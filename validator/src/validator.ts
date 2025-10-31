@@ -1,15 +1,15 @@
 import dotenv from "dotenv";
-import type { Address } from "viem";
 import { createValidatorService } from "./service/service.js";
 import type { ConsensusConfig } from "./types/interfaces.js";
+import { validatorConfigSchema } from "./types/schemas.js";
 
 dotenv.config();
 
-// TODO use zod to validate input
-const rpcUrl = process.env.RPC_URL!;
+const validatorConfig = validatorConfigSchema.parse(process.env);
 
+const rpcUrl = validatorConfig.RPC_URL;
 const config: ConsensusConfig = {
-	coreAddress: process.env.CONSENSUS_CORE_ADDRESS! as Address,
+	coreAddress: validatorConfig.CONSENSUS_CORE_ADDRESS,
 };
 
 const service = createValidatorService(rpcUrl, config);
