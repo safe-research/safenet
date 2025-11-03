@@ -12,7 +12,7 @@ FROM base as builder
 COPY package.json package-lock.json ./
 # IMPORTANT: Copy the package.json for every workspace
 COPY validator/package.json ./validator/package.json
-RUN npm ci
+RUN npm ci --workspace=validator
 
 # Then, copy over the rest of the validator source code and build the project.
 # The .dockerignore file will prevent node_modules on the host from being copied.
@@ -30,7 +30,7 @@ COPY --from=builder /usr/src/app/package.json /usr/src/app/package-lock.json ./
 # that 'validator' depends on, plus 'validator' itself.
 # This allows 'npm ci' to resolve the workspace structure.
 COPY --from=builder /usr/src/app/validator/package.json ./validator/
-RUN npm ci --omit=dev --ignore-scripts
+RUN npm ci --workspace=validator --omit=dev --ignore-scripts
 
 # Copy the compiled code from the builder stage.
 COPY --from=builder /usr/src/app/validator/dist ./validator/dist
