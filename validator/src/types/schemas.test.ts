@@ -8,6 +8,8 @@ import { checkedAddressSchema, validatorConfigSchema } from "./schemas.js";
 
 // This is a standard test address (e.g., from Hardhat/Anvil)
 const MOCK_LOWERCASE_ADDRESS = "0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266";
+const MOCK_WRONG_CHECKSUMMED_ADDRESS =
+	"0xf39Fd6e51aad88F6F4ce6aB8827279cfFFb92266";
 // This is the EIP-55 checksummed version of the address above
 const MOCK_CHECKSUMMED_ADDRESS = "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266";
 
@@ -17,14 +19,6 @@ const MOCK_INVALID_URL = "not_a_real_url";
 
 // --- Tests ---
 describe("checkedAddressSchema", () => {
-	it("should successfully parse and checksum a valid lowercase address", () => {
-		// Use .parse() to check the transformed output
-		const parsedAddress = checkedAddressSchema.parse(MOCK_LOWERCASE_ADDRESS);
-
-		// Expect the output to be the checksummed version
-		expect(parsedAddress).toBe(MOCK_CHECKSUMMED_ADDRESS);
-	});
-
 	it("should successfully parse a valid, already-checksummed address", () => {
 		const parsedAddress = checkedAddressSchema.parse(MOCK_CHECKSUMMED_ADDRESS);
 
@@ -35,6 +29,20 @@ describe("checkedAddressSchema", () => {
 	it("should fail to parse an invalid address string", () => {
 		// .safeParse() is better for testing failures as it doesn't throw
 		const result = checkedAddressSchema.safeParse(MOCK_INVALID_ADDRESS);
+
+		expect(result.success).toBe(false);
+	});
+
+	it("should fail to parse non-checksummed address", () => {
+		const result = checkedAddressSchema.safeParse(MOCK_LOWERCASE_ADDRESS);
+
+		expect(result.success).toBe(false);
+	});
+
+	it("should fail to parse a wrongly checksummed address", () => {
+		const result = checkedAddressSchema.safeParse(
+			MOCK_WRONG_CHECKSUMMED_ADDRESS,
+		);
 
 		expect(result.success).toBe(false);
 	});
@@ -64,7 +72,7 @@ describe("validatorConfigSchema", () => {
 	it("should successfully parse a valid config object", () => {
 		const validConfig = {
 			RPC_URL: MOCK_VALID_URL,
-			CONSENSUS_CORE_ADDRESS: MOCK_LOWERCASE_ADDRESS, // Use lowercase to test transform
+			CONSENSUS_CORE_ADDRESS: MOCK_CHECKSUMMED_ADDRESS, // Use lowercase to test transform
 		};
 
 		const result = validatorConfigSchema.safeParse(validConfig);
