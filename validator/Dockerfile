@@ -26,9 +26,9 @@ FROM base as runner
 COPY package.json package-lock.json* ./
 RUN npm install --omit=dev
 
-# Copy the compiled code and package.json from the builder stage.
+# Copy the compiled code from the builder stage.
 COPY --from=builder /usr/src/app/dist ./dist
-COPY --from=builder /usr/src/app/package.json ./
 
+USER node
 # Specify the command to run the compiled worker.
 CMD [ "node", "dist/validator.js" ]
