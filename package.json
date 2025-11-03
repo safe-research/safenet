@@ -1,5 +1,5 @@
 {
-	"name": "shield-net",
+	"name": "shieldnet",
 	"private": true,
 	"workspaces": [
 		"validator"
