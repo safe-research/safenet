@@ -1,149 +1,153 @@
 // Assuming your schemas are in a file named './schemas.ts'
 // Make sure to import from your actual file location.
-import { checkedAddressSchema, validatorConfigSchema } from './schemas.js';
-import { describe, it, expect } from 'vitest'; // or '@jest/globals'
+
+import { describe, expect, it } from "vitest"; // or '@jest/globals'
+import { checkedAddressSchema, validatorConfigSchema } from "./schemas.js";
 
 // --- Test Data ---
 
 // This is a standard test address (e.g., from Hardhat/Anvil)
-const MOCK_LOWERCASE_ADDRESS = '0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266';
+const MOCK_LOWERCASE_ADDRESS = "0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266";
 // This is the EIP-55 checksummed version of the address above
-const MOCK_CHECKSUMMED_ADDRESS = '0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266';
+const MOCK_CHECKSUMMED_ADDRESS = "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266";
 
-const MOCK_INVALID_ADDRESS = '0xnotanaddress';
-const MOCK_VALID_URL = 'http://127.0.0.1:8545';
-const MOCK_INVALID_URL = 'not_a_real_url';
+const MOCK_INVALID_ADDRESS = "0xnotanaddress";
+const MOCK_VALID_URL = "http://127.0.0.1:8545";
+const MOCK_INVALID_URL = "not_a_real_url";
 
 // --- Tests ---
-describe('checkedAddressSchema', () => {
-  it('should successfully parse and checksum a valid lowercase address', () => {
-    // Use .parse() to check the transformed output
-    const parsedAddress = checkedAddressSchema.parse(MOCK_LOWERCASE_ADDRESS);
-    
-    // Expect the output to be the checksummed version
-    expect(parsedAddress).toBe(MOCK_CHECKSUMMED_ADDRESS);
-  });
+describe("checkedAddressSchema", () => {
+	it("should successfully parse and checksum a valid lowercase address", () => {
+		// Use .parse() to check the transformed output
+		const parsedAddress = checkedAddressSchema.parse(MOCK_LOWERCASE_ADDRESS);
 
-  it('should successfully parse a valid, already-checksummed address', () => {
-    const parsedAddress = checkedAddressSchema.parse(MOCK_CHECKSUMMED_ADDRESS);
-    
-    // Expect the output to remain checksummed
-    expect(parsedAddress).toBe(MOCK_CHECKSUMMED_ADDRESS);
-  });
+		// Expect the output to be the checksummed version
+		expect(parsedAddress).toBe(MOCK_CHECKSUMMED_ADDRESS);
+	});
 
-  it('should fail to parse an invalid address string', () => {
-    // .safeParse() is better for testing failures as it doesn't throw
-    const result = checkedAddressSchema.safeParse(MOCK_INVALID_ADDRESS);
-    
-    expect(result.success).toBe(false);
-  });
+	it("should successfully parse a valid, already-checksummed address", () => {
+		const parsedAddress = checkedAddressSchema.parse(MOCK_CHECKSUMMED_ADDRESS);
 
-  it('should fail to parse an address that is too short', () => {
-    const result = checkedAddressSchema.safeParse('0x12345');
-    
-    expect(result.success).toBe(false);
-  });
+		// Expect the output to remain checksummed
+		expect(parsedAddress).toBe(MOCK_CHECKSUMMED_ADDRESS);
+	});
 
-  it('should fail to parse a non-string input', () => {
-    const result = checkedAddressSchema.safeParse(123456789);
-    
-    expect(result.success).toBe(false);
-    if (!result.success) {
-      expect(result.error.issues[0].message).toContain('Invalid input: expected string, received number');
-    }
-  });
+	it("should fail to parse an invalid address string", () => {
+		// .safeParse() is better for testing failures as it doesn't throw
+		const result = checkedAddressSchema.safeParse(MOCK_INVALID_ADDRESS);
+
+		expect(result.success).toBe(false);
+	});
+
+	it("should fail to parse an address that is too short", () => {
+		const result = checkedAddressSchema.safeParse("0x12345");
+
+		expect(result.success).toBe(false);
+	});
+
+	it("should fail to parse a non-string input", () => {
+		const result = checkedAddressSchema.safeParse(123456789);
+
+		expect(result.success).toBe(false);
+		if (!result.success) {
+			expect(result.error.issues[0].message).toContain(
+				"Invalid input: expected string, received number",
+			);
+		}
+	});
 });
 
+describe("validatorConfigSchema", () => {
+	it("should successfully parse a valid config object", () => {
+		const validConfig = {
+			RPC_URL: MOCK_VALID_URL,
+			CONSENSUS_CORE_ADDRESS: MOCK_LOWERCASE_ADDRESS, // Use lowercase to test transform
+		};
 
-describe('validatorConfigSchema', () => {
-  it('should successfully parse a valid config object', () => {
-    const validConfig = {
-      RPC_URL: MOCK_VALID_URL,
-      CONSENSUS_CORE_ADDRESS: MOCK_LOWERCASE_ADDRESS, // Use lowercase to test transform
-    };
+		const result = validatorConfigSchema.safeParse(validConfig);
 
-    const result = validatorConfigSchema.safeParse(validConfig);
+		// 1. Check for overall success
+		expect(result.success).toBe(true);
 
-    // 1. Check for overall success
-    expect(result.success).toBe(true);
+		// 2. Check that the address was correctly transformed
+		if (result.success) {
+			expect(result.data).toEqual({
+				RPC_URL: MOCK_VALID_URL,
+				CONSENSUS_CORE_ADDRESS: MOCK_CHECKSUMMED_ADDRESS, // Should be checksummed
+			});
+		}
+	});
 
-    // 2. Check that the address was correctly transformed
-    if (result.success) {
-      expect(result.data).toEqual({
-        RPC_URL: MOCK_VALID_URL,
-        CONSENSUS_CORE_ADDRESS: MOCK_CHECKSUMMED_ADDRESS, // Should be checksummed
-      });
-    }
-  });
+	it("should fail if RPC_URL is invalid", () => {
+		const invalidConfig = {
+			RPC_URL: MOCK_INVALID_URL, // <-- Invalid
+			CONSENSUS_CORE_ADDRESS: MOCK_LOWERCASE_ADDRESS,
+		};
 
-  it('should fail if RPC_URL is invalid', () => {
-    const invalidConfig = {
-      RPC_URL: MOCK_INVALID_URL, // <-- Invalid
-      CONSENSUS_CORE_ADDRESS: MOCK_LOWERCASE_ADDRESS,
-    };
+		const result = validatorConfigSchema.safeParse(invalidConfig);
+		expect(result.success).toBe(false);
 
-    const result = validatorConfigSchema.safeParse(invalidConfig);
-    expect(result.success).toBe(false);
+		// Check that the error is specifically about the RPC_URL
+		if (!result.success) {
+			const urlError = result.error.issues.find(
+				(issue) => issue.path[0] === "RPC_URL",
+			);
+			expect(urlError).toBeDefined();
+			expect(urlError?.message).toBe("Invalid URL");
+		}
+	});
 
-    // Check that the error is specifically about the RPC_URL
-    if (!result.success) {
-      const urlError = result.error.issues.find(
-        (issue) => issue.path[0] === 'RPC_URL',
-      );
-      expect(urlError).toBeDefined();
-      expect(urlError?.message).toBe('Invalid URL');
-    }
-  });
+	it("should fail if CONSENSUS_CORE_ADDRESS is invalid", () => {
+		const invalidConfig = {
+			RPC_URL: MOCK_VALID_URL,
+			CONSENSUS_CORE_ADDRESS: MOCK_INVALID_ADDRESS, // <-- Invalid
+		};
 
-  it('should fail if CONSENSUS_CORE_ADDRESS is invalid', () => {
-    const invalidConfig = {
-      RPC_URL: MOCK_VALID_URL,
-      CONSENSUS_CORE_ADDRESS: MOCK_INVALID_ADDRESS, // <-- Invalid
-    };
+		const result = validatorConfigSchema.safeParse(invalidConfig);
+		expect(result.success).toBe(false);
 
-    const result = validatorConfigSchema.safeParse(invalidConfig);
-    expect(result.success).toBe(false);
+		// Check that the error is from the address field
+		if (!result.success) {
+			const addressError = result.error.issues.find(
+				(issue) => issue.path[0] === "CONSENSUS_CORE_ADDRESS",
+			);
+			expect(addressError).toBeDefined();
+		}
+	});
 
-    // Check that the error is from the address field
-    if (!result.success) {
-      const addressError = result.error.issues.find(
-        (issue) => issue.path[0] === 'CONSENSUS_CORE_ADDRESS',
-      );
-      expect(addressError).toBeDefined();
-    }
-  });
+	it("should fail if RPC_URL is missing", () => {
+		const incompleteConfig = {
+			CONSENSUS_CORE_ADDRESS: MOCK_LOWERCASE_ADDRESS,
+		};
 
-  it('should fail if RPC_URL is missing', () => {
-    const incompleteConfig = {
-      CONSENSUS_CORE_ADDRESS: MOCK_LOWERCASE_ADDRESS,
-    };
+		const result = validatorConfigSchema.safeParse(incompleteConfig);
+		expect(result.success).toBe(false);
 
-    // Cast to 'any' to bypass TypeScript's static check for the test
-    const result = validatorConfigSchema.safeParse(incompleteConfig as any);
-    expect(result.success).toBe(false);
+		if (!result.success) {
+			const error = result.error.issues.find(
+				(issue) => issue.path[0] === "RPC_URL",
+			);
+			expect(error?.message).toBe(
+				"Invalid input: expected string, received undefined",
+			);
+		}
+	});
 
-    if (!result.success) {
-      const error = result.error.issues.find(
-        (issue) => issue.path[0] === 'RPC_URL',
-      );
-      expect(error?.message).toBe('Invalid input: expected string, received undefined');
-    }
-  });
+	it("should fail if CONSENSUS_CORE_ADDRESS is missing", () => {
+		const incompleteConfig = {
+			RPC_URL: MOCK_VALID_URL,
+		};
 
-  it('should fail if CONSENSUS_CORE_ADDRESS is missing', () => {
-    const incompleteConfig = {
-      RPC_URL: MOCK_VALID_URL,
-    };
+		const result = validatorConfigSchema.safeParse(incompleteConfig);
+		expect(result.success).toBe(false);
 
-    // Cast to 'any' to bypass TypeScript's static check for the test
-    const result = validatorConfigSchema.safeParse(incompleteConfig as any);
-    expect(result.success).toBe(false);
-
-    if (!result.success) {
-      const error = result.error.issues.find(
-        (issue) => issue.path[0] === 'CONSENSUS_CORE_ADDRESS',
-      );
-      expect(error?.message).toBe('Invalid input: expected string, received undefined');
-    }
-  });
+		if (!result.success) {
+			const error = result.error.issues.find(
+				(issue) => issue.path[0] === "CONSENSUS_CORE_ADDRESS",
+			);
+			expect(error?.message).toBe(
+				"Invalid input: expected string, received undefined",
+			);
+		}
+	});
 });

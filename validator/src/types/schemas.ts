@@ -1,9 +1,9 @@
-import { Address, checksumAddress, getAddress, isAddress } from "viem";
+import { type Address, checksumAddress, isAddress } from "viem";
 import { z } from "zod";
 
 export const checkedAddressSchema = z
 	.string()
-    .refine((arg) => isAddress(arg))
+	.refine((arg) => isAddress(arg))
 	.transform((arg) => checksumAddress(arg as Address));
 
 export const validatorConfigSchema = z.object({
