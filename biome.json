@@ -16,7 +16,8 @@
 			"!**/node_modules/**",
 			"!**/dist/**",
 			"!**/typechain-types/**",
-			"!**/*.gen.ts"
+			"!**/*.gen.ts",
+			"!contracts/**"
 		],
 		"maxSize": 2000000
 	},

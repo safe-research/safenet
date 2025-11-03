@@ -4,7 +4,8 @@
 	"scripts": {
 		"build": "rimraf dist && tsc",
 		"dev": "tsx src/validator.ts",
-		"check": "biome check"
+		"check": "biome check",
+		"test": "echo \"Error: no test specified\" && exit 0"
 	},
 	"dependencies": {
 		"dotenv": "^17.2.1",

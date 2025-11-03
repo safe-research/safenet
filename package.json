@@ -2,7 +2,7 @@
 	"name": "shield-net",
 	"private": true,
 	"workspaces": [
-        "validator"
+		"validator"
 	],
 	"scripts": {
 		"format": "biome format",
