@@ -1,9 +1,10 @@
-import { getAddress } from "viem";
+import { Address, checksumAddress, getAddress, isAddress } from "viem";
 import { z } from "zod";
 
 export const checkedAddressSchema = z
 	.string()
-	.transform((arg) => getAddress(arg));
+    .refine((arg) => isAddress(arg))
+	.transform((arg) => checksumAddress(arg as Address));
 
 export const validatorConfigSchema = z.object({
 	RPC_URL: z.url(),

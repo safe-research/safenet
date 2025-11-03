@@ -5,7 +5,8 @@
 		"build": "rimraf dist && tsc",
 		"dev": "tsx src/validator.ts",
 		"check": "biome check",
-		"test": "echo \"Error: no test specified\" && exit 0"
+		"test": "vitest run",
+		"test:watch": "vitest"
 	},
 	"dependencies": {
 		"dotenv": "^17.2.1",
@@ -16,6 +17,7 @@
 		"@types/node": "^24.1.0",
 		"rimraf": "^6.0.1",
 		"tsx": "^4.20.3",
-		"typescript": "^5.8.3"
+		"typescript": "^5.8.3",
+		"vitest": "^4.0.6"
 	}
 }
