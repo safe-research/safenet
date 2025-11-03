@@ -2,9 +2,6 @@ name: contracts
 
 on:
   pull_request:
-    paths:
-      - "contracts/**"
-      - ".github/workflows/**"
   push:
     branches:
       - main
