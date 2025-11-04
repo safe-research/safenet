@@ -199,7 +199,12 @@ contract Staking is Ownable {
     error InsufficientRecoverableAmount();
 
     /*
-     * @notice Thrown when trying to claim a withdrawal that doesn't exist or isn't ready
+     * @notice Thrown when trying to claim from an empty withdrawal queue
+     */
+    error WithdrawalQueueEmpty();
+
+    /*
+     * @notice Thrown when trying to claim a withdrawal that isn't ready
      */
     error NoClaimableWithdrawal();
 
@@ -273,6 +278,9 @@ contract Staking is Ownable {
         totalPendingWithdrawals += amount;
 
         // Calculate claimable timestamp
+        // If the validator has been removed, we allow immediate withdrawal.
+        // This design ensures users are not penalized by withdrawal delays for validators that are no longer active,
+        // and can reclaim their funds without waiting once a validator is removed.
         uint256 claimableAt = isValidator[validator] ? block.timestamp + withdrawDelay : block.timestamp;
 
         // Generate new withdrawal ID and create node
@@ -300,7 +308,7 @@ contract Staking is Ownable {
      */
     function claimWithdrawal(address staker, address validator) external {
         WithdrawalQueue memory queue = withdrawalQueues[staker][validator];
-        if (queue.head == 0) revert NoClaimableWithdrawal();
+        if (queue.head == 0) revert WithdrawalQueueEmpty();
 
         WithdrawalNode memory node = withdrawalNodes[queue.head];
         if (block.timestamp < node.claimableAt) revert NoClaimableWithdrawal();
@@ -425,7 +433,6 @@ contract Staking is Ownable {
      * @notice Recover accidentally sent tokens
      * @param token The token address to recover
      * @param to The address to send recovered tokens to
-     * @param amount The amount of tokens to recover
      */
     function recoverTokens(address token, address to) external onlyOwner {
         if (to == address(0)) revert InvalidAddress();
@@ -465,6 +472,7 @@ contract Staking is Ownable {
      * @return The unused stake amount
      */
     function getUnusedStake(address validator) external view returns (uint256) {
+        if (!isValidator[validator]) return 0;
         return totalStakes[validator] % fixedStakeAmount;
     }
 
