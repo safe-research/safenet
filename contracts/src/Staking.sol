@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-only
 pragma solidity ^0.8.30;
 
-import { Ownable } from "@oz/access/Ownable.sol";
-import { IERC20 } from "@oz/token/ERC20/IERC20.sol";
-import { SafeERC20 } from "@oz/token/ERC20/utils/SafeERC20.sol";
+import {Ownable} from "@oz/access/Ownable.sol";
+import {IERC20} from "@oz/token/ERC20/IERC20.sol";
+import {SafeERC20} from "@oz/token/ERC20/utils/SafeERC20.sol";
 
 contract Staking is Ownable {
     using SafeERC20 for IERC20;
@@ -277,13 +277,13 @@ contract Staking is Ownable {
 
         // Generate new withdrawal ID and create node
         uint256 withdrawalId = nextWithdrawalId++;
-        withdrawalNodes[withdrawalId] = WithdrawalNode({ amount: amount, claimableAt: claimableAt, next: 0 });
+        withdrawalNodes[withdrawalId] = WithdrawalNode({amount: amount, claimableAt: claimableAt, next: 0});
 
         // Add to queue
         WithdrawalQueue storage queue = withdrawalQueues[msg.sender][validator];
         if (queue.head == 0) {
             // Queue is empty
-            withdrawalQueues[msg.sender][validator] = WithdrawalQueue({ head: withdrawalId, tail: withdrawalId });
+            withdrawalQueues[msg.sender][validator] = WithdrawalQueue({head: withdrawalId, tail: withdrawalId});
         } else {
             // Link from tail
             withdrawalNodes[queue.tail].next = withdrawalId;
@@ -309,7 +309,7 @@ contract Staking is Ownable {
 
         if (node.next == 0) {
             // Queue is now empty
-            withdrawalQueues[staker][validator] = WithdrawalQueue({ head: 0, tail: 0 });
+            withdrawalQueues[staker][validator] = WithdrawalQueue({head: 0, tail: 0});
         } else {
             withdrawalQueues[staker][validator].head = node.next;
         }
@@ -333,7 +333,7 @@ contract Staking is Ownable {
         if (newAmount == 0) revert InvalidAmount();
 
         uint256 executableAt = block.timestamp + configTimeDelay;
-        pendingFixedStakeAmountChange = ConfigProposal({ value: newAmount, executableAt: executableAt });
+        pendingFixedStakeAmountChange = ConfigProposal({value: newAmount, executableAt: executableAt});
         emit FixedStakeAmountProposed(fixedStakeAmount, newAmount, executableAt);
     }
 
@@ -345,7 +345,7 @@ contract Staking is Ownable {
         if (newDelay == 0 || newDelay > configTimeDelay) revert InvalidParameter();
 
         uint256 executableAt = block.timestamp + configTimeDelay;
-        pendingWithdrawDelayChange = ConfigProposal({ value: newDelay, executableAt: executableAt });
+        pendingWithdrawDelayChange = ConfigProposal({value: newDelay, executableAt: executableAt});
         emit WithdrawDelayProposed(withdrawDelay, newDelay, executableAt);
     }
 
@@ -366,7 +366,7 @@ contract Staking is Ownable {
         }
 
         pendingValidatorChanges =
-            ValidatorProposal({ validators: validators, isRegistration: isRegistration, executableAt: executableAt });
+            ValidatorProposal({validators: validators, isRegistration: isRegistration, executableAt: executableAt});
     }
 
     // ============================================================
@@ -478,11 +478,7 @@ contract Staking is Ownable {
      * @param validator The validator address
      * @return An array of withdrawal info
      */
-    function getPendingWithdrawals(address staker, address validator)
-        external
-        view
-        returns (WithdrawalInfo[] memory)
-    {
+    function getPendingWithdrawals(address staker, address validator) external view returns (WithdrawalInfo[] memory) {
         WithdrawalQueue memory queue = withdrawalQueues[staker][validator];
         if (queue.head == 0) {
             return new WithdrawalInfo[](0);
@@ -501,7 +497,7 @@ contract Staking is Ownable {
         currentId = queue.head;
         for (uint256 i = 0; i < count; i++) {
             WithdrawalNode memory node = withdrawalNodes[currentId];
-            withdrawals[i] = WithdrawalInfo({ amount: node.amount, claimableAt: node.claimableAt });
+            withdrawals[i] = WithdrawalInfo({amount: node.amount, claimableAt: node.claimableAt});
             currentId = node.next;
         }
 
@@ -528,5 +524,4 @@ contract Staking is Ownable {
         WithdrawalNode memory node = withdrawalNodes[queue.head];
         return (node.amount, node.claimableAt);
     }
-
 }
