@@ -58,11 +58,11 @@ contract FROSTCoordinatorTest is Test {
         // Round 1.3
         // Note that `cc[index]` is equivalent to `commitments[index].c`. We
         // need the additional array to keep `ForgeSecp256k1.P` versions of our
-        // points, because implementing elliptic curve implementation natively
-        // on the EVM is prohibitively expensive, and need to use the built-in
-        // Forge cheatcodes for doing the elliptic curve operations for the
-        // test. These elliptic curve operations are done offchain anyway, so
-        // this is not a concern for the actual production system.
+        // points, because implementing elliptic curve addition natively on the
+        // EVM is prohibitively slow, and so we need to use the built-in Forge
+        // cheatcodes for doing the elliptic curve operations for the test.
+        // These elliptic curve operations are done offchain anyway, so this
+        // is not a concern for the actual production system.
         ForgeSecp256k1.P[][] memory cc = new ForgeSecp256k1.P[][](COUNT + 1);
         for (uint256 index = 1; index <= COUNT; index++) {
             FROSTCoordinator.KeyGenCommitment memory commitment = commitments[index];
@@ -123,12 +123,12 @@ contract FROSTCoordinatorTest is Test {
 
                 uint256 fi = _f(a[index], l);
 
-                // EXTENSION: We apply ECDH to encrypt the `f(j)` value for the
-                // target participant. This allows us to use the same onchain
-                // coordinator for the secret shares and not require an
+                // EXTENSION: We apply ECDH to encrypt the `f_i(l)` evaluation
+                // for the target participant. This allows us to use the same
+                // onchain coordinator for the secret shares and not require an
                 // additional secret channel. This also implies that we only
-                // delete `f` in 2.3, as we need `a_0` to recover the secret
-                // share sent by other participants.
+                // completely delete `f` in 2.3, as we need `a_0` to recover the
+                // secret shares sent by other participants.
                 fi = _ecdh(fi, a[index][0], cc[l][0]);
 
                 share.f[i++] = fi;
