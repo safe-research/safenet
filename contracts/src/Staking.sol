@@ -17,7 +17,7 @@ contract Staking is Ownable {
      */
     struct WithdrawalNode {
         uint256 amount;
-        uint128 claimedAt;
+        uint128 initiatedAt;
         uint128 next; // ID of next withdrawal, 0 if last
     }
 
@@ -42,7 +42,7 @@ contract Staking is Ownable {
      */
     struct WithdrawalInfo {
         uint256 amount;
-        uint256 claimedAt;
+        uint256 initiatedAt;
     }
 
     // ============================================================
@@ -263,12 +263,12 @@ contract Staking is Ownable {
         totalStakedAmount -= amount;
         totalPendingWithdrawals += amount;
 
-        // Calculate claimed timestamp
-        uint128 claimedAt = uint128(block.timestamp);
+        // Casting claimed timestamp
+        uint128 initiatedAt = uint128(block.timestamp);
 
         // Generate new withdrawal ID and create node
         uint128 withdrawalId = nextWithdrawalId++;
-        withdrawalNodes[withdrawalId] = WithdrawalNode({amount: amount, claimedAt: claimedAt, next: 0});
+        withdrawalNodes[withdrawalId] = WithdrawalNode({amount: amount, initiatedAt: initiatedAt, next: 0});
 
         // Add to queue
         WithdrawalQueue storage queue = withdrawalQueues[msg.sender][validator];
@@ -294,7 +294,7 @@ contract Staking is Ownable {
         if (queue.head == 0) revert WithdrawalQueueEmpty();
 
         WithdrawalNode memory node = withdrawalNodes[queue.head];
-        if (block.timestamp < node.claimedAt + withdrawDelay) revert NoClaimableWithdrawal();
+        if (block.timestamp < node.initiatedAt + withdrawDelay) revert NoClaimableWithdrawal();
 
         uint256 amount = node.amount;
 
@@ -447,7 +447,7 @@ contract Staking is Ownable {
         currentId = queue.head;
         for (uint256 i = 0; i < count; i++) {
             WithdrawalNode memory node = withdrawalNodes[currentId];
-            withdrawals[i] = WithdrawalInfo({amount: node.amount, claimedAt: node.claimedAt});
+            withdrawals[i] = WithdrawalInfo({amount: node.amount, initiatedAt: node.initiatedAt});
             currentId = node.next;
         }
 
@@ -472,6 +472,6 @@ contract Staking is Ownable {
         }
 
         WithdrawalNode memory node = withdrawalNodes[queue.head];
-        return (node.amount, node.claimedAt + withdrawDelay);
+        return (node.amount, node.initiatedAt + withdrawDelay);
     }
 }
