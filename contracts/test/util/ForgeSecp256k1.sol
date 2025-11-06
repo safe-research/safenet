@@ -21,8 +21,8 @@ library ForgeSecp256k1 {
     }
 
     function rand() internal returns (P memory r) {
-        // The `ecrecover` trick only works for X-coordinates smaller than the
-        // curve order. Assuming uniform distribution of X-coordinates for curve
+        // The `ecrecover` trick only works for x-coordinates smaller than the
+        // curve order. Assuming uniform distribution of x-coordinates for curve
         // points, this occurs once in every 3.7e39, so this loop will
         // practically always run exactly once.
         while (true) {
