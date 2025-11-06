@@ -17,7 +17,7 @@ contract Staking is Ownable {
      */
     struct WithdrawalNode {
         uint256 amount;
-        uint128 claimableAt;
+        uint128 claimedAt;
         uint128 next; // ID of next withdrawal, 0 if last
     }
 
@@ -42,7 +42,7 @@ contract Staking is Ownable {
      */
     struct WithdrawalInfo {
         uint256 amount;
-        uint256 claimableAt;
+        uint256 claimedAt;
     }
 
     // ============================================================
@@ -52,12 +52,12 @@ contract Staking is Ownable {
     /*
      * @notice The SAFE token used for staking
      */
-    IERC20 public immutable safeToken;
+    IERC20 public immutable SAFE_TOKEN;
 
     /*
      * @notice Time delay for configuration changes (immutable, set at deployment)
      */
-    uint256 public immutable configTimeDelay;
+    uint256 public immutable CONFIG_TIME_DELAY;
 
     /*
      * @notice Global counter for total staked tokens
@@ -124,7 +124,7 @@ contract Staking is Ownable {
 
     // Staking Operations
     event StakeIncreased(address indexed staker, address indexed validator, uint256 amount);
-    event WithdrawalInitiated(address indexed staker, address indexed validator, uint256 amount, uint256 claimableAt);
+    event WithdrawalInitiated(address indexed staker, address indexed validator, uint256 amount);
     event WithdrawalClaimed(address indexed staker, address indexed validator, uint256 amount);
 
     // Validator Management
@@ -213,15 +213,16 @@ contract Staking is Ownable {
     // CONSTRUCTOR
     // ============================================================
 
-    constructor(address initialOwner, address _safeToken, uint128 initialWithdrawDelay, uint256 _configTimeDelay)
+    constructor(address initialOwner, address safeToken, uint128 initialWithdrawDelay, uint256 configTimeDelay)
         Ownable(initialOwner)
     {
-        if (_safeToken == address(0)) revert InvalidAddress();
+        if (safeToken == address(0)) revert InvalidAddress();
         if (initialWithdrawDelay == 0) revert InvalidParameter();
-        if (_configTimeDelay == 0) revert InvalidParameter();
+        if (configTimeDelay == 0) revert InvalidParameter();
+        if (initialWithdrawDelay > configTimeDelay) revert InvalidParameter();
 
-        safeToken = IERC20(_safeToken);
-        configTimeDelay = _configTimeDelay;
+        SAFE_TOKEN = IERC20(safeToken);
+        CONFIG_TIME_DELAY = configTimeDelay;
         withdrawDelay = initialWithdrawDelay;
         nextWithdrawalId = 1;
     }
@@ -245,7 +246,7 @@ contract Staking is Ownable {
         totalStakedAmount += amount;
         emit StakeIncreased(msg.sender, validator, amount);
 
-        safeToken.safeTransferFrom(msg.sender, address(this), amount);
+        SAFE_TOKEN.safeTransferFrom(msg.sender, address(this), amount);
     }
 
     /*
@@ -262,12 +263,12 @@ contract Staking is Ownable {
         totalStakedAmount -= amount;
         totalPendingWithdrawals += amount;
 
-        // Calculate claimable timestamp
-        uint128 claimableAt = uint128(block.timestamp + withdrawDelay);
+        // Calculate claimed timestamp
+        uint128 claimedAt = uint128(block.timestamp);
 
         // Generate new withdrawal ID and create node
         uint128 withdrawalId = nextWithdrawalId++;
-        withdrawalNodes[withdrawalId] = WithdrawalNode({amount: amount, claimableAt: claimableAt, next: 0});
+        withdrawalNodes[withdrawalId] = WithdrawalNode({amount: amount, claimedAt: claimedAt, next: 0});
 
         // Add to queue
         WithdrawalQueue storage queue = withdrawalQueues[msg.sender][validator];
@@ -280,7 +281,7 @@ contract Staking is Ownable {
             queue.tail = withdrawalId;
         }
 
-        emit WithdrawalInitiated(msg.sender, validator, amount, claimableAt);
+        emit WithdrawalInitiated(msg.sender, validator, amount);
     }
 
     /*
@@ -293,7 +294,7 @@ contract Staking is Ownable {
         if (queue.head == 0) revert WithdrawalQueueEmpty();
 
         WithdrawalNode memory node = withdrawalNodes[queue.head];
-        if (block.timestamp < node.claimableAt) revert NoClaimableWithdrawal();
+        if (block.timestamp < node.claimedAt + withdrawDelay) revert NoClaimableWithdrawal();
 
         uint256 amount = node.amount;
 
@@ -308,7 +309,7 @@ contract Staking is Ownable {
         totalPendingWithdrawals -= amount;
         emit WithdrawalClaimed(staker, validator, amount);
 
-        safeToken.safeTransfer(staker, amount);
+        SAFE_TOKEN.safeTransfer(staker, amount);
     }
 
     // ============================================================
@@ -320,9 +321,9 @@ contract Staking is Ownable {
      * @param newDelay The proposed withdraw delay in seconds
      */
     function proposeWithdrawDelay(uint128 newDelay) external onlyOwner {
-        if (newDelay == 0 || newDelay > configTimeDelay) revert InvalidParameter();
+        if (newDelay == 0 || newDelay > CONFIG_TIME_DELAY) revert InvalidParameter();
 
-        uint128 executableAt = uint128(block.timestamp + configTimeDelay);
+        uint128 executableAt = uint128(block.timestamp + CONFIG_TIME_DELAY);
         pendingWithdrawDelayChange = ConfigProposal({value: newDelay, executableAt: executableAt});
         emit WithdrawDelayProposed(withdrawDelay, newDelay, executableAt);
     }
@@ -337,7 +338,7 @@ contract Staking is Ownable {
         if (validators.length == 0) revert InvalidParameter();
         if (validators.length != isRegistration.length) revert ArrayLengthMismatch();
 
-        uint256 executableAt = block.timestamp + configTimeDelay;
+        uint256 executableAt = block.timestamp + CONFIG_TIME_DELAY;
         bytes32 validatorsHash = keccak256(abi.encode(validators, isRegistration, executableAt));
         for (uint256 i = 0; i < validators.length; i++) {
             if (validators[i] == address(0)) revert InvalidAddress();
@@ -403,8 +404,8 @@ contract Staking is Ownable {
         if (to == address(0)) revert InvalidAddress();
 
         uint256 recoverable;
-        if (token == address(safeToken)) {
-            uint256 balance = safeToken.balanceOf(address(this));
+        if (token == address(SAFE_TOKEN)) {
+            uint256 balance = SAFE_TOKEN.balanceOf(address(this));
             recoverable = balance - totalStakedAmount - totalPendingWithdrawals;
         } else {
             recoverable = IERC20(token).balanceOf(address(this));
@@ -446,7 +447,7 @@ contract Staking is Ownable {
         currentId = queue.head;
         for (uint256 i = 0; i < count; i++) {
             WithdrawalNode memory node = withdrawalNodes[currentId];
-            withdrawals[i] = WithdrawalInfo({amount: node.amount, claimableAt: node.claimableAt});
+            withdrawals[i] = WithdrawalInfo({amount: node.amount, claimedAt: node.claimedAt});
             currentId = node.next;
         }
 
@@ -471,6 +472,6 @@ contract Staking is Ownable {
         }
 
         WithdrawalNode memory node = withdrawalNodes[queue.head];
-        return (node.amount, node.claimableAt);
+        return (node.amount, node.claimedAt + withdrawDelay);
     }
 }
