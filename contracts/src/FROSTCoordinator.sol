@@ -72,7 +72,11 @@ contract FROSTCoordinator {
         external
     {
         Group storage group = $groups[id];
-        require(group.parameters.threshold == commitment.c.length, InvalidKeyGenCommitment());
+        GroupParameters memory parameters = group.parameters;
+        require(
+            index > 0 && index <= parameters.count && commitment.c.length == parameters.threshold,
+            InvalidKeyGenCommitment()
+        );
 
         group.participants.register(index, msg.sender, poap);
         group.key = Secp256k1.add(group.key, commitment.c[0]);
