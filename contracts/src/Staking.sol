@@ -321,14 +321,13 @@ contract Staking is Ownable {
      * @notice Initiate a withdrawal of staked tokens at a specific position in the queue
      * @param validator The validator address to withdraw from
      * @param amount The amount of tokens to withdraw
-     * @param previousId The ID of the previous withdrawal in the queue
-     * @param nextId The ID of the next withdrawal in the queue
+     * @param previousId The ID of the previous withdrawal in the queue or 0 to insert at head
      * @dev This function allows specifying the position in the queue. It is intended for usage
      *      only if absolutely necessary, as it requires more information.
      *      The caller must ensure that the specified position is of it's own linked list, else this
      *      might get added to the wrong user's queue.
      */
-    function initiateWithdrawalAtPosition(address validator, uint256 amount, uint64 previousId, uint64 nextId)
+    function initiateWithdrawalAtPosition(address validator, uint256 amount, uint64 previousId)
         external
     {
         require(amount != 0, InvalidAmount());
@@ -337,21 +336,20 @@ contract Staking is Ownable {
         // Calculating & casting claimable timestamp
         uint128 claimableAt = uint128(block.timestamp + withdrawDelay);
 
+        uint64 nextId;
         // Check if the Id's are correct and claimableAt ordering is correct
-        if (previousId == 0 && nextId == 0) {
-            require(
-                withdrawalQueues[msg.sender][validator].head == 0 && withdrawalQueues[msg.sender][validator].tail == 0,
-                InvalidParameter()
-            );
+        if (previousId == 0) {
+            // Inserting at head - get the current head as nextId
+            nextId = withdrawalQueues[msg.sender][validator].head;            
         } else {
-            if (previousId != 0) {
-                require(withdrawalNodes[previousId].next == nextId, InvalidParameter());
-                require(withdrawalNodes[previousId].claimableAt <= claimableAt, InvalidOrdering());
-            }
-            if (nextId != 0) {
-                require(withdrawalNodes[nextId].previous == previousId, InvalidParameter());
-                require(withdrawalNodes[nextId].claimableAt >= claimableAt, InvalidOrdering());
-            }
+            require(withdrawalNodes[previousId].claimableAt <= claimableAt, InvalidOrdering());
+
+            nextId = withdrawalNodes[previousId].next;
+        }
+
+        // Validate ordering if queue is not empty
+        if (nextId != 0) {
+            require(withdrawalNodes[nextId].claimableAt >= claimableAt, InvalidOrdering());
         }
 
         stakes[msg.sender][validator] -= amount;
