@@ -66,7 +66,6 @@ library Secp256k1 {
         //        = λ² - (Px + Qx)
         //     Ry = (2⋅Px + Qx)⋅λ - λ³ - Py
         //        = (2⋅Px + Qx - λ²)⋅λ - Py
-        //        = (Px + (Px + Qx) - λ²)⋅λ - Py
         //        = (Px - (λ² - (Px + Qx)))⋅λ - Py
         //        = (Px - Rx)⋅λ - Py
         // Noting that `Px = Qx` for point doubling.
