@@ -126,7 +126,7 @@ contract Staking is Ownable {
     // Staking Operations
     event StakeIncreased(address indexed staker, address indexed validator, uint256 amount);
     event WithdrawalInitiated(
-        address indexed staker, address indexed validator, uint256 indexed withdrawalId, uint256 amount
+        address indexed staker, address indexed validator, uint64 indexed withdrawalId, uint256 amount
     );
     event WithdrawalClaimed(address indexed staker, address indexed validator, uint256 amount);
 
@@ -285,8 +285,7 @@ contract Staking is Ownable {
         WithdrawalQueue storage queue = withdrawalQueues[msg.sender][validator];
         // If queue is empty, set head and tail to new node
         if (queue.head == 0) {
-            queue.head = withdrawalId;
-            queue.tail = withdrawalId;
+            withdrawalQueues[msg.sender][validator] = WithdrawalQueue({head: withdrawalId, tail: withdrawalId});
         } else {
             // Check if the claimableAt of the tail is higher than the claimableAt of the new node
             // If so, traverse backwards to find the correct position
