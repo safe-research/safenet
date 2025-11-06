@@ -258,106 +258,129 @@ contract Staking is Ownable {
     }
 
     /*
-     * @notice Initiate a withdrawal of staked tokens either at a specific position in the queue or auto-sorted
+     * @notice Internal function to handle initial withdrawal logic
+     * @param user The address initiating the withdrawal
+     * @param amount The amount to withdraw
      * @param validator The validator address to withdraw from
-     * @param amount The amount of tokens to withdraw
-     * @param insertAtPosition Whether to insert at a specific position (true) or auto-sort (false)
-     * @param previousId The ID of the previous withdrawal in the queue or 0 to insert at head
-     * @dev This function allows specifying the position in the queue. It is intended for usage
-     *      only if absolutely necessary, as it requires more information.
-     *      The caller must ensure that the specified position is of it's own linked list, else this
-     *      might get added to the wrong user's queue.
+     * @return withdrawalId The unique ID of the initiated withdrawal
+     * @return claimableAt The timestamp when the withdrawal becomes claimable
      */
-    function initiateWithdrawal(address validator, uint256 amount, bool insertAtPosition, uint64 previousId) external {
+    function _initialWithdrawal(address user, uint256 amount, address validator)
+        internal
+        returns (uint64 withdrawalId, uint128 claimableAt)
+    {
         require(amount != 0, InvalidAmount());
-        require(stakes[msg.sender][validator] >= amount, InsufficientStake());
+        require(stakes[user][validator] >= amount, InsufficientStake());
 
         // Calculating & casting claimable timestamp
-        uint128 claimableAt = uint128(block.timestamp + withdrawDelay);
+        claimableAt = uint128(block.timestamp + withdrawDelay);
 
-        stakes[msg.sender][validator] -= amount;
+        stakes[user][validator] -= amount;
         totalStakes[validator] -= amount;
         totalStakedAmount -= amount;
         totalPendingWithdrawals += amount;
 
         // Generate new withdrawal ID
-        uint64 withdrawalId = nextWithdrawalId++;
+        withdrawalId = nextWithdrawalId++;
 
-        if (insertAtPosition) {
-            uint64 nextId;
-            // Check if the Id's are correct and claimableAt ordering is correct
-            if (previousId == 0) {
-                // Inserting at head - get the current head as nextId
-                nextId = withdrawalQueues[msg.sender][validator].head;
-            } else {
-                require(withdrawalNodes[previousId].claimableAt <= claimableAt, InvalidOrdering());
+        emit WithdrawalInitiated(user, validator, withdrawalId, amount);
+    }
 
-                nextId = withdrawalNodes[previousId].next;
-            }
+    /*
+     * @notice Initiate a withdrawal from a validator
+     * @param validator The validator address to withdraw from
+     * @param amount The amount of tokens to withdraw
+     * @dev   This function should be used in the interface for normal withdrawals. It inserts the new withdrawal
+     *        into the queue in the correct position based on the claimableAt timestamp.
+     */
+    function initiateWithdrawal(address validator, uint256 amount) external {
+        (uint64 withdrawalId, uint128 claimableAt) = _initialWithdrawal(msg.sender, amount, validator);
 
-            // Validate ordering if queue is not empty
-            if (nextId != 0) {
-                require(withdrawalNodes[nextId].claimableAt >= claimableAt, InvalidOrdering());
-            }
+        // Create node
+        withdrawalNodes[withdrawalId] = WithdrawalNode({amount: amount, claimableAt: claimableAt, previous: 0, next: 0});
 
-            // Create node
-            withdrawalNodes[withdrawalId] =
-                WithdrawalNode({amount: amount, claimableAt: claimableAt, previous: previousId, next: nextId});
-
-            // Update previous and next nodes
-            if (previousId != 0) {
-                withdrawalNodes[previousId].next = withdrawalId;
-            } else {
-                // Inserting at head
-                withdrawalQueues[msg.sender][validator].head = withdrawalId;
-            }
-
-            if (nextId != 0) {
-                withdrawalNodes[nextId].previous = withdrawalId;
-            } else {
-                // Inserting at tail
-                withdrawalQueues[msg.sender][validator].tail = withdrawalId;
-            }
+        // Add to queue
+        WithdrawalQueue storage queue = withdrawalQueues[msg.sender][validator];
+        // If queue is empty, set head and tail to new node
+        if (queue.head == 0) {
+            withdrawalQueues[msg.sender][validator] = WithdrawalQueue({head: withdrawalId, tail: withdrawalId});
         } else {
-            // Create node
-            withdrawalNodes[withdrawalId] =
-                WithdrawalNode({amount: amount, claimableAt: claimableAt, previous: 0, next: 0});
-
-            // Add to queue
-            WithdrawalQueue storage queue = withdrawalQueues[msg.sender][validator];
-            // If queue is empty, set head and tail to new node
-            if (queue.head == 0) {
-                withdrawalQueues[msg.sender][validator] = WithdrawalQueue({head: withdrawalId, tail: withdrawalId});
+            // Check if the claimableAt of the tail is higher than the claimableAt of the new node
+            // If so, traverse backwards to find the correct position
+            uint64 currentId = queue.tail;
+            while (currentId != 0 && withdrawalNodes[currentId].claimableAt > claimableAt) {
+                currentId = withdrawalNodes[currentId].previous;
+            }
+            if (currentId == queue.tail) {
+                // Higher chances of this happening in most cases, so check first
+                // Insert at tail
+                withdrawalNodes[withdrawalId].previous = queue.tail;
+                withdrawalNodes[queue.tail].next = withdrawalId;
+                queue.tail = withdrawalId;
+            } else if (currentId == 0) {
+                // Insert at head
+                withdrawalNodes[withdrawalId].next = queue.head;
+                withdrawalNodes[queue.head].previous = withdrawalId;
+                queue.head = withdrawalId;
             } else {
-                // Check if the claimableAt of the tail is higher than the claimableAt of the new node
-                // If so, traverse backwards to find the correct position
-                uint64 currentId = queue.tail;
-                while (currentId != 0 && withdrawalNodes[currentId].claimableAt > claimableAt) {
-                    currentId = withdrawalNodes[currentId].previous;
-                }
-                if (currentId == queue.tail) {
-                    // Higher chances of this happening in most cases, so check first
-                    // Insert at tail
-                    withdrawalNodes[withdrawalId].previous = queue.tail;
-                    withdrawalNodes[queue.tail].next = withdrawalId;
-                    queue.tail = withdrawalId;
-                } else if (currentId == 0) {
-                    // Insert at head
-                    withdrawalNodes[withdrawalId].next = queue.head;
-                    withdrawalNodes[queue.head].previous = withdrawalId;
-                    queue.head = withdrawalId;
-                } else {
-                    // Insert in the middle
-                    uint64 nextId = withdrawalNodes[currentId].next;
-                    withdrawalNodes[withdrawalId].previous = currentId;
-                    withdrawalNodes[withdrawalId].next = nextId;
-                    withdrawalNodes[currentId].next = withdrawalId;
-                    withdrawalNodes[nextId].previous = withdrawalId;
-                }
+                // Insert in the middle
+                uint64 nextId = withdrawalNodes[currentId].next;
+                withdrawalNodes[withdrawalId].previous = currentId;
+                withdrawalNodes[withdrawalId].next = nextId;
+                withdrawalNodes[currentId].next = withdrawalId;
+                withdrawalNodes[nextId].previous = withdrawalId;
             }
         }
 
         emit WithdrawalInitiated(msg.sender, validator, withdrawalId, amount);
+    }
+
+    /*
+     * @notice Initiate a withdrawal from a validator at a specific position in the queue
+     * @param validator The validator address to withdraw from
+     * @param amount The amount of tokens to withdraw
+     * @param previousId The ID of the previous withdrawal in the queue (0 if inserting at head)
+     * @dev   This function allows users to specify the position of their withdrawal in the queue.
+     *        It is the caller's responsibility to ensure the correct ordering based on claimableAt timestamps.
+     *        This is an advanced function and should be used with caution.
+     */
+    function initiateWithdrawalAtPosition(address validator, uint256 amount, uint64 previousId) external {
+        (uint64 withdrawalId, uint128 claimableAt) = _initialWithdrawal(msg.sender, amount, validator);
+
+        uint64 nextId;
+        // Check if the Id's are correct and claimableAt ordering is correct
+        if (previousId == 0) {
+            // Inserting at head - get the current head as nextId
+            nextId = withdrawalQueues[msg.sender][validator].head;
+        } else {
+            require(withdrawalNodes[previousId].claimableAt <= claimableAt, InvalidOrdering());
+
+            nextId = withdrawalNodes[previousId].next;
+        }
+
+        // Validate ordering if queue is not empty
+        if (nextId != 0) {
+            require(withdrawalNodes[nextId].claimableAt >= claimableAt, InvalidOrdering());
+        }
+
+        // Create node
+        withdrawalNodes[withdrawalId] =
+            WithdrawalNode({amount: amount, claimableAt: claimableAt, previous: previousId, next: nextId});
+
+        // Update previous and next nodes
+        if (previousId != 0) {
+            withdrawalNodes[previousId].next = withdrawalId;
+        } else {
+            // Inserting at head
+            withdrawalQueues[msg.sender][validator].head = withdrawalId;
+        }
+
+        if (nextId != 0) {
+            withdrawalNodes[nextId].previous = withdrawalId;
+        } else {
+            // Inserting at tail
+            withdrawalQueues[msg.sender][validator].tail = withdrawalId;
+        }
     }
 
     /*
