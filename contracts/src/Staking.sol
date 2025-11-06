@@ -4,8 +4,10 @@ pragma solidity ^0.8.30;
 import {Ownable} from "@oz/access/Ownable.sol";
 import {IERC20} from "@oz/token/ERC20/IERC20.sol";
 import {SafeERC20} from "@oz/token/ERC20/utils/SafeERC20.sol";
+import {SafeCast} from "@oz/utils/math/SafeCast.sol";
 
 contract Staking is Ownable {
+    using SafeCast for uint256;
     using SafeERC20 for IERC20;
 
     // ============================================================
@@ -423,7 +425,7 @@ contract Staking is Ownable {
     function proposeWithdrawDelay(uint128 newDelay) external onlyOwner {
         require(newDelay != 0 && newDelay <= CONFIG_TIME_DELAY, InvalidParameter());
 
-        uint128 executableAt = uint128(block.timestamp + CONFIG_TIME_DELAY);
+        uint128 executableAt = (block.timestamp + CONFIG_TIME_DELAY).toUint128();
         pendingWithdrawDelayChange = ConfigProposal({value: newDelay, executableAt: executableAt});
         emit WithdrawDelayProposed(withdrawDelay, newDelay, executableAt);
     }
