@@ -70,8 +70,7 @@ library Secp256k1 {
         //        = (Px - Rx)⋅λ - Py
         // Noting that `Px = Qx` for point doubling.
         unchecked {
-            uint256 l2 = mulmod(l, l, P);
-            r.x = addmod(l2, P - addmod(px, qx, P), P);
+            r.x = addmod(mulmod(l, l, P), P - addmod(px, qx, P), P);
             r.y = addmod(mulmod(addmod(px, P - r.x, P), l, P), P - py, P);
         }
         return r;
