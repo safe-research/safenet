@@ -18,15 +18,16 @@ contract Staking is Ownable {
     struct WithdrawalNode {
         uint256 amount;
         uint128 claimableAt;
-        uint128 next; // ID of next withdrawal, 0 if last
+        uint64 previous; // ID of previous withdrawal, 0 if first
+        uint64 next; // ID of next withdrawal, 0 if last
     }
 
     /*
      * @notice Tracks the withdrawal queue for a staker-validator pair
      */
     struct WithdrawalQueue {
-        uint128 head; // ID of first withdrawal in queue, 0 if empty
-        uint128 tail; // ID of last withdrawal in queue, 0 if empty
+        uint64 head; // ID of first withdrawal in queue, 0 if empty
+        uint64 tail; // ID of last withdrawal in queue, 0 if empty
     }
 
     /*
@@ -52,12 +53,12 @@ contract Staking is Ownable {
     /*
      * @notice The SAFE token used for staking
      */
-    IERC20 public immutable safeToken;
+    IERC20 public immutable SAFE_TOKEN;
 
     /*
      * @notice Time delay for configuration changes (immutable, set at deployment)
      */
-    uint256 public immutable configTimeDelay;
+    uint256 public immutable CONFIG_TIME_DELAY;
 
     /*
      * @notice Global counter for total staked tokens
@@ -77,7 +78,7 @@ contract Staking is Ownable {
     /*
      * @notice Counter for generating unique withdrawal IDs
      */
-    uint128 public nextWithdrawalId;
+    uint64 public nextWithdrawalId;
 
     // ============================================================
     // MAPPINGS
@@ -106,7 +107,7 @@ contract Staking is Ownable {
     /*
      * @notice Stores all withdrawal nodes by ID
      */
-    mapping(uint128 withdrawalId => WithdrawalNode node) public withdrawalNodes;
+    mapping(uint64 withdrawalId => WithdrawalNode node) public withdrawalNodes;
 
     /*
      * @notice Pending proposal for withdraw delay change
@@ -124,12 +125,14 @@ contract Staking is Ownable {
 
     // Staking Operations
     event StakeIncreased(address indexed staker, address indexed validator, uint256 amount);
-    event WithdrawalInitiated(address indexed staker, address indexed validator, uint256 amount, uint256 claimableAt);
+    event WithdrawalInitiated(
+        address indexed staker, address indexed validator, uint64 indexed withdrawalId, uint256 amount
+    );
     event WithdrawalClaimed(address indexed staker, address indexed validator, uint256 amount);
 
     // Validator Management
     event ValidatorsProposed(
-        bytes32 indexed validatorsHash, address[] indexed validator, bool[] isRegistration, uint256 executableAt
+        bytes32 indexed validatorsHash, address[] validator, bool[] isRegistration, uint256 executableAt
     );
     event ValidatorUpdated(address indexed validator, bool isRegistered);
 
@@ -209,19 +212,25 @@ contract Staking is Ownable {
      */
     error InvalidParameter();
 
+    /*
+     * @notice Thrown when the specified ordering in the withdrawal queue is invalid
+     */
+    error InvalidOrdering();
+
     // ============================================================
     // CONSTRUCTOR
     // ============================================================
 
-    constructor(address initialOwner, address _safeToken, uint128 initialWithdrawDelay, uint256 _configTimeDelay)
+    constructor(address initialOwner, address safeToken, uint128 initialWithdrawDelay, uint256 configTimeDelay)
         Ownable(initialOwner)
     {
-        if (_safeToken == address(0)) revert InvalidAddress();
-        if (initialWithdrawDelay == 0) revert InvalidParameter();
-        if (_configTimeDelay == 0) revert InvalidParameter();
+        require(safeToken != address(0), InvalidAddress());
+        require(initialWithdrawDelay != 0, InvalidParameter());
+        require(configTimeDelay != 0, InvalidParameter());
+        require(initialWithdrawDelay <= configTimeDelay, InvalidParameter());
 
-        safeToken = IERC20(_safeToken);
-        configTimeDelay = _configTimeDelay;
+        SAFE_TOKEN = IERC20(safeToken);
+        CONFIG_TIME_DELAY = configTimeDelay;
         withdrawDelay = initialWithdrawDelay;
         nextWithdrawalId = 1;
     }
@@ -236,51 +245,142 @@ contract Staking is Ownable {
      * @param amount The amount of tokens to stake
      */
     function stake(address validator, uint256 amount) external {
-        if (amount == 0) revert InvalidAmount();
-        if (validator == address(0)) revert InvalidAddress();
-        if (!isValidator[validator]) revert NotValidator();
+        require(amount != 0, InvalidAmount());
+        require(validator != address(0), InvalidAddress());
+        require(isValidator[validator], NotValidator());
 
         stakes[msg.sender][validator] += amount;
         totalStakes[validator] += amount;
         totalStakedAmount += amount;
         emit StakeIncreased(msg.sender, validator, amount);
 
-        safeToken.safeTransferFrom(msg.sender, address(this), amount);
+        SAFE_TOKEN.safeTransferFrom(msg.sender, address(this), amount);
     }
 
     /*
-     * @notice Initiate a withdrawal of staked tokens
+     * @notice Internal function to handle initial withdrawal logic
+     * @param user The address initiating the withdrawal
+     * @param amount The amount to withdraw
      * @param validator The validator address to withdraw from
-     * @param amount The amount of tokens to withdraw
+     * @return withdrawalId The unique ID of the initiated withdrawal
+     * @return claimableAt The timestamp when the withdrawal becomes claimable
      */
-    function initiateWithdrawal(address validator, uint256 amount) external {
-        if (amount == 0) revert InvalidAmount();
-        if (stakes[msg.sender][validator] < amount) revert InsufficientStake();
+    function _initialWithdrawal(address user, uint256 amount, address validator)
+        internal
+        returns (uint64 withdrawalId, uint128 claimableAt)
+    {
+        require(amount != 0, InvalidAmount());
+        require(stakes[user][validator] >= amount, InsufficientStake());
 
-        stakes[msg.sender][validator] -= amount;
+        // Calculating & casting claimable timestamp
+        claimableAt = uint128(block.timestamp + withdrawDelay);
+
+        stakes[user][validator] -= amount;
         totalStakes[validator] -= amount;
         totalStakedAmount -= amount;
         totalPendingWithdrawals += amount;
 
-        // Calculate claimable timestamp
-        uint128 claimableAt = uint128(block.timestamp + withdrawDelay);
+        // Generate new withdrawal ID
+        withdrawalId = nextWithdrawalId++;
 
-        // Generate new withdrawal ID and create node
-        uint128 withdrawalId = nextWithdrawalId++;
-        withdrawalNodes[withdrawalId] = WithdrawalNode({amount: amount, claimableAt: claimableAt, next: 0});
+        emit WithdrawalInitiated(user, validator, withdrawalId, amount);
+    }
+
+    /*
+     * @notice Initiate a withdrawal from a validator
+     * @param validator The validator address to withdraw from
+     * @param amount The amount of tokens to withdraw
+     * @dev   This function should be used in the interface for normal withdrawals. It inserts the new withdrawal
+     *        into the queue in the correct position based on the claimableAt timestamp.
+     */
+    function initiateWithdrawal(address validator, uint256 amount) external {
+        (uint64 withdrawalId, uint128 claimableAt) = _initialWithdrawal(msg.sender, amount, validator);
+
+        // Create node
+        withdrawalNodes[withdrawalId] = WithdrawalNode({amount: amount, claimableAt: claimableAt, previous: 0, next: 0});
 
         // Add to queue
         WithdrawalQueue storage queue = withdrawalQueues[msg.sender][validator];
+        // If queue is empty, set head and tail to new node
         if (queue.head == 0) {
-            // Queue is empty
             withdrawalQueues[msg.sender][validator] = WithdrawalQueue({head: withdrawalId, tail: withdrawalId});
         } else {
-            // Link from tail
-            withdrawalNodes[queue.tail].next = withdrawalId;
-            queue.tail = withdrawalId;
+            // Check if the claimableAt of the tail is higher than the claimableAt of the new node
+            // If so, traverse backwards to find the correct position
+            uint64 currentId = queue.tail;
+            while (currentId != 0 && withdrawalNodes[currentId].claimableAt > claimableAt) {
+                currentId = withdrawalNodes[currentId].previous;
+            }
+            if (currentId == queue.tail) {
+                // Higher chances of this happening in most cases, so check first
+                // Insert at tail
+                withdrawalNodes[withdrawalId].previous = queue.tail;
+                withdrawalNodes[queue.tail].next = withdrawalId;
+                queue.tail = withdrawalId;
+            } else if (currentId == 0) {
+                // Insert at head
+                withdrawalNodes[withdrawalId].next = queue.head;
+                withdrawalNodes[queue.head].previous = withdrawalId;
+                queue.head = withdrawalId;
+            } else {
+                // Insert in the middle
+                uint64 nextId = withdrawalNodes[currentId].next;
+                withdrawalNodes[withdrawalId].previous = currentId;
+                withdrawalNodes[withdrawalId].next = nextId;
+                withdrawalNodes[currentId].next = withdrawalId;
+                withdrawalNodes[nextId].previous = withdrawalId;
+            }
         }
 
-        emit WithdrawalInitiated(msg.sender, validator, amount, claimableAt);
+        emit WithdrawalInitiated(msg.sender, validator, withdrawalId, amount);
+    }
+
+    /*
+     * @notice Initiate a withdrawal from a validator at a specific position in the queue
+     * @param validator The validator address to withdraw from
+     * @param amount The amount of tokens to withdraw
+     * @param previousId The ID of the previous withdrawal in the queue (0 if inserting at head)
+     * @dev   This function allows users to specify the position of their withdrawal in the queue.
+     *        It is the caller's responsibility to ensure the correct ordering based on claimableAt timestamps.
+     *        This is an advanced function and should be used with caution.
+     */
+    function initiateWithdrawalAtPosition(address validator, uint256 amount, uint64 previousId) external {
+        (uint64 withdrawalId, uint128 claimableAt) = _initialWithdrawal(msg.sender, amount, validator);
+
+        uint64 nextId;
+        // Check if the Id's are correct and claimableAt ordering is correct
+        if (previousId == 0) {
+            // Inserting at head - get the current head as nextId
+            nextId = withdrawalQueues[msg.sender][validator].head;
+        } else {
+            require(withdrawalNodes[previousId].claimableAt <= claimableAt, InvalidOrdering());
+
+            nextId = withdrawalNodes[previousId].next;
+        }
+
+        // Validate ordering if queue is not empty
+        if (nextId != 0) {
+            require(withdrawalNodes[nextId].claimableAt >= claimableAt, InvalidOrdering());
+        }
+
+        // Create node
+        withdrawalNodes[withdrawalId] =
+            WithdrawalNode({amount: amount, claimableAt: claimableAt, previous: previousId, next: nextId});
+
+        // Update previous and next nodes
+        if (previousId != 0) {
+            withdrawalNodes[previousId].next = withdrawalId;
+        } else {
+            // Inserting at head
+            withdrawalQueues[msg.sender][validator].head = withdrawalId;
+        }
+
+        if (nextId != 0) {
+            withdrawalNodes[nextId].previous = withdrawalId;
+        } else {
+            // Inserting at tail
+            withdrawalQueues[msg.sender][validator].tail = withdrawalId;
+        }
     }
 
     /*
@@ -290,10 +390,10 @@ contract Staking is Ownable {
      */
     function claimWithdrawal(address staker, address validator) external {
         WithdrawalQueue memory queue = withdrawalQueues[staker][validator];
-        if (queue.head == 0) revert WithdrawalQueueEmpty();
+        require(queue.head != 0, WithdrawalQueueEmpty());
 
         WithdrawalNode memory node = withdrawalNodes[queue.head];
-        if (block.timestamp < node.claimableAt) revert NoClaimableWithdrawal();
+        require(block.timestamp >= node.claimableAt, NoClaimableWithdrawal());
 
         uint256 amount = node.amount;
 
@@ -302,13 +402,14 @@ contract Staking is Ownable {
             withdrawalQueues[staker][validator] = WithdrawalQueue({head: 0, tail: 0});
         } else {
             withdrawalQueues[staker][validator].head = node.next;
+            withdrawalNodes[node.next].previous = 0;
         }
 
         delete withdrawalNodes[queue.head];
         totalPendingWithdrawals -= amount;
         emit WithdrawalClaimed(staker, validator, amount);
 
-        safeToken.safeTransfer(staker, amount);
+        SAFE_TOKEN.safeTransfer(staker, amount);
     }
 
     // ============================================================
@@ -320,9 +421,9 @@ contract Staking is Ownable {
      * @param newDelay The proposed withdraw delay in seconds
      */
     function proposeWithdrawDelay(uint128 newDelay) external onlyOwner {
-        if (newDelay == 0 || newDelay > configTimeDelay) revert InvalidParameter();
+        require(newDelay != 0 && newDelay <= CONFIG_TIME_DELAY, InvalidParameter());
 
-        uint128 executableAt = uint128(block.timestamp + configTimeDelay);
+        uint128 executableAt = uint128(block.timestamp + CONFIG_TIME_DELAY);
         pendingWithdrawDelayChange = ConfigProposal({value: newDelay, executableAt: executableAt});
         emit WithdrawDelayProposed(withdrawDelay, newDelay, executableAt);
     }
@@ -334,13 +435,13 @@ contract Staking is Ownable {
      * @dev It is currently possible to propose duplicate validators in a single proposal.
      */
     function proposeValidators(address[] calldata validators, bool[] calldata isRegistration) external onlyOwner {
-        if (validators.length == 0) revert InvalidParameter();
-        if (validators.length != isRegistration.length) revert ArrayLengthMismatch();
+        require(validators.length != 0, InvalidParameter());
+        require(validators.length == isRegistration.length, ArrayLengthMismatch());
 
-        uint256 executableAt = block.timestamp + configTimeDelay;
+        uint256 executableAt = block.timestamp + CONFIG_TIME_DELAY;
         bytes32 validatorsHash = keccak256(abi.encode(validators, isRegistration, executableAt));
         for (uint256 i = 0; i < validators.length; i++) {
-            if (validators[i] == address(0)) revert InvalidAddress();
+            require(validators[i] != address(0), InvalidAddress());
         }
 
         pendingValidatorChangeHash = validatorsHash;
@@ -357,8 +458,8 @@ contract Staking is Ownable {
      */
     function executeWithdrawDelayChange() external {
         ConfigProposal memory proposal = pendingWithdrawDelayChange;
-        if (proposal.executableAt == 0) revert NoProposalExists();
-        if (block.timestamp < proposal.executableAt) revert ProposalNotExecutable();
+        require(proposal.executableAt != 0, NoProposalExists());
+        require(block.timestamp >= proposal.executableAt, ProposalNotExecutable());
 
         uint256 oldDelay = withdrawDelay;
         withdrawDelay = uint128(proposal.value);
@@ -375,12 +476,12 @@ contract Staking is Ownable {
         uint256 executableAt
     ) external {
         bytes32 proposalHash = pendingValidatorChangeHash;
-        if (proposalHash == bytes32(0)) revert NoProposalExists();
+        require(proposalHash != bytes32(0), NoProposalExists());
 
         bytes32 validatorsHash = keccak256(abi.encode(validators, isRegistration, executableAt));
-        if (proposalHash != validatorsHash) revert InvalidProposalHash();
-        if (executableAt == 0) revert ProposalNotSet();
-        if (block.timestamp < executableAt) revert ProposalNotExecutable();
+        require(proposalHash == validatorsHash, InvalidProposalHash());
+        require(executableAt != 0, ProposalNotSet());
+        require(block.timestamp >= executableAt, ProposalNotExecutable());
 
         for (uint256 i = 0; i < validators.length; i++) {
             isValidator[validators[i]] = isRegistration[i];
@@ -400,17 +501,17 @@ contract Staking is Ownable {
      * @param to The address to send recovered tokens to
      */
     function recoverTokens(address token, address to) external onlyOwner {
-        if (to == address(0)) revert InvalidAddress();
+        require(to != address(0), InvalidAddress());
 
         uint256 recoverable;
-        if (token == address(safeToken)) {
-            uint256 balance = safeToken.balanceOf(address(this));
+        if (token == address(SAFE_TOKEN)) {
+            uint256 balance = SAFE_TOKEN.balanceOf(address(this));
             recoverable = balance - totalStakedAmount - totalPendingWithdrawals;
         } else {
             recoverable = IERC20(token).balanceOf(address(this));
         }
 
-        if (recoverable == 0) revert InsufficientRecoverableAmount();
+        require(recoverable != 0, InsufficientRecoverableAmount());
 
         emit TokensRecovered(token, to, recoverable);
 
@@ -435,7 +536,7 @@ contract Staking is Ownable {
 
         // Count withdrawals
         uint256 count = 0;
-        uint128 currentId = queue.head;
+        uint64 currentId = queue.head;
         while (currentId != 0) {
             count++;
             currentId = withdrawalNodes[currentId].next;
