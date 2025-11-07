@@ -115,14 +115,14 @@ library Secp256k1 {
     }
 
     /// @notice Requires that `P` is a non-zero point on the curve.
-    function requireNonZero(Point memory p) private pure {
-        require(_satisfiesCurveEquasion(p.x, p.y), NotOnCurve());
+    function requireNonZero(Point memory p) internal pure {
+        require(_satisfiesCurveEquation(p.x, p.y), NotOnCurve());
     }
 
     function _unpack(Point memory p) private pure returns (uint256 x, uint256 y) {
         x = p.x;
         y = p.y;
-        bool valid = _satisfiesCurveEquasion(x, y);
+        bool valid = _satisfiesCurveEquation(x, y);
         assembly ("memory-safe") {
             valid := or(iszero(or(x, y)), valid)
         }

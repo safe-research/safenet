@@ -148,7 +148,7 @@ contract FROSTCoordinatorTest is Test {
             vm.expectEmit();
             emit FROSTCoordinator.KeyGenSecretShared(id, index, share);
             vm.prank(participants.addr(index));
-            coordinator.keygenSecretShare(id, index, share);
+            coordinator.keygenSecretShare(id, share);
         }
 
         // Round 2.2*
