@@ -26,11 +26,11 @@ export class ValidatorService {
 	async start() {
 		if (this.#unwatch !== null) throw Error("Already started!");
 		this.#unwatch = watchConsusEvents({
-			client: this.#client, 
+			client: this.#client,
 			target: this.#config.coreAddress,
 			onApprove: console.log,
 			onTransfer: console.log,
-			onError: console.error
+			onError: console.error,
 		});
 	}
 

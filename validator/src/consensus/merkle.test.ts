@@ -1,10 +1,14 @@
-import { getAddress, Hex } from "viem";
+import type { Hex } from "viem";
 import { describe, expect, it } from "vitest"; // or '@jest/globals'
-import { calculateMerkleRoot, calculateParticipantsRoot, generateMerkleProof, verifyMerkleProof } from "./merkle.js";
+import {
+	calculateMerkleRoot,
+	generateMerkleProof,
+	verifyMerkleProof,
+} from "./merkle.js";
 
 // --- Tests ---
 describe("merkle", () => {
-	it.only("should generate the correct merkle root", () => {
+	it("should generate the correct merkle root", () => {
 		const leaves: Hex[] = [
 			"0x0000000000000000000000000000000000000000000000000000000000000001",
 			"0x0000000000000000000000000000000000000000000000000000000000000002",
@@ -13,15 +17,15 @@ describe("merkle", () => {
 			"0x0000000000000000000000000000000000000000000000000000000000000005",
 			"0x0000000000000000000000000000000000000000000000000000000000000000",
 			"0x0000000000000000000000000000000000000000000000000000000000000000",
-			"0x0000000000000000000000000000000000000000000000000000000000000000"
-		]
-		const root = calculateMerkleRoot(leaves)
+			"0x0000000000000000000000000000000000000000000000000000000000000000",
+		];
+		const root = calculateMerkleRoot(leaves);
 		expect(root).toBe(
-			"0x37e58bc84afff4e1afade4140135583af3d6d3523a435e60cec5dc75ae3d7e8b"
+			"0x37e58bc84afff4e1afade4140135583af3d6d3523a435e60cec5dc75ae3d7e8b",
 		);
 	});
 
-	it.only("should generate a valid merkle proof", () => {
+	it("should generate a valid merkle proof", () => {
 		const leaves: Hex[] = [
 			"0x0000000000000000000000000000000000000000000000000000000000000001",
 			"0x0000000000000000000000000000000000000000000000000000000000000002",
@@ -30,16 +34,16 @@ describe("merkle", () => {
 			"0x0000000000000000000000000000000000000000000000000000000000000005",
 			"0x0000000000000000000000000000000000000000000000000000000000000000",
 			"0x0000000000000000000000000000000000000000000000000000000000000000",
-			"0x0000000000000000000000000000000000000000000000000000000000000000"
-		]
-		const proof = generateMerkleProof(leaves, 2)
-		const root = calculateMerkleRoot(leaves)
+			"0x0000000000000000000000000000000000000000000000000000000000000000",
+		];
+		const proof = generateMerkleProof(leaves, 2);
+		const root = calculateMerkleRoot(leaves);
 		expect(
 			verifyMerkleProof(
 				root,
 				"0x0000000000000000000000000000000000000000000000000000000000000003",
-				proof
-			)
+				proof,
+			),
 		).toBeTruthy();
 	});
 });

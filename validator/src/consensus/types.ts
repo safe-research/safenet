@@ -1,6 +1,6 @@
-import { Address } from "viem"
+import type { Address } from "viem";
 
 export type Participant = {
-    index: bigint,
-    address: Address
-}
+	index: bigint;
+	address: Address;
+};
