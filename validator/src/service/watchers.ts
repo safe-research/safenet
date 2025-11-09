@@ -8,6 +8,7 @@ export const watchCoordinatorEvents = ({
 	target,
 	onKeyGenInit,
 	onKeyGenCommitment,
+	onKeyGenSecrets,
 	onError,
 	onUnknown,
 }: {
@@ -24,6 +25,11 @@ export const watchCoordinatorEvents = ({
 		index?: bigint;
 		commitment?: { mu: bigint; r: Point; c: readonly Point[] };
 	}) => void;
+	onKeyGenSecrets: (args: {
+		id?: Hex;
+		index?: bigint;
+		share?: { f: readonly bigint[]; y: Point };
+	}) => void;
 	onError: (error: Error) => void;
 	onUnknown?: (log: Log) => void;
 }): (() => void) => {
@@ -34,12 +40,13 @@ export const watchCoordinatorEvents = ({
 			logs.forEach((log) => {
 				switch (log.eventName) {
 					case "KeyGen":
-						// Handle Approve event
 						onKeyGenInit(log.args);
 						return;
 					case "KeyGenCommitted":
-						// Handle Approve event
 						onKeyGenCommitment(log.args);
+						return;
+					case "KeyGenSecretShared":
+						onKeyGenSecrets(log.args);
 						return;
 					default:
 						// TODO: should never happen, check if it can be removed

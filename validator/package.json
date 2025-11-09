@@ -9,6 +9,8 @@
 		"test:watch": "vitest"
 	},
 	"dependencies": {
+		"@noble/curves": "^2.0.1",
+		"@noble/hashes": "^2.0.1",
 		"dotenv": "^17.2.1",
 		"viem": "^2.38.5",
 		"zod": "^4.1.12"
