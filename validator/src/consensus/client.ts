@@ -1,7 +1,19 @@
 import type { Address, Hex } from "viem";
+import {
+	createSigningShare,
+	createVerificationShare,
+	evalCommitment,
+	evalPoly,
+	verifyKey,
+} from "../frost/math.js";
+import { ecdh } from "../frost/secret.js";
 import type { FrostPoint, GroupId, ProofOfKnowledge } from "../frost/types.js";
-// TODO: replace by final math logic imports
-import { FROST_MATH } from "../frost/types.js";
+import {
+	createCoefficients,
+	createCommitments,
+	createProofOfKnowledge,
+	verifyCommitments,
+} from "../frost/vss.js";
 import {
 	calculateParticipantsRoot,
 	generateParticipantProof,
@@ -66,6 +78,14 @@ export class FrostClient {
 		this.#coordinator = coordinator;
 	}
 
+	validator(): Address {
+		return this.#validatorAddress;
+	}
+
+	participationIndex(groupId: GroupId): bigint {
+		return this.#keyGenInfo.get(groupId)?.participantIndex ?? -1n;
+	}
+
 	registerParticipants(participants: Participant[]) {
 		const participantsRoot = calculateParticipantsRoot(participants);
 		this.#participantsInfo.set(participantsRoot, participants);
@@ -95,20 +115,16 @@ export class FrostClient {
 			participants,
 			this.#validatorAddress,
 		);
-		const coefficients = FROST_MATH.createCoefficients(threshold);
-		const pok = FROST_MATH.createProofOfKnowledge(
-			groupId,
-			participantIndex,
-			coefficients,
-		);
-		const localCommitments = FROST_MATH.createCommitments(coefficients);
+		const coefficients = createCoefficients(threshold);
+		const pok = createProofOfKnowledge(groupId, participantIndex, coefficients);
+		const localCommitments = createCommitments(coefficients);
 		const poap = generateParticipantProof(participants, arrayIndex);
 		const commitments = new Map<bigint, FrostPoint[]>();
 		commitments.set(participantIndex, localCommitments);
 		const secretShares = new Map<bigint, bigint>();
 		secretShares.set(
 			participantIndex,
-			FROST_MATH.evalPoly(coefficients, participantIndex),
+			evalPoly(coefficients, participantIndex),
 		);
 		this.#keyGenInfo.set(groupId, {
 			groupId,
@@ -136,13 +152,13 @@ export class FrostClient {
 		const info = this.#keyGenInfo.get(groupId);
 		if (info === undefined) return;
 		if (senderIndex === info.participantIndex) {
-			console.info("Do not verify own shares");
+			console.info("Do not verify own commitments");
 			return;
 		}
 		if (info.commitments.has(senderIndex)) {
 			throw Error(`Commitment for ${groupId}:${senderIndex} already known!`);
 		}
-		FROST_MATH.verifyCommitments(groupId, senderIndex, peerCommitments, pok);
+		verifyCommitments(groupId, senderIndex, peerCommitments, pok);
 		info.commitments.set(senderIndex, peerCommitments);
 		if (checkInformationComplete(info.participants, info.commitments)) {
 			this.prepareAndPublishKeygenSecretShares(info);
@@ -152,7 +168,7 @@ export class FrostClient {
 	// Round 2.1
 	private prepareAndPublishKeygenSecretShares(info: KeygenInfo) {
 		// Will be published as y
-		const verificationShare = FROST_MATH.createVerificationShare(
+		const verificationShare = createVerificationShare(
 			info.commitments,
 			info.participantIndex,
 		);
@@ -166,11 +182,8 @@ export class FrostClient {
 				throw Error(
 					`Commitments for ${info.groupId}:${participant.index} are not available!`,
 				);
-			const peerShare = FROST_MATH.evalPoly(
-				info.coefficients,
-				participant.index,
-			);
-			const encryptedShare = FROST_MATH.ecdh(
+			const peerShare = evalPoly(info.coefficients, participant.index);
+			const encryptedShare = ecdh(
 				peerShare,
 				info.coefficients[0],
 				peerCommitments[0],
@@ -200,6 +213,10 @@ export class FrostClient {
 		if (peerShares.length !== info.participants.length - 1) {
 			throw Error("Unexpect f length");
 		}
+		if (senderIndex === info.participantIndex) {
+			console.info("Do not handle own share");
+			return;
+		}
 		const [participantIndex] = findParticipationIndex(
 			info.participants,
 			this.#validatorAddress,
@@ -213,25 +230,26 @@ export class FrostClient {
 		const shareIndex =
 			participantIndex < senderIndex ? participantIndex : participantIndex - 1n;
 		// Note: Number(shareIndex) is theoretically an unsafe cast
-		const partialShare = FROST_MATH.ecdh(
-			peerShares[Number(shareIndex)],
+		const partialShare = ecdh(
+			peerShares[Number(shareIndex) - 1],
 			info.coefficients[0],
 			commitment[0],
 		);
-		const partialVerificationShare = FROST_MATH.evalCommitment(
+		const partialVerificationShare = evalCommitment(
 			commitment,
 			participantIndex,
 		);
-		FROST_MATH.verifyKey(partialVerificationShare, partialShare);
+		verifyKey(partialVerificationShare, partialShare);
 		info.secretShares.set(senderIndex, partialShare);
 
 		if (checkInformationComplete(info.participants, info.secretShares)) {
 			const verificationShare = info.verificationShare;
 			if (verificationShare === undefined)
 				throw Error("No verification share available!");
-			const signingShare = FROST_MATH.createSigningShare(info.secretShares);
-			FROST_MATH.verifyKey(partialVerificationShare, signingShare);
+			const signingShare = createSigningShare(info.secretShares);
+			verifyKey(verificationShare, signingShare);
 			info.signingShare = signingShare;
+			console.info(`Final signing key for ${info.participantIndex} calculated`);
 		}
 	}
 }

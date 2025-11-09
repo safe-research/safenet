@@ -8,7 +8,7 @@ export const buildMerkleTree = (leaves: Hex[]): Hex[][] => {
 	while (tree[tree.length - 1].length > 1) {
 		const nextLevel: Hex[] = [];
 		const currentLevel = tree[tree.length - 1];
-		const currentOrder = Math.floor(currentLevel.length / 2);
+		const currentOrder = Math.ceil(currentLevel.length / 2);
 		for (let i = 0; i < currentOrder; i++) {
 			const a = currentLevel.at(i * 2) ?? zeroHash;
 			const b = currentLevel.at(i * 2 + 1) ?? zeroHash;
@@ -29,7 +29,7 @@ export const calculateMerkleRoot = (leaves: Hex[]): Hex => {
 	return rootLevel[0];
 };
 
-const hashParticipant = (p: Participant): Hex =>
+export const hashParticipant = (p: Participant): Hex =>
 	keccak256(encodePacked(["uint256", "address"], [p.index, p.address]));
 
 export const calculateParticipantsRoot = (participants: Participant[]): Hex => {
