@@ -2,16 +2,24 @@
 pragma solidity ^0.8.30;
 
 import {Test, Vm} from "@forge-std/Test.sol";
+import {Arrays} from "@oz/utils/Arrays.sol";
+import {Hashes} from "@oz/utils/cryptography/Hashes.sol";
 import {ForgeSecp256k1} from "@test/util/ForgeSecp256k1.sol";
 import {ParticipantMerkleTree} from "@test/util/ParticipantMerkleTree.sol";
 import {FROSTCoordinator} from "@/FROSTCoordinator.sol";
 import {Secp256k1} from "@/lib/Secp256k1.sol";
 
 contract FROSTCoordinatorTest is Test {
+    using Arrays for address[];
     using ForgeSecp256k1 for ForgeSecp256k1.P;
 
-    uint128 public constant COUNT = 5;
-    uint128 public constant THRESHOLD = 3;
+    struct Nonces {
+        ForgeSecp256k1.P d;
+        ForgeSecp256k1.P e;
+    }
+
+    uint64 public constant COUNT = 5;
+    uint64 public constant THRESHOLD = 3;
 
     FROSTCoordinator public coordinator;
     ParticipantMerkleTree public participants;
@@ -201,20 +209,113 @@ contract FROSTCoordinatorTest is Test {
         }
     }
 
-    function _randomSortedAddresses(uint128 length) private returns (address[] memory result) {
-        // Forge standard library only supports sorting arrays of integers, so
-        // use type coersion to sort random addresses (noting that arrays of
-        // integers and arrays of addresses have the same layout in memory).
+    function test_Sign() public {
+        (FROSTCoordinator.GroupId id, uint256[] memory s) = _trustedKeyGen(0);
+        FROSTCoordinator.SignatureId sig = coordinator.nextSignatureId(id);
 
-        uint256[] memory unsorted = new uint256[](uint256(length));
-        for (uint256 i = 0; i < unsorted.length; i++) {
-            unsorted[i] = uint256(uint160(vm.randomAddress()));
+        // Preprocess 1
+        // We setup a commit with **a single** pair of nonces in a Merkle tree
+        // full of 0s in order to speed up the test. In practice, we compute and
+        // commit to trees with 1024 nonce pairs.
+        bytes32[] memory proof = new bytes32[](10);
+        Nonces[] memory nonces = new Nonces[](COUNT + 1);
+        bytes32[] memory commitments = new bytes32[](COUNT + 1);
+        for (uint256 index = 1; index <= COUNT; index++) {
+            Nonces memory n = nonces[index];
+            n.d = ForgeSecp256k1.rand();
+            n.e = ForgeSecp256k1.rand();
+            // forge-lint: disable-next-line(asm-keccak256)
+            bytes32 digest = keccak256(abi.encode(n.d.x(), n.d.y(), n.e.x(), n.e.y()));
+            for (uint256 i = 0; i < proof.length; i++) {
+                digest = Hashes.efficientKeccak256(digest, 0);
+            }
+            commitments[index] = digest;
         }
 
-        uint256[] memory sorted = vm.sort(unsorted);
-        assembly ("memory-safe") {
-            result := sorted
+        // Preprocess 2
+        for (uint256 index = 1; index <= COUNT; index++) {
+            vm.prank(participants.addr(index));
+            coordinator.preprocess(id, commitments[index]);
         }
+
+        // Sign 1
+        // The complete list of participants is implicitely selects all honest
+        // all participants should cooperate. "honest" must be deterministic
+        // such that there is no ambiguity on the set for honest validators.
+        uint256[] memory honestParticipants = _honestParticipants();
+
+        // Sign 2*
+        // The signature aggregator (the coordinator) reveals the message to
+        // sign and the participants reveal their committed to nonces.
+        bytes32 message = keccak256("Hello, Shieldnet!");
+        vm.expectEmit();
+        emit FROSTCoordinator.Sign(id, sig, message);
+        assertEq(
+            FROSTCoordinator.SignatureId.unwrap(sig), FROSTCoordinator.SignatureId.unwrap(coordinator.sign(id, message))
+        );
+        for (uint256 i = 0; i < honestParticipants.length; i++) {
+            uint256 index = honestParticipants[i];
+            Nonces memory n = nonces[index];
+            FROSTCoordinator.SignNonces memory nn = FROSTCoordinator.SignNonces({d: n.d.toPoint(), e: n.e.toPoint()});
+            vm.prank(participants.addr(index));
+            coordinator.signRevealNonces(sig, nn, proof);
+        }
+    }
+
+    function _randomSortedAddresses(uint64 count) private view returns (address[] memory result) {
+        result = new address[](count);
+        for (uint256 i = 0; i < result.length; i++) {
+            result[i] = vm.randomAddress();
+        }
+        result.sort();
+    }
+
+    function _trustedKeyGen(uint64 domain) private returns (FROSTCoordinator.GroupId id, uint256[] memory s) {
+        id = coordinator.keygen(domain, participants.root(), COUNT, THRESHOLD);
+        s = new uint256[](COUNT + 1);
+
+        uint256[] memory a = new uint256[](THRESHOLD);
+        for (uint256 j = 0; j < THRESHOLD; j++) {
+            a[j] = vm.randomUint(0, Secp256k1.N - 1);
+        }
+
+        // In our trusted key gen setup, we pretend like the first participant
+        // has the full polynomial for deriving all the shares, and all other
+        // participants do not add anything.
+        FROSTCoordinator.KeyGenCommitment memory commitment;
+        commitment.c = new Secp256k1.Point[](THRESHOLD);
+        for (uint256 index = 2; index <= COUNT; index++) {
+            (address participant, bytes32[] memory poap) = participants.proof(index);
+            vm.prank(participant);
+            coordinator.keygenCommit(id, index, poap, commitment);
+        }
+        {
+            for (uint256 j = 0; j < THRESHOLD; j++) {
+                commitment.c[j] = ForgeSecp256k1.g(a[j]).toPoint();
+            }
+            (address participant, bytes32[] memory poap) = participants.proof(1);
+            vm.prank(participant);
+            coordinator.keygenCommit(id, 1, poap, commitment);
+        }
+
+        // We don't actually need to encrypt and broadcast secret shares, the
+        // trusted dealer computes the private keys for each participant.
+        FROSTCoordinator.KeyGenSecretShare memory share;
+        share.f = new uint256[](COUNT - 1);
+        for (uint256 index = 1; index <= COUNT; index++) {
+            s[index] = _f(a, index);
+            share.y = ForgeSecp256k1.g(s[index]).toPoint();
+            vm.prank(participants.addr(index));
+            coordinator.keygenSecretShare(id, share);
+        }
+
+        // For debugging purposes, also provide the group private key to the
+        // caller (even if this is typically not available).
+        s[0] = a[0];
+
+        assertEq(
+            keccak256(abi.encode(coordinator.groupKey(id))), keccak256(abi.encode(ForgeSecp256k1.g(s[0]).toPoint()))
+        );
     }
 
     function _h(uint256 index, Secp256k1.Point memory ga0, Secp256k1.Point memory r)
@@ -247,5 +348,18 @@ contract FROSTCoordinatorTest is Test {
 
     function _ecdh(uint256 x, uint256 k, ForgeSecp256k1.P memory q) private returns (uint256 encX) {
         return x ^ ForgeSecp256k1.mul(k, q).toPoint().x;
+    }
+
+    function _honestParticipants() private returns (uint256[] memory indexes) {
+        indexes = new uint256[](COUNT);
+        for (uint256 i = 0; i < COUNT; i++) {
+            indexes[i] = i + 1;
+        }
+
+        indexes = vm.shuffle(indexes);
+        uint256 length = vm.randomUint(THRESHOLD, COUNT);
+        assembly ("memory-safe") {
+            mstore(indexes, length)
+        }
     }
 }

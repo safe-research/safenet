@@ -46,8 +46,16 @@ library ForgeSecp256k1 {
         return g(mulmod(a, p.w.privateKey, Secp256k1.N));
     }
 
+    function x(P memory p) internal pure returns (uint256 result) {
+        return p.w.publicKeyX;
+    }
+
+    function y(P memory p) internal pure returns (uint256 result) {
+        return p.w.publicKeyY;
+    }
+
     function toPoint(P memory p) internal pure returns (Secp256k1.Point memory r) {
-        r.x = p.w.publicKeyX;
-        r.y = p.w.publicKeyY;
+        r.x = x(p);
+        r.y = y(p);
     }
 }

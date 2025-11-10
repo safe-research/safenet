@@ -12,16 +12,20 @@ contract FROSTCoordinator {
     using FROSTParticipantMap for FROSTParticipantMap.T;
 
     type GroupId is bytes32;
-
-    struct GroupParameters {
-        uint128 count;
-        uint128 threshold;
-    }
+    type SignatureId is bytes32;
 
     struct Group {
         FROSTParticipantMap.T participants;
+        FROSTCommitmentSet.T commitments;
         GroupParameters parameters;
         Secp256k1.Point key;
+    }
+
+    struct GroupParameters {
+        uint64 count;
+        uint64 threshold;
+        uint32 sequence;
+        uint96 _padding;
     }
 
     struct KeyGenCommitment {
@@ -35,11 +39,8 @@ contract FROSTCoordinator {
         uint256[] f;
     }
 
-    type SignatureId is bytes32;
-
     struct Signature {
         GroupId group;
-        FROSTCommitmentSet.T commitments;
     }
 
     struct SignNonces {
@@ -47,47 +48,34 @@ contract FROSTCoordinator {
         Secp256k1.Point e;
     }
 
-    event KeyGen(GroupId indexed id, bytes32 participants, uint128 count, uint128 threshold);
+    event KeyGen(GroupId indexed id, bytes32 participants, uint64 count, uint64 threshold);
     event KeyGenCommitted(GroupId indexed id, uint256 index, KeyGenCommitment commitment);
     event KeyGenSecretShared(GroupId indexed id, uint256 index, KeyGenSecretShare share);
-    event Sign(SignatureId indexed id, GroupId group, bytes32 participants);
-    event SignCommittedNonces(SignatureId indexed id, uint256 index, SignNonces nonces);
-    event SignMessage(SignatureId indexed id, bytes32 message);
+    event Preprocess(GroupId indexed id, uint256 index, uint32 chunk);
+    event Sign(GroupId indexed id, SignatureId sig, bytes32 message);
+    event SignRevealedNonces(SignatureId indexed sig, uint256 index, SignNonces nonces);
 
-    error InvalidGroupParameters();
     error NotInitiator();
+    error InvalidGroupParameters();
     error InvalidKeyGenCommitment();
     error InvalidKeyGenSecretShare();
-    error AlreadySigning();
     error InvalidGroup();
-    error InsufficientParticipants();
+    error NotSigning();
 
     // forge-lint: disable-start(mixed-case-variable)
     mapping(GroupId => Group) private $groups;
     mapping(SignatureId => Signature) private $signatures;
+
     // forge-lint: disable-end(mixed-case-variable)
 
-    modifier onlyGroupInitiator(GroupId id) {
-        _requireInitiator(GroupId.unwrap(id));
-        _;
-    }
-
-    modifier onlySignatureInitiator(SignatureId id) {
-        _requireInitiator(SignatureId.unwrap(id));
-        _;
-    }
-
     /// @notice Initiate a distributed key generation ceremony.
-    function keygen(uint96 nonce, bytes32 participants, uint128 count, uint128 threshold)
-        external
-        returns (GroupId id)
-    {
-        id = GroupId.wrap(_id("grp", nonce));
+    function keygen(uint64 domain, bytes32 participants, uint64 count, uint64 threshold) external returns (GroupId id) {
+        id = _groupId(domain);
         Group storage group = $groups[id];
         require(count >= threshold && threshold > 1, InvalidGroupParameters());
 
         group.participants.init(participants);
-        group.parameters = GroupParameters({count: count, threshold: threshold});
+        group.parameters = GroupParameters({count: count, threshold: threshold, sequence: 0, _padding: 0});
         emit KeyGen(id, participants, count, threshold);
     }
 
@@ -117,46 +105,38 @@ contract FROSTCoordinator {
         emit KeyGenSecretShared(id, index, share);
     }
 
-    /// @notice Initiate a signing ceremony.
-    /// @dev This function additionally takes a `participants` Merkle tree root
-    ///      that can further restrict which participants are allowed to
-    ///      participate in the signing ceremony. This allows signatures to
-    ///      continue to be produced from a group, even if one of the
-    ///      participants has been suspended. Set this value to `bytes32(0)` in
-    ///      order to allow all participants from the group.
-    function sign(GroupId group, uint96 nonce, bytes32 participants)
-        external
-        onlyGroupInitiator(group)
-        returns (SignatureId id)
-    {
-        id = SignatureId.wrap(_id("sig", nonce));
-        Signature storage sig = $signatures[id];
-        require(GroupId.unwrap(sig.group) == bytes32(0), AlreadySigning());
-        sig.group = group;
-        sig.commitments.authorize(participants);
-        emit Sign(id, group, participants);
-    }
-
-    /// @notice Commit a nonce pair for a signing ceremony.
-    function signCommitNonces(SignatureId id, SignNonces calldata nonces, bytes32[] calldata authorization) external {
-        Signature storage sig = $signatures[id];
-        Group storage group = $groups[sig.group];
+    /// @notice Submit a commitment to a chunk of nonces as part of the
+    ///         _Preprocess_ algorithm. The commitment is a Merkle root to a
+    ///         256 nonces that get revealed as part of the signing process.
+    ///         This allows signing requests to reveal the `message` right away
+    ///         while still preventing Wagner's Birthday Attacks.
+    function preprocess(GroupId id, bytes32 commitment) external returns (uint32 chunk) {
+        Group storage group = $groups[id];
         uint256 index = group.participants.indexOf(msg.sender);
-        sig.commitments.commit(index, nonces.d, nonces.e, msg.sender, authorization);
-        emit SignCommittedNonces(id, index, nonces);
+        chunk = group.commitments.commit(index, commitment, group.parameters.sequence);
+        emit Preprocess(id, index, chunk);
     }
 
-    /// @notice Share the message being signed and fix the set of participant
-    ///         for the signing ceremony.
-    function signMessage(SignatureId id, bytes32 message) external onlySignatureInitiator(id) {
-        Signature storage sig = $signatures[id];
-        Group storage group = $groups[sig.group];
-        require(sig.commitments.count >= group.parameters.threshold, InsufficientParticipants());
-        sig.commitments.seal();
-        emit SignMessage(id, message);
+    /// @notice Initiate a signing ceremony.
+    function sign(GroupId id, bytes32 message) external returns (SignatureId sig) {
+        require(msg.sender == _groupInitiator(id), NotInitiator());
+        Group storage group = $groups[id];
+        require(group.participants.initialized(), InvalidGroup());
+        uint32 sequence = group.parameters.sequence++;
+        sig = _signatureId(id, sequence);
+        emit Sign(id, sig, message);
     }
 
-    /// @notice
+    /// @notice Reveal a nonce pair for a signing ceremony.
+    function signRevealNonces(SignatureId sig, SignNonces calldata nonces, bytes32[] calldata proof) external {
+        GroupId id = _signatureGroup(sig);
+        Group storage group = $groups[id];
+        uint256 index = group.participants.indexOf(msg.sender);
+        uint32 sequence = _signatureSequence(sig);
+        require(sequence < group.parameters.sequence, NotSigning());
+        group.commitments.verify(index, nonces.d, nonces.e, sequence, proof);
+        emit SignRevealedNonces(sig, index, nonces);
+    }
 
     /// @notice Retrieve the group public key. Note that it is undefined
     ///         behaviour to call this before the keygen ceremony is completed.
@@ -169,12 +149,32 @@ contract FROSTCoordinator {
         return $groups[id].participants.getKey(index);
     }
 
-    function _id(bytes3 domain, uint96 nonce) private view returns (bytes32 id) {
-        return bytes32(uint256(bytes32(domain)) | (uint256(nonce) << 160) | uint256(uint160(msg.sender)));
+    /// @notice Returns the signature ID of the next ceremony.
+    function nextSignatureId(GroupId id) external view returns (SignatureId sig) {
+        return _signatureId(id, $groups[id].parameters.sequence);
     }
 
-    function _requireInitiator(bytes32 id) private view {
-        address initiator = address(uint160(uint256(id)));
-        require(msg.sender == initiator, NotInitiator());
+    function _groupId(uint64 domain) private view returns (GroupId id) {
+        return GroupId.wrap(bytes32((uint256(domain) << 192) | uint256(uint160(msg.sender))));
+    }
+
+    function _groupInitiator(GroupId id) private pure returns (address initiator) {
+        return address(uint160(uint256(GroupId.unwrap(id))));
+    }
+
+    function _signatureId(GroupId id, uint32 sequence) private pure returns (SignatureId sig) {
+        // We encode `sequence + 1` in the signature ID. This allows us to tell
+        // whether an ID belongs to a group or a signature by non-zero value in
+        // the range `id[20:24]`.
+        return SignatureId.wrap(GroupId.unwrap(id) | bytes32(uint256(sequence + 1) << 160));
+    }
+
+    function _signatureGroup(SignatureId sig) private pure returns (GroupId id) {
+        return
+            GroupId.wrap(SignatureId.unwrap(sig) & 0xffffffffffffffff00000000ffffffffffffffffffffffffffffffffffffffff);
+    }
+
+    function _signatureSequence(SignatureId sig) private pure returns (uint32 sequence) {
+        return uint32(uint256(SignatureId.unwrap(sig)) >> 160) - 1;
     }
 }
