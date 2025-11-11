@@ -64,7 +64,7 @@ library FROSTCommitmentSet {
         for (uint256 i = 0; i < _CHUNKSZ; i++) {
             bytes32 p = proof[i];
             (bytes32 left, bytes32 right) = offset & 1 == 0 ? (digest, p) : (p, digest);
-            Hashes.efficientKeccak256(left, right);
+            digest = Hashes.efficientKeccak256(left, right);
         }
         require(digest & _ROOTMASK == commitment, NotIncluded());
     }

@@ -8,6 +8,7 @@ import {ForgeSecp256k1} from "@test/util/ForgeSecp256k1.sol";
 import {ParticipantMerkleTree} from "@test/util/ParticipantMerkleTree.sol";
 import {FROSTCoordinator} from "@/FROSTCoordinator.sol";
 import {Secp256k1} from "@/lib/Secp256k1.sol";
+import {FROST} from "@/lib/FROST.sol";
 
 contract FROSTCoordinatorTest is Test {
     using Arrays for address[];
@@ -35,6 +36,9 @@ contract FROSTCoordinatorTest is Test {
     }
 
     function test_KeyGen() public {
+        // Distributed key generation algorithm from the FROST white paper.
+        // <https://eprint.iacr.org/2020/852.pdf>
+
         FROSTCoordinator.GroupId id = coordinator.keygen(0, participants.root(), COUNT, THRESHOLD);
 
         // Off-by-one errors are one of the two hardest problems in computer
@@ -210,10 +214,14 @@ contract FROSTCoordinatorTest is Test {
     }
 
     function test_Sign() public {
+        // Implementatino of the two-round FROST signing protocol from RFC-9591
+        // <https://datatracker.ietf.org/doc/html/rfc9591#section-5>
+
         (FROSTCoordinator.GroupId id, uint256[] memory s) = _trustedKeyGen(0);
         FROSTCoordinator.SignatureId sig = coordinator.nextSignatureId(id);
 
-        // Preprocess 1
+        // Round 1
+
         // We setup a commit with **a single** pair of nonces in a Merkle tree
         // full of 0s in order to speed up the test. In practice, we compute and
         // commit to trees with 1024 nonce pairs.
@@ -221,9 +229,10 @@ contract FROSTCoordinatorTest is Test {
         Nonces[] memory nonces = new Nonces[](COUNT + 1);
         bytes32[] memory commitments = new bytes32[](COUNT + 1);
         for (uint256 index = 1; index <= COUNT; index++) {
+            Secp256k1.Point memory secret = ForgeSecp256k1.g(s[index]).toPoint();
             Nonces memory n = nonces[index];
-            n.d = ForgeSecp256k1.rand();
-            n.e = ForgeSecp256k1.rand();
+            n.d = ForgeSecp256k1.g(FROST.nonce(bytes32(vm.randomUint()), secret));
+            n.e = ForgeSecp256k1.g(FROST.nonce(bytes32(vm.randomUint()), secret));
             // forge-lint: disable-next-line(asm-keccak256)
             bytes32 digest = keccak256(abi.encode(n.d.x(), n.d.y(), n.e.x(), n.e.y()));
             for (uint256 i = 0; i < proof.length; i++) {
@@ -231,22 +240,21 @@ contract FROSTCoordinatorTest is Test {
             }
             commitments[index] = digest;
         }
-
-        // Preprocess 2
         for (uint256 index = 1; index <= COUNT; index++) {
             vm.prank(participants.addr(index));
             coordinator.preprocess(id, commitments[index]);
         }
 
-        // Sign 1
+        // Round 2
+
         // The complete list of participants is implicitely selects all honest
         // all participants should cooperate. "honest" must be deterministic
         // such that there is no ambiguity on the set for honest validators.
         uint256[] memory honestParticipants = _honestParticipants();
 
-        // Sign 2*
-        // The signature aggregator (the coordinator) reveals the message to
-        // sign and the participants reveal their committed to nonces.
+        // The signature aggregator (the coordinator contract) reveals the
+        // message to sign and the participants reveal their committed nonces
+        // from round 1.
         bytes32 message = keccak256("Hello, Shieldnet!");
         vm.expectEmit();
         emit FROSTCoordinator.Sign(id, sig, message);
@@ -259,6 +267,23 @@ contract FROSTCoordinatorTest is Test {
             FROSTCoordinator.SignNonces memory nn = FROSTCoordinator.SignNonces({d: n.d.toPoint(), e: n.e.toPoint()});
             vm.prank(participants.addr(index));
             coordinator.signRevealNonces(sig, nn, proof);
+        }
+
+        // The `sign` algorithm from RFC-9591. Note that the algorithms assume a
+        // sorted list of participants. Note that at this point, all commitment
+        // nonces are available from event data (assuming a block limit for
+        // participants to submit nonces before being declared "dishonest").
+        // <https://datatracker.ietf.org/doc/html/rfc9591#section-5.2>
+        honestParticipants = vm.sort(honestParticipants);
+        uint256[] memory bindingFactors;
+        {
+            FROST.Commitment[] memory coms = new FROST.Commitment[](honestParticipants.length);
+            for (uint256 i = 0; i < honestParticipants.length; i++) {
+                uint256 index = honestParticipants[i];
+                Nonces memory n = nonces[index];
+                coms[i] = FROST.Commitment({index: index, d: n.d.toPoint(), e: n.e.toPoint()});
+            }
+            bindingFactors = FROST.bindingFactors(coordinator.groupKey(id), coms, message);
         }
     }
 
