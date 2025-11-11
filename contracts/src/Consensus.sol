@@ -19,7 +19,7 @@ pragma solidity ^0.8.30;
 
     - FROSTCoordinator: For distributed key generation ceremonies
     - Staking: For validator status verification
-    - Ownable (OpenZeppelin): For owner-controlled threshold updates
+    - Ownable (OpenZeppelin): For owner-controlled KeyGen retries
 
     ============================================================
     STRUCTS
@@ -40,11 +40,6 @@ pragma solidity ^0.8.30;
        - epoch: uint256              // Epoch number when transaction was proposed
        - proposer: address           // Address that proposed this transaction
        - safeAddress: address        // Safe wallet address this transaction is for
-       - timestamp: uint256          // Block timestamp when transaction was proposed
-
-    2. ConfigProposal
-       - value: uint128              // Proposed threshold value
-       - executableAt: uint128       // Timestamp when proposal can be executed (0 if none)
 
     ============================================================
     STORAGE VARIABLES
@@ -64,18 +59,6 @@ pragma solidity ^0.8.30;
     - lastEpochTimestamp: uint256
         // Timestamp of the last epoch increment
         // Used to enforce 86400 second (1 day) minimum between epochs
-
-    - threshold: uint128
-        // Minimum number of validators required for FROST signing
-        // Must satisfy: 1 < threshold <= validator count
-        // Updated through time-locked proposal mechanism
-
-    - pendingThresholdChange: ConfigProposal
-        // Pending threshold change proposal with timelock
-
-    - CONFIG_TIME_DELAY: uint256 (immutable)
-        // Time delay for threshold changes (e.g., 7 days)
-        // Set at deployment, same pattern as Staking contract
 
     Mappings:
     - registeredValidators: mapping(address => bool)
@@ -132,13 +115,7 @@ pragma solidity ^0.8.30;
        )
        - Emitted when a validator attests to a transaction
 
-    6. ThresholdProposed(uint128 currentThreshold, uint128 proposedThreshold, uint256 executableAt)
-       - Emitted when owner proposes a threshold change
-
-    7. ThresholdUpdated(uint128 oldThreshold, uint128 newThreshold)
-       - Emitted when threshold change is executed
-
-    8. KeyGenRetried(uint256 indexed epoch, bytes32 participantsMerkleRoot)
+    6. KeyGenRetried(uint256 indexed epoch, bytes32 participantsMerkleRoot)
        - Emitted when KeyGen is retried for the current epoch (in case of failure)
 
     ============================================================
@@ -147,6 +124,7 @@ pragma solidity ^0.8.30;
 
     - EpochNotReady()
         // Thrown when trying to increment epoch before 86400 seconds have passed
+        // or when epoch is not ready
 
     - NotValidator()
         // Thrown when non-validator tries to perform validator-only action
@@ -157,11 +135,8 @@ pragma solidity ^0.8.30;
     - NotRegistered()
         // Thrown when trying to deregister a non-registered validator
 
-    - InsufficientValidators()
-        // Thrown when trying to start KeyGen with fewer validators than threshold
-
     - InvalidThreshold()
-        // Thrown when threshold is 0 or greater than validator count
+        // Thrown when threshold is greater than validator count
 
     - TransactionNotFound()
         // Thrown when querying non-existent transaction
@@ -175,12 +150,6 @@ pragma solidity ^0.8.30;
     - InvalidTransaction()
         // Thrown when transaction parameters are invalid
 
-    - ProposalNotExecutable()
-        // Thrown when trying to execute threshold change before timelock expires
-
-    - NoProposalExists()
-        // Thrown when trying to execute non-existent proposal
-
     - InvalidParameter()
         // Thrown for invalid input parameters
 
@@ -193,32 +162,25 @@ pragma solidity ^0.8.30;
         address _stakingContract,
         address _frostCoordinator,
         address[] memory initialValidators,
-        uint128 initialThreshold,
         uint256 configTimeDelay
     )
 
     Parameters:
-    - initialOwner: Address to set as contract owner (for threshold updates)
+    - initialOwner: Address to set as contract owner (for KeyGen retries)
     - _stakingContract: Address of Staking contract
     - _frostCoordinator: Address of FROSTCoordinator contract
-    - initialValidators: Array of initial validators (must be >= initialThreshold)
-    - initialThreshold: Initial threshold value (must be > 1 and <= initialValidators.length)
-    - configTimeDelay: Time delay for threshold changes (e.g., 604800 for 7 days)
+    - initialValidators: Array of initial validators
 
     Actions:
     1. Set immutable contract references
-    2. Set initial threshold
-    3. Set CONFIG_TIME_DELAY
-    4. Register all initial validators
-    5. Set currentEpoch = 1
-    6. Set lastEpochTimestamp = block.timestamp
-    7. Call _initiateKeyGen() to start first epoch
+    2. Register all initial validators
+    3. Set currentEpoch = 1
+    4. Set lastEpochTimestamp = block.timestamp
+    5. Call _initiateKeyGen() to start first epoch
 
     Validations:
-    - initialValidators.length >= initialThreshold
-    - initialThreshold > 1
+    - initialThreshold >= 1
     - All addresses non-zero
-    - configTimeDelay > 0
 
     ============================================================
     EXTERNAL FUNCTIONS - VALIDATOR REGISTRATION
@@ -271,11 +233,11 @@ pragma solidity ^0.8.30;
 
        Validations:
        - block.timestamp >= lastEpochTimestamp + 86400
-       - validatorsList.length >= threshold (sufficient validators registered)
 
        Actions:
        - Increment currentEpoch
        - Set lastEpochTimestamp = block.timestamp
+       - threshold = (validatorsList.length / 2) + 1  // Simple majority
        - Call _initiateKeyGen()
 
     4. retryKeyGen()
@@ -346,7 +308,7 @@ pragma solidity ^0.8.30;
        - Set transaction.epoch = currentEpoch
        - Set transaction.proposer = msg.sender
        - Set transaction.timestamp = block.timestamp
-       - Calculate txHash = keccak256(abi.encode(all transaction fields except timestamp))
+       - Calculate txHash = use SafeTxHash (i.e. Safe.getTransactionHash(...))
        - Store: transactions[txHash] = SafeTransaction
        - Emit TransactionProposed(txHash, msg.sender, safeAddress, currentEpoch, chainId)
        - Return txHash
@@ -381,60 +343,23 @@ pragma solidity ^0.8.30;
          1. Group public key (from FROSTCoordinator.groupKey(GroupId))
          2. Message hash (the txHash)
          3. FROST signature
-         4. Verification function (likely using Secp256k1 library)
+         4. Verification function (using FROST.verify())
        - Implementation suggestion:
          * Get GroupId for the transaction's epoch
          * Retrieve group public key: FROSTCoordinator.groupKey(GroupId)
-         * Verify signature using Secp256k1 library
+         * Verify signature using FROST.verify()
          * If valid, record attestation from all threshold participants?
            OR record that the threshold was met for this tx?
-
-    ============================================================
-    EXTERNAL FUNCTIONS - THRESHOLD MANAGEMENT (OWNER ONLY)
-    ============================================================
-
-    8. proposeThresholdChange(uint128 newThreshold) external onlyOwner
-       - Propose a change to the threshold value
-       - Uses time-lock mechanism like Staking contract
-
-       Parameters:
-       - newThreshold: New threshold value
-
-       Validations:
-       - newThreshold > 1
-       - newThreshold <= current registered validator count - @CHECK Or should this be checked at execution? Or not checked at all as Validator count can change based on de/registrations)
-
-       Actions:
-       - Calculate executableAt = block.timestamp + CONFIG_TIME_DELAY
-       - Set pendingThresholdChange = ConfigProposal(newThreshold, executableAt)
-       - Emit ThresholdProposed(threshold, newThreshold, executableAt)
-
-    9. executeThresholdChange() external
-       - Execute a pending threshold change after timelock expires
-       - Can be called by anyone
-       - Change takes effect in the NEXT KeyGen, not current epoch
-
-       Validations:
-       - pendingThresholdChange.executableAt != 0 (proposal exists)
-       - block.timestamp >= pendingThresholdChange.executableAt
-       - pendingThresholdChange.value > 1
-       - pendingThresholdChange.value <= validatorsList.length (check at execution time)
-
-       Actions:
-       - Store old value: oldThreshold = threshold
-       - Update: threshold = pendingThresholdChange.value
-       - Clear proposal: delete pendingThresholdChange
-       - Emit ThresholdUpdated(oldThreshold, threshold)
 
     ============================================================
     VIEW FUNCTIONS
     ============================================================
 
-    10. canIncrementEpoch() external view returns (bool)
+    8. canIncrementEpoch() external view returns (bool)
         - Returns true if enough time has passed to increment epoch
         - Returns block.timestamp >= lastEpochTimestamp + 86400
 
-    11. getNextEpochTimestamp() external view returns (uint256)
+    9. getNextEpochTimestamp() external view returns (uint256)
         - Returns timestamp when next epoch can start
         - Returns lastEpochTimestamp + 86400
 
