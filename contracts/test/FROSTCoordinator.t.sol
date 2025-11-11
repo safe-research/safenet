@@ -4,6 +4,8 @@ pragma solidity ^0.8.30;
 import {Test, Vm} from "@forge-std/Test.sol";
 import {Arrays} from "@oz/utils/Arrays.sol";
 import {Hashes} from "@oz/utils/cryptography/Hashes.sol";
+import {Math} from "@oz/utils/math/Math.sol";
+import {CommitmentShareMerkleTree} from "@test/util/CommitmentShareMerkleTree.sol";
 import {ForgeSecp256k1} from "@test/util/ForgeSecp256k1.sol";
 import {ParticipantMerkleTree} from "@test/util/ParticipantMerkleTree.sol";
 import {FROSTCoordinator} from "@/FROSTCoordinator.sol";
@@ -12,6 +14,7 @@ import {FROST} from "@/lib/FROST.sol";
 
 contract FROSTCoordinatorTest is Test {
     using Arrays for address[];
+    using Arrays for uint256[];
     using ForgeSecp256k1 for ForgeSecp256k1.P;
 
     struct Nonces {
@@ -285,6 +288,52 @@ contract FROSTCoordinatorTest is Test {
             }
             bindingFactors = FROST.bindingFactors(coordinator.groupKey(id), coms, message);
         }
+
+        ForgeSecp256k1.P memory groupCommitment;
+        ForgeSecp256k1.P[] memory r = new ForgeSecp256k1.P[](honestParticipants.length);
+        for (uint256 i = 0; i < honestParticipants.length; i++) {
+            uint256 index = honestParticipants[i];
+            Nonces memory n = nonces[index];
+            uint256 bindingFactor = bindingFactors[i];
+            r[i] = ForgeSecp256k1.add(n.d, ForgeSecp256k1.mul(bindingFactor, n.e));
+            groupCommitment = ForgeSecp256k1.add(groupCommitment, r[i]);
+        }
+        uint256 challenge = FROST.challenge(groupCommitment.toPoint(), coordinator.groupKey(id), message);
+        uint256[] memory lambda = new uint256[](honestParticipants.length);
+        for (uint256 i = 0; i < honestParticipants.length; i++) {
+            uint256 index = honestParticipants[i];
+            lambda[i] = _lagrangeCoefficient(honestParticipants, index);
+        }
+
+        uint256[] memory shares = new uint256[](honestParticipants.length);
+        for (uint256 i = 0; i < honestParticipants.length; i++) {
+            uint256 index = honestParticipants[i];
+            uint256 sk = s[index];
+            Nonces memory n = nonces[index];
+            shares[i] = addmod(
+                n.d.w.privateKey,
+                addmod(
+                    mulmod(n.e.w.privateKey, bindingFactors[i], Secp256k1.N),
+                    mulmod(lambda[i], mulmod(sk, challenge, Secp256k1.N), Secp256k1.N),
+                    Secp256k1.N
+                ),
+                Secp256k1.N
+            );
+        }
+
+        // Extension: the onchain computed group signature (R, z) is grouped by
+        // a commitment share Merkle tree root. This makes it so misbehaving
+        // participants can't influence the final onchain signature value for
+        // a correctly behaving set.
+        CommitmentShareMerkleTree commitmentShares;
+        {
+            CommitmentShareMerkleTree.S[] memory cs = new CommitmentShareMerkleTree.S[](honestParticipants.length);
+            for (uint256 i = 0; i < honestParticipants.length; i++) {
+                uint256 index = honestParticipants[i];
+                cs[i] = CommitmentShareMerkleTree.S({index: index, r: r[i].toPoint(), lambda: lambda[i]});
+            }
+            commitmentShares = new CommitmentShareMerkleTree(cs);
+        }
     }
 
     function _randomSortedAddresses(uint64 count) private view returns (address[] memory result) {
@@ -386,5 +435,20 @@ contract FROSTCoordinatorTest is Test {
         assembly ("memory-safe") {
             mstore(indexes, length)
         }
+    }
+
+    function _lagrangeCoefficient(uint256[] memory l, uint256 index) private view returns (uint256 lambda) {
+        uint256 numerator = 1;
+        uint256 denominator = 1;
+        uint256 minusIndex = Secp256k1.N - index;
+        for (uint256 i = 0; i < l.length; i++) {
+            uint256 x = l.unsafeMemoryAccess(i);
+            if (x == index) {
+                continue;
+            }
+            numerator = mulmod(numerator, x, Secp256k1.N);
+            denominator = mulmod(denominator, addmod(x, minusIndex, Secp256k1.N), Secp256k1.N);
+        }
+        return mulmod(numerator, Math.invModPrime(denominator, Secp256k1.N), Secp256k1.N);
     }
 }
