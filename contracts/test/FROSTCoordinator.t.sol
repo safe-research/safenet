@@ -262,12 +262,10 @@ contract FROSTCoordinatorTest is Test {
         // from round 1.
         bytes32 message = keccak256("Hello, Shieldnet!");
         {
-        vm.expectEmit();
+            vm.expectEmit();
             emit FROSTCoordinator.Sign(gid, sid, message);
             FROSTCoordinator.SignatureId actualSid = coordinator.sign(gid, message);
-        assertEq(
-            FROSTCoordinator.SignatureId.unwrap(sid), FROSTCoordinator.SignatureId.unwrap(actualSid)
-        );
+            assertEq(FROSTCoordinator.SignatureId.unwrap(sid), FROSTCoordinator.SignatureId.unwrap(actualSid));
         }
         for (uint256 i = 0; i < honestParticipants.length; i++) {
             uint256 identifier = honestParticipants[i];
