@@ -6,20 +6,15 @@ pragma solidity ^0.8.30;
     =================================
 
     This contract coordinates FROST-based multi-signature consensus for Safe wallet transactions.
-    It manages validator registration, epoch-based KeyGen ceremonies, transaction proposals,
-    and attestations from validators.
+    It manages epoch-based KeyGen ceremonies, transaction proposals, and attestations from validators.
 
-    NOTE: This is a permissioned system. Initial validators must be provided at deployment,
-    and new validators must be approved by the owner through the Staking contract before they
-    can participate.
-
+    NOTE: This is a permissioned system. Initial participant hash (validator merkle root) must be provided at deployment.
     ============================================================
     DEPENDENCIES & IMPORTS
     ============================================================
 
     - FROSTCoordinator: For distributed key generation ceremonies
-    - Staking: For validator status verification
-    - Ownable (OpenZeppelin): For owner-controlled KeyGen retries
+    - FROST: For FROST signature verification
 
     ============================================================
     STRUCTS
@@ -46,106 +41,81 @@ pragma solidity ^0.8.30;
     ============================================================
 
     State Variables:
-    - stakingContract: address (immutable)
-        // Reference to Staking contract for validator verification
+    - EPOCH_DURATION: uint256 (constant)
+        // Minimum duration between epochs (86400 seconds = 1 day)
 
     - frostCoordinator: address (immutable)
         // Reference to FROSTCoordinator for KeyGen ceremonies
+
+    - participantHash: bytes32 (immutable)
+        // Merkle root of the validator set for this consensus contract
+
+    - participantCount: uint256 (immutable)
+        // Number of participants in the initial validator set
 
     - currentEpoch: uint256
         // Current epoch number (incremented with each KeyGen)
         // Starts at 1 (first epoch initiated in constructor)
 
-    - lastEpochTimestamp: uint256
-        // Timestamp of the last epoch increment
-        // Used to enforce 86400 second (1 day) minimum between epochs
+    - transactions: mapping(bytes32 safeTxHash => uint256 blockNumber)
+        // Emits the Safe Transaction as a event, and store just the blockNumber for validators to retrieve full details
+        // safeTxHash = Safe.getTransactionHash(...)
 
-    Mappings:
-    - registeredValidators: mapping(address => bool)
-        // Tracks validators registered for the NEXT epoch
-        // Validators can register at any time, included in next KeyGen
-
-    - validatorsList: address[]
-        // Array of registered validator addresses for next epoch
-        // Used for Merkle tree construction (sorted ascending by address)
-        // New validators are added in ascending order based on address
-
-    - epochParticipants: mapping(uint256 epoch => bytes32 merkleRoot)
-        // Historical record of participant merkle roots for each epoch
-        // Useful for verifying which validators participated in which epoch
-
-    - epochParticipantCount: mapping(uint256 epoch => uint128 count)
-        // Number of participants in each epoch's KeyGen
-
-    - transactions: mapping(bytes32 txHash => SafeTransaction)
-        // Stores proposed Safe transactions by their hash
-        // txHash = keccak256(abi.encode(SafeTransaction fields))
-
-    - attestations: mapping(bytes32 txHash => mapping(address validators/coordinator => bool attested))
-        // Tracks which validators have attested to each transaction
+    - attestations: mapping(bytes32 txHash => bool attested)
+        // Tracks if the transaction has been attested by the validator set
         // There would be a single attestation from all validators together using a FROST signature
 
     ============================================================
     EVENTS
     ============================================================
 
-    1. EpochIncremented(uint256 indexed epoch, bytes32 indexed participantsMerkleRoot, uint128 participantCount, uint128 threshold, uint256 timestamp)
-       - Emitted when a new epoch starts and KeyGen is initiated
+    1. KeyGenInitiated(uint256 indexed epoch, bytes32 indexed participantHash, uint128 participantCount, uint128 threshold)
+       - Emitted when a KeyGen is initiated (this is started for the next epoch)
        - Off-chain validators listen to this to participate in KeyGen
 
-    2. ValidatorRegistered(address indexed validator, uint256 indexed forEpoch)
-       - Emitted when a validator registers for the next epoch
-
-    3. ValidatorDeregistered(address indexed validator, uint256 indexed fromEpoch)
-       - Emitted when a validator deregisters
-
-    4. TransactionProposed(
-           bytes32 indexed txHash,
-           address indexed proposer,
-           address indexed safeAddress,
-           uint256 epoch,
-           uint256 chainId
-       )
+    2. TransactionProposed(
+            bytes32 indexed txHash,
+            address indexed proposer,
+            address indexed safeAddress,
+            address to,
+            uint256 value,
+            bytes data,
+            uint8 operation,
+            uint256 safeTxGas,
+            uint256 baseGas,
+            uint256 gasPrice,
+            address gasToken,
+            address refundReceiver,
+            uint256 nonce,
+            uint256 chainId,
+            uint256 epoch
+        )
        - Emitted when a Safe transaction is proposed
        - Off-chain validators listen to this to evaluate the transaction
+       - Instead of storing full transaction on-chain, we emit event and store blockNumber for retrieval
 
-    5. TransactionAttested(
+    3. TransactionAttested(
            bytes32 indexed txHash,
-           address indexed validator
+           bytes32 indexed participantHash
        )
-       - Emitted when a validator attests to a transaction
-
-    6. KeyGenRetried(uint256 indexed epoch, bytes32 participantsMerkleRoot)
-       - Emitted when KeyGen is retried for the current epoch (in case of failure)
+       - Emitted when a validator set attests to a transaction
 
     ============================================================
     ERRORS
     ============================================================
 
     - EpochNotReady()
-        // Thrown when trying to increment epoch before 86400 seconds have passed
+        // Thrown when trying to increment epoch before 86400 seconds have passed manually
         // or when epoch is not ready
-
-    - NotValidator()
-        // Thrown when non-validator tries to perform validator-only action
-
-    - AlreadyRegistered()
-        // Thrown when validator tries to register twice
-
-    - NotRegistered()
-        // Thrown when trying to deregister a non-registered validator
-
-    - InvalidThreshold()
-        // Thrown when threshold is greater than validator count
 
     - TransactionNotFound()
         // Thrown when querying non-existent transaction
 
     - AlreadyAttested()
-        // Thrown when validators tries to attest to same transaction twice
+        // Thrown when validator set tries to attest to same transaction twice
 
     - WrongEpoch()
-        // Thrown when validators tries to attest to transaction from different epoch
+        // Thrown when validator set tries to attest to transaction from different epoch
 
     - InvalidTransaction()
         // Thrown when transaction parameters are invalid
@@ -159,96 +129,40 @@ pragma solidity ^0.8.30;
 
     constructor(
         address initialOwner,
-        address _stakingContract,
-        address _frostCoordinator,
-        address[] memory initialValidators,
-        uint256 configTimeDelay
+        address frostCoordinator,
+        bytes32 participantHash,
+        uint256 participantCount,
     )
 
     Parameters:
     - initialOwner: Address to set as contract owner (for KeyGen retries)
-    - _stakingContract: Address of Staking contract
-    - _frostCoordinator: Address of FROSTCoordinator contract
-    - initialValidators: Array of initial validators
+    - frostCoordinator: Address of FROSTCoordinator contract
+    - participantHash: Merkle root of the validator set for this consensus contract
+    - participantCount: Number of participants in the initial validator set
 
     Actions:
     1. Set immutable contract references
-    2. Register all initial validators
-    3. Set currentEpoch = 1
-    4. Set lastEpochTimestamp = block.timestamp
-    5. Call _initiateKeyGen() to start first epoch
+    2. Call _initiateKeyGen() to start first epoch
 
     Validations:
-    - initialThreshold >= 1
-    - All addresses non-zero
-
-    ============================================================
-    EXTERNAL FUNCTIONS - VALIDATOR REGISTRATION
-    ============================================================
-
-    1. registerValidator(address validator)
-       - Allows validator registration for the NEXT epoch
-       - Can be called by anyone, but validator must be approved in Staking contract
-       - Validator is included starting from the next KeyGen
-
-       Parameters:
-       - validator: Address of validator to register
-
-       Validations:
-       - validator != address(0)
-       - Staking.isValidator(validator) == true
-       - !registeredValidators[validator] (prevent duplicates)
-
-       Actions:
-       - Set registeredValidators[validator] = true
-       - Add validator to validatorsList array
-       - Emit ValidatorRegistered(validator, currentEpoch + 1)
-
-    2. deregisterValidator(address validator)
-       - Allows validator deregistration
-       - Can be called by anyone
-       - Validator removed from next epoch's KeyGen
-       - Should succeed if validator is no longer valid in Staking
-
-       Parameters:
-       - validator: Address of validator to deregister
-
-       Validations:
-       - registeredValidators[validator] == true
-
-       Actions:
-       - Set registeredValidators[validator] = false
-       - Remove validator from validatorsList array (maintain order for others)
-       - Emit ValidatorDeregistered(validator, currentEpoch + 1)
+    - (participantCount / 2) > 0
+    - All addresses are non-zero
 
     ============================================================
     EXTERNAL FUNCTIONS - EPOCH MANAGEMENT
     ============================================================
 
-    3. incrementEpoch()
+    3. initiateKeyGen()
        - Initiates KeyGen for a new epoch
        - Can be called by anyone
        - Takes no parameters
-       - Enforces 86400 second (1 day) minimum between epochs
+       - KeyGen cannot be initiated more than once with the same parameter, so we don't need any additional check here
 
        Validations:
-       - block.timestamp >= lastEpochTimestamp + 86400
+       - currentEpoch < block.timestamp / EPOCH_DURATION
 
        Actions:
-       - Increment currentEpoch
-       - Set lastEpochTimestamp = block.timestamp
-       - threshold = (validatorsList.length / 2) + 1  // Simple majority
        - Call _initiateKeyGen()
-
-    4. retryKeyGen()
-       - Retries KeyGen for current epoch if it failed - @CHECK How to detect failure?
-       - Can be called by anyone
-       - Useful if KeyGen ceremony fails and needs to be restarted
-
-       Actions:
-       - Call FROSTCoordinator.keygenAbort(currentEpoch) first (to clean up failed state)
-       - Call _initiateKeyGen() to restart
-       - Emit KeyGenRetried(currentEpoch, participantsMerkleRoot)
 
     ============================================================
     INTERNAL FUNCTIONS - KEYGEN
@@ -256,20 +170,18 @@ pragma solidity ^0.8.30;
 
     5. _initiateKeyGen() internal
        - Internal function to initiate KeyGen ceremony
-       - Called by constructor and incrementEpoch()
+       - Called by constructor and initiateKeyGen()
 
        Actions:
-       - Calculate merkle root from sorted validatorsList - @CHECK Should we use FROSTMerkleMap.init() or something else?
-       - Store merkle root: epochParticipants[currentEpoch] = merkleRoot
-       - Store count: epochParticipantCount[currentEpoch] = validatorsList.length
+       - Get the participant hash
+       - threshold = (participantCount / 2) + 1
        - Call FROSTCoordinator.keygen(
-             uint96(currentEpoch),               // nonce = epoch number
-             merkleRoot,                         // participants merkle root
-             uint128(validatorsList.length),     // count (auto-calculated)
-             threshold                           // current threshold value
+             uint96(block.timestamp / EPOCH_DURATION),  // nonce = epoch number
+             participantHash,                           // participants merkle root
+             uint128(participantCount),                 // count (auto-calculated)
+             threshold                                  // current threshold value
          )
-       - Emit EpochIncremented(currentEpoch, merkleRoot, count, threshold, block.timestamp)
-       - Keep registeredValidators mapping (validators stay registered unless they deregister)
+       - Emit KeyGenInitiated(currentEpoch, participantHash, participantCount, threshold, block.timestamp)
 
     ============================================================
     EXTERNAL FUNCTIONS - TRANSACTION PROPOSALS
@@ -291,7 +203,7 @@ pragma solidity ^0.8.30;
        ) external returns (bytes32 txHash)
 
        - Allows anyone to propose a Safe transaction for attestation
-       - Stores full transaction with current epoch
+       - Emits full transaction with current epoch information
 
        Parameters:
        - All Safe transaction parameters
@@ -304,36 +216,29 @@ pragma solidity ^0.8.30;
        - chainId != 0
 
        Actions:
-       - Create SafeTransaction struct with all parameters
-       - Set transaction.epoch = currentEpoch
-       - Set transaction.proposer = msg.sender
-       - Set transaction.timestamp = block.timestamp
        - Calculate txHash = use SafeTxHash (i.e. Safe.getTransactionHash(...))
-       - Store: transactions[txHash] = SafeTransaction
-       - Emit TransactionProposed(txHash, msg.sender, safeAddress, currentEpoch, chainId)
+       - Store the block number: transactions[txHash] = block.number
+       - Emit TransactionProposed(txHash, msg.sender, safeAddress, to, value, data, operation, safeTxGas, baseGas, gasPrice, gasToken, refundReceiver, nonce, chainId, currentEpoch)
        - Return txHash
 
     ============================================================
     EXTERNAL FUNCTIONS - ATTESTATIONS
     ============================================================
 
-    7. attestTransaction(bytes32 txHash, bytes calldata frostSignature) - @CHECK If we don't know what will be the input, we could simply use bytes calldata
-       - Allows validator to attest that a transaction is safe to execute
-       - Validator must be from the same epoch as the transaction
-       - PLACEHOLDER for FROST signature verification
+    7. attestTransaction(bytes32 txHash, bytes calldata frostSignature)
+       - Allows anyone with a valid FROST signature to attest that a transaction is safe to execute
+       - Do FROST signature verification to ensure at least 'threshold' validators signed off
 
        Parameters:
        - txHash: Hash of the transaction to attest
-       - frostSignature: FROST group signature (PLACEHOLDER for now)
-           * TODO: Need to implement FROST signature verification
+       - frostSignature: FROST signature information for FROST.verify() (Need to decode the values for verification)
 
        Validations:
-       - transactions[txHash].epoch != 0 (transaction exists)
-       - msg.sender == FROSTCoordinator (caller is interacting through FROSTCoordinator)
-       - !attestations[txHash][msg.sender] (hasn't already attested)
+       - transactions[txHash] != 0 (transaction exists)
+       - !attestations[txHash] (hasn't already attested)
 
        Actions:
-       - Set attestations[txHash][msg.sender] = true
+       - Set attestations[txHash] = true
        - Emit TransactionAttested(txHash, msg.sender)
 
        Note on FROST Signature Verification:
@@ -344,12 +249,6 @@ pragma solidity ^0.8.30;
          2. Message hash (the txHash)
          3. FROST signature
          4. Verification function (using FROST.verify())
-       - Implementation suggestion:
-         * Get GroupId for the transaction's epoch
-         * Retrieve group public key: FROSTCoordinator.groupKey(GroupId)
-         * Verify signature using FROST.verify()
-         * If valid, record attestation from all threshold participants?
-           OR record that the threshold was met for this tx?
 
     ============================================================
     VIEW FUNCTIONS
@@ -357,29 +256,7 @@ pragma solidity ^0.8.30;
 
     8. canIncrementEpoch() external view returns (bool)
         - Returns true if enough time has passed to increment epoch
-        - Returns block.timestamp >= lastEpochTimestamp + 86400
-
-    9. getNextEpochTimestamp() external view returns (uint256)
-        - Returns timestamp when next epoch can start
-        - Returns lastEpochTimestamp + 86400
-
-    ============================================================
-    ADDITIONAL NOTES & FUTURE IMPROVEMENTS
-    ============================================================
-
-    1. Emergency Controls:
-       - @CHECK Should we be able to pause transaction proposals during security incidents
-       - Functions to pause: proposeSafeTransaction, attestTransaction
-
-    2. Transaction Lifecycle:
-       - Current spec: Transactions are proposed and attested, but never expire
-       - @CHECK Should we add transaction expiry (e.g., 30 days or 10 epochs)
-       - Add status: Pending, Attested (threshold met), Expired
-
-    3. Validator registration/deregistration
-       - @CHECK If the validator length is less than threshold after deregistration, should we prevent it?
-       - Or we allow the last epoch to run as long as there is not enough validators?
-            - But in this case, invalid validators may participate in attestation.
+        - Returns currentEpoch < block.timestamp / EPOCH_DURATION
 */
 
 contract Consensus {}
