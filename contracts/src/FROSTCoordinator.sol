@@ -99,7 +99,6 @@ contract FROSTCoordinator {
         require(commitment.c.length == parameters.threshold, InvalidKeyGenCommitment());
 
         group.participants.register(identifier, msg.sender, poap);
-        group.parameters = parameters;
         group.key = Secp256k1.add(group.key, commitment.c[0]);
         emit KeyGenCommitted(gid, identifier, commitment);
     }
