@@ -1,8 +1,9 @@
-// Assuming your schemas are in a file named './schemas.ts'
-// Make sure to import from your actual file location.
-
 import { describe, expect, it } from "vitest"; // or '@jest/globals'
-import { checkedAddressSchema, validatorConfigSchema } from "./schemas.js";
+import {
+	checkedAddressSchema,
+	frostPointSchema,
+	validatorConfigSchema,
+} from "./schemas.js";
 
 // --- Test Data ---
 
@@ -164,5 +165,71 @@ describe("validatorConfigSchema", () => {
 				"Invalid input: expected string, received undefined",
 			);
 		}
+	});
+});
+
+describe("frostPointSchema", () => {
+	it("should allow 0 points", () => {
+		const validPoint = {
+			x: 0n,
+			y: 0n,
+		};
+
+		const result = frostPointSchema.safeParse(validPoint);
+
+		expect(result.success).toBeTruthy();
+	});
+
+	it("should allow positive values", () => {
+		const validPoint = {
+			x: 1n,
+			y: 1n,
+		};
+
+		const result = frostPointSchema.safeParse(validPoint);
+
+		expect(result.success).toBeTruthy();
+	});
+
+	it("should not allow negative values for x", () => {
+		const validPoint = {
+			x: -1n,
+			y: 0n,
+		};
+
+		const result = frostPointSchema.safeParse(validPoint);
+
+		expect(result.success).toBeFalsy();
+	});
+
+	it("should not allow absence of x", () => {
+		const validPoint = {
+			y: 0n,
+		};
+
+		const result = frostPointSchema.safeParse(validPoint);
+
+		expect(result.success).toBeFalsy();
+	});
+
+	it("should not allow negative values for y", () => {
+		const validPoint = {
+			x: 0n,
+			y: -1n,
+		};
+
+		const result = frostPointSchema.safeParse(validPoint);
+
+		expect(result.success).toBeFalsy();
+	});
+
+	it("should not allow absence of y", () => {
+		const validPoint = {
+			x: 0n,
+		};
+
+		const result = frostPointSchema.safeParse(validPoint);
+
+		expect(result.success).toBeFalsy();
 	});
 });

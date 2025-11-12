@@ -1,4 +1,4 @@
-import { type Address, getAddress, isAddress } from "viem";
+import { type Address, getAddress, type Hex, isAddress, isHex } from "viem";
 import { z } from "zod";
 
 export const checkedAddressSchema = z
@@ -13,7 +13,47 @@ export const checkedAddressSchema = z
 	)
 	.transform((arg) => arg as Address);
 
+export const hexDataSchema = z
+	.string()
+	.refine(isHex, "Value is not a valid hex string")
+	.transform((val) => val as Hex);
+
 export const validatorConfigSchema = z.object({
 	RPC_URL: z.url(),
 	CONSENSUS_CORE_ADDRESS: checkedAddressSchema,
+});
+
+export const frostPointSchema = z.object({
+	x: z.bigint().nonnegative(),
+	y: z.bigint().nonnegative(),
+});
+
+export const frostCommitmentSchema = z.object({
+	c: z.array(frostPointSchema),
+	r: frostPointSchema,
+	mu: z.bigint().nonnegative(),
+});
+
+export const frostShareSchema = z.object({
+	y: frostPointSchema,
+	f: z.array(z.bigint().nonnegative()),
+});
+
+export const keyGenEventSchema = z.object({
+	id: hexDataSchema,
+	participants: hexDataSchema,
+	count: z.bigint().positive(),
+	threshold: z.bigint().positive(),
+});
+
+export const keyGenCommittedEventSchema = z.object({
+	id: hexDataSchema,
+	index: z.bigint().positive(),
+	commitment: frostCommitmentSchema,
+});
+
+export const keyGenSecretSharedEventSchema = z.object({
+	id: hexDataSchema,
+	index: z.bigint().positive(),
+	share: frostShareSchema,
 });

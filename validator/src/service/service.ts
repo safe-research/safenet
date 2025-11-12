@@ -7,8 +7,8 @@ import {
 	webSocket,
 } from "viem";
 import { gnosis } from "viem/chains";
-import { CONSENSUS_CORE_ABI } from "../types/abis.js";
 import type { ConsensusConfig } from "../types/interfaces.js";
+import { watchConsusEvents } from "./watchers.js";
 
 export class ValidatorService {
 	#config: ConsensusConfig;
@@ -25,35 +25,12 @@ export class ValidatorService {
 
 	async start() {
 		if (this.#unwatch !== null) throw Error("Already started!");
-		this.#unwatch = this.#client.watchContractEvent({
-			address: this.#config.coreAddress,
-			abi: CONSENSUS_CORE_ABI,
-			eventName: "Transfer",
-			// You can filter for indexed parameters here.
-			// For example, to only listen to transfers *to* a specific address:
-			// args: {
-			//   to: '0xYourAddressHere'
-			// },
-			onLogs: (logs) => {
-				console.log("--- New Transfer Event(s) Received ---");
-				logs.forEach((log) => {
-					// The `args` are automatically parsed for you!
-					const { from, to, value } = log.args;
-					console.log(
-						`  From: ${from}\n  To: ${to}\n  Value: ${value?.toString()}`,
-					);
-					console.log(
-						`  Block: ${log.blockNumber}\n  Tx Hash: ${log.transactionHash}`,
-					);
-				});
-				console.log("--------------------------------------");
-			},
-			// This will be called if an error occurs
-			onError: (error) => {
-				// TODO: handle error
-				console.error("An error occurred with the event listener:");
-				console.error(error);
-			},
+		this.#unwatch = watchConsusEvents({
+			client: this.#client,
+			target: this.#config.coreAddress,
+			onApprove: console.log,
+			onTransfer: console.log,
+			onError: console.error,
 		});
 	}
 
