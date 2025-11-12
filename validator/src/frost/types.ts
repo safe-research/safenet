@@ -20,3 +20,5 @@ export type ProofOfKnowledge = {
 export type ProofOfAttestationParticipation = Hex[];
 
 export type GroupId = Hex;
+
+export type SignatureId = Hex;

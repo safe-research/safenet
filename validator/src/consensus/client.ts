@@ -20,7 +20,7 @@ import {
 } from "./merkle.js";
 import type { FrostCoordinator, Participant } from "./types.js";
 
-type KeygenInfo = {
+export type KeygenInfo = {
 	groupId: GroupId;
 	participants: Participant[];
 	coefficients: bigint[];

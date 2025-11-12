@@ -4,14 +4,16 @@ import type {
 	GroupId,
 	ProofOfAttestationParticipation,
 	ProofOfKnowledge,
+	SignatureId,
 } from "../frost/types.js";
+import { PublicNonceCommitments } from "./signing/nonces.js";
 
 export type Participant = {
 	index: bigint;
 	address: Address;
 };
 
-export type FrostCoordinator = {
+export type KeyGenCoordinator = {
 	publishKeygenCommitments(
 		groupId: GroupId,
 		index: bigint,
@@ -27,3 +29,27 @@ export type FrostCoordinator = {
 		peerShares: bigint[],
 	): Promise<Hex>;
 };
+
+export type SigningCoordinator = {
+	publishNonceCommitmentsHash(
+		groupId: GroupId,
+		nonceCommitmentsHash: Hex
+	): Promise<Hex>
+
+	publishNonceCommitments(
+		signatureId: SignatureId,
+		nonceCommitments: PublicNonceCommitments,
+		nonceProof: Hex[]
+	): Promise<Hex>
+
+	publishSignatureShare(
+		signatureId: SignatureId,
+		signingParticipantsHash: Hex,
+		groupCommitementShare: FrostPoint, // add(d, mul(bindingFactor, e)
+		signatureShare: bigint,
+		lagrangeChallange: bigint,
+		signingParticipantsProof: Hex[]
+	): Promise<Hex>
+}
+
+export type FrostCoordinator = KeyGenCoordinator
