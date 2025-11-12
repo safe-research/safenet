@@ -2,22 +2,23 @@
 pragma solidity ^0.8.30;
 
 import {MerkleTreeBase} from "@test/util/MerkleTreeBase.sol";
+import {FROST} from "@/lib/FROST.sol";
 
 contract ParticipantMerkleTree is MerkleTreeBase {
     // forge-lint: disable-next-line(mixed-case-variable)
-    mapping(address participant => uint256 index) private $indexes;
+    mapping(address participant => FROST.Identifier) private $identifiers;
     // forge-lint: disable-next-line(mixed-case-variable)
-    mapping(uint256 index => address participant) private $addresses;
+    mapping(FROST.Identifier => address participant) private $addresses;
 
     constructor(address[] memory participants) {
         address last = address(0);
         for (uint256 i = 0; i < participants.length; i++) {
-            // Note that for FROST, participant indexes start from 1.
-            uint256 index = i + 1;
+            // Note that for FROST, participant identifers start from 1.
+            FROST.Identifier identifier = FROST.newIdentifier(i + 1);
             address participant = participants[i];
-            $indexes[participant] = index;
-            $addresses[index] = participant;
-            _leaf(keccak256(abi.encode(index, participant)));
+            $identifiers[participant] = identifier;
+            $addresses[identifier] = participant;
+            _leaf(keccak256(abi.encode(identifier, participant)));
 
             assert(participant > last);
             last = participant;
@@ -25,19 +26,14 @@ contract ParticipantMerkleTree is MerkleTreeBase {
         _build();
     }
 
-    function addr(uint256 index) external view returns (address participant) {
-        participant = $addresses[index];
+    function addr(uint256 identifier) external view returns (address participant) {
+        participant = $addresses[FROST.newIdentifier(identifier)];
         assert(participant != address(0));
     }
 
-    function proof(uint256 index) external view returns (address participant, bytes32[] memory poap) {
-        participant = $addresses[index];
-        poap = _proof(index - 1);
+    function proof(uint256 identifier) external view returns (address participant, bytes32[] memory poap) {
+        participant = $addresses[FROST.newIdentifier(identifier)];
+        poap = _proof(identifier - 1);
         assert(participant != address(0));
-    }
-
-    function proof(address participant) external view returns (uint256 index, bytes32[] memory poap) {
-        index = $indexes[participant];
-        poap = _proof(index - 1);
     }
 }

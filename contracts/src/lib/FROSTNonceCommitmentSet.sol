@@ -2,6 +2,7 @@
 pragma solidity ^0.8.30;
 
 import {MerkleProof} from "@oz/utils/cryptography/MerkleProof.sol";
+import {FROST} from "@/lib/FROST.sol";
 import {Secp256k1} from "@/lib/Secp256k1.sol";
 
 /// @title FROST Nonce Commitment Set
@@ -10,7 +11,7 @@ library FROSTNonceCommitmentSet {
     using Secp256k1 for Secp256k1.Point;
 
     struct T {
-        mapping(uint256 index => Commitments) commitments;
+        mapping(FROST.Identifier => Commitments) commitments;
     }
 
     struct Commitments {
@@ -29,11 +30,11 @@ library FROSTNonceCommitmentSet {
     /// @notice Commits to the next chunk of nonces, given the current signature
     ///         sequence for a group. This prevents participants commiting to
     ///         nonces _after_ a signing ceremony has already begun.
-    function commit(T storage self, uint256 index, bytes32 commitment, uint32 sequence)
+    function commit(T storage self, FROST.Identifier identifier, bytes32 commitment, uint32 sequence)
         internal
         returns (uint32 chunk)
     {
-        Commitments storage commitments = self.commitments[index];
+        Commitments storage commitments = self.commitments[identifier];
         uint256 offset;
         (chunk, offset) = _sequence(sequence);
         uint32 next = commitments.next;
@@ -47,7 +48,7 @@ library FROSTNonceCommitmentSet {
     /// @notice Verifies that the specified commitment is part of the set.
     function verify(
         T storage self,
-        uint256 index,
+        FROST.Identifier identifier,
         Secp256k1.Point memory d,
         Secp256k1.Point memory e,
         uint32 sequence,
@@ -57,7 +58,7 @@ library FROSTNonceCommitmentSet {
         e.requireNonZero();
 
         (uint32 chunk, uint256 offset) = _sequence(sequence);
-        (bytes32 commitment, uint256 startOffset) = _root(self.commitments[index].chunks[chunk]);
+        (bytes32 commitment, uint256 startOffset) = _root(self.commitments[identifier].chunks[chunk]);
         require(offset >= startOffset, NotIncluded());
 
         require(proof.length == _CHUNKSZ, NotIncluded());
