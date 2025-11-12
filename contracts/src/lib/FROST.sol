@@ -18,12 +18,11 @@ library FROST {
     error InvalidScalar();
 
     /// @notice Generate a random nonce from some randomness and a secret key.
-    function nonce(bytes32 random, Secp256k1.Point memory secret) internal view returns (uint256 n) {
+    function nonce(bytes32 random, uint256 secret) internal view returns (uint256 n) {
         // The RFC-9591 `nonce_generate` function.
         // <https://datatracker.ietf.org/doc/html/rfc9591#section-4.1>
 
-        (uint8 sv, bytes32 sx) = secret.serialize();
-        return _h3(abi.encodePacked(random, sv, sx));
+        return _h3(abi.encodePacked(random, secret));
     }
 
     /// @notice Compute the binding factors for a message and group commitments.
@@ -76,6 +75,21 @@ library FROST {
         Secp256k1.mulmuladd(z, c, y, r);
     }
 
+    /// @notice Generate a KeyGen challenge for the proof of knowledge.
+    function keyGenChallenge(uint256 index, Secp256k1.Point memory phi, Secp256k1.Point memory r)
+        internal
+        view
+        returns (uint256 c)
+    {
+        // The official FROST implementation KeyGen `challenge` function.
+        // <https://github.com/ZcashFoundation/frost/blob/3ffc19d8f473d5bc4e07ed41bc884bdb42d6c29f/frost-core/src/keys/dkg.rs#L413-L430>
+        // <https://github.com/ZcashFoundation/frost/blob/3ffc19d8f473d5bc4e07ed41bc884bdb42d6c29f/frost-secp256k1/src/lib.rs#L222-L224>
+
+        (uint8 phiv, bytes32 phix) = phi.serialize();
+        (uint8 rv, bytes32 rx) = r.serialize();
+        return _hdkg(abi.encodePacked(index, phiv, phix, rv, rx));
+    }
+
     function _encodeCommitments(Commitment[] memory commitments) private pure returns (bytes memory result) {
         // The RFC-9591 `encode_group_commitment_list` function.
         // <https://datatracker.ietf.org/doc/html/rfc9591#section-4.3>
@@ -120,6 +134,10 @@ library FROST {
 
     function _h5(bytes memory input) private view returns (bytes32 result) {
         return _hash(input, "FROST-secp256k1-SHA256-v1com\x00\x00\x00\x1c");
+    }
+
+    function _hdkg(bytes memory input) private view returns (uint256 result) {
+        return _hashToField(input, "FROST-secp256k1-SHA256-v1dkg\x00\x00\x00\x1c");
     }
 
     function _hashToField(bytes memory message, bytes32 dst) private view returns (uint256 e) {
@@ -208,7 +226,7 @@ library FROST {
             let dstLen := byte(31, dst)
             let dstOffset := sub(32, dstLen)
             let len := mload(input)
-            mstore(input, shr(shl(4, dstOffset), dst))
+            mstore(input, shr(shl(3, dstOffset), dst))
             if iszero(
                 and(
                     eq(returndatasize(), 0x20),

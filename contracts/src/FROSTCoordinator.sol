@@ -72,7 +72,7 @@ contract FROSTCoordinator {
     mapping(SignatureId => Signature) private $signatures;
 
     /// @notice Initiate a distributed key generation ceremony.
-    function keygen(uint64 domain, bytes32 participants, uint64 count, uint64 threshold) external returns (GroupId id) {
+    function keyGen(uint64 domain, bytes32 participants, uint64 count, uint64 threshold) external returns (GroupId id) {
         id = _groupId(domain);
         Group storage group = $groups[id];
         require(count >= threshold && threshold > 1, InvalidGroupParameters());
@@ -84,7 +84,7 @@ contract FROSTCoordinator {
 
     /// @notice Submit a commitment and proof for a key generation participant.
     ///         This corresponds to Round 1 of the FROST _KeyGen_ algorithm.
-    function keygenCommit(GroupId id, uint256 index, bytes32[] calldata poap, KeyGenCommitment calldata commitment)
+    function keyGenCommit(GroupId id, uint256 index, bytes32[] calldata poap, KeyGenCommitment calldata commitment)
         external
     {
         Group storage group = $groups[id];
@@ -100,7 +100,7 @@ contract FROSTCoordinator {
     ///         of the FROST _KeyGen_ algorithm. Note that `f(i)` needs to be
     ///         shared secretly, so we use ECDH using each participant's `φ_0`
     ///         value in order to encrypt the secret share for each recipient.
-    function keygenSecretShare(GroupId id, KeyGenSecretShare calldata share) external {
+    function keyGenSecretShare(GroupId id, KeyGenSecretShare calldata share) external {
         Group storage group = $groups[id];
         require(group.parameters.count - 1 == share.f.length, InvalidKeyGenSecretShare());
 

@@ -42,7 +42,7 @@ contract FROSTCoordinatorTest is Test {
         // Distributed key generation algorithm from the FROST white paper.
         // <https://eprint.iacr.org/2020/852.pdf>
 
-        FROSTCoordinator.GroupId id = coordinator.keygen(0, participants.root(), COUNT, THRESHOLD);
+        FROSTCoordinator.GroupId id = coordinator.keyGen(0, participants.root(), COUNT, THRESHOLD);
 
         // Off-by-one errors are one of the two hardest problems in computer
         // science (along with cache invalidation and naming things). We use a
@@ -71,8 +71,8 @@ contract FROSTCoordinatorTest is Test {
 
             uint256 k = vm.randomUint(0, Secp256k1.N - 1);
             commitment.r = ForgeSecp256k1.g(k).toPoint();
-            bytes32 c = _h(index, ForgeSecp256k1.g(a[index][0]).toPoint(), commitment.r);
-            commitment.mu = addmod(k, mulmod(a[index][0], uint256(c), Secp256k1.N), Secp256k1.N);
+            uint256 c = FROST.keyGenChallenge(index, ForgeSecp256k1.g(a[index][0]).toPoint(), commitment.r);
+            commitment.mu = addmod(k, mulmod(a[index][0], c, Secp256k1.N), Secp256k1.N);
         }
 
         // Round 1.3
@@ -102,7 +102,7 @@ contract FROSTCoordinatorTest is Test {
             vm.expectEmit();
             emit FROSTCoordinator.KeyGenCommitted(id, index, commitment);
             vm.prank(participant);
-            coordinator.keygenCommit(id, index, poap, commitment);
+            coordinator.keyGenCommit(id, index, poap, commitment);
         }
 
         // Round 1.5
@@ -110,8 +110,8 @@ contract FROSTCoordinatorTest is Test {
         // included in events emitted during the `KeyGen` process.
         for (uint256 index = 1; index <= COUNT; index++) {
             FROSTCoordinator.KeyGenCommitment memory commitment = commitments[index];
-            bytes32 c = _h(index, commitment.c[0], commitment.r);
-            Secp256k1.mulmuladd(commitment.mu, uint256(c), commitment.c[0], commitment.r);
+            uint256 c = FROST.keyGenChallenge(index, commitment.c[0], commitment.r);
+            Secp256k1.mulmuladd(commitment.mu, c, commitment.c[0], commitment.r);
 
             commitment.mu = 0;
             commitment.r = Secp256k1.Point({x: 0, y: 0});
@@ -163,7 +163,7 @@ contract FROSTCoordinatorTest is Test {
             vm.expectEmit();
             emit FROSTCoordinator.KeyGenSecretShared(id, index, share);
             vm.prank(participants.addr(index));
-            coordinator.keygenSecretShare(id, share);
+            coordinator.keyGenSecretShare(id, share);
         }
 
         // Round 2.2*
@@ -233,10 +233,9 @@ contract FROSTCoordinatorTest is Test {
         {
             bytes32[] memory commitments = new bytes32[](COUNT + 1);
             for (uint256 index = 1; index <= COUNT; index++) {
-                Secp256k1.Point memory secret = ForgeSecp256k1.g(s[index]).toPoint();
                 Nonces memory n = nonces[index];
-                n.d = ForgeSecp256k1.g(FROST.nonce(bytes32(vm.randomUint()), secret));
-                n.e = ForgeSecp256k1.g(FROST.nonce(bytes32(vm.randomUint()), secret));
+                n.d = ForgeSecp256k1.g(FROST.nonce(bytes32(vm.randomUint()), s[index]));
+                n.e = ForgeSecp256k1.g(FROST.nonce(bytes32(vm.randomUint()), s[index]));
                 // forge-lint: disable-next-line(asm-keccak256)
                 bytes32 digest = keccak256(abi.encode(n.d.x(), n.d.y(), n.e.x(), n.e.y()));
                 for (uint256 i = 0; i < nonceProof.length; i++) {
@@ -360,7 +359,7 @@ contract FROSTCoordinatorTest is Test {
     }
 
     function _trustedKeyGen(uint64 domain) private returns (FROSTCoordinator.GroupId id, uint256[] memory s) {
-        id = coordinator.keygen(domain, participants.root(), COUNT, THRESHOLD);
+        id = coordinator.keyGen(domain, participants.root(), COUNT, THRESHOLD);
         s = new uint256[](COUNT + 1);
 
         uint256[] memory a = new uint256[](THRESHOLD);
@@ -376,7 +375,7 @@ contract FROSTCoordinatorTest is Test {
         for (uint256 index = 2; index <= COUNT; index++) {
             (address participant, bytes32[] memory poap) = participants.proof(index);
             vm.prank(participant);
-            coordinator.keygenCommit(id, index, poap, commitment);
+            coordinator.keyGenCommit(id, index, poap, commitment);
         }
         {
             for (uint256 j = 0; j < THRESHOLD; j++) {
@@ -384,7 +383,7 @@ contract FROSTCoordinatorTest is Test {
             }
             (address participant, bytes32[] memory poap) = participants.proof(1);
             vm.prank(participant);
-            coordinator.keygenCommit(id, 1, poap, commitment);
+            coordinator.keyGenCommit(id, 1, poap, commitment);
         }
 
         // We don't actually need to encrypt and broadcast secret shares, the
@@ -395,7 +394,7 @@ contract FROSTCoordinatorTest is Test {
             s[index] = _f(a, index);
             share.y = ForgeSecp256k1.g(s[index]).toPoint();
             vm.prank(participants.addr(index));
-            coordinator.keygenSecretShare(id, share);
+            coordinator.keyGenSecretShare(id, share);
         }
 
         // For debugging purposes, also provide the group private key to the
@@ -405,16 +404,6 @@ contract FROSTCoordinatorTest is Test {
         assertEq(
             keccak256(abi.encode(coordinator.groupKey(id))), keccak256(abi.encode(ForgeSecp256k1.g(s[0]).toPoint()))
         );
-    }
-
-    function _h(uint256 index, Secp256k1.Point memory ga0, Secp256k1.Point memory r)
-        private
-        pure
-        returns (bytes32 digest)
-    {
-        // NOTE: This hash function is for demonstration only - we should use a
-        // suitable hash function for the actual proof.
-        return keccak256(abi.encodePacked(index, "test", ga0.x, ga0.y, r.x, r.y));
     }
 
     function _f(uint256[] memory a, uint256 x) private pure returns (uint256 r) {
