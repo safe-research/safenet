@@ -114,22 +114,39 @@ library Secp256k1 {
         require(valid, InvalidMulMulAddWitness());
     }
 
+    /// @notice Requires that `P` is a non-zero point on the curve.
+    function requireNonZero(Point memory p) internal pure {
+        require(_satisfiesCurveEquation(p.x, p.y), NotOnCurve());
+    }
+
+    /// @notice Serializes a point to its compressed form.
+    function serialize(Point memory p) internal pure returns (uint8 prefix, bytes32 encoded) {
+        requireNonZero(p);
+        uint256 y = p.y;
+        assembly ("memory-safe") {
+            prefix := add(2, and(y, 1))
+        }
+        encoded = bytes32(p.x);
+    }
+
     function _unpack(Point memory p) private pure returns (uint256 x, uint256 y) {
         x = p.x;
         y = p.y;
-        bool valid;
+        bool valid = _satisfiesCurveEquation(x, y);
         assembly ("memory-safe") {
-            // Check (branchlessly) that `p` is either the point at infinity,
-            // which is encoded as the 0-value, or that the point's coordinates
-            // satisfy the curve equasion:
-            //      Py² = Px³ + b
-            // And that both `Px` and `Py` are elements in Fp.
-            valid := or(
-                iszero(or(x, y)),
-                and(eq(mulmod(y, y, P), addmod(mulmod(x, mulmod(x, x, P), P), B, P)), and(lt(x, P), lt(y, P)))
-            )
+            valid := or(iszero(or(x, y)), valid)
         }
         require(valid, NotOnCurve());
+    }
+
+    function _satisfiesCurveEquation(uint256 x, uint256 y) private pure returns (bool result) {
+        assembly ("memory-safe") {
+            // Check (branchlessly) that the point's coordinates satisfy the
+            // curve equation:
+            //      Py² = Px³ + b
+            // And that both `Px` and `Py` are elements in Fp.
+            result := and(eq(mulmod(y, y, P), addmod(mulmod(x, mulmod(x, x, P), P), B, P)), and(lt(x, P), lt(y, P)))
+        }
     }
 
     function _divmod(uint256 x, uint256 y, uint256 p) private view returns (uint256 result) {
