@@ -3,7 +3,7 @@ pragma solidity ^0.8.30;
 
 import {Test, Vm} from "@forge-std/Test.sol";
 import {Arrays} from "@oz/utils/Arrays.sol";
-import {Hashes} from "@oz/utils/cryptography/Hashes.sol";
+import {MerkleProof} from "@oz/utils/cryptography/MerkleProof.sol";
 import {Math} from "@oz/utils/math/Math.sol";
 import {CommitmentShareMerkleTree} from "@test/util/CommitmentShareMerkleTree.sol";
 import {ForgeSecp256k1} from "@test/util/ForgeSecp256k1.sol";
@@ -237,11 +237,8 @@ contract FROSTCoordinatorTest is Test {
                 n.d = ForgeSecp256k1.g(FROST.nonce(bytes32(vm.randomUint()), s[index]));
                 n.e = ForgeSecp256k1.g(FROST.nonce(bytes32(vm.randomUint()), s[index]));
                 // forge-lint: disable-next-line(asm-keccak256)
-                bytes32 digest = keccak256(abi.encode(n.d.x(), n.d.y(), n.e.x(), n.e.y()));
-                for (uint256 i = 0; i < nonceProof.length; i++) {
-                    digest = Hashes.efficientKeccak256(digest, 0);
-                }
-                commitments[index] = digest;
+                bytes32 leaf = keccak256(abi.encode(0, n.d.x(), n.d.y(), n.e.x(), n.e.y()));
+                commitments[index] = MerkleProof.processProof(nonceProof, leaf);
             }
             for (uint256 index = 1; index <= COUNT; index++) {
                 vm.prank(participants.addr(index));
