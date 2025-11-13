@@ -6,15 +6,15 @@ import type {
 	GroupId,
 	ProofOfAttestationParticipation,
 	ProofOfKnowledge,
-} from "../frost/types.js";
-import { FrostClient } from "./client.js";
+} from "../../frost/types.js";
 import {
 	calculateParticipantsRoot,
 	hashParticipant,
 	verifyMerkleProof,
-} from "./merkle.js";
-import { InMemoryStorage } from "./storage.js";
-import type { FrostCoordinator, Participant } from "./types.js";
+} from "../merkle.js";
+import { InMemoryStorage } from "../storage.js";
+import type { FrostCoordinator, Participant } from "../types.js";
+import { KeyGenClient } from "./client.js";
 
 const createRandomAccount = () => privateKeyToAccount(generatePrivateKey());
 
@@ -106,7 +106,7 @@ describe("client", () => {
 				},
 			};
 			const storage = new InMemoryStorage(a.address);
-			const client = new FrostClient(storage, coordinator);
+			const client = new KeyGenClient(storage, coordinator);
 			client.registerParticipants(participants);
 			return {
 				storage,

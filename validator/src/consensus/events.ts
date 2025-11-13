@@ -6,10 +6,10 @@ import {
 	keyGenEventSchema,
 	keyGenSecretSharedEventSchema,
 } from "../types/schemas.js";
-import type { FrostClient } from "./client.js";
+import type { KeyGenClient } from "./keygen/client.js";
 
 export const linkClientToCoordinator = (
-	frostClient: FrostClient,
+	frostClient: KeyGenClient,
 	publicClient: PublicClient,
 	coordinatorAddress: Address,
 ) => {

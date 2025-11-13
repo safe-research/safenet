@@ -1,14 +1,8 @@
 import { randomBytes } from "node:crypto";
 import { mod } from "@noble/curves/abstract/modular.js";
 import { secp256k1 } from "@noble/curves/secp256k1.js";
-import {
-	bytesToNumberBE,
-	concatBytes,
-	numberToBytesBE,
-} from "@noble/curves/utils.js";
-import { keccak_256 } from "@noble/hashes/sha3.js";
-import { hexToBigInt } from "viem";
-import type { FrostPoint, GroupId } from "./types.js";
+import { bytesToNumberBE } from "@noble/curves/utils.js";
+import type { FrostPoint } from "./types.js";
 
 export const G_BASE = secp256k1.Point.BASE;
 export const N = secp256k1.Point.CURVE().n;
@@ -45,38 +39,6 @@ export const toPoint = (coordinates: { x: bigint; y: bigint }): FrostPoint => {
 	const point = secp256k1.Point.fromAffine(coordinates);
 	point.assertValidity();
 	return point;
-};
-
-// TODO: replace by proper hashing function
-export const hashToBigInt = (
-	index: bigint,
-	ga0: FrostPoint,
-	r: FrostPoint,
-	groupId: GroupId,
-): bigint => {
-	const indexBytes = numberToBytesBE(index, 32);
-	const grouIdBytes = numberToBytesBE(hexToBigInt(groupId), 32);
-	const ga0xBytes = numberToBytesBE(ga0.x, 32);
-	const ga0yBytes = numberToBytesBE(ga0.y, 32);
-	const rxBytes = numberToBytesBE(r.x, 32);
-	const ryBytes = numberToBytesBE(r.y, 32);
-
-	// Concatenate all bytes as you specified
-	const allBytes = concatBytes(
-		indexBytes,
-		grouIdBytes,
-		ga0xBytes,
-		ga0yBytes,
-		rxBytes,
-		ryBytes,
-	);
-	const hash = keccak_256(allBytes); // 32-byte array
-
-	// Convert the hash digest to a bigint
-	const c = bytesToNumberBE(hash);
-
-	// CRITICAL: Reduce the bigint modulo the curve order n
-	return mod_n(c);
 };
 
 export const createVerificationShare = (

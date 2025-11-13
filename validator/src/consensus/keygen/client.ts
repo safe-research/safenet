@@ -5,27 +5,27 @@ import {
 	evalCommitment,
 	evalPoly,
 	verifyKey,
-} from "../frost/math.js";
-import { ecdh } from "../frost/secret.js";
+} from "../../frost/math.js";
+import { ecdh } from "../../frost/secret.js";
 import type {
 	FrostPoint,
 	GroupId,
 	ParticipantId,
 	ProofOfKnowledge,
-} from "../frost/types.js";
+} from "../../frost/types.js";
 import {
 	createCoefficients,
 	createCommitments,
 	createProofOfKnowledge,
 	verifyCommitments,
-} from "../frost/vss.js";
-import { generateParticipantProof } from "./merkle.js";
+} from "../../frost/vss.js";
+import { generateParticipantProof } from "../merkle.js";
 import type {
 	FrostCoordinator,
 	GroupInfoStorage,
 	KeyGenInfoStorage,
 	Participant,
-} from "./types.js";
+} from "../types.js";
 
 export type KeygenInfo = {
 	groupId: GroupId;
@@ -48,7 +48,7 @@ export type KeygenInfo = {
  * 4. publish secret shares
  *   a. receive secret shares
  */
-export class FrostClient {
+export class KeyGenClient {
 	#coordinator: FrostCoordinator;
 	#storage: GroupInfoStorage & KeyGenInfoStorage;
 
@@ -94,7 +94,7 @@ export class FrostClient {
 		const participantId = this.#storage.registerGroup(groupId, participants);
 		const coefficients = createCoefficients(threshold);
 		this.#storage.registerKeyGen(groupId, coefficients);
-		const pok = createProofOfKnowledge(groupId, participantId, coefficients);
+		const pok = createProofOfKnowledge(participantId, coefficients);
 		const localCommitments = createCommitments(coefficients);
 		const poap = generateParticipantProof(participants, participantId);
 		this.#storage.registerCommitments(groupId, participantId, localCommitments);
@@ -123,7 +123,7 @@ export class FrostClient {
 			console.info("Do not verify own commitments");
 			return;
 		}
-		verifyCommitments(groupId, senderId, peerCommitments, pok);
+		verifyCommitments(senderId, peerCommitments, pok);
 		this.#storage.registerCommitments(groupId, senderId, peerCommitments);
 		if (this.#storage.checkIfCommitmentsComplete(groupId)) {
 			await this.prepareAndPublishKeygenSecretShares(groupId);

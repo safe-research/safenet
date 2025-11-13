@@ -4,9 +4,9 @@ import { createPublicClient, createWalletClient, http, parseAbi } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 import { anvil } from "viem/chains";
 import { describe, expect, it } from "vitest"; // or '@jest/globals'
-import { FrostClient } from "./client.js";
 import { OnchainCoordinator } from "./coordinator.js";
 import { linkClientToCoordinator } from "./events.js";
+import { KeyGenClient } from "./keygen/client.js";
 import { calculateParticipantsRoot } from "./merkle.js";
 import { InMemoryStorage } from "./storage.js";
 import type { Participant } from "./types.js";
@@ -49,7 +49,7 @@ describe("integration", () => {
 				coordinatorAddress,
 			);
 			const storage = new InMemoryStorage(a.address);
-			const client = new FrostClient(storage, coordinator);
+			const client = new KeyGenClient(storage, coordinator);
 			linkClientToCoordinator(client, publicClient, coordinatorAddress);
 			client.registerParticipants(participants);
 			return client;
