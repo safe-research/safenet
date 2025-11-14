@@ -26,7 +26,7 @@ library SafeLib {
         0x47e79534a245952e8b16893a336b85a3d9ea9fa8c573f3d803afb92a79469218;
 
     /**
-     * @dev EIP-712 domain separator typehash.
+     * @dev Computes the EIP-712 domain separator for the given chain ID and verifying contract.
      */
     function domainSeparator(uint256 chainId, address verifyingContract) public pure returns (bytes32 domainHash) {
         /* solhint-disable no-inline-assembly */
