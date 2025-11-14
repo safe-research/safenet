@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-only
 pragma solidity ^0.8.30;
 
-import {Hashes} from "@oz/utils/cryptography/Hashes.sol";
+import {MerkleProof} from "@oz/utils/cryptography/MerkleProof.sol";
+import {FROST} from "@/lib/FROST.sol";
 import {Secp256k1} from "@/lib/Secp256k1.sol";
 
 /// @title FROST Nonce Commitment Set
@@ -10,7 +11,7 @@ library FROSTNonceCommitmentSet {
     using Secp256k1 for Secp256k1.Point;
 
     struct T {
-        mapping(uint256 index => Commitments) commitments;
+        mapping(FROST.Identifier => Commitments) commitments;
     }
 
     struct Commitments {
@@ -29,11 +30,11 @@ library FROSTNonceCommitmentSet {
     /// @notice Commits to the next chunk of nonces, given the current signature
     ///         sequence for a group. This prevents participants commiting to
     ///         nonces _after_ a signing ceremony has already begun.
-    function commit(T storage self, uint256 index, bytes32 commitment, uint32 sequence)
+    function commit(T storage self, FROST.Identifier identifier, bytes32 commitment, uint32 sequence)
         internal
         returns (uint32 chunk)
     {
-        Commitments storage commitments = self.commitments[index];
+        Commitments storage commitments = self.commitments[identifier];
         uint256 offset;
         (chunk, offset) = _sequence(sequence);
         uint32 next = commitments.next;
@@ -47,38 +48,35 @@ library FROSTNonceCommitmentSet {
     /// @notice Verifies that the specified commitment is part of the set.
     function verify(
         T storage self,
-        uint256 index,
+        FROST.Identifier identifier,
         Secp256k1.Point memory d,
         Secp256k1.Point memory e,
         uint32 sequence,
         bytes32[] calldata proof
     ) internal view {
+        d.requireNonZero();
+        e.requireNonZero();
+
         (uint32 chunk, uint256 offset) = _sequence(sequence);
-        (bytes32 commitment, uint256 startOffset) = _root(self.commitments[index].chunks[chunk]);
+        (bytes32 commitment, uint256 startOffset) = _root(self.commitments[identifier].chunks[chunk]);
         require(offset >= startOffset, NotIncluded());
 
-        // `commitment` represents an **ordered** Merkle tree of `_CHUNKSZ`
-        // depth, where the `n`-th leaf represents the nonces for offset `n`.
-        bytes32 digest = hash(d, e);
         require(proof.length == _CHUNKSZ, NotIncluded());
-        for (uint256 i = 0; i < _CHUNKSZ; i++) {
-            bytes32 p = proof[i];
-            (bytes32 left, bytes32 right) = (offset >> i) & 1 == 0 ? (digest, p) : (p, digest);
-            digest = Hashes.efficientKeccak256(left, right);
-        }
+        bytes32 digest = MerkleProof.processProofCalldata(proof, _hash(offset, d, e));
         require(digest & _ROOTMASK == commitment, NotIncluded());
     }
 
-    /// @notice Returns the hash of a pair of commited nonces. This hash is a
-    ///         leaf in a commitment chunk's Merkle tree.
-    function hash(Secp256k1.Point memory d, Secp256k1.Point memory e) internal pure returns (bytes32 digest) {
-        d.requireNonZero();
-        e.requireNonZero();
+    function _hash(uint256 offset, Secp256k1.Point memory d, Secp256k1.Point memory e)
+        private
+        pure
+        returns (bytes32 digest)
+    {
         assembly ("memory-safe") {
             let ptr := mload(0x40)
-            mcopy(ptr, d, 0x40)
-            mcopy(add(ptr, 0x40), e, 0x40)
-            digest := keccak256(ptr, 0x80)
+            mstore(ptr, offset)
+            mcopy(add(ptr, 0x20), d, 0x40)
+            mcopy(add(ptr, 0x60), e, 0x40)
+            digest := keccak256(ptr, 0xa0)
         }
     }
 

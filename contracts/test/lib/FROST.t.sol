@@ -22,12 +22,15 @@ contract FROSTTest is Test {
             y: 0x3547f11ca8696646f2f3acb08e31016afac23e630c5d11f59f61fef57b0d2aa5
         });
         FROST.Commitment[] memory commitments = new FROST.Commitment[](3);
-        commitments[0] =
-            FROST.Commitment({index: 1, d: ForgeSecp256k1.g(0xd1).toPoint(), e: ForgeSecp256k1.g(0xe1).toPoint()});
-        commitments[1] =
-            FROST.Commitment({index: 2, d: ForgeSecp256k1.g(0xd2).toPoint(), e: ForgeSecp256k1.g(0xe2).toPoint()});
-        commitments[2] =
-            FROST.Commitment({index: 3, d: ForgeSecp256k1.g(0xd3).toPoint(), e: ForgeSecp256k1.g(0xe3).toPoint()});
+        commitments[0] = FROST.Commitment({
+            identifier: FROST.newIdentifier(1), d: ForgeSecp256k1.g(0xd1).toPoint(), e: ForgeSecp256k1.g(0xe1).toPoint()
+        });
+        commitments[1] = FROST.Commitment({
+            identifier: FROST.newIdentifier(2), d: ForgeSecp256k1.g(0xd2).toPoint(), e: ForgeSecp256k1.g(0xe2).toPoint()
+        });
+        commitments[2] = FROST.Commitment({
+            identifier: FROST.newIdentifier(3), d: ForgeSecp256k1.g(0xd3).toPoint(), e: ForgeSecp256k1.g(0xe3).toPoint()
+        });
         bytes32 message = keccak256("hello");
 
         uint256[] memory bindingFactors = FROST.bindingFactors(y, commitments, message);
@@ -77,7 +80,7 @@ contract FROSTTest is Test {
             y: 0x3020f80cae8f515d58686d5c6e4f1d027a1671348b6402f4e43ce525bda00fbc
         });
 
-        uint256 c = FROST.keyGenChallenge(1, phi, r);
+        uint256 c = FROST.keyGenChallenge(FROST.newIdentifier(1), phi, r);
         assertEq(c, 0xe39fcb3eef980ce5ee77898a6ed247fe78146aca2852ca4cf9f7fdcf23b4d470);
     }
 }

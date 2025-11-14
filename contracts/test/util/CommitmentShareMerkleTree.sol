@@ -2,11 +2,12 @@
 pragma solidity ^0.8.30;
 
 import {MerkleTreeBase} from "@test/util/MerkleTreeBase.sol";
+import {FROST} from "@/lib/FROST.sol";
 import {Secp256k1} from "@/lib/Secp256k1.sol";
 
 contract CommitmentShareMerkleTree is MerkleTreeBase {
     struct S {
-        uint256 index;
+        FROST.Identifier identifier;
         Secp256k1.Point r;
         uint256 cl;
     }
@@ -21,10 +22,10 @@ contract CommitmentShareMerkleTree is MerkleTreeBase {
         uint256 last = 0;
         for (uint256 i = 0; i < shares.length; i++) {
             S memory share = shares[i];
-            _leaf(keccak256(abi.encode(share.index, share.r.x, share.r.y, share.cl)));
+            _leaf(keccak256(abi.encode(share.identifier, share.r.x, share.r.y, share.cl)));
 
-            assert(share.index > last);
-            last = share.index;
+            assert(FROST.Identifier.unwrap(share.identifier) > last);
+            last = FROST.Identifier.unwrap(share.identifier);
         }
         _build();
     }

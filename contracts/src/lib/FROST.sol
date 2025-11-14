@@ -8,14 +8,28 @@ import {Secp256k1} from "@/lib/Secp256k1.sol";
 library FROST {
     using Secp256k1 for Secp256k1.Point;
 
+    type Identifier is uint256;
+
     struct Commitment {
-        uint256 index;
+        Identifier identifier;
         Secp256k1.Point d;
         Secp256k1.Point e;
     }
 
+    error InvalidIdentifier();
     error UnorderedCommitments();
     error InvalidScalar();
+
+    /// @notice Contruct a FROST participant identifier.
+    function newIdentifier(uint256 value) internal pure returns (Identifier identifier) {
+        identifier = Identifier.wrap(value);
+        requireValidIdentifier(identifier);
+    }
+
+    /// @notice Requires that an identifier is valid.
+    function requireValidIdentifier(Identifier identifier) internal pure {
+        require(Identifier.unwrap(identifier) != 0, InvalidIdentifier());
+    }
 
     /// @notice Generate a random nonce from some randomness and a secret key.
     function nonce(bytes32 random, uint256 secret) internal view returns (uint256 n) {
@@ -45,9 +59,9 @@ library FROST {
 
         rho = new uint256[](commitments.length);
         for (uint256 i = 0; i < commitments.length; i++) {
-            uint256 index = commitments[i].index;
+            Identifier identifier = commitments[i].identifier;
             assembly ("memory-safe") {
-                mstore(rhoIndexPtr, index)
+                mstore(rhoIndexPtr, identifier)
             }
             rho[i] = _h1(rhoInput);
         }
@@ -76,7 +90,7 @@ library FROST {
     }
 
     /// @notice Generate a KeyGen challenge for the proof of knowledge.
-    function keyGenChallenge(uint256 index, Secp256k1.Point memory phi, Secp256k1.Point memory r)
+    function keyGenChallenge(Identifier identifier, Secp256k1.Point memory phi, Secp256k1.Point memory r)
         internal
         view
         returns (uint256 c)
@@ -87,7 +101,7 @@ library FROST {
 
         (uint8 phiv, bytes32 phix) = phi.serialize();
         (uint8 rv, bytes32 rx) = r.serialize();
-        return _hdkg(abi.encodePacked(index, phiv, phix, rv, rx));
+        return _hdkg(abi.encodePacked(identifier, phiv, phix, rv, rx));
     }
 
     function _encodeCommitments(Commitment[] memory commitments) private pure returns (bytes memory result) {
@@ -96,18 +110,18 @@ library FROST {
 
         result = new bytes(commitments.length * 98);
 
-        uint256 lastIndex = 0;
+        uint256 identifier = 0;
         for (uint256 i = 0; i < commitments.length; i++) {
             Commitment memory commitment = commitments[i];
 
-            require(commitment.index > lastIndex, UnorderedCommitments());
-            lastIndex = commitment.index;
+            require(Identifier.unwrap(commitment.identifier) > identifier, UnorderedCommitments());
+            identifier = Identifier.unwrap(commitment.identifier);
 
             (uint8 dv, bytes32 dx) = commitment.d.serialize();
             (uint8 ev, bytes32 ex) = commitment.e.serialize();
             assembly ("memory-safe") {
                 let ptr := add(add(result, 0x20), mul(i, 98))
-                mstore(ptr, lastIndex)
+                mstore(ptr, identifier)
                 mstore8(add(ptr, 0x20), dv)
                 mstore(add(ptr, 0x21), dx)
                 mstore8(add(ptr, 0x41), ev)
