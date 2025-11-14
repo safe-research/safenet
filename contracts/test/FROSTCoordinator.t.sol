@@ -408,7 +408,7 @@ contract FROSTCoordinatorTest is Test {
         // For debugging purposes, also provide the group private key to the
         // caller (even if this is typically not available).
         s[0] = a[0];
-        
+
         assertEq(
             keccak256(abi.encode(coordinator.groupKey(gid))), keccak256(abi.encode(ForgeSecp256k1.g(s[0]).toPoint()))
         );
