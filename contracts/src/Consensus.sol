@@ -235,7 +235,7 @@ contract Consensus {
         Secp256k1.Point memory nextGroupKey = FROST_COORDINATOR.groupKey(nextGroupId);
 
         // Create message: hash of nextEpoch and its group key
-        bytes32 message = keccak256(abi.encode(nextEpoch, nextGroupKey));
+        bytes32 message = _calculateEpochMessage(nextEpoch, nextGroupKey);
 
         // Initiate FROST signing ceremony
         FROSTCoordinator.SignatureId signatureId = FROST_COORDINATOR.sign(currentGroupId, message);
@@ -258,7 +258,7 @@ contract Consensus {
         Secp256k1.Point memory nextGroupKey = FROST_COORDINATOR.groupKey(nextGroupId);
 
         // Recreate the message that was signed
-        bytes32 message = keccak256(abi.encode(nextEpoch, nextGroupKey));
+        bytes32 message = _calculateEpochMessage(nextEpoch, nextGroupKey);
 
         // Get current epoch's group key (special case for bootstrap)
         Secp256k1.Point memory currentGroupKey;
@@ -434,6 +434,36 @@ contract Consensus {
      */
     function _groupId(uint64 epoch) private view returns (FROSTCoordinator.GroupId) {
         return FROSTCoordinator.GroupId.wrap(bytes32((uint256(epoch) << 192) | uint256(uint160(address(this)))));
+    }
+
+    /*
+     * @notice Calculates the message hash for epoch handover signing
+     * @param epoch The epoch number
+     * @param groupKey The group public key for the epoch
+     * @return message The keccak256 hash of abi.encode(epoch, groupKey)
+     * @dev Uses inline assembly for gas optimization
+     */
+    function _calculateEpochMessage(uint64 epoch, Secp256k1.Point memory groupKey)
+        private
+        pure
+        returns (bytes32 message)
+    {
+        assembly {
+            // Get free memory pointer
+            let ptr := mload(0x40)
+
+            // Store epoch (padded to 32 bytes)
+            mstore(ptr, epoch)
+
+            // Store groupKey.x at offset 0x20
+            mstore(add(ptr, 0x20), mload(groupKey))
+
+            // Store groupKey.y at offset 0x40
+            mstore(add(ptr, 0x40), mload(add(groupKey, 0x20)))
+
+            // Calculate keccak256 of the 96 bytes (0x60)
+            message := keccak256(ptr, 0x60)
+        }
     }
 }
 
