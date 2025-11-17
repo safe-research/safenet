@@ -40,20 +40,51 @@ export const frostShareSchema = z.object({
 });
 
 export const keyGenEventSchema = z.object({
-	id: hexDataSchema,
+	gid: hexDataSchema,
 	participants: hexDataSchema,
 	count: z.bigint().positive(),
 	threshold: z.bigint().positive(),
 });
 
 export const keyGenCommittedEventSchema = z.object({
-	id: hexDataSchema,
-	index: z.bigint().positive(),
+	gid: hexDataSchema,
+	identifier: z.bigint().positive(),
 	commitment: frostCommitmentSchema,
 });
 
 export const keyGenSecretSharedEventSchema = z.object({
-	id: hexDataSchema,
-	index: z.bigint().positive(),
+	gid: hexDataSchema,
+	identifier: z.bigint().positive(),
 	share: frostShareSchema,
+});
+
+export const nonceCommitmentsHashEventSchema = z.object({
+	gid: hexDataSchema,
+	identifier: z.bigint().positive(),
+	chunk: z.number().nonnegative(),
+	commitment: hexDataSchema,
+});
+
+export const signRequestEventSchema = z.object({
+	gid: hexDataSchema,
+	sid: hexDataSchema,
+	message: hexDataSchema,
+	sequence: z.bigint().nonnegative(),
+});
+
+export const nonceCommitmentsSchema = z.object({
+	d: frostPointSchema,
+	e: frostPointSchema,
+});
+
+export const nonceCommitmentsEventSchema = z.object({
+	sid: hexDataSchema,
+	identifier: z.bigint().positive(),
+	nonces: nonceCommitmentsSchema
+});
+
+export const signatureShareEventSchema = z.object({
+	sid: hexDataSchema,
+	identifier: z.bigint().positive(),
+	z: z.bigint().nonnegative(),
 });
