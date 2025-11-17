@@ -154,12 +154,10 @@ describe("integration", () => {
 					"event Sign(bytes32 indexed gid, bytes32 sid, bytes32 indexed message, uint256 sequence)",
 				),
 				args: {
-					// viem automatically uses these to filter indexed parameters
 					gid: groupId,
 					message: message,
 				},
-				// It's highly recommended to specify a block range
-				fromBlock: "earliest", // Or a specific block number like 123456n
+				fromBlock: "earliest",
 				toBlock: "latest",
 			});
 			expect(signEvents.length).toBe(1);
@@ -171,11 +169,9 @@ describe("integration", () => {
 					"event SignShare(bytes32 indexed sid, uint256 identifier, uint256 z, bytes32 signersRoot)",
 				),
 				args: {
-					// viem automatically uses these to filter indexed parameters
 					sid,
 				},
-				// It's highly recommended to specify a block range
-				fromBlock: "earliest", // Or a specific block number like 123456n
+				fromBlock: "earliest",
 				toBlock: "latest",
 			});
 			expect(signShareEvent.length).toBeGreaterThan(0);
