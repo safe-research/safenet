@@ -16,8 +16,8 @@ import type { FrostCoordinator } from "./types.js";
 export const COORDINATOR_FUNCTIONS = parseAbi([
 	"error InvalidKeyGenCommitment()",
 	"error NotParticipating()",
-	"function keygenCommit(bytes32 id, uint256 index, bytes32[] calldata poap, ((uint256 x, uint256 y)[] c, (uint256 x, uint256 y) r, uint256 mu) calldata commitment) external",
-	"function keygenSecretShare(bytes32 id, uint256 index, ((uint256 x, uint256 y) y, uint256[] f) calldata share) external",
+	"function keyGenCommit(bytes32 id, uint256 index, bytes32[] calldata poap, ((uint256 x, uint256 y)[] c, (uint256 x, uint256 y) r, uint256 mu) calldata commitment) external",
+	"function keyGenSecretShare(bytes32 id, ((uint256 x, uint256 y) y, uint256[] f) calldata share) external",
 ]);
 
 export class OnchainCoordinator implements FrostCoordinator {
@@ -45,7 +45,7 @@ export class OnchainCoordinator implements FrostCoordinator {
 		const { request } = await this.#publicClient.simulateContract({
 			address: this.#address,
 			abi: COORDINATOR_FUNCTIONS,
-			functionName: "keygenCommit",
+			functionName: "keyGenCommit",
 			args: [
 				groupId,
 				index,
@@ -63,17 +63,15 @@ export class OnchainCoordinator implements FrostCoordinator {
 
 	async publishKeygenSecretShares(
 		groupId: GroupId,
-		index: bigint,
 		verificationShare: FrostPoint,
 		peerShares: bigint[],
 	): Promise<Hex> {
 		const { request } = await this.#publicClient.simulateContract({
 			address: this.#address,
 			abi: COORDINATOR_FUNCTIONS,
-			functionName: "keygenSecretShare",
+			functionName: "keyGenSecretShare",
 			args: [
 				groupId,
-				index,
 				{
 					y: verificationShare,
 					f: peerShares,

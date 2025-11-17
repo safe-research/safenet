@@ -7,7 +7,7 @@ export const CONSENSUS_CORE_EVENTS = parseAbi([
 ]);
 
 export const COORDINATOR_EVENTS = parseAbi([
-	"event KeyGen(bytes32 indexed id, bytes32 participants, uint128 count, uint128 threshold)",
+	"event KeyGen(bytes32 indexed id, bytes32 participants, uint64 count, uint64 threshold)",
 	"event KeyGenAborted(bytes32 indexed id)",
 	"event KeyGenCommitted(bytes32 indexed id, uint256 index, ((uint256 x, uint256 y)[] c, (uint256 x, uint256 y) r, uint256 mu) commitment)",
 	"event KeyGenSecretShared(bytes32 indexed id, uint256 index, ((uint256 x, uint256 y) y, uint256[] f) share)",

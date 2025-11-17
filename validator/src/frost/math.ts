@@ -1,17 +1,11 @@
 import { randomBytes } from "node:crypto";
 import { mod } from "@noble/curves/abstract/modular.js";
 import { secp256k1 } from "@noble/curves/secp256k1.js";
-import {
-	bytesToNumberBE,
-	concatBytes,
-	numberToBytesBE,
-} from "@noble/curves/utils.js";
-import { keccak_256 } from "@noble/hashes/sha3.js";
-import { hexToBigInt } from "viem";
-import type { FrostPoint, GroupId } from "./types.js";
+import { bytesToNumberBE } from "@noble/curves/utils.js";
+import type { FrostPoint } from "./types.js";
 
-const G_BASE = secp256k1.Point.BASE;
-const N = secp256k1.Point.CURVE().n;
+export const G_BASE = secp256k1.Point.BASE;
+export const N = secp256k1.Point.CURVE().n;
 
 export const randomBigInt = () => bytesToNumberBE(randomBytes(32));
 
@@ -25,42 +19,30 @@ export const mod_n = (x: bigint) => {
 	return mod(x, N);
 };
 
+export const neg = (val: bigint) => {
+	return secp256k1.Point.Fn.neg(val);
+};
+
+export const addmod = (ĺhs: bigint, rhs: bigint) => {
+	return secp256k1.Point.Fn.add(ĺhs, rhs);
+};
+
+export const submod = (ĺhs: bigint, rhs: bigint) => {
+	return secp256k1.Point.Fn.sub(ĺhs, rhs);
+};
+
+export const mulmod = (ĺhs: bigint, rhs: bigint) => {
+	return secp256k1.Point.Fn.mul(ĺhs, rhs);
+};
+
+export const divmod = (ĺhs: bigint, rhs: bigint) => {
+	return secp256k1.Point.Fn.div(ĺhs, rhs);
+};
+
 export const toPoint = (coordinates: { x: bigint; y: bigint }): FrostPoint => {
 	const point = secp256k1.Point.fromAffine(coordinates);
 	point.assertValidity();
 	return point;
-};
-
-// TODO: replace by proper hashing function
-export const hashToBigInt = (
-	index: bigint,
-	ga0: FrostPoint,
-	r: FrostPoint,
-	groupId: GroupId,
-): bigint => {
-	const indexBytes = numberToBytesBE(index, 32);
-	const grouIdBytes = numberToBytesBE(hexToBigInt(groupId), 32);
-	const ga0xBytes = numberToBytesBE(ga0.x, 32);
-	const ga0yBytes = numberToBytesBE(ga0.y, 32);
-	const rxBytes = numberToBytesBE(r.x, 32);
-	const ryBytes = numberToBytesBE(r.y, 32);
-
-	// Concatenate all bytes as you specified
-	const allBytes = concatBytes(
-		indexBytes,
-		grouIdBytes,
-		ga0xBytes,
-		ga0yBytes,
-		rxBytes,
-		ryBytes,
-	);
-	const hash = keccak_256(allBytes); // 32-byte array
-
-	// Convert the hash digest to a bigint
-	const c = bytesToNumberBE(hash);
-
-	// CRITICAL: Reduce the bigint modulo the curve order n
-	return mod_n(c);
 };
 
 export const createVerificationShare = (
@@ -85,7 +67,7 @@ export const createSigningShare = (
 ): bigint => {
 	let signingShare = 0n;
 	for (const [, share] of secretShares) {
-		signingShare = mod_n(signingShare + share);
+		signingShare = addmod(signingShare, share);
 	}
 	if (signingShare === 0n) throw Error("Could not calculate signing share!");
 	return signingShare;
@@ -98,7 +80,7 @@ export const verifyKey = (publicKey: FrostPoint, privateKey: bigint): void => {
 	}
 };
 
-export const evalPoly = (coefficient: bigint[], x: bigint): bigint => {
+export const evalPoly = (coefficient: readonly bigint[], x: bigint): bigint => {
 	if (x === 0n) {
 		throw new Error("x is zero");
 	}
@@ -124,14 +106,14 @@ export const evalCommitment = (
 	commitments: readonly FrostPoint[],
 	x: bigint,
 ): FrostPoint => {
-	if (x === 0n) {
-		throw new Error("x is zero");
-	}
 	let value = commitments[0];
+	if (x === 0n) {
+		return value;
+	}
 	let term_pow = 1n;
 	const t = commitments.length;
 	for (let j = 1; j < t; j++) {
-		term_pow = mod_n(term_pow * x);
+		term_pow = mulmod(term_pow, x);
 		value = value.add(commitments[j].multiply(term_pow));
 	}
 	return value;

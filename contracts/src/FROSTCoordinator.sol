@@ -54,8 +54,8 @@ contract FROSTCoordinator {
     event KeyGen(GroupId indexed gid, bytes32 participants, uint64 count, uint64 threshold);
     event KeyGenCommitted(GroupId indexed gid, FROST.Identifier identifier, KeyGenCommitment commitment);
     event KeyGenSecretShared(GroupId indexed gid, FROST.Identifier identifier, KeyGenSecretShare share);
-    event Preprocess(GroupId indexed gid, FROST.Identifier identifier, uint32 chunk);
-    event Sign(GroupId indexed gid, SignatureId sid, bytes32 message);
+    event Preprocess(GroupId indexed gid, FROST.Identifier identifier, uint32 chunk, bytes32 commitment);
+    event Sign(GroupId indexed gid, SignatureId sid, bytes32 message, uint256 sequence);
     event SignRevealedNonces(SignatureId indexed sid, FROST.Identifier identifier, SignNonces nonces);
     event SignShare(SignatureId indexed sid, FROST.Identifier identifier, uint256 z);
 
@@ -125,7 +125,7 @@ contract FROSTCoordinator {
         Group storage group = $groups[gid];
         FROST.Identifier identifier = group.participants.identifierOf(msg.sender);
         chunk = group.nonces.commit(identifier, commitment, group.parameters.sequence);
-        emit Preprocess(gid, identifier, chunk);
+        emit Preprocess(gid, identifier, chunk, commitment);
     }
 
     /// @notice Initiate a signing ceremony.
@@ -137,7 +137,7 @@ contract FROSTCoordinator {
         uint32 sequence = parameters.sequence++;
         sid = _signatureId(gid, sequence);
         group.parameters = parameters;
-        emit Sign(gid, sid, message);
+        emit Sign(gid, sid, message, sequence);
     }
 
     /// @notice Reveal a nonce pair for a signing ceremony.

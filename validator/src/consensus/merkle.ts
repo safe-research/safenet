@@ -1,4 +1,5 @@
 import { encodePacked, type Hex, keccak256, zeroHash } from "viem";
+import type { ParticipantId } from "../frost/types.js";
 import type { Participant } from "./types.js";
 
 export const buildMerkleTree = (leaves: Hex[]): Hex[][] => {
@@ -30,9 +31,11 @@ export const calculateMerkleRoot = (leaves: Hex[]): Hex => {
 };
 
 export const hashParticipant = (p: Participant): Hex =>
-	keccak256(encodePacked(["uint256", "uint256"], [p.index, BigInt(p.address)]));
+	keccak256(encodePacked(["uint256", "uint256"], [p.id, BigInt(p.address)]));
 
-export const calculateParticipantsRoot = (participants: Participant[]): Hex => {
+export const calculateParticipantsRoot = (
+	participants: readonly Participant[],
+): Hex => {
 	// TODO: sort participants
 	return calculateMerkleRoot(participants.map(hashParticipant));
 };
@@ -50,7 +53,13 @@ export const verifyMerkleProof = (
 	return root === node;
 };
 
-export const generateMerkleProof = (leaves: Hex[], index: number): Hex[] => {
+export const generateMerkleProofWithRoot = (
+	leaves: Hex[],
+	index: number,
+): {
+	proof: Hex[];
+	root: Hex;
+} => {
 	const tree = buildMerkleTree(leaves);
 	const proof: Hex[] = [];
 	const height = tree.length;
@@ -60,13 +69,21 @@ export const generateMerkleProof = (leaves: Hex[], index: number): Hex[] => {
 		proof.push(node);
 		index = Math.floor(index / 2);
 	}
+	return {
+		proof,
+		root: tree[height - 1][0],
+	};
+};
+
+export const generateMerkleProof = (leaves: Hex[], index: number): Hex[] => {
+	const { proof } = generateMerkleProofWithRoot(leaves, index);
 	return proof;
 };
 
 export const generateParticipantProof = (
-	participants: Participant[],
-	index: number,
+	participants: readonly Participant[],
+	participantId: ParticipantId,
 ): Hex[] => {
-	// TODO: sort participants
+	const index = participants.findIndex((p) => p.id === participantId);
 	return generateMerkleProof(participants.map(hashParticipant), index);
 };

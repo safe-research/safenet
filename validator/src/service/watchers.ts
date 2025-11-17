@@ -62,7 +62,7 @@ export const watchCoordinatorEvents = ({
 	});
 };
 
-export const watchConsusEvents = ({
+export const watchConsensusEvents = ({
 	client,
 	target,
 	onApprove,

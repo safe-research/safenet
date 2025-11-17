@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest"; // or '@jest/globals'
+import { describe, expect, it } from "vitest";
 import {
 	checkedAddressSchema,
 	frostPointSchema,
