@@ -5,8 +5,8 @@
 		"build": "rimraf dist && tsc",
 		"dev": "tsx src/validator.ts",
 		"check": "biome check",
-		"test": "vitest run --exclude integration",
-		"test:watch": "vitest --exclude integration"
+		"test": "vitest run",
+		"test:watch": "vitest"
 	},
 	"dependencies": {
 		"@noble/curves": "^2.0.1",

@@ -10,7 +10,8 @@
 		"lint": "biome lint",
 		"lint:fix": "biome lint --fix",
 		"check": "biome check",
-		"test": "npm run test --workspaces"
+		"test": "npm run test --workspaces",
+		"test:integration": "./scripts/run_integration_test.sh"
 	},
 	"devDependencies": {
 		"@biomejs/biome": "2.0.6",
