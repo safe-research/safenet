@@ -25,4 +25,4 @@ jobs:
         run: npm ci
 
       - name: Run integration checks
-        run: VERBOSE=true ./run-integration-tests.sh
+        run: VERBOSE=true ./scripts/run-integration-tests.sh
