@@ -15,8 +15,8 @@ library FROSTNonceCommitmentSet {
     }
 
     struct Commitments {
-        uint32 next;
-        mapping(uint32 chunk => Root) chunks;
+        uint64 next;
+        mapping(uint64 chunk => Root) chunks;
     }
 
     type Root is bytes32;
@@ -30,14 +30,14 @@ library FROSTNonceCommitmentSet {
     /// @notice Commits to the next chunk of nonces, given the current signature
     ///         sequence for a group. This prevents participants commiting to
     ///         nonces _after_ a signing ceremony has already begun.
-    function commit(T storage self, FROST.Identifier identifier, bytes32 commitment, uint32 sequence)
+    function commit(T storage self, FROST.Identifier identifier, bytes32 commitment, uint64 sequence)
         internal
-        returns (uint32 chunk)
+        returns (uint64 chunk)
     {
         Commitments storage commitments = self.commitments[identifier];
         uint256 offset;
         (chunk, offset) = _sequence(sequence);
-        uint32 next = commitments.next;
+        uint64 next = commitments.next;
         if (next > chunk) {
             chunk = next;
         }
@@ -51,13 +51,13 @@ library FROSTNonceCommitmentSet {
         FROST.Identifier identifier,
         Secp256k1.Point memory d,
         Secp256k1.Point memory e,
-        uint32 sequence,
+        uint64 sequence,
         bytes32[] calldata proof
     ) internal view {
         d.requireNonZero();
         e.requireNonZero();
 
-        (uint32 chunk, uint256 offset) = _sequence(sequence);
+        (uint64 chunk, uint256 offset) = _sequence(sequence);
         (bytes32 commitment, uint256 startOffset) = _root(self.commitments[identifier].chunks[chunk]);
         require(offset >= startOffset, NotIncluded());
 
@@ -80,7 +80,7 @@ library FROSTNonceCommitmentSet {
         }
     }
 
-    function _sequence(uint32 sequence) private pure returns (uint32 chunk, uint256 offset) {
+    function _sequence(uint64 sequence) private pure returns (uint64 chunk, uint256 offset) {
         chunk = sequence >> _CHUNKSZ;
         offset = uint256(sequence) & _OFFSETMASK;
     }
