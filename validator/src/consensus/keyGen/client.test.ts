@@ -13,7 +13,7 @@ import {
 	verifyMerkleProof,
 } from "../merkle.js";
 import { InMemoryStorage } from "../storage.js";
-import type { FrostCoordinator, Participant } from "../types.js";
+import type { KeyGenCoordinator, Participant } from "../types.js";
 import { KeyGenClient } from "./client.js";
 
 const createRandomAccount = () => privateKeyToAccount(generatePrivateKey());
@@ -47,8 +47,8 @@ describe("keyGen", () => {
 			peerShares: bigint[];
 		}[] = [];
 		const clients = validatorAddresses.map((a) => {
-			const participantIndexMapping = new Map<GroupId, bigint>();
-			const coordinator: FrostCoordinator = {
+			const participantIdMapping = new Map<GroupId, bigint>();
+			const coordinator: KeyGenCoordinator = {
 				publishKeygenCommitments: (
 					groupId: GroupId,
 					index: bigint,
@@ -56,7 +56,7 @@ describe("keyGen", () => {
 					pok: ProofOfKnowledge,
 					poap: ProofOfAttestationParticipation,
 				): Promise<Hex> => {
-					participantIndexMapping.set(groupId, index);
+					participantIdMapping.set(groupId, index);
 					log("##### Received KeygenCommitments #####");
 					log({
 						groupId,
@@ -95,7 +95,7 @@ describe("keyGen", () => {
 						peerShares,
 					});
 					log("#######################################");
-					const index = participantIndexMapping.get(groupId) ?? -1n;
+					const index = participantIdMapping.get(groupId) ?? -1n;
 					shareEvents.push({
 						groupId,
 						index,

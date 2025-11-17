@@ -31,7 +31,7 @@ export type KeygenInfo = {
 	groupId: GroupId;
 	participants: Participant[];
 	coefficients: bigint[];
-	participantIndex: bigint;
+	participantId: bigint;
 	commitments: Map<bigint, readonly FrostPoint[]>;
 	secretShares: Map<bigint, bigint>;
 	verificationShare?: FrostPoint;
@@ -126,8 +126,8 @@ export class KeyGenClient {
 		peerCommitments: readonly FrostPoint[],
 		pok: ProofOfKnowledge,
 	) {
-		const participantIndex = this.#storage.participantId(groupId);
-		if (senderId === participantIndex) {
+		const participantId = this.#storage.participantId(groupId);
+		if (senderId === participantId) {
 			this.#callbacks.onDebug?.("Do not verify own commitments");
 			return;
 		}
@@ -182,7 +182,7 @@ export class KeyGenClient {
 		);
 	}
 
-	// `senderIndex` is the index of sending local participant in the participants set
+	// `senderId` is the index of sending local participant in the participants set
 	// `peerShares` are the calculated and encrypted shares (also defined as `f`)
 	async handleKeygenSecrets(
 		groupId: GroupId,

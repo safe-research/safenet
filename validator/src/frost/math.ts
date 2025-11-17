@@ -47,11 +47,11 @@ export const toPoint = (coordinates: { x: bigint; y: bigint }): FrostPoint => {
 
 export const createVerificationShare = (
 	allCommitments: Map<bigint, readonly FrostPoint[]>,
-	senderIndex: bigint,
+	senderId: bigint,
 ): FrostPoint => {
 	let verificationShare = null;
 	for (const [, commitments] of allCommitments) {
-		const partialVerificationShare = evalCommitment(commitments, senderIndex);
+		const partialVerificationShare = evalCommitment(commitments, senderId);
 		verificationShare =
 			verificationShare == null
 				? partialVerificationShare

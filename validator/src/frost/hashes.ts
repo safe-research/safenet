@@ -9,12 +9,19 @@ import { stringToBytes } from "viem";
 import type { FrostPoint } from "./types.js";
 
 const N = secp256k1.Point.CURVE().n;
-const DOMAIN = "FROST-secp256k1-SHA256-v1";
+const CONTEXT = "FROST-secp256k1-SHA256-v1";
 
-const dst = (context: string): string => DOMAIN + context;
+const dst = (discriminant: string): string => CONTEXT + discriminant;
 
-const opts = (context: string): H2COpts => {
-	return { m: 1, p: N, k: 128, expand: "xmd", hash: sha256, DST: dst(context) };
+const opts = (discriminant: string): H2COpts => {
+	return {
+		m: 1,
+		p: N,
+		k: 128,
+		expand: "xmd",
+		hash: sha256,
+		DST: dst(discriminant),
+	};
 };
 
 // TODO: replace by proper hashing function

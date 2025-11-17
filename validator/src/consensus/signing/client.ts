@@ -19,7 +19,7 @@ import {
 import { createSignatureShare, lagrangeChallenge } from "./shares.js";
 import { verifySignatureShare } from "./verify.js";
 
-export type SigingCallbacks = {
+export type SigningCallbacks = {
 	onRequestSigned?: (
 		signatureId: SignatureId,
 		signerId: ParticipantId,
@@ -31,12 +31,12 @@ export type SigingCallbacks = {
 export class SigningClient {
 	#storage: GroupInfoStorage & SignatureRequestStorage;
 	#coordinator: SigningCoordinator;
-	#callbacks: SigingCallbacks;
+	#callbacks: SigningCallbacks;
 
 	constructor(
 		storage: GroupInfoStorage & SignatureRequestStorage,
 		coordinator: SigningCoordinator,
-		callbacks: SigingCallbacks = {},
+		callbacks: SigningCallbacks = {},
 	) {
 		this.#storage = storage;
 		this.#coordinator = coordinator;

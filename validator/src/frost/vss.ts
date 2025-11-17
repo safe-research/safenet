@@ -2,6 +2,11 @@ import { keyGenChallenge } from "./hashes.js";
 import { addmod, g, mod_n, mulmod, randomBigInt } from "./math.js";
 import type { FrostPoint, ProofOfKnowledge } from "./types.js";
 
+/*
+ * This is a modified or extended Pedersen DKG and
+ * not just Feldmann VSS (the former is built on the latter).
+ */
+
 // Round 1.1
 export const createCoefficients = (threshold: bigint): bigint[] => {
 	const coefficients: bigint[] = [];
