@@ -2,7 +2,7 @@
 pragma solidity ^0.8.30;
 
 import {MerkleTreeBase} from "@test/util/MerkleTreeBase.sol";
-import {FROST} from "@/lib/FROST.sol";
+import {FROST} from "@/libraries/FROST.sol";
 
 contract ParticipantMerkleTree is MerkleTreeBase {
     // forge-lint: disable-next-line(mixed-case-variable)

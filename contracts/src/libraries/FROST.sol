@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 pragma solidity ^0.8.30;
 
-import {Secp256k1} from "@/lib/Secp256k1.sol";
+import {Secp256k1} from "@/libraries/Secp256k1.sol";
 
 /// @title FROST
 /// @notice Implementation of FROST(secp256k1, SHA-256) cyphersuite.

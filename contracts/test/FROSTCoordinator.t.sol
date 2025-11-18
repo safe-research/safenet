@@ -9,8 +9,8 @@ import {CommitmentShareMerkleTree} from "@test/util/CommitmentShareMerkleTree.so
 import {ForgeSecp256k1} from "@test/util/ForgeSecp256k1.sol";
 import {ParticipantMerkleTree} from "@test/util/ParticipantMerkleTree.sol";
 import {FROSTCoordinator} from "@/FROSTCoordinator.sol";
-import {FROST} from "@/lib/FROST.sol";
-import {Secp256k1} from "@/lib/Secp256k1.sol";
+import {FROST} from "@/libraries/FROST.sol";
+import {Secp256k1} from "@/libraries/Secp256k1.sol";
 
 contract FROSTCoordinatorTest is Test {
     using Arrays for address[];

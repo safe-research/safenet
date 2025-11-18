@@ -2,8 +2,8 @@
 pragma solidity ^0.8.30;
 
 import {MerkleProof} from "@oz/utils/cryptography/MerkleProof.sol";
-import {FROST} from "@/lib/FROST.sol";
-import {Secp256k1} from "@/lib/Secp256k1.sol";
+import {FROST} from "@/libraries/FROST.sol";
+import {Secp256k1} from "@/libraries/Secp256k1.sol";
 
 /// @title FROST Signature Shares
 /// @notice Accumulate FROST signature shares by commitment root.

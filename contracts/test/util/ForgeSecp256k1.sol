@@ -2,7 +2,7 @@
 pragma solidity ^0.8.30;
 
 import {Vm} from "@forge-std/Vm.sol";
-import {Secp256k1} from "@/lib/Secp256k1.sol";
+import {Secp256k1} from "@/libraries/Secp256k1.sol";
 
 /// @title Forge Secp256k1
 /// @dev The Forge standard library doesn't provide any direct methods for doing

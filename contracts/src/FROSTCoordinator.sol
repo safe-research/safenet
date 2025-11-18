@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: GPL-3.0-only
 pragma solidity ^0.8.30;
 
-import {FROST} from "@/lib/FROST.sol";
-import {FROSTNonceCommitmentSet} from "@/lib/FROSTNonceCommitmentSet.sol";
-import {FROSTParticipantMap} from "@/lib/FROSTParticipantMap.sol";
-import {FROSTSignatureShares} from "@/lib/FROSTSignatureShares.sol";
-import {Secp256k1} from "@/lib/Secp256k1.sol";
+import {FROST} from "@/libraries/FROST.sol";
+import {FROSTNonceCommitmentSet} from "@/libraries/FROSTNonceCommitmentSet.sol";
+import {FROSTParticipantMap} from "@/libraries/FROSTParticipantMap.sol";
+import {FROSTSignatureShares} from "@/libraries/FROSTSignatureShares.sol";
+import {Secp256k1} from "@/libraries/Secp256k1.sol";
 
 /// @title FROST Coordinator
 /// @notice An onchain coordinator for FROST key generation and signing.
