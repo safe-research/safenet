@@ -6,7 +6,6 @@ import {
 	verifyMerkleProof,
 } from "./merkle.js";
 
-// --- Tests ---
 describe("merkle", () => {
 	it("should generate the correct merkle root", () => {
 		const leaves: Hex[] = [

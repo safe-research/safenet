@@ -24,7 +24,6 @@ const opts = (discriminant: string): H2COpts => {
 	};
 };
 
-// TODO: replace by proper hashing function
 export const keyGenChallenge = (
 	index: bigint,
 	ga0: FrostPoint,

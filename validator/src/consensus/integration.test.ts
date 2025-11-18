@@ -31,7 +31,6 @@ import { verifySignature } from "./signing/verify.js";
 import { InMemoryStorage } from "./storage.js";
 import type { Participant } from "./types.js";
 
-// --- Tests ---
 describe("integration", () => {
 	it("keygen and signing flow", { timeout: 30000 }, async ({ skip }) => {
 		// Make sure to first start the Anvil testnode (run `anvil` in the root)

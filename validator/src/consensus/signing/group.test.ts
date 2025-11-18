@@ -3,7 +3,6 @@ import { describe, expect, it } from "vitest";
 import { toPoint } from "../../frost/math.js";
 import { groupChallenge } from "./group.js";
 
-// --- Tests ---
 describe("group", () => {
 	it("should generate correct challenge", async () => {
 		const groupCommitment = toPoint({

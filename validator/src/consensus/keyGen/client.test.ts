@@ -19,7 +19,6 @@ import { KeyGenClient } from "./client.js";
 
 const createRandomAccount = () => privateKeyToAccount(generatePrivateKey());
 
-// --- Tests ---
 describe("keyGen", () => {
 	it("e2e keygen flow", async () => {
 		const count = 3n;

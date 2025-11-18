@@ -8,7 +8,6 @@ import {
 	type NonceCommitments,
 } from "./nonces.js";
 
-// --- Tests ---
 describe("nonces", () => {
 	it("should generate correct nonce", async () => {
 		const random =
