@@ -4,6 +4,7 @@ import { checkedAddressSchema } from "../../../types/schemas.js";
 const rolloverSchema = z.object({
 	activeEpoch: z.bigint().nonnegative(),
 	proposedEpoch: z.bigint().nonnegative(),
+	rolloverAt: z.bigint().nonnegative(),
 	groupKeyX: z.bigint().nonnegative(),
 	groupKeyY: z.bigint().nonnegative(),
 });
