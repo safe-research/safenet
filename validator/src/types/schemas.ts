@@ -88,3 +88,11 @@ export const signatureShareEventSchema = z.object({
 	identifier: z.bigint().positive(),
 	z: z.bigint().nonnegative(),
 });
+
+export const epochProposedEventSchema = z.object({
+	activeEpoch: z.bigint().positive(),
+	proposedEpoch: z.bigint().positive(),
+	timestamp: z.bigint().positive(),
+	groupKey: frostPointSchema,
+});
+

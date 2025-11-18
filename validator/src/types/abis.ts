@@ -1,9 +1,7 @@
 import { parseAbi } from "viem";
 
-// TODO: placeholder
-export const CONSENSUS_CORE_EVENTS = parseAbi([
-	"event Transfer(address indexed from, address indexed to, uint256 value)",
-	"event Approve(address indexed from, address indexed to, uint256 amount)",
+export const CONSENSUS_EVENTS = parseAbi([
+	"event EpochProposed(uint64 indexed activeEpoch, uint64 indexed proposedEpoch, uint64 timestamp, (uint256 x, uint256 y) groupKey)",
 ]);
 
 export const COORDINATOR_EVENTS = parseAbi([

@@ -3,6 +3,7 @@ import { toPoint } from "../frost/math.js";
 import { watchKeyGenEvents } from "../service/watchers/keyGen.js";
 import { watchSignEvents } from "../service/watchers/signing.js";
 import {
+	epochProposedEventSchema,
 	keyGenCommittedEventSchema,
 	keyGenEventSchema,
 	keyGenSecretSharedEventSchema,
@@ -12,6 +13,9 @@ import {
 } from "../types/schemas.js";
 import type { KeyGenClient } from "./keyGen/client.js";
 import type { SigningClient } from "./signing/client.js";
+import { watchConsensusEvents } from "../service/watchers/consensus.js";
+import { VerificationEngine } from "./verify/engine.js";
+import { EpochRolloverPacket } from "./verify/rollover/schemas.js";
 
 export const linkKeyGenClientToCoordinator = (
 	frostClient: KeyGenClient,
@@ -90,3 +94,33 @@ export const linkSigningClientToCoordinator = (
 		onError: console.error,
 	});
 };
+
+export const linkSigningClientToConsensus = (
+	verificationEngine: VerificationEngine,
+	publicClient: PublicClient,
+	consensusAddress: Address,
+) => {
+	watchConsensusEvents({
+		client: publicClient,
+		target: consensusAddress,
+		onEpochProposed: async (e) => {
+			const event = epochProposedEventSchema.parse(e);
+			const packet: EpochRolloverPacket = {
+				type: "epoch_rollover_packet",
+				domain: {
+					chain: BigInt(publicClient.chain?.id ?? 0),
+					consensus: consensusAddress
+				},
+				rollover: {
+					activeEpoch: event.activeEpoch,
+					proposedEpoch: event.proposedEpoch,
+					rolloverAt: event.timestamp,
+					groupKeyX: event.groupKey.x,
+					groupKeyY: event.groupKey.y
+				}
+			}
+			await verificationEngine.verify(packet)
+		},
+		onError: console.error,
+	})
+}
