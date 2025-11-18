@@ -95,6 +95,7 @@ describe("integration", () => {
 				publicClient,
 				signingClient,
 				coordinatorAddress,
+				coordinatorAddress,
 			);
 			const storage = new InMemoryStorage(a.address);
 			const sc = new SigningClient(storage, coordinator, {

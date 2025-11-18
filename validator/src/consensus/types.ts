@@ -52,7 +52,23 @@ export type SigningCoordinator = {
 	): Promise<Hex>;
 };
 
-export type FrostCoordinator = KeyGenCoordinator & SigningCoordinator;
+export type Consensus = {
+	proposeEpoch(
+		proposedEpoch: bigint,
+		rolloverAt: bigint,
+		group: GroupId,
+	): Promise<Hex>;
+
+	stageEpoch(
+		proposedEpoch: bigint,
+		rolloverAt: bigint,
+		group: GroupId,
+		groupCommitment: FrostPoint,
+		groupSignature: bigint,
+	): Promise<Hex>;
+};
+
+export type ShieldnetCoordinator = KeyGenCoordinator & SigningCoordinator & Consensus;
 
 export type GroupInfoStorage = {
 	knownGroups(): GroupId[];

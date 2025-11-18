@@ -13,7 +13,7 @@ import type {
 	SignatureId,
 } from "../frost/types.js";
 import type { PublicNonceCommitments } from "./signing/nonces.js";
-import type { FrostCoordinator } from "./types.js";
+import type { ShieldnetCoordinator } from "./types.js";
 
 export const COORDINATOR_FUNCTIONS = parseAbi([
 	"error InvalidKeyGenCommitment()",
@@ -25,19 +25,28 @@ export const COORDINATOR_FUNCTIONS = parseAbi([
 	"function signShare(bytes32 sid, bytes32 root, (uint256 x, uint256 y) r, uint256 z, uint256 cl, bytes32[] proof) external",
 ]);
 
-export class OnchainCoordinator implements FrostCoordinator {
+export const CONSENSUS_FUNCTIONS = parseAbi([
+	"error InvalidRollover()",
+	"function proposeEpoch(uint64 proposedEpoch, uint64 rolloverAt, bytes32 group) external",
+	"function stageEpoch(uint64 proposedEpoch, uint64 rolloverAt, bytes32 group, ((uint256 x, uint256 y) r, uint256 z) signature) external"
+]);
+
+export class OnchainCoordinator implements ShieldnetCoordinator {
 	#publicClient: PublicClient;
 	#signingClient: WalletClient;
-	#address: Address;
+	#consensus: Address;
+	#coordinator: Address;
 
 	constructor(
 		publicClient: PublicClient,
 		signingClient: WalletClient,
-		address: Address,
+		consensus: Address,
+		coordinator: Address,
 	) {
 		this.#publicClient = publicClient;
 		this.#signingClient = signingClient;
-		this.#address = address;
+		this.#consensus = consensus;
+		this.#coordinator = coordinator;
 	}
 
 	async publishKeygenCommitments(
@@ -48,7 +57,7 @@ export class OnchainCoordinator implements FrostCoordinator {
 		poap: ProofOfAttestationParticipation,
 	): Promise<Hex> {
 		const { request } = await this.#publicClient.simulateContract({
-			address: this.#address,
+			address: this.#coordinator,
 			abi: COORDINATOR_FUNCTIONS,
 			functionName: "keyGenCommit",
 			args: [
@@ -72,7 +81,7 @@ export class OnchainCoordinator implements FrostCoordinator {
 		peerShares: bigint[],
 	): Promise<Hex> {
 		const { request } = await this.#publicClient.simulateContract({
-			address: this.#address,
+			address: this.#coordinator,
 			abi: COORDINATOR_FUNCTIONS,
 			functionName: "keyGenSecretShare",
 			args: [
@@ -92,7 +101,7 @@ export class OnchainCoordinator implements FrostCoordinator {
 		nonceCommitmentsHash: Hex,
 	): Promise<Hex> {
 		const { request } = await this.#publicClient.simulateContract({
-			address: this.#address,
+			address: this.#coordinator,
 			abi: COORDINATOR_FUNCTIONS,
 			functionName: "preprocess",
 			args: [groupId, nonceCommitmentsHash],
@@ -107,7 +116,7 @@ export class OnchainCoordinator implements FrostCoordinator {
 		nonceProof: Hex[],
 	): Promise<Hex> {
 		const { request } = await this.#publicClient.simulateContract({
-			address: this.#address,
+			address: this.#coordinator,
 			abi: COORDINATOR_FUNCTIONS,
 			functionName: "signRevealNonces",
 			args: [
@@ -132,7 +141,7 @@ export class OnchainCoordinator implements FrostCoordinator {
 		signingParticipantsProof: Hex[],
 	): Promise<Hex> {
 		const { request } = await this.#publicClient.simulateContract({
-			address: this.#address,
+			address: this.#coordinator,
 			abi: COORDINATOR_FUNCTIONS,
 			functionName: "signShare",
 			args: [
@@ -142,6 +151,40 @@ export class OnchainCoordinator implements FrostCoordinator {
 				signatureShare,
 				lagrangeChallenge,
 				signingParticipantsProof,
+			],
+			account: this.#signingClient.account,
+		});
+		return this.#signingClient.writeContract(request);
+	}
+
+	async proposeEpoch(proposedEpoch: bigint, rolloverAt: bigint, group: GroupId): Promise<Hex> {
+		const { request } = await this.#publicClient.simulateContract({
+			address: this.#consensus,
+			abi: CONSENSUS_FUNCTIONS,
+			functionName: "proposeEpoch",
+			args: [
+				proposedEpoch,
+				rolloverAt,
+				group
+			],
+			account: this.#signingClient.account,
+		});
+		return this.#signingClient.writeContract(request);
+	}
+
+	async stageEpoch(proposedEpoch: bigint, rolloverAt: bigint, group: GroupId, groupCommitment: FrostPoint, groupSignature: bigint): Promise<Hex> {
+		const { request } = await this.#publicClient.simulateContract({
+			address: this.#consensus,
+			abi: CONSENSUS_FUNCTIONS,
+			functionName: "stageEpoch",
+			args: [
+				proposedEpoch,
+				rolloverAt,
+				group,
+				{
+					r: groupCommitment,
+					z: groupSignature
+				}
 			],
 			account: this.#signingClient.account,
 		});
