@@ -2,8 +2,8 @@
 pragma solidity ^0.8.30;
 
 import {Test} from "@forge-std/Test.sol";
-import {FROST} from "@/lib/FROST.sol";
-import {Secp256k1} from "@/lib/Secp256k1.sol";
+import {FROST} from "@/libraries/FROST.sol";
+import {Secp256k1} from "@/libraries/Secp256k1.sol";
 import {ForgeSecp256k1} from "@test/util/ForgeSecp256k1.sol";
 
 contract FROSTTest is Test {

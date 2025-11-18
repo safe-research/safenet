@@ -3,7 +3,7 @@ pragma solidity ^0.8.30;
 
 import {Test} from "@forge-std/Test.sol";
 import {ForgeSecp256k1} from "@test/util/ForgeSecp256k1.sol";
-import {Secp256k1} from "@/lib/Secp256k1.sol";
+import {Secp256k1} from "@/libraries/Secp256k1.sol";
 
 contract Secp256k1Test is Test {
     using ForgeSecp256k1 for ForgeSecp256k1.P;
