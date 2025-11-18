@@ -25,7 +25,7 @@ export class VerificationEngine {
 		this.#verfiedMessages.add(packetId);
 		return packetId;
 	}
-    
+
 	isVerified(packetId: Hex): boolean {
 		return this.#verfiedMessages.has(packetId);
 	}

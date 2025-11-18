@@ -1,7 +1,5 @@
 import z from "zod";
-import {
-	checkedAddressSchema,
-} from "../../../types/schemas.js";
+import { checkedAddressSchema } from "../../../types/schemas.js";
 
 const rolloverSchema = z.object({
 	activeEpoch: z.bigint().nonnegative(),
