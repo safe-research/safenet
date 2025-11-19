@@ -2,7 +2,6 @@
 pragma solidity ^0.8.30;
 
 import {FROSTCoordinator} from "./FROSTCoordinator.sol";
-import {FROST} from "@/libraries/FROST.sol";
 import {Secp256k1} from "@/libraries/Secp256k1.sol";
 
 contract Consensus {
@@ -86,13 +85,13 @@ contract Consensus {
         uint64 proposedEpoch,
         uint64 rolloverAt,
         FROSTCoordinator.GroupId group,
-        FROST.Signature calldata signature
+        FROSTCoordinator.SignatureId signature
     ) external {
         (Epochs memory epochs, FROSTCoordinator.GroupId activeGroup) = _processRollover();
         _requireValidRollover(epochs, proposedEpoch, rolloverAt);
         Secp256k1.Point memory groupKey = _COORDINATOR.groupKey(group);
         bytes32 message = epochRolloverMessage(epochs.active, proposedEpoch, rolloverAt, groupKey);
-        _COORDINATOR.groupVerify(activeGroup, signature, message);
+        _COORDINATOR.signatureVerify(activeGroup, signature, message);
         $epochs = Epochs({active: epochs.active, staged: proposedEpoch, rolloverAt: rolloverAt, _padding: 0});
         $groups.staged = group;
         emit EpochStaged(epochs.active, proposedEpoch, rolloverAt, groupKey);

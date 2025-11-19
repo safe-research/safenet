@@ -9,7 +9,7 @@ contract CommitmentShareMerkleTree is MerkleTreeBase {
     struct S {
         FROST.Identifier identifier;
         Secp256k1.Point r;
-        uint256 cl;
+        uint256 l;
     }
 
     // forge-lint: disable-start(mixed-case-variable)
@@ -18,11 +18,11 @@ contract CommitmentShareMerkleTree is MerkleTreeBase {
     uint256 private $height;
     // forge-lint: disable-end(mixed-case-variable)
 
-    constructor(S[] memory shares) {
+    constructor(Secp256k1.Point memory r, S[] memory shares) {
         uint256 last = 0;
         for (uint256 i = 0; i < shares.length; i++) {
             S memory share = shares[i];
-            _leaf(keccak256(abi.encode(share.identifier, share.r.x, share.r.y, share.cl)));
+            _leaf(keccak256(abi.encode(share.identifier, share.r.x, share.r.y, share.l, r.x, r.y)));
 
             assert(FROST.Identifier.unwrap(share.identifier) > last);
             last = FROST.Identifier.unwrap(share.identifier);

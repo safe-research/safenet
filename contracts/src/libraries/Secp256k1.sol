@@ -114,6 +114,13 @@ library Secp256k1 {
         require(valid, InvalidMulMulAddWitness());
     }
 
+    /// @notice Returns wither `P` equals `Q`.
+    function eq(Point memory p, Point memory q) internal pure returns (bool result) {
+        (uint256 px, uint256 py) = _unpack(p);
+        (uint256 qx, uint256 qy) = _unpack(q);
+        return (px ^ qx) | (py ^ qy) == 0;
+    }
+
     /// @notice Requires that `P` is a non-zero point on the curve.
     function requireNonZero(Point memory p) internal pure {
         require(_satisfiesCurveEquation(p.x, p.y), NotOnCurve());

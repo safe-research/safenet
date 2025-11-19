@@ -292,8 +292,8 @@ contract FROSTCoordinatorTest is Test {
         // <https://datatracker.ietf.org/doc/html/rfc9591#section-5.2>
         honestParticipants = vm.sort(honestParticipants);
         Secp256k1.Point memory groupKey = coordinator.groupKey(gid);
-        uint256[] memory shares = new uint256[](honestParticipants.length);
-        CommitmentShareMerkleTree.S[] memory cs = new CommitmentShareMerkleTree.S[](honestParticipants.length);
+        FROSTCoordinator.SignSelection memory selection;
+        FROST.SignatureShare[] memory shares = new FROST.SignatureShare[](honestParticipants.length);
         {
             uint256[] memory bindingFactors;
             {
@@ -309,58 +309,57 @@ contract FROSTCoordinatorTest is Test {
             }
 
             ForgeSecp256k1.P memory groupCommitment;
-            ForgeSecp256k1.P[] memory r = new ForgeSecp256k1.P[](honestParticipants.length);
             for (uint256 i = 0; i < honestParticipants.length; i++) {
                 uint256 identifier = honestParticipants[i];
                 Nonces memory n = nonces[identifier];
                 uint256 bindingFactor = bindingFactors[i];
-                r[i] = ForgeSecp256k1.add(n.d, ForgeSecp256k1.mul(bindingFactor, n.e));
-                groupCommitment = ForgeSecp256k1.add(groupCommitment, r[i]);
+                ForgeSecp256k1.P memory r = ForgeSecp256k1.add(n.d, ForgeSecp256k1.mul(bindingFactor, n.e));
+                shares[i].r = r.toPoint();
+                shares[i].l = _lagrangeCoefficient(honestParticipants, identifier);
+                groupCommitment = ForgeSecp256k1.add(groupCommitment, r);
             }
-            uint256 challenge = FROST.challenge(groupCommitment.toPoint(), groupKey, message);
+            selection.r = groupCommitment.toPoint();
 
-            // Extension: the onchain computed group signature (R, z) is grouped
-            // by a commitment share Merkle tree root. This makes it so
-            // misbehaving participants can't influence the final onchain
-            // signature value for a correctly behaving set.
-            for (uint256 i = 0; i < honestParticipants.length; i++) {
-                uint256 identifier = honestParticipants[i];
-                uint256 lambda = _lagrangeCoefficient(honestParticipants, identifier);
-                uint256 cl = mulmod(challenge, lambda, Secp256k1.N);
-                cs[i] = CommitmentShareMerkleTree.S({
-                    identifier: FROST.newIdentifier(identifier), r: r[i].toPoint(), cl: cl
-                });
-            }
-
+            uint256 challenge = FROST.challenge(selection.r, groupKey, message);
             for (uint256 i = 0; i < honestParticipants.length; i++) {
                 uint256 identifier = honestParticipants[i];
                 uint256 sk = s[identifier];
                 Nonces memory n = nonces[identifier];
-                shares[i] = addmod(
+                shares[i].z = addmod(
                     n.d.w.privateKey,
                     addmod(
                         mulmod(n.e.w.privateKey, bindingFactors[i], Secp256k1.N),
-                        mulmod(cs[i].cl, sk, Secp256k1.N),
+                        mulmod(mulmod(challenge, shares[i].l, Secp256k1.N), sk, Secp256k1.N),
                         Secp256k1.N
                     ),
                     Secp256k1.N
                 );
             }
         }
-        CommitmentShareMerkleTree commitmentShares = new CommitmentShareMerkleTree(cs);
+        CommitmentShareMerkleTree commitmentShares;
+        {
+            CommitmentShareMerkleTree.S[] memory cs = new CommitmentShareMerkleTree.S[](honestParticipants.length);
+            for (uint256 i = 0; i < honestParticipants.length; i++) {
+                uint256 identifier = honestParticipants[i];
+                cs[i] = CommitmentShareMerkleTree.S({
+                    identifier: FROST.newIdentifier(identifier), r: shares[i].r, l: shares[i].l
+                });
+            }
+            commitmentShares = new CommitmentShareMerkleTree(selection.r, cs);
+            selection.root = commitmentShares.root();
+        }
 
         for (uint256 i = 0; i < honestParticipants.length; i++) {
             uint256 identifier = honestParticipants[i];
-            bytes32 root = commitmentShares.root();
             bytes32[] memory proof = commitmentShares.proof(i);
 
             vm.expectEmit();
-            emit FROSTCoordinator.SignShare(sid, FROST.newIdentifier(identifier), shares[i], root);
+            emit FROSTCoordinator.SignShared(sid, FROST.newIdentifier(identifier), shares[i].z, selection.root);
             vm.prank(participants.addr(identifier));
-            coordinator.signShare(sid, root, cs[i].r, shares[i], cs[i].cl, proof);
+            coordinator.signShare(sid, selection, shares[i], proof);
         }
 
-        FROST.Signature memory signature = coordinator.groupSignature(sid, commitmentShares.root());
+        FROST.Signature memory signature = coordinator.signatureValue(sid);
         FROST.verify(groupKey, signature, message);
     }
 

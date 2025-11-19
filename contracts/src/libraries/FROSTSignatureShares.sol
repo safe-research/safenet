@@ -9,56 +9,57 @@ import {Secp256k1} from "@/libraries/Secp256k1.sol";
 /// @notice Accumulate FROST signature shares by commitment root.
 library FROSTSignatureShares {
     struct T {
-        mapping(bytes32 root => Root) roots;
+        mapping(bytes32 key => Aggregate) aggregates;
     }
 
-    struct Root {
+    struct Aggregate {
         mapping(FROST.Identifier => bytes32) participants;
-        Secp256k1.Point r;
-        uint256 z;
+        FROST.Signature signature;
     }
 
     error AlreadyIncluded();
     error NotIncluded();
+    error IncompleteSigning();
 
     /// @notice Registers a commitment share for a participant.
     function register(
         T storage self,
-        bytes32 root,
         FROST.Identifier identifier,
+        FROST.SignatureShare memory share,
         Secp256k1.Point memory r,
-        uint256 z,
-        uint256 cl,
+        bytes32 root,
         bytes32[] calldata proof
-    ) internal {
-        Root storage rt = self.roots[root];
-        require(rt.participants[identifier] == bytes32(0), AlreadyIncluded());
-        bytes32 leaf = _hash(identifier, r, cl);
+    ) internal returns (FROST.Signature memory signature) {
+        Aggregate storage aggregate = self.aggregates[root];
+        require(aggregate.participants[identifier] == bytes32(0), AlreadyIncluded());
+        bytes32 leaf = _hash(identifier, share, r);
         require(MerkleProof.verifyCalldata(proof, root, leaf), NotIncluded());
-        rt.participants[identifier] = leaf;
-        rt.r = Secp256k1.add(rt.r, r);
-        rt.z = addmod(rt.z, z, Secp256k1.N);
+        aggregate.participants[identifier] = leaf;
+        signature.r = Secp256k1.add(aggregate.signature.r, share.r);
+        signature.z = addmod(aggregate.signature.z, share.z, Secp256k1.N);
+        aggregate.signature = signature;
     }
 
     /// @notice Retrieves the current group signature for the specified
     ///         commitment root.
     function groupSignature(T storage self, bytes32 root) internal view returns (FROST.Signature memory signature) {
-        Root storage rt = self.roots[root];
-        signature.r = rt.r;
-        signature.z = rt.z;
+        return self.aggregates[root].signature;
     }
 
-    function _hash(FROST.Identifier identifier, Secp256k1.Point memory r, uint256 cl)
+    function _hash(FROST.Identifier identifier, FROST.SignatureShare memory share, Secp256k1.Point memory r)
         private
         pure
         returns (bytes32 digest)
     {
+        Secp256k1.Point memory ri = share.r;
+        uint256 l = share.l;
         assembly ("memory-safe") {
             let ptr := mload(0x40)
             mstore(ptr, identifier)
-            mcopy(add(ptr, 0x20), r, 0x40)
-            mstore(add(ptr, 0x60), cl)
-            digest := keccak256(ptr, 0x80)
+            mcopy(add(ptr, 0x20), ri, 0x40)
+            mstore(add(ptr, 0x60), l)
+            mcopy(add(ptr, 0x80), r, 0x40)
+            digest := keccak256(ptr, 0xc0)
         }
     }
 }

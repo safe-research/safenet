@@ -43,12 +43,19 @@ contract FROSTCoordinator {
     }
 
     struct Signature {
+        bytes32 message;
+        bytes32 signed;
         FROSTSignatureShares.T shares;
     }
 
     struct SignNonces {
         Secp256k1.Point d;
         Secp256k1.Point e;
+    }
+
+    struct SignSelection {
+        Secp256k1.Point r;
+        bytes32 root;
     }
 
     event KeyGen(GroupId indexed gid, bytes32 participants, uint64 count, uint64 threshold, bytes32 context);
@@ -59,15 +66,19 @@ contract FROSTCoordinator {
         address indexed initiator, GroupId indexed gid, bytes32 indexed message, SignatureId sid, uint64 sequence
     );
     event SignRevealedNonces(SignatureId indexed sid, FROST.Identifier identifier, SignNonces nonces);
-    event SignShare(SignatureId indexed sid, FROST.Identifier identifier, uint256 z, bytes32 root);
+    event SignShared(SignatureId indexed sid, FROST.Identifier identifier, uint256 z, bytes32 root);
+    event SignCompleted(SignatureId indexed sid, FROST.Signature signature);
 
     error NotInitiator();
     error InvalidGroupParameters();
     error InvalidKeyGenCommitment();
     error InvalidKeyGenSecretShare();
+    error InvalidMessage();
     error InvalidGroup();
     error NotSigning();
     error InvalidShare();
+    error NotSigned();
+    error WrongSignature();
 
     // forge-lint: disable-next-line(mixed-case-variable)
     mapping(GroupId => Group) private $groups;
@@ -149,16 +160,19 @@ contract FROSTCoordinator {
 
     /// @notice Initiate a signing ceremony.
     function sign(GroupId gid, bytes32 message) external returns (SignatureId sid) {
+        require(message != bytes32(0), InvalidMessage());
         Group storage group = $groups[gid];
         require(group.participants.initialized(), InvalidGroup());
         uint64 sequence = group.parameters.sequence++;
         sid = signatureId(gid, sequence);
+        Signature storage signature = $signatures[sid];
+        signature.message = message;
         emit Sign(msg.sender, gid, message, sid, sequence);
     }
 
     /// @notice Reveal a nonce pair for a signing ceremony.
     function signRevealNonces(SignatureId sid, SignNonces calldata nonces, bytes32[] calldata proof) external {
-        Group storage group = _signatureGroup(sid);
+        (Group storage group,) = _signatureGroupAndMessage(sid);
         FROST.Identifier identifier = group.participants.identifierOf(msg.sender);
         uint64 sequence = _signatureSequence(sid);
         group.nonces.verify(identifier, nonces.d, nonces.e, sequence, proof);
@@ -168,19 +182,25 @@ contract FROSTCoordinator {
     /// @notice Broadcast a signature share for a commitment shares root.
     function signShare(
         SignatureId sid,
-        bytes32 root,
-        Secp256k1.Point memory r,
-        uint256 z,
-        uint256 cl,
+        SignSelection calldata selection,
+        FROST.SignatureShare calldata share,
         bytes32[] calldata proof
     ) external {
-        Group storage group = _signatureGroup(sid);
+        (Group storage group, bytes32 message) = _signatureGroupAndMessage(sid);
         FROST.Identifier identifier = group.participants.identifierOf(msg.sender);
-        Secp256k1.Point memory y = group.participants.getKey(identifier);
-        Secp256k1.mulmuladd(z, cl, y, r);
+        Secp256k1.Point memory key = group.key;
+        FROST.verifyShare(key, selection.r, group.participants.getKey(identifier), share, message);
         Signature storage signature = $signatures[sid];
-        signature.shares.register(root, identifier, r, z, cl, proof);
-        emit SignShare(sid, identifier, z, root);
+        FROST.Signature memory accumulator =
+            signature.shares.register(identifier, share, selection.r, selection.root, proof);
+        emit SignShared(sid, identifier, share.z, selection.root);
+        if (Secp256k1.eq(selection.r, accumulator.r)) {
+            FROST.verify(key, accumulator, message);
+            if (signature.signed == bytes32(0)) {
+                signature.signed = selection.root;
+                emit SignCompleted(sid, accumulator);
+            }
+        }
     }
 
     /// @notice computes the deterministic group ID for a given configuration.
@@ -214,11 +234,6 @@ contract FROSTCoordinator {
         return $groups[gid].participants.getKey(identifier);
     }
 
-    /// @notice Verifies a group signature.
-    function groupVerify(GroupId gid, FROST.Signature memory signature, bytes32 message) external view {
-        FROST.verify($groups[gid].key, signature, message);
-    }
-
     /// @notice Computes the signature ID for a group and sequence.
     function signatureId(GroupId gid, uint64 sequence) public pure returns (SignatureId sid) {
         // We encode `sequence + 1` in the signature ID. This allows us to tell
@@ -227,17 +242,34 @@ contract FROSTCoordinator {
         return SignatureId.wrap(GroupId.unwrap(gid) | bytes32(uint256(sequence + 1)));
     }
 
-    /// @notice Retrieve a group signature.
-    function groupSignature(SignatureId sid, bytes32 root) external view returns (FROST.Signature memory signature) {
-        return $signatures[sid].shares.groupSignature(root);
+    /// @notice Verifies that a successful FROST signing ceremony was completed
+    ///         for a given group and message.
+    function signatureVerify(GroupId gid, SignatureId sid, bytes32 message) external view {
+        Signature storage signature = $signatures[sid];
+        require(signature.signed != bytes32(0), NotSigned());
+        require(
+            GroupId.unwrap(gid) == GroupId.unwrap(_signatureGroupId(sid)) && message == signature.message,
+            WrongSignature()
+        );
     }
 
-    function _signatureGroup(SignatureId sid) private view returns (Group storage group) {
-        GroupId gid =
-            GroupId.wrap(SignatureId.unwrap(sid) & 0xffffffffffffffffffffffffffffffffffffffffffffffff0000000000000000);
+    /// @notice Retrieve the resulting FROST signature for a ceremony.
+    function signatureValue(SignatureId sid) external view returns (FROST.Signature memory result) {
+        Signature storage signature = $signatures[sid];
+        bytes32 signed = signature.signed;
+        require(signed != bytes32(0), NotSigned());
+        return $signatures[sid].shares.groupSignature(signed);
+    }
+
+    function _signatureGroupId(SignatureId sid) private pure returns (GroupId gid) {
+        gid = GroupId.wrap(SignatureId.unwrap(sid) & 0xffffffffffffffffffffffffffffffffffffffffffffffff0000000000000000);
+    }
+
+    function _signatureGroupAndMessage(SignatureId sid) private view returns (Group storage group, bytes32 message) {
+        message = $signatures[sid].message;
+        require(message != bytes32(0), NotSigning());
+        GroupId gid = _signatureGroupId(sid);
         group = $groups[gid];
-        uint256 nextSequence = uint256(SignatureId.unwrap(sid)) & 0xffffffffffffffff;
-        require(nextSequence <= group.parameters.sequence, NotSigning());
     }
 
     function _signatureSequence(SignatureId sid) private pure returns (uint64 sequence) {

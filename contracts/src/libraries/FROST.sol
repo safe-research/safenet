@@ -21,6 +21,12 @@ library FROST {
         uint256 z;
     }
 
+    struct SignatureShare {
+        Secp256k1.Point r;
+        uint256 z;
+        uint256 l;
+    }
+
     error InvalidIdentifier();
     error UnorderedCommitments();
     error InvalidScalar();
@@ -92,6 +98,20 @@ library FROST {
         require(signature.z < Secp256k1.N, InvalidScalar());
         uint256 c = challenge(signature.r, y, message);
         Secp256k1.mulmuladd(signature.z, c, y, signature.r);
+    }
+
+    /// @notice Verifies a FROST signature share.
+    function verifyShare(
+        Secp256k1.Point memory group,
+        Secp256k1.Point memory r,
+        Secp256k1.Point memory participant,
+        SignatureShare memory share,
+        bytes32 message
+    ) internal view {
+        require(share.z < Secp256k1.N, InvalidScalar());
+        uint256 c = challenge(r, group, message);
+        uint256 cl = mulmod(c, share.l, Secp256k1.N);
+        Secp256k1.mulmuladd(share.z, cl, participant, share.r);
     }
 
     /// @notice Generate a KeyGen challenge for the proof of knowledge.
