@@ -214,6 +214,11 @@ contract FROSTCoordinator {
         return $groups[gid].participants.getKey(identifier);
     }
 
+    /// @notice Verifies a group signature.
+    function groupVerify(GroupId gid, FROST.Signature memory signature, bytes32 message) external view {
+        FROST.verify($groups[gid].key, signature, message);
+    }
+
     /// @notice Computes the signature ID for a group and sequence.
     function signatureId(GroupId gid, uint64 sequence) public pure returns (SignatureId sid) {
         // We encode `sequence + 1` in the signature ID. This allows us to tell
@@ -223,7 +228,7 @@ contract FROSTCoordinator {
     }
 
     /// @notice Retrieve a group signature.
-    function groupSignature(SignatureId sid, bytes32 root) external view returns (Secp256k1.Point memory r, uint256 z) {
+    function groupSignature(SignatureId sid, bytes32 root) external view returns (FROST.Signature memory signature) {
         return $signatures[sid].shares.groupSignature(root);
     }
 

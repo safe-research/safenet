@@ -42,9 +42,10 @@ library FROSTSignatureShares {
 
     /// @notice Retrieves the current group signature for the specified
     ///         commitment root.
-    function groupSignature(T storage self, bytes32 root) internal view returns (Secp256k1.Point memory r, uint256 z) {
+    function groupSignature(T storage self, bytes32 root) internal view returns (FROST.Signature memory signature) {
         Root storage rt = self.roots[root];
-        return (rt.r, rt.z);
+        signature.r = rt.r;
+        signature.z = rt.z;
     }
 
     function _hash(FROST.Identifier identifier, Secp256k1.Point memory r, uint256 cl)

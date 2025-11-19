@@ -360,8 +360,8 @@ contract FROSTCoordinatorTest is Test {
             coordinator.signShare(sid, root, cs[i].r, shares[i], cs[i].cl, proof);
         }
 
-        (Secp256k1.Point memory rr, uint256 zz) = coordinator.groupSignature(sid, commitmentShares.root());
-        FROST.verify(groupKey, rr, zz, message);
+        FROST.Signature memory signature = coordinator.groupSignature(sid, commitmentShares.root());
+        FROST.verify(groupKey, signature, message);
     }
 
     function _randomSortedAddresses(uint64 count) private view returns (address[] memory result) {

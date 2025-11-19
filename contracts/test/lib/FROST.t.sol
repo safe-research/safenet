@@ -67,7 +67,7 @@ contract FROSTTest is Test {
         uint256 z = 0x209fa63cfb23b425f13b526d8af1301dcec65f9d74354b9af14f5fb86b908f8c;
         bytes32 message = keccak256("hello");
 
-        FROST.verify(y, r, z, message);
+        FROST.verify(y, FROST.Signature(r, z), message);
     }
 
     function test_KeyGenChallenge() public view {
