@@ -9,7 +9,7 @@ import {Secp256k1} from "@/libraries/Secp256k1.sol";
 /// @notice Accumulate FROST signature shares by commitment root.
 library FROSTSignatureShares {
     struct T {
-        mapping(bytes32 key => Aggregate) aggregates;
+        mapping(bytes32 root => Aggregate) aggregates;
     }
 
     struct Aggregate {
