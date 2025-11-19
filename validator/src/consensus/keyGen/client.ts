@@ -26,6 +26,7 @@ import type {
 	KeyGenInfoStorage,
 	Participant,
 } from "../types.js";
+import { calcGroupId } from "./utils.js";
 
 export type KeygenInfo = {
 	groupId: GroupId;
@@ -125,12 +126,7 @@ export class KeyGenClient {
 		threshold: bigint,
 		context: Hex,
 	) {
-		const groupId = keccak256(
-			encodePacked(
-				["bytes32", "uint256", "uint256", "bytes32"],
-				[participantsRoot, count, threshold, context],
-			),
-		);
+		const groupId = calcGroupId(participantsRoot, count, threshold, context);
 		const { participantId, pok, poap, localCommitments } = this.setupGroup(
 			groupId,
 			participantsRoot,
@@ -153,8 +149,7 @@ export class KeyGenClient {
 		groupId: GroupId,
 		participantsRoot: Hex,
 		count: bigint,
-		threshold: bigint,
-		_context: Hex,
+		threshold: bigint
 	) {
 		const { participantId, pok, poap, localCommitments } = this.setupGroup(
 			groupId,

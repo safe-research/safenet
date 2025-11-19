@@ -127,21 +127,18 @@ describe("integration", () => {
 		});
 		const abi = parseAbi([
 			"function groupKey(bytes32 id) external view returns ((uint256 x, uint256 y) memory key)",
-			"function keyGen(bytes32 participants, uint64 count, uint64 threshold, bytes32 context) external",
 			"function sign(bytes32 gid, bytes32 message) external returns (bytes32 sid)",
 			"function groupSignature(bytes32 sid, bytes32 root) external view returns ((uint256 x, uint256 y) memory r, uint256 z)",
 		]);
-		await initiatorClient.writeContract({
-			address: coordinatorAddress,
-			abi: abi,
-			functionName: "keyGen",
-			args: [
+		const context = bytesToHex(randomBytes(32))
+		for (const { kc } of clients) {
+			kc.triggerKeygenAndCommit(
 				calculateParticipantsRoot(participants),
 				BigInt(accounts.length),
 				BigInt(Math.ceil(accounts.length / 2)),
-				bytesToHex(randomBytes(32)),
-			],
-		});
+				context
+			).catch(console.error)
+		}
 		await new Promise((resolve) => setTimeout(resolve, 7000));
 		const groups: Set<GroupId> = new Set();
 		for (const { kc } of clients) {

@@ -16,6 +16,7 @@ import type { PublicNonceCommitments } from "./signing/nonces.js";
 import type { ShieldnetCoordinator } from "./types.js";
 
 export const COORDINATOR_FUNCTIONS = parseAbi([
+	"error AlreadyRegistered()",
 	"error InvalidKeyGenCommitment()",
 	"error NotParticipating()",
 	"function keyGenAndCommit(bytes32 participants, uint64 count, uint64 threshold, bytes32 context, uint256 identifier, bytes32[] poap, ((uint256 x, uint256 y)[] c, (uint256 x, uint256 y) r, uint256 mu) commitment) external",

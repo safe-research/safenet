@@ -26,14 +26,12 @@ export const linkKeyGenClientToCoordinator = (
 		client: publicClient,
 		target: coordinatorAddress,
 		onKeyGenInit: async (e) => {
-			// TODO: Disable in favor of keyGenAndCommit
 			const event = keyGenEventSchema.parse(e);
 			return frostClient.handleKeygenInit(
 				event.gid,
 				event.participants,
 				event.count,
-				event.threshold,
-				event.context,
+				event.threshold
 			);
 		},
 		onKeyGenCommitment: async (e) => {

@@ -16,6 +16,7 @@ import {
 import { InMemoryStorage } from "../storage.js";
 import type { KeyGenCoordinator, Participant } from "../types.js";
 import { KeyGenClient } from "./client.js";
+import { calcGroupId } from "./utils.js";
 
 const createRandomAccount = () => privateKeyToAccount(generatePrivateKey());
 
@@ -57,13 +58,7 @@ describe("keyGen", () => {
 					pok: ProofOfKnowledge,
 					poap: ProofOfAttestationParticipation,
 				): Promise<Hex> => {
-					// TODO: currently we duplicate the code here, once we clean up the package structure this should be refactored
-					const groupId = keccak256(
-						encodePacked(
-							["bytes32", "uint256", "uint256", "bytes32"],
-							[participantsRoot, count, threshold, context],
-						),
-					);
+					const groupId = calcGroupId(root, c, t, ctx);
 					participantIdMapping.set(groupId, id);
 					expect(root).toBe(participantsRoot);
 					expect(c).toBe(count);
