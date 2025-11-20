@@ -166,9 +166,9 @@ contract Consensus is IFROSTCoordinatorCallback {
             epochs.active = epochs.staged;
             epochs.staged = 0;
             $epochs = epochs;
-            // Note that we intentionally don't reset `$epochs.rolloverBlock` and
-            // `$groups.staged` since the `$epochs.staged == 0` uniquely
-            // determines whether or not there is staged rollover.
+            // Note that we intentionally don't reset `$epochs.rolloverBlock`
+            // since the `$epochs.staged == 0` uniquely determines whether or
+            // not there is staged rollover.
             emit EpochRolledOver(epochs.active);
         }
     }
