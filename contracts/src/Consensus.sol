@@ -3,63 +3,77 @@ pragma solidity ^0.8.30;
 
 import {FROSTCoordinator} from "@/FROSTCoordinator.sol";
 import {IFROSTCoordinatorCallback} from "@/interfaces/IFROSTCoordinatorCallback.sol";
+import {ConsensusMessages} from "@/libraries/ConsensusMessages.sol";
+import {FROST} from "@/libraries/FROST.sol";
 import {FROSTGroupId} from "@/libraries/FROSTGroupId.sol";
 import {FROSTSignatureId} from "@/libraries/FROSTSignatureId.sol";
+import {MetaTransaction} from "@/libraries/MetaTransaction.sol";
 import {Secp256k1} from "@/libraries/Secp256k1.sol";
 
 contract Consensus is IFROSTCoordinatorCallback {
+    using ConsensusMessages for bytes32;
+    using MetaTransaction for MetaTransaction.T;
+
     struct Epochs {
         uint64 active;
         uint64 staged;
-        uint64 rolloverAt;
+        uint64 rolloverBlock;
         uint64 _padding;
     }
 
-    struct Groups {
-        FROSTGroupId.T active;
-        FROSTGroupId.T staged;
-    }
-
     event EpochProposed(
-        uint64 indexed activeEpoch, uint64 indexed proposedEpoch, uint64 timestamp, Secp256k1.Point groupKey
+        uint64 indexed activeEpoch, uint64 indexed proposedEpoch, uint64 rolloverBlock, Secp256k1.Point groupKey
     );
     event EpochStaged(
-        uint64 indexed activeEpoch, uint64 indexed proposedEpoch, uint64 timestamp, Secp256k1.Point groupKey
+        uint64 indexed activeEpoch, uint64 indexed proposedEpoch, uint64 rolloverBlock, Secp256k1.Point groupKey
     );
     event EpochRolledOver(uint64 indexed newActiveEpoch);
+    event TransactionProposed(bytes32 indexed message, uint64 epoch, MetaTransaction.T transaction);
+    event TransactionAttested(bytes32 indexed message);
 
     error InvalidRollover();
     error UnknownSignatureSelector();
-
-    /// @custom:precomputed keccak256("EIP712Domain(uint256 chainId,address verifyingContract)
-    bytes32 private constant _DOMAIN_TYPEHASH = hex"47e79534a245952e8b16893a336b85a3d9ea9fa8c573f3d803afb92a79469218";
-
-    /// @custom:precomputed keccak256("EpochRollover(uint64 activeEpoch,uint64 proposedEpoch,uint64 rolloverAt,uint256 groupKeyX,uint256 groupKeyY)")
-    bytes32 private constant _EPOCH_ROLLOVER_TYPEHASH =
-        hex"0d6c6e1100d6b156230ad2ed7a6f7f9b1c2e03d20d5ed86d36323486bb3773a6";
+    error NotCoordinator();
 
     FROSTCoordinator private immutable _COORDINATOR;
 
     // forge-lint: disable-next-line(mixed-case-variable)
     Epochs private $epochs;
     // forge-lint: disable-next-line(mixed-case-variable)
-    Groups private $groups;
+    mapping(uint64 epoch => FROSTGroupId.T) private $groups;
+    // forge-lint: disable-next-line(mixed-case-variable)
+    mapping(bytes32 message => FROSTSignatureId.T) private $attestations;
 
     constructor(address coordinator, FROSTGroupId.T group) {
         _COORDINATOR = FROSTCoordinator(coordinator);
-        $groups.active = group;
+        $groups[0] = group;
+    }
+
+    // forge-lint: disable-next-line(unwrapped-modifier-logic)
+    modifier onlyCoordinator() {
+        require(msg.sender == address(_COORDINATOR), NotCoordinator());
+        _;
     }
 
     /// @notice Compute the EIP-712 domain separator used by the consensus
     ///         contract.
     function domainSeparator() public view returns (bytes32 result) {
-        assembly ("memory-safe") {
-            let ptr := mload(0x40)
-            mstore(ptr, _DOMAIN_TYPEHASH)
-            mstore(add(ptr, 0x20), chainid())
-            mstore(add(ptr, 0x40), address())
-            result := keccak256(ptr, 0x60)
-        }
+        return ConsensusMessages.domain(block.chainid, address(this));
+    }
+
+    /// @notice Gets a transaction attestation.
+    function getAttestation(uint64 epoch, MetaTransaction.T memory transaction)
+        external
+        view
+        returns (bytes32 message, FROST.Signature memory signature)
+    {
+        message = domainSeparator().transactionProposal(epoch, transaction.hash());
+        signature = getAttestationByMessage(message);
+    }
+
+    /// @notice Gets a transaction attestation by its hashed message.
+    function getAttestationByMessage(bytes32 message) public view returns (FROST.Signature memory signature) {
+        return _COORDINATOR.signatureValue($attestations[message]);
     }
 
     /// @notice Gets the active epoch and its group ID.
@@ -67,99 +81,103 @@ contract Consensus is IFROSTCoordinatorCallback {
         Epochs memory epochs = $epochs;
         if (_epochsShouldRollover(epochs)) {
             epoch = epochs.staged;
-            group = $groups.staged;
         } else {
             epoch = epochs.active;
-            group = $groups.active;
         }
+        group = $groups[epoch];
     }
 
     /// @notice Proposes a new epoch that to be rolled over to.
-    function proposeEpoch(uint64 proposedEpoch, uint64 rolloverAt, FROSTGroupId.T group) public {
-        (Epochs memory epochs, FROSTGroupId.T activeGroup) = _processRollover();
-        _requireValidRollover(epochs, proposedEpoch, rolloverAt);
+    function proposeEpoch(uint64 proposedEpoch, uint64 rolloverBlock, FROSTGroupId.T group) public {
+        Epochs memory epochs = _processRollover();
+        _requireValidRollover(epochs, proposedEpoch, rolloverBlock);
         Secp256k1.Point memory groupKey = _COORDINATOR.groupKey(group);
-        bytes32 message = epochRolloverMessage(epochs.active, proposedEpoch, rolloverAt, groupKey);
-        emit EpochProposed(epochs.active, proposedEpoch, rolloverAt, groupKey);
-        _COORDINATOR.sign(activeGroup, message);
+        bytes32 message = domainSeparator().epochRollover(epochs.active, proposedEpoch, rolloverBlock, groupKey);
+        emit EpochProposed(epochs.active, proposedEpoch, rolloverBlock, groupKey);
+        _COORDINATOR.sign($groups[epochs.active], message);
     }
 
     /// @notice Stages an epoch to automatically rollover.
-    function stageEpoch(uint64 proposedEpoch, uint64 rolloverAt, FROSTGroupId.T group, FROSTSignatureId.T signature)
+    function stageEpoch(uint64 proposedEpoch, uint64 rolloverBlock, FROSTGroupId.T group, FROSTSignatureId.T signature)
         public
     {
-        (Epochs memory epochs, FROSTGroupId.T activeGroup) = _processRollover();
-        _requireValidRollover(epochs, proposedEpoch, rolloverAt);
+        Epochs memory epochs = _processRollover();
+        _requireValidRollover(epochs, proposedEpoch, rolloverBlock);
         Secp256k1.Point memory groupKey = _COORDINATOR.groupKey(group);
-        bytes32 message = epochRolloverMessage(epochs.active, proposedEpoch, rolloverAt, groupKey);
-        _COORDINATOR.signatureVerify(signature, activeGroup, message);
-        $epochs = Epochs({active: epochs.active, staged: proposedEpoch, rolloverAt: rolloverAt, _padding: 0});
-        $groups.staged = group;
-        emit EpochStaged(epochs.active, proposedEpoch, rolloverAt, groupKey);
+        bytes32 message = domainSeparator().epochRollover(epochs.active, proposedEpoch, rolloverBlock, groupKey);
+        _COORDINATOR.signatureVerify(signature, $groups[epochs.active], message);
+        epochs.staged = proposedEpoch;
+        epochs.rolloverBlock = rolloverBlock;
+        $epochs = epochs;
+        $groups[proposedEpoch] = group;
+        emit EpochStaged(epochs.active, proposedEpoch, rolloverBlock, groupKey);
     }
 
-    function onKeyGenCompleted(FROSTGroupId.T group, bytes calldata context) external {
-        (uint64 proposedEpoch, uint64 rolloverAt) = abi.decode(context, (uint64, uint64));
-        proposeEpoch(proposedEpoch, rolloverAt, group);
+    function proposeTransaction(MetaTransaction.T memory transaction) external returns (bytes32 message) {
+        Epochs memory epochs = _processRollover();
+        message = domainSeparator().transactionProposal(epochs.active, transaction.hash());
+        emit TransactionProposed(message, epochs.active, transaction);
+        _COORDINATOR.sign($groups[epochs.active], message);
     }
 
-    function onSignCompleted(FROSTSignatureId.T signature, bytes calldata context) external {
+    /// @notice Attest to a transaction.
+    function attestTransaction(uint64 epoch, bytes32 transactionHash, FROSTSignatureId.T signature) public {
+        // Note that we do not impose a time limit for a transaction to be
+        // attested to in the consensus contract. In theory, we have enough
+        // space in our `Epochs` struct to also keep track of the previous epoch
+        // and then we could check here that `epoch` is either `epochs.active`
+        // or `epochs.previous`. This isn't a useful distinction, however: in
+        // fact, if there is a reverted transaction with a valid FROST signature
+        // onchain, then there is a valid attestation for the transaction
+        // (regardless of whether or not this contract accepts it). Therefore,
+        // it isn't useful for us to be restritive here.
+
+        bytes32 message = domainSeparator().transactionProposal(epoch, transactionHash);
+        _COORDINATOR.signatureVerify(signature, $groups[epoch], message);
+        $attestations[message] = signature;
+        emit TransactionAttested(message);
+    }
+
+    /// @inheritdoc IFROSTCoordinatorCallback
+    function onKeyGenCompleted(FROSTGroupId.T group, bytes calldata context) external onlyCoordinator {
+        (uint64 proposedEpoch, uint64 rolloverBlock) = abi.decode(context, (uint64, uint64));
+        proposeEpoch(proposedEpoch, rolloverBlock, group);
+    }
+
+    /// @inheritdoc IFROSTCoordinatorCallback
+    function onSignCompleted(FROSTSignatureId.T signature, bytes calldata context) external onlyCoordinator {
         // forge-lint: disable-next-line(unsafe-typecast)
         bytes4 selector = bytes4(context);
         if (selector == this.stageEpoch.selector) {
-            (uint64 proposedEpoch, uint64 rolloverAt, FROSTGroupId.T group) =
+            (uint64 proposedEpoch, uint64 rolloverBlock, FROSTGroupId.T group) =
                 abi.decode(context[4:], (uint64, uint64, FROSTGroupId.T));
-            stageEpoch(proposedEpoch, rolloverAt, group, signature);
-        } else if (selector == "sign") {
-            // TODO: post safe transaction signature
+            stageEpoch(proposedEpoch, rolloverBlock, group, signature);
+        } else if (selector == this.attestTransaction.selector) {
+            (uint64 epoch, bytes32 transactionHash) = abi.decode(context[4:], (uint64, bytes32));
+            attestTransaction(epoch, transactionHash, signature);
         } else {
             revert UnknownSignatureSelector();
         }
     }
 
-    function epochRolloverMessage(
-        uint64 activeEpoch,
-        uint64 proposedEpoch,
-        uint64 rolloverAt,
-        Secp256k1.Point memory groupKey
-    ) public view returns (bytes32 message) {
-        bytes32 domain = domainSeparator();
-        assembly ("memory-safe") {
-            let ptr := mload(0x40)
-            mstore(ptr, _EPOCH_ROLLOVER_TYPEHASH)
-            mstore(add(ptr, 0x20), activeEpoch)
-            mstore(add(ptr, 0x40), proposedEpoch)
-            mstore(add(ptr, 0x60), rolloverAt)
-            mcopy(add(ptr, 0x80), groupKey, 0x40)
-            mstore(add(ptr, 0x22), keccak256(ptr, 0xc0))
-            mstore(ptr, hex"1901")
-            mstore(add(ptr, 0x02), domain)
-            message := keccak256(ptr, 0x42)
-        }
-    }
-
-    function _processRollover() private returns (Epochs memory epochs, FROSTGroupId.T activeGroup) {
+    function _processRollover() private returns (Epochs memory epochs) {
         epochs = $epochs;
         if (_epochsShouldRollover(epochs)) {
             epochs.active = epochs.staged;
             epochs.staged = 0;
             $epochs = epochs;
-            activeGroup = $groups.staged;
-            $groups.active = activeGroup;
-            // Note that we intentionally don't reset `$epochs.rolloverAt` and
+            // Note that we intentionally don't reset `$epochs.rolloverBlock` and
             // `$groups.staged` since the `$epochs.staged == 0` uniquely
             // determines whether or not there is staged rollover.
             emit EpochRolledOver(epochs.active);
-        } else {
-            activeGroup = $groups.active;
         }
     }
 
     function _epochsShouldRollover(Epochs memory epochs) private view returns (bool result) {
-        return epochs.staged != 0 && epochs.rolloverAt <= block.timestamp;
+        return epochs.staged != 0 && epochs.rolloverBlock <= block.number;
     }
 
-    function _requireValidRollover(Epochs memory epochs, uint64 proposedEpoch, uint64 rolloverAt) private view {
-        require(epochs.active < proposedEpoch && rolloverAt > block.timestamp && epochs.staged == 0, InvalidRollover());
+    function _requireValidRollover(Epochs memory epochs, uint64 proposedEpoch, uint64 rolloverBlock) private view {
+        require(epochs.active < proposedEpoch && rolloverBlock > block.number && epochs.staged == 0, InvalidRollover());
     }
 }
