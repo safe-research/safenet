@@ -108,7 +108,7 @@ contract Consensus is IFROSTCoordinatorCallback {
         bytes4 selector = bytes4(context);
         if (selector == this.stageEpoch.selector) {
             (uint64 proposedEpoch, uint64 rolloverAt, FROSTGroupId.T group) =
-                abi.decode(context, (uint64, uint64, FROSTGroupId.T));
+                abi.decode(context[4:], (uint64, uint64, FROSTGroupId.T));
             stageEpoch(proposedEpoch, rolloverAt, group, signature);
         } else if (selector == "sign") {
             // TODO: post safe transaction signature
