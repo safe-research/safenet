@@ -142,8 +142,7 @@ contract FROSTCoordinator {
     /// @notice Initiate, if not already initialized, a distributed key
     ///         generation ceremony and submit a commitment and proof for a
     ///         participant. This is the same as a `keyGen` follwed by a
-    ///         `keyGenCommit` and is provided for convenience. The provided
-    ///         callback is executed once the group is fully committed to.
+    ///         `keyGenCommit` and is provided for convenience.
     function keyGenAndCommit(
         bytes32 participants,
         uint64 count,
