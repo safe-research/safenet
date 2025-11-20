@@ -2,11 +2,12 @@
 pragma solidity ^0.8.30;
 
 import {FROSTCoordinator} from "@/FROSTCoordinator.sol";
+import {IFROSTCoordinatorCallback} from "@/interfaces/IFROSTCoordinatorCallback.sol";
 import {FROSTGroupId} from "@/libraries/FROSTGroupId.sol";
 import {FROSTSignatureId} from "@/libraries/FROSTSignatureId.sol";
 import {Secp256k1} from "@/libraries/Secp256k1.sol";
 
-contract Consensus {
+contract Consensus is IFROSTCoordinatorCallback {
     struct Epochs {
         uint64 active;
         uint64 staged;
@@ -28,6 +29,7 @@ contract Consensus {
     event EpochRolledOver(uint64 indexed newActiveEpoch);
 
     error InvalidRollover();
+    error UnknownSignatureSelector();
 
     /// @custom:precomputed keccak256("EIP712Domain(uint256 chainId,address verifyingContract)
     bytes32 private constant _DOMAIN_TYPEHASH = hex"47e79534a245952e8b16893a336b85a3d9ea9fa8c573f3d803afb92a79469218";
@@ -73,7 +75,7 @@ contract Consensus {
     }
 
     /// @notice Proposes a new epoch that to be rolled over to.
-    function proposeEpoch(uint64 proposedEpoch, uint64 rolloverAt, FROSTGroupId.T group) external {
+    function proposeEpoch(uint64 proposedEpoch, uint64 rolloverAt, FROSTGroupId.T group) public {
         (Epochs memory epochs, FROSTGroupId.T activeGroup) = _processRollover();
         _requireValidRollover(epochs, proposedEpoch, rolloverAt);
         Secp256k1.Point memory groupKey = _COORDINATOR.groupKey(group);
@@ -84,7 +86,7 @@ contract Consensus {
 
     /// @notice Stages an epoch to automatically rollover.
     function stageEpoch(uint64 proposedEpoch, uint64 rolloverAt, FROSTGroupId.T group, FROSTSignatureId.T signature)
-        external
+        public
     {
         (Epochs memory epochs, FROSTGroupId.T activeGroup) = _processRollover();
         _requireValidRollover(epochs, proposedEpoch, rolloverAt);
@@ -94,6 +96,25 @@ contract Consensus {
         $epochs = Epochs({active: epochs.active, staged: proposedEpoch, rolloverAt: rolloverAt, _padding: 0});
         $groups.staged = group;
         emit EpochStaged(epochs.active, proposedEpoch, rolloverAt, groupKey);
+    }
+
+    function onKeyGenCompleted(FROSTGroupId.T group, bytes calldata context) external {
+        (uint64 proposedEpoch, uint64 rolloverAt) = abi.decode(context, (uint64, uint64));
+        proposeEpoch(proposedEpoch, rolloverAt, group);
+    }
+
+    function onSignCompleted(FROSTSignatureId.T signature, bytes calldata context) external {
+        // forge-lint: disable-next-line(unsafe-typecast)
+        bytes4 selector = bytes4(context);
+        if (selector == this.stageEpoch.selector) {
+            (uint64 proposedEpoch, uint64 rolloverAt, FROSTGroupId.T group) =
+                abi.decode(context, (uint64, uint64, FROSTGroupId.T));
+            stageEpoch(proposedEpoch, rolloverAt, group, signature);
+        } else if (selector == "sign") {
+            // TODO: post safe transaction signature
+        } else {
+            revert UnknownSignatureSelector();
+        }
     }
 
     function epochRolloverMessage(
