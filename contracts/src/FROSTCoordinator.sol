@@ -71,6 +71,7 @@ contract FROSTCoordinator {
 
     error InvalidGroupParameters();
     error InvalidGroupCommitment();
+    error GroupNotInitialized();
     error GroupNotCommitted();
     error InvalidSecretShare();
     error InvalidMessage();
@@ -166,7 +167,8 @@ contract FROSTCoordinator {
         require(message != bytes32(0), InvalidMessage());
         Group storage group = $groups[gid];
         GroupParameters memory parameters = group.parameters;
-        require(parameters.count > 0 && parameters.pending == 0, GroupNotCommitted());
+        require(parameters.count > 0, GroupNotInitialized());
+        require(parameters.pending == 0, GroupNotCommitted());
         uint64 sequence = parameters.sequence++;
         sid = signatureId(gid, sequence);
         Signature storage signature = $signatures[sid];
