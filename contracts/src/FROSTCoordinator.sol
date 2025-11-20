@@ -27,8 +27,8 @@ contract FROSTCoordinator {
     struct GroupParameters {
         uint64 count;
         uint64 threshold;
+        uint64 pending;
         uint64 sequence;
-        uint64 _padding;
     }
 
     struct KeyGenCommitment {
@@ -69,14 +69,13 @@ contract FROSTCoordinator {
     event SignShared(SignatureId indexed sid, FROST.Identifier identifier, uint256 z, bytes32 root);
     event SignCompleted(SignatureId indexed sid, FROST.Signature signature);
 
-    error NotInitiator();
     error InvalidGroupParameters();
-    error InvalidKeyGenCommitment();
-    error InvalidKeyGenSecretShare();
+    error InvalidGroupCommitment();
+    error GroupNotInitialized();
+    error GroupNotCommitted();
+    error InvalidSecretShare();
     error InvalidMessage();
-    error InvalidGroup();
     error NotSigning();
-    error InvalidShare();
     error NotSigned();
     error WrongSignature();
 
@@ -94,7 +93,7 @@ contract FROSTCoordinator {
         gid = groupId(participants, count, threshold, context);
         Group storage group = $groups[gid];
         group.participants.init(participants);
-        group.parameters = GroupParameters({count: count, threshold: threshold, sequence: 0, _padding: 0});
+        group.parameters = GroupParameters({count: count, threshold: threshold, pending: count, sequence: 0});
         emit KeyGen(gid, participants, count, threshold, context);
     }
 
@@ -107,8 +106,11 @@ contract FROSTCoordinator {
         KeyGenCommitment calldata commitment
     ) public {
         Group storage group = $groups[gid];
-        require(commitment.c.length == group.parameters.threshold, InvalidKeyGenCommitment());
+        GroupParameters memory parameters = group.parameters;
+        require(commitment.c.length == parameters.threshold, InvalidGroupCommitment());
         group.participants.register(identifier, msg.sender, poap);
+        parameters.pending--;
+        group.parameters = parameters;
         group.key = Secp256k1.add(group.key, commitment.c[0]);
         emit KeyGenCommitted(gid, identifier, commitment);
     }
@@ -139,8 +141,10 @@ contract FROSTCoordinator {
     ///         value in order to encrypt the secret share for each recipient.
     function keyGenSecretShare(GroupId gid, KeyGenSecretShare calldata share) external {
         Group storage group = $groups[gid];
+        GroupParameters memory parameters = group.parameters;
+        require(parameters.pending == 0, GroupNotCommitted());
         unchecked {
-            require(group.parameters.count - 1 == share.f.length, InvalidKeyGenSecretShare());
+            require(share.f.length == parameters.count - 1, InvalidSecretShare());
         }
         FROST.Identifier identifier = group.participants.set(msg.sender, share.y);
         emit KeyGenSecretShared(gid, identifier, share);
@@ -162,10 +166,13 @@ contract FROSTCoordinator {
     function sign(GroupId gid, bytes32 message) external returns (SignatureId sid) {
         require(message != bytes32(0), InvalidMessage());
         Group storage group = $groups[gid];
-        require(group.participants.initialized(), InvalidGroup());
-        uint64 sequence = group.parameters.sequence++;
+        GroupParameters memory parameters = group.parameters;
+        require(parameters.count > 0, GroupNotInitialized());
+        require(parameters.pending == 0, GroupNotCommitted());
+        uint64 sequence = parameters.sequence++;
         sid = signatureId(gid, sequence);
         Signature storage signature = $signatures[sid];
+        group.parameters = parameters;
         signature.message = message;
         emit Sign(msg.sender, gid, message, sid, sequence);
     }
@@ -179,7 +186,8 @@ contract FROSTCoordinator {
         emit SignRevealedNonces(sid, identifier, nonces);
     }
 
-    /// @notice Broadcast a signature share for a commitment shares root.
+    /// @notice Broadcast a signature share for a selection of participating
+    ///         signers.
     function signShare(
         SignatureId sid,
         SignSelection calldata selection,
