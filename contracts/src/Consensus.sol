@@ -1,7 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-only
 pragma solidity ^0.8.30;
 
-import {FROSTCoordinator} from "./FROSTCoordinator.sol";
+import {FROSTCoordinator} from "@/FROSTCoordinator.sol";
+import {FROSTGroupId} from "@/libraries/FROSTGroupId.sol";
+import {FROSTSignatureId} from "@/libraries/FROSTSignatureId.sol";
 import {Secp256k1} from "@/libraries/Secp256k1.sol";
 
 contract Consensus {
@@ -13,8 +15,8 @@ contract Consensus {
     }
 
     struct Groups {
-        FROSTCoordinator.GroupId active;
-        FROSTCoordinator.GroupId staged;
+        FROSTGroupId.T active;
+        FROSTGroupId.T staged;
     }
 
     event EpochProposed(
@@ -41,7 +43,7 @@ contract Consensus {
     // forge-lint: disable-next-line(mixed-case-variable)
     Groups private $groups;
 
-    constructor(address coordinator, FROSTCoordinator.GroupId group) {
+    constructor(address coordinator, FROSTGroupId.T group) {
         _COORDINATOR = FROSTCoordinator(coordinator);
         $groups.active = group;
     }
@@ -59,7 +61,7 @@ contract Consensus {
     }
 
     /// @notice Gets the active epoch and its group ID.
-    function getActiveEpoch() external view returns (uint64 epoch, FROSTCoordinator.GroupId group) {
+    function getActiveEpoch() external view returns (uint64 epoch, FROSTGroupId.T group) {
         Epochs memory epochs = $epochs;
         if (_epochsShouldRollover(epochs)) {
             epoch = epochs.staged;
@@ -71,8 +73,8 @@ contract Consensus {
     }
 
     /// @notice Proposes a new epoch that to be rolled over to.
-    function proposeEpoch(uint64 proposedEpoch, uint64 rolloverAt, FROSTCoordinator.GroupId group) external {
-        (Epochs memory epochs, FROSTCoordinator.GroupId activeGroup) = _processRollover();
+    function proposeEpoch(uint64 proposedEpoch, uint64 rolloverAt, FROSTGroupId.T group) external {
+        (Epochs memory epochs, FROSTGroupId.T activeGroup) = _processRollover();
         _requireValidRollover(epochs, proposedEpoch, rolloverAt);
         Secp256k1.Point memory groupKey = _COORDINATOR.groupKey(group);
         bytes32 message = epochRolloverMessage(epochs.active, proposedEpoch, rolloverAt, groupKey);
@@ -81,17 +83,14 @@ contract Consensus {
     }
 
     /// @notice Stages an epoch to automatically rollover.
-    function stageEpoch(
-        uint64 proposedEpoch,
-        uint64 rolloverAt,
-        FROSTCoordinator.GroupId group,
-        FROSTCoordinator.SignatureId signature
-    ) external {
-        (Epochs memory epochs, FROSTCoordinator.GroupId activeGroup) = _processRollover();
+    function stageEpoch(uint64 proposedEpoch, uint64 rolloverAt, FROSTGroupId.T group, FROSTSignatureId.T signature)
+        external
+    {
+        (Epochs memory epochs, FROSTGroupId.T activeGroup) = _processRollover();
         _requireValidRollover(epochs, proposedEpoch, rolloverAt);
         Secp256k1.Point memory groupKey = _COORDINATOR.groupKey(group);
         bytes32 message = epochRolloverMessage(epochs.active, proposedEpoch, rolloverAt, groupKey);
-        _COORDINATOR.signatureVerify(activeGroup, signature, message);
+        _COORDINATOR.signatureVerify(signature, activeGroup, message);
         $epochs = Epochs({active: epochs.active, staged: proposedEpoch, rolloverAt: rolloverAt, _padding: 0});
         $groups.staged = group;
         emit EpochStaged(epochs.active, proposedEpoch, rolloverAt, groupKey);
@@ -118,7 +117,7 @@ contract Consensus {
         }
     }
 
-    function _processRollover() private returns (Epochs memory epochs, FROSTCoordinator.GroupId activeGroup) {
+    function _processRollover() private returns (Epochs memory epochs, FROSTGroupId.T activeGroup) {
         epochs = $epochs;
         if (_epochsShouldRollover(epochs)) {
             epochs.active = epochs.staged;
