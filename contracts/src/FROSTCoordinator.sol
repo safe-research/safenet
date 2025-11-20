@@ -1,21 +1,23 @@
 // SPDX-License-Identifier: GPL-3.0-only
 pragma solidity ^0.8.30;
 
+import {IFROSTCoordinatorCallback} from "@/interfaces/IFROSTCoordinatorCallback.sol";
 import {FROST} from "@/libraries/FROST.sol";
+import {FROSTGroupId} from "@/libraries/FROSTGroupId.sol";
 import {FROSTNonceCommitmentSet} from "@/libraries/FROSTNonceCommitmentSet.sol";
 import {FROSTParticipantMap} from "@/libraries/FROSTParticipantMap.sol";
+import {FROSTSignatureId} from "@/libraries/FROSTSignatureId.sol";
 import {FROSTSignatureShares} from "@/libraries/FROSTSignatureShares.sol";
 import {Secp256k1} from "@/libraries/Secp256k1.sol";
 
 /// @title FROST Coordinator
 /// @notice An onchain coordinator for FROST key generation and signing.
 contract FROSTCoordinator {
+    using FROSTGroupId for FROSTGroupId.T;
     using FROSTNonceCommitmentSet for FROSTNonceCommitmentSet.T;
     using FROSTParticipantMap for FROSTParticipantMap.T;
+    using FROSTSignatureId for FROSTSignatureId.T;
     using FROSTSignatureShares for FROSTSignatureShares.T;
-
-    type GroupId is bytes32;
-    type SignatureId is bytes32;
 
     struct Group {
         FROSTParticipantMap.T participants;
@@ -58,20 +60,30 @@ contract FROSTCoordinator {
         bytes32 root;
     }
 
-    event KeyGen(GroupId indexed gid, bytes32 participants, uint64 count, uint64 threshold, bytes32 context);
-    event KeyGenCommitted(GroupId indexed gid, FROST.Identifier identifier, KeyGenCommitment commitment);
-    event KeyGenSecretShared(GroupId indexed gid, FROST.Identifier identifier, KeyGenSecretShare share);
-    event Preprocess(GroupId indexed gid, FROST.Identifier identifier, uint64 chunk, bytes32 commitment);
+    struct Callback {
+        IFROSTCoordinatorCallback target;
+        bytes context;
+    }
+
+    event KeyGen(FROSTGroupId.T indexed gid, bytes32 participants, uint64 count, uint64 threshold, bytes32 context);
+    event KeyGenCommitted(FROSTGroupId.T indexed gid, FROST.Identifier identifier, KeyGenCommitment commitment);
+    event KeyGenSecretShared(FROSTGroupId.T indexed gid, FROST.Identifier identifier, KeyGenSecretShare share);
+    event Preprocess(FROSTGroupId.T indexed gid, FROST.Identifier identifier, uint64 chunk, bytes32 commitment);
     event Sign(
-        address indexed initiator, GroupId indexed gid, bytes32 indexed message, SignatureId sid, uint64 sequence
+        address indexed initiator,
+        FROSTGroupId.T indexed gid,
+        bytes32 indexed message,
+        FROSTSignatureId.T sid,
+        uint64 sequence
     );
-    event SignRevealedNonces(SignatureId indexed sid, FROST.Identifier identifier, SignNonces nonces);
-    event SignShared(SignatureId indexed sid, FROST.Identifier identifier, uint256 z, bytes32 root);
-    event SignCompleted(SignatureId indexed sid, FROST.Signature signature);
+    event SignRevealedNonces(FROSTSignatureId.T indexed sid, FROST.Identifier identifier, SignNonces nonces);
+    event SignShared(FROSTSignatureId.T indexed sid, FROST.Identifier identifier, uint256 z, bytes32 root);
+    event SignCompleted(FROSTSignatureId.T indexed sid, FROST.Signature signature);
 
     error InvalidGroupParameters();
     error InvalidGroupCommitment();
     error GroupNotInitialized();
+    error GroupAlreadyCommitted();
     error GroupNotCommitted();
     error InvalidSecretShare();
     error InvalidMessage();
@@ -80,36 +92,48 @@ contract FROSTCoordinator {
     error WrongSignature();
 
     // forge-lint: disable-next-line(mixed-case-variable)
-    mapping(GroupId => Group) private $groups;
+    mapping(FROSTGroupId.T => Group) private $groups;
     // forge-lint: disable-next-line(mixed-case-variable)
-    mapping(SignatureId => Signature) private $signatures;
+    mapping(FROSTSignatureId.T => Signature) private $signatures;
 
     /// @notice Initiate a distributed key generation ceremony.
     function keyGen(bytes32 participants, uint64 count, uint64 threshold, bytes32 context)
         public
-        returns (GroupId gid)
+        returns (FROSTGroupId.T gid)
     {
         require(count >= threshold && threshold > 1, InvalidGroupParameters());
-        gid = groupId(participants, count, threshold, context);
+        gid = FROSTGroupId.create(participants, count, threshold, context);
         Group storage group = $groups[gid];
         group.participants.init(participants);
-        group.parameters = GroupParameters({count: count, threshold: threshold, pending: count, sequence: 0});
+        // We use the `sequence` as a marker value to indicate that we are
+        // committing vs secret sharing. That is, we have the following
+        // invariants that are always held:
+        // - `pending != 0 && sequence != 0`: One or more commits pending
+        // - `pending != 0 && sequence == 0`: One or more secret shares pending
+        // - `pending == 0`: All committed and shared
+        group.parameters =
+            GroupParameters({count: count, threshold: threshold, pending: count, sequence: type(uint64).max});
         emit KeyGen(gid, participants, count, threshold, context);
     }
 
     /// @notice Submit a commitment and proof for a key generation participant.
     ///         This corresponds to Round 1 of the FROST _KeyGen_ algorithm.
     function keyGenCommit(
-        GroupId gid,
+        FROSTGroupId.T gid,
         FROST.Identifier identifier,
         bytes32[] calldata poap,
         KeyGenCommitment calldata commitment
-    ) public {
+    ) public returns (bool committed) {
         Group storage group = $groups[gid];
         GroupParameters memory parameters = group.parameters;
+        require(parameters.sequence != 0, GroupAlreadyCommitted());
+        committed = --parameters.pending == 0;
+        if (committed) {
+            parameters.sequence = 0;
+            parameters.pending = parameters.count;
+        }
         require(commitment.c.length == parameters.threshold, InvalidGroupCommitment());
         group.participants.register(identifier, msg.sender, poap);
-        parameters.pending--;
         group.parameters = parameters;
         group.key = Secp256k1.add(group.key, commitment.c[0]);
         emit KeyGenCommitted(gid, identifier, commitment);
@@ -118,7 +142,8 @@ contract FROSTCoordinator {
     /// @notice Initiate, if not already initialized, a distributed key
     ///         generation ceremony and submit a commitment and proof for a
     ///         participant. This is the same as a `keyGen` follwed by a
-    ///         `keyGenCommit` and is provided for convenience.
+    ///         `keyGenCommit` and is provided for convenience. The provided
+    ///         callback is executed once the group is fully committed to.
     function keyGenAndCommit(
         bytes32 participants,
         uint64 count,
@@ -127,27 +152,43 @@ contract FROSTCoordinator {
         FROST.Identifier identifier,
         bytes32[] calldata poap,
         KeyGenCommitment calldata commitment
-    ) external returns (GroupId gid) {
-        gid = groupId(participants, count, threshold, context);
+    ) external returns (FROSTGroupId.T gid, bool committed) {
+        gid = FROSTGroupId.create(participants, count, threshold, context);
         if (!$groups[gid].participants.initialized()) {
             keyGen(participants, count, threshold, context);
         }
-        keyGenCommit(gid, identifier, poap, commitment);
+        committed = keyGenCommit(gid, identifier, poap, commitment);
     }
 
     /// @notice Submit participants secret shares. This corresponds to Round 2
     ///         of the FROST _KeyGen_ algorithm. Note that `f(i)` needs to be
     ///         shared secretly, so we use ECDH using each participant's `φ_0`
     ///         value in order to encrypt the secret share for each recipient.
-    function keyGenSecretShare(GroupId gid, KeyGenSecretShare calldata share) external {
+    function keyGenSecretShare(FROSTGroupId.T gid, KeyGenSecretShare calldata share) public returns (bool completed) {
         Group storage group = $groups[gid];
         GroupParameters memory parameters = group.parameters;
-        require(parameters.pending == 0, GroupNotCommitted());
+        require(parameters.sequence == 0, GroupNotCommitted());
+        completed = --parameters.pending == 0;
         unchecked {
             require(share.f.length == parameters.count - 1, InvalidSecretShare());
         }
         FROST.Identifier identifier = group.participants.set(msg.sender, share.y);
+        group.parameters = parameters;
         emit KeyGenSecretShared(gid, identifier, share);
+    }
+
+    /// @notice Submit participants secret shares. This method is the same as
+    ///         `keyGenSecretShare` with an additional callback once secret
+    ///         sharing is complete.
+    function keyGenSecretShareWithCallback(
+        FROSTGroupId.T gid,
+        KeyGenSecretShare calldata share,
+        Callback calldata callback
+    ) public returns (bool completed) {
+        completed = keyGenSecretShare(gid, share);
+        if (completed) {
+            callback.target.onKeyGenCompleted(gid, callback.context);
+        }
     }
 
     /// @notice Submit a commitment to a chunk of nonces as part of the
@@ -155,7 +196,7 @@ contract FROSTCoordinator {
     ///         256 nonces that get revealed as part of the signing process.
     ///         This allows signing requests to reveal the `message` right away
     ///         while still preventing Wagner's Birthday Attacks.
-    function preprocess(GroupId gid, bytes32 commitment) external returns (uint64 chunk) {
+    function preprocess(FROSTGroupId.T gid, bytes32 commitment) external returns (uint64 chunk) {
         Group storage group = $groups[gid];
         FROST.Identifier identifier = group.participants.identifierOf(msg.sender);
         chunk = group.nonces.commit(identifier, commitment, group.parameters.sequence);
@@ -163,14 +204,14 @@ contract FROSTCoordinator {
     }
 
     /// @notice Initiate a signing ceremony.
-    function sign(GroupId gid, bytes32 message) external returns (SignatureId sid) {
+    function sign(FROSTGroupId.T gid, bytes32 message) external returns (FROSTSignatureId.T sid) {
         require(message != bytes32(0), InvalidMessage());
         Group storage group = $groups[gid];
         GroupParameters memory parameters = group.parameters;
         require(parameters.count > 0, GroupNotInitialized());
         require(parameters.pending == 0, GroupNotCommitted());
         uint64 sequence = parameters.sequence++;
-        sid = signatureId(gid, sequence);
+        sid = FROSTSignatureId.create(gid, sequence);
         Signature storage signature = $signatures[sid];
         group.parameters = parameters;
         signature.message = message;
@@ -178,22 +219,21 @@ contract FROSTCoordinator {
     }
 
     /// @notice Reveal a nonce pair for a signing ceremony.
-    function signRevealNonces(SignatureId sid, SignNonces calldata nonces, bytes32[] calldata proof) external {
+    function signRevealNonces(FROSTSignatureId.T sid, SignNonces calldata nonces, bytes32[] calldata proof) external {
         (Group storage group,) = _signatureGroupAndMessage(sid);
         FROST.Identifier identifier = group.participants.identifierOf(msg.sender);
-        uint64 sequence = _signatureSequence(sid);
-        group.nonces.verify(identifier, nonces.d, nonces.e, sequence, proof);
+        group.nonces.verify(identifier, nonces.d, nonces.e, sid.sequence(), proof);
         emit SignRevealedNonces(sid, identifier, nonces);
     }
 
     /// @notice Broadcast a signature share for a selection of participating
     ///         signers.
     function signShare(
-        SignatureId sid,
+        FROSTSignatureId.T sid,
         SignSelection calldata selection,
         FROST.SignatureShare calldata share,
         bytes32[] calldata proof
-    ) external {
+    ) public returns (bool completed) {
         (Group storage group, bytes32 message) = _signatureGroupAndMessage(sid);
         FROST.Identifier identifier = group.participants.identifierOf(msg.sender);
         Secp256k1.Point memory key = group.key;
@@ -207,34 +247,36 @@ contract FROSTCoordinator {
             if (signature.signed == bytes32(0)) {
                 signature.signed = selection.root;
                 emit SignCompleted(sid, accumulator);
+                return true;
             }
         }
+        return false;
     }
 
-    /// @notice computes the deterministic group ID for a given configuration.
-    function groupId(bytes32 participants, uint64 count, uint64 threshold, bytes32 context)
-        public
-        pure
-        returns (GroupId gid)
-    {
-        assembly ("memory-safe") {
-            let ptr := mload(0x40)
-            mstore(ptr, participants)
-            mstore(add(ptr, 0x20), count)
-            mstore(add(ptr, 0x40), threshold)
-            mstore(add(ptr, 0x60), context)
-            gid := and(keccak256(ptr, 0x80), 0xffffffffffffffffffffffffffffffffffffffffffffffff0000000000000000)
+    /// @notice Broadcast a signature share for a selection of participating
+    ///         signers. This method works identically to `signShare` but
+    ///         additionally executes a callback
+    function signShareWithCallback(
+        FROSTSignatureId.T sid,
+        SignSelection calldata selection,
+        FROST.SignatureShare calldata share,
+        bytes32[] calldata proof,
+        Callback calldata callback
+    ) external returns (bool completed) {
+        completed = signShare(sid, selection, share, proof);
+        if (completed) {
+            callback.target.onSignCompleted(sid, callback.context);
         }
     }
 
     /// @notice Retrieve the group public key. Note that it is undefined
     ///         behaviour to call this before the keygen ceremony is completed.
-    function groupKey(GroupId gid) external view returns (Secp256k1.Point memory key) {
+    function groupKey(FROSTGroupId.T gid) external view returns (Secp256k1.Point memory key) {
         return $groups[gid].key;
     }
 
     /// @notice Retrieve the participant public key.
-    function participantKey(GroupId gid, FROST.Identifier identifier)
+    function participantKey(FROSTGroupId.T gid, FROST.Identifier identifier)
         external
         view
         returns (Secp256k1.Point memory key)
@@ -242,47 +284,29 @@ contract FROSTCoordinator {
         return $groups[gid].participants.getKey(identifier);
     }
 
-    /// @notice Computes the signature ID for a group and sequence.
-    function signatureId(GroupId gid, uint64 sequence) public pure returns (SignatureId sid) {
-        // We encode `sequence + 1` in the signature ID. This allows us to tell
-        // whether an ID belongs to a group or a signature by non-zero value in
-        // the range `sid[24:32]`.
-        return SignatureId.wrap(GroupId.unwrap(gid) | bytes32(uint256(sequence + 1)));
-    }
-
     /// @notice Verifies that a successful FROST signing ceremony was completed
     ///         for a given group and message.
-    function signatureVerify(GroupId gid, SignatureId sid, bytes32 message) external view {
+    function signatureVerify(FROSTSignatureId.T sid, FROSTGroupId.T gid, bytes32 message) external view {
         Signature storage signature = $signatures[sid];
         require(signature.signed != bytes32(0), NotSigned());
-        require(
-            GroupId.unwrap(gid) == GroupId.unwrap(_signatureGroupId(sid)) && message == signature.message,
-            WrongSignature()
-        );
+        require(gid.eq(sid.group()) && message == signature.message, WrongSignature());
     }
 
     /// @notice Retrieve the resulting FROST signature for a ceremony.
-    function signatureValue(SignatureId sid) external view returns (FROST.Signature memory result) {
+    function signatureValue(FROSTSignatureId.T sid) external view returns (FROST.Signature memory result) {
         Signature storage signature = $signatures[sid];
         bytes32 signed = signature.signed;
         require(signed != bytes32(0), NotSigned());
         return $signatures[sid].shares.groupSignature(signed);
     }
 
-    function _signatureGroupId(SignatureId sid) private pure returns (GroupId gid) {
-        gid = GroupId.wrap(SignatureId.unwrap(sid) & 0xffffffffffffffffffffffffffffffffffffffffffffffff0000000000000000);
-    }
-
-    function _signatureGroupAndMessage(SignatureId sid) private view returns (Group storage group, bytes32 message) {
+    function _signatureGroupAndMessage(FROSTSignatureId.T sid)
+        private
+        view
+        returns (Group storage group, bytes32 message)
+    {
         message = $signatures[sid].message;
         require(message != bytes32(0), NotSigning());
-        GroupId gid = _signatureGroupId(sid);
-        group = $groups[gid];
-    }
-
-    function _signatureSequence(SignatureId sid) private pure returns (uint64 sequence) {
-        unchecked {
-            return uint64(uint256(SignatureId.unwrap(sid)) - 1);
-        }
+        group = $groups[sid.group()];
     }
 }

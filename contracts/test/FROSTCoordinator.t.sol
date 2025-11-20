@@ -10,6 +10,8 @@ import {ForgeSecp256k1} from "@test/util/ForgeSecp256k1.sol";
 import {ParticipantMerkleTree} from "@test/util/ParticipantMerkleTree.sol";
 import {FROSTCoordinator} from "@/FROSTCoordinator.sol";
 import {FROST} from "@/libraries/FROST.sol";
+import {FROSTGroupId} from "@/libraries/FROSTGroupId.sol";
+import {FROSTSignatureId} from "@/libraries/FROSTSignatureId.sol";
 import {Secp256k1} from "@/libraries/Secp256k1.sol";
 
 contract FROSTCoordinatorTest is Test {
@@ -44,13 +46,13 @@ contract FROSTCoordinatorTest is Test {
 
         vm.expectEmit();
         emit FROSTCoordinator.KeyGen(
-            coordinator.groupId(participants.root(), COUNT, THRESHOLD, bytes32(0)),
+            FROSTGroupId.create(participants.root(), COUNT, THRESHOLD, bytes32(0)),
             participants.root(),
             COUNT,
             THRESHOLD,
             bytes32(0)
         );
-        FROSTCoordinator.GroupId gid = coordinator.keyGen(participants.root(), COUNT, THRESHOLD, bytes32(0));
+        FROSTGroupId.T gid = coordinator.keyGen(participants.root(), COUNT, THRESHOLD, bytes32(0));
 
         // Off-by-one errors are one of the two hardest problems in computer
         // science (along with cache invalidation and naming things). We use a
@@ -232,7 +234,7 @@ contract FROSTCoordinatorTest is Test {
         // Implementation of the two-round FROST signing protocol from RFC-9591
         // <https://datatracker.ietf.org/doc/html/rfc9591#section-5>
 
-        (FROSTCoordinator.GroupId gid, uint256[] memory s) = _trustedKeyGen(bytes32(0));
+        (FROSTGroupId.T gid, uint256[] memory s) = _trustedKeyGen(bytes32(0));
 
         // Round 1
 
@@ -272,8 +274,8 @@ contract FROSTCoordinatorTest is Test {
         bytes32 message = keccak256("Hello, Shieldnet!");
 
         vm.expectEmit();
-        emit FROSTCoordinator.Sign(address(this), gid, message, coordinator.signatureId(gid, 0), 0);
-        FROSTCoordinator.SignatureId sid = coordinator.sign(gid, message);
+        emit FROSTCoordinator.Sign(address(this), gid, message, FROSTSignatureId.create(gid, 0), 0);
+        FROSTSignatureId.T sid = coordinator.sign(gid, message);
 
         for (uint256 i = 0; i < honestParticipants.length; i++) {
             uint256 identifier = honestParticipants[i];
@@ -371,7 +373,7 @@ contract FROSTCoordinatorTest is Test {
         result.sort();
     }
 
-    function _trustedKeyGen(bytes32 context) private returns (FROSTCoordinator.GroupId gid, uint256[] memory s) {
+    function _trustedKeyGen(bytes32 context) private returns (FROSTGroupId.T gid, uint256[] memory s) {
         s = new uint256[](COUNT + 1);
 
         uint256[] memory a = new uint256[](THRESHOLD);
@@ -399,7 +401,8 @@ contract FROSTCoordinatorTest is Test {
             bytes32 root = participants.root();
             (address participant, bytes32[] memory poap) = participants.proof(1);
             vm.prank(participant);
-            gid = coordinator.keyGenAndCommit(root, COUNT, THRESHOLD, context, FROST.newIdentifier(1), poap, commitment);
+            (gid,) =
+                coordinator.keyGenAndCommit(root, COUNT, THRESHOLD, context, FROST.newIdentifier(1), poap, commitment);
         }
 
         // We don't actually need to encrypt and broadcast secret shares, the
