@@ -10,6 +10,8 @@ import {FROSTSignatureId} from "@/libraries/FROSTSignatureId.sol";
 import {MetaTransaction} from "@/libraries/MetaTransaction.sol";
 import {Secp256k1} from "@/libraries/Secp256k1.sol";
 
+/// @title Consensus
+/// @notice Onchain consensus state.
 contract Consensus is IFROSTCoordinatorCallback {
     using ConsensusMessages for bytes32;
     using MetaTransaction for MetaTransaction.T;

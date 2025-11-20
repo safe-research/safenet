@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-only
 pragma solidity ^0.8.30;
 
+/// @title Meta-Transaction Library
+/// @notice Library that defines a meta-transaction type and hash.
 library MetaTransaction {
     struct T {
         uint256 chainId;
