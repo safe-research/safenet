@@ -150,6 +150,7 @@ export class ShieldnetStateMachine {
 	}
 
 	private async handleEvent(eventName: string, eventArgs: unknown) {
+		this.#logger?.(`Handle event ${eventName}`);
 		switch (eventName) {
 			case "KeyGenCommitted": {
 				// A participant has committed to the new key gen
@@ -203,20 +204,36 @@ export class ShieldnetStateMachine {
 			case "EpochProposed": {
 				// This provides the data for the signing of the epoch rollover
 				// Ignore if not in "request_rollover_data" state
-				if (this.#keyGenState.id !== "request_rollover_data") return;
+				if (this.#keyGenState.id !== "request_rollover_data") {
+					this.#logger?.(`Not expecting new epochf during ${this.#keyGenState.id}!`);
+					return;
+				}
 				// Parse event from raw data
 				const event = epochProposedEventSchema.parse(eventArgs);
 				// TODO refactor verification logic
-				if (event.activeEpoch !== this.#activeEpoch) return;
-				if (event.proposedEpoch !== this.#keyGenState.nextEpoch) return;
-				if (event.timestamp !== event.proposedEpoch * this.#blocksPerEpoch)
+				if (event.activeEpoch !== this.#activeEpoch) {
+					this.#logger?.(`Proposal for unexpected active epoch ${event.activeEpoch}!`);
 					return;
+				}
+				if (event.proposedEpoch !== this.#keyGenState.nextEpoch) {
+					this.#logger?.(`Proposal for unexpected next epoch ${event.proposedEpoch}!`);
+					return;
+				}
+				if (event.rolloverBlock !== event.proposedEpoch * this.#blocksPerEpoch) {
+					this.#logger?.(`Proposal for unexpected rollover block ${event.rolloverBlock}!`);
+					return;
+				}
 				const groupKey = this.#keyGenClient.groupPublicKey(
 					this.#keyGenState.groupId,
 				);
-				if (groupKey === undefined) return;
-				if (groupKey.x !== event.groupKey.x || groupKey.y !== event.groupKey.y)
+				if (groupKey === undefined) {
+					this.#logger?.(`Missing group key!`);
 					return;
+				}
+				if (groupKey.x !== event.groupKey.x || groupKey.y !== event.groupKey.y) {
+					this.#logger?.(`Proposal with unexpected group key!`);
+					return;
+				}
 				const packet: EpochRolloverPacket = {
 					type: "epoch_rollover_packet",
 					domain: {
@@ -226,12 +243,13 @@ export class ShieldnetStateMachine {
 					rollover: {
 						activeEpoch: event.activeEpoch,
 						proposedEpoch: event.proposedEpoch,
-						rolloverAt: event.timestamp,
+						rolloverBlock: event.rolloverBlock,
 						groupKeyX: event.groupKey.x,
 						groupKeyY: event.groupKey.y,
 					},
 				};
 				const message = await this.#verificationEngine.verify(packet);
+				this.#logger?.(`Verified message ${message}`);
 				// Update state to "sign_rollover_msg"
 				this.#keyGenState = {
 					id: "sign_rollover_msg",
@@ -264,15 +282,27 @@ export class ShieldnetStateMachine {
 				// Parse event from raw data
 				const event = signRequestEventSchema.parse(eventArgs);
 				// Check that signing was initiated via consensus contract
-				if (event.initiator !== this.#protocol.consensus()) return;
+				if (event.initiator !== this.#protocol.consensus()) {
+					this.#logger?.(`Unexpected initiator ${event.initiator}!`);
+					return;
+				}
 				// Check that message is verified
-				if (!this.#verificationEngine.isVerified(event.message)) return;
+				if (!this.#verificationEngine.isVerified(event.message)) {
+					this.#logger?.(`Message ${event.message} not verified!`);
+					return;
+				}
 				const status = this.#signingState.get(event.sid);
 				// Check that state for signature id is "not_started"
-				if (status !== undefined) return;
+				if (status !== undefined) {
+					this.#logger?.(`Alreay started signing ${event.sid}!`);
+					return;
+				}
 				// Check that it has the expected sequence
 				const currentSequence = this.#groupSequence.get(event.gid) ?? 0n;
-				if (currentSequence !== event.sequence) return;
+				if (currentSequence !== event.sequence) {
+					this.#logger?.(`Unexpected sequence ${event.sequence}!`);
+					return;
+				}
 				this.#groupSequence.set(event.gid, currentSequence + 1n);
 				await this.#signingClient.handleSignatureRequest(
 					event.gid,

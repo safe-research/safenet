@@ -11,7 +11,7 @@ export const epochRolloverHash = (packet: EpochRolloverPacket): Hex =>
 			EpochRollover: [
 				{ type: "uint64", name: "activeEpoch" },
 				{ type: "uint64", name: "proposedEpoch" },
-				{ type: "uint64", name: "rolloverAt" },
+				{ type: "uint64", name: "rolloverBlock" },
 				{ type: "uint256", name: "groupKeyX" },
 				{ type: "uint256", name: "groupKeyY" },
 			],

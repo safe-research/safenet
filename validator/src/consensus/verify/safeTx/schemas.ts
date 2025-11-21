@@ -12,15 +12,25 @@ const partialSafeTransactionSchema = safeMetaTransactionSchema.extend({
 	nonce: z.bigint().nonnegative(),
 });
 
-const safeDomainSchema = z.object({
+const safeTransactionSchema = partialSafeTransactionSchema.extend({
+	chainId: z.bigint().nonnegative(),
+	account: checkedAddressSchema,
+});
+
+const transactionProposalSchema = z.object({
+	epoch: z.bigint().nonnegative(),
+	transaction: safeTransactionSchema,
+});
+
+const consensusDomainSchema = z.object({
 	chain: z.bigint().nonnegative(),
-	safe: checkedAddressSchema,
+	consensus: checkedAddressSchema,
 });
 
 export const safeTransactionPacketSchema = z.object({
 	type: z.literal("safe_transaction_packet"),
-	domain: safeDomainSchema,
-	transaction: partialSafeTransactionSchema,
+	domain: consensusDomainSchema,
+	proposal: transactionProposalSchema,
 });
 
 export type SafeTransactionPacket = z.infer<typeof safeTransactionPacketSchema>;

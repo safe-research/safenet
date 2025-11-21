@@ -71,8 +71,8 @@ export const nonceCommitmentsHashEventSchema = z.object({
 export const signRequestEventSchema = z.object({
 	initiator: checkedAddressSchema,
 	gid: hexDataSchema,
-	sid: hexDataSchema,
 	message: hexDataSchema,
+	sid: hexDataSchema,
 	sequence: z.bigint().nonnegative(),
 });
 
@@ -106,6 +106,6 @@ export const signedEventSchema = z.object({
 export const epochProposedEventSchema = z.object({
 	activeEpoch: z.bigint().nonnegative(),
 	proposedEpoch: z.bigint().positive(),
-	timestamp: z.bigint().positive(),
+	rolloverBlock: z.bigint().positive(),
 	groupKey: frostPointSchema,
 });

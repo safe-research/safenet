@@ -1,7 +1,8 @@
 import { parseAbi } from "viem";
 
 export const CONSENSUS_EVENTS = parseAbi([
-	"event EpochProposed(uint64 indexed activeEpoch, uint64 indexed proposedEpoch, uint64 timestamp, (uint256 x, uint256 y) groupKey)",
+	"event EpochProposed(uint64 indexed activeEpoch, uint64 indexed proposedEpoch, uint64 rolloverBlock, (uint256 x, uint256 y) groupKey)",
+	"event TransactionProposed(bytes32 indexed message, bytes32 indexed transactionHash, uint64 epoch, (uint256 chainId, address account, address to, uint256 value, uint8 operation, bytes data, uint256 nonce) transaction)"
 ]);
 
 export const COORDINATOR_EVENTS = parseAbi([
@@ -38,6 +39,8 @@ export const CONSENSUS_FUNCTIONS = parseAbi([
 	"error InvalidMessage()",
 	"error NotSigned()",
 	"error WrongSignature()",
-	"function proposeEpoch(uint64 proposedEpoch, uint64 rolloverAt, bytes32 group) external",
-	"function stageEpoch(uint64 proposedEpoch, uint64 rolloverAt, bytes32 group, bytes32 signature) external",
+	"function proposeEpoch(uint64 proposedEpoch, uint64 rolloverBlock, bytes32 group) external",
+	"function stageEpoch(uint64 proposedEpoch, uint64 rolloverBlock, bytes32 group, bytes32 signature) external",
+	"function proposeTransaction((uint256 chainId, address account, address to, uint256 value, uint8 operation, bytes data, uint256 nonce) transaction) external",
+	"function attestTransaction(uint64 epoch, bytes32 transactionHash, bytes32 signature) external"
 ]);
