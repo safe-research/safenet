@@ -205,22 +205,33 @@ export class ShieldnetStateMachine {
 				// This provides the data for the signing of the epoch rollover
 				// Ignore if not in "request_rollover_data" state
 				if (this.#keyGenState.id !== "request_rollover_data") {
-					this.#logger?.(`Not expecting new epochf during ${this.#keyGenState.id}!`);
+					this.#logger?.(
+						`Not expecting new epochf during ${this.#keyGenState.id}!`,
+					);
 					return;
 				}
 				// Parse event from raw data
 				const event = epochProposedEventSchema.parse(eventArgs);
 				// TODO refactor verification logic
 				if (event.activeEpoch !== this.#activeEpoch) {
-					this.#logger?.(`Proposal for unexpected active epoch ${event.activeEpoch}!`);
+					this.#logger?.(
+						`Proposal for unexpected active epoch ${event.activeEpoch}!`,
+					);
 					return;
 				}
 				if (event.proposedEpoch !== this.#keyGenState.nextEpoch) {
-					this.#logger?.(`Proposal for unexpected next epoch ${event.proposedEpoch}!`);
+					this.#logger?.(
+						`Proposal for unexpected next epoch ${event.proposedEpoch}!`,
+					);
 					return;
 				}
-				if (event.rolloverBlock !== event.proposedEpoch * this.#blocksPerEpoch) {
-					this.#logger?.(`Proposal for unexpected rollover block ${event.rolloverBlock}!`);
+				if (
+					event.rolloverBlock !==
+					event.proposedEpoch * this.#blocksPerEpoch
+				) {
+					this.#logger?.(
+						`Proposal for unexpected rollover block ${event.rolloverBlock}!`,
+					);
 					return;
 				}
 				const groupKey = this.#keyGenClient.groupPublicKey(
@@ -230,7 +241,10 @@ export class ShieldnetStateMachine {
 					this.#logger?.(`Missing group key!`);
 					return;
 				}
-				if (groupKey.x !== event.groupKey.x || groupKey.y !== event.groupKey.y) {
+				if (
+					groupKey.x !== event.groupKey.x ||
+					groupKey.y !== event.groupKey.y
+				) {
 					this.#logger?.(`Proposal with unexpected group key!`);
 					return;
 				}

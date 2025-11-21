@@ -13,7 +13,10 @@ contract DeployScript is Script {
         FROSTCoordinator coordinator = new FROSTCoordinator{salt: bytes32(0)}();
         console.log("FROSTCoordinator deployed to:", address(coordinator));
 
-        Consensus consensus = new Consensus{salt: bytes32(0)}(address(coordinator), FROSTGroupId.T.wrap(0xfa3efbc5dd215abad66149ad58d7869f90cf6d2c1bc472be0000000000000000));
+        Consensus consensus = new Consensus{salt: bytes32(0)}(
+            address(coordinator),
+            FROSTGroupId.T.wrap(0xfa3efbc5dd215abad66149ad58d7869f90cf6d2c1bc472be0000000000000000)
+        );
         console.log("Consensus deployed to:", address(consensus));
 
         vm.stopBroadcast();

@@ -66,8 +66,12 @@ contract FROSTCoordinator {
     }
 
     event KeyGen(FROSTGroupId.T indexed gid, bytes32 participants, uint64 count, uint64 threshold, bytes32 context);
-    event KeyGenCommitted(FROSTGroupId.T indexed gid, FROST.Identifier identifier, KeyGenCommitment commitment, bool committed);
-    event KeyGenSecretShared(FROSTGroupId.T indexed gid, FROST.Identifier identifier, KeyGenSecretShare share, bool completed);
+    event KeyGenCommitted(
+        FROSTGroupId.T indexed gid, FROST.Identifier identifier, KeyGenCommitment commitment, bool committed
+    );
+    event KeyGenSecretShared(
+        FROSTGroupId.T indexed gid, FROST.Identifier identifier, KeyGenSecretShare share, bool completed
+    );
     event Preprocess(FROSTGroupId.T indexed gid, FROST.Identifier identifier, uint64 chunk, bytes32 commitment);
     event Sign(
         address indexed initiator,
