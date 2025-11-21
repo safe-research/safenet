@@ -29,6 +29,10 @@ library FROSTSignatureId {
         }
     }
 
+    function isZero(T self) internal pure returns (bool result) {
+        return T.unwrap(self) == bytes32(0);
+    }
+
     /// @notice Requires that a signature ID is valid.
     function requireValid(T self) internal pure {
         require((uint256(T.unwrap(self)) << 192) != 0, InvalidSignatureId());
