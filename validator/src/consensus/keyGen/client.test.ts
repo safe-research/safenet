@@ -99,6 +99,7 @@ describe("keyGen", () => {
 					groupId: GroupId,
 					verificationShare: FrostPoint,
 					peerShares: bigint[],
+					callbackContext: Hex,
 				): Promise<Hex> => {
 					log("##### Received KeygenSecretShares #####");
 					log({
@@ -107,6 +108,7 @@ describe("keyGen", () => {
 						peerShares,
 					});
 					log("#######################################");
+					expect(callbackContext).toBe("0x5afe5afe");
 					const id = participantIdMapping.get(groupId) ?? -1n;
 					shareEvents.push({
 						groupId,
@@ -147,7 +149,13 @@ describe("keyGen", () => {
 				log(
 					`>>>> Keygen commitment from ${e.id} to ${client.participantId(e.groupId)} >>>>`,
 				);
-				await client.handleKeygenCommitment(e.groupId, e.id, e.commits, e.pok);
+				await client.handleKeygenCommitment(
+					e.groupId,
+					e.id,
+					e.commits,
+					e.pok,
+					"0x5afe5afe",
+				);
 			}
 		}
 		log("------------------------ Publish Shares ------------------------");

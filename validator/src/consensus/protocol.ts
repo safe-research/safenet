@@ -99,11 +99,48 @@ export class OnchainProtocol implements ShieldnetProtocol {
 		return this.#signingClient.writeContract(request);
 	}
 
+	async publishKeygenSecretSharesWithCallback(
+		groupId: GroupId,
+		verificationShare: FrostPoint,
+		peerShares: bigint[],
+		callbackContext: Hex,
+	): Promise<Hex> {
+		const { request } = await this.#publicClient.simulateContract({
+			address: this.#coordinator,
+			abi: COORDINATOR_FUNCTIONS,
+			functionName: "keyGenSecretShareWithCallback",
+			args: [
+				groupId,
+				{
+					y: verificationShare,
+					f: peerShares,
+				},
+				{
+					target: this.#consensus,
+					context: callbackContext,
+				},
+			],
+			account: this.#signingClient.account,
+			gas: 300_000n, // TODO: this seems to be wrongly estimated
+		});
+		return this.#signingClient.writeContract(request);
+	}
+
 	async publishKeygenSecretShares(
 		groupId: GroupId,
 		verificationShare: FrostPoint,
 		peerShares: bigint[],
+		callbackContext?: Hex,
 	): Promise<Hex> {
+		// TODO: use callback
+		if (callbackContext !== undefined) {
+			return this.publishKeygenSecretSharesWithCallback(
+				groupId,
+				verificationShare,
+				peerShares,
+				callbackContext,
+			);
+		}
 		const { request } = await this.#publicClient.simulateContract({
 			address: this.#coordinator,
 			abi: COORDINATOR_FUNCTIONS,
@@ -165,6 +202,7 @@ export class OnchainProtocol implements ShieldnetProtocol {
 		signatureShare: bigint,
 		lagrange: bigint,
 	): Promise<Hex> {
+		// TODO: use callback
 		const { request } = await this.#publicClient.simulateContract({
 			address: this.#coordinator,
 			abi: COORDINATOR_FUNCTIONS,
@@ -183,7 +221,7 @@ export class OnchainProtocol implements ShieldnetProtocol {
 				signingParticipantsProof,
 			],
 			account: this.#signingClient.account,
-			gas: 400_000n,
+			gas: 400_000n, // TODO: this seems to be wrongly estimated
 		});
 		return this.#signingClient.writeContract(request);
 	}

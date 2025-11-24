@@ -176,6 +176,7 @@ export class KeyGenClient {
 		senderId: ParticipantId,
 		peerCommitments: readonly FrostPoint[],
 		pok: ProofOfKnowledge,
+		callbackContext?: Hex,
 	): Promise<Hex | undefined> {
 		const participantId = this.#storage.participantId(groupId);
 		if (senderId === participantId) {
@@ -185,7 +186,10 @@ export class KeyGenClient {
 		verifyCommitments(senderId, peerCommitments, pok);
 		this.#storage.registerCommitments(groupId, senderId, peerCommitments);
 		if (this.#storage.checkIfCommitmentsComplete(groupId)) {
-			return await this.prepareAndPublishKeygenSecretShares(groupId);
+			return await this.prepareAndPublishKeygenSecretShares(
+				groupId,
+				callbackContext,
+			);
 		}
 		return undefined;
 	}
@@ -193,6 +197,7 @@ export class KeyGenClient {
 	// Round 2.1
 	private async prepareAndPublishKeygenSecretShares(
 		groupId: GroupId,
+		callbackContext?: Hex,
 	): Promise<Hex> {
 		const commitments = this.#storage.commitmentsMap(groupId);
 		const groupPublicKey = createVerificationShare(commitments, 0n);
@@ -233,6 +238,7 @@ export class KeyGenClient {
 			groupId,
 			verificationShare,
 			shares,
+			callbackContext,
 		);
 	}
 

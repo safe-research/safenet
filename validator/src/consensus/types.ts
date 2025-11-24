@@ -40,6 +40,7 @@ export type KeyGenCoordinator = {
 		groupId: GroupId,
 		verificationShare: FrostPoint,
 		peerShares: bigint[],
+		callbackContext?: Hex,
 	): Promise<Hex>;
 };
 

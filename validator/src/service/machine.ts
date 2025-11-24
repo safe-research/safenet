@@ -213,7 +213,14 @@ export class ShieldnetStateMachine {
 				const event = keyGenCommittedEventSchema.parse(eventArgs);
 				// Verify that the group corresponds to the next epoch
 				if (this.#keyGenState.groupId !== event.gid) return;
-				// This will be handled by the keyGenClient
+				const nextEpoch = this.#keyGenState.nextEpoch;
+				const callbackContext =
+					this.#genesisGroupId === event.gid
+						? undefined
+						: encodePacked(
+								["uint256", "uint256"],
+								[nextEpoch, nextEpoch * this.#blocksPerEpoch],
+							);
 				await this.#keyGenClient.handleKeygenCommitment(
 					event.gid,
 					event.identifier,
@@ -222,10 +229,10 @@ export class ShieldnetStateMachine {
 						r: toPoint(event.commitment.r),
 						mu: event.commitment.mu,
 					},
+					callbackContext,
 				);
 				// If all participants have committed update state to "collecting_shares"
 				if (event.committed) {
-					const nextEpoch = this.#keyGenState.nextEpoch;
 					this.#keyGenState = {
 						id: "collecting_shares",
 						groupId: event.gid,
@@ -538,20 +545,8 @@ export class ShieldnetStateMachine {
 			this.#keyGenState = { id: "waiting_for_rollover" };
 			return;
 		}
-		const participantId = this.#keyGenClient.participantId(groupId);
-		const lastParticipant = this.#keyGenState.lastParticipant;
 		const nextEpoch = this.#keyGenState.nextEpoch;
 		this.#keyGenState = { id: "request_rollover_data", groupId, nextEpoch };
-		this.#logger?.(`Propose rollover to ${nextEpoch}!`);
-		// If all participants have committed update state to "request_rollover_data"
-		// If this validator has submitted last sign, trigger epoch rollover
-		if (participantId === lastParticipant) {
-			await this.#protocol.proposeEpoch(
-				nextEpoch,
-				nextEpoch * this.#blocksPerEpoch,
-				groupId,
-			);
-		}
 	}
 
 	private async checkAvailableNonces() {
