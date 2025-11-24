@@ -14,13 +14,14 @@ import {Secp256k1} from "@/libraries/Secp256k1.sol";
 /// @notice Onchain consensus state.
 contract Consensus is IFROSTCoordinatorCallback {
     using ConsensusMessages for bytes32;
+    using FROSTSignatureId for FROSTSignatureId.T;
     using MetaTransaction for MetaTransaction.T;
 
     struct Epochs {
+        uint64 previous;
         uint64 active;
         uint64 staged;
         uint64 rolloverBlock;
-        uint64 _padding;
     }
 
     event EpochProposed(
@@ -80,14 +81,40 @@ contract Consensus is IFROSTCoordinatorCallback {
         return _COORDINATOR.signatureValue($attestations[message]);
     }
 
+    /// @notice Gets a recent transaction attestation. This method will fail if
+    ///         the attestation did not happen in either the active or previous
+    ///         epochs. This is provided as a convienience method to clients who
+    ///         may want to query an attestation for a transaction they recently
+    ///         proposed for validator approval.
+    function getRecentAttestation(MetaTransaction.T memory transaction)
+        external
+        view
+        returns (bytes32 message, FROST.Signature memory signature)
+    {
+        return getRecentAttestationByHash(transaction.hash());
+    }
+
+    /// @notice Gets a recent transaction attestation by hash.
+    function getRecentAttestationByHash(bytes32 transactionHash)
+        public
+        view
+        returns (bytes32 message, FROST.Signature memory signature)
+    {
+        (Epochs memory epochs,) = _epochsWithRollover();
+        bytes32 domain = domainSeparator();
+        message = domain.transactionProposal(epochs.active, transactionHash);
+        FROSTSignatureId.T attestation = $attestations[message];
+        if (attestation.isZero()) {
+            message = domain.transactionProposal(epochs.previous, transactionHash);
+            attestation = $attestations[message];
+        }
+        signature = _COORDINATOR.signatureValue(attestation);
+    }
+
     /// @notice Gets the active epoch and its group ID.
     function getActiveEpoch() external view returns (uint64 epoch, FROSTGroupId.T group) {
-        Epochs memory epochs = $epochs;
-        if (_epochsShouldRollover(epochs)) {
-            epoch = epochs.staged;
-        } else {
-            epoch = epochs.active;
-        }
+        (Epochs memory epochs,) = _epochsWithRollover();
+        epoch = epochs.active;
         group = $groups[epoch];
     }
 
@@ -166,20 +193,23 @@ contract Consensus is IFROSTCoordinatorCallback {
     }
 
     function _processRollover() private returns (Epochs memory epochs) {
-        epochs = $epochs;
-        if (_epochsShouldRollover(epochs)) {
-            epochs.active = epochs.staged;
-            epochs.staged = 0;
+        bool rolledOver;
+        (epochs, rolledOver) = _epochsWithRollover();
+        if (rolledOver) {
             $epochs = epochs;
-            // Note that we intentionally don't reset `$epochs.rolloverBlock`
-            // since the `$epochs.staged == 0` uniquely determines whether or
-            // not there is staged rollover.
             emit EpochRolledOver(epochs.active);
         }
     }
 
-    function _epochsShouldRollover(Epochs memory epochs) private view returns (bool result) {
-        return epochs.staged != 0 && epochs.rolloverBlock <= block.number;
+    function _epochsWithRollover() private view returns (Epochs memory epochs, bool rolledOver) {
+        epochs = $epochs;
+        if (epochs.staged != 0 && epochs.rolloverBlock <= block.number) {
+            epochs.previous = epochs.active;
+            epochs.active = epochs.staged;
+            epochs.staged = 0;
+            epochs.rolloverBlock = 0;
+            rolledOver = true;
+        }
     }
 
     function _requireValidRollover(Epochs memory epochs, uint64 proposedEpoch, uint64 rolloverBlock) private view {
