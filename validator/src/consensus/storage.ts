@@ -332,4 +332,22 @@ export class InMemoryStorage
 			throw Error(`No nonces available for ${groupId}:${chunk}!`);
 		return nonceTree;
 	}
+	burnNonce(groupId: GroupId, chunk: bigint, offset: bigint): void {
+		const chunkId = keccak256(
+			encodePacked(["bytes32", "uint256"], [groupId, chunk]),
+		);
+		const treeHash = this.#chunkNonces.get(chunkId);
+		if (treeHash === undefined)
+			throw Error(`No nonces linked to ${groupId}:${chunk}!`);
+		const nonceTree = this.#nonceTrees.get(treeHash);
+		if (nonceTree === undefined)
+			throw Error(`No nonces available for ${groupId}:${chunk}!`);
+		const commitments = nonceTree.commitments.at(Number(offset));
+		if (commitments === undefined)
+			throw Error(`No nonces at offset ${offset}!`);
+		if (commitments.bindingNonce === 0n && commitments.hidingNonce === 0n)
+			throw Error(`Nonce for offset ${offset} already burned!`);
+		commitments.bindingNonce = 0n;
+		commitments.hidingNonce = 0n;
+	}
 }

@@ -179,7 +179,12 @@ export class SigningClient {
 		const nonceTree = this.#storage.nonceTree(groupId, chunk);
 		// Calculate information specific to this signer
 		const nonceCommitments = nonceTree.commitments[Number(offset)];
-		// TODO: check if nonce was burned
+		if (
+			nonceCommitments.bindingNonce === 0n &&
+			nonceCommitments.hidingNonce === 0n
+		) {
+			throw Error(`Nonces for sequence ${sequence} have been already burned`);
+		}
 		const signerPart = signerParts[signerIndex];
 		const signatureShare = createSignatureShare(
 			signingShare,
@@ -201,6 +206,7 @@ export class SigningClient {
 		);
 
 		// TODO: burn nonce
+		this.#storage.burnNonce(groupId, chunk, offset);
 		const submissionId = await this.#coordinator.publishSignatureShare(
 			signatureId,
 			signingParticipantsHash,
