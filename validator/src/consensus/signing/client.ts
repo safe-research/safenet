@@ -59,8 +59,8 @@ export class SigningClient {
 		nonceCommitments: PublicNonceCommitments;
 		nonceProof: Hex[];
 	} {
+		// TODO: pass in signers to allow to remove unhonest
 		const participants = this.#storage.participants(groupId);
-		// TODO: add check for unhonest signers
 		const signers = participants.map((p) => p.id).sort();
 		this.#storage.registerSignatureRequest(
 			signatureId,

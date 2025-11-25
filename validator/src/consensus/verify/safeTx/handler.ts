@@ -11,7 +11,6 @@ export class SafeTransactionHandler
 {
 	async hashAndVerify(uncheckedPacket: SafeTransactionPacket): Promise<Hex> {
 		const packet = safeTransactionPacketSchema.parse(uncheckedPacket);
-		// TODO: refine check
 		if (packet.proposal.transaction.operation !== 0)
 			throw Error("Delegatecall not allowed");
 		return safeTxPacketHash(packet);

@@ -1,5 +1,6 @@
 import { type Address, getAddress, type Hex, isAddress, isHex } from "viem";
 import { z } from "zod";
+import { supportedChains } from "./chains.js";
 
 export const checkedAddressSchema = z
 	.string()
@@ -18,7 +19,27 @@ export const hexDataSchema = z
 	.refine(isHex, "Value is not a valid hex string")
 	.transform((val) => val as Hex);
 
+export const supportedChainsSchema = z
+	.union([
+		z.number(), // number or
+		z.string().transform((str) => parseInt(str, 10)),
+	])
+	.pipe(z.union(supportedChains.map((chain) => z.literal(chain.id))));
+
+export const participantsSchema = z.preprocess((val) => {
+	if (typeof val === "string") {
+		return val.split(",");
+	}
+	return val;
+}, z.array(checkedAddressSchema));
+
 export const validatorConfigSchema = z.object({
 	RPC_URL: z.url(),
-	CONSENSUS_CORE_ADDRESS: checkedAddressSchema,
+	PRIVATE_KEY: hexDataSchema,
+	CONSENSUS_ADDRESS: checkedAddressSchema,
+	COORDINATOR_ADDRESS: checkedAddressSchema,
+	CHAIN_ID: supportedChainsSchema,
+	PARTICIPANTS: participantsSchema,
 });
+
+export type SupportedChain = z.infer<typeof supportedChainsSchema>;

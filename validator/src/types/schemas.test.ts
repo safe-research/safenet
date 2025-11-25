@@ -1,3 +1,4 @@
+import { generatePrivateKey } from "viem/accounts";
 import { describe, expect, it } from "vitest";
 import { frostPointSchema } from "../consensus/schemas.js";
 import { checkedAddressSchema, validatorConfigSchema } from "./schemas.js";
@@ -68,29 +69,35 @@ describe("checkedAddressSchema", () => {
 
 describe("validatorConfigSchema", () => {
 	it("should successfully parse a valid config object", () => {
+		const pk = generatePrivateKey();
 		const validConfig = {
 			RPC_URL: MOCK_VALID_URL,
-			CONSENSUS_CORE_ADDRESS: MOCK_CHECKSUMMED_ADDRESS, // Use lowercase to test transform
+			CONSENSUS_ADDRESS: MOCK_CHECKSUMMED_ADDRESS,
+			COORDINATOR_ADDRESS: MOCK_CHECKSUMMED_ADDRESS,
+			CHAIN_ID: 100,
+			PRIVATE_KEY: pk,
+			PARTICIPANTS:
+				"0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266,0x6Adb3baB5730852eB53987EA89D8e8f16393C200",
 		};
 
-		const result = validatorConfigSchema.safeParse(validConfig);
-
-		// 1. Check for overall success
-		expect(result.success).toBe(true);
-
-		// 2. Check that the address was correctly transformed
-		if (result.success) {
-			expect(result.data).toEqual({
-				RPC_URL: MOCK_VALID_URL,
-				CONSENSUS_CORE_ADDRESS: MOCK_CHECKSUMMED_ADDRESS, // Should be checksummed
-			});
-		}
+		const result = validatorConfigSchema.parse(validConfig);
+		expect(result).toEqual({
+			RPC_URL: MOCK_VALID_URL,
+			CONSENSUS_ADDRESS: MOCK_CHECKSUMMED_ADDRESS,
+			COORDINATOR_ADDRESS: MOCK_CHECKSUMMED_ADDRESS,
+			CHAIN_ID: 100,
+			PRIVATE_KEY: pk,
+			PARTICIPANTS: [
+				"0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266",
+				"0x6Adb3baB5730852eB53987EA89D8e8f16393C200",
+			],
+		});
 	});
 
 	it("should fail if RPC_URL is invalid", () => {
 		const invalidConfig = {
 			RPC_URL: MOCK_INVALID_URL, // <-- Invalid
-			CONSENSUS_CORE_ADDRESS: MOCK_LOWERCASE_ADDRESS,
+			CONSENSUS_ADDRESS: MOCK_LOWERCASE_ADDRESS,
 		};
 
 		const result = validatorConfigSchema.safeParse(invalidConfig);
@@ -106,10 +113,16 @@ describe("validatorConfigSchema", () => {
 		}
 	});
 
-	it("should fail if CONSENSUS_CORE_ADDRESS is invalid", () => {
+	it("should fail if CHAIN_ID is not from a supported network", () => {
+		const pk = generatePrivateKey();
 		const invalidConfig = {
 			RPC_URL: MOCK_VALID_URL,
-			CONSENSUS_CORE_ADDRESS: MOCK_INVALID_ADDRESS, // <-- Invalid
+			CONSENSUS_ADDRESS: MOCK_CHECKSUMMED_ADDRESS,
+			COORDINATOR_ADDRESS: MOCK_CHECKSUMMED_ADDRESS,
+			CHAIN_ID: 1, // Mainnet is not supported right now
+			PRIVATE_KEY: pk,
+			PARTICIPANTS:
+				"0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266,0x6Adb3baB5730852eB53987EA89D8e8f16393C200",
 		};
 
 		const result = validatorConfigSchema.safeParse(invalidConfig);
@@ -118,7 +131,25 @@ describe("validatorConfigSchema", () => {
 		// Check that the error is from the address field
 		if (!result.success) {
 			const addressError = result.error.issues.find(
-				(issue) => issue.path[0] === "CONSENSUS_CORE_ADDRESS",
+				(issue) => issue.path[0] === "CHAIN_ID",
+			);
+			expect(addressError).toBeDefined();
+		}
+	});
+
+	it("should fail if CONSENSUS_ADDRESS is invalid", () => {
+		const invalidConfig = {
+			RPC_URL: MOCK_VALID_URL,
+			CONSENSUS_ADDRESS: MOCK_INVALID_ADDRESS, // <-- Invalid
+		};
+
+		const result = validatorConfigSchema.safeParse(invalidConfig);
+		expect(result.success).toBe(false);
+
+		// Check that the error is from the address field
+		if (!result.success) {
+			const addressError = result.error.issues.find(
+				(issue) => issue.path[0] === "CONSENSUS_ADDRESS",
 			);
 			expect(addressError).toBeDefined();
 		}
@@ -126,7 +157,7 @@ describe("validatorConfigSchema", () => {
 
 	it("should fail if RPC_URL is missing", () => {
 		const incompleteConfig = {
-			CONSENSUS_CORE_ADDRESS: MOCK_LOWERCASE_ADDRESS,
+			CONSENSUS_ADDRESS: MOCK_LOWERCASE_ADDRESS,
 		};
 
 		const result = validatorConfigSchema.safeParse(incompleteConfig);
@@ -144,7 +175,7 @@ describe("validatorConfigSchema", () => {
 		}
 	});
 
-	it("should fail if CONSENSUS_CORE_ADDRESS is missing", () => {
+	it("should fail if CONSENSUS_ADDRESS is missing", () => {
 		const incompleteConfig = {
 			RPC_URL: MOCK_VALID_URL,
 		};
@@ -154,7 +185,7 @@ describe("validatorConfigSchema", () => {
 
 		if (!result.success) {
 			const error = result.error.issues.find(
-				(issue) => issue.path[0] === "CONSENSUS_CORE_ADDRESS",
+				(issue) => issue.path[0] === "CONSENSUS_ADDRESS",
 			);
 			expect(error).toBeDefined();
 			expect(error?.code).toBe("invalid_type");

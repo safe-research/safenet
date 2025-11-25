@@ -200,9 +200,8 @@ export class ShieldnetStateMachine {
 		actions.push(...this.checkEpochRollover(block));
 		actions.push(...this.checkAvailableNonces());
 
-		// TODO:
-		// Check keyGen timeouts
-		// Check signing timeouts
+		// TODO: Check keyGen timeouts
+		// TODO: Check signing timeouts
 
 		return actions;
 	}
@@ -245,6 +244,7 @@ export class ShieldnetStateMachine {
 				// Verify that the group corresponds to the next epoch
 				if (this.#keyGenState.groupId !== event.gid) return [];
 				const nextEpoch = this.#keyGenState.nextEpoch;
+				// TODO: handle bad commitments -> Remove participant
 				this.#keyGenClient.handleKeygenCommitment(
 					event.gid,
 					event.identifier,
@@ -265,7 +265,6 @@ export class ShieldnetStateMachine {
 						nextEpoch,
 					};
 
-					// TODO: refactor to actions engine
 					const callbackContext =
 						this.#genesisGroupId === event.gid
 							? undefined
@@ -340,6 +339,7 @@ export class ShieldnetStateMachine {
 					return [];
 				}
 				// Check that signing was initiated via consensus contract
+				// TODO: switch to filter by group id
 				if (event.initiator !== this.#protocol.consensus()) {
 					this.#logger?.(`Unexpected initiator ${event.initiator}!`);
 					return [];
@@ -605,7 +605,6 @@ export class ShieldnetStateMachine {
 			this.#stagedEpoch === 0n
 		) {
 			// Trigger key gen for next epoch
-			// TODO discussed format, my proposal encodePacked(0x00000000, Consensus.address, nextEpoch) -> 4 bytes version, 20 bytes address, 8 bytes Epoch number)
 			const nextEpoch = currentEpoch + 1n;
 			this.#logger?.(`Trigger key gen for epoch ${nextEpoch}`);
 			const { actions } = this.triggerKeyGen(nextEpoch);
@@ -618,13 +617,16 @@ export class ShieldnetStateMachine {
 		epoch: bigint,
 		consensus: Address = this.#protocol.consensus(),
 	): { groupId: GroupId; actions: ProtocolAction[] } {
-		const context = encodePacked(["address", "uint96"], [consensus, epoch]);
+		// 4 bytes version, 20 bytes address, 8 bytes epoch number
+		const context = encodePacked(
+			["uint32", "address", "uint64"],
+			[0, consensus, epoch],
+		);
 		const participantsRoot = this.#keyGenClient.registerParticipants(
 			this.#participants,
 		);
 		const count = BigInt(this.#participants.length);
-		// TODO discuss
-		const threshold = (2n * count) / 3n;
+		const threshold = count / 2n + 1n;
 		const { groupId, participantId, commitments, pok, poap } =
 			this.#keyGenClient.setupGroup(
 				participantsRoot,

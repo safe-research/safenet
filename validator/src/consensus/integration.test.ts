@@ -48,7 +48,7 @@ describe("integration", () => {
 		{ timeout: TEST_RUNTIME_IN_SECONDS * 1000 * 5 },
 		async ({ skip }) => {
 			// Make sure to first start the Anvil testnode (run `anvil` in the root)
-			// and run the deployment script: forge script DeployScript --rpc-url --unlocked --sender 0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266 http://127.0.0.1:8545 --broadcast
+			// and run the deployment script: forge script DeployScript --rpc-url http://127.0.0.1:8545 --unlocked --sender 0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266 --broadcast
 			const deploymentInfoFile = path.join(
 				process.cwd(),
 				"..",
@@ -238,7 +238,6 @@ describe("integration", () => {
 
 			// Check if signature request worked
 			// Calculate transaction hash
-			// TODO nit: would be nice if this would be a safeTxHash (or easily mappable)
 			const transactionHash = hashStruct({
 				types: {
 					MetaTransaction: [

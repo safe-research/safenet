@@ -107,7 +107,6 @@ export class KeyGenClient {
 		const pok = createProofOfKnowledge(participantId, coefficients);
 		const commitments = createCommitments(coefficients);
 		const poap = generateParticipantProof(participants, participantId);
-		this.#storage.registerCommitments(groupId, participantId, commitments);
 		this.#storage.registerSecretShare(
 			groupId,
 			participantId,
@@ -128,11 +127,6 @@ export class KeyGenClient {
 		peerCommitments: readonly FrostPoint[],
 		pok: ProofOfKnowledge,
 	): boolean {
-		const participantId = this.#storage.participantId(groupId);
-		if (senderId === participantId) {
-			this.#logger?.debug("Do not verify own commitments");
-			return false;
-		}
 		verifyCommitments(senderId, peerCommitments, pok);
 		this.#storage.registerCommitments(groupId, senderId, peerCommitments);
 		return this.#storage.checkIfCommitmentsComplete(groupId);
