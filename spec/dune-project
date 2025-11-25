@@ -1,0 +1,11 @@
+(lang dune 3.20)
+
+(name shieldnet)
+(source
+ (github safe-research/shiednet))
+(license GPL-3.0-only)
+
+(package
+ (name shieldnet)
+ (synopsis "Shiednet specification")
+ (depends ocaml))
