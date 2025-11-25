@@ -1,6 +1,6 @@
 import { encodePacked, type Hex, keccak256, zeroHash } from "viem";
 import type { ParticipantId } from "../frost/types.js";
-import type { Participant } from "./types.js";
+import type { Participant } from "./storage/types.js";
 
 export const buildMerkleTree = (leaves: Hex[]): Hex[][] => {
 	if (leaves.length === 0) throw Error("Cannot generate empty tree!");

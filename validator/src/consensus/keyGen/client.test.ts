@@ -1,11 +1,10 @@
-import { type Address, type Hex, keccak256, zeroAddress } from "viem";
+import { keccak256 } from "viem";
 import { generatePrivateKey, privateKeyToAccount } from "viem/accounts";
 import { describe, expect, it } from "vitest";
 import { log } from "../../__tests__/logging.js";
 import type {
 	FrostPoint,
 	GroupId,
-	ProofOfAttestationParticipation,
 	ProofOfKnowledge,
 } from "../../frost/types.js";
 import {
@@ -13,8 +12,8 @@ import {
 	hashParticipant,
 	verifyMerkleProof,
 } from "../merkle.js";
-import { InMemoryStorage } from "../storage.js";
-import type { KeyGenCoordinator, Participant } from "../types.js";
+import { InMemoryStorage } from "../storage/inmemory.js";
+import type { Participant } from "../storage/types.js";
 import { KeyGenClient } from "./client.js";
 import { calcGroupId } from "./utils.js";
 
@@ -33,138 +32,92 @@ describe("keyGen", () => {
 		});
 		const participantsRoot = calculateParticipantsRoot(participants);
 		const context = keccak256(participantsRoot);
+		const groupId = calcGroupId(participantsRoot, count, threshold, context);
 		const commitmentEvents: {
 			groupId: GroupId;
-			id: bigint;
-			commits: FrostPoint[];
+			participantId: bigint;
+			commitments: FrostPoint[];
 			pok: ProofOfKnowledge;
 		}[] = [];
 		const shareEvents: {
 			groupId: GroupId;
 			id: bigint;
 			verificationShare: FrostPoint;
-			peerShares: bigint[];
+			shares: bigint[];
 		}[] = [];
 		const clients = validatorAddresses.map((a) => {
-			const participantIdMapping = new Map<GroupId, bigint>();
-			const coordinator: KeyGenCoordinator = {
-				triggerKeygenAndCommit: (
-					root: Hex,
-					c: bigint,
-					t: bigint,
-					ctx: Hex,
-					id: bigint,
-					commits: FrostPoint[],
-					pok: ProofOfKnowledge,
-					poap: ProofOfAttestationParticipation,
-				): Promise<Hex> => {
-					const groupId = calcGroupId(root, c, t, ctx);
-					participantIdMapping.set(groupId, id);
-					expect(root).toBe(participantsRoot);
-					expect(c).toBe(count);
-					expect(t).toBe(threshold);
-					expect(ctx).toBe(context);
-					log("##### Received KeygenCommitments #####");
-					log({
-						groupId,
-						id,
-						commits,
-						pok,
-						poap,
-					});
-					const leaf = participants.find((p) => p.id === id);
-					if (leaf === undefined) throw Error(`Invliad id: ${id}`);
-					expect(
-						verifyMerkleProof(participantsRoot, hashParticipant(leaf), poap),
-					).toBeTruthy();
-					log("######################################");
-					commitmentEvents.push({
-						groupId,
-						id,
-						commits,
-						pok,
-					});
-					return Promise.resolve("0x");
-				},
-				publishKeygenCommitments: (
-					_groupId: GroupId,
-					_id: bigint,
-					_commits: FrostPoint[],
-					_pok: ProofOfKnowledge,
-					_poap: ProofOfAttestationParticipation,
-				): Promise<Hex> => {
-					return Promise.reject("Should not be called");
-				},
-				publishKeygenSecretShares: (
-					groupId: GroupId,
-					verificationShare: FrostPoint,
-					peerShares: bigint[],
-					callbackContext: Hex,
-				): Promise<Hex> => {
-					log("##### Received KeygenSecretShares #####");
-					log({
-						groupId,
-						verificationShare,
-						peerShares,
-					});
-					log("#######################################");
-					expect(callbackContext).toBe("0x5afe5afe");
-					const id = participantIdMapping.get(groupId) ?? -1n;
-					shareEvents.push({
-						groupId,
-						id,
-						verificationShare,
-						peerShares,
-					});
-					return Promise.resolve("0x");
-				},
-				chainId: (): bigint => 0n,
-				coordinator: (): Address => zeroAddress,
-			};
+			const ids = new Map<GroupId, bigint>();
 			const storage = new InMemoryStorage(a.address);
-			const client = new KeyGenClient(storage, coordinator);
+			const client = new KeyGenClient(storage);
 			client.registerParticipants(participants);
 			return {
+				ids,
 				storage,
 				client,
 			};
 		});
 		log(
-			"------------------------ Trigger Keygen Init ------------------------",
+			"------------------------ Trigger Keygen Init and Commitments ------------------------",
 		);
-		for (const { client } of clients) {
+		for (const { client, ids } of clients) {
 			log(`>>>> Keygen and Commit >>>>`);
-			await client.triggerKeygenAndCommit(
+			const { participantId, commitments, poap, pok } = client.setupGroup(
 				participantsRoot,
 				count,
 				threshold,
 				context,
 			);
+			ids.set(groupId, participantId);
+			const leaf = participants.find((p) => p.id === participantId);
+			if (leaf === undefined) throw Error(`Invalid id: ${participantId}`);
+			expect(
+				verifyMerkleProof(participantsRoot, hashParticipant(leaf), poap),
+			).toBeTruthy();
+			log("######################################");
+			commitmentEvents.push({
+				groupId,
+				participantId,
+				commitments,
+				pok,
+			});
 		}
-		log(
-			"------------------------ Publish Commitments ------------------------",
-		);
+		log("------------------------ Handle Commitments ------------------------");
 		for (const { client } of clients) {
 			for (const e of commitmentEvents) {
 				log(
-					`>>>> Keygen commitment from ${e.id} to ${client.participantId(e.groupId)} >>>>`,
+					`>>>> Handle commitment from ${e.participantId} by ${client.participantId(e.groupId)} >>>>`,
 				);
-				await client.handleKeygenCommitment(
+				client.handleKeygenCommitment(
 					e.groupId,
-					e.id,
-					e.commits,
+					e.participantId,
+					e.commitments,
 					e.pok,
-					"0x5afe5afe",
 				);
 			}
 		}
-		log("------------------------ Publish Shares ------------------------");
+		log(
+			"------------------------ Publish Secret Shares ------------------------",
+		);
+		for (const { client, ids } of clients) {
+			log(`>>>> Publish secret share of ${client.participantId(groupId)} >>>>`);
+			const { verificationShare, shares } = client.createSecretShares(groupId);
+			const id = ids.get(groupId) ?? -1n;
+			shareEvents.push({
+				groupId,
+				id,
+				verificationShare,
+				shares,
+			});
+		}
+		log(
+			"------------------------ Handle Secret Shares ------------------------",
+		);
 		for (const { client } of clients) {
 			for (const e of shareEvents) {
 				log(
-					`>>>> Keygen secrets from ${e.id} to ${client.participantId(e.groupId)} >>>>`,
+					`>>>> Handle secrets shares from ${e.id} by ${client.participantId(e.groupId)} >>>>`,
 				);
-				await client.handleKeygenSecrets(e.groupId, e.id, e.peerShares);
+				await client.handleKeygenSecrets(e.groupId, e.id, e.shares);
 			}
 		}
 		for (const { storage } of clients) {

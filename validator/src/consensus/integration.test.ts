@@ -19,11 +19,11 @@ import type { GroupId } from "../frost/types.js";
 import { ShieldnetStateMachine as SchildNetzMachine } from "../service/machine.js";
 import { CONSENSUS_EVENTS, COORDINATOR_EVENTS } from "../types/abis.js";
 import { KeyGenClient } from "./keyGen/client.js";
-import { OnchainProtocol } from "./protocol.js";
+import { OnchainProtocol } from "./protocol/onchain.js";
 import { SigningClient } from "./signing/client.js";
 import { verifySignature } from "./signing/verify.js";
-import { InMemoryStorage } from "./storage.js";
-import type { Participant } from "./types.js";
+import { InMemoryStorage } from "./storage/inmemory.js";
+import type { Participant } from "./storage/types.js";
 import {
 	type PacketHandler,
 	type Typed,
@@ -103,6 +103,20 @@ describe("integration", () => {
 				return { id: BigInt(i + 1), address: a.address };
 			});
 			const clients = accounts.map((a, i) => {
+				const storage = new InMemoryStorage(a.address);
+				const sc = new SigningClient(storage);
+				const kc = new KeyGenClient(storage);
+				const verificationHandlers = new Map<string, PacketHandler<Typed>>();
+				verificationHandlers.set(
+					"safe_transaction_packet",
+					new SafeTransactionHandler(),
+				);
+				verificationHandlers.set(
+					"epoch_rollover_packet",
+					new EpochRolloverHandler(),
+				);
+				const verificationEngine = new VerificationEngine(verificationHandlers);
+				const logger = i === 0 ? log : undefined;
 				const publicClient = createPublicClient({
 					chain: anvil,
 					transport: http(),
@@ -118,31 +132,8 @@ describe("integration", () => {
 					signingClient,
 					consensusAddress,
 					coordinatorAddress,
+					logger,
 				);
-				const storage = new InMemoryStorage(a.address);
-				const sc = new SigningClient(storage, protocol, {
-					onRequestSigned: (signatureId, participantId, message) => {
-						log(
-							`Participant ${participantId} signed request ${signatureId} for ${message}`,
-						);
-					},
-				});
-				const kc = new KeyGenClient(storage, protocol, {
-					onGroupSetup: (groupId, participantId) => {
-						log(`Participant ${participantId} is setup for group ${groupId}`);
-					},
-				});
-				const verificationHandlers = new Map<string, PacketHandler<Typed>>();
-				verificationHandlers.set(
-					"safe_transaction_packet",
-					new SafeTransactionHandler(),
-				);
-				verificationHandlers.set(
-					"epoch_rollover_packet",
-					new EpochRolloverHandler(),
-				);
-				const verificationEngine = new VerificationEngine(verificationHandlers);
-				const logger = i === 0 ? log : undefined;
 				const sm = new SchildNetzMachine({
 					participants,
 					protocol,

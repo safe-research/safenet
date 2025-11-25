@@ -1,21 +1,13 @@
-import {
-	type Address,
-	type Hex,
-	keccak256,
-	stringToBytes,
-	zeroAddress,
-} from "viem";
+import { type Address, type Hex, keccak256, stringToBytes } from "viem";
 import { describe, expect, it } from "vitest";
 import { log } from "../../__tests__/logging.js";
 import { addmod, g, toPoint } from "../../frost/math.js";
 import type {
 	FrostPoint,
-	GroupId,
 	ParticipantId,
 	SignatureId,
 } from "../../frost/types.js";
-import { InMemoryStorage } from "../storage.js";
-import type { SigningCoordinator } from "../types.js";
+import { InMemoryStorage } from "../storage/inmemory.js";
 import { SigningClient } from "./client.js";
 import type { NonceCommitments, PublicNonceCommitments } from "./nonces.js";
 import { verifySignature } from "./verify.js";
@@ -133,12 +125,6 @@ const NONCE_TREES = [
 // --- Tests ---
 describe("signing", () => {
 	it("e2e signing flow", async () => {
-		const nonceCommitmentsEvents: {
-			groupId: GroupId;
-			signerId: ParticipantId;
-			chunk: bigint;
-			commitment: Hex;
-		}[] = [];
 		const nonceRevealEvent: {
 			signatureId: SignatureId;
 			signerId: ParticipantId;
@@ -151,53 +137,6 @@ describe("signing", () => {
 			r: FrostPoint;
 		}[] = [];
 		const clients = TEST_SIGNERS.map((a) => {
-			const coordinator: SigningCoordinator = {
-				publishNonceCommitmentsHash: (
-					groupId: GroupId,
-					nonceCommitmentsHash: Hex,
-				): Promise<Hex> => {
-					nonceCommitmentsEvents.push({
-						groupId: groupId,
-						signerId: a.participantId,
-						chunk: 0n,
-						commitment: nonceCommitmentsHash,
-					});
-					return Promise.resolve("0x");
-				},
-				publishNonceCommitments: (
-					signatureId: SignatureId,
-					nonceCommitments: PublicNonceCommitments,
-					_nonceProof: Hex[],
-				): Promise<Hex> => {
-					nonceRevealEvent.push({
-						signatureId,
-						signerId: a.participantId,
-						nonces: nonceCommitments,
-					});
-					return Promise.resolve("0x");
-				},
-				publishSignatureShare: (
-					signatureId: SignatureId,
-					_signingParticipantsHash: Hex,
-					_signingParticipantsProof: Hex[],
-					_groupCommitement: FrostPoint,
-					groupCommitementShare: FrostPoint, // add(d, mul(bindingFactor, e)
-					signatureShare: bigint,
-					_lagrange: bigint,
-					callbackContext?: Hex,
-				): Promise<Hex> => {
-					signatureShareEvents.push({
-						signatureId,
-						signerId: a.participantId,
-						z: signatureShare,
-						r: groupCommitementShare,
-					});
-					expect(callbackContext).toBe("0xdad5afe1");
-					return Promise.resolve("0x");
-				},
-				chainId: (): bigint => 0n,
-				coordinator: (): Address => zeroAddress,
-			};
 			const storage = new InMemoryStorage(a.account);
 			storage.registerGroup(
 				TEST_GROUP.groupId,
@@ -210,7 +149,7 @@ describe("signing", () => {
 				a.verificationShare,
 			);
 			storage.registerSigningShare(TEST_GROUP.groupId, a.signingShare);
-			const client = new SigningClient(storage, coordinator);
+			const client = new SigningClient(storage);
 			return {
 				storage,
 				client,
@@ -235,7 +174,7 @@ describe("signing", () => {
 				root: treeInfo.root as Hex,
 			};
 			storage.registerNonceTree(nonceTree);
-			await client.handleNonceCommitmentsHash(
+			client.handleNonceCommitmentsHash(
 				groupId,
 				participantId,
 				nonceTree.root,
@@ -250,7 +189,17 @@ describe("signing", () => {
 		const message = keccak256(stringToBytes("Hello, Shieldnet!"));
 		for (const { client, storage } of clients) {
 			log(`>>>> Signing request to ${storage.participantId(groupId)} >>>>`);
-			await client.handleSignatureRequest(groupId, signatureId, message, 0n);
+			const commitments = client.createNonceCommitments(
+				groupId,
+				signatureId,
+				message,
+				0n,
+			);
+			nonceRevealEvent.push({
+				signatureId,
+				signerId: storage.participantId(groupId),
+				nonces: commitments.nonceCommitments,
+			});
 		}
 		log("------------------------ Reveal Nonces ------------------------");
 		for (const e of nonceRevealEvent) {
@@ -258,12 +207,23 @@ describe("signing", () => {
 				log(
 					`>>>> Nonce reveal from ${e.signerId} to ${storage.participantId(groupId)} >>>>`,
 				);
-				await client.handleNonceCommitments(
+				const readyToSubmit = client.handleNonceCommitments(
 					e.signatureId,
 					e.signerId,
 					e.nonces,
-					"0xdad5afe1",
 				);
+				if (!readyToSubmit) continue;
+
+				const { commitmentShare, signatureShare } = client.createSignatureShare(
+					e.signatureId,
+				);
+
+				signatureShareEvents.push({
+					signatureId: e.signatureId,
+					signerId: e.signerId,
+					z: signatureShare,
+					r: commitmentShare,
+				});
 			}
 		}
 		log("------------------------ Verify Shares ------------------------");

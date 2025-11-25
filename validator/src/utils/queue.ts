@@ -23,6 +23,21 @@ export class Queue<T> {
 		}
 	}
 
+	return(element: T) {
+		const entry = {
+			prev: this.#tail,
+			element,
+		};
+		if (this.#tail !== undefined) {
+			this.#tail.next = entry;
+		}
+
+		this.#tail = entry;
+		if (this.#head === undefined) {
+			this.#head = entry;
+		}
+	}
+
 	pop(): T | undefined {
 		const entry = this.#tail;
 		this.#tail = entry?.prev;

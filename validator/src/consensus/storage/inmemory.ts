@@ -4,9 +4,9 @@ import type {
 	GroupId,
 	ParticipantId,
 	SignatureId,
-} from "../frost/types.js";
-import { calculateParticipantsRoot } from "./merkle.js";
-import type { NonceTree, PublicNonceCommitments } from "./signing/nonces.js";
+} from "../../frost/types.js";
+import { calculateParticipantsRoot } from "../merkle.js";
+import type { NonceTree, PublicNonceCommitments } from "../signing/nonces.js";
 import type {
 	GroupInfoStorage,
 	KeyGenInfoStorage,

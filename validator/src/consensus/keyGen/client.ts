@@ -11,6 +11,7 @@ import type {
 	FrostPoint,
 	GroupId,
 	ParticipantId,
+	ProofOfAttestationParticipation,
 	ProofOfKnowledge,
 } from "../../frost/types.js";
 import {
@@ -19,13 +20,13 @@ import {
 	createProofOfKnowledge,
 	verifyCommitments,
 } from "../../frost/vss.js";
+import type { Logger } from "../../utils/logging.js";
 import { generateParticipantProof } from "../merkle.js";
 import type {
 	GroupInfoStorage,
-	KeyGenCoordinator,
 	KeyGenInfoStorage,
 	Participant,
-} from "../types.js";
+} from "../storage/types.js";
 import { calcGroupId } from "./utils.js";
 
 export type KeygenInfo = {
@@ -40,11 +41,6 @@ export type KeygenInfo = {
 	signingShare?: bigint;
 };
 
-export type KeyGenCallbacks = {
-	onGroupSetup?: (groupId: GroupId, participantId: ParticipantId) => void;
-	onDebug?: (log: string) => void;
-};
-
 /**
  * The following order must always strictly kept:
  * 1. register participants root
@@ -55,18 +51,12 @@ export type KeyGenCallbacks = {
  *   a. receive secret shares
  */
 export class KeyGenClient {
-	#coordinator: KeyGenCoordinator;
 	#storage: GroupInfoStorage & KeyGenInfoStorage;
-	#callbacks: KeyGenCallbacks;
+	#logger?: Logger;
 
-	constructor(
-		storage: GroupInfoStorage & KeyGenInfoStorage,
-		coordinator: KeyGenCoordinator,
-		callbacks: KeyGenCallbacks = {},
-	) {
+	constructor(storage: GroupInfoStorage & KeyGenInfoStorage, logger?: Logger) {
 		this.#storage = storage;
-		this.#coordinator = coordinator;
-		this.#callbacks = callbacks;
+		this.#logger = logger;
 	}
 
 	participantId(groupId: GroupId): bigint {
@@ -89,12 +79,19 @@ export class KeyGenClient {
 		this.#storage.unregisterGroup(groupId);
 	}
 
-	private setupGroup(
-		groupId: Hex,
+	setupGroup(
 		participantsRoot: Hex,
 		count: bigint,
 		threshold: bigint,
-	) {
+		context: Hex,
+	): {
+		groupId: GroupId;
+		participantId: bigint;
+		commitments: FrostPoint[];
+		pok: ProofOfKnowledge;
+		poap: ProofOfAttestationParticipation;
+	} {
+		const groupId = calcGroupId(participantsRoot, count, threshold, context);
 		const participants = this.#storage.loadParticipants(participantsRoot);
 		if (participants.length !== Number(count))
 			throw Error(
@@ -108,97 +105,44 @@ export class KeyGenClient {
 		const coefficients = createCoefficients(threshold);
 		this.#storage.registerKeyGen(groupId, coefficients);
 		const pok = createProofOfKnowledge(participantId, coefficients);
-		const localCommitments = createCommitments(coefficients);
+		const commitments = createCommitments(coefficients);
 		const poap = generateParticipantProof(participants, participantId);
-		this.#storage.registerCommitments(groupId, participantId, localCommitments);
+		this.#storage.registerCommitments(groupId, participantId, commitments);
 		this.#storage.registerSecretShare(
 			groupId,
 			participantId,
 			evalPoly(coefficients, participantId),
 		);
 		return {
+			groupId,
 			participantId,
 			pok,
 			poap,
-			localCommitments,
+			commitments,
 		};
 	}
 
-	async triggerKeygenAndCommit(
-		participantsRoot: Hex,
-		count: bigint,
-		threshold: bigint,
-		context: Hex,
-	): Promise<GroupId> {
-		const groupId = calcGroupId(participantsRoot, count, threshold, context);
-		const { participantId, pok, poap, localCommitments } = this.setupGroup(
-			groupId,
-			participantsRoot,
-			count,
-			threshold,
-		);
-		await this.#coordinator.triggerKeygenAndCommit(
-			participantsRoot,
-			count,
-			threshold,
-			context,
-			participantId,
-			localCommitments,
-			pok,
-			poap,
-		);
-		return groupId;
-	}
-
-	async handleKeygenInit(
-		groupId: GroupId,
-		participantsRoot: Hex,
-		count: bigint,
-		threshold: bigint,
-	) {
-		const { participantId, pok, poap, localCommitments } = this.setupGroup(
-			groupId,
-			participantsRoot,
-			count,
-			threshold,
-		);
-		await this.#coordinator.publishKeygenCommitments(
-			groupId,
-			participantId,
-			localCommitments,
-			pok,
-			poap,
-		);
-	}
-
-	async handleKeygenCommitment(
+	handleKeygenCommitment(
 		groupId: GroupId,
 		senderId: ParticipantId,
 		peerCommitments: readonly FrostPoint[],
 		pok: ProofOfKnowledge,
-		callbackContext?: Hex,
-	): Promise<Hex | undefined> {
+	): boolean {
 		const participantId = this.#storage.participantId(groupId);
 		if (senderId === participantId) {
-			this.#callbacks.onDebug?.("Do not verify own commitments");
-			return;
+			this.#logger?.debug("Do not verify own commitments");
+			return false;
 		}
 		verifyCommitments(senderId, peerCommitments, pok);
 		this.#storage.registerCommitments(groupId, senderId, peerCommitments);
-		if (this.#storage.checkIfCommitmentsComplete(groupId)) {
-			return await this.prepareAndPublishKeygenSecretShares(
-				groupId,
-				callbackContext,
-			);
-		}
-		return undefined;
+		return this.#storage.checkIfCommitmentsComplete(groupId);
 	}
 
 	// Round 2.1
-	private async prepareAndPublishKeygenSecretShares(
-		groupId: GroupId,
-		callbackContext?: Hex,
-	): Promise<Hex> {
+	createSecretShares(groupId: GroupId): {
+		verificationShare: FrostPoint;
+		shares: bigint[];
+	} {
 		const commitments = this.#storage.commitmentsMap(groupId);
 		const groupPublicKey = createVerificationShare(commitments, 0n);
 		// Will be published as y
@@ -234,12 +178,10 @@ export class KeyGenClient {
 		if (shares.length !== participants.length - 1) {
 			throw Error("Unexpect f length");
 		}
-		return await this.#coordinator.publishKeygenSecretShares(
-			groupId,
+		return {
 			verificationShare,
 			shares,
-			callbackContext,
-		);
+		};
 	}
 
 	// `senderId` is the id of sending local participant in the participants set
@@ -255,7 +197,7 @@ export class KeyGenClient {
 		}
 		const participantId = this.#storage.participantId(groupId);
 		if (senderId === participantId) {
-			this.#callbacks.onDebug?.("Do not handle own share");
+			this.#logger?.debug("Do not handle own share");
 			return false;
 		}
 		const commitment = this.#storage.commitments(groupId, senderId);
@@ -282,8 +224,6 @@ export class KeyGenClient {
 			verifyKey(verificationShare, signingShare);
 			this.#storage.registerSigningShare(groupId, signingShare);
 			this.#storage.clearKeyGen(groupId);
-			const participantId = this.#storage.participantId(groupId);
-			this.#callbacks.onGroupSetup?.(groupId, participantId);
 			return true;
 		}
 		return false;

@@ -1,16 +1,16 @@
 import type { Address, Hex, PublicClient, WalletClient } from "viem";
+import type { FrostPoint, GroupId, SignatureId } from "../../frost/types.js";
+import { COORDINATOR_FUNCTIONS } from "../../types/abis.js";
+import { BaseProtocol } from "./base.js";
 import type {
-	FrostPoint,
-	GroupId,
-	ProofOfAttestationParticipation,
-	ProofOfKnowledge,
-	SignatureId,
-} from "../frost/types.js";
-import { CONSENSUS_FUNCTIONS, COORDINATOR_FUNCTIONS } from "../types/abis.js";
-import type { PublicNonceCommitments } from "./signing/nonces.js";
-import type { ShieldnetProtocol } from "./types.js";
+	PublishSecretShares,
+	PublishSignatureShare,
+	RegisterNonceCommitments,
+	RevealNonceCommitments,
+	StartKeyGen,
+} from "./types.js";
 
-export class OnchainProtocol implements ShieldnetProtocol {
+export class OnchainProtocol extends BaseProtocol {
 	#publicClient: PublicClient;
 	#signingClient: WalletClient;
 	#consensus: Address;
@@ -21,7 +21,9 @@ export class OnchainProtocol implements ShieldnetProtocol {
 		signingClient: WalletClient,
 		consensus: Address,
 		coordinator: Address,
+		logger?: (msg: unknown) => void,
 	) {
+		super(logger);
 		this.#publicClient = publicClient;
 		this.#signingClient = signingClient;
 		this.#consensus = consensus;
@@ -40,16 +42,16 @@ export class OnchainProtocol implements ShieldnetProtocol {
 	coordinator(): Address {
 		return this.#coordinator;
 	}
-	async triggerKeygenAndCommit(
-		participants: Hex,
-		count: bigint,
-		threshold: bigint,
-		context: Hex,
-		id: bigint,
-		commits: FrostPoint[],
-		pok: ProofOfKnowledge,
-		poap: ProofOfAttestationParticipation,
-	): Promise<Hex> {
+	protected async startKeyGen({
+		participants,
+		count,
+		threshold,
+		context,
+		participantId,
+		commitments,
+		pok,
+		poap,
+	}: StartKeyGen): Promise<Hex> {
 		const { request } = await this.#publicClient.simulateContract({
 			address: this.#coordinator,
 			abi: COORDINATOR_FUNCTIONS,
@@ -59,10 +61,10 @@ export class OnchainProtocol implements ShieldnetProtocol {
 				count,
 				threshold,
 				context,
-				id,
+				participantId,
 				poap,
 				{
-					c: commits,
+					c: commitments,
 					r: pok.r,
 					mu: pok.mu,
 				},
@@ -73,33 +75,7 @@ export class OnchainProtocol implements ShieldnetProtocol {
 		return this.#signingClient.writeContract(request);
 	}
 
-	async publishKeygenCommitments(
-		groupId: GroupId,
-		id: bigint,
-		commits: FrostPoint[],
-		pok: ProofOfKnowledge,
-		poap: ProofOfAttestationParticipation,
-	): Promise<Hex> {
-		const { request } = await this.#publicClient.simulateContract({
-			address: this.#coordinator,
-			abi: COORDINATOR_FUNCTIONS,
-			functionName: "keyGenCommit",
-			args: [
-				groupId,
-				id,
-				poap,
-				{
-					c: commits,
-					r: pok.r,
-					mu: pok.mu,
-				},
-			],
-			account: this.#signingClient.account,
-		});
-		return this.#signingClient.writeContract(request);
-	}
-
-	async publishKeygenSecretSharesWithCallback(
+	private async publishKeygenSecretSharesWithCallback(
 		groupId: GroupId,
 		verificationShare: FrostPoint,
 		peerShares: bigint[],
@@ -126,17 +102,17 @@ export class OnchainProtocol implements ShieldnetProtocol {
 		return this.#signingClient.writeContract(request);
 	}
 
-	async publishKeygenSecretShares(
-		groupId: GroupId,
-		verificationShare: FrostPoint,
-		peerShares: bigint[],
-		callbackContext?: Hex,
-	): Promise<Hex> {
+	protected async publishKeygenSecretShares({
+		groupId,
+		verificationShare,
+		shares,
+		callbackContext,
+	}: PublishSecretShares): Promise<Hex> {
 		if (callbackContext !== undefined) {
 			return this.publishKeygenSecretSharesWithCallback(
 				groupId,
 				verificationShare,
-				peerShares,
+				shares,
 				callbackContext,
 			);
 		}
@@ -148,7 +124,7 @@ export class OnchainProtocol implements ShieldnetProtocol {
 				groupId,
 				{
 					y: verificationShare,
-					f: peerShares,
+					f: shares,
 				},
 			],
 			account: this.#signingClient.account,
@@ -156,10 +132,10 @@ export class OnchainProtocol implements ShieldnetProtocol {
 		return this.#signingClient.writeContract(request);
 	}
 
-	async publishNonceCommitmentsHash(
-		groupId: GroupId,
-		nonceCommitmentsHash: Hex,
-	): Promise<Hex> {
+	protected async registerNonceCommitments({
+		groupId,
+		nonceCommitmentsHash,
+	}: RegisterNonceCommitments): Promise<Hex> {
 		const { request } = await this.#publicClient.simulateContract({
 			address: this.#coordinator,
 			abi: COORDINATOR_FUNCTIONS,
@@ -170,11 +146,11 @@ export class OnchainProtocol implements ShieldnetProtocol {
 		return this.#signingClient.writeContract(request);
 	}
 
-	async publishNonceCommitments(
-		signatureId: SignatureId,
-		nonceCommitments: PublicNonceCommitments,
-		nonceProof: Hex[],
-	): Promise<Hex> {
+	protected async revealNonceCommitments({
+		signatureId,
+		nonceCommitments,
+		nonceProof,
+	}: RevealNonceCommitments): Promise<Hex> {
 		const { request } = await this.#publicClient.simulateContract({
 			address: this.#coordinator,
 			abi: COORDINATOR_FUNCTIONS,
@@ -192,17 +168,16 @@ export class OnchainProtocol implements ShieldnetProtocol {
 		return this.#signingClient.writeContract(request);
 	}
 
-	async publishSignatureShareWithCallback(
+	private async publishSignatureShareWithCallback(
 		signatureId: SignatureId,
-		signingParticipantsHash: Hex,
-		signingParticipantsProof: Hex[],
-		groupCommitement: FrostPoint,
-		groupCommitementShare: FrostPoint,
+		signersRoot: Hex,
+		signersProof: Hex[],
+		groupCommitment: FrostPoint,
+		commitmentShare: FrostPoint,
 		signatureShare: bigint,
-		lagrange: bigint,
+		lagrangeCoefficient: bigint,
 		callbackContext: Hex,
 	): Promise<Hex> {
-		// TODO: use callback
 		const { request } = await this.#publicClient.simulateContract({
 			address: this.#coordinator,
 			abi: COORDINATOR_FUNCTIONS,
@@ -210,15 +185,15 @@ export class OnchainProtocol implements ShieldnetProtocol {
 			args: [
 				signatureId,
 				{
-					r: groupCommitement,
-					root: signingParticipantsHash,
+					r: groupCommitment,
+					root: signersRoot,
 				},
 				{
-					r: groupCommitementShare,
+					r: commitmentShare,
 					z: signatureShare,
-					l: lagrange,
+					l: lagrangeCoefficient,
 				},
-				signingParticipantsProof,
+				signersProof,
 				{
 					target: this.#consensus,
 					context: callbackContext,
@@ -230,25 +205,25 @@ export class OnchainProtocol implements ShieldnetProtocol {
 		return this.#signingClient.writeContract(request);
 	}
 
-	async publishSignatureShare(
-		signatureId: SignatureId,
-		signingParticipantsHash: Hex,
-		signingParticipantsProof: Hex[],
-		groupCommitement: FrostPoint,
-		groupCommitementShare: FrostPoint,
-		signatureShare: bigint,
-		lagrange: bigint,
-		callbackContext?: Hex,
-	): Promise<Hex> {
+	protected async publishSignatureShare({
+		signatureId,
+		signersRoot,
+		signersProof,
+		groupCommitment,
+		commitmentShare,
+		signatureShare,
+		lagrangeCoefficient,
+		callbackContext,
+	}: PublishSignatureShare): Promise<Hex> {
 		if (callbackContext !== undefined) {
 			return this.publishSignatureShareWithCallback(
 				signatureId,
-				signingParticipantsHash,
-				signingParticipantsProof,
-				groupCommitement,
-				groupCommitementShare,
+				signersRoot,
+				signersProof,
+				groupCommitment,
+				commitmentShare,
 				signatureShare,
-				lagrange,
+				lagrangeCoefficient,
 				callbackContext,
 			);
 		}
@@ -259,49 +234,18 @@ export class OnchainProtocol implements ShieldnetProtocol {
 			args: [
 				signatureId,
 				{
-					r: groupCommitement,
-					root: signingParticipantsHash,
+					r: groupCommitment,
+					root: signersRoot,
 				},
 				{
-					r: groupCommitementShare,
+					r: commitmentShare,
 					z: signatureShare,
-					l: lagrange,
+					l: lagrangeCoefficient,
 				},
-				signingParticipantsProof,
+				signersProof,
 			],
 			account: this.#signingClient.account,
 			gas: 400_000n, // TODO: this seems to be wrongly estimated
-		});
-		return this.#signingClient.writeContract(request);
-	}
-
-	async proposeEpoch(
-		proposedEpoch: bigint,
-		rolloverAt: bigint,
-		group: GroupId,
-	): Promise<Hex> {
-		const { request } = await this.#publicClient.simulateContract({
-			address: this.#consensus,
-			abi: CONSENSUS_FUNCTIONS,
-			functionName: "proposeEpoch",
-			args: [proposedEpoch, rolloverAt, group],
-			account: this.#signingClient.account,
-		});
-		return this.#signingClient.writeContract(request);
-	}
-
-	async stageEpoch(
-		proposedEpoch: bigint,
-		rolloverAt: bigint,
-		group: GroupId,
-		signature: SignatureId,
-	): Promise<Hex> {
-		const { request } = await this.#publicClient.simulateContract({
-			address: this.#consensus,
-			abi: CONSENSUS_FUNCTIONS,
-			functionName: "stageEpoch",
-			args: [proposedEpoch, rolloverAt, group, signature],
-			account: this.#signingClient.account,
 		});
 		return this.#signingClient.writeContract(request);
 	}
