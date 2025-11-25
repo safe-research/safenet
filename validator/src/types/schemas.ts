@@ -19,11 +19,8 @@ export const hexDataSchema = z
 	.refine(isHex, "Value is not a valid hex string")
 	.transform((val) => val as Hex);
 
-export const supportedChainsSchema = z
-	.union([
-		z.number(), // number or
-		z.string().transform((str) => parseInt(str, 10)),
-	])
+export const supportedChainsSchema = z.coerce
+	.number()
 	.pipe(z.union(supportedChains.map((chain) => z.literal(chain.id))));
 
 export const participantsSchema = z.preprocess((val) => {

@@ -90,11 +90,12 @@ export class ValidatorService {
 				abi: [...CONSENSUS_EVENTS, ...COORDINATOR_EVENTS],
 				fromBlock: 0n,
 				onLogs: async (logs) => {
-					logs.sort((left, right) =>
-						left.blockNumber === right.blockNumber
-							? left.logIndex - right.logIndex
-							: Number(left.blockNumber - right.blockNumber),
-					);
+					logs.sort((left, right) => {
+						if (left.blockNumber !== right.blockNumber) {
+							return left.blockNumber < right.blockNumber ? -1 : 1;
+						}
+						return left.logIndex - right.logIndex;
+					});
 					for (const log of logs) {
 						this.#stateMachine.transition({
 							type: "event",
