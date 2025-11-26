@@ -1,35 +1,21 @@
 {
 	"$schema": "https://biomejs.dev/schemas/2.0.6/schema.json",
-	"vcs": {
-		"enabled": false,
-		"clientKind": "git",
-		"useIgnoreFile": false
-	},
 	"files": {
 		"ignoreUnknown": false,
 		"includes": [
 			"**/*.ts",
-			"**/*.tsx",
-			"**/*.js",
-			"**/*.jsx",
 			"**/package.json",
-			"!**/node_modules/**",
-			"!**/dist/**",
-			"!**/typechain-types/**",
-			"!**/*.gen.ts",
-			"!contracts/**"
+			"**/tsconfig.json",
+			"**/tsconfig.*.json",
+			"!**/dist",
+			"!**/node_modules",
+			"!contracts"
 		],
 		"maxSize": 2000000
 	},
-	"formatter": {
-		"enabled": true,
-		"indentStyle": "tab"
-	},
 	"assist": { "actions": { "source": { "organizeImports": "on" } } },
 	"linter": {
-		"enabled": true,
 		"rules": {
-			"recommended": true,
 			"style": {
 				"noParameterAssign": "error",
 				"useAsConstAssertion": "error",
@@ -42,12 +28,6 @@
 				"noInferrableTypes": "error",
 				"noUselessElse": "error"
 			}
-		}
-	},
-	"javascript": {
-		"formatter": {
-			"quoteStyle": "double",
-			"lineWidth": 120
 		}
 	}
 }

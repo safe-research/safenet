@@ -62,11 +62,13 @@ export const generateMerkleProofWithRoot = (
 	const tree = buildMerkleTree(leaves);
 	const proof: Hex[] = [];
 	const height = tree.length;
+	let currentIndex = index;
 	for (let i = 0; i < height - 1; i++) {
-		const neighbor = index % 2 === 0 ? index + 1 : index - 1; // index ^ 1
+		const neighbor =
+			currentIndex % 2 === 0 ? currentIndex + 1 : currentIndex - 1; // currentIndex ^ 1
 		const node = tree.at(i)?.at(neighbor) ?? zeroHash;
 		proof.push(node);
-		index = Math.floor(index / 2);
+		currentIndex = Math.floor(currentIndex / 2); // currentIndex >> 1
 	}
 	return {
 		proof,

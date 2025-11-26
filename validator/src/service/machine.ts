@@ -490,14 +490,14 @@ export class ShieldnetStateMachine {
 					this.#keyGenState.groupId,
 				);
 				if (groupKey === undefined) {
-					this.#logger?.(`Missing group key!`);
+					this.#logger?.("Missing group key!");
 					return [];
 				}
 				if (
 					groupKey.x !== event.groupKey.x ||
 					groupKey.y !== event.groupKey.y
 				) {
-					this.#logger?.(`Proposal with unexpected group key!`);
+					this.#logger?.("Proposal with unexpected group key!");
 					return [];
 				}
 				const packet: EpochRolloverPacket = {
@@ -681,7 +681,7 @@ export class ShieldnetStateMachine {
 		];
 
 		if (this.#genesisGroupId === groupId) {
-			this.#logger?.(`Genesis group ready!`);
+			this.#logger?.("Genesis group ready!");
 			// Don't propose rollover for genesis groups
 			this.#keyGenState = { id: "waiting_for_rollover" };
 			return actions;

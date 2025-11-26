@@ -2,9 +2,9 @@
 	"name": "validator",
 	"type": "module",
 	"scripts": {
-		"build": "rimraf dist && tsc",
+		"build": "rimraf dist && tsc --project tsconfig.dist.json",
 		"dev": "tsx src/validator.ts",
-		"check": "biome check",
+		"check": "biome check && tsc",
 		"test": "vitest run",
 		"test:watch": "vitest"
 	},

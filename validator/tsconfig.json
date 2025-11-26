@@ -1,20 +1,14 @@
 {
 	"compilerOptions": {
-		"target": "ESNext",
+		"esModuleInterop": true,
+		"lib": ["ESNext"],
 		"module": "NodeNext",
 		"moduleResolution": "NodeNext",
-		"esModuleInterop": true,
-		"experimentalDecorators": true,
-		"emitDecoratorMetadata": true,
-		"strict": true,
+		"noEmit": true,
 		"skipLibCheck": true,
-		"lib": ["ESNext"],
-		"jsx": "react-jsx",
-		"jsxImportSource": "hono/jsx",
-		"outDir": "./dist",
-		"rootDir": "./src",
-		"types": ["@types/node"] // Include both
+		"strict": true,
+		"target": "ESNext",
+		"types": ["@types/node"]
 	},
-	"include": ["src/**/*.ts"],
-	"exclude": ["node_modules"]
+	"include": ["src/**/*.ts"]
 }

@@ -60,7 +60,7 @@ describe("keyGen", () => {
 			"------------------------ Trigger Keygen Init and Commitments ------------------------",
 		);
 		for (const { client, ids } of clients) {
-			log(`>>>> Keygen and Commit >>>>`);
+			log(">>>> Keygen and Commit >>>>");
 			const { participantId, commitments, poap, pok } = client.setupGroup(
 				participantsRoot,
 				count,
