@@ -54,11 +54,14 @@ contract Consensus is IFROSTCoordinatorCallback {
         $groups[0] = group;
     }
 
-    // forge-lint: disable-next-line(unwrapped-modifier-logic)
+    // forge-lint: disable-start(unwrapped-modifier-logic)
+
     modifier onlyCoordinator() {
         require(msg.sender == address(_COORDINATOR), NotCoordinator());
         _;
     }
+
+    // forge-lint: disable-end(unwrapped-modifier-logic)
 
     /// @notice Compute the EIP-712 domain separator used by the consensus
     ///         contract.
