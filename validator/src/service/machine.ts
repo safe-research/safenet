@@ -491,12 +491,6 @@ export class ShieldnetStateMachine {
 					deadline: block + this.#signingTimeout,
 					responsible: status.lastSigner,
 				});
-				// If msg is rollover message check epoch update
-				if (
-					this.#rolloverState.id === "sign_rollover" &&
-					this.#rolloverState.message === this.#signingClient.message(event.sid)
-				) {
-				}
 				return [];
 			}
 			case "EpochStaged": {
@@ -784,7 +778,7 @@ export class ShieldnetStateMachine {
 		const groupId = this.#rolloverState.groupId;
 		// Get participants that did not participate
 		const missingParticipants =
-			this.#rolloverState.id !== "collecting_commitments"
+			this.#rolloverState.id === "collecting_commitments"
 				? this.#keyGenClient.missingCommitments(groupId)
 				: this.#keyGenClient.missingSecretShares(groupId);
 		// For next key gen only consider active participants
@@ -799,131 +793,140 @@ export class ShieldnetStateMachine {
 		return actions;
 	}
 
+	private checkSigningRequestTimeout(
+		block: bigint,
+		signatureId: SignatureId,
+		status: SigningState,
+	): ProtocolAction[] {
+		// Still within deadline
+		if (status.deadline > block) return [];
+		this.#messageSignatureRequests.delete(signatureId);
+		switch (status.id) {
+			case "waiting_for_attestation": {
+				const everyoneResponsible = status.responsible === undefined;
+				if (everyoneResponsible) {
+					// Everyone is responsible
+					// Signature request will be readded once it is submitted
+					// and no more state needs to be tracked
+					// if the deadline is hit again this would be a critical failure
+					this.#signingState.delete(signatureId);
+				} else {
+					// Make everyone responsible for next retry
+					this.#signingState.set(signatureId, {
+						...status,
+						responsible: undefined,
+						deadline: block + this.#signingTimeout,
+					});
+				}
+				const act =
+					everyoneResponsible ||
+					status.responsible === this.#signingClient.participantId(signatureId);
+				if (!act) {
+					return [];
+				}
+				const message = this.#signingClient.message(signatureId);
+				if (
+					this.#rolloverState.id === "sign_rollover" &&
+					message === this.#rolloverState.message
+				) {
+					return [
+						{
+							id: "consensus_stage_epoch",
+							proposedEpoch: this.#rolloverState.nextEpoch,
+							rolloverBlock:
+								this.#rolloverState.nextEpoch * this.#blocksPerEpoch,
+							groupId: this.#rolloverState.groupId,
+							signatureId,
+						},
+					];
+				}
+				const transactionInfo = this.#transactionProposalInfo.get(message);
+				if (transactionInfo !== undefined) {
+					return [
+						{
+							id: "consensus_attest_transaction",
+							...transactionInfo,
+							signatureId,
+						},
+					];
+				}
+				return [];
+			}
+			case "waiting_for_request": {
+				const everyoneResponsible = status.responsible === undefined;
+				if (everyoneResponsible) {
+					// Everyone is responsible
+					// Signature request will be readded once it is submitted
+					// and no more state needs to be tracked
+					// if the deadline is hit again this would be a critical failure
+					this.#signingState.delete(signatureId);
+				} else {
+					// Make everyone responsible for next retry
+					this.#signingState.set(signatureId, {
+						...status,
+						signers: status.signers.filter((id) => id !== status.responsible),
+						responsible: undefined,
+						deadline: block + this.#signingTimeout,
+					});
+				}
+				const act =
+					everyoneResponsible ||
+					status.responsible === this.#signingClient.participantId(signatureId);
+				if (!act) {
+					return [];
+				}
+				const message = this.#signingClient.message(signatureId);
+				const groupId = this.#signingClient.signingGroup(signatureId);
+				return [
+					{
+						id: "sign_request",
+						groupId,
+						message,
+					},
+				];
+			}
+			case "collect_nonce_commitments":
+			case "collect_signing_shares": {
+				// Still within deadline
+				if (status.deadline <= block) return [];
+				// Get participants that did not participate
+				const missingParticipants =
+					status.id === "collect_nonce_commitments"
+						? this.#signingClient.missingNonces(signatureId)
+						: this.#signingClient
+								.signers(signatureId)
+								.filter((s) => status.sharesFrom.indexOf(s) < 0);
+				// For next key gen only consider active participants
+				const signers = this.#defaultParticipants
+					.filter((p) => missingParticipants.indexOf(p.id) < 0)
+					.map((p) => p.id);
+				this.#signingState.set(signatureId, {
+					id: "waiting_for_request",
+					responsible: status.lastSigner,
+					signers,
+					deadline: block + this.#signingTimeout,
+				});
+				const groupId = this.#signingClient.signingGroup(signatureId);
+				const message = this.#signingClient.message(signatureId);
+				return [
+					{
+						id: "sign_request",
+						groupId,
+						message,
+					},
+				];
+			}
+		}
+	}
+
 	private checkSigningTimeouts(block: bigint): ProtocolAction[] {
 		// No timeout in waiting state
 		const statesToProcess = Array.from(this.#signingState.entries());
+		const actions: ProtocolAction[] = [];
 		for (const [signatureId, status] of statesToProcess) {
-			// Still within deadline
-			if (status.deadline > block) return [];
-			this.#messageSignatureRequests.delete(signatureId);
-			switch (status.id) {
-				case "waiting_for_attestation": {
-					const everyoneResponsible = status.responsible === undefined;
-					if (everyoneResponsible) {
-						// Everyone is responsible
-						// Signature request will be readded once it is submitted
-						// and no more state needs to be tracked
-						// if the deadline is hit again this would be a critical failure
-						this.#signingState.delete(signatureId);
-					} else {
-						// Make everyone responsible for next retry
-						this.#signingState.set(signatureId, {
-							...status,
-							responsible: undefined,
-							deadline: block + this.#signingTimeout,
-						});
-					}
-					const act =
-						everyoneResponsible ||
-						status.responsible ===
-							this.#signingClient.participantId(signatureId);
-					if (!act) {
-						return [];
-					}
-					const message = this.#signingClient.message(signatureId);
-					if (
-						this.#rolloverState.id === "sign_rollover" &&
-						message === this.#rolloverState.message
-					) {
-						return [
-							{
-								id: "consensus_stage_epoch",
-								proposedEpoch: this.#rolloverState.nextEpoch,
-								rolloverBlock:
-									this.#rolloverState.nextEpoch * this.#blocksPerEpoch,
-								groupId: this.#rolloverState.groupId,
-								signatureId,
-							},
-						];
-					}
-					const transactionInfo = this.#transactionProposalInfo.get(message);
-					if (transactionInfo !== undefined) {
-						return [
-							{
-								id: "consensus_attest_transaction",
-								...transactionInfo,
-								signatureId,
-							},
-						];
-					}
-					return [];
-				}
-				case "waiting_for_request": {
-					const everyoneResponsible = status.responsible === undefined;
-					if (everyoneResponsible) {
-						// Everyone is responsible
-						// Signature request will be readded once it is submitted
-						// and no more state needs to be tracked
-						// if the deadline is hit again this would be a critical failure
-						this.#signingState.delete(signatureId);
-					} else {
-						// Make everyone responsible for next retry
-						this.#signingState.set(signatureId, {
-							...status,
-							signers: status.signers.filter((id) => id !== status.responsible),
-							responsible: undefined,
-							deadline: block + this.#signingTimeout,
-						});
-					}
-					const act =
-						everyoneResponsible ||
-						status.responsible ===
-							this.#signingClient.participantId(signatureId);
-					if (!act) {
-						return [];
-					}
-					const message = this.#signingClient.message(signatureId);
-					const groupId = this.#signingClient.signingGroup(signatureId);
-					return [
-						{
-							id: "sign_request",
-							groupId,
-							message,
-						},
-					];
-				}
-				case "collect_nonce_commitments":
-				case "collect_signing_shares": {
-					// Still within deadline
-					if (status.deadline <= block) return [];
-					// Get participants that did not participate
-					const missingParticipants =
-						status.id === "collect_nonce_commitments"
-							? this.#signingClient.missingNonces(signatureId)
-							: this.#signingClient
-									.signers(signatureId)
-									.filter((s) => status.sharesFrom.indexOf(s) < 0);
-					// For next key gen only consider active participants
-					const signers = this.#defaultParticipants
-						.filter((p) => missingParticipants.indexOf(p.id) < 0)
-						.map((p) => p.id);
-					this.#signingState.set(signatureId, {
-						id: "waiting_for_request",
-						responsible: status.lastSigner,
-						signers,
-						deadline: block + this.#signingTimeout,
-					});
-					const groupId = this.#signingClient.signingGroup(signatureId);
-					const message = this.#signingClient.message(signatureId);
-					return [
-						{
-							id: "sign_request",
-							groupId,
-							message,
-						},
-					];
-				}
-			}
+			actions.push(
+				...this.checkSigningRequestTimeout(block, signatureId, status),
+			);
 		}
 		return [];
 	}
@@ -955,7 +958,7 @@ export class ShieldnetStateMachine {
 				chunk++;
 				offset = 0n;
 			}
-			if (availableNonces - offset < NONCE_THRESHOLD) {
+			if (availableNonces < NONCE_THRESHOLD) {
 				this.#groupPendingNonces.add(activeGroup);
 				this.#logger?.(`Commit nonces for ${activeGroup}!`);
 				const nonceTreeRoot =
