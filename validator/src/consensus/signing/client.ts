@@ -55,13 +55,20 @@ export class SigningClient {
 		signatureId: SignatureId,
 		message: Hex,
 		sequence: bigint,
+		signers: ParticipantId[],
 	): {
 		nonceCommitments: PublicNonceCommitments;
 		nonceProof: Hex[];
 	} {
-		// TODO: pass in signers to allow to remove unhonest
-		const participants = this.#storage.participants(groupId);
-		const signers = participants.map((p) => p.id).sort();
+		if (signers.length < this.#storage.threshold(groupId)) {
+			throw Error("Not enought signers to start signing process")
+		}
+		const participants = this.#storage.participants(groupId).map(p => p.id);
+		for (const signer of signers) {
+			if (participants.indexOf(signer) < 0) {
+				throw Error(`Invalid signer id provided: ${signer}`)
+			}
+		}
 		this.#storage.registerSignatureRequest(
 			signatureId,
 			groupId,

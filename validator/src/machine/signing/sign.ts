@@ -33,8 +33,8 @@ export const handleSign = async (
 		logger,
 	);
 	const status = machineStates.signing.get(event.sid);
-	// Check that state for signature id is "not_started"
-	if (status !== undefined) {
+	// Check that there is no state or it is the retry flow
+	if (status !== undefined && status.id !== "waiting_for_request") {
 		logger?.(`Alreay started signing ${event.sid}!`);
 		return { actions };
 	}
@@ -57,11 +57,13 @@ export const handleSign = async (
 	// TODO: refactor into state diff
 	consensusState.messageSignatureRequests.set(event.message, event.sid);
 
+	const signers = status?.signers ?? machineConfig.defaultParticipants.map(p => p.id)
 	const { nonceCommitments, nonceProof } = signingClient.createNonceCommitments(
 		event.gid,
 		event.sid,
 		event.message,
 		event.sequence,
+		signers,
 	);
 
 	actions.push({
