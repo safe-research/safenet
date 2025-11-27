@@ -5,7 +5,6 @@ import type {
 	ParticipantId,
 	SignatureId,
 } from "../../frost/types.js";
-import { calculateParticipantsRoot } from "../merkle.js";
 import type { NonceTree, PublicNonceCommitments } from "../signing/nonces.js";
 import type {
 	GroupInfoStorage,
@@ -182,17 +181,6 @@ export class InMemoryStorage
 	}
 	clearKeyGen(groupId: GroupId): void {
 		this.#keyGenInfo.delete(groupId);
-	}
-	registerParticipants(participants: readonly Participant[]): Hex {
-		const participantsHash = calculateParticipantsRoot(participants);
-		this.#participantsInfo.set(participantsHash, participants);
-		return participantsHash;
-	}
-	loadParticipants(hash: Hex): readonly Participant[] {
-		const participants = this.#participantsInfo.get(hash);
-		if (participants === undefined)
-			throw Error(`Unknown participants hash ${hash}!`);
-		return participants;
 	}
 	knownGroups(): GroupId[] {
 		return Array.from(this.#groupInfo.values().map((g) => g.groupId));

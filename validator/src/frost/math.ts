@@ -1,22 +1,14 @@
-import { randomBytes } from "node:crypto";
-import { mod } from "@noble/curves/abstract/modular.js";
 import { secp256k1 } from "@noble/curves/secp256k1.js";
-import { bytesToNumberBE } from "@noble/curves/utils.js";
+import { bytesToHex, hexToBytes } from "@noble/curves/utils.js";
 import type { FrostPoint } from "./types.js";
 
 export const G_BASE = secp256k1.Point.BASE;
 export const N = secp256k1.Point.CURVE().n;
 
-export const randomBigInt = () => bytesToNumberBE(randomBytes(32));
-
 export const g = (scalar: bigint): FrostPoint => {
 	const point = G_BASE.multiply(scalar);
 	point.assertValidity();
 	return point;
-};
-
-export const mod_n = (x: bigint) => {
-	return mod(x, N);
 };
 
 export const neg = (val: bigint) => {
@@ -43,6 +35,22 @@ export const toPoint = (coordinates: { x: bigint; y: bigint }): FrostPoint => {
 	const point = secp256k1.Point.fromAffine(coordinates);
 	point.assertValidity();
 	return point;
+};
+
+export const pointFromHex = (hex: string): FrostPoint => {
+	return secp256k1.Point.fromHex(hex);
+};
+
+export const scalarToBytes = (scalar: bigint): Uint8Array => {
+	return secp256k1.Point.Fn.toBytes(scalar);
+};
+
+export const scalarToHex = (scalar: bigint): string => {
+	return bytesToHex(scalarToBytes(scalar));
+};
+
+export const scalarFromHex = (hex: string): bigint => {
+	return secp256k1.Point.Fn.fromBytes(hexToBytes(hex));
 };
 
 export const createVerificationShare = (
@@ -91,11 +99,9 @@ export const evalPoly = (coefficient: readonly bigint[], x: bigint): bigint => {
 	const t = coefficient.length;
 	for (let j = t - 1; j >= 0; j--) {
 		// Multiply the current value by x (shift to the next power of x).
-		value *= x;
+		value = mulmod(value, x);
 		// Add the current coefficient to the value.
-		value += coefficient[j];
-		// Ensure the result is reduced to the field value.
-		value = mod_n(value);
+		value = addmod(value, coefficient[j]);
 	}
 
 	// Return the final evaluated value of the polynomial.

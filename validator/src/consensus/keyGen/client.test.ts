@@ -49,7 +49,6 @@ describe("keyGen", () => {
 			const ids = new Map<GroupId, bigint>();
 			const storage = new InMemoryStorage(a.address);
 			const client = new KeyGenClient(storage);
-			client.registerParticipants(participants);
 			return {
 				ids,
 				storage,
@@ -62,7 +61,7 @@ describe("keyGen", () => {
 		for (const { client, ids } of clients) {
 			log(">>>> Keygen and Commit >>>>");
 			const { participantId, commitments, poap, pok } = client.setupGroup(
-				participantsRoot,
+				participants,
 				count,
 				threshold,
 				context,

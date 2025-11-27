@@ -1,8 +1,8 @@
-import { numberToBytesBE } from "@noble/curves/utils.js";
-import { concatBytes } from "@noble/hashes/utils.js";
+import { randomBytes } from "node:crypto";
+import { concatBytes } from "@noble/curves/utils.js";
 import { encodePacked, type Hex, hexToBytes, keccak256 } from "viem";
 import { h1, h3, h4, h5 } from "../../frost/hashes.js";
-import { g, randomBigInt } from "../../frost/math.js";
+import { g, scalarToBytes } from "../../frost/math.js";
 import type { FrostPoint } from "../../frost/types.js";
 import { calculateMerkleRoot, generateMerkleProof } from "../merkle.js";
 
@@ -26,15 +26,20 @@ export type NonceTree = {
 	root: Hex;
 };
 
-export const generateNonce = (secret: bigint, random: bigint): bigint => {
-	return h3(
-		concatBytes(numberToBytesBE(random, 32), numberToBytesBE(secret, 32)),
-	);
+export const generateNonce = (
+	secret: bigint,
+	randomness?: Uint8Array,
+): bigint => {
+	const random = randomness ?? randomBytes(32);
+	if (random.length !== 32) {
+		throw new Error("invalid nonce randomness");
+	}
+	return h3(concatBytes(random, scalarToBytes(secret)));
 };
 
 export const generateNonceCommitments = (secret: bigint): NonceCommitments => {
-	const hidingNonce = generateNonce(secret, randomBigInt());
-	const bindingNonce = generateNonce(secret, randomBigInt());
+	const hidingNonce = generateNonce(secret);
+	const bindingNonce = generateNonce(secret);
 	return {
 		hidingNonce,
 		bindingNonce,
@@ -86,7 +91,7 @@ const encodeCommitments = (
 			if (commitments === undefined)
 				throw Error(`Missing nonce commitments for ${id}`);
 			return concatBytes(
-				numberToBytesBE(id, 32),
+				scalarToBytes(id),
 				commitments.hidingNonceCommitment.toBytes(true),
 				commitments.bindingNonceCommitment.toBytes(true),
 			);
@@ -115,7 +120,7 @@ export const bindingFactor = (
 	signerId: bigint,
 	bindingPrefix: Uint8Array,
 ): bigint => {
-	return h1(concatBytes(bindingPrefix, numberToBytesBE(signerId, 32)));
+	return h1(concatBytes(bindingPrefix, scalarToBytes(signerId)));
 };
 
 export const bindingFactors = (

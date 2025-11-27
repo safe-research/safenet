@@ -21,7 +21,10 @@ import {
 	verifyCommitments,
 } from "../../frost/vss.js";
 import type { Logger } from "../../utils/logging.js";
-import { generateParticipantProof } from "../merkle.js";
+import {
+	calculateParticipantsRoot,
+	generateParticipantProof,
+} from "../merkle.js";
 import type {
 	GroupInfoStorage,
 	KeyGenInfoStorage,
@@ -71,10 +74,6 @@ export class KeyGenClient {
 		return this.#storage.publicKey(groupId);
 	}
 
-	registerParticipants(participants: Participant[]): Hex {
-		return this.#storage.registerParticipants(participants);
-	}
-
 	missingCommitments(groupId: GroupId): ParticipantId[] {
 		return this.#storage.missingCommitments(groupId);
 	}
@@ -84,23 +83,24 @@ export class KeyGenClient {
 	}
 
 	setupGroup(
-		participantsRoot: Hex,
+		participants: readonly Participant[],
 		count: bigint,
 		threshold: bigint,
 		context: Hex,
 	): {
 		groupId: GroupId;
+		participantsRoot: Hex;
 		participantId: bigint;
 		commitments: FrostPoint[];
 		pok: ProofOfKnowledge;
 		poap: ProofOfAttestationParticipation;
 	} {
-		const groupId = calcGroupId(participantsRoot, count, threshold, context);
-		const participants = this.#storage.loadParticipants(participantsRoot);
+		const participantsRoot = calculateParticipantsRoot(participants);
 		if (participants.length !== Number(count))
 			throw Error(
 				`Unexpected participant count ${participantsRoot}! (Expected ${participants.length} got ${count})`,
 			);
+		const groupId = calcGroupId(participantsRoot, count, threshold, context);
 		const participantId = this.#storage.registerGroup(
 			groupId,
 			participants,
@@ -118,6 +118,7 @@ export class KeyGenClient {
 		);
 		return {
 			groupId,
+			participantsRoot,
 			participantId,
 			pok,
 			poap,

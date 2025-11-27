@@ -38,6 +38,10 @@ export const hdkg = (input: Uint8Array): bigint => {
 	return hash_to_field(input, 1, opts("dkg"))[0][0];
 };
 
+export const hpok = (input: Uint8Array): bigint => {
+	return hash_to_field(input, 1, opts("pok"))[0][0];
+};
+
 export const h1 = (input: Uint8Array): bigint => {
 	return hash_to_field(input, 1, opts("rho"))[0][0];
 };

@@ -35,11 +35,6 @@ export type GroupInfoStorage = {
 	unregisterGroup(groupId: GroupId): void;
 };
 
-export type ParticipantStorage = {
-	registerParticipants(participants: readonly Participant[]): Hex;
-	loadParticipants(hash: Hex): readonly Participant[];
-};
-
 export type KeyGenInfoStorage = {
 	registerKeyGen(groupId: GroupId, coefficients: readonly bigint[]): void;
 	registerCommitments(
@@ -67,7 +62,7 @@ export type KeyGenInfoStorage = {
 	commitmentsMap(groupId: GroupId): Map<ParticipantId, readonly FrostPoint[]>;
 	secretSharesMap(groupId: GroupId): Map<ParticipantId, bigint>;
 	clearKeyGen(groupId: GroupId): void;
-} & ParticipantStorage;
+};
 
 export type NonceStorage = {
 	registerNonceTree(tree: NonceTree): Hex;

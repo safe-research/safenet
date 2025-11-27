@@ -1,4 +1,4 @@
-import { bytesToHex, keccak256, stringToBytes } from "viem";
+import { bytesToHex, hexToBytes, keccak256, stringToBytes } from "viem";
 import { describe, expect, it } from "vitest";
 import { g, toPoint } from "../../frost/math.js";
 import {
@@ -10,8 +10,9 @@ import {
 
 describe("nonces", () => {
 	it("should generate correct nonce", async () => {
-		const random =
-			0x2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2an;
+		const random = hexToBytes(
+			"0x2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a",
+		);
 		const secret =
 			0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80n;
 		expect(generateNonce(secret, random)).toBe(
