@@ -1,0 +1,11 @@
+{
+	"name": "shieldnet-contracts",
+	"private": true,
+	"scripts": {
+		"build": "forge build",
+		"check": "forge fmt --check && forge lint --deny notes",
+		"deploy": "forge script DeployScript",
+		"fix": "forge fmt",
+		"test": "forge test -vvv"
+	}
+}

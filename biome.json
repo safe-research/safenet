@@ -3,13 +3,11 @@
 	"files": {
 		"ignoreUnknown": false,
 		"includes": [
-			"**/*.ts",
+			"**/src/**/*.ts",
 			"**/package.json",
 			"**/tsconfig.json",
 			"**/tsconfig.*.json",
-			"!**/dist",
-			"!**/node_modules",
-			"!contracts"
+			"!contracts/lib"
 		],
 		"maxSize": 2000000
 	},

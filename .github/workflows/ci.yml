@@ -1,4 +1,4 @@
-name: contracts
+name: ci
 
 on:
   pull_request:
@@ -17,9 +17,14 @@ jobs:
         with:
           submodules: recursive
 
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "lts/*"
+          cache: "npm"
+
       - uses: foundry-rs/foundry-toolchain@v1
 
+      - run: npm ci
       - run: |
-          forge fmt --check
-          forge lint --deny notes
-          forge test -vvv
+          npm run check
+          npm run test

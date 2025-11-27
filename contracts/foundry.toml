@@ -1,0 +1,12 @@
+[profile.default]
+out = "build/out"
+cache_path = "build/cache"
+broadcast = "build/broadcast"
+
+remappings = [
+  "@/=src/",
+  "@test/=test/",
+  "@forge-std/=lib/forge-std/src/",
+  "@oz/=lib/openzeppelin-contracts/contracts/",
+]
+auto_detect_remappings = false

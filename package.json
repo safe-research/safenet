@@ -2,19 +2,17 @@
 	"name": "shieldnet",
 	"private": true,
 	"workspaces": [
+		"contracts",
 		"validator"
 	],
 	"scripts": {
-		"format": "biome format",
-		"format:fix": "biome format --fix",
-		"lint": "biome lint",
-		"lint:fix": "biome lint --fix",
-		"check": "biome check",
+		"build": "npm run build --workspaces",
+		"check": "biome check && npm run check --workspaces",
+		"fix": "biome check --write && npm run fix --workspaces",
 		"test": "npm run test --workspaces",
 		"test:integration": "./scripts/run_integration_test.sh"
 	},
 	"devDependencies": {
-		"@biomejs/biome": "2.0.6",
-		"typescript": "^5.8.3"
+		"@biomejs/biome": "2.0.6"
 	}
 }

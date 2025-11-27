@@ -1,10 +1,12 @@
 {
-	"name": "validator",
+	"name": "shieldnet-validator",
+	"private": true,
 	"type": "module",
 	"scripts": {
 		"build": "rimraf dist && tsc --project tsconfig.dist.json",
-		"dev": "tsx src/validator.ts",
 		"check": "biome check && tsc",
+		"dev": "tsx src/validator.ts",
+		"fix": "biome check --write",
 		"test": "vitest run",
 		"test:watch": "vitest"
 	},
