@@ -44,14 +44,15 @@ export class SqliteStorage
 				public_key TEXT,
 				verification_share TEXT,
 				signing_share TEXT,
-				PRIMARY KEY (id)
+				PRIMARY KEY(id)
 			);
 
 			CREATE TABLE IF NOT EXISTS group_participants(
 				group_id TEXT NOT NULL,
 				id INTEGER NOT NULL,
 				address TEXT NOT NULL,
-				PRIMARY KEY (group_id, id)
+				PRIMARY KEY(group_id, id),
+				FOREIGN KEY(group_id) REFERENCES groups(id) ON DELETE CASCADE
 			);
 		`);
 
@@ -111,7 +112,7 @@ export class SqliteStorage
 			)
 			.run(groupPublicKey.toHex(), verificationShare.toHex(), groupId);
 		if (changes < 1) {
-			throw new Error("group not found");
+			throw new Error("group not found or verification already registered");
 		}
 	}
 
@@ -122,7 +123,7 @@ export class SqliteStorage
 			)
 			.run(scalarToHex(signingShare), groupId);
 		if (changes < 1) {
-			throw new Error("group not found");
+			throw new Error("group not found or signing share already registered");
 		}
 	}
 
@@ -158,12 +159,18 @@ export class SqliteStorage
 	}
 
 	participants(groupId: GroupId): readonly Participant[] {
-		// Make sure that the group is present!
-		this.groupColumn(groupId, "id", hexDataSchema);
-		return this.#db
+		const result = this.#db
 			.prepare("SELECT id, address FROM group_participants WHERE group_id = ?")
 			.all(groupId)
 			.map((row) => dbParticipantSchema.parse(row));
+		// Note that registering a group requires there to be at least one
+		// participant (as a corrolary to `this.#account` being included in the
+		// participants list). This means that not finding any values here is
+		// equivalent to the group not being registered.
+		if (result.length === 0) {
+			throw new Error("group not found");
+		}
+		return result;
 	}
 
 	threshold(groupId: GroupId): bigint {
@@ -187,12 +194,7 @@ export class SqliteStorage
 	}
 
 	unregisterGroup(groupId: GroupId): void {
-		this.#db.transaction(() => {
-			this.#db.prepare("DELETE FROM groups WHERE id = ?").run(groupId);
-			this.#db
-				.prepare("DELETE FROM group_participants WHERE group_id = ?")
-				.run(groupId);
-		})();
+		this.#db.prepare("DELETE FROM groups WHERE id = ?").run(groupId);
 	}
 
 	registerKeyGen(_groupId: GroupId, _coefficients: readonly bigint[]): void {
