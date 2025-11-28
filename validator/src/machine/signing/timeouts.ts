@@ -46,7 +46,7 @@ const checkSigningRequestTimeout = (
 ): StateDiff => {
 	// Still within deadline
 	if (status.deadline > block) return {};
-	// TODO: refactor to statediff
+	// TODO: refactor into statediff
 	consensusState.messageSignatureRequests.delete(signatureId);
 	switch (status.id) {
 		case "waiting_for_attestation": {

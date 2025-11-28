@@ -1,6 +1,6 @@
 import { nonceCommitmentsHashEventSchema } from "../../consensus/schemas.js";
 import type { SigningClient } from "../../consensus/signing/client.js";
-import type { ConsensusState, StateDiff } from "../types.js";
+import type { ConsensusDiff, ConsensusState, StateDiff } from "../types.js";
 
 export const handlePreprocess = async (
 	signingClient: SigningClient,
@@ -14,9 +14,9 @@ export const handlePreprocess = async (
 	const event = nonceCommitmentsHashEventSchema.parse(eventArgs);
 	logger?.(`Link nonces for chunk ${event.chunk}`);
 	// Clear pending nonce commitments for group
+	const consensus: ConsensusDiff = {};
 	if (consensusState.groupPendingNonces.has(event.gid)) {
-		// TODO: refactor into state diff
-		consensusState.groupPendingNonces.delete(event.gid);
+		consensus.groupPendingNonces = ["remove", event.gid];
 	}
 	signingClient.handleNonceCommitmentsHash(
 		event.gid,
@@ -24,5 +24,5 @@ export const handlePreprocess = async (
 		event.commitment,
 		event.chunk,
 	);
-	return {};
+	return { consensus };
 };

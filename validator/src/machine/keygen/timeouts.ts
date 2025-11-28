@@ -1,18 +1,12 @@
 import type { KeyGenClient } from "../../consensus/keyGen/client.js";
 import type { ShieldnetProtocol } from "../../consensus/protocol/types.js";
-import type {
-	ConsensusState,
-	MachineConfig,
-	MachineStates,
-	StateDiff,
-} from "../types.js";
+import type { MachineConfig, MachineStates, StateDiff } from "../types.js";
 import { triggerKeyGen } from "./trigger.js";
 
 export const checkKeyGenTimeouts = (
 	machineConfig: MachineConfig,
 	protocol: ShieldnetProtocol,
 	keyGenClient: KeyGenClient,
-	consensusState: ConsensusState,
 	machineStates: MachineStates,
 	block: bigint,
 	logger?: (msg: unknown) => void,
@@ -40,7 +34,6 @@ export const checkKeyGenTimeouts = (
 	);
 	const { diff } = triggerKeyGen(
 		keyGenClient,
-		consensusState,
 		machineStates.rollover.nextEpoch,
 		block + machineConfig.keyGenTimeout,
 		participants,

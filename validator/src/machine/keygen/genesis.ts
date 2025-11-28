@@ -24,17 +24,19 @@ export const checkGenesis = (
 		// We set no timeout for the genesis group generation
 		const { groupId, diff } = triggerKeyGen(
 			keyGenClient,
-			consensusState,
 			0n,
 			maxUint64,
 			machineConfig.defaultParticipants,
 			zeroAddress,
 			logger,
 		);
-		// TODO: refactor to state diff
-		consensusState.genesisGroupId = groupId;
+		const consensus = diff.consensus ?? {};
+		consensus.genesisGroupId = groupId;
 		logger?.(`Genesis group id: ${groupId}`);
-		return diff;
+		return {
+			...diff,
+			consensus,
+		};
 	}
 	return {};
 };

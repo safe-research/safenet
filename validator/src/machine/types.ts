@@ -65,7 +65,18 @@ export type StateTransition =
 			eventArgs: unknown;
 	  };
 
+export type ConsensusDiff = {
+	groupPendingNonces?: ["add" | "remove", GroupId];
+	activeEpoch?: bigint;
+	stagedEpoch?: bigint;
+	genesisGroupId?: GroupId;
+	epochGroup?: [bigint, GroupId];
+	messageSignatureRequests?: [Hex, SignatureId?];
+	transactionProposalInfo?: [Hex, { epoch: bigint; transactionHash: Hex }?];
+};
+
 export type StateDiff = {
+	consensus?: ConsensusDiff;
 	rollover?: RolloverState;
 	signing?: [SignatureId, SigningState?];
 	actions?: ProtocolAction[];

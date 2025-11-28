@@ -8,6 +8,7 @@ import type { SigningClient } from "../../consensus/signing/client.js";
 import type { VerificationEngine } from "../../consensus/verify/engine.js";
 import type { EpochRolloverPacket } from "../../consensus/verify/rollover/schemas.js";
 import type {
+	ConsensusDiff,
 	ConsensusState,
 	MachineConfig,
 	MachineStates,
@@ -41,6 +42,7 @@ export const handleKeyGenSecretShared = async (
 	const groupId = event.gid;
 	machineStates.rollover.lastParticipant = event.identifier;
 	// Track identity that has submitted last share
+	// TODO: handle bad shares -> Submit fraud proof
 	await keyGenClient.handleKeygenSecrets(
 		event.gid,
 		event.identifier,
@@ -53,8 +55,9 @@ export const handleKeyGenSecretShared = async (
 	}
 
 	// If a group is setup start preprocess (aka nonce commitment)
-	// TODO: extract to diff
-	consensusState.groupPendingNonces.add(groupId);
+	const consensus: ConsensusDiff = {
+		groupPendingNonces: ["add", groupId],
+	};
 	const nonceTreeRoot = signingClient.generateNonceTree(groupId);
 	const actions: ProtocolAction[] = [
 		{
@@ -66,7 +69,7 @@ export const handleKeyGenSecretShared = async (
 
 	if (consensusState.genesisGroupId === groupId) {
 		logger?.("Genesis group ready!");
-		return { rollover: { id: "waiting_for_rollover" }, actions };
+		return { consensus, rollover: { id: "waiting_for_rollover" }, actions };
 	}
 	if (status.lastParticipant === undefined) {
 		throw Error("Invalid state");
@@ -94,6 +97,7 @@ export const handleKeyGenSecretShared = async (
 	const message = await verificationEngine.verify(packet);
 	logger?.(`Verified message ${message}`);
 	return {
+		consensus,
 		rollover: {
 			id: "sign_rollover",
 			groupId,

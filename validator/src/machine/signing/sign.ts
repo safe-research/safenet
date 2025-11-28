@@ -1,4 +1,3 @@
-import type { ProtocolAction } from "../../consensus/protocol/types.js";
 import { signRequestEventSchema } from "../../consensus/schemas.js";
 import type { SigningClient } from "../../consensus/signing/client.js";
 import { decodeSequence } from "../../consensus/signing/nonces.js";
@@ -25,7 +24,7 @@ export const handleSign = async (
 	// The signature process has been started
 	// Parse event from raw data
 	const event = signRequestEventSchema.parse(eventArgs);
-	const actions = checkAvailableNonces(
+	const diff = checkAvailableNonces(
 		signingClient,
 		consensusState,
 		machineStates,
@@ -36,14 +35,14 @@ export const handleSign = async (
 	// Check that there is no state or it is the retry flow
 	if (status !== undefined && status.id !== "waiting_for_request") {
 		logger?.(`Alreay started signing ${event.sid}!`);
-		return { actions };
+		return diff;
 	}
 	// Check that signing was initiated via consensus contract
 	// TODO: filter by group id
 	// Check that message is verified
 	if (!verificationEngine.isVerified(event.message)) {
 		logger?.(`Message ${event.message} not verified!`);
-		return { actions };
+		return diff;
 	}
 	// Check if there is already a request for this message
 	const signatureRequest = consensusState.messageSignatureRequests.get(
@@ -52,12 +51,16 @@ export const handleSign = async (
 	// Only allow one concurrent signing process per message
 	if (signatureRequest !== undefined) {
 		logger?.(`Message ${event.message} is already being signed!`);
-		return { actions };
+		return diff;
 	}
-	// TODO: refactor into state diff
-	consensusState.messageSignatureRequests.set(event.message, event.sid);
 
-	const signers = status?.signers ?? machineConfig.defaultParticipants.map(p => p.id)
+	const consensus = {
+		...diff.consensus,
+	};
+	consensus.messageSignatureRequests = [event.message, event.sid];
+
+	const signers =
+		status?.signers ?? machineConfig.defaultParticipants.map((p) => p.id);
 	const { nonceCommitments, nonceProof } = signingClient.createNonceCommitments(
 		event.gid,
 		event.sid,
@@ -66,6 +69,7 @@ export const handleSign = async (
 		signers,
 	);
 
+	const actions = diff.actions ?? [];
 	actions.push({
 		id: "sign_reveal_nonce_commitments",
 		signatureId: event.sid,
@@ -73,6 +77,7 @@ export const handleSign = async (
 		nonceProof,
 	});
 	return {
+		consensus,
 		signing: [
 			event.sid,
 			{
@@ -91,13 +96,13 @@ const checkAvailableNonces = (
 	machineStates: MachineStates,
 	sequence: bigint,
 	logger?: (msg: unknown) => void,
-): ProtocolAction[] => {
+): Pick<StateDiff, "consensus"> & Pick<StateDiff, "actions"> => {
 	if (
 		consensusState.activeEpoch === 0n &&
 		machineStates.rollover.id !== "waiting_for_rollover"
 	) {
 		// We are in the genesis setup
-		return [];
+		return {};
 	}
 	const activeGroup = consensusState.epochGroups.get(
 		consensusState.activeEpoch,
@@ -121,19 +126,22 @@ const checkAvailableNonces = (
 			offset = 0n;
 		}
 		if (availableNonces < NONCE_THRESHOLD) {
-			// TODO: refactor to state diff
-			consensusState.groupPendingNonces.add(activeGroup);
 			logger?.(`Commit nonces for ${activeGroup}!`);
 			const nonceTreeRoot = signingClient.generateNonceTree(activeGroup);
 
-			return [
-				{
-					id: "sign_register_nonce_commitments",
-					groupId: activeGroup,
-					nonceCommitmentsHash: nonceTreeRoot,
+			return {
+				consensus: {
+					groupPendingNonces: ["add", activeGroup],
 				},
-			];
+				actions: [
+					{
+						id: "sign_register_nonce_commitments",
+						groupId: activeGroup,
+						nonceCommitmentsHash: nonceTreeRoot,
+					},
+				],
+			};
 		}
 	}
-	return [];
+	return {};
 };

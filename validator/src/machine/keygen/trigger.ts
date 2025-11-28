@@ -3,11 +3,10 @@ import type { KeyGenClient } from "../../consensus/keyGen/client.js";
 import type { ProtocolAction } from "../../consensus/protocol/types.js";
 import type { Participant } from "../../consensus/storage/types.js";
 import type { GroupId } from "../../frost/types.js";
-import type { ConsensusState, StateDiff } from "../types.js";
+import type { StateDiff } from "../types.js";
 
 export const triggerKeyGen = (
 	keyGenClient: KeyGenClient,
-	consensusState: ConsensusState,
 	epoch: bigint,
 	deadline: bigint,
 	participants: Participant[],
@@ -43,11 +42,12 @@ export const triggerKeyGen = (
 	];
 
 	logger?.(`Triggered key gen for epoch ${epoch} with ${groupId}`);
-	// TODO: refactor to state diff
-	consensusState.epochGroups.set(epoch, groupId);
 	return {
 		groupId,
 		diff: {
+			consensus: {
+				epochGroup: [epoch, groupId],
+			},
 			rollover: {
 				id: "collecting_commitments",
 				nextEpoch: epoch,

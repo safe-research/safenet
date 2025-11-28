@@ -61,12 +61,12 @@ export class SigningClient {
 		nonceProof: Hex[];
 	} {
 		if (signers.length < this.#storage.threshold(groupId)) {
-			throw Error("Not enought signers to start signing process")
+			throw Error("Not enought signers to start signing process");
 		}
-		const participants = this.#storage.participants(groupId).map(p => p.id);
+		const participants = this.#storage.participants(groupId).map((p) => p.id);
 		for (const signer of signers) {
 			if (participants.indexOf(signer) < 0) {
-				throw Error(`Invalid signer id provided: ${signer}`)
+				throw Error(`Invalid signer id provided: ${signer}`);
 			}
 		}
 		this.#storage.registerSignatureRequest(

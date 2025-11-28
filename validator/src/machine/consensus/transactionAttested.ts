@@ -19,10 +19,11 @@ export const handleTransactionAttested = async (
 	if (status?.id !== "waiting_for_attestation") return {};
 
 	// Clean up internal state
-	// TODO: refactor to state diff
-	consensusState.messageSignatureRequests.delete(event.message);
-	consensusState.transactionProposalInfo.delete(event.message);
 	return {
+		consensus: {
+			messageSignatureRequests: [event.message],
+			transactionProposalInfo: [event.message],
+		},
 		signing: [signatureRequest, undefined],
 	};
 };

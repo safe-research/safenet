@@ -194,7 +194,7 @@ describe("signing", () => {
 				signatureId,
 				message,
 				0n,
-				TEST_GROUP.participants.map(p => p.id)
+				TEST_GROUP.participants.map((p) => p.id),
 			);
 			nonceRevealEvent.push({
 				signatureId,

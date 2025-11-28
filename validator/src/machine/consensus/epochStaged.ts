@@ -25,11 +25,8 @@ export const handleEpochStaged = async (
 	if (status?.id !== "waiting_for_attestation") return {};
 
 	// Clean up internal state
-	// TODO: refactor to state diff
-	consensusState.messageSignatureRequests.delete(
-		machineStates.rollover.message,
-	);
 	return {
+		consensus: { messageSignatureRequests: [machineStates.rollover.message] },
 		signing: [signatureRequest, undefined],
 		rollover: { id: "waiting_for_rollover" },
 	};

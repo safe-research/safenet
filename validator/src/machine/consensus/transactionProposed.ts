@@ -30,12 +30,17 @@ export const handleTransactionProposed = async (
 		},
 	};
 	const message = await verificationEngine.verify(packet);
-	// TODO: refactor to state diff
-	consensusState.transactionProposalInfo.set(message, {
-		epoch: event.epoch,
-		transactionHash: event.transactionHash,
-	});
 	logger?.(`Verified message ${message}`);
 	// The signing will be triggered in a separate event
-	return {};
+	return {
+		consensus: {
+			transactionProposalInfo: [
+				message,
+				{
+					epoch: event.epoch,
+					transactionHash: event.transactionHash,
+				},
+			],
+		},
+	};
 };
