@@ -24,6 +24,7 @@ export const handleSign = async (
 	// The signature process has been started
 	// Parse event from raw data
 	const event = signRequestEventSchema.parse(eventArgs);
+	// TODO: this can be lifted out of this function
 	const diff = checkAvailableNonces(
 		signingClient,
 		consensusState,
@@ -31,14 +32,12 @@ export const handleSign = async (
 		event.sequence,
 		logger,
 	);
-	const status = machineStates.signing.get(event.message);
+	const status = machineStates.signing[event.message];
 	// Check that there is no state or it is the retry flow
 	if (status?.id !== "waiting_for_request") {
 		logger?.(`Unexpected signing request for ${event.message}!`);
 		return diff;
 	}
-	// Check that signing was initiated via consensus contract
-	// TODO: filter by group id
 	// Check that message is verified
 	if (!verificationEngine.isVerified(event.message)) {
 		logger?.(`Message ${event.message} not verified!`);
@@ -75,7 +74,6 @@ export const handleSign = async (
 				deadline: block + machineConfig.signingTimeout,
 				lastSigner: undefined,
 				packet: status.packet,
-				epoch: status.epoch,
 			},
 		],
 		actions,
@@ -96,12 +94,11 @@ const checkAvailableNonces = (
 		// We are in the genesis setup
 		return {};
 	}
-	const activeGroup = consensusState.epochGroups.get(
-		consensusState.activeEpoch,
-	);
+	const activeGroup =
+		consensusState.epochGroups[consensusState.activeEpoch.toString()];
 	if (
 		activeGroup !== undefined &&
-		!consensusState.groupPendingNonces.has(activeGroup.groupId)
+		!consensusState.groupPendingNonces[activeGroup.groupId] === true
 	) {
 		const groupId = activeGroup.groupId;
 		let { chunk, offset } = decodeSequence(sequence);

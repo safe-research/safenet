@@ -15,10 +15,12 @@ export const checkSigningTimeouts = (
 	consensusState: ConsensusState,
 	machineStates: MachineStates,
 	block: bigint,
-	_logger?: (msg: unknown) => void,
 ): StateDiff[] => {
 	// No timeout in waiting state
-	const statesToProcess = Array.from(machineStates.signing.entries());
+	const statesToProcess = Object.entries(machineStates.signing) as [
+		Hex,
+		SigningState,
+	][];
 	const diffs: StateDiff[] = [];
 	for (const [signatureId, status] of statesToProcess) {
 		diffs.push(
@@ -47,12 +49,14 @@ const checkSigningRequestTimeout = (
 ): StateDiff => {
 	// Still within deadline
 	if (status.deadline > block) return {};
-	// TODO: refactor into statediff
-	consensusState.signatureIdToMessage.delete(message);
+	const stateDiff: StateDiff = {
+		consensus: {
+			signatureIdToMessage: [message],
+		},
+	};
 	switch (status.id) {
 		case "waiting_for_attestation": {
 			const everyoneResponsible = status.responsible === undefined;
-			const stateDiff: StateDiff = {};
 			if (everyoneResponsible) {
 				// Everyone is responsible
 				// Signature request will be readded once it is submitted
@@ -112,7 +116,6 @@ const checkSigningRequestTimeout = (
 			return stateDiff;
 		}
 		case "waiting_for_request": {
-			const stateDiff: StateDiff = {};
 			const everyoneResponsible = status.responsible === undefined;
 			if (everyoneResponsible) {
 				// Everyone is responsible
@@ -132,9 +135,13 @@ const checkSigningRequestTimeout = (
 					},
 				];
 			}
-			const groupInfo = consensusState.epochGroups.get(status.epoch);
+			const epoch =
+				status.packet.type === "epoch_rollover_packet"
+					? status.packet.rollover.activeEpoch
+					: status.packet.proposal.epoch;
+			const groupInfo = consensusState.epochGroups[epoch.toString()];
 			if (groupInfo === undefined) {
-				throw Error(`Unknown group for epoch ${status.epoch}`);
+				throw Error(`Unknown group for epoch ${epoch}`);
 			}
 			const { groupId, participantId } = groupInfo;
 			const act = everyoneResponsible || status.responsible === participantId;
@@ -167,12 +174,17 @@ const checkSigningRequestTimeout = (
 			const signers = machineConfig.defaultParticipants
 				.filter((p) => missingParticipants.indexOf(p.id) < 0)
 				.map((p) => p.id);
-			const groupInfo = consensusState.epochGroups.get(status.epoch);
+			const epoch =
+				status.packet.type === "epoch_rollover_packet"
+					? status.packet.rollover.activeEpoch
+					: status.packet.proposal.epoch;
+			const groupInfo = consensusState.epochGroups[epoch.toString()];
 			if (groupInfo === undefined) {
-				throw Error(`Unknown group for epoch ${status.epoch}`);
+				throw Error(`Unknown group for epoch ${epoch}`);
 			}
 			const { groupId } = groupInfo;
 			return {
+				...stateDiff,
 				signing: [
 					message,
 					{
@@ -180,7 +192,6 @@ const checkSigningRequestTimeout = (
 						responsible: status.lastSigner,
 						signers,
 						deadline: block + machineConfig.signingTimeout,
-						epoch: status.epoch,
 						packet: status.packet,
 					},
 				],

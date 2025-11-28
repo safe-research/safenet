@@ -10,9 +10,9 @@ export const handleSigningShares = async (
 	// Parse event from raw data
 	const event = signatureShareEventSchema.parse(eventArgs);
 	// Check that this is a request related to a message that is handled"
-	const message = consensusState.signatureIdToMessage.get(event.sid);
+	const message = consensusState.signatureIdToMessage[event.sid];
 	if (message === undefined) return {};
-	const status = machineStates.signing.get(message);
+	const status = machineStates.signing[message];
 	// Check that state for signature id is "collect_signing_shares"
 	if (status?.id !== "collect_signing_shares") return {};
 	// Track identity that has submitted last share

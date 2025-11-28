@@ -32,7 +32,6 @@ export type RolloverState =
 
 export type BaseSigningState = {
 	packet: SafeTransactionPacket | EpochRolloverPacket;
-	epoch: bigint;
 };
 
 export type SigningState = BaseSigningState &
@@ -98,19 +97,23 @@ export type StateDiff = {
 	actions?: ProtocolAction[];
 };
 
-export type ConsensusState = {
+export type MutableConsensusState = {
 	genesisGroupId?: GroupId;
-	epochGroups: Map<bigint, GroupInfo>;
-	groupPendingNonces: Set<GroupId>;
 	activeEpoch: bigint;
 	stagedEpoch: bigint;
-	signatureIdToMessage: Map<SignatureId, Hex>;
+	groupPendingNonces: Record<GroupId, boolean>;
+	epochGroups: Record<string, GroupInfo>;
+	signatureIdToMessage: Record<SignatureId, Hex>;
 };
 
-export type MachineStates = {
+export type ConsensusState = Readonly<MutableConsensusState>;
+
+export type MutableMachineStates = {
 	rollover: RolloverState;
-	signing: Map<SignatureId, SigningState>;
+	signing: Record<SignatureId, SigningState>;
 };
+
+export type MachineStates = Readonly<MutableMachineStates>;
 
 export type MachineConfig = {
 	defaultParticipants: Participant[];

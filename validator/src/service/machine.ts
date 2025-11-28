@@ -1,4 +1,3 @@
-import type { Hex } from "viem";
 import type { KeyGenClient } from "../consensus/keyGen/client.js";
 import type {
 	ProtocolAction,
@@ -7,7 +6,6 @@ import type {
 import type { SigningClient } from "../consensus/signing/client.js";
 import type { Participant } from "../consensus/storage/types.js";
 import type { VerificationEngine } from "../consensus/verify/engine.js";
-import type { GroupId, SignatureId } from "../frost/types.js";
 import { handleEpochStaged } from "../machine/consensus/epochStaged.js";
 import { checkEpochRollover } from "../machine/consensus/rollover.js";
 import { handleTransactionAttested } from "../machine/consensus/transactionAttested.js";
@@ -24,11 +22,9 @@ import { handleSigningShares } from "../machine/signing/shares.js";
 import { handleSign } from "../machine/signing/sign.js";
 import { checkSigningTimeouts } from "../machine/signing/timeouts.js";
 import type {
-	ConsensusState,
-	GroupInfo,
 	MachineConfig,
-	MachineStates,
-	SigningState,
+	MutableConsensusState,
+	MutableMachineStates,
 	StateDiff,
 	StateTransition,
 } from "../machine/types.js";
@@ -52,17 +48,17 @@ export class ShieldnetStateMachine {
 	#transitionQueue = new Queue<StateTransition>();
 	#currentTransition?: StateTransition;
 	// Consensus state
-	#consensusState: ConsensusState = {
-		epochGroups: new Map<bigint, GroupInfo>(),
+	#consensusState: MutableConsensusState = {
+		epochGroups: {},
 		activeEpoch: 0n,
 		stagedEpoch: 0n,
-		groupPendingNonces: new Set<GroupId>(),
-		signatureIdToMessage: new Map<SignatureId, Hex>(),
+		groupPendingNonces: {},
+		signatureIdToMessage: {},
 	};
 	// Sub machine state
-	#machineStates: MachineStates = {
+	#machineStates: MutableMachineStates = {
 		rollover: { id: "waiting_for_rollover" },
-		signing: new Map<SignatureId, SigningState>(),
+		signing: {},
 	};
 
 	constructor({
@@ -255,15 +251,15 @@ export class ShieldnetStateMachine {
 
 	private applyDiff(
 		diff: StateDiff,
-		machineStates: MachineStates = this.#machineStates,
-		consensusState: ConsensusState = this.#consensusState,
+		machineStates: MutableMachineStates = this.#machineStates,
+		consensusState: MutableConsensusState = this.#consensusState,
 	): ProtocolAction[] {
 		if (diff.signing !== undefined) {
 			const [signatureId, state] = diff.signing;
 			if (state === undefined) {
-				machineStates.signing.delete(signatureId);
+				delete machineStates.signing[signatureId];
 			} else {
-				machineStates.signing.set(signatureId, state);
+				machineStates.signing[signatureId] = state;
 			}
 		}
 		if (diff.rollover !== undefined) {
@@ -274,9 +270,9 @@ export class ShieldnetStateMachine {
 			if (consensusDiff.groupPendingNonces !== undefined) {
 				const [action, groupId] = consensusDiff.groupPendingNonces;
 				if (action === "add") {
-					consensusState.groupPendingNonces.add(groupId);
+					consensusState.groupPendingNonces[groupId] = true;
 				} else {
-					consensusState.groupPendingNonces.delete(groupId);
+					delete consensusState.groupPendingNonces[groupId];
 				}
 			}
 			if (consensusDiff.activeEpoch !== undefined) {
@@ -290,14 +286,14 @@ export class ShieldnetStateMachine {
 			}
 			if (consensusDiff.epochGroup !== undefined) {
 				const [epoch, groupInfo] = consensusDiff.epochGroup;
-				consensusState.epochGroups.set(epoch, groupInfo);
+				consensusState.epochGroups[epoch.toString()] = groupInfo;
 			}
 			if (consensusDiff.signatureIdToMessage !== undefined) {
 				const [message, signatureId] = consensusDiff.signatureIdToMessage;
 				if (signatureId === undefined) {
-					consensusState.signatureIdToMessage.delete(message);
+					delete consensusState.signatureIdToMessage[message];
 				} else {
-					consensusState.signatureIdToMessage.set(message, signatureId);
+					consensusState.signatureIdToMessage[message] = signatureId;
 				}
 			}
 		}

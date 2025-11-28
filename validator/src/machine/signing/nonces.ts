@@ -24,15 +24,11 @@ export const handleRevealedNonces = async (
 	// Parse event from raw data
 	const event = nonceCommitmentsEventSchema.parse(eventArgs);
 	// Check that this is a request related to a message that is handled"
-	const message = consensusState.signatureIdToMessage.get(event.sid);
+	const message = consensusState.signatureIdToMessage[event.sid];
 	if (message === undefined) return {};
 	// Check that state for signature id is "collect_nonce_commitments"
-	const status = machineStates.signing.get(message);
+	const status = machineStates.signing[message];
 	if (status?.id !== "collect_nonce_commitments") return {};
-	machineStates.signing.set(message, {
-		...status,
-		lastSigner: event.identifier,
-	});
 	const readyToSubmit = signingClient.handleNonceCommitments(
 		event.sid,
 		event.identifier,
@@ -41,7 +37,16 @@ export const handleRevealedNonces = async (
 			bindingNonceCommitment: toPoint(event.nonces.e),
 		},
 	);
-	if (!readyToSubmit) return {};
+	if (!readyToSubmit)
+		return {
+			signing: [
+				message,
+				{
+					...status,
+					lastSigner: event.identifier,
+				},
+			],
+		};
 	// If all participants have committed update state for request id to "collect_signing_shares"
 	const {
 		signersRoot,
@@ -78,7 +83,6 @@ export const handleRevealedNonces = async (
 				deadline: block + machineConfig.signingTimeout,
 				lastSigner: event.identifier,
 				packet: status.packet,
-				epoch: status.epoch,
 			},
 		],
 		actions: [

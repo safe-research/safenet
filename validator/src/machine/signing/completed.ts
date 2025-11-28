@@ -17,10 +17,10 @@ export const handleSigningCompleted = async (
 	// Parse event from raw data
 	const event = signedEventSchema.parse(eventArgs);
 	// Check that this is a request related to a message that is handled"
-	const message = consensusState.signatureIdToMessage.get(event.sid);
+	const message = consensusState.signatureIdToMessage[event.sid];
 	if (message === undefined) return {};
 	// Check that state for signature id is "collect_signing_shares"
-	const status = machineStates.signing.get(message);
+	const status = machineStates.signing[message];
 	if (status?.id !== "collect_signing_shares") return {};
 	if (status.lastSigner === undefined) throw Error("Invalid state");
 
@@ -32,7 +32,6 @@ export const handleSigningCompleted = async (
 				signatureId: status.signatureId,
 				deadline: block + machineConfig.signingTimeout,
 				responsible: status.lastSigner,
-				epoch: status.epoch,
 				packet: status.packet,
 			},
 		],

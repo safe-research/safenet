@@ -112,7 +112,6 @@ export const handleKeyGenSecretShared = async (
 				id: "waiting_for_request",
 				responsible: status.lastParticipant,
 				packet,
-				epoch: consensusState.activeEpoch,
 				signers: machineConfig.defaultParticipants.map((p) => p.id),
 				deadline: block + machineConfig.signingTimeout,
 			},

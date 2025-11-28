@@ -15,7 +15,7 @@ export const handleTransactionProposed = async (
 ): Promise<StateDiff> => {
 	// Parse event from raw data
 	const event = transactionProposedEventSchema.parse(eventArgs);
-	const group = consensusState.epochGroups.get(event.epoch);
+	const group = consensusState.epochGroups[event.epoch.toString()];
 	if (group === undefined) {
 		logger?.(`Unknown epoch ${event.epoch}!`);
 		return {};
@@ -41,7 +41,6 @@ export const handleTransactionProposed = async (
 				id: "waiting_for_request",
 				responsible: undefined,
 				packet,
-				epoch: consensusState.activeEpoch,
 				signers: machineConfig.defaultParticipants.map((p) => p.id),
 				deadline: block + machineConfig.signingTimeout,
 			},
