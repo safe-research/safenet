@@ -29,6 +29,12 @@ interface ZodSchema<Output> {
 	parse(data: unknown): Output;
 }
 
+const mustChangeOne = (result: { changes: number }, err: string): void => {
+	if (result.changes !== 1) {
+		throw new Error(err);
+	}
+};
+
 export class SqliteStorage
 	implements KeyGenInfoStorage, GroupInfoStorage, SignatureRequestStorage
 {
@@ -42,8 +48,6 @@ export class SqliteStorage
 				id TEXT NOT NULL,
 				threshold INTEGER NOT NULL,
 				public_key TEXT,
-				verification_share TEXT,
-				signing_share TEXT,
 				PRIMARY KEY(id)
 			);
 
@@ -51,6 +55,8 @@ export class SqliteStorage
 				group_id TEXT NOT NULL,
 				id INTEGER NOT NULL,
 				address TEXT NOT NULL,
+				verification_share TEXT,
+				signing_share TEXT,
 				PRIMARY KEY(group_id, id),
 				FOREIGN KEY(group_id) REFERENCES groups(id) ON DELETE CASCADE
 			);
@@ -92,7 +98,10 @@ export class SqliteStorage
 			"INSERT INTO group_participants (group_id, id, address) VALUES (?, ?, ?)",
 		);
 		this.#db.transaction(() => {
-			insertGroup.run(groupId, threshold);
+			mustChangeOne(
+				insertGroup.run(groupId, threshold),
+				"group already exists",
+			);
 			for (const { id, address } of participants) {
 				insertParticipant.run(groupId, id, address);
 			}
@@ -106,56 +115,38 @@ export class SqliteStorage
 		groupPublicKey: FrostPoint,
 		verificationShare: FrostPoint,
 	): void {
-		const { changes } = this.#db
-			.prepare(
-				"UPDATE groups SET public_key = ?, verification_share = ? WHERE id = ? AND public_key IS NULL",
-			)
-			.run(groupPublicKey.toHex(), verificationShare.toHex(), groupId);
-		if (changes < 1) {
-			throw new Error("group not found or verification already registered");
-		}
+		const updatePublicKey = this.#db.prepare(
+			"UPDATE groups SET public_key = ? WHERE id = ? AND public_key IS NULL",
+		);
+		const updateVerificationShare = this.#db.prepare(
+			"UPDATE group_participants SET verification_share = ? WHERE group_id = ? AND address = ? AND verification_share IS NULL",
+		);
+
+		this.#db.transaction(() => {
+			mustChangeOne(
+				updatePublicKey.run(groupPublicKey.toHex(), groupId),
+				"group not found or public key already registered",
+			);
+			mustChangeOne(
+				updateVerificationShare.run(
+					verificationShare.toHex(),
+					groupId,
+					this.#account,
+				),
+				"group participant not found or verification share already registered",
+			);
+		})();
 	}
 
 	registerSigningShare(groupId: GroupId, signingShare: bigint): void {
-		const { changes } = this.#db
-			.prepare(
-				"UPDATE groups SET signing_share = ? WHERE id = ? AND signing_share IS NULL",
-			)
-			.run(scalarToHex(signingShare), groupId);
-		if (changes < 1) {
-			throw new Error("group not found or signing share already registered");
-		}
-	}
-
-	participantId(groupId: GroupId): ParticipantId {
-		const result = this.#db
-			.prepare(
-				"SELECT id FROM group_participants WHERE group_id = ? AND address = ?",
-			)
-			.pluck(true)
-			.get(groupId, this.#account);
-		if (result === undefined) {
-			throw new Error("participant not in group");
-		}
-
-		return dbIntegerSchema.parse(result);
-	}
-
-	private groupColumn<T>(
-		groupId: GroupId,
-		column: string,
-		schema: ZodSchema<T>,
-	): T {
-		const result = this.#db
-			.prepare(`SELECT ${column} as hex FROM groups WHERE id = ?`)
-			.pluck(true)
-			.get(groupId);
-		if (result === undefined) {
-			throw new Error("group not found");
-		}
-		// The interface expects "undefined" to signal a missing value instead
-		// of null, so map that here.
-		return schema.parse(result ?? undefined);
+		mustChangeOne(
+			this.#db
+				.prepare(
+					"UPDATE group_participants SET signing_share = ? WHERE group_id = ? AND address = ? AND signing_share IS NULL",
+				)
+				.run(scalarToHex(signingShare), groupId, this.#account),
+			"group participant not found or signing share already registered",
+		);
 	}
 
 	participants(groupId: GroupId): readonly Participant[] {
@@ -173,6 +164,46 @@ export class SqliteStorage
 		return result;
 	}
 
+	private groupColumn<T>(
+		groupId: GroupId,
+		column: string,
+		schema: ZodSchema<T>,
+	): T {
+		const result = this.#db
+			.prepare(`SELECT ${column} FROM groups WHERE id = ?`)
+			.pluck(true)
+			.get(groupId);
+		if (result === undefined) {
+			throw new Error("group not found");
+		}
+		// The interface expects "undefined" to signal a missing value instead
+		// of null, so map that here.
+		return schema.parse(result ?? undefined);
+	}
+
+	private groupParticipantColumn<T>(
+		groupId: GroupId,
+		column: string,
+		schema: ZodSchema<T>,
+	): T {
+		const result = this.#db
+			.prepare(
+				`SELECT ${column} FROM group_participants WHERE group_id = ? AND address = ?`,
+			)
+			.pluck(true)
+			.get(groupId, this.#account);
+		if (result === undefined) {
+			throw new Error("group not found or participant not in group");
+		}
+		// The interface expects "undefined" to signal a missing value instead
+		// of null, so map that here.
+		return schema.parse(result ?? undefined);
+	}
+
+	participantId(groupId: GroupId): ParticipantId {
+		return this.groupParticipantColumn(groupId, "id", dbIntegerSchema);
+	}
+
 	threshold(groupId: GroupId): bigint {
 		return this.groupColumn(groupId, "threshold", dbIntegerSchema);
 	}
@@ -182,11 +213,15 @@ export class SqliteStorage
 	}
 
 	verificationShare(groupId: GroupId): FrostPoint {
-		return this.groupColumn(groupId, "verification_share", dbPointSchema);
+		return this.groupParticipantColumn(
+			groupId,
+			"verification_share",
+			dbPointSchema,
+		);
 	}
 
 	signingShare(groupId: GroupId): bigint | undefined {
-		return this.groupColumn(
+		return this.groupParticipantColumn(
 			groupId,
 			"signing_share",
 			dbScalarSchema.optional(),
@@ -214,13 +249,18 @@ export class SqliteStorage
 	): void {
 		throw new Error("not implemented");
 	}
+	missingCommitments(_groupId: GroupId): ParticipantId[] {
+		throw new Error("not implemented");
+	}
 	checkIfCommitmentsComplete(_groupId: GroupId): boolean {
+		throw new Error("not implemented");
+	}
+	missingSecretShares(_groupId: GroupId): ParticipantId[] {
 		throw new Error("not implemented");
 	}
 	checkIfSecretSharesComplete(_groupId: GroupId): boolean {
 		throw new Error("not implemented");
 	}
-
 	encryptionKey(_groupId: GroupId): bigint {
 		throw new Error("not implemented");
 	}
@@ -271,6 +311,9 @@ export class SqliteStorage
 		throw new Error("not implemented");
 	}
 	checkIfNoncesComplete(_signatureId: SignatureId): boolean {
+		throw new Error("not implemented");
+	}
+	missingNonces(_signatureId: SignatureId): ParticipantId[] {
 		throw new Error("not implemented");
 	}
 	signingGroup(_signatureId: SignatureId): GroupId {

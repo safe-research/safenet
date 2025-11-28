@@ -648,15 +648,10 @@ export class ShieldnetStateMachine {
 			["uint32", "address", "uint64"],
 			[0, consensus, epoch],
 		);
-		const count = BigInt(this.#participants.length);
+		const count = BigInt(participants.length);
 		const threshold = count / 2n + 1n;
 		const { groupId, participantsRoot, participantId, commitments, pok, poap } =
-			this.#keyGenClient.setupGroup(
-				this.#participants,
-				count,
-				threshold,
-				context,
-			);
+			this.#keyGenClient.setupGroup(participants, count, threshold, context);
 
 		const actions: ProtocolAction[] = [
 			{
