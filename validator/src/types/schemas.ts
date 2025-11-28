@@ -39,4 +39,22 @@ export const validatorConfigSchema = z.object({
 	PARTICIPANTS: participantsSchema,
 });
 
+export const chunked = <T>(
+	sz: number,
+	transform: (b: Buffer) => T,
+): ((b: Buffer) => T[]) => {
+	return (b: Buffer) => {
+		if (b.length % sz !== 0) {
+			throw new Error(
+				`buffer of length ${b.length} cannot be chunked in ${sz} bytes`,
+			);
+		}
+		return [...Array(b.length / sz)].map((_, i) => {
+			const start = i * sz;
+			const end = start + sz;
+			return transform(b.subarray(start, end));
+		});
+	};
+};
+
 export type SupportedChain = z.infer<typeof supportedChainsSchema>;

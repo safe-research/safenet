@@ -1,5 +1,4 @@
 import { secp256k1 } from "@noble/curves/secp256k1.js";
-import { bytesToHex, hexToBytes } from "@noble/curves/utils.js";
 import type { FrostPoint } from "./types.js";
 
 export const G_BASE = secp256k1.Point.BASE;
@@ -37,20 +36,16 @@ export const toPoint = (coordinates: { x: bigint; y: bigint }): FrostPoint => {
 	return point;
 };
 
-export const pointFromHex = (hex: string): FrostPoint => {
-	return secp256k1.Point.fromHex(hex);
+export const pointFromBytes = (bytes: Uint8Array): FrostPoint => {
+	return secp256k1.Point.fromBytes(bytes);
 };
 
 export const scalarToBytes = (scalar: bigint): Uint8Array => {
 	return secp256k1.Point.Fn.toBytes(scalar);
 };
 
-export const scalarToHex = (scalar: bigint): string => {
-	return bytesToHex(scalarToBytes(scalar));
-};
-
-export const scalarFromHex = (hex: string): bigint => {
-	return secp256k1.Point.Fn.fromBytes(hexToBytes(hex));
+export const scalarFromBytes = (bytes: Uint8Array): bigint => {
+	return secp256k1.Point.Fn.fromBytes(bytes);
 };
 
 export const createVerificationShare = (
