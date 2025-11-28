@@ -16,7 +16,7 @@ export const handlePreprocess = async (
 	// Clear pending nonce commitments for group
 	const consensus: ConsensusDiff = {};
 	if (consensusState.groupPendingNonces[event.gid] === true) {
-		consensus.groupPendingNonces = ["remove", event.gid];
+		consensus.groupPendingNonces = [event.gid];
 	}
 	signingClient.handleNonceCommitmentsHash(
 		event.gid,

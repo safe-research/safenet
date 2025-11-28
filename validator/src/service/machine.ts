@@ -21,8 +21,12 @@ import { handlePreprocess } from "../machine/signing/preprocess.js";
 import { handleSigningShares } from "../machine/signing/shares.js";
 import { handleSign } from "../machine/signing/sign.js";
 import { checkSigningTimeouts } from "../machine/signing/timeouts.js";
+import { applyConsensus, applyMachines } from "../machine/state/diff.js";
+import { TransitionState } from "../machine/state/local.js";
 import type {
+	ConsensusState,
 	MachineConfig,
+	MachineStates,
 	MutableConsensusState,
 	MutableMachineStates,
 	StateDiff,
@@ -112,7 +116,11 @@ export class ShieldnetStateMachine {
 		if (transition === undefined) return;
 		this.#currentTransition = transition;
 		this.performTransition(transition)
-			.then((actions) => {
+			.then((diffs) => {
+				const actions: ProtocolAction[] = [];
+				for (const diff of diffs) {
+					actions.push(...this.applyDiff(diff));
+				}
 				for (const action of actions) {
 					this.#protocol.process(action);
 				}
@@ -126,7 +134,7 @@ export class ShieldnetStateMachine {
 
 	private async performTransition(
 		transition: StateTransition,
-	): Promise<ProtocolAction[]> {
+	): Promise<StateDiff[]> {
 		switch (transition.type) {
 			case "block":
 				return this.progressToBlock(transition.block);
@@ -140,76 +148,70 @@ export class ShieldnetStateMachine {
 		}
 	}
 
-	private progressToBlock(block: bigint): ProtocolAction[] {
+	private progressToBlock(
+		block: bigint,
+		state: TransitionState = new TransitionState(
+			this.#machineStates,
+			this.#consensusState,
+		),
+	): StateDiff[] {
 		// Check if we are already up to date
 		if (block <= this.#lastProcessedBlock) {
 			return [];
 		}
 		this.#lastProcessedBlock = block;
-		const actions: ProtocolAction[] = [];
-
-		actions.push(
-			...this.applyDiff(
-				checkKeyGenAbort(
-					this.#machineConfig,
-					this.#consensusState,
-					this.#machineStates,
-					block,
-					this.#logger,
-				),
+		state.apply(
+			checkKeyGenAbort(
+				this.#machineConfig,
+				state.consensus,
+				state.machines,
+				block,
+				this.#logger,
 			),
 		);
-
-		actions.push(
-			...this.applyDiff(
-				checkKeyGenTimeouts(
-					this.#machineConfig,
-					this.#protocol,
-					this.#keyGenClient,
-					this.#machineStates,
-					block,
-					this.#logger,
-				),
+		state.apply(
+			checkKeyGenTimeouts(
+				this.#machineConfig,
+				this.#protocol,
+				this.#keyGenClient,
+				state.machines,
+				block,
+				this.#logger,
 			),
 		);
 
 		for (const diff of checkSigningTimeouts(
 			this.#machineConfig,
 			this.#signingClient,
-			this.#consensusState,
-			this.#machineStates,
+			state.consensus,
+			state.machines,
 			block,
 		)) {
-			actions.push(...this.applyDiff(diff));
+			state.apply(diff);
 		}
-
-		actions.push(
-			...this.applyDiff(
-				checkGenesis(
-					this.#machineConfig,
-					this.#keyGenClient,
-					this.#consensusState,
-					this.#machineStates,
-					this.#logger,
-				),
+		state.apply(
+			checkGenesis(
+				this.#machineConfig,
+				this.#keyGenClient,
+				state.consensus,
+				state.machines,
+				this.#logger,
 			),
 		);
 
-		actions.push(
-			...this.applyDiff(
-				checkEpochRollover(
-					this.#machineConfig,
-					this.#protocol,
-					this.#keyGenClient,
-					this.#consensusState,
-					this.#machineStates,
-					block,
-					this.#logger,
-				),
+		state.apply(
+			checkEpochRollover(
+				this.#machineConfig,
+				this.#protocol,
+				this.#keyGenClient,
+				state.consensus,
+				state.machines,
+				block,
+				this.#logger,
 			),
 		);
 
-		return actions;
+		return state.diffs;
 	}
 
 	private async processBlockEvent(
@@ -217,7 +219,7 @@ export class ShieldnetStateMachine {
 		index: number,
 		eventName: string,
 		eventArgs: unknown,
-	): Promise<ProtocolAction[]> {
+	): Promise<StateDiff[]> {
 		if (
 			block < this.#lastProcessedBlock ||
 			(block === this.#lastProcessedBlock && index <= this.#lastProcessedIndex)
@@ -226,27 +228,34 @@ export class ShieldnetStateMachine {
 				`Invalid block number (${block}) and index ${index} (currently at block ${this.#lastProcessedBlock} and index ${this.#lastProcessedIndex})`,
 			);
 		}
-		const actions: ProtocolAction[] = [];
 		this.#lastProcessedIndex = index;
-		actions.push(...this.progressToBlock(block));
-		actions.push(
-			...this.applyDiff(await this.handleEvent(block, eventName, eventArgs)),
+		const state = new TransitionState(
+			this.#machineStates,
+			this.#consensusState,
 		);
-		// Check after every event if we could do a epoch rollover
-		actions.push(
-			...this.applyDiff(
-				checkEpochRollover(
-					this.#machineConfig,
-					this.#protocol,
-					this.#keyGenClient,
-					this.#consensusState,
-					this.#machineStates,
-					block,
-					this.#logger,
-				),
+		this.progressToBlock(block, state);
+		state.apply(
+			await this.handleEvent(
+				block,
+				eventName,
+				eventArgs,
+				state.consensus,
+				state.machines,
 			),
 		);
-		return actions;
+		// Check after every event if we could do a epoch rollover
+		state.apply(
+			checkEpochRollover(
+				this.#machineConfig,
+				this.#protocol,
+				this.#keyGenClient,
+				state.consensus,
+				state.machines,
+				block,
+				this.#logger,
+			),
+		);
+		return state.diffs;
 	}
 
 	private applyDiff(
@@ -254,55 +263,17 @@ export class ShieldnetStateMachine {
 		machineStates: MutableMachineStates = this.#machineStates,
 		consensusState: MutableConsensusState = this.#consensusState,
 	): ProtocolAction[] {
-		if (diff.signing !== undefined) {
-			const [signatureId, state] = diff.signing;
-			if (state === undefined) {
-				delete machineStates.signing[signatureId];
-			} else {
-				machineStates.signing[signatureId] = state;
-			}
-		}
-		if (diff.rollover !== undefined) {
-			machineStates.rollover = diff.rollover;
-		}
-		if (diff.consensus !== undefined) {
-			const consensusDiff = diff.consensus;
-			if (consensusDiff.groupPendingNonces !== undefined) {
-				const [action, groupId] = consensusDiff.groupPendingNonces;
-				if (action === "add") {
-					consensusState.groupPendingNonces[groupId] = true;
-				} else {
-					delete consensusState.groupPendingNonces[groupId];
-				}
-			}
-			if (consensusDiff.activeEpoch !== undefined) {
-				consensusState.activeEpoch = consensusDiff.activeEpoch;
-			}
-			if (consensusDiff.stagedEpoch !== undefined) {
-				consensusState.stagedEpoch = consensusDiff.stagedEpoch;
-			}
-			if (consensusDiff.genesisGroupId !== undefined) {
-				consensusState.genesisGroupId = consensusDiff.genesisGroupId;
-			}
-			if (consensusDiff.epochGroup !== undefined) {
-				const [epoch, groupInfo] = consensusDiff.epochGroup;
-				consensusState.epochGroups[epoch.toString()] = groupInfo;
-			}
-			if (consensusDiff.signatureIdToMessage !== undefined) {
-				const [message, signatureId] = consensusDiff.signatureIdToMessage;
-				if (signatureId === undefined) {
-					delete consensusState.signatureIdToMessage[message];
-				} else {
-					consensusState.signatureIdToMessage[message] = signatureId;
-				}
-			}
-		}
+		applyMachines(diff, machineStates);
+		applyConsensus(diff, consensusState);
 		return diff.actions ?? [];
 	}
+
 	private async handleEvent(
 		block: bigint,
 		eventName: string,
 		eventArgs: unknown,
+		consensusState: ConsensusState,
+		machineStates: MachineStates,
 	): Promise<StateDiff> {
 		this.#logger?.(`Handle event ${eventName}`);
 		switch (eventName) {
@@ -310,8 +281,8 @@ export class ShieldnetStateMachine {
 				return await handleKeyGenCommitted(
 					this.#machineConfig,
 					this.#keyGenClient,
-					this.#consensusState,
-					this.#machineStates,
+					consensusState,
+					machineStates,
 					block,
 					eventArgs,
 				);
@@ -323,8 +294,8 @@ export class ShieldnetStateMachine {
 					this.#verificationEngine,
 					this.#keyGenClient,
 					this.#signingClient,
-					this.#consensusState,
-					this.#machineStates,
+					consensusState,
+					machineStates,
 					block,
 					eventArgs,
 					this.#logger,
@@ -333,7 +304,7 @@ export class ShieldnetStateMachine {
 			case "Preprocess": {
 				return await handlePreprocess(
 					this.#signingClient,
-					this.#consensusState,
+					consensusState,
 					eventArgs,
 					this.#logger,
 				);
@@ -343,8 +314,8 @@ export class ShieldnetStateMachine {
 					this.#machineConfig,
 					this.#verificationEngine,
 					this.#signingClient,
-					this.#consensusState,
-					this.#machineStates,
+					consensusState,
+					machineStates,
 					block,
 					eventArgs,
 					this.#logger,
@@ -354,32 +325,32 @@ export class ShieldnetStateMachine {
 				return await handleRevealedNonces(
 					this.#machineConfig,
 					this.#signingClient,
-					this.#consensusState,
-					this.#machineStates,
+					consensusState,
+					machineStates,
 					block,
 					eventArgs,
 				);
 			}
 			case "SignShared": {
 				return await handleSigningShares(
-					this.#consensusState,
-					this.#machineStates,
+					consensusState,
+					machineStates,
 					eventArgs,
 				);
 			}
 			case "SignCompleted": {
 				return await handleSigningCompleted(
 					this.#machineConfig,
-					this.#consensusState,
-					this.#machineStates,
+					consensusState,
+					machineStates,
 					block,
 					eventArgs,
 				);
 			}
 			case "EpochStaged": {
 				return await handleEpochStaged(
-					this.#consensusState,
-					this.#machineStates,
+					consensusState,
+					machineStates,
 					eventArgs,
 				);
 			}
@@ -388,14 +359,14 @@ export class ShieldnetStateMachine {
 					this.#machineConfig,
 					this.#protocol,
 					this.#verificationEngine,
-					this.#consensusState,
+					consensusState,
 					block,
 					eventArgs,
 					this.#logger,
 				);
 			}
 			case "TransactionAttested": {
-				return await handleTransactionAttested(this.#machineStates, eventArgs);
+				return await handleTransactionAttested(machineStates, eventArgs);
 			}
 			default: {
 				return {};

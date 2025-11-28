@@ -54,5 +54,6 @@ export const checkEpochRollover = (
 			consensus,
 		};
 	}
+	// TODO return empty if no change
 	return { consensus: { activeEpoch, stagedEpoch } };
 };

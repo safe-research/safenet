@@ -49,15 +49,14 @@ export const handleKeyGenSecretShared = async (
 		event.identifier,
 		event.share.f,
 	);
-	if (!event.completed) return {};
-	const status = machineStates.rollover;
-	if (status.id !== "collecting_shares" || status.groupId !== groupId) {
+	if (!event.completed) {
+		logger?.(`Group ${event.gid} not completed yet`);
 		return {};
 	}
 
 	// If a group is setup start preprocess (aka nonce commitment)
 	const consensus: ConsensusDiff = {
-		groupPendingNonces: ["add", groupId],
+		groupPendingNonces: [groupId, true],
 	};
 	const nonceTreeRoot = signingClient.generateNonceTree(groupId);
 	const actions: ProtocolAction[] = [
@@ -72,10 +71,10 @@ export const handleKeyGenSecretShared = async (
 		logger?.("Genesis group ready!");
 		return { consensus, rollover: { id: "waiting_for_rollover" }, actions };
 	}
-	if (status.lastParticipant === undefined) {
+	if (machineStates.rollover.lastParticipant === undefined) {
 		throw Error("Invalid state");
 	}
-	const nextEpoch = status.nextEpoch;
+	const nextEpoch = machineStates.rollover.nextEpoch;
 	const groupKey = keyGenClient.groupPublicKey(groupId);
 	if (groupKey === undefined) {
 		throw Error("Invalid state");
@@ -104,13 +103,13 @@ export const handleKeyGenSecretShared = async (
 			groupId,
 			nextEpoch,
 			message,
-			responsible: status.lastParticipant,
+			responsible: machineStates.rollover.lastParticipant,
 		},
 		signing: [
 			message,
 			{
 				id: "waiting_for_request",
-				responsible: status.lastParticipant,
+				responsible: machineStates.rollover.lastParticipant,
 				packet,
 				signers: machineConfig.defaultParticipants.map((p) => p.id),
 				deadline: block + machineConfig.signingTimeout,

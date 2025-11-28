@@ -121,7 +121,7 @@ const checkAvailableNonces = (
 
 			return {
 				consensus: {
-					groupPendingNonces: ["add", groupId],
+					groupPendingNonces: [groupId, true],
 				},
 				actions: [
 					{

@@ -5,6 +5,8 @@ import type { EpochRolloverPacket } from "../consensus/verify/rollover/schemas.j
 import type { SafeTransactionPacket } from "../consensus/verify/safeTx/schemas.js";
 import type { GroupId, ParticipantId, SignatureId } from "../frost/types.js";
 
+export type Optional<T, K extends keyof T> = Omit<T, K> & Partial<Pick<T, K>>;
+
 export type RolloverState =
 	| {
 			id: "waiting_for_rollover";
@@ -82,7 +84,7 @@ export type GroupInfo = {
 };
 
 export type ConsensusDiff = {
-	groupPendingNonces?: ["add" | "remove", GroupId];
+	groupPendingNonces?: [GroupId, true?];
 	activeEpoch?: bigint;
 	stagedEpoch?: bigint;
 	genesisGroupId?: GroupId;
