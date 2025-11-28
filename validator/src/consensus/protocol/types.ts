@@ -16,6 +16,12 @@ export type ShieldnetProtocol = {
 	process(action: ProtocolAction): void;
 };
 
+export type RequestSignature = {
+	id: "sign_request";
+	groupId: GroupId;
+	message: Hex;
+};
+
 export type RegisterNonceCommitments = {
 	id: "sign_register_nonce_commitments";
 	groupId: GroupId;
@@ -42,6 +48,7 @@ export type PublishSignatureShare = {
 };
 
 export type SigningAction =
+	| RequestSignature
 	| RegisterNonceCommitments
 	| RevealNonceCommitments
 	| PublishSignatureShare;
@@ -67,4 +74,21 @@ export type PublishSecretShares = {
 };
 export type KeyGenAction = StartKeyGen | PublishSecretShares;
 
-export type ProtocolAction = KeyGenAction | SigningAction;
+export type AttestTransaction = {
+	id: "consensus_attest_transaction";
+	epoch: bigint;
+	transactionHash: Hex;
+	signatureId: SignatureId;
+};
+
+export type StageEpoch = {
+	id: "consensus_stage_epoch";
+	proposedEpoch: bigint;
+	rolloverBlock: bigint;
+	groupId: GroupId;
+	signatureId: SignatureId;
+};
+
+export type ConsensusAction = AttestTransaction | StageEpoch;
+
+export type ProtocolAction = KeyGenAction | SigningAction | ConsensusAction;

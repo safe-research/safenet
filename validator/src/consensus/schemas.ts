@@ -89,9 +89,20 @@ export const epochProposedEventSchema = z.object({
 	groupKey: frostPointSchema,
 });
 
+export const epochStagedEventSchema = z.object({
+	activeEpoch: z.bigint().nonnegative(),
+	proposedEpoch: z.bigint().positive(),
+	rolloverBlock: z.bigint().positive(),
+	groupKey: frostPointSchema,
+});
+
 export const transactionProposedEventSchema = z.object({
 	message: hexDataSchema,
 	transactionHash: hexDataSchema,
 	epoch: z.bigint().nonnegative(),
 	transaction: safeTransactionSchema,
+});
+
+export const transactionAttestedEventSchema = z.object({
+	message: hexDataSchema,
 });

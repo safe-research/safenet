@@ -53,7 +53,9 @@ export type KeyGenInfoStorage = {
 		share: bigint,
 	): void;
 
+	missingCommitments(groupId: GroupId): ParticipantId[];
 	checkIfCommitmentsComplete(groupId: GroupId): boolean;
+	missingSecretShares(groupId: GroupId): ParticipantId[];
 	checkIfSecretSharesComplete(groupId: GroupId): boolean;
 
 	encryptionKey(groupId: GroupId): bigint;
@@ -89,6 +91,7 @@ export type SignatureRequestStorage = {
 	): void;
 
 	checkIfNoncesComplete(signatureId: SignatureId): boolean;
+	missingNonces(signatureId: SignatureId): ParticipantId[];
 
 	signingGroup(signatureId: SignatureId): GroupId;
 	signers(signatureId: SignatureId): ParticipantId[];

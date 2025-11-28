@@ -1,8 +1,10 @@
 import { parseAbi } from "viem";
 
 export const CONSENSUS_EVENTS = parseAbi([
-	"event EpochProposed(uint64 indexed activeEpoch, uint64 indexed proposedEpoch, uint64 rolloverBlock, (uint256 x, uint256 y) groupKey)",
 	"event TransactionProposed(bytes32 indexed message, bytes32 indexed transactionHash, uint64 epoch, (uint256 chainId, address account, address to, uint256 value, uint8 operation, bytes data, uint256 nonce) transaction)",
+	"event TransactionAttested(bytes32 indexed message)",
+	"event EpochProposed(uint64 indexed activeEpoch, uint64 indexed proposedEpoch, uint64 rolloverBlock, (uint256 x, uint256 y) groupKey)",
+	"event EpochStaged(uint64 indexed activeEpoch, uint64 indexed proposedEpoch, uint64 rolloverBlock, (uint256 x, uint256 y) groupKey)",
 ]);
 
 export const COORDINATOR_EVENTS = parseAbi([
@@ -29,6 +31,7 @@ export const COORDINATOR_FUNCTIONS = parseAbi([
 	"function keyGenSecretShare(bytes32 gid, ((uint256 x, uint256 y) y, uint256[] f) share) external",
 	"function keyGenSecretShareWithCallback(bytes32 gid, ((uint256 x, uint256 y) y, uint256[] f) share, (address target, bytes context) callback) external",
 	"function preprocess(bytes32 id, bytes32 commitment) external returns (uint32 chunk)",
+	"function sign(bytes32 gid, bytes32 message)",
 	"function signRevealNonces(bytes32 sid, ((uint256 x, uint256 y) d, (uint256 x, uint256 y) e) nonces, bytes32[] proof) external",
 	"function signShare(bytes32 sid, ((uint256 x, uint256 y) r, bytes32 root) selection, ((uint256 x, uint256 y) r, uint256 z, uint256 l) share, bytes32[] proof) external",
 	"function signShareWithCallback(bytes32 sid, ((uint256 x, uint256 y) r, bytes32 root) selection, ((uint256 x, uint256 y) r, uint256 z, uint256 l) share, bytes32[] proof, (address target, bytes context) callback) external",

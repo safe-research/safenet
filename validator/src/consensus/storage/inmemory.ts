@@ -124,6 +124,17 @@ export class InMemoryStorage
 			info.commitments,
 		);
 	}
+	missingCommitments(groupId: GroupId): ParticipantId[] {
+		const missing: ParticipantId[] = [];
+		const participants = this.participants(groupId);
+		const info = this.keyGenInfo(groupId);
+		for (const p of participants) {
+			if (!info.commitments.has(p.id)) {
+				missing.push(p.id);
+			}
+		}
+		return missing;
+	}
 	checkIfSecretSharesComplete(groupId: GroupId): boolean {
 		const participants = this.participants(groupId);
 		const info = this.keyGenInfo(groupId);
@@ -131,6 +142,17 @@ export class InMemoryStorage
 			participants.map((p) => p.id),
 			info.secretShares,
 		);
+	}
+	missingSecretShares(groupId: GroupId): ParticipantId[] {
+		const missing: ParticipantId[] = [];
+		const participants = this.participants(groupId);
+		const info = this.keyGenInfo(groupId);
+		for (const p of participants) {
+			if (!info.secretShares.has(p.id)) {
+				missing.push(p.id);
+			}
+		}
+		return missing;
 	}
 	encryptionKey(groupId: GroupId): bigint {
 		const info = this.keyGenInfo(groupId);
@@ -289,6 +311,16 @@ export class InMemoryStorage
 			request.signers,
 			request.signerNonceCommitments,
 		);
+	}
+	missingNonces(signatureId: SignatureId): ParticipantId[] {
+		const missing: ParticipantId[] = [];
+		const request = this.signatureRequest(signatureId);
+		for (const id of request.signers) {
+			if (!request.signerNonceCommitments.has(id)) {
+				missing.push(id);
+			}
+		}
+		return missing;
 	}
 	signingGroup(signatureId: SignatureId): GroupId {
 		return this.signatureRequest(signatureId).groupId;

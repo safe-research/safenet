@@ -1,12 +1,15 @@
 import type { Address, Hex } from "viem";
 import { Queue } from "../../utils/queue.js";
 import type {
+	AttestTransaction,
 	ProtocolAction,
 	PublishSecretShares,
 	PublishSignatureShare,
 	RegisterNonceCommitments,
+	RequestSignature,
 	RevealNonceCommitments,
 	ShieldnetProtocol,
+	StageEpoch,
 	StartKeyGen,
 } from "./types.js";
 
@@ -67,18 +70,24 @@ export abstract class BaseProtocol implements ShieldnetProtocol {
 		}, executionDelay);
 	}
 
-	private async performAction(action: ProtocolAction) {
+	private async performAction(action: ProtocolAction): Promise<Hex> {
 		switch (action.id) {
 			case "key_gen_start":
 				return await this.startKeyGen(action);
 			case "key_gen_publish_secret_shares":
 				return await this.publishKeygenSecretShares(action);
+			case "sign_request":
+				return await this.requestSignature(action);
 			case "sign_register_nonce_commitments":
 				return await this.registerNonceCommitments(action);
 			case "sign_reveal_nonce_commitments":
 				return await this.revealNonceCommitments(action);
 			case "sign_publish_signature_share":
 				return await this.publishSignatureShare(action);
+			case "consensus_attest_transaction":
+				return await this.attestTransaction(action);
+			case "consensus_stage_epoch":
+				return await this.stageEpoch(action);
 		}
 	}
 	protected abstract startKeyGen(args: StartKeyGen): Promise<Hex>;
@@ -86,6 +95,8 @@ export abstract class BaseProtocol implements ShieldnetProtocol {
 	protected abstract publishKeygenSecretShares(
 		args: PublishSecretShares,
 	): Promise<Hex>;
+
+	protected abstract requestSignature(args: RequestSignature): Promise<Hex>;
 
 	protected abstract registerNonceCommitments(
 		args: RegisterNonceCommitments,
@@ -98,4 +109,8 @@ export abstract class BaseProtocol implements ShieldnetProtocol {
 	protected abstract publishSignatureShare(
 		args: PublishSignatureShare,
 	): Promise<Hex>;
+
+	protected abstract attestTransaction(args: AttestTransaction): Promise<Hex>;
+
+	protected abstract stageEpoch(args: StageEpoch): Promise<Hex>;
 }

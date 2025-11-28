@@ -210,6 +210,14 @@ export class SigningClient {
 		};
 	}
 
+	signers(groupId: GroupId): ParticipantId[] {
+		return this.#storage.signers(groupId);
+	}
+
+	missingNonces(groupId: GroupId): ParticipantId[] {
+		return this.#storage.missingNonces(groupId);
+	}
+
 	availableNoncesCount(groupId: GroupId, chunk: bigint): bigint {
 		try {
 			const nonceTree = this.#storage.nonceTree(groupId, chunk);
@@ -217,6 +225,10 @@ export class SigningClient {
 		} catch {
 			return 0n;
 		}
+	}
+
+	signingGroup(signatureId: SignatureId): GroupId {
+		return this.#storage.signingGroup(signatureId);
 	}
 
 	message(signatureId: SignatureId): Hex {

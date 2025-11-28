@@ -75,8 +75,12 @@ export class KeyGenClient {
 		return this.#storage.registerParticipants(participants);
 	}
 
-	abortKeygen(groupId: GroupId) {
-		this.#storage.unregisterGroup(groupId);
+	missingCommitments(groupId: GroupId): ParticipantId[] {
+		return this.#storage.missingCommitments(groupId);
+	}
+
+	missingSecretShares(groupId: GroupId): ParticipantId[] {
+		return this.#storage.missingSecretShares(groupId);
 	}
 
 	setupGroup(
