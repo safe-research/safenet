@@ -31,10 +31,10 @@ export const handleSign = async (
 		event.sequence,
 		logger,
 	);
-	const status = machineStates.signing.get(event.sid);
+	const status = machineStates.signing.get(event.message);
 	// Check that there is no state or it is the retry flow
-	if (status !== undefined && status.id !== "waiting_for_request") {
-		logger?.(`Alreay started signing ${event.sid}!`);
+	if (status?.id !== "waiting_for_request") {
+		logger?.(`Unexpected signing request for ${event.message}!`);
 		return diff;
 	}
 	// Check that signing was initiated via consensus contract
@@ -44,29 +44,18 @@ export const handleSign = async (
 		logger?.(`Message ${event.message} not verified!`);
 		return diff;
 	}
-	// Check if there is already a request for this message
-	const signatureRequest = consensusState.messageSignatureRequests.get(
-		event.message,
-	);
-	// Only allow one concurrent signing process per message
-	if (signatureRequest !== undefined) {
-		logger?.(`Message ${event.message} is already being signed!`);
-		return diff;
-	}
 
 	const consensus = {
 		...diff.consensus,
 	};
-	consensus.messageSignatureRequests = [event.message, event.sid];
+	consensus.signatureIdToMessage = [event.sid, event.message];
 
-	const signers =
-		status?.signers ?? machineConfig.defaultParticipants.map((p) => p.id);
 	const { nonceCommitments, nonceProof } = signingClient.createNonceCommitments(
 		event.gid,
 		event.sid,
 		event.message,
 		event.sequence,
-		signers,
+		status.signers,
 	);
 
 	const actions = diff.actions ?? [];
@@ -79,11 +68,14 @@ export const handleSign = async (
 	return {
 		consensus,
 		signing: [
-			event.sid,
+			event.message,
 			{
 				id: "collect_nonce_commitments",
+				signatureId: event.sid,
 				deadline: block + machineConfig.signingTimeout,
 				lastSigner: undefined,
+				packet: status.packet,
+				epoch: status.epoch,
 			},
 		],
 		actions,
@@ -109,13 +101,14 @@ const checkAvailableNonces = (
 	);
 	if (
 		activeGroup !== undefined &&
-		!consensusState.groupPendingNonces.has(activeGroup)
+		!consensusState.groupPendingNonces.has(activeGroup.groupId)
 	) {
+		const groupId = activeGroup.groupId;
 		let { chunk, offset } = decodeSequence(sequence);
 		let availableNonces = 0n;
 		while (true) {
 			const noncesInChunk = signingClient.availableNoncesCount(
-				activeGroup,
+				activeGroup.groupId,
 				chunk,
 			);
 			availableNonces += noncesInChunk - offset;
@@ -126,17 +119,17 @@ const checkAvailableNonces = (
 			offset = 0n;
 		}
 		if (availableNonces < NONCE_THRESHOLD) {
-			logger?.(`Commit nonces for ${activeGroup}!`);
-			const nonceTreeRoot = signingClient.generateNonceTree(activeGroup);
+			logger?.(`Commit nonces for ${groupId}!`);
+			const nonceTreeRoot = signingClient.generateNonceTree(groupId);
 
 			return {
 				consensus: {
-					groupPendingNonces: ["add", activeGroup],
+					groupPendingNonces: ["add", groupId],
 				},
 				actions: [
 					{
 						id: "sign_register_nonce_commitments",
-						groupId: activeGroup,
+						groupId,
 						nonceCommitmentsHash: nonceTreeRoot,
 					},
 				],

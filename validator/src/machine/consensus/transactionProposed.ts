@@ -2,12 +2,14 @@ import type { ShieldnetProtocol } from "../../consensus/protocol/types.js";
 import { transactionProposedEventSchema } from "../../consensus/schemas.js";
 import type { VerificationEngine } from "../../consensus/verify/engine.js";
 import type { SafeTransactionPacket } from "../../consensus/verify/safeTx/schemas.js";
-import type { ConsensusState, StateDiff } from "../types.js";
+import type { ConsensusState, MachineConfig, StateDiff } from "../types.js";
 
 export const handleTransactionProposed = async (
+	machineConfig: MachineConfig,
 	protocol: ShieldnetProtocol,
 	verificationEngine: VerificationEngine,
 	consensusState: ConsensusState,
+	block: bigint,
 	eventArgs: unknown,
 	logger?: (msg: unknown) => void,
 ): Promise<StateDiff> => {
@@ -33,14 +35,16 @@ export const handleTransactionProposed = async (
 	logger?.(`Verified message ${message}`);
 	// The signing will be triggered in a separate event
 	return {
-		consensus: {
-			transactionProposalInfo: [
-				message,
-				{
-					epoch: event.epoch,
-					transactionHash: event.transactionHash,
-				},
-			],
-		},
+		signing: [
+			message,
+			{
+				id: "waiting_for_request",
+				responsible: undefined,
+				packet,
+				epoch: consensusState.activeEpoch,
+				signers: machineConfig.defaultParticipants.map((p) => p.id),
+				deadline: block + machineConfig.signingTimeout,
+			},
+		],
 	};
 };

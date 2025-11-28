@@ -1,6 +1,8 @@
 import { encodeFunctionData, type Hex, zeroHash } from "viem";
 import { nonceCommitmentsEventSchema } from "../../consensus/schemas.js";
 import type { SigningClient } from "../../consensus/signing/client.js";
+import { metaTxHash } from "../../consensus/verify/safeTx/hashing.js";
+import type { SafeTransactionPacket } from "../../consensus/verify/safeTx/schemas.js";
 import { toPoint } from "../../frost/math.js";
 import { CONSENSUS_FUNCTIONS } from "../../types/abis.js";
 import type {
@@ -17,19 +19,20 @@ export const handleRevealedNonces = async (
 	machineStates: MachineStates,
 	block: bigint,
 	eventArgs: unknown,
-	logger?: (msg: unknown) => void,
 ): Promise<StateDiff> => {
 	// A participant has submitted nonces for a signature id
 	// Parse event from raw data
 	const event = nonceCommitmentsEventSchema.parse(eventArgs);
+	// Check that this is a request related to a message that is handled"
+	const message = consensusState.signatureIdToMessage.get(event.sid);
+	if (message === undefined) return {};
 	// Check that state for signature id is "collect_nonce_commitments"
-	const status = machineStates.signing.get(event.sid);
+	const status = machineStates.signing.get(message);
 	if (status?.id !== "collect_nonce_commitments") return {};
-	machineStates.signing.set(event.sid, {
+	machineStates.signing.set(message, {
 		...status,
 		lastSigner: event.identifier,
 	});
-	const message = signingClient.message(event.sid);
 	const readyToSubmit = signingClient.handleNonceCommitments(
 		event.sid,
 		event.identifier,
@@ -62,15 +65,20 @@ export const handleRevealedNonces = async (
 						zeroHash,
 					],
 				})
-			: buildTransactionAttestationCallback(consensusState, message, logger);
+			: status.packet.type === "safe_transaction_packet"
+				? buildTransactionAttestationCallback(status.packet)
+				: undefined;
 	return {
 		signing: [
-			event.sid,
+			message,
 			{
 				id: "collect_signing_shares",
+				signatureId: status.signatureId,
 				sharesFrom: [],
 				deadline: block + machineConfig.signingTimeout,
 				lastSigner: event.identifier,
+				packet: status.packet,
+				epoch: status.epoch,
 			},
 		],
 		actions: [
@@ -90,18 +98,15 @@ export const handleRevealedNonces = async (
 };
 
 const buildTransactionAttestationCallback = (
-	consensusState: ConsensusState,
-	message: Hex,
-	logger?: (msg: unknown) => void,
+	packet: SafeTransactionPacket,
 ): Hex | undefined => {
-	const info = consensusState.transactionProposalInfo.get(message);
-	if (info === undefined) {
-		logger?.(`Warn: Unknown proposal info for ${message}`);
-		return undefined;
-	}
 	return encodeFunctionData({
 		abi: CONSENSUS_FUNCTIONS,
 		functionName: "attestTransaction",
-		args: [info.epoch, info.transactionHash, zeroHash],
+		args: [
+			packet.proposal.epoch,
+			metaTxHash(packet.proposal.transaction),
+			zeroHash,
+		],
 	});
 };

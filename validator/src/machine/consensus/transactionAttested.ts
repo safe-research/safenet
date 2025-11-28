@@ -1,29 +1,22 @@
 import { transactionAttestedEventSchema } from "../../consensus/schemas.js";
-import type { ConsensusState, MachineStates, StateDiff } from "../types.js";
+import type { MachineStates, StateDiff } from "../types.js";
 
 export const handleTransactionAttested = async (
 	machineStates: MachineStates,
-	consensusState: ConsensusState,
 	eventArgs: unknown,
 ): Promise<StateDiff> => {
 	// The transaction attestation was submitted
 	// Parse event from raw data
 	const event = transactionAttestedEventSchema.parse(eventArgs);
-	// Get current signature id for message
-	const signatureRequest = consensusState.messageSignatureRequests.get(
-		event.message,
-	);
-	if (signatureRequest === undefined) return {};
 	// Check that state for signature id is "collect_signing_shares"
-	const status = machineStates.signing.get(signatureRequest);
+	const status = machineStates.signing.get(event.message);
 	if (status?.id !== "waiting_for_attestation") return {};
 
 	// Clean up internal state
 	return {
 		consensus: {
-			messageSignatureRequests: [event.message],
-			transactionProposalInfo: [event.message],
+			signatureIdToMessage: [status.signatureId],
 		},
-		signing: [signatureRequest, undefined],
+		signing: [event.message],
 	};
 };

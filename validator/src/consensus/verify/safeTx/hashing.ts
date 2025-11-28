@@ -1,5 +1,5 @@
-import { type Hex, hashTypedData } from "viem";
-import type { SafeTransactionPacket } from "./schemas.js";
+import { type Hex, hashStruct, hashTypedData } from "viem";
+import type { MetaTransaction, SafeTransactionPacket } from "./schemas.js";
 
 export const safeTxPacketHash = (packet: SafeTransactionPacket): Hex =>
 	hashTypedData({
@@ -26,4 +26,21 @@ export const safeTxPacketHash = (packet: SafeTransactionPacket): Hex =>
 		message: {
 			...packet.proposal,
 		},
+	});
+
+export const metaTxHash = (transaction: MetaTransaction): Hex =>
+	hashStruct({
+		types: {
+			MetaTransaction: [
+				{ type: "uint256", name: "chainId" },
+				{ type: "address", name: "account" },
+				{ type: "address", name: "to" },
+				{ type: "uint256", name: "value" },
+				{ type: "uint8", name: "operation" },
+				{ type: "bytes", name: "data" },
+				{ type: "uint256", name: "nonce" },
+			],
+		},
+		primaryType: "MetaTransaction",
+		data: transaction,
 	});

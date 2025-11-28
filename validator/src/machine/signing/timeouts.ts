@@ -1,5 +1,6 @@
+import type { Hex } from "viem";
 import type { SigningClient } from "../../consensus/signing/client.js";
-import type { SignatureId } from "../../frost/types.js";
+import { metaTxHash } from "../../consensus/verify/safeTx/hashing.js";
 import type {
 	ConsensusState,
 	MachineConfig,
@@ -41,13 +42,13 @@ const checkSigningRequestTimeout = (
 	consensusState: ConsensusState,
 	machineStates: MachineStates,
 	block: bigint,
-	signatureId: SignatureId,
+	message: Hex,
 	status: SigningState,
 ): StateDiff => {
 	// Still within deadline
 	if (status.deadline > block) return {};
 	// TODO: refactor into statediff
-	consensusState.messageSignatureRequests.delete(signatureId);
+	consensusState.signatureIdToMessage.delete(message);
 	switch (status.id) {
 		case "waiting_for_attestation": {
 			const everyoneResponsible = status.responsible === undefined;
@@ -57,11 +58,11 @@ const checkSigningRequestTimeout = (
 				// Signature request will be readded once it is submitted
 				// and no more state needs to be tracked
 				// if the deadline is hit again this would be a critical failure
-				stateDiff.signing = [signatureId, undefined];
+				stateDiff.signing = [message, undefined];
 			} else {
 				// Make everyone responsible for next retry
 				stateDiff.signing = [
-					signatureId,
+					message,
 					{
 						...status,
 						responsible: undefined,
@@ -69,13 +70,13 @@ const checkSigningRequestTimeout = (
 					},
 				];
 			}
+			const signatureId = status.signatureId;
 			const act =
 				everyoneResponsible ||
 				status.responsible === signingClient.participantId(signatureId);
 			if (!act) {
 				return stateDiff;
 			}
-			const message = signingClient.message(signatureId);
 			if (
 				machineStates.rollover.id === "sign_rollover" &&
 				message === machineStates.rollover.message
@@ -94,15 +95,15 @@ const checkSigningRequestTimeout = (
 					],
 				};
 			}
-			const transactionInfo =
-				consensusState.transactionProposalInfo.get(message);
-			if (transactionInfo !== undefined) {
+			if (status.packet.type === "safe_transaction_packet") {
+				const transactionHash = metaTxHash(status.packet.proposal.transaction);
 				return {
 					...stateDiff,
 					actions: [
 						{
 							id: "consensus_attest_transaction",
-							...transactionInfo,
+							epoch: status.packet.proposal.epoch,
+							transactionHash,
 							signatureId,
 						},
 					],
@@ -118,11 +119,11 @@ const checkSigningRequestTimeout = (
 				// Signature request will be readded once it is submitted
 				// and no more state needs to be tracked
 				// if the deadline is hit again this would be a critical failure
-				stateDiff.signing = [signatureId, undefined];
+				stateDiff.signing = [message, undefined];
 			} else {
 				// Make everyone responsible for next retry
 				stateDiff.signing = [
-					signatureId,
+					message,
 					{
 						...status,
 						signers: status.signers.filter((id) => id !== status.responsible),
@@ -131,14 +132,15 @@ const checkSigningRequestTimeout = (
 					},
 				];
 			}
-			const act =
-				everyoneResponsible ||
-				status.responsible === signingClient.participantId(signatureId);
+			const groupInfo = consensusState.epochGroups.get(status.epoch);
+			if (groupInfo === undefined) {
+				throw Error(`Unknown group for epoch ${status.epoch}`);
+			}
+			const { groupId, participantId } = groupInfo;
+			const act = everyoneResponsible || status.responsible === participantId;
 			if (!act) {
 				return stateDiff;
 			}
-			const message = signingClient.message(signatureId);
-			const groupId = signingClient.signingGroup(signatureId);
 			return {
 				...stateDiff,
 				actions: [
@@ -157,24 +159,29 @@ const checkSigningRequestTimeout = (
 			// Get participants that did not participate
 			const missingParticipants =
 				status.id === "collect_nonce_commitments"
-					? signingClient.missingNonces(signatureId)
+					? signingClient.missingNonces(status.signatureId)
 					: signingClient
-							.signers(signatureId)
+							.signers(status.signatureId)
 							.filter((s) => status.sharesFrom.indexOf(s) < 0);
 			// For next key gen only consider active participants
 			const signers = machineConfig.defaultParticipants
 				.filter((p) => missingParticipants.indexOf(p.id) < 0)
 				.map((p) => p.id);
-			const groupId = signingClient.signingGroup(signatureId);
-			const message = signingClient.message(signatureId);
+			const groupInfo = consensusState.epochGroups.get(status.epoch);
+			if (groupInfo === undefined) {
+				throw Error(`Unknown group for epoch ${status.epoch}`);
+			}
+			const { groupId } = groupInfo;
 			return {
 				signing: [
-					signatureId,
+					message,
 					{
 						id: "waiting_for_request",
 						responsible: status.lastSigner,
 						signers,
 						deadline: block + machineConfig.signingTimeout,
+						epoch: status.epoch,
+						packet: status.packet,
 					},
 				],
 				actions: [

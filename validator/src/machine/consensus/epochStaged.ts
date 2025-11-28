@@ -15,19 +15,14 @@ export const handleEpochStaged = async (
 			`Not expecting epoch staging during ${machineStates.rollover.id}!`,
 		);
 	}
-	// Get current signature id for message
-	const signatureRequest = consensusState.messageSignatureRequests.get(
-		machineStates.rollover.message,
-	);
-	if (signatureRequest === undefined) return {};
 	// Check that state for signature id is "collect_signing_shares"
-	const status = machineStates.signing.get(signatureRequest);
+	const status = machineStates.signing.get(machineStates.rollover.message);
 	if (status?.id !== "waiting_for_attestation") return {};
 
 	// Clean up internal state
 	return {
-		consensus: { messageSignatureRequests: [machineStates.rollover.message] },
-		signing: [signatureRequest, undefined],
+		consensus: { signatureIdToMessage: [status.signatureId] },
+		signing: [machineStates.rollover.message],
 		rollover: { id: "waiting_for_rollover" },
 	};
 };

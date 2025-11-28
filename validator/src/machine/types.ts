@@ -1,6 +1,8 @@
 import type { Hex } from "viem";
 import type { ProtocolAction } from "../consensus/protocol/types.js";
 import type { Participant } from "../consensus/storage/types.js";
+import type { EpochRolloverPacket } from "../consensus/verify/rollover/schemas.js";
+import type { SafeTransactionPacket } from "../consensus/verify/safeTx/schemas.js";
 import type { GroupId, ParticipantId, SignatureId } from "../frost/types.js";
 
 export type RolloverState =
@@ -28,29 +30,39 @@ export type RolloverState =
 			responsible: ParticipantId;
 	  };
 
-export type SigningState =
-	| {
-			id: "waiting_for_request";
-			responsible: ParticipantId | undefined;
-			signers: ParticipantId[];
-			deadline: bigint;
-	  }
-	| {
-			id: "collect_nonce_commitments";
-			lastSigner: ParticipantId | undefined;
-			deadline: bigint;
-	  }
-	| {
-			id: "collect_signing_shares";
-			sharesFrom: ParticipantId[];
-			lastSigner: ParticipantId | undefined;
-			deadline: bigint;
-	  }
-	| {
-			id: "waiting_for_attestation";
-			responsible: ParticipantId | undefined;
-			deadline: bigint;
-	  };
+export type BaseSigningState = {
+	packet: SafeTransactionPacket | EpochRolloverPacket;
+	epoch: bigint;
+};
+
+export type SigningState = BaseSigningState &
+	(
+		| {
+				id: "waiting_for_request";
+				responsible: ParticipantId | undefined;
+				signers: ParticipantId[];
+				deadline: bigint;
+		  }
+		| {
+				id: "collect_nonce_commitments";
+				signatureId: SignatureId;
+				lastSigner: ParticipantId | undefined;
+				deadline: bigint;
+		  }
+		| {
+				id: "collect_signing_shares";
+				signatureId: SignatureId;
+				sharesFrom: ParticipantId[];
+				lastSigner: ParticipantId | undefined;
+				deadline: bigint;
+		  }
+		| {
+				id: "waiting_for_attestation";
+				signatureId: SignatureId;
+				responsible: ParticipantId | undefined;
+				deadline: bigint;
+		  }
+	);
 
 export type StateTransition =
 	| {
@@ -65,14 +77,18 @@ export type StateTransition =
 			eventArgs: unknown;
 	  };
 
+export type GroupInfo = {
+	groupId: GroupId;
+	participantId: ParticipantId;
+};
+
 export type ConsensusDiff = {
 	groupPendingNonces?: ["add" | "remove", GroupId];
 	activeEpoch?: bigint;
 	stagedEpoch?: bigint;
 	genesisGroupId?: GroupId;
-	epochGroup?: [bigint, GroupId];
-	messageSignatureRequests?: [Hex, SignatureId?];
-	transactionProposalInfo?: [Hex, { epoch: bigint; transactionHash: Hex }?];
+	epochGroup?: [bigint, GroupInfo];
+	signatureIdToMessage?: [SignatureId, Hex?];
 };
 
 export type StateDiff = {
@@ -84,12 +100,11 @@ export type StateDiff = {
 
 export type ConsensusState = {
 	genesisGroupId?: GroupId;
-	epochGroups: Map<bigint, GroupId>;
+	epochGroups: Map<bigint, GroupInfo>;
 	groupPendingNonces: Set<GroupId>;
 	activeEpoch: bigint;
 	stagedEpoch: bigint;
-	messageSignatureRequests: Map<Hex, SignatureId>;
-	transactionProposalInfo: Map<Hex, { epoch: bigint; transactionHash: Hex }>;
+	signatureIdToMessage: Map<SignatureId, Hex>;
 };
 
 export type MachineStates = {

@@ -25,6 +25,7 @@ import { handleSign } from "../machine/signing/sign.js";
 import { checkSigningTimeouts } from "../machine/signing/timeouts.js";
 import type {
 	ConsensusState,
+	GroupInfo,
 	MachineConfig,
 	MachineStates,
 	SigningState,
@@ -52,15 +53,11 @@ export class ShieldnetStateMachine {
 	#currentTransition?: StateTransition;
 	// Consensus state
 	#consensusState: ConsensusState = {
-		epochGroups: new Map<bigint, GroupId>(),
+		epochGroups: new Map<bigint, GroupInfo>(),
 		activeEpoch: 0n,
 		stagedEpoch: 0n,
 		groupPendingNonces: new Set<GroupId>(),
-		messageSignatureRequests: new Map<Hex, SignatureId>(),
-		transactionProposalInfo: new Map<
-			Hex,
-			{ epoch: bigint; transactionHash: Hex }
-		>(),
+		signatureIdToMessage: new Map<SignatureId, Hex>(),
 	};
 	// Sub machine state
 	#machineStates: MachineStates = {
@@ -292,23 +289,15 @@ export class ShieldnetStateMachine {
 				consensusState.genesisGroupId = consensusDiff.genesisGroupId;
 			}
 			if (consensusDiff.epochGroup !== undefined) {
-				const [epoch, groupId] = consensusDiff.epochGroup;
-				consensusState.epochGroups.set(epoch, groupId);
+				const [epoch, groupInfo] = consensusDiff.epochGroup;
+				consensusState.epochGroups.set(epoch, groupInfo);
 			}
-			if (consensusDiff.messageSignatureRequests !== undefined) {
-				const [message, signatureId] = consensusDiff.messageSignatureRequests;
+			if (consensusDiff.signatureIdToMessage !== undefined) {
+				const [message, signatureId] = consensusDiff.signatureIdToMessage;
 				if (signatureId === undefined) {
-					consensusState.messageSignatureRequests.delete(message);
+					consensusState.signatureIdToMessage.delete(message);
 				} else {
-					consensusState.messageSignatureRequests.set(message, signatureId);
-				}
-			}
-			if (consensusDiff.transactionProposalInfo !== undefined) {
-				const [message, info] = consensusDiff.transactionProposalInfo;
-				if (info === undefined) {
-					consensusState.transactionProposalInfo.delete(message);
-				} else {
-					consensusState.transactionProposalInfo.set(message, info);
+					consensusState.signatureIdToMessage.set(message, signatureId);
 				}
 			}
 		}
@@ -340,6 +329,7 @@ export class ShieldnetStateMachine {
 					this.#signingClient,
 					this.#consensusState,
 					this.#machineStates,
+					block,
 					eventArgs,
 					this.#logger,
 				);
@@ -372,15 +362,19 @@ export class ShieldnetStateMachine {
 					this.#machineStates,
 					block,
 					eventArgs,
-					this.#logger,
 				);
 			}
 			case "SignShared": {
-				return await handleSigningShares(this.#machineStates, eventArgs);
+				return await handleSigningShares(
+					this.#consensusState,
+					this.#machineStates,
+					eventArgs,
+				);
 			}
 			case "SignCompleted": {
 				return await handleSigningCompleted(
 					this.#machineConfig,
+					this.#consensusState,
 					this.#machineStates,
 					block,
 					eventArgs,
@@ -395,19 +389,17 @@ export class ShieldnetStateMachine {
 			}
 			case "TransactionProposed": {
 				return await handleTransactionProposed(
+					this.#machineConfig,
 					this.#protocol,
 					this.#verificationEngine,
 					this.#consensusState,
+					block,
 					eventArgs,
 					this.#logger,
 				);
 			}
 			case "TransactionAttested": {
-				return await handleTransactionAttested(
-					this.#machineStates,
-					this.#consensusState,
-					eventArgs,
-				);
+				return await handleTransactionAttested(this.#machineStates, eventArgs);
 			}
 			default: {
 				return {};

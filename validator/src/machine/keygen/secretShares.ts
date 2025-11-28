@@ -23,6 +23,7 @@ export const handleKeyGenSecretShared = async (
 	signingClient: SigningClient,
 	consensusState: ConsensusState,
 	machineStates: MachineStates,
+	block: bigint,
 	eventArgs: unknown,
 	logger?: (msg: unknown) => void,
 ): Promise<StateDiff> => {
@@ -95,7 +96,7 @@ export const handleKeyGenSecretShared = async (
 		},
 	};
 	const message = await verificationEngine.verify(packet);
-	logger?.(`Verified message ${message}`);
+	logger?.(`Verified epoch rollover message ${message}`);
 	return {
 		consensus,
 		rollover: {
@@ -105,6 +106,17 @@ export const handleKeyGenSecretShared = async (
 			message,
 			responsible: status.lastParticipant,
 		},
+		signing: [
+			message,
+			{
+				id: "waiting_for_request",
+				responsible: status.lastParticipant,
+				packet,
+				epoch: consensusState.activeEpoch,
+				signers: machineConfig.defaultParticipants.map((p) => p.id),
+				deadline: block + machineConfig.signingTimeout,
+			},
+		],
 		actions,
 	};
 };

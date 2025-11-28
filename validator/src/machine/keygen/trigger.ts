@@ -46,7 +46,7 @@ export const triggerKeyGen = (
 		groupId,
 		diff: {
 			consensus: {
-				epochGroup: [epoch, groupId],
+				epochGroup: [epoch, { groupId, participantId }],
 			},
 			rollover: {
 				id: "collecting_commitments",
