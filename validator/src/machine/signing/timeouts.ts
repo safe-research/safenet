@@ -161,8 +161,6 @@ const checkSigningRequestTimeout = (
 		}
 		case "collect_nonce_commitments":
 		case "collect_signing_shares": {
-			// Still within deadline
-			if (status.deadline <= block) return {};
 			// Get participants that did not participate
 			const missingParticipants =
 				status.id === "collect_nonce_commitments"
