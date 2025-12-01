@@ -55,7 +55,7 @@ export class SigningClient {
 		signatureId: SignatureId,
 		message: Hex,
 		sequence: bigint,
-		signers: ParticipantId[],
+		signers: readonly ParticipantId[],
 	): {
 		nonceCommitments: PublicNonceCommitments;
 		nonceProof: Hex[];

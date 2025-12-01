@@ -36,34 +36,36 @@ export type BaseSigningState = {
 	packet: SafeTransactionPacket | EpochRolloverPacket;
 };
 
-export type SigningState = BaseSigningState &
-	(
-		| {
-				id: "waiting_for_request";
-				responsible: ParticipantId | undefined;
-				signers: ParticipantId[];
-				deadline: bigint;
-		  }
-		| {
-				id: "collect_nonce_commitments";
-				signatureId: SignatureId;
-				lastSigner: ParticipantId | undefined;
-				deadline: bigint;
-		  }
-		| {
-				id: "collect_signing_shares";
-				signatureId: SignatureId;
-				sharesFrom: ParticipantId[];
-				lastSigner: ParticipantId | undefined;
-				deadline: bigint;
-		  }
-		| {
-				id: "waiting_for_attestation";
-				signatureId: SignatureId;
-				responsible: ParticipantId | undefined;
-				deadline: bigint;
-		  }
-	);
+export type SigningState = Readonly<
+	BaseSigningState &
+		(
+			| {
+					id: "waiting_for_request";
+					responsible: ParticipantId | undefined;
+					signers: readonly ParticipantId[];
+					deadline: bigint;
+			  }
+			| {
+					id: "collect_nonce_commitments";
+					signatureId: SignatureId;
+					lastSigner: ParticipantId | undefined;
+					deadline: bigint;
+			  }
+			| {
+					id: "collect_signing_shares";
+					signatureId: SignatureId;
+					sharesFrom: readonly ParticipantId[];
+					lastSigner: ParticipantId | undefined;
+					deadline: bigint;
+			  }
+			| {
+					id: "waiting_for_attestation";
+					signatureId: SignatureId;
+					responsible: ParticipantId | undefined;
+					deadline: bigint;
+			  }
+		)
+>;
 
 export type StateTransition =
 	| {
@@ -108,7 +110,14 @@ export type MutableConsensusState = {
 	signatureIdToMessage: Record<SignatureId, Hex>;
 };
 
-export type ConsensusState = Readonly<MutableConsensusState>;
+export type ConsensusState = Readonly<{
+	genesisGroupId?: GroupId;
+	activeEpoch: bigint;
+	stagedEpoch: bigint;
+	groupPendingNonces: Readonly<Record<GroupId, boolean>>;
+	epochGroups: Readonly<Record<string, Readonly<GroupInfo>>>;
+	signatureIdToMessage: Readonly<Record<SignatureId, Hex>>;
+}>;
 
 export type MutableMachineStates = {
 	rollover: RolloverState;
@@ -117,7 +126,7 @@ export type MutableMachineStates = {
 
 export type MachineStates = Readonly<{
 	rollover: Readonly<RolloverState>;
-	signing: Record<SignatureId, Readonly<SigningState>>;
+	signing: Readonly<Record<SignatureId, Readonly<SigningState>>>;
 }>;
 
 export type MachineConfig = {

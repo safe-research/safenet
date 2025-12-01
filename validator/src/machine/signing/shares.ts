@@ -20,7 +20,7 @@ export const handleSigningShares = async (
 	const sharesFrom = [...status.sharesFrom, event.identifier];
 	return {
 		signing: [
-			event.sid,
+			message,
 			{
 				...status,
 				lastSigner: event.identifier,
