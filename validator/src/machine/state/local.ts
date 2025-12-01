@@ -16,30 +16,30 @@ import {
 } from "./diff.js";
 
 const proxy = <K extends string, V, T extends Record<K, V>>(
-	target: T,
+	source: T,
 	temp: Record<K, V | undefined>,
 ) =>
-	new Proxy(target, {
-		get(target, key, receiver): V | undefined {
+	new Proxy(temp, {
+		get(temp, key, receiver): V | undefined {
 			const keyString = String(key) as K;
 			if (keyString in temp) {
 				return temp[keyString];
 			}
-			return Reflect.get(target, key, receiver);
+			return Reflect.get(source, key, receiver);
 		},
-		has(target, key) {
+		has(temp, key) {
 			const keyString = String(key) as K;
 			if (keyString in temp) {
 				return temp[keyString] !== undefined;
 			}
-			return Reflect.has(target, key);
+			return Reflect.has(source, key);
 		},
-		deleteProperty(_target, key) {
+		deleteProperty(_temp, key) {
 			const keyString = String(key) as K;
 			temp[keyString] = undefined;
 			return true;
 		},
-	});
+	}) as Record<K, V>;
 
 export class LocalMachineStates implements MachineStates {
 	protected tempState: UpdatableMachineState = {
@@ -55,12 +55,16 @@ export class LocalMachineStates implements MachineStates {
 		return this.immutableState.rollover;
 	}
 
+	public set rollover(value: RolloverState) {
+		this.tempState.rollover = value;
+	}
+
 	public get signing(): Record<`0x${string}`, SigningState> {
 		return proxy(this.immutableState.signing, this.tempState.signing);
 	}
 
 	apply(diff: StateDiff) {
-		applyMachines(diff, this.tempState);
+		applyMachines(diff, this);
 	}
 }
 
@@ -73,11 +77,15 @@ export class LocalConsensusStates implements ConsensusState {
 
 	constructor(private immutableState: ConsensusState) {}
 
-	public get genesisGroupId(): `0x${string}` | undefined {
+	public get genesisGroupId(): Hex | undefined {
 		if (this.tempState.genesisGroupId !== undefined) {
 			return this.tempState.genesisGroupId;
 		}
 		return this.immutableState.genesisGroupId;
+	}
+
+	public set genesisGroupId(value: Hex | undefined) {
+		this.tempState.genesisGroupId = value;
 	}
 
 	public get activeEpoch(): bigint {
@@ -87,11 +95,19 @@ export class LocalConsensusStates implements ConsensusState {
 		return this.immutableState.activeEpoch;
 	}
 
+	public set activeEpoch(value: bigint) {
+		this.tempState.activeEpoch = value;
+	}
+
 	public get stagedEpoch(): bigint {
 		if (this.tempState.stagedEpoch !== undefined) {
 			return this.tempState.stagedEpoch;
 		}
 		return this.immutableState.stagedEpoch;
+	}
+
+	public set stagedEpoch(value: bigint) {
+		this.tempState.stagedEpoch = value;
 	}
 
 	public get groupPendingNonces(): Record<Hex, boolean> {
@@ -116,7 +132,7 @@ export class LocalConsensusStates implements ConsensusState {
 	}
 
 	apply(diff: StateDiff) {
-		applyConsensus(diff, this.tempState);
+		applyConsensus(diff, this);
 	}
 }
 
