@@ -22,6 +22,42 @@ const secretShares = [
 	{ id: 3n, value: 103n },
 ];
 
+const nonces = {
+	root: `0x${"44".repeat(31)}01`,
+	leaves: [
+		`0x${"77".repeat(31)}01`,
+		`0x${"77".repeat(31)}02`,
+		`0x${"77".repeat(31)}03`,
+		`0x${"77".repeat(31)}04`,
+	],
+	commitments: [
+		{
+			hidingNonce: 401n,
+			hidingNonceCommitment: g(401n),
+			bindingNonce: 801n,
+			bindingNonceCommitment: g(801n),
+		},
+		{
+			hidingNonce: 402n,
+			hidingNonceCommitment: g(402n),
+			bindingNonce: 802n,
+			bindingNonceCommitment: g(802n),
+		},
+		{
+			hidingNonce: 403n,
+			hidingNonceCommitment: g(403n),
+			bindingNonce: 803n,
+			bindingNonceCommitment: g(803n),
+		},
+		{
+			hidingNonce: 404n,
+			hidingNonceCommitment: g(404n),
+			bindingNonce: 804n,
+			bindingNonceCommitment: g(804n),
+		},
+	],
+} as const;
+
 const sortedEntries = <T>(m: Map<bigint, T>): [bigint, T][] => {
 	return [...m.entries()].sort(([a], [b]) => Number(a - b));
 };
@@ -246,6 +282,63 @@ describe("sqlite", () => {
 			storage.clearKeyGen(groups[0]);
 
 			expect(storage.secretSharesMap(groups[0]).size).toBe(0);
+		});
+	});
+
+	describe("NonceStorage", () => {
+		it("should register, link, and burn nonces", () => {
+			const storage = new SqliteStorage(participants[0].address, ":memory:");
+
+			const chunk = 42n;
+			const offset = 2n;
+
+			// TODO: The `NonceStorage` interface does not take a `readonly`
+			// `NonceTree` as input, meaning that (at least at a type level) it
+			// is permitted to modify values from the passed-in object. I don't
+			// think we actually want this. For the test, we need to convert our
+			// constant `readonly` value of `nonces` into a mutable one.
+			const dup = (n: typeof nonces) => ({
+				root: n.root,
+				leaves: [...n.leaves],
+				commitments: n.commitments.map((c) => ({ ...c })),
+			});
+
+			expect(() =>
+				storage.registerNonceTree(groups[0], dup(nonces)),
+			).toThrowError();
+
+			storage.registerGroup(groups[0], participants, 2n);
+
+			expect(() =>
+				storage.linkNonceTree(groups[0], chunk, nonces.root),
+			).toThrowError();
+			expect(() => storage.nonceTree(groups[0], chunk)).toThrowError();
+			expect(() => storage.burnNonce(groups[0], chunk, offset)).toThrowError();
+
+			const treeHash = storage.registerNonceTree(groups[0], dup(nonces));
+
+			expect(treeHash).toBe(nonces.root);
+			expect(() => storage.nonceTree(groups[0], chunk)).toThrowError();
+			expect(() => storage.burnNonce(groups[0], chunk, offset)).toThrowError();
+
+			storage.linkNonceTree(groups[0], chunk, nonces.root);
+
+			expect(storage.nonceTree(groups[0], chunk)).toEqual(nonces);
+
+			storage.burnNonce(groups[0], chunk, offset);
+
+			expect(storage.nonceTree(groups[0], chunk)).toEqual({
+				...nonces,
+				commitments: nonces.commitments.map((c, i) =>
+					BigInt(i) === offset
+						? { ...c, hidingNonce: 0n, bindingNonce: 0n }
+						: c,
+				),
+			});
+
+			storage.unregisterGroup(groups[0]);
+
+			expect(() => storage.nonceTree(groups[0], chunk)).toThrowError();
 		});
 	});
 });

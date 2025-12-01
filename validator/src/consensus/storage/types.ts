@@ -65,7 +65,7 @@ export type KeyGenInfoStorage = {
 };
 
 export type NonceStorage = {
-	registerNonceTree(tree: NonceTree): Hex;
+	registerNonceTree(groupId: GroupId, tree: NonceTree): Hex;
 	linkNonceTree(groupId: GroupId, chunk: bigint, treeHash: Hex): void;
 	nonceTree(groupId: GroupId, chunk: bigint): NonceTree;
 	burnNonce(groupId: GroupId, chunk: bigint, offset: bigint): void;

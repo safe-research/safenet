@@ -46,6 +46,14 @@ const dbSecretShareSchema = z.object({
 	id: dbIntegerSchema,
 	secretShare: dbScalarSchema,
 });
+const dbNoncesCommitmentSchema = z.object({
+	root: hexDataSchema,
+	leaf: hexDataSchema,
+	hiding: dbScalarSchema.nullable(),
+	hidingCommitment: dbPointSchema,
+	binding: dbScalarSchema.nullable(),
+	bindingCommitment: dbPointSchema,
+});
 
 interface ZodSchema<Output> {
 	parse(data: unknown): Output;
@@ -88,13 +96,35 @@ export class SqliteStorage
 				PRIMARY KEY(group_id, address, from_participant),
 				FOREIGN KEY(group_id) REFERENCES groups(id) ON DELETE CASCADE
 			);
+
+			CREATE TABLE IF NOT EXISTS nonces_links(
+				root TEXT NOT NULL,
+				group_id TEXT NOT NULL,
+				address TEXT NOT NULL,
+				chunk INTEGER,
+				PRIMARY KEY(root),
+				FOREIGN KEY(group_id) REFERENCES groups(id) ON DELETE CASCADE
+			);
+
+			CREATE TABLE IF NOT EXISTS nonces(
+				leaf TEXT NOT NULL,
+				root TEXT NOT NULL,
+				offset INTEGER NOT NULL,
+				hiding BLOB,
+		        hiding_commitment BLOB NOT NULL,
+				binding BLOB,
+				binding_commitment BLOB NOT NULL,
+				PRIMARY KEY(leaf),
+				FOREIGN KEY(root) REFERENCES nonces_links(root) ON DELETE CASCADE
+			);
 		`);
 
 		this.#account = account;
 		this.#db = db;
 
 		// TODO: We can cache all our prepared SQL statements for performance
-		// in the future.
+		// in the future. Additionally, there are a few indexes that we can add
+		// to speed up SQL performance.
 	}
 
 	knownGroups(): GroupId[] {
@@ -459,18 +489,93 @@ export class SqliteStorage
 		})();
 	}
 
-	registerNonceTree(_tree: NonceTree): Hex {
-		throw new Error("not implemented");
+	registerNonceTree(groupId: GroupId, tree: NonceTree): Hex {
+		const insertNoncesLink = this.#db.prepare(
+			"INSERT INTO nonces_links (root, group_id, address) VALUES (?, ?, ?)",
+		);
+		const insertNoncesLeaf = this.#db.prepare(
+			"INSERT INTO nonces (leaf, root, offset, hiding, hiding_commitment, binding, binding_commitment) VALUES (?, ?, ?, ?, ?, ?, ?)",
+		);
+		this.#db.transaction(() => {
+			insertNoncesLink.run(tree.root, groupId, this.#account);
+			for (let offset = 0; offset < tree.commitments.length; offset++) {
+				insertNoncesLeaf.run(
+					tree.leaves[offset],
+					tree.root,
+					offset,
+					scalarToBytes(tree.commitments[offset].hidingNonce),
+					tree.commitments[offset].hidingNonceCommitment.toBytes(),
+					scalarToBytes(tree.commitments[offset].bindingNonce),
+					tree.commitments[offset].bindingNonceCommitment.toBytes(),
+				);
+			}
+		})();
+		// TODO: feels like a code-smell that we return an input parameter.
+		return tree.root;
 	}
-	linkNonceTree(_groupId: GroupId, _chunk: bigint, _treeHash: Hex): void {
-		throw new Error("not implemented");
+
+	linkNonceTree(groupId: GroupId, chunk: bigint, treeHash: Hex): void {
+		const { changes } = this.#db
+			.prepare(
+				"UPDATE nonces_links SET chunk = ? WHERE root = ? AND group_id = ? AND chunk is NULL",
+			)
+			.run(chunk, treeHash, groupId);
+		if (changes !== 1) {
+			throw new Error("nonces root not found or already linked to chunk");
+		}
 	}
-	nonceTree(_groupId: GroupId, _chunk: bigint): NonceTree {
-		throw new Error("not implemented");
+
+	nonceTree(groupId: GroupId, chunk: bigint): NonceTree {
+		const nonces = this.#db
+			.prepare(`
+				SELECT
+					root,
+					leaf,
+					hiding,
+					hiding_commitment AS hidingCommitment,
+					binding,
+					binding_commitment AS bindingCommitment
+				FROM nonces
+				WHERE root = (
+					SELECT l.root FROM nonces_links AS l
+					WHERE l.group_id = ? AND l.address = ? AND l.chunk = ?
+				)
+				ORDER BY offset ASC
+			`)
+			.all(groupId, this.#account, chunk)
+			.map((row) => dbNoncesCommitmentSchema.parse(row));
+		if (nonces.length === 0) {
+			throw new Error("nonce tree not found");
+		}
+		return {
+			root: nonces[0].root,
+			leaves: nonces.map((n) => n.leaf),
+			commitments: nonces.map((n) => ({
+				hidingNonce: n.hiding ?? 0n,
+				hidingNonceCommitment: n.hidingCommitment,
+				bindingNonce: n.binding ?? 0n,
+				bindingNonceCommitment: n.bindingCommitment,
+			})),
+		};
 	}
-	burnNonce(_groupId: GroupId, _chunk: bigint, _offset: bigint): void {
-		throw new Error("not implemented");
+
+	burnNonce(groupId: GroupId, chunk: bigint, offset: bigint): void {
+		const { changes } = this.#db
+			.prepare(`
+				UPDATE nonces
+				SET hiding = NULL, binding = NULL
+				WHERE root = (
+					SELECT l.root FROM nonces_links AS l
+					WHERE l.group_id = ? AND l.address = ? AND l.chunk = ?
+				)
+				AND offset = ? AND hiding IS NOT NULL AND binding IS NOT NULL
+			`)
+			.run(groupId, this.#account, chunk, offset);
+		if (changes !== 1) {
+			throw new Error("nonce not found or already burned");
+		}
 	}
+
 	registerSignatureRequest(
 		_signatureId: SignatureId,
 		_groupId: GroupId,

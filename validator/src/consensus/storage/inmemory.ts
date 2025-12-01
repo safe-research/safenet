@@ -328,7 +328,7 @@ export class InMemoryStorage
 		return this.signatureRequest(signatureId).signerNonceCommitments;
 	}
 
-	registerNonceTree(tree: NonceTree): Hex {
+	registerNonceTree(_groupId: GroupId, tree: NonceTree): Hex {
 		this.#nonceTrees.set(tree.root, tree);
 		return tree.root;
 	}

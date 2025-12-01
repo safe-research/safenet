@@ -34,7 +34,7 @@ export class SigningClient {
 		const signingShare = this.#storage.signingShare(groupId);
 		if (signingShare === undefined) throw Error(`No info for ${groupId}`);
 		const nonceTree = createNonceTree(signingShare);
-		const nonceTreeRoot = this.#storage.registerNonceTree(nonceTree);
+		const nonceTreeRoot = this.#storage.registerNonceTree(groupId, nonceTree);
 		return nonceTreeRoot;
 	}
 

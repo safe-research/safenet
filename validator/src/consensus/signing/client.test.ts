@@ -173,7 +173,7 @@ describe("signing", () => {
 				leaves: ["0x" as Hex],
 				root: treeInfo.root as Hex,
 			};
-			storage.registerNonceTree(nonceTree);
+			storage.registerNonceTree(groupId, nonceTree);
 			client.handleNonceCommitmentsHash(
 				groupId,
 				participantId,
