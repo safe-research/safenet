@@ -144,6 +144,11 @@ describe("sqlite", () => {
 			expect(() =>
 				storage.commitments(groups[0], commitments[1].id),
 			).toThrowError();
+			expect(() => storage.missingCommitments(groups[0])).toThrowError();
+			expect(() =>
+				storage.checkIfCommitmentsComplete(groups[0]),
+			).toThrowError();
+			expect(() => storage.commitmentsMap(groups[0])).toThrowError();
 
 			storage.registerGroup(groups[0], participants, 2n);
 
@@ -191,6 +196,14 @@ describe("sqlite", () => {
 			storage.clearKeyGen(groups[0]);
 
 			expect(storage.commitmentsMap(groups[0]).size).toBe(0);
+
+			storage.unregisterGroup(groups[0]);
+
+			expect(() => storage.missingCommitments(groups[0])).toThrowError();
+			expect(() =>
+				storage.checkIfCommitmentsComplete(groups[0]),
+			).toThrowError();
+			expect(() => storage.commitmentsMap(groups[0])).toThrowError();
 		});
 
 		it("should register secret shares", () => {
@@ -203,6 +216,11 @@ describe("sqlite", () => {
 					secretShares[1].value,
 				),
 			).toThrowError();
+			expect(() => storage.missingSecretShares(groups[0])).toThrowError();
+			expect(() =>
+				storage.checkIfSecretSharesComplete(groups[0]),
+			).toThrowError();
+			expect(() => storage.secretSharesMap(groups[0])).toThrowError();
 
 			storage.registerGroup(groups[0], participants, 2n);
 
@@ -246,6 +264,14 @@ describe("sqlite", () => {
 			storage.clearKeyGen(groups[0]);
 
 			expect(storage.secretSharesMap(groups[0]).size).toBe(0);
+
+			storage.unregisterGroup(groups[0]);
+
+			expect(() => storage.missingSecretShares(groups[0])).toThrowError();
+			expect(() =>
+				storage.checkIfSecretSharesComplete(groups[0]),
+			).toThrowError();
+			expect(() => storage.secretSharesMap(groups[0])).toThrowError();
 		});
 	});
 
@@ -409,6 +435,9 @@ describe("sqlite", () => {
 			expect(() =>
 				storage.registerNonceCommitments(signature, signers[1], commitments[1]),
 			).toThrowError();
+			expect(() => storage.checkIfNoncesComplete(signature)).toThrowError();
+			expect(() => storage.missingNonces(signature)).toThrowError();
+			expect(() => storage.nonceCommitmentsMap(signature)).toThrowError();
 
 			storage.registerGroup(groups[0], participants, 2n);
 			storage.registerSignatureRequest(
@@ -418,6 +447,10 @@ describe("sqlite", () => {
 				signers,
 				sequence,
 			);
+
+			expect(storage.checkIfNoncesComplete(signature)).toBe(false);
+			expect(storage.missingNonces(signature)).toEqual(signers);
+			expect(sortedEntries(storage.nonceCommitmentsMap(signature))).toEqual([]);
 
 			storage.registerNonceCommitments(signature, signers[1], commitments[1]);
 
@@ -438,6 +471,12 @@ describe("sqlite", () => {
 				[signers[0], commitments[0]],
 				[signers[1], commitments[1]],
 			]);
+
+			storage.unregisterGroup(groups[0]);
+
+			expect(() => storage.checkIfNoncesComplete(signature)).toThrowError();
+			expect(() => storage.missingNonces(signature)).toThrowError();
+			expect(() => storage.nonceCommitmentsMap(signature)).toThrowError();
 		});
 	});
 });

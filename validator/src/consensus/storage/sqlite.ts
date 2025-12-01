@@ -25,6 +25,10 @@ import type {
 	SignatureRequestStorage,
 } from "./types.js";
 
+interface ZodSchema<Output> {
+	parse(data: unknown): Output;
+}
+
 const dbIntegerSchema = z.int().transform((id) => BigInt(id));
 const dbParticipantSchema = z.object({
 	id: dbIntegerSchema,
@@ -59,10 +63,37 @@ const dbSignatureCommitmentSchema = z.object({
 	hiding: dbPointSchema,
 	binding: dbPointSchema,
 });
-
-interface ZodSchema<Output> {
-	parse(data: unknown): Output;
-}
+const dbEmptyListSchema = z.array(z.null()).length(1);
+const dbList = <T>(result: unknown[], schema: ZodSchema<T>): T[] => {
+	// NOTE: For certain queries, we use a `LEFT JOIN` on the primary ID (for
+	// example group ID or signature ID) so that we return `[]` in case of
+	// a missing primary ID, a `[null]` in case there is a primary ID but with
+	// no associated values (for example, no missing nonces), and `[...]`
+	// otherwise. This allows is us to disambiguate between "_ not found" errors
+	// and empty lists.
+	if (result.length === 0) {
+		throw new Error("not found");
+	}
+	if (dbEmptyListSchema.safeParse(result).success) {
+		return [];
+	}
+	return result.map((row) => schema.parse(row));
+};
+const dbEmptyMapSchema = z.array(z.record(z.string(), z.null())).length(1);
+const dbMap = <T, K, V>(
+	result: unknown[],
+	schema: ZodSchema<T>,
+	f: (value: T) => [K, V],
+): Map<K, V> => {
+	// NOTE: We apply the same `LEFT JOIN` trick for maps as we do for lists.
+	if (result.length === 0) {
+		throw new Error("not found");
+	}
+	if (dbEmptyMapSchema.safeParse(result).success) {
+		return new Map();
+	}
+	return new Map(result.map((row) => f(schema.parse(row))));
+};
 
 export class SqliteStorage
 	implements GroupInfoStorage, KeyGenInfoStorage, SignatureRequestStorage
@@ -400,48 +431,84 @@ export class SqliteStorage
 	}
 
 	missingCommitments(groupId: GroupId): ParticipantId[] {
-		return this.#db
-			.prepare(
-				"SELECT id FROM group_participants WHERE group_id = ? AND commitments IS NULL ORDER BY id ASC",
-			)
-			.pluck(true)
-			.all(groupId)
-			.map((row) => dbIntegerSchema.parse(row));
+		return dbList(
+			this.#db
+				.prepare(`
+					SELECT p.id
+					FROM groups AS g
+					LEFT JOIN group_participants AS p
+					ON p.group_id = g.id AND p.commitments IS NULL
+					WHERE g.id = ?
+					ORDER BY p.id ASC
+				`)
+				.pluck(true)
+				.all(groupId),
+			dbIntegerSchema,
+		);
 	}
 
 	checkIfCommitmentsComplete(groupId: GroupId): boolean {
-		const count = this.#db
-			.prepare(
-				"SELECT COUNT(*) FROM group_participants WHERE group_id = ? AND commitments IS NULL",
-			)
+		const exists = this.#db
+			.prepare(`
+				SELECT CASE
+					WHEN EXISTS (SELECT id FROM groups WHERE id = ?) THEN EXISTS (
+						SELECT 1
+						FROM group_participants
+						WHERE group_id = ? AND commitments IS NULL
+					)
+					ELSE NULL
+				END
+			`)
 			.pluck(true)
-			.get(groupId);
-		return count === 0;
+			.get(groupId, groupId);
+		if (exists === null) {
+			throw new Error("group not found");
+		}
+		return exists === 0;
 	}
 
 	missingSecretShares(groupId: GroupId): ParticipantId[] {
-		return this.#db
-			.prepare(`
-				SELECT p.id FROM group_participants AS p
-				LEFT JOIN group_secret_shares AS s ON s.group_id = p.group_id AND s.address = ? AND s.from_participant = p.id
-				WHERE p.group_id = ? AND s.secret_share IS NULL
-				ORDER BY id ASC
-			`)
-			.pluck(true)
-			.all(this.#account, groupId)
-			.map((row) => dbIntegerSchema.parse(row));
+		return dbList(
+			this.#db
+				.prepare(`
+					WITH group_participant_secret_shares AS (
+						SELECT p.group_id, p.id, s.secret_share
+						FROM group_participants AS p
+						LEFT JOIN group_secret_shares AS s
+						ON s.group_id = p.group_id AND s.address = ? AND s.from_participant = p.id
+					)
+					SELECT t.id FROM groups AS g
+					LEFT JOIN group_participant_secret_shares AS t
+					ON t.group_id = g.id AND t.secret_share IS NULL
+					WHERE g.id = ?
+					ORDER BY t.id ASC
+				`)
+				.pluck(true)
+				.all(this.#account, groupId),
+			dbIntegerSchema,
+		);
 	}
 
 	checkIfSecretSharesComplete(groupId: GroupId): boolean {
-		const count = this.#db
+		const exists = this.#db
 			.prepare(`
-				SELECT COUNT(*) FROM group_participants AS p
-				LEFT JOIN group_secret_shares AS s ON s.group_id = p.group_id AND s.address = ? AND s.from_participant = p.id
-				WHERE p.group_id = ? AND s.secret_share IS NULL
+				SELECT CASE
+					WHEN EXISTS (SELECT id FROM groups WHERE id = ?) THEN EXISTS (
+						SELECT 1
+						FROM group_participants AS p
+				 		LEFT JOIN group_secret_shares AS s
+				 		ON s.group_id = p.group_id AND s.address = ? AND s.from_participant = p.id
+				 		WHERE p.group_id = ? AND s.secret_share IS NULL
+					)
+					ELSE NULL
+				END
 			`)
 			.pluck(true)
-			.get(this.#account, groupId);
-		return count === 0;
+			.get(groupId, this.#account, groupId);
+		if (exists === null) {
+			throw new Error("group not found");
+		}
+		return exists === 0;
 	}
 
 	encryptionKey(groupId: GroupId): bigint {
@@ -473,32 +540,34 @@ export class SqliteStorage
 	}
 
 	commitmentsMap(groupId: GroupId): Map<ParticipantId, readonly FrostPoint[]> {
-		return new Map(
+		return dbMap(
 			this.#db
-				.prepare(
-					"SELECT id, commitments FROM group_participants WHERE group_id = ? AND commitments IS NOT NULL",
-				)
-				.all(groupId)
-				.map((row) => {
-					const { id, commitments } = dbCommitmentsSchema.parse(row);
-					return [id, commitments];
-				}),
+				.prepare(`
+					SELECT p.id, p.commitments
+					FROM groups AS g
+					LEFT JOIN group_participants AS p
+					ON p.group_id = g.id AND p.commitments IS NOT NULL
+					WHERE g.id = ?
+				`)
+				.all(groupId),
+			dbCommitmentsSchema,
+			({ id, commitments }) => [id, commitments],
 		);
 	}
 
 	secretSharesMap(groupId: GroupId): Map<ParticipantId, bigint> {
-		return new Map(
+		return dbMap(
 			this.#db
 				.prepare(`
-					SELECT from_participant as id, secret_share as secretShare
-					FROM group_secret_shares
-					WHERE group_id = ? AND address = ? AND secret_share IS NOT NULL
+					SELECT s.from_participant AS id, s.secret_share AS secretShare
+					FROM groups AS g
+					LEFT JOIN group_secret_shares AS s
+					ON s.group_id = g.id AND s.address = ? AND s.secret_share IS NOT NULL
+					WHERE g.id = ?
 				`)
-				.all(groupId, this.#account)
-				.map((row) => {
-					const { id, secretShare } = dbSecretShareSchema.parse(row);
-					return [id, secretShare];
-				}),
+				.all(this.#account, groupId),
+			dbSecretShareSchema,
+			({ id, secretShare }) => [id, secretShare],
 		);
 	}
 
@@ -612,7 +681,7 @@ export class SqliteStorage
 			.pluck(true)
 			.get(signatureId);
 		if (result === undefined) {
-			throw new Error("signature not found");
+			throw new Error("signature request not found");
 		}
 		return schema.parse(result);
 	}
@@ -664,23 +733,41 @@ export class SqliteStorage
 	}
 
 	checkIfNoncesComplete(signatureId: SignatureId): boolean {
-		const count = this.#db
-			.prepare(
-				"SELECT COUNT(*) FROM signature_commitments WHERE signature_id = ? AND (hiding IS NULL OR binding IS NULL)",
-			)
+		const exists = this.#db
+			.prepare(`
+				SELECT CASE
+					WHEN EXISTS (SELECT id FROM signatures WHERE id = ?) THEN EXISTS (
+						SELECT 1
+						FROM signature_commitments
+						WHERE signature_id = ?
+						AND (hiding IS NULL OR binding IS NULL)
+					)
+					ELSE NULL
+				END
+			`)
 			.pluck(true)
-			.get(signatureId);
-		return count === 0;
+			.get(signatureId, signatureId);
+		if (exists === null) {
+			throw new Error("signature request not found");
+		}
+		return exists === 0;
 	}
 
 	missingNonces(signatureId: SignatureId): ParticipantId[] {
-		return this.#db
-			.prepare(
-				"SELECT signer FROM signature_commitments WHERE signature_id = ? AND (hiding IS NULL OR binding IS NULL) ORDER BY signer ASC",
-			)
-			.pluck(true)
-			.all(signatureId)
-			.map((row) => dbIntegerSchema.parse(row));
+		return dbList(
+			this.#db
+				.prepare(`
+					SELECT c.signer
+					FROM signatures AS s
+					LEFT JOIN signature_commitments AS c
+					ON c.signature_id = s.id AND (c.hiding IS NULL OR c.binding IS NULL)
+					WHERE s.id = ?
+					ORDER BY c.signer ASC
+				`)
+				.pluck(true)
+				.all(signatureId),
+			dbIntegerSchema,
+		);
 	}
 
 	signingGroup(signatureId: SignatureId): GroupId {
@@ -693,12 +780,11 @@ export class SqliteStorage
 				"SELECT signer FROM signature_commitments WHERE signature_id = ? ORDER BY signer ASC",
 			)
 			.pluck(true)
-			.all(signatureId)
-			.map((row) => dbIntegerSchema.parse(row));
+			.all(signatureId);
 		if (result.length === 0) {
-			throw new Error("signature not found");
+			throw new Error("signature request not found");
 		}
-		return result;
+		return result.map((row) => dbIntegerSchema.parse(row));
 	}
 
 	message(signatureId: SignatureId): Hex {
@@ -712,21 +798,24 @@ export class SqliteStorage
 	nonceCommitmentsMap(
 		signatureId: SignatureId,
 	): Map<ParticipantId, PublicNonceCommitments> {
-		return new Map(
+		return dbMap(
 			this.#db
 				.prepare(`
-					SELECT signer, hiding, binding FROM signature_commitments
-					WHERE signature_id = ? AND (hiding IS NOT NULL AND binding IS NOT NULL)
+					SELECT c.signer, c.hiding, c.binding
+					FROM signatures AS s
+					LEFT JOIN signature_commitments AS c
+					ON c.signature_id = s.id AND c.hiding IS NOT NULL AND c.binding IS NOT NULL
+					WHERE s.id = ?
 				`)
-				.all(signatureId)
-				.map((row) => {
-					const { signer, hiding, binding } =
-						dbSignatureCommitmentSchema.parse(row);
-					return [
-						signer,
-						{ hidingNonceCommitment: hiding, bindingNonceCommitment: binding },
-					];
-				}),
+				.all(signatureId),
+			dbSignatureCommitmentSchema,
+			({ signer, hiding, binding }) => [
+				signer,
+				{
+					hidingNonceCommitment: hiding,
+					bindingNonceCommitment: binding,
+				},
+			],
 		);
 	}
 }
