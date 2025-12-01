@@ -201,7 +201,9 @@ export class KeyGenClient {
 		}
 		const commitment = this.#storage.commitments(groupId, senderId);
 		if (commitment === undefined)
-			throw new Error(`Commitments for ${groupId}:${senderId} are not available!`);
+			throw new Error(
+				`Commitments for ${groupId}:${senderId} are not available!`,
+			);
 		// TODO: check if we should use a reasonable limit for the id (current uint256)
 		const shareIndex =
 			participantId < senderId ? participantId : participantId - 1n;

@@ -60,11 +60,12 @@ export class SigningClient {
 		nonceCommitments: PublicNonceCommitments;
 		nonceProof: Hex[];
 	} {
-
 		if (signers.length < this.#storage.threshold(groupId)) {
 			throw new Error("Not enough signers to start signing process");
 		}
-		const participantsSet = new Set(this.#storage.participants(groupId).map((p) => p.id));
+		const participantsSet = new Set(
+			this.#storage.participants(groupId).map((p) => p.id),
+		);
 		for (const signer of signers) {
 			if (!participantsSet.has(signer)) {
 				throw new Error(`Invalid signer id provided: ${signer}`);
@@ -184,7 +185,9 @@ export class SigningClient {
 			nonceCommitments.bindingNonce === 0n &&
 			nonceCommitments.hidingNonce === 0n
 		) {
-			throw new Error(`Nonces for sequence ${sequence} have been already burned`);
+			throw new Error(
+				`Nonces for sequence ${sequence} have been already burned`,
+			);
 		}
 		const signerPart = signerParts[signerIndex];
 		const signatureShare = createSignatureShare(

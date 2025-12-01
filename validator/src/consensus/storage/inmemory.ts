@@ -54,7 +54,8 @@ export class InMemoryStorage
 
 	private keyGenInfo(groupId: GroupId): KeyGenInfo {
 		const info = this.#keyGenInfo.get(groupId);
-		if (info === undefined) throw new Error(`No keygen info for group ${groupId}!`);
+		if (info === undefined)
+			throw new Error(`No keygen info for group ${groupId}!`);
 		return info;
 	}
 
@@ -271,7 +272,9 @@ export class InMemoryStorage
 		// Check if group is known, otherwise this will throw
 		this.groupInfo(groupId);
 		if (this.#signatureRequests.has(signatureId))
-			throw new Error(`SignatureRequest for ${signatureId} already registered!`);
+			throw new Error(
+				`SignatureRequest for ${signatureId} already registered!`,
+			);
 		this.#signatureRequests.set(signatureId, {
 			groupId,
 			message,

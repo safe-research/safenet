@@ -72,7 +72,8 @@ export const createSigningShare = (
 	for (const [, share] of secretShares) {
 		signingShare = addmod(signingShare, share);
 	}
-	if (signingShare === 0n) throw new Error("Could not calculate signing share!");
+	if (signingShare === 0n)
+		throw new Error("Could not calculate signing share!");
 	return signingShare;
 };
 

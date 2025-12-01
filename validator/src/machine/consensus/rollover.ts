@@ -54,6 +54,11 @@ export const checkEpochRollover = (
 			consensus,
 		};
 	}
-	// TODO return empty if no change
-	return { consensus: { activeEpoch, stagedEpoch } };
+	if (
+		activeEpoch !== consensusState.activeEpoch ||
+		stagedEpoch !== consensusState.stagedEpoch
+	) {
+		return { consensus: { activeEpoch, stagedEpoch } };
+	}
+	return {};
 };
