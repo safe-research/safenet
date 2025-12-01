@@ -348,11 +348,7 @@ export class ShieldnetStateMachine {
 				);
 			}
 			case "EpochStaged": {
-				return await handleEpochStaged(
-					consensusState,
-					machineStates,
-					eventArgs,
-				);
+				return await handleEpochStaged(machineStates, eventArgs);
 			}
 			case "TransactionProposed": {
 				return await handleTransactionProposed(

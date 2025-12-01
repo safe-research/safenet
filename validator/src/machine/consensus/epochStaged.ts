@@ -1,8 +1,7 @@
 import { epochStagedEventSchema } from "../../consensus/schemas.js";
-import type { ConsensusState, MachineStates, StateDiff } from "../types.js";
+import type { MachineStates, StateDiff } from "../types.js";
 
 export const handleEpochStaged = async (
-	_consensusState: ConsensusState,
 	machineStates: MachineStates,
 	eventArgs: unknown,
 ): Promise<StateDiff> => {
