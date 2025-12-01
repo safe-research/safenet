@@ -54,6 +54,11 @@ const dbNoncesCommitmentSchema = z.object({
 	binding: dbScalarSchema.nullable(),
 	bindingCommitment: dbPointSchema,
 });
+const dbSignatureCommitmentSchema = z.object({
+	signer: dbIntegerSchema,
+	hiding: dbPointSchema,
+	binding: dbPointSchema,
+});
 
 interface ZodSchema<Output> {
 	parse(data: unknown): Output;
@@ -116,6 +121,24 @@ export class SqliteStorage
 				binding_commitment BLOB NOT NULL,
 				PRIMARY KEY(leaf),
 				FOREIGN KEY(root) REFERENCES nonces_links(root) ON DELETE CASCADE
+			);
+
+			CREATE TABLE IF NOT EXISTS signatures(
+				id TEXT NOT NULL,
+				group_id TEXT NOT NULL,
+				message TEXT NOT NULL,
+				sequence INTEGER NOT NULL,
+				PRIMARY KEY(id),
+				FOREIGN KEY(group_id) REFERENCES groups(id) ON DELETE CASCADE
+			);
+
+			CREATE TABLE IF NOT EXISTS signature_commitments(
+				signature_id TEXT NOT NULL,
+				signer INTEGER NOT NULL,
+				hiding BLOB,
+				binding BLOB,
+				PRIMARY KEY(signature_id, signer),
+				FOREIGN KEY(signature_id) REFERENCES signatures(id) ON DELETE CASCADE
 			);
 		`);
 
@@ -296,7 +319,9 @@ export class SqliteStorage
 
 	participants(groupId: GroupId): readonly Participant[] {
 		const result = this.#db
-			.prepare("SELECT id, address FROM group_participants WHERE group_id = ?")
+			.prepare(
+				"SELECT id, address FROM group_participants WHERE group_id = ? ORDER BY id ASC",
+			)
 			.all(groupId)
 			.map((row) => dbParticipantSchema.parse(row));
 		// Note that registering a group requires there to be at least one
@@ -377,7 +402,7 @@ export class SqliteStorage
 	missingCommitments(groupId: GroupId): ParticipantId[] {
 		return this.#db
 			.prepare(
-				"SELECT id FROM group_participants WHERE group_id = ? AND commitments IS NULL",
+				"SELECT id FROM group_participants WHERE group_id = ? AND commitments IS NULL ORDER BY id ASC",
 			)
 			.pluck(true)
 			.all(groupId)
@@ -400,6 +425,7 @@ export class SqliteStorage
 				SELECT p.id FROM group_participants AS p
 				LEFT JOIN group_secret_shares AS s ON s.group_id = p.group_id AND s.address = ? AND s.from_participant = p.id
 				WHERE p.group_id = ? AND s.secret_share IS NULL
+				ORDER BY id ASC
 			`)
 			.pluck(true)
 			.all(this.#account, groupId)
@@ -576,43 +602,131 @@ export class SqliteStorage
 		}
 	}
 
+	private getSignatureColumn<T>(
+		signatureId: SignatureId,
+		column: string,
+		schema: ZodSchema<T>,
+	): T {
+		const result = this.#db
+			.prepare(`SELECT ${column} FROM signatures WHERE id = ?`)
+			.pluck(true)
+			.get(signatureId);
+		if (result === undefined) {
+			throw new Error("signature not found");
+		}
+		return schema.parse(result);
+	}
+
 	registerSignatureRequest(
-		_signatureId: SignatureId,
-		_groupId: GroupId,
-		_message: Hex,
-		_signers: ParticipantId[],
-		_sequence: bigint,
+		signatureId: SignatureId,
+		groupId: GroupId,
+		message: Hex,
+		signers: ParticipantId[],
+		sequence: bigint,
 	): void {
-		throw new Error("not implemented");
+		if (signers.length === 0) {
+			throw new Error("signature with no signers");
+		}
+
+		const insertSignature = this.#db.prepare(
+			"INSERT INTO signatures (id, group_id, message, sequence) VALUES (?, ?, ?, ?)",
+		);
+		const insertSignatureCommitment = this.#db.prepare(
+			"INSERT INTO signature_commitments (signature_id, signer) VALUES (?, ?)",
+		);
+		this.#db.transaction(() => {
+			insertSignature.run(signatureId, groupId, message, sequence);
+			for (const signer of signers) {
+				insertSignatureCommitment.run(signatureId, signer);
+			}
+		})();
 	}
+
 	registerNonceCommitments(
-		_signatureId: SignatureId,
-		_signerId: ParticipantId,
-		_nonceCommitments: PublicNonceCommitments,
+		signatureId: SignatureId,
+		signerId: ParticipantId,
+		nonceCommitments: PublicNonceCommitments,
 	): void {
-		throw new Error("not implemented");
+		const { changes } = this.#db
+			.prepare(`
+				UPDATE signature_commitments SET hiding = ?, binding = ?
+				WHERE signature_id = ? AND signer = ? AND hiding IS NULL AND binding IS NULL
+			`)
+			.run(
+				nonceCommitments.hidingNonceCommitment.toBytes(),
+				nonceCommitments.bindingNonceCommitment.toBytes(),
+				signatureId,
+				signerId,
+			);
+		if (changes !== 1) {
+			throw new Error("signature commitment not found or already registered");
+		}
 	}
-	checkIfNoncesComplete(_signatureId: SignatureId): boolean {
-		throw new Error("not implemented");
+
+	checkIfNoncesComplete(signatureId: SignatureId): boolean {
+		const count = this.#db
+			.prepare(
+				"SELECT COUNT(*) FROM signature_commitments WHERE signature_id = ? AND (hiding IS NULL OR binding IS NULL)",
+			)
+			.pluck(true)
+			.get(signatureId);
+		return count === 0;
 	}
-	missingNonces(_signatureId: SignatureId): ParticipantId[] {
-		throw new Error("not implemented");
+
+	missingNonces(signatureId: SignatureId): ParticipantId[] {
+		return this.#db
+			.prepare(
+				"SELECT signer FROM signature_commitments WHERE signature_id = ? AND (hiding IS NULL OR binding IS NULL) ORDER BY signer ASC",
+			)
+			.pluck(true)
+			.all(signatureId)
+			.map((row) => dbIntegerSchema.parse(row));
 	}
-	signingGroup(_signatureId: SignatureId): GroupId {
-		throw new Error("not implemented");
+
+	signingGroup(signatureId: SignatureId): GroupId {
+		return this.getSignatureColumn(signatureId, "group_id", hexDataSchema);
 	}
-	signers(_signatureId: SignatureId): ParticipantId[] {
-		throw new Error("not implemented");
+
+	signers(signatureId: SignatureId): ParticipantId[] {
+		const result = this.#db
+			.prepare(
+				"SELECT signer FROM signature_commitments WHERE signature_id = ? ORDER BY signer ASC",
+			)
+			.pluck(true)
+			.all(signatureId)
+			.map((row) => dbIntegerSchema.parse(row));
+		if (result.length === 0) {
+			throw new Error("signature not found");
+		}
+		return result;
 	}
-	message(_signatureId: SignatureId): Hex {
-		throw new Error("not implemented");
+
+	message(signatureId: SignatureId): Hex {
+		return this.getSignatureColumn(signatureId, "message", hexDataSchema);
 	}
-	sequence(_signatureId: SignatureId): bigint {
-		throw new Error("not implemented");
+
+	sequence(signatureId: SignatureId): bigint {
+		return this.getSignatureColumn(signatureId, "sequence", dbIntegerSchema);
 	}
+
 	nonceCommitmentsMap(
-		_signatureId: SignatureId,
+		signatureId: SignatureId,
 	): Map<ParticipantId, PublicNonceCommitments> {
-		throw new Error("not implemented");
+		return new Map(
+			this.#db
+				.prepare(`
+					SELECT signer, hiding, binding FROM signature_commitments
+					WHERE signature_id = ? AND (hiding IS NOT NULL AND binding IS NOT NULL)
+				`)
+				.all(signatureId)
+				.map((row) => {
+					const { signer, hiding, binding } =
+						dbSignatureCommitmentSchema.parse(row);
+					return [
+						signer,
+						{ hidingNonceCommitment: hiding, bindingNonceCommitment: binding },
+					];
+				}),
+		);
 	}
 }
