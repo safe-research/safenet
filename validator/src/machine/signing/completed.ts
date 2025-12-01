@@ -22,7 +22,7 @@ export const handleSigningCompleted = async (
 	// Check that state for signature id is "collect_signing_shares"
 	const status = machineStates.signing[message];
 	if (status?.id !== "collect_signing_shares") return {};
-	if (status.lastSigner === undefined) throw Error("Invalid state");
+	if (status.lastSigner === undefined) throw new Error("Invalid state");
 
 	return {
 		signing: [

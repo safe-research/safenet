@@ -14,7 +14,7 @@ export const triggerKeyGen = (
 	logger?: (msg: unknown) => void,
 ): { groupId: GroupId; diff: StateDiff } => {
 	if (participants.length < 2) {
-		throw Error("Not enough participatns!");
+		throw new Error("Not enough participatns!");
 	}
 	// 4 bytes version, 20 bytes address, 8 bytes epoch number
 	const context = encodePacked(

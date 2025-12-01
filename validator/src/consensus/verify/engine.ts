@@ -19,7 +19,7 @@ export class VerificationEngine {
 	async verify(packet: Typed): Promise<Hex> {
 		const handler = this.#typeHandlers.get(packet.type);
 		if (handler === undefined) {
-			throw Error(`No handler registered for type ${packet.type}`);
+			throw new Error(`No handler registered for type ${packet.type}`);
 		}
 		// Throws if packet is invalid
 		const packetId = await handler.hashAndVerify(packet);

@@ -76,12 +76,12 @@ export const handleKeyGenSecretShared = async (
 		return { consensus, rollover: { id: "waiting_for_rollover" }, actions };
 	}
 	if (machineStates.rollover.lastParticipant === undefined) {
-		throw Error("Invalid state");
+		throw new Error("Invalid state");
 	}
 	const nextEpoch = machineStates.rollover.nextEpoch;
 	const groupKey = keyGenClient.groupPublicKey(groupId);
 	if (groupKey === undefined) {
-		throw Error("Invalid state");
+		throw new Error("Invalid state");
 	}
 	// The deadline is either the timeout or when the epoch should start
 	const packet: EpochRolloverPacket = {

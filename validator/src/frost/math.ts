@@ -61,7 +61,7 @@ export const createVerificationShare = (
 				: verificationShare.add(partialVerificationShare);
 	}
 	if (verificationShare === null)
-		throw Error("Could not calculate verification share!");
+		throw new Error("Could not calculate verification share!");
 	return verificationShare;
 };
 
@@ -72,14 +72,14 @@ export const createSigningShare = (
 	for (const [, share] of secretShares) {
 		signingShare = addmod(signingShare, share);
 	}
-	if (signingShare === 0n) throw Error("Could not calculate signing share!");
+	if (signingShare === 0n) throw new Error("Could not calculate signing share!");
 	return signingShare;
 };
 
 export const verifyKey = (publicKey: FrostPoint, privateKey: bigint): void => {
 	const verification = g(privateKey);
 	if (verification.x !== publicKey.x || verification.y !== publicKey.y) {
-		throw Error("Private key and public key don't match!");
+		throw new Error("Private key and public key don't match!");
 	}
 };
 

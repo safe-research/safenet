@@ -141,7 +141,7 @@ const checkSigningRequestTimeout = (
 					: status.packet.proposal.epoch;
 			const groupInfo = consensusState.epochGroups[epoch.toString()];
 			if (groupInfo === undefined) {
-				throw Error(`Unknown group for epoch ${epoch}`);
+				throw new Error(`Unknown group for epoch ${epoch}`);
 			}
 			const { groupId, participantId } = groupInfo;
 			const act = everyoneResponsible || status.responsible === participantId;
@@ -178,7 +178,7 @@ const checkSigningRequestTimeout = (
 					: status.packet.proposal.epoch;
 			const groupInfo = consensusState.epochGroups[epoch.toString()];
 			if (groupInfo === undefined) {
-				throw Error(`Unknown group for epoch ${epoch}`);
+				throw new Error(`Unknown group for epoch ${epoch}`);
 			}
 			const { groupId } = groupInfo;
 			return {

@@ -82,7 +82,7 @@ export class ValidatorService {
 	}
 
 	async start() {
-		if (this.#cleanupCallbacks.length > 0) throw Error("Already started!");
+		if (this.#cleanupCallbacks.length > 0) throw new Error("Already started!");
 		// TODO: from block should be last synced block (after state machine transition)
 		this.#cleanupCallbacks.push(
 			this.#publicClient.watchContractEvent({

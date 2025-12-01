@@ -224,7 +224,7 @@ export class ShieldnetStateMachine {
 			block < this.#lastProcessedBlock ||
 			(block === this.#lastProcessedBlock && index <= this.#lastProcessedIndex)
 		) {
-			throw Error(
+			throw new Error(
 				`Invalid block number (${block}) and index ${index} (currently at block ${this.#lastProcessedBlock} and index ${this.#lastProcessedIndex})`,
 			);
 		}

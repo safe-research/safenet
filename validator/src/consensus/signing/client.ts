@@ -32,7 +32,7 @@ export class SigningClient {
 
 	generateNonceTree(groupId: GroupId): Hex {
 		const signingShare = this.#storage.signingShare(groupId);
-		if (signingShare === undefined) throw Error(`No info for ${groupId}`);
+		if (signingShare === undefined) throw new Error(`No info for ${groupId}`);
 		const nonceTree = createNonceTree(signingShare);
 		const nonceTreeRoot = this.#storage.registerNonceTree(groupId, nonceTree);
 		return nonceTreeRoot;
@@ -60,13 +60,14 @@ export class SigningClient {
 		nonceCommitments: PublicNonceCommitments;
 		nonceProof: Hex[];
 	} {
+
 		if (signers.length < this.#storage.threshold(groupId)) {
-			throw Error("Not enought signers to start signing process");
+			throw new Error("Not enough signers to start signing process");
 		}
-		const participants = this.#storage.participants(groupId).map((p) => p.id);
+		const participantsSet = new Set(this.#storage.participants(groupId).map((p) => p.id));
 		for (const signer of signers) {
-			if (participants.indexOf(signer) < 0) {
-				throw Error(`Invalid signer id provided: ${signer}`);
+			if (!participantsSet.has(signer)) {
+				throw new Error(`Invalid signer id provided: ${signer}`);
 			}
 		}
 		this.#storage.registerSignatureRequest(
@@ -127,11 +128,11 @@ export class SigningClient {
 
 		const groupPublicKey = this.#storage.publicKey(groupId);
 		if (groupPublicKey === undefined)
-			throw Error(`Missing public key for group ${groupId}`);
+			throw new Error(`Missing public key for group ${groupId}`);
 
 		const signingShare = this.#storage.signingShare(groupId);
 		if (signingShare === undefined)
-			throw Error(`Missing signing share for group ${groupId}`);
+			throw new Error(`Missing signing share for group ${groupId}`);
 
 		const signerIndex = signers.indexOf(signerId);
 		const signerNonceCommitments =
@@ -154,7 +155,7 @@ export class SigningClient {
 		const signerParts = signers.map((signerId, index) => {
 			const nonceCommitments = signerNonceCommitments.get(signerId);
 			if (nonceCommitments === undefined) {
-				throw Error(`Missing nonce commitments for ${signerId}`);
+				throw new Error(`Missing nonce commitments for ${signerId}`);
 			}
 			const r = groupCommitmentShares[index];
 			const coeff = lagrangeCoefficient(signers, signerId);
@@ -183,7 +184,7 @@ export class SigningClient {
 			nonceCommitments.bindingNonce === 0n &&
 			nonceCommitments.hidingNonce === 0n
 		) {
-			throw Error(`Nonces for sequence ${sequence} have been already burned`);
+			throw new Error(`Nonces for sequence ${sequence} have been already burned`);
 		}
 		const signerPart = signerParts[signerIndex];
 		const signatureShare = createSignatureShare(

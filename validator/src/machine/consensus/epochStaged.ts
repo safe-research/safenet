@@ -10,7 +10,7 @@ export const handleEpochStaged = async (
 	const event = epochStagedEventSchema.parse(eventArgs);
 	// Ignore if not in "request_rollover_data" state
 	if (machineStates.rollover.id !== "sign_rollover") {
-		throw Error(
+		throw new Error(
 			`Not expecting epoch staging during ${machineStates.rollover.id}!`,
 		);
 	}

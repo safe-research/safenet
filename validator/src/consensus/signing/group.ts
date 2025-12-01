@@ -19,7 +19,7 @@ export const groupChallenge = (
 };
 
 export const lagrangeCoefficient = (signers: bigint[], id: bigint): bigint => {
-	if (signers.indexOf(id) < 0) throw Error(`${id} not part of signers`);
+	if (signers.indexOf(id) < 0) throw new Error(`${id} not part of signers`);
 	let numerator = 1n;
 	let denominator = 1n;
 

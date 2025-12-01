@@ -170,7 +170,7 @@ export class SqliteStorage
 			(p) => p.address === this.#account,
 		)?.id;
 		if (participantId === undefined) {
-			throw Error(`Not part of Group ${groupId}!`);
+			throw new Error(`Not part of Group ${groupId}!`);
 		}
 
 		const insertGroup = this.#db.prepare(
