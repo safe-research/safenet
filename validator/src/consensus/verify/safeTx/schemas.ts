@@ -33,4 +33,6 @@ export const safeTransactionPacketSchema = z.object({
 	proposal: transactionProposalSchema,
 });
 
+export type MetaTransaction = z.infer<typeof safeTransactionSchema>;
+
 export type SafeTransactionPacket = z.infer<typeof safeTransactionPacketSchema>;

@@ -19,7 +19,7 @@ describe("verify engine", () => {
 		const handlers = new Map<string, PacketHandler<Typed>>();
 		handlers.set("test", {
 			hashAndVerify: async (_packet: Typed) => {
-				throw Error("not implemented");
+				throw new Error("not implemented");
 			},
 		});
 		const engine = new VerificationEngine(handlers);

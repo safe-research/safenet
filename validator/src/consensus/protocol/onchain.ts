@@ -38,7 +38,7 @@ export class OnchainProtocol extends BaseProtocol {
 	chainId(): bigint {
 		const chainId = this.#signingClient.chain?.id;
 		if (chainId === undefined) {
-			throw Error("Unknown chain id");
+			throw new Error("Unknown chain id");
 		}
 		return BigInt(chainId);
 	}

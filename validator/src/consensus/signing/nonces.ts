@@ -89,7 +89,7 @@ const encodeCommitments = (
 		...signers.map((id) => {
 			const commitments = nonceCommitments.get(id);
 			if (commitments === undefined)
-				throw Error(`Missing nonce commitments for ${id}`);
+				throw new Error(`Missing nonce commitments for ${id}`);
 			return concatBytes(
 				scalarToBytes(id),
 				commitments.hidingNonceCommitment.toBytes(true),
@@ -159,7 +159,7 @@ export const groupCommitementShares = (
 	return bindingFactors.map((bf) => {
 		const commitments = nonceCommitments.get(bf.id);
 		if (commitments === undefined)
-			throw Error(`Missing nonce commitments for ${bf.id}`);
+			throw new Error(`Missing nonce commitments for ${bf.id}`);
 		const factor = commitments.bindingNonceCommitment.multiply(
 			bf.bindingFactor,
 		);

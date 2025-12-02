@@ -68,7 +68,7 @@ describe("keyGen", () => {
 			);
 			ids.set(groupId, participantId);
 			const leaf = participants.find((p) => p.id === participantId);
-			if (leaf === undefined) throw Error(`Invalid id: ${participantId}`);
+			if (leaf === undefined) throw new Error(`Invalid id: ${participantId}`);
 			expect(
 				verifyMerkleProof(participantsRoot, hashParticipant(leaf), poap),
 			).toBeTruthy();

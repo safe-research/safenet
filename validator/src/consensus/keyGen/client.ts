@@ -97,7 +97,7 @@ export class KeyGenClient {
 	} {
 		const participantsRoot = calculateParticipantsRoot(participants);
 		if (participants.length !== Number(count))
-			throw Error(
+			throw new Error(
 				`Unexpected participant count ${participantsRoot}! (Expected ${participants.length} got ${count})`,
 			);
 		const groupId = calcGroupId(participantsRoot, count, threshold, context);
@@ -163,7 +163,7 @@ export class KeyGenClient {
 			if (participant.id === participantId) continue;
 			const peerCommitments = commitments.get(participant.id);
 			if (peerCommitments === undefined)
-				throw Error(
+				throw new Error(
 					`Commitments for ${groupId}:${participant.id} are not available!`,
 				);
 			const peerShare = evalPoly(coefficients, participant.id);
@@ -175,7 +175,7 @@ export class KeyGenClient {
 			shares.push(encryptedShare);
 		}
 		if (shares.length !== participants.length - 1) {
-			throw Error("Unexpect f length");
+			throw new Error("Unexpect f length");
 		}
 		return {
 			verificationShare,
@@ -192,7 +192,7 @@ export class KeyGenClient {
 	): Promise<boolean> {
 		const participants = this.#storage.participants(groupId);
 		if (peerShares.length !== participants.length - 1) {
-			throw Error("Unexpect f length");
+			throw new Error("Unexpect f length");
 		}
 		const participantId = this.#storage.participantId(groupId);
 		if (senderId === participantId) {
@@ -201,7 +201,9 @@ export class KeyGenClient {
 		}
 		const commitment = this.#storage.commitments(groupId, senderId);
 		if (commitment === undefined)
-			throw Error(`Commitments for ${groupId}:${senderId} are not available!`);
+			throw new Error(
+				`Commitments for ${groupId}:${senderId} are not available!`,
+			);
 		// TODO: check if we should use a reasonable limit for the id (current uint256)
 		const shareIndex =
 			participantId < senderId ? participantId : participantId - 1n;

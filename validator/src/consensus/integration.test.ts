@@ -271,7 +271,7 @@ describe("integration", () => {
 			const proposal = proposedMessages[0];
 			expect(proposal.args.transaction).toStrictEqual(transaction);
 			if (proposal.args.message === undefined)
-				throw Error("Message is expected to be defined");
+				throw new Error("Message is expected to be defined");
 			// Load signature request for transaction proposal
 			const signRequestEvent = COORDINATOR_EVENTS.filter(
 				(e) => e.name === "Sign",
@@ -289,7 +289,7 @@ describe("integration", () => {
 			expect(request.args.initiator).toBe(consensusAddress);
 			expect(request.args.sid).toBeDefined();
 			if (request.args.gid === undefined)
-				throw Error("GroupId is expected to be defined");
+				throw new Error("GroupId is expected to be defined");
 			// Load completed request for signature request
 			const signedEvent = COORDINATOR_EVENTS.filter(
 				(e) => e.name === "SignCompleted",
@@ -307,7 +307,7 @@ describe("integration", () => {
 			expect(completedRequest.args.sid).toBe(request.args.sid);
 			const signature = completedRequest.args.signature;
 			if (signature === undefined)
-				throw Error("Signature is expected to be defined");
+				throw new Error("Signature is expected to be defined");
 
 			// Load group key for verification
 			const groupKey = await readClient.readContract({

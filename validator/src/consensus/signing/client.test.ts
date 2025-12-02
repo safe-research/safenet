@@ -194,6 +194,7 @@ describe("signing", () => {
 				signatureId,
 				message,
 				0n,
+				TEST_GROUP.participants.map((p) => p.id),
 			);
 			nonceRevealEvent.push({
 				signatureId,
@@ -236,7 +237,7 @@ describe("signing", () => {
 			r = r == null ? e.r : r.add(e.r);
 			z = addmod(z, e.z);
 		}
-		if (r == null) throw Error("r is null");
+		if (r == null) throw new Error("r is null");
 		expect(verifySignature(r, z, TEST_GROUP.publicKey, message)).toBeTruthy();
 	});
 });

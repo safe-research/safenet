@@ -12,7 +12,7 @@ export class SafeTransactionHandler
 	async hashAndVerify(uncheckedPacket: SafeTransactionPacket): Promise<Hex> {
 		const packet = safeTransactionPacketSchema.parse(uncheckedPacket);
 		if (packet.proposal.transaction.operation !== 0)
-			throw Error("Delegatecall not allowed");
+			throw new Error("Delegatecall not allowed");
 		return safeTxPacketHash(packet);
 	}
 }

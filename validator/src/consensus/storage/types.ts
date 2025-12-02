@@ -76,7 +76,7 @@ export type SignatureRequestStorage = {
 		signatureId: SignatureId,
 		groupId: GroupId,
 		message: Hex,
-		signers: ParticipantId[],
+		signers: readonly ParticipantId[],
 		sequence: bigint,
 	): void;
 	registerNonceCommitments(

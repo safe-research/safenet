@@ -27,6 +27,6 @@ export const verifySignatureShare = (
 	const pki = verificationShare.multiply(lagrangeChallenge);
 	const r = groupCommitmentShare.add(pki);
 	if (sG.x !== r.x) {
-		throw Error("Invalid signature share");
+		throw new Error("Invalid signature share");
 	}
 };

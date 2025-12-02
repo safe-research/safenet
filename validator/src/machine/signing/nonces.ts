@@ -1,0 +1,116 @@
+import { encodeFunctionData, type Hex, zeroHash } from "viem";
+import { nonceCommitmentsEventSchema } from "../../consensus/schemas.js";
+import type { SigningClient } from "../../consensus/signing/client.js";
+import { metaTxHash } from "../../consensus/verify/safeTx/hashing.js";
+import type { SafeTransactionPacket } from "../../consensus/verify/safeTx/schemas.js";
+import { toPoint } from "../../frost/math.js";
+import { CONSENSUS_FUNCTIONS } from "../../types/abis.js";
+import type {
+	ConsensusState,
+	MachineConfig,
+	MachineStates,
+	StateDiff,
+} from "../types.js";
+
+export const handleRevealedNonces = async (
+	machineConfig: MachineConfig,
+	signingClient: SigningClient,
+	consensusState: ConsensusState,
+	machineStates: MachineStates,
+	block: bigint,
+	eventArgs: unknown,
+): Promise<StateDiff> => {
+	// A participant has submitted nonces for a signature id
+	// Parse event from raw data
+	const event = nonceCommitmentsEventSchema.parse(eventArgs);
+	// Check that this is a request related to a message that is handled"
+	const message = consensusState.signatureIdToMessage[event.sid];
+	if (message === undefined) return {};
+	// Check that state for signature id is "collect_nonce_commitments"
+	const status = machineStates.signing[message];
+	if (status?.id !== "collect_nonce_commitments") return {};
+	const readyToSubmit = signingClient.handleNonceCommitments(
+		event.sid,
+		event.identifier,
+		{
+			hidingNonceCommitment: toPoint(event.nonces.d),
+			bindingNonceCommitment: toPoint(event.nonces.e),
+		},
+	);
+	if (!readyToSubmit)
+		return {
+			signing: [
+				message,
+				{
+					...status,
+					lastSigner: event.identifier,
+				},
+			],
+		};
+	// If all participants have committed update state for request id to "collect_signing_shares"
+	const {
+		signersRoot,
+		signersProof,
+		groupCommitment,
+		commitmentShare,
+		signatureShare,
+		lagrangeCoefficient,
+	} = signingClient.createSignatureShare(event.sid);
+
+	const callbackContext =
+		machineStates.rollover.id === "sign_rollover" &&
+		machineStates.rollover.message === message
+			? encodeFunctionData({
+					abi: CONSENSUS_FUNCTIONS,
+					functionName: "stageEpoch",
+					args: [
+						machineStates.rollover.nextEpoch,
+						machineStates.rollover.nextEpoch * machineConfig.blocksPerEpoch,
+						machineStates.rollover.groupId,
+						zeroHash,
+					],
+				})
+			: status.packet.type === "safe_transaction_packet"
+				? buildTransactionAttestationCallback(status.packet)
+				: undefined;
+	return {
+		signing: [
+			message,
+			{
+				id: "collect_signing_shares",
+				signatureId: status.signatureId,
+				sharesFrom: [],
+				deadline: block + machineConfig.signingTimeout,
+				lastSigner: event.identifier,
+				packet: status.packet,
+			},
+		],
+		actions: [
+			{
+				id: "sign_publish_signature_share",
+				signatureId: event.sid,
+				signersRoot,
+				signersProof,
+				groupCommitment,
+				commitmentShare,
+				signatureShare,
+				lagrangeCoefficient,
+				callbackContext,
+			},
+		],
+	};
+};
+
+const buildTransactionAttestationCallback = (
+	packet: SafeTransactionPacket,
+): Hex | undefined => {
+	return encodeFunctionData({
+		abi: CONSENSUS_FUNCTIONS,
+		functionName: "attestTransaction",
+		args: [
+			packet.proposal.epoch,
+			metaTxHash(packet.proposal.transaction),
+			zeroHash,
+		],
+	});
+};

@@ -3,7 +3,7 @@ import type { ParticipantId } from "../frost/types.js";
 import type { Participant } from "./storage/types.js";
 
 export const buildMerkleTree = (leaves: Hex[]): Hex[][] => {
-	if (leaves.length === 0) throw Error("Cannot generate empty tree!");
+	if (leaves.length === 0) throw new Error("Cannot generate empty tree!");
 	const tree: Hex[][] = [];
 	tree.push(leaves);
 	while (tree[tree.length - 1].length > 1) {
@@ -26,7 +26,7 @@ export const buildMerkleTree = (leaves: Hex[]): Hex[][] => {
 
 export const calculateMerkleRoot = (leaves: Hex[]): Hex => {
 	const rootLevel = buildMerkleTree(leaves).at(-1);
-	if (rootLevel?.length !== 1) throw Error("Unexpected Merkle Tree");
+	if (rootLevel?.length !== 1) throw new Error("Unexpected Merkle Tree");
 	return rootLevel[0];
 };
 
