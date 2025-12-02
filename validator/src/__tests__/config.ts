@@ -5,7 +5,9 @@ import { SqliteStorage } from "../consensus/storage/sqlite.js";
 const { SHIELDNET_TEST_VERBOSE, SHIELDNET_TEST_STORAGE } = process.env;
 
 export const log =
-	SHIELDNET_TEST_VERBOSE === "1" ? (...args: unknown[]) => console.log(...args) : (..._args: unknown[]) => {};
+	SHIELDNET_TEST_VERBOSE === "true" || SHIELDNET_TEST_VERBOSE === "1"
+		? (...args: unknown[]) => console.log(...args)
+		: (..._args: unknown[]) => {};
 
 export const createStorage =
 	SHIELDNET_TEST_STORAGE === "sqlite"
