@@ -30,7 +30,6 @@
 	},
 	"javascript": {
 		"formatter": {
-			"quoteStyle": "double",
 			"lineWidth": 120
 		}
 	}

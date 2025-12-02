@@ -332,6 +332,23 @@ export class SqliteStorage implements GroupInfoStorage, KeyGenInfoStorage, Signa
 	}
 
 	missingCommitments(groupId: GroupId): ParticipantId[] {
+		// Use a `LEFT JOIN` for this query; see documentation in `dbList` for
+		// more information on the rationale behind structuring it this way.
+		//
+		// Because we are selecting the `groups` table and using a `LEFT JOIN`,
+		// then if the group with `groupId` exists then the query will return
+		// at least one row regardless of whether or not there are matching
+		// participants (with a `group_participants.id` value of `NULL` in case
+		// there are no rows from the `group_participants` table to join on).
+		// If there are no matching groups with `groupId`, then the select will
+		// return no rows. This, critically, allows us to differentiate between
+		// missing groups, and groups with no missing commitments:
+		//
+		// - returns `[]` in case there is no rows in `groups` with `groupId`.
+		// - returns `[null]` in case there is a row in `groups` with `groupId`
+		//   but no participants in `group_participants` with no commitments.
+		// - returns `[1, 2, ...]` in case there are missing commitments.
+
 		return dbList(
 			this.#db
 				.prepare(`
@@ -349,6 +366,20 @@ export class SqliteStorage implements GroupInfoStorage, KeyGenInfoStorage, Signa
 	}
 
 	checkIfCommitmentsComplete(groupId: GroupId): boolean {
+		// Select based on the existence of a row in `groups` with `groupId`,
+		// so that we differentiate between "there is no group" (which will
+		// cause the query to return `NULL`) and "there are no missing
+		// commitments" (which will cause the query to return `0`).
+		//
+		// This is essentially an atomic version of:
+		// 1. Check that there exists a group in `groups` with `groupId`
+		//    a. If yes, then return whether or not there exists rows in
+		//       `group_participants` where the commitments is still `NULL`,
+		//       returning `1` in case there are, meaning that the commitments
+		//       **are not** complete; and `0` in case there are not, meaning
+		//       the commitments **are** complete.
+		//    b. If not, return `NULL` to indicate that there is no group.
+
 		const exists = this.#db
 			.prepare(`
 				SELECT CASE
@@ -369,6 +400,11 @@ export class SqliteStorage implements GroupInfoStorage, KeyGenInfoStorage, Signa
 	}
 
 	missingSecretShares(groupId: GroupId): ParticipantId[] {
+		// Use the `LEFT JOIN` trick described in `dbList` and in the
+		// `missingCommitments` query. Note that the query has some additional
+		// complexity around secret shares and participants being split into
+		// two tables.
+
 		return dbList(
 			this.#db
 				.prepare(`
@@ -391,6 +427,9 @@ export class SqliteStorage implements GroupInfoStorage, KeyGenInfoStorage, Signa
 	}
 
 	checkIfSecretSharesComplete(groupId: GroupId): boolean {
+		// Differentiate between "group not found" and "no missing secret
+		// shares"; see `checkIfCommitmentsComplete` for more information.
+
 		const exists = this.#db
 			.prepare(`
 				SELECT CASE
@@ -425,6 +464,9 @@ export class SqliteStorage implements GroupInfoStorage, KeyGenInfoStorage, Signa
 	}
 
 	commitmentsMap(groupId: GroupId): Map<ParticipantId, readonly FrostPoint[]> {
+		// Use the `LEFT JOIN` trick described in `dbList` and in the
+		// `missingCommitments` query, adapted to mappings.
+
 		return dbMap(
 			this.#db
 				.prepare(`
@@ -441,6 +483,9 @@ export class SqliteStorage implements GroupInfoStorage, KeyGenInfoStorage, Signa
 	}
 
 	secretSharesMap(groupId: GroupId): Map<ParticipantId, bigint> {
+		// Use the `LEFT JOIN` trick decribed in `dbList` and in the
+		// `missingSecretShares` query, adapted to mappings.
+
 		return dbMap(
 			this.#db
 				.prepare(`
@@ -605,6 +650,10 @@ export class SqliteStorage implements GroupInfoStorage, KeyGenInfoStorage, Signa
 	}
 
 	checkIfNoncesComplete(signatureId: SignatureId): boolean {
+		// Differentiate between "signature request not found" and "no missing
+		// nonces commitments"; see `checkIfCommitmentsComplete` for more
+		// information.
+
 		const exists = this.#db
 			.prepare(`
 				SELECT CASE
@@ -626,6 +675,9 @@ export class SqliteStorage implements GroupInfoStorage, KeyGenInfoStorage, Signa
 	}
 
 	missingNonces(signatureId: SignatureId): ParticipantId[] {
+		// Use the `LEFT JOIN` trick described in `dbList` and in the
+		// `missingCommitments` query, adapted for signature requests.
+
 		return dbList(
 			this.#db
 				.prepare(`
@@ -666,6 +718,9 @@ export class SqliteStorage implements GroupInfoStorage, KeyGenInfoStorage, Signa
 	}
 
 	nonceCommitmentsMap(signatureId: SignatureId): Map<ParticipantId, PublicNonceCommitments> {
+		// Use the `LEFT JOIN` trick described in `dbList` and in the
+		// `missingNonces` query, adapted to mappings.
+
 		return dbMap(
 			this.#db
 				.prepare(`
