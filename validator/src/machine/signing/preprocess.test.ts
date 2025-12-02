@@ -17,17 +17,14 @@ const EVENT_ARGS = {
 	gid: "0x000000000000000000000000000000000000000000000000000000005af35af3",
 	identifier: 1n,
 	chunk: 0n,
-	commitment:
-		"0x5af35af35af35af35af35af35af35af35af35af35af35af35af35af35af35af3",
+	commitment: "0x5af35af35af35af35af35af35af35af35af35af35af35af35af35af35af35af3",
 };
 
 // --- Tests ---
 describe("handle preprocess", () => {
 	it("should fail on invalid event arguments", async () => {
 		const signingClient = {} as unknown as SigningClient;
-		await expect(
-			handlePreprocess(signingClient, CONSENSUS_STATE, {}),
-		).rejects.toThrow();
+		await expect(handlePreprocess(signingClient, CONSENSUS_STATE, {})).rejects.toThrow();
 	});
 
 	it("should remove group from pending nonces", async () => {
@@ -35,11 +32,7 @@ describe("handle preprocess", () => {
 		const signingClient = {
 			handleNonceCommitmentsHash,
 		} as unknown as SigningClient;
-		const diff = await handlePreprocess(
-			signingClient,
-			CONSENSUS_STATE,
-			EVENT_ARGS,
-		);
+		const diff = await handlePreprocess(signingClient, CONSENSUS_STATE, EVENT_ARGS);
 
 		expect(handleNonceCommitmentsHash).toBeCalledWith(
 			"0x000000000000000000000000000000000000000000000000000000005af35af3",
@@ -53,9 +46,7 @@ describe("handle preprocess", () => {
 		expect(diff.rollover).toBeUndefined();
 		expect(diff.actions).toBeUndefined();
 		expect(diff.consensus).toStrictEqual({
-			groupPendingNonces: [
-				"0x000000000000000000000000000000000000000000000000000000005af35af3",
-			],
+			groupPendingNonces: ["0x000000000000000000000000000000000000000000000000000000005af35af3"],
 		});
 	});
 
@@ -68,11 +59,7 @@ describe("handle preprocess", () => {
 			...CONSENSUS_STATE,
 			groupPendingNonces: {},
 		};
-		const diff = await handlePreprocess(
-			signingClient,
-			consensusState,
-			EVENT_ARGS,
-		);
+		const diff = await handlePreprocess(signingClient, consensusState, EVENT_ARGS);
 
 		expect(handleNonceCommitmentsHash).toBeCalledWith(
 			"0x000000000000000000000000000000000000000000000000000000005af35af3",

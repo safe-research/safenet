@@ -2,12 +2,7 @@ import { zeroHash } from "viem";
 import { describe, expect, it, vi } from "vitest";
 import type { SigningClient } from "../../consensus/signing/client.js";
 import type { VerificationEngine } from "../../consensus/verify/engine.js";
-import type {
-	ConsensusState,
-	MachineConfig,
-	MachineStates,
-	SigningState,
-} from "../types.js";
+import type { ConsensusState, MachineConfig, MachineStates, SigningState } from "../types.js";
 import { handleSign } from "./sign.js";
 
 // --- Test Data ---
@@ -72,15 +67,7 @@ describe("collecting shares", () => {
 		const verificationEngine = {} as unknown as VerificationEngine;
 		const signingClient = {} as unknown as SigningClient;
 		await expect(
-			handleSign(
-				MACHINE_CONFIG,
-				verificationEngine,
-				signingClient,
-				CONSENSUS_STATE,
-				MACHINE_STATES,
-				2n,
-				{},
-			),
+			handleSign(MACHINE_CONFIG, verificationEngine, signingClient, CONSENSUS_STATE, MACHINE_STATES, 2n, {}),
 		).rejects.toThrow();
 	});
 
@@ -190,10 +177,7 @@ describe("collecting shares", () => {
 			nonceCommitments: zeroHash,
 			nonceProof: [zeroHash],
 		});
-		const availableNoncesCount = vi
-			.fn()
-			.mockReturnValueOnce(10n)
-			.mockReturnValueOnce(0n);
+		const availableNoncesCount = vi.fn().mockReturnValueOnce(10n).mockReturnValueOnce(0n);
 		const generateNonceTree = vi.fn().mockReturnValueOnce(zeroHash);
 		const signingClient = {
 			createNonceCommitments,
@@ -205,8 +189,7 @@ describe("collecting shares", () => {
 			activeEpoch: 1n,
 			epochGroups: {
 				"1": {
-					groupId:
-						"0x0000000000000000000000007fa9385be102ac3eac297483dd6233d62b3e1496",
+					groupId: "0x0000000000000000000000007fa9385be102ac3eac297483dd6233d62b3e1496",
 					participantId: 1n,
 				},
 			},
@@ -242,9 +225,7 @@ describe("collecting shares", () => {
 			"0x0000000000000000000000007fa9385be102ac3eac297483dd6233d62b3e1496",
 			1n,
 		);
-		expect(generateNonceTree).toBeCalledWith(
-			"0x0000000000000000000000007fa9385be102ac3eac297483dd6233d62b3e1496",
-		);
+		expect(generateNonceTree).toBeCalledWith("0x0000000000000000000000007fa9385be102ac3eac297483dd6233d62b3e1496");
 		expect(generateNonceTree).toBeCalledTimes(1);
 
 		expect(diff.rollover).toBeUndefined();
@@ -259,17 +240,13 @@ describe("collecting shares", () => {
 			},
 		]);
 		expect(diff.consensus).toStrictEqual({
-			groupPendingNonces: [
-				"0x0000000000000000000000007fa9385be102ac3eac297483dd6233d62b3e1496",
-				true,
-			],
+			groupPendingNonces: ["0x0000000000000000000000007fa9385be102ac3eac297483dd6233d62b3e1496", true],
 			signatureIdToMessage: ["0x5af35af3", "0x5afe5afe"],
 		});
 		expect(diff.actions).toStrictEqual([
 			{
 				id: "sign_register_nonce_commitments",
-				groupId:
-					"0x0000000000000000000000007fa9385be102ac3eac297483dd6233d62b3e1496",
+				groupId: "0x0000000000000000000000007fa9385be102ac3eac297483dd6233d62b3e1496",
 				nonceCommitmentsHash: zeroHash,
 			},
 			{

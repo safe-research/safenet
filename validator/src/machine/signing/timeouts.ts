@@ -45,7 +45,7 @@ const checkSigningRequestTimeout = (
 			// Remove pending request
 			stateDiff.consensus = {
 				signatureIdToMessage: [status.signatureId, undefined],
-			}
+			};
 			const everyoneResponsible = status.responsible === undefined;
 			if (everyoneResponsible) {
 				// Everyone is responsible
@@ -148,7 +148,7 @@ const checkSigningRequestTimeout = (
 			// Remove pending request
 			stateDiff.consensus = {
 				signatureIdToMessage: [status.signatureId, undefined],
-			}
+			};
 			// Get participants that did not participate
 			const missingParticipants =
 				status.id === "collect_nonce_commitments"
