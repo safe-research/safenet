@@ -39,13 +39,13 @@ const checkSigningRequestTimeout = (
 ): StateDiff => {
 	// Still within deadline
 	if (status.deadline > block) return {};
-	const stateDiff: StateDiff = {
-		consensus: {
-			signatureIdToMessage: [message],
-		},
-	};
+	const stateDiff: StateDiff = {};
 	switch (status.id) {
 		case "waiting_for_attestation": {
+			// Remove pending request
+			stateDiff.consensus = {
+				signatureIdToMessage: [status.signatureId, undefined],
+			}
 			const everyoneResponsible = status.responsible === undefined;
 			if (everyoneResponsible) {
 				// Everyone is responsible
@@ -145,6 +145,10 @@ const checkSigningRequestTimeout = (
 		}
 		case "collect_nonce_commitments":
 		case "collect_signing_shares": {
+			// Remove pending request
+			stateDiff.consensus = {
+				signatureIdToMessage: [status.signatureId, undefined],
+			}
 			// Get participants that did not participate
 			const missingParticipants =
 				status.id === "collect_nonce_commitments"
