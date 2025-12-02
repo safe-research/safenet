@@ -24,9 +24,8 @@ export class InMemoryStateStorage implements StateStorage {
 			...consensus,
 		};
 		this.#machineStates = {
-			rollover: { id: "waiting_for_rollover" },
-			signing: {},
-			...machines,
+			rollover: machines?.rollover ?? { id: "waiting_for_rollover" },
+			signing: machines?.rollover ?? {},
 		};
 	}
 

@@ -1,6 +1,8 @@
 import type { Address } from "viem";
 import { InMemoryStorage } from "../consensus/storage/inmemory.js";
 import { SqliteStorage } from "../consensus/storage/sqlite.js";
+import { SqliteStateStorage } from "../machine/storage/sqlite.js";
+import { InMemoryStateStorage } from "../machine/storage/inmemory.js";
 
 const { SHIELDNET_TEST_VERBOSE, SHIELDNET_TEST_STORAGE } = process.env;
 
@@ -9,7 +11,12 @@ export const log =
 		? (...args: unknown[]) => console.log(...args)
 		: (..._args: unknown[]) => {};
 
-export const createStorage =
+export const createClientStorage =
 	SHIELDNET_TEST_STORAGE === "sqlite"
 		? (account: Address) => new SqliteStorage(account, ":memory:")
 		: (account: Address) => new InMemoryStorage(account);
+
+export const createStateStorage =
+	SHIELDNET_TEST_STORAGE === "sqlite"
+		? () => new SqliteStateStorage(":memory:")
+		: () => new InMemoryStateStorage();

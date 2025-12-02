@@ -13,7 +13,7 @@ import {
 import { privateKeyToAccount } from "viem/accounts";
 import { anvil } from "viem/chains";
 import { describe, expect, it } from "vitest";
-import { createStorage, log } from "../__tests__/config.js";
+import { createClientStorage, createStateStorage, log } from "../__tests__/config.js";
 import { toPoint } from "../frost/math.js";
 import type { GroupId } from "../frost/types.js";
 import { InMemoryStateStorage } from "../machine/storage/inmemory.js";
@@ -89,7 +89,7 @@ describe("integration", () => {
 			return { id: BigInt(i + 1), address: a.address };
 		});
 		const clients = accounts.map((a, i) => {
-			const storage = createStorage(a.address);
+			const storage = createClientStorage(a.address);
 			const sc = new SigningClient(storage);
 			const kc = new KeyGenClient(storage);
 			const verificationHandlers = new Map<string, PacketHandler<Typed>>();
@@ -107,7 +107,7 @@ describe("integration", () => {
 				transport: http(),
 				account: a,
 			});
-			const stateStorage = new InMemoryStateStorage();
+			const stateStorage = createStateStorage();
 			const protocol = new OnchainProtocol(publicClient, signingClient, consensusAddress, coordinatorAddress, logger);
 			const sm = new SchildNetzMachine({
 				participants,

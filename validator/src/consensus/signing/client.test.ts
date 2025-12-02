@@ -1,6 +1,6 @@
 import { type Address, type Hex, keccak256, stringToBytes } from "viem";
 import { describe, expect, it } from "vitest";
-import { createStorage, log } from "../../__tests__/config.js";
+import { createClientStorage, log } from "../../__tests__/config.js";
 import { addmod, g, toPoint } from "../../frost/math.js";
 import type { FrostPoint, ParticipantId, SignatureId } from "../../frost/types.js";
 import { SigningClient } from "./client.js";
@@ -126,7 +126,7 @@ describe("signing", () => {
 			r: FrostPoint;
 		}[] = [];
 		const clients = TEST_SIGNERS.map((a) => {
-			const storage = createStorage(a.account);
+			const storage = createClientStorage(a.account);
 			storage.registerGroup(TEST_GROUP.groupId, TEST_GROUP.participants, BigInt(TEST_GROUP.participants.length));
 			storage.registerVerification(TEST_GROUP.groupId, TEST_GROUP.publicKey, a.verificationShare);
 			storage.registerSigningShare(TEST_GROUP.groupId, a.signingShare);
