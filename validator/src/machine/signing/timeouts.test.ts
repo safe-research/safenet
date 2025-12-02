@@ -1,3 +1,4 @@
+import { zeroAddress } from "viem";
 import { describe, expect, it, vi } from "vitest";
 import type { SigningClient } from "../../consensus/signing/client.js";
 import type { SafeTransactionPacket } from "../../consensus/verify/safeTx/schemas.js";
@@ -70,7 +71,11 @@ const CONSENSUS_STATE: ConsensusState = {
 };
 
 const MACHINE_CONFIG: MachineConfig = {
-	defaultParticipants: [],
+	defaultParticipants: [
+		{ id: 1n, address: zeroAddress },
+		{ id: 2n, address: zeroAddress },
+		{ id: 3n, address: zeroAddress },
+	],
 	keyGenTimeout: 0n,
 	signingTimeout: 20n,
 	blocksPerEpoch: 8n,
@@ -599,5 +604,488 @@ describe("signing timeouts - waiting for request", () => {
 				message: "0x5afe5afe",
 			},
 		]);
+	});
+});
+
+describe("signing timeouts - collect nonce commitments", () => {
+	it("should throw if group is unknown", async () => {
+		const missingNonces = vi.fn().mockReturnValueOnce([3n]);
+		const signingClient = {
+			missingNonces,
+		} as unknown as SigningClient;
+		const machineStates: MachineStates = {
+			...MACHINE_STATES,
+			signing: {
+				"0x5afe5afe": {
+					...SIGNING_STATE,
+					deadline: 1n,
+					lastSigner: 2n,
+					signatureId: "0x5af35af3",
+					id: "collect_nonce_commitments",
+				},
+			},
+		};
+		expect(() => {
+			checkSigningTimeouts(MACHINE_CONFIG, signingClient, CONSENSUS_STATE, machineStates, 2n);
+		}).toThrowError("Unknown group for epoch 0");
+
+		expect(missingNonces).toBeCalledTimes(1);
+		expect(missingNonces).toBeCalledWith("0x5af35af3");
+	});
+
+	it("should timeout without action when someone else responsible (epoch rollover)", async () => {
+		const missingNonces = vi.fn().mockReturnValueOnce([3n]);
+		const participantId = vi.fn().mockReturnValueOnce(1n);
+		const signingClient = {
+			participantId,
+			missingNonces,
+		} as unknown as SigningClient;
+		const consensusState: ConsensusState = {
+			...CONSENSUS_STATE,
+			epochGroups: {
+				"0": { groupId: "0x5afe", participantId: 1n },
+			},
+		};
+		const machineStates: MachineStates = {
+			...MACHINE_STATES,
+			signing: {
+				"0x5afe5afe": {
+					packet: SIGNING_STATE.packet,
+					deadline: 1n,
+					lastSigner: 2n,
+					signatureId: "0x5af35af3",
+					id: "collect_nonce_commitments",
+				},
+			},
+		};
+		const diff = checkSigningTimeouts(MACHINE_CONFIG, signingClient, consensusState, machineStates, 2n);
+		expect(diff.length).toBe(1);
+		expect(diff[0].consensus).toStrictEqual({
+			signatureIdToMessage: ["0x5af35af3", undefined],
+		});
+		expect(diff[0].rollover).toBeUndefined();
+		expect(diff[0].signing).toStrictEqual([
+			"0x5afe5afe",
+			{
+				id: "waiting_for_request",
+				deadline: 22n,
+				responsible: 2n,
+				signers: [1n, 2n],
+				packet: SIGNING_STATE.packet,
+			},
+		]);
+		expect(diff[0].actions).toBeUndefined();
+
+		expect(missingNonces).toBeCalledTimes(1);
+		expect(missingNonces).toBeCalledWith("0x5af35af3");
+
+		expect(participantId).toBeCalledTimes(1);
+		expect(participantId).toBeCalledWith("0x5af35af3");
+	});
+
+	it("should timeout without action when I am responsible (epoch rollover)", async () => {
+		const missingNonces = vi.fn().mockReturnValueOnce([3n]);
+		const participantId = vi.fn().mockReturnValueOnce(2n);
+		const signingClient = {
+			participantId,
+			missingNonces,
+		} as unknown as SigningClient;
+		const consensusState: ConsensusState = {
+			...CONSENSUS_STATE,
+			epochGroups: {
+				"0": { groupId: "0x5afe", participantId: 1n },
+			},
+		};
+		const machineStates: MachineStates = {
+			...MACHINE_STATES,
+			signing: {
+				"0x5afe5afe": {
+					packet: SIGNING_STATE.packet,
+					deadline: 1n,
+					lastSigner: 2n,
+					signatureId: "0x5af35af3",
+					id: "collect_nonce_commitments",
+				},
+			},
+		};
+		const diff = checkSigningTimeouts(MACHINE_CONFIG, signingClient, consensusState, machineStates, 2n);
+		expect(diff.length).toBe(1);
+		expect(diff[0].consensus).toStrictEqual({
+			signatureIdToMessage: ["0x5af35af3", undefined],
+		});
+		expect(diff[0].rollover).toBeUndefined();
+		expect(diff[0].signing).toStrictEqual([
+			"0x5afe5afe",
+			{
+				id: "waiting_for_request",
+				deadline: 22n,
+				responsible: 2n,
+				signers: [1n, 2n],
+				packet: SIGNING_STATE.packet,
+			},
+		]);
+		expect(diff[0].actions).toStrictEqual([
+			{
+				id: "sign_request",
+				groupId: "0x5afe",
+				message: "0x5afe5afe",
+			},
+		]);
+
+		expect(missingNonces).toBeCalledTimes(1);
+		expect(missingNonces).toBeCalledWith("0x5af35af3");
+
+		expect(participantId).toBeCalledTimes(1);
+		expect(participantId).toBeCalledWith("0x5af35af3");
+	});
+
+	it("should timeout without action when someone else responsible (transaction attestation)", async () => {
+		const missingNonces = vi.fn().mockReturnValueOnce([3n]);
+		const participantId = vi.fn().mockReturnValueOnce(1n);
+		const signingClient = {
+			participantId,
+			missingNonces,
+		} as unknown as SigningClient;
+		const consensusState: ConsensusState = {
+			...CONSENSUS_STATE,
+			epochGroups: {
+				"22": { groupId: "0x5afe", participantId: 1n },
+			},
+		};
+		const machineStates: MachineStates = {
+			...MACHINE_STATES,
+			signing: {
+				"0x5afe5afe": {
+					packet: TX_ATTESTATION_PACKET,
+					deadline: 1n,
+					lastSigner: 2n,
+					signatureId: "0x5af35af3",
+					id: "collect_nonce_commitments",
+				},
+			},
+		};
+		const diff = checkSigningTimeouts(MACHINE_CONFIG, signingClient, consensusState, machineStates, 2n);
+		expect(diff.length).toBe(1);
+		expect(diff[0].consensus).toStrictEqual({
+			signatureIdToMessage: ["0x5af35af3", undefined],
+		});
+		expect(diff[0].rollover).toBeUndefined();
+		expect(diff[0].signing).toStrictEqual([
+			"0x5afe5afe",
+			{
+				id: "waiting_for_request",
+				deadline: 22n,
+				responsible: 2n,
+				signers: [1n, 2n],
+				packet: TX_ATTESTATION_PACKET,
+			},
+		]);
+		expect(diff[0].actions).toBeUndefined();
+
+		expect(missingNonces).toBeCalledTimes(1);
+		expect(missingNonces).toBeCalledWith("0x5af35af3");
+
+		expect(participantId).toBeCalledTimes(1);
+		expect(participantId).toBeCalledWith("0x5af35af3");
+	});
+
+	it("should timeout without action when I am responsible (transaction attestation)", async () => {
+		const missingNonces = vi.fn().mockReturnValueOnce([3n]);
+		const participantId = vi.fn().mockReturnValueOnce(2n);
+		const signingClient = {
+			participantId,
+			missingNonces,
+		} as unknown as SigningClient;
+		const consensusState: ConsensusState = {
+			...CONSENSUS_STATE,
+			epochGroups: {
+				"22": { groupId: "0x5afe", participantId: 1n },
+			},
+		};
+		const machineStates: MachineStates = {
+			...MACHINE_STATES,
+			signing: {
+				"0x5afe5afe": {
+					packet: TX_ATTESTATION_PACKET,
+					deadline: 1n,
+					lastSigner: 2n,
+					signatureId: "0x5af35af3",
+					id: "collect_nonce_commitments",
+				},
+			},
+		};
+		const diff = checkSigningTimeouts(MACHINE_CONFIG, signingClient, consensusState, machineStates, 2n);
+		expect(diff.length).toBe(1);
+		expect(diff[0].consensus).toStrictEqual({
+			signatureIdToMessage: ["0x5af35af3", undefined],
+		});
+		expect(diff[0].rollover).toBeUndefined();
+		expect(diff[0].signing).toStrictEqual([
+			"0x5afe5afe",
+			{
+				id: "waiting_for_request",
+				deadline: 22n,
+				responsible: 2n,
+				signers: [1n, 2n],
+				packet: TX_ATTESTATION_PACKET,
+			},
+		]);
+		expect(diff[0].actions).toStrictEqual([
+			{
+				id: "sign_request",
+				groupId: "0x5afe",
+				message: "0x5afe5afe",
+			},
+		]);
+
+		expect(missingNonces).toBeCalledTimes(1);
+		expect(missingNonces).toBeCalledWith("0x5af35af3");
+
+		expect(participantId).toBeCalledTimes(1);
+		expect(participantId).toBeCalledWith("0x5af35af3");
+	});
+});
+
+describe("signing timeouts - collect signing shares", () => {
+	it("should throw if group is unknown", async () => {
+		const signers = vi.fn().mockReturnValueOnce([1n, 2n, 3n]);
+		const signingClient = {
+			signers,
+		} as unknown as SigningClient;
+		const machineStates: MachineStates = {
+			...MACHINE_STATES,
+			signing: {
+				"0x5afe5afe": {
+					...SIGNING_STATE,
+					deadline: 1n,
+					lastSigner: 2n,
+					signatureId: "0x5af35af3",
+					sharesFrom: [1n, 2n],
+					id: "collect_signing_shares",
+				},
+			},
+		};
+		expect(() => {
+			checkSigningTimeouts(MACHINE_CONFIG, signingClient, CONSENSUS_STATE, machineStates, 2n);
+		}).toThrowError("Unknown group for epoch 0");
+
+		expect(signers).toBeCalledTimes(1);
+		expect(signers).toBeCalledWith("0x5af35af3");
+	});
+
+	it("should timeout without action when someone else responsible (epoch rollover)", async () => {
+		const signers = vi.fn().mockReturnValueOnce([1n, 2n, 3n]);
+		const participantId = vi.fn().mockReturnValueOnce(1n);
+		const signingClient = {
+			participantId,
+			signers,
+		} as unknown as SigningClient;
+		const consensusState: ConsensusState = {
+			...CONSENSUS_STATE,
+			epochGroups: {
+				"0": { groupId: "0x5afe", participantId: 1n },
+			},
+		};
+		const machineStates: MachineStates = {
+			...MACHINE_STATES,
+			signing: {
+				"0x5afe5afe": {
+					packet: SIGNING_STATE.packet,
+					deadline: 1n,
+					lastSigner: 2n,
+					signatureId: "0x5af35af3",
+					sharesFrom: [1n, 2n],
+					id: "collect_signing_shares",
+				},
+			},
+		};
+		const diff = checkSigningTimeouts(MACHINE_CONFIG, signingClient, consensusState, machineStates, 2n);
+		expect(diff.length).toBe(1);
+		expect(diff[0].consensus).toStrictEqual({
+			signatureIdToMessage: ["0x5af35af3", undefined],
+		});
+		expect(diff[0].rollover).toBeUndefined();
+		expect(diff[0].signing).toStrictEqual([
+			"0x5afe5afe",
+			{
+				id: "waiting_for_request",
+				deadline: 22n,
+				responsible: 2n,
+				signers: [1n, 2n],
+				packet: SIGNING_STATE.packet,
+			},
+		]);
+		expect(diff[0].actions).toBeUndefined();
+
+		expect(signers).toBeCalledTimes(1);
+		expect(signers).toBeCalledWith("0x5af35af3");
+
+		expect(participantId).toBeCalledTimes(1);
+		expect(participantId).toBeCalledWith("0x5af35af3");
+	});
+
+	it("should timeout without action when I am responsible (epoch rollover)", async () => {
+		const signers = vi.fn().mockReturnValueOnce([1n, 2n, 3n]);
+		const participantId = vi.fn().mockReturnValueOnce(2n);
+		const signingClient = {
+			participantId,
+			signers,
+		} as unknown as SigningClient;
+		const consensusState: ConsensusState = {
+			...CONSENSUS_STATE,
+			epochGroups: {
+				"0": { groupId: "0x5afe", participantId: 1n },
+			},
+		};
+		const machineStates: MachineStates = {
+			...MACHINE_STATES,
+			signing: {
+				"0x5afe5afe": {
+					packet: SIGNING_STATE.packet,
+					deadline: 1n,
+					lastSigner: 2n,
+					signatureId: "0x5af35af3",
+					sharesFrom: [1n, 2n],
+					id: "collect_signing_shares",
+				},
+			},
+		};
+		const diff = checkSigningTimeouts(MACHINE_CONFIG, signingClient, consensusState, machineStates, 2n);
+		expect(diff.length).toBe(1);
+		expect(diff[0].consensus).toStrictEqual({
+			signatureIdToMessage: ["0x5af35af3", undefined],
+		});
+		expect(diff[0].rollover).toBeUndefined();
+		expect(diff[0].signing).toStrictEqual([
+			"0x5afe5afe",
+			{
+				id: "waiting_for_request",
+				deadline: 22n,
+				responsible: 2n,
+				signers: [1n, 2n],
+				packet: SIGNING_STATE.packet,
+			},
+		]);
+		expect(diff[0].actions).toStrictEqual([
+			{
+				id: "sign_request",
+				groupId: "0x5afe",
+				message: "0x5afe5afe",
+			},
+		]);
+
+		expect(signers).toBeCalledTimes(1);
+		expect(signers).toBeCalledWith("0x5af35af3");
+
+		expect(participantId).toBeCalledTimes(1);
+		expect(participantId).toBeCalledWith("0x5af35af3");
+	});
+
+	it("should timeout without action when someone else responsible (transaction attestation)", async () => {
+		const signers = vi.fn().mockReturnValueOnce([1n, 2n, 3n]);
+		const participantId = vi.fn().mockReturnValueOnce(1n);
+		const signingClient = {
+			participantId,
+			signers,
+		} as unknown as SigningClient;
+		const consensusState: ConsensusState = {
+			...CONSENSUS_STATE,
+			epochGroups: {
+				"22": { groupId: "0x5afe", participantId: 1n },
+			},
+		};
+		const machineStates: MachineStates = {
+			...MACHINE_STATES,
+			signing: {
+				"0x5afe5afe": {
+					packet: TX_ATTESTATION_PACKET,
+					deadline: 1n,
+					lastSigner: 2n,
+					signatureId: "0x5af35af3",
+					sharesFrom: [1n, 2n],
+					id: "collect_signing_shares",
+				},
+			},
+		};
+		const diff = checkSigningTimeouts(MACHINE_CONFIG, signingClient, consensusState, machineStates, 2n);
+		expect(diff.length).toBe(1);
+		expect(diff[0].consensus).toStrictEqual({
+			signatureIdToMessage: ["0x5af35af3", undefined],
+		});
+		expect(diff[0].rollover).toBeUndefined();
+		expect(diff[0].signing).toStrictEqual([
+			"0x5afe5afe",
+			{
+				id: "waiting_for_request",
+				deadline: 22n,
+				responsible: 2n,
+				signers: [1n, 2n],
+				packet: TX_ATTESTATION_PACKET,
+			},
+		]);
+		expect(diff[0].actions).toBeUndefined();
+
+		expect(signers).toBeCalledTimes(1);
+		expect(signers).toBeCalledWith("0x5af35af3");
+
+		expect(participantId).toBeCalledTimes(1);
+		expect(participantId).toBeCalledWith("0x5af35af3");
+	});
+
+	it("should timeout without action when I am responsible (transaction attestation)", async () => {
+		const signers = vi.fn().mockReturnValueOnce([1n, 2n, 3n]);
+		const participantId = vi.fn().mockReturnValueOnce(2n);
+		const signingClient = {
+			participantId,
+			signers,
+		} as unknown as SigningClient;
+		const consensusState: ConsensusState = {
+			...CONSENSUS_STATE,
+			epochGroups: {
+				"22": { groupId: "0x5afe", participantId: 1n },
+			},
+		};
+		const machineStates: MachineStates = {
+			...MACHINE_STATES,
+			signing: {
+				"0x5afe5afe": {
+					packet: TX_ATTESTATION_PACKET,
+					deadline: 1n,
+					lastSigner: 2n,
+					signatureId: "0x5af35af3",
+					sharesFrom: [1n, 2n],
+					id: "collect_signing_shares",
+				},
+			},
+		};
+		const diff = checkSigningTimeouts(MACHINE_CONFIG, signingClient, consensusState, machineStates, 2n);
+		expect(diff.length).toBe(1);
+		expect(diff[0].consensus).toStrictEqual({
+			signatureIdToMessage: ["0x5af35af3", undefined],
+		});
+		expect(diff[0].rollover).toBeUndefined();
+		expect(diff[0].signing).toStrictEqual([
+			"0x5afe5afe",
+			{
+				id: "waiting_for_request",
+				deadline: 22n,
+				responsible: 2n,
+				signers: [1n, 2n],
+				packet: TX_ATTESTATION_PACKET,
+			},
+		]);
+		expect(diff[0].actions).toStrictEqual([
+			{
+				id: "sign_request",
+				groupId: "0x5afe",
+				message: "0x5afe5afe",
+			},
+		]);
+
+		expect(signers).toBeCalledTimes(1);
+		expect(signers).toBeCalledWith("0x5af35af3");
+
+		expect(participantId).toBeCalledTimes(1);
+		expect(participantId).toBeCalledWith("0x5af35af3");
 	});
 });

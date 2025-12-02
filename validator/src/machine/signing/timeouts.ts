@@ -167,18 +167,21 @@ const checkSigningRequestTimeout = (
 				throw new Error(`Unknown group for epoch ${epoch}`);
 			}
 			const { groupId } = groupInfo;
+			stateDiff.signing = [
+				message,
+				{
+					id: "waiting_for_request",
+					responsible: status.lastSigner,
+					signers,
+					deadline: block + machineConfig.signingTimeout,
+					packet: status.packet,
+				},
+			];
+			if (status.lastSigner !== signingClient.participantId(status.signatureId)) {
+				return stateDiff;
+			}
 			return {
 				...stateDiff,
-				signing: [
-					message,
-					{
-						id: "waiting_for_request",
-						responsible: status.lastSigner,
-						signers,
-						deadline: block + machineConfig.signingTimeout,
-						packet: status.packet,
-					},
-				],
 				actions: [
 					{
 						id: "sign_request",
