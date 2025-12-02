@@ -14,9 +14,7 @@ export const buildMerkleTree = (leaves: Hex[]): Hex[][] => {
 			const a = currentLevel.at(i * 2) ?? zeroHash;
 			const b = currentLevel.at(i * 2 + 1) ?? zeroHash;
 			const [left, right] = a < b ? [a, b] : [b, a];
-			const node = keccak256(
-				encodePacked(["bytes32", "bytes32"], [left, right]),
-			);
+			const node = keccak256(encodePacked(["bytes32", "bytes32"], [left, right]));
 			nextLevel.push(node);
 		}
 		tree.push(nextLevel);
@@ -33,17 +31,11 @@ export const calculateMerkleRoot = (leaves: Hex[]): Hex => {
 export const hashParticipant = (p: Participant): Hex =>
 	keccak256(encodePacked(["uint256", "uint256"], [p.id, BigInt(p.address)]));
 
-export const calculateParticipantsRoot = (
-	participants: readonly Participant[],
-): Hex => {
+export const calculateParticipantsRoot = (participants: readonly Participant[]): Hex => {
 	return calculateMerkleRoot(participants.map(hashParticipant));
 };
 
-export const verifyMerkleProof = (
-	root: Hex,
-	leaf: Hex,
-	proof: Hex[],
-): boolean => {
+export const verifyMerkleProof = (root: Hex, leaf: Hex, proof: Hex[]): boolean => {
 	let node: Hex = leaf;
 	for (const part of proof) {
 		const [left, right] = node < part ? [node, part] : [part, node];
@@ -64,8 +56,7 @@ export const generateMerkleProofWithRoot = (
 	const height = tree.length;
 	let currentIndex = index;
 	for (let i = 0; i < height - 1; i++) {
-		const neighbor =
-			currentIndex % 2 === 0 ? currentIndex + 1 : currentIndex - 1; // currentIndex ^ 1
+		const neighbor = currentIndex % 2 === 0 ? currentIndex + 1 : currentIndex - 1; // currentIndex ^ 1
 		const node = tree.at(i)?.at(neighbor) ?? zeroHash;
 		proof.push(node);
 		currentIndex = Math.floor(currentIndex / 2); // currentIndex >> 1
@@ -81,10 +72,7 @@ export const generateMerkleProof = (leaves: Hex[], index: number): Hex[] => {
 	return proof;
 };
 
-export const generateParticipantProof = (
-	participants: readonly Participant[],
-	participantId: ParticipantId,
-): Hex[] => {
+export const generateParticipantProof = (participants: readonly Participant[], participantId: ParticipantId): Hex[] => {
 	const index = participants.findIndex((p) => p.id === participantId);
 	return generateMerkleProof(participants.map(hashParticipant), index);
 };

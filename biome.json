@@ -27,5 +27,11 @@
 				"noUselessElse": "error"
 			}
 		}
+	},
+	"javascript": {
+		"formatter": {
+			"quoteStyle": "double",
+			"lineWidth": 120
+		}
 	}
 }

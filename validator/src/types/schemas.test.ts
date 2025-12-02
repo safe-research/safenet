@@ -7,8 +7,7 @@ import { checkedAddressSchema, validatorConfigSchema } from "./schemas.js";
 
 // This is a standard test address (e.g., from Hardhat/Anvil)
 const MOCK_LOWERCASE_ADDRESS = "0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266";
-const MOCK_WRONG_CHECKSUMMED_ADDRESS =
-	"0xf39Fd6e51aad88F6F4ce6aB8827279cfFFb92266";
+const MOCK_WRONG_CHECKSUMMED_ADDRESS = "0xf39Fd6e51aad88F6F4ce6aB8827279cfFFb92266";
 // This is the EIP-55 checksummed version of the address above
 const MOCK_CHECKSUMMED_ADDRESS = "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266";
 
@@ -39,9 +38,7 @@ describe("checkedAddressSchema", () => {
 	});
 
 	it("should fail to parse a wrongly checksummed address", () => {
-		const result = checkedAddressSchema.safeParse(
-			MOCK_WRONG_CHECKSUMMED_ADDRESS,
-		);
+		const result = checkedAddressSchema.safeParse(MOCK_WRONG_CHECKSUMMED_ADDRESS);
 
 		expect(result.success).toBe(false);
 	});
@@ -60,9 +57,7 @@ describe("checkedAddressSchema", () => {
 			expect(result.error.issues).toHaveLength(1);
 			const issue = result.error.issues[0];
 			expect(issue.code).toBe("invalid_type");
-			expect(issue.message).toBe(
-				"Invalid input: expected string, received number",
-			);
+			expect(issue.message).toBe("Invalid input: expected string, received number");
 		}
 	});
 });
@@ -76,8 +71,7 @@ describe("validatorConfigSchema", () => {
 			COORDINATOR_ADDRESS: MOCK_CHECKSUMMED_ADDRESS,
 			CHAIN_ID: 100,
 			PRIVATE_KEY: pk,
-			PARTICIPANTS:
-				"0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266,0x6Adb3baB5730852eB53987EA89D8e8f16393C200",
+			PARTICIPANTS: "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266,0x6Adb3baB5730852eB53987EA89D8e8f16393C200",
 		};
 
 		const result = validatorConfigSchema.parse(validConfig);
@@ -87,10 +81,7 @@ describe("validatorConfigSchema", () => {
 			COORDINATOR_ADDRESS: MOCK_CHECKSUMMED_ADDRESS,
 			CHAIN_ID: 100,
 			PRIVATE_KEY: pk,
-			PARTICIPANTS: [
-				"0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266",
-				"0x6Adb3baB5730852eB53987EA89D8e8f16393C200",
-			],
+			PARTICIPANTS: ["0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266", "0x6Adb3baB5730852eB53987EA89D8e8f16393C200"],
 		});
 	});
 
@@ -105,9 +96,7 @@ describe("validatorConfigSchema", () => {
 
 		// Check that the error is specifically about the RPC_URL
 		if (!result.success) {
-			const urlError = result.error.issues.find(
-				(issue) => issue.path[0] === "RPC_URL",
-			);
+			const urlError = result.error.issues.find((issue) => issue.path[0] === "RPC_URL");
 			expect(urlError).toBeDefined();
 			expect(urlError?.message).toBe("Invalid URL");
 		}
@@ -121,8 +110,7 @@ describe("validatorConfigSchema", () => {
 			COORDINATOR_ADDRESS: MOCK_CHECKSUMMED_ADDRESS,
 			CHAIN_ID: 1, // Mainnet is not supported right now
 			PRIVATE_KEY: pk,
-			PARTICIPANTS:
-				"0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266,0x6Adb3baB5730852eB53987EA89D8e8f16393C200",
+			PARTICIPANTS: "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266,0x6Adb3baB5730852eB53987EA89D8e8f16393C200",
 		};
 
 		const result = validatorConfigSchema.safeParse(invalidConfig);
@@ -130,9 +118,7 @@ describe("validatorConfigSchema", () => {
 
 		// Check that the error is from the address field
 		if (!result.success) {
-			const addressError = result.error.issues.find(
-				(issue) => issue.path[0] === "CHAIN_ID",
-			);
+			const addressError = result.error.issues.find((issue) => issue.path[0] === "CHAIN_ID");
 			expect(addressError).toBeDefined();
 		}
 	});
@@ -148,9 +134,7 @@ describe("validatorConfigSchema", () => {
 
 		// Check that the error is from the address field
 		if (!result.success) {
-			const addressError = result.error.issues.find(
-				(issue) => issue.path[0] === "CONSENSUS_ADDRESS",
-			);
+			const addressError = result.error.issues.find((issue) => issue.path[0] === "CONSENSUS_ADDRESS");
 			expect(addressError).toBeDefined();
 		}
 	});
@@ -164,14 +148,10 @@ describe("validatorConfigSchema", () => {
 		expect(result.success).toBe(false);
 
 		if (!result.success) {
-			const error = result.error.issues.find(
-				(issue) => issue.path[0] === "RPC_URL",
-			);
+			const error = result.error.issues.find((issue) => issue.path[0] === "RPC_URL");
 			expect(error).toBeDefined();
 			expect(error?.code).toBe("invalid_type");
-			expect(error?.message).toBe(
-				"Invalid input: expected string, received undefined",
-			);
+			expect(error?.message).toBe("Invalid input: expected string, received undefined");
 		}
 	});
 
@@ -184,14 +164,10 @@ describe("validatorConfigSchema", () => {
 		expect(result.success).toBe(false);
 
 		if (!result.success) {
-			const error = result.error.issues.find(
-				(issue) => issue.path[0] === "CONSENSUS_ADDRESS",
-			);
+			const error = result.error.issues.find((issue) => issue.path[0] === "CONSENSUS_ADDRESS");
 			expect(error).toBeDefined();
 			expect(error?.code).toBe("invalid_type");
-			expect(error?.message).toBe(
-				"Invalid input: expected string, received undefined",
-			);
+			expect(error?.message).toBe("Invalid input: expected string, received undefined");
 		}
 	});
 });

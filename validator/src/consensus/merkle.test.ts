@@ -1,10 +1,6 @@
 import type { Hex } from "viem";
 import { describe, expect, it } from "vitest";
-import {
-	calculateMerkleRoot,
-	generateMerkleProof,
-	verifyMerkleProof,
-} from "./merkle.js";
+import { calculateMerkleRoot, generateMerkleProof, verifyMerkleProof } from "./merkle.js";
 
 describe("merkle", () => {
 	it("should generate the correct merkle root", () => {
@@ -19,9 +15,7 @@ describe("merkle", () => {
 			"0x0000000000000000000000000000000000000000000000000000000000000000",
 		];
 		const root = calculateMerkleRoot(leaves);
-		expect(root).toBe(
-			"0x37e58bc84afff4e1afade4140135583af3d6d3523a435e60cec5dc75ae3d7e8b",
-		);
+		expect(root).toBe("0x37e58bc84afff4e1afade4140135583af3d6d3523a435e60cec5dc75ae3d7e8b");
 	});
 
 	it("should generate a valid merkle proof", () => {
@@ -38,11 +32,7 @@ describe("merkle", () => {
 		const proof = generateMerkleProof(leaves, 2);
 		const root = calculateMerkleRoot(leaves);
 		expect(
-			verifyMerkleProof(
-				root,
-				"0x0000000000000000000000000000000000000000000000000000000000000003",
-				proof,
-			),
+			verifyMerkleProof(root, "0x0000000000000000000000000000000000000000000000000000000000000003", proof),
 		).toBeTruthy();
 	});
 });

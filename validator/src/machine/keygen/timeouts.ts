@@ -13,10 +13,7 @@ export const checkKeyGenTimeouts = (
 ): StateDiff => {
 	// No timeout in waiting state
 	// Timeouts in signing state will be handled in the signing flow
-	if (
-		machineStates.rollover.id !== "collecting_commitments" &&
-		machineStates.rollover.id !== "collecting_shares"
-	) {
+	if (machineStates.rollover.id !== "collecting_commitments" && machineStates.rollover.id !== "collecting_shares") {
 		return {};
 	}
 	// Still within deadline
@@ -30,9 +27,7 @@ export const checkKeyGenTimeouts = (
 			? keyGenClient.missingCommitments(groupId)
 			: keyGenClient.missingSecretShares(groupId);
 	// For next key gen only consider active participants
-	const participants = machineConfig.defaultParticipants.filter(
-		(p) => missingParticipants.indexOf(p.id) < 0,
-	);
+	const participants = machineConfig.defaultParticipants.filter((p) => missingParticipants.indexOf(p.id) < 0);
 	const { diff } = triggerKeyGen(
 		keyGenClient,
 		machineStates.rollover.nextEpoch,

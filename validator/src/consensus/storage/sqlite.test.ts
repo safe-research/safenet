@@ -38,9 +38,7 @@ describe("sqlite", () => {
 
 			expect(() => storage.publicKey(groups[0])).toThrowError();
 			expect(() => storage.verificationShare(groups[0])).toThrowError();
-			expect(() =>
-				storage.registerVerification(groups[0], g(1n), g(2n)),
-			).toThrowError();
+			expect(() => storage.registerVerification(groups[0], g(1n), g(2n))).toThrowError();
 
 			storage.registerGroup(groups[0], participants, 2n);
 
@@ -51,12 +49,8 @@ describe("sqlite", () => {
 
 			expect(storage.publicKey(groups[0])).toEqual(g(1n));
 			expect(storage.verificationShare(groups[0])).toEqual(g(2n));
-			expect(() =>
-				storage.registerVerification(groups[0], g(1n), g(2n)),
-			).toThrowError();
-			expect(() =>
-				storage.registerVerification(groups[0], g(3n), g(4n)),
-			).toThrowError();
+			expect(() => storage.registerVerification(groups[0], g(1n), g(2n))).toThrowError();
+			expect(() => storage.registerVerification(groups[0], g(3n), g(4n))).toThrowError();
 		});
 
 		it("should register group signing shares", () => {
@@ -73,9 +67,7 @@ describe("sqlite", () => {
 
 			expect(storage.signingShare(groups[0])).toEqual(42n);
 			expect(() => storage.registerSigningShare(groups[0], 42n)).toThrowError();
-			expect(() =>
-				storage.registerSigningShare(groups[0], 1337n),
-			).toThrowError();
+			expect(() => storage.registerSigningShare(groups[0], 1337n)).toThrowError();
 		});
 
 		it("should unregister groups and related data", () => {
@@ -109,9 +101,7 @@ describe("sqlite", () => {
 		it("should register KeyGen coefficients", () => {
 			const storage = new SqliteStorage(participants[0].address, ":memory:");
 
-			expect(() =>
-				storage.registerKeyGen(groups[0], coefficients),
-			).toThrowError();
+			expect(() => storage.registerKeyGen(groups[0], coefficients)).toThrowError();
 			expect(() => storage.coefficients(groups[0])).toThrowError();
 			expect(() => storage.encryptionKey(groups[0])).toThrowError();
 
@@ -134,53 +124,22 @@ describe("sqlite", () => {
 		it("should register commitments", () => {
 			const storage = new SqliteStorage(participants[0].address, ":memory:");
 
-			expect(() =>
-				storage.registerCommitments(
-					groups[0],
-					commitments[1].id,
-					commitments[1].value,
-				),
-			).toThrowError();
-			expect(() =>
-				storage.commitments(groups[0], commitments[1].id),
-			).toThrowError();
+			expect(() => storage.registerCommitments(groups[0], commitments[1].id, commitments[1].value)).toThrowError();
+			expect(() => storage.commitments(groups[0], commitments[1].id)).toThrowError();
 			expect(() => storage.missingCommitments(groups[0])).toThrowError();
-			expect(() =>
-				storage.checkIfCommitmentsComplete(groups[0]),
-			).toThrowError();
+			expect(() => storage.checkIfCommitmentsComplete(groups[0])).toThrowError();
 			expect(() => storage.commitmentsMap(groups[0])).toThrowError();
 
 			storage.registerGroup(groups[0], participants, 2n);
 
-			storage.registerCommitments(
-				groups[0],
-				commitments[1].id,
-				commitments[1].value,
-			);
+			storage.registerCommitments(groups[0], commitments[1].id, commitments[1].value);
 
-			expect(storage.missingCommitments(groups[0])).toEqual([
-				commitments[0].id,
-				commitments[2].id,
-			]);
+			expect(storage.missingCommitments(groups[0])).toEqual([commitments[0].id, commitments[2].id]);
 			expect(storage.checkIfCommitmentsComplete(groups[0])).toBe(false);
-			expect(() =>
-				storage.registerCommitments(
-					groups[0],
-					commitments[1].id,
-					commitments[1].value,
-				),
-			).toThrowError();
+			expect(() => storage.registerCommitments(groups[0], commitments[1].id, commitments[1].value)).toThrowError();
 
-			storage.registerCommitments(
-				groups[0],
-				commitments[0].id,
-				commitments[0].value,
-			);
-			storage.registerCommitments(
-				groups[0],
-				commitments[2].id,
-				commitments[2].value,
-			);
+			storage.registerCommitments(groups[0], commitments[0].id, commitments[0].value);
+			storage.registerCommitments(groups[0], commitments[2].id, commitments[2].value);
 
 			expect(storage.missingCommitments(groups[0])).toEqual([]);
 			expect(storage.checkIfCommitmentsComplete(groups[0])).toBe(true);
@@ -189,9 +148,7 @@ describe("sqlite", () => {
 				expect(storage.commitments(groups[0], id)).toEqual(value);
 			}
 
-			expect(sortedEntries(storage.commitmentsMap(groups[0]))).toEqual(
-				commitments.map((c) => [c.id, c.value]),
-			);
+			expect(sortedEntries(storage.commitmentsMap(groups[0]))).toEqual(commitments.map((c) => [c.id, c.value]));
 
 			storage.clearKeyGen(groups[0]);
 
@@ -200,66 +157,33 @@ describe("sqlite", () => {
 			storage.unregisterGroup(groups[0]);
 
 			expect(() => storage.missingCommitments(groups[0])).toThrowError();
-			expect(() =>
-				storage.checkIfCommitmentsComplete(groups[0]),
-			).toThrowError();
+			expect(() => storage.checkIfCommitmentsComplete(groups[0])).toThrowError();
 			expect(() => storage.commitmentsMap(groups[0])).toThrowError();
 		});
 
 		it("should register secret shares", () => {
 			const storage = new SqliteStorage(participants[0].address, ":memory:");
 
-			expect(() =>
-				storage.registerSecretShare(
-					groups[0],
-					secretShares[1].id,
-					secretShares[1].value,
-				),
-			).toThrowError();
+			expect(() => storage.registerSecretShare(groups[0], secretShares[1].id, secretShares[1].value)).toThrowError();
 			expect(() => storage.missingSecretShares(groups[0])).toThrowError();
-			expect(() =>
-				storage.checkIfSecretSharesComplete(groups[0]),
-			).toThrowError();
+			expect(() => storage.checkIfSecretSharesComplete(groups[0])).toThrowError();
 			expect(() => storage.secretSharesMap(groups[0])).toThrowError();
 
 			storage.registerGroup(groups[0], participants, 2n);
 
-			storage.registerSecretShare(
-				groups[0],
-				secretShares[1].id,
-				secretShares[1].value,
-			);
+			storage.registerSecretShare(groups[0], secretShares[1].id, secretShares[1].value);
 
-			expect(storage.missingSecretShares(groups[0])).toEqual([
-				secretShares[0].id,
-				secretShares[2].id,
-			]);
+			expect(storage.missingSecretShares(groups[0])).toEqual([secretShares[0].id, secretShares[2].id]);
 			expect(storage.checkIfSecretSharesComplete(groups[0])).toBe(false);
-			expect(() =>
-				storage.registerSecretShare(
-					groups[0],
-					secretShares[1].id,
-					secretShares[1].value,
-				),
-			).toThrowError();
+			expect(() => storage.registerSecretShare(groups[0], secretShares[1].id, secretShares[1].value)).toThrowError();
 
-			storage.registerSecretShare(
-				groups[0],
-				secretShares[0].id,
-				secretShares[0].value,
-			);
-			storage.registerSecretShare(
-				groups[0],
-				secretShares[2].id,
-				secretShares[2].value,
-			);
+			storage.registerSecretShare(groups[0], secretShares[0].id, secretShares[0].value);
+			storage.registerSecretShare(groups[0], secretShares[2].id, secretShares[2].value);
 
 			expect(storage.missingSecretShares(groups[0])).toEqual([]);
 			expect(storage.checkIfSecretSharesComplete(groups[0])).toBe(true);
 
-			expect(sortedEntries(storage.secretSharesMap(groups[0]))).toEqual(
-				secretShares.map((s) => [s.id, s.value]),
-			);
+			expect(sortedEntries(storage.secretSharesMap(groups[0]))).toEqual(secretShares.map((s) => [s.id, s.value]));
 
 			storage.clearKeyGen(groups[0]);
 
@@ -268,9 +192,7 @@ describe("sqlite", () => {
 			storage.unregisterGroup(groups[0]);
 
 			expect(() => storage.missingSecretShares(groups[0])).toThrowError();
-			expect(() =>
-				storage.checkIfSecretSharesComplete(groups[0]),
-			).toThrowError();
+			expect(() => storage.checkIfSecretSharesComplete(groups[0])).toThrowError();
 			expect(() => storage.secretSharesMap(groups[0])).toThrowError();
 		});
 	});
@@ -278,12 +200,7 @@ describe("sqlite", () => {
 	describe("NonceStorage", () => {
 		const nonces = {
 			root: `0x${"44".repeat(31)}01`,
-			leaves: [
-				`0x${"77".repeat(31)}01`,
-				`0x${"77".repeat(31)}02`,
-				`0x${"77".repeat(31)}03`,
-				`0x${"77".repeat(31)}04`,
-			],
+			leaves: [`0x${"77".repeat(31)}01`, `0x${"77".repeat(31)}02`, `0x${"77".repeat(31)}03`, `0x${"77".repeat(31)}04`],
 			commitments: [
 				{
 					hidingNonce: 401n,
@@ -328,15 +245,11 @@ describe("sqlite", () => {
 		it("should register, link, and burn nonces", () => {
 			const storage = new SqliteStorage(participants[0].address, ":memory:");
 
-			expect(() =>
-				storage.registerNonceTree(groups[0], dup(nonces)),
-			).toThrowError();
+			expect(() => storage.registerNonceTree(groups[0], dup(nonces))).toThrowError();
 
 			storage.registerGroup(groups[0], participants, 2n);
 
-			expect(() =>
-				storage.linkNonceTree(groups[0], chunk, nonces.root),
-			).toThrowError();
+			expect(() => storage.linkNonceTree(groups[0], chunk, nonces.root)).toThrowError();
 			expect(() => storage.nonceTree(groups[0], chunk)).toThrowError();
 			expect(() => storage.burnNonce(groups[0], chunk, offset)).toThrowError();
 
@@ -355,9 +268,7 @@ describe("sqlite", () => {
 			expect(storage.nonceTree(groups[0], chunk)).toEqual({
 				...nonces,
 				commitments: nonces.commitments.map((c, i) =>
-					BigInt(i) === offset
-						? { ...c, hidingNonce: 0n, bindingNonce: 0n }
-						: c,
+					BigInt(i) === offset ? { ...c, hidingNonce: 0n, bindingNonce: 0n } : c,
 				),
 			});
 
@@ -387,15 +298,7 @@ describe("sqlite", () => {
 		it("should register signature requests", () => {
 			const storage = new SqliteStorage(participants[0].address, ":memory:");
 
-			expect(() =>
-				storage.registerSignatureRequest(
-					signature,
-					groups[0],
-					message,
-					signers,
-					sequence,
-				),
-			).toThrowError();
+			expect(() => storage.registerSignatureRequest(signature, groups[0], message, signers, sequence)).toThrowError();
 			expect(() => storage.signingGroup(signature)).toThrowError();
 			expect(() => storage.signers(signature)).toThrowError();
 			expect(() => storage.message(signature)).toThrowError();
@@ -408,13 +311,7 @@ describe("sqlite", () => {
 			expect(() => storage.message(signature)).toThrowError();
 			expect(() => storage.sequence(signature)).toThrowError();
 
-			storage.registerSignatureRequest(
-				signature,
-				groups[0],
-				message,
-				signers,
-				sequence,
-			);
+			storage.registerSignatureRequest(signature, groups[0], message, signers, sequence);
 
 			expect(storage.signingGroup(signature)).toEqual(groups[0]);
 			expect(storage.signers(signature)).toEqual(signers);
@@ -432,21 +329,13 @@ describe("sqlite", () => {
 		it("should register signature nonce commitments", () => {
 			const storage = new SqliteStorage(participants[0].address, ":memory:");
 
-			expect(() =>
-				storage.registerNonceCommitments(signature, signers[1], commitments[1]),
-			).toThrowError();
+			expect(() => storage.registerNonceCommitments(signature, signers[1], commitments[1])).toThrowError();
 			expect(() => storage.checkIfNoncesComplete(signature)).toThrowError();
 			expect(() => storage.missingNonces(signature)).toThrowError();
 			expect(() => storage.nonceCommitmentsMap(signature)).toThrowError();
 
 			storage.registerGroup(groups[0], participants, 2n);
-			storage.registerSignatureRequest(
-				signature,
-				groups[0],
-				message,
-				signers,
-				sequence,
-			);
+			storage.registerSignatureRequest(signature, groups[0], message, signers, sequence);
 
 			expect(storage.checkIfNoncesComplete(signature)).toBe(false);
 			expect(storage.missingNonces(signature)).toEqual(signers);
@@ -454,14 +343,10 @@ describe("sqlite", () => {
 
 			storage.registerNonceCommitments(signature, signers[1], commitments[1]);
 
-			expect(() =>
-				storage.registerNonceCommitments(signature, signers[1], commitments[1]),
-			).toThrowError();
+			expect(() => storage.registerNonceCommitments(signature, signers[1], commitments[1])).toThrowError();
 			expect(storage.checkIfNoncesComplete(signature)).toBe(false);
 			expect(storage.missingNonces(signature)).toEqual([signers[0]]);
-			expect(sortedEntries(storage.nonceCommitmentsMap(signature))).toEqual([
-				[signers[1], commitments[1]],
-			]);
+			expect(sortedEntries(storage.nonceCommitmentsMap(signature))).toEqual([[signers[1], commitments[1]]]);
 
 			storage.registerNonceCommitments(signature, signers[0], commitments[0]);
 

@@ -1,15 +1,7 @@
 import { encodePacked, type Hex, keccak256 } from "viem";
-import type {
-	FrostPoint,
-	GroupId,
-	ParticipantId,
-	SignatureId,
-} from "../../frost/types.js";
+import type { FrostPoint, GroupId, ParticipantId, SignatureId } from "../../frost/types.js";
 import { generateMerkleProofWithRoot } from "../merkle.js";
-import type {
-	GroupInfoStorage,
-	SignatureRequestStorage,
-} from "../storage/types.js";
+import type { GroupInfoStorage, SignatureRequestStorage } from "../storage/types.js";
 import { groupChallenge, lagrangeCoefficient } from "./group.js";
 import {
 	bindingFactors,
@@ -38,12 +30,7 @@ export class SigningClient {
 		return nonceTreeRoot;
 	}
 
-	handleNonceCommitmentsHash(
-		groupId: GroupId,
-		senderId: ParticipantId,
-		nonceCommitmentsHash: Hex,
-		chunk: bigint,
-	) {
+	handleNonceCommitmentsHash(groupId: GroupId, senderId: ParticipantId, nonceCommitmentsHash: Hex, chunk: bigint) {
 		const participantId = this.#storage.participantId(groupId);
 		// Only link own nonce commitments
 		if (participantId !== senderId) return;
@@ -63,34 +50,19 @@ export class SigningClient {
 		if (signers.length < this.#storage.threshold(groupId)) {
 			throw new Error("Not enough signers to start signing process");
 		}
-		const participantsSet = new Set(
-			this.#storage.participants(groupId).map((p) => p.id),
-		);
+		const participantsSet = new Set(this.#storage.participants(groupId).map((p) => p.id));
 		for (const signer of signers) {
 			if (!participantsSet.has(signer)) {
 				throw new Error(`Invalid signer id provided: ${signer}`);
 			}
 		}
-		this.#storage.registerSignatureRequest(
-			signatureId,
-			groupId,
-			message,
-			signers,
-			sequence,
-		);
+		this.#storage.registerSignatureRequest(signatureId, groupId, message, signers, sequence);
 		// Set own nonce commitments
 		const { chunk, offset } = decodeSequence(sequence);
 		const nonceTree = this.#storage.nonceTree(groupId, chunk);
-		const { nonceCommitments, nonceProof } = nonceCommitmentsWithProof(
-			nonceTree,
-			offset,
-		);
+		const { nonceCommitments, nonceProof } = nonceCommitmentsWithProof(nonceTree, offset);
 		const participantId = this.#storage.participantId(groupId);
-		this.#storage.registerNonceCommitments(
-			signatureId,
-			participantId,
-			nonceCommitments,
-		);
+		this.#storage.registerNonceCommitments(signatureId, participantId, nonceCommitments);
 		return {
 			nonceCommitments,
 			nonceProof,
@@ -106,11 +78,7 @@ export class SigningClient {
 		const signerId = this.#storage.participantId(groupId);
 		// Skip own commits
 		if (signerId === peerId) return false;
-		this.#storage.registerNonceCommitments(
-			signatureId,
-			peerId,
-			nonceCommitments,
-		);
+		this.#storage.registerNonceCommitments(signatureId, peerId, nonceCommitments);
 
 		return this.#storage.checkIfNoncesComplete(signatureId);
 	}
@@ -128,29 +96,18 @@ export class SigningClient {
 		const signerId = this.#storage.participantId(groupId);
 
 		const groupPublicKey = this.#storage.publicKey(groupId);
-		if (groupPublicKey === undefined)
-			throw new Error(`Missing public key for group ${groupId}`);
+		if (groupPublicKey === undefined) throw new Error(`Missing public key for group ${groupId}`);
 
 		const signingShare = this.#storage.signingShare(groupId);
-		if (signingShare === undefined)
-			throw new Error(`Missing signing share for group ${groupId}`);
+		if (signingShare === undefined) throw new Error(`Missing signing share for group ${groupId}`);
 
 		const signerIndex = signers.indexOf(signerId);
-		const signerNonceCommitments =
-			this.#storage.nonceCommitmentsMap(signatureId);
+		const signerNonceCommitments = this.#storage.nonceCommitmentsMap(signatureId);
 		const message = this.#storage.message(signatureId);
 
 		// Calculate information over the complete signer group
-		const bindingFactorList = bindingFactors(
-			groupPublicKey,
-			signers,
-			signerNonceCommitments,
-			message,
-		);
-		const groupCommitmentShares = groupCommitementShares(
-			bindingFactorList,
-			signerNonceCommitments,
-		);
+		const bindingFactorList = bindingFactors(groupPublicKey, signers, signerNonceCommitments, message);
+		const groupCommitmentShares = groupCommitementShares(bindingFactorList, signerNonceCommitments);
 		const groupCommitment = calculateGroupCommitment(groupCommitmentShares);
 		const challenge = groupChallenge(groupCommitment, groupPublicKey, message);
 		const signerParts = signers.map((signerId, index) => {
@@ -181,13 +138,8 @@ export class SigningClient {
 		const nonceTree = this.#storage.nonceTree(groupId, chunk);
 		// Calculate information specific to this signer
 		const nonceCommitments = nonceTree.commitments[Number(offset)];
-		if (
-			nonceCommitments.bindingNonce === 0n &&
-			nonceCommitments.hidingNonce === 0n
-		) {
-			throw new Error(
-				`Nonces for sequence ${sequence} have been already burned`,
-			);
+		if (nonceCommitments.bindingNonce === 0n && nonceCommitments.hidingNonce === 0n) {
+			throw new Error(`Nonces for sequence ${sequence} have been already burned`);
 		}
 		const signerPart = signerParts[signerIndex];
 		const signatureShare = createSignatureShare(
@@ -196,18 +148,12 @@ export class SigningClient {
 			bindingFactorList[signerIndex].bindingFactor,
 			signerPart.cl,
 		);
-		const { proof: signersProof, root: signersRoot } =
-			generateMerkleProofWithRoot(
-				signerParts.map((p) => p.node),
-				signerIndex,
-			);
-
-		verifySignatureShare(
-			signatureShare,
-			this.#storage.verificationShare(groupId),
-			signerPart.cl,
-			signerPart.r,
+		const { proof: signersProof, root: signersRoot } = generateMerkleProofWithRoot(
+			signerParts.map((p) => p.node),
+			signerIndex,
 		);
+
+		verifySignatureShare(signatureShare, this.#storage.verificationShare(groupId), signerPart.cl, signerPart.r);
 
 		this.#storage.burnNonce(groupId, chunk, offset);
 

@@ -59,8 +59,6 @@ describe("safeTx handler", () => {
 					},
 				},
 			}),
-		).resolves.toBe(
-			"0x35ea25a4b798dcc97b2ec8b2c1f87e44e77213340965099255e504f217a75436",
-		);
+		).resolves.toBe("0x35ea25a4b798dcc97b2ec8b2c1f87e44e77213340965099255e504f217a75436");
 	});
 });

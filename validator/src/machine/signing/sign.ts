@@ -2,12 +2,7 @@ import { signRequestEventSchema } from "../../consensus/schemas.js";
 import type { SigningClient } from "../../consensus/signing/client.js";
 import { decodeSequence } from "../../consensus/signing/nonces.js";
 import type { VerificationEngine } from "../../consensus/verify/engine.js";
-import type {
-	ConsensusState,
-	MachineConfig,
-	MachineStates,
-	StateDiff,
-} from "../types.js";
+import type { ConsensusState, MachineConfig, MachineStates, StateDiff } from "../types.js";
 
 const NONCE_THRESHOLD = 100n;
 
@@ -25,13 +20,7 @@ export const handleSign = async (
 	// Parse event from raw data
 	const event = signRequestEventSchema.parse(eventArgs);
 	// TODO: this can be lifted out of this function
-	const diff = checkAvailableNonces(
-		signingClient,
-		consensusState,
-		machineStates,
-		event.sequence,
-		logger,
-	);
+	const diff = checkAvailableNonces(signingClient, consensusState, machineStates, event.sequence, logger);
 	const status = machineStates.signing[event.message];
 	// Check that there is no state or it is the retry flow
 	if (status?.id !== "waiting_for_request") {
@@ -87,27 +76,17 @@ const checkAvailableNonces = (
 	sequence: bigint,
 	logger?: (msg: unknown) => void,
 ): Pick<StateDiff, "consensus"> & Pick<StateDiff, "actions"> => {
-	if (
-		consensusState.activeEpoch === 0n &&
-		machineStates.rollover.id !== "waiting_for_rollover"
-	) {
+	if (consensusState.activeEpoch === 0n && machineStates.rollover.id !== "waiting_for_rollover") {
 		// We are in the genesis setup
 		return {};
 	}
-	const activeGroup =
-		consensusState.epochGroups[consensusState.activeEpoch.toString()];
-	if (
-		activeGroup !== undefined &&
-		!consensusState.groupPendingNonces[activeGroup.groupId] === true
-	) {
+	const activeGroup = consensusState.epochGroups[consensusState.activeEpoch.toString()];
+	if (activeGroup !== undefined && !consensusState.groupPendingNonces[activeGroup.groupId] === true) {
 		const groupId = activeGroup.groupId;
 		let { chunk, offset } = decodeSequence(sequence);
 		let availableNonces = 0n;
 		while (true) {
-			const noncesInChunk = signingClient.availableNoncesCount(
-				activeGroup.groupId,
-				chunk,
-			);
+			const noncesInChunk = signingClient.availableNoncesCount(activeGroup.groupId, chunk);
 			availableNonces += noncesInChunk - offset;
 			// Chunk has no nonces, meaning the chunk was not initialized yet.
 			if (noncesInChunk === 0n) break;

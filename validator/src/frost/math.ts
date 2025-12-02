@@ -56,24 +56,18 @@ export const createVerificationShare = (
 	for (const [, commitments] of allCommitments) {
 		const partialVerificationShare = evalCommitment(commitments, senderId);
 		verificationShare =
-			verificationShare == null
-				? partialVerificationShare
-				: verificationShare.add(partialVerificationShare);
+			verificationShare == null ? partialVerificationShare : verificationShare.add(partialVerificationShare);
 	}
-	if (verificationShare === null)
-		throw new Error("Could not calculate verification share!");
+	if (verificationShare === null) throw new Error("Could not calculate verification share!");
 	return verificationShare;
 };
 
-export const createSigningShare = (
-	secretShares: Map<bigint, bigint>,
-): bigint => {
+export const createSigningShare = (secretShares: Map<bigint, bigint>): bigint => {
 	let signingShare = 0n;
 	for (const [, share] of secretShares) {
 		signingShare = addmod(signingShare, share);
 	}
-	if (signingShare === 0n)
-		throw new Error("Could not calculate signing share!");
+	if (signingShare === 0n) throw new Error("Could not calculate signing share!");
 	return signingShare;
 };
 
@@ -104,10 +98,7 @@ export const evalPoly = (coefficient: readonly bigint[], x: bigint): bigint => {
 	return value;
 };
 
-export const evalCommitment = (
-	commitments: readonly FrostPoint[],
-	x: bigint,
-): FrostPoint => {
+export const evalCommitment = (commitments: readonly FrostPoint[], x: bigint): FrostPoint => {
 	let value = commitments[0];
 	if (x === 0n) {
 		return value;

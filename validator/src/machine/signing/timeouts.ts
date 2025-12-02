@@ -1,13 +1,7 @@
 import type { Hex } from "viem";
 import type { SigningClient } from "../../consensus/signing/client.js";
 import { metaTxHash } from "../../consensus/verify/safeTx/hashing.js";
-import type {
-	ConsensusState,
-	MachineConfig,
-	MachineStates,
-	SigningState,
-	StateDiff,
-} from "../types.js";
+import type { ConsensusState, MachineConfig, MachineStates, SigningState, StateDiff } from "../types.js";
 
 export const checkSigningTimeouts = (
 	machineConfig: MachineConfig,
@@ -16,10 +10,7 @@ export const checkSigningTimeouts = (
 	machineStates: MachineStates,
 	block: bigint,
 ): StateDiff[] => {
-	const statesToProcess = Object.entries(machineStates.signing) as [
-		Hex,
-		SigningState,
-	][];
+	const statesToProcess = Object.entries(machineStates.signing) as [Hex, SigningState][];
 	const diffs: StateDiff[] = [];
 	for (const [signatureId, status] of statesToProcess) {
 		diffs.push(
@@ -74,24 +65,18 @@ const checkSigningRequestTimeout = (
 				];
 			}
 			const signatureId = status.signatureId;
-			const act =
-				everyoneResponsible ||
-				status.responsible === signingClient.participantId(signatureId);
+			const act = everyoneResponsible || status.responsible === signingClient.participantId(signatureId);
 			if (!act) {
 				return stateDiff;
 			}
-			if (
-				machineStates.rollover.id === "sign_rollover" &&
-				message === machineStates.rollover.message
-			) {
+			if (machineStates.rollover.id === "sign_rollover" && message === machineStates.rollover.message) {
 				return {
 					...stateDiff,
 					actions: [
 						{
 							id: "consensus_stage_epoch",
 							proposedEpoch: machineStates.rollover.nextEpoch,
-							rolloverBlock:
-								machineStates.rollover.nextEpoch * machineConfig.blocksPerEpoch,
+							rolloverBlock: machineStates.rollover.nextEpoch * machineConfig.blocksPerEpoch,
 							groupId: machineStates.rollover.groupId,
 							signatureId,
 						},
@@ -164,9 +149,7 @@ const checkSigningRequestTimeout = (
 			const missingParticipants =
 				status.id === "collect_nonce_commitments"
 					? signingClient.missingNonces(status.signatureId)
-					: signingClient
-							.signers(status.signatureId)
-							.filter((s) => status.sharesFrom.indexOf(s) < 0);
+					: signingClient.signers(status.signatureId).filter((s) => status.sharesFrom.indexOf(s) < 0);
 			// For next key gen only consider active participants
 			const signers = machineConfig.defaultParticipants
 				.filter((p) => missingParticipants.indexOf(p.id) < 0)

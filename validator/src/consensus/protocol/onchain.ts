@@ -1,9 +1,6 @@
 import type { Address, Hex, PublicClient, WalletClient } from "viem";
 import type { FrostPoint, GroupId, SignatureId } from "../../frost/types.js";
-import {
-	CONSENSUS_FUNCTIONS,
-	COORDINATOR_FUNCTIONS,
-} from "../../types/abis.js";
+import { CONSENSUS_FUNCTIONS, COORDINATOR_FUNCTIONS } from "../../types/abis.js";
 import { BaseProtocol } from "./base.js";
 import type {
 	AttestTransaction,
@@ -115,12 +112,7 @@ export class OnchainProtocol extends BaseProtocol {
 		callbackContext,
 	}: PublishSecretShares): Promise<Hex> {
 		if (callbackContext !== undefined) {
-			return this.publishKeygenSecretSharesWithCallback(
-				groupId,
-				verificationShare,
-				shares,
-				callbackContext,
-			);
+			return this.publishKeygenSecretSharesWithCallback(groupId, verificationShare, shares, callbackContext);
 		}
 		const { request } = await this.#publicClient.simulateContract({
 			address: this.#coordinator,
@@ -138,10 +130,7 @@ export class OnchainProtocol extends BaseProtocol {
 		return this.#signingClient.writeContract(request);
 	}
 
-	protected async requestSignature({
-		groupId,
-		message,
-	}: RequestSignature): Promise<Hex> {
+	protected async requestSignature({ groupId, message }: RequestSignature): Promise<Hex> {
 		const { request } = await this.#publicClient.simulateContract({
 			address: this.#coordinator,
 			abi: COORDINATOR_FUNCTIONS,
@@ -152,10 +141,7 @@ export class OnchainProtocol extends BaseProtocol {
 		return this.#signingClient.writeContract(request);
 	}
 
-	protected async registerNonceCommitments({
-		groupId,
-		nonceCommitmentsHash,
-	}: RegisterNonceCommitments): Promise<Hex> {
+	protected async registerNonceCommitments({ groupId, nonceCommitmentsHash }: RegisterNonceCommitments): Promise<Hex> {
 		const { request } = await this.#publicClient.simulateContract({
 			address: this.#coordinator,
 			abi: COORDINATOR_FUNCTIONS,
@@ -269,11 +255,7 @@ export class OnchainProtocol extends BaseProtocol {
 		});
 		return this.#signingClient.writeContract(request);
 	}
-	protected async attestTransaction({
-		epoch,
-		transactionHash,
-		signatureId,
-	}: AttestTransaction): Promise<Hex> {
+	protected async attestTransaction({ epoch, transactionHash, signatureId }: AttestTransaction): Promise<Hex> {
 		const { request } = await this.#publicClient.simulateContract({
 			address: this.#consensus,
 			abi: CONSENSUS_FUNCTIONS,
@@ -283,12 +265,7 @@ export class OnchainProtocol extends BaseProtocol {
 		});
 		return this.#signingClient.writeContract(request);
 	}
-	protected async stageEpoch({
-		proposedEpoch,
-		rolloverBlock,
-		groupId,
-		signatureId,
-	}: StageEpoch): Promise<Hex> {
+	protected async stageEpoch({ proposedEpoch, rolloverBlock, groupId, signatureId }: StageEpoch): Promise<Hex> {
 		const { request } = await this.#publicClient.simulateContract({
 			address: this.#consensus,
 			abi: CONSENSUS_FUNCTIONS,

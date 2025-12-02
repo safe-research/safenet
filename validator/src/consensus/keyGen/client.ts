@@ -1,11 +1,5 @@
 import type { Hex } from "viem";
-import {
-	createSigningShare,
-	createVerificationShare,
-	evalCommitment,
-	evalPoly,
-	verifyKey,
-} from "../../frost/math.js";
+import { createSigningShare, createVerificationShare, evalCommitment, evalPoly, verifyKey } from "../../frost/math.js";
 import { ecdh } from "../../frost/secret.js";
 import type {
 	FrostPoint,
@@ -14,22 +8,10 @@ import type {
 	ProofOfAttestationParticipation,
 	ProofOfKnowledge,
 } from "../../frost/types.js";
-import {
-	createCoefficients,
-	createCommitments,
-	createProofOfKnowledge,
-	verifyCommitments,
-} from "../../frost/vss.js";
+import { createCoefficients, createCommitments, createProofOfKnowledge, verifyCommitments } from "../../frost/vss.js";
 import type { Logger } from "../../utils/logging.js";
-import {
-	calculateParticipantsRoot,
-	generateParticipantProof,
-} from "../merkle.js";
-import type {
-	GroupInfoStorage,
-	KeyGenInfoStorage,
-	Participant,
-} from "../storage/types.js";
+import { calculateParticipantsRoot, generateParticipantProof } from "../merkle.js";
+import type { GroupInfoStorage, KeyGenInfoStorage, Participant } from "../storage/types.js";
 import { calcGroupId } from "./utils.js";
 
 export type KeygenInfo = {
@@ -101,21 +83,13 @@ export class KeyGenClient {
 				`Unexpected participant count ${participantsRoot}! (Expected ${participants.length} got ${count})`,
 			);
 		const groupId = calcGroupId(participantsRoot, count, threshold, context);
-		const participantId = this.#storage.registerGroup(
-			groupId,
-			participants,
-			threshold,
-		);
+		const participantId = this.#storage.registerGroup(groupId, participants, threshold);
 		const coefficients = createCoefficients(threshold);
 		this.#storage.registerKeyGen(groupId, coefficients);
 		const pok = createProofOfKnowledge(participantId, coefficients);
 		const commitments = createCommitments(coefficients);
 		const poap = generateParticipantProof(participants, participantId);
-		this.#storage.registerSecretShare(
-			groupId,
-			participantId,
-			evalPoly(coefficients, participantId),
-		);
+		this.#storage.registerSecretShare(groupId, participantId, evalPoly(coefficients, participantId));
 		return {
 			groupId,
 			participantsRoot,
@@ -146,15 +120,8 @@ export class KeyGenClient {
 		const groupPublicKey = createVerificationShare(commitments, 0n);
 		// Will be published as y
 		const participantId = this.#storage.participantId(groupId);
-		const verificationShare = createVerificationShare(
-			commitments,
-			participantId,
-		);
-		this.#storage.registerVerification(
-			groupId,
-			groupPublicKey,
-			verificationShare,
-		);
+		const verificationShare = createVerificationShare(commitments, participantId);
+		this.#storage.registerVerification(groupId, groupPublicKey, verificationShare);
 
 		const coefficients = this.#storage.coefficients(groupId);
 		const participants = this.#storage.participants(groupId);
@@ -163,15 +130,9 @@ export class KeyGenClient {
 			if (participant.id === participantId) continue;
 			const peerCommitments = commitments.get(participant.id);
 			if (peerCommitments === undefined)
-				throw new Error(
-					`Commitments for ${groupId}:${participant.id} are not available!`,
-				);
+				throw new Error(`Commitments for ${groupId}:${participant.id} are not available!`);
 			const peerShare = evalPoly(coefficients, participant.id);
-			const encryptedShare = ecdh(
-				peerShare,
-				coefficients[0],
-				peerCommitments[0],
-			);
+			const encryptedShare = ecdh(peerShare, coefficients[0], peerCommitments[0]);
 			shares.push(encryptedShare);
 		}
 		if (shares.length !== participants.length - 1) {
@@ -200,20 +161,12 @@ export class KeyGenClient {
 			return false;
 		}
 		const commitment = this.#storage.commitments(groupId, senderId);
-		if (commitment === undefined)
-			throw new Error(
-				`Commitments for ${groupId}:${senderId} are not available!`,
-			);
+		if (commitment === undefined) throw new Error(`Commitments for ${groupId}:${senderId} are not available!`);
 		// TODO: check if we should use a reasonable limit for the id (current uint256)
-		const shareIndex =
-			participantId < senderId ? participantId : participantId - 1n;
+		const shareIndex = participantId < senderId ? participantId : participantId - 1n;
 		// Note: Number(shareIndex) is theoretically an unsafe cast
 		const key = this.#storage.encryptionKey(groupId);
-		const partialShare = ecdh(
-			peerShares[Number(shareIndex) - 1],
-			key,
-			commitment[0],
-		);
+		const partialShare = ecdh(peerShares[Number(shareIndex) - 1], key, commitment[0]);
 		const partialVerificationShare = evalCommitment(commitment, participantId);
 		verifyKey(partialVerificationShare, partialShare);
 		this.#storage.registerSecretShare(groupId, senderId, partialShare);

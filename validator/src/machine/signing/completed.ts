@@ -1,10 +1,5 @@
 import { signedEventSchema } from "../../consensus/schemas.js";
-import type {
-	ConsensusState,
-	MachineConfig,
-	MachineStates,
-	StateDiff,
-} from "../types.js";
+import type { ConsensusState, MachineConfig, MachineStates, StateDiff } from "../types.js";
 
 export const handleSigningCompleted = async (
 	machineConfig: MachineConfig,

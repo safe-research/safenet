@@ -14,24 +14,19 @@ const BLOCKS_PER_EPOCH = (5n * 60n) / BLOCKTIME_IN_SECONDS; // ~ blocks for 5 mi
 const result = validatorConfigSchema.safeParse(process.env);
 if (!result.success) {
 	console.log(result.error);
-	console.error(
-		"Invalid environment variable configuration:",
-		z.treeifyError(result.error),
-	);
+	console.error("Invalid environment variable configuration:", z.treeifyError(result.error));
 	process.exit(1);
 }
 
 const validatorConfig = result.data;
 const rpcUrl = validatorConfig.RPC_URL;
 
-const participants: Participant[] = validatorConfig.PARTICIPANTS.map(
-	(address, i) => {
-		return {
-			address,
-			id: BigInt(i + 1),
-		};
-	},
-);
+const participants: Participant[] = validatorConfig.PARTICIPANTS.map((address, i) => {
+	return {
+		address,
+		id: BigInt(i + 1),
+	};
+});
 
 const config: ProtocolConfig = {
 	chainId: validatorConfig.CHAIN_ID,

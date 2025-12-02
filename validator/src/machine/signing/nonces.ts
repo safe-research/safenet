@@ -5,12 +5,7 @@ import { metaTxHash } from "../../consensus/verify/safeTx/hashing.js";
 import type { SafeTransactionPacket } from "../../consensus/verify/safeTx/schemas.js";
 import { toPoint } from "../../frost/math.js";
 import { CONSENSUS_FUNCTIONS } from "../../types/abis.js";
-import type {
-	ConsensusState,
-	MachineConfig,
-	MachineStates,
-	StateDiff,
-} from "../types.js";
+import type { ConsensusState, MachineConfig, MachineStates, StateDiff } from "../types.js";
 
 export const handleRevealedNonces = async (
 	machineConfig: MachineConfig,
@@ -29,14 +24,10 @@ export const handleRevealedNonces = async (
 	// Check that state for signature id is "collect_nonce_commitments"
 	const status = machineStates.signing[message];
 	if (status?.id !== "collect_nonce_commitments") return {};
-	const readyToSubmit = signingClient.handleNonceCommitments(
-		event.sid,
-		event.identifier,
-		{
-			hidingNonceCommitment: toPoint(event.nonces.d),
-			bindingNonceCommitment: toPoint(event.nonces.e),
-		},
-	);
+	const readyToSubmit = signingClient.handleNonceCommitments(event.sid, event.identifier, {
+		hidingNonceCommitment: toPoint(event.nonces.d),
+		bindingNonceCommitment: toPoint(event.nonces.e),
+	});
 	if (!readyToSubmit)
 		return {
 			signing: [
@@ -48,18 +39,11 @@ export const handleRevealedNonces = async (
 			],
 		};
 	// If all participants have committed update state for request id to "collect_signing_shares"
-	const {
-		signersRoot,
-		signersProof,
-		groupCommitment,
-		commitmentShare,
-		signatureShare,
-		lagrangeCoefficient,
-	} = signingClient.createSignatureShare(event.sid);
+	const { signersRoot, signersProof, groupCommitment, commitmentShare, signatureShare, lagrangeCoefficient } =
+		signingClient.createSignatureShare(event.sid);
 
 	const callbackContext =
-		machineStates.rollover.id === "sign_rollover" &&
-		machineStates.rollover.message === message
+		machineStates.rollover.id === "sign_rollover" && machineStates.rollover.message === message
 			? encodeFunctionData({
 					abi: CONSENSUS_FUNCTIONS,
 					functionName: "stageEpoch",
@@ -101,16 +85,10 @@ export const handleRevealedNonces = async (
 	};
 };
 
-const buildTransactionAttestationCallback = (
-	packet: SafeTransactionPacket,
-): Hex | undefined => {
+const buildTransactionAttestationCallback = (packet: SafeTransactionPacket): Hex | undefined => {
 	return encodeFunctionData({
 		abi: CONSENSUS_FUNCTIONS,
 		functionName: "attestTransaction",
-		args: [
-			packet.proposal.epoch,
-			metaTxHash(packet.proposal.transaction),
-			zeroHash,
-		],
+		args: [packet.proposal.epoch, metaTxHash(packet.proposal.transaction), zeroHash],
 	});
 };

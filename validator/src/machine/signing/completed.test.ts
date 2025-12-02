@@ -1,10 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type {
-	ConsensusState,
-	MachineConfig,
-	MachineStates,
-	SigningState,
-} from "../types.js";
+import type { ConsensusState, MachineConfig, MachineStates, SigningState } from "../types.js";
 import { handleSigningCompleted } from "./completed.js";
 
 // --- Test Data ---
@@ -70,15 +65,7 @@ const EVENT_ARGS = {
 // --- Tests ---
 describe("signing completed", () => {
 	it("should fail on invalid event arguments", async () => {
-		await expect(
-			handleSigningCompleted(
-				MACHINE_CONFIG,
-				CONSENSUS_STATE,
-				MACHINE_STATES,
-				2n,
-				{},
-			),
-		).rejects.toThrow();
+		await expect(handleSigningCompleted(MACHINE_CONFIG, CONSENSUS_STATE, MACHINE_STATES, 2n, {})).rejects.toThrow();
 	});
 
 	it("should not handle signing requests without a message", async () => {
@@ -86,13 +73,7 @@ describe("signing completed", () => {
 			...CONSENSUS_STATE,
 			signatureIdToMessage: {},
 		};
-		const diff = await handleSigningCompleted(
-			MACHINE_CONFIG,
-			consensusState,
-			MACHINE_STATES,
-			2n,
-			EVENT_ARGS,
-		);
+		const diff = await handleSigningCompleted(MACHINE_CONFIG, consensusState, MACHINE_STATES, 2n, EVENT_ARGS);
 
 		expect(diff).toStrictEqual({});
 	});
@@ -102,13 +83,7 @@ describe("signing completed", () => {
 			...MACHINE_STATES,
 			signing: {},
 		};
-		const diff = await handleSigningCompleted(
-			MACHINE_CONFIG,
-			CONSENSUS_STATE,
-			machineStates,
-			2n,
-			EVENT_ARGS,
-		);
+		const diff = await handleSigningCompleted(MACHINE_CONFIG, CONSENSUS_STATE, machineStates, 2n, EVENT_ARGS);
 
 		expect(diff).toStrictEqual({});
 	});
@@ -123,13 +98,7 @@ describe("signing completed", () => {
 				},
 			},
 		};
-		const diff = await handleSigningCompleted(
-			MACHINE_CONFIG,
-			CONSENSUS_STATE,
-			machineStates,
-			2n,
-			EVENT_ARGS,
-		);
+		const diff = await handleSigningCompleted(MACHINE_CONFIG, CONSENSUS_STATE, machineStates, 2n, EVENT_ARGS);
 
 		expect(diff).toStrictEqual({});
 	});
@@ -146,24 +115,12 @@ describe("signing completed", () => {
 		};
 
 		await expect(
-			handleSigningCompleted(
-				MACHINE_CONFIG,
-				CONSENSUS_STATE,
-				machineStates,
-				2n,
-				EVENT_ARGS,
-			),
+			handleSigningCompleted(MACHINE_CONFIG, CONSENSUS_STATE, machineStates, 2n, EVENT_ARGS),
 		).rejects.toStrictEqual(Error("Invalid state"));
 	});
 
 	it("should correctly transition to waiting for attestation", async () => {
-		const diff = await handleSigningCompleted(
-			MACHINE_CONFIG,
-			CONSENSUS_STATE,
-			MACHINE_STATES,
-			2n,
-			EVENT_ARGS,
-		);
+		const diff = await handleSigningCompleted(MACHINE_CONFIG, CONSENSUS_STATE, MACHINE_STATES, 2n, EVENT_ARGS);
 
 		expect(diff.consensus).toBeUndefined();
 		expect(diff.rollover).toBeUndefined();

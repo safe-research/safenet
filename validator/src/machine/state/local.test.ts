@@ -1,12 +1,6 @@
 import { zeroHash } from "viem";
 import { describe, expect, it } from "vitest";
-import type {
-	ConsensusState,
-	MachineStates,
-	RolloverState,
-	SigningState,
-	StateDiff,
-} from "../types.js";
+import type { ConsensusState, MachineStates, RolloverState, SigningState, StateDiff } from "../types.js";
 import { LocalConsensusStates, LocalMachineStates } from "./local.js";
 
 // --- Test Data ---
@@ -203,10 +197,7 @@ describe("LocalConsensusStates", () => {
 				activeEpoch: 11n,
 				stagedEpoch: 13n,
 				groupPendingNonces: ["0x5afe5afe2", true],
-				epochGroup: [
-					0x5afe5af5n,
-					{ groupId: "0x5afe5afe27", participantId: 1n },
-				],
+				epochGroup: [0x5afe5af5n, { groupId: "0x5afe5afe27", participantId: 1n }],
 				signatureIdToMessage: ["0x5afe5afe27", zeroHash],
 			},
 		};

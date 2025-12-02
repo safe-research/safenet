@@ -17,14 +17,15 @@ export const triggerKeyGen = (
 		throw new Error("Not enough participatns!");
 	}
 	// 4 bytes version, 20 bytes address, 8 bytes epoch number
-	const context = encodePacked(
-		["uint32", "address", "uint64"],
-		[0, consensus, epoch],
-	);
+	const context = encodePacked(["uint32", "address", "uint64"], [0, consensus, epoch]);
 	const count = BigInt(participants.length);
 	const threshold = count / 2n + 1n;
-	const { groupId, participantsRoot, participantId, commitments, pok, poap } =
-		keyGenClient.setupGroup(participants, count, threshold, context);
+	const { groupId, participantsRoot, participantId, commitments, pok, poap } = keyGenClient.setupGroup(
+		participants,
+		count,
+		threshold,
+		context,
+	);
 
 	const actions: ProtocolAction[] = [
 		{

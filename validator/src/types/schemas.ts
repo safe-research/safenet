@@ -8,10 +8,7 @@ export const checkedAddressSchema = z
 	// Viem always allows to get around the checksum when providing an all lowercase address.
 	// With strict to `false` and the manual check the additional overhead is minimal as the
 	// result of `isAddress` is cached internaly in Viem (strict is part of the cache key).
-	.refine(
-		(arg) => isAddress(arg, { strict: false }) && arg === getAddress(arg),
-		"Invalid address format or checksum",
-	)
+	.refine((arg) => isAddress(arg, { strict: false }) && arg === getAddress(arg), "Invalid address format or checksum")
 	.transform((arg) => arg as Address);
 
 export const hexDataSchema = z
@@ -39,15 +36,10 @@ export const validatorConfigSchema = z.object({
 	PARTICIPANTS: participantsSchema,
 });
 
-export const chunked = <T>(
-	sz: number,
-	transform: (b: Buffer) => T,
-): ((b: Buffer) => T[]) => {
+export const chunked = <T>(sz: number, transform: (b: Buffer) => T): ((b: Buffer) => T[]) => {
 	return (b: Buffer) => {
 		if (b.length % sz !== 0) {
-			throw new Error(
-				`buffer of length ${b.length} cannot be chunked in ${sz} bytes`,
-			);
+			throw new Error(`buffer of length ${b.length} cannot be chunked in ${sz} bytes`);
 		}
 		return [...Array(b.length / sz)].map((_, i) => {
 			const start = i * sz;

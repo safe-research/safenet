@@ -13,11 +13,7 @@ import { KeyGenClient } from "../consensus/keyGen/client.js";
 import { OnchainProtocol } from "../consensus/protocol/onchain.js";
 import { SigningClient } from "../consensus/signing/client.js";
 import { InMemoryStorage } from "../consensus/storage/inmemory.js";
-import {
-	type PacketHandler,
-	type Typed,
-	VerificationEngine,
-} from "../consensus/verify/engine.js";
+import { type PacketHandler, type Typed, VerificationEngine } from "../consensus/verify/engine.js";
 import { EpochRolloverHandler } from "../consensus/verify/rollover/handler.js";
 import { SafeTransactionHandler } from "../consensus/verify/safeTx/handler.js";
 import { CONSENSUS_EVENTS, COORDINATOR_EVENTS } from "../types/abis.js";
@@ -54,14 +50,8 @@ export class ValidatorService {
 		const signingClient = new SigningClient(storage);
 		const keyGenClient = new KeyGenClient(storage, this.#logger);
 		const verificationHandlers = new Map<string, PacketHandler<Typed>>();
-		verificationHandlers.set(
-			"safe_transaction_packet",
-			new SafeTransactionHandler(),
-		);
-		verificationHandlers.set(
-			"epoch_rollover_packet",
-			new EpochRolloverHandler(),
-		);
+		verificationHandlers.set("safe_transaction_packet", new SafeTransactionHandler());
+		verificationHandlers.set("epoch_rollover_packet", new EpochRolloverHandler());
 		const verificationEngine = new VerificationEngine(verificationHandlers);
 		const protocol = new OnchainProtocol(
 			this.#publicClient,
@@ -134,11 +124,7 @@ export class ValidatorService {
 	}
 }
 
-export const createValidatorService = (
-	account: Account,
-	rpcUrl: string,
-	config: ProtocolConfig,
-): ValidatorService => {
+export const createValidatorService = (account: Account, rpcUrl: string, config: ProtocolConfig): ValidatorService => {
 	const transport = rpcUrl.startsWith("wss") ? webSocket(rpcUrl) : http(rpcUrl);
 	const chain = extractChain({
 		chains: supportedChains,

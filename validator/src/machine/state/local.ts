@@ -1,24 +1,9 @@
 import type { Hex } from "viem";
 import type { SignatureId } from "../../frost/types.js";
-import type {
-	ConsensusState,
-	GroupInfo,
-	MachineStates,
-	RolloverState,
-	SigningState,
-	StateDiff,
-} from "../types.js";
-import {
-	applyConsensus,
-	applyMachines,
-	type UpdatableConsensusState,
-	type UpdatableMachineState,
-} from "./diff.js";
+import type { ConsensusState, GroupInfo, MachineStates, RolloverState, SigningState, StateDiff } from "../types.js";
+import { applyConsensus, applyMachines, type UpdatableConsensusState, type UpdatableMachineState } from "./diff.js";
 
-const proxy = <K extends string, V, T extends Record<K, V>>(
-	source: T,
-	temp: Record<K, V | undefined>,
-) =>
+const proxy = <K extends string, V, T extends Record<K, V>>(source: T, temp: Record<K, V | undefined>) =>
 	new Proxy(temp, {
 		get(temp, key, receiver): V | undefined {
 			const keyString = String(key) as K;
@@ -111,24 +96,15 @@ export class LocalConsensusStates implements ConsensusState {
 	}
 
 	public get groupPendingNonces(): Record<Hex, boolean> {
-		return proxy(
-			this.immutableState.groupPendingNonces,
-			this.tempState.groupPendingNonces ?? {},
-		);
+		return proxy(this.immutableState.groupPendingNonces, this.tempState.groupPendingNonces ?? {});
 	}
 
 	public get epochGroups(): Record<string, GroupInfo> {
-		return proxy(
-			this.immutableState.epochGroups,
-			this.tempState.epochGroups ?? {},
-		);
+		return proxy(this.immutableState.epochGroups, this.tempState.epochGroups ?? {});
 	}
 
 	public get signatureIdToMessage(): Record<SignatureId, Hex> {
-		return proxy(
-			this.immutableState.signatureIdToMessage,
-			this.tempState.signatureIdToMessage ?? {},
-		);
+		return proxy(this.immutableState.signatureIdToMessage, this.tempState.signatureIdToMessage ?? {});
 	}
 
 	apply(diff: StateDiff) {

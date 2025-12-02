@@ -1,11 +1,6 @@
 import { maxUint64, zeroAddress } from "viem";
 import type { KeyGenClient } from "../../consensus/keyGen/client.js";
-import type {
-	ConsensusState,
-	MachineConfig,
-	MachineStates,
-	StateDiff,
-} from "../types.js";
+import type { ConsensusState, MachineConfig, MachineStates, StateDiff } from "../types.js";
 import { triggerKeyGen } from "./trigger.js";
 
 export const checkGenesis = (

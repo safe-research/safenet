@@ -2,19 +2,13 @@ import { describe, expect, it, vi } from "vitest";
 import type { SigningClient } from "../../consensus/signing/client.js";
 import type { SafeTransactionPacket } from "../../consensus/verify/safeTx/schemas.js";
 import { toPoint } from "../../frost/math.js";
-import type {
-	ConsensusState,
-	MachineConfig,
-	MachineStates,
-	SigningState,
-} from "../types.js";
+import type { ConsensusState, MachineConfig, MachineStates, SigningState } from "../types.js";
 import { handleRevealedNonces } from "./nonces.js";
 
 // --- Test Data ---
 const SIGNING_STATE: SigningState = {
 	id: "collect_nonce_commitments",
-	signatureId:
-		"0x000000000000000000000000000000000000000000000000000000005af35af3",
+	signatureId: "0x000000000000000000000000000000000000000000000000000000005af35af3",
 	lastSigner: undefined,
 	deadline: 13n,
 	packet: {
@@ -36,8 +30,7 @@ const SIGNING_STATE: SigningState = {
 const MACHINE_STATES: MachineStates = {
 	rollover: {
 		id: "sign_rollover",
-		groupId:
-			"0x0000000000000000000000007fa9385be102ac3eac297483dd6233d62b3e1496",
+		groupId: "0x0000000000000000000000007fa9385be102ac3eac297483dd6233d62b3e1496",
 		message: "0x5afe5afe",
 		nextEpoch: 3n,
 		responsible: 1n,
@@ -53,8 +46,7 @@ const CONSENSUS_STATE: ConsensusState = {
 	groupPendingNonces: {},
 	epochGroups: {},
 	signatureIdToMessage: {
-		"0x000000000000000000000000000000000000000000000000000000005af35af3":
-			"0x5afe5afe",
+		"0x000000000000000000000000000000000000000000000000000000005af35af3": "0x5afe5afe",
 	},
 };
 
@@ -85,14 +77,7 @@ describe("nonces revealed", () => {
 	it("should fail on invalid event arguments", async () => {
 		const signingClient = {} as unknown as SigningClient;
 		await expect(
-			handleRevealedNonces(
-				MACHINE_CONFIG,
-				signingClient,
-				CONSENSUS_STATE,
-				MACHINE_STATES,
-				2n,
-				{},
-			),
+			handleRevealedNonces(MACHINE_CONFIG, signingClient, CONSENSUS_STATE, MACHINE_STATES, 2n, {}),
 		).rejects.toThrow();
 	});
 
@@ -211,9 +196,7 @@ describe("nonces revealed", () => {
 		);
 		expect(handleNonceCommitments).toBeCalledTimes(1);
 
-		expect(createSignatureShare).toBeCalledWith(
-			"0x000000000000000000000000000000000000000000000000000000005af35af3",
-		);
+		expect(createSignatureShare).toBeCalledWith("0x000000000000000000000000000000000000000000000000000000005af35af3");
 		expect(createSignatureShare).toBeCalledTimes(1);
 
 		expect(diff.consensus).toBeUndefined();
@@ -233,8 +216,7 @@ describe("nonces revealed", () => {
 		expect(diff.actions).toStrictEqual([
 			{
 				id: "sign_publish_signature_share",
-				signatureId:
-					"0x000000000000000000000000000000000000000000000000000000005af35af3",
+				signatureId: "0x000000000000000000000000000000000000000000000000000000005af35af3",
 				callbackContext,
 				...signatureShareData,
 			},
@@ -270,8 +252,7 @@ describe("nonces revealed", () => {
 		const machineStates: MachineStates = {
 			rollover: {
 				id: "sign_rollover",
-				groupId:
-					"0x0000000000000000000000007fa9385be102ac3eac297483dd6233d62b3e1496",
+				groupId: "0x0000000000000000000000007fa9385be102ac3eac297483dd6233d62b3e1496",
 				message: "0x5afe5af3",
 				nextEpoch: 3n,
 				responsible: 1n,
@@ -315,9 +296,7 @@ describe("nonces revealed", () => {
 		);
 		expect(handleNonceCommitments).toBeCalledTimes(1);
 
-		expect(createSignatureShare).toBeCalledWith(
-			"0x000000000000000000000000000000000000000000000000000000005af35af3",
-		);
+		expect(createSignatureShare).toBeCalledWith("0x000000000000000000000000000000000000000000000000000000005af35af3");
 		expect(createSignatureShare).toBeCalledTimes(1);
 
 		expect(diff.consensus).toBeUndefined();
@@ -337,8 +316,7 @@ describe("nonces revealed", () => {
 		expect(diff.actions).toStrictEqual([
 			{
 				id: "sign_publish_signature_share",
-				signatureId:
-					"0x000000000000000000000000000000000000000000000000000000005af35af3",
+				signatureId: "0x000000000000000000000000000000000000000000000000000000005af35af3",
 				callbackContext,
 				...signatureShareData,
 			},
@@ -351,8 +329,7 @@ describe("nonces revealed", () => {
 			...MACHINE_STATES,
 			rollover: {
 				id: "sign_rollover",
-				groupId:
-					"0x0000000000000000000000007fa9385be102ac3eac297483dd6233d62b3e1496",
+				groupId: "0x0000000000000000000000007fa9385be102ac3eac297483dd6233d62b3e1496",
 				message: "0x5afe5af3",
 				nextEpoch: 3n,
 				responsible: 1n,
@@ -393,9 +370,7 @@ describe("nonces revealed", () => {
 		);
 		expect(handleNonceCommitments).toBeCalledTimes(1);
 
-		expect(createSignatureShare).toBeCalledWith(
-			"0x000000000000000000000000000000000000000000000000000000005af35af3",
-		);
+		expect(createSignatureShare).toBeCalledWith("0x000000000000000000000000000000000000000000000000000000005af35af3");
 		expect(createSignatureShare).toBeCalledTimes(1);
 
 		expect(diff.consensus).toBeUndefined();
@@ -413,8 +388,7 @@ describe("nonces revealed", () => {
 		expect(diff.actions).toStrictEqual([
 			{
 				id: "sign_publish_signature_share",
-				signatureId:
-					"0x000000000000000000000000000000000000000000000000000000005af35af3",
+				signatureId: "0x000000000000000000000000000000000000000000000000000000005af35af3",
 				callbackContext: undefined,
 				...signatureShareData,
 			},

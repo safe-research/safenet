@@ -26,10 +26,7 @@ export type NonceTree = {
 	root: Hex;
 };
 
-export const generateNonce = (
-	secret: bigint,
-	randomness?: Uint8Array,
-): bigint => {
+export const generateNonce = (secret: bigint, randomness?: Uint8Array): bigint => {
 	const random = randomness ?? randomBytes(32);
 	if (random.length !== 32) {
 		throw new Error("invalid nonce randomness");
@@ -62,10 +59,7 @@ const hashNonceCommitments = (id: bigint, c: PublicNonceCommitments): Hex =>
 		),
 	);
 
-export const createNonceTree = (
-	secret: bigint,
-	size: bigint = SEQUENCE_CHUNK_SIZE,
-): NonceTree => {
+export const createNonceTree = (secret: bigint, size: bigint = SEQUENCE_CHUNK_SIZE): NonceTree => {
 	const commitments: NonceCommitments[] = [];
 	const leaves: Hex[] = [];
 	for (let i = 0n; i < size; i++) {
@@ -81,15 +75,11 @@ export const createNonceTree = (
 	};
 };
 
-const encodeCommitments = (
-	signers: bigint[],
-	nonceCommitments: Map<bigint, PublicNonceCommitments>,
-): Uint8Array => {
+const encodeCommitments = (signers: bigint[], nonceCommitments: Map<bigint, PublicNonceCommitments>): Uint8Array => {
 	return concatBytes(
 		...signers.map((id) => {
 			const commitments = nonceCommitments.get(id);
-			if (commitments === undefined)
-				throw new Error(`Missing nonce commitments for ${id}`);
+			if (commitments === undefined) throw new Error(`Missing nonce commitments for ${id}`);
 			return concatBytes(
 				scalarToBytes(id),
 				commitments.hidingNonceCommitment.toBytes(true),
@@ -116,10 +106,7 @@ export const bindingPrefix = (
 	return concatBytes(serializedKey, msgHash, commitmentHash);
 };
 
-export const bindingFactor = (
-	signerId: bigint,
-	bindingPrefix: Uint8Array,
-): bigint => {
+export const bindingFactor = (signerId: bigint, bindingPrefix: Uint8Array): bigint => {
 	return h1(concatBytes(bindingPrefix, scalarToBytes(signerId)));
 };
 
@@ -129,12 +116,7 @@ export const bindingFactors = (
 	nonceCommitments: Map<bigint, PublicNonceCommitments>,
 	message: Hex,
 ): BindingFactor[] => {
-	const prefix = bindingPrefix(
-		groupPublicKey,
-		signers,
-		nonceCommitments,
-		message,
-	);
+	const prefix = bindingPrefix(groupPublicKey, signers, nonceCommitments, message);
 	return signers.map((id) => {
 		return {
 			id,
@@ -143,12 +125,8 @@ export const bindingFactors = (
 	});
 };
 
-export const groupCommitmentShare = (
-	bindingFactor: bigint,
-	nonceCommitments: PublicNonceCommitments,
-): FrostPoint => {
-	const factor =
-		nonceCommitments.bindingNonceCommitment.multiply(bindingFactor);
+export const groupCommitmentShare = (bindingFactor: bigint, nonceCommitments: PublicNonceCommitments): FrostPoint => {
+	const factor = nonceCommitments.bindingNonceCommitment.multiply(bindingFactor);
 	return nonceCommitments.hidingNonceCommitment.add(factor);
 };
 
@@ -158,18 +136,13 @@ export const groupCommitementShares = (
 ): FrostPoint[] => {
 	return bindingFactors.map((bf) => {
 		const commitments = nonceCommitments.get(bf.id);
-		if (commitments === undefined)
-			throw new Error(`Missing nonce commitments for ${bf.id}`);
-		const factor = commitments.bindingNonceCommitment.multiply(
-			bf.bindingFactor,
-		);
+		if (commitments === undefined) throw new Error(`Missing nonce commitments for ${bf.id}`);
+		const factor = commitments.bindingNonceCommitment.multiply(bf.bindingFactor);
 		return commitments.hidingNonceCommitment.add(factor);
 	});
 };
 
-export const calculateGroupCommitment = (
-	groupCommitmentShares: FrostPoint[],
-): FrostPoint => {
+export const calculateGroupCommitment = (groupCommitmentShares: FrostPoint[]): FrostPoint => {
 	return groupCommitmentShares.reduce((v, c) => v.add(c));
 };
 

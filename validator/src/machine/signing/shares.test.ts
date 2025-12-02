@@ -53,9 +53,7 @@ const EVENT_ARGS = {
 // --- Tests ---
 describe("collecting shares", () => {
 	it("should fail on invalid event arguments", async () => {
-		await expect(
-			handleSigningShares(CONSENSUS_STATE, MACHINE_STATES, {}),
-		).rejects.toThrow();
+		await expect(handleSigningShares(CONSENSUS_STATE, MACHINE_STATES, {})).rejects.toThrow();
 	});
 
 	it("should not handle signing requests without a message", async () => {
@@ -63,11 +61,7 @@ describe("collecting shares", () => {
 			...CONSENSUS_STATE,
 			signatureIdToMessage: {},
 		};
-		const diff = await handleSigningShares(
-			consensusState,
-			MACHINE_STATES,
-			EVENT_ARGS,
-		);
+		const diff = await handleSigningShares(consensusState, MACHINE_STATES, EVENT_ARGS);
 
 		expect(diff).toStrictEqual({});
 	});
@@ -77,11 +71,7 @@ describe("collecting shares", () => {
 			...MACHINE_STATES,
 			signing: {},
 		};
-		const diff = await handleSigningShares(
-			CONSENSUS_STATE,
-			machineStates,
-			EVENT_ARGS,
-		);
+		const diff = await handleSigningShares(CONSENSUS_STATE, machineStates, EVENT_ARGS);
 
 		expect(diff).toStrictEqual({});
 	});
@@ -96,21 +86,13 @@ describe("collecting shares", () => {
 				},
 			},
 		};
-		const diff = await handleSigningShares(
-			CONSENSUS_STATE,
-			machineStates,
-			EVENT_ARGS,
-		);
+		const diff = await handleSigningShares(CONSENSUS_STATE, machineStates, EVENT_ARGS);
 
 		expect(diff).toStrictEqual({});
 	});
 
 	it("should stay in state and update", async () => {
-		const diff = await handleSigningShares(
-			CONSENSUS_STATE,
-			MACHINE_STATES,
-			EVENT_ARGS,
-		);
+		const diff = await handleSigningShares(CONSENSUS_STATE, MACHINE_STATES, EVENT_ARGS);
 
 		expect(diff.consensus).toBeUndefined();
 		expect(diff.rollover).toBeUndefined();

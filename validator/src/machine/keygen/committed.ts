@@ -2,12 +2,7 @@ import { encodePacked } from "viem";
 import type { KeyGenClient } from "../../consensus/keyGen/client.js";
 import { keyGenCommittedEventSchema } from "../../consensus/schemas.js";
 import { toPoint } from "../../frost/math.js";
-import type {
-	ConsensusState,
-	MachineConfig,
-	MachineStates,
-	StateDiff,
-} from "../types.js";
+import type { ConsensusState, MachineConfig, MachineStates, StateDiff } from "../types.js";
 
 export const handleKeyGenCommitted = async (
 	machineConfig: MachineConfig,
@@ -39,16 +34,11 @@ export const handleKeyGenCommitted = async (
 		return {};
 	}
 	// If all participants have committed update state to "collecting_shares"
-	const { verificationShare, shares } = keyGenClient.createSecretShares(
-		event.gid,
-	);
+	const { verificationShare, shares } = keyGenClient.createSecretShares(event.gid);
 	const callbackContext =
 		consensusState.genesisGroupId === event.gid
 			? undefined
-			: encodePacked(
-					["uint256", "uint256"],
-					[nextEpoch, nextEpoch * machineConfig.blocksPerEpoch],
-				);
+			: encodePacked(["uint256", "uint256"], [nextEpoch, nextEpoch * machineConfig.blocksPerEpoch]);
 	return {
 		rollover: {
 			id: "collecting_shares",

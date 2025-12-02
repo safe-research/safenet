@@ -1,9 +1,5 @@
 import { describe, expect, it } from "vitest";
-import {
-	type PacketHandler,
-	type Typed,
-	VerificationEngine,
-} from "./engine.js";
+import { type PacketHandler, type Typed, VerificationEngine } from "./engine.js";
 
 describe("verify engine", () => {
 	it("should throw if no handler is present", async () => {

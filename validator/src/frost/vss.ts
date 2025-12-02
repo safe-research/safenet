@@ -24,10 +24,7 @@ export const createCoefficients = (threshold: bigint): bigint[] => {
 const generateProofOfKnowledgeNonce = (): bigint => {
 	return hpok(randomBytes(32));
 };
-export const createProofOfKnowledge = (
-	id: bigint,
-	coefficients: bigint[],
-): ProofOfKnowledge => {
+export const createProofOfKnowledge = (id: bigint, coefficients: bigint[]): ProofOfKnowledge => {
 	const a0 = coefficients[0];
 	const ga0 = g(a0);
 	const k = generateProofOfKnowledgeNonce();
@@ -47,11 +44,7 @@ export const createCommitments = (coefficients: bigint[]): FrostPoint[] => {
 
 // Round 1.5
 // Note: this only verifies commitment[0], other commitments are implicitly verified in round 2
-export const verifyCommitments = (
-	id: bigint,
-	commitments: readonly FrostPoint[],
-	proof: ProofOfKnowledge,
-) => {
+export const verifyCommitments = (id: bigint, commitments: readonly FrostPoint[], proof: ProofOfKnowledge) => {
 	const ga0 = commitments[0];
 	const c = keyGenChallenge(id, ga0, proof.r);
 	const v = g(proof.mu).add(ga0.multiply(c).negate());

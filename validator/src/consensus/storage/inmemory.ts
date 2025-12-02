@@ -1,17 +1,7 @@
 import { type Address, encodePacked, type Hex, keccak256 } from "viem";
-import type {
-	FrostPoint,
-	GroupId,
-	ParticipantId,
-	SignatureId,
-} from "../../frost/types.js";
+import type { FrostPoint, GroupId, ParticipantId, SignatureId } from "../../frost/types.js";
 import type { NonceTree, PublicNonceCommitments } from "../signing/nonces.js";
-import type {
-	GroupInfoStorage,
-	KeyGenInfoStorage,
-	Participant,
-	SignatureRequestStorage,
-} from "./types.js";
+import type { GroupInfoStorage, KeyGenInfoStorage, Participant, SignatureRequestStorage } from "./types.js";
 
 type GroupInfo = {
 	groupId: GroupId;
@@ -37,9 +27,7 @@ type SignatureRequest = {
 	signers: ParticipantId[];
 };
 
-export class InMemoryStorage
-	implements KeyGenInfoStorage, GroupInfoStorage, SignatureRequestStorage
-{
+export class InMemoryStorage implements KeyGenInfoStorage, GroupInfoStorage, SignatureRequestStorage {
 	#account: Address;
 	#participantsInfo = new Map<Hex, readonly Participant[]>();
 	#keyGenInfo = new Map<GroupId, KeyGenInfo>();
@@ -54,8 +42,7 @@ export class InMemoryStorage
 
 	private keyGenInfo(groupId: GroupId): KeyGenInfo {
 		const info = this.#keyGenInfo.get(groupId);
-		if (info === undefined)
-			throw new Error(`No keygen info for group ${groupId}!`);
+		if (info === undefined) throw new Error(`No keygen info for group ${groupId}!`);
 		return info;
 	}
 
@@ -65,10 +52,7 @@ export class InMemoryStorage
 		return info;
 	}
 
-	private checkInformationComplete(
-		participants: readonly ParticipantId[],
-		information: Map<bigint, unknown>,
-	): boolean {
+	private checkInformationComplete(participants: readonly ParticipantId[], information: Map<bigint, unknown>): boolean {
 		for (const id of participants) {
 			if (!information.has(id)) {
 				return false;
@@ -84,36 +68,23 @@ export class InMemoryStorage
 	registerKeyGen(groupId: GroupId, coefficients: readonly bigint[]): void {
 		// Check if group is known, otherwise this will throw
 		this.groupInfo(groupId);
-		if (this.#keyGenInfo.has(groupId))
-			throw new Error(`KeyGen for ${groupId} already registered!`);
+		if (this.#keyGenInfo.has(groupId)) throw new Error(`KeyGen for ${groupId} already registered!`);
 		this.#keyGenInfo.set(groupId, {
 			coefficients,
 			commitments: new Map(),
 			secretShares: new Map(),
 		});
 	}
-	registerCommitments(
-		groupId: GroupId,
-		participantId: ParticipantId,
-		commitments: readonly FrostPoint[],
-	): void {
+	registerCommitments(groupId: GroupId, participantId: ParticipantId, commitments: readonly FrostPoint[]): void {
 		const info = this.keyGenInfo(groupId);
 		if (info.commitments.has(participantId))
-			throw new Error(
-				`Commitments for ${groupId}:${participantId} already registered!`,
-			);
+			throw new Error(`Commitments for ${groupId}:${participantId} already registered!`);
 		info.commitments.set(participantId, commitments);
 	}
-	registerSecretShare(
-		groupId: GroupId,
-		participantId: ParticipantId,
-		share: bigint,
-	): void {
+	registerSecretShare(groupId: GroupId, participantId: ParticipantId, share: bigint): void {
 		const info = this.keyGenInfo(groupId);
 		if (info.secretShares.has(participantId))
-			throw new Error(
-				`Secret share for ${groupId}:${participantId} already registered!`,
-			);
+			throw new Error(`Secret share for ${groupId}:${participantId} already registered!`);
 		info.secretShares.set(participantId, share);
 	}
 	checkIfCommitmentsComplete(groupId: GroupId): boolean {
@@ -162,14 +133,10 @@ export class InMemoryStorage
 		const info = this.keyGenInfo(groupId);
 		return info.coefficients;
 	}
-	commitments(
-		groupId: GroupId,
-		participantId: ParticipantId,
-	): readonly FrostPoint[] {
+	commitments(groupId: GroupId, participantId: ParticipantId): readonly FrostPoint[] {
 		const info = this.keyGenInfo(groupId);
 		const commitments = info.commitments.get(participantId);
-		if (commitments === undefined)
-			throw new Error(`No commitments for ${participantId} available!`);
+		if (commitments === undefined) throw new Error(`No commitments for ${participantId} available!`);
 		return commitments;
 	}
 	commitmentsMap(groupId: GroupId): Map<ParticipantId, readonly FrostPoint[]> {
@@ -186,18 +153,10 @@ export class InMemoryStorage
 	knownGroups(): GroupId[] {
 		return Array.from(this.#groupInfo.values().map((g) => g.groupId));
 	}
-	registerGroup(
-		groupId: GroupId,
-		participants: readonly Participant[],
-		threshold: bigint,
-	): ParticipantId {
-		if (this.#groupInfo.has(groupId))
-			throw new Error(`Group ${groupId} already registered!`);
-		const participantId = participants.find(
-			(p) => p.address === this.#account,
-		)?.id;
-		if (participantId === undefined)
-			throw new Error(`Not part of Group ${groupId}!`);
+	registerGroup(groupId: GroupId, participants: readonly Participant[], threshold: bigint): ParticipantId {
+		if (this.#groupInfo.has(groupId)) throw new Error(`Group ${groupId} already registered!`);
+		const participantId = participants.find((p) => p.address === this.#account)?.id;
+		if (participantId === undefined) throw new Error(`Not part of Group ${groupId}!`);
 		this.#groupInfo.set(groupId, {
 			participantId,
 			groupId,
@@ -206,24 +165,16 @@ export class InMemoryStorage
 		});
 		return participantId;
 	}
-	registerVerification(
-		groupId: GroupId,
-		groupPublicKey: FrostPoint,
-		verificationShare: FrostPoint,
-	): void {
+	registerVerification(groupId: GroupId, groupPublicKey: FrostPoint, verificationShare: FrostPoint): void {
 		const info = this.groupInfo(groupId);
-		if (
-			info.groupPublicKey !== undefined ||
-			info.verificationShare !== undefined
-		)
+		if (info.groupPublicKey !== undefined || info.verificationShare !== undefined)
 			throw new Error(`Verification information for ${groupId} already set!`);
 		info.groupPublicKey = groupPublicKey;
 		info.verificationShare = verificationShare;
 	}
 	registerSigningShare(groupId: GroupId, signingShare: bigint): void {
 		const info = this.groupInfo(groupId);
-		if (info.signingShare !== undefined)
-			throw new Error(`Signing share for ${groupId} already set!`);
+		if (info.signingShare !== undefined) throw new Error(`Signing share for ${groupId} already set!`);
 		info.signingShare = signingShare;
 	}
 	participantId(groupId: GroupId): ParticipantId {
@@ -243,8 +194,7 @@ export class InMemoryStorage
 	}
 	verificationShare(groupId: GroupId): FrostPoint {
 		const verificationShare = this.groupInfo(groupId).verificationShare;
-		if (verificationShare === undefined)
-			throw new Error(`Verificatrion share not available for ${groupId}!`);
+		if (verificationShare === undefined) throw new Error(`Verificatrion share not available for ${groupId}!`);
 		return verificationShare;
 	}
 	unregisterGroup(groupId: GroupId): void {
@@ -257,8 +207,7 @@ export class InMemoryStorage
 
 	private signatureRequest(signatureId: SignatureId): SignatureRequest {
 		const request = this.#signatureRequests.get(signatureId);
-		if (request === undefined)
-			throw new Error(`Unknown signature request ${signatureId}!`);
+		if (request === undefined) throw new Error(`Unknown signature request ${signatureId}!`);
 		return request;
 	}
 
@@ -272,9 +221,7 @@ export class InMemoryStorage
 		// Check if group is known, otherwise this will throw
 		this.groupInfo(groupId);
 		if (this.#signatureRequests.has(signatureId))
-			throw new Error(
-				`SignatureRequest for ${signatureId} already registered!`,
-			);
+			throw new Error(`SignatureRequest for ${signatureId} already registered!`);
 		this.#signatureRequests.set(signatureId, {
 			groupId,
 			message,
@@ -290,18 +237,13 @@ export class InMemoryStorage
 	): void {
 		const request = this.signatureRequest(signatureId);
 		if (request.signerNonceCommitments.has(signerId))
-			throw new Error(
-				`Nonce commitments for ${signatureId}:${signerId} already registered!`,
-			);
+			throw new Error(`Nonce commitments for ${signatureId}:${signerId} already registered!`);
 		request.signerNonceCommitments.set(signerId, nonceCommitments);
 	}
 
 	checkIfNoncesComplete(signatureId: SignatureId): boolean {
 		const request = this.signatureRequest(signatureId);
-		return this.checkInformationComplete(
-			request.signers,
-			request.signerNonceCommitments,
-		);
+		return this.checkInformationComplete(request.signers, request.signerNonceCommitments);
 	}
 	missingNonces(signatureId: SignatureId): ParticipantId[] {
 		const missing: ParticipantId[] = [];
@@ -325,9 +267,7 @@ export class InMemoryStorage
 	sequence(signatureId: SignatureId): bigint {
 		return this.signatureRequest(signatureId).sequence;
 	}
-	nonceCommitmentsMap(
-		signatureId: SignatureId,
-	): Map<ParticipantId, PublicNonceCommitments> {
+	nonceCommitmentsMap(signatureId: SignatureId): Map<ParticipantId, PublicNonceCommitments> {
 		return this.signatureRequest(signatureId).signerNonceCommitments;
 	}
 
@@ -336,38 +276,26 @@ export class InMemoryStorage
 		return tree.root;
 	}
 	linkNonceTree(groupId: GroupId, chunk: bigint, treeHash: Hex): void {
-		const chunkId = keccak256(
-			encodePacked(["bytes32", "uint256"], [groupId, chunk]),
-		);
-		if (this.#chunkNonces.has(chunkId))
-			throw new Error(`Chunk ${groupId}:${chunk} has already be linked!`);
+		const chunkId = keccak256(encodePacked(["bytes32", "uint256"], [groupId, chunk]));
+		if (this.#chunkNonces.has(chunkId)) throw new Error(`Chunk ${groupId}:${chunk} has already be linked!`);
 		this.#chunkNonces.set(chunkId, treeHash);
 	}
 	nonceTree(groupId: GroupId, chunk: bigint): NonceTree {
-		const chunkId = keccak256(
-			encodePacked(["bytes32", "uint256"], [groupId, chunk]),
-		);
+		const chunkId = keccak256(encodePacked(["bytes32", "uint256"], [groupId, chunk]));
 		const treeHash = this.#chunkNonces.get(chunkId);
-		if (treeHash === undefined)
-			throw new Error(`No nonces linked to ${groupId}:${chunk}!`);
+		if (treeHash === undefined) throw new Error(`No nonces linked to ${groupId}:${chunk}!`);
 		const nonceTree = this.#nonceTrees.get(treeHash);
-		if (nonceTree === undefined)
-			throw new Error(`No nonces available for ${groupId}:${chunk}!`);
+		if (nonceTree === undefined) throw new Error(`No nonces available for ${groupId}:${chunk}!`);
 		return nonceTree;
 	}
 	burnNonce(groupId: GroupId, chunk: bigint, offset: bigint): void {
-		const chunkId = keccak256(
-			encodePacked(["bytes32", "uint256"], [groupId, chunk]),
-		);
+		const chunkId = keccak256(encodePacked(["bytes32", "uint256"], [groupId, chunk]));
 		const treeHash = this.#chunkNonces.get(chunkId);
-		if (treeHash === undefined)
-			throw new Error(`No nonces linked to ${groupId}:${chunk}!`);
+		if (treeHash === undefined) throw new Error(`No nonces linked to ${groupId}:${chunk}!`);
 		const nonceTree = this.#nonceTrees.get(treeHash);
-		if (nonceTree === undefined)
-			throw new Error(`No nonces available for ${groupId}:${chunk}!`);
+		if (nonceTree === undefined) throw new Error(`No nonces available for ${groupId}:${chunk}!`);
 		const commitments = nonceTree.commitments.at(Number(offset));
-		if (commitments === undefined)
-			throw new Error(`No nonces at offset ${offset}!`);
+		if (commitments === undefined) throw new Error(`No nonces at offset ${offset}!`);
 		if (commitments.bindingNonce === 0n && commitments.hidingNonce === 0n)
 			throw new Error(`Nonce for offset ${offset} already burned!`);
 		commitments.bindingNonce = 0n;

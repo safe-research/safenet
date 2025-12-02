@@ -1,19 +1,10 @@
 import type { KeyGenClient } from "../../consensus/keyGen/client.js";
-import type {
-	ProtocolAction,
-	ShieldnetProtocol,
-} from "../../consensus/protocol/types.js";
+import type { ProtocolAction, ShieldnetProtocol } from "../../consensus/protocol/types.js";
 import { keyGenSecretSharedEventSchema } from "../../consensus/schemas.js";
 import type { SigningClient } from "../../consensus/signing/client.js";
 import type { VerificationEngine } from "../../consensus/verify/engine.js";
 import type { EpochRolloverPacket } from "../../consensus/verify/rollover/schemas.js";
-import type {
-	ConsensusDiff,
-	ConsensusState,
-	MachineConfig,
-	MachineStates,
-	StateDiff,
-} from "../types.js";
+import type { ConsensusDiff, ConsensusState, MachineConfig, MachineStates, StateDiff } from "../types.js";
 
 export const handleKeyGenSecretShared = async (
 	machineConfig: MachineConfig,
@@ -43,11 +34,7 @@ export const handleKeyGenSecretShared = async (
 	const groupId = event.gid;
 	// Track identity that has submitted last share
 	// TODO: handle bad shares -> Submit fraud proof
-	await keyGenClient.handleKeygenSecrets(
-		event.gid,
-		event.identifier,
-		event.share.f,
-	);
+	await keyGenClient.handleKeygenSecrets(event.gid, event.identifier, event.share.f);
 	if (!event.completed) {
 		logger?.(`Group ${event.gid} not completed yet`);
 		return {

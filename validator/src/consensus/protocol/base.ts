@@ -49,9 +49,7 @@ export abstract class BaseProtocol implements ShieldnetProtocol {
 		// Nothing queued
 		if (action === undefined) return;
 		if (action.retryCount > MAX_RETRIES) {
-			this.#logger?.(
-				`Max retry count exeeded for ${action.id}. Dropping action!`,
-			);
+			this.#logger?.(`Max retry count exeeded for ${action.id}. Dropping action!`);
 			this.checkNextAction();
 			return;
 		}
@@ -92,23 +90,15 @@ export abstract class BaseProtocol implements ShieldnetProtocol {
 	}
 	protected abstract startKeyGen(args: StartKeyGen): Promise<Hex>;
 
-	protected abstract publishKeygenSecretShares(
-		args: PublishSecretShares,
-	): Promise<Hex>;
+	protected abstract publishKeygenSecretShares(args: PublishSecretShares): Promise<Hex>;
 
 	protected abstract requestSignature(args: RequestSignature): Promise<Hex>;
 
-	protected abstract registerNonceCommitments(
-		args: RegisterNonceCommitments,
-	): Promise<Hex>;
+	protected abstract registerNonceCommitments(args: RegisterNonceCommitments): Promise<Hex>;
 
-	protected abstract revealNonceCommitments(
-		args: RevealNonceCommitments,
-	): Promise<Hex>;
+	protected abstract revealNonceCommitments(args: RevealNonceCommitments): Promise<Hex>;
 
-	protected abstract publishSignatureShare(
-		args: PublishSignatureShare,
-	): Promise<Hex>;
+	protected abstract publishSignatureShare(args: PublishSignatureShare): Promise<Hex>;
 
 	protected abstract attestTransaction(args: AttestTransaction): Promise<Hex>;
 

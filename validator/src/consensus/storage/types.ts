@@ -1,10 +1,5 @@
 import type { Address, Hex } from "viem";
-import type {
-	FrostPoint,
-	GroupId,
-	ParticipantId,
-	SignatureId,
-} from "../../frost/types.js";
+import type { FrostPoint, GroupId, ParticipantId, SignatureId } from "../../frost/types.js";
 import type { NonceTree, PublicNonceCommitments } from "../signing/nonces.js";
 
 export type Participant = {
@@ -14,16 +9,8 @@ export type Participant = {
 
 export type GroupInfoStorage = {
 	knownGroups(): GroupId[];
-	registerGroup(
-		groupId: GroupId,
-		participants: readonly Participant[],
-		threshold: bigint,
-	): ParticipantId;
-	registerVerification(
-		groupId: GroupId,
-		groupPublicKey: FrostPoint,
-		verificationShare: FrostPoint,
-	): void;
+	registerGroup(groupId: GroupId, participants: readonly Participant[], threshold: bigint): ParticipantId;
+	registerVerification(groupId: GroupId, groupPublicKey: FrostPoint, verificationShare: FrostPoint): void;
 	registerSigningShare(groupId: GroupId, signingShare: bigint): void;
 
 	participantId(groupId: GroupId): ParticipantId;
@@ -37,16 +24,8 @@ export type GroupInfoStorage = {
 
 export type KeyGenInfoStorage = {
 	registerKeyGen(groupId: GroupId, coefficients: readonly bigint[]): void;
-	registerCommitments(
-		groupId: GroupId,
-		participantId: ParticipantId,
-		commitments: readonly FrostPoint[],
-	): void;
-	registerSecretShare(
-		groupId: GroupId,
-		participantId: ParticipantId,
-		share: bigint,
-	): void;
+	registerCommitments(groupId: GroupId, participantId: ParticipantId, commitments: readonly FrostPoint[]): void;
+	registerSecretShare(groupId: GroupId, participantId: ParticipantId, share: bigint): void;
 
 	missingCommitments(groupId: GroupId): ParticipantId[];
 	checkIfCommitmentsComplete(groupId: GroupId): boolean;
@@ -55,10 +34,7 @@ export type KeyGenInfoStorage = {
 
 	encryptionKey(groupId: GroupId): bigint;
 	coefficients(groupId: GroupId): readonly bigint[];
-	commitments(
-		groupId: GroupId,
-		participantId: ParticipantId,
-	): readonly FrostPoint[];
+	commitments(groupId: GroupId, participantId: ParticipantId): readonly FrostPoint[];
 	commitmentsMap(groupId: GroupId): Map<ParticipantId, readonly FrostPoint[]>;
 	secretSharesMap(groupId: GroupId): Map<ParticipantId, bigint>;
 	clearKeyGen(groupId: GroupId): void;
@@ -92,7 +68,5 @@ export type SignatureRequestStorage = {
 	signers(signatureId: SignatureId): ParticipantId[];
 	message(signatureId: SignatureId): Hex;
 	sequence(signatureId: SignatureId): bigint;
-	nonceCommitmentsMap(
-		signatureId: SignatureId,
-	): Map<ParticipantId, PublicNonceCommitments>;
+	nonceCommitmentsMap(signatureId: SignatureId): Map<ParticipantId, PublicNonceCommitments>;
 } & NonceStorage;

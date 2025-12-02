@@ -1,12 +1,7 @@
 import type { KeyGenClient } from "../../consensus/keyGen/client.js";
 import type { ShieldnetProtocol } from "../../consensus/protocol/types.js";
 import { triggerKeyGen } from "../keygen/trigger.js";
-import type {
-	ConsensusState,
-	MachineConfig,
-	MachineStates,
-	StateDiff,
-} from "../types.js";
+import type { ConsensusState, MachineConfig, MachineStates, StateDiff } from "../types.js";
 
 export const checkEpochRollover = (
 	machineConfig: MachineConfig,
@@ -21,18 +16,13 @@ export const checkEpochRollover = (
 	let activeEpoch = consensusState.activeEpoch;
 	let stagedEpoch = consensusState.stagedEpoch;
 	if (stagedEpoch > 0n && stagedEpoch <= currentEpoch) {
-		logger?.(
-			`Update active epoch from ${consensusState.activeEpoch} to ${consensusState.stagedEpoch}`,
-		);
+		logger?.(`Update active epoch from ${consensusState.activeEpoch} to ${consensusState.stagedEpoch}`);
 		// Update active epoch
 		activeEpoch = consensusState.stagedEpoch;
 		stagedEpoch = 0n;
 	}
 	// If no rollover is staged and new key gen was not triggered do it now
-	if (
-		machineStates.rollover.id === "waiting_for_rollover" &&
-		stagedEpoch === 0n
-	) {
+	if (machineStates.rollover.id === "waiting_for_rollover" && stagedEpoch === 0n) {
 		// Trigger key gen for next epoch
 		const nextEpoch = currentEpoch + 1n;
 		logger?.(`Trigger key gen for epoch ${nextEpoch}`);
@@ -54,10 +44,7 @@ export const checkEpochRollover = (
 			consensus,
 		};
 	}
-	if (
-		activeEpoch !== consensusState.activeEpoch ||
-		stagedEpoch !== consensusState.stagedEpoch
-	) {
+	if (activeEpoch !== consensusState.activeEpoch || stagedEpoch !== consensusState.stagedEpoch) {
 		return { consensus: { activeEpoch, stagedEpoch } };
 	}
 	return {};

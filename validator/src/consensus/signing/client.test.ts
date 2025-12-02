@@ -2,19 +2,14 @@ import { type Address, type Hex, keccak256, stringToBytes } from "viem";
 import { describe, expect, it } from "vitest";
 import { log } from "../../__tests__/logging.js";
 import { addmod, g, toPoint } from "../../frost/math.js";
-import type {
-	FrostPoint,
-	ParticipantId,
-	SignatureId,
-} from "../../frost/types.js";
+import type { FrostPoint, ParticipantId, SignatureId } from "../../frost/types.js";
 import { InMemoryStorage } from "../storage/inmemory.js";
 import { SigningClient } from "./client.js";
 import type { NonceCommitments, PublicNonceCommitments } from "./nonces.js";
 import { verifySignature } from "./verify.js";
 
 const TEST_GROUP = {
-	groupId:
-		"0x0000000000000000000000007fa9385be102ac3eac297483dd6233d62b3e1496" as Hex,
+	groupId: "0x0000000000000000000000007fa9385be102ac3eac297483dd6233d62b3e1496" as Hex,
 	participants: [
 		{
 			id: 1n,
@@ -45,8 +40,7 @@ const TEST_GROUP = {
 const TEST_SIGNERS = [
 	{
 		account: "0x17dA3E04a30e9Dec247FddDCbFb7B0497Cd2AF95" as Address,
-		signingShare:
-			20562999615202090641202256481184490375429435244238288544262716592143955696382n,
+		signingShare: 20562999615202090641202256481184490375429435244238288544262716592143955696382n,
 		participantId: 1n,
 		verificationShare: toPoint({
 			x: 8157951670743782207572742157759285246997125817591478561509454646417563755134n,
@@ -55,8 +49,7 @@ const TEST_SIGNERS = [
 	},
 	{
 		account: "0x690f083b2968f6cB0Ab6d8885d563b7977cff43B" as Address,
-		signingShare:
-			11521112607527998281706776924866429794302295528584870815702418782215238588532n,
+		signingShare: 11521112607527998281706776924866429794302295528584870815702418782215238588532n,
 		participantId: 2n,
 		verificationShare: toPoint({
 			x: 73844941487532555987364396775795076447946974313865618280135872376303125438365n,
@@ -65,8 +58,7 @@ const TEST_SIGNERS = [
 	},
 	{
 		account: "0x89bEf0f3a116cf717e51F74C271A0a7aF527511D" as Address,
-		signingShare:
-			49315800323439827956806304959772670422395371345712878244203054714816206370500n,
+		signingShare: 49315800323439827956806304959772670422395371345712878244203054714816206370500n,
 		participantId: 3n,
 		verificationShare: toPoint({
 			x: 44679288968503427008336055401348610670311019206231050966573026822674597087871n,
@@ -75,8 +67,7 @@ const TEST_SIGNERS = [
 	},
 	{
 		account: "0xbF4e298652F7e39d9062A4e7ec5C48Bf76e48e10" as Address,
-		signingShare:
-			18154973525621384242929855577215304406871098416547406447159461248428697547949n,
+		signingShare: 18154973525621384242929855577215304406871098416547406447159461248428697547949n,
 		participantId: 4n,
 		verificationShare: toPoint({
 			x: 112111548805574036052056537155641327571521863544152157231564193075408059401719n,
@@ -85,8 +76,7 @@ const TEST_SIGNERS = [
 	},
 	{
 		account: "0xf22BE54C085Dc0621ad076D881de8251c5a25fF1" as Address,
-		signingShare:
-			33830721451388862563648413785882239600567041020163359807176801524570873615216n,
+		signingShare: 33830721451388862563648413785882239600567041020163359807176801524570873615216n,
 		participantId: 5n,
 		verificationShare: toPoint({
 			x: 105587021125387004117772930966558154492652686110919450580386247155506502192059n,
@@ -138,16 +128,8 @@ describe("signing", () => {
 		}[] = [];
 		const clients = TEST_SIGNERS.map((a) => {
 			const storage = new InMemoryStorage(a.account);
-			storage.registerGroup(
-				TEST_GROUP.groupId,
-				TEST_GROUP.participants,
-				BigInt(TEST_GROUP.participants.length),
-			);
-			storage.registerVerification(
-				TEST_GROUP.groupId,
-				TEST_GROUP.publicKey,
-				a.verificationShare,
-			);
+			storage.registerGroup(TEST_GROUP.groupId, TEST_GROUP.participants, BigInt(TEST_GROUP.participants.length));
+			storage.registerVerification(TEST_GROUP.groupId, TEST_GROUP.publicKey, a.verificationShare);
 			storage.registerSigningShare(TEST_GROUP.groupId, a.signingShare);
 			const client = new SigningClient(storage);
 			return {
@@ -156,9 +138,7 @@ describe("signing", () => {
 			};
 		});
 		const groupId = TEST_GROUP.groupId;
-		log(
-			"------------------------ Inject Nonce Commitments ------------------------",
-		);
+		log("------------------------ Inject Nonce Commitments ------------------------");
 		for (const { client, storage } of clients) {
 			const participantId = storage.participantId(groupId);
 			const treeInfo = NONCE_TREES[Number(participantId) - 1];
@@ -174,18 +154,10 @@ describe("signing", () => {
 				root: treeInfo.root as Hex,
 			};
 			storage.registerNonceTree(groupId, nonceTree);
-			client.handleNonceCommitmentsHash(
-				groupId,
-				participantId,
-				nonceTree.root,
-				0n,
-			);
+			client.handleNonceCommitmentsHash(groupId, participantId, nonceTree.root, 0n);
 		}
-		log(
-			"------------------------ Trigger Signing Request ------------------------",
-		);
-		const signatureId =
-			"0x0000000000000000000000017fa9385be102ac3eac297483dd6233d62b3e1496";
+		log("------------------------ Trigger Signing Request ------------------------");
+		const signatureId = "0x0000000000000000000000017fa9385be102ac3eac297483dd6233d62b3e1496";
 		const message = keccak256(stringToBytes("Hello, Shieldnet!"));
 		for (const { client, storage } of clients) {
 			log(`>>>> Signing request to ${storage.participantId(groupId)} >>>>`);
@@ -205,19 +177,11 @@ describe("signing", () => {
 		log("------------------------ Reveal Nonces ------------------------");
 		for (const e of nonceRevealEvent) {
 			for (const { client, storage } of clients) {
-				log(
-					`>>>> Nonce reveal from ${e.signerId} to ${storage.participantId(groupId)} >>>>`,
-				);
-				const readyToSubmit = client.handleNonceCommitments(
-					e.signatureId,
-					e.signerId,
-					e.nonces,
-				);
+				log(`>>>> Nonce reveal from ${e.signerId} to ${storage.participantId(groupId)} >>>>`);
+				const readyToSubmit = client.handleNonceCommitments(e.signatureId, e.signerId, e.nonces);
 				if (!readyToSubmit) continue;
 
-				const { commitmentShare, signatureShare } = client.createSignatureShare(
-					e.signatureId,
-				);
+				const { commitmentShare, signatureShare } = client.createSignatureShare(e.signatureId);
 
 				signatureShareEvents.push({
 					signatureId: e.signatureId,

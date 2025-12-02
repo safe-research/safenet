@@ -1,29 +1,11 @@
 import Sqlite3, { type Database } from "better-sqlite3";
 import { type Address, concat, type Hex } from "viem";
 import { z } from "zod";
-import {
-	pointFromBytes,
-	scalarFromBytes,
-	scalarToBytes,
-} from "../../frost/math.js";
-import type {
-	FrostPoint,
-	GroupId,
-	ParticipantId,
-	SignatureId,
-} from "../../frost/types.js";
-import {
-	checkedAddressSchema,
-	chunked,
-	hexDataSchema,
-} from "../../types/schemas.js";
+import { pointFromBytes, scalarFromBytes, scalarToBytes } from "../../frost/math.js";
+import type { FrostPoint, GroupId, ParticipantId, SignatureId } from "../../frost/types.js";
+import { checkedAddressSchema, chunked, hexDataSchema } from "../../types/schemas.js";
 import type { NonceTree, PublicNonceCommitments } from "../signing/nonces.js";
-import type {
-	GroupInfoStorage,
-	KeyGenInfoStorage,
-	Participant,
-	SignatureRequestStorage,
-} from "./types.js";
+import type { GroupInfoStorage, KeyGenInfoStorage, Participant, SignatureRequestStorage } from "./types.js";
 
 interface ZodSchema<Output> {
 	parse(data: unknown): Output;
@@ -36,12 +18,8 @@ const dbParticipantSchema = z.object({
 });
 const dbPointSchema = z.instanceof(Buffer).transform(pointFromBytes);
 const dbScalarSchema = z.instanceof(Buffer).transform(scalarFromBytes);
-const dbPointArraySchema = z
-	.instanceof(Buffer)
-	.transform(chunked(33, pointFromBytes));
-const dbScalarArraySchema = z
-	.instanceof(Buffer)
-	.transform(chunked(32, scalarFromBytes));
+const dbPointArraySchema = z.instanceof(Buffer).transform(chunked(33, pointFromBytes));
+const dbScalarArraySchema = z.instanceof(Buffer).transform(chunked(32, scalarFromBytes));
 const dbCommitmentsSchema = z.object({
 	id: dbIntegerSchema,
 	commitments: dbPointArraySchema,
@@ -80,11 +58,7 @@ const dbList = <T>(result: unknown[], schema: ZodSchema<T>): T[] => {
 	return result.map((row) => schema.parse(row));
 };
 const dbEmptyMapSchema = z.array(z.record(z.string(), z.null())).length(1);
-const dbMap = <T, K, V>(
-	result: unknown[],
-	schema: ZodSchema<T>,
-	f: (value: T) => [K, V],
-): Map<K, V> => {
+const dbMap = <T, K, V>(result: unknown[], schema: ZodSchema<T>, f: (value: T) => [K, V]): Map<K, V> => {
 	// NOTE: We apply the same `LEFT JOIN` trick for maps as we do for lists.
 	if (result.length === 0) {
 		throw new Error("not found");
@@ -95,9 +69,7 @@ const dbMap = <T, K, V>(
 	return new Map(result.map((row) => f(schema.parse(row))));
 };
 
-export class SqliteStorage
-	implements GroupInfoStorage, KeyGenInfoStorage, SignatureRequestStorage
-{
+export class SqliteStorage implements GroupInfoStorage, KeyGenInfoStorage, SignatureRequestStorage {
 	#account: Address;
 	#db: Database;
 
@@ -189,24 +161,16 @@ export class SqliteStorage
 			.map((row) => hexDataSchema.parse(row));
 	}
 
-	registerGroup(
-		groupId: GroupId,
-		participants: readonly Participant[],
-		threshold: bigint,
-	): ParticipantId {
+	registerGroup(groupId: GroupId, participants: readonly Participant[], threshold: bigint): ParticipantId {
 		// TODO: Computing the participant ID from inputs does not seem like the
 		// responsibility of the client. Additionally, it is not possible to
 		// correctly support multiple participant IDs managed by the same EOA.
-		const participantId = participants.find(
-			(p) => p.address === this.#account,
-		)?.id;
+		const participantId = participants.find((p) => p.address === this.#account)?.id;
 		if (participantId === undefined) {
 			throw new Error(`Not part of Group ${groupId}!`);
 		}
 
-		const insertGroup = this.#db.prepare(
-			"INSERT INTO groups (id, threshold) VALUES (?, ?)",
-		);
+		const insertGroup = this.#db.prepare("INSERT INTO groups (id, threshold) VALUES (?, ?)");
 		const insertParticipant = this.#db.prepare(
 			"INSERT INTO group_participants (group_id, id, address) VALUES (?, ?, ?)",
 		);
@@ -223,30 +187,18 @@ export class SqliteStorage
 		return participantId;
 	}
 
-	private setGroupColumn(
-		groupId: GroupId,
-		column: string,
-		value: unknown,
-	): void {
+	private setGroupColumn(groupId: GroupId, column: string, value: unknown): void {
 		const { changes } = this.#db
-			.prepare(
-				`UPDATE groups SET ${column} = ? WHERE id = ? AND ${column} IS NULL`,
-			)
+			.prepare(`UPDATE groups SET ${column} = ? WHERE id = ? AND ${column} IS NULL`)
 			.run(value, groupId);
 		if (changes !== 1) {
 			throw new Error("group not found or value already set");
 		}
 	}
 
-	private setGroupThisParticipantColumn(
-		groupId: GroupId,
-		column: string,
-		value: unknown,
-	): void {
+	private setGroupThisParticipantColumn(groupId: GroupId, column: string, value: unknown): void {
 		const { changes } = this.#db
-			.prepare(
-				`UPDATE group_participants SET ${column} = ? WHERE group_id = ? AND address = ? AND ${column} IS NULL`,
-			)
+			.prepare(`UPDATE group_participants SET ${column} = ? WHERE group_id = ? AND address = ? AND ${column} IS NULL`)
 			.run(value, groupId, this.#account);
 		if (changes !== 1) {
 			throw new Error("group participant not found or value already set");
@@ -260,24 +212,15 @@ export class SqliteStorage
 		value: unknown,
 	): void {
 		const { changes } = this.#db
-			.prepare(
-				`UPDATE group_participants SET ${column} = ? WHERE group_id = ? AND id = ? AND ${column} IS NULL`,
-			)
+			.prepare(`UPDATE group_participants SET ${column} = ? WHERE group_id = ? AND id = ? AND ${column} IS NULL`)
 			.run(value, groupId, participantId);
 		if (changes !== 1) {
 			throw new Error("group participant not found or value already set");
 		}
 	}
 
-	private getGroupColumn<T>(
-		groupId: GroupId,
-		column: string,
-		schema: ZodSchema<T>,
-	): T {
-		const result = this.#db
-			.prepare(`SELECT ${column} FROM groups WHERE id = ?`)
-			.pluck(true)
-			.get(groupId);
+	private getGroupColumn<T>(groupId: GroupId, column: string, schema: ZodSchema<T>): T {
+		const result = this.#db.prepare(`SELECT ${column} FROM groups WHERE id = ?`).pluck(true).get(groupId);
 		if (result === undefined) {
 			throw new Error("group not found");
 		}
@@ -293,9 +236,7 @@ export class SqliteStorage
 		schema: ZodSchema<T>,
 	): T {
 		const result = this.#db
-			.prepare(
-				`SELECT ${column} FROM group_participants WHERE group_id = ? AND id = ?`,
-			)
+			.prepare(`SELECT ${column} FROM group_participants WHERE group_id = ? AND id = ?`)
 			.pluck(true)
 			.get(groupId, participantId);
 		if (result === undefined) {
@@ -306,15 +247,9 @@ export class SqliteStorage
 		return schema.parse(result ?? undefined);
 	}
 
-	private getGroupThisParticipantColumn<T>(
-		groupId: GroupId,
-		column: string,
-		schema: ZodSchema<T>,
-	): T {
+	private getGroupThisParticipantColumn<T>(groupId: GroupId, column: string, schema: ZodSchema<T>): T {
 		const result = this.#db
-			.prepare(
-				`SELECT ${column} FROM group_participants WHERE group_id = ? AND address = ?`,
-			)
+			.prepare(`SELECT ${column} FROM group_participants WHERE group_id = ? AND address = ?`)
 			.pluck(true)
 			.get(groupId, this.#account);
 		if (result === undefined) {
@@ -325,34 +260,20 @@ export class SqliteStorage
 		return schema.parse(result ?? undefined);
 	}
 
-	registerVerification(
-		groupId: GroupId,
-		groupPublicKey: FrostPoint,
-		verificationShare: FrostPoint,
-	): void {
+	registerVerification(groupId: GroupId, groupPublicKey: FrostPoint, verificationShare: FrostPoint): void {
 		this.#db.transaction(() => {
 			this.setGroupColumn(groupId, "public_key", groupPublicKey.toBytes());
-			this.setGroupThisParticipantColumn(
-				groupId,
-				"verification_share",
-				verificationShare.toBytes(),
-			);
+			this.setGroupThisParticipantColumn(groupId, "verification_share", verificationShare.toBytes());
 		})();
 	}
 
 	registerSigningShare(groupId: GroupId, signingShare: bigint): void {
-		this.setGroupThisParticipantColumn(
-			groupId,
-			"signing_share",
-			scalarToBytes(signingShare),
-		);
+		this.setGroupThisParticipantColumn(groupId, "signing_share", scalarToBytes(signingShare));
 	}
 
 	participants(groupId: GroupId): readonly Participant[] {
 		const result = this.#db
-			.prepare(
-				"SELECT id, address FROM group_participants WHERE group_id = ? ORDER BY id ASC",
-			)
+			.prepare("SELECT id, address FROM group_participants WHERE group_id = ? ORDER BY id ASC")
 			.all(groupId)
 			.map((row) => dbParticipantSchema.parse(row));
 		// Note that registering a group requires there to be at least one
@@ -378,19 +299,11 @@ export class SqliteStorage
 	}
 
 	verificationShare(groupId: GroupId): FrostPoint {
-		return this.getGroupThisParticipantColumn(
-			groupId,
-			"verification_share",
-			dbPointSchema,
-		);
+		return this.getGroupThisParticipantColumn(groupId, "verification_share", dbPointSchema);
 	}
 
 	signingShare(groupId: GroupId): bigint | undefined {
-		return this.getGroupThisParticipantColumn(
-			groupId,
-			"signing_share",
-			dbScalarSchema.optional(),
-		);
+		return this.getGroupThisParticipantColumn(groupId, "signing_share", dbScalarSchema.optional());
 	}
 
 	unregisterGroup(groupId: GroupId): void {
@@ -398,18 +311,10 @@ export class SqliteStorage
 	}
 
 	registerKeyGen(groupId: GroupId, coefficients: readonly bigint[]): void {
-		this.setGroupThisParticipantColumn(
-			groupId,
-			"coefficients",
-			concat(coefficients.map(scalarToBytes)),
-		);
+		this.setGroupThisParticipantColumn(groupId, "coefficients", concat(coefficients.map(scalarToBytes)));
 	}
 
-	registerCommitments(
-		groupId: GroupId,
-		participantId: ParticipantId,
-		commitments: readonly FrostPoint[],
-	): void {
+	registerCommitments(groupId: GroupId, participantId: ParticipantId, commitments: readonly FrostPoint[]): void {
 		this.setGroupParticipantColumn(
 			groupId,
 			participantId,
@@ -418,11 +323,7 @@ export class SqliteStorage
 		);
 	}
 
-	registerSecretShare(
-		groupId: GroupId,
-		participantId: ParticipantId,
-		share: bigint,
-	): void {
+	registerSecretShare(groupId: GroupId, participantId: ParticipantId, share: bigint): void {
 		this.#db
 			.prepare(
 				"INSERT INTO group_secret_shares (group_id, address, from_participant, secret_share) VALUES (?, ?, ?, ?)",
@@ -512,31 +413,15 @@ export class SqliteStorage
 	}
 
 	encryptionKey(groupId: GroupId): bigint {
-		return this.getGroupThisParticipantColumn(
-			groupId,
-			"SUBSTRING(coefficients, 1, 32)",
-			dbScalarSchema,
-		);
+		return this.getGroupThisParticipantColumn(groupId, "SUBSTRING(coefficients, 1, 32)", dbScalarSchema);
 	}
 
 	coefficients(groupId: GroupId): readonly bigint[] {
-		return this.getGroupThisParticipantColumn(
-			groupId,
-			"coefficients",
-			dbScalarArraySchema,
-		);
+		return this.getGroupThisParticipantColumn(groupId, "coefficients", dbScalarArraySchema);
 	}
 
-	commitments(
-		groupId: GroupId,
-		participantId: ParticipantId,
-	): readonly FrostPoint[] {
-		return this.getGroupParticipantColumn(
-			groupId,
-			participantId,
-			"commitments",
-			dbPointArraySchema,
-		);
+	commitments(groupId: GroupId, participantId: ParticipantId): readonly FrostPoint[] {
+		return this.getGroupParticipantColumn(groupId, participantId, "commitments", dbPointArraySchema);
 	}
 
 	commitmentsMap(groupId: GroupId): Map<ParticipantId, readonly FrostPoint[]> {
@@ -575,9 +460,7 @@ export class SqliteStorage
 		const deleteCoefficientsAndCommitments = this.#db.prepare(
 			"UPDATE group_participants SET coefficients = NULL, commitments = NULL WHERE group_id = ?",
 		);
-		const deleteSecretShares = this.#db.prepare(
-			"DELETE FROM group_secret_shares WHERE group_id = ?",
-		);
+		const deleteSecretShares = this.#db.prepare("DELETE FROM group_secret_shares WHERE group_id = ?");
 		this.#db.transaction(() => {
 			deleteCoefficientsAndCommitments.run(groupId);
 			deleteSecretShares.run(groupId);
@@ -585,9 +468,7 @@ export class SqliteStorage
 	}
 
 	registerNonceTree(groupId: GroupId, tree: NonceTree): Hex {
-		const insertNoncesLink = this.#db.prepare(
-			"INSERT INTO nonces_links (root, group_id, address) VALUES (?, ?, ?)",
-		);
+		const insertNoncesLink = this.#db.prepare("INSERT INTO nonces_links (root, group_id, address) VALUES (?, ?, ?)");
 		const insertNoncesLeaf = this.#db.prepare(
 			"INSERT INTO nonces (leaf, root, offset, hiding, hiding_commitment, binding, binding_commitment) VALUES (?, ?, ?, ?, ?, ?, ?)",
 		);
@@ -611,9 +492,7 @@ export class SqliteStorage
 
 	linkNonceTree(groupId: GroupId, chunk: bigint, treeHash: Hex): void {
 		const { changes } = this.#db
-			.prepare(
-				"UPDATE nonces_links SET chunk = ? WHERE root = ? AND group_id = ? AND chunk is NULL",
-			)
+			.prepare("UPDATE nonces_links SET chunk = ? WHERE root = ? AND group_id = ? AND chunk is NULL")
 			.run(chunk, treeHash, groupId);
 		if (changes !== 1) {
 			throw new Error("nonces root not found or already linked to chunk");
@@ -671,15 +550,8 @@ export class SqliteStorage
 		}
 	}
 
-	private getSignatureColumn<T>(
-		signatureId: SignatureId,
-		column: string,
-		schema: ZodSchema<T>,
-	): T {
-		const result = this.#db
-			.prepare(`SELECT ${column} FROM signatures WHERE id = ?`)
-			.pluck(true)
-			.get(signatureId);
+	private getSignatureColumn<T>(signatureId: SignatureId, column: string, schema: ZodSchema<T>): T {
+		const result = this.#db.prepare(`SELECT ${column} FROM signatures WHERE id = ?`).pluck(true).get(signatureId);
 		if (result === undefined) {
 			throw new Error("signature request not found");
 		}
@@ -776,9 +648,7 @@ export class SqliteStorage
 
 	signers(signatureId: SignatureId): ParticipantId[] {
 		const result = this.#db
-			.prepare(
-				"SELECT signer FROM signature_commitments WHERE signature_id = ? ORDER BY signer ASC",
-			)
+			.prepare("SELECT signer FROM signature_commitments WHERE signature_id = ? ORDER BY signer ASC")
 			.pluck(true)
 			.all(signatureId);
 		if (result.length === 0) {
@@ -795,9 +665,7 @@ export class SqliteStorage
 		return this.getSignatureColumn(signatureId, "sequence", dbIntegerSchema);
 	}
 
-	nonceCommitmentsMap(
-		signatureId: SignatureId,
-	): Map<ParticipantId, PublicNonceCommitments> {
+	nonceCommitmentsMap(signatureId: SignatureId): Map<ParticipantId, PublicNonceCommitments> {
 		return dbMap(
 			this.#db
 				.prepare(`

@@ -1,9 +1,4 @@
-import type {
-	ConsensusState,
-	MachineConfig,
-	MachineStates,
-	StateDiff,
-} from "../types.js";
+import type { ConsensusState, MachineConfig, MachineStates, StateDiff } from "../types.js";
 
 export const checkKeyGenAbort = (
 	machineConfig: MachineConfig,

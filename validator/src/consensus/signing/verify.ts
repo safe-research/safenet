@@ -10,9 +10,7 @@ export const verifySignature = (
 	msg: Hex,
 ) => {
 	const challenge = groupChallenge(groupCommitment, groupPublicKey, msg);
-	const r = g(combinedSignatureShares).add(
-		groupPublicKey.multiply(neg(challenge)),
-	);
+	const r = g(combinedSignatureShares).add(groupPublicKey.multiply(neg(challenge)));
 	if (r.x === 0n && r.y === 0n) return false;
 	return r.equals(groupCommitment);
 };

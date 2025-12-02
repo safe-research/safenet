@@ -4,18 +4,8 @@ import { h2 } from "../../frost/hashes.js";
 import { divmod, mulmod, submod } from "../../frost/math.js";
 import type { FrostPoint } from "../../frost/types.js";
 
-export const groupChallenge = (
-	groupCommitment: FrostPoint,
-	groupPublicKey: FrostPoint,
-	message: Hex,
-): bigint => {
-	return h2(
-		concatBytes(
-			groupCommitment.toBytes(true),
-			groupPublicKey.toBytes(true),
-			hexToBytes(message),
-		),
-	);
+export const groupChallenge = (groupCommitment: FrostPoint, groupPublicKey: FrostPoint, message: Hex): bigint => {
+	return h2(concatBytes(groupCommitment.toBytes(true), groupPublicKey.toBytes(true), hexToBytes(message)));
 };
 
 export const lagrangeCoefficient = (signers: bigint[], id: bigint): bigint => {

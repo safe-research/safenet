@@ -25,14 +25,10 @@ describe("epoch rollover handler", () => {
 					activeEpoch: 0n,
 					proposedEpoch: 1n,
 					rolloverBlock: 0xbaddad42n,
-					groupKeyX:
-						0x8318535b54105d4a7aae60c08fc45f9687181b4fdfc625bd1a753fa7397fed75n,
-					groupKeyY:
-						0x3547f11ca8696646f2f3acb08e31016afac23e630c5d11f59f61fef57b0d2aa5n,
+					groupKeyX: 0x8318535b54105d4a7aae60c08fc45f9687181b4fdfc625bd1a753fa7397fed75n,
+					groupKeyY: 0x3547f11ca8696646f2f3acb08e31016afac23e630c5d11f59f61fef57b0d2aa5n,
 				},
 			}),
-		).resolves.toBe(
-			"0xc1e4d484d6c376741c904290cc043f4afb4618f9d567dcdd0edcbf22abae57f7",
-		);
+		).resolves.toBe("0xc1e4d484d6c376741c904290cc043f4afb4618f9d567dcdd0edcbf22abae57f7");
 	});
 });

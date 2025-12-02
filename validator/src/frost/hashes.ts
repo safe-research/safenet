@@ -1,7 +1,4 @@
-import {
-	type H2COpts,
-	hash_to_field,
-} from "@noble/curves/abstract/hash-to-curve.js";
+import { type H2COpts, hash_to_field } from "@noble/curves/abstract/hash-to-curve.js";
 import { secp256k1 } from "@noble/curves/secp256k1.js";
 import { concatBytes, numberToBytesBE } from "@noble/curves/utils.js";
 import { sha256 } from "@noble/hashes/sha2.js";
@@ -24,14 +21,8 @@ const opts = (discriminant: string): H2COpts => {
 	};
 };
 
-export const keyGenChallenge = (
-	id: bigint,
-	ga0: FrostPoint,
-	r: FrostPoint,
-): bigint => {
-	return hdkg(
-		concatBytes(numberToBytesBE(id, 32), ga0.toBytes(true), r.toBytes(true)),
-	);
+export const keyGenChallenge = (id: bigint, ga0: FrostPoint, r: FrostPoint): bigint => {
+	return hdkg(concatBytes(numberToBytesBE(id, 32), ga0.toBytes(true), r.toBytes(true)));
 };
 
 export const hdkg = (input: Uint8Array): bigint => {
