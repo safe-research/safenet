@@ -13,7 +13,7 @@ import {
 import { privateKeyToAccount } from "viem/accounts";
 import { anvil } from "viem/chains";
 import { describe, expect, it } from "vitest";
-import { log } from "../__tests__/logging.js";
+import { createStorage, log } from "../__tests__/config.js";
 import { toPoint } from "../frost/math.js";
 import type { GroupId } from "../frost/types.js";
 import { ShieldnetStateMachine as SchildNetzMachine } from "../service/machine.js";
@@ -22,7 +22,6 @@ import { KeyGenClient } from "./keyGen/client.js";
 import { OnchainProtocol } from "./protocol/onchain.js";
 import { SigningClient } from "./signing/client.js";
 import { verifySignature } from "./signing/verify.js";
-import { InMemoryStorage } from "./storage/inmemory.js";
 import type { Participant } from "./storage/types.js";
 import { type PacketHandler, type Typed, VerificationEngine } from "./verify/engine.js";
 import { EpochRolloverHandler } from "./verify/rollover/handler.js";
@@ -32,6 +31,7 @@ const BLOCKTIME_IN_SECONDS = 1;
 const BLOCKS_PER_EPOCH = 20n;
 const TEST_RUNTIME_IN_SECONDS = 60;
 const EXPECTED_GROUPS = TEST_RUNTIME_IN_SECONDS / Number(BLOCKS_PER_EPOCH) + 1;
+
 /**
  * The integration test will bootstrap the setup from genesis and run for 1 minute.
  * Block time is 1 second, so 60 blocks will be mined.
@@ -88,7 +88,7 @@ describe("integration", () => {
 			return { id: BigInt(i + 1), address: a.address };
 		});
 		const clients = accounts.map((a, i) => {
-			const storage = new InMemoryStorage(a.address);
+			const storage = createStorage(a.address);
 			const sc = new SigningClient(storage);
 			const kc = new KeyGenClient(storage);
 			const verificationHandlers = new Map<string, PacketHandler<Typed>>();

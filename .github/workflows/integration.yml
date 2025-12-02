@@ -9,6 +9,14 @@ on:
 jobs:
   integration:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        storage: ["inmemory", "sqlite"]
+    env:
+      SHIELDNET_TEST_VERBOSE: "1"
+      SHIELDNET_TEST_STORAGE: ${{ matrix.storage }}
+
     steps:
       - uses: actions/checkout@v5
         with:
@@ -21,8 +29,5 @@ jobs:
 
       - uses: foundry-rs/foundry-toolchain@v1
 
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Run integration checks
-        run: VERBOSE=true ./scripts/run_integration_test.sh
+      - run: npm ci
+      - run: npm run test:integration

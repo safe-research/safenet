@@ -153,6 +153,10 @@ export class SqliteStorage implements GroupInfoStorage, KeyGenInfoStorage, Signa
 		// to speed up SQL performance.
 	}
 
+	accountAddress(): Address {
+		return this.#account;
+	}
+
 	knownGroups(): GroupId[] {
 		return this.#db
 			.prepare("SELECT id FROM groups")

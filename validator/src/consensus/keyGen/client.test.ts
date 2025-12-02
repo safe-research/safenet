@@ -1,10 +1,9 @@
 import { keccak256 } from "viem";
 import { generatePrivateKey, privateKeyToAccount } from "viem/accounts";
 import { describe, expect, it } from "vitest";
-import { log } from "../../__tests__/logging.js";
+import { createStorage, log } from "../../__tests__/config.js";
 import type { FrostPoint, GroupId, ProofOfKnowledge } from "../../frost/types.js";
 import { calculateParticipantsRoot, hashParticipant, verifyMerkleProof } from "../merkle.js";
-import { InMemoryStorage } from "../storage/inmemory.js";
 import type { Participant } from "../storage/types.js";
 import { KeyGenClient } from "./client.js";
 import { calcGroupId } from "./utils.js";
@@ -37,7 +36,7 @@ describe("keyGen", () => {
 		}[] = [];
 		const clients = validatorAddresses.map((a) => {
 			const ids = new Map<GroupId, bigint>();
-			const storage = new InMemoryStorage(a.address);
+			const storage = createStorage(a.address);
 			const client = new KeyGenClient(storage);
 			return {
 				ids,
