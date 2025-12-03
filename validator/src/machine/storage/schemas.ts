@@ -1,23 +1,59 @@
 import { z } from "zod";
-import { epochRolloverPacketSchema } from "../consensus/verify/rollover/schemas.js";
-import { safeTransactionPacketSchema } from "../consensus/verify/safeTx/schemas.js";
-import type { GroupId, ParticipantId, SignatureId } from "../frost/types.js";
-import { hexDataSchema } from "../types/schemas.js";
+import { epochRolloverPacketSchema } from "../../consensus/verify/rollover/schemas.js";
+import { safeTransactionPacketSchema } from "../../consensus/verify/safeTx/schemas.js";
+import type { GroupId, ParticipantId, SignatureId } from "../../frost/types.js";
+import { hexDataSchema } from "../../types/schemas.js";
 
 // --- Base Type Definitions (for Zod) ---
 
-// Assuming Hex, GroupId, ParticipantId, SignatureId, SafeTransactionPacket, EpochRolloverPacket
-// are all represented as strings (Hex) or standard identifiers in the database.
-
 const groupIdSchema = hexDataSchema.transform((v) => v as GroupId);
-const participantIdSchema = z.coerce
-	.bigint()
-	.nonnegative()
-	.transform((v) => v as ParticipantId);
-const signatureIdSchema = hexDataSchema.transform((v) => v as SignatureId);
 const coercedBigIntSchema = z.coerce.bigint().nonnegative();
+const participantIdSchema = coercedBigIntSchema.transform((v) => v as ParticipantId);
+const signatureIdSchema = hexDataSchema.transform((v) => v as SignatureId);
 
-const packetSchema = z.union([safeTransactionPacketSchema, epochRolloverPacketSchema]);
+// Overwrite bigint fields to accept strings
+const dbSafeTransactionPacketSchema = safeTransactionPacketSchema.extend({
+	domain: safeTransactionPacketSchema.shape.domain.extend({
+		chain: coercedBigIntSchema,
+	}),
+	proposal: safeTransactionPacketSchema.shape.proposal.extend({
+		epoch: coercedBigIntSchema,
+		transaction: safeTransactionPacketSchema.shape.proposal.shape.transaction.extend({
+			chainId: coercedBigIntSchema,
+			nonce: coercedBigIntSchema,
+			value: coercedBigIntSchema,
+		}),
+	}),
+});
+const dbEpochRolloverPacketSchema = epochRolloverPacketSchema.extend({
+	domain: epochRolloverPacketSchema.shape.domain.extend({
+		chain: coercedBigIntSchema,
+	}),
+	rollover: epochRolloverPacketSchema.shape.rollover.extend({
+		activeEpoch: coercedBigIntSchema,
+		proposedEpoch: coercedBigIntSchema,
+		rolloverBlock: coercedBigIntSchema,
+		groupKeyX: coercedBigIntSchema,
+		groupKeyY: coercedBigIntSchema,
+	}),
+});
+
+const packetSchema = z.union([dbSafeTransactionPacketSchema, dbEpochRolloverPacketSchema]);
+
+// --- SQLite Base Query Schemas ---
+
+export const jsonQueryResultSchema = z
+	.object({
+		stateJson: z.string(),
+	})
+	.optional();
+
+export const signingQueryResultSchema = z.array(
+	z.object({
+		signatureId: signatureIdSchema,
+		stateJson: z.string(),
+	}),
+);
 
 // --- 1. RolloverState Schemas ---
 
