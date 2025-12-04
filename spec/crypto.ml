@@ -35,8 +35,7 @@ module FROST = struct
     let commit (_ : coefficients) : commitments = Placeholder.fn ()
     let verify_proof (_ : commitments) : bool = Placeholder.fn ()
 
-    let secret_shares (_ : coefficients) (_ : Identifier.t list) :
-        (Identifier.t * secret_share) list =
+    let secret_share (_ : coefficients) (_ : Identifier.t) : secret_share =
       Placeholder.fn ()
 
     let encrypt_secret_share (_ : coefficients) (_ : commitments)
