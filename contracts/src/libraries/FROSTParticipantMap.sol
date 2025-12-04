@@ -16,7 +16,7 @@ library FROSTParticipantMap {
     enum ComplaintStatus {
         NONE,
         SUBMITTED,
-        RESOLVED
+        RESPONDED
     }
 
     struct ParticipantState {
@@ -94,7 +94,7 @@ library FROSTParticipantMap {
     /// @notice Responds to a complaint from a plaintiff against an accused.
     function respond(T storage self, FROST.Identifier plaintiff, FROST.Identifier accused) internal {
         require(self.states[plaintiff].statuses[accused] == ComplaintStatus.SUBMITTED, ComplaintNotSubmitted());
-        self.states[plaintiff].statuses[accused] = ComplaintStatus.RESOLVED;
+        self.states[plaintiff].statuses[accused] = ComplaintStatus.RESPONDED;
         self.states[plaintiff].complaints--;
         self.states[accused].accusations--;
     }
