@@ -1,6 +1,7 @@
 import Sqlite3, { type Database } from "better-sqlite3";
 import type { ProtocolAction } from "../../consensus/protocol/types.js";
 import type { SignatureId } from "../../frost/types.js";
+import { jsonReplacer } from "../../utils/json.js";
 import type { ConsensusState, MutableConsensusState, RolloverState, SigningState, StateDiff } from "../types.js";
 import { InMemoryStateStorage } from "./inmemory.js";
 import {
@@ -10,13 +11,6 @@ import {
 	signingQueryResultSchema,
 	signingStateSchema,
 } from "./schemas.js";
-
-function jsonReplacer(_key: string, value: unknown): unknown {
-	if (typeof value === "bigint") {
-		return value.toString();
-	}
-	return value;
-}
 
 function loadConsensusState(db: Database): MutableConsensusState | undefined {
 	const stmt = db.prepare("SELECT stateJson FROM consensus_state WHERE id = 1");

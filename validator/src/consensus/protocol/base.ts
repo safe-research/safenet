@@ -1,6 +1,7 @@
 import type { Address, Hex } from "viem";
-import { Queue } from "../../utils/queue.js";
+import { InMemoryQueue, type Queue } from "../../utils/queue.js";
 import type {
+	ActionWithRetry,
 	AttestTransaction,
 	ConfirmKeyGen,
 	ProtocolAction,
@@ -14,15 +15,11 @@ import type {
 	StartKeyGen,
 } from "./types.js";
 
-type ActionWithRetry = ProtocolAction & {
-	retryCount: number;
-};
-
 const MAX_RETRIES = 5;
 const ERROR_RETRY_DELAY = 1000;
 
 export abstract class BaseProtocol implements ShieldnetProtocol {
-	#actionQueue = new Queue<ActionWithRetry>();
+	#actionQueue: Queue<ActionWithRetry> = new InMemoryQueue<ActionWithRetry>();
 	#currentAction?: ActionWithRetry;
 	#logger?: (msg: unknown) => void;
 
@@ -30,7 +27,8 @@ export abstract class BaseProtocol implements ShieldnetProtocol {
 	abstract consensus(): Address;
 	abstract coordinator(): Address;
 
-	constructor(logger?: (msg: unknown) => void) {
+	constructor(queue: Queue<ActionWithRetry>, logger?: (msg: unknown) => void) {
+		this.#actionQueue = queue;
 		this.#logger = logger;
 	}
 
@@ -46,7 +44,7 @@ export abstract class BaseProtocol implements ShieldnetProtocol {
 	private checkNextAction() {
 		// Still processing
 		if (this.#currentAction !== undefined) return;
-		const action = this.#actionQueue.pop();
+		const action = this.#actionQueue.peek();
 		// Nothing queued
 		if (action === undefined) return;
 		if (action.retryCount > MAX_RETRIES) {
@@ -58,9 +56,12 @@ export abstract class BaseProtocol implements ShieldnetProtocol {
 		const executionDelay = action.retryCount > 0 ? ERROR_RETRY_DELAY : 0;
 		setTimeout(() => {
 			this.performAction(action)
+				.then(() => {
+					// If action was successfully executed, remove it from queue
+					this.#actionQueue.pop();
+				})
 				.catch(() => {
 					action.retryCount++;
-					this.#actionQueue.return(action);
 				})
 				.finally(() => {
 					this.#currentAction = undefined;

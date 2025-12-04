@@ -84,7 +84,7 @@ const signRolloverSchema = z.object({
 	responsible: participantIdSchema,
 });
 
-export const rolloverStateSchema = z.union([
+export const rolloverStateSchema = z.discriminatedUnion("id", [
 	waitingForRolloverSchema,
 	collectingCommitmentsSchema,
 	collectingSharesSchema,
@@ -128,7 +128,7 @@ const waitingForAttestationSchema = z.object({
 
 export const signingStateSchema = z.intersection(
 	baseSigningStateSchema,
-	z.union([
+	z.discriminatedUnion("id", [
 		waitingForRequestSchema,
 		collectNonceCommitmentsSchema,
 		collectSigningSharesSchema,

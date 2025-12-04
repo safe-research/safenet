@@ -11,6 +11,7 @@ import {
 } from "viem";
 import { KeyGenClient } from "../consensus/keyGen/client.js";
 import { OnchainProtocol } from "../consensus/protocol/onchain.js";
+import type { ActionWithRetry } from "../consensus/protocol/types.js";
 import { SigningClient } from "../consensus/signing/client.js";
 import { InMemoryClientStorage } from "../consensus/storage/inmemory.js";
 import { type PacketHandler, type Typed, VerificationEngine } from "../consensus/verify/engine.js";
@@ -21,6 +22,7 @@ import { CONSENSUS_EVENTS, COORDINATOR_EVENTS } from "../types/abis.js";
 import { supportedChains } from "../types/chains.js";
 import type { ProtocolConfig } from "../types/interfaces.js";
 import type { Logger } from "../utils/logging.js";
+import { InMemoryQueue } from "../utils/queue.js";
 import { ShieldnetStateMachine } from "./machine.js";
 
 export class ValidatorService {
@@ -54,11 +56,13 @@ export class ValidatorService {
 		verificationHandlers.set("safe_transaction_packet", new SafeTransactionHandler());
 		verificationHandlers.set("epoch_rollover_packet", new EpochRolloverHandler());
 		const verificationEngine = new VerificationEngine(verificationHandlers);
+		const actionStorage = new InMemoryQueue<ActionWithRetry>();
 		const protocol = new OnchainProtocol(
 			this.#publicClient,
 			walletClient,
 			config.conensus,
 			config.coordinator,
+			actionStorage,
 			this.#logger?.info,
 		);
 		const stateStorage = new InMemoryStateStorage();

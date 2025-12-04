@@ -1,8 +1,10 @@
 import type { Address, Hex, PublicClient, WalletClient } from "viem";
 import type { FrostPoint, GroupId, SignatureId } from "../../frost/types.js";
 import { CONSENSUS_FUNCTIONS, COORDINATOR_FUNCTIONS } from "../../types/abis.js";
+import type { Queue } from "../../utils/queue.js";
 import { BaseProtocol } from "./base.js";
 import type {
+	ActionWithRetry,
 	AttestTransaction,
 	ConfirmKeyGen,
 	PublishSecretShares,
@@ -25,9 +27,10 @@ export class OnchainProtocol extends BaseProtocol {
 		signingClient: WalletClient,
 		consensus: Address,
 		coordinator: Address,
+		queue: Queue<ActionWithRetry>,
 		logger?: (msg: unknown) => void,
 	) {
-		super(logger);
+		super(queue, logger);
 		this.#publicClient = publicClient;
 		this.#signingClient = signingClient;
 		this.#consensus = consensus;

@@ -18,8 +18,10 @@ import { toPoint } from "../frost/math.js";
 import type { GroupId } from "../frost/types.js";
 import { ShieldnetStateMachine as SchildNetzMaschine } from "../service/machine.js";
 import { CONSENSUS_EVENTS, COORDINATOR_EVENTS } from "../types/abis.js";
+import { InMemoryQueue } from "../utils/queue.js";
 import { KeyGenClient } from "./keyGen/client.js";
 import { OnchainProtocol } from "./protocol/onchain.js";
+import type { ActionWithRetry } from "./protocol/types.js";
 import { SigningClient } from "./signing/client.js";
 import { verifySignature } from "./signing/verify.js";
 import type { Participant } from "./storage/types.js";
@@ -106,8 +108,16 @@ describe("integration", () => {
 				transport: http(),
 				account: a,
 			});
+			const actionStorage = new InMemoryQueue<ActionWithRetry>();
+			const protocol = new OnchainProtocol(
+				publicClient,
+				signingClient,
+				consensusAddress,
+				coordinatorAddress,
+				actionStorage,
+				logger,
+			);
 			const stateStorage = createStateStorage();
-			const protocol = new OnchainProtocol(publicClient, signingClient, consensusAddress, coordinatorAddress, logger);
 			const sm = new SchildNetzMaschine({
 				participants,
 				protocol,

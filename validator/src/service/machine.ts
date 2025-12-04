@@ -23,7 +23,7 @@ import { checkSigningTimeouts } from "../machine/signing/timeouts.js";
 import { TransitionState } from "../machine/state/local.js";
 import type { StateStorage } from "../machine/storage/types.js";
 import type { ConsensusState, MachineConfig, MachineStates, StateDiff, StateTransition } from "../machine/types.js";
-import { Queue } from "../utils/queue.js";
+import { InMemoryQueue, type Queue } from "../utils/queue.js";
 
 const BLOCKS_PER_EPOCH = (24n * 60n * 60n) / 5n; // ~ blocks for 1 day
 const DEFAULT_TIMEOUT = (10n * 60n) / 5n; // ~ blocks for 10 minutes
@@ -41,7 +41,7 @@ export class ShieldnetStateMachine {
 	// Event queue state
 	#lastProcessedBlock = 0n;
 	#lastProcessedIndex = 0;
-	#transitionQueue = new Queue<StateTransition>();
+	#transitionQueue: Queue<StateTransition> = new InMemoryQueue<StateTransition>();
 	#currentTransition?: StateTransition;
 
 	constructor({
@@ -90,7 +90,7 @@ export class ShieldnetStateMachine {
 	private checkNextTransition() {
 		// Still processing
 		if (this.#currentTransition !== undefined) return;
-		const transition = this.#transitionQueue.pop();
+		const transition = this.#transitionQueue.peek();
 		// Nothing queued
 		if (transition === undefined) return;
 		this.#currentTransition = transition;
@@ -103,6 +103,10 @@ export class ShieldnetStateMachine {
 				for (const action of actions) {
 					this.#protocol.process(action);
 				}
+			})
+			.then(() => {
+				// If transition was successfully appled, remove it from queue
+				this.#transitionQueue.pop();
 			})
 			.catch(this.#logger)
 			.finally(() => {
