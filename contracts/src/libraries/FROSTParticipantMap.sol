@@ -39,6 +39,7 @@ library FROSTParticipantMap {
     error NotParticipating();
     error AlreadySet();
     error ComplaintAlreadySubmitted();
+    error InvalidAccused();
     error ParticipantAlreadyFinalized();
     error ComplaintNotSubmitted();
     error UnrespondedComplaintExists();
@@ -83,12 +84,17 @@ library FROSTParticipantMap {
     }
 
     /// @notice Submits a complaint from a plaintiff against an accused.
-    function complain(T storage self, FROST.Identifier plaintiff, FROST.Identifier accused) internal {
+    function complain(T storage self, FROST.Identifier plaintiff, FROST.Identifier accused)
+        internal
+        returns (uint64 totalAccusations)
+    {
         require(self.states[plaintiff].statuses[accused] == ComplaintStatus.NONE, ComplaintAlreadySubmitted());
         require(!self.states[plaintiff].confirmed, ParticipantAlreadyFinalized());
+        require(isParticipating(self, accused), InvalidAccused());
+        require(!FROST.identifierEq(plaintiff, accused), InvalidAccused());
         self.states[plaintiff].statuses[accused] = ComplaintStatus.SUBMITTED;
         self.states[plaintiff].complaints++;
-        self.states[accused].accusations++;
+        totalAccusations = ++self.states[accused].accusations;
     }
 
     /// @notice Responds to a complaint from a plaintiff against an accused.
@@ -105,11 +111,6 @@ library FROSTParticipantMap {
         require(self.states[participant].complaints == 0, UnrespondedComplaintExists());
         require(!self.states[participant].confirmed, ParticipantAlreadyFinalized());
         self.states[participant].confirmed = true;
-    }
-
-    /// @notice Gets the count of complaints received by an accused.
-    function getAccusationCount(T storage self, FROST.Identifier accused) internal view returns (uint64) {
-        return self.states[accused].accusations;
     }
 
     /// @notice Gets the participant's identifier.

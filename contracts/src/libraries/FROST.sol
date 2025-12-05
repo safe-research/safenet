@@ -277,7 +277,7 @@ library FROST {
         }
     }
 
-    function eq(Identifier a, Identifier b) internal pure returns (bool) {
+    function identifierEq(Identifier a, Identifier b) internal pure returns (bool) {
         return Identifier.unwrap(a) == Identifier.unwrap(b);
     }
 }

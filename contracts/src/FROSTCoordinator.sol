@@ -103,7 +103,6 @@ contract FROSTCoordinator {
     error InvalidGroupCommitment();
     error GroupNotInitialized();
     error GroupNotReady();
-    error InvalidAccused();
     error InvalidSecretShare();
     error InvalidMessage();
     error NotSigning();
@@ -227,10 +226,7 @@ contract FROSTCoordinator {
             GroupNotReady()
         );
         FROST.Identifier plaintiff = group.participants.identifierOf(msg.sender);
-        require(!FROST.eq(plaintiff, accused), InvalidAccused());
-        require(group.participants.isParticipating(accused), InvalidAccused());
-        group.participants.complain(plaintiff, accused);
-        if (group.participants.getAccusationCount(accused) >= (group.parameters.threshold)) {
+        if (group.participants.complain(plaintiff, accused) >= group.parameters.threshold) {
             group.parameters.status = GroupStatus.COMPROMISED;
         }
         emit KeyGenComplained(gid, plaintiff, accused);
@@ -267,7 +263,7 @@ contract FROSTCoordinator {
         Group storage group = $groups[gid];
         GroupParameters memory parameters = group.parameters;
         require(parameters.count > 0, GroupNotInitialized());
-        require(parameters.pending == 0, GroupNotReady());
+        require(parameters.status == GroupStatus.FINALIZED, GroupNotReady());
         uint64 sequence = parameters.sequence++;
         sid = FROSTSignatureId.create(gid, sequence);
         Signature storage signature = $signatures[sid];
