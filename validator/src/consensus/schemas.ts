@@ -40,6 +40,11 @@ export const keyGenSecretSharedEventSchema = z.object({
 	completed: z.boolean(),
 });
 
+export const keyGenConfirmedEventSchema = z.object({
+	gid: hexDataSchema,
+	identifier: z.bigint().positive(),
+});
+
 export const nonceCommitmentsHashEventSchema = z.object({
 	gid: hexDataSchema,
 	identifier: z.bigint().positive(),

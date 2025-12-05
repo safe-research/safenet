@@ -31,7 +31,7 @@ export type KeygenInfo = {
  * 1. register participants root
  * 2. pre keygen
  * 3. publish commitments to other participants
- *   a. recive commitments from other participants
+ *   a. receive commitments from other participants
  * 4. publish secret shares
  *   a. receive secret shares
  */

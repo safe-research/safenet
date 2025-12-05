@@ -4,6 +4,7 @@ import { CONSENSUS_FUNCTIONS, COORDINATOR_FUNCTIONS } from "../../types/abis.js"
 import { BaseProtocol } from "./base.js";
 import type {
 	AttestTransaction,
+	ConfirmKeyGen,
 	PublishSecretShares,
 	PublishSignatureShare,
 	RegisterNonceCommitments,
@@ -78,42 +79,7 @@ export class OnchainProtocol extends BaseProtocol {
 		return this.#signingClient.writeContract(request);
 	}
 
-	private async publishKeygenSecretSharesWithCallback(
-		groupId: GroupId,
-		verificationShare: FrostPoint,
-		peerShares: bigint[],
-		callbackContext: Hex,
-	): Promise<Hex> {
-		const { request } = await this.#publicClient.simulateContract({
-			address: this.#coordinator,
-			abi: COORDINATOR_FUNCTIONS,
-			functionName: "keyGenSecretShareWithCallback",
-			args: [
-				groupId,
-				{
-					y: verificationShare,
-					f: peerShares,
-				},
-				{
-					target: this.#consensus,
-					context: callbackContext,
-				},
-			],
-			account: this.#signingClient.account,
-			gas: 300_000n, // TODO: this seems to be wrongly estimated
-		});
-		return this.#signingClient.writeContract(request);
-	}
-
-	protected async publishKeygenSecretShares({
-		groupId,
-		verificationShare,
-		shares,
-		callbackContext,
-	}: PublishSecretShares): Promise<Hex> {
-		if (callbackContext !== undefined) {
-			return this.publishKeygenSecretSharesWithCallback(groupId, verificationShare, shares, callbackContext);
-		}
+	protected async publishKeygenSecretShares({ groupId, verificationShare, shares }: PublishSecretShares): Promise<Hex> {
 		const { request } = await this.#publicClient.simulateContract({
 			address: this.#coordinator,
 			abi: COORDINATOR_FUNCTIONS,
@@ -125,6 +91,39 @@ export class OnchainProtocol extends BaseProtocol {
 					f: shares,
 				},
 			],
+			account: this.#signingClient.account,
+			gas: 350_000n,
+		});
+		return this.#signingClient.writeContract(request);
+	}
+
+	private async confirmKeyGenWithCallback(groupId: GroupId, callbackContext: Hex): Promise<Hex> {
+		const { request } = await this.#publicClient.simulateContract({
+			address: this.#coordinator,
+			abi: COORDINATOR_FUNCTIONS,
+			functionName: "keyGenConfirmWithCallback",
+			args: [
+				groupId,
+				{
+					target: this.#consensus,
+					context: callbackContext,
+				},
+			],
+			account: this.#signingClient.account,
+			gas: 300_000n,
+		});
+		return this.#signingClient.writeContract(request);
+	}
+
+	protected async confirmKeyGen({ groupId, callbackContext }: ConfirmKeyGen): Promise<Hex> {
+		if (callbackContext !== undefined) {
+			return this.confirmKeyGenWithCallback(groupId, callbackContext);
+		}
+		const { request } = await this.#publicClient.simulateContract({
+			address: this.#coordinator,
+			abi: COORDINATOR_FUNCTIONS,
+			functionName: "keyGenConfirm",
+			args: [groupId],
 			account: this.#signingClient.account,
 		});
 		return this.#signingClient.writeContract(request);

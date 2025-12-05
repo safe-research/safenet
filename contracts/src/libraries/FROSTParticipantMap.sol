@@ -13,10 +13,24 @@ library FROSTParticipantMap {
     using FROST for FROST.Identifier;
     using Secp256k1 for Secp256k1.Point;
 
+    enum ComplaintStatus {
+        NONE,
+        SUBMITTED,
+        RESPONDED
+    }
+
+    struct ParticipantState {
+        bool confirmed;
+        uint64 complaints;
+        uint64 accusations;
+        mapping(FROST.Identifier accused => ComplaintStatus) statuses;
+    }
+
     struct T {
         bytes32 root;
         mapping(address participant => FROST.Identifier) identifiers;
         mapping(FROST.Identifier => Secp256k1.Point) keys;
+        mapping(FROST.Identifier => ParticipantState) states;
     }
 
     error InvalidRootHash();
@@ -24,6 +38,11 @@ library FROSTParticipantMap {
     error AlreadyRegistered();
     error NotParticipating();
     error AlreadySet();
+    error ComplaintAlreadySubmitted();
+    error InvalidAccused();
+    error ParticipantAlreadyFinalized();
+    error ComplaintNotSubmitted();
+    error UnrespondedComplaintExists();
 
     /// @notice Initializes a merkle map with a root.
     function init(T storage self, bytes32 root) internal {
@@ -64,6 +83,36 @@ library FROSTParticipantMap {
         key.y = y.y;
     }
 
+    /// @notice Submits a complaint from a plaintiff against an accused.
+    function complain(T storage self, FROST.Identifier plaintiff, FROST.Identifier accused)
+        internal
+        returns (uint64 totalAccusations)
+    {
+        require(self.states[plaintiff].statuses[accused] == ComplaintStatus.NONE, ComplaintAlreadySubmitted());
+        require(!self.states[plaintiff].confirmed, ParticipantAlreadyFinalized());
+        require(isParticipating(self, accused), InvalidAccused());
+        require(!FROST.identifierEq(plaintiff, accused), InvalidAccused());
+        self.states[plaintiff].statuses[accused] = ComplaintStatus.SUBMITTED;
+        self.states[plaintiff].complaints++;
+        totalAccusations = ++self.states[accused].accusations;
+    }
+
+    /// @notice Responds to a complaint from a plaintiff against an accused.
+    function respond(T storage self, FROST.Identifier plaintiff, FROST.Identifier accused) internal {
+        require(self.states[plaintiff].statuses[accused] == ComplaintStatus.SUBMITTED, ComplaintNotSubmitted());
+        self.states[plaintiff].statuses[accused] = ComplaintStatus.RESPONDED;
+        self.states[plaintiff].complaints--;
+        self.states[accused].accusations--;
+    }
+
+    /// @notice Confirms the Key Gen process for a participant.
+    /// @dev After this, no more complaints can be submitted by this participant.
+    function confirm(T storage self, FROST.Identifier participant) internal {
+        require(self.states[participant].complaints == 0, UnrespondedComplaintExists());
+        require(!self.states[participant].confirmed, ParticipantAlreadyFinalized());
+        self.states[participant].confirmed = true;
+    }
+
     /// @notice Gets the participant's identifier.
     function identifierOf(T storage self, address participant) internal view returns (FROST.Identifier identifier) {
         identifier = self.identifiers[participant];
@@ -74,5 +123,11 @@ library FROSTParticipantMap {
     function getKey(T storage self, FROST.Identifier identifier) internal view returns (Secp256k1.Point memory y) {
         y = self.keys[identifier];
         require(y.x | y.y != 0, NotParticipating());
+    }
+
+    /// @notice Returns whether or not a participant is registered.
+    function isParticipating(T storage self, FROST.Identifier identifier) internal view returns (bool) {
+        Secp256k1.Point memory y = self.keys[identifier];
+        return y.x | y.y != 0;
     }
 }

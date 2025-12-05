@@ -1,20 +1,13 @@
+import { encodeAbiParameters, type Hex } from "viem";
 import type { KeyGenClient } from "../../consensus/keyGen/client.js";
-import type { ProtocolAction, ShieldnetProtocol } from "../../consensus/protocol/types.js";
+import type { ProtocolAction } from "../../consensus/protocol/types.js";
 import { keyGenSecretSharedEventSchema } from "../../consensus/schemas.js";
-import type { SigningClient } from "../../consensus/signing/client.js";
-import type { VerificationEngine } from "../../consensus/verify/engine.js";
-import type { EpochRolloverPacket } from "../../consensus/verify/rollover/schemas.js";
-import type { ConsensusDiff, ConsensusState, MachineConfig, MachineStates, StateDiff } from "../types.js";
+import type { MachineConfig, MachineStates, StateDiff } from "../types.js";
 
 export const handleKeyGenSecretShared = async (
 	machineConfig: MachineConfig,
-	protocol: ShieldnetProtocol,
-	verificationEngine: VerificationEngine,
 	keyGenClient: KeyGenClient,
-	signingClient: SigningClient,
-	consensusState: ConsensusState,
 	machineStates: MachineStates,
-	block: bigint,
 	eventArgs: unknown,
 	logger?: (msg: unknown) => void,
 ): Promise<StateDiff> => {
@@ -36,7 +29,7 @@ export const handleKeyGenSecretShared = async (
 	// TODO: handle bad shares -> Submit fraud proof
 	await keyGenClient.handleKeygenSecrets(event.gid, event.identifier, event.share.f);
 	if (!event.completed) {
-		logger?.(`Group ${event.gid} not completed yet`);
+		logger?.(`Group ${event.gid} secret shares not completed yet`);
 		return {
 			rollover: {
 				...machineStates.rollover,
@@ -45,67 +38,35 @@ export const handleKeyGenSecretShared = async (
 		};
 	}
 
-	// If a group is setup start preprocess (aka nonce commitment)
-	const consensus: ConsensusDiff = {
-		groupPendingNonces: [groupId, true],
-	};
-	const nonceTreeRoot = signingClient.generateNonceTree(groupId);
+	// All secret shares collected, now each participant must confirm
+	logger?.(`Group ${event.gid} secret shares completed, triggering confirmation`);
+
+	// Build the callback context for non-genesis group (to trigger epoch proposal after confirmation)
+	let callbackContext: Hex | undefined;
+	if (machineStates.rollover.nextEpoch !== 0n) {
+		// For non-genesis groups, we include callback context to trigger epoch proposal
+		const nextEpoch = machineStates.rollover.nextEpoch;
+		const rolloverBlock = nextEpoch * machineConfig.blocksPerEpoch;
+		// ABI encode: (uint64 proposedEpoch, uint64 rolloverBlock)
+		callbackContext = encodeAbiParameters([{ type: "uint64" }, { type: "uint64" }], [nextEpoch, rolloverBlock]);
+	}
+
 	const actions: ProtocolAction[] = [
 		{
-			id: "sign_register_nonce_commitments",
+			id: "key_gen_confirm",
 			groupId,
-			nonceCommitmentsHash: nonceTreeRoot,
+			callbackContext,
 		},
 	];
 
-	if (consensusState.genesisGroupId === groupId) {
-		logger?.("Genesis group ready!");
-		return { consensus, rollover: { id: "waiting_for_rollover" }, actions };
-	}
-	if (machineStates.rollover.lastParticipant === undefined) {
-		throw new Error("Invalid state");
-	}
-	const nextEpoch = machineStates.rollover.nextEpoch;
-	const groupKey = keyGenClient.groupPublicKey(groupId);
-	if (groupKey === undefined) {
-		throw new Error("Invalid state");
-	}
-	// The deadline is either the timeout or when the epoch should start
-	const packet: EpochRolloverPacket = {
-		type: "epoch_rollover_packet",
-		domain: {
-			chain: protocol.chainId(),
-			consensus: protocol.consensus(),
-		},
-		rollover: {
-			activeEpoch: consensusState.activeEpoch,
-			proposedEpoch: nextEpoch,
-			rolloverBlock: nextEpoch * machineConfig.blocksPerEpoch,
-			groupKeyX: groupKey.x,
-			groupKeyY: groupKey.y,
-		},
-	};
-	const message = await verificationEngine.verify(packet);
-	logger?.(`Verified epoch rollover message ${message}`);
 	return {
-		consensus,
 		rollover: {
-			id: "sign_rollover",
+			id: "collecting_confirmations",
 			groupId,
-			nextEpoch,
-			message,
-			responsible: machineStates.rollover.lastParticipant,
+			nextEpoch: machineStates.rollover.nextEpoch,
+			deadline: machineStates.rollover.deadline,
+			lastParticipant: event.identifier,
 		},
-		signing: [
-			message,
-			{
-				id: "waiting_for_request",
-				responsible: machineStates.rollover.lastParticipant,
-				packet,
-				signers: machineConfig.defaultParticipants.map((p) => p.id),
-				deadline: block + machineConfig.signingTimeout,
-			},
-		],
 		actions,
 	};
 };

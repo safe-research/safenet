@@ -416,6 +416,12 @@ contract FROSTCoordinatorTest is Test {
             coordinator.keyGenSecretShare(gid, share);
         }
 
+        // We now finalize the key generation.
+        for (uint256 identifier = 1; identifier <= COUNT; identifier++) {
+            vm.prank(participants.addr(identifier));
+            coordinator.keyGenConfirm(gid);
+        }
+
         // For debugging purposes, also provide the group private key to the
         // caller (even if this is typically not available).
         s[0] = a[0];

@@ -276,4 +276,8 @@ library FROST {
             mstore(input, len)
         }
     }
+
+    function identifierEq(Identifier a, Identifier b) internal pure returns (bool) {
+        return Identifier.unwrap(a) == Identifier.unwrap(b);
+    }
 }

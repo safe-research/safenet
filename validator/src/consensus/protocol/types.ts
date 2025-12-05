@@ -70,9 +70,15 @@ export type PublishSecretShares = {
 	groupId: GroupId;
 	verificationShare: FrostPoint;
 	shares: bigint[];
+};
+
+export type ConfirmKeyGen = {
+	id: "key_gen_confirm";
+	groupId: GroupId;
 	callbackContext?: Hex;
 };
-export type KeyGenAction = StartKeyGen | PublishSecretShares;
+
+export type KeyGenAction = StartKeyGen | PublishSecretShares | ConfirmKeyGen;
 
 export type AttestTransaction = {
 	id: "consensus_attest_transaction";

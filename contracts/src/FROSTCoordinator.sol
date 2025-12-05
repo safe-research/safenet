@@ -26,11 +26,21 @@ contract FROSTCoordinator {
         Secp256k1.Point key;
     }
 
+    enum GroupStatus {
+        UNINITIALIZED,
+        COMMITTING,
+        SHARING,
+        CONFIRMING,
+        COMPROMISED,
+        FINALIZED
+    }
+
     struct GroupParameters {
         uint64 count;
         uint64 threshold;
         uint64 pending;
         uint64 sequence;
+        GroupStatus status;
     }
 
     struct KeyGenCommitment {
@@ -72,6 +82,11 @@ contract FROSTCoordinator {
     event KeyGenSecretShared(
         FROSTGroupId.T indexed gid, FROST.Identifier identifier, KeyGenSecretShare share, bool completed
     );
+    event KeyGenConfirmed(FROSTGroupId.T indexed gid, FROST.Identifier identifier);
+    event KeyGenComplained(FROSTGroupId.T indexed gid, FROST.Identifier plaintiff, FROST.Identifier accused);
+    event KeyGenComplaintResponded(
+        FROSTGroupId.T indexed gid, FROST.Identifier plaintiff, FROST.Identifier accused, uint256 secretShare
+    );
     event Preprocess(FROSTGroupId.T indexed gid, FROST.Identifier identifier, uint64 chunk, bytes32 commitment);
     event Sign(
         address indexed initiator,
@@ -87,8 +102,7 @@ contract FROSTCoordinator {
     error InvalidGroupParameters();
     error InvalidGroupCommitment();
     error GroupNotInitialized();
-    error GroupAlreadyCommitted();
-    error GroupNotCommitted();
+    error GroupNotReady();
     error InvalidSecretShare();
     error InvalidMessage();
     error NotSigning();
@@ -109,14 +123,9 @@ contract FROSTCoordinator {
         gid = FROSTGroupId.create(participants, count, threshold, context);
         Group storage group = $groups[gid];
         group.participants.init(participants);
-        // We use the `sequence` as a marker value to indicate that we are
-        // committing vs secret sharing. That is, we have the following
-        // invariants that are always held:
-        // - `pending != 0 && sequence != 0`: One or more commits pending
-        // - `pending != 0 && sequence == 0`: One or more secret shares pending
-        // - `pending == 0`: All committed and shared
-        group.parameters =
-            GroupParameters({count: count, threshold: threshold, pending: count, sequence: type(uint64).max});
+        group.parameters = GroupParameters({
+            count: count, threshold: threshold, pending: count, sequence: 0, status: GroupStatus.COMMITTING
+        });
         emit KeyGen(gid, participants, count, threshold, context);
     }
 
@@ -130,10 +139,10 @@ contract FROSTCoordinator {
     ) public returns (bool committed) {
         Group storage group = $groups[gid];
         GroupParameters memory parameters = group.parameters;
-        require(parameters.sequence != 0, GroupAlreadyCommitted());
+        require(parameters.status == GroupStatus.COMMITTING, GroupNotReady());
         committed = --parameters.pending == 0;
         if (committed) {
-            parameters.sequence = 0;
+            parameters.status = GroupStatus.SHARING;
             parameters.pending = parameters.count;
         }
         require(commitment.c.length == parameters.threshold, InvalidGroupCommitment());
@@ -170,8 +179,12 @@ contract FROSTCoordinator {
     function keyGenSecretShare(FROSTGroupId.T gid, KeyGenSecretShare calldata share) public returns (bool completed) {
         Group storage group = $groups[gid];
         GroupParameters memory parameters = group.parameters;
-        require(parameters.sequence == 0, GroupNotCommitted());
+        require(parameters.status == GroupStatus.SHARING, GroupNotReady());
         completed = --parameters.pending == 0;
+        if (completed) {
+            parameters.pending = parameters.count;
+            parameters.status = GroupStatus.CONFIRMING;
+        }
         unchecked {
             require(share.f.length == parameters.count - 1, InvalidSecretShare());
         }
@@ -180,18 +193,56 @@ contract FROSTCoordinator {
         emit KeyGenSecretShared(gid, identifier, share, completed);
     }
 
-    /// @notice Submit participants secret shares. This method is the same as
-    ///         `keyGenSecretShare` with an additional callback once secret
-    ///         sharing is complete.
-    function keyGenSecretShareWithCallback(
-        FROSTGroupId.T gid,
-        KeyGenSecretShare calldata share,
-        Callback calldata callback
-    ) public returns (bool completed) {
-        completed = keyGenSecretShare(gid, share);
+    /// @notice Confirms the Key Generation ceremony for the sender if no unresolved complaints exist.
+    function keyGenConfirm(FROSTGroupId.T gid) public returns (bool completed) {
+        Group storage group = $groups[gid];
+        GroupParameters memory parameters = group.parameters;
+        require(parameters.status == GroupStatus.CONFIRMING, GroupNotReady());
+        FROST.Identifier identifier = group.participants.identifierOf(msg.sender);
+        group.participants.confirm(identifier);
+        completed = --parameters.pending == 0;
+        if (completed) {
+            parameters.status = GroupStatus.FINALIZED;
+        }
+        group.parameters = parameters;
+        emit KeyGenConfirmed(gid, identifier);
+    }
+
+    /// @notice Confirm the Key Generation ceremony for the sender if no unresolved complaints exist. This method is
+    ///         the same as `keyGenConfirm` with an additional callback once confirmed.
+    function keyGenConfirmWithCallback(FROSTGroupId.T gid, Callback calldata callback) public returns (bool completed) {
+        completed = keyGenConfirm(gid);
         if (completed) {
             callback.target.onKeyGenCompleted(gid, callback.context);
         }
+    }
+
+    /// @notice Submit a complaint from the sender against another participant
+    ///         during key generation.
+    function keyGenComplain(FROSTGroupId.T gid, FROST.Identifier accused) external {
+        Group storage group = $groups[gid];
+        require(
+            group.parameters.status == GroupStatus.SHARING || group.parameters.status == GroupStatus.CONFIRMING,
+            GroupNotReady()
+        );
+        FROST.Identifier plaintiff = group.participants.identifierOf(msg.sender);
+        if (group.participants.complain(plaintiff, accused) >= group.parameters.threshold) {
+            group.parameters.status = GroupStatus.COMPROMISED;
+        }
+        emit KeyGenComplained(gid, plaintiff, accused);
+    }
+
+    /// @notice Response to a complaint from a plaintiff against the sender by
+    ///         providing the secret share publicly.
+    function keyGenComplaintResponse(FROSTGroupId.T gid, FROST.Identifier plaintiff, uint256 secretShare) external {
+        Group storage group = $groups[gid];
+        require(
+            group.parameters.status == GroupStatus.SHARING || group.parameters.status == GroupStatus.CONFIRMING,
+            GroupNotReady()
+        );
+        FROST.Identifier accused = group.participants.identifierOf(msg.sender);
+        group.participants.respond(plaintiff, accused);
+        emit KeyGenComplaintResponded(gid, plaintiff, accused, secretShare);
     }
 
     /// @notice Submit a commitment to a chunk of nonces as part of the
@@ -212,7 +263,7 @@ contract FROSTCoordinator {
         Group storage group = $groups[gid];
         GroupParameters memory parameters = group.parameters;
         require(parameters.count > 0, GroupNotInitialized());
-        require(parameters.pending == 0, GroupNotCommitted());
+        require(parameters.status == GroupStatus.FINALIZED, GroupNotReady());
         uint64 sequence = parameters.sequence++;
         sid = FROSTSignatureId.create(gid, sequence);
         Signature storage signature = $signatures[sid];

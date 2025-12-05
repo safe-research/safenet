@@ -25,6 +25,13 @@ export type RolloverState = Readonly<
 			lastParticipant?: ParticipantId;
 	  }
 	| {
+			id: "collecting_confirmations";
+			groupId: GroupId;
+			nextEpoch: bigint;
+			deadline: bigint;
+			lastParticipant?: ParticipantId;
+	  }
+	| {
 			id: "sign_rollover";
 			groupId: GroupId;
 			nextEpoch: bigint;

@@ -2,6 +2,7 @@ import type { Address, Hex } from "viem";
 import { Queue } from "../../utils/queue.js";
 import type {
 	AttestTransaction,
+	ConfirmKeyGen,
 	ProtocolAction,
 	PublishSecretShares,
 	PublishSignatureShare,
@@ -74,6 +75,8 @@ export abstract class BaseProtocol implements ShieldnetProtocol {
 				return await this.startKeyGen(action);
 			case "key_gen_publish_secret_shares":
 				return await this.publishKeygenSecretShares(action);
+			case "key_gen_confirm":
+				return await this.confirmKeyGen(action);
 			case "sign_request":
 				return await this.requestSignature(action);
 			case "sign_register_nonce_commitments":
@@ -91,6 +94,8 @@ export abstract class BaseProtocol implements ShieldnetProtocol {
 	protected abstract startKeyGen(args: StartKeyGen): Promise<Hex>;
 
 	protected abstract publishKeygenSecretShares(args: PublishSecretShares): Promise<Hex>;
+
+	protected abstract confirmKeyGen(args: ConfirmKeyGen): Promise<Hex>;
 
 	protected abstract requestSignature(args: RequestSignature): Promise<Hex>;
 

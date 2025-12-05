@@ -3,12 +3,14 @@ import type { ProtocolAction, ShieldnetProtocol } from "../consensus/protocol/ty
 import type { SigningClient } from "../consensus/signing/client.js";
 import type { Participant } from "../consensus/storage/types.js";
 import type { VerificationEngine } from "../consensus/verify/engine.js";
+import { handleEpochProposed } from "../machine/consensus/epochProposed.js";
 import { handleEpochStaged } from "../machine/consensus/epochStaged.js";
 import { checkEpochRollover } from "../machine/consensus/rollover.js";
 import { handleTransactionAttested } from "../machine/consensus/transactionAttested.js";
 import { handleTransactionProposed } from "../machine/consensus/transactionProposed.js";
 import { checkKeyGenAbort } from "../machine/keygen/abort.js";
 import { handleKeyGenCommitted } from "../machine/keygen/committed.js";
+import { handleKeyGenConfirmed } from "../machine/keygen/confirmed.js";
 import { checkGenesis } from "../machine/keygen/genesis.js";
 import { handleKeyGenSecretShared } from "../machine/keygen/secretShares.js";
 import { checkKeyGenTimeouts } from "../machine/keygen/timeouts.js";
@@ -198,25 +200,23 @@ export class ShieldnetStateMachine {
 		this.#logger?.(`Handle event ${eventName}`);
 		switch (eventName) {
 			case "KeyGenCommitted": {
-				return await handleKeyGenCommitted(
-					this.#machineConfig,
-					this.#keyGenClient,
-					consensusState,
-					machineStates,
-					block,
-					eventArgs,
-				);
+				return await handleKeyGenCommitted(this.#machineConfig, this.#keyGenClient, machineStates, block, eventArgs);
 			}
 			case "KeyGenSecretShared": {
 				return await handleKeyGenSecretShared(
 					this.#machineConfig,
-					this.#protocol,
-					this.#verificationEngine,
+					this.#keyGenClient,
+					machineStates,
+					eventArgs,
+					this.#logger,
+				);
+			}
+			case "KeyGenConfirmed": {
+				return await handleKeyGenConfirmed(
 					this.#keyGenClient,
 					this.#signingClient,
 					consensusState,
 					machineStates,
-					block,
 					eventArgs,
 					this.#logger,
 				);
@@ -251,6 +251,17 @@ export class ShieldnetStateMachine {
 			}
 			case "SignCompleted": {
 				return await handleSigningCompleted(this.#machineConfig, consensusState, machineStates, block, eventArgs);
+			}
+			case "EpochProposed": {
+				return await handleEpochProposed(
+					this.#machineConfig,
+					this.#protocol,
+					this.#verificationEngine,
+					machineStates,
+					block,
+					eventArgs,
+					this.#logger,
+				);
 			}
 			case "EpochStaged": {
 				return await handleEpochStaged(machineStates, eventArgs);
