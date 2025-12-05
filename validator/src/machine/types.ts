@@ -75,19 +75,6 @@ export type SigningState = Readonly<
 		)
 >;
 
-export type StateTransition =
-	| {
-			type: "block";
-			block: bigint;
-	  }
-	| {
-			type: "event";
-			block: bigint;
-			index: number;
-			eventName: string;
-			eventArgs: unknown;
-	  };
-
 export type GroupInfo = {
 	groupId: GroupId;
 	participantId: ParticipantId;

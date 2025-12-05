@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import type { SigningClient } from "../../consensus/signing/client.js";
 import type { SafeTransactionPacket } from "../../consensus/verify/safeTx/schemas.js";
 import { toPoint } from "../../frost/math.js";
+import type { NonceCommitmentsEvent } from "../transitions/types.js";
 import type { ConsensusState, MachineConfig, MachineStates, SigningState } from "../types.js";
 import { handleRevealedNonces } from "./nonces.js";
 
@@ -57,44 +58,33 @@ const MACHINE_CONFIG: MachineConfig = {
 	blocksPerEpoch: 8n,
 };
 
-const EVENT_ARGS = {
+const EVENT: NonceCommitmentsEvent = {
+	id: "event_nonce_commitments",
+	block: 2n,
+	index: 0,
 	sid: "0x000000000000000000000000000000000000000000000000000000005af35af3",
 	identifier: 1n,
 	nonces: {
-		d: {
+		d: toPoint({
 			x: 8157951670743782207572742157759285246997125817591478561509454646417563755134n,
 			y: 56888799465634869784517292721691123160415451366201038719887189136540242661500n,
-		},
-		e: {
+		}),
+		e: toPoint({
 			x: 73844941487532555987364396775795076447946974313865618280135872376303125438365n,
 			y: 29462187596282402403443212507099371496473451788807502182979305411073244917417n,
-		},
+		}),
 	},
 };
 
 // --- Tests ---
 describe("nonces revealed", () => {
-	it("should fail on invalid event arguments", async () => {
-		const signingClient = {} as unknown as SigningClient;
-		await expect(
-			handleRevealedNonces(MACHINE_CONFIG, signingClient, CONSENSUS_STATE, MACHINE_STATES, 2n, {}),
-		).rejects.toThrow();
-	});
-
 	it("should not handle completed for unknown message", async () => {
 		const signingClient = {} as unknown as SigningClient;
 		const machineStates: MachineStates = {
 			...MACHINE_STATES,
 			signing: {},
 		};
-		const diff = await handleRevealedNonces(
-			MACHINE_CONFIG,
-			signingClient,
-			CONSENSUS_STATE,
-			machineStates,
-			2n,
-			EVENT_ARGS,
-		);
+		const diff = await handleRevealedNonces(MACHINE_CONFIG, signingClient, CONSENSUS_STATE, machineStates, EVENT);
 
 		expect(diff).toStrictEqual({});
 	});
@@ -111,14 +101,7 @@ describe("nonces revealed", () => {
 				},
 			},
 		};
-		const diff = await handleRevealedNonces(
-			MACHINE_CONFIG,
-			signingClient,
-			CONSENSUS_STATE,
-			machineStates,
-			2n,
-			EVENT_ARGS,
-		);
+		const diff = await handleRevealedNonces(MACHINE_CONFIG, signingClient, CONSENSUS_STATE, machineStates, EVENT);
 
 		expect(diff).toStrictEqual({});
 	});
@@ -129,21 +112,14 @@ describe("nonces revealed", () => {
 		const signingClient = {
 			handleNonceCommitments,
 		} as unknown as SigningClient;
-		const diff = await handleRevealedNonces(
-			MACHINE_CONFIG,
-			signingClient,
-			CONSENSUS_STATE,
-			MACHINE_STATES,
-			2n,
-			EVENT_ARGS,
-		);
+		const diff = await handleRevealedNonces(MACHINE_CONFIG, signingClient, CONSENSUS_STATE, MACHINE_STATES, EVENT);
 
 		expect(handleNonceCommitments).toBeCalledWith(
 			"0x000000000000000000000000000000000000000000000000000000005af35af3",
 			1n,
 			{
-				hidingNonceCommitment: toPoint(EVENT_ARGS.nonces.d),
-				bindingNonceCommitment: toPoint(EVENT_ARGS.nonces.e),
+				hidingNonceCommitment: EVENT.nonces.d,
+				bindingNonceCommitment: EVENT.nonces.e,
 			},
 		);
 		expect(handleNonceCommitments).toBeCalledTimes(1);
@@ -177,21 +153,14 @@ describe("nonces revealed", () => {
 			handleNonceCommitments,
 			createSignatureShare,
 		} as unknown as SigningClient;
-		const diff = await handleRevealedNonces(
-			MACHINE_CONFIG,
-			signingClient,
-			CONSENSUS_STATE,
-			MACHINE_STATES,
-			2n,
-			EVENT_ARGS,
-		);
+		const diff = await handleRevealedNonces(MACHINE_CONFIG, signingClient, CONSENSUS_STATE, MACHINE_STATES, EVENT);
 
 		expect(handleNonceCommitments).toBeCalledWith(
 			"0x000000000000000000000000000000000000000000000000000000005af35af3",
 			1n,
 			{
-				hidingNonceCommitment: toPoint(EVENT_ARGS.nonces.d),
-				bindingNonceCommitment: toPoint(EVENT_ARGS.nonces.e),
+				hidingNonceCommitment: EVENT.nonces.d,
+				bindingNonceCommitment: EVENT.nonces.e,
 			},
 		);
 		expect(handleNonceCommitments).toBeCalledTimes(1);
@@ -277,21 +246,14 @@ describe("nonces revealed", () => {
 			handleNonceCommitments,
 			createSignatureShare,
 		} as unknown as SigningClient;
-		const diff = await handleRevealedNonces(
-			MACHINE_CONFIG,
-			signingClient,
-			CONSENSUS_STATE,
-			machineStates,
-			2n,
-			EVENT_ARGS,
-		);
+		const diff = await handleRevealedNonces(MACHINE_CONFIG, signingClient, CONSENSUS_STATE, machineStates, EVENT);
 
 		expect(handleNonceCommitments).toBeCalledWith(
 			"0x000000000000000000000000000000000000000000000000000000005af35af3",
 			1n,
 			{
-				hidingNonceCommitment: toPoint(EVENT_ARGS.nonces.d),
-				bindingNonceCommitment: toPoint(EVENT_ARGS.nonces.e),
+				hidingNonceCommitment: EVENT.nonces.d,
+				bindingNonceCommitment: EVENT.nonces.e,
 			},
 		);
 		expect(handleNonceCommitments).toBeCalledTimes(1);
@@ -351,21 +313,14 @@ describe("nonces revealed", () => {
 			handleNonceCommitments,
 			createSignatureShare,
 		} as unknown as SigningClient;
-		const diff = await handleRevealedNonces(
-			MACHINE_CONFIG,
-			signingClient,
-			CONSENSUS_STATE,
-			machineStates,
-			2n,
-			EVENT_ARGS,
-		);
+		const diff = await handleRevealedNonces(MACHINE_CONFIG, signingClient, CONSENSUS_STATE, machineStates, EVENT);
 
 		expect(handleNonceCommitments).toBeCalledWith(
 			"0x000000000000000000000000000000000000000000000000000000005af35af3",
 			1n,
 			{
-				hidingNonceCommitment: toPoint(EVENT_ARGS.nonces.d),
-				bindingNonceCommitment: toPoint(EVENT_ARGS.nonces.e),
+				hidingNonceCommitment: EVENT.nonces.d,
+				bindingNonceCommitment: EVENT.nonces.e,
 			},
 		);
 		expect(handleNonceCommitments).toBeCalledTimes(1);

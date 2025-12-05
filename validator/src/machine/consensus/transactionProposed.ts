@@ -1,7 +1,7 @@
 import type { ShieldnetProtocol } from "../../consensus/protocol/types.js";
-import { transactionProposedEventSchema } from "../../consensus/schemas.js";
 import type { VerificationEngine } from "../../consensus/verify/engine.js";
 import type { SafeTransactionPacket } from "../../consensus/verify/safeTx/schemas.js";
+import type { TransactionProposedEvent } from "../transitions/types.js";
 import type { ConsensusState, MachineConfig, StateDiff } from "../types.js";
 
 export const handleTransactionProposed = async (
@@ -9,12 +9,9 @@ export const handleTransactionProposed = async (
 	protocol: ShieldnetProtocol,
 	verificationEngine: VerificationEngine,
 	consensusState: ConsensusState,
-	block: bigint,
-	eventArgs: unknown,
+	event: TransactionProposedEvent,
 	logger?: (msg: unknown) => void,
 ): Promise<StateDiff> => {
-	// Parse event from raw data
-	const event = transactionProposedEventSchema.parse(eventArgs);
 	const group = consensusState.epochGroups[event.epoch.toString()];
 	if (group === undefined) {
 		logger?.(`Unknown epoch ${event.epoch}!`);
@@ -42,7 +39,7 @@ export const handleTransactionProposed = async (
 				responsible: undefined,
 				packet,
 				signers: machineConfig.defaultParticipants.map((p) => p.id),
-				deadline: block + machineConfig.signingTimeout,
+				deadline: event.block + machineConfig.signingTimeout,
 			},
 		],
 	};

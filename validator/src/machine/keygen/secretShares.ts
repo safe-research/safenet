@@ -1,14 +1,14 @@
 import { encodeAbiParameters, type Hex } from "viem";
 import type { KeyGenClient } from "../../consensus/keyGen/client.js";
 import type { ProtocolAction } from "../../consensus/protocol/types.js";
-import { keyGenSecretSharedEventSchema } from "../../consensus/schemas.js";
+import type { KeyGenSecretSharedEvent } from "../transitions/types.js";
 import type { MachineConfig, MachineStates, StateDiff } from "../types.js";
 
 export const handleKeyGenSecretShared = async (
 	machineConfig: MachineConfig,
 	keyGenClient: KeyGenClient,
 	machineStates: MachineStates,
-	eventArgs: unknown,
+	event: KeyGenSecretSharedEvent,
 	logger?: (msg: unknown) => void,
 ): Promise<StateDiff> => {
 	// A participant has submitted secret share for new group
@@ -17,8 +17,6 @@ export const handleKeyGenSecretShared = async (
 		logger?.(`Unexpected state ${machineStates.rollover.id}`);
 		return {};
 	}
-	// Parse event from raw data
-	const event = keyGenSecretSharedEventSchema.parse(eventArgs);
 	// Verify that the group corresponds to the next epoch
 	if (machineStates.rollover.groupId !== event.gid) {
 		logger?.(`Unexpected groupId ${event.gid}`);

@@ -22,8 +22,9 @@ import { handleSign } from "../machine/signing/sign.js";
 import { checkSigningTimeouts } from "../machine/signing/timeouts.js";
 import { TransitionState } from "../machine/state/local.js";
 import type { StateStorage } from "../machine/storage/types.js";
-import type { ConsensusState, MachineConfig, MachineStates, StateDiff, StateTransition } from "../machine/types.js";
-import { Queue } from "../utils/queue.js";
+import type { EventTransition, StateTransition } from "../machine/transitions/types.js";
+import type { ConsensusState, MachineConfig, MachineStates, StateDiff } from "../machine/types.js";
+import { InMemoryQueue, type Queue } from "../utils/queue.js";
 
 const BLOCKS_PER_EPOCH = (24n * 60n * 60n) / 5n; // ~ blocks for 1 day
 const DEFAULT_TIMEOUT = (10n * 60n) / 5n; // ~ blocks for 10 minutes
@@ -41,7 +42,7 @@ export class ShieldnetStateMachine {
 	// Event queue state
 	#lastProcessedBlock = 0n;
 	#lastProcessedIndex = 0;
-	#transitionQueue = new Queue<StateTransition>();
+	#transitionQueue: Queue<StateTransition> = new InMemoryQueue<StateTransition>();
 	#currentTransition?: StateTransition;
 
 	constructor({
@@ -82,7 +83,7 @@ export class ShieldnetStateMachine {
 	}
 
 	transition(transition: StateTransition) {
-		this.#logger?.(`Enqueue ${transition.type} at ${transition.block}`);
+		this.#logger?.(`Enqueue ${transition.id} at ${transition.block}`);
 		this.#transitionQueue.push(transition);
 		this.checkNextTransition();
 	}
@@ -90,7 +91,7 @@ export class ShieldnetStateMachine {
 	private checkNextTransition() {
 		// Still processing
 		if (this.#currentTransition !== undefined) return;
-		const transition = this.#transitionQueue.pop();
+		const transition = this.#transitionQueue.peek();
 		// Nothing queued
 		if (transition === undefined) return;
 		this.#currentTransition = transition;
@@ -106,17 +107,18 @@ export class ShieldnetStateMachine {
 			})
 			.catch(this.#logger)
 			.finally(() => {
+				this.#transitionQueue.pop();
 				this.#currentTransition = undefined;
 				this.checkNextTransition();
 			});
 	}
 
 	private async performTransition(transition: StateTransition): Promise<StateDiff[]> {
-		switch (transition.type) {
-			case "block":
+		switch (transition.id) {
+			case "block_new":
 				return this.progressToBlock(transition.block);
-			case "event":
-				return this.processBlockEvent(transition.block, transition.index, transition.eventName, transition.eventArgs);
+			default:
+				return this.processEventTransition(transition);
 		}
 	}
 
@@ -160,12 +162,8 @@ export class ShieldnetStateMachine {
 		return state.diffs;
 	}
 
-	private async processBlockEvent(
-		block: bigint,
-		index: number,
-		eventName: string,
-		eventArgs: unknown,
-	): Promise<StateDiff[]> {
+	private async processEventTransition(transition: EventTransition): Promise<StateDiff[]> {
+		const { block, index } = transition;
 		if (block < this.#lastProcessedBlock || (block === this.#lastProcessedBlock && index <= this.#lastProcessedIndex)) {
 			throw new Error(
 				`Invalid block number (${block}) and index ${index} (currently at block ${this.#lastProcessedBlock} and index ${this.#lastProcessedIndex})`,
@@ -174,7 +172,7 @@ export class ShieldnetStateMachine {
 		this.#lastProcessedIndex = index;
 		const state = new TransitionState(this.#storage.machineStates(), this.#storage.consensusState());
 		this.progressToBlock(block, state);
-		state.apply(await this.handleEvent(block, eventName, eventArgs, state.consensus, state.machines));
+		state.apply(await this.handleEvent(block, transition, state.consensus, state.machines));
 		// Check after every event if we could do a epoch rollover
 		state.apply(
 			checkEpochRollover(
@@ -191,98 +189,93 @@ export class ShieldnetStateMachine {
 	}
 
 	private async handleEvent(
-		block: bigint,
-		eventName: string,
-		eventArgs: unknown,
+		_block: bigint,
+		transition: EventTransition,
 		consensusState: ConsensusState,
 		machineStates: MachineStates,
 	): Promise<StateDiff> {
-		this.#logger?.(`Handle event ${eventName}`);
-		switch (eventName) {
-			case "KeyGenCommitted": {
-				return await handleKeyGenCommitted(this.#machineConfig, this.#keyGenClient, machineStates, block, eventArgs);
+		this.#logger?.(`Handle event ${transition.id}`);
+		switch (transition.id) {
+			case "event_key_gen_committed": {
+				return await handleKeyGenCommitted(this.#machineConfig, this.#keyGenClient, machineStates, transition);
 			}
-			case "KeyGenSecretShared": {
+			case "event_key_gen_secret_shared": {
 				return await handleKeyGenSecretShared(
 					this.#machineConfig,
 					this.#keyGenClient,
 					machineStates,
-					eventArgs,
+					transition,
 					this.#logger,
 				);
 			}
-			case "KeyGenConfirmed": {
+			case "event_key_gen_confirmed": {
 				return await handleKeyGenConfirmed(
 					this.#keyGenClient,
 					this.#signingClient,
 					consensusState,
 					machineStates,
-					eventArgs,
+					transition,
 					this.#logger,
 				);
 			}
-			case "Preprocess": {
-				return await handlePreprocess(this.#signingClient, consensusState, eventArgs, this.#logger);
+			// aka Preprocess
+			case "event_nonce_commitments_hash": {
+				return await handlePreprocess(this.#signingClient, consensusState, transition, this.#logger);
 			}
-			case "Sign": {
+			case "event_sign_request": {
 				return await handleSign(
 					this.#machineConfig,
 					this.#verificationEngine,
 					this.#signingClient,
 					consensusState,
 					machineStates,
-					block,
-					eventArgs,
+					transition,
 					this.#logger,
 				);
 			}
-			case "SignRevealedNonces": {
+			case "event_nonce_commitments": {
 				return await handleRevealedNonces(
 					this.#machineConfig,
 					this.#signingClient,
 					consensusState,
 					machineStates,
-					block,
-					eventArgs,
+					transition,
 				);
 			}
-			case "SignShared": {
-				return await handleSigningShares(consensusState, machineStates, eventArgs);
+			case "event_signature_share": {
+				return await handleSigningShares(consensusState, machineStates, transition);
 			}
-			case "SignCompleted": {
-				return await handleSigningCompleted(this.#machineConfig, consensusState, machineStates, block, eventArgs);
+			case "event_signed": {
+				return await handleSigningCompleted(this.#machineConfig, consensusState, machineStates, transition);
 			}
-			case "EpochProposed": {
+			case "event_epoch_proposed": {
 				return await handleEpochProposed(
 					this.#machineConfig,
 					this.#protocol,
 					this.#verificationEngine,
 					machineStates,
-					block,
-					eventArgs,
+					transition,
 					this.#logger,
 				);
 			}
-			case "EpochStaged": {
-				return await handleEpochStaged(machineStates, eventArgs);
+			case "event_epoch_staged": {
+				return await handleEpochStaged(machineStates, transition);
 			}
-			case "TransactionProposed": {
+			case "event_transaction_proposed": {
 				return await handleTransactionProposed(
 					this.#machineConfig,
 					this.#protocol,
 					this.#verificationEngine,
 					consensusState,
-					block,
-					eventArgs,
+					transition,
 					this.#logger,
 				);
 			}
-			case "TransactionAttested": {
-				return await handleTransactionAttested(machineStates, eventArgs);
+			case "event_transaction_attested": {
+				return await handleTransactionAttested(machineStates, transition);
 			}
-			default: {
+			case "event_key_gen":
 				return {};
-			}
 		}
 	}
 }

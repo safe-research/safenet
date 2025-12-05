@@ -1,0 +1,229 @@
+import { z } from "zod";
+import { toPoint } from "../../frost/math.js";
+import { checkedAddressSchema, hexDataSchema } from "../../types/schemas.js";
+
+const eventBigIntSchema = z.coerce.bigint().nonnegative();
+
+export const frostPointSchema = z
+	.object({
+		x: eventBigIntSchema,
+		y: eventBigIntSchema,
+	})
+	.refine((point) => point.x !== 0n || point.y !== 0n)
+	.transform((p) => toPoint(p));
+
+export const frostCommitmentSchema = z.object({
+	c: z.array(frostPointSchema),
+	r: frostPointSchema,
+	mu: eventBigIntSchema,
+});
+
+export const frostShareSchema = z.object({
+	y: frostPointSchema,
+	f: z.array(eventBigIntSchema),
+});
+
+export const keyGenEventSchema = z.object({
+	gid: hexDataSchema,
+	participants: hexDataSchema,
+	count: eventBigIntSchema,
+	threshold: eventBigIntSchema,
+	context: hexDataSchema,
+});
+
+export const keyGenCommittedEventSchema = z.object({
+	gid: hexDataSchema,
+	identifier: eventBigIntSchema,
+	commitment: frostCommitmentSchema,
+	committed: z.boolean(),
+});
+
+export const keyGenSecretSharedEventSchema = z.object({
+	gid: hexDataSchema,
+	identifier: eventBigIntSchema,
+	share: frostShareSchema,
+	completed: z.boolean(),
+});
+
+export const keyGenConfirmedEventSchema = z.object({
+	gid: hexDataSchema,
+	identifier: eventBigIntSchema,
+});
+
+export const nonceCommitmentsHashEventSchema = z.object({
+	gid: hexDataSchema,
+	identifier: eventBigIntSchema,
+	chunk: eventBigIntSchema,
+	commitment: hexDataSchema,
+});
+
+export const signRequestEventSchema = z.object({
+	initiator: checkedAddressSchema,
+	gid: hexDataSchema,
+	message: hexDataSchema,
+	sid: hexDataSchema,
+	sequence: eventBigIntSchema,
+});
+
+export const nonceCommitmentsSchema = z.object({
+	d: frostPointSchema,
+	e: frostPointSchema,
+});
+
+export const nonceCommitmentsEventSchema = z.object({
+	sid: hexDataSchema,
+	identifier: eventBigIntSchema,
+	nonces: nonceCommitmentsSchema,
+});
+
+export const signatureShareEventSchema = z.object({
+	sid: hexDataSchema,
+	identifier: eventBigIntSchema,
+	z: eventBigIntSchema,
+});
+
+export const signatureSchema = z.object({
+	z: eventBigIntSchema,
+	r: frostPointSchema,
+});
+
+export const signedEventSchema = z.object({
+	sid: hexDataSchema,
+	signature: signatureSchema,
+});
+
+export const epochProposedEventSchema = z.object({
+	activeEpoch: eventBigIntSchema,
+	proposedEpoch: eventBigIntSchema,
+	rolloverBlock: eventBigIntSchema,
+	groupKey: frostPointSchema,
+});
+
+export const epochStagedEventSchema = z.object({
+	activeEpoch: eventBigIntSchema,
+	proposedEpoch: eventBigIntSchema,
+	rolloverBlock: eventBigIntSchema,
+	groupKey: frostPointSchema,
+});
+
+const transactionSchema = z.object({
+	to: checkedAddressSchema,
+	value: eventBigIntSchema,
+	data: hexDataSchema,
+	operation: z.union([z.literal(0), z.literal(1)]),
+	nonce: eventBigIntSchema,
+	chainId: eventBigIntSchema,
+	account: checkedAddressSchema,
+});
+
+export const transactionProposedEventSchema = z.object({
+	message: hexDataSchema,
+	transactionHash: hexDataSchema,
+	epoch: eventBigIntSchema,
+	transaction: transactionSchema,
+});
+
+export const transactionAttestedEventSchema = z.object({
+	message: hexDataSchema,
+});
+
+const baseEventTransitionParamsSchema = z.object({
+	block: eventBigIntSchema,
+	index: z.number(),
+});
+
+const keyGenEventTransitionSchema = baseEventTransitionParamsSchema.extend(keyGenEventSchema.shape).extend({
+	id: z.literal("event_key_gen"),
+});
+
+const keyGenCommittedEventTransitionSchema = baseEventTransitionParamsSchema
+	.extend(keyGenCommittedEventSchema.shape)
+	.extend({
+		id: z.literal("event_key_gen_committed"),
+	});
+
+const keyGenSecretSharedEventTransitionSchema = baseEventTransitionParamsSchema
+	.extend(keyGenSecretSharedEventSchema.shape)
+	.extend({
+		id: z.literal("event_key_gen_secret_shared"),
+	});
+
+const keyGenConfirmedEventTransitionSchema = baseEventTransitionParamsSchema
+	.extend(keyGenConfirmedEventSchema.shape)
+	.extend({
+		id: z.literal("event_key_gen_confirmed"),
+	});
+
+const nonceCommitmentsHashEventTransitionSchema = baseEventTransitionParamsSchema
+	.extend(nonceCommitmentsHashEventSchema.shape)
+	.extend({
+		id: z.literal("event_nonce_commitments_hash"),
+	});
+
+const signRequestEventTransitionSchema = baseEventTransitionParamsSchema.extend(signRequestEventSchema.shape).extend({
+	id: z.literal("event_sign_request"),
+});
+
+const nonceCommitmentsEventTransitionSchema = baseEventTransitionParamsSchema
+	.extend(nonceCommitmentsEventSchema.shape)
+	.extend({
+		id: z.literal("event_nonce_commitments"),
+	});
+
+const signatureShareEventTransitionSchema = baseEventTransitionParamsSchema
+	.extend(signatureShareEventSchema.shape)
+	.extend({
+		id: z.literal("event_signature_share"),
+	});
+
+const signedEventTransitionSchema = baseEventTransitionParamsSchema.extend(signedEventSchema.shape).extend({
+	id: z.literal("event_signed"),
+});
+
+const epochProposedEventTransitionSchema = baseEventTransitionParamsSchema
+	.extend(epochProposedEventSchema.shape)
+	.extend({
+		id: z.literal("event_epoch_proposed"),
+	});
+
+const epochStagedEventTransitionSchema = baseEventTransitionParamsSchema.extend(epochStagedEventSchema.shape).extend({
+	id: z.literal("event_epoch_staged"),
+});
+
+const transactionProposedEventTransitionSchema = baseEventTransitionParamsSchema
+	.extend(transactionProposedEventSchema.shape)
+	.extend({
+		id: z.literal("event_transaction_proposed"),
+	});
+
+const transactionAttestedEventTransitionSchema = baseEventTransitionParamsSchema
+	.extend(transactionAttestedEventSchema.shape)
+	.extend({
+		id: z.literal("event_transaction_attested"),
+	});
+
+const newBlockTransition = z.object({
+	id: z.literal("block_new"),
+	block: eventBigIntSchema,
+});
+
+export const stateTransitionSchema = z.discriminatedUnion("id", [
+	// KeyGen Events
+	keyGenEventTransitionSchema,
+	keyGenCommittedEventTransitionSchema,
+	keyGenSecretSharedEventTransitionSchema,
+	keyGenConfirmedEventTransitionSchema,
+	nonceCommitmentsHashEventTransitionSchema,
+	// Signing Events
+	signRequestEventTransitionSchema,
+	nonceCommitmentsEventTransitionSchema,
+	signatureShareEventTransitionSchema,
+	signedEventTransitionSchema,
+	// Consensus Events
+	epochProposedEventTransitionSchema,
+	epochStagedEventTransitionSchema,
+	transactionProposedEventTransitionSchema,
+	transactionAttestedEventTransitionSchema,
+	// Consensus Clock
+	newBlockTransition,
+]);

@@ -1,6 +1,6 @@
 import { generatePrivateKey } from "viem/accounts";
 import { describe, expect, it } from "vitest";
-import { frostPointSchema } from "../consensus/schemas.js";
+import { frostPointSchema } from "../machine/transitions/schemas.js";
 import { checkedAddressSchema, validatorConfigSchema } from "./schemas.js";
 
 // --- Test Data ---
@@ -173,21 +173,21 @@ describe("validatorConfigSchema", () => {
 });
 
 describe("frostPointSchema", () => {
-	it("should allow 0 points", () => {
-		const validPoint = {
+	it("should not allow 0 points", () => {
+		const invalidPoint = {
 			x: 0n,
 			y: 0n,
 		};
 
-		const result = frostPointSchema.safeParse(validPoint);
+		const result = frostPointSchema.safeParse(invalidPoint);
 
-		expect(result.success).toBeTruthy();
+		expect(result.success).toBeFalsy();
 	});
 
 	it("should allow positive values", () => {
 		const validPoint = {
-			x: 1n,
-			y: 1n,
+			x: 8157951670743782207572742157759285246997125817591478561509454646417563755134n,
+			y: 56888799465634869784517292721691123160415451366201038719887189136540242661500n,
 		};
 
 		const result = frostPointSchema.safeParse(validPoint);
@@ -196,43 +196,43 @@ describe("frostPointSchema", () => {
 	});
 
 	it("should not allow negative values for x", () => {
-		const validPoint = {
-			x: -1n,
-			y: 0n,
+		const invalidPoint = {
+			x: -8157951670743782207572742157759285246997125817591478561509454646417563755134n,
+			y: 56888799465634869784517292721691123160415451366201038719887189136540242661500n,
 		};
 
-		const result = frostPointSchema.safeParse(validPoint);
+		const result = frostPointSchema.safeParse(invalidPoint);
 
 		expect(result.success).toBeFalsy();
 	});
 
 	it("should not allow absence of x", () => {
-		const validPoint = {
+		const invalidPoint = {
 			y: 0n,
 		};
 
-		const result = frostPointSchema.safeParse(validPoint);
+		const result = frostPointSchema.safeParse(invalidPoint);
 
 		expect(result.success).toBeFalsy();
 	});
 
 	it("should not allow negative values for y", () => {
-		const validPoint = {
-			x: 0n,
-			y: -1n,
+		const invalidPoint = {
+			x: 8157951670743782207572742157759285246997125817591478561509454646417563755134n,
+			y: -56888799465634869784517292721691123160415451366201038719887189136540242661500n,
 		};
 
-		const result = frostPointSchema.safeParse(validPoint);
+		const result = frostPointSchema.safeParse(invalidPoint);
 
 		expect(result.success).toBeFalsy();
 	});
 
 	it("should not allow absence of y", () => {
-		const validPoint = {
+		const invalidPoint = {
 			x: 0n,
 		};
 
-		const result = frostPointSchema.safeParse(validPoint);
+		const result = frostPointSchema.safeParse(invalidPoint);
 
 		expect(result.success).toBeFalsy();
 	});

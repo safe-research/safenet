@@ -1,7 +1,7 @@
 import type { KeyGenClient } from "../../consensus/keyGen/client.js";
 import type { ProtocolAction } from "../../consensus/protocol/types.js";
-import { keyGenConfirmedEventSchema } from "../../consensus/schemas.js";
 import type { SigningClient } from "../../consensus/signing/client.js";
+import type { KeyGenConfirmedEvent } from "../transitions/types.js";
 import type { ConsensusDiff, ConsensusState, MachineStates, StateDiff } from "../types.js";
 
 export const handleKeyGenConfirmed = async (
@@ -9,7 +9,7 @@ export const handleKeyGenConfirmed = async (
 	signingClient: SigningClient,
 	consensusState: ConsensusState,
 	machineStates: MachineStates,
-	eventArgs: unknown,
+	event: KeyGenConfirmedEvent,
 	logger?: (msg: unknown) => void,
 ): Promise<StateDiff> => {
 	// A participant has confirmed their participation in the key gen ceremony
@@ -18,8 +18,6 @@ export const handleKeyGenConfirmed = async (
 		logger?.(`Unexpected state ${machineStates.rollover.id}`);
 		return {};
 	}
-	// Parse event from raw data
-	const event = keyGenConfirmedEventSchema.parse(eventArgs);
 	// Verify that the group corresponds to the expected group
 	if (machineStates.rollover.groupId !== event.gid) {
 		logger?.(`Unexpected groupId ${event.gid}`);

@@ -1,14 +1,11 @@
-import { signatureShareEventSchema } from "../../consensus/schemas.js";
+import type { SignatureShareEvent } from "../transitions/types.js";
 import type { ConsensusState, MachineStates, StateDiff } from "../types.js";
 
 export const handleSigningShares = async (
 	consensusState: ConsensusState,
 	machineStates: MachineStates,
-	eventArgs: unknown,
+	event: SignatureShareEvent,
 ): Promise<StateDiff> => {
-	// A participant has submitted a singature share for a signature id
-	// Parse event from raw data
-	const event = signatureShareEventSchema.parse(eventArgs);
 	// Check that this is a request related to a message that is handled"
 	const message = consensusState.signatureIdToMessage[event.sid];
 	if (message === undefined) return {};

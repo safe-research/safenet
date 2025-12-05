@@ -1,7 +1,7 @@
 import type { ShieldnetProtocol } from "../../consensus/protocol/types.js";
-import { epochProposedEventSchema } from "../../consensus/schemas.js";
 import type { VerificationEngine } from "../../consensus/verify/engine.js";
 import type { EpochRolloverPacket } from "../../consensus/verify/rollover/schemas.js";
+import type { EpochProposedEvent } from "../transitions/types.js";
 import type { MachineConfig, MachineStates, StateDiff } from "../types.js";
 
 export const handleEpochProposed = async (
@@ -9,13 +9,9 @@ export const handleEpochProposed = async (
 	protocol: ShieldnetProtocol,
 	verificationEngine: VerificationEngine,
 	machineStates: MachineStates,
-	block: bigint,
-	eventArgs: unknown,
+	event: EpochProposedEvent,
 	logger?: (msg: unknown) => void,
 ): Promise<StateDiff> => {
-	// An epoch rollover was proposed, triggered by onKeyGenCompleted callback
-	const event = epochProposedEventSchema.parse(eventArgs);
-
 	logger?.(`EpochProposed: epoch ${event.proposedEpoch} with rollover block ${event.rolloverBlock}`);
 
 	// We should be in sign_rollover state after our confirmation
@@ -60,7 +56,7 @@ export const handleEpochProposed = async (
 				responsible: machineStates.rollover.responsible,
 				packet,
 				signers: machineConfig.defaultParticipants.map((p) => p.id),
-				deadline: block + machineConfig.signingTimeout,
+				deadline: event.block + machineConfig.signingTimeout,
 			},
 		],
 	};

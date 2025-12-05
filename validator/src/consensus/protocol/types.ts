@@ -98,3 +98,7 @@ export type StageEpoch = {
 export type ConsensusAction = AttestTransaction | StageEpoch;
 
 export type ProtocolAction = KeyGenAction | SigningAction | ConsensusAction;
+
+export type ActionWithRetry = ProtocolAction & {
+	retryCount: number;
+};

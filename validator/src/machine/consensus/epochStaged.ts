@@ -1,9 +1,7 @@
-import { epochStagedEventSchema } from "../../consensus/schemas.js";
+import type { EpochStagedEvent } from "../transitions/types.js";
 import type { MachineStates, StateDiff } from "../types.js";
 
-export const handleEpochStaged = async (machineStates: MachineStates, eventArgs: unknown): Promise<StateDiff> => {
-	// An epoch was staged
-	const event = epochStagedEventSchema.parse(eventArgs);
+export const handleEpochStaged = async (machineStates: MachineStates, event: EpochStagedEvent): Promise<StateDiff> => {
 	// Ignore if not in "request_rollover_data" state
 	if (machineStates.rollover.id !== "sign_rollover") {
 		throw new Error(`Not expecting epoch staging during ${machineStates.rollover.id}!`);

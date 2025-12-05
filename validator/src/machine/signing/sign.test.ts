@@ -2,6 +2,7 @@ import { zeroHash } from "viem";
 import { describe, expect, it, vi } from "vitest";
 import type { SigningClient } from "../../consensus/signing/client.js";
 import type { VerificationEngine } from "../../consensus/verify/engine.js";
+import type { SignRequestEvent } from "../transitions/types.js";
 import type { ConsensusState, MachineConfig, MachineStates, SigningState } from "../types.js";
 import { handleSign } from "./sign.js";
 
@@ -53,7 +54,10 @@ const MACHINE_CONFIG: MachineConfig = {
 	blocksPerEpoch: 0n,
 };
 
-const EVENT_ARGS = {
+const EVENT: SignRequestEvent = {
+	id: "event_sign_request",
+	block: 2n,
+	index: 0,
 	initiator: "0x690f083b2968f6cB0Ab6d8885d563b7977cff43B",
 	gid: "0x0000000000000000000000007fa9385be102ac3eac297483dd6233d62b3e1496",
 	message: "0x5afe5afe",
@@ -67,7 +71,7 @@ describe("collecting shares", () => {
 		const verificationEngine = {} as unknown as VerificationEngine;
 		const signingClient = {} as unknown as SigningClient;
 		await expect(
-			handleSign(MACHINE_CONFIG, verificationEngine, signingClient, CONSENSUS_STATE, MACHINE_STATES, 2n, {}),
+			handleSign(MACHINE_CONFIG, verificationEngine, signingClient, CONSENSUS_STATE, MACHINE_STATES, EVENT),
 		).rejects.toThrow();
 	});
 
@@ -84,8 +88,7 @@ describe("collecting shares", () => {
 			signingClient,
 			CONSENSUS_STATE,
 			machineStates,
-			2n,
-			EVENT_ARGS,
+			EVENT,
 		);
 
 		expect(diff).toStrictEqual({});
@@ -103,8 +106,7 @@ describe("collecting shares", () => {
 			signingClient,
 			CONSENSUS_STATE,
 			MACHINE_STATES,
-			2n,
-			EVENT_ARGS,
+			EVENT,
 		);
 
 		expect(isVerified).toBeCalledWith("0x5afe5afe");
@@ -130,8 +132,7 @@ describe("collecting shares", () => {
 			signingClient,
 			CONSENSUS_STATE,
 			MACHINE_STATES,
-			2n,
-			EVENT_ARGS,
+			EVENT,
 		);
 
 		expect(isVerified).toBeCalledWith("0x5afe5afe");
@@ -200,8 +201,7 @@ describe("collecting shares", () => {
 			signingClient,
 			consensusState,
 			MACHINE_STATES,
-			2n,
-			EVENT_ARGS,
+			EVENT,
 		);
 
 		expect(isVerified).toBeCalledWith("0x5afe5afe");

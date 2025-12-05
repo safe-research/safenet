@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import type { SigningClient } from "../../consensus/signing/client.js";
+import type { NonceCommitmentsHashEvent } from "../transitions/types.js";
 import type { ConsensusState } from "../types.js";
 import { handlePreprocess } from "./preprocess.js";
 
@@ -13,7 +14,10 @@ const CONSENSUS_STATE: ConsensusState = {
 	epochGroups: {},
 	signatureIdToMessage: {},
 };
-const EVENT_ARGS = {
+const EVENT: NonceCommitmentsHashEvent = {
+	id: "event_nonce_commitments_hash",
+	block: 2n,
+	index: 0,
 	gid: "0x000000000000000000000000000000000000000000000000000000005af35af3",
 	identifier: 1n,
 	chunk: 0n,
@@ -22,17 +26,12 @@ const EVENT_ARGS = {
 
 // --- Tests ---
 describe("handle preprocess", () => {
-	it("should fail on invalid event arguments", async () => {
-		const signingClient = {} as unknown as SigningClient;
-		await expect(handlePreprocess(signingClient, CONSENSUS_STATE, {})).rejects.toThrow();
-	});
-
 	it("should remove group from pending nonces", async () => {
 		const handleNonceCommitmentsHash = vi.fn();
 		const signingClient = {
 			handleNonceCommitmentsHash,
 		} as unknown as SigningClient;
-		const diff = await handlePreprocess(signingClient, CONSENSUS_STATE, EVENT_ARGS);
+		const diff = await handlePreprocess(signingClient, CONSENSUS_STATE, EVENT);
 
 		expect(handleNonceCommitmentsHash).toBeCalledWith(
 			"0x000000000000000000000000000000000000000000000000000000005af35af3",
@@ -59,7 +58,7 @@ describe("handle preprocess", () => {
 			...CONSENSUS_STATE,
 			groupPendingNonces: {},
 		};
-		const diff = await handlePreprocess(signingClient, consensusState, EVENT_ARGS);
+		const diff = await handlePreprocess(signingClient, consensusState, EVENT);
 
 		expect(handleNonceCommitmentsHash).toBeCalledWith(
 			"0x000000000000000000000000000000000000000000000000000000005af35af3",

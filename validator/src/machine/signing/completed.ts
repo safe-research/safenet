@@ -1,16 +1,12 @@
-import { signedEventSchema } from "../../consensus/schemas.js";
+import type { SignedEvent } from "../transitions/types.js";
 import type { ConsensusState, MachineConfig, MachineStates, StateDiff } from "../types.js";
 
 export const handleSigningCompleted = async (
 	machineConfig: MachineConfig,
 	consensusState: ConsensusState,
 	machineStates: MachineStates,
-	block: bigint,
-	eventArgs: unknown,
+	event: SignedEvent,
 ): Promise<StateDiff> => {
-	// The message was completely signed
-	// Parse event from raw data
-	const event = signedEventSchema.parse(eventArgs);
 	// Check that this is a request related to a message that is handled"
 	const message = consensusState.signatureIdToMessage[event.sid];
 	if (message === undefined) return {};
@@ -25,7 +21,7 @@ export const handleSigningCompleted = async (
 			{
 				id: "waiting_for_attestation",
 				signatureId: status.signatureId,
-				deadline: block + machineConfig.signingTimeout,
+				deadline: event.block + machineConfig.signingTimeout,
 				responsible: status.lastSigner,
 				packet: status.packet,
 			},

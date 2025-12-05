@@ -11,16 +11,19 @@ import {
 } from "viem";
 import { KeyGenClient } from "../consensus/keyGen/client.js";
 import { OnchainProtocol } from "../consensus/protocol/onchain.js";
+import type { ActionWithRetry } from "../consensus/protocol/types.js";
 import { SigningClient } from "../consensus/signing/client.js";
 import { InMemoryClientStorage } from "../consensus/storage/inmemory.js";
 import { type PacketHandler, type Typed, VerificationEngine } from "../consensus/verify/engine.js";
 import { EpochRolloverHandler } from "../consensus/verify/rollover/handler.js";
 import { SafeTransactionHandler } from "../consensus/verify/safeTx/handler.js";
 import { InMemoryStateStorage } from "../machine/storage/inmemory.js";
+import { logToTransition } from "../machine/transitions/onchain.js";
 import { CONSENSUS_EVENTS, COORDINATOR_EVENTS } from "../types/abis.js";
 import { supportedChains } from "../types/chains.js";
 import type { ProtocolConfig } from "../types/interfaces.js";
 import type { Logger } from "../utils/logging.js";
+import { InMemoryQueue } from "../utils/queue.js";
 import { ShieldnetStateMachine } from "./machine.js";
 
 export class ValidatorService {
@@ -54,11 +57,13 @@ export class ValidatorService {
 		verificationHandlers.set("safe_transaction_packet", new SafeTransactionHandler());
 		verificationHandlers.set("epoch_rollover_packet", new EpochRolloverHandler());
 		const verificationEngine = new VerificationEngine(verificationHandlers);
+		const actionStorage = new InMemoryQueue<ActionWithRetry>();
 		const protocol = new OnchainProtocol(
 			this.#publicClient,
 			walletClient,
 			config.conensus,
 			config.coordinator,
+			actionStorage,
 			this.#logger?.info,
 		);
 		const stateStorage = new InMemoryStateStorage();
@@ -90,13 +95,12 @@ export class ValidatorService {
 						return left.logIndex - right.logIndex;
 					});
 					for (const log of logs) {
-						this.#stateMachine.transition({
-							type: "event",
-							block: log.blockNumber,
-							index: log.logIndex,
-							eventName: log.eventName,
-							eventArgs: log.args,
-						});
+						const transition = logToTransition(log.blockNumber, log.logIndex, log.eventName, log.args);
+						if (transition === undefined) {
+							this.#logger?.info(`Unknown log: ${log.eventName}`);
+							continue;
+						}
+						this.#stateMachine.transition(transition);
 					}
 				},
 				onError: this.#logger?.error,
@@ -108,7 +112,7 @@ export class ValidatorService {
 					// We delay the processing to avoid potential race conditions for now
 					setTimeout(() => {
 						this.#stateMachine.transition({
-							type: "block",
+							id: "block_new",
 							block,
 						});
 					}, 2000);

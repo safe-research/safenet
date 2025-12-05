@@ -1,10 +1,9 @@
 import { encodeFunctionData, type Hex, zeroHash } from "viem";
-import { nonceCommitmentsEventSchema } from "../../consensus/schemas.js";
 import type { SigningClient } from "../../consensus/signing/client.js";
 import { metaTxHash } from "../../consensus/verify/safeTx/hashing.js";
 import type { SafeTransactionPacket } from "../../consensus/verify/safeTx/schemas.js";
-import { toPoint } from "../../frost/math.js";
 import { CONSENSUS_FUNCTIONS } from "../../types/abis.js";
+import type { NonceCommitmentsEvent } from "../transitions/types.js";
 import type { ConsensusState, MachineConfig, MachineStates, StateDiff } from "../types.js";
 
 export const handleRevealedNonces = async (
@@ -12,12 +11,8 @@ export const handleRevealedNonces = async (
 	signingClient: SigningClient,
 	consensusState: ConsensusState,
 	machineStates: MachineStates,
-	block: bigint,
-	eventArgs: unknown,
+	event: NonceCommitmentsEvent,
 ): Promise<StateDiff> => {
-	// A participant has submitted nonces for a signature id
-	// Parse event from raw data
-	const event = nonceCommitmentsEventSchema.parse(eventArgs);
 	// Check that this is a request related to a message that is handled"
 	const message = consensusState.signatureIdToMessage[event.sid];
 	if (message === undefined) return {};
@@ -25,8 +20,8 @@ export const handleRevealedNonces = async (
 	const status = machineStates.signing[message];
 	if (status?.id !== "collect_nonce_commitments") return {};
 	const readyToSubmit = signingClient.handleNonceCommitments(event.sid, event.identifier, {
-		hidingNonceCommitment: toPoint(event.nonces.d),
-		bindingNonceCommitment: toPoint(event.nonces.e),
+		hidingNonceCommitment: event.nonces.d,
+		bindingNonceCommitment: event.nonces.e,
 	});
 	if (!readyToSubmit)
 		return {
@@ -64,7 +59,7 @@ export const handleRevealedNonces = async (
 				id: "collect_signing_shares",
 				signatureId: status.signatureId,
 				sharesFrom: [],
-				deadline: block + machineConfig.signingTimeout,
+				deadline: event.block + machineConfig.signingTimeout,
 				lastSigner: event.identifier,
 				packet: status.packet,
 			},

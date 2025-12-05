@@ -1,7 +1,7 @@
-import { signRequestEventSchema } from "../../consensus/schemas.js";
 import type { SigningClient } from "../../consensus/signing/client.js";
 import { decodeSequence } from "../../consensus/signing/nonces.js";
 import type { VerificationEngine } from "../../consensus/verify/engine.js";
+import type { SignRequestEvent } from "../transitions/types.js";
 import type { ConsensusState, MachineConfig, MachineStates, StateDiff } from "../types.js";
 
 const NONCE_THRESHOLD = 100n;
@@ -12,13 +12,9 @@ export const handleSign = async (
 	signingClient: SigningClient,
 	consensusState: ConsensusState,
 	machineStates: MachineStates,
-	block: bigint,
-	eventArgs: unknown,
+	event: SignRequestEvent,
 	logger?: (msg: unknown) => void,
 ): Promise<StateDiff> => {
-	// The signature process has been started
-	// Parse event from raw data
-	const event = signRequestEventSchema.parse(eventArgs);
 	// TODO: this can be lifted out of this function
 	const diff = checkAvailableNonces(signingClient, consensusState, machineStates, event.sequence, logger);
 	const status = machineStates.signing[event.message];
@@ -60,7 +56,7 @@ export const handleSign = async (
 			{
 				id: "collect_nonce_commitments",
 				signatureId: event.sid,
-				deadline: block + machineConfig.signingTimeout,
+				deadline: event.block + machineConfig.signingTimeout,
 				lastSigner: undefined,
 				packet: status.packet,
 			},

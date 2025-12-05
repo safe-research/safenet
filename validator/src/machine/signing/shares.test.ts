@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import type { SignatureShareEvent } from "../transitions/types.js";
 import type { ConsensusState, MachineStates, SigningState } from "../types.js";
 import { handleSigningShares } from "./shares.js";
 
@@ -44,7 +45,10 @@ const CONSENSUS_STATE: ConsensusState = {
 	},
 };
 
-const EVENT_ARGS = {
+const EVENT: SignatureShareEvent = {
+	id: "event_signature_share",
+	block: 2n,
+	index: 0,
 	sid: "0x5af35af3",
 	identifier: 1n,
 	z: 1n,
@@ -52,16 +56,12 @@ const EVENT_ARGS = {
 
 // --- Tests ---
 describe("collecting shares", () => {
-	it("should fail on invalid event arguments", async () => {
-		await expect(handleSigningShares(CONSENSUS_STATE, MACHINE_STATES, {})).rejects.toThrow();
-	});
-
 	it("should not handle signing requests without a message", async () => {
 		const consensusState: ConsensusState = {
 			...CONSENSUS_STATE,
 			signatureIdToMessage: {},
 		};
-		const diff = await handleSigningShares(consensusState, MACHINE_STATES, EVENT_ARGS);
+		const diff = await handleSigningShares(consensusState, MACHINE_STATES, EVENT);
 
 		expect(diff).toStrictEqual({});
 	});
@@ -71,7 +71,7 @@ describe("collecting shares", () => {
 			...MACHINE_STATES,
 			signing: {},
 		};
-		const diff = await handleSigningShares(CONSENSUS_STATE, machineStates, EVENT_ARGS);
+		const diff = await handleSigningShares(CONSENSUS_STATE, machineStates, EVENT);
 
 		expect(diff).toStrictEqual({});
 	});
@@ -86,13 +86,13 @@ describe("collecting shares", () => {
 				},
 			},
 		};
-		const diff = await handleSigningShares(CONSENSUS_STATE, machineStates, EVENT_ARGS);
+		const diff = await handleSigningShares(CONSENSUS_STATE, machineStates, EVENT);
 
 		expect(diff).toStrictEqual({});
 	});
 
 	it("should stay in state and update", async () => {
-		const diff = await handleSigningShares(CONSENSUS_STATE, MACHINE_STATES, EVENT_ARGS);
+		const diff = await handleSigningShares(CONSENSUS_STATE, MACHINE_STATES, EVENT);
 
 		expect(diff.consensus).toBeUndefined();
 		expect(diff.rollover).toBeUndefined();
