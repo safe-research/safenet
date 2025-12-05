@@ -15,7 +15,7 @@ const queueSQLiteSchema = z.object({
 
 // FIFO tyle queue
 export type Queue<T> = {
-	// Insert at the beggining
+	// Insert at the beginning
 	push(element: T): void;
 	// Peek at the next element
 	peek(): T | undefined;

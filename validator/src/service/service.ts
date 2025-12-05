@@ -11,7 +11,7 @@ import {
 } from "viem";
 import { KeyGenClient } from "../consensus/keyGen/client.js";
 import { OnchainProtocol } from "../consensus/protocol/onchain.js";
-import type { ActionWithRetry } from "../consensus/protocol/types.js";
+import type { ActionWithTimeout } from "../consensus/protocol/types.js";
 import { SigningClient } from "../consensus/signing/client.js";
 import { InMemoryClientStorage } from "../consensus/storage/inmemory.js";
 import { type PacketHandler, type Typed, VerificationEngine } from "../consensus/verify/engine.js";
@@ -56,7 +56,7 @@ export class ValidatorService {
 		verificationHandlers.set("safe_transaction_packet", new SafeTransactionHandler());
 		verificationHandlers.set("epoch_rollover_packet", new EpochRolloverHandler());
 		const verificationEngine = new VerificationEngine(verificationHandlers);
-		const actionStorage = new InMemoryQueue<ActionWithRetry>();
+		const actionStorage = new InMemoryQueue<ActionWithTimeout>();
 		const protocol = new OnchainProtocol(
 			this.#publicClient,
 			walletClient,

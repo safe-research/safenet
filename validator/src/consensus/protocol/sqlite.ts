@@ -3,7 +3,7 @@ import { toPoint } from "../../frost/math.js";
 import type { GroupId, ParticipantId, SignatureId } from "../../frost/types.js";
 import { hexDataSchema } from "../../types/schemas.js";
 import { SqliteQueue } from "../../utils/queue.js";
-import type { ActionWithRetry } from "./types.js";
+import type { ActionWithTimeout } from "./types.js";
 
 const groupIdSchema = hexDataSchema.transform((v) => v as GroupId);
 const coercedBigIntSchema = z.coerce.bigint().nonnegative();
@@ -125,15 +125,15 @@ export const consensusActionSchema = z.discriminatedUnion("id", [attestTransacti
 
 const protocolActionSchema = z.union([signingActionSchema, keyGenActionSchema, consensusActionSchema]);
 
-const actionWithRetrySchema = z.intersection(
+const actionWithTimeoutSchema = z.intersection(
 	protocolActionSchema,
 	z.object({
-		retryCount: z.number(),
+		validUntil: z.number(),
 	}),
 );
 
-export class SqliteActionQueue extends SqliteQueue<ActionWithRetry> {
+export class SqliteActionQueue extends SqliteQueue<ActionWithTimeout> {
 	constructor(path: string) {
-		super(actionWithRetrySchema, path, "actions");
+		super(actionWithTimeoutSchema, path, "actions");
 	}
 }

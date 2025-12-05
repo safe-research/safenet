@@ -1,7 +1,7 @@
 import type { Address, Hex } from "viem";
 import { InMemoryQueue, type Queue } from "../../utils/queue.js";
 import type {
-	ActionWithRetry,
+	ActionWithTimeout,
 	AttestTransaction,
 	ConfirmKeyGen,
 	ProtocolAction,
@@ -15,28 +15,28 @@ import type {
 	StartKeyGen,
 } from "./types.js";
 
-const MAX_RETRIES = 5;
+const ACTION_TIMEOUT = 10 * 60 * 1000; // 10 minutes
 const ERROR_RETRY_DELAY = 1000;
 
 export abstract class BaseProtocol implements ShieldnetProtocol {
-	#actionQueue: Queue<ActionWithRetry> = new InMemoryQueue<ActionWithRetry>();
-	#currentAction?: ActionWithRetry;
+	#actionQueue: Queue<ActionWithTimeout> = new InMemoryQueue<ActionWithTimeout>();
+	#currentAction?: ActionWithTimeout;
 	#logger?: (msg: unknown) => void;
 
 	abstract chainId(): bigint;
 	abstract consensus(): Address;
 	abstract coordinator(): Address;
 
-	constructor(queue: Queue<ActionWithRetry>, logger?: (msg: unknown) => void) {
+	constructor(queue: Queue<ActionWithTimeout>, logger?: (msg: unknown) => void) {
 		this.#actionQueue = queue;
 		this.#logger = logger;
 	}
 
-	process(action: ProtocolAction): void {
+	process(action: ProtocolAction, timeout: number = ACTION_TIMEOUT): void {
 		this.#logger?.(`Enqueue ${action.id}`);
 		this.#actionQueue.push({
 			...action,
-			retryCount: 0,
+			validUntil: Date.now() + timeout,
 		});
 		this.checkNextAction();
 	}
@@ -47,30 +47,28 @@ export abstract class BaseProtocol implements ShieldnetProtocol {
 		const action = this.#actionQueue.peek();
 		// Nothing queued
 		if (action === undefined) return;
-		if (action.retryCount > MAX_RETRIES) {
+		// Check if action is still valid
+		if (action.validUntil < Date.now()) {
 			this.#actionQueue.pop();
-			this.#logger?.(`Max retry count exeeded for ${action.id}. Dropping action!`);
-			setTimeout(() => {
-				this.checkNextAction();
-			}, 1000);
+			this.#logger?.(`Timeout exeeded for ${action.id}. Dropping action!`);
+			this.checkNextAction();
 			return;
 		}
 		this.#currentAction = action;
-		const executionDelay = action.retryCount > 0 ? ERROR_RETRY_DELAY : 0;
-		setTimeout(() => {
-			this.performAction(action)
-				.then(() => {
-					// If action was successfully executed, remove it from queue
-					this.#actionQueue.pop();
-				})
-				.catch(() => {
-					action.retryCount++;
-				})
-				.finally(() => {
-					this.#currentAction = undefined;
+		this.performAction(action)
+			.then(() => {
+				// If action was successfully executed, remove it from queue
+				this.#actionQueue.pop();
+				this.#currentAction = undefined;
+				this.checkNextAction();
+			})
+			.catch(() => {
+				this.#logger?.("Action failed, will retry after a delay!");
+				this.#currentAction = undefined;
+				setTimeout(() => {
 					this.checkNextAction();
-				});
-		}, executionDelay);
+				}, ERROR_RETRY_DELAY);
+			});
 	}
 
 	private async performAction(action: ProtocolAction): Promise<Hex> {

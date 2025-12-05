@@ -22,7 +22,7 @@ import { CONSENSUS_EVENTS, COORDINATOR_EVENTS } from "../types/abis.js";
 import { InMemoryQueue } from "../utils/queue.js";
 import { KeyGenClient } from "./keyGen/client.js";
 import { OnchainProtocol } from "./protocol/onchain.js";
-import type { ActionWithRetry } from "./protocol/types.js";
+import type { ActionWithTimeout } from "./protocol/types.js";
 import { SigningClient } from "./signing/client.js";
 import { verifySignature } from "./signing/verify.js";
 import type { Participant } from "./storage/types.js";
@@ -109,7 +109,7 @@ describe("integration", () => {
 				transport: http(),
 				account: a,
 			});
-			const actionStorage = new InMemoryQueue<ActionWithRetry>();
+			const actionStorage = new InMemoryQueue<ActionWithTimeout>();
 			const protocol = new OnchainProtocol(
 				publicClient,
 				signingClient,

@@ -4,7 +4,7 @@ import { CONSENSUS_FUNCTIONS, COORDINATOR_FUNCTIONS } from "../../types/abis.js"
 import type { Queue } from "../../utils/queue.js";
 import { BaseProtocol } from "./base.js";
 import type {
-	ActionWithRetry,
+	ActionWithTimeout,
 	AttestTransaction,
 	ConfirmKeyGen,
 	PublishSecretShares,
@@ -27,7 +27,7 @@ export class OnchainProtocol extends BaseProtocol {
 		signingClient: WalletClient,
 		consensus: Address,
 		coordinator: Address,
-		queue: Queue<ActionWithRetry>,
+		queue: Queue<ActionWithTimeout>,
 		logger?: (msg: unknown) => void,
 	) {
 		super(queue, logger);
