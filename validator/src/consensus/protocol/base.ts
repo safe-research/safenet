@@ -48,8 +48,11 @@ export abstract class BaseProtocol implements ShieldnetProtocol {
 		// Nothing queued
 		if (action === undefined) return;
 		if (action.retryCount > MAX_RETRIES) {
+			this.#actionQueue.pop();
 			this.#logger?.(`Max retry count exeeded for ${action.id}. Dropping action!`);
-			this.checkNextAction();
+			setTimeout(() => {
+				this.checkNextAction()
+			}, 1000);
 			return;
 		}
 		this.#currentAction = action;
