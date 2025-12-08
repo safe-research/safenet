@@ -24,8 +24,9 @@ export const checkEpochRollover = (
 	// If no rollover is staged and new key gen was not triggered do it now
 	if (
 		machineStates.rollover.id === "waiting_for_rollover" &&
-		(activeEpoch !== 0n || consensusState.genesisGroupId !== undefined) &&
-		stagedEpoch === 0n
+		stagedEpoch === 0n &&
+		// Do not trigger a new key gen on genesis
+		(activeEpoch !== 0n || consensusState.genesisGroupId !== undefined)
 	) {
 		// Trigger key gen for next epoch
 		const nextEpoch = currentEpoch + 1n;
