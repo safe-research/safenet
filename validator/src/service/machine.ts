@@ -11,7 +11,7 @@ import { handleTransactionProposed } from "../machine/consensus/transactionPropo
 import { checkKeyGenAbort } from "../machine/keygen/abort.js";
 import { handleKeyGenCommitted } from "../machine/keygen/committed.js";
 import { handleKeyGenConfirmed } from "../machine/keygen/confirmed.js";
-import { checkGenesis } from "../machine/keygen/genesis.js";
+import { handleGenesisKeyGen } from "../machine/keygen/genesis.js";
 import { handleKeyGenSecretShared } from "../machine/keygen/secretShares.js";
 import { checkKeyGenTimeouts } from "../machine/keygen/timeouts.js";
 import { handleSigningCompleted } from "../machine/signing/completed.js";
@@ -145,7 +145,6 @@ export class ShieldnetStateMachine {
 		)) {
 			state.apply(diff);
 		}
-		state.apply(checkGenesis(this.#machineConfig, this.#keyGenClient, state.consensus, state.machines, this.#logger));
 
 		state.apply(
 			checkEpochRollover(
@@ -196,6 +195,16 @@ export class ShieldnetStateMachine {
 	): Promise<StateDiff> {
 		this.#logger?.(`Handle event ${transition.id}`);
 		switch (transition.id) {
+			case "event_key_gen": {
+				return await handleGenesisKeyGen(
+					this.#machineConfig,
+					this.#keyGenClient,
+					consensusState,
+					machineStates,
+					transition,
+					this.#logger,
+				);
+			}
 			case "event_key_gen_committed": {
 				return await handleKeyGenCommitted(this.#machineConfig, this.#keyGenClient, machineStates, transition);
 			}
@@ -274,8 +283,6 @@ export class ShieldnetStateMachine {
 			case "event_transaction_attested": {
 				return await handleTransactionAttested(machineStates, transition);
 			}
-			case "event_key_gen":
-				return {};
 		}
 	}
 }

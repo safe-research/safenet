@@ -37,7 +37,7 @@ export class OnchainTransitionWatcher {
 		const db = new Sqlite3(dbPath);
 		db.exec(`
             CREATE TABLE IF NOT EXISTS transition_watcher (
-                chainId INTEGER PRIMARY KEY, 
+                chainId INTEGER PRIMARY KEY,
                 lastIndexedBlock INTEGER NOT NULL
             );
         `);
@@ -48,16 +48,11 @@ export class OnchainTransitionWatcher {
 		this.#onTransition = onTransition;
 	}
 
-	async getLastIndexedBlock(): Promise<bigint> {
+	private async getLastIndexedBlock(): Promise<bigint | undefined> {
 		const clientChainId = this.#publicClient.chain?.id ?? 0n;
 		const stmt = this.#db.prepare("SELECT chainId, lastIndexedBlock FROM transition_watcher WHERE chainId = ?");
 		const result = transitionWatcherStateSchema.parse(stmt.get(clientChainId));
-
-		if (!result) {
-			// No entries stored, lets start fresh
-			return -1n;
-		}
-		return result.lastIndexedBlock;
+		return result?.lastIndexedBlock;
 	}
 
 	updateLastIndexedBlock(block: bigint): boolean {
@@ -90,7 +85,7 @@ export class OnchainTransitionWatcher {
 			this.#publicClient.watchContractEvent({
 				address: [this.#config.consensus, this.#config.coordinator],
 				abi: [...CONSENSUS_EVENTS, ...COORDINATOR_EVENTS],
-				fromBlock: lastIndexedBlock + 1n,
+				fromBlock: lastIndexedBlock ? lastIndexedBlock + 1n : undefined,
 				onLogs: async (logs) => {
 					logs.sort((left, right) => {
 						if (left.blockNumber !== right.blockNumber) {

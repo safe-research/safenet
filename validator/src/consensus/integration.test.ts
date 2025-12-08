@@ -9,6 +9,7 @@ import {
 	hashStruct,
 	http,
 	parseAbi,
+	zeroHash,
 } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 import { anvil } from "viem/chains";
@@ -21,6 +22,7 @@ import { ShieldnetStateMachine as SchildNetzMaschine } from "../service/machine.
 import { CONSENSUS_EVENTS, COORDINATOR_EVENTS } from "../types/abis.js";
 import { InMemoryQueue } from "../utils/queue.js";
 import { KeyGenClient } from "./keyGen/client.js";
+import { calculateParticipantsRoot } from "./merkle.js";
 import { OnchainProtocol } from "./protocol/onchain.js";
 import type { ActionWithTimeout } from "./protocol/types.js";
 import { SigningClient } from "./signing/client.js";
@@ -76,10 +78,24 @@ describe("integration", () => {
 		});
 		testClient.setIntervalMining({ interval: BLOCKTIME_IN_SECONDS });
 		const deploymentInfo = JSON.parse(fs.readFileSync(deploymentInfoFile, "utf-8"));
-		const coordinatorAddress = deploymentInfo.returns["0"].value as Address;
-		log(`Use coordinator at ${coordinatorAddress}`);
-		const consensusAddress = deploymentInfo.returns["1"].value as Address;
-		log(`Use consensus at ${consensusAddress}`);
+		const coordinator = {
+			address: deploymentInfo.returns["0"].value as Address,
+			abi: parseAbi([
+				"function keyGen(bytes32 participants, uint64 count, uint64 threshold, bytes32 context) external returns (bytes32 gid)",
+				"function sign(bytes32 gid, bytes32 message) external returns (bytes32 sid)",
+				"function groupKey(bytes32 id) external view returns ((uint256 x, uint256 y) key)",
+			]),
+		} as const;
+		log(`Use coordinator at ${coordinator.address}`);
+		const consensus = {
+			address: deploymentInfo.returns["1"].value as Address,
+			abi: parseAbi([
+				"function proposeTransaction((uint256 chainId, address account, address to, uint256 value, uint8 operation, bytes data, uint256 nonce) transaction) external",
+				"function getAttestation(uint64 epoch, (uint256 chainId, address account, address to, uint256 value, uint8 operation, bytes data, uint256 nonce) transaction) external view returns (bytes32 message, ((uint256 x, uint256 y) r, uint256 z) signature)",
+				"function getAttestationByMessage(bytes32 message) external view returns (((uint256 x, uint256 y) r, uint256 z) signature)",
+			]),
+		} as const;
+		log(`Use consensus at ${consensus.address}`);
 
 		// Private keys from Anvil testnet
 		const accounts = [
@@ -113,8 +129,8 @@ describe("integration", () => {
 			const protocol = new OnchainProtocol(
 				publicClient,
 				signingClient,
-				consensusAddress,
-				coordinatorAddress,
+				consensus.address,
+				coordinator.address,
 				actionStorage,
 				logger,
 			);
@@ -133,8 +149,8 @@ describe("integration", () => {
 				dbPath: ":memory:",
 				publicClient,
 				config: {
-					consensus: consensusAddress,
-					coordinator: coordinatorAddress,
+					consensus: consensus.address,
+					coordinator: coordinator.address,
 				},
 				logger:
 					logger !== undefined
@@ -158,14 +174,18 @@ describe("integration", () => {
 		for (const { watcher } of clients) {
 			await watcher.start();
 		}
+		const initiatorClient = createWalletClient({
+			chain: anvil,
+			transport: http(),
+			account: privateKeyToAccount("0x2a871d0798f97d79848a013d4936a73bf4cc922c825d33c1cf7073dff6d409c6"),
+		});
+		// Manually trigger genesis KeyGen
+		await initiatorClient.writeContract({
+			...coordinator,
+			functionName: "keyGen",
+			args: [calculateParticipantsRoot(participants), 3n, 2n, zeroHash],
+		});
 		// Setup done ... SchildNetz läuft ... lets send some signature requests
-		const abi = parseAbi([
-			"function proposeTransaction((uint256 chainId, address account, address to, uint256 value, uint8 operation, bytes data, uint256 nonce) transaction) external",
-			"function groupKey(bytes32 id) external view returns ((uint256 x, uint256 y) key)",
-			"function sign(bytes32 gid, bytes32 message) external returns (bytes32 sid)",
-			"function getAttestation(uint64 epoch, (uint256 chainId, address account, address to, uint256 value, uint8 operation, bytes data, uint256 nonce) transaction) external view returns (bytes32 message, ((uint256 x, uint256 y) r, uint256 z) signature)",
-			"function getAttestationByMessage(bytes32 message) external view returns (((uint256 x, uint256 y) r, uint256 z) signature)",
-		]);
 		const transaction = {
 			chainId: 1n,
 			account: "0xb3D9cf8E163bbc840195a97E81F8A34E295B8f39" as Address,
@@ -177,15 +197,8 @@ describe("integration", () => {
 		};
 		setTimeout(
 			async () => {
-				const initiatorClient = createWalletClient({
-					chain: anvil,
-					transport: http(),
-					account: privateKeyToAccount("0x2a871d0798f97d79848a013d4936a73bf4cc922c825d33c1cf7073dff6d409c6"),
-				});
-
 				await initiatorClient.writeContract({
-					address: consensusAddress,
-					abi: abi,
+					...consensus,
 					functionName: "proposeTransaction",
 					args: [transaction],
 				});
@@ -199,8 +212,7 @@ describe("integration", () => {
 			expect(knownGroups.length).toBe(EXPECTED_GROUPS);
 			for (const groupId of knownGroups) {
 				const groupKey = await readClient.readContract({
-					address: coordinatorAddress,
-					abi: abi,
+					...coordinator,
 					functionName: "groupKey",
 					args: [groupId],
 				});
@@ -236,7 +248,7 @@ describe("integration", () => {
 		// Load transaction proposal for tx hash
 		const proposeEvent = CONSENSUS_EVENTS.filter((e) => e.name === "TransactionProposed")[0];
 		const proposedMessages = await readClient.getLogs({
-			address: consensusAddress,
+			address: consensus.address,
 			event: proposeEvent,
 			fromBlock: "earliest",
 			args: {
@@ -250,7 +262,7 @@ describe("integration", () => {
 		// Load signature request for transaction proposal
 		const signRequestEvent = COORDINATOR_EVENTS.filter((e) => e.name === "Sign")[0];
 		const signatureRequests = await readClient.getLogs({
-			address: coordinatorAddress,
+			address: coordinator.address,
 			event: signRequestEvent,
 			fromBlock: "earliest",
 			args: {
@@ -259,13 +271,13 @@ describe("integration", () => {
 		});
 		expect(signatureRequests.length).toBe(1);
 		const request = signatureRequests[0];
-		expect(request.args.initiator).toBe(consensusAddress);
+		expect(request.args.initiator).toBe(consensus.address);
 		expect(request.args.sid).toBeDefined();
 		if (request.args.gid === undefined) throw new Error("GroupId is expected to be defined");
 		// Load completed request for signature request
 		const signedEvent = COORDINATOR_EVENTS.filter((e) => e.name === "SignCompleted")[0];
 		const completedRequests = await readClient.getLogs({
-			address: coordinatorAddress,
+			address: coordinator.address,
 			event: signedEvent,
 			fromBlock: "earliest",
 			args: {
@@ -280,8 +292,7 @@ describe("integration", () => {
 
 		// Load group key for verification
 		const groupKey = await readClient.readContract({
-			address: coordinatorAddress,
-			abi: abi,
+			...coordinator,
 			functionName: "groupKey",
 			args: [request.args.gid],
 		});
@@ -289,8 +300,7 @@ describe("integration", () => {
 
 		// Check that the attestation is correctly tracked
 		const attestation = await readClient.readContract({
-			address: consensusAddress,
-			abi: abi,
+			...consensus,
 			functionName: "getAttestationByMessage",
 			args: [proposal.args.message],
 		});
