@@ -32,7 +32,7 @@ const main = async (): Promise<void> => {
 		.parse(process.env);
 	const genesisGroup = calcGenesisGroup({
 		defaultParticipants: config.PARTICIPANTS,
-		genesisSalt: config.GENESIS_SALT ?? zeroHash,
+		genesisSalt: config.GENESIS_SALT,
 	});
 	const consensus = getContractAddress({
 		opcode: "CREATE2",
