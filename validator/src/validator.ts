@@ -32,11 +32,13 @@ const config: ProtocolConfig = {
 	chainId: validatorConfig.CHAIN_ID,
 	consensus: validatorConfig.CONSENSUS_ADDRESS,
 	coordinator: validatorConfig.COORDINATOR_ADDRESS,
+	genesisSalt: validatorConfig.GENESIS_SALT,
 	blocksPerEpoch: BLOCKS_PER_EPOCH,
 	participants,
 };
 
 const account = privateKeyToAccount(validatorConfig.PRIVATE_KEY);
+console.log(`Using validator account ${account.address}`);
 
 const service = createValidatorService(account, rpcUrl, config);
 

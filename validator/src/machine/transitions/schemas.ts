@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { toPoint } from "../../frost/math.js";
-import { checkedAddressSchema, hexDataSchema } from "../../types/schemas.js";
+import { checkedAddressSchema, hexBytes32Schema, hexDataSchema } from "../../types/schemas.js";
 
 const eventBigIntSchema = z.coerce.bigint().nonnegative();
 
@@ -24,44 +24,44 @@ export const frostShareSchema = z.object({
 });
 
 export const keyGenEventSchema = z.object({
-	gid: hexDataSchema,
-	participants: hexDataSchema,
+	gid: hexBytes32Schema,
+	participants: hexBytes32Schema,
 	count: eventBigIntSchema,
 	threshold: eventBigIntSchema,
-	context: hexDataSchema,
+	context: hexBytes32Schema,
 });
 
 export const keyGenCommittedEventSchema = z.object({
-	gid: hexDataSchema,
+	gid: hexBytes32Schema,
 	identifier: eventBigIntSchema,
 	commitment: frostCommitmentSchema,
 	committed: z.boolean(),
 });
 
 export const keyGenSecretSharedEventSchema = z.object({
-	gid: hexDataSchema,
+	gid: hexBytes32Schema,
 	identifier: eventBigIntSchema,
 	share: frostShareSchema,
 	completed: z.boolean(),
 });
 
 export const keyGenConfirmedEventSchema = z.object({
-	gid: hexDataSchema,
+	gid: hexBytes32Schema,
 	identifier: eventBigIntSchema,
 });
 
 export const nonceCommitmentsHashEventSchema = z.object({
-	gid: hexDataSchema,
+	gid: hexBytes32Schema,
 	identifier: eventBigIntSchema,
 	chunk: eventBigIntSchema,
-	commitment: hexDataSchema,
+	commitment: hexBytes32Schema,
 });
 
 export const signRequestEventSchema = z.object({
 	initiator: checkedAddressSchema,
-	gid: hexDataSchema,
-	message: hexDataSchema,
-	sid: hexDataSchema,
+	gid: hexBytes32Schema,
+	message: hexBytes32Schema,
+	sid: hexBytes32Schema,
 	sequence: eventBigIntSchema,
 });
 
@@ -71,13 +71,13 @@ export const nonceCommitmentsSchema = z.object({
 });
 
 export const nonceCommitmentsEventSchema = z.object({
-	sid: hexDataSchema,
+	sid: hexBytes32Schema,
 	identifier: eventBigIntSchema,
 	nonces: nonceCommitmentsSchema,
 });
 
 export const signatureShareEventSchema = z.object({
-	sid: hexDataSchema,
+	sid: hexBytes32Schema,
 	identifier: eventBigIntSchema,
 	z: eventBigIntSchema,
 });
@@ -88,7 +88,7 @@ export const signatureSchema = z.object({
 });
 
 export const signedEventSchema = z.object({
-	sid: hexDataSchema,
+	sid: hexBytes32Schema,
 	signature: signatureSchema,
 });
 
@@ -117,14 +117,14 @@ const transactionSchema = z.object({
 });
 
 export const transactionProposedEventSchema = z.object({
-	message: hexDataSchema,
-	transactionHash: hexDataSchema,
+	message: hexBytes32Schema,
+	transactionHash: hexBytes32Schema,
 	epoch: eventBigIntSchema,
 	transaction: transactionSchema,
 });
 
 export const transactionAttestedEventSchema = z.object({
-	message: hexDataSchema,
+	message: hexBytes32Schema,
 });
 
 const baseEventTransitionParamsSchema = z.object({

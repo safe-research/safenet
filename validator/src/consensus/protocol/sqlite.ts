@@ -1,14 +1,14 @@
 import { z } from "zod";
 import { toPoint } from "../../frost/math.js";
 import type { GroupId, ParticipantId, SignatureId } from "../../frost/types.js";
-import { hexDataSchema } from "../../types/schemas.js";
+import { hexBytes32Schema, hexDataSchema } from "../../types/schemas.js";
 import { SqliteQueue } from "../../utils/queue.js";
 import type { ActionWithTimeout } from "./types.js";
 
-const groupIdSchema = hexDataSchema.transform((v) => v as GroupId);
+const groupIdSchema = hexBytes32Schema.transform((v) => v as GroupId);
 const coercedBigIntSchema = z.coerce.bigint().nonnegative();
 const participantIdSchema = coercedBigIntSchema.transform((v) => v as ParticipantId);
-const signatureIdSchema = hexDataSchema.transform((v) => v as SignatureId);
+const signatureIdSchema = hexBytes32Schema.transform((v) => v as SignatureId);
 
 // Complex objects from imports
 const frostPointSchema = z
@@ -23,7 +23,7 @@ const proofOfKnowledgeSchema = z.object({
 	mu: coercedBigIntSchema,
 });
 
-const proofOfAttestationParticipationSchema = z.array(hexDataSchema);
+const proofOfAttestationParticipationSchema = z.array(hexBytes32Schema);
 
 const publicNonceCommitmentsSchema = z.object({
 	hidingNonceCommitment: frostPointSchema,
@@ -34,27 +34,27 @@ const publicNonceCommitmentsSchema = z.object({
 const requestSignatureSchema = z.object({
 	id: z.literal("sign_request"),
 	groupId: groupIdSchema,
-	message: hexDataSchema,
+	message: hexBytes32Schema,
 });
 
 const registerNonceCommitmentsSchema = z.object({
 	id: z.literal("sign_register_nonce_commitments"),
 	groupId: groupIdSchema,
-	nonceCommitmentsHash: hexDataSchema,
+	nonceCommitmentsHash: hexBytes32Schema,
 });
 
 const revealNonceCommitmentsSchema = z.object({
 	id: z.literal("sign_reveal_nonce_commitments"),
 	signatureId: signatureIdSchema,
 	nonceCommitments: publicNonceCommitmentsSchema,
-	nonceProof: z.array(hexDataSchema),
+	nonceProof: z.array(hexBytes32Schema),
 });
 
 const publishSignatureShareSchema = z.object({
 	id: z.literal("sign_publish_signature_share"),
 	signatureId: signatureIdSchema,
-	signersRoot: hexDataSchema,
-	signersProof: z.array(hexDataSchema),
+	signersRoot: hexBytes32Schema,
+	signersProof: z.array(hexBytes32Schema),
 	groupCommitment: frostPointSchema,
 	commitmentShare: frostPointSchema,
 	signatureShare: coercedBigIntSchema,
@@ -73,10 +73,10 @@ const signingActionSchema = z.discriminatedUnion("id", [
 
 export const startKeyGenSchema = z.object({
 	id: z.literal("key_gen_start"),
-	participants: hexDataSchema,
+	participants: hexBytes32Schema,
 	count: coercedBigIntSchema,
 	threshold: coercedBigIntSchema,
-	context: hexDataSchema,
+	context: hexBytes32Schema,
 	participantId: participantIdSchema,
 	commitments: z.array(frostPointSchema),
 	pok: proofOfKnowledgeSchema,
@@ -107,7 +107,7 @@ export const keyGenActionSchema = z.discriminatedUnion("id", [
 export const attestTransactionSchema = z.object({
 	id: z.literal("consensus_attest_transaction"),
 	epoch: coercedBigIntSchema,
-	transactionHash: hexDataSchema,
+	transactionHash: hexBytes32Schema,
 	signatureId: signatureIdSchema,
 });
 

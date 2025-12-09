@@ -1,3 +1,4 @@
+import { type Hex, zeroHash } from "viem";
 import type { KeyGenClient } from "../consensus/keyGen/client.js";
 import type { ProtocolAction, ShieldnetProtocol } from "../consensus/protocol/types.js";
 import type { SigningClient } from "../consensus/signing/client.js";
@@ -52,6 +53,7 @@ export class ShieldnetStateMachine {
 		signingClient,
 		verificationEngine,
 		logger,
+		genesisSalt,
 		blocksPerEpoch,
 		keyGenTimeout,
 		signingTimeout,
@@ -63,6 +65,7 @@ export class ShieldnetStateMachine {
 		signingClient: SigningClient;
 		verificationEngine: VerificationEngine;
 		logger?: (msg: unknown) => void;
+		genesisSalt?: Hex;
 		blocksPerEpoch?: bigint;
 		keyGenTimeout?: bigint;
 		signingTimeout?: bigint;
@@ -70,6 +73,7 @@ export class ShieldnetStateMachine {
 	}) {
 		this.#machineConfig = {
 			defaultParticipants: participants,
+			genesisSalt: genesisSalt ?? zeroHash,
 			blocksPerEpoch: blocksPerEpoch ?? BLOCKS_PER_EPOCH,
 			keyGenTimeout: keyGenTimeout ?? DEFAULT_TIMEOUT,
 			signingTimeout: signingTimeout ?? DEFAULT_TIMEOUT,

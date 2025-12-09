@@ -1,5 +1,6 @@
 import type { KeyGenClient } from "../../consensus/keyGen/client.js";
 import type { ShieldnetProtocol } from "../../consensus/protocol/types.js";
+import { calcGroupContext } from "../keygen/group.js";
 import { triggerKeyGen } from "../keygen/trigger.js";
 import type { ConsensusState, MachineConfig, MachineStates, StateDiff } from "../types.js";
 
@@ -36,7 +37,7 @@ export const checkEpochRollover = (
 			nextEpoch,
 			block + machineConfig.keyGenTimeout,
 			machineConfig.defaultParticipants,
-			protocol.consensus(),
+			calcGroupContext(protocol.consensus(), nextEpoch),
 			logger,
 		);
 		const consensus = {
