@@ -1,9 +1,10 @@
-import { type Address, encodePacked } from "viem";
+import type { Address } from "viem";
 import type { KeyGenClient } from "../../consensus/keyGen/client.js";
 import type { ProtocolAction } from "../../consensus/protocol/types.js";
 import type { Participant } from "../../consensus/storage/types.js";
 import type { GroupId } from "../../frost/types.js";
 import type { StateDiff } from "../types.js";
+import { calcGroupParameters } from "./group.js";
 
 export const triggerKeyGen = (
 	keyGenClient: KeyGenClient,
@@ -16,10 +17,7 @@ export const triggerKeyGen = (
 	if (participants.length < 2) {
 		throw new Error("Not enough participatns!");
 	}
-	// 4 bytes version, 20 bytes address, 8 bytes epoch number
-	const context = encodePacked(["uint32", "address", "uint64"], [0, consensus, epoch]);
-	const count = BigInt(participants.length);
-	const threshold = count / 2n + 1n;
+	const { count, threshold, context } = calcGroupParameters(participants.length, consensus, epoch);
 	const { groupId, participantsRoot, participantId, commitments, pok, poap } = keyGenClient.setupGroup(
 		participants,
 		count,
