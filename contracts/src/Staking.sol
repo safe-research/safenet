@@ -15,33 +15,43 @@ contract Staking is Ownable {
     // ============================================================
 
     /*
-     * @notice Represents a single withdrawal in the queue
+     * @notice Represents a single withdrawal in the queue.
+     * @param amount The amount of tokens to withdraw.
+     * @param claimableAt The timestamp when the withdrawal becomes claimable.
+     * @param previous The ID of the previous withdrawal in the queue (0 if first).
+     * @param next The ID of the next withdrawal in the queue (0 if last).
      */
     struct WithdrawalNode {
         uint256 amount;
         uint128 claimableAt;
-        uint64 previous; // ID of previous withdrawal, 0 if first
-        uint64 next; // ID of next withdrawal, 0 if last
+        uint64 previous;
+        uint64 next;
     }
 
     /*
-     * @notice Tracks the withdrawal queue for a staker-validator pair
+     * @notice Tracks the withdrawal queue for a staker-validator pair.
+     * @param head The ID of the first withdrawal in the queue (0 if empty).
+     * @param tail The ID of the last withdrawal in the queue (0 if empty).
      */
     struct WithdrawalQueue {
-        uint64 head; // ID of first withdrawal in queue, 0 if empty
-        uint64 tail; // ID of last withdrawal in queue, 0 if empty
+        uint64 head;
+        uint64 tail;
     }
 
     /*
-     * @notice Represents a pending configuration change proposal
+     * @notice Represents a pending configuration change proposal.
+     * @param value The proposed new value for the configuration parameter.
+     * @param executableAt The timestamp when the proposal can be executed (0 if no proposal exists).
      */
     struct ConfigProposal {
         uint128 value;
-        uint128 executableAt; // 0 if no proposal exists
+        uint128 executableAt;
     }
 
     /*
-     * @notice Return type for view functions querying withdrawal info
+     * @notice Return type for view functions querying withdrawal info.
+     * @param amount The amount of tokens in the withdrawal.
+     * @param claimableAt The timestamp when the withdrawal becomes claimable.
      */
     struct WithdrawalInfo {
         uint256 amount;
@@ -53,32 +63,32 @@ contract Staking is Ownable {
     // ============================================================
 
     /*
-     * @notice The SAFE token used for staking
+     * @notice The SAFE token used for staking.
      */
     IERC20 public immutable SAFE_TOKEN;
 
     /*
-     * @notice Time delay for configuration changes (immutable, set at deployment)
+     * @notice Time delay for configuration changes (immutable, set at deployment).
      */
     uint256 public immutable CONFIG_TIME_DELAY;
 
     /*
-     * @notice Global counter for total staked tokens
+     * @notice Global counter for total staked tokens.
      */
     uint256 public totalStakedAmount;
 
     /*
-     * @notice Global counter for total pending withdrawals
+     * @notice Global counter for total pending withdrawals.
      */
     uint256 public totalPendingWithdrawals;
 
     /*
-     * @notice Withdraw time delay before tokens can be claimed
+     * @notice Withdraw time delay before tokens can be claimed.
      */
     uint128 public withdrawDelay;
 
     /*
-     * @notice Counter for generating unique withdrawal IDs
+     * @notice Counter for generating unique withdrawal IDs.
      */
     uint64 public nextWithdrawalId;
 
@@ -87,37 +97,37 @@ contract Staking is Ownable {
     // ============================================================
 
     /*
-     * @notice Tracks if an address is a registered validator
+     * @notice Tracks if an address is a registered validator.
      */
     mapping(address validator => bool isRegistered) public isValidator;
 
     /*
-     * @notice Tracks total stake amount for each validator
+     * @notice Tracks total stake amount for each validator.
      */
     mapping(address validator => uint256 totalStake) public totalStakes;
 
     /*
-     * @notice Tracks individual stake amounts: staker => validator => amount
+     * @notice Tracks individual stake amounts: staker => validator => amount.
      */
     mapping(address staker => mapping(address validator => uint256 amount)) public stakes;
 
     /*
-     * @notice Tracks withdrawal queues: staker => validator => queue
+     * @notice Tracks withdrawal queues: staker => validator => queue.
      */
     mapping(address staker => mapping(address validator => WithdrawalQueue queue)) public withdrawalQueues;
 
     /*
-     * @notice Stores all withdrawal nodes by ID
+     * @notice Stores all withdrawal nodes by ID.
      */
     mapping(uint64 withdrawalId => WithdrawalNode node) public withdrawalNodes;
 
     /*
-     * @notice Pending proposal for withdraw delay change
+     * @notice Pending proposal for withdraw delay change.
      */
     ConfigProposal public pendingWithdrawDelayChange;
 
     /*
-     * @notice Pending proposal for validator changes
+     * @notice Pending proposal for validator changes.
      */
     bytes32 public pendingValidatorChangeHash;
 
@@ -126,23 +136,79 @@ contract Staking is Ownable {
     // ============================================================
 
     // Staking Operations
+
+    /*
+     * @notice Emitted when a stake is increased.
+     * @param staker The address of the staker.
+     * @param validator The validator address the stake is increased toward.
+     * @param amount The amount of tokens staked.
+     */
     event StakeIncreased(address indexed staker, address indexed validator, uint256 amount);
+
+    /*
+     * @notice Emitted when a withdrawal is initiated.
+     * @param staker The address of the staker.
+     * @param validator The validator address the withdrawal is initiated from.
+     * @param withdrawalId The unique ID of the initiated withdrawal.
+     * @param amount The amount of tokens to withdraw.
+     */
     event WithdrawalInitiated(
         address indexed staker, address indexed validator, uint64 indexed withdrawalId, uint256 amount
     );
+
+    /*
+     * @notice Emitted when a withdrawal is claimed after the delay period.
+     * @param staker The address of the staker.
+     * @param validator The validator address the withdrawal is claimed from.
+     * @param amount The amount of tokens claimed.
+     */
     event WithdrawalClaimed(address indexed staker, address indexed validator, uint256 amount);
 
     // Validator Management
+
+    /*
+     * @notice Emitted when validator registration/deregistration is proposed.
+     * @param validatorsHash The hash of the proposed validators change.
+     * @param validator The array of validator addresses.
+     * @param isRegistration The array of booleans indicating registration (true) or deregistration (false).
+     * @param executableAt The timestamp when the proposal can be executed.
+     */
     event ValidatorsProposed(
         bytes32 indexed validatorsHash, address[] validator, bool[] isRegistration, uint256 executableAt
     );
+
+    /*
+     * @notice Emitted when a validator is registered or deregistered.
+     * @param validator The validator address.
+     * @param isRegistered True if registered, false if deregistered.
+     */
     event ValidatorUpdated(address indexed validator, bool isRegistered);
 
     // Configuration Changes
+
+    /*
+     * @notice Emitted when a withdraw delay change is proposed.
+     * @param currentDelay The current withdraw delay.
+     * @param proposedDelay The proposed new withdraw delay.
+     * @param executableAt The timestamp when the proposal can be executed.
+     */
     event WithdrawDelayProposed(uint256 currentDelay, uint256 proposedDelay, uint256 executableAt);
+
+    /*
+     * @notice Emitted when a withdraw delay change is executed.
+     * @param oldDelay The old withdraw delay.
+     * @param newDelay The new withdraw delay.
+     */
     event WithdrawDelayChanged(uint256 oldDelay, uint256 newDelay);
 
     // Token Recovery
+
+    /*
+     * @notice Emitted when tokens are recovered.
+     * @param token The token address recovered.
+     * @param to The address tokens are sent to.
+     * @param amount The amount of tokens recovered.
+     */
     event TokensRecovered(address indexed token, address indexed to, uint256 amount);
 
     // ============================================================
@@ -150,72 +216,72 @@ contract Staking is Ownable {
     // ============================================================
 
     /*
-     * @notice Thrown when an amount parameter is 0 or invalid
+     * @notice Thrown when an amount parameter is 0 or invalid.
      */
     error InvalidAmount();
 
     /*
-     * @notice Thrown when an address parameter is the zero address
+     * @notice Thrown when an address parameter is the zero address.
      */
     error InvalidAddress();
 
     /*
-     * @notice Thrown when attempting to stake to a non-registered validator
+     * @notice Thrown when attempting to stake to a non-registered validator.
      */
     error NotValidator();
 
     /*
-     * @notice Thrown when trying to withdraw more than the current stake
+     * @notice Thrown when trying to withdraw more than the current stake.
      */
     error InsufficientStake();
 
     /*
-     * @notice Thrown when trying to execute a proposal that hasn't been set
+     * @notice Thrown when trying to execute a proposal that hasn't been set.
      */
     error ProposalNotSet();
 
     /*
-     * @notice Thrown when trying to execute a proposal with an invalid hash
+     * @notice Thrown when trying to execute a proposal with an invalid hash.
      */
     error InvalidProposalHash();
 
     /*
-     * @notice Thrown when trying to execute a proposal before the timelock expires
+     * @notice Thrown when trying to execute a proposal before the timelock expires.
      */
     error ProposalNotExecutable();
 
     /*
-     * @notice Thrown when trying to execute a non-existent proposal
+     * @notice Thrown when trying to execute a non-existent proposal.
      */
     error NoProposalExists();
 
     /*
-     * @notice Thrown when trying to recover more tokens than available
+     * @notice Thrown when trying to recover more tokens than available.
      */
     error InsufficientRecoverableAmount();
 
     /*
-     * @notice Thrown when trying to claim from an empty withdrawal queue
+     * @notice Thrown when trying to claim from an empty withdrawal queue.
      */
     error WithdrawalQueueEmpty();
 
     /*
-     * @notice Thrown when trying to claim a withdrawal that isn't ready
+     * @notice Thrown when trying to claim a withdrawal that isn't ready.
      */
     error NoClaimableWithdrawal();
 
     /*
-     * @notice Thrown when input arrays have mismatched lengths
+     * @notice Thrown when input arrays have mismatched lengths.
      */
     error ArrayLengthMismatch();
 
     /*
-     * @notice Thrown when a parameter is outside acceptable bounds
+     * @notice Thrown when a parameter is outside acceptable bounds.
      */
     error InvalidParameter();
 
     /*
-     * @notice Thrown when the specified ordering in the withdrawal queue is invalid
+     * @notice Thrown when the specified ordering in the withdrawal queue is invalid.
      */
     error InvalidOrdering();
 
@@ -223,6 +289,13 @@ contract Staking is Ownable {
     // CONSTRUCTOR
     // ============================================================
 
+    /*
+     * @notice Constructs the Staking contract.
+     * @param initialOwner The initial owner of the contract.
+     * @param safeToken The address of the SAFE token used for staking.
+     * @param initialWithdrawDelay The initial withdraw delay in seconds.
+     * @param configTimeDelay The time delay for configuration changes in seconds.
+     */
     constructor(address initialOwner, address safeToken, uint128 initialWithdrawDelay, uint256 configTimeDelay)
         Ownable(initialOwner)
     {
@@ -242,9 +315,9 @@ contract Staking is Ownable {
     // ============================================================
 
     /*
-     * @notice Stake tokens toward a validator
-     * @param validator The validator address to stake toward
-     * @param amount The amount of tokens to stake
+     * @notice Stake tokens toward a validator.
+     * @param validator The validator address to stake toward.
+     * @param amount The amount of tokens to stake.
      */
     function stake(address validator, uint256 amount) external {
         require(amount != 0, InvalidAmount());
@@ -260,12 +333,12 @@ contract Staking is Ownable {
     }
 
     /*
-     * @notice Internal function to handle initial withdrawal logic
-     * @param user The address initiating the withdrawal
-     * @param amount The amount to withdraw
-     * @param validator The validator address to withdraw from
-     * @return withdrawalId The unique ID of the initiated withdrawal
-     * @return claimableAt The timestamp when the withdrawal becomes claimable
+     * @notice Internal function to handle initial withdrawal logic.
+     * @param user The address initiating the withdrawal.
+     * @param amount The amount to withdraw.
+     * @param validator The validator address to withdraw from.
+     * @return withdrawalId The unique ID of the initiated withdrawal.
+     * @return claimableAt The timestamp when the withdrawal becomes claimable.
      */
     function _initialWithdrawal(address user, uint256 amount, address validator)
         internal
@@ -274,7 +347,7 @@ contract Staking is Ownable {
         require(amount != 0, InvalidAmount());
         require(stakes[user][validator] >= amount, InsufficientStake());
 
-        // Calculating & casting claimable timestamp
+        // Calculating & casting claimable timestamp.
         claimableAt = uint128(block.timestamp + withdrawDelay);
 
         stakes[user][validator] -= amount;
@@ -282,50 +355,50 @@ contract Staking is Ownable {
         totalStakedAmount -= amount;
         totalPendingWithdrawals += amount;
 
-        // Generate new withdrawal ID
+        // Generate new withdrawal ID.
         withdrawalId = nextWithdrawalId++;
 
         emit WithdrawalInitiated(user, validator, withdrawalId, amount);
     }
 
     /*
-     * @notice Initiate a withdrawal from a validator
-     * @param validator The validator address to withdraw from
-     * @param amount The amount of tokens to withdraw
-     * @dev   This function should be used in the interface for normal withdrawals. It inserts the new withdrawal
-     *        into the queue in the correct position based on the claimableAt timestamp.
+     * @notice Initiate a withdrawal from a validator.
+     * @param validator The validator address to withdraw from.
+     * @param amount The amount of tokens to withdraw.
+     * @dev This function should be used in the interface for normal withdrawals. It inserts the new withdrawal
+     *      into the queue in the correct position based on the claimableAt timestamp.
      */
     function initiateWithdrawal(address validator, uint256 amount) external {
         (uint64 withdrawalId, uint128 claimableAt) = _initialWithdrawal(msg.sender, amount, validator);
 
-        // Create node
+        // Create a withdrawal node.
         withdrawalNodes[withdrawalId] = WithdrawalNode({amount: amount, claimableAt: claimableAt, previous: 0, next: 0});
 
-        // Add to queue
+        // Add to the withdrawal queue.
         WithdrawalQueue storage queue = withdrawalQueues[msg.sender][validator];
-        // If queue is empty, set head and tail to new node
+        // If queue is empty, set head and tail to new node.
         if (queue.head == 0) {
             withdrawalQueues[msg.sender][validator] = WithdrawalQueue({head: withdrawalId, tail: withdrawalId});
         } else {
-            // Check if the claimableAt of the tail is higher than the claimableAt of the new node
-            // If so, traverse backwards to find the correct position
+            // Check if the claimableAt of the tail is higher than the claimableAt of the new node.
+            // If so, traverse backwards to find the correct position.
             uint64 currentId = queue.tail;
             while (currentId != 0 && withdrawalNodes[currentId].claimableAt > claimableAt) {
                 currentId = withdrawalNodes[currentId].previous;
             }
             if (currentId == queue.tail) {
-                // Higher chances of this happening in most cases, so check first
-                // Insert at tail
+                // Higher chances of this happening in most cases, so check first.
+                // Insert at tail.
                 withdrawalNodes[withdrawalId].previous = queue.tail;
                 withdrawalNodes[queue.tail].next = withdrawalId;
                 queue.tail = withdrawalId;
             } else if (currentId == 0) {
-                // Insert at head
+                // Insert at head.
                 withdrawalNodes[withdrawalId].next = queue.head;
                 withdrawalNodes[queue.head].previous = withdrawalId;
                 queue.head = withdrawalId;
             } else {
-                // Insert in the middle
+                // Insert in the middle.
                 uint64 nextId = withdrawalNodes[currentId].next;
                 withdrawalNodes[withdrawalId].previous = currentId;
                 withdrawalNodes[withdrawalId].next = nextId;
@@ -338,21 +411,21 @@ contract Staking is Ownable {
     }
 
     /*
-     * @notice Initiate a withdrawal from a validator at a specific position in the queue
-     * @param validator The validator address to withdraw from
-     * @param amount The amount of tokens to withdraw
-     * @param previousId The ID of the previous withdrawal in the queue (0 if inserting at head)
-     * @dev   This function allows users to specify the position of their withdrawal in the queue.
-     *        It is the caller's responsibility to ensure the correct ordering based on claimableAt timestamps.
-     *        This is an advanced function and should be used with caution.
+     * @notice Initiate a withdrawal from a validator at a specific position in the queue.
+     * @param validator The validator address to withdraw from.
+     * @param amount The amount of tokens to withdraw.
+     * @param previousId The ID of the previous withdrawal in the queue (0 if inserting at head).
+     * @dev This function allows users to specify the position of their withdrawal in the queue.
+     *      It is the caller's responsibility to ensure the correct ordering based on claimableAt timestamps.
+     *      This is an advanced function and should be used with caution.
      */
     function initiateWithdrawalAtPosition(address validator, uint256 amount, uint64 previousId) external {
         (uint64 withdrawalId, uint128 claimableAt) = _initialWithdrawal(msg.sender, amount, validator);
 
         uint64 nextId;
-        // Check if the Id's are correct and claimableAt ordering is correct
+        // Check if the IDs are correct and claimableAt ordering is correct.
         if (previousId == 0) {
-            // Inserting at head - get the current head as nextId
+            // Inserting at head - get the current head as nextId.
             nextId = withdrawalQueues[msg.sender][validator].head;
         } else {
             require(withdrawalNodes[previousId].claimableAt <= claimableAt, InvalidOrdering());
@@ -360,35 +433,35 @@ contract Staking is Ownable {
             nextId = withdrawalNodes[previousId].next;
         }
 
-        // Validate ordering if queue is not empty
+        // Validate ordering if queue is not empty.
         if (nextId != 0) {
             require(withdrawalNodes[nextId].claimableAt >= claimableAt, InvalidOrdering());
         }
 
-        // Create node
+        // Create a withdrawal node.
         withdrawalNodes[withdrawalId] =
             WithdrawalNode({amount: amount, claimableAt: claimableAt, previous: previousId, next: nextId});
 
-        // Update previous and next nodes
+        // Update previous and next nodes.
         if (previousId != 0) {
             withdrawalNodes[previousId].next = withdrawalId;
         } else {
-            // Inserting at head
+            // Inserting at head.
             withdrawalQueues[msg.sender][validator].head = withdrawalId;
         }
 
         if (nextId != 0) {
             withdrawalNodes[nextId].previous = withdrawalId;
         } else {
-            // Inserting at tail
+            // Inserting at tail.
             withdrawalQueues[msg.sender][validator].tail = withdrawalId;
         }
     }
 
     /*
-     * @notice Claim a pending withdrawal after the delay period
-     * @param staker The address that initiated the withdrawal
-     * @param validator The validator address to claim from
+     * @notice Claim a pending withdrawal after the delay period.
+     * @param staker The address that initiated the withdrawal.
+     * @param validator The validator address to claim from.
      */
     function claimWithdrawal(address staker, address validator) external {
         WithdrawalQueue memory queue = withdrawalQueues[staker][validator];
@@ -400,7 +473,7 @@ contract Staking is Ownable {
         uint256 amount = node.amount;
 
         if (node.next == 0) {
-            // Queue is now empty
+            // Queue is now empty.
             withdrawalQueues[staker][validator] = WithdrawalQueue({head: 0, tail: 0});
         } else {
             withdrawalQueues[staker][validator].head = node.next;
@@ -419,8 +492,8 @@ contract Staking is Ownable {
     // ============================================================
 
     /*
-     * @notice Propose a new withdraw delay
-     * @param newDelay The proposed withdraw delay in seconds
+     * @notice Propose a new withdraw delay.
+     * @param newDelay The proposed withdraw delay in seconds.
      */
     function proposeWithdrawDelay(uint128 newDelay) external onlyOwner {
         require(newDelay != 0 && newDelay <= CONFIG_TIME_DELAY, InvalidParameter());
@@ -431,9 +504,9 @@ contract Staking is Ownable {
     }
 
     /*
-     * @notice Propose validator registration/deregistration changes
-     * @param validators Array of validator addresses
-     * @param isRegistration Array of booleans (true = register, false = deregister)
+     * @notice Propose validator registration/deregistration changes.
+     * @param validators Array of validator addresses.
+     * @param isRegistration Array of booleans (true = register, false = deregister).
      * @dev It is currently possible to propose duplicate validators in a single proposal.
      */
     function proposeValidators(address[] calldata validators, bool[] calldata isRegistration) external onlyOwner {
@@ -456,7 +529,7 @@ contract Staking is Ownable {
     // ============================================================
 
     /*
-     * @notice Execute a pending withdraw delay change
+     * @notice Execute a pending withdraw delay change.
      */
     function executeWithdrawDelayChange() external {
         ConfigProposal memory proposal = pendingWithdrawDelayChange;
@@ -470,7 +543,7 @@ contract Staking is Ownable {
     }
 
     /*
-     * @notice Execute pending validator changes
+     * @notice Execute pending validator changes.
      */
     function executeValidatorChanges(
         address[] calldata validators,
@@ -498,9 +571,9 @@ contract Staking is Ownable {
     // ============================================================
 
     /*
-     * @notice Recover accidentally sent tokens
-     * @param token The token address to recover
-     * @param to The address to send recovered tokens to
+     * @notice Recover accidentally sent tokens.
+     * @param token The token address to recover.
+     * @param to The address to send recovered tokens to.
      */
     function recoverTokens(address token, address to) external onlyOwner {
         require(to != address(0), InvalidAddress());
@@ -525,10 +598,10 @@ contract Staking is Ownable {
     // ============================================================
 
     /*
-     * @notice Get all pending withdrawals for a staker-validator pair
-     * @param staker The staker address
-     * @param validator The validator address
-     * @return An array of withdrawal info
+     * @notice Get all pending withdrawals for a staker-validator pair.
+     * @param staker The staker address.
+     * @param validator The validator address.
+     * @return An array of withdrawal info.
      */
     function getPendingWithdrawals(address staker, address validator) external view returns (WithdrawalInfo[] memory) {
         WithdrawalQueue memory queue = withdrawalQueues[staker][validator];
@@ -536,7 +609,7 @@ contract Staking is Ownable {
             return new WithdrawalInfo[](0);
         }
 
-        // Count withdrawals
+        // Count the pending withdrawals.
         uint256 count = 0;
         uint64 currentId = queue.head;
         while (currentId != 0) {
@@ -544,7 +617,7 @@ contract Staking is Ownable {
             currentId = withdrawalNodes[currentId].next;
         }
 
-        // Populate array
+        // Populate the withdrawals array.
         WithdrawalInfo[] memory withdrawals = new WithdrawalInfo[](count);
         currentId = queue.head;
         for (uint256 i = 0; i < count; i++) {
@@ -557,11 +630,11 @@ contract Staking is Ownable {
     }
 
     /*
-     * @notice Get the next claimable withdrawal for a staker-validator pair
-     * @param staker The staker address
-     * @param validator The validator address
-     * @return amount The withdrawal amount
-     * @return claimableAt The timestamp when claimable
+     * @notice Get the next claimable withdrawal for a staker-validator pair.
+     * @param staker The staker address.
+     * @param validator The validator address.
+     * @return amount The withdrawal amount.
+     * @return claimableAt The timestamp when claimable.
      */
     function getNextClaimableWithdrawal(address staker, address validator)
         external
@@ -582,7 +655,7 @@ contract Staking is Ownable {
     // ============================================================
 
     /*
-     * @notice Compute the hash of the validators for a configuration change.
+     * @notice Computes the hash of the validators for a configuration change.
      * @param validators The validators affected by the configuration change.
      * @param isRegistration Whether or not the validator should be registered or unregistered.
      * @param executableAt The timestamp once the validator change can be executed.
