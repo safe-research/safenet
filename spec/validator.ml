@@ -650,7 +650,38 @@ struct
     (state', actions)
 
   let key_gen_complaint_response state group_id plaintiff accused secret_share =
+    let record_response accused complaints =
+      let c = ParticipantMap.find accused complaints in
+      ParticipantMap.add accused
+        { c with unresponded = c.unresponded - 1 }
+        complaints
+    in
     match state.rollover with
+    | Collecting_key_gen_secret_shares st
+      when GroupId.equal st.group.id group_id ->
+        let accused_commitments =
+          ParticipantMap.find accused st.vss.commitments
+        in
+        if FROST.KeyGen.verify_secret_share accused_commitments secret_share
+        then
+          let (Local me) = st.group.me in
+          let (Local shares) = st.shares in
+          let shares' =
+            if FROST.Identifier.equal me plaintiff then
+              ParticipantMap.add accused (Some secret_share) shares
+            else shares
+          in
+          let complaints' = record_response accused st.complaints in
+          let rollover' =
+            Collecting_key_gen_secret_shares
+              { st with shares = Local shares'; complaints = complaints' }
+          in
+          let state' = { state with rollover = rollover' } in
+          (state', [])
+        else
+          let address = participant_address st.group.participants accused in
+          let participants' = AddressSet.remove address st.group.participants in
+          key_gen_and_commit state participants'
     | Confirming_key_gen st when GroupId.equal st.group.id group_id ->
         (* Note that we drop complaint responses that come too late. This should
            never really happen in practice (since honest validators ignore
@@ -687,12 +718,7 @@ struct
                 (shares', actions)
               else (shares, [])
             in
-            let complaints' =
-              let c = ParticipantMap.find accused st.complaints in
-              ParticipantMap.add accused
-                { c with unresponded = c.unresponded - 1 }
-                st.complaints
-            in
+            let complaints' = record_response accused st.complaints in
             let rollover' =
               Confirming_key_gen
                 { st with shares = Local shares'; complaints = complaints' }
