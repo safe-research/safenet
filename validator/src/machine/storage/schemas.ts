@@ -2,14 +2,14 @@ import { z } from "zod";
 import { epochRolloverPacketSchema } from "../../consensus/verify/rollover/schemas.js";
 import { safeTransactionPacketSchema } from "../../consensus/verify/safeTx/schemas.js";
 import type { GroupId, ParticipantId, SignatureId } from "../../frost/types.js";
-import { hexDataSchema } from "../../types/schemas.js";
+import { hexBytes32Schema } from "../../types/schemas.js";
 
 // --- Base Type Definitions (for Zod) ---
 
-const groupIdSchema = hexDataSchema.transform((v) => v as GroupId);
+const groupIdSchema = hexBytes32Schema.transform((v) => v as GroupId);
 const coercedBigIntSchema = z.coerce.bigint().nonnegative();
 const participantIdSchema = coercedBigIntSchema.transform((v) => v as ParticipantId);
-const signatureIdSchema = hexDataSchema.transform((v) => v as SignatureId);
+const signatureIdSchema = hexBytes32Schema.transform((v) => v as SignatureId);
 
 // Overwrite bigint fields to accept strings
 const dbSafeTransactionPacketSchema = safeTransactionPacketSchema.extend({
@@ -80,7 +80,7 @@ const signRolloverSchema = z.object({
 	id: z.literal("sign_rollover"),
 	groupId: groupIdSchema,
 	nextEpoch: coercedBigIntSchema,
-	message: hexDataSchema,
+	message: hexBytes32Schema,
 	responsible: participantIdSchema,
 });
 
@@ -149,5 +149,5 @@ export const consensusStateSchema = z.object({
 	stagedEpoch: coercedBigIntSchema,
 	groupPendingNonces: z.record(groupIdSchema, z.boolean()),
 	epochGroups: z.record(z.string(), groupInfoSchema),
-	signatureIdToMessage: z.record(signatureIdSchema, hexDataSchema),
+	signatureIdToMessage: z.record(signatureIdSchema, hexBytes32Schema),
 });

@@ -126,6 +126,7 @@ export type MachineStates = Readonly<{
 
 export type MachineConfig = {
 	defaultParticipants: Participant[];
+	genesisSalt: Hex;
 	keyGenTimeout: bigint;
 	signingTimeout: bigint;
 	blocksPerEpoch: bigint;

@@ -70,21 +70,21 @@ describe("SqliteStateStorage", () => {
 		originalStorage.applyDiff({
 			rollover: {
 				id: "collecting_shares",
-				groupId: "0x5afe",
+				groupId: "0x5afe000000000000000000000000000000000000000000000000000000000000",
 				nextEpoch: 1n,
 				deadline: 100n,
 			},
 		});
 		expect(originalStorage.machineStates().rollover).toStrictEqual({
 			id: "collecting_shares",
-			groupId: "0x5afe",
+			groupId: "0x5afe000000000000000000000000000000000000000000000000000000000000",
 			nextEpoch: 1n,
 			deadline: 100n,
 		});
 		const recoveredStorage = new SqliteStateStorage(TEST_DB_PATH);
 		expect(recoveredStorage.machineStates().rollover).toStrictEqual({
 			id: "collecting_shares",
-			groupId: "0x5afe",
+			groupId: "0x5afe000000000000000000000000000000000000000000000000000000000000",
 			nextEpoch: 1n,
 			deadline: 100n,
 		});
@@ -103,22 +103,29 @@ describe("SqliteStateStorage", () => {
 			consensus: {
 				activeEpoch: 1n,
 				stagedEpoch: 2n,
-				epochGroup: [1n, { groupId: "0x5afe", participantId: 1n }],
-				groupPendingNonces: ["0x5afe", true],
-				signatureIdToMessage: ["0x5afe", "0x5af3"],
+				epochGroup: [
+					1n,
+					{ groupId: "0x5afe000000000000000000000000000000000000000000000000000000000000", participantId: 1n },
+				],
+				groupPendingNonces: ["0x5afe000000000000000000000000000000000000000000000000000000000000", true],
+				signatureIdToMessage: [
+					"0x5afe000000000000000000000000000000000000000000000000000000000000",
+					"0x5af3000000000000000000000000000000000000000000000000000000000000",
+				],
 			},
 		});
 		expect(originalStorage.consensusState()).toStrictEqual({
 			activeEpoch: 1n,
 			stagedEpoch: 2n,
 			epochGroups: {
-				"1": { groupId: "0x5afe", participantId: 1n },
+				"1": { groupId: "0x5afe000000000000000000000000000000000000000000000000000000000000", participantId: 1n },
 			},
 			groupPendingNonces: {
-				"0x5afe": true,
+				"0x5afe000000000000000000000000000000000000000000000000000000000000": true,
 			},
 			signatureIdToMessage: {
-				"0x5afe": "0x5af3",
+				"0x5afe000000000000000000000000000000000000000000000000000000000000":
+					"0x5af3000000000000000000000000000000000000000000000000000000000000",
 			},
 		});
 		const recoveredStorage = new SqliteStateStorage(TEST_DB_PATH);
@@ -126,20 +133,21 @@ describe("SqliteStateStorage", () => {
 			activeEpoch: 1n,
 			stagedEpoch: 2n,
 			epochGroups: {
-				"1": { groupId: "0x5afe", participantId: 1n },
+				"1": { groupId: "0x5afe000000000000000000000000000000000000000000000000000000000000", participantId: 1n },
 			},
 			groupPendingNonces: {
-				"0x5afe": true,
+				"0x5afe000000000000000000000000000000000000000000000000000000000000": true,
 			},
 			signatureIdToMessage: {
-				"0x5afe": "0x5af3",
+				"0x5afe000000000000000000000000000000000000000000000000000000000000":
+					"0x5af3000000000000000000000000000000000000000000000000000000000000",
 			},
 		});
 		// Check that cleanup is working
 		recoveredStorage.applyDiff({
 			consensus: {
-				groupPendingNonces: ["0x5afe"],
-				signatureIdToMessage: ["0x5afe"],
+				groupPendingNonces: ["0x5afe000000000000000000000000000000000000000000000000000000000000"],
+				signatureIdToMessage: ["0x5afe000000000000000000000000000000000000000000000000000000000000"],
 			},
 		});
 		const cleanedStorage = new SqliteStateStorage(TEST_DB_PATH);
@@ -147,7 +155,7 @@ describe("SqliteStateStorage", () => {
 			activeEpoch: 1n,
 			stagedEpoch: 2n,
 			epochGroups: {
-				"1": { groupId: "0x5afe", participantId: 1n },
+				"1": { groupId: "0x5afe000000000000000000000000000000000000000000000000000000000000", participantId: 1n },
 			},
 			groupPendingNonces: {},
 			signatureIdToMessage: {},
@@ -160,11 +168,11 @@ describe("SqliteStateStorage", () => {
 		// For each state one version with an epoch rollover packet and a tx attestation packet is added
 		originalStorage.applyDiff({
 			signing: [
-				"0x5afe1a",
+				"0x5afe1a0000000000000000000000000000000000000000000000000000000000",
 				{
 					id: "collect_nonce_commitments",
 					packet: TX_ATTESTATION_PACKET,
-					signatureId: "0x5af301",
+					signatureId: "0x5af3010000000000000000000000000000000000000000000000000000000000",
 					lastSigner: 1n,
 					deadline: 10n,
 				},
@@ -172,11 +180,11 @@ describe("SqliteStateStorage", () => {
 		});
 		originalStorage.applyDiff({
 			signing: [
-				"0x5afe1b",
+				"0x5afe1b0000000000000000000000000000000000000000000000000000000000",
 				{
 					id: "collect_nonce_commitments",
 					packet: EPOCH_ROLLOVER_PACKET,
-					signatureId: "0x5af301",
+					signatureId: "0x5af3010000000000000000000000000000000000000000000000000000000000",
 					lastSigner: 1n,
 					deadline: 10n,
 				},
@@ -184,12 +192,12 @@ describe("SqliteStateStorage", () => {
 		});
 		originalStorage.applyDiff({
 			signing: [
-				"0x5afe2a",
+				"0x5afe2a0000000000000000000000000000000000000000000000000000000000",
 				{
 					id: "collect_signing_shares",
 					packet: TX_ATTESTATION_PACKET,
 					sharesFrom: [2n],
-					signatureId: "0x5af301",
+					signatureId: "0x5af3010000000000000000000000000000000000000000000000000000000000",
 					lastSigner: 1n,
 					deadline: 10n,
 				},
@@ -197,12 +205,12 @@ describe("SqliteStateStorage", () => {
 		});
 		originalStorage.applyDiff({
 			signing: [
-				"0x5afe2b",
+				"0x5afe2b0000000000000000000000000000000000000000000000000000000000",
 				{
 					id: "collect_signing_shares",
 					packet: EPOCH_ROLLOVER_PACKET,
 					sharesFrom: [2n],
-					signatureId: "0x5af301",
+					signatureId: "0x5af3010000000000000000000000000000000000000000000000000000000000",
 					lastSigner: 1n,
 					deadline: 10n,
 				},
@@ -210,11 +218,11 @@ describe("SqliteStateStorage", () => {
 		});
 		originalStorage.applyDiff({
 			signing: [
-				"0x5afe3a",
+				"0x5afe3a0000000000000000000000000000000000000000000000000000000000",
 				{
 					id: "waiting_for_attestation",
 					packet: TX_ATTESTATION_PACKET,
-					signatureId: "0x5af301",
+					signatureId: "0x5af3010000000000000000000000000000000000000000000000000000000000",
 					responsible: 1n,
 					deadline: 10n,
 				},
@@ -222,11 +230,11 @@ describe("SqliteStateStorage", () => {
 		});
 		originalStorage.applyDiff({
 			signing: [
-				"0x5afe3b",
+				"0x5afe3b0000000000000000000000000000000000000000000000000000000000",
 				{
 					id: "waiting_for_attestation",
 					packet: EPOCH_ROLLOVER_PACKET,
-					signatureId: "0x5af301",
+					signatureId: "0x5af3010000000000000000000000000000000000000000000000000000000000",
 					responsible: 1n,
 					deadline: 10n,
 				},
@@ -234,7 +242,7 @@ describe("SqliteStateStorage", () => {
 		});
 		originalStorage.applyDiff({
 			signing: [
-				"0x5afe4a",
+				"0x5afe4a0000000000000000000000000000000000000000000000000000000000",
 				{
 					id: "waiting_for_request",
 					packet: TX_ATTESTATION_PACKET,
@@ -246,7 +254,7 @@ describe("SqliteStateStorage", () => {
 		});
 		originalStorage.applyDiff({
 			signing: [
-				"0x5afe4b",
+				"0x5afe4b0000000000000000000000000000000000000000000000000000000000",
 				{
 					id: "waiting_for_request",
 					packet: EPOCH_ROLLOVER_PACKET,
@@ -257,58 +265,58 @@ describe("SqliteStateStorage", () => {
 			],
 		});
 		const expectedSigningState: Record<Hex, SigningState> = {
-			"0x5afe1a": {
+			"0x5afe1a0000000000000000000000000000000000000000000000000000000000": {
 				id: "collect_nonce_commitments",
 				packet: TX_ATTESTATION_PACKET,
-				signatureId: "0x5af301",
+				signatureId: "0x5af3010000000000000000000000000000000000000000000000000000000000",
 				lastSigner: 1n,
 				deadline: 10n,
 			},
-			"0x5afe1b": {
+			"0x5afe1b0000000000000000000000000000000000000000000000000000000000": {
 				id: "collect_nonce_commitments",
 				packet: EPOCH_ROLLOVER_PACKET,
-				signatureId: "0x5af301",
+				signatureId: "0x5af3010000000000000000000000000000000000000000000000000000000000",
 				lastSigner: 1n,
 				deadline: 10n,
 			},
-			"0x5afe2a": {
+			"0x5afe2a0000000000000000000000000000000000000000000000000000000000": {
 				id: "collect_signing_shares",
 				packet: TX_ATTESTATION_PACKET,
 				sharesFrom: [2n],
-				signatureId: "0x5af301",
+				signatureId: "0x5af3010000000000000000000000000000000000000000000000000000000000",
 				lastSigner: 1n,
 				deadline: 10n,
 			},
-			"0x5afe2b": {
+			"0x5afe2b0000000000000000000000000000000000000000000000000000000000": {
 				id: "collect_signing_shares",
 				packet: EPOCH_ROLLOVER_PACKET,
 				sharesFrom: [2n],
-				signatureId: "0x5af301",
+				signatureId: "0x5af3010000000000000000000000000000000000000000000000000000000000",
 				lastSigner: 1n,
 				deadline: 10n,
 			},
-			"0x5afe3a": {
+			"0x5afe3a0000000000000000000000000000000000000000000000000000000000": {
 				id: "waiting_for_attestation",
 				packet: TX_ATTESTATION_PACKET,
-				signatureId: "0x5af301",
+				signatureId: "0x5af3010000000000000000000000000000000000000000000000000000000000",
 				responsible: 1n,
 				deadline: 10n,
 			},
-			"0x5afe3b": {
+			"0x5afe3b0000000000000000000000000000000000000000000000000000000000": {
 				id: "waiting_for_attestation",
 				packet: EPOCH_ROLLOVER_PACKET,
-				signatureId: "0x5af301",
+				signatureId: "0x5af3010000000000000000000000000000000000000000000000000000000000",
 				responsible: 1n,
 				deadline: 10n,
 			},
-			"0x5afe4a": {
+			"0x5afe4a0000000000000000000000000000000000000000000000000000000000": {
 				id: "waiting_for_request",
 				packet: TX_ATTESTATION_PACKET,
 				signers: [1n, 2n],
 				responsible: 1n,
 				deadline: 10n,
 			},
-			"0x5afe4b": {
+			"0x5afe4b0000000000000000000000000000000000000000000000000000000000": {
 				id: "waiting_for_request",
 				packet: EPOCH_ROLLOVER_PACKET,
 				signers: [1n, 2n],
@@ -320,15 +328,15 @@ describe("SqliteStateStorage", () => {
 		const recoveredStorage = new SqliteStateStorage(TEST_DB_PATH);
 		expect(recoveredStorage.machineStates().signing).toStrictEqual(expectedSigningState);
 		// Delete half of the states to check that cleanup is working
-		recoveredStorage.applyDiff({ signing: ["0x5afe1a"] });
-		recoveredStorage.applyDiff({ signing: ["0x5afe2b"] });
-		recoveredStorage.applyDiff({ signing: ["0x5afe3b"] });
-		recoveredStorage.applyDiff({ signing: ["0x5afe4a"] });
+		recoveredStorage.applyDiff({ signing: ["0x5afe1a0000000000000000000000000000000000000000000000000000000000"] });
+		recoveredStorage.applyDiff({ signing: ["0x5afe2b0000000000000000000000000000000000000000000000000000000000"] });
+		recoveredStorage.applyDiff({ signing: ["0x5afe3b0000000000000000000000000000000000000000000000000000000000"] });
+		recoveredStorage.applyDiff({ signing: ["0x5afe4a0000000000000000000000000000000000000000000000000000000000"] });
 		const cleanedStorage = new SqliteStateStorage(TEST_DB_PATH);
-		delete expectedSigningState["0x5afe1a"];
-		delete expectedSigningState["0x5afe2b"];
-		delete expectedSigningState["0x5afe3b"];
-		delete expectedSigningState["0x5afe4a"];
+		delete expectedSigningState["0x5afe1a0000000000000000000000000000000000000000000000000000000000"];
+		delete expectedSigningState["0x5afe2b0000000000000000000000000000000000000000000000000000000000"];
+		delete expectedSigningState["0x5afe3b0000000000000000000000000000000000000000000000000000000000"];
+		delete expectedSigningState["0x5afe4a0000000000000000000000000000000000000000000000000000000000"];
 		expect(cleanedStorage.machineStates().signing).toStrictEqual(expectedSigningState);
 	});
 });

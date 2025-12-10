@@ -70,6 +70,7 @@ export class ValidatorService {
 			participants: config.participants,
 			blocksPerEpoch: config.blocksPerEpoch,
 			logger: this.#logger?.info,
+			genesisSalt: config.genesisSalt,
 			protocol,
 			storage: stateStorage,
 			keyGenClient,

@@ -3,7 +3,7 @@ import { type Address, concat, type Hex } from "viem";
 import { z } from "zod";
 import { pointFromBytes, scalarFromBytes, scalarToBytes } from "../../frost/math.js";
 import type { FrostPoint, GroupId, ParticipantId, SignatureId } from "../../frost/types.js";
-import { checkedAddressSchema, chunked, hexDataSchema } from "../../types/schemas.js";
+import { checkedAddressSchema, chunked, hexBytes32Schema } from "../../types/schemas.js";
 import type { NonceTree, PublicNonceCommitments } from "../signing/nonces.js";
 import type { GroupInfoStorage, KeyGenInfoStorage, Participant, SignatureRequestStorage } from "./types.js";
 
@@ -29,8 +29,8 @@ const dbSecretShareSchema = z.object({
 	secretShare: dbScalarSchema,
 });
 const dbNoncesCommitmentSchema = z.object({
-	root: hexDataSchema,
-	leaf: hexDataSchema,
+	root: hexBytes32Schema,
+	leaf: hexBytes32Schema,
 	hiding: dbScalarSchema.nullable(),
 	hidingCommitment: dbPointSchema,
 	binding: dbScalarSchema.nullable(),
@@ -162,7 +162,7 @@ export class SqliteClientStorage implements GroupInfoStorage, KeyGenInfoStorage,
 			.prepare("SELECT id FROM groups")
 			.pluck(true)
 			.all()
-			.map((row) => hexDataSchema.parse(row));
+			.map((row) => hexBytes32Schema.parse(row));
 	}
 
 	registerGroup(groupId: GroupId, participants: readonly Participant[], threshold: bigint): ParticipantId {
@@ -699,7 +699,7 @@ export class SqliteClientStorage implements GroupInfoStorage, KeyGenInfoStorage,
 	}
 
 	signingGroup(signatureId: SignatureId): GroupId {
-		return this.getSignatureColumn(signatureId, "group_id", hexDataSchema);
+		return this.getSignatureColumn(signatureId, "group_id", hexBytes32Schema);
 	}
 
 	signers(signatureId: SignatureId): ParticipantId[] {
@@ -714,7 +714,7 @@ export class SqliteClientStorage implements GroupInfoStorage, KeyGenInfoStorage,
 	}
 
 	message(signatureId: SignatureId): Hex {
-		return this.getSignatureColumn(signatureId, "message", hexDataSchema);
+		return this.getSignatureColumn(signatureId, "message", hexBytes32Schema);
 	}
 
 	sequence(signatureId: SignatureId): bigint {

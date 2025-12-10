@@ -137,6 +137,7 @@ describe("integration", () => {
 			const stateStorage = createStateStorage();
 			const sm = new SchildNetzMaschine({
 				participants,
+				genesisSalt: zeroHash,
 				protocol,
 				storage: stateStorage,
 				keyGenClient: kc,

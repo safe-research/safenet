@@ -1,4 +1,4 @@
-import type { Address } from "viem";
+import type { Hex } from "viem";
 import type { KeyGenClient } from "../../consensus/keyGen/client.js";
 import type { ProtocolAction } from "../../consensus/protocol/types.js";
 import type { Participant } from "../../consensus/storage/types.js";
@@ -11,13 +11,13 @@ export const triggerKeyGen = (
 	epoch: bigint,
 	deadline: bigint,
 	participants: Participant[],
-	consensus: Address,
+	context: Hex,
 	logger?: (msg: unknown) => void,
 ): { groupId: GroupId; diff: StateDiff } => {
 	if (participants.length < 2) {
 		throw new Error("Not enough participatns!");
 	}
-	const { count, threshold, context } = calcGroupParameters(participants.length, consensus, epoch);
+	const { count, threshold } = calcGroupParameters(participants.length);
 	const { groupId, participantsRoot, participantId, commitments, pok, poap } = keyGenClient.setupGroup(
 		participants,
 		count,

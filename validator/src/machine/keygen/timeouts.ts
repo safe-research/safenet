@@ -1,6 +1,7 @@
 import type { KeyGenClient } from "../../consensus/keyGen/client.js";
 import type { ShieldnetProtocol } from "../../consensus/protocol/types.js";
 import type { MachineConfig, MachineStates, StateDiff } from "../types.js";
+import { calcGroupContext } from "./group.js";
 import { triggerKeyGen } from "./trigger.js";
 
 export const checkKeyGenTimeouts = (
@@ -33,7 +34,7 @@ export const checkKeyGenTimeouts = (
 		machineStates.rollover.nextEpoch,
 		block + machineConfig.keyGenTimeout,
 		participants,
-		protocol.consensus(),
+		calcGroupContext(protocol.consensus(), machineStates.rollover.nextEpoch),
 		logger,
 	);
 	return diff;

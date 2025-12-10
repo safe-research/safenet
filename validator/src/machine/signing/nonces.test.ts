@@ -1,3 +1,4 @@
+import { zeroHash } from "viem";
 import { describe, expect, it, vi } from "vitest";
 import type { SigningClient } from "../../consensus/signing/client.js";
 import type { SafeTransactionPacket } from "../../consensus/verify/safeTx/schemas.js";
@@ -53,6 +54,7 @@ const CONSENSUS_STATE: ConsensusState = {
 
 const MACHINE_CONFIG: MachineConfig = {
 	defaultParticipants: [],
+	genesisSalt: zeroHash,
 	keyGenTimeout: 0n,
 	signingTimeout: 20n,
 	blocksPerEpoch: 8n,

@@ -6,6 +6,7 @@
 		"build": "rimraf dist && tsc --project tsconfig.dist.json",
 		"check": "biome check && tsc",
 		"dev": "tsx src/validator.ts",
+		"cmd:derive-genesis": "tsx src/cmd/derive-genesis.ts",
 		"fix": "biome check --write",
 		"test": "vitest run",
 		"test:watch": "vitest"

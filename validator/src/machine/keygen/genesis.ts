@@ -1,8 +1,8 @@
-import { maxUint64, zeroAddress } from "viem";
+import { maxUint64 } from "viem";
 import type { KeyGenClient } from "../../consensus/keyGen/client.js";
 import type { KeyGenEvent } from "../transitions/types.js";
 import type { ConsensusState, MachineConfig, MachineStates, StateDiff } from "../types.js";
-import { calcGenesisGroupId } from "./group.js";
+import { calcGenesisGroup } from "./group.js";
 import { triggerKeyGen } from "./trigger.js";
 
 export const handleGenesisKeyGen = (
@@ -13,13 +13,13 @@ export const handleGenesisKeyGen = (
 	transition: KeyGenEvent,
 	logger?: (msg: unknown) => void,
 ): StateDiff => {
-	const genesisGroupId = calcGenesisGroupId(machineConfig);
-	logger?.(`Genesis group id: ${genesisGroupId}`);
+	const genesisGroup = calcGenesisGroup(machineConfig);
+	logger?.(`Genesis group id: ${genesisGroup.id}`);
 	if (
 		machineStates.rollover.id === "waiting_for_rollover" &&
 		consensusState.activeEpoch === 0n &&
 		consensusState.stagedEpoch === 0n &&
-		transition.gid === genesisGroupId
+		transition.gid === genesisGroup.id
 	) {
 		logger?.("Trigger Genesis Group Generation");
 		// We set no timeout for the genesis group generation
@@ -28,7 +28,7 @@ export const handleGenesisKeyGen = (
 			0n,
 			maxUint64,
 			machineConfig.defaultParticipants,
-			zeroAddress,
+			genesisGroup.context,
 			logger,
 		);
 		const consensus = diff.consensus ?? {};

@@ -1,4 +1,4 @@
-import { type Address, getAddress, type Hex, isAddress, isHex } from "viem";
+import { type Address, getAddress, type Hex, isAddress, isHex, size, zeroHash } from "viem";
 import { z } from "zod";
 import { supportedChains } from "./chains.js";
 
@@ -16,24 +16,36 @@ export const hexDataSchema = z
 	.refine(isHex, "Value is not a valid hex string")
 	.transform((val) => val as Hex);
 
+export const hexBytes32Schema = hexDataSchema.refine((bytes) => size(bytes) === 32, "Value is not 32 bytes long");
+
 export const supportedChainsSchema = z.coerce
 	.number()
 	.pipe(z.union(supportedChains.map((chain) => z.literal(chain.id))));
 
-export const participantsSchema = z.preprocess((val) => {
-	if (typeof val === "string") {
-		return val.split(",");
+export const participantsSchema = z
+	.preprocess((val) => {
+		if (typeof val === "string") {
+			return val.split(",");
+		}
+		return val;
+	}, z.array(checkedAddressSchema))
+	.transform((participants) => participants.map((address, i) => ({ address, id: BigInt(i + 1) })));
+
+export const genesisSaltSchema = z.preprocess((val) => {
+	if (val === undefined || val === "") {
+		return zeroHash;
 	}
 	return val;
-}, z.array(checkedAddressSchema));
+}, hexBytes32Schema);
 
 export const validatorConfigSchema = z.object({
 	RPC_URL: z.url(),
-	PRIVATE_KEY: hexDataSchema,
+	PRIVATE_KEY: hexBytes32Schema,
 	CONSENSUS_ADDRESS: checkedAddressSchema,
 	COORDINATOR_ADDRESS: checkedAddressSchema,
 	CHAIN_ID: supportedChainsSchema,
 	PARTICIPANTS: participantsSchema,
+	GENESIS_SALT: genesisSaltSchema,
 });
 
 export const chunked = <T>(sz: number, transform: (b: Buffer) => T): ((b: Buffer) => T[]) => {
