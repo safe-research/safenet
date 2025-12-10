@@ -119,7 +119,7 @@ describe("transaction proposed", () => {
 		});
 	});
 
-	it("should throw if message cannot be verified", async () => {
+	it("should transition to waiting for request after verifying transaction", async () => {
 		const protocol: ShieldnetProtocol = {
 			chainId: () => 23n,
 			consensus: () => zeroAddress,
