@@ -7,28 +7,6 @@ import type { ConsensusState, MachineConfig, SigningState } from "../types.js";
 import { handleTransactionProposed } from "./transactionProposed.js";
 
 // --- Test Data ---
-const _SIGNING_STATE: SigningState = {
-	id: "collect_signing_shares",
-	signatureId: "0x5af35af3",
-	sharesFrom: [1n, 2n],
-	lastSigner: 2n,
-	deadline: 23n,
-	packet: {
-		type: "epoch_rollover_packet",
-		domain: {
-			chain: 1n,
-			consensus: "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266",
-		},
-		rollover: {
-			activeEpoch: 0n,
-			proposedEpoch: 3n,
-			rolloverBlock: 23n,
-			groupKeyX: 0n,
-			groupKeyY: 0n,
-		},
-	},
-};
-
 const CONSENSUS_STATE: ConsensusState = {
 	activeEpoch: 0n,
 	stagedEpoch: 0n,
