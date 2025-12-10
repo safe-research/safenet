@@ -1,0 +1,160 @@
+import { zeroAddress, zeroHash } from "viem";
+import { describe, expect, it, vi } from "vitest";
+import type { ShieldnetProtocol } from "../../consensus/protocol/types.js";
+import type { VerificationEngine } from "../../consensus/verify/engine.js";
+import type { TransactionProposedEvent } from "../transitions/types.js";
+import type { ConsensusState, MachineConfig, SigningState } from "../types.js";
+import { handleTransactionProposed } from "./transactionProposed.js";
+
+// --- Test Data ---
+const _SIGNING_STATE: SigningState = {
+	id: "collect_signing_shares",
+	signatureId: "0x5af35af3",
+	sharesFrom: [1n, 2n],
+	lastSigner: 2n,
+	deadline: 23n,
+	packet: {
+		type: "epoch_rollover_packet",
+		domain: {
+			chain: 1n,
+			consensus: "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266",
+		},
+		rollover: {
+			activeEpoch: 0n,
+			proposedEpoch: 3n,
+			rolloverBlock: 23n,
+			groupKeyX: 0n,
+			groupKeyY: 0n,
+		},
+	},
+};
+
+const CONSENSUS_STATE: ConsensusState = {
+	activeEpoch: 0n,
+	stagedEpoch: 0n,
+	groupPendingNonces: {},
+	epochGroups: {
+		"10": { groupId: "0x5af3", participantId: 1n },
+	},
+	signatureIdToMessage: {},
+};
+
+const MACHINE_CONFIG: MachineConfig = {
+	defaultParticipants: [
+		{
+			id: 1n,
+			address: zeroAddress,
+		},
+		{
+			id: 3n,
+			address: zeroAddress,
+		},
+		{
+			id: 7n,
+			address: zeroAddress,
+		},
+	],
+	genesisSalt: zeroHash,
+	keyGenTimeout: 0n,
+	signingTimeout: 20n,
+	blocksPerEpoch: 0n,
+};
+
+const EVENT: TransactionProposedEvent = {
+	id: "event_transaction_proposed",
+	block: 2n,
+	index: 0,
+	message: "0x5afe5afe",
+	transactionHash: "0x5af35af3",
+	epoch: 10n,
+	transaction: {
+		to: "0x5afe5afe",
+		value: 0n,
+		data: "0x",
+		operation: 0,
+		nonce: 2n,
+		chainId: 1n,
+		account: "0x5afe5afe",
+	},
+};
+
+// --- Tests ---
+describe("transaction proposed", () => {
+	it("should not handle proposed event if epoch group is unknown", async () => {
+		const protocol: ShieldnetProtocol = {} as unknown as ShieldnetProtocol;
+		const verificationEngine: VerificationEngine = {} as unknown as VerificationEngine;
+		const consensus = {
+			...CONSENSUS_STATE,
+			epochGroups: {},
+		};
+		const diff = await handleTransactionProposed(MACHINE_CONFIG, protocol, verificationEngine, consensus, EVENT);
+
+		expect(diff).toStrictEqual({});
+	});
+
+	it("should throw if message cannot be verified", async () => {
+		const protocol: ShieldnetProtocol = {
+			chainId: () => 23n,
+			consensus: () => zeroAddress,
+		} as unknown as ShieldnetProtocol;
+		const verify = vi.fn();
+		verify.mockRejectedValueOnce(new Error("could not verify"));
+		const verificationEngine: VerificationEngine = {
+			verify,
+		} as unknown as VerificationEngine;
+		await expect(
+			handleTransactionProposed(MACHINE_CONFIG, protocol, verificationEngine, CONSENSUS_STATE, EVENT),
+		).rejects.toStrictEqual(new Error("could not verify"));
+		expect(verify).toBeCalledTimes(1);
+		expect(verify).toBeCalledWith({
+			type: "safe_transaction_packet",
+			domain: {
+				chain: 23n,
+				consensus: zeroAddress,
+			},
+			proposal: {
+				epoch: EVENT.epoch,
+				transaction: EVENT.transaction,
+			},
+		});
+	});
+
+	it("should throw if message cannot be verified", async () => {
+		const protocol: ShieldnetProtocol = {
+			chainId: () => 23n,
+			consensus: () => zeroAddress,
+		} as unknown as ShieldnetProtocol;
+		const verify = vi.fn();
+		verify.mockReturnValue("0x5af35afe");
+		const verificationEngine: VerificationEngine = {
+			verify,
+		} as unknown as VerificationEngine;
+		const diff = await handleTransactionProposed(MACHINE_CONFIG, protocol, verificationEngine, CONSENSUS_STATE, EVENT);
+		const packet = {
+			type: "safe_transaction_packet",
+			domain: {
+				chain: 23n,
+				consensus: zeroAddress,
+			},
+			proposal: {
+				epoch: EVENT.epoch,
+				transaction: EVENT.transaction,
+			},
+		};
+		expect(diff.actions).toBeUndefined();
+		expect(diff.rollover).toBeUndefined();
+		expect(diff.consensus).toBeUndefined();
+		expect(diff.signing).toStrictEqual([
+			"0x5af35afe",
+			{
+				id: "waiting_for_request",
+				responsible: undefined,
+				packet,
+				signers: [1n, 3n, 7n],
+				deadline: 22n,
+			},
+		]);
+		expect(verify).toBeCalledTimes(1);
+		expect(verify).toBeCalledWith(packet);
+	});
+});

@@ -7,6 +7,8 @@ import type { GroupId, ParticipantId, SignatureId } from "../frost/types.js";
 
 export type Optional<T, K extends keyof T> = Omit<T, K> & Partial<Pick<T, K>>;
 
+// TODO: currently missing states for epoch_skipped
+// TODO: adjust waiting_for_rollover to align with epoch_staged from specs
 export type RolloverState = Readonly<
 	| {
 			id: "waiting_for_rollover";
