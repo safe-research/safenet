@@ -10,6 +10,7 @@ const MOCK_LOWERCASE_ADDRESS = "0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266";
 const MOCK_WRONG_CHECKSUMMED_ADDRESS = "0xf39Fd6e51aad88F6F4ce6aB8827279cfFFb92266";
 // This is the EIP-55 checksummed version of the address above
 const MOCK_CHECKSUMMED_ADDRESS = "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266";
+const MOCK_GENESIS_SALT = "0x5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe";
 
 const MOCK_INVALID_ADDRESS = "0xnotanaddress";
 const MOCK_VALID_URL = "http://127.0.0.1:8545";
@@ -72,6 +73,7 @@ describe("validatorConfigSchema", () => {
 			CHAIN_ID: 100,
 			PRIVATE_KEY: pk,
 			PARTICIPANTS: "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266,0x6Adb3baB5730852eB53987EA89D8e8f16393C200",
+			GENESIS_SALT: MOCK_GENESIS_SALT,
 		};
 
 		const result = validatorConfigSchema.parse(validConfig);
@@ -81,7 +83,11 @@ describe("validatorConfigSchema", () => {
 			COORDINATOR_ADDRESS: MOCK_CHECKSUMMED_ADDRESS,
 			CHAIN_ID: 100,
 			PRIVATE_KEY: pk,
-			PARTICIPANTS: ["0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266", "0x6Adb3baB5730852eB53987EA89D8e8f16393C200"],
+			PARTICIPANTS: [
+				{ id: 1n, address: "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266" },
+				{ id: 2n, address: "0x6Adb3baB5730852eB53987EA89D8e8f16393C200" },
+			],
+			GENESIS_SALT: MOCK_GENESIS_SALT,
 		});
 	});
 

@@ -1,12 +1,11 @@
 import dotenv from "dotenv";
 import { privateKeyToAccount } from "viem/accounts";
 import { z } from "zod";
-import type { Participant } from "./consensus/storage/types.js";
 import { createValidatorService } from "./service/service.js";
 import type { ProtocolConfig } from "./types/interfaces.js";
 import { validatorConfigSchema } from "./types/schemas.js";
 
-dotenv.config();
+dotenv.config({ quiet: true });
 
 const BLOCKTIME_IN_SECONDS = 5n; // value assumed for gnosis chain
 const BLOCKS_PER_EPOCH = (5n * 60n) / BLOCKTIME_IN_SECONDS; // ~ blocks for 5 minutes
@@ -21,20 +20,13 @@ if (!result.success) {
 const validatorConfig = result.data;
 const rpcUrl = validatorConfig.RPC_URL;
 
-const participants: Participant[] = validatorConfig.PARTICIPANTS.map((address, i) => {
-	return {
-		address,
-		id: BigInt(i + 1),
-	};
-});
-
 const config: ProtocolConfig = {
 	chainId: validatorConfig.CHAIN_ID,
 	consensus: validatorConfig.CONSENSUS_ADDRESS,
 	coordinator: validatorConfig.COORDINATOR_ADDRESS,
+	participants: validatorConfig.PARTICIPANTS,
 	genesisSalt: validatorConfig.GENESIS_SALT,
 	blocksPerEpoch: BLOCKS_PER_EPOCH,
-	participants,
 };
 
 const account = privateKeyToAccount(validatorConfig.PRIVATE_KEY);

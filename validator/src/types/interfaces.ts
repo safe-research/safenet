@@ -8,7 +8,7 @@ export interface ProtocolConfig {
 	coordinator: Address;
 	blocksPerEpoch: bigint;
 	participants: Participant[];
-	genesisSalt?: Hex;
+	genesisSalt: Hex;
 }
 
 export type AbiPoint = { x: bigint; y: bigint };
