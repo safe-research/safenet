@@ -4,7 +4,6 @@ import type { ProtocolAction, ShieldnetProtocol } from "../consensus/protocol/ty
 import type { SigningClient } from "../consensus/signing/client.js";
 import type { Participant } from "../consensus/storage/types.js";
 import type { VerificationEngine } from "../consensus/verify/engine.js";
-import { handleEpochProposed } from "../machine/consensus/epochProposed.js";
 import { handleEpochStaged } from "../machine/consensus/epochStaged.js";
 import { checkEpochRollover } from "../machine/consensus/rollover.js";
 import { handleTransactionAttested } from "../machine/consensus/transactionAttested.js";
@@ -223,6 +222,9 @@ export class ShieldnetStateMachine {
 			}
 			case "event_key_gen_confirmed": {
 				return await handleKeyGenConfirmed(
+					this.#machineConfig,
+					this.#protocol,
+					this.#verificationEngine,
 					this.#keyGenClient,
 					this.#signingClient,
 					consensusState,
@@ -262,17 +264,11 @@ export class ShieldnetStateMachine {
 				return await handleSigningCompleted(this.#machineConfig, consensusState, machineStates, transition);
 			}
 			case "event_epoch_proposed": {
-				return await handleEpochProposed(
-					this.#machineConfig,
-					this.#protocol,
-					this.#verificationEngine,
-					machineStates,
-					transition,
-					this.#logger,
-				);
+				// No-op: message already verified in handleKeyGenConfirmed
+				return {};
 			}
 			case "event_epoch_staged": {
-				return await handleEpochStaged(machineStates, transition);
+				return await handleEpochStaged(this.#signingClient, machineStates, transition);
 			}
 			case "event_transaction_proposed": {
 				return await handleTransactionProposed(

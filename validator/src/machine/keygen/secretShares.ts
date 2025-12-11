@@ -64,6 +64,7 @@ export const handleKeyGenSecretShared = async (
 			nextEpoch: machineStates.rollover.nextEpoch,
 			deadline: machineStates.rollover.deadline,
 			lastParticipant: event.identifier,
+			sharesFrom: [],
 		},
 		actions,
 	};

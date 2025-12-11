@@ -50,7 +50,7 @@ export class SigningClient {
 		if (signers.length < this.#storage.threshold(groupId)) {
 			throw new Error("Not enough signers to start signing process");
 		}
-		const participantsSet = new Set(this.#storage.participants(groupId).map((p) => p.id));
+		const participantsSet = new Set(this.participants(groupId));
 		for (const signer of signers) {
 			if (!participantsSet.has(signer)) {
 				throw new Error(`Invalid signer id provided: ${signer}`);
@@ -92,7 +92,7 @@ export class SigningClient {
 		lagrangeCoefficient: bigint;
 	} {
 		const groupId = this.#storage.signingGroup(signatureId);
-		const signers = this.#storage.signers(signatureId);
+		const signers = this.signers(signatureId);
 		const signerId = this.#storage.participantId(groupId);
 
 		const groupPublicKey = this.#storage.publicKey(groupId);
@@ -167,8 +167,12 @@ export class SigningClient {
 		};
 	}
 
-	signers(groupId: GroupId): ParticipantId[] {
-		return this.#storage.signers(groupId);
+	signers(signatureId: SignatureId): ParticipantId[] {
+		return this.#storage.signers(signatureId);
+	}
+
+	participants(groupId: GroupId): ParticipantId[] {
+		return this.#storage.participants(groupId).map((p) => p.id);
 	}
 
 	missingNonces(groupId: GroupId): ParticipantId[] {
@@ -198,7 +202,7 @@ export class SigningClient {
 	}
 
 	requiredShareCount(signatureId: SignatureId): bigint {
-		return BigInt(this.#storage.signers(signatureId).length);
+		return BigInt(this.signers(signatureId).length);
 	}
 
 	participantId(signatureId: SignatureId): bigint {
