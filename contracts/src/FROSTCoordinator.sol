@@ -10,8 +10,10 @@ import {FROSTSignatureId} from "@/libraries/FROSTSignatureId.sol";
 import {FROSTSignatureShares} from "@/libraries/FROSTSignatureShares.sol";
 import {Secp256k1} from "@/libraries/Secp256k1.sol";
 
-/// @title FROST Coordinator
-/// @notice An onchain coordinator for FROST key generation and signing.
+/**
+ * @title FROST Coordinator
+ * @notice An onchain coordinator for FROST key generation and signing.
+ */
 contract FROSTCoordinator {
     using FROSTGroupId for FROSTGroupId.T;
     using FROSTNonceCommitmentSet for FROSTNonceCommitmentSet.T;
@@ -19,13 +21,19 @@ contract FROSTCoordinator {
     using FROSTSignatureId for FROSTSignatureId.T;
     using FROSTSignatureShares for FROSTSignatureShares.T;
 
-    struct Group {
-        FROSTParticipantMap.T participants;
-        FROSTNonceCommitmentSet.T nonces;
-        GroupParameters parameters;
-        Secp256k1.Point key;
-    }
+    // ============================================================
+    // ENUMS
+    // ============================================================
 
+    /**
+     * @notice The lifecycle status of a FROST group.
+     * @custom:enumValue UNINITIALIZED The group has not been initialized yet.
+     * @custom:enumValue COMMITTING The keygen commitment phase has started.
+     * @custom:enumValue SHARING The keygen secret sharing phase has started.
+     * @custom:enumValue CONFIRMING The keygen confirmation phase has started.
+     * @custom:enumValue COMPROMISED The group has been compromised due to threshold complaints.
+     * @custom:enumValue FINALIZED The group has completed key generation.
+     */
     enum GroupStatus {
         UNINITIALIZED,
         COMMITTING,
@@ -35,6 +43,32 @@ contract FROSTCoordinator {
         FINALIZED
     }
 
+    // ============================================================
+    // STRUCTS
+    // ============================================================
+
+    /**
+     * @notice Represents a FROST signing group and its associated state.
+     * @param participants The participant map for the group.
+     * @param nonces The nonce commitment set for the group.
+     * @param parameters The parameters and status of the group.
+     * @param key The group public key.
+     */
+    struct Group {
+        FROSTParticipantMap.T participants;
+        FROSTNonceCommitmentSet.T nonces;
+        GroupParameters parameters;
+        Secp256k1.Point key;
+    }
+
+    /**
+     * @notice Parameters and status of a FROST group.
+     * @param count The number of participants.
+     * @param threshold The threshold required for signing.
+     * @param pending The number of pending participants in the current phase.
+     * @param sequence The current signing sequence counter.
+     * @param status The current status of the group.
+     */
     struct GroupParameters {
         uint64 count;
         uint64 threshold;
@@ -43,51 +77,149 @@ contract FROSTCoordinator {
         GroupStatus status;
     }
 
+    /**
+     * @notice Commitment data for key generation.
+     * @param c The vector of public commitments.
+     * @param r The public nonce.
+     * @param mu The proof of knowledge scalar.
+     */
     struct KeyGenCommitment {
         Secp256k1.Point[] c;
         Secp256k1.Point r;
         uint256 mu;
     }
 
+    /**
+     * @notice Secret share data for key generation.
+     * @param y The participant public key share.
+     * @param f The polynomial coefficients encrypted for participants.
+     */
     struct KeyGenSecretShare {
         Secp256k1.Point y;
         uint256[] f;
     }
 
+    /**
+     * @notice Tracks a signing ceremony state.
+     * @param message The message being signed.
+     * @param signed The Merkle root of the signature shares.
+     * @param shares The accumulated signature shares.
+     */
     struct Signature {
         bytes32 message;
         bytes32 signed;
         FROSTSignatureShares.T shares;
     }
 
+    /**
+     * @notice Nonce pair for signing.
+     * @param d The first nonce commitment point.
+     * @param e The second nonce commitment point.
+     */
     struct SignNonces {
         Secp256k1.Point d;
         Secp256k1.Point e;
     }
 
+    /**
+     * @notice Selection data for signing.
+     * @param r The group commitment point.
+     * @param root The Merkle root of the selected participants.
+     */
     struct SignSelection {
         Secp256k1.Point r;
         bytes32 root;
     }
 
+    /**
+     * @notice Callback target and context for asynchronous operations.
+     * @param target The callback target contract.
+     * @param context The callback context data.
+     */
     struct Callback {
         IFROSTCoordinatorCallback target;
         bytes context;
     }
 
+    // ============================================================
+    // EVENTS
+    // ============================================================
+
+    /**
+     * @notice Emitted when a key generation ceremony is initiated.
+     * @param gid The group ID.
+     * @param participants The Merkle root of participants.
+     * @param count The number of participants.
+     * @param threshold The signing threshold.
+     * @param context The application-specific context.
+     */
     event KeyGen(FROSTGroupId.T indexed gid, bytes32 participants, uint64 count, uint64 threshold, bytes32 context);
+
+    /**
+     * @notice Emitted when a key generation commitment is submitted.
+     * @param gid The group ID.
+     * @param identifier The participant identifier.
+     * @param commitment The key generation commitment.
+     * @param committed True if all commitments are received and the phase completes.
+     */
     event KeyGenCommitted(
         FROSTGroupId.T indexed gid, FROST.Identifier identifier, KeyGenCommitment commitment, bool committed
     );
+
+    /**
+     * @notice Emitted when a key generation secret share is submitted.
+     * @param gid The group ID.
+     * @param identifier The participant identifier.
+     * @param share The key generation secret share.
+     * @param completed True if all shares are received and the phase completes.
+     */
     event KeyGenSecretShared(
         FROSTGroupId.T indexed gid, FROST.Identifier identifier, KeyGenSecretShare share, bool completed
     );
+
+    /**
+     * @notice Emitted when key generation is confirmed by a participant.
+     * @param gid The group ID.
+     * @param identifier The participant identifier.
+     */
     event KeyGenConfirmed(FROSTGroupId.T indexed gid, FROST.Identifier identifier);
+
+    /**
+     * @notice Emitted when a complaint is submitted during key generation.
+     * @param gid The group ID.
+     * @param plaintiff The complaining participant.
+     * @param accused The accused participant.
+     */
     event KeyGenComplained(FROSTGroupId.T indexed gid, FROST.Identifier plaintiff, FROST.Identifier accused);
+
+    /**
+     * @notice Emitted when a complaint response is submitted.
+     * @param gid The group ID.
+     * @param plaintiff The complaining participant.
+     * @param accused The accused participant.
+     * @param secretShare The revealed secret share.
+     */
     event KeyGenComplaintResponded(
         FROSTGroupId.T indexed gid, FROST.Identifier plaintiff, FROST.Identifier accused, uint256 secretShare
     );
+
+    /**
+     * @notice Emitted when a nonce commitment is submitted for preprocessing.
+     * @param gid The group ID.
+     * @param identifier The participant identifier.
+     * @param chunk The chunk index.
+     * @param commitment The nonce commitment Merkle root.
+     */
     event Preprocess(FROSTGroupId.T indexed gid, FROST.Identifier identifier, uint64 chunk, bytes32 commitment);
+
+    /**
+     * @notice Emitted when a signing ceremony is initiated.
+     * @param initiator The address initiating the signing.
+     * @param gid The group ID.
+     * @param message The message to be signed.
+     * @param sid The signature ID.
+     * @param sequence The signing sequence number.
+     */
     event Sign(
         address indexed initiator,
         FROSTGroupId.T indexed gid,
@@ -95,26 +227,108 @@ contract FROSTCoordinator {
         FROSTSignatureId.T sid,
         uint64 sequence
     );
+
+    /**
+     * @notice Emitted when a participant reveals nonces for signing.
+     * @param sid The signature ID.
+     * @param identifier The participant identifier.
+     * @param nonces The revealed nonces.
+     */
     event SignRevealedNonces(FROSTSignatureId.T indexed sid, FROST.Identifier identifier, SignNonces nonces);
+
+    /**
+     * @notice Emitted when a participant submits a signature share.
+     * @param sid The signature ID.
+     * @param identifier The participant identifier.
+     * @param z The scalar component of the share.
+     * @param root The Merkle root of the selected participants.
+     */
     event SignShared(FROSTSignatureId.T indexed sid, FROST.Identifier identifier, uint256 z, bytes32 root);
+
+    /**
+     * @notice Emitted when a FROST signature is successfully completed.
+     * @param sid The signature ID.
+     * @param signature The completed FROST signature.
+     */
     event SignCompleted(FROSTSignatureId.T indexed sid, FROST.Signature signature);
 
+    // ============================================================
+    // ERRORS
+    // ============================================================
+
+    /**
+     * @notice Thrown when group parameters are invalid.
+     */
     error InvalidGroupParameters();
+
+    /**
+     * @notice Thrown when a group commitment is invalid.
+     */
     error InvalidGroupCommitment();
+
+    /**
+     * @notice Thrown when a group has not been initialized.
+     */
     error GroupNotInitialized();
+
+    /**
+     * @notice Thrown when a group is not ready for the requested operation.
+     */
     error GroupNotReady();
+
+    /**
+     * @notice Thrown when a secret share is invalid.
+     */
     error InvalidSecretShare();
+
+    /**
+     * @notice Thrown when a message is invalid.
+     */
     error InvalidMessage();
+
+    /**
+     * @notice Thrown when a signing ceremony is not in progress.
+     */
     error NotSigning();
+
+    /**
+     * @notice Thrown when a signature has not yet been completed.
+     */
     error NotSigned();
+
+    /**
+     * @notice Thrown when a signature does not match the expected group or message.
+     */
     error WrongSignature();
 
+    // ============================================================
+    // STORAGE VARIABLES
+    // ============================================================
+
+    /**
+     * @notice Mapping from group ID to group state.
+     */
     // forge-lint: disable-next-line(mixed-case-variable)
     mapping(FROSTGroupId.T => Group) private $groups;
+
+    /**
+     * @notice Mapping from signature ID to signing ceremony state.
+     */
     // forge-lint: disable-next-line(mixed-case-variable)
     mapping(FROSTSignatureId.T => Signature) private $signatures;
 
-    /// @notice Initiate a distributed key generation ceremony.
+    // ============================================================
+    // EXTERNAL AND PUBLIC FUNCTIONS - KEY GENERATION
+    // ============================================================
+
+    /**
+     * @notice Initiates a distributed key generation ceremony.
+     * @param participants The Merkle root of participants.
+     * @param count The number of participants.
+     * @param threshold The signing threshold.
+     * @param context Application-specific context.
+     * @return gid The created group ID.
+     */
     function keyGen(bytes32 participants, uint64 count, uint64 threshold, bytes32 context)
         public
         returns (FROSTGroupId.T gid)
@@ -129,8 +343,15 @@ contract FROSTCoordinator {
         emit KeyGen(gid, participants, count, threshold, context);
     }
 
-    /// @notice Submit a commitment and proof for a key generation participant.
-    ///         This corresponds to Round 1 of the FROST _KeyGen_ algorithm.
+    /**
+     * @notice Submits a commitment and proof for a key generation participant.
+     * @dev This corresponds to Round 1 of the FROST KeyGen algorithm.
+     * @param gid The group ID.
+     * @param identifier The participant identifier.
+     * @param poap The Merkle proof of participation.
+     * @param commitment The key generation commitment.
+     * @return committed True if all commitments are received and the phase completes.
+     */
     function keyGenCommit(
         FROSTGroupId.T gid,
         FROST.Identifier identifier,
@@ -152,10 +373,19 @@ contract FROSTCoordinator {
         emit KeyGenCommitted(gid, identifier, commitment, committed);
     }
 
-    /// @notice Initiate, if not already initialized, a distributed key
-    ///         generation ceremony and submit a commitment and proof for a
-    ///         participant. This is the same as a `keyGen` follwed by a
-    ///         `keyGenCommit` and is provided for convenience.
+    /**
+     * @notice Initiates (if needed) a key generation ceremony and submits a commitment.
+     * @dev This is equivalent to calling `keyGen` followed by `keyGenCommit`.
+     * @param participants The Merkle root of participants.
+     * @param count The number of participants.
+     * @param threshold The signing threshold.
+     * @param context Application-specific context.
+     * @param identifier The participant identifier.
+     * @param poap The Merkle proof of participation.
+     * @param commitment The key generation commitment.
+     * @return gid The group ID.
+     * @return committed True if all commitments are received and the phase completes.
+     */
     function keyGenAndCommit(
         bytes32 participants,
         uint64 count,
@@ -172,10 +402,15 @@ contract FROSTCoordinator {
         committed = keyGenCommit(gid, identifier, poap, commitment);
     }
 
-    /// @notice Submit participants secret shares. This corresponds to Round 2
-    ///         of the FROST _KeyGen_ algorithm. Note that `f(i)` needs to be
-    ///         shared secretly, so we use ECDH using each participant's `φ_0`
-    ///         value in order to encrypt the secret share for each recipient.
+    /**
+     * @notice Submits participants' secret shares.
+     * @dev This corresponds to Round 2 of the FROST KeyGen algorithm. The
+     *      secret shares are encrypted using ECDH with each participant's
+     *      public value.
+     * @param gid The group ID.
+     * @param share The secret share payload.
+     * @return completed True if all shares are received and the phase completes.
+     */
     function keyGenSecretShare(FROSTGroupId.T gid, KeyGenSecretShare calldata share) public returns (bool completed) {
         Group storage group = $groups[gid];
         GroupParameters memory parameters = group.parameters;
@@ -193,7 +428,12 @@ contract FROSTCoordinator {
         emit KeyGenSecretShared(gid, identifier, share, completed);
     }
 
-    /// @notice Confirms the Key Generation ceremony for the sender if no unresolved complaints exist.
+    /**
+     * @notice Confirms the key generation ceremony for the sender.
+     * @dev This requires that no unresolved complaints exist.
+     * @param gid The group ID.
+     * @return completed True if all confirmations are received and the group is finalized.
+     */
     function keyGenConfirm(FROSTGroupId.T gid) public returns (bool completed) {
         Group storage group = $groups[gid];
         GroupParameters memory parameters = group.parameters;
@@ -208,8 +448,13 @@ contract FROSTCoordinator {
         emit KeyGenConfirmed(gid, identifier);
     }
 
-    /// @notice Confirm the Key Generation ceremony for the sender if no unresolved complaints exist. This method is
-    ///         the same as `keyGenConfirm` with an additional callback once confirmed.
+    /**
+     * @notice Confirms key generation for the sender and optionally calls a callback.
+     * @dev This is the same as `keyGenConfirm` with an additional callback once confirmed.
+     * @param gid The group ID.
+     * @param callback The callback target and context.
+     * @return completed True if all confirmations are received and the group is finalized.
+     */
     function keyGenConfirmWithCallback(FROSTGroupId.T gid, Callback calldata callback) public returns (bool completed) {
         completed = keyGenConfirm(gid);
         if (completed) {
@@ -217,8 +462,11 @@ contract FROSTCoordinator {
         }
     }
 
-    /// @notice Submit a complaint from the sender against another participant
-    ///         during key generation.
+    /**
+     * @notice Submits a complaint from the sender against another participant during key generation.
+     * @param gid The group ID.
+     * @param accused The accused participant identifier.
+     */
     function keyGenComplain(FROSTGroupId.T gid, FROST.Identifier accused) external {
         Group storage group = $groups[gid];
         require(
@@ -232,8 +480,12 @@ contract FROSTCoordinator {
         emit KeyGenComplained(gid, plaintiff, accused);
     }
 
-    /// @notice Response to a complaint from a plaintiff against the sender by
-    ///         providing the secret share publicly.
+    /**
+     * @notice Responds to a complaint by revealing the secret share publicly.
+     * @param gid The group ID.
+     * @param plaintiff The complaining participant identifier.
+     * @param secretShare The revealed secret share.
+     */
     function keyGenComplaintResponse(FROSTGroupId.T gid, FROST.Identifier plaintiff, uint256 secretShare) external {
         Group storage group = $groups[gid];
         require(
@@ -245,11 +497,15 @@ contract FROSTCoordinator {
         emit KeyGenComplaintResponded(gid, plaintiff, accused, secretShare);
     }
 
-    /// @notice Submit a commitment to a chunk of nonces as part of the
-    ///         _Preprocess_ algorithm. The commitment is a Merkle root to a
-    ///         256 nonces that get revealed as part of the signing process.
-    ///         This allows signing requests to reveal the `message` right away
-    ///         while still preventing Wagner's Birthday Attacks.
+    /**
+     * @notice Submits a commitment to a chunk of nonces for preprocessing.
+     * @dev The commitment is a Merkle root to 256 nonces that get revealed as
+     *      part of the signing process. This allows signing requests to reveal
+     *      the message immediately while still preventing Wagner's Birthday Attacks.
+     * @param gid The group ID.
+     * @param commitment The nonce commitment Merkle root.
+     * @return chunk The chunk index used for this commitment.
+     */
     function preprocess(FROSTGroupId.T gid, bytes32 commitment) external returns (uint64 chunk) {
         Group storage group = $groups[gid];
         FROST.Identifier identifier = group.participants.identifierOf(msg.sender);
@@ -257,7 +513,16 @@ contract FROSTCoordinator {
         emit Preprocess(gid, identifier, chunk, commitment);
     }
 
-    /// @notice Initiate a signing ceremony.
+    // ============================================================
+    // EXTERNAL AND PUBLIC FUNCTIONS - SIGNING
+    // ============================================================
+
+    /**
+     * @notice Initiates a signing ceremony.
+     * @param gid The group ID.
+     * @param message The message to be signed.
+     * @return sid The created signature ID.
+     */
     function sign(FROSTGroupId.T gid, bytes32 message) external returns (FROSTSignatureId.T sid) {
         require(message != bytes32(0), InvalidMessage());
         Group storage group = $groups[gid];
@@ -272,7 +537,12 @@ contract FROSTCoordinator {
         emit Sign(msg.sender, gid, message, sid, sequence);
     }
 
-    /// @notice Reveal a nonce pair for a signing ceremony.
+    /**
+     * @notice Reveals a nonce pair for a signing ceremony.
+     * @param sid The signature ID.
+     * @param nonces The nonce pair to reveal.
+     * @param proof The Merkle proof for the nonce commitment.
+     */
     function signRevealNonces(FROSTSignatureId.T sid, SignNonces calldata nonces, bytes32[] calldata proof) external {
         (Group storage group,) = _signatureGroupAndMessage(sid);
         FROST.Identifier identifier = group.participants.identifierOf(msg.sender);
@@ -280,8 +550,14 @@ contract FROSTCoordinator {
         emit SignRevealedNonces(sid, identifier, nonces);
     }
 
-    /// @notice Broadcast a signature share for a selection of participating
-    ///         signers.
+    /**
+     * @notice Broadcasts a signature share for a selection of participating signers.
+     * @param sid The signature ID.
+     * @param selection The signing selection data.
+     * @param share The participant's signature share.
+     * @param proof The Merkle proof for the selection.
+     * @return completed True if the signature is completed with this share.
+     */
     function signShare(
         FROSTSignatureId.T sid,
         SignSelection calldata selection,
@@ -307,9 +583,16 @@ contract FROSTCoordinator {
         return false;
     }
 
-    /// @notice Broadcast a signature share for a selection of participating
-    ///         signers. This method works identically to `signShare` but
-    ///         additionally executes a callback
+    /**
+     * @notice Broadcasts a signature share and optionally executes a callback when completed.
+     * @dev This method works identically to `signShare` but additionally executes a callback.
+     * @param sid The signature ID.
+     * @param selection The signing selection data.
+     * @param share The participant's signature share.
+     * @param proof The Merkle proof for the selection.
+     * @param callback The callback target and context.
+     * @return completed True if the signature is completed with this share.
+     */
     function signShareWithCallback(
         FROSTSignatureId.T sid,
         SignSelection calldata selection,
@@ -323,13 +606,26 @@ contract FROSTCoordinator {
         }
     }
 
-    /// @notice Retrieve the group public key. Note that it is undefined
-    ///         behaviour to call this before the keygen ceremony is completed.
+    // ============================================================
+    // EXTERNAL AND PUBLIC VIEW FUNCTIONS
+    // ============================================================
+
+    /**
+     * @notice Retrieves the group public key.
+     * @dev It is undefined behaviour to call this before key generation completes.
+     * @param gid The group ID.
+     * @return key The group public key.
+     */
     function groupKey(FROSTGroupId.T gid) external view returns (Secp256k1.Point memory key) {
         return $groups[gid].key;
     }
 
-    /// @notice Retrieve the participant public key.
+    /**
+     * @notice Retrieves a participant's public key.
+     * @param gid The group ID.
+     * @param identifier The participant identifier.
+     * @return key The participant's public key.
+     */
     function participantKey(FROSTGroupId.T gid, FROST.Identifier identifier)
         external
         view
@@ -338,15 +634,23 @@ contract FROSTCoordinator {
         return $groups[gid].participants.getKey(identifier);
     }
 
-    /// @notice Verifies that a successful FROST signing ceremony was completed
-    ///         for a given group and message.
+    /**
+     * @notice Verifies that a successful FROST signing ceremony was completed for a group and message.
+     * @param sid The signature ID.
+     * @param gid The group ID.
+     * @param message The message that was signed.
+     */
     function signatureVerify(FROSTSignatureId.T sid, FROSTGroupId.T gid, bytes32 message) external view {
         Signature storage signature = $signatures[sid];
         require(signature.signed != bytes32(0), NotSigned());
         require(gid.eq(sid.group()) && message == signature.message, WrongSignature());
     }
 
-    /// @notice Retrieve the resulting FROST signature for a ceremony.
+    /**
+     * @notice Retrieves the resulting FROST signature for a ceremony.
+     * @param sid The signature ID.
+     * @return result The completed FROST signature.
+     */
     function signatureValue(FROSTSignatureId.T sid) external view returns (FROST.Signature memory result) {
         Signature storage signature = $signatures[sid];
         bytes32 signed = signature.signed;
@@ -354,6 +658,16 @@ contract FROSTCoordinator {
         return $signatures[sid].shares.groupSignature(signed);
     }
 
+    // ============================================================
+    // PRIVATE FUNCTIONS
+    // ============================================================
+
+    /**
+     * @notice Retrieves the group and message associated with a signature ID.
+     * @param sid The signature ID.
+     * @return group The group state.
+     * @return message The message being signed.
+     */
     function _signatureGroupAndMessage(FROSTSignatureId.T sid)
         private
         view

@@ -1,14 +1,38 @@
 // SPDX-License-Identifier: GPL-3.0-only
 pragma solidity ^0.8.30;
 
-/// @title FROST Group ID
-/// @notice A FROST coordinator unique group identifier.
+/**
+ * @title FROST Group ID
+ * @notice A FROST coordinator unique group identifier.
+ */
 library FROSTGroupId {
+    // ============================================================
+    // TYPES
+    // ============================================================
+
     type T is bytes32;
 
+    // ============================================================
+    // ERRORS
+    // ============================================================
+
+    /**
+     * @notice Thrown when a group ID is invalid.
+     */
     error InvalidGroupId();
 
-    /// @notice Computes the deterministic group ID for a given configuration.
+    // ============================================================
+    // INTERNAL FUNCTIONS
+    // ============================================================
+
+    /**
+     * @notice Computes the deterministic group ID for a given configuration.
+     * @param participants The participants hash.
+     * @param count The number of participants.
+     * @param threshold The threshold for the group.
+     * @param context The context data for the group.
+     * @return result The computed group ID.
+     */
     function create(bytes32 participants, uint64 count, uint64 threshold, bytes32 context)
         internal
         pure
@@ -26,17 +50,29 @@ library FROSTGroupId {
         return mask(digest);
     }
 
-    /// @notice Masks a `bytes32` to a group ID value.
+    /**
+     * @notice Masks a `bytes32` to a group ID value.
+     * @param raw The raw bytes32 value to mask.
+     * @return result The masked group ID.
+     */
     function mask(bytes32 raw) internal pure returns (T result) {
         return T.wrap(raw & 0xffffffffffffffffffffffffffffffffffffffffffffffff0000000000000000);
     }
 
-    /// @notice Compares two group IDs.
+    /**
+     * @notice Compares two group IDs.
+     * @param a The first group ID.
+     * @param b The second group ID.
+     * @return result True if the group IDs are equal, false otherwise.
+     */
     function eq(T a, T b) internal pure returns (bool result) {
         return T.unwrap(a) == T.unwrap(b);
     }
 
-    /// @notice Requires that a group ID is valid.
+    /**
+     * @notice Requires that a group ID is valid.
+     * @param self The group ID to validate.
+     */
     function requireValid(T self) internal pure {
         require((uint256(T.unwrap(self)) << 192) == 0, InvalidGroupId());
     }

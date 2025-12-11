@@ -10,13 +10,26 @@ import {FROSTSignatureId} from "@/libraries/FROSTSignatureId.sol";
 import {MetaTransaction} from "@/libraries/MetaTransaction.sol";
 import {Secp256k1} from "@/libraries/Secp256k1.sol";
 
-/// @title Consensus
-/// @notice Onchain consensus state.
+/**
+ * @title Consensus
+ * @notice Onchain consensus state.
+ */
 contract Consensus is IFROSTCoordinatorCallback {
     using ConsensusMessages for bytes32;
     using FROSTSignatureId for FROSTSignatureId.T;
     using MetaTransaction for MetaTransaction.T;
 
+    // ============================================================
+    // STRUCTS
+    // ============================================================
+
+    /**
+     * @notice Tracks epoch rollover information.
+     * @param previous The previous active epoch.
+     * @param active The current active epoch.
+     * @param staged The staged epoch to roll over to.
+     * @param rolloverBlock The block number at which rollover occurs.
+     */
     struct Epochs {
         uint64 previous;
         uint64 active;
@@ -24,38 +37,124 @@ contract Consensus is IFROSTCoordinatorCallback {
         uint64 rolloverBlock;
     }
 
-    event EpochProposed(
-        uint64 indexed activeEpoch, uint64 indexed proposedEpoch, uint64 rolloverBlock, Secp256k1.Point groupKey
-    );
-    event EpochStaged(
-        uint64 indexed activeEpoch, uint64 indexed proposedEpoch, uint64 rolloverBlock, Secp256k1.Point groupKey
-    );
-    event EpochRolledOver(uint64 indexed newActiveEpoch);
-    event TransactionProposed(
-        bytes32 indexed message, bytes32 indexed transactionHash, uint64 epoch, MetaTransaction.T transaction
-    );
-    event TransactionAttested(bytes32 indexed message);
+    // ============================================================
+    // STORAGE VARIABLES
+    // ============================================================
 
-    error InvalidRollover();
-    error UnknownSignatureSelector();
-    error NotCoordinator();
-
+    /**
+     * @notice The FROST coordinator contract.
+     */
     FROSTCoordinator private immutable _COORDINATOR;
 
+    /**
+     * @notice The epochs state tracking previous, active, and staged epochs.
+     */
     // forge-lint: disable-next-line(mixed-case-variable)
     Epochs private $epochs;
+
+    /**
+     * @notice Mapping from epoch to FROST group ID.
+     */
     // forge-lint: disable-next-line(mixed-case-variable)
     mapping(uint64 epoch => FROSTGroupId.T) private $groups;
+
+    /**
+     * @notice Mapping from message hash to attested FROST signature ID.
+     */
     // forge-lint: disable-next-line(mixed-case-variable)
     mapping(bytes32 message => FROSTSignatureId.T) private $attestations;
 
+    // ============================================================
+    // EVENTS
+    // ============================================================
+
+    /**
+     * @notice Emitted when a new epoch rollover is proposed.
+     * @param activeEpoch The current active epoch.
+     * @param proposedEpoch The proposed new epoch.
+     * @param rolloverBlock The block number when rollover should occur.
+     * @param groupKey The public group key for the proposed epoch.
+     */
+    event EpochProposed(
+        uint64 indexed activeEpoch, uint64 indexed proposedEpoch, uint64 rolloverBlock, Secp256k1.Point groupKey
+    );
+
+    /**
+     * @notice Emitted when a new epoch is staged for automatic rollover.
+     * @param activeEpoch The current active epoch.
+     * @param proposedEpoch The proposed new epoch.
+     * @param rolloverBlock The block number when rollover should occur.
+     * @param groupKey The public group key for the proposed epoch.
+     */
+    event EpochStaged(
+        uint64 indexed activeEpoch, uint64 indexed proposedEpoch, uint64 rolloverBlock, Secp256k1.Point groupKey
+    );
+
+    /**
+     * @notice Emitted when the active epoch is rolled over.
+     * @param newActiveEpoch The new active epoch.
+     */
+    event EpochRolledOver(uint64 indexed newActiveEpoch);
+
+    /**
+     * @notice Emitted when a transaction is proposed for validator approval.
+     * @param message The EIP-712 message hash.
+     * @param transactionHash The hash of the proposed meta-transaction.
+     * @param epoch The epoch in which the transaction is proposed.
+     * @param transaction The proposed meta-transaction.
+     */
+    event TransactionProposed(
+        bytes32 indexed message, bytes32 indexed transactionHash, uint64 epoch, MetaTransaction.T transaction
+    );
+
+    /**
+     * @notice Emitted when a transaction is attested by the validator set.
+     * @param message The EIP-712 message hash that was attested.
+     */
+    event TransactionAttested(bytes32 indexed message);
+
+    // ============================================================
+    // ERRORS
+    // ============================================================
+
+    /**
+     * @notice Thrown when an epoch rollover proposal is invalid.
+     */
+    error InvalidRollover();
+
+    /**
+     * @notice Thrown when an unknown signature selector is provided in a callback.
+     */
+    error UnknownSignatureSelector();
+
+    /**
+     * @notice Thrown when a caller is not the configured coordinator.
+     */
+    error NotCoordinator();
+
+    // ============================================================
+    // CONSTRUCTOR
+    // ============================================================
+
+    /**
+     * @notice Constructs the consensus contract.
+     * @param coordinator The address of the FROST coordinator contract.
+     * @param group The initial FROST group ID for epoch 0.
+     */
     constructor(address coordinator, FROSTGroupId.T group) {
         _COORDINATOR = FROSTCoordinator(coordinator);
         $groups[0] = group;
     }
 
+    // ============================================================
+    // MODIFIERS
+    // ============================================================
+
     // forge-lint: disable-start(unwrapped-modifier-logic)
 
+    /**
+     * @notice Restricts functions to be callable only by the coordinator.
+     */
     modifier onlyCoordinator() {
         require(msg.sender == address(_COORDINATOR), NotCoordinator());
         _;
@@ -63,13 +162,25 @@ contract Consensus is IFROSTCoordinatorCallback {
 
     // forge-lint: disable-end(unwrapped-modifier-logic)
 
-    /// @notice Compute the EIP-712 domain separator used by the consensus
-    ///         contract.
+    // ============================================================
+    // EXTERNAL AND PUBLIC VIEW FUNCTIONS
+    // ============================================================
+
+    /**
+     * @notice Computes the EIP-712 domain separator used by the consensus contract.
+     * @return result The domain separator.
+     */
     function domainSeparator() public view returns (bytes32 result) {
         return ConsensusMessages.domain(block.chainid, address(this));
     }
 
-    /// @notice Gets a transaction attestation.
+    /**
+     * @notice Gets a transaction attestation for a specific epoch and transaction.
+     * @param epoch The epoch in which the transaction was proposed.
+     * @param transaction The meta-transaction to query the attestation for.
+     * @return message The EIP-712 message hash of the proposal.
+     * @return signature The FROST signature attesting to the transaction.
+     */
     function getAttestation(uint64 epoch, MetaTransaction.T memory transaction)
         external
         view
@@ -79,16 +190,25 @@ contract Consensus is IFROSTCoordinatorCallback {
         signature = getAttestationByMessage(message);
     }
 
-    /// @notice Gets a transaction attestation by its hashed message.
+    /**
+     * @notice Gets a transaction attestation by its hashed message.
+     * @param message The EIP-712 message hash of the proposal.
+     * @return signature The FROST signature attesting to the transaction.
+     */
     function getAttestationByMessage(bytes32 message) public view returns (FROST.Signature memory signature) {
         return _COORDINATOR.signatureValue($attestations[message]);
     }
 
-    /// @notice Gets a recent transaction attestation. This method will fail if
-    ///         the attestation did not happen in either the active or previous
-    ///         epochs. This is provided as a convienience method to clients who
-    ///         may want to query an attestation for a transaction they recently
-    ///         proposed for validator approval.
+    /**
+     * @notice Gets a recent transaction attestation.
+     * @dev This method will fail if the attestation did not happen in either
+     *      the active or previous epochs. This is provided as a convenience
+     *      method to clients who may want to query an attestation for a
+     *      transaction they recently proposed for validator approval.
+     * @param transaction The meta-transaction to query the attestation for.
+     * @return message The EIP-712 message hash of the proposal.
+     * @return signature The FROST signature attesting to the transaction.
+     */
     function getRecentAttestation(MetaTransaction.T memory transaction)
         external
         view
@@ -97,7 +217,12 @@ contract Consensus is IFROSTCoordinatorCallback {
         return getRecentAttestationByHash(transaction.hash());
     }
 
-    /// @notice Gets a recent transaction attestation by hash.
+    /**
+     * @notice Gets a recent transaction attestation by transaction hash.
+     * @param transactionHash The hash of the meta-transaction.
+     * @return message The EIP-712 message hash of the proposal.
+     * @return signature The FROST signature attesting to the transaction.
+     */
     function getRecentAttestationByHash(bytes32 transactionHash)
         public
         view
@@ -114,14 +239,27 @@ contract Consensus is IFROSTCoordinatorCallback {
         signature = _COORDINATOR.signatureValue(attestation);
     }
 
-    /// @notice Gets the active epoch and its group ID.
+    /**
+     * @notice Gets the active epoch and its group ID.
+     * @return epoch The current active epoch.
+     * @return group The FROST group ID for the active epoch.
+     */
     function getActiveEpoch() external view returns (uint64 epoch, FROSTGroupId.T group) {
         (Epochs memory epochs,) = _epochsWithRollover();
         epoch = epochs.active;
         group = $groups[epoch];
     }
 
-    /// @notice Proposes a new epoch that to be rolled over to.
+    // ============================================================
+    // EXTERNAL AND PUBLIC STATE-CHANGING FUNCTIONS
+    // ============================================================
+
+    /**
+     * @notice Proposes a new epoch to be rolled over to.
+     * @param proposedEpoch The proposed new epoch.
+     * @param rolloverBlock The block number when rollover should occur.
+     * @param group The FROST group ID for the proposed epoch.
+     */
     function proposeEpoch(uint64 proposedEpoch, uint64 rolloverBlock, FROSTGroupId.T group) public {
         Epochs memory epochs = _processRollover();
         _requireValidRollover(epochs, proposedEpoch, rolloverBlock);
@@ -131,7 +269,13 @@ contract Consensus is IFROSTCoordinatorCallback {
         _COORDINATOR.sign($groups[epochs.active], message);
     }
 
-    /// @notice Stages an epoch to automatically rollover.
+    /**
+     * @notice Stages an epoch to automatically roll over.
+     * @param proposedEpoch The proposed new epoch.
+     * @param rolloverBlock The block number when rollover should occur.
+     * @param group The FROST group ID for the proposed epoch.
+     * @param signature The FROST signature authorizing the staged epoch.
+     */
     function stageEpoch(uint64 proposedEpoch, uint64 rolloverBlock, FROSTGroupId.T group, FROSTSignatureId.T signature)
         public
     {
@@ -147,6 +291,11 @@ contract Consensus is IFROSTCoordinatorCallback {
         emit EpochStaged(epochs.active, proposedEpoch, rolloverBlock, groupKey);
     }
 
+    /**
+     * @notice Proposes a transaction for validator approval.
+     * @param transaction The meta-transaction to propose.
+     * @return message The EIP-712 message hash of the proposal.
+     */
     function proposeTransaction(MetaTransaction.T memory transaction) external returns (bytes32 message) {
         Epochs memory epochs = _processRollover();
         bytes32 transactionHash = transaction.hash();
@@ -155,7 +304,14 @@ contract Consensus is IFROSTCoordinatorCallback {
         _COORDINATOR.sign($groups[epochs.active], message);
     }
 
-    /// @notice Attest to a transaction.
+    /**
+     * @notice Attests to a transaction.
+     * @param epoch The epoch in which the transaction was proposed.
+     * @param transactionHash The hash of the meta-transaction.
+     * @param signature The FROST signature share attesting to the transaction.
+     * @dev No explicit time limit is imposed for when a transaction can be
+     *      attested in this contract.
+     */
     function attestTransaction(uint64 epoch, bytes32 transactionHash, FROSTSignatureId.T signature) public {
         // Note that we do not impose a time limit for a transaction to be
         // attested to in the consensus contract. In theory, we have enough
@@ -173,13 +329,17 @@ contract Consensus is IFROSTCoordinatorCallback {
         emit TransactionAttested(message);
     }
 
-    /// @inheritdoc IFROSTCoordinatorCallback
+    /**
+     * @inheritdoc IFROSTCoordinatorCallback
+     */
     function onKeyGenCompleted(FROSTGroupId.T group, bytes calldata context) external onlyCoordinator {
         (uint64 proposedEpoch, uint64 rolloverBlock) = abi.decode(context, (uint64, uint64));
         proposeEpoch(proposedEpoch, rolloverBlock, group);
     }
 
-    /// @inheritdoc IFROSTCoordinatorCallback
+    /**
+     * @inheritdoc IFROSTCoordinatorCallback
+     */
     function onSignCompleted(FROSTSignatureId.T signature, bytes calldata context) external onlyCoordinator {
         // forge-lint: disable-next-line(unsafe-typecast)
         bytes4 selector = bytes4(context);
@@ -195,6 +355,14 @@ contract Consensus is IFROSTCoordinatorCallback {
         }
     }
 
+    // ============================================================
+    // PRIVATE FUNCTIONS
+    // ============================================================
+
+    /**
+     * @notice Processes a potential epoch rollover based on the staged state.
+     * @return epochs The updated epochs state.
+     */
     function _processRollover() private returns (Epochs memory epochs) {
         bool rolledOver;
         (epochs, rolledOver) = _epochsWithRollover();
@@ -204,6 +372,11 @@ contract Consensus is IFROSTCoordinatorCallback {
         }
     }
 
+    /**
+     * @notice Computes the effective epochs state, applying staged rollover if eligible.
+     * @return epochs The epochs state after applying rollover if needed.
+     * @return rolledOver True if a rollover occurred, false otherwise.
+     */
     function _epochsWithRollover() private view returns (Epochs memory epochs, bool rolledOver) {
         epochs = $epochs;
         if (epochs.staged != 0 && epochs.rolloverBlock <= block.number) {
@@ -215,6 +388,12 @@ contract Consensus is IFROSTCoordinatorCallback {
         }
     }
 
+    /**
+     * @notice Requires that a proposed epoch rollover is valid.
+     * @param epochs The current epochs state.
+     * @param proposedEpoch The proposed new epoch.
+     * @param rolloverBlock The block number when rollover should occur.
+     */
     function _requireValidRollover(Epochs memory epochs, uint64 proposedEpoch, uint64 rolloverBlock) private view {
         require(epochs.active < proposedEpoch && rolloverBlock > block.number && epochs.staged == 0, InvalidRollover());
     }

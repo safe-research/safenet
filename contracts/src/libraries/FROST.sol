@@ -3,46 +3,108 @@ pragma solidity ^0.8.30;
 
 import {Secp256k1} from "@/libraries/Secp256k1.sol";
 
-/// @title FROST
-/// @notice Implementation of FROST(secp256k1, SHA-256) cyphersuite.
+/**
+ * @title FROST
+ * @notice Implementation of the FROST(secp256k1, SHA-256) ciphersuite.
+ */
 library FROST {
     using Secp256k1 for Secp256k1.Point;
 
+    // ============================================================
+    // TYPES AND STRUCTS
+    // ============================================================
+
+    /**
+     * @notice Type alias for a FROST participant identifier.
+     */
     type Identifier is uint256;
 
+    /**
+     * @notice Group commitment used in FROST signing.
+     * @param identifier The participant identifier associated with this commitment.
+     * @param d The first public nonce commitment point.
+     * @param e The second public nonce commitment point.
+     */
     struct Commitment {
         Identifier identifier;
         Secp256k1.Point d;
         Secp256k1.Point e;
     }
 
+    /**
+     * @notice A FROST group signature.
+     * @param r The group commitment point.
+     * @param z The scalar signature component.
+     */
     struct Signature {
         Secp256k1.Point r;
         uint256 z;
     }
 
+    /**
+     * @notice A FROST signature share for a single participant.
+     * @param r The participant commitment point.
+     * @param z The participant scalar share.
+     * @param l The Lagrange coefficient for this participant.
+     */
     struct SignatureShare {
         Secp256k1.Point r;
         uint256 z;
         uint256 l;
     }
 
+    // ============================================================
+    // ERRORS
+    // ============================================================
+
+    /**
+     * @notice Thrown when an identifier is zero or otherwise invalid.
+     */
     error InvalidIdentifier();
+
+    /**
+     * @notice Thrown when commitments are not strictly ordered by identifier.
+     */
     error UnorderedCommitments();
+
+    /**
+     * @notice Thrown when a scalar is not reduced modulo the curve order.
+     */
     error InvalidScalar();
 
-    /// @notice Contruct a FROST participant identifier.
+    // ============================================================
+    // INTERNAL FUNCTIONS - IDENTIFIERS
+    // ============================================================
+
+    /**
+     * @notice Constructs a FROST participant identifier.
+     * @param value The raw identifier value.
+     * @return identifier The wrapped identifier.
+     */
     function newIdentifier(uint256 value) internal pure returns (Identifier identifier) {
         identifier = Identifier.wrap(value);
         requireValidIdentifier(identifier);
     }
 
-    /// @notice Requires that an identifier is valid.
+    /**
+     * @notice Ensures that an identifier is valid.
+     * @param identifier The identifier to validate.
+     */
     function requireValidIdentifier(Identifier identifier) internal pure {
         require(Identifier.unwrap(identifier) != 0, InvalidIdentifier());
     }
 
-    /// @notice Generate a random nonce from some randomness and a secret key.
+    // ============================================================
+    // INTERNAL FUNCTIONS - NONCES AND CHALLENGES
+    // ============================================================
+
+    /**
+     * @notice Generates a random nonce from randomness and a secret key.
+     * @dev Implements the RFC-9591 `nonce_generate` function.
+     * @param random The source randomness.
+     * @param secret The participant secret key.
+     * @return n The derived nonce scalar.
+     */
     function nonce(bytes32 random, uint256 secret) internal view returns (uint256 n) {
         // The RFC-9591 `nonce_generate` function.
         // <https://datatracker.ietf.org/doc/html/rfc9591#section-4.1>
@@ -50,7 +112,14 @@ library FROST {
         return _h3(abi.encodePacked(random, secret));
     }
 
-    /// @notice Compute the binding factors for a message and group commitments.
+    /**
+     * @notice Computes the binding factors for a message and group commitments.
+     * @dev Implements the RFC-9591 `compute_binding_factors` function.
+     * @param y The group public key.
+     * @param commitments The list of participant commitments.
+     * @param message The message being signed.
+     * @return rho The binding factors for each participant.
+     */
     function bindingFactors(Secp256k1.Point memory y, Commitment[] memory commitments, bytes32 message)
         internal
         view
@@ -78,8 +147,14 @@ library FROST {
         }
     }
 
-    /// @notice Compute the challenge for a message from a group commitment and
-    ///         group public key.
+    /**
+     * @notice Computes the challenge for a message from a group commitment and group public key.
+     * @dev Implements the RFC-9591 `compute_challenge` function.
+     * @param r The group commitment point.
+     * @param y The group public key.
+     * @param message The message being signed.
+     * @return c The computed challenge scalar.
+     */
     function challenge(Secp256k1.Point memory r, Secp256k1.Point memory y, bytes32 message)
         internal
         view
@@ -93,14 +168,26 @@ library FROST {
         return _h2(abi.encodePacked(rv, rx, yv, yx, message));
     }
 
-    /// @notice Verifies a FROST signature.
+    /**
+     * @notice Verifies a FROST group signature.
+     * @param y The group public key.
+     * @param signature The FROST signature to verify.
+     * @param message The signed message.
+     */
     function verify(Secp256k1.Point memory y, Signature memory signature, bytes32 message) internal view {
         require(signature.z < Secp256k1.N, InvalidScalar());
         uint256 c = challenge(signature.r, y, message);
         Secp256k1.mulmuladd(signature.z, c, y, signature.r);
     }
 
-    /// @notice Verifies a FROST signature share.
+    /**
+     * @notice Verifies a FROST signature share.
+     * @param group The group public key.
+     * @param r The group commitment point.
+     * @param participant The participant public key.
+     * @param share The signature share to verify.
+     * @param message The signed message.
+     */
     function verifyShare(
         Secp256k1.Point memory group,
         Secp256k1.Point memory r,
@@ -114,7 +201,14 @@ library FROST {
         Secp256k1.mulmuladd(share.z, cl, participant, share.r);
     }
 
-    /// @notice Generate a KeyGen challenge for the proof of knowledge.
+    /**
+     * @notice Generates a key generation challenge for the proof of knowledge.
+     * @dev Matches the official FROST implementation KeyGen `challenge` function.
+     * @param identifier The participant identifier.
+     * @param phi The participant public key share.
+     * @param r The commitment point used in the proof.
+     * @return c The computed challenge scalar.
+     */
     function keyGenChallenge(Identifier identifier, Secp256k1.Point memory phi, Secp256k1.Point memory r)
         internal
         view
@@ -129,6 +223,15 @@ library FROST {
         return _hdkg(abi.encodePacked(identifier, phiv, phix, rv, rx));
     }
 
+    // ============================================================
+    // PRIVATE FUNCTIONS - ENCODING
+    // ============================================================
+
+    /**
+     * @notice Encodes a list of commitments into the RFC-9591 group commitment list format.
+     * @param commitments The commitments to encode.
+     * @return result The encoded commitment list.
+     */
     function _encodeCommitments(Commitment[] memory commitments) private pure returns (bytes memory result) {
         // The RFC-9591 `encode_group_commitment_list` function.
         // <https://datatracker.ietf.org/doc/html/rfc9591#section-4.3>
@@ -155,30 +258,75 @@ library FROST {
         }
     }
 
+    // ============================================================
+    // PRIVATE FUNCTIONS - HASH DOMAINS
+    // ============================================================
+
+    /**
+     * @notice Hashes input to a field element for binding factors.
+     * @param input The input bytes.
+     * @return result The field element.
+     */
     function _h1(bytes memory input) private view returns (uint256 result) {
         return _hashToField(input, "FROST-secp256k1-SHA256-v1rho\x00\x00\x00\x1c");
     }
 
+    /**
+     * @notice Hashes input to a field element for the challenge.
+     * @param input The input bytes.
+     * @return result The field element.
+     */
     function _h2(bytes memory input) private view returns (uint256 result) {
         return _hashToField(input, "FROST-secp256k1-SHA256-v1chal\x00\x00\x1d");
     }
 
+    /**
+     * @notice Hashes input to a field element for nonce generation.
+     * @param input The input bytes.
+     * @return result The field element.
+     */
     function _h3(bytes memory input) private view returns (uint256 result) {
         return _hashToField(input, "FROST-secp256k1-SHA256-v1nonce\x00\x1e");
     }
 
+    /**
+     * @notice Hashes input for the message binding factor.
+     * @param input The input bytes.
+     * @return result The 32-byte hash.
+     */
     function _h4(bytes memory input) private view returns (bytes32 result) {
         return _hash(input, "FROST-secp256k1-SHA256-v1msg\x00\x00\x00\x1c");
     }
 
+    /**
+     * @notice Hashes input for the commitment list binding factor.
+     * @param input The input bytes.
+     * @return result The 32-byte hash.
+     */
     function _h5(bytes memory input) private view returns (bytes32 result) {
         return _hash(input, "FROST-secp256k1-SHA256-v1com\x00\x00\x00\x1c");
     }
 
+    /**
+     * @notice Hashes input to a field element for key generation challenges.
+     * @param input The input bytes.
+     * @return result The field element.
+     */
     function _hdkg(bytes memory input) private view returns (uint256 result) {
         return _hashToField(input, "FROST-secp256k1-SHA256-v1dkg\x00\x00\x00\x1c");
     }
 
+    // ============================================================
+    // PRIVATE FUNCTIONS - HASH TO FIELD
+    // ============================================================
+
+    /**
+     * @notice Hashes a message to a field element modulo Secp256k1.N.
+     * @dev Implements the RFC-9380 `hash_to_field` function for m = 1, L = 48.
+     * @param message The message to hash.
+     * @param dst The domain separation tag.
+     * @return e The resulting field element.
+     */
     function _hashToField(bytes memory message, bytes32 dst) private view returns (uint256 e) {
         // The RFC-9380 `hash_to_field` function with:
         // - F: the finite field of order Secp256k1.N
@@ -195,6 +343,14 @@ library FROST {
         }
     }
 
+    /**
+     * @notice Expands a message using SHA-256 XMD.
+     * @dev Implements the RFC-9380 `expand_message_xmd` function with SHA-256.
+     * @param message The message to expand.
+     * @param dst The domain separation tag.
+     * @param len The desired output length in bytes.
+     * @return uniform The expanded pseudo-random bytes.
+     */
     function _expandMessageXmd(bytes memory message, bytes32 dst, uint256 len)
         private
         view
@@ -260,6 +416,12 @@ library FROST {
         }
     }
 
+    /**
+     * @notice Computes a SHA-256 hash of input with a domain separation tag.
+     * @param input The input message.
+     * @param dst The domain separation tag.
+     * @return digest The resulting hash.
+     */
     function _hash(bytes memory input, bytes32 dst) private view returns (bytes32 digest) {
         assembly ("memory-safe") {
             let dstLen := byte(31, dst)
@@ -277,6 +439,16 @@ library FROST {
         }
     }
 
+    // ============================================================
+    // INTERNAL FUNCTIONS - COMPARISON
+    // ============================================================
+
+    /**
+     * @notice Compares two identifiers for equality.
+     * @param a The first identifier.
+     * @param b The second identifier.
+     * @return True if the identifiers are equal, false otherwise.
+     */
     function identifierEq(Identifier a, Identifier b) internal pure returns (bool) {
         return Identifier.unwrap(a) == Identifier.unwrap(b);
     }
