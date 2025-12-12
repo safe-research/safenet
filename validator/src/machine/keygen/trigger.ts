@@ -15,7 +15,7 @@ export const triggerKeyGen = (
 	logger?: (msg: unknown) => void,
 ): { groupId: GroupId; diff: StateDiff } => {
 	if (participants.length < 2) {
-		throw new Error("Not enough participatns!");
+		throw new Error("Not enough participants!");
 	}
 	const { count, threshold } = calcGroupParameters(participants.length);
 	const { groupId, participantsRoot, participantId, commitments, pok, poap } = keyGenClient.setupGroup(
