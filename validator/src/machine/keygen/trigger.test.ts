@@ -28,15 +28,15 @@ const PARTICIPANTS = [
 ];
 
 // --- Tests ---
-describe("key gen abort", () => {
-	it("should throw if not enought participants are provided", () => {
+describe("trigger key gen", () => {
+	it("should throw if not enough participants are provided", () => {
 		const keyGenClient = {} as unknown as KeyGenClient;
 		expect(() => triggerKeyGen(keyGenClient, 1n, 20n, PARTICIPANTS.slice(0, 1), zeroHash)).toThrowError(
 			new Error("Not enough participatns!"),
 		);
 	});
 
-	it("should abort key gen when current epoch is multiple epochs after staged epoch", () => {
+	it("should trigger key generation and return the correct state diff", () => {
 		const context = "0x00000000eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee0000000000000002";
 		const setupGroup = vi.fn();
 		const groupSetup = {
