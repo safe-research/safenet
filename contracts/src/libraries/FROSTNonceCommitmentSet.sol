@@ -67,7 +67,7 @@ library FROSTNonceCommitmentSet {
      *         nonces _after_ a signing ceremony has already begun.
      * @param self The storage struct.
      * @param identifier The participant's FROST identifier.
-     * @param commitment The commitment hash.
+     * @param commitment The commitment merkle root.
      * @param sequence The current signature sequence.
      * @return chunk The chunk index for this commitment.
      */

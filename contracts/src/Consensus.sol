@@ -201,13 +201,13 @@ contract Consensus is IFROSTCoordinatorCallback {
 
     /**
      * @notice Gets a recent transaction attestation.
+     * @param transaction The meta-transaction to query the attestation for.
+     * @return message The EIP-712 message hash of the proposal.
+     * @return signature The FROST signature attesting to the transaction.
      * @dev This method will fail if the attestation did not happen in either
      *      the active or previous epochs. This is provided as a convenience
      *      method to clients who may want to query an attestation for a
      *      transaction they recently proposed for validator approval.
-     * @param transaction The meta-transaction to query the attestation for.
-     * @return message The EIP-712 message hash of the proposal.
-     * @return signature The FROST signature attesting to the transaction.
      */
     function getRecentAttestation(MetaTransaction.T memory transaction)
         external

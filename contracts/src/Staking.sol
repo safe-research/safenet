@@ -544,6 +544,9 @@ contract Staking is Ownable {
 
     /**
      * @notice Execute pending validator changes.
+     * @param validators Array of validator addresses.
+     * @param isRegistration Array of booleans representing registration (true) or deregistration (false).
+     * @param executableAt The timestamp when the proposal can be executed.
      */
     function executeValidatorChanges(
         address[] calldata validators,

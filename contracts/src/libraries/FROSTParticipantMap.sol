@@ -130,8 +130,7 @@ library FROSTParticipantMap {
     }
 
     /**
-     * @notice Returns whether or not a group is initialized. A sealed group is
-     *         not considered initialized.
+     * @notice Returns whether or not a group is initialized.
      * @param self The storage struct.
      * @return result True if initialized, false otherwise.
      */

@@ -6,6 +6,8 @@ import {Secp256k1} from "@/libraries/Secp256k1.sol";
 /**
  * @title FROST
  * @notice Implementation of the FROST(secp256k1, SHA-256) ciphersuite.
+ * @dev FROST Implementation is based on RFC-9591 (https://datatracker.ietf.org/doc/html/rfc9591).
+ *      The dst (Domain Separation Tag) values for `_hashToField` are based on https://datatracker.ietf.org/doc/html/rfc9591#section-6.5
  */
 library FROST {
     using Secp256k1 for Secp256k1.Point;
@@ -22,8 +24,8 @@ library FROST {
     /**
      * @notice Group commitment used in FROST signing.
      * @param identifier The participant identifier associated with this commitment.
-     * @param d The first public nonce commitment point.
-     * @param e The second public nonce commitment point.
+     * @param d The hiding nonce commitment point.
+     * @param e The binding nonce commitment point.
      */
     struct Commitment {
         Identifier identifier;
@@ -33,7 +35,7 @@ library FROST {
 
     /**
      * @notice A FROST group signature.
-     * @param r The group commitment point.
+     * @param r The group commitment represented as a point.
      * @param z The scalar signature component.
      */
     struct Signature {
@@ -43,7 +45,7 @@ library FROST {
 
     /**
      * @notice A FROST signature share for a single participant.
-     * @param r The participant commitment point.
+     * @param r The participant commitment represented as a point.
      * @param z The participant scalar share.
      * @param l The Lagrange coefficient for this participant.
      */
@@ -58,7 +60,7 @@ library FROST {
     // ============================================================
 
     /**
-     * @notice Thrown when an identifier is zero or otherwise invalid.
+     * @notice Thrown when a participant identifier is zero or otherwise invalid.
      */
     error InvalidIdentifier();
 
@@ -100,25 +102,22 @@ library FROST {
 
     /**
      * @notice Generates a random nonce from randomness and a secret key.
-     * @dev Implements the RFC-9591 `nonce_generate` function.
      * @param random The source randomness.
      * @param secret The participant secret key.
      * @return n The derived nonce scalar.
+     * @dev Implements the RFC-9591 `nonce_generate` function (https://datatracker.ietf.org/doc/html/rfc9591#section-4.1).
      */
     function nonce(bytes32 random, uint256 secret) internal view returns (uint256 n) {
-        // The RFC-9591 `nonce_generate` function.
-        // <https://datatracker.ietf.org/doc/html/rfc9591#section-4.1>
-
         return _h3(abi.encodePacked(random, secret));
     }
 
     /**
      * @notice Computes the binding factors for a message and group commitments.
-     * @dev Implements the RFC-9591 `compute_binding_factors` function.
      * @param y The group public key.
      * @param commitments The list of participant commitments.
      * @param message The message being signed.
      * @return rho The binding factors for each participant.
+     * @dev Implements the RFC-9591 `compute_binding_factors` function.
      */
     function bindingFactors(Secp256k1.Point memory y, Commitment[] memory commitments, bytes32 message)
         internal
@@ -149,11 +148,11 @@ library FROST {
 
     /**
      * @notice Computes the challenge for a message from a group commitment and group public key.
-     * @dev Implements the RFC-9591 `compute_challenge` function.
-     * @param r The group commitment point.
+     * @param r The participant commitment represented as a point.
      * @param y The group public key.
      * @param message The message being signed.
      * @return c The computed challenge scalar.
+     * @dev Implements the RFC-9591 `compute_challenge` function.
      */
     function challenge(Secp256k1.Point memory r, Secp256k1.Point memory y, bytes32 message)
         internal
@@ -183,7 +182,7 @@ library FROST {
     /**
      * @notice Verifies a FROST signature share.
      * @param group The group public key.
-     * @param r The group commitment point.
+     * @param r The participant commitment represented as a point.
      * @param participant The participant public key.
      * @param share The signature share to verify.
      * @param message The signed message.
@@ -203,11 +202,11 @@ library FROST {
 
     /**
      * @notice Generates a key generation challenge for the proof of knowledge.
-     * @dev Matches the official FROST implementation KeyGen `challenge` function.
      * @param identifier The participant identifier.
      * @param phi The participant public key share.
      * @param r The commitment point used in the proof.
      * @return c The computed challenge scalar.
+     * @dev Matches the official FROST implementation KeyGen `challenge` function.
      */
     function keyGenChallenge(Identifier identifier, Secp256k1.Point memory phi, Secp256k1.Point memory r)
         internal
@@ -322,10 +321,10 @@ library FROST {
 
     /**
      * @notice Hashes a message to a field element modulo Secp256k1.N.
-     * @dev Implements the RFC-9380 `hash_to_field` function for m = 1, L = 48.
      * @param message The message to hash.
      * @param dst The domain separation tag.
      * @return e The resulting field element.
+     * @dev Implements the RFC-9380 `hash_to_field` function for m = 1, L = 48.
      */
     function _hashToField(bytes memory message, bytes32 dst) private view returns (uint256 e) {
         // The RFC-9380 `hash_to_field` function with:
@@ -345,11 +344,11 @@ library FROST {
 
     /**
      * @notice Expands a message using SHA-256 XMD.
-     * @dev Implements the RFC-9380 `expand_message_xmd` function with SHA-256.
      * @param message The message to expand.
      * @param dst The domain separation tag.
      * @param len The desired output length in bytes.
      * @return uniform The expanded pseudo-random bytes.
+     * @dev Implements the RFC-9380 `expand_message_xmd` function with SHA-256.
      */
     function _expandMessageXmd(bytes memory message, bytes32 dst, uint256 len)
         private

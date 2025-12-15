@@ -16,7 +16,7 @@ library ConsensusMessages {
     /**
      * @custom:precomputed keccak256("EIP712Domain(uint256 chainId,address verifyingContract)")
      */
-    bytes32 private constant DOMAIN_TYPEHASH = hex"47e79534a245952e8b16893a336b85a3d9ea9fa8c573f3d803afb92a79469218";
+    bytes32 internal constant DOMAIN_TYPEHASH = hex"47e79534a245952e8b16893a336b85a3d9ea9fa8c573f3d803afb92a79469218";
 
     /**
      * @custom:precomputed keccak256("EpochRollover(uint64 activeEpoch,uint64 proposedEpoch,uint64 rolloverBlock,uint256 groupKeyX,uint256 groupKeyY)")

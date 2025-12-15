@@ -345,12 +345,12 @@ contract FROSTCoordinator {
 
     /**
      * @notice Submits a commitment and proof for a key generation participant.
-     * @dev This corresponds to Round 1 of the FROST KeyGen algorithm.
      * @param gid The group ID.
      * @param identifier The participant identifier.
      * @param poap The Merkle proof of participation.
      * @param commitment The key generation commitment.
      * @return committed True if all commitments are received and the phase completes.
+     * @dev This corresponds to Round 1 of the FROST KeyGen algorithm.
      */
     function keyGenCommit(
         FROSTGroupId.T gid,
@@ -375,7 +375,6 @@ contract FROSTCoordinator {
 
     /**
      * @notice Initiates (if needed) a key generation ceremony and submits a commitment.
-     * @dev This is equivalent to calling `keyGen` followed by `keyGenCommit`.
      * @param participants The Merkle root of participants.
      * @param count The number of participants.
      * @param threshold The signing threshold.
@@ -385,6 +384,7 @@ contract FROSTCoordinator {
      * @param commitment The key generation commitment.
      * @return gid The group ID.
      * @return committed True if all commitments are received and the phase completes.
+     * @dev This is equivalent to calling `keyGen` followed by `keyGenCommit`.
      */
     function keyGenAndCommit(
         bytes32 participants,
@@ -404,12 +404,12 @@ contract FROSTCoordinator {
 
     /**
      * @notice Submits participants' secret shares.
-     * @dev This corresponds to Round 2 of the FROST KeyGen algorithm. The
-     *      secret shares are encrypted using ECDH with each participant's
-     *      public value.
      * @param gid The group ID.
      * @param share The secret share payload.
      * @return completed True if all shares are received and the phase completes.
+     * @dev This corresponds to Round 2 of the FROST KeyGen algorithm. The
+     *      secret shares are encrypted using ECDH with each participant's
+     *      public value.
      */
     function keyGenSecretShare(FROSTGroupId.T gid, KeyGenSecretShare calldata share) public returns (bool completed) {
         Group storage group = $groups[gid];
@@ -430,9 +430,9 @@ contract FROSTCoordinator {
 
     /**
      * @notice Confirms the key generation ceremony for the sender.
-     * @dev This requires that no unresolved complaints exist.
      * @param gid The group ID.
      * @return completed True if all confirmations are received and the group is finalized.
+     * @dev This requires that no unresolved complaints exist.
      */
     function keyGenConfirm(FROSTGroupId.T gid) public returns (bool completed) {
         Group storage group = $groups[gid];
@@ -450,10 +450,10 @@ contract FROSTCoordinator {
 
     /**
      * @notice Confirms key generation for the sender and optionally calls a callback.
-     * @dev This is the same as `keyGenConfirm` with an additional callback once confirmed.
      * @param gid The group ID.
      * @param callback The callback target and context.
      * @return completed True if all confirmations are received and the group is finalized.
+     * @dev This is the same as `keyGenConfirm` with an additional callback once confirmed.
      */
     function keyGenConfirmWithCallback(FROSTGroupId.T gid, Callback calldata callback) public returns (bool completed) {
         completed = keyGenConfirm(gid);
@@ -499,12 +499,12 @@ contract FROSTCoordinator {
 
     /**
      * @notice Submits a commitment to a chunk of nonces for preprocessing.
-     * @dev The commitment is a Merkle root to 256 nonces that get revealed as
-     *      part of the signing process. This allows signing requests to reveal
-     *      the message immediately while still preventing Wagner's Birthday Attacks.
      * @param gid The group ID.
      * @param commitment The nonce commitment Merkle root.
      * @return chunk The chunk index used for this commitment.
+     * @dev The commitment is a Merkle root to 256 nonces that get revealed as
+     *      part of the signing process. This allows signing requests to reveal
+     *      the message immediately while still preventing Wagner's Birthday Attacks.
      */
     function preprocess(FROSTGroupId.T gid, bytes32 commitment) external returns (uint64 chunk) {
         Group storage group = $groups[gid];
@@ -585,13 +585,13 @@ contract FROSTCoordinator {
 
     /**
      * @notice Broadcasts a signature share and optionally executes a callback when completed.
-     * @dev This method works identically to `signShare` but additionally executes a callback.
      * @param sid The signature ID.
      * @param selection The signing selection data.
      * @param share The participant's signature share.
      * @param proof The Merkle proof for the selection.
      * @param callback The callback target and context.
      * @return completed True if the signature is completed with this share.
+     * @dev This method works identically to `signShare` but additionally executes a callback.
      */
     function signShareWithCallback(
         FROSTSignatureId.T sid,
@@ -612,9 +612,9 @@ contract FROSTCoordinator {
 
     /**
      * @notice Retrieves the group public key.
-     * @dev It is undefined behaviour to call this before key generation completes.
      * @param gid The group ID.
      * @return key The group public key.
+     * @dev It is undefined behaviour to call this before key generation completes.
      */
     function groupKey(FROSTGroupId.T gid) external view returns (Secp256k1.Point memory key) {
         return $groups[gid].key;

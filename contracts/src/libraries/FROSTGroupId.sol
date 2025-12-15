@@ -27,7 +27,7 @@ library FROSTGroupId {
 
     /**
      * @notice Computes the deterministic group ID for a given configuration.
-     * @param participants The participants hash.
+     * @param participants The participant merkle root.
      * @param count The number of participants.
      * @param threshold The threshold for the group.
      * @param context The context data for the group.

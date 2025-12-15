@@ -13,7 +13,7 @@ library MetaTransaction {
     /**
      * @notice Represents a meta-transaction.
      * @param chainId The chain ID for the transaction.
-     * @param account The account address initiating the transaction.
+     * @param account The account address that is executing the transaction.
      * @param to The target address of the transaction.
      * @param value The value to send with the transaction.
      * @param operation The operation type (CALL or DELEGATECALL).

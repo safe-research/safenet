@@ -137,7 +137,7 @@ library Secp256k1 {
      *      Additionally, it only supports points `P` with x-coordinates that
      *      are elements in Fn. In practice (assuming uniform distribution of
      *      x-coordinates), this happens for roughly one in every 3.7e39 points
-     *      and is negligeable.
+     *      and is negligible.
      */
     function mulmuladd(uint256 z, uint256 e, Point memory p, Point memory r) internal view {
         (uint256 px, uint256 py) = _unpack(p);
