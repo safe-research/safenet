@@ -142,7 +142,7 @@ describe("key gen confirmed", () => {
 		};
 		const keyGenClient = {} as unknown as KeyGenClient;
 		const participants = vi.fn();
-		participants.mockReturnValueOnce(MACHINE_CONFIG.defaultParticipants);
+		participants.mockReturnValueOnce([1n, 2n, 3n]);
 		const signingClient = {
 			participants,
 		} as unknown as SigningClient;
