@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import type { ShieldnetProtocol } from "../../consensus/protocol/types.js";
 import type { VerificationEngine } from "../../consensus/verify/engine.js";
 import type { TransactionProposedEvent } from "../transitions/types.js";
-import type { ConsensusState, MachineConfig, SigningState } from "../types.js";
+import type { ConsensusState, MachineConfig } from "../types.js";
 import { handleTransactionProposed } from "./transactionProposed.js";
 
 // --- Test Data ---
