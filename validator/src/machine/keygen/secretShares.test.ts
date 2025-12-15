@@ -24,14 +24,6 @@ const MACHINE_STATES: MachineStates = {
 	signing: {},
 };
 
-const _CONSENSUS_STATE: ConsensusState = {
-	activeEpoch: 0n,
-	stagedEpoch: 0n,
-	groupPendingNonces: {},
-	epochGroups: {},
-	signatureIdToMessage: {},
-};
-
 const MACHINE_CONFIG: MachineConfig = {
 	defaultParticipants: [
 		{
