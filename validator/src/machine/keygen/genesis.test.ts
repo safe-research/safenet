@@ -60,7 +60,7 @@ const EVENT: KeyGenEvent = {
 };
 
 // --- Tests ---
-describe("key gen abort", () => {
+describe("gensis key gen", () => {
 	it("should not trigger genesis key gen when not waiting for rollover", () => {
 		const machineStates: MachineStates = {
 			rollover: {
