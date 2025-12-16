@@ -40,6 +40,17 @@ export const genesisSaltSchema = z.preprocess((val) => {
 	return val;
 }, hexBytes32Schema);
 
+const BLOCKTIME_IN_SECONDS = 5n; // value assumed for gnosis chain
+const BLOCKS_PER_EPOCH = (24n * 60n * 60n) / BLOCKTIME_IN_SECONDS; // ~ blocks for 5 minutes
+
+export const epochLengthSchema = z.preprocess((val) => {
+	if (val === undefined || val === "") {
+		return BLOCKS_PER_EPOCH;
+	}
+	return val;
+}, z.coerce.bigint());
+
+
 export const validatorConfigSchema = z.object({
 	LOG_LEVEL: logLevelSchema.optional(),
 	RPC_URL: z.url(),
@@ -49,6 +60,7 @@ export const validatorConfigSchema = z.object({
 	CHAIN_ID: supportedChainsSchema,
 	PARTICIPANTS: participantsSchema,
 	GENESIS_SALT: genesisSaltSchema,
+	BLOCKS_PER_EPOCH: epochLengthSchema,
 });
 
 export const chunked = <T>(sz: number, transform: (b: Buffer) => T): ((b: Buffer) => T[]) => {

@@ -8,9 +8,6 @@ import { createLogger } from "./utils/logging.js";
 
 dotenv.config({ quiet: true });
 
-const BLOCKTIME_IN_SECONDS = 5n; // value assumed for gnosis chain
-const BLOCKS_PER_EPOCH = (5n * 60n) / BLOCKTIME_IN_SECONDS; // ~ blocks for 5 minutes
-
 const result = validatorConfigSchema.safeParse(process.env);
 if (!result.success) {
 	console.log(result.error);
@@ -32,7 +29,7 @@ const config: ProtocolConfig = {
 	coordinator: validatorConfig.COORDINATOR_ADDRESS,
 	participants: validatorConfig.PARTICIPANTS,
 	genesisSalt: validatorConfig.GENESIS_SALT,
-	blocksPerEpoch: BLOCKS_PER_EPOCH,
+	blocksPerEpoch: validatorConfig.BLOCKS_PER_EPOCH,
 };
 
 const account = privateKeyToAccount(validatorConfig.PRIVATE_KEY);

@@ -129,6 +129,7 @@ export class OnchainProtocol extends BaseProtocol {
 			functionName: "keyGenConfirm",
 			args: [groupId],
 			account: this.#signingClient.account,
+			gas: 100_000n,
 		});
 		return this.#signingClient.writeContract(request);
 	}
