@@ -40,12 +40,15 @@ logger.info(`Using validator account ${account.address}`);
 
 const service = createValidatorService(account, rpcUrl, config, logger);
 
-// Handle graceful shutdown
-process.on("SIGINT", () => {
+// Handle graceful shutdown, for both `SIGINT` (i.e. Ctrl-C) and `SIGTERM` which
+// gets send when stopping a container or `kill`.
+const shutdown = () => {
 	logger.info("Shutting down service...");
 	service.stop();
 	process.exit(0);
-});
+};
+process.on("SIGINT", shutdown);
+process.on("SIGTERM", shutdown);
 
 service.start().catch((error: unknown) => {
 	logger.error("Service failed to start:");
