@@ -1,0 +1,39 @@
+name: docker
+
+on:
+  pull_request:
+  push:
+    branches:
+	  - main
+
+jobs:
+  docker:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          submodules: recursive
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/safe-research/shieldnet-validator
+          labels: |
+            org.opencontainers.image.licenses=GPL-3.0-only
+
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: validator/Dockerfile
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
