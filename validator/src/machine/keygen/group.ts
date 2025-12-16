@@ -23,6 +23,9 @@ export const calcGroupContext = (consensus: Address, epoch: bigint): Hex => {
 
 export type GenesisGroup = {
 	id: GroupId;
+	participantsRoot: Hex;
+	count: bigint;
+	threshold: bigint;
 	context: Hex;
 };
 
@@ -42,6 +45,9 @@ export const calcGenesisGroup = ({
 		genesisSalt === zeroHash ? zeroHash : keccak256(encodePacked(["string", "bytes32"], ["genesis", genesisSalt]));
 	return {
 		id: calcGroupId(participantsRoot, count, threshold, context),
+		participantsRoot,
+		count,
+		threshold,
 		context,
 	};
 };

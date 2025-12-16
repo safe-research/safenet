@@ -45,8 +45,12 @@ const main = async (): Promise<void> => {
 		salt: zeroHash,
 	});
 
-	console.log(`Genesis group ID: ${genesisGroup.id}`);
-	console.log(`Consensus contract address: ${consensus}`);
+	console.log(`Genesis group ID:                ${genesisGroup.id}`);
+	console.log(`Genesis group participants root: ${genesisGroup.participantsRoot}`);
+	console.log(`Genesis group count:             ${genesisGroup.count}`);
+	console.log(`Genesis group threshold:         ${genesisGroup.threshold}`);
+	console.log(`Genesis group context:           ${genesisGroup.context}`);
+	console.log(`Consensus contract address:      ${consensus}`);
 };
 
 main().catch((err) => {

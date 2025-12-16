@@ -5,7 +5,7 @@ import type { KeyGenClient } from "../../consensus/keyGen/client.js";
 import { toPoint } from "../../frost/math.js";
 import type { FrostPoint } from "../../frost/types.js";
 import type { KeyGenSecretSharedEvent } from "../transitions/types.js";
-import type { ConsensusState, MachineConfig, MachineStates } from "../types.js";
+import type { MachineConfig, MachineStates } from "../types.js";
 import { handleKeyGenSecretShared } from "./secretShares.js";
 
 // --- Test Data ---
