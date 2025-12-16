@@ -50,7 +50,6 @@ export const epochLengthSchema = z.preprocess((val) => {
 	return val;
 }, z.coerce.bigint());
 
-
 export const validatorConfigSchema = z.object({
 	LOG_LEVEL: logLevelSchema.optional(),
 	RPC_URL: z.url(),
