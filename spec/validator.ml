@@ -77,7 +77,6 @@ type rollover_finalization = {
   shares : FROST.KeyGen.secret_share ParticipantMap.t local;
   complaints : rollover_complaints ParticipantMap.t;
   confirmations : ParticipantSet.t;
-  last_participant : FROST.Identifier.t;
   complaint_deadline : int;
   response_deadline : int;
   confirm_deadline : int;
@@ -113,6 +112,7 @@ type sign_status =
       root : string;
       group_commitment : FROST.group_commitment;
       shares : FROST.signature_share ParticipantMap.t;
+      last_participant : FROST.Identifier.t option;
     }
   | Waiting_for_consensus_attestation of {
       id : SignatureId.t;
@@ -131,7 +131,6 @@ type signature = {
   status : sign_status;
   epoch : epoch;
   packet : packet;
-  last_participant : FROST.Identifier.t option;
   selection : ParticipantSet.t;
   deadline : int;
 }
@@ -508,7 +507,6 @@ struct
                   shares = Local valid_shares;
                   confirmations = ParticipantSet.empty;
                   complaints = st.complaints;
-                  last_participant = identifier;
                   (* Right now, we are overly generous with the deadlines here.
                      In the future we can tighten this up by dynamically setting
                      the response and confirm deadlines based on the latest
@@ -596,7 +594,6 @@ struct
                   Waiting_for_sign_request { responsible = Some identifier };
                 epoch = state.active_epoch;
                 packet;
-                last_participant = Some st.last_participant;
                 selection = state.active_epoch.group.participants;
                 deadline = state.block + Configuration.signing_block_timeout;
               }
@@ -845,6 +842,7 @@ struct
           root;
           group_commitment;
           shares = ParticipantMap.empty;
+          last_participant = None;
         }
     in
     let proof =
@@ -913,7 +911,7 @@ struct
       match
         List.find_map (fun (message, signature) ->
             match signature.status with
-            | Collecting_sign_shares { id; root; group_commitment; shares }
+            | Collecting_sign_shares { id; root; group_commitment; shares; _ }
               when SignatureId.equal id signature_id
                    && String.equal root binding_root ->
                 Some (message, signature, group_commitment, shares)
@@ -939,6 +937,7 @@ struct
                   root = binding_root;
                   group_commitment;
                   shares = shares';
+                  last_participant = Some identifier;
                 }
           in
           let signature' =
@@ -972,6 +971,8 @@ struct
                     match responsible with
                     | Some responsible ->
                         ParticipantSet.remove responsible signature.selection
+                    (* All participants were responsible, and we still timed
+                       out. The signing selection is now empty! *)
                     | None -> ParticipantSet.empty)
               in
               let threshold =
@@ -987,20 +988,48 @@ struct
                    drop the signature request. *)
                 (None, [])
               else
-                let state', action, actor =
+                let state', actions' =
                   match signature.status with
+                  | Waiting_for_sign_request _ ->
+                      ( Waiting_for_sign_request { responsible = None },
+                        `Coordinator_sign (signature.epoch.group.id, message)
+                        :: actions )
+                  | Collecting_sign_nonces { id; nonces } ->
+                      (* Continue the signing process with only the participants
+                         which provided nonces. Note that this is sound as we
+                         have already verified that we still have a sufficient
+                         signers. *)
+                      let state', action =
+                        sign_share_with_callback signature message id nonces
+                      in
+                      (state', action :: actions)
+                  | Collecting_sign_shares { last_participant; _ } ->
+                      (* Since at least `threshold` signers contributed shares,
+                         (given the check above), we are guaranteed that
+                         `last_participant` is not `None`. *)
+                      let last_participant = Option.get last_participant in
+                      let state' =
+                        Waiting_for_sign_request
+                          { responsible = Some last_participant }
+                      in
+                      let (Local me) = signature.epoch.group.me in
+                      let actions' =
+                        if FROST.Identifier.equal last_participant me then
+                          `Coordinator_sign (signature.epoch.group.id, message)
+                          :: actions
+                        else actions
+                      in
+                      (state', actions')
                   | Waiting_for_consensus_attestation { id = signature_id; _ }
                     ->
-                      (* As an optimization, we just re-attest if we already have
-                         a valid signature but the responsible participant did not
-                         do it in time. The punishment for doing this is foregoing
-                         rewards for that attestation. *)
+                      (* As an optimization, all participants just try to
+                         re-attest if we already have a valid signature but the
+                         responsible participant did not do it in time. The
+                         punishment for doing this is foregoing rewards for that
+                         attestation. *)
                       let state' =
                         Waiting_for_consensus_attestation
-                          {
-                            id = signature_id;
-                            responsible = signature.last_participant;
-                          }
+                          { id = signature_id; responsible = None }
                       in
                       (* The actual attestation action depends on the packet we are
                          attesting to. *)
@@ -1013,38 +1042,15 @@ struct
                             `Consensus_attest_transaction
                               (epoch, hash, signature_id)
                       in
-                      (state', action, signature.last_participant)
-                  | Collecting_sign_nonces { id; nonces; _ } ->
-                      (* Continue the signing process with only the participants
-                         which provided nonces. Note that this is sound given the
-                         asserted assumption above - i.e. we always have a
-                         threshold of well-behaving signers. *)
-                      let state', action =
-                        sign_share_with_callback signature message id nonces
-                      in
-                      (state', action, None)
-                  | _ ->
-                      ( Waiting_for_sign_request
-                          { responsible = signature.last_participant },
-                        `Coordinator_sign (signature.epoch.group.id, message),
-                        signature.last_participant )
+                      (state', action :: actions)
                 in
                 let signature' =
                   {
                     signature with
                     status = state';
-                    last_participant = None;
                     selection = selection';
                     deadline = state.block + Configuration.signing_block_timeout;
                   }
-                in
-                let (Local me) = signature.epoch.group.me in
-                let actions' =
-                  match actor with
-                  | None -> action :: actions
-                  | Some address when FROST.Identifier.equal address me ->
-                      action :: actions
-                  | _ -> actions
                 in
                 (Some signature', actions')
             end
@@ -1101,7 +1107,6 @@ struct
             status = Waiting_for_sign_request { responsible = None };
             epoch = state.active_epoch;
             packet = Transaction_proposal { epoch; hash = transaction_hash };
-            last_participant = None;
             selection = state.active_epoch.group.participants;
             deadline = state.block + Configuration.signing_block_timeout;
           }
