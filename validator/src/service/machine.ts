@@ -137,6 +137,7 @@ export class ShieldnetStateMachine {
 			return [];
 		}
 		this.#lastProcessedBlock = block;
+		this.#lastProcessedIndex = 0;
 		state.apply(checkKeyGenAbort(this.#machineConfig, state.consensus, state.machines, block, this.#logger.info));
 		state.apply(
 			checkKeyGenTimeouts(
@@ -181,9 +182,12 @@ export class ShieldnetStateMachine {
 				`Invalid block number (${block}) and index ${index} (currently at block ${this.#lastProcessedBlock} and index ${this.#lastProcessedIndex})`,
 			);
 		}
-		this.#lastProcessedIndex = index;
 		const state = new TransitionState(this.#storage.machineStates(), this.#storage.consensusState());
-		this.progressToBlock(block, state);
+		try {
+			this.progressToBlock(block, state);
+		} finally {
+			this.#lastProcessedIndex = index;
+		}
 		state.apply(await this.handleEvent(block, transition, state.consensus, state.machines));
 		// Check after every event if we could do a epoch rollover
 		state.apply(
