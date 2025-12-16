@@ -25,7 +25,7 @@ const adjustParticipants = (
 			return defaultParticipants.filter((p) => missingParticipants.indexOf(p.id) < 0);
 		}
 		case "collecting_confirmations": {
-			return defaultParticipants.filter((p) => rollover.sharesFrom.indexOf(p.id) >= 0);
+			return defaultParticipants.filter((p) => rollover.confirmationsFrom.indexOf(p.id) >= 0);
 		}
 	}
 };

@@ -7,6 +7,11 @@ import type { GroupId, ParticipantId, SignatureId } from "../frost/types.js";
 
 export type Optional<T, K extends keyof T> = Omit<T, K> & Partial<Pick<T, K>>;
 
+export type Complaints = {
+	unresponded: bigint;
+	total: bigint;
+};
+
 // TODO: currently missing states for epoch_skipped
 // TODO: adjust waiting_for_rollover to align with epoch_staged from specs
 export type RolloverState = Readonly<
@@ -24,15 +29,19 @@ export type RolloverState = Readonly<
 			groupId: GroupId;
 			nextEpoch: bigint;
 			deadline: bigint;
+			complaints: Readonly<Record<string, Readonly<Complaints>>>;
 			lastParticipant?: ParticipantId;
 	  }
 	| {
 			id: "collecting_confirmations";
 			groupId: GroupId;
 			nextEpoch: bigint;
+			complaintDeadline: bigint;
+			responseDeadline: bigint;
 			deadline: bigint;
 			lastParticipant?: ParticipantId;
-			sharesFrom: readonly ParticipantId[];
+			complaints: Readonly<Record<string, Readonly<Complaints>>>;
+			confirmationsFrom: readonly ParticipantId[];
 	  }
 	| {
 			id: "sign_rollover";

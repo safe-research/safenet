@@ -10,6 +10,7 @@ import { handleTransactionAttested } from "../machine/consensus/transactionAttes
 import { handleTransactionProposed } from "../machine/consensus/transactionProposed.js";
 import { checkKeyGenAbort } from "../machine/keygen/abort.js";
 import { handleKeyGenCommitted } from "../machine/keygen/committed.js";
+import { handleComplaintSubmitted } from "../machine/keygen/complaintSubmitted.js";
 import { handleKeyGenConfirmed } from "../machine/keygen/confirmed.js";
 import { handleGenesisKeyGen } from "../machine/keygen/genesis.js";
 import { handleKeyGenSecretShared } from "../machine/keygen/secretShares.js";
@@ -233,6 +234,9 @@ export class ShieldnetStateMachine {
 					transition,
 					this.#logger.info,
 				);
+			}
+			case "event_key_gen_complaint_submitted": {
+				return await handleComplaintSubmitted(this.#keyGenClient, machineStates, transition);
 			}
 			case "event_key_gen_confirmed": {
 				return await handleKeyGenConfirmed(

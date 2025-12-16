@@ -62,9 +62,12 @@ export const handleKeyGenSecretShared = async (
 			id: "collecting_confirmations",
 			groupId,
 			nextEpoch: machineStates.rollover.nextEpoch,
+			complaintDeadline: event.block + machineConfig.keyGenTimeout,
+			responseDeadline: event.block + 2n * machineConfig.keyGenTimeout,
 			deadline: event.block + 3n * machineConfig.keyGenTimeout,
 			lastParticipant: event.identifier,
-			sharesFrom: [],
+			complaints: {},
+			confirmationsFrom: [],
 		},
 		actions,
 	};

@@ -90,7 +90,20 @@ export const publishSecretSharesSchema = z.object({
 	shares: z.array(coercedBigIntSchema),
 });
 
-export const keyGenCofirmSchema = z.object({
+export const keyGenComplainSchema = z.object({
+	id: z.literal("key_gen_complain"),
+	groupId: groupIdSchema,
+	accused: participantIdSchema,
+});
+
+export const keyGenComplaintResponseSchema = z.object({
+	id: z.literal("key_gen_complaint_response"),
+	groupId: groupIdSchema,
+	plaintiff: participantIdSchema,
+	secretShare: coercedBigIntSchema,
+});
+
+export const keyGenConfirmSchema = z.object({
 	id: z.literal("key_gen_confirm"),
 	groupId: groupIdSchema,
 	callbackContext: hexDataSchema.optional(),
@@ -99,7 +112,9 @@ export const keyGenCofirmSchema = z.object({
 export const keyGenActionSchema = z.discriminatedUnion("id", [
 	startKeyGenSchema,
 	publishSecretSharesSchema,
-	keyGenCofirmSchema,
+	keyGenComplainSchema,
+	keyGenComplaintResponseSchema,
+	keyGenConfirmSchema,
 ]);
 
 // --- Consensus Actions ---

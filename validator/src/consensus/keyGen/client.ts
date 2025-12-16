@@ -144,6 +144,12 @@ export class KeyGenClient {
 		};
 	}
 
+	// Complaint flow reveal
+	createSecretShare(groupId: GroupId, peerId: ParticipantId): bigint {
+		const coefficients = this.#storage.coefficients(groupId);
+		return evalPoly(coefficients, peerId);
+	}
+
 	// `senderId` is the id of sending local participant in the participants set
 	// `peerShares` are the calculated and encrypted shares (also defined as `f`)
 	async handleKeygenSecrets(

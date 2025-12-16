@@ -89,6 +89,19 @@ const actions: ActionWithTimeout[] = [
 		validUntil: 1,
 	},
 	{
+		id: "key_gen_complain",
+		groupId: "0x5afe000000000000000000000000000000000000000000000000000000000000",
+		accused: 1n,
+		validUntil: 1,
+	},
+	{
+		id: "key_gen_complaint_response",
+		groupId: "0x5afe000000000000000000000000000000000000000000000000000000000000",
+		plaintiff: 2n,
+		secretShare: 0x5afe5afe5afen,
+		validUntil: 1,
+	},
+	{
 		id: "key_gen_confirm",
 		groupId: "0x5afe000000000000000000000000000000000000000000000000000000000000",
 		validUntil: 1,

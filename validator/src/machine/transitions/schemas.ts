@@ -31,6 +31,12 @@ export const keyGenEventSchema = z.object({
 	context: hexBytes32Schema,
 });
 
+export const keyGenComplaintSubmittedEventSchema = z.object({
+	gid: hexBytes32Schema,
+	plaintiff: eventBigIntSchema,
+	accused: eventBigIntSchema,
+});
+
 export const keyGenCommittedEventSchema = z.object({
 	gid: hexBytes32Schema,
 	identifier: eventBigIntSchema,
@@ -148,6 +154,12 @@ const keyGenSecretSharedEventTransitionSchema = baseEventTransitionParamsSchema
 		id: z.literal("event_key_gen_secret_shared"),
 	});
 
+const keyGenComplaintSubmittedEventTransitionSchema = baseEventTransitionParamsSchema
+	.extend(keyGenComplaintSubmittedEventSchema.shape)
+	.extend({
+		id: z.literal("event_key_gen_complaint_submitted"),
+	});
+
 const keyGenConfirmedEventTransitionSchema = baseEventTransitionParamsSchema
 	.extend(keyGenConfirmedEventSchema.shape)
 	.extend({
@@ -212,6 +224,7 @@ export const stateTransitionSchema = z.discriminatedUnion("id", [
 	keyGenEventTransitionSchema,
 	keyGenCommittedEventTransitionSchema,
 	keyGenSecretSharedEventTransitionSchema,
+	keyGenComplaintSubmittedEventTransitionSchema,
 	keyGenConfirmedEventTransitionSchema,
 	nonceCommitmentsHashEventTransitionSchema,
 	// Signing Events

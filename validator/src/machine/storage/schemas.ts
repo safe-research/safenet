@@ -68,12 +68,32 @@ const collectingCommitmentsSchema = z.object({
 	deadline: coercedBigIntSchema,
 });
 
+const complaintsDataSchema = z.object({
+	unresponded: coercedBigIntSchema,
+	total: coercedBigIntSchema,
+});
+
+const complaintsSchema = z.record(z.string(), complaintsDataSchema);
+
 const collectingSharesSchema = z.object({
 	id: z.literal("collecting_shares"),
 	groupId: groupIdSchema,
 	nextEpoch: coercedBigIntSchema,
 	deadline: coercedBigIntSchema,
+	complaints: complaintsSchema,
 	lastParticipant: participantIdSchema.optional(),
+});
+
+const collectingConfirmationsSchema = z.object({
+	id: z.literal("collecting_confirmations"),
+	groupId: groupIdSchema,
+	nextEpoch: coercedBigIntSchema,
+	complaints: complaintsSchema,
+	complaintDeadline: coercedBigIntSchema,
+	responseDeadline: coercedBigIntSchema,
+	deadline: coercedBigIntSchema,
+	lastParticipant: participantIdSchema.optional(),
+	confirmationsFrom: participantIdSchema.array(),
 });
 
 const signRolloverSchema = z.object({
@@ -88,6 +108,7 @@ export const rolloverStateSchema = z.discriminatedUnion("id", [
 	waitingForRolloverSchema,
 	collectingCommitmentsSchema,
 	collectingSharesSchema,
+	collectingConfirmationsSchema,
 	signRolloverSchema,
 ]);
 

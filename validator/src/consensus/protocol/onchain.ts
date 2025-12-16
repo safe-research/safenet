@@ -7,6 +7,8 @@ import { BaseProtocol } from "./base.js";
 import type {
 	ActionWithTimeout,
 	AttestTransaction,
+	Complain,
+	ComplaintResponse,
 	ConfirmKeyGen,
 	PublishSecretShares,
 	PublishSignatureShare,
@@ -117,6 +119,13 @@ export class OnchainProtocol extends BaseProtocol {
 			gas: 300_000n,
 		});
 		return this.#signingClient.writeContract(request);
+	}
+
+	protected complain(_args: Complain): Promise<Hex> {
+		throw new Error("Method not implemented.");
+	}
+	protected complaintReponse(_args: ComplaintResponse): Promise<Hex> {
+		throw new Error("Method not implemented.");
 	}
 
 	protected async confirmKeyGen({ groupId, callbackContext }: ConfirmKeyGen): Promise<Hex> {

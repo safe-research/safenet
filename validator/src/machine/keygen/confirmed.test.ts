@@ -38,8 +38,11 @@ const MACHINE_STATES: MachineStates = {
 		id: "collecting_confirmations",
 		groupId: "0x06cb03baac74421225341827941e88d9547e5459c4b3715c0000000000000000",
 		nextEpoch: 10n,
+		complaintDeadline: 20n,
+		responseDeadline: 25n,
 		deadline: 30n,
-		sharesFrom: [3n, 1n],
+		confirmationsFrom: [3n, 1n],
+		complaints: {},
 	},
 	signing: {},
 };
@@ -129,14 +132,17 @@ describe("key gen confirmed", () => {
 		expect(diff).toStrictEqual({});
 	});
 
-	it("should only update sharesFrom and lastParticipant if not completed", async () => {
+	it("should only update confirmationsFrom and lastParticipant if not completed", async () => {
 		const machineStates: MachineStates = {
 			rollover: {
 				id: "collecting_confirmations",
 				groupId: "0x06cb03baac74421225341827941e88d9547e5459c4b3715c0000000000000000",
 				nextEpoch: 10n,
+				complaintDeadline: 20n,
+				responseDeadline: 25n,
 				deadline: 30n,
-				sharesFrom: [3n],
+				confirmationsFrom: [3n],
+				complaints: {},
 			},
 			signing: {},
 		};
@@ -164,9 +170,12 @@ describe("key gen confirmed", () => {
 				id: "collecting_confirmations",
 				groupId: "0x06cb03baac74421225341827941e88d9547e5459c4b3715c0000000000000000",
 				nextEpoch: 10n,
+				complaintDeadline: 20n,
+				responseDeadline: 25n,
 				deadline: 30n,
-				sharesFrom: [3n, 2n],
+				confirmationsFrom: [3n, 2n],
 				lastParticipant: 2n,
+				complaints: {},
 			},
 		});
 		expect(participants).toBeCalledTimes(1);

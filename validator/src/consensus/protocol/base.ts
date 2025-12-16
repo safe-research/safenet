@@ -4,6 +4,8 @@ import { InMemoryQueue, type Queue } from "../../utils/queue.js";
 import type {
 	ActionWithTimeout,
 	AttestTransaction,
+	Complain,
+	ComplaintResponse,
 	ConfirmKeyGen,
 	ProtocolAction,
 	PublishSecretShares,
@@ -78,6 +80,10 @@ export abstract class BaseProtocol implements ShieldnetProtocol {
 				return await this.startKeyGen(action);
 			case "key_gen_publish_secret_shares":
 				return await this.publishKeygenSecretShares(action);
+			case "key_gen_complain":
+				return await this.complain(action);
+			case "key_gen_complaint_response":
+				return await this.complaintReponse(action);
 			case "key_gen_confirm":
 				return await this.confirmKeyGen(action);
 			case "sign_request":
@@ -97,6 +103,10 @@ export abstract class BaseProtocol implements ShieldnetProtocol {
 	protected abstract startKeyGen(args: StartKeyGen): Promise<Hex>;
 
 	protected abstract publishKeygenSecretShares(args: PublishSecretShares): Promise<Hex>;
+
+	protected abstract complain(args: Complain): Promise<Hex>;
+
+	protected abstract complaintReponse(args: ComplaintResponse): Promise<Hex>;
 
 	protected abstract confirmKeyGen(args: ConfirmKeyGen): Promise<Hex>;
 

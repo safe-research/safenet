@@ -41,6 +41,15 @@ export type KeyGenSecretSharedEvent = {
 	completed: boolean;
 };
 
+export type KeyGenComplaintSubmittedEvent = {
+	id: "event_key_gen_complaint_submitted";
+	block: bigint;
+	index: number;
+	gid: GroupId;
+	plaintiff: ParticipantId;
+	accused: ParticipantId;
+};
+
 export type KeyGenConfirmedEvent = {
 	id: "event_key_gen_confirmed";
 	block: bigint;
@@ -143,6 +152,7 @@ export type EventTransition =
 	| KeyGenEvent
 	| KeyGenCommittedEvent
 	| KeyGenSecretSharedEvent
+	| KeyGenComplaintSubmittedEvent
 	| KeyGenConfirmedEvent
 	| NonceCommitmentsHashEvent
 	| NonceCommitmentsEvent

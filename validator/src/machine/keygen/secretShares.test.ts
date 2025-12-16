@@ -20,6 +20,7 @@ const MACHINE_STATES: MachineStates = {
 		groupId: "0x06cb03baac74421225341827941e88d9547e5459c4b3715c0000000000000000",
 		nextEpoch: 10n,
 		deadline: 30n,
+		complaints: {},
 	},
 	signing: {},
 };
@@ -116,6 +117,7 @@ describe("receiving secret shares", () => {
 				groupId: "0x06cb03baac74421225341827941e88d9547e5459c4b3715c0000000000000000",
 				nextEpoch: 0n,
 				deadline: 30n,
+				complaints: {},
 			},
 			signing: {},
 		};
@@ -132,9 +134,12 @@ describe("receiving secret shares", () => {
 				id: "collecting_confirmations",
 				groupId: "0x06cb03baac74421225341827941e88d9547e5459c4b3715c0000000000000000",
 				nextEpoch: 0n,
+				complaintDeadline: 29n, // 4n (block) + 25n (key gen timeout)
+				responseDeadline: 54n, // 4n (block) + 2n * 25n (key gen timeout)
 				deadline: 79n, // 4n (block) + 3n * 25n (key gen timeout)
 				lastParticipant: EVENT.identifier,
-				sharesFrom: [],
+				complaints: {},
+				confirmationsFrom: [],
 			},
 			actions: [
 				{
@@ -166,9 +171,12 @@ describe("receiving secret shares", () => {
 				id: "collecting_confirmations",
 				groupId: "0x06cb03baac74421225341827941e88d9547e5459c4b3715c0000000000000000",
 				nextEpoch: 10n,
+				complaintDeadline: 29n, // 4n (block) + 25n (key gen timeout)
+				responseDeadline: 54n, // 4n (block) + 2n * 25n (key gen timeout)
 				deadline: 79n, // 4n (block) + 3n * 25n (key gen timeout)
 				lastParticipant: EVENT.identifier,
-				sharesFrom: [],
+				complaints: {},
+				confirmationsFrom: [],
 			},
 			actions: [
 				{

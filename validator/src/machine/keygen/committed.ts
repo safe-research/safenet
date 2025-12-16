@@ -30,6 +30,7 @@ export const handleKeyGenCommitted = async (
 			groupId: event.gid,
 			nextEpoch,
 			deadline: event.block + machineConfig.keyGenTimeout,
+			complaints: {},
 		},
 		actions: [
 			{

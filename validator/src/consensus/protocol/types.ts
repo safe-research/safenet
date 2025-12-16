@@ -72,13 +72,26 @@ export type PublishSecretShares = {
 	shares: bigint[];
 };
 
+export type Complain = {
+	id: "key_gen_complain";
+	groupId: GroupId;
+	accused: ParticipantId;
+};
+
+export type ComplaintResponse = {
+	id: "key_gen_complaint_response";
+	groupId: GroupId;
+	plaintiff: ParticipantId;
+	secretShare: bigint;
+};
+
 export type ConfirmKeyGen = {
 	id: "key_gen_confirm";
 	groupId: GroupId;
 	callbackContext?: Hex;
 };
 
-export type KeyGenAction = StartKeyGen | PublishSecretShares | ConfirmKeyGen;
+export type KeyGenAction = StartKeyGen | PublishSecretShares | ConfirmKeyGen | Complain | ComplaintResponse;
 
 export type AttestTransaction = {
 	id: "consensus_attest_transaction";

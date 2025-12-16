@@ -73,6 +73,16 @@ describe("SqliteStateStorage", () => {
 				groupId: "0x5afe000000000000000000000000000000000000000000000000000000000000",
 				nextEpoch: 1n,
 				deadline: 100n,
+				complaints: {
+					"1": {
+						total: 2n,
+						unresponded: 1n,
+					},
+					"2": {
+						total: 1n,
+						unresponded: 0n,
+					},
+				},
 			},
 		});
 		expect(originalStorage.machineStates().rollover).toStrictEqual({
@@ -80,6 +90,16 @@ describe("SqliteStateStorage", () => {
 			groupId: "0x5afe000000000000000000000000000000000000000000000000000000000000",
 			nextEpoch: 1n,
 			deadline: 100n,
+			complaints: {
+				"1": {
+					total: 2n,
+					unresponded: 1n,
+				},
+				"2": {
+					total: 1n,
+					unresponded: 0n,
+				},
+			},
 		});
 		const recoveredStorage = new SqliteStateStorage(TEST_DB_PATH);
 		expect(recoveredStorage.machineStates().rollover).toStrictEqual({
@@ -87,6 +107,16 @@ describe("SqliteStateStorage", () => {
 			groupId: "0x5afe000000000000000000000000000000000000000000000000000000000000",
 			nextEpoch: 1n,
 			deadline: 100n,
+			complaints: {
+				"1": {
+					total: 2n,
+					unresponded: 1n,
+				},
+				"2": {
+					total: 1n,
+					unresponded: 0n,
+				},
+			},
 		});
 	});
 

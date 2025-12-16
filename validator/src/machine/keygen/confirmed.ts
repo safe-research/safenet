@@ -32,7 +32,7 @@ export const handleKeyGenConfirmed = async (
 	const groupId = event.gid;
 
 	// Track this confirmation
-	const sharesFrom = [...machineStates.rollover.sharesFrom, event.identifier];
+	const sharesFrom = [...machineStates.rollover.confirmationsFrom, event.identifier];
 	const participants = signingClient.participants(groupId);
 	const allConfirmed = participants.every((p) => sharesFrom.includes(p));
 
@@ -43,7 +43,7 @@ export const handleKeyGenConfirmed = async (
 		return {
 			rollover: {
 				...machineStates.rollover,
-				sharesFrom,
+				confirmationsFrom: sharesFrom,
 				lastParticipant: event.identifier,
 			},
 		};

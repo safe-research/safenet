@@ -126,6 +126,7 @@ describe("key gen committed", () => {
 				groupId: "0x06cb03baac74421225341827941e88d9547e5459c4b3715c0000000000000000",
 				nextEpoch: 10n,
 				deadline: 29n,
+				complaints: {},
 			},
 			actions: [
 				{
