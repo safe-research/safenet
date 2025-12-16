@@ -24,7 +24,8 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - uses: docker/metadata-action@v5
+      - id: meta
+        uses: docker/metadata-action@v5
         with:
           images: ghcr.io/safe-research/shieldnet-validator
 
