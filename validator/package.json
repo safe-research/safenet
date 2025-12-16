@@ -7,6 +7,7 @@
 		"check": "biome check && tsc",
 		"dev": "tsx src/validator.ts",
 		"cmd:derive-genesis": "tsx src/cmd/derive-genesis.ts",
+		"cmd:trigger-genesis": "tsx src/cmd/trigger-genesis.ts",
 		"fix": "biome check --write",
 		"test": "vitest run",
 		"test:watch": "vitest"
