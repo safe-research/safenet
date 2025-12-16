@@ -1,11 +1,11 @@
 # ---- Base Image ----
 # Use a specific, slim version of Node for reproducibility and a smaller image.
-FROM node:24-slim as base
+FROM node:24-slim AS base
 WORKDIR /usr/src/app
 
 # ---- Builder Stage ----
 # This stage builds the TypeScript source code into JavaScript.
-FROM base as builder
+FROM base AS builder
 
 # First, copy over package files and install all dependencies.
 # This includes devDependencies needed for the build process (e.g., typescript).
@@ -21,7 +21,7 @@ RUN npm run build --workspace=validator
 
 # ---- Production Stage ----
 # This stage creates the final, lean image for running the application.
-FROM base as runner
+FROM base AS runner
 
 # Copy package.json and install *only* production dependencies.
 # This avoids including devDependencies in the final image, keeping it small.
@@ -41,7 +41,7 @@ COPY --from=builder /usr/src/app/validator/dist ./validator/dist
 COPY --from=builder /usr/src/app/node_modules/better-sqlite3/build ./node_modules/better-sqlite3/build
 
 USER node
-ENV NODE_ENV production
+ENV NODE_ENV=production
 
 # Specify the command to run the compiled worker.
 CMD [ "node", "validator/dist/validator.js" ]
