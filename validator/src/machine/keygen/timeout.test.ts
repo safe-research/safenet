@@ -98,7 +98,7 @@ describe("key gen timeouts", () => {
 				groupId: "0x5afe02",
 				nextEpoch: 10n,
 				deadline: 22n,
-				sharesFrom: [1n, 3n],
+				sharesFrom: [1n, 7n, 11n],
 			} as RolloverState,
 			keyGenInvocations: [0, 0],
 		},
@@ -114,8 +114,7 @@ describe("key gen timeouts", () => {
 
 			expect(diff).toStrictEqual({});
 		});
-		it("should trigger key gen after deadline has passed", ({ skip }) => {
-			if (rollover.id === "collecting_confirmations") skip();
+		it("should trigger key gen after deadline has passed", () => {
 			const groupSetup = {
 				groupId: "0x5afe02",
 				participantsRoot: "0x5afe5afe5afe",
