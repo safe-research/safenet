@@ -27,8 +27,6 @@ jobs:
       - uses: docker/metadata-action@v5
         with:
           images: ghcr.io/safe-research/shieldnet-validator
-          labels: |
-            org.opencontainers.image.licenses=GPL-3.0-only
 
       - uses: docker/build-push-action@v6
         with:
