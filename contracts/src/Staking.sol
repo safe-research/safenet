@@ -104,12 +104,17 @@ contract Staking is Ownable {
     /**
      * @notice Tracks total stake amount for each validator.
      */
-    mapping(address validator => uint256 totalStake) public totalStakes;
+    mapping(address validator => uint256 totalStake) public totalValidatorStakes;
 
     /**
      * @notice Tracks individual stake amounts: staker => validator => amount.
      */
     mapping(address staker => mapping(address validator => uint256 amount)) public stakes;
+
+    /**
+     * @notice Tracks total stake amount for each staker across all validators.
+     */
+    mapping(address staker => uint256 totalStake) public totalStakerStakes;
 
     /**
      * @notice Tracks withdrawal queues: staker => validator => queue.
@@ -281,6 +286,11 @@ contract Staking is Ownable {
     error InvalidParameter();
 
     /**
+     * @notice Thrown when a specified withdrawal node does not exist.
+     */
+    error InvalidWithdrawalNode();
+
+    /**
      * @notice Thrown when the specified ordering in the withdrawal queue is invalid.
      */
     error InvalidOrdering();
@@ -308,6 +318,8 @@ contract Staking is Ownable {
         CONFIG_TIME_DELAY = configTimeDelay;
         withdrawDelay = initialWithdrawDelay;
         nextWithdrawalId = 1;
+
+        emit WithdrawDelayChanged(0, initialWithdrawDelay);
     }
 
     // ============================================================
@@ -325,7 +337,8 @@ contract Staking is Ownable {
         require(isValidator[validator], NotValidator());
 
         stakes[msg.sender][validator] += amount;
-        totalStakes[validator] += amount;
+        totalValidatorStakes[validator] += amount;
+        totalStakerStakes[msg.sender] += amount;
         totalStakedAmount += amount;
         emit StakeIncreased(msg.sender, validator, amount);
 
@@ -333,14 +346,14 @@ contract Staking is Ownable {
     }
 
     /**
-     * @notice Internal function to handle initial withdrawal logic.
+     * @notice Internal function to handle initiate withdrawal logic.
      * @param user The address initiating the withdrawal.
      * @param amount The amount to withdraw.
      * @param validator The validator address to withdraw from.
      * @return withdrawalId The unique ID of the initiated withdrawal.
      * @return claimableAt The timestamp when the withdrawal becomes claimable.
      */
-    function _initialWithdrawal(address user, uint256 amount, address validator)
+    function _initiateWithdrawal(address user, uint256 amount, address validator)
         internal
         returns (uint64 withdrawalId, uint128 claimableAt)
     {
@@ -351,7 +364,8 @@ contract Staking is Ownable {
         claimableAt = uint128(block.timestamp + withdrawDelay);
 
         stakes[user][validator] -= amount;
-        totalStakes[validator] -= amount;
+        totalValidatorStakes[validator] -= amount;
+        totalStakerStakes[user] -= amount;
         totalStakedAmount -= amount;
         totalPendingWithdrawals += amount;
 
@@ -369,7 +383,7 @@ contract Staking is Ownable {
      *      into the queue in the correct position based on the claimableAt timestamp.
      */
     function initiateWithdrawal(address validator, uint256 amount) external {
-        (uint64 withdrawalId, uint128 claimableAt) = _initialWithdrawal(msg.sender, amount, validator);
+        (uint64 withdrawalId, uint128 claimableAt) = _initiateWithdrawal(msg.sender, amount, validator);
 
         // Create a withdrawal node.
         withdrawalNodes[withdrawalId] = WithdrawalNode({amount: amount, claimableAt: claimableAt, previous: 0, next: 0});
@@ -406,8 +420,6 @@ contract Staking is Ownable {
                 withdrawalNodes[nextId].previous = withdrawalId;
             }
         }
-
-        emit WithdrawalInitiated(msg.sender, validator, withdrawalId, amount);
     }
 
     /**
@@ -420,7 +432,7 @@ contract Staking is Ownable {
      *      This is an advanced function and should be used with caution.
      */
     function initiateWithdrawalAtPosition(address validator, uint256 amount, uint64 previousId) external {
-        (uint64 withdrawalId, uint128 claimableAt) = _initialWithdrawal(msg.sender, amount, validator);
+        (uint64 withdrawalId, uint128 claimableAt) = _initiateWithdrawal(msg.sender, amount, validator);
 
         uint64 nextId;
         // Check if the IDs are correct and claimableAt ordering is correct.
@@ -428,6 +440,7 @@ contract Staking is Ownable {
             // Inserting at head - get the current head as nextId.
             nextId = withdrawalQueues[msg.sender][validator].head;
         } else {
+            require(withdrawalNodes[previousId].claimableAt > 0, InvalidWithdrawalNode());
             require(withdrawalNodes[previousId].claimableAt <= claimableAt, InvalidOrdering());
 
             nextId = withdrawalNodes[previousId].next;
