@@ -286,6 +286,11 @@ contract Staking is Ownable {
     error InvalidParameter();
 
     /**
+     * @notice Thrown when a specified withdrawal node does not exist.
+     */
+    error InvalidWithdrawalNode();
+
+    /**
      * @notice Thrown when the specified ordering in the withdrawal queue is invalid.
      */
     error InvalidOrdering();
@@ -435,6 +440,7 @@ contract Staking is Ownable {
             // Inserting at head - get the current head as nextId.
             nextId = withdrawalQueues[msg.sender][validator].head;
         } else {
+            require(withdrawalNodes[previousId].claimableAt > 0, InvalidWithdrawalNode());
             require(withdrawalNodes[previousId].claimableAt <= claimableAt, InvalidOrdering());
 
             nextId = withdrawalNodes[previousId].next;
