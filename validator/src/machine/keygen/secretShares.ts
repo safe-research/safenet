@@ -24,9 +24,20 @@ export const handleKeyGenSecretShared = async (
 	}
 	const groupId = event.gid;
 	// Track identity that has submitted last share
-	// TODO: handle bad shares -> Submit fraud proof
-	await keyGenClient.handleKeygenSecrets(event.gid, event.identifier, event.share.f);
-	if (!event.completed) {
+	const response = await keyGenClient.handleKeygenSecrets(event.gid, event.identifier, event.share.f);
+	if (response === "invalid_share") {
+		logger?.(`Invalid share submitted by ${event.identifier} for group ${event.gid}`);
+		return {
+			actions: [
+				{
+					id: "key_gen_complain",
+					groupId: event.gid,
+					accused: event.identifier,
+				},
+			],
+		};
+	}
+	if (response === "pending_shares") {
 		logger?.(`Group ${event.gid} secret shares not completed yet`);
 		return {
 			rollover: {
@@ -35,7 +46,6 @@ export const handleKeyGenSecretShared = async (
 			},
 		};
 	}
-
 	// All secret shares collected, now each participant must confirm
 	logger?.(`Group ${event.gid} secret shares completed, triggering confirmation`);
 

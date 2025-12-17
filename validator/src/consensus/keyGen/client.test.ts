@@ -83,7 +83,8 @@ describe("keyGen", () => {
 		for (const { client } of clients) {
 			for (const e of shareEvents) {
 				log(`>>>> Handle secrets shares from ${e.id} by ${client.participantId(e.groupId)} >>>>`);
-				await client.handleKeygenSecrets(e.groupId, e.id, e.shares);
+				const response = await client.handleKeygenSecrets(e.groupId, e.id, e.shares);
+				expect(response).not.toBe("invalid_share");
 			}
 		}
 		for (const { storage } of clients) {

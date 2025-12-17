@@ -71,11 +71,9 @@ export const createSigningShare = (secretShares: Map<bigint, bigint>): bigint =>
 	return signingShare;
 };
 
-export const verifyKey = (publicKey: FrostPoint, privateKey: bigint): void => {
+export const verifyKey = (publicKey: FrostPoint, privateKey: bigint): boolean => {
 	const verification = g(privateKey);
-	if (verification.x !== publicKey.x || verification.y !== publicKey.y) {
-		throw new Error("Private key and public key don't match!");
-	}
+	return verification.x === publicKey.x && verification.y === publicKey.y;
 };
 
 export const evalPoly = (coefficient: readonly bigint[], x: bigint): bigint => {

@@ -89,6 +89,7 @@ describe("receiving secret shares", () => {
 			completed: false,
 		};
 		const handleKeygenSecrets = vi.fn();
+		handleKeygenSecrets.mockReturnValue("pending_shares");
 		const keyGenClient = {
 			handleKeygenSecrets,
 		} as unknown as KeyGenClient;
@@ -108,7 +109,30 @@ describe("receiving secret shares", () => {
 		);
 	});
 
-	it.skip("should only trigger key gen confirm if valid shares have been submitted", async () => {});
+	it("should only trigger key gen confirm if valid shares have been submitted", async () => {
+		const handleKeygenSecrets = vi.fn();
+		handleKeygenSecrets.mockReturnValue("invalid_share");
+		const keyGenClient = {
+			handleKeygenSecrets,
+		} as unknown as KeyGenClient;
+		const diff = await handleKeyGenSecretShared(MACHINE_CONFIG, keyGenClient, MACHINE_STATES, EVENT);
+
+		expect(diff).toStrictEqual({
+			actions: [
+				{
+					id: "key_gen_complain",
+					groupId: "0x06cb03baac74421225341827941e88d9547e5459c4b3715c0000000000000000",
+					accused: 2n,
+				},
+			],
+		});
+		expect(handleKeygenSecrets).toBeCalledTimes(1);
+		expect(handleKeygenSecrets).toBeCalledWith(
+			"0x06cb03baac74421225341827941e88d9547e5459c4b3715c0000000000000000",
+			2n,
+			[0x5afe5afe5afe01n, 0x5afe5afe5afe02n, 0x5afe5afe5afe03n],
+		);
+	});
 
 	it("should trigger key gen confirm without callback when doing genesis key gen", async () => {
 		const machineStates: MachineStates = {
@@ -122,13 +146,12 @@ describe("receiving secret shares", () => {
 			signing: {},
 		};
 		const handleKeygenSecrets = vi.fn();
+		handleKeygenSecrets.mockReturnValue("shares_completed");
 		const keyGenClient = {
 			handleKeygenSecrets,
 		} as unknown as KeyGenClient;
 		const diff = await handleKeyGenSecretShared(MACHINE_CONFIG, keyGenClient, machineStates, EVENT);
 
-		// TODO we should have multiple timeouts (raise complaint, respond to complaint, confirm)
-		// Currently only one is returned, the "confirm" timeout, therefore 3x key gen timeout
 		expect(diff).toStrictEqual({
 			rollover: {
 				id: "collecting_confirmations",
@@ -159,6 +182,7 @@ describe("receiving secret shares", () => {
 
 	it("should trigger key gen confirm with callback", async () => {
 		const handleKeygenSecrets = vi.fn();
+		handleKeygenSecrets.mockReturnValue("shares_completed");
 		const keyGenClient = {
 			handleKeygenSecrets,
 		} as unknown as KeyGenClient;
