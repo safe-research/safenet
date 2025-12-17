@@ -2,6 +2,8 @@ import {
 	epochProposedEventSchema,
 	epochStagedEventSchema,
 	keyGenCommittedEventSchema,
+	keyGenComplaintRespondedEventSchema,
+	keyGenComplaintSubmittedEventSchema,
 	keyGenConfirmedEventSchema,
 	keyGenEventSchema,
 	keyGenSecretSharedEventSchema,
@@ -35,6 +37,24 @@ export const logToTransition = (
 			const args = keyGenSecretSharedEventSchema.parse(eventArgs);
 			return {
 				id: "event_key_gen_secret_shared",
+				block,
+				index,
+				...args,
+			};
+		}
+		case "KeyGenComplained": {
+			const args = keyGenComplaintSubmittedEventSchema.parse(eventArgs);
+			return {
+				id: "event_key_gen_complaint_submitted",
+				block,
+				index,
+				...args,
+			};
+		}
+		case "KeyGenComplaintResponded": {
+			const args = keyGenComplaintRespondedEventSchema.parse(eventArgs);
+			return {
+				id: "event_key_gen_complaint_responded",
 				block,
 				index,
 				...args,

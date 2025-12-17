@@ -20,6 +20,7 @@ const MACHINE_STATES: MachineStates = {
 		groupId: "0x06cb03baac74421225341827941e88d9547e5459c4b3715c0000000000000000",
 		nextEpoch: 10n,
 		deadline: 30n,
+		missingSharesFrom: [],
 		complaints: {},
 	},
 	signing: {},
@@ -100,6 +101,7 @@ describe("receiving secret shares", () => {
 				...MACHINE_STATES.rollover,
 				lastParticipant: 2n,
 			},
+			actions: [],
 		});
 		expect(handleKeygenSecrets).toBeCalledTimes(1);
 		expect(handleKeygenSecrets).toBeCalledWith(
@@ -109,7 +111,41 @@ describe("receiving secret shares", () => {
 		);
 	});
 
-	it("should only trigger key gen confirm if valid shares have been submitted", async () => {
+	it("should track who submitted invalid shares", async () => {
+		const event: KeyGenSecretSharedEvent = {
+			...EVENT,
+			completed: false,
+		};
+		const handleKeygenSecrets = vi.fn();
+		handleKeygenSecrets.mockReturnValue("invalid_share");
+		const keyGenClient = {
+			handleKeygenSecrets,
+		} as unknown as KeyGenClient;
+		const diff = await handleKeyGenSecretShared(MACHINE_CONFIG, keyGenClient, MACHINE_STATES, event);
+
+		expect(diff).toStrictEqual({
+			rollover: {
+				...MACHINE_STATES.rollover,
+				missingSharesFrom: [2n],
+				lastParticipant: 2n,
+			},
+			actions: [
+				{
+					id: "key_gen_complain",
+					groupId: "0x06cb03baac74421225341827941e88d9547e5459c4b3715c0000000000000000",
+					accused: 2n,
+				},
+			],
+		});
+		expect(handleKeygenSecrets).toBeCalledTimes(1);
+		expect(handleKeygenSecrets).toBeCalledWith(
+			"0x06cb03baac74421225341827941e88d9547e5459c4b3715c0000000000000000",
+			2n,
+			[0x5afe5afe5afe01n, 0x5afe5afe5afe02n, 0x5afe5afe5afe03n],
+		);
+	});
+
+	it("should track invalid shares have been submitted and proceed to key gen without sending confirmation", async () => {
 		const handleKeygenSecrets = vi.fn();
 		handleKeygenSecrets.mockReturnValue("invalid_share");
 		const keyGenClient = {
@@ -118,6 +154,18 @@ describe("receiving secret shares", () => {
 		const diff = await handleKeyGenSecretShared(MACHINE_CONFIG, keyGenClient, MACHINE_STATES, EVENT);
 
 		expect(diff).toStrictEqual({
+			rollover: {
+				id: "collecting_confirmations",
+				groupId: "0x06cb03baac74421225341827941e88d9547e5459c4b3715c0000000000000000",
+				nextEpoch: 10n,
+				complaintDeadline: 29n, // 4n (block) + 25n (key gen timeout)
+				responseDeadline: 54n, // 4n (block) + 2n * 25n (key gen timeout)
+				deadline: 79n, // 4n (block) + 3n * 25n (key gen timeout)
+				lastParticipant: EVENT.identifier,
+				complaints: {},
+				missingSharesFrom: [2n],
+				confirmationsFrom: [],
+			},
 			actions: [
 				{
 					id: "key_gen_complain",
@@ -141,6 +189,7 @@ describe("receiving secret shares", () => {
 				groupId: "0x06cb03baac74421225341827941e88d9547e5459c4b3715c0000000000000000",
 				nextEpoch: 0n,
 				deadline: 30n,
+				missingSharesFrom: [],
 				complaints: {},
 			},
 			signing: {},
@@ -162,6 +211,7 @@ describe("receiving secret shares", () => {
 				deadline: 79n, // 4n (block) + 3n * 25n (key gen timeout)
 				lastParticipant: EVENT.identifier,
 				complaints: {},
+				missingSharesFrom: [],
 				confirmationsFrom: [],
 			},
 			actions: [
@@ -180,6 +230,54 @@ describe("receiving secret shares", () => {
 		);
 	});
 
+	it("should carry over complaints and missing shares", async () => {
+		const handleKeygenSecrets = vi.fn();
+		handleKeygenSecrets.mockReturnValue("pending_shares");
+		const keyGenClient = {
+			handleKeygenSecrets,
+		} as unknown as KeyGenClient;
+
+		const machineStates: MachineStates = {
+			rollover: {
+				id: "collecting_shares",
+				groupId: "0x06cb03baac74421225341827941e88d9547e5459c4b3715c0000000000000000",
+				nextEpoch: 10n,
+				deadline: 30n,
+				missingSharesFrom: [1n],
+				complaints: {
+					"1": { total: 1n, unresponded: 1n },
+				},
+			},
+			signing: {},
+		};
+
+		const diff = await handleKeyGenSecretShared(MACHINE_CONFIG, keyGenClient, machineStates, EVENT);
+
+		expect(diff).toStrictEqual({
+			rollover: {
+				id: "collecting_confirmations",
+				groupId: "0x06cb03baac74421225341827941e88d9547e5459c4b3715c0000000000000000",
+				nextEpoch: 10n,
+				complaintDeadline: 29n, // 4n (block) + 25n (key gen timeout)
+				responseDeadline: 54n, // 4n (block) + 2n * 25n (key gen timeout)
+				deadline: 79n, // 4n (block) + 3n * 25n (key gen timeout)
+				lastParticipant: EVENT.identifier,
+				missingSharesFrom: [1n],
+				complaints: {
+					"1": { total: 1n, unresponded: 1n },
+				},
+				confirmationsFrom: [],
+			},
+			actions: [],
+		});
+		expect(handleKeygenSecrets).toBeCalledTimes(1);
+		expect(handleKeygenSecrets).toBeCalledWith(
+			"0x06cb03baac74421225341827941e88d9547e5459c4b3715c0000000000000000",
+			2n,
+			[0x5afe5afe5afe01n, 0x5afe5afe5afe02n, 0x5afe5afe5afe03n],
+		);
+	});
+
 	it("should trigger key gen confirm with callback", async () => {
 		const handleKeygenSecrets = vi.fn();
 		handleKeygenSecrets.mockReturnValue("shares_completed");
@@ -188,8 +286,6 @@ describe("receiving secret shares", () => {
 		} as unknown as KeyGenClient;
 		const diff = await handleKeyGenSecretShared(MACHINE_CONFIG, keyGenClient, MACHINE_STATES, EVENT);
 
-		// TODO we should have multiple timeouts (raise complaint, respond to complaint, confirm)
-		// Currently only one is returned, the "confirm" timeout, therefore 3x key gen timeout
 		expect(diff).toStrictEqual({
 			rollover: {
 				id: "collecting_confirmations",
@@ -200,6 +296,7 @@ describe("receiving secret shares", () => {
 				deadline: 79n, // 4n (block) + 3n * 25n (key gen timeout)
 				lastParticipant: EVENT.identifier,
 				complaints: {},
+				missingSharesFrom: [],
 				confirmationsFrom: [],
 			},
 			actions: [

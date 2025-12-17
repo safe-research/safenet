@@ -11,7 +11,7 @@ type CollectingState = Extract<
 >;
 
 const adjustParticipants = (
-	defaultParticipants: Participant[],
+	defaultParticipants: readonly Participant[],
 	keyGenClient: KeyGenClient,
 	rollover: CollectingState,
 ): Participant[] => {
@@ -54,7 +54,8 @@ export const checkKeyGenTimeouts = (
 	}
 
 	// For next key gen only consider active participants
-	const participants = adjustParticipants(machineConfig.defaultParticipants, keyGenClient, machineStates.rollover);
+	const currentPariticipants = keyGenClient.participants(machineStates.rollover.groupId);
+	const participants = adjustParticipants(currentPariticipants, keyGenClient, machineStates.rollover);
 	const { diff } = triggerKeyGen(
 		keyGenClient,
 		machineStates.rollover.nextEpoch,

@@ -30,6 +30,7 @@ export type RolloverState = Readonly<
 			nextEpoch: bigint;
 			deadline: bigint;
 			complaints: Readonly<Record<string, Readonly<Complaints>>>;
+			missingSharesFrom: readonly ParticipantId[];
 			lastParticipant?: ParticipantId;
 	  }
 	| {
@@ -41,6 +42,7 @@ export type RolloverState = Readonly<
 			deadline: bigint;
 			lastParticipant?: ParticipantId;
 			complaints: Readonly<Record<string, Readonly<Complaints>>>;
+			missingSharesFrom: readonly ParticipantId[];
 			confirmationsFrom: readonly ParticipantId[];
 	  }
 	| {

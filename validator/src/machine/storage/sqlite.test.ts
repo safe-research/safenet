@@ -73,6 +73,7 @@ describe("SqliteStateStorage", () => {
 				groupId: "0x5afe000000000000000000000000000000000000000000000000000000000000",
 				nextEpoch: 1n,
 				deadline: 100n,
+				missingSharesFrom: [1n],
 				complaints: {
 					"1": {
 						total: 2n,
@@ -90,6 +91,7 @@ describe("SqliteStateStorage", () => {
 			groupId: "0x5afe000000000000000000000000000000000000000000000000000000000000",
 			nextEpoch: 1n,
 			deadline: 100n,
+			missingSharesFrom: [1n],
 			complaints: {
 				"1": {
 					total: 2n,
@@ -107,6 +109,7 @@ describe("SqliteStateStorage", () => {
 			groupId: "0x5afe000000000000000000000000000000000000000000000000000000000000",
 			nextEpoch: 1n,
 			deadline: 100n,
+			missingSharesFrom: [1n],
 			complaints: {
 				"1": {
 					total: 2n,

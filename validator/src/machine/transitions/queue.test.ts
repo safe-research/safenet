@@ -58,6 +58,15 @@ const actions: StateTransition[] = [
 		accused: 2n,
 	},
 	{
+		id: "event_key_gen_complaint_responded",
+		block: 111n,
+		index: 0,
+		gid: "0x5afe000000000000000000000000000000000000000000000000000000000000",
+		plaintiff: 1n,
+		accused: 2n,
+		secretShare: 0x5afe5afe5afen,
+	},
+	{
 		id: "event_key_gen_confirmed",
 		block: 111n,
 		index: 0,

@@ -107,14 +107,14 @@ describe("integration", () => {
 			return { id: BigInt(i + 1), address: a.address };
 		});
 		const clients = accounts.map((a, i) => {
+			const logger = i === 0 ? testLogger : silentLogger;
 			const storage = createClientStorage(a.address);
 			const sc = new SigningClient(storage);
-			const kc = new KeyGenClient(storage);
+			const kc = new KeyGenClient(storage, logger);
 			const verificationHandlers = new Map<string, PacketHandler<Typed>>();
 			verificationHandlers.set("safe_transaction_packet", new SafeTransactionHandler());
 			verificationHandlers.set("epoch_rollover_packet", new EpochRolloverHandler());
 			const verificationEngine = new VerificationEngine(verificationHandlers);
-			const logger = i === 0 ? testLogger : silentLogger;
 			const publicClient = createPublicClient({
 				chain: anvil,
 				transport: http(),
