@@ -4,6 +4,7 @@ import { SqliteClientStorage } from "../consensus/storage/sqlite.js";
 import { InMemoryStateStorage } from "../machine/storage/inmemory.js";
 import { SqliteStateStorage } from "../machine/storage/sqlite.js";
 import { createLogger } from "../utils/logging.js";
+import { createMetricsService } from "../utils/metrics.js";
 
 const { SHIELDNET_TEST_VERBOSE, SHIELDNET_TEST_STORAGE } = process.env;
 
@@ -14,6 +15,8 @@ export const testLogger = createLogger({
 });
 
 export const log = testLogger.debug.bind(testLogger);
+
+export const testMetrics = createMetricsService({ logger: silentLogger }).metrics;
 
 export const createClientStorage =
 	SHIELDNET_TEST_STORAGE === "sqlite"

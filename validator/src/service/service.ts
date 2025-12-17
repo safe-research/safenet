@@ -22,6 +22,7 @@ import { OnchainTransitionWatcher } from "../machine/transitions/watcher.js";
 import { supportedChains } from "../types/chains.js";
 import type { ProtocolConfig } from "../types/interfaces.js";
 import type { Logger } from "../utils/logging.js";
+import type { Metrics } from "../utils/metrics.js";
 import { InMemoryQueue } from "../utils/queue.js";
 import { ShieldnetStateMachine } from "./machine.js";
 
@@ -38,12 +39,14 @@ export class ValidatorService {
 		config,
 		chain,
 		logger,
+		metrics,
 	}: {
 		account: Account;
 		transport: Transport;
 		config: ProtocolConfig;
 		chain: Chain;
 		logger: Logger;
+		metrics: Metrics;
 	}) {
 		this.#logger = logger;
 		this.#config = config;
@@ -70,6 +73,7 @@ export class ValidatorService {
 			participants: config.participants,
 			blocksPerEpoch: config.blocksPerEpoch,
 			logger: this.#logger,
+			metrics,
 			genesisSalt: config.genesisSalt,
 			protocol,
 			storage: stateStorage,
@@ -102,11 +106,12 @@ export const createValidatorService = (
 	rpcUrl: string,
 	config: ProtocolConfig,
 	logger: Logger,
+	metrics: Metrics,
 ): ValidatorService => {
 	const transport = rpcUrl.startsWith("wss") ? webSocket(rpcUrl) : http(rpcUrl);
 	const chain = extractChain({
 		chains: supportedChains,
 		id: config.chainId,
 	});
-	return new ValidatorService({ account, transport, config, chain, logger });
+	return new ValidatorService({ account, transport, config, chain, logger, metrics });
 };

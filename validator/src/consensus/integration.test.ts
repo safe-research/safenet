@@ -14,7 +14,7 @@ import {
 import { privateKeyToAccount } from "viem/accounts";
 import { anvil } from "viem/chains";
 import { describe, expect, it } from "vitest";
-import { createClientStorage, createStateStorage, silentLogger, testLogger } from "../__tests__/config.js";
+import { createClientStorage, createStateStorage, silentLogger, testLogger, testMetrics } from "../__tests__/config.js";
 import { toPoint } from "../frost/math.js";
 import type { GroupId } from "../frost/types.js";
 import { OnchainTransitionWatcher } from "../machine/transitions/watcher.js";
@@ -144,6 +144,7 @@ describe("integration", () => {
 				signingClient: sc,
 				verificationEngine,
 				logger,
+				metrics: testMetrics,
 				blocksPerEpoch: BLOCKS_PER_EPOCH,
 			});
 			const watcher = new OnchainTransitionWatcher({
