@@ -5,6 +5,7 @@ import { createValidatorService } from "./service/service.js";
 import type { ProtocolConfig } from "./types/interfaces.js";
 import { validatorConfigSchema } from "./types/schemas.js";
 import { createLogger } from "./utils/logging.js";
+import { createMetricsService } from "./utils/metrics.js";
 
 dotenv.config({ quiet: true });
 
@@ -35,19 +36,21 @@ const config: ProtocolConfig = {
 const account = privateKeyToAccount(validatorConfig.PRIVATE_KEY);
 logger.info(`Using validator account ${account.address}`);
 
-const service = createValidatorService(account, rpcUrl, config, logger);
+const metrics = createMetricsService({ logger, port: validatorConfig.METRICS_PORT });
+const service = createValidatorService(account, rpcUrl, config, logger, metrics.metrics);
 
 // Handle graceful shutdown, for both `SIGINT` (i.e. Ctrl-C) and `SIGTERM` which
 // gets send when stopping a container or `kill`.
-const shutdown = () => {
+const shutdown = async () => {
 	logger.info("Shutting down service...");
 	service.stop();
+	await metrics.stop();
 	process.exit(0);
 };
 process.on("SIGINT", shutdown);
 process.on("SIGTERM", shutdown);
 
-service.start().catch((error: unknown) => {
+Promise.all([service.start(), metrics.start()]).catch((error: unknown) => {
 	logger.error("Service failed to start:");
 	logger.error(error);
 	process.exit(1);

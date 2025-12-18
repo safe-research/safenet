@@ -14,7 +14,7 @@ import {
 import { privateKeyToAccount } from "viem/accounts";
 import { anvil } from "viem/chains";
 import { describe, expect, it } from "vitest";
-import { createClientStorage, createStateStorage, silentLogger, testLogger } from "../__tests__/config.js";
+import { createClientStorage, createStateStorage, silentLogger, testLogger, testMetrics } from "../__tests__/config.js";
 import { toPoint } from "../frost/math.js";
 import type { GroupId } from "../frost/types.js";
 import { OnchainTransitionWatcher } from "../machine/transitions/watcher.js";
@@ -107,14 +107,14 @@ describe("integration", () => {
 			return { id: BigInt(i + 1), address: a.address };
 		});
 		const clients = accounts.map((a, i) => {
+			const logger = i === 0 ? testLogger : silentLogger;
 			const storage = createClientStorage(a.address);
 			const sc = new SigningClient(storage);
-			const kc = new KeyGenClient(storage);
+			const kc = new KeyGenClient(storage, logger);
 			const verificationHandlers = new Map<string, PacketHandler<Typed>>();
 			verificationHandlers.set("safe_transaction_packet", new SafeTransactionHandler());
 			verificationHandlers.set("epoch_rollover_packet", new EpochRolloverHandler());
 			const verificationEngine = new VerificationEngine(verificationHandlers);
-			const logger = i === 0 ? testLogger : silentLogger;
 			const publicClient = createPublicClient({
 				chain: anvil,
 				transport: http(),
@@ -144,6 +144,7 @@ describe("integration", () => {
 				signingClient: sc,
 				verificationEngine,
 				logger,
+				metrics: testMetrics,
 				blocksPerEpoch: BLOCKS_PER_EPOCH,
 			});
 			const watcher = new OnchainTransitionWatcher({

@@ -15,12 +15,13 @@ export const transitionWatcherStateSchema = z
 	.optional();
 
 export class OnchainTransitionWatcher {
-	#logger?: Logger;
+	#logger: Logger;
 	#config: Pick<ProtocolConfig, "consensus" | "coordinator">;
 	#db: Database;
 	#publicClient: PublicClient;
 	#cleanupCallbacks: (() => void)[] = [];
 	#onTransition: (transition: StateTransition) => void;
+
 	constructor({
 		dbPath,
 		publicClient,
@@ -32,7 +33,7 @@ export class OnchainTransitionWatcher {
 		publicClient: PublicClient;
 		config: Pick<ProtocolConfig, "consensus" | "coordinator">;
 		onTransition: (transition: StateTransition) => void;
-		logger?: Logger;
+		logger: Logger;
 	}) {
 		const db = new Sqlite3(dbPath);
 		db.exec(`
@@ -75,7 +76,8 @@ export class OnchainTransitionWatcher {
 				this.#onTransition(transition);
 			}
 		} catch (e: unknown) {
-			this.#logger?.error(e instanceof Error ? e : new Error(`unknown error occurred: ${String(e)}`));
+			const err = e instanceof Error ? e : new Error(`unknown error: ${e}`);
+			this.#logger.error("an error occurred handling a state transition:", err);
 		}
 	}
 
@@ -96,13 +98,13 @@ export class OnchainTransitionWatcher {
 					for (const log of logs) {
 						const transition = logToTransition(log.blockNumber, log.logIndex, log.eventName, log.args);
 						if (transition === undefined) {
-							this.#logger?.info(`Unknown log: ${log.eventName}`);
+							this.#logger.info(`Unknown log: ${log.eventName}`);
 							continue;
 						}
 						this.handleTransition(transition);
 					}
 				},
-				onError: this.#logger?.error,
+				onError: (err) => this.#logger.error("contract event watcher error:", err),
 			}),
 		);
 		this.#cleanupCallbacks.push(
@@ -116,7 +118,7 @@ export class OnchainTransitionWatcher {
 						});
 					}, 2000);
 				},
-				onError: this.#logger?.error,
+				onError: (err) => this.#logger.error("block number watcher error:", err),
 			}),
 		);
 	}
