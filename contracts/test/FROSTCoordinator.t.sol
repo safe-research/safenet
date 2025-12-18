@@ -31,7 +31,7 @@ contract FROSTCoordinatorTest is Test {
     ParticipantMerkleTree public participants;
 
     function setUp() public {
-        // When debegging, it may be useful to use deterministic values to check
+        // When debugging, it may be useful to use deterministic values to check
         // intermediate steps. Uncomment the following line in order to set a
         // deterministic seed and ensure that all random values are predictable.
         //vm.setSeed(0x5afe);

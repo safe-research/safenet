@@ -26,13 +26,23 @@ contract FROSTCoordinator {
     // ============================================================
 
     /**
-     * @notice The lifecycle status of a FROST group.
-     * @custom:enumValue UNINITIALIZED The group has not been initialized yet.
-     * @custom:enumValue COMMITTING The keygen commitment phase has started.
-     * @custom:enumValue SHARING The keygen secret sharing phase has started.
-     * @custom:enumValue CONFIRMING The keygen confirmation phase has started.
-     * @custom:enumValue COMPROMISED The group has been compromised due to threshold complaints.
-     * @custom:enumValue FINALIZED The group has completed key generation.
+     * @notice The lifecycle status of a FROST Distributed Key Generation (DKG) group.
+     * @custom:enumValue UNINITIALIZED The group has not been defined or initiated.
+     * @custom:enumValue COMMITTING Round 1: Participants commit to their secret polynomial
+     *                   by broadcasting a public commitment. This prevents malicious
+     *                   participants from choosing their values based on others' shares.
+     * @custom:enumValue SHARING Round 2: After all commitments are received, participants
+     *                 broadcast their secret shares, encrypted for each recipient.
+     * @custom:enumValue CONFIRMING Final Round: Participants verify their received shares,
+     *                    compute their long-lived private key, and derive the group
+     *                    public key. They confirm successful completion.
+     * @custom:enumValue COMPROMISED The key generation has failed due to a sufficient
+     *                   number of complaints against misbehaving participants. The
+     *                   group cannot be used for signing.
+     * @custom:enumValue FINALIZED The DKG ceremony has completed successfully. The group
+     *                  public key is established, and the group is ready to sign messages.
+     * @dev The DKG process follows a multi-round protocol where participants
+     *      collaboratively generate a shared secret and a group public key.
      */
     enum GroupStatus {
         UNINITIALIZED,
@@ -502,9 +512,13 @@ contract FROSTCoordinator {
      * @param gid The group ID.
      * @param commitment The nonce commitment Merkle root.
      * @return chunk The chunk index used for this commitment.
-     * @dev The commitment is a Merkle root to 256 nonces that get revealed as
-     *      part of the signing process. This allows signing requests to reveal
-     *      the message immediately while still preventing Wagner's Birthday Attacks.
+     * @dev This function implements the first step of a two-round signing protocol.
+     *      Participants pre-commit to a large set of nonces (256) by submitting
+     *      the Merkle root of the nonce commitments. This is the "commitment" phase.
+     *      The actual nonces are kept secret until a signing ceremony begins.
+     *      This commitment/reveal scheme is a crucial defense against adaptive signature
+     *      forgery attacks (e.g., Wagner's Birthday Attack), as it forces participants
+     *      to choose their nonces before the message to be signed is known.
      */
     function preprocess(FROSTGroupId.T gid, bytes32 commitment) external returns (uint64 chunk) {
         Group storage group = $groups[gid];
@@ -542,6 +556,11 @@ contract FROSTCoordinator {
      * @param sid The signature ID.
      * @param nonces The nonce pair to reveal.
      * @param proof The Merkle proof for the nonce commitment.
+     * @dev In the second round of signing, each participant reveals the specific nonce
+     *      pair they will use for this ceremony. The contract verifies that this nonce
+     *      pair was included in the previously committed Merkle tree using the provided
+     *      `proof`. This ensures that participants cannot maliciously choose their nonces
+     *      after seeing the message and other participants' nonces.
      */
     function signRevealNonces(FROSTSignatureId.T sid, SignNonces calldata nonces, bytes32[] calldata proof) external {
         (Group storage group,) = _signatureGroupAndMessage(sid);
@@ -554,9 +573,15 @@ contract FROSTCoordinator {
      * @notice Broadcasts a signature share for a selection of participating signers.
      * @param sid The signature ID.
      * @param selection The signing selection data.
-     * @param share The participant's signature share.
+     * @param share The participant's signature share, including the Lagrange coefficient.
      * @param proof The Merkle proof for the selection.
      * @return completed True if the signature is completed with this share.
+     * @dev Each participant computes their signature share `z_i` and provides their
+     *      Lagrange coefficient `l_i`. The Lagrange coefficient is a public value that
+     *      depends on the set of participating signers. It is used to correctly
+     *      reconstruct the group signature from a threshold number of shares. For a
+     *      participant `i` in a signing set `S`, the coefficient is `l_i = ∏_{j∈S, j≠i} j / (j-i)`.
+     *      The contract verifies the submitted share using this coefficient.
      */
     function signShare(
         FROSTSignatureId.T sid,

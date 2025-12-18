@@ -13,7 +13,7 @@ contract ParticipantMerkleTree is MerkleTreeBase {
     constructor(address[] memory participants) {
         address last = address(0);
         for (uint256 i = 0; i < participants.length; i++) {
-            // Note that for FROST, participant identifers start from 1.
+            // Note that for FROST, participant identifiers start from 1.
             FROST.Identifier identifier = FROST.newIdentifier(i + 1);
             address participant = participants[i];
             $identifiers[participant] = identifier;

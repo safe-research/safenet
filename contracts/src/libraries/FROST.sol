@@ -262,54 +262,76 @@ library FROST {
     // ============================================================
 
     /**
-     * @notice Hashes input to a field element for binding factors.
-     * @param input The input bytes.
+     * @notice h1: Hashes input to a field element for calculating binding factors (rho).
+     * @param input The input bytes, which include group public key, message hash, and commitments hash.
      * @return result The field element.
+     * @dev Uses a domain separation tag "FROST-secp256k1-SHA256-v1rho" as required by
+     *      RFC 9591, Section 6.5. Domain separation is critical to prevent an attacker
+     *      from reusing a signature or proof from one context in another. The DST is
+     *      packed into a bytes32 with its length (28 / 0x1c) as the final byte,
+     *      following RFC 9380 recommendations for DST formatting.
      */
     function _h1(bytes memory input) private view returns (uint256 result) {
         return _hashToField(input, "FROST-secp256k1-SHA256-v1rho\x00\x00\x00\x1c");
     }
 
     /**
-     * @notice Hashes input to a field element for the challenge.
-     * @param input The input bytes.
+     * @notice h2: Hashes input to a field element for calculating the per-message challenge (c).
+     * @param input The input bytes, which include group commitment, group public key, and the message.
      * @return result The field element.
+     * @dev Uses a domain separation tag "FROST-secp256k1-SHA256-v1chal" as required by
+     *      RFC 9591, Section 6.5. The DST, short for "challenge", ensures that the
+     *      output of this hash is not confused with outputs from other hash functions
+     *      in the protocol. The length of the DST is 29 (0x1d).
      */
     function _h2(bytes memory input) private view returns (uint256 result) {
         return _hashToField(input, "FROST-secp256k1-SHA256-v1chal\x00\x00\x1d");
     }
 
     /**
-     * @notice Hashes input to a field element for nonce generation.
-     * @param input The input bytes.
+     * @notice h3: Hashes input to a field element for generating nonces.
+     * @param input The input bytes, which include participant-specific randomness and the secret key.
      * @return result The field element.
+     * @dev Uses a domain separation tag "FROST-secp256k1-SHA256-v1nonce" as required by
+     *      RFC 9591, Section 6.5. This ensures that the process of generating nonces is
+     *      cryptographically separated from other hashing operations in the protocol.
+     *      The length of the DST is 30 (0x1e).
      */
     function _h3(bytes memory input) private view returns (uint256 result) {
         return _hashToField(input, "FROST-secp256k1-SHA256-v1nonce\x00\x1e");
     }
 
     /**
-     * @notice Hashes input for the message binding factor.
-     * @param input The input bytes.
+     * @notice h4: Hashes the message before it is used in the binding factor computation.
+     * @param input The message bytes.
      * @return result The 32-byte hash.
+     * @dev Uses a domain separation tag "FROST-secp256k1-SHA256-v1msg" as required by
+     *      RFC 9591, Section 6.5. This pre-hashes the message to a fixed-size digest
+     *      before it is combined with other elements. The length of the DST is 28 (0x1c).
      */
     function _h4(bytes memory input) private view returns (bytes32 result) {
         return _hash(input, "FROST-secp256k1-SHA256-v1msg\x00\x00\x00\x1c");
     }
 
     /**
-     * @notice Hashes input for the commitment list binding factor.
-     * @param input The input bytes.
+     * @notice h5: Hashes the list of nonce commitments for the binding factor computation.
+     * @param input The encoded commitment list.
      * @return result The 32-byte hash.
+     * @dev Uses a domain separation tag "FROST-secp256k1-SHA256-v1com" as required by
+     *      RFC 9591, Section 6.5. 'com' is short for 'commitments'. This hashes the
+     *      entire list of commitments to a fixed-size digest. The length of the DST is 28 (0x1c).
      */
     function _h5(bytes memory input) private view returns (bytes32 result) {
         return _hash(input, "FROST-secp256k1-SHA256-v1com\x00\x00\x00\x1c");
     }
 
     /**
-     * @notice Hashes input to a field element for key generation challenges.
-     * @param input The input bytes.
+     * @notice h_dkg: Hashes input to a field element for key generation challenges.
+     * @param input The input bytes, which include identifier, public key share, and commitment point.
      * @return result The field element.
+     * @dev Uses a domain separation tag "FROST-secp256k1-SHA256-v1dkg" inspired by the
+     *      FROST specification for Distributed Key Generation (DKG). This ensures the
+     *      challenge is unique to the DKG context. The length of the DST is 28 (0x1c).
      */
     function _hdkg(bytes memory input) private view returns (uint256 result) {
         return _hashToField(input, "FROST-secp256k1-SHA256-v1dkg\x00\x00\x00\x1c");
@@ -324,14 +346,19 @@ library FROST {
      * @param message The message to hash.
      * @param dst The domain separation tag.
      * @return e The resulting field element.
-     * @dev Implements the RFC-9380 `hash_to_field` function for m = 1, L = 48.
+     * @dev Implements the RFC-9380 `hash_to_field` function. The parameter `L` is chosen
+     *      to be 48 to achieve a 128-bit security level for the secp256k1 curve.
+     *      `L` is calculated as `ceil((ceil(log2(N)) + k) / 8)`, where `N` is the curve
+     *      order (256 bits) and `k` is the target security level (128 bits).
+     *      Thus, L = ceil((256 + 128) / 8) = 48 bytes.
+     *      See: https://datatracker.ietf.org/doc/html/rfc9380#section-5.1
      */
     function _hashToField(bytes memory message, bytes32 dst) private view returns (uint256 e) {
         // The RFC-9380 `hash_to_field` function with:
         // - F: the finite field of order Secp256k1.N
-        // - p: Secp256k1.N
-        // - m: 1
-        // - L: 48
+        // - p: Secp256k1.N (field modulus)
+        // - m: 1 (number of elements to generate)
+        // - L: 48 (byte-length of intermediate value, for 128-bit security)
         // <https://datatracker.ietf.org/doc/html/rfc9380#section-5.2>
 
         bytes memory uniform = _expandMessageXmd(message, dst, 48);

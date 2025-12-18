@@ -15,11 +15,13 @@ contract Staking is Ownable {
     // ============================================================
 
     /**
-     * @notice Represents a single withdrawal in the queue.
+     * @notice Represents a single withdrawal as a node in a doubly linked list.
      * @param amount The amount of tokens to withdraw.
-     * @param claimableAt The timestamp when the withdrawal becomes claimable.
-     * @param previous The ID of the previous withdrawal in the queue (0 if first).
-     * @param next The ID of the next withdrawal in the queue (0 if last).
+     * @param claimableAt The block timestamp when the withdrawal becomes claimable.
+     * @param previous The ID of the previous withdrawal in the queue (0 if this node is the head).
+     * @param next The ID of the next withdrawal in the queue (0 if this node is the tail).
+     * @dev The withdrawal queue for each staker-validator pair is implemented as a
+     *      doubly linked list to allow for efficient claims from queue.
      */
     struct WithdrawalNode {
         uint256 amount;
@@ -29,9 +31,10 @@ contract Staking is Ownable {
     }
 
     /**
-     * @notice Tracks the withdrawal queue for a staker-validator pair.
+     * @notice Tracks the head and tail of the withdrawal queue for a staker-validator pair.
      * @param head The ID of the first withdrawal in the queue (0 if empty).
      * @param tail The ID of the last withdrawal in the queue (0 if empty).
+     * @dev This struct points to the start and end of a doubly linked list of WithdrawalNode.
      */
     struct WithdrawalQueue {
         uint64 head;
@@ -376,11 +379,16 @@ contract Staking is Ownable {
     }
 
     /**
-     * @notice Initiate a withdrawal from a validator.
+     * @notice Initiate a withdrawal from a validator, automatically inserting it into a sorted queue.
      * @param validator The validator address to withdraw from.
      * @param amount The amount of tokens to withdraw.
-     * @dev This function should be used in the interface for normal withdrawals. It inserts the new withdrawal
-     *      into the queue in the correct position based on the claimableAt timestamp.
+     * @dev This function creates a new withdrawal request and inserts it into a doubly
+     *      linked list that acts as a queue for the staker. The queue is kept sorted by
+     *      the `claimableAt` timestamp to ensure withdrawals can be processed in order.
+     *      This function handles the sorting on-chain by traversing the list backwards
+     *      from the tail to find the correct insertion point.
+     *      WARNING: This traversal can be gas-intensive if the queue is long. For a more
+     *      gas-efficient method, consider `initiateWithdrawalAtPosition`.
      */
     function initiateWithdrawal(address validator, uint256 amount) external {
         (uint64 withdrawalId, uint128 claimableAt) = _initiateWithdrawal(msg.sender, amount, validator);
@@ -423,13 +431,16 @@ contract Staking is Ownable {
     }
 
     /**
-     * @notice Initiate a withdrawal from a validator at a specific position in the queue.
+     * @notice Initiate a withdrawal at a specific position in the queue, for advanced users.
      * @param validator The validator address to withdraw from.
      * @param amount The amount of tokens to withdraw.
-     * @param previousId The ID of the previous withdrawal in the queue (0 if inserting at head).
-     * @dev This function allows users to specify the position of their withdrawal in the queue.
-     *      It is the caller's responsibility to ensure the correct ordering based on claimableAt timestamps.
-     *      This is an advanced function and should be used with caution.
+     * @param previousId The ID of the withdrawal node after which to insert the new node (0 to insert at the head).
+     * @dev This is a gas-efficient alternative to `initiateWithdrawal`. It allows the caller
+     *      to specify the exact insertion point in the doubly linked list. The caller is
+     *      responsible for providing a `previousId` that maintains the sorted order of the
+     *      queue (by `claimableAt` timestamp). The contract performs checks to prevent
+     *      out-of-order insertions, but it is less foolproof than the automatic version.
+     *      Incorrect usage can lead to transaction reverts.
      */
     function initiateWithdrawalAtPosition(address validator, uint256 amount, uint64 previousId) external {
         (uint64 withdrawalId, uint128 claimableAt) = _initiateWithdrawal(msg.sender, amount, validator);
@@ -472,9 +483,13 @@ contract Staking is Ownable {
     }
 
     /**
-     * @notice Claim a pending withdrawal after the delay period.
+     * @notice Claim a pending withdrawal after the delay period has passed.
      * @param staker The address that initiated the withdrawal.
      * @param validator The validator address to claim from.
+     * @dev This function processes the first withdrawal in the queue (the "head" of the
+     *      linked list). It verifies that the `withdrawDelay` has passed. Upon success,
+     *      it removes the withdrawal node from the queue, updates the queue's head to the
+     *      next node, and transfers the staked tokens back to the staker.
      */
     function claimWithdrawal(address staker, address validator) external {
         WithdrawalQueue memory queue = withdrawalQueues[staker][validator];
