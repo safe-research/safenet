@@ -41,9 +41,9 @@ const handleCollectingCommitments = (
 		// Still within deadline
 		return undefined;
 	}
-	const missingParticipants = keyGenClient.missingCommitments(rollover.groupId);
+	const missingParticipants = new Set(keyGenClient.missingCommitments(rollover.groupId));
 	const currentPariticipants = keyGenClient.participants(rollover.groupId);
-	return [currentPariticipants.filter((p) => missingParticipants.indexOf(p.id) < 0), rollover.nextEpoch];
+	return [currentPariticipants.filter((p) => !missingParticipants.has(p.id)), rollover.nextEpoch];
 };
 
 const handleCollectingShares = (
@@ -55,9 +55,9 @@ const handleCollectingShares = (
 		// Still within deadline
 		return undefined;
 	}
-	const missingParticipants = keyGenClient.missingSecretShares(rollover.groupId);
+	const missingParticipants = new Set(keyGenClient.missingSecretShares(rollover.groupId));
 	const currentPariticipants = keyGenClient.participants(rollover.groupId);
-	return [currentPariticipants.filter((p) => missingParticipants.indexOf(p.id) < 0), rollover.nextEpoch];
+	return [currentPariticipants.filter((p) => !missingParticipants.has(p.id)), rollover.nextEpoch];
 };
 
 const getTimeoutInfo = (
