@@ -164,7 +164,7 @@ export class KeyGenClient {
 		const participantId = this.#storage.participantId(groupId);
 		if (senderId === participantId) {
 			this.#logger.debug("Do not handle own share");
-			return "pending_shares;
+			return "pending_shares";
 		}
 		const commitment = this.#storage.commitments(groupId, senderId);
 		if (commitment === undefined) throw new Error(`Commitments for ${groupId}:${senderId} are not available!`);
