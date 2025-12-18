@@ -29,7 +29,7 @@ const MACHINE_CONFIG: MachineConfig = {
 		},
 		{
 			id: 11n,
-			address: entryPoint08Address,
+			address: ethAddress,
 		},
 	],
 	genesisSalt: zeroHash,
@@ -108,7 +108,24 @@ describe("key gen timeouts", () => {
 			} as RolloverState,
 			keyGenInvocations: [0, 0],
 		},
-	])("when in $description", ({ rollover, keyGenInvocations }) => {
+		{
+			description: "waiting for responses",
+			rollover: {
+				id: "collecting_confirmations",
+				groupId: "0x5afe02",
+				nextEpoch: 10n,
+				complaintDeadline: 15n,
+				responseDeadline: 25n,
+				deadline: 35n,
+				complaints: {
+					"3": { unresponded: 1n, total: 1n },
+				},
+				missingSharesFrom: [],
+				confirmationsFrom: [1n, 3n, 11n],
+			} as RolloverState,
+			keyGenInvocations: [0, 0],
+		},
+	])("when $description", ({ rollover, keyGenInvocations }) => {
 		it("should not timeout when deadline has not passed", () => {
 			const protocol = {} as unknown as ShieldnetProtocol;
 			const keyGenClient = {} as unknown as KeyGenClient;
