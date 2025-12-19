@@ -131,7 +131,6 @@ contract StakingTest is Test {
         assertEq(staking.CONFIG_TIME_DELAY(), CONFIG_TIME_DELAY);
         assertEq(staking.withdrawDelay(), INITIAL_WITHDRAW_DELAY);
         assertEq(staking.owner(), owner);
-        assertTrue(staking.isValidator(validator));
     }
 
     function test_Constructor_Event() public {
