@@ -1,6 +1,7 @@
 import { Link } from "@tanstack/react-router";
 import { useMemo } from "react";
 import { formatEther, type Hex, size } from "viem";
+import { useSettings } from "@/hooks/useSettings";
 import { shortAddress } from "@/lib/address";
 import type { TransactionProposal } from "@/lib/consensus";
 import { calculateSafeTxHash } from "@/lib/safe";
@@ -29,9 +30,15 @@ export const TransactionProposalDetails = ({ proposal }: { proposal: Transaction
 };
 
 export const TransactionProposalDataDetails = ({ proposal }: { proposal: TransactionProposal }) => {
+	const [settings] = useSettings();
 	return (
 		<>
-			<p className={"text-xs"}>Data ({dataString(proposal.transaction.data)})</p>
+			<div className={"flex justify-between"}>
+				<p className={"text-xs"}>Data ({dataString(proposal.transaction.data)})</p>
+				<a className={"text-xs"} href={`${settings.decoder}${proposal.transaction.data}`} target="_blank">
+					decode
+				</a>
+			</div>
 			<p className={"break-all font-mono"}>{proposal.transaction.data}</p>
 		</>
 	);
