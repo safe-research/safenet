@@ -13,7 +13,10 @@ export const portSchema = z.preprocess((val) => {
 	return val;
 }, z.int().gte(0).lte(65535).optional());
 
-export const fileNameSchema = z.string().transform((arg) => (arg === "" ? undefined : arg));
+export const fileNameSchema = z
+	.string()
+	.optional()
+	.transform((arg) => (arg === "" ? undefined : arg));
 
 export const checkedAddressSchema = z
 	.string()
