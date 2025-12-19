@@ -38,7 +38,7 @@ export const handleComplaintResponded = async (
 	// If reponse is required to finalize shares get state by registering secret, otherwise only verify
 	const sharesState =
 		keyGenClient.participantId(event.gid) === event.plaintiff &&
-		machineStates.rollover.missingSharesFrom.indexOf(event.accused) >= 0
+		machineStates.rollover.missingSharesFrom.includes(event.accused)
 			? await keyGenClient.registerPlainKeyGenSecret(event.gid, event.accused, event.secretShare)
 			: !keyGenClient.verifySecretShare(event.gid, event.accused, event.plaintiff, event.secretShare)
 				? "invalid_share"

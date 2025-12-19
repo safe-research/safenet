@@ -5,28 +5,78 @@ import type { MachineConfig, MachineStates, RolloverState, StateDiff } from "../
 import { calcGroupContext } from "./group.js";
 import { triggerKeyGen } from "./trigger.js";
 
-type CollectingState = Extract<
-	RolloverState,
-	{ id: "collecting_commitments" | "collecting_shares" | "collecting_confirmations" }
->;
-
-const adjustParticipants = (
-	defaultParticipants: readonly Participant[],
+const handleCollectingConfirmations = (
 	keyGenClient: KeyGenClient,
-	rollover: CollectingState,
-): Participant[] => {
+	rollover: Extract<RolloverState, { id: "collecting_confirmations" }>,
+	block: bigint,
+): [Participant[], bigint] | undefined => {
+	if (rollover.responseDeadline <= block) {
+		// Check if there are any responses that timed out
+		const unresponded = new Set(
+			Object.entries(rollover.complaints)
+				.filter(([_, c]) => c.unresponded > 0)
+				.map(([id]) => BigInt(id)),
+		);
+		if (unresponded.size > 0) {
+			const currentPariticipants = keyGenClient.participants(rollover.groupId);
+			return [currentPariticipants.filter((p) => !unresponded.has(p.id)), rollover.nextEpoch];
+		}
+	}
+	if (rollover.deadline <= block) {
+		// Check if confirmations timed out
+		const confirmedSet = new Set(rollover.confirmationsFrom);
+		const currentPariticipants = keyGenClient.participants(rollover.groupId);
+		return [currentPariticipants.filter((p) => confirmedSet.has(p.id)), rollover.nextEpoch];
+	}
+	// Still within deadline
+	return undefined;
+};
+
+const handleCollectingCommitments = (
+	keyGenClient: KeyGenClient,
+	rollover: Extract<RolloverState, { id: "collecting_commitments" }>,
+	block: bigint,
+): [Participant[], bigint] | undefined => {
+	if (rollover.deadline > block) {
+		// Still within deadline
+		return undefined;
+	}
+	const missingParticipants = new Set(keyGenClient.missingCommitments(rollover.groupId));
+	const currentPariticipants = keyGenClient.participants(rollover.groupId);
+	return [currentPariticipants.filter((p) => !missingParticipants.has(p.id)), rollover.nextEpoch];
+};
+
+const handleCollectingShares = (
+	keyGenClient: KeyGenClient,
+	rollover: Extract<RolloverState, { id: "collecting_shares" }>,
+	block: bigint,
+): [Participant[], bigint] | undefined => {
+	if (rollover.deadline > block) {
+		// Still within deadline
+		return undefined;
+	}
+	const missingParticipants = new Set(keyGenClient.missingSecretShares(rollover.groupId));
+	const currentPariticipants = keyGenClient.participants(rollover.groupId);
+	return [currentPariticipants.filter((p) => !missingParticipants.has(p.id)), rollover.nextEpoch];
+};
+
+const getTimeoutInfo = (
+	keyGenClient: KeyGenClient,
+	rollover: RolloverState,
+	block: bigint,
+): [Participant[], bigint] | undefined => {
 	switch (rollover.id) {
 		case "collecting_commitments": {
-			const missingParticipants = keyGenClient.missingCommitments(rollover.groupId);
-			return defaultParticipants.filter((p) => missingParticipants.indexOf(p.id) < 0);
+			return handleCollectingCommitments(keyGenClient, rollover, block);
 		}
 		case "collecting_shares": {
-			const missingParticipants = keyGenClient.missingSecretShares(rollover.groupId);
-			return defaultParticipants.filter((p) => missingParticipants.indexOf(p.id) < 0);
+			return handleCollectingShares(keyGenClient, rollover, block);
 		}
 		case "collecting_confirmations": {
-			const confirmedSet = new Set(rollover.confirmationsFrom);
-			return defaultParticipants.filter((p) => confirmedSet.has(p.id));
+			return handleCollectingConfirmations(keyGenClient, rollover, block);
+		}
+		default: {
+			return undefined;
 		}
 	}
 };
@@ -39,29 +89,21 @@ export const checkKeyGenTimeouts = (
 	block: bigint,
 	logger?: (msg: unknown) => void,
 ): StateDiff => {
-	// No timeout in waiting state
-	// Timeouts in signing state will be handled in the signing flow
-	if (
-		machineStates.rollover.id !== "collecting_commitments" &&
-		machineStates.rollover.id !== "collecting_shares" &&
-		machineStates.rollover.id !== "collecting_confirmations"
-	) {
+	const timeoutInfo = getTimeoutInfo(keyGenClient, machineStates.rollover, block);
+
+	if (timeoutInfo === undefined) {
+		// No need to adjust participants, as no timeout
 		return {};
 	}
-	// Still within deadline
-	if (machineStates.rollover.deadline > block) {
-		return {};
-	}
+	const [adjustedParticipants, nextEpoch] = timeoutInfo;
 
 	// For next key gen only consider active participants
-	const currentPariticipants = keyGenClient.participants(machineStates.rollover.groupId);
-	const participants = adjustParticipants(currentPariticipants, keyGenClient, machineStates.rollover);
 	const { diff } = triggerKeyGen(
 		keyGenClient,
-		machineStates.rollover.nextEpoch,
+		nextEpoch,
 		block + machineConfig.keyGenTimeout,
-		participants,
-		calcGroupContext(protocol.consensus(), machineStates.rollover.nextEpoch),
+		adjustedParticipants,
+		calcGroupContext(protocol.consensus(), nextEpoch),
 		logger,
 	);
 	return diff;
