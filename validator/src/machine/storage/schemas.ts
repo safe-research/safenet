@@ -81,6 +81,7 @@ const collectingSharesSchema = z.object({
 	nextEpoch: coercedBigIntSchema,
 	deadline: coercedBigIntSchema,
 	complaints: complaintsSchema,
+	missingSharesFrom: participantIdSchema.array(),
 	lastParticipant: participantIdSchema.optional(),
 });
 
@@ -93,6 +94,7 @@ const collectingConfirmationsSchema = z.object({
 	responseDeadline: coercedBigIntSchema,
 	deadline: coercedBigIntSchema,
 	lastParticipant: participantIdSchema.optional(),
+	missingSharesFrom: participantIdSchema.array(),
 	confirmationsFrom: participantIdSchema.array(),
 });
 

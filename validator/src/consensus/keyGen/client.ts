@@ -48,6 +48,10 @@ export class KeyGenClient {
 		return this.#storage.participantId(groupId);
 	}
 
+	participants(groupId: GroupId): readonly Participant[] {
+		return this.#storage.participants(groupId);
+	}
+
 	knownGroups(): GroupId[] {
 		return this.#storage.knownGroups();
 	}
@@ -89,7 +93,6 @@ export class KeyGenClient {
 		const pok = createProofOfKnowledge(participantId, coefficients);
 		const commitments = createCommitments(coefficients);
 		const poap = generateParticipantProof(participants, participantId);
-		this.#storage.registerSecretShare(groupId, participantId, evalPoly(coefficients, participantId));
 		return {
 			groupId,
 			participantsRoot,
@@ -150,6 +153,50 @@ export class KeyGenClient {
 		return evalPoly(coefficients, peerId);
 	}
 
+	// Complaint flow verify revealed
+	verifySecretShare(groupId: GroupId, senderId: ParticipantId, targetId: bigint, secretShare: bigint): boolean {
+		const commitment = this.#storage.commitments(groupId, senderId);
+		if (commitment === undefined) throw new Error(`Commitments for ${groupId}:${senderId} are not available!`);
+		const partialVerificationShare = evalCommitment(commitment, targetId);
+		return verifyKey(partialVerificationShare, secretShare);
+	}
+
+	protected finalizeSharesIfPossible(groupId: GroupId): "pending_shares" | "shares_completed" {
+		if (this.#storage.checkIfSecretSharesComplete(groupId)) {
+			const verificationShare = this.#storage.verificationShare(groupId);
+			const secretShares = this.#storage.secretSharesMap(groupId);
+			const signingShare = createSigningShare(secretShares);
+			if (!verifyKey(verificationShare, signingShare)) {
+				throw new Error("Invalid signing share reconstructed!");
+			}
+			this.#storage.registerSigningShare(groupId, signingShare);
+			this.#storage.clearKeyGen(groupId);
+			return "shares_completed";
+		}
+		return "pending_shares";
+	}
+
+	protected registerSecretShare(
+		groupId: GroupId,
+		senderId: ParticipantId,
+		secretShare: bigint,
+	): "pending_shares" | "shares_completed" {
+		this.#storage.registerSecretShare(groupId, senderId, secretShare);
+		return this.finalizeSharesIfPossible(groupId);
+	}
+
+	async registerPlainKeyGenSecret(
+		groupId: GroupId,
+		senderId: ParticipantId,
+		secretShare: bigint,
+	): Promise<"invalid_share" | "pending_shares" | "shares_completed"> {
+		const participantId = this.#storage.participantId(groupId);
+		if (!this.verifySecretShare(groupId, senderId, participantId, secretShare)) {
+			return "invalid_share";
+		}
+		return this.registerSecretShare(groupId, senderId, secretShare);
+	}
+
 	// `senderId` is the id of sending local participant in the participants set
 	// `peerShares` are the calculated and encrypted shares (also defined as `f`)
 	async handleKeygenSecrets(
@@ -163,34 +210,22 @@ export class KeyGenClient {
 		}
 		const participantId = this.#storage.participantId(groupId);
 		if (senderId === participantId) {
-			this.#logger.debug("Do not handle own share");
-			return "pending_shares";
+			this.#logger.debug("Register own shares");
+			const coefficients = this.#storage.coefficients(groupId);
+			return this.registerSecretShare(groupId, participantId, evalPoly(coefficients, participantId));
 		}
-		const commitment = this.#storage.commitments(groupId, senderId);
-		if (commitment === undefined) throw new Error(`Commitments for ${groupId}:${senderId} are not available!`);
 		// TODO: check if we should use a reasonable limit for the id (current uint256)
 		const shareIndex = participantId < senderId ? participantId : participantId - 1n;
 		// Note: Number(shareIndex) is theoretically an unsafe cast
 		const key = this.#storage.encryptionKey(groupId);
-		const partialShare = ecdh(peerShares[Number(shareIndex) - 1], key, commitment[0]);
-		const partialVerificationShare = evalCommitment(commitment, participantId);
+		const commitments = this.#storage.commitments(groupId, senderId);
+		if (commitments === undefined) throw new Error(`Commitments for ${groupId}:${senderId} are not available!`);
+		const partialShare = ecdh(peerShares[Number(shareIndex) - 1], key, commitments[0]);
+		const partialVerificationShare = evalCommitment(commitments, participantId);
 		if (!verifyKey(partialVerificationShare, partialShare)) {
 			// Share is invalid, abort as this would result in an invalid signing share
 			return "invalid_share";
 		}
-		this.#storage.registerSecretShare(groupId, senderId, partialShare);
-
-		if (this.#storage.checkIfSecretSharesComplete(groupId)) {
-			const verificationShare = this.#storage.verificationShare(groupId);
-			const secretShares = this.#storage.secretSharesMap(groupId);
-			const signingShare = createSigningShare(secretShares);
-			if (!verifyKey(verificationShare, signingShare)) {
-				throw new Error("Invalid signing share reconstructed!");
-			}
-			this.#storage.registerSigningShare(groupId, signingShare);
-			this.#storage.clearKeyGen(groupId);
-			return "shares_completed";
-		}
-		return "pending_shares";
+		return this.registerSecretShare(groupId, senderId, partialShare);
 	}
 }

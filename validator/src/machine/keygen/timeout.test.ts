@@ -88,6 +88,7 @@ describe("key gen timeouts", () => {
 				groupId: "0x5afe02",
 				nextEpoch: 10n,
 				deadline: 22n,
+				missingSharesFrom: [],
 				complaints: {},
 			} as RolloverState,
 			keyGenInvocations: [0, 1],
@@ -102,6 +103,7 @@ describe("key gen timeouts", () => {
 				responseDeadline: 17n,
 				deadline: 22n,
 				complaints: {},
+				missingSharesFrom: [],
 				confirmationsFrom: [1n, 7n, 11n],
 			} as RolloverState,
 			keyGenInvocations: [0, 0],
@@ -141,7 +143,10 @@ describe("key gen timeouts", () => {
 			missingSecretShares.mockReturnValueOnce([3n]);
 			const setupGroup = vi.fn();
 			setupGroup.mockReturnValueOnce(groupSetup);
+			const participants = vi.fn();
+			participants.mockReturnValueOnce(MACHINE_CONFIG.defaultParticipants);
 			const keyGenClient = {
+				participants,
 				setupGroup,
 				missingCommitments,
 				missingSecretShares,

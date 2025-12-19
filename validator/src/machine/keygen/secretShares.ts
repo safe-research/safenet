@@ -1,8 +1,9 @@
-import { encodeAbiParameters, type Hex } from "viem";
 import type { KeyGenClient } from "../../consensus/keyGen/client.js";
 import type { ProtocolAction } from "../../consensus/protocol/types.js";
+import type { ParticipantId } from "../../frost/types.js";
 import type { KeyGenSecretSharedEvent } from "../transitions/types.js";
 import type { MachineConfig, MachineStates, StateDiff } from "../types.js";
+import { buildKeyGenCallback } from "./utils.js";
 
 export const handleKeyGenSecretShared = async (
 	machineConfig: MachineConfig,
@@ -25,47 +26,42 @@ export const handleKeyGenSecretShared = async (
 	const groupId = event.gid;
 	// Track identity that has submitted last share
 	const response = await keyGenClient.handleKeygenSecrets(event.gid, event.identifier, event.share.f);
+	const missingSharesFrom: ParticipantId[] = [...machineStates.rollover.missingSharesFrom];
+	const actions: ProtocolAction[] = [];
 	if (response === "invalid_share") {
 		logger?.(`Invalid share submitted by ${event.identifier} for group ${event.gid}`);
-		return {
-			actions: [
-				{
-					id: "key_gen_complain",
-					groupId: event.gid,
-					accused: event.identifier,
-				},
-			],
-		};
+		missingSharesFrom.push(event.identifier);
+		actions.push({
+			id: "key_gen_complain",
+			groupId: event.gid,
+			accused: event.identifier,
+		});
 	}
-	if (response === "pending_shares") {
+	// Share collection is completed when every paritcipant submitted a share, no matter if valid or invalid
+	// `response` will only be "shares_completed" when all valid shares have been received
+	if (!event.completed) {
 		logger?.(`Group ${event.gid} secret shares not completed yet`);
 		return {
 			rollover: {
 				...machineStates.rollover,
+				missingSharesFrom,
 				lastParticipant: event.identifier,
 			},
+			actions,
 		};
 	}
-	// All secret shares collected, now each participant must confirm
+	// All secret shares collected, now each participant must confirm or complain
 	logger?.(`Group ${event.gid} secret shares completed, triggering confirmation`);
 
-	// Build the callback context for non-genesis group (to trigger epoch proposal after confirmation)
-	let callbackContext: Hex | undefined;
-	if (machineStates.rollover.nextEpoch !== 0n) {
-		// For non-genesis groups, we include callback context to trigger epoch proposal
+	if (response === "shares_completed") {
 		const nextEpoch = machineStates.rollover.nextEpoch;
-		const rolloverBlock = nextEpoch * machineConfig.blocksPerEpoch;
-		// ABI encode: (uint64 proposedEpoch, uint64 rolloverBlock)
-		callbackContext = encodeAbiParameters([{ type: "uint64" }, { type: "uint64" }], [nextEpoch, rolloverBlock]);
-	}
-
-	const actions: ProtocolAction[] = [
-		{
+		const callbackContext = buildKeyGenCallback(machineConfig, nextEpoch);
+		actions.push({
 			id: "key_gen_confirm",
 			groupId,
 			callbackContext,
-		},
-	];
+		});
+	}
 
 	return {
 		rollover: {
@@ -76,7 +72,8 @@ export const handleKeyGenSecretShared = async (
 			responseDeadline: event.block + 2n * machineConfig.keyGenTimeout,
 			deadline: event.block + 3n * machineConfig.keyGenTimeout,
 			lastParticipant: event.identifier,
-			complaints: {},
+			complaints: machineStates.rollover.complaints,
+			missingSharesFrom,
 			confirmationsFrom: [],
 		},
 		actions,
