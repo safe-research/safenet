@@ -246,7 +246,14 @@ export class ShieldnetStateMachine {
 				);
 			}
 			case "event_key_gen_complaint_submitted": {
-				return await handleComplaintSubmitted(this.#keyGenClient, machineStates, transition);
+				return await handleComplaintSubmitted(
+					this.#machineConfig,
+					this.#protocol,
+					this.#keyGenClient,
+					machineStates,
+					transition,
+					this.#logger.info,
+				);
 			}
 			case "event_key_gen_complaint_responded": {
 				return await handleComplaintResponded(

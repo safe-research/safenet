@@ -68,6 +68,14 @@ export class KeyGenClient {
 		return this.#storage.missingSecretShares(groupId);
 	}
 
+	participants(groupId: GroupId): Participant[] {
+		return this.#storage.participants(groupId);
+	}
+
+	threshold(groupId: GroupId): bigint {
+		return this.#storage.threshold(groupId);
+	}
+
 	setupGroup(
 		participants: readonly Participant[],
 		count: bigint,
