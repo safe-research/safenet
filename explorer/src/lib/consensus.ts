@@ -15,9 +15,11 @@ const consensusAbi = parseAbi([
 export type ConsensusState = {
 	currentEpoch: bigint;
 	currentGroupId: Hex;
+	currentBlock: bigint;
 };
 
 export const loadConsensusState = async (provider: PublicClient, consensus: Address): Promise<ConsensusState> => {
+	const currentBlock = await provider.getBlockNumber();
 	const [epoch, groupId] = await provider.readContract({
 		address: consensus,
 		abi: consensusAbi,
@@ -27,6 +29,7 @@ export const loadConsensusState = async (provider: PublicClient, consensus: Addr
 	return {
 		currentEpoch: epoch,
 		currentGroupId: groupId,
+		currentBlock,
 	};
 };
 
@@ -45,6 +48,7 @@ export const transactionProposedEventSchema = z.object({
 	transactionHash: bytes32Schema,
 	epoch: bigIntSchema,
 	transaction: transactionSchema,
+	proposedAt: bigIntSchema,
 });
 
 export type MetaTransaction = z.output<typeof transactionSchema>;
@@ -76,7 +80,10 @@ export const loadRecentTransactionProposals = async (
 			return right.logIndex - left.logIndex;
 		})
 		.map((log) => {
-			const event = transactionProposedEventSchema.safeParse(log.args);
+			const event = transactionProposedEventSchema.safeParse({
+				...log.args,
+				proposedAt: log.blockNumber,
+			});
 			return event.success ? event.data : undefined;
 		})
 		.filter((entry) => entry !== undefined);
@@ -84,7 +91,6 @@ export const loadRecentTransactionProposals = async (
 
 export type TransactionDetails = {
 	proposal: TransactionProposal;
-	proposedAt: bigint;
 	attestedAt: bigint | null;
 };
 
@@ -112,12 +118,14 @@ export const loadTransactionProposalDetails = async (
 	});
 	const proposalEvent = events.find((e) => e.eventName === "TransactionProposed");
 	if (proposalEvent === undefined) return null;
-	const parsedProposal = transactionProposedEventSchema.safeParse(proposalEvent.args);
+	const parsedProposal = transactionProposedEventSchema.safeParse({
+		...proposalEvent.args,
+		proposedAt: proposalEvent.blockNumber,
+	});
 	const attestationEvent = events.find((e) => e.eventName === "TransactionAttested");
 	return parsedProposal.success
 		? {
 				proposal: parsedProposal.data,
-				proposedAt: BigInt(proposalEvent.blockNumber),
 				attestedAt: attestationEvent?.blockNumber !== undefined ? BigInt(attestationEvent.blockNumber) : null,
 			}
 		: null;

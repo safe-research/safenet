@@ -17,7 +17,8 @@ export default function Header() {
 					Shieldnet
 				</Link>
 				<div className="flex items-center gap-2">
-					Current Epoch: {state.data.currentEpoch} | Current GroupId: {state.data.currentGroupId.slice(0, 10)}
+					Block: {state.data.currentBlock} | Epoch: {state.data.currentEpoch} | GroupId:{" "}
+					{state.data.currentGroupId.slice(0, 10)}
 					<Link to="/settings">
 						<Cog6ToothIcon className="size-8 p-1 hover:opacity-40 transition-opacity duration-300 cursor-pointer" />
 					</Link>

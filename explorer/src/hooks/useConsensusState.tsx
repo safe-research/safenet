@@ -11,6 +11,6 @@ export function useConsensusState() {
 		queryKey: ["consensusState", settings.consensus],
 		queryFn: () => loadConsensusState(provider, settings.consensus),
 		refetchInterval: 10000,
-		initialData: { currentEpoch: 0n, currentGroupId: zeroHash },
+		initialData: { currentBlock: 0n, currentEpoch: 0n, currentGroupId: zeroHash },
 	});
 }

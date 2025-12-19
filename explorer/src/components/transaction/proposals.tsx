@@ -11,13 +11,22 @@ const opString = (operation: 0 | 1) => (operation === 0 ? "CALL" : "DELEGATECALL
 const valueString = (value: bigint) => `${formatEther(value)} ETH`;
 const dataString = (data: Hex) => `${size(data)} bytes of data`;
 
-export const TransactionProposalDetails = ({ proposal }: { proposal: TransactionProposal }) => {
+export const TransactionProposalDetails = ({
+	proposal,
+	hideProposedAt,
+}: {
+	proposal: TransactionProposal;
+	hideProposedAt?: boolean;
+}) => {
 	const safeTxHash = useMemo(() => {
 		return calculateSafeTxHash(proposal);
 	}, [proposal]);
 	return (
 		<>
-			<p className={"text-xs"}>Safe Tx Hash: {safeTxHash}</p>
+			<div className={"flex justify-between"}>
+				<p className={"text-xs"}>Safe Tx Hash: {safeTxHash}</p>
+				{hideProposedAt !== true && <p className={"text-xs"}>{proposal.proposedAt}</p>}
+			</div>
 			<p>
 				{shortAddress(proposal.transaction.account)} on {proposal.transaction.chainId}
 			</p>
@@ -47,16 +56,19 @@ export const TransactionProposalDataDetails = ({ proposal }: { proposal: Transac
 export const TransactionProposalList = ({ proposals }: { proposals: TransactionProposal[] }) => {
 	console.log({ proposals });
 	return (
-		<div className={"space-y-4"}>
-			{proposals.map((proposal) => (
-				<div key={proposal.message}>
-					<Link to="/proposal" search={{ id: proposal.message }}>
-						<Box className={"hover:bg-gray-100"}>
-							<TransactionProposalDetails proposal={proposal} />
-						</Box>
-					</Link>
-				</div>
-			))}
-		</div>
+		<>
+			<div className="w-full p-2 text-xs text-right">{proposals.length} recent proposals</div>
+			<div className={"space-y-4"}>
+				{proposals.map((proposal) => (
+					<div key={proposal.message}>
+						<Link to="/proposal" search={{ id: proposal.message }}>
+							<Box className={"hover:bg-gray-100"}>
+								<TransactionProposalDetails proposal={proposal} />
+							</Box>
+						</Link>
+					</div>
+				))}
+			</div>
+		</>
 	);
 };

@@ -27,11 +27,11 @@ export function Proposal() {
 				{details.data !== null && (
 					<div className={"space-y-4"}>
 						<Box>
-							<TransactionProposalDetails proposal={details.data.proposal} />
+							<TransactionProposalDetails proposal={details.data.proposal} hideProposedAt />
 						</Box>
 						<Box className={`${isAttested ? "border-green-400" : "border-yellow-400"}`}>
 							<p className={"text-xs"}>Message: {details.data.proposal.message}</p>
-							<p>Proposed at block {details.data.proposedAt}</p>
+							<p>Proposed at block {details.data.proposal.proposedAt}</p>
 							{isAttested && <p>Attested at block {details.data.attestedAt}</p>}
 							{!isAttested && <p>Attestetation pending</p>}
 						</Box>
@@ -40,7 +40,7 @@ export function Proposal() {
 						</Box>
 					</div>
 				)}
-				{!details.isFetching && details.data === null && "Could not load proposal!"}
+				{!details.isFetching && details.data === null && <Box>"Could not load proposal!"</Box>}
 			</div>
 		</div>
 	);
