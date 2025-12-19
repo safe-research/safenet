@@ -25,11 +25,11 @@ contract Consensus is IFROSTCoordinatorCallback {
 
     /**
      * @notice Tracks the state of validator set epochs and their rollover.
-     * @param previous The epoch number of the previously active validator set.
-     * @param active The epoch number of the currently active validator set.
-     * @param staged The epoch number of the next validator set, which will become active
+     * @custom:param previous The epoch number of the previously active validator set.
+     * @custom:param active The epoch number of the currently active validator set.
+     * @custom:param staged The epoch number of the next validator set, which will become active
      *               at the `rolloverBlock`. Zero if no epoch is staged.
-     * @param rolloverBlock The block number at which the `staged` epoch will become `active`.
+     * @custom:param rolloverBlock The block number at which the `staged` epoch will become `active`.
      * @dev An epoch represents a period governed by a specific validator set (FROST group).
      *      The rollover from one epoch to the next is a two-step, on-chain process:
      *      1. Proposal & Attestation: A new epoch and validator group are proposed. The
@@ -271,7 +271,8 @@ contract Consensus is IFROSTCoordinatorCallback {
      * @dev This is the first step of the epoch rollover process. It creates a message
      *      for the epoch change proposal and requests the current active FROST group
      *      to sign it. The signature from the current group serves as an authorization
-     *      for the new group to take over.
+     *      for the new group to take over. This step is completely optional atm, as we
+     *      can just stage directly if there is a valid signature.
      */
     function proposeEpoch(uint64 proposedEpoch, uint64 rolloverBlock, FROSTGroupId.T group) public {
         Epochs memory epochs = _processRollover();

@@ -19,13 +19,37 @@ library ConsensusMessages {
     bytes32 internal constant DOMAIN_TYPEHASH = hex"47e79534a245952e8b16893a336b85a3d9ea9fa8c573f3d803afb92a79469218";
 
     /**
-     * @custom:precomputed keccak256("EpochRollover(uint64 activeEpoch,uint64 proposedEpoch,uint64 rolloverBlock,uint256 groupKeyX,uint256 groupKeyY)")
+     * @custom:precomputed
+     *         keccak256(
+     *             "EpochRollover(
+     *                 uint64 activeEpoch,
+     *                 uint64 proposedEpoch,
+     *                 uint64 rolloverBlock,
+     *                 uint256 groupKeyX,
+     *                 uint256 groupKeyY
+     *             )"
+     *         )
      */
     bytes32 internal constant EPOCH_ROLLOVER_TYPEHASH =
         hex"13de01993286119c9a7628720a5b7d7c32841dbf2d23752b59de86a7e03fe1bf";
 
     /**
-     * @custom:precomputed keccak256("TransactionProposal(uint64 epoch,MetaTransaction transaction)MetaTransaction(uint256 chainId,address account,address to,uint256 value,uint8 operation,bytes data,uint256 nonce)")
+     * @custom:precomputed
+     *         keccak256(
+     *             "TransactionProposal(
+     *                 uint64 epoch,
+     *                 MetaTransaction transaction
+     *             )
+     *             MetaTransaction(
+     *                 uint256 chainId,
+     *                 address account,
+     *                 address to,
+     *                 uint256 value,
+     *                 uint8 operation,
+     *                 bytes data,
+     *                 uint256 nonce
+     *             )"
+     *         )
      */
     bytes32 internal constant TRANSACTION_PROPOSAL_TYPEHASH =
         hex"71e403143d11e6fdc9bddd54b7d0e6e418d2c792dbdae33a3ab5ddf78f01b063";

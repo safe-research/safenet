@@ -32,15 +32,15 @@ contract FROSTCoordinator {
      *                   by broadcasting a public commitment. This prevents malicious
      *                   participants from choosing their values based on others' shares.
      * @custom:enumValue SHARING Round 2: After all commitments are received, participants
-     *                 broadcast their secret shares, encrypted for each recipient.
+     *                   broadcast their secret shares, encrypted for each recipient.
      * @custom:enumValue CONFIRMING Final Round: Participants verify their received shares,
-     *                    compute their long-lived private key, and derive the group
-     *                    public key. They confirm successful completion.
+     *                   compute their long-lived private key, and derive the group
+     *                   public key. They confirm successful completion.
      * @custom:enumValue COMPROMISED The key generation has failed due to a sufficient
      *                   number of complaints against misbehaving participants. The
      *                   group cannot be used for signing.
      * @custom:enumValue FINALIZED The DKG ceremony has completed successfully. The group
-     *                  public key is established, and the group is ready to sign messages.
+     *                   public key is established, and the group is ready to sign messages.
      * @dev The DKG process follows a multi-round protocol where participants
      *      collaboratively generate a shared secret and a group public key.
      */
@@ -59,10 +59,10 @@ contract FROSTCoordinator {
 
     /**
      * @notice Represents a FROST signing group and its associated state.
-     * @param participants The participant map for the group.
-     * @param nonces The nonce commitment set for the group.
-     * @param parameters The parameters and status of the group.
-     * @param key The group public key.
+     * @custom:param participants The participant map for the group.
+     * @custom:param nonces The nonce commitment set for the group.
+     * @custom:param parameters The parameters and status of the group.
+     * @custom:param key The group public key.
      */
     struct Group {
         FROSTParticipantMap.T participants;
@@ -73,11 +73,11 @@ contract FROSTCoordinator {
 
     /**
      * @notice Parameters and status of a FROST group.
-     * @param count The number of participants.
-     * @param threshold The threshold required for signing.
-     * @param pending The number of pending participants in the current phase.
-     * @param sequence The current signing sequence counter.
-     * @param status The current status of the group.
+     * @custom:param count The number of participants.
+     * @custom:param threshold The threshold required for signing.
+     * @custom:param pending The number of pending participants in the current phase.
+     * @custom:param sequence The current signing sequence counter.
+     * @custom:param status The current status of the group.
      */
     struct GroupParameters {
         uint64 count;
@@ -89,9 +89,9 @@ contract FROSTCoordinator {
 
     /**
      * @notice Commitment data for key generation.
-     * @param c The vector of public commitments.
-     * @param r The public nonce.
-     * @param mu The proof of knowledge scalar.
+     * @custom:param c The vector of public commitments.
+     * @custom:param r The public nonce.
+     * @custom:param mu The proof of knowledge scalar.
      */
     struct KeyGenCommitment {
         Secp256k1.Point[] c;
@@ -101,8 +101,8 @@ contract FROSTCoordinator {
 
     /**
      * @notice Secret share data for key generation.
-     * @param y The participant public key share.
-     * @param f The polynomial coefficients encrypted for participants.
+     * @custom:param y The participant public key share.
+     * @custom:param f The polynomial coefficients encrypted for participants.
      */
     struct KeyGenSecretShare {
         Secp256k1.Point y;
@@ -111,9 +111,9 @@ contract FROSTCoordinator {
 
     /**
      * @notice Tracks a signing ceremony state.
-     * @param message The message being signed.
-     * @param signed The Merkle root of the signature shares.
-     * @param shares The accumulated signature shares.
+     * @custom:param message The message being signed.
+     * @custom:param signed The Merkle root of the signature shares.
+     * @custom:param shares The accumulated signature shares.
      */
     struct Signature {
         bytes32 message;
@@ -123,8 +123,8 @@ contract FROSTCoordinator {
 
     /**
      * @notice Nonce pair for signing.
-     * @param d The first nonce commitment point.
-     * @param e The second nonce commitment point.
+     * @custom:param d The first nonce commitment point.
+     * @custom:param e The second nonce commitment point.
      */
     struct SignNonces {
         Secp256k1.Point d;
@@ -133,8 +133,8 @@ contract FROSTCoordinator {
 
     /**
      * @notice Selection data for signing.
-     * @param r The group commitment point.
-     * @param root The Merkle root of the selected participants.
+     * @custom:param r The group commitment point.
+     * @custom:param root The Merkle root of the selected participants.
      */
     struct SignSelection {
         Secp256k1.Point r;
@@ -143,8 +143,8 @@ contract FROSTCoordinator {
 
     /**
      * @notice Callback target and context for asynchronous operations.
-     * @param target The callback target contract.
-     * @param context The callback context data.
+     * @custom:param target The callback target contract.
+     * @custom:param context The callback context data.
      */
     struct Callback {
         IFROSTCoordinatorCallback target;
@@ -513,7 +513,7 @@ contract FROSTCoordinator {
      * @param commitment The nonce commitment Merkle root.
      * @return chunk The chunk index used for this commitment.
      * @dev This function implements the first step of a two-round signing protocol.
-     *      Participants pre-commit to a large set of nonces (256) by submitting
+     *      Participants pre-commit to a large set of nonces (1024) by submitting
      *      the Merkle root of the nonce commitments. This is the "commitment" phase.
      *      The actual nonces are kept secret until a signing ceremony begins.
      *      This commitment/reveal scheme is a crucial defense against adaptive signature

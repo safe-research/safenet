@@ -16,10 +16,10 @@ contract Staking is Ownable {
 
     /**
      * @notice Represents a single withdrawal as a node in a doubly linked list.
-     * @param amount The amount of tokens to withdraw.
-     * @param claimableAt The block timestamp when the withdrawal becomes claimable.
-     * @param previous The ID of the previous withdrawal in the queue (0 if this node is the head).
-     * @param next The ID of the next withdrawal in the queue (0 if this node is the tail).
+     * @custom:param amount The amount of tokens to withdraw.
+     * @custom:param claimableAt The block timestamp when the withdrawal becomes claimable.
+     * @custom:param previous The ID of the previous withdrawal in the queue (0 if this node is the head).
+     * @custom:param next The ID of the next withdrawal in the queue (0 if this node is the tail).
      * @dev The withdrawal queue for each staker-validator pair is implemented as a
      *      doubly linked list to allow for efficient claims from queue.
      */
@@ -32,8 +32,8 @@ contract Staking is Ownable {
 
     /**
      * @notice Tracks the head and tail of the withdrawal queue for a staker-validator pair.
-     * @param head The ID of the first withdrawal in the queue (0 if empty).
-     * @param tail The ID of the last withdrawal in the queue (0 if empty).
+     * @custom:param head The ID of the first withdrawal in the queue (0 if empty).
+     * @custom:param tail The ID of the last withdrawal in the queue (0 if empty).
      * @dev This struct points to the start and end of a doubly linked list of WithdrawalNode.
      */
     struct WithdrawalQueue {
@@ -43,8 +43,8 @@ contract Staking is Ownable {
 
     /**
      * @notice Represents a pending configuration change proposal.
-     * @param value The proposed new value for the configuration parameter.
-     * @param executableAt The timestamp when the proposal can be executed (0 if no proposal exists).
+     * @custom:param value The proposed new value for the configuration parameter.
+     * @custom:param executableAt The timestamp when the proposal can be executed (0 if no proposal exists).
      */
     struct ConfigProposal {
         uint128 value;
@@ -53,8 +53,8 @@ contract Staking is Ownable {
 
     /**
      * @notice Return type for view functions querying withdrawal info.
-     * @param amount The amount of tokens in the withdrawal.
-     * @param claimableAt The timestamp when the withdrawal becomes claimable.
+     * @custom:param amount The amount of tokens in the withdrawal.
+     * @custom:param claimableAt The timestamp when the withdrawal becomes claimable.
      */
     struct WithdrawalInfo {
         uint256 amount;

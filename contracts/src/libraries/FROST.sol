@@ -7,7 +7,8 @@ import {Secp256k1} from "@/libraries/Secp256k1.sol";
  * @title FROST
  * @notice Implementation of the FROST(secp256k1, SHA-256) ciphersuite.
  * @dev FROST Implementation is based on RFC-9591 (https://datatracker.ietf.org/doc/html/rfc9591).
- *      The dst (Domain Separation Tag) values for `_hashToField` are based on https://datatracker.ietf.org/doc/html/rfc9591#section-6.5
+ *      The dst (Domain Separation Tag) values for `_hashToField` are based on
+ *      https://datatracker.ietf.org/doc/html/rfc9591#section-6.5
  */
 library FROST {
     using Secp256k1 for Secp256k1.Point;
@@ -23,9 +24,9 @@ library FROST {
 
     /**
      * @notice Group commitment used in FROST signing.
-     * @param identifier The participant identifier associated with this commitment.
-     * @param d The hiding nonce commitment point.
-     * @param e The binding nonce commitment point.
+     * @custom:param identifier The participant identifier associated with this commitment.
+     * @custom:param d The hiding nonce commitment point.
+     * @custom:param e The binding nonce commitment point.
      */
     struct Commitment {
         Identifier identifier;
@@ -35,8 +36,8 @@ library FROST {
 
     /**
      * @notice A FROST group signature.
-     * @param r The group commitment represented as a point.
-     * @param z The scalar signature component.
+     * @custom:param r The group commitment represented as a point.
+     * @custom:param z The scalar signature component.
      */
     struct Signature {
         Secp256k1.Point r;
@@ -45,9 +46,9 @@ library FROST {
 
     /**
      * @notice A FROST signature share for a single participant.
-     * @param r The participant commitment represented as a point.
-     * @param z The participant scalar share.
-     * @param l The Lagrange coefficient for this participant.
+     * @custom:param r The participant commitment represented as a point.
+     * @custom:param z The participant scalar share.
+     * @custom:param l The Lagrange coefficient for this participant.
      */
     struct SignatureShare {
         Secp256k1.Point r;
@@ -105,7 +106,8 @@ library FROST {
      * @param random The source randomness.
      * @param secret The participant secret key.
      * @return n The derived nonce scalar.
-     * @dev Implements the RFC-9591 `nonce_generate` function (https://datatracker.ietf.org/doc/html/rfc9591#section-4.1).
+     * @dev Implements the RFC-9591 `nonce_generate` function
+     *      (https://datatracker.ietf.org/doc/html/rfc9591#section-4.1).
      */
     function nonce(bytes32 random, uint256 secret) internal view returns (uint256 n) {
         return _h3(abi.encodePacked(random, secret));
@@ -214,8 +216,8 @@ library FROST {
         returns (uint256 c)
     {
         // The official FROST implementation KeyGen `challenge` function.
-        // <https://github.com/ZcashFoundation/frost/blob/3ffc19d8f473d5bc4e07ed41bc884bdb42d6c29f/frost-core/src/keys/dkg.rs#L413-L430>
-        // <https://github.com/ZcashFoundation/frost/blob/3ffc19d8f473d5bc4e07ed41bc884bdb42d6c29f/frost-secp256k1/src/lib.rs#L222-L224>
+        // <https://github.com/ZcashFoundation/frost/blob/3ffc19d/frost-core/src/keys/dkg.rs#L413-L430>
+        // <https://github.com/ZcashFoundation/frost/blob/3ffc19d/frost-secp256k1/src/lib.rs#L222-L224>
 
         (uint8 phiv, bytes32 phix) = phi.serialize();
         (uint8 rv, bytes32 rx) = r.serialize();
@@ -262,64 +264,56 @@ library FROST {
     // ============================================================
 
     /**
-     * @notice h1: Hashes input to a field element for calculating binding factors (rho).
-     * @param input The input bytes, which include group public key, message hash, and commitments hash.
+     * @notice H1: Hashes input to a field element for calculating binding factors (rho).
+     * @param input The input bytes.
      * @return result The field element.
      * @dev Uses a domain separation tag "FROST-secp256k1-SHA256-v1rho" as required by
-     *      RFC 9591, Section 6.5. Domain separation is critical to prevent an attacker
-     *      from reusing a signature or proof from one context in another. The DST is
-     *      packed into a bytes32 with its length (28 / 0x1c) as the final byte,
-     *      following RFC 9380 recommendations for DST formatting.
+     *      RFC 9591, Section 6.5. The DST is packed into a bytes32 with its length (28 / 0x1c)
+     *      as the final byte.
      */
     function _h1(bytes memory input) private view returns (uint256 result) {
         return _hashToField(input, "FROST-secp256k1-SHA256-v1rho\x00\x00\x00\x1c");
     }
 
     /**
-     * @notice h2: Hashes input to a field element for calculating the per-message challenge (c).
+     * @notice H2: Hashes input to a field element for calculating the per-message challenge (c).
      * @param input The input bytes, which include group commitment, group public key, and the message.
      * @return result The field element.
      * @dev Uses a domain separation tag "FROST-secp256k1-SHA256-v1chal" as required by
-     *      RFC 9591, Section 6.5. The DST, short for "challenge", ensures that the
-     *      output of this hash is not confused with outputs from other hash functions
-     *      in the protocol. The length of the DST is 29 (0x1d).
+     *      RFC 9591, Section 6.5. The length of the DST is 29 (0x1d).
      */
     function _h2(bytes memory input) private view returns (uint256 result) {
         return _hashToField(input, "FROST-secp256k1-SHA256-v1chal\x00\x00\x1d");
     }
 
     /**
-     * @notice h3: Hashes input to a field element for generating nonces.
+     * @notice H3: Hashes input to a field element for generating nonces.
      * @param input The input bytes, which include participant-specific randomness and the secret key.
      * @return result The field element.
      * @dev Uses a domain separation tag "FROST-secp256k1-SHA256-v1nonce" as required by
-     *      RFC 9591, Section 6.5. This ensures that the process of generating nonces is
-     *      cryptographically separated from other hashing operations in the protocol.
-     *      The length of the DST is 30 (0x1e).
+     *      RFC 9591, Section 6.5. The length of the DST is 30 (0x1e).
      */
     function _h3(bytes memory input) private view returns (uint256 result) {
         return _hashToField(input, "FROST-secp256k1-SHA256-v1nonce\x00\x1e");
     }
 
     /**
-     * @notice h4: Hashes the message before it is used in the binding factor computation.
+     * @notice H4: Hashes the message before it is used in the binding factor computation.
      * @param input The message bytes.
      * @return result The 32-byte hash.
      * @dev Uses a domain separation tag "FROST-secp256k1-SHA256-v1msg" as required by
-     *      RFC 9591, Section 6.5. This pre-hashes the message to a fixed-size digest
-     *      before it is combined with other elements. The length of the DST is 28 (0x1c).
+     *      RFC 9591, Section 6.5. The length of the DST is 28 (0x1c).
      */
     function _h4(bytes memory input) private view returns (bytes32 result) {
         return _hash(input, "FROST-secp256k1-SHA256-v1msg\x00\x00\x00\x1c");
     }
 
     /**
-     * @notice h5: Hashes the list of nonce commitments for the binding factor computation.
+     * @notice H5: Hashes the list of nonce commitments for the binding factor computation.
      * @param input The encoded commitment list.
      * @return result The 32-byte hash.
      * @dev Uses a domain separation tag "FROST-secp256k1-SHA256-v1com" as required by
-     *      RFC 9591, Section 6.5. 'com' is short for 'commitments'. This hashes the
-     *      entire list of commitments to a fixed-size digest. The length of the DST is 28 (0x1c).
+     *      RFC 9591, Section 6.5. The length of the DST is 28 (0x1c).
      */
     function _h5(bytes memory input) private view returns (bytes32 result) {
         return _hash(input, "FROST-secp256k1-SHA256-v1com\x00\x00\x00\x1c");
@@ -346,12 +340,6 @@ library FROST {
      * @param message The message to hash.
      * @param dst The domain separation tag.
      * @return e The resulting field element.
-     * @dev Implements the RFC-9380 `hash_to_field` function. The parameter `L` is chosen
-     *      to be 48 to achieve a 128-bit security level for the secp256k1 curve.
-     *      `L` is calculated as `ceil((ceil(log2(N)) + k) / 8)`, where `N` is the curve
-     *      order (256 bits) and `k` is the target security level (128 bits).
-     *      Thus, L = ceil((256 + 128) / 8) = 48 bytes.
-     *      See: https://datatracker.ietf.org/doc/html/rfc9380#section-5.1
      */
     function _hashToField(bytes memory message, bytes32 dst) private view returns (uint256 e) {
         // The RFC-9380 `hash_to_field` function with:
@@ -372,7 +360,7 @@ library FROST {
     /**
      * @notice Expands a message using SHA-256 XMD.
      * @param message The message to expand.
-     * @param dst The domain separation tag.
+     * @param dst The domain separation tag. The string is packed into a bytes32 with its length as the final byte.
      * @param len The desired output length in bytes.
      * @return uniform The expanded pseudo-random bytes.
      * @dev Implements the RFC-9380 `expand_message_xmd` function with SHA-256.

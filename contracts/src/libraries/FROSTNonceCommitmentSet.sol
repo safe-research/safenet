@@ -18,7 +18,7 @@ library FROSTNonceCommitmentSet {
 
     /**
      * @notice The main storage struct for tracking nonce commitments.
-     * @param commitments Mapping from participant identifier to their commitments.
+     * @custom:param commitments Mapping from participant identifier to their commitments.
      */
     struct T {
         mapping(FROST.Identifier => Commitments) commitments;
@@ -26,8 +26,8 @@ library FROSTNonceCommitmentSet {
 
     /**
      * @notice Commitments storage for a single participant.
-     * @param next The next chunk index to use.
-     * @param chunks Mapping from chunk index to commitment root.
+     * @custom:param next The next chunk index to use.
+     * @custom:param chunks Mapping from chunk index to commitment root.
      */
     struct Commitments {
         uint64 next;
