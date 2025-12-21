@@ -4,15 +4,8 @@ import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { ErrorItem, FormItem, SubmitItem } from "@/components/Forms";
 import { useSettings } from "@/hooks/useSettings";
-import { checkedAddressSchema } from "@/lib/schemas";
+import { checkedAddressSchema, emptyToUndefined } from "@/lib/schemas";
 import { type Settings, updateSettings } from "@/lib/settings";
-
-const emptyToUndefined = <T,>(pipe: z.ZodType<T, string>) =>
-	z
-		.string()
-		.trim()
-		.transform((v) => (v === "" ? undefined : v))
-		.pipe(pipe.optional());
 
 const settingsFormSchema = z.object({
 	consensus: emptyToUndefined(checkedAddressSchema),
@@ -23,7 +16,7 @@ const settingsFormSchema = z.object({
 
 type SettingsFormInput = z.input<typeof settingsFormSchema>;
 
-function SettingsForm({ onSubmitted }: { onSubmitted?: () => void }) {
+function ConsensusSettingsForm({ onSubmitted }: { onSubmitted?: () => void }) {
 	const [settings] = useSettings();
 	const [isSubmitting, setIsSubmitting] = useState(false);
 	const [error, setError] = useState<string>();
@@ -75,4 +68,4 @@ function SettingsForm({ onSubmitted }: { onSubmitted?: () => void }) {
 	);
 }
 
-export { SettingsForm };
+export { ConsensusSettingsForm };

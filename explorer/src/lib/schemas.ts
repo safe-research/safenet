@@ -18,3 +18,10 @@ export const hexDataSchema = z
 	.transform((val) => val as Hex);
 
 export const bytes32Schema = hexDataSchema.refine((bytes) => size(bytes) === 32, "Value is not 32 bytes long");
+
+export const emptyToUndefined = <T>(pipe: z.ZodType<T, string>) =>
+	z
+		.string()
+		.trim()
+		.transform((v) => (v === "" ? undefined : v))
+		.pipe(pipe.optional());
