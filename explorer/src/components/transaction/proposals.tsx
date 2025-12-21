@@ -53,13 +53,20 @@ export const TransactionProposalDataDetails = ({ proposal }: { proposal: Transac
 	);
 };
 
-export const TransactionProposalList = ({ proposals }: { proposals: TransactionProposal[] }) => {
-	console.log({ proposals });
+export const TransactionProposalList = ({
+	proposals,
+	onShowMore,
+	itemsToDisplay,
+}: {
+	proposals: TransactionProposal[];
+	onShowMore?: () => void;
+	itemsToDisplay: number;
+}) => {
 	return (
 		<>
 			<div className="w-full p-2 text-xs text-right">{proposals.length} recent proposals</div>
 			<div className={"space-y-4"}>
-				{proposals.map((proposal) => (
+				{proposals.slice(0, itemsToDisplay).map((proposal) => (
 					<div key={proposal.message}>
 						<Link to="/proposal" search={{ id: proposal.message }}>
 							<Box className={"hover:bg-gray-100"}>
@@ -68,6 +75,11 @@ export const TransactionProposalList = ({ proposals }: { proposals: TransactionP
 						</Link>
 					</div>
 				))}
+				{onShowMore && proposals.length > itemsToDisplay && (
+					<p className="w-full p-2 text-center cursor-pointer" onClick={onShowMore}>
+						Show More
+					</p>
+				)}
 			</div>
 		</>
 	);

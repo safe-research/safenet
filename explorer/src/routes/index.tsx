@@ -1,4 +1,5 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { z } from "zod";
 import { TransactionProposalList } from "@/components/transaction/proposals";
 import { useRecentTransactionProposals } from "@/hooks/useRecentTransactions";
 
@@ -26,9 +27,21 @@ export function App() {
 	return <AppInner />;
 }
 
+const PAGE_SIZE = 10;
+
 function AppInner() {
 	const recentProposals = useRecentTransactionProposals();
-	console.log(recentProposals.data);
+	const { limit } = Route.useSearch();
+	const navigate = useNavigate({ from: Route.fullPath });
+
+	const handleShowMore = () => {
+		// 2. Update the URL. This triggers a re-render automatically.
+		navigate({
+			search: (prev) => ({ ...prev, limit: prev.limit + PAGE_SIZE }),
+			resetScroll: false,
+			replace: true,
+		});
+	};
 	return (
 		<div className="bg-gray-50 h-full max-h-full">
 			<div className="max-w-4xl mx-auto px-4 py-12 sm:px-6 lg:px-8">
@@ -38,7 +51,11 @@ function AppInner() {
 				</div>
 
 				{recentProposals.data.length > 0 ? (
-					<TransactionProposalList proposals={recentProposals.data} />
+					<TransactionProposalList
+						proposals={recentProposals.data}
+						itemsToDisplay={limit}
+						onShowMore={handleShowMore}
+					/>
 				) : (
 					<div className="bg-white rounded-lg shadow-md p-8 border border-gray-200 max-w-2xl mx-auto">
 						<SafeIllustration />
@@ -49,6 +66,11 @@ function AppInner() {
 	);
 }
 
+const entriesSearchSchema = z.object({
+	limit: z.number().catch(PAGE_SIZE),
+});
+
 export const Route = createFileRoute("/")({
+	validateSearch: (search) => entriesSearchSchema.parse(search),
 	component: App,
 });
