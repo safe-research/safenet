@@ -1,4 +1,4 @@
-import { ArrowRightIcon } from "@heroicons/react/24/solid";
+import { MagnifyingGlassIcon } from "@heroicons/react/24/solid";
 import { useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
 import { SAFE_SERVICE_CHAINS } from "@/lib/chains";
@@ -64,7 +64,7 @@ export function SearchBar({
 						if (e.key === "Enter") handleSelected();
 					}}
 				/>
-				<ArrowRightIcon
+				<MagnifyingGlassIcon
 					onClick={() => handleSelected()}
 					className="size-8 p-1 hover:opacity-40 transition-opacity duration-300 cursor-pointer"
 				/>

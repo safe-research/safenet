@@ -3,12 +3,12 @@ import { useMemo } from "react";
 import type { Hex } from "viem";
 import { usePorposalsForTransaction } from "@/hooks/useProposalsForTransaction";
 import { useSettings } from "@/hooks/useSettings";
-import { shortAddress } from "@/lib/address";
 import { SAFE_SERVICE_CHAINS } from "@/lib/chains";
 import type { MetaTransaction } from "@/lib/consensus";
 import { dataString, opString, valueString } from "@/lib/safe/formatting";
 import { metaTxHash } from "@/lib/safe/hashing";
 import type { SafeTransaction } from "@/lib/safe/service";
+import { InlineAddress } from "../common/InlineAddress";
 import { Box, BoxTitle } from "../Groups";
 import { TransactionProposalDetails } from "./Proposals";
 
@@ -30,11 +30,11 @@ export const SafeTxOverview = ({
 				{timestamp !== undefined && <p className={"text-xs"}>{timestamp}</p>}
 			</div>
 			<p>
-				{shortAddress(transaction.account)} on {chainName}
+				<InlineAddress chainId={transaction.chainId} address={transaction.account} /> on {chainName}
 			</p>
 			<p>
-				{opString(transaction.operation)} {shortAddress(transaction.to)} with {valueString(transaction.value)} and{" "}
-				{dataString(transaction.data)}
+				{opString(transaction.operation)} <InlineAddress chainId={transaction.chainId} address={transaction.to} /> with{" "}
+				{valueString(transaction.value)} and {dataString(transaction.data)}
 			</p>
 		</>
 	);
