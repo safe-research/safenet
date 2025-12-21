@@ -18,6 +18,7 @@ const settingsFormSchema = z.object({
 	consensus: emptyToUndefined(checkedAddressSchema),
 	decoder: emptyToUndefined(z.url()),
 	rpc: emptyToUndefined(z.url()),
+	relayer: emptyToUndefined(z.url()),
 });
 
 type SettingsFormInput = z.input<typeof settingsFormSchema>;
@@ -57,6 +58,7 @@ function SettingsForm({ onSubmitted }: { onSubmitted?: () => void }) {
 		<form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
 			<FormItem id="rpc" register={register} error={errors.rpc} label="RPC Url" />
 			<FormItem id="decoder" register={register} error={errors.decoder} label="Decoder Url" />
+			<FormItem id="relayer" register={register} error={errors.relayer} label="Relayer Url" />
 
 			<FormItem
 				id="consensus"

@@ -1,8 +1,9 @@
 import { Link } from "@tanstack/react-router";
 import { useMemo } from "react";
 import type { Hex } from "viem";
-import { usePorposalsForTransaction } from "@/hooks/useProposalsForTransaction";
+import { useProposalsForTransaction } from "@/hooks/useProposalsForTransaction";
 import { useSettings } from "@/hooks/useSettings";
+import { useSubmitProposal } from "@/hooks/useSubmitProposal";
 import { SAFE_SERVICE_CHAINS } from "@/lib/chains";
 import type { MetaTransaction } from "@/lib/consensus";
 import { dataString, opString, valueString } from "@/lib/safe/formatting";
@@ -16,26 +17,31 @@ export const SafeTxOverview = ({
 	title,
 	transaction,
 	timestamp,
+	disableLinks,
 }: {
 	title: string;
 	transaction: MetaTransaction;
 	timestamp?: string;
+	disableLinks?: boolean;
 }) => {
 	const chainIdString = `${transaction.chainId}`;
-	const chainName = SAFE_SERVICE_CHAINS[chainIdString]?.name ?? chainIdString;
+	const chainInfo = SAFE_SERVICE_CHAINS[chainIdString];
+	const chainName = chainInfo?.name ?? chainIdString;
 	return (
 		<>
 			<div className={"flex justify-between"}>
 				<p className={"text-xs"}>{title}</p>
 				{timestamp !== undefined && <p className={"text-xs"}>{timestamp}</p>}
 			</div>
-			<p>
-				<InlineAddress chainId={transaction.chainId} address={transaction.account} /> on {chainName}
-			</p>
-			<p>
-				{opString(transaction.operation)} <InlineAddress chainId={transaction.chainId} address={transaction.to} /> with{" "}
-				{valueString(transaction.value)} and {dataString(transaction.data)}
-			</p>
+			<div>
+				<InlineAddress chainId={transaction.chainId} address={transaction.account} disableLinks={disableLinks} /> on{" "}
+				{chainName}
+			</div>
+			<div>
+				{opString(transaction.operation)}{" "}
+				<InlineAddress chainId={transaction.chainId} address={transaction.to} disableLinks={disableLinks} /> with{" "}
+				{valueString(transaction.value, chainInfo?.nativeCurrency)} and {dataString(transaction.data)}
+			</div>
 		</>
 	);
 };
@@ -55,22 +61,44 @@ export const TransactionDataDetails = ({ data }: { data: Hex }) => {
 	);
 };
 
+export const NoTransactionProposalScreen = ({ transaction }: { transaction: SafeTransaction }) => {
+	const { enabled, mutation } = useSubmitProposal();
+	return (
+		<Box className="flex w-full flex-col justify-center items-center space-y-4">
+			<div>No proposals for this transaction!</div>
+			{enabled && !mutation.isSuccess && (
+				<>
+					<button
+						type="button"
+						className="px-4 py-2 border rounded-full bg-surface-1 hover:bg-surface-hover cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed "
+						onClick={() => mutation.mutate(transaction)}
+						disabled={mutation.isPending}
+					>
+						{mutation.isPending ? "Submitting" : "Submit Proposal"}
+					</button>
+					{mutation.error && <p className="text-error">{mutation.error.message}</p>}
+				</>
+			)}
+		</Box>
+	);
+};
+
 export const TransactionProposals = ({ transaction }: { transaction: SafeTransaction }) => {
 	const proposalTxHash = useMemo(() => {
 		return metaTxHash(transaction);
 	}, [transaction]);
-	const proposals = usePorposalsForTransaction(proposalTxHash);
+	const proposals = useProposalsForTransaction(proposalTxHash);
 	return (
 		<div className={"space-y-4"}>
 			<BoxTitle>Transaction Proposals</BoxTitle>
 			{proposals.isLoading && <Box>Loading</Box>}
-			{!proposals.isLoading && proposals.data.length === 0 && <Box>No proposals for this transaction!</Box>}
+			{!proposals.isLoading && proposals.data.length === 0 && <NoTransactionProposalScreen transaction={transaction} />}
 			{!proposals.isLoading &&
 				proposals.data.map((proposal) => (
 					<div key={proposal.message}>
 						<Link to="/proposal" search={{ id: proposal.message }}>
 							<Box className={"hover:bg-surface-hover"}>
-								<TransactionProposalDetails proposal={proposal} />
+								<TransactionProposalDetails proposal={proposal} disableLinks />
 							</Box>
 						</Link>
 					</div>

@@ -1,6 +1,8 @@
 import { type Address, getAbiItem, type Hex, numberToHex, type PublicClient, parseAbi, parseEventLogs } from "viem";
 import z from "zod";
+import type { SafeTransaction } from "./safe/service";
 import { bigIntSchema, bytes32Schema, checkedAddressSchema, hexDataSchema } from "./schemas";
+import { jsonReplacer } from "./utils";
 
 const consensusAbi = parseAbi([
 	"function getActiveEpoch() external view returns (uint64 epoch, bytes32 group)",
@@ -130,7 +132,6 @@ export const loadTransactionProposalDetails = async (
 	consensus: Address,
 	message: Hex,
 ): Promise<TransactionDetails | null> => {
-	console.log("loadRecentTransactionProposals");
 	const blockNo = await provider.getBlockNumber();
 	const logs = await provider.request({
 		method: "eth_getLogs",
@@ -160,4 +161,14 @@ export const loadTransactionProposalDetails = async (
 				attestedAt: attestationEvent?.blockNumber !== undefined ? BigInt(attestationEvent.blockNumber) : null,
 			}
 		: null;
+};
+
+export const postTransactionProposal = async (url: string, transaction: SafeTransaction) => {
+	const response = await fetch(url, {
+		method: "POST",
+		headers: { "Content-Type": "application/json" },
+		body: JSON.stringify(transaction, jsonReplacer),
+	});
+
+	if (!response.ok) throw new Error("Network response was not ok");
 };

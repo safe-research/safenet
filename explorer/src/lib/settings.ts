@@ -15,6 +15,7 @@ const settingsSchema = z.object({
 	rpc: z.url().default(DEFAULT_SETTINGS.rpc),
 	decoder: z.url().default(DEFAULT_SETTINGS.decoder),
 	consensus: checkedAddressSchema.default(DEFAULT_SETTINGS.consensus),
+	relayer: z.url().optional(),
 });
 
 export type Settings = z.output<typeof settingsSchema>;

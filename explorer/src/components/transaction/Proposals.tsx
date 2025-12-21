@@ -8,16 +8,23 @@ import { SafeTxOverview } from "./SafeTxOverview";
 export const TransactionProposalDetails = ({
 	proposal,
 	hideProposedAt,
+	disableLinks,
 }: {
 	proposal: TransactionProposal;
 	hideProposedAt?: boolean;
+	disableLinks?: boolean;
 }) => {
 	const safeTxHash = useMemo(() => {
 		return calculateSafeTxHash(proposal);
 	}, [proposal]);
 	const timestamp = hideProposedAt ? undefined : proposal.proposedAt.toString();
 	return (
-		<SafeTxOverview transaction={proposal.transaction} title={`Safe Tx Hash: ${safeTxHash}`} timestamp={timestamp} />
+		<SafeTxOverview
+			transaction={proposal.transaction}
+			title={`Safe Tx Hash: ${safeTxHash}`}
+			timestamp={timestamp}
+			disableLinks={disableLinks}
+		/>
 	);
 };
 
@@ -38,7 +45,7 @@ export const TransactionProposalList = ({
 					<div key={proposal.message}>
 						<Link to="/proposal" search={{ id: proposal.message }}>
 							<Box className={"hover:bg-surface-hover"}>
-								<TransactionProposalDetails proposal={proposal} />
+								<TransactionProposalDetails proposal={proposal} disableLinks />
 							</Box>
 						</Link>
 					</div>
