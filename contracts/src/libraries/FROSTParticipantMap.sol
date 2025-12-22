@@ -33,11 +33,16 @@ library FROSTParticipantMap {
     // ============================================================
 
     /**
-     * @notice State tracking for a single participant.
-     * @param confirmed Whether the participant has confirmed key generation.
-     * @param complaints The number of unresolved complaints submitted by this participant.
-     * @param accusations The number of accusations against this participant.
-     * @param statuses Mapping of complaint statuses against other participants.
+     * @notice State tracking for a single participant during DKG.
+     * @custom:param confirmed Whether the participant has successfully confirmed their participation
+     *               in the key generation, locking them out of future complaints.
+     * @custom:param complaints The number of unresolved complaints this participant has filed
+     *               against others. A participant cannot finalize DKG with a non-zero count.
+     * @custom:param accusations The number of unresolved accusations filed against this participant by others.
+     * @custom:param statuses Mapping to track the status of complaints made by this participant
+     *               against specific other participants.
+     * @dev This struct tracks a participant's progress and status within the DKG
+     *      ceremony, particularly for the complaint and resolution process.
      */
     struct ParticipantState {
         bool confirmed;
@@ -48,10 +53,10 @@ library FROSTParticipantMap {
 
     /**
      * @notice The main storage struct for tracking participants.
-     * @param root The Merkle root for participant verification.
-     * @param identifiers Mapping from participant address to their identifier.
-     * @param keys Mapping from identifier to public verification share.
-     * @param states Mapping from identifier to participant state.
+     * @custom:param root The Merkle root for participant verification.
+     * @custom:param identifiers Mapping from participant address to their identifier.
+     * @custom:param keys Mapping from identifier to public verification share.
+     * @custom:param states Mapping from identifier to participant state.
      */
     struct T {
         bytes32 root;
@@ -177,11 +182,16 @@ library FROSTParticipantMap {
     }
 
     /**
-     * @notice Submits a complaint from a plaintiff against an accused.
+     * @notice Submits a complaint from a plaintiff against an accused participant.
      * @param self The storage struct.
      * @param plaintiff The plaintiff's FROST identifier.
      * @param accused The accused's FROST identifier.
-     * @return totalAccusations The total number of accusations against the accused.
+     * @return totalAccusations The total number of unresolved accusations against the accused.
+     * @dev This function is a key part of the DKG's security. If a participant
+     *      detects that another participant is misbehaving (e.g., by providing an
+     *      invalid secret share), they can file a public complaint on-chain.
+     *      A participant cannot file the same complaint twice or complain after
+     *      they have already confirmed their own DKG completion.
      */
     function complain(T storage self, FROST.Identifier plaintiff, FROST.Identifier accused)
         internal
@@ -197,10 +207,14 @@ library FROSTParticipantMap {
     }
 
     /**
-     * @notice Responds to a complaint from a plaintiff against an accused.
+     * @notice Responds to a complaint from a plaintiff, resolving it.
      * @param self The storage struct.
      * @param plaintiff The plaintiff's FROST identifier.
      * @param accused The accused's FROST identifier.
+     * @dev When accused, a participant can resolve the complaint by taking an
+     *      action, which is signaled by calling this function. This involves revealing
+     *      the secret share that was sent to the plaintiff. This function decrements the
+     *      complaint/accusation counters, marking the specific dispute as resolved.
      */
     function respond(T storage self, FROST.Identifier plaintiff, FROST.Identifier accused) internal {
         require(self.states[plaintiff].statuses[accused] == ComplaintStatus.SUBMITTED, ComplaintNotSubmitted());
@@ -210,10 +224,12 @@ library FROSTParticipantMap {
     }
 
     /**
-     * @notice Confirms the Key Gen process for a participant.
+     * @notice Confirms the Key Gen process for a participant, marking their successful completion.
      * @param self The storage struct.
      * @param participant The participant's FROST identifier.
-     * @dev After this, no more complaints can be submitted by this participant.
+     * @dev A participant can only confirm if they have no outstanding complaints filed
+     *      against others. This ensures all disputes are resolved before the group is
+     *      finalized. Once confirmed, a participant can no longer file new complaints.
      */
     function confirm(T storage self, FROST.Identifier participant) internal {
         require(self.states[participant].complaints == 0, UnrespondedComplaintExists());

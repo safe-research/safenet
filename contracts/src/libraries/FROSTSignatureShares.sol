@@ -15,17 +15,23 @@ library FROSTSignatureShares {
     // ============================================================
 
     /**
-     * @notice The main storage struct for tracking signature shares.
-     * @param aggregates Mapping from commitment root to aggregate data.
+     * @notice The main storage struct for tracking aggregated signature shares.
+     * @custom:param aggregates Mapping from the Merkle root of a signing participant set to their aggregate signature
+     *               data.
+     * @dev This library's state is organized by the Merkle root of the signing participant set.
+     *      Each `root` corresponds to a unique signing ceremony instance.
      */
     struct T {
         mapping(bytes32 root => Aggregate) aggregates;
     }
 
     /**
-     * @notice Aggregated signature data for a commitment root.
-     * @param participants Mapping from participant identifier to their leaf hash.
-     * @param signature The accumulated group signature.
+     * @notice Aggregated signature data for a specific group of signing participants.
+     * @custom:param participants A mapping to track which participants have already submitted their
+     *               shares for this ceremony, preventing replay or duplicate submissions.
+     *               The value is the participant's leaf hash in the Merkle tree.
+     * @custom:param signature The accumulated group signature, which is built up as each participant
+     *               submits their share.
      */
     struct Aggregate {
         mapping(FROST.Identifier => bytes32) participants;
@@ -56,14 +62,20 @@ library FROSTSignatureShares {
     // ============================================================
 
     /**
-     * @notice Registers a commitment share for a participant.
+     * @notice Registers and aggregates a participant's signature share.
      * @param self The storage struct.
      * @param identifier The participant's FROST identifier.
-     * @param share The participant's signature share.
-     * @param r The group commitment point.
-     * @param root The Merkle root for the commitment.
-     * @param proof The Merkle proof for inclusion.
-     * @return signature The accumulated group signature after registration.
+     * @param share The participant's signature share to be aggregated.
+     * @param r The group commitment for this signing ceremony.
+     * @param root The Merkle root of the set of signing set for this signing ceremony.
+     * @param proof The Merkle proof demonstrating the participant's inclusion in the signing set.
+     * @return signature The updated, accumulated group signature after incorporating the new share.
+     * @dev This function performs two key actions:
+     *      1. Authorization: It verifies using a Merkle `proof` that the `identifier` is part of
+     *         the set of signers defined by the `root`.
+     *      2. Aggregation: It adds the participant's share to the collective group signature.
+     *         The final group signature is `(R, z)` where
+     *         `R = ∑ R_i` and `z = ∑ z_i`.
      */
     function register(
         T storage self,

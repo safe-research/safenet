@@ -3,6 +3,7 @@ out = "build/out"
 cache_path = "build/cache"
 broadcast = "build/broadcast"
 
+solc_version = "0.8.30"
 remappings = [
   "@/=src/",
   "@test/=test/",
