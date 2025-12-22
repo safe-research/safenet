@@ -114,7 +114,13 @@ describe("integration", () => {
 			const sc = new SigningClient(storage);
 			const kc = new KeyGenClient(storage, logger);
 			const verificationHandlers = new Map<string, PacketHandler<Typed>>();
-			verificationHandlers.set("safe_transaction_packet", new SafeTransactionHandler());
+			const failCheck = {
+				check: () => {
+					throw Error("Not allowed!");
+				},
+			};
+			const passThroughCheck = { check: () => {} };
+			verificationHandlers.set("safe_transaction_packet", new SafeTransactionHandler(failCheck, passThroughCheck));
 			verificationHandlers.set("epoch_rollover_packet", new EpochRolloverHandler());
 			const verificationEngine = new VerificationEngine(verificationHandlers);
 			const publicClient = createPublicClient({

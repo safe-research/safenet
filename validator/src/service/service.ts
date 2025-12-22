@@ -65,7 +65,13 @@ export class ValidatorService {
 		const signingClient = new SigningClient(storage);
 		const keyGenClient = new KeyGenClient(storage, this.#logger);
 		const verificationHandlers = new Map<string, PacketHandler<Typed>>();
-		verificationHandlers.set("safe_transaction_packet", new SafeTransactionHandler());
+		const failCheck = {
+			check: () => {
+				throw Error("Not allowed!");
+			},
+		};
+		const passThroughCheck = { check: () => {} };
+		verificationHandlers.set("safe_transaction_packet", new SafeTransactionHandler(failCheck, passThroughCheck));
 		verificationHandlers.set("epoch_rollover_packet", new EpochRolloverHandler());
 		const verificationEngine = new VerificationEngine(verificationHandlers);
 		const actionStorage =
