@@ -41,7 +41,7 @@ const DEFAULT_API_SETTINGS = {
 
 const safeApiSettingsSchema = z.object({
 	apiKey: z.string().optional(),
-	url: z.url().default(DEFAULT_SETTINGS.decoder),
+	url: z.url().default(DEFAULT_API_SETTINGS.url),
 });
 
 export type SafeApiSettings = z.output<typeof safeApiSettingsSchema>;

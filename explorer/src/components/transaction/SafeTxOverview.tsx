@@ -52,7 +52,7 @@ export const TransactionDataDetails = ({ data }: { data: Hex }) => {
 		<>
 			<div className={"flex justify-between"}>
 				<p className={"text-xs"}>Data ({dataString(data)})</p>
-				<a className={"text-xs"} href={`${settings.decoder}${data}`} target="_blank">
+				<a className={"text-xs"} href={`${settings.decoder}${data}`} target="_blank" rel="noopener noreferrer">
 					decode
 				</a>
 			</div>

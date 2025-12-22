@@ -15,7 +15,6 @@ type SettingsFormInput = z.input<typeof settingsFormSchema>;
 
 function UiSettingsForm({ onSubmitted }: { onSubmitted?: () => void }) {
 	const [settings] = useUiSettings();
-	console.log({ settings });
 	const [isSubmitting, setIsSubmitting] = useState(false);
 	const [error, setError] = useState<string>();
 	const {
@@ -30,15 +29,13 @@ function UiSettingsForm({ onSubmitted }: { onSubmitted?: () => void }) {
 
 	const onSubmit = async (data: Partial<UiSettings>) => {
 		setError(undefined);
-		console.log({ data });
 		try {
 			setIsSubmitting(true);
 			updateUiSettings(data);
 			reset(data);
 			onSubmitted?.();
-			console.log("Updated Settings!");
 		} catch (err: unknown) {
-			const message = err instanceof Error ? err.message : "An error occured";
+			const message = err instanceof Error ? err.message : "An error occurred";
 			setError(message);
 		} finally {
 			setIsSubmitting(false);

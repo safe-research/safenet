@@ -51,9 +51,9 @@ export const TransactionProposalList = ({
 					</div>
 				))}
 				{onShowMore && proposals.length > itemsToDisplay && (
-					<p className="w-full p-2 text-center cursor-pointer" onClick={onShowMore}>
+					<button type="button" className="w-full p-2 text-center cursor-pointer" onClick={onShowMore}>
 						Show More
-					</p>
+					</button>
 				)}
 			</div>
 		</>

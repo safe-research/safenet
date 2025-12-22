@@ -28,7 +28,7 @@ function FormItem<T extends FieldValues>({
 				{...register(id)}
 				placeholder={placeholder}
 				disabled={disabled}
-				className="mt-1 block w-full border border-surface.outline bg-surface-1 text-title rounded-md px-3 py-2"
+				className="mt-1 block w-full border border-surface-outline bg-surface-1 text-title rounded-md px-3 py-2"
 			/>
 			{error && <p className="mt-1 text-sm text-error">{error.message}</p>}
 		</div>

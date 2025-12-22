@@ -13,10 +13,10 @@ const validateSearch = z.object({
 
 export const Route = createFileRoute("/safeTx")({
 	validateSearch,
-	component: Proposal,
+	component: SafeTransaction,
 });
 
-export function Proposal() {
+export function SafeTransaction() {
 	const { chainId, safeTxHash } = Route.useSearch();
 	const details = useSafeTransactionDetails(chainId, safeTxHash);
 	return (

@@ -38,9 +38,8 @@ function ConsensusSettingsForm({ onSubmitted }: { onSubmitted?: () => void }) {
 			updateSettings(data);
 			reset(data);
 			onSubmitted?.();
-			console.log("Updated Settings!");
 		} catch (err: unknown) {
-			const message = err instanceof Error ? err.message : "An error occured";
+			const message = err instanceof Error ? err.message : "An error occurred";
 			setError(message);
 		} finally {
 			setIsSubmitting(false);

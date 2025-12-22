@@ -18,7 +18,7 @@ export function InlineAddress({
 	}
 	const explorerLink = `${chainInfo.blockExplorers.default.url}/address/${address}`;
 	return (
-		<a href={explorerLink} target="_blank" className="font-mono">
+		<a href={explorerLink} target="_blank" rel="noopener noreferrer" className="font-mono">
 			{formattedAddress}
 		</a>
 	);

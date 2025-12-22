@@ -143,7 +143,6 @@ export const loadTransactionProposalDetails = async (
 			},
 		],
 	});
-	console.log({ logs });
 	const events = parseEventLogs({
 		logs,
 		abi: consensusAbi,
