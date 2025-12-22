@@ -320,12 +320,12 @@ library FROST {
     }
 
     /**
-     * @notice h_dkg: Hashes input to a field element for key generation challenges.
+     * @notice HDKG: Hashes input to a field element for key generation challenges.
      * @param input The input bytes, which include identifier, public key share, and commitment point.
      * @return result The field element.
-     * @dev Uses a domain separation tag "FROST-secp256k1-SHA256-v1dkg" inspired by the
-     *      FROST specification for Distributed Key Generation (DKG). This ensures the
-     *      challenge is unique to the DKG context. The length of the DST is 28 (0x1c).
+     * @dev Uses a domain separation tag "FROST-secp256k1-SHA256-v1dkg" inspired by the Zcash Foundation reference
+     *      implementation (https://github.com/ZcashFoundation/frost/blob/main/frost-secp256k1/src/lib.rs#L221-L224).
+     *      This ensures the challenge is unique to the DKG context. The length of the DST is 28 (0x1c).
      */
     function _hdkg(bytes memory input) private view returns (uint256 result) {
         return _hashToField(input, "FROST-secp256k1-SHA256-v1dkg\x00\x00\x00\x1c");
