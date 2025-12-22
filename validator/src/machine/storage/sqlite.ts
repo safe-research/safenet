@@ -1,4 +1,4 @@
-import Sqlite3, { type Database } from "better-sqlite3";
+import type { Database } from "better-sqlite3";
 import type { ProtocolAction } from "../../consensus/protocol/types.js";
 import type { SignatureId } from "../../frost/types.js";
 import { jsonReplacer } from "../../utils/json.js";
@@ -95,39 +95,38 @@ function writeRolloverState(db: Database, state: RolloverState): void {
 export class SqliteStateStorage extends InMemoryStateStorage {
 	#db: Database;
 
-	constructor(path: string) {
-		const db = new Sqlite3(path);
-		db.exec(`
-            CREATE TABLE IF NOT EXISTS consensus_state (
-                -- Enforce a single row for the global consensus data
-                id INTEGER PRIMARY KEY CHECK (id = 1), 
-                
-                -- Stores the JSON serialized representation of MutableConsensusState
-                stateJson TEXT NOT NULL
-            );
-            CREATE TABLE IF NOT EXISTS rollover_state (
-                -- Enforce a single row for the active rollover process
-                id INTEGER PRIMARY KEY CHECK (id = 1),
-                
-                -- Stores the JSON serialized representation of RolloverState
-                stateJson TEXT NOT NULL
-            );
-            CREATE TABLE IF NOT EXISTS signing_states (
-                -- The SignatureId is the unique key for each signing session
-                signatureId TEXT PRIMARY KEY NOT NULL, 
-                
-                -- Stores the JSON serialized representation of a single SigningState object
-                stateJson TEXT NOT NULL
-            );
-        `);
+	constructor(database: Database) {
+		database.exec(`
+			CREATE TABLE IF NOT EXISTS consensus_state (
+				-- Enforce a single row for the global consensus data
+				id INTEGER PRIMARY KEY CHECK (id = 1), 
+
+				-- Stores the JSON serialized representation of MutableConsensusState
+				stateJson TEXT NOT NULL
+			);
+			CREATE TABLE IF NOT EXISTS rollover_state (
+				-- Enforce a single row for the active rollover process
+				id INTEGER PRIMARY KEY CHECK (id = 1),
+
+				-- Stores the JSON serialized representation of RolloverState
+				stateJson TEXT NOT NULL
+			);
+			CREATE TABLE IF NOT EXISTS signing_states (
+				-- The SignatureId is the unique key for each signing session
+				signatureId TEXT PRIMARY KEY NOT NULL, 
+
+				-- Stores the JSON serialized representation of a single SigningState object
+				stateJson TEXT NOT NULL
+			);
+		`);
 
 		// Load the database state and initialize the InMemoryStateStorage with it
-		const consensus = loadConsensusState(db);
-		const rollover = loadRolloverState(db);
-		const signing = loadSigningStates(db);
+		const consensus = loadConsensusState(database);
+		const rollover = loadRolloverState(database);
+		const signing = loadSigningStates(database);
 		super(consensus, { rollover, signing });
 
-		this.#db = db;
+		this.#db = database;
 	}
 
 	applyDiff(diff: StateDiff): ProtocolAction[] {

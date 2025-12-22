@@ -1,4 +1,4 @@
-import Sqlite3, { type Database } from "better-sqlite3";
+import type { Database } from "better-sqlite3";
 import { type Address, concat, type Hex } from "viem";
 import { z } from "zod";
 import { pointFromBytes, scalarFromBytes, scalarToBytes } from "../../frost/math.js";
@@ -73,9 +73,11 @@ export class SqliteClientStorage implements GroupInfoStorage, KeyGenInfoStorage,
 	#account: Address;
 	#db: Database;
 
-	constructor(account: Address, path: string) {
-		const db = new Sqlite3(path);
-		db.exec(`
+	constructor(account: Address, database: Database) {
+		this.#account = account;
+		this.#db = database;
+
+		this.#db.exec(`
 			CREATE TABLE IF NOT EXISTS groups(
 				id TEXT NOT NULL,
 				threshold INTEGER NOT NULL,
@@ -119,7 +121,7 @@ export class SqliteClientStorage implements GroupInfoStorage, KeyGenInfoStorage,
 				root TEXT NOT NULL,
 				offset INTEGER NOT NULL,
 				hiding BLOB,
-		        hiding_commitment BLOB NOT NULL,
+				hiding_commitment BLOB NOT NULL,
 				binding BLOB,
 				binding_commitment BLOB NOT NULL,
 				PRIMARY KEY(leaf),
@@ -144,9 +146,6 @@ export class SqliteClientStorage implements GroupInfoStorage, KeyGenInfoStorage,
 				FOREIGN KEY(signature_id) REFERENCES signatures(id) ON DELETE CASCADE
 			);
 		`);
-
-		this.#account = account;
-		this.#db = db;
 
 		// TODO: We can cache all our prepared SQL statements for performance
 		// in the future. Additionally, there are a few indexes that we can add

@@ -1,3 +1,4 @@
+import Sqlite3 from "better-sqlite3";
 import { describe, expect, it } from "vitest";
 import { toPoint } from "../../frost/math.js";
 import { SqliteActionQueue } from "./sqlite.js";
@@ -131,7 +132,7 @@ const actions: ActionWithTimeout[] = [
 
 describe("SqliteActionQueue", () => {
 	it("should store all actions and return in correct order", () => {
-		const storage = new SqliteActionQueue(":memory:");
+		const storage = new SqliteActionQueue(new Sqlite3(":memory:"));
 
 		expect(storage.peek()).toBeUndefined();
 		for (const action of actions) {

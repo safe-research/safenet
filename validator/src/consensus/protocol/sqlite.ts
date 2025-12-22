@@ -1,3 +1,4 @@
+import type { Database } from "better-sqlite3";
 import { z } from "zod";
 import { toPoint } from "../../frost/math.js";
 import type { GroupId, ParticipantId, SignatureId } from "../../frost/types.js";
@@ -148,7 +149,7 @@ const actionWithTimeoutSchema = z.intersection(
 );
 
 export class SqliteActionQueue extends SqliteQueue<ActionWithTimeout> {
-	constructor(path: string) {
-		super(actionWithTimeoutSchema, path, "actions");
+	constructor(database: Database) {
+		super(actionWithTimeoutSchema, database, "actions");
 	}
 }

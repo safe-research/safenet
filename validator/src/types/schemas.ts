@@ -3,10 +3,17 @@ import { z } from "zod";
 import { supportedChains } from "./chains.js";
 
 export const logLevelSchema = z.enum(["error", "warn", "info", "debug", "silent"]);
-export const portSchema = z.preprocess(
-	(val) => (typeof val === "string" ? Number.parseInt(val) : val),
-	z.int().gte(0).lte(65535),
-);
+export const portSchema = z.preprocess((val) => {
+	if (val === "") {
+		return undefined;
+	}
+	if (typeof val === "string") {
+		return Number.parseInt(val);
+	}
+	return val;
+}, z.int().gte(0).lte(65535).optional());
+
+export const fileNameSchema = z.preprocess((val) => (val === "" ? undefined : val), z.string().optional());
 
 export const checkedAddressSchema = z
 	.string()
@@ -56,7 +63,8 @@ export const epochLengthSchema = z.preprocess((val) => {
 
 export const validatorConfigSchema = z.object({
 	LOG_LEVEL: logLevelSchema.optional(),
-	METRICS_PORT: portSchema.optional(),
+	METRICS_PORT: portSchema,
+	STORAGE_FILE: fileNameSchema,
 	RPC_URL: z.url(),
 	PRIVATE_KEY: hexBytes32Schema,
 	CONSENSUS_ADDRESS: checkedAddressSchema,

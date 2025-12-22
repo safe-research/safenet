@@ -1,3 +1,5 @@
+import Sqlite3 from "better-sqlite3";
+import type { Address } from "viem";
 import { describe, expect, it } from "vitest";
 import { g } from "../../frost/math.js";
 import { SqliteClientStorage } from "./sqlite.js";
@@ -15,9 +17,11 @@ const sortedEntries = <T>(m: Map<bigint, T>): [bigint, T][] => {
 };
 
 describe("sqlite", () => {
+	const testStorage = (address: Address) => new SqliteClientStorage(address, new Sqlite3(":memory:"));
+
 	describe("GroupInfoStorage", () => {
 		it("should register groups with participants", () => {
-			const storage = new SqliteClientStorage(participants[1].address, ":memory:");
+			const storage = testStorage(participants[1].address);
 
 			expect(storage.knownGroups()).toEqual([]);
 			expect(() => storage.participantId(groups[0])).toThrowError();
@@ -34,7 +38,7 @@ describe("sqlite", () => {
 		});
 
 		it("should register group public key and verification share", () => {
-			const storage = new SqliteClientStorage(participants[0].address, ":memory:");
+			const storage = testStorage(participants[0].address);
 
 			expect(() => storage.publicKey(groups[0])).toThrowError();
 			expect(() => storage.verificationShare(groups[0])).toThrowError();
@@ -54,7 +58,7 @@ describe("sqlite", () => {
 		});
 
 		it("should register group signing shares", () => {
-			const storage = new SqliteClientStorage(participants[0].address, ":memory:");
+			const storage = testStorage(participants[0].address);
 
 			expect(() => storage.signingShare(groups[0])).toThrowError();
 			expect(() => storage.registerSigningShare(groups[0], 42n)).toThrowError();
@@ -71,7 +75,7 @@ describe("sqlite", () => {
 		});
 
 		it("should unregister groups and related data", () => {
-			const storage = new SqliteClientStorage(participants[0].address, ":memory:");
+			const storage = testStorage(participants[0].address);
 
 			for (const groupId of [groups[0], groups[1]]) {
 				storage.registerGroup(groupId, participants, 2n);
@@ -99,7 +103,7 @@ describe("sqlite", () => {
 		];
 
 		it("should register KeyGen coefficients", () => {
-			const storage = new SqliteClientStorage(participants[0].address, ":memory:");
+			const storage = testStorage(participants[0].address);
 
 			expect(() => storage.registerKeyGen(groups[0], coefficients)).toThrowError();
 			expect(() => storage.coefficients(groups[0])).toThrowError();
@@ -122,7 +126,7 @@ describe("sqlite", () => {
 		});
 
 		it("should register commitments", () => {
-			const storage = new SqliteClientStorage(participants[0].address, ":memory:");
+			const storage = testStorage(participants[0].address);
 
 			expect(() => storage.registerCommitments(groups[0], commitments[1].id, commitments[1].value)).toThrowError();
 			expect(() => storage.commitments(groups[0], commitments[1].id)).toThrowError();
@@ -162,7 +166,7 @@ describe("sqlite", () => {
 		});
 
 		it("should register secret shares", () => {
-			const storage = new SqliteClientStorage(participants[0].address, ":memory:");
+			const storage = testStorage(participants[0].address);
 
 			expect(() => storage.registerSecretShare(groups[0], secretShares[1].id, secretShares[1].value)).toThrowError();
 			expect(() => storage.missingSecretShares(groups[0])).toThrowError();
@@ -243,7 +247,7 @@ describe("sqlite", () => {
 		});
 
 		it("should register, link, and burn nonces", () => {
-			const storage = new SqliteClientStorage(participants[0].address, ":memory:");
+			const storage = testStorage(participants[0].address);
 
 			expect(() => storage.registerNonceTree(groups[0], dup(nonces))).toThrowError();
 
@@ -296,7 +300,7 @@ describe("sqlite", () => {
 		];
 
 		it("should register signature requests", () => {
-			const storage = new SqliteClientStorage(participants[0].address, ":memory:");
+			const storage = testStorage(participants[0].address);
 
 			expect(() => storage.registerSignatureRequest(signature, groups[0], message, signers, sequence)).toThrowError();
 			expect(() => storage.signingGroup(signature)).toThrowError();
@@ -327,7 +331,7 @@ describe("sqlite", () => {
 		});
 
 		it("should register signature nonce commitments", () => {
-			const storage = new SqliteClientStorage(participants[0].address, ":memory:");
+			const storage = testStorage(participants[0].address);
 
 			expect(() => storage.registerNonceCommitments(signature, signers[1], commitments[1])).toThrowError();
 			expect(() => storage.checkIfNoncesComplete(signature)).toThrowError();

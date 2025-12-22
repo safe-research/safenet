@@ -1,16 +1,10 @@
-import fs from "node:fs";
-import os from "node:os";
-import path from "node:path";
+import Sqlite3 from "better-sqlite3";
 import type { Hex } from "viem";
-import { afterAll, beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 import type { EpochRolloverPacket } from "../../consensus/verify/rollover/schemas.js";
 import type { SafeTransactionPacket } from "../../consensus/verify/safeTx/schemas.js";
 import type { SigningState } from "../types.js";
 import { SqliteStateStorage } from "./sqlite.js";
-
-// Generate a unique file name using a high-resolution timestamp to prevent parallel test conflicts
-const TEST_DB_FILENAME = `test-storage-${process.pid}-${Date.now()}.sqlite`;
-const TEST_DB_PATH = path.join(os.tmpdir(), TEST_DB_FILENAME);
 
 const TX_ATTESTATION_PACKET: SafeTransactionPacket = {
 	type: "safe_transaction_packet",
@@ -48,22 +42,14 @@ const EPOCH_ROLLOVER_PACKET: EpochRolloverPacket = {
 };
 
 describe("SqliteStateStorage", () => {
+	let testDb = new Sqlite3(":memory:");
 	beforeEach(() => {
-		// Ensure that there is not left over from the test before
-		if (fs.existsSync(TEST_DB_PATH)) {
-			fs.unlinkSync(TEST_DB_PATH);
-		}
-	});
-
-	afterAll(() => {
-		// Clean up after all test runs
-		if (fs.existsSync(TEST_DB_PATH)) {
-			fs.unlinkSync(TEST_DB_PATH);
-		}
+		// Reset the database for each test.
+		testDb = new Sqlite3(":memory:");
 	});
 
 	it("should store and reinstantiate rollover state correctly", () => {
-		const originalStorage = new SqliteStateStorage(TEST_DB_PATH);
+		const originalStorage = new SqliteStateStorage(testDb);
 		expect(originalStorage.machineStates().rollover).toStrictEqual({
 			id: "waiting_for_rollover",
 		});
@@ -103,7 +89,7 @@ describe("SqliteStateStorage", () => {
 				},
 			},
 		});
-		const recoveredStorage = new SqliteStateStorage(TEST_DB_PATH);
+		const recoveredStorage = new SqliteStateStorage(testDb);
 		expect(recoveredStorage.machineStates().rollover).toStrictEqual({
 			id: "collecting_shares",
 			groupId: "0x5afe000000000000000000000000000000000000000000000000000000000000",
@@ -124,7 +110,7 @@ describe("SqliteStateStorage", () => {
 	});
 
 	it("should store and reinstantiate consensus state correctly", () => {
-		const originalStorage = new SqliteStateStorage(TEST_DB_PATH);
+		const originalStorage = new SqliteStateStorage(testDb);
 		expect(originalStorage.consensusState()).toStrictEqual({
 			activeEpoch: 0n,
 			stagedEpoch: 0n,
@@ -161,7 +147,7 @@ describe("SqliteStateStorage", () => {
 					"0x5af3000000000000000000000000000000000000000000000000000000000000",
 			},
 		});
-		const recoveredStorage = new SqliteStateStorage(TEST_DB_PATH);
+		const recoveredStorage = new SqliteStateStorage(testDb);
 		expect(recoveredStorage.consensusState()).toStrictEqual({
 			activeEpoch: 1n,
 			stagedEpoch: 2n,
@@ -183,7 +169,7 @@ describe("SqliteStateStorage", () => {
 				signatureIdToMessage: ["0x5afe000000000000000000000000000000000000000000000000000000000000"],
 			},
 		});
-		const cleanedStorage = new SqliteStateStorage(TEST_DB_PATH);
+		const cleanedStorage = new SqliteStateStorage(testDb);
 		expect(cleanedStorage.consensusState()).toStrictEqual({
 			activeEpoch: 1n,
 			stagedEpoch: 2n,
@@ -196,7 +182,7 @@ describe("SqliteStateStorage", () => {
 	});
 
 	it("should store and reinstantiate signing state correctly", () => {
-		const originalStorage = new SqliteStateStorage(TEST_DB_PATH);
+		const originalStorage = new SqliteStateStorage(testDb);
 		expect(originalStorage.machineStates().signing).toStrictEqual({});
 		// For each state one version with an epoch rollover packet and a tx attestation packet is added
 		originalStorage.applyDiff({
@@ -358,14 +344,14 @@ describe("SqliteStateStorage", () => {
 			},
 		};
 		expect(originalStorage.machineStates().signing).toStrictEqual(expectedSigningState);
-		const recoveredStorage = new SqliteStateStorage(TEST_DB_PATH);
+		const recoveredStorage = new SqliteStateStorage(testDb);
 		expect(recoveredStorage.machineStates().signing).toStrictEqual(expectedSigningState);
 		// Delete half of the states to check that cleanup is working
 		recoveredStorage.applyDiff({ signing: ["0x5afe1a0000000000000000000000000000000000000000000000000000000000"] });
 		recoveredStorage.applyDiff({ signing: ["0x5afe2b0000000000000000000000000000000000000000000000000000000000"] });
 		recoveredStorage.applyDiff({ signing: ["0x5afe3b0000000000000000000000000000000000000000000000000000000000"] });
 		recoveredStorage.applyDiff({ signing: ["0x5afe4a0000000000000000000000000000000000000000000000000000000000"] });
-		const cleanedStorage = new SqliteStateStorage(TEST_DB_PATH);
+		const cleanedStorage = new SqliteStateStorage(testDb);
 		delete expectedSigningState["0x5afe1a0000000000000000000000000000000000000000000000000000000000"];
 		delete expectedSigningState["0x5afe2b0000000000000000000000000000000000000000000000000000000000"];
 		delete expectedSigningState["0x5afe3b0000000000000000000000000000000000000000000000000000000000"];

@@ -1,4 +1,4 @@
-import Sqlite3, { type Database } from "better-sqlite3";
+import type { Database } from "better-sqlite3";
 import z, { type ZodType } from "zod";
 import { jsonReplacer } from "./json.js";
 
@@ -27,17 +27,18 @@ export class SqliteQueue<T> implements Queue<T> {
 	#schema: ZodType<T>;
 	#db: Database;
 	#name: string;
-	constructor(schema: ZodType<T>, path: string, name: string) {
-		const db = new Sqlite3(path);
-		db.exec(`
-            CREATE TABLE IF NOT EXISTS queue_${name} (
-               id INTEGER PRIMARY KEY,
-               payloadJson TEXT NOT NULL
-            );
-        `);
+
+	constructor(schema: ZodType<T>, database: Database, name: string) {
 		this.#schema = schema;
-		this.#db = db;
+		this.#db = database;
 		this.#name = name;
+
+		this.#db.exec(`
+			CREATE TABLE IF NOT EXISTS queue_${name} (
+				id INTEGER PRIMARY KEY,
+				payloadJson TEXT NOT NULL
+			);
+		`);
 	}
 
 	push(element: T): void {

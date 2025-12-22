@@ -11,12 +11,12 @@ FROM base AS builder
 # This includes devDependencies needed for the build process (e.g., typescript).
 COPY package.json package-lock.json ./
 # IMPORTANT: Copy the package.json for every workspace
-COPY validator/package.json ./validator/package.json
+COPY validator/package.json validator/package.json
 RUN npm ci --workspace=validator
 
 # Then, copy over the rest of the validator source code and build the project.
 # The .dockerignore file will prevent node_modules on the host from being copied.
-COPY ./validator/ ./validator/
+COPY validator/ validator/
 RUN npm run build --workspace=validator
 
 # ---- Production Stage ----
@@ -29,19 +29,22 @@ COPY --from=builder /usr/src/app/package.json /usr/src/app/package-lock.json ./
 # CRITICAL: You must copy the package.json for *every* workspace
 # that 'validator' depends on, plus 'validator' itself.
 # This allows 'npm ci' to resolve the workspace structure.
-COPY --from=builder /usr/src/app/validator/package.json ./validator/
+COPY --from=builder /usr/src/app/validator/package.json validator/
 RUN npm ci --workspace=validator --omit=dev --ignore-scripts
 
 # Copy the compiled code from the builder stage.
-COPY --from=builder /usr/src/app/validator/dist ./validator/dist
+COPY --from=builder /usr/src/app/validator/dist validator/dist
 
 # Additionally, `better-sqlite3` builds native code which is needed when
 # running, so make sure to copy that as well. This is a hacky work-around for
 # now, but should be revisited in the future.
-COPY --from=builder /usr/src/app/node_modules/better-sqlite3/build ./node_modules/better-sqlite3/build
+COPY --from=builder /usr/src/app/node_modules/better-sqlite3/build node_modules/better-sqlite3/build
+
+# Copy the container entry point script.
+COPY validator/bin/entrypoint.sh validator/bin/entrypoint.sh
 
 USER node
 ENV NODE_ENV=production
 
 # Specify the command to run the compiled worker.
-CMD [ "node", "validator/dist/validator.js" ]
+CMD [ "validator/bin/entrypoint.sh" ]

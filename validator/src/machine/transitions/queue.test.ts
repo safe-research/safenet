@@ -1,3 +1,4 @@
+import Sqlite3 from "better-sqlite3";
 import { zeroAddress } from "viem";
 import { describe, expect, it } from "vitest";
 import { toPoint } from "../../frost/math.js";
@@ -166,7 +167,7 @@ const actions: StateTransition[] = [
 
 describe("SqliteActionQueue", () => {
 	it("should store all actions and return in correct order", () => {
-		const storage = new SqliteTransitionQueue(":memory:");
+		const storage = new SqliteTransitionQueue(new Sqlite3(":memory:"));
 
 		expect(storage.peek()).toBeUndefined();
 		for (const action of actions) {

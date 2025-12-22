@@ -1,4 +1,4 @@
-import Sqlite3, { type Database } from "better-sqlite3";
+import type { Database } from "better-sqlite3";
 import type { PublicClient } from "viem";
 import z from "zod";
 import { CONSENSUS_EVENTS, COORDINATOR_EVENTS } from "../../types/abis.js";
@@ -23,30 +23,30 @@ export class OnchainTransitionWatcher {
 	#onTransition: (transition: StateTransition) => void;
 
 	constructor({
-		dbPath,
+		database,
 		publicClient,
 		config,
 		logger,
 		onTransition,
 	}: {
-		dbPath: string;
+		database: Database;
 		publicClient: PublicClient;
 		config: Pick<ProtocolConfig, "consensus" | "coordinator">;
 		onTransition: (transition: StateTransition) => void;
 		logger: Logger;
 	}) {
-		const db = new Sqlite3(dbPath);
-		db.exec(`
-            CREATE TABLE IF NOT EXISTS transition_watcher (
-                chainId INTEGER PRIMARY KEY,
-                lastIndexedBlock INTEGER NOT NULL
-            );
-        `);
-		this.#db = db;
+		this.#db = database;
 		this.#config = config;
 		this.#logger = logger;
 		this.#publicClient = publicClient;
 		this.#onTransition = onTransition;
+
+		this.#db.exec(`
+			CREATE TABLE IF NOT EXISTS transition_watcher (
+				chainId INTEGER PRIMARY KEY,
+				lastIndexedBlock INTEGER NOT NULL
+			);
+		`);
 	}
 
 	private async getLastIndexedBlock(): Promise<bigint | undefined> {
@@ -58,12 +58,12 @@ export class OnchainTransitionWatcher {
 
 	updateLastIndexedBlock(block: bigint): boolean {
 		const stmt = this.#db.prepare(`
-            INSERT INTO transition_watcher (chainId, lastIndexedBlock)
-            VALUES (@chainId, @block)
-            ON CONFLICT(chainId) DO UPDATE
-            SET lastIndexedBlock = excluded.lastIndexedBlock
-            WHERE excluded.lastIndexedBlock >= transition_watcher.lastIndexedBlock
-        `);
+			INSERT INTO transition_watcher (chainId, lastIndexedBlock)
+			VALUES (@chainId, @block)
+			ON CONFLICT(chainId) DO UPDATE
+			SET lastIndexedBlock = excluded.lastIndexedBlock
+			WHERE excluded.lastIndexedBlock >= transition_watcher.lastIndexedBlock
+		`);
 		const chainId = this.#publicClient.chain?.id ?? 0n;
 		const info = stmt.run({ chainId, block });
 		return info.changes > 0;

@@ -2,7 +2,7 @@
 	"name": "shieldnet-contracts",
 	"private": true,
 	"scripts": {
-		"build": "forge build",
+		"build": "forge build --force",
 		"check": "forge fmt --check && forge lint --deny notes",
 		"deploy": "forge script DeployScript",
 		"fix": "forge fmt",

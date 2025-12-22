@@ -1,3 +1,4 @@
+import Sqlite3 from "better-sqlite3";
 import { describe, expect, it } from "vitest";
 import z from "zod";
 import { InMemoryQueue, SqliteQueue } from "./queue.js";
@@ -33,12 +34,14 @@ describe("inmemory queue", () => {
 });
 
 describe("sqlite queue", () => {
+	const sqliteQueue = () => new SqliteQueue<number>(z.number(), new Sqlite3(":memory:"), "test");
+
 	it("should return undefined on empty pop", () => {
-		const queue = new SqliteQueue<number>(z.number(), ":memory:", "test");
+		const queue = sqliteQueue();
 		expect(queue.pop()).toBeUndefined();
 	});
 	it("should return last added item and undefined when empty", () => {
-		const queue = new SqliteQueue<number>(z.number(), ":memory:", "test");
+		const queue = sqliteQueue();
 		const values = [1, 2, 3, 4, 5, 6];
 		for (const value of values) {
 			queue.push(value);
@@ -49,7 +52,7 @@ describe("sqlite queue", () => {
 		expect(queue.pop()).toBeUndefined();
 	});
 	it("should not delete element when peeking", () => {
-		const queue = new SqliteQueue<number>(z.number(), ":memory:", "test");
+		const queue = sqliteQueue();
 		const values = [1, 2, 3, 4, 5, 6];
 		for (const value of values) {
 			queue.push(value);

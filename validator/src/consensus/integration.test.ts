@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
+import Sqlite3 from "better-sqlite3";
 import {
 	type Address,
 	createPublicClient,
@@ -108,7 +109,8 @@ describe("integration", () => {
 		});
 		const clients = accounts.map((a, i) => {
 			const logger = i === 0 ? testLogger : silentLogger;
-			const storage = createClientStorage(a.address);
+			const database = new Sqlite3(":memory:");
+			const storage = createClientStorage(a.address, database);
 			const sc = new SigningClient(storage);
 			const kc = new KeyGenClient(storage, logger);
 			const verificationHandlers = new Map<string, PacketHandler<Typed>>();
@@ -134,7 +136,7 @@ describe("integration", () => {
 				actionStorage,
 				logger,
 			);
-			const stateStorage = createStateStorage();
+			const stateStorage = createStateStorage(database);
 			const sm = new SchildNetzMaschine({
 				participants,
 				genesisSalt: zeroHash,
@@ -148,7 +150,7 @@ describe("integration", () => {
 				blocksPerEpoch: BLOCKS_PER_EPOCH,
 			});
 			const watcher = new OnchainTransitionWatcher({
-				dbPath: ":memory:",
+				database,
 				publicClient,
 				config: {
 					consensus: consensus.address,
