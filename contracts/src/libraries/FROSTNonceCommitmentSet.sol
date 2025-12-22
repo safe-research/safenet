@@ -103,6 +103,7 @@ library FROSTNonceCommitmentSet {
         uint64 next = commitments.next;
         if (next > chunk) {
             chunk = next;
+            offset = 0;
         }
         commitments.next = chunk + 1;
         commitments.chunks[chunk] = _root(commitment, offset);

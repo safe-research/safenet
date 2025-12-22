@@ -15,18 +15,17 @@ abstract contract MerkleTreeBase {
         return $root;
     }
 
-    function _leaf(bytes32 value) internal {
+    function _leaf(bytes32 value) internal returns (uint256 x) {
         assert($root == bytes32(0));
 
-        uint256 x = $width++;
+        x = $width++;
         $tree[x][0] = value;
     }
 
-    function _build() internal {
+    function _build() internal returns (uint256 y) {
         assert($root == bytes32(0));
 
         uint256 l = $width;
-        uint256 y = 0;
         while (l > 1) {
             l = (l + 1) >> 1;
             y++;
@@ -45,6 +44,19 @@ abstract contract MerkleTreeBase {
         assert(l > 0);
         $height = y;
         $root = $tree[0][y];
+    }
+
+    function _buildWithHeight(uint256 height) internal {
+        uint256 y = _build();
+        assert(height >= y);
+        bytes32 left = bytes32(0);
+        while (y < height) {
+            uint256 yy = y++;
+            bytes32 right = $tree[0][yy];
+            $tree[0][y] = keccak256(abi.encode(left, right));
+        }
+        $height = height;
+        $root = $tree[0][height];
     }
 
     function _proof(uint256 x) internal view returns (bytes32[] memory proof) {
