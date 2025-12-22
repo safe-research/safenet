@@ -48,8 +48,12 @@ export class KeyGenClient {
 		return this.#storage.participantId(groupId);
 	}
 
-	participants(groupId: GroupId): readonly Participant[] {
+	participants(groupId: GroupId): Participant[] {
 		return this.#storage.participants(groupId);
+	}
+
+	threshold(groupId: GroupId): bigint {
+		return this.#storage.threshold(groupId);
 	}
 
 	knownGroups(): GroupId[] {
@@ -66,14 +70,6 @@ export class KeyGenClient {
 
 	missingSecretShares(groupId: GroupId): ParticipantId[] {
 		return this.#storage.missingSecretShares(groupId);
-	}
-
-	participants(groupId: GroupId): Participant[] {
-		return this.#storage.participants(groupId);
-	}
-
-	threshold(groupId: GroupId): bigint {
-		return this.#storage.threshold(groupId);
 	}
 
 	setupGroup(

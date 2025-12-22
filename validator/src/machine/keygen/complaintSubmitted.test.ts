@@ -334,6 +334,7 @@ describe("complaint submitted", () => {
 				groupId: EVENT.gid,
 				nextEpoch: 10n,
 				deadline: 30n,
+				missingSharesFrom: [],
 				complaints: {
 					"2": { unresponded: 0n, total: 1n },
 				},
