@@ -4,9 +4,11 @@
 		"ignoreUnknown": false,
 		"includes": [
 			"**/src/**/*.ts",
+			"**/src/**/*.tsx",
 			"**/package.json",
 			"**/tsconfig.json",
 			"**/tsconfig.*.json",
+			"!**/src/*.gen.ts",
 			"!contracts/lib"
 		],
 		"maxSize": 2000000

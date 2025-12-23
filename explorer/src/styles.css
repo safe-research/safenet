@@ -1,0 +1,93 @@
+/* Import Inter font family */
+@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap");
+
+@import "tailwindcss";
+
+@theme {
+	--color-title: var(--color-title);
+	--color-title-hover: var(--color-title-hover);
+	--color-sub-title: var(--color-title);
+	--color-button-content: var(--color-button-content);
+	--color-surface-0: var(--color-surface-0);
+	--color-surface-1: var(--color-surface-1);
+	--color-surface-hover: var(--color-surface-hover);
+	--color-surface-outline: var(--color-surface-outline);
+	--color-button: var(--color-button);
+	--color-button-hover: var(--color-button-hover);
+	--color-button-outline: var(--color-button-outline);
+	--color-button-content: var(--color-button-content);
+	--color-positive: var(--color-positive);
+	--color-pending: var(--color-pending);
+	--color-error: var(--color-warning);
+	--color-error-outline: var(--color-warning-outline);
+	--color-error-surface: var(--color-warning-surface);
+	--color-warning: var(--color-warning);
+	--color-warning-outline: var(--color-warning-outline);
+	--color-warning-surface: var(--color-warning-surface);
+}
+
+/* Global base styles */
+@layer base {
+	html,
+	body {
+		margin: 0;
+		padding: 0;
+		background-color: var(--color-surface-0);
+		color: var(--color-title);
+		font-family: "Inter", sans-serif;
+	}
+	*,
+	*::before,
+	*::after {
+		outline: none;
+	}
+}
+
+code {
+	font-family:
+		source-code-pro, Menlo, Monaco, Consolas, "Courier New", monospace;
+}
+
+:root {
+	--color-title: oklch(21% 0.034 264.665);
+	--color-title-hover: oklch(27.8% 0.033 256.848);
+	--color-sub-title: oklch(21% 0.034 264.665);
+	--color-surface-0: oklch(98.5% 0.002 247.839);
+	--color-surface-1: oklch(1 0 0);
+	--color-surface-hover: oklch(0.985 0 0);
+	--color-surface-outline: oklch(92.8% 0.006 264.531);
+	--color-button: oklch(13% 0.028 261.692);
+	--color-button-hover: oklch(21% 0.034 264.665);
+	--color-button-outline: oklch(44.6% 0.03 256.802);
+	--color-button-content: oklch(1 0 0);
+	--color-positive: oklch(79.2% 0.209 151.711);
+	--color-pending: oklch(85.2% 0.199 91.936);
+	--color-error: oklch(57.7% 0.245 27.325);
+	--color-error-outline: oklch(70.4% 0.191 22.216);
+	--color-error-surface: oklch(97.1% 0.013 17.38);
+	--color-warning: oklch(47.6% 0.114 61.907);
+	--color-warning-outline: oklch(87.9% 0.169 91.605);
+	--color-warning-surface: oklch(98.7% 0.026 102.212);
+}
+
+.dark {
+	--color-title: oklch(1 0 0);
+	--color-title-hover: oklch(98.5% 0.002 247.839);
+	--color-sub-title: oklch(1 0 0);
+	--color-surface-0: oklch(13% 0.028 261.692);
+	--color-surface-1: oklch(27.8% 0.033 256.848);
+	--color-surface-hover: oklch(21% 0.034 264.665);
+	--color-surface-outline: oklch(44.6% 0.03 256.802);
+	--color-button: oklch(1 0 0);
+	--color-button-hover: oklch(0.985 0 0);
+	--color-button-outline: oklch(92.8% 0.006 264.531);
+	--color-button-content: oklch(21% 0.034 264.665);
+	--color-positive: oklch(86.708% 0.19478 153.255);
+	--color-pending: oklch(91.698% 0.19298 107.115);
+	--color-error: oklch(57.7% 0.245 27.325);
+	--color-error-outline: oklch(70.4% 0.191 22.216);
+	--color-error-surface: oklch(97.1% 0.013 17.38);
+	--color-warning: oklch(47.6% 0.114 61.907);
+	--color-warning-outline: oklch(87.9% 0.169 91.605);
+	--color-warning-surface: oklch(98.7% 0.026 102.212);
+}
