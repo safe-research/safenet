@@ -87,14 +87,15 @@ library Secp256k1 {
             // `Q` is the point at infinity, and `P + 0 = P`.
             return p;
         } else if (px != qx) {
-            // Point addition, compute the slope through `P` and `Q`: λ = (Qy - Py) / (Qx - Px)
+            // Point addition, compute the slope through `P` and `Q`:
+            //     λ = (Qy - Py) / (Qx - Px)
             unchecked {
                 l = _divmod(addmod(qy, P - py, P), addmod(qx, P - px, P), P);
             }
         } else if (py == qy) {
             // Point doubling, compute the slope of the tangent at `P`:
-            // λ = (3⋅Px² + a) / (2⋅Py)
-            //   = (3⋅Px²) / (2⋅Py)
+            //     λ = (3⋅Px² + a) / (2⋅Py)
+            //       = (3⋅Px²) / (2⋅Py)
             // Noting that `a = 0` for the `secp256k1` curve.
             unchecked {
                 l = _divmod(mulmod(3, mulmod(px, px, P), P), addmod(py, py, P), P);
@@ -106,12 +107,12 @@ library Secp256k1 {
         }
 
         // Compute the coordinates for the point `R`:
-        // Rx = λ² - Px - Qx
-        //    = λ² - (Px + Qx)
-        // Ry = (2⋅Px + Qx)⋅λ - λ³ - Py
-        //    = (2⋅Px + Qx - λ²)⋅λ - Py
-        //    = (Px - (λ² - (Px + Qx)))⋅λ - Py
-        //    = (Px - Rx)⋅λ - Py
+        //     Rx = λ² - Px - Qx
+        //        = λ² - (Px + Qx)
+        //     Ry = (2⋅Px + Qx)⋅λ - λ³ - Py
+        //        = (2⋅Px + Qx - λ²)⋅λ - Py
+        //        = (Px - (λ² - (Px + Qx)))⋅λ - Py
+        //        = (Px - Rx)⋅λ - Py
         // Noting that `Px = Qx` for point doubling.
         unchecked {
             r.x = addmod(mulmod(l, l, P), P - addmod(px, qx, P), P);
@@ -222,7 +223,7 @@ library Secp256k1 {
     function _satisfiesCurveEquation(uint256 x, uint256 y) private pure returns (bool result) {
         assembly ("memory-safe") {
             // Check (branchlessly) that the point's coordinates satisfy the curve equation:
-            // Py² = Px³ + b
+            //      Py² = Px³ + b
             // And that both `Px` and `Py` are elements in Fp.
             result := and(eq(mulmod(y, y, P), addmod(mulmod(x, mulmod(x, x, P), P), B, P)), and(lt(x, P), lt(y, P)))
         }

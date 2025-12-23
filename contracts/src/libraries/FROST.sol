@@ -6,8 +6,8 @@ import {Secp256k1} from "@/libraries/Secp256k1.sol";
 /**
  * @title FROST
  * @notice Implementation of the FROST(secp256k1, SHA-256) ciphersuite.
- * @dev FROST Implementation is based on RFC-9591 (https://datatracker.ietf.org/doc/html/rfc9591). The dst (Domain
- *      Separation Tag) values for `_hashToField` are based on https://datatracker.ietf.org/doc/html/rfc9591#section-6.5
+ * @dev FROST Implementation based on [RFC-9591](https://datatracker.ietf.org/doc/html/rfc9591). In particular, it
+ *      implements the FROST(secp256k1, SHA-256) ciphersuite from Section 6.5.
  */
 library FROST {
     using Secp256k1 for Secp256k1.Point;

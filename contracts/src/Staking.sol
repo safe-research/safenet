@@ -384,8 +384,8 @@ contract Staking is Ownable {
      * @param amount The amount of tokens to withdraw.
      * @dev This function creates a new withdrawal request and inserts it into a doubly linked list that acts as a
      *      queue for the staker. The queue is kept sorted by the `claimableAt` timestamp to ensure withdrawals can be
-     *      processed in order. This function handles the sorting on-chain by traversing the list backwards from the
-     *      tail to find the correct insertion point. WARNING: This traversal can be gas-intensive if the queue is
+     *      processed in order. This function handles the sorting on-chain by traversing the list backwards from the
+     *      tail to find the correct insertion point. WARNING: This traversal can be gas-intensive if the queue is
      *      long. For a more gas-efficient method, consider `initiateWithdrawalAtPosition`.
      */
     function initiateWithdrawal(address validator, uint256 amount) external {
