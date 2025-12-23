@@ -29,6 +29,7 @@ import type { Logger } from "../utils/logging.js";
 import type { Metrics } from "../utils/metrics.js";
 import { InMemoryQueue } from "../utils/queue.js";
 import { ShieldnetStateMachine } from "./machine.js";
+import { NoDelegateCallCheck } from "../consensus/verify/safeTx/checks/basic.js";
 
 export class ValidatorService {
 	#logger: Logger;
@@ -65,13 +66,8 @@ export class ValidatorService {
 		const signingClient = new SigningClient(storage);
 		const keyGenClient = new KeyGenClient(storage, this.#logger);
 		const verificationHandlers = new Map<string, PacketHandler<Typed>>();
-		const failCheck = {
-			check: () => {
-				throw Error("Not allowed!");
-			},
-		};
-		const passThroughCheck = { check: () => {} };
-		verificationHandlers.set("safe_transaction_packet", new SafeTransactionHandler(failCheck, passThroughCheck));
+		const check = new NoDelegateCallCheck()
+		verificationHandlers.set("safe_transaction_packet", new SafeTransactionHandler(check));
 		verificationHandlers.set("epoch_rollover_packet", new EpochRolloverHandler());
 		const verificationEngine = new VerificationEngine(verificationHandlers);
 		const actionStorage =

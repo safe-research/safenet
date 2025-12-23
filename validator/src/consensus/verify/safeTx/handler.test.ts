@@ -4,8 +4,8 @@ import type { SafeTransactionPacket } from "./schemas.js";
 
 describe("safeTx handler", () => {
 	it("should throw on invalid packet", async () => {
-		const invalidCheck = {} as unknown as TransactionCheck;
-		const handler = new SafeTransactionHandler(invalidCheck, invalidCheck);
+		const testCheck = {} as unknown as TransactionCheck;
+		const handler = new SafeTransactionHandler(testCheck);
 		await expect(
 			handler.hashAndVerify({
 				type: "invalid packet",
@@ -14,10 +14,8 @@ describe("safeTx handler", () => {
 	});
 
 	it("should throw for invalid operation", async () => {
-		const check = vi.fn();
-		const validCheck = { check } as unknown as TransactionCheck;
-		const invalidCheck = {} as unknown as TransactionCheck;
-		const handler = new SafeTransactionHandler(validCheck, invalidCheck);
+		const testCheck = {} as unknown as TransactionCheck;
+		const handler = new SafeTransactionHandler(testCheck);
 		await expect(
 			handler.hashAndVerify({
 				type: "safe_transaction_packet",
@@ -41,11 +39,10 @@ describe("safeTx handler", () => {
 		).rejects.toThrow();
 	});
 
-	it("should call delegate check for delegatecall tx and return hash", async () => {
+	it("should call check for delegatecall tx and return hash", async () => {
 		const check = vi.fn();
-		const validCheck = { check } as unknown as TransactionCheck;
-		const invalidCheck = {} as unknown as TransactionCheck;
-		const handler = new SafeTransactionHandler(validCheck, invalidCheck);
+		const testCheck = { check } as unknown as TransactionCheck;
+		const handler = new SafeTransactionHandler(testCheck);
 		await expect(
 			handler.hashAndVerify({
 				type: "safe_transaction_packet",
@@ -84,9 +81,8 @@ describe("safeTx handler", () => {
 		check.mockImplementationOnce(() => {
 			throw new Error("Invalid");
 		});
-		const validCheck = { check } as unknown as TransactionCheck;
-		const invalidCheck = {} as unknown as TransactionCheck;
-		const handler = new SafeTransactionHandler(validCheck, invalidCheck);
+		const testCheck = { check } as unknown as TransactionCheck;
+		const handler = new SafeTransactionHandler(testCheck);
 		await expect(
 			handler.hashAndVerify({
 				type: "safe_transaction_packet",
@@ -122,9 +118,8 @@ describe("safeTx handler", () => {
 
 	it("should call call check for call tx and return hash", async () => {
 		const check = vi.fn();
-		const validCheck = { check } as unknown as TransactionCheck;
-		const invalidCheck = {} as unknown as TransactionCheck;
-		const handler = new SafeTransactionHandler(invalidCheck, validCheck);
+		const testCheck = { check } as unknown as TransactionCheck;
+		const handler = new SafeTransactionHandler(testCheck);
 		await expect(
 			handler.hashAndVerify({
 				type: "safe_transaction_packet",
@@ -163,9 +158,8 @@ describe("safeTx handler", () => {
 		check.mockImplementationOnce(() => {
 			throw new Error("Invalid");
 		});
-		const validCheck = { check } as unknown as TransactionCheck;
-		const invalidCheck = {} as unknown as TransactionCheck;
-		const handler = new SafeTransactionHandler(invalidCheck, validCheck);
+		const testCheck = { check } as unknown as TransactionCheck;
+		const handler = new SafeTransactionHandler(testCheck);
 		await expect(
 			handler.hashAndVerify({
 				type: "safe_transaction_packet",

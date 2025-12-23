@@ -11,14 +11,13 @@ export class CombinedChecks implements TransactionCheck {
 	}
 }
 
-export class DelegateCallCheck implements TransactionCheck {
-	constructor(private checks: Record<string, TransactionCheck>) {}
+export class AddressSplitCheck implements TransactionCheck {
+	constructor(private checks: Record<string, TransactionCheck>, private fallback?: TransactionCheck) {}
 
 	check(tx: MetaTransaction): void {
-		if (tx.operation !== 1) throw new Error("Check only supports delegatecalls");
 		// First check for chain specific check and then fallback to chain independent checks
 		const toWithPrefix = `eip155:${tx.chainId}:${tx.to}`;
-		const check = this.checks[toWithPrefix] ?? this.checks[tx.to];
+		const check = this.checks[toWithPrefix] ?? this.checks[tx.to] ?? this.fallback;
 		if (check === undefined) {
 			throw new Error(`Delegatecalls for ${toWithPrefix} not allowed!`);
 		}

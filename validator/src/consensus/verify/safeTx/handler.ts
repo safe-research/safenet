@@ -9,21 +9,11 @@ export interface TransactionCheck {
 
 export class SafeTransactionHandler implements PacketHandler<SafeTransactionPacket> {
 	constructor(
-		private delegateCallCheck: TransactionCheck,
-		private callCheck: TransactionCheck,
+		private check: TransactionCheck,
 	) {}
 	async hashAndVerify(uncheckedPacket: SafeTransactionPacket): Promise<Hex> {
 		const packet = safeTransactionPacketSchema.parse(uncheckedPacket);
-		switch (packet.proposal.transaction.operation) {
-			case 0:
-				this.callCheck.check(packet.proposal.transaction);
-				break;
-			case 1:
-				this.delegateCallCheck.check(packet.proposal.transaction);
-				break;
-			default:
-				throw new Error("Unknown operation");
-		}
+		this.check.check(packet.proposal.transaction);
 		return safeTxPacketHash(packet);
 	}
 }

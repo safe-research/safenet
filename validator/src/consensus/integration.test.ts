@@ -32,6 +32,7 @@ import type { Participant } from "./storage/types.js";
 import { type PacketHandler, type Typed, VerificationEngine } from "./verify/engine.js";
 import { EpochRolloverHandler } from "./verify/rollover/handler.js";
 import { SafeTransactionHandler } from "./verify/safeTx/handler.js";
+import { NoDelegateCallCheck } from "./verify/safeTx/checks/basic.js";
 
 const BLOCKTIME_IN_SECONDS = 1;
 const BLOCKS_PER_EPOCH = 20n;
@@ -114,13 +115,8 @@ describe("integration", () => {
 			const sc = new SigningClient(storage);
 			const kc = new KeyGenClient(storage, logger);
 			const verificationHandlers = new Map<string, PacketHandler<Typed>>();
-			const failCheck = {
-				check: () => {
-					throw Error("Not allowed!");
-				},
-			};
-			const passThroughCheck = { check: () => {} };
-			verificationHandlers.set("safe_transaction_packet", new SafeTransactionHandler(failCheck, passThroughCheck));
+			const check = new NoDelegateCallCheck()
+			verificationHandlers.set("safe_transaction_packet", new SafeTransactionHandler(check));
 			verificationHandlers.set("epoch_rollover_packet", new EpochRolloverHandler());
 			const verificationEngine = new VerificationEngine(verificationHandlers);
 			const publicClient = createPublicClient({
