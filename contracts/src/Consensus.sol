@@ -27,17 +27,17 @@ contract Consensus is IFROSTCoordinatorCallback {
      * @notice Tracks the state of validator set epochs and their rollover.
      * @custom:param previous The epoch number of the previously active validator set.
      * @custom:param active The epoch number of the currently active validator set.
-     * @custom:param staged The epoch number of the next validator set, which will become active
-     *               at the `rolloverBlock`. Zero if no epoch is staged.
+     * @custom:param staged The epoch number of the next validator set, which will become active at the
+     *               `rolloverBlock`. Zero if no epoch is staged.
      * @custom:param rolloverBlock The block number at which the `staged` epoch will become `active`.
-     * @dev An epoch represents a period governed by a specific validator set (FROST group).
-     *      The rollover from one epoch to the next is a two-step, on-chain process:
-     *      1. Proposal & Attestation: A new epoch and validator group are proposed. The
-     *         current active validator set must attest to this proposal by signing it.
+     * @dev An epoch represents a period governed by a specific validator set (FROST group). The rollover from one
+     *      epoch to the next is a two-step, on-chain process:
+     *      1. Proposal & Attestation: A new epoch and validator group are proposed. The current active validator set
+     *         must attest to this proposal by signing it.
      *      2. Staging: Once attested, the new epoch is "staged" for a future `rolloverBlock`.
-     *      3. Rollover: The actual switch to the new epoch happens automatically and lazily
-     *         when the `rolloverBlock` is reached. Any state-changing transaction will
-     *         trigger the rollover if the block number is past the scheduled time.
+     *      3. Rollover: The actual switch to the new epoch happens automatically and lazily when the `rolloverBlock`
+     *         is reached. Any state-changing transaction will trigger the rollover if the block number is past the
+     *         scheduled time.
      */
     struct Epochs {
         uint64 previous;
@@ -213,10 +213,9 @@ contract Consensus is IFROSTCoordinatorCallback {
      * @param transaction The meta-transaction to query the attestation for.
      * @return message The EIP-712 message hash of the proposal.
      * @return signature The FROST signature attesting to the transaction.
-     * @dev This method will fail if the attestation did not happen in either
-     *      the active or previous epochs. This is provided as a convenience
-     *      method to clients who may want to query an attestation for a
-     *      transaction they recently proposed for validator approval.
+     * @dev This method will fail if the attestation did not happen in either the active or previous epochs. This is
+     *      provided as a convenience method to clients who may want to query an attestation for a transaction they
+     *      recently proposed for validator approval.
      */
     function getRecentAttestation(MetaTransaction.T memory transaction)
         external
@@ -268,11 +267,10 @@ contract Consensus is IFROSTCoordinatorCallback {
      * @param proposedEpoch The proposed new epoch.
      * @param rolloverBlock The block number when rollover should occur.
      * @param group The FROST group ID for the proposed epoch.
-     * @dev This is the first step of the epoch rollover process. It creates a message
-     *      for the epoch change proposal and requests the current active FROST group
-     *      to sign it. The signature from the current group serves as an authorization
-     *      for the new group to take over. This step is completely optional atm, as we
-     *      can just stage directly if there is a valid signature.
+     * @dev This is the first step of the epoch rollover process. It creates a message for the epoch change proposal
+     *      and requests the current active FROST group to sign it. The signature from the current group serves as an
+     *      authorization for the new group to take over. This step is completely optional atm, as we can just stage
+     *      directly if there is a valid signature.
      */
     function proposeEpoch(uint64 proposedEpoch, uint64 rolloverBlock, FROSTGroupId.T group) public {
         Epochs memory epochs = _processRollover();
@@ -289,9 +287,9 @@ contract Consensus is IFROSTCoordinatorCallback {
      * @param rolloverBlock The block number when rollover should occur.
      * @param group The FROST group ID for the proposed epoch.
      * @param signature The ID of the FROST signature from the current active group, authorizing the change.
-     * @dev This is the second step of the epoch rollover. It requires a valid signature
-     *      from the current active validator group, which proves their consent. Once staged,
-     *      the epoch will automatically become active at the specified `rolloverBlock`.
+     * @dev This is the second step of the epoch rollover. It requires a valid signature from the current active
+     *      validator group, which proves their consent. Once staged, the epoch will automatically become active at the
+     *      specified `rolloverBlock`.
      */
     function stageEpoch(uint64 proposedEpoch, uint64 rolloverBlock, FROSTGroupId.T group, FROSTSignatureId.T signature)
         public
@@ -326,19 +324,15 @@ contract Consensus is IFROSTCoordinatorCallback {
      * @param epoch The epoch in which the transaction was proposed.
      * @param transactionHash The hash of the meta-transaction.
      * @param signature The FROST signature share attesting to the transaction.
-     * @dev No explicit time limit is imposed for when a transaction can be
-     *      attested in this contract.
+     * @dev No explicit time limit is imposed for when a transaction can be attested in this contract.
      */
     function attestTransaction(uint64 epoch, bytes32 transactionHash, FROSTSignatureId.T signature) public {
-        // Note that we do not impose a time limit for a transaction to be
-        // attested to in the consensus contract. In theory, we have enough
-        // space in our `Epochs` struct to also keep track of the previous epoch
-        // and then we could check here that `epoch` is either `epochs.active`
-        // or `epochs.previous`. This isn't a useful distinction, however: in
-        // fact, if there is a reverted transaction with a valid FROST signature
-        // onchain, then there is a valid attestation for the transaction
-        // (regardless of whether or not this contract accepts it). Therefore,
-        // it isn't useful for us to be restrictive here.
+        // Note that we do not impose a time limit for a transaction to be attested to in the consensus contract. In
+        // theory, we have enough space in our `Epochs` struct to also keep track of the previous epoch and then we
+        // could check here that `epoch` is either `epochs.active` or `epochs.previous`. This isn't a useful
+        // distinction, however: in fact, if there is a reverted transaction with a valid FROST signature onchain, then
+        // there is a valid attestation for the transaction (regardless of whether or not this contract accepts it).
+        // Therefore, it isn't useful for us to be restrictive here.
 
         bytes32 message = domainSeparator().transactionProposal(epoch, transactionHash);
         _COORDINATOR.signatureVerify(signature, $groups[epoch], message);
@@ -379,9 +373,8 @@ contract Consensus is IFROSTCoordinatorCallback {
     /**
      * @notice Processes a potential epoch rollover based on the staged state.
      * @return epochs The updated epochs state.
-     * @dev This is a "lazy" execution function, called at the beginning of most state-changing
-     *      methods. It checks if a scheduled rollover is due (via `_epochsWithRollover`) and
-     *      applies the state change if it is.
+     * @dev This is a "lazy" execution function, called at the beginning of most state-changing methods. It checks if a
+     *      scheduled rollover is due (via `_epochsWithRollover`) and applies the state change if it is.
      */
     function _processRollover() private returns (Epochs memory epochs) {
         bool rolledOver;
@@ -396,9 +389,9 @@ contract Consensus is IFROSTCoordinatorCallback {
      * @notice Computes the effective epochs state, applying staged rollover if eligible.
      * @return epochs The epochs state after applying rollover if needed.
      * @return rolledOver True if a rollover occurred, false otherwise.
-     * @dev This view function checks if a staged epoch exists and if its `rolloverBlock`
-     *      has passed. If so, it calculates the new state of epochs without actually
-     *      writing to storage. The caller is responsible for persisting the new state.
+     * @dev This view function checks if a staged epoch exists and if its `rolloverBlock` has passed. If so, it
+     *      calculates the new state of epochs without actually writing to storage. The caller is responsible for
+     *      persisting the new state.
      */
     function _epochsWithRollover() private view returns (Epochs memory epochs, bool rolledOver) {
         epochs = $epochs;

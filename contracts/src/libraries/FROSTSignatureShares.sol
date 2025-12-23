@@ -71,10 +71,10 @@ library FROSTSignatureShares {
      * @param proof The Merkle proof demonstrating the participant's inclusion in the signing set.
      * @return signature The updated, accumulated group signature after incorporating the new share.
      * @dev This function performs two key actions:
-     *      1. Authorization: It verifies using a Merkle `proof` that the `identifier` is part of
-     *         the set of signers defined by the `root`.
-     *      2. Aggregation: It adds the participant's share to the collective group signature.
-     *         The final group signature is `(R, z)` where
+     *      1. Authorization: It verifies using a Merkle `proof` that the `identifier` is part of the set of signers
+     *         defined by the `root`.
+     *      2. Aggregation: It adds the participant's share to the collective group signature. The final group
+     *         signature is `(R, z)` where
      *         `R = ∑ R_i` and `z = ∑ z_i`.
      */
     function register(
@@ -96,8 +96,7 @@ library FROSTSignatureShares {
     }
 
     /**
-     * @notice Retrieves the current group signature for the specified
-     *         commitment root.
+     * @notice Retrieves the current group signature for the specified commitment root.
      * @param self The storage struct.
      * @param root The commitment root.
      * @return signature The accumulated group signature.

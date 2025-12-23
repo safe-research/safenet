@@ -54,28 +54,25 @@ library FROSTNonceCommitmentSet {
     // ============================================================
 
     /**
-     * @dev The size of a nonce chunk, expressed as a power of 2. A chunk size of 10
-     *      means each Merkle tree committed to by a participant contains 2^10 = 1024
-     *      nonce commitments. This value balances the gas cost of on-chain commitments
-     *      against the off-chain computational overhead for participants. Larger chunks
-     *      reduce the frequency of on-chain transactions but require more work upfront.
+     * @dev The size of a nonce chunk, expressed as a power of 2. A chunk size of 10 means each Merkle tree committed
+     *      to by a participant contains 2^10 = 1024 nonce commitments. This value balances the gas cost of on-chain
+     *      commitments against the off-chain computational overhead for participants. Larger chunks reduce the
+     *      frequency of on-chain transactions but require more work upfront.
      */
     uint256 private constant _CHUNKSZ = 10;
 
     /**
-     * @dev A bitmask used to extract the 10-bit offset from a packed sequence number.
-     *      The value 0x3ff is `2^10 - 1`, which is `...001111111111` in binary.
-     *      Applying this mask with a bitwise AND operation isolates the lower 10 bits,
-     *      which represent the nonce's index within a chunk of 1024 nonces.
+     * @dev A bitmask used to extract the 10-bit offset from a packed sequence number. The value 0x3ff is `2^10 - 1`,
+     *      which is `...001111111111` in binary. Applying this mask with a bitwise AND operation isolates the lower 10
+     *      bits, which represent the nonce's index within a chunk of 1024 nonces.
      */
     uint256 private constant _OFFSETMASK = 0x3ff;
 
     /**
-     * @dev A bitmask used to extract the Merkle root from a packed `bytes32` value.
-     *      This mask has its lower 10 bits set to 0 and the upper 246 bits set to 1.
-     *      It is used to zero out the bits where the offset is stored, leaving only
-     *      the Merkle root part of the packed value. This is part of the gas-saving
-     *      strategy to pack the root and offset into a single storage slot.
+     * @dev A bitmask used to extract the Merkle root from a packed `bytes32` value. This mask has its lower 10 bits
+     *      set to 0 and the upper 246 bits set to 1. It is used to zero out the bits where the offset is stored,
+     *      leaving only the Merkle root part of the packed value. This is part of the gas-saving strategy to pack the
+     *      root and offset into a single storage slot.
      */
     bytes32 private constant _ROOTMASK = 0xfffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffc00;
 
@@ -84,9 +81,8 @@ library FROSTNonceCommitmentSet {
     // ============================================================
 
     /**
-     * @notice Commits to the next chunk of nonces, given the current signature
-     *         sequence for a group. This prevents participants commiting to
-     *         nonces _after_ a signing ceremony has already begun.
+     * @notice Commits to the next chunk of nonces, given the current signature sequence for a group. This prevents
+     *         participants committing to nonces _after_ a signing ceremony has already begun.
      * @param self The storage struct.
      * @param identifier The participant's FROST identifier.
      * @param commitment The commitment merkle root.
@@ -179,12 +175,11 @@ library FROSTNonceCommitmentSet {
      * @param commitment The commitment hash.
      * @param offset The offset to encode.
      * @return root The encoded Root.
-     * @dev This function implements a gas-saving packing strategy. It combines a 32-byte
-     *      Merkle root and a 10-bit offset into a single `bytes32` storage slot. The
-     *      offset is stored in the 10 least significant bits, and the Merkle root
-     *      occupies the remaining 246 bits. This reduces storage costs but implies that
-     *      only a prefix of the Merkle root is stored, slightly increasing the theoretical
-     *      collision probability (though it remains negligible in practice).
+     * @dev This function implements a gas-saving packing strategy. It combines a 32-byte Merkle root and a 10-bit
+     *      offset into a single `bytes32` storage slot. The offset is stored in the 10 least significant bits, and the
+     *      Merkle root occupies the remaining 246 bits. This reduces storage costs but implies that only a prefix of
+     *      the Merkle root is stored, slightly increasing the theoretical collision probability (though it remains
+     *      negligible in practice).
      */
     function _root(bytes32 commitment, uint256 offset) private pure returns (Root root) {
         return Root.wrap(bytes32(uint256(commitment & _ROOTMASK) | offset));
@@ -195,9 +190,8 @@ library FROSTNonceCommitmentSet {
      * @param root The Root to decode.
      * @return commitment The commitment hash.
      * @return offset The encoded offset.
-     * @dev This function unpacks a `bytes32` value into a Merkle root and an offset,
-     *      reversing the packing performed by the `_root` function. It uses bitmasks
-     *      to separate the 246-bit root from the 10-bit offset.
+     * @dev This function unpacks a `bytes32` value into a Merkle root and an offset, reversing the packing performed
+     *      by the `_root` function. It uses bitmasks to separate the 246-bit root from the 10-bit offset.
      */
     function _root(Root root) private pure returns (bytes32 commitment, uint256 offset) {
         commitment = Root.unwrap(root) & _ROOTMASK;

@@ -47,18 +47,7 @@ library MetaTransaction {
     // ============================================================
 
     /**
-     * @custom:precomputed
-     *         keccak256(
-     *             "MetaTransaction(
-     *                 uint256 chainId,
-     *                 address account,
-     *                 address to,
-     *                 uint256 value,
-     *                 uint8 operation,
-     *                 bytes data,
-     *                 uint256 nonce
-     *             )"
-     *         )
+     * @custom:precomputed keccak256("MetaTransaction(uint256 chainId,address account,address to,uint256 value,uint8 operation,bytes data,uint256 nonce)")
      */
     bytes32 private constant TYPEHASH = hex"67f1b8aa48f188fdd88de6207876f34194dbe2598053bc2a144324e5b8953bc4";
 

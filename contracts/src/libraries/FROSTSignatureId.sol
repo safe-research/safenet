@@ -32,8 +32,8 @@ library FROSTSignatureId {
      * @param gid The group ID.
      * @param seq The sequence number.
      * @return result The computed signature ID.
-     * @dev We encode `sequence + 1` in the signature ID. This allows us to tell
-     *      whether an ID belongs to a group or a signature by non-zero LSBs.
+     * @dev We encode `sequence + 1` in the signature ID. This allows us to tell whether an ID belongs to a group or a
+     *      signature by non-zero LSBs.
      */
     function create(FROSTGroupId.T gid, uint64 seq) internal pure returns (T result) {
         return T.wrap(FROSTGroupId.T.unwrap(gid) | bytes32(uint256(seq + 1)));
