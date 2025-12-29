@@ -6,3 +6,4 @@ build/
 .env
 anvil_logs.txt
 foundry.lock
+.certora_internal
