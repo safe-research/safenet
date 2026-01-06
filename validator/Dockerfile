@@ -43,7 +43,7 @@ COPY --from=builder /usr/src/app/node_modules/better-sqlite3/build node_modules/
 # Copy the container entry point script.
 COPY validator/bin/entrypoint.sh validator/bin/entrypoint.sh
 
-USER node
+# Set the Node environment to "production"
 ENV NODE_ENV=production
 
 # Specify the command to run the compiled worker.
