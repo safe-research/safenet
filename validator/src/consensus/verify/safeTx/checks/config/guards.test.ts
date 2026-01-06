@@ -37,7 +37,7 @@ describe("guards", () => {
 			);
 		});
 
-		it("allow zero address as module guard (to reset)", async () => {
+		it("allow zero address as guard (to reset)", async () => {
 			const tx: MetaTransaction = {
 				to: "0xF01888f0677547Ec07cd16c8680e699c96588E6B",
 				value: 0n,

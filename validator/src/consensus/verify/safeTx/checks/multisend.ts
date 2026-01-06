@@ -23,7 +23,7 @@ const decodeMultiSend = ({ account, chainId, nonce, data }: MetaTransaction): Me
 	const multiSendDataLength = BigInt(`0x${data.slice(pointer, pointer + 64)}`);
 	pointer += 64;
 	// Calculate data padding that is appended by default abi encoders
-	const multiSendDataPadding = 32n - (multiSendDataLength % 32n);
+	const multiSendDataPadding = (32n - (multiSendDataLength % 32n)) % 32n;
 
 	if (multiSendDataLength + multiSendDataPadding !== BigInt(dataSize - MIN_LENGTH)) {
 		throw new Error("Invalid multi send data length");

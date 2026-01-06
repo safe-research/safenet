@@ -221,7 +221,7 @@ describe("basic checks", () => {
 		});
 	});
 
-	describe("buildSupportedSignatureCheck", () => {
+	describe("buildSelectorChecks", () => {
 		it("should throw for data shorter than a selector", async () => {
 			const selectors: Record<string, TransactionCheck> = {};
 			const tx: MetaTransaction = {

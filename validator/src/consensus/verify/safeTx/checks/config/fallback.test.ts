@@ -20,7 +20,7 @@ describe("fallback", () => {
 			expect(() => check["0xf08a0323"](tx)).toThrow();
 		});
 
-		it("should throw for unknown guard", async () => {
+		it("should throw for unknown fallback handler", async () => {
 			const tx: MetaTransaction = {
 				to: "0xF01888f0677547Ec07cd16c8680e699c96588E6B",
 				value: 0n,
@@ -37,7 +37,7 @@ describe("fallback", () => {
 			);
 		});
 
-		it("allow zero address as module guard (to reset)", async () => {
+		it("allow zero address as fallback handler (to reset)", async () => {
 			const tx: MetaTransaction = {
 				to: "0xF01888f0677547Ec07cd16c8680e699c96588E6B",
 				value: 0n,
