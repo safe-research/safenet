@@ -28,6 +28,7 @@ import type { ProtocolConfig } from "../types/interfaces.js";
 import type { Logger } from "../utils/logging.js";
 import type { Metrics } from "../utils/metrics.js";
 import { InMemoryQueue } from "../utils/queue.js";
+import { buildSafeTransactionCheck } from "./checks.js";
 import { ShieldnetStateMachine } from "./machine.js";
 
 export class ValidatorService {
@@ -65,7 +66,8 @@ export class ValidatorService {
 		const signingClient = new SigningClient(storage);
 		const keyGenClient = new KeyGenClient(storage, this.#logger);
 		const verificationHandlers = new Map<string, PacketHandler<Typed>>();
-		verificationHandlers.set("safe_transaction_packet", new SafeTransactionHandler());
+		const check = buildSafeTransactionCheck();
+		verificationHandlers.set("safe_transaction_packet", new SafeTransactionHandler(check));
 		verificationHandlers.set("epoch_rollover_packet", new EpochRolloverHandler());
 		const verificationEngine = new VerificationEngine(verificationHandlers);
 		const actionStorage =
