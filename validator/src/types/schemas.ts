@@ -52,7 +52,7 @@ const genesisSaltSchema = z.preprocess((val) => {
 const BLOCKTIME_IN_SECONDS = 5n; // value assumed for gnosis chain
 const BLOCKS_PER_EPOCH = (24n * 60n * 60n) / BLOCKTIME_IN_SECONDS; // ~ blocks for 1 day
 
-const emptyToDefault = (schema: ZodType, defaultVal?: unknown) =>
+const emptyToDefault = <T>(schema: ZodType<T>, defaultVal?: unknown): ZodType<T> =>
 	z.preprocess((val) => {
 		if (val === undefined || val === "") {
 			return defaultVal;

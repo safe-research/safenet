@@ -3,7 +3,6 @@ import {
 	type Account,
 	type Chain,
 	type ChainFees,
-	createNonceManager,
 	createPublicClient,
 	createWalletClient,
 	extractChain,
@@ -12,7 +11,6 @@ import {
 	type Transport,
 	webSocket,
 } from "viem";
-import { jsonRpc } from "viem/nonce";
 import { KeyGenClient } from "../consensus/keyGen/client.js";
 import { OnchainProtocol } from "../consensus/protocol/onchain.js";
 import { SqliteActionQueue } from "../consensus/protocol/sqlite.js";
@@ -36,7 +34,6 @@ import { ShieldnetStateMachine } from "./machine.js";
 
 export class ValidatorService {
 	#logger: Logger;
-	#config: ProtocolConfig;
 	#publicClient: PublicClient;
 	#watcher: OnchainTransitionWatcher;
 	#stateMachine: ShieldnetStateMachine;
@@ -59,7 +56,6 @@ export class ValidatorService {
 		database?: Database;
 	}) {
 		this.#logger = logger;
-		this.#config = config;
 		this.#publicClient = createPublicClient({ chain, transport });
 		const walletClient = createWalletClient({ chain, transport, account });
 		const storage =
@@ -134,10 +130,6 @@ export const createValidatorService = ({
 	fees?: ChainFees;
 }): ValidatorService => {
 	const transport = rpcUrl.startsWith("wss") ? webSocket(rpcUrl) : http(rpcUrl);
-	if (account.nonceManager === undefined) {
-		// Enforce nonce manager
-		account.nonceManager = createNonceManager({ source: jsonRpc() });
-	}
 	const chain: Chain = {
 		...extractChain({
 			chains: supportedChains,

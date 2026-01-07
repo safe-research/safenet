@@ -1,6 +1,7 @@
 import dotenv from "dotenv";
 import type { ChainFees } from "viem";
-import { privateKeyToAccount } from "viem/accounts";
+import { createNonceManager, privateKeyToAccount } from "viem/accounts";
+import { jsonRpc } from "viem/nonce";
 import { z } from "zod";
 import { createValidatorService } from "./service/service.js";
 import type { ProtocolConfig } from "./types/interfaces.js";
@@ -40,7 +41,9 @@ const fees: ChainFees = {
 	maxPriorityFeePerGas: validatorConfig.PRIORITY_FEE_PER_GAS,
 };
 
-const account = privateKeyToAccount(validatorConfig.PRIVATE_KEY);
+const account = privateKeyToAccount(validatorConfig.PRIVATE_KEY, {
+	nonceManager: createNonceManager({ source: jsonRpc() }),
+});
 logger.info(`Using validator account ${account.address}`);
 
 const metrics = createMetricsService({ logger, port: validatorConfig.METRICS_PORT });
