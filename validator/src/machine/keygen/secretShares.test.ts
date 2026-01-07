@@ -57,7 +57,7 @@ const EVENT: KeyGenSecretSharedEvent = {
 		y: TEST_POINT,
 		f: [0x5afe5afe5afe01n, 0x5afe5afe5afe02n, 0x5afe5afe5afe03n],
 	},
-	completed: true,
+	shared: true,
 };
 
 // --- Tests ---
@@ -87,7 +87,7 @@ describe("receiving secret shares", () => {
 	it("should only update last participant if not completed", async () => {
 		const event: KeyGenSecretSharedEvent = {
 			...EVENT,
-			completed: false,
+			shared: false,
 		};
 		const handleKeygenSecrets = vi.fn();
 		handleKeygenSecrets.mockReturnValue("pending_shares");
@@ -114,7 +114,7 @@ describe("receiving secret shares", () => {
 	it("should track who submitted invalid shares", async () => {
 		const event: KeyGenSecretSharedEvent = {
 			...EVENT,
-			completed: false,
+			shared: false,
 		};
 		const handleKeygenSecrets = vi.fn();
 		handleKeygenSecrets.mockReturnValue("invalid_share");

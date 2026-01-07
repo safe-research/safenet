@@ -13,8 +13,8 @@ export type KeyGenEvent = {
 	index: number;
 	gid: GroupId;
 	participants: Hex;
-	count: bigint;
-	threshold: bigint;
+	count: number;
+	threshold: number;
 	context: Hex;
 };
 
@@ -38,7 +38,7 @@ export type KeyGenSecretSharedEvent = {
 		y: FrostPoint;
 		f: bigint[];
 	};
-	completed: boolean;
+	shared: boolean;
 };
 
 export type KeyGenComplaintSubmittedEvent = {
@@ -48,6 +48,7 @@ export type KeyGenComplaintSubmittedEvent = {
 	gid: GroupId;
 	plaintiff: ParticipantId;
 	accused: ParticipantId;
+	compromised: boolean;
 };
 
 export type KeyGenComplaintResponsedEvent = {
@@ -66,6 +67,7 @@ export type KeyGenConfirmedEvent = {
 	index: number;
 	gid: GroupId;
 	identifier: ParticipantId;
+	confirmed: boolean;
 };
 
 export type NonceCommitmentsHashEvent = {

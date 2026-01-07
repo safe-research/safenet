@@ -12,8 +12,8 @@ const createRandomAccount = () => privateKeyToAccount(generatePrivateKey());
 
 describe("keyGen", () => {
 	it("e2e keygen flow", async () => {
-		const count = 3n;
-		const threshold = count / 2n + 1n;
+		const count = 3;
+		const threshold = 2;
 		const validatorAddresses = Array.from({ length: Number(count) }, () => createRandomAccount());
 		log(`Run test with ${count} validators and threshold ${threshold}`);
 		const participants: Participant[] = validatorAddresses.map((a, i) => {

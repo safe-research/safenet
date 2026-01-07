@@ -37,7 +37,7 @@ const main = async (): Promise<void> => {
 	const coordinator = {
 		address: config.COORDINATOR_ADDRESS,
 		abi: parseAbi([
-			"function keyGen(bytes32 participants, uint64 count, uint64 threshold, bytes32 context) external returns (bytes32 gid)",
+			"function keyGen(bytes32 participants, uint16 count, uint16 threshold, bytes32 context) external returns (bytes32 gid)",
 		]),
 	} as const;
 	// Manually trigger genesis KeyGen

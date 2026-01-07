@@ -21,8 +21,8 @@ const actions: StateTransition[] = [
 		index: 0,
 		gid: "0x5afe000000000000000000000000000000000000000000000000000000000000",
 		participants: "0x5afe5afe00000000000000000000000000000000000000000000000000000000",
-		count: 4n,
-		threshold: 3n,
+		count: 4,
+		threshold: 3,
 		context: "0x5afecc0000000000000000000000000000000000000000000000000000000000",
 	},
 	{
@@ -48,7 +48,7 @@ const actions: StateTransition[] = [
 			y: TEST_POINT,
 			f: [1n, 2n, 3n, 5n, 8n],
 		},
-		completed: true,
+		shared: true,
 	},
 	{
 		id: "event_key_gen_complaint_submitted",
@@ -57,6 +57,7 @@ const actions: StateTransition[] = [
 		gid: "0x5afe000000000000000000000000000000000000000000000000000000000000",
 		plaintiff: 1n,
 		accused: 2n,
+		compromised: false,
 	},
 	{
 		id: "event_key_gen_complaint_responded",
@@ -73,6 +74,7 @@ const actions: StateTransition[] = [
 		index: 0,
 		gid: "0x5afe000000000000000000000000000000000000000000000000000000000000",
 		identifier: 1n,
+		confirmed: true,
 	},
 	{
 		id: "event_nonce_commitments_hash",

@@ -83,6 +83,7 @@ const EVENT: KeyGenConfirmedEvent = {
 	index: 0,
 	gid: "0x06cb03baac74421225341827941e88d9547e5459c4b3715c0000000000000000",
 	identifier: 2n,
+	confirmed: false,
 };
 
 // --- Tests ---

@@ -127,7 +127,7 @@ describe("signing", () => {
 		}[] = [];
 		const clients = TEST_SIGNERS.map((a) => {
 			const storage = createClientStorage(a.account);
-			storage.registerGroup(TEST_GROUP.groupId, TEST_GROUP.participants, BigInt(TEST_GROUP.participants.length));
+			storage.registerGroup(TEST_GROUP.groupId, TEST_GROUP.participants, TEST_GROUP.participants.length);
 			storage.registerVerification(TEST_GROUP.groupId, TEST_GROUP.publicKey, a.verificationShare);
 			storage.registerSigningShare(TEST_GROUP.groupId, a.signingShare);
 			const client = new SigningClient(storage);

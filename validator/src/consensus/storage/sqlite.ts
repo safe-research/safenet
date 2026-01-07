@@ -164,7 +164,7 @@ export class SqliteClientStorage implements GroupInfoStorage, KeyGenInfoStorage,
 			.map((row) => hexBytes32Schema.parse(row));
 	}
 
-	registerGroup(groupId: GroupId, participants: readonly Participant[], threshold: bigint): ParticipantId {
+	registerGroup(groupId: GroupId, participants: readonly Participant[], threshold: number): ParticipantId {
 		// TODO: Computing the participant ID from inputs does not seem like the
 		// responsibility of the client. Additionally, it is not possible to
 		// correctly support multiple participant IDs managed by the same EOA.
@@ -293,8 +293,8 @@ export class SqliteClientStorage implements GroupInfoStorage, KeyGenInfoStorage,
 		return this.getGroupThisParticipantColumn(groupId, "id", dbIntegerSchema);
 	}
 
-	threshold(groupId: GroupId): bigint {
-		return this.getGroupColumn(groupId, "threshold", dbIntegerSchema);
+	threshold(groupId: GroupId): number {
+		return this.getGroupColumn(groupId, "threshold", z.int());
 	}
 
 	publicKey(groupId: GroupId): FrostPoint | undefined {

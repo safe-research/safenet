@@ -75,8 +75,8 @@ const signingActionSchema = z.discriminatedUnion("id", [
 export const startKeyGenSchema = z.object({
 	id: z.literal("key_gen_start"),
 	participants: hexBytes32Schema,
-	count: coercedBigIntSchema,
-	threshold: coercedBigIntSchema,
+	count: z.int(),
+	threshold: z.int(),
 	context: hexBytes32Schema,
 	participantId: participantIdSchema,
 	commitments: z.array(frostPointSchema),

@@ -26,22 +26,9 @@ export const frostShareSchema = z.object({
 export const keyGenEventSchema = z.object({
 	gid: hexBytes32Schema,
 	participants: hexBytes32Schema,
-	count: eventBigIntSchema,
-	threshold: eventBigIntSchema,
+	count: z.int(),
+	threshold: z.int(),
 	context: hexBytes32Schema,
-});
-
-export const keyGenComplaintSubmittedEventSchema = z.object({
-	gid: hexBytes32Schema,
-	plaintiff: eventBigIntSchema,
-	accused: eventBigIntSchema,
-});
-
-export const keyGenComplaintRespondedEventSchema = z.object({
-	gid: hexBytes32Schema,
-	plaintiff: eventBigIntSchema,
-	accused: eventBigIntSchema,
-	secretShare: eventBigIntSchema,
 });
 
 export const keyGenCommittedEventSchema = z.object({
@@ -55,12 +42,27 @@ export const keyGenSecretSharedEventSchema = z.object({
 	gid: hexBytes32Schema,
 	identifier: eventBigIntSchema,
 	share: frostShareSchema,
-	completed: z.boolean(),
+	shared: z.boolean(),
 });
 
 export const keyGenConfirmedEventSchema = z.object({
 	gid: hexBytes32Schema,
 	identifier: eventBigIntSchema,
+	confirmed: z.boolean(),
+});
+
+export const keyGenComplaintSubmittedEventSchema = z.object({
+	gid: hexBytes32Schema,
+	plaintiff: eventBigIntSchema,
+	accused: eventBigIntSchema,
+	compromised: z.boolean(),
+});
+
+export const keyGenComplaintRespondedEventSchema = z.object({
+	gid: hexBytes32Schema,
+	plaintiff: eventBigIntSchema,
+	accused: eventBigIntSchema,
+	secretShare: eventBigIntSchema,
 });
 
 export const nonceCommitmentsHashEventSchema = z.object({

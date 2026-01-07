@@ -52,7 +52,7 @@ export class KeyGenClient {
 		return this.#storage.participants(groupId);
 	}
 
-	threshold(groupId: GroupId): bigint {
+	threshold(groupId: GroupId): number {
 		return this.#storage.threshold(groupId);
 	}
 
@@ -74,8 +74,8 @@ export class KeyGenClient {
 
 	setupGroup(
 		participants: readonly Participant[],
-		count: bigint,
-		threshold: bigint,
+		count: number,
+		threshold: number,
 		context: Hex,
 	): {
 		groupId: GroupId;

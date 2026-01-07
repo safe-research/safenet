@@ -9,14 +9,14 @@ export type Participant = {
 
 export type GroupInfoStorage = {
 	knownGroups(): GroupId[];
-	registerGroup(groupId: GroupId, participants: readonly Participant[], threshold: bigint): ParticipantId;
+	registerGroup(groupId: GroupId, participants: readonly Participant[], threshold: number): ParticipantId;
 	registerVerification(groupId: GroupId, groupPublicKey: FrostPoint, verificationShare: FrostPoint): void;
 	registerSigningShare(groupId: GroupId, signingShare: bigint): void;
 
 	participantId(groupId: GroupId): ParticipantId;
 	publicKey(groupId: GroupId): FrostPoint | undefined;
 	participants(groupId: GroupId): readonly Participant[];
-	threshold(groupId: GroupId): bigint;
+	threshold(groupId: GroupId): number;
 	signingShare(groupId: GroupId): bigint | undefined;
 	verificationShare(groupId: GroupId): FrostPoint;
 	unregisterGroup(groupId: GroupId): void;

@@ -5,13 +5,13 @@ import type { GroupId } from "../../frost/types.js";
 import type { MachineConfig } from "../types.js";
 
 export type GroupParameters = {
-	count: bigint;
-	threshold: bigint;
+	count: number;
+	threshold: number;
 };
 
 export const calcGroupParameters = (participantCount: number): GroupParameters => {
-	const count = BigInt(participantCount);
-	const threshold = count / 2n + 1n;
+	const count = participantCount;
+	const threshold = Math.floor(count / 2) + 1;
 	// TODO: Handle cases where the group size is too small.
 	return { count, threshold };
 };
@@ -24,8 +24,8 @@ export const calcGroupContext = (consensus: Address, epoch: bigint): Hex => {
 export type GenesisGroup = {
 	id: GroupId;
 	participantsRoot: Hex;
-	count: bigint;
-	threshold: bigint;
+	count: number;
+	threshold: number;
 	context: Hex;
 };
 

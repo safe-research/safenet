@@ -7,7 +7,7 @@ type GroupInfo = {
 	groupId: GroupId;
 	participants: readonly Participant[];
 	participantId: bigint;
-	threshold: bigint;
+	threshold: number;
 	verificationShare?: FrostPoint;
 	groupPublicKey?: FrostPoint;
 	signingShare?: bigint;
@@ -152,7 +152,7 @@ export class InMemoryClientStorage implements KeyGenInfoStorage, GroupInfoStorag
 	knownGroups(): GroupId[] {
 		return Array.from(this.#groupInfo.values().map((g) => g.groupId));
 	}
-	registerGroup(groupId: GroupId, participants: readonly Participant[], threshold: bigint): ParticipantId {
+	registerGroup(groupId: GroupId, participants: readonly Participant[], threshold: number): ParticipantId {
 		if (this.#groupInfo.has(groupId)) throw new Error(`Group ${groupId} already registered!`);
 		const participantId = participants.find((p) => p.address === this.#account)?.id;
 		if (participantId === undefined) throw new Error(`Not part of Group ${groupId}!`);
@@ -185,7 +185,7 @@ export class InMemoryClientStorage implements KeyGenInfoStorage, GroupInfoStorag
 	participants(groupId: GroupId): readonly Participant[] {
 		return this.groupInfo(groupId).participants;
 	}
-	threshold(groupId: GroupId): bigint {
+	threshold(groupId: GroupId): number {
 		return this.groupInfo(groupId).threshold;
 	}
 	signingShare(groupId: GroupId): bigint | undefined {

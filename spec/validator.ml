@@ -248,8 +248,8 @@ struct
     Abi.encode
       [
         `Bytes32 participants_root;
-        `Uint64 count;
-        `Uint64 threshold;
+        `Uint16 count;
+        `Uint16 threshold;
         `Bytes32 context;
       ]
     |> Keccak256.hash |> GroupId.of_string

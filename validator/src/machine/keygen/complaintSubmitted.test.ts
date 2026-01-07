@@ -17,6 +17,7 @@ const EVENT: KeyGenComplaintSubmittedEvent = {
 	gid: "0x06cb03baac74421225341827941e88d9547e5459c4b3715c0000000000000000",
 	plaintiff: 1n,
 	accused: 2n,
+	compromised: false,
 };
 const TEST_POINT = toPoint({
 	x: 73844941487532555987364396775795076447946974313865618280135872376303125438365n,
@@ -348,8 +349,8 @@ describe("complaint submitted", () => {
 			{
 				id: "key_gen_start",
 				participants: groupSetup.participantsRoot,
-				count: 2n,
-				threshold: 2n,
+				count: 2,
+				threshold: 2,
 				context: calcGroupContext(ethAddress, 10n),
 				participantId: 1n,
 				commitments: groupSetup.commitments,
@@ -368,6 +369,6 @@ describe("complaint submitted", () => {
 		});
 		expect(consensus).toBeCalledTimes(1);
 		expect(setupGroup).toBeCalledTimes(1);
-		expect(setupGroup).toBeCalledWith([participants[0], participants[2]], 2n, 2n, calcGroupContext(ethAddress, 10n));
+		expect(setupGroup).toBeCalledWith([participants[0], participants[2]], 2, 2, calcGroupContext(ethAddress, 10n));
 	});
 });

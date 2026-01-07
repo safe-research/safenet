@@ -196,7 +196,7 @@ export class SigningClient {
 		return this.#storage.message(signatureId);
 	}
 
-	threshold(signatureId: SignatureId): bigint {
+	threshold(signatureId: SignatureId): number {
 		const groupId = this.#storage.signingGroup(signatureId);
 		return this.#storage.threshold(groupId);
 	}

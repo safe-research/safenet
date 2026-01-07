@@ -67,8 +67,8 @@ const actions: ActionWithTimeout[] = [
 	{
 		id: "key_gen_start",
 		participants: "0x5afe000000000000000000000000000000000000000000000000000000000000",
-		count: 4n,
-		threshold: 3n,
+		count: 4,
+		threshold: 3,
 		context: "0x5afe00aa00000000000000000000000000000000000000000000000000000000",
 		participantId: 1n,
 		commitments: [TEST_POINT, TEST_POINT],

@@ -28,13 +28,13 @@ describe("sqlite", () => {
 			expect(() => storage.participants(groups[0])).toThrowError();
 			expect(() => storage.threshold(groups[0])).toThrowError();
 
-			const participantId = storage.registerGroup(groups[0], participants, 2n);
+			const participantId = storage.registerGroup(groups[0], participants, 2);
 			expect(participantId).toBe(participants[1].id);
 
 			expect(storage.knownGroups()).toEqual([groups[0]]);
 			expect(storage.participantId(groups[0])).toBe(participants[1].id);
 			expect(storage.participants(groups[0])).toEqual(participants);
-			expect(storage.threshold(groups[0])).toBe(2n);
+			expect(storage.threshold(groups[0])).toBe(2);
 		});
 
 		it("should register group public key and verification share", () => {
@@ -44,7 +44,7 @@ describe("sqlite", () => {
 			expect(() => storage.verificationShare(groups[0])).toThrowError();
 			expect(() => storage.registerVerification(groups[0], g(1n), g(2n))).toThrowError();
 
-			storage.registerGroup(groups[0], participants, 2n);
+			storage.registerGroup(groups[0], participants, 2);
 
 			expect(storage.publicKey(groups[0])).toBeUndefined();
 			expect(() => storage.verificationShare(groups[0])).toThrowError();
@@ -63,7 +63,7 @@ describe("sqlite", () => {
 			expect(() => storage.signingShare(groups[0])).toThrowError();
 			expect(() => storage.registerSigningShare(groups[0], 42n)).toThrowError();
 
-			storage.registerGroup(groups[0], participants, 2n);
+			storage.registerGroup(groups[0], participants, 2);
 
 			expect(storage.signingShare(groups[0])).toBeUndefined();
 
@@ -78,7 +78,7 @@ describe("sqlite", () => {
 			const storage = testStorage(participants[0].address);
 
 			for (const groupId of [groups[0], groups[1]]) {
-				storage.registerGroup(groupId, participants, 2n);
+				storage.registerGroup(groupId, participants, 2);
 			}
 
 			storage.unregisterGroup(groups[0]);
@@ -109,7 +109,7 @@ describe("sqlite", () => {
 			expect(() => storage.coefficients(groups[0])).toThrowError();
 			expect(() => storage.encryptionKey(groups[0])).toThrowError();
 
-			storage.registerGroup(groups[0], participants, 2n);
+			storage.registerGroup(groups[0], participants, 2);
 
 			expect(() => storage.coefficients(groups[0])).toThrowError();
 			expect(() => storage.encryptionKey(groups[0])).toThrowError();
@@ -134,7 +134,7 @@ describe("sqlite", () => {
 			expect(() => storage.checkIfCommitmentsComplete(groups[0])).toThrowError();
 			expect(() => storage.commitmentsMap(groups[0])).toThrowError();
 
-			storage.registerGroup(groups[0], participants, 2n);
+			storage.registerGroup(groups[0], participants, 2);
 
 			storage.registerCommitments(groups[0], commitments[1].id, commitments[1].value);
 
@@ -173,7 +173,7 @@ describe("sqlite", () => {
 			expect(() => storage.checkIfSecretSharesComplete(groups[0])).toThrowError();
 			expect(() => storage.secretSharesMap(groups[0])).toThrowError();
 
-			storage.registerGroup(groups[0], participants, 2n);
+			storage.registerGroup(groups[0], participants, 2);
 
 			storage.registerSecretShare(groups[0], secretShares[1].id, secretShares[1].value);
 
@@ -251,7 +251,7 @@ describe("sqlite", () => {
 
 			expect(() => storage.registerNonceTree(groups[0], dup(nonces))).toThrowError();
 
-			storage.registerGroup(groups[0], participants, 2n);
+			storage.registerGroup(groups[0], participants, 2);
 
 			expect(() => storage.linkNonceTree(groups[0], chunk, nonces.root)).toThrowError();
 			expect(() => storage.nonceTree(groups[0], chunk)).toThrowError();
@@ -308,7 +308,7 @@ describe("sqlite", () => {
 			expect(() => storage.message(signature)).toThrowError();
 			expect(() => storage.sequence(signature)).toThrowError();
 
-			storage.registerGroup(groups[0], participants, 2n);
+			storage.registerGroup(groups[0], participants, 2);
 
 			expect(() => storage.signingGroup(signature)).toThrowError();
 			expect(() => storage.signers(signature)).toThrowError();
@@ -338,7 +338,7 @@ describe("sqlite", () => {
 			expect(() => storage.missingNonces(signature)).toThrowError();
 			expect(() => storage.nonceCommitmentsMap(signature)).toThrowError();
 
-			storage.registerGroup(groups[0], participants, 2n);
+			storage.registerGroup(groups[0], participants, 2);
 			storage.registerSignatureRequest(signature, groups[0], message, signers, sequence);
 
 			expect(storage.checkIfNoncesComplete(signature)).toBe(false);
