@@ -61,8 +61,8 @@ describe("trigger key gen", () => {
 			{
 				id: "key_gen_start",
 				participants: groupSetup.participantsRoot,
-				count: 3n,
-				threshold: 2n,
+				count: 3,
+				threshold: 2,
 				context,
 				participantId: 3n,
 				commitments: groupSetup.commitments,
@@ -82,6 +82,6 @@ describe("trigger key gen", () => {
 		expect(diff.signing).toBeUndefined();
 
 		expect(setupGroup).toBeCalledTimes(1);
-		expect(setupGroup).toBeCalledWith(PARTICIPANTS, 3n, 2n, context);
+		expect(setupGroup).toBeCalledWith(PARTICIPANTS, 3, 2, context);
 	});
 });

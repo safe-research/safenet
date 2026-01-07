@@ -56,8 +56,8 @@ export type SigningAction =
 export type StartKeyGen = {
 	id: "key_gen_start";
 	participants: Hex;
-	count: bigint;
-	threshold: bigint;
+	count: number;
+	threshold: number;
 	context: Hex;
 	participantId: ParticipantId;
 	commitments: FrostPoint[];

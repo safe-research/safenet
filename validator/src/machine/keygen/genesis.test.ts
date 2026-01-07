@@ -54,14 +54,14 @@ const EVENT: KeyGenEvent = {
 	index: 0,
 	gid: "0x06cb03baac74421225341827941e88d9547e5459c4b3715c0000000000000000",
 	participants: "0xc41a668cab547c9e2cfd2975f4b6130877c8500c21820daffba14b24c40c742e",
-	count: 3n,
-	threshold: 2n,
+	count: 3,
+	threshold: 2,
 	context: zeroHash,
 };
 
 // --- Tests ---
 describe("gensis key gen", () => {
-	it("should not trigger genesis key gen when not waiting for rollover", () => {
+	it("should not trigger genesis key gen when not waiting for rollover", async () => {
 		const machineStates: MachineStates = {
 			rollover: {
 				id: "collecting_commitments",
@@ -72,44 +72,44 @@ describe("gensis key gen", () => {
 			signing: {},
 		};
 		const keyGenClient = {} as unknown as KeyGenClient;
-		const diff = handleGenesisKeyGen(MACHINE_CONFIG, keyGenClient, CONSENSUS_STATE, machineStates, EVENT);
+		const diff = await handleGenesisKeyGen(MACHINE_CONFIG, keyGenClient, CONSENSUS_STATE, machineStates, EVENT);
 
 		expect(diff).toStrictEqual({});
 	});
 
-	it("should not trigger genesis key gen when already active", () => {
+	it("should not trigger genesis key gen when already active", async () => {
 		const consensusState: ConsensusState = {
 			...CONSENSUS_STATE,
 			activeEpoch: 1n,
 		};
 		const keyGenClient = {} as unknown as KeyGenClient;
-		const diff = handleGenesisKeyGen(MACHINE_CONFIG, keyGenClient, consensusState, MACHINE_STATES, EVENT);
+		const diff = await handleGenesisKeyGen(MACHINE_CONFIG, keyGenClient, consensusState, MACHINE_STATES, EVENT);
 
 		expect(diff).toStrictEqual({});
 	});
 
-	it("should not trigger genesis key gen when an epoch is staged", () => {
+	it("should not trigger genesis key gen when an epoch is staged", async () => {
 		const consensusState: ConsensusState = {
 			...CONSENSUS_STATE,
 			stagedEpoch: 1n,
 		};
 		const keyGenClient = {} as unknown as KeyGenClient;
-		const diff = handleGenesisKeyGen(MACHINE_CONFIG, keyGenClient, consensusState, MACHINE_STATES, EVENT);
+		const diff = await handleGenesisKeyGen(MACHINE_CONFIG, keyGenClient, consensusState, MACHINE_STATES, EVENT);
 
 		expect(diff).toStrictEqual({});
 	});
 
-	it("should not trigger genesis key gen when event group id does not correspond to calculated group id", () => {
+	it("should not trigger genesis key gen when event group id does not correspond to calculated group id", async () => {
 		const keyGenClient = {} as unknown as KeyGenClient;
 		const event: KeyGenEvent = {
 			...EVENT,
 			gid: "0x5afe5afe",
 		};
-		const diff = handleGenesisKeyGen(MACHINE_CONFIG, keyGenClient, CONSENSUS_STATE, MACHINE_STATES, event);
+		const diff = await handleGenesisKeyGen(MACHINE_CONFIG, keyGenClient, CONSENSUS_STATE, MACHINE_STATES, event);
 		expect(diff).toStrictEqual({});
 	});
 
-	it("should trigger genesis key gen with correct parameters", () => {
+	it("should trigger genesis key gen with correct parameters", async () => {
 		const groupSetup = {
 			groupId: "0x06cb03baac74421225341827941e88d9547e5459c4b3715c0000000000000000",
 			participantsRoot: "0xc41a668cab547c9e2cfd2975f4b6130877c8500c21820daffba14b24c40c742e",
@@ -126,13 +126,13 @@ describe("gensis key gen", () => {
 		const keyGenClient = {
 			setupGroup,
 		} as unknown as KeyGenClient;
-		const diff = handleGenesisKeyGen(MACHINE_CONFIG, keyGenClient, CONSENSUS_STATE, MACHINE_STATES, EVENT);
+		const diff = await handleGenesisKeyGen(MACHINE_CONFIG, keyGenClient, CONSENSUS_STATE, MACHINE_STATES, EVENT);
 		expect(diff.actions).toStrictEqual([
 			{
 				id: "key_gen_start",
 				participants: groupSetup.participantsRoot,
-				count: 3n,
-				threshold: 2n,
+				count: 3,
+				threshold: 2,
 				context: zeroHash,
 				participantId: 2n,
 				commitments: groupSetup.commitments,
@@ -155,6 +155,6 @@ describe("gensis key gen", () => {
 		});
 		expect(diff.signing).toBeUndefined();
 		expect(setupGroup).toBeCalledTimes(1);
-		expect(setupGroup).toBeCalledWith(MACHINE_CONFIG.defaultParticipants, 3n, 2n, zeroHash);
+		expect(setupGroup).toBeCalledWith(MACHINE_CONFIG.defaultParticipants, 3, 2, zeroHash);
 	});
 });

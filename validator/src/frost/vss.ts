@@ -12,7 +12,7 @@ import type { FrostPoint, ProofOfKnowledge } from "./types.js";
 const generateCoefficient = (): bigint => {
 	return hdkg(randomBytes(32));
 };
-export const createCoefficients = (threshold: bigint): bigint[] => {
+export const createCoefficients = (threshold: number): bigint[] => {
 	const coefficients: bigint[] = [];
 	for (let i = 0; i < threshold; i++) {
 		coefficients.push(generateCoefficient());

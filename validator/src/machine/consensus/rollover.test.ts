@@ -150,8 +150,8 @@ describe("check rollover", () => {
 			{
 				id: "key_gen_start",
 				participants: groupSetup.participantsRoot,
-				count: 3n,
-				threshold: 2n,
+				count: 3,
+				threshold: 2,
 				context: "0x00000000eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee0000000000000002",
 				participantId: 3n,
 				commitments: groupSetup.commitments,
@@ -176,8 +176,8 @@ describe("check rollover", () => {
 		expect(setupGroup).toBeCalledTimes(1);
 		expect(setupGroup).toBeCalledWith(
 			MACHINE_CONFIG.defaultParticipants,
-			3n,
-			2n,
+			3,
+			2,
 			"0x00000000eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee0000000000000002",
 		);
 	});
@@ -214,8 +214,8 @@ describe("check rollover", () => {
 			{
 				id: "key_gen_start",
 				participants: groupSetup.participantsRoot,
-				count: 3n,
-				threshold: 2n,
+				count: 3,
+				threshold: 2,
 				context: "0x00000000eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee0000000000000002",
 				participantId: 3n,
 				commitments: groupSetup.commitments,
@@ -240,8 +240,8 @@ describe("check rollover", () => {
 		expect(setupGroup).toBeCalledTimes(1);
 		expect(setupGroup).toBeCalledWith(
 			MACHINE_CONFIG.defaultParticipants,
-			3n,
-			2n,
+			3,
+			2,
 			"0x00000000eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee0000000000000002",
 		);
 	});

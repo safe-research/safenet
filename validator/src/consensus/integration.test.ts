@@ -83,7 +83,7 @@ describe("integration", () => {
 		const coordinator = {
 			address: deploymentInfo.returns["0"].value as Address,
 			abi: parseAbi([
-				"function keyGen(bytes32 participants, uint64 count, uint64 threshold, bytes32 context) external returns (bytes32 gid)",
+				"function keyGen(bytes32 participants, uint16 count, uint16 threshold, bytes32 context) external returns (bytes32 gid)",
 				"function sign(bytes32 gid, bytes32 message) external returns (bytes32 sid)",
 				"function groupKey(bytes32 id) external view returns ((uint256 x, uint256 y) key)",
 			]),
@@ -182,7 +182,7 @@ describe("integration", () => {
 		await initiatorClient.writeContract({
 			...coordinator,
 			functionName: "keyGen",
-			args: [calculateParticipantsRoot(participants), 3n, 2n, zeroHash],
+			args: [calculateParticipantsRoot(participants), 3, 2, zeroHash],
 		});
 		// Setup done ... SchildNetz läuft ... lets send some signature requests
 		const transaction = {

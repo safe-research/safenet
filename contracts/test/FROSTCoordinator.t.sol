@@ -24,8 +24,8 @@ contract FROSTCoordinatorTest is Test {
         ForgeSecp256k1.P e;
     }
 
-    uint64 public constant COUNT = 5;
-    uint64 public constant THRESHOLD = 3;
+    uint16 public constant COUNT = 5;
+    uint16 public constant THRESHOLD = 3;
 
     FROSTCoordinator public coordinator;
     ParticipantMerkleTree public participants;
@@ -228,6 +228,14 @@ contract FROSTCoordinatorTest is Test {
             assertEq(y.x, yy.x);
             assertEq(y.y, yy.y);
         }
+
+        // EXTENSION: Confirmation
+        for (uint256 identifier = 1; identifier <= COUNT; identifier++) {
+            vm.expectEmit();
+            emit FROSTCoordinator.KeyGenConfirmed(gid, FROST.newIdentifier(identifier), identifier == COUNT);
+            vm.prank(participants.addr(identifier));
+            coordinator.keyGenConfirm(gid);
+        }
     }
 
     function test_Sign() public {
@@ -365,7 +373,7 @@ contract FROSTCoordinatorTest is Test {
         FROST.verify(groupKey, signature, message);
     }
 
-    function _randomSortedAddresses(uint64 count) private view returns (address[] memory result) {
+    function _randomSortedAddresses(uint16 count) private view returns (address[] memory result) {
         result = new address[](count);
         for (uint256 i = 0; i < result.length; i++) {
             result[i] = vm.randomAddress();

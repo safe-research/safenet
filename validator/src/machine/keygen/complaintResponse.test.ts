@@ -273,8 +273,8 @@ describe("complaint responded", () => {
 				{
 					id: "key_gen_start",
 					participants: groupSetup.participantsRoot,
-					count: 3n,
-					threshold: 2n,
+					count: 3,
+					threshold: 2,
 					context: "0x00000000eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee000000000000000a",
 					participantId: 4n,
 					commitments: groupSetup.commitments,
@@ -344,8 +344,8 @@ describe("complaint responded", () => {
 				{
 					id: "key_gen_start",
 					participants: groupSetup.participantsRoot,
-					count: 3n,
-					threshold: 2n,
+					count: 3,
+					threshold: 2,
 					context: "0x00000000eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee000000000000000a",
 					participantId: 4n,
 					commitments: groupSetup.commitments,

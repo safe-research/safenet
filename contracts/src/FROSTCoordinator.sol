@@ -78,11 +78,12 @@ contract FROSTCoordinator {
      * @custom:param status The current status of the group.
      */
     struct GroupParameters {
-        uint64 count;
-        uint64 threshold;
-        uint64 pending;
-        uint64 sequence;
         GroupStatus status;
+        uint16 count;
+        uint16 threshold;
+        uint16 pending;
+        uint64 sequence;
+        uint136 _padding;
     }
 
     /**
@@ -161,7 +162,7 @@ contract FROSTCoordinator {
      * @param threshold The signing threshold.
      * @param context The application-specific context.
      */
-    event KeyGen(FROSTGroupId.T indexed gid, bytes32 participants, uint64 count, uint64 threshold, bytes32 context);
+    event KeyGen(FROSTGroupId.T indexed gid, bytes32 participants, uint16 count, uint16 threshold, bytes32 context);
 
     /**
      * @notice Emitted when a key generation commitment is submitted.
@@ -179,26 +180,30 @@ contract FROSTCoordinator {
      * @param gid The group ID.
      * @param identifier The participant identifier.
      * @param share The key generation secret share.
-     * @param completed True if all shares are received and the phase completes.
+     * @param shared True if all shares are received and the phase completes.
      */
     event KeyGenSecretShared(
-        FROSTGroupId.T indexed gid, FROST.Identifier identifier, KeyGenSecretShare share, bool completed
+        FROSTGroupId.T indexed gid, FROST.Identifier identifier, KeyGenSecretShare share, bool shared
     );
 
     /**
      * @notice Emitted when key generation is confirmed by a participant.
      * @param gid The group ID.
      * @param identifier The participant identifier.
+     * @param confirmed All group participants have confirmed.
      */
-    event KeyGenConfirmed(FROSTGroupId.T indexed gid, FROST.Identifier identifier);
+    event KeyGenConfirmed(FROSTGroupId.T indexed gid, FROST.Identifier identifier, bool confirmed);
 
     /**
      * @notice Emitted when a complaint is submitted during key generation.
      * @param gid The group ID.
      * @param plaintiff The complaining participant.
      * @param accused The accused participant.
+     * @param compromised The group has become compromised due to too many complaints.
      */
-    event KeyGenComplained(FROSTGroupId.T indexed gid, FROST.Identifier plaintiff, FROST.Identifier accused);
+    event KeyGenComplained(
+        FROSTGroupId.T indexed gid, FROST.Identifier plaintiff, FROST.Identifier accused, bool compromised
+    );
 
     /**
      * @notice Emitted when a complaint response is submitted.
@@ -254,9 +259,9 @@ contract FROSTCoordinator {
     event SignShared(FROSTSignatureId.T indexed sid, FROST.Identifier identifier, uint256 z, bytes32 root);
 
     /**
-     * @notice Emitted when a FROST signature is successfully completed.
+     * @notice Emitted when a FROST signing ceremony successfully completed.
      * @param sid The signature ID.
-     * @param signature The completed FROST signature.
+     * @param signature The FROST signature.
      */
     event SignCompleted(FROSTSignatureId.T indexed sid, FROST.Signature signature);
 
@@ -300,7 +305,7 @@ contract FROSTCoordinator {
     error NotSigning();
 
     /**
-     * @notice Thrown when a signature has not yet been completed.
+     * @notice Thrown when a signature ceremony is not complete.
      */
     error NotSigned();
 
@@ -337,7 +342,7 @@ contract FROSTCoordinator {
      * @param context Application-specific context.
      * @return gid The created group ID.
      */
-    function keyGen(bytes32 participants, uint64 count, uint64 threshold, bytes32 context)
+    function keyGen(bytes32 participants, uint16 count, uint16 threshold, bytes32 context)
         public
         returns (FROSTGroupId.T gid)
     {
@@ -346,7 +351,7 @@ contract FROSTCoordinator {
         Group storage group = $groups[gid];
         group.participants.init(participants);
         group.parameters = GroupParameters({
-            count: count, threshold: threshold, pending: count, sequence: 0, status: GroupStatus.COMMITTING
+            status: GroupStatus.COMMITTING, count: count, threshold: threshold, pending: count, sequence: 0, _padding: 0
         });
         emit KeyGen(gid, participants, count, threshold, context);
     }
@@ -396,8 +401,8 @@ contract FROSTCoordinator {
      */
     function keyGenAndCommit(
         bytes32 participants,
-        uint64 count,
-        uint64 threshold,
+        uint16 count,
+        uint16 threshold,
         bytes32 context,
         FROST.Identifier identifier,
         bytes32[] calldata poap,
@@ -414,16 +419,16 @@ contract FROSTCoordinator {
      * @notice Submits participants' secret shares.
      * @param gid The group ID.
      * @param share The secret share payload.
-     * @return completed True if all shares are received and the phase completes.
+     * @return shared True if all shares have been received.
      * @dev This corresponds to Round 2 of the FROST KeyGen algorithm. The secret shares are encrypted using ECDH with
      *      each participant's public value.
      */
-    function keyGenSecretShare(FROSTGroupId.T gid, KeyGenSecretShare calldata share) public returns (bool completed) {
+    function keyGenSecretShare(FROSTGroupId.T gid, KeyGenSecretShare calldata share) public returns (bool shared) {
         Group storage group = $groups[gid];
         GroupParameters memory parameters = group.parameters;
         require(parameters.status == GroupStatus.SHARING, GroupNotReady());
-        completed = --parameters.pending == 0;
-        if (completed) {
+        shared = --parameters.pending == 0;
+        if (shared) {
             parameters.pending = parameters.count;
             parameters.status = GroupStatus.CONFIRMING;
         }
@@ -432,39 +437,39 @@ contract FROSTCoordinator {
         }
         FROST.Identifier identifier = group.participants.set(msg.sender, share.y);
         group.parameters = parameters;
-        emit KeyGenSecretShared(gid, identifier, share, completed);
+        emit KeyGenSecretShared(gid, identifier, share, shared);
     }
 
     /**
      * @notice Confirms the key generation ceremony for the sender.
      * @param gid The group ID.
-     * @return completed True if all confirmations are received and the group is finalized.
+     * @return confirmed True if all confirmations have been received, finalizing the group.
      * @dev This requires that no unresolved complaints exist.
      */
-    function keyGenConfirm(FROSTGroupId.T gid) public returns (bool completed) {
+    function keyGenConfirm(FROSTGroupId.T gid) public returns (bool confirmed) {
         Group storage group = $groups[gid];
         GroupParameters memory parameters = group.parameters;
         require(parameters.status == GroupStatus.CONFIRMING, GroupNotReady());
         FROST.Identifier identifier = group.participants.identifierOf(msg.sender);
         group.participants.confirm(identifier);
-        completed = --parameters.pending == 0;
-        if (completed) {
+        confirmed = --parameters.pending == 0;
+        if (confirmed) {
             parameters.status = GroupStatus.FINALIZED;
         }
         group.parameters = parameters;
-        emit KeyGenConfirmed(gid, identifier);
+        emit KeyGenConfirmed(gid, identifier, confirmed);
     }
 
     /**
      * @notice Confirms key generation for the sender and optionally calls a callback.
      * @param gid The group ID.
      * @param callback The callback target and context.
-     * @return completed True if all confirmations are received and the group is finalized.
+     * @return confirmed True if all confirmations are received and the group is finalized.
      * @dev This is the same as `keyGenConfirm` with an additional callback once confirmed.
      */
-    function keyGenConfirmWithCallback(FROSTGroupId.T gid, Callback calldata callback) public returns (bool completed) {
-        completed = keyGenConfirm(gid);
-        if (completed) {
+    function keyGenConfirmWithCallback(FROSTGroupId.T gid, Callback calldata callback) public returns (bool confirmed) {
+        confirmed = keyGenConfirm(gid);
+        if (confirmed) {
             callback.target.onKeyGenCompleted(gid, callback.context);
         }
     }
@@ -473,18 +478,20 @@ contract FROSTCoordinator {
      * @notice Submits a complaint from the sender against another participant during key generation.
      * @param gid The group ID.
      * @param accused The accused participant identifier.
+     * @return compromised Whether the group has become compromised due to too many complaints.
      */
-    function keyGenComplain(FROSTGroupId.T gid, FROST.Identifier accused) external {
+    function keyGenComplain(FROSTGroupId.T gid, FROST.Identifier accused) external returns (bool compromised) {
         Group storage group = $groups[gid];
         require(
             group.parameters.status == GroupStatus.SHARING || group.parameters.status == GroupStatus.CONFIRMING,
             GroupNotReady()
         );
         FROST.Identifier plaintiff = group.participants.identifierOf(msg.sender);
-        if (group.participants.complain(plaintiff, accused) >= group.parameters.threshold) {
+        compromised = group.participants.complain(plaintiff, accused) >= group.parameters.threshold;
+        if (compromised) {
             group.parameters.status = GroupStatus.COMPROMISED;
         }
-        emit KeyGenComplained(gid, plaintiff, accused);
+        emit KeyGenComplained(gid, plaintiff, accused, compromised);
     }
 
     /**
@@ -569,7 +576,7 @@ contract FROSTCoordinator {
      * @param selection The signing selection data.
      * @param share The participant's signature share, including the Lagrange coefficient.
      * @param proof The Merkle proof for the selection.
-     * @return completed True if the signature is completed with this share.
+     * @return signed True if the signature ceremony was completed with this share.
      * @dev Each participant computes their signature share `z_i` and provides their Lagrange coefficient `l_i`. The
      *      Lagrange coefficient is a public value that depends on the set of participating signers. It is used to
      *      correctly reconstruct the group signature from a threshold number of shares. For a participant `i` in a
@@ -581,7 +588,7 @@ contract FROSTCoordinator {
         SignSelection calldata selection,
         FROST.SignatureShare calldata share,
         bytes32[] calldata proof
-    ) public returns (bool completed) {
+    ) public returns (bool signed) {
         (Group storage group, bytes32 message) = _signatureGroupAndMessage(sid);
         FROST.Identifier identifier = group.participants.identifierOf(msg.sender);
         Secp256k1.Point memory key = group.key;
@@ -608,7 +615,7 @@ contract FROSTCoordinator {
      * @param share The participant's signature share.
      * @param proof The Merkle proof for the selection.
      * @param callback The callback target and context.
-     * @return completed True if the signature is completed with this share.
+     * @return signed True if the signature ceremony was completed with this share.
      * @dev This method works identically to `signShare` but additionally executes a callback.
      */
     function signShareWithCallback(
@@ -617,9 +624,9 @@ contract FROSTCoordinator {
         FROST.SignatureShare calldata share,
         bytes32[] calldata proof,
         Callback calldata callback
-    ) external returns (bool completed) {
-        completed = signShare(sid, selection, share, proof);
-        if (completed) {
+    ) external returns (bool signed) {
+        signed = signShare(sid, selection, share, proof);
+        if (signed) {
             callback.target.onSignCompleted(sid, callback.context);
         }
     }
@@ -667,7 +674,7 @@ contract FROSTCoordinator {
     /**
      * @notice Retrieves the resulting FROST signature for a ceremony.
      * @param sid The signature ID.
-     * @return result The completed FROST signature.
+     * @return result The FROST signature.
      */
     function signatureValue(FROSTSignatureId.T sid) external view returns (FROST.Signature memory result) {
         Signature storage signature = $signatures[sid];

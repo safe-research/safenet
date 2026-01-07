@@ -8,17 +8,20 @@ export const CONSENSUS_EVENTS = parseAbi([
 ]);
 
 export const COORDINATOR_EVENTS = parseAbi([
-	"event KeyGen(bytes32 indexed gid, bytes32 participants, uint64 count, uint64 threshold, bytes32 context)",
-	"event KeyGenAborted(bytes32 indexed gid)",
+	"event KeyGen(bytes32 indexed gid, bytes32 participants, uint16 count, uint16 threshold, bytes32 context)",
 	"event KeyGenCommitted(bytes32 indexed gid, uint256 identifier, ((uint256 x, uint256 y)[] c, (uint256 x, uint256 y) r, uint256 mu) commitment, bool committed)",
-	"event KeyGenSecretShared(bytes32 indexed gid, uint256 identifier, ((uint256 x, uint256 y) y, uint256[] f) share, bool completed)",
-	"event KeyGenConfirmed(bytes32 indexed gid, uint256 identifier)",
+	"event KeyGenSecretShared(bytes32 indexed gid, uint256 identifier, ((uint256 x, uint256 y) y, uint256[] f) share, bool shared)",
+	"event KeyGenConfirmed(bytes32 indexed gid, uint256 identifier, bool confirmed)",
+	"event KeyGenComplained(bytes32 indexed gid, uint256 plaintiff, uint256 accused, bool compromised)",
+	"event KeyGenComplaintResponded(bytes32 indexed gid, uint256 plaintiff, uint256 accused, uint256 secretShare)",
 	"event Preprocess(bytes32 indexed gid, uint256 identifier, uint64 chunk, bytes32 commitment)",
 	"event Sign(address indexed initiator, bytes32 indexed gid, bytes32 indexed message, bytes32 sid, uint64 sequence)",
 	"event SignRevealedNonces(bytes32 indexed sid, uint256 identifier, ((uint256 x, uint256 y) d, (uint256 x, uint256 y) e) nonces)",
 	"event SignShared(bytes32 indexed sid, uint256 identifier, uint256 z, bytes32 root)",
 	"event SignCompleted(bytes32 indexed sid, ((uint256 x, uint256 y) r, uint256 z) signature)",
 ]);
+
+export const ALL_EVENTS = [...CONSENSUS_EVENTS, ...COORDINATOR_EVENTS] as const;
 
 export const COORDINATOR_FUNCTIONS = parseAbi([
 	"error AlreadyRegistered()",
@@ -27,7 +30,7 @@ export const COORDINATOR_FUNCTIONS = parseAbi([
 	"error GroupNotInitialized()",
 	"error GroupNotCommitted()",
 	"error InvalidMessage()",
-	"function keyGenAndCommit(bytes32 participants, uint64 count, uint64 threshold, bytes32 context, uint256 identifier, bytes32[] poap, ((uint256 x, uint256 y)[] c, (uint256 x, uint256 y) r, uint256 mu) commitment) external",
+	"function keyGenAndCommit(bytes32 participants, uint16 count, uint16 threshold, bytes32 context, uint256 identifier, bytes32[] poap, ((uint256 x, uint256 y)[] c, (uint256 x, uint256 y) r, uint256 mu) commitment) external",
 	"function keyGenCommit(bytes32 gid, uint256 identifier, bytes32[] poap, ((uint256 x, uint256 y)[] c, (uint256 x, uint256 y) r, uint256 mu) commitment) external",
 	"function keyGenSecretShare(bytes32 gid, ((uint256 x, uint256 y) y, uint256[] f) share) external",
 	"function keyGenComplain(bytes32 gid, uint256 accused) external",

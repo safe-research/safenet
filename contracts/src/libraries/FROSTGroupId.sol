@@ -33,7 +33,7 @@ library FROSTGroupId {
      * @param context The context data for the group.
      * @return result The computed group ID.
      */
-    function create(bytes32 participants, uint64 count, uint64 threshold, bytes32 context)
+    function create(bytes32 participants, uint16 count, uint16 threshold, bytes32 context)
         internal
         pure
         returns (T result)

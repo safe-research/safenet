@@ -5,14 +5,14 @@ import type { ConsensusState, MachineConfig, MachineStates, StateDiff } from "..
 import { calcGenesisGroup } from "./group.js";
 import { triggerKeyGen } from "./trigger.js";
 
-export const handleGenesisKeyGen = (
+export const handleGenesisKeyGen = async (
 	machineConfig: MachineConfig,
 	keyGenClient: KeyGenClient,
 	consensusState: ConsensusState,
 	machineStates: MachineStates,
 	transition: KeyGenEvent,
 	logger?: (msg: unknown) => void,
-): StateDiff => {
+): Promise<StateDiff> => {
 	const genesisGroup = calcGenesisGroup(machineConfig);
 	logger?.(`Genesis group id: ${genesisGroup.id}`);
 	if (

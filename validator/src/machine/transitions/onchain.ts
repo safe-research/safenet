@@ -1,3 +1,5 @@
+import type { ContractEventName } from "viem";
+import type { ALL_EVENTS } from "../../types/abis.js";
 import {
 	epochProposedEventSchema,
 	epochStagedEventSchema,
@@ -20,9 +22,9 @@ import type { EventTransition } from "./types.js";
 export const logToTransition = (
 	block: bigint,
 	index: number,
-	eventName: string,
+	eventName: ContractEventName<typeof ALL_EVENTS>,
 	eventArgs: unknown,
-): EventTransition | undefined => {
+): EventTransition => {
 	switch (eventName) {
 		case "KeyGenCommitted": {
 			const args = keyGenCommittedEventSchema.parse(eventArgs);
@@ -158,9 +160,6 @@ export const logToTransition = (
 				index,
 				...args,
 			};
-		}
-		default: {
-			return undefined;
 		}
 	}
 };

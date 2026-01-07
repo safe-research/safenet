@@ -39,7 +39,7 @@ export const handleKeyGenSecretShared = async (
 	}
 	// Share collection is completed when every paritcipant submitted a share, no matter if valid or invalid
 	// `response` will only be "shares_completed" when all valid shares have been received
-	if (!event.completed) {
+	if (!event.shared) {
 		logger?.(`Group ${event.gid} secret shares not completed yet`);
 		return {
 			rollover: {

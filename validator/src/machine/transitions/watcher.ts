@@ -1,7 +1,7 @@
 import type { Database } from "better-sqlite3";
 import type { PublicClient } from "viem";
 import z from "zod";
-import { CONSENSUS_EVENTS, COORDINATOR_EVENTS } from "../../types/abis.js";
+import { ALL_EVENTS } from "../../types/abis.js";
 import type { ProtocolConfig } from "../../types/interfaces.js";
 import type { Logger } from "../../utils/logging.js";
 import { logToTransition } from "./onchain.js";
@@ -86,7 +86,7 @@ export class OnchainTransitionWatcher {
 		this.#cleanupCallbacks.push(
 			this.#publicClient.watchContractEvent({
 				address: [this.#config.consensus, this.#config.coordinator],
-				abi: [...CONSENSUS_EVENTS, ...COORDINATOR_EVENTS],
+				abi: ALL_EVENTS,
 				fromBlock: lastIndexedBlock ? lastIndexedBlock + 1n : undefined,
 				onLogs: async (logs) => {
 					logs.sort((left, right) => {
