@@ -259,7 +259,7 @@ contract FROSTCoordinator {
     event SignShared(FROSTSignatureId.T indexed sid, FROST.Identifier identifier, uint256 z, bytes32 root);
 
     /**
-     * @notice Emitted when a FROST signing ceremory successfully completed.
+     * @notice Emitted when a FROST signing ceremony successfully completed.
      * @param sid The signature ID.
      * @param signature The FROST signature.
      */
