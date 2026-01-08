@@ -107,14 +107,19 @@ runs:
       with:
         github-token: ${{ inputs.github-token }}
         script: |
-          const coverage = '${{ steps.parse_coverage.outputs.LINES_PERCENT }}';
-          const rawSummary = `${{ steps.parse_coverage.outputs.SUMMARY_BODY }}`;
+          const totalStats = '${{ steps.process_coverage.outputs.TOTAL_STATS }}';
+          const table = `${{ steps.process_coverage.outputs.DETAILED_TABLE }}`;
+          const rawSummary = `${{ steps.process_coverage.outputs.RAW_SUMMARY }}`;
           
           const formattedBody = `
-          ### 🛡️ Combined Test Coverage
-          **Total Line Coverage:** ${coverage}
+          ### 🛡️ Test Coverage Report
+          
+          **Total Line Coverage:** ${totalStats}
+          
+          ${table}
+          
           <details>
-          <summary>Click to see detailed LCOV summary</summary>
+          <summary>Click to see raw LCOV summary</summary>
           
           \`\`\`text
           ${rawSummary}
