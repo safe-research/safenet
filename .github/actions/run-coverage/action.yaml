@@ -88,15 +88,23 @@ runs:
         OUTPUT=$(lcov --summary lcov.info)
         TOTAL_STATS=$(echo "$OUTPUT" | grep "lines......" | cut -d ':' -f 2 | xargs)
 
-        echo "TOTAL_STATS=$TOTAL_STATS" >> $GITHUB_OUTPUT
+        # 5. Get File List
+        # Grep -v removes the "Reading tracefile" noise
+        FILE_LIST=$(lcov --list lcov.info | grep -v "Reading tracefile")
 
-        # 5. Export Variables for JS Step
+        # 6. Export Variables for JS Step
+
         # Pass Total %
-        echo "TOTAL_PCT=$TOTAL_PCT" >> $GITHUB_OUTPUT
+        echo "TOTAL_STATS=$TOTAL_STATS" >> $GITHUB_OUTPUT
         
-        # Pass the Table (Handling Multiline String)
-        echo "DETAILED_TABLE<<EOF" >> $GITHUB_OUTPUT
+        # Pass the summary
+        echo "SUMMARY<<EOF" >> $GITHUB_OUTPUT
         echo -e "$REPORT_TABLE" >> $GITHUB_OUTPUT
+        echo "EOF" >> $GITHUB_OUTPUT
+
+        # Pass the details
+        echo "DETAILS<<EOF" >> $GITHUB_OUTPUT
+        echo "$FILE_LIST" >> $GITHUB_OUTPUT
         echo "EOF" >> $GITHUB_OUTPUT
 
     - name: Post Coverage Comment
@@ -105,7 +113,8 @@ runs:
         github-token: ${{ inputs.github-token }}
         script: |
           const totalStats = '${{ steps.process_coverage.outputs.TOTAL_STATS }}';
-          const table = `${{ steps.process_coverage.outputs.DETAILED_TABLE }}`;
+          const summary = `${{ steps.process_coverage.outputs.SUMMARY }}`;
+          const details = `${{ steps.process_coverage.outputs.DETAILS }}`;
           
           const title = "### 🛡️ Test Coverage Report"
           const formattedBody = `
@@ -113,7 +122,15 @@ runs:
           
           **Total Line Coverage:** ${totalStats}
           
-          ${table}
+          ${summary}
+
+          <details>
+          <summary><strong>📄 Click to view coverage for all files</strong></summary>
+          
+          \`\`\`text
+          ${details}
+          \`\`\`
+          </details>
           `;
 
           const { data: comments } = await github.rest.issues.listComments({
