@@ -236,6 +236,10 @@ export class BlockIndexer {
 		const lastBlock = this.#blocks.at(-1);
 		if (lastBlock !== undefined && lastBlock.hash !== block.parentHash) {
 			this.#blocks.pop();
+			this.#pending = {
+				number: lastBlock.number,
+				timestampMs: lastBlock.timestamp * 1000n,
+			};
 			return { type: "record_uncle_block", blockNumber: lastBlock.number };
 		}
 

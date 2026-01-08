@@ -247,5 +247,41 @@ describe("BlockIndexer", () => {
 
 			expect(record).toStrictEqual(newBlockRecord({ number: 1001n }));
 		});
+
+		it("supports deep reorgs", async () => {
+			const { next, mocks } = await setupNext({ latestBlock: 1000n, startTime: 2000100, maxReorgDepth: 5 });
+
+			mocks.getBlock.mockResolvedValueOnce(
+				block({ number: 1001n, hash: keccak256(toHex("reorg1001")), parentHash: keccak256(toHex("reorg1000")) }),
+			);
+			mocks.getBlock.mockResolvedValueOnce(
+				block({ number: 1000n, hash: keccak256(toHex("reorg1000")), parentHash: keccak256(toHex("reorg999")) }),
+			);
+			mocks.getBlock.mockResolvedValueOnce(
+				block({ number: 999n, hash: keccak256(toHex("reorg999")), parentHash: keccak256(toHex("reorg998")) }),
+			);
+			mocks.getBlock.mockResolvedValueOnce(block({ number: 998n, hash: keccak256(toHex("reorg998")) }));
+			mocks.getBlock.mockResolvedValueOnce(
+				block({ number: 999n, hash: keccak256(toHex("reorg999")), parentHash: keccak256(toHex("reorg998")) }),
+			);
+
+			const records = [await next(), await next(), await next(), await next(), await next()];
+			expect(mocks.sleep.mock.calls).toEqual([[1900 + 500]]);
+			expect(mocks.getBlock.mock.calls).toEqual([
+				[{ blockNumber: 1001n }],
+				[{ blockNumber: 1000n }],
+				[{ blockNumber: 999n }],
+				[{ blockNumber: 998n }],
+				[{ blockNumber: 999n }],
+			]);
+
+			expect(records).toStrictEqual([
+				{ type: "record_uncle_block", blockNumber: 1000n },
+				{ type: "record_uncle_block", blockNumber: 999n },
+				{ type: "record_uncle_block", blockNumber: 998n },
+				newBlockRecord({ number: 998n, hash: keccak256(toHex("reorg998")) }),
+				newBlockRecord({ number: 999n, hash: keccak256(toHex("reorg999")) }),
+			]);
+		});
 	});
 });
