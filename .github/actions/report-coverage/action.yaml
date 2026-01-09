@@ -1,5 +1,5 @@
-name: "Run and Report Coverage"
-description: "Runs Forge & Vitest coverage, merges reports, and comments on PR"
+name: "Report Coverage"
+description: "Merges reports, and comments on PR"
 inputs:
   github-token:
     description: "The GITHUB_TOKEN required to post comments"
@@ -30,10 +30,6 @@ runs:
         # Cleanup
         cd ..
         rm -rf /tmp/lcov
-
-    - name: Run Coverage
-      shell: bash
-      run: npm run coverage
 
     - name: Process Coverage Files
       id: process_coverage
