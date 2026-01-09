@@ -2,27 +2,27 @@
 // This setup is currently specific to Fedora. Needs updaating for other distros.
 // For MacOS, refer to ./macos/devcontainer.json
 {
-	"name": "Shieldnet (Linux)",
-	"image": "mcr.microsoft.com/devcontainers/typescript-node:1-24-bookworm",
+    "name": "Shieldnet (Linux)",
+    "image": "mcr.microsoft.com/devcontainers/typescript-node:1-24-bookworm",
 
-	"mounts": [
+    "mounts": [
     // Bind-mount the 1Password SSH agent socket from the host into the container.
-    "source=${env:HOME}/.1password/agent.sock,target=/tmp/ssh-agent.sock,type=bind,consistency=cached"
-	],
+        "source=${env:HOME}/.1password/agent.sock,target=/tmp/ssh-agent.sock,type=bind,consistency=cached"
+    ],
 
-	// Environment variables set *inside* the container.
-	"remoteEnv": {
-		// Tells SSH inside the container where to find the SSH agent socket.
-		"SSH_AUTH_SOCK": "/tmp/ssh-agent.sock"
-	},
+    // Environment variables set *inside* the container.
+    "remoteEnv": {
+        // Tells SSH inside the container where to find the SSH agent socket.
+        "SSH_AUTH_SOCK": "/tmp/ssh-agent.sock"
+    },
 
-	// Extra arguments passed directly to `docker run`.
-	"runArgs": [
-		// Enable user namespace remapping, keeping the container user ID
-		// mapped to the same UID/GID as the host user.
-		"--userns=keep-id"
-	],
+    // Extra arguments passed directly to `docker run`.
+    "runArgs": [
+        // Enable user namespace remapping, keeping the container user ID
+        // mapped to the same UID/GID as the host user.
+        "--userns=keep-id"
+    ],
 
-	// User that VS Code connects as *inside* the container.
-	"remoteUser": "node"
+    // User that VS Code connects as *inside* the container.
+    "remoteUser": "node"
 }
