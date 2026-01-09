@@ -6,18 +6,30 @@
 .heroBanner {
   padding: 4rem 0;
   text-align: center;
-  position: relative;
-  overflow: hidden;
+  background: var(--ifm-background-surface-color);
+  color: var(--ifm-font-color-base);
+  border-bottom: 1px solid var(--ifm-color-emphasis-200);
 }
 
-@media screen and (max-width: 996px) {
-  .heroBanner {
-    padding: 2rem;
-  }
+.heroBanner :global(.hero__title) {
+  color: var(--ifm-heading-color);
 }
 
-.buttons {
-  display: flex;
-  align-items: center;
-  justify-content: center;
+.heroBanner :global(.hero__subtitle) {
+  color: var(--ifm-font-color-base);
+  opacity: 0.9;
+  max-width: 60ch;
+  margin: 0.75rem auto 0;
+}
+
+.heroBanner :global(.button.button--secondary) {
+  background: var(--ifm-color-primary);
+  color: var(--ifm-color-primary-contrast-foreground);
+  border-color: transparent;
+  margin-top: 1.5rem;
+}
+
+.heroBanner :global(.button.button--secondary:hover) {
+  background: var(--ifm-color-primary-dark);
+  color: var(--ifm-color-primary-contrast-foreground);
 }
