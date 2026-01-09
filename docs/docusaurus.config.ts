@@ -20,7 +20,7 @@ const config: Config = {
   url: 'https://safe.dev',
   // Set the /<baseUrl>/ pathname under which your site is served
   // For GitHub pages deployment, it is often '/<projectName>/'
-  baseUrl: '/shieldnet/',
+  baseUrl: process.env.DOCUSAURUS_BASE_URL ?? '/shieldnet/',
   trailingSlash: false,
 
 

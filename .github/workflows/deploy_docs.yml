@@ -5,20 +5,18 @@ on:
     branches: [main]
     paths:
       - "docs/**"
-      - ".github/workflows/deploy-pages.yml"
+      - ".github/workflows/deploy-docs.yml"
   workflow_dispatch:
 
 permissions:
-  contents: read
-  pages: write
-  id-token: write
+  contents: write
 
 concurrency:
-  group: pages
+  group: gh-pages
   cancel-in-progress: true
 
 jobs:
-  build:
+  deploy:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -31,20 +29,19 @@ jobs:
       - name: Install
         run: npm ci
 
-      - name: Build docs
+      - name: Build docs (prod)
+        env:
+          DOCUSAURUS_BASE_URL: /shieldnet/
         run: npm run build --workspace shieldnet-docs
 
       - name: Disable Jekyll
         run: touch docs/build/.nojekyll
 
-      - uses: actions/upload-pages-artifact@v3
+      - name: Deploy to gh-pages (root)
+        uses: JamesIves/github-pages-deploy-action@v4
         with:
-          path: docs/build
-
-  deploy:
-    needs: build
-    runs-on: ubuntu-latest
-    environment:
-      name: github-pages
-    steps:
-      - uses: actions/deploy-pages@v4
+          branch: gh-pages
+          folder: docs/build
+          clean: true
+          clean-exclude: |
+            pr-*

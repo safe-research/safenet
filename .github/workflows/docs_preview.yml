@@ -1,0 +1,155 @@
+name: Deploy Docs Preview (PR)
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, closed]
+    paths:
+      - "docs/**"
+      - ".github/workflows/docs_preview.yml"
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: docs-preview-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  deploy_preview:
+    if: github.event.action != 'closed'
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install (repo root)
+        run: npm ci
+
+      - name: Build docs (PR preview)
+        env:
+          DOCUSAURUS_BASE_URL: /shieldnet/pr-${{ github.event.pull_request.number }}/
+        run: npm run build --workspace shieldnet-docs
+
+      - name: Disable Jekyll
+        run: touch docs/build/.nojekyll
+
+      - name: Deploy preview to gh-pages/pr-<number>
+        uses: JamesIves/github-pages-deploy-action@v4
+        with:
+          branch: gh-pages
+          folder: docs/build
+          target-folder: pr-${{ github.event.pull_request.number }}
+          clean: true
+
+      - name: Comment preview URL on PR (create or update)
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const pr = context.payload.pull_request.number;
+            const url = `https://safe-research.github.io/shieldnet/pr-${pr}/`;
+            const marker = '<!-- shieldnet-docs-preview -->';
+            const body = `${marker}\n📘 **Docs preview:** ${url}`;
+
+            // Find existing bot comment (so we update instead of spamming)
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: pr,
+              per_page: 100,
+            });
+
+            const existing = comments.find(c =>
+              c.user?.type === 'Bot' &&
+              typeof c.body === 'string' &&
+              c.body.includes(marker)
+            );
+
+            if (existing) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: existing.id,
+                body,
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: pr,
+                body,
+              });
+            }
+
+  cleanup_preview:
+    if: github.event.action == 'closed'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout gh-pages
+        uses: actions/checkout@v4
+        with:
+          ref: gh-pages
+
+      - name: Remove preview folder pr-<number>
+        run: |
+          set -euxo pipefail
+          PREVIEW_DIR="pr-${{ github.event.pull_request.number }}"
+          if [ -d "$PREVIEW_DIR" ]; then
+            rm -rf "$PREVIEW_DIR"
+          fi
+
+      - name: Commit and push cleanup (if needed)
+        run: |
+          set -euxo pipefail
+          if git status --porcelain | grep -q .; then
+            git config user.name "github-actions[bot]"
+            git config user.email "github-actions[bot]@users.noreply.github.com"
+            git add -A
+            git commit -m "chore(docs): remove preview for PR #${{ github.event.pull_request.number }}"
+            git push
+          else
+            echo "No preview folder to remove; nothing to commit."
+          fi
+
+      - name: Comment cleanup on PR (optional)
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const pr = context.payload.pull_request.number;
+            const marker = '<!-- shieldnet-docs-preview -->';
+            const body = `${marker}\n🧹 Docs preview removed (PR closed).`;
+
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: pr,
+              per_page: 100,
+            });
+
+            const existing = comments.find(c =>
+              c.user?.type === 'Bot' &&
+              typeof c.body === 'string' &&
+              c.body.includes(marker)
+            );
+
+            if (existing) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: existing.id,
+                body,
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: pr,
+                body,
+              });
+            }
