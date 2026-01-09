@@ -21,7 +21,7 @@ contract Staking is Ownable {
      * @custom:param previous The ID of the previous withdrawal in the queue (0 if this node is the head).
      * @custom:param next The ID of the next withdrawal in the queue (0 if this node is the tail).
      * @custom:param staker The address of the staker who owns this withdrawal.
-     * @dev The withdrawal queue for each staker-validator pair is implemented as a doubly linked list to allow for
+     * @dev The withdrawal queue for each staker is implemented as a doubly linked list to allow for
      *      efficient claims from queue.
      */
     struct WithdrawalNode {
@@ -33,7 +33,7 @@ contract Staking is Ownable {
     }
 
     /**
-     * @notice Tracks the head and tail of the withdrawal queue for a staker-validator pair.
+     * @notice Tracks the head and tail of the withdrawal queue for a staker.
      * @custom:param head The ID of the first withdrawal in the queue (0 if empty).
      * @custom:param tail The ID of the last withdrawal in the queue (0 if empty).
      * @dev This struct points to the start and end of a doubly linked list of WithdrawalNode.
@@ -292,14 +292,9 @@ contract Staking is Ownable {
 
     /**
      * @notice Thrown when a specified previous withdrawal ID is not from the
-     *         caller (staker).
+     *         caller (staker). Also checks that the previous ID exists.
      */
     error InvalidPreviousId();
-
-    /**
-     * @notice Thrown when a specified withdrawal node does not exist.
-     */
-    error InvalidWithdrawalNode();
 
     /**
      * @notice Thrown when the specified ordering in the withdrawal queue is invalid.
@@ -458,7 +453,6 @@ contract Staking is Ownable {
             nextId = withdrawalQueues[msg.sender].head;
         } else {
             require(withdrawalNodes[previousId].staker == msg.sender, InvalidPreviousId());
-            require(withdrawalNodes[previousId].claimableAt > 0, InvalidWithdrawalNode());
             require(withdrawalNodes[previousId].claimableAt <= claimableAt, InvalidOrdering());
 
             nextId = withdrawalNodes[previousId].next;
@@ -635,7 +629,7 @@ contract Staking is Ownable {
     // ============================================================
 
     /**
-     * @notice Get all pending withdrawals for a staker-validator pair.
+     * @notice Get all pending withdrawals for a staker pair.
      * @param staker The staker address.
      * @return An array of withdrawal info.
      */
@@ -666,7 +660,7 @@ contract Staking is Ownable {
     }
 
     /**
-     * @notice Get the next claimable withdrawal for a staker-validator pair.
+     * @notice Get the next claimable withdrawal for a staker pair.
      * @param staker The staker address.
      * @return amount The withdrawal amount.
      * @return claimableAt The timestamp when claimable.
