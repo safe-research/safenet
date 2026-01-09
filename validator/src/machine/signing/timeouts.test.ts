@@ -1,5 +1,6 @@
 import { zeroAddress, zeroHash } from "viem";
 import { describe, expect, it, vi } from "vitest";
+import { log } from "../../__tests__/config.js";
 import type { SigningClient } from "../../consensus/signing/client.js";
 import type { SafeTransactionPacket } from "../../consensus/verify/safeTx/schemas.js";
 import type { ConsensusState, MachineConfig, MachineStates, SigningState } from "../types.js";
@@ -90,14 +91,14 @@ describe("signing timeouts - base conditions", () => {
 			...MACHINE_STATES,
 			signing: {},
 		};
-		const diff = checkSigningTimeouts(MACHINE_CONFIG, signingClient, CONSENSUS_STATE, machineStates, 2n);
+		const diff = checkSigningTimeouts(MACHINE_CONFIG, signingClient, CONSENSUS_STATE, machineStates, 2n, log);
 
 		expect(diff).toStrictEqual([]);
 	});
 
 	it("should not handle request that are within the deadline", async () => {
 		const signingClient = {} as unknown as SigningClient;
-		const diff = checkSigningTimeouts(MACHINE_CONFIG, signingClient, CONSENSUS_STATE, MACHINE_STATES, 2n);
+		const diff = checkSigningTimeouts(MACHINE_CONFIG, signingClient, CONSENSUS_STATE, MACHINE_STATES, 2n, log);
 		expect(diff).toStrictEqual([{}]);
 	});
 });
@@ -120,7 +121,7 @@ describe("signing timeouts - waiting for attestation", () => {
 				},
 			},
 		};
-		const diff = checkSigningTimeouts(MACHINE_CONFIG, signingClient, CONSENSUS_STATE, machineStates, 2n);
+		const diff = checkSigningTimeouts(MACHINE_CONFIG, signingClient, CONSENSUS_STATE, machineStates, 2n, log);
 		expect(diff.length).toBe(1);
 		expect(diff[0].consensus).toStrictEqual({
 			signatureIdToMessage: ["0x5af35af3", undefined],
@@ -159,7 +160,7 @@ describe("signing timeouts - waiting for attestation", () => {
 				},
 			},
 		};
-		const diff = checkSigningTimeouts(MACHINE_CONFIG, signingClient, CONSENSUS_STATE, machineStates, 2n);
+		const diff = checkSigningTimeouts(MACHINE_CONFIG, signingClient, CONSENSUS_STATE, machineStates, 2n, log);
 		expect(diff.length).toBe(1);
 		expect(diff[0].consensus).toStrictEqual({
 			signatureIdToMessage: ["0x5af35af3", undefined],
@@ -208,7 +209,7 @@ describe("signing timeouts - waiting for attestation", () => {
 				"0x5afe5afe5afe": signingState,
 			},
 		};
-		const diff = checkSigningTimeouts(MACHINE_CONFIG, signingClient, CONSENSUS_STATE, machineStates, 2n);
+		const diff = checkSigningTimeouts(MACHINE_CONFIG, signingClient, CONSENSUS_STATE, machineStates, 2n, log);
 		expect(diff.length).toBe(1);
 		expect(diff[0].consensus).toStrictEqual({
 			signatureIdToMessage: ["0x5af35af3", undefined],
@@ -254,7 +255,7 @@ describe("signing timeouts - waiting for attestation", () => {
 				},
 			},
 		};
-		const diff = checkSigningTimeouts(MACHINE_CONFIG, signingClient, CONSENSUS_STATE, machineStates, 2n);
+		const diff = checkSigningTimeouts(MACHINE_CONFIG, signingClient, CONSENSUS_STATE, machineStates, 2n, log);
 		expect(diff.length).toBe(1);
 		expect(diff[0].consensus).toStrictEqual({
 			signatureIdToMessage: ["0x5af35af3", undefined],
@@ -290,7 +291,7 @@ describe("signing timeouts - waiting for attestation", () => {
 				},
 			},
 		};
-		const diff = checkSigningTimeouts(MACHINE_CONFIG, signingClient, CONSENSUS_STATE, machineStates, 2n);
+		const diff = checkSigningTimeouts(MACHINE_CONFIG, signingClient, CONSENSUS_STATE, machineStates, 2n, log);
 		expect(diff.length).toBe(1);
 		expect(diff[0].consensus).toStrictEqual({
 			signatureIdToMessage: ["0x5af35af3", undefined],
@@ -324,7 +325,7 @@ describe("signing timeouts - waiting for attestation", () => {
 				"0x5afe5afe5afe": signingState,
 			},
 		};
-		const diff = checkSigningTimeouts(MACHINE_CONFIG, signingClient, CONSENSUS_STATE, machineStates, 2n);
+		const diff = checkSigningTimeouts(MACHINE_CONFIG, signingClient, CONSENSUS_STATE, machineStates, 2n, log);
 		expect(diff.length).toBe(1);
 		expect(diff[0].consensus).toStrictEqual({
 			signatureIdToMessage: ["0x5af35af3", undefined],
@@ -357,7 +358,7 @@ describe("signing timeouts - waiting for attestation", () => {
 				"0x5afe5afe5afe": signingState,
 			},
 		};
-		const diff = checkSigningTimeouts(MACHINE_CONFIG, signingClient, CONSENSUS_STATE, machineStates, 2n);
+		const diff = checkSigningTimeouts(MACHINE_CONFIG, signingClient, CONSENSUS_STATE, machineStates, 2n, log);
 		expect(diff.length).toBe(1);
 		expect(diff[0].consensus).toStrictEqual({
 			signatureIdToMessage: ["0x5af35af3", undefined],
@@ -382,7 +383,7 @@ describe("signing timeouts - waiting for request", () => {
 			},
 		};
 		expect(() => {
-			checkSigningTimeouts(MACHINE_CONFIG, signingClient, CONSENSUS_STATE, machineStates, 2n);
+			checkSigningTimeouts(MACHINE_CONFIG, signingClient, CONSENSUS_STATE, machineStates, 2n, log);
 		}).toThrowError("Unknown group for epoch 0");
 	});
 
@@ -404,7 +405,7 @@ describe("signing timeouts - waiting for request", () => {
 				"0": { groupId: "0x5afe", participantId: 1n },
 			},
 		};
-		const diff = checkSigningTimeouts(MACHINE_CONFIG, signingClient, consensusState, machineStates, 2n);
+		const diff = checkSigningTimeouts(MACHINE_CONFIG, signingClient, consensusState, machineStates, 2n, log);
 		expect(diff.length).toBe(1);
 		expect(diff[0].consensus).toBeUndefined();
 		expect(diff[0].rollover).toBeUndefined();
@@ -438,7 +439,7 @@ describe("signing timeouts - waiting for request", () => {
 				"0": { groupId: "0x5afe", participantId: 1n },
 			},
 		};
-		const diff = checkSigningTimeouts(MACHINE_CONFIG, signingClient, consensusState, machineStates, 2n);
+		const diff = checkSigningTimeouts(MACHINE_CONFIG, signingClient, consensusState, machineStates, 2n, log);
 		expect(diff.length).toBe(1);
 		expect(diff[0].consensus).toBeUndefined();
 		expect(diff[0].rollover).toBeUndefined();
@@ -472,7 +473,7 @@ describe("signing timeouts - waiting for request", () => {
 				"0": { groupId: "0x5afe", participantId: 1n },
 			},
 		};
-		const diff = checkSigningTimeouts(MACHINE_CONFIG, signingClient, consensusState, machineStates, 2n);
+		const diff = checkSigningTimeouts(MACHINE_CONFIG, signingClient, consensusState, machineStates, 2n, log);
 		expect(diff.length).toBe(1);
 		expect(diff[0].consensus).toBeUndefined();
 		expect(diff[0].rollover).toBeUndefined();
@@ -514,7 +515,7 @@ describe("signing timeouts - waiting for request", () => {
 				"22": { groupId: "0x5afe", participantId: 1n },
 			},
 		};
-		const diff = checkSigningTimeouts(MACHINE_CONFIG, signingClient, consensusState, machineStates, 2n);
+		const diff = checkSigningTimeouts(MACHINE_CONFIG, signingClient, consensusState, machineStates, 2n, log);
 		expect(diff.length).toBe(1);
 		expect(diff[0].consensus).toBeUndefined();
 		expect(diff[0].rollover).toBeUndefined();
@@ -549,7 +550,7 @@ describe("signing timeouts - waiting for request", () => {
 				"22": { groupId: "0x5afe", participantId: 1n },
 			},
 		};
-		const diff = checkSigningTimeouts(MACHINE_CONFIG, signingClient, consensusState, machineStates, 2n);
+		const diff = checkSigningTimeouts(MACHINE_CONFIG, signingClient, consensusState, machineStates, 2n, log);
 		expect(diff.length).toBe(1);
 		expect(diff[0].consensus).toBeUndefined();
 		expect(diff[0].rollover).toBeUndefined();
@@ -584,7 +585,7 @@ describe("signing timeouts - waiting for request", () => {
 				"22": { groupId: "0x5afe", participantId: 1n },
 			},
 		};
-		const diff = checkSigningTimeouts(MACHINE_CONFIG, signingClient, consensusState, machineStates, 2n);
+		const diff = checkSigningTimeouts(MACHINE_CONFIG, signingClient, consensusState, machineStates, 2n, log);
 		expect(diff.length).toBe(1);
 		expect(diff[0].consensus).toBeUndefined();
 		expect(diff[0].rollover).toBeUndefined();
@@ -627,7 +628,7 @@ describe("signing timeouts - collect nonce commitments", () => {
 			},
 		};
 		expect(() => {
-			checkSigningTimeouts(MACHINE_CONFIG, signingClient, CONSENSUS_STATE, machineStates, 2n);
+			checkSigningTimeouts(MACHINE_CONFIG, signingClient, CONSENSUS_STATE, machineStates, 2n, log);
 		}).toThrowError("Unknown group for epoch 0");
 
 		expect(missingNonces).toBeCalledTimes(1);
@@ -659,7 +660,7 @@ describe("signing timeouts - collect nonce commitments", () => {
 				},
 			},
 		};
-		const diff = checkSigningTimeouts(MACHINE_CONFIG, signingClient, consensusState, machineStates, 2n);
+		const diff = checkSigningTimeouts(MACHINE_CONFIG, signingClient, consensusState, machineStates, 2n, log);
 		expect(diff.length).toBe(1);
 		expect(diff[0].consensus).toStrictEqual({
 			signatureIdToMessage: ["0x5af35af3", undefined],
@@ -709,7 +710,7 @@ describe("signing timeouts - collect nonce commitments", () => {
 				},
 			},
 		};
-		const diff = checkSigningTimeouts(MACHINE_CONFIG, signingClient, consensusState, machineStates, 2n);
+		const diff = checkSigningTimeouts(MACHINE_CONFIG, signingClient, consensusState, machineStates, 2n, log);
 		expect(diff.length).toBe(1);
 		expect(diff[0].consensus).toStrictEqual({
 			signatureIdToMessage: ["0x5af35af3", undefined],
@@ -765,7 +766,7 @@ describe("signing timeouts - collect nonce commitments", () => {
 				},
 			},
 		};
-		const diff = checkSigningTimeouts(MACHINE_CONFIG, signingClient, consensusState, machineStates, 2n);
+		const diff = checkSigningTimeouts(MACHINE_CONFIG, signingClient, consensusState, machineStates, 2n, log);
 		expect(diff.length).toBe(1);
 		expect(diff[0].consensus).toStrictEqual({
 			signatureIdToMessage: ["0x5af35af3", undefined],
@@ -815,7 +816,7 @@ describe("signing timeouts - collect nonce commitments", () => {
 				},
 			},
 		};
-		const diff = checkSigningTimeouts(MACHINE_CONFIG, signingClient, consensusState, machineStates, 2n);
+		const diff = checkSigningTimeouts(MACHINE_CONFIG, signingClient, consensusState, machineStates, 2n, log);
 		expect(diff.length).toBe(1);
 		expect(diff[0].consensus).toStrictEqual({
 			signatureIdToMessage: ["0x5af35af3", undefined],
@@ -867,7 +868,7 @@ describe("signing timeouts - collect signing shares", () => {
 			},
 		};
 		expect(() => {
-			checkSigningTimeouts(MACHINE_CONFIG, signingClient, CONSENSUS_STATE, machineStates, 2n);
+			checkSigningTimeouts(MACHINE_CONFIG, signingClient, CONSENSUS_STATE, machineStates, 2n, log);
 		}).toThrowError("Unknown group for epoch 0");
 
 		expect(signers).toBeCalledTimes(1);
@@ -900,7 +901,7 @@ describe("signing timeouts - collect signing shares", () => {
 				},
 			},
 		};
-		const diff = checkSigningTimeouts(MACHINE_CONFIG, signingClient, consensusState, machineStates, 2n);
+		const diff = checkSigningTimeouts(MACHINE_CONFIG, signingClient, consensusState, machineStates, 2n, log);
 		expect(diff.length).toBe(1);
 		expect(diff[0].consensus).toStrictEqual({
 			signatureIdToMessage: ["0x5af35af3", undefined],
@@ -951,7 +952,7 @@ describe("signing timeouts - collect signing shares", () => {
 				},
 			},
 		};
-		const diff = checkSigningTimeouts(MACHINE_CONFIG, signingClient, consensusState, machineStates, 2n);
+		const diff = checkSigningTimeouts(MACHINE_CONFIG, signingClient, consensusState, machineStates, 2n, log);
 		expect(diff.length).toBe(1);
 		expect(diff[0].consensus).toStrictEqual({
 			signatureIdToMessage: ["0x5af35af3", undefined],
@@ -1008,7 +1009,7 @@ describe("signing timeouts - collect signing shares", () => {
 				},
 			},
 		};
-		const diff = checkSigningTimeouts(MACHINE_CONFIG, signingClient, consensusState, machineStates, 2n);
+		const diff = checkSigningTimeouts(MACHINE_CONFIG, signingClient, consensusState, machineStates, 2n, log);
 		expect(diff.length).toBe(1);
 		expect(diff[0].consensus).toStrictEqual({
 			signatureIdToMessage: ["0x5af35af3", undefined],
@@ -1059,7 +1060,7 @@ describe("signing timeouts - collect signing shares", () => {
 				},
 			},
 		};
-		const diff = checkSigningTimeouts(MACHINE_CONFIG, signingClient, consensusState, machineStates, 2n);
+		const diff = checkSigningTimeouts(MACHINE_CONFIG, signingClient, consensusState, machineStates, 2n, log);
 		expect(diff.length).toBe(1);
 		expect(diff[0].consensus).toStrictEqual({
 			signatureIdToMessage: ["0x5af35af3", undefined],

@@ -36,7 +36,7 @@ export abstract class BaseProtocol implements ShieldnetProtocol {
 	}
 
 	process(action: ProtocolAction, timeout: number = ACTION_TIMEOUT): void {
-		this.#logger.debug(`Enqueue ${action.id}`);
+		this.#logger.verbose(`Enqueue ${action.id}`, { action });
 		this.#actionQueue.push({
 			...action,
 			validUntil: Date.now() + timeout,
@@ -51,22 +51,24 @@ export abstract class BaseProtocol implements ShieldnetProtocol {
 		// Nothing queued
 		if (action === undefined) return;
 		// Check if action is still valid
+		const actionSpan = { action: { id: action.id } };
 		if (action.validUntil < Date.now()) {
 			this.#actionQueue.pop();
-			this.#logger.debug(`Timeout exeeded for ${action.id}. Dropping action!`);
+			this.#logger.warn("Timeout exeeded. Dropping action!", actionSpan);
 			this.checkNextAction();
 			return;
 		}
 		this.#currentAction = action;
 		this.performAction(action)
-			.then(() => {
-				// If action was successfully executed, remove it from queue
+			.then((transactionHash) => {
+				// If action was successfully sent to the node, remove it from queue
+				this.#logger.verbose(`sent action for ${action.id} transaction`, { ...actionSpan, transactionHash });
 				this.#actionQueue.pop();
 				this.#currentAction = undefined;
 				this.checkNextAction();
 			})
-			.catch(() => {
-				this.#logger.debug("Action failed, will retry after a delay!");
+			.catch((err) => {
+				this.#logger.verbose("Action failed, will retry after a delay!", { ...actionSpan, ...err });
 				this.#currentAction = undefined;
 				setTimeout(() => {
 					this.checkNextAction();

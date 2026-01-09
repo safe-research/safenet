@@ -33,6 +33,7 @@ const config: ProtocolConfig = {
 	genesisSalt: validatorConfig.GENESIS_SALT,
 	blocksPerEpoch: validatorConfig.BLOCKS_PER_EPOCH,
 };
+logger.info("Using protocol configuration", { config });
 
 const fees: ChainFees = {
 	// Use a higher default multiplier to ensure transaction inclusion

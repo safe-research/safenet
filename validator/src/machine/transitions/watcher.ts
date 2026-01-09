@@ -71,10 +71,11 @@ export class OnchainTransitionWatcher {
 
 	handleTransition(transition: StateTransition) {
 		try {
-			if (this.updateLastIndexedBlock(transition.block)) {
-				// Only trigger callback for valid transitions
-				this.#onTransition(transition);
+			if (!this.updateLastIndexedBlock(transition.block)) {
+				this.#logger.warn("received an out-of-order transition", { transition });
+				return;
 			}
+			this.#onTransition(transition);
 		} catch (e: unknown) {
 			const err = e instanceof Error ? e : new Error(`unknown error: ${e}`);
 			this.#logger.error("an error occurred handling a state transition:", err);
@@ -97,10 +98,6 @@ export class OnchainTransitionWatcher {
 					});
 					for (const log of logs) {
 						const transition = logToTransition(log.blockNumber, log.logIndex, log.eventName, log.args);
-						if (transition === undefined) {
-							this.#logger.info(`Unknown log: ${log.eventName}`);
-							continue;
-						}
 						this.handleTransition(transition);
 					}
 				},

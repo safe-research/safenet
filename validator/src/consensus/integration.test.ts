@@ -88,7 +88,7 @@ describe("integration", () => {
 				"function groupKey(bytes32 id) external view returns ((uint256 x, uint256 y) key)",
 			]),
 		} as const;
-		testLogger.debug(`Use coordinator at ${coordinator.address}`);
+		testLogger.info(`Use coordinator at ${coordinator.address}`);
 		const consensus = {
 			address: deploymentInfo.returns["1"].value as Address,
 			abi: parseAbi([
@@ -97,7 +97,7 @@ describe("integration", () => {
 				"function getAttestationByMessage(bytes32 message) external view returns (((uint256 x, uint256 y) r, uint256 z) signature)",
 			]),
 		} as const;
-		testLogger.debug(`Use consensus at ${consensus.address}`);
+		testLogger.info(`Use consensus at ${consensus.address}`);
 
 		// Private keys from Anvil testnet
 		const accounts = [
