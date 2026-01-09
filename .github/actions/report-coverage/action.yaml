@@ -31,10 +31,6 @@ runs:
         cd ..
         rm -rf /tmp/lcov
 
-    - name: Run Coverage
-      shell: bash
-      run: npm run coverage
-
     - name: Process Coverage Files
       id: process_coverage
       shell: bash
