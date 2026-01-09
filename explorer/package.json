@@ -10,7 +10,8 @@
 		"fix": "biome check --write",
 		"serve": "vite preview",
 		"test": "vitest run",
-		"test:watch": "vitest"
+		"test:watch": "vitest",
+		"coverage": "vitest run --coverage"
 	},
 	"dependencies": {
 		"@heroicons/react": "^2.2.0",

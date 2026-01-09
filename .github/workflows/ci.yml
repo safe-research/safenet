@@ -25,6 +25,9 @@ jobs:
       - uses: foundry-rs/foundry-toolchain@v1
 
       - run: npm ci
-      - run: |
-          npm run check
-          npm run test
+      - run: npm run check
+      
+      - name: Run Coverage & Report
+        uses: ./.github/actions/run-coverage 
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }} 

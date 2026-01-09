@@ -17,10 +17,10 @@ export default defineConfig({
 		 */
 		globals: false,
 
-		// You can add other configurations here, like coverage
-		// coverage: {
-		//   provider: 'v8', // or 'istanbul'
-		//   reporter: ['text', 'html'],
-		// },
+		coverage: {
+			provider: 'v8',
+			exclude: ['src/__tests__/**'],
+			reporter: ['text', 'json', 'html', 'lcov'],
+		},
 	},
 });

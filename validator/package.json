@@ -10,7 +10,8 @@
 		"cmd:trigger-genesis": "tsx src/cmd/trigger-genesis.ts",
 		"fix": "biome check --write",
 		"test": "vitest run",
-		"test:watch": "vitest"
+		"test:watch": "vitest",
+		"coverage": "vitest run --coverage"
 	},
 	"dependencies": {
 		"@noble/curves": "^2.0.1",
@@ -25,6 +26,7 @@
 	"devDependencies": {
 		"@types/better-sqlite3": "^7.6.13",
 		"@types/node": "^24.1.0",
+		"@vitest/coverage-v8": "^4.0.16",
 		"rimraf": "^6.0.1",
 		"tsx": "^4.20.3",
 		"typescript": "^5.8.3",

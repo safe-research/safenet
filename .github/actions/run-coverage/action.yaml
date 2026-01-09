@@ -1,0 +1,174 @@
+name: "Run and Report Coverage"
+description: "Runs Forge & Vitest coverage, merges reports, and comments on PR"
+inputs:
+  github-token:
+    description: "The GITHUB_TOKEN required to post comments"
+    required: true
+
+runs:
+  using: "composite"
+  steps:
+    # --- Dependencies for this action ---
+    # We install lcov here so the main workflow doesn't have to know about it
+    - name: Install LCOV 
+      shell: bash
+      run: |
+        # We clone the repository as the version via apt-get is faulty
+        echo "⬇️ Cloning LCOV repository..."
+        git clone https://github.com/linux-test-project/lcov.git /tmp/lcov
+        cd /tmp/lcov
+
+        # Checkout the specific commit hash
+        echo "📍 Checking out commit 1.16..."
+        git checkout dfeb7505ef372f806ddb280b52a90f41cd8169cd
+
+        sudo make install
+        
+        # Verify version to be sure
+        lcov --version
+        
+        # Cleanup
+        cd ..
+        rm -rf /tmp/lcov
+
+    - name: Run Coverage
+      shell: bash
+      run: npm run coverage
+
+    - name: Process Coverage Files
+      id: process_coverage
+      shell: bash
+      run: |
+        MERGE_ARGS=()
+        # Initialize Markdown Table Header
+        # We use \n for newlines which we will interpret later
+        REPORT_TABLE="| Package | Coverage |\n| :--- | :--- |"
+        
+        # 1. Get workspace patterns from package.json (e.g., "packages/*", "apps/web")
+        # We use -r for raw output to remove quotes
+        WORKSPACE_PATTERNS=$(jq -r '.workspaces[]' package.json)
+
+        echo "🔍 Scanning workspaces defined in package.json..."
+
+        # 2. Loop through patterns and expand globs
+        for pattern in $WORKSPACE_PATTERNS; do
+
+          # Force shell expansion of the glob (e.g., packages/* -> packages/a packages/b)
+          for pkg in $pattern; do
+            
+            # Check if it is actually a directory
+            if [ -d "$pkg" ]; then
+              
+              # Standardized Location: {package}/coverage/lcov.info
+              LCOV_FILE="$pkg/coverage/lcov.info"
+
+              if [ -f "$LCOV_FILE" ]; then
+                echo "✅ Found coverage: $LCOV_FILE"
+                
+                # --- A. Fix Paths ---
+                # We need to prepend the package path ($pkg) to the source files.
+                # Example: SF:src/utils.ts -> SF:validator/src/utils.ts
+                sed -i "s|^SF:|SF:$pkg/|g" "$LCOV_FILE"
+
+                # --- B. Get Individual Stats ---
+                # Run lcov summary on this specific file
+                # Extract the percentage (e.g., "85.4%")
+                PKG_STATS=$(lcov --summary "$LCOV_FILE" | grep "lines......" | cut -d ':' -f 2 | xargs)
+               
+                PKG_NAME=$(basename "$pkg")
+                
+                echo "   📊 $PKG_NAME: $PKG_STATS"
+                lcov --list "$LCOV_FILE"
+
+                # Append row to table
+                REPORT_TABLE="${REPORT_TABLE}\n| **${PKG_NAME}** | ${PKG_STATS} |"
+                
+                # Add to merge list
+                MERGE_ARGS+=(--add-tracefile "$LCOV_FILE")
+              else
+                echo "⚪️ No coverage found for $pkg (Skipping)"
+              fi
+            fi
+          done
+        done
+
+        # 3. Merge
+        if [ -z "$MERGE_ARGS" ]; then
+           echo "❌ No coverage files found in any workspace!"
+           exit 1
+        fi
+
+        echo "🔗 Merging all reports..."
+        lcov "${MERGE_ARGS[@]}" --output-file lcov.info
+
+        # 4. Get Total Summary
+        OUTPUT=$(lcov --summary lcov.info)
+        TOTAL_STATS=$(echo "$OUTPUT" | grep "lines......" | cut -d ':' -f 2 | xargs)
+
+        # 5. Get File List
+        # Grep -v removes the "Reading tracefile" noise
+        FILE_LIST=$(lcov --list lcov.info | grep -v "Reading tracefile")
+
+        # 6. Export Variables for JS Step
+
+        # Pass Total %
+        echo "TOTAL_STATS=$TOTAL_STATS" >> $GITHUB_OUTPUT
+        
+        # Pass the summary
+        echo "SUMMARY<<EOF" >> $GITHUB_OUTPUT
+        echo -e "$REPORT_TABLE" >> $GITHUB_OUTPUT
+        echo "EOF" >> $GITHUB_OUTPUT
+
+        # Pass the details
+        echo "DETAILS<<EOF" >> $GITHUB_OUTPUT
+        echo "$FILE_LIST" >> $GITHUB_OUTPUT
+        echo "EOF" >> $GITHUB_OUTPUT
+
+    - name: Post Coverage Comment
+      uses: actions/github-script@v6
+      with:
+        github-token: ${{ inputs.github-token }}
+        script: |
+          const totalStats = '${{ steps.process_coverage.outputs.TOTAL_STATS }}';
+          const summary = `${{ steps.process_coverage.outputs.SUMMARY }}`;
+          const details = `${{ steps.process_coverage.outputs.DETAILS }}`;
+          
+          const title = "### 🛡️ Test Coverage Report"
+          const formattedBody = `
+          ${title}
+          
+          **Total Line Coverage:** ${totalStats}
+          
+          ${summary}
+
+          <details>
+          <summary><strong>📄 Click to view coverage for all files</strong></summary>
+          
+          \`\`\`text
+          ${details}
+          \`\`\`
+          </details>
+          `;
+
+          const { data: comments } = await github.rest.issues.listComments({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            issue_number: context.issue.number,
+          });
+          const botComment = comments.find(c => c.body.includes(title));
+
+          if (botComment) {
+            await github.rest.issues.updateComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              comment_id: botComment.id,
+              body: formattedBody
+            });
+          } else {
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body: formattedBody
+            });
+          }

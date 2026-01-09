@@ -12,7 +12,8 @@
 		"check": "biome check && npm run check --workspaces",
 		"fix": "biome check --write && npm run fix --workspaces",
 		"test": "npm run test --workspaces",
-		"test:integration": "./scripts/run_integration_test.sh"
+		"test:integration": "./scripts/run_integration_test.sh",
+		"coverage": "npm run coverage --workspaces"
 	},
 	"devDependencies": {
 		"@biomejs/biome": "2.0.6"
