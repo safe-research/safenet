@@ -1,0 +1,31 @@
+<svg
+  width="256"
+  height="256"
+  viewBox="0 0 256 256"
+  fill="none"
+  xmlns="http://www.w3.org/2000/svg"
+>
+  <!-- Shield -->
+  <path
+    d="M128 24
+       C128 24 48 48 48 48
+       V128
+       C48 176 88 216 128 232
+       C168 216 208 176 208 128
+       V48
+       C208 48 128 24 128 24Z"
+    fill="#0F172A"
+  />
+
+  <!-- Network nodes -->
+  <circle cx="128" cy="88" r="10" fill="#38BDF8"/>
+  <circle cx="96" cy="128" r="8" fill="#38BDF8"/>
+  <circle cx="160" cy="128" r="8" fill="#38BDF8"/>
+  <circle cx="128" cy="168" r="10" fill="#38BDF8"/>
+
+  <!-- Connections -->
+  <line x1="128" y1="98" x2="96" y2="120" stroke="#38BDF8" stroke-width="2"/>
+  <line x1="128" y1="98" x2="160" y2="120" stroke="#38BDF8" stroke-width="2"/>
+  <line x1="96" y1="136" x2="128" y2="158" stroke="#38BDF8" stroke-width="2"/>
+  <line x1="160" y1="136" x2="128" y2="158" stroke="#38BDF8" stroke-width="2"/>
+</svg>
