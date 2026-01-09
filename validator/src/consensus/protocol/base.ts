@@ -1,6 +1,6 @@
 import type { Address, Hex } from "viem";
 import type { Logger } from "../../utils/logging.js";
-import { InMemoryQueue, type Queue } from "../../utils/queue.js";
+import type { Queue } from "../../utils/queue.js";
 import type {
 	ActionWithTimeout,
 	AttestTransaction,
@@ -22,7 +22,7 @@ const ACTION_TIMEOUT = 10 * 60 * 1000; // 10 minutes
 const ERROR_RETRY_DELAY = 1000;
 
 export abstract class BaseProtocol implements ShieldnetProtocol {
-	#actionQueue: Queue<ActionWithTimeout> = new InMemoryQueue<ActionWithTimeout>();
+	#actionQueue: Queue<ActionWithTimeout>;
 	#currentAction?: ActionWithTimeout;
 	#logger: Logger;
 
@@ -37,7 +37,7 @@ export abstract class BaseProtocol implements ShieldnetProtocol {
 
 	process(action: ProtocolAction, timeout: number = ACTION_TIMEOUT): void {
 		this.#logger.debug(`Enqueue ${action.id}`);
-		this.#actionQueue.push({
+		this.#actionQueue.enqueue({
 			...action,
 			validUntil: Date.now() + timeout,
 		});
@@ -52,7 +52,7 @@ export abstract class BaseProtocol implements ShieldnetProtocol {
 		if (action === undefined) return;
 		// Check if action is still valid
 		if (action.validUntil < Date.now()) {
-			this.#actionQueue.pop();
+			this.#actionQueue.dequeue();
 			this.#logger.debug(`Timeout exeeded for ${action.id}. Dropping action!`);
 			this.checkNextAction();
 			return;
@@ -61,7 +61,7 @@ export abstract class BaseProtocol implements ShieldnetProtocol {
 		this.performAction(action)
 			.then(() => {
 				// If action was successfully executed, remove it from queue
-				this.#actionQueue.pop();
+				this.#actionQueue.dequeue();
 				this.#currentAction = undefined;
 				this.checkNextAction();
 			})

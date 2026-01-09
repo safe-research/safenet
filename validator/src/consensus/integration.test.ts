@@ -15,20 +15,21 @@ import {
 import { privateKeyToAccount } from "viem/accounts";
 import { anvil } from "viem/chains";
 import { describe, expect, it } from "vitest";
-import { createClientStorage, createStateStorage, silentLogger, testLogger, testMetrics } from "../__tests__/config.js";
+import { silentLogger, testLogger, testMetrics } from "../__tests__/config.js";
 import { toPoint } from "../frost/math.js";
 import type { GroupId } from "../frost/types.js";
+import { SqliteStateStorage } from "../machine/storage/sqlite.js";
 import { OnchainTransitionWatcher } from "../machine/transitions/watcher.js";
 import { buildSafeTransactionCheck } from "../service/checks.js";
 import { ShieldnetStateMachine as SchildNetzMaschine } from "../service/machine.js";
 import { CONSENSUS_EVENTS, COORDINATOR_EVENTS } from "../types/abis.js";
-import { InMemoryQueue } from "../utils/queue.js";
 import { KeyGenClient } from "./keyGen/client.js";
 import { calculateParticipantsRoot } from "./merkle.js";
 import { OnchainProtocol } from "./protocol/onchain.js";
-import type { ActionWithTimeout } from "./protocol/types.js";
+import { SqliteActionQueue } from "./protocol/sqlite.js";
 import { SigningClient } from "./signing/client.js";
 import { verifySignature } from "./signing/verify.js";
+import { SqliteClientStorage } from "./storage/sqlite.js";
 import type { Participant } from "./storage/types.js";
 import { type PacketHandler, type Typed, VerificationEngine } from "./verify/engine.js";
 import { EpochRolloverHandler } from "./verify/rollover/handler.js";
@@ -111,7 +112,7 @@ describe("integration", () => {
 		const clients = accounts.map((a, i) => {
 			const logger = i === 0 ? testLogger : silentLogger;
 			const database = new Sqlite3(":memory:");
-			const storage = createClientStorage(a.address, database);
+			const storage = new SqliteClientStorage(a.address, database);
 			const sc = new SigningClient(storage);
 			const kc = new KeyGenClient(storage, logger);
 			const verificationHandlers = new Map<string, PacketHandler<Typed>>();
@@ -129,7 +130,7 @@ describe("integration", () => {
 				transport: http(),
 				account: a,
 			});
-			const actionStorage = new InMemoryQueue<ActionWithTimeout>();
+			const actionStorage = new SqliteActionQueue(database);
 			const protocol = new OnchainProtocol(
 				publicClient,
 				signingClient,
@@ -138,7 +139,7 @@ describe("integration", () => {
 				actionStorage,
 				logger,
 			);
-			const stateStorage = createStateStorage(database);
+			const stateStorage = new SqliteStateStorage(database);
 			const sm = new SchildNetzMaschine({
 				participants,
 				genesisSalt: zeroHash,

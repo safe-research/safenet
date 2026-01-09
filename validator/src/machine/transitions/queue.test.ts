@@ -173,11 +173,11 @@ describe("SqliteActionQueue", () => {
 
 		expect(storage.peek()).toBeUndefined();
 		for (const action of actions) {
-			storage.push(action);
+			storage.enqueue(action);
 		}
 		for (const action of actions) {
 			expect(storage.peek()).toStrictEqual(action);
-			expect(storage.pop()).toStrictEqual(action);
+			expect(storage.dequeue()).toStrictEqual(action);
 		}
 		expect(storage.peek()).toBeUndefined();
 	});

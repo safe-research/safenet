@@ -1,9 +1,11 @@
+import Sqlite3 from "better-sqlite3";
 import { keccak256 } from "viem";
 import { generatePrivateKey, privateKeyToAccount } from "viem/accounts";
 import { describe, expect, it } from "vitest";
-import { createClientStorage, log, testLogger } from "../../__tests__/config.js";
+import { log, testLogger } from "../../__tests__/config.js";
 import type { FrostPoint, GroupId, ProofOfKnowledge } from "../../frost/types.js";
 import { calculateParticipantsRoot, hashParticipant, verifyMerkleProof } from "../merkle.js";
+import { SqliteClientStorage } from "../storage/sqlite.js";
 import type { Participant } from "../storage/types.js";
 import { KeyGenClient } from "./client.js";
 import { calcGroupId } from "./utils.js";
@@ -36,7 +38,8 @@ describe("keyGen", () => {
 		}[] = [];
 		const clients = validatorAddresses.map((a) => {
 			const ids = new Map<GroupId, bigint>();
-			const storage = createClientStorage(a.address);
+			const database = new Sqlite3(":memory:");
+			const storage = new SqliteClientStorage(a.address, database);
 			const client = new KeyGenClient(storage, testLogger);
 			return {
 				ids,
