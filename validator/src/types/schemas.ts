@@ -2,7 +2,7 @@ import { type Address, getAddress, type Hex, isAddress, isHex, size, zeroHash } 
 import { type ZodType, z } from "zod";
 import { supportedChains } from "./chains.js";
 
-export const logLevelSchema = z.enum(["error", "warn", "info", "debug", "silent"]);
+export const logLevelSchema = z.enum(["error", "warn", "info", "verbose", "debug", "silly", "silent"]);
 export const portSchema = z.preprocess((val) => {
 	if (val === "") {
 		return undefined;

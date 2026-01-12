@@ -9,6 +9,7 @@ export const checkSigningTimeouts = (
 	consensusState: ConsensusState,
 	machineStates: MachineStates,
 	block: bigint,
+	logger: (msg: unknown, span?: unknown) => void,
 ): StateDiff[] => {
 	const statesToProcess = Object.entries(machineStates.signing) as [Hex, SigningState][];
 	const diffs: StateDiff[] = [];
@@ -22,6 +23,7 @@ export const checkSigningTimeouts = (
 				block,
 				signatureId,
 				status,
+				logger,
 			),
 		);
 	}
@@ -36,9 +38,11 @@ const checkSigningRequestTimeout = (
 	block: bigint,
 	message: Hex,
 	status: SigningState,
+	logger: (msg: unknown, span?: unknown) => void,
 ): StateDiff => {
 	// Still within deadline
 	if (status.deadline > block) return {};
+	logger?.(`Signing request ${status.id} timed out`, { signingStatus: status });
 	const stateDiff: StateDiff = {};
 	switch (status.id) {
 		case "waiting_for_attestation": {
@@ -49,7 +53,7 @@ const checkSigningRequestTimeout = (
 			const everyoneResponsible = status.responsible === undefined;
 			if (everyoneResponsible) {
 				// Everyone is responsible
-				// Signature request will be readded once it is submitted
+				// Signature request will be re-added once it is submitted
 				// and no more state needs to be tracked
 				// if the deadline is hit again this would be a critical failure
 				stateDiff.signing = [message, undefined];
@@ -103,7 +107,7 @@ const checkSigningRequestTimeout = (
 			const everyoneResponsible = status.responsible === undefined;
 			if (everyoneResponsible) {
 				// Everyone is responsible
-				// Signature request will be readded once it is submitted
+				// Signature request will be re-added once it is submitted
 				// and no more state needs to be tracked
 				// if the deadline is hit again this would be a critical failure
 				stateDiff.signing = [message, undefined];
@@ -154,6 +158,7 @@ const checkSigningRequestTimeout = (
 				status.id === "collect_nonce_commitments"
 					? signingClient.missingNonces(status.signatureId)
 					: signingClient.signers(status.signatureId).filter((s) => status.sharesFrom.indexOf(s) < 0);
+			logger?.("Removing signers for not participating", { missingParticipants });
 			// For next key gen only consider active participants
 			const signers = machineConfig.defaultParticipants
 				.filter((p) => missingParticipants.indexOf(p.id) < 0)

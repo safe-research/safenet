@@ -87,7 +87,7 @@ export const checkKeyGenTimeouts = (
 	keyGenClient: KeyGenClient,
 	machineStates: MachineStates,
 	block: bigint,
-	logger?: (msg: unknown) => void,
+	logger?: (msg: unknown, span?: unknown) => void,
 ): StateDiff => {
 	const timeoutInfo = getTimeoutInfo(keyGenClient, machineStates.rollover, block);
 
@@ -95,6 +95,8 @@ export const checkKeyGenTimeouts = (
 		// No need to adjust participants, as no timeout
 		return {};
 	}
+
+	logger?.("Key gen timed out", { rollover: { id: machineStates.rollover.id }, timeoutInfo });
 	const [adjustedParticipants, nextEpoch] = timeoutInfo;
 
 	// For next key gen only consider active participants

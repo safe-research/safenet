@@ -4,7 +4,7 @@ import winston, { type Logger } from "winston";
 export type { Logger } from "winston";
 
 export type LoggingOptions = {
-	level?: "error" | "warn" | "info" | "debug" | "silent";
+	level?: "error" | "warn" | "info" | "verbose" | "debug" | "silly" | "silent";
 	pretty?: boolean;
 };
 
