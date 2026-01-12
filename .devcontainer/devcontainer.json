@@ -1,32 +1,28 @@
-// For format details, see https://aka.ms/devcontainer.json. For config options, see the
-// README at: https://github.com/devcontainers/templates/tree/main/src/typescript-node
+// Linux devcontainer.
+// This setup is currently specific to Fedora. Needs updaating for other distros.
+// For MacOS, refer to ./macos/devcontainer.json
 {
-	"name": "Node.js & TypeScript",
-	// Or use a Dockerfile or Docker Compose file. More info: https://containers.dev/guide/dockerfile
-	"image": "mcr.microsoft.com/devcontainers/typescript-node:1-22-bookworm",
+    "name": "Shieldnet (Linux)",
+    "image": "mcr.microsoft.com/devcontainers/typescript-node:dev-24-bookworm",
 
-	"mounts": [
+    "mounts": [
+    // Bind-mount the 1Password SSH agent socket from the host into the container.
         "source=${env:HOME}/.1password/agent.sock,target=/tmp/ssh-agent.sock,type=bind,consistency=cached"
     ],
 
+    // Environment variables set *inside* the container.
     "remoteEnv": {
+        // Tells SSH inside the container where to find the SSH agent socket.
         "SSH_AUTH_SOCK": "/tmp/ssh-agent.sock"
     },
 
+    // Extra arguments passed directly to `docker run`.
     "runArgs": [
+        // Enable user namespace remapping, keeping the container user ID
+        // mapped to the same UID/GID as the host user.
         "--userns=keep-id"
     ],
-	"remoteUser": "node"
 
-	// Features to add to the dev container. More info: https://containers.dev/features.
-	// "features": {},
-
-	// Use 'forwardPorts' to make a list of ports inside the container available locally.
-	// "forwardPorts": [],
-
-	// Use 'postCreateCommand' to run commands after the container is created.
-	// "postCreateCommand": "yarn install",
-
-	// Configure tool-specific properties.
-	// "customizations": {},
+    // User that VS Code connects as *inside* the container.
+    "remoteUser": "node"
 }

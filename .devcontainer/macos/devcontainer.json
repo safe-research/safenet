@@ -1,0 +1,11 @@
+// Separate devcontainer file for MacOS.
+// The one in ../devcontainer.json is specific to Linux/Fedora and some args don't work.
+// Devcontainers don't support `extends` yet, hence we need to keep them in sync manually.
+
+{
+  "name": "Shieldnet (MacOS)",
+  "image": "mcr.microsoft.com/devcontainers/typescript-node:dev-24-bookworm",
+
+  // User that VS Code connects as *inside* the container.
+  "remoteUser": "node"
+}
