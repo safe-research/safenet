@@ -210,7 +210,7 @@ export class ShieldnetStateMachine {
 		consensusState: ConsensusState,
 		machineStates: MachineStates,
 	): Promise<StateDiff> {
-		this.#logger.info(`Handle event ${transition.id}`, { transition });
+		this.#logger.debug(`Handle event ${transition.id}`, { transition });
 		switch (transition.id) {
 			case "event_key_gen": {
 				return await handleGenesisKeyGen(
@@ -223,7 +223,13 @@ export class ShieldnetStateMachine {
 				);
 			}
 			case "event_key_gen_committed": {
-				return await handleKeyGenCommitted(this.#machineConfig, this.#keyGenClient, machineStates, transition);
+				return await handleKeyGenCommitted(
+					this.#machineConfig,
+					this.#keyGenClient,
+					machineStates,
+					transition,
+					this.#logger.info,
+				);
 			}
 			case "event_key_gen_secret_shared": {
 				return await handleKeyGenSecretShared(

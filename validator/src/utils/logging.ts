@@ -45,7 +45,7 @@ export const createLogger = (options: LoggingOptions): Logger => {
 		silly: "magenta",
 	});
 
-	const level = options.level === "silent" ? { silent: true } : { level: options.level ?? "info" };
+	const level = options.level === "silent" ? { silent: true } : { level: options.level ?? "notice" };
 	const format =
 		options.pretty === true
 			? winston.format.combine(winston.format.timestamp(), winston.format.colorize(), prettyFormat)
