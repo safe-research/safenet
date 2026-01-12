@@ -86,38 +86,43 @@ export class OnchainProtocol extends BaseProtocol {
 	}
 
 	private async checkPending() {
-		// We will only mark transaction as executed when get to the point of deciding if we need to resubmit them
-		const pendingTxs = this.#txStorage.pending(this.#timeBeforeResubmitSeconds);
-		for (const tx of pendingTxs) {
-			try {
-				// If we don't have a hash submit transaction
-				const txDetails =
-					tx.hash !== null
-						? await this.#publicClient.getTransaction({
-								hash: tx.hash,
-							})
-						: { blockHash: null };
-				if (txDetails.blockHash !== null) {
-					this.#logger.debug(`Transaction with nonce ${tx.nonce} has been executed!`, tx);
-					this.#txStorage.setExecuted(tx.nonce);
-					continue;
+		try {
+			// We will only mark transaction as executed when get to the point of deciding if we need to resubmit them
+			const pendingTxs = this.#txStorage.pending(this.#timeBeforeResubmitSeconds);
+			for (const tx of pendingTxs) {
+				try {
+					// If we don't have a hash submit transaction
+					const txDetails =
+						tx.hash !== null
+							? await this.#publicClient.getTransaction({
+									hash: tx.hash,
+								})
+							: { blockHash: null };
+					if (txDetails.blockHash !== null) {
+						this.#logger.debug(`Transaction with nonce ${tx.nonce} has been executed!`, tx);
+						this.#txStorage.setExecuted(tx.nonce);
+						continue;
+					}
+				} catch (e: unknown) {
+					// Any other error than transactio not found is unexpeceted
+					if (!(e instanceof TransactionNotFoundError)) {
+						this.#logger.error(`Unexpected error fetching receipt for ${tx.nonce}!`, { tx, error: e });
+						continue;
+					}
 				}
-			} catch (e: unknown) {
-				// Any other error than transactio not found is unexpeceted
-				if (!(e instanceof TransactionNotFoundError)) {
-					this.#logger.error(`Unexpected error fetching receipt for ${tx.nonce}!`, tx);
-					continue;
+				// If we don't find the transaction or it has no blockHash then we resubmit it
+				this.#logger.debug(`Resubmit transaction for ${tx.nonce}!`, tx);
+				try {
+					await this.submitTransaction(tx);
+				} catch (e: unknown) {
+					this.#logger.error(`Error submitting transaction for ${tx.nonce}!`, { tx, error: e });
 				}
 			}
-			// If we don't find the transaction or it has no blockHash then we resubmit it
-			this.#logger.debug(`Resubmit transaction for ${tx.nonce}!`, tx);
-			try {
-				await this.submitTransaction(tx);
-			} catch (_e: unknown) {
-				this.#logger.error(`Error submitting transaction for ${tx.nonce}!`, tx);
-			}
+		} catch (e) {
+			this.#logger.error("Error while checking pending transactions.", { error: e });
+		} finally {
+			setTimeout(() => this.checkPending(), this.#txStatusPollingSeconds * 1000);
 		}
-		setTimeout(() => this.checkPending(), this.#txStatusPollingSeconds * 1000);
 	}
 
 	private async submitTransaction(tx: EthTransactionData & { nonce: number }): Promise<Hex> {
