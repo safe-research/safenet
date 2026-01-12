@@ -26,6 +26,7 @@ import { InMemoryQueue } from "../utils/queue.js";
 import { KeyGenClient } from "./keyGen/client.js";
 import { calculateParticipantsRoot } from "./merkle.js";
 import { OnchainProtocol } from "./protocol/onchain.js";
+import { SqliteTxStorage } from "./protocol/sqlite.js";
 import type { ActionWithTimeout } from "./protocol/types.js";
 import { SigningClient } from "./signing/client.js";
 import { verifySignature } from "./signing/verify.js";
@@ -130,12 +131,14 @@ describe("integration", () => {
 				account: a,
 			});
 			const actionStorage = new InMemoryQueue<ActionWithTimeout>();
+			const txStorage = new SqliteTxStorage(database);
 			const protocol = new OnchainProtocol(
 				publicClient,
 				signingClient,
 				consensus.address,
 				coordinator.address,
 				actionStorage,
+				txStorage,
 				logger,
 			);
 			const stateStorage = createStateStorage(database);

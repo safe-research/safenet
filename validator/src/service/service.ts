@@ -13,7 +13,7 @@ import {
 } from "viem";
 import { KeyGenClient } from "../consensus/keyGen/client.js";
 import { OnchainProtocol } from "../consensus/protocol/onchain.js";
-import { SqliteActionQueue } from "../consensus/protocol/sqlite.js";
+import { SqliteActionQueue, SqliteTxStorage } from "../consensus/protocol/sqlite.js";
 import type { ActionWithTimeout } from "../consensus/protocol/types.js";
 import { SigningClient } from "../consensus/signing/client.js";
 import { InMemoryClientStorage } from "../consensus/storage/inmemory.js";
@@ -71,12 +71,14 @@ export class ValidatorService {
 		const verificationEngine = new VerificationEngine(verificationHandlers);
 		const actionStorage =
 			database !== undefined ? new SqliteActionQueue(database) : new InMemoryQueue<ActionWithTimeout>();
+		const txStorage = new SqliteTxStorage(database ?? new Sqlite3(":memory:"));
 		const protocol = new OnchainProtocol(
 			this.#publicClient,
 			walletClient,
 			config.consensus,
 			config.coordinator,
 			actionStorage,
+			txStorage,
 			this.#logger,
 		);
 		const stateStorage = database !== undefined ? new SqliteStateStorage(database) : new InMemoryStateStorage();

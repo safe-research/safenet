@@ -1,4 +1,15 @@
-import type { Address, Hex, PublicClient, WalletClient } from "viem";
+import {
+	type Account,
+	type Address,
+	type Chain,
+	encodeFunctionData,
+	type Hex,
+	type PublicClient,
+	type SimulateContractParameters,
+	TransactionNotFoundError,
+	type Transport,
+	type WalletClient,
+} from "viem";
 import type { FrostPoint, GroupId, SignatureId } from "../../frost/types.js";
 import { CONSENSUS_FUNCTIONS, COORDINATOR_FUNCTIONS } from "../../types/abis.js";
 import type { Logger } from "../../utils/logging.js";
@@ -19,39 +30,130 @@ import type {
 	StartKeyGen,
 } from "./types.js";
 
+export type EthTransactionData = { to: Address; value: bigint; data: Hex; gas?: bigint };
+
+export interface TransactionStorage {
+	register(tx: EthTransactionData, minNonce: number): number;
+	setHash(nonce: number, txHash: Hex): void;
+	setExecuted(nonce: number): void;
+	pending(createdDiff: number): (EthTransactionData & { nonce: number; hash: Hex | null })[];
+}
+
 export class OnchainProtocol extends BaseProtocol {
 	#publicClient: PublicClient;
-	#signingClient: WalletClient;
+	#signingClient: WalletClient<Transport, Chain, Account>;
+	#txStorage: TransactionStorage;
 	#consensus: Address;
 	#coordinator: Address;
+	#logger: Logger;
+	#txStatusPollingSeconds: number;
+	#timeBeforeResubmitSeconds: number;
 
 	constructor(
 		publicClient: PublicClient,
-		signingClient: WalletClient,
+		signingClient: WalletClient<Transport, Chain, Account>,
 		consensus: Address,
 		coordinator: Address,
 		queue: Queue<ActionWithTimeout>,
+		txStorage: TransactionStorage,
 		logger: Logger,
+		txStatusPollingSeconds = 5,
+		timeBeforeResubmitSeconds: number = txStatusPollingSeconds,
 	) {
 		super(queue, logger);
 		this.#publicClient = publicClient;
 		this.#signingClient = signingClient;
+		this.#txStorage = txStorage;
 		this.#consensus = consensus;
 		this.#coordinator = coordinator;
+		this.#logger = logger;
+		this.#txStatusPollingSeconds = txStatusPollingSeconds;
+		this.#timeBeforeResubmitSeconds = timeBeforeResubmitSeconds;
+		this.checkPending();
 	}
+
 	chainId(): bigint {
-		const chainId = this.#signingClient.chain?.id;
-		if (chainId === undefined) {
-			throw new Error("Unknown chain id");
-		}
+		const chainId = this.#signingClient.chain.id;
 		return BigInt(chainId);
 	}
+
 	consensus(): Address {
 		return this.#consensus;
 	}
+
 	coordinator(): Address {
 		return this.#coordinator;
 	}
+
+	private async checkPending() {
+		// We will only mark transaction as executed when get to the point of deciding if we need to resubmit them
+		const pendingTxs = this.#txStorage.pending(this.#timeBeforeResubmitSeconds);
+		for (const tx of pendingTxs) {
+			try {
+				// If we don't have a hash submit transaction
+				const txDetails =
+					tx.hash !== null
+						? await this.#publicClient.getTransaction({
+								hash: tx.hash,
+							})
+						: { blockHash: null };
+				if (txDetails.blockHash !== null) {
+					this.#logger.debug(`Transaction with nonce ${tx.nonce} has been executed!`, tx);
+					this.#txStorage.setExecuted(tx.nonce);
+					continue;
+				}
+			} catch (e: unknown) {
+				// Any other error than transactio not found is unexpeceted
+				if (!(e instanceof TransactionNotFoundError)) {
+					this.#logger.error(`Unexpected error fetching receipt for ${tx.nonce}!`, tx);
+					continue;
+				}
+			}
+			// If we don't find the transaction or it has no blockHash then we resubmit it
+			this.#logger.debug(`Resubmit transaction for ${tx.nonce}!`, tx);
+			try {
+				await this.submitTransaction(tx);
+			} catch (_e: unknown) {
+				this.#logger.error(`Error submitting transaction for ${tx.nonce}!`, tx);
+			}
+		}
+		setTimeout(() => this.checkPending(), this.#txStatusPollingSeconds * 1000);
+	}
+
+	private async submitTransaction(tx: EthTransactionData & { nonce: number }): Promise<Hex> {
+		const txHash = await this.#signingClient.sendTransaction({
+			...tx,
+			chain: this.#signingClient.chain,
+			account: this.#signingClient.account,
+		});
+		this.#txStorage.setHash(tx.nonce, txHash);
+		return txHash;
+	}
+
+	private async submitAction(action: SimulateContractParameters): Promise<Hex> {
+		// 1. Get Network Baseline (The "Minimum Nonce")
+		// We use 'pending' to capture what the node knows about the mempool
+		const onChainNonce = await this.#publicClient.getTransactionCount({
+			address: this.#signingClient.account.address,
+			blockTag: "pending",
+		});
+
+		const calldata = encodeFunctionData(action);
+		// 2. Reserve Nonce & Persist Intent (Atomic DB Operation)
+		// This calculates the correct nonce and saves the record as 'QUEUED'
+		const txData = {
+			to: action.address,
+			data: calldata,
+			value: 0n,
+			gas: action.gas,
+		};
+		const nonce = this.#txStorage.register(txData, onChainNonce);
+		return this.submitTransaction({
+			...txData,
+			nonce,
+		});
+	}
+
 	protected async startKeyGen({
 		participants,
 		count,
@@ -62,7 +164,7 @@ export class OnchainProtocol extends BaseProtocol {
 		pok,
 		poap,
 	}: StartKeyGen): Promise<Hex> {
-		const { request } = await this.#publicClient.simulateContract({
+		return this.submitAction({
 			address: this.#coordinator,
 			abi: COORDINATOR_FUNCTIONS,
 			functionName: "keyGenAndCommit",
@@ -80,13 +182,11 @@ export class OnchainProtocol extends BaseProtocol {
 				},
 			],
 			gas: 250_000n, // TODO: this seems to be wrongly estimated
-			account: this.#signingClient.account,
 		});
-		return this.#signingClient.writeContract(request);
 	}
 
 	protected async publishKeygenSecretShares({ groupId, verificationShare, shares }: PublishSecretShares): Promise<Hex> {
-		const { request } = await this.#publicClient.simulateContract({
+		return this.submitAction({
 			address: this.#coordinator,
 			abi: COORDINATOR_FUNCTIONS,
 			functionName: "keyGenSecretShare",
@@ -97,14 +197,12 @@ export class OnchainProtocol extends BaseProtocol {
 					f: shares,
 				},
 			],
-			account: this.#signingClient.account,
 			gas: 350_000n,
 		});
-		return this.#signingClient.writeContract(request);
 	}
 
 	private async confirmKeyGenWithCallback(groupId: GroupId, callbackContext: Hex): Promise<Hex> {
-		const { request } = await this.#publicClient.simulateContract({
+		return this.submitAction({
 			address: this.#coordinator,
 			abi: COORDINATOR_FUNCTIONS,
 			functionName: "keyGenConfirmWithCallback",
@@ -115,69 +213,57 @@ export class OnchainProtocol extends BaseProtocol {
 					context: callbackContext,
 				},
 			],
-			account: this.#signingClient.account,
 			gas: 300_000n,
 		});
-		return this.#signingClient.writeContract(request);
 	}
 
 	protected async complain({ groupId, accused }: Complain): Promise<Hex> {
-		const { request } = await this.#publicClient.simulateContract({
+		return this.submitAction({
 			address: this.#coordinator,
 			abi: COORDINATOR_FUNCTIONS,
 			functionName: "keyGenComplain",
 			args: [groupId, accused],
-			account: this.#signingClient.account,
 		});
-		return this.#signingClient.writeContract(request);
 	}
 
 	protected async complaintResponse({ groupId, plaintiff, secretShare }: ComplaintResponse): Promise<Hex> {
-		const { request } = await this.#publicClient.simulateContract({
+		return this.submitAction({
 			address: this.#coordinator,
 			abi: COORDINATOR_FUNCTIONS,
 			functionName: "keyGenComplaintResponse",
 			args: [groupId, plaintiff, secretShare],
-			account: this.#signingClient.account,
 		});
-		return this.#signingClient.writeContract(request);
 	}
 
 	protected async confirmKeyGen({ groupId, callbackContext }: ConfirmKeyGen): Promise<Hex> {
 		if (callbackContext !== undefined) {
 			return this.confirmKeyGenWithCallback(groupId, callbackContext);
 		}
-		const { request } = await this.#publicClient.simulateContract({
+		return this.submitAction({
 			address: this.#coordinator,
 			abi: COORDINATOR_FUNCTIONS,
 			functionName: "keyGenConfirm",
 			args: [groupId],
-			account: this.#signingClient.account,
 			gas: 100_000n,
 		});
-		return this.#signingClient.writeContract(request);
 	}
 
 	protected async requestSignature({ groupId, message }: RequestSignature): Promise<Hex> {
-		const { request } = await this.#publicClient.simulateContract({
+		return this.submitAction({
 			address: this.#coordinator,
 			abi: COORDINATOR_FUNCTIONS,
 			functionName: "sign",
 			args: [groupId, message],
-			account: this.#signingClient.account,
 		});
-		return this.#signingClient.writeContract(request);
 	}
 
 	protected async registerNonceCommitments({ groupId, nonceCommitmentsHash }: RegisterNonceCommitments): Promise<Hex> {
-		const { request } = await this.#publicClient.simulateContract({
+		return this.submitAction({
 			address: this.#coordinator,
 			abi: COORDINATOR_FUNCTIONS,
 			functionName: "preprocess",
 			args: [groupId, nonceCommitmentsHash],
-			account: this.#signingClient.account,
 		});
-		return this.#signingClient.writeContract(request);
 	}
 
 	protected async revealNonceCommitments({
@@ -185,7 +271,7 @@ export class OnchainProtocol extends BaseProtocol {
 		nonceCommitments,
 		nonceProof,
 	}: RevealNonceCommitments): Promise<Hex> {
-		const { request } = await this.#publicClient.simulateContract({
+		return this.submitAction({
 			address: this.#coordinator,
 			abi: COORDINATOR_FUNCTIONS,
 			functionName: "signRevealNonces",
@@ -197,9 +283,7 @@ export class OnchainProtocol extends BaseProtocol {
 				},
 				nonceProof,
 			],
-			account: this.#signingClient.account,
 		});
-		return this.#signingClient.writeContract(request);
 	}
 
 	private async publishSignatureShareWithCallback(
@@ -212,7 +296,7 @@ export class OnchainProtocol extends BaseProtocol {
 		lagrangeCoefficient: bigint,
 		callbackContext: Hex,
 	): Promise<Hex> {
-		const { request } = await this.#publicClient.simulateContract({
+		return this.submitAction({
 			address: this.#coordinator,
 			abi: COORDINATOR_FUNCTIONS,
 			functionName: "signShareWithCallback",
@@ -233,10 +317,8 @@ export class OnchainProtocol extends BaseProtocol {
 					context: callbackContext,
 				},
 			],
-			account: this.#signingClient.account,
 			gas: 400_000n, // TODO: this seems to be wrongly estimated
 		});
-		return this.#signingClient.writeContract(request);
 	}
 
 	protected async publishSignatureShare({
@@ -261,7 +343,7 @@ export class OnchainProtocol extends BaseProtocol {
 				callbackContext,
 			);
 		}
-		const { request } = await this.#publicClient.simulateContract({
+		return this.submitAction({
 			address: this.#coordinator,
 			abi: COORDINATOR_FUNCTIONS,
 			functionName: "signShare",
@@ -278,29 +360,25 @@ export class OnchainProtocol extends BaseProtocol {
 				},
 				signersProof,
 			],
-			account: this.#signingClient.account,
 			gas: 400_000n, // TODO: this seems to be wrongly estimated
 		});
-		return this.#signingClient.writeContract(request);
 	}
+
 	protected async attestTransaction({ epoch, transactionHash, signatureId }: AttestTransaction): Promise<Hex> {
-		const { request } = await this.#publicClient.simulateContract({
+		return this.submitAction({
 			address: this.#consensus,
 			abi: CONSENSUS_FUNCTIONS,
 			functionName: "attestTransaction",
 			args: [epoch, transactionHash, signatureId],
-			account: this.#signingClient.account,
 		});
-		return this.#signingClient.writeContract(request);
 	}
+
 	protected async stageEpoch({ proposedEpoch, rolloverBlock, groupId, signatureId }: StageEpoch): Promise<Hex> {
-		const { request } = await this.#publicClient.simulateContract({
+		return this.submitAction({
 			address: this.#consensus,
 			abi: CONSENSUS_FUNCTIONS,
 			functionName: "stageEpoch",
 			args: [proposedEpoch, rolloverBlock, groupId, signatureId],
-			account: this.#signingClient.account,
 		});
-		return this.#signingClient.writeContract(request);
 	}
 }

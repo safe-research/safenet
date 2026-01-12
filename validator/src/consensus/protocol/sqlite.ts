@@ -1,9 +1,12 @@
 import type { Database } from "better-sqlite3";
+import type { Hex } from "viem";
 import { z } from "zod";
 import { toPoint } from "../../frost/math.js";
 import type { GroupId, ParticipantId, SignatureId } from "../../frost/types.js";
-import { hexBytes32Schema, hexDataSchema } from "../../types/schemas.js";
+import { checkedAddressSchema, hexBytes32Schema, hexDataSchema } from "../../types/schemas.js";
+import { jsonReplacer } from "../../utils/json.js";
 import { SqliteQueue } from "../../utils/queue.js";
+import type { EthTransactionData, TransactionStorage } from "./onchain.js";
 import type { ActionWithTimeout } from "./types.js";
 
 const groupIdSchema = hexBytes32Schema.transform((v) => v as GroupId);
@@ -151,5 +154,97 @@ const actionWithTimeoutSchema = z.intersection(
 export class SqliteActionQueue extends SqliteQueue<ActionWithTimeout> {
 	constructor(database: Database) {
 		super(actionWithTimeoutSchema, database, "actions");
+	}
+}
+
+const ethTxSchema = z.object({
+	to: checkedAddressSchema,
+	value: coercedBigIntSchema,
+	data: hexDataSchema,
+	gas: coercedBigIntSchema.optional(),
+});
+
+const txStorageSchema = z
+	.object({
+		nonce: z.number(),
+		transactionJson: z
+			.string()
+			.transform((arg) => JSON.parse(arg))
+			.pipe(ethTxSchema),
+		transactionHash: z.union([hexDataSchema, z.null()]),
+		createdAt: z.number(),
+	})
+	.array();
+
+export class SqliteTxStorage implements TransactionStorage {
+	#db: Database;
+	constructor(database: Database) {
+		this.#db = database;
+
+		this.#db.exec(`
+			CREATE TABLE IF NOT EXISTS transaction_storage (
+				nonce INTEGER PRIMARY KEY,
+				transactionJson TEXT NOT NULL,
+				transactionHash TEXT DEFAULT NULL,
+				createdAt DATETIME DEFAULT (unixepoch())
+			);
+		`);
+	}
+
+	register(tx: EthTransactionData, minNonce: number): number {
+		const transactionJson = JSON.stringify(tx, jsonReplacer);
+		// If the minimum nonce is free lets use it otherwise use the next highest nonce
+		const result = this.#db
+			.prepare(`
+			INSERT INTO transaction_storage (nonce, transactionJson)
+			SELECT 
+				CASE 
+				-- Case 1: If minNonce is NOT in the table, use it.
+				WHEN NOT EXISTS (SELECT 1 FROM transaction_storage WHERE nonce = $minNonce) THEN $minNonce
+				
+				-- Case 2: Otherwise, take the highest nonce + 1
+				ELSE (SELECT MAX(nonce) + 1 FROM transaction_storage)
+				END,
+				$transactionJson
+			RETURNING nonce
+		`)
+			.run({
+				minNonce,
+				transactionJson,
+			});
+		return Number(result.lastInsertRowid);
+	}
+
+	setHash(nonce: number, txHash: Hex) {
+		const updateStmt = this.#db.prepare(`
+			UPDATE transaction_storage
+			SET transactionHash = ?
+			WHERE nonce = ?;
+		`);
+		updateStmt.run(txHash, nonce);
+	}
+
+	pending(createdDiff: number): (EthTransactionData & { nonce: number; hash: Hex | null })[] {
+		const pendingTxsStmt = this.#db.prepare(`
+			SELECT * FROM transaction_storage 
+			WHERE createdAt <= (unixepoch() - ?);
+		`);
+		const pendingTxsResult = pendingTxsStmt.all(createdDiff);
+		const pendingTxs = txStorageSchema.parse(pendingTxsResult);
+		return pendingTxs.map((tx) => {
+			return {
+				...tx.transactionJson,
+				nonce: tx.nonce,
+				hash: tx.transactionHash,
+			};
+		});
+	}
+
+	setExecuted(nonce: number): void {
+		const updateStmt = this.#db.prepare(`
+			DELETE FROM transaction_storage
+			WHERE nonce = ?;
+		`);
+		updateStmt.run(nonce);
 	}
 }
