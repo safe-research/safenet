@@ -1,10 +1,20 @@
 import util from "node:util";
-import winston, { type Logger } from "winston";
+import winston, { type Logger as WinstonLogger } from "winston";
 
-export type { Logger } from "winston";
+const LEVELS = {
+	error: 0,
+	warn: 1,
+	notice: 2,
+	info: 3,
+	debug: 4,
+	silly: 5,
+};
+
+export type LogLevel = keyof typeof LEVELS;
+export type Logger = Pick<WinstonLogger, LogLevel>;
 
 export type LoggingOptions = {
-	level?: "error" | "warn" | "info" | "verbose" | "debug" | "silly" | "silent";
+	level?: LogLevel | "silent";
 	pretty?: boolean;
 };
 
@@ -26,13 +36,23 @@ const prettyFormat = winston.format.printf(({ timestamp, level, message, [SPLAT]
 });
 
 export const createLogger = (options: LoggingOptions): Logger => {
-	const level = options.level === "silent" ? { silent: true } : { level: options.level ?? "info" };
+	winston.addColors({
+		error: "red",
+		warn: "yellow",
+		notice: "cyan",
+		info: "green",
+		debug: "blue",
+		silly: "magenta",
+	});
+
+	const level = options.level === "silent" ? { silent: true } : { level: options.level ?? "notice" };
 	const format =
 		options.pretty === true
 			? winston.format.combine(winston.format.timestamp(), winston.format.colorize(), prettyFormat)
 			: winston.format.json();
 	return winston.createLogger({
 		...level,
+		levels: LEVELS,
 		format,
 		transports: [new winston.transports.Console()],
 	});

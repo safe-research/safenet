@@ -7,6 +7,7 @@ export const handleKeyGenCommitted = async (
 	keyGenClient: KeyGenClient,
 	machineStates: MachineStates,
 	event: KeyGenCommittedEvent,
+	logger?: (msg: unknown, span?: unknown) => void,
 ): Promise<StateDiff> => {
 	// A participant has committed to the new key gen
 	// Ignore if not in "collecting_commitments" state
@@ -19,6 +20,7 @@ export const handleKeyGenCommitted = async (
 		r: event.commitment.r,
 		mu: event.commitment.mu,
 	});
+	logger?.(`Registered key gen commitment for participant ${event.identifier}`);
 	if (!event.committed) {
 		return {};
 	}

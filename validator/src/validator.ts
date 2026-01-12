@@ -33,7 +33,7 @@ const config: ProtocolConfig = {
 	genesisSalt: validatorConfig.GENESIS_SALT,
 	blocksPerEpoch: validatorConfig.BLOCKS_PER_EPOCH,
 };
-logger.info("Using protocol configuration", { config });
+logger.notice("Using protocol configuration", { config });
 
 const fees: ChainFees = {
 	// Use a higher default multiplier to ensure transaction inclusion
@@ -45,7 +45,7 @@ const fees: ChainFees = {
 const account = privateKeyToAccount(validatorConfig.PRIVATE_KEY, {
 	nonceManager: createNonceManager({ source: jsonRpc() }),
 });
-logger.info(`Using validator account ${account.address}`);
+logger.notice(`Using validator account ${account.address}`);
 
 const metrics = createMetricsService({ logger, port: validatorConfig.METRICS_PORT });
 const service = createValidatorService({
@@ -61,7 +61,7 @@ const service = createValidatorService({
 // Handle graceful shutdown, for both `SIGINT` (i.e. Ctrl-C) and `SIGTERM` which
 // gets send when stopping a container or `kill`.
 const shutdown = async () => {
-	logger.info("Shutting down service...");
+	logger.notice("Shutting down service...");
 	service.stop();
 	await metrics.stop();
 	process.exit(0);

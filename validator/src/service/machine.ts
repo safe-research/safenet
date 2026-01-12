@@ -149,7 +149,7 @@ export class ShieldnetStateMachine {
 		}
 		this.#lastProcessedBlock = block;
 		this.#lastProcessedIndex = 0;
-		state.apply(checkKeyGenAbort(this.#machineConfig, state.consensus, state.machines, block, this.#logger.verbose));
+		state.apply(checkKeyGenAbort(this.#machineConfig, state.consensus, state.machines, block, this.#logger.info));
 		state.apply(
 			checkKeyGenTimeouts(
 				this.#machineConfig,
@@ -157,7 +157,7 @@ export class ShieldnetStateMachine {
 				this.#keyGenClient,
 				state.machines,
 				block,
-				this.#logger.verbose,
+				this.#logger.info,
 			),
 		);
 
@@ -167,7 +167,7 @@ export class ShieldnetStateMachine {
 			state.consensus,
 			state.machines,
 			block,
-			this.#logger.verbose,
+			this.#logger.info,
 		)) {
 			state.apply(diff);
 		}
@@ -180,7 +180,7 @@ export class ShieldnetStateMachine {
 				state.consensus,
 				state.machines,
 				block,
-				this.#logger.verbose,
+				this.#logger.info,
 			),
 		);
 
@@ -210,7 +210,7 @@ export class ShieldnetStateMachine {
 		consensusState: ConsensusState,
 		machineStates: MachineStates,
 	): Promise<StateDiff> {
-		this.#logger.verbose(`Handle event ${transition.id}`, { transition });
+		this.#logger.debug(`Handle event ${transition.id}`, { transition });
 		switch (transition.id) {
 			case "event_key_gen": {
 				return await handleGenesisKeyGen(
@@ -219,11 +219,17 @@ export class ShieldnetStateMachine {
 					consensusState,
 					machineStates,
 					transition,
-					this.#logger.verbose,
+					this.#logger.info,
 				);
 			}
 			case "event_key_gen_committed": {
-				return await handleKeyGenCommitted(this.#machineConfig, this.#keyGenClient, machineStates, transition);
+				return await handleKeyGenCommitted(
+					this.#machineConfig,
+					this.#keyGenClient,
+					machineStates,
+					transition,
+					this.#logger.info,
+				);
 			}
 			case "event_key_gen_secret_shared": {
 				return await handleKeyGenSecretShared(
@@ -231,7 +237,7 @@ export class ShieldnetStateMachine {
 					this.#keyGenClient,
 					machineStates,
 					transition,
-					this.#logger.verbose,
+					this.#logger.info,
 				);
 			}
 			case "event_key_gen_complaint_submitted": {
@@ -241,7 +247,7 @@ export class ShieldnetStateMachine {
 					this.#keyGenClient,
 					machineStates,
 					transition,
-					this.#logger.verbose,
+					this.#logger.info,
 				);
 			}
 			case "event_key_gen_complaint_responded": {
@@ -251,7 +257,7 @@ export class ShieldnetStateMachine {
 					this.#keyGenClient,
 					machineStates,
 					transition,
-					this.#logger.verbose,
+					this.#logger.info,
 				);
 			}
 			case "event_key_gen_confirmed": {
@@ -264,12 +270,12 @@ export class ShieldnetStateMachine {
 					consensusState,
 					machineStates,
 					transition,
-					this.#logger.verbose,
+					this.#logger.info,
 				);
 			}
 			// aka Preprocess
 			case "event_nonce_commitments_hash": {
-				return await handlePreprocess(this.#signingClient, consensusState, transition, this.#logger.verbose);
+				return await handlePreprocess(this.#signingClient, consensusState, transition, this.#logger.info);
 			}
 			case "event_sign_request": {
 				return await handleSign(
@@ -279,7 +285,7 @@ export class ShieldnetStateMachine {
 					consensusState,
 					machineStates,
 					transition,
-					this.#logger.verbose,
+					this.#logger.info,
 				);
 			}
 			case "event_nonce_commitments": {
@@ -311,7 +317,7 @@ export class ShieldnetStateMachine {
 					this.#verificationEngine,
 					consensusState,
 					transition,
-					this.#logger.verbose,
+					this.#logger.info,
 				);
 			}
 			case "event_transaction_attested": {
