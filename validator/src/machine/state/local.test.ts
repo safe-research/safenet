@@ -42,6 +42,40 @@ describe("LocalMachineStates", () => {
 		expect(localState.signing["0x5afe5afe"]).toStrictEqual(SIGNING_STATE);
 	});
 
+	it("should enumerate all object entries", () => {
+		const signingState = (tag: number) => ({ ...SIGNING_STATE, deadline: BigInt(tag) });
+		const immutableState: MachineStates = {
+			rollover: {
+				id: "waiting_for_rollover",
+			},
+			signing: {
+				"0x5afe5afe00": signingState(0),
+				"0x5afe5afe01": signingState(1),
+				"0x5afe5afe02": signingState(2),
+			},
+		};
+
+		// Create a local state with a mix of immutable and temporary values.
+		const localState = new LocalMachineStates(immutableState);
+		localState.apply({ signing: ["0x5afe5afe03", signingState(3)] });
+		localState.apply({ signing: ["0x5afe5afe04", signingState(4)] });
+		localState.apply({ signing: ["0x5afe5afe05", signingState(5)] });
+
+		// Remove and update one entry from each immutable and temporary records.
+		localState.apply({ signing: ["0x5afe5afe01"] });
+		localState.apply({ signing: ["0x5afe5afe02", signingState(12)] });
+		localState.apply({ signing: ["0x5afe5afe02", signingState(22)] });
+		localState.apply({ signing: ["0x5afe5afe04"] });
+		localState.apply({ signing: ["0x5afe5afe05", signingState(15)] });
+
+		expect(Object.entries(localState.signing)).toStrictEqual([
+			["0x5afe5afe00", signingState(0)],
+			["0x5afe5afe02", signingState(22)],
+			["0x5afe5afe03", signingState(3)],
+			["0x5afe5afe05", signingState(15)],
+		]);
+	});
+
 	it("should return undefined for deleted state", () => {
 		const immutableState: MachineStates = {
 			rollover: {

@@ -5,23 +5,34 @@ import { applyConsensus, applyMachines, type UpdatableConsensusState, type Updat
 
 const proxy = <K extends string, V, T extends Record<K, V>>(source: T, temp: Record<K, V | undefined>) =>
 	new Proxy(temp, {
-		get(temp, key, receiver): V | undefined {
-			const keyString = String(key) as K;
-			if (keyString in temp) {
-				return temp[keyString];
+		get(temp, key, receiver): V {
+			if (Reflect.has(temp, key)) {
+				return temp[key as K] as V;
 			}
 			return Reflect.get(source, key, receiver);
 		},
+		set(temp, key, value): boolean {
+			temp[key as K] = value;
+			return true;
+		},
 		has(temp, key) {
-			const keyString = String(key) as K;
-			if (keyString in temp) {
-				return temp[keyString] !== undefined;
+			if (Reflect.has(temp, key)) {
+				return temp[key as K] !== undefined;
 			}
 			return Reflect.has(source, key);
 		},
+		ownKeys(temp) {
+			const keys = [...new Set([...Reflect.ownKeys(source), ...Reflect.ownKeys(temp)])];
+			return keys.filter((key) => (Reflect.has(temp, key) ? temp[key as K] !== undefined : Reflect.has(source, key)));
+		},
+		getOwnPropertyDescriptor(temp, key) {
+			if (Reflect.has(temp, key)) {
+				return temp[key as K] !== undefined ? Reflect.getOwnPropertyDescriptor(temp, key) : undefined;
+			}
+			return Reflect.getOwnPropertyDescriptor(source, key);
+		},
 		deleteProperty(_temp, key) {
-			const keyString = String(key) as K;
-			temp[keyString] = undefined;
+			temp[key as K] = undefined;
 			return true;
 		},
 	}) as Record<K, V>;
