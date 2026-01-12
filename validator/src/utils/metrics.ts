@@ -73,7 +73,7 @@ export class MetricsService {
 			this.#listenOptions.port = address.port;
 		}
 
-		this.#logger.info(`serving metrics on :${this.#listenOptions.port}`);
+		this.#logger.notice(`serving metrics on :${this.#listenOptions.port}`);
 	}
 
 	stop(): Promise<void> {
