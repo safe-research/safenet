@@ -111,7 +111,7 @@ describe("OnchainProtocol", () => {
 				hash,
 			},
 		]);
-		getTransactionReceipt.mockRejectedValueOnce(new Error("Test unexpeceted!"));
+		getTransactionReceipt.mockRejectedValueOnce(new Error("Test unexpected!"));
 		new OnchainProtocol(publicClient, signingClient, TEST_CONSENSUS, TEST_COORDINATOR, queue, txStorage, logger);
 		await vi.waitFor(() => {
 			expect(timeoutSpy).toHaveBeenCalled();
@@ -135,7 +135,7 @@ describe("OnchainProtocol", () => {
 		} as unknown as TransactionStorage;
 		const timeoutSpy = vi.spyOn(global, "setTimeout");
 		pending.mockImplementationOnce(() => {
-			throw new Error("Test unexpeceted!");
+			throw new Error("Test unexpected!");
 		});
 		new OnchainProtocol(publicClient, signingClient, TEST_CONSENSUS, TEST_COORDINATOR, queue, txStorage, logger);
 		await vi.waitFor(() => {
@@ -179,9 +179,7 @@ describe("OnchainProtocol", () => {
 			},
 		]);
 		getTransactionReceipt.mockRejectedValueOnce(new TransactionReceiptNotFoundError({ hash }));
-
-		const _retryHash = keccak256("0x5afe5afe02");
-		sendTransaction.mockRejectedValueOnce(new Error("Test unexpeceted!"));
+		sendTransaction.mockRejectedValueOnce(new Error("Test unexpected!"));
 		new OnchainProtocol(publicClient, signingClient, TEST_CONSENSUS, TEST_COORDINATOR, queue, txStorage, logger);
 		await vi.waitFor(() => {
 			expect(timeoutSpy).toHaveBeenCalled();
