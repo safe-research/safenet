@@ -6,9 +6,10 @@ import {
 	type Hex,
 	type PublicClient,
 	type SimulateContractParameters,
-	TransactionNotFoundError,
+	TransactionReceiptNotFoundError,
 	type Transport,
 	type WalletClient,
+	zeroHash,
 } from "viem";
 import type { FrostPoint, GroupId, SignatureId } from "../../frost/types.js";
 import { CONSENSUS_FUNCTIONS, COORDINATOR_FUNCTIONS } from "../../types/abis.js";
@@ -91,22 +92,24 @@ export class OnchainProtocol extends BaseProtocol {
 			const pendingTxs = this.#txStorage.pending(this.#timeBeforeResubmitSeconds);
 			for (const tx of pendingTxs) {
 				try {
-					// If we don't have a hash submit transaction
-					const txDetails =
-						tx.hash !== null
-							? await this.#publicClient.getTransaction({
-									hash: tx.hash,
-								})
-							: { blockHash: null };
-					if (txDetails.blockHash !== null) {
-						this.#logger.debug(`Transaction with nonce ${tx.nonce} has been executed!`, tx);
-						this.#txStorage.setExecuted(tx.nonce);
-						continue;
+					// If we don't have a hash we throw an error to trigger resubmission
+					if (tx.hash === null) {
+						throw new TransactionReceiptNotFoundError({ hash: zeroHash });
 					}
+					const receipt = await this.#publicClient.getTransactionReceipt({
+						hash: tx.hash,
+					});
+					this.#logger.debug(
+						`Transaction with nonce ${tx.nonce} has been executed at block ${receipt.blockNumber}!`,
+						tx,
+						receipt,
+					);
+					this.#txStorage.setExecuted(tx.nonce);
+					continue;
 				} catch (e: unknown) {
 					// Any other error than transactio not found is unexpeceted
-					if (!(e instanceof TransactionNotFoundError)) {
-						this.#logger.error(`Unexpected error fetching receipt for ${tx.nonce}!`, { tx, error: e });
+					if (!(e instanceof TransactionReceiptNotFoundError)) {
+						this.#logger.warning(`Unexpected error fetching receipt for ${tx.nonce}!`, e);
 						continue;
 					}
 				}
@@ -115,11 +118,11 @@ export class OnchainProtocol extends BaseProtocol {
 				try {
 					await this.submitTransaction(tx);
 				} catch (e: unknown) {
-					this.#logger.error(`Error submitting transaction for ${tx.nonce}!`, { tx, error: e });
+					this.#logger.warning(`Error submitting transaction for ${tx.nonce}!`, e);
 				}
 			}
 		} catch (e) {
-			this.#logger.error("Error while checking pending transactions.", { error: e });
+			this.#logger.error("Error while checking pending transactions.", e);
 		} finally {
 			setTimeout(() => this.checkPending(), this.#txStatusPollingSeconds * 1000);
 		}
