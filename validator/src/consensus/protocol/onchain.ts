@@ -189,7 +189,7 @@ export class OnchainProtocol extends BaseProtocol {
 					mu: pok.mu,
 				},
 			],
-			gas: 250_000n, // TODO: this seems to be wrongly estimated
+			gas: 250_000n,
 		});
 	}
 
