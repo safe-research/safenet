@@ -10,8 +10,8 @@ import {
 import { entryPoint09Address } from "viem/account-abstraction";
 import { gnosisChiado } from "viem/chains";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { testLogger } from "../../__tests__/config.js";
 import { TEST_ACTIONS, TEST_CONSENSUS, TEST_COORDINATOR } from "../../__tests__/data/protocol.js";
-import { createLogger } from "../../utils/logging.js";
 import { InMemoryQueue } from "../../utils/queue.js";
 import { OnchainProtocol, type TransactionStorage } from "./onchain.js";
 import type { ActionWithTimeout } from "./types.js";
@@ -27,7 +27,6 @@ describe("OnchainProtocol", () => {
 
 	it("should return correct config params", async () => {
 		const queue = new InMemoryQueue<ActionWithTimeout>();
-		const logger = createLogger({});
 		const publicClient = {} as unknown as PublicClient;
 		const signingClient = {
 			chain: { id: 100 },
@@ -44,7 +43,7 @@ describe("OnchainProtocol", () => {
 			TEST_COORDINATOR,
 			queue,
 			txStorage,
-			logger,
+			testLogger,
 		);
 		expect(protocol.chainId()).toBe(100n);
 		expect(protocol.consensus()).toBe(TEST_CONSENSUS);
@@ -53,7 +52,6 @@ describe("OnchainProtocol", () => {
 
 	it("should check pending on setup and mark as executed", async () => {
 		const queue = new InMemoryQueue<ActionWithTimeout>();
-		const logger = createLogger({});
 		const getTransactionReceipt = vi.fn();
 		const publicClient = {
 			getTransactionReceipt,
@@ -77,7 +75,7 @@ describe("OnchainProtocol", () => {
 			},
 		]);
 		getTransactionReceipt.mockResolvedValueOnce({});
-		new OnchainProtocol(publicClient, signingClient, TEST_CONSENSUS, TEST_COORDINATOR, queue, txStorage, logger);
+		new OnchainProtocol(publicClient, signingClient, TEST_CONSENSUS, TEST_COORDINATOR, queue, txStorage, testLogger);
 		await vi.waitFor(() => {
 			expect(timeoutSpy).toHaveBeenCalled();
 		});
@@ -90,7 +88,6 @@ describe("OnchainProtocol", () => {
 
 	it("should do nothing on rpc error", async () => {
 		const queue = new InMemoryQueue<ActionWithTimeout>();
-		const logger = createLogger({});
 		const getTransactionReceipt = vi.fn();
 		const publicClient = {
 			getTransactionReceipt,
@@ -112,7 +109,7 @@ describe("OnchainProtocol", () => {
 			},
 		]);
 		getTransactionReceipt.mockRejectedValueOnce(new Error("Test unexpected!"));
-		new OnchainProtocol(publicClient, signingClient, TEST_CONSENSUS, TEST_COORDINATOR, queue, txStorage, logger);
+		new OnchainProtocol(publicClient, signingClient, TEST_CONSENSUS, TEST_COORDINATOR, queue, txStorage, testLogger);
 		await vi.waitFor(() => {
 			expect(timeoutSpy).toHaveBeenCalled();
 		});
@@ -123,7 +120,6 @@ describe("OnchainProtocol", () => {
 
 	it("should do nothing on fetching pending tx error", async () => {
 		const queue = new InMemoryQueue<ActionWithTimeout>();
-		const logger = createLogger({});
 		const getTransactionReceipt = vi.fn();
 		const publicClient = {
 			getTransactionReceipt,
@@ -137,7 +133,7 @@ describe("OnchainProtocol", () => {
 		pending.mockImplementationOnce(() => {
 			throw new Error("Test unexpected!");
 		});
-		new OnchainProtocol(publicClient, signingClient, TEST_CONSENSUS, TEST_COORDINATOR, queue, txStorage, logger);
+		new OnchainProtocol(publicClient, signingClient, TEST_CONSENSUS, TEST_COORDINATOR, queue, txStorage, testLogger);
 		await vi.waitFor(() => {
 			expect(timeoutSpy).toHaveBeenCalled();
 		});
@@ -148,7 +144,6 @@ describe("OnchainProtocol", () => {
 
 	it("should do nothing on submission error", async () => {
 		const queue = new InMemoryQueue<ActionWithTimeout>();
-		const logger = createLogger({});
 		const getTransactionReceipt = vi.fn();
 		const publicClient = {
 			getTransactionReceipt,
@@ -180,7 +175,7 @@ describe("OnchainProtocol", () => {
 		]);
 		getTransactionReceipt.mockRejectedValueOnce(new TransactionReceiptNotFoundError({ hash }));
 		sendTransaction.mockRejectedValueOnce(new Error("Test unexpected!"));
-		new OnchainProtocol(publicClient, signingClient, TEST_CONSENSUS, TEST_COORDINATOR, queue, txStorage, logger);
+		new OnchainProtocol(publicClient, signingClient, TEST_CONSENSUS, TEST_COORDINATOR, queue, txStorage, testLogger);
 		await vi.waitFor(() => {
 			expect(timeoutSpy).toHaveBeenCalled();
 		});
@@ -200,7 +195,6 @@ describe("OnchainProtocol", () => {
 
 	it("should resubmit pending tx", async () => {
 		const queue = new InMemoryQueue<ActionWithTimeout>();
-		const logger = createLogger({});
 		const getTransactionReceipt = vi.fn();
 		const publicClient = {
 			getTransactionReceipt,
@@ -234,7 +228,7 @@ describe("OnchainProtocol", () => {
 
 		const retryHash = keccak256("0x5afe5afe02");
 		sendTransaction.mockResolvedValueOnce(retryHash);
-		new OnchainProtocol(publicClient, signingClient, TEST_CONSENSUS, TEST_COORDINATOR, queue, txStorage, logger);
+		new OnchainProtocol(publicClient, signingClient, TEST_CONSENSUS, TEST_COORDINATOR, queue, txStorage, testLogger);
 		await vi.waitFor(() => {
 			expect(timeoutSpy).toHaveBeenCalled();
 		});
@@ -255,7 +249,6 @@ describe("OnchainProtocol", () => {
 
 	it("should submit pending tx without hash", async () => {
 		const queue = new InMemoryQueue<ActionWithTimeout>();
-		const logger = createLogger({});
 		const publicClient = {} as unknown as PublicClient;
 		const sendTransaction = vi.fn();
 		const chain = gnosisChiado;
@@ -284,7 +277,7 @@ describe("OnchainProtocol", () => {
 
 		const hash = keccak256("0x5afe5afe");
 		sendTransaction.mockResolvedValueOnce(hash);
-		new OnchainProtocol(publicClient, signingClient, TEST_CONSENSUS, TEST_COORDINATOR, queue, txStorage, logger);
+		new OnchainProtocol(publicClient, signingClient, TEST_CONSENSUS, TEST_COORDINATOR, queue, txStorage, testLogger);
 		await vi.waitFor(() => {
 			expect(timeoutSpy).toHaveBeenCalled();
 		});
@@ -303,7 +296,6 @@ describe("OnchainProtocol", () => {
 
 	it("should check pending to be called after polling timeout mark as executed", async () => {
 		const queue = new InMemoryQueue<ActionWithTimeout>();
-		const logger = createLogger({});
 		const getTransactionReceipt = vi.fn();
 		const publicClient = {
 			getTransactionReceipt,
@@ -317,7 +309,7 @@ describe("OnchainProtocol", () => {
 		} as unknown as TransactionStorage;
 		// No pending tx on startup
 		pending.mockReturnValue([]);
-		new OnchainProtocol(publicClient, signingClient, TEST_CONSENSUS, TEST_COORDINATOR, queue, txStorage, logger);
+		new OnchainProtocol(publicClient, signingClient, TEST_CONSENSUS, TEST_COORDINATOR, queue, txStorage, testLogger);
 		expect(pending).toBeCalledTimes(1);
 
 		// No pending tx to check
@@ -353,7 +345,6 @@ describe("OnchainProtocol", () => {
 	)("for $description", ({ action, functionName, tx }) => {
 		it(`should call ${functionName}`, async () => {
 			const queue = new InMemoryQueue<ActionWithTimeout>();
-			const logger = createLogger({});
 			const getTransactionCount = vi.fn();
 			const publicClient = {
 				getTransactionCount,
@@ -382,7 +373,7 @@ describe("OnchainProtocol", () => {
 				TEST_COORDINATOR,
 				queue,
 				txStorage,
-				logger,
+				testLogger,
 			);
 			getTransactionCount.mockResolvedValueOnce(2);
 			// Mock high nonce to ensure overwrite works

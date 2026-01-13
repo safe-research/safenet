@@ -1,7 +1,7 @@
 import { zeroHash } from "viem";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { testLogger } from "../../__tests__/config.js";
 import { TEST_ACTIONS, TestProtocol } from "../../__tests__/data/protocol.js";
-import { createLogger } from "../../utils/logging.js";
 import { InMemoryQueue } from "../../utils/queue.js";
 import type { ActionWithTimeout } from "./types.js";
 
@@ -20,8 +20,7 @@ describe("BaseProtocol", () => {
 		const pushSpy = vi.spyOn(queue, "push");
 		const peekSpy = vi.spyOn(queue, "peek");
 		const popSpy = vi.spyOn(queue, "pop");
-		const logger = createLogger({});
-		const protocol = new TestProtocol(queue, logger);
+		const protocol = new TestProtocol(queue, testLogger);
 		const protocolSpy = vi.spyOn(protocol, "requestSignature");
 		expect(queue.peek()).toBeUndefined();
 		const action = TEST_ACTIONS[0][0];
@@ -62,8 +61,7 @@ describe("BaseProtocol", () => {
 		const pushSpy = vi.spyOn(queue, "push");
 		const peekSpy = vi.spyOn(queue, "peek");
 		const popSpy = vi.spyOn(queue, "pop");
-		const logger = createLogger({});
-		const protocol = new TestProtocol(queue, logger);
+		const protocol = new TestProtocol(queue, testLogger);
 		const protocolSpy = vi.spyOn(protocol, "requestSignature");
 		expect(queue.peek()).toBeUndefined();
 		const action = TEST_ACTIONS[0][0];
@@ -103,8 +101,7 @@ describe("BaseProtocol", () => {
 		const timeoutSpy = vi.spyOn(global, "setTimeout");
 		const queue = new InMemoryQueue<ActionWithTimeout>();
 		const popSpy = vi.spyOn(queue, "pop");
-		const logger = createLogger({});
-		const protocol = new TestProtocol(queue, logger);
+		const protocol = new TestProtocol(queue, testLogger);
 		const protocolSpy = vi.spyOn(protocol, "requestSignature");
 		// Do not resolve promise
 		protocolSpy.mockReturnValueOnce(new Promise(() => {}));
@@ -138,8 +135,7 @@ describe("BaseProtocol", () => {
 			const pushSpy = vi.spyOn(queue, "push");
 			const peekSpy = vi.spyOn(queue, "peek");
 			const popSpy = vi.spyOn(queue, "pop");
-			const logger = createLogger({});
-			const protocol = new TestProtocol(queue, logger);
+			const protocol = new TestProtocol(queue, testLogger);
 			const protocolSpy = vi.spyOn(protocol, functionName);
 			protocolSpy.mockResolvedValueOnce(zeroHash);
 			protocol.process(action, 0);
