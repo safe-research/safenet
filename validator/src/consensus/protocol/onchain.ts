@@ -109,7 +109,7 @@ export class OnchainProtocol extends BaseProtocol {
 				} catch (e: unknown) {
 					// Any other error than transactio not found is unexpeceted
 					if (!(e instanceof TransactionReceiptNotFoundError)) {
-						this.#logger.warning(`Unexpected error fetching receipt for ${tx.nonce}!`, e);
+						this.#logger.warn(`Unexpected error fetching receipt for ${tx.nonce}!`, e);
 						continue;
 					}
 				}
@@ -118,7 +118,7 @@ export class OnchainProtocol extends BaseProtocol {
 				try {
 					await this.submitTransaction(tx);
 				} catch (e: unknown) {
-					this.#logger.warning(`Error submitting transaction for ${tx.nonce}!`, e);
+					this.#logger.warn(`Error submitting transaction for ${tx.nonce}!`, e);
 				}
 			}
 		} catch (e) {
