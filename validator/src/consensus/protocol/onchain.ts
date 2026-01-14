@@ -107,7 +107,7 @@ export class OnchainProtocol extends BaseProtocol {
 					this.#txStorage.setExecuted(tx.nonce);
 					continue;
 				} catch (e: unknown) {
-					// Any other error than transactio not found is unexpeceted
+					// Any other error than transactio not found is unexpected
 					if (!(e instanceof TransactionReceiptNotFoundError)) {
 						this.#logger.warn(`Unexpected error fetching receipt for ${tx.nonce}!`, e);
 						continue;
@@ -189,7 +189,7 @@ export class OnchainProtocol extends BaseProtocol {
 					mu: pok.mu,
 				},
 			],
-			gas: 250_000n, // TODO: this seems to be wrongly estimated
+			gas: 250_000n,
 		});
 	}
 
