@@ -1,7 +1,7 @@
 import { type Block, BlockNotFoundError, type GetBlockParameters, keccak256, numberToHex, toHex } from "viem";
 import { describe, expect, it, vi } from "vitest";
 
-import { BlockIndexer, type Client, type Timer } from "./blocks.js";
+import { BlockWatcher, type Client, type Timer } from "./blocks.js";
 
 const CONFIG = {
 	blockTime: 2000,
@@ -17,7 +17,7 @@ const setupCreate = (config: { lastIndexedBlock: bigint | null; maxReorgDepth?: 
 
 	return {
 		create() {
-			return BlockIndexer.create({
+			return BlockWatcher.create({
 				...CONFIG,
 				...config,
 				client: {
@@ -43,7 +43,7 @@ const setupNext = async (config: { latestBlock: bigint; startTime: number; maxRe
 		...config,
 	});
 
-	let created: BlockIndexer | null = null;
+	let created: BlockWatcher | null = null;
 	await mocks.getBlock.withImplementation(
 		({ blockTag, blockNumber }: GetBlockParameters) => {
 			if (blockTag === "latest") {
@@ -62,7 +62,7 @@ const setupNext = async (config: { latestBlock: bigint; startTime: number; maxRe
 
 	// We have to trick the type-system here, it doesn't understand that the callback in the
 	// `withImplementation` call can change the value and thinks `created: null`.
-	const blocks = created as unknown as BlockIndexer;
+	const blocks = created as unknown as BlockWatcher;
 
 	// Skip the queued records.
 	blocks.queued();
@@ -106,9 +106,9 @@ const newBlockRecord = (
 	logsBloom: b.logsBloom ?? numberToHex(b.number, { size: 512 }),
 });
 
-describe("BlockIndexer", () => {
+describe("BlockWatcher", () => {
 	describe("create", () => {
-		it("initialize an indexer", async () => {
+		it("initialize a watcher", async () => {
 			const { create, mocks } = setupCreate({ lastIndexedBlock: null });
 
 			mocks.getBlock.mockReturnValueOnce(block({ number: 1000n }));

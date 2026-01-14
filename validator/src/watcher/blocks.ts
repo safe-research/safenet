@@ -1,7 +1,7 @@
 /**
- * Block indexer.
+ * Block watcher.
  *
- * This indexer is responsible for reliably producing a stream of blocks. Additionally, it keeps
+ * This watcher is responsible for reliably producing a stream of blocks. Additionally, it keeps
  * track of recent block hashes in order to detect reorgs.
  */
 
@@ -14,7 +14,7 @@ export type Timer = {
 };
 
 /**
- * Required block indexing settings.
+ * Required block watcher settings.
  */
 export type Settings = {
 	blockTime: number;
@@ -22,7 +22,7 @@ export type Settings = {
 };
 
 /**
- * Block indexing options.
+ * Block watcher options.
  */
 export type Options = {
 	blockPropagationDelay: number;
@@ -31,7 +31,7 @@ export type Options = {
 };
 
 /**
- * Block indexer creation parameters.
+ * Block watcher creation parameters.
  */
 export type CreateParams = Prettify<
 	{
@@ -42,7 +42,7 @@ export type CreateParams = Prettify<
 >;
 
 /**
- * Block indexing records.
+ * Block watcher records.
  */
 export type Record =
 	| { type: "record_warp_to_block"; fromBlock: bigint; toBlock: bigint }
@@ -67,7 +67,7 @@ export const DEFAULT_OPTIONS = {
 	},
 };
 
-export class BlockIndexer {
+export class BlockWatcher {
 	#client: Client;
 	#config: Config;
 	#pending: PendingBlock;
@@ -86,12 +86,12 @@ export class BlockIndexer {
 		const latest = await this.#client.getBlock({ blockTag: "latest" });
 		const safe = bmax(latest.number - BigInt(this.#config.maxReorgDepth), 0n);
 
-		this.#updatePendingBlock(latest);
+		this.#updateNextPendingBlock(latest);
 
 		if (lastIndexedBlock !== null) {
 			// In order to prevent edge-cases where there is a reorg for a block when the service
 			// was restarted, we always need to create a "fake" reorg `maxReorgDepth` deep in order
-			// to re-index the last blocks before the service shutdown. Queue an indexer record for
+			// to re-index the last blocks before the service shutdown. Queue an watcher record for
 			// uncling the block right after the last safe indexed block.
 			const uncle = bmax(lastIndexedBlock - BigInt(this.#config.maxReorgDepth - 1), 0n);
 			if (uncle <= lastIndexedBlock) {
@@ -152,7 +152,7 @@ export class BlockIndexer {
 	/**
 	 * Updates the pending block for the specified latest block.
 	 */
-	#updatePendingBlock({ number, timestamp }: Pick<Block, "number" | "timestamp">) {
+	#updateNextPendingBlock({ number, timestamp }: Pick<Block, "number" | "timestamp">) {
 		this.#pending = {
 			number: number + 1n,
 			timestampMs: timestamp * 1000n + BigInt(this.#config.blockTime),
@@ -171,20 +171,8 @@ export class BlockIndexer {
 	}
 
 	/**
-	 * Create a new block indexer with the specified paramters.
-	 */
-	static async create({ client, lastIndexedBlock, ...config }: CreateParams) {
-		const self = new BlockIndexer(client, {
-			...DEFAULT_OPTIONS,
-			...config,
-		});
-		await self.#initialize(lastIndexedBlock);
-		return self;
-	}
-
-	/**
 	 * Consumes all queued events. This allows caller to synchronously process records that are
-	 * already ready from the indexer.
+	 * already ready from the watcher.
 	 *
 	 * This is currently used for testing.
 	 */
@@ -193,7 +181,7 @@ export class BlockIndexer {
 	}
 
 	/**
-	 * Retrieve the next record from the block indexer.
+	 * Retrieve the next record from the block watcher.
 	 */
 	public async next(): Promise<Record> {
 		// First, see if we have a queued record that we can return immediately.
@@ -236,6 +224,8 @@ export class BlockIndexer {
 		const lastBlock = this.#blocks.at(-1);
 		if (lastBlock !== undefined && lastBlock.hash !== block.parentHash) {
 			this.#blocks.pop();
+			// Note that we update the pending block to be the one that was just uncled, which is
+			// the block immediately before the latest block that we just queried.
 			this.#pending = {
 				number: lastBlock.number,
 				timestampMs: lastBlock.timestamp * 1000n,
@@ -252,7 +242,7 @@ export class BlockIndexer {
 		while (this.#blocks.length > this.#config.maxReorgDepth) {
 			this.#blocks.shift();
 		}
-		this.#updatePendingBlock(block);
+		this.#updateNextPendingBlock(block);
 
 		return {
 			type: "record_new_block",
@@ -260,6 +250,18 @@ export class BlockIndexer {
 			blockHash: block.hash,
 			logsBloom: block.logsBloom,
 		};
+	}
+
+	/**
+	 * Create a new block watcher with the specified paramters.
+	 */
+	static async create({ client, lastIndexedBlock, ...config }: CreateParams) {
+		const self = new BlockWatcher(client, {
+			...DEFAULT_OPTIONS,
+			...config,
+		});
+		await self.#initialize(lastIndexedBlock);
+		return self;
 	}
 }
 
