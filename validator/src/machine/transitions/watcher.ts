@@ -146,6 +146,6 @@ export class OnchainTransitionWatcher {
 	async stop() {
 		const cleanupCallbacks = this.#cleanupCallbacks;
 		this.#cleanupCallbacks = [];
-		await Promise.all(cleanupCallbacks);
+		await Promise.all(cleanupCallbacks.map(callback => callback()));
 	}
 }
