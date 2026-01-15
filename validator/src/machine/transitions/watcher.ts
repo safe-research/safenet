@@ -32,8 +32,8 @@ export class OnchainTransitionWatcher {
 	#watcher: WatcherConfig;
 	#db: Database;
 	#publicClient: PublicClient;
-	#cleanupCallbacks: Stop[] = [];
 	#onTransition: (transition: StateTransition) => void;
+	#stop: Stop | null = null;
 
 	constructor({
 		database,
@@ -99,13 +99,17 @@ export class OnchainTransitionWatcher {
 	}
 
 	async start() {
+		if (this.#stop !== null) {
+			throw new Error("already started");
+		}
+
 		const blockTime = this.#publicClient.chain?.blockTime;
 		if (blockTime === undefined) {
 			throw new Error("chain missing block time configuration");
 		}
 
 		const lastIndexedBlock = (await this.getLastIndexedBlock()) ?? null;
-		const stop = await watchBlocksAndEvents({
+		this.#stop = await watchBlocksAndEvents({
 			logger: this.#logger,
 			client: this.#publicClient,
 			...this.#watcher,
@@ -140,12 +144,15 @@ export class OnchainTransitionWatcher {
 				}
 			},
 		});
-		this.#cleanupCallbacks.push(stop);
 	}
 
 	async stop() {
-		const cleanupCallbacks = this.#cleanupCallbacks;
-		this.#cleanupCallbacks = [];
-		await Promise.all(cleanupCallbacks.map(callback => callback()));
+		if (this.#stop === null) {
+			throw new Error("already stopped");
+		}
+
+		const stop = this.#stop;
+		this.#stop = null;
+		await stop();
 	}
 }

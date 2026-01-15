@@ -112,8 +112,8 @@ export class ValidatorService {
 		await this.#watcher.start();
 	}
 
-	stop() {
-		this.#watcher.stop();
+	async stop() {
+		await this.#watcher.stop();
 	}
 }
 
