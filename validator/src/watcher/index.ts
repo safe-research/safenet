@@ -4,6 +4,7 @@
 
 import type { Prettify } from "viem";
 import type { Logger } from "../utils/logging.js";
+import { Backoff, type Config as BackoffConfig } from "./backoff.js";
 import {
 	type Client as BlockClient,
 	type BlockUpdate,
@@ -27,7 +28,9 @@ export type Handler<E extends Events> = (update: Update<E>) => void;
 export type Unsubscribe = () => void;
 export type Stop = () => Promise<void>;
 export type CreateParams<E extends Events> = Prettify<
-	{ client: BlockClient & EventClient } & BlockWatcherCreateParams & EventWatcherConstructorParams<E>
+	{ client: BlockClient & EventClient } & BlockWatcherCreateParams &
+		EventWatcherConstructorParams<E> &
+		Partial<BackoffConfig>
 >;
 export type WatchParams<E extends Events> = Prettify<{ handler: Handler<E> } & CreateParams<E>>;
 
@@ -38,43 +41,49 @@ export class Watcher<E extends Events> {
 	#logger: Logger;
 	#blocks: BlockWatcher;
 	#events: EventWatcher<E>;
+	#backoff: Backoff;
 	#handlers: Map<symbol, Handler<E>>;
 	#worker: Promise<void>;
 	#running: boolean;
 
-	private constructor(logger: Logger, blocks: BlockWatcher, events: EventWatcher<E>) {
+	private constructor(logger: Logger, blocks: BlockWatcher, events: EventWatcher<E>, backoff: Backoff) {
 		this.#logger = logger;
 		this.#blocks = blocks;
 		this.#events = events;
+		this.#backoff = backoff;
 		this.#handlers = new Map();
 		this.#worker = Promise.resolve();
 		this.#running = false;
 	}
 
+	async #next() {
+		while (true /* logs !== null */) {
+			const logs = await this.#events.next();
+			if (logs === null) {
+				break;
+			}
+
+			// Trigger an update if we have some logs.
+			if (logs.length > 0) {
+				this.#onUpdate({ type: "watcher_update_new_logs", logs });
+			}
+
+			// Check in between updates to make sure that we don't wait too long to stop
+			// if we are in the middle of warping over a large block range.
+			if (!this.#running) {
+				return;
+			}
+		}
+
+		const update = await this.#blocks.next();
+		this.#events.onBlockUpdate(update);
+		this.#onUpdate(update);
+	}
+
 	async #run() {
 		while (this.#running) {
 			try {
-				while (true /* logs !== null */) {
-					const logs = await this.#events.next();
-					if (logs === null) {
-						break;
-					}
-
-					// Trigger an update if we have some logs.
-					if (logs.length > 0) {
-						this.#onUpdate({ type: "watcher_update_new_logs", logs });
-					}
-
-					// Check in between updates to make sure that we don't wait too long to stop
-					// if we are in the middle of warping over a large block range.
-					if (!this.#running) {
-						return;
-					}
-				}
-
-				const update = await this.#blocks.next();
-				this.#events.onBlockUpdate(update);
-				this.#onUpdate(update);
+				await this.#backoff.throttled(() => this.#next());
 			} catch (error) {
 				this.#logger.warn("internal watcher error", { error });
 			}
@@ -134,7 +143,8 @@ export class Watcher<E extends Events> {
 		const logger = params.logger;
 		const blocks = await BlockWatcher.create(params);
 		const events = new EventWatcher(params);
-		return new Watcher(logger, blocks, events);
+		const backoff = new Backoff(params);
+		return new Watcher(logger, blocks, events, backoff);
 	}
 }
 
