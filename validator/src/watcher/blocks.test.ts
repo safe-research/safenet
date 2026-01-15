@@ -100,7 +100,7 @@ const newBlockUpdate = (
 		number: bigint;
 	} & Partial<Pick<Block<bigint, false, "latest">, "hash" | "logsBloom">>,
 ) => ({
-	type: "block_update_new_block",
+	type: "watcher_update_new_block",
 	blockNumber: b.number,
 	blockHash: b.hash ?? numberToHex(b.number, { size: 32 }),
 	logsBloom: b.logsBloom ?? numberToHex(b.number, { size: 512 }),
@@ -131,13 +131,13 @@ describe("BlockWatcher", () => {
 
 			expect(blocks.queued()).toStrictEqual([
 				{
-					type: "block_update_uncle_block",
+					type: "watcher_update_uncle_block",
 					// Uncling 899, means that we go back to block 898 after starting on 900, which makes
 					// sense given our 2 max reorg depth. I hope there is no off-by-one error!
 					blockNumber: 899n,
 				},
 				{
-					type: "block_update_warp_to_block",
+					type: "watcher_update_warp_to_block",
 					fromBlock: 899n,
 					toBlock: 998n,
 				},
@@ -156,7 +156,7 @@ describe("BlockWatcher", () => {
 
 			expect(blocks.queued()).toStrictEqual([
 				{
-					type: "block_update_warp_to_block",
+					type: "watcher_update_warp_to_block",
 					fromBlock: 901n,
 					toBlock: 1000n,
 				},
@@ -276,9 +276,9 @@ describe("BlockWatcher", () => {
 			]);
 
 			expect(updates).toStrictEqual([
-				{ type: "block_update_uncle_block", blockNumber: 1000n },
-				{ type: "block_update_uncle_block", blockNumber: 999n },
-				{ type: "block_update_uncle_block", blockNumber: 998n },
+				{ type: "watcher_update_uncle_block", blockNumber: 1000n },
+				{ type: "watcher_update_uncle_block", blockNumber: 999n },
+				{ type: "watcher_update_uncle_block", blockNumber: 998n },
 				newBlockUpdate({ number: 998n, hash: keccak256(toHex("reorg998")) }),
 				newBlockUpdate({ number: 999n, hash: keccak256(toHex("reorg999")) }),
 			]);

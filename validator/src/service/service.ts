@@ -23,7 +23,7 @@ import { EpochRolloverHandler } from "../consensus/verify/rollover/handler.js";
 import { SafeTransactionHandler } from "../consensus/verify/safeTx/handler.js";
 import { InMemoryStateStorage } from "../machine/storage/inmemory.js";
 import { SqliteStateStorage } from "../machine/storage/sqlite.js";
-import { OnchainTransitionWatcher } from "../machine/transitions/watcher.js";
+import { OnchainTransitionWatcher, type WatcherConfig } from "../machine/transitions/watcher.js";
 import { supportedChains } from "../types/chains.js";
 import type { ProtocolConfig } from "../types/interfaces.js";
 import type { Logger } from "../utils/logging.js";
@@ -42,6 +42,7 @@ export class ValidatorService {
 		account,
 		transport,
 		config,
+		watcher,
 		chain,
 		logger,
 		metrics,
@@ -50,6 +51,7 @@ export class ValidatorService {
 		account: Account;
 		transport: Transport;
 		config: ProtocolConfig;
+		watcher: WatcherConfig;
 		chain: Chain;
 		logger: Logger;
 		metrics: Metrics;
@@ -98,6 +100,7 @@ export class ValidatorService {
 			publicClient: this.#publicClient,
 			database: database ?? new Sqlite3(":memory:"),
 			config,
+			watcher,
 			logger,
 			onTransition: (t) => {
 				this.#stateMachine.transition(t);
@@ -119,6 +122,7 @@ export const createValidatorService = ({
 	rpcUrl,
 	storageFile,
 	config,
+	watcher,
 	logger,
 	metrics,
 	fees,
@@ -127,6 +131,7 @@ export const createValidatorService = ({
 	rpcUrl: string;
 	storageFile?: string;
 	config: ProtocolConfig;
+	watcher: WatcherConfig;
 	logger: Logger;
 	metrics: Metrics;
 	fees?: ChainFees;
@@ -140,5 +145,5 @@ export const createValidatorService = ({
 		fees,
 	};
 	const database = storageFile !== undefined ? new Sqlite3(storageFile) : undefined;
-	return new ValidatorService({ account, transport, config, chain, logger, metrics, database });
+	return new ValidatorService({ account, transport, config, watcher, chain, logger, metrics, database });
 };

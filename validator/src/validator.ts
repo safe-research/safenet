@@ -3,6 +3,7 @@ import type { ChainFees } from "viem";
 import { createNonceManager, privateKeyToAccount } from "viem/accounts";
 import { jsonRpc } from "viem/nonce";
 import { z } from "zod";
+import type { WatcherConfig } from "./machine/transitions/watcher.js";
 import { createValidatorService } from "./service/service.js";
 import type { ProtocolConfig } from "./types/interfaces.js";
 import { validatorConfigSchema } from "./types/schemas.js";
@@ -33,7 +34,12 @@ const config: ProtocolConfig = {
 	genesisSalt: validatorConfig.GENESIS_SALT,
 	blocksPerEpoch: validatorConfig.BLOCKS_PER_EPOCH,
 };
-logger.notice("Using protocol configuration", { config });
+const watcher: WatcherConfig = {
+	maxReorgDepth: validatorConfig.MAX_REORG_DEPTH ?? 5,
+	blockPageSize: validatorConfig.BLOCK_PAGE_SIZE,
+	maxLogsPerQuery: validatorConfig.MAX_LOGS_PER_QUERY,
+};
+logger.notice("Using configuration", { config, watcher });
 
 const fees: ChainFees = {
 	// Use a higher default multiplier to ensure transaction inclusion
@@ -53,6 +59,7 @@ const service = createValidatorService({
 	rpcUrl: validatorConfig.RPC_URL,
 	storageFile: validatorConfig.STORAGE_FILE,
 	config,
+	watcher,
 	logger,
 	metrics: metrics.metrics,
 	fees,
@@ -62,8 +69,7 @@ const service = createValidatorService({
 // gets send when stopping a container or `kill`.
 const shutdown = async () => {
 	logger.notice("Shutting down service...");
-	service.stop();
-	await metrics.stop();
+	await Promise.all([service.stop(), metrics.stop()]);
 	process.exit(0);
 };
 process.on("SIGINT", shutdown);

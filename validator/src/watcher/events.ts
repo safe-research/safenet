@@ -18,6 +18,7 @@ import type { Logger } from "../utils/logging.js";
 import type { BlockUpdate } from "./blocks.js";
 
 export type Client = Pick<PublicClient, "getLogs">;
+export type Events = readonly AbiEvent[];
 
 /**
  * Event watcher configuration.
@@ -41,7 +42,7 @@ export type ConstructorParams<I> = Prettify<
 /**
  * An EVM logged, with parsed event parameters.
  */
-export type Log<I extends readonly AbiEvent[]> = ViemLog<bigint, number, false, undefined, true, I, undefined>;
+export type Log<E extends Events> = ViemLog<bigint, number, false, undefined, true, E, undefined>;
 
 export const DEFAULT_CONFIG = {
 	blockPageSize: 100,
@@ -54,15 +55,15 @@ type WarpingStep = { fromBlock: bigint; toBlock: bigint; pageSize: bigint };
 type BlockStep = { blockHash: Hex; logsBloom: Hex; retries: number };
 type Step = { type: "idle" } | ({ type: "warping" } & WarpingStep) | ({ type: "block" } & BlockStep);
 
-export class EventWatcher<I extends readonly AbiEvent[]> {
+export class EventWatcher<E extends Events> {
 	#logger: Logger;
 	#client: Client;
 	#address: Address[];
-	#events: I;
+	#events: E;
 	#config: Config;
 	#step: Step;
 
-	constructor({ logger, client, address, events, ...config }: ConstructorParams<I>) {
+	constructor({ logger, client, address, events, ...config }: ConstructorParams<E>) {
 		this.#logger = logger;
 		this.#client = client;
 		this.#address = address;
@@ -81,7 +82,7 @@ export class EventWatcher<I extends readonly AbiEvent[]> {
 		}
 	}
 
-	#sortLogs(logs: Log<I>[]): Log<I>[] {
+	#sortLogs(logs: Log<E>[]): Log<E>[] {
 		return logs.sort((a, b) => {
 			if (a.blockNumber < b.blockNumber) {
 				return -1;
@@ -146,7 +147,7 @@ export class EventWatcher<I extends readonly AbiEvent[]> {
 					return [];
 				}
 
-				let eventLogs: Log<I>[] = [];
+				let eventLogs: Log<E>[] = [];
 				try {
 					// Unfortunately, a type assertion is needed here. In general, the viem `Log`
 					// types between `Log<undefined, AbiEvent[]>` and `Log<AbiEvent, undefined>`
@@ -158,7 +159,7 @@ export class EventWatcher<I extends readonly AbiEvent[]> {
 						address: this.#address,
 						event,
 						...blockRange,
-					})) as unknown as Log<I>[];
+					})) as unknown as Log<E>[];
 					this.#checkForPotentiallyMissedLogs(eventLogs.length);
 					return eventLogs;
 				} catch (err) {
@@ -231,7 +232,7 @@ export class EventWatcher<I extends readonly AbiEvent[]> {
 
 		let step: Step;
 		switch (update.type) {
-			case "block_update_warp_to_block": {
+			case "watcher_update_warp_to_block": {
 				step = {
 					type: "warping",
 					fromBlock: update.fromBlock,
@@ -240,12 +241,12 @@ export class EventWatcher<I extends readonly AbiEvent[]> {
 				};
 				break;
 			}
-			case "block_update_uncle_block": {
+			case "watcher_update_uncle_block": {
 				// We don't need to query events for uncled blocks.
 				step = { type: "idle" };
 				break;
 			}
-			case "block_update_new_block": {
+			case "watcher_update_new_block": {
 				step = {
 					type: "block",
 					blockHash: update.blockHash,
@@ -262,7 +263,7 @@ export class EventWatcher<I extends readonly AbiEvent[]> {
 		this.#step = step;
 	}
 
-	async next(): Promise<Log<I>[] | null> {
+	async next(): Promise<Log<E>[] | null> {
 		switch (this.#step.type) {
 			case "idle": {
 				return null;
@@ -281,5 +282,5 @@ const bmin = (a: bigint, b: bigint) => (a < b ? a : b);
 
 const areAddressesInLogsBloom = (logsBloom: Hex, addresses: Address[]) =>
 	addresses.some((address) => isInBloom(logsBloom, address));
-const areEventsInLogsBloom = (logsBloom: Hex, events: readonly AbiEvent[]) =>
+const areEventsInLogsBloom = (logsBloom: Hex, events: Events) =>
 	events.some((event) => isInBloom(logsBloom, toEventSelector(event)));

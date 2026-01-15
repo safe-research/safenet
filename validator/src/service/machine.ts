@@ -148,7 +148,7 @@ export class ShieldnetStateMachine {
 			return [];
 		}
 		this.#lastProcessedBlock = block;
-		this.#lastProcessedIndex = 0;
+		this.#lastProcessedIndex = -1;
 		state.apply(checkKeyGenAbort(this.#machineConfig, state.consensus, state.machines, block, this.#logger.info));
 		state.apply(
 			checkKeyGenTimeouts(

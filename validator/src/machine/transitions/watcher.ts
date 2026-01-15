@@ -4,6 +4,7 @@ import z from "zod";
 import { ALL_EVENTS } from "../../types/abis.js";
 import type { ProtocolConfig } from "../../types/interfaces.js";
 import type { Logger } from "../../utils/logging.js";
+import { type Stop, type WatchParams, watchBlocksAndEvents } from "../../watcher/index.js";
 import { logToTransition } from "./onchain.js";
 import type { StateTransition } from "./types.js";
 
@@ -14,29 +15,44 @@ export const transitionWatcherStateSchema = z
 	})
 	.optional();
 
+export type Config = Pick<ProtocolConfig, "coordinator" | "consensus">;
+export type WatcherConfig = Pick<
+	WatchParams<[]>,
+	| "maxReorgDepth"
+	| "blockPageSize"
+	| "blockPropagationDelay"
+	| "blockRetryDelays"
+	| "blockSingleQueryRetryCount"
+	| "maxLogsPerQuery"
+>;
+
 export class OnchainTransitionWatcher {
 	#logger: Logger;
-	#config: Pick<ProtocolConfig, "consensus" | "coordinator">;
+	#config: Config;
+	#watcher: WatcherConfig;
 	#db: Database;
 	#publicClient: PublicClient;
-	#cleanupCallbacks: (() => void)[] = [];
+	#cleanupCallbacks: Stop[] = [];
 	#onTransition: (transition: StateTransition) => void;
 
 	constructor({
 		database,
 		publicClient,
 		config,
+		watcher,
 		logger,
 		onTransition,
 	}: {
 		database: Database;
 		publicClient: PublicClient;
-		config: Pick<ProtocolConfig, "consensus" | "coordinator">;
+		config: Config;
+		watcher: WatcherConfig;
 		onTransition: (transition: StateTransition) => void;
 		logger: Logger;
 	}) {
 		this.#db = database;
 		this.#config = config;
+		this.#watcher = watcher;
 		this.#logger = logger;
 		this.#publicClient = publicClient;
 		this.#onTransition = onTransition;
@@ -83,48 +99,53 @@ export class OnchainTransitionWatcher {
 	}
 
 	async start() {
-		const lastIndexedBlock = await this.getLastIndexedBlock();
-		this.#cleanupCallbacks.push(
-			this.#publicClient.watchContractEvent({
-				address: [this.#config.consensus, this.#config.coordinator],
-				abi: ALL_EVENTS,
-				fromBlock: lastIndexedBlock ? lastIndexedBlock + 1n : undefined,
-				onLogs: async (logs) => {
-					logs.sort((left, right) => {
-						if (left.blockNumber !== right.blockNumber) {
-							return left.blockNumber < right.blockNumber ? -1 : 1;
-						}
-						return left.logIndex - right.logIndex;
-					});
-					for (const log of logs) {
-						const transition = logToTransition(log.blockNumber, log.logIndex, log.eventName, log.args);
-						this.handleTransition(transition);
+		const blockTime = this.#publicClient.chain?.blockTime;
+		if (blockTime === undefined) {
+			throw new Error("chain missing block time configuration");
+		}
+
+		const lastIndexedBlock = (await this.getLastIndexedBlock()) ?? null;
+		const stop = await watchBlocksAndEvents({
+			logger: this.#logger,
+			client: this.#publicClient,
+			...this.#watcher,
+			lastIndexedBlock,
+			blockTime,
+			address: [this.#config.consensus, this.#config.coordinator],
+			events: ALL_EVENTS,
+			fallibleEvents: ["TransactionProposed"],
+			handler: (update) => {
+				switch (update.type) {
+					case "watcher_update_warp_to_block": {
+						// Note that we don't explicitely handle warping in our state machine,
+						// instead if any events are found in the log range, the state machine is
+						// updated to the correct block accordingly.
+						this.#logger.debug(`warping to block ${update.toBlock}`);
+						break;
 					}
-				},
-				onError: (err) => this.#logger.error("Contract event watcher error:", err),
-			}),
-		);
-		this.#cleanupCallbacks.push(
-			this.#publicClient.watchBlockNumber({
-				onBlockNumber: (block) => {
-					// we delay the processing to avoid potential race conditions for now
-					setTimeout(() => {
-						this.handleTransition({
-							id: "block_new",
-							block,
-						});
-					}, 2000);
-				},
-				onError: (err) => this.#logger.error("Block number watcher error:", err),
-			}),
-		);
+					case "watcher_update_uncle_block": {
+						this.#logger.warn("reorg detected, but currently not supported", { update });
+						break;
+					}
+					case "watcher_update_new_block": {
+						this.handleTransition({ id: "block_new", block: update.blockNumber });
+						break;
+					}
+					case "watcher_update_new_logs": {
+						for (const log of update.logs) {
+							this.handleTransition(logToTransition(log));
+						}
+						break;
+					}
+				}
+			},
+		});
+		this.#cleanupCallbacks.push(stop);
 	}
 
-	stop() {
+	async stop() {
 		const cleanupCallbacks = this.#cleanupCallbacks;
 		this.#cleanupCallbacks = [];
-		for (const callback of cleanupCallbacks) {
-			callback();
-		}
+		await Promise.all(cleanupCallbacks);
 	}
 }

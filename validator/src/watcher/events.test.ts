@@ -48,11 +48,11 @@ const setupOneQueryPerEvent = async (update: BlockUpdate, config: Partial<Pick<C
 
 	mocks.getLogs.mockRejectedValue(new Error("test"));
 
-	if (update.type === "block_update_warp_to_block") {
+	if (update.type === "watcher_update_warp_to_block") {
 		for (let i = CONFIG.blockPageSize; i !== 1; i = Math.ceil(i / 2)) {
 			await expect(events.next()).rejects.toThrow();
 		}
-	} else if (update.type === "block_update_new_block") {
+	} else if (update.type === "watcher_update_new_block") {
 		for (let i = 0; i < CONFIG.blockSingleQueryRetryCount; i++) {
 			await expect(events.next()).rejects.toThrow();
 		}
@@ -104,8 +104,8 @@ describe("EventWatcher", () => {
 	describe("onBlock", () => {
 		it("does not process new block updates before the previous is done", async () => {
 			for (const update of [
-				{ type: "block_update_warp_to_block", fromBlock: 123n, toBlock: 130n },
-				{ type: "block_update_new_block", blockNumber: 0n, blockHash: zeroHash, logsBloom: BLOOM_ZERO },
+				{ type: "watcher_update_warp_to_block", fromBlock: 123n, toBlock: 130n },
+				{ type: "watcher_update_new_block", blockNumber: 0n, blockHash: zeroHash, logsBloom: BLOOM_ZERO },
 			] as const) {
 				const { events } = setup();
 
@@ -120,7 +120,7 @@ describe("EventWatcher", () => {
 		it("has no effect on the event watcher", async () => {
 			const { events, mocks } = setup();
 
-			events.onBlockUpdate({ type: "block_update_uncle_block", blockNumber: 42n });
+			events.onBlockUpdate({ type: "watcher_update_uncle_block", blockNumber: 42n });
 			const logs = await events.next();
 
 			expect(mocks.getLogs).toBeCalledTimes(0);
@@ -132,7 +132,7 @@ describe("EventWatcher", () => {
 		it("should fetch logs in pages", async () => {
 			const { events, mocks } = setup();
 
-			events.onBlockUpdate({ type: "block_update_warp_to_block", fromBlock: 123n, toBlock: 130n });
+			events.onBlockUpdate({ type: "watcher_update_warp_to_block", fromBlock: 123n, toBlock: 130n });
 
 			mocks.getLogs.mockResolvedValueOnce([
 				log({ eventName: "Transfer", blockNumber: 123n, logIndex: 42 }),
@@ -164,7 +164,7 @@ describe("EventWatcher", () => {
 		it("should error if the max log length is returned", async () => {
 			const { events, mocks } = setup();
 
-			events.onBlockUpdate({ type: "block_update_warp_to_block", fromBlock: 123n, toBlock: 130n });
+			events.onBlockUpdate({ type: "watcher_update_warp_to_block", fromBlock: 123n, toBlock: 130n });
 
 			mocks.getLogs.mockResolvedValueOnce(
 				Array(CONFIG.maxLogsPerQuery).map((_, i) => log({ eventName: "Approval", blockNumber: 123n, logIndex: i })),
@@ -176,7 +176,7 @@ describe("EventWatcher", () => {
 		it("should reduce page sizes on failure", async () => {
 			const { events, mocks } = setup();
 
-			events.onBlockUpdate({ type: "block_update_warp_to_block", fromBlock: 123n, toBlock: 130n });
+			events.onBlockUpdate({ type: "watcher_update_warp_to_block", fromBlock: 123n, toBlock: 130n });
 
 			mocks.getLogs.mockRejectedValue(new Error("error"));
 
@@ -197,7 +197,7 @@ describe("EventWatcher", () => {
 		it("should reset page size once recovered", async () => {
 			const { events, mocks } = setup();
 
-			events.onBlockUpdate({ type: "block_update_warp_to_block", fromBlock: 123n, toBlock: 130n });
+			events.onBlockUpdate({ type: "watcher_update_warp_to_block", fromBlock: 123n, toBlock: 130n });
 
 			mocks.getLogs.mockRejectedValueOnce(new Error("error"));
 			mocks.getLogs.mockResolvedValue([]);
@@ -215,7 +215,7 @@ describe("EventWatcher", () => {
 
 		it("errors when at least one query fails when splitting requests per event", async () => {
 			const { events, mocks } = await setupOneQueryPerEvent({
-				type: "block_update_warp_to_block",
+				type: "watcher_update_warp_to_block",
 				fromBlock: 123n,
 				toBlock: 130n,
 			});
@@ -228,7 +228,7 @@ describe("EventWatcher", () => {
 
 		it("errors when at least one query has too many events when splitting requests per event", async () => {
 			const { events, mocks } = await setupOneQueryPerEvent({
-				type: "block_update_warp_to_block",
+				type: "watcher_update_warp_to_block",
 				fromBlock: 123n,
 				toBlock: 130n,
 			});
@@ -245,7 +245,7 @@ describe("EventWatcher", () => {
 
 		it("allows fallible events to be dropped", async () => {
 			const { events, mocks } = await setupOneQueryPerEvent(
-				{ type: "block_update_warp_to_block", fromBlock: 123n, toBlock: 130n },
+				{ type: "watcher_update_warp_to_block", fromBlock: 123n, toBlock: 130n },
 				{
 					fallibleEvents: ["Approval"],
 				},
@@ -264,7 +264,7 @@ describe("EventWatcher", () => {
 
 		it("allows fallible events to have more than log limit", async () => {
 			const { events, mocks } = await setupOneQueryPerEvent(
-				{ type: "block_update_warp_to_block", fromBlock: 123n, toBlock: 130n },
+				{ type: "watcher_update_warp_to_block", fromBlock: 123n, toBlock: 130n },
 				{
 					fallibleEvents: ["Approval"],
 				},
@@ -293,7 +293,7 @@ describe("EventWatcher", () => {
 			const { events, mocks } = setup();
 
 			events.onBlockUpdate({
-				type: "block_update_new_block",
+				type: "watcher_update_new_block",
 				blockNumber: 1337n,
 				blockHash: keccak256(toHex("1337")),
 				logsBloom: BLOOM_ALL,
@@ -324,7 +324,7 @@ describe("EventWatcher", () => {
 			const { events, mocks } = setup();
 
 			events.onBlockUpdate({
-				type: "block_update_new_block",
+				type: "watcher_update_new_block",
 				blockNumber: 1337n,
 				blockHash: keccak256(toHex("1337")),
 				logsBloom: bloom(WATCH.address[0], toEventSelector(WATCH.events[1])),
@@ -348,7 +348,7 @@ describe("EventWatcher", () => {
 				const { events, mocks } = setup();
 
 				events.onBlockUpdate({
-					type: "block_update_new_block",
+					type: "watcher_update_new_block",
 					blockNumber: 42n,
 					blockHash: keccak256(toHex("the answer to life, the universe, and everything")),
 					logsBloom,
@@ -365,7 +365,7 @@ describe("EventWatcher", () => {
 			const { events, mocks } = setup();
 
 			events.onBlockUpdate({
-				type: "block_update_new_block",
+				type: "watcher_update_new_block",
 				blockNumber: 42n,
 				blockHash: keccak256(toHex("the answer to life, the universe, and everything")),
 				logsBloom: BLOOM_ALL,
@@ -382,7 +382,7 @@ describe("EventWatcher", () => {
 			const { events, mocks } = setup();
 
 			events.onBlockUpdate({
-				type: "block_update_new_block",
+				type: "watcher_update_new_block",
 				blockNumber: 1337n,
 				blockHash: keccak256(toHex("1337")),
 				logsBloom: BLOOM_ALL,
@@ -404,7 +404,7 @@ describe("EventWatcher", () => {
 
 		it("skips fallback event queries that are not in the bloom filter", async () => {
 			const { events, mocks } = await setupOneQueryPerEvent({
-				type: "block_update_new_block",
+				type: "watcher_update_new_block",
 				blockNumber: 1337n,
 				blockHash: keccak256(toHex("1337")),
 				logsBloom: bloom(...WATCH.address, toEventSelector(WATCH.events[1])),
@@ -423,7 +423,7 @@ describe("EventWatcher", () => {
 
 		it("errors when at least one query fails when splitting requests per event", async () => {
 			const { events, mocks } = await setupOneQueryPerEvent({
-				type: "block_update_new_block",
+				type: "watcher_update_new_block",
 				blockNumber: 1337n,
 				blockHash: keccak256(toHex("1337")),
 				logsBloom: BLOOM_ALL,
@@ -437,7 +437,7 @@ describe("EventWatcher", () => {
 
 		it("errors when at least one query has too many events when splitting requests per event", async () => {
 			const { events, mocks } = await setupOneQueryPerEvent({
-				type: "block_update_new_block",
+				type: "watcher_update_new_block",
 				blockNumber: 1337n,
 				blockHash: keccak256(toHex("1337")),
 				logsBloom: BLOOM_ALL,
@@ -456,7 +456,7 @@ describe("EventWatcher", () => {
 		it("allows fallible events to be dropped", async () => {
 			const { events, mocks } = await setupOneQueryPerEvent(
 				{
-					type: "block_update_new_block",
+					type: "watcher_update_new_block",
 					blockNumber: 1337n,
 					blockHash: keccak256(toHex("1337")),
 					logsBloom: BLOOM_ALL,
@@ -480,7 +480,7 @@ describe("EventWatcher", () => {
 		it("allows fallible events to have more than log limit", async () => {
 			const { events, mocks } = await setupOneQueryPerEvent(
 				{
-					type: "block_update_new_block",
+					type: "watcher_update_new_block",
 					blockNumber: 1337n,
 					blockHash: keccak256(toHex("1337")),
 					logsBloom: BLOOM_ALL,

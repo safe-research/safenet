@@ -45,9 +45,9 @@ export type CreateParams = Prettify<
  * Block watcher update.
  */
 export type BlockUpdate =
-	| { type: "block_update_warp_to_block"; fromBlock: bigint; toBlock: bigint }
-	| { type: "block_update_uncle_block"; blockNumber: bigint }
-	| { type: "block_update_new_block"; blockNumber: bigint; blockHash: Hex; logsBloom: Hex };
+	| { type: "watcher_update_warp_to_block"; fromBlock: bigint; toBlock: bigint }
+	| { type: "watcher_update_uncle_block"; blockNumber: bigint }
+	| { type: "watcher_update_new_block"; blockNumber: bigint; blockHash: Hex; logsBloom: Hex };
 
 type Config = Settings & Options;
 type Block = ViemBlock<bigint, false, "latest">;
@@ -95,7 +95,7 @@ export class BlockWatcher {
 			// uncling the block right after the last safe indexed block.
 			const uncle = bmax(lastIndexedBlock - BigInt(this.#config.maxReorgDepth - 1), 0n);
 			if (uncle <= lastIndexedBlock) {
-				this.#queue.push({ type: "block_update_uncle_block", blockNumber: uncle });
+				this.#queue.push({ type: "watcher_update_uncle_block", blockNumber: uncle });
 			}
 
 			// If possible, add an update warping to the reorg-safe block. This allows optimizations
@@ -103,7 +103,7 @@ export class BlockWatcher {
 			// the latest block, as it would be possible to do a `eth_getLogs` query and potentially
 			// retrieve data for an uncled block.
 			if (uncle <= safe) {
-				this.#queue.push({ type: "block_update_warp_to_block", fromBlock: uncle, toBlock: safe });
+				this.#queue.push({ type: "watcher_update_warp_to_block", fromBlock: uncle, toBlock: safe });
 			}
 		}
 
@@ -140,7 +140,7 @@ export class BlockWatcher {
 			...this.#blocks.map(
 				(block) =>
 					({
-						type: "block_update_new_block",
+						type: "watcher_update_new_block",
 						blockNumber: block.number,
 						blockHash: block.hash,
 						logsBloom: block.logsBloom,
@@ -230,7 +230,7 @@ export class BlockWatcher {
 				number: lastBlock.number,
 				timestampMs: lastBlock.timestamp * 1000n,
 			};
-			return { type: "block_update_uncle_block", blockNumber: lastBlock.number };
+			return { type: "watcher_update_uncle_block", blockNumber: lastBlock.number };
 		}
 
 		// Update our internal accounting:
@@ -245,7 +245,7 @@ export class BlockWatcher {
 		this.#updateNextPendingBlock(block);
 
 		return {
-			type: "block_update_new_block",
+			type: "watcher_update_new_block",
 			blockNumber: block.number,
 			blockHash: block.hash,
 			logsBloom: block.logsBloom,

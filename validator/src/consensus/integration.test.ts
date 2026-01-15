@@ -120,13 +120,17 @@ describe("integration", () => {
 			verificationHandlers.set("safe_transaction_packet", new SafeTransactionHandler(check));
 			verificationHandlers.set("epoch_rollover_packet", new EpochRolloverHandler());
 			const verificationEngine = new VerificationEngine(verificationHandlers);
+			const chain = {
+				...anvil,
+				blockTime: 1000,
+			};
 			const publicClient = createPublicClient({
-				chain: anvil,
+				chain,
 				transport: http(),
 				pollingInterval: 500,
 			});
 			const signingClient = createWalletClient({
-				chain: anvil,
+				chain,
 				transport: http(),
 				account: a,
 			});
@@ -160,6 +164,9 @@ describe("integration", () => {
 				config: {
 					consensus: consensus.address,
 					coordinator: coordinator.address,
+				},
+				watcher: {
+					maxReorgDepth: 0,
 				},
 				logger,
 				onTransition: (t) => {
@@ -207,7 +214,9 @@ describe("integration", () => {
 			},
 			(TEST_RUNTIME_IN_SECONDS / 3) * 1000,
 		);
-		await new Promise((resolve) => setTimeout(resolve, TEST_RUNTIME_IN_SECONDS * 1000));
+		// Wait right until right before the end of the test run time, (otherwise, we may have
+		// already seen the 60'th block and start an additional key gen process.
+		await new Promise((resolve) => setTimeout(resolve, (TEST_RUNTIME_IN_SECONDS - 1) * 1000));
 		const groups: Set<GroupId> = new Set();
 		for (const { kc } of clients) {
 			const knownGroups = kc.knownGroups();
