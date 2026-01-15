@@ -49,7 +49,7 @@ export class Backoff {
 	 */
 	classify(error: unknown): void {
 		if (this.#isRateLimitError(error)) {
-			this.#delay = Math.max((this.#delay ?? -1) + 1, this.#config.backoffDelays.length - 1);
+			this.#delay = Math.min((this.#delay ?? -1) + 1, this.#config.backoffDelays.length - 1);
 		} else {
 			this.reset();
 		}
