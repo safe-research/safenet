@@ -57,7 +57,7 @@ export class Watcher<E extends Events> {
 				while (true /* logs !== null */) {
 					const logs = await this.#events.next();
 					if (logs === null) {
-						break
+						break;
 					}
 
 					// Trigger an update if we have some logs.
