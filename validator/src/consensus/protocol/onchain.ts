@@ -122,7 +122,7 @@ export class OnchainProtocol extends BaseProtocol {
 					if (error instanceof NonceTooLowError) {
 						this.#logger.warn(`Nonce already used. Dropping pending transaction for ${tx.nonce}!`, { error });
 						this.#txStorage.setExecuted(tx.nonce);
-						break;
+						continue;
 					}
 					this.#logger.warn(`Error submitting transaction for ${tx.nonce}!`, { error });
 				}
