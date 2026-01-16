@@ -95,8 +95,7 @@ export class OnchainTransitionWatcher {
 				return;
 			}
 			this.#onTransition(transition);
-		} catch (err) {
-			const error = err instanceof Error ? err : new Error(`unknown error: ${err}`);
+		} catch (error) {
 			this.#logger.error("An error occurred handling a state transition.", { error });
 		}
 	}
