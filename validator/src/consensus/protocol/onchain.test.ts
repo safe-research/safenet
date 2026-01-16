@@ -4,6 +4,8 @@ import {
 	keccak256,
 	NonceTooLowError,
 	type PublicClient,
+	type SendTransactionParameters,
+	TransactionExecutionError,
 	TransactionReceiptNotFoundError,
 	type Transport,
 	type WalletClient,
@@ -178,6 +180,70 @@ describe("OnchainProtocol", () => {
 		]);
 		getTransactionReceipt.mockRejectedValueOnce(new TransactionReceiptNotFoundError({ hash }));
 		sendTransaction.mockRejectedValueOnce(new NonceTooLowError());
+		new OnchainProtocol(publicClient, signingClient, TEST_CONSENSUS, TEST_COORDINATOR, queue, txStorage, testLogger);
+		await vi.waitFor(() => {
+			expect(timeoutSpy).toHaveBeenCalled();
+		});
+		expect(timeoutSpy).toBeCalledTimes(1);
+		expect(setExecuted).toBeCalledTimes(1);
+		expect(setExecuted).toBeCalledWith(10);
+		expect(getTransactionReceipt).toBeCalledTimes(1);
+		expect(getTransactionReceipt).toBeCalledWith({ hash });
+		expect(sendTransaction).toBeCalledTimes(1);
+		expect(sendTransaction).toBeCalledWith({
+			...tx,
+			nonce: 10,
+			hash,
+			account,
+			chain,
+		});
+		expect(setHash).toBeCalledTimes(0);
+	});
+
+	it("should mark as completed if nested nonce too low error on submission", async () => {
+		const queue = new InMemoryQueue<ActionWithTimeout>();
+		const getTransactionReceipt = vi.fn();
+		const publicClient = {
+			getTransactionReceipt,
+		} as unknown as PublicClient;
+		const sendTransaction = vi.fn();
+		const chain = gnosisChiado;
+		const account = { address: entryPoint09Address };
+		const signingClient = {
+			account,
+			chain,
+			sendTransaction,
+		} as unknown as WalletClient<Transport, Chain, Account>;
+		const pending = vi.fn();
+		const setHash = vi.fn();
+		const setExecuted = vi.fn();
+		const txStorage = {
+			pending,
+			setHash,
+			setExecuted,
+		} as unknown as TransactionStorage;
+		const timeoutSpy = vi.spyOn(global, "setTimeout");
+
+		const hash = keccak256("0x5afe5afe01");
+		const [, , tx] = TEST_ACTIONS[0];
+		pending.mockReturnValue([
+			{
+				...tx,
+				nonce: 10,
+				hash,
+			},
+		]);
+		getTransactionReceipt.mockRejectedValueOnce(new TransactionReceiptNotFoundError({ hash }));
+		sendTransaction.mockRejectedValueOnce(
+			new TransactionExecutionError(
+				new NonceTooLowError(),
+				{} as unknown as Omit<SendTransactionParameters, "account" | "chain"> & {
+					account: Account | null;
+					chain?: Chain | undefined;
+					docsPath?: string | undefined;
+				},
+			),
+		);
 		new OnchainProtocol(publicClient, signingClient, TEST_CONSENSUS, TEST_COORDINATOR, queue, txStorage, testLogger);
 		await vi.waitFor(() => {
 			expect(timeoutSpy).toHaveBeenCalled();

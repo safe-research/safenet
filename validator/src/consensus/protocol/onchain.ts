@@ -7,6 +7,7 @@ import {
 	NonceTooLowError,
 	type PublicClient,
 	type SimulateContractParameters,
+	TransactionExecutionError,
 	TransactionReceiptNotFoundError,
 	type Transport,
 	type WalletClient,
@@ -119,7 +120,11 @@ export class OnchainProtocol extends BaseProtocol {
 				try {
 					await this.submitTransaction(tx);
 				} catch (error) {
-					if (error instanceof NonceTooLowError) {
+					if (
+						error instanceof NonceTooLowError ||
+						// Nonce error might be nested as cause error
+						(error instanceof TransactionExecutionError && error.cause instanceof NonceTooLowError)
+					) {
 						this.#logger.warn(`Nonce already used. Dropping pending transaction for ${tx.nonce}!`, { error });
 						this.#txStorage.setExecuted(tx.nonce);
 						continue;
