@@ -24,6 +24,7 @@ export type WatcherConfig = Pick<
 	| "blockRetryDelays"
 	| "blockSingleQueryRetryCount"
 	| "maxLogsPerQuery"
+	| "backoffDelays"
 >;
 
 export class OnchainTransitionWatcher {
