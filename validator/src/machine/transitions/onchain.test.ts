@@ -11,7 +11,7 @@ describe.each(
 		};
 	}).filter((test) => test.log !== null) as { log: ProtocolLog; transition: EventTransition }[],
 )("logToTransition $log.eventName", ({ log, transition }) => {
-	it(`should map to ${transition.id}`, async () => {
+	it(`should map to ${transition.id}`, () => {
 		expect(logToTransition(log)).toStrictEqual(transition);
 	});
 });
