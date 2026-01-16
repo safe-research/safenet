@@ -110,6 +110,7 @@ export type SignatureShareEvent = {
 	sid: SignatureId;
 	identifier: ParticipantId;
 	z: bigint;
+	root: Hex;
 };
 
 export type SignedEvent = {

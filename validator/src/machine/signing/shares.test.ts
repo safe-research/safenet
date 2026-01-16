@@ -52,6 +52,7 @@ const EVENT: SignatureShareEvent = {
 	sid: "0x5af35af3",
 	identifier: 1n,
 	z: 1n,
+	root: "0x5af35af35af35af3000000000000000000000000000000000000000000000000",
 };
 
 // --- Tests ---

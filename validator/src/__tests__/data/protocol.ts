@@ -1,4 +1,4 @@
-import type { Address, Hex } from "viem";
+import { type Address, type Hex, zeroAddress } from "viem";
 import { entryPoint06Address, entryPoint07Address } from "viem/account-abstraction";
 import { BaseProtocol } from "../../consensus/protocol/base.js";
 import type { EthTransactionData } from "../../consensus/protocol/onchain.js";
@@ -17,6 +17,8 @@ import type {
 	StartKeyGen,
 } from "../../consensus/protocol/types.js";
 import { toPoint } from "../../frost/math.js";
+import type { ProtocolLog } from "../../machine/transitions/onchain.js";
+import type { StateTransition } from "../../machine/transitions/types.js";
 
 export class TestProtocol extends BaseProtocol {
 	chainId(): bigint {
@@ -292,6 +294,393 @@ export const TEST_ACTIONS: [ProtocolAction, keyof TestProtocol, EthTransactionDa
 			value: 0n,
 			data: "0xea5eeafa000000000000000000000000000000000000000000000000000000000000000a000000000000000000000000000000000000000000000000000000000000001e5afe00aa000000000000000000000000000000000000000000000000000000005afe000000000000000000000000000000000000000000000000000000000000",
 			gas: undefined,
+		},
+	],
+];
+
+export const TEST_EVENTS: [ProtocolLog | null, StateTransition][] = [
+	[
+		null,
+		{
+			id: "block_new",
+			block: 111n,
+		},
+	],
+	[
+		{
+			blockNumber: 111n,
+			logIndex: 0,
+			// KeyGen(bytes32 indexed gid, bytes32 participants, uint16 count, uint16 threshold, bytes32 context)
+			eventName: "KeyGen",
+			args: {
+				gid: "0x5afe000000000000000000000000000000000000000000000000000000000000",
+				participants: "0x5afe5afe00000000000000000000000000000000000000000000000000000000",
+				count: 4,
+				threshold: 3,
+				context: "0x5afecc0000000000000000000000000000000000000000000000000000000000",
+			},
+		},
+		{
+			id: "event_key_gen",
+			block: 111n,
+			index: 0,
+			gid: "0x5afe000000000000000000000000000000000000000000000000000000000000",
+			participants: "0x5afe5afe00000000000000000000000000000000000000000000000000000000",
+			count: 4,
+			threshold: 3,
+			context: "0x5afecc0000000000000000000000000000000000000000000000000000000000",
+		},
+	],
+	[
+		{
+			blockNumber: 111n,
+			logIndex: 0,
+			// KeyGenCommitted(bytes32 indexed gid, uint256 identifier, ((uint256 x, uint256 y)[] c, (uint256 x, uint256 y) r, uint256 mu) commitment, bool committed)
+			eventName: "KeyGenCommitted",
+			args: {
+				gid: "0x5afe000000000000000000000000000000000000000000000000000000000000",
+				identifier: 1n,
+				commitment: {
+					r: TEST_POINT,
+					mu: 123n,
+					c: [TEST_POINT, TEST_POINT],
+				},
+				committed: true,
+			},
+		},
+		{
+			id: "event_key_gen_committed",
+			block: 111n,
+			index: 0,
+			gid: "0x5afe000000000000000000000000000000000000000000000000000000000000",
+			identifier: 1n,
+			commitment: {
+				r: TEST_POINT,
+				mu: 123n,
+				c: [TEST_POINT, TEST_POINT],
+			},
+			committed: true,
+		},
+	],
+	[
+		{
+			blockNumber: 111n,
+			logIndex: 0,
+			// KeyGenSecretShared(bytes32 indexed gid, uint256 identifier, ((uint256 x, uint256 y) y, uint256[] f) share, bool shared)
+			eventName: "KeyGenSecretShared",
+			args: {
+				gid: "0x5afe000000000000000000000000000000000000000000000000000000000000",
+				identifier: 1n,
+				share: {
+					y: TEST_POINT,
+					f: [1n, 2n, 3n, 5n, 8n],
+				},
+				shared: true,
+			},
+		},
+		{
+			id: "event_key_gen_secret_shared",
+			block: 111n,
+			index: 0,
+			gid: "0x5afe000000000000000000000000000000000000000000000000000000000000",
+			identifier: 1n,
+			share: {
+				y: TEST_POINT,
+				f: [1n, 2n, 3n, 5n, 8n],
+			},
+			shared: true,
+		},
+	],
+	[
+		{
+			blockNumber: 111n,
+			logIndex: 0,
+			// KeyGenComplained(bytes32 indexed gid, uint256 plaintiff, uint256 accused, bool compromised)
+			eventName: "KeyGenComplained",
+			args: {
+				gid: "0x5afe000000000000000000000000000000000000000000000000000000000000",
+				plaintiff: 1n,
+				accused: 2n,
+				compromised: false,
+			},
+		},
+		{
+			id: "event_key_gen_complaint_submitted",
+			block: 111n,
+			index: 0,
+			gid: "0x5afe000000000000000000000000000000000000000000000000000000000000",
+			plaintiff: 1n,
+			accused: 2n,
+			compromised: false,
+		},
+	],
+	[
+		{
+			blockNumber: 111n,
+			logIndex: 0,
+			// KeyGenComplaintResponded(bytes32 indexed gid, uint256 plaintiff, uint256 accused, uint256 secretShare)
+			eventName: "KeyGenComplaintResponded",
+			args: {
+				gid: "0x5afe000000000000000000000000000000000000000000000000000000000000",
+				plaintiff: 1n,
+				accused: 2n,
+				secretShare: 0x5afe5afe5afen,
+			},
+		},
+		{
+			id: "event_key_gen_complaint_responded",
+			block: 111n,
+			index: 0,
+			gid: "0x5afe000000000000000000000000000000000000000000000000000000000000",
+			plaintiff: 1n,
+			accused: 2n,
+			secretShare: 0x5afe5afe5afen,
+		},
+	],
+	[
+		{
+			blockNumber: 111n,
+			logIndex: 0,
+			// KeyGenConfirmed(bytes32 indexed gid, uint256 identifier, bool confirmed)
+			eventName: "KeyGenConfirmed",
+			args: {
+				gid: "0x5afe000000000000000000000000000000000000000000000000000000000000",
+				identifier: 1n,
+				confirmed: true,
+			},
+		},
+		{
+			id: "event_key_gen_confirmed",
+			block: 111n,
+			index: 0,
+			gid: "0x5afe000000000000000000000000000000000000000000000000000000000000",
+			identifier: 1n,
+			confirmed: true,
+		},
+	],
+	[
+		{
+			blockNumber: 111n,
+			logIndex: 0,
+			// Preprocess(bytes32 indexed gid, uint256 identifier, uint64 chunk, bytes32 commitment)
+			eventName: "Preprocess",
+			args: {
+				gid: "0x5afe000000000000000000000000000000000000000000000000000000000000",
+				identifier: 1n,
+				chunk: 100n,
+				commitment: "0x5afeaabb00000000000000000000000000000000000000000000000000000000",
+			},
+		},
+		{
+			id: "event_nonce_commitments_hash",
+			block: 111n,
+			index: 0,
+			gid: "0x5afe000000000000000000000000000000000000000000000000000000000000",
+			identifier: 1n,
+			chunk: 100n,
+			commitment: "0x5afeaabb00000000000000000000000000000000000000000000000000000000",
+		},
+	],
+	[
+		{
+			blockNumber: 111n,
+			logIndex: 0,
+			// Sign(address indexed initiator, bytes32 indexed gid, bytes32 indexed message, bytes32 sid, uint64 sequence)
+			eventName: "Sign",
+			args: {
+				initiator: zeroAddress,
+				gid: "0x5afe000000000000000000000000000000000000000000000000000000000000",
+				sid: "0x5af3000000000000000000000000000000000000000000000000000000000000",
+				message: "0x5afeaabbcc000000000000000000000000000000000000000000000000000000",
+				sequence: 23n,
+			},
+		},
+		{
+			id: "event_sign_request",
+			block: 111n,
+			index: 0,
+			initiator: zeroAddress,
+			gid: "0x5afe000000000000000000000000000000000000000000000000000000000000",
+			sid: "0x5af3000000000000000000000000000000000000000000000000000000000000",
+			message: "0x5afeaabbcc000000000000000000000000000000000000000000000000000000",
+			sequence: 23n,
+		},
+	],
+	[
+		{
+			blockNumber: 111n,
+			logIndex: 0,
+			// SignRevealedNonces(bytes32 indexed sid, uint256 identifier, ((uint256 x, uint256 y) d, (uint256 x, uint256 y) e) nonces)
+			eventName: "SignRevealedNonces",
+			args: {
+				sid: "0x5af3000000000000000000000000000000000000000000000000000000000000",
+				identifier: 1n,
+				nonces: {
+					d: TEST_POINT,
+					e: TEST_POINT,
+				},
+			},
+		},
+		{
+			id: "event_nonce_commitments",
+			block: 111n,
+			index: 0,
+			sid: "0x5af3000000000000000000000000000000000000000000000000000000000000",
+			identifier: 1n,
+			nonces: {
+				d: TEST_POINT,
+				e: TEST_POINT,
+			},
+		},
+	],
+	[
+		{
+			blockNumber: 111n,
+			logIndex: 0,
+			// SignShared(bytes32 indexed sid, uint256 identifier, uint256 z, bytes32 root)
+			eventName: "SignShared",
+			args: {
+				sid: "0x5af3000000000000000000000000000000000000000000000000000000000000",
+				identifier: 1n,
+				z: 12345n,
+				root: "0x5af35af35af35af3000000000000000000000000000000000000000000000000",
+			},
+		},
+		{
+			id: "event_signature_share",
+			block: 111n,
+			index: 0,
+			sid: "0x5af3000000000000000000000000000000000000000000000000000000000000",
+			identifier: 1n,
+			z: 12345n,
+			root: "0x5af35af35af35af3000000000000000000000000000000000000000000000000",
+		},
+	],
+	[
+		{
+			blockNumber: 111n,
+			logIndex: 0,
+			// SignCompleted(bytes32 indexed sid, ((uint256 x, uint256 y) r, uint256 z) signature)
+			eventName: "SignCompleted",
+			args: {
+				sid: "0x5af3000000000000000000000000000000000000000000000000000000000000",
+				signature: {
+					z: 12345n,
+					r: TEST_POINT,
+				},
+			},
+		},
+		{
+			id: "event_signed",
+			block: 111n,
+			index: 0,
+			sid: "0x5af3000000000000000000000000000000000000000000000000000000000000",
+			signature: {
+				z: 12345n,
+				r: TEST_POINT,
+			},
+		},
+	],
+	[
+		{
+			blockNumber: 111n,
+			logIndex: 0,
+			// EpochProposed(uint64 indexed activeEpoch, uint64 indexed proposedEpoch, uint64 rolloverBlock, (uint256 x, uint256 y) groupKey)
+			eventName: "EpochProposed",
+			args: {
+				activeEpoch: 1n,
+				proposedEpoch: 2n,
+				rolloverBlock: 3n,
+				groupKey: TEST_POINT,
+			},
+		},
+		{
+			id: "event_epoch_proposed",
+			block: 111n,
+			index: 0,
+			activeEpoch: 1n,
+			proposedEpoch: 2n,
+			rolloverBlock: 3n,
+			groupKey: TEST_POINT,
+		},
+	],
+	[
+		{
+			blockNumber: 111n,
+			logIndex: 0,
+			// EpochStaged(uint64 indexed activeEpoch, uint64 indexed proposedEpoch, uint64 rolloverBlock, (uint256 x, uint256 y) groupKey)
+			eventName: "EpochStaged",
+			args: {
+				activeEpoch: 1n,
+				proposedEpoch: 2n,
+				rolloverBlock: 3n,
+				groupKey: TEST_POINT,
+			},
+		},
+		{
+			id: "event_epoch_staged",
+			block: 111n,
+			index: 0,
+			activeEpoch: 1n,
+			proposedEpoch: 2n,
+			rolloverBlock: 3n,
+			groupKey: TEST_POINT,
+		},
+	],
+	[
+		{
+			blockNumber: 111n,
+			logIndex: 0,
+			// TransactionProposed(bytes32 indexed message, bytes32 indexed transactionHash, uint64 epoch, (uint256 chainId, address account, address to, uint256 value, uint8 operation, bytes data, uint256 nonce) transaction)
+			eventName: "TransactionProposed",
+			args: {
+				message: "0x5af3330000000000000000000000000000000000000000000000000000000000",
+				transactionHash: "0x5af3aabbcc000000000000000000000000000000000000000000000000000000",
+				epoch: 2n,
+				transaction: {
+					to: zeroAddress,
+					value: 10n,
+					data: "0x",
+					operation: 1,
+					nonce: 3n,
+					chainId: 100n,
+					account: zeroAddress,
+				},
+			},
+		},
+		{
+			id: "event_transaction_proposed",
+			block: 111n,
+			index: 0,
+			message: "0x5af3330000000000000000000000000000000000000000000000000000000000",
+			transactionHash: "0x5af3aabbcc000000000000000000000000000000000000000000000000000000",
+			epoch: 2n,
+			transaction: {
+				to: zeroAddress,
+				value: 10n,
+				data: "0x",
+				operation: 1,
+				nonce: 3n,
+				chainId: 100n,
+				account: zeroAddress,
+			},
+		},
+	],
+	[
+		{
+			blockNumber: 111n,
+			logIndex: 0,
+			// TransactionAttested(bytes32 indexed message)
+			eventName: "TransactionAttested",
+			args: {
+				message: "0x5af3330000000000000000000000000000000000000000000000000000000000",
+			},
+		},
+		{
+			id: "event_transaction_attested",
+			block: 111n,
+			index: 0,
+			message: "0x5af3330000000000000000000000000000000000000000000000000000000000",
 		},
 	],
 ];

@@ -19,12 +19,14 @@ import {
 } from "./schemas.js";
 import type { EventTransition } from "./types.js";
 
+export type ProtocolLog = Pick<Log<typeof ALL_EVENTS>, "blockNumber" | "logIndex" | "eventName" | "args">;
+
 export const logToTransition = ({
 	blockNumber: block,
 	logIndex: index,
 	eventName,
 	args: eventArgs,
-}: Log<typeof ALL_EVENTS>): EventTransition => {
+}: ProtocolLog): EventTransition => {
 	switch (eventName) {
 		case "KeyGenCommitted": {
 			const args = keyGenCommittedEventSchema.parse(eventArgs);

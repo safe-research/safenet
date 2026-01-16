@@ -95,6 +95,7 @@ export const signatureShareEventSchema = z.object({
 	sid: hexBytes32Schema,
 	identifier: eventBigIntSchema,
 	z: eventBigIntSchema,
+	root: hexBytes32Schema,
 });
 
 export const signatureSchema = z.object({
