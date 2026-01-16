@@ -106,10 +106,10 @@ export class OnchainProtocol extends BaseProtocol {
 					);
 					this.#txStorage.setExecuted(tx.nonce);
 					continue;
-				} catch (e: unknown) {
-					// Any other error than transactio not found is unexpected
-					if (!(e instanceof TransactionReceiptNotFoundError)) {
-						this.#logger.warn(`Unexpected error fetching receipt for ${tx.nonce}!`, e);
+				} catch (error) {
+					// Any other error than transaction not found is unexpected
+					if (!(error instanceof TransactionReceiptNotFoundError)) {
+						this.#logger.warn(`Unexpected error fetching receipt for ${tx.nonce}!`, { error });
 						continue;
 					}
 				}
@@ -117,12 +117,12 @@ export class OnchainProtocol extends BaseProtocol {
 				this.#logger.debug(`Resubmit transaction for ${tx.nonce}!`, tx);
 				try {
 					await this.submitTransaction(tx);
-				} catch (e: unknown) {
-					this.#logger.warn(`Error submitting transaction for ${tx.nonce}!`, e);
+				} catch (error) {
+					this.#logger.warn(`Error submitting transaction for ${tx.nonce}!`, { error });
 				}
 			}
-		} catch (e) {
-			this.#logger.error("Error while checking pending transactions.", e);
+		} catch (error) {
+			this.#logger.error("Error while checking pending transactions.", { error });
 		} finally {
 			setTimeout(() => this.checkPending(), this.#txStatusPollingSeconds * 1000);
 		}

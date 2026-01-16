@@ -120,17 +120,13 @@ describe("integration", () => {
 			verificationHandlers.set("safe_transaction_packet", new SafeTransactionHandler(check));
 			verificationHandlers.set("epoch_rollover_packet", new EpochRolloverHandler());
 			const verificationEngine = new VerificationEngine(verificationHandlers);
-			const chain = {
-				...anvil,
-				blockTime: 1000,
-			};
 			const publicClient = createPublicClient({
-				chain,
+				chain: anvil,
 				transport: http(),
 				pollingInterval: 500,
 			});
 			const signingClient = createWalletClient({
-				chain,
+				chain: anvil,
 				transport: http(),
 				account: a,
 			});
@@ -166,6 +162,7 @@ describe("integration", () => {
 					coordinator: coordinator.address,
 				},
 				watcherConfig: {
+					blockTimeOverride: 1000,
 					maxReorgDepth: 0,
 				},
 				logger,

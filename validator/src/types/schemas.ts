@@ -74,6 +74,7 @@ export const validatorConfigSchema = z.object({
 	BLOCKS_PER_EPOCH: emptyToDefault(z.coerce.bigint(), BLOCKS_PER_EPOCH),
 	BASE_FEE_MULTIPLIER: emptyToDefault(z.coerce.number().optional()),
 	PRIORITY_FEE_PER_GAS: emptyToDefault(z.coerce.bigint().optional()),
+	BLOCK_TIME_OVERRIDE: emptyToDefault(z.coerce.number().int().optional()),
 	MAX_REORG_DEPTH: emptyToDefault(z.coerce.number().int().optional()),
 	BLOCK_PAGE_SIZE: emptyToDefault(z.coerce.number().int().optional()),
 	MAX_LOGS_PER_QUERY: emptyToDefault(z.coerce.number().int().optional()),

@@ -35,6 +35,7 @@ const config: ProtocolConfig = {
 	blocksPerEpoch: validatorConfig.BLOCKS_PER_EPOCH,
 };
 const watcherConfig: WatcherConfig = {
+	blockTimeOverride: validatorConfig.BLOCK_TIME_OVERRIDE,
 	maxReorgDepth: validatorConfig.MAX_REORG_DEPTH ?? 5,
 	blockPageSize: validatorConfig.BLOCK_PAGE_SIZE,
 	maxLogsPerQuery: validatorConfig.MAX_LOGS_PER_QUERY,
@@ -76,8 +77,7 @@ process.on("SIGINT", shutdown);
 process.on("SIGTERM", shutdown);
 
 Promise.all([service.start(), metrics.start()]).catch((error: unknown) => {
-	logger.error("Service failed to start:");
-	logger.error(error);
+	logger.error("Service failed to start.", { error });
 	process.exit(1);
 });
 

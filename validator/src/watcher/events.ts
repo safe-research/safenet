@@ -165,7 +165,7 @@ export class EventWatcher<E extends Events> {
 				} catch (err) {
 					if (this.#config.fallibleEvents.includes(event.name)) {
 						const blockId = query.blockHash !== undefined ? query.blockHash : query.blockNumber;
-						this.#logger.warn(`potentially dropping ${event.name} logs for block ${blockId}`);
+						this.#logger.warn(`Potentially dropping ${event.name} logs for block ${blockId}.`);
 						return eventLogs;
 					}
 					throw err;

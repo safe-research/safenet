@@ -1,5 +1,5 @@
 import type { Database } from "better-sqlite3";
-import type { PublicClient } from "viem";
+import type { Prettify, PublicClient } from "viem";
 import z from "zod";
 import { ALL_EVENTS } from "../../types/abis.js";
 import type { ProtocolConfig } from "../../types/interfaces.js";
@@ -16,15 +16,17 @@ export const transitionWatcherStateSchema = z
 	.optional();
 
 export type Config = Pick<ProtocolConfig, "coordinator" | "consensus">;
-export type WatcherConfig = Pick<
-	WatchParams<[]>,
-	| "maxReorgDepth"
-	| "blockPageSize"
-	| "blockPropagationDelay"
-	| "blockRetryDelays"
-	| "blockSingleQueryRetryCount"
-	| "maxLogsPerQuery"
-	| "backoffDelays"
+export type WatcherConfig = Prettify<
+	{ blockTimeOverride?: number } & Pick<
+		WatchParams<[]>,
+		| "maxReorgDepth"
+		| "blockPageSize"
+		| "blockPropagationDelay"
+		| "blockRetryDelays"
+		| "blockSingleQueryRetryCount"
+		| "maxLogsPerQuery"
+		| "backoffDelays"
+	>
 >;
 
 export class OnchainTransitionWatcher {
@@ -89,13 +91,12 @@ export class OnchainTransitionWatcher {
 	handleTransition(transition: StateTransition) {
 		try {
 			if (!this.updateLastIndexedBlock(transition.block)) {
-				this.#logger.warn("Received an out-of-order transition", { transition });
+				this.#logger.warn("Received an out-of-order transition.", { transition });
 				return;
 			}
 			this.#onTransition(transition);
-		} catch (e: unknown) {
-			const err = e instanceof Error ? e : new Error(`unknown error: ${e}`);
-			this.#logger.error("An error occurred handling a state transition:", err);
+		} catch (error) {
+			this.#logger.error("An error occurred handling a state transition.", { error });
 		}
 	}
 
@@ -104,7 +105,7 @@ export class OnchainTransitionWatcher {
 			throw new Error("already started");
 		}
 
-		const blockTime = this.#publicClient.chain?.blockTime;
+		const blockTime = this.#watcherConfig.blockTimeOverride ?? this.#publicClient.chain?.blockTime;
 		if (blockTime === undefined) {
 			throw new Error("chain missing block time configuration");
 		}
@@ -129,7 +130,7 @@ export class OnchainTransitionWatcher {
 						break;
 					}
 					case "watcher_update_uncle_block": {
-						this.#logger.warn("reorg detected, but currently not supported", { update });
+						this.#logger.warn("Reorg detected, but currently not supported.", { update });
 						break;
 					}
 					case "watcher_update_new_block": {

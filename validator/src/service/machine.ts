@@ -117,8 +117,8 @@ export class ShieldnetStateMachine {
 				}
 				this.#metrics.transitions.labels({ result: "success" }).inc();
 			})
-			.catch((err) => {
-				this.#logger.warn(`Error performing state transition '${transition.id}':`, err);
+			.catch((error) => {
+				this.#logger.warn(`Error performing state transition '${transition.id}'.`, { error });
 				this.#metrics.transitions.labels({ result: "failure" }).inc();
 			})
 			.finally(() => {

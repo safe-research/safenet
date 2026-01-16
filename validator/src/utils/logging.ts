@@ -35,6 +35,21 @@ const prettyFormat = winston.format.printf(({ timestamp, level, message, [SPLAT]
 	return `[${timestamp} ${level}]: ${text}`;
 });
 
+const jsonReplacer = (key: string, value: unknown) => {
+	if (typeof value === "bigint") {
+		return value.toString();
+	}
+	if (value instanceof Error) {
+		const error = value as unknown as Record<string, unknown>;
+		const fields: Record<string, unknown> = {};
+		for (const propertyName of Object.getOwnPropertyNames(error)) {
+			fields[propertyName] = error[propertyName];
+		}
+		return fields;
+	}
+	return value;
+};
+
 export const createLogger = (options: LoggingOptions): Logger => {
 	winston.addColors({
 		error: "red",
@@ -49,7 +64,7 @@ export const createLogger = (options: LoggingOptions): Logger => {
 	const format =
 		options.pretty === true
 			? winston.format.combine(winston.format.timestamp(), winston.format.colorize(), prettyFormat)
-			: winston.format.json();
+			: winston.format.json({ replacer: jsonReplacer });
 	return winston.createLogger({
 		...level,
 		levels: LEVELS,

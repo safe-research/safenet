@@ -85,7 +85,7 @@ export class Watcher<E extends Events> {
 			try {
 				await this.#backoff.throttled(() => this.#next());
 			} catch (error) {
-				this.#logger.warn("internal watcher error", { error });
+				this.#logger.warn("Internal watcher error.", { error });
 			}
 		}
 	}
@@ -95,7 +95,7 @@ export class Watcher<E extends Events> {
 			try {
 				handler(update);
 			} catch (error) {
-				this.#logger.warn("watcher handler failed", { error, update });
+				this.#logger.warn("Watcher handler failed.", { error, update });
 			}
 		}
 	}
