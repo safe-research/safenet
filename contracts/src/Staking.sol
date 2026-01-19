@@ -529,7 +529,7 @@ contract Staking is Ownable {
     }
 
     /**
-     * @notice Propose validator registration/deregistration changes. Proposing validators (de-)registration while
+     * @notice Propose validator registration/deregistration changes. Proposing validators (de)registration while
      *         there is already a pending proposal will cause the pending one to be invalidated.
      * @param validators Array of validator addresses.
      * @param isRegistration Array of booleans (true = register, false = deregister).
