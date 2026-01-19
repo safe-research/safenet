@@ -988,7 +988,7 @@ contract StakingTest is Test {
 
         // Try claiming early
         vm.expectRevert(Staking.NoClaimableWithdrawal.selector);
-        staking.claimWithdrawal(staker);
+        staking.claimWithdrawal();
 
         // Warp to claimable time
         vm.warp(block.timestamp + INITIAL_WITHDRAW_DELAY);
@@ -998,7 +998,7 @@ contract StakingTest is Test {
 
         vm.expectEmit(true, true, false, true);
         emit WithdrawalClaimed(staker, queueHead, withdrawAmount);
-        staking.claimWithdrawal(staker);
+        staking.claimWithdrawal();
 
         assertEq(token.balanceOf(staker), preBalance + withdrawAmount);
         assertEq(staking.totalPendingWithdrawals(), 0);
@@ -1028,7 +1028,7 @@ contract StakingTest is Test {
 
         vm.warp(block.timestamp + INITIAL_WITHDRAW_DELAY - 100); // At W1 claimable time
 
-        staking.claimWithdrawal(staker); // Claims W1
+        staking.claimWithdrawal(); // Claims W1
 
         // Queue: W2
 
@@ -1038,10 +1038,10 @@ contract StakingTest is Test {
 
         // Try claim W2 early
         vm.expectRevert(Staking.NoClaimableWithdrawal.selector);
-        staking.claimWithdrawal(staker);
+        staking.claimWithdrawal();
 
         vm.warp(block.timestamp + 100);
-        staking.claimWithdrawal(staker); // Claims W2
+        staking.claimWithdrawal(); // Claims W2
 
         // Queue: Empty
 
@@ -1057,30 +1057,9 @@ contract StakingTest is Test {
 
         // No withdrawals initiated
         vm.expectRevert(Staking.WithdrawalQueueEmpty.selector);
-        staking.claimWithdrawal(staker);
+        staking.claimWithdrawal();
 
         vm.stopPrank();
-    }
-
-    function test_ClaimWithdrawal_AnyoneCanClaim() public {
-        uint256 stakeAmount = 100 ether;
-        uint256 withdrawAmount = 10 ether;
-
-        vm.startPrank(staker);
-        staking.stake(validator, stakeAmount);
-        staking.initiateWithdrawal(validator, withdrawAmount);
-        vm.stopPrank();
-
-        vm.warp(block.timestamp + INITIAL_WITHDRAW_DELAY);
-
-        uint256 stakerBalanceBefore = token.balanceOf(staker);
-
-        // `other` calls claim for `staker`
-        vm.prank(other);
-        staking.claimWithdrawal(staker);
-
-        // Tokens go to staker, not caller
-        assertEq(token.balanceOf(staker), stakerBalanceBefore + withdrawAmount);
     }
 
     function test_ClaimWithdrawal_ExactlyAtClaimableTime() public {
@@ -1092,13 +1071,12 @@ contract StakingTest is Test {
 
         uint256 initiateTime = block.timestamp;
         staking.initiateWithdrawal(validator, withdrawAmount);
-        vm.stopPrank();
 
         // Warp to exactly claimableAt (not 1 second after)
         vm.warp(initiateTime + INITIAL_WITHDRAW_DELAY);
 
         uint256 stakerBalanceBefore = token.balanceOf(staker);
-        staking.claimWithdrawal(staker);
+        staking.claimWithdrawal();
 
         assertEq(token.balanceOf(staker), stakerBalanceBefore + withdrawAmount);
     }
@@ -1232,7 +1210,7 @@ contract StakingTest is Test {
         vm.warp(block.timestamp + INITIAL_WITHDRAW_DELAY);
 
         uint256 balanceBefore = token.balanceOf(staker);
-        staking.claimWithdrawal(staker);
+        staking.claimWithdrawal();
         assertEq(token.balanceOf(staker), balanceBefore + 100 ether);
         vm.stopPrank();
     }
@@ -1335,7 +1313,7 @@ contract StakingTest is Test {
         assertEq(staking.totalPendingWithdrawals(), stakeAmount);
 
         vm.warp(block.timestamp + INITIAL_WITHDRAW_DELAY);
-        staking.claimWithdrawal(staker);
+        staking.claimWithdrawal();
 
         // All state should be zeroed
         _assertStakeState(staker, validator, 0, 0, 0);

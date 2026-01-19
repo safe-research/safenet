@@ -482,34 +482,33 @@ contract Staking is Ownable {
     }
 
     /**
-     * @notice Claim a pending withdrawal after the delay period has passed.
-     * @param staker The address that initiated the withdrawal.
-     * @dev This function processes the first withdrawal in the queue (the "head" of the linked list). It verifies that
-     *      the `withdrawDelay` has passed. Upon success, it removes the withdrawal node from the queue, updates the
-     *      queue's head to the next node, and transfers the staked tokens back to the staker.
+     * @notice Claim a pending withdrawal for the caller after the delay period has passed.
+     * @dev This function processes the first withdrawal in `msg.sender`'s queue (the "head" of the linked list). It
+     *      verifies that the `withdrawDelay` has passed. Upon success, it removes the withdrawal node from the queue,
+     *      updates the queue's head to the next node, and transfers the staked tokens back to the `msg.sender`.
      */
-    function claimWithdrawal(address staker) external {
-        uint64 queueHead = withdrawalQueues[staker].head;
+    function claimWithdrawal() external {
+        uint64 queueHead = withdrawalQueues[msg.sender].head;
         require(queueHead != 0, WithdrawalQueueEmpty());
 
-        WithdrawalNode memory node = withdrawalNodes[staker][queueHead];
+        WithdrawalNode memory node = withdrawalNodes[msg.sender][queueHead];
         require(block.timestamp >= node.claimableAt, NoClaimableWithdrawal());
 
         uint256 amount = node.amount;
 
         if (node.next == 0) {
             // Queue is now empty.
-            withdrawalQueues[staker] = WithdrawalQueue({head: 0, tail: 0});
+            withdrawalQueues[msg.sender] = WithdrawalQueue({head: 0, tail: 0});
         } else {
-            withdrawalQueues[staker].head = node.next;
-            withdrawalNodes[staker][node.next].previous = 0;
+            withdrawalQueues[msg.sender].head = node.next;
+            withdrawalNodes[msg.sender][node.next].previous = 0;
         }
 
-        delete withdrawalNodes[staker][queueHead];
+        delete withdrawalNodes[msg.sender][queueHead];
         totalPendingWithdrawals -= amount;
-        emit WithdrawalClaimed(staker, queueHead, amount);
+        emit WithdrawalClaimed(msg.sender, queueHead, amount);
 
-        SAFE_TOKEN.safeTransfer(staker, amount);
+        SAFE_TOKEN.safeTransfer(msg.sender, amount);
     }
 
     // ============================================================
