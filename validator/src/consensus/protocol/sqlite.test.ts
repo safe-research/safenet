@@ -229,5 +229,37 @@ describe("protocol - sqlite", () => {
 				},
 			]);
 		});
+
+		it("should return correct number of updated transaction", () => {
+			const db = new Sqlite3(":memory:");
+			const storage = new SqliteTxStorage(db);
+			storage.register(
+				{
+					to: entryPoint06Address,
+					value: 0n,
+					data: "0x5afe01",
+				},
+				1,
+			);
+			storage.register(
+				{
+					to: entryPoint06Address,
+					value: 0n,
+					data: "0x5afe02",
+					gas: 200_000n,
+				},
+				1,
+			);
+			storage.register(
+				{
+					to: entryPoint06Address,
+					value: 0n,
+					data: "0x5afe03",
+					gas: 200_000n,
+				},
+				1,
+			);
+			expect(storage.setAllBeforeAsExecuted(3)).toBe(2);
+		});
 	});
 });

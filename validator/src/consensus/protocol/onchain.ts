@@ -37,6 +37,7 @@ export interface TransactionStorage {
 	register(tx: EthTransactionData, minNonce: number): number;
 	setHash(nonce: number, txHash: Hex): void;
 	setExecuted(nonce: number): void;
+	setAllBeforeAsExecuted(nonce: number): number;
 	pending(createdDiff: number): (EthTransactionData & { nonce: number; hash: Hex | null })[];
 }
 
@@ -99,14 +100,13 @@ export class OnchainProtocol extends BaseProtocol {
 				address: this.#signingClient.account.address,
 				blockTag: "latest",
 			});
+			const executedTxs = this.#txStorage.setAllBeforeAsExecuted(currentNonce);
+			if (executedTxs > 0) {
+				this.#logger.debug(`Marked ${executedTxs} transactions as executed`);
+			}
 			// We will only mark transaction as executed when get to the point of deciding if we need to resubmit them
 			const pendingTxs = this.#txStorage.pending(this.#timeBeforeResubmitSeconds);
 			for (const tx of pendingTxs) {
-				if (tx.nonce < currentNonce) {
-					this.#logger.debug(`Transaction with nonce ${tx.nonce} has been executed!`, tx);
-					this.#txStorage.setExecuted(tx.nonce);
-					continue;
-				}
 				// If we don't find the transaction or it has no blockHash then we resubmit it
 				this.#logger.debug(`Resubmit transaction for ${tx.nonce}!`, tx);
 				try {
