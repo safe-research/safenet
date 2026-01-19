@@ -403,27 +403,32 @@ contract Staking is Ownable {
         } else {
             // Check if the claimableAt of the tail is higher than the claimableAt of the new node. If so, traverse
             // backwards to find the correct position.
-            uint64 currentId = queue.tail;
-            while (currentId != 0 && stakerNodes[currentId].claimableAt > claimableAt) {
-                currentId = stakerNodes[currentId].previous;
+            uint64 queueTail = queue.tail;
+            uint64 currentId = queueTail;
+            WithdrawalNode storage currentNode = stakerNodes[currentId];
+            while (currentId != 0 && currentNode.claimableAt > claimableAt) {
+                currentId = currentNode.previous;
+                currentNode = stakerNodes[currentId];
             }
-            if (currentId == queue.tail) {
+            WithdrawalNode storage withdrawalNode = stakerNodes[withdrawalId];
+            if (currentId == queueTail) {
                 // Higher chances of this happening in most cases, so check first.
                 // Insert at tail.
-                stakerNodes[withdrawalId].previous = queue.tail;
-                stakerNodes[queue.tail].next = withdrawalId;
+                withdrawalNode.previous = queueTail;
+                stakerNodes[queueTail].next = withdrawalId;
                 queue.tail = withdrawalId;
             } else if (currentId == 0) {
                 // Insert at head.
-                stakerNodes[withdrawalId].next = queue.head;
-                stakerNodes[queue.head].previous = withdrawalId;
+                uint64 queueHead = queue.head;
+                withdrawalNode.next = queueHead;
+                stakerNodes[queueHead].previous = withdrawalId;
                 queue.head = withdrawalId;
             } else {
                 // Insert in the middle.
-                uint64 nextId = stakerNodes[currentId].next;
-                stakerNodes[withdrawalId].previous = currentId;
-                stakerNodes[withdrawalId].next = nextId;
-                stakerNodes[currentId].next = withdrawalId;
+                uint64 nextId = currentNode.next;
+                withdrawalNode.previous = currentId;
+                withdrawalNode.next = nextId;
+                currentNode.next = withdrawalId;
                 stakerNodes[nextId].previous = withdrawalId;
             }
         }
@@ -445,15 +450,18 @@ contract Staking is Ownable {
 
         uint64 nextId;
         mapping(uint64 => WithdrawalNode) storage stakerNodes = withdrawalNodes[msg.sender];
+        WithdrawalNode storage previousNode = stakerNodes[previousId];
+        WithdrawalQueue storage stakerQueue = withdrawalQueues[msg.sender];
         // Check if the IDs are correct and claimableAt ordering is correct.
         if (previousId == 0) {
             // Inserting at head - get the current head as nextId.
-            nextId = withdrawalQueues[msg.sender].head;
+            nextId = stakerQueue.head;
         } else {
-            require(stakerNodes[previousId].claimableAt > 0, InvalidPreviousId());
-            require(stakerNodes[previousId].claimableAt <= claimableAt, InvalidOrdering());
+            uint128 previousClaimableAt = previousNode.claimableAt;
+            require(previousClaimableAt > 0, InvalidPreviousId());
+            require(previousClaimableAt <= claimableAt, InvalidOrdering());
 
-            nextId = stakerNodes[previousId].next;
+            nextId = previousNode.next;
         }
 
         // Validate ordering if queue is not empty.
@@ -467,17 +475,17 @@ contract Staking is Ownable {
 
         // Update previous and next nodes.
         if (previousId != 0) {
-            stakerNodes[previousId].next = withdrawalId;
+            previousNode.next = withdrawalId;
         } else {
             // Inserting at head.
-            withdrawalQueues[msg.sender].head = withdrawalId;
+            stakerQueue.head = withdrawalId;
         }
 
         if (nextId != 0) {
             stakerNodes[nextId].previous = withdrawalId;
         } else {
             // Inserting at tail.
-            withdrawalQueues[msg.sender].tail = withdrawalId;
+            stakerQueue.tail = withdrawalId;
         }
     }
 
