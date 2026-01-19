@@ -8,10 +8,8 @@ import {
 	type PublicClient,
 	type SimulateContractParameters,
 	TransactionExecutionError,
-	TransactionReceiptNotFoundError,
 	type Transport,
 	type WalletClient,
-	zeroHash,
 } from "viem";
 import type { FrostPoint, GroupId, SignatureId } from "../../frost/types.js";
 import { CONSENSUS_FUNCTIONS, COORDINATOR_FUNCTIONS } from "../../types/abis.js";
@@ -83,7 +81,7 @@ export class OnchainProtocol extends BaseProtocol {
 		// By default polling is disabled
 		this.#txStatusPollingSeconds = txStatusPollingSeconds ?? 0;
 		// By default it should be 1 block (falling back to eth mainnet blocktime)
-		this.#timeBeforeResubmitSeconds = timeBeforeResubmitSeconds ?? publicClient.chain?.blockTime ?? 12000 / 1000;
+		this.#timeBeforeResubmitSeconds = timeBeforeResubmitSeconds ?? (publicClient.chain?.blockTime ?? 12000) / 1000;
 		this.checkPendingActions();
 	}
 
@@ -102,30 +100,17 @@ export class OnchainProtocol extends BaseProtocol {
 
 	async checkPendingActions() {
 		try {
+			const currentNonce = await this.#publicClient.getTransactionCount({
+				address: this.#signingClient.account.address,
+				blockTag: "latest",
+			});
 			// We will only mark transaction as executed when get to the point of deciding if we need to resubmit them
 			const pendingTxs = this.#txStorage.pending(this.#timeBeforeResubmitSeconds);
 			for (const tx of pendingTxs) {
-				try {
-					// If we don't have a hash we throw an error to trigger resubmission
-					if (tx.hash === null) {
-						throw new TransactionReceiptNotFoundError({ hash: zeroHash });
-					}
-					const receipt = await this.#publicClient.getTransactionReceipt({
-						hash: tx.hash,
-					});
-					this.#logger.debug(
-						`Transaction with nonce ${tx.nonce} has been executed at block ${receipt.blockNumber}!`,
-						tx,
-						receipt,
-					);
+				if (tx.nonce < currentNonce) {
+					this.#logger.debug(`Transaction with nonce ${tx.nonce} has been executed!`, tx);
 					this.#txStorage.setExecuted(tx.nonce);
 					continue;
-				} catch (error) {
-					// Any other error than transaction not found is unexpected
-					if (!(error instanceof TransactionReceiptNotFoundError)) {
-						this.#logger.warn(`Unexpected error fetching receipt for ${tx.nonce}!`, { error });
-						continue;
-					}
 				}
 				// If we don't find the transaction or it has no blockHash then we resubmit it
 				this.#logger.debug(`Resubmit transaction for ${tx.nonce}!`, tx);
