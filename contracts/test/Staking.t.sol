@@ -30,7 +30,7 @@ contract StakingTest is Test {
     event WithdrawalInitiated(
         address indexed staker, address indexed validator, uint64 indexed withdrawalId, uint256 amount
     );
-    event WithdrawalClaimed(address indexed staker, address indexed validator, uint256 amount);
+    event WithdrawalClaimed(address indexed staker, uint64 indexed withdrawalId, uint256 amount);
     event ValidatorsProposed(
         bytes32 indexed validatorsHash, address[] validator, bool[] isRegistration, uint256 executableAt
     );
@@ -591,11 +591,11 @@ contract StakingTest is Test {
         emit WithdrawalInitiated(staker, validator, 1, withdrawAmount); // ID starts at 1
         staking.initiateWithdrawal(validator, withdrawAmount);
 
-        (uint64 head, uint64 tail) = staking.withdrawalQueues(staker, validator);
+        (uint64 head, uint64 tail) = staking.withdrawalQueues(staker);
         assertEq(head, 1);
         assertEq(tail, 1);
 
-        (uint256 amt, uint256 claimableAt, uint64 prev, uint64 next) = staking.withdrawalNodes(1);
+        (uint256 amt, uint256 claimableAt, uint64 prev, uint64 next) = staking.withdrawalNodes(staker, 1);
         assertEq(amt, withdrawAmount);
         assertEq(claimableAt, block.timestamp + INITIAL_WITHDRAW_DELAY);
         assertEq(prev, 0);
@@ -615,12 +615,12 @@ contract StakingTest is Test {
         vm.warp(block.timestamp + 100);
         staking.initiateWithdrawal(validator, 10 ether); // ID 2
 
-        (uint64 head, uint64 tail) = staking.withdrawalQueues(staker, validator);
+        (uint64 head, uint64 tail) = staking.withdrawalQueues(staker);
         assertEq(head, 1);
         assertEq(tail, 2);
 
-        (,,, uint64 next1) = staking.withdrawalNodes(1);
-        (,, uint64 prev2, uint64 next2) = staking.withdrawalNodes(2);
+        (,,, uint64 next1) = staking.withdrawalNodes(staker, 1);
+        (,, uint64 prev2, uint64 next2) = staking.withdrawalNodes(staker, 2);
 
         assertEq(next1, 2);
         assertEq(prev2, 1);
@@ -659,14 +659,14 @@ contract StakingTest is Test {
         vm.startPrank(staker);
         staking.initiateWithdrawal(validator, 10 ether); // ID 2
 
-        (uint64 head, uint64 tail) = staking.withdrawalQueues(staker, validator);
+        (uint64 head, uint64 tail) = staking.withdrawalQueues(staker);
 
         // W2 should be HEAD, W1 should be TAIL
         assertEq(head, 2);
         assertEq(tail, 1);
 
-        (,, uint64 prev2, uint64 next2) = staking.withdrawalNodes(2);
-        (,, uint64 prev1, uint64 next1) = staking.withdrawalNodes(1);
+        (,, uint64 prev2, uint64 next2) = staking.withdrawalNodes(staker, 2);
+        (,, uint64 prev1, uint64 next1) = staking.withdrawalNodes(staker, 1);
 
         // Check links: 2 -> 1
         assertEq(next2, 1);
@@ -732,13 +732,13 @@ contract StakingTest is Test {
         staking.initiateWithdrawal(validator, 10 ether); // ID 3
         vm.stopPrank();
 
-        (uint64 head, uint64 tail) = staking.withdrawalQueues(staker, validator);
+        (uint64 head, uint64 tail) = staking.withdrawalQueues(staker);
         assertEq(head, 1);
         assertEq(tail, 2);
 
-        (,,, uint64 next1) = staking.withdrawalNodes(1);
-        (,, uint64 prev2,) = staking.withdrawalNodes(2);
-        (,, uint64 prev3, uint64 next3) = staking.withdrawalNodes(3);
+        (,,, uint64 next1) = staking.withdrawalNodes(staker, 1);
+        (,, uint64 prev2,) = staking.withdrawalNodes(staker, 2);
+        (,, uint64 prev3, uint64 next3) = staking.withdrawalNodes(staker, 3);
 
         // W1 -> W3 -> W2
         assertEq(next1, 3);
@@ -769,11 +769,11 @@ contract StakingTest is Test {
         vm.warp(block.timestamp + 100);
         staking.initiateWithdrawalAtPosition(validator, 10 ether, 1); // ID 2
 
-        (uint64 head, uint64 tail) = staking.withdrawalQueues(staker, validator);
+        (uint64 head, uint64 tail) = staking.withdrawalQueues(staker);
         assertEq(head, 1);
         assertEq(tail, 2);
 
-        (,, uint64 prev2, uint64 next2) = staking.withdrawalNodes(2);
+        (,, uint64 prev2, uint64 next2) = staking.withdrawalNodes(staker, 2);
         assertEq(prev2, 1);
         assertEq(next2, 0);
 
@@ -814,14 +814,14 @@ contract StakingTest is Test {
         staking.initiateWithdrawalAtPosition(validator, 10 ether, 1); // ID 3
         vm.stopPrank();
 
-        (uint64 head, uint64 tail) = staking.withdrawalQueues(staker, validator);
+        (uint64 head, uint64 tail) = staking.withdrawalQueues(staker);
         assertEq(head, 1);
         assertEq(tail, 2);
 
         // Check links: 1 -> 3 -> 2
-        (,, uint64 prev1, uint64 next1) = staking.withdrawalNodes(1);
-        (,, uint64 prev2, uint64 next2) = staking.withdrawalNodes(2);
-        (,, uint64 prev3, uint64 next3) = staking.withdrawalNodes(3);
+        (,, uint64 prev1, uint64 next1) = staking.withdrawalNodes(staker, 1);
+        (,, uint64 prev2, uint64 next2) = staking.withdrawalNodes(staker, 2);
+        (,, uint64 prev3, uint64 next3) = staking.withdrawalNodes(staker, 3);
 
         assertEq(prev1, 0);
         assertEq(next1, 3);
@@ -854,13 +854,13 @@ contract StakingTest is Test {
         staking.initiateWithdrawalAtPosition(validator, 10 ether, 0); // ID 2
         vm.stopPrank();
 
-        (uint64 head, uint64 tail) = staking.withdrawalQueues(staker, validator);
+        (uint64 head, uint64 tail) = staking.withdrawalQueues(staker);
         assertEq(head, 2);
         assertEq(tail, 1);
 
         // Check links: 2 -> 1
-        (,, uint64 prev1, uint64 next1) = staking.withdrawalNodes(1);
-        (,, uint64 prev2, uint64 next2) = staking.withdrawalNodes(2);
+        (,, uint64 prev1, uint64 next1) = staking.withdrawalNodes(staker, 1);
+        (,, uint64 prev2, uint64 next2) = staking.withdrawalNodes(staker, 2);
 
         assertEq(prev1, 2);
         assertEq(next1, 0);
@@ -932,7 +932,7 @@ contract StakingTest is Test {
         vm.startPrank(staker);
         staking.stake(validator, stakeAmount);
 
-        vm.expectRevert(Staking.InvalidWithdrawalNode.selector);
+        vm.expectRevert(Staking.InvalidPreviousId.selector);
         staking.initiateWithdrawalAtPosition(validator, 10 ether, 999);
         vm.stopPrank();
     }
@@ -968,7 +968,7 @@ contract StakingTest is Test {
         // Insert at position 0 (head) when queue is empty
         staking.initiateWithdrawalAtPosition(validator, 10 ether, 0);
 
-        (uint64 head, uint64 tail) = staking.withdrawalQueues(staker, validator);
+        (uint64 head, uint64 tail) = staking.withdrawalQueues(staker);
         assertEq(head, 1);
         assertEq(tail, 1);
         vm.stopPrank();
@@ -988,22 +988,23 @@ contract StakingTest is Test {
 
         // Try claiming early
         vm.expectRevert(Staking.NoClaimableWithdrawal.selector);
-        staking.claimWithdrawal(staker, validator);
+        staking.claimWithdrawal(staker);
 
         // Warp to claimable time
         vm.warp(block.timestamp + INITIAL_WITHDRAW_DELAY);
 
         uint256 preBalance = token.balanceOf(staker);
+        (uint64 queueHead,) = staking.withdrawalQueues(staker);
 
         vm.expectEmit(true, true, false, true);
-        emit WithdrawalClaimed(staker, validator, withdrawAmount);
-        staking.claimWithdrawal(staker, validator);
+        emit WithdrawalClaimed(staker, queueHead, withdrawAmount);
+        staking.claimWithdrawal(staker);
 
         assertEq(token.balanceOf(staker), preBalance + withdrawAmount);
         assertEq(staking.totalPendingWithdrawals(), 0);
 
         // Queue should be empty
-        (uint64 head, uint64 tail) = staking.withdrawalQueues(staker, validator);
+        (uint64 head, uint64 tail) = staking.withdrawalQueues(staker);
         assertEq(head, 0);
         assertEq(tail, 0);
 
@@ -1027,24 +1028,24 @@ contract StakingTest is Test {
 
         vm.warp(block.timestamp + INITIAL_WITHDRAW_DELAY - 100); // At W1 claimable time
 
-        staking.claimWithdrawal(staker, validator); // Claims W1
+        staking.claimWithdrawal(staker); // Claims W1
 
         // Queue: W2
 
-        (uint64 head, uint64 tail) = staking.withdrawalQueues(staker, validator);
+        (uint64 head, uint64 tail) = staking.withdrawalQueues(staker);
         assertEq(head, 2); // Head moved to W2
         assertEq(tail, 2);
 
         // Try claim W2 early
         vm.expectRevert(Staking.NoClaimableWithdrawal.selector);
-        staking.claimWithdrawal(staker, validator);
+        staking.claimWithdrawal(staker);
 
         vm.warp(block.timestamp + 100);
-        staking.claimWithdrawal(staker, validator); // Claims W2
+        staking.claimWithdrawal(staker); // Claims W2
 
         // Queue: Empty
 
-        (head, tail) = staking.withdrawalQueues(staker, validator);
+        (head, tail) = staking.withdrawalQueues(staker);
         assertEq(head, 0);
 
         vm.stopPrank();
@@ -1056,7 +1057,7 @@ contract StakingTest is Test {
 
         // No withdrawals initiated
         vm.expectRevert(Staking.WithdrawalQueueEmpty.selector);
-        staking.claimWithdrawal(staker, validator);
+        staking.claimWithdrawal(staker);
 
         vm.stopPrank();
     }
@@ -1076,7 +1077,7 @@ contract StakingTest is Test {
 
         // `other` calls claim for `staker`
         vm.prank(other);
-        staking.claimWithdrawal(staker, validator);
+        staking.claimWithdrawal(staker);
 
         // Tokens go to staker, not caller
         assertEq(token.balanceOf(staker), stakerBalanceBefore + withdrawAmount);
@@ -1097,7 +1098,7 @@ contract StakingTest is Test {
         vm.warp(initiateTime + INITIAL_WITHDRAW_DELAY);
 
         uint256 stakerBalanceBefore = token.balanceOf(staker);
-        staking.claimWithdrawal(staker, validator);
+        staking.claimWithdrawal(staker);
 
         assertEq(token.balanceOf(staker), stakerBalanceBefore + withdrawAmount);
     }
@@ -1231,7 +1232,7 @@ contract StakingTest is Test {
         vm.warp(block.timestamp + INITIAL_WITHDRAW_DELAY);
 
         uint256 balanceBefore = token.balanceOf(staker);
-        staking.claimWithdrawal(staker, validator);
+        staking.claimWithdrawal(staker);
         assertEq(token.balanceOf(staker), balanceBefore + 100 ether);
         vm.stopPrank();
     }
@@ -1257,7 +1258,7 @@ contract StakingTest is Test {
         staking.initiateWithdrawal(validator, 10 ether);
         staking.initiateWithdrawal(validator, 20 ether);
 
-        Staking.WithdrawalInfo[] memory withdrawals = staking.getPendingWithdrawals(staker, validator);
+        Staking.WithdrawalInfo[] memory withdrawals = staking.getPendingWithdrawals(staker);
         assertEq(withdrawals.length, 2);
         assertEq(withdrawals[0].amount, 10 ether);
         assertEq(withdrawals[1].amount, 20 ether);
@@ -1270,13 +1271,13 @@ contract StakingTest is Test {
         staking.stake(validator, stakeAmount);
 
         // Empty queue
-        (uint256 amt, uint256 time) = staking.getNextClaimableWithdrawal(staker, validator);
+        (uint256 amt, uint256 time) = staking.getNextClaimableWithdrawal(staker);
         assertEq(amt, 0);
         assertEq(time, 0);
 
         // One withdrawal
         staking.initiateWithdrawal(validator, 10 ether);
-        (amt, time) = staking.getNextClaimableWithdrawal(staker, validator);
+        (amt, time) = staking.getNextClaimableWithdrawal(staker);
         assertEq(amt, 10 ether);
         assertEq(time, block.timestamp + INITIAL_WITHDRAW_DELAY);
 
@@ -1284,7 +1285,7 @@ contract StakingTest is Test {
     }
 
     function test_GetPendingWithdrawals_EmptyQueue() public view {
-        Staking.WithdrawalInfo[] memory withdrawals = staking.getPendingWithdrawals(staker, validator);
+        Staking.WithdrawalInfo[] memory withdrawals = staking.getPendingWithdrawals(staker);
         assertEq(withdrawals.length, 0);
     }
 
@@ -1300,7 +1301,7 @@ contract StakingTest is Test {
         vm.warp(block.timestamp + 1);
         staking.initiateWithdrawal(validator, 15 ether);
 
-        Staking.WithdrawalInfo[] memory withdrawals = staking.getPendingWithdrawals(staker, validator);
+        Staking.WithdrawalInfo[] memory withdrawals = staking.getPendingWithdrawals(staker);
         assertEq(withdrawals.length, 4);
 
         // Verify ordering by amount (which reflects insertion order here)
@@ -1334,7 +1335,7 @@ contract StakingTest is Test {
         assertEq(staking.totalPendingWithdrawals(), stakeAmount);
 
         vm.warp(block.timestamp + INITIAL_WITHDRAW_DELAY);
-        staking.claimWithdrawal(staker, validator);
+        staking.claimWithdrawal(staker);
 
         // All state should be zeroed
         _assertStakeState(staker, validator, 0, 0, 0);
@@ -1342,7 +1343,7 @@ contract StakingTest is Test {
         assertEq(staking.totalPendingWithdrawals(), 0);
 
         // Queue should be empty
-        (uint64 head, uint64 tail) = staking.withdrawalQueues(staker, validator);
+        (uint64 head, uint64 tail) = staking.withdrawalQueues(staker);
         assertEq(head, 0);
         assertEq(tail, 0);
         vm.stopPrank();

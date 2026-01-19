@@ -20,7 +20,7 @@ contract Staking is Ownable {
      * @custom:param claimableAt The block timestamp when the withdrawal becomes claimable.
      * @custom:param previous The ID of the previous withdrawal in the queue (0 if this node is the head).
      * @custom:param next The ID of the next withdrawal in the queue (0 if this node is the tail).
-     * @dev The withdrawal queue for each staker-validator pair is implemented as a doubly linked list to allow for
+     * @dev The withdrawal queue for each staker is implemented as a doubly linked list to allow for
      *      efficient claims from queue.
      */
     struct WithdrawalNode {
@@ -31,7 +31,7 @@ contract Staking is Ownable {
     }
 
     /**
-     * @notice Tracks the head and tail of the withdrawal queue for a staker-validator pair.
+     * @notice Tracks the head and tail of the withdrawal queue for a staker.
      * @custom:param head The ID of the first withdrawal in the queue (0 if empty).
      * @custom:param tail The ID of the last withdrawal in the queue (0 if empty).
      * @dev This struct points to the start and end of a doubly linked list of WithdrawalNode.
@@ -120,14 +120,14 @@ contract Staking is Ownable {
     mapping(address staker => uint256 totalStake) public totalStakerStakes;
 
     /**
-     * @notice Tracks withdrawal queues: staker => validator => queue.
+     * @notice Tracks withdrawal queues: staker => queue.
      */
-    mapping(address staker => mapping(address validator => WithdrawalQueue queue)) public withdrawalQueues;
+    mapping(address staker => WithdrawalQueue queue) public withdrawalQueues;
 
     /**
-     * @notice Stores all withdrawal nodes by ID.
+     * @notice Stores all withdrawal nodes by staker -> withdrawal ID.
      */
-    mapping(uint64 withdrawalId => WithdrawalNode node) public withdrawalNodes;
+    mapping(address staker => mapping(uint64 withdrawalId => WithdrawalNode node)) public withdrawalNodes;
 
     /**
      * @notice Pending proposal for withdraw delay change.
@@ -167,10 +167,10 @@ contract Staking is Ownable {
     /**
      * @notice Emitted when a withdrawal is claimed after the delay period.
      * @param staker The address of the staker.
-     * @param validator The validator address the withdrawal is claimed from.
+     * @param withdrawalId The unique ID of the withdrawal being claimed.
      * @param amount The amount of tokens claimed.
      */
-    event WithdrawalClaimed(address indexed staker, address indexed validator, uint256 amount);
+    event WithdrawalClaimed(address indexed staker, uint64 indexed withdrawalId, uint256 amount);
 
     // Validator Management
 
@@ -289,9 +289,9 @@ contract Staking is Ownable {
     error InvalidParameter();
 
     /**
-     * @notice Thrown when a specified withdrawal node does not exist.
+     * @notice Thrown when the previous ID doesn't exist.
      */
-    error InvalidWithdrawalNode();
+    error InvalidPreviousId();
 
     /**
      * @notice Thrown when the specified ordering in the withdrawal queue is invalid.
@@ -392,38 +392,39 @@ contract Staking is Ownable {
         (uint64 withdrawalId, uint128 claimableAt) = _initiateWithdrawal(msg.sender, amount, validator);
 
         // Create a withdrawal node.
-        withdrawalNodes[withdrawalId] = WithdrawalNode({amount: amount, claimableAt: claimableAt, previous: 0, next: 0});
+        mapping(uint64 => WithdrawalNode) storage stakerNodes = withdrawalNodes[msg.sender];
+        stakerNodes[withdrawalId] = WithdrawalNode({amount: amount, claimableAt: claimableAt, previous: 0, next: 0});
 
         // Add to the withdrawal queue.
-        WithdrawalQueue storage queue = withdrawalQueues[msg.sender][validator];
+        WithdrawalQueue storage queue = withdrawalQueues[msg.sender];
         // If queue is empty, set head and tail to new node.
         if (queue.head == 0) {
-            withdrawalQueues[msg.sender][validator] = WithdrawalQueue({head: withdrawalId, tail: withdrawalId});
+            withdrawalQueues[msg.sender] = WithdrawalQueue({head: withdrawalId, tail: withdrawalId});
         } else {
             // Check if the claimableAt of the tail is higher than the claimableAt of the new node. If so, traverse
             // backwards to find the correct position.
             uint64 currentId = queue.tail;
-            while (currentId != 0 && withdrawalNodes[currentId].claimableAt > claimableAt) {
-                currentId = withdrawalNodes[currentId].previous;
+            while (currentId != 0 && stakerNodes[currentId].claimableAt > claimableAt) {
+                currentId = stakerNodes[currentId].previous;
             }
             if (currentId == queue.tail) {
                 // Higher chances of this happening in most cases, so check first.
                 // Insert at tail.
-                withdrawalNodes[withdrawalId].previous = queue.tail;
-                withdrawalNodes[queue.tail].next = withdrawalId;
+                stakerNodes[withdrawalId].previous = queue.tail;
+                stakerNodes[queue.tail].next = withdrawalId;
                 queue.tail = withdrawalId;
             } else if (currentId == 0) {
                 // Insert at head.
-                withdrawalNodes[withdrawalId].next = queue.head;
-                withdrawalNodes[queue.head].previous = withdrawalId;
+                stakerNodes[withdrawalId].next = queue.head;
+                stakerNodes[queue.head].previous = withdrawalId;
                 queue.head = withdrawalId;
             } else {
                 // Insert in the middle.
-                uint64 nextId = withdrawalNodes[currentId].next;
-                withdrawalNodes[withdrawalId].previous = currentId;
-                withdrawalNodes[withdrawalId].next = nextId;
-                withdrawalNodes[currentId].next = withdrawalId;
-                withdrawalNodes[nextId].previous = withdrawalId;
+                uint64 nextId = stakerNodes[currentId].next;
+                stakerNodes[withdrawalId].previous = currentId;
+                stakerNodes[withdrawalId].next = nextId;
+                stakerNodes[currentId].next = withdrawalId;
+                stakerNodes[nextId].previous = withdrawalId;
             }
         }
     }
@@ -443,70 +444,70 @@ contract Staking is Ownable {
         (uint64 withdrawalId, uint128 claimableAt) = _initiateWithdrawal(msg.sender, amount, validator);
 
         uint64 nextId;
+        mapping(uint64 => WithdrawalNode) storage stakerNodes = withdrawalNodes[msg.sender];
         // Check if the IDs are correct and claimableAt ordering is correct.
         if (previousId == 0) {
             // Inserting at head - get the current head as nextId.
-            nextId = withdrawalQueues[msg.sender][validator].head;
+            nextId = withdrawalQueues[msg.sender].head;
         } else {
-            require(withdrawalNodes[previousId].claimableAt > 0, InvalidWithdrawalNode());
-            require(withdrawalNodes[previousId].claimableAt <= claimableAt, InvalidOrdering());
+            require(stakerNodes[previousId].claimableAt > 0, InvalidPreviousId());
+            require(stakerNodes[previousId].claimableAt <= claimableAt, InvalidOrdering());
 
-            nextId = withdrawalNodes[previousId].next;
+            nextId = stakerNodes[previousId].next;
         }
 
         // Validate ordering if queue is not empty.
         if (nextId != 0) {
-            require(withdrawalNodes[nextId].claimableAt >= claimableAt, InvalidOrdering());
+            require(stakerNodes[nextId].claimableAt >= claimableAt, InvalidOrdering());
         }
 
         // Create a withdrawal node.
-        withdrawalNodes[withdrawalId] =
+        stakerNodes[withdrawalId] =
             WithdrawalNode({amount: amount, claimableAt: claimableAt, previous: previousId, next: nextId});
 
         // Update previous and next nodes.
         if (previousId != 0) {
-            withdrawalNodes[previousId].next = withdrawalId;
+            stakerNodes[previousId].next = withdrawalId;
         } else {
             // Inserting at head.
-            withdrawalQueues[msg.sender][validator].head = withdrawalId;
+            withdrawalQueues[msg.sender].head = withdrawalId;
         }
 
         if (nextId != 0) {
-            withdrawalNodes[nextId].previous = withdrawalId;
+            stakerNodes[nextId].previous = withdrawalId;
         } else {
             // Inserting at tail.
-            withdrawalQueues[msg.sender][validator].tail = withdrawalId;
+            withdrawalQueues[msg.sender].tail = withdrawalId;
         }
     }
 
     /**
      * @notice Claim a pending withdrawal after the delay period has passed.
      * @param staker The address that initiated the withdrawal.
-     * @param validator The validator address to claim from.
      * @dev This function processes the first withdrawal in the queue (the "head" of the linked list). It verifies that
      *      the `withdrawDelay` has passed. Upon success, it removes the withdrawal node from the queue, updates the
      *      queue's head to the next node, and transfers the staked tokens back to the staker.
      */
-    function claimWithdrawal(address staker, address validator) external {
-        WithdrawalQueue memory queue = withdrawalQueues[staker][validator];
-        require(queue.head != 0, WithdrawalQueueEmpty());
+    function claimWithdrawal(address staker) external {
+        uint64 queueHead = withdrawalQueues[staker].head;
+        require(queueHead != 0, WithdrawalQueueEmpty());
 
-        WithdrawalNode memory node = withdrawalNodes[queue.head];
+        WithdrawalNode memory node = withdrawalNodes[staker][queueHead];
         require(block.timestamp >= node.claimableAt, NoClaimableWithdrawal());
 
         uint256 amount = node.amount;
 
         if (node.next == 0) {
             // Queue is now empty.
-            withdrawalQueues[staker][validator] = WithdrawalQueue({head: 0, tail: 0});
+            withdrawalQueues[staker] = WithdrawalQueue({head: 0, tail: 0});
         } else {
-            withdrawalQueues[staker][validator].head = node.next;
-            withdrawalNodes[node.next].previous = 0;
+            withdrawalQueues[staker].head = node.next;
+            withdrawalNodes[staker][node.next].previous = 0;
         }
 
-        delete withdrawalNodes[queue.head];
+        delete withdrawalNodes[staker][queueHead];
         totalPendingWithdrawals -= amount;
-        emit WithdrawalClaimed(staker, validator, amount);
+        emit WithdrawalClaimed(staker, queueHead, amount);
 
         SAFE_TOKEN.safeTransfer(staker, amount);
     }
@@ -625,13 +626,12 @@ contract Staking is Ownable {
     // ============================================================
 
     /**
-     * @notice Get all pending withdrawals for a staker-validator pair.
+     * @notice Get all pending withdrawals for a staker pair.
      * @param staker The staker address.
-     * @param validator The validator address.
      * @return An array of withdrawal info.
      */
-    function getPendingWithdrawals(address staker, address validator) external view returns (WithdrawalInfo[] memory) {
-        WithdrawalQueue memory queue = withdrawalQueues[staker][validator];
+    function getPendingWithdrawals(address staker) external view returns (WithdrawalInfo[] memory) {
+        WithdrawalQueue memory queue = withdrawalQueues[staker];
         if (queue.head == 0) {
             return new WithdrawalInfo[](0);
         }
@@ -641,14 +641,14 @@ contract Staking is Ownable {
         uint64 currentId = queue.head;
         while (currentId != 0) {
             count++;
-            currentId = withdrawalNodes[currentId].next;
+            currentId = withdrawalNodes[staker][currentId].next;
         }
 
         // Populate the withdrawals array.
         WithdrawalInfo[] memory withdrawals = new WithdrawalInfo[](count);
         currentId = queue.head;
         for (uint256 i = 0; i < count; i++) {
-            WithdrawalNode memory node = withdrawalNodes[currentId];
+            WithdrawalNode memory node = withdrawalNodes[staker][currentId];
             withdrawals[i] = WithdrawalInfo({amount: node.amount, claimableAt: node.claimableAt});
             currentId = node.next;
         }
@@ -657,23 +657,18 @@ contract Staking is Ownable {
     }
 
     /**
-     * @notice Get the next claimable withdrawal for a staker-validator pair.
+     * @notice Get the next claimable withdrawal for a staker pair.
      * @param staker The staker address.
-     * @param validator The validator address.
      * @return amount The withdrawal amount.
      * @return claimableAt The timestamp when claimable.
      */
-    function getNextClaimableWithdrawal(address staker, address validator)
-        external
-        view
-        returns (uint256 amount, uint256 claimableAt)
-    {
-        WithdrawalQueue memory queue = withdrawalQueues[staker][validator];
+    function getNextClaimableWithdrawal(address staker) external view returns (uint256 amount, uint256 claimableAt) {
+        WithdrawalQueue memory queue = withdrawalQueues[staker];
         if (queue.head == 0) {
             return (0, 0);
         }
 
-        WithdrawalNode memory node = withdrawalNodes[queue.head];
+        WithdrawalNode memory node = withdrawalNodes[staker][queue.head];
         return (node.amount, node.claimableAt);
     }
 
