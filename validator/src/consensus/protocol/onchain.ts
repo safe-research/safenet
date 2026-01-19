@@ -47,7 +47,6 @@ export class OnchainProtocol extends BaseProtocol {
 	#consensus: Address;
 	#coordinator: Address;
 	#logger: Logger;
-	#txStatusPollingSeconds: number;
 	#timeBeforeResubmitSeconds: number;
 
 	constructor({
@@ -58,7 +57,6 @@ export class OnchainProtocol extends BaseProtocol {
 		queue,
 		txStorage,
 		logger,
-		txStatusPollingSeconds,
 		timeBeforeResubmitSeconds,
 	}: {
 		publicClient: PublicClient;
@@ -68,7 +66,6 @@ export class OnchainProtocol extends BaseProtocol {
 		queue: Queue<ActionWithTimeout>;
 		txStorage: TransactionStorage;
 		logger: Logger;
-		txStatusPollingSeconds?: number;
 		timeBeforeResubmitSeconds?: number;
 	}) {
 		super(queue, logger);
@@ -78,8 +75,6 @@ export class OnchainProtocol extends BaseProtocol {
 		this.#consensus = consensus;
 		this.#coordinator = coordinator;
 		this.#logger = logger;
-		// By default polling is disabled
-		this.#txStatusPollingSeconds = txStatusPollingSeconds ?? 0;
 		// By default it should be 1 block (falling back to eth mainnet blocktime)
 		this.#timeBeforeResubmitSeconds = timeBeforeResubmitSeconds ?? (publicClient.chain?.blockTime ?? 12000) / 1000;
 		this.checkPendingActions();
@@ -131,10 +126,6 @@ export class OnchainProtocol extends BaseProtocol {
 			}
 		} catch (error) {
 			this.#logger.error("Error while checking pending transactions.", { error });
-		} finally {
-			if (this.#txStatusPollingSeconds > 0) {
-				setTimeout(() => this.checkPendingActions(), this.#txStatusPollingSeconds * 1000);
-			}
 		}
 	}
 
