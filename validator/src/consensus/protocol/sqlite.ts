@@ -186,7 +186,8 @@ export class SqliteTxStorage implements TransactionStorage {
 				nonce INTEGER PRIMARY KEY,
 				transactionJson TEXT NOT NULL,
 				transactionHash TEXT DEFAULT NULL,
-				createdAt DATETIME DEFAULT (unixepoch())
+				createdAt DATETIME DEFAULT (unixepoch()),
+				submittedAt INTEGER DEFAULT NULL
 			);
 		`);
 	}

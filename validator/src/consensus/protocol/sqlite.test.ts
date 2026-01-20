@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import path from "node:path";
 import Sqlite3 from "better-sqlite3";
 import { entryPoint06Address } from "viem/account-abstraction";
 import { describe, expect, it } from "vitest";
@@ -20,6 +22,84 @@ describe("protocol - sqlite", () => {
 				expect(storage.pop()).toStrictEqual(actionWithTimeout);
 			}
 			expect(storage.peek()).toBeUndefined();
+		});
+	});
+
+	describe("SqliteTxStorage Migration", () => {
+		it("should succesfully migrate db", () => {
+			const db = new Sqlite3(":memory:");
+			// Original Table
+			db.exec(`
+				CREATE TABLE IF NOT EXISTS transaction_storage (
+					nonce INTEGER PRIMARY KEY,
+					transactionJson TEXT NOT NULL,
+					transactionHash TEXT DEFAULT NULL,
+					createdAt DATETIME DEFAULT (unixepoch())
+				);
+			`);
+			const migrationPath = path.join(__dirname, "..", "..", "..", "migrations", "1_add_submitted_at.sql");
+			const migrationSql = readFileSync(migrationPath, "utf-8");
+			expect(() => {
+				db.exec(migrationSql);
+			}).not.toThrow();
+			const columns = db.pragma("table_info(transaction_storage)") as Array<{ name: string }>;
+			expect(columns).toStrictEqual([
+				{
+					cid: 0,
+					dflt_value: null,
+					notnull: 0,
+					pk: 1,
+					name: "nonce",
+					type: "INTEGER",
+				},
+				{
+					cid: 1,
+					dflt_value: null,
+					notnull: 1,
+					pk: 0,
+					name: "transactionJson",
+					type: "TEXT",
+				},
+				{
+					cid: 2,
+					dflt_value: "NULL",
+					notnull: 0,
+					pk: 0,
+					name: "transactionHash",
+					type: "TEXT",
+				},
+				{
+					cid: 3,
+					dflt_value: "unixepoch()",
+					notnull: 0,
+					pk: 0,
+					name: "createdAt",
+					type: "DATETIME",
+				},
+				{
+					cid: 4,
+					dflt_value: "NULL",
+					notnull: 0,
+					pk: 0,
+					name: "submittedAt",
+					type: "INTEGER",
+				},
+			]);
+
+			// Check that it works with tx storage operations
+			const storage = new SqliteTxStorage(db);
+			expect(storage.pending(0)).toStrictEqual([]);
+		});
+
+		it("should throw on mihrated db", () => {
+			const db = new Sqlite3(":memory:");
+			// Will create db with latest schema
+			new SqliteTxStorage(db);
+			const migrationPath = path.join(__dirname, "..", "..", "..", "migrations", "1_add_submitted_at.sql");
+			const migrationSql = readFileSync(migrationPath, "utf-8");
+			expect(() => {
+				db.exec(migrationSql);
+			}).toThrow();
 		});
 	});
 
