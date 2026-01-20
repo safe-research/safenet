@@ -172,7 +172,6 @@ const txStorageSchema = z
 			.transform((arg) => JSON.parse(arg))
 			.pipe(ethTxSchema),
 		transactionHash: z.union([hexDataSchema, z.null()]),
-		createdAt: z.number(),
 	})
 	.array();
 
@@ -230,7 +229,7 @@ export class SqliteTxStorage implements TransactionStorage {
 
 	submittedUpTo(blockNumber: bigint): (EthTransactionData & { nonce: number; hash: Hex | null })[] {
 		const pendingTxsStmt = this.#db.prepare(`
-			SELECT * FROM transaction_storage 
+			SELECT nonce, transactionJson, transactionHash FROM transaction_storage 
 			WHERE submittedAt <= ?;
 		`);
 		const pendingTxsResult = pendingTxsStmt.all(blockNumber);

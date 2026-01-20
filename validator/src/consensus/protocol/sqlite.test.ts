@@ -90,7 +90,7 @@ describe("protocol - sqlite", () => {
 			expect(storage.submittedUpTo(0n)).toStrictEqual([]);
 		});
 
-		it("should throw on mihrated db", () => {
+		it("should throw on migrated db", () => {
 			const db = new Sqlite3(":memory:");
 			// Will create db with latest schema
 			new SqliteTxStorage(db);

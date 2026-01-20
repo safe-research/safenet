@@ -100,7 +100,7 @@ export class OnchainProtocol extends BaseProtocol {
 			// If the blocksBeforeResubmit is 1 block, these transactions will only be retried on the next block
 			const newPendingTxs = this.#txStorage.setSubmittedForPending(blockNumber);
 			if (newPendingTxs > 0) {
-				this.#logger.debug(`Marked ${newPendingTxs} transactions as pending since block ${blockNumber - 1n}`);
+				this.#logger.debug(`Marked ${newPendingTxs} transactions as submitted at block ${blockNumber}`);
 			}
 			const currentNonce = await this.#publicClient.getTransactionCount({
 				address: this.#signingClient.account.address,
