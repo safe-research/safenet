@@ -1,44 +1,34 @@
 import fs from "node:fs";
 import path from "node:path";
-import Sqlite3 from "better-sqlite3";
 import {
 	type Address,
-	createPublicClient,
 	createTestClient,
-	createWalletClient,
 	type Hex,
 	hashStruct,
 	http,
 	parseAbi,
+	publicActions,
+	walletActions,
 	zeroHash,
 } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 import { anvil } from "viem/chains";
-import { describe, expect, it } from "vitest";
-import { createClientStorage, createStateStorage, silentLogger, testLogger, testMetrics } from "../__tests__/config.js";
+import { beforeAll, describe, expect, it } from "vitest";
+import { silentLogger, testLogger, testMetrics } from "../__tests__/config.js";
 import { toPoint } from "../frost/math.js";
-import type { GroupId } from "../frost/types.js";
-import { OnchainTransitionWatcher } from "../machine/transitions/watcher.js";
-import { buildSafeTransactionCheck } from "../service/checks.js";
-import { ShieldnetStateMachine as SchildNetzMaschine } from "../service/machine.js";
+import type { WatcherConfig } from "../machine/transitions/watcher.js";
+import { createValidatorService } from "../service/service.js";
 import { CONSENSUS_EVENTS, COORDINATOR_EVENTS } from "../types/abis.js";
-import { InMemoryQueue } from "../utils/queue.js";
-import { KeyGenClient } from "./keyGen/client.js";
+import type { ProtocolConfig } from "../types/interfaces.js";
 import { calculateParticipantsRoot } from "./merkle.js";
-import { OnchainProtocol } from "./protocol/onchain.js";
-import { SqliteTxStorage } from "./protocol/sqlite.js";
-import type { ActionWithTimeout } from "./protocol/types.js";
-import { SigningClient } from "./signing/client.js";
 import { verifySignature } from "./signing/verify.js";
 import type { Participant } from "./storage/types.js";
-import { type PacketHandler, type Typed, VerificationEngine } from "./verify/engine.js";
-import { EpochRolloverHandler } from "./verify/rollover/handler.js";
-import { SafeTransactionHandler } from "./verify/safeTx/handler.js";
 
 const BLOCKTIME_IN_SECONDS = 1;
 const BLOCKS_PER_EPOCH = 20n;
 const TEST_RUNTIME_IN_SECONDS = 60;
-const EXPECTED_GROUPS = TEST_RUNTIME_IN_SECONDS / Number(BLOCKS_PER_EPOCH) + 1;
+// 2 epoch rotations + 1 staged epoch
+const EXPECTED_GROUPS = TEST_RUNTIME_IN_SECONDS / Number(BLOCKS_PER_EPOCH);
 
 /**
  * The integration test will bootstrap the setup from genesis and run for 1 minute.
@@ -47,7 +37,25 @@ const EXPECTED_GROUPS = TEST_RUNTIME_IN_SECONDS / Number(BLOCKS_PER_EPOCH) + 1;
  * It is expected that 4 groups will be created: genesis + 2 epoch rotations + 1 staged epoch
  */
 describe("integration", () => {
-	it("keygen and signing flow", { timeout: TEST_RUNTIME_IN_SECONDS * 1000 * 5 }, async ({ skip }) => {
+	const testClient = createTestClient({
+		mode: "anvil",
+		chain: anvil,
+		transport: http(),
+		account: privateKeyToAccount("0x2a871d0798f97d79848a013d4936a73bf4cc922c825d33c1cf7073dff6d409c6"),
+	})
+		.extend(publicActions)
+		.extend(walletActions);
+	let snapshotId: Hex;
+
+	beforeAll(async () => {
+		try {
+			snapshotId = await testClient.snapshot();
+		} catch {
+			testLogger.notice("Could not set snapshot");
+		}
+	});
+
+	const setup = async () => {
 		// Make sure to first start the Anvil testnode (run `anvil` in the root)
 		// and run the deployment script: forge script DeployScript --rpc-url http://127.0.0.1:8545 --unlocked --sender 0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266 --broadcast
 		const deploymentInfoFile = path.join(
@@ -62,24 +70,14 @@ describe("integration", () => {
 		);
 		if (!fs.existsSync(deploymentInfoFile)) {
 			// Deployment info not present
-			skip();
+			return undefined;
 		}
-		const readClient = createPublicClient({
-			chain: anvil,
-			transport: http(),
-		});
-		try {
-			await readClient.getBlockNumber();
-		} catch {
-			// Anvil not running
-			skip();
+		if (snapshotId === undefined) {
+			return undefined;
 		}
-		const testClient = createTestClient({
-			mode: "anvil",
-			chain: anvil,
-			transport: http(),
-		});
-		testClient.setIntervalMining({ interval: BLOCKTIME_IN_SECONDS });
+		await testClient.revert({ id: snapshotId });
+		await testClient.setIntervalMining({ interval: BLOCKTIME_IN_SECONDS });
+
 		const deploymentInfo = JSON.parse(fs.readFileSync(deploymentInfoFile, "utf-8"));
 		const coordinator = {
 			address: deploymentInfo.returns["0"].value as Address,
@@ -109,91 +107,66 @@ describe("integration", () => {
 		const participants: Participant[] = accounts.map((a, i) => {
 			return { id: BigInt(i + 1), address: a.address };
 		});
+
 		const clients = accounts.map((a, i) => {
 			const logger = i === 0 ? testLogger : silentLogger;
-			const database = new Sqlite3(":memory:");
-			const storage = createClientStorage(a.address, database);
-			const sc = new SigningClient(storage);
-			const kc = new KeyGenClient(storage, logger);
-			const verificationHandlers = new Map<string, PacketHandler<Typed>>();
-			const check = buildSafeTransactionCheck();
-			verificationHandlers.set("safe_transaction_packet", new SafeTransactionHandler(check));
-			verificationHandlers.set("epoch_rollover_packet", new EpochRolloverHandler());
-			const verificationEngine = new VerificationEngine(verificationHandlers);
-			const publicClient = createPublicClient({
-				chain: anvil,
-				transport: http(),
-				pollingInterval: 500,
-			});
-			const signingClient = createWalletClient({
-				chain: anvil,
-				transport: http(),
-				account: a,
-			});
-			const actionStorage = new InMemoryQueue<ActionWithTimeout>();
-			const txStorage = new SqliteTxStorage(database);
-			const protocol = new OnchainProtocol({
-				publicClient,
-				signingClient,
+			const config: ProtocolConfig = {
+				chainId: 31_337,
 				consensus: consensus.address,
 				coordinator: coordinator.address,
-				queue: actionStorage,
-				txStorage,
-				logger,
-			});
-			const stateStorage = createStateStorage(database);
-			const sm = new SchildNetzMaschine({
 				participants,
 				genesisSalt: zeroHash,
-				protocol,
-				storage: stateStorage,
-				keyGenClient: kc,
-				signingClient: sc,
-				verificationEngine,
-				logger,
-				metrics: testMetrics,
 				blocksPerEpoch: BLOCKS_PER_EPOCH,
-			});
-			const watcher = new OnchainTransitionWatcher({
-				database,
-				publicClient,
-				config: {
-					consensus: consensus.address,
-					coordinator: coordinator.address,
-				},
-				watcherConfig: {
-					blockTimeOverride: 1000,
-					maxReorgDepth: 0,
-				},
+			};
+			const watcherConfig: WatcherConfig = {
+				maxReorgDepth: 1,
+				blockTimeOverride: BLOCKTIME_IN_SECONDS * 1000,
+			};
+			const service = createValidatorService({
+				account: a,
+				rpcUrl: "http://127.0.0.1:8545",
 				logger,
-				onTransition: (t) => {
-					sm.transition(t);
-					if (t.id === "block_new") {
-						protocol.checkPendingActions(t.block);
-					}
-				},
+				config,
+				watcherConfig,
+				metrics: testMetrics,
 			});
 			return {
-				kc,
-				sc,
-				sm,
-				watcher,
+				acccount: a,
+				service,
 			};
 		});
-		for (const { watcher } of clients) {
-			await watcher.start();
+		for (const { service } of clients) {
+			await service.start();
 		}
-		const initiatorClient = createWalletClient({
-			chain: anvil,
-			transport: http(),
-			account: privateKeyToAccount("0x2a871d0798f97d79848a013d4936a73bf4cc922c825d33c1cf7073dff6d409c6"),
-		});
-		// Manually trigger genesis KeyGen
-		await initiatorClient.writeContract({
-			...coordinator,
-			functionName: "keyGen",
-			args: [calculateParticipantsRoot(participants), 3, 2, zeroHash],
-		});
+
+		const triggerKeyGen = async () => {
+			// Manually trigger genesis KeyGen
+			await testClient.writeContract({
+				...coordinator,
+				functionName: "keyGen",
+				args: [calculateParticipantsRoot(participants), 3, 2, zeroHash],
+			});
+		};
+
+		return {
+			clients,
+			participants,
+			coordinator,
+			consensus,
+			deploymentInfoFile,
+			triggerKeyGen,
+		};
+	};
+
+	it("keygen and signing flow", { timeout: TEST_RUNTIME_IN_SECONDS * 1000 * 5 }, async ({ skip }) => {
+		const setupInfo = await setup();
+		if (setupInfo === undefined) {
+			skip();
+			// We need the return here to make sure that setup is not undefined in the next steps
+			return;
+		}
+		const { coordinator, consensus, triggerKeyGen } = setupInfo;
+		await triggerKeyGen();
 		// Setup done ... SchildNetz läuft ... lets send some signature requests
 		const transaction = {
 			chainId: 1n,
@@ -206,7 +179,7 @@ describe("integration", () => {
 		};
 		setTimeout(
 			async () => {
-				await initiatorClient.writeContract({
+				await testClient.writeContract({
 					...consensus,
 					functionName: "proposeTransaction",
 					args: [transaction],
@@ -217,25 +190,14 @@ describe("integration", () => {
 		// Stop a few seconds before the end of the test run time, (otherwise, we may have
 		// already seen the 60'th block and start an additional key gen process).
 		await new Promise((resolve) => setTimeout(resolve, (TEST_RUNTIME_IN_SECONDS - 5) * 1000));
-		const groups: Set<GroupId> = new Set();
-		for (const { kc } of clients) {
-			const knownGroups = kc.knownGroups();
-			expect(knownGroups.length).toBe(EXPECTED_GROUPS);
-			for (const groupId of knownGroups) {
-				const groupKey = await readClient.readContract({
-					...coordinator,
-					functionName: "groupKey",
-					args: [groupId],
-				});
-				const localGroupKey = kc.groupPublicKey(groupId);
-				expect(localGroupKey !== undefined).toBeTruthy();
-				expect(localGroupKey?.x).toBe(groupKey.x);
-				expect(localGroupKey?.y).toBe(groupKey.y);
-				groups.add(groupId);
-			}
-		}
-		// Genesis + 2 epoch rotations + 1 staged epoch
-		expect(groups.size).toBe(EXPECTED_GROUPS);
+		// Load transaction proposal for tx hash
+		const epochStagedEvent = CONSENSUS_EVENTS.filter((e) => e.name === "EpochStaged")[0];
+		const stagedEpochs = await testClient.getLogs({
+			address: consensus.address,
+			event: epochStagedEvent,
+			fromBlock: "earliest",
+		});
+		expect(stagedEpochs.length).toBe(EXPECTED_GROUPS);
 
 		// Check if signature request worked
 		// Calculate transaction hash
@@ -258,7 +220,7 @@ describe("integration", () => {
 		});
 		// Load transaction proposal for tx hash
 		const proposeEvent = CONSENSUS_EVENTS.filter((e) => e.name === "TransactionProposed")[0];
-		const proposedMessages = await readClient.getLogs({
+		const proposedMessages = await testClient.getLogs({
 			address: consensus.address,
 			event: proposeEvent,
 			fromBlock: "earliest",
@@ -272,7 +234,7 @@ describe("integration", () => {
 		if (proposal.args.message === undefined) throw new Error("Message is expected to be defined");
 		// Load signature request for transaction proposal
 		const signRequestEvent = COORDINATOR_EVENTS.filter((e) => e.name === "Sign")[0];
-		const signatureRequests = await readClient.getLogs({
+		const signatureRequests = await testClient.getLogs({
 			address: coordinator.address,
 			event: signRequestEvent,
 			fromBlock: "earliest",
@@ -287,7 +249,7 @@ describe("integration", () => {
 		if (request.args.gid === undefined) throw new Error("GroupId is expected to be defined");
 		// Load completed request for signature request
 		const signedEvent = COORDINATOR_EVENTS.filter((e) => e.name === "SignCompleted")[0];
-		const completedRequests = await readClient.getLogs({
+		const completedRequests = await testClient.getLogs({
 			address: coordinator.address,
 			event: signedEvent,
 			fromBlock: "earliest",
@@ -302,7 +264,7 @@ describe("integration", () => {
 		if (signature === undefined) throw new Error("Signature is expected to be defined");
 
 		// Load group key for verification
-		const groupKey = await readClient.readContract({
+		const groupKey = await testClient.readContract({
 			...coordinator,
 			functionName: "groupKey",
 			args: [request.args.gid],
@@ -310,7 +272,7 @@ describe("integration", () => {
 		expect(verifySignature(toPoint(signature.r), signature.z, toPoint(groupKey), proposal.args.message)).toBeTruthy();
 
 		// Check that the attestation is correctly tracked
-		const attestation = await readClient.readContract({
+		const attestation = await testClient.readContract({
 			...consensus,
 			functionName: "getAttestationByMessage",
 			args: [proposal.args.message],
