@@ -172,7 +172,6 @@ const txStorageSchema = z
 			.transform((arg) => JSON.parse(arg))
 			.pipe(ethTxSchema),
 		transactionHash: z.union([hexDataSchema, z.null()]),
-		createdAt: z.number(),
 	})
 	.array();
 
@@ -186,7 +185,8 @@ export class SqliteTxStorage implements TransactionStorage {
 				nonce INTEGER PRIMARY KEY,
 				transactionJson TEXT NOT NULL,
 				transactionHash TEXT DEFAULT NULL,
-				createdAt DATETIME DEFAULT (unixepoch())
+				createdAt DATETIME DEFAULT (unixepoch()),
+				submittedAt INTEGER DEFAULT NULL
 			);
 		`);
 	}
@@ -217,12 +217,22 @@ export class SqliteTxStorage implements TransactionStorage {
 		updateStmt.run(txHash, nonce);
 	}
 
-	pending(createdDiff: number): (EthTransactionData & { nonce: number; hash: Hex | null })[] {
-		const pendingTxsStmt = this.#db.prepare(`
-			SELECT * FROM transaction_storage 
-			WHERE createdAt <= (unixepoch() - ?);
+	setSubmittedForPending(blockNumber: bigint): number {
+		const updateStmt = this.#db.prepare(`
+			UPDATE transaction_storage
+			SET submittedAt = ?
+			WHERE submittedAt IS NULL;
 		`);
-		const pendingTxsResult = pendingTxsStmt.all(createdDiff);
+		const result = updateStmt.run(blockNumber);
+		return result.changes;
+	}
+
+	submittedUpTo(blockNumber: bigint): (EthTransactionData & { nonce: number; hash: Hex | null })[] {
+		const pendingTxsStmt = this.#db.prepare(`
+			SELECT nonce, transactionJson, transactionHash FROM transaction_storage 
+			WHERE submittedAt <= ?;
+		`);
+		const pendingTxsResult = pendingTxsStmt.all(blockNumber);
 		const pendingTxs = txStorageSchema.parse(pendingTxsResult);
 		return pendingTxs.map((tx) => {
 			return {

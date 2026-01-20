@@ -38,7 +38,8 @@ export interface TransactionStorage {
 	setHash(nonce: number, txHash: Hex): void;
 	setExecuted(nonce: number): void;
 	setAllBeforeAsExecuted(nonce: number): number;
-	pending(createdDiff: number): (EthTransactionData & { nonce: number; hash: Hex | null })[];
+	setSubmittedForPending(blockNumber: bigint): number;
+	submittedUpTo(blockNumber: bigint): (EthTransactionData & { nonce: number; hash: Hex | null })[];
 }
 
 export class OnchainProtocol extends BaseProtocol {
@@ -48,7 +49,7 @@ export class OnchainProtocol extends BaseProtocol {
 	#consensus: Address;
 	#coordinator: Address;
 	#logger: Logger;
-	#timeBeforeResubmitSeconds: number;
+	#blocksBeforeResubmit: bigint;
 
 	constructor({
 		publicClient,
@@ -58,7 +59,7 @@ export class OnchainProtocol extends BaseProtocol {
 		queue,
 		txStorage,
 		logger,
-		timeBeforeResubmitSeconds,
+		blocksBeforeResubmit,
 	}: {
 		publicClient: PublicClient;
 		signingClient: WalletClient<Transport, Chain, Account>;
@@ -67,7 +68,7 @@ export class OnchainProtocol extends BaseProtocol {
 		queue: Queue<ActionWithTimeout>;
 		txStorage: TransactionStorage;
 		logger: Logger;
-		timeBeforeResubmitSeconds?: number;
+		blocksBeforeResubmit?: bigint;
 	}) {
 		super(queue, logger);
 		this.#publicClient = publicClient;
@@ -76,9 +77,7 @@ export class OnchainProtocol extends BaseProtocol {
 		this.#consensus = consensus;
 		this.#coordinator = coordinator;
 		this.#logger = logger;
-		// By default it should be 1 block (falling back to eth mainnet blocktime)
-		this.#timeBeforeResubmitSeconds = timeBeforeResubmitSeconds ?? (publicClient.chain?.blockTime ?? 12000) / 1000;
-		this.checkPendingActions();
+		this.#blocksBeforeResubmit = blocksBeforeResubmit ?? 1n;
 	}
 
 	chainId(): bigint {
@@ -94,8 +93,15 @@ export class OnchainProtocol extends BaseProtocol {
 		return this.#coordinator;
 	}
 
-	async checkPendingActions() {
+	async checkPendingActions(blockNumber: bigint) {
 		try {
+			// For transaction without a submission block set it to this block
+			// This assumes that the transaction should be included in this block
+			// If the blocksBeforeResubmit is 1 block, these transactions will only be retried on the next block
+			const newPendingTxs = this.#txStorage.setSubmittedForPending(blockNumber);
+			if (newPendingTxs > 0) {
+				this.#logger.debug(`Marked ${newPendingTxs} transactions as submitted at block ${blockNumber}`);
+			}
 			const currentNonce = await this.#publicClient.getTransactionCount({
 				address: this.#signingClient.account.address,
 				blockTag: "latest",
@@ -104,8 +110,7 @@ export class OnchainProtocol extends BaseProtocol {
 			if (executedTxs > 0) {
 				this.#logger.debug(`Marked ${executedTxs} transactions as executed`);
 			}
-			// We will only mark transaction as executed when get to the point of deciding if we need to resubmit them
-			const pendingTxs = this.#txStorage.pending(this.#timeBeforeResubmitSeconds);
+			const pendingTxs = this.#txStorage.submittedUpTo(blockNumber - this.#blocksBeforeResubmit);
 			for (const tx of pendingTxs) {
 				// If we don't find the transaction or it has no blockHash then we resubmit it
 				this.#logger.debug(`Resubmit transaction for ${tx.nonce}!`, tx);
@@ -117,7 +122,7 @@ export class OnchainProtocol extends BaseProtocol {
 						// Nonce error might be nested as cause error
 						(error instanceof TransactionExecutionError && error.cause instanceof NonceTooLowError)
 					) {
-						this.#logger.warn(`Nonce already used. Dropping pending transaction for ${tx.nonce}!`, { error });
+						this.#logger.info(`Nonce already used. Marking transaction with nonce ${tx.nonce} as executed!`, { error });
 						this.#txStorage.setExecuted(tx.nonce);
 						continue;
 					}

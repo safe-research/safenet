@@ -106,7 +106,7 @@ export class ValidatorService {
 				this.#stateMachine.transition(t);
 				// If we get a new block check pending actions
 				if (t.id === "block_new") {
-					protocol.checkPendingActions();
+					protocol.checkPendingActions(t.block);
 				}
 			},
 		});

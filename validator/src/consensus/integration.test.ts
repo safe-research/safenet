@@ -169,7 +169,7 @@ describe("integration", () => {
 				onTransition: (t) => {
 					sm.transition(t);
 					if (t.id === "block_new") {
-						protocol.checkPendingActions();
+						protocol.checkPendingActions(t.block);
 					}
 				},
 			});
