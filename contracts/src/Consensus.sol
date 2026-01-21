@@ -258,6 +258,25 @@ contract Consensus is IFROSTCoordinatorCallback {
         group = $groups[epoch];
     }
 
+    /**
+     * @notice Gets the current epochs (previous, active, staged).
+     * @return epochs The current active epoch.
+     */
+    function getCurrentEpochs() external view returns (Epochs memory epochs) {
+        (epochs,) = _epochsWithRollover();
+    }
+
+    /**
+     * @notice Gets the group info for a specific epoch
+     * @param epoch The epoch for which the group should be retrieved
+     * @return group The FROST group ID for the active epoch.
+     * @return groupKey The FROST group ID for the active epoch.
+     */
+    function getEpochGroup(uint64 epoch) external view returns (FROSTGroupId.T group, Secp256k1.Point memory groupKey) {
+        group = $groups[epoch];
+        groupKey = _COORDINATOR.groupKey(group);
+    }
+
     // ============================================================
     // EXTERNAL AND PUBLIC STATE-CHANGING FUNCTIONS
     // ============================================================
