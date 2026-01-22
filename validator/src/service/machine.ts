@@ -315,6 +315,7 @@ export class ShieldnetStateMachine {
 					this.#machineConfig,
 					this.#protocol,
 					this.#verificationEngine,
+					this.#signingClient,
 					consensusState,
 					transition,
 					this.#logger.info,
