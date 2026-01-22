@@ -405,6 +405,7 @@ describe("integration", () => {
 		const request = signatureRequests[0];
 		expect(request.args.initiator).toBe(consensus.address);
 		expect(request.args.sid).toBeDefined();
+		expect(request.args.gid).toBeDefined();
 		// Load completed request for signature request
 		const signedEvent = COORDINATOR_EVENTS.filter((e) => e.name === "SignCompleted")[0];
 		const completedRequests = await testClient.getLogs({
