@@ -344,9 +344,8 @@ describe("integration", () => {
 			functionName: "proposeTransaction",
 			args: [transaction],
 		});
-		// Stop a few seconds before the end of the test run time, (otherwise, we may have
-		// already seen the 60'th block and start an additional key gen process).
-		await waitForBlock(testClient, 45n);
+		// Wait until the end of the epoch
+		await waitForBlock(testClient, 40n);
 		const endEpoch = (await testClient.getBlockNumber({ cacheTime: 0 })) / BLOCKS_PER_EPOCH;
 		// Check number of staged epochs
 		const epochStagedEvent = CONSENSUS_EVENTS.filter((e) => e.name === "EpochStaged")[0];
