@@ -12,8 +12,11 @@ type MergeDefaults<T extends object, D extends object> = Prettify<{
 			: never; // If only in Default, use Default
 }>;
 
-export const withDefaults = <T extends object, D extends object>(config: T, defaultValues: D): MergeDefaults<T, D> => {
-	const merged = { ...defaultValues } as Record<string, unknown>;
+export const withDefaults = <T extends Record<string, unknown>, D extends Record<string, unknown>>(
+	config: T,
+	defaultValues: D,
+): MergeDefaults<T, D> => {
+	const merged: Record<string, unknown> = { ...defaultValues };
 	for (const key in config) {
 		const value = config[key];
 		if (value !== undefined) {
