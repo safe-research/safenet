@@ -14,6 +14,7 @@ import {
 	type Log as ViemLog,
 } from "viem";
 import { isInBloom } from "../utils/bloom.js";
+import { withDefaults } from "../utils/config.js";
 import type { Logger } from "../utils/logging.js";
 import type { BlockUpdate } from "./blocks.js";
 
@@ -68,7 +69,7 @@ export class EventWatcher<E extends Events> {
 		this.#client = client;
 		this.#address = address;
 		this.#events = events;
-		this.#config = { ...DEFAULT_CONFIG, ...config };
+		this.#config = withDefaults(config, DEFAULT_CONFIG);
 		this.#step = { type: "idle" };
 	}
 

@@ -3,6 +3,7 @@
  */
 
 import type { RequestErrorType } from "viem/utils";
+import { withDefaults } from "../utils/config.js";
 
 /**
  * Configuration options for the backoff.
@@ -23,7 +24,7 @@ export class Backoff {
 	#delay: number | null;
 
 	constructor(config: Partial<Config>) {
-		this.#config = { ...DEFAULT_CONFIG, ...config };
+		this.#config = withDefaults(config, DEFAULT_CONFIG);
 		this.#delay = null;
 	}
 
