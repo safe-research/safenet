@@ -104,6 +104,7 @@ describe("validatorConfigSchema", () => {
 			PARTICIPANTS: "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266,0x6Adb3baB5730852eB53987EA89D8e8f16393C200",
 			GENESIS_SALT: MOCK_GENESIS_SALT,
 			BLOCKS_PER_EPOCH: "",
+			BLOCKS_BEFORE_RESUBMIT: "",
 		};
 
 		const result = validatorConfigSchema.parse(validConfig);
@@ -133,6 +134,7 @@ describe("validatorConfigSchema", () => {
 			PARTICIPANTS: "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266,0x6Adb3baB5730852eB53987EA89D8e8f16393C200",
 			GENESIS_SALT: MOCK_GENESIS_SALT,
 			BLOCKS_PER_EPOCH: "100",
+			BLOCKS_BEFORE_RESUBMIT: "200",
 		};
 
 		const result = validatorConfigSchema.parse(validConfig);
@@ -148,6 +150,7 @@ describe("validatorConfigSchema", () => {
 			],
 			GENESIS_SALT: MOCK_GENESIS_SALT,
 			BLOCKS_PER_EPOCH: 100n,
+			BLOCKS_BEFORE_RESUBMIT: 200n,
 		});
 	});
 

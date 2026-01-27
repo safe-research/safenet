@@ -11,6 +11,7 @@ export interface ProtocolConfig {
 	genesisSalt: Hex;
 	keyGenTimeout?: bigint;
 	signingTimeout?: bigint;
+	blocksBeforeResubmit?: bigint;
 }
 
 export type AbiPoint = { x: bigint; y: bigint };

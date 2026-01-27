@@ -82,6 +82,7 @@ export class ValidatorService {
 			queue: actionStorage,
 			txStorage,
 			logger: this.#logger,
+			blocksBeforeResubmit: config.blocksBeforeResubmit,
 		});
 		const stateStorage = database !== undefined ? new SqliteStateStorage(database) : new InMemoryStateStorage();
 		this.#stateMachine = new ShieldnetStateMachine({

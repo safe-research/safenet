@@ -33,6 +33,7 @@ const config: ProtocolConfig = {
 	participants: validatorConfig.PARTICIPANTS,
 	genesisSalt: validatorConfig.GENESIS_SALT,
 	blocksPerEpoch: validatorConfig.BLOCKS_PER_EPOCH,
+	blocksBeforeResubmit: validatorConfig.BLOCKS_BEFORE_RESUBMIT,
 };
 const watcherConfig: WatcherConfig = {
 	blockTimeOverride: validatorConfig.BLOCK_TIME_OVERRIDE,

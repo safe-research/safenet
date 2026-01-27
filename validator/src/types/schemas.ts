@@ -72,6 +72,7 @@ export const validatorConfigSchema = z.object({
 	PARTICIPANTS: participantsSchema,
 	GENESIS_SALT: genesisSaltSchema,
 	BLOCKS_PER_EPOCH: emptyToDefault(z.coerce.bigint(), BLOCKS_PER_EPOCH),
+	BLOCKS_BEFORE_RESUBMIT: emptyToDefault(z.coerce.bigint().optional()),
 	BASE_FEE_MULTIPLIER: emptyToDefault(z.coerce.number().optional()),
 	PRIORITY_FEE_PER_GAS: emptyToDefault(z.coerce.bigint().optional()),
 	BLOCK_TIME_OVERRIDE: emptyToDefault(z.coerce.number().int().optional()),
