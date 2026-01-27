@@ -23,6 +23,65 @@ contract StakingHarness is Staking {
         isEmpty = (amount == 0 && claimableAt == 0);
     }
 
+    function withdrawalQueueLength(address staker) public returns (uint256 length) {
+        return this.getPendingWithdrawals(staker).length;
+    }
+
+    function isInWithdrawalQueue(address staker, uint64 withdrawalId) public returns (bool result) {
+        WithdrawalQueue storage queue = withdrawalQueues[staker];
+        mapping(uint64 => WithdrawalNode) storage nodes = withdrawalNodes[staker];
+
+        for (uint64 currentId = queue.head; currentId != 0; currentId = nodes[currentId].next) {
+            if (currentId == withdrawalId) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    function checkWithdrawQueueIntegrity(address staker) public returns (bool result) {
+        // Check the integrity of the withdrawal queue linked list pointers.
+
+        WithdrawalQueue memory queue = withdrawalQueues[staker];
+        mapping(uint64 => WithdrawalNode) storage nodes = withdrawalNodes[staker];
+
+        if (queue.head == 0 && queue.tail == 0) {
+            // Empty queue.
+            return true;
+        } else if (queue.head == queue.tail) {
+            // Queue with a single element.
+            WithdrawalNode memory node = nodes[queue.head];
+            return node.next == 0 && node.previous == 0;
+        } else {
+            // Queue with two or more elements. Ensure the list is the same forwards and backwards.
+            uint256 count = 0;
+            uint64 currentId;
+            for (currentId = queue.head; currentId != 0; currentId = nodes[currentId].next) {
+                count++;
+            }
+            if (count < 2) {
+                return false;
+            }
+
+            uint64[] memory withdrawalIds = new uint64[](count);
+            currentId = queue.head;
+            for (uint256 i = 0; i < count; i++) {
+                withdrawalIds[i] = currentId;
+                currentId = nodes[currentId].next;
+            }
+            currentId = queue.tail;
+            for (uint256 i = 0; i < count; i++) {
+                uint256 j = count - i - 1;
+                if (withdrawalIds[i] != currentId) {
+                    return false;
+                }
+                currentId = nodes[currentId].previous;
+            }
+
+            return nodes[queue.head].previous == 0;
+        }
+    }
+
     function getTotalUserPendingWithdrawals(address staker) public view returns (uint256 totalUserPendingWithdrawals) {
         WithdrawalInfo[] memory pendingWithdrawals = this.getPendingWithdrawals(staker);
         for (uint256 i = 0; i < pendingWithdrawals.length; i++) {

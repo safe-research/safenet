@@ -19,6 +19,9 @@ methods {
 
     // Harnessed functions
     function withdrawalQueueEmpty(address staker) external returns (bool) envfree;
+    function withdrawalQueueLength(address staker) external returns (uint256) envfree;
+    function checkWithdrawQueueIntegrity(address staker) external returns (bool) envfree;
+    function isInWithdrawalQueue(address staker, uint64 withdrawalId) external returns (bool) envfree;
     function getTotalUserPendingWithdrawals(address staker) external returns (uint256) envfree;
     function addressesNotZero(address[] addrs) external returns (bool) envfree;
     function isPendingWithdrawalsTimestampIncreasing(address staker) external returns (bool) envfree;
@@ -51,8 +54,11 @@ ghost mathint ghostLastTimestamp;
 
 // Hook function that tracks the last timestamp.
 hook TIMESTAMP uint256 time {
+    // We cannot go back in time to 1970.
     require time != 0;
+    // The heat death of the universe would have already happened.
     require time < max_uint128 - CONFIG_TIME_DELAY();
+    // We cannot go back in time.
     require time >= ghostLastTimestamp;
     ghostLastTimestamp = time;
 }
@@ -101,6 +107,20 @@ invariant withdrawDelayIsNonZero()
 {
     preserved {
         requireInvariant pendingWithdrawalDelayChangeShouldEitherBothBeZeroOrNonZero();
+    }
+}
+
+// Invariant that proves that the Shieldnet Staking contract's pending
+// withdraw delay is never greater than the config delay.
+invariant pendingWithdrawDelayIsLessThanConfigDelay()
+    currentContract.pendingWithdrawDelayChange.value <= CONFIG_TIME_DELAY();
+
+// Withdrawal time delay is always smaller than the configuration time delay.
+invariant withdrawDelayIsLessThanConfigDelay()
+    withdrawDelay() <= CONFIG_TIME_DELAY()
+{
+    preserved {
+        requireInvariant pendingWithdrawDelayIsLessThanConfigDelay();
     }
 }
 
@@ -165,7 +185,7 @@ invariant withdrawalNodeNextOrPreviousCannotBeItself(address staker, uint64 with
         requireInvariant nextWithdrawalIdShouldAlwaysBeGreaterThanHeadAndTailPointers(
             e.msg.sender
         );
-    }    
+    }
 }
 
 // Invariant that proves that the Shieldnet Staking contract's withdrawal
@@ -181,18 +201,34 @@ invariant withdrawalNodeZeroShouldNotExist(address staker)
     }
 }
 
+// Invariant that proves that all non-zero withdrawal nodes are reachable.
+invariant withdrawalNodeIsReachable(address staker, uint64 withdrawalId)
+    currentContract.withdrawalNodes[staker][withdrawalId].amount != 0
+    && currentContract.withdrawalNodes[staker][withdrawalId].claimableAt != 0
+        => isInWithdrawalQueue(staker, withdrawalId)
+{
+    preserved {
+        requireInvariant withdrawalNodeZeroShouldNotExist(staker);
+        requireInvariant nextWithdrawalIdIsNonZero();
+    }
+}
+
 // TODO: https://prover.certora.com/output/950385/e0cfede3d65349d184c8c969dc06531c
 // Invariant that proves that the Shieldnet Staking contract's withdrawal node
 // with non-zero amount and claimableAt timestamps and zero next and previous
 // pointers is the only node in the withdrawal queue for a given staker.
 invariant withdrawalNodeNextAndPreviousZeroIntegrity(address staker, uint64 withdrawalId)
-    withdrawalId != 0
-    && currentContract.withdrawalNodes[staker][withdrawalId].amount != 0
+    currentContract.withdrawalNodes[staker][withdrawalId].amount != 0
     && currentContract.withdrawalNodes[staker][withdrawalId].claimableAt != 0
     && currentContract.withdrawalNodes[staker][withdrawalId].next == 0
-    && currentContract.withdrawalNodes[staker][withdrawalId].previous == 0 =>
-        currentContract.withdrawalQueues[staker].head == withdrawalId
-        && currentContract.withdrawalQueues[staker].tail == withdrawalId;
+    && currentContract.withdrawalNodes[staker][withdrawalId].previous == 0
+        => currentContract.withdrawalQueues[staker].head == withdrawalId
+        && currentContract.withdrawalQueues[staker].tail == withdrawalId
+{
+    preserved {
+        requireInvariant withdrawalLinkedListIntegrityNew(staker);
+    }
+}
 
 // TODO: https://prover.certora.com/output/950385/c0c1531fc371423aa8706bbc55dcda82
 // Invariant that proves that the Shieldnet Staking contract's withdrawal
@@ -205,13 +241,8 @@ invariant withdrawalIdsAreEitherBothZeroOrNonZero(address staker)
     (currentContract.withdrawalQueues[staker].head != 0
         && currentContract.withdrawalQueues[staker].tail != 0)
 {
-    preserved initiateWithdrawal(address v, uint256 a) with (env e) {
-        requireInvariant nextWithdrawalIdIsNonZero();
-    }
-    preserved initiateWithdrawalAtPosition(address v, uint256 a, uint64 previousId) with (env e) {
-        requireInvariant nextWithdrawalIdIsNonZero();
-        requireInvariant withdrawalNodeZeroShouldNotExist(staker);
-        requireInvariant nextWithdrawalIdShouldAlwaysBeGreaterThanPreviousAndNextPointers(staker, previousId);
+    preserved {
+        requireInvariant withdrawalLinkedListIntegrityNew(staker);
     }
 }
 
@@ -223,19 +254,14 @@ invariant previousAndNextShouldNotBeSameExceptZero(address staker, uint64 withdr
         currentContract.withdrawalNodes[staker][withdrawalId].next != currentContract.withdrawalNodes[staker][withdrawalId].previous
 {
     preserved {
-        requireInvariant nextWithdrawalIdAndGreaterIdNodeShouldNotExist(staker, withdrawalId);
-    }
-    preserved initiateWithdrawal(address validator, uint256 amount) with (env e) {
-        requireInvariant nextWithdrawalIdShouldAlwaysBeGreaterThanHeadAndTailPointers(
-            e.msg.sender
-        );
-    }
-    preserved initiateWithdrawalAtPosition(address validator, uint256 amount, uint64 previousId) with (env e) {
-        requireInvariant nextWithdrawalIdShouldAlwaysBeGreaterThanHeadAndTailPointers(
-            e.msg.sender
-        );
+        requireInvariant withdrawalLinkedListIntegrityNew(staker);
     }
 }
+
+// Invariant that proves that the Shieldnet Staking contract's withdrawal
+// linked list integrity is always maintained.
+invariant withdrawalLinkedListIntegrityNew(address staker)
+    checkWithdrawQueueIntegrity(staker);
 
 // TODO: https://prover.certora.com/output/950385/78758a564f0c4d93acf482ec2f96c747
 // Invariant that proves that the Shieldnet Staking contract's withdrawal
@@ -255,12 +281,13 @@ invariant stakerAddressIsNeverZero(address staker)
 // validator change hash cannot be computed if any of the validator addresses
 // is zero.
 invariant pendingValidatorsHashCannotHaveZeroValidatorAddress(address[] validators, bool[] isRegistration, uint256 executableAt)
-    getValidatorsHash(validators, isRegistration, executableAt) == pendingValidatorChangeHash() => addressesNotZero(validators);    
+    getValidatorsHash(validators, isRegistration, executableAt) == pendingValidatorChangeHash() => addressesNotZero(validators);
 
 // TODO: https://prover.certora.com/output/950385/5fc61f233eff44839dc406a60be3e314 (Errored)
 // Invariant that proves that the Shieldnet Staking contract never has a
 // validator with address zero.
-invariant validatorAddressIsNeverZero() !isValidator(0)
+invariant validatorAddressIsNeverZero()
+    !isValidator(0)
 {
     preserved executeValidatorChanges(address[] validators, bool[] isRegistration, uint256 executableAt) with (env e) {
         requireInvariant pendingValidatorsHashCannotHaveZeroValidatorAddress(validators, isRegistration, executableAt);
@@ -283,7 +310,6 @@ invariant contractCannotOperateOnItself(address validator)
     }
 }
 
-// TODO: https://prover.certora.com/output/950385/9f18ec4d152742a196d1a96a00243dcf
 // Invariant that proves that the Shieldnet Staking contract never grants
 // allowance to another address; i.e. there is no way for an external caller to
 // get the locking contract to call `approve` or `increaseAllowance` on the Safe
@@ -293,6 +319,13 @@ invariant noAllowanceForShieldnetStaking(address spender)
     filtered {
         f -> f.contract != erc20Token
     }
+{
+    preserved constructor() {
+        // Assume we don't already start with an allowance set to the staking
+        // contract before the contract is deployed.
+        require erc20Token.allowance(currentContract, spender) == 0;
+    }
+}
 
 // Invariant that proves that the Shieldnet Staking contract's balance of the
 // Safe token is always greater than or equal to the total amount of tokens
@@ -349,7 +382,12 @@ invariant totalPendingWithdrawalIsGreaterThanUserPendingWithdrawals(address stak
 // Invariant that proves that the previous node pointer of the withdrawal node
 // head of a staker's withdrawal queue is always zero.
 invariant withdrawalHeadPreviousShouldAlwaysBeZero(address staker)
-    currentContract.withdrawalNodes[staker][currentContract.withdrawalQueues[staker].head].previous == 0;
+    currentContract.withdrawalNodes[staker][currentContract.withdrawalQueues[staker].head].previous == 0
+{
+    preserved {
+        requireInvariant withdrawalLinkedListIntegrityNew(staker);
+    }
+}
 
 // TODO: https://prover.certora.com/output/950385/d1835b4a266a4334833d96b817ab3bef
 // Invariant that proves that the next node pointer of the withdrawal node tail
@@ -358,7 +396,7 @@ invariant withdrawalTailNextShouldAlwaysBeZero(address staker)
     currentContract.withdrawalNodes[staker][currentContract.withdrawalQueues[staker].tail].next == 0
 {
     preserved {
-        requireInvariant nextWithdrawalIdShouldAlwaysBeGreaterThanHeadAndTailPointers(staker);
+        requireInvariant withdrawalLinkedListIntegrityNew(staker);
     }
 }
 
@@ -376,6 +414,61 @@ invariant pendingWithdrawalAmountShouldAlwaysBeGreaterThanZero(address staker)
 {
     preserved with (env e) {
         requireInvariant withdrawDelayIsNonZero();
-        requireInvariant withdrawalIdsAreEitherBothZeroOrNonZero(staker);
+        requireInvariant withdrawalLinkedListIntegrityNew(staker);
     }
+}
+
+// Rule that verifies that any added withdrawal has non-zero amount and claim.
+rule initializeWithdrawalIntegrity(method f) filtered {
+    f -> f.selector == sig:initiateWithdrawal(address,uint256).selector
+      || f.selector == sig:initiateWithdrawalAtPosition(address,uint256,uint64).selector
+} {
+    env e;
+    calldataarg args;
+
+    address staker = e.msg.sender;
+    uint64 withdrawalId = nextWithdrawalId();
+    uint256 withdrawals = withdrawalQueueLength(staker);
+
+    // We limit the number of total withdrawals to `type(uint64).max - 1`.
+    require withdrawalId < max_uint64;
+    // The staker cannot call on behalf of the ERC-20
+    //require staker != erc20Token;
+
+    requireInvariant withdrawDelayIsLessThanConfigDelay();
+    requireInvariant withdrawalNodeZeroShouldNotExist(staker);
+    requireInvariant withdrawalLinkedListIntegrityNew(staker);
+    requireInvariant nextWithdrawalIdIsNonZero();
+    requireInvariant nextWithdrawalIdAndGreaterIdNodeShouldNotExist(staker, withdrawalId);
+
+    assert currentContract.withdrawalNodes[staker][withdrawalId].amount == 0
+        && currentContract.withdrawalNodes[staker][withdrawalId].claimableAt == 0;
+
+    f(e, args);
+
+    assert nextWithdrawalId() == withdrawalId + 1;
+    assert withdrawalQueueLength(staker) == withdrawals + 1;
+    assert isInWithdrawalQueue(staker, withdrawalId);
+    assert currentContract.withdrawalNodes[staker][withdrawalId].amount != 0
+        && currentContract.withdrawalNodes[staker][withdrawalId].claimableAt != 0;
+}
+
+// Rule that ensures that we can always reduce the length of the withdraw queue
+// by waiting.
+rule canAlwaysClaimWithdrawal(address staker) {
+    setupRequireERC20TokenInvariants(currentContract, staker);
+    requireInvariant contractBalanceGreaterThanTotalStakedAndPendingWithdrawals();
+    require(staker != 0);
+
+    uint256 claimableAt = getNextClaimableWithdrawalTimestamp(staker);
+    require(claimableAt > 0);
+
+    env e;
+    require(e.block.timestamp >= claimableAt);
+    require(e.msg.value == 0);
+
+    claimWithdrawal@withrevert(e, staker);
+    bool claimWithdrawalSuccess = !lastReverted;
+
+    assert claimWithdrawalSuccess;
 }
