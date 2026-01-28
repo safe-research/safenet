@@ -330,7 +330,8 @@ contract Staking is Ownable {
     // ============================================================
 
     /**
-     * @notice Stake tokens toward a validator.
+     * @notice Stake tokens toward a validator. Note that it is possible to stake towards validators that have been
+     *         proposed for deregistration.
      * @param validator The validator address to stake toward.
      * @param amount The amount of tokens to stake.
      */

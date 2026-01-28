@@ -133,6 +133,7 @@ Custom errors are used for gas efficiency and precise revert reasons:
   - **Purpose**: Increase stake for a validator.
   - **Invariants**: Validator must be registered; amount must be non-zero.
   - **Security**: State updates precede `safeTransferFrom` (reverts roll back state).
+  - **Edge case**: Staking towards validators that are pending deregistration is allowed.
 
 - `initiateWithdrawal(validator, amount)`
   - **Purpose**: Create a withdrawal and insert into a sorted queue automatically.
