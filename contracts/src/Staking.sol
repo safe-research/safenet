@@ -542,7 +542,7 @@ contract Staking is Ownable {
         uint256 executableAt = block.timestamp + CONFIG_TIME_DELAY;
         bytes32 validatorsHash = _getValidatorsHash(validators, isRegistration, executableAt);
         for (uint256 i = 0; i < validators.length; i++) {
-            require(validators[i] != address(0), InvalidAddress());
+            require(validators[i] != address(0) && validators[i] != address(this), InvalidAddress());
         }
 
         pendingValidatorChangeHash = validatorsHash;

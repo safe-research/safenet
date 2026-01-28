@@ -213,6 +213,18 @@ contract StakingTest is Test {
         vm.stopPrank();
     }
 
+    function test_RevertWhen_ProposeValidators_Self() public {
+        vm.startPrank(owner);
+        address[] memory validators = new address[](1);
+        validators[0] = address(staking);
+        bool[] memory isRegistration = new bool[](1);
+        isRegistration[0] = true;
+
+        vm.expectRevert(Staking.InvalidAddress.selector);
+        staking.proposeValidators(validators, isRegistration);
+        vm.stopPrank();
+    }
+
     function test_ExecuteValidatorChanges() public {
         vm.startPrank(owner);
         address[] memory validators = new address[](1);
