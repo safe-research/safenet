@@ -184,6 +184,7 @@ export class OnchainProtocol extends BaseProtocol {
 				((tx.fees?.maxPriorityFeePerGas ?? 0n) * 110n) / 100n,
 			),
 		};
+		this.#logger.debug("Calculated fees:", { estimatedFees, fees })
 
 		// Store fees before submission in case an error occurs
 		this.#txStorage.setFees(tx.nonce, fees);
