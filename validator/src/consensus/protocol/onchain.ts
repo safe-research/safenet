@@ -184,7 +184,6 @@ export class OnchainProtocol extends BaseProtocol {
 				((tx.fees?.maxPriorityFeePerGas ?? 0n) * 110n) / 100n,
 			),
 		};
-		this.#logger.debug("Calculated fees:", { estimatedFees, fees, tx });
 
 		// Store fees before submission in case an error occurs
 		this.#txStorage.setFees(tx.nonce, fees);
@@ -198,7 +197,6 @@ export class OnchainProtocol extends BaseProtocol {
 			account: this.#signingClient.account,
 			...fees,
 		});
-		this.#logger.debug("Submitted tx:", { txHash, tx });
 		this.#txStorage.setHash(tx.nonce, txHash);
 		return txHash;
 	}
@@ -271,7 +269,7 @@ export class OnchainProtocol extends BaseProtocol {
 					f: shares,
 				},
 			],
-			gas: 350_000n,
+			gas: 250_000n + BigInt(shares.length) * 25_000n, // TODO: the gas amount per share has not been estimates
 		});
 	}
 
@@ -297,6 +295,7 @@ export class OnchainProtocol extends BaseProtocol {
 			abi: COORDINATOR_FUNCTIONS,
 			functionName: "keyGenComplain",
 			args: [groupId, accused],
+			gas: 300_000n, // TODO: this has not been estimated yet
 		});
 	}
 
@@ -306,6 +305,7 @@ export class OnchainProtocol extends BaseProtocol {
 			abi: COORDINATOR_FUNCTIONS,
 			functionName: "keyGenComplaintResponse",
 			args: [groupId, plaintiff, secretShare],
+			gas: 300_000n, // TODO: this has not been estimated yet
 		});
 	}
 
@@ -318,7 +318,7 @@ export class OnchainProtocol extends BaseProtocol {
 			abi: COORDINATOR_FUNCTIONS,
 			functionName: "keyGenConfirm",
 			args: [groupId],
-			gas: 100_000n,
+			gas: 200_000n,
 		});
 	}
 
@@ -328,6 +328,7 @@ export class OnchainProtocol extends BaseProtocol {
 			abi: COORDINATOR_FUNCTIONS,
 			functionName: "sign",
 			args: [groupId, message],
+			gas: 400_000n, // TODO: this has not been estimated yet
 		});
 	}
 
@@ -358,6 +359,7 @@ export class OnchainProtocol extends BaseProtocol {
 				},
 				nonceProof,
 			],
+			gas: 200_000n,
 		});
 	}
 
@@ -392,7 +394,7 @@ export class OnchainProtocol extends BaseProtocol {
 					context: callbackContext,
 				},
 			],
-			gas: 400_000n, // TODO: this seems to be wrongly estimated
+			gas: 400_000n,
 		});
 	}
 
@@ -435,7 +437,7 @@ export class OnchainProtocol extends BaseProtocol {
 				},
 				signersProof,
 			],
-			gas: 400_000n, // TODO: this seems to be wrongly estimated
+			gas: 400_000n,
 		});
 	}
 
@@ -445,6 +447,7 @@ export class OnchainProtocol extends BaseProtocol {
 			abi: CONSENSUS_FUNCTIONS,
 			functionName: "attestTransaction",
 			args: [epoch, transactionHash, signatureId],
+			gas: 400_000n, // TODO: this has not been estimated yet
 		});
 	}
 
@@ -454,6 +457,7 @@ export class OnchainProtocol extends BaseProtocol {
 			abi: CONSENSUS_FUNCTIONS,
 			functionName: "stageEpoch",
 			args: [proposedEpoch, rolloverBlock, groupId, signatureId],
+			gas: 400_000n, // TODO: this has not been estimated yet
 		});
 	}
 }
