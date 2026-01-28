@@ -48,7 +48,7 @@ export interface TransactionStorage {
 }
 
 export class GasFeeEstimator {
-	#currentBlockNumner = 0n;
+	#currentBlockNumber = 0n;
 	#cachedPrices: Promise<FeeValues> | null = null;
 	#client: PublicClient;
 
@@ -57,9 +57,9 @@ export class GasFeeEstimator {
 	}
 
 	invalidate(blockNumber: bigint) {
-		if (blockNumber > this.#currentBlockNumner) {
+		if (blockNumber > this.#currentBlockNumber) {
 			this.#cachedPrices = null;
-			this.#currentBlockNumner = blockNumber;
+			this.#currentBlockNumber = blockNumber;
 		}
 	}
 
@@ -176,11 +176,13 @@ export class OnchainProtocol extends BaseProtocol {
 		tx: EthTransactionData & Pick<EthTransactionDetails, "nonce" | "fees">,
 	): Promise<Hex> {
 		const estimatedFees = await this.#gasFeeEstimator.estimateFees();
-		// Use max of previous fees and estimate and slightly increase the fees to ensure that it is always bigger than before
+		// Use max of (previous fees + 10%) and estimate
 		const fees: FeeValues = {
-			// Increase by 2 to cover an increase by 1 of the base fee and priority fee
-			maxFeePerGas: maxBigInt(estimatedFees.maxFeePerGas, tx.fees?.maxFeePerGas ?? 0n) + 2n,
-			maxPriorityFeePerGas: maxBigInt(estimatedFees.maxPriorityFeePerGas, tx.fees?.maxPriorityFeePerGas ?? 0n) + 1n,
+			maxFeePerGas: maxBigInt(estimatedFees.maxFeePerGas, ((tx.fees?.maxFeePerGas ?? 0n) * 110n) / 100n),
+			maxPriorityFeePerGas: maxBigInt(
+				estimatedFees.maxPriorityFeePerGas,
+				((tx.fees?.maxPriorityFeePerGas ?? 0n) * 110n) / 100n,
+			),
 		};
 
 		// Store fees before submission in case an error occurs

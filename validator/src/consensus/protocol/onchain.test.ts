@@ -438,8 +438,8 @@ describe("OnchainProtocol", () => {
 		expect(estimateFees).toBeCalledTimes(1);
 		expect(setFees).toBeCalledTimes(1);
 		expect(setFees).toBeCalledWith(10, {
-			maxFeePerGas: 202n,
-			maxPriorityFeePerGas: 101n,
+			maxFeePerGas: 200n,
+			maxPriorityFeePerGas: 100n,
 		});
 		expect(sendTransaction).toBeCalledTimes(1);
 		expect(sendTransaction).toBeCalledWith({
@@ -447,8 +447,8 @@ describe("OnchainProtocol", () => {
 			nonce: 10,
 			account,
 			chain,
-			maxFeePerGas: 202n,
-			maxPriorityFeePerGas: 101n,
+			maxFeePerGas: 200n,
+			maxPriorityFeePerGas: 100n,
 		});
 		expect(setHash).toBeCalledTimes(0);
 	});
@@ -537,8 +537,8 @@ describe("OnchainProtocol", () => {
 		expect(estimateFees).toBeCalledTimes(1);
 		expect(setFees).toBeCalledTimes(1);
 		expect(setFees).toBeCalledWith(10, {
-			maxFeePerGas: 202n,
-			maxPriorityFeePerGas: 101n,
+			maxFeePerGas: 200n,
+			maxPriorityFeePerGas: 100n,
 		});
 		expect(sendTransaction).toBeCalledTimes(1);
 		expect(sendTransaction).toBeCalledWith({
@@ -546,8 +546,8 @@ describe("OnchainProtocol", () => {
 			nonce: 10,
 			account,
 			chain,
-			maxFeePerGas: 202n,
-			maxPriorityFeePerGas: 101n,
+			maxFeePerGas: 200n,
+			maxPriorityFeePerGas: 100n,
 		});
 		expect(setHash).toBeCalledTimes(0);
 	});
@@ -627,8 +627,8 @@ describe("OnchainProtocol", () => {
 			nonce: 10,
 			account,
 			chain,
-			maxFeePerGas: 202n,
-			maxPriorityFeePerGas: 101n,
+			maxFeePerGas: 200n,
+			maxPriorityFeePerGas: 100n,
 		});
 		expect(setHash).toBeCalledTimes(0);
 	});
@@ -711,13 +711,13 @@ describe("OnchainProtocol", () => {
 			nonce: 10,
 			account,
 			chain,
-			maxFeePerGas: 202n,
-			maxPriorityFeePerGas: 101n,
+			maxFeePerGas: 200n,
+			maxPriorityFeePerGas: 100n,
 		});
 		expect(setFees).toBeCalledTimes(1);
 		expect(setFees).toBeCalledWith(10, {
-			maxFeePerGas: 202n,
-			maxPriorityFeePerGas: 101n,
+			maxFeePerGas: 200n,
+			maxPriorityFeePerGas: 100n,
 		});
 		expect(setHash).toBeCalledTimes(1);
 		expect(setHash).toBeCalledWith(10, retryHash);
@@ -804,13 +804,13 @@ describe("OnchainProtocol", () => {
 			nonce: 10,
 			account,
 			chain,
-			maxFeePerGas: 202n,
-			maxPriorityFeePerGas: 101n,
+			maxFeePerGas: 200n,
+			maxPriorityFeePerGas: 100n,
 		});
 		expect(setFees).toBeCalledTimes(1);
 		expect(setFees).toBeCalledWith(10, {
-			maxFeePerGas: 202n,
-			maxPriorityFeePerGas: 101n,
+			maxFeePerGas: 200n,
+			maxPriorityFeePerGas: 100n,
 		});
 		expect(setHash).toBeCalledTimes(1);
 		expect(setHash).toBeCalledWith(10, retryHash);
@@ -855,8 +855,8 @@ describe("OnchainProtocol", () => {
 				nonce: 10,
 				hash,
 				fees: {
-					maxFeePerGas: 502n,
-					maxPriorityFeePerGas: 401n,
+					maxFeePerGas: 190n,
+					maxPriorityFeePerGas: 99n,
 				},
 			},
 		]);
@@ -897,13 +897,13 @@ describe("OnchainProtocol", () => {
 			nonce: 10,
 			account,
 			chain,
-			maxFeePerGas: 504n,
-			maxPriorityFeePerGas: 402n,
+			maxFeePerGas: 209n,
+			maxPriorityFeePerGas: 108n,
 		});
 		expect(setFees).toBeCalledTimes(1);
 		expect(setFees).toBeCalledWith(10, {
-			maxFeePerGas: 504n,
-			maxPriorityFeePerGas: 402n,
+			maxFeePerGas: 209n,
+			maxPriorityFeePerGas: 108n,
 		});
 		expect(setHash).toBeCalledTimes(1);
 		expect(setHash).toBeCalledWith(10, retryHash);
@@ -985,13 +985,13 @@ describe("OnchainProtocol", () => {
 			nonce: 11,
 			account,
 			chain,
-			maxFeePerGas: 202n,
-			maxPriorityFeePerGas: 101n,
+			maxFeePerGas: 200n,
+			maxPriorityFeePerGas: 100n,
 		});
 		expect(setFees).toBeCalledTimes(1);
 		expect(setFees).toBeCalledWith(11, {
-			maxFeePerGas: 202n,
-			maxPriorityFeePerGas: 101n,
+			maxFeePerGas: 200n,
+			maxPriorityFeePerGas: 100n,
 		});
 		expect(setHash).toBeCalledTimes(1);
 		expect(setHash).toBeCalledWith(11, hash);
@@ -1072,13 +1072,13 @@ describe("OnchainProtocol", () => {
 			nonce: 11,
 			account,
 			chain,
-			maxFeePerGas: 202n,
-			maxPriorityFeePerGas: 101n,
+			maxFeePerGas: 200n,
+			maxPriorityFeePerGas: 100n,
 		});
 		expect(setFees).toBeCalledTimes(1);
 		expect(setFees).toBeCalledWith(11, {
-			maxFeePerGas: 202n,
-			maxPriorityFeePerGas: 101n,
+			maxFeePerGas: 200n,
+			maxPriorityFeePerGas: 100n,
 		});
 		expect(setHash).toBeCalledTimes(1);
 		expect(setHash).toBeCalledWith(11, hash);
@@ -1156,8 +1156,8 @@ describe("OnchainProtocol", () => {
 			expect(estimateFees).toBeCalledTimes(1);
 			expect(setFees).toBeCalledTimes(1);
 			expect(setFees).toBeCalledWith(10, {
-				maxFeePerGas: 202n,
-				maxPriorityFeePerGas: 101n,
+				maxFeePerGas: 200n,
+				maxPriorityFeePerGas: 100n,
 			});
 			expect(sendTransaction).toBeCalledTimes(1);
 			expect(sendTransaction).toBeCalledWith({
@@ -1165,8 +1165,8 @@ describe("OnchainProtocol", () => {
 				nonce: 10,
 				account,
 				chain,
-				maxFeePerGas: 202n,
-				maxPriorityFeePerGas: 101n,
+				maxFeePerGas: 200n,
+				maxPriorityFeePerGas: 100n,
 			});
 			expect(setHash).toBeCalledTimes(1);
 			expect(setHash).toBeCalledWith(10, txHash);
