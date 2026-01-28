@@ -529,7 +529,8 @@ contract Staking is Ownable {
     }
 
     /**
-     * @notice Propose validator registration/deregistration changes.
+     * @notice Propose validator registration/deregistration changes. This will overwrite the existing pending proposal
+     *         for validator changes.
      * @param validators Array of validator addresses.
      * @param isRegistration Array of booleans (true = register, false = deregister).
      * @dev It is currently possible to propose duplicate validators in a single proposal.
