@@ -195,7 +195,7 @@ export class OnchainProtocol extends BaseProtocol {
 			gas: tx.gas,
 			chain: this.#signingClient.chain,
 			account: this.#signingClient.account,
-			...fees,
+			...(await this.#publicClient.estimateFeesPerGas()),
 		});
 		this.#txStorage.setHash(tx.nonce, txHash);
 		return txHash;
