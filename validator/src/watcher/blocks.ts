@@ -6,6 +6,7 @@
  */
 
 import { BlockNotFoundError, type Hex, type Prettify, type PublicClient, type Block as ViemBlock } from "viem";
+import { withDefaults } from "../utils/config.js";
 
 export type Client = Pick<PublicClient, "getBlock">;
 export type Timer = {
@@ -256,10 +257,7 @@ export class BlockWatcher {
 	 * Create a new block watcher with the specified paramters.
 	 */
 	static async create({ client, lastIndexedBlock, ...config }: CreateParams) {
-		const self = new BlockWatcher(client, {
-			...DEFAULT_OPTIONS,
-			...config,
-		});
+		const self = new BlockWatcher(client, withDefaults(config, DEFAULT_OPTIONS));
 		await self.#initialize(lastIndexedBlock);
 		return self;
 	}
