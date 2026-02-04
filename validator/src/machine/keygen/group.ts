@@ -25,11 +25,11 @@ export type GroupParameters = {
  * Solving for D, to calculate the miminum participation count:
  * D < N - M / t
  *
- * If BFT (aka M) is 50%, then D is 0, therefore the target BFT is 33%.  
+ * If BFT (aka M) is 50%, then D is 0, therefore the target BFT is 33%.
  * To achive a BFT of 33%, assume M = (1 / 3) * N
  * for the default participants:
  * D < N - (1 / 3) * N / t
- * D < N - N / (3 * t) 
+ * D < N - N / (3 * t)
  *
  * With t set to 1 / 2 (see calcGroupParameters):
  * D < N / 3
@@ -42,6 +42,7 @@ export type GroupParameters = {
 export const calcMinimumParticipants = ({
 	defaultParticipants,
 }: Pick<MachineConfig, "defaultParticipants">): number => {
+	const count = defaultParticipants.length;
 	// The defined minimum participantion group size is 2/3 or 66.66...%
 	return Math.max(2, Math.floor((count * 2) / 3) + 1);
 };

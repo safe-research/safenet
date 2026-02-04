@@ -177,7 +177,7 @@ describe("key gen timeouts", () => {
 					id: "key_gen_start",
 					participants: groupSetup.participantsRoot,
 					count: 3,
-					threshold: 3,
+					threshold: 2,
 					context: "0x00000000eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee000000000000000a",
 					participantId: 7n,
 					commitments: groupSetup.commitments,
@@ -213,7 +213,7 @@ describe("key gen timeouts", () => {
 					MACHINE_CONFIG.defaultParticipants[3],
 				],
 				3,
-				3,
+				2,
 				"0x00000000eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee000000000000000a",
 			);
 		});

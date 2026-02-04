@@ -1,5 +1,10 @@
 import { ethAddress, zeroHash } from "viem";
-import { entryPoint06Address, entryPoint07Address, entryPoint08Address } from "viem/account-abstraction";
+import {
+	entryPoint06Address,
+	entryPoint07Address,
+	entryPoint08Address,
+	entryPoint09Address,
+} from "viem/account-abstraction";
 import { describe, expect, it, vi } from "vitest";
 import type { KeyGenClient } from "../../consensus/keyGen/client.js";
 import type { ShieldnetProtocol } from "../../consensus/protocol/types.js";
@@ -316,6 +321,7 @@ describe("complaint submitted", () => {
 			{ id: 1n, address: entryPoint06Address },
 			{ id: 2n, address: entryPoint07Address },
 			{ id: 3n, address: entryPoint08Address },
+			{ id: 4n, address: entryPoint09Address },
 		];
 		const setupGroup = vi.fn();
 		setupGroup.mockReturnValueOnce(groupSetup);
@@ -349,7 +355,7 @@ describe("complaint submitted", () => {
 			{
 				id: "key_gen_start",
 				participants: groupSetup.participantsRoot,
-				count: 2,
+				count: 3,
 				threshold: 2,
 				context: calcGroupContext(ethAddress, 10n),
 				participantId: 1n,
@@ -369,6 +375,11 @@ describe("complaint submitted", () => {
 		});
 		expect(consensus).toBeCalledTimes(1);
 		expect(setupGroup).toBeCalledTimes(1);
-		expect(setupGroup).toBeCalledWith([participants[0], participants[2]], 2, 2, calcGroupContext(ethAddress, 10n));
+		expect(setupGroup).toBeCalledWith(
+			[participants[0], participants[2], participants[3]],
+			3,
+			2,
+			calcGroupContext(ethAddress, 10n),
+		);
 	});
 });

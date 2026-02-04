@@ -51,7 +51,7 @@ describe("trigger key gen", () => {
 		const keyGenClient = {} as unknown as KeyGenClient;
 		// Only provide 1 participant
 		expect(() => triggerKeyGen(MACHINE_CONFIG, keyGenClient, 1n, 20n, PARTICIPANTS.slice(0, 1), zeroHash)).toThrowError(
-			new Error("Not enough participants! Expected at least 2 got 1"),
+			new Error("Not enough participants! Expected at least 3 got 1"),
 		);
 	});
 
@@ -108,7 +108,7 @@ describe("trigger key gen", () => {
 				id: "key_gen_start",
 				participants: groupSetup.participantsRoot,
 				count: 3,
-				threshold: 3,
+				threshold: 2,
 				context,
 				participantId: 3n,
 				commitments: groupSetup.commitments,
@@ -128,6 +128,6 @@ describe("trigger key gen", () => {
 		expect(diff.signing).toBeUndefined();
 
 		expect(setupGroup).toBeCalledTimes(1);
-		expect(setupGroup).toBeCalledWith(PARTICIPANTS, 3, 3, context);
+		expect(setupGroup).toBeCalledWith(PARTICIPANTS, 3, 2, context);
 	});
 });

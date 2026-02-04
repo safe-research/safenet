@@ -52,7 +52,7 @@ const EVENT: KeyGenEvent = {
 	id: "event_key_gen",
 	block: 4n,
 	index: 0,
-	gid: "0xa1ca556ff97bc5eb8845dfc04c4eedb0e69ff4376f7fde910000000000000000",
+	gid: "0x06cb03baac74421225341827941e88d9547e5459c4b3715c0000000000000000",
 	participants: "0xc41a668cab547c9e2cfd2975f4b6130877c8500c21820daffba14b24c40c742e",
 	count: 3,
 	threshold: 3,
@@ -111,7 +111,7 @@ describe("gensis key gen", () => {
 
 	it("should trigger genesis key gen with correct parameters", async () => {
 		const groupSetup = {
-			groupId: "0xa1ca556ff97bc5eb8845dfc04c4eedb0e69ff4376f7fde910000000000000000",
+			groupId: "0x06cb03baac74421225341827941e88d9547e5459c4b3715c0000000000000000",
 			participantsRoot: "0xc41a668cab547c9e2cfd2975f4b6130877c8500c21820daffba14b24c40c742e",
 			participantId: 2n,
 			commitments: [TEST_POINT],
@@ -132,7 +132,7 @@ describe("gensis key gen", () => {
 				id: "key_gen_start",
 				participants: groupSetup.participantsRoot,
 				count: 3,
-				threshold: 3,
+				threshold: 2,
 				context: zeroHash,
 				participantId: 2n,
 				commitments: groupSetup.commitments,
@@ -142,19 +142,19 @@ describe("gensis key gen", () => {
 		]);
 		expect(diff.rollover).toStrictEqual({
 			id: "collecting_commitments",
-			groupId: "0xa1ca556ff97bc5eb8845dfc04c4eedb0e69ff4376f7fde910000000000000000",
+			groupId: "0x06cb03baac74421225341827941e88d9547e5459c4b3715c0000000000000000",
 			nextEpoch: 0n,
 			deadline: maxUint64,
 		});
 		expect(diff.consensus).toStrictEqual({
-			genesisGroupId: "0xa1ca556ff97bc5eb8845dfc04c4eedb0e69ff4376f7fde910000000000000000",
+			genesisGroupId: "0x06cb03baac74421225341827941e88d9547e5459c4b3715c0000000000000000",
 			epochGroup: [
 				0n,
-				{ groupId: "0xa1ca556ff97bc5eb8845dfc04c4eedb0e69ff4376f7fde910000000000000000", participantId: 2n },
+				{ groupId: "0x06cb03baac74421225341827941e88d9547e5459c4b3715c0000000000000000", participantId: 2n },
 			],
 		});
 		expect(diff.signing).toBeUndefined();
 		expect(setupGroup).toBeCalledTimes(1);
-		expect(setupGroup).toBeCalledWith(MACHINE_CONFIG.defaultParticipants, 3, 3, zeroHash);
+		expect(setupGroup).toBeCalledWith(MACHINE_CONFIG.defaultParticipants, 3, 2, zeroHash);
 	});
 });
