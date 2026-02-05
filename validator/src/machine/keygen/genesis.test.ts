@@ -41,6 +41,10 @@ const MACHINE_CONFIG: MachineConfig = {
 			id: 3n,
 			address: entryPoint08Address,
 		},
+		{
+			id: 4n,
+			address: entryPoint08Address,
+		},
 	],
 	genesisSalt: zeroHash,
 	keyGenTimeout: 25n,
@@ -52,9 +56,9 @@ const EVENT: KeyGenEvent = {
 	id: "event_key_gen",
 	block: 4n,
 	index: 0,
-	gid: "0x06cb03baac74421225341827941e88d9547e5459c4b3715c0000000000000000",
-	participants: "0xc41a668cab547c9e2cfd2975f4b6130877c8500c21820daffba14b24c40c742e",
-	count: 3,
+	gid: "0x00a9d1aa438a646139fe8d817f9c9dbb060ee7e2e58f2b100000000000000000",
+	participants: "0x78d9152d3ca012af785cf642cd52803acabeaea430964b93136f31f83c7df9d0",
+	count: 4,
 	threshold: 3,
 	context: zeroHash,
 };
@@ -111,8 +115,8 @@ describe("gensis key gen", () => {
 
 	it("should trigger genesis key gen with correct parameters", async () => {
 		const groupSetup = {
-			groupId: "0x06cb03baac74421225341827941e88d9547e5459c4b3715c0000000000000000",
-			participantsRoot: "0xc41a668cab547c9e2cfd2975f4b6130877c8500c21820daffba14b24c40c742e",
+			groupId: "0x00a9d1aa438a646139fe8d817f9c9dbb060ee7e2e58f2b100000000000000000",
+			participantsRoot: "0x78d9152d3ca012af785cf642cd52803acabeaea430964b93136f31f83c7df9d0",
 			participantId: 2n,
 			commitments: [TEST_POINT],
 			pok: {
@@ -131,8 +135,8 @@ describe("gensis key gen", () => {
 			{
 				id: "key_gen_start",
 				participants: groupSetup.participantsRoot,
-				count: 3,
-				threshold: 2,
+				count: 4,
+				threshold: 3,
 				context: zeroHash,
 				participantId: 2n,
 				commitments: groupSetup.commitments,
@@ -142,19 +146,19 @@ describe("gensis key gen", () => {
 		]);
 		expect(diff.rollover).toStrictEqual({
 			id: "collecting_commitments",
-			groupId: "0x06cb03baac74421225341827941e88d9547e5459c4b3715c0000000000000000",
+			groupId: "0x00a9d1aa438a646139fe8d817f9c9dbb060ee7e2e58f2b100000000000000000",
 			nextEpoch: 0n,
 			deadline: maxUint64,
 		});
 		expect(diff.consensus).toStrictEqual({
-			genesisGroupId: "0x06cb03baac74421225341827941e88d9547e5459c4b3715c0000000000000000",
+			genesisGroupId: "0x00a9d1aa438a646139fe8d817f9c9dbb060ee7e2e58f2b100000000000000000",
 			epochGroup: [
 				0n,
-				{ groupId: "0x06cb03baac74421225341827941e88d9547e5459c4b3715c0000000000000000", participantId: 2n },
+				{ groupId: "0x00a9d1aa438a646139fe8d817f9c9dbb060ee7e2e58f2b100000000000000000", participantId: 2n },
 			],
 		});
 		expect(diff.signing).toBeUndefined();
 		expect(setupGroup).toBeCalledTimes(1);
-		expect(setupGroup).toBeCalledWith(MACHINE_CONFIG.defaultParticipants, 3, 2, zeroHash);
+		expect(setupGroup).toBeCalledWith(MACHINE_CONFIG.defaultParticipants, 4, 3, zeroHash);
 	});
 });
