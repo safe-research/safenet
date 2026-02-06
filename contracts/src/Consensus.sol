@@ -108,9 +108,9 @@ contract Consensus is IFROSTCoordinatorCallback {
     /**
      * @notice Emitted when a transaction is proposed for validator approval.
      * @param message The EIP-712 message hash.
-     * @param transactionHash The hash of the proposed meta-transaction.
+     * @param transactionHash The hash of the proposed Safe transaction.
      * @param epoch The epoch in which the transaction is proposed.
-     * @param transaction The proposed meta-transaction.
+     * @param transaction The proposed Safe transaction.
      */
     event TransactionProposed(
         bytes32 indexed message, bytes32 indexed transactionHash, uint64 epoch, SafeTransaction.T transaction
@@ -186,7 +186,7 @@ contract Consensus is IFROSTCoordinatorCallback {
     /**
      * @notice Gets a transaction attestation for a specific epoch and transaction.
      * @param epoch The epoch in which the transaction was proposed.
-     * @param transaction The meta-transaction to query the attestation for.
+     * @param transaction The Safe transaction to query the attestation for.
      * @return message The EIP-712 message hash of the proposal.
      * @return signature The FROST signature attesting to the transaction.
      */
@@ -195,12 +195,27 @@ contract Consensus is IFROSTCoordinatorCallback {
         view
         returns (bytes32 message, FROST.Signature memory signature)
     {
-        message = domainSeparator().transactionProposal(epoch, transaction.hash());
+        return getAttestationByHash(epoch, transaction.hash());
+    }
+
+    /**
+     * @notice Gets a transaction attestation for a specific epoch and transaction hash.
+     * @param epoch The epoch in which the transaction was proposed.
+     * @param transactionHash The Safe transaction hash to query the attestation for.
+     * @return message The EIP-712 message hash of the proposal.
+     * @return signature The FROST signature attesting to the transaction.
+     */
+    function getAttestationByHash(uint64 epoch, bytes32 transactionHash)
+        public
+        view
+        returns (bytes32 message, FROST.Signature memory signature)
+    {
+        message = domainSeparator().transactionProposal(epoch, transactionHash);
         signature = getAttestationByMessage(message);
     }
 
     /**
-     * @notice Gets a transaction attestation by its hashed message.
+     * @notice Gets a transaction attestation by its transaction proposal hash.
      * @param message The EIP-712 message hash of the proposal.
      * @return signature The FROST signature attesting to the transaction.
      */
@@ -211,6 +226,7 @@ contract Consensus is IFROSTCoordinatorCallback {
     /**
      * @notice Gets a recent transaction attestation.
      * @param transaction The meta-transaction to query the attestation for.
+     * @return epoch The recent epoch that the transaction was attested in.
      * @return message The EIP-712 message hash of the proposal.
      * @return signature The FROST signature attesting to the transaction.
      * @dev This method will fail if the attestation did not happen in either the active or previous epochs. This is
@@ -220,7 +236,7 @@ contract Consensus is IFROSTCoordinatorCallback {
     function getRecentAttestation(SafeTransaction.T memory transaction)
         external
         view
-        returns (bytes32 message, FROST.Signature memory signature)
+        returns (uint64 epoch, bytes32 message, FROST.Signature memory signature)
     {
         return getRecentAttestationByHash(transaction.hash());
     }
@@ -228,19 +244,22 @@ contract Consensus is IFROSTCoordinatorCallback {
     /**
      * @notice Gets a recent transaction attestation by transaction hash.
      * @param transactionHash The hash of the meta-transaction.
+     * @return epoch The recent epoch that the transaction was attested in.
      * @return message The EIP-712 message hash of the proposal.
      * @return signature The FROST signature attesting to the transaction.
      */
     function getRecentAttestationByHash(bytes32 transactionHash)
         public
         view
-        returns (bytes32 message, FROST.Signature memory signature)
+        returns (uint64 epoch, bytes32 message, FROST.Signature memory signature)
     {
         (Epochs memory epochs,) = _epochsWithRollover();
         bytes32 domain = domainSeparator();
+        epoch = epochs.active;
         message = domain.transactionProposal(epochs.active, transactionHash);
         FROSTSignatureId.T attestation = $attestations[message];
         if (attestation.isZero()) {
+            epoch = epochs.previous;
             message = domain.transactionProposal(epochs.previous, transactionHash);
             attestation = $attestations[message];
         }
