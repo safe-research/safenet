@@ -13,6 +13,8 @@ library SafeTransaction {
     /**
      * @notice A Safe smart account transaction.
      * @dev This type combines both the Safe's EIP-712 domain and the `SafeTx` message.
+     * @custom:param chainId The chain ID of the Safe account.
+     * @custom:param safe The address of the Safe account.
      * @custom:param to Destination address of Safe transaction.
      * @custom:param value Native token value of the Safe transaction.
      * @custom:param data Data payload of the Safe transaction.
