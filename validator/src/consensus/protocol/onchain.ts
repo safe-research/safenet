@@ -144,7 +144,7 @@ export class OnchainProtocol extends BaseProtocol {
 			if (executedTxs > 0) {
 				this.#logger.debug(`Marked ${executedTxs} transactions as executed`);
 			}
-			// No pagination is used, to avoid that to many transactions are retried at once (current default is 100)
+			// Only fetch the first page of pending transactions (default limit is 100) to avoid retrying too many transactions at once.
 			const pendingTxs = this.#txStorage.submittedUpTo(blockNumber - this.#blocksBeforeResubmit);
 			for (const tx of pendingTxs) {
 				// If we don't find the transaction or it has no blockHash then we resubmit it
