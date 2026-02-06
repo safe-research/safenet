@@ -46,7 +46,7 @@ export interface TransactionStorage {
 	setAllBeforeAsExecuted(nonce: number): number;
 	setSubmittedForPending(blockNumber: bigint): number;
 	maxNonce(): number | null;
-	submittedUpTo(blockNumber: bigint): (EthTransactionData & EthTransactionDetails)[];
+	submittedUpTo(blockNumber: bigint, offset?: number, limit?: number): (EthTransactionData & EthTransactionDetails)[];
 }
 
 export class GasFeeEstimator {
@@ -144,6 +144,7 @@ export class OnchainProtocol extends BaseProtocol {
 			if (executedTxs > 0) {
 				this.#logger.debug(`Marked ${executedTxs} transactions as executed`);
 			}
+			// No pagination is used, to avoid that to many transactions are retried at once (current default is 100)
 			const pendingTxs = this.#txStorage.submittedUpTo(blockNumber - this.#blocksBeforeResubmit);
 			for (const tx of pendingTxs) {
 				// If we don't find the transaction or it has no blockHash then we resubmit it

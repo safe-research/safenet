@@ -207,6 +207,98 @@ describe("protocol - sqlite", () => {
 			]);
 		});
 
+		it("should only return specified limit of entries with submittedUpTo", () => {
+			const db = new Sqlite3(":memory:");
+			const storage = new SqliteTxStorage(db);
+			storage.register(
+				{
+					to: entryPoint06Address,
+					value: 0n,
+					data: "0x5afe01",
+				},
+				1,
+			);
+			storage.register(
+				{
+					to: entryPoint06Address,
+					value: 0n,
+					data: "0x5afe02",
+				},
+				2,
+			);
+			storage.setSubmittedForPending(400n);
+			expect(storage.submittedUpTo(4200n, 0, 1)).toStrictEqual([
+				{
+					to: entryPoint06Address,
+					value: 0n,
+					data: "0x5afe01",
+					hash: null,
+					fees: null,
+					nonce: 1,
+				},
+			]);
+			expect(storage.submittedUpTo(4200n, 0, 2)).toStrictEqual([
+				{
+					to: entryPoint06Address,
+					value: 0n,
+					data: "0x5afe01",
+					hash: null,
+					fees: null,
+					nonce: 1,
+				},
+				{
+					to: entryPoint06Address,
+					value: 0n,
+					data: "0x5afe02",
+					hash: null,
+					fees: null,
+					nonce: 2,
+				},
+			]);
+		});
+
+		it("should apply offset for submittedUpTo", () => {
+			const db = new Sqlite3(":memory:");
+			const storage = new SqliteTxStorage(db);
+			storage.register(
+				{
+					to: entryPoint06Address,
+					value: 0n,
+					data: "0x5afe01",
+				},
+				1,
+			);
+			storage.register(
+				{
+					to: entryPoint06Address,
+					value: 0n,
+					data: "0x5afe02",
+				},
+				2,
+			);
+			storage.setSubmittedForPending(400n);
+			expect(storage.submittedUpTo(4200n, 0, 1)).toStrictEqual([
+				{
+					to: entryPoint06Address,
+					value: 0n,
+					data: "0x5afe01",
+					hash: null,
+					fees: null,
+					nonce: 1,
+				},
+			]);
+			expect(storage.submittedUpTo(4200n, 1, 1)).toStrictEqual([
+				{
+					to: entryPoint06Address,
+					value: 0n,
+					data: "0x5afe02",
+					hash: null,
+					fees: null,
+					nonce: 2,
+				},
+			]);
+		});
+
 		it("should update the transaction hash", () => {
 			const db = new Sqlite3(":memory:");
 			const storage = new SqliteTxStorage(db);

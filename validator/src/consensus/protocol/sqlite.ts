@@ -277,12 +277,15 @@ export class SqliteTxStorage implements TransactionStorage {
 		return result.changes;
 	}
 
-	submittedUpTo(blockNumber: bigint): (EthTransactionData & EthTransactionDetails)[] {
+	submittedUpTo(blockNumber: bigint, offset = 0, limit = 100): (EthTransactionData & EthTransactionDetails)[] {
 		const pendingTxsStmt = this.#db.prepare(`
 			SELECT nonce, transactionJson, transactionHash, feesJson FROM transaction_storage 
-			WHERE submittedAt <= ?;
+			WHERE submittedAt <= ?
+			ORDER BY nonce ASC
+			LIMIT ?
+			OFFSET ?;
 		`);
-		const pendingTxsResult = pendingTxsStmt.all(blockNumber);
+		const pendingTxsResult = pendingTxsStmt.all(blockNumber, limit, offset);
 		const pendingTxs = txStorageSchema.parse(pendingTxsResult);
 		return pendingTxs.map((tx) => {
 			return {
