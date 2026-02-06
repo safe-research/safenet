@@ -1,7 +1,9 @@
 import z from "zod";
 import { checkedAddressSchema, hexDataSchema } from "../../../types/schemas.js";
 
-const safeTxSchema = z.object({
+export const safeTransactionSchema = z.object({
+	chainId: z.bigint().nonnegative(),
+	safe: checkedAddressSchema,
 	to: checkedAddressSchema,
 	value: z.bigint().nonnegative(),
 	data: hexDataSchema,
@@ -12,11 +14,6 @@ const safeTxSchema = z.object({
 	gasToken: checkedAddressSchema,
 	refundReceiver: checkedAddressSchema,
 	nonce: z.bigint().nonnegative(),
-});
-
-export const safeTransactionSchema = safeTxSchema.extend({
-	chainId: z.bigint().nonnegative(),
-	safe: checkedAddressSchema,
 });
 
 const transactionProposalSchema = z.object({
