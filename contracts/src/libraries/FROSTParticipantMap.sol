@@ -15,21 +15,20 @@ library FROSTParticipantMap {
     using Secp256k1 for Secp256k1.Point;
 
     // ============================================================
-    // ENUMS
+    // STRUCTS AND ENUMS
     // ============================================================
 
     /**
      * @notice The status of a complaint between participants.
+     * @custom:enumValue NONE No complaint has been registered.
+     * @custom:enumValue SUBMITTED A complaint was submitted.
+     * @custom:enumValue RESPONDED A previously submitted complaint was responded to by the accused.
      */
     enum ComplaintStatus {
         NONE,
         SUBMITTED,
         RESPONDED
     }
-
-    // ============================================================
-    // STRUCTS
-    // ============================================================
 
     /**
      * @notice State tracking for a single participant during DKG.

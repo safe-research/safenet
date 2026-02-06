@@ -1,3 +1,4 @@
+import { zeroAddress } from "viem";
 import { describe, expect, it } from "vitest";
 import type { SafeTransactionPacket } from "../../consensus/verify/safeTx/schemas.js";
 import type { TransactionAttestedEvent } from "../transitions/types.js";
@@ -14,13 +15,18 @@ const PACKET: SafeTransactionPacket = {
 	proposal: {
 		epoch: 10n,
 		transaction: {
+			chainId: 1n,
+			safe: "0x5afe5afe",
 			to: "0x5afe5afe",
 			value: 0n,
 			data: "0x",
 			operation: 0,
+			safeTxGas: 0n,
+			baseGas: 0n,
+			gasPrice: 0n,
+			gasToken: zeroAddress,
+			refundReceiver: zeroAddress,
 			nonce: 2n,
-			chainId: 1n,
-			account: "0x5afe5afe",
 		},
 	},
 };

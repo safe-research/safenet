@@ -1,5 +1,5 @@
 import type { Address, Hex } from "viem";
-import type { MetaTransaction } from "../../consensus/verify/safeTx/schemas.js";
+import type { SafeTransaction } from "../../consensus/verify/safeTx/schemas.js";
 import type { FrostPoint, GroupId, ParticipantId, ProofOfKnowledge, SignatureId } from "../../frost/types.js";
 
 export type NewBlock = {
@@ -151,7 +151,7 @@ export type TransactionProposedEvent = {
 	message: Hex;
 	transactionHash: Hex;
 	epoch: bigint;
-	transaction: MetaTransaction;
+	transaction: SafeTransaction;
 };
 
 export type TransactionAttestedEvent = {

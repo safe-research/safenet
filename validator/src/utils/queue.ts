@@ -54,9 +54,9 @@ export class SqliteQueue<T> implements Queue<T> {
 	peek(): T | undefined {
 		const messageRow = this.#db
 			.prepare(`
-			SELECT id, payloadJson 
-			FROM queue_${this.#name}  
-			ORDER BY id ASC 
+			SELECT id, payloadJson
+			FROM queue_${this.#name}
+			ORDER BY id ASC
 			LIMIT 1;
 		`)
 			.get();
@@ -73,9 +73,9 @@ export class SqliteQueue<T> implements Queue<T> {
 			// Step 1: Select the oldest message
 			const messageRow = this.#db
 				.prepare(`
-				SELECT id, payloadJson 
-				FROM queue_${this.#name} 
-				ORDER BY id ASC 
+				SELECT id, payloadJson
+				FROM queue_${this.#name}
+				ORDER BY id ASC
 				LIMIT 1;
 			`)
 				.get();

@@ -1,4 +1,4 @@
-import { zeroHash } from "viem";
+import { zeroAddress, zeroHash } from "viem";
 import { describe, expect, it, vi } from "vitest";
 import type { SigningClient } from "../../consensus/signing/client.js";
 import type { SafeTransactionPacket } from "../../consensus/verify/safeTx/schemas.js";
@@ -204,13 +204,18 @@ describe("nonces revealed", () => {
 			proposal: {
 				epoch: 22n,
 				transaction: {
+					chainId: 0n,
+					safe: "0x89bEf0f3a116cf717e51F74C271A0a7aF527511D",
 					to: "0x89bEf0f3a116cf717e51F74C271A0a7aF527511D",
 					value: 0n,
 					data: "0x",
 					operation: 0,
+					safeTxGas: 0n,
+					baseGas: 0n,
+					gasPrice: 0n,
+					gasToken: zeroAddress,
+					refundReceiver: zeroAddress,
 					nonce: 0n,
-					chainId: 0n,
-					account: "0x89bEf0f3a116cf717e51F74C271A0a7aF527511D",
 				},
 			},
 		};
@@ -274,7 +279,7 @@ describe("nonces revealed", () => {
 			},
 		]);
 		const callbackContext =
-			"0x68c0ce390000000000000000000000000000000000000000000000000000000000000016916684b071b093f33683e48ed3ee895d9a8cae6d5e6a8a6621a30c306857f6a50000000000000000000000000000000000000000000000000000000000000000";
+			"0x68c0ce390000000000000000000000000000000000000000000000000000000000000016d17a3cccc647b9a43f15b53cd396e7ded1c0bb5dde266146f8f8aa86804f76fe0000000000000000000000000000000000000000000000000000000000000000";
 		expect(diff.actions).toStrictEqual([
 			{
 				id: "sign_publish_signature_share",

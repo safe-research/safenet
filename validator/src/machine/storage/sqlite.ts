@@ -99,7 +99,7 @@ export class SqliteStateStorage extends InMemoryStateStorage {
 		database.exec(`
 			CREATE TABLE IF NOT EXISTS consensus_state (
 				-- Enforce a single row for the global consensus data
-				id INTEGER PRIMARY KEY CHECK (id = 1), 
+				id INTEGER PRIMARY KEY CHECK (id = 1),
 
 				-- Stores the JSON serialized representation of MutableConsensusState
 				stateJson TEXT NOT NULL
@@ -113,7 +113,7 @@ export class SqliteStateStorage extends InMemoryStateStorage {
 			);
 			CREATE TABLE IF NOT EXISTS signing_states (
 				-- The SignatureId is the unique key for each signing session
-				signatureId TEXT PRIMARY KEY NOT NULL, 
+				signatureId TEXT PRIMARY KEY NOT NULL,
 
 				-- Stores the JSON serialized representation of a single SigningState object
 				stateJson TEXT NOT NULL

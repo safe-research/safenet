@@ -4,11 +4,12 @@ import {
 	type Address,
 	createTestClient,
 	type Hex,
-	hashStruct,
+	hashTypedData,
 	http,
 	parseAbi,
 	publicActions,
 	walletActions,
+	zeroAddress,
 	zeroHash,
 } from "viem";
 import { type Account, privateKeyToAccount } from "viem/accounts";
@@ -107,8 +108,8 @@ describe("integration", () => {
 		const consensus = {
 			address: deploymentInfo.returns["1"].value as Address,
 			abi: parseAbi([
-				"function proposeTransaction((uint256 chainId, address account, address to, uint256 value, uint8 operation, bytes data, uint256 nonce) transaction) external",
-				"function getAttestation(uint64 epoch, (uint256 chainId, address account, address to, uint256 value, uint8 operation, bytes data, uint256 nonce) transaction) external view returns (bytes32 message, ((uint256 x, uint256 y) r, uint256 z) signature)",
+				"function proposeTransaction((uint256 chainId, address safe, address to, uint256 value, bytes data, uint8 operation, uint256 safeTxGas, uint256 baseGas, uint256 gasPrice, address gasToken, address refundReceiver, uint256 nonce) transaction) external",
+				"function getAttestation(uint64 epoch, (uint256 chainId, address safe, address to, uint256 value, bytes data, uint8 operation, uint256 safeTxGas, uint256 baseGas, uint256 gasPrice, address gasToken, address refundReceiver, uint256 nonce) transaction) external view returns (bytes32 message, ((uint256 x, uint256 y) r, uint256 z) signature)",
 				"function getAttestationByMessage(bytes32 message) external view returns (((uint256 x, uint256 y) r, uint256 z) signature)",
 				"function getActiveEpoch() external view returns (uint64 epoch, bytes32 group)",
 			]),
@@ -338,13 +339,18 @@ describe("integration", () => {
 		// Setup done ... SchildNetz läuft ... lets send some signature requests
 		const transaction = {
 			chainId: 1n,
-			account: "0xb3D9cf8E163bbc840195a97E81F8A34E295B8f39" as Address,
-			to: "0x74F665BE90ffcd9ce9dcA68cB5875570B711CEca" as Address,
+			safe: "0xb3D9cf8E163bbc840195a97E81F8A34E295B8f39",
+			to: "0x74F665BE90ffcd9ce9dcA68cB5875570B711CEca",
 			value: 0n,
-			data: "0x5afe5afe" as Hex,
+			data: "0x5afe5afe",
 			operation: 0,
+			safeTxGas: 0n,
+			baseGas: 0n,
+			gasPrice: 0n,
+			gasToken: zeroAddress,
+			refundReceiver: zeroAddress,
 			nonce: 0n,
-		};
+		} as const;
 		testLogger.notice("Propose transaction", transaction);
 		await testClient.writeContract({
 			...consensus,
@@ -366,22 +372,27 @@ describe("integration", () => {
 
 		// Check if signature request worked
 		// Calculate transaction hash
-		const transactionHash = hashStruct({
+		const transactionHash = hashTypedData({
+			domain: {
+				chainId: transaction.chainId,
+				verifyingContract: transaction.safe,
+			},
 			types: {
-				MetaTransaction: [
-					{ type: "uint256", name: "chainId" },
-					{ type: "address", name: "account" },
+				SafeTx: [
 					{ type: "address", name: "to" },
 					{ type: "uint256", name: "value" },
-					{ type: "uint8", name: "operation" },
 					{ type: "bytes", name: "data" },
+					{ type: "uint8", name: "operation" },
+					{ type: "uint256", name: "safeTxGas" },
+					{ type: "uint256", name: "baseGas" },
+					{ type: "uint256", name: "gasPrice" },
+					{ type: "address", name: "gasToken" },
+					{ type: "address", name: "refundReceiver" },
 					{ type: "uint256", name: "nonce" },
 				],
 			},
-			primaryType: "MetaTransaction",
-			data: {
-				...transaction,
-			},
+			primaryType: "SafeTx",
+			message: transaction,
 		});
 		// Load transaction proposal for tx hash
 		const proposeEvent = CONSENSUS_EVENTS.filter((e) => e.name === "TransactionProposed")[0];

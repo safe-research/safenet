@@ -24,10 +24,10 @@ library ConsensusMessages {
         hex"13de01993286119c9a7628720a5b7d7c32841dbf2d23752b59de86a7e03fe1bf";
 
     /**
-     * @custom:precomputed keccak256("TransactionProposal(uint64 epoch,MetaTransaction transaction)MetaTransaction(uint256 chainId,address account,address to,uint256 value,uint8 operation,bytes data,uint256 nonce)")
+     * @custom:precomputed keccak256("TransactionProposal(uint64 epoch,bytes32 safeTxHash)")
      */
     bytes32 internal constant TRANSACTION_PROPOSAL_TYPEHASH =
-        hex"71e403143d11e6fdc9bddd54b7d0e6e418d2c792dbdae33a3ab5ddf78f01b063";
+        hex"0791f9d2a47e59f417d6c5d2ac1c700ccf949a66461ac7842e6d104c1a92b152";
 
     // ============================================================
     // INTERNAL FUNCTIONS

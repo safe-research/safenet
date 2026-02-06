@@ -1,9 +1,9 @@
 import type { Hex } from "viem";
 import type { PacketHandler } from "../engine.js";
 import { safeTxPacketHash } from "./hashing.js";
-import { type MetaTransaction, type SafeTransactionPacket, safeTransactionPacketSchema } from "./schemas.js";
+import { type SafeTransaction, type SafeTransactionPacket, safeTransactionPacketSchema } from "./schemas.js";
 
-export type TransactionCheck = (tx: MetaTransaction) => void;
+export type TransactionCheck = (tx: SafeTransaction) => void;
 
 export class SafeTransactionHandler implements PacketHandler<SafeTransactionPacket> {
 	constructor(private check: TransactionCheck) {}

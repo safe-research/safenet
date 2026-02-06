@@ -1,5 +1,5 @@
 import Sqlite3 from "better-sqlite3";
-import type { Hex } from "viem";
+import { type Hex, zeroAddress } from "viem";
 import { beforeEach, describe, expect, it } from "vitest";
 import type { EpochRolloverPacket } from "../../consensus/verify/rollover/schemas.js";
 import type { SafeTransactionPacket } from "../../consensus/verify/safeTx/schemas.js";
@@ -15,13 +15,18 @@ const TX_ATTESTATION_PACKET: SafeTransactionPacket = {
 	proposal: {
 		epoch: 22n,
 		transaction: {
+			chainId: 0n,
+			safe: "0x89bEf0f3a116cf717e51F74C271A0a7aF527511D",
 			to: "0x89bEf0f3a116cf717e51F74C271A0a7aF527511D",
 			value: 0n,
 			data: "0x",
 			operation: 0,
+			safeTxGas: 0n,
+			baseGas: 0n,
+			gasPrice: 0n,
+			gasToken: zeroAddress,
+			refundReceiver: zeroAddress,
 			nonce: 0n,
-			chainId: 0n,
-			account: "0x89bEf0f3a116cf717e51F74C271A0a7aF527511D",
 		},
 	},
 };

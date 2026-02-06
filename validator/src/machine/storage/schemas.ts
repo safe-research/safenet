@@ -20,8 +20,11 @@ const dbSafeTransactionPacketSchema = safeTransactionPacketSchema.extend({
 		epoch: coercedBigIntSchema,
 		transaction: safeTransactionPacketSchema.shape.proposal.shape.transaction.extend({
 			chainId: coercedBigIntSchema,
-			nonce: coercedBigIntSchema,
 			value: coercedBigIntSchema,
+			safeTxGas: coercedBigIntSchema,
+			baseGas: coercedBigIntSchema,
+			gasPrice: coercedBigIntSchema,
+			nonce: coercedBigIntSchema,
 		}),
 	}),
 });

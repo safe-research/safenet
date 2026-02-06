@@ -8,21 +8,21 @@ import {
 	toFunctionSelector,
 } from "viem";
 import type { TransactionCheck } from "../handler.js";
-import type { MetaTransaction } from "../schemas.js";
+import type { SafeTransaction } from "../schemas.js";
 
-export const buildNoDelegateCallCheck = () => (tx: MetaTransaction) => {
+export const buildNoDelegateCallCheck = () => (tx: SafeTransaction) => {
 	if (tx.operation !== 0) throw new Error("Delegatecall not allowed");
 };
 
-export const buildSelfCheck = (check: TransactionCheck) => (tx: MetaTransaction) => {
+export const buildSelfCheck = (check: TransactionCheck) => (tx: SafeTransaction) => {
 	// Checks should only be applied to self transactions
-	if (tx.to !== tx.account) return;
+	if (tx.to !== tx.safe) return;
 	check(tx);
 };
 
 export const buildFixedParamsCheck =
-	(params: Partial<MetaTransaction>): TransactionCheck =>
-	(tx: MetaTransaction) => {
+	(params: Partial<SafeTransaction>): TransactionCheck =>
+	(tx: SafeTransaction) => {
 		if (params.operation !== undefined && tx.operation !== params.operation) {
 			throw new Error(`Expected operation ${params.operation} got ${tx.operation}`);
 		}
@@ -39,7 +39,7 @@ export const buildFixedParamsCheck =
 
 export const buildSupportedSelectorCheck =
 	(selectors: readonly Hex[], allowEmpty: boolean): TransactionCheck =>
-	(tx: MetaTransaction) => {
+	(tx: SafeTransaction) => {
 		const dataSize = size(tx.data);
 		if (dataSize === 0 && allowEmpty) return;
 		if (dataSize < 4) {
@@ -66,7 +66,7 @@ export function buildSelectorCheck<S extends string>(
 	const selectorCheck: SelectorChecks = {};
 	const abi = parseAbiItem(signature as string) as ParseAbiItem<S>;
 	const selector = toFunctionSelector(signature);
-	selectorCheck[selector] = (tx: MetaTransaction): void => {
+	selectorCheck[selector] = (tx: SafeTransaction): void => {
 		const parsedData = decodeFunctionData<ParseAbiItem<S>[]>({ abi: [abi], data: tx.data });
 		handler(parsedData.args);
 	};
@@ -75,7 +75,7 @@ export function buildSelectorCheck<S extends string>(
 
 export const buildSelectorChecks =
 	(selectorChecks: Readonly<SelectorChecks>, allowEmpty: boolean, fallbackCheck?: TransactionCheck): TransactionCheck =>
-	(tx: MetaTransaction): void => {
+	(tx: SafeTransaction): void => {
 		const dataSize = size(tx.data);
 		if (dataSize === 0 && allowEmpty) return;
 		if (dataSize < 4) {

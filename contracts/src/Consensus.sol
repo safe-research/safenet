@@ -7,7 +7,7 @@ import {ConsensusMessages} from "@/libraries/ConsensusMessages.sol";
 import {FROST} from "@/libraries/FROST.sol";
 import {FROSTGroupId} from "@/libraries/FROSTGroupId.sol";
 import {FROSTSignatureId} from "@/libraries/FROSTSignatureId.sol";
-import {MetaTransaction} from "@/libraries/MetaTransaction.sol";
+import {SafeTransaction} from "@/libraries/SafeTransaction.sol";
 import {Secp256k1} from "@/libraries/Secp256k1.sol";
 
 /**
@@ -17,7 +17,7 @@ import {Secp256k1} from "@/libraries/Secp256k1.sol";
 contract Consensus is IFROSTCoordinatorCallback {
     using ConsensusMessages for bytes32;
     using FROSTSignatureId for FROSTSignatureId.T;
-    using MetaTransaction for MetaTransaction.T;
+    using SafeTransaction for SafeTransaction.T;
 
     // ============================================================
     // STRUCTS
@@ -108,12 +108,12 @@ contract Consensus is IFROSTCoordinatorCallback {
     /**
      * @notice Emitted when a transaction is proposed for validator approval.
      * @param message The EIP-712 message hash.
-     * @param transactionHash The hash of the proposed meta-transaction.
+     * @param transactionHash The hash of the proposed Safe transaction.
      * @param epoch The epoch in which the transaction is proposed.
-     * @param transaction The proposed meta-transaction.
+     * @param transaction The proposed Safe transaction.
      */
     event TransactionProposed(
-        bytes32 indexed message, bytes32 indexed transactionHash, uint64 epoch, MetaTransaction.T transaction
+        bytes32 indexed message, bytes32 indexed transactionHash, uint64 epoch, SafeTransaction.T transaction
     );
 
     /**
@@ -186,21 +186,36 @@ contract Consensus is IFROSTCoordinatorCallback {
     /**
      * @notice Gets a transaction attestation for a specific epoch and transaction.
      * @param epoch The epoch in which the transaction was proposed.
-     * @param transaction The meta-transaction to query the attestation for.
+     * @param transaction The Safe transaction to query the attestation for.
      * @return message The EIP-712 message hash of the proposal.
      * @return signature The FROST signature attesting to the transaction.
      */
-    function getAttestation(uint64 epoch, MetaTransaction.T memory transaction)
+    function getAttestation(uint64 epoch, SafeTransaction.T memory transaction)
         external
         view
         returns (bytes32 message, FROST.Signature memory signature)
     {
-        message = domainSeparator().transactionProposal(epoch, transaction.hash());
+        return getAttestationByHash(epoch, transaction.hash());
+    }
+
+    /**
+     * @notice Gets a transaction attestation for a specific epoch and transaction hash.
+     * @param epoch The epoch in which the transaction was proposed.
+     * @param transactionHash The Safe transaction hash to query the attestation for.
+     * @return message The EIP-712 message hash of the proposal.
+     * @return signature The FROST signature attesting to the transaction.
+     */
+    function getAttestationByHash(uint64 epoch, bytes32 transactionHash)
+        public
+        view
+        returns (bytes32 message, FROST.Signature memory signature)
+    {
+        message = domainSeparator().transactionProposal(epoch, transactionHash);
         signature = getAttestationByMessage(message);
     }
 
     /**
-     * @notice Gets a transaction attestation by its hashed message.
+     * @notice Gets a transaction attestation by its transaction proposal hash.
      * @param message The EIP-712 message hash of the proposal.
      * @return signature The FROST signature attesting to the transaction.
      */
@@ -210,37 +225,41 @@ contract Consensus is IFROSTCoordinatorCallback {
 
     /**
      * @notice Gets a recent transaction attestation.
-     * @param transaction The meta-transaction to query the attestation for.
+     * @param transaction The Safe transaction to query the attestation for.
+     * @return epoch The recent epoch that the transaction was attested in.
      * @return message The EIP-712 message hash of the proposal.
      * @return signature The FROST signature attesting to the transaction.
      * @dev This method will fail if the attestation did not happen in either the active or previous epochs. This is
      *      provided as a convenience method to clients who may want to query an attestation for a transaction they
      *      recently proposed for validator approval.
      */
-    function getRecentAttestation(MetaTransaction.T memory transaction)
+    function getRecentAttestation(SafeTransaction.T memory transaction)
         external
         view
-        returns (bytes32 message, FROST.Signature memory signature)
+        returns (uint64 epoch, bytes32 message, FROST.Signature memory signature)
     {
         return getRecentAttestationByHash(transaction.hash());
     }
 
     /**
      * @notice Gets a recent transaction attestation by transaction hash.
-     * @param transactionHash The hash of the meta-transaction.
+     * @param transactionHash The hash of the Safe transaction.
+     * @return epoch The recent epoch that the transaction was attested in.
      * @return message The EIP-712 message hash of the proposal.
      * @return signature The FROST signature attesting to the transaction.
      */
     function getRecentAttestationByHash(bytes32 transactionHash)
         public
         view
-        returns (bytes32 message, FROST.Signature memory signature)
+        returns (uint64 epoch, bytes32 message, FROST.Signature memory signature)
     {
         (Epochs memory epochs,) = _epochsWithRollover();
         bytes32 domain = domainSeparator();
+        epoch = epochs.active;
         message = domain.transactionProposal(epochs.active, transactionHash);
         FROSTSignatureId.T attestation = $attestations[message];
         if (attestation.isZero()) {
+            epoch = epochs.previous;
             message = domain.transactionProposal(epochs.previous, transactionHash);
             attestation = $attestations[message];
         }
@@ -327,21 +346,62 @@ contract Consensus is IFROSTCoordinatorCallback {
 
     /**
      * @notice Proposes a transaction for validator approval.
-     * @param transaction The meta-transaction to propose.
+     * @param transaction The Safe transaction to propose.
      * @return message The EIP-712 message hash of the proposal.
+     * @return transactionHash The Safe transaction hash.
      */
-    function proposeTransaction(MetaTransaction.T memory transaction) external returns (bytes32 message) {
+    function proposeTransaction(SafeTransaction.T memory transaction)
+        public
+        returns (bytes32 message, bytes32 transactionHash)
+    {
         Epochs memory epochs = _processRollover();
-        bytes32 transactionHash = transaction.hash();
+        transactionHash = transaction.hash();
         message = domainSeparator().transactionProposal(epochs.active, transactionHash);
         emit TransactionProposed(message, transactionHash, epochs.active, transaction);
         _COORDINATOR.sign($groups[epochs.active], message);
     }
 
     /**
+     * @notice Proposes a transaction for validator approval, only specifying the basic transaction properties.
+     * @param chainId The chain ID of the Safe account.
+     * @param safe The address of the Safe account.
+     * @param to Destination address of Safe transaction.
+     * @param value Native token value of the Safe transaction.
+     * @param data Data payload of the Safe transaction.
+     * @param nonce Safe transaction nonce.
+     * @return message The EIP-712 message hash of the proposal.
+     * @return transactionHash The Safe transaction hash.
+     * @dev This is provided as a convenience method for proposing transactions with the most common parameters.
+     */
+    function proposeBasicTransaction(
+        uint256 chainId,
+        address safe,
+        address to,
+        uint256 value,
+        bytes memory data,
+        uint256 nonce
+    ) external returns (bytes32 message, bytes32 transactionHash) {
+        SafeTransaction.T memory transaction = SafeTransaction.T({
+            chainId: chainId,
+            safe: safe,
+            to: to,
+            value: value,
+            data: data,
+            operation: SafeTransaction.Operation.CALL,
+            safeTxGas: 0,
+            baseGas: 0,
+            gasPrice: 0,
+            gasToken: address(0),
+            refundReceiver: address(0),
+            nonce: nonce
+        });
+        return proposeTransaction(transaction);
+    }
+
+    /**
      * @notice Attests to a transaction.
      * @param epoch The epoch in which the transaction was proposed.
-     * @param transactionHash The hash of the meta-transaction.
+     * @param transactionHash The hash of the Safe transaction.
      * @param signature The FROST signature share attesting to the transaction.
      * @dev No explicit time limit is imposed for when a transaction can be attested in this contract.
      */

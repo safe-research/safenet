@@ -37,13 +37,18 @@ const TX_ATTESTATION_PACKET: SafeTransactionPacket = {
 	proposal: {
 		epoch: 22n,
 		transaction: {
+			chainId: 0n,
+			safe: "0x89bEf0f3a116cf717e51F74C271A0a7aF527511D",
 			to: "0x89bEf0f3a116cf717e51F74C271A0a7aF527511D",
 			value: 0n,
 			data: "0x",
 			operation: 0,
+			safeTxGas: 0n,
+			baseGas: 0n,
+			gasPrice: 0n,
+			gasToken: zeroAddress,
+			refundReceiver: zeroAddress,
 			nonce: 0n,
-			chainId: 0n,
-			account: "0x89bEf0f3a116cf717e51F74C271A0a7aF527511D",
 		},
 	},
 };
@@ -228,7 +233,7 @@ describe("signing timeouts - waiting for attestation", () => {
 			{
 				id: "consensus_attest_transaction",
 				epoch: 22n,
-				transactionHash: "0x916684b071b093f33683e48ed3ee895d9a8cae6d5e6a8a6621a30c306857f6a5",
+				transactionHash: "0xd17a3cccc647b9a43f15b53cd396e7ded1c0bb5dde266146f8f8aa86804f76fe",
 				signatureId: "0x5af35af3",
 			},
 		]);
@@ -335,7 +340,7 @@ describe("signing timeouts - waiting for attestation", () => {
 			{
 				id: "consensus_attest_transaction",
 				epoch: 22n,
-				transactionHash: "0x916684b071b093f33683e48ed3ee895d9a8cae6d5e6a8a6621a30c306857f6a5",
+				transactionHash: "0xd17a3cccc647b9a43f15b53cd396e7ded1c0bb5dde266146f8f8aa86804f76fe",
 				signatureId: "0x5af35af3",
 			},
 		]);

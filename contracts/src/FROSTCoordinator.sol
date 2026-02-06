@@ -22,7 +22,7 @@ contract FROSTCoordinator {
     using FROSTSignatureShares for FROSTSignatureShares.T;
 
     // ============================================================
-    // ENUMS
+    // TYPES
     // ============================================================
 
     /**
@@ -50,10 +50,6 @@ contract FROSTCoordinator {
         COMPROMISED,
         FINALIZED
     }
-
-    // ============================================================
-    // STRUCTS
-    // ============================================================
 
     /**
      * @notice Represents a FROST signing group and its associated state.

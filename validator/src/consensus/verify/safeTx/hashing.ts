@@ -1,46 +1,45 @@
-import { type Hex, hashStruct, hashTypedData } from "viem";
-import type { MetaTransaction, SafeTransactionPacket } from "./schemas.js";
+import { type Hex, hashTypedData } from "viem";
+import type { SafeTransaction, SafeTransactionPacket } from "./schemas.js";
 
 export const safeTxPacketHash = (packet: SafeTransactionPacket): Hex =>
 	hashTypedData({
 		domain: {
-			verifyingContract: packet.domain.consensus,
 			chainId: packet.domain.chain,
+			verifyingContract: packet.domain.consensus,
 		},
 		types: {
-			MetaTransaction: [
-				{ type: "uint256", name: "chainId" },
-				{ type: "address", name: "account" },
-				{ type: "address", name: "to" },
-				{ type: "uint256", name: "value" },
-				{ type: "uint8", name: "operation" },
-				{ type: "bytes", name: "data" },
-				{ type: "uint256", name: "nonce" },
-			],
 			TransactionProposal: [
 				{ type: "uint64", name: "epoch" },
-				{ type: "MetaTransaction", name: "transaction" },
+				{ type: "bytes32", name: "safeTxHash" },
 			],
 		},
 		primaryType: "TransactionProposal",
 		message: {
-			...packet.proposal,
+			epoch: packet.proposal.epoch,
+			safeTxHash: safeTxHash(packet.proposal.transaction),
 		},
 	});
 
-export const metaTxHash = (transaction: MetaTransaction): Hex =>
-	hashStruct({
+export const safeTxHash = (transaction: SafeTransaction): Hex =>
+	hashTypedData({
+		domain: {
+			chainId: transaction.chainId,
+			verifyingContract: transaction.safe,
+		},
 		types: {
-			MetaTransaction: [
-				{ type: "uint256", name: "chainId" },
-				{ type: "address", name: "account" },
+			SafeTx: [
 				{ type: "address", name: "to" },
 				{ type: "uint256", name: "value" },
-				{ type: "uint8", name: "operation" },
 				{ type: "bytes", name: "data" },
+				{ type: "uint8", name: "operation" },
+				{ type: "uint256", name: "safeTxGas" },
+				{ type: "uint256", name: "baseGas" },
+				{ type: "uint256", name: "gasPrice" },
+				{ type: "address", name: "gasToken" },
+				{ type: "address", name: "refundReceiver" },
 				{ type: "uint256", name: "nonce" },
 			],
 		},
-		primaryType: "MetaTransaction",
-		data: transaction,
+		primaryType: "SafeTx",
+		message: transaction,
 	});

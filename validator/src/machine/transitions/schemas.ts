@@ -123,13 +123,18 @@ export const epochStagedEventSchema = z.object({
 });
 
 const transactionSchema = z.object({
+	chainId: eventBigIntSchema,
+	safe: checkedAddressSchema,
 	to: checkedAddressSchema,
 	value: eventBigIntSchema,
 	data: hexDataSchema,
 	operation: z.union([z.literal(0), z.literal(1)]),
+	safeTxGas: eventBigIntSchema,
+	baseGas: eventBigIntSchema,
+	gasPrice: eventBigIntSchema,
+	gasToken: checkedAddressSchema,
+	refundReceiver: checkedAddressSchema,
 	nonce: eventBigIntSchema,
-	chainId: eventBigIntSchema,
-	account: checkedAddressSchema,
 });
 
 export const transactionProposedEventSchema = z.object({

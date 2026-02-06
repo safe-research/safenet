@@ -1,6 +1,7 @@
+import { zeroAddress } from "viem";
 import { describe, expect, it, vi } from "vitest";
 import type { TransactionCheck } from "../handler.js";
-import type { MetaTransaction } from "../schemas.js";
+import type { SafeTransaction } from "../schemas.js";
 import { buildAddressSplitCheck, buildCombinedChecks } from "./combined.js";
 
 describe("combined checks", () => {
@@ -11,23 +12,33 @@ describe("combined checks", () => {
 				"0x40A2aCCbd92BCA938b02010E17A5b8929b49130D": subCheck,
 			});
 			addressCheck({
+				chainId: 1n,
+				safe: "0xF01888f0677547Ec07cd16c8680e699c96588E6B",
 				to: "0x40A2aCCbd92BCA938b02010E17A5b8929b49130D",
 				value: 0n,
 				data: "0x5afe",
 				operation: 1,
+				safeTxGas: 0n,
+				baseGas: 0n,
+				gasPrice: 0n,
+				gasToken: zeroAddress,
+				refundReceiver: zeroAddress,
 				nonce: 0n,
-				chainId: 1n,
-				account: "0xF01888f0677547Ec07cd16c8680e699c96588E6B",
 			});
 			expect(subCheck).toBeCalledTimes(1);
 			expect(subCheck).toBeCalledWith({
+				chainId: 1n,
+				safe: "0xF01888f0677547Ec07cd16c8680e699c96588E6B",
 				to: "0x40A2aCCbd92BCA938b02010E17A5b8929b49130D",
 				value: 0n,
 				data: "0x5afe",
 				operation: 1,
+				safeTxGas: 0n,
+				baseGas: 0n,
+				gasPrice: 0n,
+				gasToken: zeroAddress,
+				refundReceiver: zeroAddress,
 				nonce: 0n,
-				chainId: 1n,
-				account: "0xF01888f0677547Ec07cd16c8680e699c96588E6B",
 			});
 		});
 
@@ -39,23 +50,33 @@ describe("combined checks", () => {
 				"0x40A2aCCbd92BCA938b02010E17A5b8929b49130D": invalidCheck,
 			});
 			addressCheck({
+				chainId: 1n,
+				safe: "0xF01888f0677547Ec07cd16c8680e699c96588E6B",
 				to: "0x40A2aCCbd92BCA938b02010E17A5b8929b49130D",
 				value: 0n,
 				data: "0x5afe",
 				operation: 1,
+				safeTxGas: 0n,
+				baseGas: 0n,
+				gasPrice: 0n,
+				gasToken: zeroAddress,
+				refundReceiver: zeroAddress,
 				nonce: 0n,
-				chainId: 1n,
-				account: "0xF01888f0677547Ec07cd16c8680e699c96588E6B",
 			});
 			expect(subCheck).toBeCalledTimes(1);
 			expect(subCheck).toBeCalledWith({
+				chainId: 1n,
+				safe: "0xF01888f0677547Ec07cd16c8680e699c96588E6B",
 				to: "0x40A2aCCbd92BCA938b02010E17A5b8929b49130D",
 				value: 0n,
 				data: "0x5afe",
 				operation: 1,
+				safeTxGas: 0n,
+				baseGas: 0n,
+				gasPrice: 0n,
+				gasToken: zeroAddress,
+				refundReceiver: zeroAddress,
 				nonce: 0n,
-				chainId: 1n,
-				account: "0xF01888f0677547Ec07cd16c8680e699c96588E6B",
 			});
 		});
 
@@ -68,23 +89,33 @@ describe("combined checks", () => {
 				subCheck,
 			);
 			addressCheck({
+				chainId: 2n,
+				safe: "0xF01888f0677547Ec07cd16c8680e699c96588E6B",
 				to: "0x40A2aCCbd92BCA938b02010E17A5b8929b49130D",
 				value: 0n,
 				data: "0x5afe",
 				operation: 1,
+				safeTxGas: 0n,
+				baseGas: 0n,
+				gasPrice: 0n,
+				gasToken: zeroAddress,
+				refundReceiver: zeroAddress,
 				nonce: 0n,
-				chainId: 2n,
-				account: "0xF01888f0677547Ec07cd16c8680e699c96588E6B",
 			});
 			expect(subCheck).toBeCalledTimes(1);
 			expect(subCheck).toBeCalledWith({
+				chainId: 2n,
+				safe: "0xF01888f0677547Ec07cd16c8680e699c96588E6B",
 				to: "0x40A2aCCbd92BCA938b02010E17A5b8929b49130D",
 				value: 0n,
 				data: "0x5afe",
 				operation: 1,
+				safeTxGas: 0n,
+				baseGas: 0n,
+				gasPrice: 0n,
+				gasToken: zeroAddress,
+				refundReceiver: zeroAddress,
 				nonce: 0n,
-				chainId: 2n,
-				account: "0xF01888f0677547Ec07cd16c8680e699c96588E6B",
 			});
 		});
 
@@ -94,13 +125,18 @@ describe("combined checks", () => {
 				"eip155:1:0x40A2aCCbd92BCA938b02010E17A5b8929b49130D": subCheck,
 			});
 			addressCheck({
+				chainId: 2n,
+				safe: "0xF01888f0677547Ec07cd16c8680e699c96588E6B",
 				to: "0x40A2aCCbd92BCA938b02010E17A5b8929b49130D",
 				value: 0n,
 				data: "0x5afe",
 				operation: 1,
+				safeTxGas: 0n,
+				baseGas: 0n,
+				gasPrice: 0n,
+				gasToken: zeroAddress,
+				refundReceiver: zeroAddress,
 				nonce: 0n,
-				chainId: 2n,
-				account: "0xF01888f0677547Ec07cd16c8680e699c96588E6B",
 			});
 		});
 	});
@@ -118,14 +154,19 @@ describe("combined checks", () => {
 			subCheck.mockImplementationOnce(() => {
 				throw new Error("Invalid");
 			});
-			const tx: MetaTransaction = {
+			const tx: SafeTransaction = {
+				chainId: 1n,
+				safe: "0xF01888f0677547Ec07cd16c8680e699c96588E6B",
 				to: "0x40A2aCCbd92BCA938b02010E17A5b8929b49130D",
 				value: 0n,
 				data: "0x5afe",
 				operation: 0,
+				safeTxGas: 0n,
+				baseGas: 0n,
+				gasPrice: 0n,
+				gasToken: zeroAddress,
+				refundReceiver: zeroAddress,
 				nonce: 0n,
-				chainId: 1n,
-				account: "0xF01888f0677547Ec07cd16c8680e699c96588E6B",
 			};
 			expect(() => combinedCheck(tx)).toThrowError(Error("Invalid"));
 			expect(subCheck).toBeCalledTimes(3);
@@ -138,14 +179,19 @@ describe("combined checks", () => {
 			subCheck.mockImplementation(() => {
 				return;
 			});
-			const tx: MetaTransaction = {
+			const tx: SafeTransaction = {
+				chainId: 1n,
+				safe: "0xF01888f0677547Ec07cd16c8680e699c96588E6B",
 				to: "0x40A2aCCbd92BCA938b02010E17A5b8929b49130D",
 				value: 0n,
 				data: "0x5afe",
 				operation: 0,
+				safeTxGas: 0n,
+				baseGas: 0n,
+				gasPrice: 0n,
+				gasToken: zeroAddress,
+				refundReceiver: zeroAddress,
 				nonce: 0n,
-				chainId: 1n,
-				account: "0xF01888f0677547Ec07cd16c8680e699c96588E6B",
 			};
 			combinedCheck(tx);
 			expect(subCheck).toBeCalledTimes(4);
