@@ -18,16 +18,16 @@ contract StakingHarness is Staking {
         )
     {}
 
-    function withdrawalQueueEmpty(address staker) public returns (bool isEmpty) {
+    function withdrawalQueueEmpty(address staker) public view returns (bool isEmpty) {
         (uint256 amount, uint256 claimableAt) = this.getNextClaimableWithdrawal(staker);
         isEmpty = (amount == 0 && claimableAt == 0);
     }
 
-    function withdrawalQueueLength(address staker) public returns (uint256 length) {
+    function withdrawalQueueLength(address staker) public view returns (uint256 length) {
         return this.getPendingWithdrawals(staker).length;
     }
 
-    function isInWithdrawalQueue(address staker, uint64 withdrawalId) public returns (bool result) {
+    function isInWithdrawalQueue(address staker, uint64 withdrawalId) public view returns (bool result) {
         WithdrawalQueue storage queue = withdrawalQueues[staker];
         mapping(uint64 => WithdrawalNode) storage nodes = withdrawalNodes[staker];
 
@@ -39,7 +39,7 @@ contract StakingHarness is Staking {
         return false;
     }
 
-    function checkWithdrawQueueIntegrity(address staker) public returns (bool result) {
+    function checkWithdrawQueueIntegrity(address staker) public view returns (bool result) {
         // Check the integrity of the withdrawal queue linked list pointers.
 
         WithdrawalQueue memory queue = withdrawalQueues[staker];

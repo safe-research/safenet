@@ -174,7 +174,7 @@ rule canAlwaysWithdrawAtPosition(env e, address validator, uint256 amount, uint6
     require previousId > 0 && previousId < nextWithdrawalId(); // Previous ID must be valid and non-zero
     require previousIdClaimableAt != 0; // Previous node must exist in the withdrawal queue
     require previousIdClaimableAt <= e.block.timestamp + withdrawDelay();
-    require nextIdClaimableAt >= e.block.timestamp + withdrawDelay();
+    require nextId == 0 || nextIdClaimableAt >= e.block.timestamp + withdrawDelay();
     require e.block.timestamp + withdrawDelay() < max_uint128; // To prevent overflow of claimableAt timestamp
     require nextWithdrawalId() < max_uint64; // To prevent overflow of withdrawal IDs
     require totalPendingWithdrawals() + amount < erc20Token.totalSupply();
