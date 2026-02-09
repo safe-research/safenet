@@ -83,18 +83,37 @@ describe("key gen committed", () => {
 		expect(diff).toStrictEqual({});
 	});
 
+	it("should not handle event if part of the group", async () => {
+		const participantId = vi.fn();
+		const keyGenClient = {
+			participantId,
+		} as unknown as KeyGenClient;
+		participantId.mockImplementationOnce(() => {
+			throw new Error("Test Error: Unknown group!");
+		});
+		const diff = await handleKeyGenCommitted(MACHINE_CONFIG, keyGenClient, MACHINE_STATES, EVENT);
+
+		expect(diff).toStrictEqual({});
+		expect(participantId).toBeCalledTimes(1);
+		expect(participantId).toBeCalledWith("0x06cb03baac74421225341827941e88d9547e5459c4b3715c0000000000000000");
+	});
+
 	it("should not update state if not fully committed", async () => {
 		const event: KeyGenCommittedEvent = {
 			...EVENT,
 			committed: false,
 		};
+		const participantId = vi.fn();
 		const handleKeygenCommitment = vi.fn();
 		const keyGenClient = {
 			handleKeygenCommitment,
+			participantId,
 		} as unknown as KeyGenClient;
 		const diff = await handleKeyGenCommitted(MACHINE_CONFIG, keyGenClient, MACHINE_STATES, event);
 
 		expect(diff).toStrictEqual({});
+		expect(participantId).toBeCalledTimes(1);
+		expect(participantId).toBeCalledWith("0x06cb03baac74421225341827941e88d9547e5459c4b3715c0000000000000000");
 		expect(handleKeygenCommitment).toBeCalledTimes(1);
 		expect(handleKeygenCommitment).toBeCalledWith(
 			"0x06cb03baac74421225341827941e88d9547e5459c4b3715c0000000000000000",
@@ -108,6 +127,7 @@ describe("key gen committed", () => {
 	});
 
 	it("should publish secret shares once fully committed", async () => {
+		const participantId = vi.fn();
 		const handleKeygenCommitment = vi.fn();
 		const createSecretShares = vi.fn();
 		createSecretShares.mockReturnValueOnce({
@@ -115,6 +135,7 @@ describe("key gen committed", () => {
 			shares: [0x5afe01n, 0x5afe03n],
 		});
 		const keyGenClient = {
+			participantId,
 			handleKeygenCommitment,
 			createSecretShares,
 		} as unknown as KeyGenClient;
@@ -138,6 +159,8 @@ describe("key gen committed", () => {
 				},
 			],
 		});
+		expect(participantId).toBeCalledTimes(1);
+		expect(participantId).toBeCalledWith("0x06cb03baac74421225341827941e88d9547e5459c4b3715c0000000000000000");
 		expect(handleKeygenCommitment).toBeCalledTimes(1);
 		expect(handleKeygenCommitment).toBeCalledWith(
 			"0x06cb03baac74421225341827941e88d9547e5459c4b3715c0000000000000000",

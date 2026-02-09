@@ -15,6 +15,16 @@ export const handleKeyGenCommitted = async (
 	// Verify that the group corresponds to the next epoch
 	if (machineStates.rollover.groupId !== event.gid) return {};
 	const nextEpoch = machineStates.rollover.nextEpoch;
+
+	try {
+		// Check if validator is part of group, method will throw if not
+		keyGenClient.participantId(event.gid);
+	} catch {
+		// If there is no participant id, then this validator is not part of the group
+		// In this case ignore this request
+		return {};
+	}
+
 	// TODO: handle bad commitments -> Remove participant
 	keyGenClient.handleKeygenCommitment(event.gid, event.identifier, event.commitment.c, {
 		r: event.commitment.r,
