@@ -47,8 +47,9 @@ const EVENT: TransactionProposedEvent = {
 	id: "event_transaction_proposed",
 	block: 2n,
 	index: 0,
-	message: "0x5afe5afe",
 	transactionHash: "0x5af35af3",
+	chainId: 1n,
+	safe: "0x5afe5afe",
 	epoch: 10n,
 	transaction: {
 		chainId: 1n,

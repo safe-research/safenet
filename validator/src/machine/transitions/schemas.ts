@@ -23,6 +23,11 @@ export const frostShareSchema = z.object({
 	f: z.array(eventBigIntSchema),
 });
 
+export const signatureSchema = z.object({
+	z: eventBigIntSchema,
+	r: frostPointSchema,
+});
+
 export const keyGenEventSchema = z.object({
 	gid: hexBytes32Schema,
 	participants: hexBytes32Schema,
@@ -98,11 +103,6 @@ export const signatureShareEventSchema = z.object({
 	root: hexBytes32Schema,
 });
 
-export const signatureSchema = z.object({
-	z: eventBigIntSchema,
-	r: frostPointSchema,
-});
-
 export const signedEventSchema = z.object({
 	sid: hexBytes32Schema,
 	signature: signatureSchema,
@@ -120,6 +120,7 @@ export const epochStagedEventSchema = z.object({
 	proposedEpoch: eventBigIntSchema,
 	rolloverBlock: eventBigIntSchema,
 	groupKey: frostPointSchema,
+	attestation: signatureSchema,
 });
 
 const transactionSchema = z.object({
@@ -138,14 +139,17 @@ const transactionSchema = z.object({
 });
 
 export const transactionProposedEventSchema = z.object({
-	message: hexBytes32Schema,
 	transactionHash: hexBytes32Schema,
+	chainId: eventBigIntSchema,
+	safe: checkedAddressSchema,
 	epoch: eventBigIntSchema,
 	transaction: transactionSchema,
 });
 
 export const transactionAttestedEventSchema = z.object({
-	message: hexBytes32Schema,
+	transactionHash: hexBytes32Schema,
+	epoch: eventBigIntSchema,
+	attestation: signatureSchema,
 });
 
 const baseEventTransitionParamsSchema = z.object({

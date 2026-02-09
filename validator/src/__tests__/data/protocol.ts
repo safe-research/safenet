@@ -608,13 +608,17 @@ export const TEST_EVENTS: [ProtocolLog | null, StateTransition][] = [
 		{
 			blockNumber: 111n,
 			logIndex: 0,
-			// EpochStaged(uint64 indexed activeEpoch, uint64 indexed proposedEpoch, uint64 rolloverBlock, (uint256 x, uint256 y) groupKey)
+			// EpochStaged(uint64 indexed activeEpoch, uint64 indexed proposedEpoch, uint64 rolloverBlock, (uint256 x, uint256 y) groupKey, ((uint256 x, uint256 y) r, uint256 z) attestation)
 			eventName: "EpochStaged",
 			args: {
 				activeEpoch: 1n,
 				proposedEpoch: 2n,
 				rolloverBlock: 3n,
 				groupKey: TEST_POINT,
+				attestation: {
+					r: TEST_POINT,
+					z: 12345n,
+				},
 			},
 		},
 		{
@@ -625,17 +629,22 @@ export const TEST_EVENTS: [ProtocolLog | null, StateTransition][] = [
 			proposedEpoch: 2n,
 			rolloverBlock: 3n,
 			groupKey: TEST_POINT,
+			attestation: {
+				z: 12345n,
+				r: TEST_POINT,
+			},
 		},
 	],
 	[
 		{
 			blockNumber: 111n,
 			logIndex: 0,
-			// TransactionProposed(bytes32 indexed message, bytes32 indexed transactionHash, uint64 epoch, (uint256 chainId, address safe, address to, uint256 value, bytes data, uint8 operation, uint256 safeTxGas, uint256 baseGas, uint256 gasPrice, address gasToken, address refundReceiver, uint256 nonce) transaction)
+			// TransactionProposed(bytes32 indexed transactionHash, uint256 indexed chainId, address indexed safe, uint64 epoch, (uint256 chainId, address safe, address to, uint256 value, bytes data, uint8 operation, uint256 safeTxGas, uint256 baseGas, uint256 gasPrice, address gasToken, address refundReceiver, uint256 nonce) transaction)
 			eventName: "TransactionProposed",
 			args: {
-				message: "0x5af3330000000000000000000000000000000000000000000000000000000000",
 				transactionHash: "0x5af3aabbcc000000000000000000000000000000000000000000000000000000",
+				chainId: 100n,
+				safe: zeroAddress,
 				epoch: 2n,
 				transaction: {
 					chainId: 100n,
@@ -657,8 +666,9 @@ export const TEST_EVENTS: [ProtocolLog | null, StateTransition][] = [
 			id: "event_transaction_proposed",
 			block: 111n,
 			index: 0,
-			message: "0x5af3330000000000000000000000000000000000000000000000000000000000",
 			transactionHash: "0x5af3aabbcc000000000000000000000000000000000000000000000000000000",
+			chainId: 100n,
+			safe: zeroAddress,
 			epoch: 2n,
 			transaction: {
 				chainId: 100n,
@@ -680,17 +690,27 @@ export const TEST_EVENTS: [ProtocolLog | null, StateTransition][] = [
 		{
 			blockNumber: 111n,
 			logIndex: 0,
-			// TransactionAttested(bytes32 indexed message)
+			// TransactionAttested(bytes32 indexed transactionHash, uint64 epoch, ((uint256 x, uint256 y) r, uint256 z) attestation)
 			eventName: "TransactionAttested",
 			args: {
-				message: "0x5af3330000000000000000000000000000000000000000000000000000000000",
+				transactionHash: "0x5af3330000000000000000000000000000000000000000000000000000000000",
+				epoch: 42n,
+				attestation: {
+					r: TEST_POINT,
+					z: 12345n,
+				},
 			},
 		},
 		{
 			id: "event_transaction_attested",
 			block: 111n,
 			index: 0,
-			message: "0x5af3330000000000000000000000000000000000000000000000000000000000",
+			transactionHash: "0x5af3330000000000000000000000000000000000000000000000000000000000",
+			epoch: 42n,
+			attestation: {
+				r: TEST_POINT,
+				z: 12345n,
+			},
 		},
 	],
 ];

@@ -21,7 +21,13 @@ import { toPoint } from "../frost/math.js";
 import { calcGenesisGroup, calcGroupContext } from "../machine/keygen/group.js";
 import type { WatcherConfig } from "../machine/transitions/watcher.js";
 import { createValidatorService, type ValidatorService } from "../service/service.js";
-import { CONSENSUS_EVENTS, COORDINATOR_EVENTS } from "../types/abis.js";
+import {
+	CONSENSUS_EPOCH_STAGED_EVENT,
+	CONSENSUS_TRANSACTION_PROPOSED_EVENT,
+	COORDINATOR_EVENTS,
+	COORDINATOR_SIGN_COMPLETED_EVENT,
+	COORDINATOR_SIGN_EVENT,
+} from "../types/abis.js";
 import type { ProtocolConfig } from "../types/interfaces.js";
 import { calcGroupId } from "./keyGen/utils.js";
 import { calculateParticipantsRoot } from "./merkle.js";
@@ -109,8 +115,7 @@ describe("integration", () => {
 			address: deploymentInfo.returns["1"].value as Address,
 			abi: parseAbi([
 				"function proposeTransaction((uint256 chainId, address safe, address to, uint256 value, bytes data, uint8 operation, uint256 safeTxGas, uint256 baseGas, uint256 gasPrice, address gasToken, address refundReceiver, uint256 nonce) transaction) external",
-				"function getAttestation(uint64 epoch, (uint256 chainId, address safe, address to, uint256 value, bytes data, uint8 operation, uint256 safeTxGas, uint256 baseGas, uint256 gasPrice, address gasToken, address refundReceiver, uint256 nonce) transaction) external view returns (bytes32 message, ((uint256 x, uint256 y) r, uint256 z) signature)",
-				"function getAttestationByMessage(bytes32 message) external view returns (((uint256 x, uint256 y) r, uint256 z) signature)",
+				"function getTransactionAttestation(uint64 epoch, (uint256 chainId, address safe, address to, uint256 value, bytes data, uint8 operation, uint256 safeTxGas, uint256 baseGas, uint256 gasPrice, address gasToken, address refundReceiver, uint256 nonce) transaction) external view returns (((uint256 x, uint256 y) r, uint256 z) signature)",
 				"function getActiveEpoch() external view returns (uint64 epoch, bytes32 group)",
 			]),
 		} as const;
@@ -142,6 +147,8 @@ describe("integration", () => {
 			const watcherConfig: WatcherConfig = {
 				maxReorgDepth: 1,
 				blockTimeOverride: blockTime,
+				blockPropagationDelay: Math.floor(blockTime / 5),
+				blockRetryDelays: [Math.floor(blockTime / 10), Math.floor(blockTime / 20), Math.floor(blockTime / 20)],
 			};
 			const service = createValidatorService({
 				account: a,
@@ -235,21 +242,19 @@ describe("integration", () => {
 		// Wait for end of epoch
 		await waitForBlock(testClient, 40n);
 		// Check number of staged epochs
-		const epochStagedEvent = CONSENSUS_EVENTS.filter((e) => e.name === "EpochStaged")[0];
 		const stagedEpochs = await testClient.getLogs({
 			address: consensus.address,
-			event: epochStagedEvent,
+			event: CONSENSUS_EPOCH_STAGED_EVENT,
 			fromBlock: "earliest",
+			strict: true,
 		});
 		expect(stagedEpochs.length).toBe(1);
-		const proposedEpoch = stagedEpochs[0].args.proposedEpoch;
-		expect(proposedEpoch).toBeDefined();
 		// Calculate group id for reduced group
 		const expectedGroup = calcGroupId(
 			calculateParticipantsRoot([participants[0], participants[1], participants[3]]),
 			3,
 			2,
-			calcGroupContext(consensus.address, proposedEpoch as bigint),
+			calcGroupContext(consensus.address, stagedEpochs[0].args.proposedEpoch),
 		);
 		const expectedKey = await testClient.readContract({
 			...coordinator,
@@ -298,10 +303,9 @@ describe("integration", () => {
 		await waitForBlock(testClient, (abortedEpoch + 1n) * blocksPerEpoch);
 
 		// Check number of staged epochs
-		const epochStagedEvent = CONSENSUS_EVENTS.filter((e) => e.name === "EpochStaged")[0];
 		const stagedEpochs = await testClient.getLogs({
 			address: consensus.address,
-			event: epochStagedEvent,
+			event: CONSENSUS_EPOCH_STAGED_EVENT,
 			fromBlock: "earliest",
 		});
 		expect(stagedEpochs.length).toBe(1);
@@ -361,12 +365,12 @@ describe("integration", () => {
 		await waitForBlock(testClient, 40n);
 		const endEpoch = (await testClient.getBlockNumber({ cacheTime: 0 })) / BLOCKS_PER_EPOCH;
 		// Check number of staged epochs
-		const epochStagedEvent = CONSENSUS_EVENTS.filter((e) => e.name === "EpochStaged")[0];
 		const stagedEpochs = await testClient.getLogs({
 			address: consensus.address,
-			event: epochStagedEvent,
+			event: CONSENSUS_EPOCH_STAGED_EVENT,
 			fromBlock: "earliest",
 		});
+		console.log(stagedEpochs);
 		// For the start epoch there is no staged event, but for the epoch after the end epoch is an additional one
 		expect(stagedEpochs.length).toBe(Number(endEpoch - startEpoch));
 
@@ -395,66 +399,77 @@ describe("integration", () => {
 			message: transaction,
 		});
 		// Load transaction proposal for tx hash
-		const proposeEvent = CONSENSUS_EVENTS.filter((e) => e.name === "TransactionProposed")[0];
-		const proposedMessages = await testClient.getLogs({
+		const proposedTransactions = await testClient.getLogs({
 			address: consensus.address,
-			event: proposeEvent,
+			event: CONSENSUS_TRANSACTION_PROPOSED_EVENT,
 			fromBlock: "earliest",
 			args: {
 				transactionHash,
 			},
+			strict: true,
 		});
-		expect(proposedMessages.length).toBe(1);
-		const proposal = proposedMessages[0];
+		expect(proposedTransactions.length).toBe(1);
+		const proposal = proposedTransactions[0];
 		expect(proposal.args.transaction).toStrictEqual(transaction);
-		if (proposal.args.message === undefined) throw new Error("Message is expected to be defined");
 		// Load signature request for transaction proposal
-		const signRequestEvent = COORDINATOR_EVENTS.filter((e) => e.name === "Sign")[0];
+		const proposalMessage = hashTypedData({
+			domain: {
+				chainId: 31_337,
+				verifyingContract: proposal.address,
+			},
+			types: {
+				TransactionProposal: [
+					{ type: "uint64", name: "epoch" },
+					{ type: "bytes32", name: "safeTxHash" },
+				],
+			},
+			primaryType: "TransactionProposal",
+			message: {
+				epoch: proposal.args.epoch,
+				safeTxHash: proposal.args.transactionHash,
+			},
+		});
 		const signatureRequests = await testClient.getLogs({
 			address: coordinator.address,
-			event: signRequestEvent,
+			event: COORDINATOR_SIGN_EVENT,
 			fromBlock: "earliest",
 			args: {
-				message: proposal.args.message,
+				message: proposalMessage,
 			},
+			strict: true,
 		});
 		expect(signatureRequests.length).toBe(1);
 		const request = signatureRequests[0];
 		expect(request.args.initiator).toBe(consensus.address);
-		expect(request.args.sid).toBeDefined();
-		expect(request.args.gid).toBeDefined();
 		// Load completed request for signature request
-		const signedEvent = COORDINATOR_EVENTS.filter((e) => e.name === "SignCompleted")[0];
 		const completedRequests = await testClient.getLogs({
 			address: coordinator.address,
-			event: signedEvent,
+			event: COORDINATOR_SIGN_COMPLETED_EVENT,
 			fromBlock: "earliest",
 			args: {
-				sid: request.args.sid as Hex,
+				sid: request.args.sid,
 			},
+			strict: true,
 		});
 		expect(completedRequests.length).toBe(1);
 		const completedRequest = completedRequests[0];
 		expect(completedRequest.args.sid).toBe(request.args.sid);
 		const signature = completedRequest.args.signature;
-		if (signature === undefined) throw new Error("Signature is expected to be defined");
 
 		// Load group key for verification
 		const groupKey = await testClient.readContract({
 			...coordinator,
 			functionName: "groupKey",
-			args: [request.args.gid as Hex],
+			args: [request.args.gid],
 		});
-		expect(verifySignature(toPoint(signature.r), signature.z, toPoint(groupKey), proposal.args.message)).toBeTruthy();
+		expect(verifySignature(toPoint(signature.r), signature.z, toPoint(groupKey), proposalMessage)).toBeTruthy();
 
 		// Check that the attestation is correctly tracked
 		const attestation = await testClient.readContract({
 			...consensus,
-			functionName: "getAttestationByMessage",
-			args: [proposal.args.message],
+			functionName: "getTransactionAttestation",
+			args: [proposal.args.epoch, proposal.args.transaction],
 		});
-		expect(
-			verifySignature(toPoint(attestation.r), attestation.z, toPoint(groupKey), proposal.args.message),
-		).toBeTruthy();
+		expect(verifySignature(toPoint(attestation.r), attestation.z, toPoint(groupKey), proposalMessage)).toBeTruthy();
 	});
 });

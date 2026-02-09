@@ -142,14 +142,19 @@ export type EpochStagedEvent = {
 	proposedEpoch: bigint;
 	rolloverBlock: bigint;
 	groupKey: FrostPoint;
+	attestation: {
+		z: bigint;
+		r: FrostPoint;
+	};
 };
 
 export type TransactionProposedEvent = {
 	id: "event_transaction_proposed";
 	block: bigint;
 	index: number;
-	message: Hex;
 	transactionHash: Hex;
+	chainId: bigint;
+	safe: Address;
 	epoch: bigint;
 	transaction: SafeTransaction;
 };
@@ -158,7 +163,12 @@ export type TransactionAttestedEvent = {
 	id: "event_transaction_attested";
 	block: bigint;
 	index: number;
-	message: Hex;
+	transactionHash: Hex;
+	epoch: bigint;
+	attestation: {
+		z: bigint;
+		r: FrostPoint;
+	};
 };
 
 export type EventTransition =

@@ -1,11 +1,19 @@
 import { type Hex, hashTypedData } from "viem";
 import type { SafeTransaction, SafeTransactionPacket } from "./schemas.js";
 
-export const safeTxPacketHash = (packet: SafeTransactionPacket): Hex =>
+export type SafeTransactionProposal = {
+	domain: SafeTransactionPacket["domain"];
+	proposal: {
+		epoch: bigint;
+		safeTxHash: Hex;
+	};
+};
+
+export const safeTxProposalHash = ({ domain, proposal }: SafeTransactionProposal) =>
 	hashTypedData({
 		domain: {
-			chainId: packet.domain.chain,
-			verifyingContract: packet.domain.consensus,
+			chainId: domain.chain,
+			verifyingContract: domain.consensus,
 		},
 		types: {
 			TransactionProposal: [
@@ -14,10 +22,13 @@ export const safeTxPacketHash = (packet: SafeTransactionPacket): Hex =>
 			],
 		},
 		primaryType: "TransactionProposal",
-		message: {
-			epoch: packet.proposal.epoch,
-			safeTxHash: safeTxHash(packet.proposal.transaction),
-		},
+		message: proposal,
+	});
+
+export const safeTxPacketHash = (packet: SafeTransactionPacket): Hex =>
+	safeTxProposalHash({
+		domain: packet.domain,
+		proposal: { epoch: packet.proposal.epoch, safeTxHash: safeTxHash(packet.proposal.transaction) },
 	});
 
 export const safeTxHash = (transaction: SafeTransaction): Hex =>
