@@ -11,14 +11,23 @@ export const handleEpochStaged = async (
 	// An epoch was staged
 	// Ignore if not in "sign_rollover" state
 	if (machineStates.rollover.id !== "sign_rollover") {
-		// TODO: ignore
-		throw new Error(`Not expecting epoch staging during ${machineStates.rollover.id}!`);
+		return {};
 	}
+
 	// Check that signing state is waiting for attestation
 	const status = machineStates.signing[machineStates.rollover.message];
 	if (status?.id !== "waiting_for_attestation") return {};
 
 	const groupId = machineStates.rollover.groupId;
+
+	try {
+		// Check if validator is part of group, method will throw if not
+		signingClient.participantId(groupId);
+	} catch {
+		// If there is no participant id, then this validator is not part of the group
+		// In this case ignore this request
+		return {};
+	}
 
 	// Start preprocessing for the new group (per spec's epoch_staged handler)
 	const nonceTreeRoot = signingClient.generateNonceTree(groupId);
