@@ -212,7 +212,6 @@ describe("key gen timeouts", () => {
 					MACHINE_CONFIG.defaultParticipants[2],
 					MACHINE_CONFIG.defaultParticipants[3],
 				],
-				3,
 				2,
 				"0x00000000eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee000000000000000a",
 			);

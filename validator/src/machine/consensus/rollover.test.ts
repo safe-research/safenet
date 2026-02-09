@@ -176,7 +176,6 @@ describe("check rollover", () => {
 		expect(setupGroup).toBeCalledTimes(1);
 		expect(setupGroup).toBeCalledWith(
 			MACHINE_CONFIG.defaultParticipants,
-			3,
 			2,
 			"0x00000000eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee0000000000000002",
 		);
@@ -240,7 +239,6 @@ describe("check rollover", () => {
 		expect(setupGroup).toBeCalledTimes(1);
 		expect(setupGroup).toBeCalledWith(
 			MACHINE_CONFIG.defaultParticipants,
-			3,
 			2,
 			"0x00000000eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee0000000000000002",
 		);

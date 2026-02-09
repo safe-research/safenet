@@ -128,6 +128,6 @@ describe("trigger key gen", () => {
 		expect(diff.signing).toBeUndefined();
 
 		expect(setupGroup).toBeCalledTimes(1);
-		expect(setupGroup).toBeCalledWith(PARTICIPANTS, 3, 2, context);
+		expect(setupGroup).toBeCalledWith(PARTICIPANTS, 2, context);
 	});
 });

@@ -377,7 +377,6 @@ describe("complaint submitted", () => {
 		expect(setupGroup).toBeCalledTimes(1);
 		expect(setupGroup).toBeCalledWith(
 			[participants[0], participants[2], participants[3]],
-			3,
 			2,
 			calcGroupContext(ethAddress, 10n),
 		);

@@ -159,6 +159,6 @@ describe("gensis key gen", () => {
 		});
 		expect(diff.signing).toBeUndefined();
 		expect(setupGroup).toBeCalledTimes(1);
-		expect(setupGroup).toBeCalledWith(MACHINE_CONFIG.defaultParticipants, 4, 3, zeroHash);
+		expect(setupGroup).toBeCalledWith(MACHINE_CONFIG.defaultParticipants, 3, zeroHash);
 	});
 });

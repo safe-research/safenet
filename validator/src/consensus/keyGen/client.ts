@@ -74,7 +74,6 @@ export class KeyGenClient {
 
 	setupGroup(
 		participants: readonly Participant[],
-		count: number,
 		threshold: number,
 		context: Hex,
 	): {
@@ -86,11 +85,7 @@ export class KeyGenClient {
 		poap: ProofOfAttestationParticipation;
 	} {
 		const participantsRoot = calculateParticipantsRoot(participants);
-		// TODO: get rid of count and use participants.length
-		if (participants.length !== Number(count))
-			throw new Error(
-				`Unexpected participant count ${participantsRoot}! (Expected ${participants.length} got ${count})`,
-			);
+		const count = participants.length;
 		const groupId = calcGroupId(participantsRoot, count, threshold, context);
 		const participantId = this.#storage.registerGroup(groupId, participants, threshold);
 		const coefficients = createCoefficients(threshold);

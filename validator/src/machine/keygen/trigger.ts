@@ -4,7 +4,7 @@ import type { ProtocolAction } from "../../consensus/protocol/types.js";
 import type { Participant } from "../../consensus/storage/types.js";
 import type { GroupId } from "../../frost/types.js";
 import type { MachineConfig, StateDiff } from "../types.js";
-import { calcGroupParameters, calcMinimumParticipants } from "./group.js";
+import { calcMinimumParticipants, calcTreshold } from "./group.js";
 
 export const triggerKeyGen = (
 	machineConfig: MachineConfig,
@@ -20,10 +20,10 @@ export const triggerKeyGen = (
 		// TODO: skip
 		throw new Error(`Not enough participants! Expected at least ${requiredParticipants} got ${participants.length}`);
 	}
-	const { count, threshold } = calcGroupParameters(participants.length);
+	const count = participants.length;
+	const threshold = calcTreshold(count);
 	const { groupId, participantsRoot, participantId, commitments, pok, poap } = keyGenClient.setupGroup(
 		participants,
-		count,
 		threshold,
 		context,
 	);

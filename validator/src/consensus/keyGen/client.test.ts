@@ -47,7 +47,7 @@ describe("keyGen", () => {
 		log("------------------------ Trigger Keygen Init and Commitments ------------------------");
 		for (const { client, ids } of clients) {
 			log(">>>> Keygen and Commit >>>>");
-			const { participantId, commitments, poap, pok } = client.setupGroup(participants, count, threshold, context);
+			const { participantId, commitments, poap, pok } = client.setupGroup(participants, threshold, context);
 			ids.set(groupId, participantId);
 			const leaf = participants.find((p) => p.id === participantId);
 			if (leaf === undefined) throw new Error(`Invalid id: ${participantId}`);
