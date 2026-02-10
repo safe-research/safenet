@@ -50,9 +50,12 @@ describe("trigger key gen", () => {
 	it("should throw if not enough participants are provided (below hard minimum of 2)", () => {
 		const keyGenClient = {} as unknown as KeyGenClient;
 		// Only provide 1 participant
-		expect(() => triggerKeyGen(MACHINE_CONFIG, keyGenClient, 1n, 20n, PARTICIPANTS.slice(0, 1), zeroHash)).toThrowError(
-			new Error("Not enough participants! Expected at least 3 got 1"),
-		);
+		expect(triggerKeyGen(MACHINE_CONFIG, keyGenClient, 1n, 20n, PARTICIPANTS.slice(0, 1), zeroHash)).toStrictEqual({
+			rollover: {
+				id: "epoch_skipped",
+				nextEpoch: 1n,
+			},
+		});
 	});
 
 	it("should throw if not enough participants are provided (below crash fault tolerance)", () => {
@@ -77,9 +80,12 @@ describe("trigger key gen", () => {
 				},
 			],
 		} as unknown as MachineConfig;
-		expect(() => triggerKeyGen(config, keyGenClient, 1n, 20n, PARTICIPANTS.slice(0, 2), zeroHash)).toThrowError(
-			new Error("Not enough participants! Expected at least 3 got 2"),
-		);
+		expect(triggerKeyGen(config, keyGenClient, 1n, 20n, PARTICIPANTS.slice(0, 2), zeroHash)).toStrictEqual({
+			rollover: {
+				id: "epoch_skipped",
+				nextEpoch: 1n,
+			},
+		});
 	});
 
 	it("should trigger key generation and return the correct state diff", () => {

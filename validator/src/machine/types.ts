@@ -19,7 +19,7 @@ export type RolloverState = Readonly<
 	  }
 	| {
 			id: "epoch_skipped";
-			epoch: bigint;
+			nextEpoch: bigint;
 	  }
 	| {
 			id: "collecting_commitments";

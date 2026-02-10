@@ -16,8 +16,12 @@ export const triggerKeyGen = (
 ): StateDiff => {
 	const requiredParticipants = calcMinimumParticipants(machineConfig);
 	if (participants.length < requiredParticipants) {
-		// TODO: error refactor - skip -> introduce epoch_skipped
-		throw new Error(`Not enough participants! Expected at least ${requiredParticipants} got ${participants.length}`);
+		return {
+			rollover: {
+				id: "epoch_skipped",
+				nextEpoch: epoch,
+			},
+		};
 	}
 	const count = participants.length;
 	const threshold = calcTreshold(count);
