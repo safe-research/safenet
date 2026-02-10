@@ -100,7 +100,7 @@ export const checkKeyGenTimeouts = (
 	const [adjustedParticipants, nextEpoch] = timeoutInfo;
 
 	// For next key gen only consider active participants
-	const { diff } = triggerKeyGen(
+	return triggerKeyGen(
 		machineConfig,
 		keyGenClient,
 		nextEpoch,
@@ -109,5 +109,4 @@ export const checkKeyGenTimeouts = (
 		calcGroupContext(protocol.consensus(), nextEpoch),
 		logger,
 	);
-	return diff;
 };

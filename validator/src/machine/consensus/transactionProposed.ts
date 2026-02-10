@@ -1,8 +1,8 @@
-import type { Logger } from "winston";
 import type { ShieldnetProtocol } from "../../consensus/protocol/types.js";
 import type { SigningClient } from "../../consensus/signing/client.js";
 import type { VerificationEngine } from "../../consensus/verify/engine.js";
 import type { SafeTransactionPacket } from "../../consensus/verify/safeTx/schemas.js";
+import type { Logger } from "../../utils/logging.js";
 import type { TransactionProposedEvent } from "../transitions/types.js";
 import type { ConsensusState, MachineConfig, StateDiff } from "../types.js";
 

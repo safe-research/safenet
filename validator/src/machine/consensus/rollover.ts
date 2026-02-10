@@ -38,7 +38,7 @@ export const checkEpochRollover = (
 		logger?.(`Trigger key gen for epoch ${nextEpoch}`);
 		// For each epoch rollover key gen trigger always use the default participants
 		// This allows previously removed validators to recover
-		const { diff } = triggerKeyGen(
+		const diff = triggerKeyGen(
 			machineConfig,
 			keyGenClient,
 			nextEpoch,

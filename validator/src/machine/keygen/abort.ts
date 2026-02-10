@@ -9,6 +9,7 @@ export const checkKeyGenAbort = (
 ): StateDiff => {
 	if (
 		machineStates.rollover.id === "waiting_for_rollover" ||
+		machineStates.rollover.id === "epoch_skipped" ||
 		machineStates.rollover.groupId === consensusState.genesisGroupId
 	) {
 		return {};

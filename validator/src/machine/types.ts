@@ -12,11 +12,14 @@ export type Complaints = {
 	total: bigint;
 };
 
-// TODO: currently missing states for epoch_skipped
 // TODO: adjust waiting_for_rollover to align with epoch_staged from specs
 export type RolloverState = Readonly<
 	| {
 			id: "waiting_for_rollover";
+	  }
+	| {
+			id: "epoch_skipped";
+			epoch: bigint;
 	  }
 	| {
 			id: "collecting_commitments";

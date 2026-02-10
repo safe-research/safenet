@@ -23,7 +23,7 @@ export const handleGenesisKeyGen = async (
 	) {
 		logger?.("Trigger Genesis Group Generation");
 		// Set no timeout for the genesis group generation
-		const { groupId, diff } = triggerKeyGen(
+		const diff = triggerKeyGen(
 			machineConfig,
 			keyGenClient,
 			0n,
@@ -32,8 +32,12 @@ export const handleGenesisKeyGen = async (
 			genesisGroup.context,
 			logger,
 		);
+		const epochGroup = diff.consensus?.epochGroup;
+		if (epochGroup === undefined || epochGroup[0] !== 0n || epochGroup[1].groupId !== genesisGroup.id) {
+			throw new Error(`Unexpected genesis group ${epochGroup?.[1].groupId}`);
+		}
 		const consensus = diff.consensus ?? {};
-		consensus.genesisGroupId = groupId;
+		consensus.genesisGroupId = genesisGroup.id;
 		return {
 			...diff,
 			consensus,

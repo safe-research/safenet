@@ -113,6 +113,32 @@ describe("gensis key gen", () => {
 		expect(diff).toStrictEqual({});
 	});
 
+	it("should throw if different genesis group id is calculated", async () => {
+		const groupSetup = {
+			groupId: "0xffa9d1aa438a646139fe8d817f9c9dbb060ee7e2e58f2b100000000000000000",
+			participantsRoot: "0x78d9152d3ca012af785cf642cd52803acabeaea430964b93136f31f83c7df9d0",
+			participantId: 2n,
+			commitments: [TEST_POINT],
+			pok: {
+				r: TEST_POINT,
+				mu: 100n,
+			},
+			poap: ["0x5afe5afe5afe01"],
+		};
+		const setupGroup = vi.fn();
+		setupGroup.mockReturnValueOnce(groupSetup);
+		const keyGenClient = {
+			setupGroup,
+		} as unknown as KeyGenClient;
+		await expect(
+			handleGenesisKeyGen(MACHINE_CONFIG, keyGenClient, CONSENSUS_STATE, MACHINE_STATES, EVENT),
+		).rejects.toStrictEqual(
+			new Error("Unexpected genesis group 0xffa9d1aa438a646139fe8d817f9c9dbb060ee7e2e58f2b100000000000000000"),
+		);
+		expect(setupGroup).toBeCalledTimes(1);
+		expect(setupGroup).toBeCalledWith(MACHINE_CONFIG.defaultParticipants, 3, zeroHash);
+	});
+
 	it("should trigger genesis key gen with correct parameters", async () => {
 		const groupSetup = {
 			groupId: "0x00a9d1aa438a646139fe8d817f9c9dbb060ee7e2e58f2b100000000000000000",

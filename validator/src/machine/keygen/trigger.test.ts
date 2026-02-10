@@ -100,9 +100,8 @@ describe("trigger key gen", () => {
 		const keyGenClient = {
 			setupGroup,
 		} as unknown as KeyGenClient;
-		const { groupId, diff } = triggerKeyGen(MACHINE_CONFIG, keyGenClient, 2n, 30n, PARTICIPANTS, context);
+		const diff = triggerKeyGen(MACHINE_CONFIG, keyGenClient, 2n, 30n, PARTICIPANTS, context);
 
-		expect(groupId).toBe("0x5afe02");
 		expect(diff.actions).toStrictEqual([
 			{
 				id: "key_gen_start",
