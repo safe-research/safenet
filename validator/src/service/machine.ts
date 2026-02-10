@@ -318,7 +318,7 @@ export class ShieldnetStateMachine {
 					this.#signingClient,
 					consensusState,
 					transition,
-					this.#logger.info,
+					this.#logger,
 				);
 			}
 			case "event_transaction_attested": {
