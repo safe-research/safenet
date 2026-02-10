@@ -60,6 +60,7 @@ const EVENT: SignedEvent = {
 	block: 2n,
 	index: 0,
 	sid: "0x5af35af3",
+	root: zeroHash,
 	signature: {
 		z: 1n,
 		r: toPoint({

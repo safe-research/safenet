@@ -252,14 +252,14 @@ contract FROSTCoordinator {
      * @param z The scalar component of the share.
      * @param root The Merkle root of the selected participants.
      */
-    event SignShared(FROSTSignatureId.T indexed sid, FROST.Identifier identifier, uint256 z, bytes32 root);
+    event SignShared(FROSTSignatureId.T indexed sid, bytes32 indexed root, FROST.Identifier identifier, uint256 z);
 
     /**
      * @notice Emitted when a FROST signing ceremony successfully completed.
      * @param sid The signature ID.
      * @param signature The FROST signature.
      */
-    event SignCompleted(FROSTSignatureId.T indexed sid, FROST.Signature signature);
+    event SignCompleted(FROSTSignatureId.T indexed sid, bytes32 indexed root, FROST.Signature signature);
 
     // ============================================================
     // ERRORS
@@ -592,12 +592,12 @@ contract FROSTCoordinator {
         Signature storage signature = $signatures[sid];
         FROST.Signature memory accumulator =
             signature.shares.register(identifier, share, selection.r, selection.root, proof);
-        emit SignShared(sid, identifier, share.z, selection.root);
+        emit SignShared(sid, selection.root, identifier, share.z);
         if (Secp256k1.eq(selection.r, accumulator.r)) {
             FROST.verify(key, accumulator, message);
             if (signature.signed == bytes32(0)) {
                 signature.signed = selection.root;
-                emit SignCompleted(sid, accumulator);
+                emit SignCompleted(sid, selection.root, accumulator);
                 return true;
             }
         }

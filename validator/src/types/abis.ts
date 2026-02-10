@@ -24,7 +24,7 @@ export const COORDINATOR_SIGN_EVENT = parseAbiItem(
 );
 
 export const COORDINATOR_SIGN_COMPLETED_EVENT = parseAbiItem(
-	"event SignCompleted(bytes32 indexed sid, ((uint256 x, uint256 y) r, uint256 z) signature)",
+	"event SignCompleted(bytes32 indexed sid, bytes32 indexed root, ((uint256 x, uint256 y) r, uint256 z) signature)",
 );
 
 export const COORDINATOR_OTHER_EVENTS = parseAbi([
@@ -36,7 +36,7 @@ export const COORDINATOR_OTHER_EVENTS = parseAbi([
 	"event KeyGenComplaintResponded(bytes32 indexed gid, uint256 plaintiff, uint256 accused, uint256 secretShare)",
 	"event Preprocess(bytes32 indexed gid, uint256 identifier, uint64 chunk, bytes32 commitment)",
 	"event SignRevealedNonces(bytes32 indexed sid, uint256 identifier, ((uint256 x, uint256 y) d, (uint256 x, uint256 y) e) nonces)",
-	"event SignShared(bytes32 indexed sid, uint256 identifier, uint256 z, bytes32 root)",
+	"event SignShared(bytes32 indexed sid, bytes32 indexed root, uint256 identifier, uint256 z)",
 ]);
 
 export const COORDINATOR_EVENTS = [

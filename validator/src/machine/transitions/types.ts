@@ -108,9 +108,9 @@ export type SignatureShareEvent = {
 	block: bigint;
 	index: number;
 	sid: SignatureId;
+	root: Hex;
 	identifier: ParticipantId;
 	z: bigint;
-	root: Hex;
 };
 
 export type SignedEvent = {
@@ -118,6 +118,7 @@ export type SignedEvent = {
 	block: bigint;
 	index: number;
 	sid: SignatureId;
+	root: Hex;
 	signature: {
 		z: bigint;
 		r: FrostPoint;

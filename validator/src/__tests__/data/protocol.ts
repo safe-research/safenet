@@ -537,13 +537,13 @@ export const TEST_EVENTS: [ProtocolLog | null, StateTransition][] = [
 		{
 			blockNumber: 111n,
 			logIndex: 0,
-			// SignShared(bytes32 indexed sid, uint256 identifier, uint256 z, bytes32 root)
+			// SignShared(bytes32 indexed sid, bytes32 indexed root, uint256 identifier, uint256 z)
 			eventName: "SignShared",
 			args: {
 				sid: "0x5af3000000000000000000000000000000000000000000000000000000000000",
+				root: "0x5af35af35af35af3000000000000000000000000000000000000000000000000",
 				identifier: 1n,
 				z: 12345n,
-				root: "0x5af35af35af35af3000000000000000000000000000000000000000000000000",
 			},
 		},
 		{
@@ -551,19 +551,20 @@ export const TEST_EVENTS: [ProtocolLog | null, StateTransition][] = [
 			block: 111n,
 			index: 0,
 			sid: "0x5af3000000000000000000000000000000000000000000000000000000000000",
+			root: "0x5af35af35af35af3000000000000000000000000000000000000000000000000",
 			identifier: 1n,
 			z: 12345n,
-			root: "0x5af35af35af35af3000000000000000000000000000000000000000000000000",
 		},
 	],
 	[
 		{
 			blockNumber: 111n,
 			logIndex: 0,
-			// SignCompleted(bytes32 indexed sid, ((uint256 x, uint256 y) r, uint256 z) signature)
+			// SignCompleted(bytes32 indexed sid, bytes32 indexed root, ((uint256 x, uint256 y) r, uint256 z) signature)
 			eventName: "SignCompleted",
 			args: {
 				sid: "0x5af3000000000000000000000000000000000000000000000000000000000000",
+				root: "0x5af35af35af35af3000000000000000000000000000000000000000000000000",
 				signature: {
 					z: 12345n,
 					r: TEST_POINT,
@@ -575,6 +576,7 @@ export const TEST_EVENTS: [ProtocolLog | null, StateTransition][] = [
 			block: 111n,
 			index: 0,
 			sid: "0x5af3000000000000000000000000000000000000000000000000000000000000",
+			root: "0x5af35af35af35af3000000000000000000000000000000000000000000000000",
 			signature: {
 				z: 12345n,
 				r: TEST_POINT,
