@@ -53,7 +53,7 @@ contract Consensus is IFROSTCoordinatorCallback {
     /**
      * @notice The FROST coordinator contract.
      */
-    FROSTCoordinator private immutable _COORDINATOR;
+    FROSTCoordinator public immutable COORDINATOR;
 
     /**
      * @notice The epochs state tracking previous, active, and staged epochs.
@@ -151,7 +151,7 @@ contract Consensus is IFROSTCoordinatorCallback {
      * @param group The initial FROST group ID for epoch 0.
      */
     constructor(address coordinator, FROSTGroupId.T group) {
-        _COORDINATOR = FROSTCoordinator(coordinator);
+        COORDINATOR = FROSTCoordinator(coordinator);
         $groups[0] = group;
     }
 
@@ -165,7 +165,7 @@ contract Consensus is IFROSTCoordinatorCallback {
      * @notice Restricts functions to be callable only by the coordinator.
      */
     modifier onlyCoordinator() {
-        require(msg.sender == address(_COORDINATOR), NotCoordinator());
+        require(msg.sender == address(COORDINATOR), NotCoordinator());
         _;
     }
 
@@ -220,7 +220,7 @@ contract Consensus is IFROSTCoordinatorCallback {
      * @return signature The FROST signature attesting to the transaction.
      */
     function getAttestationByMessage(bytes32 message) public view returns (FROST.Signature memory signature) {
-        return _COORDINATOR.signatureValue($attestations[message]);
+        return COORDINATOR.signatureValue($attestations[message]);
     }
 
     /**
@@ -263,7 +263,7 @@ contract Consensus is IFROSTCoordinatorCallback {
             message = domain.transactionProposal(epochs.previous, transactionHash);
             attestation = $attestations[message];
         }
-        signature = _COORDINATOR.signatureValue(attestation);
+        signature = COORDINATOR.signatureValue(attestation);
     }
 
     /**
@@ -293,7 +293,7 @@ contract Consensus is IFROSTCoordinatorCallback {
      */
     function getEpochGroup(uint64 epoch) external view returns (FROSTGroupId.T group, Secp256k1.Point memory groupKey) {
         group = $groups[epoch];
-        groupKey = _COORDINATOR.groupKey(group);
+        groupKey = COORDINATOR.groupKey(group);
     }
 
     // ============================================================
@@ -313,10 +313,10 @@ contract Consensus is IFROSTCoordinatorCallback {
     function proposeEpoch(uint64 proposedEpoch, uint64 rolloverBlock, FROSTGroupId.T group) public {
         Epochs memory epochs = _processRollover();
         _requireValidRollover(epochs, proposedEpoch, rolloverBlock);
-        Secp256k1.Point memory groupKey = _COORDINATOR.groupKey(group);
+        Secp256k1.Point memory groupKey = COORDINATOR.groupKey(group);
         bytes32 message = domainSeparator().epochRollover(epochs.active, proposedEpoch, rolloverBlock, groupKey);
         emit EpochProposed(epochs.active, proposedEpoch, rolloverBlock, groupKey);
-        _COORDINATOR.sign($groups[epochs.active], message);
+        COORDINATOR.sign($groups[epochs.active], message);
     }
 
     /**
@@ -334,9 +334,9 @@ contract Consensus is IFROSTCoordinatorCallback {
     {
         Epochs memory epochs = _processRollover();
         _requireValidRollover(epochs, proposedEpoch, rolloverBlock);
-        Secp256k1.Point memory groupKey = _COORDINATOR.groupKey(group);
+        Secp256k1.Point memory groupKey = COORDINATOR.groupKey(group);
         bytes32 message = domainSeparator().epochRollover(epochs.active, proposedEpoch, rolloverBlock, groupKey);
-        _COORDINATOR.signatureVerify(signature, $groups[epochs.active], message);
+        COORDINATOR.signatureVerify(signature, $groups[epochs.active], message);
         epochs.staged = proposedEpoch;
         epochs.rolloverBlock = rolloverBlock;
         $epochs = epochs;
@@ -358,7 +358,7 @@ contract Consensus is IFROSTCoordinatorCallback {
         transactionHash = transaction.hash();
         message = domainSeparator().transactionProposal(epochs.active, transactionHash);
         emit TransactionProposed(message, transactionHash, epochs.active, transaction);
-        _COORDINATOR.sign($groups[epochs.active], message);
+        COORDINATOR.sign($groups[epochs.active], message);
     }
 
     /**
@@ -414,7 +414,7 @@ contract Consensus is IFROSTCoordinatorCallback {
         // Therefore, it isn't useful for us to be restrictive here.
 
         bytes32 message = domainSeparator().transactionProposal(epoch, transactionHash);
-        _COORDINATOR.signatureVerify(signature, $groups[epoch], message);
+        COORDINATOR.signatureVerify(signature, $groups[epoch], message);
         $attestations[message] = signature;
         emit TransactionAttested(message);
     }
