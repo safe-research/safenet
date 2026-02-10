@@ -104,9 +104,10 @@ const checkSigningRequestTimeout = (
 			return stateDiff;
 		}
 		case "waiting_for_request": {
+			const signers = status.signers.filter((id) => id !== status.responsible);
 			const everyoneResponsible = status.responsible === undefined;
 			if (everyoneResponsible) {
-				// Everyone is responsible
+				// Everyone is responsible or there are not enough signers
 				// Signature request will be re-added once it is submitted
 				// and no more state needs to be tracked
 				// if the deadline is hit again this would be a critical failure
@@ -117,7 +118,7 @@ const checkSigningRequestTimeout = (
 					message,
 					{
 						...status,
-						signers: status.signers.filter((id) => id !== status.responsible),
+						signers,
 						responsible: undefined,
 						deadline: block + machineConfig.signingTimeout,
 					},
@@ -155,15 +156,22 @@ const checkSigningRequestTimeout = (
 				signatureIdToMessage: [status.signatureId, undefined],
 			};
 			// Get participants that did not participate
+			const currentSigners = signingClient.signers(status.signatureId)
 			const missingParticipants =
 				status.id === "collect_nonce_commitments"
 					? signingClient.missingNonces(status.signatureId)
-					: signingClient.signers(status.signatureId).filter((s) => status.sharesFrom.indexOf(s) < 0);
+					: currentSigners.filter((s) => status.sharesFrom.indexOf(s) < 0);
 			logger?.("Removing signers for not participating", { missingParticipants });
-			// For next key gen only consider active participants
-			const signers = machineConfig.defaultParticipants
-				.filter((p) => missingParticipants.indexOf(p.id) < 0)
-				.map((p) => p.id);
+			// For retry of remove inactive signers from current signers set
+			const signers = currentSigners
+				.filter((pid) => missingParticipants.indexOf(pid) < 0);
+			if (signers.length < signingClient.threshold(status.signatureId)) {
+				// Not enough signers to handle the message, remove request
+				return {
+					...stateDiff,
+					signing: [message, undefined]
+				};
+			}
 			const epoch =
 				status.packet.type === "epoch_rollover_packet"
 					? status.packet.rollover.activeEpoch

@@ -47,7 +47,6 @@ export class SigningClient {
 		nonceCommitments: PublicNonceCommitments;
 		nonceProof: Hex[];
 	} {
-		// TODO: caller verify that threshold can be met
 		if (signers.length < this.#storage.threshold(groupId)) {
 			throw new Error("Not enough signers to start signing process");
 		}
