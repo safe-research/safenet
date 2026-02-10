@@ -20,12 +20,9 @@ export const verifySignatureShare = (
 	verificationShare: FrostPoint,
 	lagrangeChallenge: bigint,
 	groupCommitmentShare: FrostPoint,
-) => {
+): boolean => {
 	const sG = g(signatureShare);
 	const pki = verificationShare.multiply(lagrangeChallenge);
 	const r = groupCommitmentShare.add(pki);
-	// TODO: error refactor - check if this should be converted to boolean return
-	if (sG.x !== r.x) {
-		throw new Error("Invalid signature share");
-	}
+	return sG.x === r.x;
 };

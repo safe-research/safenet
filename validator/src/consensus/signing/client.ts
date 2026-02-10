@@ -154,7 +154,10 @@ export class SigningClient {
 			signerIndex,
 		);
 
-		verifySignatureShare(signatureShare, this.#storage.verificationShare(groupId), signerPart.cl, signerPart.r);
+		if (!verifySignatureShare(signatureShare, this.#storage.verificationShare(groupId), signerPart.cl, signerPart.r)) {
+			// This should never happen as all inputs have been verified before
+			throw new Error("Could not create valid signature share!");
+		}
 
 		this.#storage.burnNonce(groupId, chunk, offset);
 
