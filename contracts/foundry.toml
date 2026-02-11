@@ -6,6 +6,7 @@ broadcast = "build/broadcast"
 solc_version = "0.8.30"
 remappings = [
   "@/=src/",
+  "@script/=script/",
   "@test/=test/",
   "@forge-std/=lib/forge-std/src/",
   "@oz/=lib/openzeppelin-contracts/contracts/",

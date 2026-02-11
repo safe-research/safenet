@@ -103,7 +103,7 @@ describe("integration", () => {
 
 		const deploymentInfo = JSON.parse(fs.readFileSync(deploymentInfoFile, "utf-8"));
 		const coordinator = {
-			address: deploymentInfo.returns["0"].value as Address,
+			address: deploymentInfo.returns.coordinator.value as Address,
 			abi: parseAbi([
 				"function keyGen(bytes32 participants, uint16 count, uint16 threshold, bytes32 context) external returns (bytes32 gid)",
 				"function sign(bytes32 gid, bytes32 message) external returns (bytes32 sid)",
@@ -112,7 +112,7 @@ describe("integration", () => {
 		} as const;
 		testLogger.notice(`Use coordinator at ${coordinator.address}`);
 		const consensus = {
-			address: deploymentInfo.returns["1"].value as Address,
+			address: deploymentInfo.returns.consensus.value as Address,
 			abi: parseAbi([
 				"function proposeTransaction((uint256 chainId, address safe, address to, uint256 value, bytes data, uint8 operation, uint256 safeTxGas, uint256 baseGas, uint256 gasPrice, address gasToken, address refundReceiver, uint256 nonce) transaction) external",
 				"function getTransactionAttestation(uint64 epoch, (uint256 chainId, address safe, address to, uint256 value, bytes data, uint8 operation, uint256 safeTxGas, uint256 baseGas, uint256 gasPrice, address gasToken, address refundReceiver, uint256 nonce) transaction) external view returns (((uint256 x, uint256 y) r, uint256 z) signature)",
@@ -370,7 +370,6 @@ describe("integration", () => {
 			event: CONSENSUS_EPOCH_STAGED_EVENT,
 			fromBlock: "earliest",
 		});
-		console.log(stagedEpochs);
 		// For the start epoch there is no staged event, but for the epoch after the end epoch is an additional one
 		expect(stagedEpochs.length).toBe(Number(endEpoch - startEpoch));
 
