@@ -26,7 +26,7 @@ sleep 2
 echo "Deploying contracts..."
 env \
     PARTICIPANTS=$(IFS=, ; echo "${PARTICIPANTS[*]}") \
-npm run -w contracts deploy -- \
+npm run -w contracts cmd:deploy -- \
     --rpc-url $ANVIL_RPC_URL \
     --unlocked \
     --sender 0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266 \

@@ -10,7 +10,6 @@ FROM base AS builder
 # First, copy over package files and install all dependencies.
 # This includes devDependencies needed for the build process (e.g., typescript).
 COPY package.json package-lock.json ./
-# IMPORTANT: Copy the package.json for every workspace
 COPY validator/package.json validator/package.json
 RUN npm ci --workspace=validator
 
@@ -26,9 +25,6 @@ FROM base AS runner
 # Copy package.json and install *only* production dependencies.
 # This avoids including devDependencies in the final image, keeping it small.
 COPY --from=builder /usr/src/app/package.json /usr/src/app/package-lock.json ./
-# CRITICAL: You must copy the package.json for *every* workspace
-# that 'validator' depends on, plus 'validator' itself.
-# This allows 'npm ci' to resolve the workspace structure.
 COPY --from=builder /usr/src/app/validator/package.json validator/
 RUN npm ci --workspace=validator --omit=dev --ignore-scripts
 

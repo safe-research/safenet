@@ -14,7 +14,7 @@ library Genesis {
      * @param participants The participant addresses.
      * @return result The Merkle root hash.
      */
-    function participantsRoot(address[] memory participants) internal pure returns (bytes32 result) {
+    function participantsMerkleRoot(address[] memory participants) internal pure returns (bytes32 result) {
         uint256 depth = 0;
         for (uint256 l = participants.length; l > 1; l = (l + 1) / 2) {
             depth++;
@@ -38,16 +38,34 @@ library Genesis {
     }
 
     /**
+     * @notice Computes the genesis group parameters for a set of participants and a salt.
+     * @param participants The participant addresses.
+     * @param salt The genesis salt.
+     * @return participantsRoot The Merkle root of the participants.
+     * @return count The number of participants.
+     * @return threshold The threshold of participants required for an attestation.
+     * @return context The FROST coordinator group context.
+     */
+    function groupParameters(address[] memory participants, bytes32 salt)
+        internal
+        pure
+        returns (bytes32 participantsRoot, uint16 count, uint16 threshold, bytes32 context)
+    {
+        participantsRoot = participantsMerkleRoot(participants);
+        count = uint16(participants.length);
+        threshold = (count / 2) + 1;
+        context = salt == bytes32(0) ? bytes32(0) : keccak256(abi.encodePacked("genesis", salt));
+    }
+
+    /**
      * @notice Computes the genesis group ID for a set of participants and a salt.
      * @param participants The participant addresses.
      * @param salt The genesis salt.
      * @return result The FROST coordinator genesis group ID.
      */
     function groupId(address[] memory participants, bytes32 salt) internal pure returns (FROSTGroupId.T result) {
-        bytes32 proot = participantsRoot(participants);
-        uint16 count = uint16(participants.length);
-        uint16 threshold = (count / 2) + 1;
-        bytes32 context = salt == bytes32(0) ? bytes32(0) : keccak256(abi.encodePacked("genesis", salt));
-        return FROSTGroupId.create(proot, count, threshold, context);
+        (bytes32 participantsRoot, uint16 count, uint16 threshold, bytes32 context) =
+            groupParameters(participants, salt);
+        return FROSTGroupId.create(participantsRoot, count, threshold, context);
     }
 }

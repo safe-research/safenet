@@ -4,7 +4,8 @@
 	"scripts": {
 		"build": "forge build --force",
 		"check": "forge fmt --check && forge lint --deny notes",
-		"deploy": "forge script DeployScript",
+		"cmd:deploy": "forge script DeployScript",
+		"cmd:genesis": "forge script GenesisScript",
 		"fix": "forge fmt",
 		"test": "forge test -vvv",
 		"coverage": "mkdir -p coverage && forge coverage --report lcov --report-file coverage/lcov.info"
