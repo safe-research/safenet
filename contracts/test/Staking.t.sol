@@ -2,16 +2,9 @@
 pragma solidity ^0.8.30;
 
 import {Test} from "@forge-std/Test.sol";
-import {Staking, Ownable} from "../src/Staking.sol";
-import {ERC20, IERC20Errors} from "@oz/token/ERC20/ERC20.sol";
-
-contract MockERC20 is ERC20 {
-    constructor(string memory name, string memory symbol) ERC20(name, symbol) {}
-
-    function mint(address to, uint256 amount) external {
-        _mint(to, amount);
-    }
-}
+import {IERC20Errors} from "@oz/token/ERC20/ERC20.sol";
+import {MockERC20} from "@test/util/MockERC20.sol";
+import {Staking, Ownable} from "@/Staking.sol";
 
 contract StakingTest is Test {
     Staking public staking;

@@ -12,7 +12,3 @@ remappings = [
   "@oz/=lib/openzeppelin-contracts/contracts/",
 ]
 auto_detect_remappings = false
-
-# Suppress "Function state mutability can be restricted to pure" for
-# supportsInterface, which must remain `view` for IERC165 compatibility.
-ignored_error_codes = [2018]

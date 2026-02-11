@@ -1,7 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-only
 pragma solidity ^0.8.30;
 
+import {IERC165} from "@oz/utils/introspection/IERC165.sol";
 import {FROSTCoordinator} from "@/FROSTCoordinator.sol";
+import {IConsensus} from "@/interfaces/IConsensus.sol";
 import {IFROSTCoordinatorCallback} from "@/interfaces/IFROSTCoordinatorCallback.sol";
 import {ConsensusMessages} from "@/libraries/ConsensusMessages.sol";
 import {FROST} from "@/libraries/FROST.sol";
@@ -9,17 +11,42 @@ import {FROSTGroupId} from "@/libraries/FROSTGroupId.sol";
 import {FROSTSignatureId} from "@/libraries/FROSTSignatureId.sol";
 import {SafeTransaction} from "@/libraries/SafeTransaction.sol";
 import {Secp256k1} from "@/libraries/Secp256k1.sol";
-import {IConsensus} from "@/interfaces/IConsensus.sol";
-import {IERC165} from "@/interfaces/IERC165.sol";
 
 /**
  * @title Consensus
  * @notice Onchain consensus state.
  */
-contract Consensus is IConsensus, IFROSTCoordinatorCallback {
+contract Consensus is IConsensus, IERC165, IFROSTCoordinatorCallback {
     using ConsensusMessages for bytes32;
     using FROSTSignatureId for FROSTSignatureId.T;
     using SafeTransaction for SafeTransaction.T;
+
+    // ============================================================
+    // STRUCTS
+    // ============================================================
+
+    /**
+     * @notice Tracks the state of validator set epochs and their rollover.
+     * @custom:param previous The epoch number of the previously active validator set.
+     * @custom:param active The epoch number of the currently active validator set.
+     * @custom:param staged The epoch number of the next validator set, which will become active at the
+     *               `rolloverBlock`. Zero if no epoch is staged.
+     * @custom:param rolloverBlock The block number at which the `staged` epoch will become `active`.
+     * @dev An epoch represents a period governed by a specific validator set (FROST group). The rollover from one
+     *      epoch to the next is a two-step, on-chain process:
+     *      1. Proposal & Attestation: A new epoch and validator group are proposed. The current active validator set
+     *         must attest to this proposal by signing it.
+     *      2. Staging: Once attested, the new epoch is "staged" for a future `rolloverBlock`.
+     *      3. Rollover: The actual switch to the new epoch happens automatically and lazily when the `rolloverBlock`
+     *         is reached. Any state-changing transaction will trigger the rollover if the block number is past the
+     *         scheduled time.
+     */
+    struct Epochs {
+        uint64 previous;
+        uint64 active;
+        uint64 staged;
+        uint64 rolloverBlock;
+    }
 
     // ============================================================
     // STORAGE VARIABLES
@@ -47,67 +74,6 @@ contract Consensus is IConsensus, IFROSTCoordinatorCallback {
      */
     // forge-lint: disable-next-line(mixed-case-variable)
     mapping(bytes32 message => FROSTSignatureId.T) private $attestations;
-
-    // ============================================================
-    // EVENTS
-    // ============================================================
-
-    /**
-     * @notice Emitted when a new epoch rollover is proposed.
-     * @param activeEpoch The current active epoch.
-     * @param proposedEpoch The proposed new epoch.
-     * @param rolloverBlock The block number when rollover should occur.
-     * @param groupKey The public group key for the proposed epoch.
-     */
-    event EpochProposed(
-        uint64 indexed activeEpoch, uint64 indexed proposedEpoch, uint64 rolloverBlock, Secp256k1.Point groupKey
-    );
-
-    /**
-     * @notice Emitted when a new epoch is staged for automatic rollover.
-     * @param activeEpoch The current active epoch.
-     * @param proposedEpoch The proposed new epoch.
-     * @param rolloverBlock The block number when rollover should occur.
-     * @param groupKey The public group key for the proposed epoch.
-     * @param attestation The attestation to epoch rollover.
-     */
-    event EpochStaged(
-        uint64 indexed activeEpoch,
-        uint64 indexed proposedEpoch,
-        uint64 rolloverBlock,
-        Secp256k1.Point groupKey,
-        FROST.Signature attestation
-    );
-
-    /**
-     * @notice Emitted when the active epoch is rolled over.
-     * @param newActiveEpoch The new active epoch.
-     */
-    event EpochRolledOver(uint64 indexed newActiveEpoch);
-
-    /**
-     * @notice Emitted when a transaction is proposed for validator approval.
-     * @param transactionHash The hash of the proposed Safe transaction.
-     * @param chainId The chain ID for the Safe transaction.
-     * @param safe The address of the Safe.
-     * @param epoch The epoch in which the transaction is proposed.
-     * @param transaction The proposed Safe transaction.
-     */
-    event TransactionProposed(
-        bytes32 indexed transactionHash,
-        uint256 indexed chainId,
-        address indexed safe,
-        uint64 epoch,
-        SafeTransaction.T transaction
-    );
-
-    /**
-     * @notice Emitted when a transaction is attested by the validator set.
-     * @param transactionHash The hash of the attested Safe transaction.
-     * @param epoch The epoch in which the attested transaction was proposed.
-     * @param attestation The attestation to Safe transaction.
-     */
-    event TransactionAttested(bytes32 indexed transactionHash, uint64 epoch, FROST.Signature attestation);
 
     // ============================================================
     // ERRORS
@@ -164,14 +130,88 @@ contract Consensus is IConsensus, IFROSTCoordinatorCallback {
     // forge-lint: disable-end(unwrapped-modifier-logic)
 
     // ============================================================
-    // EXTERNAL AND PUBLIC VIEW FUNCTIONS
+    // HELPER AND STATE INSPECTION FUNCTIONS
+    // ============================================================
+
+    /**
+     * @notice Computes the EIP-712 domain separator used by the consensus contract.
+     * @return result The domain separator.
+     */
+    function domainSeparator() public view returns (bytes32 result) {
+        return ConsensusMessages.domain(block.chainid, address(this));
+    }
+
+    /**
+     * @notice Gets the internal epochs state.
+     * @return epochs The epochs state tracking previous, active, and staged epochs.
+     */
+    function getEpochsState() external view returns (Epochs memory epochs) {
+        (epochs,) = _epochsWithRollover();
+    }
+
+    /**
+     * @notice Gets the group info for a specific epoch
+     * @param epoch The epoch for which the group should be retrieved
+     * @return group The FROST group ID for the specified epoch.
+     */
+    function getEpochGroupId(uint64 epoch) external view returns (FROSTGroupId.T group) {
+        return $groups[epoch];
+    }
+
+    /**
+     * @notice Gets the FROST signature ID of an attestation to the specified rollover or transaction message.
+     * @param message The message to query an attestation signature ID for.
+     * @return signature The signature ID of the attested message; a zero value indicates the message was never
+     *                    attested to.
+     */
+    function getAttestationSignatureId(bytes32 message) external view returns (FROSTSignatureId.T signature) {
+        return $attestations[message];
+    }
+
+    // ============================================================
+    // IConsensus IMPLEMENTATION
     // ============================================================
 
     /**
      * @inheritdoc IConsensus
      */
-    function domainSeparator() public view returns (bytes32 result) {
-        return ConsensusMessages.domain(block.chainid, address(this));
+    function getActiveEpoch() external view returns (uint64 epoch, FROSTGroupId.T group) {
+        (Epochs memory epochs,) = _epochsWithRollover();
+        epoch = epochs.active;
+        group = $groups[epoch];
+    }
+
+    /**
+     * @inheritdoc IConsensus
+     */
+    function proposeEpoch(uint64 proposedEpoch, uint64 rolloverBlock, FROSTGroupId.T group) public {
+        Epochs memory epochs = _processRollover();
+        _requireValidRollover(epochs, proposedEpoch, rolloverBlock);
+        Secp256k1.Point memory groupKey = COORDINATOR.groupKey(group);
+        bytes32 message = domainSeparator().epochRollover(epochs.active, proposedEpoch, rolloverBlock, groupKey);
+        emit EpochProposed(epochs.active, proposedEpoch, rolloverBlock, groupKey);
+        COORDINATOR.sign($groups[epochs.active], message);
+    }
+
+    /**
+     * @inheritdoc IConsensus
+     */
+    function stageEpoch(uint64 proposedEpoch, uint64 rolloverBlock, FROSTGroupId.T group, FROSTSignatureId.T signature)
+        public
+    {
+        Epochs memory epochs = _processRollover();
+        _requireValidRollover(epochs, proposedEpoch, rolloverBlock);
+        Secp256k1.Point memory groupKey = COORDINATOR.groupKey(group);
+        bytes32 message = domainSeparator().epochRollover(epochs.active, proposedEpoch, rolloverBlock, groupKey);
+        FROST.Signature memory attestation = COORDINATOR.signatureVerify(signature, $groups[epochs.active], message);
+        epochs.staged = proposedEpoch;
+        epochs.rolloverBlock = rolloverBlock;
+        $epochs = epochs;
+        $groups[proposedEpoch] = group;
+        // Note that we do not need to check that `$attestations[message]` is zero, since the `_requireValidRollover`
+        // already prevents an epoch being proposed and staged more than once.
+        $attestations[message] = signature;
+        emit EpochStaged(epochs.active, proposedEpoch, rolloverBlock, groupKey, attestation);
     }
 
     /**
@@ -232,73 +272,6 @@ contract Consensus is IConsensus, IFROSTCoordinatorCallback {
     /**
      * @inheritdoc IConsensus
      */
-    function getActiveEpoch() external view returns (uint64 epoch, FROSTGroupId.T group) {
-        (Epochs memory epochs,) = _epochsWithRollover();
-        epoch = epochs.active;
-        group = $groups[epoch];
-    }
-
-    /**
-     * @inheritdoc IConsensus
-     */
-    function getEpochsState() external view returns (Epochs memory epochs) {
-        (epochs,) = _epochsWithRollover();
-    }
-
-    /**
-     * @inheritdoc IConsensus
-     */
-    function getEpochGroupId(uint64 epoch) external view returns (FROSTGroupId.T group) {
-        return $groups[epoch];
-    }
-
-    /**
-     * @inheritdoc IConsensus
-     */
-    function getAttestationSignatureId(bytes32 message) external view returns (FROSTSignatureId.T signature) {
-        return $attestations[message];
-    }
-
-    // ============================================================
-    // EXTERNAL AND PUBLIC STATE-CHANGING FUNCTIONS
-    // ============================================================
-
-    /**
-     * @inheritdoc IConsensus
-     */
-    function proposeEpoch(uint64 proposedEpoch, uint64 rolloverBlock, FROSTGroupId.T group) public {
-        Epochs memory epochs = _processRollover();
-        _requireValidRollover(epochs, proposedEpoch, rolloverBlock);
-        Secp256k1.Point memory groupKey = COORDINATOR.groupKey(group);
-        bytes32 message = domainSeparator().epochRollover(epochs.active, proposedEpoch, rolloverBlock, groupKey);
-        emit EpochProposed(epochs.active, proposedEpoch, rolloverBlock, groupKey);
-        COORDINATOR.sign($groups[epochs.active], message);
-    }
-
-    /**
-     * @inheritdoc IConsensus
-     */
-    function stageEpoch(uint64 proposedEpoch, uint64 rolloverBlock, FROSTGroupId.T group, FROSTSignatureId.T signature)
-        public
-    {
-        Epochs memory epochs = _processRollover();
-        _requireValidRollover(epochs, proposedEpoch, rolloverBlock);
-        Secp256k1.Point memory groupKey = COORDINATOR.groupKey(group);
-        bytes32 message = domainSeparator().epochRollover(epochs.active, proposedEpoch, rolloverBlock, groupKey);
-        FROST.Signature memory attestation = COORDINATOR.signatureVerify(signature, $groups[epochs.active], message);
-        epochs.staged = proposedEpoch;
-        epochs.rolloverBlock = rolloverBlock;
-        $epochs = epochs;
-        $groups[proposedEpoch] = group;
-        // Note that we do not need to check that `$attestations[message]` is zero, since the `_requireValidRollover`
-        // already prevents an epoch being proposed and staged more than once.
-        $attestations[message] = signature;
-        emit EpochStaged(epochs.active, proposedEpoch, rolloverBlock, groupKey, attestation);
-    }
-
-    /**
-     * @inheritdoc IConsensus
-     */
     function proposeTransaction(SafeTransaction.T memory transaction) public returns (bytes32 transactionHash) {
         Epochs memory epochs = _processRollover();
         transactionHash = transaction.hash();
@@ -352,6 +325,18 @@ contract Consensus is IConsensus, IFROSTCoordinatorCallback {
         FROST.Signature memory attestation = COORDINATOR.signatureVerify(signature, $groups[epoch], message);
         $attestations[message] = signature;
         emit TransactionAttested(transactionHash, epoch, attestation);
+    }
+
+    // ============================================================
+    // IERC165 IMPLEMENTATION
+    // ============================================================
+
+    /**
+     * @inheritdoc IERC165
+     */
+    function supportsInterface(bytes4 interfaceId) external pure returns (bool) {
+        return interfaceId == type(IConsensus).interfaceId || interfaceId == type(IERC165).interfaceId
+            || interfaceId == type(IFROSTCoordinatorCallback).interfaceId;
     }
 
     // ============================================================
@@ -430,15 +415,5 @@ contract Consensus is IConsensus, IFROSTCoordinatorCallback {
      */
     function _requireValidRollover(Epochs memory epochs, uint64 proposedEpoch, uint64 rolloverBlock) private view {
         require(epochs.active < proposedEpoch && rolloverBlock > block.number && epochs.staged == 0, InvalidRollover());
-    }
-
-    /**
-     * @notice Checks if the contract supports a given interface.
-     * @param interfaceId The ID of the interface to check support for.
-     * @return Whether or not the interface is supported.
-     */
-    function supportsInterface(bytes4 interfaceId) external view returns (bool) {
-        return interfaceId == type(IConsensus).interfaceId || interfaceId == type(IFROSTCoordinatorCallback).interfaceId
-            || interfaceId == type(IERC165).interfaceId;
     }
 }
