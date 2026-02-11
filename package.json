@@ -1,9 +1,8 @@
 {
-	"name": "shieldnet",
+	"name": "safenet",
 	"private": true,
 	"workspaces": [
 		"contracts",
-		"docs",
 		"explorer",
 		"validator"
 	],

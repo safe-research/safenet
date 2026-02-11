@@ -1,6 +1,6 @@
 import { zeroAddress, zeroHash } from "viem";
 import { describe, expect, it, vi } from "vitest";
-import type { ShieldnetProtocol } from "../../consensus/protocol/types.js";
+import type { SafenetProtocol } from "../../consensus/protocol/types.js";
 import type { SigningClient } from "../../consensus/signing/client.js";
 import type { VerificationEngine } from "../../consensus/verify/engine.js";
 import type { TransactionProposedEvent } from "../transitions/types.js";
@@ -69,7 +69,7 @@ const EVENT: TransactionProposedEvent = {
 // --- Tests ---
 describe("transaction proposed", () => {
 	it("should not handle proposed event if epoch group is unknown", async () => {
-		const protocol: ShieldnetProtocol = {} as unknown as ShieldnetProtocol;
+		const protocol: SafenetProtocol = {} as unknown as SafenetProtocol;
 		const verificationEngine: VerificationEngine = {} as unknown as VerificationEngine;
 		const signingClient: SigningClient = {} as unknown as SigningClient;
 		const consensus = {
@@ -89,10 +89,10 @@ describe("transaction proposed", () => {
 	});
 
 	it("should not update state if message cannot be verified", async () => {
-		const protocol: ShieldnetProtocol = {
+		const protocol: SafenetProtocol = {
 			chainId: () => 23n,
 			consensus: () => zeroAddress,
-		} as unknown as ShieldnetProtocol;
+		} as unknown as SafenetProtocol;
 		const verify = vi.fn();
 		verify.mockResolvedValueOnce({
 			status: "invalid",
@@ -126,10 +126,10 @@ describe("transaction proposed", () => {
 	});
 
 	it("should transition to waiting for request after verifying transaction", async () => {
-		const protocol: ShieldnetProtocol = {
+		const protocol: SafenetProtocol = {
 			chainId: () => 23n,
 			consensus: () => zeroAddress,
-		} as unknown as ShieldnetProtocol;
+		} as unknown as SafenetProtocol;
 		const verify = vi.fn();
 		verify.mockReturnValue({
 			status: "valid",

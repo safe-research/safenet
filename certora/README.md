@@ -1,6 +1,6 @@
 # Formal Verification
 
-This subdirectory contains formal verification specifications for the Shieldnet contracts.
+This subdirectory contains formal verification specifications for the Safenet contracts.
 
 ## Installation
 

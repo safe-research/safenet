@@ -1,7 +1,7 @@
 using ERC20Harness as erc20Token;
 
 methods {
-    // Shieldnet Staking functions
+    // Staking functions
     function SAFE_TOKEN() external returns (address) envfree;
     function CONFIG_TIME_DELAY() external returns (uint256) envfree;
     function stakes(address staker, address validator) external returns (uint256) envfree;
@@ -41,8 +41,8 @@ methods {
     function _.transfer(address to, uint256 amount) external => DISPATCHER(true);
 }
 
-// Setup function that proves that the ERC20 token (SAFE) used in the Shieldnet
-// Staking contract behaves like a well-formed ERC20 token.
+// Setup function that proves that the ERC20 token (SAFE) used in the Staking
+// contract behaves like a well-formed ERC20 token.
 function setupRequireERC20TokenInvariants(address a, address b) {
     require erc20Token.totalSupply() == 10^27; // 1 billion tokens with 18 decimals
     require erc20Token.balanceOf(a) <= erc20Token.totalSupply();
@@ -85,8 +85,8 @@ hook Sload uint64 value withdrawalQueues[KEY address staker].tail {
     requireInvariant withdrawalQueueHeadAndTailAreEitherBothZeroOrNonZero(staker);
 }
 
-// Invariant that proves that the Shieldnet Staking contract's next withdrawal
-// ID is always increasing.
+// Invariant that proves that the Staking contract's next withdrawal ID is
+// always increasing.
 invariant nextWithdrawalIdShouldAlwaysBeGreaterThanHeadAndTailPointers(address staker)
     (currentContract.withdrawalQueues[staker].head != 0 => currentContract.withdrawalQueues[staker].head < nextWithdrawalId()) &&
     (currentContract.withdrawalQueues[staker].tail != 0 => currentContract.withdrawalQueues[staker].tail < nextWithdrawalId())
@@ -96,8 +96,8 @@ invariant nextWithdrawalIdShouldAlwaysBeGreaterThanHeadAndTailPointers(address s
     }
 }
 
-// Invariant that proves that the Shieldnet Staking contract's withdrawal
-// linked list integrity is always maintained.
+// Invariant that proves that the Staking contract's withdrawal linked list
+// integrity is always maintained.
 invariant withdrawalLinkedListIntegrity(address staker)
     checkWithdrawQueueIntegrity(staker)
 {
@@ -139,9 +139,8 @@ invariant withdrawalNodeIsReachable(address staker, uint64 withdrawalId)
     }
 }
 
-// Invariant that proves that the Shieldnet Staking contract's withdrawal
-// queue head and tail IDs are either both zero or both non-zero for a given
-// staker.
+// Invariant that proves that the Staking contract's withdrawal queue head and
+// tail IDs are either both zero or both non-zero for a given staker.
 invariant withdrawalQueueHeadAndTailAreEitherBothZeroOrNonZero(address staker)
     (currentContract.withdrawalQueues[staker].head == 0
         && currentContract.withdrawalQueues[staker].tail == 0)
@@ -166,8 +165,8 @@ invariant withdrawalQueueHeadAndTailAreEitherBothZeroOrNonZero(address staker)
     }
 }
 
-// Invariant that proves that the Shieldnet Staking contract's next withdrawal
-// ID's withdrawal node should always be non existent.
+// Invariant that proves that the Staking contract's next withdrawal ID's
+// withdrawal node should always be non existent.
 invariant nextWithdrawalIdAndGreaterIdNodeShouldNotExist(address staker, uint64 withdrawalId)
     withdrawalId >= nextWithdrawalId() =>
         currentContract.withdrawalNodes[staker][withdrawalId].amount == 0
@@ -189,13 +188,13 @@ invariant nextWithdrawalIdAndGreaterIdNodeShouldNotExist(address staker, uint64 
     }
 }
 
-// Invariant that proves that the Shieldnet Staking contract never has a
-// staker with address zero.
+// Invariant that proves that the Staking contract never has a staker with
+// address zero.
 invariant stakerAddressIsNeverZero()
     totalStakerStakes(0) == 0;
 
-// Invariant that proves that the Shieldnet Staking contract's next withdrawal
-// ID is always non-zero.
+// Invariant that proves that the Staking contract's next withdrawal ID is
+// always non-zero.
 invariant nextWithdrawalIdIsNonZero()
     nextWithdrawalId() > 0;
 
@@ -208,8 +207,8 @@ invariant withdrawDelayIsLessThanConfigDelay()
     }
 }
 
-// Invariant that proves that the Shieldnet Staking contract's withdrawal
-// node with ID zero should never exist.
+// Invariant that proves that the Staking contract's withdrawal node with ID
+// zero should never exist.
 invariant withdrawalNodeZeroShouldNotExist(address staker)
     currentContract.withdrawalNodes[staker][0].amount == 0
     && currentContract.withdrawalNodes[staker][0].claimableAt == 0
@@ -234,16 +233,15 @@ invariant withdrawalNodeIntegrity(address staker, uint64 withdrawalId)
     }
 }
 
-// Invariant that proves that the Shieldnet Staking contract's pending
-// withdraw delay is never greater than the config delay.
+// Invariant that proves that the Staking contract's pending withdrawal delay is
+// never greater than the config delay.
 invariant pendingWithdrawDelayIsLessThanConfigDelay()
     currentContract.pendingWithdrawDelayChange.value <= CONFIG_TIME_DELAY();
 
-// Invariant that proves that the Shieldnet Staking contract never grants
-// allowance to another address; i.e. there is no way for an external caller to
-// get the locking contract to call `approve` or `increaseAllowance` on the Safe
-// token.
-invariant noAllowanceForShieldnetStaking(address spender)
+// Invariant that proves that the Staking contract never grants allowance to
+// another address; i.e. there is no way for an external caller to get the
+// locking contract to call `approve` or `increaseAllowance` on the Safe token.
+invariant noAllowanceForSelf(address spender)
     erc20Token.allowance(currentContract, spender) == 0
     filtered {
         f -> f.contract != erc20Token
@@ -256,9 +254,9 @@ invariant noAllowanceForShieldnetStaking(address spender)
     }
 }
 
-// Invariant that proves that the Shieldnet Staking contract's balance of the
-// Safe token is always greater than or equal to the total amount of tokens
-// staked plus the total amount of tokens pending withdrawal.
+// Invariant that proves that the Staking contract's balance of the Safe token
+// is always greater than or equal to the total amount of tokens staked plus the
+// total amount of tokens pending withdrawal.
 invariant contractBalanceGreaterThanTotalStakedAndPendingWithdrawals()
     erc20Token.balanceOf(currentContract) >= totalStakedAmount() + totalPendingWithdrawals()
 {
@@ -268,6 +266,6 @@ invariant contractBalanceGreaterThanTotalStakedAndPendingWithdrawals()
     }
     preserved erc20Token.transferFrom(address from, address to, uint256 value) with (env e) {
         setupRequireERC20TokenInvariants(from, to);
-        requireInvariant noAllowanceForShieldnetStaking(e.msg.sender);
+        requireInvariant noAllowanceForSelf(e.msg.sender);
     }
 }

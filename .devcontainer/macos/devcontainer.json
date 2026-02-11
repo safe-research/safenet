@@ -3,7 +3,7 @@
 // Devcontainers don't support `extends` yet, hence we need to keep them in sync manually.
 
 {
-  "name": "Shieldnet (MacOS)",
+  "name": "Safenet (MacOS)",
   "image": "mcr.microsoft.com/devcontainers/typescript-node:dev-24-bookworm",
 
   // User that VS Code connects as *inside* the container.

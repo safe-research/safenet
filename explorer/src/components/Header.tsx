@@ -12,7 +12,7 @@ export default function Header() {
 		<header className="sticky top-0 z-50 w-full flex flex-col items-center px-2 py-2 bg-surface-1 border-b border-surface-outline">
 			<nav className="flex flex-row w-full justify-between mb-2">
 				<Link to="/" className="text-xl font-semibold text-title hover:opacity-75 transition" search={{}}>
-					Shieldnet
+					Safenet
 				</Link>
 				<div className="flex items-center gap-2">
 					Block: {state.data.currentBlock} | Epoch: {state.data.currentEpoch} | GroupId:{" "}

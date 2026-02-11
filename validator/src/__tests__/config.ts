@@ -7,11 +7,11 @@ import { SqliteStateStorage } from "../machine/storage/sqlite.js";
 import { createLogger } from "../utils/logging.js";
 import { createMetricsService } from "../utils/metrics.js";
 
-const { SHIELDNET_TEST_VERBOSE, SHIELDNET_TEST_STORAGE } = process.env;
+const { SAFENET_TEST_VERBOSE, SAFENET_TEST_STORAGE } = process.env;
 
 export const silentLogger = createLogger({ level: "silent" });
 export const testLogger = createLogger({
-	level: SHIELDNET_TEST_VERBOSE === "true" || SHIELDNET_TEST_VERBOSE === "1" ? "debug" : "silent",
+	level: SAFENET_TEST_VERBOSE === "true" || SAFENET_TEST_VERBOSE === "1" ? "debug" : "silent",
 	pretty: true,
 });
 
@@ -20,11 +20,11 @@ export const log = testLogger.debug.bind(testLogger);
 export const testMetrics = createMetricsService({ logger: silentLogger }).metrics;
 
 export const createClientStorage =
-	SHIELDNET_TEST_STORAGE === "sqlite"
+	SAFENET_TEST_STORAGE === "sqlite"
 		? (account: Address, database?: Database) => new SqliteClientStorage(account, database ?? new Sqlite3(":memory:"))
 		: (account: Address) => new InMemoryClientStorage(account);
 
 export const createStateStorage =
-	SHIELDNET_TEST_STORAGE === "sqlite"
+	SAFENET_TEST_STORAGE === "sqlite"
 		? (database?: Database) => new SqliteStateStorage(database ?? new Sqlite3(":memory:"))
 		: () => new InMemoryStateStorage();

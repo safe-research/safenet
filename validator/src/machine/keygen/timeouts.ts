@@ -1,5 +1,5 @@
 import type { KeyGenClient } from "../../consensus/keyGen/client.js";
-import type { ShieldnetProtocol } from "../../consensus/protocol/types.js";
+import type { SafenetProtocol } from "../../consensus/protocol/types.js";
 import type { Participant } from "../../consensus/storage/types.js";
 import type { MachineConfig, MachineStates, RolloverState, StateDiff } from "../types.js";
 import { calcGroupContext } from "./group.js";
@@ -83,7 +83,7 @@ const getTimeoutInfo = (
 
 export const checkKeyGenTimeouts = (
 	machineConfig: MachineConfig,
-	protocol: ShieldnetProtocol,
+	protocol: SafenetProtocol,
 	keyGenClient: KeyGenClient,
 	machineStates: MachineStates,
 	block: bigint,

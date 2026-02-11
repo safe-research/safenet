@@ -1,7 +1,7 @@
 import "StakingCommon.spec";
 
-// Invariant that proves that the Shieldnet Staking contract's withdrawal
-// node's next and previous pointers are always less than the next withdrawal ID.
+// Invariant that proves that the Staking contract's withdrawal node's next and
+// previous pointers are always less than the next withdrawal ID.
 invariant nextWithdrawalIdShouldAlwaysBeGreaterThanPreviousAndNextPointers(address staker, uint64 withdrawalId)
     (currentContract.withdrawalNodes[staker][withdrawalId].previous != 0 => currentContract.withdrawalNodes[staker][withdrawalId].previous < nextWithdrawalId())
     && (currentContract.withdrawalNodes[staker][withdrawalId].next != 0 => currentContract.withdrawalNodes[staker][withdrawalId].next < nextWithdrawalId())
@@ -20,8 +20,8 @@ invariant nextWithdrawalIdShouldAlwaysBeGreaterThanPreviousAndNextPointers(addre
     }
 }
 
-// Invariant that proves that the Shieldnet Staking contract's withdrawal
-// node's next and previous pointers can never point to itself.
+// Invariant that proves that the Staking contract's withdrawal node's next and
+// previous pointers can never point to itself.
 invariant withdrawalNodeNextOrPreviousCannotBeItself(address staker, uint64 withdrawalId)
     withdrawalId != 0 =>
         currentContract.withdrawalNodes[staker][withdrawalId].next != withdrawalId
@@ -41,8 +41,8 @@ invariant withdrawalNodeNextOrPreviousCannotBeItself(address staker, uint64 with
     }
 }
 
-// Invariant that proves that the Shieldnet Staking contract's withdrawal node
-// with non-zero amount and claimableAt timestamps and zero next and previous
+// Invariant that proves that the Staking contract's withdrawal node with
+// non-zero amount and claimableAt timestamps and zero next and previous
 // pointers is the only node in the withdrawal queue for a given staker.
 invariant withdrawalNodeNextAndPreviousZeroIntegrity(address staker, uint64 withdrawalId)
     currentContract.withdrawalNodes[staker][withdrawalId].amount != 0
@@ -74,8 +74,8 @@ invariant withdrawalNodeNextAndPreviousZeroIntegrity(address staker, uint64 with
     }
 }
 
-// Invariant that proves that the Shieldnet Staking contract's withdrawal
-// node's next and previous pointers are not the same except when they are zero.
+// Invariant that proves that the Staking contract's withdrawal node's next and
+// previous pointers are not the same except when they are zero.
 invariant previousAndNextShouldNotBeSameExceptZero(address staker, uint64 withdrawalId)
     (currentContract.withdrawalNodes[staker][withdrawalId].next != 0 && currentContract.withdrawalNodes[staker][withdrawalId].previous != 0) =>
         currentContract.withdrawalNodes[staker][withdrawalId].next != currentContract.withdrawalNodes[staker][withdrawalId].previous
@@ -110,8 +110,8 @@ invariant headAndTailPointerShouldBeValidWithdrawalNodes(address staker)
     }
 }
 
-// Invariant that proves that the Shieldnet Staking contract's withdrawal
-// linked list integrity is always maintained.
+// Invariant that proves that the Staking contract's withdrawal linked list
+// integrity is always maintained.
 invariant withdrawalLinkedListPointerIntegrity(address staker, uint64 withdrawalId)
     (currentContract.withdrawalNodes[staker][withdrawalId].next != 0 =>
         !withdrawalQueueEmpty(staker) &&
@@ -136,9 +136,9 @@ invariant withdrawalLinkedListPointerIntegrity(address staker, uint64 withdrawal
     }
 }
 
-// Invariant that proves that the Shieldnet Staking contract's withdrawal
-// IDs are unique for each staker; i.e. two different stakers cannot both have
-// a valid withdrawal node (non-zero amount and claimableAt) for the same ID.
+// Invariant that proves that the Staking contract's withdrawal IDs are unique
+// for each staker; i.e. two different stakers cannot both have a valid
+// withdrawal node (non-zero amount and claimableAt) for the same ID.
 invariant withdrawalIdShouldBeUniqueForEachStaker(address stakerA, address stakerB, uint64 withdrawalId)
     stakerA != stakerB =>
         !(currentContract.withdrawalNodes[stakerA][withdrawalId].amount != 0 &&

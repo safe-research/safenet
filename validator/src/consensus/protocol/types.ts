@@ -9,7 +9,7 @@ import type {
 } from "../../frost/types.js";
 import type { PublicNonceCommitments } from "../signing/nonces.js";
 
-export type ShieldnetProtocol = {
+export type SafenetProtocol = {
 	chainId(): bigint;
 	consensus(): Address;
 	coordinator(): Address;

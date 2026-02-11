@@ -1,10 +1,10 @@
-import type { ShieldnetProtocol } from "../../consensus/protocol/types.js";
+import type { SafenetProtocol } from "../../consensus/protocol/types.js";
 import { safeTxProposalHash } from "../../consensus/verify/safeTx/hashing.js";
 import type { TransactionAttestedEvent } from "../transitions/types.js";
 import type { MachineStates, StateDiff } from "../types.js";
 
 export const handleTransactionAttested = async (
-	protocol: ShieldnetProtocol,
+	protocol: SafenetProtocol,
 	machineStates: MachineStates,
 	event: TransactionAttestedEvent,
 ): Promise<StateDiff> => {

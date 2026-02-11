@@ -2,7 +2,7 @@
 // This setup is currently specific to Fedora. Needs updaating for other distros.
 // For MacOS, refer to ./macos/devcontainer.json
 {
-    "name": "Shieldnet (Linux)",
+    "name": "Safenet (Linux)",
     "image": "mcr.microsoft.com/devcontainers/typescript-node:dev-24-bookworm",
 
     "mounts": [

@@ -1,5 +1,5 @@
 import type { KeyGenClient } from "../../consensus/keyGen/client.js";
-import type { ProtocolAction, ShieldnetProtocol } from "../../consensus/protocol/types.js";
+import type { ProtocolAction, SafenetProtocol } from "../../consensus/protocol/types.js";
 import type { SigningClient } from "../../consensus/signing/client.js";
 import type { VerificationEngine } from "../../consensus/verify/engine.js";
 import type { EpochRolloverPacket } from "../../consensus/verify/rollover/schemas.js";
@@ -9,7 +9,7 @@ import type { ConsensusDiff, ConsensusState, MachineConfig, MachineStates, State
 
 export const handleKeyGenConfirmed = async (
 	machineConfig: MachineConfig,
-	protocol: ShieldnetProtocol,
+	protocol: SafenetProtocol,
 	verificationEngine: VerificationEngine,
 	keyGenClient: KeyGenClient,
 	signingClient: SigningClient,

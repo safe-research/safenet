@@ -35,7 +35,7 @@ function AppInner() {
 	return (
 		<Container>
 			<div className="text-center mb-12">
-				<h1 className="text-3xl font-bold text-title sm:text-4xl mb-4">Shieldnet Explorer</h1>
+				<h1 className="text-3xl font-bold text-title sm:text-4xl mb-4">Safenet Explorer</h1>
 				<p className="text-lg text-sub-title max-w-2xl mx-auto">Explore the future of transaction security!</p>
 			</div>
 
@@ -55,7 +55,7 @@ function AppInner() {
 const entriesSearchSchema = z.object({
 	network: z.coerce
 		.string()
-		.pipe(z.union(Object.keys(SAFE_SERVICE_CHAINS).map((c) => z.literal(c))).or(z.literal("Shieldnet")))
+		.pipe(z.union(Object.keys(SAFE_SERVICE_CHAINS).map((c) => z.literal(c))).or(z.literal("Safenet")))
 		.optional()
 		.catch(undefined),
 	limit: z.coerce.number().optional().catch(PAGE_SIZE),

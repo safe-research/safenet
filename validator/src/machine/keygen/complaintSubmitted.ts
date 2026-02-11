@@ -1,5 +1,5 @@
 import type { KeyGenClient } from "../../consensus/keyGen/client.js";
-import type { ComplaintResponse, ShieldnetProtocol } from "../../consensus/protocol/types.js";
+import type { ComplaintResponse, SafenetProtocol } from "../../consensus/protocol/types.js";
 import type { KeyGenComplaintSubmittedEvent } from "../transitions/types.js";
 import type { MachineConfig, MachineStates, RolloverState, StateDiff } from "../types.js";
 import { calcGroupContext } from "./group.js";
@@ -7,7 +7,7 @@ import { triggerKeyGen } from "./trigger.js";
 
 export const handleComplaintSubmitted = async (
 	machineConfig: MachineConfig,
-	protocol: ShieldnetProtocol,
+	protocol: SafenetProtocol,
 	keyGenClient: KeyGenClient,
 	machineStates: MachineStates,
 	event: KeyGenComplaintSubmittedEvent,

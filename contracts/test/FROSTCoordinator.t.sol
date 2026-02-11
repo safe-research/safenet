@@ -279,7 +279,7 @@ contract FROSTCoordinatorTest is Test {
         // The signature aggregator (the coordinator contract) reveals the
         // message to sign and the participants reveal their committed nonces
         // from round 1.
-        bytes32 message = keccak256("Hello, Shieldnet!");
+        bytes32 message = keccak256("Hello, Safenet!");
 
         vm.expectEmit();
         emit FROSTCoordinator.Sign(address(this), gid, message, FROSTSignatureId.create(gid, 0), 0);

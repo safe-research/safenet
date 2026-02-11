@@ -22,7 +22,7 @@ export const Route = createRootRouteWithContext<MyRouterContext>()({
 		<>
 			<Header />
 			<Outlet />
-			<SafeResearchFooter repo="shieldnet" />
+			<SafeResearchFooter repo="safenet" />
 			<ReactQueryDevtoolsSetup />
 		</>
 	),

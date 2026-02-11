@@ -1,7 +1,7 @@
 import { zeroAddress } from "viem";
 import { describe, expect, it } from "vitest";
 import { TEST_POINT } from "../../__tests__/data/protocol.js";
-import type { ShieldnetProtocol } from "../../consensus/protocol/types.js";
+import type { SafenetProtocol } from "../../consensus/protocol/types.js";
 import { safeTxHash, safeTxPacketHash } from "../../consensus/verify/safeTx/hashing.js";
 import type { SafeTransactionPacket } from "../../consensus/verify/safeTx/schemas.js";
 import type { TransactionAttestedEvent } from "../transitions/types.js";
@@ -12,7 +12,7 @@ import { handleTransactionAttested } from "./transactionAttested.js";
 const PROTOCOL = {
 	chainId: () => 42n,
 	consensus: () => "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266",
-} as unknown as ShieldnetProtocol;
+} as unknown as SafenetProtocol;
 const PACKET: SafeTransactionPacket = {
 	type: "safe_transaction_packet",
 	domain: {

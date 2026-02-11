@@ -7,7 +7,7 @@
 
 ### Certora
 
-The Safenet Beta staking contract audit was performed on commit [e97ed6170721fe499a243a394e84e278925527bf](https://github.com/safe-research/shieldnet/tree/e97ed6170721fe499a243a394e84e278925527bf).
+The Safenet Beta staking contract audit was performed on commit [e97ed6170721fe499a243a394e84e278925527bf](https://github.com/safe-research/safenet/tree/e97ed6170721fe499a243a394e84e278925527bf).
 
 #### Files
 

@@ -7,7 +7,7 @@ import {
 } from "viem/account-abstraction";
 import { describe, expect, it, vi } from "vitest";
 import type { KeyGenClient } from "../../consensus/keyGen/client.js";
-import type { ShieldnetProtocol } from "../../consensus/protocol/types.js";
+import type { SafenetProtocol } from "../../consensus/protocol/types.js";
 import { toPoint } from "../../frost/math.js";
 import type { KeyGenComplaintSubmittedEvent } from "../transitions/types.js";
 import type { MachineConfig, MachineStates } from "../types.js";
@@ -43,7 +43,7 @@ const MACHINE_CONFIG: MachineConfig = {
 // --- Tests ---
 describe("complaint submitted", () => {
 	it("should not handle event if in unexpected state", async () => {
-		const protocol = { consensus: vi.fn().mockReturnValue(ethAddress) } as unknown as ShieldnetProtocol;
+		const protocol = { consensus: vi.fn().mockReturnValue(ethAddress) } as unknown as SafenetProtocol;
 		const keyGenClient = {} as unknown as KeyGenClient;
 		const machineStates: MachineStates = {
 			rollover: {
@@ -59,7 +59,7 @@ describe("complaint submitted", () => {
 	});
 
 	it("should not handle complaint if unexpected group id", async () => {
-		const protocol = { consensus: vi.fn().mockReturnValue(ethAddress) } as unknown as ShieldnetProtocol;
+		const protocol = { consensus: vi.fn().mockReturnValue(ethAddress) } as unknown as SafenetProtocol;
 		const keyGenClient = {} as unknown as KeyGenClient;
 		const machineStates: MachineStates = {
 			rollover: {
@@ -80,7 +80,7 @@ describe("complaint submitted", () => {
 	});
 
 	it("should not handle complaint in collecting confirmations if complaint deadline has passed", async () => {
-		const protocol = { consensus: vi.fn().mockReturnValue(ethAddress) } as unknown as ShieldnetProtocol;
+		const protocol = { consensus: vi.fn().mockReturnValue(ethAddress) } as unknown as SafenetProtocol;
 		const keyGenClient = {} as unknown as KeyGenClient;
 		const machineStates: MachineStates = {
 			rollover: {
@@ -109,7 +109,7 @@ describe("complaint submitted", () => {
 			participantId,
 			threshold,
 		} as unknown as KeyGenClient;
-		const protocol = { consensus: vi.fn().mockReturnValue(ethAddress) } as unknown as ShieldnetProtocol;
+		const protocol = { consensus: vi.fn().mockReturnValue(ethAddress) } as unknown as SafenetProtocol;
 		const machineStates: MachineStates = {
 			rollover: {
 				id: "collecting_shares",
@@ -145,7 +145,7 @@ describe("complaint submitted", () => {
 			participantId,
 			threshold,
 		} as unknown as KeyGenClient;
-		const protocol = { consensus: vi.fn().mockReturnValue(ethAddress) } as unknown as ShieldnetProtocol;
+		const protocol = { consensus: vi.fn().mockReturnValue(ethAddress) } as unknown as SafenetProtocol;
 		const machineStates: MachineStates = {
 			rollover: {
 				id: "collecting_confirmations",
@@ -187,7 +187,7 @@ describe("complaint submitted", () => {
 			participantId,
 			threshold,
 		} as unknown as KeyGenClient;
-		const protocol = { consensus: vi.fn().mockReturnValue(ethAddress) } as unknown as ShieldnetProtocol;
+		const protocol = { consensus: vi.fn().mockReturnValue(ethAddress) } as unknown as SafenetProtocol;
 		const machineStates: MachineStates = {
 			rollover: {
 				id: "collecting_shares",
@@ -226,7 +226,7 @@ describe("complaint submitted", () => {
 			participantId,
 			threshold,
 		} as unknown as KeyGenClient;
-		const protocol = { consensus: vi.fn().mockReturnValue(ethAddress) } as unknown as ShieldnetProtocol;
+		const protocol = { consensus: vi.fn().mockReturnValue(ethAddress) } as unknown as SafenetProtocol;
 		const machineStates: MachineStates = {
 			rollover: {
 				id: "collecting_shares",
@@ -268,7 +268,7 @@ describe("complaint submitted", () => {
 			participantId,
 			threshold,
 		} as unknown as KeyGenClient;
-		const protocol = { consensus: vi.fn().mockReturnValue(ethAddress) } as unknown as ShieldnetProtocol;
+		const protocol = { consensus: vi.fn().mockReturnValue(ethAddress) } as unknown as SafenetProtocol;
 		const machineStates: MachineStates = {
 			rollover: {
 				id: "collecting_shares",
@@ -334,7 +334,7 @@ describe("complaint submitted", () => {
 		} as unknown as KeyGenClient;
 		const consensus = vi.fn();
 		consensus.mockReturnValueOnce(ethAddress);
-		const protocol = { consensus } as unknown as ShieldnetProtocol;
+		const protocol = { consensus } as unknown as SafenetProtocol;
 		const machineStates: MachineStates = {
 			rollover: {
 				id: "collecting_shares",

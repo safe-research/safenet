@@ -157,7 +157,7 @@ describe("signing", () => {
 		}
 		log("------------------------ Trigger Signing Request ------------------------");
 		const signatureId = "0x0000000000000000000000017fa9385be102ac3eac297483dd6233d62b3e1496";
-		const message = keccak256(stringToBytes("Hello, Shieldnet!"));
+		const message = keccak256(stringToBytes("Hello, Safenet!"));
 		for (const { client, storage } of clients) {
 			log(`>>>> Signing request to ${storage.participantId(groupId)} >>>>`);
 			const commitments = client.createNonceCommitments(

@@ -2,7 +2,7 @@ import { keccak256, zeroHash } from "viem";
 import { entryPoint06Address, entryPoint07Address, entryPoint08Address } from "viem/account-abstraction";
 import { describe, expect, it, vi } from "vitest";
 import type { KeyGenClient } from "../../consensus/keyGen/client.js";
-import type { ShieldnetProtocol } from "../../consensus/protocol/types.js";
+import type { SafenetProtocol } from "../../consensus/protocol/types.js";
 import type { SigningClient } from "../../consensus/signing/client.js";
 import type { VerificationEngine } from "../../consensus/verify/engine.js";
 import type { EpochRolloverPacket } from "../../consensus/verify/rollover/schemas.js";
@@ -95,7 +95,7 @@ describe("key gen confirmed", () => {
 		};
 		const keyGenClient = {} as unknown as KeyGenClient;
 		const signingClient = {} as unknown as SigningClient;
-		const protocol = {} as unknown as ShieldnetProtocol;
+		const protocol = {} as unknown as SafenetProtocol;
 		const verificationEngine = {} as unknown as VerificationEngine;
 		const diff = await handleKeyGenConfirmed(
 			MACHINE_CONFIG,
@@ -118,7 +118,7 @@ describe("key gen confirmed", () => {
 		};
 		const keyGenClient = {} as unknown as KeyGenClient;
 		const signingClient = {} as unknown as SigningClient;
-		const protocol = {} as unknown as ShieldnetProtocol;
+		const protocol = {} as unknown as SafenetProtocol;
 		const verificationEngine = {} as unknown as VerificationEngine;
 		const diff = await handleKeyGenConfirmed(
 			MACHINE_CONFIG,
@@ -155,7 +155,7 @@ describe("key gen confirmed", () => {
 		const signingClient = {
 			participants,
 		} as unknown as SigningClient;
-		const protocol = {} as unknown as ShieldnetProtocol;
+		const protocol = {} as unknown as SafenetProtocol;
 		const verificationEngine = {} as unknown as VerificationEngine;
 		const diff = await handleKeyGenConfirmed(
 			MACHINE_CONFIG,
@@ -200,7 +200,7 @@ describe("key gen confirmed", () => {
 			...CONSENSUS_STATE,
 			genesisGroupId: "0x06cb03baac74421225341827941e88d9547e5459c4b3715c0000000000000000",
 		};
-		const protocol = {} as unknown as ShieldnetProtocol;
+		const protocol = {} as unknown as SafenetProtocol;
 		const verificationEngine = {} as unknown as VerificationEngine;
 		const diff = await handleKeyGenConfirmed(
 			MACHINE_CONFIG,
@@ -243,7 +243,7 @@ describe("key gen confirmed", () => {
 		const signingClient = {
 			participants,
 		} as unknown as SigningClient;
-		const protocol = {} as unknown as ShieldnetProtocol;
+		const protocol = {} as unknown as SafenetProtocol;
 		const verificationEngine = {} as unknown as VerificationEngine;
 		await expect(
 			handleKeyGenConfirmed(
@@ -324,7 +324,7 @@ describe("key gen confirmed", () => {
 		const protocol = {
 			chainId: () => 100n,
 			consensus: () => "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266",
-		} as unknown as ShieldnetProtocol;
+		} as unknown as SafenetProtocol;
 		const verify = vi.fn();
 		verify.mockReturnValueOnce({
 			status: "valid",

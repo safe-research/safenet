@@ -14,8 +14,8 @@ jobs:
       matrix:
         storage: ["inmemory", "sqlite"]
     env:
-      SHIELDNET_TEST_VERBOSE: "1"
-      SHIELDNET_TEST_STORAGE: ${{ matrix.storage }}
+      SAFENET_TEST_VERBOSE: "1"
+      SAFENET_TEST_STORAGE: ${{ matrix.storage }}
 
     steps:
       - uses: actions/checkout@v5

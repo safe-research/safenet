@@ -1,4 +1,4 @@
-import type { ShieldnetProtocol } from "../../consensus/protocol/types.js";
+import type { SafenetProtocol } from "../../consensus/protocol/types.js";
 import type { SigningClient } from "../../consensus/signing/client.js";
 import type { VerificationEngine } from "../../consensus/verify/engine.js";
 import type { SafeTransactionPacket } from "../../consensus/verify/safeTx/schemas.js";
@@ -8,7 +8,7 @@ import type { ConsensusState, MachineConfig, StateDiff } from "../types.js";
 
 export const handleTransactionProposed = async (
 	machineConfig: MachineConfig,
-	protocol: ShieldnetProtocol,
+	protocol: SafenetProtocol,
 	verificationEngine: VerificationEngine,
 	signingClient: SigningClient,
 	consensusState: ConsensusState,

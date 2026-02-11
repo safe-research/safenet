@@ -30,13 +30,13 @@ import type { Logger } from "../utils/logging.js";
 import type { Metrics } from "../utils/metrics.js";
 import { InMemoryQueue } from "../utils/queue.js";
 import { buildSafeTransactionCheck } from "./checks.js";
-import { ShieldnetStateMachine } from "./machine.js";
+import { SafenetStateMachine } from "./machine.js";
 
 export class ValidatorService {
 	#logger: Logger;
 	#publicClient: PublicClient;
 	#watcher: OnchainTransitionWatcher;
-	#stateMachine: ShieldnetStateMachine;
+	#stateMachine: SafenetStateMachine;
 
 	constructor({
 		account,
@@ -87,7 +87,7 @@ export class ValidatorService {
 			blocksBeforeResubmit: config.blocksBeforeResubmit,
 		});
 		const stateStorage = database !== undefined ? new SqliteStateStorage(database) : new InMemoryStateStorage();
-		this.#stateMachine = new ShieldnetStateMachine({
+		this.#stateMachine = new SafenetStateMachine({
 			participants: config.participants,
 			blocksPerEpoch: config.blocksPerEpoch,
 			logger: this.#logger,

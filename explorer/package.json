@@ -1,5 +1,5 @@
 {
-	"name": "shieldnet-explorer",
+	"name": "@safenet/explorer",
 	"private": true,
 	"type": "module",
 	"scripts": {

@@ -2,7 +2,7 @@
 
 set -euo pipefail
 
-# Entry point for the Shieldnet Validator Docker image.
+# Entry point for the Safenet Validator Docker image.
 #
 # Arguments:
 # - STORAGE_FILE: The file name of the SQLite database used for storing

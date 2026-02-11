@@ -13,7 +13,7 @@ import type {
 	RegisterNonceCommitments,
 	RequestSignature,
 	RevealNonceCommitments,
-	ShieldnetProtocol,
+	SafenetProtocol,
 	StageEpoch,
 	StartKeyGen,
 } from "./types.js";
@@ -21,7 +21,7 @@ import type {
 const ACTION_TIMEOUT = 10 * 60 * 1000; // 10 minutes
 const ERROR_RETRY_DELAY = 1000;
 
-export abstract class BaseProtocol implements ShieldnetProtocol {
+export abstract class BaseProtocol implements SafenetProtocol {
 	#actionQueue: Queue<ActionWithTimeout> = new InMemoryQueue<ActionWithTimeout>();
 	#currentAction?: ActionWithTimeout;
 	#logger: Logger;

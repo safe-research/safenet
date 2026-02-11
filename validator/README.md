@@ -25,10 +25,10 @@ podman build -f validator/Dockerfile -t validator-service .
 
 3. Start the image using docker or podman
 ```sh
-podman run -d --name shieldnet-validator --env-file validator/.env validator-service
+podman run -d --name safenet-validator --env-file validator/.env validator-service
 ```
 
 4. Follow the logs
 ```sh
-podman logs -f shieldnet-validator
+podman logs -f safenet-validator
 ```

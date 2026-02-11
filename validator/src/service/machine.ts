@@ -1,6 +1,6 @@
 import type { Hex } from "viem";
 import type { KeyGenClient } from "../consensus/keyGen/client.js";
-import type { ProtocolAction, ShieldnetProtocol } from "../consensus/protocol/types.js";
+import type { ProtocolAction, SafenetProtocol } from "../consensus/protocol/types.js";
 import type { SigningClient } from "../consensus/signing/client.js";
 import type { Participant } from "../consensus/storage/types.js";
 import type { VerificationEngine } from "../consensus/verify/engine.js";
@@ -32,9 +32,9 @@ import { InMemoryQueue, type Queue } from "../utils/queue.js";
 const BLOCKS_PER_EPOCH = (24n * 60n * 60n) / 5n; // ~ blocks for 1 day
 const DEFAULT_TIMEOUT = (10n * 60n) / 5n; // ~ blocks for 10 minutes
 
-export class ShieldnetStateMachine {
+export class SafenetStateMachine {
 	// Injected logic
-	#protocol: ShieldnetProtocol;
+	#protocol: SafenetProtocol;
 	#verificationEngine: VerificationEngine;
 	#keyGenClient: KeyGenClient;
 	#signingClient: SigningClient;
@@ -65,7 +65,7 @@ export class ShieldnetStateMachine {
 	}: {
 		participants: Participant[];
 		genesisSalt: Hex;
-		protocol: ShieldnetProtocol;
+		protocol: SafenetProtocol;
 		keyGenClient: KeyGenClient;
 		signingClient: SigningClient;
 		verificationEngine: VerificationEngine;

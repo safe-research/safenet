@@ -2,7 +2,7 @@ import { ethAddress, zeroHash } from "viem";
 import { entryPoint06Address, entryPoint07Address, entryPoint08Address } from "viem/account-abstraction";
 import { describe, expect, it, vi } from "vitest";
 import type { KeyGenClient } from "../../consensus/keyGen/client.js";
-import type { ShieldnetProtocol } from "../../consensus/protocol/types.js";
+import type { SafenetProtocol } from "../../consensus/protocol/types.js";
 import { toPoint } from "../../frost/math.js";
 import type { FrostPoint } from "../../frost/types.js";
 import type { MachineConfig, MachineStates, RolloverState } from "../types.js";
@@ -41,7 +41,7 @@ const MACHINE_CONFIG: MachineConfig = {
 // --- Tests ---
 describe("key gen timeouts", () => {
 	it("should not timeout in waiting for genesis", () => {
-		const protocol = {} as unknown as ShieldnetProtocol;
+		const protocol = {} as unknown as SafenetProtocol;
 		const keyGenClient = {} as unknown as KeyGenClient;
 		const machineStates: MachineStates = {
 			rollover: { id: "waiting_for_genesis" },
@@ -53,7 +53,7 @@ describe("key gen timeouts", () => {
 	});
 
 	it("should not timeout in signing rollover (is handle in signing flow)", () => {
-		const protocol = {} as unknown as ShieldnetProtocol;
+		const protocol = {} as unknown as SafenetProtocol;
 		const keyGenClient = {} as unknown as KeyGenClient;
 		const machineStates: MachineStates = {
 			rollover: {
@@ -126,7 +126,7 @@ describe("key gen timeouts", () => {
 		},
 	])("when $description", ({ rollover, keyGenInvocations }) => {
 		it("should not timeout when deadline has not passed", () => {
-			const protocol = {} as unknown as ShieldnetProtocol;
+			const protocol = {} as unknown as SafenetProtocol;
 			const keyGenClient = {} as unknown as KeyGenClient;
 			const machineStates: MachineStates = {
 				rollover,
@@ -152,7 +152,7 @@ describe("key gen timeouts", () => {
 			consensus.mockReturnValueOnce(ethAddress);
 			const protocol = {
 				consensus,
-			} as unknown as ShieldnetProtocol;
+			} as unknown as SafenetProtocol;
 			const missingCommitments = vi.fn();
 			missingCommitments.mockReturnValueOnce([3n]);
 			const missingSecretShares = vi.fn();

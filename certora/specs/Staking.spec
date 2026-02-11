@@ -1,17 +1,17 @@
 import "StakingCommon.spec";
 
-// Invariant that proves that the Shieldnet Staking contract's config time delay
+// Invariant that proves that the Staking contract's config time delay
 // is always non-zero.
 invariant configTimeDelayIsNonZero()
     CONFIG_TIME_DELAY() > 0;
 
-// Invariant that proves that the Shieldnet Staking contract's pending
-// withdraw delay change value is always non-zero.
+// Invariant that proves that the Staking contract's pending withdraw delay
+// change value is always non-zero.
 invariant pendingWithdrawalDelayChangeShouldEitherBothBeZeroOrNonZero()
     currentContract.pendingWithdrawDelayChange.value != 0 <=> currentContract.pendingWithdrawDelayChange.executableAt != 0;
 
-// Invariant that proves that the Shieldnet Staking contract's withdraw delay
-// is always non-zero.
+// Invariant that proves that the Staking contract's withdraw delay is always
+// non-zero.
 invariant withdrawDelayIsNonZero()
     withdrawDelay() > 0
 {
@@ -20,14 +20,13 @@ invariant withdrawDelayIsNonZero()
     }
 }
 
-// Invariant that proves that the Shieldnet Staking contract's pending
-// validator change hash cannot be computed if any of the validator addresses
-// is zero.
+// Invariant that proves that the Staking contract's pending validator change
+// hash cannot be computed if any of the validator addresses is zero.
 invariant pendingValidatorsHashCannotHaveZeroValidatorAddress(address[] validators, bool[] isRegistration, uint256 executableAt)
     getValidatorsHash(validators, isRegistration, executableAt) == pendingValidatorChangeHash() => addressesNotZero(validators);
 
-// Invariant that proves that the Shieldnet Staking contract never has a
-// validator with address zero.
+// Invariant that proves that the Staking contract never has a validator with
+// address zero.
 invariant validatorAddressIsNeverZero()
     !isValidator(0)
 {
@@ -36,10 +35,10 @@ invariant validatorAddressIsNeverZero()
     }
 }
 
-// Invariant that proves that the Shieldnet Staking contract never has a stake
-// balance; i.e. there is no way for an external caller to get the locking
-// contract to call `stake`, `initiateWithdrawal` or `initiateWithdrawalAtPosition`,
-// on itself.
+// Invariant that proves that the Staking contract never has a stake balance;
+// i.e. there is no way for an external caller to get the locking contract to
+// call `stake`, `initiateWithdrawal` or `initiateWithdrawalAtPosition` on
+// itself.
 invariant contractCannotOperateOnItself()
     totalStakerStakes(currentContract) == 0
         && withdrawalQueueEmpty(currentContract)
@@ -51,9 +50,8 @@ invariant contractCannotOperateOnItself()
     }
 }
 
-// Invariant that proves that the Shieldnet Staking contract's total staked
-// amount is always greater than or equal to any individual staker's total
-// stakes.
+// Invariant that proves that the Staking contract's total staked amount is
+// always greater than or equal to any individual staker's total stakes.
 invariant totalStakedIsGreaterThanUserStaked(address staker)
     totalStakedAmount() >= totalStakerStakes(staker)
 {

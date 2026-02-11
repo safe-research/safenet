@@ -19,7 +19,7 @@ export function SearchBar({
 	const handleSelected = () => {
 		const cleanInput = idInput.trim();
 		if (cleanInput.length === 0) return;
-		if (selectedNetwork === "Shieldnet") {
+		if (selectedNetwork === "Safenet") {
 			navigate({
 				to: "/proposal",
 				search: {
@@ -49,8 +49,8 @@ export function SearchBar({
 							{info.name}
 						</option>
 					))}
-					<option key="Shieldnet" value="Shieldnet">
-						Shieldnet
+					<option key="Safenet" value="Safenet">
+						Safenet
 					</option>
 				</select>
 				<input

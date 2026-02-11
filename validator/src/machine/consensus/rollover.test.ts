@@ -1,7 +1,7 @@
 import { ethAddress, zeroAddress, zeroHash } from "viem";
 import { describe, expect, it, vi } from "vitest";
 import type { KeyGenClient } from "../../consensus/keyGen/client.js";
-import type { ShieldnetProtocol } from "../../consensus/protocol/types.js";
+import type { SafenetProtocol } from "../../consensus/protocol/types.js";
 import { toPoint } from "../../frost/math.js";
 import type { FrostPoint } from "../../frost/types.js";
 import type { ConsensusState, MachineConfig, MachineStates } from "../types.js";
@@ -54,7 +54,7 @@ const MACHINE_STATES: MachineStates = {
 // --- Tests ---
 describe("check rollover", () => {
 	it("should not trigger key gen in genesis state", async () => {
-		const protocol = {} as unknown as ShieldnetProtocol;
+		const protocol = {} as unknown as SafenetProtocol;
 		const keyGenClient = {} as unknown as KeyGenClient;
 		const consensus: ConsensusState = {
 			...CONSENSUS_STATE,
@@ -66,7 +66,7 @@ describe("check rollover", () => {
 	});
 
 	it("should not abort genesis key gen", async () => {
-		const protocol = {} as unknown as ShieldnetProtocol;
+		const protocol = {} as unknown as SafenetProtocol;
 		const keyGenClient = {} as unknown as KeyGenClient;
 		const machineStates: MachineStates = {
 			...MACHINE_STATES,
@@ -83,7 +83,7 @@ describe("check rollover", () => {
 	});
 
 	it("should not abort genesis key gen in skipped state (this is an expected halt condition)", async () => {
-		const protocol = {} as unknown as ShieldnetProtocol;
+		const protocol = {} as unknown as SafenetProtocol;
 		const keyGenClient = {} as unknown as KeyGenClient;
 		const machineStates: MachineStates = {
 			...MACHINE_STATES,
@@ -98,7 +98,7 @@ describe("check rollover", () => {
 	});
 
 	it("should not trigger key gen if next epoch is still in the future", async () => {
-		const protocol = {} as unknown as ShieldnetProtocol;
+		const protocol = {} as unknown as SafenetProtocol;
 		const keyGenClient = {} as unknown as KeyGenClient;
 		const machineStates: MachineStates = {
 			...MACHINE_STATES,
@@ -115,7 +115,7 @@ describe("check rollover", () => {
 	});
 
 	it("should not trigger key gen if current epoch was skipped", async () => {
-		const protocol = {} as unknown as ShieldnetProtocol;
+		const protocol = {} as unknown as SafenetProtocol;
 		const keyGenClient = {} as unknown as KeyGenClient;
 		const machineState: MachineStates = {
 			rollover: {
@@ -134,7 +134,7 @@ describe("check rollover", () => {
 		consensus.mockReturnValueOnce(ethAddress);
 		const protocol = {
 			consensus,
-		} as unknown as ShieldnetProtocol;
+		} as unknown as SafenetProtocol;
 		const setupGroup = vi.fn();
 		const groupSetup = {
 			groupId: "0x5afe02",
@@ -198,7 +198,7 @@ describe("check rollover", () => {
 		consensus.mockReturnValueOnce(ethAddress);
 		const protocol = {
 			consensus,
-		} as unknown as ShieldnetProtocol;
+		} as unknown as SafenetProtocol;
 		const setupGroup = vi.fn();
 		const groupSetup = {
 			groupId: "0x5afe02",
@@ -264,7 +264,7 @@ describe("check rollover", () => {
 		consensus.mockReturnValueOnce(ethAddress);
 		const protocol = {
 			consensus,
-		} as unknown as ShieldnetProtocol;
+		} as unknown as SafenetProtocol;
 		const setupGroup = vi.fn();
 		const groupSetup = {
 			groupId: "0x5afe02",

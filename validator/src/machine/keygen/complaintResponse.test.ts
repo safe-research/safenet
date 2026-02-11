@@ -2,7 +2,7 @@ import { ethAddress, zeroHash } from "viem";
 import { entryPoint06Address, entryPoint07Address, entryPoint08Address } from "viem/account-abstraction";
 import { describe, expect, it, vi } from "vitest";
 import type { KeyGenClient } from "../../consensus/keyGen/client.js";
-import type { ShieldnetProtocol } from "../../consensus/protocol/types.js";
+import type { SafenetProtocol } from "../../consensus/protocol/types.js";
 import { toPoint } from "../../frost/math.js";
 import type { FrostPoint } from "../../frost/types.js";
 import type { KeyGenComplaintResponsedEvent as KeyGenComplaintRespondedEvent } from "../transitions/types.js";
@@ -52,7 +52,7 @@ const EVENT: KeyGenComplaintRespondedEvent = {
 // --- Tests ---
 describe("complaint responded", () => {
 	it("should not handle responses if in unexpected state", async () => {
-		const protocol = {} as unknown as ShieldnetProtocol;
+		const protocol = {} as unknown as SafenetProtocol;
 		const keyGenClient = {} as unknown as KeyGenClient;
 		const machineStates: MachineStates = {
 			rollover: {
@@ -68,7 +68,7 @@ describe("complaint responded", () => {
 	});
 
 	it("should not handle responses if unexpected group id", async () => {
-		const protocol = {} as unknown as ShieldnetProtocol;
+		const protocol = {} as unknown as SafenetProtocol;
 		const keyGenClient = {} as unknown as KeyGenClient;
 		const machineStates: MachineStates = {
 			rollover: {
@@ -89,7 +89,7 @@ describe("complaint responded", () => {
 	});
 
 	it("should not handle responses in collecting confirmations if response deadline has passed", async () => {
-		const protocol = {} as unknown as ShieldnetProtocol;
+		const protocol = {} as unknown as SafenetProtocol;
 		const keyGenClient = {} as unknown as KeyGenClient;
 		const machineStates: MachineStates = {
 			rollover: {
@@ -110,7 +110,7 @@ describe("complaint responded", () => {
 	});
 
 	it("should not handle responses if no complaints tracked", async () => {
-		const protocol = {} as unknown as ShieldnetProtocol;
+		const protocol = {} as unknown as SafenetProtocol;
 		const keyGenClient = {} as unknown as KeyGenClient;
 		const machineStates: MachineStates = {
 			rollover: {
@@ -131,7 +131,7 @@ describe("complaint responded", () => {
 	});
 
 	it("should accept responses when collecting shares", async () => {
-		const protocol = {} as unknown as ShieldnetProtocol;
+		const protocol = {} as unknown as SafenetProtocol;
 		const participantId = vi.fn();
 		participantId.mockReturnValueOnce(1n);
 		const verifySecretShare = vi.fn();
@@ -170,7 +170,7 @@ describe("complaint responded", () => {
 	});
 
 	it("should accept complaints when collecting confirmations", async () => {
-		const protocol = {} as unknown as ShieldnetProtocol;
+		const protocol = {} as unknown as SafenetProtocol;
 		const participantId = vi.fn();
 		participantId.mockReturnValueOnce(1n);
 		const verifySecretShare = vi.fn();
@@ -219,7 +219,7 @@ describe("complaint responded", () => {
 		consensus.mockReturnValueOnce(ethAddress);
 		const protocol = {
 			consensus,
-		} as unknown as ShieldnetProtocol;
+		} as unknown as SafenetProtocol;
 		const groupSetup = {
 			groupId: "0x5afe02",
 			participantsRoot: "0x5afe5afe5afe",
@@ -290,7 +290,7 @@ describe("complaint responded", () => {
 		consensus.mockReturnValueOnce(ethAddress);
 		const protocol = {
 			consensus,
-		} as unknown as ShieldnetProtocol;
+		} as unknown as SafenetProtocol;
 		const groupSetup = {
 			groupId: "0x5afe02",
 			participantsRoot: "0x5afe5afe5afe",
@@ -357,7 +357,7 @@ describe("complaint responded", () => {
 	});
 
 	it("should remove missing share once received", async () => {
-		const protocol = {} as unknown as ShieldnetProtocol;
+		const protocol = {} as unknown as SafenetProtocol;
 		const participantId = vi.fn();
 		participantId.mockReturnValueOnce(1n);
 		const registerPlainKeyGenSecret = vi.fn();
@@ -402,7 +402,7 @@ describe("complaint responded", () => {
 	});
 
 	it("should trigger confirmation if missing share in collecting confirmations", async () => {
-		const protocol = {} as unknown as ShieldnetProtocol;
+		const protocol = {} as unknown as SafenetProtocol;
 		const participantId = vi.fn();
 		participantId.mockReturnValueOnce(1n);
 		const registerPlainKeyGenSecret = vi.fn();
