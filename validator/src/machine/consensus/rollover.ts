@@ -20,12 +20,16 @@ export const checkEpochRollover = (
 		return {};
 	}
 
+	if (currentState.id !== "epoch_staged" && currentState.nextEpoch === 0n) {
+		// Rollover should not happen while in genesis keygen.
+		return {};
+	}
+
 	// This check applies to all states
 	// When staged or skipped then keygen should be started for next epoch
 	// When in one of the other state keygen should be aborted and restarted for next epoch
-	// Note: Do not abort genesis!
-	if ((currentState.id !== "epoch_staged" && currentState.nextEpoch === 0n) || currentState.nextEpoch > currentEpoch) {
-		// Rollover should not happen yet
+	if (currentState.nextEpoch > currentEpoch) {
+		// Rollover should not happen yet.
 		return {};
 	}
 
