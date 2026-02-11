@@ -17,7 +17,7 @@ contract DeployScript is Script {
         // Optional script arguments:
         bytes32 genesisSalt = vm.envOr("GENESIS_SALT", bytes32(0));
         bytes32 coordinatorSalt = vm.envOr("COORDINATOR_SALT", bytes32(0));
-        bytes32 consensusSalt = vm.envOr("COORDINATOR_SALT", bytes32(0));
+        bytes32 consensusSalt = vm.envOr("CONSENSUS_SALT", bytes32(0));
 
         vm.startBroadcast();
 
