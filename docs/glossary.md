@@ -13,7 +13,7 @@
 | **Curve Order (N)** | The number of points in the curve's group (~2²⁵⁶); scalars are computed mod N |
 | **Field Prime (P)** | The prime defining the finite field for coordinates: $2^{256} - 2^{32} - 977$ |
 | **Point at Infinity** | The identity element for point addition (like 0 for numbers) |
-| **Point Addition** | Combining two curve points $P + Q$; group operation for eliptic curve |
+| **Point Addition** | Combining two curve points $P + Q$; group operation for elliptic curve |
 | **Scalar Multiplication** | Multiplying a point by a scalar $k \cdot P$; Adding a points to itself $k$ times. |
 | **ECDH** | Elliptic Curve Diffie-Hellman; used to encrypt secret shares during DKG by computing shared secret $a \cdot B = b \cdot A$ |
 
@@ -37,7 +37,7 @@
 | **Signature Share ($z_i$)** | Partial signature from one participant. Formula: $z_i = d_i + \rho_i e_i + \lambda_i sk_i c$ |
 | **Group Response ($z$)** | The aggregate of the signature shares from all participants. Formula: $z = \sum_i z_i$|
 | **Schnorr Signature ($R, z$)** | Final signature $(R, z)$ verifiable with $z \cdot G = R + c \cdot Y$ |
-| **Hashing Functions ($H_n$)** | Hashing function specified as part of the FROST cyphersuite |
+| **Hashing Functions ($H_n$)** | Hashing function specified as part of the FROST ciphersuite |
 
 ## Contract Specific Terms
 
