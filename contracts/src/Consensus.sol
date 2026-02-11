@@ -16,7 +16,7 @@ import {IERC165} from "@/interfaces/IERC165.sol";
  * @title Consensus
  * @notice Onchain consensus state.
  */
-contract Consensus is IConsensus {
+contract Consensus is IConsensus, IFROSTCoordinatorCallback {
     using ConsensusMessages for bytes32;
     using FROSTSignatureId for FROSTSignatureId.T;
     using SafeTransaction for SafeTransaction.T;

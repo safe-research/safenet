@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
 pragma solidity ^0.8.30;
 
-import {IFROSTCoordinatorCallback} from "@/interfaces/IFROSTCoordinatorCallback.sol";
 import {FROST} from "@/libraries/FROST.sol";
 import {FROSTGroupId} from "@/libraries/FROSTGroupId.sol";
 import {FROSTSignatureId} from "@/libraries/FROSTSignatureId.sol";
@@ -11,7 +10,7 @@ import {IERC165} from "@/interfaces/IERC165.sol";
 /**
  * @title Consensus Interface
  */
-interface IConsensus is IERC165, IFROSTCoordinatorCallback {
+interface IConsensus is IERC165 {
     // ============================================================
     // STRUCTS
     // ============================================================
