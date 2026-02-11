@@ -9,42 +9,17 @@ import {FROSTGroupId} from "@/libraries/FROSTGroupId.sol";
 import {FROSTSignatureId} from "@/libraries/FROSTSignatureId.sol";
 import {SafeTransaction} from "@/libraries/SafeTransaction.sol";
 import {Secp256k1} from "@/libraries/Secp256k1.sol";
+import {IConsensus} from "@/interfaces/IConsensus.sol";
+import {IERC165} from "@/interfaces/IERC165.sol";
 
 /**
  * @title Consensus
  * @notice Onchain consensus state.
  */
-contract Consensus is IFROSTCoordinatorCallback {
+contract Consensus is IConsensus, IFROSTCoordinatorCallback {
     using ConsensusMessages for bytes32;
     using FROSTSignatureId for FROSTSignatureId.T;
     using SafeTransaction for SafeTransaction.T;
-
-    // ============================================================
-    // STRUCTS
-    // ============================================================
-
-    /**
-     * @notice Tracks the state of validator set epochs and their rollover.
-     * @custom:param previous The epoch number of the previously active validator set.
-     * @custom:param active The epoch number of the currently active validator set.
-     * @custom:param staged The epoch number of the next validator set, which will become active at the
-     *               `rolloverBlock`. Zero if no epoch is staged.
-     * @custom:param rolloverBlock The block number at which the `staged` epoch will become `active`.
-     * @dev An epoch represents a period governed by a specific validator set (FROST group). The rollover from one
-     *      epoch to the next is a two-step, on-chain process:
-     *      1. Proposal & Attestation: A new epoch and validator group are proposed. The current active validator set
-     *         must attest to this proposal by signing it.
-     *      2. Staging: Once attested, the new epoch is "staged" for a future `rolloverBlock`.
-     *      3. Rollover: The actual switch to the new epoch happens automatically and lazily when the `rolloverBlock`
-     *         is reached. Any state-changing transaction will trigger the rollover if the block number is past the
-     *         scheduled time.
-     */
-    struct Epochs {
-        uint64 previous;
-        uint64 active;
-        uint64 staged;
-        uint64 rolloverBlock;
-    }
 
     // ============================================================
     // STORAGE VARIABLES
@@ -193,18 +168,14 @@ contract Consensus is IFROSTCoordinatorCallback {
     // ============================================================
 
     /**
-     * @notice Computes the EIP-712 domain separator used by the consensus contract.
-     * @return result The domain separator.
+     * @inheritdoc IConsensus
      */
     function domainSeparator() public view returns (bytes32 result) {
         return ConsensusMessages.domain(block.chainid, address(this));
     }
 
     /**
-     * @notice Gets a transaction attestation for a specific epoch and transaction.
-     * @param epoch The epoch in which the transaction was proposed.
-     * @param transaction The Safe transaction to query the attestation for.
-     * @return signature The FROST signature attesting to the transaction.
+     * @inheritdoc IConsensus
      */
     function getTransactionAttestation(uint64 epoch, SafeTransaction.T memory transaction)
         external
@@ -215,10 +186,7 @@ contract Consensus is IFROSTCoordinatorCallback {
     }
 
     /**
-     * @notice Gets a transaction attestation for a specific epoch and transaction hash.
-     * @param epoch The epoch in which the transaction was proposed.
-     * @param transactionHash The Safe transaction hash to query the attestation for.
-     * @return signature The FROST signature attesting to the transaction.
+     * @inheritdoc IConsensus
      */
     function getTransactionAttestationByHash(uint64 epoch, bytes32 transactionHash)
         public
@@ -230,13 +198,7 @@ contract Consensus is IFROSTCoordinatorCallback {
     }
 
     /**
-     * @notice Gets a recent transaction attestation.
-     * @param transaction The Safe transaction to query the attestation for.
-     * @return epoch The recent epoch that the transaction was attested in.
-     * @return signature The FROST signature attesting to the transaction.
-     * @dev This method will fail if the attestation did not happen in either the active or previous epochs. This is
-     *      provided as a convenience method to clients who may want to query an attestation for a transaction they
-     *      recently proposed for validator approval.
+     * @inheritdoc IConsensus
      */
     function getRecentTransactionAttestation(SafeTransaction.T memory transaction)
         external
@@ -247,10 +209,7 @@ contract Consensus is IFROSTCoordinatorCallback {
     }
 
     /**
-     * @notice Gets a recent transaction attestation by transaction hash.
-     * @param transactionHash The hash of the Safe transaction.
-     * @return epoch The recent epoch that the transaction was attested in.
-     * @return signature The FROST signature attesting to the transaction.
+     * @inheritdoc IConsensus
      */
     function getRecentTransactionAttestationByHash(bytes32 transactionHash)
         public
@@ -271,9 +230,7 @@ contract Consensus is IFROSTCoordinatorCallback {
     }
 
     /**
-     * @notice Gets the active epoch and its group ID.
-     * @return epoch The current active epoch.
-     * @return group The FROST group ID for the active epoch.
+     * @inheritdoc IConsensus
      */
     function getActiveEpoch() external view returns (uint64 epoch, FROSTGroupId.T group) {
         (Epochs memory epochs,) = _epochsWithRollover();
@@ -282,27 +239,21 @@ contract Consensus is IFROSTCoordinatorCallback {
     }
 
     /**
-     * @notice Gets the internal epochs state.
-     * @return epochs The epochs state tracking previous, active, and staged epochs.
+     * @inheritdoc IConsensus
      */
     function getEpochsState() external view returns (Epochs memory epochs) {
         (epochs,) = _epochsWithRollover();
     }
 
     /**
-     * @notice Gets the group info for a specific epoch
-     * @param epoch The epoch for which the group should be retrieved
-     * @return group The FROST group ID for the specified epoch.
+     * @inheritdoc IConsensus
      */
     function getEpochGroupId(uint64 epoch) external view returns (FROSTGroupId.T group) {
         return $groups[epoch];
     }
 
     /**
-     * @notice Gets the FROST signature ID of an attestation to the specified rollover or transaction message.
-     * @param message The message to query an attestation signature ID for.
-     * @return signature The signature ID of the attested message; a zero value indicates the message was never
-     *                    attested to.
+     * @inheritdoc IConsensus
      */
     function getAttestationSignatureId(bytes32 message) external view returns (FROSTSignatureId.T signature) {
         return $attestations[message];
@@ -313,14 +264,7 @@ contract Consensus is IFROSTCoordinatorCallback {
     // ============================================================
 
     /**
-     * @notice Proposes a new epoch to be rolled over to.
-     * @param proposedEpoch The proposed new epoch.
-     * @param rolloverBlock The block number when rollover should occur.
-     * @param group The FROST group ID for the proposed epoch.
-     * @dev This is the first step of the epoch rollover process. It creates a message for the epoch change proposal
-     *      and requests the current active FROST group to sign it. The signature from the current group serves as an
-     *      authorization for the new group to take over. This step is completely optional atm, as we can just stage
-     *      directly if there is a valid signature.
+     * @inheritdoc IConsensus
      */
     function proposeEpoch(uint64 proposedEpoch, uint64 rolloverBlock, FROSTGroupId.T group) public {
         Epochs memory epochs = _processRollover();
@@ -332,14 +276,7 @@ contract Consensus is IFROSTCoordinatorCallback {
     }
 
     /**
-     * @notice Stages an epoch to automatically roll over after it has been approved.
-     * @param proposedEpoch The proposed new epoch.
-     * @param rolloverBlock The block number when rollover should occur.
-     * @param group The FROST group ID for the proposed epoch.
-     * @param signature The ID of the FROST signature from the current active group, authorizing the change.
-     * @dev This is the second step of the epoch rollover. It requires a valid signature from the current active
-     *      validator group, which proves their consent. Once staged, the epoch will automatically become active at the
-     *      specified `rolloverBlock`.
+     * @inheritdoc IConsensus
      */
     function stageEpoch(uint64 proposedEpoch, uint64 rolloverBlock, FROSTGroupId.T group, FROSTSignatureId.T signature)
         public
@@ -360,9 +297,7 @@ contract Consensus is IFROSTCoordinatorCallback {
     }
 
     /**
-     * @notice Proposes a transaction for validator approval.
-     * @param transaction The Safe transaction to propose.
-     * @return transactionHash The Safe transaction hash.
+     * @inheritdoc IConsensus
      */
     function proposeTransaction(SafeTransaction.T memory transaction) public returns (bytes32 transactionHash) {
         Epochs memory epochs = _processRollover();
@@ -374,15 +309,7 @@ contract Consensus is IFROSTCoordinatorCallback {
     }
 
     /**
-     * @notice Proposes a transaction for validator approval, only specifying the basic transaction properties.
-     * @param chainId The chain ID of the Safe account.
-     * @param safe The address of the Safe account.
-     * @param to Destination address of Safe transaction.
-     * @param value Native token value of the Safe transaction.
-     * @param data Data payload of the Safe transaction.
-     * @param nonce Safe transaction nonce.
-     * @return transactionHash The Safe transaction hash.
-     * @dev This is provided as a convenience method for proposing transactions with the most common parameters.
+     * @inheritdoc IConsensus
      */
     function proposeBasicTransaction(
         uint256 chainId,
@@ -410,11 +337,7 @@ contract Consensus is IFROSTCoordinatorCallback {
     }
 
     /**
-     * @notice Attests to a transaction.
-     * @param epoch The epoch in which the transaction was proposed.
-     * @param transactionHash The hash of the Safe transaction.
-     * @param signature The FROST signature share attesting to the transaction.
-     * @dev No explicit time limit is imposed for when a transaction can be attested in this contract.
+     * @inheritdoc IConsensus
      */
     function attestTransaction(uint64 epoch, bytes32 transactionHash, FROSTSignatureId.T signature) public {
         // Note that we do not impose a time limit for a transaction to be attested to in the consensus contract. In
@@ -507,5 +430,15 @@ contract Consensus is IFROSTCoordinatorCallback {
      */
     function _requireValidRollover(Epochs memory epochs, uint64 proposedEpoch, uint64 rolloverBlock) private view {
         require(epochs.active < proposedEpoch && rolloverBlock > block.number && epochs.staged == 0, InvalidRollover());
+    }
+
+    /**
+     * @notice Checks if the contract supports a given interface.
+     * @param interfaceId The ID of the interface to check support for.
+     * @return Whether or not the interface is supported.
+     */
+    function supportsInterface(bytes4 interfaceId) external view returns (bool) {
+        return interfaceId == type(IConsensus).interfaceId || interfaceId == type(IFROSTCoordinatorCallback).interfaceId
+            || interfaceId == type(IERC165).interfaceId;
     }
 }
