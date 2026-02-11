@@ -322,7 +322,7 @@ export class ShieldnetStateMachine {
 				);
 			}
 			case "event_transaction_attested": {
-				return await handleTransactionAttested(machineStates, transition);
+				return await handleTransactionAttested(this.#protocol, machineStates, transition);
 			}
 		}
 	}

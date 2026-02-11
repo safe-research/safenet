@@ -70,6 +70,15 @@ library FROSTGroupId {
     }
 
     /**
+     * @notice Checks if a group ID is zero.
+     * @param self The group ID to check.
+     * @return result True if the group ID is zero, false otherwise.
+     */
+    function isZero(T self) internal pure returns (bool result) {
+        return T.unwrap(self) == bytes32(0);
+    }
+
+    /**
      * @notice Requires that a group ID is valid.
      * @param self The group ID to validate.
      */

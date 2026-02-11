@@ -68,7 +68,7 @@ contract Consensus is IFROSTCoordinatorCallback {
     mapping(uint64 epoch => FROSTGroupId.T) private $groups;
 
     /**
-     * @notice Mapping from message hash to attested FROST signature ID.
+     * @notice Mapping message hash to attestation FROST signature ID.
      */
     // forge-lint: disable-next-line(mixed-case-variable)
     mapping(bytes32 message => FROSTSignatureId.T) private $attestations;
@@ -94,9 +94,14 @@ contract Consensus is IFROSTCoordinatorCallback {
      * @param proposedEpoch The proposed new epoch.
      * @param rolloverBlock The block number when rollover should occur.
      * @param groupKey The public group key for the proposed epoch.
+     * @param attestation The attestation to epoch rollover.
      */
     event EpochStaged(
-        uint64 indexed activeEpoch, uint64 indexed proposedEpoch, uint64 rolloverBlock, Secp256k1.Point groupKey
+        uint64 indexed activeEpoch,
+        uint64 indexed proposedEpoch,
+        uint64 rolloverBlock,
+        Secp256k1.Point groupKey,
+        FROST.Signature attestation
     );
 
     /**
@@ -107,20 +112,27 @@ contract Consensus is IFROSTCoordinatorCallback {
 
     /**
      * @notice Emitted when a transaction is proposed for validator approval.
-     * @param message The EIP-712 message hash.
      * @param transactionHash The hash of the proposed Safe transaction.
+     * @param chainId The chain ID for the Safe transaction.
+     * @param safe The address of the Safe.
      * @param epoch The epoch in which the transaction is proposed.
      * @param transaction The proposed Safe transaction.
      */
     event TransactionProposed(
-        bytes32 indexed message, bytes32 indexed transactionHash, uint64 epoch, SafeTransaction.T transaction
+        bytes32 indexed transactionHash,
+        uint256 indexed chainId,
+        address indexed safe,
+        uint64 epoch,
+        SafeTransaction.T transaction
     );
 
     /**
      * @notice Emitted when a transaction is attested by the validator set.
-     * @param message The EIP-712 message hash that was attested.
+     * @param transactionHash The hash of the attested Safe transaction.
+     * @param epoch The epoch in which the attested transaction was proposed.
+     * @param attestation The attestation to Safe transaction.
      */
-    event TransactionAttested(bytes32 indexed message);
+    event TransactionAttested(bytes32 indexed transactionHash, uint64 epoch, FROST.Signature attestation);
 
     // ============================================================
     // ERRORS
@@ -130,6 +142,11 @@ contract Consensus is IFROSTCoordinatorCallback {
      * @notice Thrown when an epoch rollover proposal is invalid.
      */
     error InvalidRollover();
+
+    /**
+     * @notice Thrown when proposing or re-attesting to an already attested transaction.
+     */
+    error AlreadyAttested();
 
     /**
      * @notice Thrown when an unknown signature selector is provided in a callback.
@@ -187,39 +204,28 @@ contract Consensus is IFROSTCoordinatorCallback {
      * @notice Gets a transaction attestation for a specific epoch and transaction.
      * @param epoch The epoch in which the transaction was proposed.
      * @param transaction The Safe transaction to query the attestation for.
-     * @return message The EIP-712 message hash of the proposal.
      * @return signature The FROST signature attesting to the transaction.
      */
-    function getAttestation(uint64 epoch, SafeTransaction.T memory transaction)
+    function getTransactionAttestation(uint64 epoch, SafeTransaction.T memory transaction)
         external
         view
-        returns (bytes32 message, FROST.Signature memory signature)
+        returns (FROST.Signature memory signature)
     {
-        return getAttestationByHash(epoch, transaction.hash());
+        return getTransactionAttestationByHash(epoch, transaction.hash());
     }
 
     /**
      * @notice Gets a transaction attestation for a specific epoch and transaction hash.
      * @param epoch The epoch in which the transaction was proposed.
      * @param transactionHash The Safe transaction hash to query the attestation for.
-     * @return message The EIP-712 message hash of the proposal.
      * @return signature The FROST signature attesting to the transaction.
      */
-    function getAttestationByHash(uint64 epoch, bytes32 transactionHash)
+    function getTransactionAttestationByHash(uint64 epoch, bytes32 transactionHash)
         public
         view
-        returns (bytes32 message, FROST.Signature memory signature)
+        returns (FROST.Signature memory signature)
     {
-        message = domainSeparator().transactionProposal(epoch, transactionHash);
-        signature = getAttestationByMessage(message);
-    }
-
-    /**
-     * @notice Gets a transaction attestation by its transaction proposal hash.
-     * @param message The EIP-712 message hash of the proposal.
-     * @return signature The FROST signature attesting to the transaction.
-     */
-    function getAttestationByMessage(bytes32 message) public view returns (FROST.Signature memory signature) {
+        bytes32 message = domainSeparator().transactionProposal(epoch, transactionHash);
         return COORDINATOR.signatureValue($attestations[message]);
     }
 
@@ -227,36 +233,34 @@ contract Consensus is IFROSTCoordinatorCallback {
      * @notice Gets a recent transaction attestation.
      * @param transaction The Safe transaction to query the attestation for.
      * @return epoch The recent epoch that the transaction was attested in.
-     * @return message The EIP-712 message hash of the proposal.
      * @return signature The FROST signature attesting to the transaction.
      * @dev This method will fail if the attestation did not happen in either the active or previous epochs. This is
      *      provided as a convenience method to clients who may want to query an attestation for a transaction they
      *      recently proposed for validator approval.
      */
-    function getRecentAttestation(SafeTransaction.T memory transaction)
+    function getRecentTransactionAttestation(SafeTransaction.T memory transaction)
         external
         view
-        returns (uint64 epoch, bytes32 message, FROST.Signature memory signature)
+        returns (uint64 epoch, FROST.Signature memory signature)
     {
-        return getRecentAttestationByHash(transaction.hash());
+        return getRecentTransactionAttestationByHash(transaction.hash());
     }
 
     /**
      * @notice Gets a recent transaction attestation by transaction hash.
      * @param transactionHash The hash of the Safe transaction.
      * @return epoch The recent epoch that the transaction was attested in.
-     * @return message The EIP-712 message hash of the proposal.
      * @return signature The FROST signature attesting to the transaction.
      */
-    function getRecentAttestationByHash(bytes32 transactionHash)
+    function getRecentTransactionAttestationByHash(bytes32 transactionHash)
         public
         view
-        returns (uint64 epoch, bytes32 message, FROST.Signature memory signature)
+        returns (uint64 epoch, FROST.Signature memory signature)
     {
         (Epochs memory epochs,) = _epochsWithRollover();
         bytes32 domain = domainSeparator();
         epoch = epochs.active;
-        message = domain.transactionProposal(epochs.active, transactionHash);
+        bytes32 message = domain.transactionProposal(epochs.active, transactionHash);
         FROSTSignatureId.T attestation = $attestations[message];
         if (attestation.isZero()) {
             epoch = epochs.previous;
@@ -278,10 +282,10 @@ contract Consensus is IFROSTCoordinatorCallback {
     }
 
     /**
-     * @notice Gets the current epochs (previous, active, staged).
-     * @return epochs The current active epoch.
+     * @notice Gets the internal epochs state.
+     * @return epochs The epochs state tracking previous, active, and staged epochs.
      */
-    function getCurrentEpochs() external view returns (Epochs memory epochs) {
+    function getEpochsState() external view returns (Epochs memory epochs) {
         (epochs,) = _epochsWithRollover();
     }
 
@@ -289,11 +293,19 @@ contract Consensus is IFROSTCoordinatorCallback {
      * @notice Gets the group info for a specific epoch
      * @param epoch The epoch for which the group should be retrieved
      * @return group The FROST group ID for the specified epoch.
-     * @return groupKey The public key for the specified epoch's group.
      */
-    function getEpochGroup(uint64 epoch) external view returns (FROSTGroupId.T group, Secp256k1.Point memory groupKey) {
-        group = $groups[epoch];
-        groupKey = COORDINATOR.groupKey(group);
+    function getEpochGroupId(uint64 epoch) external view returns (FROSTGroupId.T group) {
+        return $groups[epoch];
+    }
+
+    /**
+     * @notice Gets the FROST signature ID of an attestation to the specified rollover or transaction message.
+     * @param message The message to query an attestation signature ID for.
+     * @return signature The signature ID of the attested message; a zero value indicates the message was never
+     *                    attested to.
+     */
+    function getAttestationSignatureId(bytes32 message) external view returns (FROSTSignatureId.T signature) {
+        return $attestations[message];
     }
 
     // ============================================================
@@ -336,28 +348,28 @@ contract Consensus is IFROSTCoordinatorCallback {
         _requireValidRollover(epochs, proposedEpoch, rolloverBlock);
         Secp256k1.Point memory groupKey = COORDINATOR.groupKey(group);
         bytes32 message = domainSeparator().epochRollover(epochs.active, proposedEpoch, rolloverBlock, groupKey);
-        COORDINATOR.signatureVerify(signature, $groups[epochs.active], message);
+        FROST.Signature memory attestation = COORDINATOR.signatureVerify(signature, $groups[epochs.active], message);
         epochs.staged = proposedEpoch;
         epochs.rolloverBlock = rolloverBlock;
         $epochs = epochs;
         $groups[proposedEpoch] = group;
-        emit EpochStaged(epochs.active, proposedEpoch, rolloverBlock, groupKey);
+        // Note that we do not need to check that `$attestations[message]` is zero, since the `_requireValidRollover`
+        // already prevents an epoch being proposed and staged more than once.
+        $attestations[message] = signature;
+        emit EpochStaged(epochs.active, proposedEpoch, rolloverBlock, groupKey, attestation);
     }
 
     /**
      * @notice Proposes a transaction for validator approval.
      * @param transaction The Safe transaction to propose.
-     * @return message The EIP-712 message hash of the proposal.
      * @return transactionHash The Safe transaction hash.
      */
-    function proposeTransaction(SafeTransaction.T memory transaction)
-        public
-        returns (bytes32 message, bytes32 transactionHash)
-    {
+    function proposeTransaction(SafeTransaction.T memory transaction) public returns (bytes32 transactionHash) {
         Epochs memory epochs = _processRollover();
         transactionHash = transaction.hash();
-        message = domainSeparator().transactionProposal(epochs.active, transactionHash);
-        emit TransactionProposed(message, transactionHash, epochs.active, transaction);
+        bytes32 message = domainSeparator().transactionProposal(epochs.active, transactionHash);
+        require($attestations[message].isZero(), AlreadyAttested());
+        emit TransactionProposed(transactionHash, transaction.chainId, transaction.safe, epochs.active, transaction);
         COORDINATOR.sign($groups[epochs.active], message);
     }
 
@@ -369,7 +381,6 @@ contract Consensus is IFROSTCoordinatorCallback {
      * @param value Native token value of the Safe transaction.
      * @param data Data payload of the Safe transaction.
      * @param nonce Safe transaction nonce.
-     * @return message The EIP-712 message hash of the proposal.
      * @return transactionHash The Safe transaction hash.
      * @dev This is provided as a convenience method for proposing transactions with the most common parameters.
      */
@@ -380,7 +391,7 @@ contract Consensus is IFROSTCoordinatorCallback {
         uint256 value,
         bytes memory data,
         uint256 nonce
-    ) external returns (bytes32 message, bytes32 transactionHash) {
+    ) external returns (bytes32 transactionHash) {
         SafeTransaction.T memory transaction = SafeTransaction.T({
             chainId: chainId,
             safe: safe,
@@ -414,10 +425,15 @@ contract Consensus is IFROSTCoordinatorCallback {
         // Therefore, it isn't useful for us to be restrictive here.
 
         bytes32 message = domainSeparator().transactionProposal(epoch, transactionHash);
-        COORDINATOR.signatureVerify(signature, $groups[epoch], message);
+        require($attestations[message].isZero(), AlreadyAttested());
+        FROST.Signature memory attestation = COORDINATOR.signatureVerify(signature, $groups[epoch], message);
         $attestations[message] = signature;
-        emit TransactionAttested(message);
+        emit TransactionAttested(transactionHash, epoch, attestation);
     }
+
+    // ============================================================
+    // IFROSTCoordinatorCallback IMPLEMENTATION
+    // ============================================================
 
     /**
      * @inheritdoc IFROSTCoordinatorCallback

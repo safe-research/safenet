@@ -3,6 +3,7 @@ pragma solidity ^0.8.30;
 
 import {Test, Vm} from "@forge-std/Test.sol";
 import {Consensus} from "@/Consensus.sol";
+import {FROST} from "@/libraries/FROST.sol";
 import {FROSTGroupId} from "@/libraries/FROSTGroupId.sol";
 import {FROSTSignatureId} from "@/libraries/FROSTSignatureId.sol";
 import {Secp256k1} from "@/libraries/Secp256k1.sol";
@@ -18,10 +19,16 @@ contract MockCoordinator {
         return groupKeys[group];
     }
 
-    function signatureVerify(FROSTSignatureId.T, FROSTGroupId.T, bytes32) external view {}
+    function signatureVerify(FROSTSignatureId.T, FROSTGroupId.T, bytes32)
+        external
+        view
+        returns (FROST.Signature memory signature)
+    {}
 }
 
 contract ConsensusTest is Test {
+    using FROSTGroupId for FROSTGroupId.T;
+
     FROSTGroupId.T immutable GENESIS_GROUP = FROSTGroupId.T.wrap(keccak256("genesisGroup"));
 
     Vm.Wallet public group;
@@ -36,25 +43,19 @@ contract ConsensusTest is Test {
         consensus = new Consensus(address(coordinator), GENESIS_GROUP);
     }
 
-    function test_GetEpochGroup_ExistingGroup() public {
+    function test_GetEpochGroup_ExistingGroup() public view {
         (uint64 epoch, FROSTGroupId.T expectedGroupId) = consensus.getActiveEpoch();
-        Secp256k1.Point memory expectedKey = Secp256k1.Point({x: 0x5afe01, y: 0x5afe02});
-        coordinator.setGroupKey(expectedGroupId, expectedKey);
-        (FROSTGroupId.T groupId, Secp256k1.Point memory groupKey) = consensus.getEpochGroup(epoch);
-        assertEq32(FROSTGroupId.T.unwrap(expectedGroupId), FROSTGroupId.T.unwrap(groupId));
-        assertEq(expectedKey.x, groupKey.x);
-        assertEq(expectedKey.y, groupKey.y);
+        FROSTGroupId.T groupId = consensus.getEpochGroupId(epoch);
+        assertTrue(groupId.eq(expectedGroupId));
     }
 
     function test_GetEpochGroup_EmptyForUnknownEpoch() public view {
-        (FROSTGroupId.T groupId, Secp256k1.Point memory groupKey) = consensus.getEpochGroup(10000);
-        assertEq32(bytes32(uint256(0)), FROSTGroupId.T.unwrap(groupId));
-        assertEq(0, groupKey.x);
-        assertEq(0, groupKey.y);
+        FROSTGroupId.T groupId = consensus.getEpochGroupId(10000);
+        assertTrue(groupId.isZero());
     }
 
     function test_GetCurrentEpochs_GenesisInfo() public view {
-        (Consensus.Epochs memory epochs) = consensus.getCurrentEpochs();
+        (Consensus.Epochs memory epochs) = consensus.getEpochsState();
         assertEq(0, epochs.previous);
         assertEq(0, epochs.active);
         assertEq(0, epochs.staged);
@@ -63,7 +64,7 @@ contract ConsensusTest is Test {
 
     function test_GetCurrentEpochs_StagedEpoch() public {
         consensus.stageEpoch(0x5afe, 0x100, FROSTGroupId.T.wrap(keccak256("testGroup")), FROSTSignatureId.T.wrap(""));
-        (Consensus.Epochs memory epochs) = consensus.getCurrentEpochs();
+        (Consensus.Epochs memory epochs) = consensus.getEpochsState();
         assertEq(0, epochs.previous);
         assertEq(0, epochs.active);
         assertEq(0x5afe, epochs.staged);
@@ -75,7 +76,7 @@ contract ConsensusTest is Test {
             0x5afe, uint64(block.number + 1), FROSTGroupId.T.wrap(keccak256("testGroup")), FROSTSignatureId.T.wrap("")
         );
         vm.roll(block.number + 1);
-        (Consensus.Epochs memory epochs) = consensus.getCurrentEpochs();
+        (Consensus.Epochs memory epochs) = consensus.getEpochsState();
         assertEq(0, epochs.previous);
         assertEq(0x5afe, epochs.active);
         assertEq(0, epochs.staged);
@@ -95,7 +96,7 @@ contract ConsensusTest is Test {
         consensus.stageEpoch(
             0x5afe03, uint64(block.number + 1), FROSTGroupId.T.wrap(keccak256("testGroup")), FROSTSignatureId.T.wrap("")
         );
-        (Consensus.Epochs memory epochs) = consensus.getCurrentEpochs();
+        (Consensus.Epochs memory epochs) = consensus.getEpochsState();
         assertEq(0x5afe01, epochs.previous);
         assertEq(0x5afe02, epochs.active);
         assertEq(0x5afe03, epochs.staged);
