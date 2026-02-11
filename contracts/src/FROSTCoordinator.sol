@@ -97,7 +97,7 @@ contract FROSTCoordinator {
     /**
      * @notice Secret share data for key generation.
      * @custom:param y The participant public key share.
-     * @custom:param f The polynomial coefficients encrypted for participants.
+     * @custom:param f The polynomial evaluations encrypted for participants.
      */
     struct KeyGenSecretShare {
         Secp256k1.Point y;
@@ -250,16 +250,19 @@ contract FROSTCoordinator {
      * @param sid The signature ID.
      * @param identifier The participant identifier.
      * @param z The scalar component of the share.
-     * @param root The Merkle root of the selected participants.
+     * @param selectionRoot The Merkle root of the selected participants.
      */
-    event SignShared(FROSTSignatureId.T indexed sid, bytes32 indexed root, FROST.Identifier identifier, uint256 z);
+    event SignShared(
+        FROSTSignatureId.T indexed sid, bytes32 indexed selectionRoot, FROST.Identifier identifier, uint256 z
+    );
 
     /**
      * @notice Emitted when a FROST signing ceremony successfully completed.
      * @param sid The signature ID.
+     * @param selectionRoot The Merkle root of the selected participants.
      * @param signature The FROST signature.
      */
-    event SignCompleted(FROSTSignatureId.T indexed sid, bytes32 indexed root, FROST.Signature signature);
+    event SignCompleted(FROSTSignatureId.T indexed sid, bytes32 indexed selectionRoot, FROST.Signature signature);
 
     // ============================================================
     // ERRORS

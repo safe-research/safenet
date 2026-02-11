@@ -98,14 +98,14 @@ export const nonceCommitmentsEventSchema = z.object({
 
 export const signatureShareEventSchema = z.object({
 	sid: hexBytes32Schema,
-	root: hexBytes32Schema,
+	selectionRoot: hexBytes32Schema,
 	identifier: eventBigIntSchema,
 	z: eventBigIntSchema,
 });
 
 export const signedEventSchema = z.object({
 	sid: hexBytes32Schema,
-	root: hexBytes32Schema,
+	selectionRoot: hexBytes32Schema,
 	signature: signatureSchema,
 });
 
