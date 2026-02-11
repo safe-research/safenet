@@ -15,7 +15,6 @@ export const handleSign = async (
 	event: SignRequestEvent,
 	logger?: (msg: unknown) => void,
 ): Promise<StateDiff> => {
-	// TODO: this can be lifted out of this function
 	const diff = checkAvailableNonces(signingClient, consensusState, machineStates, event.sequence, logger);
 	const status = machineStates.signing[event.message];
 	// Check that there is no state or it is the retry flow

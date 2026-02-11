@@ -44,9 +44,9 @@ export const createCommitments = (coefficients: bigint[]): FrostPoint[] => {
 
 // Round 1.5
 // Note: this only verifies commitment[0], other commitments are implicitly verified in round 2
-export const verifyCommitments = (id: bigint, commitments: readonly FrostPoint[], proof: ProofOfKnowledge) => {
+export const verifyCommitments = (id: bigint, commitments: readonly FrostPoint[], proof: ProofOfKnowledge): boolean => {
 	const ga0 = commitments[0];
 	const c = keyGenChallenge(id, ga0, proof.r);
 	const v = g(proof.mu).add(ga0.multiply(c).negate());
-	if (!proof.r.equals(v)) throw new Error(`Invalid commitments for ${id}`);
+	return proof.r.equals(v);
 };

@@ -8,6 +8,7 @@ import type { VerificationEngine } from "../../consensus/verify/engine.js";
 import type { EpochRolloverPacket } from "../../consensus/verify/rollover/schemas.js";
 import { toPoint } from "../../frost/math.js";
 import type { FrostPoint } from "../../frost/types.js";
+import { jsonReplacer } from "../../utils/json.js";
 import type { KeyGenConfirmedEvent } from "../transitions/types.js";
 import type { ConsensusState, MachineConfig, MachineStates, RolloverState, SigningState } from "../types.js";
 import { handleKeyGenConfirmed } from "./confirmed.js";
@@ -267,6 +268,49 @@ describe("key gen confirmed", () => {
 		expect(groupPublicKey).toBeCalledWith("0x06cb03baac74421225341827941e88d9547e5459c4b3715c0000000000000000");
 	});
 
+	it("should throw for invalid rollover packet", async () => {
+		const groupPublicKey = vi.fn();
+		groupPublicKey.mockReturnValueOnce(TEST_POINT);
+		const keyGenClient = {
+			groupPublicKey,
+		} as unknown as KeyGenClient;
+		const participants = vi.fn();
+		participants.mockReturnValueOnce([1n, 2n, 3n]);
+		const signingClient = {
+			participants,
+		} as unknown as SigningClient;
+		const protocol = {
+			chainId: () => 100n,
+			consensus: () => "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266",
+		} as unknown as ShieldnetProtocol;
+		const verify = vi.fn();
+		verify.mockReturnValueOnce({
+			status: "invalid",
+			error: "Test Error",
+		});
+		const verificationEngine = {
+			verify,
+		} as unknown as VerificationEngine;
+		await expect(
+			handleKeyGenConfirmed(
+				MACHINE_CONFIG,
+				protocol,
+				verificationEngine,
+				keyGenClient,
+				signingClient,
+				CONSENSUS_STATE,
+				MACHINE_STATES,
+				EVENT,
+			),
+		).rejects.toStrictEqual(new Error(`Invalid epoch packet created ${JSON.stringify(EPOCH_PACKET, jsonReplacer)}`));
+		expect(participants).toBeCalledTimes(1);
+		expect(participants).toBeCalledWith("0x06cb03baac74421225341827941e88d9547e5459c4b3715c0000000000000000");
+		expect(groupPublicKey).toBeCalledTimes(1);
+		expect(groupPublicKey).toBeCalledWith("0x06cb03baac74421225341827941e88d9547e5459c4b3715c0000000000000000");
+		expect(verify).toBeCalledTimes(1);
+		expect(verify).toBeCalledWith(EPOCH_PACKET);
+	});
+
 	it("should verify packet and trigger signing for rollover", async () => {
 		const groupPublicKey = vi.fn();
 		groupPublicKey.mockReturnValueOnce(TEST_POINT);
@@ -283,7 +327,10 @@ describe("key gen confirmed", () => {
 			consensus: () => "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266",
 		} as unknown as ShieldnetProtocol;
 		const verify = vi.fn();
-		verify.mockReturnValueOnce(keccak256("0x5afe01020304"));
+		verify.mockReturnValueOnce({
+			status: "valid",
+			packetId: keccak256("0x5afe01020304"),
+		});
 		const verificationEngine = {
 			verify,
 		} as unknown as VerificationEngine;

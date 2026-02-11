@@ -74,7 +74,6 @@ export class KeyGenClient {
 
 	setupGroup(
 		participants: readonly Participant[],
-		count: number,
 		threshold: number,
 		context: Hex,
 	): {
@@ -86,10 +85,7 @@ export class KeyGenClient {
 		poap: ProofOfAttestationParticipation;
 	} {
 		const participantsRoot = calculateParticipantsRoot(participants);
-		if (participants.length !== Number(count))
-			throw new Error(
-				`Unexpected participant count ${participantsRoot}! (Expected ${participants.length} got ${count})`,
-			);
+		const count = participants.length;
 		const groupId = calcGroupId(participantsRoot, count, threshold, context);
 		const participantId = this.#storage.registerGroup(groupId, participants, threshold);
 		const coefficients = createCoefficients(threshold);
@@ -113,9 +109,9 @@ export class KeyGenClient {
 		peerCommitments: readonly FrostPoint[],
 		pok: ProofOfKnowledge,
 	): boolean {
-		verifyCommitments(senderId, peerCommitments, pok);
+		if (!verifyCommitments(senderId, peerCommitments, pok)) return false;
 		this.#storage.registerCommitments(groupId, senderId, peerCommitments);
-		return this.#storage.checkIfCommitmentsComplete(groupId);
+		return true;
 	}
 
 	// Round 2.1
@@ -210,7 +206,8 @@ export class KeyGenClient {
 	): Promise<"invalid_share" | "pending_shares" | "shares_completed"> {
 		const participants = this.#storage.participants(groupId);
 		if (peerShares.length !== participants.length - 1) {
-			throw new Error("Unexpect f length");
+			// Invalid data was submitted, flag this so a complaint can be issued
+			return "invalid_share";
 		}
 		const participantId = this.#storage.participantId(groupId);
 		if (senderId === participantId) {

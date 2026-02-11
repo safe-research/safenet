@@ -48,7 +48,7 @@ export const handleComplaintResponded = async (
 		const participants = keyGenClient
 			.participants(machineStates.rollover.groupId)
 			.filter((p) => p.id !== event.accused);
-		const { diff } = triggerKeyGen(
+		return triggerKeyGen(
 			machineConfig,
 			keyGenClient,
 			machineStates.rollover.nextEpoch,
@@ -57,7 +57,6 @@ export const handleComplaintResponded = async (
 			calcGroupContext(protocol.consensus(), machineStates.rollover.nextEpoch),
 			logger,
 		);
-		return diff;
 	}
 
 	const actions: ProtocolAction[] = [];

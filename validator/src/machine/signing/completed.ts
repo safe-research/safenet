@@ -13,6 +13,8 @@ export const handleSigningCompleted = async (
 	// Check that state for signature id is "collect_signing_shares"
 	const status = machineStates.signing[message];
 	if (status?.id !== "collect_signing_shares") return {};
+	// If signing shares where collected (based on previous state check),
+	// then it is a logic error that there is no last signer,
 	if (status.lastSigner === undefined) throw new Error("Invalid state");
 
 	return {

@@ -4,11 +4,6 @@ import { calculateParticipantsRoot } from "../../consensus/merkle.js";
 import type { GroupId } from "../../frost/types.js";
 import type { MachineConfig } from "../types.js";
 
-export type GroupParameters = {
-	count: number;
-	threshold: number;
-};
-
 /**
  * Note on threshold and minimum participant count:
  * With M as the count of malicious nodes
@@ -47,11 +42,8 @@ export const calcMinimumParticipants = ({
 	return Math.max(2, Math.floor((count * 2) / 3) + 1);
 };
 
-export const calcGroupParameters = (participantCount: number): GroupParameters => {
-	const count = participantCount;
-	// The defined threshold is 1/2 or 50%
-	const threshold = Math.floor(count / 2) + 1;
-	return { count, threshold };
+export const calcTreshold = (participantCount: number): number => {
+	return Math.floor(participantCount / 2) + 1;
 };
 
 export const calcGroupContext = (consensus: Address, epoch: bigint): Hex => {
@@ -72,7 +64,8 @@ export const calcGenesisGroup = ({
 	genesisSalt,
 }: Pick<MachineConfig, "defaultParticipants" | "genesisSalt">): GenesisGroup => {
 	const participantsRoot = calculateParticipantsRoot(defaultParticipants);
-	const { count, threshold } = calcGroupParameters(defaultParticipants.length);
+	const count = defaultParticipants.length;
+	const threshold = calcTreshold(defaultParticipants.length);
 	// For genesis, we don't know the consensus contract address since it
 	// depends on the genesis group ID (🐓 and 🥚 problem). Instead, compute a
 	// different context based on the user-provided genesis salt (allowing the

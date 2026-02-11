@@ -71,15 +71,15 @@ const EVENT: EpochStagedEvent = {
 
 // --- Tests ---
 describe("epoch staged", () => {
-	it("should throw if in unexpected rollover state", async () => {
+	it("should not handle epoch if in unexpected rollover state", async () => {
 		const signingClient: SigningClient = {} as unknown as SigningClient;
 		const machineStates: MachineStates = {
 			rollover: { id: "waiting_for_rollover" },
 			signing: {},
 		};
-		await expect(handleEpochStaged(signingClient, machineStates, EVENT)).rejects.toStrictEqual(
-			new Error("Not expecting epoch staging during waiting_for_rollover!"),
-		);
+		const diff = await handleEpochStaged(signingClient, machineStates, EVENT);
+
+		expect(diff).toStrictEqual({});
 	});
 
 	it("should not handle epoch staged event if in unexpected signing state", async () => {
@@ -93,10 +93,27 @@ describe("epoch staged", () => {
 		expect(diff).toStrictEqual({});
 	});
 
+	it("should not handle epoch staged event if not part of group", async () => {
+		const participantId = vi.fn();
+		participantId.mockImplementationOnce(() => {
+			throw new Error("Test Error: unknown group!");
+		});
+		const signingClient: SigningClient = {
+			participantId,
+		} as unknown as SigningClient;
+		const diff = await handleEpochStaged(signingClient, MACHINE_STATES, EVENT);
+
+		expect(diff).toStrictEqual({});
+		expect(participantId).toBeCalledTimes(1);
+		expect(participantId).toBeCalledWith("0x5afe5af3");
+	});
+
 	it("should clean up states and trigger nonce commitments after staging rollover", async () => {
+		const participantId = vi.fn();
 		const generateNonceTree = vi.fn();
 		generateNonceTree.mockReturnValueOnce("0xdeadb055");
 		const signingClient: SigningClient = {
+			participantId,
 			generateNonceTree,
 		} as unknown as SigningClient;
 		const diff = await handleEpochStaged(signingClient, MACHINE_STATES, EVENT);
@@ -114,5 +131,7 @@ describe("epoch staged", () => {
 			signatureIdToMessage: ["0x5af35af3"],
 		});
 		expect(diff.signing).toStrictEqual(["0x5afe5afe"]);
+		expect(participantId).toBeCalledTimes(1);
+		expect(participantId).toBeCalledWith("0x5afe5af3");
 	});
 });

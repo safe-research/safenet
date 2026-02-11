@@ -42,7 +42,7 @@ export const handleComplaintSubmitted = async (
 		const participants = keyGenClient.participants(event.gid);
 		const nextParticipants = participants.filter((participant) => participant.id !== event.accused);
 		logger?.(`Restarting key gen after too many complaints against participant ${accusedId}`);
-		const { diff } = triggerKeyGen(
+		return triggerKeyGen(
 			machineConfig,
 			keyGenClient,
 			machineStates.rollover.nextEpoch,
@@ -51,7 +51,6 @@ export const handleComplaintSubmitted = async (
 			calcGroupContext(protocol.consensus(), machineStates.rollover.nextEpoch),
 			logger,
 		);
-		return diff;
 	}
 
 	const rollover: RolloverState = {

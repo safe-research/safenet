@@ -122,6 +122,87 @@ describe("check rollover", () => {
 		expect(diff.signing).toBeUndefined();
 	});
 
+	it("should not trigger key gen if current epoch was skipped", async () => {
+		const protocol = {} as unknown as ShieldnetProtocol;
+		const keyGenClient = {} as unknown as KeyGenClient;
+		const machineState: MachineStates = {
+			rollover: {
+				id: "epoch_skipped",
+				nextEpoch: 2n,
+			},
+			signing: {},
+		};
+		const diff = checkEpochRollover(MACHINE_CONFIG, protocol, keyGenClient, CONSENSUS_STATE, machineState, 19n);
+
+		expect(diff).toStrictEqual({});
+	});
+
+	it("should trigger key gen if previous epoch was skipped", async () => {
+		const consensus = vi.fn();
+		consensus.mockReturnValueOnce(ethAddress);
+		const protocol = {
+			consensus,
+		} as unknown as ShieldnetProtocol;
+		const setupGroup = vi.fn();
+		const groupSetup = {
+			groupId: "0x5afe02",
+			participantsRoot: "0x5afe5afe5afe",
+			participantId: 3n,
+			commitments: [TEST_POINT],
+			pok: {
+				r: TEST_POINT,
+				mu: 100n,
+			},
+			poap: ["0x5afe5afe5afe01"],
+		};
+		setupGroup.mockReturnValueOnce(groupSetup);
+		const keyGenClient = {
+			setupGroup,
+		} as unknown as KeyGenClient;
+		const machineState: MachineStates = {
+			rollover: {
+				id: "epoch_skipped",
+				nextEpoch: 2n,
+			},
+			signing: {},
+		};
+		const diff = checkEpochRollover(MACHINE_CONFIG, protocol, keyGenClient, CONSENSUS_STATE, machineState, 20n);
+
+		expect(diff.actions).toStrictEqual([
+			{
+				id: "key_gen_start",
+				participants: groupSetup.participantsRoot,
+				count: 3,
+				threshold: 2,
+				context: "0x00000000eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee0000000000000003",
+				participantId: 3n,
+				commitments: groupSetup.commitments,
+				pok: groupSetup.pok,
+				poap: groupSetup.poap,
+			},
+		]);
+		expect(diff.rollover).toStrictEqual({
+			id: "collecting_commitments",
+			groupId: "0x5afe02",
+			nextEpoch: 3n,
+			deadline: 40n,
+		});
+		expect(diff.consensus).toStrictEqual({
+			epochGroup: [3n, { groupId: "0x5afe02", participantId: 3n }],
+			activeEpoch: 0n,
+			stagedEpoch: 0n,
+		});
+		expect(diff.signing).toBeUndefined();
+
+		expect(consensus).toBeCalledTimes(1);
+		expect(setupGroup).toBeCalledTimes(1);
+		expect(setupGroup).toBeCalledWith(
+			MACHINE_CONFIG.defaultParticipants,
+			2,
+			"0x00000000eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee0000000000000003",
+		);
+	});
+
 	it("should trigger key gen if no key gen is active", async () => {
 		const consensus = vi.fn();
 		consensus.mockReturnValueOnce(ethAddress);
@@ -176,7 +257,6 @@ describe("check rollover", () => {
 		expect(setupGroup).toBeCalledTimes(1);
 		expect(setupGroup).toBeCalledWith(
 			MACHINE_CONFIG.defaultParticipants,
-			3,
 			2,
 			"0x00000000eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee0000000000000002",
 		);
@@ -240,7 +320,6 @@ describe("check rollover", () => {
 		expect(setupGroup).toBeCalledTimes(1);
 		expect(setupGroup).toBeCalledWith(
 			MACHINE_CONFIG.defaultParticipants,
-			3,
 			2,
 			"0x00000000eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee0000000000000002",
 		);

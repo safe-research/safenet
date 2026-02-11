@@ -89,20 +89,29 @@ describe("transaction proposed", () => {
 		expect(diff).toStrictEqual({});
 	});
 
-	it("should throw if message cannot be verified", async () => {
+	it("should not update state if message cannot be verified", async () => {
 		const protocol: ShieldnetProtocol = {
 			chainId: () => 23n,
 			consensus: () => zeroAddress,
 		} as unknown as ShieldnetProtocol;
 		const verify = vi.fn();
-		verify.mockRejectedValueOnce(new Error("could not verify"));
+		verify.mockResolvedValueOnce({
+			status: "invalid",
+			error: new Error("Test Verification Error"),
+		});
 		const verificationEngine: VerificationEngine = {
 			verify,
 		} as unknown as VerificationEngine;
 		const signingClient: SigningClient = {} as unknown as SigningClient;
-		await expect(
-			handleTransactionProposed(MACHINE_CONFIG, protocol, verificationEngine, signingClient, CONSENSUS_STATE, EVENT),
-		).rejects.toStrictEqual(new Error("could not verify"));
+		const diff = await handleTransactionProposed(
+			MACHINE_CONFIG,
+			protocol,
+			verificationEngine,
+			signingClient,
+			CONSENSUS_STATE,
+			EVENT,
+		);
+		expect(diff).toStrictEqual({});
 		expect(verify).toBeCalledTimes(1);
 		expect(verify).toBeCalledWith({
 			type: "safe_transaction_packet",
@@ -123,7 +132,10 @@ describe("transaction proposed", () => {
 			consensus: () => zeroAddress,
 		} as unknown as ShieldnetProtocol;
 		const verify = vi.fn();
-		verify.mockReturnValue("0x5af35afe");
+		verify.mockReturnValue({
+			status: "valid",
+			packetId: "0x5af35afe",
+		});
 		const verificationEngine: VerificationEngine = {
 			verify,
 		} as unknown as VerificationEngine;

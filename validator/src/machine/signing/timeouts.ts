@@ -69,7 +69,9 @@ const checkSigningRequestTimeout = (
 				];
 			}
 			const signatureId = status.signatureId;
-			const act = everyoneResponsible || status.responsible === signingClient.participantId(signatureId);
+			const act =
+				everyoneResponsible ||
+				status.responsible === signingClient.participantId(signingClient.signingGroup(signatureId));
 			if (!act) {
 				return stateDiff;
 			}
@@ -104,6 +106,20 @@ const checkSigningRequestTimeout = (
 			return stateDiff;
 		}
 		case "waiting_for_request": {
+			const signers = status.signers.filter((id) => id !== status.responsible);
+			const epoch =
+				status.packet.type === "epoch_rollover_packet"
+					? status.packet.rollover.activeEpoch
+					: status.packet.proposal.epoch;
+			const groupInfo = consensusState.epochGroups[epoch.toString()];
+			if (groupInfo === undefined || signers.length < signingClient.threshold(groupInfo.groupId)) {
+				// There are not enough signers, or group is not known, so the request is dropped
+				return {
+					...stateDiff,
+					signing: [message, undefined],
+				};
+			}
+			const { groupId, participantId } = groupInfo;
 			const everyoneResponsible = status.responsible === undefined;
 			if (everyoneResponsible) {
 				// Everyone is responsible
@@ -117,21 +133,12 @@ const checkSigningRequestTimeout = (
 					message,
 					{
 						...status,
-						signers: status.signers.filter((id) => id !== status.responsible),
+						signers,
 						responsible: undefined,
 						deadline: block + machineConfig.signingTimeout,
 					},
 				];
 			}
-			const epoch =
-				status.packet.type === "epoch_rollover_packet"
-					? status.packet.rollover.activeEpoch
-					: status.packet.proposal.epoch;
-			const groupInfo = consensusState.epochGroups[epoch.toString()];
-			if (groupInfo === undefined) {
-				throw new Error(`Unknown group for epoch ${epoch}`);
-			}
-			const { groupId, participantId } = groupInfo;
 			const act = everyoneResponsible || status.responsible === participantId;
 			if (!act) {
 				return stateDiff;
@@ -154,24 +161,31 @@ const checkSigningRequestTimeout = (
 				signatureIdToMessage: [status.signatureId, undefined],
 			};
 			// Get participants that did not participate
+			const currentSigners = signingClient.signers(status.signatureId);
 			const missingParticipants =
 				status.id === "collect_nonce_commitments"
 					? signingClient.missingNonces(status.signatureId)
-					: signingClient.signers(status.signatureId).filter((s) => status.sharesFrom.indexOf(s) < 0);
+					: currentSigners.filter((s) => status.sharesFrom.indexOf(s) < 0);
 			logger?.("Removing signers for not participating", { missingParticipants });
-			// For next key gen only consider active participants
-			const signers = machineConfig.defaultParticipants
-				.filter((p) => missingParticipants.indexOf(p.id) < 0)
-				.map((p) => p.id);
 			const epoch =
 				status.packet.type === "epoch_rollover_packet"
 					? status.packet.rollover.activeEpoch
 					: status.packet.proposal.epoch;
 			const groupInfo = consensusState.epochGroups[epoch.toString()];
+			// There should always be a group for a packet that was accepted before
 			if (groupInfo === undefined) {
 				throw new Error(`Unknown group for epoch ${epoch}`);
 			}
 			const { groupId } = groupInfo;
+			// For retry of remove inactive signers from current signers set
+			const signers = currentSigners.filter((pid) => missingParticipants.indexOf(pid) < 0);
+			if (signers.length < signingClient.threshold(groupId)) {
+				// Not enough signers to handle the message, remove request
+				return {
+					...stateDiff,
+					signing: [message, undefined],
+				};
+			}
 			stateDiff.signing = [
 				message,
 				{
@@ -182,7 +196,7 @@ const checkSigningRequestTimeout = (
 					packet: status.packet,
 				},
 			];
-			if (status.lastSigner !== signingClient.participantId(status.signatureId)) {
+			if (status.lastSigner !== signingClient.participantId(groupId)) {
 				return stateDiff;
 			}
 			return {

@@ -50,6 +50,7 @@ export class SigningClient {
 		if (signers.length < this.#storage.threshold(groupId)) {
 			throw new Error("Not enough signers to start signing process");
 		}
+		// Check that signers are a subset of participants
 		const participantsSet = new Set(this.participants(groupId));
 		for (const signer of signers) {
 			if (!participantsSet.has(signer)) {
@@ -153,7 +154,10 @@ export class SigningClient {
 			signerIndex,
 		);
 
-		verifySignatureShare(signatureShare, this.#storage.verificationShare(groupId), signerPart.cl, signerPart.r);
+		if (!verifySignatureShare(signatureShare, this.#storage.verificationShare(groupId), signerPart.cl, signerPart.r)) {
+			// This should never happen as all inputs have been verified before
+			throw new Error("Could not create valid signature share!");
+		}
 
 		this.#storage.burnNonce(groupId, chunk, offset);
 
@@ -169,6 +173,10 @@ export class SigningClient {
 
 	signers(signatureId: SignatureId): ParticipantId[] {
 		return this.#storage.signers(signatureId);
+	}
+
+	signingGroup(signatureId: SignatureId): GroupId {
+		return this.#storage.signingGroup(signatureId);
 	}
 
 	participants(groupId: GroupId): ParticipantId[] {
@@ -188,25 +196,11 @@ export class SigningClient {
 		}
 	}
 
-	signingGroup(signatureId: SignatureId): GroupId {
-		return this.#storage.signingGroup(signatureId);
-	}
-
-	message(signatureId: SignatureId): Hex {
-		return this.#storage.message(signatureId);
-	}
-
-	threshold(signatureId: SignatureId): number {
-		const groupId = this.#storage.signingGroup(signatureId);
+	threshold(groupId: GroupId): number {
 		return this.#storage.threshold(groupId);
 	}
 
-	requiredShareCount(signatureId: SignatureId): bigint {
-		return BigInt(this.signers(signatureId).length);
-	}
-
-	participantId(signatureId: SignatureId): bigint {
-		const groupId = this.#storage.signingGroup(signatureId);
+	participantId(groupId: GroupId): bigint {
 		return this.#storage.participantId(groupId);
 	}
 }

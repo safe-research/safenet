@@ -64,6 +64,11 @@ const waitingForRolloverSchema = z.object({
 	id: z.literal("waiting_for_rollover"),
 });
 
+const skipEpochSchema = z.object({
+	id: z.literal("epoch_skipped"),
+	nextEpoch: coercedBigIntSchema,
+});
+
 const collectingCommitmentsSchema = z.object({
 	id: z.literal("collecting_commitments"),
 	groupId: groupIdSchema,
@@ -106,11 +111,11 @@ const signRolloverSchema = z.object({
 	groupId: groupIdSchema,
 	nextEpoch: coercedBigIntSchema,
 	message: hexBytes32Schema,
-	responsible: participantIdSchema,
 });
 
 export const rolloverStateSchema = z.discriminatedUnion("id", [
 	waitingForRolloverSchema,
+	skipEpochSchema,
 	collectingCommitmentsSchema,
 	collectingSharesSchema,
 	collectingConfirmationsSchema,

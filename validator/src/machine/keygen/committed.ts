@@ -15,11 +15,26 @@ export const handleKeyGenCommitted = async (
 	// Verify that the group corresponds to the next epoch
 	if (machineStates.rollover.groupId !== event.gid) return {};
 	const nextEpoch = machineStates.rollover.nextEpoch;
-	// TODO: handle bad commitments -> Remove participant
-	keyGenClient.handleKeygenCommitment(event.gid, event.identifier, event.commitment.c, {
-		r: event.commitment.r,
-		mu: event.commitment.mu,
-	});
+
+	try {
+		// Check if validator is part of group, method will throw if not
+		keyGenClient.participantId(event.gid);
+	} catch {
+		// If there is no participant id, then this validator is not part of the group
+		// In this case ignore this request
+		return {};
+	}
+
+	if (
+		!keyGenClient.handleKeygenCommitment(event.gid, event.identifier, event.commitment.c, {
+			r: event.commitment.r,
+			mu: event.commitment.mu,
+		})
+	) {
+		logger?.(`Invalid key gen commitment from participant ${event.identifier}`);
+		// No state changes for invalid key gen commitments, participant will be removed on timeout
+		return {};
+	}
 	logger?.(`Registered key gen commitment for participant ${event.identifier}`);
 	if (!event.committed) {
 		return {};

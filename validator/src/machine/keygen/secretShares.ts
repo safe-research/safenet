@@ -18,29 +18,40 @@ export const handleKeyGenSecretShared = async (
 		logger?.(`Unexpected state ${machineStates.rollover.id}`);
 		return {};
 	}
+	const groupId = event.gid;
+
 	// Verify that the group corresponds to the next epoch
-	if (machineStates.rollover.groupId !== event.gid) {
-		logger?.(`Unexpected groupId ${event.gid}`);
+	if (machineStates.rollover.groupId !== groupId) {
+		logger?.(`Unexpected groupId ${groupId}`);
 		return {};
 	}
-	const groupId = event.gid;
+
+	try {
+		// Check if validator is part of group, method will throw if not
+		keyGenClient.participantId(groupId);
+	} catch {
+		// If there is no participant id, then this validator is not part of the group
+		// In this case ignore this request
+		return {};
+	}
+
 	// Track identity that has submitted last share
-	const response = await keyGenClient.handleKeygenSecrets(event.gid, event.identifier, event.share.f);
+	const response = await keyGenClient.handleKeygenSecrets(groupId, event.identifier, event.share.f);
 	const missingSharesFrom: ParticipantId[] = [...machineStates.rollover.missingSharesFrom];
 	const actions: ProtocolAction[] = [];
 	if (response === "invalid_share") {
-		logger?.(`Invalid share submitted by ${event.identifier} for group ${event.gid}`);
+		logger?.(`Invalid share submitted by ${event.identifier} for group ${groupId}`);
 		missingSharesFrom.push(event.identifier);
 		actions.push({
 			id: "key_gen_complain",
-			groupId: event.gid,
+			groupId,
 			accused: event.identifier,
 		});
 	}
 	// Share collection is completed when every paritcipant submitted a share, no matter if valid or invalid
 	// `response` will only be "shares_completed" when all valid shares have been received
 	if (!event.shared) {
-		logger?.(`Group ${event.gid} secret shares not completed yet`);
+		logger?.(`Group ${groupId} secret shares not completed yet`);
 		return {
 			rollover: {
 				...machineStates.rollover,
@@ -51,7 +62,7 @@ export const handleKeyGenSecretShared = async (
 		};
 	}
 	// All secret shares collected, now each participant must confirm or complain
-	logger?.(`Group ${event.gid} secret shares completed, triggering confirmation`);
+	logger?.(`Group ${groupId} secret shares completed, triggering confirmation`);
 
 	if (response === "shares_completed") {
 		const nextEpoch = machineStates.rollover.nextEpoch;

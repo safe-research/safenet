@@ -26,7 +26,7 @@ describe("verify engine", () => {
 		).rejects.toStrictEqual(Error("No handler registered for type not_test"));
 	});
 
-	it("should return hash from handler if present", async () => {
+	it("should return valid verification result from handler on successful check", async () => {
 		const handlers = new Map<string, PacketHandler<Typed>>();
 		handlers.set("test", {
 			hashAndVerify: async (_packet: Typed) => "0xbaddad42",
@@ -36,7 +36,29 @@ describe("verify engine", () => {
 			engine.verify({
 				type: "test",
 			}),
-		).resolves.toBe("0xbaddad42");
+		).resolves.toStrictEqual({
+			status: "valid",
+			packetId: "0xbaddad42",
+		});
+	});
+
+	it("should return invalid verification result from handler on failed check", async () => {
+		const handlers = new Map<string, PacketHandler<Typed>>();
+		const error = new Error("Verification Error");
+		handlers.set("test", {
+			hashAndVerify: async (_packet: Typed) => {
+				throw error;
+			},
+		});
+		const engine = new VerificationEngine(handlers);
+		await expect(
+			engine.verify({
+				type: "test",
+			}),
+		).resolves.toStrictEqual({
+			status: "invalid",
+			error,
+		});
 	});
 
 	it("should return false if message is not verified", async () => {

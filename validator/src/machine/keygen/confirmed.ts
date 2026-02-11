@@ -3,6 +3,7 @@ import type { ProtocolAction, ShieldnetProtocol } from "../../consensus/protocol
 import type { SigningClient } from "../../consensus/signing/client.js";
 import type { VerificationEngine } from "../../consensus/verify/engine.js";
 import type { EpochRolloverPacket } from "../../consensus/verify/rollover/schemas.js";
+import { jsonReplacer } from "../../utils/json.js";
 import type { KeyGenConfirmedEvent } from "../transitions/types.js";
 import type { ConsensusDiff, ConsensusState, MachineConfig, MachineStates, StateDiff } from "../types.js";
 
@@ -97,7 +98,11 @@ export const handleKeyGenConfirmed = async (
 	};
 
 	// Verify the packet to get the message hash
-	const message = await verificationEngine.verify(packet);
+	const result = await verificationEngine.verify(packet);
+	if (result.status === "invalid") {
+		throw new Error(`Invalid epoch packet created ${JSON.stringify(packet, jsonReplacer)}`);
+	}
+	const message = result.packetId;
 	logger?.(`Computed epoch rollover message ${message}`);
 
 	// Transition to sign_rollover with the proper message

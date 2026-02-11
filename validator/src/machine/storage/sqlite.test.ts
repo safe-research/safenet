@@ -1,9 +1,9 @@
 import Sqlite3 from "better-sqlite3";
-import { type Hex, zeroAddress } from "viem";
+import { type Hex, keccak256, zeroAddress } from "viem";
 import { beforeEach, describe, expect, it } from "vitest";
 import type { EpochRolloverPacket } from "../../consensus/verify/rollover/schemas.js";
 import type { SafeTransactionPacket } from "../../consensus/verify/safeTx/schemas.js";
-import type { SigningState } from "../types.js";
+import type { RolloverState, SigningState } from "../types.js";
 import { SqliteStateStorage } from "./sqlite.js";
 
 const TX_ATTESTATION_PACKET: SafeTransactionPacket = {
@@ -46,6 +46,65 @@ const EPOCH_ROLLOVER_PACKET: EpochRolloverPacket = {
 	},
 };
 
+const ROLLOVER_TEST_STATES: { [K in RolloverState["id"]]: RolloverState & { id: K } } = {
+	waiting_for_rollover: {
+		id: "waiting_for_rollover",
+	},
+	epoch_skipped: {
+		id: "epoch_skipped",
+		nextEpoch: 1n,
+	},
+	collecting_commitments: {
+		id: "collecting_commitments",
+		groupId: "0x5afe000000000000000000000000000000000000000000000000000000000000",
+		deadline: 100n,
+		nextEpoch: 1n,
+	},
+	collecting_shares: {
+		id: "collecting_shares",
+		groupId: "0x5afe000000000000000000000000000000000000000000000000000000000000",
+		nextEpoch: 1n,
+		deadline: 100n,
+		missingSharesFrom: [1n],
+		complaints: {
+			"1": {
+				total: 2n,
+				unresponded: 1n,
+			},
+			"2": {
+				total: 1n,
+				unresponded: 0n,
+			},
+		},
+	},
+	collecting_confirmations: {
+		id: "collecting_confirmations",
+		groupId: "0x5afe000000000000000000000000000000000000000000000000000000000000",
+		nextEpoch: 1n,
+		deadline: 100n,
+		complaintDeadline: 80n,
+		responseDeadline: 60n,
+		missingSharesFrom: [1n],
+		complaints: {
+			"1": {
+				total: 2n,
+				unresponded: 1n,
+			},
+			"2": {
+				total: 1n,
+				unresponded: 0n,
+			},
+		},
+		confirmationsFrom: [1n],
+	},
+	sign_rollover: {
+		id: "sign_rollover",
+		groupId: "0x5afe000000000000000000000000000000000000000000000000000000000000",
+		message: keccak256("0x5afe5afe5afe"),
+		nextEpoch: 1n,
+	},
+};
+
 describe("SqliteStateStorage", () => {
 	let testDb = new Sqlite3(":memory:");
 	beforeEach(() => {
@@ -53,64 +112,18 @@ describe("SqliteStateStorage", () => {
 		testDb = new Sqlite3(":memory:");
 	});
 
-	it("should store and reinstantiate rollover state correctly", () => {
-		const originalStorage = new SqliteStateStorage(testDb);
-		expect(originalStorage.machineStates().rollover).toStrictEqual({
-			id: "waiting_for_rollover",
-		});
-		originalStorage.applyDiff({
-			rollover: {
-				id: "collecting_shares",
-				groupId: "0x5afe000000000000000000000000000000000000000000000000000000000000",
-				nextEpoch: 1n,
-				deadline: 100n,
-				missingSharesFrom: [1n],
-				complaints: {
-					"1": {
-						total: 2n,
-						unresponded: 1n,
-					},
-					"2": {
-						total: 1n,
-						unresponded: 0n,
-					},
-				},
-			},
-		});
-		expect(originalStorage.machineStates().rollover).toStrictEqual({
-			id: "collecting_shares",
-			groupId: "0x5afe000000000000000000000000000000000000000000000000000000000000",
-			nextEpoch: 1n,
-			deadline: 100n,
-			missingSharesFrom: [1n],
-			complaints: {
-				"1": {
-					total: 2n,
-					unresponded: 1n,
-				},
-				"2": {
-					total: 1n,
-					unresponded: 0n,
-				},
-			},
-		});
-		const recoveredStorage = new SqliteStateStorage(testDb);
-		expect(recoveredStorage.machineStates().rollover).toStrictEqual({
-			id: "collecting_shares",
-			groupId: "0x5afe000000000000000000000000000000000000000000000000000000000000",
-			nextEpoch: 1n,
-			deadline: 100n,
-			missingSharesFrom: [1n],
-			complaints: {
-				"1": {
-					total: 2n,
-					unresponded: 1n,
-				},
-				"2": {
-					total: 1n,
-					unresponded: 0n,
-				},
-			},
+	describe.each(Object.values(ROLLOVER_TEST_STATES))("when $id", (rollover) => {
+		it("should store and reinstantiate rollover state correctly", () => {
+			const originalStorage = new SqliteStateStorage(testDb);
+			expect(originalStorage.machineStates().rollover).toStrictEqual({
+				id: "waiting_for_rollover",
+			});
+			originalStorage.applyDiff({
+				rollover,
+			});
+			expect(originalStorage.machineStates().rollover).toStrictEqual(rollover);
+			const recoveredStorage = new SqliteStateStorage(testDb);
+			expect(recoveredStorage.machineStates().rollover).toStrictEqual(rollover);
 		});
 	});
 
