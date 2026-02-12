@@ -142,7 +142,7 @@ export const loadTransactionProposalDetails = async (
 		params: [
 			{
 				address: consensus,
-				topics: [safeTxHash],
+				topics: [null, safeTxHash],
 				fromBlock: numberToHex(blockNo - MAX_BLOCKS_RANGE),
 			},
 		],
