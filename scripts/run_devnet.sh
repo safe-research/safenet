@@ -71,7 +71,7 @@ fi
 # Compute the participant set based on our configuration. We want to
 # extract the address of each of the validators.
 participants=()
-for validator in ${VALIDATORS[@]}; do
+for validator in "${VALIDATORS[@]}"; do
     parts=(${validator//:/ })
     participants+=(${parts[1]})
 done
@@ -83,8 +83,11 @@ participants=$(IFS=, ; echo "${participants[*]}")
 # deployments. For now, simulate a deployment with our `contracts`
 # image and parse out the contract addresses.
 deployment="$(podman run --rm -e PARTICIPANTS=$participants localhost/safenet-contracts 'forge script DeployScript')"
-coordinator="$(echo "$deployment" | grep -oP '(?<=FROSTCoordinator: )0x[0-9a-fA-F]{40}')"
-consensus="$(echo "$deployment" | grep -oP '(?<=Consensus: )0x[0-9a-fA-F]{40}')"
+parse_deployment() {
+    echo "$deployment" | grep "$1:" | grep -oE '0x[0-9a-fA-F]{40}'
+}
+coordinator="$(parse_deployment FROSTCoordinator)"
+consensus="$(parse_deployment Consensus)"
 
 safenet_spec() {
     cat <<EOF

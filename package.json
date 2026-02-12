@@ -9,7 +9,7 @@
 	"scripts": {
 		"build": "npm run build --workspaces",
 		"check": "biome check && npm run check --workspaces",
-        "devnet": "./scripts/run_devnet.sh",
+		"devnet": "./scripts/run_devnet.sh",
 		"fix": "biome check --write && npm run fix --workspaces",
 		"test": "npm run test --workspaces",
 		"test:integration": "./scripts/run_integration_test.sh",
