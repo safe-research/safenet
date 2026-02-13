@@ -5,10 +5,9 @@ import { useProposalsForTransaction } from "@/hooks/useProposalsForTransaction";
 import { useSettings } from "@/hooks/useSettings";
 import { useSubmitProposal } from "@/hooks/useSubmitProposal";
 import { SAFE_SERVICE_CHAINS } from "@/lib/chains";
-import type { MetaTransaction } from "@/lib/consensus";
+import type { SafeTransaction } from "@/lib/consensus";
 import { dataString, opString, valueString } from "@/lib/safe/formatting";
-import { metaTxHash } from "@/lib/safe/hashing";
-import type { SafeTransaction } from "@/lib/safe/service";
+import { calculateSafeTxHash } from "@/lib/safe/hashing";
 import { InlineAddress } from "../common/InlineAddress";
 import { Box, BoxTitle } from "../Groups";
 import { TransactionProposalDetails } from "./Proposals";
@@ -20,7 +19,7 @@ export const SafeTxOverview = ({
 	disableLinks,
 }: {
 	title: string;
-	transaction: MetaTransaction;
+	transaction: SafeTransaction;
 	timestamp?: string;
 	disableLinks?: boolean;
 }) => {
@@ -34,7 +33,7 @@ export const SafeTxOverview = ({
 				{timestamp !== undefined && <p className={"text-xs"}>{timestamp}</p>}
 			</div>
 			<div>
-				<InlineAddress chainId={transaction.chainId} address={transaction.account} disableLinks={disableLinks} /> on{" "}
+				<InlineAddress chainId={transaction.chainId} address={transaction.safe} disableLinks={disableLinks} /> on{" "}
 				{chainName}
 			</div>
 			<div>
@@ -84,10 +83,10 @@ export const NoTransactionProposalScreen = ({ transaction }: { transaction: Safe
 };
 
 export const TransactionProposals = ({ transaction }: { transaction: SafeTransaction }) => {
-	const proposalTxHash = useMemo(() => {
-		return metaTxHash(transaction);
+	const safeTxHash = useMemo(() => {
+		return calculateSafeTxHash(transaction);
 	}, [transaction]);
-	const proposals = useProposalsForTransaction(proposalTxHash);
+	const proposals = useProposalsForTransaction(safeTxHash);
 	return (
 		<div className={"space-y-4"}>
 			<BoxTitle>Transaction Proposals</BoxTitle>
@@ -95,8 +94,8 @@ export const TransactionProposals = ({ transaction }: { transaction: SafeTransac
 			{!proposals.isLoading && proposals.data.length === 0 && <NoTransactionProposalScreen transaction={transaction} />}
 			{!proposals.isLoading &&
 				proposals.data.map((proposal) => (
-					<div key={proposal.message}>
-						<Link to="/proposal" search={{ id: proposal.message }}>
+					<div key={proposal.transactionHash}>
+						<Link to="/proposal" search={{ id: proposal.transactionHash }}>
 							<Box className={"hover:bg-surface-hover"}>
 								<TransactionProposalDetails proposal={proposal} disableLinks />
 							</Box>

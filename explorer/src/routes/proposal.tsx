@@ -31,7 +31,7 @@ export function Proposal() {
 						<TransactionProposalDetails proposal={details.data.proposal} hideProposedAt />
 					</Box>
 					<Box className={`${isAttested ? "border-positive" : "border-pending"}`}>
-						<p className={"text-xs"}>Message: {details.data.proposal.message}</p>
+						<p className={"text-xs"}>Transaction Hash: {details.data.proposal.transactionHash}</p>
 						<p>Proposed at block {details.data.proposal.proposedAt}</p>
 						{isAttested && <p>Attested at block {details.data.attestedAt}</p>}
 						{!isAttested && <p>Attestetation pending</p>}

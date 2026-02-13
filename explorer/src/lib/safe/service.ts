@@ -1,8 +1,10 @@
-import type { Address, Hex } from "viem";
+import type { Hex } from "viem";
 import z from "zod";
 import { SAFE_SERVICE_CHAINS } from "../chains";
+import type { SafeTransaction } from "../consensus";
 import { bigIntSchema, checkedAddressSchema, hexDataSchema } from "../schemas";
 import { loadSafeApiSettings } from "../settings";
+import { calculateSafeTxHash } from "./hashing";
 
 const safeTransactionSchema = z.object({
 	safeTxHash: hexDataSchema,
@@ -19,11 +21,6 @@ const safeTransactionSchema = z.object({
 	nonce: bigIntSchema,
 });
 
-export type SafeTransaction = z.output<typeof safeTransactionSchema> & {
-	account: Address;
-	chainId: bigint;
-};
-
 const buildSafeTxDetailsEndpoint = (base: string, shortName: string, safeTxHash: Hex) =>
 	`${base}/tx-service/${shortName}/api/v2/multisig-transactions/${safeTxHash}/`;
 
@@ -34,9 +31,9 @@ export const loadSafeTransactionDetails = async (chainId: bigint, safeTxHash: He
 	const response = await fetch(buildSafeTxDetailsEndpoint(url, chainInfo.shortName, safeTxHash));
 	const parsed = safeTransactionSchema.safeParse(await response.json());
 	if (!parsed.success) return null;
-	return {
+	const transaction = {
 		chainId,
-		account: parsed.data.safe,
 		...parsed.data,
 	};
+	return calculateSafeTxHash(transaction) === safeTxHash ? transaction : null;
 };

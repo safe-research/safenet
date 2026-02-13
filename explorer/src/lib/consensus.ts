@@ -1,17 +1,24 @@
-import { type Address, getAbiItem, type Hex, numberToHex, type PublicClient, parseAbi, parseEventLogs } from "viem";
+import {
+	type AbiEvent,
+	type Address,
+	getAbiItem,
+	type Hex,
+	type Log,
+	numberToHex,
+	type PublicClient,
+	parseAbi,
+	parseEventLogs,
+} from "viem";
 import z from "zod";
-import type { SafeTransaction } from "./safe/service";
 import { bigIntSchema, bytes32Schema, checkedAddressSchema, hexDataSchema } from "./schemas";
 import { jsonReplacer } from "./utils";
 
 const consensusAbi = parseAbi([
 	"function getActiveEpoch() external view returns (uint64 epoch, bytes32 group)",
-	"function proposeTransaction((uint256 chainId, address account, address to, uint256 value, uint8 operation, bytes data, uint256 nonce) transaction) external",
-	"function getAttestation(uint64 epoch, (uint256 chainId, address account, address to, uint256 value, uint8 operation, bytes data, uint256 nonce) transaction) external view returns (bytes32 message, ((uint256 x, uint256 y) r, uint256 z) signature)",
-	"function getAttestationByMessage(bytes32 message) external view returns (((uint256 x, uint256 y) r, uint256 z) signature)",
-	"struct MetaTransaction { uint256 chainId; address account; address to; uint256 value; uint8 operation; bytes data; uint256 nonce; }",
-	"event TransactionProposed(bytes32 indexed message, bytes32 indexed transactionHash, uint64 epoch, MetaTransaction transaction)",
-	"event TransactionAttested(bytes32 indexed message)",
+	"function proposeTransaction((uint256 chainId, address safe, address to, uint256 value, bytes data, uint8 operation, uint256 safeTxGas, uint256 baseGas, uint256 gasPrice, address gasToken, address refundReceiver, uint256 nonce) transaction) external returns (bytes32 transactionHash)",
+	"function getTransactionAttestationByHash(uint64 epoch, bytes32 transactionHash) external view returns (((uint256 x, uint256 y) r, uint256 z) signature)",
+	"event TransactionProposed(bytes32 indexed transactionHash, uint256 indexed chainId, address indexed safe, uint64 epoch, (uint256 chainId, address safe, address to, uint256 value, bytes data, uint8 operation, uint256 safeTxGas, uint256 baseGas, uint256 gasPrice, address gasToken, address refundReceiver, uint256 nonce) transaction)",
+	"event TransactionAttested(bytes32 indexed transactionHash, uint64 epoch, ((uint256 x, uint256 y) r, uint256 z) attestation)",
 ]);
 
 export type ConsensusState = {
@@ -34,31 +41,58 @@ export const loadConsensusState = async (provider: PublicClient, consensus: Addr
 	};
 };
 
-export const transactionSchema = z.object({
+export const safeTransactionSchema = z.object({
+	chainId: bigIntSchema,
+	safe: checkedAddressSchema,
 	to: checkedAddressSchema,
 	value: bigIntSchema,
 	data: hexDataSchema,
 	operation: z.union([z.literal(0), z.literal(1)]),
+	safeTxGas: bigIntSchema,
+	baseGas: bigIntSchema,
+	gasPrice: bigIntSchema,
+	gasToken: checkedAddressSchema,
+	refundReceiver: checkedAddressSchema,
 	nonce: bigIntSchema,
-	chainId: bigIntSchema,
-	account: checkedAddressSchema,
 });
 
-export const transactionProposedEventSchema = z.object({
-	message: bytes32Schema,
-	transactionHash: bytes32Schema,
-	epoch: bigIntSchema,
-	transaction: transactionSchema,
+export const transactionProposedSchema = z.object({
 	proposedAt: bigIntSchema,
+	transactionHash: bytes32Schema,
+	chainId: bigIntSchema,
+	safe: checkedAddressSchema,
+	epoch: bigIntSchema,
+	transaction: safeTransactionSchema,
 });
 
-export type MetaTransaction = z.output<typeof transactionSchema>;
+export type SafeTransaction = z.output<typeof safeTransactionSchema>;
 
-export type TransactionProposal = z.output<typeof transactionProposedEventSchema>;
+export type TransactionProposal = z.output<typeof transactionProposedSchema>;
 
 const MAX_BLOCKS_RANGE = 50000n;
 
-export const loadMessagesForTransaction = async (
+const transactionProposedEvent = getAbiItem({
+	abi: consensusAbi,
+	name: "TransactionProposed",
+});
+
+const mostRecentFirst = <T extends Pick<Log<bigint, number, false>, "blockNumber" | "logIndex">>(logs: T[]): T[] =>
+	logs.sort((left, right) => {
+		if (left.blockNumber !== right.blockNumber) {
+			return left.blockNumber < right.blockNumber ? 1 : -1;
+		}
+		return right.logIndex - left.logIndex;
+	});
+
+const parseTransactionProposal = <E extends AbiEvent>(
+	log: Log<bigint, number, false, E> | null | undefined,
+): TransactionProposal | undefined =>
+	transactionProposedSchema.safeParse({
+		...log?.args,
+		proposedAt: log?.blockNumber,
+	}).data;
+
+export const loadProposalsForTransaction = async (
 	provider: PublicClient,
 	consensus: Address,
 	proposalTxHash: Hex,
@@ -66,30 +100,15 @@ export const loadMessagesForTransaction = async (
 	const blockNo = await provider.getBlockNumber();
 	const logs = await provider.getLogs({
 		address: consensus,
-		event: getAbiItem({
-			abi: consensusAbi,
-			name: "TransactionProposed",
-		}),
+		event: transactionProposedEvent,
 		args: {
 			transactionHash: proposalTxHash,
 		},
 		fromBlock: blockNo - MAX_BLOCKS_RANGE,
 	});
-	return logs
-		.sort((left, right) => {
-			if (left.blockNumber !== right.blockNumber) {
-				return left.blockNumber < right.blockNumber ? 1 : -1;
-			}
-			return right.logIndex - left.logIndex;
-		})
-		.map((log) => {
-			const event = transactionProposedEventSchema.safeParse({
-				...log.args,
-				proposedAt: log.blockNumber,
-			});
-			return event.success ? event.data : undefined;
-		})
-		.filter((entry) => entry !== undefined);
+	return mostRecentFirst(logs)
+		.map(parseTransactionProposal)
+		.filter((e) => e !== undefined);
 };
 
 export const loadRecentTransactionProposals = async (
@@ -99,27 +118,12 @@ export const loadRecentTransactionProposals = async (
 	const blockNo = await provider.getBlockNumber();
 	const logs = await provider.getLogs({
 		address: consensus,
-		event: getAbiItem({
-			abi: consensusAbi,
-			name: "TransactionProposed",
-		}),
+		event: transactionProposedEvent,
 		fromBlock: blockNo - MAX_BLOCKS_RANGE,
 	});
-	return logs
-		.sort((left, right) => {
-			if (left.blockNumber !== right.blockNumber) {
-				return left.blockNumber < right.blockNumber ? 1 : -1;
-			}
-			return right.logIndex - left.logIndex;
-		})
-		.map((log) => {
-			const event = transactionProposedEventSchema.safeParse({
-				...log.args,
-				proposedAt: log.blockNumber,
-			});
-			return event.success ? event.data : undefined;
-		})
-		.filter((entry) => entry !== undefined);
+	return mostRecentFirst(logs)
+		.map(parseTransactionProposal)
+		.filter((e) => e !== undefined);
 };
 
 export type TransactionDetails = {
@@ -130,7 +134,7 @@ export type TransactionDetails = {
 export const loadTransactionProposalDetails = async (
 	provider: PublicClient,
 	consensus: Address,
-	message: Hex,
+	safeTxHash: Hex,
 ): Promise<TransactionDetails | null> => {
 	const blockNo = await provider.getBlockNumber();
 	const logs = await provider.request({
@@ -138,28 +142,45 @@ export const loadTransactionProposalDetails = async (
 		params: [
 			{
 				address: consensus,
-				topics: [null, message],
+				topics: [null, safeTxHash],
 				fromBlock: numberToHex(blockNo - MAX_BLOCKS_RANGE),
 			},
 		],
 	});
-	const events = parseEventLogs({
-		logs,
-		abi: consensusAbi,
-	});
-	const proposalEvent = events.find((e) => e.eventName === "TransactionProposed");
-	if (proposalEvent === undefined) return null;
-	const parsedProposal = transactionProposedEventSchema.safeParse({
-		...proposalEvent.args,
-		proposedAt: proposalEvent.blockNumber,
-	});
-	const attestationEvent = events.find((e) => e.eventName === "TransactionAttested");
-	return parsedProposal.success
-		? {
-				proposal: parsedProposal.data,
-				attestedAt: attestationEvent?.blockNumber !== undefined ? BigInt(attestationEvent.blockNumber) : null,
-			}
-		: null;
+	const events = mostRecentFirst(
+		parseEventLogs({
+			logs,
+			abi: consensusAbi,
+			strict: true,
+		}),
+	);
+
+	// First look for attestations, and try to return transaction details for it.
+	for (const attestation of events.filter((e) => e.eventName === "TransactionAttested")) {
+		const proposal = parseTransactionProposal(
+			events.find((e) => e.eventName === "TransactionProposed" && e.args.epoch === attestation.args.epoch),
+		);
+		if (proposal === undefined) {
+			continue;
+		}
+
+		return {
+			proposal,
+			attestedAt: attestation.blockNumber,
+		};
+	}
+
+	// If we can't find an attestation with a matching transaction proposal, return the most recent pending proposal.
+	const proposal = parseTransactionProposal(events.find((e) => e.eventName === "TransactionProposed"));
+	if (proposal !== undefined) {
+		return {
+			proposal,
+			attestedAt: null,
+		};
+	}
+
+	// We can't find anything...
+	return null;
 };
 
 export const postTransactionProposal = async (url: string, transaction: SafeTransaction) => {

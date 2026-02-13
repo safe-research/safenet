@@ -42,8 +42,8 @@ export const TransactionProposalList = ({
 			<div className="w-full p-2 text-xs text-right">{proposals.length} recent proposals</div>
 			<div className={"space-y-4"}>
 				{proposals.slice(0, itemsToDisplay).map((proposal) => (
-					<div key={proposal.message}>
-						<Link to="/proposal" search={{ id: proposal.message }}>
+					<div key={proposal.transactionHash}>
+						<Link to="/proposal" search={{ id: proposal.transactionHash }}>
 							<Box className={"hover:bg-surface-hover"}>
 								<TransactionProposalDetails proposal={proposal} disableLinks />
 							</Box>

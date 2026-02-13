@@ -1,6 +1,5 @@
 import { useMutation } from "@tanstack/react-query";
-import { postTransactionProposal } from "@/lib/consensus";
-import type { SafeTransaction } from "@/lib/safe/service";
+import { postTransactionProposal, type SafeTransaction } from "@/lib/consensus";
 import { useSettings } from "./useSettings";
 
 export function useSubmitProposal() {

@@ -27,7 +27,7 @@ export function SafeTransaction() {
 			{details.data !== null && (
 				<div className={"space-y-4"}>
 					<Box>
-						<SafeTxOverview title={`Safe Tx Hash: ${details.data.safeTxHash}`} transaction={details.data} />
+						<SafeTxOverview title={`Safe Tx Hash: ${safeTxHash}`} transaction={details.data} />
 					</Box>
 					<Box>
 						<TransactionDataDetails data={details.data.data} />

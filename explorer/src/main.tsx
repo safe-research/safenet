@@ -1,15 +1,13 @@
 import { createRouter, RouterProvider, stringifySearchWith } from "@tanstack/react-router";
 import { StrictMode } from "react";
 import ReactDOM from "react-dom/client";
-
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import * as TanstackQuery from "@/integrations/tanstack-query/root-provider";
-
+import { jsonReplacer } from "@/lib/utils";
+import reportWebVitals from "@/reportWebVitals";
 import { routeTree } from "@/routeTree.gen";
 
 import "@/styles.css";
-import reportWebVitals from "@/reportWebVitals.ts";
-import { jsonReplacer } from "./lib/utils";
 
 /**
  * TanStack Router instance configured with the generated route tree and TanStack Query context.
