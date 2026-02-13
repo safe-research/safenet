@@ -11,9 +11,8 @@ import {
 	toEventSelector,
 } from "viem";
 import z from "zod";
-import { calculateSafeTxHash } from "./safe/hashing";
-import { bigIntSchema, checkedAddressSchema, hexDataSchema } from "./schemas";
-import { jsonReplacer } from "./utils";
+import { bigIntSchema, checkedAddressSchema, hexDataSchema } from "@/lib/schemas";
+import { jsonReplacer } from "@/lib/utils";
 
 const consensusAbi = parseAbi([
 	"function getActiveEpoch() external view returns (uint64 epoch, bytes32 group)",
@@ -66,11 +65,6 @@ export type TransactionProposal = {
 	transaction: SafeTransaction;
 	proposedAt: bigint;
 	attestedAt: bigint | null;
-};
-
-export type RecentTransaction = {
-	safeTxHash: Hex;
-	transaction: SafeTransaction;
 };
 
 const MAX_BLOCKS_RANGE = 50000n;
@@ -171,13 +165,8 @@ export const loadTransactionProposals = async ({
 				return undefined;
 			}
 
-			const calculatedSafeTxHash = calculateSafeTxHash(transaction.data);
-			if (safeTxHash !== undefined && calculatedSafeTxHash !== safeTxHash) {
-				return undefined;
-			}
-
 			return {
-				safeTxHash: calculatedSafeTxHash,
+				safeTxHash: log.args.transactionHash,
 				epoch: log.args.epoch,
 				transaction: transaction.data,
 				proposedAt: log.blockNumber,
