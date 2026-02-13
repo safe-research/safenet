@@ -74,7 +74,7 @@ const MAX_BLOCKS_RANGE = 50000n;
 const getFromBlock = async (provider: PublicClient): Promise<bigint> => {
 	const blockNo = await provider.getBlockNumber();
 	return blockNo > MAX_BLOCKS_RANGE ? blockNo - MAX_BLOCKS_RANGE : 0n;
-}
+};
 
 const transactionProposedEvent = getAbiItem({
 	abi: consensusAbi,
