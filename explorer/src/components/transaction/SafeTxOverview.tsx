@@ -94,7 +94,7 @@ export const TransactionProposals = ({ transaction }: { transaction: SafeTransac
 			{!proposals.isLoading && proposals.data.length === 0 && <NoTransactionProposalScreen transaction={transaction} />}
 			{!proposals.isLoading &&
 				proposals.data.map((proposal) => (
-					<div key={proposal.transactionHash}>
+					<div key={`${proposal.transactionHash}:${proposal.epoch}`}>
 						<Link to="/proposal" search={{ id: proposal.transactionHash }}>
 							<Box className={"hover:bg-surface-hover"}>
 								<TransactionProposalDetails proposal={proposal} disableLinks />

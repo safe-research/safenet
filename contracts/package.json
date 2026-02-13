@@ -6,6 +6,7 @@
 		"check": "forge fmt --check && forge lint --deny notes",
 		"cmd:deploy": "forge script DeployScript",
 		"cmd:genesis": "forge script GenesisScript",
+		"cmd:propose": "forge script ProposeScript",
 		"fix": "forge fmt",
 		"test": "forge test -vvv",
 		"coverage": "mkdir -p coverage && forge coverage --report lcov --report-file coverage/lcov.info"

@@ -26,7 +26,9 @@ contract DeployScript is Script {
             DeterministicDeployment.CANONICAL.deploy(coordinatorSalt, type(FROSTCoordinator).creationCode)
         );
 
-        FROSTGroupId.T groupId = Genesis.groupId(participants, genesisSalt);
+        (bytes32 participantsRoot, uint16 count, uint16 threshold, bytes32 context) =
+            Genesis.groupParameters(participants, genesisSalt);
+        FROSTGroupId.T groupId = FROSTGroupId.create(participantsRoot, count, threshold, context);
         consensus = Consensus(
             DeterministicDeployment.CANONICAL
                 .deployWithArgs(consensusSalt, type(Consensus).creationCode, abi.encode(coordinator, groupId))
@@ -34,8 +36,12 @@ contract DeployScript is Script {
 
         vm.stopBroadcast();
 
+        console.log("Genesis Group ID:", vm.toString(FROSTGroupId.T.unwrap(groupId)));
+        console.log("Genesis Group Participants Root:", vm.toString(participantsRoot));
+        console.log("Genesis Group Count:", uint256(count));
+        console.log("Genesis Group Threshold:", uint256(threshold));
+        console.log("Genesis Group Context:", vm.toString(context));
         console.log("FROSTCoordinator:", address(coordinator));
-        console.log("Genesis Group ID: %s", vm.toString(FROSTGroupId.T.unwrap(groupId)));
         console.log("Consensus:", address(consensus));
     }
 }

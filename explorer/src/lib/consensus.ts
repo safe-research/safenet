@@ -71,6 +71,11 @@ export type TransactionProposal = z.output<typeof transactionProposedSchema>;
 
 const MAX_BLOCKS_RANGE = 50000n;
 
+const getFromBlock = async (provider: PublicClient): Promise<bigint> => {
+	const blockNo = await provider.getBlockNumber();
+	return blockNo > MAX_BLOCKS_RANGE ? blockNo - MAX_BLOCKS_RANGE : 0n;
+}
+
 const transactionProposedEvent = getAbiItem({
 	abi: consensusAbi,
 	name: "TransactionProposed",
@@ -97,14 +102,14 @@ export const loadProposalsForTransaction = async (
 	consensus: Address,
 	proposalTxHash: Hex,
 ): Promise<TransactionProposal[]> => {
-	const blockNo = await provider.getBlockNumber();
+	const fromBlock = await getFromBlock(provider);
 	const logs = await provider.getLogs({
 		address: consensus,
 		event: transactionProposedEvent,
 		args: {
 			transactionHash: proposalTxHash,
 		},
-		fromBlock: blockNo - MAX_BLOCKS_RANGE,
+		fromBlock,
 	});
 	return mostRecentFirst(logs)
 		.map(parseTransactionProposal)
@@ -115,11 +120,11 @@ export const loadRecentTransactionProposals = async (
 	provider: PublicClient,
 	consensus: Address,
 ): Promise<TransactionProposal[]> => {
-	const blockNo = await provider.getBlockNumber();
+	const fromBlock = await getFromBlock(provider);
 	const logs = await provider.getLogs({
 		address: consensus,
 		event: transactionProposedEvent,
-		fromBlock: blockNo - MAX_BLOCKS_RANGE,
+		fromBlock,
 	});
 	return mostRecentFirst(logs)
 		.map(parseTransactionProposal)
@@ -136,14 +141,14 @@ export const loadTransactionProposalDetails = async (
 	consensus: Address,
 	safeTxHash: Hex,
 ): Promise<TransactionDetails | null> => {
-	const blockNo = await provider.getBlockNumber();
+	const fromBlock = await getFromBlock(provider);
 	const logs = await provider.request({
 		method: "eth_getLogs",
 		params: [
 			{
 				address: consensus,
 				topics: [null, safeTxHash],
-				fromBlock: numberToHex(blockNo - MAX_BLOCKS_RANGE),
+				fromBlock: numberToHex(fromBlock),
 			},
 		],
 	});
