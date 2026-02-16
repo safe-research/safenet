@@ -5,7 +5,14 @@ import type { VerificationEngine } from "../../consensus/verify/engine.js";
 import type { EpochRolloverPacket } from "../../consensus/verify/rollover/schemas.js";
 import { jsonReplacer } from "../../utils/json.js";
 import type { KeyGenConfirmedEvent } from "../transitions/types.js";
-import type { ConsensusDiff, ConsensusState, MachineConfig, MachineStates, StateDiff } from "../types.js";
+import type {
+	ConsensusDiff,
+	ConsensusState,
+	MachineConfig,
+	MachineStates,
+	RolloverState,
+	StateDiff,
+} from "../types.js";
 
 export const handleKeyGenConfirmed = async (
 	machineConfig: MachineConfig,
@@ -109,20 +116,35 @@ export const handleKeyGenConfirmed = async (
 	// Transition to sign_rollover with the proper message
 	// Note: Preprocessing (nonce generation) will be triggered after the epoch is staged,
 	// as per the spec's epoch_staged handler.
+	const rollover: RolloverState = {
+		id: "sign_rollover",
+		groupId,
+		nextEpoch,
+		message,
+	};
+	const activeGroup = consensusState.epochGroups[consensusState.activeEpoch.toString()];
+	if (activeGroup === undefined) {
+		// Unknown active group, don't participate in epoch signing
+		return {
+			rollover,
+		};
+	}
+	const signers = signingClient.participants(activeGroup.groupId);
+	if (!signers.includes(activeGroup.participantId)) {
+		// Not part of active group, don't participate in epoch signing
+		return {
+			rollover,
+		};
+	}
 	return {
-		rollover: {
-			id: "sign_rollover",
-			groupId,
-			nextEpoch,
-			message,
-		},
+		rollover,
 		signing: [
 			message,
 			{
 				id: "waiting_for_request",
 				responsible: event.identifier,
 				packet,
-				signers: participants,
+				signers,
 				deadline: block + machineConfig.signingTimeout,
 			},
 		],

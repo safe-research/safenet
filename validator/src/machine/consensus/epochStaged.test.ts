@@ -82,7 +82,7 @@ describe("epoch staged", () => {
 		expect(diff).toStrictEqual({});
 	});
 
-	it("should not handle epoch staged event if in unexpected signing state", async () => {
+	it("should clean up signing in any signing state ", async () => {
 		const signingClient: SigningClient = {} as unknown as SigningClient;
 		const machineStates: MachineStates = {
 			...MACHINE_STATES,
@@ -90,10 +90,14 @@ describe("epoch staged", () => {
 		};
 		const diff = await handleEpochStaged(signingClient, machineStates, EVENT);
 
-		expect(diff).toStrictEqual({});
+		expect(diff).toStrictEqual({
+			consensus: {},
+			rollover: { id: "epoch_staged", nextEpoch: 2n },
+			signing: ["0x5afe5afe", undefined],
+		});
 	});
 
-	it("should not handle epoch staged event if not part of group", async () => {
+	it("should clean up state even if not part of signing group", async () => {
 		const participantId = vi.fn();
 		participantId.mockImplementationOnce(() => {
 			throw new Error("Test Error: unknown group!");
@@ -101,9 +105,17 @@ describe("epoch staged", () => {
 		const signingClient: SigningClient = {
 			participantId,
 		} as unknown as SigningClient;
-		const diff = await handleEpochStaged(signingClient, MACHINE_STATES, EVENT);
+		const machineStates: MachineStates = {
+			...MACHINE_STATES,
+			signing: {},
+		};
+		const diff = await handleEpochStaged(signingClient, machineStates, EVENT);
 
-		expect(diff).toStrictEqual({});
+		expect(diff).toStrictEqual({
+			consensus: {},
+			rollover: { id: "epoch_staged", nextEpoch: 2n },
+			signing: ["0x5afe5afe", undefined],
+		});
 		expect(participantId).toBeCalledTimes(1);
 		expect(participantId).toBeCalledWith("0x5afe5af3");
 	});
@@ -127,9 +139,9 @@ describe("epoch staged", () => {
 		expect(diff.rollover).toStrictEqual({ id: "epoch_staged", nextEpoch: 2n });
 		expect(diff.consensus).toStrictEqual({
 			groupPendingNonces: ["0x5afe5af3", true],
-			signatureIdToMessage: ["0x5af35af3"],
+			signatureIdToMessage: ["0x5af35af3", undefined],
 		});
-		expect(diff.signing).toStrictEqual(["0x5afe5afe"]);
+		expect(diff.signing).toStrictEqual(["0x5afe5afe", undefined]);
 		expect(participantId).toBeCalledTimes(1);
 		expect(participantId).toBeCalledWith("0x5afe5af3");
 	});
