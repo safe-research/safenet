@@ -52,7 +52,12 @@ const MACHINE_STATES: MachineStates = {
 const CONSENSUS_STATE: ConsensusState = {
 	activeEpoch: 0n,
 	groupPendingNonces: {},
-	epochGroups: {},
+	epochGroups: {
+		"0": {
+			groupId: "0xffa9d1aa438a646139fe8d817f9c9dbb060ee7e2e58f2b100000000000000000",
+			participantId: 1n,
+		},
+	},
 	signatureIdToMessage: {},
 };
 
@@ -310,6 +315,120 @@ describe("key gen confirmed", () => {
 		expect(verify).toBeCalledWith(EPOCH_PACKET);
 	});
 
+	it("should wait for epoch signing if unknown active group", async () => {
+		const groupPublicKey = vi.fn();
+		groupPublicKey.mockReturnValueOnce(TEST_POINT);
+		const keyGenClient = {
+			groupPublicKey,
+		} as unknown as KeyGenClient;
+		const participants = vi.fn();
+		// New group
+		participants.mockReturnValueOnce([1n, 2n, 3n]);
+		// Active group
+		participants.mockReturnValueOnce([2n, 3n, 4n]);
+		const signingClient = {
+			participants,
+		} as unknown as SigningClient;
+		const protocol = {
+			chainId: () => 100n,
+			consensus: () => "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266",
+		} as unknown as SafenetProtocol;
+		const verify = vi.fn();
+		verify.mockReturnValueOnce({
+			status: "valid",
+			packetId: keccak256("0x5afe01020304"),
+		});
+		const verificationEngine = {
+			verify,
+		} as unknown as VerificationEngine;
+		const conesnsusState: ConsensusState = {
+			...CONSENSUS_STATE,
+			epochGroups: {},
+		};
+		const diff = await handleKeyGenConfirmed(
+			MACHINE_CONFIG,
+			protocol,
+			verificationEngine,
+			keyGenClient,
+			signingClient,
+			conesnsusState,
+			MACHINE_STATES,
+			EVENT,
+		);
+		const rollover: RolloverState = {
+			id: "sign_rollover",
+			groupId: "0x06cb03baac74421225341827941e88d9547e5459c4b3715c0000000000000000",
+			nextEpoch: 10n,
+			message: keccak256("0x5afe01020304"),
+		};
+		expect(diff).toStrictEqual({
+			rollover,
+		});
+		expect(participants).toBeCalledTimes(1);
+		// New group
+		expect(participants).toBeCalledWith("0x06cb03baac74421225341827941e88d9547e5459c4b3715c0000000000000000");
+		expect(groupPublicKey).toBeCalledTimes(1);
+		expect(groupPublicKey).toBeCalledWith("0x06cb03baac74421225341827941e88d9547e5459c4b3715c0000000000000000");
+		expect(verify).toBeCalledTimes(1);
+		expect(verify).toBeCalledWith(EPOCH_PACKET);
+	});
+
+	it("should wait for epoch signing if not part of active group", async () => {
+		const groupPublicKey = vi.fn();
+		groupPublicKey.mockReturnValueOnce(TEST_POINT);
+		const keyGenClient = {
+			groupPublicKey,
+		} as unknown as KeyGenClient;
+		const participants = vi.fn();
+		// New group
+		participants.mockReturnValueOnce([1n, 2n, 3n]);
+		// Active group
+		participants.mockReturnValueOnce([2n, 3n, 4n]);
+		const signingClient = {
+			participants,
+		} as unknown as SigningClient;
+		const protocol = {
+			chainId: () => 100n,
+			consensus: () => "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266",
+		} as unknown as SafenetProtocol;
+		const verify = vi.fn();
+		verify.mockReturnValueOnce({
+			status: "valid",
+			packetId: keccak256("0x5afe01020304"),
+		});
+		const verificationEngine = {
+			verify,
+		} as unknown as VerificationEngine;
+		const diff = await handleKeyGenConfirmed(
+			MACHINE_CONFIG,
+			protocol,
+			verificationEngine,
+			keyGenClient,
+			signingClient,
+			CONSENSUS_STATE,
+			MACHINE_STATES,
+			EVENT,
+		);
+		const rollover: RolloverState = {
+			id: "sign_rollover",
+			groupId: "0x06cb03baac74421225341827941e88d9547e5459c4b3715c0000000000000000",
+			nextEpoch: 10n,
+			message: keccak256("0x5afe01020304"),
+		};
+		expect(diff).toStrictEqual({
+			rollover,
+		});
+		expect(participants).toBeCalledTimes(2);
+		// New group
+		expect(participants).toBeCalledWith("0x06cb03baac74421225341827941e88d9547e5459c4b3715c0000000000000000");
+		// Active group
+		expect(participants).toBeCalledWith("0xffa9d1aa438a646139fe8d817f9c9dbb060ee7e2e58f2b100000000000000000");
+		expect(groupPublicKey).toBeCalledTimes(1);
+		expect(groupPublicKey).toBeCalledWith("0x06cb03baac74421225341827941e88d9547e5459c4b3715c0000000000000000");
+		expect(verify).toBeCalledTimes(1);
+		expect(verify).toBeCalledWith(EPOCH_PACKET);
+	});
+
 	it("should verify packet and trigger signing for rollover", async () => {
 		const groupPublicKey = vi.fn();
 		groupPublicKey.mockReturnValueOnce(TEST_POINT);
@@ -318,6 +437,7 @@ describe("key gen confirmed", () => {
 		} as unknown as KeyGenClient;
 		const participants = vi.fn();
 		participants.mockReturnValueOnce([1n, 2n, 3n]);
+		participants.mockReturnValueOnce([1n, 2n, 3n, 4n]);
 		const signingClient = {
 			participants,
 		} as unknown as SigningClient;
@@ -347,7 +467,7 @@ describe("key gen confirmed", () => {
 			id: "waiting_for_request",
 			packet: EPOCH_PACKET,
 			responsible: 2n,
-			signers: [1n, 2n, 3n],
+			signers: [1n, 2n, 3n, 4n],
 			deadline: 24n,
 		};
 		const rollover: RolloverState = {
@@ -360,8 +480,11 @@ describe("key gen confirmed", () => {
 			rollover,
 			signing: [keccak256("0x5afe01020304"), signingState],
 		});
-		expect(participants).toBeCalledTimes(1);
+		expect(participants).toBeCalledTimes(2);
+		// New group
 		expect(participants).toBeCalledWith("0x06cb03baac74421225341827941e88d9547e5459c4b3715c0000000000000000");
+		// Active group
+		expect(participants).toBeCalledWith("0xffa9d1aa438a646139fe8d817f9c9dbb060ee7e2e58f2b100000000000000000");
 		expect(groupPublicKey).toBeCalledTimes(1);
 		expect(groupPublicKey).toBeCalledWith("0x06cb03baac74421225341827941e88d9547e5459c4b3715c0000000000000000");
 		expect(verify).toBeCalledTimes(1);

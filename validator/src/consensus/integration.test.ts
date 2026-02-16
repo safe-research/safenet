@@ -263,6 +263,27 @@ describe("integration", () => {
 		});
 		const stagedGroupKey = stagedEpochs[0].args.groupKey;
 		expect(stagedGroupKey).toStrictEqual(expectedKey);
+
+		// Restart client and calculate next group
+		clients[2].service.start();
+
+		// Wait for end of epoch
+		await waitForBlock(testClient, 60n);
+
+		const expectedGroupEpoch2 = calcGroupId(
+			calculateParticipantsRoot([participants[0], participants[1], participants[2], participants[3]]),
+			4,
+			3,
+			calcGroupContext(consensus.address, 2n),
+		);
+		const expectedKeyEpoch2 = await testClient.readContract({
+			...coordinator,
+			functionName: "groupKey",
+			args: [expectedGroupEpoch2],
+		});
+		expect(expectedKeyEpoch2.x).not.toBe(0n);
+		expect(expectedKeyEpoch2.y).not.toBe(0n);
+		expect(stagedGroupKey).not.toStrictEqual(expectedKeyEpoch2);
 	});
 
 	it("keygen abort", { timeout: TEST_RUNTIME_IN_SECONDS * 1000 * 5 }, async ({ skip }) => {
