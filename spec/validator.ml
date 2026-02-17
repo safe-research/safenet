@@ -634,21 +634,7 @@ struct
                 deadline = state.block + Configuration.key_gen_block_timeout;
               }
           in
-          let signatures' =
-            StringMap.add message
-              {
-                status =
-                  Waiting_for_sign_request { responsible = Some identifier };
-                epoch = state.active_epoch;
-                packet;
-                selection = state.active_epoch.group.participants;
-                deadline = state.block + Configuration.signing_block_timeout;
-              }
-              state.signatures
-          in
-          let state' =
-            { state with rollover = rollover'; signatures = signatures' }
-          in
+          let state' = { state with rollover = rollover' } in
           (state', [])
         else
           let rollover' =
@@ -1116,9 +1102,30 @@ struct
 
   let epoch_proposed state proposed_epoch =
     match state.rollover with
-    | Proposing_epoch { epoch; message; _ } when epoch.epoch = proposed_epoch ->
+    | Proposing_epoch { epoch; message; responsible; _ }
+      when epoch.epoch = proposed_epoch ->
         let rollover' = Signing_epoch_rollover { epoch; message } in
-        let state' = { state with rollover = rollover' } in
+        let signatures' =
+          StringMap.add message
+            {
+              status =
+                Waiting_for_sign_request { responsible = Some responsible };
+              epoch = state.active_epoch;
+              packet =
+                Epoch_rollover
+                  {
+                    epoch = epoch.epoch;
+                    rollover_block = rollover_block epoch.epoch;
+                    group_key = epoch.group.key;
+                  };
+              selection = state.active_epoch.group.participants;
+              deadline = state.block + Configuration.signing_block_timeout;
+            }
+            state.signatures
+        in
+        let state' =
+          { state with rollover = rollover'; signatures = signatures' }
+        in
         (state', [])
     | _ -> (state, [])
 
