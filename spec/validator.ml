@@ -1159,14 +1159,21 @@ struct
       let packet = Transaction_proposal { epoch; hash = transaction_hash } in
       let message = Abi.hash_typed_data packet in
       let signatures' =
-        StringMap.add message
-          {
-            status = Waiting_for_sign_request { responsible = None };
-            epoch = state.active_epoch;
-            packet;
-            selection = state.active_epoch.group.participants;
-            deadline = state.block + Configuration.signing_block_timeout;
-          }
+        StringMap.update message
+          (function
+            (* We only consider the first proposal for a given transaction and
+               epoch, this prevents validators from performing multiple signing
+               ceremonies for attesting the same packet. *)
+            | Some existing -> Some existing
+            | None ->
+                Some
+                  {
+                    status = Waiting_for_sign_request { responsible = None };
+                    epoch = state.active_epoch;
+                    packet;
+                    selection = state.active_epoch.group.participants;
+                    deadline = state.block + Configuration.signing_block_timeout;
+                  })
           state.signatures
       in
       let state' = { state with signatures = signatures' } in
