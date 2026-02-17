@@ -1084,7 +1084,7 @@ describe("OnchainProtocol", () => {
 		expect(setHash).toBeCalledWith(11, hash);
 	});
 
-	it("should delete tx on error if no additional tx was submitted", async () => {
+	it("should not delete tx on error", async () => {
 		const queue = new InMemoryQueue<ActionWithTimeout>();
 		const getTransactionCount = vi.fn();
 		const publicClient = {
@@ -1122,83 +1122,6 @@ describe("OnchainProtocol", () => {
 		sendTransaction.mockRejectedValueOnce(new Error("Test unexpected!"));
 		register.mockReturnValueOnce(10);
 		maxNonce.mockReturnValueOnce(10);
-		const protocol = new OnchainProtocol({
-			publicClient,
-			signingClient,
-			gasFeeEstimator,
-			consensus: TEST_CONSENSUS,
-			coordinator: TEST_COORDINATOR,
-			queue,
-			txStorage,
-			logger: testLogger,
-		});
-		protocol.process(action);
-		// Action was submitted and should be in the queue
-		expect(queue.peek()).toBeDefined();
-		await vi.waitFor(() => {
-			expect(deleteTx).toHaveBeenCalled();
-		});
-		// Tx was not stored, action should be kept
-		expect(queue.peek()).toBeDefined();
-		expect(getTransactionCount).toBeCalledTimes(1);
-		expect(getTransactionCount).toBeCalledWith({
-			address: entryPoint09Address,
-			blockTag: "latest",
-		});
-		expect(register).toBeCalledTimes(1);
-		expect(register).toBeCalledWith(tx, 10);
-		expect(estimateFees).toBeCalledTimes(1);
-		expect(sendTransaction).toBeCalledTimes(1);
-		expect(sendTransaction).toBeCalledWith({
-			...tx,
-			nonce: 10,
-			account,
-			chain,
-			maxFeePerGas: 200n,
-			maxPriorityFeePerGas: 100n,
-		});
-		expect(deleteTx).toBeCalledTimes(1);
-		expect(deleteTx).toBeCalledWith(10);
-	});
-
-	it("should not delete tx on error if additional tx was submitted", async () => {
-		const queue = new InMemoryQueue<ActionWithTimeout>();
-		const getTransactionCount = vi.fn();
-		const publicClient = {
-			getTransactionCount,
-		} as unknown as PublicClient;
-		const sendTransaction = vi.fn();
-		const chain = gnosisChiado;
-		const account = { address: entryPoint09Address };
-		const signingClient = {
-			account,
-			chain,
-			sendTransaction,
-		} as unknown as WalletClient<Transport, Chain, Account>;
-		const estimateFees = vi.fn();
-		const gasFeeEstimator = {
-			estimateFees,
-		} as unknown as GasFeeEstimator;
-		const register = vi.fn();
-		const setFees = vi.fn();
-		const maxNonce = vi.fn();
-		const deleteTx = vi.fn();
-		const txStorage = {
-			register,
-			setFees,
-			maxNonce,
-			delete: deleteTx,
-		} as unknown as TransactionStorage;
-
-		const [action, , tx] = TEST_ACTIONS[0];
-		getTransactionCount.mockResolvedValueOnce(10);
-		estimateFees.mockResolvedValueOnce({
-			maxFeePerGas: 200n,
-			maxPriorityFeePerGas: 100n,
-		});
-		sendTransaction.mockRejectedValueOnce(new Error("Test unexpected!"));
-		register.mockReturnValueOnce(10);
-		maxNonce.mockReturnValueOnce(11);
 		const protocol = new OnchainProtocol({
 			publicClient,
 			signingClient,

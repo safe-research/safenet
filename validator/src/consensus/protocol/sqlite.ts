@@ -225,14 +225,6 @@ export class SqliteTxStorage implements TransactionStorage {
 		return Number(result.lastInsertRowid);
 	}
 
-	delete(nonce: number): void {
-		const updateStmt = this.#db.prepare(`
-			DELETE FROM transaction_storage
-			WHERE nonce = ?;
-		`);
-		updateStmt.run(nonce);
-	}
-
 	maxNonce(): number | null {
 		const result = this.#db
 			.prepare(`
@@ -295,7 +287,11 @@ export class SqliteTxStorage implements TransactionStorage {
 
 	setExecuted(nonce: number): void {
 		// Executed txs are delete to avoid the database from growing
-		this.delete(nonce);
+		const updateStmt = this.#db.prepare(`
+			DELETE FROM transaction_storage
+			WHERE nonce = ?;
+		`);
+		updateStmt.run(nonce);
 	}
 
 	setAllBeforeAsExecuted(nonce: number): number {

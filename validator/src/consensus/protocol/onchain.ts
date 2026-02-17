@@ -39,7 +39,6 @@ export type EthTransactionDetails = { nonce: number; fees: FeeValues | null; has
 
 export interface TransactionStorage {
 	register(tx: EthTransactionData, minNonce: number): number;
-	delete(nonce: number): void;
 	setFees(nonce: number, fees: FeeValues): void;
 	setHash(nonce: number, txHash: Hex): void;
 	setExecuted(nonce: number): void;
@@ -222,15 +221,9 @@ export class OnchainProtocol extends BaseProtocol {
 			...txData,
 			nonce,
 			fees: null,
-		}).catch((e) => {
-			// Check if this tx is still the latest, if so delete it and throw error
-			// Retrying should happen on action level, which allows timeouts to apply
-			if (nonce === this.#txStorage.maxNonce()) {
-				this.#txStorage.delete(nonce);
-				throw e;
-			}
-			// If another action was already submitted it is important to prevent potential unused nonces
-			// In this case the transaction is kept and retried until executed (to use up the nonce)
+		}).catch((_e) => {
+			// Transaction was already registered, and will be handled in the resubmission flow.
+			// It will be retried until executed (to use up the nonce).
 			// No error is thrown to avoid that the action is retried.
 			return null;
 		});
