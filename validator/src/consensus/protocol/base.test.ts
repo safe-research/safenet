@@ -169,7 +169,6 @@ describe("BaseProtocol", () => {
 			await vi.waitFor(() => {
 				expect(timeoutSpy).toBeCalledTimes(i);
 			});
-			console.log({ i });
 			const delay = Math.min(i * 1000, 5000);
 			expect(timeoutSpy).toHaveBeenLastCalledWith(expect.any(Function), delay);
 			vi.advanceTimersByTime(delay);
@@ -180,6 +179,103 @@ describe("BaseProtocol", () => {
 		expect(popSpy).toBeCalledTimes(1);
 		// Queue should be empty now
 		expect(queue.peek()).toBeUndefined();
+	});
+
+	it("should reset delay after successfull action submission", async () => {
+		const timeoutSpy = vi.spyOn(global, "setTimeout");
+		const queue = new InMemoryQueue<ActionWithTimeout>();
+		const pushSpy = vi.spyOn(queue, "push");
+		const peekSpy = vi.spyOn(queue, "peek");
+		const popSpy = vi.spyOn(queue, "pop");
+		const protocol = new TestProtocol(queue, testLogger);
+		const protocolSpy = vi.spyOn(protocol, "requestSignature");
+		protocolSpy.mockRejectedValueOnce("Test Error");
+		protocolSpy.mockRejectedValueOnce("Test Error");
+		protocolSpy.mockResolvedValueOnce(zeroHash);
+		protocolSpy.mockRejectedValueOnce("Test Error");
+		expect(queue.peek()).toBeUndefined();
+		const action = TEST_ACTIONS[0][0];
+		protocol.process(action, 50000);
+		const actionWithTimeout = {
+			...action,
+			validUntil: Date.now() + 50000,
+		};
+		expect(queue.peek()).toStrictEqual(actionWithTimeout);
+		expect(pushSpy).toBeCalledTimes(1);
+		expect(pushSpy).toBeCalledWith(actionWithTimeout);
+		// Called 3 times: 2 times in the test, 1 time in the implementation
+		expect(peekSpy).toBeCalledTimes(3);
+		// Check if retry was scheduled via setTimeout
+		for (let i = 1; i <= 2; i++) {
+			await vi.waitFor(() => {
+				expect(timeoutSpy).toBeCalledTimes(i);
+			});
+			const delay = Math.min(i * 1000, 5000);
+			expect(timeoutSpy).toHaveBeenLastCalledWith(expect.any(Function), delay);
+			vi.advanceTimersByTime(delay);
+		}
+		vi.advanceTimersByTime(5000);
+		await vi.waitFor(() => {
+			expect(popSpy).toHaveBeenCalled();
+		});
+		expect(popSpy).toBeCalledTimes(1);
+		// Queue should be empty now
+		expect(queue.peek()).toBeUndefined();
+		expect(timeoutSpy).toBeCalledTimes(2);
+		protocol.process(action, 50000);
+		expect(queue.peek()).toBeDefined();
+		await vi.waitFor(() => {
+			expect(timeoutSpy).toBeCalledTimes(3);
+		});
+		// Check that retry delay was reset
+		expect(timeoutSpy).toHaveBeenLastCalledWith(expect.any(Function), 1000);
+	});
+
+	it("should reset delay after action timed out", async () => {
+		const timeoutSpy = vi.spyOn(global, "setTimeout");
+		const queue = new InMemoryQueue<ActionWithTimeout>();
+		const pushSpy = vi.spyOn(queue, "push");
+		const peekSpy = vi.spyOn(queue, "peek");
+		const popSpy = vi.spyOn(queue, "pop");
+		const protocol = new TestProtocol(queue, testLogger);
+		expect(queue.peek()).toBeUndefined();
+		const action = TEST_ACTIONS[0][0];
+		protocol.process(action, 3000);
+		const actionWithTimeout = {
+			...action,
+			validUntil: Date.now() + 3000,
+		};
+		expect(queue.peek()).toStrictEqual(actionWithTimeout);
+		expect(pushSpy).toBeCalledTimes(1);
+		expect(pushSpy).toBeCalledWith(actionWithTimeout);
+		// Called 3 times: 2 times in the test, 1 time in the implementation
+		expect(peekSpy).toBeCalledTimes(3);
+		// Check if retry was scheduled via setTimeout
+		for (let i = 1; i <= 2; i++) {
+			await vi.waitFor(() => {
+				expect(timeoutSpy).toBeCalledTimes(i);
+			});
+			const delay = Math.min(i * 1000, 5000);
+			expect(timeoutSpy).toHaveBeenLastCalledWith(expect.any(Function), delay);
+			vi.advanceTimersByTime(delay);
+		}
+		vi.advanceTimersByTime(5000);
+		await vi.waitFor(() => {
+			expect(popSpy).toHaveBeenCalled();
+		});
+		expect(popSpy).toBeCalledTimes(1);
+		// Queue should be empty now
+		expect(queue.peek()).toBeUndefined();
+		expect(timeoutSpy).toBeCalledTimes(2);
+		expect(peekSpy).toBeCalledTimes(7);
+		protocol.process(action, 50000);
+		expect(queue.peek()).toBeDefined();
+		expect(peekSpy).toBeCalledTimes(9);
+		await vi.waitFor(() => {
+			expect(timeoutSpy).toBeCalledTimes(3);
+		});
+		// Check that retry delay was reset
+		expect(timeoutSpy).toHaveBeenLastCalledWith(expect.any(Function), 1000);
 	});
 
 	it("should be able to enqueue multiple actions", async () => {

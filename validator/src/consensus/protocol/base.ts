@@ -51,6 +51,9 @@ export abstract class BaseProtocol implements SafenetProtocol {
 	}
 
 	private checkNextAction() {
+		// Reset retry delay
+		const lastRetryDelay = this.#retryDelay;
+		this.#retryDelay = undefined;
 		// An action is still processing
 		if (this.#currentAction !== undefined) return;
 		const action = this.#actionQueue.peek();
@@ -71,12 +74,11 @@ export abstract class BaseProtocol implements SafenetProtocol {
 				this.#logger.info(`Sent action for ${action.id} transaction`, { ...actionSpan, transactionHash });
 				this.#actionQueue.pop();
 				this.#currentAction = undefined;
-				this.#retryDelay = undefined;
 				this.checkNextAction();
 			})
 			.catch((err) => {
 				// With each retry increase the delay until the maximum is reached
-				this.#retryDelay = Math.min((this.#retryDelay ?? 0) + ERROR_RETRY_DELAY, ERROR_RETRY_MAX_DELAY);
+				this.#retryDelay = Math.min((lastRetryDelay ?? 0) + ERROR_RETRY_DELAY, ERROR_RETRY_MAX_DELAY);
 				this.#logger.info(`Action failed, will retry after a delay of ${this.#retryDelay} ms!`, {
 					...actionSpan,
 					error: formatError(err),
