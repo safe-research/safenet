@@ -6,7 +6,7 @@ import {Script, console} from "@forge-std/Script.sol";
 contract ExtractExecutableAtScript is Script {
     function setUp() public {}
 
-    function run() public {
+    function run() public view {
         // Read the executableAt value from run-latest.json using the chain ID
         string memory json = vm.readFile(
             string.concat(

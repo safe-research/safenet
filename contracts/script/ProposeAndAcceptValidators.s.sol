@@ -2,7 +2,6 @@
 pragma solidity ^0.8.30;
 
 import {Script, console} from "@forge-std/Script.sol";
-import {IERC20} from "@oz/token/ERC20/IERC20.sol";
 import {Staking} from "../src/Staking.sol";
 
 contract ProposeAndAcceptValidatorsScript is Script {
