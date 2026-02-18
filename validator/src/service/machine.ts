@@ -1,4 +1,5 @@
 import type { Hex } from "viem";
+import { formatError } from "zod/v4/core";
 import type { KeyGenClient } from "../consensus/keyGen/client.js";
 import type { ProtocolAction, SafenetProtocol } from "../consensus/protocol/types.js";
 import type { SigningClient } from "../consensus/signing/client.js";
@@ -122,7 +123,7 @@ export class SafenetStateMachine {
 				this.#metrics.transitions.labels({ result: "success" }).inc();
 			})
 			.catch((error) => {
-				this.#logger.warn(`Error performing state transition '${transition.id}'.`, { error });
+				this.#logger.warn(`Error performing state transition '${transition.id}'.`, { error: formatError(error) });
 				this.#metrics.transitions.labels({ result: "failure" }).inc();
 			})
 			.finally(() => {

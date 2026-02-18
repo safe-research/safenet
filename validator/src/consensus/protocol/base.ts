@@ -1,4 +1,5 @@
 import type { Address, Hex } from "viem";
+import { formatError } from "../../utils/errors.js";
 import type { Logger } from "../../utils/logging.js";
 import { InMemoryQueue, type Queue } from "../../utils/queue.js";
 import type {
@@ -68,8 +69,9 @@ export abstract class BaseProtocol implements SafenetProtocol {
 				this.checkNextAction();
 			})
 			.catch((err) => {
-				this.#logger.info("Action failed, will retry after a delay!", { ...actionSpan, ...err });
+				this.#logger.info("Action failed, will retry after a delay!", { ...actionSpan, error: formatError(err) });
 				this.#currentAction = undefined;
+				// TODO: Implement global in memory backoff, don't try processing actions while backoff
 				setTimeout(() => {
 					this.checkNextAction();
 				}, ERROR_RETRY_DELAY);

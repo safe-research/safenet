@@ -7,6 +7,7 @@ import type { WatcherConfig } from "./machine/transitions/watcher.js";
 import { createValidatorService } from "./service/service.js";
 import type { ProtocolConfig } from "./types/interfaces.js";
 import { validatorConfigSchema } from "./types/schemas.js";
+import { formatError } from "./utils/errors.js";
 import { createLogger } from "./utils/logging.js";
 import { createMetricsService } from "./utils/metrics.js";
 
@@ -78,7 +79,7 @@ process.on("SIGINT", shutdown);
 process.on("SIGTERM", shutdown);
 
 Promise.all([service.start(), metrics.start()]).catch((error: unknown) => {
-	logger.error("Service failed to start.", { error });
+	logger.error("Service failed to start.", { error: formatError(error) });
 	process.exit(1);
 });
 

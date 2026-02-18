@@ -5,6 +5,7 @@ import {
 	encodeFunctionData,
 	type FeeValuesEIP1559,
 	type Hex,
+	keccak256,
 	NonceTooLowError,
 	type PublicClient,
 	type SimulateContractParameters,
@@ -14,6 +15,7 @@ import {
 } from "viem";
 import type { FrostPoint, GroupId, SignatureId } from "../../frost/types.js";
 import { CONSENSUS_FUNCTIONS, COORDINATOR_FUNCTIONS } from "../../types/abis.js";
+import { formatError } from "../../utils/errors.js";
 import type { Logger } from "../../utils/logging.js";
 import { maxBigInt } from "../../utils/math.js";
 import type { Queue } from "../../utils/queue.js";
@@ -163,11 +165,13 @@ export class OnchainProtocol extends BaseProtocol {
 						this.#txStorage.setExecuted(tx.nonce);
 						continue;
 					}
-					this.#logger.warn(`Error submitting transaction for ${tx.nonce}!`, { error });
+					this.#logger.warn(`Error submitting transaction for ${tx.nonce}!`, { error: formatError(error) });
+					// If an error occurs skip rest of pending transactions, to avoid triggering more errors
+					return;
 				}
 			}
 		} catch (error) {
-			this.#logger.error("Error while checking pending transactions.", { error });
+			this.#logger.error("Error while checking pending transactions.", { error: formatError(error) });
 		}
 	}
 
@@ -186,7 +190,7 @@ export class OnchainProtocol extends BaseProtocol {
 
 		// Store fees before submission in case an error occurs
 		this.#txStorage.setFees(tx.nonce, fees);
-		const txHash = await this.#signingClient.sendTransaction({
+		const signedTx = await this.#signingClient.signTransaction({
 			to: tx.to,
 			value: tx.value,
 			data: tx.data,
@@ -196,8 +200,10 @@ export class OnchainProtocol extends BaseProtocol {
 			account: this.#signingClient.account,
 			...fees,
 		});
+		const txHash = keccak256(signedTx);
 		this.#txStorage.setHash(tx.nonce, txHash);
-		return txHash;
+		this.#logger.debug(`Submitting transaction for nonce ${tx.nonce}!`, { tx, txHash, fees });
+		return this.#signingClient.sendRawTransaction({ serializedTransaction: signedTx });
 	}
 
 	private async submitAction(action: SimulateContractParameters): Promise<Hex | null> {
