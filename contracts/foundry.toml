@@ -12,3 +12,7 @@ remappings = [
   "@oz/=lib/openzeppelin-contracts/contracts/",
 ]
 auto_detect_remappings = false
+
+fs_permissions = [
+  { access = "read-write", path = "deployments.json" },
+  { access = "read", path = "build/broadcast/ProposeAndAcceptValidators.s.sol" }]
