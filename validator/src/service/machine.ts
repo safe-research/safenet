@@ -1,5 +1,4 @@
 import type { Hex } from "viem";
-import { formatError } from "zod/v4/core";
 import type { KeyGenClient } from "../consensus/keyGen/client.js";
 import type { ProtocolAction, SafenetProtocol } from "../consensus/protocol/types.js";
 import type { SigningClient } from "../consensus/signing/client.js";
@@ -27,6 +26,7 @@ import { TransitionState } from "../machine/state/local.js";
 import type { StateStorage } from "../machine/storage/types.js";
 import type { EventTransition, StateTransition } from "../machine/transitions/types.js";
 import type { ConsensusState, MachineConfig, MachineStates, StateDiff } from "../machine/types.js";
+import { formatError } from "../utils/errors.js";
 import type { Logger } from "../utils/logging.js";
 import type { Metrics } from "../utils/metrics.js";
 import { InMemoryQueue, type Queue } from "../utils/queue.js";

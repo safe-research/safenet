@@ -13,6 +13,6 @@ export const formatError = (err: unknown): unknown => {
 			// Exclude 'cause' to keep JSON logs single-line
 		};
 	}
-    
+
 	return err;
 };
