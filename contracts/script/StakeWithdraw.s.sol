@@ -5,8 +5,6 @@ import {Script, console} from "@forge-std/Script.sol";
 import {Staking} from "../src/Staking.sol";
 
 contract StakeWithdrawScript is Script {
-    function setUp() public {}
-
     function run() public {
         uint256 privateKey = vm.envUint("PRIVATE_KEY");
 
@@ -34,7 +32,7 @@ contract StakeWithdrawScript is Script {
             require(block.timestamp >= claimableAt, "Withdrawal not executable yet");
 
             staking.claimWithdrawal();
-            console.log("Claimed withdrawal of %d SAFE tokens for validator %s", amountToClaim, validator);
+            console.log("Claimed withdrawal of %d SAFE tokens", amountToClaim);
         }
 
         vm.stopBroadcast();

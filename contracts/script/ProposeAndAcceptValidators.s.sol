@@ -5,8 +5,6 @@ import {Script, console} from "@forge-std/Script.sol";
 import {Staking} from "../src/Staking.sol";
 
 contract ProposeAndAcceptValidatorsScript is Script {
-    function setUp() public {}
-
     function run() public {
         uint256 privateKey = vm.envUint("PRIVATE_KEY");
 

@@ -6,8 +6,6 @@ import {IERC20} from "@oz/token/ERC20/IERC20.sol";
 import {Staking} from "../src/Staking.sol";
 
 contract StakeSafeScript is Script {
-    function setUp() public {}
-
     function run() public {
         uint256 privateKey = vm.envUint("PRIVATE_KEY");
 

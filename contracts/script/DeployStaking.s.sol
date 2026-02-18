@@ -9,8 +9,6 @@ import {DeterministicDeployment} from "@script/util/DeterministicDeployment.sol"
 contract StakingScript is Script {
     using DeterministicDeployment for DeterministicDeployment.Factory;
 
-    function setUp() public {}
-
     function run() public returns (Staking staking) {
         uint256 privateKey = vm.envUint("PRIVATE_KEY");
 

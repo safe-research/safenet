@@ -10,7 +10,7 @@ import {DeterministicDeployment} from "@script/util/DeterministicDeployment.sol"
 
 contract MyToken is ERC20, Ownable, ERC20Permit {
     constructor(address owner) ERC20("MyToken", "MTK") Ownable(owner) ERC20Permit("MyToken") {
-        _mint(owner, 100000 * 10 ** decimals());
+        _mint(owner, 100_000 * 10 ** decimals());
     }
 
     function mint(address to, uint256 amount) public onlyOwner {
@@ -20,8 +20,6 @@ contract MyToken is ERC20, Ownable, ERC20Permit {
 
 contract ERC20Script is Script {
     using DeterministicDeployment for DeterministicDeployment.Factory;
-
-    function setUp() public {}
 
     function run() public returns (MyToken erc20) {
         uint256 privateKey = vm.envUint("PRIVATE_KEY");

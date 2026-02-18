@@ -1,6 +1,6 @@
 # Deployment
 
-All the commands has to be run from the `contracts` directory. Make sure to fill the `.env` file with the correct values before running the commands.
+All the commands have to be run from the `contracts` directory. Make sure to fill the `.env` file with the correct values before running the commands.
 
 ## Staking
 
