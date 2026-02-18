@@ -2,6 +2,7 @@ import type { SafenetProtocol } from "../../consensus/protocol/types.js";
 import type { SigningClient } from "../../consensus/signing/client.js";
 import type { VerificationEngine } from "../../consensus/verify/engine.js";
 import type { SafeTransactionPacket } from "../../consensus/verify/safeTx/schemas.js";
+import { formatError } from "../../utils/errors.js";
 import type { Logger } from "../../utils/logging.js";
 import type { TransactionProposedEvent } from "../transitions/types.js";
 import type { ConsensusState, MachineConfig, StateDiff } from "../types.js";
@@ -34,7 +35,7 @@ export const handleTransactionProposed = async (
 	const result = await verificationEngine.verify(packet);
 	if (result.status === "invalid") {
 		// Invalid packed, don't update state
-		logger?.info?.("Invalid message", { tx: event.transaction, error: result.error });
+		logger?.info?.("Invalid message", { tx: event.transaction, error: formatError(result.error) });
 		return {};
 	}
 	const message = result.packetId;

@@ -3,6 +3,7 @@ import type { Prettify, PublicClient } from "viem";
 import z from "zod";
 import { ALL_EVENTS } from "../../types/abis.js";
 import type { ProtocolConfig } from "../../types/interfaces.js";
+import { formatError } from "../../utils/errors.js";
 import type { Logger } from "../../utils/logging.js";
 import { type Stop, type WatchParams, watchBlocksAndEvents } from "../../watcher/index.js";
 import { logToTransition } from "./onchain.js";
@@ -96,7 +97,7 @@ export class OnchainTransitionWatcher {
 			}
 			this.#onTransition(transition);
 		} catch (error) {
-			this.#logger.error("An error occurred handling a state transition.", { error });
+			this.#logger.error("An error occurred handling a state transition.", { error: formatError(error) });
 		}
 	}
 

@@ -110,7 +110,7 @@ export type ConsensusDiff = {
 export type StateDiff = {
 	consensus?: ConsensusDiff;
 	rollover?: RolloverState;
-	signing?: [SignatureId, SigningState?];
+	signing?: [Hex, SigningState?];
 	actions?: ProtocolAction[];
 };
 
@@ -132,12 +132,12 @@ export type ConsensusState = Readonly<{
 
 export type MutableMachineStates = {
 	rollover: RolloverState;
-	signing: Record<SignatureId, SigningState>;
+	signing: Record<Hex, SigningState>;
 };
 
 export type MachineStates = Readonly<{
 	rollover: Readonly<RolloverState>;
-	signing: Readonly<Record<SignatureId, Readonly<SigningState>>>;
+	signing: Readonly<Record<Hex, Readonly<SigningState>>>;
 }>;
 
 export type MachineConfig = {

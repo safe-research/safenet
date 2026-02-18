@@ -26,6 +26,7 @@ import { TransitionState } from "../machine/state/local.js";
 import type { StateStorage } from "../machine/storage/types.js";
 import type { EventTransition, StateTransition } from "../machine/transitions/types.js";
 import type { ConsensusState, MachineConfig, MachineStates, StateDiff } from "../machine/types.js";
+import { formatError } from "../utils/errors.js";
 import type { Logger } from "../utils/logging.js";
 import type { Metrics } from "../utils/metrics.js";
 import { InMemoryQueue, type Queue } from "../utils/queue.js";
@@ -122,7 +123,7 @@ export class SafenetStateMachine {
 				this.#metrics.transitions.labels({ result: "success" }).inc();
 			})
 			.catch((error) => {
-				this.#logger.warn(`Error performing state transition '${transition.id}'.`, { error });
+				this.#logger.warn(`Error performing state transition '${transition.id}'.`, { error: formatError(error) });
 				this.#metrics.transitions.labels({ result: "failure" }).inc();
 			})
 			.finally(() => {
