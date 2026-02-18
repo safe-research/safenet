@@ -15,6 +15,7 @@ contract StakeWithdrawScript is Script {
         uint256 amount = vm.envUint("WITHDRAW_AMOUNT");
 
         // Read the staking contract address from deployments.json using the chain ID
+        // forge-lint: disable-next-line(unsafe-cheatcode)
         string memory json = vm.readFile(string.concat("deployments.json"));
         Staking staking = Staking(vm.parseJsonAddress(json, string.concat(".", vm.toString(block.chainid), ".staking")));
 

@@ -16,6 +16,7 @@ contract ProposeAndAcceptValidatorsScript is Script {
         bool[] memory isRegistration = vm.envBool("IS_REGISTRATION", ",");
 
         // Read the staking contract address from deployments.json using the chain ID
+        // forge-lint: disable-next-line(unsafe-cheatcode)
         string memory json = vm.readFile(string.concat("deployments.json"));
         address stakingContract = vm.parseJsonAddress(json, string.concat(".", vm.toString(block.chainid), ".staking"));
         Staking staking = Staking(stakingContract);

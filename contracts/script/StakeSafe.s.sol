@@ -17,6 +17,7 @@ contract StakeSafeScript is Script {
         uint256 amount = vm.envUint("STAKE_AMOUNT");
 
         // Read the staking contract address from deployments.json using the chain ID
+        // forge-lint: disable-next-line(unsafe-cheatcode)
         string memory json = vm.readFile(string.concat("deployments.json"));
         address stakingContract = vm.parseJsonAddress(json, string.concat(".", vm.toString(block.chainid), ".staking"));
 

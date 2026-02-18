@@ -6,6 +6,7 @@ import {Script, console} from "@forge-std/Script.sol";
 contract ExtractExecutableAtScript is Script {
     function run() public view {
         // Read the executableAt value from run-latest.json using the chain ID
+        // forge-lint: disable-next-line(unsafe-cheatcode)
         string memory json = vm.readFile(
             string.concat(
                 "build/broadcast/ProposeAndAcceptValidators.s.sol/", vm.toString(block.chainid), "/run-latest.json"
