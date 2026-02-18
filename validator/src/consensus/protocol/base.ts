@@ -21,10 +21,12 @@ import type {
 
 const ACTION_TIMEOUT = 10 * 60 * 1000; // 10 minutes
 const ERROR_RETRY_DELAY = 1000;
+const ERROR_RETRY_MAX_DELAY = 5000;
 
 export abstract class BaseProtocol implements SafenetProtocol {
 	#actionQueue: Queue<ActionWithTimeout> = new InMemoryQueue<ActionWithTimeout>();
 	#currentAction?: ActionWithTimeout;
+	#retryDelay?: number;
 	#logger: Logger;
 
 	abstract chainId(): bigint;
@@ -42,11 +44,14 @@ export abstract class BaseProtocol implements SafenetProtocol {
 			...action,
 			validUntil: Date.now() + timeout,
 		});
-		this.checkNextAction();
+		// If no retry is scheduled, try immediate processing
+		if (this.#retryDelay === undefined) {
+			this.checkNextAction();
+		}
 	}
 
 	private checkNextAction() {
-		// Still processing
+		// An action is still processing
 		if (this.#currentAction !== undefined) return;
 		const action = this.#actionQueue.peek();
 		// Nothing queued
@@ -66,15 +71,20 @@ export abstract class BaseProtocol implements SafenetProtocol {
 				this.#logger.info(`Sent action for ${action.id} transaction`, { ...actionSpan, transactionHash });
 				this.#actionQueue.pop();
 				this.#currentAction = undefined;
+				this.#retryDelay = undefined;
 				this.checkNextAction();
 			})
 			.catch((err) => {
-				this.#logger.info("Action failed, will retry after a delay!", { ...actionSpan, error: formatError(err) });
+				// With each retry increase the delay until the maximum is reached
+				this.#retryDelay = Math.min((this.#retryDelay ?? 0) + ERROR_RETRY_DELAY, ERROR_RETRY_MAX_DELAY);
+				this.#logger.info(`Action failed, will retry after a delay of ${this.#retryDelay} ms!`, {
+					...actionSpan,
+					error: formatError(err),
+				});
 				this.#currentAction = undefined;
-				// TODO: Implement global in memory backoff, don't try processing actions while backoff
 				setTimeout(() => {
 					this.checkNextAction();
-				}, ERROR_RETRY_DELAY);
+				}, this.#retryDelay);
 			});
 	}
 
