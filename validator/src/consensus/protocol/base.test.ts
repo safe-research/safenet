@@ -97,7 +97,7 @@ describe("BaseProtocol", () => {
 		expect(queue.peek()).toBeUndefined();
 	});
 
-	it("should trigger immediate processing if retry is scheduled", async () => {
+	it("should not trigger immediate processing if retry is scheduled", async () => {
 		const timeoutSpy = vi.spyOn(global, "setTimeout");
 		const queue = new InMemoryQueue<ActionWithTimeout>();
 		const pushSpy = vi.spyOn(queue, "push");

@@ -51,11 +51,11 @@ export abstract class BaseProtocol implements SafenetProtocol {
 	}
 
 	private checkNextAction() {
+		// An action is still processing
+		if (this.#currentAction !== undefined) return;
 		// Reset retry delay
 		const lastRetryDelay = this.#retryDelay;
 		this.#retryDelay = undefined;
-		// An action is still processing
-		if (this.#currentAction !== undefined) return;
 		const action = this.#actionQueue.peek();
 		// Nothing queued
 		if (action === undefined) return;
