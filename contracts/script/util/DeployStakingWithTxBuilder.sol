@@ -16,7 +16,7 @@ contract DeployStakingWithTxBuilderScript is Script {
         uint256 configTimeDelay = vm.envUint("STAKING_CONFIG_TIME_DELAY");
         string memory safe = vm.toString(vm.envAddress("SAFE"));
         string memory safeOwner = vm.toString(vm.envAddress("SAFE_OWNER"));
-        string memory chainId = vm.toString(vm.envUint("CHAIN_ID"));
+        string memory chainId = vm.toString(vm.envOr("CHAIN_ID", uint256(1)));
         string memory factory = vm.toString(DeterministicDeployment.Factory.unwrap(DeterministicDeployment.SAFE_SINGLETON_FACTORY));
 
         // Safe Tx Builder uses millisecond timestamps in exports.
