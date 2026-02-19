@@ -72,10 +72,9 @@ library FROSTSignatureShares {
      * @return signature The updated, accumulated group signature after incorporating the new share.
      * @dev This function performs two key actions:
      *      1. Authorization: It verifies using a Merkle `proof` that the `identifier` is part of the set of signers
-     *         defined by the `root`.
+     *         with the specified share commitment and coefficient defined by the `root`.
      *      2. Aggregation: It adds the participant's share to the collective group signature. The final group
-     *         signature is `(R, z)` where
-     *         `R = ∑ R_i` and `z = ∑ z_i`.
+     *         signature is `(R, z)` where `R = ∑ R_i` and `z = ∑ z_i`.
      */
     function register(
         T storage self,

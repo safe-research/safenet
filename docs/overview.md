@@ -27,6 +27,14 @@ For the initial beta release, Safenet validators communicate entirely on Gnosis 
 
 That being said, **onchain communication does not scale well with a large number of validators.** (in fact, it scales quadratically[^scale] with the number of validators). In the future, Safenet will have its own peer-to-peer network enabling much larger validator sets.
 
+#### `Consensus` Contract
+
+The consensus contract is responsible for tracking the current epoch, as well as providing an interface for clients to request attestations to Safe transactions.
+
+#### `FROSTCoordinator` Contract
+
+The coordinator contract is responsible for coordinating and verifying the various cryptographic protocols required by the Safenet consensus contract.
+
 ## FROST
 
 The Flexible Round-Optimized Schnorr Threshold (FROST for short)[^rfc9591] protocol is at the core of the cryptographic guarantees provided by Safenet. FROST is a threshold signature scheme where a set of _participants_ share a _group key_, and a _selection_ of at least a _threshold_ of the participants can come together in a _signing ceremony_ to generate a signature for that group key.
@@ -43,37 +51,43 @@ FROST requires a key generation phase to setup _signing key shares_ for each par
 
 FROST signing ceremonies produce Schnorr signatures for the group key with at a selection of participants. The selection does not need to include all participants and only needs to be larger than the group threshold. Safenet's FROST implementation closely follows RFC 9591[^rfc9591], with only one small change to accommodate for the onchain communication channel:
 
-- Nonces are precomputed and committed to in chunks onchain before the signing ceremony starts. This is required in order to prevent Wagner's generalized birthday attack. The commitment to a chunk is done as a Merkle root, where individual nonce pairs are revealed per signing ceremony with a Merkle proof (to ensure the nonce pair matches what was originally committed to in the chunk).
+- Nonces are precomputed and committed to in chunks onchain before the signing ceremony starts. This is required in order to prevent Wagner's generalized birthday attack. The commitment to a chunk is done as a Merkle root, where individual nonce pairs are revealed per signing ceremony with a Merkle proof (to ensure the nonce pair matches what was originally committed to in the chunk). The chunk size was to be a power of 2 and is set to 1024, its exact value was chosen by "vibes" such that it is small enough that it can be comfortably computed in the time between two blocks, but large enough that chunks don't need to be committed too often onchain.
+- Signature shares are aggregated onchain, allowing for the final Schnorr signature to be known - and verifiable - onchain. In order to block dishonest participants from influencing the signature aggregation, shares are collected and grouped by a _selection root_: a Merkle root representing the participant selection with their publicly computable participant signature commitment share `R_i` and Lagrange coefficient `l_i`. Since all honest participants use the same selection, and can compute the same selection root, they will all contribute to the same aggregate signature. Dishonest participants cannot incorrectly influence the aggregate signature as their provided signature shares are verified onchain. Additionally dishonest participants cannot DoS the signature ceremony process indefinitely, as the honest validators will simply exclude a validator that acts dishonestly from the selection and they cannot generate a Merkle proof that they are part of a selection root from which they are excluded.
+- Signing ceremonies are started onchain and allocated a unique sequence number, taking advantage of the blockchain's absolute ordering of transactions. This ensures that a committed nonce can be used for one, and only one, signing ceremony, thus preventing nonce reuse which can leak signing key shares.
 
 ### Parameters
 
 - `min_group_size = ((total_validators * 2) / 3) + 1` To protect against the _shrinking quorum attack_, Safenet requires that the participant set must always be greater than two-thirds of the total registered participants. This prevents an attacker from forcing honest validators offline to gain control of a smaller, compromised quorum.
 - `threshold = (group_size / 2) + 1`: By requiring more than half of the participants to sign, Safenet ensures that only one valid consensus decision can exist at any time, preventing forks or competing attestations.
 
-## Epochs
+## Consensus
+
+### Epochs
 
 The network is segmented into _epochs_: periods of `0x5afe` (23294) blocks that fix a set of _participants_ from the complete validator set. During the epoch, all participants are expected to take part in _signing ceremonies_ to either attest to valid Safe transactions, or to the rollover to the next epoch. Each epoch corresponds to a new FROST KeyGen process including the participant set. This ensures that the validator key shares used for creating attestations as are periodically rotated. Therefore, each epoch has a new FROST group key.
 
 Epoch rollover, in other words changing to a new epoch after the previous one is over, requires an attestation. The previous epoch's FROST group needs to agree on what the new epoch's FROST group should be. By having the current epoch's participant set attest to each epoch rollover, we can create an _attestation chain_ in order to cryptographically verify the current epoch state. This works by starting by some well-known _genesis epoch_ and verifying each rollover attestation until the current epoch. This enables permissionless Safenet oracles to exist on all chains supported by the Safe smart account, and is key to implementing Safe transaction guards that prevent the execution of malicious Safe transactions.
 
-Failure to perform a key generation or sign an attestation to the epoch rollover before the start of an epoch will cause it to be skipped. In this case, the previous epoch will continue for another period, giving another chance for the validators to agree on a rollover. This ensures that the network can continue to produce transaction attestations under partial outages, allowing Safe smart accounts to continue to transaction with the added security from Safenet.
+In case of failure to perform a key generation, the dishonest participants are identified and removed from the participant set. If the new participant set is large enough (larger than `min_group_size` defined above), then KeyGen process for the new epoch is restarted and tried again. This means the epoch will potentially rollover to a smaller participant set. Note that the participant set will start again from the total validator set in the following epoch. If on the other hand the participant set becomes too small, there is a failure to sign an attestation to the epoch rollover, or the process does not complete before the start of the epoch, then it will be skipped entirely. In this case, the previous epoch will continue for another period, giving another chance for the validators to agree on a rollover. This ensures that the network can continue to produce transaction attestations under partial outages, allowing Safe smart accounts to continue to transaction with the added security from Safenet.
 
 > [!NOTE]
 > For the initial beta launch, the complete validator set will be fixed to a small group of 4-5 validators, and each epoch's participant set will try to include all of them. Offline validator(s) will be automatically excluded from epochs where they fail to participate in time, allowing the network to continue functioning in case of an intermittent outage from one of the nodes. In the future, we plan to increase the validator set size and allow operators to join permissionlessly.
 
-### State Diagram
+#### State Diagram
 
-``` mermaid
+```mermaid
 ---
 title: Epoch Rollover
 ---
 stateDiagram-v2
-	commit : Collecting Commitments
-	secret_share : Secret Sharing
-	confirm : Confirming
+	commit : KeyGen Collecting Commitments
+	secret_share : KeyGen Secret Sharing
+	confirm : KeyGen Confirming
+	propose: Waiting for Rollover Proposal
 	signing : Signing
-	success : Success
 	failure : Failure
+	success : Success
+	skipped : Skipped
 
 	[*] --> commit
 
@@ -86,16 +100,83 @@ stateDiagram-v2
 	secret_share --> failure : KeyGenComplained(compromised=true)<br>timeout
 
 	confirm --> confirm : KeyGenConfirmed(completed=false)<br>KeyGenComplained(compromised=false)<br>KeyGenComplaintResponded()
-	confirm --> signing : KeyGenConfirmed(completed=true)
-	confirm --> failure : KeyGenComplained(compromised=true)<br>complaint_timeout<br>confirm_timeout
+	confirm --> propose : KeyGenConfirmed(completed=true)
+	confirm --> failure : KeyGenComplained(compromised=true)<br>complaint_response_timeout<br>confirm_timeout
+
+	propose --> signing : EpochProposed()
+	propose --> failure : timeout
+
+	failure --> commit : len(remaining_participants) >= min_group_size
+	failure --> skipped : len(remaining_participants) < min_group_size
 
 	signing --> success : EpochStaged()
+	signing --> skipped : timeout
 
 	success --> [*]
-	failure --> [*]
+	skipped --> [*]
 ```
 
+### Attestations
 
+#### Transaction Attestations
+
+The main purpose of Safenet is to attest to Safe transactions. Attestations are crytographically verifiable FROST signatures, specifically, `secp256k1` Schnorr signatures. This allows Safenet attestations to be verifiable **on any EVM-compatible chain** (specifically, it requires the `ecrecover (0x1)` and `sha256 (0x2)` precompiles which are ubiquitously available). Transaction attestations are generated as part of FROST signing ceremonies with the signature aggregated onchain.
+
+Because FROST signatures only require a threshold of participants to be involved, Safenet is resilient to intermittent outages and/or malicious behavior of up to half of the validators participating in an epoch. In case a validator is not available or acts maliciously, it is removed from the selection of participants for a given transaction attestation so that the signing ceremony can be restarted and the transaction ultimately attested.
+
+> [!IMPORTANT]
+> In case of a severe outage where more than half of the participating validators in an epoch are down, Safe transactions cannot be attested.
+
+#### Epoch Rollover Attestations
+
+Epoch rollover attestations work in the exact same way as transaction attestations, with just a different signing message. The epoch rollover attestation guarantees that the participants of the current epoch agree to the new FROST group that will become in charge of the following epoch.
+
+> [!IMPORTANT]
+> Like with Safe transaction attestations, in case of a severe outage epoch rollover attestations will not be possible. This will prevent new epochs from starting, and cause the consensus to stay stuck in an old epoch. While in the older epoch, Safenet can continue to produce Safe transaction attestations, and will automatically recover once sufficient validators come online.
+
+#### State Diagram
+
+```mermaid
+---
+title: Attestations
+---
+stateDiagram-v2
+	request : Waiting for Signing Request
+	commit_nonces : Commiting Signing Nonce Pairs
+	share : Collecting Signing Shares
+	attest: Waiting for Attestation
+	failure : Failure
+	success : Success
+	skipped : Skipped
+
+	[*] --> request
+
+	request --> commit_nonces : Sign()
+	request --> failure : timeout
+
+	commit_nonces --> commit_nonces : SignRevealedNonces(completed=false)
+	commit_nonces --> share : SignRevealedNonces(completed=true)
+	commit_nonces --> failure : timeout
+
+	share --> share : SignShared()
+	share --> attest : SignCompleted()
+	share --> failure : timeout
+
+	attest --> success : EpochStaged()<br>TransactionAttested()
+	attest --> failure : timeout
+
+	failure --> request : len(remaining_selection) >= threshold
+	failure --> skipped : len(remaining_selection) < threshold
+
+	success --> [*]
+	skipped --> [*]
+```
+
+### Responsible Participant
+
+One caveat to having parts of the Safenet consensus be onchain, is that there are times where someone needs to do something to drive the protocol forward (for example, in case of a signing ceremony failure where it needs to be restarted so that a new sequence number is allocated for the new signature attempt). The protocol defines a _responsible participant_ for executing this onchain transaction in order to keep consensus moving. In order for the responsible participant to be determined without any ambiguity, it is defined to be the last participant to participate in the topic in question (for example, in case of a signing ceremony that fails because of a timeout waiting for nonce commitments to be revealed, it would be the last participant to reveal its nonce, based on transaction order in the block; note that if there are multiple simultaneous signing ceremonies taking place, it only considers the last participant **in the signing ceremony that needs to be restarted**, and not across all ongoing signing ceremonies).
+
+<!-- References -->
 
 [^rfc9591]: [RFC 9591 - The Flexible Round-Optimized Schnorr Threshold (FROST) Protocol for Two‑Round Schnorr Signatures](https://datatracker.ietf.org/doc/html/rfc9591)
 [^frost]: [FROST: Flexible Round-Optimized Schnorr Threshold Signatures](https://web.archive.org/web/20260218133025/https://eprint.iacr.org/2020/852.pdf)
