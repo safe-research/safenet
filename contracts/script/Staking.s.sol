@@ -18,29 +18,30 @@ contract StakingScript is Script {
         uint256 configTimeDelay = vm.envUint("STAKING_CONFIG_TIME_DELAY");
         uint256 factoryChoice = vm.envUint("FACTORY");
 
+        require(initialOwner != address(0), "Invalid initial owner address");
+        require(safeToken != address(0), "Invalid SAFE token address");
+        require(initialWithdrawalDelay != 0, "Invalid initial withdrawal delay");
+        require(configTimeDelay != 0, "Invalid configuration time delay");
+        require(
+            initialWithdrawalDelay <= configTimeDelay,
+            "Initial withdrawal delay must be less than or equal to config time delay"
+        );
+
+        DeterministicDeployment.Factory factory;
+
         if (factoryChoice == 1) {
-            // Deploy the Staking contract using the SafeSingletonFactory
-            staking = Staking(
-                DeterministicDeployment.SAFE_SINGLETON_FACTORY
-                    .deployWithArgs(
-                        bytes32(0),
-                        type(Staking).creationCode,
-                        abi.encode(initialOwner, safeToken, initialWithdrawalDelay, configTimeDelay)
-                    )
-            );
+            factory = DeterministicDeployment.SAFE_SINGLETON_FACTORY;
         } else if (factoryChoice == 2) {
-            // Deploy the Staking contract using the DeterministicDeployment factory
-            staking = Staking(
-                DeterministicDeployment.CANONICAL
-                    .deployWithArgs(
-                        bytes32(0),
-                        type(Staking).creationCode,
-                        abi.encode(initialOwner, safeToken, initialWithdrawalDelay, configTimeDelay)
-                    )
-            );
+            factory = DeterministicDeployment.CANONICAL;
         } else {
             revert("Invalid FACTORY choice");
         }
+
+        factory.deployWithArgs(
+            bytes32(0),
+            type(Staking).creationCode,
+            abi.encode(initialOwner, safeToken, initialWithdrawalDelay, configTimeDelay)
+        );
 
         vm.stopBroadcast();
 

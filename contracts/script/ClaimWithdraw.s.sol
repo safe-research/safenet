@@ -10,7 +10,7 @@ contract ClaimWithdrawScript is Script {
         vm.startBroadcast();
 
         // Calculate the staking contract address using the GetStakingAddress utility and the FACTORY environment variable
-        Staking staking = Staking(new GetStakingAddress().getStakingAddress(vm.envUint("FACTORY")));
+        Staking staking = Staking(new GetStakingAddress().getStakingAddress());
 
         // Check if it is a withdrawal initiation or claim
         (uint256 amountToClaim, uint256 claimableAt) = staking.getNextClaimableWithdrawal(msg.sender);

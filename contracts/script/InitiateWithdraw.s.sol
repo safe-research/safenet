@@ -9,12 +9,15 @@ contract InitiateWithdrawScript is Script {
     function run() public {
         vm.startBroadcast();
 
+        // Calculate the staking contract address using the GetStakingAddress utility and the FACTORY environment variable
+        Staking staking = Staking(new GetStakingAddress().getStakingAddress());
+
         // Required script arguments:
         address validator = vm.envAddress("WITHDRAW_VALIDATOR");
         uint256 amount = vm.envUint("WITHDRAW_AMOUNT");
 
-        // Calculate the staking contract address using the GetStakingAddress utility and the FACTORY environment variable
-        Staking staking = Staking(new GetStakingAddress().getStakingAddress(vm.envUint("FACTORY")));
+        require(validator != address(0), "Invalid validator address");
+        require(amount > 0, "Invalid withdrawal amount");
 
         // Check if enough amount available to withdraw with the validator
         uint256 stakedAmount = staking.stakes(msg.sender, validator);

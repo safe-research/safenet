@@ -81,6 +81,8 @@ npm run cmd:proposeValidators -w @safenet/contracts -- --rpc-url http://127.0.0.
 npm run cmd:acceptValidators -w @safenet/contracts -- --rpc-url http://127.0.0.1:8545 --broadcast --sender 0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266 --account anvil-1
 ```
 
+You could also set an environment variable `EXECUTABLE_AT` with the timestamp value to execute the validator changes at a specific time (after the delay is passed). If not set, it will try to read the event from the propose script output.
+
 ### Stake SAFE Token
 
 This step stakes the SAFE Token (or the selected ERC20 Token) into the staking contract for a particular validator. It also checks if there is enough allowance, if not, initiates a transaction to do the same.

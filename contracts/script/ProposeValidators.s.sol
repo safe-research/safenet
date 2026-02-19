@@ -13,8 +13,11 @@ contract ProposeValidatorsScript is Script {
         address[] memory validators = vm.envAddress("ADD_VALIDATORS", ",");
         bool[] memory isRegistration = vm.envBool("IS_REGISTRATION", ",");
 
+        require(validators.length == isRegistration.length, "Mismatched input lengths");
+        require(validators.length > 0, "No validators provided");
+
         // Calculate the staking contract address using the GetStakingAddress utility and the FACTORY environment variable
-        Staking staking = Staking(new GetStakingAddress().getStakingAddress(vm.envUint("FACTORY")));
+        Staking staking = Staking(new GetStakingAddress().getStakingAddress());
 
         staking.proposeValidators(validators, isRegistration);
 

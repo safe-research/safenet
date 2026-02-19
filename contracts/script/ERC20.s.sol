@@ -22,24 +22,19 @@ contract ERC20Script is Script {
 
     function run() public returns (MyToken erc20) {
         uint256 factoryChoice = vm.envUint("FACTORY");
+        DeterministicDeployment.Factory factory;
 
         vm.startBroadcast();
 
         if (factoryChoice == 1) {
-            // Deploy the Staking contract using the SafeSingletonFactory
-            erc20 = MyToken(
-                DeterministicDeployment.SAFE_SINGLETON_FACTORY
-                    .deployWithArgs(bytes32(0), type(MyToken).creationCode, abi.encode(msg.sender))
-            );
+            factory = DeterministicDeployment.SAFE_SINGLETON_FACTORY;
         } else if (factoryChoice == 2) {
-            // Deploy the Staking contract using the DeterministicDeployment factory
-            erc20 = MyToken(
-                DeterministicDeployment.CANONICAL
-                    .deployWithArgs(bytes32(0), type(MyToken).creationCode, abi.encode(msg.sender))
-            );
+            factory = DeterministicDeployment.CANONICAL;
         } else {
             revert("Invalid FACTORY choice");
         }
+
+        factory.deployWithArgs(bytes32(0), type(MyToken).creationCode, abi.encode(msg.sender));
 
         vm.stopBroadcast();
 
