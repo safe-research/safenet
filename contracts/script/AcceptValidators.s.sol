@@ -13,14 +13,16 @@ contract AcceptValidatorsScript is Script {
             // Read the executableAt value from run-latest.json using the chain ID
             // forge-lint: disable-next-line(unsafe-cheatcode)
             string memory runJson = vm.readFile(
-                string.concat("build/broadcast/ProposeValidators.s.sol/", vm.toString(block.chainid), "/run-latest.json")
+                string.concat(
+                    "build/broadcast/ProposeValidators.s.sol/", vm.toString(block.chainid), "/run-latest.json"
+                )
             );
             bytes32 actualEventSignature = keccak256("ValidatorsProposed(bytes32,address[],bool[],uint256)");
             bytes32 emittedEventSignature = vm.parseJsonBytes32(runJson, ".receipts[1].logs[0].topics[0]");
             require(actualEventSignature == emittedEventSignature, "Event signature mismatch");
 
             bytes memory proposeEventData = vm.parseJsonBytes(runJson, ".receipts[1].logs[0].data");
-            (,,executableAt) = abi.decode(proposeEventData, (address[], bool[], uint256));
+            (,, executableAt) = abi.decode(proposeEventData, (address[], bool[], uint256));
         }
 
         vm.startBroadcast();
