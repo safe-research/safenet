@@ -15,4 +15,5 @@ auto_detect_remappings = false
 
 fs_permissions = [
   { access = "read", path = "build/broadcast/ProposeValidators.s.sol" },
+  { access = "read-write", path = "transactions.json" },
 ]

@@ -14,8 +14,9 @@
 		"cmd:stakeSafe": "forge script StakeSafeScript",
 		"cmd:initiateWithdraw": "forge script InitiateWithdrawScript",
 		"cmd:claimWithdraw": "forge script ClaimWithdrawScript",
+		"coverage": "mkdir -p coverage && forge coverage --report lcov --report-file coverage/lcov.info",
 		"fix": "forge fmt",
 		"test": "forge test -vvv",
-		"coverage": "mkdir -p coverage && forge coverage --report lcov --report-file coverage/lcov.info"
+		"txBuilder:staking": "forge script DeployStakingWithTxBuilderScript"
 	}
 }
