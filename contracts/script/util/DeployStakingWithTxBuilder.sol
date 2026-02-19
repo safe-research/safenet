@@ -17,6 +17,7 @@ contract DeployStakingWithTxBuilderScript is Script {
         string memory safe = vm.toString(vm.envAddress("SAFE"));
         string memory safeOwner = vm.toString(vm.envAddress("SAFE_OWNER"));
         string memory chainId = vm.toString(vm.envUint("CHAIN_ID"));
+        string memory factory = vm.toString(DeterministicDeployment.Factory.unwrap(DeterministicDeployment.SAFE_SINGLETON_FACTORY));
 
         // Safe Tx Builder uses millisecond timestamps in exports.
         string memory createdAtStr = vm.toString(vm.unixTime() * 1000);
@@ -25,7 +26,7 @@ contract DeployStakingWithTxBuilderScript is Script {
         string memory txData = vm.toString(abi.encodePacked(bytes32(0), type(Staking).creationCode, constructorArgs));
 
         // Compute the tx-builder checksum from the canonical serialization (sorted keys, custom object format).
-        string memory checksum = _calculateTxBuilderChecksum(createdAtStr, chainId, safe, safeOwner, txData);
+        string memory checksum = _calculateTxBuilderChecksum(createdAtStr, chainId, safe, safeOwner, txData, factory);
 
         {
             // Emit a tx-builder compatible batch file with a precomputed checksum.
@@ -48,7 +49,9 @@ contract DeployStakingWithTxBuilderScript is Script {
                     safeOwner,
                     '","checksum":"',
                     checksum,
-                    '"},"transactions":[{"to":"0x914d7Fec6aaC8cd542e72Bca78B30650d45643d7","value":"0","data":"',
+                    '"},"transactions":[{"to":"',
+                    factory,
+                    '","value":"0","data":"',
                     txData,
                     '","contractMethod":null,"contractInputsValues":null}]}'
                 )
@@ -73,67 +76,42 @@ contract DeployStakingWithTxBuilderScript is Script {
         string memory chainId,
         string memory safeAddress,
         string memory safeOwner,
-        string memory txData
+        string memory txData,
+        string memory factory
     ) internal pure returns (string memory) {
         // Follows apps/tx-builder/src/lib/checksum.ts serialization rules.
         // Note: meta.name is forced to null for checksum calculation.
         string memory serialized = string(
             abi.encodePacked(
-                '{["chainId","createdAt","meta","transactions","version"]',
-                _jsonQuote(chainId), // Chain ID
-                ",",
+                '{["chainId","createdAt","meta","transactions","version"]"',
+                chainId, // Chain ID
+                '",',
                 createdAtStr,
-                ',{["createdFromOwnerAddress","createdFromSafeAddress","description","name","txBuilderVersion"]',
-                _jsonQuote(safeOwner),
-                ",",
-                _jsonQuote(safeAddress),
-                ",",
-                _jsonQuote("Safenet Staking Beta Deployment Transaction"),
-                ",",
+                ',{["createdFromOwnerAddress","createdFromSafeAddress","description","name","txBuilderVersion"]"',
+                safeOwner,
+                '","',
+                safeAddress,
+                '","',
+                "Safenet Staking Beta Deployment Transaction",
+                '",',
                 "null",
-                ",",
-                _jsonQuote("1.18.3"), // Tx Builder version
-                ",},",
+                ',"',
+                "1.18.3", // Tx Builder version
+                '",},',
                 '[{["contractInputsValues","contractMethod","data","to","value"]',
-                "null,null,",
-                _jsonQuote(txData),
-                ",",
-                _jsonQuote("0x914d7Fec6aaC8cd542e72Bca78B30650d45643d7"), // Factory address
-                ",",
-                _jsonQuote("0"), // Value
-                ",}],",
-                _jsonQuote("1.0"), // Tx Builder batch format version
-                ",}"
+                'null,null,"',
+                txData,
+                '","',
+                factory, // Factory address
+                '","',
+                '0', // Value
+                '",}],"',
+                '1.0', // Tx Builder batch format version
+                '",}'
             )
         );
 
         return vm.toString(keccak256(bytes(serialized)));
-    }
-
-    /// @dev Wraps a string in double quotes and escapes internal quotes/backslashes for JSON encoding.
-    function _jsonQuote(string memory value) internal pure returns (string memory) {
-        bytes memory input = bytes(value);
-        bytes memory output = new bytes(input.length * 2 + 2);
-        uint256 outIndex = 0;
-
-        output[outIndex++] = '"';
-
-        for (uint256 i = 0; i < input.length; i++) {
-            bytes1 ch = input[i];
-            if (ch == '"' || ch == "\\") {
-                output[outIndex++] = "\\";
-            }
-            output[outIndex++] = ch;
-        }
-
-        output[outIndex++] = '"';
-
-        // Resize output to actual length to avoid trailing zeros.
-        assembly {
-            mstore(output, outIndex)
-        }
-
-        return string(output);
     }
 
     function verifyCommand(
