@@ -165,11 +165,14 @@ describe("BaseProtocol", () => {
 		// Called 3 times: 2 times in the test, 1 time in the implementation
 		expect(peekSpy).toBeCalledTimes(3);
 		// Check if retry was scheduled via setTimeout
-		for (let i = 1; i <= 7; i++) {
+		for (const [times, delay] of [
+			1000, 2000, 3000, 4000, 5000,
+			// Does not increase past maximum!
+			5000, 5000,
+		].map((delay, i) => [i + 1, delay])) {
 			await vi.waitFor(() => {
-				expect(timeoutSpy).toBeCalledTimes(i);
+				expect(timeoutSpy).toBeCalledTimes(times);
 			});
-			const delay = Math.min(i * 1000, 5000);
 			expect(timeoutSpy).toHaveBeenLastCalledWith(expect.any(Function), delay);
 			vi.advanceTimersByTime(delay);
 		}
@@ -206,11 +209,10 @@ describe("BaseProtocol", () => {
 		// Called 3 times: 2 times in the test, 1 time in the implementation
 		expect(peekSpy).toBeCalledTimes(3);
 		// Check if retry was scheduled via setTimeout
-		for (let i = 1; i <= 2; i++) {
+		for (const [times, delay] of [1000, 2000].map((delay, i) => [i + 1, delay])) {
 			await vi.waitFor(() => {
-				expect(timeoutSpy).toBeCalledTimes(i);
+				expect(timeoutSpy).toBeCalledTimes(times);
 			});
-			const delay = Math.min(i * 1000, 5000);
 			expect(timeoutSpy).toHaveBeenLastCalledWith(expect.any(Function), delay);
 			vi.advanceTimersByTime(delay);
 		}
@@ -251,11 +253,10 @@ describe("BaseProtocol", () => {
 		// Called 3 times: 2 times in the test, 1 time in the implementation
 		expect(peekSpy).toBeCalledTimes(3);
 		// Check if retry was scheduled via setTimeout
-		for (let i = 1; i <= 2; i++) {
+		for (const [times, delay] of [1000, 2000].map((delay, i) => [i + 1, delay])) {
 			await vi.waitFor(() => {
-				expect(timeoutSpy).toBeCalledTimes(i);
+				expect(timeoutSpy).toBeCalledTimes(times);
 			});
-			const delay = Math.min(i * 1000, 5000);
 			expect(timeoutSpy).toHaveBeenLastCalledWith(expect.any(Function), delay);
 			vi.advanceTimersByTime(delay);
 		}
