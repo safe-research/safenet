@@ -17,7 +17,8 @@ contract DeployStakingWithTxBuilderScript is Script {
         string memory safe = vm.toString(vm.envAddress("SAFE"));
         string memory safeOwner = vm.toString(vm.envAddress("SAFE_OWNER"));
         string memory chainId = vm.toString(vm.envOr("CHAIN_ID", uint256(1)));
-        string memory factory = vm.toString(DeterministicDeployment.Factory.unwrap(DeterministicDeployment.SAFE_SINGLETON_FACTORY));
+        string memory factory =
+            vm.toString(DeterministicDeployment.Factory.unwrap(DeterministicDeployment.SAFE_SINGLETON_FACTORY));
 
         // Safe Tx Builder uses millisecond timestamps in exports.
         string memory createdAtStr = vm.toString(vm.unixTime() * 1000);
@@ -104,9 +105,9 @@ contract DeployStakingWithTxBuilderScript is Script {
                 '","',
                 factory, // Factory address
                 '","',
-                '0', // Value
+                "0", // Value
                 '",}],"',
-                '1.0', // Tx Builder batch format version
+                "1.0", // Tx Builder batch format version
                 '",}'
             )
         );
