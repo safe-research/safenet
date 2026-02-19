@@ -2,13 +2,23 @@
 pragma solidity ^0.8.30;
 
 import {Script} from "@forge-std/Script.sol";
-import {Staking} from "../../src/Staking.sol";
-import {DeterministicDeployment} from "./DeterministicDeployment.sol";
+import {Staking} from "@/src/Staking.sol";
+import {DeterministicDeployment} from "@script/util/DeterministicDeployment.sol";
 
 contract GetStakingAddress is Script {
     using DeterministicDeployment for DeterministicDeployment.Factory;
 
-    function getStakingAddress(uint256 factory) public view returns (address) {
+    function getStakingAddress() public view returns (address) {
+        uint256 factoryId = vm.envUint("FACTORY");
+        DeterministicDeployment.Factory factory;
+        if (factoryId == 1) {
+            factory = DeterministicDeployment.Factory.SAFE_SINGLETON_FACTORY;
+        } else if (factoryId == 2) {
+            factory = DeterministicDeployment.Factory.CANONICAL;
+        } else {
+            revert("Invalid FACTORY choice");
+        }
+
         bytes memory code = type(Staking).creationCode;
         bytes memory args = abi.encode(
             vm.envAddress("STAKING_INITIAL_OWNER"),
@@ -16,12 +26,6 @@ contract GetStakingAddress is Script {
             uint128(vm.envUint("STAKING_INITIAL_WITHDRAWAL_DELAY")),
             vm.envUint("STAKING_CONFIG_TIME_DELAY")
         );
-        if (factory == 1) {
-            return DeterministicDeployment.SAFE_SINGLETON_FACTORY.deploymentAddressWithArgs(bytes32(0), code, args);
-        } else if (factory == 2) {
-            return DeterministicDeployment.CANONICAL.deploymentAddressWithArgs(bytes32(0), code, args);
-        } else {
-            revert("Invalid FACTORY choice");
-        }
+        return factory.deploymentAddressWithArgs(bytes32(0), code, args);
     }
 }
