@@ -27,9 +27,9 @@ contract ERC20Script is Script {
         vm.startBroadcast();
 
         if (factoryChoice == 1) {
-            factory = DeterministicDeployment.Factory.SAFE_SINGLETON_FACTORY;
+            factory = DeterministicDeployment.SAFE_SINGLETON_FACTORY;
         } else if (factoryChoice == 2) {
-            factory = DeterministicDeployment.Factory.CANONICAL;
+            factory = DeterministicDeployment.CANONICAL;
         } else {
             revert("Invalid FACTORY choice");
         }

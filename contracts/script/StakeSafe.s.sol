@@ -20,7 +20,7 @@ contract StakeSafeScript is Script {
         require(amount > 0, "Invalid stake amount");
 
         // Calculate the staking contract address using the GetStakingAddress utility and the FACTORY environment variable
-        address stakingContract = new GetStakingAddress().getStakingAddress(vm.envUint("FACTORY"));
+        address stakingContract = new GetStakingAddress().getStakingAddress();
 
         // Check if user has enough SAFE tokens to stake
         uint256 userBalance = IERC20(safeToken).balanceOf(msg.sender);

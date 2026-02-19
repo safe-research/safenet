@@ -2,7 +2,7 @@
 pragma solidity ^0.8.30;
 
 import {Script} from "@forge-std/Script.sol";
-import {Staking} from "@/src/Staking.sol";
+import {Staking} from "@/Staking.sol";
 import {DeterministicDeployment} from "@script/util/DeterministicDeployment.sol";
 
 contract GetStakingAddress is Script {
@@ -12,9 +12,9 @@ contract GetStakingAddress is Script {
         uint256 factoryId = vm.envUint("FACTORY");
         DeterministicDeployment.Factory factory;
         if (factoryId == 1) {
-            factory = DeterministicDeployment.Factory.SAFE_SINGLETON_FACTORY;
+            factory = DeterministicDeployment.SAFE_SINGLETON_FACTORY;
         } else if (factoryId == 2) {
-            factory = DeterministicDeployment.Factory.CANONICAL;
+            factory = DeterministicDeployment.CANONICAL;
         } else {
             revert("Invalid FACTORY choice");
         }

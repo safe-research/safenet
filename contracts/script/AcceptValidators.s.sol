@@ -7,7 +7,7 @@ import {GetStakingAddress} from "./util/GetStakingAddress.sol";
 
 contract AcceptValidatorsScript is Script {
     function run() public {
-        uint256 executableAt = vm.envOr("EXECUTABLE_AT", 0);
+        uint256 executableAt = vm.envOr("EXECUTABLE_AT", uint256(0));
 
         if (executableAt == 0) {
             // Read the executableAt value from run-latest.json using the chain ID
