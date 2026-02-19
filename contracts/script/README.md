@@ -67,9 +67,6 @@ Note: Make sure you have filled the `.env` file with the correct values. Validat
 - `ADD_VALIDATORS`: Comma separated addresses
 - `IS_REGISTRATION`: Comma separated bool values
 
-Validator acceptance requires an extra parameter on top of the previous values. You can either add it in `.env`, or within the command (recommended):
-- `EXECUTABLE_AT`: Unix timestamp (which you can get from event logs)
-
 #### Command
 
 ##### Propose
