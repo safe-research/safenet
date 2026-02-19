@@ -1,0 +1,28 @@
+// SPDX-License-Identifier: GPL-3.0-only
+pragma solidity ^0.8.30;
+
+import {Script, console} from "@forge-std/Script.sol";
+import {Staking} from "../src/Staking.sol";
+import {GetStakingAddress} from "./util/GetStakingAddress.sol";
+
+contract InitiateWithdrawScript is Script {
+    function run() public {
+        vm.startBroadcast();
+
+        // Required script arguments:
+        address validator = vm.envAddress("WITHDRAW_VALIDATOR");
+        uint256 amount = vm.envUint("WITHDRAW_AMOUNT");
+
+        // Calculate the staking contract address using the GetStakingAddress utility and the FACTORY environment variable
+        Staking staking = Staking(new GetStakingAddress().getStakingAddress(vm.envUint("FACTORY")));
+
+        // Check if enough amount available to withdraw with the validator
+        uint256 stakedAmount = staking.stakes(msg.sender, validator);
+        require(stakedAmount >= amount, "Not enough staked amount to withdraw");
+
+        staking.initiateWithdrawal(validator, amount);
+        console.log("Initiated withdrawal of %d SAFE tokens for validator %s", amount, validator);
+
+        vm.stopBroadcast();
+    }
+}

@@ -14,5 +14,5 @@ remappings = [
 auto_detect_remappings = false
 
 fs_permissions = [
-  { access = "read-write", path = "deployments.json" },
-  { access = "read", path = "build/broadcast/ProposeAndAcceptValidators.s.sol" }]
+  { access = "read", path = "build/broadcast/ProposeValidators.s.sol" },
+]

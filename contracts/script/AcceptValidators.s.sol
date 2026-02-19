@@ -1,0 +1,44 @@
+// SPDX-License-Identifier: GPL-3.0-only
+pragma solidity ^0.8.30;
+
+import {Script, console} from "@forge-std/Script.sol";
+import {Staking} from "../src/Staking.sol";
+import {GetStakingAddress} from "./util/GetStakingAddress.sol";
+
+contract AcceptValidatorsScript is Script {
+    function run() public {
+        // Read the executableAt value from run-latest.json using the chain ID
+        // forge-lint: disable-next-line(unsafe-cheatcode)
+        string memory runJson = vm.readFile(
+            string.concat("build/broadcast/ProposeValidators.s.sol/", vm.toString(block.chainid), "/run-latest.json")
+        );
+        bytes32 actualEventSignature = keccak256("ValidatorsProposed(bytes32,address[],bool[],uint256)");
+        bytes32 emittedEventSignature = vm.parseJsonBytes32(runJson, ".receipts[1].logs[0].topics[0]");
+        require(actualEventSignature == emittedEventSignature, "Event signature mismatch");
+
+        bytes memory proposeEventData = vm.parseJsonBytes(runJson, ".receipts[1].logs[0].data");
+        (,, uint256 executableAt) = abi.decode(proposeEventData, (address[], bool[], uint256));
+
+        vm.startBroadcast();
+
+        // Required script arguments:
+        address[] memory validators = vm.envAddress("ADD_VALIDATORS", ",");
+        bool[] memory isRegistration = vm.envBool("IS_REGISTRATION", ",");
+
+        // Calculate the staking contract address using the GetStakingAddress utility and the FACTORY environment variable
+        Staking staking = Staking(new GetStakingAddress().getStakingAddress(vm.envUint("FACTORY")));
+
+        if (executableAt <= block.timestamp) {
+            staking.executeValidatorChanges(validators, isRegistration, executableAt);
+            console.log("Executed validator changes for validators: %s", vm.toString(abi.encode(validators)));
+        } else {
+            console.log(
+                "Validator changes not executable yet. Executable at: %d, current time: %d",
+                executableAt,
+                block.timestamp
+            );
+        }
+
+        vm.stopBroadcast();
+    }
+}
