@@ -158,7 +158,7 @@ title: Attestations
 ---
 stateDiagram-v2
 	request : Waiting for Signing Request
-	commit_nonces : Commiting Signing Nonce Pairs
+	commit_nonces : Committing Signing Nonce Pairs
 	share : Collecting Signing Shares
 	attest: Waiting for Attestation
 	failure : Failure
