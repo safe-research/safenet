@@ -1,4 +1,4 @@
-import { createRouter, RouterProvider, stringifySearchWith } from "@tanstack/react-router";
+import { createHashHistory, createRouter, RouterProvider, stringifySearchWith } from "@tanstack/react-router";
 import { StrictMode } from "react";
 import ReactDOM from "react-dom/client";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
@@ -9,11 +9,14 @@ import { routeTree } from "@/routeTree.gen";
 
 import "@/styles.css";
 
+const hashHistory = createHashHistory();
+
 /**
  * TanStack Router instance configured with the generated route tree and TanStack Query context.
  */
 const router = createRouter({
 	routeTree,
+	history: hashHistory,
 	basepath: __BASE_PATH__,
 	context: {
 		...TanstackQuery.getContext(),
