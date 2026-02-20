@@ -17,14 +17,12 @@ contract MyToken is ERC20, Ownable, ERC20Permit {
     }
 }
 
-contract ERC20Script is Script {
+contract DeployERC20Script is Script {
     using DeterministicDeployment for DeterministicDeployment.Factory;
 
-    function run() public returns (MyToken erc20) {
+    function run() public returns (address erc20) {
         uint256 factoryChoice = vm.envUint("FACTORY");
         DeterministicDeployment.Factory factory;
-
-        vm.startBroadcast();
 
         if (factoryChoice == 1) {
             factory = DeterministicDeployment.SAFE_SINGLETON_FACTORY;
@@ -34,7 +32,9 @@ contract ERC20Script is Script {
             revert("Invalid FACTORY choice");
         }
 
-        factory.deployWithArgs(bytes32(0), type(MyToken).creationCode, abi.encode(msg.sender));
+        vm.startBroadcast();
+
+        erc20 = factory.deployWithArgs(bytes32(0), type(MyToken).creationCode, abi.encode(msg.sender));
 
         vm.stopBroadcast();
 

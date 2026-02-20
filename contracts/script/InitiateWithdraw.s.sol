@@ -7,10 +7,8 @@ import {getStakingAddress} from "@script/util/GetStakingAddress.sol";
 
 contract InitiateWithdrawScript is Script {
     function run() public {
-        vm.startBroadcast();
-
         // Calculate the staking contract address using the GetStakingAddress utility
-        Staking staking = Staking(getStakingAddress(vm));
+        Staking staking = getStakingAddress(vm);
 
         // Required script arguments:
         address validator = vm.envAddress("WITHDRAW_VALIDATOR");
@@ -22,6 +20,8 @@ contract InitiateWithdrawScript is Script {
         // Check if enough amount available to withdraw with the validator
         uint256 stakedAmount = staking.stakes(msg.sender, validator);
         require(stakedAmount >= amount, "Not enough staked amount to withdraw");
+
+        vm.startBroadcast();
 
         staking.initiateWithdrawal(validator, amount);
         console.log("Initiated withdrawal of %d SAFE tokens for validator %s", amount, validator);

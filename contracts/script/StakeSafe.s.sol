@@ -8,8 +8,6 @@ import {getStakingAddress} from "@script/util/GetStakingAddress.sol";
 
 contract StakeSafeScript is Script {
     function run() public {
-        vm.startBroadcast();
-
         // Required script arguments:
         address safeToken = vm.envAddress("SAFE_TOKEN");
         address validator = vm.envAddress("STAKE_VALIDATOR");
@@ -20,11 +18,13 @@ contract StakeSafeScript is Script {
         require(amount > 0, "Invalid stake amount");
 
         // Calculate the staking contract address using the GetStakingAddress utility
-        address stakingContract = getStakingAddress(vm);
+        address stakingContract = address(getStakingAddress(vm));
 
         // Check if user has enough SAFE tokens to stake
         uint256 userBalance = IERC20(safeToken).balanceOf(msg.sender);
         require(userBalance >= amount, "Not enough SAFE tokens to stake");
+
+        vm.startBroadcast();
 
         // Check if enough allowance to the staking contract
         if (IERC20(safeToken).allowance(msg.sender, stakingContract) < amount) {
