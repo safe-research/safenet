@@ -2,7 +2,7 @@
 pragma solidity ^0.8.30;
 
 import {Script, console} from "@forge-std/Script.sol";
-import {Staking} from "../src/Staking.sol";
+import {Staking} from "@/Staking.sol";
 import {DeterministicDeployment} from "@script/util/DeterministicDeployment.sol";
 
 contract StakingScript is Script {

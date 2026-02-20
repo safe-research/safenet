@@ -3,8 +3,8 @@ pragma solidity ^0.8.30;
 
 import {Script, console} from "@forge-std/Script.sol";
 import {IERC20} from "@oz/token/ERC20/IERC20.sol";
-import {Staking} from "../src/Staking.sol";
-import {GetStakingAddress} from "./util/GetStakingAddress.sol";
+import {Staking} from "@/Staking.sol";
+import {getStakingAddress} from "@script/util/GetStakingAddress.sol";
 
 contract StakeSafeScript is Script {
     function run() public {
@@ -19,8 +19,8 @@ contract StakeSafeScript is Script {
         require(validator != address(0), "Invalid validator address");
         require(amount > 0, "Invalid stake amount");
 
-        // Calculate the staking contract address using the GetStakingAddress utility and the FACTORY environment variable
-        address stakingContract = new GetStakingAddress().getStakingAddress();
+        // Calculate the staking contract address using the GetStakingAddress utility
+        address stakingContract = getStakingAddress(vm);
 
         // Check if user has enough SAFE tokens to stake
         uint256 userBalance = IERC20(safeToken).balanceOf(msg.sender);
