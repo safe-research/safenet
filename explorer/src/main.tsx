@@ -9,7 +9,7 @@ import { routeTree } from "@/routeTree.gen";
 
 import "@/styles.css";
 
-const hashHistory = createHashHistory()
+const hashHistory = createHashHistory();
 
 /**
  * TanStack Router instance configured with the generated route tree and TanStack Query context.
