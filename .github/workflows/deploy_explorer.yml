@@ -1,0 +1,50 @@
+name: Deploy Explorer to GitHub Pages
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "explorer/**"
+      - ".github/workflows/deploy_explorer.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install
+        run: npm ci
+
+      - name: Build explorer
+        run: VITE_BASE_PATH=/safenet/ npm run build --workspace explorer
+
+      - name: Create 404 for GH pages
+        run: cp explorer/dist/index.html explorer/dist/404.html
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: explorer/dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+    steps:
+      - uses: actions/deploy-pages@v4
