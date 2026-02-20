@@ -28,14 +28,14 @@ contract DeployStakingWithTxBuilderScript is Script {
 
         {
             // Emit a tx-builder compatible batch file with a precomputed checksum.
-            string memory path = "build/transactions.json";
+            string memory path = "build/staking-deployment.json";
             string memory json = string.concat(
                 '{"version":"1.0","chainId":"',
                 chainId,
                 '","createdAt":',
                 createdAtStr,
                 ',"meta":{"name":"',
-                "Transactions Batch",
+                "Staking Deployment",
                 '","description":"',
                 "Safenet Staking Beta Deployment Transaction",
                 '","txBuilderVersion":"',
