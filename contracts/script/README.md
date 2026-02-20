@@ -67,6 +67,8 @@ Note: Make sure you have filled the `.env` file with the correct values. Validat
 - `ADD_VALIDATORS`: Comma separated addresses
 - `IS_REGISTRATION`: Comma separated bool values
 
+Note: If you want to explicitly provide a staking contract address, you can set the `STAKING_ADDRESS` environment variable in the `.env` file.
+
 #### Command
 
 ##### Propose
@@ -92,6 +94,8 @@ Staking SAFE Tokens require 2 values:
 - `STAKE_VALIDATOR`: Validator address for which you want to stake
 - `STAKE_AMOUNT`: The amount to stake
 
+Note: If you want to explicitly provide a staking contract address, you can set the `STAKING_ADDRESS` environment variable in the `.env` file.
+
 #### Command
 
 ```
@@ -108,6 +112,8 @@ Note: Make sure you have filled the `.env` file with the correct values.
 Withdrawing SAFE Tokens require 2 values:
 - `WITHDRAW_VALIDATOR`: Validator address for which you want to withdraw
 - `WITHDRAW_AMOUNT`: The amount to withdraw
+
+Note: If you want to explicitly provide a staking contract address, you can set the `STAKING_ADDRESS` environment variable in the `.env` file.
 
 #### Command
 

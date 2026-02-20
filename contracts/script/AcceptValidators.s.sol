@@ -2,12 +2,15 @@
 pragma solidity ^0.8.30;
 
 import {Script, console} from "@forge-std/Script.sol";
-import {Staking} from "../src/Staking.sol";
-import {GetStakingAddress} from "./util/GetStakingAddress.sol";
+import {Staking} from "@/Staking.sol";
+import {getStakingAddress} from "@script/util/GetStakingAddress.sol";
 
 contract AcceptValidatorsScript is Script {
     function run() public {
         uint256 executableAt = vm.envOr("EXECUTABLE_AT", uint256(0));
+        address[] memory validators;
+        bool[] memory isRegistration;
+        Staking staking;
 
         if (executableAt == 0) {
             // Read the executableAt value from run-latest.json using the chain ID
@@ -18,24 +21,26 @@ contract AcceptValidatorsScript is Script {
                 )
             );
             bytes32 actualEventSignature = keccak256("ValidatorsProposed(bytes32,address[],bool[],uint256)");
-            bytes32 emittedEventSignature = vm.parseJsonBytes32(runJson, ".receipts[1].logs[0].topics[0]");
+            bytes32 emittedEventSignature = vm.parseJsonBytes32(runJson, ".receipts[0].logs[0].topics[0]");
             require(actualEventSignature == emittedEventSignature, "Event signature mismatch");
 
-            bytes memory proposeEventData = vm.parseJsonBytes(runJson, ".receipts[1].logs[0].data");
-            (,, executableAt) = abi.decode(proposeEventData, (address[], bool[], uint256));
+            bytes memory proposeEventData = vm.parseJsonBytes(runJson, ".receipts[0].logs[0].data");
+            (validators, isRegistration, executableAt) = abi.decode(proposeEventData, (address[], bool[], uint256));
+
+            staking = Staking(vm.parseJsonAddress(runJson, ".receipts[0].logs[0].address"));
+        } else {
+            // Required script arguments:
+            validators = vm.envAddress("ADD_VALIDATORS", ",");
+            isRegistration = vm.envBool("IS_REGISTRATION", ",");
+
+            // Calculate the staking contract address using the GetStakingAddress utility
+            staking = getStakingAddress(vm);
         }
-
-        vm.startBroadcast();
-
-        // Required script arguments:
-        address[] memory validators = vm.envAddress("ADD_VALIDATORS", ",");
-        bool[] memory isRegistration = vm.envBool("IS_REGISTRATION", ",");
 
         require(validators.length == isRegistration.length, "Mismatched input lengths");
         require(validators.length > 0, "No validators provided");
 
-        // Calculate the staking contract address using the GetStakingAddress utility and the FACTORY environment variable
-        Staking staking = Staking(new GetStakingAddress().getStakingAddress());
+        vm.startBroadcast();
 
         if (executableAt <= block.timestamp) {
             staking.executeValidatorChanges(validators, isRegistration, executableAt);

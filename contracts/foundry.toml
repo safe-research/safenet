@@ -14,6 +14,8 @@ remappings = [
 auto_detect_remappings = false
 
 fs_permissions = [
+  # Allow read access to the broadcast file for ProposeValidators script to extract
+  # the validator info and when validators can be accepted (executableAt timestamp).
   { access = "read", path = "build/broadcast/ProposeValidators.s.sol" },
   { access = "read-write", path = "transactions.json" },
 ]

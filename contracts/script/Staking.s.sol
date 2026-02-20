@@ -2,21 +2,22 @@
 pragma solidity ^0.8.30;
 
 import {Script, console} from "@forge-std/Script.sol";
-import {Staking} from "../src/Staking.sol";
+import {Staking} from "@/Staking.sol";
 import {DeterministicDeployment} from "@script/util/DeterministicDeployment.sol";
+import {getStackingDeploymentParameters} from "@script/util/GetStakingAddress.sol";
 
-contract StakingScript is Script {
+contract DeployStakingScript is Script {
     using DeterministicDeployment for DeterministicDeployment.Factory;
 
-    function run() public returns (Staking staking) {
-        vm.startBroadcast();
-
+    function run() public returns (address staking) {
         // Required script arguments:
-        address initialOwner = vm.envAddress("STAKING_INITIAL_OWNER");
-        address safeToken = vm.envAddress("SAFE_TOKEN");
-        uint128 initialWithdrawalDelay = uint128(vm.envUint("STAKING_INITIAL_WITHDRAWAL_DELAY"));
-        uint256 configTimeDelay = vm.envUint("STAKING_CONFIG_TIME_DELAY");
-        uint256 factoryChoice = vm.envUint("FACTORY");
+        (
+            address initialOwner,
+            address safeToken,
+            uint128 initialWithdrawalDelay,
+            uint256 configTimeDelay,
+            DeterministicDeployment.Factory factory
+        ) = getStackingDeploymentParameters(vm);
 
         require(initialOwner != address(0), "Invalid initial owner address");
         require(safeToken != address(0), "Invalid SAFE token address");
@@ -27,17 +28,9 @@ contract StakingScript is Script {
             "Initial withdrawal delay must be less than or equal to config time delay"
         );
 
-        DeterministicDeployment.Factory factory;
+        vm.startBroadcast();
 
-        if (factoryChoice == 1) {
-            factory = DeterministicDeployment.SAFE_SINGLETON_FACTORY;
-        } else if (factoryChoice == 2) {
-            factory = DeterministicDeployment.CANONICAL;
-        } else {
-            revert("Invalid FACTORY choice");
-        }
-
-        factory.deployWithArgs(
+        staking = factory.deployWithArgs(
             bytes32(0),
             type(Staking).creationCode,
             abi.encode(initialOwner, safeToken, initialWithdrawalDelay, configTimeDelay)
