@@ -19,7 +19,7 @@ In the future, we want Safenet to create economic incentives for _transaction ch
 
 For the initial beta release, Safenet validators communicate entirely onchain:
 
-- It must be on a chain with has low gas fees, making it relatively cheap from an operational standpoint, despite the communication being onchain.
+- It must be on a chain that has low gas fees, making it relatively cheap from an operational standpoint, despite the communication being onchain.
 - Onchain communication provides the protocol with absolute ordering of messages as well as a global "clock" that validators can rely on for deterministic timeouts.
 - Reduces the operational complexity of running a validator, as you do not need to expose a service to the scary internet.
 - Users can directly interact with Safenet by executing transactions on a block explorer.
