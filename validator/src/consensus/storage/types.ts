@@ -24,7 +24,12 @@ export type GroupInfoStorage = {
 
 export type KeyGenInfoStorage = {
 	registerKeyGen(groupId: GroupId, coefficients: readonly bigint[]): void;
-	registerCommitments(groupId: GroupId, participantId: ParticipantId, commitments: readonly FrostPoint[]): void;
+	registerCommitments(
+		groupId: GroupId,
+		participantId: ParticipantId,
+		commitments: readonly FrostPoint[],
+		encryptionKey: FrostPoint,
+	): void;
 	registerSecretShare(groupId: GroupId, participantId: ParticipantId, share: bigint): void;
 
 	missingCommitments(groupId: GroupId): ParticipantId[];
@@ -33,6 +38,7 @@ export type KeyGenInfoStorage = {
 	checkIfSecretSharesComplete(groupId: GroupId): boolean;
 
 	encryptionKey(groupId: GroupId): bigint;
+	encryptionPublicKey(groupId: GroupId, participantId: ParticipantId): FrostPoint;
 	coefficients(groupId: GroupId): readonly bigint[];
 	commitments(groupId: GroupId, participantId: ParticipantId): readonly FrostPoint[];
 	commitmentsMap(groupId: GroupId): Map<ParticipantId, readonly FrostPoint[]>;

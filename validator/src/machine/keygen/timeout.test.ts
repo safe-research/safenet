@@ -142,6 +142,7 @@ describe("key gen timeouts", () => {
 				participantsRoot: "0x5afe5afe5afe",
 				participantId: 7n,
 				commitments: [TEST_POINT],
+				encryptionKey: TEST_POINT,
 				pok: {
 					r: TEST_POINT,
 					mu: 100n,
@@ -181,6 +182,7 @@ describe("key gen timeouts", () => {
 					context: "0x00000000eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee000000000000000a",
 					participantId: 7n,
 					commitments: groupSetup.commitments,
+					encryptionKey: groupSetup.encryptionKey,
 					pok: groupSetup.pok,
 					poap: groupSetup.poap,
 				},

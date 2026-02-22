@@ -1,5 +1,12 @@
 import type { Hex } from "viem";
-import { createSigningShare, createVerificationShare, evalCommitment, evalPoly, verifyKey } from "../../frost/math.js";
+import {
+	createSigningShare,
+	createVerificationShare,
+	evalCommitment,
+	evalPoly,
+	g,
+	verifyKey,
+} from "../../frost/math.js";
 import { ecdh } from "../../frost/secret.js";
 import type {
 	FrostPoint,
@@ -81,6 +88,7 @@ export class KeyGenClient {
 		participantsRoot: Hex;
 		participantId: bigint;
 		commitments: FrostPoint[];
+		encryptionKey: FrostPoint;
 		pok: ProofOfKnowledge;
 		poap: ProofOfAttestationParticipation;
 	} {
@@ -92,6 +100,7 @@ export class KeyGenClient {
 		this.#storage.registerKeyGen(groupId, coefficients);
 		const pok = createProofOfKnowledge(participantId, coefficients);
 		const commitments = createCommitments(coefficients);
+		const encryptionKey = g(coefficients[0]);
 		const poap = generateParticipantProof(participants, participantId);
 		return {
 			groupId,
@@ -100,6 +109,7 @@ export class KeyGenClient {
 			pok,
 			poap,
 			commitments,
+			encryptionKey,
 		};
 	}
 
@@ -107,10 +117,11 @@ export class KeyGenClient {
 		groupId: GroupId,
 		senderId: ParticipantId,
 		peerCommitments: readonly FrostPoint[],
+		encryptionKey: FrostPoint,
 		pok: ProofOfKnowledge,
 	): boolean {
 		if (!verifyCommitments(senderId, peerCommitments, pok)) return false;
-		this.#storage.registerCommitments(groupId, senderId, peerCommitments);
+		this.#storage.registerCommitments(groupId, senderId, peerCommitments, encryptionKey);
 		return true;
 	}
 
@@ -134,8 +145,9 @@ export class KeyGenClient {
 			const peerCommitments = commitments.get(participant.id);
 			if (peerCommitments === undefined)
 				throw new Error(`Commitments for ${groupId}:${participant.id} are not available!`);
+			const peerEncryptionKey = this.#storage.encryptionPublicKey(groupId, participant.id);
 			const peerShare = evalPoly(coefficients, participant.id);
-			const encryptedShare = ecdh(peerShare, coefficients[0], peerCommitments[0]);
+			const encryptedShare = ecdh(peerShare, coefficients[0], peerEncryptionKey);
 			shares.push(encryptedShare);
 		}
 		if (shares.length !== participants.length - 1) {
@@ -219,8 +231,9 @@ export class KeyGenClient {
 		if (shareIndex < 0) throw new Error("Could not find self in participants");
 		const key = this.#storage.encryptionKey(groupId);
 		const commitments = this.#storage.commitments(groupId, senderId);
+		const encryptionKey = this.#storage.encryptionPublicKey(groupId, senderId);
 		if (commitments === undefined) throw new Error(`Commitments for ${groupId}:${senderId} are not available!`);
-		const partialShare = ecdh(peerShares[shareIndex], key, commitments[0]);
+		const partialShare = ecdh(peerShares[shareIndex], key, encryptionKey);
 		const partialVerificationShare = evalCommitment(commitments, participantId);
 		if (!verifyKey(partialVerificationShare, partialShare)) {
 			// Share is invalid, abort as this would result in an invalid signing share

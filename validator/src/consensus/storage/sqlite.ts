@@ -91,6 +91,7 @@ export class SqliteClientStorage implements GroupInfoStorage, KeyGenInfoStorage,
 				address TEXT NOT NULL,
 				coefficients BLOB,
 				commitments BLOB,
+				encryption_key BLOB,
 				verification_share BLOB,
 				signing_share BLOB,
 				PRIMARY KEY(group_id, id),
@@ -317,13 +318,24 @@ export class SqliteClientStorage implements GroupInfoStorage, KeyGenInfoStorage,
 		this.setGroupThisParticipantColumn(groupId, "coefficients", concat(coefficients.map(scalarToBytes)));
 	}
 
-	registerCommitments(groupId: GroupId, participantId: ParticipantId, commitments: readonly FrostPoint[]): void {
-		this.setGroupParticipantColumn(
-			groupId,
-			participantId,
-			"commitments",
-			concat(commitments.map((point) => point.toBytes())),
-		);
+	registerCommitments(
+		groupId: GroupId,
+		participantId: ParticipantId,
+		commitments: readonly FrostPoint[],
+		encryptionKey: FrostPoint,
+	): void {
+		const { changes } = this.#db
+			.prepare(
+				`
+					UPDATE group_participants
+					SET commitments = ?, encryption_key = ?
+					WHERE group_id = ? AND id = ? AND commitments IS NULL AND encryption_key IS NULL
+				`,
+			)
+			.run(concat(commitments.map((point) => point.toBytes())), encryptionKey.toBytes(), groupId, participantId);
+		if (changes !== 1) {
+			throw new Error("group participant not found or value already set");
+		}
 	}
 
 	registerSecretShare(groupId: GroupId, participantId: ParticipantId, share: bigint): void {
@@ -457,6 +469,9 @@ export class SqliteClientStorage implements GroupInfoStorage, KeyGenInfoStorage,
 	encryptionKey(groupId: GroupId): bigint {
 		return this.getGroupThisParticipantColumn(groupId, "SUBSTRING(coefficients, 1, 32)", dbScalarSchema);
 	}
+	encryptionPublicKey(groupId: GroupId, participantId: ParticipantId): FrostPoint {
+		return this.getGroupParticipantColumn(groupId, participantId, "encryption_key", dbPointSchema);
+	}
 
 	coefficients(groupId: GroupId): readonly bigint[] {
 		return this.getGroupThisParticipantColumn(groupId, "coefficients", dbScalarArraySchema);
@@ -506,7 +521,7 @@ export class SqliteClientStorage implements GroupInfoStorage, KeyGenInfoStorage,
 
 	clearKeyGen(groupId: GroupId): void {
 		const deleteCoefficientsAndCommitments = this.#db.prepare(
-			"UPDATE group_participants SET coefficients = NULL, commitments = NULL WHERE group_id = ?",
+			"UPDATE group_participants SET coefficients = NULL, commitments = NULL, encryption_key = NULL WHERE group_id = ?",
 		);
 		const deleteSecretShares = this.#db.prepare("DELETE FROM group_secret_shares WHERE group_id = ?");
 		this.#db.transaction(() => {

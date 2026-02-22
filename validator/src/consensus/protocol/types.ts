@@ -61,6 +61,7 @@ export type StartKeyGen = {
 	context: Hex;
 	participantId: ParticipantId;
 	commitments: FrostPoint[];
+	encryptionKey: FrostPoint;
 	pok: ProofOfKnowledge;
 	poap: ProofOfAttestationParticipation;
 };

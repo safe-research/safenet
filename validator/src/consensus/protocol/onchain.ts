@@ -249,6 +249,7 @@ export class OnchainProtocol extends BaseProtocol {
 		context,
 		participantId,
 		commitments,
+		encryptionKey,
 		pok,
 		poap,
 	}: StartKeyGen): Promise<Hex | null> {
@@ -264,6 +265,7 @@ export class OnchainProtocol extends BaseProtocol {
 				participantId,
 				poap,
 				{
+					q: encryptionKey,
 					c: commitments,
 					r: pok.r,
 					mu: pok.mu,

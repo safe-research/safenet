@@ -26,7 +26,7 @@ export const handleKeyGenCommitted = async (
 	}
 
 	if (
-		!keyGenClient.handleKeygenCommitment(event.gid, event.identifier, event.commitment.c, {
+		!keyGenClient.handleKeygenCommitment(event.gid, event.identifier, event.commitment.c, event.commitment.q, {
 			r: event.commitment.r,
 			mu: event.commitment.mu,
 		})

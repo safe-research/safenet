@@ -83,6 +83,7 @@ export const startKeyGenSchema = z.object({
 	context: hexBytes32Schema,
 	participantId: participantIdSchema,
 	commitments: z.array(frostPointSchema),
+	encryptionKey: frostPointSchema,
 	pok: proofOfKnowledgeSchema,
 	poap: proofOfAttestationParticipationSchema,
 });

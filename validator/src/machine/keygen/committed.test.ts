@@ -52,6 +52,7 @@ const EVENT: KeyGenCommittedEvent = {
 	gid: "0x06cb03baac74421225341827941e88d9547e5459c4b3715c0000000000000000",
 	identifier: 2n,
 	commitment: {
+		q: TEST_POINT,
 		r: TEST_POINT,
 		mu: 0x5afen,
 		c: [TEST_POINT, TEST_POINT, TEST_POINT],
@@ -115,6 +116,7 @@ describe("key gen committed", () => {
 			"0x06cb03baac74421225341827941e88d9547e5459c4b3715c0000000000000000",
 			2n,
 			[TEST_POINT, TEST_POINT, TEST_POINT],
+			TEST_POINT,
 			{
 				r: TEST_POINT,
 				mu: 0x5afen,
@@ -143,6 +145,7 @@ describe("key gen committed", () => {
 			"0x06cb03baac74421225341827941e88d9547e5459c4b3715c0000000000000000",
 			2n,
 			[TEST_POINT, TEST_POINT, TEST_POINT],
+			TEST_POINT,
 			{
 				r: TEST_POINT,
 				mu: 0x5afen,
@@ -190,6 +193,7 @@ describe("key gen committed", () => {
 			"0x06cb03baac74421225341827941e88d9547e5459c4b3715c0000000000000000",
 			2n,
 			[TEST_POINT, TEST_POINT, TEST_POINT],
+			TEST_POINT,
 			{
 				r: TEST_POINT,
 				mu: 0x5afen,
