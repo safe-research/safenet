@@ -8,7 +8,7 @@ This is a work-in-progress. Don't use it yet!
 - [Explorer](./explorer) Explorer web interface (Typescript & npm)
 - [Validator](./validator) Validator service (Typescript & npm)
 
-## Developping
+## Developing
 
 ### Project Setup
 
