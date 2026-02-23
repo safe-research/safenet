@@ -24,7 +24,7 @@ In order to update the submodules, or fetch them if the repository was cloned wi
 git submodule update --init --recursive
 ```
 
-Safenet repository currently an NPM workspace project. Install dependencies with:
+Safenet repository is currently an NPM workspace project. Install dependencies with:
 
 ```sh
 npm ci
