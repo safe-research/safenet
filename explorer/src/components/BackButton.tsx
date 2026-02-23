@@ -37,13 +37,14 @@ function BackButton({ to, search, children, className = "" }: BackButtonProps) {
  * @param {BackButtonProps} props - The component props.
  * @returns JSX element representing the back button.
  */
-function ConditionalBackButton({ className = "" }: { className?: string }) {
+function ConditionalBackButton({ className = "", upPath = "/"
+ }: { className?: string, upPath?: string }) {
 	const router = useRouter();
 	const canGoBack = useCanGoBack();
-	return canGoBack ? (
+	return canGoBack || upPath !== undefined ? (
 		<button
 			type="button"
-			onClick={() => router.history.back()}
+			onClick={() => canGoBack ? router.history.back() : router.navigate({ to: upPath })}
 			className={cn("cursor-pointer inline-flex items-center text-sub-title hover:underline", className)}
 		>
 			← Back
