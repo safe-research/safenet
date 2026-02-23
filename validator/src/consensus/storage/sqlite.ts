@@ -521,7 +521,7 @@ export class SqliteClientStorage implements GroupInfoStorage, KeyGenInfoStorage,
 	}
 
 	clearKeyGen(groupId: GroupId): void {
-		const deleteCoefficientsAndCommitments = this.#db.prepare(`
+		const clearGroupParticipantData = this.#db.prepare(`
 			UPDATE group_participants
 			SET
 				encryption_secret_key = NULL,
@@ -532,7 +532,7 @@ export class SqliteClientStorage implements GroupInfoStorage, KeyGenInfoStorage,
 		`);
 		const deleteSecretShares = this.#db.prepare("DELETE FROM group_secret_shares WHERE group_id = ?");
 		this.#db.transaction(() => {
-			deleteCoefficientsAndCommitments.run(groupId);
+			clearGroupParticipantData.run(groupId);
 			deleteSecretShares.run(groupId);
 		})();
 	}
