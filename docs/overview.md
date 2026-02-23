@@ -148,7 +148,7 @@ Because FROST signatures only require a threshold of participants to be involved
 Epoch rollover attestations work in the exact same way as transaction attestations, with just a different signing message. The epoch rollover attestation guarantees that the participants of the current epoch agree to the new FROST group that will become in charge of the following epoch.
 
 > [!IMPORTANT]
-> Like with Safe transaction attestations, in case of a severe outage epoch rollover attestations will not be possible. This will prevent new epochs from starting, and cause the consensus to stay stuck in an old epoch. While in the older epoch, Safenet can continue to produce Safe transaction attestations, and will automatically recover once sufficient validators come online.
+> Like with Safe transaction attestations, in case of a severe outage, epoch rollover attestations will not be possible. This will prevent new epochs from starting, and cause the consensus to stay stuck in an old epoch. While in the older epoch, Safenet can continue to produce Safe transaction attestations, and will automatically recover once sufficient validators come online.
 
 #### State Diagram
 
