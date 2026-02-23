@@ -6,11 +6,7 @@ All the commands specified in `package.json` currently only simulates the transa
 
 We use Foundry as a tool for the deployment & interaction scripts. Make sure to have Foundry installed and set up in your system. You can follow the instructions from the [Foundry Book](https://www.getfoundry.sh/introduction/installation) for installation.
 
-Please use these commands to setup the required libraries:
-
-```
-npm run forge-install -w @safenet/contracts
-```
+Please use the project setup commands specified in the root [README](/README.md) to install the required libraries for this script command:
 
 Also, please use the `.env.sample` file to create a `.env` file and fill the required values before running the commands.
 
@@ -28,11 +24,13 @@ Note: If you set the `FACTORY` as `1`, make sure that the Safe Singleton Factory
 
 #### Anvil (Foundry)
 
-If you are using anvil, recommended to use `-b`, i.e. block time for interval mining with value 1. This helps to increase the time automatically, rather than mining on transaction (which is required to increase the timestamp so we could accept validators once delay is reached after proposal).
+If you are using anvil as a blockchain for testing, recommended to use `-b`, i.e. block time for interval mining with value 1. This helps to increase the time automatically, rather than mining on transaction (which is required to increase the timestamp so we could accept validators once delay is reached after proposal).
 
 ```
 anvil -b 1
 ```
+
+The above command is only required if you want to test things out locally.
 
 ### Signing
 
@@ -50,6 +48,8 @@ The deployed contract address can be taken from the Logs of forge script command
 
 #### Command
 
+Dry Run:
+
 ```
 npm run cmd:deploy:testing-erc20 -w @safenet/contracts
 ```
@@ -57,21 +57,29 @@ npm run cmd:deploy:testing-erc20 -w @safenet/contracts
 For broadcasting and specifying rpc url along with sender, you can use the following command:
 
 ```
-npm run cmd:deploy:testing-erc20 -w @safenet/contracts -- --rpc-url http://127.0.0.1:8545 --broadcast --sender 0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266 --account anvil-1
+npm run cmd:deploy:testing-erc20 -w @safenet/contracts -- --rpc-url http://127.0.0.1:8545 --broadcast --sender 0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266 --account sender-keystore-account
 ```
 
 where
-- RPC URL is the localhost (anvil local node) url, change it accordingly if you are using a different chain or network.
-- `0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266` is the default anvil address
-- `anvil-1` is the default anvil account alias for the address `0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266` used for signing the transaction with forge keystore feature. You can use any other method as specified in the [forge documentation](https://www.getfoundry.sh/forge/scripting#providing-a-private-key). Replace `anvil-1` with the alias of the account you want to use for signing.
+- RPC URL specified here is the localhost (anvil local node) url, change it accordingly based on the chain or network.
+- `0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266` is the sender address used for signing the transaction.
+- `sender-keystore-account` is the keystore account alias for the address `0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266` used for signing the transaction with forge keystore feature. You can use any other method as specified in the [forge documentation](https://www.getfoundry.sh/forge/scripting#providing-a-private-key). Replace `sender-keystore-account` with the alias of the account you want to use for signing.
 
 Note: `--sender` here is specified because forge uses default sender `0x1804c8AB1F12E6bbf3894d4083f33e07309d1f38` otherwise, even when `--account` is specified.
+
+Example ETH Mainnet Command will look something like this:
+
+```
+npm run cmd:deploy:testing-erc20 -w @safenet/contracts -- --rpc-url https://eth.drpc.org --broadcast --sender SENDER_ADDRESS --account mainnet-account
+```
+
+Here we are using `https://eth.drpc.org` as the RPC URL for mainnet, you can replace it with any other RPC provider. Also replace `SENDER_ADDRESS` with the address you want to use for deployment and `mainnet-account` with the keystore alias of the account in forge keystore which has the private key for the sender address.
 
 ### Staking Contract Deployment
 
 This deploys the staking contract.
 
-Note: Make sure you have filled the `.env` file with the correct values. Staking contract requires these 5 values:
+Note: Make sure you have filled the `.env` file with the correct values. Staking contract deployment requires these five values (if not provided explicitly, default will be taken):
 - `STAKING_INITIAL_OWNER`
 - `SAFE_TOKEN`
 - `STAKING_INITIAL_WITHDRAWAL_DELAY`
@@ -83,7 +91,7 @@ Tip: For easier Testing, both delays can be kept to a minimum. Always remember t
 #### Command
 
 ```
-npm run cmd:deploy:staking -w @safenet/contracts -- --rpc-url http://127.0.0.1:8545 --broadcast --sender 0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266 --account anvil-1
+npm run cmd:deploy:staking -w @safenet/contracts -- --rpc-url http://127.0.0.1:8545 --broadcast --sender 0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266 --account sender-keystore-account
 ```
 
 ### (Optional) Propose and Accept Validators
@@ -101,13 +109,13 @@ Note: If you want to explicitly provide a staking contract address, you can set 
 ##### Propose
 
 ```
-npm run cmd:proposeValidators -w @safenet/contracts -- --rpc-url http://127.0.0.1:8545 --broadcast --sender 0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266 --account anvil-1
+npm run cmd:proposeValidators -w @safenet/contracts -- --rpc-url http://127.0.0.1:8545 --broadcast --sender 0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266 --account sender-keystore-account
 ```
 
 ##### Accept
 
 ```
-npm run cmd:acceptValidators -w @safenet/contracts -- --rpc-url http://127.0.0.1:8545 --broadcast --sender 0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266 --account anvil-1
+npm run cmd:acceptValidators -w @safenet/contracts -- --rpc-url http://127.0.0.1:8545 --broadcast --sender 0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266 --account sender-keystore-account
 ```
 
 You could also set an environment variable `EXECUTABLE_AT` with the timestamp value to execute the validator changes at a specific time (after the delay is passed). If not set, it will try to read the event from the propose script output.
@@ -127,7 +135,7 @@ Note: If you want to explicitly provide a staking contract address, you can set 
 #### Command
 
 ```
-npm run cmd:stakeSafe -w @safenet/contracts -- --rpc-url http://127.0.0.1:8545 --broadcast --sender 0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266 --account anvil-1
+npm run cmd:stakeSafe -w @safenet/contracts -- --rpc-url http://127.0.0.1:8545 --broadcast --sender 0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266 --account sender-keystore-account
 ```
 
 ### Withdraw SAFE Token
@@ -148,11 +156,11 @@ Note: If you want to explicitly provide a staking contract address, you can set 
 ##### Initiate Withdraw
 
 ```
-npm run cmd:initiateWithdraw -w @safenet/contracts -- --rpc-url http://127.0.0.1:8545 --broadcast --sender 0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266 --account anvil-1
+npm run cmd:initiateWithdraw -w @safenet/contracts -- --rpc-url http://127.0.0.1:8545 --broadcast --sender 0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266 --account sender-keystore-account
 ```
 
 ##### Claim Withdraw
 
 ```
-npm run cmd:claimWithdraw -w @safenet/contracts -- --rpc-url http://127.0.0.1:8545 --broadcast --sender 0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266 --account anvil-1
+npm run cmd:claimWithdraw -w @safenet/contracts -- --rpc-url http://127.0.0.1:8545 --broadcast --sender 0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266 --account sender-keystore-account
 ```

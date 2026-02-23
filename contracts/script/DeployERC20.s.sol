@@ -4,21 +4,13 @@ pragma solidity ^0.8.30;
 import {Script, console} from "@forge-std/Script.sol";
 import {DeterministicDeployment} from "@script/util/DeterministicDeployment.sol";
 import {MyToken} from "@script/util/MyToken.sol";
+import {getFactory} from "@script/util/GetFactory.sol";
 
 contract DeployERC20Script is Script {
     using DeterministicDeployment for DeterministicDeployment.Factory;
 
     function run() public returns (address erc20) {
-        uint256 factoryChoice = vm.envOr("FACTORY", uint256(1));
-        DeterministicDeployment.Factory factory;
-
-        if (factoryChoice == 1) {
-            factory = DeterministicDeployment.SAFE_SINGLETON_FACTORY;
-        } else if (factoryChoice == 2) {
-            factory = DeterministicDeployment.CANONICAL;
-        } else {
-            revert("Invalid FACTORY choice");
-        }
+        DeterministicDeployment.Factory factory = getFactory(vm);
 
         vm.startBroadcast();
 
