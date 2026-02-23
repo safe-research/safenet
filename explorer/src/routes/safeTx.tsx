@@ -27,7 +27,8 @@ export function SafeTransaction() {
 			<ConditionalBackButton />
 			<ContainerTitle>Transaction Details</ContainerTitle>
 			{details.isLoading && "Loading ..."}
-			{details.data !== null && (<>
+			{details.data !== null && (
+				<>
 					<Box>
 						<SafeTxOverview title={`Safe Tx Hash: ${safeTxHash}`} transaction={details.data} />
 					</Box>
@@ -37,7 +38,8 @@ export function SafeTransaction() {
 					<Box>
 						<SafeTxProposals transaction={details.data} />
 					</Box>
-			</>)}
+				</>
+			)}
 			{!details.isFetching && details.data === null && <Box>"Could not load proposal!"</Box>}
 		</Container>
 	);
