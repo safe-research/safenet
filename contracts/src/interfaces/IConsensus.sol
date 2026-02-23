@@ -72,6 +72,13 @@ interface IConsensus {
      */
     event TransactionAttested(bytes32 indexed transactionHash, uint64 epoch, FROST.Signature attestation);
 
+    /**
+     * @notice Emitted when a validator's staker address is updated.
+     * @param validator The address of the validator.
+     * @param staker The new staker address for the validator.
+     */
+    event ValidatorStakerUpdated(address indexed validator, address indexed staker);
+
     // ============================================================
     // EPOCHS
     // ============================================================
@@ -194,4 +201,19 @@ interface IConsensus {
      * @dev No explicit time limit is imposed for when a transaction can be attested in this contract.
      */
     function attestTransaction(uint64 epoch, bytes32 transactionHash, FROSTSignatureId.T signature) external;
+
+    /**
+     * @notice Updates a validator's staker address.
+     * @param staker The new staker address for the validator.
+     * @dev This function should be called by the validator themselves when they want to update their staker address.
+     *      The staker address cannot be zero as every validator must have a minimum stake.
+     */
+    function updateValidatorStaker(address staker) external;
+
+    /**
+     * @notice Gets a validator's staker address.
+     * @param validator The address of the validator.
+     * @return staker The staker address for the validator.
+     */
+    function getValidatorStaker(address validator) external view returns (address staker);
 }

@@ -16,12 +16,16 @@ contract ConsensusTest is Test {
 
     MockCoordinator public coordinator;
     Consensus public consensus;
+    address public validator;
+
+    event ValidatorStakerUpdated(address indexed validator, address indexed staker);
 
     function setUp() public {
         group = vm.createWallet("group");
 
         coordinator = new MockCoordinator();
         consensus = new Consensus(address(coordinator), GENESIS_GROUP);
+        validator = vm.addr(0x1);
     }
 
     function test_GetEpochGroup_ExistingGroup() public view {
@@ -82,5 +86,17 @@ contract ConsensusTest is Test {
         assertEq(0x5afe02, epochs.active);
         assertEq(0x5afe03, epochs.staged);
         assertEq(block.number + 1, epochs.rolloverBlock);
+    }
+
+    function test_updateValidatorStaker() public {
+        address newStaker = address(0x123);
+        vm.prank(validator);
+
+        vm.expectEmit(true, true, false, false);
+        emit ValidatorStakerUpdated(validator, newStaker);
+        consensus.updateValidatorStaker(newStaker);
+
+        (address staker) = consensus.getValidatorStaker(validator);
+        assertEq(staker, newStaker);
     }
 }

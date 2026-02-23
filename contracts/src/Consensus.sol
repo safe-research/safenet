@@ -75,6 +75,12 @@ contract Consensus is IConsensus, IERC165, IFROSTCoordinatorCallback {
     // forge-lint: disable-next-line(mixed-case-variable)
     mapping(bytes32 message => FROSTSignatureId.T) private $attestations;
 
+    /**
+     * @notice Mapping from validator address to its staker address.
+     */
+    // forge-lint: disable-next-line(mixed-case-variable)
+    mapping(address validator => address staker) private $validatorStakers;
+
     // ============================================================
     // ERRORS
     // ============================================================
@@ -98,6 +104,11 @@ contract Consensus is IConsensus, IERC165, IFROSTCoordinatorCallback {
      * @notice Thrown when a caller is not the configured coordinator.
      */
     error NotCoordinator();
+
+    /**
+     * @notice Thrown when a staker address is set to zero address.
+     */
+    error StakerAddressCannotBeZero();
 
     // ============================================================
     // CONSTRUCTOR
@@ -325,6 +336,22 @@ contract Consensus is IConsensus, IERC165, IFROSTCoordinatorCallback {
         FROST.Signature memory attestation = COORDINATOR.signatureVerify(signature, $groups[epoch], message);
         $attestations[message] = signature;
         emit TransactionAttested(transactionHash, epoch, attestation);
+    }
+
+    /**
+     * @inheritdoc IConsensus
+     */
+    function updateValidatorStaker(address staker) external {
+        require(staker != address(0), StakerAddressCannotBeZero());
+        $validatorStakers[msg.sender] = staker;
+        emit ValidatorStakerUpdated(msg.sender, staker);
+    }
+
+    /**
+     * @inheritdoc IConsensus
+     */
+    function getValidatorStaker(address validator) external view returns (address staker) {
+        return $validatorStakers[validator];
     }
 
     // ============================================================
