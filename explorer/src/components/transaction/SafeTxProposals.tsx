@@ -4,6 +4,7 @@ import { useProposalsForTransaction } from "@/hooks/useProposalsForTransaction";
 import { useSubmitProposal } from "@/hooks/useSubmitProposal";
 import type { SafeTransaction, TransactionProposal } from "@/lib/consensus";
 import { calculateSafeTxHash } from "@/lib/safe/hashing";
+import { Skeleton } from "../Skeleton";
 
 export function SafeTxProposals({ transaction }: { transaction: SafeTransaction }) {
 	const safeTxHash = useMemo(() => {
@@ -14,7 +15,7 @@ export function SafeTxProposals({ transaction }: { transaction: SafeTransaction 
 	return (
 		<div className={"space-y-4"}>
 			<BoxTitle>Transaction Proposals</BoxTitle>
-			{proposals.isLoading && <Box>Loading...</Box>}
+			{proposals.isLoading && <Skeleton className="w-full h-25" />}
 			{!proposals.isLoading && proposals.data.length === 0 && <NoSafeTxProposals transaction={transaction} />}
 			{!proposals.isLoading &&
 				proposals.data.length !== 0 &&
