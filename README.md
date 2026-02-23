@@ -4,7 +4,7 @@ This is a work-in-progress. Don't use it yet!
 
 ## Project Organisation
 
-- [Contracts](./contracts) Consensus contracts (Solidity & Foundry)
+- [Contracts](./contracts) Safenet contracts (Solidity & Foundry)
 - [Explorer](./explorer) Explorer web interface (Typescript & npm)
 - [Validator](./validator) Validator service (Typescript & npm)
 
