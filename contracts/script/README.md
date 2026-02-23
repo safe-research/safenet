@@ -4,7 +4,7 @@ All the commands specified in `package.json` currently only simulates the transa
 
 ## Project Setup
 
-Make sure to follow the setup instructions from the project [README](../../README.md#developping).
+Make sure to follow the setup instructions from the project [README](../../README.md#project-setup).
 
 ## Staking
 
