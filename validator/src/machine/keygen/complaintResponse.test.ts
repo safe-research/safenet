@@ -225,6 +225,7 @@ describe("complaint responded", () => {
 			participantsRoot: "0x5afe5afe5afe",
 			participantId: 4n,
 			commitments: [TEST_POINT],
+			encryptionPublicKey: TEST_POINT,
 			pok: {
 				r: TEST_POINT,
 				mu: 100n,
@@ -278,6 +279,7 @@ describe("complaint responded", () => {
 					context: "0x00000000eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee000000000000000a",
 					participantId: 4n,
 					commitments: groupSetup.commitments,
+					encryptionPublicKey: groupSetup.encryptionPublicKey,
 					pok: groupSetup.pok,
 					poap: groupSetup.poap,
 				},
@@ -296,6 +298,7 @@ describe("complaint responded", () => {
 			participantsRoot: "0x5afe5afe5afe",
 			participantId: 4n,
 			commitments: [TEST_POINT],
+			encryptionPublicKey: TEST_POINT,
 			pok: {
 				r: TEST_POINT,
 				mu: 100n,
@@ -349,6 +352,7 @@ describe("complaint responded", () => {
 					context: "0x00000000eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee000000000000000a",
 					participantId: 4n,
 					commitments: groupSetup.commitments,
+					encryptionPublicKey: groupSetup.encryptionPublicKey,
 					pok: groupSetup.pok,
 					poap: groupSetup.poap,
 				},

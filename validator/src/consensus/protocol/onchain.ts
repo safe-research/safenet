@@ -248,6 +248,7 @@ export class OnchainProtocol extends BaseProtocol {
 		threshold,
 		context,
 		participantId,
+		encryptionPublicKey,
 		commitments,
 		pok,
 		poap,
@@ -264,6 +265,7 @@ export class OnchainProtocol extends BaseProtocol {
 				participantId,
 				poap,
 				{
+					q: encryptionPublicKey,
 					c: commitments,
 					r: pok.r,
 					mu: pok.mu,

@@ -25,6 +25,7 @@ describe("keyGen", () => {
 		const commitmentEvents: {
 			groupId: GroupId;
 			participantId: bigint;
+			encryptionPublicKey: FrostPoint;
 			commitments: FrostPoint[];
 			pok: ProofOfKnowledge;
 		}[] = [];
@@ -47,7 +48,11 @@ describe("keyGen", () => {
 		log("------------------------ Trigger Keygen Init and Commitments ------------------------");
 		for (const { client, ids } of clients) {
 			log(">>>> Keygen and Commit >>>>");
-			const { participantId, commitments, poap, pok } = client.setupGroup(participants, threshold, context);
+			const { participantId, encryptionPublicKey, commitments, poap, pok } = client.setupGroup(
+				participants,
+				threshold,
+				context,
+			);
 			ids.set(groupId, participantId);
 			const leaf = participants.find((p) => p.id === participantId);
 			if (leaf === undefined) throw new Error(`Invalid id: ${participantId}`);
@@ -56,6 +61,7 @@ describe("keyGen", () => {
 			commitmentEvents.push({
 				groupId,
 				participantId,
+				encryptionPublicKey,
 				commitments,
 				pok,
 			});
@@ -64,7 +70,7 @@ describe("keyGen", () => {
 		for (const { client } of clients) {
 			for (const e of commitmentEvents) {
 				log(`>>>> Handle commitment from ${e.participantId} by ${client.participantId(e.groupId)} >>>>`);
-				client.handleKeygenCommitment(e.groupId, e.participantId, e.commitments, e.pok);
+				client.handleKeygenCommitment(e.groupId, e.participantId, e.encryptionPublicKey, e.commitments, e.pok);
 			}
 		}
 		log("------------------------ Publish Secret Shares ------------------------");

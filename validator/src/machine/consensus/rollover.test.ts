@@ -129,6 +129,7 @@ describe("check rollover", () => {
 			participantsRoot: "0x5afe5afe5afe",
 			participantId: 3n,
 			commitments: [TEST_POINT],
+			encryptionPublicKey: TEST_POINT,
 			pok: {
 				r: TEST_POINT,
 				mu: 100n,
@@ -157,6 +158,7 @@ describe("check rollover", () => {
 				context: "0x00000000eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee0000000000000003",
 				participantId: 3n,
 				commitments: groupSetup.commitments,
+				encryptionPublicKey: groupSetup.encryptionPublicKey,
 				pok: groupSetup.pok,
 				poap: groupSetup.poap,
 			},
@@ -193,6 +195,7 @@ describe("check rollover", () => {
 			participantsRoot: "0x5afe5afe5afe",
 			participantId: 3n,
 			commitments: [TEST_POINT],
+			encryptionPublicKey: TEST_POINT,
 			pok: {
 				r: TEST_POINT,
 				mu: 100n,
@@ -223,6 +226,7 @@ describe("check rollover", () => {
 				context: "0x00000000eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee0000000000000002",
 				participantId: 3n,
 				commitments: groupSetup.commitments,
+				encryptionPublicKey: groupSetup.encryptionPublicKey,
 				pok: groupSetup.pok,
 				poap: groupSetup.poap,
 			},
@@ -259,6 +263,7 @@ describe("check rollover", () => {
 			participantsRoot: "0x5afe5afe5afe",
 			participantId: 3n,
 			commitments: [TEST_POINT],
+			encryptionPublicKey: TEST_POINT,
 			pok: {
 				r: TEST_POINT,
 				mu: 100n,
@@ -284,6 +289,7 @@ describe("check rollover", () => {
 				context: "0x00000000eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee0000000000000002",
 				participantId: 3n,
 				commitments: groupSetup.commitments,
+				encryptionPublicKey: groupSetup.encryptionPublicKey,
 				pok: groupSetup.pok,
 				poap: groupSetup.poap,
 			},

@@ -24,7 +24,7 @@ export type KeyGenCommittedEvent = {
 	index: number;
 	gid: GroupId;
 	identifier: ParticipantId;
-	commitment: ProofOfKnowledge & { c: FrostPoint[] };
+	commitment: ProofOfKnowledge & { q: FrostPoint; c: FrostPoint[] };
 	committed: boolean;
 };
 

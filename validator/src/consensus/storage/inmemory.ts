@@ -14,6 +14,8 @@ type GroupInfo = {
 };
 
 type KeyGenInfo = {
+	encryptionSecretKey: bigint;
+	encryptionPublicKeys: Map<ParticipantId, FrostPoint>;
 	coefficients: readonly bigint[];
 	commitments: Map<ParticipantId, readonly FrostPoint[]>;
 	secretShares: Map<ParticipantId, bigint>;
@@ -64,21 +66,29 @@ export class InMemoryClientStorage implements KeyGenInfoStorage, GroupInfoStorag
 		return this.#account;
 	}
 
-	registerKeyGen(groupId: GroupId, coefficients: readonly bigint[]): void {
+	registerKeyGen(groupId: GroupId, encryptionSecretKey: bigint, coefficients: readonly bigint[]): void {
 		// Check if group is known, otherwise this will throw
 		this.groupInfo(groupId);
 		if (this.#keyGenInfo.has(groupId)) throw new Error(`KeyGen for ${groupId} already registered!`);
 		this.#keyGenInfo.set(groupId, {
+			encryptionSecretKey,
+			encryptionPublicKeys: new Map(),
 			coefficients,
 			commitments: new Map(),
 			secretShares: new Map(),
 		});
 	}
-	registerCommitments(groupId: GroupId, participantId: ParticipantId, commitments: readonly FrostPoint[]): void {
+	registerCommitments(
+		groupId: GroupId,
+		participantId: ParticipantId,
+		encryptionPublicKey: FrostPoint,
+		commitments: readonly FrostPoint[],
+	): void {
 		const info = this.keyGenInfo(groupId);
 		if (info.commitments.has(participantId))
 			throw new Error(`Commitments for ${groupId}:${participantId} already registered!`);
 		info.commitments.set(participantId, commitments);
+		info.encryptionPublicKeys.set(participantId, encryptionPublicKey);
 	}
 	registerSecretShare(groupId: GroupId, participantId: ParticipantId, share: bigint): void {
 		const info = this.keyGenInfo(groupId);
@@ -124,9 +134,15 @@ export class InMemoryClientStorage implements KeyGenInfoStorage, GroupInfoStorag
 		}
 		return missing;
 	}
-	encryptionKey(groupId: GroupId): bigint {
+	encryptionSecretKey(groupId: GroupId): bigint {
 		const info = this.keyGenInfo(groupId);
-		return info.coefficients[0];
+		return info.encryptionSecretKey;
+	}
+	encryptionPublicKey(groupId: GroupId, participantId: ParticipantId): FrostPoint {
+		const info = this.keyGenInfo(groupId);
+		const encryptionPublicKey = info.encryptionPublicKeys.get(participantId);
+		if (encryptionPublicKey === undefined) throw new Error(`No encryption public key for ${participantId} available!`);
+		return encryptionPublicKey;
 	}
 	coefficients(groupId: GroupId): readonly bigint[] {
 		const info = this.keyGenInfo(groupId);

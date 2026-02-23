@@ -60,6 +60,7 @@ export type StartKeyGen = {
 	threshold: number;
 	context: Hex;
 	participantId: ParticipantId;
+	encryptionPublicKey: FrostPoint;
 	commitments: FrostPoint[];
 	pok: ProofOfKnowledge;
 	poap: ProofOfAttestationParticipation;

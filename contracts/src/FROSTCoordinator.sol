@@ -84,11 +84,13 @@ contract FROSTCoordinator {
 
     /**
      * @notice Commitment data for key generation.
+     * @custom:param q The participant's public encryption key used to encrypt secret shares.
      * @custom:param c The vector of public commitments.
      * @custom:param r The public nonce.
      * @custom:param mu The proof of knowledge scalar.
      */
     struct KeyGenCommitment {
+        Secp256k1.Point q;
         Secp256k1.Point[] c;
         Secp256k1.Point r;
         uint256 mu;
@@ -378,6 +380,7 @@ contract FROSTCoordinator {
             parameters.status = GroupStatus.SHARING;
             parameters.pending = parameters.count;
         }
+        Secp256k1.requireNonZero(commitment.q);
         require(commitment.c.length == parameters.threshold, InvalidGroupCommitment());
         group.participants.register(identifier, msg.sender, poap);
         group.parameters = parameters;

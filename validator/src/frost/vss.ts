@@ -1,7 +1,7 @@
 import { randomBytes } from "node:crypto";
-import { hdkg, hpok, keyGenChallenge } from "./hashes.js";
+import { hdkg, henc, hpok, keyGenChallenge } from "./hashes.js";
 import { addmod, g, mulmod } from "./math.js";
-import type { FrostPoint, ProofOfKnowledge } from "./types.js";
+import type { EncryptionKey, FrostPoint, ProofOfKnowledge } from "./types.js";
 
 /*
  * This is a modified or extended Pedersen DKG and
@@ -9,6 +9,14 @@ import type { FrostPoint, ProofOfKnowledge } from "./types.js";
  */
 
 // Round 1.1
+const generateEncryptionKey = (): bigint => {
+	return henc(randomBytes(32));
+};
+export const createEncryptionKey = (): EncryptionKey => {
+	const secretKey = generateEncryptionKey();
+	const publicKey = g(secretKey);
+	return { secretKey, publicKey };
+};
 const generateCoefficient = (): bigint => {
 	return hdkg(randomBytes(32));
 };
