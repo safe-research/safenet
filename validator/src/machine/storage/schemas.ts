@@ -53,7 +53,7 @@ export const jsonQueryResultSchema = z
 
 export const signingQueryResultSchema = z.array(
 	z.object({
-		id: signatureIdSchema,
+		id: hexBytes32Schema,
 		stateJson: z.string(),
 	}),
 );
