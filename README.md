@@ -18,6 +18,12 @@ Clone the repository and all its submodules with:
 git clone --recurse-submodules https://github.com/safe-research/safenet
 ```
 
+In order to update the submodules, or fetch them if the repository was cloned without a `--recurse-submodules` flag:
+
+```sh
+git submodule update --init --recursive
+```
+
 Safenet repository currently an NPM workspace project. Install dependencies with:
 
 ```sh
