@@ -27,11 +27,8 @@ export const triggerKeyGen = (
 	}
 	const count = participants.length;
 	const threshold = calcTreshold(count);
-	const { groupId, participantsRoot, participantId, commitments, encryptionKey, pok, poap } = keyGenClient.setupGroup(
-		participants,
-		threshold,
-		context,
-	);
+	const { groupId, participantsRoot, participantId, commitments, encryptionPublicKey, pok, poap } =
+		keyGenClient.setupGroup(participants, threshold, context);
 
 	const actions: ProtocolAction[] = [
 		{
@@ -41,8 +38,8 @@ export const triggerKeyGen = (
 			threshold,
 			context,
 			participantId,
+			encryptionPublicKey,
 			commitments,
-			encryptionKey,
 			pok,
 			poap,
 		},

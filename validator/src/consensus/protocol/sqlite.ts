@@ -82,8 +82,8 @@ export const startKeyGenSchema = z.object({
 	threshold: z.int(),
 	context: hexBytes32Schema,
 	participantId: participantIdSchema,
+	encryptionPublicKey: frostPointSchema,
 	commitments: z.array(frostPointSchema),
-	encryptionKey: frostPointSchema,
 	pok: proofOfKnowledgeSchema,
 	poap: proofOfAttestationParticipationSchema,
 });
@@ -276,7 +276,7 @@ export class SqliteTxStorage implements TransactionStorage {
 
 	submittedUpTo(blockNumber: bigint, offset = 0, limit = 100): (EthTransactionData & EthTransactionDetails)[] {
 		const pendingTxsStmt = this.#db.prepare(`
-			SELECT nonce, transactionJson, transactionHash, feesJson FROM transaction_storage 
+			SELECT nonce, transactionJson, transactionHash, feesJson FROM transaction_storage
 			WHERE submittedAt <= ?
 			ORDER BY nonce ASC
 			LIMIT ?

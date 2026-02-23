@@ -25,8 +25,8 @@ describe("keyGen", () => {
 		const commitmentEvents: {
 			groupId: GroupId;
 			participantId: bigint;
+			encryptionPublicKey: FrostPoint;
 			commitments: FrostPoint[];
-			encryptionKey: FrostPoint;
 			pok: ProofOfKnowledge;
 		}[] = [];
 		const shareEvents: {
@@ -48,7 +48,7 @@ describe("keyGen", () => {
 		log("------------------------ Trigger Keygen Init and Commitments ------------------------");
 		for (const { client, ids } of clients) {
 			log(">>>> Keygen and Commit >>>>");
-			const { participantId, commitments, encryptionKey, poap, pok } = client.setupGroup(
+			const { participantId, encryptionPublicKey, commitments, poap, pok } = client.setupGroup(
 				participants,
 				threshold,
 				context,
@@ -61,8 +61,8 @@ describe("keyGen", () => {
 			commitmentEvents.push({
 				groupId,
 				participantId,
+				encryptionPublicKey,
 				commitments,
-				encryptionKey,
 				pok,
 			});
 		}
@@ -70,7 +70,7 @@ describe("keyGen", () => {
 		for (const { client } of clients) {
 			for (const e of commitmentEvents) {
 				log(`>>>> Handle commitment from ${e.participantId} by ${client.participantId(e.groupId)} >>>>`);
-				client.handleKeygenCommitment(e.groupId, e.participantId, e.commitments, e.encryptionKey, e.pok);
+				client.handleKeygenCommitment(e.groupId, e.participantId, e.encryptionPublicKey, e.commitments, e.pok);
 			}
 		}
 		log("------------------------ Publish Secret Shares ------------------------");

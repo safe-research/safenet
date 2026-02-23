@@ -133,7 +133,7 @@ describe("gensis key gen", () => {
 			participantsRoot: "0x78d9152d3ca012af785cf642cd52803acabeaea430964b93136f31f83c7df9d0",
 			participantId: 2n,
 			commitments: [TEST_POINT],
-			encryptionKey: TEST_POINT,
+			encryptionPublicKey: TEST_POINT,
 			pok: {
 				r: TEST_POINT,
 				mu: 100n,
@@ -155,7 +155,7 @@ describe("gensis key gen", () => {
 				context: zeroHash,
 				participantId: 2n,
 				commitments: groupSetup.commitments,
-				encryptionKey: groupSetup.encryptionKey,
+				encryptionPublicKey: groupSetup.encryptionPublicKey,
 				pok: groupSetup.pok,
 				poap: groupSetup.poap,
 			},

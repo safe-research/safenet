@@ -96,7 +96,7 @@ describe("trigger key gen", () => {
 			participantsRoot: "0x5afe5afe5afe",
 			participantId: 3n,
 			commitments: [TEST_POINT],
-			encryptionKey: TEST_POINT,
+			encryptionPublicKey: TEST_POINT,
 			pok: {
 				r: TEST_POINT,
 				mu: 100n,
@@ -118,7 +118,7 @@ describe("trigger key gen", () => {
 				context,
 				participantId: 3n,
 				commitments: groupSetup.commitments,
-				encryptionKey: groupSetup.encryptionKey,
+				encryptionPublicKey: groupSetup.encryptionPublicKey,
 				pok: groupSetup.pok,
 				poap: groupSetup.poap,
 			},

@@ -25,6 +25,10 @@ export const keyGenChallenge = (id: bigint, ga0: FrostPoint, r: FrostPoint): big
 	return hdkg(concatBytes(numberToBytesBE(id, 32), ga0.toBytes(true), r.toBytes(true)));
 };
 
+export const henc = (input: Uint8Array): bigint => {
+	return hash_to_field(input, 1, opts("enc"))[0][0];
+};
+
 export const hdkg = (input: Uint8Array): bigint => {
 	return hash_to_field(input, 1, opts("dkg"))[0][0];
 };

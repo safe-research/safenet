@@ -176,8 +176,8 @@ export const TEST_ACTIONS: [ProtocolAction, keyof TestProtocol, EthTransactionDa
 			threshold: 3,
 			context: "0x5afe00aa00000000000000000000000000000000000000000000000000000000",
 			participantId: 1n,
+			encryptionPublicKey: TEST_POINT,
 			commitments: [TEST_POINT, TEST_POINT],
-			encryptionKey: TEST_POINT,
 			pok: {
 				r: TEST_POINT,
 				mu: 5n,

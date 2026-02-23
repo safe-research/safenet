@@ -311,7 +311,7 @@ describe("complaint submitted", () => {
 			participantsRoot: "0x5afe5afe5afe",
 			participantId: 1n,
 			commitments: [TEST_POINT],
-			encryptionKey: TEST_POINT,
+			encryptionPublicKey: TEST_POINT,
 			pok: {
 				r: TEST_POINT,
 				mu: 100n,
@@ -361,7 +361,7 @@ describe("complaint submitted", () => {
 				context: calcGroupContext(ethAddress, 10n),
 				participantId: 1n,
 				commitments: groupSetup.commitments,
-				encryptionKey: groupSetup.encryptionKey,
+				encryptionPublicKey: groupSetup.encryptionPublicKey,
 				pok: groupSetup.pok,
 				poap: groupSetup.poap,
 			},

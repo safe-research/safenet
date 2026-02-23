@@ -90,11 +90,12 @@ describe("sqlite", () => {
 	});
 
 	describe("KeyGenInfoStorage", () => {
+		const encryptionSecretKey = 42n;
 		const coefficients = [11n, 22n];
 		const commitments = [
-			{ id: 1n, value: [g(11n), g(22n)], encryptionKey: g(111n) },
-			{ id: 2n, value: [g(33n), g(44n)], encryptionKey: g(222n) },
-			{ id: 3n, value: [g(55n), g(66n)], encryptionKey: g(333n) },
+			{ id: 1n, value: [g(11n), g(22n)], encryptionPublicKey: g(111n) },
+			{ id: 2n, value: [g(33n), g(44n)], encryptionPublicKey: g(222n) },
+			{ id: 3n, value: [g(55n), g(66n)], encryptionPublicKey: g(333n) },
 		];
 		const secretShares = [
 			{ id: 1n, value: 101n },
@@ -105,31 +106,36 @@ describe("sqlite", () => {
 		it("should register KeyGen coefficients", () => {
 			const storage = testStorage(participants[0].address);
 
-			expect(() => storage.registerKeyGen(groups[0], coefficients)).toThrowError();
+			expect(() => storage.registerKeyGen(groups[0], encryptionSecretKey, coefficients)).toThrowError();
 			expect(() => storage.coefficients(groups[0])).toThrowError();
-			expect(() => storage.encryptionKey(groups[0])).toThrowError();
+			expect(() => storage.encryptionSecretKey(groups[0])).toThrowError();
 
 			storage.registerGroup(groups[0], participants, 2);
 
 			expect(() => storage.coefficients(groups[0])).toThrowError();
-			expect(() => storage.encryptionKey(groups[0])).toThrowError();
+			expect(() => storage.encryptionSecretKey(groups[0])).toThrowError();
 
-			storage.registerKeyGen(groups[0], coefficients);
+			storage.registerKeyGen(groups[0], encryptionSecretKey, coefficients);
 
 			expect(storage.coefficients(groups[0])).toEqual(coefficients);
-			expect(storage.encryptionKey(groups[0])).toEqual(coefficients[0]);
+			expect(storage.encryptionSecretKey(groups[0])).toEqual(encryptionSecretKey);
 
 			storage.clearKeyGen(groups[0]);
 
 			expect(() => storage.coefficients(groups[0])).toThrowError();
-			expect(() => storage.encryptionKey(groups[0])).toThrowError();
+			expect(() => storage.encryptionSecretKey(groups[0])).toThrowError();
 		});
 
 		it("should register commitments", () => {
 			const storage = testStorage(participants[0].address);
 
 			expect(() =>
-				storage.registerCommitments(groups[0], commitments[1].id, commitments[1].value, commitments[1].encryptionKey),
+				storage.registerCommitments(
+					groups[0],
+					commitments[1].id,
+					commitments[1].encryptionPublicKey,
+					commitments[1].value,
+				),
 			).toThrowError();
 			expect(() => storage.commitments(groups[0], commitments[1].id)).toThrowError();
 			expect(() => storage.encryptionPublicKey(groups[0], commitments[1].id)).toThrowError();
@@ -139,16 +145,36 @@ describe("sqlite", () => {
 
 			storage.registerGroup(groups[0], participants, 2);
 
-			storage.registerCommitments(groups[0], commitments[1].id, commitments[1].value, commitments[1].encryptionKey);
+			storage.registerCommitments(
+				groups[0],
+				commitments[1].id,
+				commitments[1].encryptionPublicKey,
+				commitments[1].value,
+			);
 
 			expect(storage.missingCommitments(groups[0])).toEqual([commitments[0].id, commitments[2].id]);
 			expect(storage.checkIfCommitmentsComplete(groups[0])).toBe(false);
 			expect(() =>
-				storage.registerCommitments(groups[0], commitments[1].id, commitments[1].value, commitments[1].encryptionKey),
+				storage.registerCommitments(
+					groups[0],
+					commitments[1].id,
+					commitments[1].encryptionPublicKey,
+					commitments[1].value,
+				),
 			).toThrowError();
 
-			storage.registerCommitments(groups[0], commitments[0].id, commitments[0].value, commitments[0].encryptionKey);
-			storage.registerCommitments(groups[0], commitments[2].id, commitments[2].value, commitments[2].encryptionKey);
+			storage.registerCommitments(
+				groups[0],
+				commitments[0].id,
+				commitments[0].encryptionPublicKey,
+				commitments[0].value,
+			);
+			storage.registerCommitments(
+				groups[0],
+				commitments[2].id,
+				commitments[2].encryptionPublicKey,
+				commitments[2].value,
+			);
 
 			expect(storage.missingCommitments(groups[0])).toEqual([]);
 			expect(storage.checkIfCommitmentsComplete(groups[0])).toBe(true);
@@ -156,8 +182,8 @@ describe("sqlite", () => {
 			for (const { id, value } of commitments) {
 				expect(storage.commitments(groups[0], id)).toEqual(value);
 			}
-			for (const { id, encryptionKey } of commitments) {
-				expect(storage.encryptionPublicKey(groups[0], id)).toEqual(encryptionKey);
+			for (const { id, encryptionPublicKey } of commitments) {
+				expect(storage.encryptionPublicKey(groups[0], id)).toEqual(encryptionPublicKey);
 			}
 
 			expect(sortedEntries(storage.commitmentsMap(groups[0]))).toEqual(commitments.map((c) => [c.id, c.value]));

@@ -89,9 +89,10 @@ export class SqliteClientStorage implements GroupInfoStorage, KeyGenInfoStorage,
 				group_id TEXT NOT NULL,
 				id INTEGER NOT NULL,
 				address TEXT NOT NULL,
+				encryption_secret_key BLOB,
 				coefficients BLOB,
+				encryption_public_key BLOB,
 				commitments BLOB,
-				encryption_key BLOB,
 				verification_share BLOB,
 				signing_share BLOB,
 				PRIMARY KEY(group_id, id),
@@ -314,28 +315,28 @@ export class SqliteClientStorage implements GroupInfoStorage, KeyGenInfoStorage,
 		this.#db.prepare("DELETE FROM groups WHERE id = ?").run(groupId);
 	}
 
-	registerKeyGen(groupId: GroupId, coefficients: readonly bigint[]): void {
-		this.setGroupThisParticipantColumn(groupId, "coefficients", concat(coefficients.map(scalarToBytes)));
+	registerKeyGen(groupId: GroupId, encryptionSecretKey: bigint, coefficients: readonly bigint[]): void {
+		this.#db.transaction(() => {
+			this.setGroupThisParticipantColumn(groupId, "encryption_secret_key", scalarToBytes(encryptionSecretKey));
+			this.setGroupThisParticipantColumn(groupId, "coefficients", concat(coefficients.map(scalarToBytes)));
+		})();
 	}
 
 	registerCommitments(
 		groupId: GroupId,
 		participantId: ParticipantId,
+		encryptionPublicKey: FrostPoint,
 		commitments: readonly FrostPoint[],
-		encryptionKey: FrostPoint,
 	): void {
-		const { changes } = this.#db
-			.prepare(
-				`
-					UPDATE group_participants
-					SET commitments = ?, encryption_key = ?
-					WHERE group_id = ? AND id = ? AND commitments IS NULL AND encryption_key IS NULL
-				`,
-			)
-			.run(concat(commitments.map((point) => point.toBytes())), encryptionKey.toBytes(), groupId, participantId);
-		if (changes !== 1) {
-			throw new Error("group participant not found or value already set");
-		}
+		this.#db.transaction(() => {
+			this.setGroupParticipantColumn(groupId, participantId, "encryption_public_key", encryptionPublicKey.toBytes());
+			this.setGroupParticipantColumn(
+				groupId,
+				participantId,
+				"commitments",
+				concat(commitments.map((point) => point.toBytes())),
+			);
+		})();
 	}
 
 	registerSecretShare(groupId: GroupId, participantId: ParticipantId, share: bigint): void {
@@ -466,11 +467,11 @@ export class SqliteClientStorage implements GroupInfoStorage, KeyGenInfoStorage,
 		return exists === 0;
 	}
 
-	encryptionKey(groupId: GroupId): bigint {
-		return this.getGroupThisParticipantColumn(groupId, "SUBSTRING(coefficients, 1, 32)", dbScalarSchema);
+	encryptionSecretKey(groupId: GroupId): bigint {
+		return this.getGroupThisParticipantColumn(groupId, "encryption_secret_key", dbScalarSchema);
 	}
 	encryptionPublicKey(groupId: GroupId, participantId: ParticipantId): FrostPoint {
-		return this.getGroupParticipantColumn(groupId, participantId, "encryption_key", dbPointSchema);
+		return this.getGroupParticipantColumn(groupId, participantId, "encryption_public_key", dbPointSchema);
 	}
 
 	coefficients(groupId: GroupId): readonly bigint[] {
@@ -520,9 +521,15 @@ export class SqliteClientStorage implements GroupInfoStorage, KeyGenInfoStorage,
 	}
 
 	clearKeyGen(groupId: GroupId): void {
-		const deleteCoefficientsAndCommitments = this.#db.prepare(
-			"UPDATE group_participants SET coefficients = NULL, commitments = NULL, encryption_key = NULL WHERE group_id = ?",
-		);
+		const deleteCoefficientsAndCommitments = this.#db.prepare(`
+			UPDATE group_participants
+			SET
+				encryption_secret_key = NULL,
+				coefficients = NULL,
+				encryption_public_key = NULL,
+				commitments = NULL
+			WHERE group_id = ?
+		`);
 		const deleteSecretShares = this.#db.prepare("DELETE FROM group_secret_shares WHERE group_id = ?");
 		this.#db.transaction(() => {
 			deleteCoefficientsAndCommitments.run(groupId);
