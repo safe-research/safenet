@@ -141,7 +141,7 @@ The main purpose of Safenet is to attest to Safe transactions. Attestations are 
 Because FROST signatures only require a threshold of participants to be involved, Safenet is resilient to intermittent outages and/or malicious behavior of less than half of the validators participating in an epoch. In case a validator is not available or acts maliciously, it is removed from the selection of participants for a given transaction attestation so that the signing ceremony can be restarted and the transaction ultimately attested.
 
 > [!IMPORTANT]
-> In case of a severe outage where more than half of the participating validators in an epoch are down, Safe transactions cannot be attested.
+> In the event of a severe outage in which half or more of the participating validators in an epoch are down, Safe transactions cannot be attested.
 
 #### Epoch Rollover Attestations
 
