@@ -6,7 +6,7 @@ All the commands specified in `package.json` currently only simulates the transa
 
 We use Foundry as a tool for the deployment & interaction scripts. Make sure to have Foundry installed and set up in your system. You can follow the instructions from the [Foundry Book](https://www.getfoundry.sh/introduction/installation) for installation.
 
-Please use the project setup commands specified in the root [README](/README.md) to install the required libraries for this script command:
+Make sure to follow the setup instructions from the project [README](../../README.md#project-setup)
 
 Also, please use the `.env.sample` file to create a `.env` file and fill the required values before running the commands.
 

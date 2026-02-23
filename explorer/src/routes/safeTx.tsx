@@ -23,12 +23,12 @@ export function SafeTransaction() {
 	const { chainId, safeTxHash } = Route.useSearch();
 	const details = useSafeTransactionDetails(chainId, safeTxHash);
 	return (
-		<Container>
+		<Container className="space-y-4">
 			<ConditionalBackButton />
 			<ContainerTitle>Transaction Details</ContainerTitle>
 			{details.isLoading && "Loading ..."}
 			{details.data !== null && (
-				<div className={"space-y-4"}>
+				<>
 					<Box>
 						<SafeTxOverview title={`Safe Tx Hash: ${safeTxHash}`} transaction={details.data} />
 					</Box>
@@ -38,7 +38,7 @@ export function SafeTransaction() {
 					<Box>
 						<SafeTxProposals transaction={details.data} />
 					</Box>
-				</div>
+				</>
 			)}
 			{!details.isFetching && details.data === null && <Box>"Could not load proposal!"</Box>}
 		</Container>

@@ -37,7 +37,7 @@ function writeConsensusState(db: Database, state: ConsensusState): void {
 }
 
 function loadSigningStates(db: Database): Record<SignatureId, SigningState> {
-	const stmt = db.prepare("SELECT signatureId, stateJson FROM signing_states");
+	const stmt = db.prepare("SELECT id, stateJson FROM signing_states");
 	const results = signingQueryResultSchema.parse(stmt.all());
 
 	const signingStates: Record<SignatureId, SigningState> = {};
@@ -45,7 +45,7 @@ function loadSigningStates(db: Database): Record<SignatureId, SigningState> {
 	for (const row of results) {
 		// If this fails we should abort as the db is in an invalid state
 		const data = JSON.parse(row.stateJson);
-		signingStates[row.signatureId] = signingStateSchema.parse(data);
+		signingStates[row.id] = signingStateSchema.parse(data);
 	}
 
 	return signingStates;
@@ -54,16 +54,16 @@ function loadSigningStates(db: Database): Record<SignatureId, SigningState> {
 function deleteSigningState(db: Database, id: SignatureId): void {
 	db.prepare(`
 		DELETE FROM signing_states
-		WHERE signatureId = ?;
+		WHERE id = ?;
 	`).run(id);
 }
 
 function writeSigningState(db: Database, id: SignatureId, state: SigningState): void {
 	const stateJson = JSON.stringify(state, jsonReplacer);
 	db.prepare(`
-		INSERT INTO signing_states (signatureId, stateJson)
+		INSERT INTO signing_states (id, stateJson)
 		VALUES (?, ?)
-		ON CONFLICT(signatureId) DO UPDATE SET
+		ON CONFLICT(id) DO UPDATE SET
 			stateJson = excluded.stateJson;
 	`).run(id, stateJson);
 }
@@ -112,8 +112,8 @@ export class SqliteStateStorage extends InMemoryStateStorage {
 				stateJson TEXT NOT NULL
 			);
 			CREATE TABLE IF NOT EXISTS signing_states (
-				-- The SignatureId is the unique key for each signing session
-				signatureId TEXT PRIMARY KEY NOT NULL,
+				-- The Message is used as the id and is the unique key for each signing session
+				id TEXT PRIMARY KEY NOT NULL,
 
 				-- Stores the JSON serialized representation of a single SigningState object
 				stateJson TEXT NOT NULL
@@ -139,11 +139,11 @@ export class SqliteStateStorage extends InMemoryStateStorage {
 				writeRolloverState(this.#db, diff.rollover);
 			}
 			if (diff.signing) {
-				const [signatureId, update] = diff.signing;
+				const [id, update] = diff.signing;
 				if (update === undefined) {
-					deleteSigningState(this.#db, signatureId);
+					deleteSigningState(this.#db, id);
 				} else {
-					writeSigningState(this.#db, signatureId, update);
+					writeSigningState(this.#db, id, update);
 				}
 			}
 		})();
