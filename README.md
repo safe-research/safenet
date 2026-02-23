@@ -10,6 +10,8 @@ This is a work-in-progress. Don't use it yet!
 
 ## Developping
 
+### Project Setup
+
 Clone the repository and all its submodules with:
 
 ```sh
