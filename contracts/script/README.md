@@ -2,6 +2,10 @@
 
 All the commands specified in `package.json` currently only simulates the transaction. For signing and broadcasting the transaction, you should use the `--rpc-url` and `--broadcast` flag along with the wallet configuration in forge. Make sure to fill the `.env` file with the correct values before running the commands.
 
+## Project Setup
+
+Make sure to follow the setup instructions from the project [README](../../README.md#developping).
+
 ## Staking
 
 ### Chain
