@@ -9,6 +9,11 @@ library DeterministicDeployment {
     type Factory is address;
 
     /**
+     * @notice The SAFE singleton factory address used for deterministic deployments.
+     */
+    Factory constant SAFE_SINGLETON_FACTORY = Factory.wrap(0x914d7Fec6aaC8cd542e72Bca78B30650d45643d7);
+
+    /**
      * @notice The canonical CREATE2 factory address used by Foundry by default. Anvil will always deploy this factory
      *         when spinning up a test node.
      */
