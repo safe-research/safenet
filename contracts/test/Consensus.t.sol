@@ -99,4 +99,10 @@ contract ConsensusTest is Test {
         (address staker) = consensus.getValidatorStaker(validator);
         assertEq(staker, newStaker);
     }
+
+    function test_revert_updateValidatorStaker_ZeroAddress() public {
+        vm.prank(validator);
+        vm.expectRevert(abi.encodeWithSelector(Consensus.StakerAddressCannotBeZero.selector));
+        consensus.updateValidatorStaker(address(0));
+    }
 }
