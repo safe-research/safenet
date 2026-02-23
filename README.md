@@ -2,36 +2,38 @@
 
 This is a work-in-progress. Don't use it yet!
 
-## Project setup
+## Project Organisation
 
 - [Contracts](./contracts) Consensus contracts (Solidity & Foundry)
+- [Explorer](./explorer) Explorer web interface (Typescript & npm)
 - [Validator](./validator) Validator service (Typescript & npm)
 
-## Install dependencies
+## Developping
 
-### Contracts
-```
-forge install
-```
+Clone the repository and all its submodules with:
 
-### Validator
-```
-npm install
+```sh
+git clone --recurse-submodules https://github.com/safe-research/safenet
 ```
 
-## Run tests
+Safenet repository currently an NPM workspace project. Install dependencies with:
 
-Contracts
-```
-forge test
+```sh
+npm ci
 ```
 
-Validator
+### Run tests
+
+Unit tests for all projects:
+
 ```
 npm test
 ```
 
-Integration
-```
+Integration test:
+
+```sh
 npm run test:integration
 ```
+
+Verbose logging for tests can be enabled by setting `SAFENET_TEST_VERBOSE=1`.
