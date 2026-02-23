@@ -9,7 +9,7 @@ contract DeployERC20Script is Script {
     using DeterministicDeployment for DeterministicDeployment.Factory;
 
     function run() public returns (address erc20) {
-        uint256 factoryChoice = vm.envUint("FACTORY");
+        uint256 factoryChoice = vm.envOr("FACTORY", uint256(1));
         DeterministicDeployment.Factory factory;
 
         if (factoryChoice == 1) {
