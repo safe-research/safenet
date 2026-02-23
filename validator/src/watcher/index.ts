@@ -3,6 +3,7 @@
  */
 
 import type { Prettify } from "viem";
+import { formatError } from "../utils/errors.js";
 import type { Logger } from "../utils/logging.js";
 import { Backoff, type Config as BackoffConfig } from "./backoff.js";
 import {
@@ -85,7 +86,7 @@ export class Watcher<E extends Events> {
 			try {
 				await this.#backoff.throttled(() => this.#next());
 			} catch (error) {
-				this.#logger.warn("Internal watcher error.", { error });
+				this.#logger.warn("Internal watcher error.", { error: formatError(error) });
 			}
 		}
 	}
@@ -95,7 +96,7 @@ export class Watcher<E extends Events> {
 			try {
 				handler(update);
 			} catch (error) {
-				this.#logger.warn("Watcher handler failed.", { error, update });
+				this.#logger.warn("Watcher handler failed.", { error: formatError(error), update });
 			}
 		}
 	}

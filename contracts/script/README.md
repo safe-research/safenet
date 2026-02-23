@@ -2,6 +2,10 @@
 
 All the commands specified in `package.json` currently only simulates the transaction. For signing and broadcasting the transaction, you should use the `--rpc-url` and `--broadcast` flag along with the wallet configuration in forge. Make sure to fill the `.env` file with the correct values before running the commands.
 
+## Project Setup
+
+Make sure to follow the setup instructions from the project [README](../../README.md#project-setup).
+
 ## Staking
 
 ### Chain
@@ -25,13 +29,13 @@ The deployed contract address can be taken from the Logs of forge script command
 #### Command
 
 ```
-npm run cmd:erc20 -w @safenet/contracts
+npm run cmd:deploy:testing-erc20 -w @safenet/contracts
 ```
 
 For broadcasting and specifying rpc url along with sender, you can use the following command:
 
 ```
-npm run cmd:erc20 -w @safenet/contracts -- --rpc-url http://127.0.0.1:8545 --broadcast --sender 0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266 --account anvil-1
+npm run cmd:deploy:testing-erc20 -w @safenet/contracts -- --rpc-url http://127.0.0.1:8545 --broadcast --sender 0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266 --account anvil-1
 ```
 
 where
@@ -56,7 +60,7 @@ Tip: For easier Testing, both delays can be kept to a minimum. Always remember t
 #### Command
 
 ```
-npm run cmd:staking -w @safenet/contracts -- --rpc-url http://127.0.0.1:8545 --broadcast --sender 0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266 --account anvil-1
+npm run cmd:deploy:staking -w @safenet/contracts -- --rpc-url http://127.0.0.1:8545 --broadcast --sender 0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266 --account anvil-1
 ```
 
 ### (Optional) Propose and Accept Validators

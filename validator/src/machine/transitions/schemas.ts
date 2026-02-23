@@ -13,6 +13,7 @@ export const frostPointSchema = z
 	.transform((p) => toPoint(p));
 
 export const frostCommitmentSchema = z.object({
+	q: frostPointSchema,
 	c: z.array(frostPointSchema),
 	r: frostPointSchema,
 	mu: eventBigIntSchema,

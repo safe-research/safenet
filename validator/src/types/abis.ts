@@ -29,7 +29,7 @@ export const COORDINATOR_SIGN_COMPLETED_EVENT = parseAbiItem(
 
 export const COORDINATOR_OTHER_EVENTS = parseAbi([
 	"event KeyGen(bytes32 indexed gid, bytes32 participants, uint16 count, uint16 threshold, bytes32 context)",
-	"event KeyGenCommitted(bytes32 indexed gid, uint256 identifier, ((uint256 x, uint256 y)[] c, (uint256 x, uint256 y) r, uint256 mu) commitment, bool committed)",
+	"event KeyGenCommitted(bytes32 indexed gid, uint256 identifier, ((uint256 x, uint256 y) q, (uint256 x, uint256 y)[] c, (uint256 x, uint256 y) r, uint256 mu) commitment, bool committed)",
 	"event KeyGenSecretShared(bytes32 indexed gid, uint256 identifier, ((uint256 x, uint256 y) y, uint256[] f) share, bool shared)",
 	"event KeyGenConfirmed(bytes32 indexed gid, uint256 identifier, bool confirmed)",
 	"event KeyGenComplained(bytes32 indexed gid, uint256 plaintiff, uint256 accused, bool compromised)",
@@ -54,8 +54,8 @@ export const COORDINATOR_FUNCTIONS = parseAbi([
 	"error GroupNotInitialized()",
 	"error GroupNotCommitted()",
 	"error InvalidMessage()",
-	"function keyGenAndCommit(bytes32 participants, uint16 count, uint16 threshold, bytes32 context, uint256 identifier, bytes32[] poap, ((uint256 x, uint256 y)[] c, (uint256 x, uint256 y) r, uint256 mu) commitment) external",
-	"function keyGenCommit(bytes32 gid, uint256 identifier, bytes32[] poap, ((uint256 x, uint256 y)[] c, (uint256 x, uint256 y) r, uint256 mu) commitment) external",
+	"function keyGenAndCommit(bytes32 participants, uint16 count, uint16 threshold, bytes32 context, uint256 identifier, bytes32[] poap, ((uint256 x, uint256 y) q, (uint256 x, uint256 y)[] c, (uint256 x, uint256 y) r, uint256 mu) commitment) external",
+	"function keyGenCommit(bytes32 gid, uint256 identifier, bytes32[] poap, ((uint256 x, uint256 y) q, (uint256 x, uint256 y)[] c, (uint256 x, uint256 y) r, uint256 mu) commitment) external",
 	"function keyGenSecretShare(bytes32 gid, ((uint256 x, uint256 y) y, uint256[] f) share) external",
 	"function keyGenComplain(bytes32 gid, uint256 accused) external",
 	"function keyGenComplaintResponse(bytes32 gid, uint256 plaintiff, uint256 secretShare) external",

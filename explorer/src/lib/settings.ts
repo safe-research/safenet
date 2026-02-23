@@ -7,7 +7,7 @@ const STORAGE_KEY_SAFE_API_SETTINGS = "localStorage.safe_api_settings.object.v1"
 const STORAGE_KEY_SAFE_UI_SETTINGS = "localStorage.safe_ui_settings.object.v1";
 
 const DEFAULT_SETTINGS = {
-	consensus: "0xF39F38a7e40fD51C7c5f355d92A0AFA75776871F" as Address,
+	consensus: "0x49Db717Adec0D22235A73C3a9c2ea57AB0bC2353" as Address,
 	rpc: "https://ethereum-sepolia-rpc.publicnode.com",
 	decoder: "https://calldata.swiss-knife.xyz/decoder?calldata=",
 };

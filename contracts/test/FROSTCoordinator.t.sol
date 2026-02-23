@@ -67,11 +67,13 @@ contract FROSTCoordinatorTest is Test {
         // `someArray[0]`.
 
         // Round 1.1
+        uint256[] memory q = new uint256[](COUNT + 1);
         uint256[][] memory a = new uint256[][](COUNT + 1);
         for (uint256 identifier = 1; identifier <= COUNT; identifier++) {
+            q[identifier] = vm.randomUint(1, Secp256k1.N - 1);
             a[identifier] = new uint256[](THRESHOLD);
             for (uint256 j = 0; j < THRESHOLD; j++) {
-                a[identifier][j] = vm.randomUint(0, Secp256k1.N - 1);
+                a[identifier][j] = vm.randomUint(1, Secp256k1.N - 1);
             }
         }
 
@@ -80,7 +82,7 @@ contract FROSTCoordinatorTest is Test {
         for (uint256 identifier = 1; identifier <= COUNT; identifier++) {
             FROSTCoordinator.KeyGenCommitment memory commitment = commitments[identifier];
 
-            uint256 k = vm.randomUint(0, Secp256k1.N - 1);
+            uint256 k = vm.randomUint(1, Secp256k1.N - 1);
             commitment.r = ForgeSecp256k1.g(k).toPoint();
             uint256 c = FROST.keyGenChallenge(
                 FROST.newIdentifier(identifier), ForgeSecp256k1.g(a[identifier][0]).toPoint(), commitment.r
@@ -89,17 +91,21 @@ contract FROSTCoordinatorTest is Test {
         }
 
         // Round 1.3
-        // Note that `cc[identifier]` is equivalent to
-        // `commitments[identifier].c`. We need the additional array to keep
+        // Note that `qq[identifier]` and `cc[identifier]` are equivalent to
+        // `commitments[identifier].q` and `commitments[identifier].c`
+        // respectively. We need these additional arrays in order to keep
         // `ForgeSecp256k1.P` versions of our points, because implementing
         // elliptic curve multiplication natively on the EVM is prohibitively
         // slow, and so we need to use the built-in Forge cheatcodes for doing
         // the elliptic curve operations for the test. These elliptic curve
         // operations are done offchain anyway, so this is not a concern for the
         // actual production system.
+        ForgeSecp256k1.P[] memory qq = new ForgeSecp256k1.P[](COUNT + 1);
         ForgeSecp256k1.P[][] memory cc = new ForgeSecp256k1.P[][](COUNT + 1);
         for (uint256 identifier = 1; identifier <= COUNT; identifier++) {
             FROSTCoordinator.KeyGenCommitment memory commitment = commitments[identifier];
+            qq[identifier] = ForgeSecp256k1.g(q[identifier]);
+            commitment.q = qq[identifier].toPoint();
             commitment.c = new Secp256k1.Point[](THRESHOLD);
             cc[identifier] = new ForgeSecp256k1.P[](THRESHOLD);
             for (uint256 j = 0; j < THRESHOLD; j++) {
@@ -169,7 +175,7 @@ contract FROSTCoordinatorTest is Test {
                 // additional secret channel. This also implies that we only
                 // completely delete `f` in 2.3, as we need `a_0` to recover the
                 // secret shares sent by other participants.
-                fi = _ecdh(fi, a[identifier][0], cc[l][0]);
+                fi = _ecdh(fi, q[identifier], qq[l]);
 
                 share.f[i++] = fi;
             }
@@ -201,7 +207,7 @@ contract FROSTCoordinatorTest is Test {
 
                 // EXTENSION: We need to reverse the ECDH we applied in the
                 // previous step.
-                f[identifier][l] = _ecdh(f[identifier][l], a[identifier][0], cc[l][0]);
+                f[identifier][l] = _ecdh(f[identifier][l], q[identifier], qq[l]);
 
                 Secp256k1.Point memory gf = ForgeSecp256k1.g(f[identifier][l]).toPoint();
                 Secp256k1.Point memory fc = _fc(cc[l], identifier).toPoint();
@@ -389,10 +395,13 @@ contract FROSTCoordinatorTest is Test {
             a[j] = vm.randomUint(0, Secp256k1.N - 1);
         }
 
+        FROSTCoordinator.KeyGenCommitment memory commitment;
+        // Because we are in a trusted setup, we don't actually need to encrypt
+        // anything. Specify a dummy encryption key.
+        commitment.q = ForgeSecp256k1.g(1).toPoint();
         // In our trusted key gen setup, we pretend like the first participant
         // has the full polynomial for deriving all the shares, and all other
         // participants do not add anything.
-        FROSTCoordinator.KeyGenCommitment memory commitment;
         commitment.c = new Secp256k1.Point[](THRESHOLD);
         for (uint256 identifier = 2; identifier <= COUNT; identifier++) {
             bytes32 root = participants.root();

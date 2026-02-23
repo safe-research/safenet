@@ -32,13 +32,14 @@ export const handleTransactionProposed = async (
 		},
 	};
 	const result = await verificationEngine.verify(packet);
+	const span = { tx: event.transaction, safeTxHash: event.transactionHash };
 	if (result.status === "invalid") {
-		// Invalid packed, don't update state
-		logger?.info?.("Invalid message", { tx: event.transaction, error: result.error });
+		// Invalid packet, don't update state
+		logger?.info?.(`Invalid transaction packet: ${result.error.message}`, span);
 		return {};
 	}
 	const message = result.packetId;
-	logger?.info?.(`Verified message ${message}`, { tx: event.transaction });
+	logger?.info?.(`Verified transaction packet: ${message}`, span);
 	// The signing will be triggered in a separate event
 	const signers = signingClient.participants(group.groupId);
 	return {

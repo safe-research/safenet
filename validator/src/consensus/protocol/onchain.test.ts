@@ -360,7 +360,8 @@ describe("OnchainProtocol", () => {
 		expect(setAllBeforeAsExecuted).toBeCalledTimes(1);
 		expect(setAllBeforeAsExecuted).toBeCalledWith(10);
 		expect(submittedUpTo).toBeCalledTimes(1);
-		expect(estimateFees).toBeCalledTimes(2);
+		// Only 1 call is expected, as the rest of the pending txs are skipped on error
+		expect(estimateFees).toBeCalledTimes(1);
 	});
 
 	it("should mark as completed if nonce too low error on submission", async () => {
@@ -369,13 +370,15 @@ describe("OnchainProtocol", () => {
 		const publicClient = {
 			getTransactionCount,
 		} as unknown as PublicClient;
-		const sendTransaction = vi.fn();
+		const signTransaction = vi.fn();
+		const sendRawTransaction = vi.fn();
 		const chain = gnosisChiado;
 		const account = { address: entryPoint09Address };
 		const signingClient = {
 			account,
 			chain,
-			sendTransaction,
+			signTransaction,
+			sendRawTransaction,
 		} as unknown as WalletClient<Transport, Chain, Account>;
 		const estimateFees = vi.fn();
 		const gasFeeEstimator = {
@@ -412,7 +415,8 @@ describe("OnchainProtocol", () => {
 			maxFeePerGas: 200n,
 			maxPriorityFeePerGas: 100n,
 		});
-		sendTransaction.mockRejectedValueOnce(new NonceTooLowError());
+		signTransaction.mockResolvedValueOnce("0x5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe");
+		sendRawTransaction.mockRejectedValueOnce(new NonceTooLowError());
 		const protocol = new OnchainProtocol({
 			publicClient,
 			signingClient,
@@ -441,8 +445,8 @@ describe("OnchainProtocol", () => {
 			maxFeePerGas: 200n,
 			maxPriorityFeePerGas: 100n,
 		});
-		expect(sendTransaction).toBeCalledTimes(1);
-		expect(sendTransaction).toBeCalledWith({
+		expect(signTransaction).toBeCalledTimes(1);
+		expect(signTransaction).toBeCalledWith({
 			...tx,
 			nonce: 10,
 			account,
@@ -450,7 +454,13 @@ describe("OnchainProtocol", () => {
 			maxFeePerGas: 200n,
 			maxPriorityFeePerGas: 100n,
 		});
-		expect(setHash).toBeCalledTimes(0);
+		expect(setHash).toBeCalledTimes(1);
+		const txHash = keccak256("0x5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe");
+		expect(setHash).toBeCalledWith(10, txHash);
+		expect(sendRawTransaction).toBeCalledTimes(1);
+		expect(sendRawTransaction).toBeCalledWith({
+			serializedTransaction: "0x5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe",
+		});
 	});
 
 	it("should mark as completed if nested nonce too low error on submission", async () => {
@@ -459,13 +469,15 @@ describe("OnchainProtocol", () => {
 		const publicClient = {
 			getTransactionCount,
 		} as unknown as PublicClient;
-		const sendTransaction = vi.fn();
+		const signTransaction = vi.fn();
+		const sendRawTransaction = vi.fn();
 		const chain = gnosisChiado;
 		const account = { address: entryPoint09Address };
 		const signingClient = {
 			account,
 			chain,
-			sendTransaction,
+			signTransaction,
+			sendRawTransaction,
 		} as unknown as WalletClient<Transport, Chain, Account>;
 		const estimateFees = vi.fn();
 		const gasFeeEstimator = {
@@ -502,7 +514,8 @@ describe("OnchainProtocol", () => {
 			maxFeePerGas: 200n,
 			maxPriorityFeePerGas: 100n,
 		});
-		sendTransaction.mockRejectedValueOnce(
+		signTransaction.mockResolvedValueOnce("0x5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe");
+		sendRawTransaction.mockRejectedValueOnce(
 			new TransactionExecutionError(
 				new NonceTooLowError(),
 				{} as unknown as Omit<SendTransactionParameters, "account" | "chain"> & {
@@ -540,8 +553,8 @@ describe("OnchainProtocol", () => {
 			maxFeePerGas: 200n,
 			maxPriorityFeePerGas: 100n,
 		});
-		expect(sendTransaction).toBeCalledTimes(1);
-		expect(sendTransaction).toBeCalledWith({
+		expect(signTransaction).toBeCalledTimes(1);
+		expect(signTransaction).toBeCalledWith({
 			...tx,
 			nonce: 10,
 			account,
@@ -549,22 +562,30 @@ describe("OnchainProtocol", () => {
 			maxFeePerGas: 200n,
 			maxPriorityFeePerGas: 100n,
 		});
-		expect(setHash).toBeCalledTimes(0);
+		expect(setHash).toBeCalledTimes(1);
+		const txHash = keccak256("0x5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe");
+		expect(setHash).toBeCalledWith(10, txHash);
+		expect(sendRawTransaction).toBeCalledTimes(1);
+		expect(sendRawTransaction).toBeCalledWith({
+			serializedTransaction: "0x5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe",
+		});
 	});
 
-	it("should do nothing on unexpected error on submission", async () => {
+	it("should set tx hash on unexpected error on submission", async () => {
 		const queue = new InMemoryQueue<ActionWithTimeout>();
 		const getTransactionCount = vi.fn();
 		const publicClient = {
 			getTransactionCount,
 		} as unknown as PublicClient;
-		const sendTransaction = vi.fn();
+		const signTransaction = vi.fn();
+		const sendRawTransaction = vi.fn();
 		const chain = gnosisChiado;
 		const account = { address: entryPoint09Address };
 		const signingClient = {
 			account,
 			chain,
-			sendTransaction,
+			signTransaction,
+			sendRawTransaction,
 		} as unknown as WalletClient<Transport, Chain, Account>;
 		const estimateFees = vi.fn();
 		const gasFeeEstimator = {
@@ -599,7 +620,8 @@ describe("OnchainProtocol", () => {
 			maxFeePerGas: 200n,
 			maxPriorityFeePerGas: 100n,
 		});
-		sendTransaction.mockRejectedValueOnce(new Error("Test unexpected!"));
+		signTransaction.mockResolvedValueOnce("0x5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe");
+		sendRawTransaction.mockRejectedValueOnce(new Error("Test unexpected!"));
 		const protocol = new OnchainProtocol({
 			publicClient,
 			signingClient,
@@ -621,8 +643,8 @@ describe("OnchainProtocol", () => {
 		expect(setAllBeforeAsExecuted).toBeCalledTimes(1);
 		expect(setAllBeforeAsExecuted).toBeCalledWith(10);
 		expect(estimateFees).toBeCalledTimes(1);
-		expect(sendTransaction).toBeCalledTimes(1);
-		expect(sendTransaction).toBeCalledWith({
+		expect(signTransaction).toBeCalledTimes(1);
+		expect(signTransaction).toBeCalledWith({
 			...tx,
 			nonce: 10,
 			account,
@@ -630,7 +652,13 @@ describe("OnchainProtocol", () => {
 			maxFeePerGas: 200n,
 			maxPriorityFeePerGas: 100n,
 		});
-		expect(setHash).toBeCalledTimes(0);
+		expect(setHash).toBeCalledTimes(1);
+		const txHash = keccak256("0x5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe");
+		expect(setHash).toBeCalledWith(10, txHash);
+		expect(sendRawTransaction).toBeCalledTimes(1);
+		expect(sendRawTransaction).toBeCalledWith({
+			serializedTransaction: "0x5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe",
+		});
 	});
 
 	it("should resubmit submittedUpTo tx without stored gas fees", async () => {
@@ -639,13 +667,15 @@ describe("OnchainProtocol", () => {
 		const publicClient = {
 			getTransactionCount,
 		} as unknown as PublicClient;
-		const sendTransaction = vi.fn();
+		const signTransaction = vi.fn();
+		const sendRawTransaction = vi.fn();
 		const chain = gnosisChiado;
 		const account = { address: entryPoint09Address };
 		const signingClient = {
 			account,
 			chain,
-			sendTransaction,
+			signTransaction,
+			sendRawTransaction,
 		} as unknown as WalletClient<Transport, Chain, Account>;
 		const estimateFees = vi.fn();
 		const gasFeeEstimator = {
@@ -682,8 +712,9 @@ describe("OnchainProtocol", () => {
 			maxFeePerGas: 200n,
 			maxPriorityFeePerGas: 100n,
 		});
-		const retryHash = keccak256("0x5afe5afe02");
-		sendTransaction.mockResolvedValueOnce(retryHash);
+		signTransaction.mockResolvedValueOnce("0x5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe");
+		const retryHash = keccak256("0x5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe");
+		sendRawTransaction.mockResolvedValueOnce(retryHash);
 		const protocol = new OnchainProtocol({
 			publicClient,
 			signingClient,
@@ -705,14 +736,18 @@ describe("OnchainProtocol", () => {
 		expect(setAllBeforeAsExecuted).toBeCalledTimes(1);
 		expect(setAllBeforeAsExecuted).toBeCalledWith(10);
 		expect(estimateFees).toBeCalledTimes(1);
-		expect(sendTransaction).toBeCalledTimes(1);
-		expect(sendTransaction).toBeCalledWith({
+		expect(signTransaction).toBeCalledTimes(1);
+		expect(signTransaction).toBeCalledWith({
 			...tx,
 			nonce: 10,
 			account,
 			chain,
 			maxFeePerGas: 200n,
 			maxPriorityFeePerGas: 100n,
+		});
+		expect(sendRawTransaction).toBeCalledTimes(1);
+		expect(sendRawTransaction).toBeCalledWith({
+			serializedTransaction: "0x5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe",
 		});
 		expect(setFees).toBeCalledTimes(1);
 		expect(setFees).toBeCalledWith(10, {
@@ -729,13 +764,15 @@ describe("OnchainProtocol", () => {
 		const publicClient = {
 			getTransactionCount,
 		} as unknown as PublicClient;
-		const sendTransaction = vi.fn();
+		const signTransaction = vi.fn();
+		const sendRawTransaction = vi.fn();
 		const chain = gnosisChiado;
 		const account = { address: entryPoint09Address };
 		const signingClient = {
 			account,
 			chain,
-			sendTransaction,
+			signTransaction,
+			sendRawTransaction,
 		} as unknown as WalletClient<Transport, Chain, Account>;
 		const estimateFees = vi.fn();
 		const gasFeeEstimator = {
@@ -775,8 +812,9 @@ describe("OnchainProtocol", () => {
 			maxFeePerGas: 200n,
 			maxPriorityFeePerGas: 100n,
 		});
+		signTransaction.mockResolvedValueOnce("0x5afe5afe02");
 		const retryHash = keccak256("0x5afe5afe02");
-		sendTransaction.mockResolvedValueOnce(retryHash);
+		sendRawTransaction.mockResolvedValueOnce(retryHash);
 		const protocol = new OnchainProtocol({
 			publicClient,
 			signingClient,
@@ -798,8 +836,8 @@ describe("OnchainProtocol", () => {
 		expect(setAllBeforeAsExecuted).toBeCalledTimes(1);
 		expect(setAllBeforeAsExecuted).toBeCalledWith(10);
 		expect(estimateFees).toBeCalledTimes(1);
-		expect(sendTransaction).toBeCalledTimes(1);
-		expect(sendTransaction).toBeCalledWith({
+		expect(signTransaction).toBeCalledTimes(1);
+		expect(signTransaction).toBeCalledWith({
 			...tx,
 			nonce: 10,
 			account,
@@ -807,6 +845,8 @@ describe("OnchainProtocol", () => {
 			maxFeePerGas: 200n,
 			maxPriorityFeePerGas: 100n,
 		});
+		expect(sendRawTransaction).toBeCalledTimes(1);
+		expect(sendRawTransaction).toBeCalledWith({ serializedTransaction: "0x5afe5afe02" });
 		expect(setFees).toBeCalledTimes(1);
 		expect(setFees).toBeCalledWith(10, {
 			maxFeePerGas: 200n,
@@ -822,13 +862,15 @@ describe("OnchainProtocol", () => {
 		const publicClient = {
 			getTransactionCount,
 		} as unknown as PublicClient;
-		const sendTransaction = vi.fn();
+		const signTransaction = vi.fn();
+		const sendRawTransaction = vi.fn();
 		const chain = gnosisChiado;
 		const account = { address: entryPoint09Address };
 		const signingClient = {
 			account,
 			chain,
-			sendTransaction,
+			signTransaction,
+			sendRawTransaction,
 		} as unknown as WalletClient<Transport, Chain, Account>;
 		const estimateFees = vi.fn();
 		const gasFeeEstimator = {
@@ -868,8 +910,9 @@ describe("OnchainProtocol", () => {
 			maxFeePerGas: 200n,
 			maxPriorityFeePerGas: 100n,
 		});
+		signTransaction.mockResolvedValueOnce("0x5afe5afe02");
 		const retryHash = keccak256("0x5afe5afe02");
-		sendTransaction.mockResolvedValueOnce(retryHash);
+		sendRawTransaction.mockResolvedValueOnce(retryHash);
 		const protocol = new OnchainProtocol({
 			publicClient,
 			signingClient,
@@ -891,8 +934,8 @@ describe("OnchainProtocol", () => {
 		expect(setAllBeforeAsExecuted).toBeCalledTimes(1);
 		expect(setAllBeforeAsExecuted).toBeCalledWith(10);
 		expect(estimateFees).toBeCalledTimes(1);
-		expect(sendTransaction).toBeCalledTimes(1);
-		expect(sendTransaction).toBeCalledWith({
+		expect(signTransaction).toBeCalledTimes(1);
+		expect(signTransaction).toBeCalledWith({
 			...tx,
 			nonce: 10,
 			account,
@@ -900,6 +943,8 @@ describe("OnchainProtocol", () => {
 			maxFeePerGas: 209n,
 			maxPriorityFeePerGas: 108n,
 		});
+		expect(sendRawTransaction).toBeCalledTimes(1);
+		expect(sendRawTransaction).toBeCalledWith({ serializedTransaction: "0x5afe5afe02" });
 		expect(setFees).toBeCalledTimes(1);
 		expect(setFees).toBeCalledWith(10, {
 			maxFeePerGas: 209n,
@@ -915,13 +960,15 @@ describe("OnchainProtocol", () => {
 		const publicClient = {
 			getTransactionCount,
 		} as unknown as PublicClient;
-		const sendTransaction = vi.fn();
+		const signTransaction = vi.fn();
+		const sendRawTransaction = vi.fn();
 		const chain = gnosisChiado;
 		const account = { address: entryPoint09Address };
 		const signingClient = {
 			account,
 			chain,
-			sendTransaction,
+			signTransaction,
+			sendRawTransaction,
 		} as unknown as WalletClient<Transport, Chain, Account>;
 		const estimateFees = vi.fn();
 		const gasFeeEstimator = {
@@ -956,8 +1003,9 @@ describe("OnchainProtocol", () => {
 			maxFeePerGas: 200n,
 			maxPriorityFeePerGas: 100n,
 		});
-		const hash = keccak256("0x5afe5afe");
-		sendTransaction.mockResolvedValueOnce(hash);
+		signTransaction.mockResolvedValueOnce("0x5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe");
+		const hash = keccak256("0x5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe");
+		sendRawTransaction.mockResolvedValueOnce(hash);
 		const protocol = new OnchainProtocol({
 			publicClient,
 			signingClient,
@@ -979,14 +1027,18 @@ describe("OnchainProtocol", () => {
 		expect(setAllBeforeAsExecuted).toBeCalledTimes(1);
 		expect(setAllBeforeAsExecuted).toBeCalledWith(10);
 		expect(estimateFees).toBeCalledTimes(1);
-		expect(sendTransaction).toBeCalledTimes(1);
-		expect(sendTransaction).toBeCalledWith({
+		expect(signTransaction).toBeCalledTimes(1);
+		expect(signTransaction).toBeCalledWith({
 			...tx,
 			nonce: 11,
 			account,
 			chain,
 			maxFeePerGas: 200n,
 			maxPriorityFeePerGas: 100n,
+		});
+		expect(sendRawTransaction).toBeCalledTimes(1);
+		expect(sendRawTransaction).toBeCalledWith({
+			serializedTransaction: "0x5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe",
 		});
 		expect(setFees).toBeCalledTimes(1);
 		expect(setFees).toBeCalledWith(11, {
@@ -1003,13 +1055,15 @@ describe("OnchainProtocol", () => {
 		const publicClient = {
 			getTransactionCount,
 		} as unknown as PublicClient;
-		const sendTransaction = vi.fn();
+		const signTransaction = vi.fn();
+		const sendRawTransaction = vi.fn();
 		const chain = gnosisChiado;
 		const account = { address: entryPoint09Address };
 		const signingClient = {
 			account,
 			chain,
-			sendTransaction,
+			signTransaction,
+			sendRawTransaction,
 		} as unknown as WalletClient<Transport, Chain, Account>;
 		const estimateFees = vi.fn();
 		const gasFeeEstimator = {
@@ -1055,7 +1109,8 @@ describe("OnchainProtocol", () => {
 			maxFeePerGas: 200n,
 			maxPriorityFeePerGas: 100n,
 		});
-		sendTransaction.mockResolvedValueOnce(hash);
+		signTransaction.mockResolvedValueOnce("0x5afe5afe");
+		sendRawTransaction.mockResolvedValueOnce(hash);
 		await protocol.checkPendingActions(10n);
 		expect(setSubmittedForPending).toBeCalledTimes(1);
 		expect(setSubmittedForPending).toBeCalledWith(10n);
@@ -1067,7 +1122,8 @@ describe("OnchainProtocol", () => {
 		expect(setAllBeforeAsExecuted).toBeCalledTimes(1);
 		expect(setAllBeforeAsExecuted).toBeCalledWith(11);
 		expect(estimateFees).toBeCalledTimes(1);
-		expect(sendTransaction).toBeCalledWith({
+		expect(signTransaction).toBeCalledTimes(1);
+		expect(signTransaction).toBeCalledWith({
 			...tx,
 			nonce: 11,
 			account,
@@ -1082,6 +1138,8 @@ describe("OnchainProtocol", () => {
 		});
 		expect(setHash).toBeCalledTimes(1);
 		expect(setHash).toBeCalledWith(11, hash);
+		expect(sendRawTransaction).toBeCalledTimes(1);
+		expect(sendRawTransaction).toBeCalledWith({ serializedTransaction: "0x5afe5afe" });
 	});
 
 	it("should delete tx on error if no additional tx was submitted", async () => {
@@ -1090,13 +1148,15 @@ describe("OnchainProtocol", () => {
 		const publicClient = {
 			getTransactionCount,
 		} as unknown as PublicClient;
-		const sendTransaction = vi.fn();
+		const signTransaction = vi.fn();
+		const sendRawTransaction = vi.fn();
 		const chain = gnosisChiado;
 		const account = { address: entryPoint09Address };
 		const signingClient = {
 			account,
 			chain,
-			sendTransaction,
+			signTransaction,
+			sendRawTransaction,
 		} as unknown as WalletClient<Transport, Chain, Account>;
 		const estimateFees = vi.fn();
 		const gasFeeEstimator = {
@@ -1106,10 +1166,12 @@ describe("OnchainProtocol", () => {
 		const setFees = vi.fn();
 		const maxNonce = vi.fn();
 		const deleteTx = vi.fn();
+		const setHash = vi.fn();
 		const txStorage = {
 			register,
 			setFees,
 			maxNonce,
+			setHash,
 			delete: deleteTx,
 		} as unknown as TransactionStorage;
 
@@ -1119,7 +1181,8 @@ describe("OnchainProtocol", () => {
 			maxFeePerGas: 200n,
 			maxPriorityFeePerGas: 100n,
 		});
-		sendTransaction.mockRejectedValueOnce(new Error("Test unexpected!"));
+		signTransaction.mockResolvedValueOnce("0x5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe");
+		sendRawTransaction.mockRejectedValueOnce(new Error("Test unexpected!"));
 		register.mockReturnValueOnce(10);
 		maxNonce.mockReturnValueOnce(10);
 		const protocol = new OnchainProtocol({
@@ -1148,14 +1211,21 @@ describe("OnchainProtocol", () => {
 		expect(register).toBeCalledTimes(1);
 		expect(register).toBeCalledWith(tx, 10);
 		expect(estimateFees).toBeCalledTimes(1);
-		expect(sendTransaction).toBeCalledTimes(1);
-		expect(sendTransaction).toBeCalledWith({
+		expect(signTransaction).toBeCalledTimes(1);
+		expect(signTransaction).toBeCalledWith({
 			...tx,
 			nonce: 10,
 			account,
 			chain,
 			maxFeePerGas: 200n,
 			maxPriorityFeePerGas: 100n,
+		});
+		expect(setHash).toBeCalledTimes(1);
+		const txHash = keccak256("0x5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe");
+		expect(setHash).toBeCalledWith(10, txHash);
+		expect(sendRawTransaction).toBeCalledTimes(1);
+		expect(sendRawTransaction).toBeCalledWith({
+			serializedTransaction: "0x5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe",
 		});
 		expect(deleteTx).toBeCalledTimes(1);
 		expect(deleteTx).toBeCalledWith(10);
@@ -1167,13 +1237,15 @@ describe("OnchainProtocol", () => {
 		const publicClient = {
 			getTransactionCount,
 		} as unknown as PublicClient;
-		const sendTransaction = vi.fn();
+		const signTransaction = vi.fn();
+		const sendRawTransaction = vi.fn();
 		const chain = gnosisChiado;
 		const account = { address: entryPoint09Address };
 		const signingClient = {
 			account,
 			chain,
-			sendTransaction,
+			signTransaction,
+			sendRawTransaction,
 		} as unknown as WalletClient<Transport, Chain, Account>;
 		const estimateFees = vi.fn();
 		const gasFeeEstimator = {
@@ -1183,9 +1255,11 @@ describe("OnchainProtocol", () => {
 		const setFees = vi.fn();
 		const maxNonce = vi.fn();
 		const deleteTx = vi.fn();
+		const setHash = vi.fn();
 		const txStorage = {
 			register,
 			setFees,
+			setHash,
 			maxNonce,
 			delete: deleteTx,
 		} as unknown as TransactionStorage;
@@ -1196,7 +1270,8 @@ describe("OnchainProtocol", () => {
 			maxFeePerGas: 200n,
 			maxPriorityFeePerGas: 100n,
 		});
-		sendTransaction.mockRejectedValueOnce(new Error("Test unexpected!"));
+		signTransaction.mockResolvedValueOnce("0x5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe");
+		sendRawTransaction.mockRejectedValueOnce(new Error("Test unexpected!"));
 		register.mockReturnValueOnce(10);
 		maxNonce.mockReturnValueOnce(11);
 		const protocol = new OnchainProtocol({
@@ -1213,7 +1288,7 @@ describe("OnchainProtocol", () => {
 		// Action was submitted and should be in the queue
 		expect(queue.peek()).toBeDefined();
 		await vi.waitFor(() => {
-			expect(sendTransaction).toHaveBeenCalled();
+			expect(sendRawTransaction).toHaveBeenCalled();
 		});
 		// Tx was stored, action should be popped
 		expect(queue.peek()).toBeUndefined();
@@ -1225,14 +1300,21 @@ describe("OnchainProtocol", () => {
 		expect(register).toBeCalledTimes(1);
 		expect(register).toBeCalledWith(tx, 10);
 		expect(estimateFees).toBeCalledTimes(1);
-		expect(sendTransaction).toBeCalledTimes(1);
-		expect(sendTransaction).toBeCalledWith({
+		expect(signTransaction).toBeCalledTimes(1);
+		expect(signTransaction).toBeCalledWith({
 			...tx,
 			nonce: 10,
 			account,
 			chain,
 			maxFeePerGas: 200n,
 			maxPriorityFeePerGas: 100n,
+		});
+		expect(setHash).toBeCalledTimes(1);
+		const txHash = keccak256("0x5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe");
+		expect(setHash).toBeCalledWith(10, txHash);
+		expect(sendRawTransaction).toBeCalledTimes(1);
+		expect(sendRawTransaction).toBeCalledWith({
+			serializedTransaction: "0x5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe",
 		});
 		expect(deleteTx).toBeCalledTimes(0);
 	});
@@ -1253,13 +1335,15 @@ describe("OnchainProtocol", () => {
 			const publicClient = {
 				getTransactionCount,
 			} as unknown as PublicClient;
-			const sendTransaction = vi.fn();
+			const signTransaction = vi.fn();
+			const sendRawTransaction = vi.fn();
 			const chain = gnosisChiado;
 			const account = { address: entryPoint09Address };
 			const signingClient = {
 				account,
 				chain,
-				sendTransaction,
+				signTransaction,
+				sendRawTransaction,
 			} as unknown as WalletClient<Transport, Chain, Account>;
 			const estimateFees = vi.fn();
 			const gasFeeEstimator = {
@@ -1291,13 +1375,16 @@ describe("OnchainProtocol", () => {
 				maxFeePerGas: 200n,
 				maxPriorityFeePerGas: 100n,
 			});
-			const txHash = keccak256("0x5afe5afe");
-			sendTransaction.mockResolvedValueOnce(txHash);
+			signTransaction.mockResolvedValueOnce(
+				"0x5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe",
+			);
+			const txHash = keccak256("0x5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe");
+			sendRawTransaction.mockResolvedValueOnce(txHash);
 
 			protocol.process(action, 0);
 			// Wait for the setHash that is triggered after successful submission
 			await vi.waitFor(() => {
-				expect(setHash).toHaveBeenCalled();
+				expect(sendRawTransaction).toHaveBeenCalled();
 			});
 			expect(getTransactionCount).toBeCalledTimes(1);
 			expect(getTransactionCount).toBeCalledWith({
@@ -1312,14 +1399,18 @@ describe("OnchainProtocol", () => {
 				maxFeePerGas: 200n,
 				maxPriorityFeePerGas: 100n,
 			});
-			expect(sendTransaction).toBeCalledTimes(1);
-			expect(sendTransaction).toBeCalledWith({
+			expect(signTransaction).toBeCalledTimes(1);
+			expect(signTransaction).toBeCalledWith({
 				...tx,
 				nonce: 10,
 				account,
 				chain,
 				maxFeePerGas: 200n,
 				maxPriorityFeePerGas: 100n,
+			});
+			expect(sendRawTransaction).toBeCalledTimes(1);
+			expect(sendRawTransaction).toBeCalledWith({
+				serializedTransaction: "0x5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe",
 			});
 			expect(setHash).toBeCalledTimes(1);
 			expect(setHash).toBeCalledWith(10, txHash);

@@ -1,4 +1,5 @@
 import type { Address, Hex } from "viem";
+import { formatError } from "../../utils/errors.js";
 import type { Logger } from "../../utils/logging.js";
 import { InMemoryQueue, type Queue } from "../../utils/queue.js";
 import type {
@@ -20,10 +21,12 @@ import type {
 
 const ACTION_TIMEOUT = 10 * 60 * 1000; // 10 minutes
 const ERROR_RETRY_DELAY = 1000;
+const ERROR_RETRY_MAX_DELAY = 5000;
 
 export abstract class BaseProtocol implements SafenetProtocol {
 	#actionQueue: Queue<ActionWithTimeout> = new InMemoryQueue<ActionWithTimeout>();
 	#currentAction?: ActionWithTimeout;
+	#retryDelay?: number;
 	#logger: Logger;
 
 	abstract chainId(): bigint;
@@ -41,12 +44,18 @@ export abstract class BaseProtocol implements SafenetProtocol {
 			...action,
 			validUntil: Date.now() + timeout,
 		});
-		this.checkNextAction();
+		// If no retry is scheduled, try immediate processing
+		if (this.#retryDelay === undefined) {
+			this.checkNextAction();
+		}
 	}
 
 	private checkNextAction() {
-		// Still processing
+		// An action is still processing
 		if (this.#currentAction !== undefined) return;
+		// Reset retry delay
+		const lastRetryDelay = this.#retryDelay;
+		this.#retryDelay = undefined;
 		const action = this.#actionQueue.peek();
 		// Nothing queued
 		if (action === undefined) return;
@@ -68,11 +77,16 @@ export abstract class BaseProtocol implements SafenetProtocol {
 				this.checkNextAction();
 			})
 			.catch((err) => {
-				this.#logger.info("Action failed, will retry after a delay!", { ...actionSpan, ...err });
+				// With each retry increase the delay until the maximum is reached
+				this.#retryDelay = Math.min((lastRetryDelay ?? 0) + ERROR_RETRY_DELAY, ERROR_RETRY_MAX_DELAY);
+				this.#logger.info(`Action failed, will retry after a delay of ${this.#retryDelay} ms!`, {
+					...actionSpan,
+					error: formatError(err),
+				});
 				this.#currentAction = undefined;
 				setTimeout(() => {
 					this.checkNextAction();
-				}, ERROR_RETRY_DELAY);
+				}, this.#retryDelay);
 			});
 	}
 

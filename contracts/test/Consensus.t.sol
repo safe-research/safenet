@@ -3,7 +3,7 @@ pragma solidity ^0.8.30;
 
 import {Test, Vm} from "@forge-std/Test.sol";
 import {MockCoordinator} from "@test/util/MockCoordinator.sol";
-import {Consensus} from "@/Consensus.sol";
+import {Consensus, IConsensus} from "@/Consensus.sol";
 import {FROSTGroupId} from "@/libraries/FROSTGroupId.sol";
 import {FROSTSignatureId} from "@/libraries/FROSTSignatureId.sol";
 
@@ -16,12 +16,14 @@ contract ConsensusTest is Test {
 
     MockCoordinator public coordinator;
     Consensus public consensus;
+    address public validator;
 
     function setUp() public {
         group = vm.createWallet("group");
 
         coordinator = new MockCoordinator();
         consensus = new Consensus(address(coordinator), GENESIS_GROUP);
+        validator = vm.createWallet("validator").addr;
     }
 
     function test_GetEpochGroup_ExistingGroup() public view {
@@ -82,5 +84,17 @@ contract ConsensusTest is Test {
         assertEq(0x5afe02, epochs.active);
         assertEq(0x5afe03, epochs.staged);
         assertEq(block.number + 1, epochs.rolloverBlock);
+    }
+
+    function test_updateValidatorStaker() public {
+        address newStaker = vm.createWallet("staker").addr;
+        vm.prank(validator);
+
+        vm.expectEmit(true, false, false, false);
+        emit IConsensus.ValidatorStakerSet(validator, newStaker);
+        consensus.setValidatorStaker(newStaker);
+
+        (address staker) = consensus.getValidatorStaker(validator);
+        assertEq(staker, newStaker);
     }
 }

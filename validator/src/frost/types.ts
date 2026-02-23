@@ -19,6 +19,11 @@ export type ProofOfKnowledge = {
 	mu: bigint;
 };
 
+export type EncryptionKey = {
+	secretKey: bigint;
+	publicKey: FrostPoint;
+};
+
 export type ProofOfAttestationParticipation = Hex[];
 
 export type GroupId = Hex;

@@ -13,7 +13,7 @@ export type PacketVerificationResult =
 			status: "valid";
 			packetId: Hex;
 	  }
-	| { status: "invalid"; error: unknown };
+	| { status: "invalid"; error: Error };
 
 export class VerificationEngine {
 	#typeHandlers: Map<string, PacketHandler<Typed>>;
@@ -36,7 +36,8 @@ export class VerificationEngine {
 				status: "valid",
 				packetId,
 			};
-		} catch (error: unknown) {
+		} catch (err: unknown) {
+			const error = err instanceof Error ? err : new Error(`unknown error: ${err}`);
 			return {
 				status: "invalid",
 				error,
