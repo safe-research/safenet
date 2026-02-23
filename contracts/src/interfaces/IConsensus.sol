@@ -77,7 +77,7 @@ interface IConsensus {
      * @param validator The address of the validator.
      * @param staker The new staker address for the validator.
      */
-    event ValidatorStakerUpdated(address indexed validator, address indexed staker);
+    event ValidatorStakerSet(address indexed validator, address staker);
 
     // ============================================================
     // EPOCHS
@@ -203,12 +203,12 @@ interface IConsensus {
     function attestTransaction(uint64 epoch, bytes32 transactionHash, FROSTSignatureId.T signature) external;
 
     /**
-     * @notice Updates a validator's staker address.
+     * @notice Sets a validator's staker address.
      * @param staker The new staker address for the validator.
      * @dev This function should be called by the validator themselves when they want to update their staker address.
-     *      The staker address cannot be zero as every validator must have a minimum stake.
+     *      The contract does not verify if the caller is a validator. Thus, stakers set for non-validators are ignored.
      */
-    function updateValidatorStaker(address staker) external;
+    function setValidatorStaker(address staker) external;
 
     /**
      * @notice Gets a validator's staker address.

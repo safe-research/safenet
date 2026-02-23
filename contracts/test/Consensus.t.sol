@@ -3,7 +3,7 @@ pragma solidity ^0.8.30;
 
 import {Test, Vm} from "@forge-std/Test.sol";
 import {MockCoordinator} from "@test/util/MockCoordinator.sol";
-import {Consensus} from "@/Consensus.sol";
+import {Consensus, IConsensus} from "@/Consensus.sol";
 import {FROSTGroupId} from "@/libraries/FROSTGroupId.sol";
 import {FROSTSignatureId} from "@/libraries/FROSTSignatureId.sol";
 
@@ -18,14 +18,12 @@ contract ConsensusTest is Test {
     Consensus public consensus;
     address public validator;
 
-    event ValidatorStakerUpdated(address indexed validator, address indexed staker);
-
     function setUp() public {
         group = vm.createWallet("group");
 
         coordinator = new MockCoordinator();
         consensus = new Consensus(address(coordinator), GENESIS_GROUP);
-        validator = vm.addr(0x1);
+        validator = vm.createWallet("validator").addr;
     }
 
     function test_GetEpochGroup_ExistingGroup() public view {
@@ -89,20 +87,14 @@ contract ConsensusTest is Test {
     }
 
     function test_updateValidatorStaker() public {
-        address newStaker = address(0x123);
+        address newStaker = vm.createWallet("staker").addr;
         vm.prank(validator);
 
-        vm.expectEmit(true, true, false, false);
-        emit ValidatorStakerUpdated(validator, newStaker);
-        consensus.updateValidatorStaker(newStaker);
+        vm.expectEmit(true, false, false, false);
+        emit IConsensus.ValidatorStakerSet(validator, newStaker);
+        consensus.setValidatorStaker(newStaker);
 
         (address staker) = consensus.getValidatorStaker(validator);
         assertEq(staker, newStaker);
-    }
-
-    function test_revert_updateValidatorStaker_ZeroAddress() public {
-        vm.prank(validator);
-        vm.expectRevert(abi.encodeWithSelector(Consensus.StakerAddressCannotBeZero.selector));
-        consensus.updateValidatorStaker(address(0));
     }
 }

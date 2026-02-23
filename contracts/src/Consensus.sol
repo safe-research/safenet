@@ -341,10 +341,10 @@ contract Consensus is IConsensus, IERC165, IFROSTCoordinatorCallback {
     /**
      * @inheritdoc IConsensus
      */
-    function updateValidatorStaker(address staker) external {
+    function setValidatorStaker(address staker) external {
         require(staker != address(0), StakerAddressCannotBeZero());
         $validatorStakers[msg.sender] = staker;
-        emit ValidatorStakerUpdated(msg.sender, staker);
+        emit ValidatorStakerSet(msg.sender, staker);
     }
 
     /**
