@@ -3,7 +3,7 @@ pragma solidity ^0.8.30;
 
 import {Script, console} from "@forge-std/Script.sol";
 import {Staking} from "@/Staking.sol";
-import {getStakingAddress} from "@script/util/GetStakingAddress.sol";
+import {getStakingContract} from "@script/util/GetStakingContract.sol";
 
 contract AcceptValidatorsScript is Script {
     function run() public {
@@ -33,12 +33,8 @@ contract AcceptValidatorsScript is Script {
             validators = vm.envAddress("ADD_VALIDATORS", ",");
             isRegistration = vm.envBool("IS_REGISTRATION", ",");
 
-            // Calculate the staking contract address using the GetStakingAddress utility
-            staking = getStakingAddress(vm);
+            staking = getStakingContract(vm);
         }
-
-        require(validators.length == isRegistration.length, "Mismatched input lengths");
-        require(validators.length > 0, "No validators provided");
 
         vm.startBroadcast();
 

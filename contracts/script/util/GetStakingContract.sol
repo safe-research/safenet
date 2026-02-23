@@ -7,30 +7,25 @@ import {DeterministicDeployment} from "@script/util/DeterministicDeployment.sol"
 
 using DeterministicDeployment for DeterministicDeployment.Factory;
 
-function getStakingAddress(Vm vm) view returns (Staking) {
+function getStakingContract(Vm vm) view returns (Staking) {
     address stakingAddress = vm.envOr("STAKING_ADDRESS", address(0));
     if (stakingAddress != address(0)) {
         return Staking(stakingAddress);
     }
 
-    uint256 factoryId = vm.envUint("FACTORY");
-    DeterministicDeployment.Factory factory;
-    if (factoryId == 1) {
-        factory = DeterministicDeployment.SAFE_SINGLETON_FACTORY;
-    } else if (factoryId == 2) {
-        factory = DeterministicDeployment.CANONICAL;
-    } else {
-        revert("Invalid FACTORY choice");
-    }
-
-    (address initialOwner, address safeToken, uint128 initialWithdrawalDelay, uint256 configTimeDelay,) =
-        getStackingDeploymentParameters(vm);
+    (
+        address initialOwner,
+        address safeToken,
+        uint128 initialWithdrawalDelay,
+        uint256 configTimeDelay,
+        DeterministicDeployment.Factory factory
+    ) = getStakingDeploymentParameters(vm);
     bytes memory code = type(Staking).creationCode;
     bytes memory args = abi.encode(initialOwner, safeToken, initialWithdrawalDelay, configTimeDelay);
     return Staking(factory.deploymentAddressWithArgs(bytes32(0), code, args));
 }
 
-function getStackingDeploymentParameters(Vm vm)
+function getStakingDeploymentParameters(Vm vm)
     view
     returns (
         address initialOwner,

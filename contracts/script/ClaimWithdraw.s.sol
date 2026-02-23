@@ -3,17 +3,14 @@ pragma solidity ^0.8.30;
 
 import {Script, console} from "@forge-std/Script.sol";
 import {Staking} from "@/Staking.sol";
-import {getStakingAddress} from "@script/util/GetStakingAddress.sol";
+import {getStakingContract} from "@script/util/GetStakingContract.sol";
 
 contract ClaimWithdrawScript is Script {
     function run() public {
-        // Calculate the staking contract address using the GetStakingAddress utility
-        Staking staking = getStakingAddress(vm);
+        Staking staking = getStakingContract(vm);
 
         // Check if it is a withdrawal initiation or claim
-        (uint256 amountToClaim, uint256 claimableAt) = staking.getNextClaimableWithdrawal(msg.sender);
-        require(amountToClaim > 0, "No withdrawal available to claim");
-        require(block.timestamp >= claimableAt, "Withdrawal not executable yet");
+        (uint256 amountToClaim,) = staking.getNextClaimableWithdrawal(msg.sender);
 
         vm.startBroadcast();
 
