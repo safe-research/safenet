@@ -40,6 +40,7 @@ export const keyGenEventSchema = z.object({
 export const keyGenCommittedEventSchema = z.object({
 	gid: hexBytes32Schema,
 	identifier: eventBigIntSchema,
+	participant: checkedAddressSchema,
 	commitment: frostCommitmentSchema,
 	committed: z.boolean(),
 });
