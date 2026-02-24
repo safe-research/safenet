@@ -5,6 +5,7 @@ import {Script, console} from "@forge-std/Script.sol";
 import {Staking} from "../../src/Staking.sol";
 import {DeterministicDeployment} from "./DeterministicDeployment.sol";
 import {getStackingDeploymentParameters} from "./GetStakingAddress.sol";
+import {verifyStakingCommand} from "./VerifyStaking.sol";
 
 contract DeployStakingWithTxBuilderScript is Script {
     using DeterministicDeployment for DeterministicDeployment.Factory;
@@ -59,8 +60,14 @@ contract DeployStakingWithTxBuilderScript is Script {
             .deploymentAddressWithArgs(bytes32(0), type(Staking).creationCode, constructorArgs);
         console.log("Predicted Staking address:", predictedAddress);
 
-        verifyCommand(
-            predictedAddress, vm.parseUint(chainId), initialOwner, safeToken, initialWithdrawalDelay, configTimeDelay
+        verifyStakingCommand(
+            vm,
+            predictedAddress,
+            vm.parseUint(chainId),
+            initialOwner,
+            safeToken,
+            initialWithdrawalDelay,
+            configTimeDelay
         );
     }
 
@@ -97,33 +104,5 @@ contract DeployStakingWithTxBuilderScript is Script {
         );
 
         return vm.toString(keccak256(bytes(serialized)));
-    }
-
-    function verifyCommand(
-        address stakingAddress,
-        uint256 chainId,
-        address initialOwner,
-        address safeToken,
-        uint128 initialWithdrawalDelay,
-        uint256 configTimeDelay
-    ) public pure {
-        console.log(
-            "Verify command:",
-            string.concat(
-                "forge verify-contract --watch ",
-                vm.toString(stakingAddress),
-                " src/Staking.sol:Staking --verifier etherscan --chain-id ",
-                vm.toString(chainId),
-                ' --constructor-args $(cast abi-encode "constructor(address,address,uint128,uint256)" "',
-                vm.toString(initialOwner),
-                '" "',
-                vm.toString(safeToken),
-                '" "',
-                vm.toString(initialWithdrawalDelay),
-                '" "',
-                vm.toString(configTimeDelay),
-                '") --etherscan-api-key ETHERSCAN_MULTICHAIN_KEY'
-            )
-        );
     }
 }
