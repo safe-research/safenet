@@ -8,13 +8,15 @@
 
   // User that VS Code connects as *inside* the container.
   "remoteUser": "node",
+
+  // Use the following 1pw integration if you need 1pw secrets in your container.
   "features": {
     "ghcr.io/flexwie/devcontainer-features/op:1": {}
   },
   "remoteEnv": {
-    "OP_SERVICE_ACCOUNT_TOKEN": "${localEnv:OP_SERVICE_ACCOUNT_TOKEN}"
-    // Needs the OP_SERVICE_ACCOUNT_TOKEN env var on the host.
+    // Needs export OP_SERVICE_ACCOUNT_TOKEN env var on the host.
     // Get a service account token via https://developer.1password.com/docs/service-accounts/
     // You can then use the pk via "$(op read 'op://VAULT/ITEM/FIELD')"
+    "OP_SERVICE_ACCOUNT_TOKEN": "${localEnv:OP_SERVICE_ACCOUNT_TOKEN}"
   }
 }
