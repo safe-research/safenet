@@ -12,11 +12,15 @@ contract DeployStakingWithTxBuilderScript is Script {
 
     function run() public {
         // Required script arguments:
-        (address initialOwner, address safeToken, uint128 initialWithdrawalDelay, uint256 configTimeDelay,) =
-            getStakingDeploymentParameters(vm);
+        (
+            address initialOwner,
+            address safeToken,
+            uint128 initialWithdrawalDelay,
+            uint256 configTimeDelay,
+            DeterministicDeployment.Factory factory
+        ) = getStakingDeploymentParameters(vm);
         string memory chainId = vm.toString(vm.envOr("CHAIN_ID", uint256(1)));
-        string memory factory =
-            vm.toString(DeterministicDeployment.Factory.unwrap(DeterministicDeployment.SAFE_SINGLETON_FACTORY));
+        string memory factoryAddress = vm.toString(DeterministicDeployment.Factory.unwrap(factory));
 
         // Safe Tx Builder uses millisecond timestamps in exports.
         uint256 createdAt = vm.unixTime() * 1000;
@@ -26,7 +30,8 @@ contract DeployStakingWithTxBuilderScript is Script {
 
         // Compute the tx-builder checksum from the canonical serialization (sorted keys, custom object format).
         string memory checksum =
-            _calculateTxBuilderChecksum(vm.toString(createdAt), chainId, vm.toString(txData), factory);
+            _calculateTxBuilderChecksum(vm.toString(createdAt), chainId, vm.toString(txData), factoryAddress);
+        console.log("Checksum:", checksum);
 
         {
             // Emit a tx-builder compatible batch file with a precomputed checksum.
@@ -34,7 +39,7 @@ contract DeployStakingWithTxBuilderScript is Script {
 
             string memory transaction = "tx";
             vm.serializeJson(transaction, '{"contractMethod": null, "contractInputsValues": null}');
-            vm.serializeString(transaction, "to", factory);
+            vm.serializeString(transaction, "to", factoryAddress);
             vm.serializeString(transaction, "value", "0");
             transaction = vm.serializeBytes(transaction, "data", txData);
 
@@ -45,7 +50,7 @@ contract DeployStakingWithTxBuilderScript is Script {
             meta = vm.serializeString(meta, "checksum", checksum);
 
             string memory root = "root";
-            vm.serializeJson(root, string(abi.encodePacked('{"transactions": [', transaction, "]}")));
+            vm.serializeJson(root, string.concat('{"transactions": [', transaction, "]}"));
             vm.serializeString(root, "meta", meta);
             vm.serializeString(root, "version", "1.0");
             vm.serializeString(root, "chainId", chainId);
@@ -56,8 +61,8 @@ contract DeployStakingWithTxBuilderScript is Script {
             vm.writeFile(path, root);
         }
 
-        address predictedAddress = DeterministicDeployment.SAFE_SINGLETON_FACTORY
-            .deploymentAddressWithArgs(bytes32(0), type(Staking).creationCode, constructorArgs);
+        address predictedAddress =
+            factory.deploymentAddressWithArgs(bytes32(0), type(Staking).creationCode, constructorArgs);
         console.log("Predicted Staking address:", predictedAddress);
 
         verifyStakingCommand(
