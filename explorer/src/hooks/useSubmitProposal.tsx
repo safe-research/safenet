@@ -1,6 +1,6 @@
 import { useMutation } from "@tanstack/react-query";
+import { useSettings } from "@/hooks/useSettings";
 import { postTransactionProposal, type SafeTransaction } from "@/lib/consensus";
-import { useSettings } from "./useSettings";
 
 export function useSubmitProposal() {
 	const [settings] = useSettings();

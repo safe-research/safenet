@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { shortAddress } from "./address";
+import { shortAddress } from "@/lib/address";
 
 describe("address", () => {
 	const LOWER = "0xdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef";

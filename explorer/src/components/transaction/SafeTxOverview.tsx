@@ -1,7 +1,7 @@
+import { InlineAddress } from "@/components/common/InlineAddress";
 import { SAFE_SERVICE_CHAINS } from "@/lib/chains";
 import type { SafeTransaction } from "@/lib/consensus";
 import { dataString, opString, valueString } from "@/lib/safe/formatting";
-import { InlineAddress } from "../common/InlineAddress";
 
 export const SafeTxOverview = ({
 	title,
@@ -20,7 +20,7 @@ export const SafeTxOverview = ({
 	return (
 		<>
 			<div className={"flex justify-between"}>
-				<p className={"text-xs"}>{title}</p>
+				<p className={"text-xs break-all"}>{title}</p>
 				{timestamp !== undefined && <p className={"text-xs"}>{timestamp}</p>}
 			</div>
 			<div>

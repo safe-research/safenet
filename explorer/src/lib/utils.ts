@@ -1,5 +1,6 @@
 import { type ClassValue, clsx } from "clsx";
 import { twMerge } from "tailwind-merge";
+import type { Log, PublicClient } from "viem";
 
 export function cn(...inputs: ClassValue[]) {
 	return twMerge(clsx(inputs));
@@ -11,3 +12,20 @@ export function jsonReplacer(_key: string, value: unknown): unknown {
 	}
 	return value;
 }
+
+const MAX_BLOCKS_RANGE = 50000n;
+
+export const getFromBlock = async (provider: PublicClient): Promise<bigint> => {
+	const blockNumber = await provider.getBlockNumber();
+	return blockNumber > MAX_BLOCKS_RANGE ? blockNumber - MAX_BLOCKS_RANGE : 0n;
+};
+
+export const mostRecentFirst = <T extends Pick<Log<bigint, number, false>, "blockNumber" | "logIndex">>(
+	logs: T[],
+): T[] =>
+	logs.sort((left, right) => {
+		if (left.blockNumber !== right.blockNumber) {
+			return left.blockNumber < right.blockNumber ? 1 : -1;
+		}
+		return right.logIndex - left.logIndex;
+	});

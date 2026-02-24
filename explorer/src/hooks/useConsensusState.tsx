@@ -1,8 +1,8 @@
 import { useQuery } from "@tanstack/react-query";
 import { zeroHash } from "viem";
+import { useProvider } from "@/hooks/useProvider";
+import { useSettings } from "@/hooks/useSettings";
 import { type ConsensusState, loadConsensusState } from "@/lib/consensus";
-import { useProvider } from "./useProvider";
-import { useSettings } from "./useSettings";
 
 export function useConsensusState() {
 	const [settings] = useSettings();
