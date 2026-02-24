@@ -1,6 +1,6 @@
 import { zeroAddress } from "viem";
 import { describe, expect, it } from "vitest";
-import { calculateSafeTxHash } from "@/lib/safe/hashing";
+import { calculateSafeTxHash } from "./hashing";
 
 describe("hashing", () => {
 	describe("Safe transaction hash", () => {
