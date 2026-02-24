@@ -18,40 +18,40 @@ contract DeployStakingWithTxBuilderScript is Script {
             vm.toString(DeterministicDeployment.Factory.unwrap(DeterministicDeployment.SAFE_SINGLETON_FACTORY));
 
         // Safe Tx Builder uses millisecond timestamps in exports.
-        string memory createdAtStr = vm.toString(vm.unixTime() * 1000);
+        uint256 createdAt = vm.unixTime() * 1000;
         // Build the txData (creation code + constructor args)
         bytes memory constructorArgs = abi.encode(initialOwner, safeToken, initialWithdrawalDelay, configTimeDelay);
-        string memory txData = vm.toString(abi.encodePacked(bytes32(0), type(Staking).creationCode, constructorArgs));
+        bytes memory txData = abi.encodePacked(bytes32(0), type(Staking).creationCode, constructorArgs);
 
         // Compute the tx-builder checksum from the canonical serialization (sorted keys, custom object format).
-        string memory checksum = _calculateTxBuilderChecksum(createdAtStr, chainId, txData, factory);
+        string memory checksum = _calculateTxBuilderChecksum(vm.toString(createdAt), chainId, vm.toString(txData), factory);
 
         {
             // Emit a tx-builder compatible batch file with a precomputed checksum.
             string memory path = "build/staking-deployment.json";
-            string memory json = string.concat(
-                '{"version":"1.0","chainId":"',
-                chainId,
-                '","createdAt":',
-                createdAtStr,
-                ',"meta":{"name":"',
-                "Staking Deployment",
-                '","description":"',
-                "Safenet Staking Beta Deployment Transaction",
-                '","txBuilderVersion":"',
-                "1.18.3",
-                '","checksum":"',
-                checksum,
-                '"},"transactions":[{"to":"',
-                factory,
-                '","value":"0","data":"',
-                txData,
-                '","contractMethod":null,"contractInputsValues":null}]}'
-            );
+
+            string memory transaction = "tx";
+            vm.serializeJson(transaction, '{"contractMethod": null, "contractInputsValues": null}');
+            vm.serializeString(transaction, "to", factory);
+            vm.serializeString(transaction, "value", "0");
+            transaction = vm.serializeBytes(transaction, "data", txData);
+
+            string memory meta = "meta";
+            vm.serializeString(meta, "name", "Staking Deployment");
+            vm.serializeString(meta, "description", "Safenet Staking Beta Deployment Transaction");
+            vm.serializeString(meta, "txBuilderVersion", "1.18.3");
+            meta = vm.serializeString(meta, "checksum", checksum);
+
+            string memory root = "root";
+            vm.serializeJson(root, string(abi.encodePacked('{"transactions": [', transaction, ']}')));
+            vm.serializeString(root, "meta", meta);
+            vm.serializeString(root, "version", "1.0");
+            vm.serializeString(root, "chainId", chainId);
+            root = vm.serializeUint(root, "createdAt", createdAt);
 
             // Write the JSON to the file system
             // forge-lint: disable-next-line(unsafe-cheatcode)
-            vm.writeFile(path, json);
+            vm.writeFile(path, root);
         }
 
         address predictedAddress = DeterministicDeployment.SAFE_SINGLETON_FACTORY
