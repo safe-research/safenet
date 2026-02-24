@@ -4,7 +4,7 @@ pragma solidity ^0.8.30;
 import {Script, console} from "@forge-std/Script.sol";
 import {Staking} from "../../src/Staking.sol";
 import {DeterministicDeployment} from "./DeterministicDeployment.sol";
-import {getStackingDeploymentParameters} from "./GetStakingAddress.sol";
+import {getStakingDeploymentParameters} from "./GetStakingContract.sol";
 import {verifyStakingCommand} from "./VerifyStaking.sol";
 
 contract DeployStakingWithTxBuilderScript is Script {
@@ -13,7 +13,7 @@ contract DeployStakingWithTxBuilderScript is Script {
     function run() public {
         // Required script arguments:
         (address initialOwner, address safeToken, uint128 initialWithdrawalDelay, uint256 configTimeDelay,) =
-            getStackingDeploymentParameters(vm);
+            getStakingDeploymentParameters(vm);
         string memory chainId = vm.toString(vm.envOr("CHAIN_ID", uint256(1)));
         string memory factory =
             vm.toString(DeterministicDeployment.Factory.unwrap(DeterministicDeployment.SAFE_SINGLETON_FACTORY));
