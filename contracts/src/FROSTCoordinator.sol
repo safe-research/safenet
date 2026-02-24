@@ -55,25 +55,26 @@ contract FROSTCoordinator {
      * @notice Represents a FROST signing group and its associated state.
      * @custom:param participants The participant map for the group.
      * @custom:param nonces The nonce commitment set for the group.
-     * @custom:param parameters The parameters and status of the group.
+     * @custom:param state The internal state of the group.
      * @custom:param key The group public key.
      */
     struct Group {
         FROSTParticipantMap.T participants;
         FROSTNonceCommitmentSet.T nonces;
-        GroupParameters parameters;
+        GroupState state;
         Secp256k1.Point key;
     }
 
     /**
-     * @notice Parameters and status of a FROST group.
+     * @notice The internal state of a FROST group.
+     * @custom:param status The current status of the group.
      * @custom:param count The number of participants.
      * @custom:param threshold The threshold required for signing.
      * @custom:param pending The number of pending participants in the current phase.
      * @custom:param sequence The current signing sequence counter.
-     * @custom:param status The current status of the group.
+     * @dev This data structure is designed to fit exactly in one storage word.
      */
-    struct GroupParameters {
+    struct GroupState {
         GroupStatus status;
         uint16 count;
         uint16 threshold;
@@ -166,11 +167,16 @@ contract FROSTCoordinator {
      * @notice Emitted when a key generation commitment is submitted.
      * @param gid The group ID.
      * @param identifier The participant identifier.
+     * @param participant The participant address that commited to the key generation.
      * @param commitment The key generation commitment.
      * @param committed True if all commitments are received and the phase completes.
      */
     event KeyGenCommitted(
-        FROSTGroupId.T indexed gid, FROST.Identifier identifier, KeyGenCommitment commitment, bool committed
+        FROSTGroupId.T indexed gid,
+        FROST.Identifier identifier,
+        address participant,
+        KeyGenCommitment commitment,
+        bool committed
     );
 
     /**
@@ -351,7 +357,7 @@ contract FROSTCoordinator {
         gid = FROSTGroupId.create(participants, count, threshold, context);
         Group storage group = $groups[gid];
         group.participants.init(participants);
-        group.parameters = GroupParameters({
+        group.state = GroupState({
             status: GroupStatus.COMMITTING, count: count, threshold: threshold, pending: count, sequence: 0, _padding: 0
         });
         emit KeyGen(gid, participants, count, threshold, context);
@@ -373,19 +379,19 @@ contract FROSTCoordinator {
         KeyGenCommitment calldata commitment
     ) public returns (bool committed) {
         Group storage group = $groups[gid];
-        GroupParameters memory parameters = group.parameters;
-        require(parameters.status == GroupStatus.COMMITTING, GroupNotReady());
-        committed = --parameters.pending == 0;
+        GroupState memory state = group.state;
+        require(state.status == GroupStatus.COMMITTING, GroupNotReady());
+        committed = --state.pending == 0;
         if (committed) {
-            parameters.status = GroupStatus.SHARING;
-            parameters.pending = parameters.count;
+            state.status = GroupStatus.SHARING;
+            state.pending = state.count;
         }
         Secp256k1.requireNonZero(commitment.q);
-        require(commitment.c.length == parameters.threshold, InvalidGroupCommitment());
+        require(commitment.c.length == state.threshold, InvalidGroupCommitment());
         group.participants.register(identifier, msg.sender, poap);
-        group.parameters = parameters;
+        group.state = state;
         group.key = Secp256k1.add(group.key, commitment.c[0]);
-        emit KeyGenCommitted(gid, identifier, commitment, committed);
+        emit KeyGenCommitted(gid, identifier, msg.sender, commitment, committed);
     }
 
     /**
@@ -427,18 +433,18 @@ contract FROSTCoordinator {
      */
     function keyGenSecretShare(FROSTGroupId.T gid, KeyGenSecretShare calldata share) public returns (bool shared) {
         Group storage group = $groups[gid];
-        GroupParameters memory parameters = group.parameters;
-        require(parameters.status == GroupStatus.SHARING, GroupNotReady());
-        shared = --parameters.pending == 0;
+        GroupState memory state = group.state;
+        require(state.status == GroupStatus.SHARING, GroupNotReady());
+        shared = --state.pending == 0;
         if (shared) {
-            parameters.pending = parameters.count;
-            parameters.status = GroupStatus.CONFIRMING;
+            state.pending = state.count;
+            state.status = GroupStatus.CONFIRMING;
         }
         unchecked {
-            require(share.f.length == parameters.count - 1, InvalidSecretShare());
+            require(share.f.length == state.count - 1, InvalidSecretShare());
         }
         FROST.Identifier identifier = group.participants.set(msg.sender, share.y);
-        group.parameters = parameters;
+        group.state = state;
         emit KeyGenSecretShared(gid, identifier, share, shared);
     }
 
@@ -450,15 +456,15 @@ contract FROSTCoordinator {
      */
     function keyGenConfirm(FROSTGroupId.T gid) public returns (bool confirmed) {
         Group storage group = $groups[gid];
-        GroupParameters memory parameters = group.parameters;
-        require(parameters.status == GroupStatus.CONFIRMING, GroupNotReady());
+        GroupState memory state = group.state;
+        require(state.status == GroupStatus.CONFIRMING, GroupNotReady());
         FROST.Identifier identifier = group.participants.identifierOf(msg.sender);
         group.participants.confirm(identifier);
-        confirmed = --parameters.pending == 0;
+        confirmed = --state.pending == 0;
         if (confirmed) {
-            parameters.status = GroupStatus.FINALIZED;
+            state.status = GroupStatus.FINALIZED;
         }
-        group.parameters = parameters;
+        group.state = state;
         emit KeyGenConfirmed(gid, identifier, confirmed);
     }
 
@@ -484,14 +490,13 @@ contract FROSTCoordinator {
      */
     function keyGenComplain(FROSTGroupId.T gid, FROST.Identifier accused) external returns (bool compromised) {
         Group storage group = $groups[gid];
-        require(
-            group.parameters.status == GroupStatus.SHARING || group.parameters.status == GroupStatus.CONFIRMING,
-            GroupNotReady()
-        );
+        GroupState memory state = group.state;
+        require(state.status == GroupStatus.SHARING || state.status == GroupStatus.CONFIRMING, GroupNotReady());
         FROST.Identifier plaintiff = group.participants.identifierOf(msg.sender);
-        compromised = group.participants.complain(plaintiff, accused) >= group.parameters.threshold;
+        compromised = group.participants.complain(plaintiff, accused) >= state.threshold;
         if (compromised) {
-            group.parameters.status = GroupStatus.COMPROMISED;
+            state.status = GroupStatus.COMPROMISED;
+            group.state = state;
         }
         emit KeyGenComplained(gid, plaintiff, accused, compromised);
     }
@@ -504,10 +509,8 @@ contract FROSTCoordinator {
      */
     function keyGenComplaintResponse(FROSTGroupId.T gid, FROST.Identifier plaintiff, uint256 secretShare) external {
         Group storage group = $groups[gid];
-        require(
-            group.parameters.status == GroupStatus.SHARING || group.parameters.status == GroupStatus.CONFIRMING,
-            GroupNotReady()
-        );
+        GroupStatus status = group.state.status;
+        require(status == GroupStatus.SHARING || status == GroupStatus.CONFIRMING, GroupNotReady());
         FROST.Identifier accused = group.participants.identifierOf(msg.sender);
         group.participants.respond(plaintiff, accused);
         emit KeyGenComplaintResponded(gid, plaintiff, accused, secretShare);
@@ -527,7 +530,7 @@ contract FROSTCoordinator {
     function preprocess(FROSTGroupId.T gid, bytes32 commitment) external returns (uint64 chunk) {
         Group storage group = $groups[gid];
         FROST.Identifier identifier = group.participants.identifierOf(msg.sender);
-        chunk = group.nonces.commit(identifier, commitment, group.parameters.sequence);
+        chunk = group.nonces.commit(identifier, commitment, group.state.sequence);
         emit Preprocess(gid, identifier, chunk, commitment);
     }
 
@@ -544,13 +547,13 @@ contract FROSTCoordinator {
     function sign(FROSTGroupId.T gid, bytes32 message) external returns (FROSTSignatureId.T sid) {
         require(message != bytes32(0), InvalidMessage());
         Group storage group = $groups[gid];
-        GroupParameters memory parameters = group.parameters;
-        require(parameters.count > 0, GroupNotInitialized());
-        require(parameters.status == GroupStatus.FINALIZED, GroupNotReady());
-        uint64 sequence = parameters.sequence++;
+        GroupState memory state = group.state;
+        require(state.count > 0, GroupNotInitialized());
+        require(state.status == GroupStatus.FINALIZED, GroupNotReady());
+        uint64 sequence = state.sequence++;
         sid = FROSTSignatureId.create(gid, sequence);
         Signature storage signature = $signatures[sid];
-        group.parameters = parameters;
+        group.state = state;
         signature.message = message;
         emit Sign(msg.sender, gid, message, sid, sequence);
     }
@@ -638,13 +641,41 @@ contract FROSTCoordinator {
     // ============================================================
 
     /**
+     * @notice Retrieves the group parameters.
+     * @param gid The group ID.
+     * @return count The number of participants in the group.
+     * @return threshold The signing threshold for the group.
+     * @return participants The Merkle root hash of the participant set.
+     */
+    function groupParameters(FROSTGroupId.T gid)
+        external
+        view
+        returns (uint16 count, uint16 threshold, bytes32 participants)
+    {
+        Group storage group = $groups[gid];
+        GroupState memory state = group.state;
+        return (state.count, state.threshold, group.participants.getRoot());
+    }
+
+    /**
      * @notice Retrieves the group public key.
      * @param gid The group ID.
      * @return key The group public key.
-     * @dev It is undefined behaviour to call this before key generation completes.
      */
     function groupKey(FROSTGroupId.T gid) external view returns (Secp256k1.Point memory key) {
-        return $groups[gid].key;
+        Group storage group = $groups[gid];
+        require(group.state.status == GroupStatus.FINALIZED, GroupNotReady());
+        return group.key;
+    }
+
+    /**
+     * @notice Gets the number of signing ceremonies the specified group has started.
+     * @param gid The group ID.
+     * @return result The number of started ceremonies.
+     * @dev This only returns the number of **started** ceremonies, including abandoned ones that may never complete.
+     */
+    function groupSignCount(FROSTGroupId.T gid) external view returns (uint256 result) {
+        return uint256($groups[gid].state.sequence);
     }
 
     /**

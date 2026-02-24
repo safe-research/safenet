@@ -245,6 +245,15 @@ library FROSTParticipantMap {
     }
 
     /**
+     * @notice Gets the group participant Merkle root hash.
+     * @param self The storage struct.
+     * @return result The Merkle root hash of the participant set.
+     */
+    function getRoot(T storage self) internal view returns (bytes32 result) {
+        return self.root;
+    }
+
+    /**
      * @notice Gets the participants verification share.
      * @param self The storage struct.
      * @param identifier The participant's FROST identifier.
