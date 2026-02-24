@@ -2,10 +2,10 @@ import { createFileRoute } from "@tanstack/react-router";
 import z from "zod";
 import { ConditionalBackButton } from "@/components/BackButton";
 import { Box, Container, ContainerTitle } from "@/components/Groups";
+import { Skeleton } from "@/components/Skeleton";
 import { SafeTxDataDetails } from "@/components/transaction/SafeTxDataDetails";
 import { SafeTxOverview } from "@/components/transaction/SafeTxOverview";
 import { SafeTxProposals } from "@/components/transaction/SafeTxProposals";
-
 import { useSafeTransactionDetails } from "@/hooks/useSafeTransactionDetails";
 import { bigIntSchema, bytes32Schema } from "@/lib/schemas";
 
@@ -26,7 +26,7 @@ export function SafeTransaction() {
 		<Container className="space-y-4">
 			<ConditionalBackButton />
 			<ContainerTitle>Transaction Details</ContainerTitle>
-			{details.isLoading && "Loading ..."}
+			{details.isLoading && <Skeleton className="w-full h-25" />}
 			{details.data !== null && (
 				<>
 					<Box>

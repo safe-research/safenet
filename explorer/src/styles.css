@@ -4,6 +4,7 @@
 @import "tailwindcss";
 
 @theme {
+	--color-primary: var(--color-primary);
 	--color-title: var(--color-title);
 	--color-title-hover: var(--color-title-hover);
 	--color-sub-title: var(--color-title);
@@ -49,6 +50,7 @@ code {
 }
 
 :root {
+	--color-primary: #12FF80;
 	--color-title: oklch(21% 0.034 264.665);
 	--color-title-hover: oklch(27.8% 0.033 256.848);
 	--color-sub-title: oklch(21% 0.034 264.665);
@@ -71,6 +73,7 @@ code {
 }
 
 .dark {
+	--color-primary: #12FF80;
 	--color-title: oklch(1 0 0);
 	--color-title-hover: oklch(98.5% 0.002 247.839);
 	--color-sub-title: oklch(1 0 0);
