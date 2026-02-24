@@ -35,7 +35,7 @@ contract DeployStakingScript is Script {
         verifyStakingCommand(
             vm,
             address(staking),
-            vm.envOr("CHAIN_ID", uint256(1)),
+            block.chainid,
             initialOwner,
             safeToken,
             initialWithdrawalDelay,
