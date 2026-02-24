@@ -104,7 +104,7 @@ npm run cmd:deploy:staking-with-tx-builder -w @safenet/contracts
 
 This command provides the output as a JSON in the path: `contracts/build/staking-deployment.json` which can be used with the Safe Tx Builder tool to deploy the staking contract. A forge verify command is also provided as the output of the above command, which can be used to verify the deployment transaction in etherscan (requires the etherscan API key).
 
-Note: An added environment variable `CHAIN_ID` is required for the above command to specify the chain id of the network for which the deployment transaction is being built. If not set, it will take the default value as `1` (Ethereum Mainnet).
+Note: An added environment variable `CHAIN_ID` can optionally be specified for the above command to specify the chain id of the network for which the deployment transaction is being built. If not set, it will take the default value as `1` (Ethereum Mainnet).
 
 ### (Optional) Propose and Accept Validators
 
