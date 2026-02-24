@@ -15,6 +15,7 @@
 		"cmd:initiateWithdraw": "forge script InitiateWithdrawScript",
 		"cmd:claimWithdraw": "forge script ClaimWithdrawScript",
 		"fix": "forge fmt",
+		"forge-install": "forge install",
 		"test": "forge test -vvv",
 		"coverage": "mkdir -p coverage && forge coverage --report lcov --report-file coverage/lcov.info"
 	}

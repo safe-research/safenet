@@ -4,6 +4,7 @@ pragma solidity ^0.8.30;
 import {Vm} from "@forge-std/Vm.sol";
 import {Staking} from "@/Staking.sol";
 import {DeterministicDeployment} from "@script/util/DeterministicDeployment.sol";
+import {getFactory} from "@script/util/GetFactory.sol";
 
 using DeterministicDeployment for DeterministicDeployment.Factory;
 
@@ -39,12 +40,5 @@ function getStakingDeploymentParameters(Vm vm)
     safeToken = vm.envOr("SAFE_TOKEN", 0x5aFE3855358E112B5647B952709E6165e1c1eEEe);
     initialWithdrawalDelay = uint128(vm.envOr("STAKING_INITIAL_WITHDRAWAL_DELAY", uint256(172800)));
     configTimeDelay = uint256(vm.envOr("STAKING_CONFIG_TIME_DELAY", uint256(604800)));
-    uint256 factoryId = uint256(vm.envOr("FACTORY", uint256(1)));
-    if (factoryId == 1) {
-        factory = DeterministicDeployment.SAFE_SINGLETON_FACTORY;
-    } else if (factoryId == 2) {
-        factory = DeterministicDeployment.CANONICAL;
-    } else {
-        revert("Invalid FACTORY choice");
-    }
+    factory = getFactory(vm);
 }
