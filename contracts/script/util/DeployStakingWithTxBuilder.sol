@@ -24,7 +24,8 @@ contract DeployStakingWithTxBuilderScript is Script {
         bytes memory txData = abi.encodePacked(bytes32(0), type(Staking).creationCode, constructorArgs);
 
         // Compute the tx-builder checksum from the canonical serialization (sorted keys, custom object format).
-        string memory checksum = _calculateTxBuilderChecksum(vm.toString(createdAt), chainId, vm.toString(txData), factory);
+        string memory checksum =
+            _calculateTxBuilderChecksum(vm.toString(createdAt), chainId, vm.toString(txData), factory);
 
         {
             // Emit a tx-builder compatible batch file with a precomputed checksum.
@@ -43,7 +44,7 @@ contract DeployStakingWithTxBuilderScript is Script {
             meta = vm.serializeString(meta, "checksum", checksum);
 
             string memory root = "root";
-            vm.serializeJson(root, string(abi.encodePacked('{"transactions": [', transaction, ']}')));
+            vm.serializeJson(root, string(abi.encodePacked('{"transactions": [', transaction, "]}")));
             vm.serializeString(root, "meta", meta);
             vm.serializeString(root, "version", "1.0");
             vm.serializeString(root, "chainId", chainId);
