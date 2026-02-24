@@ -643,18 +643,18 @@ contract FROSTCoordinator {
     /**
      * @notice Retrieves the group parameters.
      * @param gid The group ID.
+     * @return participants The Merkle root hash of the participant set.
      * @return count The number of participants in the group.
      * @return threshold The signing threshold for the group.
-     * @return participants The Merkle root hash of the participant set.
      */
     function groupParameters(FROSTGroupId.T gid)
         external
         view
-        returns (uint16 count, uint16 threshold, bytes32 participants)
+        returns (bytes32 participants, uint16 count, uint16 threshold)
     {
         Group storage group = $groups[gid];
         GroupState memory state = group.state;
-        return (state.count, state.threshold, group.participants.getRoot());
+        return (group.participants.getRoot(), state.count, state.threshold);
     }
 
     /**
