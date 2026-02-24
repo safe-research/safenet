@@ -336,11 +336,12 @@ export const TEST_EVENTS: [ProtocolLog | null, StateTransition][] = [
 		{
 			blockNumber: 111n,
 			logIndex: 0,
-			// KeyGenCommitted(bytes32 indexed gid, uint256 identifier, ((uint256 x, uint256 y) q, (uint256 x, uint256 y)[] c, (uint256 x, uint256 y) r, uint256 mu) commitment, bool committed)
+			// KeyGenCommitted(bytes32 indexed gid, uint256 identifier, address participant, ((uint256 x, uint256 y) q, (uint256 x, uint256 y)[] c, (uint256 x, uint256 y) r, uint256 mu) commitment, bool committed)
 			eventName: "KeyGenCommitted",
 			args: {
 				gid: "0x5afe000000000000000000000000000000000000000000000000000000000000",
 				identifier: 1n,
+				participant: zeroAddress,
 				commitment: {
 					q: TEST_POINT,
 					r: TEST_POINT,
@@ -356,6 +357,7 @@ export const TEST_EVENTS: [ProtocolLog | null, StateTransition][] = [
 			index: 0,
 			gid: "0x5afe000000000000000000000000000000000000000000000000000000000000",
 			identifier: 1n,
+			participant: zeroAddress,
 			commitment: {
 				q: TEST_POINT,
 				r: TEST_POINT,

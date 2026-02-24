@@ -120,7 +120,9 @@ contract FROSTCoordinatorTest is Test {
             FROSTCoordinator.KeyGenCommitment memory commitment = commitments[identifier];
 
             vm.expectEmit();
-            emit FROSTCoordinator.KeyGenCommitted(gid, FROST.newIdentifier(identifier), commitment, identifier == COUNT);
+            emit FROSTCoordinator.KeyGenCommitted(
+                gid, FROST.newIdentifier(identifier), participant, commitment, identifier == COUNT
+            );
             vm.prank(participant);
             coordinator.keyGenCommit(gid, FROST.newIdentifier(identifier), poap, commitment);
         }
@@ -135,20 +137,6 @@ contract FROSTCoordinatorTest is Test {
 
             commitment.mu = 0;
             commitment.r = Secp256k1.Point({x: 0, y: 0});
-        }
-
-        // End of round 1. Note that we already have derived the group public
-        // key at this point!
-        {
-            uint256 groupPrivateKey = 0;
-            for (uint256 identifier = 1; identifier <= COUNT; identifier++) {
-                groupPrivateKey = addmod(groupPrivateKey, a[identifier][0], Secp256k1.N);
-            }
-            Vm.Wallet memory groupAccount = vm.createWallet(groupPrivateKey);
-            Secp256k1.Point memory groupPublicKey = coordinator.groupKey(gid);
-
-            assertEq(groupPublicKey.x, groupAccount.publicKeyX);
-            assertEq(groupPublicKey.y, groupAccount.publicKeyY);
         }
 
         // Round 2.1*
@@ -224,8 +212,6 @@ contract FROSTCoordinatorTest is Test {
                 s[identifier] = addmod(s[identifier], f[identifier][l], Secp256k1.N);
             }
         }
-        a = new uint256[][](0);
-        f = new uint256[][](0);
 
         // Round 2.4
         for (uint256 identifier = 1; identifier <= COUNT; identifier++) {
@@ -241,6 +227,19 @@ contract FROSTCoordinatorTest is Test {
             emit FROSTCoordinator.KeyGenConfirmed(gid, FROST.newIdentifier(identifier), identifier == COUNT);
             vm.prank(participants.addr(identifier));
             coordinator.keyGenConfirm(gid);
+        }
+
+        // COMPLETE: Verify the group key that was derived onchain!
+        {
+            uint256 groupPrivateKey = 0;
+            for (uint256 identifier = 1; identifier <= COUNT; identifier++) {
+                groupPrivateKey = addmod(groupPrivateKey, a[identifier][0], Secp256k1.N);
+            }
+            Vm.Wallet memory groupAccount = vm.createWallet(groupPrivateKey);
+            Secp256k1.Point memory groupPublicKey = coordinator.groupKey(gid);
+
+            assertEq(groupPublicKey.x, groupAccount.publicKeyX);
+            assertEq(groupPublicKey.y, groupAccount.publicKeyY);
         }
     }
 
