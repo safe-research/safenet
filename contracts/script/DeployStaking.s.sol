@@ -5,6 +5,7 @@ import {Script, console} from "@forge-std/Script.sol";
 import {Staking} from "@/Staking.sol";
 import {DeterministicDeployment} from "@script/util/DeterministicDeployment.sol";
 import {getStakingDeploymentParameters} from "@script/util/GetStakingContract.sol";
+import {verifyStakingCommand} from "@script/util/VerifyStaking.sol";
 
 contract DeployStakingScript is Script {
     using DeterministicDeployment for DeterministicDeployment.Factory;
@@ -30,5 +31,9 @@ contract DeployStakingScript is Script {
         vm.stopBroadcast();
 
         console.log("Staking deployed at:", address(staking));
+
+        verifyStakingCommand(
+            vm, address(staking), block.chainid, initialOwner, safeToken, initialWithdrawalDelay, configTimeDelay
+        );
     }
 }

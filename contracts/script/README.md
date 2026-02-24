@@ -90,9 +90,21 @@ Tip: For easier Testing, both delays can be kept to a minimum. Always remember t
 
 #### Command
 
+##### EOA based deployment
+
 ```
 npm run cmd:deploy:staking -w @safenet/contracts -- --rpc-url http://127.0.0.1:8545 --broadcast --sender 0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266 --account sender-keystore-account
 ```
+
+##### Safe Tx Builder based deployment
+
+```
+npm run cmd:deploy:staking-with-tx-builder -w @safenet/contracts
+```
+
+This command provides the output as a JSON in the path: `contracts/build/staking-deployment.json` which can be used with the Safe Tx Builder tool to deploy the staking contract. A forge verify command is also provided as the output of the above command, which can be used to verify the deployment transaction in etherscan (requires the etherscan API key).
+
+Note: An added environment variable `CHAIN_ID` can optionally be specified for the above command to specify the chain id of the network for which the deployment transaction is being built. If not set, it will take the default value as `1` (Ethereum Mainnet).
 
 ### (Optional) Propose and Accept Validators
 
