@@ -14,7 +14,7 @@ Note: If you face an error like `vm.envUint: environment variable "ABC" not foun
 
 For deployment commands, the choice of `FACTORY` needs to be specified in the `.env` file. It can have two values:
 - `1`: Safe Singleton Factory (Default, recommended for mainnet or public testnets)
-- `2`: Deterministic Deployment (Anvil, recommended for testing locally with anvil)
+- `2`: Canonical Deterministic Deployment Factory
 
 Note: If you set the `FACTORY` as `1`, make sure that the Safe Singleton Factory is deployed on the chain you are using. You can find the list of deployed factory addresses on different chains [here](https://github.com/safe-fndn/safe-singleton-factory).
 

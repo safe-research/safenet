@@ -7,7 +7,7 @@ import {DeterministicDeployment} from "@script/util/DeterministicDeployment.sol"
 using DeterministicDeployment for DeterministicDeployment.Factory;
 
 function getFactory(Vm vm) view returns (DeterministicDeployment.Factory) {
-    uint256 factoryId = uint256(vm.envOr("FACTORY", uint256(1)));
+    uint256 factoryId = vm.envOr("FACTORY", uint256(1));
     if (factoryId == 1) {
         return DeterministicDeployment.SAFE_SINGLETON_FACTORY;
     } else if (factoryId == 2) {
