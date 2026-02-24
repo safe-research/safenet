@@ -107,4 +107,13 @@ library DeterministicDeployment {
             require(result.code.length != 0, NotCreated(result));
         }
     }
+
+    /**
+     * @notice Returns the address of the CREATE2 factory.
+     * @param self The CREATE2 factory.
+     * @return result The address of the factory.
+     */
+    function addr(Factory self) internal pure returns (address result) {
+        return Factory.unwrap(self);
+    }
 }

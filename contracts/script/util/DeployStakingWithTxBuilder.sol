@@ -19,8 +19,7 @@ contract DeployStakingWithTxBuilderScript is Script {
             uint256 configTimeDelay,
             DeterministicDeployment.Factory factory
         ) = getStakingDeploymentParameters(vm);
-        string memory chainId = vm.toString(vm.envOr("CHAIN_ID", uint256(1)));
-        string memory factoryAddress = vm.toString(DeterministicDeployment.Factory.unwrap(factory));
+        uint256 chainId = vm.envOr("CHAIN_ID", uint256(1));
 
         // Safe Tx Builder uses millisecond timestamps in exports.
         uint256 createdAt = vm.unixTime() * 1000;
@@ -29,8 +28,7 @@ contract DeployStakingWithTxBuilderScript is Script {
         bytes memory txData = abi.encodePacked(bytes32(0), type(Staking).creationCode, constructorArgs);
 
         // Compute the tx-builder checksum from the canonical serialization (sorted keys, custom object format).
-        string memory checksum =
-            _calculateTxBuilderChecksum(vm.toString(createdAt), chainId, vm.toString(txData), factoryAddress);
+        string memory checksum = _calculateTxBuilderChecksum(createdAt, chainId, txData, factory);
         console.log("Checksum:", checksum);
 
         {
@@ -39,7 +37,7 @@ contract DeployStakingWithTxBuilderScript is Script {
 
             string memory transaction = "tx";
             vm.serializeJson(transaction, '{"contractMethod": null, "contractInputsValues": null}');
-            vm.serializeString(transaction, "to", factoryAddress);
+            vm.serializeAddress(transaction, "to", factory.addr());
             vm.serializeString(transaction, "value", "0");
             transaction = vm.serializeBytes(transaction, "data", txData);
 
@@ -53,7 +51,7 @@ contract DeployStakingWithTxBuilderScript is Script {
             vm.serializeJson(root, string.concat('{"transactions": [', transaction, "]}"));
             vm.serializeString(root, "meta", meta);
             vm.serializeString(root, "version", "1.0");
-            vm.serializeString(root, "chainId", chainId);
+            vm.serializeString(root, "chainId", vm.toString(chainId));
             root = vm.serializeUint(root, "createdAt", createdAt);
 
             // Write the JSON to the file system
@@ -66,29 +64,23 @@ contract DeployStakingWithTxBuilderScript is Script {
         console.log("Predicted Staking address:", predictedAddress);
 
         verifyStakingCommand(
-            vm,
-            predictedAddress,
-            vm.parseUint(chainId),
-            initialOwner,
-            safeToken,
-            initialWithdrawalDelay,
-            configTimeDelay
+            vm, predictedAddress, chainId, initialOwner, safeToken, initialWithdrawalDelay, configTimeDelay
         );
     }
 
     function _calculateTxBuilderChecksum(
-        string memory createdAtStr,
-        string memory chainId,
-        string memory txData,
-        string memory factory
+        uint256 createdAt,
+        uint256 chainId,
+        bytes memory txData,
+        DeterministicDeployment.Factory factory
     ) internal pure returns (string memory) {
         // Follows apps/tx-builder/src/lib/checksum.ts serialization rules.
         // Note: meta.name is forced to null for checksum calculation.
         string memory serialized = string.concat(
             '{["chainId","createdAt","meta","transactions","version"]"',
-            chainId, // Chain ID
+            vm.toString(chainId), // Chain ID
             '",',
-            createdAtStr,
+            vm.toString(createdAt),
             ',{["description","name","txBuilderVersion"]"',
             "Safenet Staking Beta Deployment Transaction",
             '",',
@@ -97,10 +89,10 @@ contract DeployStakingWithTxBuilderScript is Script {
             "1.18.3", // Tx Builder version
             '",},',
             '[{["contractInputsValues","contractMethod","data","to","value"]',
-            'null,null,"',
-            txData,
+            'null,null,"', // contract inputs and method
+            vm.toString(txData),
             '","',
-            factory, // Factory address
+            vm.toString(factory.addr()), // Factory address
             '","',
             "0", // Value
             '",}],"',

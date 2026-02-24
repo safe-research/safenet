@@ -33,13 +33,7 @@ contract DeployStakingScript is Script {
         console.log("Staking deployed at:", address(staking));
 
         verifyStakingCommand(
-            vm,
-            address(staking),
-            block.chainid,
-            initialOwner,
-            safeToken,
-            initialWithdrawalDelay,
-            configTimeDelay
+            vm, address(staking), block.chainid, initialOwner, safeToken, initialWithdrawalDelay, configTimeDelay
         );
     }
 }
