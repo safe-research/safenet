@@ -6,6 +6,7 @@ export type Metrics = {
 	blockNumber: Gauge;
 	eventIndex: Gauge;
 	transitions: Counter;
+	rpcRequests: Counter;
 };
 
 export type MetricsServiceOptions = {
@@ -39,6 +40,12 @@ export class MetricsService {
 				name: "validator_transitions",
 				help: "Validator state transitions",
 				labelNames: ["result"],
+				registers: [this.#register],
+			}),
+			rpcRequests: new Counter({
+				name: "validator_rpc_requests",
+				help: "RPC requests by method and result",
+				labelNames: ["method", "result"],
 				registers: [this.#register],
 			}),
 		};
