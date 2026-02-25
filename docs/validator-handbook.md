@@ -1,4 +1,4 @@
-# Safenet Validator Handbook
+# Safenet Beta Validator Handbook
 
 This document provides a brief guide to operating a Safenet validator.
 
