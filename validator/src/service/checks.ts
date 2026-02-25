@@ -10,19 +10,23 @@ import { buildSetGuardCheck } from "../consensus/verify/safeTx/checks/config/gua
 import { buildSignMessageChecks } from "../consensus/verify/safeTx/checks/config/messages.js";
 import { buildEnableModuleCheck, buildSetModuleGuardCheck } from "../consensus/verify/safeTx/checks/config/modules.js";
 import { buildSingletonUpgradeChecks } from "../consensus/verify/safeTx/checks/config/singletons.js";
+import { classifyTxCheck } from "../consensus/verify/safeTx/checks/errors.js";
 import { buildMultiSendCallOnlyCheck } from "../consensus/verify/safeTx/checks/multisend.js";
 import type { TransactionCheck } from "../consensus/verify/safeTx/handler.js";
 
 export const buildSafeTransactionCheck = (): TransactionCheck => {
 	// Only specific calls should be allowed on the Safe itself
 	// Following methods do not require additional parameter checks
-	const unboundedSelfCallChecks = buildSupportedSignaturesCheck([
-		"function disableModule(address prevModule, address module)",
-		"function addOwnerWithThreshold(address owner, uint256 threshold)",
-		"function removeOwner(address prevOwner, address owner, uint256 threshold)",
-		"function swapOwner(address prevOwner, address oldOwner, address newOwner)",
-		"function changeThreshold(uint256 threshold)",
-	]);
+	const unboundedSelfCallChecks = classifyTxCheck(
+		"invalid_self_call",
+		buildSupportedSignaturesCheck([
+			"function disableModule(address prevModule, address module)",
+			"function addOwnerWithThreshold(address owner, uint256 threshold)",
+			"function removeOwner(address prevOwner, address owner, uint256 threshold)",
+			"function swapOwner(address prevOwner, address oldOwner, address newOwner)",
+			"function changeThreshold(uint256 threshold)",
+		]),
+	);
 	// Apply parameter checks for critical methods
 	const selfChecks = buildSelfCheck(
 		buildSelectorChecks(

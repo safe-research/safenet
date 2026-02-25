@@ -9,9 +9,10 @@ import {
 } from "viem";
 import type { TransactionCheck } from "../handler.js";
 import type { SafeTransaction } from "../schemas.js";
+import { TransactionCheckError } from "./errors.js";
 
 export const buildNoDelegateCallCheck = () => (tx: SafeTransaction) => {
-	if (tx.operation !== 0) throw new Error("Delegatecall not allowed");
+	if (tx.operation !== 0) throw new TransactionCheckError("no_delegatecall", "Delegatecall not allowed");
 };
 
 export const buildSelfCheck = (check: TransactionCheck) => (tx: SafeTransaction) => {
@@ -21,19 +22,12 @@ export const buildSelfCheck = (check: TransactionCheck) => (tx: SafeTransaction)
 };
 
 export const buildFixedParamsCheck =
-	(params: Partial<SafeTransaction>): TransactionCheck =>
+	(params: Partial<Pick<SafeTransaction, "to" | "value" | "data" | "operation">>): TransactionCheck =>
 	(tx: SafeTransaction) => {
-		if (params.operation !== undefined && tx.operation !== params.operation) {
-			throw new Error(`Expected operation ${params.operation} got ${tx.operation}`);
-		}
-		if (params.to !== undefined && tx.to !== params.to) {
-			throw new Error(`Expected to ${params.to} got ${tx.to}`);
-		}
-		if (params.data !== undefined && tx.data !== params.data) {
-			throw new Error(`Expected data ${params.data} got ${tx.data}`);
-		}
-		if (params.value !== undefined && tx.value !== params.value) {
-			throw new Error(`Expected value ${params.value} got ${tx.value}`);
+		for (const field of ["to", "value", "data", "operation"] as const) {
+			if (params[field] !== undefined && tx[field] !== params[field]) {
+				throw new Error(`Expected ${field} ${params[field]} got ${tx[field]}`);
+			}
 		}
 	};
 

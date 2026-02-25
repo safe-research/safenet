@@ -2,6 +2,7 @@ import { toFunctionSelector } from "viem";
 import type { TransactionCheck } from "../../handler.js";
 import { buildFixedParamsCheck, buildSupportedSelectorCheck } from "../basic.js";
 import { buildCombinedChecks } from "../combined.js";
+import { classifyTxCheck } from "../errors.js";
 
 const buildMigrationCheck = () =>
 	buildCombinedChecks([
@@ -19,8 +20,8 @@ const buildMigrationCheck = () =>
 
 export const buildSingletonUpgradeChecks = (): Record<string, TransactionCheck> => {
 	const migrationCheck = buildMigrationCheck();
-	return {
+	return classifyTxCheck("invalid_migration", {
 		"0x6439e7ABD8Bb915A5263094784C5CF561c4172AC": migrationCheck,
 		"0x526643F69b81B008F46d95CD5ced5eC0edFFDaC6": migrationCheck,
-	};
+	});
 };

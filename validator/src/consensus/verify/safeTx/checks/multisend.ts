@@ -1,6 +1,7 @@
 import { getAddress, size, zeroAddress } from "viem";
 import type { TransactionCheck } from "../handler.js";
 import type { SafeTransaction } from "../schemas.js";
+import { classifyTxCheck } from "./errors.js";
 
 // selector + pointer + length
 const MIN_LENGTH = 4 + 32 + 32;
@@ -71,9 +72,8 @@ const decodeMultiSend = ({ chainId, safe, data, nonce }: SafeTransaction): SafeT
 	return txs;
 };
 
-export const buildMultiSendCallOnlyCheck =
-	(check: TransactionCheck): TransactionCheck =>
-	(tx: SafeTransaction) => {
+export const buildMultiSendCallOnlyCheck = (check: TransactionCheck): TransactionCheck =>
+	classifyTxCheck("invalid_multisend", (tx: SafeTransaction) => {
 		if (tx.operation !== 1) throw new Error("MultiSend has to be performed with delegatecall");
 		if (tx.value !== 0n) throw new Error("MultiSend should not be executed with value");
 
@@ -82,4 +82,4 @@ export const buildMultiSendCallOnlyCheck =
 		for (const tx of subTxs) {
 			check(tx);
 		}
-	};
+	});

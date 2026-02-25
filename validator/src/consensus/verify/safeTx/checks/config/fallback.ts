@@ -1,5 +1,6 @@
 import { type Address, zeroAddress } from "viem";
 import { buildSelectorCheck } from "../basic.js";
+import { classifyTxCheck } from "../errors.js";
 
 const ALLOWED_FALLBACK_HANDLERS: Address[] = [
 	"0x85a8ca358D388530ad0fB95D0cb89Dd44Fc242c3", // ExtensibleFallbackHandler - 1.5.0
@@ -11,8 +12,11 @@ const ALLOWED_FALLBACK_HANDLERS: Address[] = [
 ];
 
 export const buildSetFallbackHandlerCheck = () =>
-	buildSelectorCheck("function setFallbackHandler(address)", ([handler]) => {
-		if (handler !== zeroAddress && !ALLOWED_FALLBACK_HANDLERS.includes(handler)) {
-			throw Error(`Cannot set unknown fallback handler ${handler}`);
-		}
-	});
+	classifyTxCheck(
+		"unknown_fallback_handler",
+		buildSelectorCheck("function setFallbackHandler(address)", ([handler]) => {
+			if (handler !== zeroAddress && !ALLOWED_FALLBACK_HANDLERS.includes(handler)) {
+				throw Error(`Cannot set unknown fallback handler ${handler}`);
+			}
+		}),
+	);

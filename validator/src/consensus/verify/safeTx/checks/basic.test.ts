@@ -9,6 +9,7 @@ import {
 	buildSupportedSelectorCheck,
 	buildSupportedSignaturesCheck,
 } from "./basic.js";
+import { TransactionCheckError } from "./errors.js";
 
 describe("basic checks", () => {
 	describe("buildNoDelegateCallCheck", () => {
@@ -29,7 +30,7 @@ describe("basic checks", () => {
 					refundReceiver: zeroAddress,
 					nonce: 0n,
 				}),
-			).toThrowError(Error("Delegatecall not allowed"));
+			).toThrowError(new TransactionCheckError("no_delegatecall", "Delegatecall not allowed"));
 		});
 
 		it("should forward continue for call transactions", async () => {
