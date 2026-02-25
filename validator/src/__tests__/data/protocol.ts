@@ -301,6 +301,19 @@ export const TEST_ACTIONS: [ProtocolAction, keyof TestProtocol, EthTransactionDa
 			gas: 400_000n,
 		},
 	],
+	[
+		{
+			id: "consensus_set_validator_staker",
+			staker: "0x5AFE000000000000000000000000000000000000",
+		},
+		"setValidatorStaker",
+		{
+			to: TEST_CONSENSUS,
+			value: 0n,
+			data: "0xbbce66a60000000000000000000000005afe000000000000000000000000000000000000",
+			gas: 400_000n,
+		},
+	],
 ];
 
 export const TEST_EVENTS: [ProtocolLog | null, StateTransition][] = [
