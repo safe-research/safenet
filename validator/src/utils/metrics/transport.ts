@@ -1,14 +1,14 @@
 import type { Transport } from "viem";
 import type { Metrics } from "./index.js";
 
-export const wrapTransportWithRpcMetrics = (transport: Transport, metrics: Metrics): Transport => {
-	return (options) => {
+export const withMetrics = <T extends Transport>(transport: T, metrics: Metrics): T => {
+	return ((options) => {
 		const base = transport(options);
 		return {
 			...base,
-			request: async (args, requestOptions) => {
+			async request(args, options) {
 				try {
-					const response = await base.request(args, requestOptions);
+					const response = await base.request(args, options);
 					metrics.rpcRequests.labels({ method: args.method, result: "success" }).inc();
 					return response;
 				} catch (error) {
@@ -17,5 +17,5 @@ export const wrapTransportWithRpcMetrics = (transport: Transport, metrics: Metri
 				}
 			},
 		};
-	};
+	}) as T;
 };

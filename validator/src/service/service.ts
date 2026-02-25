@@ -28,8 +28,8 @@ import { supportedChains } from "../types/chains.js";
 import type { ProtocolConfig } from "../types/interfaces.js";
 import type { Logger } from "../utils/logging.js";
 import type { Metrics } from "../utils/metrics/index.js";
+import { withMetrics } from "../utils/metrics/transport.js";
 import { InMemoryQueue } from "../utils/queue.js";
-import { wrapTransportWithRpcMetrics } from "../utils/metrics/transport.js";
 import { buildSafeTransactionCheck } from "./checks.js";
 import { SafenetStateMachine } from "./machine.js";
 
@@ -59,8 +59,7 @@ export class ValidatorService {
 		database?: Database;
 	}) {
 		this.#logger = logger;
-		const publicTransport = wrapTransportWithRpcMetrics(transport, metrics);
-		this.#publicClient = createPublicClient({ chain, transport: publicTransport });
+		this.#publicClient = createPublicClient({ chain, transport });
 		const walletClient = createWalletClient({ chain, transport, account });
 		const storage =
 			database !== undefined
@@ -150,7 +149,7 @@ export const createValidatorService = ({
 	metrics: Metrics;
 	fees?: ChainFees;
 }): ValidatorService => {
-	const transport = rpcUrl.startsWith("wss") ? webSocket(rpcUrl) : http(rpcUrl);
+	const transport = withMetrics(rpcUrl.startsWith("wss") ? webSocket(rpcUrl) : http(rpcUrl), metrics);
 	const chain: Chain = {
 		...extractChain({
 			chains: supportedChains,
