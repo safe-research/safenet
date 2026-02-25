@@ -485,60 +485,6 @@ describe("protocol - sqlite", () => {
 			]);
 		});
 
-		it("should not return executed transactions", () => {
-			const db = new Sqlite3(":memory:");
-			const storage = new SqliteTxStorage(db);
-			storage.register(
-				{
-					to: entryPoint06Address,
-					value: 0n,
-					data: "0x5afe01",
-				},
-				1,
-			);
-			storage.register(
-				{
-					to: entryPoint06Address,
-					value: 0n,
-					data: "0x5afe02",
-					gas: 200_000n,
-				},
-				1,
-			);
-			storage.setSubmittedForPending(0n);
-			expect(storage.submittedUpTo(0n)).toStrictEqual([
-				{
-					to: entryPoint06Address,
-					value: 0n,
-					data: "0x5afe01",
-					hash: null,
-					nonce: 1,
-					fees: null,
-				},
-				{
-					to: entryPoint06Address,
-					value: 0n,
-					data: "0x5afe02",
-					hash: null,
-					gas: 200_000n,
-					nonce: 2,
-					fees: null,
-				},
-			]);
-			storage.setExecuted(1);
-			expect(storage.submittedUpTo(0n)).toStrictEqual([
-				{
-					to: entryPoint06Address,
-					value: 0n,
-					data: "0x5afe02",
-					hash: null,
-					gas: 200_000n,
-					nonce: 2,
-					fees: null,
-				},
-			]);
-		});
-
 		it("should return null for maxNonce if no transations stored", () => {
 			const db = new Sqlite3(":memory:");
 			const storage = new SqliteTxStorage(db);

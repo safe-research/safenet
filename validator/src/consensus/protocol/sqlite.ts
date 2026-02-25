@@ -214,16 +214,27 @@ export class SqliteTxStorage implements TransactionStorage {
 		// If the minimum nonce is free lets use it otherwise use the next highest nonce
 		const result = this.#db
 			.prepare(`
-			INSERT INTO transaction_storage (nonce, transactionJson)
-			SELECT MAX($minNonce, COALESCE(MAX(nonce) + 1, $minNonce)), $transactionJson
-			FROM transaction_storage
-			RETURNING nonce;
-		`)
+				INSERT INTO transaction_storage (nonce, transactionJson)
+				SELECT MAX($minNonce, COALESCE(MAX(nonce) + 1, $minNonce)), $transactionJson
+				FROM transaction_storage
+				RETURNING nonce;
+			`)
 			.run({
 				minNonce,
 				transactionJson,
 			});
 		return Number(result.lastInsertRowid);
+	}
+
+	count(): number {
+		const result = this.#db
+			.prepare(`
+				SELECT COUNT(*)
+				FROM transaction_storage;
+			`)
+			.pluck()
+			.get();
+		return z.int().parse(result);
 	}
 
 	delete(nonce: number): void {
@@ -237,11 +248,10 @@ export class SqliteTxStorage implements TransactionStorage {
 	maxNonce(): number | null {
 		const result = this.#db
 			.prepare(`
-			SELECT MAX(nonce) as maxNonce
-			FROM transaction_storage;
-		`)
+				SELECT MAX(nonce) as maxNonce
+				FROM transaction_storage;
+			`)
 			.get();
-
 		return maxNonceSchema.parse(result).maxNonce;
 	}
 
@@ -292,11 +302,6 @@ export class SqliteTxStorage implements TransactionStorage {
 				fees: tx.feesJson,
 			};
 		});
-	}
-
-	setExecuted(nonce: number): void {
-		// Executed txs are delete to avoid the database from growing
-		this.delete(nonce);
 	}
 
 	setAllBeforeAsExecuted(nonce: number): number {

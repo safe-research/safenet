@@ -104,17 +104,18 @@ describe("OnchainProtocol", () => {
 			account: { address: entryPoint09Address },
 		} as unknown as WalletClient<Transport, Chain, Account>;
 		const gasFeeEstimator = {} as unknown as GasFeeEstimator;
-		const setExecuted = vi.fn();
+		const count = vi.fn();
 		const submittedUpTo = vi.fn();
 		const setAllBeforeAsExecuted = vi.fn();
 		const setSubmittedForPending = vi.fn();
 		const txStorage = {
+			count,
 			setSubmittedForPending,
 			setAllBeforeAsExecuted,
 			submittedUpTo,
-			setExecuted,
 		} as unknown as TransactionStorage;
 		const loggerSpy = vi.spyOn(testLogger, "debug");
+		count.mockReturnValue(1);
 		setSubmittedForPending.mockReturnValue(0);
 		setAllBeforeAsExecuted.mockReturnValue(2);
 		submittedUpTo.mockReturnValue([]);
@@ -130,6 +131,7 @@ describe("OnchainProtocol", () => {
 			logger: testLogger,
 		});
 		await protocol.checkPendingActions(10n);
+		expect(count).toBeCalledTimes(1);
 		expect(getTransactionCount).toBeCalledTimes(1);
 		expect(getTransactionCount).toBeCalledWith({
 			address: entryPoint09Address,
@@ -139,7 +141,6 @@ describe("OnchainProtocol", () => {
 		expect(setAllBeforeAsExecuted).toBeCalledWith(12);
 		expect(loggerSpy).toBeCalledTimes(1);
 		expect(loggerSpy).toBeCalledWith("Marked 2 transactions as executed");
-		expect(setExecuted).toBeCalledTimes(0);
 	});
 
 	it("should do nothing on setSubmittedForPending error", async () => {
@@ -150,10 +151,13 @@ describe("OnchainProtocol", () => {
 			chain: { id: 100 },
 		} as unknown as WalletClient<Transport, Chain, Account>;
 		const gasFeeEstimator = {} as unknown as GasFeeEstimator;
+		const count = vi.fn();
 		const setSubmittedForPending = vi.fn();
 		const txStorage = {
+			count,
 			setSubmittedForPending,
 		} as unknown as TransactionStorage;
+		count.mockReturnValue(1);
 		setSubmittedForPending.mockRejectedValueOnce(new Error("Test unexpected!"));
 		const protocol = new OnchainProtocol({
 			publicClient,
@@ -166,6 +170,7 @@ describe("OnchainProtocol", () => {
 			logger: testLogger,
 		});
 		await protocol.checkPendingActions(10n);
+		expect(count).toBeCalledTimes(1);
 		expect(setSubmittedForPending).toBeCalledTimes(1);
 		expect(setSubmittedForPending).toBeCalledWith(10n);
 	});
@@ -181,10 +186,13 @@ describe("OnchainProtocol", () => {
 			chain: { id: 100 },
 		} as unknown as WalletClient<Transport, Chain, Account>;
 		const gasFeeEstimator = {} as unknown as GasFeeEstimator;
+		const count = vi.fn();
 		const setSubmittedForPending = vi.fn();
 		const txStorage = {
+			count,
 			setSubmittedForPending,
 		} as unknown as TransactionStorage;
+		count.mockReturnValue(1);
 		setSubmittedForPending.mockResolvedValueOnce(10);
 		getTransactionCount.mockRejectedValueOnce(new Error("Test unexpected!"));
 		const protocol = new OnchainProtocol({
@@ -198,6 +206,7 @@ describe("OnchainProtocol", () => {
 			logger: testLogger,
 		});
 		await protocol.checkPendingActions(10n);
+		expect(count).toBeCalledTimes(1);
 		expect(setSubmittedForPending).toBeCalledTimes(1);
 		expect(setSubmittedForPending).toBeCalledWith(10n);
 		expect(getTransactionCount).toBeCalledTimes(1);
@@ -218,12 +227,15 @@ describe("OnchainProtocol", () => {
 			chain: { id: 100 },
 		} as unknown as WalletClient<Transport, Chain, Account>;
 		const gasFeeEstimator = {} as unknown as GasFeeEstimator;
+		const count = vi.fn();
 		const setSubmittedForPending = vi.fn();
 		const setAllBeforeAsExecuted = vi.fn();
 		const txStorage = {
+			count,
 			setSubmittedForPending,
 			setAllBeforeAsExecuted,
 		} as unknown as TransactionStorage;
+		count.mockReturnValue(1);
 		setSubmittedForPending.mockResolvedValueOnce(10);
 		getTransactionCount.mockResolvedValueOnce(10);
 		setAllBeforeAsExecuted.mockImplementationOnce(() => {
@@ -240,6 +252,7 @@ describe("OnchainProtocol", () => {
 			logger: testLogger,
 		});
 		await protocol.checkPendingActions(10n);
+		expect(count).toBeCalledTimes(1);
 		expect(setSubmittedForPending).toBeCalledTimes(1);
 		expect(setSubmittedForPending).toBeCalledWith(10n);
 		expect(getTransactionCount).toBeCalledTimes(1);
@@ -261,14 +274,17 @@ describe("OnchainProtocol", () => {
 			chain: { id: 100 },
 		} as unknown as WalletClient<Transport, Chain, Account>;
 		const gasFeeEstimator = {} as unknown as GasFeeEstimator;
+		const count = vi.fn();
 		const submittedUpTo = vi.fn();
 		const setSubmittedForPending = vi.fn();
 		const setAllBeforeAsExecuted = vi.fn();
 		const txStorage = {
+			count,
 			submittedUpTo,
 			setSubmittedForPending,
 			setAllBeforeAsExecuted,
 		} as unknown as TransactionStorage;
+		count.mockReturnValue(1);
 		getTransactionCount.mockResolvedValueOnce(10);
 		setSubmittedForPending.mockReturnValueOnce(0);
 		setAllBeforeAsExecuted.mockReturnValueOnce(0);
@@ -286,6 +302,7 @@ describe("OnchainProtocol", () => {
 			logger: testLogger,
 		});
 		await protocol.checkPendingActions(10n);
+		expect(count).toBeCalledTimes(1);
 		expect(setSubmittedForPending).toBeCalledTimes(1);
 		expect(setSubmittedForPending).toBeCalledWith(10n);
 		expect(getTransactionCount).toBeCalledTimes(1);
@@ -312,14 +329,17 @@ describe("OnchainProtocol", () => {
 		const gasFeeEstimator = {
 			estimateFees,
 		} as unknown as GasFeeEstimator;
+		const count = vi.fn();
 		const submittedUpTo = vi.fn();
 		const setSubmittedForPending = vi.fn();
 		const setAllBeforeAsExecuted = vi.fn();
 		const txStorage = {
+			count,
 			submittedUpTo,
 			setSubmittedForPending,
 			setAllBeforeAsExecuted,
 		} as unknown as TransactionStorage;
+		count.mockReturnValue(1);
 		getTransactionCount.mockResolvedValueOnce(10);
 		setSubmittedForPending.mockReturnValueOnce(0);
 		setAllBeforeAsExecuted.mockReturnValueOnce(0);
@@ -350,6 +370,7 @@ describe("OnchainProtocol", () => {
 			logger: testLogger,
 		});
 		await protocol.checkPendingActions(10n);
+		expect(count).toBeCalledTimes(1);
 		expect(setSubmittedForPending).toBeCalledTimes(1);
 		expect(setSubmittedForPending).toBeCalledWith(10n);
 		expect(getTransactionCount).toBeCalledTimes(1);
@@ -384,23 +405,24 @@ describe("OnchainProtocol", () => {
 		const gasFeeEstimator = {
 			estimateFees,
 		} as unknown as GasFeeEstimator;
+		const count = vi.fn();
 		const submittedUpTo = vi.fn();
 		const setSubmittedForPending = vi.fn();
 		const setAllBeforeAsExecuted = vi.fn();
 		const setFees = vi.fn();
 		const setHash = vi.fn();
-		const setExecuted = vi.fn();
 		const txStorage = {
+			count,
 			submittedUpTo,
 			setFees,
 			setHash,
-			setExecuted,
 			setSubmittedForPending,
 			setAllBeforeAsExecuted,
 		} as unknown as TransactionStorage;
 
 		const hash = keccak256("0x5afe5afe01");
 		const [, , tx] = TEST_ACTIONS[0];
+		count.mockReturnValue(1);
 		setSubmittedForPending.mockReturnValueOnce(0);
 		setAllBeforeAsExecuted.mockReturnValueOnce(0);
 		submittedUpTo.mockReturnValue([
@@ -428,6 +450,7 @@ describe("OnchainProtocol", () => {
 			logger: testLogger,
 		});
 		await protocol.checkPendingActions(10n);
+		expect(count).toBeCalledTimes(1);
 		expect(setSubmittedForPending).toBeCalledTimes(1);
 		expect(setSubmittedForPending).toBeCalledWith(10n);
 		expect(getTransactionCount).toBeCalledTimes(1);
@@ -435,10 +458,9 @@ describe("OnchainProtocol", () => {
 			address: entryPoint09Address,
 			blockTag: "latest",
 		});
-		expect(setAllBeforeAsExecuted).toBeCalledTimes(1);
-		expect(setAllBeforeAsExecuted).toBeCalledWith(10);
-		expect(setExecuted).toBeCalledTimes(1);
-		expect(setExecuted).toBeCalledWith(10);
+		expect(setAllBeforeAsExecuted).toBeCalledTimes(2);
+		expect(setAllBeforeAsExecuted).toHaveBeenNthCalledWith(1, 10);
+		expect(setAllBeforeAsExecuted).toHaveBeenNthCalledWith(2, 10);
 		expect(estimateFees).toBeCalledTimes(1);
 		expect(setFees).toBeCalledTimes(1);
 		expect(setFees).toBeCalledWith(10, {
@@ -483,23 +505,24 @@ describe("OnchainProtocol", () => {
 		const gasFeeEstimator = {
 			estimateFees,
 		} as unknown as GasFeeEstimator;
+		const count = vi.fn();
 		const submittedUpTo = vi.fn();
 		const setSubmittedForPending = vi.fn();
 		const setAllBeforeAsExecuted = vi.fn();
 		const setFees = vi.fn();
 		const setHash = vi.fn();
-		const setExecuted = vi.fn();
 		const txStorage = {
+			count,
 			submittedUpTo,
 			setFees,
 			setHash,
-			setExecuted,
 			setSubmittedForPending,
 			setAllBeforeAsExecuted,
 		} as unknown as TransactionStorage;
 
 		const hash = keccak256("0x5afe5afe01");
 		const [, , tx] = TEST_ACTIONS[0];
+		count.mockReturnValue(1);
 		setSubmittedForPending.mockReturnValueOnce(0);
 		setAllBeforeAsExecuted.mockReturnValueOnce(0);
 		submittedUpTo.mockReturnValue([
@@ -536,6 +559,7 @@ describe("OnchainProtocol", () => {
 			logger: testLogger,
 		});
 		await protocol.checkPendingActions(10n);
+		expect(count).toBeCalledTimes(1);
 		expect(setSubmittedForPending).toBeCalledTimes(1);
 		expect(setSubmittedForPending).toBeCalledWith(10n);
 		expect(getTransactionCount).toBeCalledTimes(1);
@@ -543,10 +567,9 @@ describe("OnchainProtocol", () => {
 			address: entryPoint09Address,
 			blockTag: "latest",
 		});
-		expect(setAllBeforeAsExecuted).toBeCalledTimes(1);
-		expect(setAllBeforeAsExecuted).toBeCalledWith(10);
-		expect(setExecuted).toBeCalledTimes(1);
-		expect(setExecuted).toBeCalledWith(10);
+		expect(setAllBeforeAsExecuted).toBeCalledTimes(2);
+		expect(setAllBeforeAsExecuted).toHaveBeenNthCalledWith(1, 10);
+		expect(setAllBeforeAsExecuted).toHaveBeenNthCalledWith(2, 10);
 		expect(estimateFees).toBeCalledTimes(1);
 		expect(setFees).toBeCalledTimes(1);
 		expect(setFees).toBeCalledWith(10, {
@@ -591,12 +614,14 @@ describe("OnchainProtocol", () => {
 		const gasFeeEstimator = {
 			estimateFees,
 		} as unknown as GasFeeEstimator;
+		const count = vi.fn();
 		const submittedUpTo = vi.fn();
 		const setSubmittedForPending = vi.fn();
 		const setAllBeforeAsExecuted = vi.fn();
 		const setFees = vi.fn();
 		const setHash = vi.fn();
 		const txStorage = {
+			count,
 			submittedUpTo,
 			setFees,
 			setHash,
@@ -606,6 +631,7 @@ describe("OnchainProtocol", () => {
 
 		const hash = keccak256("0x5afe5afe01");
 		const [, , tx] = TEST_ACTIONS[0];
+		count.mockReturnValue(1);
 		setSubmittedForPending.mockReturnValueOnce(0);
 		setAllBeforeAsExecuted.mockReturnValueOnce(0);
 		submittedUpTo.mockReturnValue([
@@ -633,6 +659,7 @@ describe("OnchainProtocol", () => {
 			logger: testLogger,
 		});
 		await protocol.checkPendingActions(10n);
+		expect(count).toBeCalledTimes(1);
 		expect(setSubmittedForPending).toBeCalledTimes(1);
 		expect(setSubmittedForPending).toBeCalledWith(10n);
 		expect(getTransactionCount).toBeCalledTimes(1);
@@ -681,12 +708,14 @@ describe("OnchainProtocol", () => {
 		const gasFeeEstimator = {
 			estimateFees,
 		} as unknown as GasFeeEstimator;
+		const count = vi.fn();
 		const submittedUpTo = vi.fn();
 		const setSubmittedForPending = vi.fn();
 		const setAllBeforeAsExecuted = vi.fn();
 		const setHash = vi.fn();
 		const setFees = vi.fn();
 		const txStorage = {
+			count,
 			submittedUpTo,
 			setHash,
 			setFees,
@@ -704,6 +733,7 @@ describe("OnchainProtocol", () => {
 				fees: null,
 			},
 		]);
+		count.mockReturnValue(1);
 		setSubmittedForPending.mockReturnValueOnce(0);
 		setAllBeforeAsExecuted.mockReturnValueOnce(0);
 		getTransactionCount.mockResolvedValueOnce(10);
@@ -726,6 +756,7 @@ describe("OnchainProtocol", () => {
 			logger: testLogger,
 		});
 		await protocol.checkPendingActions(10n);
+		expect(count).toBeCalledTimes(1);
 		expect(getTransactionCount).toBeCalledTimes(1);
 		expect(getTransactionCount).toBeCalledWith({
 			address: entryPoint09Address,
@@ -778,12 +809,14 @@ describe("OnchainProtocol", () => {
 		const gasFeeEstimator = {
 			estimateFees,
 		} as unknown as GasFeeEstimator;
+		const count = vi.fn();
 		const submittedUpTo = vi.fn();
 		const setSubmittedForPending = vi.fn();
 		const setAllBeforeAsExecuted = vi.fn();
 		const setHash = vi.fn();
 		const setFees = vi.fn();
 		const txStorage = {
+			count,
 			submittedUpTo,
 			setHash,
 			setFees,
@@ -804,6 +837,7 @@ describe("OnchainProtocol", () => {
 				},
 			},
 		]);
+		count.mockReturnValue(1);
 		setSubmittedForPending.mockReturnValueOnce(0);
 		setAllBeforeAsExecuted.mockReturnValueOnce(0);
 		getTransactionCount.mockResolvedValueOnce(10);
@@ -826,6 +860,7 @@ describe("OnchainProtocol", () => {
 			logger: testLogger,
 		});
 		await protocol.checkPendingActions(10n);
+		expect(count).toBeCalledTimes(1);
 		expect(getTransactionCount).toBeCalledTimes(1);
 		expect(getTransactionCount).toBeCalledWith({
 			address: entryPoint09Address,
@@ -876,12 +911,14 @@ describe("OnchainProtocol", () => {
 		const gasFeeEstimator = {
 			estimateFees,
 		} as unknown as GasFeeEstimator;
+		const count = vi.fn();
 		const submittedUpTo = vi.fn();
 		const setSubmittedForPending = vi.fn();
 		const setAllBeforeAsExecuted = vi.fn();
 		const setHash = vi.fn();
 		const setFees = vi.fn();
 		const txStorage = {
+			count,
 			submittedUpTo,
 			setHash,
 			setFees,
@@ -902,6 +939,7 @@ describe("OnchainProtocol", () => {
 				},
 			},
 		]);
+		count.mockReturnValue(1);
 		setSubmittedForPending.mockReturnValueOnce(0);
 		setAllBeforeAsExecuted.mockReturnValueOnce(0);
 		getTransactionCount.mockResolvedValueOnce(10);
@@ -924,6 +962,7 @@ describe("OnchainProtocol", () => {
 			logger: testLogger,
 		});
 		await protocol.checkPendingActions(10n);
+		expect(count).toBeCalledTimes(1);
 		expect(getTransactionCount).toBeCalledTimes(1);
 		expect(getTransactionCount).toBeCalledWith({
 			address: entryPoint09Address,
@@ -974,12 +1013,14 @@ describe("OnchainProtocol", () => {
 		const gasFeeEstimator = {
 			estimateFees,
 		} as unknown as GasFeeEstimator;
+		const count = vi.fn();
 		const submittedUpTo = vi.fn();
 		const setSubmittedForPending = vi.fn();
 		const setAllBeforeAsExecuted = vi.fn();
 		const setFees = vi.fn();
 		const setHash = vi.fn();
 		const txStorage = {
+			count,
 			submittedUpTo,
 			setFees,
 			setHash,
@@ -990,6 +1031,7 @@ describe("OnchainProtocol", () => {
 		setSubmittedForPending.mockReturnValueOnce(0);
 		getTransactionCount.mockResolvedValueOnce(10);
 		setAllBeforeAsExecuted.mockReturnValueOnce(0);
+		count.mockReturnValue(1);
 		const [, , tx] = TEST_ACTIONS[0];
 		submittedUpTo.mockReturnValue([
 			{
@@ -1017,6 +1059,7 @@ describe("OnchainProtocol", () => {
 			logger: testLogger,
 		});
 		await protocol.checkPendingActions(10n);
+		expect(count).toBeCalledTimes(1);
 		expect(setSubmittedForPending).toBeCalledTimes(1);
 		expect(setSubmittedForPending).toBeCalledWith(10n);
 		expect(getTransactionCount).toBeCalledTimes(1);
@@ -1069,12 +1112,14 @@ describe("OnchainProtocol", () => {
 		const gasFeeEstimator = {
 			estimateFees,
 		} as unknown as GasFeeEstimator;
+		const count = vi.fn();
 		const setHash = vi.fn();
 		const setFees = vi.fn();
 		const submittedUpTo = vi.fn();
 		const setAllBeforeAsExecuted = vi.fn();
 		const setSubmittedForPending = vi.fn();
 		const txStorage = {
+			count,
 			submittedUpTo,
 			setFees,
 			setHash,
@@ -1093,6 +1138,7 @@ describe("OnchainProtocol", () => {
 			logger: testLogger,
 		});
 
+		count.mockReturnValue(1);
 		setSubmittedForPending.mockReturnValue(0);
 		setAllBeforeAsExecuted.mockReturnValue(0);
 		getTransactionCount.mockResolvedValue(11);
@@ -1112,6 +1158,7 @@ describe("OnchainProtocol", () => {
 		signTransaction.mockResolvedValueOnce("0x5afe5afe");
 		sendRawTransaction.mockResolvedValueOnce(hash);
 		await protocol.checkPendingActions(10n);
+		expect(count).toBeCalledTimes(1);
 		expect(setSubmittedForPending).toBeCalledTimes(1);
 		expect(setSubmittedForPending).toBeCalledWith(10n);
 		expect(getTransactionCount).toBeCalledTimes(1);
