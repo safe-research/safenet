@@ -28,6 +28,7 @@ import { OnchainTransitionWatcher, type WatcherConfig } from "../machine/transit
 import { CONSENSUS_FUNCTIONS } from "../types/abis.js";
 import { supportedChains } from "../types/chains.js";
 import type { ProtocolConfig } from "../types/interfaces.js";
+import { formatError } from "../utils/errors.js";
 import type { Logger } from "../utils/logging.js";
 import type { Metrics } from "../utils/metrics.js";
 import { InMemoryQueue } from "../utils/queue.js";
@@ -122,14 +123,19 @@ export class ValidatorService {
 			},
 		});
 		this.#setStakerAddress = async () => {
-			const currentStaker = await this.#publicClient.readContract({
-				address: config.consensus,
-				abi: CONSENSUS_FUNCTIONS,
-				functionName: "getValidatorStaker",
-				args: [account.address],
-			});
-			if (isAddressEqual(currentStaker, config.staker)) {
-				this.#logger.info("Validator staker address is already set correctly.");
+			try {
+				const currentStaker = await this.#publicClient.readContract({
+					address: config.consensus,
+					abi: CONSENSUS_FUNCTIONS,
+					functionName: "getValidatorStaker",
+					args: [account.address],
+				});
+				if (isAddressEqual(currentStaker, config.staker)) {
+					this.#logger.info("Validator staker address is already set correctly.");
+					return;
+				}
+			} catch (error) {
+				this.#logger.error("Error while getting the current validator staker address", { error: formatError(error) });
 				return;
 			}
 			this.#logger.info(`Setting validator staker address to ${config.staker}...`);
