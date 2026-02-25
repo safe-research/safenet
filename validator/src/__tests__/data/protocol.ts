@@ -13,6 +13,7 @@ import type {
 	RegisterNonceCommitments,
 	RequestSignature,
 	RevealNonceCommitments,
+	SetValidatorStaker,
 	StageEpoch,
 	StartKeyGen,
 } from "../../consensus/protocol/types.js";
@@ -61,6 +62,9 @@ export class TestProtocol extends BaseProtocol {
 		throw new Error("Method not implemented.");
 	}
 	public stageEpoch(_args: StageEpoch): Promise<Hex> {
+		throw new Error("Method not implemented.");
+	}
+	public setValidatorStaker(_args: SetValidatorStaker): Promise<Hex> {
 		throw new Error("Method not implemented.");
 	}
 }

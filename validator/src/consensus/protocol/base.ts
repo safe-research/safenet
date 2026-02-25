@@ -15,6 +15,7 @@ import type {
 	RequestSignature,
 	RevealNonceCommitments,
 	SafenetProtocol,
+	SetValidatorStaker,
 	StageEpoch,
 	StartKeyGen,
 } from "./types.js";
@@ -114,6 +115,8 @@ export abstract class BaseProtocol implements SafenetProtocol {
 				return await this.attestTransaction(action);
 			case "consensus_stage_epoch":
 				return await this.stageEpoch(action);
+			case "consensus_set_validator_staker":
+				return await this.setValidatorStaker(action);
 		}
 	}
 	protected abstract startKeyGen(args: StartKeyGen): Promise<Hex | null>;
@@ -137,4 +140,6 @@ export abstract class BaseProtocol implements SafenetProtocol {
 	protected abstract attestTransaction(args: AttestTransaction): Promise<Hex | null>;
 
 	protected abstract stageEpoch(args: StageEpoch): Promise<Hex | null>;
+
+	protected abstract setValidatorStaker(args: SetValidatorStaker): Promise<Hex | null>;
 }

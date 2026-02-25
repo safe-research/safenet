@@ -133,14 +133,7 @@ export class ValidatorService {
 				return;
 			}
 			this.#logger.info(`Setting validator staker address to ${config.staker}...`);
-			const txHash = await walletClient.writeContract({
-				address: config.consensus,
-				abi: CONSENSUS_FUNCTIONS,
-				functionName: "setValidatorStaker",
-				args: [config.staker],
-			});
-			await this.#publicClient.waitForTransactionReceipt({ hash: txHash });
-			this.#logger.info(`Validator staker address set with transaction hash: ${txHash}`);
+			protocol.process({ id: "consensus_set_validator_staker", staker: config.staker });
 		};
 	}
 

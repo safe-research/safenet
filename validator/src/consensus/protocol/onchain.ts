@@ -31,6 +31,7 @@ import type {
 	RegisterNonceCommitments,
 	RequestSignature,
 	RevealNonceCommitments,
+	SetValidatorStaker,
 	StageEpoch,
 	StartKeyGen,
 } from "./types.js";
@@ -479,6 +480,16 @@ export class OnchainProtocol extends BaseProtocol {
 			abi: CONSENSUS_FUNCTIONS,
 			functionName: "stageEpoch",
 			args: [proposedEpoch, rolloverBlock, groupId, signatureId],
+			gas: 400_000n, // TODO: this has not been estimated yet
+		});
+	}
+
+	protected setValidatorStaker({ staker }: SetValidatorStaker): Promise<Hex | null> {
+		return this.submitAction({
+			address: this.#consensus,
+			abi: CONSENSUS_FUNCTIONS,
+			functionName: "setValidatorStaker",
+			args: [staker],
 			gas: 400_000n, // TODO: this has not been estimated yet
 		});
 	}
