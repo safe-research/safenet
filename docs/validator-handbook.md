@@ -32,14 +32,20 @@ To run a validator, you need a reliable Ethereum RPC node that can accommodate a
 
 The validator node writes JSON-formatted logs to standard output. It also exposes Prometheus metrics on `:3555` by default, which can be scraped over HTTP.
 
-### Private Keys
+### Secrets
 
-#### `secp256k1` Keys
+#### `secp256k1` Validator Key
 
-Each validator must be provisioned with a `secp256k1` private key. This key is used to authenticate the validator onchain for participation in Safenet Beta. It must be funded with sufficient gas for the EVM transactions required for onchain consensus-related communication. The exact amount varies by chain, but you can expect the account to consume roughly 1.000.000.000 gas per day under peak load.
+Each validator must be provisioned with a `secp256k1` private key. This key is used to authenticate the validator onchain for participation in Safenet Beta. It must be funded with sufficient gas for the EVM transactions required for onchain consensus-related communication.
 
 > [!TIP]
 > The validator currently requires the private key at startup and does not support any KMS systems. Do not use this key for anything else, especially security-related tasks. Use it only for validating, and fund it only with the amount needed for gas. In the future, we plan to support KMS systems for more secure setups.
+
+##### Gas Costs
+
+The exact amount varies by chain, but you can expect the account to consume roughly 1.000.000.000 gas per day under peak load. The actual cost of that gas depends on network congestion.
+
+Safenet Beta’s onchain components are planned for deployment on Gnosis Chain. Over the past six months (Aug 25, 2025 – Feb 25, 2026), the average base fee per gas was approximately 0.042 Gwei, translating to just under $0.05 per day in gas costs. However, daily average base fee per gas reached as high as 3.4 Gwei. Based on these figures, validators should expect to need roughly $10 in tokens to cover gas costs over the six-month Beta period. It is recommended to overfund the validator to account for base gas fee variability.
 
 #### Consensus Secrets
 
