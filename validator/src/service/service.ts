@@ -7,6 +7,7 @@ import {
 	createWalletClient,
 	extractChain,
 	http,
+	isAddressEqual,
 	type PublicClient,
 	type Transport,
 	webSocket,
@@ -24,6 +25,7 @@ import { SafeTransactionHandler } from "../consensus/verify/safeTx/handler.js";
 import { InMemoryStateStorage } from "../machine/storage/inmemory.js";
 import { SqliteStateStorage } from "../machine/storage/sqlite.js";
 import { OnchainTransitionWatcher, type WatcherConfig } from "../machine/transitions/watcher.js";
+import { CONSENSUS_FUNCTIONS } from "../types/abis.js";
 import { supportedChains } from "../types/chains.js";
 import type { ProtocolConfig } from "../types/interfaces.js";
 import type { Logger } from "../utils/logging.js";
@@ -37,6 +39,7 @@ export class ValidatorService {
 	#publicClient: PublicClient;
 	#watcher: OnchainTransitionWatcher;
 	#stateMachine: SafenetStateMachine;
+	#setStakerAddress: () => Promise<void>;
 
 	constructor({
 		account,
@@ -118,9 +121,31 @@ export class ValidatorService {
 				}
 			},
 		});
+		this.#setStakerAddress = async () => {
+			const currentStaker = await this.#publicClient.readContract({
+				address: config.consensus,
+				abi: CONSENSUS_FUNCTIONS,
+				functionName: "getValidatorStaker",
+				args: [account.address],
+			});
+			if (isAddressEqual(currentStaker, config.staker)) {
+				this.#logger.info("Validator staker address is already set correctly.");
+				return;
+			}
+			this.#logger.info(`Setting validator staker address to ${config.staker}...`);
+			const txHash = await walletClient.writeContract({
+				address: config.consensus,
+				abi: CONSENSUS_FUNCTIONS,
+				functionName: "setValidatorStaker",
+				args: [config.staker],
+			});
+			await this.#publicClient.waitForTransactionReceipt({ hash: txHash });
+			this.#logger.info(`Validator staker address set with transaction hash: ${txHash}`);
+		};
 	}
 
 	async start() {
+		await this.#setStakerAddress();
 		await this.#watcher.start();
 	}
 

@@ -27,10 +27,16 @@ const logger = createLogger({
 	pretty: process.stdout.isTTY,
 });
 
+const account = privateKeyToAccount(validatorConfig.PRIVATE_KEY, {
+	nonceManager: createNonceManager({ source: jsonRpc() }),
+});
+logger.notice(`Using validator account ${account.address}`);
+
 const config: ProtocolConfig = {
 	chainId: validatorConfig.CHAIN_ID,
 	consensus: validatorConfig.CONSENSUS_ADDRESS,
 	coordinator: validatorConfig.COORDINATOR_ADDRESS,
+	staker: validatorConfig.STAKER_ADDRESS ?? account.address,
 	participants: validatorConfig.PARTICIPANTS,
 	genesisSalt: validatorConfig.GENESIS_SALT,
 	blocksPerEpoch: validatorConfig.BLOCKS_PER_EPOCH,
@@ -50,11 +56,6 @@ const fees: ChainFees = {
 	// Allow to set higher default priority fee to ensure transaction inclusion
 	maxPriorityFeePerGas: validatorConfig.PRIORITY_FEE_PER_GAS,
 };
-
-const account = privateKeyToAccount(validatorConfig.PRIVATE_KEY, {
-	nonceManager: createNonceManager({ source: jsonRpc() }),
-});
-logger.notice(`Using validator account ${account.address}`);
 
 const metrics = createMetricsService({ logger, port: validatorConfig.METRICS_PORT });
 const service = createValidatorService({

@@ -66,6 +66,7 @@ export const validatorConfigSchema = z.object({
 	STORAGE_FILE: fileNameSchema,
 	RPC_URL: z.url(),
 	PRIVATE_KEY: hexBytes32Schema,
+	STAKER_ADDRESS: checkedAddressSchema.optional(),
 	CONSENSUS_ADDRESS: checkedAddressSchema,
 	COORDINATOR_ADDRESS: checkedAddressSchema,
 	CHAIN_ID: supportedChainsSchema,
