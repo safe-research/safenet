@@ -4,7 +4,7 @@ This document provides a brief guide to operating a Safenet validator.
 
 ## Introduction
 
-Safenet is a decentralized Safe transaction security network where validators coordinate to generate cryptographic attestations for Safe transactions. Validators are run by independent parties to maintain decentralization and prevent a single entity from producing invalid attestations that could compromise Safenet’s security guarantees.
+Safenet Beta is a decentralized Safe transaction security network where validators coordinate to generate cryptographic attestations for Safe transactions. Validators are run by independent parties to maintain decentralization and prevent a single entity from producing invalid attestations that could compromise Safenet’s security guarantees.
 
 In the initial beta release, Safenet validators communicate entirely onchain. This simplifies validator operations: only a stable RPC node connection is required, and the system does not need to be exposed to the public internet.
 
