@@ -84,5 +84,5 @@ There are a few things you can do to verify your validator is running as expecte
 
 ### Common Problems
 
-- Ethereum node RPC issues such as rate limits. While the validator implements exponential backoff for some RPC requests, rate limits can still prevent full participation in Safenet.
+- Ethereum node RPC issues such as rate limits. While the validator implements exponential backoff for some RPC requests, rate limits can still prevent full participation in Safenet Beta.
 - Insufficient funds on the validator account to submit onchain transactions. Logs will show that `actions` could not be submitted because of insufficient gas.
