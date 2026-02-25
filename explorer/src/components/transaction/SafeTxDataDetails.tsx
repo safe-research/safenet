@@ -1,15 +1,15 @@
 import { ArrowTopRightOnSquareIcon } from "@heroicons/react/24/solid";
 import { useState } from "react";
-import { type Hex, size } from "viem";
+import type { Hex } from "viem";
 import { useSettings } from "@/hooks/useSettings";
 import { dataString } from "@/lib/safe/formatting";
 
-const DATA_LIMIT = 104;
+const DATA_LIMIT = 206;
 
 export function SafeTxDataDetails({ data }: { data: Hex }) {
 	const [showAll, setShowAll] = useState(false);
 	const [settings] = useSettings();
-	const canShowMore = size(data) > DATA_LIMIT;
+	const canShowMore = data.length > DATA_LIMIT;
 	return (
 		<>
 			<div className={"flex justify-between"}>

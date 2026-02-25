@@ -1,8 +1,8 @@
 import { type Address, formatLog, type Hex, numberToHex, type PublicClient, parseEventLogs } from "viem";
 import {
-	COORDINATOR_SIGNGING_PROGRESS_SELECTORS,
 	COORDINATOR_SIGNING_INITIATED_EVENT,
 	COORDINATOR_SIGNING_PROGRESS_EVENTS,
+	COORDINATOR_SIGNING_PROGRESS_SELECTORS,
 } from "@/lib/coordinator/abi";
 import { safeTxProposalHash } from "@/lib/packets";
 import { getFromBlock } from "@/lib/utils";
@@ -91,7 +91,7 @@ export const loadLatestAttestationStatus = async ({
 		params: [
 			{
 				address: coordinator,
-				topics: [COORDINATOR_SIGNGING_PROGRESS_SELECTORS, signingIds],
+				topics: [COORDINATOR_SIGNING_PROGRESS_SELECTORS, signingIds],
 				fromBlock: numberToHex(fromBlock),
 				toBlock: typeof toBlock === "bigint" ? numberToHex(toBlock) : toBlock,
 			},
@@ -181,6 +181,6 @@ const getSigned = (status: StatusAggregation | undefined): AttestationParticipat
 	}
 	// If not completed look for the selection with the most signatures
 	return Object.values(status.signedBySelection).reduce((left, right) => {
-		return left.length < right.length ? left : right;
+		return left.length >= right.length ? left : right;
 	}, []);
 };

@@ -30,7 +30,7 @@ export const COORDINATOR_EVENTS = [
 	...COORDINATOR_OTHER_EVENTS,
 ] as const;
 
-export const COORDINATOR_SIGNGING_PROGRESS_SELECTORS = [
+export const COORDINATOR_SIGNING_PROGRESS_SELECTORS = [
 	"SignCompleted" as const,
 	"SignRevealedNonces" as const,
 	"SignShared" as const,

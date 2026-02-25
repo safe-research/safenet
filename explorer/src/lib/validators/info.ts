@@ -21,6 +21,9 @@ const validatorInfoSchema = z.array(
 
 export const loadValidatorInfoMap = async (): Promise<Map<bigint, ValidatorInfo>> => {
 	return fetch(VALIDATOR_INFO_URL).then(async (resp) => {
+		if (!resp.ok) {
+			throw new Error(`Failed to fetch validator info: ${resp.statusText}`);
+		}
 		return validatorInfoSchema.parse(await resp.json()).reduce((map, info) => {
 			map.set(info.identifier, info);
 			return map;

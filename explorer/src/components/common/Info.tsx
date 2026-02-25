@@ -20,7 +20,7 @@ export function InlineExplorerTxLink({
 	return (
 		<>
 			[
-			<a href={explorerLink} target="_blank">
+			<a href={explorerLink} target="_blank" rel="noopener noreferrer">
 				{children} <ArrowTopRightOnSquareIcon className="inline-block h-4 w-4 mb-1" />
 			</a>
 			]

@@ -18,7 +18,6 @@ export function useChainId() {
 	return useQuery<bigint | null, Error>({
 		queryKey: ["chainId"],
 		queryFn: () => provider.getChainId().then((id) => BigInt(id)),
-		refetchInterval: 10000,
 		initialData: null,
 	});
 }
@@ -28,7 +27,6 @@ export function useBlockInfo(blockNumber: bigint) {
 	return useQuery<Block | null, Error>({
 		queryKey: ["blockInfo", blockNumber.toString()],
 		queryFn: () => provider.getBlock({ blockNumber }),
-		refetchInterval: 10000,
 		initialData: null,
 	});
 }
