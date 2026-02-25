@@ -1,6 +1,6 @@
 # Safenet Beta Validator Handbook
 
-This document provides a brief guide to operating a Safenet validator.
+This document provides a brief guide to operating a Safenet Beta validator.
 
 ## Introduction
 
