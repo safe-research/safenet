@@ -14,7 +14,7 @@ For more information on Safenet, consult the [technical overview](./overview.md)
 
 ### System
 
-The Safenet validator node is distributed as an OCI container image that can run on any OCI-compatible runtime (Docker, Podman, etc.). The validator is lean and can run on a single core (with average CPU usage under 5%) and less than 500 MB of RAM (1 GB is recommended to handle spikes). Currently, only Linux x86-64 images are distributed.
+The Safenet Beta validator node is distributed as an OCI container image that can run on any OCI-compatible runtime (Docker, Podman, etc.). The validator is lean and can run on a single core (with average CPU usage under 5%) and less than 500 MB of RAM (1 GB is recommended to handle spikes). Currently, only Linux x86-64 images are distributed.
 
 Additionally, the validator node stores intermediate state in a SQLite database file. This file contains critical runtime information and should be backed up. Loss of this data would prevent the validator from correctly participating in consensus for the duration of an epoch.
 
