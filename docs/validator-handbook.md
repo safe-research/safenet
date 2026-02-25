@@ -36,7 +36,7 @@ The validator node writes JSON-formatted logs to standard output. It also expose
 
 #### `secp256k1` Keys
 
-Each validator must be provisioned with a `secp256k1` private key. This key is used to authenticate the validator onchain for participation in Safenet. It must be funded with sufficient gas for the EVM transactions required for onchain consensus-related communication. The exact amount varies by chain, but you can expect the account to consume roughly 1.000.000.000 gas per day under peak load.
+Each validator must be provisioned with a `secp256k1` private key. This key is used to authenticate the validator onchain for participation in Safenet Beta. It must be funded with sufficient gas for the EVM transactions required for onchain consensus-related communication. The exact amount varies by chain, but you can expect the account to consume roughly 1.000.000.000 gas per day under peak load.
 
 > [!TIP]
 > The validator currently requires the private key at startup and does not support any KMS systems. Do not use this key for anything else, especially security-related tasks. Use it only for validating, and fund it only with the amount needed for gas. In the future, we plan to support KMS systems for more secure setups.
