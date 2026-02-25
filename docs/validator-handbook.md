@@ -8,7 +8,7 @@ Safenet Beta is a decentralized Safe transaction security network where validato
 
 In the initial beta release, Safenet validators communicate entirely onchain. This simplifies validator operations: only a stable RPC node connection is required, and the system does not need to be exposed to the public internet.
 
-For more general information on Safenet, consult the [technical overview](./overview.md).
+For more information on Safenet, consult the [technical overview](./overview.md) as well as the [general public docs](https://docs.safefoundation.org/safenet).
 
 ## Requirements
 
