@@ -1,12 +1,12 @@
 # Safenet Validator Handbook
 
-This document contains a brief guide on operating a Safenet validator.
+This document provides a brief guide to operating a Safenet validator.
 
 ## Introduction
 
-Safenet is a decentralized Safe transaction security network, where validators coordinate to generate cryptographic attestations to Safe transactions. Validators are run by independent parties, in order to ensure a high level of decentralization of the network, and preventing a single entity from producing invalid attestations that would compromise the security protections offered by Safenet.
+Safenet is a decentralized Safe transaction security network where validators coordinate to generate cryptographic attestations for Safe transactions. Validators are run by independent parties to maintain decentralization and prevent a single entity from producing invalid attestations that could compromise Safenet’s security guarantees.
 
-In the initial beta release, Safenet validators communicate entirely onchain. This **greatly** simplifies the logistics of running a validator, only a stable RPC node connection is needed, and it does not require exposing the system to the public internet.
+In the initial beta release, Safenet validators communicate entirely onchain. This simplifies validator operations: only a stable RPC node connection is required, and the system does not need to be exposed to the public internet.
 
 For more general information on Safenet, consult the [technical overview](./overview.md).
 
@@ -14,15 +14,15 @@ For more general information on Safenet, consult the [technical overview](./over
 
 ### System
 
-The Safenet validator node is distributed as an OCI container image that can run on any OCI-compatible runtime (Docker, Podman, etc.). The validator itself is fairly lean and can run on a single core (with average CPU usage at less than 5%) and less than 500 MB of RAM (although 1 GB is recommended in order to deal with spikes). Currently, we only distribute Linux x86-64 images.
+The Safenet validator node is distributed as an OCI container image that can run on any OCI-compatible runtime (Docker, Podman, etc.). The validator is lean and can run on a single core (with average CPU usage under 5%) and less than 500 MB of RAM (1 GB is recommended to handle spikes). Currently, only Linux x86-64 images are distributed.
 
-Additionally, the validator node stores intermediate state in a SQLite database file. This file contains critical runtime information and should be backed up. Loss of this data would prevent from the validator from correctly participating with consensus for the duration of an epoch.
+Additionally, the validator node stores intermediate state in a SQLite database file. This file contains critical runtime information and should be backed up. Loss of this data would prevent the validator from correctly participating in consensus for the duration of an epoch.
 
 ### Infrastructure
 
 #### Ethereum RPC
 
-In order to run a validator, you need a reliable Ethereum RPC node that can accommodate a peak of 100.000 requests per day. The following table shows the approximate breakdown of each RPC method that is used (note that exact ratios depends on how busy Safenet is):
+To run a validator, you need a reliable Ethereum RPC node that can accommodate a peak of 100.000 requests per day. The following table shows the approximate breakdown by RPC method (exact ratios depend on Safenet activity):
 
 | eth_getBlockByNumber | eth_sendRawTransaction | eth_maxPriorityFeePerGas | eth_getLogs | eth_getTransactionCount |
 | -------------------- | ---------------------- | ------------------------ | ----------- | ----------------------- |
@@ -30,29 +30,29 @@ In order to run a validator, you need a reliable Ethereum RPC node that can acco
 
 #### Logging and Metrics
 
-The validator node writes JSON-formatted logs to standard output. Additionally, it exposes Prometheus metrics to `:3555` by default which can be scraped over HTTP.
+The validator node writes JSON-formatted logs to standard output. It also exposes Prometheus metrics on `:3555` by default, which can be scraped over HTTP.
 
 ### Private Keys
 
 #### `secp256k1` Keys
 
-Each validator must be provisioned a `secp256k1` private key. This key is used to authenticate the validator onchain for participating in Safenet. This key must be funded with sufficient gas money for the executing EVM transactions required for onchain consensus-related communication. The exact amount of funds required varies widely from chain to chain, but you can expect the account to consume roughly 1.000.000.000 gas per day under peak load.
+Each validator must be provisioned with a `secp256k1` private key. This key is used to authenticate the validator onchain for participation in Safenet. It must be funded with sufficient gas for the EVM transactions required for onchain consensus-related communication. The exact amount varies by chain, but you can expect the account to consume roughly 1.000.000.000 gas per day under peak load.
 
 > [!TIP]
-> The validator currently requires the private key to be provided at startup, and currently does not support any KMS systems. As such, it is recommended that this private key not be used for anything else, especially nothing security related. It should only be used for validating and have a small amount of funds required as gas money for executing transactions on chain. In the future, we plan to support KMS systems enabling more secure setups.
+> The validator currently requires the private key at startup and does not support any KMS systems. Do not use this key for anything else, especially security-related tasks. Use it only for validating, and fund it only with the amount needed for gas. In the future, we plan to support KMS systems for more secure setups.
 
 #### Consensus Secrets
 
-While participating in consensus, validators generate short term secrets that are required for attesting Safe transactions and correctly participating in consensus. Specifically, it generates:
+While participating in consensus, validators generate short-term secrets required to attest Safe transactions and participate correctly. Specifically, it generates:
 
 - Secret coefficients used for distributed key generation once per epoch
 - A secret signing share used for attesting Safe transactions once per epoch
 - Secret nonce pairs that are used in signing ceremonies producing Safe transaction attestations once per signing sequence chunk (i.e. once every 1024 signatures)
 
-The loss of these secrets would cause the validator to not be able to participate in consensus until new ones are computed, foregoing protocol rewards during that period. As such, it is very important to ensure that this information isn't lost and survives validator restarts. In the current implementation, the validator stores these secrets in an SQLite database on disk. Validator operators must ensure that the file is stored in a way such that it is not lost across restarts, and properly backed up in case of failure.
+Loss of these secrets would prevent the validator from participating in consensus until new ones are computed, and it would forgo protocol rewards during that period. Ensure this information survives restarts. In the current implementation, the validator stores these secrets in an SQLite database on disk. Operators must ensure the file persists across restarts and is backed up in case of failure.
 
 > [!TIP]
-> The secrets are currently stored in plaintext and not encrypted in the SQLite database. **This means that the validator database file must be treated as containing secret keys**, ensuring the sufficient restrictions are applied in order to prevent unwanted access. **Never share this file with anyone, including the Safenet team for debugging**.
+> The secrets are stored in plaintext and are not encrypted in the SQLite database. **Treat the validator database file as containing secret keys**, and apply sufficient restrictions to prevent unauthorized access. **Never share this file with anyone, including the Safenet team for debugging**.
 
 ## Running
 
@@ -74,15 +74,15 @@ docker run --name safenet-validator \
 
 ## Debugging
 
-There are a few things you can do to check your validator is running as expected:
+There are a few things you can do to verify your validator is running as expected:
 
-- Check the logs, for example if running with `docker` you can check them with:
+- Check the logs. For example, if running with `docker`:
   ```shell
   docker logs --follow safenet-validator
   ```
-- Check the validator EVM account on a block explorer, there should be recent transactions to the `Consensus` and `FROSTCoordinator` contracts
+- Check the validator EVM account on a block explorer. There should be recent transactions to the `Consensus` and `FROSTCoordinator` contracts.
 
 ### Common Problems
 
-- Ethereum node RPC issues such as rate limits being hit, while the validator does implement exponential backoff for some of its RPC requests, RPC rate limits can cause the validator to not fully participate in Safenet.
-- Insufficient funds on the validator account to submit transactions for communicating onchain, there will be logs that `actions` could not be submitted because of insufficient gas.
+- Ethereum node RPC issues such as rate limits. While the validator implements exponential backoff for some RPC requests, rate limits can still prevent full participation in Safenet.
+- Insufficient funds on the validator account to submit onchain transactions. Logs will show that `actions` could not be submitted because of insufficient gas.
