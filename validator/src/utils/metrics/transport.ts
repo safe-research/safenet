@@ -1,5 +1,5 @@
 import type { Transport } from "viem";
-import type { Metrics } from "./metrics.js";
+import type { Metrics } from "./index.js";
 
 export const wrapTransportWithRpcMetrics = (transport: Transport, metrics: Metrics): Transport => {
 	return (options) => {

@@ -27,9 +27,9 @@ import { OnchainTransitionWatcher, type WatcherConfig } from "../machine/transit
 import { supportedChains } from "../types/chains.js";
 import type { ProtocolConfig } from "../types/interfaces.js";
 import type { Logger } from "../utils/logging.js";
-import type { Metrics } from "../utils/metrics.js";
+import type { Metrics } from "../utils/metrics/index.js";
 import { InMemoryQueue } from "../utils/queue.js";
-import { wrapTransportWithRpcMetrics } from "../utils/transport.js";
+import { wrapTransportWithRpcMetrics } from "../utils/metrics/transport.js";
 import { buildSafeTransactionCheck } from "./checks.js";
 import { SafenetStateMachine } from "./machine.js";
 
