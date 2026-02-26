@@ -226,7 +226,7 @@ export class SqliteTxStorage implements TransactionStorage {
 		return Number(result.lastInsertRowid);
 	}
 
-	count(): number {
+	countPending(): number {
 		const result = this.#db
 			.prepare(`
 				SELECT COUNT(*)

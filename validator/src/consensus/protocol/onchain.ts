@@ -41,7 +41,7 @@ export type EthTransactionDetails = { nonce: number; fees: FeeValues | null; has
 
 export interface TransactionStorage {
 	register(tx: EthTransactionData, minNonce: number): number;
-	count(): number;
+	countPending(): number;
 	delete(nonce: number): void;
 	setFees(nonce: number, fees: FeeValues): void;
 	setHash(nonce: number, txHash: Hex): void;
@@ -133,7 +133,7 @@ export class OnchainProtocol extends BaseProtocol {
 		try {
 			// Optimistically check whether or not we have pending actions. If we don't then we can just exit early and
 			// save on some RPC calls and database reads.
-			if (this.#txStorage.count() === 0) {
+			if (this.#txStorage.countPending() === 0) {
 				return;
 			}
 
