@@ -9,7 +9,7 @@ import type { ProtocolConfig } from "./types/interfaces.js";
 import { validatorConfigSchema } from "./types/schemas.js";
 import { formatError } from "./utils/errors.js";
 import { createLogger } from "./utils/logging.js";
-import { createMetricsService } from "./utils/metrics.js";
+import { createMetricsService } from "./utils/metrics/index.js";
 
 dotenv.config({ quiet: true });
 
