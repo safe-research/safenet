@@ -41,11 +41,11 @@ export type EthTransactionDetails = { nonce: number; fees: FeeValues | null; has
 
 export interface TransactionStorage {
 	register(tx: EthTransactionData, minNonce: number): number;
+	countPending(): number;
 	delete(nonce: number): void;
 	setFees(nonce: number, fees: FeeValues): void;
 	setHash(nonce: number, txHash: Hex): void;
-	setExecuted(nonce: number): void;
-	setAllBeforeAsExecuted(nonce: number): number;
+	setExecutedUpTo(nonce: number): number;
 	setSubmittedForPending(blockNumber: bigint): number;
 	maxNonce(): number | null;
 	submittedUpTo(blockNumber: bigint, offset?: number, limit?: number): (EthTransactionData & EthTransactionDetails)[];
@@ -131,6 +131,12 @@ export class OnchainProtocol extends BaseProtocol {
 
 	async checkPendingActions(blockNumber: bigint) {
 		try {
+			// Optimistically check whether or not we have pending actions. If we don't then we can just exit early and
+			// save on some RPC calls and database reads.
+			if (this.#txStorage.countPending() === 0) {
+				return;
+			}
+
 			// For transaction without a submission block set it to this block
 			// This assumes that the transaction should be included in this block
 			// If the blocksBeforeResubmit is 1 block, these transactions will only be retried on the next block
@@ -142,14 +148,14 @@ export class OnchainProtocol extends BaseProtocol {
 				address: this.#signingClient.account.address,
 				blockTag: "latest",
 			});
-			const executedTxs = this.#txStorage.setAllBeforeAsExecuted(currentNonce);
+			const executedTxs = this.#txStorage.setExecutedUpTo(currentNonce - 1);
 			if (executedTxs > 0) {
 				this.#logger.debug(`Marked ${executedTxs} transactions as executed`);
 			}
-			// Only fetch the first page of pending transactions (default limit is 100) to avoid retrying too many transactions at once.
+			// Only fetch the first page of pending transactions (default limit is 100) to avoid retrying too many
+			// transactions at once.
 			const pendingTxs = this.#txStorage.submittedUpTo(blockNumber - this.#blocksBeforeResubmit);
 			for (const tx of pendingTxs) {
-				// If we don't find the transaction or it has no blockHash then we resubmit it
 				this.#logger.debug(`Resubmit transaction for ${tx.nonce}!`, { transaction: tx });
 				try {
 					await this.submitTransaction(tx);
@@ -162,7 +168,7 @@ export class OnchainProtocol extends BaseProtocol {
 						this.#logger.info(`Nonce already used. Marking transaction with nonce ${tx.nonce} as executed!`, {
 							transaction: tx,
 						});
-						this.#txStorage.setExecuted(tx.nonce);
+						this.#txStorage.setExecutedUpTo(tx.nonce);
 						continue;
 					}
 					this.#logger.warn(`Error submitting transaction for ${tx.nonce}!`, { error: formatError(error) });

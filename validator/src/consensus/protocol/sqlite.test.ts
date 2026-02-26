@@ -485,60 +485,6 @@ describe("protocol - sqlite", () => {
 			]);
 		});
 
-		it("should not return executed transactions", () => {
-			const db = new Sqlite3(":memory:");
-			const storage = new SqliteTxStorage(db);
-			storage.register(
-				{
-					to: entryPoint06Address,
-					value: 0n,
-					data: "0x5afe01",
-				},
-				1,
-			);
-			storage.register(
-				{
-					to: entryPoint06Address,
-					value: 0n,
-					data: "0x5afe02",
-					gas: 200_000n,
-				},
-				1,
-			);
-			storage.setSubmittedForPending(0n);
-			expect(storage.submittedUpTo(0n)).toStrictEqual([
-				{
-					to: entryPoint06Address,
-					value: 0n,
-					data: "0x5afe01",
-					hash: null,
-					nonce: 1,
-					fees: null,
-				},
-				{
-					to: entryPoint06Address,
-					value: 0n,
-					data: "0x5afe02",
-					hash: null,
-					gas: 200_000n,
-					nonce: 2,
-					fees: null,
-				},
-			]);
-			storage.setExecuted(1);
-			expect(storage.submittedUpTo(0n)).toStrictEqual([
-				{
-					to: entryPoint06Address,
-					value: 0n,
-					data: "0x5afe02",
-					hash: null,
-					gas: 200_000n,
-					nonce: 2,
-					fees: null,
-				},
-			]);
-		});
-
 		it("should return null for maxNonce if no transations stored", () => {
 			const db = new Sqlite3(":memory:");
 			const storage = new SqliteTxStorage(db);
@@ -606,7 +552,33 @@ describe("protocol - sqlite", () => {
 				},
 				1,
 			);
-			expect(storage.setAllBeforeAsExecuted(3)).toBe(2);
+			storage.setSubmittedForPending(0n);
+			expect(storage.setExecutedUpTo(2)).toBe(2);
+			expect(storage.submittedUpTo(0n)).toStrictEqual([
+				{
+					to: entryPoint06Address,
+					value: 0n,
+					data: "0x5afe03",
+					hash: null,
+					gas: 200_000n,
+					nonce: 3,
+					fees: null,
+				},
+			]);
+		});
+
+		it("should ignore setting executed up to negative nonce", () => {
+			const db = new Sqlite3(":memory:");
+			const storage = new SqliteTxStorage(db);
+			storage.register(
+				{
+					to: entryPoint06Address,
+					value: 0n,
+					data: "0x5afe01",
+				},
+				1,
+			);
+			expect(storage.setExecutedUpTo(-1)).toBe(0);
 		});
 
 		it("should return correct number of updated pending transaction", () => {
