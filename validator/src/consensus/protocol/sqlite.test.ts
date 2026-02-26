@@ -552,7 +552,19 @@ describe("protocol - sqlite", () => {
 				},
 				1,
 			);
+			storage.setSubmittedForPending(0n);
 			expect(storage.setExecutedUpTo(2)).toBe(2);
+			expect(storage.submittedUpTo(0n)).toStrictEqual([
+				{
+					to: entryPoint06Address,
+					value: 0n,
+					data: "0x5afe03",
+					hash: null,
+					gas: 200_000n,
+					nonce: 3,
+					fees: null,
+				},
+			]);
 		});
 
 		it("should ignore setting executed up to negative nonce", () => {
