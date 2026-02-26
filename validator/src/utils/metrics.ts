@@ -6,6 +6,8 @@ export type Metrics = {
 	blockNumber: Gauge;
 	eventIndex: Gauge;
 	transitions: Counter;
+	transactionCount: Gauge;
+	balance: Gauge;
 };
 
 export type MetricsServiceOptions = {
@@ -39,6 +41,16 @@ export class MetricsService {
 				name: "validator_transitions",
 				help: "Validator state transitions",
 				labelNames: ["result"],
+				registers: [this.#register],
+			}),
+			transactionCount: new Gauge({
+				name: "validator_transaction_count",
+				help: "The current transaction count for the validator account",
+				registers: [this.#register],
+			}),
+			balance: new Gauge({
+				name: "validator_balance",
+				help: "The current balance for the validator account",
 				registers: [this.#register],
 			}),
 		};

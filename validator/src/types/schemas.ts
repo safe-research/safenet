@@ -49,6 +49,19 @@ const genesisSaltSchema = z.preprocess((val) => {
 	return val;
 }, hexBytes32Schema);
 
+const optionalBooleanSchema = z.preprocess((val) => {
+	if (val === undefined || val === "") {
+		return undefined;
+	}
+	if (val === "true" || val === "1") {
+		return true;
+	}
+	if (val === "false" || val === "0") {
+		return false;
+	}
+	return val;
+}, z.boolean().optional());
+
 const BLOCKTIME_IN_SECONDS = 5n; // value assumed for gnosis chain
 const BLOCKS_PER_EPOCH = (24n * 60n * 60n) / BLOCKTIME_IN_SECONDS; // ~ blocks for 1 day
 
@@ -74,6 +87,7 @@ export const validatorConfigSchema = z.object({
 	BLOCKS_PER_EPOCH: emptyToDefault(z.coerce.bigint(), BLOCKS_PER_EPOCH),
 	BLOCKS_BEFORE_RESUBMIT: emptyToDefault(z.coerce.bigint().optional()),
 	BASE_FEE_MULTIPLIER: emptyToDefault(z.coerce.number().optional()),
+	RECORD_VALIDATOR_BALANCE: optionalBooleanSchema,
 	PRIORITY_FEE_PER_GAS: emptyToDefault(z.coerce.bigint().optional()),
 	BLOCK_TIME_OVERRIDE: emptyToDefault(z.coerce.number().int().optional()),
 	MAX_REORG_DEPTH: emptyToDefault(z.coerce.number().int().optional()),

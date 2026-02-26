@@ -12,6 +12,7 @@ export interface ProtocolConfig {
 	keyGenTimeout?: bigint;
 	signingTimeout?: bigint;
 	blocksBeforeResubmit?: bigint;
+	recordValidatorBalance?: boolean;
 }
 
 export type AbiPoint = { x: bigint; y: bigint };

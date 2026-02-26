@@ -1,3 +1,4 @@
+import type { Gauge } from "prom-client";
 import {
 	type Account,
 	type Address,
@@ -51,6 +52,11 @@ export interface TransactionStorage {
 	submittedUpTo(blockNumber: bigint, offset?: number, limit?: number): (EthTransactionData & EthTransactionDetails)[];
 }
 
+export type ValidatorMetrics = {
+	transactionCount: Gauge;
+	balance: Gauge;
+};
+
 export class GasFeeEstimator {
 	#cachedPrices: Promise<FeeValues> | null = null;
 	#client: PublicClient;
@@ -82,7 +88,9 @@ export class OnchainProtocol extends BaseProtocol {
 	#consensus: Address;
 	#coordinator: Address;
 	#logger: Logger;
+	#metrics?: ValidatorMetrics;
 	#blocksBeforeResubmit: bigint;
+	#recordValidatorBalance: boolean;
 
 	constructor({
 		publicClient,
@@ -93,7 +101,9 @@ export class OnchainProtocol extends BaseProtocol {
 		queue,
 		txStorage,
 		logger,
+		metrics,
 		blocksBeforeResubmit,
+		recordValidatorBalance,
 	}: {
 		publicClient: PublicClient;
 		signingClient: WalletClient<Transport, Chain, Account>;
@@ -103,7 +113,9 @@ export class OnchainProtocol extends BaseProtocol {
 		queue: Queue<ActionWithTimeout>;
 		txStorage: TransactionStorage;
 		logger: Logger;
+		metrics?: ValidatorMetrics;
 		blocksBeforeResubmit?: bigint;
+		recordValidatorBalance?: boolean;
 	}) {
 		super(queue, logger);
 		this.#publicClient = publicClient;
@@ -113,7 +125,9 @@ export class OnchainProtocol extends BaseProtocol {
 		this.#consensus = consensus;
 		this.#coordinator = coordinator;
 		this.#logger = logger;
+		this.#metrics = metrics;
 		this.#blocksBeforeResubmit = blocksBeforeResubmit ?? 1n;
+		this.#recordValidatorBalance = recordValidatorBalance ?? false;
 	}
 
 	chainId(): bigint {
@@ -142,6 +156,19 @@ export class OnchainProtocol extends BaseProtocol {
 				address: this.#signingClient.account.address,
 				blockTag: "latest",
 			});
+			this.#metrics?.transactionCount.set(currentNonce);
+			if (this.#metrics !== undefined && this.#recordValidatorBalance) {
+				try {
+					const currentBalance = await this.#publicClient.getBalance({
+						address: this.#signingClient.account.address,
+						blockTag: "latest",
+					});
+					// TODO: deal with bigint
+					this.#metrics?.balance.set(Number(currentBalance));
+				} catch (error) {
+					this.#logger.warn("Error while fetching validator balance for metrics.", { error: formatError(error) });
+				}
+			}
 			const executedTxs = this.#txStorage.setAllBeforeAsExecuted(currentNonce);
 			if (executedTxs > 0) {
 				this.#logger.debug(`Marked ${executedTxs} transactions as executed`);

@@ -16,7 +16,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { testLogger } from "../../__tests__/config.js";
 import { TEST_ACTIONS, TEST_CONSENSUS, TEST_COORDINATOR } from "../../__tests__/data/protocol.js";
 import { InMemoryQueue } from "../../utils/queue.js";
-import { GasFeeEstimator, OnchainProtocol, type TransactionStorage } from "./onchain.js";
+import { GasFeeEstimator, OnchainProtocol, type TransactionStorage, type ValidatorMetrics } from "./onchain.js";
 import type { ActionWithTimeout } from "./types.js";
 
 describe("OnchainProtocol", () => {
@@ -140,6 +140,70 @@ describe("OnchainProtocol", () => {
 		expect(loggerSpy).toBeCalledTimes(1);
 		expect(loggerSpy).toBeCalledWith("Marked 2 transactions as executed");
 		expect(setExecuted).toBeCalledTimes(0);
+	});
+
+	it("should ignore balance metric errors and continue", async () => {
+		const queue = new InMemoryQueue<ActionWithTimeout>();
+		const getTransactionCount = vi.fn();
+		const getBalance = vi.fn();
+		const publicClient = {
+			getTransactionCount,
+			getBalance,
+		} as unknown as PublicClient;
+		const signingClient = {
+			account: { address: entryPoint09Address },
+			chain: { id: 100 },
+		} as unknown as WalletClient<Transport, Chain, Account>;
+		const gasFeeEstimator = {} as unknown as GasFeeEstimator;
+		const submittedUpTo = vi.fn();
+		const setAllBeforeAsExecuted = vi.fn();
+		const setSubmittedForPending = vi.fn();
+		const txStorage = {
+			setSubmittedForPending,
+			setAllBeforeAsExecuted,
+			submittedUpTo,
+		} as unknown as TransactionStorage;
+		const transactionCountSet = vi.fn();
+		const balanceSet = vi.fn();
+		const metrics = {
+			transactionCount: {
+				set: transactionCountSet,
+			},
+			balance: {
+				set: balanceSet,
+			},
+		} as unknown as ValidatorMetrics;
+		const loggerSpy = vi.spyOn(testLogger, "warn");
+		setSubmittedForPending.mockReturnValue(0);
+		setAllBeforeAsExecuted.mockReturnValue(0);
+		submittedUpTo.mockReturnValue([]);
+		getTransactionCount.mockResolvedValueOnce(10);
+		getBalance.mockRejectedValueOnce(new Error("balance unavailable"));
+		const protocol = new OnchainProtocol({
+			publicClient,
+			signingClient,
+			gasFeeEstimator,
+			consensus: TEST_CONSENSUS,
+			coordinator: TEST_COORDINATOR,
+			queue,
+			txStorage,
+			logger: testLogger,
+			recordValidatorBalance: true,
+			metrics,
+		});
+		await protocol.checkPendingActions(10n);
+		expect(getTransactionCount).toBeCalledTimes(1);
+		expect(getBalance).toBeCalledTimes(1);
+		expect(getBalance).toBeCalledWith({
+			address: entryPoint09Address,
+			blockTag: "latest",
+		});
+		expect(transactionCountSet).toBeCalledTimes(1);
+		expect(transactionCountSet).toBeCalledWith(10);
+		expect(balanceSet).toBeCalledTimes(0);
+		expect(setAllBeforeAsExecuted).toBeCalledTimes(1);
+		expect(submittedUpTo).toBeCalledTimes(1);
+		expect(loggerSpy).toBeCalledWith("Error while fetching validator balance for metrics.", expect.any(Object));
 	});
 
 	it("should do nothing on setSubmittedForPending error", async () => {

@@ -85,6 +85,8 @@ export class ValidatorService {
 			txStorage,
 			logger: this.#logger,
 			blocksBeforeResubmit: config.blocksBeforeResubmit,
+			recordValidatorBalance: config.recordValidatorBalance,
+			metrics,
 		});
 		const stateStorage = database !== undefined ? new SqliteStateStorage(database) : new InMemoryStateStorage();
 		this.#stateMachine = new SafenetStateMachine({

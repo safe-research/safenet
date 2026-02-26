@@ -216,6 +216,23 @@ describe("validatorConfigSchema", () => {
 		});
 	});
 
+	it("should successfully parse a valid config object with validator balance metric flag", () => {
+		const pk = generatePrivateKey();
+		const validConfig = {
+			RPC_URL: MOCK_VALID_URL,
+			CONSENSUS_ADDRESS: MOCK_CHECKSUMMED_ADDRESS,
+			COORDINATOR_ADDRESS: MOCK_CHECKSUMMED_ADDRESS,
+			CHAIN_ID: 100,
+			PRIVATE_KEY: pk,
+			PARTICIPANTS: "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266,0x6Adb3baB5730852eB53987EA89D8e8f16393C200",
+			GENESIS_SALT: MOCK_GENESIS_SALT,
+			RECORD_VALIDATOR_BALANCE: "true",
+		};
+
+		const result = validatorConfigSchema.parse(validConfig);
+		expect(result.RECORD_VALIDATOR_BALANCE).toBe(true);
+	});
+
 	it("should fail if fee params are invalid", () => {
 		const invalidConfig = {
 			BASE_FEE_MULTIPLIER: "2.4foo",
