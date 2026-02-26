@@ -45,7 +45,7 @@ export interface TransactionStorage {
 	delete(nonce: number): void;
 	setFees(nonce: number, fees: FeeValues): void;
 	setHash(nonce: number, txHash: Hex): void;
-	setAllBeforeAsExecuted(nonce: number): number;
+	setExecutedUpTo(nonce: number): number;
 	setSubmittedForPending(blockNumber: bigint): number;
 	maxNonce(): number | null;
 	submittedUpTo(blockNumber: bigint, offset?: number, limit?: number): (EthTransactionData & EthTransactionDetails)[];
@@ -148,7 +148,7 @@ export class OnchainProtocol extends BaseProtocol {
 				address: this.#signingClient.account.address,
 				blockTag: "latest",
 			});
-			const executedTxs = this.#txStorage.setAllBeforeAsExecuted(currentNonce);
+			const executedTxs = this.#txStorage.setExecutedUpTo(currentNonce - 1);
 			if (executedTxs > 0) {
 				this.#logger.debug(`Marked ${executedTxs} transactions as executed`);
 			}
@@ -168,7 +168,7 @@ export class OnchainProtocol extends BaseProtocol {
 						this.#logger.info(`Nonce already used. Marking transaction with nonce ${tx.nonce} as executed!`, {
 							transaction: tx,
 						});
-						this.#txStorage.setAllBeforeAsExecuted(tx.nonce);
+						this.#txStorage.setExecutedUpTo(tx.nonce);
 						continue;
 					}
 					this.#logger.warn(`Error submitting transaction for ${tx.nonce}!`, { error: formatError(error) });

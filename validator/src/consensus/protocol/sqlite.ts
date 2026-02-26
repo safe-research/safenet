@@ -304,10 +304,10 @@ export class SqliteTxStorage implements TransactionStorage {
 		});
 	}
 
-	setAllBeforeAsExecuted(nonce: number): number {
+	setExecutedUpTo(nonce: number): number {
 		const updateStmt = this.#db.prepare(`
 			DELETE FROM transaction_storage
-			WHERE nonce < ?;
+			WHERE nonce <= ?;
 		`);
 		const result = updateStmt.run(nonce);
 		return result.changes;

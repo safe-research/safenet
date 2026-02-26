@@ -36,12 +36,12 @@ describe("OnchainProtocol", () => {
 		} as unknown as WalletClient<Transport, Chain, Account>;
 		const gasFeeEstimator = {} as unknown as GasFeeEstimator;
 		const submittedUpTo = vi.fn();
-		const setAllBeforeAsExecuted = vi.fn();
+		const setExecutedUpTo = vi.fn();
 		const txStorage = {
-			setAllBeforeAsExecuted,
+			setExecutedUpTo,
 			submittedUpTo,
 		} as unknown as TransactionStorage;
-		setAllBeforeAsExecuted.mockReturnValue(0);
+		setExecutedUpTo.mockReturnValue(0);
 		submittedUpTo.mockReturnValue([]);
 		const protocol = new OnchainProtocol({
 			publicClient,
@@ -64,18 +64,16 @@ describe("OnchainProtocol", () => {
 		const publicClient = {} as unknown as PublicClient;
 		const signingClient = {} as unknown as WalletClient<Transport, Chain, Account>;
 		const gasFeeEstimator = {} as unknown as GasFeeEstimator;
-		const setExecuted = vi.fn();
 		const submittedUpTo = vi.fn();
-		const setAllBeforeAsExecuted = vi.fn();
+		const setExecutedUpTo = vi.fn();
 		const setSubmittedForPending = vi.fn();
 		const txStorage = {
 			setSubmittedForPending,
-			setAllBeforeAsExecuted,
+			setExecutedUpTo,
 			submittedUpTo,
-			setExecuted,
 		} as unknown as TransactionStorage;
 		setSubmittedForPending.mockReturnValue(0);
-		setAllBeforeAsExecuted.mockReturnValue(2);
+		setExecutedUpTo.mockReturnValue(2);
 		submittedUpTo.mockReturnValue([]);
 		getTransactionCount.mockResolvedValueOnce(12);
 		new OnchainProtocol({
@@ -89,9 +87,8 @@ describe("OnchainProtocol", () => {
 			logger: testLogger,
 		});
 		expect(setSubmittedForPending).toBeCalledTimes(0);
-		expect(setAllBeforeAsExecuted).toBeCalledTimes(0);
+		expect(setExecutedUpTo).toBeCalledTimes(0);
 		expect(submittedUpTo).toBeCalledTimes(0);
-		expect(setExecuted).toBeCalledTimes(0);
 	});
 
 	it("should use bulk mark as executed", async () => {
@@ -106,18 +103,18 @@ describe("OnchainProtocol", () => {
 		const gasFeeEstimator = {} as unknown as GasFeeEstimator;
 		const count = vi.fn();
 		const submittedUpTo = vi.fn();
-		const setAllBeforeAsExecuted = vi.fn();
+		const setExecutedUpTo = vi.fn();
 		const setSubmittedForPending = vi.fn();
 		const txStorage = {
 			count,
 			setSubmittedForPending,
-			setAllBeforeAsExecuted,
+			setExecutedUpTo,
 			submittedUpTo,
 		} as unknown as TransactionStorage;
 		const loggerSpy = vi.spyOn(testLogger, "debug");
-		count.mockReturnValue(1);
+		count.mockReturnValue(2);
 		setSubmittedForPending.mockReturnValue(0);
-		setAllBeforeAsExecuted.mockReturnValue(2);
+		setExecutedUpTo.mockReturnValue(2);
 		submittedUpTo.mockReturnValue([]);
 		getTransactionCount.mockResolvedValueOnce(12);
 		const protocol = new OnchainProtocol({
@@ -137,8 +134,8 @@ describe("OnchainProtocol", () => {
 			address: entryPoint09Address,
 			blockTag: "latest",
 		});
-		expect(setAllBeforeAsExecuted).toBeCalledTimes(1);
-		expect(setAllBeforeAsExecuted).toBeCalledWith(12);
+		expect(setExecutedUpTo).toBeCalledTimes(1);
+		expect(setExecutedUpTo).toBeCalledWith(11);
 		expect(loggerSpy).toBeCalledTimes(1);
 		expect(loggerSpy).toBeCalledWith("Marked 2 transactions as executed");
 	});
@@ -229,16 +226,16 @@ describe("OnchainProtocol", () => {
 		const gasFeeEstimator = {} as unknown as GasFeeEstimator;
 		const count = vi.fn();
 		const setSubmittedForPending = vi.fn();
-		const setAllBeforeAsExecuted = vi.fn();
+		const setExecutedUpTo = vi.fn();
 		const txStorage = {
 			count,
 			setSubmittedForPending,
-			setAllBeforeAsExecuted,
+			setExecutedUpTo,
 		} as unknown as TransactionStorage;
 		count.mockReturnValue(1);
 		setSubmittedForPending.mockResolvedValueOnce(10);
 		getTransactionCount.mockResolvedValueOnce(10);
-		setAllBeforeAsExecuted.mockImplementationOnce(() => {
+		setExecutedUpTo.mockImplementationOnce(() => {
 			throw new Error("Test unexpected!");
 		});
 		const protocol = new OnchainProtocol({
@@ -260,7 +257,7 @@ describe("OnchainProtocol", () => {
 			address: entryPoint09Address,
 			blockTag: "latest",
 		});
-		expect(setAllBeforeAsExecuted).toBeCalledTimes(1);
+		expect(setExecutedUpTo).toBeCalledTimes(1);
 	});
 
 	it("should do nothing on fetching submittedUpTo tx error", async () => {
@@ -277,17 +274,17 @@ describe("OnchainProtocol", () => {
 		const count = vi.fn();
 		const submittedUpTo = vi.fn();
 		const setSubmittedForPending = vi.fn();
-		const setAllBeforeAsExecuted = vi.fn();
+		const setExecutedUpTo = vi.fn();
 		const txStorage = {
 			count,
 			submittedUpTo,
 			setSubmittedForPending,
-			setAllBeforeAsExecuted,
+			setExecutedUpTo,
 		} as unknown as TransactionStorage;
 		count.mockReturnValue(1);
 		getTransactionCount.mockResolvedValueOnce(10);
 		setSubmittedForPending.mockReturnValueOnce(0);
-		setAllBeforeAsExecuted.mockReturnValueOnce(0);
+		setExecutedUpTo.mockReturnValueOnce(0);
 		submittedUpTo.mockImplementationOnce(() => {
 			throw new Error("Test unexpected!");
 		});
@@ -310,8 +307,8 @@ describe("OnchainProtocol", () => {
 			address: entryPoint09Address,
 			blockTag: "latest",
 		});
-		expect(setAllBeforeAsExecuted).toBeCalledTimes(1);
-		expect(setAllBeforeAsExecuted).toBeCalledWith(10);
+		expect(setExecutedUpTo).toBeCalledTimes(1);
+		expect(setExecutedUpTo).toBeCalledWith(9);
 		expect(submittedUpTo).toBeCalledTimes(1);
 	});
 
@@ -332,17 +329,17 @@ describe("OnchainProtocol", () => {
 		const count = vi.fn();
 		const submittedUpTo = vi.fn();
 		const setSubmittedForPending = vi.fn();
-		const setAllBeforeAsExecuted = vi.fn();
+		const setExecutedUpTo = vi.fn();
 		const txStorage = {
 			count,
 			submittedUpTo,
 			setSubmittedForPending,
-			setAllBeforeAsExecuted,
+			setExecutedUpTo,
 		} as unknown as TransactionStorage;
 		count.mockReturnValue(1);
 		getTransactionCount.mockResolvedValueOnce(10);
 		setSubmittedForPending.mockReturnValueOnce(0);
-		setAllBeforeAsExecuted.mockReturnValueOnce(0);
+		setExecutedUpTo.mockReturnValueOnce(0);
 		const hash = keccak256("0x5afe5afe01");
 		const [, , tx1] = TEST_ACTIONS[0];
 		const [, , tx2] = TEST_ACTIONS[0];
@@ -378,8 +375,8 @@ describe("OnchainProtocol", () => {
 			address: entryPoint09Address,
 			blockTag: "latest",
 		});
-		expect(setAllBeforeAsExecuted).toBeCalledTimes(1);
-		expect(setAllBeforeAsExecuted).toBeCalledWith(10);
+		expect(setExecutedUpTo).toBeCalledTimes(1);
+		expect(setExecutedUpTo).toBeCalledWith(9);
 		expect(submittedUpTo).toBeCalledTimes(1);
 		// Only 1 call is expected, as the rest of the pending txs are skipped on error
 		expect(estimateFees).toBeCalledTimes(1);
@@ -408,7 +405,7 @@ describe("OnchainProtocol", () => {
 		const count = vi.fn();
 		const submittedUpTo = vi.fn();
 		const setSubmittedForPending = vi.fn();
-		const setAllBeforeAsExecuted = vi.fn();
+		const setExecutedUpTo = vi.fn();
 		const setFees = vi.fn();
 		const setHash = vi.fn();
 		const txStorage = {
@@ -417,14 +414,14 @@ describe("OnchainProtocol", () => {
 			setFees,
 			setHash,
 			setSubmittedForPending,
-			setAllBeforeAsExecuted,
+			setExecutedUpTo,
 		} as unknown as TransactionStorage;
 
 		const hash = keccak256("0x5afe5afe01");
 		const [, , tx] = TEST_ACTIONS[0];
 		count.mockReturnValue(1);
 		setSubmittedForPending.mockReturnValueOnce(0);
-		setAllBeforeAsExecuted.mockReturnValueOnce(0);
+		setExecutedUpTo.mockReturnValueOnce(0);
 		submittedUpTo.mockReturnValue([
 			{
 				...tx,
@@ -458,9 +455,9 @@ describe("OnchainProtocol", () => {
 			address: entryPoint09Address,
 			blockTag: "latest",
 		});
-		expect(setAllBeforeAsExecuted).toBeCalledTimes(2);
-		expect(setAllBeforeAsExecuted).toHaveBeenNthCalledWith(1, 10);
-		expect(setAllBeforeAsExecuted).toHaveBeenNthCalledWith(2, 10);
+		expect(setExecutedUpTo).toBeCalledTimes(2);
+		expect(setExecutedUpTo).toHaveBeenNthCalledWith(1, 9);
+		expect(setExecutedUpTo).toHaveBeenNthCalledWith(2, 10);
 		expect(estimateFees).toBeCalledTimes(1);
 		expect(setFees).toBeCalledTimes(1);
 		expect(setFees).toBeCalledWith(10, {
@@ -508,7 +505,7 @@ describe("OnchainProtocol", () => {
 		const count = vi.fn();
 		const submittedUpTo = vi.fn();
 		const setSubmittedForPending = vi.fn();
-		const setAllBeforeAsExecuted = vi.fn();
+		const setExecutedUpTo = vi.fn();
 		const setFees = vi.fn();
 		const setHash = vi.fn();
 		const txStorage = {
@@ -517,14 +514,14 @@ describe("OnchainProtocol", () => {
 			setFees,
 			setHash,
 			setSubmittedForPending,
-			setAllBeforeAsExecuted,
+			setExecutedUpTo,
 		} as unknown as TransactionStorage;
 
 		const hash = keccak256("0x5afe5afe01");
 		const [, , tx] = TEST_ACTIONS[0];
 		count.mockReturnValue(1);
 		setSubmittedForPending.mockReturnValueOnce(0);
-		setAllBeforeAsExecuted.mockReturnValueOnce(0);
+		setExecutedUpTo.mockReturnValueOnce(0);
 		submittedUpTo.mockReturnValue([
 			{
 				...tx,
@@ -567,9 +564,9 @@ describe("OnchainProtocol", () => {
 			address: entryPoint09Address,
 			blockTag: "latest",
 		});
-		expect(setAllBeforeAsExecuted).toBeCalledTimes(2);
-		expect(setAllBeforeAsExecuted).toHaveBeenNthCalledWith(1, 10);
-		expect(setAllBeforeAsExecuted).toHaveBeenNthCalledWith(2, 10);
+		expect(setExecutedUpTo).toBeCalledTimes(2);
+		expect(setExecutedUpTo).toHaveBeenNthCalledWith(1, 9);
+		expect(setExecutedUpTo).toHaveBeenNthCalledWith(2, 10);
 		expect(estimateFees).toBeCalledTimes(1);
 		expect(setFees).toBeCalledTimes(1);
 		expect(setFees).toBeCalledWith(10, {
@@ -617,7 +614,7 @@ describe("OnchainProtocol", () => {
 		const count = vi.fn();
 		const submittedUpTo = vi.fn();
 		const setSubmittedForPending = vi.fn();
-		const setAllBeforeAsExecuted = vi.fn();
+		const setExecutedUpTo = vi.fn();
 		const setFees = vi.fn();
 		const setHash = vi.fn();
 		const txStorage = {
@@ -626,14 +623,14 @@ describe("OnchainProtocol", () => {
 			setFees,
 			setHash,
 			setSubmittedForPending,
-			setAllBeforeAsExecuted,
+			setExecutedUpTo,
 		} as unknown as TransactionStorage;
 
 		const hash = keccak256("0x5afe5afe01");
 		const [, , tx] = TEST_ACTIONS[0];
 		count.mockReturnValue(1);
 		setSubmittedForPending.mockReturnValueOnce(0);
-		setAllBeforeAsExecuted.mockReturnValueOnce(0);
+		setExecutedUpTo.mockReturnValueOnce(0);
 		submittedUpTo.mockReturnValue([
 			{
 				...tx,
@@ -667,8 +664,8 @@ describe("OnchainProtocol", () => {
 			address: entryPoint09Address,
 			blockTag: "latest",
 		});
-		expect(setAllBeforeAsExecuted).toBeCalledTimes(1);
-		expect(setAllBeforeAsExecuted).toBeCalledWith(10);
+		expect(setExecutedUpTo).toBeCalledTimes(1);
+		expect(setExecutedUpTo).toBeCalledWith(9);
 		expect(estimateFees).toBeCalledTimes(1);
 		expect(signTransaction).toBeCalledTimes(1);
 		expect(signTransaction).toBeCalledWith({
@@ -711,7 +708,7 @@ describe("OnchainProtocol", () => {
 		const count = vi.fn();
 		const submittedUpTo = vi.fn();
 		const setSubmittedForPending = vi.fn();
-		const setAllBeforeAsExecuted = vi.fn();
+		const setExecutedUpTo = vi.fn();
 		const setHash = vi.fn();
 		const setFees = vi.fn();
 		const txStorage = {
@@ -720,7 +717,7 @@ describe("OnchainProtocol", () => {
 			setHash,
 			setFees,
 			setSubmittedForPending,
-			setAllBeforeAsExecuted,
+			setExecutedUpTo,
 		} as unknown as TransactionStorage;
 
 		const hash = keccak256("0x5afe5afe01");
@@ -735,7 +732,7 @@ describe("OnchainProtocol", () => {
 		]);
 		count.mockReturnValue(1);
 		setSubmittedForPending.mockReturnValueOnce(0);
-		setAllBeforeAsExecuted.mockReturnValueOnce(0);
+		setExecutedUpTo.mockReturnValueOnce(0);
 		getTransactionCount.mockResolvedValueOnce(10);
 
 		estimateFees.mockResolvedValueOnce({
@@ -764,8 +761,8 @@ describe("OnchainProtocol", () => {
 		});
 		expect(setSubmittedForPending).toBeCalledTimes(1);
 		expect(setSubmittedForPending).toBeCalledWith(10n);
-		expect(setAllBeforeAsExecuted).toBeCalledTimes(1);
-		expect(setAllBeforeAsExecuted).toBeCalledWith(10);
+		expect(setExecutedUpTo).toBeCalledTimes(1);
+		expect(setExecutedUpTo).toBeCalledWith(9);
 		expect(estimateFees).toBeCalledTimes(1);
 		expect(signTransaction).toBeCalledTimes(1);
 		expect(signTransaction).toBeCalledWith({
@@ -812,7 +809,7 @@ describe("OnchainProtocol", () => {
 		const count = vi.fn();
 		const submittedUpTo = vi.fn();
 		const setSubmittedForPending = vi.fn();
-		const setAllBeforeAsExecuted = vi.fn();
+		const setExecutedUpTo = vi.fn();
 		const setHash = vi.fn();
 		const setFees = vi.fn();
 		const txStorage = {
@@ -821,7 +818,7 @@ describe("OnchainProtocol", () => {
 			setHash,
 			setFees,
 			setSubmittedForPending,
-			setAllBeforeAsExecuted,
+			setExecutedUpTo,
 		} as unknown as TransactionStorage;
 
 		const hash = keccak256("0x5afe5afe01");
@@ -839,7 +836,7 @@ describe("OnchainProtocol", () => {
 		]);
 		count.mockReturnValue(1);
 		setSubmittedForPending.mockReturnValueOnce(0);
-		setAllBeforeAsExecuted.mockReturnValueOnce(0);
+		setExecutedUpTo.mockReturnValueOnce(0);
 		getTransactionCount.mockResolvedValueOnce(10);
 
 		estimateFees.mockResolvedValueOnce({
@@ -868,8 +865,8 @@ describe("OnchainProtocol", () => {
 		});
 		expect(setSubmittedForPending).toBeCalledTimes(1);
 		expect(setSubmittedForPending).toBeCalledWith(10n);
-		expect(setAllBeforeAsExecuted).toBeCalledTimes(1);
-		expect(setAllBeforeAsExecuted).toBeCalledWith(10);
+		expect(setExecutedUpTo).toBeCalledTimes(1);
+		expect(setExecutedUpTo).toBeCalledWith(9);
 		expect(estimateFees).toBeCalledTimes(1);
 		expect(signTransaction).toBeCalledTimes(1);
 		expect(signTransaction).toBeCalledWith({
@@ -914,7 +911,7 @@ describe("OnchainProtocol", () => {
 		const count = vi.fn();
 		const submittedUpTo = vi.fn();
 		const setSubmittedForPending = vi.fn();
-		const setAllBeforeAsExecuted = vi.fn();
+		const setExecutedUpTo = vi.fn();
 		const setHash = vi.fn();
 		const setFees = vi.fn();
 		const txStorage = {
@@ -923,7 +920,7 @@ describe("OnchainProtocol", () => {
 			setHash,
 			setFees,
 			setSubmittedForPending,
-			setAllBeforeAsExecuted,
+			setExecutedUpTo,
 		} as unknown as TransactionStorage;
 
 		const hash = keccak256("0x5afe5afe01");
@@ -941,7 +938,7 @@ describe("OnchainProtocol", () => {
 		]);
 		count.mockReturnValue(1);
 		setSubmittedForPending.mockReturnValueOnce(0);
-		setAllBeforeAsExecuted.mockReturnValueOnce(0);
+		setExecutedUpTo.mockReturnValueOnce(0);
 		getTransactionCount.mockResolvedValueOnce(10);
 
 		estimateFees.mockResolvedValueOnce({
@@ -970,8 +967,8 @@ describe("OnchainProtocol", () => {
 		});
 		expect(setSubmittedForPending).toBeCalledTimes(1);
 		expect(setSubmittedForPending).toBeCalledWith(10n);
-		expect(setAllBeforeAsExecuted).toBeCalledTimes(1);
-		expect(setAllBeforeAsExecuted).toBeCalledWith(10);
+		expect(setExecutedUpTo).toBeCalledTimes(1);
+		expect(setExecutedUpTo).toBeCalledWith(9);
 		expect(estimateFees).toBeCalledTimes(1);
 		expect(signTransaction).toBeCalledTimes(1);
 		expect(signTransaction).toBeCalledWith({
@@ -1016,7 +1013,7 @@ describe("OnchainProtocol", () => {
 		const count = vi.fn();
 		const submittedUpTo = vi.fn();
 		const setSubmittedForPending = vi.fn();
-		const setAllBeforeAsExecuted = vi.fn();
+		const setExecutedUpTo = vi.fn();
 		const setFees = vi.fn();
 		const setHash = vi.fn();
 		const txStorage = {
@@ -1025,12 +1022,12 @@ describe("OnchainProtocol", () => {
 			setFees,
 			setHash,
 			setSubmittedForPending,
-			setAllBeforeAsExecuted,
+			setExecutedUpTo,
 		} as unknown as TransactionStorage;
 
 		setSubmittedForPending.mockReturnValueOnce(0);
 		getTransactionCount.mockResolvedValueOnce(10);
-		setAllBeforeAsExecuted.mockReturnValueOnce(0);
+		setExecutedUpTo.mockReturnValueOnce(0);
 		count.mockReturnValue(1);
 		const [, , tx] = TEST_ACTIONS[0];
 		submittedUpTo.mockReturnValue([
@@ -1067,8 +1064,8 @@ describe("OnchainProtocol", () => {
 			address: entryPoint09Address,
 			blockTag: "latest",
 		});
-		expect(setAllBeforeAsExecuted).toBeCalledTimes(1);
-		expect(setAllBeforeAsExecuted).toBeCalledWith(10);
+		expect(setExecutedUpTo).toBeCalledTimes(1);
+		expect(setExecutedUpTo).toBeCalledWith(9);
 		expect(estimateFees).toBeCalledTimes(1);
 		expect(signTransaction).toBeCalledTimes(1);
 		expect(signTransaction).toBeCalledWith({
@@ -1116,14 +1113,14 @@ describe("OnchainProtocol", () => {
 		const setHash = vi.fn();
 		const setFees = vi.fn();
 		const submittedUpTo = vi.fn();
-		const setAllBeforeAsExecuted = vi.fn();
+		const setExecutedUpTo = vi.fn();
 		const setSubmittedForPending = vi.fn();
 		const txStorage = {
 			count,
 			submittedUpTo,
 			setFees,
 			setHash,
-			setAllBeforeAsExecuted,
+			setExecutedUpTo,
 			setSubmittedForPending,
 		} as unknown as TransactionStorage;
 
@@ -1140,7 +1137,7 @@ describe("OnchainProtocol", () => {
 
 		count.mockReturnValue(1);
 		setSubmittedForPending.mockReturnValue(0);
-		setAllBeforeAsExecuted.mockReturnValue(0);
+		setExecutedUpTo.mockReturnValue(0);
 		getTransactionCount.mockResolvedValue(11);
 		const hash = keccak256("0x5afe5afe");
 		const [, , tx] = TEST_ACTIONS[0];
@@ -1166,8 +1163,8 @@ describe("OnchainProtocol", () => {
 			address: entryPoint09Address,
 			blockTag: "latest",
 		});
-		expect(setAllBeforeAsExecuted).toBeCalledTimes(1);
-		expect(setAllBeforeAsExecuted).toBeCalledWith(11);
+		expect(setExecutedUpTo).toBeCalledTimes(1);
+		expect(setExecutedUpTo).toBeCalledWith(10);
 		expect(estimateFees).toBeCalledTimes(1);
 		expect(signTransaction).toBeCalledTimes(1);
 		expect(signTransaction).toBeCalledWith({

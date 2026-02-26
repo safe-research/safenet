@@ -552,7 +552,21 @@ describe("protocol - sqlite", () => {
 				},
 				1,
 			);
-			expect(storage.setAllBeforeAsExecuted(3)).toBe(2);
+			expect(storage.setExecutedUpTo(2)).toBe(2);
+		});
+
+		it("should ignore setting executed up to negative nonce", () => {
+			const db = new Sqlite3(":memory:");
+			const storage = new SqliteTxStorage(db);
+			storage.register(
+				{
+					to: entryPoint06Address,
+					value: 0n,
+					data: "0x5afe01",
+				},
+				1,
+			);
+			expect(storage.setExecutedUpTo(-1)).toBe(0);
 		});
 
 		it("should return correct number of updated pending transaction", () => {
