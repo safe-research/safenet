@@ -5,7 +5,7 @@ import { SqliteClientStorage } from "../consensus/storage/sqlite.js";
 import { InMemoryStateStorage } from "../machine/storage/inmemory.js";
 import { SqliteStateStorage } from "../machine/storage/sqlite.js";
 import { createLogger } from "../utils/logging.js";
-import { createMetricsService } from "../utils/metrics.js";
+import { createMetricsService } from "../utils/metrics/index.js";
 
 const { SAFENET_TEST_VERBOSE, SAFENET_TEST_STORAGE } = process.env;
 

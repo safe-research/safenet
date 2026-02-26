@@ -27,7 +27,8 @@ import { OnchainTransitionWatcher, type WatcherConfig } from "../machine/transit
 import { supportedChains } from "../types/chains.js";
 import type { ProtocolConfig } from "../types/interfaces.js";
 import type { Logger } from "../utils/logging.js";
-import type { Metrics } from "../utils/metrics.js";
+import type { Metrics } from "../utils/metrics/index.js";
+import { withMetrics } from "../utils/metrics/transport.js";
 import { InMemoryQueue } from "../utils/queue.js";
 import { buildSafeTransactionCheck } from "./checks.js";
 import { SafenetStateMachine } from "./machine.js";
@@ -148,7 +149,7 @@ export const createValidatorService = ({
 	metrics: Metrics;
 	fees?: ChainFees;
 }): ValidatorService => {
-	const transport = rpcUrl.startsWith("wss") ? webSocket(rpcUrl) : http(rpcUrl);
+	const transport = withMetrics(rpcUrl.startsWith("wss") ? webSocket(rpcUrl) : http(rpcUrl), metrics);
 	const chain: Chain = {
 		...extractChain({
 			chains: supportedChains,
