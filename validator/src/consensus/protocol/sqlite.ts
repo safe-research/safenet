@@ -264,6 +264,15 @@ export class SqliteTxStorage implements TransactionStorage {
 		return maxNonceSchema.parse(result).maxNonce;
 	}
 
+	setPending(nonce: number) {
+		const updateStmt = this.#db.prepare(`
+			UPDATE transaction_storage
+			SET submittedAt = NULL
+			WHERE nonce = ?;
+		`);
+		updateStmt.run(nonce);
+	}
+
 	setFees(nonce: number, fees: FeeValues) {
 		const feesJson = JSON.stringify(fees, jsonReplacer);
 		const updateStmt = this.#db.prepare(`

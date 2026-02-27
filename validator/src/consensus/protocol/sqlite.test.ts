@@ -375,6 +375,32 @@ describe("protocol - sqlite", () => {
 			]);
 		});
 
+		it("should update the pending state", () => {
+			const db = new Sqlite3(":memory:");
+			const storage = new SqliteTxStorage(db);
+			storage.register(
+				{
+					to: entryPoint06Address,
+					value: 0n,
+					data: "0x5afe",
+				},
+				1,
+			);
+			storage.setSubmittedForPending(0n);
+			expect(storage.submittedUpTo(0n)).toStrictEqual([
+				{
+					to: entryPoint06Address,
+					value: 0n,
+					data: "0x5afe",
+					hash: null,
+					nonce: 1,
+					fees: null,
+				},
+			]);
+			storage.setPending(1);
+			expect(storage.submittedUpTo(0n)).toStrictEqual([]);
+		});
+
 		it("should use min nonce if free (instead of highest nonce)", () => {
 			const db = new Sqlite3(":memory:");
 			const storage = new SqliteTxStorage(db);

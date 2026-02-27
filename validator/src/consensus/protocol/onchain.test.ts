@@ -406,11 +406,13 @@ describe("OnchainProtocol", () => {
 		const submittedUpTo = vi.fn();
 		const setSubmittedForPending = vi.fn();
 		const setExecutedUpTo = vi.fn();
+		const setPending = vi.fn();
 		const setFees = vi.fn();
 		const setHash = vi.fn();
 		const txStorage = {
 			countPending,
 			submittedUpTo,
+			setPending,
 			setFees,
 			setHash,
 			setSubmittedForPending,
@@ -506,10 +508,12 @@ describe("OnchainProtocol", () => {
 		const submittedUpTo = vi.fn();
 		const setSubmittedForPending = vi.fn();
 		const setExecutedUpTo = vi.fn();
+		const setPending = vi.fn();
 		const setFees = vi.fn();
 		const setHash = vi.fn();
 		const txStorage = {
 			countPending,
+			setPending,
 			submittedUpTo,
 			setFees,
 			setHash,
@@ -568,6 +572,8 @@ describe("OnchainProtocol", () => {
 		expect(setExecutedUpTo).toHaveBeenNthCalledWith(1, 9);
 		expect(setExecutedUpTo).toHaveBeenNthCalledWith(2, 10);
 		expect(estimateFees).toBeCalledTimes(1);
+		expect(setPending).toBeCalledTimes(1);
+		expect(setPending).toBeCalledWith(10);
 		expect(setFees).toBeCalledTimes(1);
 		expect(setFees).toBeCalledWith(10, {
 			maxFeePerGas: 200n,
@@ -615,11 +621,13 @@ describe("OnchainProtocol", () => {
 		const submittedUpTo = vi.fn();
 		const setSubmittedForPending = vi.fn();
 		const setExecutedUpTo = vi.fn();
+		const setPending = vi.fn();
 		const setFees = vi.fn();
 		const setHash = vi.fn();
 		const txStorage = {
 			countPending,
 			submittedUpTo,
+			setPending,
 			setFees,
 			setHash,
 			setSubmittedForPending,
@@ -709,11 +717,13 @@ describe("OnchainProtocol", () => {
 		const submittedUpTo = vi.fn();
 		const setSubmittedForPending = vi.fn();
 		const setExecutedUpTo = vi.fn();
+		const setPending = vi.fn();
 		const setHash = vi.fn();
 		const setFees = vi.fn();
 		const txStorage = {
 			countPending,
 			submittedUpTo,
+			setPending,
 			setHash,
 			setFees,
 			setSubmittedForPending,
@@ -810,11 +820,13 @@ describe("OnchainProtocol", () => {
 		const submittedUpTo = vi.fn();
 		const setSubmittedForPending = vi.fn();
 		const setExecutedUpTo = vi.fn();
+		const setPending = vi.fn();
 		const setHash = vi.fn();
 		const setFees = vi.fn();
 		const txStorage = {
 			countPending,
 			submittedUpTo,
+			setPending,
 			setHash,
 			setFees,
 			setSubmittedForPending,
@@ -912,11 +924,13 @@ describe("OnchainProtocol", () => {
 		const submittedUpTo = vi.fn();
 		const setSubmittedForPending = vi.fn();
 		const setExecutedUpTo = vi.fn();
+		const setPending = vi.fn();
 		const setHash = vi.fn();
 		const setFees = vi.fn();
 		const txStorage = {
 			countPending,
 			submittedUpTo,
+			setPending,
 			setHash,
 			setFees,
 			setSubmittedForPending,
@@ -1014,10 +1028,12 @@ describe("OnchainProtocol", () => {
 		const submittedUpTo = vi.fn();
 		const setSubmittedForPending = vi.fn();
 		const setExecutedUpTo = vi.fn();
+		const setPending = vi.fn();
 		const setFees = vi.fn();
 		const setHash = vi.fn();
 		const txStorage = {
 			countPending,
+			setPending,
 			submittedUpTo,
 			setFees,
 			setHash,
@@ -1110,6 +1126,7 @@ describe("OnchainProtocol", () => {
 			estimateFees,
 		} as unknown as GasFeeEstimator;
 		const countPending = vi.fn();
+		const setPending = vi.fn();
 		const setHash = vi.fn();
 		const setFees = vi.fn();
 		const submittedUpTo = vi.fn();
@@ -1117,6 +1134,7 @@ describe("OnchainProtocol", () => {
 		const setSubmittedForPending = vi.fn();
 		const txStorage = {
 			countPending,
+			setPending,
 			submittedUpTo,
 			setFees,
 			setHash,
@@ -1175,6 +1193,8 @@ describe("OnchainProtocol", () => {
 			maxFeePerGas: 200n,
 			maxPriorityFeePerGas: 100n,
 		});
+		expect(setPending).toBeCalledTimes(1);
+		expect(setPending).toBeCalledWith(11);
 		expect(setFees).toBeCalledTimes(1);
 		expect(setFees).toBeCalledWith(11, {
 			maxFeePerGas: 200n,
@@ -1207,12 +1227,14 @@ describe("OnchainProtocol", () => {
 			estimateFees,
 		} as unknown as GasFeeEstimator;
 		const register = vi.fn();
+		const setPending = vi.fn();
 		const setFees = vi.fn();
 		const maxNonce = vi.fn();
 		const deleteTx = vi.fn();
 		const setHash = vi.fn();
 		const txStorage = {
 			register,
+			setPending,
 			setFees,
 			maxNonce,
 			setHash,
@@ -1296,12 +1318,14 @@ describe("OnchainProtocol", () => {
 			estimateFees,
 		} as unknown as GasFeeEstimator;
 		const register = vi.fn();
+		const setPending = vi.fn();
 		const setFees = vi.fn();
 		const maxNonce = vi.fn();
 		const deleteTx = vi.fn();
 		const setHash = vi.fn();
 		const txStorage = {
 			register,
+			setPending,
 			setFees,
 			setHash,
 			maxNonce,
@@ -1344,6 +1368,14 @@ describe("OnchainProtocol", () => {
 		expect(register).toBeCalledTimes(1);
 		expect(register).toBeCalledWith(tx, 10);
 		expect(estimateFees).toBeCalledTimes(1);
+		// Check that pending state and fees are also set in an error case
+		expect(setPending).toBeCalledTimes(1);
+		expect(setPending).toBeCalledWith(10);
+		expect(setFees).toBeCalledTimes(1);
+		expect(setFees).toBeCalledWith(10, {
+			maxFeePerGas: 200n,
+			maxPriorityFeePerGas: 100n,
+		});
 		expect(signTransaction).toBeCalledTimes(1);
 		expect(signTransaction).toBeCalledWith({
 			...tx,
@@ -1394,10 +1426,12 @@ describe("OnchainProtocol", () => {
 				estimateFees,
 			} as unknown as GasFeeEstimator;
 			const register = vi.fn();
+			const setPending = vi.fn();
 			const setHash = vi.fn();
 			const setFees = vi.fn();
 			const txStorage = {
 				register,
+				setPending,
 				setFees,
 				setHash,
 			} as unknown as TransactionStorage;
@@ -1438,6 +1472,8 @@ describe("OnchainProtocol", () => {
 			expect(register).toBeCalledTimes(1);
 			expect(register).toBeCalledWith(tx, 2);
 			expect(estimateFees).toBeCalledTimes(1);
+			expect(setPending).toBeCalledTimes(1);
+			expect(setPending).toBeCalledWith(10);
 			expect(setFees).toBeCalledTimes(1);
 			expect(setFees).toBeCalledWith(10, {
 				maxFeePerGas: 200n,
