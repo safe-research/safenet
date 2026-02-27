@@ -181,7 +181,7 @@ contract Consensus is IConsensus, IERC165, IFROSTCoordinatorCallback {
     /**
      * @inheritdoc IConsensus
      */
-    function getCoordinator() external pure returns (address coordinator) {
+    function getCoordinator() external view returns (address coordinator) {
         return address(_COORDINATOR);
     }
 

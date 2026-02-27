@@ -80,14 +80,14 @@ interface IConsensus {
     event TransactionAttested(bytes32 indexed transactionHash, uint64 epoch, FROST.Signature attestation);
 
     // ============================================================
-	// CONFIGURATION
+    // CONFIGURATION
     // ============================================================
 
     /**
      * @notice Gets the address of the FROST coordinator that the consensus uses.
      * @return coordinator The address of the FROST coordinator being used by consensus.
      */
-    function getCoordinator(address validator) external view returns (address coordinator);
+    function getCoordinator() external view returns (address coordinator);
 
     /**
      * @notice Gets a validator's staker address.
@@ -102,7 +102,7 @@ interface IConsensus {
      * @dev This function should be called by the validator themselves when they want to update their staker address.
      *      The contract does not verify if the caller is a validator. Thus, stakers set for non-validators are ignored.
      *      The validator must call this function with the intended staker (or itself, if they want to be their own
-	 *      staker) at least once to receive the commission reward for validating.
+     *      staker) at least once to receive the commission reward for validating.
      */
     function setValidatorStaker(address staker) external;
 
