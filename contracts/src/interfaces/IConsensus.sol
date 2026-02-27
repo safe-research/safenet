@@ -16,6 +16,13 @@ interface IConsensus {
     // ============================================================
 
     /**
+     * @notice Emitted when a validator's staker address is updated.
+     * @param validator The address of the validator.
+     * @param staker The new staker address for the validator.
+     */
+    event ValidatorStakerSet(address indexed validator, address staker);
+
+    /**
      * @notice Emitted when a new epoch rollover is proposed.
      * @param activeEpoch The current active epoch.
      * @param proposedEpoch The proposed new epoch.
@@ -72,12 +79,32 @@ interface IConsensus {
      */
     event TransactionAttested(bytes32 indexed transactionHash, uint64 epoch, FROST.Signature attestation);
 
+    // ============================================================
+	// CONFIGURATION
+    // ============================================================
+
     /**
-     * @notice Emitted when a validator's staker address is updated.
-     * @param validator The address of the validator.
-     * @param staker The new staker address for the validator.
+     * @notice Gets the address of the FROST coordinator that the consensus uses.
+     * @return coordinator The address of the FROST coordinator being used by consensus.
      */
-    event ValidatorStakerSet(address indexed validator, address staker);
+    function getCoordinator(address validator) external view returns (address coordinator);
+
+    /**
+     * @notice Gets a validator's staker address.
+     * @param validator The address of the validator.
+     * @return staker The staker address for the validator.
+     */
+    function getValidatorStaker(address validator) external view returns (address staker);
+
+    /**
+     * @notice Sets a validator's staker address.
+     * @param staker The new staker address for the validator.
+     * @dev This function should be called by the validator themselves when they want to update their staker address.
+     *      The contract does not verify if the caller is a validator. Thus, stakers set for non-validators are ignored.
+     *      The validator must call this function with the intended staker (or itself, if they want to be their own
+	 *      staker) at least once to receive the commission reward for validating.
+     */
+    function setValidatorStaker(address staker) external;
 
     // ============================================================
     // EPOCHS
@@ -201,21 +228,4 @@ interface IConsensus {
      * @dev No explicit time limit is imposed for when a transaction can be attested in this contract.
      */
     function attestTransaction(uint64 epoch, bytes32 transactionHash, FROSTSignatureId.T signature) external;
-
-    /**
-     * @notice Sets a validator's staker address.
-     * @param staker The new staker address for the validator.
-     * @dev This function should be called by the validator themselves when they want to update their staker address.
-     *      The contract does not verify if the caller is a validator. Thus, stakers set for non-validators are ignored.
-     *      The validator must call this function with the intended staker (or itself, if they want to be their own staker)
-     *      at least once to receive the commission reward for validating.
-     */
-    function setValidatorStaker(address staker) external;
-
-    /**
-     * @notice Gets a validator's staker address.
-     * @param validator The address of the validator.
-     * @return staker The staker address for the validator.
-     */
-    function getValidatorStaker(address validator) external view returns (address staker);
 }

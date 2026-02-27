@@ -55,7 +55,7 @@ contract Consensus is IConsensus, IERC165, IFROSTCoordinatorCallback {
     /**
      * @notice The FROST coordinator contract.
      */
-    FROSTCoordinator public immutable COORDINATOR;
+    FROSTCoordinator private immutable _COORDINATOR;
 
     /**
      * @notice The epochs state tracking previous, active, and staged epochs.
@@ -115,7 +115,7 @@ contract Consensus is IConsensus, IERC165, IFROSTCoordinatorCallback {
      * @param group The initial FROST group ID for epoch 0.
      */
     constructor(address coordinator, FROSTGroupId.T group) {
-        COORDINATOR = FROSTCoordinator(coordinator);
+        _COORDINATOR = FROSTCoordinator(coordinator);
         $groups[0] = group;
     }
 
@@ -129,7 +129,7 @@ contract Consensus is IConsensus, IERC165, IFROSTCoordinatorCallback {
      * @notice Restricts functions to be callable only by the coordinator.
      */
     modifier onlyCoordinator() {
-        require(msg.sender == address(COORDINATOR), NotCoordinator());
+        require(msg.sender == address(_COORDINATOR), NotCoordinator());
         _;
     }
 
@@ -181,6 +181,28 @@ contract Consensus is IConsensus, IERC165, IFROSTCoordinatorCallback {
     /**
      * @inheritdoc IConsensus
      */
+    function getCoordinator() external pure returns (address coordinator) {
+        return address(_COORDINATOR);
+    }
+
+    /**
+     * @inheritdoc IConsensus
+     */
+    function getValidatorStaker(address validator) external view returns (address staker) {
+        return $validatorStakers[validator];
+    }
+
+    /**
+     * @inheritdoc IConsensus
+     */
+    function setValidatorStaker(address staker) external {
+        $validatorStakers[msg.sender] = staker;
+        emit ValidatorStakerSet(msg.sender, staker);
+    }
+
+    /**
+     * @inheritdoc IConsensus
+     */
     function getActiveEpoch() external view returns (uint64 epoch, FROSTGroupId.T group) {
         (Epochs memory epochs,) = _epochsWithRollover();
         epoch = epochs.active;
@@ -193,10 +215,10 @@ contract Consensus is IConsensus, IERC165, IFROSTCoordinatorCallback {
     function proposeEpoch(uint64 proposedEpoch, uint64 rolloverBlock, FROSTGroupId.T group) public {
         Epochs memory epochs = _processRollover();
         _requireValidRollover(epochs, proposedEpoch, rolloverBlock);
-        Secp256k1.Point memory groupKey = COORDINATOR.groupKey(group);
+        Secp256k1.Point memory groupKey = _COORDINATOR.groupKey(group);
         bytes32 message = domainSeparator().epochRollover(epochs.active, proposedEpoch, rolloverBlock, groupKey);
         emit EpochProposed(epochs.active, proposedEpoch, rolloverBlock, groupKey);
-        COORDINATOR.sign($groups[epochs.active], message);
+        _COORDINATOR.sign($groups[epochs.active], message);
     }
 
     /**
@@ -207,9 +229,9 @@ contract Consensus is IConsensus, IERC165, IFROSTCoordinatorCallback {
     {
         Epochs memory epochs = _processRollover();
         _requireValidRollover(epochs, proposedEpoch, rolloverBlock);
-        Secp256k1.Point memory groupKey = COORDINATOR.groupKey(group);
+        Secp256k1.Point memory groupKey = _COORDINATOR.groupKey(group);
         bytes32 message = domainSeparator().epochRollover(epochs.active, proposedEpoch, rolloverBlock, groupKey);
-        FROST.Signature memory attestation = COORDINATOR.signatureVerify(signature, $groups[epochs.active], message);
+        FROST.Signature memory attestation = _COORDINATOR.signatureVerify(signature, $groups[epochs.active], message);
         epochs.staged = proposedEpoch;
         epochs.rolloverBlock = rolloverBlock;
         $epochs = epochs;
@@ -240,7 +262,7 @@ contract Consensus is IConsensus, IERC165, IFROSTCoordinatorCallback {
         returns (FROST.Signature memory signature)
     {
         bytes32 message = domainSeparator().transactionProposal(epoch, transactionHash);
-        return COORDINATOR.signatureValue($attestations[message]);
+        return _COORDINATOR.signatureValue($attestations[message]);
     }
 
     /**
@@ -272,7 +294,7 @@ contract Consensus is IConsensus, IERC165, IFROSTCoordinatorCallback {
             message = domain.transactionProposal(epochs.previous, transactionHash);
             attestation = $attestations[message];
         }
-        signature = COORDINATOR.signatureValue(attestation);
+        signature = _COORDINATOR.signatureValue(attestation);
     }
 
     /**
@@ -284,7 +306,7 @@ contract Consensus is IConsensus, IERC165, IFROSTCoordinatorCallback {
         bytes32 message = domainSeparator().transactionProposal(epochs.active, transactionHash);
         require($attestations[message].isZero(), AlreadyAttested());
         emit TransactionProposed(transactionHash, transaction.chainId, transaction.safe, epochs.active, transaction);
-        COORDINATOR.sign($groups[epochs.active], message);
+        _COORDINATOR.sign($groups[epochs.active], message);
     }
 
     /**
@@ -328,24 +350,9 @@ contract Consensus is IConsensus, IERC165, IFROSTCoordinatorCallback {
 
         bytes32 message = domainSeparator().transactionProposal(epoch, transactionHash);
         require($attestations[message].isZero(), AlreadyAttested());
-        FROST.Signature memory attestation = COORDINATOR.signatureVerify(signature, $groups[epoch], message);
+        FROST.Signature memory attestation = _COORDINATOR.signatureVerify(signature, $groups[epoch], message);
         $attestations[message] = signature;
         emit TransactionAttested(transactionHash, epoch, attestation);
-    }
-
-    /**
-     * @inheritdoc IConsensus
-     */
-    function setValidatorStaker(address staker) external {
-        $validatorStakers[msg.sender] = staker;
-        emit ValidatorStakerSet(msg.sender, staker);
-    }
-
-    /**
-     * @inheritdoc IConsensus
-     */
-    function getValidatorStaker(address validator) external view returns (address staker) {
-        return $validatorStakers[validator];
     }
 
     // ============================================================
