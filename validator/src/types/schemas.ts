@@ -52,6 +52,8 @@ const genesisSaltSchema = z.preprocess((val) => {
 const BLOCKTIME_IN_SECONDS = 5n; // value assumed for gnosis chain
 const BLOCKS_PER_EPOCH = (24n * 60n * 60n) / BLOCKTIME_IN_SECONDS; // ~ blocks for 1 day
 
+const strictBoolSchema = z.enum(["true", "false", "0", "1"]).transform((v) => v === "true" || v === "1");
+
 const emptyToDefault = <T>(schema: ZodType<T>, defaultVal?: unknown): ZodType<T> =>
 	z.preprocess((val) => {
 		if (val === undefined || val === "") {
@@ -80,6 +82,7 @@ export const validatorConfigSchema = z.object({
 	MAX_REORG_DEPTH: emptyToDefault(z.coerce.number().int().optional()),
 	BLOCK_PAGE_SIZE: emptyToDefault(z.coerce.number().int().optional()),
 	MAX_LOGS_PER_QUERY: emptyToDefault(z.coerce.number().int().optional()),
+	SKIP_GENESIS: emptyToDefault(strictBoolSchema.optional()),
 });
 
 export const chunked = <T>(sz: number, transform: (b: Buffer) => T): ((b: Buffer) => T[]) => {

@@ -67,6 +67,7 @@ const service = createValidatorService({
 	logger,
 	metrics: metrics.metrics,
 	fees,
+	skipGenesis: validatorConfig.SKIP_GENESIS,
 });
 
 // Handle graceful shutdown, for both `SIGINT` (i.e. Ctrl-C) and `SIGTERM` which

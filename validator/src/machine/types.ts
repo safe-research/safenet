@@ -17,6 +17,9 @@ export type RolloverState = Readonly<
 			id: "waiting_for_genesis";
 	  }
 	| {
+			id: "skip_genesis";
+	  }
+	| {
 			id: "epoch_skipped";
 			nextEpoch: bigint;
 	  }

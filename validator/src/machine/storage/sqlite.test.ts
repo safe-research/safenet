@@ -50,6 +50,9 @@ const ROLLOVER_TEST_STATES: { [K in RolloverState["id"]]: RolloverState & { id: 
 	waiting_for_genesis: {
 		id: "waiting_for_genesis",
 	},
+	skip_genesis: {
+		id: "skip_genesis",
+	},
 	epoch_skipped: {
 		id: "epoch_skipped",
 		nextEpoch: 1n,

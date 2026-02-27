@@ -20,6 +20,15 @@ export const checkEpochRollover = (
 		return {};
 	}
 
+	if (currentState.id === "skip_genesis") {
+		// If genesis was skipped then prepare to participate in the next keygen
+		// Current key gen is for the next epoch, which is skipped.
+		// Next key gen is for the epoch after
+		return {
+			rollover: { id: "epoch_skipped", nextEpoch: currentEpoch + 1n },
+		};
+	}
+
 	if (currentState.id !== "epoch_staged" && currentState.nextEpoch === 0n) {
 		// Rollover should not happen while in genesis keygen.
 		return {};
