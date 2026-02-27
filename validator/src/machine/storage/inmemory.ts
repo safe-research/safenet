@@ -5,6 +5,7 @@ import type {
 	MachineStates,
 	MutableConsensusState,
 	MutableMachineStates,
+	Optional,
 	StateDiff,
 } from "../types.js";
 import type { StateStorage } from "./types.js";
@@ -14,7 +15,7 @@ export class InMemoryStateStorage implements StateStorage {
 	#consensusState: MutableConsensusState;
 	#machineStates: MutableMachineStates;
 
-	constructor(consensus?: Partial<MutableConsensusState>, machines?: Partial<MutableMachineStates>) {
+	constructor(consensus?: Partial<MutableConsensusState>, machines?: Optional<MutableMachineStates, "signing">) {
 		this.#consensusState = {
 			epochGroups: {},
 			activeEpoch: 0n,

@@ -85,6 +85,31 @@ describe("check rollover", () => {
 		expect(diff).toStrictEqual({});
 	});
 
+	it("should mark next epoch as skipped when skipping genesis", async () => {
+		const protocol = {} as unknown as SafenetProtocol;
+		const keyGenClient = {} as unknown as KeyGenClient;
+		const machineStates: MachineStates = {
+			...MACHINE_STATES,
+			rollover: {
+				id: "skip_genesis",
+			},
+		};
+
+		expect(checkEpochRollover(MACHINE_CONFIG, protocol, keyGenClient, machineStates, 1n)).toStrictEqual({
+			rollover: {
+				id: "epoch_skipped",
+				nextEpoch: 1n,
+			},
+		});
+
+		expect(checkEpochRollover(MACHINE_CONFIG, protocol, keyGenClient, machineStates, 123n)).toStrictEqual({
+			rollover: {
+				id: "epoch_skipped",
+				nextEpoch: 13n,
+			},
+		});
+	});
+
 	it("should not trigger key gen if next epoch is still in the future", async () => {
 		const protocol = {} as unknown as SafenetProtocol;
 		const keyGenClient = {} as unknown as KeyGenClient;

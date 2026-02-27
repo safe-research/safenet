@@ -107,6 +107,7 @@ describe("validatorConfigSchema", () => {
 			GENESIS_SALT: MOCK_GENESIS_SALT,
 			BLOCKS_PER_EPOCH: "",
 			BLOCKS_BEFORE_RESUBMIT: "",
+			SKIP_GENESIS: "",
 		};
 
 		const result = validatorConfigSchema.parse(validConfig);
@@ -236,6 +237,91 @@ describe("validatorConfigSchema", () => {
 			const priorityFeeError = result.error.issues.find((issue) => issue.path[0] === "PRIORITY_FEE_PER_GAS");
 			expect(priorityFeeError).toBeDefined();
 			expect(priorityFeeError?.message).toBe("Invalid input: expected bigint, received string");
+		}
+	});
+
+	it("should correctly parse skip genesis parameter", () => {
+		const pk = generatePrivateKey();
+		const baseConfig = {
+			RPC_URL: MOCK_VALID_URL,
+			CONSENSUS_ADDRESS: MOCK_CHECKSUMMED_ADDRESS,
+			COORDINATOR_ADDRESS: MOCK_CHECKSUMMED_ADDRESS,
+			CHAIN_ID: 100,
+			PRIVATE_KEY: pk,
+			PARTICIPANTS: "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266,0x6Adb3baB5730852eB53987EA89D8e8f16393C200",
+			GENESIS_SALT: MOCK_GENESIS_SALT,
+			BASE_FEE_MULTIPLIER: "",
+			PRIORITY_FEE_PER_GAS: "",
+		};
+
+		const expectedBaseConfig = {
+			RPC_URL: MOCK_VALID_URL,
+			CONSENSUS_ADDRESS: MOCK_CHECKSUMMED_ADDRESS,
+			COORDINATOR_ADDRESS: MOCK_CHECKSUMMED_ADDRESS,
+			CHAIN_ID: 100,
+			PRIVATE_KEY: pk,
+			PARTICIPANTS: [
+				{ id: 1n, address: "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266" },
+				{ id: 2n, address: "0x6Adb3baB5730852eB53987EA89D8e8f16393C200" },
+			],
+			GENESIS_SALT: MOCK_GENESIS_SALT,
+			BLOCKS_PER_EPOCH: 17280n,
+		};
+
+		expect(
+			validatorConfigSchema.parse({
+				...baseConfig,
+				SKIP_GENESIS: "false",
+			}),
+		).toEqual({
+			...expectedBaseConfig,
+			SKIP_GENESIS: false,
+		});
+
+		expect(
+			validatorConfigSchema.parse({
+				...baseConfig,
+				SKIP_GENESIS: "0",
+			}),
+		).toEqual({
+			...expectedBaseConfig,
+			SKIP_GENESIS: false,
+		});
+
+		expect(
+			validatorConfigSchema.parse({
+				...baseConfig,
+				SKIP_GENESIS: "true",
+			}),
+		).toEqual({
+			...expectedBaseConfig,
+			SKIP_GENESIS: true,
+		});
+
+		expect(
+			validatorConfigSchema.parse({
+				...baseConfig,
+				SKIP_GENESIS: "1",
+			}),
+		).toEqual({
+			...expectedBaseConfig,
+			SKIP_GENESIS: true,
+		});
+	});
+
+	it("should fail if SKIP_GENESIS is invalid", () => {
+		const invalidConfig = {
+			SKIP_GENESIS: 1,
+		};
+
+		const result = validatorConfigSchema.safeParse(invalidConfig);
+		expect(result.success).toBe(false);
+
+		// Check that the error is specifically about the SKIP_GENESIS
+		if (!result.success) {
+			const urlError = result.error.issues.find((issue) => issue.path[0] === "SKIP_GENESIS");
+			expect(urlError).toBeDefined();
+			expect(urlError?.message).toBe('Invalid option: expected one of "0"|"1"|"true"|"false"');
 		}
 	});
 

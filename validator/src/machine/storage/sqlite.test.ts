@@ -50,6 +50,9 @@ const ROLLOVER_TEST_STATES: { [K in RolloverState["id"]]: RolloverState & { id: 
 	waiting_for_genesis: {
 		id: "waiting_for_genesis",
 	},
+	skip_genesis: {
+		id: "skip_genesis",
+	},
 	epoch_skipped: {
 		id: "epoch_skipped",
 		nextEpoch: 1n,
@@ -116,9 +119,18 @@ describe("SqliteStateStorage", () => {
 		testDb = new Sqlite3(":memory:");
 	});
 
+	it("should set correct initial state", () => {
+		expect(new SqliteStateStorage(testDb, { id: "waiting_for_genesis" }).machineStates().rollover).toStrictEqual({
+			id: "waiting_for_genesis",
+		});
+		expect(new SqliteStateStorage(testDb, { id: "skip_genesis" }).machineStates().rollover).toStrictEqual({
+			id: "skip_genesis",
+		});
+	});
+
 	describe.each(Object.values(ROLLOVER_TEST_STATES))("when $id", (rollover) => {
 		it("should store and reinstantiate rollover state correctly", () => {
-			const originalStorage = new SqliteStateStorage(testDb);
+			const originalStorage = new SqliteStateStorage(testDb, { id: "waiting_for_genesis" });
 			expect(originalStorage.machineStates().rollover).toStrictEqual({
 				id: "waiting_for_genesis",
 			});
@@ -126,13 +138,13 @@ describe("SqliteStateStorage", () => {
 				rollover,
 			});
 			expect(originalStorage.machineStates().rollover).toStrictEqual(rollover);
-			const recoveredStorage = new SqliteStateStorage(testDb);
+			const recoveredStorage = new SqliteStateStorage(testDb, { id: "waiting_for_genesis" });
 			expect(recoveredStorage.machineStates().rollover).toStrictEqual(rollover);
 		});
 	});
 
 	it("should store and reinstantiate consensus state correctly", () => {
-		const originalStorage = new SqliteStateStorage(testDb);
+		const originalStorage = new SqliteStateStorage(testDb, { id: "waiting_for_genesis" });
 		expect(originalStorage.consensusState()).toStrictEqual({
 			activeEpoch: 0n,
 			epochGroups: {},
@@ -166,7 +178,7 @@ describe("SqliteStateStorage", () => {
 					"0x5af3000000000000000000000000000000000000000000000000000000000000",
 			},
 		});
-		const recoveredStorage = new SqliteStateStorage(testDb);
+		const recoveredStorage = new SqliteStateStorage(testDb, { id: "waiting_for_genesis" });
 		expect(recoveredStorage.consensusState()).toStrictEqual({
 			activeEpoch: 1n,
 			epochGroups: {
@@ -187,7 +199,7 @@ describe("SqliteStateStorage", () => {
 				signatureIdToMessage: ["0x5afe000000000000000000000000000000000000000000000000000000000000"],
 			},
 		});
-		const cleanedStorage = new SqliteStateStorage(testDb);
+		const cleanedStorage = new SqliteStateStorage(testDb, { id: "waiting_for_genesis" });
 		expect(cleanedStorage.consensusState()).toStrictEqual({
 			activeEpoch: 1n,
 			epochGroups: {
@@ -199,7 +211,7 @@ describe("SqliteStateStorage", () => {
 	});
 
 	it("should store and reinstantiate signing state correctly", () => {
-		const originalStorage = new SqliteStateStorage(testDb);
+		const originalStorage = new SqliteStateStorage(testDb, { id: "waiting_for_genesis" });
 		expect(originalStorage.machineStates().signing).toStrictEqual({});
 		// For each state one version with an epoch rollover packet and a tx attestation packet is added
 		originalStorage.applyDiff({
@@ -361,14 +373,14 @@ describe("SqliteStateStorage", () => {
 			},
 		};
 		expect(originalStorage.machineStates().signing).toStrictEqual(expectedSigningState);
-		const recoveredStorage = new SqliteStateStorage(testDb);
+		const recoveredStorage = new SqliteStateStorage(testDb, { id: "waiting_for_genesis" });
 		expect(recoveredStorage.machineStates().signing).toStrictEqual(expectedSigningState);
 		// Delete half of the states to check that cleanup is working
 		recoveredStorage.applyDiff({ signing: ["0x5afe1a0000000000000000000000000000000000000000000000000000000000"] });
 		recoveredStorage.applyDiff({ signing: ["0x5afe2b0000000000000000000000000000000000000000000000000000000000"] });
 		recoveredStorage.applyDiff({ signing: ["0x5afe3b0000000000000000000000000000000000000000000000000000000000"] });
 		recoveredStorage.applyDiff({ signing: ["0x5afe4a0000000000000000000000000000000000000000000000000000000000"] });
-		const cleanedStorage = new SqliteStateStorage(testDb);
+		const cleanedStorage = new SqliteStateStorage(testDb, { id: "waiting_for_genesis" });
 		delete expectedSigningState["0x5afe1a0000000000000000000000000000000000000000000000000000000000"];
 		delete expectedSigningState["0x5afe2b0000000000000000000000000000000000000000000000000000000000"];
 		delete expectedSigningState["0x5afe3b0000000000000000000000000000000000000000000000000000000000"];

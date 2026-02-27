@@ -2,8 +2,6 @@ import Sqlite3, { type Database } from "better-sqlite3";
 import type { Address } from "viem";
 import { InMemoryClientStorage } from "../consensus/storage/inmemory.js";
 import { SqliteClientStorage } from "../consensus/storage/sqlite.js";
-import { InMemoryStateStorage } from "../machine/storage/inmemory.js";
-import { SqliteStateStorage } from "../machine/storage/sqlite.js";
 import { createLogger } from "../utils/logging.js";
 import { createMetricsService } from "../utils/metrics/index.js";
 
@@ -23,8 +21,3 @@ export const createClientStorage =
 	SAFENET_TEST_STORAGE === "sqlite"
 		? (account: Address, database?: Database) => new SqliteClientStorage(account, database ?? new Sqlite3(":memory:"))
 		: (account: Address) => new InMemoryClientStorage(account);
-
-export const createStateStorage =
-	SAFENET_TEST_STORAGE === "sqlite"
-		? (database?: Database) => new SqliteStateStorage(database ?? new Sqlite3(":memory:"))
-		: () => new InMemoryStateStorage();

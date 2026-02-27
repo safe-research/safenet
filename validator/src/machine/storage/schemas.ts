@@ -64,6 +64,10 @@ const waitingForGenesisSchema = z.object({
 	id: z.literal("waiting_for_genesis"),
 });
 
+const skipGenesisSchema = z.object({
+	id: z.literal("skip_genesis"),
+});
+
 const skipEpochSchema = z.object({
 	id: z.literal("epoch_skipped"),
 	nextEpoch: coercedBigIntSchema,
@@ -120,6 +124,7 @@ const epochStagedSchema = z.object({
 
 export const rolloverStateSchema = z.discriminatedUnion("id", [
 	waitingForGenesisSchema,
+	skipGenesisSchema,
 	skipEpochSchema,
 	collectingCommitmentsSchema,
 	collectingSharesSchema,

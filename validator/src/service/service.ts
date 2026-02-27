@@ -25,6 +25,7 @@ import { SafeTransactionHandler } from "../consensus/verify/safeTx/handler.js";
 import { InMemoryStateStorage } from "../machine/storage/inmemory.js";
 import { SqliteStateStorage } from "../machine/storage/sqlite.js";
 import { OnchainTransitionWatcher, type WatcherConfig } from "../machine/transitions/watcher.js";
+import type { RolloverState } from "../machine/types.js";
 import { CONSENSUS_FUNCTIONS } from "../types/abis.js";
 import { supportedChains } from "../types/chains.js";
 import type { ProtocolConfig } from "../types/interfaces.js";
@@ -52,6 +53,7 @@ export class ValidatorService {
 		logger,
 		metrics,
 		database,
+		skipGenesis = false,
 	}: {
 		account: Account;
 		transport: Transport;
@@ -61,6 +63,7 @@ export class ValidatorService {
 		logger: Logger;
 		metrics: Metrics;
 		database?: Database;
+		skipGenesis?: boolean;
 	}) {
 		this.#logger = logger;
 		this.#publicClient = createPublicClient({ chain, transport });
@@ -91,7 +94,14 @@ export class ValidatorService {
 			logger: this.#logger,
 			blocksBeforeResubmit: config.blocksBeforeResubmit,
 		});
-		const stateStorage = database !== undefined ? new SqliteStateStorage(database) : new InMemoryStateStorage();
+		if (skipGenesis) {
+			logger.notice("Skipping genesis key gen!");
+		}
+		const initialRolloverState: RolloverState = skipGenesis ? { id: "skip_genesis" } : { id: "waiting_for_genesis" };
+		const stateStorage =
+			database !== undefined
+				? new SqliteStateStorage(database, initialRolloverState)
+				: new InMemoryStateStorage(undefined, { rollover: initialRolloverState });
 		this.#stateMachine = new SafenetStateMachine({
 			participants: config.participants,
 			blocksPerEpoch: config.blocksPerEpoch,
@@ -163,6 +173,7 @@ export const createValidatorService = ({
 	logger,
 	metrics,
 	fees,
+	skipGenesis,
 }: {
 	account: Account;
 	rpcUrl: string;
@@ -172,6 +183,7 @@ export const createValidatorService = ({
 	logger: Logger;
 	metrics: Metrics;
 	fees?: ChainFees;
+	skipGenesis?: boolean;
 }): ValidatorService => {
 	const transport = withMetrics(rpcUrl.startsWith("wss") ? webSocket(rpcUrl) : http(rpcUrl), metrics);
 	const chain: Chain = {
@@ -182,5 +194,15 @@ export const createValidatorService = ({
 		fees,
 	};
 	const database = storageFile !== undefined ? new Sqlite3(storageFile) : undefined;
-	return new ValidatorService({ account, transport, config, watcherConfig, chain, logger, metrics, database });
+	return new ValidatorService({
+		account,
+		transport,
+		config,
+		watcherConfig,
+		chain,
+		logger,
+		metrics,
+		database,
+		skipGenesis,
+	});
 };

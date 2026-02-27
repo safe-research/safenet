@@ -95,7 +95,7 @@ function writeRolloverState(db: Database, state: RolloverState): void {
 export class SqliteStateStorage extends InMemoryStateStorage {
 	#db: Database;
 
-	constructor(database: Database) {
+	constructor(database: Database, initialRolloverState: RolloverState) {
 		database.exec(`
 			CREATE TABLE IF NOT EXISTS consensus_state (
 				-- Enforce a single row for the global consensus data
@@ -122,7 +122,7 @@ export class SqliteStateStorage extends InMemoryStateStorage {
 
 		// Load the database state and initialize the InMemoryStateStorage with it
 		const consensus = loadConsensusState(database);
-		const rollover = loadRolloverState(database);
+		const rollover = loadRolloverState(database) ?? initialRolloverState;
 		const signing = loadSigningStates(database);
 		super(consensus, { rollover, signing });
 
