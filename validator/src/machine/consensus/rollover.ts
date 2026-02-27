@@ -22,7 +22,7 @@ export const checkEpochRollover = (
 
 	if (currentState.id === "skip_genesis") {
 		// The state of the current key gen (for the next epoch) is unknown.
-		// To avoid unexpected behvior, skip the current key gen and wait for the next.
+		// To avoid unexpected behavior, skip the current key gen and wait for the next.
 		return {
 			rollover: { id: "epoch_skipped", nextEpoch: currentEpoch + 1n },
 		};
