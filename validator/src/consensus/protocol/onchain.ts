@@ -43,6 +43,7 @@ export interface TransactionStorage {
 	register(tx: EthTransactionData, minNonce: number): number;
 	countPending(): number;
 	delete(nonce: number): void;
+	setPending(nonce: number): void;
 	setFees(nonce: number, fees: FeeValues): void;
 	setHash(nonce: number, txHash: Hex): void;
 	setExecutedUpTo(nonce: number): number;
@@ -194,6 +195,7 @@ export class OnchainProtocol extends BaseProtocol {
 			),
 		};
 
+		this.#txStorage.setPending(tx.nonce);
 		// Store fees before submission in case an error occurs
 		this.#txStorage.setFees(tx.nonce, fees);
 		const signedTx = await this.#signingClient.signTransaction({
