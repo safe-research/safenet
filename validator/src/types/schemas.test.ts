@@ -73,6 +73,7 @@ describe("validatorConfigSchema", () => {
 			COORDINATOR_ADDRESS: MOCK_CHECKSUMMED_ADDRESS,
 			CHAIN_ID: 100,
 			PRIVATE_KEY: pk,
+			STAKER_ADDRESS: MOCK_CHECKSUMMED_ADDRESS,
 			PARTICIPANTS: "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266,0x6Adb3baB5730852eB53987EA89D8e8f16393C200",
 			GENESIS_SALT: MOCK_GENESIS_SALT,
 		};
@@ -84,6 +85,7 @@ describe("validatorConfigSchema", () => {
 			COORDINATOR_ADDRESS: MOCK_CHECKSUMMED_ADDRESS,
 			CHAIN_ID: 100,
 			PRIVATE_KEY: pk,
+			STAKER_ADDRESS: MOCK_CHECKSUMMED_ADDRESS,
 			PARTICIPANTS: [
 				{ id: 1n, address: "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266" },
 				{ id: 2n, address: "0x6Adb3baB5730852eB53987EA89D8e8f16393C200" },
@@ -320,6 +322,26 @@ describe("validatorConfigSchema", () => {
 			expect(error).toBeDefined();
 			expect(error?.code).toBe("invalid_type");
 			expect(error?.message).toBe("Invalid input: expected string, received undefined");
+		}
+	});
+
+	it("should fail if STAKER_ADDRESS is invalid", () => {
+		const invalidConfig = {
+			RPC_URL: MOCK_VALID_URL,
+			CONSENSUS_ADDRESS: MOCK_CHECKSUMMED_ADDRESS,
+			COORDINATOR_ADDRESS: MOCK_CHECKSUMMED_ADDRESS,
+			CHAIN_ID: 100,
+			PRIVATE_KEY: generatePrivateKey(),
+			STAKER_ADDRESS: MOCK_INVALID_ADDRESS, // <-- Invalid
+			PARTICIPANTS: "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266,0x6Adb3baB5730852eB53987EA89D8e8f16393C200",
+		};
+
+		const result = validatorConfigSchema.safeParse(invalidConfig);
+		expect(result.success).toBe(false);
+
+		if (!result.success) {
+			const addressError = result.error.issues.find((issue) => issue.path[0] === "STAKER_ADDRESS");
+			expect(addressError).toBeDefined();
 		}
 	});
 });

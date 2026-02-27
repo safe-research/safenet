@@ -13,6 +13,7 @@ import type {
 	RegisterNonceCommitments,
 	RequestSignature,
 	RevealNonceCommitments,
+	SetValidatorStaker,
 	StageEpoch,
 	StartKeyGen,
 } from "../../consensus/protocol/types.js";
@@ -61,6 +62,9 @@ export class TestProtocol extends BaseProtocol {
 		throw new Error("Method not implemented.");
 	}
 	public stageEpoch(_args: StageEpoch): Promise<Hex> {
+		throw new Error("Method not implemented.");
+	}
+	public setValidatorStaker(_args: SetValidatorStaker): Promise<Hex> {
 		throw new Error("Method not implemented.");
 	}
 }
@@ -294,6 +298,19 @@ export const TEST_ACTIONS: [ProtocolAction, keyof TestProtocol, EthTransactionDa
 			to: TEST_CONSENSUS,
 			value: 0n,
 			data: "0xea5eeafa000000000000000000000000000000000000000000000000000000000000000a000000000000000000000000000000000000000000000000000000000000001e5afe00aa000000000000000000000000000000000000000000000000000000005afe000000000000000000000000000000000000000000000000000000000000",
+			gas: 400_000n,
+		},
+	],
+	[
+		{
+			id: "consensus_set_validator_staker",
+			staker: "0x5AFE000000000000000000000000000000000000",
+		},
+		"setValidatorStaker",
+		{
+			to: TEST_CONSENSUS,
+			value: 0n,
+			data: "0xbbce66a60000000000000000000000005afe000000000000000000000000000000000000",
 			gas: 400_000n,
 		},
 	],

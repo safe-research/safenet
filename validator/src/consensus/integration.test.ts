@@ -138,6 +138,7 @@ describe("integration", () => {
 				chainId: 31_337,
 				consensus: consensus.address,
 				coordinator: coordinator.address,
+				staker: a.address,
 				participants,
 				genesisSalt: zeroHash,
 				blocksPerEpoch: blocksPerEpoch ?? BLOCKS_PER_EPOCH,

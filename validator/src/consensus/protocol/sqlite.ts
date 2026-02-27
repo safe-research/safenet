@@ -139,7 +139,16 @@ export const stageEpochSchema = z.object({
 	signatureId: signatureIdSchema,
 });
 
-export const consensusActionSchema = z.discriminatedUnion("id", [attestTransactionSchema, stageEpochSchema]);
+export const setValidatorStakerSchema = z.object({
+	id: z.literal("consensus_set_validator_staker"),
+	staker: checkedAddressSchema,
+});
+
+export const consensusActionSchema = z.discriminatedUnion("id", [
+	attestTransactionSchema,
+	stageEpochSchema,
+	setValidatorStakerSchema,
+]);
 
 // --- Protocol Action & Retry ---
 

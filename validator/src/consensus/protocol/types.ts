@@ -109,7 +109,12 @@ export type StageEpoch = {
 	signatureId: SignatureId;
 };
 
-export type ConsensusAction = AttestTransaction | StageEpoch;
+export type SetValidatorStaker = {
+	id: "consensus_set_validator_staker";
+	staker: Address;
+};
+
+export type ConsensusAction = AttestTransaction | StageEpoch | SetValidatorStaker;
 
 export type ProtocolAction = KeyGenAction | SigningAction | ConsensusAction;
 

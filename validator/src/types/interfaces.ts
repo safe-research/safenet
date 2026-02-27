@@ -6,6 +6,7 @@ export interface ProtocolConfig {
 	chainId: SupportedChain;
 	consensus: Address;
 	coordinator: Address;
+	staker: Address;
 	blocksPerEpoch: bigint;
 	participants: Participant[];
 	genesisSalt: Hex;
