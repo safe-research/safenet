@@ -95,7 +95,7 @@ function writeRolloverState(db: Database, state: RolloverState): void {
 export class SqliteStateStorage extends InMemoryStateStorage {
 	#db: Database;
 
-	constructor(database: Database, initialRolloverState?: RolloverState) {
+	constructor(database: Database, initialRolloverState: RolloverState) {
 		database.exec(`
 			CREATE TABLE IF NOT EXISTS consensus_state (
 				-- Enforce a single row for the global consensus data
