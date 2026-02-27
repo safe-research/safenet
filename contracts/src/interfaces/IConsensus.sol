@@ -85,7 +85,7 @@ interface IConsensus {
 
     /**
      * @notice Gets the address of the FROST coordinator that the consensus uses.
-     * @return coordinator The address of the FROST coordinator being used by consensus.
+     * @return coordinator The address of the FROST coordinator.
      */
     function getCoordinator() external view returns (address coordinator);
 
