@@ -147,11 +147,16 @@ export class SqliteClientStorage implements GroupInfoStorage, KeyGenInfoStorage,
 				PRIMARY KEY(signature_id, signer),
 				FOREIGN KEY(signature_id) REFERENCES signatures(id) ON DELETE CASCADE
 			);
+
+			CREATE INDEX IF NOT EXISTS idx_nonces_links_lookup
+				ON nonces_links(group_id, address, chunk);
+
+			CREATE INDEX IF NOT EXISTS idx_nonces_root
+				ON nonces(root);
 		`);
 
 		// TODO: We can cache all our prepared SQL statements for performance
-		// in the future. Additionally, there are a few indexes that we can add
-		// to speed up SQL performance.
+		// in the future.
 	}
 
 	accountAddress(): Address {
