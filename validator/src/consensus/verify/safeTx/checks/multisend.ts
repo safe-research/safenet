@@ -30,7 +30,7 @@ const decodeMultiSend = ({
 	const txs = decodeMultiSendFunctionData({ data });
 	const result: SafeTransaction[] = [];
 	let pointer = 0;
-	while (pointer + TRANSACTION_FIXED_SIZE < size(txs)) {
+	while (pointer + TRANSACTION_FIXED_SIZE <= size(txs)) {
 		// Read 1 byte for the operation as number
 		const operation = Number(slice(txs, pointer, pointer + 1));
 		if (operation !== 0 && operation !== 1) {
