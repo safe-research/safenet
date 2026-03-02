@@ -32,7 +32,7 @@ npm run build -w contracts      # Solidity only (forge build --force)
 
 ```sh
 npm run check                   # Biome + tsc all workspaces
-npm run check -w contracts      # forge fmt --check && forge lint
+npm run check -w contracts      # forge fmt --check && forge lint --deny notes
 ```
 
 ### Fix (auto-format)
@@ -73,7 +73,7 @@ SAFENET_TEST_STORAGE=sqlite   npm run test:integration
 ### Local devnet
 
 ```sh
-npm run devnet                  # ./scripts/run_devnet.sh (Podman/Docker required)
+npm run devnet                  # ./scripts/run_devnet.sh (Podman required)
 ```
 
 ## Code Quality Tools
