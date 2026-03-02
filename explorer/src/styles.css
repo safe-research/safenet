@@ -49,21 +49,6 @@ code {
 		source-code-pro, Menlo, Monaco, Consolas, "Courier New", monospace;
 }
 
-@utility bg-core-gradient {
-	background: linear-gradient(135deg, #12FF80, #5FDDFF);
-}
-
-@utility text-core-gradient {
-	background: linear-gradient(135deg, #12FF80, #5FDDFF);
-	-webkit-background-clip: text;
-	-webkit-text-fill-color: transparent;
-	background-clip: text;
-}
-
-@utility bg-guardians-gradient {
-	background: linear-gradient(135deg, #001F26, #00B460);
-}
-
 :root {
 	--color-primary: #12FF80;
 	--color-title: #121312;
