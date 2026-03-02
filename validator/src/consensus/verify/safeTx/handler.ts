@@ -1,5 +1,5 @@
 import type { Hex } from "viem";
-import type { Metrics } from "../../../utils/metrics.js";
+import type { Metrics } from "../../../utils/metrics/index.js";
 import type { PacketHandler } from "../engine.js";
 import { TransactionCheckError } from "./checks/errors.js";
 import { safeTxPacketHash } from "./hashing.js";
@@ -12,6 +12,7 @@ export class SafeTransactionHandler implements PacketHandler<SafeTransactionPack
 		private check: TransactionCheck,
 		private metrics?: Pick<Metrics, "transactionChecks">,
 	) {}
+
 	async hashAndVerify(uncheckedPacket: SafeTransactionPacket): Promise<Hex> {
 		const packet = safeTransactionPacketSchema.parse(uncheckedPacket);
 		try {
