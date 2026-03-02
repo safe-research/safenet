@@ -10,7 +10,7 @@ function RecentTransactionProposal({ proposal }: { proposal: TransactionProposal
 				<SafeTxOverview
 					transaction={proposal.transaction}
 					title={`Safe Tx Hash: ${proposal.safeTxHash}`}
-					timestamp={`${proposal.proposedAt}`}
+					timestamp={`${proposal.proposedAt.block}`}
 					disableLinks={true}
 				/>
 			</Box>

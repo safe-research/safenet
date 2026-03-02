@@ -1,6 +1,6 @@
 import type { Address } from "viem";
 import { z } from "zod";
-import { checkedAddressSchema } from "./schemas";
+import { checkedAddressSchema } from "@/lib/schemas";
 
 const STORAGE_KEY_SETTINGS = "localStorage.settings.object.v1";
 const STORAGE_KEY_SAFE_API_SETTINGS = "localStorage.safe_api_settings.object.v1";

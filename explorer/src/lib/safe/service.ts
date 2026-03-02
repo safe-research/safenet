@@ -1,10 +1,10 @@
 import type { Hex } from "viem";
 import z from "zod";
-import { SAFE_SERVICE_CHAINS } from "../chains";
-import type { SafeTransaction } from "../consensus";
-import { bigIntSchema, checkedAddressSchema, hexDataSchema } from "../schemas";
-import { loadSafeApiSettings } from "../settings";
-import { calculateSafeTxHash } from "./hashing";
+import { SAFE_SERVICE_CHAINS } from "@/lib/chains";
+import type { SafeTransaction } from "@/lib/consensus";
+import { calculateSafeTxHash } from "@/lib/safe/hashing";
+import { bigIntSchema, checkedAddressSchema, hexDataSchema } from "@/lib/schemas";
+import { loadSafeApiSettings } from "@/lib/settings";
 
 const safeTransactionSchema = z.object({
 	safeTxHash: hexDataSchema,

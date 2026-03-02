@@ -26,7 +26,8 @@ export function SafeTransaction() {
 		<Container className="space-y-4">
 			<ConditionalBackButton />
 			<ContainerTitle>Transaction Details</ContainerTitle>
-			{details.isLoading && <Skeleton className="w-full h-25" />}
+			{details.isFetching && details.data === null && <Skeleton className="w-full h-25" />}
+			{!details.isFetching && details.data === null && <Box>"Could not load proposal!"</Box>}
 			{details.data !== null && (
 				<>
 					<Box>
@@ -36,11 +37,10 @@ export function SafeTransaction() {
 						<SafeTxDataDetails data={details.data.data} />
 					</Box>
 					<Box>
-						<SafeTxProposals transaction={details.data} />
+						<SafeTxProposals safeTxHash={safeTxHash} transaction={details.data} />
 					</Box>
 				</>
 			)}
-			{!details.isFetching && details.data === null && <Box>"Could not load proposal!"</Box>}
 		</Container>
 	);
 }

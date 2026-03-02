@@ -1,5 +1,5 @@
 import { type Hex, hashTypedData } from "viem";
-import type { SafeTransaction } from "../consensus";
+import type { SafeTransaction } from "@/lib/consensus";
 
 export const calculateSafeTxHash = (transaction: SafeTransaction): Hex => {
 	const domain = {

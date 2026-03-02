@@ -3,7 +3,6 @@ import {
 	formatLog,
 	getAbiItem,
 	type Hex,
-	type Log,
 	numberToHex,
 	type PublicClient,
 	parseAbi,
@@ -12,7 +11,7 @@ import {
 } from "viem";
 import z from "zod";
 import { bigIntSchema, checkedAddressSchema, hexDataSchema } from "@/lib/schemas";
-import { jsonReplacer } from "@/lib/utils";
+import { getFromBlock, jsonReplacer, mostRecentFirst } from "@/lib/utils";
 
 const consensusAbi = parseAbi([
 	"function getActiveEpoch() external view returns (uint64 epoch, bytes32 group)",
@@ -59,28 +58,19 @@ export const safeTransactionSchema = z.object({
 
 export type SafeTransaction = z.output<typeof safeTransactionSchema>;
 
+export type ExecutionLink = {
+	block: bigint;
+	tx: Hex;
+};
+
 export type TransactionProposal = {
+	chainId: bigint;
 	safeTxHash: Hex;
 	epoch: bigint;
 	transaction: SafeTransaction;
-	proposedAt: bigint;
-	attestedAt: bigint | null;
+	proposedAt: ExecutionLink;
+	attestedAt: ExecutionLink | null;
 };
-
-const MAX_BLOCKS_RANGE = 50000n;
-
-const getFromBlock = async (provider: PublicClient): Promise<bigint> => {
-	const blockNumber = await provider.getBlockNumber();
-	return blockNumber > MAX_BLOCKS_RANGE ? blockNumber - MAX_BLOCKS_RANGE : 0n;
-};
-
-const mostRecentFirst = <T extends Pick<Log<bigint, number, false>, "blockNumber" | "logIndex">>(logs: T[]): T[] =>
-	logs.sort((left, right) => {
-		if (left.blockNumber !== right.blockNumber) {
-			return left.blockNumber < right.blockNumber ? 1 : -1;
-		}
-		return right.logIndex - left.logIndex;
-	});
 
 const transactionEventSelectors = ["TransactionProposed" as const, "TransactionAttested" as const].map((eventName) =>
 	toEventSelector(
@@ -152,7 +142,7 @@ export const loadTransactionProposals = async ({
 	const attestations = new Map(
 		eventLogs
 			.filter((log) => log.eventName === "TransactionAttested")
-			.map((log) => [attestationKey(log), log.blockNumber] as const),
+			.map((log) => [attestationKey(log), { block: log.blockNumber, tx: log.transactionHash }] as const),
 	);
 	return eventLogs
 		.map((log) => {
@@ -165,12 +155,17 @@ export const loadTransactionProposals = async ({
 				return undefined;
 			}
 
+			const attestation = attestations.get(attestationKey(log));
 			return {
+				chainId: log.args.chainId,
 				safeTxHash: log.args.transactionHash,
 				epoch: log.args.epoch,
 				transaction: transaction.data,
-				proposedAt: log.blockNumber,
-				attestedAt: attestations.get(attestationKey(log)) ?? null,
+				proposedAt: {
+					block: log.blockNumber,
+					tx: log.transactionHash,
+				},
+				attestedAt: attestation ?? null,
 			};
 		})
 		.filter((proposal) => proposal !== undefined);

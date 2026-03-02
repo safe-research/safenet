@@ -1,6 +1,7 @@
+import { useQuery } from "@tanstack/react-query";
 import { useMemo } from "react";
-import { createPublicClient, http, type PublicClient } from "viem";
-import { useSettings } from "./useSettings";
+import { type Block, createPublicClient, http, type PublicClient } from "viem";
+import { useSettings } from "@/hooks/useSettings";
 
 export function useProvider(): PublicClient {
 	const [settings] = useSettings();
@@ -10,4 +11,22 @@ export function useProvider(): PublicClient {
 		});
 	}, [settings.rpc]);
 	return provider;
+}
+
+export function useChainId() {
+	const provider = useProvider();
+	return useQuery<bigint | null, Error>({
+		queryKey: ["chainId"],
+		queryFn: () => provider.getChainId().then((id) => BigInt(id)),
+		initialData: null,
+	});
+}
+
+export function useBlockInfo(blockNumber: bigint) {
+	const provider = useProvider();
+	return useQuery<Block | null, Error>({
+		queryKey: ["blockInfo", blockNumber.toString()],
+		queryFn: () => provider.getBlock({ blockNumber }),
+		initialData: null,
+	});
 }
