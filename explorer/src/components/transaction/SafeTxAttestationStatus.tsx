@@ -7,10 +7,12 @@ export function ValidatorList({
 	all,
 	active,
 	mapInfo,
+	completed,
 }: {
 	all: bigint[];
 	active: bigint[];
 	mapInfo: (suffix: string) => (identifier: bigint) => string;
+	completed: boolean;
 }) {
 	return (
 		<>
@@ -20,7 +22,7 @@ export function ValidatorList({
 				.concat(
 					all
 						.filter((v) => !active.includes(v))
-						.map(mapInfo("⏳"))
+						.map(mapInfo(completed ? "❌" : "⏳"))
 						.sort(),
 				)
 				.join(", ")}
@@ -45,16 +47,19 @@ export function SafeTxAttestationStatus({ proposal }: { proposal: TransactionPro
 			{status.data !== null && (
 				<div key={status.data.sid}>
 					<p>Validators:</p>
-					<div className={"md:flex md:justify-between"}>
-						<p className={"ml-4"}>Committed:</p>
-						<p>
-							<ValidatorList
-								all={allValidatorIds}
-								active={status.data.committed.map((s) => s.identifier)}
-								mapInfo={mapInfo}
-							/>
-						</p>
-					</div>
+					{!status.data.completed && (
+						<div className={"md:flex md:justify-between"}>
+							<p className={"ml-4"}>Committed:</p>
+							<p>
+								<ValidatorList
+									all={allValidatorIds}
+									active={status.data.committed.map((s) => s.identifier)}
+									mapInfo={mapInfo}
+									completed={status.data.completed}
+								/>
+							</p>
+						</div>
+					)}
 					<div className={"md:flex md:justify-between"}>
 						<p className={"ml-4"}>Attested:</p>
 						<p>
@@ -62,6 +67,7 @@ export function SafeTxAttestationStatus({ proposal }: { proposal: TransactionPro
 								all={allValidatorIds}
 								active={status.data.signed.map((s) => s.identifier)}
 								mapInfo={mapInfo}
+								completed={status.data.completed}
 							/>
 						</p>
 					</div>

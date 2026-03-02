@@ -1,6 +1,6 @@
 import type { Address } from "viem";
 import z from "zod";
-import { checkedAddressSchema } from "../schemas";
+import { checkedAddressSchema } from "@/lib/schemas";
 
 export type ValidatorInfo = {
 	identifier: bigint;
