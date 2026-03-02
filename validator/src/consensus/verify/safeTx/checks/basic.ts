@@ -77,9 +77,21 @@ export function buildSelectorCheck<S extends string>(
 }
 
 export const buildSelectorChecks =
-	(selectorChecks: Readonly<SelectorChecks>, fallbackCheck: TransactionCheck): TransactionCheck =>
+	(
+		code: TransactionCheckErrorCode,
+		selectorChecks: Readonly<SelectorChecks>,
+		allowEmpty = false,
+		fallbackCheck?: TransactionCheck,
+	): TransactionCheck =>
 	(tx: SafeTransaction): void => {
-		const selectorCheck = size(tx.data) >= 4 ? selectorChecks[slice(tx.data, 0, 4)] : undefined;
-		const check = selectorCheck ?? fallbackCheck;
+		if (size(tx.data) === 0 && allowEmpty) return;
+		if (size(tx.data) < 4) {
+			throw new TransactionCheckError(code, `${tx.data} is not a valid selector`);
+		}
+		const selector = slice(tx.data, 0, 4);
+		const check = selectorChecks[selector] ?? fallbackCheck;
+		if (check === undefined) {
+			throw new TransactionCheckError(code, `${selector} not supported`);
+		}
 		check(tx);
 	};

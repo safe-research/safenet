@@ -17,6 +17,7 @@ export const buildSafeTransactionCheck = (): TransactionCheck => {
 	// Only specific calls should be allowed on the Safe itself
 	const selfChecks = buildSelfCheck(
 		buildSelectorChecks(
+			"invalid_self_call",
 			// These methods have additional validation on their arguments.
 			{
 				...buildSetFallbackHandlerCheck(),
@@ -24,6 +25,8 @@ export const buildSafeTransactionCheck = (): TransactionCheck => {
 				...buildSetModuleGuardCheck(),
 				...buildEnableModuleCheck(),
 			},
+			// Allow empty calls to self.
+			true,
 			// These self calls are generally allowed.
 			buildSupportedSignaturesCheck("invalid_self_call", [
 				"function disableModule(address prevModule, address module)",

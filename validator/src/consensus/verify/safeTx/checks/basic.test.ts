@@ -293,6 +293,46 @@ describe("basic checks", () => {
 	});
 
 	describe("buildSelectorChecks", () => {
+		it("should throw for data shorter than a selector", async () => {
+			const selectors: Record<string, TransactionCheck> = {};
+			const tx: SafeTransaction = {
+				chainId: 1n,
+				safe: "0xF01888f0677547Ec07cd16c8680e699c96588E6B",
+				to: "0x40A2aCCbd92BCA938b02010E17A5b8929b49130D",
+				value: 0n,
+				data: "0x5afe",
+				operation: 1,
+				safeTxGas: 0n,
+				baseGas: 0n,
+				gasPrice: 0n,
+				gasToken: zeroAddress,
+				refundReceiver: zeroAddress,
+				nonce: 0n,
+			};
+			const check = buildSelectorChecks("unknown", selectors);
+			expect(() => check(tx)).toThrow("0x5afe is not a valid selector");
+		});
+
+		it("should allow empty data when allowEmpty is true", async () => {
+			const selectors: Record<string, TransactionCheck> = {};
+			const tx: SafeTransaction = {
+				chainId: 1n,
+				safe: "0xF01888f0677547Ec07cd16c8680e699c96588E6B",
+				to: "0x40A2aCCbd92BCA938b02010E17A5b8929b49130D",
+				value: 0n,
+				data: "0x",
+				operation: 1,
+				safeTxGas: 0n,
+				baseGas: 0n,
+				gasPrice: 0n,
+				gasToken: zeroAddress,
+				refundReceiver: zeroAddress,
+				nonce: 0n,
+			};
+			const check = buildSelectorChecks("unknown", selectors, true);
+			check(tx);
+		});
+
 		it("should call sub check", async () => {
 			const subCheck = vi.fn();
 			const selectors: Record<string, TransactionCheck> = {
@@ -312,10 +352,34 @@ describe("basic checks", () => {
 				refundReceiver: zeroAddress,
 				nonce: 0n,
 			};
-			const check = buildSelectorChecks(selectors, () => {});
+			const check = buildSelectorChecks("unknown", selectors);
 			check(tx);
 			expect(subCheck).toBeCalledTimes(1);
 			expect(subCheck).toBeCalledWith(tx);
+		});
+
+		it("should throw if no check for selector is registered", async () => {
+			const subCheck = vi.fn();
+			const selectors: Record<string, TransactionCheck> = {
+				"0xa9059cbb": subCheck,
+			};
+			const tx: SafeTransaction = {
+				chainId: 1n,
+				safe: "0xF01888f0677547Ec07cd16c8680e699c96588E6B",
+				to: "0x40A2aCCbd92BCA938b02010E17A5b8929b49130D",
+				value: 0n,
+				data: "0xa9059cbc",
+				operation: 1,
+				safeTxGas: 0n,
+				baseGas: 0n,
+				gasPrice: 0n,
+				gasToken: zeroAddress,
+				refundReceiver: zeroAddress,
+				nonce: 0n,
+			};
+			const check = buildSelectorChecks("unknown", selectors, true);
+			expect(() => check(tx)).toThrow("0xa9059cbc not supported");
+			expect(subCheck).toBeCalledTimes(0);
 		});
 
 		it("should call fallback if no check for selector is registered", async () => {
@@ -338,7 +402,7 @@ describe("basic checks", () => {
 				refundReceiver: zeroAddress,
 				nonce: 0n,
 			};
-			const check = buildSelectorChecks(selectors, fallbackCheck);
+			const check = buildSelectorChecks("unknown", selectors, false, fallbackCheck);
 			check(tx);
 			expect(fallbackCheck).toBeCalledTimes(1);
 			expect(fallbackCheck).toBeCalledWith(tx);
