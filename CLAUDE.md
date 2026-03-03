@@ -12,6 +12,8 @@ The repository is an npm monorepo with three workspaces:
 
 Formal verification specs live in `certora/`. Integration and devnet scripts are in `scripts/`.
 
+Technical documentation for the system is in `docs/`, where we can find an overview, a glossary, and detailed validator information.
+
 ## Development Commands
 
 ### Install
