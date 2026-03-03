@@ -7,7 +7,6 @@ build/
 anvil_logs.txt
 foundry.lock
 .certora_internal
-.docusaurus
 
 # Coverage related files
 coverage/
