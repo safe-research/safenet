@@ -43,7 +43,7 @@ export const buildSupportedSelectorCheck =
 		if (dataSize < 4) {
 			throw new TransactionCheckError(code, `${tx.data} is not a valid selector`);
 		}
-		const selector = tx.data.slice(0, 10) as Hex;
+		const selector = slice(tx.data, 0, 4);
 		if (!selectors.includes(selector)) {
 			throw new TransactionCheckError(code, `${selector} not supported`);
 		}
