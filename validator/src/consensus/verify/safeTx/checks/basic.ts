@@ -35,31 +35,6 @@ export const buildFixedParamsCheck =
 		}
 	};
 
-export const buildSupportedSelectorCheck =
-	(code: TransactionCheckErrorCode, selectors: readonly Hex[], allowEmpty: boolean): TransactionCheck =>
-	(tx: SafeTransaction) => {
-		const dataSize = size(tx.data);
-		if (dataSize === 0 && allowEmpty) return;
-		if (dataSize < 4) {
-			throw new TransactionCheckError(code, `${tx.data} is not a valid selector`);
-		}
-		const selector = slice(tx.data, 0, 4);
-		if (!selectors.includes(selector)) {
-			throw new TransactionCheckError(code, `${selector} not supported`);
-		}
-	};
-
-export const buildSupportedSignaturesCheck = (
-	code: TransactionCheckErrorCode,
-	signatures: readonly string[],
-	allowEmpty = true,
-): TransactionCheck =>
-	buildSupportedSelectorCheck(
-		code,
-		signatures.map((s) => toFunctionSelector(s)),
-		allowEmpty,
-	);
-
 type SelectorChecks = Record<string, TransactionCheck>;
 
 export function buildSelectorCheck<S extends string>(
@@ -95,3 +70,20 @@ export const buildSelectorChecks =
 		}
 		check(tx);
 	};
+
+export const buildSupportedSelectorCheck = (
+	code: TransactionCheckErrorCode,
+	selectors: readonly Hex[],
+	allowEmpty: boolean,
+): TransactionCheck => buildSelectorChecks(code, Object.fromEntries(selectors.map((s) => [s, () => {}])), allowEmpty);
+
+export const buildSupportedSignaturesCheck = (
+	code: TransactionCheckErrorCode,
+	signatures: readonly string[],
+	allowEmpty = true,
+): TransactionCheck =>
+	buildSupportedSelectorCheck(
+		code,
+		signatures.map((s) => toFunctionSelector(s)),
+		allowEmpty,
+	);
