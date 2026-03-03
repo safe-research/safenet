@@ -16,8 +16,8 @@ const decodeMultiSendFunctionData = ({ data }: Pick<SafeTransaction, "data">): H
 			data,
 		});
 		return transactions;
-	} catch {
-		throw new TransactionCheckError("invalid_multisend", "Invalid multi send transaction ABI encoding");
+	} catch (cause) {
+		throw new TransactionCheckError("invalid_multisend", "Invalid multi send transaction ABI encoding", { cause });
 	}
 };
 
