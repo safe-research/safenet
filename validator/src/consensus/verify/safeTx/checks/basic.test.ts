@@ -9,6 +9,7 @@ import {
 	buildSupportedSelectorCheck,
 	buildSupportedSignaturesCheck,
 } from "./basic.js";
+import { TransactionCheckError } from "./errors.js";
 
 describe("basic checks", () => {
 	describe("buildNoDelegateCallCheck", () => {
@@ -29,7 +30,7 @@ describe("basic checks", () => {
 					refundReceiver: zeroAddress,
 					nonce: 0n,
 				}),
-			).toThrowError(Error("Delegatecall not allowed"));
+			).toThrowError(new TransactionCheckError("no_delegatecall", "Delegatecall not allowed"));
 		});
 
 		it("should forward continue for call transactions", async () => {
@@ -52,7 +53,7 @@ describe("basic checks", () => {
 	});
 	describe("buildFixedParamsCheck", () => {
 		it("should throw for wrong operation", async () => {
-			const check = buildFixedParamsCheck({
+			const check = buildFixedParamsCheck("unknown", {
 				operation: 0,
 			});
 			expect(() =>
@@ -70,11 +71,11 @@ describe("basic checks", () => {
 					refundReceiver: zeroAddress,
 					nonce: 0n,
 				}),
-			).toThrowError(Error("Expected operation 0 got 1"));
+			).toThrowError(new TransactionCheckError("unknown", "Expected operation 0 got 1"));
 		});
 
 		it("should throw for wrong to", async () => {
-			const check = buildFixedParamsCheck({
+			const check = buildFixedParamsCheck("unknown", {
 				to: ethAddress,
 			});
 			expect(() =>
@@ -92,11 +93,16 @@ describe("basic checks", () => {
 					refundReceiver: zeroAddress,
 					nonce: 0n,
 				}),
-			).toThrowError(Error(`Expected to ${ethAddress} got 0x40A2aCCbd92BCA938b02010E17A5b8929b49130D`));
+			).toThrowError(
+				new TransactionCheckError(
+					"unknown",
+					`Expected to ${ethAddress} got 0x40A2aCCbd92BCA938b02010E17A5b8929b49130D`,
+				),
+			);
 		});
 
 		it("should throw for wrong data", async () => {
-			const check = buildFixedParamsCheck({
+			const check = buildFixedParamsCheck("unknown", {
 				data: "0x5afe5afe",
 			});
 			expect(() =>
@@ -114,11 +120,11 @@ describe("basic checks", () => {
 					refundReceiver: zeroAddress,
 					nonce: 0n,
 				}),
-			).toThrowError(Error("Expected data 0x5afe5afe got 0x5afe"));
+			).toThrowError(new TransactionCheckError("unknown", "Expected data 0x5afe5afe got 0x5afe"));
 		});
 
 		it("should throw for wrong value", async () => {
-			const check = buildFixedParamsCheck({
+			const check = buildFixedParamsCheck("unknown", {
 				value: 0n,
 			});
 			expect(() =>
@@ -136,11 +142,11 @@ describe("basic checks", () => {
 					refundReceiver: zeroAddress,
 					nonce: 0n,
 				}),
-			).toThrowError(Error("Expected value 0 got 1"));
+			).toThrowError(new TransactionCheckError("unknown", "Expected value 0 got 1"));
 		});
 
 		it("should not throw for correct values", async () => {
-			const check = buildFixedParamsCheck({
+			const check = buildFixedParamsCheck("unknown", {
 				to: "0x40A2aCCbd92BCA938b02010E17A5b8929b49130D",
 				value: 1n,
 				data: "0x5afe",
@@ -179,7 +185,7 @@ describe("basic checks", () => {
 				refundReceiver: zeroAddress,
 				nonce: 0n,
 			};
-			const check = buildSupportedSelectorCheck(selectors, true);
+			const check = buildSupportedSelectorCheck("unknown", selectors, true);
 			expect(() => check(tx)).toThrow();
 		});
 
@@ -199,7 +205,7 @@ describe("basic checks", () => {
 				refundReceiver: zeroAddress,
 				nonce: 0n,
 			};
-			const check = buildSupportedSelectorCheck(selectors, true);
+			const check = buildSupportedSelectorCheck("unknown", selectors, true);
 			check(tx);
 		});
 
@@ -219,7 +225,7 @@ describe("basic checks", () => {
 				refundReceiver: zeroAddress,
 				nonce: 0n,
 			};
-			const check = buildSupportedSelectorCheck(selectors, true);
+			const check = buildSupportedSelectorCheck("unknown", selectors, true);
 			check(tx);
 		});
 	});
@@ -241,7 +247,7 @@ describe("basic checks", () => {
 				refundReceiver: zeroAddress,
 				nonce: 0n,
 			};
-			const check = buildSupportedSignaturesCheck(selectors, true);
+			const check = buildSupportedSignaturesCheck("unknown", selectors, true);
 			expect(() => check(tx)).toThrow();
 		});
 
@@ -261,7 +267,7 @@ describe("basic checks", () => {
 				refundReceiver: zeroAddress,
 				nonce: 0n,
 			};
-			const check = buildSupportedSignaturesCheck(selectors, true);
+			const check = buildSupportedSignaturesCheck("unknown", selectors, true);
 			check(tx);
 		});
 
@@ -281,7 +287,7 @@ describe("basic checks", () => {
 				refundReceiver: zeroAddress,
 				nonce: 0n,
 			};
-			const check = buildSupportedSignaturesCheck(selectors, true);
+			const check = buildSupportedSignaturesCheck("unknown", selectors, true);
 			check(tx);
 		});
 	});
@@ -303,7 +309,7 @@ describe("basic checks", () => {
 				refundReceiver: zeroAddress,
 				nonce: 0n,
 			};
-			const check = buildSelectorChecks(selectors, true);
+			const check = buildSelectorChecks("unknown", selectors);
 			expect(() => check(tx)).toThrow("0x5afe is not a valid selector");
 		});
 
@@ -323,7 +329,7 @@ describe("basic checks", () => {
 				refundReceiver: zeroAddress,
 				nonce: 0n,
 			};
-			const check = buildSelectorChecks(selectors, true);
+			const check = buildSelectorChecks("unknown", selectors, true);
 			check(tx);
 		});
 
@@ -346,7 +352,7 @@ describe("basic checks", () => {
 				refundReceiver: zeroAddress,
 				nonce: 0n,
 			};
-			const check = buildSelectorChecks(selectors, true);
+			const check = buildSelectorChecks("unknown", selectors);
 			check(tx);
 			expect(subCheck).toBeCalledTimes(1);
 			expect(subCheck).toBeCalledWith(tx);
@@ -371,7 +377,7 @@ describe("basic checks", () => {
 				refundReceiver: zeroAddress,
 				nonce: 0n,
 			};
-			const check = buildSelectorChecks(selectors, true);
+			const check = buildSelectorChecks("unknown", selectors, true);
 			expect(() => check(tx)).toThrow("0xa9059cbc not supported");
 			expect(subCheck).toBeCalledTimes(0);
 		});
@@ -396,7 +402,7 @@ describe("basic checks", () => {
 				refundReceiver: zeroAddress,
 				nonce: 0n,
 			};
-			const check = buildSelectorChecks(selectors, true, fallbackCheck);
+			const check = buildSelectorChecks("unknown", selectors, false, fallbackCheck);
 			check(tx);
 			expect(fallbackCheck).toBeCalledTimes(1);
 			expect(fallbackCheck).toBeCalledWith(tx);

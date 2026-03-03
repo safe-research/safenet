@@ -15,25 +15,26 @@ import type { TransactionCheck } from "../consensus/verify/safeTx/handler.js";
 
 export const buildSafeTransactionCheck = (): TransactionCheck => {
 	// Only specific calls should be allowed on the Safe itself
-	// Following methods do not require additional parameter checks
-	const unboundedSelfCallChecks = buildSupportedSignaturesCheck([
-		"function disableModule(address prevModule, address module)",
-		"function addOwnerWithThreshold(address owner, uint256 threshold)",
-		"function removeOwner(address prevOwner, address owner, uint256 threshold)",
-		"function swapOwner(address prevOwner, address oldOwner, address newOwner)",
-		"function changeThreshold(uint256 threshold)",
-	]);
-	// Apply parameter checks for critical methods
 	const selfChecks = buildSelfCheck(
 		buildSelectorChecks(
+			"invalid_self_call",
+			// These methods have additional validation on their arguments.
 			{
 				...buildSetFallbackHandlerCheck(),
 				...buildSetGuardCheck(),
 				...buildSetModuleGuardCheck(),
 				...buildEnableModuleCheck(),
 			},
+			// Allow empty calls to self.
 			true,
-			unboundedSelfCallChecks,
+			// These self calls are generally allowed.
+			buildSupportedSignaturesCheck("invalid_self_call", [
+				"function disableModule(address prevModule, address module)",
+				"function addOwnerWithThreshold(address owner, uint256 threshold)",
+				"function removeOwner(address prevOwner, address owner, uint256 threshold)",
+				"function swapOwner(address prevOwner, address oldOwner, address newOwner)",
+				"function changeThreshold(uint256 threshold)",
+			]),
 		),
 	);
 	// All base checks always have to pass

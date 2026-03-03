@@ -76,7 +76,7 @@ export class ValidatorService {
 		const keyGenClient = new KeyGenClient(storage, this.#logger);
 		const verificationHandlers = new Map<string, PacketHandler<Typed>>();
 		const check = buildSafeTransactionCheck();
-		verificationHandlers.set("safe_transaction_packet", new SafeTransactionHandler(check));
+		verificationHandlers.set("safe_transaction_packet", new SafeTransactionHandler(check, metrics));
 		verificationHandlers.set("epoch_rollover_packet", new EpochRolloverHandler());
 		const verificationEngine = new VerificationEngine(verificationHandlers);
 		const actionStorage =

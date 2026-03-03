@@ -5,13 +5,15 @@ import {
 	type ParseAbiItem,
 	parseAbiItem,
 	size,
+	slice,
 	toFunctionSelector,
 } from "viem";
 import type { TransactionCheck } from "../handler.js";
 import type { SafeTransaction } from "../schemas.js";
+import { TransactionCheckError, type TransactionCheckErrorCode } from "./errors.js";
 
 export const buildNoDelegateCallCheck = () => (tx: SafeTransaction) => {
-	if (tx.operation !== 0) throw new Error("Delegatecall not allowed");
+	if (tx.operation !== 0) throw new TransactionCheckError("no_delegatecall", "Delegatecall not allowed");
 };
 
 export const buildSelfCheck = (check: TransactionCheck) => (tx: SafeTransaction) => {
@@ -21,41 +23,17 @@ export const buildSelfCheck = (check: TransactionCheck) => (tx: SafeTransaction)
 };
 
 export const buildFixedParamsCheck =
-	(params: Partial<SafeTransaction>): TransactionCheck =>
+	(
+		code: TransactionCheckErrorCode,
+		params: Partial<Pick<SafeTransaction, "to" | "value" | "data" | "operation">>,
+	): TransactionCheck =>
 	(tx: SafeTransaction) => {
-		if (params.operation !== undefined && tx.operation !== params.operation) {
-			throw new Error(`Expected operation ${params.operation} got ${tx.operation}`);
-		}
-		if (params.to !== undefined && tx.to !== params.to) {
-			throw new Error(`Expected to ${params.to} got ${tx.to}`);
-		}
-		if (params.data !== undefined && tx.data !== params.data) {
-			throw new Error(`Expected data ${params.data} got ${tx.data}`);
-		}
-		if (params.value !== undefined && tx.value !== params.value) {
-			throw new Error(`Expected value ${params.value} got ${tx.value}`);
+		for (const field of ["to", "value", "data", "operation"] as const) {
+			if (params[field] !== undefined && tx[field] !== params[field]) {
+				throw new TransactionCheckError(code, `Expected ${field} ${params[field]} got ${tx[field]}`);
+			}
 		}
 	};
-
-export const buildSupportedSelectorCheck =
-	(selectors: readonly Hex[], allowEmpty: boolean): TransactionCheck =>
-	(tx: SafeTransaction) => {
-		const dataSize = size(tx.data);
-		if (dataSize === 0 && allowEmpty) return;
-		if (dataSize < 4) {
-			throw new Error(`${tx.data} is not a valid selector`);
-		}
-		const selector = tx.data.slice(0, 10) as Hex;
-		if (!selectors.includes(selector)) {
-			throw new Error(`${selector} not supported`);
-		}
-	};
-
-export const buildSupportedSignaturesCheck = (signatures: readonly string[], allowEmpty = true): TransactionCheck =>
-	buildSupportedSelectorCheck(
-		signatures.map((s) => toFunctionSelector(s)),
-		allowEmpty,
-	);
 
 type SelectorChecks = Record<string, TransactionCheck>;
 
@@ -74,17 +52,38 @@ export function buildSelectorCheck<S extends string>(
 }
 
 export const buildSelectorChecks =
-	(selectorChecks: Readonly<SelectorChecks>, allowEmpty: boolean, fallbackCheck?: TransactionCheck): TransactionCheck =>
+	(
+		code: TransactionCheckErrorCode,
+		selectorChecks: Readonly<SelectorChecks>,
+		allowEmpty = false,
+		fallbackCheck?: TransactionCheck,
+	): TransactionCheck =>
 	(tx: SafeTransaction): void => {
-		const dataSize = size(tx.data);
-		if (dataSize === 0 && allowEmpty) return;
-		if (dataSize < 4) {
-			throw new Error(`${tx.data} is not a valid selector`);
+		if (size(tx.data) === 0 && allowEmpty) return;
+		if (size(tx.data) < 4) {
+			throw new TransactionCheckError(code, `${tx.data} is not a valid selector`);
 		}
-		const selector = tx.data.slice(0, 10) as Hex;
-		const selectorCheck = selectorChecks[selector] ?? fallbackCheck;
-		if (selectorCheck === undefined) {
-			throw new Error(`${selector} not supported`);
+		const selector = slice(tx.data, 0, 4);
+		const check = selectorChecks[selector] ?? fallbackCheck;
+		if (check === undefined) {
+			throw new TransactionCheckError(code, `${selector} not supported`);
 		}
-		selectorCheck(tx);
+		check(tx);
 	};
+
+export const buildSupportedSelectorCheck = (
+	code: TransactionCheckErrorCode,
+	selectors: readonly Hex[],
+	allowEmpty: boolean,
+): TransactionCheck => buildSelectorChecks(code, Object.fromEntries(selectors.map((s) => [s, () => {}])), allowEmpty);
+
+export const buildSupportedSignaturesCheck = (
+	code: TransactionCheckErrorCode,
+	signatures: readonly string[],
+	allowEmpty = true,
+): TransactionCheck =>
+	buildSupportedSelectorCheck(
+		code,
+		signatures.map((s) => toFunctionSelector(s)),
+		allowEmpty,
+	);

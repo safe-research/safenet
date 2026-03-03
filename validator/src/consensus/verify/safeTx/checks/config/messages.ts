@@ -5,8 +5,8 @@ import { buildCombinedChecks } from "../combined.js";
 
 const buildSignCheck = (): TransactionCheck =>
 	buildCombinedChecks([
-		buildFixedParamsCheck({ operation: 1 }),
-		buildSupportedSelectorCheck([toFunctionSelector("function signMessage(bytes)")], false),
+		buildFixedParamsCheck("invalid_sign_message", { operation: 1 }),
+		buildSupportedSelectorCheck("invalid_sign_message", [toFunctionSelector("function signMessage(bytes)")], false),
 	]);
 
 export const buildSignMessageChecks = (): Record<string, TransactionCheck> => {
