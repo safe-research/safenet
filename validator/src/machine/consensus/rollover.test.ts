@@ -4,7 +4,7 @@ import type { KeyGenClient } from "../../consensus/keyGen/client.js";
 import type { SafenetProtocol } from "../../consensus/protocol/types.js";
 import { toPoint } from "../../frost/math.js";
 import type { FrostPoint } from "../../frost/types.js";
-import type { MachineConfig, MachineStates } from "../types.js";
+import type { ConsensusState, MachineConfig, MachineStates, SigningState } from "../types.js";
 import { checkEpochRollover } from "./rollover.js";
 
 // --- Test Data ---
@@ -43,12 +43,19 @@ const MACHINE_STATES: MachineStates = {
 	signing: {},
 };
 
+const CONSENSUS_STATE: ConsensusState = {
+	activeEpoch: 0n,
+	groupPendingNonces: {},
+	epochGroups: {},
+	signatureIdToMessage: {},
+};
+
 // --- Tests ---
 describe("check rollover", () => {
 	it("should not trigger key gen in genesis state", async () => {
 		const protocol = {} as unknown as SafenetProtocol;
 		const keyGenClient = {} as unknown as KeyGenClient;
-		const diff = checkEpochRollover(MACHINE_CONFIG, protocol, keyGenClient, MACHINE_STATES, 1n);
+		const diff = checkEpochRollover(MACHINE_CONFIG, protocol, keyGenClient, CONSENSUS_STATE, MACHINE_STATES, 1n);
 
 		expect(diff).toStrictEqual({});
 	});
@@ -65,7 +72,7 @@ describe("check rollover", () => {
 				deadline: 22n,
 			},
 		};
-		const diff = checkEpochRollover(MACHINE_CONFIG, protocol, keyGenClient, machineStates, 1n);
+		const diff = checkEpochRollover(MACHINE_CONFIG, protocol, keyGenClient, CONSENSUS_STATE, machineStates, 1n);
 
 		expect(diff).toStrictEqual({});
 	});
@@ -80,7 +87,7 @@ describe("check rollover", () => {
 				nextEpoch: 0n,
 			},
 		};
-		const diff = checkEpochRollover(MACHINE_CONFIG, protocol, keyGenClient, machineStates, 1n);
+		const diff = checkEpochRollover(MACHINE_CONFIG, protocol, keyGenClient, CONSENSUS_STATE, machineStates, 1n);
 
 		expect(diff).toStrictEqual({});
 	});
@@ -95,14 +102,18 @@ describe("check rollover", () => {
 			},
 		};
 
-		expect(checkEpochRollover(MACHINE_CONFIG, protocol, keyGenClient, machineStates, 1n)).toStrictEqual({
+		expect(
+			checkEpochRollover(MACHINE_CONFIG, protocol, keyGenClient, CONSENSUS_STATE, machineStates, 1n),
+		).toStrictEqual({
 			rollover: {
 				id: "epoch_skipped",
 				nextEpoch: 1n,
 			},
 		});
 
-		expect(checkEpochRollover(MACHINE_CONFIG, protocol, keyGenClient, machineStates, 123n)).toStrictEqual({
+		expect(
+			checkEpochRollover(MACHINE_CONFIG, protocol, keyGenClient, CONSENSUS_STATE, machineStates, 123n),
+		).toStrictEqual({
 			rollover: {
 				id: "epoch_skipped",
 				nextEpoch: 13n,
@@ -122,7 +133,7 @@ describe("check rollover", () => {
 				deadline: 22n,
 			},
 		};
-		const diff = checkEpochRollover(MACHINE_CONFIG, protocol, keyGenClient, machineStates, 1n);
+		const diff = checkEpochRollover(MACHINE_CONFIG, protocol, keyGenClient, CONSENSUS_STATE, machineStates, 1n);
 
 		expect(diff).toStrictEqual({});
 	});
@@ -137,7 +148,7 @@ describe("check rollover", () => {
 			},
 			signing: {},
 		};
-		const diff = checkEpochRollover(MACHINE_CONFIG, protocol, keyGenClient, machineState, 19n);
+		const diff = checkEpochRollover(MACHINE_CONFIG, protocol, keyGenClient, CONSENSUS_STATE, machineState, 19n);
 
 		expect(diff).toStrictEqual({});
 	});
@@ -172,7 +183,7 @@ describe("check rollover", () => {
 			},
 			signing: {},
 		};
-		const diff = checkEpochRollover(MACHINE_CONFIG, protocol, keyGenClient, machineState, 20n);
+		const diff = checkEpochRollover(MACHINE_CONFIG, protocol, keyGenClient, CONSENSUS_STATE, machineState, 20n);
 
 		expect(diff.actions).toStrictEqual([
 			{
@@ -240,7 +251,7 @@ describe("check rollover", () => {
 				deadline: 12n,
 			},
 		};
-		const diff = checkEpochRollover(MACHINE_CONFIG, protocol, keyGenClient, machineStates, 10n);
+		const diff = checkEpochRollover(MACHINE_CONFIG, protocol, keyGenClient, CONSENSUS_STATE, machineStates, 10n);
 
 		expect(diff.actions).toStrictEqual([
 			{
@@ -303,7 +314,7 @@ describe("check rollover", () => {
 			...MACHINE_STATES,
 			rollover: { id: "epoch_staged", nextEpoch: 1n },
 		};
-		const diff = checkEpochRollover(MACHINE_CONFIG, protocol, keyGenClient, machineStates, 10n);
+		const diff = checkEpochRollover(MACHINE_CONFIG, protocol, keyGenClient, CONSENSUS_STATE, machineStates, 10n);
 
 		expect(diff.actions).toStrictEqual([
 			{
@@ -338,5 +349,278 @@ describe("check rollover", () => {
 			2,
 			"0x00000000eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee0000000000000002",
 		);
+	});
+
+	it("should cleanup old epoch groups on epoch activation with non-sequential epochs", async () => {
+		const consensus = vi.fn();
+		consensus.mockReturnValueOnce(ethAddress);
+		const protocol = {
+			consensus,
+		} as unknown as SafenetProtocol;
+		const setupGroup = vi.fn();
+		const groupSetup = {
+			groupId: "0x5afe02",
+			participantsRoot: "0x5afe5afe5afe",
+			participantId: 3n,
+			commitments: [TEST_POINT],
+			encryptionPublicKey: TEST_POINT,
+			pok: {
+				r: TEST_POINT,
+				mu: 100n,
+			},
+			poap: ["0x5afe5afe5afe01"],
+		};
+		setupGroup.mockReturnValueOnce(groupSetup);
+		const unregisterGroup = vi.fn();
+		const keyGenClient = {
+			setupGroup,
+			unregisterGroup,
+		} as unknown as KeyGenClient;
+		const machineStates: MachineStates = {
+			...MACHINE_STATES,
+			rollover: { id: "epoch_staged", nextEpoch: 7n },
+		};
+		// Non-sequential epochs: 1, 2, 5, 7
+		const consensusStateWithGroups: ConsensusState = {
+			...CONSENSUS_STATE,
+			epochGroups: {
+				"1": { groupId: "0xgroup1", participantId: 1n },
+				"2": { groupId: "0xgroup2", participantId: 1n },
+				"5": { groupId: "0xgroup5", participantId: 1n },
+				"7": { groupId: "0xgroup7", participantId: 1n },
+			},
+		};
+		// blocksPerEpoch = 10, so block 70 => currentEpoch = 7
+		const diff = checkEpochRollover(
+			MACHINE_CONFIG,
+			protocol,
+			keyGenClient,
+			consensusStateWithGroups,
+			machineStates,
+			70n,
+		);
+
+		// previousEpoch = 5, no signing sessions → threshold = 5
+		// Epochs 1 and 2 should be removed (< 5)
+		expect(diff.consensus?.removeEpochGroupsBefore).toBe(5n);
+		expect(diff.consensus?.activeEpoch).toBe(7n);
+		expect(unregisterGroup).toBeCalledTimes(2);
+		expect(unregisterGroup).toBeCalledWith("0xgroup1");
+		expect(unregisterGroup).toBeCalledWith("0xgroup2");
+	});
+
+	it("should preserve epoch groups referenced by active signing sessions", async () => {
+		const consensus = vi.fn();
+		consensus.mockReturnValueOnce(ethAddress);
+		const protocol = {
+			consensus,
+		} as unknown as SafenetProtocol;
+		const setupGroup = vi.fn();
+		const groupSetup = {
+			groupId: "0x5afe02",
+			participantsRoot: "0x5afe5afe5afe",
+			participantId: 3n,
+			commitments: [TEST_POINT],
+			encryptionPublicKey: TEST_POINT,
+			pok: {
+				r: TEST_POINT,
+				mu: 100n,
+			},
+			poap: ["0x5afe5afe5afe01"],
+		};
+		setupGroup.mockReturnValueOnce(groupSetup);
+		const unregisterGroup = vi.fn();
+		const keyGenClient = {
+			setupGroup,
+			unregisterGroup,
+		} as unknown as KeyGenClient;
+		// Active signing session referencing epoch 2
+		const signingState: SigningState = {
+			id: "waiting_for_request",
+			signers: [1n],
+			deadline: 100n,
+			packet: {
+				type: "safe_transaction_packet",
+				domain: {
+					chain: 1n,
+					consensus: zeroAddress,
+				},
+				proposal: {
+					epoch: 2n,
+					transaction: {
+						chainId: 1n,
+						safe: zeroAddress,
+						to: zeroAddress,
+						value: 0n,
+						data: "0x",
+						operation: 0,
+						safeTxGas: 0n,
+						baseGas: 0n,
+						gasPrice: 0n,
+						gasToken: zeroAddress,
+						refundReceiver: zeroAddress,
+						nonce: 0n,
+					},
+				},
+			},
+		};
+		const machineStates: MachineStates = {
+			rollover: { id: "epoch_staged", nextEpoch: 7n },
+			signing: {
+				"0xabc": signingState,
+			},
+		};
+		const consensusStateWithGroups: ConsensusState = {
+			...CONSENSUS_STATE,
+			epochGroups: {
+				"1": { groupId: "0xgroup1", participantId: 1n },
+				"2": { groupId: "0xgroup2", participantId: 1n },
+				"3": { groupId: "0xgroup3", participantId: 1n },
+				"5": { groupId: "0xgroup5", participantId: 1n },
+				"7": { groupId: "0xgroup7", participantId: 1n },
+			},
+		};
+		const diff = checkEpochRollover(
+			MACHINE_CONFIG,
+			protocol,
+			keyGenClient,
+			consensusStateWithGroups,
+			machineStates,
+			70n,
+		);
+
+		// previousEpoch = 5, smallestSigningEpoch = 2 → threshold = min(2, 5) = 2
+		// Only epoch 1 should be removed (< 2)
+		expect(diff.consensus?.removeEpochGroupsBefore).toBe(2n);
+		expect(unregisterGroup).toBeCalledTimes(1);
+		expect(unregisterGroup).toBeCalledWith("0xgroup1");
+	});
+
+	it("should preserve epoch groups referenced by epoch_rollover_packet signing sessions", async () => {
+		const consensus = vi.fn();
+		consensus.mockReturnValueOnce(ethAddress);
+		const protocol = {
+			consensus,
+		} as unknown as SafenetProtocol;
+		const setupGroup = vi.fn();
+		const groupSetup = {
+			groupId: "0x5afe02",
+			participantsRoot: "0x5afe5afe5afe",
+			participantId: 3n,
+			commitments: [TEST_POINT],
+			encryptionPublicKey: TEST_POINT,
+			pok: {
+				r: TEST_POINT,
+				mu: 100n,
+			},
+			poap: ["0x5afe5afe5afe01"],
+		};
+		setupGroup.mockReturnValueOnce(groupSetup);
+		const unregisterGroup = vi.fn();
+		const keyGenClient = {
+			setupGroup,
+			unregisterGroup,
+		} as unknown as KeyGenClient;
+		// Active signing session with epoch_rollover_packet referencing epoch 3
+		const signingState: SigningState = {
+			id: "waiting_for_request",
+			signers: [1n],
+			deadline: 100n,
+			packet: {
+				type: "epoch_rollover_packet",
+				domain: {
+					chain: 1n,
+					consensus: zeroAddress,
+				},
+				rollover: {
+					activeEpoch: 3n,
+					proposedEpoch: 5n,
+					rolloverBlock: 50n,
+					groupKeyX: 0n,
+					groupKeyY: 0n,
+				},
+			},
+		};
+		const machineStates: MachineStates = {
+			rollover: { id: "epoch_staged", nextEpoch: 5n },
+			signing: {
+				"0xdef": signingState,
+			},
+		};
+		// Epochs 1, 2, 3 had successful keygens; epoch 5 keygen succeeded and is staged
+		const consensusStateWithGroups: ConsensusState = {
+			...CONSENSUS_STATE,
+			epochGroups: {
+				"1": { groupId: "0xgroup1", participantId: 1n },
+				"2": { groupId: "0xgroup2", participantId: 1n },
+				"3": { groupId: "0xgroup3", participantId: 1n },
+				"5": { groupId: "0xgroup5", participantId: 1n },
+			},
+		};
+		// blocksPerEpoch = 10, so block 50 => currentEpoch = 5
+		const diff = checkEpochRollover(
+			MACHINE_CONFIG,
+			protocol,
+			keyGenClient,
+			consensusStateWithGroups,
+			machineStates,
+			50n,
+		);
+
+		// previousEpoch = 3, smallestSigningEpoch = 3 (from rollover.activeEpoch) → threshold = min(3, 3) = 3
+		// Epochs 1 and 2 should be removed (< 3)
+		expect(diff.consensus?.removeEpochGroupsBefore).toBe(3n);
+		expect(unregisterGroup).toBeCalledTimes(2);
+		expect(unregisterGroup).toBeCalledWith("0xgroup1");
+		expect(unregisterGroup).toBeCalledWith("0xgroup2");
+	});
+
+	it("should not cleanup when there are no previous epochs", async () => {
+		const consensus = vi.fn();
+		consensus.mockReturnValueOnce(ethAddress);
+		const protocol = {
+			consensus,
+		} as unknown as SafenetProtocol;
+		const setupGroup = vi.fn();
+		const groupSetup = {
+			groupId: "0x5afe02",
+			participantsRoot: "0x5afe5afe5afe",
+			participantId: 3n,
+			commitments: [TEST_POINT],
+			encryptionPublicKey: TEST_POINT,
+			pok: {
+				r: TEST_POINT,
+				mu: 100n,
+			},
+			poap: ["0x5afe5afe5afe01"],
+		};
+		setupGroup.mockReturnValueOnce(groupSetup);
+		const unregisterGroup = vi.fn();
+		const keyGenClient = {
+			setupGroup,
+			unregisterGroup,
+		} as unknown as KeyGenClient;
+		const machineStates: MachineStates = {
+			...MACHINE_STATES,
+			rollover: { id: "epoch_staged", nextEpoch: 1n },
+		};
+		// Only the activating epoch exists, no previous
+		const consensusStateWithGroups: ConsensusState = {
+			...CONSENSUS_STATE,
+			epochGroups: {
+				"1": { groupId: "0xgroup1", participantId: 1n },
+			},
+		};
+		const diff = checkEpochRollover(
+			MACHINE_CONFIG,
+			protocol,
+			keyGenClient,
+			consensusStateWithGroups,
+			machineStates,
+			10n,
+		);
+
+		expect(diff.consensus?.removeEpochGroupsBefore).toBeUndefined();
+		expect(unregisterGroup).not.toBeCalled();
 	});
 });

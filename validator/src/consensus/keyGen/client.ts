@@ -66,6 +66,10 @@ export class KeyGenClient {
 		return this.#storage.knownGroups();
 	}
 
+	unregisterGroup(groupId: GroupId): void {
+		this.#storage.unregisterGroup(groupId);
+	}
+
 	groupPublicKey(groupId: GroupId): FrostPoint | undefined {
 		return this.#storage.publicKey(groupId);
 	}

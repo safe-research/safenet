@@ -155,7 +155,15 @@ export class SafenetStateMachine {
 		this.#lastProcessedBlock = block;
 		this.#lastProcessedIndex = -1;
 		state.apply(
-			checkEpochRollover(this.#machineConfig, this.#protocol, this.#keyGenClient, state.machines, block, this.#logger),
+			checkEpochRollover(
+				this.#machineConfig,
+				this.#protocol,
+				this.#keyGenClient,
+				state.consensus,
+				state.machines,
+				block,
+				this.#logger,
+			),
 		);
 		state.apply(
 			checkKeyGenTimeouts(this.#machineConfig, this.#protocol, this.#keyGenClient, state.machines, block, this.#logger),
