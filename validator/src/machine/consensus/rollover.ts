@@ -77,15 +77,16 @@ export const checkEpochRollover = (
 };
 
 /**
- * Computes the cleanup cutoff for old epoch groups.
+ * Computes the explicit list of epoch groups to remove.
  *
- * Returns a `removeEpochGroupsBefore` value in the diff, which is later used to:
- * - Remove epoch group entries from the machine state (in `applyConsensus`)
+ * Returns a `removeEpochGroups` value in the diff, which is later used to:
+ * - Remove those epoch group entries from the machine state (in `applyConsensus`)
  * - Unregister the corresponding FROST groups from the crypto DB (in `SafenetStateMachine`)
  *
  * Strategy:
  * 1. Start with the currently active epoch as the cutoff (always preserved for late attestations)
  * 2. Narrow the cutoff to the smallest epoch referenced by any active signing session, if lower
+ * 3. Collect all epoch group keys strictly below that cutoff
  *
  * This ensures:
  * - The active epoch and all future epochs are always preserved
@@ -105,13 +106,14 @@ const computeCleanupThreshold = (
 		return epoch < cutoff ? epoch : cutoff;
 	}, consensusState.activeEpoch);
 
-	// Check if there is anything to remove.
-	const hasEpochsBelowCutoff = Object.keys(consensusState.epochGroups).some((key) => BigInt(key) < epochCutoff);
-	if (!hasEpochsBelowCutoff) return {};
+	const epochsToRemove = Object.keys(consensusState.epochGroups)
+		.map(BigInt)
+		.filter((epoch) => epoch < epochCutoff);
+	if (epochsToRemove.length === 0) return {};
 
 	return {
 		consensus: {
-			removeEpochGroupsBefore: epochCutoff,
+			removeEpochGroups: epochsToRemove,
 		},
 	};
 };

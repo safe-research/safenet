@@ -401,7 +401,7 @@ describe("check rollover", () => {
 
 		// activeEpoch = 5, no signing sessions → epochCutoff = 5
 		// Epochs 1 and 2 should be removed (< 5)
-		expect(diff.consensus?.removeEpochGroupsBefore).toBe(5n);
+		expect(diff.consensus?.removeEpochGroups).toStrictEqual([1n, 2n]);
 		expect(diff.consensus?.activeEpoch).toBe(7n);
 	});
 
@@ -486,7 +486,7 @@ describe("check rollover", () => {
 
 		// activeEpoch = 5, smallestSigningEpoch = 2 → epochCutoff = min(2, 5) = 2
 		// Only epoch 1 should be removed (< 2)
-		expect(diff.consensus?.removeEpochGroupsBefore).toBe(2n);
+		expect(diff.consensus?.removeEpochGroups).toStrictEqual([1n]);
 		expect(diff.consensus?.activeEpoch).toBe(7n);
 	});
 
@@ -562,7 +562,7 @@ describe("check rollover", () => {
 
 		// activeEpoch = 3, smallestSigningEpoch = 3 (from rollover.activeEpoch) → epochCutoff = min(3, 3) = 3
 		// Epochs 1 and 2 should be removed (< 3)
-		expect(diff.consensus?.removeEpochGroupsBefore).toBe(3n);
+		expect(diff.consensus?.removeEpochGroups).toStrictEqual([1n, 2n]);
 		expect(diff.consensus?.activeEpoch).toBe(5n);
 	});
 
@@ -612,7 +612,7 @@ describe("check rollover", () => {
 		);
 
 		// activeEpoch = 5, no signing → epochCutoff = 5, but no epoch < 5 exists
-		expect(diff.consensus?.removeEpochGroupsBefore).toBeUndefined();
+		expect(diff.consensus?.removeEpochGroups).toBeUndefined();
 		expect(diff.consensus?.activeEpoch).toBe(7n);
 	});
 
@@ -696,7 +696,7 @@ describe("check rollover", () => {
 
 		// activeEpoch = 5, signingEpoch = 6, since 6 > 5 → epochCutoff = activeEpoch = 5
 		// Epochs 1 and 3 should be removed (< 5)
-		expect(diff.consensus?.removeEpochGroupsBefore).toBe(5n);
+		expect(diff.consensus?.removeEpochGroups).toStrictEqual([1n, 3n]);
 	});
 
 	it("should use the minimum epoch across multiple signing sessions", async () => {
@@ -810,7 +810,7 @@ describe("check rollover", () => {
 
 		// activeEpoch = 5, smallestSigningEpoch = min(2, 4) = 2 → epochCutoff = min(2, 5) = 2
 		// Only epoch 1 should be removed (< 2)
-		expect(diff.consensus?.removeEpochGroupsBefore).toBe(2n);
+		expect(diff.consensus?.removeEpochGroups).toStrictEqual([1n]);
 	});
 
 	it("should not cleanup when there are no previous epochs", async () => {
@@ -856,6 +856,6 @@ describe("check rollover", () => {
 			10n,
 		);
 
-		expect(diff.consensus?.removeEpochGroupsBefore).toBeUndefined();
+		expect(diff.consensus?.removeEpochGroups).toBeUndefined();
 	});
 });

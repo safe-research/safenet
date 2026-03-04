@@ -155,7 +155,7 @@ describe("SafenetStateMachine FROST group cleanup", () => {
 		);
 	});
 
-	it("should not call unregisterGroup when removeEpochGroupsBefore is absent", async () => {
+	it("should not call unregisterGroup when removeEpochGroups is absent", async () => {
 		// waiting_for_genesis → checkEpochRollover returns {} immediately
 		const storage = makeStorage({}, { id: "waiting_for_genesis" });
 		const unregisterGroup = vi.fn();

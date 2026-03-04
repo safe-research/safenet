@@ -254,7 +254,7 @@ describe("LocalConsensusStates", () => {
 		expect(immutableState.signatureIdToMessage["0x5afe5afe23"]).toBe(zeroHash);
 	});
 
-	it("should remove epoch groups below removeEpochGroupsBefore threshold", () => {
+	it("should remove the epoch groups listed in removeEpochGroups", () => {
 		const immutableState: ConsensusState = {
 			activeEpoch: 7n,
 			groupPendingNonces: {},
@@ -269,7 +269,7 @@ describe("LocalConsensusStates", () => {
 		const localState = new LocalConsensusStates(immutableState);
 		const diff: StateDiff = {
 			consensus: {
-				removeEpochGroupsBefore: 5n,
+				removeEpochGroups: [1n, 3n],
 			},
 		};
 		localState.apply(diff);
