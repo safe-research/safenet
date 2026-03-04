@@ -50,6 +50,12 @@ function ConsensusSettingsForm({ onSubmitted }: { onSubmitted?: () => void }) {
 	return (
 		<form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
 			<FormItem id="rpc" register={register} error={errors.rpc} label="RPC Url" />
+			<FormItem
+				id="maxBlockRange"
+				register={register}
+				error={errors.maxBlockRange as FieldError | undefined}
+				label="Max Block Range"
+			/>
 			<FormItem id="decoder" register={register} error={errors.decoder} label="Decoder Url" />
 			<FormItem id="relayer" register={register} error={errors.relayer} label="Relayer Url" />
 
@@ -59,13 +65,6 @@ function ConsensusSettingsForm({ onSubmitted }: { onSubmitted?: () => void }) {
 				error={errors.consensus}
 				label="Consensus Address"
 				placeholder="0x…"
-			/>
-
-			<FormItem
-				id="maxBlockRange"
-				register={register}
-				error={errors.maxBlockRange as FieldError | undefined}
-				label="Max Block Range"
 			/>
 
 			<SubmitItem actionTitle="Save" isSubmitting={isSubmitting} disabled={!isDirty} />
