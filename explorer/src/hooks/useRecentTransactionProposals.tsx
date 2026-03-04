@@ -9,7 +9,11 @@ export function useRecentTransactionProposals() {
 	return useQuery<TransactionProposal[], Error>({
 		queryKey: ["recentProposals", settings.consensus, settings.maxBlockRange],
 		queryFn: () =>
-			loadTransactionProposals({ provider, consensus: settings.consensus, maxBlockRange: BigInt(settings.maxBlockRange) }),
+			loadTransactionProposals({
+				provider,
+				consensus: settings.consensus,
+				maxBlockRange: BigInt(settings.maxBlockRange),
+			}),
 		refetchInterval: 10000,
 		initialData: [],
 	});

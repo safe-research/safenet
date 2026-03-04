@@ -12,7 +12,7 @@ const settingsFormSchema = z.object({
 	decoder: emptyToUndefined(z.url()),
 	rpc: emptyToUndefined(z.url()),
 	relayer: emptyToUndefined(z.url()),
-	maxBlockRange: z.coerce.number().int().positive().optional(),
+	maxBlockRange: emptyToUndefined(z.string().pipe(z.coerce.number().int().positive())),
 });
 
 type SettingsFormInput = z.input<typeof settingsFormSchema>;
