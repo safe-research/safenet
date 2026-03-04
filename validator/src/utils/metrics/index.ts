@@ -7,6 +7,7 @@ export type Metrics = {
 	eventIndex: Gauge;
 	transitions: Counter;
 	rpcRequests: Counter;
+	frostGroupCleanupFailures: Counter;
 };
 
 export type MetricsServiceOptions = {
@@ -46,6 +47,11 @@ export class MetricsService {
 				name: "validator_rpc_requests",
 				help: "RPC requests by method and result",
 				labelNames: ["method", "result"],
+				registers: [this.#register],
+			}),
+			frostGroupCleanupFailures: new Counter({
+				name: "validator_frost_group_cleanup_failures",
+				help: "Number of times a FROST group failed to unregister during epoch cleanup",
 				registers: [this.#register],
 			}),
 		};

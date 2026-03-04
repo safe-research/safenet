@@ -39,9 +39,9 @@ export const applyConsensus = (diff: Pick<StateDiff, "consensus">, consensusStat
 			consensusState.epochGroups[epoch.toString()] = groupInfo;
 		}
 		if (consensusDiff.removeEpochGroupsBefore !== undefined) {
-			const threshold = consensusDiff.removeEpochGroupsBefore;
+			const epochCutoff = consensusDiff.removeEpochGroupsBefore;
 			for (const key of Object.keys(consensusState.epochGroups)) {
-				if (BigInt(key) < threshold) {
+				if (BigInt(key) < epochCutoff) {
 					delete consensusState.epochGroups[key];
 				}
 			}

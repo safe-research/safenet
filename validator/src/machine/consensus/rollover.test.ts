@@ -371,10 +371,8 @@ describe("check rollover", () => {
 			poap: ["0x5afe5afe5afe01"],
 		};
 		setupGroup.mockReturnValueOnce(groupSetup);
-		const unregisterGroup = vi.fn();
 		const keyGenClient = {
 			setupGroup,
-			unregisterGroup,
 		} as unknown as KeyGenClient;
 		const machineStates: MachineStates = {
 			...MACHINE_STATES,
@@ -383,6 +381,7 @@ describe("check rollover", () => {
 		// Non-sequential epochs: 1, 2, 5, 7
 		const consensusStateWithGroups: ConsensusState = {
 			...CONSENSUS_STATE,
+			activeEpoch: 5n,
 			epochGroups: {
 				"1": { groupId: "0xgroup1", participantId: 1n },
 				"2": { groupId: "0xgroup2", participantId: 1n },
@@ -400,13 +399,10 @@ describe("check rollover", () => {
 			70n,
 		);
 
-		// previousEpoch = 5, no signing sessions → threshold = 5
+		// activeEpoch = 5, no signing sessions → epochCutoff = 5
 		// Epochs 1 and 2 should be removed (< 5)
 		expect(diff.consensus?.removeEpochGroupsBefore).toBe(5n);
 		expect(diff.consensus?.activeEpoch).toBe(7n);
-		expect(unregisterGroup).toBeCalledTimes(2);
-		expect(unregisterGroup).toBeCalledWith("0xgroup1");
-		expect(unregisterGroup).toBeCalledWith("0xgroup2");
 	});
 
 	it("should preserve epoch groups referenced by active signing sessions", async () => {
@@ -429,10 +425,8 @@ describe("check rollover", () => {
 			poap: ["0x5afe5afe5afe01"],
 		};
 		setupGroup.mockReturnValueOnce(groupSetup);
-		const unregisterGroup = vi.fn();
 		const keyGenClient = {
 			setupGroup,
-			unregisterGroup,
 		} as unknown as KeyGenClient;
 		// Active signing session referencing epoch 2
 		const signingState: SigningState = {
@@ -472,6 +466,7 @@ describe("check rollover", () => {
 		};
 		const consensusStateWithGroups: ConsensusState = {
 			...CONSENSUS_STATE,
+			activeEpoch: 5n,
 			epochGroups: {
 				"1": { groupId: "0xgroup1", participantId: 1n },
 				"2": { groupId: "0xgroup2", participantId: 1n },
@@ -489,11 +484,10 @@ describe("check rollover", () => {
 			70n,
 		);
 
-		// previousEpoch = 5, smallestSigningEpoch = 2 → threshold = min(2, 5) = 2
+		// activeEpoch = 5, smallestSigningEpoch = 2 → epochCutoff = min(2, 5) = 2
 		// Only epoch 1 should be removed (< 2)
 		expect(diff.consensus?.removeEpochGroupsBefore).toBe(2n);
-		expect(unregisterGroup).toBeCalledTimes(1);
-		expect(unregisterGroup).toBeCalledWith("0xgroup1");
+		expect(diff.consensus?.activeEpoch).toBe(7n);
 	});
 
 	it("should preserve epoch groups referenced by epoch_rollover_packet signing sessions", async () => {
@@ -516,10 +510,8 @@ describe("check rollover", () => {
 			poap: ["0x5afe5afe5afe01"],
 		};
 		setupGroup.mockReturnValueOnce(groupSetup);
-		const unregisterGroup = vi.fn();
 		const keyGenClient = {
 			setupGroup,
-			unregisterGroup,
 		} as unknown as KeyGenClient;
 		// Active signing session with epoch_rollover_packet referencing epoch 3
 		const signingState: SigningState = {
@@ -550,6 +542,7 @@ describe("check rollover", () => {
 		// Epochs 1, 2, 3 had successful keygens; epoch 5 keygen succeeded and is staged
 		const consensusStateWithGroups: ConsensusState = {
 			...CONSENSUS_STATE,
+			activeEpoch: 3n,
 			epochGroups: {
 				"1": { groupId: "0xgroup1", participantId: 1n },
 				"2": { groupId: "0xgroup2", participantId: 1n },
@@ -567,12 +560,257 @@ describe("check rollover", () => {
 			50n,
 		);
 
-		// previousEpoch = 3, smallestSigningEpoch = 3 (from rollover.activeEpoch) → threshold = min(3, 3) = 3
+		// activeEpoch = 3, smallestSigningEpoch = 3 (from rollover.activeEpoch) → epochCutoff = min(3, 3) = 3
 		// Epochs 1 and 2 should be removed (< 3)
 		expect(diff.consensus?.removeEpochGroupsBefore).toBe(3n);
-		expect(unregisterGroup).toBeCalledTimes(2);
-		expect(unregisterGroup).toBeCalledWith("0xgroup1");
-		expect(unregisterGroup).toBeCalledWith("0xgroup2");
+		expect(diff.consensus?.activeEpoch).toBe(5n);
+	});
+
+	it("should not cleanup when all existing epochs are at or above the activeEpoch cutoff", async () => {
+		const consensus = vi.fn();
+		consensus.mockReturnValueOnce(ethAddress);
+		const protocol = {
+			consensus,
+		} as unknown as SafenetProtocol;
+		const setupGroup = vi.fn();
+		const groupSetup = {
+			groupId: "0x5afe02",
+			participantsRoot: "0x5afe5afe5afe",
+			participantId: 3n,
+			commitments: [TEST_POINT],
+			encryptionPublicKey: TEST_POINT,
+			pok: {
+				r: TEST_POINT,
+				mu: 100n,
+			},
+			poap: ["0x5afe5afe5afe01"],
+		};
+		setupGroup.mockReturnValueOnce(groupSetup);
+		const keyGenClient = {
+			setupGroup,
+		} as unknown as KeyGenClient;
+		const machineStates: MachineStates = {
+			...MACHINE_STATES,
+			rollover: { id: "epoch_staged", nextEpoch: 7n },
+		};
+		// Only epochs 5 and 7 — activeEpoch = 5, epochCutoff = 5, but nothing < 5
+		const consensusStateWithGroups: ConsensusState = {
+			...CONSENSUS_STATE,
+			activeEpoch: 5n,
+			epochGroups: {
+				"5": { groupId: "0xgroup5", participantId: 1n },
+				"7": { groupId: "0xgroup7", participantId: 1n },
+			},
+		};
+		const diff = checkEpochRollover(
+			MACHINE_CONFIG,
+			protocol,
+			keyGenClient,
+			consensusStateWithGroups,
+			machineStates,
+			70n,
+		);
+
+		// activeEpoch = 5, no signing → epochCutoff = 5, but no epoch < 5 exists
+		expect(diff.consensus?.removeEpochGroupsBefore).toBeUndefined();
+		expect(diff.consensus?.activeEpoch).toBe(7n);
+	});
+
+	it("should use activeEpoch as epochCutoff when signing epoch is larger", async () => {
+		const consensus = vi.fn();
+		consensus.mockReturnValueOnce(ethAddress);
+		const protocol = {
+			consensus,
+		} as unknown as SafenetProtocol;
+		const setupGroup = vi.fn();
+		const groupSetup = {
+			groupId: "0x5afe02",
+			participantsRoot: "0x5afe5afe5afe",
+			participantId: 3n,
+			commitments: [TEST_POINT],
+			encryptionPublicKey: TEST_POINT,
+			pok: {
+				r: TEST_POINT,
+				mu: 100n,
+			},
+			poap: ["0x5afe5afe5afe01"],
+		};
+		setupGroup.mockReturnValueOnce(groupSetup);
+		const keyGenClient = {
+			setupGroup,
+		} as unknown as KeyGenClient;
+		// Signing session referencing epoch 6, which is > activeEpoch (5)
+		const signingState: SigningState = {
+			id: "waiting_for_request",
+			signers: [1n],
+			deadline: 100n,
+			packet: {
+				type: "safe_transaction_packet",
+				domain: {
+					chain: 1n,
+					consensus: zeroAddress,
+				},
+				proposal: {
+					epoch: 6n,
+					transaction: {
+						chainId: 1n,
+						safe: zeroAddress,
+						to: zeroAddress,
+						value: 0n,
+						data: "0x",
+						operation: 0,
+						safeTxGas: 0n,
+						baseGas: 0n,
+						gasPrice: 0n,
+						gasToken: zeroAddress,
+						refundReceiver: zeroAddress,
+						nonce: 0n,
+					},
+				},
+			},
+		};
+		const machineStates: MachineStates = {
+			rollover: { id: "epoch_staged", nextEpoch: 7n },
+			signing: {
+				"0xabc": signingState,
+			},
+		};
+		const consensusStateWithGroups: ConsensusState = {
+			...CONSENSUS_STATE,
+			activeEpoch: 5n,
+			epochGroups: {
+				"1": { groupId: "0xgroup1", participantId: 1n },
+				"3": { groupId: "0xgroup3", participantId: 1n },
+				"5": { groupId: "0xgroup5", participantId: 1n },
+				"7": { groupId: "0xgroup7", participantId: 1n },
+			},
+		};
+		const diff = checkEpochRollover(
+			MACHINE_CONFIG,
+			protocol,
+			keyGenClient,
+			consensusStateWithGroups,
+			machineStates,
+			70n,
+		);
+
+		// activeEpoch = 5, signingEpoch = 6, since 6 > 5 → epochCutoff = activeEpoch = 5
+		// Epochs 1 and 3 should be removed (< 5)
+		expect(diff.consensus?.removeEpochGroupsBefore).toBe(5n);
+	});
+
+	it("should use the minimum epoch across multiple signing sessions", async () => {
+		const consensus = vi.fn();
+		consensus.mockReturnValueOnce(ethAddress);
+		const protocol = {
+			consensus,
+		} as unknown as SafenetProtocol;
+		const setupGroup = vi.fn();
+		const groupSetup = {
+			groupId: "0x5afe02",
+			participantsRoot: "0x5afe5afe5afe",
+			participantId: 3n,
+			commitments: [TEST_POINT],
+			encryptionPublicKey: TEST_POINT,
+			pok: {
+				r: TEST_POINT,
+				mu: 100n,
+			},
+			poap: ["0x5afe5afe5afe01"],
+		};
+		setupGroup.mockReturnValueOnce(groupSetup);
+		const keyGenClient = {
+			setupGroup,
+		} as unknown as KeyGenClient;
+		// Two signing sessions: one at epoch 2, one at epoch 4
+		const signingState2: SigningState = {
+			id: "waiting_for_request",
+			signers: [1n],
+			deadline: 100n,
+			packet: {
+				type: "safe_transaction_packet",
+				domain: {
+					chain: 1n,
+					consensus: zeroAddress,
+				},
+				proposal: {
+					epoch: 2n,
+					transaction: {
+						chainId: 1n,
+						safe: zeroAddress,
+						to: zeroAddress,
+						value: 0n,
+						data: "0x",
+						operation: 0,
+						safeTxGas: 0n,
+						baseGas: 0n,
+						gasPrice: 0n,
+						gasToken: zeroAddress,
+						refundReceiver: zeroAddress,
+						nonce: 0n,
+					},
+				},
+			},
+		};
+		const signingState4: SigningState = {
+			id: "waiting_for_request",
+			signers: [1n],
+			deadline: 100n,
+			packet: {
+				type: "safe_transaction_packet",
+				domain: {
+					chain: 1n,
+					consensus: zeroAddress,
+				},
+				proposal: {
+					epoch: 4n,
+					transaction: {
+						chainId: 1n,
+						safe: zeroAddress,
+						to: zeroAddress,
+						value: 0n,
+						data: "0x",
+						operation: 0,
+						safeTxGas: 0n,
+						baseGas: 0n,
+						gasPrice: 0n,
+						gasToken: zeroAddress,
+						refundReceiver: zeroAddress,
+						nonce: 0n,
+					},
+				},
+			},
+		};
+		const machineStates: MachineStates = {
+			rollover: { id: "epoch_staged", nextEpoch: 7n },
+			signing: {
+				"0xabc": signingState2,
+				"0xdef": signingState4,
+			},
+		};
+		const consensusStateWithGroups: ConsensusState = {
+			...CONSENSUS_STATE,
+			activeEpoch: 5n,
+			epochGroups: {
+				"1": { groupId: "0xgroup1", participantId: 1n },
+				"2": { groupId: "0xgroup2", participantId: 1n },
+				"3": { groupId: "0xgroup3", participantId: 1n },
+				"5": { groupId: "0xgroup5", participantId: 1n },
+				"7": { groupId: "0xgroup7", participantId: 1n },
+			},
+		};
+		const diff = checkEpochRollover(
+			MACHINE_CONFIG,
+			protocol,
+			keyGenClient,
+			consensusStateWithGroups,
+			machineStates,
+			70n,
+		);
+
+		// activeEpoch = 5, smallestSigningEpoch = min(2, 4) = 2 → epochCutoff = min(2, 5) = 2
+		// Only epoch 1 should be removed (< 2)
+		expect(diff.consensus?.removeEpochGroupsBefore).toBe(2n);
 	});
 
 	it("should not cleanup when there are no previous epochs", async () => {
@@ -595,10 +833,8 @@ describe("check rollover", () => {
 			poap: ["0x5afe5afe5afe01"],
 		};
 		setupGroup.mockReturnValueOnce(groupSetup);
-		const unregisterGroup = vi.fn();
 		const keyGenClient = {
 			setupGroup,
-			unregisterGroup,
 		} as unknown as KeyGenClient;
 		const machineStates: MachineStates = {
 			...MACHINE_STATES,
@@ -621,6 +857,5 @@ describe("check rollover", () => {
 		);
 
 		expect(diff.consensus?.removeEpochGroupsBefore).toBeUndefined();
-		expect(unregisterGroup).not.toBeCalled();
 	});
 });

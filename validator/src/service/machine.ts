@@ -4,6 +4,7 @@ import type { ProtocolAction, SafenetProtocol } from "../consensus/protocol/type
 import type { SigningClient } from "../consensus/signing/client.js";
 import type { Participant } from "../consensus/storage/types.js";
 import type { VerificationEngine } from "../consensus/verify/engine.js";
+import type { GroupId } from "../frost/types.js";
 import { handleEpochStaged } from "../machine/consensus/epochStaged.js";
 import { checkEpochRollover } from "../machine/consensus/rollover.js";
 import { handleTransactionAttested } from "../machine/consensus/transactionAttested.js";
@@ -115,7 +116,18 @@ export class SafenetStateMachine {
 			.then((diffs) => {
 				const actions: ProtocolAction[] = [];
 				for (const diff of diffs) {
+					// Collect FROST groups to unregister before state is modified
+					const groupsToUnregister = this.collectGroupsToUnregister(diff);
 					actions.push(...this.#storage.applyDiff(diff));
+					// Deferred FROST group cleanup: only unregister after state is committed
+					for (const groupId of groupsToUnregister) {
+						try {
+							this.#keyGenClient.unregisterGroup(groupId);
+						} catch (error) {
+							this.#metrics.frostGroupCleanupFailures.inc();
+							this.#logger.warn(`Failed to unregister FROST group ${groupId}.`, { error: formatError(error) });
+						}
+					}
 				}
 				for (const action of actions) {
 					this.#protocol.process(action);
@@ -142,6 +154,27 @@ export class SafenetStateMachine {
 			default:
 				return this.processEventTransition(transition);
 		}
+	}
+
+	/**
+	 * Collects FROST group IDs that need to be unregistered based on the removeEpochGroupsBefore threshold.
+	 * Must be called BEFORE applyDiff modifies the state, so we can read the current epoch groups.
+	 *
+	 * Note: on restart and replay, if applyDiff already removed the epoch group records in a prior run,
+	 * this method returns an empty list and unregisterGroup will not be called again. FROST groups
+	 * orphaned by a prior incomplete cleanup are not retried automatically.
+	 */
+	private collectGroupsToUnregister(diff: StateDiff): GroupId[] {
+		const epochCutoff = diff.consensus?.removeEpochGroupsBefore;
+		if (epochCutoff === undefined) return [];
+		const epochGroups = this.#storage.consensusState().epochGroups;
+		const groupIds: GroupId[] = [];
+		for (const [key, groupInfo] of Object.entries(epochGroups)) {
+			if (BigInt(key) < epochCutoff) {
+				groupIds.push(groupInfo.groupId);
+			}
+		}
+		return groupIds;
 	}
 
 	private progressToBlock(

@@ -45,13 +45,7 @@ export const checkEpochRollover = (
 	const rolloverDiff: StateDiff = {};
 	if (currentState.id === "epoch_staged") {
 		logger?.info?.(`Rollover to epoch ${currentState.nextEpoch}`);
-		const cleanupDiff = cleanupOldEpochGroups(
-			keyGenClient,
-			consensusState,
-			machineStates,
-			currentState.nextEpoch,
-			logger,
-		);
+		const cleanupDiff = computeCleanupThreshold(consensusState, machineStates);
 		rolloverDiff.consensus = {
 			activeEpoch: currentState.nextEpoch,
 			...cleanupDiff.consensus,
@@ -83,76 +77,44 @@ export const checkEpochRollover = (
 };
 
 /**
- * Remove old epoch groups that are no longer needed.
+ * Computes the cleanup cutoff for old epoch groups.
+ *
+ * Returns a `removeEpochGroupsBefore` value in the diff, which is later used to:
+ * - Remove epoch group entries from the machine state (in `applyConsensus`)
+ * - Unregister the corresponding FROST groups from the crypto DB (in `SafenetStateMachine`)
  *
  * Strategy:
- * 1. Find the smallest epoch referenced by any active signing session
- * 2. Find the previous epoch (largest epoch key < activatingEpoch) from epochGroups
- * 3. Threshold = min(smallestSigningEpoch, previousEpoch)
- * 4. Remove all epoch groups with epoch < threshold, and unregister their FROST groups
+ * 1. Start with the currently active epoch as the cutoff (always preserved for late attestations)
+ * 2. Narrow the cutoff to the smallest epoch referenced by any active signing session, if lower
  *
  * This ensures:
- * - The activating epoch and all future epochs are always preserved
- * - The previous epoch is always preserved (for late attestations)
+ * - The active epoch and all future epochs are always preserved
  * - Any epoch still referenced by an active signing session is preserved
  */
-const cleanupOldEpochGroups = (
-	keyGenClient: KeyGenClient,
+const computeCleanupThreshold = (
 	consensusState: ConsensusState,
 	machineStates: MachineStates,
-	activatingEpoch: bigint,
-	logger?: Logger,
-): StateDiff => {
-	const epochKeys = Object.keys(consensusState.epochGroups).map(BigInt);
-	if (epochKeys.length === 0) return {};
-
-	// Find the previous epoch: the largest epoch key strictly less than the activating epoch
-	let previousEpoch: bigint | undefined;
-	for (const epoch of epochKeys) {
-		if (epoch < activatingEpoch) {
-			if (previousEpoch === undefined || epoch > previousEpoch) {
-				previousEpoch = epoch;
-			}
-		}
-	}
-
-	// No previous epochs to clean up
-	if (previousEpoch === undefined) return {};
-
-	// Find the smallest epoch referenced by any active signing session
-	let smallestSigningEpoch: bigint | undefined;
+): Pick<StateDiff, "consensus"> => {
+	// Preserve the currently active epoch; narrow down if a signing session references an older epoch.
+	let epochCutoff = consensusState.activeEpoch;
 	for (const status of Object.values(machineStates.signing)) {
 		const epoch =
 			status.packet.type === "epoch_rollover_packet"
-				? status.packet.rollover.activeEpoch
+				? // Rollover packets are signed with the active epoch's key; proposedEpoch is the new epoch being set up.
+					status.packet.rollover.activeEpoch
 				: status.packet.proposal.epoch;
-		if (smallestSigningEpoch === undefined || epoch < smallestSigningEpoch) {
-			smallestSigningEpoch = epoch;
+		if (epoch < epochCutoff) {
+			epochCutoff = epoch;
 		}
 	}
 
-	// Threshold: remove epoch groups strictly below this value
-	const threshold =
-		smallestSigningEpoch !== undefined && smallestSigningEpoch < previousEpoch ? smallestSigningEpoch : previousEpoch;
-
-	// Check if there is anything to remove
-	const hasEpochsBelowThreshold = epochKeys.some((epoch) => epoch < threshold);
-	if (!hasEpochsBelowThreshold) return {};
-
-	// Unregister FROST groups for removed epochs (cascading deletes clean up all related data)
-	for (const epoch of epochKeys) {
-		if (epoch < threshold) {
-			const groupInfo = consensusState.epochGroups[epoch.toString()];
-			if (groupInfo !== undefined) {
-				logger?.info?.(`Cleaning up epoch group for epoch ${epoch} (group ${groupInfo.groupId})`);
-				keyGenClient.unregisterGroup(groupInfo.groupId);
-			}
-		}
-	}
+	// Check if there is anything to remove.
+	const hasEpochsBelowCutoff = Object.keys(consensusState.epochGroups).some((key) => BigInt(key) < epochCutoff);
+	if (!hasEpochsBelowCutoff) return {};
 
 	return {
 		consensus: {
-			removeEpochGroupsBefore: threshold,
+			removeEpochGroupsBefore: epochCutoff,
 		},
 	};
 };
