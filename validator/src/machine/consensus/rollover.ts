@@ -96,17 +96,14 @@ const computeCleanupThreshold = (
 	machineStates: MachineStates,
 ): Pick<StateDiff, "consensus"> => {
 	// Preserve the currently active epoch; narrow down if a signing session references an older epoch.
-	let epochCutoff = consensusState.activeEpoch;
-	for (const status of Object.values(machineStates.signing)) {
+	const epochCutoff = Object.values(machineStates.signing).reduce((cutoff, status) => {
 		const epoch =
 			status.packet.type === "epoch_rollover_packet"
 				? // Rollover packets are signed with the active epoch's key; proposedEpoch is the new epoch being set up.
 					status.packet.rollover.activeEpoch
 				: status.packet.proposal.epoch;
-		if (epoch < epochCutoff) {
-			epochCutoff = epoch;
-		}
-	}
+		return epoch < cutoff ? epoch : cutoff;
+	}, consensusState.activeEpoch);
 
 	// Check if there is anything to remove.
 	const hasEpochsBelowCutoff = Object.keys(consensusState.epochGroups).some((key) => BigInt(key) < epochCutoff);
