@@ -30,11 +30,16 @@ export function useSafeTransactionDetails(chainId: bigint, safeTxHash: Hex) {
 	const [settings] = useSettings();
 	const provider = useProvider();
 	return useQuery<SafeTransaction | null, Error>({
-		queryKey: ["safeTxDetails", chainId.toString(), safeTxHash, settings.consensus],
+		queryKey: ["safeTxDetails", chainId.toString(), safeTxHash, settings.consensus, settings.maxBlockRange],
 		queryFn: () =>
 			findAny(
 				loadSafeTransactionDetails(chainId, safeTxHash),
-				loadProposedSafeTransaction({ provider, consensus: settings.consensus, safeTxHash }),
+				loadProposedSafeTransaction({
+					provider,
+					consensus: settings.consensus,
+					safeTxHash,
+					maxBlockRange: BigInt(settings.maxBlockRange),
+				}),
 			),
 		initialData: null,
 	});

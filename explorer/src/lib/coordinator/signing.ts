@@ -49,6 +49,7 @@ export const loadLatestAttestationStatus = async ({
 	epoch,
 	proposedAt,
 	attestedAt,
+	maxBlockRange,
 }: {
 	provider: PublicClient;
 	consensus: Address;
@@ -56,10 +57,11 @@ export const loadLatestAttestationStatus = async ({
 	epoch: bigint;
 	proposedAt?: bigint;
 	attestedAt?: bigint | null;
+	maxBlockRange: bigint;
 }): Promise<AttestationStatus | null> => {
 	// We use an `eth_getLogs` here directly, in order to filter on the `transactionHash` of both `TransactionProposed`
 	// and `TransactionAttested` events.
-	const fromBlock = proposedAt ?? (await getFromBlock(provider));
+	const fromBlock = proposedAt ?? (await getFromBlock(provider, maxBlockRange));
 	const toBlock = attestedAt ?? "latest";
 	const chainId = await provider.getChainId();
 	const coordinator = await loadCoordinator(consensus);

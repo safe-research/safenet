@@ -15,6 +15,7 @@ export function useAttestationStatus(safeTxHash: Hex, epoch: bigint, proposedAt:
 			epoch.toString(),
 			proposedAt.toString(),
 			attestedAt?.toString(),
+			settings.maxBlockRange,
 		],
 		queryFn: () =>
 			loadLatestAttestationStatus({
@@ -24,6 +25,7 @@ export function useAttestationStatus(safeTxHash: Hex, epoch: bigint, proposedAt:
 				epoch,
 				proposedAt,
 				attestedAt,
+				maxBlockRange: BigInt(settings.maxBlockRange),
 			}),
 		initialData: null,
 		refetchInterval: (query) => {

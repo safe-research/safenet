@@ -13,11 +13,9 @@ export function jsonReplacer(_key: string, value: unknown): unknown {
 	return value;
 }
 
-const MAX_BLOCKS_RANGE = 50000n;
-
-export const getFromBlock = async (provider: PublicClient): Promise<bigint> => {
+export const getFromBlock = async (provider: PublicClient, maxBlockRange: bigint): Promise<bigint> => {
 	const blockNumber = await provider.getBlockNumber();
-	return blockNumber > MAX_BLOCKS_RANGE ? blockNumber - MAX_BLOCKS_RANGE : 0n;
+	return blockNumber > maxBlockRange ? blockNumber - maxBlockRange : 0n;
 };
 
 export const mostRecentFirst = <T extends Pick<Log<bigint, number, false>, "blockNumber" | "logIndex">>(

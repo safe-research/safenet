@@ -12,6 +12,7 @@ const settingsFormSchema = z.object({
 	decoder: emptyToUndefined(z.url()),
 	rpc: emptyToUndefined(z.url()),
 	relayer: emptyToUndefined(z.url()),
+	maxBlockRange: z.coerce.number().int().positive().optional(),
 });
 
 type SettingsFormInput = z.input<typeof settingsFormSchema>;
@@ -59,6 +60,8 @@ function ConsensusSettingsForm({ onSubmitted }: { onSubmitted?: () => void }) {
 				label="Consensus Address"
 				placeholder="0x…"
 			/>
+
+			<FormItem id="maxBlockRange" register={register} error={errors.maxBlockRange} label="Max Block Range" />
 
 			<SubmitItem actionTitle="Save" isSubmitting={isSubmitting} disabled={!isDirty} />
 
