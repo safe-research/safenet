@@ -1,6 +1,6 @@
 import { standardSchemaResolver } from "@hookform/resolvers/standard-schema";
 import { useState } from "react";
-import { useForm } from "react-hook-form";
+import { type FieldError, useForm } from "react-hook-form";
 import { z } from "zod";
 import { ErrorItem, FormItem, SubmitItem } from "@/components/Forms";
 import { useSettings } from "@/hooks/useSettings";
@@ -12,7 +12,7 @@ const settingsFormSchema = z.object({
 	decoder: emptyToUndefined(z.url()),
 	rpc: emptyToUndefined(z.url()),
 	relayer: emptyToUndefined(z.url()),
-	maxBlockRange: emptyToUndefined(z.string().pipe(z.coerce.number().int().positive())),
+	maxBlockRange: z.coerce.number().int().positive().optional(),
 });
 
 type SettingsFormInput = z.input<typeof settingsFormSchema>;
@@ -61,7 +61,12 @@ function ConsensusSettingsForm({ onSubmitted }: { onSubmitted?: () => void }) {
 				placeholder="0x…"
 			/>
 
-			<FormItem id="maxBlockRange" register={register} error={errors.maxBlockRange} label="Max Block Range" />
+			<FormItem
+				id="maxBlockRange"
+				register={register}
+				error={errors.maxBlockRange as FieldError | undefined}
+				label="Max Block Range"
+			/>
 
 			<SubmitItem actionTitle="Save" isSubmitting={isSubmitting} disabled={!isDirty} />
 
