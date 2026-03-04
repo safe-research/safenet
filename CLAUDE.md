@@ -16,41 +16,16 @@ Technical documentation for the system is in `docs/`, where we can find an overv
 
 ## Development Commands
 
-### Install
+### Project Setup
 
-```sh
-git clone --recurse-submodules https://github.com/safe-research/safenet
-npm ci
-```
+The steps for project setup are documented in the root [README.md](./README.md#project-setup).
 
-### Build
+### Commands
 
-```sh
-npm run build                   # Build all workspaces
-npm run build -w contracts      # Solidity only (forge build --force)
-```
+All commands are specified in the root [package.json](./package.json). Workspace specific commands can be found in the `package.json` of each corresponding workspace. 
 
-### Check (lint + type-check)
+To run a command in a specific workspace use `--workspace` or `-w`.
 
-```sh
-npm run check                   # Biome + tsc all workspaces
-npm run check -w contracts      # forge fmt --check && forge lint --deny notes
-```
-
-### Fix (auto-format)
-
-```sh
-npm run fix                     # Biome auto-fix all workspaces
-npm run fix -w contracts        # forge fmt
-```
-
-### Test
-
-```sh
-npm test                        # Unit tests all workspaces (Vitest + Forge)
-npm run test -w contracts       # forge test -vvv
-npm run coverage                # Coverage reports all workspaces
-```
 
 ### Integration Tests
 
