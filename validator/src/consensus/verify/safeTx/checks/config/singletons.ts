@@ -5,8 +5,9 @@ import { buildCombinedChecks } from "../combined.js";
 
 const buildMigrationCheck = () =>
 	buildCombinedChecks([
-		buildFixedParamsCheck({ operation: 1 }),
+		buildFixedParamsCheck("invalid_migration", { operation: 1 }),
 		buildSupportedSelectorCheck(
+			"invalid_migration",
 			[
 				toFunctionSelector("function migrateSingleton()"),
 				toFunctionSelector("function migrateWithFallbackHandler()"),

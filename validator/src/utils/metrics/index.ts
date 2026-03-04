@@ -7,6 +7,7 @@ export type Metrics = {
 	eventIndex: Gauge;
 	transitions: Counter;
 	rpcRequests: Counter;
+	transactionChecks: Counter;
 	frostGroupCleanupFailures: Counter;
 };
 
@@ -47,6 +48,12 @@ export class MetricsService {
 				name: "validator_rpc_requests",
 				help: "RPC requests by method and result",
 				labelNames: ["method", "result"],
+				registers: [this.#register],
+			}),
+			transactionChecks: new Counter({
+				name: "validator_transaction_checks",
+				help: "Checked transactions by result",
+				labelNames: ["result"],
 				registers: [this.#register],
 			}),
 			frostGroupCleanupFailures: new Counter({
