@@ -115,10 +115,11 @@ export class SafenetStateMachine {
 			.then((diffs) => {
 				const actions: ProtocolAction[] = [];
 				for (const diff of diffs) {
-					// Snapshot epoch groups before applyDiff removes them from state
+					// Unregister FROST groups before applying the state diff.
+					// performTransition has already fully succeeded (we are in .then()), so this is safe.
+					// On replay, the epoch group records are already gone from state, so groupId resolves
+					// to undefined and unregisterGroup is not called again (best-effort, not retried).
 					const epochGroups = this.#storage.consensusState().epochGroups;
-					actions.push(...this.#storage.applyDiff(diff));
-					// Deferred FROST group cleanup: only unregister after state is committed.
 					for (const epoch of diff.consensus?.removeEpochGroups ?? []) {
 						const groupId = epochGroups[epoch.toString()]?.groupId;
 						if (groupId === undefined) continue;
@@ -129,6 +130,7 @@ export class SafenetStateMachine {
 							this.#logger.warn(`Failed to unregister FROST group ${groupId}.`, { error: formatError(error) });
 						}
 					}
+					actions.push(...this.#storage.applyDiff(diff));
 				}
 				for (const action of actions) {
 					this.#protocol.process(action);

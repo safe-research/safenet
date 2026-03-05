@@ -8,7 +8,7 @@ import type { VerificationEngine } from "../consensus/verify/engine.js";
 import { toPoint } from "../frost/math.js";
 import type { FrostPoint } from "../frost/types.js";
 import type { StateStorage } from "../machine/storage/types.js";
-import type { ConsensusState, MachineStates } from "../machine/types.js";
+import type { ConsensusState, MachineStates, StateDiff } from "../machine/types.js";
 import type { Logger } from "../utils/logging.js";
 import type { Metrics } from "../utils/metrics/index.js";
 import { SafenetStateMachine } from "./machine.js";
@@ -49,7 +49,14 @@ const makeStorage = (
 	rolloverState: MachineStates["rollover"],
 	activeEpoch = 0n,
 ): StateStorage => ({
-	applyDiff: vi.fn().mockReturnValue([]),
+	applyDiff: vi.fn().mockImplementation((diff: StateDiff) => {
+		// Simulate the real applyConsensus behaviour: delete epoch group entries by key.
+		// This ensures tests catch any code that reads epochGroups after applyDiff runs.
+		for (const epoch of diff.consensus?.removeEpochGroups ?? []) {
+			delete (epochGroups as Record<string, unknown>)[epoch.toString()];
+		}
+		return [];
+	}),
 	consensusState: vi.fn().mockReturnValue({
 		epochGroups,
 		activeEpoch,
