@@ -1,4 +1,13 @@
-import { type Address, formatLog, type Hex, numberToHex, type PublicClient, parseAbi, parseEventLogs } from "viem";
+import {
+	type Address,
+	ChainDoesNotSupportContract,
+	formatLog,
+	type Hex,
+	numberToHex,
+	type PublicClient,
+	parseAbi,
+	parseEventLogs,
+} from "viem";
 import {
 	COORDINATOR_SIGNING_INITIATED_EVENT,
 	COORDINATOR_SIGNING_PROGRESS_EVENTS,
@@ -31,8 +40,9 @@ const fetchCoordinator = async (provider: PublicClient, consensus: Address): Pro
 			],
 			allowFailure: true,
 		});
-	} catch {
-		// Multicall3 not available on this chain — fall back to individual calls
+	} catch (err) {
+		if (!(err instanceof ChainDoesNotSupportContract)) throw err;
+		// Multicall3 not deployed on this chain — fall back to individual calls
 	}
 
 	if (multicallResults !== undefined) {
@@ -57,7 +67,11 @@ const loadCoordinator = (provider: PublicClient, consensus: Address): Promise<Ad
 		return cachedAddresses.coordinator;
 	}
 
-	const coordinator = fetchCoordinator(provider, consensus);
+	const coordinator = fetchCoordinator(provider, consensus).catch((err) => {
+		// Don't permanently cache failures — clear so the next call retries
+		if (cachedAddresses?.consensus === consensus) cachedAddresses = undefined;
+		throw err;
+	});
 	cachedAddresses = { consensus, coordinator };
 	return coordinator;
 };

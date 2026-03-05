@@ -1,4 +1,5 @@
 import type { Address, PublicClient } from "viem";
+import { ChainDoesNotSupportContract } from "viem";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 // loadCoordinator is module-private. We test it indirectly via
@@ -14,6 +15,13 @@ const COORDINATOR_FROM_UPPER = "0xBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB" as Add
 
 // Valid 32-byte hex (required by safeTxProposalHash's hashTypedData)
 const SAFE_TX_HASH = `0x${"ab".repeat(32)}` as `0x${string}`;
+
+// Convenience factory for the error viem throws when Multicall3 is absent.
+const noMulticall = () =>
+	new ChainDoesNotSupportContract({
+		chain: { id: 1, name: "test" } as ConstructorParameters<typeof ChainDoesNotSupportContract>[0]["chain"],
+		contract: { name: "multicall3" },
+	});
 
 type LoadLatestAttestationStatus = typeof import("./signing").loadLatestAttestationStatus;
 
@@ -113,10 +121,24 @@ describe("loadCoordinator (via loadLatestAttestationStatus)", () => {
 		);
 	});
 
-	it("falls back to individual readContract when multicall throws, preferring getCoordinator()", async () => {
+	it("re-throws unexpected multicall errors without falling back", async () => {
+		const unexpectedError = new Error("RPC connection refused");
 		const provider = makeProvider({
 			multicallImpl: async () => {
-				throw new Error("Multicall3 not deployed");
+				throw unexpectedError;
+			},
+		});
+
+		const load = await loadModule();
+		await expect(load({ provider, ...baseArgs })).rejects.toThrow(unexpectedError);
+		// Individual readContract should never have been attempted
+		expect(provider.readContract).not.toHaveBeenCalled();
+	});
+
+	it("falls back to individual readContract when Multicall3 is not deployed, preferring getCoordinator()", async () => {
+		const provider = makeProvider({
+			multicallImpl: async () => {
+				throw noMulticall();
 			},
 			readContractImpl: async ({ functionName }: { functionName: string }) => {
 				if (functionName === "getCoordinator") return COORDINATOR_FROM_GETTER;
@@ -133,7 +155,7 @@ describe("loadCoordinator (via loadLatestAttestationStatus)", () => {
 	it("falls back and uses COORDINATOR() when getCoordinator() fails in fallback", async () => {
 		const provider = makeProvider({
 			multicallImpl: async () => {
-				throw new Error("Multicall3 not deployed");
+				throw noMulticall();
 			},
 			readContractImpl: async ({ functionName }: { functionName: string }) => {
 				if (functionName === "getCoordinator") throw new Error("not found");
@@ -150,7 +172,7 @@ describe("loadCoordinator (via loadLatestAttestationStatus)", () => {
 	it("throws when both fallback readContract calls fail", async () => {
 		const provider = makeProvider({
 			multicallImpl: async () => {
-				throw new Error("Multicall3 not deployed");
+				throw noMulticall();
 			},
 			readContractImpl: async () => {
 				throw new Error("not found");
@@ -177,5 +199,33 @@ describe("loadCoordinator (via loadLatestAttestationStatus)", () => {
 
 		// multicall should only be called once despite two loadLatestAttestationStatus invocations
 		expect(provider.multicall).toHaveBeenCalledTimes(1);
+	});
+
+	it("does not cache failures — retries on next call", async () => {
+		let callCount = 0;
+		const provider = makeProvider({
+			multicallImpl: async () => {
+				callCount++;
+				if (callCount === 1) {
+					return [
+						{ status: "failure", error: new Error("not found") },
+						{ status: "failure", error: new Error("not found") },
+					];
+				}
+				// Second attempt succeeds
+				return [
+					{ status: "failure", error: new Error("not found") },
+					{ status: "success", result: COORDINATOR_FROM_GETTER },
+				];
+			},
+		});
+
+		const load = await loadModule();
+		// First call fails
+		await expect(load({ provider, ...baseArgs })).rejects.toThrow();
+		// Second call succeeds because the failure was not cached
+		await load({ provider, ...baseArgs });
+
+		expect(provider.getLogs).toHaveBeenCalledWith(expect.objectContaining({ address: COORDINATOR_FROM_GETTER }));
 	});
 });
