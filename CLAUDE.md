@@ -14,6 +14,10 @@ Formal verification specs live in `certora/`. Integration and devnet scripts are
 
 Technical documentation for the system is in `docs/`, where we can find an overview, a glossary, and detailed validator information.
 
+## Documentation
+
+For detailed architecture and setup information, refer to the local [docs](./docs/) folder. Additional documentation, including information about Safe, is available on the [Safe Foundation docs](https://docs.safefoundation.org). The MCP server related to this documentation can be found at https://docs.safefoundation.org/mcp.
+
 ## Development Commands
 
 ### Project Setup
