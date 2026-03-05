@@ -10,6 +10,9 @@ const DEFAULT_SETTINGS: Settings = {
 	rpc: "https://ethereum-sepolia-rpc.publicnode.com",
 	decoder: "https://calldata.swiss-knife.xyz/decoder?calldata=",
 	maxBlockRange: 10000,
+	validatorInfo: 
+		"https://raw.githubusercontent.com/safe-fndn/safenet-validator-info/refs/heads/main/assets/safenet-validator-info.json",
+	refetchInterval: 10000,
 };
 
 const mockUpdateSettings = vi.hoisted(() => vi.fn());
@@ -35,6 +38,8 @@ describe("ConsensusSettingsForm", () => {
 		expect(screen.getByLabelText("Decoder Url")).toBeTruthy();
 		expect(screen.getByLabelText("Relayer Url")).toBeTruthy();
 		expect(screen.getByLabelText("Consensus Address")).toBeTruthy();
+		expect(screen.getByLabelText("Validator Info Url")).toBeTruthy();
+		expect(screen.getByLabelText("Refetch Interval (0 to disable refetching)")).toBeTruthy();
 	});
 
 	it("displays default values from settings", () => {
@@ -43,6 +48,8 @@ describe("ConsensusSettingsForm", () => {
 		expect(rpcInput.value).toBe(DEFAULT_SETTINGS.rpc);
 		const maxBlockRangeInput = screen.getByLabelText("Max Block Range") as HTMLInputElement;
 		expect(maxBlockRangeInput.value).toBe(String(DEFAULT_SETTINGS.maxBlockRange));
+		const refetchIntervalInput = screen.getByLabelText("Refetch Interval (0 to disable refetching)") as HTMLInputElement;
+		expect(refetchIntervalInput.value).toBe(String(DEFAULT_SETTINGS.refetchInterval));
 	});
 
 	it("save button is disabled when form is not dirty", () => {
