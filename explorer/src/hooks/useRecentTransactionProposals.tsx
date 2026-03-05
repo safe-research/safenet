@@ -14,7 +14,7 @@ export function useRecentTransactionProposals() {
 				consensus: settings.consensus,
 				maxBlockRange: BigInt(settings.maxBlockRange),
 			}),
-		refetchInterval: 10000,
+		refetchInterval: () => (settings.refetchInterval > 0 ? settings.refetchInterval : false),
 		initialData: [],
 	});
 }

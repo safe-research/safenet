@@ -11,6 +11,9 @@ const DEFAULT_SETTINGS = {
 	rpc: "https://ethereum-sepolia-rpc.publicnode.com",
 	decoder: "https://calldata.swiss-knife.xyz/decoder?calldata=",
 	maxBlockRange: 10000,
+	validatorInfo:
+		"https://raw.githubusercontent.com/safe-fndn/safenet-validator-info/refs/heads/main/assets/safenet-validator-info.json",
+	refetchInterval: 10000,
 };
 
 const settingsSchema = z.object({
@@ -19,6 +22,8 @@ const settingsSchema = z.object({
 	consensus: checkedAddressSchema.default(DEFAULT_SETTINGS.consensus),
 	relayer: z.url().optional(),
 	maxBlockRange: z.number().int().positive().default(DEFAULT_SETTINGS.maxBlockRange),
+	validatorInfo: z.url().default(DEFAULT_SETTINGS.validatorInfo),
+	refetchInterval: z.number().int().nonnegative().default(DEFAULT_SETTINGS.refetchInterval),
 });
 
 export type Settings = z.output<typeof settingsSchema>;

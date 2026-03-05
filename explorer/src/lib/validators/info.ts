@@ -8,9 +8,6 @@ export type ValidatorInfo = {
 	label: string;
 };
 
-const VALIDATOR_INFO_URL =
-	"https://raw.githubusercontent.com/safe-fndn/safenet-validator-info/refs/heads/main/assets/safenet-validator-info.json";
-
 const validatorInfoSchema = z.array(
 	z.object({
 		identifier: z.coerce.bigint(),
@@ -19,8 +16,8 @@ const validatorInfoSchema = z.array(
 	}),
 );
 
-export const loadValidatorInfoMap = async (): Promise<Map<bigint, ValidatorInfo>> => {
-	return fetch(VALIDATOR_INFO_URL).then(async (resp) => {
+export const loadValidatorInfoMap = async (source: string): Promise<Map<bigint, ValidatorInfo>> => {
+	return fetch(source).then(async (resp) => {
 		if (!resp.ok) {
 			throw new Error(`Failed to fetch validator info: ${resp.statusText}`);
 		}

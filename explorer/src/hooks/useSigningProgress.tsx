@@ -29,7 +29,7 @@ export function useAttestationStatus(safeTxHash: Hex, epoch: bigint, proposedAt:
 			}),
 		initialData: null,
 		refetchInterval: (query) => {
-			return query.state.data?.completed ? false : 1000;
+			return query.state.data?.completed !== true && settings.refetchInterval > 0 ? settings.refetchInterval : false;
 		},
 	});
 }

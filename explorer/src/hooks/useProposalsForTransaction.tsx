@@ -17,6 +17,6 @@ export function useProposalsForTransaction(proposalTxHash: Hex) {
 				maxBlockRange: BigInt(settings.maxBlockRange),
 			}),
 		initialData: [],
-		refetchInterval: 10000,
+		refetchInterval: () => (settings.refetchInterval > 0 ? settings.refetchInterval : false),
 	});
 }
