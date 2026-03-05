@@ -125,8 +125,9 @@ export class SafenetStateMachine {
 						if (groupId === undefined) continue;
 						try {
 							this.#keyGenClient.unregisterGroup(groupId);
+							this.#metrics.frostGroupCleanups.labels({ result: "success" }).inc();
 						} catch (error) {
-							this.#metrics.frostGroupCleanupFailures.inc();
+							this.#metrics.frostGroupCleanups.labels({ result: "failure" }).inc();
 							this.#logger.warn(`Failed to unregister FROST group ${groupId}.`, { error: formatError(error) });
 						}
 					}
