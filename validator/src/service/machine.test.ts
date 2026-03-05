@@ -41,7 +41,7 @@ const makeMetrics = (): Metrics =>
 		transitions: { labels: vi.fn().mockReturnValue({ inc: vi.fn() }) },
 		blockNumber: { set: vi.fn() },
 		eventIndex: { set: vi.fn() },
-		frostGroupCleanupFailures: { inc: vi.fn() },
+		frostGroupCleanups: { labels: vi.fn().mockReturnValue({ inc: vi.fn() }) },
 	}) as unknown as Metrics;
 
 const makeStorage = (
@@ -124,7 +124,8 @@ describe("SafenetStateMachine FROST group cleanup", () => {
 		const storage = makeStorage(epochGroups, { id: "epoch_staged", nextEpoch: 5n }, 3n);
 		const unregisterGroup = vi.fn();
 		const keyGenClient = makeKeyGenClient(unregisterGroup);
-		const machine = makeMachine(storage, keyGenClient, makeLogger(), makeMetrics());
+		const metrics = makeMetrics();
+		const machine = makeMachine(storage, keyGenClient, makeLogger(), metrics);
 
 		// blocksPerEpoch = 10, block 50 → currentEpoch = 5
 		machine.transition({ id: "block_new", block: 50n });
@@ -134,6 +135,8 @@ describe("SafenetStateMachine FROST group cleanup", () => {
 		expect(unregisterGroup).toHaveBeenCalledWith("0xgroup1");
 		expect(unregisterGroup).not.toHaveBeenCalledWith("0xgroup3");
 		expect(unregisterGroup).not.toHaveBeenCalledWith("0xgroup5");
+		expect(metrics.frostGroupCleanups.labels).toHaveBeenCalledWith({ result: "success" });
+		expect(metrics.frostGroupCleanups.labels).not.toHaveBeenCalledWith({ result: "failure" });
 	});
 
 	it("should tolerate unregisterGroup failure, log a warning, and increment the metric", async () => {
@@ -155,7 +158,8 @@ describe("SafenetStateMachine FROST group cleanup", () => {
 		await flushAsync();
 
 		expect(unregisterGroup).toHaveBeenCalledOnce();
-		expect(metrics.frostGroupCleanupFailures.inc).toHaveBeenCalledOnce();
+		expect(metrics.frostGroupCleanups.labels).toHaveBeenCalledWith({ result: "failure" });
+		expect(metrics.frostGroupCleanups.labels).not.toHaveBeenCalledWith({ result: "success" });
 		expect(logger.warn).toHaveBeenCalledWith(
 			expect.stringContaining("0xgroup1"),
 			expect.objectContaining({ error: expect.any(Error) }),
