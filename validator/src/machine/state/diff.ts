@@ -38,6 +38,11 @@ export const applyConsensus = (diff: Pick<StateDiff, "consensus">, consensusStat
 			const [epoch, groupInfo] = consensusDiff.epochGroup;
 			consensusState.epochGroups[epoch.toString()] = groupInfo;
 		}
+		if (consensusDiff.removeEpochGroups !== undefined) {
+			for (const epoch of consensusDiff.removeEpochGroups) {
+				delete consensusState.epochGroups[epoch.toString()];
+			}
+		}
 		if (consensusDiff.signatureIdToMessage !== undefined) {
 			const [signatureId, message] = consensusDiff.signatureIdToMessage;
 			if (message === undefined) {

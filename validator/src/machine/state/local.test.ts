@@ -253,4 +253,47 @@ describe("LocalConsensusStates", () => {
 		});
 		expect(immutableState.signatureIdToMessage["0x5afe5afe23"]).toBe(zeroHash);
 	});
+
+	it("should remove the epoch groups listed in removeEpochGroups", () => {
+		const immutableState: ConsensusState = {
+			activeEpoch: 7n,
+			groupPendingNonces: {},
+			epochGroups: {
+				"1": { groupId: "0xgroup1", participantId: 1n },
+				"3": { groupId: "0xgroup3", participantId: 1n },
+				"5": { groupId: "0xgroup5", participantId: 1n },
+				"7": { groupId: "0xgroup7", participantId: 1n },
+			},
+			signatureIdToMessage: {},
+		};
+		const localState = new LocalConsensusStates(immutableState);
+		const diff: StateDiff = {
+			consensus: {
+				removeEpochGroups: [1n, 3n],
+			},
+		};
+		localState.apply(diff);
+
+		// Epochs 1 and 3 should be removed (< 5), epochs 5 and 7 should remain
+		expect(localState.epochGroups["1"]).toBeUndefined();
+		expect(localState.epochGroups["3"]).toBeUndefined();
+		expect(localState.epochGroups["5"]).toStrictEqual({
+			groupId: "0xgroup5",
+			participantId: 1n,
+		});
+		expect(localState.epochGroups["7"]).toStrictEqual({
+			groupId: "0xgroup7",
+			participantId: 1n,
+		});
+
+		// Check that immutable state was not touched
+		expect(immutableState.epochGroups["1"]).toStrictEqual({
+			groupId: "0xgroup1",
+			participantId: 1n,
+		});
+		expect(immutableState.epochGroups["3"]).toStrictEqual({
+			groupId: "0xgroup3",
+			participantId: 1n,
+		});
+	});
 });

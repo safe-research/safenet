@@ -8,6 +8,7 @@ export type Metrics = {
 	transitions: Counter;
 	rpcRequests: Counter;
 	transactionChecks: Counter;
+	frostGroupCleanupFailures: Counter;
 };
 
 export type MetricsServiceOptions = {
@@ -53,6 +54,11 @@ export class MetricsService {
 				name: "validator_transaction_checks",
 				help: "Checked transactions by result",
 				labelNames: ["result"],
+				registers: [this.#register],
+			}),
+			frostGroupCleanupFailures: new Counter({
+				name: "validator_frost_group_cleanup_failures",
+				help: "Number of times a FROST group failed to unregister during epoch cleanup",
 				registers: [this.#register],
 			}),
 		};

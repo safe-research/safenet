@@ -115,6 +115,21 @@ export class SafenetStateMachine {
 			.then((diffs) => {
 				const actions: ProtocolAction[] = [];
 				for (const diff of diffs) {
+					// Unregister FROST groups before applying the state diff.
+					// performTransition has already fully succeeded (we are in .then()), so this is safe.
+					// On replay, the epoch group records are already gone from state, so groupId resolves
+					// to undefined and unregisterGroup is not called again (best-effort, not retried).
+					const epochGroups = this.#storage.consensusState().epochGroups;
+					for (const epoch of diff.consensus?.removeEpochGroups ?? []) {
+						const groupId = epochGroups[epoch.toString()]?.groupId;
+						if (groupId === undefined) continue;
+						try {
+							this.#keyGenClient.unregisterGroup(groupId);
+						} catch (error) {
+							this.#metrics.frostGroupCleanupFailures.inc();
+							this.#logger.warn(`Failed to unregister FROST group ${groupId}.`, { error: formatError(error) });
+						}
+					}
 					actions.push(...this.#storage.applyDiff(diff));
 				}
 				for (const action of actions) {
@@ -155,7 +170,15 @@ export class SafenetStateMachine {
 		this.#lastProcessedBlock = block;
 		this.#lastProcessedIndex = -1;
 		state.apply(
-			checkEpochRollover(this.#machineConfig, this.#protocol, this.#keyGenClient, state.machines, block, this.#logger),
+			checkEpochRollover(
+				this.#machineConfig,
+				this.#protocol,
+				this.#keyGenClient,
+				state.consensus,
+				state.machines,
+				block,
+				this.#logger,
+			),
 		);
 		state.apply(
 			checkKeyGenTimeouts(this.#machineConfig, this.#protocol, this.#keyGenClient, state.machines, block, this.#logger),

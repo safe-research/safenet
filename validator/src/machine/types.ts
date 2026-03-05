@@ -107,6 +107,7 @@ export type ConsensusDiff = {
 	activeEpoch?: bigint;
 	genesisGroupId?: GroupId;
 	epochGroup?: [bigint, GroupInfo];
+	removeEpochGroups?: bigint[];
 	signatureIdToMessage?: [SignatureId, Hex?];
 };
 

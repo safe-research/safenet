@@ -3,12 +3,13 @@ import type { SafenetProtocol } from "../../consensus/protocol/types.js";
 import type { Logger } from "../../utils/logging.js";
 import { calcGroupContext } from "../keygen/group.js";
 import { triggerKeyGen } from "../keygen/trigger.js";
-import type { MachineConfig, MachineStates, StateDiff } from "../types.js";
+import type { ConsensusState, MachineConfig, MachineStates, StateDiff } from "../types.js";
 
 export const checkEpochRollover = (
 	machineConfig: MachineConfig,
 	protocol: SafenetProtocol,
 	keyGenClient: KeyGenClient,
+	consensusState: ConsensusState,
 	machineStates: MachineStates,
 	block: bigint,
 	logger?: Logger,
@@ -44,8 +45,10 @@ export const checkEpochRollover = (
 	const rolloverDiff: StateDiff = {};
 	if (currentState.id === "epoch_staged") {
 		logger?.info?.(`Rollover to epoch ${currentState.nextEpoch}`);
+		const cleanupDiff = computeCleanupThreshold(consensusState, machineStates);
 		rolloverDiff.consensus = {
 			activeEpoch: currentState.nextEpoch,
+			...cleanupDiff.consensus,
 		};
 	}
 
@@ -70,5 +73,47 @@ export const checkEpochRollover = (
 	return {
 		...diff,
 		consensus,
+	};
+};
+
+/**
+ * Computes the explicit list of epoch groups to remove.
+ *
+ * Returns a `removeEpochGroups` value in the diff, which is later used to:
+ * - Remove those epoch group entries from the machine state (in `applyConsensus`)
+ * - Unregister the corresponding FROST groups from the crypto DB (in `SafenetStateMachine`)
+ *
+ * Strategy:
+ * 1. Start with the currently active epoch as the cutoff (always preserved for late attestations)
+ * 2. Narrow the cutoff to the smallest epoch referenced by any active signing session, if lower
+ * 3. Collect all epoch group keys strictly below that cutoff
+ *
+ * This ensures:
+ * - The active epoch and all future epochs are always preserved
+ * - Any epoch still referenced by an active signing session is preserved
+ */
+const computeCleanupThreshold = (
+	consensusState: ConsensusState,
+	machineStates: MachineStates,
+): Pick<StateDiff, "consensus"> => {
+	// Preserve the currently active epoch; narrow down if a signing session references an older epoch.
+	const epochCutoff = Object.values(machineStates.signing).reduce((cutoff, status) => {
+		const epoch =
+			status.packet.type === "epoch_rollover_packet"
+				? // Rollover packets are signed with the active epoch's key; proposedEpoch is the new epoch being set up.
+					status.packet.rollover.activeEpoch
+				: status.packet.proposal.epoch;
+		return epoch < cutoff ? epoch : cutoff;
+	}, consensusState.activeEpoch);
+
+	const epochsToRemove = Object.keys(consensusState.epochGroups)
+		.map(BigInt)
+		.filter((epoch) => epoch < epochCutoff);
+	if (epochsToRemove.length === 0) return {};
+
+	return {
+		consensus: {
+			removeEpochGroups: epochsToRemove,
+		},
 	};
 };
