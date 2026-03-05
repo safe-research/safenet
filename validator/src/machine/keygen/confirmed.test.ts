@@ -1,24 +1,18 @@
 import { keccak256, zeroHash } from "viem";
 import { entryPoint06Address, entryPoint07Address, entryPoint08Address } from "viem/account-abstraction";
 import { describe, expect, it, vi } from "vitest";
+import { TEST_POINT } from "../../__tests__/data/machine.js";
 import type { KeyGenClient } from "../../consensus/keyGen/client.js";
 import type { SafenetProtocol } from "../../consensus/protocol/types.js";
 import type { SigningClient } from "../../consensus/signing/client.js";
 import type { VerificationEngine } from "../../consensus/verify/engine.js";
 import type { EpochRolloverPacket } from "../../consensus/verify/rollover/schemas.js";
-import { toPoint } from "../../frost/math.js";
-import type { FrostPoint } from "../../frost/types.js";
 import { jsonReplacer } from "../../utils/json.js";
 import type { KeyGenConfirmedEvent } from "../transitions/types.js";
 import type { ConsensusState, MachineConfig, MachineStates, RolloverState, SigningState } from "../types.js";
 import { handleKeyGenConfirmed } from "./confirmed.js";
 
 // --- Test Data ---
-const TEST_POINT: FrostPoint = toPoint({
-	x: 73844941487532555987364396775795076447946974313865618280135872376303125438365n,
-	y: 29462187596282402403443212507099371496473451788807502182979305411073244917417n,
-});
-
 const EPOCH_PACKET: EpochRolloverPacket = {
 	type: "epoch_rollover_packet",
 	domain: {
