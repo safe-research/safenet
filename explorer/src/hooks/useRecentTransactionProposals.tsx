@@ -7,8 +7,13 @@ export function useRecentTransactionProposals() {
 	const [settings] = useSettings();
 	const provider = useProvider();
 	return useQuery<TransactionProposal[], Error>({
-		queryKey: ["recentProposals", settings.consensus],
-		queryFn: () => loadTransactionProposals({ provider, consensus: settings.consensus }),
+		queryKey: ["recentProposals", settings.consensus, settings.maxBlockRange],
+		queryFn: () =>
+			loadTransactionProposals({
+				provider,
+				consensus: settings.consensus,
+				maxBlockRange: BigInt(settings.maxBlockRange),
+			}),
 		refetchInterval: 10000,
 		initialData: [],
 	});

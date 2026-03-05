@@ -1,6 +1,6 @@
 import { standardSchemaResolver } from "@hookform/resolvers/standard-schema";
 import { useState } from "react";
-import { useForm } from "react-hook-form";
+import { type FieldError, useForm } from "react-hook-form";
 import { z } from "zod";
 import { ErrorItem, FormItem, SubmitItem } from "@/components/Forms";
 import { useSettings } from "@/hooks/useSettings";
@@ -12,6 +12,7 @@ const settingsFormSchema = z.object({
 	decoder: emptyToUndefined(z.url()),
 	rpc: emptyToUndefined(z.url()),
 	relayer: emptyToUndefined(z.url()),
+	maxBlockRange: z.coerce.number().int().positive().optional(),
 });
 
 type SettingsFormInput = z.input<typeof settingsFormSchema>;
@@ -49,6 +50,12 @@ function ConsensusSettingsForm({ onSubmitted }: { onSubmitted?: () => void }) {
 	return (
 		<form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
 			<FormItem id="rpc" register={register} error={errors.rpc} label="RPC Url" />
+			<FormItem
+				id="maxBlockRange"
+				register={register}
+				error={errors.maxBlockRange as FieldError | undefined}
+				label="Max Block Range"
+			/>
 			<FormItem id="decoder" register={register} error={errors.decoder} label="Decoder Url" />
 			<FormItem id="relayer" register={register} error={errors.relayer} label="Relayer Url" />
 

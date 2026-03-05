@@ -10,6 +10,7 @@ const DEFAULT_SETTINGS = {
 	consensus: "0x49Db717Adec0D22235A73C3a9c2ea57AB0bC2353" as Address,
 	rpc: "https://ethereum-sepolia-rpc.publicnode.com",
 	decoder: "https://calldata.swiss-knife.xyz/decoder?calldata=",
+	maxBlockRange: 10000,
 };
 
 const settingsSchema = z.object({
@@ -17,6 +18,7 @@ const settingsSchema = z.object({
 	decoder: z.url().default(DEFAULT_SETTINGS.decoder),
 	consensus: checkedAddressSchema.default(DEFAULT_SETTINGS.consensus),
 	relayer: z.url().optional(),
+	maxBlockRange: z.number().int().positive().default(DEFAULT_SETTINGS.maxBlockRange),
 });
 
 export type Settings = z.output<typeof settingsSchema>;

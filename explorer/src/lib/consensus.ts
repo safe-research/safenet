@@ -85,12 +85,14 @@ export const loadProposedSafeTransaction = async ({
 	provider,
 	consensus,
 	safeTxHash,
+	maxBlockRange,
 }: {
 	provider: PublicClient;
 	consensus: Address;
 	safeTxHash: Hex;
+	maxBlockRange: bigint;
 }): Promise<SafeTransaction | null> => {
-	const fromBlock = await getFromBlock(provider);
+	const fromBlock = await getFromBlock(provider, maxBlockRange);
 	const logs = await provider.getLogs({
 		address: consensus,
 		event: getAbiItem({
@@ -110,14 +112,16 @@ export const loadTransactionProposals = async ({
 	provider,
 	consensus,
 	safeTxHash,
+	maxBlockRange,
 }: {
 	provider: PublicClient;
 	consensus: Address;
 	safeTxHash?: Hex;
+	maxBlockRange: bigint;
 }): Promise<TransactionProposal[]> => {
 	// We use an `eth_getLogs` here directly, in order to filter on the `transactionHash` of both `TransactionProposed`
 	// and `TransactionAttested` events.
-	const fromBlock = await getFromBlock(provider);
+	const fromBlock = await getFromBlock(provider, maxBlockRange);
 	const logs = await provider.request({
 		method: "eth_getLogs",
 		params: [

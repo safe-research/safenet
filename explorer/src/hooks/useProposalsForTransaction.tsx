@@ -8,8 +8,14 @@ export function useProposalsForTransaction(proposalTxHash: Hex) {
 	const [settings] = useSettings();
 	const provider = useProvider();
 	return useQuery<TransactionProposal[], Error>({
-		queryKey: ["proposalsForTransactionHash", settings.consensus, proposalTxHash],
-		queryFn: () => loadTransactionProposals({ provider, consensus: settings.consensus, safeTxHash: proposalTxHash }),
+		queryKey: ["proposalsForTransactionHash", settings.consensus, proposalTxHash, settings.maxBlockRange],
+		queryFn: () =>
+			loadTransactionProposals({
+				provider,
+				consensus: settings.consensus,
+				safeTxHash: proposalTxHash,
+				maxBlockRange: BigInt(settings.maxBlockRange),
+			}),
 		initialData: [],
 		refetchInterval: 10000,
 	});
