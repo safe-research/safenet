@@ -10,7 +10,7 @@ const DEFAULT_SETTINGS: Settings = {
 	rpc: "https://ethereum-sepolia-rpc.publicnode.com",
 	decoder: "https://calldata.swiss-knife.xyz/decoder?calldata=",
 	maxBlockRange: 10000,
-	validatorInfo: 
+	validatorInfo:
 		"https://raw.githubusercontent.com/safe-fndn/safenet-validator-info/refs/heads/main/assets/safenet-validator-info.json",
 	refetchInterval: 10000,
 };
@@ -48,7 +48,9 @@ describe("ConsensusSettingsForm", () => {
 		expect(rpcInput.value).toBe(DEFAULT_SETTINGS.rpc);
 		const maxBlockRangeInput = screen.getByLabelText("Max Block Range") as HTMLInputElement;
 		expect(maxBlockRangeInput.value).toBe(String(DEFAULT_SETTINGS.maxBlockRange));
-		const refetchIntervalInput = screen.getByLabelText("Refetch Interval (0 to disable refetching)") as HTMLInputElement;
+		const refetchIntervalInput = screen.getByLabelText(
+			"Refetch Interval (0 to disable refetching)",
+		) as HTMLInputElement;
 		expect(refetchIntervalInput.value).toBe(String(DEFAULT_SETTINGS.refetchInterval));
 	});
 
