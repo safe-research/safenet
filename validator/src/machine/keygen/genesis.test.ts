@@ -1,19 +1,13 @@
 import { maxUint64, zeroHash } from "viem";
 import { entryPoint06Address, entryPoint07Address, entryPoint08Address } from "viem/account-abstraction";
 import { describe, expect, it, vi } from "vitest";
+import { TEST_POINT } from "../../__tests__/data/machine.js";
 import type { KeyGenClient } from "../../consensus/keyGen/client.js";
-import { toPoint } from "../../frost/math.js";
-import type { FrostPoint } from "../../frost/types.js";
 import type { KeyGenEvent } from "../transitions/types.js";
 import type { ConsensusState, MachineConfig, MachineStates } from "../types.js";
 import { handleGenesisKeyGen } from "./genesis.js";
 
 // --- Test Data ---
-const TEST_POINT: FrostPoint = toPoint({
-	x: 73844941487532555987364396775795076447946974313865618280135872376303125438365n,
-	y: 29462187596282402403443212507099371496473451788807502182979305411073244917417n,
-});
-
 const MACHINE_STATES: MachineStates = {
 	rollover: { id: "waiting_for_genesis" },
 	signing: {},

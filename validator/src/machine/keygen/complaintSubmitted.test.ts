@@ -6,9 +6,9 @@ import {
 	entryPoint09Address,
 } from "viem/account-abstraction";
 import { describe, expect, it, vi } from "vitest";
+import { makeGroupSetup } from "../../__tests__/data/machine.js";
 import type { KeyGenClient } from "../../consensus/keyGen/client.js";
 import type { SafenetProtocol } from "../../consensus/protocol/types.js";
-import { toPoint } from "../../frost/math.js";
 import type { KeyGenComplaintSubmittedEvent } from "../transitions/types.js";
 import type { MachineConfig, MachineStates } from "../types.js";
 import { handleComplaintSubmitted } from "./complaintSubmitted.js";
@@ -24,10 +24,6 @@ const EVENT: KeyGenComplaintSubmittedEvent = {
 	accused: 2n,
 	compromised: false,
 };
-const TEST_POINT = toPoint({
-	x: 73844941487532555987364396775795076447946974313865618280135872376303125438365n,
-	y: 29462187596282402403443212507099371496473451788807502182979305411073244917417n,
-});
 const MACHINE_CONFIG: MachineConfig = {
 	defaultParticipants: [
 		{ id: 1n, address: entryPoint06Address },
@@ -40,10 +36,13 @@ const MACHINE_CONFIG: MachineConfig = {
 	blocksPerEpoch: 10n,
 };
 
+const makeProtocol = (): SafenetProtocol =>
+	({ consensus: vi.fn().mockReturnValue(ethAddress) }) as unknown as SafenetProtocol;
+
 // --- Tests ---
 describe("complaint submitted", () => {
 	it("should not handle event if in unexpected state", async () => {
-		const protocol = { consensus: vi.fn().mockReturnValue(ethAddress) } as unknown as SafenetProtocol;
+		const protocol = makeProtocol();
 		const keyGenClient = {} as unknown as KeyGenClient;
 		const machineStates: MachineStates = {
 			rollover: {
@@ -59,7 +58,7 @@ describe("complaint submitted", () => {
 	});
 
 	it("should not handle complaint if unexpected group id", async () => {
-		const protocol = { consensus: vi.fn().mockReturnValue(ethAddress) } as unknown as SafenetProtocol;
+		const protocol = makeProtocol();
 		const keyGenClient = {} as unknown as KeyGenClient;
 		const machineStates: MachineStates = {
 			rollover: {
@@ -80,7 +79,7 @@ describe("complaint submitted", () => {
 	});
 
 	it("should not handle complaint in collecting confirmations if complaint deadline has passed", async () => {
-		const protocol = { consensus: vi.fn().mockReturnValue(ethAddress) } as unknown as SafenetProtocol;
+		const protocol = makeProtocol();
 		const keyGenClient = {} as unknown as KeyGenClient;
 		const machineStates: MachineStates = {
 			rollover: {
@@ -109,7 +108,7 @@ describe("complaint submitted", () => {
 			participantId,
 			threshold,
 		} as unknown as KeyGenClient;
-		const protocol = { consensus: vi.fn().mockReturnValue(ethAddress) } as unknown as SafenetProtocol;
+		const protocol = makeProtocol();
 		const machineStates: MachineStates = {
 			rollover: {
 				id: "collecting_shares",
@@ -145,7 +144,7 @@ describe("complaint submitted", () => {
 			participantId,
 			threshold,
 		} as unknown as KeyGenClient;
-		const protocol = { consensus: vi.fn().mockReturnValue(ethAddress) } as unknown as SafenetProtocol;
+		const protocol = makeProtocol();
 		const machineStates: MachineStates = {
 			rollover: {
 				id: "collecting_confirmations",
@@ -187,7 +186,7 @@ describe("complaint submitted", () => {
 			participantId,
 			threshold,
 		} as unknown as KeyGenClient;
-		const protocol = { consensus: vi.fn().mockReturnValue(ethAddress) } as unknown as SafenetProtocol;
+		const protocol = makeProtocol();
 		const machineStates: MachineStates = {
 			rollover: {
 				id: "collecting_shares",
@@ -226,7 +225,7 @@ describe("complaint submitted", () => {
 			participantId,
 			threshold,
 		} as unknown as KeyGenClient;
-		const protocol = { consensus: vi.fn().mockReturnValue(ethAddress) } as unknown as SafenetProtocol;
+		const protocol = makeProtocol();
 		const machineStates: MachineStates = {
 			rollover: {
 				id: "collecting_shares",
@@ -268,7 +267,7 @@ describe("complaint submitted", () => {
 			participantId,
 			threshold,
 		} as unknown as KeyGenClient;
-		const protocol = { consensus: vi.fn().mockReturnValue(ethAddress) } as unknown as SafenetProtocol;
+		const protocol = makeProtocol();
 		const machineStates: MachineStates = {
 			rollover: {
 				id: "collecting_shares",
@@ -306,18 +305,7 @@ describe("complaint submitted", () => {
 	});
 
 	it("should restart key gen when complaints exceed threshold", async () => {
-		const groupSetup = {
-			groupId: "0x5afe02",
-			participantsRoot: "0x5afe5afe5afe",
-			participantId: 1n,
-			commitments: [TEST_POINT],
-			encryptionPublicKey: TEST_POINT,
-			pok: {
-				r: TEST_POINT,
-				mu: 100n,
-			},
-			poap: ["0x5afe5afe5afe01"],
-		};
+		const groupSetup = makeGroupSetup(1n);
 		const participants = [
 			{ id: 1n, address: entryPoint06Address },
 			{ id: 2n, address: entryPoint07Address },

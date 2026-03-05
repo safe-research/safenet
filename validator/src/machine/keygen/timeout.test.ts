@@ -1,18 +1,13 @@
 import { ethAddress, zeroHash } from "viem";
 import { entryPoint06Address, entryPoint07Address, entryPoint08Address } from "viem/account-abstraction";
 import { describe, expect, it, vi } from "vitest";
+import { makeGroupSetup } from "../../__tests__/data/machine.js";
 import type { KeyGenClient } from "../../consensus/keyGen/client.js";
 import type { SafenetProtocol } from "../../consensus/protocol/types.js";
-import { toPoint } from "../../frost/math.js";
-import type { FrostPoint } from "../../frost/types.js";
 import type { MachineConfig, MachineStates, RolloverState } from "../types.js";
 import { checkKeyGenTimeouts } from "./timeouts.js";
 
 // --- Test Data ---
-const TEST_POINT: FrostPoint = toPoint({
-	x: 73844941487532555987364396775795076447946974313865618280135872376303125438365n,
-	y: 29462187596282402403443212507099371496473451788807502182979305411073244917417n,
-});
 const MACHINE_CONFIG: MachineConfig = {
 	defaultParticipants: [
 		{
@@ -137,18 +132,7 @@ describe("key gen timeouts", () => {
 			expect(diff).toStrictEqual({});
 		});
 		it("should trigger key gen after deadline has passed", () => {
-			const groupSetup = {
-				groupId: "0x5afe02",
-				participantsRoot: "0x5afe5afe5afe",
-				participantId: 7n,
-				commitments: [TEST_POINT],
-				encryptionPublicKey: TEST_POINT,
-				pok: {
-					r: TEST_POINT,
-					mu: 100n,
-				},
-				poap: ["0x5afe5afe5afe01"],
-			};
+			const groupSetup = makeGroupSetup(7n);
 			const consensus = vi.fn();
 			consensus.mockReturnValueOnce(ethAddress);
 			const protocol = {

@@ -1,12 +1,11 @@
 import { zeroAddress, zeroHash } from "viem";
 import { describe, expect, it, vi } from "vitest";
+import { TEST_POINT } from "../__tests__/data/machine.js";
 import type { KeyGenClient } from "../consensus/keyGen/client.js";
 import type { SafenetProtocol } from "../consensus/protocol/types.js";
 import type { SigningClient } from "../consensus/signing/client.js";
 import type { Participant } from "../consensus/storage/types.js";
 import type { VerificationEngine } from "../consensus/verify/engine.js";
-import { toPoint } from "../frost/math.js";
-import type { FrostPoint } from "../frost/types.js";
 import type { StateStorage } from "../machine/storage/types.js";
 import type { ConsensusState, MachineStates, StateDiff } from "../machine/types.js";
 import type { Logger } from "../utils/logging.js";
@@ -14,11 +13,6 @@ import type { Metrics } from "../utils/metrics/index.js";
 import { SafenetStateMachine } from "./machine.js";
 
 // --- Test Data ---
-
-const TEST_POINT: FrostPoint = toPoint({
-	x: 73844941487532555987364396775795076447946974313865618280135872376303125438365n,
-	y: 29462187596282402403443212507099371496473451788807502182979305411073244917417n,
-});
 
 const PARTICIPANTS: Participant[] = [
 	{ id: 1n, address: zeroAddress },

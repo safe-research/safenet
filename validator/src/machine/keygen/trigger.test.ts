@@ -1,18 +1,12 @@
 import { zeroHash } from "viem";
 import { entryPoint06Address, entryPoint07Address, entryPoint08Address } from "viem/account-abstraction";
 import { describe, expect, it, vi } from "vitest";
+import { makeGroupSetup } from "../../__tests__/data/machine.js";
 import type { KeyGenClient } from "../../consensus/keyGen/client.js";
-import { toPoint } from "../../frost/math.js";
-import type { FrostPoint } from "../../frost/types.js";
 import type { MachineConfig } from "../types.js";
 import { triggerKeyGen } from "./trigger.js";
 
 // --- Test Data ---
-const TEST_POINT: FrostPoint = toPoint({
-	x: 73844941487532555987364396775795076447946974313865618280135872376303125438365n,
-	y: 29462187596282402403443212507099371496473451788807502182979305411073244917417n,
-});
-
 const PARTICIPANTS = [
 	{
 		id: 1n,
@@ -91,18 +85,7 @@ describe("trigger key gen", () => {
 	it("should trigger key generation and return the correct state diff", () => {
 		const context = "0x00000000eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee0000000000000002";
 		const setupGroup = vi.fn();
-		const groupSetup = {
-			groupId: "0x5afe02",
-			participantsRoot: "0x5afe5afe5afe",
-			participantId: 3n,
-			commitments: [TEST_POINT],
-			encryptionPublicKey: TEST_POINT,
-			pok: {
-				r: TEST_POINT,
-				mu: 100n,
-			},
-			poap: ["0x5afe5afe5afe01"],
-		};
+		const groupSetup = makeGroupSetup(3n);
 		setupGroup.mockReturnValueOnce(groupSetup);
 		const keyGenClient = {
 			setupGroup,

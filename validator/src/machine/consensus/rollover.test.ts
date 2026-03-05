@@ -1,18 +1,12 @@
 import { ethAddress, zeroAddress, zeroHash } from "viem";
 import { describe, expect, it, vi } from "vitest";
+import { makeGroupSetup } from "../../__tests__/data/machine.js";
 import type { KeyGenClient } from "../../consensus/keyGen/client.js";
 import type { SafenetProtocol } from "../../consensus/protocol/types.js";
-import { toPoint } from "../../frost/math.js";
-import type { FrostPoint } from "../../frost/types.js";
 import type { ConsensusState, MachineConfig, MachineStates, SigningState } from "../types.js";
 import { checkEpochRollover } from "./rollover.js";
 
 // --- Test Data ---
-const TEST_POINT: FrostPoint = toPoint({
-	x: 73844941487532555987364396775795076447946974313865618280135872376303125438365n,
-	y: 29462187596282402403443212507099371496473451788807502182979305411073244917417n,
-});
-
 const MACHINE_CONFIG: MachineConfig = {
 	defaultParticipants: [
 		{
@@ -50,19 +44,33 @@ const CONSENSUS_STATE: ConsensusState = {
 	signatureIdToMessage: {},
 };
 
+const GROUP_SETUP = makeGroupSetup(3n);
+
+const EMPTY_PROTOCOL = {} as unknown as SafenetProtocol;
+const EMPTY_KEY_GEN_CLIENT = {} as unknown as KeyGenClient;
+
+const makeProtocol = (): SafenetProtocol =>
+	({ consensus: vi.fn().mockReturnValueOnce(ethAddress) }) as unknown as SafenetProtocol;
+
+const makeKeyGenClient = (): KeyGenClient =>
+	({ setupGroup: vi.fn().mockReturnValueOnce(GROUP_SETUP) }) as unknown as KeyGenClient;
+
 // --- Tests ---
 describe("check rollover", () => {
 	it("should not trigger key gen in genesis state", async () => {
-		const protocol = {} as unknown as SafenetProtocol;
-		const keyGenClient = {} as unknown as KeyGenClient;
-		const diff = checkEpochRollover(MACHINE_CONFIG, protocol, keyGenClient, CONSENSUS_STATE, MACHINE_STATES, 1n);
+		const diff = checkEpochRollover(
+			MACHINE_CONFIG,
+			EMPTY_PROTOCOL,
+			EMPTY_KEY_GEN_CLIENT,
+			CONSENSUS_STATE,
+			MACHINE_STATES,
+			1n,
+		);
 
 		expect(diff).toStrictEqual({});
 	});
 
 	it("should not abort genesis key gen", async () => {
-		const protocol = {} as unknown as SafenetProtocol;
-		const keyGenClient = {} as unknown as KeyGenClient;
 		const machineStates: MachineStates = {
 			...MACHINE_STATES,
 			rollover: {
@@ -72,14 +80,19 @@ describe("check rollover", () => {
 				deadline: 22n,
 			},
 		};
-		const diff = checkEpochRollover(MACHINE_CONFIG, protocol, keyGenClient, CONSENSUS_STATE, machineStates, 1n);
+		const diff = checkEpochRollover(
+			MACHINE_CONFIG,
+			EMPTY_PROTOCOL,
+			EMPTY_KEY_GEN_CLIENT,
+			CONSENSUS_STATE,
+			machineStates,
+			1n,
+		);
 
 		expect(diff).toStrictEqual({});
 	});
 
 	it("should not abort genesis key gen in skipped state (this is an expected halt condition)", async () => {
-		const protocol = {} as unknown as SafenetProtocol;
-		const keyGenClient = {} as unknown as KeyGenClient;
 		const machineStates: MachineStates = {
 			...MACHINE_STATES,
 			rollover: {
@@ -87,14 +100,19 @@ describe("check rollover", () => {
 				nextEpoch: 0n,
 			},
 		};
-		const diff = checkEpochRollover(MACHINE_CONFIG, protocol, keyGenClient, CONSENSUS_STATE, machineStates, 1n);
+		const diff = checkEpochRollover(
+			MACHINE_CONFIG,
+			EMPTY_PROTOCOL,
+			EMPTY_KEY_GEN_CLIENT,
+			CONSENSUS_STATE,
+			machineStates,
+			1n,
+		);
 
 		expect(diff).toStrictEqual({});
 	});
 
 	it("should mark next epoch as skipped when skipping genesis", async () => {
-		const protocol = {} as unknown as SafenetProtocol;
-		const keyGenClient = {} as unknown as KeyGenClient;
 		const machineStates: MachineStates = {
 			...MACHINE_STATES,
 			rollover: {
@@ -103,7 +121,7 @@ describe("check rollover", () => {
 		};
 
 		expect(
-			checkEpochRollover(MACHINE_CONFIG, protocol, keyGenClient, CONSENSUS_STATE, machineStates, 1n),
+			checkEpochRollover(MACHINE_CONFIG, EMPTY_PROTOCOL, EMPTY_KEY_GEN_CLIENT, CONSENSUS_STATE, machineStates, 1n),
 		).toStrictEqual({
 			rollover: {
 				id: "epoch_skipped",
@@ -112,7 +130,7 @@ describe("check rollover", () => {
 		});
 
 		expect(
-			checkEpochRollover(MACHINE_CONFIG, protocol, keyGenClient, CONSENSUS_STATE, machineStates, 123n),
+			checkEpochRollover(MACHINE_CONFIG, EMPTY_PROTOCOL, EMPTY_KEY_GEN_CLIENT, CONSENSUS_STATE, machineStates, 123n),
 		).toStrictEqual({
 			rollover: {
 				id: "epoch_skipped",
@@ -122,8 +140,6 @@ describe("check rollover", () => {
 	});
 
 	it("should not trigger key gen if next epoch is still in the future", async () => {
-		const protocol = {} as unknown as SafenetProtocol;
-		const keyGenClient = {} as unknown as KeyGenClient;
 		const machineStates: MachineStates = {
 			...MACHINE_STATES,
 			rollover: {
@@ -133,14 +149,19 @@ describe("check rollover", () => {
 				deadline: 22n,
 			},
 		};
-		const diff = checkEpochRollover(MACHINE_CONFIG, protocol, keyGenClient, CONSENSUS_STATE, machineStates, 1n);
+		const diff = checkEpochRollover(
+			MACHINE_CONFIG,
+			EMPTY_PROTOCOL,
+			EMPTY_KEY_GEN_CLIENT,
+			CONSENSUS_STATE,
+			machineStates,
+			1n,
+		);
 
 		expect(diff).toStrictEqual({});
 	});
 
 	it("should not trigger key gen if current epoch was skipped", async () => {
-		const protocol = {} as unknown as SafenetProtocol;
-		const keyGenClient = {} as unknown as KeyGenClient;
 		const machineState: MachineStates = {
 			rollover: {
 				id: "epoch_skipped",
@@ -148,34 +169,21 @@ describe("check rollover", () => {
 			},
 			signing: {},
 		};
-		const diff = checkEpochRollover(MACHINE_CONFIG, protocol, keyGenClient, CONSENSUS_STATE, machineState, 19n);
+		const diff = checkEpochRollover(
+			MACHINE_CONFIG,
+			EMPTY_PROTOCOL,
+			EMPTY_KEY_GEN_CLIENT,
+			CONSENSUS_STATE,
+			machineState,
+			19n,
+		);
 
 		expect(diff).toStrictEqual({});
 	});
 
 	it("should trigger key gen if previous epoch was skipped", async () => {
-		const consensus = vi.fn();
-		consensus.mockReturnValueOnce(ethAddress);
-		const protocol = {
-			consensus,
-		} as unknown as SafenetProtocol;
-		const setupGroup = vi.fn();
-		const groupSetup = {
-			groupId: "0x5afe02",
-			participantsRoot: "0x5afe5afe5afe",
-			participantId: 3n,
-			commitments: [TEST_POINT],
-			encryptionPublicKey: TEST_POINT,
-			pok: {
-				r: TEST_POINT,
-				mu: 100n,
-			},
-			poap: ["0x5afe5afe5afe01"],
-		};
-		setupGroup.mockReturnValueOnce(groupSetup);
-		const keyGenClient = {
-			setupGroup,
-		} as unknown as KeyGenClient;
+		const protocol = makeProtocol();
+		const keyGenClient = makeKeyGenClient();
 		const machineState: MachineStates = {
 			rollover: {
 				id: "epoch_skipped",
@@ -188,15 +196,15 @@ describe("check rollover", () => {
 		expect(diff.actions).toStrictEqual([
 			{
 				id: "key_gen_start",
-				participants: groupSetup.participantsRoot,
+				participants: GROUP_SETUP.participantsRoot,
 				count: 3,
 				threshold: 2,
 				context: "0x00000000eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee0000000000000003",
 				participantId: 3n,
-				commitments: groupSetup.commitments,
-				encryptionPublicKey: groupSetup.encryptionPublicKey,
-				pok: groupSetup.pok,
-				poap: groupSetup.poap,
+				commitments: GROUP_SETUP.commitments,
+				encryptionPublicKey: GROUP_SETUP.encryptionPublicKey,
+				pok: GROUP_SETUP.pok,
+				poap: GROUP_SETUP.poap,
 			},
 		]);
 		expect(diff.rollover).toStrictEqual({
@@ -210,9 +218,9 @@ describe("check rollover", () => {
 		});
 		expect(diff.signing).toBeUndefined();
 
-		expect(consensus).toBeCalledTimes(1);
-		expect(setupGroup).toBeCalledTimes(1);
-		expect(setupGroup).toBeCalledWith(
+		expect(protocol.consensus).toBeCalledTimes(1);
+		expect(keyGenClient.setupGroup).toBeCalledTimes(1);
+		expect(keyGenClient.setupGroup).toBeCalledWith(
 			MACHINE_CONFIG.defaultParticipants,
 			2,
 			"0x00000000eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee0000000000000003",
@@ -220,28 +228,8 @@ describe("check rollover", () => {
 	});
 
 	it("should trigger key gen if key gen was aborted (in progress key gen is for a past epoch)", async () => {
-		const consensus = vi.fn();
-		consensus.mockReturnValueOnce(ethAddress);
-		const protocol = {
-			consensus,
-		} as unknown as SafenetProtocol;
-		const setupGroup = vi.fn();
-		const groupSetup = {
-			groupId: "0x5afe02",
-			participantsRoot: "0x5afe5afe5afe",
-			participantId: 3n,
-			commitments: [TEST_POINT],
-			encryptionPublicKey: TEST_POINT,
-			pok: {
-				r: TEST_POINT,
-				mu: 100n,
-			},
-			poap: ["0x5afe5afe5afe01"],
-		};
-		setupGroup.mockReturnValueOnce(groupSetup);
-		const keyGenClient = {
-			setupGroup,
-		} as unknown as KeyGenClient;
+		const protocol = makeProtocol();
+		const keyGenClient = makeKeyGenClient();
 		const machineStates: MachineStates = {
 			...MACHINE_STATES,
 			rollover: {
@@ -256,15 +244,15 @@ describe("check rollover", () => {
 		expect(diff.actions).toStrictEqual([
 			{
 				id: "key_gen_start",
-				participants: groupSetup.participantsRoot,
+				participants: GROUP_SETUP.participantsRoot,
 				count: 3,
 				threshold: 2,
 				context: "0x00000000eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee0000000000000002",
 				participantId: 3n,
-				commitments: groupSetup.commitments,
-				encryptionPublicKey: groupSetup.encryptionPublicKey,
-				pok: groupSetup.pok,
-				poap: groupSetup.poap,
+				commitments: GROUP_SETUP.commitments,
+				encryptionPublicKey: GROUP_SETUP.encryptionPublicKey,
+				pok: GROUP_SETUP.pok,
+				poap: GROUP_SETUP.poap,
 			},
 		]);
 		expect(diff.rollover).toStrictEqual({
@@ -278,9 +266,9 @@ describe("check rollover", () => {
 		});
 		expect(diff.signing).toBeUndefined();
 
-		expect(consensus).toBeCalledTimes(1);
-		expect(setupGroup).toBeCalledTimes(1);
-		expect(setupGroup).toBeCalledWith(
+		expect(protocol.consensus).toBeCalledTimes(1);
+		expect(keyGenClient.setupGroup).toBeCalledTimes(1);
+		expect(keyGenClient.setupGroup).toBeCalledWith(
 			MACHINE_CONFIG.defaultParticipants,
 			2,
 			"0x00000000eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee0000000000000002",
@@ -288,28 +276,8 @@ describe("check rollover", () => {
 	});
 
 	it("should trigger key gen after when staged epoch becomes active", async () => {
-		const consensus = vi.fn();
-		consensus.mockReturnValueOnce(ethAddress);
-		const protocol = {
-			consensus,
-		} as unknown as SafenetProtocol;
-		const setupGroup = vi.fn();
-		const groupSetup = {
-			groupId: "0x5afe02",
-			participantsRoot: "0x5afe5afe5afe",
-			participantId: 3n,
-			commitments: [TEST_POINT],
-			encryptionPublicKey: TEST_POINT,
-			pok: {
-				r: TEST_POINT,
-				mu: 100n,
-			},
-			poap: ["0x5afe5afe5afe01"],
-		};
-		setupGroup.mockReturnValueOnce(groupSetup);
-		const keyGenClient = {
-			setupGroup,
-		} as unknown as KeyGenClient;
+		const protocol = makeProtocol();
+		const keyGenClient = makeKeyGenClient();
 		const machineStates: MachineStates = {
 			...MACHINE_STATES,
 			rollover: { id: "epoch_staged", nextEpoch: 1n },
@@ -319,15 +287,15 @@ describe("check rollover", () => {
 		expect(diff.actions).toStrictEqual([
 			{
 				id: "key_gen_start",
-				participants: groupSetup.participantsRoot,
+				participants: GROUP_SETUP.participantsRoot,
 				count: 3,
 				threshold: 2,
 				context: "0x00000000eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee0000000000000002",
 				participantId: 3n,
-				commitments: groupSetup.commitments,
-				encryptionPublicKey: groupSetup.encryptionPublicKey,
-				pok: groupSetup.pok,
-				poap: groupSetup.poap,
+				commitments: GROUP_SETUP.commitments,
+				encryptionPublicKey: GROUP_SETUP.encryptionPublicKey,
+				pok: GROUP_SETUP.pok,
+				poap: GROUP_SETUP.poap,
 			},
 		]);
 		expect(diff.rollover).toStrictEqual({
@@ -342,9 +310,9 @@ describe("check rollover", () => {
 		});
 		expect(diff.signing).toBeUndefined();
 
-		expect(consensus).toBeCalledTimes(1);
-		expect(setupGroup).toBeCalledTimes(1);
-		expect(setupGroup).toBeCalledWith(
+		expect(protocol.consensus).toBeCalledTimes(1);
+		expect(keyGenClient.setupGroup).toBeCalledTimes(1);
+		expect(keyGenClient.setupGroup).toBeCalledWith(
 			MACHINE_CONFIG.defaultParticipants,
 			2,
 			"0x00000000eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee0000000000000002",
@@ -352,28 +320,8 @@ describe("check rollover", () => {
 	});
 
 	it("should cleanup old epoch groups on epoch activation with non-sequential epochs", async () => {
-		const consensus = vi.fn();
-		consensus.mockReturnValueOnce(ethAddress);
-		const protocol = {
-			consensus,
-		} as unknown as SafenetProtocol;
-		const setupGroup = vi.fn();
-		const groupSetup = {
-			groupId: "0x5afe02",
-			participantsRoot: "0x5afe5afe5afe",
-			participantId: 3n,
-			commitments: [TEST_POINT],
-			encryptionPublicKey: TEST_POINT,
-			pok: {
-				r: TEST_POINT,
-				mu: 100n,
-			},
-			poap: ["0x5afe5afe5afe01"],
-		};
-		setupGroup.mockReturnValueOnce(groupSetup);
-		const keyGenClient = {
-			setupGroup,
-		} as unknown as KeyGenClient;
+		const protocol = makeProtocol();
+		const keyGenClient = makeKeyGenClient();
 		const machineStates: MachineStates = {
 			...MACHINE_STATES,
 			rollover: { id: "epoch_staged", nextEpoch: 7n },
@@ -406,28 +354,8 @@ describe("check rollover", () => {
 	});
 
 	it("should preserve epoch groups referenced by active signing sessions", async () => {
-		const consensus = vi.fn();
-		consensus.mockReturnValueOnce(ethAddress);
-		const protocol = {
-			consensus,
-		} as unknown as SafenetProtocol;
-		const setupGroup = vi.fn();
-		const groupSetup = {
-			groupId: "0x5afe02",
-			participantsRoot: "0x5afe5afe5afe",
-			participantId: 3n,
-			commitments: [TEST_POINT],
-			encryptionPublicKey: TEST_POINT,
-			pok: {
-				r: TEST_POINT,
-				mu: 100n,
-			},
-			poap: ["0x5afe5afe5afe01"],
-		};
-		setupGroup.mockReturnValueOnce(groupSetup);
-		const keyGenClient = {
-			setupGroup,
-		} as unknown as KeyGenClient;
+		const protocol = makeProtocol();
+		const keyGenClient = makeKeyGenClient();
 		// Active signing session referencing epoch 2
 		const signingState: SigningState = {
 			id: "waiting_for_request",
@@ -491,28 +419,8 @@ describe("check rollover", () => {
 	});
 
 	it("should preserve epoch groups referenced by epoch_rollover_packet signing sessions", async () => {
-		const consensus = vi.fn();
-		consensus.mockReturnValueOnce(ethAddress);
-		const protocol = {
-			consensus,
-		} as unknown as SafenetProtocol;
-		const setupGroup = vi.fn();
-		const groupSetup = {
-			groupId: "0x5afe02",
-			participantsRoot: "0x5afe5afe5afe",
-			participantId: 3n,
-			commitments: [TEST_POINT],
-			encryptionPublicKey: TEST_POINT,
-			pok: {
-				r: TEST_POINT,
-				mu: 100n,
-			},
-			poap: ["0x5afe5afe5afe01"],
-		};
-		setupGroup.mockReturnValueOnce(groupSetup);
-		const keyGenClient = {
-			setupGroup,
-		} as unknown as KeyGenClient;
+		const protocol = makeProtocol();
+		const keyGenClient = makeKeyGenClient();
 		// Active signing session with epoch_rollover_packet referencing epoch 3
 		const signingState: SigningState = {
 			id: "waiting_for_request",
@@ -567,28 +475,8 @@ describe("check rollover", () => {
 	});
 
 	it("should not cleanup when all existing epochs are at or above the activeEpoch cutoff", async () => {
-		const consensus = vi.fn();
-		consensus.mockReturnValueOnce(ethAddress);
-		const protocol = {
-			consensus,
-		} as unknown as SafenetProtocol;
-		const setupGroup = vi.fn();
-		const groupSetup = {
-			groupId: "0x5afe02",
-			participantsRoot: "0x5afe5afe5afe",
-			participantId: 3n,
-			commitments: [TEST_POINT],
-			encryptionPublicKey: TEST_POINT,
-			pok: {
-				r: TEST_POINT,
-				mu: 100n,
-			},
-			poap: ["0x5afe5afe5afe01"],
-		};
-		setupGroup.mockReturnValueOnce(groupSetup);
-		const keyGenClient = {
-			setupGroup,
-		} as unknown as KeyGenClient;
+		const protocol = makeProtocol();
+		const keyGenClient = makeKeyGenClient();
 		const machineStates: MachineStates = {
 			...MACHINE_STATES,
 			rollover: { id: "epoch_staged", nextEpoch: 7n },
@@ -617,28 +505,8 @@ describe("check rollover", () => {
 	});
 
 	it("should use activeEpoch as epochCutoff when signing epoch is larger", async () => {
-		const consensus = vi.fn();
-		consensus.mockReturnValueOnce(ethAddress);
-		const protocol = {
-			consensus,
-		} as unknown as SafenetProtocol;
-		const setupGroup = vi.fn();
-		const groupSetup = {
-			groupId: "0x5afe02",
-			participantsRoot: "0x5afe5afe5afe",
-			participantId: 3n,
-			commitments: [TEST_POINT],
-			encryptionPublicKey: TEST_POINT,
-			pok: {
-				r: TEST_POINT,
-				mu: 100n,
-			},
-			poap: ["0x5afe5afe5afe01"],
-		};
-		setupGroup.mockReturnValueOnce(groupSetup);
-		const keyGenClient = {
-			setupGroup,
-		} as unknown as KeyGenClient;
+		const protocol = makeProtocol();
+		const keyGenClient = makeKeyGenClient();
 		// Signing session referencing epoch 6, which is > activeEpoch (5)
 		const signingState: SigningState = {
 			id: "waiting_for_request",
@@ -700,28 +568,8 @@ describe("check rollover", () => {
 	});
 
 	it("should use the minimum epoch across multiple signing sessions", async () => {
-		const consensus = vi.fn();
-		consensus.mockReturnValueOnce(ethAddress);
-		const protocol = {
-			consensus,
-		} as unknown as SafenetProtocol;
-		const setupGroup = vi.fn();
-		const groupSetup = {
-			groupId: "0x5afe02",
-			participantsRoot: "0x5afe5afe5afe",
-			participantId: 3n,
-			commitments: [TEST_POINT],
-			encryptionPublicKey: TEST_POINT,
-			pok: {
-				r: TEST_POINT,
-				mu: 100n,
-			},
-			poap: ["0x5afe5afe5afe01"],
-		};
-		setupGroup.mockReturnValueOnce(groupSetup);
-		const keyGenClient = {
-			setupGroup,
-		} as unknown as KeyGenClient;
+		const protocol = makeProtocol();
+		const keyGenClient = makeKeyGenClient();
 		// Two signing sessions: one at epoch 2, one at epoch 4
 		const signingState2: SigningState = {
 			id: "waiting_for_request",
@@ -814,28 +662,8 @@ describe("check rollover", () => {
 	});
 
 	it("should not cleanup when there are no previous epochs", async () => {
-		const consensus = vi.fn();
-		consensus.mockReturnValueOnce(ethAddress);
-		const protocol = {
-			consensus,
-		} as unknown as SafenetProtocol;
-		const setupGroup = vi.fn();
-		const groupSetup = {
-			groupId: "0x5afe02",
-			participantsRoot: "0x5afe5afe5afe",
-			participantId: 3n,
-			commitments: [TEST_POINT],
-			encryptionPublicKey: TEST_POINT,
-			pok: {
-				r: TEST_POINT,
-				mu: 100n,
-			},
-			poap: ["0x5afe5afe5afe01"],
-		};
-		setupGroup.mockReturnValueOnce(groupSetup);
-		const keyGenClient = {
-			setupGroup,
-		} as unknown as KeyGenClient;
+		const protocol = makeProtocol();
+		const keyGenClient = makeKeyGenClient();
 		const machineStates: MachineStates = {
 			...MACHINE_STATES,
 			rollover: { id: "epoch_staged", nextEpoch: 1n },
