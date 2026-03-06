@@ -133,5 +133,27 @@ describe("checks", () => {
 				}),
 			).toThrow("Delegatecall not allowed");
 		});
+
+		it("should not allow arbitrary self-calls", async () => {
+			// Simulation demonstrating that this transaction does in fact set an arbitrary module.
+			// <https://www.tdly.co/shared/simulation/6aff2317-5f16-4218-a9f5-72191356eada>
+			const check = buildSafeTransactionCheck();
+			expect(() =>
+				check({
+					chainId: 100n,
+					safe: "0x3850cd76006dc6CaCBCBB514995C47Ca8Ad0bb96",
+					to: "0xA83c336B20401Af773B6219BA5027174338D1836",
+					value: 0n,
+					data: "0x8d80ff0a0000000000000000000000000000000000000000000000000000000000000020000000000000000000000000000000000000000000000000000000000000007900000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000024610b59250000000000000000000000005afe8f36504462aa6a7467372f9a41665820a14f00000000000000",
+					operation: 1,
+					safeTxGas: 0n,
+					baseGas: 0n,
+					gasPrice: 0n,
+					gasToken: zeroAddress,
+					refundReceiver: zeroAddress,
+					nonce: 1n,
+				}),
+			).toThrow("Cannot enable unknown module 0x5Afe8f36504462aa6a7467372f9A41665820A14F");
+		});
 	});
 });

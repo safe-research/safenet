@@ -21,12 +21,10 @@ const decodeMultiSendFunctionData = ({ data }: Pick<SafeTransaction, "data">): H
 	}
 };
 
-const decodeMultiSend = ({
-	chainId,
-	safe,
-	data,
-	nonce,
-}: Pick<SafeTransaction, "chainId" | "safe" | "data" | "nonce">): SafeTransaction[] => {
+const decodeMultiSend = (
+	{ chainId, safe, data, nonce }: Pick<SafeTransaction, "chainId" | "safe" | "data" | "nonce">,
+	options: MultiSendOptions,
+): SafeTransaction[] => {
 	const txs = decodeMultiSendFunctionData({ data });
 	const result: SafeTransaction[] = [];
 	let pointer = 0;
@@ -38,7 +36,12 @@ const decodeMultiSend = ({
 		}
 		pointer += 1;
 		// Read 20 bytes for to as an address
-		const to = getAddress(slice(txs, pointer, pointer + 20));
+		let to = getAddress(slice(txs, pointer, pointer + 20));
+		if (options.toZeroIsSelf === true && to === zeroAddress) {
+			// In recent versions of the Safe contracts (v1.5.0+), setting the `to` to be the zero address
+			// causes the contract to call itself.
+			to = safe;
+		}
 		pointer += 20;
 		// Read 32 bytes for the value as a bigint
 		const value = BigInt(slice(txs, pointer, pointer + 32));
@@ -75,11 +78,18 @@ const decodeMultiSend = ({
 	return result;
 };
 
-export const buildMultiSendCallOnlyCheck = (check: TransactionCheck): TransactionCheck => {
+export type MultiSendOptions = {
+	toZeroIsSelf?: boolean;
+};
+
+export const buildMultiSendCallOnlyCheck = (
+	check: TransactionCheck,
+	options: MultiSendOptions = {},
+): TransactionCheck => {
 	const fixed = buildFixedParamsCheck("invalid_multisend", { operation: 1, value: 0n });
 	return (tx: SafeTransaction) => {
 		fixed(tx);
-		for (const subTx of decodeMultiSend(tx)) {
+		for (const subTx of decodeMultiSend(tx, options)) {
 			check(subTx);
 		}
 	};
