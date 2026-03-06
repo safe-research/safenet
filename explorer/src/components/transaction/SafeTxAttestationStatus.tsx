@@ -39,7 +39,7 @@ export function SafeTxAttestationStatus({ proposal }: { proposal: TransactionPro
 		proposal.attestedAt?.block ?? null,
 	);
 	const mapInfo = (suffix: string) => (identifier: bigint) =>
-		`${validatorInfo?.data?.get(identifier)?.label ?? identifier} ${suffix}`;
+		`${validatorInfo?.data?.get(identifier)?.label ?? `Validator ${identifier}`} ${suffix}`;
 	const allValidatorIds = Array.from(validatorInfo.data?.keys() ?? []);
 	return (
 		<>
