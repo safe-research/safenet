@@ -10,7 +10,7 @@ export function useConsensusState() {
 	return useQuery<ConsensusState, Error>({
 		queryKey: ["consensusState", settings.consensus],
 		queryFn: () => loadConsensusState(provider, settings.consensus),
-		refetchInterval: 10000,
+		refetchInterval: () => (settings.refetchInterval > 0 ? settings.refetchInterval : false),
 		initialData: { currentBlock: 0n, currentEpoch: 0n, currentGroupId: zeroHash },
 	});
 }

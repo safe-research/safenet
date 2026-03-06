@@ -1,18 +1,24 @@
 import { standardSchemaResolver } from "@hookform/resolvers/standard-schema";
 import { useState } from "react";
-import { type FieldError, useForm } from "react-hook-form";
+import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { ErrorItem, FormItem, SubmitItem } from "@/components/Forms";
 import { useSettings } from "@/hooks/useSettings";
 import { checkedAddressSchema, emptyToUndefined } from "@/lib/schemas";
 import { type Settings, updateSettings } from "@/lib/settings";
 
+const numberOrStringAsNumber = z
+	.union([z.string(), z.number()])
+	.transform((val) => (val === "" ? undefined : Number(val)));
+
 const settingsFormSchema = z.object({
 	consensus: emptyToUndefined(checkedAddressSchema),
 	decoder: emptyToUndefined(z.url()),
 	rpc: emptyToUndefined(z.url()),
 	relayer: emptyToUndefined(z.url()),
-	maxBlockRange: z.coerce.number().int().positive().optional(),
+	maxBlockRange: numberOrStringAsNumber.pipe(z.number().int().positive().optional()),
+	validatorInfo: emptyToUndefined(z.url()),
+	refetchInterval: numberOrStringAsNumber.pipe(z.number().int().nonnegative().optional()),
 });
 
 type SettingsFormInput = z.input<typeof settingsFormSchema>;
@@ -50,12 +56,7 @@ function ConsensusSettingsForm({ onSubmitted }: { onSubmitted?: () => void }) {
 	return (
 		<form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
 			<FormItem id="rpc" register={register} error={errors.rpc} label="RPC Url" />
-			<FormItem
-				id="maxBlockRange"
-				register={register}
-				error={errors.maxBlockRange as FieldError | undefined}
-				label="Max Block Range"
-			/>
+			<FormItem id="maxBlockRange" register={register} error={errors.maxBlockRange} label="Max Block Range" />
 			<FormItem id="decoder" register={register} error={errors.decoder} label="Decoder Url" />
 			<FormItem id="relayer" register={register} error={errors.relayer} label="Relayer Url" />
 
@@ -65,6 +66,15 @@ function ConsensusSettingsForm({ onSubmitted }: { onSubmitted?: () => void }) {
 				error={errors.consensus}
 				label="Consensus Address"
 				placeholder="0x…"
+			/>
+
+			<FormItem id="validatorInfo" register={register} error={errors.validatorInfo} label="Validator Info Url" />
+
+			<FormItem
+				id="refetchInterval"
+				register={register}
+				error={errors.refetchInterval}
+				label="Refetch Interval (0 to disable refetching)"
 			/>
 
 			<SubmitItem actionTitle="Save" isSubmitting={isSubmitting} disabled={!isDirty} />
