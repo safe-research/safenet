@@ -13,7 +13,7 @@ import type { SafeTransaction } from "../schemas.js";
 import { TransactionCheckError, type TransactionCheckErrorCode } from "./errors.js";
 
 export const buildNoDelegateCallCheck = () => (tx: SafeTransaction) => {
-	if (tx.operation !== 0) throw new TransactionCheckError("no_delegatecall", "Delegatecall not allowed");
+	if (tx.operation !== 0) throw new TransactionCheckError("no_delegatecall", `Delegatecall to ${tx.to} not allowed`);
 };
 
 export const buildSelfCheck = (check: TransactionCheck) => (tx: SafeTransaction) => {

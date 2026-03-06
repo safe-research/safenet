@@ -86,7 +86,7 @@ export const buildMultiSendCallOnlyCheck = (
 	check: TransactionCheck,
 	options: MultiSendOptions = {},
 ): TransactionCheck => {
-	const fixed = buildFixedParamsCheck("invalid_multisend", { operation: 1, value: 0n });
+	const fixed = buildFixedParamsCheck("invalid_multisend", { operation: 1 });
 	return (tx: SafeTransaction) => {
 		fixed(tx);
 		for (const subTx of decodeMultiSend(tx, options)) {
