@@ -1,13 +1,4 @@
-import {
-	type Address,
-	ChainDoesNotSupportContract,
-	formatLog,
-	type Hex,
-	numberToHex,
-	type PublicClient,
-	parseAbi,
-	parseEventLogs,
-} from "viem";
+import { type Address, formatLog, type Hex, numberToHex, type PublicClient, parseAbi, parseEventLogs } from "viem";
 import {
 	COORDINATOR_SIGNING_INITIATED_EVENT,
 	COORDINATOR_SIGNING_PROGRESS_EVENTS,
@@ -27,32 +18,6 @@ const COORDINATOR_UPPER_ABI = parseAbi(["function COORDINATOR() view returns (ad
 const GET_COORDINATOR_ABI = parseAbi(["function getCoordinator() view returns (address)"]);
 
 const fetchCoordinator = async (provider: PublicClient, consensus: Address): Promise<Address> => {
-	// Attempt to batch both calls in a single Multicall3 RPC round-trip.
-	// If multicall itself throws (e.g. Multicall3 not deployed), fall back to individual calls.
-	let multicallResults:
-		| ReadonlyArray<{ status: "success"; result: Address } | { status: "failure"; error: Error }>
-		| undefined;
-	try {
-		multicallResults = await provider.multicall({
-			contracts: [
-				{ address: consensus, abi: COORDINATOR_UPPER_ABI, functionName: "COORDINATOR" },
-				{ address: consensus, abi: GET_COORDINATOR_ABI, functionName: "getCoordinator" },
-			],
-			allowFailure: true,
-		});
-	} catch (err) {
-		if (!(err instanceof ChainDoesNotSupportContract)) throw err;
-		// Multicall3 not deployed on this chain — fall back to individual calls
-	}
-
-	if (multicallResults !== undefined) {
-		const [upper, getter] = multicallResults;
-		// Prefer getCoordinator(), fall back to COORDINATOR()
-		if (getter.status === "success") return getter.result;
-		if (upper.status === "success") return upper.result;
-		throw new Error(`Could not read coordinator from consensus contract ${consensus}`);
-	}
-
 	const [getterResult, upperResult] = await Promise.allSettled([
 		provider.readContract({ address: consensus, abi: GET_COORDINATOR_ABI, functionName: "getCoordinator" }),
 		provider.readContract({ address: consensus, abi: COORDINATOR_UPPER_ABI, functionName: "COORDINATOR" }),
