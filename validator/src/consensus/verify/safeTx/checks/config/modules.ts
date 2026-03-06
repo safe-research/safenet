@@ -3,7 +3,8 @@ import { buildSelectorCheck } from "../basic.js";
 import { TransactionCheckError } from "../errors.js";
 
 const ALLOWED_MODULES: Address[] = [
-	// No modules allowed right now!
+	"0x691f59471Bfd2B7d639DCF74671a2d648ED1E331", // AllowanceModule - 1.0.0
+	"0x4Aa5Bf7D840aC607cb5BD3249e6Af6FC86C04897", // SocialRecoveryModule - 0.1.0
 ];
 
 export const buildEnableModuleCheck = () =>
