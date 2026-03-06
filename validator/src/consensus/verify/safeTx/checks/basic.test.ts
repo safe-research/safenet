@@ -30,7 +30,12 @@ describe("basic checks", () => {
 					refundReceiver: zeroAddress,
 					nonce: 0n,
 				}),
-			).toThrowError(new TransactionCheckError("no_delegatecall", "Delegatecall not allowed"));
+			).toThrowError(
+				new TransactionCheckError(
+					"no_delegatecall",
+					"Delegatecall to 0x40A2aCCbd92BCA938b02010E17A5b8929b49130D not allowed",
+				),
+			);
 		});
 
 		it("should forward continue for call transactions", async () => {

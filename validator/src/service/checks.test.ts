@@ -1,10 +1,10 @@
-import { zeroAddress } from "viem";
+import { encodeFunctionData, encodePacked, parseAbi, toHex, zeroAddress } from "viem";
 import { describe, expect, it } from "vitest";
 import { buildSafeTransactionCheck } from "./checks.js";
 
 describe("checks", () => {
 	describe("buildSafeTransactionCheck", () => {
-		it("should allow owner change", async () => {
+		it("should allow owner change", () => {
 			const check = buildSafeTransactionCheck();
 			check({
 				chainId: 100n,
@@ -22,7 +22,7 @@ describe("checks", () => {
 			});
 		});
 
-		it("should allow multisend with calls to other contracts", async () => {
+		it("should allow multisend with calls to other contracts", () => {
 			const check = buildSafeTransactionCheck();
 			check({
 				chainId: 1n,
@@ -40,7 +40,7 @@ describe("checks", () => {
 			});
 		});
 
-		it("should allow cancelation transaction", async () => {
+		it("should allow cancelation transaction", () => {
 			const check = buildSafeTransactionCheck();
 			check({
 				chainId: 1n,
@@ -58,7 +58,7 @@ describe("checks", () => {
 			});
 		});
 
-		it("should allow multisend with multiple owner changes", async () => {
+		it("should allow multisend with multiple owner changes", () => {
 			const check = buildSafeTransactionCheck();
 			check({
 				chainId: 1n,
@@ -76,7 +76,7 @@ describe("checks", () => {
 			});
 		});
 
-		it("should allow singleton upgrade", async () => {
+		it("should allow singleton upgrade", () => {
 			const check = buildSafeTransactionCheck();
 			check({
 				chainId: 1n,
@@ -94,7 +94,7 @@ describe("checks", () => {
 			});
 		});
 
-		it("should not allow empty self delegate call transaction", async () => {
+		it("should not allow empty self delegate call transaction", () => {
 			const check = buildSafeTransactionCheck();
 			expect(() =>
 				check({
@@ -111,10 +111,10 @@ describe("checks", () => {
 					refundReceiver: zeroAddress,
 					nonce: 0n,
 				}),
-			).toThrow("Delegatecall not allowed");
+			).toThrow("Delegatecall to 0x1db92e2EeBC8E0c075a02BeA49a2935BcD2dFCF4 not allowed");
 		});
 
-		it("should not allow bybit transaction", async () => {
+		it("should not allow bybit transaction", () => {
 			const check = buildSafeTransactionCheck();
 			expect(() =>
 				check({
@@ -131,12 +131,10 @@ describe("checks", () => {
 					refundReceiver: zeroAddress,
 					nonce: 0n,
 				}),
-			).toThrow("Delegatecall not allowed");
+			).toThrow("Delegatecall to 0x96221423681A6d52E184D440a8eFCEbB105C7242 not allowed");
 		});
 
-		it("should not allow arbitrary self-calls", async () => {
-			// Simulation demonstrating that this transaction does in fact set an arbitrary module.
-			// <https://www.tdly.co/shared/simulation/6aff2317-5f16-4218-a9f5-72191356eada>
+		it("should not allow arbitrary self-calls", () => {
 			const check = buildSafeTransactionCheck();
 			expect(() =>
 				check({
@@ -154,6 +152,79 @@ describe("checks", () => {
 					nonce: 1n,
 				}),
 			).toThrow("Cannot enable unknown module 0x5Afe8f36504462aa6a7467372f9A41665820A14F");
+		});
+
+		it("should allow a multi-send with a valid delegate call", () => {
+			const check = buildSafeTransactionCheck();
+			check({
+				chainId: 100n,
+				safe: "0x3850cd76006dc6CaCBCBB514995C47Ca8Ad0bb96",
+				to: "0x218543288004CD07832472D464648173c77D7eB7",
+				value: 0n,
+				data: encodeFunctionData({
+					abi: parseAbi(["function multiSend(bytes transactions)"]),
+					functionName: "multiSend",
+					args: [
+						encodePacked(
+							["uint8", "address", "uint256", "uint256", "bytes", "uint8", "address", "uint256", "uint256", "bytes"],
+							[
+								1,
+								"0x4FfeF8222648872B3dE295Ba1e49110E61f5b5aa",
+								0n,
+								100n,
+								encodeFunctionData({
+									abi: parseAbi(["function signMessage(bytes message)"]),
+									functionName: "signMessage",
+									args: [toHex("swap GNO for SAFE")],
+								}),
+								0,
+								"0x9C58BAcC331c9aa871AFD802DB6379a98e80CEdb",
+								0n,
+								68n,
+								encodeFunctionData({
+									abi: parseAbi(["function approve(address to, uint256 amount)"]),
+									functionName: "approve",
+									args: ["0xC92E8bdf79f0507f65a392b0ab4667716BFE0110", 1000000000000000000000n],
+								}),
+							],
+						),
+					],
+				}),
+				operation: 1,
+				safeTxGas: 0n,
+				baseGas: 0n,
+				gasPrice: 0n,
+				gasToken: zeroAddress,
+				refundReceiver: zeroAddress,
+				nonce: 1n,
+			});
+		});
+
+		it("should not allow delegate calls included in a multi-send", () => {
+			const check = buildSafeTransactionCheck();
+			for (const multiSend of [
+				"0x218543288004CD07832472D464648173c77D7eB7",
+				"0x38869bf66a61cF6bDB996A6aE40D5853Fd43B526",
+				"0xA238CBeb142c10Ef7Ad8442C6D1f9E89e07e7761",
+				"0x998739BFdAAdde7C933B942a68053933098f9EDa",
+			] as const) {
+				expect(() =>
+					check({
+						chainId: 1n,
+						safe: "0x1db92e2EeBC8E0c075a02BeA49a2935BcD2dFCF4",
+						to: multiSend,
+						value: 0n,
+						data: "0x8d80ff0a000000000000000000000000000000000000000000000000000000000000002000000000000000000000000000000000000000000000000000000000000000990196221423681A6d52E184D440a8eFCEbB105C724200000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000044a9059cbb000000000000000000000000bdd077f651ebe7f7b3ce16fe5f2b025be2969516000000000000000000000000000000000000000000000000000000000000000000000000000000",
+						operation: 1,
+						safeTxGas: 0n,
+						baseGas: 0n,
+						gasPrice: 0n,
+						gasToken: zeroAddress,
+						refundReceiver: zeroAddress,
+						nonce: 1n,
+					}),
+				).toThrow("Delegatecall to 0x96221423681A6d52E184D440a8eFCEbB105C7242 not allowed");
+			}
 		});
 	});
 });

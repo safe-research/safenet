@@ -48,13 +48,20 @@ export const buildSafeTransactionCheck = (): TransactionCheck => {
 		baseChecks,
 	);
 	// Add multisend checks, if not multisend, fallback to other allowed delegate calls
-	const multiSendCheckV150 = buildMultiSendCallOnlyCheck(baseChecks, { toZeroIsSelf: true });
-	const multiSendCheck = buildMultiSendCallOnlyCheck(baseChecks);
+	const multiSendCheck150 = buildMultiSendCallOnlyCheck(allowedDelegateCalls, { toZeroIsSelf: true });
+	const multiSendCheckCallOnly150 = buildMultiSendCallOnlyCheck(allowedDelegateCalls, { toZeroIsSelf: true });
+	const multiSendCheck = buildMultiSendCallOnlyCheck(allowedDelegateCalls);
+	const multiSendCheckCallOnly = buildMultiSendCallOnlyCheck(allowedDelegateCalls);
 	const supportedMultiSendChecks = buildAddressSplitCheck(
 		{
-			"0xA83c336B20401Af773B6219BA5027174338D1836": multiSendCheckV150,
-			"0x9641d764fc13c8B624c04430C7356C1C7C8102e2": multiSendCheck,
-			"0x40A2aCCbd92BCA938b02010E17A5b8929b49130D": multiSendCheck,
+			"0x218543288004CD07832472D464648173c77D7eB7": multiSendCheck150, // MultiSend - 1.5.0
+			"0xA83c336B20401Af773B6219BA5027174338D1836": multiSendCheckCallOnly150, // MultiSendCallOnly - 1.5.0
+			"0x38869bf66a61cF6bDB996A6aE40D5853Fd43B526": multiSendCheck, // MultiSend - 1.4.1
+			"0x9641d764fc13c8B624c04430C7356C1C7C8102e2": multiSendCheckCallOnly, // MultiSendCallOnly - 1.4.1
+			"0xA238CBeb142c10Ef7Ad8442C6D1f9E89e07e7761": multiSendCheck, // MultiSend - 1.3.0 - canonical
+			"0x40A2aCCbd92BCA938b02010E17A5b8929b49130D": multiSendCheckCallOnly, // MultiSendCallOnly - 1.3.0 - canonical
+			"0x998739BFdAAdde7C933B942a68053933098f9EDa": multiSendCheck, // MultiSend - 1.3.0 - eip155
+			"0xA1dabEF33b3B82c7814B6D82A79e50F4AC44102B": multiSendCheckCallOnly, // MultiSendCallOnly - 1.3.0 - eip155
 		},
 		allowedDelegateCalls,
 	);
