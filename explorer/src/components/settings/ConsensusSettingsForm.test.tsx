@@ -11,7 +11,7 @@ const DEFAULT_SETTINGS: Settings = {
 	decoder: "https://calldata.swiss-knife.xyz/decoder?calldata=",
 	maxBlockRange: 10000,
 	validatorInfo:
-		"https://raw.githubusercontent.com/safe-fndn/safenet-validator-info/refs/heads/main/assets/safenet-validator-info.json",
+		"https://raw.githubusercontent.com/safe-fndn/safenet-beta-data/refs/heads/main/assets/validator-info.json",
 	refetchInterval: 10000,
 };
 
