@@ -48,8 +48,8 @@ export const buildSafeTransactionCheck = (): TransactionCheck => {
 		baseChecks,
 	);
 	// Add multisend checks, if not multisend, fallback to other allowed delegate calls
-	const multiSendCheck150 = buildMultiSendCallOnlyCheck(baseChecks, { toZeroIsSelf: true });
-	const multiSendCheck = buildMultiSendCallOnlyCheck(baseChecks);
+	const multiSendCheck150 = buildMultiSendCallOnlyCheck(allowedDelegateCalls, { toZeroIsSelf: true });
+	const multiSendCheck = buildMultiSendCallOnlyCheck(allowedDelegateCalls);
 	const supportedMultiSendChecks = buildAddressSplitCheck(
 		{
 			"0x218543288004CD07832472D464648173c77D7eB7": multiSendCheck150, // MultiSend - 1.5.0

@@ -1,4 +1,4 @@
-import { zeroAddress } from "viem";
+import { encodeFunctionData, encodePacked, parseAbi, toHex, zeroAddress } from "viem";
 import { describe, expect, it } from "vitest";
 import { buildSafeTransactionCheck } from "./checks.js";
 
@@ -152,6 +152,52 @@ describe("checks", () => {
 					nonce: 1n,
 				}),
 			).toThrow("Cannot enable unknown module 0x5Afe8f36504462aa6a7467372f9A41665820A14F");
+		});
+
+		it("should allow a multi-send with a valid delegate call", () => {
+			const check = buildSafeTransactionCheck();
+			check({
+				chainId: 100n,
+				safe: "0x3850cd76006dc6CaCBCBB514995C47Ca8Ad0bb96",
+				to: "0x218543288004CD07832472D464648173c77D7eB7",
+				value: 0n,
+				data: encodeFunctionData({
+					abi: parseAbi(["function multiSend(bytes transactions)"]),
+					functionName: "multiSend",
+					args: [
+						encodePacked(
+							["uint8", "address", "uint256", "uint256", "bytes", "uint8", "address", "uint256", "uint256", "bytes"],
+							[
+								1,
+								"0x4FfeF8222648872B3dE295Ba1e49110E61f5b5aa",
+								0n,
+								100n,
+								encodeFunctionData({
+									abi: parseAbi(["function signMessage(bytes message)"]),
+									functionName: "signMessage",
+									args: [toHex("swap GNO for SAFE")],
+								}),
+								0,
+								"0x9C58BAcC331c9aa871AFD802DB6379a98e80CEdb",
+								0n,
+								68n,
+								encodeFunctionData({
+									abi: parseAbi(["function approve(address to, uint256 amount)"]),
+									functionName: "approve",
+									args: ["0xC92E8bdf79f0507f65a392b0ab4667716BFE0110", 1000000000000000000000n],
+								}),
+							],
+						),
+					],
+				}),
+				operation: 1,
+				safeTxGas: 0n,
+				baseGas: 0n,
+				gasPrice: 0n,
+				gasToken: zeroAddress,
+				refundReceiver: zeroAddress,
+				nonce: 1n,
+			});
 		});
 
 		it("should not allow delegate calls included in a multi-send", () => {
