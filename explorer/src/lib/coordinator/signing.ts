@@ -1,4 +1,13 @@
-import { type Address, formatLog, type Hex, numberToHex, type PublicClient, parseEventLogs } from "viem";
+import {
+	type Address,
+	ChainDoesNotSupportContract,
+	formatLog,
+	type Hex,
+	numberToHex,
+	type PublicClient,
+	parseAbi,
+	parseEventLogs,
+} from "viem";
 import {
 	COORDINATOR_SIGNING_INITIATED_EVENT,
 	COORDINATOR_SIGNING_PROGRESS_EVENTS,
@@ -14,17 +23,57 @@ let cachedAddresses:
 	  }
 	| undefined;
 
-const loadCoordinator = (consensus: Address): Promise<Address> => {
+const COORDINATOR_UPPER_ABI = parseAbi(["function COORDINATOR() view returns (address)"]);
+const GET_COORDINATOR_ABI = parseAbi(["function getCoordinator() view returns (address)"]);
+
+const fetchCoordinator = async (provider: PublicClient, consensus: Address): Promise<Address> => {
+	// Attempt to batch both calls in a single Multicall3 RPC round-trip.
+	// If multicall itself throws (e.g. Multicall3 not deployed), fall back to individual calls.
+	let multicallResults:
+		| ReadonlyArray<{ status: "success"; result: Address } | { status: "failure"; error: Error }>
+		| undefined;
+	try {
+		multicallResults = await provider.multicall({
+			contracts: [
+				{ address: consensus, abi: COORDINATOR_UPPER_ABI, functionName: "COORDINATOR" },
+				{ address: consensus, abi: GET_COORDINATOR_ABI, functionName: "getCoordinator" },
+			],
+			allowFailure: true,
+		});
+	} catch (err) {
+		if (!(err instanceof ChainDoesNotSupportContract)) throw err;
+		// Multicall3 not deployed on this chain — fall back to individual calls
+	}
+
+	if (multicallResults !== undefined) {
+		const [upper, getter] = multicallResults;
+		// Prefer getCoordinator(), fall back to COORDINATOR()
+		if (getter.status === "success") return getter.result;
+		if (upper.status === "success") return upper.result;
+		throw new Error(`Could not read coordinator from consensus contract ${consensus}`);
+	}
+
+	const [getterResult, upperResult] = await Promise.allSettled([
+		provider.readContract({ address: consensus, abi: GET_COORDINATOR_ABI, functionName: "getCoordinator" }),
+		provider.readContract({ address: consensus, abi: COORDINATOR_UPPER_ABI, functionName: "COORDINATOR" }),
+	]);
+	if (getterResult.status === "fulfilled") return getterResult.value;
+	if (upperResult.status === "fulfilled") return upperResult.value;
+	throw new Error(`Could not read coordinator from consensus contract ${consensus}`);
+};
+
+const loadCoordinator = (provider: PublicClient, consensus: Address): Promise<Address> => {
 	if (cachedAddresses?.consensus === consensus) {
 		return cachedAddresses.coordinator;
 	}
 
-	// TODO: implement loading, currently we use a hardcoded coordinator
-	cachedAddresses = {
-		consensus,
-		coordinator: Promise.resolve("0xEaad5a649FCb3f4A153206879630B06fF524ABEc"),
-	};
-	return cachedAddresses.coordinator;
+	const coordinator = fetchCoordinator(provider, consensus).catch((err) => {
+		// Don't permanently cache failures — clear so the next call retries
+		if (cachedAddresses?.consensus === consensus) cachedAddresses = undefined;
+		throw err;
+	});
+	cachedAddresses = { consensus, coordinator };
+	return coordinator;
 };
 
 export type AttestationParticipation = {
@@ -64,7 +113,7 @@ export const loadLatestAttestationStatus = async ({
 	const fromBlock = proposedAt ?? (await getFromBlock(provider, maxBlockRange));
 	const toBlock = attestedAt ?? "latest";
 	const chainId = await provider.getChainId();
-	const coordinator = await loadCoordinator(consensus);
+	const coordinator = await loadCoordinator(provider, consensus);
 	const message = safeTxProposalHash({
 		domain: {
 			chainId,
