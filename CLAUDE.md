@@ -22,7 +22,7 @@ Code changes should be easy to review and to understand. For this it is importan
 
 ## Coding Guidelines
 
-Code should focus on security and maintainability. Existing code and components should be reused. New components should be written in a way that they can reused. If code duplication is introduced new shared components and styles should be extracted whenever it makes sense. Best practices should be applied and before code is submitted it should be properly inspected and tested.
+Code should focus on security and maintainability. Existing code and components should be reused. New components should be written in a way that they can be reused. If code duplication is introduced, new shared components and styles should be extracted whenever it makes sense. Best practices should be applied, and before code is submitted, it should be properly inspected and tested.
 
 All newly added code should be covered by unit tests and if possible integration tests. 
 
