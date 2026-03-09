@@ -26,7 +26,7 @@ Code should focus on security and maintainability. Existing code and components 
 
 All newly added code should be covered by unit tests and if possible integration tests. 
 
-If in doubt reference existing code to understand what implementation to choose. Do not re-invent the wheel and follow existing paradigms.
+If in doubt, refer to existing code to determine which implementation to choose. Do not re-invent the wheel and follow existing paradigms.
 
 ## Documentation
 
