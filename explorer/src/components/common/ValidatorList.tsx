@@ -15,21 +15,19 @@ export function ValidatorList({
 	mapInfo: (suffix: string) => (identifier: bigint) => string;
 	completed: boolean;
 }) {
+	const activeSet = new Set(active);
 	return (
 		<>
-			{(() => {
-				const activeSet = new Set(active);
-				return active
-					.map(mapInfo("✅"))
-					.sort()
-					.concat(
-						all
-							.filter((v) => !activeSet.has(v))
-							.map(mapInfo(completed ? "❌" : "⏳"))
-							.sort(),
-					)
-					.join(", ");
-			})()}
+			{active
+				.map(mapInfo("✅"))
+				.sort()
+				.concat(
+					all
+						.filter((v) => !activeSet.has(v))
+						.map(mapInfo(completed ? "❌" : "⏳"))
+						.sort(),
+				)
+				.join(", ")}
 		</>
 	);
 }
