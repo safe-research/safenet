@@ -203,43 +203,46 @@ contract Consensus is IConsensus, IERC165, IFROSTCoordinatorCallback {
     /**
      * @inheritdoc IConsensus
      */
-    function getActiveEpoch() external view returns (uint64 epoch, FROSTGroupId.T group) {
+    function getActiveEpoch() external view returns (uint64 epoch, FROSTGroupId.T groupId) {
         (Epochs memory epochs,) = _epochsWithRollover();
         epoch = epochs.active;
-        group = $groups[epoch];
+        groupId = $groups[epoch];
     }
 
     /**
      * @inheritdoc IConsensus
      */
-    function proposeEpoch(uint64 proposedEpoch, uint64 rolloverBlock, FROSTGroupId.T group) public {
+    function proposeEpoch(uint64 proposedEpoch, uint64 rolloverBlock, FROSTGroupId.T groupId) public {
         Epochs memory epochs = _processRollover();
         _requireValidRollover(epochs, proposedEpoch, rolloverBlock);
-        Secp256k1.Point memory groupKey = _COORDINATOR.groupKey(group);
+        Secp256k1.Point memory groupKey = _COORDINATOR.groupKey(groupId);
         bytes32 message = domainSeparator().epochRollover(epochs.active, proposedEpoch, rolloverBlock, groupKey);
-        emit EpochProposed(epochs.active, proposedEpoch, rolloverBlock, groupKey);
+        emit EpochProposed(epochs.active, proposedEpoch, rolloverBlock, groupId, groupKey);
         _COORDINATOR.sign($groups[epochs.active], message);
     }
 
     /**
      * @inheritdoc IConsensus
      */
-    function stageEpoch(uint64 proposedEpoch, uint64 rolloverBlock, FROSTGroupId.T group, FROSTSignatureId.T signature)
-        public
-    {
+    function stageEpoch(
+        uint64 proposedEpoch,
+        uint64 rolloverBlock,
+        FROSTGroupId.T groupId,
+        FROSTSignatureId.T signatureId
+    ) public {
         Epochs memory epochs = _processRollover();
         _requireValidRollover(epochs, proposedEpoch, rolloverBlock);
-        Secp256k1.Point memory groupKey = _COORDINATOR.groupKey(group);
+        Secp256k1.Point memory groupKey = _COORDINATOR.groupKey(groupId);
         bytes32 message = domainSeparator().epochRollover(epochs.active, proposedEpoch, rolloverBlock, groupKey);
-        FROST.Signature memory attestation = _COORDINATOR.signatureVerify(signature, $groups[epochs.active], message);
+        FROST.Signature memory attestation = _COORDINATOR.signatureVerify(signatureId, $groups[epochs.active], message);
         epochs.staged = proposedEpoch;
         epochs.rolloverBlock = rolloverBlock;
         $epochs = epochs;
-        $groups[proposedEpoch] = group;
+        $groups[proposedEpoch] = groupId;
         // Note that we do not need to check that `$attestations[message]` is zero, since the `_requireValidRollover`
         // already prevents an epoch being proposed and staged more than once.
-        $attestations[message] = signature;
-        emit EpochStaged(epochs.active, proposedEpoch, rolloverBlock, groupKey, attestation);
+        $attestations[message] = signatureId;
+        emit EpochStaged(epochs.active, proposedEpoch, rolloverBlock, groupId, groupKey, signatureId, attestation);
     }
 
     /**
@@ -340,7 +343,7 @@ contract Consensus is IConsensus, IERC165, IFROSTCoordinatorCallback {
     /**
      * @inheritdoc IConsensus
      */
-    function attestTransaction(uint64 epoch, bytes32 transactionHash, FROSTSignatureId.T signature) public {
+    function attestTransaction(uint64 epoch, bytes32 transactionHash, FROSTSignatureId.T signatureId) public {
         // Note that we do not impose a time limit for a transaction to be attested to in the consensus contract. In
         // theory, we have enough space in our `Epochs` struct to also keep track of the previous epoch and then we
         // could check here that `epoch` is either `epochs.active` or `epochs.previous`. This isn't a useful
@@ -350,9 +353,9 @@ contract Consensus is IConsensus, IERC165, IFROSTCoordinatorCallback {
 
         bytes32 message = domainSeparator().transactionProposal(epoch, transactionHash);
         require($attestations[message].isZero(), AlreadyAttested());
-        FROST.Signature memory attestation = _COORDINATOR.signatureVerify(signature, $groups[epoch], message);
-        $attestations[message] = signature;
-        emit TransactionAttested(transactionHash, epoch, attestation);
+        FROST.Signature memory attestation = _COORDINATOR.signatureVerify(signatureId, $groups[epoch], message);
+        $attestations[message] = signatureId;
+        emit TransactionAttested(transactionHash, epoch, signatureId, attestation);
     }
 
     // ============================================================

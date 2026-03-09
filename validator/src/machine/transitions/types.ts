@@ -133,6 +133,7 @@ export type EpochProposedEvent = {
 	activeEpoch: bigint;
 	proposedEpoch: bigint;
 	rolloverBlock: bigint;
+	groupId: GroupId;
 	groupKey: FrostPoint;
 };
 
@@ -143,7 +144,9 @@ export type EpochStagedEvent = {
 	activeEpoch: bigint;
 	proposedEpoch: bigint;
 	rolloverBlock: bigint;
+	groupId: GroupId;
 	groupKey: FrostPoint;
+	signatureId: SignatureId;
 	attestation: {
 		z: bigint;
 		r: FrostPoint;
@@ -167,6 +170,7 @@ export type TransactionAttestedEvent = {
 	index: number;
 	transactionHash: Hex;
 	epoch: bigint;
+	signatureId: SignatureId;
 	attestation: {
 		z: bigint;
 		r: FrostPoint;

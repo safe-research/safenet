@@ -27,10 +27,15 @@ interface IConsensus {
      * @param activeEpoch The current active epoch.
      * @param proposedEpoch The proposed new epoch.
      * @param rolloverBlock The block number when rollover should occur.
+     * @param groupId The unique identifier for the FROST group for the proposed epoch.
      * @param groupKey The public group key for the proposed epoch.
      */
     event EpochProposed(
-        uint64 indexed activeEpoch, uint64 indexed proposedEpoch, uint64 rolloverBlock, Secp256k1.Point groupKey
+        uint64 indexed activeEpoch,
+        uint64 indexed proposedEpoch,
+        uint64 rolloverBlock,
+        FROSTGroupId.T groupId,
+        Secp256k1.Point groupKey
     );
 
     /**
@@ -38,14 +43,18 @@ interface IConsensus {
      * @param activeEpoch The current active epoch.
      * @param proposedEpoch The proposed new epoch.
      * @param rolloverBlock The block number when rollover should occur.
+     * @param groupId The unique identifier for the FROST group for the proposed epoch.
      * @param groupKey The public group key for the proposed epoch.
+     * @param signatureId The FROST signature identifier corresponding to the rollover attestation.
      * @param attestation The attestation to epoch rollover.
      */
     event EpochStaged(
         uint64 indexed activeEpoch,
         uint64 indexed proposedEpoch,
         uint64 rolloverBlock,
+        FROSTGroupId.T groupId,
         Secp256k1.Point groupKey,
+        FROSTSignatureId.T signatureId,
         FROST.Signature attestation
     );
 
@@ -75,9 +84,12 @@ interface IConsensus {
      * @notice Emitted when a transaction is attested by the validator set.
      * @param transactionHash The hash of the attested Safe transaction.
      * @param epoch The epoch in which the attested transaction was proposed.
+     * @param signatureId The FROST signature identifier corresponding to the transaction attestation.
      * @param attestation The attestation to Safe transaction.
      */
-    event TransactionAttested(bytes32 indexed transactionHash, uint64 epoch, FROST.Signature attestation);
+    event TransactionAttested(
+        bytes32 indexed transactionHash, uint64 epoch, FROSTSignatureId.T signatureId, FROST.Signature attestation
+    );
 
     // ============================================================
     // CONFIGURATION

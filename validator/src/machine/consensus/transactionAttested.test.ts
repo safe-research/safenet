@@ -70,6 +70,7 @@ const EVENT: TransactionAttestedEvent = {
 	index: 0,
 	transactionHash: safeTxHash(PACKET.proposal.transaction),
 	epoch: PACKET.proposal.epoch,
+	signatureId: "0x5af35af3",
 	attestation: {
 		z: 12345n,
 		r: TEST_POINT,

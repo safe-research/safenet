@@ -115,6 +115,7 @@ export const epochProposedEventSchema = z.object({
 	activeEpoch: eventBigIntSchema,
 	proposedEpoch: eventBigIntSchema,
 	rolloverBlock: eventBigIntSchema,
+	groupId: hexBytes32Schema,
 	groupKey: frostPointSchema,
 });
 
@@ -122,7 +123,9 @@ export const epochStagedEventSchema = z.object({
 	activeEpoch: eventBigIntSchema,
 	proposedEpoch: eventBigIntSchema,
 	rolloverBlock: eventBigIntSchema,
+	groupId: hexBytes32Schema,
 	groupKey: frostPointSchema,
+	signatureId: hexBytes32Schema,
 	attestation: signatureSchema,
 });
 
@@ -152,6 +155,7 @@ export const transactionProposedEventSchema = z.object({
 export const transactionAttestedEventSchema = z.object({
 	transactionHash: hexBytes32Schema,
 	epoch: eventBigIntSchema,
+	signatureId: hexBytes32Schema,
 	attestation: signatureSchema,
 });
 
