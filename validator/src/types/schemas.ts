@@ -81,6 +81,8 @@ export const validatorConfigSchema = z.object({
 	BLOCK_TIME_OVERRIDE: emptyToDefault(z.coerce.number().int().optional()),
 	MAX_REORG_DEPTH: emptyToDefault(z.coerce.number().int().optional()),
 	BLOCK_PAGE_SIZE: emptyToDefault(z.coerce.number().int().optional()),
+	KEY_GEN_TIMEOUT: emptyToDefault(z.coerce.bigint().optional()),
+	SIGNING_TIMEOUT: emptyToDefault(z.coerce.bigint().optional()),
 	MAX_LOGS_PER_QUERY: emptyToDefault(z.coerce.number().int().optional()),
 	SKIP_GENESIS: emptyToDefault(strictBoolSchema.optional()),
 });
