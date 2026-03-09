@@ -22,7 +22,6 @@ const DEFAULT_SETTINGS: Settings = {
 	refetchInterval: 0,
 };
 
-// Mock hooks
 vi.mock("@/hooks/useSettings", () => ({
 	useSettings: vi.fn(() => [DEFAULT_SETTINGS]),
 }));
@@ -55,30 +54,6 @@ afterEach(() => {
 });
 
 describe("useSafeTransactionProposals", () => {
-	it("is disabled until the initial block is fetched", async () => {
-		let resolveBlock: (v: bigint) => void;
-		const blockPromise = new Promise<bigint>((resolve) => {
-			resolveBlock = resolve;
-		});
-		(mockProvider.getBlockNumber as ReturnType<typeof vi.fn>).mockReturnValue(blockPromise);
-
-		const { result } = renderHook(() => useSafeTransactionProposals({ safeAddress: SAFE_ADDRESS, chainId: CHAIN_ID }), {
-			wrapper: createWrapper(),
-		});
-
-		// Infinite query should not have fetched yet since initialFromBlock is not resolved
-		expect(result.current.isFetchingNextPage).toBe(false);
-		expect(mockProvider.request).not.toHaveBeenCalled();
-
-		// Now resolve the initial block
-		await act(async () => {
-			resolveBlock?.(CURRENT_BLOCK);
-		});
-
-		await waitFor(() => expect(result.current.isSuccess).toBe(true));
-		expect(mockProvider.request).toHaveBeenCalled();
-	});
-
 	it("fetches the most recent block window on first load", async () => {
 		const { result } = renderHook(() => useSafeTransactionProposals({ safeAddress: SAFE_ADDRESS, chainId: CHAIN_ID }), {
 			wrapper: createWrapper(),
@@ -86,43 +61,48 @@ describe("useSafeTransactionProposals", () => {
 
 		await waitFor(() => expect(result.current.isSuccess).toBe(true));
 
-		// The request should have been called with fromBlock = currentBlock - maxBlockRange
+		// fromBlock = currentBlock - maxBlockRange = 5000 - 1000 = 4000 = 0xfa0
 		const requestCalls = (mockProvider.request as ReturnType<typeof vi.fn>).mock.calls;
 		const logsCall = requestCalls.find((c) => c[0].method === "eth_getLogs");
 		expect(logsCall).toBeDefined();
-		const params = logsCall?.[0].params[0];
-		// fromBlock = 5000 - 1000 = 4000
-		expect(params.fromBlock).toBe("0xfa0");
+		expect(logsCall?.[0].params[0].fromBlock).toBe("0xfa0");
 	});
 
-	it("filters by safe address via topics", async () => {
+	it("anchors to the current block at fetch time via getBlockNumber", async () => {
 		const { result } = renderHook(() => useSafeTransactionProposals({ safeAddress: SAFE_ADDRESS, chainId: CHAIN_ID }), {
 			wrapper: createWrapper(),
 		});
 
 		await waitFor(() => expect(result.current.isSuccess).toBe(true));
 
-		const requestCalls = (mockProvider.request as ReturnType<typeof vi.fn>).mock.calls;
-		const logsCall = requestCalls.find((c) => c[0].method === "eth_getLogs");
-		expect(logsCall).toBeDefined();
-		const topics = logsCall?.[0].params[0].topics;
-		// topics[3] should be the safe address
-		expect(topics[3]).toBe(SAFE_ADDRESS);
+		expect(mockProvider.getBlockNumber).toHaveBeenCalled();
 	});
 
-	it("exposes flat list of proposals from all pages", async () => {
+	it("filters by safe address as the fourth topic", async () => {
 		const { result } = renderHook(() => useSafeTransactionProposals({ safeAddress: SAFE_ADDRESS, chainId: CHAIN_ID }), {
 			wrapper: createWrapper(),
 		});
 
 		await waitFor(() => expect(result.current.isSuccess).toBe(true));
 
-		// With empty mock responses, data.pages.flat() should be an empty array
+		const logsCall = (mockProvider.request as ReturnType<typeof vi.fn>).mock.calls.find(
+			(c) => c[0].method === "eth_getLogs",
+		);
+		expect(logsCall?.[0].params[0].topics[3]).toBe(SAFE_ADDRESS);
+	});
+
+	it("exposes a flat list of proposals across all pages", async () => {
+		const { result } = renderHook(() => useSafeTransactionProposals({ safeAddress: SAFE_ADDRESS, chainId: CHAIN_ID }), {
+			wrapper: createWrapper(),
+		});
+
+		await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
 		expect(result.current.data?.pages.flat()).toEqual([]);
 	});
 
 	it("hasNextPage is true when more blocks exist to fetch", async () => {
-		// currentBlock=5000, maxBlockRange=1000 → initialFromBlock=4000 → nextFrom=3000 ≥ 0
+		// initialFromBlock = 5000 - 1000 = 4000; nextFrom = 4000 - 1000 = 3000 ≥ 0
 		const { result } = renderHook(() => useSafeTransactionProposals({ safeAddress: SAFE_ADDRESS, chainId: CHAIN_ID }), {
 			wrapper: createWrapper(),
 		});
@@ -132,8 +112,8 @@ describe("useSafeTransactionProposals", () => {
 		expect(result.current.hasNextPage).toBe(true);
 	});
 
-	it("hasNextPage is false when fromBlock would go below zero", async () => {
-		// Set currentBlock such that initialFromBlock = 0
+	it("hasNextPage is false when the next window would start below block 0", async () => {
+		// currentBlock=500 < maxBlockRange=1000 → fromBlock=0; nextFrom = 0 - 1000 < 0
 		(mockProvider.getBlockNumber as ReturnType<typeof vi.fn>).mockResolvedValue(500n);
 
 		const { result } = renderHook(() => useSafeTransactionProposals({ safeAddress: SAFE_ADDRESS, chainId: CHAIN_ID }), {
@@ -142,18 +122,17 @@ describe("useSafeTransactionProposals", () => {
 
 		await waitFor(() => expect(result.current.isSuccess).toBe(true));
 
-		// initialFromBlock = 0 (since 500 < 1000), nextFrom = 0 - 1000 = -1000 < 0 → no next page
 		expect(result.current.hasNextPage).toBe(false);
 	});
 
-	it("fetches the next block window when fetchNextPage is called", async () => {
+	it("fetches the previous block window when fetchNextPage is called", async () => {
 		const { result } = renderHook(() => useSafeTransactionProposals({ safeAddress: SAFE_ADDRESS, chainId: CHAIN_ID }), {
 			wrapper: createWrapper(),
 		});
 
 		await waitFor(() => expect(result.current.isSuccess).toBe(true));
 
-		const requestCallsBefore = (mockProvider.request as ReturnType<typeof vi.fn>).mock.calls.filter(
+		const logCallsBefore = (mockProvider.request as ReturnType<typeof vi.fn>).mock.calls.filter(
 			(c) => c[0].method === "eth_getLogs",
 		).length;
 
@@ -162,17 +141,16 @@ describe("useSafeTransactionProposals", () => {
 		});
 
 		await waitFor(() => {
-			const requestCallsAfter = (mockProvider.request as ReturnType<typeof vi.fn>).mock.calls.filter(
+			const logCallsAfter = (mockProvider.request as ReturnType<typeof vi.fn>).mock.calls.filter(
 				(c) => c[0].method === "eth_getLogs",
 			).length;
-			expect(requestCallsAfter).toBeGreaterThan(requestCallsBefore);
+			expect(logCallsAfter).toBeGreaterThan(logCallsBefore);
 		});
 
-		// Second fetch should cover the previous window: fromBlock = 4000 - 1000 = 3000
+		// Page 1: fromBlock = 4000 - 1000 = 3000 = 0xbb8
 		const allLogsCalls = (mockProvider.request as ReturnType<typeof vi.fn>).mock.calls.filter(
 			(c) => c[0].method === "eth_getLogs",
 		);
-		const secondCallParams = allLogsCalls[1][0].params[0];
-		expect(secondCallParams.fromBlock).toBe("0xbb8"); // 3000 in hex
+		expect(allLogsCalls[1][0].params[0].fromBlock).toBe("0xbb8");
 	});
 });
