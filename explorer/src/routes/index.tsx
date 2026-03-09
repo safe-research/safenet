@@ -1,4 +1,5 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { useState } from "react";
 import { z } from "zod";
 import { Container } from "@/components/Groups";
 import { Skeleton } from "@/components/Skeleton";
@@ -14,7 +15,8 @@ export function App() {
 const PAGE_SIZE = 10;
 
 function AppInner() {
-	const proposals = useRecentTransactionProposals();
+	const [autoRefresh, setAutoRefresh] = useState(true);
+	const proposals = useRecentTransactionProposals(autoRefresh);
 	const { limit, network } = Route.useSearch();
 	const navigate = useNavigate({ from: Route.fullPath });
 
@@ -49,6 +51,11 @@ function AppInner() {
 					proposals={proposals.data}
 					itemsToShow={limit ?? PAGE_SIZE}
 					onShowMore={handleShowMore}
+					isFetching={proposals.isFetching}
+					dataUpdatedAt={proposals.dataUpdatedAt}
+					autoRefresh={autoRefresh}
+					onRefetch={() => proposals.refetch()}
+					onToggleAutoRefresh={() => setAutoRefresh((prev) => !prev)}
 				/>
 			)}
 		</Container>
