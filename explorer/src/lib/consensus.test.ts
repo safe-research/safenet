@@ -18,21 +18,10 @@ const makeProvider = (): PublicClient =>
 		request: vi.fn().mockResolvedValue([]),
 	}) as unknown as PublicClient;
 
-// Helper to extract the eth_getLogs params from the mock request call
-const capturedTopics = (provider: PublicClient): unknown[] => {
+const capturedParams = (provider: PublicClient) => {
 	const { calls } = (provider.request as ReturnType<typeof vi.fn>).mock;
 	expect(calls.length).toBeGreaterThan(0);
-	return calls[0][0].params[0].topics as unknown[];
-};
-
-const capturedFromBlock = (provider: PublicClient): string => {
-	const { calls } = (provider.request as ReturnType<typeof vi.fn>).mock;
-	return calls[0][0].params[0].fromBlock as string;
-};
-
-const capturedToBlock = (provider: PublicClient): string | undefined => {
-	const { calls } = (provider.request as ReturnType<typeof vi.fn>).mock;
-	return calls[0][0].params[0].toBlock as string | undefined;
+	return calls[0][0].params[0] as { topics: unknown[]; fromBlock: string; toBlock: string };
 };
 
 const firstCall = (provider: PublicClient) => (provider.request as ReturnType<typeof vi.fn>).mock.calls[0][0].params[0];
@@ -42,8 +31,7 @@ describe("loadTransactionProposals", () => {
 		it("passes null for safe topic when safe is not provided", async () => {
 			const provider = makeProvider();
 			await loadTransactionProposals({ provider, consensus: CONSENSUS, maxBlockRange: MAX_BLOCK_RANGE });
-			const topics = capturedTopics(provider);
-			expect(topics[3]).toBeNull();
+			expect(capturedParams(provider).topics[3]).toBeNull();
 		});
 
 		it("includes safe address as fourth topic when safe is provided", async () => {
@@ -54,8 +42,7 @@ describe("loadTransactionProposals", () => {
 				safe: SAFE_ADDRESS,
 				maxBlockRange: MAX_BLOCK_RANGE,
 			});
-			const topics = capturedTopics(provider);
-			expect(topics[3]).toBe(SAFE_ADDRESS);
+			expect(capturedParams(provider).topics[3]).toBe(SAFE_ADDRESS);
 		});
 
 		it("preserves safeTxHash filter alongside safe address filter", async () => {
@@ -67,7 +54,7 @@ describe("loadTransactionProposals", () => {
 				safe: SAFE_ADDRESS,
 				maxBlockRange: MAX_BLOCK_RANGE,
 			});
-			const topics = capturedTopics(provider);
+			const { topics } = capturedParams(provider);
 			expect(topics[1]).toBe(SAFE_TX_HASH);
 			expect(topics[3]).toBe(SAFE_ADDRESS);
 		});
@@ -80,50 +67,76 @@ describe("loadTransactionProposals", () => {
 				safe: SAFE_ADDRESS,
 				maxBlockRange: MAX_BLOCK_RANGE,
 			});
-			const topics = capturedTopics(provider);
-			expect(topics[2]).toBeNull();
+			expect(capturedParams(provider).topics[2]).toBeNull();
 		});
 	});
 
-	describe("block range parameters", () => {
-		it("computes fromBlock from maxBlockRange when fromBlock is not provided", async () => {
+	describe("block range", () => {
+		it("resolves toBlock from current block when not provided", async () => {
 			const provider = makeProvider();
 			await loadTransactionProposals({ provider, consensus: CONSENSUS, maxBlockRange: MAX_BLOCK_RANGE });
-			// fromBlock = currentBlock - maxBlockRange = 10000 - 1000 = 9000
-			expect(capturedFromBlock(provider)).toBe(numberToHex(CURRENT_BLOCK - MAX_BLOCK_RANGE));
 			expect(provider.getBlockNumber).toHaveBeenCalledOnce();
+			expect(capturedParams(provider).toBlock).toBe(numberToHex(CURRENT_BLOCK));
 		});
 
-		it("uses provided fromBlock directly without calling getBlockNumber", async () => {
+		it("computes fromBlock relative to toBlock when fromBlock is not provided", async () => {
 			const provider = makeProvider();
-			const explicitFromBlock = 5000n;
+			await loadTransactionProposals({ provider, consensus: CONSENSUS, maxBlockRange: MAX_BLOCK_RANGE });
+			// fromBlock = toBlock - maxBlockRange = 10000 - 1000 = 9000
+			expect(capturedParams(provider).fromBlock).toBe(numberToHex(CURRENT_BLOCK - MAX_BLOCK_RANGE));
+		});
+
+		it("does not call getBlockNumber when toBlock is provided", async () => {
+			const provider = makeProvider();
 			await loadTransactionProposals({
 				provider,
 				consensus: CONSENSUS,
-				fromBlock: explicitFromBlock,
+				toBlock: 6000n,
 				maxBlockRange: MAX_BLOCK_RANGE,
 			});
-			expect(capturedFromBlock(provider)).toBe(numberToHex(explicitFromBlock));
 			expect(provider.getBlockNumber).not.toHaveBeenCalled();
 		});
 
-		it("omits toBlock from request when not provided", async () => {
-			const provider = makeProvider();
-			await loadTransactionProposals({ provider, consensus: CONSENSUS, maxBlockRange: MAX_BLOCK_RANGE });
-			expect(capturedToBlock(provider)).toBeUndefined();
-		});
-
-		it("includes toBlock in request when provided", async () => {
+		it("computes fromBlock relative to explicit toBlock", async () => {
 			const provider = makeProvider();
 			const explicitToBlock = 6000n;
 			await loadTransactionProposals({
 				provider,
 				consensus: CONSENSUS,
-				fromBlock: 5000n,
 				toBlock: explicitToBlock,
 				maxBlockRange: MAX_BLOCK_RANGE,
 			});
-			expect(capturedToBlock(provider)).toBe(numberToHex(explicitToBlock));
+			// fromBlock = toBlock - maxBlockRange = 6000 - 1000 = 5000
+			expect(capturedParams(provider).fromBlock).toBe(numberToHex(explicitToBlock - MAX_BLOCK_RANGE));
+		});
+
+		it("uses provided fromBlock when both fromBlock and toBlock are given", async () => {
+			const provider = makeProvider();
+			await loadTransactionProposals({
+				provider,
+				consensus: CONSENSUS,
+				fromBlock: 5500n,
+				toBlock: 6000n,
+				maxBlockRange: MAX_BLOCK_RANGE,
+			});
+			expect(capturedParams(provider).fromBlock).toBe(numberToHex(5500n));
+			expect(capturedParams(provider).toBlock).toBe(numberToHex(6000n));
+			expect(provider.getBlockNumber).not.toHaveBeenCalled();
+		});
+	});
+
+	describe("return value", () => {
+		it("returns the fromBlock and toBlock used for the query", async () => {
+			const provider = makeProvider();
+			const result = await loadTransactionProposals({
+				provider,
+				consensus: CONSENSUS,
+				toBlock: 6000n,
+				maxBlockRange: MAX_BLOCK_RANGE,
+			});
+			expect(result.fromBlock).toBe(5000n);
+			expect(result.toBlock).toBe(6000n);
+			expect(result.proposals).toEqual([]);
 		});
 	});
 });

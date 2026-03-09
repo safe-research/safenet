@@ -112,13 +112,19 @@ export const loadProposedSafeTransaction = async ({
 	return safeTransactionSchema.safeParse(logs.at(0)?.args?.transaction).data ?? null;
 };
 
+export type LoadTransactionProposalsResult = {
+	proposals: TransactionProposal[];
+	fromBlock: bigint;
+	toBlock: bigint;
+};
+
 export const loadTransactionProposals = async ({
 	provider,
 	consensus,
 	safeTxHash,
 	safe,
-	fromBlock: fromBlockOverride,
-	toBlock,
+	fromBlock: fromBlockParam,
+	toBlock: toBlockParam,
 	maxBlockRange,
 }: {
 	provider: PublicClient;
@@ -128,10 +134,12 @@ export const loadTransactionProposals = async ({
 	fromBlock?: bigint;
 	toBlock?: bigint;
 	maxBlockRange: bigint;
-}): Promise<TransactionProposal[]> => {
+}): Promise<LoadTransactionProposalsResult> => {
 	// We use an `eth_getLogs` here directly, in order to filter on the `transactionHash` of both `TransactionProposed`
 	// and `TransactionAttested` events.
-	const fromBlock = fromBlockOverride ?? (await getFromBlock(provider, maxBlockRange));
+	// toBlock anchors the window; fromBlock is always derived relative to it so pages are contiguous.
+	const toBlock = toBlockParam ?? (await provider.getBlockNumber());
+	const fromBlock = fromBlockParam ?? (toBlock > maxBlockRange ? toBlock - maxBlockRange : 0n);
 	const logs = await provider.request({
 		method: "eth_getLogs",
 		params: [
@@ -139,7 +147,7 @@ export const loadTransactionProposals = async ({
 				address: consensus,
 				topics: [transactionEventSelectors, safeTxHash ?? null, null, safe ?? null],
 				fromBlock: numberToHex(fromBlock),
-				...(toBlock !== undefined ? { toBlock: numberToHex(toBlock) } : {}),
+				toBlock: numberToHex(toBlock),
 			},
 		],
 	});
@@ -159,7 +167,7 @@ export const loadTransactionProposals = async ({
 			.filter((log) => log.eventName === "TransactionAttested")
 			.map((log) => [attestationKey(log), { block: log.blockNumber, tx: log.transactionHash }] as const),
 	);
-	return eventLogs
+	const proposals = eventLogs
 		.map((log) => {
 			if (log.eventName !== "TransactionProposed") {
 				return undefined;
@@ -184,6 +192,8 @@ export const loadTransactionProposals = async ({
 			};
 		})
 		.filter((proposal) => proposal !== undefined);
+
+	return { proposals, fromBlock, toBlock };
 };
 
 export type EpochsState = {

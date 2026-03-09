@@ -7,7 +7,7 @@ import { loadTransactionProposals, type TransactionProposal } from "@/lib/consen
 export function useProposalsForTransaction(proposalTxHash: Hex) {
 	const [settings] = useSettings();
 	const provider = useProvider();
-	return useQuery<TransactionProposal[], Error>({
+	return useQuery<Awaited<ReturnType<typeof loadTransactionProposals>>, Error, TransactionProposal[]>({
 		queryKey: ["proposalsForTransactionHash", settings.consensus, proposalTxHash, settings.maxBlockRange],
 		queryFn: () =>
 			loadTransactionProposals({
@@ -16,7 +16,8 @@ export function useProposalsForTransaction(proposalTxHash: Hex) {
 				safeTxHash: proposalTxHash,
 				maxBlockRange: BigInt(settings.maxBlockRange),
 			}),
-		initialData: [],
+		select: (data) => data.proposals,
+		initialData: { proposals: [], fromBlock: 0n, toBlock: 0n },
 		refetchInterval: () => (settings.refetchInterval > 0 ? settings.refetchInterval : false),
 	});
 }
