@@ -5,15 +5,21 @@ import { formatLastUpdated, TransactionListControls } from "./TransactionListCon
 
 afterEach(cleanup);
 
+const FIXED_TS = 1_741_478_468_000; // 2025-03-08T22:41:08Z
+const FIXED_TS_FORMATTED = new Intl.DateTimeFormat(undefined, {
+	hour: "2-digit",
+	minute: "2-digit",
+	second: "2-digit",
+	timeZoneName: "short",
+}).format(new Date(FIXED_TS));
+
 describe("formatLastUpdated", () => {
 	it("returns '—' when dataUpdatedAt is 0", () => {
 		expect(formatLastUpdated(0)).toBe("—");
 	});
 
-	it("returns a formatted time string when dataUpdatedAt is set", () => {
-		const result = formatLastUpdated(Date.now());
-		expect(result).not.toBe("—");
-		expect(result.length).toBeGreaterThan(0);
+	it("returns the correctly formatted time string when dataUpdatedAt is set", () => {
+		expect(formatLastUpdated(FIXED_TS)).toBe(FIXED_TS_FORMATTED);
 	});
 });
 
@@ -72,9 +78,7 @@ describe("TransactionListControls", () => {
 	});
 
 	it("last updated shows formatted time when dataUpdatedAt is set", () => {
-		render(<TransactionListControls {...defaultProps} dataUpdatedAt={Date.now()} />);
-		const text = screen.getByText(/Last updated:/).textContent ?? "";
-		expect(text).not.toContain("—");
-		expect(text.length).toBeGreaterThan("Last updated: ".length);
+		render(<TransactionListControls {...defaultProps} dataUpdatedAt={FIXED_TS} />);
+		expect(screen.getByText(/Last updated:/).textContent).toContain(FIXED_TS_FORMATTED);
 	});
 });
