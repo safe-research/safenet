@@ -45,7 +45,7 @@ describe("loadTransactionProposals", () => {
 			expect(capturedParams(provider).topics[3]).toBe(SAFE_ADDRESS);
 		});
 
-		it("preserves safeTxHash filter alongside safe address filter", async () => {
+		it("preserves safeTxHash alongside safe address in topics", async () => {
 			const provider = makeProvider();
 			await loadTransactionProposals({
 				provider,
@@ -59,31 +59,18 @@ describe("loadTransactionProposals", () => {
 			expect(topics[3]).toBe(SAFE_ADDRESS);
 		});
 
-		it("keeps chainId topic as null (wildcard) when safe is provided", async () => {
+		it("keeps chainId topic as null (wildcard)", async () => {
 			const provider = makeProvider();
-			await loadTransactionProposals({
-				provider,
-				consensus: CONSENSUS,
-				safe: SAFE_ADDRESS,
-				maxBlockRange: MAX_BLOCK_RANGE,
-			});
+			await loadTransactionProposals({ provider, consensus: CONSENSUS, maxBlockRange: MAX_BLOCK_RANGE });
 			expect(capturedParams(provider).topics[2]).toBeNull();
 		});
 	});
 
 	describe("block range", () => {
-		it("resolves toBlock from current block when not provided", async () => {
+		it("always includes an explicit toBlock in the request", async () => {
 			const provider = makeProvider();
 			await loadTransactionProposals({ provider, consensus: CONSENSUS, maxBlockRange: MAX_BLOCK_RANGE });
-			expect(provider.getBlockNumber).toHaveBeenCalledOnce();
 			expect(capturedParams(provider).toBlock).toBe(numberToHex(CURRENT_BLOCK));
-		});
-
-		it("computes fromBlock relative to toBlock when fromBlock is not provided", async () => {
-			const provider = makeProvider();
-			await loadTransactionProposals({ provider, consensus: CONSENSUS, maxBlockRange: MAX_BLOCK_RANGE });
-			// fromBlock = toBlock - maxBlockRange = 10000 - 1000 = 9000
-			expect(capturedParams(provider).fromBlock).toBe(numberToHex(CURRENT_BLOCK - MAX_BLOCK_RANGE));
 		});
 
 		it("does not call getBlockNumber when toBlock is provided", async () => {
@@ -94,33 +81,6 @@ describe("loadTransactionProposals", () => {
 				toBlock: 6000n,
 				maxBlockRange: MAX_BLOCK_RANGE,
 			});
-			expect(provider.getBlockNumber).not.toHaveBeenCalled();
-		});
-
-		it("computes fromBlock relative to explicit toBlock", async () => {
-			const provider = makeProvider();
-			const explicitToBlock = 6000n;
-			await loadTransactionProposals({
-				provider,
-				consensus: CONSENSUS,
-				toBlock: explicitToBlock,
-				maxBlockRange: MAX_BLOCK_RANGE,
-			});
-			// fromBlock = toBlock - maxBlockRange = 6000 - 1000 = 5000
-			expect(capturedParams(provider).fromBlock).toBe(numberToHex(explicitToBlock - MAX_BLOCK_RANGE));
-		});
-
-		it("uses provided fromBlock when both fromBlock and toBlock are given", async () => {
-			const provider = makeProvider();
-			await loadTransactionProposals({
-				provider,
-				consensus: CONSENSUS,
-				fromBlock: 5500n,
-				toBlock: 6000n,
-				maxBlockRange: MAX_BLOCK_RANGE,
-			});
-			expect(capturedParams(provider).fromBlock).toBe(numberToHex(5500n));
-			expect(capturedParams(provider).toBlock).toBe(numberToHex(6000n));
 			expect(provider.getBlockNumber).not.toHaveBeenCalled();
 		});
 	});
@@ -303,8 +263,8 @@ describe("loadEpochRolloverHistory", () => {
 		expect(provider.getBlockNumber).not.toHaveBeenCalled();
 	});
 
-	it("uses 'latest' as toBlock when no cursor is provided", async () => {
-		const provider = makeEpochProvider();
+	it("uses current block number as toBlock when no cursor is provided", async () => {
+		const provider = makeEpochProvider({ blockNumber: 1000n });
 		await loadEpochRolloverHistory({
 			provider,
 			consensus: CONSENSUS,
@@ -312,7 +272,7 @@ describe("loadEpochRolloverHistory", () => {
 		});
 		expect(provider.getLogs).toHaveBeenCalledWith(
 			expect.objectContaining({
-				toBlock: "latest",
+				toBlock: 1000n,
 			}),
 		);
 	});

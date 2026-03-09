@@ -1,38 +1,39 @@
 import type { PublicClient } from "viem";
 import { describe, expect, it, vi } from "vitest";
-import { getFromBlock, mostRecentFirst } from "./utils";
+import { getBlockRange, mostRecentFirst } from "./utils";
 
-describe("getFromBlock", () => {
-	const makeProvider = (blockNumber: bigint): PublicClient =>
-		({
-			getBlockNumber: vi.fn().mockResolvedValue(blockNumber),
-		}) as unknown as PublicClient;
+const CURRENT_BLOCK = 10000n;
+const MAX_BLOCK_RANGE = 1000n;
 
-	it("subtracts maxBlockRange from current block", async () => {
-		const result = await getFromBlock(makeProvider(1000n), 200n);
-		expect(result).toBe(800n);
+const makeProvider = (blockNumber = CURRENT_BLOCK): PublicClient =>
+	({ getBlockNumber: vi.fn().mockResolvedValue(blockNumber) }) as unknown as PublicClient;
+
+describe("getBlockRange", () => {
+	it("fetches the current block when referenceBlock is not provided", async () => {
+		const provider = makeProvider();
+		const { toBlock } = await getBlockRange(provider, MAX_BLOCK_RANGE);
+		expect(provider.getBlockNumber).toHaveBeenCalledOnce();
+		expect(toBlock).toBe(CURRENT_BLOCK);
 	});
 
-	it("returns 0n when block number is less than maxBlockRange", async () => {
-		const result = await getFromBlock(makeProvider(50n), 200n);
-		expect(result).toBe(0n);
-	});
-
-	it("returns 0n when block number equals maxBlockRange", async () => {
-		const result = await getFromBlock(makeProvider(200n), 200n);
-		expect(result).toBe(0n);
-	});
-
-	it("uses referenceBlock instead of fetching when provided", async () => {
-		const provider = makeProvider(9999n);
-		const result = await getFromBlock(provider, 100n, 500n);
-		expect(result).toBe(400n);
+	it("uses referenceBlock as toBlock without calling getBlockNumber", async () => {
+		const provider = makeProvider();
+		const { toBlock } = await getBlockRange(provider, MAX_BLOCK_RANGE, 6000n);
 		expect(provider.getBlockNumber).not.toHaveBeenCalled();
+		expect(toBlock).toBe(6000n);
 	});
 
-	it("returns 0n when referenceBlock is less than maxBlockRange", async () => {
-		const result = await getFromBlock(makeProvider(9999n), 100n, 50n);
-		expect(result).toBe(0n);
+	it("computes fromBlock as toBlock - maxBlockRange", async () => {
+		const provider = makeProvider();
+		const { fromBlock } = await getBlockRange(provider, MAX_BLOCK_RANGE);
+		expect(fromBlock).toBe(CURRENT_BLOCK - MAX_BLOCK_RANGE);
+	});
+
+	it("clamps fromBlock to 0 when toBlock is less than maxBlockRange", async () => {
+		const provider = makeProvider(500n);
+		const { fromBlock, toBlock } = await getBlockRange(provider, MAX_BLOCK_RANGE);
+		expect(toBlock).toBe(500n);
+		expect(fromBlock).toBe(0n);
 	});
 });
 

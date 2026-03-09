@@ -11,7 +11,7 @@ import {
 } from "viem";
 import z from "zod";
 import { bigIntSchema, checkedAddressSchema, hexDataSchema } from "@/lib/schemas";
-import { getFromBlock, jsonReplacer, mostRecentFirst } from "@/lib/utils";
+import { getBlockRange, jsonReplacer, mostRecentFirst } from "@/lib/utils";
 
 const consensusAbi = parseAbi([
 	"function getActiveEpoch() external view returns (uint64 epoch, bytes32 group)",
@@ -96,7 +96,7 @@ export const loadProposedSafeTransaction = async ({
 	safeTxHash: Hex;
 	maxBlockRange: bigint;
 }): Promise<SafeTransaction | null> => {
-	const fromBlock = await getFromBlock(provider, maxBlockRange);
+	const { fromBlock, toBlock } = await getBlockRange(provider, maxBlockRange);
 	const logs = await provider.getLogs({
 		address: consensus,
 		event: getAbiItem({
@@ -107,6 +107,7 @@ export const loadProposedSafeTransaction = async ({
 			transactionHash: safeTxHash,
 		},
 		fromBlock,
+		toBlock,
 		strict: true,
 	});
 	return safeTransactionSchema.safeParse(logs.at(0)?.args?.transaction).data ?? null;
@@ -123,23 +124,20 @@ export const loadTransactionProposals = async ({
 	consensus,
 	safeTxHash,
 	safe,
-	fromBlock: fromBlockParam,
-	toBlock: toBlockParam,
+	toBlock: referenceBlock,
 	maxBlockRange,
 }: {
 	provider: PublicClient;
 	consensus: Address;
 	safeTxHash?: Hex;
 	safe?: Address;
-	fromBlock?: bigint;
 	toBlock?: bigint;
 	maxBlockRange: bigint;
 }): Promise<LoadTransactionProposalsResult> => {
 	// We use an `eth_getLogs` here directly, in order to filter on the `transactionHash` of both `TransactionProposed`
 	// and `TransactionAttested` events.
 	// toBlock anchors the window; fromBlock is always derived relative to it so pages are contiguous.
-	const toBlock = toBlockParam ?? (await provider.getBlockNumber());
-	const fromBlock = fromBlockParam ?? (toBlock > maxBlockRange ? toBlock - maxBlockRange : 0n);
+	const { fromBlock, toBlock } = await getBlockRange(provider, maxBlockRange, referenceBlock);
 	const logs = await provider.request({
 		method: "eth_getLogs",
 		params: [
@@ -254,15 +252,14 @@ export const loadEpochRolloverHistory = async ({
 	maxBlockRange: bigint;
 	cursor?: bigint;
 }): Promise<EpochRolloverResult> => {
-	const toBlock = cursor ?? (await provider.getBlockNumber());
-	const fromBlock = await getFromBlock(provider, maxBlockRange, toBlock);
+	const { fromBlock, toBlock } = await getBlockRange(provider, maxBlockRange, cursor);
 
 	const stagedLogs = mostRecentFirst(
 		await provider.getLogs({
 			address: consensus,
 			event: getAbiItem({ abi: consensusAbi, name: "EpochStaged" }),
 			fromBlock,
-			toBlock: cursor === undefined ? "latest" : toBlock,
+			toBlock,
 			strict: true,
 		}),
 	);

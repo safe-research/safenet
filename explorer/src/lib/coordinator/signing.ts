@@ -5,7 +5,7 @@ import {
 	COORDINATOR_SIGNING_PROGRESS_SELECTORS,
 } from "@/lib/coordinator/abi";
 import { safeTxProposalHash } from "@/lib/packets";
-import { getFromBlock } from "@/lib/utils";
+import { getBlockRange } from "@/lib/utils";
 
 let cachedAddresses:
 	| {
@@ -75,8 +75,12 @@ export const loadLatestAttestationStatus = async ({
 }): Promise<AttestationStatus | null> => {
 	// We use an `eth_getLogs` here directly, in order to filter on the `transactionHash` of both `TransactionProposed`
 	// and `TransactionAttested` events.
-	const fromBlock = proposedAt ?? (await getFromBlock(provider, maxBlockRange));
-	const toBlock = attestedAt ?? "latest";
+	const { fromBlock: defaultFromBlock, toBlock } = await getBlockRange(
+		provider,
+		maxBlockRange,
+		attestedAt ?? undefined,
+	);
+	const fromBlock = proposedAt ?? defaultFromBlock;
 	const chainId = await provider.getChainId();
 	const coordinator = await loadCoordinator(provider, consensus);
 	const message = safeTxProposalHash({
@@ -109,7 +113,7 @@ export const loadLatestAttestationStatus = async ({
 				address: coordinator,
 				topics: [COORDINATOR_SIGNING_PROGRESS_SELECTORS, signingIds],
 				fromBlock: numberToHex(fromBlock),
-				toBlock: typeof toBlock === "bigint" ? numberToHex(toBlock) : toBlock,
+				toBlock: numberToHex(toBlock),
 			},
 		],
 	});
