@@ -43,7 +43,7 @@ interface IConsensus {
      * @param activeEpoch The current active epoch.
      * @param proposedEpoch The proposed new epoch.
      * @param rolloverBlock The block number when rollover should occur.
-     * @param groupId The inque identifier for the FROST group for the proposed epoch.
+     * @param groupId The unique identifier for the FROST group for the proposed epoch.
      * @param groupKey The public group key for the proposed epoch.
      * @param signatureId The FROST signature identifier corresponding to the rollover attestation.
      * @param attestation The attestation to epoch rollover.
