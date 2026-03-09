@@ -15,7 +15,7 @@ Short summary of the feature including a short overview of the different steps (
 Summary of architecture decisions including context. This should especially outline if new components are added or existing architecture is adjusted.
 
 
-### Alternative considered
+### Alternatives Considered
 
 Outline potential alternatives that have been considered related to the architecture.
 
@@ -39,9 +39,9 @@ This section should outline technical details, such as new routes, components, e
 
 ## Implementation Phases
 
-Code changes should be easy to review and to understand. For this it is important that PRs are not too large. This should be considered when planning the feature. Phases that can be executed in separate PRs or can be parallized should be explicitly outlined here.
+Code changes should be easy to review and to understand. For this it is important that PRs are not too large. This should be considered when planning the feature. Phases that can be executed in separate PRs or can be parallelized should be explicitly outlined here.
 
-For each phase outline what flows will be covered, what files will be touched and what components will implemented.
+For each phase outline what flows will be covered, what files will be touched and what components will be implemented.
 
 ---
 
