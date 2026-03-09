@@ -201,21 +201,22 @@ export const loadEpochsState = async (provider: PublicClient, consensus: Address
 		abi: consensusAbi,
 		functionName: "getEpochsState",
 	});
-	const activeGroupId = await provider.readContract({
-		address: consensus,
-		abi: consensusAbi,
-		functionName: "getEpochGroupId",
-		args: [active],
-	});
-	let stagedGroupId: Hex | null = null;
-	if (staged > 0n) {
-		stagedGroupId = await provider.readContract({
+	const [activeGroupId, stagedGroupId] = await Promise.all([
+		provider.readContract({
 			address: consensus,
 			abi: consensusAbi,
 			functionName: "getEpochGroupId",
-			args: [staged],
-		});
-	}
+			args: [active],
+		}),
+		staged > 0n
+			? provider.readContract({
+					address: consensus,
+					abi: consensusAbi,
+					functionName: "getEpochGroupId",
+					args: [staged],
+				})
+			: Promise.resolve(null),
+	]);
 	return { previous, active, staged, rolloverBlock, activeGroupId, stagedGroupId };
 };
 

@@ -17,16 +17,19 @@ export function ValidatorList({
 }) {
 	return (
 		<>
-			{active
-				.map(mapInfo("✅"))
-				.sort()
-				.concat(
-					all
-						.filter((v) => !active.includes(v))
-						.map(mapInfo(completed ? "❌" : "⏳"))
-						.sort(),
-				)
-				.join(", ")}
+			{(() => {
+				const activeSet = new Set(active);
+				return active
+					.map(mapInfo("✅"))
+					.sort()
+					.concat(
+						all
+							.filter((v) => !activeSet.has(v))
+							.map(mapInfo(completed ? "❌" : "⏳"))
+							.sort(),
+					)
+					.join(", ");
+			})()}
 		</>
 	);
 }

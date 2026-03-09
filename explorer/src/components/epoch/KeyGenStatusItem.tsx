@@ -18,7 +18,7 @@ function statusColor(status: KeyGenStatus): string {
 	return "text-yellow-500";
 }
 
-export function KeyGenStatusItem({ status }: { status: KeyGenStatus | null; isLoading?: boolean }) {
+export function KeyGenStatusItem({ status }: { status: KeyGenStatus | null }) {
 	const validatorInfo = useValidatorInfoMap();
 
 	if (status === null) {

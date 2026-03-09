@@ -76,15 +76,15 @@ export const loadKeyGenDetails = async ({
 	for (const log of eventLogs) {
 		switch (log.eventName) {
 			case "KeyGenCommitted": {
-				if (log.args.committed) committed.push(toParticipation(log));
+				committed.push(toParticipation(log));
 				break;
 			}
 			case "KeyGenSecretShared": {
-				if (log.args.shared) shared.push(toParticipation(log));
+				shared.push(toParticipation(log));
 				break;
 			}
 			case "KeyGenConfirmed": {
-				if (log.args.confirmed) confirmed.push(toParticipation(log));
+				confirmed.push(toParticipation(log));
 				break;
 			}
 			case "KeyGenComplained": {
