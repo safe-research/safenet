@@ -1,10 +1,132 @@
 import type { Address, Hex, PublicClient } from "viem";
+import { numberToHex } from "viem";
 import { describe, expect, it, vi } from "vitest";
-import { loadEpochRolloverHistory, loadEpochsState } from "./consensus";
+import { loadEpochRolloverHistory, loadEpochsState, loadTransactionProposals } from "./consensus";
 
-const CONSENSUS = "0x1111111111111111111111111111111111111111" as Address;
+const CONSENSUS = "0x0000000000000000000000000000000000000001" as Address;
+const SAFE_TX_HASH = `0x${"ab".repeat(32)}` as Hex;
+const SAFE_ADDRESS = "0xDeaDbeefdEAdbeefdEadbEEFdeadbeEFdEaDbeeF" as Address;
+const CURRENT_BLOCK = 10000n;
+const MAX_BLOCK_RANGE = 1000n;
+
 const GROUP_ID_A = `0x${"aa".repeat(32)}` as Hex;
 const GROUP_ID_B = `0x${"bb".repeat(32)}` as Hex;
+
+const makeProvider = (): PublicClient =>
+	({
+		getBlockNumber: vi.fn().mockResolvedValue(CURRENT_BLOCK),
+		request: vi.fn().mockResolvedValue([]),
+	}) as unknown as PublicClient;
+
+// Helper to extract the eth_getLogs params from the mock request call
+const capturedTopics = (provider: PublicClient): unknown[] => {
+	const { calls } = (provider.request as ReturnType<typeof vi.fn>).mock;
+	expect(calls.length).toBeGreaterThan(0);
+	return calls[0][0].params[0].topics as unknown[];
+};
+
+const capturedFromBlock = (provider: PublicClient): string => {
+	const { calls } = (provider.request as ReturnType<typeof vi.fn>).mock;
+	return calls[0][0].params[0].fromBlock as string;
+};
+
+const capturedToBlock = (provider: PublicClient): string | undefined => {
+	const { calls } = (provider.request as ReturnType<typeof vi.fn>).mock;
+	return calls[0][0].params[0].toBlock as string | undefined;
+};
+
+const firstCall = (provider: PublicClient) => (provider.request as ReturnType<typeof vi.fn>).mock.calls[0][0].params[0];
+
+describe("loadTransactionProposals", () => {
+	describe("safe address topic filter", () => {
+		it("passes null for safe topic when safe is not provided", async () => {
+			const provider = makeProvider();
+			await loadTransactionProposals({ provider, consensus: CONSENSUS, maxBlockRange: MAX_BLOCK_RANGE });
+			const topics = capturedTopics(provider);
+			expect(topics[3]).toBeNull();
+		});
+
+		it("includes safe address as fourth topic when safe is provided", async () => {
+			const provider = makeProvider();
+			await loadTransactionProposals({
+				provider,
+				consensus: CONSENSUS,
+				safe: SAFE_ADDRESS,
+				maxBlockRange: MAX_BLOCK_RANGE,
+			});
+			const topics = capturedTopics(provider);
+			expect(topics[3]).toBe(SAFE_ADDRESS);
+		});
+
+		it("preserves safeTxHash filter alongside safe address filter", async () => {
+			const provider = makeProvider();
+			await loadTransactionProposals({
+				provider,
+				consensus: CONSENSUS,
+				safeTxHash: SAFE_TX_HASH,
+				safe: SAFE_ADDRESS,
+				maxBlockRange: MAX_BLOCK_RANGE,
+			});
+			const topics = capturedTopics(provider);
+			expect(topics[1]).toBe(SAFE_TX_HASH);
+			expect(topics[3]).toBe(SAFE_ADDRESS);
+		});
+
+		it("keeps chainId topic as null (wildcard) when safe is provided", async () => {
+			const provider = makeProvider();
+			await loadTransactionProposals({
+				provider,
+				consensus: CONSENSUS,
+				safe: SAFE_ADDRESS,
+				maxBlockRange: MAX_BLOCK_RANGE,
+			});
+			const topics = capturedTopics(provider);
+			expect(topics[2]).toBeNull();
+		});
+	});
+
+	describe("block range parameters", () => {
+		it("computes fromBlock from maxBlockRange when fromBlock is not provided", async () => {
+			const provider = makeProvider();
+			await loadTransactionProposals({ provider, consensus: CONSENSUS, maxBlockRange: MAX_BLOCK_RANGE });
+			// fromBlock = currentBlock - maxBlockRange = 10000 - 1000 = 9000
+			expect(capturedFromBlock(provider)).toBe(numberToHex(CURRENT_BLOCK - MAX_BLOCK_RANGE));
+			expect(provider.getBlockNumber).toHaveBeenCalledOnce();
+		});
+
+		it("uses provided fromBlock directly without calling getBlockNumber", async () => {
+			const provider = makeProvider();
+			const explicitFromBlock = 5000n;
+			await loadTransactionProposals({
+				provider,
+				consensus: CONSENSUS,
+				fromBlock: explicitFromBlock,
+				maxBlockRange: MAX_BLOCK_RANGE,
+			});
+			expect(capturedFromBlock(provider)).toBe(numberToHex(explicitFromBlock));
+			expect(provider.getBlockNumber).not.toHaveBeenCalled();
+		});
+
+		it("omits toBlock from request when not provided", async () => {
+			const provider = makeProvider();
+			await loadTransactionProposals({ provider, consensus: CONSENSUS, maxBlockRange: MAX_BLOCK_RANGE });
+			expect(capturedToBlock(provider)).toBeUndefined();
+		});
+
+		it("includes toBlock in request when provided", async () => {
+			const provider = makeProvider();
+			const explicitToBlock = 6000n;
+			await loadTransactionProposals({
+				provider,
+				consensus: CONSENSUS,
+				fromBlock: 5000n,
+				toBlock: explicitToBlock,
+				maxBlockRange: MAX_BLOCK_RANGE,
+			});
+			expect(capturedToBlock(provider)).toBe(numberToHex(explicitToBlock));
+		});
+	});
+});
 
 const makeStagedLog = ({
 	activeEpoch,
@@ -42,7 +164,7 @@ const makeStagedLog = ({
 });
 
 describe("loadEpochRolloverHistory", () => {
-	const makeProvider = ({
+	const makeEpochProvider = ({
 		blockNumber = 1000n,
 		logs = [],
 	}: {
@@ -56,7 +178,7 @@ describe("loadEpochRolloverHistory", () => {
 
 	it("returns empty entries when no logs are found", async () => {
 		const result = await loadEpochRolloverHistory({
-			provider: makeProvider(),
+			provider: makeEpochProvider(),
 			consensus: CONSENSUS,
 			maxBlockRange: 500n,
 		});
@@ -75,7 +197,7 @@ describe("loadEpochRolloverHistory", () => {
 			}),
 		];
 		const result = await loadEpochRolloverHistory({
-			provider: makeProvider({ logs }),
+			provider: makeEpochProvider({ logs }),
 			consensus: CONSENSUS,
 			maxBlockRange: 500n,
 		});
@@ -100,7 +222,7 @@ describe("loadEpochRolloverHistory", () => {
 			}),
 		];
 		const result = await loadEpochRolloverHistory({
-			provider: makeProvider({ logs }),
+			provider: makeEpochProvider({ logs }),
 			consensus: CONSENSUS,
 			maxBlockRange: 500n,
 		});
@@ -118,7 +240,7 @@ describe("loadEpochRolloverHistory", () => {
 			}),
 		];
 		const result = await loadEpochRolloverHistory({
-			provider: makeProvider({ logs }),
+			provider: makeEpochProvider({ logs }),
 			consensus: CONSENSUS,
 			maxBlockRange: 500n,
 		});
@@ -143,7 +265,7 @@ describe("loadEpochRolloverHistory", () => {
 			}),
 		];
 		const result = await loadEpochRolloverHistory({
-			provider: makeProvider({ logs }),
+			provider: makeEpochProvider({ logs }),
 			consensus: CONSENSUS,
 			maxBlockRange: 500n,
 		});
@@ -153,7 +275,7 @@ describe("loadEpochRolloverHistory", () => {
 	});
 
 	it("uses cursor as toBlock when provided", async () => {
-		const provider = makeProvider();
+		const provider = makeEpochProvider();
 		await loadEpochRolloverHistory({
 			provider,
 			consensus: CONSENSUS,
@@ -169,7 +291,7 @@ describe("loadEpochRolloverHistory", () => {
 	});
 
 	it("uses 'latest' as toBlock when no cursor is provided", async () => {
-		const provider = makeProvider();
+		const provider = makeEpochProvider();
 		await loadEpochRolloverHistory({
 			provider,
 			consensus: CONSENSUS,
