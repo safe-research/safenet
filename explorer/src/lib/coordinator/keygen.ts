@@ -1,4 +1,4 @@
-import { type Address, type Hex, type PublicClient, getAbiItem } from "viem";
+import { type Address, getAbiItem, type Hex, type PublicClient } from "viem";
 import { COORDINATOR_KEY_GEN_EVENTS } from "@/lib/coordinator/abi";
 import { loadCoordinator } from "@/lib/coordinator/signing";
 

@@ -19,14 +19,16 @@ export function useKeyGenDetails({
 	const provider = useProvider();
 	return useQuery<KeyGenStatus | null, Error>({
 		queryKey: ["keyGenDetails", settings.consensus, gid, startBlock.toString(), endBlock.toString()],
-		queryFn: () =>
-			loadKeyGenDetails({
+		queryFn: () => {
+			if (gid === null) throw new Error("gid is required");
+			return loadKeyGenDetails({
 				provider,
 				consensus: settings.consensus,
-				gid: gid!,
+				gid,
 				startBlock,
 				endBlock,
-			}),
+			});
+		},
 		enabled: enabled && gid !== null,
 		refetchInterval: (query) => {
 			const data = query.state.data;

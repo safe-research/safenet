@@ -2,9 +2,9 @@ import { useState } from "react";
 import type { Address, Hex } from "viem";
 import { KeyGenStatusItem } from "@/components/epoch/KeyGenStatusItem";
 import { Skeleton } from "@/components/Skeleton";
+import { useEpochGroupId } from "@/hooks/useEpochGroupId";
 import { useKeyGenDetails } from "@/hooks/useKeyGenDetails";
 import type { EpochRolloverEntry } from "@/lib/consensus";
-import { useEpochGroupId } from "@/hooks/useEpochGroupId";
 
 export function EpochRolloverItem({
 	entry,

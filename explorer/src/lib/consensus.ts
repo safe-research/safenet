@@ -220,11 +220,7 @@ export const loadEpochsState = async (provider: PublicClient, consensus: Address
 	return { previous, active, staged, rolloverBlock, activeGroupId, stagedGroupId };
 };
 
-export const loadEpochGroupId = async (
-	provider: PublicClient,
-	consensus: Address,
-	epoch: bigint,
-): Promise<Hex> => {
+export const loadEpochGroupId = async (provider: PublicClient, consensus: Address, epoch: bigint): Promise<Hex> => {
 	return provider.readContract({
 		address: consensus,
 		abi: consensusAbi,
@@ -261,9 +257,7 @@ export const loadEpochRolloverHistory = async ({
 		}),
 	]);
 
-	const stagedByProposedEpoch = new Map(
-		stagedLogs.map((log) => [log.args.proposedEpoch, log]),
-	);
+	const stagedByProposedEpoch = new Map(stagedLogs.map((log) => [log.args.proposedEpoch, log]));
 
 	const entries: EpochRolloverEntry[] = [];
 	for (const proposed of proposedLogs) {

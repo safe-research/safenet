@@ -26,11 +26,7 @@ function EpochPage() {
 
 			{epochsState.data !== null && (
 				<div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-8">
-					<EpochCard
-						label="Current Epoch"
-						epoch={epochsState.data.active}
-						groupId={epochsState.data.activeGroupId}
-					/>
+					<EpochCard label="Current Epoch" epoch={epochsState.data.active} groupId={epochsState.data.activeGroupId} />
 					{epochsState.data.staged > 0n && epochsState.data.stagedGroupId !== null && (
 						<EpochCard
 							label="Staged Epoch"
