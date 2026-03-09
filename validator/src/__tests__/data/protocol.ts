@@ -328,7 +328,7 @@ export const TEST_EVENTS: [ProtocolLog | null, StateTransition][] = [
 		{
 			blockNumber: 111n,
 			logIndex: 0,
-			// KeyGen(bytes32 indexed gid, bytes32 participants, uint16 count, uint16 threshold, bytes32 context)
+			// KeyGen(bytes32 indexed gid, bytes32 participants, uint16 count, uint16 threshold, bytes32 indexed context)
 			eventName: "KeyGen",
 			args: {
 				gid: "0x5afe000000000000000000000000000000000000000000000000000000000000",

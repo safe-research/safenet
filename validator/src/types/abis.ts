@@ -28,7 +28,7 @@ export const COORDINATOR_SIGN_COMPLETED_EVENT = parseAbiItem(
 );
 
 export const COORDINATOR_OTHER_EVENTS = parseAbi([
-	"event KeyGen(bytes32 indexed gid, bytes32 participants, uint16 count, uint16 threshold, bytes32 context)",
+	"event KeyGen(bytes32 indexed gid, bytes32 participants, uint16 count, uint16 threshold, bytes32 indexed context)",
 	"event KeyGenCommitted(bytes32 indexed gid, uint256 identifier, address participant, ((uint256 x, uint256 y) q, (uint256 x, uint256 y)[] c, (uint256 x, uint256 y) r, uint256 mu) commitment, bool committed)",
 	"event KeyGenSecretShared(bytes32 indexed gid, uint256 identifier, ((uint256 x, uint256 y) y, uint256[] f) share, bool shared)",
 	"event KeyGenConfirmed(bytes32 indexed gid, uint256 identifier, bool confirmed)",
