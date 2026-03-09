@@ -27,7 +27,7 @@ const fetchCoordinator = async (provider: PublicClient, consensus: Address): Pro
 	throw new Error(`Could not read coordinator from consensus contract ${consensus}`);
 };
 
-const loadCoordinator = (provider: PublicClient, consensus: Address): Promise<Address> => {
+export const loadCoordinator = (provider: PublicClient, consensus: Address): Promise<Address> => {
 	if (cachedAddresses?.consensus === consensus) {
 		return cachedAddresses.coordinator;
 	}
