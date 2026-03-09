@@ -20,9 +20,9 @@ const consensusAbi = parseAbi([
 	"function proposeTransaction((uint256 chainId, address safe, address to, uint256 value, bytes data, uint8 operation, uint256 safeTxGas, uint256 baseGas, uint256 gasPrice, address gasToken, address refundReceiver, uint256 nonce) transaction) external returns (bytes32 transactionHash)",
 	"function getTransactionAttestationByHash(uint64 epoch, bytes32 transactionHash) external view returns (((uint256 x, uint256 y) r, uint256 z) signature)",
 	"event TransactionProposed(bytes32 indexed transactionHash, uint256 indexed chainId, address indexed safe, uint64 epoch, (uint256 chainId, address safe, address to, uint256 value, bytes data, uint8 operation, uint256 safeTxGas, uint256 baseGas, uint256 gasPrice, address gasToken, address refundReceiver, uint256 nonce) transaction)",
-	"event TransactionAttested(bytes32 indexed transactionHash, uint64 epoch, ((uint256 x, uint256 y) r, uint256 z) attestation)",
-	"event EpochProposed(uint64 indexed activeEpoch, uint64 indexed proposedEpoch, uint64 rolloverBlock, (uint256 x, uint256 y) groupKey)",
-	"event EpochStaged(uint64 indexed activeEpoch, uint64 indexed proposedEpoch, uint64 rolloverBlock, (uint256 x, uint256 y) groupKey, ((uint256 x, uint256 y) r, uint256 z) attestation)",
+	"event TransactionAttested(bytes32 indexed transactionHash, uint64 epoch, bytes32 signatureId, ((uint256 x, uint256 y) r, uint256 z) attestation)",
+	"event EpochProposed(uint64 indexed activeEpoch, uint64 indexed proposedEpoch, uint64 rolloverBlock, bytes32 groupId, (uint256 x, uint256 y) groupKey)",
+	"event EpochStaged(uint64 indexed activeEpoch, uint64 indexed proposedEpoch, uint64 rolloverBlock, bytes32 groupId, (uint256 x, uint256 y) groupKey, bytes32 signatureId, ((uint256 x, uint256 y) r, uint256 z) attestation)",
 ]);
 
 export type ConsensusState = {
@@ -192,6 +192,7 @@ export type EpochRolloverEntry = {
 	activeEpoch: bigint;
 	proposedEpoch: bigint;
 	rolloverBlock: bigint;
+	groupId: Hex;
 	stagedAt: bigint;
 };
 
@@ -218,15 +219,6 @@ export const loadEpochsState = async (provider: PublicClient, consensus: Address
 			: Promise.resolve(null),
 	]);
 	return { previous, active, staged, rolloverBlock, activeGroupId, stagedGroupId };
-};
-
-export const loadEpochGroupId = async (provider: PublicClient, consensus: Address, epoch: bigint): Promise<Hex> => {
-	return provider.readContract({
-		address: consensus,
-		abi: consensusAbi,
-		functionName: "getEpochGroupId",
-		args: [epoch],
-	});
 };
 
 export type EpochRolloverResult = {
@@ -262,6 +254,7 @@ export const loadEpochRolloverHistory = async ({
 		activeEpoch: log.args.activeEpoch,
 		proposedEpoch: log.args.proposedEpoch,
 		rolloverBlock: log.args.rolloverBlock,
+		groupId: log.args.groupId,
 		stagedAt: log.blockNumber,
 	}));
 

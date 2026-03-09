@@ -2,7 +2,7 @@ import { getAbiItem, parseAbi, parseAbiItem, toEventSelector } from "viem";
 
 export const COORDINATOR_KEY_GEN_EVENTS = parseAbi([
 	"event KeyGen(bytes32 indexed gid, bytes32 participants, uint16 count, uint16 threshold, bytes32 indexed context)",
-	"event KeyGenCommitted(bytes32 indexed gid, uint256 identifier, ((uint256 x, uint256 y)[] c, (uint256 x, uint256 y) r, uint256 mu) commitment, bool committed)",
+	"event KeyGenCommitted(bytes32 indexed gid, uint256 identifier, address participant, ((uint256 x, uint256 y) q, (uint256 x, uint256 y)[] c, (uint256 x, uint256 y) r, uint256 mu) commitment, bool committed)",
 	"event KeyGenSecretShared(bytes32 indexed gid, uint256 identifier, ((uint256 x, uint256 y) y, uint256[] f) share, bool shared)",
 	"event KeyGenConfirmed(bytes32 indexed gid, uint256 identifier, bool confirmed)",
 	"event KeyGenComplained(bytes32 indexed gid, uint256 plaintiff, uint256 accused, bool compromised)",

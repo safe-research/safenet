@@ -1,16 +1,18 @@
 import { useQuery } from "@tanstack/react-query";
+import type { Hex } from "viem";
 import { useProvider } from "@/hooks/useProvider";
 import { useSettings } from "@/hooks/useSettings";
-import { loadEpochGroupId } from "@/lib/consensus";
 import { type KeyGenStatus, loadKeyGenDetails } from "@/lib/coordinator/keygen";
 
 export function useKeyGenDetails({
 	epoch,
+	gid,
 	endBlock,
 	prevStagedAt,
 	enabled = true,
 }: {
 	epoch: bigint;
+	gid: Hex;
 	endBlock: bigint;
 	prevStagedAt?: bigint;
 	enabled?: boolean;
@@ -20,7 +22,6 @@ export function useKeyGenDetails({
 	return useQuery<KeyGenStatus | null, Error>({
 		queryKey: ["keyGenDetails", settings.consensus, epoch.toString(), endBlock.toString()],
 		queryFn: async () => {
-			const gid = await loadEpochGroupId(provider, settings.consensus, epoch);
 			return loadKeyGenDetails({
 				provider,
 				consensus: settings.consensus,
