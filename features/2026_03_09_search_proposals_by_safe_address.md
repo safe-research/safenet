@@ -5,14 +5,17 @@ Component: `explorer`
 
 ## Overview
 
-Add a dedicated page that lists all `TransactionProposed` events associated with a given Safe address. The user can enter a Safe address in the existing `SearchBar` — when the input is detected as an Ethereum address, the explorer navigates to the new `/safe` route instead of the existing `/safeTx` route. Results are rendered with the existing `RecentTransactionProposals` component. Older data can be fetched block-range-by-block-range via a "Load More" button.
+Add a dedicated page that lists all `TransactionProposed` events associated with a given Safe address. The user can enter a Safe address in the existing `SearchBar` — when the input is detected as an Ethereum address, the explorer navigates to the new `/safe` route instead of the existing `/safeTx` route. Older data can be fetched block-range-by-block-range via a "Load More" button.
+
+`RecentTransactionProposals` is refactored into a generic `TransactionProposalsList` component that both the home page and the new Safe search page consume.
 
 **Phases:**
 
 1. **Phase 1** — Backend: extend `loadTransactionProposals` with an optional `safe` address topic filter and add a `useSafeTransactionProposals` hook backed by `useInfiniteQuery`.
-2. **Phase 2** — Frontend: new `/safe` route + address auto-detection in `SearchBar`.
+2. **Phase 2** — Shared component: refactor `RecentTransactionProposals` into a generic `TransactionProposalsList` and keep `RecentTransactionProposals` as a thin wrapper.
+3. **Phase 3** — Frontend: new `/safe` route + address auto-detection in `SearchBar`, consuming `TransactionProposalsList` directly.
 
-Phases are dependent (Phase 2 consumes Phase 1) but small enough to be shipped as a single PR or as two sequential PRs.
+Phase 1 and Phase 2 are independent and can be parallelised. Phase 3 depends on both.
 
 ---
 
@@ -49,13 +52,42 @@ The new hook (`useSafeTransactionProposals`) uses TanStack Query's `useInfiniteQ
 - **Page 1** — `[currentBlock - 2 × maxBlockRange, currentBlock - maxBlockRange - 1]`
 - etc.
 
-Accumulated results from all loaded pages are concatenated and passed to `RecentTransactionProposals`. A "Load More" button triggers `fetchNextPage()`, always fetching exactly one `maxBlockRange` window.
+Accumulated results from all loaded pages are concatenated and passed to `TransactionProposalsList`. A "Load More" button triggers `fetchNextPage()`, always fetching exactly one `maxBlockRange` window.
 
 The current block used as the starting anchor is captured when the query is first mounted and stored as `initialBlock` in query state to keep page boundaries stable across re-fetches.
 
-### Reuse of `RecentTransactionProposals`
+### `TransactionProposalsList` — shared list component
 
-`RecentTransactionProposals` already accepts `proposals`, `itemsToShow`, and `onShowMore`. The new route passes all loaded proposals with `itemsToShow` set to `proposals.length` (all loaded data is shown; "Show More" in this context means "fetch older blocks", not "reveal hidden rows"). Because fetching more data is async, the button will show a loading state while the next page is being fetched.
+`RecentTransactionProposals` today hardcodes the label `"N recent proposals"`, computes `hasMore` itself from `proposals.length > itemsToShow`, and has no concept of an async loading state on its button. The Safe search page needs different behaviour on all three counts:
+
+- Label: `"N proposals"` (no "recent")
+- `hasMore`: driven externally by whether more block pages exist, not by hidden in-memory rows
+- Button: shows a loading indicator while `fetchNextPage()` is in flight
+
+Rather than papering over this with ad-hoc props on the existing component, `RecentTransactionProposals` is refactored into two layers:
+
+**`TransactionProposalsList`** (new shared primitive, `components/transaction/TransactionProposalsList.tsx`):
+
+```typescript
+{
+  proposals: TransactionProposal[];
+  label: string;          // e.g. "recent proposals" | "proposals"
+  hasMore: boolean;       // whether to render the load/show-more button
+  onShowMore: () => void;
+  isLoadingMore?: boolean; // shows spinner on button when true
+  showMoreLabel?: string;  // defaults to "Show More"
+}
+```
+
+**`RecentTransactionProposals`** becomes a thin wrapper that keeps the existing home-page contract unchanged:
+
+```typescript
+// derives hasMore from proposals.length > itemsToShow
+// passes label="recent proposals", showMoreLabel="Show More"
+// slices proposals to itemsToShow before passing to TransactionProposalsList
+```
+
+The Safe search route uses `TransactionProposalsList` directly, passing `hasMore={hasNextPage}`, `isLoadingMore={isFetchingNextPage}`, and `showMoreLabel="Load More"`.
 
 ### Address auto-detection in `SearchBar`
 
@@ -83,7 +115,7 @@ When the user submits the search input, the component checks whether the trimmed
 ### Safe Proposals page
 
 1. Page mounts, fetches the most recent `maxBlockRange` blocks for the given Safe address.
-2. Matching proposals are shown using `RecentTransactionProposals` (same styling as home page).
+2. Matching proposals are shown using `TransactionProposalsList` (same styling as home page).
 3. If no proposals are found, an empty-state message is shown.
 4. User clicks "Load More" → next `maxBlockRange` block window is fetched and results are appended.
 5. When the chain's genesis block is reached, the "Load More" button is hidden.
@@ -137,7 +169,9 @@ When the user submits the search input, the component checks whether the trimmed
 |---|---|
 | `explorer/src/lib/consensus.ts` | Add optional `safe?: Address` param to `loadTransactionProposals`; extend topics array accordingly |
 | `explorer/src/hooks/useSafeTransactionProposals.ts` | New hook — `useInfiniteQuery` over block-range pages for a given Safe address |
-| `explorer/src/routes/safe.tsx` | New route — renders header with Safe address, chain name, and `RecentTransactionProposals` |
+| `explorer/src/components/transaction/TransactionProposalsList.tsx` | New shared primitive extracted from `RecentTransactionProposals`; accepts `label`, `hasMore`, `isLoadingMore`, `showMoreLabel` |
+| `explorer/src/components/transaction/RecentTransactionProposals.tsx` | Refactored to be a thin wrapper over `TransactionProposalsList` |
+| `explorer/src/routes/safe.tsx` | New route — renders header with Safe address, chain name, and `TransactionProposalsList` |
 | `explorer/src/components/search/SearchBar.tsx` | Auto-detect address input; navigate to `/safe` when matched |
 
 ### Data source
@@ -204,23 +238,34 @@ The accumulated list exposed to the component is `data.pages.flat()`.
 - Unit test for `loadTransactionProposals` with `safe` filter (mock `provider.request`)
 - Unit test for `useSafeTransactionProposals` hook (Vitest + TanStack Query test utilities)
 
-### Phase 2 — Route & SearchBar update
+### Phase 2 — `TransactionProposalsList` shared component (parallel with Phase 1)
+
+**Files touched:**
+- `explorer/src/components/transaction/TransactionProposalsList.tsx` — new shared primitive
+- `explorer/src/components/transaction/RecentTransactionProposals.tsx` — refactored to thin wrapper
+
+**Scope:** Pure refactor; the home page behaviour is unchanged. No new user-visible feature.
+
+**Tests:**
+- Unit test for `TransactionProposalsList` — label rendering, `hasMore` gating, `isLoadingMore` state on button
+- Verify existing `RecentTransactionProposals` tests still pass
+
+### Phase 3 — Route & SearchBar update (depends on Phase 1 + Phase 2)
 
 **Files touched:**
 - `explorer/src/routes/safe.tsx` — new file
 - `explorer/src/components/search/SearchBar.tsx` — address auto-detection
 
-**Scope:** Full user-visible feature. Depends on Phase 1.
+**Scope:** Full user-visible feature.
 
 **Tests:**
 - Component test for `SearchBar` — address input navigates to `/safe`
-- Component test for `safe.tsx` route — renders proposals list, "Load More" triggers next page
+- Component test for `safe.tsx` route — renders proposals list, "Load More" triggers next page fetch
 
 ---
 
 ## Open Questions / Assumptions
 
 - **Block anchor stability**: The `initialBlock` used as the starting point for pagination is captured at mount time. If the chain advances while the user is paginating, new proposals in the latest blocks will not appear until the query is invalidated (e.g. on refetch). This is acceptable for a history-oriented search.
-- **`RecentTransactionProposals` label**: The component currently renders "N recent proposals". On the Safe search page this copy should read "N proposals" or be passed as a prop. Adjusting the label is a minor change that can be included in Phase 2 (either via a prop or by extracting a shared base component).
 - **Checksum requirement**: The Safe address in the URL is expected to be checksummed. The `SearchBar` will call `getAddress()` before navigating to normalise any lowercase input.
 - **Chain context**: The chain selector in `SearchBar` already provides the `chainId` needed for the route. No additional chain-selection UI is required on the `/safe` page itself.
