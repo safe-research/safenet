@@ -7,7 +7,6 @@ Component: impacted workspace (i.e. `explorer` or `all`)
 
 Short summary of the feature including a short overview of the different steps (that would be separate/ parallel PRs).
 
-
 ---
 
 ## Architecture Decision
