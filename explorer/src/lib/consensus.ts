@@ -245,15 +245,17 @@ export const loadEpochRolloverHistory = async ({
 	cursor?: bigint;
 }): Promise<EpochRolloverResult> => {
 	const toBlock = cursor ?? (await provider.getBlockNumber());
-	const fromBlock = toBlock > maxBlockRange ? toBlock - maxBlockRange : 0n;
+	const fromBlock = await getFromBlock(provider, maxBlockRange, toBlock);
 
-	const stagedLogs = await provider.getLogs({
-		address: consensus,
-		event: getAbiItem({ abi: consensusAbi, name: "EpochStaged" }),
-		fromBlock,
-		toBlock: cursor === undefined ? "latest" : toBlock,
-		strict: true,
-	});
+	const stagedLogs = mostRecentFirst(
+		await provider.getLogs({
+			address: consensus,
+			event: getAbiItem({ abi: consensusAbi, name: "EpochStaged" }),
+			fromBlock,
+			toBlock: cursor === undefined ? "latest" : toBlock,
+			strict: true,
+		}),
+	);
 
 	const entries: EpochRolloverEntry[] = stagedLogs.map((log) => ({
 		activeEpoch: log.args.activeEpoch,
@@ -262,9 +264,10 @@ export const loadEpochRolloverHistory = async ({
 		stagedAt: log.blockNumber,
 	}));
 
+	const reachedGenesis = entries.some((e) => e.proposedEpoch === 0n);
 	return {
-		entries: entries.sort((a, b) => (a.stagedAt < b.stagedAt ? 1 : -1)),
-		reachedGenesis: fromBlock === 0n,
+		entries,
+		reachedGenesis,
 	};
 };
 

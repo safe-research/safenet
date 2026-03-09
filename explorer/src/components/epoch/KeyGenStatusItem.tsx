@@ -29,10 +29,7 @@ export function KeyGenStatusItem({ status }: { status: KeyGenStatus | null; isLo
 
 	const terminal = status.finalized || status.compromised;
 	const label = statusLabel(status);
-	const allIds =
-		status.committed.length > 0
-			? status.committed.map((p) => p.identifier)
-			: Array.from(validatorInfo.data?.keys() ?? []);
+	const allIds = Array.from(validatorInfo.data?.keys() ?? []);
 
 	return (
 		<div className="bg-surface-0 border border-surface-outline rounded-md p-4 space-y-2 text-sm">

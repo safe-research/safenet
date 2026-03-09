@@ -13,8 +13,12 @@ export function jsonReplacer(_key: string, value: unknown): unknown {
 	return value;
 }
 
-export const getFromBlock = async (provider: PublicClient, maxBlockRange: bigint): Promise<bigint> => {
-	const blockNumber = await provider.getBlockNumber();
+export const getFromBlock = async (
+	provider: PublicClient,
+	maxBlockRange: bigint,
+	referenceBlock?: bigint,
+): Promise<bigint> => {
+	const blockNumber = referenceBlock ?? (await provider.getBlockNumber());
 	return blockNumber > maxBlockRange ? blockNumber - maxBlockRange : 0n;
 };
 
