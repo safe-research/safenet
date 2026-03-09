@@ -26,6 +26,8 @@ Code should focus on security and maintainability. Existing code and components 
 
 All newly added code should be covered by unit tests and if possible integration tests. 
 
+If in doubt reference existing code to understand what implementation to choose. Do not re-invent the wheel and follow existing paradigms.
+
 ## Documentation
 
 For detailed architecture and setup information, refer to the local [docs](./docs/) folder. Additional documentation, including information about Safe, is available on the [Safe Foundation docs](https://docs.safefoundation.org). The MCP server related to this documentation can be found at https://docs.safefoundation.org/mcp.
