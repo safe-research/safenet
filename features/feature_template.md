@@ -14,7 +14,6 @@ Short summary of the feature including a short overview of the different steps (
 
 Summary of architecture decisions including context. This should especially outline if new components are added or existing architecture is adjusted.
 
-
 ### Alternatives Considered
 
 Outline potential alternatives that have been considered related to the architecture.
