@@ -10,38 +10,29 @@ export function useEpochRolloverHistory() {
 	const maxBlockRange = BigInt(settings.maxBlockRange);
 
 	const [allEntries, setAllEntries] = useState<EpochRolloverEntry[]>([]);
-	const [cursor, setCursor] = useState<bigint | null>(null);
+	const [cursor, setCursor] = useState<bigint | undefined>(undefined);
 	const [hasMore, setHasMore] = useState(true);
 
-	const query = useQuery<EpochRolloverEntry[], Error>({
+	const query = useQuery({
 		queryKey: ["epochRolloverHistory", settings.consensus, settings.maxBlockRange, cursor?.toString()],
 		queryFn: async () => {
-			const currentBlock = await provider.getBlockNumber();
-			const toBlock = cursor ?? currentBlock;
-			const fromBlock = toBlock > maxBlockRange ? toBlock - maxBlockRange : 0n;
-
-			const entries = await loadEpochRolloverHistory({
+			const result = await loadEpochRolloverHistory({
 				provider,
 				consensus: settings.consensus,
-				fromBlock,
-				toBlock: cursor === null ? "latest" : toBlock,
+				maxBlockRange,
+				cursor,
 			});
 
-			if (fromBlock === 0n) {
+			if (result.reachedGenesis) {
 				setHasMore(false);
 			}
 
-			setAllEntries((prev) => {
-				const existingKeys = new Set(prev.map((e) => `${e.proposedEpoch}`));
-				const newEntries = entries.filter((e) => !existingKeys.has(`${e.proposedEpoch}`));
-				return [...prev, ...newEntries].sort((a, b) => (a.proposedAt < b.proposedAt ? 1 : -1));
-			});
+			setAllEntries((prev) => [...prev, ...result.entries].sort((a, b) => (a.stagedAt < b.stagedAt ? 1 : -1)));
 
-			return entries;
+			return result.entries;
 		},
 		refetchInterval: () => {
-			// Only auto-refetch the initial load (no cursor), not "load more" fetches
-			if (cursor !== null) return false;
+			if (cursor !== undefined) return false;
 			return settings.refetchInterval > 0 ? settings.refetchInterval : false;
 		},
 	});
@@ -50,7 +41,7 @@ export function useEpochRolloverHistory() {
 		if (!hasMore) return;
 		const oldest = allEntries.at(-1);
 		if (oldest) {
-			setCursor(oldest.proposedAt);
+			setCursor(oldest.stagedAt);
 		}
 	}, [allEntries, hasMore]);
 

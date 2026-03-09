@@ -1,5 +1,5 @@
-import { type Address, getAbiItem, type Hex, type PublicClient } from "viem";
-import { COORDINATOR_KEY_GEN_EVENTS } from "@/lib/coordinator/abi";
+import { type Address, formatLog, type Hex, numberToHex, type PublicClient, parseEventLogs } from "viem";
+import { COORDINATOR_KEY_GEN_EVENTS, COORDINATOR_KEY_GEN_SELECTORS } from "@/lib/coordinator/abi";
 import { loadCoordinator } from "@/lib/coordinator/signing";
 
 export type KeyGenParticipation = {
@@ -23,76 +23,77 @@ export const loadKeyGenDetails = async ({
 	provider,
 	consensus,
 	gid,
-	startBlock,
 	endBlock,
+	blocksPerEpoch,
+	prevStagedAt,
+	maxBlockRange,
 }: {
 	provider: PublicClient;
 	consensus: Address;
 	gid: Hex;
-	startBlock: bigint;
 	endBlock: bigint;
+	blocksPerEpoch?: number;
+	prevStagedAt?: bigint;
+	maxBlockRange: bigint;
 }): Promise<KeyGenStatus | null> => {
+	const startBlock = computeStartBlock(endBlock, blocksPerEpoch, prevStagedAt, maxBlockRange);
 	const coordinator = await loadCoordinator(provider, consensus);
 
-	const keyGenLogs = await provider.getLogs({
-		address: coordinator,
-		event: getAbiItem({ abi: COORDINATOR_KEY_GEN_EVENTS, name: "KeyGen" }),
-		args: { gid },
-		fromBlock: startBlock,
-		toBlock: endBlock,
+	const logs = await provider.request({
+		method: "eth_getLogs",
+		params: [
+			{
+				address: coordinator,
+				topics: [COORDINATOR_KEY_GEN_SELECTORS, [gid]],
+				fromBlock: numberToHex(startBlock),
+				toBlock: numberToHex(endBlock),
+			},
+		],
+	});
+
+	const eventLogs = parseEventLogs({
+		logs: logs.map((log) => formatLog(log)),
+		abi: COORDINATOR_KEY_GEN_EVENTS,
 		strict: true,
 	});
 
-	if (keyGenLogs.length === 0) return null;
+	const keyGenLog = eventLogs.find((log) => log.eventName === "KeyGen");
+	if (!keyGenLog) return null;
 
-	const keyGen = keyGenLogs[0];
-	const count = keyGen.args.count;
-	const threshold = keyGen.args.threshold;
-
-	const [committedLogs, sharedLogs, confirmedLogs, complainedLogs] = await Promise.all([
-		provider.getLogs({
-			address: coordinator,
-			event: getAbiItem({ abi: COORDINATOR_KEY_GEN_EVENTS, name: "KeyGenCommitted" }),
-			args: { gid },
-			fromBlock: startBlock,
-			toBlock: endBlock,
-			strict: true,
-		}),
-		provider.getLogs({
-			address: coordinator,
-			event: getAbiItem({ abi: COORDINATOR_KEY_GEN_EVENTS, name: "KeyGenSecretShared" }),
-			args: { gid },
-			fromBlock: startBlock,
-			toBlock: endBlock,
-			strict: true,
-		}),
-		provider.getLogs({
-			address: coordinator,
-			event: getAbiItem({ abi: COORDINATOR_KEY_GEN_EVENTS, name: "KeyGenConfirmed" }),
-			args: { gid },
-			fromBlock: startBlock,
-			toBlock: endBlock,
-			strict: true,
-		}),
-		provider.getLogs({
-			address: coordinator,
-			event: getAbiItem({ abi: COORDINATOR_KEY_GEN_EVENTS, name: "KeyGenComplained" }),
-			args: { gid },
-			fromBlock: startBlock,
-			toBlock: endBlock,
-			strict: true,
-		}),
-	]);
+	const count = keyGenLog.args.count;
+	const threshold = keyGenLog.args.threshold;
 
 	const toParticipation = (log: { args: { identifier: bigint }; blockNumber: bigint }): KeyGenParticipation => ({
 		identifier: log.args.identifier,
 		block: log.blockNumber,
 	});
 
-	const committed = committedLogs.filter((l) => l.args.committed).map(toParticipation);
-	const shared = sharedLogs.filter((l) => l.args.shared).map(toParticipation);
-	const confirmed = confirmedLogs.filter((l) => l.args.confirmed).map(toParticipation);
-	const compromised = complainedLogs.some((l) => l.args.compromised);
+	const committed: KeyGenParticipation[] = [];
+	const shared: KeyGenParticipation[] = [];
+	const confirmed: KeyGenParticipation[] = [];
+	let compromised = false;
+
+	for (const log of eventLogs) {
+		switch (log.eventName) {
+			case "KeyGenCommitted": {
+				if (log.args.committed) committed.push(toParticipation(log));
+				break;
+			}
+			case "KeyGenSecretShared": {
+				if (log.args.shared) shared.push(toParticipation(log));
+				break;
+			}
+			case "KeyGenConfirmed": {
+				if (log.args.confirmed) confirmed.push(toParticipation(log));
+				break;
+			}
+			case "KeyGenComplained": {
+				if (log.args.compromised) compromised = true;
+				break;
+			}
+		}
+	}
+
 	const finalized = !compromised && confirmed.length >= threshold;
 
 	return {
@@ -107,3 +108,20 @@ export const loadKeyGenDetails = async ({
 		compromised,
 	};
 };
+
+function computeStartBlock(
+	endBlock: bigint,
+	blocksPerEpoch?: number,
+	prevStagedAt?: bigint,
+	maxBlockRange?: bigint,
+): bigint {
+	if (blocksPerEpoch) {
+		const bpe = BigInt(blocksPerEpoch);
+		return endBlock - (endBlock % bpe);
+	}
+	if (prevStagedAt !== undefined) {
+		return prevStagedAt;
+	}
+	const fallback = maxBlockRange ?? 10000n;
+	return endBlock > fallback ? endBlock - fallback : 0n;
+}

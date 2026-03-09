@@ -6,8 +6,6 @@ import { Container, ContainerSectionTitle, ContainerTitle } from "@/components/G
 import { Skeleton } from "@/components/Skeleton";
 import { useEpochRolloverHistory } from "@/hooks/useEpochRolloverHistory";
 import { useEpochsState } from "@/hooks/useEpochsState";
-import { useSettings } from "@/hooks/useSettings";
-
 export const Route = createFileRoute("/epoch")({
 	component: EpochPage,
 });
@@ -15,7 +13,6 @@ export const Route = createFileRoute("/epoch")({
 function EpochPage() {
 	const epochsState = useEpochsState();
 	const rolloverHistory = useEpochRolloverHistory();
-	const [settings] = useSettings();
 
 	return (
 		<Container>
@@ -50,26 +47,21 @@ function EpochPage() {
 				{rolloverHistory.entries.map((entry, index) => {
 					const prevEntry = rolloverHistory.entries[index + 1];
 					return (
-						<EpochRolloverItem
-							key={entry.proposedEpoch.toString()}
-							entry={entry}
-							prevStagedAt={prevEntry?.stagedAt}
-							blocksPerEpoch={settings.blocksPerEpoch}
-							consensus={settings.consensus}
-						/>
+						<EpochRolloverItem key={entry.proposedEpoch.toString()} entry={entry} prevStagedAt={prevEntry?.stagedAt} />
 					);
 				})}
 
-				{rolloverHistory.hasMore && (
+				{rolloverHistory.hasMore && !rolloverHistory.isFetching && (
 					<button
 						type="button"
-						className="w-full py-2 text-sm text-primary hover:underline cursor-pointer disabled:opacity-50"
+						className="w-full py-2 text-sm text-primary hover:underline cursor-pointer"
 						onClick={rolloverHistory.loadMore}
-						disabled={rolloverHistory.isFetching}
 					>
-						{rolloverHistory.isFetching ? "Loading…" : "Load more"}
+						Load more
 					</button>
 				)}
+
+				{rolloverHistory.isFetching && !rolloverHistory.isLoading && <Skeleton className="w-full h-10 bg-primary/10" />}
 			</div>
 		</Container>
 	);

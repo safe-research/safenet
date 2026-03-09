@@ -30,6 +30,22 @@ export const COORDINATOR_EVENTS = [
 	...COORDINATOR_OTHER_EVENTS,
 ] as const;
 
+export const COORDINATOR_KEY_GEN_SELECTORS = [
+	"KeyGen" as const,
+	"KeyGenCommitted" as const,
+	"KeyGenSecretShared" as const,
+	"KeyGenConfirmed" as const,
+	"KeyGenComplained" as const,
+	"KeyGenComplaintResponded" as const,
+].map((eventName) =>
+	toEventSelector(
+		getAbiItem({
+			abi: COORDINATOR_KEY_GEN_EVENTS,
+			name: eventName,
+		}),
+	),
+);
+
 export const COORDINATOR_SIGNING_PROGRESS_SELECTORS = [
 	"SignCompleted" as const,
 	"SignRevealedNonces" as const,

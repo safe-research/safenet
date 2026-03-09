@@ -1,3 +1,9 @@
+import type { ValidatorInfo } from "@/lib/validators/info";
+
+export const createMapInfo =
+	(validatorInfoMap: Map<bigint, ValidatorInfo> | null | undefined) => (suffix: string) => (identifier: bigint) =>
+		`${validatorInfoMap?.get(identifier)?.label ?? `Validator ${identifier}`} ${suffix}`;
+
 export function ValidatorList({
 	all,
 	active,

@@ -58,7 +58,6 @@ function ConsensusSettingsForm({ onSubmitted }: { onSubmitted?: () => void }) {
 		<form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
 			<FormItem id="rpc" register={register} error={errors.rpc} label="RPC Url" />
 			<FormItem id="maxBlockRange" register={register} error={errors.maxBlockRange} label="Max Block Range" />
-			<FormItem id="blocksPerEpoch" register={register} error={errors.blocksPerEpoch} label="Blocks Per Epoch" />
 			<FormItem id="decoder" register={register} error={errors.decoder} label="Decoder Url" />
 			<FormItem id="relayer" register={register} error={errors.relayer} label="Relayer Url" />
 
@@ -70,6 +69,7 @@ function ConsensusSettingsForm({ onSubmitted }: { onSubmitted?: () => void }) {
 				placeholder="0x…"
 			/>
 
+			<FormItem id="blocksPerEpoch" register={register} error={errors.blocksPerEpoch} label="Blocks Per Epoch" />
 			<FormItem id="validatorInfo" register={register} error={errors.validatorInfo} label="Validator Info Url" />
 
 			<FormItem

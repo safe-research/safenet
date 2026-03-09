@@ -192,7 +192,6 @@ export type EpochRolloverEntry = {
 	activeEpoch: bigint;
 	proposedEpoch: bigint;
 	rolloverBlock: bigint;
-	proposedAt: bigint;
 	stagedAt: bigint;
 };
 
@@ -229,51 +228,44 @@ export const loadEpochGroupId = async (provider: PublicClient, consensus: Addres
 	});
 };
 
+export type EpochRolloverResult = {
+	entries: EpochRolloverEntry[];
+	reachedGenesis: boolean;
+};
+
 export const loadEpochRolloverHistory = async ({
 	provider,
 	consensus,
-	fromBlock,
-	toBlock,
+	maxBlockRange,
+	cursor,
 }: {
 	provider: PublicClient;
 	consensus: Address;
-	fromBlock: bigint;
-	toBlock: bigint | "latest";
-}): Promise<EpochRolloverEntry[]> => {
-	const [proposedLogs, stagedLogs] = await Promise.all([
-		provider.getLogs({
-			address: consensus,
-			event: getAbiItem({ abi: consensusAbi, name: "EpochProposed" }),
-			fromBlock,
-			toBlock,
-			strict: true,
-		}),
-		provider.getLogs({
-			address: consensus,
-			event: getAbiItem({ abi: consensusAbi, name: "EpochStaged" }),
-			fromBlock,
-			toBlock,
-			strict: true,
-		}),
-	]);
+	maxBlockRange: bigint;
+	cursor?: bigint;
+}): Promise<EpochRolloverResult> => {
+	const toBlock = cursor ?? (await provider.getBlockNumber());
+	const fromBlock = toBlock > maxBlockRange ? toBlock - maxBlockRange : 0n;
 
-	const stagedByProposedEpoch = new Map(stagedLogs.map((log) => [log.args.proposedEpoch, log]));
+	const stagedLogs = await provider.getLogs({
+		address: consensus,
+		event: getAbiItem({ abi: consensusAbi, name: "EpochStaged" }),
+		fromBlock,
+		toBlock: cursor === undefined ? "latest" : toBlock,
+		strict: true,
+	});
 
-	const entries: EpochRolloverEntry[] = [];
-	for (const proposed of proposedLogs) {
-		const staged = stagedByProposedEpoch.get(proposed.args.proposedEpoch);
-		if (staged) {
-			entries.push({
-				activeEpoch: proposed.args.activeEpoch,
-				proposedEpoch: proposed.args.proposedEpoch,
-				rolloverBlock: proposed.args.rolloverBlock,
-				proposedAt: proposed.blockNumber,
-				stagedAt: staged.blockNumber,
-			});
-		}
-	}
+	const entries: EpochRolloverEntry[] = stagedLogs.map((log) => ({
+		activeEpoch: log.args.activeEpoch,
+		proposedEpoch: log.args.proposedEpoch,
+		rolloverBlock: log.args.rolloverBlock,
+		stagedAt: log.blockNumber,
+	}));
 
-	return entries.sort((a, b) => (a.proposedAt < b.proposedAt ? 1 : -1));
+	return {
+		entries: entries.sort((a, b) => (a.stagedAt < b.stagedAt ? 1 : -1)),
+		reachedGenesis: fromBlock === 0n,
+	};
 };
 
 export const postTransactionProposal = async (url: string, transaction: SafeTransaction) => {

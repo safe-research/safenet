@@ -1,4 +1,4 @@
-import { ValidatorList } from "@/components/common/ValidatorList";
+import { createMapInfo, ValidatorList } from "@/components/common/ValidatorList";
 import { Skeleton } from "@/components/Skeleton";
 import { useValidatorInfoMap } from "@/hooks/useValidatorInfo";
 import type { KeyGenStatus } from "@/lib/coordinator/keygen";
@@ -25,8 +25,7 @@ export function KeyGenStatusItem({ status }: { status: KeyGenStatus | null; isLo
 		return <Skeleton className="w-full h-10 bg-primary/10" />;
 	}
 
-	const mapInfo = (suffix: string) => (identifier: bigint) =>
-		`${validatorInfo?.data?.get(identifier)?.label ?? `Validator ${identifier}`} ${suffix}`;
+	const mapInfo = createMapInfo(validatorInfo.data);
 
 	const terminal = status.finalized || status.compromised;
 	const label = statusLabel(status);
@@ -73,19 +72,17 @@ export function KeyGenStatusItem({ status }: { status: KeyGenStatus | null; isLo
 				</div>
 			)}
 
-			{terminal && (
-				<div className="md:flex md:justify-between">
-					<p className="ml-4">Confirmed:</p>
-					<p>
-						<ValidatorList
-							all={allIds}
-							active={status.confirmed.map((p) => p.identifier)}
-							mapInfo={mapInfo}
-							completed={true}
-						/>
-					</p>
-				</div>
-			)}
+			<div className="md:flex md:justify-between">
+				<p className="ml-4">Confirmed:</p>
+				<p>
+					<ValidatorList
+						all={allIds}
+						active={status.confirmed.map((p) => p.identifier)}
+						mapInfo={mapInfo}
+						completed={terminal}
+					/>
+				</p>
+			</div>
 		</div>
 	);
 }

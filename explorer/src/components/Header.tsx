@@ -16,7 +16,7 @@ export default function Header() {
 				</Link>
 				<div className="flex items-center gap-2">
 					Block: {state.data.currentBlock} | Epoch: {state.data.currentEpoch} | GroupId:{" "}
-					<Link to="/epoch" className="hover:underline">
+					<Link to="/epoch" className="hover:opacity-75 transition">
 						{state.data.currentGroupId.slice(0, 10)}
 					</Link>
 					<Link to="/settings">
