@@ -1,54 +1,45 @@
-import { useQuery } from "@tanstack/react-query";
-import { useCallback, useState } from "react";
+import { useInfiniteQuery } from "@tanstack/react-query";
+import { useCallback } from "react";
 import { useProvider } from "@/hooks/useProvider";
 import { useSettings } from "@/hooks/useSettings";
-import { type EpochRolloverEntry, loadEpochRolloverHistory } from "@/lib/consensus";
+import { loadEpochRolloverHistory } from "@/lib/consensus";
 
 export function useEpochRolloverHistory() {
 	const [settings] = useSettings();
 	const provider = useProvider();
 	const maxBlockRange = BigInt(settings.maxBlockRange);
 
-	const [allEntries, setAllEntries] = useState<EpochRolloverEntry[]>([]);
-	const [cursor, setCursor] = useState<bigint | undefined>(undefined);
-	const [hasMore, setHasMore] = useState(true);
-
-	const query = useQuery({
-		queryKey: ["epochRolloverHistory", settings.consensus, settings.maxBlockRange, cursor?.toString()],
-		queryFn: async () => {
-			const result = await loadEpochRolloverHistory({
+	const query = useInfiniteQuery({
+		queryKey: ["epochRolloverHistory", settings.consensus, settings.maxBlockRange],
+		queryFn: async ({ pageParam }) => {
+			return loadEpochRolloverHistory({
 				provider,
 				consensus: settings.consensus,
 				maxBlockRange,
-				cursor,
+				cursor: pageParam,
 			});
-
-			if (result.reachedGenesis) {
-				setHasMore(false);
-			}
-
-			setAllEntries((prev) => (cursor === undefined ? result.entries : [...prev, ...result.entries]));
-
-			return result.entries;
 		},
-		refetchInterval: () => {
-			if (cursor !== undefined) return false;
-			return settings.refetchInterval > 0 ? settings.refetchInterval : false;
+		initialPageParam: undefined as bigint | undefined,
+		getNextPageParam: (lastPage) => {
+			if (lastPage.reachedGenesis) return undefined;
+			const oldest = lastPage.entries.at(-1);
+			return oldest?.stagedAt;
 		},
+		refetchInterval: settings.refetchInterval > 0 ? settings.refetchInterval : false,
 	});
 
+	const entries = query.data?.pages.flatMap((page) => page.entries) ?? [];
+
 	const loadMore = useCallback(() => {
-		if (!hasMore) return;
-		const oldest = allEntries.at(-1);
-		if (oldest) {
-			setCursor(oldest.stagedAt);
+		if (query.hasNextPage && !query.isFetchingNextPage) {
+			query.fetchNextPage();
 		}
-	}, [allEntries, hasMore]);
+	}, [query.hasNextPage, query.isFetchingNextPage, query.fetchNextPage]);
 
 	return {
-		entries: allEntries,
+		entries,
 		loadMore,
-		hasMore,
+		hasMore: query.hasNextPage,
 		isLoading: query.isLoading,
 		isFetching: query.isFetching,
 	};
