@@ -27,7 +27,7 @@ export function useEpochRolloverHistory() {
 				setHasMore(false);
 			}
 
-			setAllEntries((prev) => [...prev, ...result.entries]);
+			setAllEntries((prev) => (cursor === undefined ? result.entries : [...prev, ...result.entries]));
 
 			return result.entries;
 		},
