@@ -14,6 +14,20 @@ Formal verification specs live in `certora/`. Integration and devnet scripts are
 
 Technical documentation for the system is in `docs/`, where we can find an overview, a glossary, and detailed validator information.
 
+## Planning
+
+Each change to the Safenet repository should be properly planned. For this create a feature specification md file in the `features` folder. The specification file should have the name that starts with the date (`yyyy_mm_dd`) and include the name of the feature (i.e. `add_feature_template`). A complete example would be `2026_03_09_add_feature_template.md`. It should follow the [template feature specification file](./features/feature_template.md).
+
+Code changes should be easy to review and to understand. For this it is important that PRs are not too large. This should be considered when planning the feature. Phases that can be executed in separate PRs or can be parallized should be explicitly outlined.
+
+## Coding Guidelines
+
+Code should focus on security and maintainability. Existing code and components should be reused. New components should be written in a way that they can be reused. If code duplication is introduced, new shared components and styles should be extracted whenever it makes sense. Best practices should be applied, and before code is submitted, it should be properly inspected and tested.
+
+All newly added code should be covered by unit tests and if possible integration tests. 
+
+If in doubt, refer to existing code to determine which implementation to choose. Do not re-invent the wheel and follow existing paradigms.
+
 ## Documentation
 
 For detailed architecture and setup information, refer to the local [docs](./docs/) folder. Additional documentation, including information about Safe, is available on the [Safe Foundation docs](https://docs.safefoundation.org). The MCP server related to this documentation can be found at https://docs.safefoundation.org/mcp.
