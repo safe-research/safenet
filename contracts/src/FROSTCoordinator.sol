@@ -161,7 +161,9 @@ contract FROSTCoordinator {
      * @param threshold The signing threshold.
      * @param context The application-specific context.
      */
-    event KeyGen(FROSTGroupId.T indexed gid, bytes32 participants, uint16 count, uint16 threshold, bytes32 context);
+    event KeyGen(
+        FROSTGroupId.T indexed gid, bytes32 participants, uint16 count, uint16 threshold, bytes32 indexed context
+    );
 
     /**
      * @notice Emitted when a key generation commitment is submitted.
