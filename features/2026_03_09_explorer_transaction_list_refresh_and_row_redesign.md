@@ -8,7 +8,7 @@ Component: `explorer`
 Improve the transaction list on the Explorer home page with two focused changes:
 
 1. **Refresh controls bar** — a visible control strip above the list that lets users manually trigger an immediate refresh, toggle auto-refresh on/off, and see when the data was last updated.
-2. **Transaction row redesign** — replace the current border-color status indicator and verbose layout with a compact table-style row showing a status badge, a network badge, a shortened SafeTxHash, and a block-age "time ago" column.
+2. **Transaction row redesign** — replace the current border-color status indicator and verbose layout with a compact card-list row showing a status badge, a network badge, a shortened SafeTxHash, and a block-age "time ago" column.
 
 These two changes are independent and can be developed and reviewed as separate PRs.
 
@@ -33,12 +33,11 @@ The current `RecentTransactionProposal` component delegates rendering to `SafeTx
 
 New shared utilities and components:
 - **`formatHashShort(hash: Hex): string`** — returns `0x` + first 8 hex chars + `…` + last 8 hex chars (= first and last 4 bytes).
-- **`formatBlockAge(blockDiff: bigint, chainId: bigint): string`** — converts a block-count difference to a human-readable age string using static per-chain block times.
-- **`CHAIN_BLOCK_TIMES: Record<string, number>`** — static average block times in seconds per chain ID (added to `chains.ts`).
+- **`formatBlockAge(blockDiff: bigint, chain: ChainInfo): string`** — converts a block-count difference to a human-readable age string using the chain's block time. Reads `chain.blockTime` (milliseconds, optional on viem's `Chain` type) and divides by 1000 to get seconds. Falls back to 12,000 ms if undefined.
 - **`NetworkBadge`** component — renders the chain short name (e.g. `ETH`, `GNO`, `BASE`) as a styled badge. Text-only; no external icon library added in this phase (see Open Questions).
 - **`StatusBadge`** component — renders `PROPOSED` or `ATTESTED` as a styled badge.
 
-The list will switch from stacked `Box` cards to an HTML `<table>` with columns: Network / Status | Safe | SafeTxHash | To / Summary | Block | When.
+The list will stay card-based but switch to a denser, structured layout. Each item becomes a compact row card (div/flexbox) with labelled columns: Network / Status | Safe | SafeTxHash | To / Summary | Block | When. The existing `Box` card chrome is replaced with a lighter row style, keeping visual consistency with the rest of the explorer.
 
 The current `refetchInterval` setting in localStorage continues to control the underlying poll interval; the new toggle acts as an override layered on top.
 
@@ -47,7 +46,7 @@ The current `refetchInterval` setting in localStorage continues to control the u
 - **Persisting the auto-refresh toggle in localStorage** — rejected to keep settings focused on durable configuration; the toggle is a transient UX preference.
 - **Querying the current block number to compute real elapsed time** — rejected in favour of static block time constants to avoid extra RPC calls per chain on every render cycle.
 - **Using a chain-icon library (e.g. `@web3icons/react`)** for network badges — deferred to an open question; text-only badges are sufficient for the initial redesign.
-- **Reusing `SafeTxOverview` in the list** — the new table layout is sufficiently different that a dedicated `TransactionListRow` component is cleaner than parameterising `SafeTxOverview` further.
+- **Reusing `SafeTxOverview` in the list** — the new compact row layout is sufficiently different that a dedicated `TransactionListRow` component is cleaner than parameterising `SafeTxOverview` further.
 
 ---
 
@@ -98,17 +97,21 @@ Block difference is computed as `currentBlock - proposal.proposedAt.block`. The 
 
 ## Tech Specs
 
-### Static Block Times
+### Block Times via Viem
 
-Added to `explorer/src/lib/chains.ts`:
+Viem's `Chain` type includes an optional `blockTime?: number` field (in milliseconds). Of the five chains in `SAFE_SERVICE_CHAINS`, three already define it:
 
-| Chain | Chain ID | Avg block time |
+| Chain | Chain ID | `chain.blockTime` |
 |---|---|---|
-| Ethereum Mainnet | 1 | 12 s |
-| Gnosis Chain | 100 | 5 s |
-| Base | 8453 | 2 s |
-| Sepolia | 11155111 | 12 s |
-| Gnosis Chiado | 10200 | 5 s |
+| Ethereum Mainnet | 1 | 12,000 ms ✓ (defined in viem) |
+| Gnosis Chain | 100 | 5,000 ms ✓ (defined in viem) |
+| Base | 8453 | undefined — add `blockTime: 2_000` manually |
+| Sepolia | 11155111 | undefined — add `blockTime: 12_000` manually |
+| Gnosis Chiado | 10200 | 5,000 ms ✓ (defined in viem) |
+
+For chains without a viem-provided value, `blockTime` is set explicitly when constructing `SAFE_SERVICE_CHAINS` (spread into the chain object alongside `shortName`). No separate static lookup table is needed — `ChainInfo` already extends `Chain`, and `Chain.blockTime` is part of the standard type.
+
+`formatBlockAge` reads `chain.blockTime / 1000` to get seconds. If `blockTime` is still undefined (defensive fallback), 12 s is used.
 
 ### Hash Shortening
 
@@ -123,7 +126,7 @@ Added to `explorer/src/lib/chains.ts`:
 | `StatusBadge` | `components/common/StatusBadge.tsx` | New. Accepts `attested: boolean`. |
 | `TransactionListRow` | `components/transaction/TransactionListRow.tsx` | New. Replaces `RecentTransactionProposal`. |
 | `TransactionListControls` | `components/transaction/TransactionListControls.tsx` | New. Refresh button, toggle, last-updated. |
-| `RecentTransactionProposals` | `components/transaction/RecentTransactionProposals.tsx` | Modified to use table + controls. |
+| `RecentTransactionProposals` | `components/transaction/RecentTransactionProposals.tsx` | Modified to use compact card list + controls. |
 
 ### Hook Changes
 
@@ -137,9 +140,10 @@ The hook will expose `dataUpdatedAt` from the underlying `useQuery` result.
 |---|---|
 | `formatHashShort` — correct truncation for standard 32-byte hash | `lib/safe/formatting.test.ts` |
 | `formatHashShort` — handles short/invalid input gracefully | `lib/safe/formatting.test.ts` |
-| `formatBlockAge` — seconds range | `lib/chains.test.ts` |
-| `formatBlockAge` — minutes range | `lib/chains.test.ts` |
-| `formatBlockAge` — date fallback for old proposals | `lib/chains.test.ts` |
+| `formatBlockAge` — seconds range | `lib/safe/formatting.test.ts` |
+| `formatBlockAge` — minutes range | `lib/safe/formatting.test.ts` |
+| `formatBlockAge` — date fallback for old proposals | `lib/safe/formatting.test.ts` |
+| `formatBlockAge` — undefined `blockTime` uses 12 s fallback | `lib/safe/formatting.test.ts` |
 | `NetworkBadge` — renders correct short name per chain | `components/common/NetworkBadge.test.tsx` |
 | `StatusBadge` — renders PROPOSED and ATTESTED correctly | `components/common/StatusBadge.test.tsx` |
 | `TransactionListControls` — refresh button calls refetch | `components/transaction/TransactionListControls.test.tsx` |
@@ -176,15 +180,15 @@ The hook will expose `dataUpdatedAt` from the underlying `useQuery` result.
 - Network badge with chain short name.
 - Shortened SafeTxHash (first + last 4 bytes).
 - "When" column using block-age approximation.
-- Table layout replacing the stacked card layout.
+- Compact card-list layout replacing the current stacked `Box` cards.
 
 **Files touched:**
-- `explorer/src/lib/chains.ts` — add `blockTime` field to `ChainInfo` and `CHAIN_BLOCK_TIMES` constant
+- `explorer/src/lib/chains.ts` — add explicit `blockTime` values for `base` and `sepolia` in `SAFE_SERVICE_CHAINS`
 - `explorer/src/lib/safe/formatting.ts` — add `formatHashShort` and `formatBlockAge` utilities
 - `explorer/src/components/common/NetworkBadge.tsx` — new component
 - `explorer/src/components/common/StatusBadge.tsx` — new component
 - `explorer/src/components/transaction/TransactionListRow.tsx` — new component
-- `explorer/src/components/transaction/RecentTransactionProposals.tsx` — switch to table layout, use `TransactionListRow`
+- `explorer/src/components/transaction/RecentTransactionProposals.tsx` — switch to compact card-list layout, use `TransactionListRow`
 - Tests for utilities and new components
 
 **Components implemented:**
@@ -198,6 +202,6 @@ The hook will expose `dataUpdatedAt` from the underlying `useQuery` result.
 
 1. **Network icons**: The current design uses text-only badges (e.g. `ETH`, `GNO`). Adding chain logo icons (e.g. via `@web3icons/react`) is left for a follow-up if desired.
 2. **Current block for block-age**: `ConsensusState.currentBlock` is assumed to be available in the component tree. If the consensus state query is not already exposed at the list level, Phase 2 needs to surface it — this should be verified before implementation.
-3. **Responsive table**: The table layout may need to collapse to cards on small screens. This is left to implementation judgement; if a responsive breakpoint is needed, follow the existing Tailwind patterns used elsewhere in the explorer.
+3. **Responsive layout**: The compact card-list row may need to reflow on narrow screens (e.g. hide or stack the Block column). This is left to implementation judgement; follow the existing Tailwind responsive patterns used elsewhere in the explorer.
 4. **Proposal date accuracy from block age**: For very old proposals the YYYY-MM-DD display is an approximation derived from block times. This is intentional and acceptable.
 5. **Filtering interaction**: The existing network filter (via the `network` URL search param in `index.tsx`) is unaffected by these changes. The filter continues to work at the data level before proposals reach the list component.
