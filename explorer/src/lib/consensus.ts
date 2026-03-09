@@ -258,7 +258,7 @@ export const loadEpochRolloverHistory = async ({
 		stagedAt: log.blockNumber,
 	}));
 
-	const reachedGenesis = entries.some((e) => e.proposedEpoch === 0n);
+	const reachedGenesis = entries.some((e) => e.activeEpoch === 0n);
 	return {
 		entries,
 		reachedGenesis,
