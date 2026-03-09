@@ -1,34 +1,10 @@
+import { ValidatorList } from "@/components/common/ValidatorList";
 import { useAttestationStatus } from "@/hooks/useSigningProgress";
 import { useValidatorInfoMap } from "@/hooks/useValidatorInfo";
 import type { TransactionProposal } from "@/lib/consensus";
 import { Skeleton } from "../Skeleton";
 
-export function ValidatorList({
-	all,
-	active,
-	mapInfo,
-	completed,
-}: {
-	all: bigint[];
-	active: bigint[];
-	mapInfo: (suffix: string) => (identifier: bigint) => string;
-	completed: boolean;
-}) {
-	return (
-		<>
-			{active
-				.map(mapInfo("✅"))
-				.sort()
-				.concat(
-					all
-						.filter((v) => !active.includes(v))
-						.map(mapInfo(completed ? "❌" : "⏳"))
-						.sort(),
-				)
-				.join(", ")}
-		</>
-	);
-}
+export { ValidatorList };
 
 export function SafeTxAttestationStatus({ proposal }: { proposal: TransactionProposal }) {
 	const validatorInfo = useValidatorInfoMap();
