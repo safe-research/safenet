@@ -138,9 +138,11 @@ EpochStaged(uint64 indexed activeEpoch, uint64 indexed proposedEpoch, uint64 rol
 
 **Initial load:** fetch both `EpochProposed` and `EpochStaged` events from `[currentBlock - maxBlockRange, latest]`.
 
-**Matching:** pair entries by `proposedEpoch`. Only entries that have **both** an `EpochProposed` and a matching `EpochStaged` are shown in the history list. A proposed epoch without a matching staged entry is out of scope for this list (un-staged proposals indicate that the attestation signing has not yet completed; those are not surface here).
+**Matching:** pair entries by `proposedEpoch`. Only entries that have **both** an `EpochProposed` and a matching `EpochStaged` are shown in the history list. A proposed epoch without a matching staged entry is out of scope for this list (un-staged proposals indicate that the attestation signing has not yet completed; those are not surfaced here).
 
 **"Load more":** each click fetches the next `maxBlockRange` window backward (i.e., `[prevFromBlock - maxBlockRange, prevFromBlock]`) and prepends newly matched pairs.
+
+**Handling unpaired `EpochProposed` at the window boundary:** A "Load more" fetch may return `EpochProposed` events whose matching `EpochStaged` falls outside (before) the fetched window — for example when an attestation round spanned the window boundary. When this occurs, the implementation continues fetching one additional `maxBlockRange` window backward, looking for the missing `EpochStaged` events. This repeats until all `EpochProposed` events from the latest batch are either matched or proven absent (no more history). Unmatched events at the absolute bottom of history (i.e. no further data) are silently dropped, consistent with the general rule that un-staged proposals are not shown.
 
 #### Per-epoch keygen details (FROSTCoordinator contract, lazy)
 
@@ -166,7 +168,12 @@ For each history entry, clicking "Show details" triggers a query for that epoch'
 
 ### Phase 2 — Pending Key Generation
 
-Query `KeyGen` events from the coordinator from `[lastEpochProposedBlock + 1, latest]`, where `lastEpochProposedBlock` is the block of the most recent `EpochProposed` event found in the Phase 1 fetch. Any `KeyGen` events in this window represent ceremonies that have been started but whose resulting group has not yet been proposed to the Consensus contract.
+Query `KeyGen` events from the coordinator from `[pendingKeyGenStartBlock, latest]`, where `pendingKeyGenStartBlock` is derived using the same logic as Phase 1's keygen block range:
+
+- **If `blocksPerEpoch` is configured in settings**: `currentBlock - (currentBlock % blocksPerEpoch)` — snaps back to the current epoch boundary.
+- **Fallback** (no `blocksPerEpoch`): the most recent `EpochStaged.blockNumber` available from Phase 1 data. `EpochStaged` marks the block at which the previous keygen's result was officially accepted by the Consensus contract; any keygen started after that block is a candidate for the pending ceremony.
+
+Any `KeyGen` events in this window represent ceremonies that have been started but whose resulting group has not yet been proposed to the Consensus contract.
 
 Each pending keygen entry is **always expanded** (no "show details" toggle) since it is live and the validator participation is of immediate interest. Refetching follows the standard `refetchInterval` setting and stops once the keygen reaches a terminal state.
 
