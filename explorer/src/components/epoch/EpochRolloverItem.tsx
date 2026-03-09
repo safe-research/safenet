@@ -9,7 +9,6 @@ export function EpochRolloverItem({ entry, prevStagedAt }: { entry: EpochRollove
 	const [expanded, setExpanded] = useState(false);
 
 	const keyGenDetails = useKeyGenDetails({
-		epoch: entry.proposedEpoch,
 		gid: entry.groupId,
 		endBlock: entry.stagedAt,
 		prevStagedAt,

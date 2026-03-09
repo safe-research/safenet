@@ -5,13 +5,11 @@ import { useSettings } from "@/hooks/useSettings";
 import { type KeyGenStatus, loadKeyGenDetails } from "@/lib/coordinator/keygen";
 
 export function useKeyGenDetails({
-	epoch,
 	gid,
 	endBlock,
 	prevStagedAt,
 	enabled = true,
 }: {
-	epoch: bigint;
 	gid: Hex;
 	endBlock: bigint;
 	prevStagedAt?: bigint;
@@ -20,7 +18,7 @@ export function useKeyGenDetails({
 	const [settings] = useSettings();
 	const provider = useProvider();
 	return useQuery<KeyGenStatus | null, Error>({
-		queryKey: ["keyGenDetails", settings.consensus, epoch.toString(), endBlock.toString()],
+		queryKey: ["keyGenDetails", settings.consensus, gid, endBlock.toString()],
 		queryFn: async () => {
 			return loadKeyGenDetails({
 				provider,
