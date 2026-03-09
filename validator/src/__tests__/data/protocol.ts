@@ -609,12 +609,13 @@ export const TEST_EVENTS: [ProtocolLog | null, StateTransition][] = [
 		{
 			blockNumber: 111n,
 			logIndex: 0,
-			// EpochProposed(uint64 indexed activeEpoch, uint64 indexed proposedEpoch, uint64 rolloverBlock, (uint256 x, uint256 y) groupKey)
+			// EpochProposed(uint64 indexed activeEpoch, uint64 indexed proposedEpoch, uint64 rolloverBlock, bytes32 groupId, (uint256 x, uint256 y) groupKey)
 			eventName: "EpochProposed",
 			args: {
 				activeEpoch: 1n,
 				proposedEpoch: 2n,
 				rolloverBlock: 3n,
+				groupId: "0x5afe000000000000000000000000000000000000000000000000000000000000",
 				groupKey: TEST_POINT,
 			},
 		},
@@ -625,6 +626,7 @@ export const TEST_EVENTS: [ProtocolLog | null, StateTransition][] = [
 			activeEpoch: 1n,
 			proposedEpoch: 2n,
 			rolloverBlock: 3n,
+			groupId: "0x5afe000000000000000000000000000000000000000000000000000000000000",
 			groupKey: TEST_POINT,
 		},
 	],
@@ -632,13 +634,15 @@ export const TEST_EVENTS: [ProtocolLog | null, StateTransition][] = [
 		{
 			blockNumber: 111n,
 			logIndex: 0,
-			// EpochStaged(uint64 indexed activeEpoch, uint64 indexed proposedEpoch, uint64 rolloverBlock, (uint256 x, uint256 y) groupKey, ((uint256 x, uint256 y) r, uint256 z) attestation)
+			// EpochStaged(uint64 indexed activeEpoch, uint64 indexed proposedEpoch, uint64 rolloverBlock, bytes32 groupId, (uint256 x, uint256 y) groupKey, bytes32 signatureId, ((uint256 x, uint256 y) r, uint256 z) attestation)
 			eventName: "EpochStaged",
 			args: {
 				activeEpoch: 1n,
 				proposedEpoch: 2n,
 				rolloverBlock: 3n,
+				groupId: "0x5afe000000000000000000000000000000000000000000000000000000000000",
 				groupKey: TEST_POINT,
+				signatureId: "0x5af3000000000000000000000000000000000000000000000000000000000000",
 				attestation: {
 					r: TEST_POINT,
 					z: 12345n,
@@ -652,7 +656,9 @@ export const TEST_EVENTS: [ProtocolLog | null, StateTransition][] = [
 			activeEpoch: 1n,
 			proposedEpoch: 2n,
 			rolloverBlock: 3n,
+			groupId: "0x5afe000000000000000000000000000000000000000000000000000000000000",
 			groupKey: TEST_POINT,
+			signatureId: "0x5af3000000000000000000000000000000000000000000000000000000000000",
 			attestation: {
 				z: 12345n,
 				r: TEST_POINT,
@@ -714,11 +720,12 @@ export const TEST_EVENTS: [ProtocolLog | null, StateTransition][] = [
 		{
 			blockNumber: 111n,
 			logIndex: 0,
-			// TransactionAttested(bytes32 indexed transactionHash, uint64 epoch, ((uint256 x, uint256 y) r, uint256 z) attestation)
+			// TransactionAttested(bytes32 indexed transactionHash, uint64 epoch, bytes32 signatureId, ((uint256 x, uint256 y) r, uint256 z) attestation)
 			eventName: "TransactionAttested",
 			args: {
 				transactionHash: "0x5af3330000000000000000000000000000000000000000000000000000000000",
 				epoch: 42n,
+				signatureId: "0x5af3000000000000000000000000000000000000000000000000000000000000",
 				attestation: {
 					r: TEST_POINT,
 					z: 12345n,
@@ -731,6 +738,7 @@ export const TEST_EVENTS: [ProtocolLog | null, StateTransition][] = [
 			index: 0,
 			transactionHash: "0x5af3330000000000000000000000000000000000000000000000000000000000",
 			epoch: 42n,
+			signatureId: "0x5af3000000000000000000000000000000000000000000000000000000000000",
 			attestation: {
 				r: TEST_POINT,
 				z: 12345n,

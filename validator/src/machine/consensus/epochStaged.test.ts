@@ -56,10 +56,12 @@ const EVENT: EpochStagedEvent = {
 	activeEpoch: 1n,
 	proposedEpoch: 2n,
 	rolloverBlock: 20n,
+	groupId: "0x5afe5af3",
 	groupKey: toPoint({
 		x: 73844941487532555987364396775795076447946974313865618280135872376303125438365n,
 		y: 29462187596282402403443212507099371496473451788807502182979305411073244917417n,
 	}),
+	signatureId: "0x5af35af3",
 	attestation: {
 		z: 12345n,
 		r: toPoint({

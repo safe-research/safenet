@@ -1,7 +1,7 @@
 import { parseAbi, parseAbiItem } from "viem";
 
 export const CONSENSUS_EPOCH_STAGED_EVENT = parseAbiItem(
-	"event EpochStaged(uint64 indexed activeEpoch, uint64 indexed proposedEpoch, uint64 rolloverBlock, (uint256 x, uint256 y) groupKey, ((uint256 x, uint256 y) r, uint256 z) attestation)",
+	"event EpochStaged(uint64 indexed activeEpoch, uint64 indexed proposedEpoch, uint64 rolloverBlock, bytes32 groupId, (uint256 x, uint256 y) groupKey, bytes32 signatureId, ((uint256 x, uint256 y) r, uint256 z) attestation)",
 );
 
 export const CONSENSUS_TRANSACTION_PROPOSED_EVENT = parseAbiItem(
@@ -9,8 +9,8 @@ export const CONSENSUS_TRANSACTION_PROPOSED_EVENT = parseAbiItem(
 );
 
 export const CONSENSUS_OTHER_EVENTS = parseAbi([
-	"event EpochProposed(uint64 indexed activeEpoch, uint64 indexed proposedEpoch, uint64 rolloverBlock, (uint256 x, uint256 y) groupKey)",
-	"event TransactionAttested(bytes32 indexed transactionHash, uint64 epoch, ((uint256 x, uint256 y) r, uint256 z) attestation)",
+	"event EpochProposed(uint64 indexed activeEpoch, uint64 indexed proposedEpoch, uint64 rolloverBlock, bytes32 groupId, (uint256 x, uint256 y) groupKey)",
+	"event TransactionAttested(bytes32 indexed transactionHash, uint64 epoch, bytes32 signatureId, ((uint256 x, uint256 y) r, uint256 z) attestation)",
 ]);
 
 export const CONSENSUS_EVENTS = [
