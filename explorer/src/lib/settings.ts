@@ -24,6 +24,7 @@ const settingsSchema = z.object({
 	maxBlockRange: z.number().int().positive().default(DEFAULT_SETTINGS.maxBlockRange),
 	validatorInfo: z.url().default(DEFAULT_SETTINGS.validatorInfo),
 	refetchInterval: z.number().int().nonnegative().default(DEFAULT_SETTINGS.refetchInterval),
+	blocksPerEpoch: z.number().int().positive().optional(),
 });
 
 export type Settings = z.output<typeof settingsSchema>;
