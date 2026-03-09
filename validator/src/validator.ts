@@ -41,6 +41,8 @@ const config: ProtocolConfig = {
 	genesisSalt: validatorConfig.GENESIS_SALT,
 	blocksPerEpoch: validatorConfig.BLOCKS_PER_EPOCH,
 	blocksBeforeResubmit: validatorConfig.BLOCKS_BEFORE_RESUBMIT,
+	keyGenTimeout: validatorConfig.KEY_GEN_TIMEOUT,
+	signingTimeout: validatorConfig.SIGNING_TIMEOUT,
 };
 const watcherConfig: WatcherConfig = {
 	blockTimeOverride: validatorConfig.BLOCK_TIME_OVERRIDE,
