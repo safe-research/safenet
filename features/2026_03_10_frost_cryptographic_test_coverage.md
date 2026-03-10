@@ -13,7 +13,7 @@ This feature adds comprehensive unit tests across three phases, each suitable fo
 
 1. **Phase 1**: FROST math primitives and VSS functions (`frost/math.ts`, `frost/vss.ts`, `frost/secret.ts`)
 2. **Phase 2**: Signing ceremony functions (`consensus/signing/verify.ts`, `consensus/signing/shares.ts`, `consensus/signing/group.ts`, `consensus/signing/nonces.ts`)
-3. **Phase 3**: Protocol hashing and ID computation (`consensus/verify/safeTx/hashing.ts`, `consensus/keyGen/utils.ts`)
+3. **Phase 3**: Protocol hashing and ID computation (`consensus/verify/safeTx/hashing.ts`, `consensus/verify/rollover/hashing.ts`, `consensus/keyGen/utils.ts`)
 
 ---
 
@@ -46,29 +46,37 @@ Not applicable — this is an internal test coverage improvement with no user-fa
   - `neg()`, `addmod()`, `submod()`, `mulmod()`, `divmod()`: modular arithmetic correctness (commutativity, associativity, inverse properties, overflow wrapping)
   - `toPoint()`, `pointFromBytes()`: round-trip serialization, invalid coordinate rejection
   - `scalarToBytes()`, `scalarFromBytes()`: round-trip serialization, boundary values (0, N-1)
-  - `evalPoly()`: known polynomial evaluations, zero-x rejection, single-coefficient (constant) case
-  - `evalCommitment()`: commitment evaluation consistency with `evalPoly` (i.e., `evalCommitment(g(coeffs), x) == g(evalPoly(coeffs, x))`)
+  - `evalPoly()`: known polynomial evaluations, zero-x rejection (throws), single-coefficient (constant) case
+  - `evalCommitment()`:
+    - For `x != 0`: commitment evaluation consistency with `evalPoly` (i.e., `evalCommitment(g(coeffs), x) == g(evalPoly(coeffs, x))`)
+    - For `x == 0`: returns `commitments[0]` directly without throwing (diverges from `evalPoly` behaviour — must be tested explicitly)
   - `createVerificationShare()`: aggregation across multiple commitment maps, empty map error
   - `createSigningShare()`: aggregation of secret shares, empty map error
   - `verifyKey()`: valid key pair verification, mismatched key rejection
 
 - `validator/src/frost/vss.test.ts`
   - `createEncryptionKey()`: returns valid key pair (public key = g(secret key))
-  - `createCoefficients()`: returns correct count, non-zero coefficients
+  - `createCoefficients()`: returns the correct number of coefficients equal to the threshold (no non-zero assertion — the code has no explicit guard; non-zero is probabilistically certain via SHA-256 derivation but not deterministically testable)
   - `createProofOfKnowledge()`: proof verifies against own commitments
   - `createCommitments()`: commitments match g(coefficient) for each coefficient
   - `verifyCommitments()`: valid proof passes, tampered proof fails, wrong ID fails
 
 - `validator/src/frost/secret.test.ts`
-  - `ecdh()`: round-trip encryption/decryption between two key pairs, commutativity of shared secret
+  - `ecdh()`: XOR-based symmetric cipher using an EC shared secret — three test cases:
+    1. **Round-trip**: `ecdh(ecdh(msg, alicePriv, bobPub), bobPriv, alicePub) === msg` (XOR is self-inverse when both sides derive the same shared secret x-coordinate)
+    2. **Shared secret commutativity**: `ecdh(msg, alicePriv, bobPub) === ecdh(msg, bobPriv, alicePub)` (holds because `alicePriv * bobPub = bobPriv * alicePub` on the curve)
+    3. **Different keys produce different ciphertext**: `ecdh(msg, alicePriv, bobPub) !== ecdh(msg, alicePriv, carolPub)` for distinct recipients
 
 ### Phase 2: Signing Ceremony Functions
 
 **New test files:**
 
 - `validator/src/consensus/signing/verify.test.ts`
-  - `verifySignature()`: valid FROST group signature verifies, tampered message fails, tampered commitment fails, identity point (0,0) returns false
-  - `verifySignatureShare()`: valid individual share verifies, incorrect share fails
+  - `verifySignature()`: valid FROST group signature verifies, tampered message fails, tampered commitment fails, identity point (0,0) short-circuits to `false`
+  - `verifySignatureShare()`:
+    - Valid individual share verifies
+    - Incorrect share fails
+    - Explicitly validates that only the **x-coordinate** is compared (`sG.x === r.x`), consistent with the FROST spec — a share differing only in the y-coordinate would still pass
 
 - `validator/src/consensus/signing/shares.test.ts`
   - `lagrangeChallenge()`: multiplication of Lagrange coefficient and challenge
@@ -82,10 +90,12 @@ Not applicable — this is an internal test coverage improvement with no user-fa
   - `generateNonce()`: deterministic with fixed randomness, invalid randomness length rejection
   - `generateNonceCommitments()`: commitments match g(nonce) for hiding and binding
   - `createNonceTree()`: correct tree size, valid Merkle root
+  - `bindingPrefix()`: deterministic for same inputs, different output for different messages or signer sets
   - `bindingFactors()`: deterministic for same inputs, one factor per signer
   - `groupCommitmentShare()`: algebraic correctness (hiding + binding * factor)
+  - `groupCommitementShares()` _(note: exported with this spelling)_: returns one share per signer, each matching the result of `groupCommitmentShare()` applied individually
   - `calculateGroupCommitment()`: sum of shares
-  - `decodeSequence()`: chunk/offset calculation for known values
+  - `decodeSequence()`: chunk/offset calculation for known values (e.g., sequence 0 → chunk 0 / offset 0, sequence 1023 → chunk 0 / offset 1023, sequence 1024 → chunk 1 / offset 0)
   - `nonceCommitmentsWithProof()`: proof verifies against tree root
 
 ### Phase 3: Protocol Hashing and ID Computation
@@ -97,6 +107,9 @@ Not applicable — this is an internal test coverage improvement with no user-fa
   - `safeTxStructHash()`: deterministic struct hash without domain
   - `safeTxProposalHash()`: deterministic for same proposal
   - `safeTxPacketHash()`: composes `safeTxHash` and `safeTxProposalHash` correctly
+
+- `validator/src/consensus/verify/rollover/hashing.test.ts`
+  - `epochRolloverHash()`: deterministic for same packet, different output for different epoch values or chain/consensus address, matches expected EIP-712 typed data hash
 
 - `validator/src/consensus/keyGen/utils.test.ts`
   - `calcGroupId()`: deterministic for same inputs, last 8 bytes are zeroed (mask verification), different inputs produce different IDs
@@ -150,14 +163,17 @@ Not applicable — this is an internal test coverage improvement with no user-fa
 
 **Files created:**
 - `validator/src/consensus/verify/safeTx/hashing.test.ts`
+- `validator/src/consensus/verify/rollover/hashing.test.ts`
 - `validator/src/consensus/keyGen/utils.test.ts`
 
 **Files read (not modified):**
 - `validator/src/consensus/verify/safeTx/hashing.ts`
 - `validator/src/consensus/verify/safeTx/schemas.ts`
+- `validator/src/consensus/verify/rollover/hashing.ts`
+- `validator/src/consensus/verify/rollover/schemas.ts`
 - `validator/src/consensus/keyGen/utils.ts`
 
-**Estimated scope:** ~150 lines of test code across 2 files. Can be parallelized with Phases 1 and 2.
+**Estimated scope:** ~200 lines of test code across 3 files. Can be parallelized with Phases 1 and 2.
 
 ---
 
