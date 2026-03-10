@@ -76,14 +76,11 @@ export type TransactionProposal = {
 	attestedAt: ExecutionLink | null;
 };
 
-const transactionEventSelectors = ["TransactionProposed" as const, "TransactionAttested" as const].map((eventName) =>
-	toEventSelector(
-		getAbiItem({
-			abi: consensusAbi,
-			name: eventName,
-		}),
-	),
-);
+const [proposedEventSelector, attestedEventSelector] = [
+	"TransactionProposed" as const,
+	"TransactionAttested" as const,
+].map((eventName) => toEventSelector(getAbiItem({ abi: consensusAbi, name: eventName })));
+const transactionEventSelectors = [proposedEventSelector, attestedEventSelector];
 
 export const loadProposedSafeTransaction = async ({
 	provider,
@@ -138,21 +135,41 @@ export const loadTransactionProposals = async ({
 	// and `TransactionAttested` events.
 	// toBlock anchors the window; fromBlock is always derived relative to it so pages are contiguous.
 	const { fromBlock, toBlock } = await getBlockRange(provider, maxBlockRange, referenceBlock);
-	const logs = await provider.request({
-		method: "eth_getLogs",
-		params: [
-			{
-				address: consensus,
-				topics: [transactionEventSelectors, safeTxHash ?? null, null, safe ?? null],
-				fromBlock: numberToHex(fromBlock),
-				toBlock: numberToHex(toBlock),
-			},
-		],
-	});
+	const blockRange = { fromBlock: numberToHex(fromBlock), toBlock: numberToHex(toBlock) };
+
+	// TransactionProposed has 3 indexed topics (transactionHash, chainId, safe) while
+	// TransactionAttested only has 1 (transactionHash). A single eth_getLogs call with a
+	// topic[3] filter would silently drop all TransactionAttested events when filtering by
+	// safe address, so we fetch both event types in separate requests in that case.
+	const fetchLogs = async () => {
+		if (safe !== undefined) {
+			const proposedRaw = await provider.request({
+				method: "eth_getLogs",
+				params: [
+					{ address: consensus, ...blockRange, topics: [proposedEventSelector, safeTxHash ?? null, null, safe] },
+				],
+			});
+			// topic[1] of TransactionProposed is the indexed transactionHash — read directly
+			// to avoid re-parsing the full ABI just for hash extraction.
+			const txHashes = proposedRaw.map((log) => log.topics[1]).filter((hash): hash is Hex => hash !== undefined);
+			const attestedRaw =
+				txHashes.length > 0
+					? await provider.request({
+							method: "eth_getLogs",
+							params: [{ address: consensus, ...blockRange, topics: [attestedEventSelector, txHashes] }],
+						})
+					: ([] as typeof proposedRaw);
+			return [...proposedRaw, ...attestedRaw];
+		}
+		return provider.request({
+			method: "eth_getLogs",
+			params: [{ address: consensus, ...blockRange, topics: [transactionEventSelectors, safeTxHash ?? null] }],
+		});
+	};
 	const eventLogs = mostRecentFirst(
 		parseEventLogs({
 			// <https://github.com/wevm/viem/issues/4340>
-			logs: logs.map((log) => formatLog(log)),
+			logs: (await fetchLogs()).map((log) => formatLog(log)),
 			abi: consensusAbi,
 			strict: true,
 		}),
