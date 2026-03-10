@@ -1,6 +1,6 @@
 import { keccak256, stringToBytes } from "viem";
 import { describe, expect, it } from "vitest";
-import { divmod, g, N, submod, toPoint } from "../../frost/math.js";
+import { divmod, N, submod, toPoint } from "../../frost/math.js";
 import { groupChallenge, lagrangeCoefficient } from "./group.js";
 
 describe("groupChallenge", () => {
