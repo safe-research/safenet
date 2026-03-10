@@ -19,10 +19,7 @@ export function useRecentTransactionProposals(autoRefresh = true) {
 				maxBlockRange: BigInt(settings.maxBlockRange),
 			}),
 		select: (data) => data.proposals,
-		refetchInterval: () => {
-			if (!autoRefresh) return false;
-			return settings.refetchInterval > 0 ? settings.refetchInterval : false;
-		},
+		refetchInterval: () => (autoRefresh && settings.refetchInterval > 0 ? settings.refetchInterval : false),
 		initialData: { proposals: [], fromBlock: 0n, toBlock: 0n },
 	});
 }

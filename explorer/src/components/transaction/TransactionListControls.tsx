@@ -27,7 +27,6 @@ export function TransactionListControls({
 				type="button"
 				onClick={onRefetch}
 				disabled={isFetching}
-				aria-label="Refresh now"
 				className="flex items-center gap-1 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
 			>
 				{isFetching && (
