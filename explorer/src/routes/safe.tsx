@@ -1,5 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
+import { zeroAddress } from "viem";
 import z from "zod";
 import { ConditionalBackButton } from "@/components/BackButton";
 import { Container, ContainerTitle } from "@/components/Groups";
@@ -7,7 +8,6 @@ import { Skeleton } from "@/components/Skeleton";
 import { TransactionListControls } from "@/components/transaction/TransactionListControls";
 import { TransactionProposalsList } from "@/components/transaction/TransactionProposalsList";
 import { useSafeTransactionProposals } from "@/hooks/useSafeTransactionProposals";
-import { zeroAddress } from "viem";
 import { bigIntSchema, checkedAddressSchema } from "@/lib/schemas";
 
 const validateSearch = z.object({
