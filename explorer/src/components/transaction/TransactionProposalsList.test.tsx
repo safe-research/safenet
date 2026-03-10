@@ -6,11 +6,15 @@ import type { TransactionProposal } from "@/lib/consensus";
 import { RecentTransactionProposals } from "./RecentTransactionProposals";
 import { TransactionProposalsList } from "./TransactionProposalsList";
 
-vi.mock("@/components/transaction/TransactionListRow", () => ({
-	TransactionListRow: ({ proposal }: { proposal: TransactionProposal }) => (
-		<div data-testid="transaction-list-row">{proposal.safeTxHash}</div>
-	),
-}));
+vi.mock("@/components/transaction/TransactionListRow", async (importOriginal) => {
+	const actual = await importOriginal<typeof import("@/components/transaction/TransactionListRow")>();
+	return {
+		...actual,
+		TransactionListRow: ({ proposal }: { proposal: TransactionProposal }) => (
+			<div data-testid="transaction-list-row">{proposal.safeTxHash}</div>
+		),
+	};
+});
 
 afterEach(cleanup);
 
