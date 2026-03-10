@@ -18,7 +18,9 @@
 	--color-button-outline: var(--color-button-outline);
 	--color-button-content: var(--color-button-content);
 	--color-positive: var(--color-positive);
+	--color-positive-foreground: var(--color-positive-foreground);
 	--color-pending: var(--color-pending);
+	--color-pending-foreground: var(--color-pending-foreground);
 	--color-error: var(--color-warning);
 	--color-error-outline: var(--color-warning-outline);
 	--color-error-surface: var(--color-warning-surface);
@@ -63,7 +65,9 @@ code {
 	--color-button-outline: oklch(44.6% 0.03 256.802);
 	--color-button-content: oklch(1 0 0);
 	--color-positive: oklch(79.2% 0.209 151.711);
+	--color-positive-foreground: oklch(21% 0.034 264.665);
 	--color-pending: oklch(85.2% 0.199 91.936);
+	--color-pending-foreground: oklch(21% 0.034 264.665);
 	--color-error: oklch(57.7% 0.245 27.325);
 	--color-error-outline: oklch(70.4% 0.191 22.216);
 	--color-error-surface: oklch(97.1% 0.013 17.38);
@@ -86,7 +90,9 @@ code {
 	--color-button-outline: oklch(92.8% 0.006 264.531);
 	--color-button-content: oklch(21% 0.034 264.665);
 	--color-positive: oklch(86.708% 0.19478 153.255);
+	--color-positive-foreground: oklch(21% 0.034 264.665);
 	--color-pending: oklch(91.698% 0.19298 107.115);
+	--color-pending-foreground: oklch(21% 0.034 264.665);
 	--color-error: oklch(57.7% 0.245 27.325);
 	--color-error-outline: oklch(70.4% 0.191 22.216);
 	--color-error-surface: oklch(97.1% 0.013 17.38);
