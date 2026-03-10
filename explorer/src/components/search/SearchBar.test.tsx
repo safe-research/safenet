@@ -21,7 +21,7 @@ afterEach(() => {
 	mockNavigate.mockClear();
 });
 
-const SAFE_ADDRESS = "0xDeaDbeefdEAdbeefdEadbEEFdeadbeEFdEaDbeeF" as Address;
+const SAFE_ADDRESS = "0xdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef" as Address;
 const CHECKSUMMED = "0xDeaDbeefdEAdbeefdEadbEEFdeadbeEFdEaDbeeF";
 const TX_HASH = "0xabc123def456abc123def456abc123def456abc123def456abc123def456abc1";
 

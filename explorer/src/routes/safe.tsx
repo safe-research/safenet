@@ -1,8 +1,10 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { useState } from "react";
 import z from "zod";
 import { ConditionalBackButton } from "@/components/BackButton";
 import { Container, ContainerTitle } from "@/components/Groups";
 import { Skeleton } from "@/components/Skeleton";
+import { TransactionListControls } from "@/components/transaction/TransactionListControls";
 import { TransactionProposalsList } from "@/components/transaction/TransactionProposalsList";
 import { useSafeTransactionProposals } from "@/hooks/useSafeTransactionProposals";
 import { bigIntSchema, checkedAddressSchema } from "@/lib/schemas";
@@ -21,10 +23,9 @@ export const Route = createFileRoute("/safe")({
 
 export function SafePage() {
 	const { safeAddress, chainId } = Route.useSearch();
-	const { data, isFetching, isFetchingNextPage, hasNextPage, fetchNextPage } = useSafeTransactionProposals({
-		safeAddress,
-		chainId,
-	});
+	const [autoRefresh, setAutoRefresh] = useState(false);
+	const { data, isFetching, isFetchingNextPage, hasNextPage, fetchNextPage, refetch, dataUpdatedAt } =
+		useSafeTransactionProposals({ safeAddress, chainId, autoRefresh });
 
 	const proposals = data?.pages.flat() ?? [];
 	const isFirstLoad = isFetching && data === undefined;
@@ -38,13 +39,22 @@ export function SafePage() {
 				<p className="text-center text-sub-title py-8">No proposals found for this Safe address.</p>
 			)}
 			{proposals.length > 0 && (
-				<TransactionProposalsList
-					proposals={proposals}
-					hasMore={hasNextPage}
-					onShowMore={fetchNextPage}
-					isLoadingMore={isFetchingNextPage}
-					showMoreLabel="Load More"
-				/>
+				<>
+					<TransactionListControls
+						isFetching={isFetching}
+						dataUpdatedAt={dataUpdatedAt}
+						autoRefresh={autoRefresh}
+						onRefetch={refetch}
+						onToggleAutoRefresh={() => setAutoRefresh((prev) => !prev)}
+					/>
+					<TransactionProposalsList
+						proposals={proposals}
+						hasMore={hasNextPage}
+						onShowMore={fetchNextPage}
+						isLoadingMore={isFetchingNextPage}
+						showMoreLabel="Load More"
+					/>
+				</>
 			)}
 		</Container>
 	);

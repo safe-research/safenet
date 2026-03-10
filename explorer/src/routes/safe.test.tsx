@@ -20,6 +20,7 @@ vi.mock("@tanstack/react-router", () => ({
 }));
 
 const mockFetchNextPage = vi.fn();
+const mockRefetch = vi.fn();
 
 type HookResult = {
 	data: InfiniteData<TransactionProposal[]> | undefined;
@@ -27,6 +28,8 @@ type HookResult = {
 	isFetchingNextPage: boolean;
 	hasNextPage: boolean;
 	fetchNextPage: () => void;
+	refetch: () => void;
+	dataUpdatedAt: number;
 };
 
 const mockUseSafeTransactionProposals = vi.hoisted(() => vi.fn<() => HookResult>());
@@ -66,6 +69,7 @@ afterEach(() => {
 	cleanup();
 	mockUseSafeTransactionProposals.mockClear();
 	mockFetchNextPage.mockClear();
+	mockRefetch.mockClear();
 });
 
 const makeProposal = (safeTxHash: string): TransactionProposal => ({
@@ -98,6 +102,8 @@ describe("SafePage", () => {
 			isFetchingNextPage: false,
 			hasNextPage: false,
 			fetchNextPage: mockFetchNextPage,
+			refetch: mockRefetch,
+			dataUpdatedAt: 0,
 		});
 
 		const { SafePage } = await import("./safe");
@@ -115,6 +121,8 @@ describe("SafePage", () => {
 			isFetchingNextPage: false,
 			hasNextPage: false,
 			fetchNextPage: mockFetchNextPage,
+			refetch: mockRefetch,
+			dataUpdatedAt: 0,
 		});
 
 		const { SafePage } = await import("./safe");
@@ -132,6 +140,8 @@ describe("SafePage", () => {
 			isFetchingNextPage: false,
 			hasNextPage: false,
 			fetchNextPage: mockFetchNextPage,
+			refetch: mockRefetch,
+			dataUpdatedAt: 0,
 		});
 
 		const { SafePage } = await import("./safe");
@@ -149,6 +159,8 @@ describe("SafePage", () => {
 			isFetchingNextPage: false,
 			hasNextPage: true,
 			fetchNextPage: mockFetchNextPage,
+			refetch: mockRefetch,
+			dataUpdatedAt: 0,
 		});
 
 		const { SafePage } = await import("./safe");
@@ -166,6 +178,8 @@ describe("SafePage", () => {
 			isFetchingNextPage: false,
 			hasNextPage: false,
 			fetchNextPage: mockFetchNextPage,
+			refetch: mockRefetch,
+			dataUpdatedAt: 0,
 		});
 
 		const { SafePage } = await import("./safe");
@@ -183,6 +197,8 @@ describe("SafePage", () => {
 			isFetchingNextPage: false,
 			hasNextPage: false,
 			fetchNextPage: mockFetchNextPage,
+			refetch: mockRefetch,
+			dataUpdatedAt: 0,
 		});
 
 		const { SafePage } = await import("./safe");
@@ -191,5 +207,45 @@ describe("SafePage", () => {
 		expect(screen.getByText("0xhash1")).toBeTruthy();
 		expect(screen.getByText("0xhash2")).toBeTruthy();
 		expect(screen.getByText("0xhash3")).toBeTruthy();
+	});
+
+	it("Refresh now button calls refetch", async () => {
+		const proposals = [makeProposal("0xhash1")];
+		mockUseSafeTransactionProposals.mockReturnValue({
+			data: { pages: [proposals], pageParams: [] },
+			isFetching: false,
+			isFetchingNextPage: false,
+			hasNextPage: false,
+			fetchNextPage: mockFetchNextPage,
+			refetch: mockRefetch,
+			dataUpdatedAt: 0,
+		});
+
+		const { SafePage } = await import("./safe");
+		render(<SafePage />);
+
+		fireEvent.click(screen.getByRole("button", { name: /refresh now/i }));
+		expect(mockRefetch).toHaveBeenCalledOnce();
+	});
+
+	it("auto-refresh toggle starts OFF and can be toggled", async () => {
+		const proposals = [makeProposal("0xhash1")];
+		mockUseSafeTransactionProposals.mockReturnValue({
+			data: { pages: [proposals], pageParams: [] },
+			isFetching: false,
+			isFetchingNextPage: false,
+			hasNextPage: false,
+			fetchNextPage: mockFetchNextPage,
+			refetch: mockRefetch,
+			dataUpdatedAt: 0,
+		});
+
+		const { SafePage } = await import("./safe");
+		render(<SafePage />);
+
+		const toggle = screen.getByRole("button", { pressed: false });
+		expect(toggle.textContent).toBe("OFF");
+		fireEvent.click(toggle);
+		expect(screen.getByRole("button", { pressed: true }).textContent).toBe("ON");
 	});
 });
