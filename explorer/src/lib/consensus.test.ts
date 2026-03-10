@@ -18,8 +18,7 @@ const makeProvider = (): PublicClient =>
 		request: vi.fn().mockResolvedValue([]),
 	}) as unknown as PublicClient;
 
-const firstCall = (provider: PublicClient) =>
-	(provider.request as ReturnType<typeof vi.fn>).mock.calls[0][0].params[0];
+const firstCall = (provider: PublicClient) => (provider.request as ReturnType<typeof vi.fn>).mock.calls[0][0].params[0];
 
 describe("loadTransactionProposals", () => {
 	describe("topic filters", () => {

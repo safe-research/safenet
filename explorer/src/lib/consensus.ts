@@ -139,7 +139,13 @@ export const loadTransactionProposals = async ({
 	// those proposals will have attestedAt: null until contract events are updated.
 	const rawLogs = await provider.request({
 		method: "eth_getLogs",
-		params: [{ address: consensus, ...blockRange, topics: [transactionEventSelectors, safeTxHash ?? null, null, safe ?? null] }],
+		params: [
+			{
+				address: consensus,
+				...blockRange,
+				topics: [transactionEventSelectors, safeTxHash ?? null, null, safe ?? null],
+			},
+		],
 	});
 	const eventLogs = mostRecentFirst(
 		parseEventLogs({
