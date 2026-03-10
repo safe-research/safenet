@@ -90,14 +90,13 @@ const checkSigningRequestTimeout = (
 				};
 			}
 			if (status.packet.type === "safe_transaction_packet") {
-				const transactionHash = safeTxHash(status.packet.proposal.transaction);
 				return {
 					...stateDiff,
 					actions: [
 						{
 							id: "consensus_attest_transaction",
 							epoch: status.packet.proposal.epoch,
-							transactionHash,
+							safeTxHash: safeTxHash(status.packet.proposal.transaction),
 							signatureId,
 						},
 					],

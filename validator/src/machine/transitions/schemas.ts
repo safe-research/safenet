@@ -145,7 +145,7 @@ const transactionSchema = z.object({
 });
 
 export const transactionProposedEventSchema = z.object({
-	transactionHash: hexBytes32Schema,
+	safeTxHash: hexBytes32Schema,
 	chainId: eventBigIntSchema,
 	safe: checkedAddressSchema,
 	epoch: eventBigIntSchema,
@@ -153,7 +153,7 @@ export const transactionProposedEventSchema = z.object({
 });
 
 export const transactionAttestedEventSchema = z.object({
-	transactionHash: hexBytes32Schema,
+	safeTxHash: hexBytes32Schema,
 	epoch: eventBigIntSchema,
 	signatureId: hexBytes32Schema,
 	attestation: signatureSchema,

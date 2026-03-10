@@ -66,14 +66,14 @@ interface IConsensus {
 
     /**
      * @notice Emitted when a transaction is proposed for validator approval.
-     * @param transactionHash The hash of the proposed Safe transaction.
+     * @param safeTxHash The hash of the proposed Safe transaction.
      * @param chainId The chain ID for the Safe transaction.
      * @param safe The address of the Safe.
      * @param epoch The epoch in which the transaction is proposed.
      * @param transaction The proposed Safe transaction.
      */
     event TransactionProposed(
-        bytes32 indexed transactionHash,
+        bytes32 indexed safeTxHash,
         uint256 indexed chainId,
         address indexed safe,
         uint64 epoch,
@@ -82,13 +82,13 @@ interface IConsensus {
 
     /**
      * @notice Emitted when a transaction is attested by the validator set.
-     * @param transactionHash The hash of the attested Safe transaction.
+     * @param safeTxHash The hash of the attested Safe transaction.
      * @param epoch The epoch in which the attested transaction was proposed.
      * @param signatureId The FROST signature identifier corresponding to the transaction attestation.
      * @param attestation The attestation to Safe transaction.
      */
     event TransactionAttested(
-        bytes32 indexed transactionHash, uint64 epoch, FROSTSignatureId.T signatureId, FROST.Signature attestation
+        bytes32 indexed safeTxHash, uint64 epoch, FROSTSignatureId.T signatureId, FROST.Signature attestation
     );
 
     // ============================================================
@@ -146,13 +146,17 @@ interface IConsensus {
      * @param proposedEpoch The proposed new epoch.
      * @param rolloverBlock The block number when rollover should occur.
      * @param group The FROST group ID for the proposed epoch.
-     * @param signature The ID of the FROST signature from the current active group, authorizing the change.
+     * @param signatureId The ID of the FROST signature from the current active group, authorizing the change.
      * @dev This is the second step of the epoch rollover. It requires a valid signature from the current active
      *      validator group, which proves their consent. Once staged, the epoch will automatically become active at the
      *      specified `rolloverBlock`.
      */
-    function stageEpoch(uint64 proposedEpoch, uint64 rolloverBlock, FROSTGroupId.T group, FROSTSignatureId.T signature)
-        external;
+    function stageEpoch(
+        uint64 proposedEpoch,
+        uint64 rolloverBlock,
+        FROSTGroupId.T group,
+        FROSTSignatureId.T signatureId
+    ) external;
 
     // ============================================================
     // TRANSACTION ATTESTATIONS
@@ -172,10 +176,10 @@ interface IConsensus {
     /**
      * @notice Gets a transaction attestation for a specific epoch and transaction hash.
      * @param epoch The epoch in which the transaction was proposed.
-     * @param transactionHash The Safe transaction hash to query the attestation for.
+     * @param safeTxHash The Safe transaction hash to query the attestation for.
      * @return signature The FROST signature attesting to the transaction.
      */
-    function getTransactionAttestationByHash(uint64 epoch, bytes32 transactionHash)
+    function getTransactionAttestationByHash(uint64 epoch, bytes32 safeTxHash)
         external
         view
         returns (FROST.Signature memory signature);
@@ -196,11 +200,11 @@ interface IConsensus {
 
     /**
      * @notice Gets a recent transaction attestation by transaction hash.
-     * @param transactionHash The hash of the Safe transaction.
+     * @param safeTxHash The hash of the Safe transaction.
      * @return epoch The recent epoch that the transaction was attested in.
      * @return signature The FROST signature attesting to the transaction.
      */
-    function getRecentTransactionAttestationByHash(bytes32 transactionHash)
+    function getRecentTransactionAttestationByHash(bytes32 safeTxHash)
         external
         view
         returns (uint64 epoch, FROST.Signature memory signature);
@@ -208,9 +212,9 @@ interface IConsensus {
     /**
      * @notice Proposes a transaction for validator approval.
      * @param transaction The Safe transaction to propose.
-     * @return transactionHash The Safe transaction hash.
+     * @return safeTxHash The Safe transaction hash.
      */
-    function proposeTransaction(SafeTransaction.T memory transaction) external returns (bytes32 transactionHash);
+    function proposeTransaction(SafeTransaction.T memory transaction) external returns (bytes32 safeTxHash);
 
     /**
      * @notice Proposes a transaction for validator approval, only specifying the basic transaction properties.
@@ -220,7 +224,7 @@ interface IConsensus {
      * @param value Native token value of the Safe transaction.
      * @param data Data payload of the Safe transaction.
      * @param nonce Safe transaction nonce.
-     * @return transactionHash The Safe transaction hash.
+     * @return safeTxHash The Safe transaction hash.
      * @dev This is provided as a convenience method for proposing transactions with the most common parameters.
      */
     function proposeBasicTransaction(
@@ -230,14 +234,14 @@ interface IConsensus {
         uint256 value,
         bytes memory data,
         uint256 nonce
-    ) external returns (bytes32 transactionHash);
+    ) external returns (bytes32 safeTxHash);
 
     /**
      * @notice Attests to a transaction.
      * @param epoch The epoch in which the transaction was proposed.
-     * @param transactionHash The hash of the Safe transaction.
-     * @param signature The FROST signature share attesting to the transaction.
+     * @param safeTxHash The hash of the Safe transaction.
+     * @param signatureId The FROST signature share attesting to the transaction.
      * @dev No explicit time limit is imposed for when a transaction can be attested in this contract.
      */
-    function attestTransaction(uint64 epoch, bytes32 transactionHash, FROSTSignatureId.T signature) external;
+    function attestTransaction(uint64 epoch, bytes32 safeTxHash, FROSTSignatureId.T signatureId) external;
 }
