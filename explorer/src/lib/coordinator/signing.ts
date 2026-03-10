@@ -1,6 +1,6 @@
 import { type Address, formatLog, type Hex, numberToHex, type PublicClient, parseEventLogs } from "viem";
+import { consensusAbi } from "@/lib/consensus";
 import {
-	CONSENSUS_ABI,
 	COORDINATOR_SIGNING_INITIATED_EVENT,
 	COORDINATOR_SIGNING_PROGRESS_EVENTS,
 	COORDINATOR_SIGNING_PROGRESS_SELECTORS,
@@ -16,7 +16,7 @@ let cachedAddresses:
 	| undefined;
 
 const fetchCoordinator = (provider: PublicClient, consensus: Address): Promise<Address> => {
-	return provider.readContract({ address: consensus, abi: CONSENSUS_ABI, functionName: "getCoordinator" });
+	return provider.readContract({ address: consensus, abi: consensusAbi, functionName: "getCoordinator" });
 };
 
 export const loadCoordinator = (provider: PublicClient, consensus: Address): Promise<Address> => {
