@@ -28,7 +28,7 @@ All newly added code should be covered by unit tests and if possible integration
 
 If in doubt, refer to existing code to determine which implementation to choose. Do not re-invent the wheel and follow existing paradigms.
 
-Before each commit always run `npm run check` and `npm test` in the root folder, to ensure that the PR follows all project guidelines and that no regression errors were introduced.
+Always run `npm run check` and `npm test` in the root folder before committing.
 
 ## Documentation
 
