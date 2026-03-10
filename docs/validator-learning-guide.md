@@ -169,7 +169,7 @@ The commit history shows six clear development phases.
 ### Phase 0 – Bootstrapping (commits 1–3, ~Aug 2024)
 
 **Commits**: `Bootstrap Contracts`, `Started Bootstrapping some Contracts`,
-`rename to ShiedNet`
+`rename to ShieldNet`
 
 Started as "ShieldNet" (later renamed to Safenet). The first three commits
 establish Foundry for Solidity, a `Counter.sol` placeholder, and the
