@@ -75,16 +75,44 @@ No new components or architectural changes. The focus is on:
 | `ErrorBoundary` | Medium | Error catching, fallback UI rendering |
 | `InlineAddress` | Low | Address truncation, copy behavior |
 
+### Security Observations
+
+| Location | Issue | Severity | Action |
+|---|---|---|---|
+| `components/transaction/SafeTxDataDetails.tsx:17` | `href={settings.decoder}{data}` — `settings.decoder` is user-configurable via localStorage. A malicious `javascript:` URL would execute in the user's browser. | Medium | Validate the decoder URL uses `https://` protocol before rendering as a link |
+| `lib/safe/service.ts` | Calls external Safe API endpoint without timeout configuration | Low | Add request timeout and consider rate limiting |
+| `lib/settings.ts` | Sensitive settings (RPC endpoint URLs) stored in localStorage in plain text | Info | Document the trust model: explorer is a client-side tool and localStorage is trusted |
+
 ### Code Smells and Improvements
 
 | Location | Issue | Action |
 |---|---|---|
 | `lib/settings.ts:37,62,84` | `console.error` used for settings parse failures — these are silently swallowed | Add structured error reporting or at minimum document why silent failure is acceptable (graceful degradation to defaults) |
+| `lib/settings.ts` | `loadSafeApiSettings()` and `updateSafeApiSettings()` functions and the `SafeApiSettings` type appear unused in the codebase | Confirm dead code and remove, or document planned future use |
 | `lib/consensus.ts:148-149` | `attestationKey` function is defined inline — used for matching `TransactionProposed` to `TransactionAttested` events | Extract and document the epoch-scoped matching logic (a transaction can be attested in different epochs after re-proposal) |
 | `lib/consensus.ts:79-86` | `transactionEventSelectors` array construction | Add inline comment explaining why both event selectors are in the first topic position (OR-filter on event signature in `eth_getLogs`) |
 | `hooks/useRecentTransactionProposals.tsx` | The `itemsToShow` state is incremented by a hardcoded `5` | Extract to a named constant |
 | `reportWebVitals.ts` | Appears to be leftover CRA boilerplate | Evaluate if web vitals reporting is used; if not, remove |
 | `components/epoch/EpochCard.tsx` | Large component handling multiple epoch states | Consider splitting into sub-components per state (KeyGen, Signing, Idle) |
+| `components/epoch/KeyGenStatusItem.tsx:6-19` | `statusLabel()` and `statusColor()` are hardcoded in the component | Extract to `lib/` as reusable domain-logic utilities |
+| `components/search/SearchBar.tsx:50` | Input accepts any text and navigates without validating it is a valid hex hash | Add input validation before navigation |
+| `main.tsx:36` | `if (rootElement && !rootElement.innerHTML)` — checking `innerHTML` is unusual for determining mount readiness | Use a data attribute or dedicated check |
+
+### Refactoring Opportunities
+
+| Location | Issue | Action |
+|---|---|---|
+| Settings forms | `ConsensusSettingsForm.tsx` and `UiSettingsForm.tsx` have identical form patterns (useForm setup, error state, submit handling) | Extract a shared form wrapper component |
+| Validator list rendering | `KeyGenStatusItem.tsx` (lines 48-54) and `SafeTxAttestationStatus.tsx` (lines 27-34) repeat the same `ValidatorList` rendering pattern | Abstract into a shared helper |
+| `lib/coordinator/signing.ts` | `loadLatestAttestationStatus` is 182 lines of log aggregation | Split into `filterSigningEvents()`, `parseProgressEvents()`, `aggregateEventLogs()`, `computeAttestationStatus()` |
+| Hook boilerplate | All hooks in `/hooks/` follow the same pattern: useQuery → useSettings → useProvider → compose | Consider a factory function to reduce repetitive setup |
+
+### Accessibility Issues
+
+| Location | Issue | Action |
+|---|---|---|
+| `components/search/SearchBar.tsx` | Select and input fields lack ARIA labels; magnifying glass icon button has no accessible name | Add `aria-label` attributes |
+| `components/epoch/EpochRolloverItem.tsx` | Expand/collapse button state is not announced to screen readers | Add `aria-expanded` attribute |
 
 ### Inline Comments Needed
 
@@ -94,6 +122,8 @@ No new components or architectural changes. The focus is on:
 | `lib/safe/hashing.ts` | Document that this SafeTx hash computation must match the Safe contract's EIP-712 implementation exactly, and reference the `SafeTransaction.sol` library |
 | `lib/coordinator/signing.ts` | Document the relationship between FROST signing ceremonies, sequence numbers, and nonce chunks |
 | `lib/coordinator/keygen.ts` | Document the three rounds of KeyGen and which contract events correspond to each round |
+| `lib/coordinator/keygen.ts:112-127` | `computeStartBlock()` has three different fallback strategies (blocksPerEpoch, prevStagedAt, maxBlockRange) — document the priority and rationale for each |
+| `hooks/useSafeTransactionDetails.tsx:8-27` | `findAny()` uses `Promise.any()` with a pattern that throws "not found" errors — document why this approach works better than sequential attempts |
 
 ---
 
@@ -156,3 +186,6 @@ No new components or architectural changes. The focus is on:
 2. **Mock provider strategy**: Hook tests need a mock `PublicClient`. Should this be a shared test utility (e.g., `explorer/src/__tests__/mockProvider.ts`) or inline per test?
 3. **`reportWebVitals.ts`**: Is web vitals reporting actively used? If not, removing it simplifies the codebase. If yes, it should be tested.
 4. **Settings error handling**: The current `console.error` approach for corrupt settings data provides graceful degradation. Should this be upgraded to structured error reporting (e.g., via a logging utility) or is silent fallback acceptable?
+5. **Dead code in settings**: Are `loadSafeApiSettings()`, `updateSafeApiSettings()`, and the `SafeApiSettings` type planned for future use, or should they be removed?
+6. **Decoder URL validation**: The user-configurable decoder URL is used in an `<a href>`. Should we restrict it to `https://` only, or allow other protocols? This has security implications (see Security Observations).
+7. **Accessibility standards**: Should the explorer target WCAG 2.1 AA compliance? If so, the ARIA and accessibility fixes should be prioritized higher.
