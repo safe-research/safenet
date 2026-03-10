@@ -4,7 +4,7 @@ import type { TransactionProposal } from "@/lib/consensus";
 function TransactionListHeader() {
 	return (
 		<div
-			className={`${TRANSACTION_ROW_GRID_COLS} px-3 py-1.5 text-[10px] font-medium text-sub-title uppercase tracking-wide`}
+			className={`${TRANSACTION_ROW_GRID_COLS} px-3 py-1.5 text-2xs font-medium text-sub-title uppercase tracking-wide`}
 		>
 			<div>Network</div>
 			<div>Safe</div>

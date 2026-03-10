@@ -4,6 +4,7 @@
 @import "tailwindcss";
 
 @theme {
+	--text-2xs: 0.625rem;
 	--color-primary: var(--color-primary);
 	--color-title: var(--color-title);
 	--color-title-hover: var(--color-title-hover);
