@@ -42,7 +42,7 @@ export const calcMinimumParticipants = ({
 	return Math.max(2, Math.floor((count * 2) / 3) + 1);
 };
 
-export const calcTreshold = (participantCount: number): number => {
+export const calcThreshold = (participantCount: number): number => {
 	return Math.floor(participantCount / 2) + 1;
 };
 
@@ -65,7 +65,7 @@ export const calcGenesisGroup = ({
 }: Pick<MachineConfig, "defaultParticipants" | "genesisSalt">): GenesisGroup => {
 	const participantsRoot = calculateParticipantsRoot(defaultParticipants);
 	const count = defaultParticipants.length;
-	const threshold = calcTreshold(defaultParticipants.length);
+	const threshold = calcThreshold(defaultParticipants.length);
 	// For genesis, we don't know the consensus contract address since it
 	// depends on the genesis group ID (🐓 and 🥚 problem). Instead, compute a
 	// different context based on the user-provided genesis salt (allowing the
