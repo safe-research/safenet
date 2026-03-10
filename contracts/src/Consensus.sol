@@ -343,19 +343,25 @@ contract Consensus is IConsensus, IERC165, IFROSTCoordinatorCallback {
     /**
      * @inheritdoc IConsensus
      */
-    function attestTransaction(uint64 epoch, bytes32 safeTxHash, FROSTSignatureId.T signatureId) public {
+    function attestTransaction(
+        uint64 epoch,
+        uint256 chainId,
+        address safe,
+        bytes32 safeTxStructHash,
+        FROSTSignatureId.T signatureId
+    ) public {
         // Note that we do not impose a time limit for a transaction to be attested to in the consensus contract. In
         // theory, we have enough space in our `Epochs` struct to also keep track of the previous epoch and then we
         // could check here that `epoch` is either `epochs.active` or `epochs.previous`. This isn't a useful
         // distinction, however: in fact, if there is a reverted transaction with a valid FROST signature onchain, then
         // there is a valid attestation for the transaction (regardless of whether or not this contract accepts it).
         // Therefore, it isn't useful for us to be restrictive here.
-
+        bytes32 safeTxHash = SafeTransaction.partialHash(chainId, safe, safeTxStructHash);
         bytes32 message = domainSeparator().transactionProposal(epoch, safeTxHash);
         require($attestations[message].isZero(), AlreadyAttested());
         FROST.Signature memory attestation = _COORDINATOR.signatureVerify(signatureId, $groups[epoch], message);
         $attestations[message] = signatureId;
-        emit TransactionAttested(safeTxHash, epoch, signatureId, attestation);
+        emit TransactionAttested(safeTxHash, chainId, safe, epoch, signatureId, attestation);
     }
 
     // ============================================================
@@ -393,8 +399,9 @@ contract Consensus is IConsensus, IERC165, IFROSTCoordinatorCallback {
                 abi.decode(context[4:], (uint64, uint64, FROSTGroupId.T));
             stageEpoch(proposedEpoch, rolloverBlock, group, signature);
         } else if (selector == this.attestTransaction.selector) {
-            (uint64 epoch, bytes32 safeTxHash) = abi.decode(context[4:], (uint64, bytes32));
-            attestTransaction(epoch, safeTxHash, signature);
+            (uint64 epoch, uint256 chainId, address safe, bytes32 safeTxStructHash) =
+                abi.decode(context[4:], (uint64, uint256, address, bytes32));
+            attestTransaction(epoch, chainId, safe, safeTxStructHash, signature);
         } else {
             revert UnknownSignatureSelector();
         }

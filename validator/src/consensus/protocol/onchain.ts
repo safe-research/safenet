@@ -472,12 +472,18 @@ export class OnchainProtocol extends BaseProtocol {
 		});
 	}
 
-	protected attestTransaction({ epoch, safeTxHash, signatureId }: AttestTransaction): Promise<Hex | null> {
+	protected attestTransaction({
+		epoch,
+		chainId,
+		safe,
+		safeTxStructHash,
+		signatureId,
+	}: AttestTransaction): Promise<Hex | null> {
 		return this.submitAction({
 			address: this.#consensus,
 			abi: CONSENSUS_FUNCTIONS,
 			functionName: "attestTransaction",
-			args: [epoch, safeTxHash, signatureId],
+			args: [epoch, chainId, safe, safeTxStructHash, signatureId],
 			gas: 400_000n, // TODO: this has not been estimated yet
 		});
 	}

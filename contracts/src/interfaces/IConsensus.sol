@@ -88,7 +88,12 @@ interface IConsensus {
      * @param attestation The attestation to Safe transaction.
      */
     event TransactionAttested(
-        bytes32 indexed safeTxHash, uint64 epoch, FROSTSignatureId.T signatureId, FROST.Signature attestation
+        bytes32 indexed safeTxHash,
+        uint256 indexed chainId,
+        address indexed safe,
+        uint64 epoch,
+        FROSTSignatureId.T signatureId,
+        FROST.Signature attestation
     );
 
     // ============================================================
@@ -239,9 +244,17 @@ interface IConsensus {
     /**
      * @notice Attests to a transaction.
      * @param epoch The epoch in which the transaction was proposed.
-     * @param safeTxHash The hash of the Safe transaction.
+     * @param chainId The chain ID of the Safe account.
+     * @param safe The address of the Safe account.
+     * @param safeTxStructHash The EIP-712 struct hash of the Safe transaction data.
      * @param signatureId The FROST signature share attesting to the transaction.
      * @dev No explicit time limit is imposed for when a transaction can be attested in this contract.
      */
-    function attestTransaction(uint64 epoch, bytes32 safeTxHash, FROSTSignatureId.T signatureId) external;
+    function attestTransaction(
+        uint64 epoch,
+        uint256 chainId,
+        address safe,
+        bytes32 safeTxStructHash,
+        FROSTSignatureId.T signatureId
+    ) external;
 }

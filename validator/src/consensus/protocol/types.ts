@@ -97,7 +97,9 @@ export type KeyGenAction = StartKeyGen | PublishSecretShares | ConfirmKeyGen | C
 export type AttestTransaction = {
 	id: "consensus_attest_transaction";
 	epoch: bigint;
-	safeTxHash: Hex;
+	chainId: bigint;
+	safe: Address;
+	safeTxStructHash: Hex;
 	signatureId: SignatureId;
 };
 

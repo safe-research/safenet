@@ -10,7 +10,7 @@ export const CONSENSUS_TRANSACTION_PROPOSED_EVENT = parseAbiItem(
 
 export const CONSENSUS_OTHER_EVENTS = parseAbi([
 	"event EpochProposed(uint64 indexed activeEpoch, uint64 indexed proposedEpoch, uint64 rolloverBlock, bytes32 groupId, (uint256 x, uint256 y) groupKey)",
-	"event TransactionAttested(bytes32 indexed safeTxHash, uint64 epoch, bytes32 signatureId, ((uint256 x, uint256 y) r, uint256 z) attestation)",
+	"event TransactionAttested(bytes32 indexed safeTxHash, uint256 indexed chainId, address indexed safe, uint64 epoch, bytes32 signatureId, ((uint256 x, uint256 y) r, uint256 z) attestation)",
 ]);
 
 export const CONSENSUS_EVENTS = [
@@ -77,7 +77,7 @@ export const CONSENSUS_FUNCTIONS = parseAbi([
 	"error WrongSignature()",
 	"function proposeEpoch(uint64 proposedEpoch, uint64 rolloverBlock, bytes32 group) external",
 	"function stageEpoch(uint64 proposedEpoch, uint64 rolloverBlock, bytes32 group, bytes32 signature) external",
-	"function attestTransaction(uint64 epoch, bytes32 safeTxHash, bytes32 signature) external",
+	"function attestTransaction(uint64 epoch, uint256 chainId, address safe, bytes32 safeTxStructHash, bytes32 signature) external",
 	"function setValidatorStaker(address staker) external",
 	"function getValidatorStaker(address validator) external view returns (address staker)",
 ]);
