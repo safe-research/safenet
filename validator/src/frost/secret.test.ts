@@ -20,7 +20,6 @@ describe("ecdh", () => {
 	});
 
 	it("shared secret commutativity: ecdh(msg, alicePriv, bobPub) === ecdh(msg, bobPriv, alicePub)", () => {
-		// ECDH is commutative: alicePriv * bobPub = alicePriv * g(bobPriv) = bobPriv * g(alicePriv) = bobPriv * alicePub
 		expect(ecdh(msg, alicePriv, bobPub)).toBe(ecdh(msg, bobPriv, alicePub));
 	});
 
@@ -28,9 +27,7 @@ describe("ecdh", () => {
 		expect(ecdh(msg, alicePriv, bobPub)).not.toBe(ecdh(msg, alicePriv, carolPub));
 	});
 
-	it("encrypting zero produces a non-zero ciphertext (XOR with shared secret x-coordinate)", () => {
-		const encrypted = ecdh(0n, alicePriv, bobPub);
-		// The result is 0 XOR sharedSecret.x = sharedSecret.x, which should be non-zero
-		expect(encrypted).not.toBe(0n);
+	it("zero private key throws (contracts enforce non-zero via Secp256k1.requireNonZero)", () => {
+		expect(() => ecdh(msg, 0n, bobPub)).toThrow();
 	});
 });
