@@ -11,9 +11,9 @@ export class EpochRolloverHandler implements PacketHandler<EpochRolloverPacket> 
 	async hashAndVerify(uncheckedPacket: EpochRolloverPacket): Promise<Hex> {
 		const packet = epochRolloverPacketSchema.parse(uncheckedPacket);
 
-		if (packet.rollover.proposedEpoch !== packet.rollover.activeEpoch + 1n) {
+		if (packet.rollover.proposedEpoch <= packet.rollover.activeEpoch) {
 			throw new Error(
-				`Invalid epoch rollover: proposedEpoch (${packet.rollover.proposedEpoch}) must be activeEpoch (${packet.rollover.activeEpoch}) + 1`,
+				`Invalid epoch rollover: proposedEpoch (${packet.rollover.proposedEpoch}) must be greater than activeEpoch (${packet.rollover.activeEpoch})`,
 			);
 		}
 

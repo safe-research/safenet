@@ -34,7 +34,7 @@ describe("epoch rollover handler", () => {
 		);
 	});
 
-	it("should throw when proposedEpoch is not activeEpoch + 1", async () => {
+	it("should allow proposedEpoch greater than activeEpoch + 1 (skipped epochs)", async () => {
 		const handler = new EpochRolloverHandler();
 		await expect(
 			handler.hashAndVerify({
@@ -45,7 +45,7 @@ describe("epoch rollover handler", () => {
 					proposedEpoch: 7n,
 				},
 			}),
-		).rejects.toThrow("proposedEpoch (7) must be activeEpoch (5) + 1");
+		).resolves.toBeDefined();
 	});
 
 	it("should throw when proposedEpoch equals activeEpoch", async () => {
@@ -59,7 +59,21 @@ describe("epoch rollover handler", () => {
 					proposedEpoch: 3n,
 				},
 			}),
-		).rejects.toThrow("proposedEpoch (3) must be activeEpoch (3) + 1");
+		).rejects.toThrow("proposedEpoch (3) must be greater than activeEpoch (3)");
+	});
+
+	it("should throw when proposedEpoch is less than activeEpoch", async () => {
+		const handler = new EpochRolloverHandler();
+		await expect(
+			handler.hashAndVerify({
+				...validPacket,
+				rollover: {
+					...validPacket.rollover,
+					activeEpoch: 5n,
+					proposedEpoch: 3n,
+				},
+			}),
+		).rejects.toThrow("proposedEpoch (3) must be greater than activeEpoch (5)");
 	});
 
 	it("should call the check function when provided", async () => {
