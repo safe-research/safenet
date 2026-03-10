@@ -58,8 +58,8 @@ Response shapes:
 
 | State | HTTP | Body |
 |---|---|---|
-| Running, blocks current | `200` | `{ "status": "ok", "blockNumber": 12345, "blockAge": "3s" }` |
-| Running, stale blocks | `503` | `{ "status": "degraded", "reason": "no new block for 75s", "blockNumber": 12300 }` |
+| Running, blocks current | `200` | `{ "status": "ok", "blockNumber": "12345", "blockAge": "3s" }` |
+| Running, stale blocks | `503` | `{ "status": "degraded", "reason": "no new block for 75s", "blockNumber": "12300" }` |
 | Service starting (no block yet) | `503` | `{ "status": "starting" }` |
 
 ### Alternatives Considered
@@ -102,7 +102,7 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
 **Operator runbook check:**
 ```sh
 curl -s http://validator:3556/health | jq .
-# { "status": "ok", "blockNumber": 22941088, "blockAge": "4s" }
+# { "status": "ok", "blockNumber": "22941088", "blockAge": "4s" }
 ```
 
 **Firewall / network policy example (separate exposure):**
@@ -166,10 +166,12 @@ Port `0` delegates port selection to the OS, matching the same pattern used by `
 ```typescript
 type HealthResponse =
   | { status: "ok" }                                            // Phase 1
-  | { status: "ok"; blockNumber: number; blockAge: string }     // Phase 2
-  | { status: "degraded"; reason: string; blockNumber: number } // Phase 2
+  | { status: "ok"; blockNumber: string; blockAge: string }     // Phase 2
+  | { status: "degraded"; reason: string; blockNumber: string } // Phase 2
   | { status: "starting" };                                     // Phase 2
 ```
+
+`blockNumber` is serialised as a `string` (via `.toString()` on the `bigint`) to avoid precision loss — JSON numbers are IEEE 754 doubles, which cannot represent all 256-bit block numbers exactly.
 
 ### Wiring in validator.ts (Phase 1)
 
