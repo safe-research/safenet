@@ -4,7 +4,7 @@ import type { ProtocolAction } from "../../consensus/protocol/types.js";
 import type { Participant } from "../../consensus/storage/types.js";
 import type { Logger } from "../../utils/logging.js";
 import type { MachineConfig, StateDiff } from "../types.js";
-import { calcMinimumParticipants, calcTreshold } from "./group.js";
+import { calcMinimumParticipants, calcThreshold } from "./group.js";
 
 export const triggerKeyGen = (
 	machineConfig: MachineConfig,
@@ -26,7 +26,7 @@ export const triggerKeyGen = (
 		};
 	}
 	const count = participants.length;
-	const threshold = calcTreshold(count);
+	const threshold = calcThreshold(count);
 	const { groupId, participantsRoot, participantId, commitments, encryptionPublicKey, pok, poap } =
 		keyGenClient.setupGroup(participants, threshold, context);
 
