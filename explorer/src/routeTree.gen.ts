@@ -9,11 +9,13 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+
 import { Route as EpochRouteImport } from './routes/epoch'
 import { Route as SafeRouteImport } from './routes/safe'
 import { Route as SettingsRouteImport } from './routes/settings'
 import { Route as SafeTxRouteImport } from './routes/safeTx'
 import { Route as IndexRouteImport } from './routes/index'
+
 
 const EpochRoute = EpochRouteImport.update({
   id: '/epoch',
@@ -72,9 +74,9 @@ export interface FileRouteTypes {
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
-  EpochRoute: typeof EpochRoute
   IndexRoute: typeof IndexRoute
   SafeRoute: typeof SafeRoute
+  EpochRoute: typeof EpochRoute
   SafeTxRoute: typeof SafeTxRoute
   SettingsRoute: typeof SettingsRoute
 }
@@ -120,9 +122,9 @@ declare module '@tanstack/react-router' {
 }
 
 const rootRouteChildren: RootRouteChildren = {
-  EpochRoute: EpochRoute,
   IndexRoute: IndexRoute,
   SafeRoute: SafeRoute,
+  EpochRoute: EpochRoute,
   SafeTxRoute: SafeTxRoute,
   SettingsRoute: SettingsRoute,
 }
