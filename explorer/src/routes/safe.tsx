@@ -7,12 +7,11 @@ import { Skeleton } from "@/components/Skeleton";
 import { TransactionListControls } from "@/components/transaction/TransactionListControls";
 import { TransactionProposalsList } from "@/components/transaction/TransactionProposalsList";
 import { useSafeTransactionProposals } from "@/hooks/useSafeTransactionProposals";
+import { zeroAddress } from "viem";
 import { bigIntSchema, checkedAddressSchema } from "@/lib/schemas";
 
-const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000" as const;
-
 const validateSearch = z.object({
-	safeAddress: checkedAddressSchema.catch(ZERO_ADDRESS),
+	safeAddress: checkedAddressSchema.catch(zeroAddress),
 	chainId: bigIntSchema.catch(1n),
 });
 
