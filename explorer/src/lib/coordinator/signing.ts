@@ -73,8 +73,6 @@ export const loadLatestAttestationStatus = async ({
 	attestedAt?: bigint | null;
 	maxBlockRange: bigint;
 }): Promise<AttestationStatus | null> => {
-	// We use an `eth_getLogs` here directly, in order to filter on the `transactionHash` of both `TransactionProposed`
-	// and `TransactionAttested` events.
 	const { fromBlock: defaultFromBlock, toBlock } = await getBlockRange(
 		provider,
 		maxBlockRange,

@@ -1,12 +1,16 @@
 import { useQuery } from "@tanstack/react-query";
 import { useProvider } from "@/hooks/useProvider";
 import { useSettings } from "@/hooks/useSettings";
-import { loadTransactionProposals, type TransactionProposal } from "@/lib/consensus";
+import {
+	type LoadTransactionProposalsResult,
+	loadTransactionProposals,
+	type TransactionProposal,
+} from "@/lib/consensus";
 
 export function useRecentTransactionProposals() {
 	const [settings] = useSettings();
 	const provider = useProvider();
-	return useQuery<Awaited<ReturnType<typeof loadTransactionProposals>>, Error, TransactionProposal[]>({
+	return useQuery<LoadTransactionProposalsResult, Error, TransactionProposal[]>({
 		queryKey: ["recentProposals", settings.consensus, settings.maxBlockRange],
 		queryFn: () =>
 			loadTransactionProposals({
