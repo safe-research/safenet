@@ -378,7 +378,7 @@ watcher loop to prevent hammering the RPC node on failures.
 ## 4. Repository and Folder Map
 
 ```
-shield-net/
+safenet/
 ├── contracts/          Foundry Solidity project
 │   └── src/
 │       ├── FROSTCoordinator.sol   Manages FROST KeyGen and Signing ceremonies
