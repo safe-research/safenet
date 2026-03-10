@@ -112,11 +112,11 @@ contract Consensus is IConsensus, IERC165, IFROSTCoordinatorCallback {
     /**
      * @notice Constructs the consensus contract.
      * @param coordinator The address of the FROST coordinator contract.
-     * @param group The initial FROST group ID for epoch 0.
+     * @param groupId The initial FROST group ID for epoch 0.
      */
-    constructor(address coordinator, FROSTGroupId.T group) {
+    constructor(address coordinator, FROSTGroupId.T groupId) {
         _COORDINATOR = FROSTCoordinator(coordinator);
-        $groups[0] = group;
+        $groups[0] = groupId;
     }
 
     // ============================================================
@@ -158,9 +158,9 @@ contract Consensus is IConsensus, IERC165, IFROSTCoordinatorCallback {
     /**
      * @notice Gets the group info for a specific epoch
      * @param epoch The epoch for which the group should be retrieved
-     * @return group The FROST group ID for the specified epoch.
+     * @return groupId The FROST group ID for the specified epoch.
      */
-    function getEpochGroupId(uint64 epoch) external view returns (FROSTGroupId.T group) {
+    function getEpochGroupId(uint64 epoch) external view returns (FROSTGroupId.T groupId) {
         return $groups[epoch];
     }
 
@@ -383,25 +383,25 @@ contract Consensus is IConsensus, IERC165, IFROSTCoordinatorCallback {
     /**
      * @inheritdoc IFROSTCoordinatorCallback
      */
-    function onKeyGenCompleted(FROSTGroupId.T group, bytes calldata context) external onlyCoordinator {
+    function onKeyGenCompleted(FROSTGroupId.T groupId, bytes calldata context) external onlyCoordinator {
         (uint64 proposedEpoch, uint64 rolloverBlock) = abi.decode(context, (uint64, uint64));
-        proposeEpoch(proposedEpoch, rolloverBlock, group);
+        proposeEpoch(proposedEpoch, rolloverBlock, groupId);
     }
 
     /**
      * @inheritdoc IFROSTCoordinatorCallback
      */
-    function onSignCompleted(FROSTSignatureId.T signature, bytes calldata context) external onlyCoordinator {
+    function onSignCompleted(FROSTSignatureId.T signatureId, bytes calldata context) external onlyCoordinator {
         // forge-lint: disable-next-line(unsafe-typecast)
         bytes4 selector = bytes4(context);
         if (selector == this.stageEpoch.selector) {
-            (uint64 proposedEpoch, uint64 rolloverBlock, FROSTGroupId.T group) =
+            (uint64 proposedEpoch, uint64 rolloverBlock, FROSTGroupId.T groupId) =
                 abi.decode(context[4:], (uint64, uint64, FROSTGroupId.T));
-            stageEpoch(proposedEpoch, rolloverBlock, group, signature);
+            stageEpoch(proposedEpoch, rolloverBlock, groupId, signatureId);
         } else if (selector == this.attestTransaction.selector) {
             (uint64 epoch, uint256 chainId, address safe, bytes32 safeTxStructHash) =
                 abi.decode(context[4:], (uint64, uint256, address, bytes32));
-            attestTransaction(epoch, chainId, safe, safeTxStructHash, signature);
+            attestTransaction(epoch, chainId, safe, safeTxStructHash, signatureId);
         } else {
             revert UnknownSignatureSelector();
         }

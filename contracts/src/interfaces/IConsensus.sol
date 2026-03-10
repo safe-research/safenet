@@ -67,7 +67,7 @@ interface IConsensus {
     /**
      * @notice Emitted when a transaction is proposed for validator approval.
      * @param safeTxHash The hash of the proposed Safe transaction.
-     * @param chainId The chain ID for the Safe transaction.
+     * @param chainId The chain ID of the Safe account.
      * @param safe The address of the Safe.
      * @param epoch The epoch in which the transaction is proposed.
      * @param transaction The proposed Safe transaction.
@@ -83,6 +83,8 @@ interface IConsensus {
     /**
      * @notice Emitted when a transaction is attested by the validator set.
      * @param safeTxHash The hash of the attested Safe transaction.
+     * @param chainId The chain ID of the Safe account.
+     * @param safe The address of the Safe account.
      * @param epoch The epoch in which the attested transaction was proposed.
      * @param signatureId The FROST signature identifier corresponding to the transaction attestation.
      * @param attestation The attestation to Safe transaction.
@@ -130,27 +132,27 @@ interface IConsensus {
     /**
      * @notice Gets the active epoch and its group ID.
      * @return epoch The current active epoch.
-     * @return group The FROST group ID for the active epoch.
+     * @return groupId The FROST group ID for the active epoch.
      */
-    function getActiveEpoch() external view returns (uint64 epoch, FROSTGroupId.T group);
+    function getActiveEpoch() external view returns (uint64 epoch, FROSTGroupId.T groupId);
 
     /**
      * @notice Proposes a new epoch to be rolled over to.
      * @param proposedEpoch The proposed new epoch.
      * @param rolloverBlock The block number when rollover should occur.
-     * @param group The FROST group ID for the proposed epoch.
+     * @param groupId The FROST group ID for the proposed epoch.
      * @dev This is the first step of the epoch rollover process. It creates a message for the epoch change proposal
      *      and requests the current active FROST group to sign it. The signature from the current group serves as an
      *      authorization for the new group to take over. This step is completely optional atm, as we can just stage
      *      directly if there is a valid signature.
      */
-    function proposeEpoch(uint64 proposedEpoch, uint64 rolloverBlock, FROSTGroupId.T group) external;
+    function proposeEpoch(uint64 proposedEpoch, uint64 rolloverBlock, FROSTGroupId.T groupId) external;
 
     /**
      * @notice Stages an epoch to automatically roll over after it has been approved.
      * @param proposedEpoch The proposed new epoch.
      * @param rolloverBlock The block number when rollover should occur.
-     * @param group The FROST group ID for the proposed epoch.
+     * @param groupId The FROST group ID for the proposed epoch.
      * @param signatureId The ID of the FROST signature from the current active group, authorizing the change.
      * @dev This is the second step of the epoch rollover. It requires a valid signature from the current active
      *      validator group, which proves their consent. Once staged, the epoch will automatically become active at the
@@ -159,7 +161,7 @@ interface IConsensus {
     function stageEpoch(
         uint64 proposedEpoch,
         uint64 rolloverBlock,
-        FROSTGroupId.T group,
+        FROSTGroupId.T groupId,
         FROSTSignatureId.T signatureId
     ) external;
 
