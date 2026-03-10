@@ -157,7 +157,7 @@ export type TransactionProposedEvent = {
 	id: "event_transaction_proposed";
 	block: bigint;
 	index: number;
-	transactionHash: Hex;
+	safeTxHash: Hex;
 	chainId: bigint;
 	safe: Address;
 	epoch: bigint;
@@ -168,7 +168,9 @@ export type TransactionAttestedEvent = {
 	id: "event_transaction_attested";
 	block: bigint;
 	index: number;
-	transactionHash: Hex;
+	safeTxHash: Hex;
+	chainId: bigint;
+	safe: Address;
 	epoch: bigint;
 	signatureId: SignatureId;
 	attestation: {

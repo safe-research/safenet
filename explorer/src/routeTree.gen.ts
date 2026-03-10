@@ -9,16 +9,11 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
-import { Route as EpochRouteImport } from './routes/epoch'
 import { Route as SettingsRouteImport } from './routes/settings'
 import { Route as SafeTxRouteImport } from './routes/safeTx'
+import { Route as EpochRouteImport } from './routes/epoch'
 import { Route as IndexRouteImport } from './routes/index'
 
-const EpochRoute = EpochRouteImport.update({
-  id: '/epoch',
-  path: '/epoch',
-  getParentRoute: () => rootRouteImport,
-} as any)
 const SettingsRoute = SettingsRouteImport.update({
   id: '/settings',
   path: '/settings',
@@ -27,6 +22,11 @@ const SettingsRoute = SettingsRouteImport.update({
 const SafeTxRoute = SafeTxRouteImport.update({
   id: '/safeTx',
   path: '/safeTx',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const EpochRoute = EpochRouteImport.update({
+  id: '/epoch',
+  path: '/epoch',
   getParentRoute: () => rootRouteImport,
 } as any)
 const IndexRoute = IndexRouteImport.update({
@@ -63,21 +63,14 @@ export interface FileRouteTypes {
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
-  EpochRoute: typeof EpochRoute
   IndexRoute: typeof IndexRoute
+  EpochRoute: typeof EpochRoute
   SafeTxRoute: typeof SafeTxRoute
   SettingsRoute: typeof SettingsRoute
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
-    '/epoch': {
-      id: '/epoch'
-      path: '/epoch'
-      fullPath: '/epoch'
-      preLoaderRoute: typeof EpochRouteImport
-      parentRoute: typeof rootRouteImport
-    }
     '/settings': {
       id: '/settings'
       path: '/settings'
@@ -92,6 +85,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof SafeTxRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/epoch': {
+      id: '/epoch'
+      path: '/epoch'
+      fullPath: '/epoch'
+      preLoaderRoute: typeof EpochRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/': {
       id: '/'
       path: '/'
@@ -103,8 +103,8 @@ declare module '@tanstack/react-router' {
 }
 
 const rootRouteChildren: RootRouteChildren = {
-  EpochRoute: EpochRoute,
   IndexRoute: IndexRoute,
+  EpochRoute: EpochRoute,
   SafeTxRoute: SafeTxRoute,
   SettingsRoute: SettingsRoute,
 }

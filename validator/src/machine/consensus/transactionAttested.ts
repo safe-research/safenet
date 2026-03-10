@@ -16,7 +16,7 @@ export const handleTransactionAttested = async (
 		},
 		proposal: {
 			epoch: event.epoch,
-			safeTxHash: event.transactionHash,
+			safeTxHash: event.safeTxHash,
 		},
 	});
 	const status = machineStates.signing[message];
