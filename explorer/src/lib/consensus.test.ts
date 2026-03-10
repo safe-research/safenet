@@ -156,12 +156,25 @@ describe("loadEpochRolloverHistory", () => {
 
 	it("returns empty entries when no logs are found", async () => {
 		const result = await loadEpochRolloverHistory({
-			provider: makeEpochProvider(),
+			provider: makeEpochProvider({ blockNumber: 1000n }),
 			consensus: CONSENSUS,
 			maxBlockRange: 500n,
 		});
 		expect(result.entries).toEqual([]);
 		expect(result.reachedGenesis).toBe(false);
+		expect(result.fromBlock).toBe(500n);
+	});
+
+	it("returns reachedGenesis true when fromBlock reaches 0", async () => {
+		// blockNumber < maxBlockRange → fromBlock clamps to 0
+		const result = await loadEpochRolloverHistory({
+			provider: makeEpochProvider({ blockNumber: 100n }),
+			consensus: CONSENSUS,
+			maxBlockRange: 500n,
+		});
+		expect(result.entries).toEqual([]);
+		expect(result.reachedGenesis).toBe(true);
+		expect(result.fromBlock).toBe(0n);
 	});
 
 	it("maps EpochStaged logs to rollover entries", async () => {
@@ -252,7 +265,7 @@ describe("loadEpochRolloverHistory", () => {
 		expect(result.entries[1].proposedEpoch).toBe(2n);
 	});
 
-	it("uses cursor as toBlock when provided", async () => {
+	it("uses cursor - 1 as toBlock when provided to avoid duplicating the boundary entry", async () => {
 		const provider = makeEpochProvider();
 		await loadEpochRolloverHistory({
 			provider,
@@ -262,10 +275,22 @@ describe("loadEpochRolloverHistory", () => {
 		});
 		expect(provider.getLogs).toHaveBeenCalledWith(
 			expect.objectContaining({
-				toBlock: 800n,
+				toBlock: 799n,
 			}),
 		);
 		expect(provider.getBlockNumber).not.toHaveBeenCalled();
+	});
+
+	it("exposes fromBlock in the result for pagination cursor fallback", async () => {
+		const provider = makeEpochProvider({ blockNumber: 1000n });
+		const result = await loadEpochRolloverHistory({
+			provider,
+			consensus: CONSENSUS,
+			maxBlockRange: 300n,
+			cursor: 800n,
+		});
+		// cursor - 1 = 799, fromBlock = 799 - 300 = 499
+		expect(result.fromBlock).toBe(499n);
 	});
 
 	it("uses current block number as toBlock when no cursor is provided", async () => {
