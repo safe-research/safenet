@@ -1,22 +1,5 @@
-import { Link } from "@tanstack/react-router";
-import { Box } from "@/components/Groups";
-import { SafeTxOverview } from "@/components/transaction/SafeTxOverview";
+import { TransactionListRow } from "@/components/transaction/TransactionListRow";
 import type { TransactionProposal } from "@/lib/consensus";
-
-export function TransactionProposalItem({ proposal }: { proposal: TransactionProposal }) {
-	return (
-		<Link to="/safeTx" search={{ chainId: `${proposal.transaction.chainId}`, safeTxHash: proposal.safeTxHash }}>
-			<Box className={`hover:bg-surface-hover ${proposal.attestedAt ? "border-positive" : "border-pending"}`}>
-				<SafeTxOverview
-					transaction={proposal.transaction}
-					title={`Safe Tx Hash: ${proposal.safeTxHash}`}
-					timestamp={`${proposal.proposedAt.block}`}
-					disableLinks={true}
-				/>
-			</Box>
-		</Link>
-	);
-}
 
 export function TransactionProposalsList({
 	proposals,
@@ -36,10 +19,10 @@ export function TransactionProposalsList({
 	return (
 		<>
 			{label !== undefined && <div className="w-full p-2 text-xs text-right">{label}</div>}
-			<div className="space-y-4">
+			<div className="space-y-2">
 				{proposals.map((proposal) => (
 					<div key={`${proposal.safeTxHash}:${proposal.epoch}`}>
-						<TransactionProposalItem proposal={proposal} />
+						<TransactionListRow proposal={proposal} />
 					</div>
 				))}
 				{hasMore && (

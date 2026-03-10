@@ -16,10 +16,12 @@ export const SAFE_SERVICE_CHAINS: Record<string, ChainInfo> = {
 	"8453": {
 		...base,
 		shortName: "base",
+		blockTime: 2_000,
 	},
 	"11155111": {
 		...sepolia,
 		shortName: "sep",
+		blockTime: 12_000,
 	},
 	"10200": {
 		...gnosisChiado,

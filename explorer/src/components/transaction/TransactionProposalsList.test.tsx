@@ -6,14 +6,10 @@ import type { TransactionProposal } from "@/lib/consensus";
 import { RecentTransactionProposals } from "./RecentTransactionProposals";
 import { TransactionProposalsList } from "./TransactionProposalsList";
 
-vi.mock("@tanstack/react-router", () => ({
-	Link: ({ children, ...props }: { children: React.ReactNode; to: string; search?: unknown }) => (
-		<a href={props.to}>{children}</a>
+vi.mock("@/components/transaction/TransactionListRow", () => ({
+	TransactionListRow: ({ proposal }: { proposal: TransactionProposal }) => (
+		<div data-testid="transaction-list-row">{proposal.safeTxHash}</div>
 	),
-}));
-
-vi.mock("@/components/transaction/SafeTxOverview", () => ({
-	SafeTxOverview: ({ title }: { title: string }) => <div>{title}</div>,
 }));
 
 afterEach(cleanup);
@@ -115,11 +111,16 @@ describe("TransactionProposalsList", () => {
 		expect(screen.getByLabelText("Loading")).toBeTruthy();
 	});
 
-	it("renders all proposal items", () => {
+	it("renders a row for each proposal", () => {
 		render(<TransactionProposalsList proposals={PROPOSALS} label="proposals" hasMore={false} onShowMore={vi.fn()} />);
-		expect(screen.getByText("Safe Tx Hash: 0xhash1")).toBeTruthy();
-		expect(screen.getByText("Safe Tx Hash: 0xhash2")).toBeTruthy();
-		expect(screen.getByText("Safe Tx Hash: 0xhash3")).toBeTruthy();
+		expect(screen.getAllByTestId("transaction-list-row")).toHaveLength(3);
+	});
+
+	it("renders each proposal's safeTxHash via TransactionListRow", () => {
+		render(<TransactionProposalsList proposals={PROPOSALS} label="proposals" hasMore={false} onShowMore={vi.fn()} />);
+		expect(screen.getByText("0xhash1")).toBeTruthy();
+		expect(screen.getByText("0xhash2")).toBeTruthy();
+		expect(screen.getByText("0xhash3")).toBeTruthy();
 	});
 });
 
@@ -150,9 +151,8 @@ describe("RecentTransactionProposals", () => {
 		render(
 			<RecentTransactionProposals proposals={PROPOSALS} itemsToShow={2} onShowMore={vi.fn()} {...controlsProps} />,
 		);
-		expect(screen.getByText("Safe Tx Hash: 0xhash1")).toBeTruthy();
-		expect(screen.getByText("Safe Tx Hash: 0xhash2")).toBeTruthy();
-		expect(screen.queryByText("Safe Tx Hash: 0xhash3")).toBeNull();
+		const rows = screen.getAllByTestId("transaction-list-row");
+		expect(rows).toHaveLength(2);
 	});
 
 	it("shows 'Show More' button when there are more proposals than itemsToShow", () => {
