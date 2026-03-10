@@ -11,7 +11,7 @@ import {
 } from "viem";
 import z from "zod";
 import { bigIntSchema, checkedAddressSchema, hexDataSchema } from "@/lib/schemas";
-import { getFromBlock, jsonReplacer, mostRecentFirst } from "@/lib/utils";
+import { getBlockRange, jsonReplacer, mostRecentFirst } from "@/lib/utils";
 
 const consensusAbi = parseAbi([
 	"function getActiveEpoch() external view returns (uint64 epoch, bytes32 group)",
@@ -76,14 +76,11 @@ export type TransactionProposal = {
 	attestedAt: ExecutionLink | null;
 };
 
-const transactionEventSelectors = ["TransactionProposed" as const, "TransactionAttested" as const].map((eventName) =>
-	toEventSelector(
-		getAbiItem({
-			abi: consensusAbi,
-			name: eventName,
-		}),
-	),
-);
+const [proposedEventSelector, attestedEventSelector] = [
+	"TransactionProposed" as const,
+	"TransactionAttested" as const,
+].map((eventName) => toEventSelector(getAbiItem({ abi: consensusAbi, name: eventName })));
+const transactionEventSelectors = [proposedEventSelector, attestedEventSelector];
 
 export const loadProposedSafeTransaction = async ({
 	provider,
@@ -96,7 +93,7 @@ export const loadProposedSafeTransaction = async ({
 	safeTxHash: Hex;
 	maxBlockRange: bigint;
 }): Promise<SafeTransaction | null> => {
-	const fromBlock = await getFromBlock(provider, maxBlockRange);
+	const { fromBlock, toBlock } = await getBlockRange(provider, maxBlockRange);
 	const logs = await provider.getLogs({
 		address: consensus,
 		event: getAbiItem({
@@ -107,39 +104,53 @@ export const loadProposedSafeTransaction = async ({
 			transactionHash: safeTxHash,
 		},
 		fromBlock,
+		toBlock,
 		strict: true,
 	});
 	return safeTransactionSchema.safeParse(logs.at(0)?.args?.transaction).data ?? null;
+};
+
+export type LoadTransactionProposalsResult = {
+	proposals: TransactionProposal[];
+	fromBlock: bigint;
+	toBlock: bigint;
 };
 
 export const loadTransactionProposals = async ({
 	provider,
 	consensus,
 	safeTxHash,
+	safe,
+	toBlock: referenceBlock,
 	maxBlockRange,
 }: {
 	provider: PublicClient;
 	consensus: Address;
 	safeTxHash?: Hex;
+	safe?: Address;
+	toBlock?: bigint;
 	maxBlockRange: bigint;
-}): Promise<TransactionProposal[]> => {
-	// We use an `eth_getLogs` here directly, in order to filter on the `transactionHash` of both `TransactionProposed`
-	// and `TransactionAttested` events.
-	const fromBlock = await getFromBlock(provider, maxBlockRange);
-	const logs = await provider.request({
+}): Promise<LoadTransactionProposalsResult> => {
+	const { fromBlock, toBlock } = await getBlockRange(provider, maxBlockRange, referenceBlock);
+	const blockRange = { fromBlock: numberToHex(fromBlock), toBlock: numberToHex(toBlock) };
+
+	// We use an `eth_getLogs` here directly, in order to filter on the `transactionHash` topic.
+	// When `safe` is set, topic[3] silently drops `TransactionAttested` (only 1 indexed topic);
+	// those proposals will have attestedAt: null until contract events are updated.
+	const rawLogs = await provider.request({
 		method: "eth_getLogs",
 		params: [
 			{
 				address: consensus,
-				topics: [transactionEventSelectors, safeTxHash ?? null],
-				fromBlock: numberToHex(fromBlock),
+				...blockRange,
+				topics: [transactionEventSelectors, safeTxHash ?? null, null, safe ?? null],
 			},
 		],
 	});
 	const eventLogs = mostRecentFirst(
 		parseEventLogs({
 			// <https://github.com/wevm/viem/issues/4340>
-			logs: logs.map((log) => formatLog(log)),
+			logs: rawLogs.map((log) => formatLog(log)),
 			abi: consensusAbi,
 			strict: true,
 		}),
@@ -152,7 +163,7 @@ export const loadTransactionProposals = async ({
 			.filter((log) => log.eventName === "TransactionAttested")
 			.map((log) => [attestationKey(log), { block: log.blockNumber, tx: log.transactionHash }] as const),
 	);
-	return eventLogs
+	const proposals = eventLogs
 		.map((log) => {
 			if (log.eventName !== "TransactionProposed") {
 				return undefined;
@@ -177,6 +188,8 @@ export const loadTransactionProposals = async ({
 			};
 		})
 		.filter((proposal) => proposal !== undefined);
+
+	return { proposals, fromBlock, toBlock };
 };
 
 export type EpochsState = {
@@ -224,6 +237,7 @@ export const loadEpochsState = async (provider: PublicClient, consensus: Address
 export type EpochRolloverResult = {
 	entries: EpochRolloverEntry[];
 	reachedGenesis: boolean;
+	fromBlock: bigint;
 };
 
 export const loadEpochRolloverHistory = async ({
@@ -237,15 +251,17 @@ export const loadEpochRolloverHistory = async ({
 	maxBlockRange: bigint;
 	cursor?: bigint;
 }): Promise<EpochRolloverResult> => {
-	const toBlock = cursor ?? (await provider.getBlockNumber());
-	const fromBlock = await getFromBlock(provider, maxBlockRange, toBlock);
+	// When a cursor is provided, subtract 1 so the event at the cursor block (already
+	// included in the previous page) is not fetched again.
+	const referenceBlock = cursor !== undefined ? cursor - 1n : undefined;
+	const { fromBlock, toBlock } = await getBlockRange(provider, maxBlockRange, referenceBlock);
 
 	const stagedLogs = mostRecentFirst(
 		await provider.getLogs({
 			address: consensus,
 			event: getAbiItem({ abi: consensusAbi, name: "EpochStaged" }),
 			fromBlock,
-			toBlock: cursor === undefined ? "latest" : toBlock,
+			toBlock,
 			strict: true,
 		}),
 	);
@@ -258,10 +274,13 @@ export const loadEpochRolloverHistory = async ({
 		stagedAt: log.blockNumber,
 	}));
 
-	const reachedGenesis = entries.some((e) => e.activeEpoch === 0n);
+	// Reached genesis when an activeEpoch 0 entry is found, or when the search window
+	// has reached block 0 (nothing further to search).
+	const reachedGenesis = fromBlock === 0n || entries.some((e) => e.activeEpoch === 0n);
 	return {
 		entries,
 		reachedGenesis,
+		fromBlock,
 	};
 };
 

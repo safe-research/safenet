@@ -32,6 +32,7 @@ const makeProvider = ({
 	readContractImpl?: (args: { functionName: string }) => unknown;
 }): PublicClient =>
 	({
+		getBlockNumber: vi.fn().mockResolvedValue(10000n),
 		getChainId: vi.fn().mockResolvedValue(1),
 		getLogs: vi.fn().mockResolvedValue([]),
 		readContract: readContractImpl ? vi.fn(readContractImpl) : vi.fn(),

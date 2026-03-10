@@ -13,13 +13,16 @@ export function jsonReplacer(_key: string, value: unknown): unknown {
 	return value;
 }
 
-export const getFromBlock = async (
+export type BlockRange = { fromBlock: bigint; toBlock: bigint };
+
+export const getBlockRange = async (
 	provider: PublicClient,
 	maxBlockRange: bigint,
 	referenceBlock?: bigint,
-): Promise<bigint> => {
-	const blockNumber = referenceBlock ?? (await provider.getBlockNumber());
-	return blockNumber > maxBlockRange ? blockNumber - maxBlockRange : 0n;
+): Promise<BlockRange> => {
+	const toBlock = referenceBlock ?? (await provider.getBlockNumber());
+	const fromBlock = toBlock > maxBlockRange ? toBlock - maxBlockRange : 0n;
+	return { fromBlock, toBlock };
 };
 
 export const mostRecentFirst = <T extends Pick<Log<bigint, number, false>, "blockNumber" | "logIndex">>(
