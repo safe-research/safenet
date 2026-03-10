@@ -131,35 +131,20 @@ export const loadTransactionProposals = async ({
 	toBlock?: bigint;
 	maxBlockRange: bigint;
 }): Promise<LoadTransactionProposalsResult> => {
-	// We use an `eth_getLogs` here directly, in order to filter on the `transactionHash` of both `TransactionProposed`
-	// and `TransactionAttested` events.
+	// We use an `eth_getLogs` here directly, in order to filter on the `transactionHash` topic.
 	// toBlock anchors the window; fromBlock is always derived relative to it so pages are contiguous.
 	const { fromBlock, toBlock } = await getBlockRange(provider, maxBlockRange, referenceBlock);
 	const blockRange = { fromBlock: numberToHex(fromBlock), toBlock: numberToHex(toBlock) };
 
-	// TransactionProposed has 3 indexed topics (transactionHash, chainId, safe) while
-	// TransactionAttested only has 1 (transactionHash). A single eth_getLogs call with a
-	// topic[3] filter would silently drop all TransactionAttested events when filtering by
-	// safe address, so we fetch both event types in separate requests in that case.
 	const fetchLogs = async () => {
 		if (safe !== undefined) {
-			const proposedRaw = await provider.request({
+			// Only fetch TransactionProposed events when filtering by safe address.
+			// TransactionAttested has only 1 indexed topic so a topic[3] safe filter would
+			// silently exclude it; attestedAt will be null for all safe-filtered results.
+			return provider.request({
 				method: "eth_getLogs",
-				params: [
-					{ address: consensus, ...blockRange, topics: [proposedEventSelector, safeTxHash ?? null, null, safe] },
-				],
+				params: [{ address: consensus, ...blockRange, topics: [proposedEventSelector, safeTxHash ?? null, null, safe] }],
 			});
-			// topic[1] of TransactionProposed is the indexed transactionHash — read directly
-			// to avoid re-parsing the full ABI just for hash extraction.
-			const txHashes = proposedRaw.map((log) => log.topics[1]).filter((hash): hash is Hex => hash !== undefined);
-			const attestedRaw =
-				txHashes.length > 0
-					? await provider.request({
-							method: "eth_getLogs",
-							params: [{ address: consensus, ...blockRange, topics: [attestedEventSelector, txHashes] }],
-						})
-					: ([] as typeof proposedRaw);
-			return [...proposedRaw, ...attestedRaw];
 		}
 		return provider.request({
 			method: "eth_getLogs",

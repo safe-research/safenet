@@ -12,36 +12,11 @@ const MAX_BLOCK_RANGE = 1000n;
 const GROUP_ID_A = `0x${"aa".repeat(32)}` as Hex;
 const GROUP_ID_B = `0x${"bb".repeat(32)}` as Hex;
 
-// A minimal raw log stub that carries a tx hash in topics[1] so the implementation
-// can extract it for the attestation query without needing a fully ABI-encoded log.
-const makeRawProposedLog = (txHash: Hex) => ({
-	address: CONSENSUS,
-	topics: [
-		"0x0000000000000000000000000000000000000000000000000000000000000000", // selector placeholder
-		txHash,
-		`0x${"00".repeat(31)}01`, // chainId = 1
-		`0x${"000000000000000000000000"}${SAFE_ADDRESS.slice(2)}`, // safe (padded)
-	],
-	data: "0x",
-	blockNumber: "0x1",
-	transactionHash: txHash,
-	blockHash: `0x${"00".repeat(32)}`,
-	logIndex: "0x0",
-	transactionIndex: "0x0",
-	removed: false,
-});
-
-const makeProvider = (...responses: unknown[][]): PublicClient => {
-	const mock = vi.fn();
-	for (const response of responses) {
-		mock.mockResolvedValueOnce(response);
-	}
-	mock.mockResolvedValue([]); // default for any additional calls
-	return {
+const makeProvider = (): PublicClient =>
+	({
 		getBlockNumber: vi.fn().mockResolvedValue(CURRENT_BLOCK),
-		request: mock,
-	} as unknown as PublicClient;
-};
+		request: vi.fn().mockResolvedValue([]),
+	}) as unknown as PublicClient;
 
 const requestCalls = (provider: PublicClient) =>
 	(provider.request as ReturnType<typeof vi.fn>).mock.calls.map((c) => c[0].params[0]);
@@ -49,20 +24,20 @@ const requestCalls = (provider: PublicClient) =>
 describe("loadTransactionProposals", () => {
 	describe("without safe filter — single eth_getLogs call", () => {
 		it("makes a single request", async () => {
-			const provider = makeProvider([]);
+			const provider = makeProvider();
 			await loadTransactionProposals({ provider, consensus: CONSENSUS, maxBlockRange: MAX_BLOCK_RANGE });
 			expect(requestCalls(provider)).toHaveLength(1);
 		});
 
 		it("uses both event selectors as an OR filter in topic[0]", async () => {
-			const provider = makeProvider([]);
+			const provider = makeProvider();
 			await loadTransactionProposals({ provider, consensus: CONSENSUS, maxBlockRange: MAX_BLOCK_RANGE });
 			expect(Array.isArray(requestCalls(provider)[0].topics[0])).toBe(true);
 			expect(requestCalls(provider)[0].topics[0]).toHaveLength(2);
 		});
 
 		it("filters by safeTxHash in topic[1] when provided", async () => {
-			const provider = makeProvider([]);
+			const provider = makeProvider();
 			await loadTransactionProposals({
 				provider,
 				consensus: CONSENSUS,
@@ -73,9 +48,9 @@ describe("loadTransactionProposals", () => {
 		});
 	});
 
-	describe("with safe filter — two eth_getLogs calls", () => {
-		it("skips the attestation request when no proposals are found", async () => {
-			const provider = makeProvider([]); // first call returns no proposals
+	describe("with safe filter — single eth_getLogs call (TransactionProposed only)", () => {
+		it("makes a single request", async () => {
+			const provider = makeProvider();
 			await loadTransactionProposals({
 				provider,
 				consensus: CONSENSUS,
@@ -85,19 +60,8 @@ describe("loadTransactionProposals", () => {
 			expect(requestCalls(provider)).toHaveLength(1);
 		});
 
-		it("makes a second request for attestations when proposals are found", async () => {
-			const provider = makeProvider([makeRawProposedLog(SAFE_TX_HASH)]); // first call returns one proposal
-			await loadTransactionProposals({
-				provider,
-				consensus: CONSENSUS,
-				safe: SAFE_ADDRESS,
-				maxBlockRange: MAX_BLOCK_RANGE,
-			});
-			expect(requestCalls(provider)).toHaveLength(2);
-		});
-
-		it("first call uses a single selector and filters by safe in topic[3]", async () => {
-			const provider = makeProvider([]);
+		it("uses a single selector (not OR array) in topic[0]", async () => {
+			const provider = makeProvider();
 			await loadTransactionProposals({
 				provider,
 				consensus: CONSENSUS,
@@ -106,44 +70,43 @@ describe("loadTransactionProposals", () => {
 			});
 			const first = requestCalls(provider)[0];
 			expect(Array.isArray(first.topics[0])).toBe(false); // single selector, not OR array
+		});
+
+		it("filters by safe in topic[3]", async () => {
+			const provider = makeProvider();
+			await loadTransactionProposals({
+				provider,
+				consensus: CONSENSUS,
+				safe: SAFE_ADDRESS,
+				maxBlockRange: MAX_BLOCK_RANGE,
+			});
+			const first = requestCalls(provider)[0];
 			expect(first.topics[2]).toBeNull(); // chainId wildcard
 			expect(first.topics[3]).toBe(SAFE_ADDRESS);
 		});
 
-		it("second call uses a single selector with no safe topic", async () => {
-			const provider = makeProvider([makeRawProposedLog(SAFE_TX_HASH)]);
+		it("filters by safeTxHash in topic[1] when provided", async () => {
+			const provider = makeProvider();
 			await loadTransactionProposals({
 				provider,
 				consensus: CONSENSUS,
 				safe: SAFE_ADDRESS,
+				safeTxHash: SAFE_TX_HASH,
 				maxBlockRange: MAX_BLOCK_RANGE,
 			});
-			const second = requestCalls(provider)[1];
-			expect(Array.isArray(second.topics[0])).toBe(false); // single selector
-			expect(second.topics[3]).toBeUndefined(); // no safe topic on TransactionAttested
-		});
-
-		it("second call filters by the tx hashes returned by the proposal query", async () => {
-			const provider = makeProvider([makeRawProposedLog(SAFE_TX_HASH)]);
-			await loadTransactionProposals({
-				provider,
-				consensus: CONSENSUS,
-				safe: SAFE_ADDRESS,
-				maxBlockRange: MAX_BLOCK_RANGE,
-			});
-			expect(requestCalls(provider)[1].topics[1]).toContain(SAFE_TX_HASH);
+			expect(requestCalls(provider)[0].topics[1]).toBe(SAFE_TX_HASH);
 		});
 	});
 
 	describe("block range", () => {
 		it("always includes an explicit toBlock in the request", async () => {
-			const provider = makeProvider([]);
+			const provider = makeProvider();
 			await loadTransactionProposals({ provider, consensus: CONSENSUS, maxBlockRange: MAX_BLOCK_RANGE });
 			expect(requestCalls(provider)[0].toBlock).toBe(numberToHex(CURRENT_BLOCK));
 		});
 
 		it("does not call getBlockNumber when toBlock is provided", async () => {
-			const provider = makeProvider([]);
+			const provider = makeProvider();
 			await loadTransactionProposals({
 				provider,
 				consensus: CONSENSUS,
@@ -156,7 +119,7 @@ describe("loadTransactionProposals", () => {
 
 	describe("return value", () => {
 		it("returns the fromBlock and toBlock used for the query", async () => {
-			const provider = makeProvider([]);
+			const provider = makeProvider();
 			const result = await loadTransactionProposals({
 				provider,
 				consensus: CONSENSUS,
