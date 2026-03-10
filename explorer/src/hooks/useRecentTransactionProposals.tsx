@@ -7,7 +7,7 @@ import {
 	type TransactionProposal,
 } from "@/lib/consensus";
 
-export function useRecentTransactionProposals() {
+export function useRecentTransactionProposals(autoRefresh = true) {
 	const [settings] = useSettings();
 	const provider = useProvider();
 	return useQuery<LoadTransactionProposalsResult, Error, TransactionProposal[]>({
@@ -19,7 +19,7 @@ export function useRecentTransactionProposals() {
 				maxBlockRange: BigInt(settings.maxBlockRange),
 			}),
 		select: (data) => data.proposals,
-		refetchInterval: () => (settings.refetchInterval > 0 ? settings.refetchInterval : false),
+		refetchInterval: () => (autoRefresh && settings.refetchInterval > 0 ? settings.refetchInterval : false),
 		initialData: { proposals: [], fromBlock: 0n, toBlock: 0n },
 	});
 }
