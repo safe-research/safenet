@@ -70,6 +70,9 @@ The following modules have no dedicated test files and contain non-trivial logic
 | `consensus/storage/sqlite.ts:564` | `// TODO: feels like a code-smell that we return an input parameter` | Refactor return type to avoid echoing input |
 | `machine/keygen/group.ts:45` | `calcTreshold` — typo in exported function name | Rename to `calcThreshold` across all call sites |
 | `frost/math.ts:17,19,21,25,29` | Parameter names use a Unicode character `ĺ` (ĺhs) instead of ASCII `l` (lhs) | Rename to `lhs` for clarity and consistency |
+| `consensus/storage/inmemory.ts:212` | Typo in error message: `"Verificatrion share"` should be `"Verification share"` | Fix the typo |
+| `consensus/storage/sqlite.ts:200-229` | SQL column names passed via string concatenation (`UPDATE groups SET ${column} = ?`). While only called with hardcoded strings internally, this is a code smell. | Refactor to use explicit per-column methods or a validated column-name enum |
+| `consensus/signing/nonces.ts:62` | `createNonceTree` has default `size = SEQUENCE_CHUNK_SIZE` that is never overridden anywhere in the codebase | Remove the parameter or document why it exists for extensibility |
 
 ### Inline Comments Needed
 
@@ -82,6 +85,10 @@ The following modules have no dedicated test files and contain non-trivial logic
 | `consensus/merkle.ts:16` | The sorted-pair Merkle tree construction: explain why `a < b` sorting is used (matches OpenZeppelin's `MerkleProof.sol` and the Solidity contract) |
 | `consensus/signing/nonces.ts` | Nonce lifecycle: document why nonces are deleted after use and the reorg implications (reference the overview doc section on nonces and reorgs) |
 | `service/checks.ts:51-52` | `multiSendCheck150` and `multiSendCheckCallOnly150` appear to be identical to `multiSendCheck` and `multiSendCheckCallOnly` — the only difference is `{ toZeroIsSelf: true }`. Document why 1.5.0 contracts interpret `to=address(0)` as self |
+| `frost/hashes.ts:9-22` | Six different FROST hash functions with different domain separation tags (DSTs). Missing documentation on why each function is needed and which FROST RFC section each corresponds to |
+| `frost/secret.ts:3-5` | ECDH uses only the x-coordinate of the shared point for XOR. Document timing assumptions about the `@noble/curves` `multiply()` operation (whether it is constant-time) |
+| `machine/state/diff.ts:6-55` | State diff application logic applies diffs in a specific order (e.g., `removeEpochGroups` before new diffs). Document why ordering matters and what invariants it preserves |
+| `consensus/signing/shares.ts:7-16` | Complex modular arithmetic for signature share creation. Add reference to FROST RFC 9591 section that specifies this formula |
 
 ---
 
@@ -162,3 +169,5 @@ The following modules have no dedicated test files and contain non-trivial logic
 2. **Gas estimation approach**: Should gas estimates be derived from on-chain benchmarks (e.g., Foundry gas reports) or from testnet observation? The Foundry approach is more reproducible.
 3. **In-memory storage tests**: The in-memory storage backend implements the same interface as SQLite. Should tests be structured as interface-level tests that run against both backends (test parameterization)?
 4. **Unicode parameter names**: The `ĺhs` parameters in `frost/math.ts` use Unicode (accented l). Confirm these should be plain ASCII `lhs` — the current names may cause issues in some editors and CI environments.
+5. **Property-based / fuzz testing**: Cryptographic operations (Lagrange coefficients, polynomial evaluation, signature shares) have mathematical properties that lend themselves well to property-based testing (e.g., Lagrange coefficients summing to expected values). Should this initiative include property-based tests (e.g., via `fast-check`), or is that a separate effort?
+6. **SQL column concatenation**: The `setGroupColumn` pattern in `sqlite.ts` uses string concatenation for column names. While currently called only with hardcoded strings, should this be refactored to explicit per-column methods for defense-in-depth, or is the current approach acceptable given the internal-only usage?
