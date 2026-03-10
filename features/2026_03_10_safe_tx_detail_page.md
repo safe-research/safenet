@@ -35,7 +35,7 @@ the hook's return type is extended to include `fromSafeApi: boolean`. The intern
 helper is updated to tag each source before racing with `Promise.any`.
 
 Safe Wallet UI deep-links use the chain's `shortName` already present in `SAFE_SERVICE_CHAINS`:
-- Transaction URL: `https://app.safe.global/transactions/tx?safe=${shortName}:${safe}&id=multisig_${safe}_${safeTxHash}`
+- Transaction URL: `https://app.safe.global/transactions/tx?safe=${shortName}:${safe}&id=${safeTxHash}`
 - Safe URL: `https://app.safe.global/balances?safe=${shortName}:${safe}`
 
 These helpers are extracted to a new `lib/safe/wallet.ts` utility module.
@@ -55,15 +55,17 @@ untouched.
 
 ### Phase 3 — Proposals UX Improvements
 
-**Timed-out detection**: a proposal with `attestedAt === null` whose `epoch` is strictly less than
-the current active epoch has passed its signing window and is displayed as `TIMED OUT`.
-`useConsensusState` (already in scope in `safeTx.tsx`) exposes `currentEpoch`; this is passed
-down into `SafeTxProposals` as a new prop, avoiding extra RPC calls.
+**Timed-out detection**: timeout is a validator configuration parameter, not an epoch boundary.
+A `signingTimeout` field (type `number`, default `12`) is added to the settings schema in
+`lib/settings.ts`. A proposal with `attestedAt === null` is considered `TIMED OUT` when
+`currentBlock - proposal.proposedAtBlock > signingTimeout`. `currentBlock` is obtained from the
+existing `useProvider` hook. `signingTimeout` is read from `useSettings` and passed as a prop to
+`SafeTxProposals`.
 
 **Validator labels**: `SafeTxAttestationStatus` currently shows "Committed" (nonce pre-commitment)
-and "Attested" rows. The intermediate "Committed" row is removed; labels become "Attested" (signed)
-and "Missing" (not yet signed). The `ValidatorList` component renders ✅/⏳/❌ per-validator
-unchanged; only the surrounding label text changes.
+and "Attested" rows. This two-stage representation is more accurate than the wireframe's simplified
+view and is kept as-is. Only visual styling is updated (e.g. colour tokens, badge shapes) to align
+with the rest of the redesigned page; no label text or logic changes.
 
 **Proposal numbering**: the `.map()` in `SafeTxProposals` is updated to render a "Proposal #N"
 heading for each item.
@@ -76,8 +78,9 @@ to include the chain name (e.g. "No proposals found for this SafeTxHash on Base.
 - **Modify `SafeTxOverview` instead of creating `SafeTxHeader`** — rejected because `SafeTxOverview`
   is also used in the transaction list, and further parameterising it would couple list and detail
   concerns. A dedicated detail-page component is cleaner.
-- **Read `signingTimeout` from on-chain / settings** — adding a new settings field adds friction.
-  Epoch comparison achieves the same result without extra configuration.
+- **Epoch-based timeout detection** — using `proposal.epoch < currentEpoch` was considered but
+  rejected because the signing timeout is a validator configuration parameter, not an epoch
+  boundary. A configurable `signingTimeout` (blocks) is more accurate.
 - **Single large PR** — rejected for reviewability; the three phases touch different components and
   can be reviewed independently.
 
@@ -149,8 +152,8 @@ IF NO PROPOSAL (relayer configured)
 
 **Status rules:**
 - `attestedAt !== null` → **ATTESTED**
-- `attestedAt === null && proposal.epoch < currentEpoch` → **TIMED OUT**
-- `attestedAt === null && proposal.epoch >= currentEpoch` → **PROPOSED**
+- `attestedAt === null && currentBlock - proposal.proposedAtBlock > signingTimeout` → **TIMED OUT**
+- `attestedAt === null && currentBlock - proposal.proposedAtBlock <= signingTimeout` → **PROPOSED**
 
 **Auto-refresh**: `useProposalsForTransaction` already polls at `settings.refetchInterval`. No
 change required; proposals auto-refresh until they reach a terminal state.
@@ -172,11 +175,12 @@ change required; proposals auto-refresh until they reach a terminal state.
 
 | File | Change |
 |---|---|
+| `explorer/src/lib/settings.ts` | Add `signingTimeout: number` field (default `12`) to settings schema |
 | `explorer/src/hooks/useSafeTransactionDetails.tsx` | Extend return to `{ data: SafeTransaction \| null; fromSafeApi: boolean; isFetching: boolean }` |
-| `explorer/src/routes/safeTx.tsx` | Use `SafeTxHeader` + `SafeTxSummary`; pass `fromSafeApi` and `currentEpoch` |
+| `explorer/src/routes/safeTx.tsx` | Use `SafeTxHeader` + `SafeTxSummary`; pass `fromSafeApi`, `currentBlock`, and `signingTimeout` |
 | `explorer/src/components/transaction/SafeTxDataDetails.tsx` | Add `CopyButton` for raw calldata |
-| `explorer/src/components/transaction/SafeTxProposals.tsx` | Numbered proposals, timed-out status, updated CTA text; accept `currentEpoch` prop |
-| `explorer/src/components/transaction/SafeTxAttestationStatus.tsx` | Replace "Committed"/"Attested" labels with "Attested"/"Missing" |
+| `explorer/src/components/transaction/SafeTxProposals.tsx` | Numbered proposals, block-based timed-out status, updated CTA text; accept `currentBlock` and `signingTimeout` props |
+| `explorer/src/components/transaction/SafeTxAttestationStatus.tsx` | Visual styling updates only (colour tokens, badge shapes); no label or logic changes |
 
 ### Reused Components & Utilities
 
@@ -205,9 +209,10 @@ change required; proposals auto-refresh until they reach a terminal state.
 | `SafeTxHeader` — hides Safe Wallet links for unsupported chainId | `components/transaction/SafeTxHeader.test.tsx` |
 | `SafeTxSummary` — renders all labelled fields correctly | `components/transaction/SafeTxSummary.test.tsx` |
 | `SafeTxProposals` — labels attested proposal "ATTESTED" | `components/transaction/SafeTxProposals.test.tsx` (update existing) |
-| `SafeTxProposals` — labels old unattested proposal "TIMED OUT" | `components/transaction/SafeTxProposals.test.tsx` |
-| `SafeTxProposals` — labels current unattested proposal "PROPOSED" | `components/transaction/SafeTxProposals.test.tsx` |
+| `SafeTxProposals` — labels proposal as "TIMED OUT" when `currentBlock - proposedAtBlock > signingTimeout` | `components/transaction/SafeTxProposals.test.tsx` |
+| `SafeTxProposals` — labels proposal as "PROPOSED" when within `signingTimeout` blocks | `components/transaction/SafeTxProposals.test.tsx` |
 | `SafeTxProposals` — numbers proposals starting at 1 | `components/transaction/SafeTxProposals.test.tsx` |
+| `loadSettings` — `signingTimeout` defaults to 12 | `lib/settings.test.ts` |
 
 ---
 
@@ -252,14 +257,15 @@ change required; proposals auto-refresh until they reach a terminal state.
 
 **What this covers:**
 - Numbered "Proposal #N" headings
-- TIMED OUT status for proposals from past epochs, using `currentEpoch` from `useConsensusState`
-- "Attested" / "Missing" validator labels replacing "Committed" / "Attested"
+- TIMED OUT status using block-based `signingTimeout` setting (default 12 blocks)
+- Visual styling improvements to `SafeTxAttestationStatus` (no label or logic changes)
 - Updated "no proposals" message including chain name
 
 **Files touched:**
-- `explorer/src/components/transaction/SafeTxProposals.tsx` — numbered proposals, timed-out, updated CTA text, new `currentEpoch` prop
-- `explorer/src/components/transaction/SafeTxAttestationStatus.tsx` — label text changes
-- `explorer/src/routes/safeTx.tsx` — pass `currentEpoch` into `SafeTxProposals`
+- `explorer/src/lib/settings.ts` — add `signingTimeout` field
+- `explorer/src/components/transaction/SafeTxProposals.tsx` — numbered proposals, block-based timed-out, updated CTA text, new `currentBlock`/`signingTimeout` props
+- `explorer/src/components/transaction/SafeTxAttestationStatus.tsx` — styling only
+- `explorer/src/routes/safeTx.tsx` — pass `currentBlock` and `signingTimeout` into `SafeTxProposals`
 - Test files: `components/transaction/SafeTxProposals.test.tsx` (update existing)
 
 ---
@@ -267,22 +273,13 @@ change required; proposals auto-refresh until they reach a terminal state.
 ## Open Questions / Assumptions
 
 1. **Safe Wallet tx URL format**: The deep-link format
-   `https://app.safe.global/transactions/tx?safe=${shortName}:${safe}&id=multisig_${safe}_${safeTxHash}`
+   `https://app.safe.global/transactions/tx?safe=${shortName}:${safe}&id=${safeTxHash}`
    is assumed to be stable. Only `lib/safe/wallet.ts` needs updating if it changes.
 
 2. **`fromSafeApi` tracking**: The `useSafeTransactionDetails` hook resolves whichever of the two
    sources (Safe API or on-chain log) responds first via `Promise.any`. To track the source, each
    branch is wrapped with a tagged result `{ data, fromSafeApi: true/false }` before racing.
 
-3. **Timed-out edge case**: The epoch-comparison heuristic assumes a proposal's signing window does
-   not span multiple epochs. If `signingTimeout > blocksPerEpoch`, a proposal from the current
-   epoch could technically still be live even after an epoch boundary. This is accepted as a
-   simplification; an explicit `signingTimeout` setting can be added in a follow-up.
-
-4. **Auto-refresh stop condition**: Polling via `refetchInterval` continues even after all proposals
-   are terminal. Stopping the poll when all proposals are ATTESTED or TIMED OUT is a future
-   optimisation, out of scope for E100.
-
-5. **`SafeTxOverview` in list**: `SafeTxOverview` remains in use for the transaction list items
+3. **`SafeTxOverview` in list**: `SafeTxOverview` remains in use for the transaction list items
    (via `RecentTransactionProposals`). It is not touched in any phase; the separate feature
    covering the list row redesign addresses its replacement there.
