@@ -51,6 +51,9 @@ These libraries implement elliptic curve operations. Key areas needing documenta
 | `Secp256k1.sol` — point validation | Document the on-curve check and why the point at infinity must be rejected |
 | `FROST.sol` — signature verification | Document the Schnorr verification equation `z*G = R + c*Y` and how it maps to the RFC 9591 specification |
 | `FROST.sol` — binding factor computation | Document the hash-to-scalar construction and reference the ciphersuite-specific hash functions |
+| `FROST.sol` — `_expandMessageXmd` (lines 366-429) | 64 lines of dense assembly implementing RFC 9380 hash expansion with no inline comments. Each assembly block (memory layout calculations, SHA-256 loop, XOR operations) needs line-by-line documentation |
+| `FROST.sol` — `bindingFactors` (lines 123-148) | Modifies input array in-place in assembly for optimization. This is intentional but dangerous and undocumented — add a warning comment explaining this is safe because the buffer is scratch space |
+| `Secp256k1.sol` — `mulmuladd` (lines 139-160) | Abuses the `ecrecover` precompile for elliptic curve multiplication. The mathematical trick that makes this work should be explained in detail |
 
 #### `FROSTCoordinator.sol`
 
@@ -59,6 +62,8 @@ These libraries implement elliptic curve operations. Key areas needing documenta
 | KeyGen complaint flow | Document the three possible outcomes of a complaint: valid complaint (accused is dishonest), invalid complaint (plaintiff is dishonest), too many complaints (group is tainted) |
 | Sequence number allocation | Document how the sequence counter prevents nonce reuse across signing ceremonies |
 | Nonce commitment chunks | Document the Merkle root commitment scheme for pre-computed nonces and the chunk size choice (1024 = 2^10) |
+| Group status transitions | The group has 5+ states (UNINITIALIZED, COMMITTING, SHARING, CONFIRMING, COMPROMISED, FINALIZED) but transitions are not explicitly asserted in state mutation code. Add comments at each state transition documenting the expected prior state |
+| Lazy epoch rollover | Add `@dev` notes to all state-changing functions in `Consensus.sol` that may trigger lazy epoch rollover |
 
 ### Certora Spec Coverage
 
@@ -73,14 +78,29 @@ The existing Certora harness covers `Staking.sol`. Areas for expansion:
 | `FROSTCoordinator.sol` | Sequence monotonicity — signing ceremony sequence numbers must strictly increase |
 | `Staking.sol` | Withdrawal timing — funds cannot be withdrawn before the unlock period |
 
+### Security Observations
+
+| Location | Issue | Severity | Action |
+|---|---|---|---|
+| `Consensus.sol` — `onSignCompleted()` | Uses `bytes4 selector = bytes4(context)` followed by `context[4:]` without verifying `context.length >= 4`. If `context` is shorter, the slice could be unsafe. | Medium | Add `require(context.length >= 4, InvalidContext())` |
+| `FROST.sol:377` | Uses `assert(len < 0x8000)` in `_expandMessageXmd()` for input validation. `assert` consumes all remaining gas on failure, unlike `require`. | Low | Replace with `require(len < 0x8000, InvalidLength())` with a proper custom error |
+| `Secp256k1.sol:261` | `assert(success)` in `_divmod()` — if the modexp precompile fails, reverts with no error context | Low | Replace with `require(success, ModularInversionFailed())` with a descriptive error |
+| `FROSTSignatureId.sol:38` | Sequence encoded as `seq + 1` to distinguish from zero. If `seq == uint64.max`, this wraps to 0, breaking the invariant. | Low | Add a comment documenting this edge case or a check that `seq < type(uint64).max` |
+| `Consensus.sol` — lazy epoch rollover | Epoch rollover happens lazily inside state-changing functions (documented in comments). Not a bug, but callers may not realize their transaction triggers a rollover. | Info | Add `@dev NOTE: This function may trigger lazy epoch rollover` to all affected functions |
+
 ### Solidity Test Improvements
+
+The `Consensus.t.sol` test file is notably thin (~100 lines) compared to `FROSTCoordinator.t.sol` (~499 lines). Core transaction attestation functions (`proposeTransaction`, `attestTransaction`, callback dispatch) are entirely untested.
 
 | Test file | Gap |
 |---|---|
+| `Consensus.t.sol` | **Critical**: `proposeTransaction()`, `attestTransaction()`, `proposeBasicTransaction()` have zero test coverage. The `onSignCompleted()` callback dispatch (selector-based routing) is untested. Error cases for `AlreadyAttested()`, `InvalidRollover()`, `UnknownSignatureSelector()` are not exercised. |
 | `Consensus.t.sol` | Test epoch rollover with edge cases: rollover at epoch 0 (genesis), rollover when staged epoch already exists, double-staging |
-| `FROSTCoordinator.t.sol` | Test complaint flow end-to-end: valid complaint leading to group taint, invalid complaint rejection |
-| `Staking.t.sol` | Test with maximum number of validators to verify gas limits |
+| `FROSTCoordinator.t.sol` | Test `keyGenComplain()` and `keyGenComplaintResponse()` end-to-end: valid complaint leading to group taint, invalid complaint rejection, threshold-based group compromise |
+| `FROSTCoordinator.t.sol` | Test callback execution via `keyGenConfirmWithCallback()` and `signShareWithCallback()` |
+| `Staking.t.sol` | Test with maximum number of validators to verify gas limits. Test withdrawal queue with pathological insertion patterns (O(n) traversal risk). |
 | `SafeTransaction.t.sol` | Test with empty calldata, maximum-length calldata, and all-zero transaction fields |
+| `FROSTNonceCommitmentSet.t.sol` | Only ~70 lines — expand with edge cases for commitment set manipulation |
 
 ### Hardcoded Addresses in Validator
 
