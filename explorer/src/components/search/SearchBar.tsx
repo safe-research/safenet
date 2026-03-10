@@ -1,6 +1,7 @@
 import { MagnifyingGlassIcon } from "@heroicons/react/24/solid";
 import { useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
+import { getAddress, isAddress } from "viem";
 import { SAFE_SERVICE_CHAINS } from "@/lib/chains";
 import { cn } from "@/lib/utils";
 
@@ -19,13 +20,23 @@ export function SearchBar({
 	const handleSelected = () => {
 		const cleanInput = idInput.trim();
 		if (cleanInput.length === 0) return;
-		navigate({
-			to: "/safeTx",
-			search: {
-				chainId: selectedNetwork,
-				safeTxHash: cleanInput,
-			},
-		});
+		if (isAddress(cleanInput)) {
+			navigate({
+				to: "/safe",
+				search: {
+					safeAddress: getAddress(cleanInput),
+					chainId: selectedNetwork,
+				},
+			});
+		} else {
+			navigate({
+				to: "/safeTx",
+				search: {
+					chainId: selectedNetwork,
+					safeTxHash: cleanInput,
+				},
+			});
+		}
 	};
 	return (
 		<div className={cn("flex justify-center w-full", className)}>
