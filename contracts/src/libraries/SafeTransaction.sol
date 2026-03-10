@@ -81,35 +81,58 @@ library SafeTransaction {
         // struct, as struct could be placed immediately following a restricted memory region - for example if it is
         // the very first allocation in the contract).
         // [1]: <https://eips.ethereum.org/EIPS/eip-712#rationale-for-encodedata>
+        bytes32 safeTxStructHash;
         assembly ("memory-safe") {
             // Read the free memory pointer to get some space for us to do hashing. Note that we do not need to do an
             // allocation (i.e. write back to the free memory pointer), as the written memory is just used for hashing
             // and does not escape this assembly block.
             let ptr := mload(0x40)
 
-            // Compute the domain separator, we take advantage that the domain fields are laid out in memory already in
-            // the correct order, so we can use `mcopy`. We need the first 2 words (i.e. 0x40 bytes) of `self`.
-            mstore(ptr, DOMAIN_TYPEHASH)
-            mcopy(add(ptr, 0x20), self, 0x40)
-            let domainSeparator := keccak256(ptr, 0x60)
-
-            // Compute the `SafeTx` struct hash, again we take advantage that the struct fields are laid out in memory
-            // in the correct order. Note that we additionally need to replace the `data` pointer with the Keccak-256
-            // hash of the data (as per EIP-712), which we do in place over the copied fields. We need 10 words (i.e.
-            // 0x140 bytes) starting after the second word (i.e. with an offset of 0x40 bytes). The transaction call
-            // data pointer is located on the 5th word (i.e. offset 0x80) of `self`, and the data hash needs to be
-            // written to the forth word of the struct hash preimage (i.e. offset 0x60, after the typehash, `to` and
-            // `value` fields).
+            // Compute the `SafeTx` struct hash, we take advantage that the struct fields are laid out in memory in the
+            // correct order. Note that we additionally need to replace the `data` pointer with the Keccak-256 hash of
+            // the data (as per EIP-712), which we do in place over the copied fields. We need 10 words (0x140 bytes)
+            // starting after the second word (i.e. with an offset of 0x40 bytes). The transaction call data pointer is
+            // located on the 5th word (offset 0x80) of `self`, and the data hash needs to be written to the forth word
+            // of the struct hash preimage (offset 0x60, after the typehash, `to` and `value` fields).
             mstore(ptr, SAFE_TX_TYPEHASH)
             mcopy(add(ptr, 0x20), add(self, 0x40), 0x140)
             let data := mload(add(self, 0x80))
             mstore(add(ptr, 0x60), keccak256(add(data, 0x20), mload(data)))
-            let structHash := keccak256(ptr, 0x160)
+            safeTxStructHash := keccak256(ptr, 0x160)
+        }
 
-            // Finally, compute the EIP-712 hash of the Safe transaction.
+        return partialHash(self.chainId, self.safe, safeTxStructHash);
+    }
+
+    /**
+     * @notice Computes the EIP-712 hash for a Safe transaction from partial input, using on the EIP-712 struct hash of
+     *         the Safe transaction instead of its full preimage.
+     * @param chainId The chain ID of the transacting Safe.
+     * @param safe The address of the transacting Safe.
+     * @param safeTxStructHash The EIP-712 struct hash of the Safe transaction.
+     * @return result The EIP-712 hash.
+     */
+    function partialHash(uint256 chainId, address safe, bytes32 safeTxStructHash)
+        internal
+        pure
+        returns (bytes32 result)
+    {
+        assembly ("memory-safe") {
+            // Read the free memory pointer to get some space for us to do hashing. Note that we do not need to do an
+            // allocation (i.e. write back to the free memory pointer), as the written memory is just used for hashing
+            // and does not escape this assembly block.
+            let ptr := mload(0x40)
+
+            // Compute the domain separator.
+            mstore(ptr, DOMAIN_TYPEHASH)
+            mstore(add(ptr, 0x20), chainId)
+            mstore(add(ptr, 0x40), safe)
+            let domainSeparator := keccak256(ptr, 0x60)
+
+            // Compute the EIP-712 hash of the Safe transaction.
             mstore(ptr, 0x1901)
             mstore(add(ptr, 0x20), domainSeparator)
-            mstore(add(ptr, 0x40), structHash)
+            mstore(add(ptr, 0x40), safeTxStructHash)
             result := keccak256(add(ptr, 0x1e), 0x42)
         }
     }

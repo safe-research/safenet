@@ -127,7 +127,9 @@ export const keyGenActionSchema = z.discriminatedUnion("id", [
 export const attestTransactionSchema = z.object({
 	id: z.literal("consensus_attest_transaction"),
 	epoch: coercedBigIntSchema,
-	transactionHash: hexBytes32Schema,
+	chainId: coercedBigIntSchema,
+	safe: checkedAddressSchema,
+	safeTxStructHash: hexBytes32Schema,
 	signatureId: signatureIdSchema,
 });
 

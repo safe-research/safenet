@@ -104,6 +104,8 @@ export const loadLatestAttestationStatus = async ({
 	});
 	if (signingEvents.length === 0) return null;
 	const signingIds = signingEvents.map((e) => e.args.sid);
+	// We use an `eth_getLogs` here directly, in order to filter on the `sid` of all the signing
+	// process events.
 	const logs = await provider.request({
 		method: "eth_getLogs",
 		params: [

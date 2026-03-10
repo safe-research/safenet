@@ -1,6 +1,6 @@
 import { encodeFunctionData, type Hex, zeroHash } from "viem";
 import type { SigningClient } from "../../consensus/signing/client.js";
-import { safeTxHash } from "../../consensus/verify/safeTx/hashing.js";
+import { safeTxStructHash } from "../../consensus/verify/safeTx/hashing.js";
 import type { SafeTransactionPacket } from "../../consensus/verify/safeTx/schemas.js";
 import { CONSENSUS_FUNCTIONS } from "../../types/abis.js";
 import type { NonceCommitmentsEvent } from "../transitions/types.js";
@@ -81,9 +81,10 @@ export const handleRevealedNonces = async (
 };
 
 const buildTransactionAttestationCallback = (packet: SafeTransactionPacket): Hex | undefined => {
+	const { chainId, safe, ...transactionData } = packet.proposal.transaction;
 	return encodeFunctionData({
 		abi: CONSENSUS_FUNCTIONS,
 		functionName: "attestTransaction",
-		args: [packet.proposal.epoch, safeTxHash(packet.proposal.transaction), zeroHash],
+		args: [packet.proposal.epoch, chainId, safe, safeTxStructHash(transactionData), zeroHash],
 	});
 };

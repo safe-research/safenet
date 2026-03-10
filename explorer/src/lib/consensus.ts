@@ -14,13 +14,13 @@ import { bigIntSchema, checkedAddressSchema, hexDataSchema } from "@/lib/schemas
 import { getBlockRange, jsonReplacer, mostRecentFirst } from "@/lib/utils";
 
 const consensusAbi = parseAbi([
-	"function getActiveEpoch() external view returns (uint64 epoch, bytes32 group)",
+	"function getActiveEpoch() external view returns (uint64 epoch, bytes32 groupId)",
 	"function getEpochsState() external view returns (uint64 previous, uint64 active, uint64 staged, uint64 rolloverBlock)",
-	"function getEpochGroupId(uint64 epoch) external view returns (bytes32 group)",
-	"function proposeTransaction((uint256 chainId, address safe, address to, uint256 value, bytes data, uint8 operation, uint256 safeTxGas, uint256 baseGas, uint256 gasPrice, address gasToken, address refundReceiver, uint256 nonce) transaction) external returns (bytes32 transactionHash)",
-	"function getTransactionAttestationByHash(uint64 epoch, bytes32 transactionHash) external view returns (((uint256 x, uint256 y) r, uint256 z) signature)",
-	"event TransactionProposed(bytes32 indexed transactionHash, uint256 indexed chainId, address indexed safe, uint64 epoch, (uint256 chainId, address safe, address to, uint256 value, bytes data, uint8 operation, uint256 safeTxGas, uint256 baseGas, uint256 gasPrice, address gasToken, address refundReceiver, uint256 nonce) transaction)",
-	"event TransactionAttested(bytes32 indexed transactionHash, uint64 epoch, bytes32 signatureId, ((uint256 x, uint256 y) r, uint256 z) attestation)",
+	"function getEpochGroupId(uint64 epoch) external view returns (bytes32 groupId)",
+	"function proposeTransaction((uint256 chainId, address safe, address to, uint256 value, bytes data, uint8 operation, uint256 safeTxGas, uint256 baseGas, uint256 gasPrice, address gasToken, address refundReceiver, uint256 nonce) transaction) external returns (bytes32 safeTxHash)",
+	"function getTransactionAttestationByHash(uint64 epoch, bytes32 safeTxHash) external view returns (((uint256 x, uint256 y) r, uint256 z) signature)",
+	"event TransactionProposed(bytes32 indexed safeTxHash, uint256 indexed chainId, address indexed safe, uint64 epoch, (uint256 chainId, address safe, address to, uint256 value, bytes data, uint8 operation, uint256 safeTxGas, uint256 baseGas, uint256 gasPrice, address gasToken, address refundReceiver, uint256 nonce) transaction)",
+	"event TransactionAttested(bytes32 indexed safeTxHash, uint256 indexed chainId, address indexed safe, uint64 epoch, bytes32 signatureId, ((uint256 x, uint256 y) r, uint256 z) attestation)",
 	"event EpochProposed(uint64 indexed activeEpoch, uint64 indexed proposedEpoch, uint64 rolloverBlock, bytes32 groupId, (uint256 x, uint256 y) groupKey)",
 	"event EpochStaged(uint64 indexed activeEpoch, uint64 indexed proposedEpoch, uint64 rolloverBlock, bytes32 groupId, (uint256 x, uint256 y) groupKey, bytes32 signatureId, ((uint256 x, uint256 y) r, uint256 z) attestation)",
 ]);
@@ -101,7 +101,7 @@ export const loadProposedSafeTransaction = async ({
 			name: "TransactionProposed",
 		}),
 		args: {
-			transactionHash: safeTxHash,
+			safeTxHash,
 		},
 		fromBlock,
 		toBlock,
@@ -134,7 +134,7 @@ export const loadTransactionProposals = async ({
 	const { fromBlock, toBlock } = await getBlockRange(provider, maxBlockRange, referenceBlock);
 	const blockRange = { fromBlock: numberToHex(fromBlock), toBlock: numberToHex(toBlock) };
 
-	// We use an `eth_getLogs` here directly, in order to filter on the `transactionHash` topic.
+	// We use an `eth_getLogs` here directly, in order to filter on the `safeTxHash` topic.
 	// When `safe` is set, topic[3] silently drops `TransactionAttested` (only 1 indexed topic);
 	// those proposals will have attestedAt: null until contract events are updated.
 	const rawLogs = await provider.request({
@@ -156,8 +156,8 @@ export const loadTransactionProposals = async ({
 		}),
 	);
 
-	const attestationKey = (log: { args: { transactionHash: Hex; epoch: bigint } }) =>
-		`${log.args.transactionHash}:${log.args.epoch}`;
+	const attestationKey = (log: { args: { safeTxHash: Hex; epoch: bigint } }) =>
+		`${log.args.safeTxHash}:${log.args.epoch}`;
 	const attestations = new Map(
 		eventLogs
 			.filter((log) => log.eventName === "TransactionAttested")
@@ -177,7 +177,7 @@ export const loadTransactionProposals = async ({
 			const attestation = attestations.get(attestationKey(log));
 			return {
 				chainId: log.args.chainId,
-				safeTxHash: log.args.transactionHash,
+				safeTxHash: log.args.safeTxHash,
 				epoch: log.args.epoch,
 				transaction: transaction.data,
 				proposedAt: {
