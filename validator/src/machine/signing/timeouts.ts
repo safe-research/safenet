@@ -1,6 +1,6 @@
 import type { Hex } from "viem";
 import type { SigningClient } from "../../consensus/signing/client.js";
-import { safeTxHash } from "../../consensus/verify/safeTx/hashing.js";
+import { safeTxStructHash } from "../../consensus/verify/safeTx/hashing.js";
 import type { ConsensusState, MachineConfig, MachineStates, SigningState, StateDiff } from "../types.js";
 
 export const checkSigningTimeouts = (
@@ -90,13 +90,16 @@ const checkSigningRequestTimeout = (
 				};
 			}
 			if (status.packet.type === "safe_transaction_packet") {
+				const { chainId, safe, ...transactionData } = status.packet.proposal.transaction;
 				return {
 					...stateDiff,
 					actions: [
 						{
 							id: "consensus_attest_transaction",
 							epoch: status.packet.proposal.epoch,
-							safeTxHash: safeTxHash(status.packet.proposal.transaction),
+							chainId,
+							safe,
+							safeTxStructHash: safeTxStructHash(transactionData),
 							signatureId,
 						},
 					],

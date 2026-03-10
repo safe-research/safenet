@@ -169,6 +169,8 @@ export type TransactionAttestedEvent = {
 	block: bigint;
 	index: number;
 	safeTxHash: Hex;
+	chainId: bigint;
+	safe: Address;
 	epoch: bigint;
 	signatureId: SignatureId;
 	attestation: {

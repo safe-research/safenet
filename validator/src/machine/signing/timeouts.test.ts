@@ -244,7 +244,9 @@ describe("signing timeouts - waiting for attestation", () => {
 			{
 				id: "consensus_attest_transaction",
 				epoch: 22n,
-				safeTxHash: "0xd17a3cccc647b9a43f15b53cd396e7ded1c0bb5dde266146f8f8aa86804f76fe",
+				chainId: 0n,
+				safe: "0x89bEf0f3a116cf717e51F74C271A0a7aF527511D",
+				safeTxStructHash: "0xde4e914dcc51de13a527bcebf7c516fe17dd27ee03310485bc7920c16b1f892d",
 				signatureId: "0x5af35af3",
 			},
 		]);
@@ -359,7 +361,9 @@ describe("signing timeouts - waiting for attestation", () => {
 			{
 				id: "consensus_attest_transaction",
 				epoch: 22n,
-				safeTxHash: "0xd17a3cccc647b9a43f15b53cd396e7ded1c0bb5dde266146f8f8aa86804f76fe",
+				chainId: 0n,
+				safe: "0x89bEf0f3a116cf717e51F74C271A0a7aF527511D",
+				safeTxStructHash: "0xde4e914dcc51de13a527bcebf7c516fe17dd27ee03310485bc7920c16b1f892d",
 				signatureId: "0x5af35af3",
 			},
 		]);

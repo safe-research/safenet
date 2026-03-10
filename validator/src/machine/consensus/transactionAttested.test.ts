@@ -69,6 +69,8 @@ const EVENT: TransactionAttestedEvent = {
 	block: 2n,
 	index: 0,
 	safeTxHash: safeTxHash(PACKET.proposal.transaction),
+	chainId: PACKET.proposal.transaction.chainId,
+	safe: PACKET.proposal.transaction.safe,
 	epoch: PACKET.proposal.epoch,
 	signatureId: "0x5af35af3",
 	attestation: {

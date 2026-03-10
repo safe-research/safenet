@@ -1,4 +1,4 @@
-import { type Hex, hashTypedData } from "viem";
+import { type Hex, hashStruct, hashTypedData } from "viem";
 import type { SafeTransaction, SafeTransactionPacket } from "./schemas.js";
 
 export type SafeTransactionProposal = {
@@ -31,26 +31,36 @@ export const safeTxPacketHash = (packet: SafeTransactionPacket): Hex =>
 		proposal: { epoch: packet.proposal.epoch, safeTxHash: safeTxHash(packet.proposal.transaction) },
 	});
 
+const SAFE_TX = {
+	types: {
+		SafeTx: [
+			{ type: "address", name: "to" },
+			{ type: "uint256", name: "value" },
+			{ type: "bytes", name: "data" },
+			{ type: "uint8", name: "operation" },
+			{ type: "uint256", name: "safeTxGas" },
+			{ type: "uint256", name: "baseGas" },
+			{ type: "uint256", name: "gasPrice" },
+			{ type: "address", name: "gasToken" },
+			{ type: "address", name: "refundReceiver" },
+			{ type: "uint256", name: "nonce" },
+		],
+	},
+	primaryType: "SafeTx",
+} as const;
+
 export const safeTxHash = (transaction: SafeTransaction): Hex =>
 	hashTypedData({
+		...SAFE_TX,
 		domain: {
 			chainId: transaction.chainId,
 			verifyingContract: transaction.safe,
 		},
-		types: {
-			SafeTx: [
-				{ type: "address", name: "to" },
-				{ type: "uint256", name: "value" },
-				{ type: "bytes", name: "data" },
-				{ type: "uint8", name: "operation" },
-				{ type: "uint256", name: "safeTxGas" },
-				{ type: "uint256", name: "baseGas" },
-				{ type: "uint256", name: "gasPrice" },
-				{ type: "address", name: "gasToken" },
-				{ type: "address", name: "refundReceiver" },
-				{ type: "uint256", name: "nonce" },
-			],
-		},
-		primaryType: "SafeTx",
 		message: transaction,
+	});
+
+export const safeTxStructHash = (transactionData: Omit<SafeTransaction, "chainId" | "safe">): Hex =>
+	hashStruct({
+		...SAFE_TX,
+		data: transactionData,
 	});
