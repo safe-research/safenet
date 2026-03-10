@@ -1,14 +1,8 @@
+import { Badge } from "@/components/common/Badge";
+
 export function StatusBadge({ attested }: { attested: boolean }) {
 	if (attested) {
-		return (
-			<span className="inline-block px-1.5 py-0.5 text-[10px] font-semibold leading-none rounded border border-positive text-positive">
-				ATTESTED
-			</span>
-		);
+		return <Badge className="border-positive text-positive">ATTESTED</Badge>;
 	}
-	return (
-		<span className="inline-block px-1.5 py-0.5 text-[10px] font-semibold leading-none rounded border border-pending text-pending">
-			PROPOSED
-		</span>
-	);
+	return <Badge className="border-pending text-pending">PROPOSED</Badge>;
 }
