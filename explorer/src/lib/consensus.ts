@@ -13,7 +13,8 @@ import z from "zod";
 import { bigIntSchema, checkedAddressSchema, hexDataSchema } from "@/lib/schemas";
 import { getBlockRange, jsonReplacer, mostRecentFirst } from "@/lib/utils";
 
-const consensusAbi = parseAbi([
+export const consensusAbi = parseAbi([
+	"function getCoordinator() view returns (address)",
 	"function getActiveEpoch() external view returns (uint64 epoch, bytes32 groupId)",
 	"function getEpochsState() external view returns (uint64 previous, uint64 active, uint64 staged, uint64 rolloverBlock)",
 	"function getEpochGroupId(uint64 epoch) external view returns (bytes32 groupId)",

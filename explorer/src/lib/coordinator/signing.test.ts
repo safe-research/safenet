@@ -10,7 +10,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const CONSENSUS = "0x1111111111111111111111111111111111111111" as Address;
 const COORDINATOR_FROM_GETTER = "0xAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA" as Address;
-const COORDINATOR_FROM_UPPER = "0xBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB" as Address;
 
 // Valid 32-byte hex (required by safeTxProposalHash's hashTypedData)
 const SAFE_TX_HASH = `0x${"ab".repeat(32)}` as `0x${string}`;
@@ -55,12 +54,9 @@ describe("loadCoordinator (via loadLatestAttestationStatus)", () => {
 		vi.restoreAllMocks();
 	});
 
-	it("prefer getCoordinator() if both succeed", async () => {
+	it("uses getCoordinator() to fetch the coordinator address", async () => {
 		const provider = makeProvider({
-			readContractImpl: async ({ functionName }: { functionName: string }) => {
-				if (functionName === "getCoordinator") return COORDINATOR_FROM_GETTER;
-				return COORDINATOR_FROM_UPPER;
-			},
+			readContractImpl: async () => COORDINATOR_FROM_GETTER,
 		});
 
 		const load = await loadModule();
@@ -69,21 +65,7 @@ describe("loadCoordinator (via loadLatestAttestationStatus)", () => {
 		expect(provider.getLogs).toHaveBeenCalledWith(expect.objectContaining({ address: COORDINATOR_FROM_GETTER }));
 	});
 
-	it("falls back and uses COORDINATOR() when getCoordinator() fails in fallback", async () => {
-		const provider = makeProvider({
-			readContractImpl: async ({ functionName }: { functionName: string }) => {
-				if (functionName === "getCoordinator") throw new Error("not found");
-				return COORDINATOR_FROM_UPPER;
-			},
-		});
-
-		const load = await loadModule();
-		await load({ provider, ...baseArgs });
-
-		expect(provider.getLogs).toHaveBeenCalledWith(expect.objectContaining({ address: COORDINATOR_FROM_UPPER }));
-	});
-
-	it("throws when both fallback readContract calls fail", async () => {
+	it("throws when getCoordinator() fails", async () => {
 		const provider = makeProvider({
 			readContractImpl: async () => {
 				throw new Error("not found");
@@ -91,32 +73,26 @@ describe("loadCoordinator (via loadLatestAttestationStatus)", () => {
 		});
 
 		const load = await loadModule();
-		await expect(load({ provider, ...baseArgs })).rejects.toThrow(
-			`Could not read coordinator from consensus contract ${CONSENSUS}`,
-		);
+		await expect(load({ provider, ...baseArgs })).rejects.toThrow("not found");
 	});
 
 	it("caches the coordinator and does not call the provider again for the same consensus", async () => {
 		const provider = makeProvider({
-			readContractImpl: async ({ functionName }: { functionName: string }) => {
-				if (functionName === "getCoordinator") throw new Error("not found");
-				return COORDINATOR_FROM_UPPER;
-			},
+			readContractImpl: async () => COORDINATOR_FROM_GETTER,
 		});
 
 		const load = await loadModule();
 		await load({ provider, ...baseArgs });
 		await load({ provider, ...baseArgs });
 
-		// multicall should only be called once  for each method despite two loadLatestAttestationStatus invocations
-		expect(provider.readContract).toHaveBeenCalledTimes(2);
+		// readContract should only be called once despite two loadLatestAttestationStatus invocations
+		expect(provider.readContract).toHaveBeenCalledTimes(1);
 	});
 
 	it("does not cache failures — retries on next call", async () => {
 		let callCount = 0;
 		const provider = makeProvider({
-			readContractImpl: async ({ functionName }: { functionName: string }) => {
-				if (functionName === "COORDINATOR") throw new Error("not found");
+			readContractImpl: async () => {
 				callCount++;
 				if (callCount === 1) {
 					throw new Error("not found");

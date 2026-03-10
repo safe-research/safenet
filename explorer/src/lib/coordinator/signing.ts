@@ -1,4 +1,5 @@
-import { type Address, formatLog, type Hex, numberToHex, type PublicClient, parseAbi, parseEventLogs } from "viem";
+import { type Address, formatLog, type Hex, numberToHex, type PublicClient, parseEventLogs } from "viem";
+import { consensusAbi } from "@/lib/consensus";
 import {
 	COORDINATOR_SIGNING_INITIATED_EVENT,
 	COORDINATOR_SIGNING_PROGRESS_EVENTS,
@@ -14,17 +15,8 @@ let cachedAddresses:
 	  }
 	| undefined;
 
-const COORDINATOR_UPPER_ABI = parseAbi(["function COORDINATOR() view returns (address)"]);
-const GET_COORDINATOR_ABI = parseAbi(["function getCoordinator() view returns (address)"]);
-
-const fetchCoordinator = async (provider: PublicClient, consensus: Address): Promise<Address> => {
-	const [getterResult, upperResult] = await Promise.allSettled([
-		provider.readContract({ address: consensus, abi: GET_COORDINATOR_ABI, functionName: "getCoordinator" }),
-		provider.readContract({ address: consensus, abi: COORDINATOR_UPPER_ABI, functionName: "COORDINATOR" }),
-	]);
-	if (getterResult.status === "fulfilled") return getterResult.value;
-	if (upperResult.status === "fulfilled") return upperResult.value;
-	throw new Error(`Could not read coordinator from consensus contract ${consensus}`);
+const fetchCoordinator = (provider: PublicClient, consensus: Address): Promise<Address> => {
+	return provider.readContract({ address: consensus, abi: consensusAbi, functionName: "getCoordinator" });
 };
 
 export const loadCoordinator = (provider: PublicClient, consensus: Address): Promise<Address> => {
