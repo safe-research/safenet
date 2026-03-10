@@ -237,6 +237,7 @@ export const loadEpochsState = async (provider: PublicClient, consensus: Address
 export type EpochRolloverResult = {
 	entries: EpochRolloverEntry[];
 	reachedGenesis: boolean;
+	fromBlock: bigint;
 };
 
 export const loadEpochRolloverHistory = async ({
@@ -250,7 +251,10 @@ export const loadEpochRolloverHistory = async ({
 	maxBlockRange: bigint;
 	cursor?: bigint;
 }): Promise<EpochRolloverResult> => {
-	const { fromBlock, toBlock } = await getBlockRange(provider, maxBlockRange, cursor);
+	// When a cursor is provided, subtract 1 so the event at the cursor block (already
+	// included in the previous page) is not fetched again.
+	const referenceBlock = cursor !== undefined ? cursor - 1n : undefined;
+	const { fromBlock, toBlock } = await getBlockRange(provider, maxBlockRange, referenceBlock);
 
 	const stagedLogs = mostRecentFirst(
 		await provider.getLogs({
@@ -270,10 +274,13 @@ export const loadEpochRolloverHistory = async ({
 		stagedAt: log.blockNumber,
 	}));
 
-	const reachedGenesis = entries.some((e) => e.activeEpoch === 0n);
+	// Reached genesis when an activeEpoch 0 entry is found, or when the search window
+	// has reached block 0 (nothing further to search).
+	const reachedGenesis = fromBlock === 0n || entries.some((e) => e.activeEpoch === 0n);
 	return {
 		entries,
 		reachedGenesis,
+		fromBlock,
 	};
 };
 

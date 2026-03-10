@@ -23,7 +23,9 @@ export function useEpochRolloverHistory() {
 		getNextPageParam: (lastPage) => {
 			if (lastPage.reachedGenesis) return undefined;
 			const oldest = lastPage.entries.at(-1);
-			return oldest?.stagedAt;
+			// Fall back to fromBlock so an empty page still advances the cursor
+			// backwards instead of stopping pagination prematurely.
+			return oldest?.stagedAt ?? lastPage.fromBlock;
 		},
 		refetchInterval: settings.refetchInterval > 0 ? settings.refetchInterval : false,
 	});
