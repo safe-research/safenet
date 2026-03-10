@@ -196,7 +196,7 @@ describe("math", () => {
 			expect(createSigningShare(secretShares)).toBe(addmod(share1, share2));
 		});
 
-		it("empty map throws (result is 0n)", () => {
+		it("empty map throws because signingShare stays at 0n", () => {
 			const emptyMap = new Map<bigint, bigint>();
 			expect(() => createSigningShare(emptyMap)).toThrow("Could not calculate signing share!");
 		});

@@ -94,8 +94,7 @@ describe("vss", () => {
 			const proof = createProofOfKnowledge(id, coefficients);
 
 			// Use a different point for r (G_BASE itself, which is unlikely to equal proof.r)
-			const { publicKey: differentPoint } = createEncryptionKey();
-			const tamperedProof = { ...proof, r: differentPoint };
+			const tamperedProof = { ...proof, r: g(999n) };
 
 			expect(verifyCommitments(id, commitments, tamperedProof)).toBe(false);
 		});
