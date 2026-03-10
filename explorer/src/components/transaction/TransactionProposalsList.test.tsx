@@ -124,37 +124,45 @@ describe("TransactionProposalsList", () => {
 });
 
 describe("RecentTransactionProposals", () => {
+	const controlsProps = {
+		isFetching: false,
+		dataUpdatedAt: 0,
+		autoRefresh: true,
+		onRefetch: vi.fn(),
+		onToggleAutoRefresh: vi.fn(),
+	};
+
 	it("renders the count and 'recent proposals' label", () => {
-		render(<RecentTransactionProposals proposals={PROPOSALS} itemsToShow={10} onShowMore={vi.fn()} />);
+		render(<RecentTransactionProposals proposals={PROPOSALS} itemsToShow={10} onShowMore={vi.fn()} {...controlsProps} />);
 		expect(screen.getByText("3 recent proposals")).toBeTruthy();
 	});
 
 	it("shows total count in label even when proposals are sliced", () => {
-		render(<RecentTransactionProposals proposals={PROPOSALS} itemsToShow={2} onShowMore={vi.fn()} />);
+		render(<RecentTransactionProposals proposals={PROPOSALS} itemsToShow={2} onShowMore={vi.fn()} {...controlsProps} />);
 		expect(screen.getByText("3 recent proposals")).toBeTruthy();
 	});
 
 	it("shows only itemsToShow proposals", () => {
-		render(<RecentTransactionProposals proposals={PROPOSALS} itemsToShow={2} onShowMore={vi.fn()} />);
+		render(<RecentTransactionProposals proposals={PROPOSALS} itemsToShow={2} onShowMore={vi.fn()} {...controlsProps} />);
 		expect(screen.getByText("Safe Tx Hash: 0xhash1")).toBeTruthy();
 		expect(screen.getByText("Safe Tx Hash: 0xhash2")).toBeTruthy();
 		expect(screen.queryByText("Safe Tx Hash: 0xhash3")).toBeNull();
 	});
 
 	it("shows 'Show More' button when there are more proposals than itemsToShow", () => {
-		render(<RecentTransactionProposals proposals={PROPOSALS} itemsToShow={2} onShowMore={vi.fn()} />);
+		render(<RecentTransactionProposals proposals={PROPOSALS} itemsToShow={2} onShowMore={vi.fn()} {...controlsProps} />);
 		expect(screen.getByRole("button", { name: "Show More" })).toBeTruthy();
 	});
 
 	it("hides the 'Show More' button when all proposals fit within itemsToShow", () => {
-		render(<RecentTransactionProposals proposals={PROPOSALS} itemsToShow={10} onShowMore={vi.fn()} />);
-		expect(screen.queryByRole("button")).toBeNull();
+		render(<RecentTransactionProposals proposals={PROPOSALS} itemsToShow={10} onShowMore={vi.fn()} {...controlsProps} />);
+		expect(screen.queryByRole("button", { name: "Show More" })).toBeNull();
 	});
 
 	it("calls onShowMore when 'Show More' is clicked", () => {
 		const onShowMore = vi.fn();
-		render(<RecentTransactionProposals proposals={PROPOSALS} itemsToShow={2} onShowMore={onShowMore} />);
-		fireEvent.click(screen.getByRole("button"));
+		render(<RecentTransactionProposals proposals={PROPOSALS} itemsToShow={2} onShowMore={onShowMore} {...controlsProps} />);
+		fireEvent.click(screen.getByRole("button", { name: "Show More" }));
 		expect(onShowMore).toHaveBeenCalledOnce();
 	});
 });
