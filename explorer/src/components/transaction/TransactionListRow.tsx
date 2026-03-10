@@ -8,8 +8,10 @@ import { SAFE_SERVICE_CHAINS } from "@/lib/chains";
 import type { TransactionProposal } from "@/lib/consensus";
 import { dataString, formatBlockAge, formatHashShort, opString, valueString } from "@/lib/safe/formatting";
 
-/** Tailwind grid-cols definition shared with the header row in TransactionProposalsList. */
-export const TRANSACTION_ROW_GRID_COLS = "grid grid-cols-[5rem_7.5rem_1fr_2fr_6rem] gap-x-2";
+/** Grid wrapper shared by the header and data rows of the transaction list. */
+export function TransactionRowGrid({ children, className }: { children: React.ReactNode; className?: string }) {
+	return <div className={`grid grid-cols-[5rem_7.5rem_1fr_2fr_6rem] gap-x-2 ${className ?? ""}`}>{children}</div>;
+}
 
 export function TransactionListRow({ proposal }: { proposal: TransactionProposal }) {
 	const { data: consensusState } = useConsensusState();
@@ -25,9 +27,7 @@ export function TransactionListRow({ proposal }: { proposal: TransactionProposal
 
 	return (
 		<Link to="/safeTx" search={{ chainId: `${proposal.chainId}`, safeTxHash: proposal.safeTxHash }}>
-			<div
-				className={`${TRANSACTION_ROW_GRID_COLS} items-start bg-surface-1 border border-surface-outline rounded-lg px-3 py-2.5 hover:bg-surface-hover cursor-pointer`}
-			>
+			<TransactionRowGrid className="items-start bg-surface-1 border border-surface-outline rounded-lg px-3 py-2.5 hover:bg-surface-hover cursor-pointer">
 				{/* Column 1: Network + Status badges */}
 				<div className="flex flex-col gap-1">
 					<NetworkBadge chainId={proposal.chainId} />
@@ -58,7 +58,7 @@ export function TransactionListRow({ proposal }: { proposal: TransactionProposal
 					{when && <div className="whitespace-nowrap">{when}</div>}
 					<div className="font-mono whitespace-nowrap">#{proposal.proposedAt.block.toString()}</div>
 				</div>
-			</div>
+			</TransactionRowGrid>
 		</Link>
 	);
 }

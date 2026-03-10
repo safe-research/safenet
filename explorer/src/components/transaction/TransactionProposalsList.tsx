@@ -1,17 +1,15 @@
-import { TRANSACTION_ROW_GRID_COLS, TransactionListRow } from "@/components/transaction/TransactionListRow";
+import { TransactionListRow, TransactionRowGrid } from "@/components/transaction/TransactionListRow";
 import type { TransactionProposal } from "@/lib/consensus";
 
 function TransactionListHeader() {
 	return (
-		<div
-			className={`${TRANSACTION_ROW_GRID_COLS} px-3 py-1.5 text-2xs font-medium text-sub-title uppercase tracking-wide`}
-		>
+		<TransactionRowGrid className="px-3 py-1.5 text-2xs font-medium text-sub-title uppercase tracking-wide">
 			<div>Network</div>
 			<div>Safe</div>
 			<div>Tx Hash</div>
 			<div>Details</div>
 			<div className="text-right">When</div>
-		</div>
+		</TransactionRowGrid>
 	);
 }
 
