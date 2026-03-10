@@ -131,30 +131,20 @@ export const loadTransactionProposals = async ({
 	toBlock?: bigint;
 	maxBlockRange: bigint;
 }): Promise<LoadTransactionProposalsResult> => {
-	// We use an `eth_getLogs` here directly, in order to filter on the `transactionHash` topic.
-	// toBlock anchors the window; fromBlock is always derived relative to it so pages are contiguous.
 	const { fromBlock, toBlock } = await getBlockRange(provider, maxBlockRange, referenceBlock);
 	const blockRange = { fromBlock: numberToHex(fromBlock), toBlock: numberToHex(toBlock) };
 
-	const fetchLogs = async () => {
-		if (safe !== undefined) {
-			// Only fetch TransactionProposed events when filtering by safe address.
-			// TransactionAttested has only 1 indexed topic so a topic[3] safe filter would
-			// silently exclude it; attestedAt will be null for all safe-filtered results.
-			return provider.request({
-				method: "eth_getLogs",
-				params: [{ address: consensus, ...blockRange, topics: [proposedEventSelector, safeTxHash ?? null, null, safe] }],
-			});
-		}
-		return provider.request({
-			method: "eth_getLogs",
-			params: [{ address: consensus, ...blockRange, topics: [transactionEventSelectors, safeTxHash ?? null] }],
-		});
-	};
+	// We use an `eth_getLogs` here directly, in order to filter on the `transactionHash` topic.
+	// When `safe` is set, topic[3] silently drops `TransactionAttested` (only 1 indexed topic);
+	// those proposals will have attestedAt: null until contract events are updated.
+	const rawLogs = await provider.request({
+		method: "eth_getLogs",
+		params: [{ address: consensus, ...blockRange, topics: [transactionEventSelectors, safeTxHash ?? null, null, safe ?? null] }],
+	});
 	const eventLogs = mostRecentFirst(
 		parseEventLogs({
 			// <https://github.com/wevm/viem/issues/4340>
-			logs: (await fetchLogs()).map((log) => formatLog(log)),
+			logs: rawLogs.map((log) => formatLog(log)),
 			abi: consensusAbi,
 			strict: true,
 		}),
