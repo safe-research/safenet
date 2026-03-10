@@ -129,39 +129,36 @@ The field is exposed in the Consensus Settings form alongside `maxBlockRange`.
 
 ### Phase 1 — Historic Epoch Rollover List
 
-#### Primary events (Consensus contract)
+#### Primary event (Consensus contract)
 
 ```
-EpochProposed(uint64 indexed activeEpoch, uint64 indexed proposedEpoch, uint64 rolloverBlock, Secp256k1.Point groupKey)
 EpochStaged(uint64 indexed activeEpoch, uint64 indexed proposedEpoch, uint64 rolloverBlock, Secp256k1.Point groupKey, FROST.Signature attestation)
 ```
 
-**Initial load:** fetch both `EpochProposed` and `EpochStaged` events from `[currentBlock - maxBlockRange, latest]`.
+Each `EpochStaged` event represents one completed epoch rollover and contains all required information: `activeEpoch`, `proposedEpoch`, `rolloverBlock`, and the `groupKey`/`attestation`. The `blockNumber` of the event provides the `stagedAt` timestamp.
 
-**Matching:** pair entries by `proposedEpoch`. Only entries that have **both** an `EpochProposed` and a matching `EpochStaged` are shown in the history list. A proposed epoch without a matching staged entry is out of scope for this list (un-staged proposals indicate that the attestation signing has not yet completed; those are not surfaced here).
+**Initial load:** fetch `EpochStaged` events from `[currentBlock - maxBlockRange, latest]`.
 
-**"Load more":** each click fetches the next `maxBlockRange` window backward (i.e., `[prevFromBlock - maxBlockRange, prevFromBlock]`) and prepends newly matched pairs.
-
-**Handling unpaired `EpochProposed` at the window boundary:** A "Load more" fetch may return `EpochProposed` events whose matching `EpochStaged` falls outside (before) the fetched window — for example when an attestation round spanned the window boundary. When this occurs, the implementation continues fetching one additional `maxBlockRange` window backward, looking for the missing `EpochStaged` events. This repeats until all `EpochProposed` events from the latest batch are either matched or proven absent (no more history). Unmatched events at the absolute bottom of history (i.e. no further data) are silently dropped, consistent with the general rule that un-staged proposals are not shown.
+**"Load more":** each click fetches the next `maxBlockRange` window backward (i.e., `[prevFromBlock - maxBlockRange, prevFromBlock]`) and appends newly found entries.
 
 #### Per-epoch keygen details (FROSTCoordinator contract, lazy)
 
 For each history entry, clicking "Show details" triggers a query for that epoch's keygen participation:
 
 - **gid**: `getEpochGroupId(proposedEpoch)` — one contract read per epoch, performed at expansion time
-- **Block range for the keygen query** — the keygen for epoch N ran between when the previous epoch became active and when the `EpochProposed(N)` event was emitted. The end block is always `EpochProposed(N).blockNumber`. The start block is derived as follows:
-  - **If `blocksPerEpoch` is configured in settings**: `EpochProposed(N).blockNumber - (EpochProposed(N).blockNumber % blocksPerEpoch)` — snaps back to the epoch boundary block
-  - **Fallback** (no `blocksPerEpoch`): `EpochStaged(N-1).blockNumber`, i.e. the block at which the previous epoch was staged — available from the already-loaded history without any extra query
+- **Block range for the keygen query** — the keygen for epoch N completed before `EpochStaged(N).blockNumber`. The end block is always `EpochStaged(N).blockNumber`. The start block is derived as follows:
+  - **If `blocksPerEpoch` is configured in settings**: `EpochStaged(N).blockNumber - (EpochStaged(N).blockNumber % blocksPerEpoch)` — snaps back to the epoch boundary block
+  - **Fallback 1** (no `blocksPerEpoch`): `EpochStaged(N-1).blockNumber`, i.e. the block at which the previous epoch was staged — available from the already-loaded history without any extra query
+  - **Fallback 2** (no previous entry): `EpochStaged(N).blockNumber - maxBlockRange`
 - **Events fetched**: `KeyGen` (to get `count` / `threshold`) + `KeyGenCommitted / KeyGenSecretShared / KeyGenConfirmed / KeyGenComplained` for that `gid` within the range
 
-> **Note**: `EpochProposed` / `EpochStaged` carry `groupKey` (a `Secp256k1.Point {x, y}`), not the `gid` (bytes32). The `gid` must be resolved via `getEpochGroupId(proposedEpoch)` — one read per epoch, done lazily at expansion time.
+> **Note**: `EpochStaged` carries `groupKey` (a `Secp256k1.Point {x, y}`), not the `gid` (bytes32). The `gid` must be resolved via `getEpochGroupId(proposedEpoch)` — one read per epoch, done lazily at expansion time.
 
 #### Epoch entry display (collapsed)
 
 | Field | Source |
 |-------|--------|
 | `activeEpoch → proposedEpoch` | event args |
-| Proposed at block | `EpochProposed.blockNumber` |
 | Staged at block | `EpochStaged.blockNumber` |
 
 ---
@@ -241,8 +238,7 @@ export type EpochRolloverEntry = {
   activeEpoch: bigint;
   proposedEpoch: bigint;
   rolloverBlock: bigint;
-  proposedAt: bigint;  // blockNumber of EpochProposed
-  stagedAt: bigint;    // blockNumber of EpochStaged (only staged entries are surfaced)
+  stagedAt: bigint;    // blockNumber of EpochStaged event
 };
 
 // explorer/src/lib/coordinator/keygen.ts

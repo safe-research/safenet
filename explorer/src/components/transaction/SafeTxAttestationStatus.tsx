@@ -1,34 +1,8 @@
+import { createMapInfo, ValidatorList } from "@/components/common/ValidatorList";
 import { useAttestationStatus } from "@/hooks/useSigningProgress";
 import { useValidatorInfoMap } from "@/hooks/useValidatorInfo";
 import type { TransactionProposal } from "@/lib/consensus";
 import { Skeleton } from "../Skeleton";
-
-export function ValidatorList({
-	all,
-	active,
-	mapInfo,
-	completed,
-}: {
-	all: bigint[];
-	active: bigint[];
-	mapInfo: (suffix: string) => (identifier: bigint) => string;
-	completed: boolean;
-}) {
-	return (
-		<>
-			{active
-				.map(mapInfo("✅"))
-				.sort()
-				.concat(
-					all
-						.filter((v) => !active.includes(v))
-						.map(mapInfo(completed ? "❌" : "⏳"))
-						.sort(),
-				)
-				.join(", ")}
-		</>
-	);
-}
 
 export function SafeTxAttestationStatus({ proposal }: { proposal: TransactionProposal }) {
 	const validatorInfo = useValidatorInfoMap();
@@ -38,8 +12,7 @@ export function SafeTxAttestationStatus({ proposal }: { proposal: TransactionPro
 		proposal.proposedAt.block,
 		proposal.attestedAt?.block ?? null,
 	);
-	const mapInfo = (suffix: string) => (identifier: bigint) =>
-		`${validatorInfo?.data?.get(identifier)?.label ?? `Validator ${identifier}`} ${suffix}`;
+	const mapInfo = createMapInfo(validatorInfo.data);
 	const allValidatorIds = Array.from(validatorInfo.data?.keys() ?? []);
 	return (
 		<>
