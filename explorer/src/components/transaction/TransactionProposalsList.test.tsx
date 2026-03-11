@@ -129,9 +129,7 @@ describe("TransactionProposalsList", () => {
 	});
 
 	it("renders skeleton rows instead of proposals when isLoading is true", () => {
-		render(
-			<TransactionProposalsList proposals={[]} hasMore={false} onShowMore={vi.fn()} isLoading={true} />,
-		);
+		render(<TransactionProposalsList proposals={[]} hasMore={false} onShowMore={vi.fn()} isLoading={true} />);
 		expect(screen.getAllByTestId("transaction-list-row-skeleton").length).toBeGreaterThan(0);
 		expect(screen.queryAllByTestId("transaction-list-row")).toHaveLength(0);
 	});
@@ -147,9 +145,7 @@ describe("TransactionProposalsList", () => {
 	});
 
 	it("hides the show-more button while isLoading is true", () => {
-		render(
-			<TransactionProposalsList proposals={[]} hasMore={true} onShowMore={vi.fn()} isLoading={true} />,
-		);
+		render(<TransactionProposalsList proposals={[]} hasMore={true} onShowMore={vi.fn()} isLoading={true} />);
 		expect(screen.queryByRole("button")).toBeNull();
 	});
 });

@@ -1,7 +1,11 @@
-import { TransactionListRow, TransactionListRowSkeleton, TransactionRowGrid } from "@/components/transaction/TransactionListRow";
+import {
+	TransactionListRow,
+	TransactionListRowSkeleton,
+	TransactionRowGrid,
+} from "@/components/transaction/TransactionListRow";
 import type { TransactionProposal } from "@/lib/consensus";
 
-const SKELETON_ROW_COUNT = 3;
+const SKELETON_ROWS = ["skeleton-0", "skeleton-1", "skeleton-2"];
 
 function TransactionListHeader() {
 	return (
@@ -38,7 +42,7 @@ export function TransactionProposalsList({
 			<TransactionListHeader />
 			<div className="space-y-2">
 				{isLoading
-					? Array.from({ length: SKELETON_ROW_COUNT }, (_, i) => <TransactionListRowSkeleton key={i} />)
+					? SKELETON_ROWS.map((key) => <TransactionListRowSkeleton key={key} />)
 					: proposals.map((proposal) => (
 							<div key={`${proposal.safeTxHash}:${proposal.epoch}`}>
 								<TransactionListRow proposal={proposal} />
