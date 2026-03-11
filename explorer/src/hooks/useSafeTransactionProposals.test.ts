@@ -21,6 +21,7 @@ const DEFAULT_SETTINGS: Settings = {
 	maxBlockRange: MAX_BLOCK_RANGE,
 	validatorInfo: "https://example.com/validator-info.json",
 	refetchInterval: 0,
+	blocksPerEpoch: 1440,
 };
 
 vi.mock("@/hooks/useSettings", () => ({
