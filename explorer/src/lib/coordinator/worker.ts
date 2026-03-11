@@ -1,9 +1,8 @@
 import { expose } from "comlink";
-import { type Address, createPublicClient, type Hex, http } from "viem";
+import type { Address, Hex } from "viem";
+import { createRpcClient } from "@/lib/utils";
 import { loadKeyGenDetails } from "./keygen";
 import { loadLatestAttestationStatus } from "./signing";
-
-const createClient = (rpc: string) => createPublicClient({ transport: http(rpc) });
 
 const workerApi = {
 	loadLatestAttestationStatus: ({
@@ -17,7 +16,7 @@ const workerApi = {
 		proposedAt?: bigint;
 		attestedAt?: bigint | null;
 		maxBlockRange: bigint;
-	}) => loadLatestAttestationStatus({ ...params, provider: createClient(rpc) }),
+	}) => loadLatestAttestationStatus({ ...params, provider: createRpcClient(rpc) }),
 
 	loadKeyGenDetails: ({
 		rpc,
@@ -30,7 +29,7 @@ const workerApi = {
 		blocksPerEpoch?: number;
 		prevStagedAt?: bigint;
 		maxBlockRange: bigint;
-	}) => loadKeyGenDetails({ ...params, provider: createClient(rpc) }),
+	}) => loadKeyGenDetails({ ...params, provider: createRpcClient(rpc) }),
 };
 
 export type CoordinatorWorkerApi = typeof workerApi;

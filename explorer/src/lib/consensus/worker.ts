@@ -1,5 +1,6 @@
 import { expose } from "comlink";
-import { type Address, createPublicClient, type Hex, http } from "viem";
+import type { Address, Hex } from "viem";
+import { createRpcClient } from "@/lib/utils";
 import {
 	loadConsensusState,
 	loadEpochRolloverHistory,
@@ -7,8 +8,6 @@ import {
 	loadProposedSafeTransaction,
 	loadTransactionProposals,
 } from "./consensus";
-
-const createClient = (rpc: string) => createPublicClient({ transport: http(rpc) });
 
 const workerApi = {
 	loadTransactionProposals: ({
@@ -21,10 +20,10 @@ const workerApi = {
 		safe?: Address;
 		toBlock?: bigint;
 		maxBlockRange: bigint;
-	}) => loadTransactionProposals({ ...params, provider: createClient(rpc) }),
+	}) => loadTransactionProposals({ ...params, provider: createRpcClient(rpc) }),
 
 	loadConsensusState: ({ rpc, consensus }: { rpc: string; consensus: Address }) =>
-		loadConsensusState(createClient(rpc), consensus),
+		loadConsensusState(createRpcClient(rpc), consensus),
 
 	loadProposedSafeTransaction: ({
 		rpc,
@@ -34,10 +33,10 @@ const workerApi = {
 		consensus: Address;
 		safeTxHash: Hex;
 		maxBlockRange: bigint;
-	}) => loadProposedSafeTransaction({ ...params, provider: createClient(rpc) }),
+	}) => loadProposedSafeTransaction({ ...params, provider: createRpcClient(rpc) }),
 
 	loadEpochsState: ({ rpc, consensus }: { rpc: string; consensus: Address }) =>
-		loadEpochsState(createClient(rpc), consensus),
+		loadEpochsState(createRpcClient(rpc), consensus),
 
 	loadEpochRolloverHistory: ({
 		rpc,
@@ -47,7 +46,7 @@ const workerApi = {
 		consensus: Address;
 		maxBlockRange: bigint;
 		cursor?: bigint;
-	}) => loadEpochRolloverHistory({ ...params, provider: createClient(rpc) }),
+	}) => loadEpochRolloverHistory({ ...params, provider: createRpcClient(rpc) }),
 };
 
 export type ConsensusWorkerApi = typeof workerApi;
