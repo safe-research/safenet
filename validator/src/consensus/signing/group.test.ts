@@ -1,6 +1,6 @@
 import { keccak256, stringToBytes } from "viem";
 import { describe, expect, it } from "vitest";
-import { divmod, N, submod, toPoint } from "../../frost/math.js";
+import { N, toPoint } from "../../frost/math.js";
 import { groupChallenge, lagrangeCoefficient } from "./group.js";
 
 describe("groupChallenge", () => {
@@ -33,9 +33,8 @@ describe("lagrangeCoefficient", () => {
 	});
 
 	it("signers=[1n,3n], id=1n: numerator=3n, denominator=submod(3n,1n)=2n → result=divmod(3n,2n)", () => {
-		const expected = divmod(3n, submod(3n, 1n));
 		const result = lagrangeCoefficient([1n, 3n], 1n);
-		expect(result).toBe(expected);
+		expect(result).toBe(57896044618658097711785492504343953926418782139537452191302581570759080747170n);
 	});
 
 	it("throws when id is not in signers", () => {
@@ -45,5 +44,13 @@ describe("lagrangeCoefficient", () => {
 	it("single signer returns 1n (trivial lagrange coefficient)", () => {
 		const result = lagrangeCoefficient([1n], 1n);
 		expect(result).toBe(1n);
+	});
+
+	it("4-signer group (typical signing group size)", () => {
+		const signers = [1n, 2n, 3n, 4n];
+		expect(lagrangeCoefficient(signers, 1n)).toBe(4n);
+		expect(lagrangeCoefficient(signers, 2n)).toBe(N - 6n);
+		expect(lagrangeCoefficient(signers, 3n)).toBe(4n);
+		expect(lagrangeCoefficient(signers, 4n)).toBe(N - 1n);
 	});
 });

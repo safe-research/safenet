@@ -5,8 +5,8 @@ const participantsRoot = "0x0000000000000000000000000000000000000000000000000000
 const context = "0x0000000000000000000000000000000000000000000000000000000000000002" as `0x${string}`;
 
 describe("calcGroupId", () => {
-	it("last 8 bytes are zero", () => {
+	it("returns the expected deterministic group ID with last 8 bytes zeroed", () => {
 		const id = calcGroupId(participantsRoot, 3, 2, context);
-		expect(id.slice(-16)).toBe("0000000000000000");
+		expect(id).toBe("0x5a646c47d456084e87ea4b1ac6ef069d1079c21f1401c60c0000000000000000");
 	});
 });

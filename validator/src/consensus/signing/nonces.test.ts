@@ -9,8 +9,8 @@ import {
 	createNonceTree,
 	decodeSequence,
 	generateNonce,
-	groupCommitementShares,
 	groupCommitmentShare,
+	groupCommitmentShares,
 	type NonceCommitments,
 	nonceCommitmentsWithProof,
 } from "./nonces.js";
@@ -32,7 +32,7 @@ for (const p of signers) {
 const message = keccak256(stringToBytes("hello"));
 
 describe("generateNonce", () => {
-	it("should generate correct nonce", async () => {
+	it("should generate correct nonce", () => {
 		const random = hexToBytes("0x2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a");
 		const secret = 0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80n;
 		expect(generateNonce(secret, random)).toBe(0x03d979abaa17ca44e015f9e248c6cefc167ad21e814256f2a0a02cce70d57ba1n);
@@ -93,7 +93,7 @@ describe("bindingFactors", () => {
 	});
 });
 
-describe("groupCommitementShares", () => {
+describe("groupCommitmentShares", () => {
 	const signers = [1n, 2n];
 	const noncesMap = new Map<bigint, NonceCommitments>();
 	for (const p of signers) {
@@ -108,7 +108,7 @@ describe("groupCommitementShares", () => {
 		{ id: 1n, bindingFactor: 3n },
 		{ id: 2n, bindingFactor: 5n },
 	];
-	const shares = groupCommitementShares(bfs, noncesMap);
+	const shares = groupCommitmentShares(bfs, noncesMap);
 
 	it("returns one share per signer", () => {
 		expect(shares.length).toBe(2);

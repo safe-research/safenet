@@ -26,13 +26,15 @@ describe("safeTxPacketHash", () => {
 		proposal: { epoch: 1n, transaction: safeTx },
 	};
 
+	const TX_HASH = "0xfe8b85e8d090b16fe8f142d3c9292dc1fc77daf9eb4af8f7cf4a7707d95f4028";
+	const PACKET_HASH = "0x3ff98ecae85843603560e9509346df2f35c0ad1dd1ceda5dcbb145745dfc4e00";
+
 	it("equals safeTxProposalHash with safeTxHash embedded as the safeTxHash field", () => {
-		const packetHash = safeTxPacketHash(packet);
-		const embeddedHash = safeTxHash(safeTx);
-		const proposalHash = safeTxProposalHash({
-			domain: packet.domain,
-			proposal: { epoch: packet.proposal.epoch, safeTxHash: embeddedHash },
-		});
-		expect(packetHash).toBe(proposalHash);
+		expect(
+			safeTxProposalHash({
+				domain: packet.domain,
+				proposal: { epoch: packet.proposal.epoch, safeTxHash: TX_HASH as `0x${string}` },
+			}),
+		).toBe(PACKET_HASH);
 	});
 });
