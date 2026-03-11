@@ -1,8 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import type { Hex } from "viem";
-import { useProvider } from "@/hooks/useProvider";
 import { useSettings } from "@/hooks/useSettings";
-import { loadProposedSafeTransaction, type SafeTransaction } from "@/lib/consensus";
+import { getConsensusWorker, type SafeTransaction } from "@/lib/consensus";
 import { loadSafeTransactionDetails } from "@/lib/safe/service";
 
 const findAny = async (...promises: Promise<SafeTransaction | null>[]): Promise<SafeTransaction | null> => {
@@ -28,14 +27,13 @@ const findAny = async (...promises: Promise<SafeTransaction | null>[]): Promise<
 
 export function useSafeTransactionDetails(chainId: bigint, safeTxHash: Hex) {
 	const [settings] = useSettings();
-	const provider = useProvider();
 	return useQuery<SafeTransaction | null, Error>({
 		queryKey: ["safeTxDetails", chainId.toString(), safeTxHash, settings.consensus, settings.maxBlockRange],
 		queryFn: () =>
 			findAny(
 				loadSafeTransactionDetails(chainId, safeTxHash),
-				loadProposedSafeTransaction({
-					provider,
+				getConsensusWorker().loadProposedSafeTransaction({
+					rpc: settings.rpc,
 					consensus: settings.consensus,
 					safeTxHash,
 					maxBlockRange: BigInt(settings.maxBlockRange),
