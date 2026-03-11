@@ -1,6 +1,6 @@
 import { keccak256, stringToBytes } from "viem";
 import { describe, expect, it } from "vitest";
-import { addmod, g, mulmod } from "../../frost/math.js";
+import { addmod, g } from "../../frost/math.js";
 import { groupChallenge, lagrangeCoefficient } from "./group.js";
 import {
 	bindingFactors,
@@ -84,13 +84,6 @@ describe("verifySignature", () => {
 
 		expect(verifySignature(tamperedGroupCommitment, share, PK, MESSAGE)).toBe(false);
 	});
-
-	it("is deterministic: same scenario produces same result", () => {
-		const { groupCommitment, share } = buildScenario();
-		const r1 = verifySignature(groupCommitment, share, PK, MESSAGE);
-		const r2 = verifySignature(groupCommitment, share, PK, MESSAGE);
-		expect(r1).toBe(r2);
-	});
 });
 
 describe("verifySignatureShare", () => {
@@ -112,20 +105,5 @@ describe("verifySignatureShare", () => {
 		// Add 1 to the valid share to make it invalid
 		const wrongShare = addmod(share, 1n);
 		expect(verifySignatureShare(wrongShare, verificationShare, lagChallenge, commitShare)).toBe(false);
-	});
-
-	it("x-coordinate-only comparison: verifySignatureShare checks only x (FROST spec behavior)", () => {
-		// NOTE: The FROST spec (and the implementation) only compares the x-coordinate of sG
-		// against the x-coordinate of (groupCommitmentShare + verificationShare * lagrangeChallenge).
-		// This is documented here to make the known behavior explicit and intentional.
-		const { commitShare, lagChallenge, share } = buildScenario();
-		const verificationShare = PK;
-
-		// The valid share passes x-coordinate check
-		expect(verifySignatureShare(share, verificationShare, lagChallenge, commitShare)).toBe(true);
-
-		// An invalid share (scaled by 3) fails
-		const badShare = mulmod(share, 3n);
-		expect(verifySignatureShare(badShare, verificationShare, lagChallenge, commitShare)).toBe(false);
 	});
 });

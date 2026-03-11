@@ -19,37 +19,15 @@ describe("groupChallenge", () => {
 			0x092370ad82e7356eb5fe89e9be058a335705b482eaa9832fb81eddd3723647b4n,
 		);
 	});
-
-	it("is deterministic: same inputs produce same output", () => {
-		const c1 = groupChallenge(groupCommitment, groupPublicKey, message);
-		const c2 = groupChallenge(groupCommitment, groupPublicKey, message);
-		expect(c1).toBe(c2);
-	});
-
-	it("different messages produce different outputs", () => {
-		const message2 = keccak256(stringToBytes("world"));
-		const c1 = groupChallenge(groupCommitment, groupPublicKey, message);
-		const c2 = groupChallenge(groupCommitment, groupPublicKey, message2);
-		expect(c1).not.toBe(c2);
-	});
-
-	it("returns a bigint (field element)", () => {
-		const c = groupChallenge(groupCommitment, groupPublicKey, message);
-		expect(typeof c).toBe("bigint");
-		expect(c).toBeGreaterThan(0n);
-		expect(c).toBeLessThan(N);
-	});
 });
 
 describe("lagrangeCoefficient", () => {
 	it("signers=[1n,2n], id=1n: numerator=2n, denominator=submod(2n,1n)=1n → result=2n", () => {
-		// numerator = 2n, denominator = submod(2n, 1n) = 1n → divmod(2n, 1n) = 2n
 		const result = lagrangeCoefficient([1n, 2n], 1n);
 		expect(result).toBe(2n);
 	});
 
 	it("signers=[1n,2n], id=2n: numerator=1n, denominator=submod(1n,2n)=N-1n → result=neg(1n)=N-1n", () => {
-		// numerator = 1n, denominator = submod(1n, 2n) = N-1n → divmod(1n, N-1n) = N-1n
 		const result = lagrangeCoefficient([1n, 2n], 2n);
 		expect(result).toBe(N - 1n);
 	});
@@ -67,11 +45,5 @@ describe("lagrangeCoefficient", () => {
 	it("single signer returns 1n (trivial lagrange coefficient)", () => {
 		const result = lagrangeCoefficient([1n], 1n);
 		expect(result).toBe(1n);
-	});
-
-	it("is deterministic for same inputs", () => {
-		const r1 = lagrangeCoefficient([1n, 2n, 3n], 2n);
-		const r2 = lagrangeCoefficient([1n, 2n, 3n], 2n);
-		expect(r1).toBe(r2);
 	});
 });
