@@ -1,5 +1,6 @@
 import {
 	type Address,
+	encodeAbiParameters,
 	formatLog,
 	getAbiItem,
 	type Hex,
@@ -144,7 +145,12 @@ export const loadTransactionProposals = async ({
 			{
 				address: consensus,
 				...blockRange,
-				topics: [transactionEventSelectors, safeTxHash ?? null, null, safe ?? null],
+				topics: [
+					transactionEventSelectors,
+					safeTxHash ?? null,
+					null,
+					safe ? encodeAbiParameters([{ type: "address" }], [safe]) : null,
+				],
 			},
 		],
 	});

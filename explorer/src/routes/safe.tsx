@@ -8,6 +8,7 @@ import { Skeleton } from "@/components/Skeleton";
 import { TransactionListControls } from "@/components/transaction/TransactionListControls";
 import { TransactionProposalsList } from "@/components/transaction/TransactionProposalsList";
 import { useSafeTransactionProposals } from "@/hooks/useSafeTransactionProposals";
+import { shortAddress } from "@/lib/address";
 import { bigIntSchema, checkedAddressSchema } from "@/lib/schemas";
 
 const validateSearch = z.object({
@@ -32,7 +33,7 @@ export function SafePage() {
 	return (
 		<Container className="space-y-4">
 			<ConditionalBackButton />
-			<ContainerTitle>Proposals for {safeAddress}</ContainerTitle>
+			<ContainerTitle>Proposals for {shortAddress(safeAddress)}</ContainerTitle>
 			{isFirstLoad && <Skeleton className="w-full h-25" />}
 			{!isFirstLoad && proposals.length === 0 && (
 				<p className="text-center text-sub-title py-8">No proposals found for this Safe address.</p>
