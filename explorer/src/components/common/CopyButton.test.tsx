@@ -20,14 +20,14 @@ describe("CopyButton", () => {
 		expect(navigator.clipboard.writeText).toHaveBeenCalledWith("0xdeadbeef");
 	});
 
-	it("shows ✓ confirmation after copy", async () => {
+	it("shows checkmark confirmation after copy", async () => {
 		render(<CopyButton value="hello" />);
 		fireEvent.click(screen.getByRole("button"));
-		await waitFor(() => expect(screen.getByRole("button").textContent).toBe("✓"));
+		await waitFor(() => expect(screen.getByRole("button").getAttribute("aria-label")).toBe("Copied"));
 	});
 
-	it("shows 'Copy' label initially", () => {
+	it("shows copy icon initially", () => {
 		render(<CopyButton value="test" />);
-		expect(screen.getByRole("button").textContent).toBe("Copy");
+		expect(screen.getByRole("button").getAttribute("aria-label")).toBe("Copy to clipboard");
 	});
 });
