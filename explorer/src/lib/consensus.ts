@@ -5,6 +5,7 @@ import {
 	type Hex,
 	numberToHex,
 	type PublicClient,
+	pad,
 	parseAbi,
 	parseEventLogs,
 	toEventSelector,
@@ -144,7 +145,7 @@ export const loadTransactionProposals = async ({
 			{
 				address: consensus,
 				...blockRange,
-				topics: [transactionEventSelectors, safeTxHash ?? null, null, safe ?? null],
+				topics: [transactionEventSelectors, safeTxHash ?? null, null, safe ? pad(safe) : null],
 			},
 		],
 	});
