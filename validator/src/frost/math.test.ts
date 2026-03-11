@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { addmod, createSigningShare, createVerificationShare, evalCommitment, g } from "./math.js";
+import { addmod, createSigningShare, createVerificationShare, evalCommitment, g, N } from "./math.js";
 
 describe("math", () => {
 	describe("createVerificationShare()", () => {
@@ -46,6 +46,17 @@ describe("math", () => {
 		it("empty map throws because signingShare stays at 0n", () => {
 			const emptyMap = new Map<bigint, bigint>();
 			expect(() => createSigningShare(emptyMap)).toThrow("Could not calculate signing share!");
+		});
+
+		it("shares summing to zero mod N throws (zero signing share is invalid)", () => {
+			// N - 3n is the additive inverse of 3n mod N, so their sum is 0n
+			const share1 = 3n;
+			const share2 = N - 3n;
+			const secretShares = new Map<bigint, bigint>([
+				[1n, share1],
+				[2n, share2],
+			]);
+			expect(() => createSigningShare(secretShares)).toThrow("Could not calculate signing share!");
 		});
 	});
 });
