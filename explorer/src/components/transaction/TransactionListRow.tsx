@@ -28,7 +28,7 @@ export function TransactionListRowSkeleton() {
 				<Skeleton className="h-5 w-full" />
 				<Skeleton className="h-5 w-full" />
 			</div>
-			<Skeleton className="hidden sm:block h-4 w-3/4" />
+			<Skeleton className="col-span-2 sm:col-span-1 h-4 w-3/4" />
 			<Skeleton className="hidden sm:block h-4 w-full" />
 			<div className="col-span-2 sm:col-span-1 space-y-1">
 				<Skeleton className="h-4 w-2/3" />
@@ -64,7 +64,7 @@ export function TransactionListRow({ proposal }: { proposal: TransactionProposal
 				</div>
 
 				{/* Column 2: Safe address */}
-				<div className="hidden sm:block text-xs font-mono text-sub-title truncate self-center">
+				<div className="col-span-2 sm:col-span-1 text-xs font-mono text-sub-title truncate self-center">
 					{shortAddress(tx.safe)}
 				</div>
 
