@@ -62,10 +62,12 @@ A `signingTimeout` field (type `number`, default `12`) is added to the settings 
 existing `useProvider` hook. `signingTimeout` is read from `useSettings` and passed as a prop to
 `SafeTxProposals`.
 
-**Validator labels**: `SafeTxAttestationStatus` currently shows "Committed" (nonce pre-commitment)
-and "Attested" rows. This two-stage representation is more accurate than the wireframe's simplified
-view and is kept as-is. Only visual styling is updated (e.g. colour tokens, badge shapes) to align
-with the rest of the redesigned page; no label text or logic changes.
+**Validator display**: `SafeTxAttestationStatus` keeps its existing two-stage display and logic
+unchanged. When a proposal is **PROPOSED**, both the "Committed" row (nonce pre-commitment) and the
+"Attested" row (signature share) are shown with ✅/⏳ per validator, reflecting the in-progress
+signing rounds. When a proposal is terminal (**ATTESTED** or **TIMED OUT**), only a single
+"Validators" row is shown with the final ✅/❌ per validator. Only visual styling is updated
+(colour tokens, badge shapes); no label text or logic changes.
 
 **Proposal numbering**: the `.map()` in `SafeTxProposals` is updated to render a "Proposal #N"
 heading for each item.
@@ -130,17 +132,14 @@ PROPOSALS / ATTESTATIONS
 | Status: ATTESTED                                                                  |
 | Proposed: Block 19,234,120 at 2026-02-09 12:39:10   [Explorer tx ↗]              |
 | Attested: Block 19,234,130 at 2026-02-09 12:39:55   [Explorer tx ↗]              |
-| Validators:                                                                       |
-|   Attested: [val-01 ✅] [val-02 ✅] [val-03 ✅]                                    |
-|   Missing:  [val-04 ❌] [val-05 ❌]                                                |
+| Validators: [val-01 ✅] [val-02 ✅] [val-03 ✅] [val-04 ❌] [val-05 ❌]            |
 |-----------------------------------------------------------------------------------|
 | Proposal #2                                                                       |
 | Status: PROPOSED                                                                  |
 | Proposed: Block 19,234,200 at 12:41:02   [Explorer tx ↗]                          |
 | Attested: —                                                                       |
-| Validators:                                                                       |
-|   Attested: [val-02 ✅]                                                            |
-|   Missing:  [val-01 ⏳] [val-03 ⏳] [val-04 ⏳]                                    |
+| Committed: [val-01 ✅] [val-02 ✅] [val-03 ✅] [val-04 ⏳] [val-05 ⏳]             |
+| Attested:  [val-02 ✅] [val-01 ⏳] [val-03 ⏳] [val-04 ⏳] [val-05 ⏳]             |
 +-----------------------------------------------------------------------------------+
 
 IF NO PROPOSAL (relayer configured)
@@ -188,7 +187,7 @@ change required; proposals auto-refresh until they reach a terminal state.
 |---|---|---|
 | `InlineAddress` | `components/common/InlineAddress.tsx` | `SafeTxHeader` (Safe, To addresses) |
 | `InlineBlockInfo`, `InlineExplorerTxLink` | `components/common/Info.tsx` | `SafeTxProposals` (unchanged) |
-| `ValidatorList` | `components/common/ValidatorList.tsx` | `SafeTxAttestationStatus` (label text only changes) |
+| `ValidatorList` | `components/common/ValidatorList.tsx` | `SafeTxAttestationStatus` (unchanged) |
 | `Box`, `BoxTitle` | `components/Groups.tsx` | All new section components |
 | `opString`, `valueString`, `dataString` | `lib/safe/formatting.ts` | `SafeTxSummary` |
 | `SAFE_SERVICE_CHAINS` | `lib/chains.ts` | `SafeTxHeader` for Safe Wallet URL and chain name |
