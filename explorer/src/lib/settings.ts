@@ -7,13 +7,14 @@ const STORAGE_KEY_SAFE_API_SETTINGS = "localStorage.safe_api_settings.object.v1"
 const STORAGE_KEY_SAFE_UI_SETTINGS = "localStorage.safe_ui_settings.object.v1";
 
 const DEFAULT_SETTINGS = {
-	consensus: "0x49Db717Adec0D22235A73C3a9c2ea57AB0bC2353" as Address,
-	rpc: "https://ethereum-sepolia-rpc.publicnode.com",
+	consensus: "0x566fAcad24a123f47937b9a7871f24628958Fd98" as Address,
+	rpc: "https://1rpc.io/gnosis",
 	decoder: "https://calldata.swiss-knife.xyz/decoder?calldata=",
 	maxBlockRange: 10000,
 	validatorInfo:
-		"https://raw.githubusercontent.com/safe-fndn/safenet-beta-data/refs/heads/main/assets/validator-info.json",
+		"https://raw.githubusercontent.com/safe-fndn/safenet-beta-data/refs/heads/main/assets/validator-info.devnet.json",
 	refetchInterval: 10000,
+	blocksPerEpoch: 1440,
 };
 
 const settingsSchema = z.object({
@@ -24,7 +25,7 @@ const settingsSchema = z.object({
 	maxBlockRange: z.number().int().positive().default(DEFAULT_SETTINGS.maxBlockRange),
 	validatorInfo: z.url().default(DEFAULT_SETTINGS.validatorInfo),
 	refetchInterval: z.number().int().nonnegative().default(DEFAULT_SETTINGS.refetchInterval),
-	blocksPerEpoch: z.number().int().positive().optional(),
+	blocksPerEpoch: z.number().int().positive().default(DEFAULT_SETTINGS.blocksPerEpoch),
 });
 
 export type Settings = z.output<typeof settingsSchema>;
