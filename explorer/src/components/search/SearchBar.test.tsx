@@ -47,7 +47,7 @@ describe("SearchBar", () => {
 		});
 	});
 
-	it("navigates to /safeTx when input is not an address", () => {
+	it("navigates to /safeTx when input is a 32-byte tx hash", () => {
 		renderSearchBar();
 		fireEvent.change(screen.getByRole("textbox"), { target: { value: TX_HASH } });
 		clickSearchIcon();
@@ -81,7 +81,7 @@ describe("SearchBar", () => {
 		});
 	});
 
-	it("navigates to /safeTx on Enter key for non-address input", () => {
+	it("navigates to /safeTx on Enter key for 32-byte tx hash input", () => {
 		renderSearchBar();
 		const input = screen.getByRole("textbox");
 		fireEvent.change(input, { target: { value: TX_HASH } });
@@ -90,6 +90,23 @@ describe("SearchBar", () => {
 			to: "/safeTx",
 			search: { chainId: "1", safeTxHash: TX_HASH },
 		});
+	});
+
+	it("shows error and does not navigate for invalid input", () => {
+		renderSearchBar();
+		fireEvent.change(screen.getByRole("textbox"), { target: { value: "not-a-hash-or-address" } });
+		clickSearchIcon();
+		expect(mockNavigate).not.toHaveBeenCalled();
+		expect(screen.getByText(/invalid input/i)).toBeTruthy();
+	});
+
+	it("clears error when input changes", () => {
+		renderSearchBar();
+		fireEvent.change(screen.getByRole("textbox"), { target: { value: "not-a-hash-or-address" } });
+		clickSearchIcon();
+		expect(screen.getByText(/invalid input/i)).toBeTruthy();
+		fireEvent.change(screen.getByRole("textbox"), { target: { value: TX_HASH } });
+		expect(screen.queryByText(/invalid input/i)).toBeNull();
 	});
 
 	it("passes the selectedNetwork as chainId when navigating", () => {
