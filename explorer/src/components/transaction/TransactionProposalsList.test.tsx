@@ -6,15 +6,16 @@ import type { TransactionProposal } from "@/lib/consensus";
 import { RecentTransactionProposals } from "./RecentTransactionProposals";
 import { TransactionProposalsList } from "./TransactionProposalsList";
 
-vi.mock("@tanstack/react-router", () => ({
-	Link: ({ children, ...props }: { children: React.ReactNode; to: string; search?: unknown }) => (
-		<a href={props.to}>{children}</a>
-	),
-}));
-
-vi.mock("@/components/transaction/SafeTxOverview", () => ({
-	SafeTxOverview: ({ title }: { title: string }) => <div>{title}</div>,
-}));
+vi.mock("@/components/transaction/TransactionListRow", async (importOriginal) => {
+	const actual = await importOriginal<typeof import("@/components/transaction/TransactionListRow")>();
+	return {
+		...actual,
+		TransactionListRow: ({ proposal }: { proposal: TransactionProposal }) => (
+			<div data-testid="transaction-list-row">{proposal.safeTxHash}</div>
+		),
+		TransactionListRowSkeleton: () => <div data-testid="transaction-list-row-skeleton" />,
+	};
+});
 
 afterEach(cleanup);
 
@@ -115,11 +116,37 @@ describe("TransactionProposalsList", () => {
 		expect(screen.getByLabelText("Loading")).toBeTruthy();
 	});
 
-	it("renders all proposal items", () => {
+	it("renders a row for each proposal", () => {
 		render(<TransactionProposalsList proposals={PROPOSALS} label="proposals" hasMore={false} onShowMore={vi.fn()} />);
-		expect(screen.getByText("Safe Tx Hash: 0xhash1")).toBeTruthy();
-		expect(screen.getByText("Safe Tx Hash: 0xhash2")).toBeTruthy();
-		expect(screen.getByText("Safe Tx Hash: 0xhash3")).toBeTruthy();
+		expect(screen.getAllByTestId("transaction-list-row")).toHaveLength(3);
+	});
+
+	it("renders each proposal's safeTxHash via TransactionListRow", () => {
+		render(<TransactionProposalsList proposals={PROPOSALS} label="proposals" hasMore={false} onShowMore={vi.fn()} />);
+		expect(screen.getByText("0xhash1")).toBeTruthy();
+		expect(screen.getByText("0xhash2")).toBeTruthy();
+		expect(screen.getByText("0xhash3")).toBeTruthy();
+	});
+
+	it("renders skeleton rows instead of proposals when isLoading is true", () => {
+		render(<TransactionProposalsList proposals={[]} hasMore={false} onShowMore={vi.fn()} isLoading={true} />);
+		expect(screen.getAllByTestId("transaction-list-row-skeleton").length).toBeGreaterThan(0);
+		expect(screen.queryAllByTestId("transaction-list-row")).toHaveLength(0);
+	});
+
+	it("always renders the header row", () => {
+		const { rerender } = render(
+			<TransactionProposalsList proposals={[]} hasMore={false} onShowMore={vi.fn()} isLoading={true} />,
+		);
+		expect(screen.getByText("Network")).toBeTruthy();
+
+		rerender(<TransactionProposalsList proposals={PROPOSALS} hasMore={false} onShowMore={vi.fn()} />);
+		expect(screen.getByText("Network")).toBeTruthy();
+	});
+
+	it("hides the show-more button while isLoading is true", () => {
+		render(<TransactionProposalsList proposals={[]} hasMore={true} onShowMore={vi.fn()} isLoading={true} />);
+		expect(screen.queryByRole("button")).toBeNull();
 	});
 });
 
@@ -139,6 +166,33 @@ describe("RecentTransactionProposals", () => {
 		expect(screen.getByText("3 recent proposals")).toBeTruthy();
 	});
 
+	it("always renders TransactionListControls, including while loading", () => {
+		render(
+			<RecentTransactionProposals
+				proposals={[]}
+				itemsToShow={10}
+				onShowMore={vi.fn()}
+				{...controlsProps}
+				isLoading={true}
+			/>,
+		);
+		expect(screen.getByRole("button", { name: /refresh now/i })).toBeTruthy();
+	});
+
+	it("renders an empty label row while loading to prevent layout shift", () => {
+		const { container } = render(
+			<RecentTransactionProposals
+				proposals={[]}
+				itemsToShow={10}
+				onShowMore={vi.fn()}
+				{...controlsProps}
+				isLoading={true}
+			/>,
+		);
+		// The label div must exist (even if empty) so the layout doesn't jump when data arrives
+		expect(container.querySelector(".text-xs.text-right")).not.toBeNull();
+	});
+
 	it("shows total count in label even when proposals are sliced", () => {
 		render(
 			<RecentTransactionProposals proposals={PROPOSALS} itemsToShow={2} onShowMore={vi.fn()} {...controlsProps} />,
@@ -150,9 +204,8 @@ describe("RecentTransactionProposals", () => {
 		render(
 			<RecentTransactionProposals proposals={PROPOSALS} itemsToShow={2} onShowMore={vi.fn()} {...controlsProps} />,
 		);
-		expect(screen.getByText("Safe Tx Hash: 0xhash1")).toBeTruthy();
-		expect(screen.getByText("Safe Tx Hash: 0xhash2")).toBeTruthy();
-		expect(screen.queryByText("Safe Tx Hash: 0xhash3")).toBeNull();
+		const rows = screen.getAllByTestId("transaction-list-row");
+		expect(rows).toHaveLength(2);
 	});
 
 	it("shows 'Show More' button when there are more proposals than itemsToShow", () => {
