@@ -8,5 +8,9 @@ export function NetworkBadge({ chainId }: { chainId: bigint }) {
 	const chain = SAFE_SERVICE_CHAINS[chainId.toString()];
 	const label = (chain?.shortName ?? chainId.toString()).toUpperCase();
 	const bgColor = chain?.color ?? FALLBACK_COLOR;
-	return <Badge style={{ backgroundColor: bgColor, color: contrastColor(bgColor) }}>{label}</Badge>;
+	return (
+		<Badge bgColor={bgColor} fgColor={contrastColor(bgColor)}>
+			{label}
+		</Badge>
+	);
 }

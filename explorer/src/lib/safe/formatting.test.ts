@@ -17,9 +17,9 @@ describe("formatHashShort", () => {
 		expect(formatHashShort(shortHash)).toBe("0xdeadbeef");
 	});
 
-	it("handles exactly 16 hex characters without truncation", () => {
+	it("returns the full hash when the hex part is exactly 16 characters (truncation would not shorten it)", () => {
 		const hash = "0x1234567890abcdef" as Hex;
-		expect(formatHashShort(hash)).toBe("0x12345678…90abcdef");
+		expect(formatHashShort(hash)).toBe("0x1234567890abcdef");
 	});
 });
 
