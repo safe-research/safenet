@@ -12,7 +12,9 @@ import { dataString, formatBlockAge, formatHashShort, opString, valueString } fr
 /** Grid wrapper shared by the header and data rows of the transaction list. */
 export function TransactionRowGrid({ children, className }: { children: React.ReactNode; className?: string }) {
 	return (
-		<div className={`grid grid-cols-[1fr_auto] sm:grid-cols-[5rem_7.5rem_1fr_2fr_6rem] gap-x-2 ${className ?? ""}`}>
+		<div
+			className={`grid grid-cols-[1fr_auto] sm:grid-cols-[5rem_7.5rem_1fr_2fr_6rem] gap-x-2 gap-y-2 ${className ?? ""}`}
+		>
 			{children}
 		</div>
 	);
