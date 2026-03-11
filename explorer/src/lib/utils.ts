@@ -1,6 +1,6 @@
 import { type ClassValue, clsx } from "clsx";
 import { twMerge } from "tailwind-merge";
-import { createPublicClient, http, type Log, type PublicClient } from "viem";
+import type { Log, PublicClient } from "viem";
 
 /**
  * Returns `"#ffffff"` or `"#000000"` depending on which gives better contrast
@@ -25,8 +25,6 @@ export function jsonReplacer(_key: string, value: unknown): unknown {
 	}
 	return value;
 }
-
-export const createRpcClient = (rpc: string): PublicClient => createPublicClient({ transport: http(rpc) });
 
 export type BlockRange = { fromBlock: bigint; toBlock: bigint };
 

@@ -1,6 +1,6 @@
 import { expose } from "comlink";
 import type { Address, Hex } from "viem";
-import { createRpcClient } from "@/lib/utils";
+import { createRpcClient } from "@/lib/rpc";
 import {
 	loadConsensusState,
 	loadEpochRolloverHistory,
