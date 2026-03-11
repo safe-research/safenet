@@ -1,4 +1,4 @@
-import { bytesToHex, hexToBytes, keccak256, stringToBytes } from "viem";
+import { bytesToHex, keccak256, stringToBytes } from "viem";
 import { describe, expect, it } from "vitest";
 import { g, toPoint } from "../../frost/math.js";
 import { verifyMerkleProof, generateMerkleProof } from "../merkle.js";
