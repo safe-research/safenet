@@ -79,7 +79,9 @@ describe("useSafeTransactionProposals", () => {
 
 		await waitFor(() => expect(result.current.isSuccess).toBe(true));
 
-		expect(logsCalls()[0][0].params[0].topics[3]).toBe("0x000000000000000000000000deadbeefdeadbeefdeadbeefdeadbeefdeadbeef");
+		expect(logsCalls()[0][0].params[0].topics[3]).toBe(
+			"0x000000000000000000000000DeaDbeefdEAdbeefdEadbEEFdeadbeEFdEaDbeeF",
+		);
 	});
 
 	it("exposes a flat list of proposals across all pages", async () => {

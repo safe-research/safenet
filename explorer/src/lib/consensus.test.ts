@@ -67,7 +67,7 @@ describe("loadTransactionProposals", () => {
 				maxBlockRange: MAX_BLOCK_RANGE,
 			});
 			expect(firstCall(provider).topics[2]).toBeNull(); // chainId wildcard
-			expect(firstCall(provider).topics[3]).toBe("0x000000000000000000000000deadbeefdeadbeefdeadbeefdeadbeefdeadbeef");
+			expect(firstCall(provider).topics[3]).toBe("0x000000000000000000000000DeaDbeefdEAdbeefdEadbEEFdeadbeEFdEaDbeeF");
 		});
 	});
 
