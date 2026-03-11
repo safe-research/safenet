@@ -1,13 +1,25 @@
 import { CheckIcon, ClipboardDocumentIcon } from "@heroicons/react/24/outline";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 export const CopyButton = ({ value }: { value: string }) => {
 	const [copied, setCopied] = useState(false);
+	const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+	useEffect(() => {
+		return () => {
+			if (timerRef.current !== null) {
+				clearTimeout(timerRef.current);
+			}
+		};
+	}, []);
 
 	const handleCopy = async () => {
 		await navigator.clipboard.writeText(value);
+		if (timerRef.current !== null) {
+			clearTimeout(timerRef.current);
+		}
 		setCopied(true);
-		setTimeout(() => setCopied(false), 2000);
+		timerRef.current = setTimeout(() => setCopied(false), 2000);
 	};
 
 	return (

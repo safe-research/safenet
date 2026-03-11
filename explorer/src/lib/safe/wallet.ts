@@ -1,7 +1,9 @@
 import type { Address, Hex } from "viem";
 
+const SAFE_WALLET_BASE_URL = "https://app.safe.global";
+
 export const safeWalletTxUrl = (shortName: string, safe: Address, safeTxHash: Hex): string =>
-	`https://app.safe.global/transactions/tx?safe=${shortName}:${safe}&id=${safeTxHash}`;
+	`${SAFE_WALLET_BASE_URL}/transactions/tx?safe=${shortName}:${safe}&id=${safeTxHash}`;
 
 export const safeWalletSafeUrl = (shortName: string, safe: Address): string =>
-	`https://app.safe.global/balances?safe=${shortName}:${safe}`;
+	`${SAFE_WALLET_BASE_URL}/balances?safe=${shortName}:${safe}`;
