@@ -3,7 +3,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { createElement } from "react";
 import type { Address, PublicClient } from "viem";
-import { numberToHex } from "viem";
+import { encodeAbiParameters, numberToHex } from "viem";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Settings } from "@/lib/settings";
 import { useSafeTransactionProposals } from "./useSafeTransactionProposals";
@@ -79,7 +79,7 @@ describe("useSafeTransactionProposals", () => {
 
 		await waitFor(() => expect(result.current.isSuccess).toBe(true));
 
-		expect(logsCalls()[0][0].params[0].topics[3]).toBe(SAFE_ADDRESS);
+		expect(logsCalls()[0][0].params[0].topics[3]).toBe(encodeAbiParameters([{ type: "address" }], [SAFE_ADDRESS]));
 	});
 
 	it("exposes a flat list of proposals across all pages", async () => {

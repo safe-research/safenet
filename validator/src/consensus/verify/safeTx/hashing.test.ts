@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { safeTxHash, safeTxPacketHash, safeTxProposalHash } from "./hashing.js";
+import { safeTxProposalHash } from "./hashing.js";
 
 describe("safeTxPacketHash", () => {
 	const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000" as const;
