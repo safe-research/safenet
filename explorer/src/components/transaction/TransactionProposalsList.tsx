@@ -39,7 +39,9 @@ export function TransactionProposalsList({
 	return (
 		<>
 			{label !== undefined && <div className="w-full p-2 text-xs text-right">{label}</div>}
-			<TransactionListHeader />
+			<div className="hidden sm:block">
+				<TransactionListHeader />
+			</div>
 			<div className="space-y-2">
 				{isLoading
 					? SKELETON_ROWS.map((key) => <TransactionListRowSkeleton key={key} />)
