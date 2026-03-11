@@ -1,4 +1,6 @@
-export * from "./consensus";
+export * from "./abi";
+export * from "./epochs";
+export * from "./transactions";
 
 import { type Remote, wrap } from "comlink";
 import type { ConsensusWorkerApi } from "./worker";

@@ -1,13 +1,8 @@
 import { expose } from "comlink";
 import type { Address, Hex } from "viem";
 import { createRpcClient } from "@/lib/rpc";
-import {
-	loadConsensusState,
-	loadEpochRolloverHistory,
-	loadEpochsState,
-	loadProposedSafeTransaction,
-	loadTransactionProposals,
-} from "./consensus";
+import { loadConsensusState, loadEpochRolloverHistory, loadEpochsState } from "./epochs";
+import { loadProposedSafeTransaction, loadTransactionProposals } from "./transactions";
 
 const workerApi = {
 	loadTransactionProposals: ({
