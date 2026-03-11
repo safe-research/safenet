@@ -166,6 +166,33 @@ describe("RecentTransactionProposals", () => {
 		expect(screen.getByText("3 recent proposals")).toBeTruthy();
 	});
 
+	it("always renders TransactionListControls, including while loading", () => {
+		render(
+			<RecentTransactionProposals
+				proposals={[]}
+				itemsToShow={10}
+				onShowMore={vi.fn()}
+				{...controlsProps}
+				isLoading={true}
+			/>,
+		);
+		expect(screen.getByRole("button", { name: /refresh now/i })).toBeTruthy();
+	});
+
+	it("renders an empty label row while loading to prevent layout shift", () => {
+		const { container } = render(
+			<RecentTransactionProposals
+				proposals={[]}
+				itemsToShow={10}
+				onShowMore={vi.fn()}
+				{...controlsProps}
+				isLoading={true}
+			/>,
+		);
+		// The label div must exist (even if empty) so the layout doesn't jump when data arrives
+		expect(container.querySelector(".text-xs.text-right")).not.toBeNull();
+	});
+
 	it("shows total count in label even when proposals are sliced", () => {
 		render(
 			<RecentTransactionProposals proposals={PROPOSALS} itemsToShow={2} onShowMore={vi.fn()} {...controlsProps} />,

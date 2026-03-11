@@ -25,18 +25,16 @@ export function RecentTransactionProposals({
 }) {
 	return (
 		<>
-			{!isLoading && (
-				<TransactionListControls
-					isFetching={isFetching}
-					dataUpdatedAt={dataUpdatedAt}
-					autoRefresh={autoRefresh}
-					onRefetch={onRefetch}
-					onToggleAutoRefresh={onToggleAutoRefresh}
-				/>
-			)}
+			<TransactionListControls
+				isFetching={isFetching}
+				dataUpdatedAt={dataUpdatedAt}
+				autoRefresh={autoRefresh}
+				onRefetch={onRefetch}
+				onToggleAutoRefresh={onToggleAutoRefresh}
+			/>
 			<TransactionProposalsList
 				proposals={proposals.slice(0, itemsToShow)}
-				label={isLoading ? undefined : `${proposals.length} recent proposals`}
+				label={isLoading ? "" : `${proposals.length} recent proposals`}
 				hasMore={proposals.length > itemsToShow}
 				onShowMore={onShowMore}
 				isLoading={isLoading}
