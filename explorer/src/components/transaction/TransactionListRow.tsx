@@ -2,6 +2,7 @@ import { Link } from "@tanstack/react-router";
 import { Badge } from "@/components/common/Badge";
 import { NetworkBadge } from "@/components/common/NetworkBadge";
 import { StatusBadge } from "@/components/common/StatusBadge";
+import { Skeleton } from "@/components/Skeleton";
 import { useConsensusState } from "@/hooks/useConsensusState";
 import { shortAddress } from "@/lib/address";
 import { SAFE_SERVICE_CHAINS } from "@/lib/chains";
@@ -11,6 +12,28 @@ import { dataString, formatBlockAge, formatHashShort, opString, valueString } fr
 /** Grid wrapper shared by the header and data rows of the transaction list. */
 export function TransactionRowGrid({ children, className }: { children: React.ReactNode; className?: string }) {
 	return <div className={`grid grid-cols-[5rem_7.5rem_1fr_2fr_6rem] gap-x-2 ${className ?? ""}`}>{children}</div>;
+}
+
+/** Placeholder row shown while the transaction list is loading. Matches the grid layout of TransactionListRow. */
+export function TransactionListRowSkeleton() {
+	return (
+		<TransactionRowGrid className="items-center bg-surface-1 border border-surface-outline rounded-lg px-3 py-2.5">
+			<div className="flex flex-col gap-1">
+				<Skeleton className="h-5 w-full" />
+				<Skeleton className="h-5 w-full" />
+			</div>
+			<Skeleton className="h-4 w-3/4" />
+			<Skeleton className="h-4 w-full" />
+			<div className="space-y-1">
+				<Skeleton className="h-4 w-2/3" />
+				<Skeleton className="h-4 w-full" />
+			</div>
+			<div className="flex flex-col gap-1 items-end">
+				<Skeleton className="h-4 w-4/5" />
+				<Skeleton className="h-4 w-full" />
+			</div>
+		</TransactionRowGrid>
+	);
 }
 
 export function TransactionListRow({ proposal }: { proposal: TransactionProposal }) {

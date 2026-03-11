@@ -11,6 +11,7 @@ export function RecentTransactionProposals({
 	autoRefresh,
 	onRefetch,
 	onToggleAutoRefresh,
+	isLoading,
 }: {
 	proposals: TransactionProposal[];
 	itemsToShow: number;
@@ -20,21 +21,25 @@ export function RecentTransactionProposals({
 	autoRefresh: boolean;
 	onRefetch: () => void;
 	onToggleAutoRefresh: () => void;
+	isLoading?: boolean;
 }) {
 	return (
 		<>
-			<TransactionListControls
-				isFetching={isFetching}
-				dataUpdatedAt={dataUpdatedAt}
-				autoRefresh={autoRefresh}
-				onRefetch={onRefetch}
-				onToggleAutoRefresh={onToggleAutoRefresh}
-			/>
+			{!isLoading && (
+				<TransactionListControls
+					isFetching={isFetching}
+					dataUpdatedAt={dataUpdatedAt}
+					autoRefresh={autoRefresh}
+					onRefetch={onRefetch}
+					onToggleAutoRefresh={onToggleAutoRefresh}
+				/>
+			)}
 			<TransactionProposalsList
 				proposals={proposals.slice(0, itemsToShow)}
-				label={`${proposals.length} recent proposals`}
+				label={isLoading ? undefined : `${proposals.length} recent proposals`}
 				hasMore={proposals.length > itemsToShow}
 				onShowMore={onShowMore}
+				isLoading={isLoading}
 				showMoreLabel="Show More"
 			/>
 		</>

@@ -13,6 +13,7 @@ vi.mock("@/components/transaction/TransactionListRow", async (importOriginal) =>
 		TransactionListRow: ({ proposal }: { proposal: TransactionProposal }) => (
 			<div data-testid="transaction-list-row">{proposal.safeTxHash}</div>
 		),
+		TransactionListRowSkeleton: () => <div data-testid="transaction-list-row-skeleton" />,
 	};
 });
 
@@ -125,6 +126,31 @@ describe("TransactionProposalsList", () => {
 		expect(screen.getByText("0xhash1")).toBeTruthy();
 		expect(screen.getByText("0xhash2")).toBeTruthy();
 		expect(screen.getByText("0xhash3")).toBeTruthy();
+	});
+
+	it("renders skeleton rows instead of proposals when isLoading is true", () => {
+		render(
+			<TransactionProposalsList proposals={[]} hasMore={false} onShowMore={vi.fn()} isLoading={true} />,
+		);
+		expect(screen.getAllByTestId("transaction-list-row-skeleton").length).toBeGreaterThan(0);
+		expect(screen.queryAllByTestId("transaction-list-row")).toHaveLength(0);
+	});
+
+	it("always renders the header row", () => {
+		const { rerender } = render(
+			<TransactionProposalsList proposals={[]} hasMore={false} onShowMore={vi.fn()} isLoading={true} />,
+		);
+		expect(screen.getByText("Network")).toBeTruthy();
+
+		rerender(<TransactionProposalsList proposals={PROPOSALS} hasMore={false} onShowMore={vi.fn()} />);
+		expect(screen.getByText("Network")).toBeTruthy();
+	});
+
+	it("hides the show-more button while isLoading is true", () => {
+		render(
+			<TransactionProposalsList proposals={[]} hasMore={true} onShowMore={vi.fn()} isLoading={true} />,
+		);
+		expect(screen.queryByRole("button")).toBeNull();
 	});
 });
 

@@ -1,5 +1,7 @@
-import { TransactionListRow, TransactionRowGrid } from "@/components/transaction/TransactionListRow";
+import { TransactionListRow, TransactionListRowSkeleton, TransactionRowGrid } from "@/components/transaction/TransactionListRow";
 import type { TransactionProposal } from "@/lib/consensus";
+
+const SKELETON_ROW_COUNT = 3;
 
 function TransactionListHeader() {
 	return (
@@ -18,6 +20,7 @@ export function TransactionProposalsList({
 	label,
 	hasMore,
 	onShowMore,
+	isLoading,
 	isLoadingMore,
 	showMoreLabel = "Show More",
 }: {
@@ -25,6 +28,7 @@ export function TransactionProposalsList({
 	label?: string;
 	hasMore: boolean;
 	onShowMore: () => void;
+	isLoading?: boolean;
 	isLoadingMore?: boolean;
 	showMoreLabel?: string;
 }) {
@@ -33,12 +37,14 @@ export function TransactionProposalsList({
 			{label !== undefined && <div className="w-full p-2 text-xs text-right">{label}</div>}
 			<TransactionListHeader />
 			<div className="space-y-2">
-				{proposals.map((proposal) => (
-					<div key={`${proposal.safeTxHash}:${proposal.epoch}`}>
-						<TransactionListRow proposal={proposal} />
-					</div>
-				))}
-				{hasMore && (
+				{isLoading
+					? Array.from({ length: SKELETON_ROW_COUNT }, (_, i) => <TransactionListRowSkeleton key={i} />)
+					: proposals.map((proposal) => (
+							<div key={`${proposal.safeTxHash}:${proposal.epoch}`}>
+								<TransactionListRow proposal={proposal} />
+							</div>
+						))}
+				{!isLoading && hasMore && (
 					<button
 						type="button"
 						className="w-full p-2 text-center cursor-pointer"

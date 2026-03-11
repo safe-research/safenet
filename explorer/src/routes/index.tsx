@@ -2,7 +2,6 @@ import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
 import { z } from "zod";
 import { Container } from "@/components/Groups";
-import { Skeleton } from "@/components/Skeleton";
 import { SearchBar } from "@/components/search/SearchBar";
 import { RecentTransactionProposals } from "@/components/transaction/RecentTransactionProposals";
 import { useRecentTransactionProposals } from "@/hooks/useRecentTransactionProposals";
@@ -45,8 +44,7 @@ function AppInner() {
 
 			<SearchBar className="mb-8" onSelectNetwork={updateSelectedNetwork} selectedNetwork={network} />
 
-			{proposals.data.length === 0 && proposals.isFetching && <Skeleton className="w-full h-25" />}
-			{proposals.data.length > 0 && (
+			{(proposals.isFetching || proposals.data.length > 0) && (
 				<RecentTransactionProposals
 					proposals={proposals.data}
 					itemsToShow={limit ?? PAGE_SIZE}
@@ -56,6 +54,7 @@ function AppInner() {
 					autoRefresh={autoRefresh}
 					onRefetch={() => proposals.refetch()}
 					onToggleAutoRefresh={() => setAutoRefresh((prev) => !prev)}
+					isLoading={proposals.data.length === 0 && proposals.isFetching}
 				/>
 			)}
 		</Container>
