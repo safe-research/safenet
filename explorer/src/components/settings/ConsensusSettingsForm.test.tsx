@@ -13,6 +13,7 @@ const DEFAULT_SETTINGS: Settings = {
 	validatorInfo:
 		"https://raw.githubusercontent.com/safe-fndn/safenet-beta-data/refs/heads/main/assets/validator-info.json",
 	refetchInterval: 10000,
+	blocksPerEpoch: 1440,
 };
 
 const mockUpdateSettings = vi.hoisted(() => vi.fn());
