@@ -103,30 +103,7 @@ describe("OnchainProtocol", () => {
 	}
 
 	it("should return correct config params", async () => {
-		const queue = new InMemoryQueue<ActionWithTimeout>();
-		const publicClient = {} as unknown as PublicClient;
-		const signingClient = {
-			chain: { id: 100 },
-		} as unknown as WalletClient<Transport, Chain, Account>;
-		const gasFeeEstimator = {} as unknown as GasFeeEstimator;
-		const submittedUpTo = vi.fn();
-		const setExecutedUpTo = vi.fn();
-		const txStorage = {
-			setExecutedUpTo,
-			submittedUpTo,
-		} as unknown as TransactionStorage;
-		setExecutedUpTo.mockReturnValue(0);
-		submittedUpTo.mockReturnValue([]);
-		const protocol = new OnchainProtocol({
-			publicClient,
-			signingClient,
-			gasFeeEstimator,
-			consensus: TEST_CONSENSUS,
-			coordinator: TEST_COORDINATOR,
-			queue,
-			txStorage,
-			logger: testLogger,
-		});
+		const { protocol } = createTestContext({ chain: { id: 100 } as Chain });
 		expect(protocol.chainId()).toBe(100n);
 		expect(protocol.consensus()).toBe(TEST_CONSENSUS);
 		expect(protocol.coordinator()).toBe(TEST_COORDINATOR);
