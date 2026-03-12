@@ -215,6 +215,21 @@ keccak256(encodePacked(["uint256"], [BigInt(p.address)]))
 - `registerGroup`: remove participant `id` from INSERT; `insertParticipant` becomes `INSERT INTO group_participants (group_id, address) VALUES (?, ?)`.
 - All queries that JOIN or filter by `id` are updated to use `address`.
 
+#### `validator/src/consensus/protocol/onchain.ts`
+- Remove `identifier` argument from the `keyGenAndCommit` ABI call (matches the contract change).
+- For complaint actions, convert `accusedAddress: Address` → `BigInt(accusedAddress)` when calling the contract.
+- Update action type references from `participantId` to `participantAddress`.
+
+#### `validator/src/consensus/protocol/sqlite.ts`
+- Update Zod schemas for serialized protocol actions: `participantId` integer fields become address strings.
+- `startKeyGenSchema.participantId` → `participantAddress: checkedAddressSchema`.
+- `keyGenComplainSchema.accused` → `accusedAddress: checkedAddressSchema`.
+- `keyGenComplaintResponseSchema.plaintiff` → `plaintiffAddress: checkedAddressSchema`.
+- **Migration risk**: Any pending serialized actions in the queue at upgrade time will fail to deserialize. The queue must be drained or the database cleared as part of the upgrade procedure.
+
+#### `validator/src/types/abis.ts`
+- Remove the `identifier` input from the `keyGenAndCommit` / `keyGenCommit` ABI entry.
+
 ### No changes needed
 
 - `certora/` — Certora specs only cover `Staking.sol` and do not reference FROST identifiers.
@@ -253,6 +268,9 @@ keccak256(encodePacked(["uint256"], [BigInt(p.address)]))
 - `validator/src/consensus/signing/group.ts` — callers change inputs; function body unchanged
 - `validator/src/consensus/storage/inmemory.ts` — update all Maps and return types
 - `validator/src/consensus/storage/sqlite.ts` — update schema and all queries
+- `validator/src/consensus/protocol/onchain.ts` — remove `identifier` arg from ABI call, update action types
+- `validator/src/consensus/protocol/sqlite.ts` — update serialized action schemas; drain queue on upgrade
+- `validator/src/types/abis.ts` — remove `identifier` from `keyGenCommit` ABI entry
 - `validator/src/machine/types.ts` — replace `ParticipantId` with `Address`
 - `validator/src/machine/transitions/types.ts` — replace `ParticipantId` with `Address`
 - `validator/src/machine/keygen/secretShares.ts` — use `BigInt(participant.address)` for polynomial eval
@@ -304,6 +322,15 @@ The `group_secret_shares` table stores `from_participant INTEGER` to identify wh
 ### P8 — Nonce preprocessing
 Nonce commitments in `FROSTNonceCommitmentSet` are indexed by `FROST.Identifier`. The contract derives the identifier from `msg.sender` already (via `identifierOf`), so preprocessing calls are unaffected at the contract level. The TypeScript nonce storage and lookup, however, must be verified to use addresses consistently after the storage interface changes.
 
+### P9 — `AlreadyRegistered` check loses its mechanism
+`FROSTParticipantMap.register` currently detects double-registration by checking `self.identifiers[participant] == 0`. Once the `identifiers` mapping is removed this check no longer has a backing store. The keys mapping (`self.keys[identifierOf(participant)]`) is only populated in Round 2, so it cannot serve as a Round 1 sentinel. A minimal fix is to add a `mapping(address => bool) registered` boolean field to `struct T`. This adds one extra `SSTORE` per registration but preserves the invariant cleanly. This design choice must be resolved before Phase 1 implementation begins.
+
+### P10 — `identifierOf` participation guard is lost
+`FROSTParticipantMap.identifierOf` currently reverts with `NotParticipating` if the participant's address is absent from the `identifiers` mapping. After the mapping is removed, `identifierOf` becomes a pure derivation function that always succeeds. All callers that relied on the revert as a participation guard — `keyGenConfirm`, `preprocess`, `signRevealNonces`, `signShare` — must call a separate `requireParticipating(self, address)` helper (e.g. checking that the `keys` mapping for the derived identifier is non-zero) before proceeding. Missing this guard would allow unregistered addresses to trigger state transitions.
+
+### P11 — `SqliteActionQueue` pending action deserialization
+The protocol action queue (`consensus/protocol/sqlite.ts`) serializes pending actions (including `startKeyGen`, `complain`, `complaintResponse`) to a SQLite table using integer-typed `participantId`, `accused`, and `plaintiff` fields. After the upgrade, these fields become address strings. Any actions serialized in the old format that remain in the queue at upgrade time will fail to parse and cause the validator to crash on startup. The upgrade procedure must drain or wipe the action queue, or a forward-migration is provided for the old integer format.
+
 ---
 
 ## Open Questions / Assumptions
@@ -317,3 +344,7 @@ Nonce commitments in `FROSTNonceCommitmentSet` are indexed by `FROST.Identifier`
 4. **Devnet and integration test setup**: The integration test script passes participants as a comma-separated `PARTICIPANTS` env var (addresses only). This format is unchanged. Confirm that no scripts inject sequential IDs separately.
 
 5. **Assumption — single EOA per node**: The current design assumes each validator node controls exactly one address. The existing SQLite comment (`// TODO: not possible to correctly support multiple participant IDs managed by the same EOA`) is resolved by this change since the address is now the canonical identifier. If multi-address nodes are needed in the future, a separate design is required.
+
+6. **`AlreadyRegistered` replacement mechanism**: With the `identifiers` mapping removed, the recommended approach is adding `mapping(address => bool) registered` to `FROSTParticipantMap.struct T`. An alternative is reusing the `keys` mapping as a sentinel, but keys are only set in Round 2. The boolean flag adds one `SSTORE` per registration. This must be decided before Phase 1.
+
+7. **`requireParticipating` helper**: Since `identifierOf` becomes a pure function, a new `requireParticipating(T storage self, address participant)` function is needed (checking that the derived identifier has a registered key or the `registered` flag). All callers that previously relied on `identifierOf` reverting must be updated to call this helper explicitly.
