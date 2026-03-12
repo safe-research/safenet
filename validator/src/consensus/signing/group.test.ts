@@ -4,7 +4,7 @@ import { toPoint } from "../../frost/math.js";
 import { groupChallenge } from "./group.js";
 
 describe("group", () => {
-	it("should generate correct challenge", async () => {
+	it("should generate correct challenge", () => {
 		const groupCommitment = toPoint({
 			x: 0x8a3802114b5b6369ae8ba7822bdb029dee0d53fc416225d9198959b83f73215bn,
 			y: 0x3020f80cae8f515d58686d5c6e4f1d027a1671348b6402f4e43ce525bda00fbcn,
