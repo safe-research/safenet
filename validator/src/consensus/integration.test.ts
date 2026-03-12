@@ -28,7 +28,7 @@ import {
 	COORDINATOR_SIGN_COMPLETED_EVENT,
 	COORDINATOR_SIGN_EVENT,
 } from "../types/abis.js";
-import type { ParticipantInfo, ProtocolConfig } from "../types/interfaces.js";
+import type { ProtocolConfig } from "../types/interfaces.js";
 import { participantsForEpoch } from "../utils/participants.js";
 import { calcGroupId } from "./keyGen/utils.js";
 import { calculateParticipantsRoot } from "./merkle.js";
@@ -131,8 +131,8 @@ describe("integration", () => {
 			[privateKeyToAccount("0x47e179ec197488593b187f80a00eb0da91f1b9d0b13f8733639f19c30a34926a"), 0n, rotateOutEpoch],
 			[privateKeyToAccount("0x8b3a350cf5c34c9194ca85829a2df0ec3153be0318b5e2d3348e872092edffba"), 2n, undefined],
 		];
-		const participants: ParticipantInfo[] = accounts.map(([a, activeFrom, activeBefore], i) => {
-			return { id: BigInt(i + 1), address: a.address, activeFrom, activeBefore };
+		const participants = accounts.map(([a, activeFrom, activeBefore]) => {
+			return { address: a.address, activeFrom, activeBefore };
 		});
 
 		const clients = accounts.map(([a, activeFrom], i) => {
@@ -256,7 +256,7 @@ describe("integration", () => {
 		expect(stagedEpochs.length).toBe(1);
 		// Calculate group id for reduced group
 		const expectedGroup = calcGroupId(
-			calculateParticipantsRoot([participants[0], participants[1], participants[3]]),
+			calculateParticipantsRoot([participants[0].address, participants[1].address, participants[3].address]),
 			3,
 			2,
 			calcGroupContext(consensus.address, stagedEpochs[0].args.proposedEpoch),
@@ -276,7 +276,12 @@ describe("integration", () => {
 		await waitForBlock(testClient, 60n);
 
 		const expectedGroupEpoch2 = calcGroupId(
-			calculateParticipantsRoot([participants[0], participants[1], participants[2], participants[4]]),
+			calculateParticipantsRoot([
+				participants[0].address,
+				participants[1].address,
+				participants[2].address,
+				participants[4].address,
+			]),
 			4,
 			3,
 			calcGroupContext(consensus.address, 2n),

@@ -33,8 +33,8 @@ export const handleGenesisKeyGen = async (
 			logger,
 		);
 		const epochGroup = diff.consensus?.epochGroup;
-		if (epochGroup === undefined || epochGroup[0] !== 0n || epochGroup[1].groupId !== genesisGroup.id) {
-			throw new Error(`Unexpected genesis group ${epochGroup?.[1].groupId}`);
+		if (epochGroup === undefined || epochGroup[0] !== 0n || epochGroup[1] !== genesisGroup.id) {
+			throw new Error(`Unexpected genesis group ${epochGroup?.[1]}`);
 		}
 		const consensus = diff.consensus ?? {};
 		consensus.genesisGroupId = genesisGroup.id;

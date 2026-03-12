@@ -19,7 +19,7 @@ library Genesis {
 
         bytes32[] memory nodes = new bytes32[](participants.length);
         for (uint256 i = 0; i < participants.length; i++) {
-            nodes[i] = keccak256(abi.encode(i + 1, participants[i]));
+            nodes[i] = bytes32(uint256(uint160(participants[i])));
         }
         for (uint256 l = participants.length; l > 1; l = (l + 1) / 2) {
             for (uint256 i = 0; i < l; i += 2) {

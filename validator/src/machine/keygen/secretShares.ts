@@ -1,6 +1,5 @@
 import type { KeyGenClient } from "../../consensus/keyGen/client.js";
 import type { ProtocolAction } from "../../consensus/protocol/types.js";
-import type { ParticipantId } from "../../frost/types.js";
 import type { KeyGenSecretSharedEvent } from "../transitions/types.js";
 import type { MachineConfig, MachineStates, StateDiff } from "../types.js";
 import { buildKeyGenCallback } from "./utils.js";
@@ -28,24 +27,23 @@ export const handleKeyGenSecretShared = async (
 
 	try {
 		// Check if validator is part of group, method will throw if not
-		keyGenClient.participantId(groupId);
+		keyGenClient.participant(groupId);
 	} catch {
-		// If there is no participant id, then this validator is not part of the group
-		// In this case ignore this request
+		// The validator is not part of the group, ignore this request
 		return {};
 	}
 
 	// Track identity that has submitted last share
-	const response = await keyGenClient.handleKeygenSecrets(groupId, event.identifier, event.share.f);
-	const missingSharesFrom: ParticipantId[] = [...machineStates.rollover.missingSharesFrom];
+	const response = await keyGenClient.handleKeygenSecrets(groupId, event.participant, event.share.f);
+	const missingSharesFrom = machineStates.rollover.missingSharesFrom.slice();
 	const actions: ProtocolAction[] = [];
 	if (response === "invalid_share") {
-		logger?.(`Invalid share submitted by ${event.identifier} for group ${groupId}`);
-		missingSharesFrom.push(event.identifier);
+		logger?.(`Invalid share submitted by ${event.participant} for group ${groupId}`);
+		missingSharesFrom.push(event.participant);
 		actions.push({
 			id: "key_gen_complain",
 			groupId,
-			accused: event.identifier,
+			accused: event.participant,
 		});
 	}
 	// Share collection is completed when every paritcipant submitted a share, no matter if valid or invalid
@@ -56,7 +54,7 @@ export const handleKeyGenSecretShared = async (
 			rollover: {
 				...machineStates.rollover,
 				missingSharesFrom,
-				lastParticipant: event.identifier,
+				lastParticipant: event.participant,
 			},
 			actions,
 		};
@@ -82,7 +80,7 @@ export const handleKeyGenSecretShared = async (
 			complaintDeadline: event.block + machineConfig.keyGenTimeout,
 			responseDeadline: event.block + 2n * machineConfig.keyGenTimeout,
 			deadline: event.block + 3n * machineConfig.keyGenTimeout,
-			lastParticipant: event.identifier,
+			lastParticipant: event.participant,
 			complaints: machineStates.rollover.complaints,
 			missingSharesFrom,
 			confirmationsFrom: [],

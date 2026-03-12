@@ -40,12 +40,12 @@ export const handleKeyGenConfirmed = async (
 	const groupId = event.gid;
 
 	// Track this confirmation
-	const confirmationsFrom = [...machineStates.rollover.confirmationsFrom, event.identifier];
+	const confirmationsFrom = [...machineStates.rollover.confirmationsFrom, event.participant];
 	const participants = signingClient.participants(groupId);
 	const allConfirmed = participants.every((p) => confirmationsFrom.includes(p));
 
 	logger?.(
-		`Group ${groupId} confirmation from ${event.identifier} (${confirmationsFrom.length}/${participants.length})`,
+		`Group ${groupId} confirmation from ${event.participant} (${confirmationsFrom.length}/${participants.length})`,
 	);
 
 	// Still waiting for confirmations
@@ -54,7 +54,7 @@ export const handleKeyGenConfirmed = async (
 			rollover: {
 				...machineStates.rollover,
 				confirmationsFrom,
-				lastParticipant: event.identifier,
+				lastParticipant: event.participant,
 			},
 		};
 	}
@@ -129,8 +129,8 @@ export const handleKeyGenConfirmed = async (
 			rollover,
 		};
 	}
-	const signers = signingClient.participants(activeGroup.groupId);
-	if (!signers.includes(activeGroup.participantId)) {
+	const signers = signingClient.participants(activeGroup);
+	if (!signers.includes(signingClient.participant(activeGroup))) {
 		// Not part of active group, don't participate in epoch signing
 		return {
 			rollover,
@@ -142,7 +142,7 @@ export const handleKeyGenConfirmed = async (
 			message,
 			{
 				id: "waiting_for_request",
-				responsible: event.identifier,
+				responsible: event.participant,
 				packet,
 				signers,
 				deadline: block + machineConfig.signingTimeout,

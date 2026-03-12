@@ -1,8 +1,8 @@
 import type { Address, Hex } from "viem";
-import type { Participant } from "../consensus/storage/types.js";
 import type { SupportedChain } from "./schemas.js";
 
-export type ParticipantInfo = Participant & {
+export type ParticipantInfo = {
+	address: Address;
 	activeFrom: bigint;
 	activeBefore?: bigint;
 };
