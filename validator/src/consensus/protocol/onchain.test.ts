@@ -1496,73 +1496,6 @@ describe("OnchainProtocol", () => {
 			expect(setHash).toBeCalledWith(10, txHash);
 		});
 	});
-});
-
-describe("GasFeeEstimator", () => {
-	it("should cache prices", async () => {
-		const estimateFeesPerGas = vi.fn();
-		const publicClient = {
-			estimateFeesPerGas,
-		} as unknown as PublicClient;
-		let priceCallback: ((values: FeeValuesEIP1559) => void) | undefined;
-		const promise = new Promise<FeeValuesEIP1559>((callback) => {
-			priceCallback = callback;
-		});
-		estimateFeesPerGas.mockReturnValueOnce(promise);
-		const estimator = new GasFeeEstimator(publicClient);
-		const price1 = estimator.estimateFees();
-		const price2 = estimator.estimateFees();
-		expect(estimateFeesPerGas).toHaveBeenCalledTimes(1);
-		priceCallback?.({
-			maxFeePerGas: 100n,
-			maxPriorityFeePerGas: 200n,
-		});
-		expect(price1).toBe(price2);
-		expect(await price1).toStrictEqual({
-			maxFeePerGas: 100n,
-			maxPriorityFeePerGas: 200n,
-		});
-		expect(await price2).toStrictEqual({
-			maxFeePerGas: 100n,
-			maxPriorityFeePerGas: 200n,
-		});
-	});
-
-	it("should cache errors", async () => {
-		const estimateFeesPerGas = vi.fn();
-		const publicClient = {
-			estimateFeesPerGas,
-		} as unknown as PublicClient;
-		let rejectedCallback: ((reason: unknown) => void) | undefined;
-		const promise = new Promise<FeeValuesEIP1559>((_, reject) => {
-			rejectedCallback = reject;
-		});
-		estimateFeesPerGas.mockReturnValueOnce(promise);
-		const estimator = new GasFeeEstimator(publicClient);
-		const price1 = estimator.estimateFees();
-		const price2 = estimator.estimateFees();
-		expect(estimateFeesPerGas).toHaveBeenCalledTimes(1);
-		rejectedCallback?.("Some error");
-		expect(price1).toBe(price2);
-		await expect(price1).rejects.toThrow("Some error");
-		await expect(price2).rejects.toThrow("Some error");
-	});
-
-	it("should invalidate cache", async () => {
-		const estimateFeesPerGas = vi.fn();
-		const publicClient = {
-			estimateFeesPerGas,
-		} as unknown as PublicClient;
-		estimateFeesPerGas.mockReturnValueOnce(new Promise(() => {}));
-		const estimator = new GasFeeEstimator(publicClient);
-		const original = estimator.estimateFees();
-		expect(original).toBe(estimator.estimateFees());
-		expect(estimateFeesPerGas).toHaveBeenCalledTimes(1);
-		estimator.invalidate();
-		const next = estimator.estimateFees();
-		expect(original).not.toBe(next);
-		expect(estimateFeesPerGas).toHaveBeenCalledTimes(2);
-	});
 
 	it("should not resubmit a transaction that is already in-flight", async () => {
 		const queue = new InMemoryQueue<ActionWithTimeout>();
@@ -1634,10 +1567,8 @@ describe("GasFeeEstimator", () => {
 		// Start first check — it will hang inside sendRawTransaction
 		const firstCheck = protocol.checkPendingActions(10n);
 
-		// Yield to allow the first check to reach sendRawTransaction
-		await Promise.resolve();
-		await Promise.resolve();
-		await Promise.resolve();
+		// Wait until sendRawTransaction has been called (first check has entered in-flight state)
+		await vi.waitFor(() => expect(sendRawTransaction).toHaveBeenCalledTimes(1));
 
 		// Start second check while first is still in-flight
 		const secondCheck = protocol.checkPendingActions(11n);
@@ -1649,5 +1580,77 @@ describe("GasFeeEstimator", () => {
 
 		// sendRawTransaction must have been called exactly once despite two concurrent checks
 		expect(sendRawTransaction).toBeCalledTimes(1);
+
+		// After the in-flight work is done, a subsequent check can resubmit the tx (guard is not sticky)
+		sendRawTransaction.mockReturnValueOnce(Promise.resolve("0xdeadbeef2"));
+		await protocol.checkPendingActions(12n);
+		expect(sendRawTransaction).toBeCalledTimes(2);
+	});
+});
+
+describe("GasFeeEstimator", () => {
+	it("should cache prices", async () => {
+		const estimateFeesPerGas = vi.fn();
+		const publicClient = {
+			estimateFeesPerGas,
+		} as unknown as PublicClient;
+		let priceCallback: ((values: FeeValuesEIP1559) => void) | undefined;
+		const promise = new Promise<FeeValuesEIP1559>((callback) => {
+			priceCallback = callback;
+		});
+		estimateFeesPerGas.mockReturnValueOnce(promise);
+		const estimator = new GasFeeEstimator(publicClient);
+		const price1 = estimator.estimateFees();
+		const price2 = estimator.estimateFees();
+		expect(estimateFeesPerGas).toHaveBeenCalledTimes(1);
+		priceCallback?.({
+			maxFeePerGas: 100n,
+			maxPriorityFeePerGas: 200n,
+		});
+		expect(price1).toBe(price2);
+		expect(await price1).toStrictEqual({
+			maxFeePerGas: 100n,
+			maxPriorityFeePerGas: 200n,
+		});
+		expect(await price2).toStrictEqual({
+			maxFeePerGas: 100n,
+			maxPriorityFeePerGas: 200n,
+		});
+	});
+
+	it("should cache errors", async () => {
+		const estimateFeesPerGas = vi.fn();
+		const publicClient = {
+			estimateFeesPerGas,
+		} as unknown as PublicClient;
+		let rejectedCallback: ((reason: unknown) => void) | undefined;
+		const promise = new Promise<FeeValuesEIP1559>((_, reject) => {
+			rejectedCallback = reject;
+		});
+		estimateFeesPerGas.mockReturnValueOnce(promise);
+		const estimator = new GasFeeEstimator(publicClient);
+		const price1 = estimator.estimateFees();
+		const price2 = estimator.estimateFees();
+		expect(estimateFeesPerGas).toHaveBeenCalledTimes(1);
+		rejectedCallback?.("Some error");
+		expect(price1).toBe(price2);
+		await expect(price1).rejects.toThrow("Some error");
+		await expect(price2).rejects.toThrow("Some error");
+	});
+
+	it("should invalidate cache", async () => {
+		const estimateFeesPerGas = vi.fn();
+		const publicClient = {
+			estimateFeesPerGas,
+		} as unknown as PublicClient;
+		estimateFeesPerGas.mockReturnValueOnce(new Promise(() => {}));
+		const estimator = new GasFeeEstimator(publicClient);
+		const original = estimator.estimateFees();
+		expect(original).toBe(estimator.estimateFees());
+		expect(estimateFeesPerGas).toHaveBeenCalledTimes(1);
+		estimator.invalidate();
+		const next = estimator.estimateFees();
+		expect(original).not.toBe(next);
+		expect(estimateFeesPerGas).toHaveBeenCalledTimes(2);
 	});
 });
