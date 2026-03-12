@@ -1,12 +1,7 @@
 import { type InfiniteData, useInfiniteQuery } from "@tanstack/react-query";
 import type { Address } from "viem";
-import { useProvider } from "@/hooks/useProvider";
 import { useSettings } from "@/hooks/useSettings";
-import {
-	type LoadTransactionProposalsResult,
-	loadTransactionProposals,
-	type TransactionProposal,
-} from "@/lib/consensus";
+import { getConsensusWorker, type LoadTransactionProposalsResult, type TransactionProposal } from "@/lib/consensus";
 
 export function useSafeTransactionProposals({
 	safeAddress,
@@ -18,7 +13,6 @@ export function useSafeTransactionProposals({
 	autoRefresh?: boolean;
 }) {
 	const [settings] = useSettings();
-	const provider = useProvider();
 
 	return useInfiniteQuery<
 		LoadTransactionProposalsResult,
@@ -33,8 +27,8 @@ export function useSafeTransactionProposals({
 		// loadTransactionProposals resolves it from the current block at fetch time,
 		// re-anchoring to the latest block on every refetch of page 0.
 		queryFn: ({ pageParam: toBlock }) =>
-			loadTransactionProposals({
-				provider,
+			getConsensusWorker().loadTransactionProposals({
+				rpc: settings.rpc,
 				consensus: settings.consensus,
 				safe: safeAddress,
 				toBlock,

@@ -1,8 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import type { Hex } from "viem";
-import { useProvider } from "@/hooks/useProvider";
 import { useSettings } from "@/hooks/useSettings";
-import { type KeyGenStatus, loadKeyGenDetails } from "@/lib/coordinator/keygen";
+import { getCoordinatorWorker, type KeyGenStatus } from "@/lib/coordinator";
 
 export function useKeyGenDetails({
 	gid,
@@ -16,12 +15,11 @@ export function useKeyGenDetails({
 	enabled?: boolean;
 }) {
 	const [settings] = useSettings();
-	const provider = useProvider();
 	return useQuery<KeyGenStatus | null, Error>({
 		queryKey: ["keyGenDetails", settings.consensus, gid, endBlock.toString()],
 		queryFn: async () => {
-			return loadKeyGenDetails({
-				provider,
+			return getCoordinatorWorker().loadKeyGenDetails({
+				rpc: settings.rpc,
 				consensus: settings.consensus,
 				gid,
 				endBlock,
