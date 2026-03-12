@@ -11,6 +11,7 @@ export function RecentTransactionProposals({
 	autoRefresh,
 	onRefetch,
 	onToggleAutoRefresh,
+	isLoading,
 }: {
 	proposals: TransactionProposal[];
 	itemsToShow: number;
@@ -20,6 +21,7 @@ export function RecentTransactionProposals({
 	autoRefresh: boolean;
 	onRefetch: () => void;
 	onToggleAutoRefresh: () => void;
+	isLoading?: boolean;
 }) {
 	return (
 		<>
@@ -32,9 +34,10 @@ export function RecentTransactionProposals({
 			/>
 			<TransactionProposalsList
 				proposals={proposals.slice(0, itemsToShow)}
-				label={`${proposals.length} recent proposals`}
+				label={isLoading ? "" : `${proposals.length} recent proposals`}
 				hasMore={proposals.length > itemsToShow}
 				onShowMore={onShowMore}
+				isLoading={isLoading}
 				showMoreLabel="Show More"
 			/>
 		</>

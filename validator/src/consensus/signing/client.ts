@@ -8,7 +8,7 @@ import {
 	calculateGroupCommitment,
 	createNonceTree,
 	decodeSequence,
-	groupCommitementShares,
+	groupCommitmentShares,
 	nonceCommitmentsWithProof,
 	type PublicNonceCommitments,
 } from "./nonces.js";
@@ -108,15 +108,15 @@ export class SigningClient {
 
 		// Calculate information over the complete signer group
 		const bindingFactorList = bindingFactors(groupPublicKey, signers, signerNonceCommitments, message);
-		const groupCommitmentShares = groupCommitementShares(bindingFactorList, signerNonceCommitments);
-		const groupCommitment = calculateGroupCommitment(groupCommitmentShares);
+		const commitmentShares = groupCommitmentShares(bindingFactorList, signerNonceCommitments);
+		const groupCommitment = calculateGroupCommitment(commitmentShares);
 		const challenge = groupChallenge(groupCommitment, groupPublicKey, message);
 		const signerParts = signers.map((signerId, index) => {
 			const nonceCommitments = signerNonceCommitments.get(signerId);
 			if (nonceCommitments === undefined) {
 				throw new Error(`Missing nonce commitments for ${signerId}`);
 			}
-			const r = groupCommitmentShares[index];
+			const r = commitmentShares[index];
 			const coeff = lagrangeCoefficient(signers, signerId);
 			const cl = lagrangeChallenge(coeff, challenge);
 			const node = keccak256(

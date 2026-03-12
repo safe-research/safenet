@@ -8,7 +8,15 @@ import {
 	type TransactionProposal,
 } from "@/lib/consensus";
 
-export function useSafeTransactionProposals({ safeAddress, chainId }: { safeAddress: Address; chainId: bigint }) {
+export function useSafeTransactionProposals({
+	safeAddress,
+	chainId,
+	autoRefresh = false,
+}: {
+	safeAddress: Address;
+	chainId: bigint;
+	autoRefresh?: boolean;
+}) {
 	const [settings] = useSettings();
 	const provider = useProvider();
 
@@ -20,6 +28,7 @@ export function useSafeTransactionProposals({ safeAddress, chainId }: { safeAddr
 		bigint | undefined
 	>({
 		queryKey: ["safeProposals", safeAddress, chainId.toString(), settings.consensus, settings.maxBlockRange],
+		refetchInterval: autoRefresh ? settings.refetchInterval : false,
 		// pageParam is the toBlock for this window. undefined on the first page so
 		// loadTransactionProposals resolves it from the current block at fetch time,
 		// re-anchoring to the latest block on every refetch of page 0.
