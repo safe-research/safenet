@@ -312,7 +312,7 @@ Nonce commitments in `FROSTNonceCommitmentSet` are indexed by `FROST.Identifier`
 
 2. **`identifierOf` helper retention**: After the change, `identifierOf` is a pure function (`return Identifier.wrap(uint256(uint160(participant)))`). It may be kept as a helper or inlined at call sites. This is a readability decision for implementation.
 
-3. **Explorer event indexing**: If the explorer indexes `KeyGenCommitted` or similar events and extracts the `identifier` field, it will continue to work (the event still carries the identifier). However, if the explorer shows a human-readable "participant ID" it should switch to displaying the address. This is a UX follow-up and does not block the protocol change.
+3. **Explorer `ValidatorInfo` type**: `explorer/src/lib/validators/info.ts` exposes `ValidatorInfo.identifier: bigint` (the participant ID) alongside the address. After this change the identifier is redundant — it equals `BigInt(address)`. This field should either be removed or kept as a derived convenience. The display logic showing a numeric identifier to users should be updated to show the address instead. This is a UX follow-up and does not block the protocol change.
 
 4. **Devnet and integration test setup**: The integration test script passes participants as a comma-separated `PARTICIPANTS` env var (addresses only). This format is unchanged. Confirm that no scripts inject sequential IDs separately.
 
