@@ -9,22 +9,26 @@ import { checkKeyGenTimeouts } from "./timeouts.js";
 
 // --- Test Data ---
 const MACHINE_CONFIG: MachineConfig = {
-	defaultParticipants: [
+	participantsInfo: [
 		{
 			id: 1n,
 			address: entryPoint06Address,
+			activeFrom: 0n,
 		},
 		{
 			id: 3n,
 			address: entryPoint07Address,
+			activeFrom: 0n,
 		},
 		{
 			id: 7n,
 			address: entryPoint08Address,
+			activeFrom: 0n,
 		},
 		{
 			id: 11n,
 			address: ethAddress,
+			activeFrom: 0n,
 		},
 	],
 	genesisSalt: zeroHash,
@@ -145,7 +149,7 @@ describe("key gen timeouts", () => {
 			const setupGroup = vi.fn();
 			setupGroup.mockReturnValueOnce(groupSetup);
 			const participants = vi.fn();
-			participants.mockReturnValueOnce(MACHINE_CONFIG.defaultParticipants);
+			participants.mockReturnValueOnce(MACHINE_CONFIG.participantsInfo);
 			const keyGenClient = {
 				participants,
 				setupGroup,
@@ -193,11 +197,7 @@ describe("key gen timeouts", () => {
 			}
 			expect(setupGroup).toBeCalledTimes(1);
 			expect(setupGroup).toBeCalledWith(
-				[
-					MACHINE_CONFIG.defaultParticipants[0],
-					MACHINE_CONFIG.defaultParticipants[2],
-					MACHINE_CONFIG.defaultParticipants[3],
-				],
+				[MACHINE_CONFIG.participantsInfo[0], MACHINE_CONFIG.participantsInfo[2], MACHINE_CONFIG.participantsInfo[3]],
 				2,
 				"0x00000000eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee000000000000000a",
 			);

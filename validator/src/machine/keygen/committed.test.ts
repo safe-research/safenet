@@ -19,18 +19,21 @@ const MACHINE_STATES: MachineStates = {
 };
 
 const MACHINE_CONFIG: MachineConfig = {
-	defaultParticipants: [
+	participantsInfo: [
 		{
 			id: 1n,
 			address: entryPoint06Address,
+			activeFrom: 0n,
 		},
 		{
 			id: 2n,
 			address: entryPoint07Address,
+			activeFrom: 0n,
 		},
 		{
 			id: 3n,
 			address: entryPoint08Address,
+			activeFrom: 0n,
 		},
 	],
 	genesisSalt: zeroHash,

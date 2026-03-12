@@ -1,9 +1,9 @@
 import type { Hex } from "viem";
 import type { ProtocolAction } from "../consensus/protocol/types.js";
-import type { Participant } from "../consensus/storage/types.js";
 import type { EpochRolloverPacket } from "../consensus/verify/rollover/schemas.js";
 import type { SafeTransactionPacket } from "../consensus/verify/safeTx/schemas.js";
 import type { GroupId, ParticipantId, SignatureId } from "../frost/types.js";
+import type { ParticipantInfo } from "../types/interfaces.js";
 
 export type Optional<T, K extends keyof T> = Omit<T, K> & Partial<Pick<T, K>>;
 
@@ -145,7 +145,7 @@ export type MachineStates = Readonly<{
 }>;
 
 export type MachineConfig = {
-	defaultParticipants: Participant[];
+	participantsInfo: ParticipantInfo[];
 	genesisSalt: Hex;
 	keyGenTimeout: bigint;
 	signingTimeout: bigint;

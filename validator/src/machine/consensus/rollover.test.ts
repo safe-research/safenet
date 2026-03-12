@@ -8,18 +8,21 @@ import { checkEpochRollover } from "./rollover.js";
 
 // --- Test Data ---
 const MACHINE_CONFIG: MachineConfig = {
-	defaultParticipants: [
+	participantsInfo: [
 		{
 			id: 1n,
 			address: zeroAddress,
+			activeFrom: 0n,
 		},
 		{
 			id: 3n,
 			address: zeroAddress,
+			activeFrom: 0n,
 		},
 		{
 			id: 7n,
 			address: zeroAddress,
+			activeFrom: 1n,
 		},
 	],
 	genesisSalt: zeroHash,
@@ -221,7 +224,7 @@ describe("check rollover", () => {
 		expect(protocol.consensus).toBeCalledTimes(1);
 		expect(keyGenClient.setupGroup).toBeCalledTimes(1);
 		expect(keyGenClient.setupGroup).toBeCalledWith(
-			MACHINE_CONFIG.defaultParticipants,
+			MACHINE_CONFIG.participantsInfo,
 			2,
 			"0x00000000eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee0000000000000003",
 		);
@@ -269,7 +272,7 @@ describe("check rollover", () => {
 		expect(protocol.consensus).toBeCalledTimes(1);
 		expect(keyGenClient.setupGroup).toBeCalledTimes(1);
 		expect(keyGenClient.setupGroup).toBeCalledWith(
-			MACHINE_CONFIG.defaultParticipants,
+			MACHINE_CONFIG.participantsInfo,
 			2,
 			"0x00000000eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee0000000000000002",
 		);
@@ -313,7 +316,7 @@ describe("check rollover", () => {
 		expect(protocol.consensus).toBeCalledTimes(1);
 		expect(keyGenClient.setupGroup).toBeCalledTimes(1);
 		expect(keyGenClient.setupGroup).toBeCalledWith(
-			MACHINE_CONFIG.defaultParticipants,
+			MACHINE_CONFIG.participantsInfo,
 			2,
 			"0x00000000eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee0000000000000002",
 		);

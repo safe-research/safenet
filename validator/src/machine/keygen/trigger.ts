@@ -15,7 +15,7 @@ export const triggerKeyGen = (
 	context: Hex,
 	logger?: Logger,
 ): StateDiff => {
-	const requiredParticipants = calcMinimumParticipants(machineConfig);
+	const requiredParticipants = calcMinimumParticipants(machineConfig, epoch);
 	if (participants.length < requiredParticipants) {
 		logger?.info?.(`Skipped epoch ${epoch}!`, { requiredParticipants, participants });
 		return {

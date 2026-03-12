@@ -12,7 +12,7 @@ import {
 	zeroAddress,
 	zeroHash,
 } from "viem";
-import { type Account, privateKeyToAccount } from "viem/accounts";
+import { type Account, type PrivateKeyAccount, privateKeyToAccount } from "viem/accounts";
 import { anvil } from "viem/chains";
 import { afterEach, beforeAll, describe, expect, it } from "vitest";
 import { silentLogger, testLogger, testMetrics } from "../__tests__/config.js";
@@ -28,11 +28,10 @@ import {
 	COORDINATOR_SIGN_COMPLETED_EVENT,
 	COORDINATOR_SIGN_EVENT,
 } from "../types/abis.js";
-import type { ProtocolConfig } from "../types/interfaces.js";
+import type { ParticipantInfo, ProtocolConfig } from "../types/interfaces.js";
 import { calcGroupId } from "./keyGen/utils.js";
 import { calculateParticipantsRoot } from "./merkle.js";
 import { verifySignature } from "./signing/verify.js";
-import type { Participant } from "./storage/types.js";
 
 const BLOCK_TIME_MS = 200;
 const BLOCKS_PER_EPOCH = 20n;
@@ -122,17 +121,18 @@ describe("integration", () => {
 		testLogger.notice(`Use consensus at ${consensus.address}`);
 
 		// Private keys from anvil testnet
-		const accounts = [
-			privateKeyToAccount("0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d"),
-			privateKeyToAccount("0x5de4111afa1a4b94908f83103eb1f1706367c2e68ca870fc3fb9a804cdab365a"),
-			privateKeyToAccount("0x7c852118294e51e653712a81e05800f419141751be58f605c371e15141b007a6"),
-			privateKeyToAccount("0x47e179ec197488593b187f80a00eb0da91f1b9d0b13f8733639f19c30a34926a"),
+		const accounts: [PrivateKeyAccount, bigint][] = [
+			[privateKeyToAccount("0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d"), 0n],
+			[privateKeyToAccount("0x5de4111afa1a4b94908f83103eb1f1706367c2e68ca870fc3fb9a804cdab365a"), 0n],
+			[privateKeyToAccount("0x7c852118294e51e653712a81e05800f419141751be58f605c371e15141b007a6"), 0n],
+			[privateKeyToAccount("0x47e179ec197488593b187f80a00eb0da91f1b9d0b13f8733639f19c30a34926a"), 0n],
+			[privateKeyToAccount("0x8b3a350cf5c34c9194ca85829a2df0ec3153be0318b5e2d3348e872092edffba"), 2n],
 		];
-		const participants: Participant[] = accounts.map((a, i) => {
-			return { id: BigInt(i + 1), address: a.address };
+		const participants: ParticipantInfo[] = accounts.map(([a, activeFrom], i) => {
+			return { id: BigInt(i + 1), address: a.address, activeFrom };
 		});
 
-		const clients = accounts.map((a, i) => {
+		const clients = accounts.map(([a, activeFrom], i) => {
 			const logger = i === 0 ? testLogger : silentLogger;
 			const config: ProtocolConfig = {
 				chainId: 31_337,
@@ -158,6 +158,7 @@ describe("integration", () => {
 				config,
 				watcherConfig,
 				metrics: testMetrics,
+				skipGenesis: activeFrom > 0n,
 			});
 			return {
 				account: a,
@@ -168,7 +169,7 @@ describe("integration", () => {
 		currentClients = clients;
 
 		const genesisGroup = calcGenesisGroup({
-			defaultParticipants: participants,
+			participantsInfo: participants,
 			genesisSalt: zeroHash,
 		});
 		expect(

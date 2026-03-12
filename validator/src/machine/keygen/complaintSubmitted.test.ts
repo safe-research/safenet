@@ -25,10 +25,10 @@ const EVENT: KeyGenComplaintSubmittedEvent = {
 	compromised: false,
 };
 const MACHINE_CONFIG: MachineConfig = {
-	defaultParticipants: [
-		{ id: 1n, address: entryPoint06Address },
-		{ id: 2n, address: entryPoint07Address },
-		{ id: 3n, address: entryPoint08Address },
+	participantsInfo: [
+		{ id: 1n, address: entryPoint06Address, activeFrom: 0n },
+		{ id: 2n, address: entryPoint07Address, activeFrom: 0n },
+		{ id: 3n, address: entryPoint08Address, activeFrom: 0n },
 	],
 	genesisSalt: zeroHash,
 	keyGenTimeout: 10n,
