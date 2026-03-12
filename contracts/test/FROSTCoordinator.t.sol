@@ -54,85 +54,68 @@ contract FROSTCoordinatorTest is Test {
         );
         FROSTGroupId.T gid = coordinator.keyGen(participants.root(), COUNT, THRESHOLD, bytes32(0));
 
-        // Off-by-one errors are one of the two hardest problems in computer
-        // science (along with cache invalidation and naming things). We use a
-        // lot of `COUNT + 1` length arrays in the code below. This is just to
-        // make our code a bit nicer to read (you access data for participant
-        // `identifier` with `someArray[identifier]` instead of
-        // `someArray[identifier - 1]`). This confusion stems from the fact that
-        // FROST participants identifiers start from `1` and not `0`. In
-        // general, the `COUNT + 1` arrays are kind of as if they were a
-        // `mapping(identifier => ...)`. In other languages, these would be
-        // `HashMap<FROST.Identifier, ...>`. For these arrays, we never use
-        // `someArray[0]`.
-
         // Round 1.1
-        uint256[] memory q = new uint256[](COUNT + 1);
-        uint256[][] memory a = new uint256[][](COUNT + 1);
-        for (uint256 identifier = 1; identifier <= COUNT; identifier++) {
-            q[identifier] = vm.randomUint(1, Secp256k1.N - 1);
-            a[identifier] = new uint256[](THRESHOLD);
+        uint256[] memory q = new uint256[](COUNT);
+        uint256[][] memory a = new uint256[][](COUNT);
+        for (uint256 i = 0; i < COUNT; i++) {
+            q[i] = vm.randomUint(1, Secp256k1.N - 1);
+            a[i] = new uint256[](THRESHOLD);
             for (uint256 j = 0; j < THRESHOLD; j++) {
-                a[identifier][j] = vm.randomUint(1, Secp256k1.N - 1);
+                a[i][j] = vm.randomUint(1, Secp256k1.N - 1);
             }
         }
 
         // Round 1.2
-        FROSTCoordinator.KeyGenCommitment[] memory commitments = new FROSTCoordinator.KeyGenCommitment[](COUNT + 1);
-        for (uint256 identifier = 1; identifier <= COUNT; identifier++) {
-            FROSTCoordinator.KeyGenCommitment memory commitment = commitments[identifier];
+        FROSTCoordinator.KeyGenCommitment[] memory commitments = new FROSTCoordinator.KeyGenCommitment[](COUNT);
+        for (uint256 i = 0; i < COUNT; i++) {
+            FROSTCoordinator.KeyGenCommitment memory commitment = commitments[i];
 
             uint256 k = vm.randomUint(1, Secp256k1.N - 1);
             commitment.r = ForgeSecp256k1.g(k).toPoint();
-            uint256 c = FROST.keyGenChallenge(
-                FROST.newIdentifier(identifier), ForgeSecp256k1.g(a[identifier][0]).toPoint(), commitment.r
-            );
-            commitment.mu = addmod(k, mulmod(a[identifier][0], c, Secp256k1.N), Secp256k1.N);
+            uint256 c = FROST.keyGenChallenge(participants.addr(i), ForgeSecp256k1.g(a[i][0]).toPoint(), commitment.r);
+            commitment.mu = addmod(k, mulmod(a[i][0], c, Secp256k1.N), Secp256k1.N);
         }
 
         // Round 1.3
-        // Note that `qq[identifier]` and `cc[identifier]` are equivalent to
-        // `commitments[identifier].q` and `commitments[identifier].c`
-        // respectively. We need these additional arrays in order to keep
-        // `ForgeSecp256k1.P` versions of our points, because implementing
-        // elliptic curve multiplication natively on the EVM is prohibitively
-        // slow, and so we need to use the built-in Forge cheatcodes for doing
-        // the elliptic curve operations for the test. These elliptic curve
-        // operations are done offchain anyway, so this is not a concern for the
-        // actual production system.
-        ForgeSecp256k1.P[] memory qq = new ForgeSecp256k1.P[](COUNT + 1);
-        ForgeSecp256k1.P[][] memory cc = new ForgeSecp256k1.P[][](COUNT + 1);
-        for (uint256 identifier = 1; identifier <= COUNT; identifier++) {
-            FROSTCoordinator.KeyGenCommitment memory commitment = commitments[identifier];
-            qq[identifier] = ForgeSecp256k1.g(q[identifier]);
-            commitment.q = qq[identifier].toPoint();
+        // Note that `qq[i]` and `cc[i]` are equivalent to `commitments[i].q`
+        // and `commitments[i].c` respectively. We need these additional arrays
+        // in order to keep `ForgeSecp256k1.P` versions of our points, because
+        // implementing elliptic curve multiplication natively on the EVM is
+        // prohibitively slow, and so we need to use the built-in Forge
+        // cheatcodes for doing the elliptic curve operations for the test.
+        // These elliptic curve operations are done offchain anyway, so this is
+        // not a concern for the actual production system.
+        ForgeSecp256k1.P[] memory qq = new ForgeSecp256k1.P[](COUNT);
+        ForgeSecp256k1.P[][] memory cc = new ForgeSecp256k1.P[][](COUNT);
+        for (uint256 i = 0; i < COUNT; i++) {
+            FROSTCoordinator.KeyGenCommitment memory commitment = commitments[i];
+            qq[i] = ForgeSecp256k1.g(q[i]);
+            commitment.q = qq[i].toPoint();
+            cc[i] = new ForgeSecp256k1.P[](THRESHOLD);
             commitment.c = new Secp256k1.Point[](THRESHOLD);
-            cc[identifier] = new ForgeSecp256k1.P[](THRESHOLD);
             for (uint256 j = 0; j < THRESHOLD; j++) {
-                cc[identifier][j] = ForgeSecp256k1.g(a[identifier][j]);
-                commitment.c[j] = cc[identifier][j].toPoint();
+                cc[i][j] = ForgeSecp256k1.g(a[i][j]);
+                commitment.c[j] = cc[i][j].toPoint();
             }
         }
 
         // Round 1.4
-        for (uint256 identifier = 1; identifier <= COUNT; identifier++) {
-            (address participant, bytes32[] memory poap) = participants.proof(identifier);
-            FROSTCoordinator.KeyGenCommitment memory commitment = commitments[identifier];
+        for (uint256 i = 0; i < COUNT; i++) {
+            (address participant, bytes32[] memory poap) = participants.proof(i);
+            FROSTCoordinator.KeyGenCommitment memory commitment = commitments[i];
 
             vm.expectEmit();
-            emit FROSTCoordinator.KeyGenCommitted(
-                gid, FROST.newIdentifier(identifier), participant, commitment, identifier == COUNT
-            );
+            emit FROSTCoordinator.KeyGenCommitted(gid, participant, commitment, i + 1 == COUNT);
             vm.prank(participant);
-            coordinator.keyGenCommit(gid, FROST.newIdentifier(identifier), poap, commitment);
+            coordinator.keyGenCommit(gid, poap, commitment);
         }
 
         // Round 1.5
         // Note that at this point `commitments` is public information that was
         // included in events emitted during the `KeyGen` process.
-        for (uint256 identifier = 1; identifier <= COUNT; identifier++) {
-            FROSTCoordinator.KeyGenCommitment memory commitment = commitments[identifier];
-            uint256 c = FROST.keyGenChallenge(FROST.newIdentifier(identifier), commitment.c[0], commitment.r);
+        for (uint256 i = 0; i < COUNT; i++) {
+            FROSTCoordinator.KeyGenCommitment memory commitment = commitments[i];
+            uint256 c = FROST.keyGenChallenge(participants.addr(i), commitment.c[0], commitment.r);
             Secp256k1.mulmuladd(commitment.mu, c, commitment.c[0], commitment.r);
 
             commitment.mu = 0;
@@ -140,22 +123,22 @@ contract FROSTCoordinatorTest is Test {
         }
 
         // Round 2.1*
-        FROSTCoordinator.KeyGenSecretShare[] memory shares = new FROSTCoordinator.KeyGenSecretShare[](COUNT + 1);
-        for (uint256 identifier = 1; identifier <= COUNT; identifier++) {
-            FROSTCoordinator.KeyGenSecretShare memory share = shares[identifier];
+        FROSTCoordinator.KeyGenSecretShare[] memory shares = new FROSTCoordinator.KeyGenSecretShare[](COUNT);
+        for (uint256 i = 0; i < COUNT; i++) {
+            FROSTCoordinator.KeyGenSecretShare memory share = shares[i];
 
-            for (uint256 j = 1; j <= COUNT; j++) {
-                share.y = Secp256k1.add(share.y, _fc(cc[j], identifier).toPoint());
+            for (uint256 j = 0; j < COUNT; j++) {
+                share.y = Secp256k1.add(share.y, _fc(cc[j], i).toPoint());
             }
 
             share.f = new uint256[](COUNT - 1);
-            uint256 i = 0;
-            for (uint256 l = 1; l <= COUNT; l++) {
-                if (identifier == l) {
+            uint256 k = 0;
+            for (uint256 l = 0; l < COUNT; l++) {
+                if (i == l) {
                     continue;
                 }
 
-                uint256 fi = _f(a[identifier], l);
+                uint256 fi = _f(a[i], l);
 
                 // EXTENSION: We apply ECDH to encrypt the `f_i(l)` evaluation
                 // for the target participant. This allows us to use the same
@@ -163,77 +146,76 @@ contract FROSTCoordinatorTest is Test {
                 // additional secret channel. This also implies that we only
                 // completely delete `f` in 2.3, as we need `a_0` to recover the
                 // secret shares sent by other participants.
-                fi = _ecdh(fi, q[identifier], qq[l]);
+                fi = _ecdh(fi, q[i], qq[l]);
 
-                share.f[i++] = fi;
+                share.f[k++] = fi;
             }
 
             vm.expectEmit();
-            emit FROSTCoordinator.KeyGenSecretShared(gid, FROST.newIdentifier(identifier), share, identifier == COUNT);
-            vm.prank(participants.addr(identifier));
+            emit FROSTCoordinator.KeyGenSecretShared(gid, participants.addr(i), share, i + 1 == COUNT);
+            vm.prank(participants.addr(i));
             coordinator.keyGenSecretShare(gid, share);
         }
 
         // Round 2.2*
         // Note that at this point `shares` is public information that was
         // included in events emitted during the `KeyGen` process.
-        uint256[][] memory f = new uint256[][](COUNT + 1);
-        for (uint256 identifier = 1; identifier <= COUNT; identifier++) {
-            f[identifier] = new uint256[](COUNT + 1);
-            for (uint256 l = 1; l <= COUNT; l++) {
-                if (identifier == l) {
+        uint256[][] memory f = new uint256[][](COUNT);
+        for (uint256 i = 0; i < COUNT; i++) {
+            f[i] = new uint256[](COUNT);
+            for (uint256 l = 0; l < COUNT; l++) {
+                if (i == l) {
                     continue;
                 }
 
                 // The secret shares, as per the KeyGen algorthim, are only
                 // broadcast for every _other_ participant (meaning there are
-                // `COUNT - 1` of them). Compute the identifier in the `f` array
-                // for a given participant given that the array starts at
-                // identifier `0` (unlike participant identifieres), and that
-                // the share for `l` is skipped.
-                f[identifier][l] = shares[l].f[identifier < l ? identifier - 1 : identifier - 2];
+                // `COUNT - 1` of them). Compute the index in the `f` array for
+                // a given participant given that the share for `l` is skipped.
+                f[i][l] = shares[l].f[i < l ? i : i - 1];
 
                 // EXTENSION: We need to reverse the ECDH we applied in the
                 // previous step.
-                f[identifier][l] = _ecdh(f[identifier][l], q[identifier], qq[l]);
+                f[i][l] = _ecdh(f[i][l], q[i], qq[l]);
 
-                Secp256k1.Point memory gf = ForgeSecp256k1.g(f[identifier][l]).toPoint();
-                Secp256k1.Point memory fc = _fc(cc[l], identifier).toPoint();
+                Secp256k1.Point memory gf = ForgeSecp256k1.g(f[i][l]).toPoint();
+                Secp256k1.Point memory fc = _fc(cc[l], i).toPoint();
                 assertEq(gf.x, fc.x);
                 assertEq(gf.y, fc.y);
             }
-            f[identifier][identifier] = _f(a[identifier], identifier);
+            f[i][i] = _f(a[i], i);
         }
 
         // Round 2.3
-        uint256[] memory s = new uint256[](COUNT + 1);
-        for (uint256 identifier = 1; identifier <= COUNT; identifier++) {
-            for (uint256 l = 1; l <= COUNT; l++) {
-                s[identifier] = addmod(s[identifier], f[identifier][l], Secp256k1.N);
+        uint256[] memory s = new uint256[](COUNT);
+        for (uint256 i = 0; i < COUNT; i++) {
+            for (uint256 l = 0; l < COUNT; l++) {
+                s[i] = addmod(s[i], f[i][l], Secp256k1.N);
             }
         }
 
         // Round 2.4
-        for (uint256 identifier = 1; identifier <= COUNT; identifier++) {
-            Secp256k1.Point memory y = ForgeSecp256k1.g(s[identifier]).toPoint();
-            Secp256k1.Point memory yy = coordinator.participantKey(gid, FROST.newIdentifier(identifier));
+        for (uint256 i = 0; i < COUNT; i++) {
+            Secp256k1.Point memory y = ForgeSecp256k1.g(s[i]).toPoint();
+            Secp256k1.Point memory yy = coordinator.participantKey(gid, participants.addr(i));
             assertEq(y.x, yy.x);
             assertEq(y.y, yy.y);
         }
 
         // EXTENSION: Confirmation
-        for (uint256 identifier = 1; identifier <= COUNT; identifier++) {
+        for (uint256 i = 0; i < COUNT; i++) {
             vm.expectEmit();
-            emit FROSTCoordinator.KeyGenConfirmed(gid, FROST.newIdentifier(identifier), identifier == COUNT);
-            vm.prank(participants.addr(identifier));
+            emit FROSTCoordinator.KeyGenConfirmed(gid, participants.addr(i), i + 1 == COUNT);
+            vm.prank(participants.addr(i));
             coordinator.keyGenConfirm(gid);
         }
 
-        // COMPLETE: Verify the group key that was derived onchain!
+        // COMPLETE: Verify for testing purposes the group key that was
+        // correctly derived onchain using secret information.
         {
             uint256 groupPrivateKey = 0;
-            for (uint256 identifier = 1; identifier <= COUNT; identifier++) {
-                groupPrivateKey = addmod(groupPrivateKey, a[identifier][0], Secp256k1.N);
+            for (uint256 i = 0; i < COUNT; i++) {
+                groupPrivateKey = addmod(groupPrivateKey, a[i][0], Secp256k1.N);
             }
             Vm.Wallet memory groupAccount = vm.createWallet(groupPrivateKey);
             Secp256k1.Point memory groupPublicKey = coordinator.groupKey(gid);
@@ -247,7 +229,7 @@ contract FROSTCoordinatorTest is Test {
         // Implementation of the two-round FROST signing protocol from RFC-9591
         // <https://datatracker.ietf.org/doc/html/rfc9591#section-5>
 
-        (FROSTGroupId.T gid, uint256[] memory s) = _trustedKeyGen(bytes32(0));
+        (FROSTGroupId.T gid, uint256[] memory s,) = _trustedKeyGen(bytes32(0));
 
         // Round 1
 
@@ -255,22 +237,22 @@ contract FROSTCoordinatorTest is Test {
         // full of 0s in order to speed up the test. In practice, we compute and
         // commit to trees with 1024 nonce pairs.
         bytes32[] memory nonceProof = new bytes32[](10);
-        Nonces[] memory nonces = new Nonces[](COUNT + 1);
+        Nonces[] memory nonces = new Nonces[](COUNT);
         {
             bytes32[] memory commitments = new bytes32[](COUNT + 1);
-            for (uint256 identifier = 1; identifier <= COUNT; identifier++) {
-                Nonces memory n = nonces[identifier];
-                uint256 d = FROST.nonce(bytes32(vm.randomUint()), s[identifier]);
+            for (uint256 i = 0; i < COUNT; i++) {
+                Nonces memory n = nonces[i];
+                uint256 d = FROST.nonce(bytes32(vm.randomUint()), s[i]);
                 n.d = ForgeSecp256k1.g(d);
-                uint256 e = FROST.nonce(bytes32(vm.randomUint()), s[identifier]);
+                uint256 e = FROST.nonce(bytes32(vm.randomUint()), s[i]);
                 n.e = ForgeSecp256k1.g(e);
                 // forge-lint: disable-next-line(asm-keccak256)
                 bytes32 leaf = keccak256(abi.encode(0, n.d.x(), n.d.y(), n.e.x(), n.e.y()));
-                commitments[identifier] = MerkleProof.processProof(nonceProof, leaf);
+                commitments[i] = MerkleProof.processProof(nonceProof, leaf);
             }
-            for (uint256 identifier = 1; identifier <= COUNT; identifier++) {
-                vm.prank(participants.addr(identifier));
-                coordinator.preprocess(gid, commitments[identifier]);
+            for (uint256 i = 0; i < COUNT; i++) {
+                vm.prank(participants.addr(i));
+                coordinator.preprocess(gid, commitments[i]);
             }
         }
 
@@ -291,12 +273,12 @@ contract FROSTCoordinatorTest is Test {
         FROSTSignatureId.T sid = coordinator.sign(gid, message);
 
         for (uint256 i = 0; i < honestParticipants.length; i++) {
-            uint256 identifier = honestParticipants[i];
-            Nonces memory n = nonces[identifier];
+            uint256 h = honestParticipants[i];
+            Nonces memory n = nonces[h];
             FROSTCoordinator.SignNonces memory nn = FROSTCoordinator.SignNonces({d: n.d.toPoint(), e: n.e.toPoint()});
             vm.expectEmit();
-            emit FROSTCoordinator.SignRevealedNonces(sid, FROST.newIdentifier(identifier), nn);
-            vm.prank(participants.addr(identifier));
+            emit FROSTCoordinator.SignRevealedNonces(sid, participants.addr(h), nn);
+            vm.prank(participants.addr(h));
             coordinator.signRevealNonces(sid, nn, nonceProof);
         }
 
@@ -305,7 +287,7 @@ contract FROSTCoordinatorTest is Test {
         // nonces are available from event data (assuming a block limit for
         // participants to submit nonces before being declared "dishonest").
         // <https://datatracker.ietf.org/doc/html/rfc9591#section-5.2>
-        honestParticipants = vm.sort(honestParticipants);
+        _sortByParticipantId(honestParticipants);
         Secp256k1.Point memory groupKey = coordinator.groupKey(gid);
         FROSTCoordinator.SignSelection memory selection;
         FROST.SignatureShare[] memory shares = new FROST.SignatureShare[](honestParticipants.length);
@@ -314,32 +296,30 @@ contract FROSTCoordinatorTest is Test {
             {
                 FROST.Commitment[] memory coms = new FROST.Commitment[](honestParticipants.length);
                 for (uint256 i = 0; i < honestParticipants.length; i++) {
-                    uint256 identifier = honestParticipants[i];
-                    Nonces memory n = nonces[identifier];
-                    coms[i] = FROST.Commitment({
-                        identifier: FROST.newIdentifier(identifier), d: n.d.toPoint(), e: n.e.toPoint()
-                    });
+                    uint256 h = honestParticipants[i];
+                    Nonces memory n = nonces[h];
+                    coms[i] = FROST.Commitment({participant: participants.addr(h), d: n.d.toPoint(), e: n.e.toPoint()});
                 }
                 bindingFactors = FROST.bindingFactors(coordinator.groupKey(gid), coms, message);
             }
 
             ForgeSecp256k1.P memory groupCommitment;
             for (uint256 i = 0; i < honestParticipants.length; i++) {
-                uint256 identifier = honestParticipants[i];
-                Nonces memory n = nonces[identifier];
+                uint256 h = honestParticipants[i];
+                Nonces memory n = nonces[h];
                 uint256 bindingFactor = bindingFactors[i];
                 ForgeSecp256k1.P memory r = ForgeSecp256k1.add(n.d, ForgeSecp256k1.mul(bindingFactor, n.e));
                 shares[i].r = r.toPoint();
-                shares[i].l = _lagrangeCoefficient(honestParticipants, identifier);
+                shares[i].l = _lagrangeCoefficient(honestParticipants, h);
                 groupCommitment = ForgeSecp256k1.add(groupCommitment, r);
             }
             selection.r = groupCommitment.toPoint();
 
             uint256 challenge = FROST.challenge(selection.r, groupKey, message);
             for (uint256 i = 0; i < honestParticipants.length; i++) {
-                uint256 identifier = honestParticipants[i];
-                uint256 sk = s[identifier];
-                Nonces memory n = nonces[identifier];
+                uint256 h = honestParticipants[i];
+                uint256 sk = s[h];
+                Nonces memory n = nonces[h];
                 shares[i].z = addmod(
                     n.d.w.privateKey,
                     addmod(
@@ -355,22 +335,20 @@ contract FROSTCoordinatorTest is Test {
         {
             CommitmentShareMerkleTree.S[] memory cs = new CommitmentShareMerkleTree.S[](honestParticipants.length);
             for (uint256 i = 0; i < honestParticipants.length; i++) {
-                uint256 identifier = honestParticipants[i];
-                cs[i] = CommitmentShareMerkleTree.S({
-                    identifier: FROST.newIdentifier(identifier), r: shares[i].r, l: shares[i].l
-                });
+                uint256 h = honestParticipants[i];
+                cs[i] = CommitmentShareMerkleTree.S({participant: participants.addr(h), r: shares[i].r, l: shares[i].l});
             }
             commitmentShares = new CommitmentShareMerkleTree(selection.r, cs);
             selection.root = commitmentShares.root();
         }
 
         for (uint256 i = 0; i < honestParticipants.length; i++) {
-            uint256 identifier = honestParticipants[i];
+            uint256 h = honestParticipants[i];
             bytes32[] memory proof = commitmentShares.proof(i);
 
             vm.expectEmit();
-            emit FROSTCoordinator.SignShared(sid, selection.root, FROST.newIdentifier(identifier), shares[i].z);
-            vm.prank(participants.addr(identifier));
+            emit FROSTCoordinator.SignShared(sid, selection.root, participants.addr(h), shares[i].z);
+            vm.prank(participants.addr(h));
             coordinator.signShare(sid, selection, shares[i], proof);
         }
 
@@ -386,8 +364,8 @@ contract FROSTCoordinatorTest is Test {
         result.sort();
     }
 
-    function _trustedKeyGen(bytes32 context) private returns (FROSTGroupId.T gid, uint256[] memory s) {
-        s = new uint256[](COUNT + 1);
+    function _trustedKeyGen(bytes32 context) private returns (FROSTGroupId.T gid, uint256[] memory s, uint256 gs) {
+        s = new uint256[](COUNT);
 
         uint256[] memory a = new uint256[](THRESHOLD);
         for (uint256 j = 0; j < THRESHOLD; j++) {
@@ -402,66 +380,65 @@ contract FROSTCoordinatorTest is Test {
         // has the full polynomial for deriving all the shares, and all other
         // participants do not add anything.
         commitment.c = new Secp256k1.Point[](THRESHOLD);
-        for (uint256 identifier = 2; identifier <= COUNT; identifier++) {
+        for (uint256 i = 1; i < COUNT; i++) {
             bytes32 root = participants.root();
-            (address participant, bytes32[] memory poap) = participants.proof(identifier);
+            (address participant, bytes32[] memory poap) = participants.proof(i);
             vm.prank(participant);
-            coordinator.keyGenAndCommit(
-                root, COUNT, THRESHOLD, context, FROST.newIdentifier(identifier), poap, commitment
-            );
+            coordinator.keyGenAndCommit(root, COUNT, THRESHOLD, context, poap, commitment);
         }
         {
             for (uint256 j = 0; j < THRESHOLD; j++) {
                 commitment.c[j] = ForgeSecp256k1.g(a[j]).toPoint();
             }
             bytes32 root = participants.root();
-            (address participant, bytes32[] memory poap) = participants.proof(1);
+            (address participant, bytes32[] memory poap) = participants.proof(0);
             vm.prank(participant);
-            (gid,) =
-                coordinator.keyGenAndCommit(root, COUNT, THRESHOLD, context, FROST.newIdentifier(1), poap, commitment);
+            (gid,) = coordinator.keyGenAndCommit(root, COUNT, THRESHOLD, context, poap, commitment);
         }
 
         // We don't actually need to encrypt and broadcast secret shares, the
         // trusted dealer computes the private keys for each participant.
         FROSTCoordinator.KeyGenSecretShare memory share;
         share.f = new uint256[](COUNT - 1);
-        for (uint256 identifier = 1; identifier <= COUNT; identifier++) {
-            s[identifier] = _f(a, identifier);
-            share.y = ForgeSecp256k1.g(s[identifier]).toPoint();
-            vm.prank(participants.addr(identifier));
+        for (uint256 i = 0; i < COUNT; i++) {
+            s[i] = _f(a, i);
+            share.y = ForgeSecp256k1.g(s[i]).toPoint();
+            vm.prank(participants.addr(i));
             coordinator.keyGenSecretShare(gid, share);
         }
 
         // We now finalize the key generation.
-        for (uint256 identifier = 1; identifier <= COUNT; identifier++) {
-            vm.prank(participants.addr(identifier));
+        for (uint256 i = 0; i < COUNT; i++) {
+            vm.prank(participants.addr(i));
             coordinator.keyGenConfirm(gid);
         }
 
         // For debugging purposes, also provide the group private key to the
         // caller (even if this is typically not available).
-        s[0] = a[0];
+        gs = a[0];
 
         assertEq(
-            keccak256(abi.encode(coordinator.groupKey(gid))), keccak256(abi.encode(ForgeSecp256k1.g(s[0]).toPoint()))
+            keccak256(abi.encode(coordinator.groupKey(gid))), keccak256(abi.encode(ForgeSecp256k1.g(gs).toPoint()))
         );
     }
 
-    function _f(uint256[] memory a, uint256 x) private pure returns (uint256 r) {
+    function _f(uint256[] memory a, uint256 i) private view returns (uint256 r) {
         r = a[0];
+        uint256 x = FROST.identifier(participants.addr(i));
         uint256 xx = 1;
-        for (uint256 i = 1; i < a.length; i++) {
+        for (uint256 j = 1; j < a.length; j++) {
             xx = mulmod(xx, x, Secp256k1.N);
-            r = addmod(r, mulmod(a[i], xx, Secp256k1.N), Secp256k1.N);
+            r = addmod(r, mulmod(a[j], xx, Secp256k1.N), Secp256k1.N);
         }
     }
 
-    function _fc(ForgeSecp256k1.P[] memory c, uint256 x) private returns (ForgeSecp256k1.P memory r) {
+    function _fc(ForgeSecp256k1.P[] memory c, uint256 i) private returns (ForgeSecp256k1.P memory r) {
         r = c[0];
+        uint256 x = FROST.identifier(participants.addr(i));
         uint256 xx = 1;
-        for (uint256 i = 1; i < c.length; i++) {
+        for (uint256 j = 1; j < c.length; j++) {
             xx = mulmod(xx, x, Secp256k1.N);
-            r = ForgeSecp256k1.add(r, ForgeSecp256k1.mul(xx, c[i]));
+            r = ForgeSecp256k1.add(r, ForgeSecp256k1.mul(xx, c[j]));
         }
     }
 
@@ -469,30 +446,47 @@ contract FROSTCoordinatorTest is Test {
         return x ^ ForgeSecp256k1.mul(k, q).toPoint().x;
     }
 
-    function _honestParticipants() private returns (uint256[] memory identifiers) {
-        identifiers = new uint256[](COUNT);
+    function _honestParticipants() private returns (uint256[] memory result) {
+        result = new uint256[](COUNT);
         for (uint256 i = 0; i < COUNT; i++) {
-            identifiers[i] = i + 1;
+            result[i] = i;
         }
 
-        identifiers = vm.shuffle(identifiers);
+        result = vm.shuffle(result);
         uint256 length = vm.randomUint(THRESHOLD, COUNT);
         assembly ("memory-safe") {
-            mstore(identifiers, length)
+            mstore(result, length)
         }
     }
 
-    function _lagrangeCoefficient(uint256[] memory l, uint256 identifier) private view returns (uint256 lambda) {
+    function _sortByParticipantId(uint256[] memory ps) private view {
+        bool ordered = false;
+        while (!ordered) {
+            ordered = true;
+            for (uint256 i = 1; i < ps.length; i++) {
+                uint256 a = ps[i - 1];
+                uint256 b = ps[i];
+                if (FROST.identifier(participants.addr(a)) > FROST.identifier(participants.addr(b))) {
+                    ps[i - 1] = b;
+                    ps[i] = a;
+                    ordered = false;
+                }
+            }
+        }
+    }
+
+    function _lagrangeCoefficient(uint256[] memory l, uint256 i) private view returns (uint256 lambda) {
         uint256 numerator = 1;
         uint256 denominator = 1;
-        uint256 minusIdentifier = Secp256k1.N - identifier;
-        for (uint256 i = 0; i < l.length; i++) {
-            uint256 x = l.unsafeMemoryAccess(i);
-            if (x == identifier) {
+        uint256 minusId = Secp256k1.N - FROST.identifier(participants.addr(i));
+        for (uint256 j = 0; j < l.length; j++) {
+            uint256 jj = l.unsafeMemoryAccess(j);
+            if (i == jj) {
                 continue;
             }
+            uint256 x = FROST.identifier(participants.addr(jj));
             numerator = mulmod(numerator, x, Secp256k1.N);
-            denominator = mulmod(denominator, addmod(x, minusIdentifier, Secp256k1.N), Secp256k1.N);
+            denominator = mulmod(denominator, addmod(x, minusId, Secp256k1.N), Secp256k1.N);
         }
         return mulmod(numerator, Math.invModPrime(denominator, Secp256k1.N), Secp256k1.N);
     }

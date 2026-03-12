@@ -2,7 +2,6 @@
 pragma solidity ^0.8.30;
 
 import {MerkleProof} from "@oz/utils/cryptography/MerkleProof.sol";
-import {FROST} from "@/libraries/FROST.sol";
 import {Secp256k1} from "@/libraries/Secp256k1.sol";
 
 /**
@@ -18,10 +17,10 @@ library FROSTNonceCommitmentSet {
 
     /**
      * @notice The main storage struct for tracking nonce commitments.
-     * @custom:param commitments Mapping from participant identifier to their commitments.
+     * @custom:param commitments Mapping from participant address to their commitments.
      */
     struct T {
-        mapping(FROST.Identifier => Commitments) commitments;
+        mapping(address participant => Commitments) commitments;
     }
 
     /**
@@ -84,16 +83,16 @@ library FROSTNonceCommitmentSet {
      * @notice Commits to the next chunk of nonces, given the current signature sequence for a group. This prevents
      *         participants committing to nonces _after_ a signing ceremony has already begun.
      * @param self The storage struct.
-     * @param identifier The participant's FROST identifier.
+     * @param participant The participant's address.
      * @param commitment The commitment merkle root.
      * @param sequence The current signature sequence.
      * @return chunk The chunk index for this commitment.
      */
-    function commit(T storage self, FROST.Identifier identifier, bytes32 commitment, uint64 sequence)
+    function commit(T storage self, address participant, bytes32 commitment, uint64 sequence)
         internal
         returns (uint64 chunk)
     {
-        Commitments storage commitments = self.commitments[identifier];
+        Commitments storage commitments = self.commitments[participant];
         uint256 offset;
         (chunk, offset) = _sequence(sequence);
         uint64 next = commitments.next;
@@ -108,7 +107,7 @@ library FROSTNonceCommitmentSet {
     /**
      * @notice Verifies that the specified commitment is part of the set.
      * @param self The storage struct.
-     * @param identifier The participant's FROST identifier.
+     * @param participant The participant's address.
      * @param d The first nonce commitment point.
      * @param e The second nonce commitment point.
      * @param sequence The signature sequence.
@@ -116,7 +115,7 @@ library FROSTNonceCommitmentSet {
      */
     function verify(
         T storage self,
-        FROST.Identifier identifier,
+        address participant,
         Secp256k1.Point memory d,
         Secp256k1.Point memory e,
         uint64 sequence,
@@ -126,7 +125,7 @@ library FROSTNonceCommitmentSet {
         e.requireNonZero();
 
         (uint64 chunk, uint256 offset) = _sequence(sequence);
-        (bytes32 commitment, uint256 startOffset) = _root(self.commitments[identifier].chunks[chunk]);
+        (bytes32 commitment, uint256 startOffset) = _root(self.commitments[participant].chunks[chunk]);
         require(offset >= startOffset, NotIncluded());
 
         require(proof.length == _CHUNKSZ, NotIncluded());

@@ -9,6 +9,12 @@ import {ForgeSecp256k1} from "@test/util/ForgeSecp256k1.sol";
 contract FROSTTest is Test {
     using ForgeSecp256k1 for ForgeSecp256k1.P;
 
+    function test_Identifier() public view {
+        address participant = 0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045;
+        uint256 id = FROST.identifier(participant);
+        assertEq(id, 0xe3faf3d5fec69256091d32a1e942082b9541ff7f2c928745c0d01e922879745b);
+    }
+
     function test_Nonce() public view {
         bytes32 random = hex"2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a";
         uint256 secret = 0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80;
@@ -23,21 +29,27 @@ contract FROSTTest is Test {
         });
         FROST.Commitment[] memory commitments = new FROST.Commitment[](3);
         commitments[0] = FROST.Commitment({
-            identifier: FROST.newIdentifier(1), d: ForgeSecp256k1.g(0xd1).toPoint(), e: ForgeSecp256k1.g(0xe1).toPoint()
+            participant: address(3), d: ForgeSecp256k1.g(0xd3).toPoint(), e: ForgeSecp256k1.g(0xe3).toPoint()
         });
         commitments[1] = FROST.Commitment({
-            identifier: FROST.newIdentifier(2), d: ForgeSecp256k1.g(0xd2).toPoint(), e: ForgeSecp256k1.g(0xe2).toPoint()
+            participant: address(2), d: ForgeSecp256k1.g(0xd2).toPoint(), e: ForgeSecp256k1.g(0xe2).toPoint()
         });
         commitments[2] = FROST.Commitment({
-            identifier: FROST.newIdentifier(3), d: ForgeSecp256k1.g(0xd3).toPoint(), e: ForgeSecp256k1.g(0xe3).toPoint()
+            participant: address(1), d: ForgeSecp256k1.g(0xd1).toPoint(), e: ForgeSecp256k1.g(0xe1).toPoint()
         });
         bytes32 message = keccak256("hello");
 
+        // Note that commitments must be ordered _by identifier_ and not by
+        // participant.
+        assertLt(FROST.identifier(commitments[0].participant), FROST.identifier(commitments[1].participant));
+        assertLt(FROST.identifier(commitments[1].participant), FROST.identifier(commitments[2].participant));
+
         uint256[] memory bindingFactors = FROST.bindingFactors(y, commitments, message);
         assertEq(bindingFactors.length, 3);
-        assertEq(bindingFactors[0], 0x3ace394f1783cd2f9647aaded69596328f98cc57c823ae5652d7275461be9bea);
-        assertEq(bindingFactors[1], 0x30df3963e4aee100fa049ec729adf4e75609b4f3f699fa17cf1c593ef1cf3ecf);
-        assertEq(bindingFactors[2], 0x04849a66886b4b59b920d847e334fc3f9aa355d8c152e146d3ed03c8c3a8096d);
+        // TODO: Derive these values with `frost-secp256k1` crate.
+        assertEq(bindingFactors[0], 0x245a80a97dadad3e97e2be4cdfc330c48e591ef9e8786d28490b22d4276249d6);
+        assertEq(bindingFactors[1], 0x5eeb6723fe85fe18a3828e4ec862989f3b207ef95ce42e82944ac098e5d4b50e);
+        assertEq(bindingFactors[2], 0x19231f8e14a3a1918fd193a21f1c8e045e8192bec2f8f420013c138624a9f553);
     }
 
     function test_Challenge() public view {
@@ -80,7 +92,7 @@ contract FROSTTest is Test {
             y: 0x3020f80cae8f515d58686d5c6e4f1d027a1671348b6402f4e43ce525bda00fbc
         });
 
-        uint256 c = FROST.keyGenChallenge(FROST.newIdentifier(1), phi, r);
-        assertEq(c, 0xe39fcb3eef980ce5ee77898a6ed247fe78146aca2852ca4cf9f7fdcf23b4d470);
+        uint256 c = FROST.keyGenChallenge(address(1), phi, r);
+        assertEq(c, 0xd11b55fe7ad428ecdeefa22b651e2caeb2b8a8443271fc60f84a2ca9ef1aa167);
     }
 }
