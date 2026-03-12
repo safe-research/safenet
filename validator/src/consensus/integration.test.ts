@@ -18,7 +18,7 @@ import { afterEach, beforeAll, describe, expect, it } from "vitest";
 import { silentLogger, testLogger, testMetrics } from "../__tests__/config.js";
 import { waitForBlock, waitForBlocks } from "../__tests__/utils.js";
 import { toPoint } from "../frost/math.js";
-import { calcGenesisGroup, calcGroupContext } from "../machine/keygen/group.js";
+import { calcGenesisGroup, calcGroupContext, calcThreshold } from "../machine/keygen/group.js";
 import type { WatcherConfig } from "../machine/transitions/watcher.js";
 import { createValidatorService, type ValidatorService } from "../service/service.js";
 import {
@@ -29,6 +29,7 @@ import {
 	COORDINATOR_SIGN_EVENT,
 } from "../types/abis.js";
 import type { ParticipantInfo, ProtocolConfig } from "../types/interfaces.js";
+import { participantsForEpoch } from "../utils/participants.js";
 import { calcGroupId } from "./keyGen/utils.js";
 import { calculateParticipantsRoot } from "./merkle.js";
 import { verifySignature } from "./signing/verify.js";
@@ -62,10 +63,12 @@ describe("integration", () => {
 		blocksPerEpoch,
 		timeout,
 		blockTimeMs,
+		rotateOutEpoch,
 	}: {
 		blocksPerEpoch?: bigint;
 		timeout?: bigint;
 		blockTimeMs?: number;
+		rotateOutEpoch?: bigint;
 	}) => {
 		// Check deployment information is available
 		const deploymentInfoFile = path.join(
@@ -121,15 +124,15 @@ describe("integration", () => {
 		testLogger.notice(`Use consensus at ${consensus.address}`);
 
 		// Private keys from anvil testnet
-		const accounts: [PrivateKeyAccount, bigint][] = [
-			[privateKeyToAccount("0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d"), 0n],
-			[privateKeyToAccount("0x5de4111afa1a4b94908f83103eb1f1706367c2e68ca870fc3fb9a804cdab365a"), 0n],
-			[privateKeyToAccount("0x7c852118294e51e653712a81e05800f419141751be58f605c371e15141b007a6"), 0n],
-			[privateKeyToAccount("0x47e179ec197488593b187f80a00eb0da91f1b9d0b13f8733639f19c30a34926a"), 0n],
-			[privateKeyToAccount("0x8b3a350cf5c34c9194ca85829a2df0ec3153be0318b5e2d3348e872092edffba"), 2n],
+		const accounts: [PrivateKeyAccount, bigint, bigint | undefined][] = [
+			[privateKeyToAccount("0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d"), 0n, undefined],
+			[privateKeyToAccount("0x5de4111afa1a4b94908f83103eb1f1706367c2e68ca870fc3fb9a804cdab365a"), 0n, undefined],
+			[privateKeyToAccount("0x7c852118294e51e653712a81e05800f419141751be58f605c371e15141b007a6"), 0n, undefined],
+			[privateKeyToAccount("0x47e179ec197488593b187f80a00eb0da91f1b9d0b13f8733639f19c30a34926a"), 0n, rotateOutEpoch],
+			[privateKeyToAccount("0x8b3a350cf5c34c9194ca85829a2df0ec3153be0318b5e2d3348e872092edffba"), 2n, undefined],
 		];
-		const participants: ParticipantInfo[] = accounts.map(([a, activeFrom], i) => {
-			return { id: BigInt(i + 1), address: a.address, activeFrom };
+		const participants: ParticipantInfo[] = accounts.map(([a, activeFrom, activeBefore], i) => {
+			return { id: BigInt(i + 1), address: a.address, activeFrom, activeBefore };
 		});
 
 		const clients = accounts.map(([a, activeFrom], i) => {
@@ -219,7 +222,7 @@ describe("integration", () => {
 	});
 
 	it("keygen timeout", { timeout: TEST_RUNTIME_IN_SECONDS * 1000 * 5 }, async ({ skip }) => {
-		const setupInfo = await setup({ timeout: 5n, blocksPerEpoch: 40n });
+		const setupInfo = await setup({ timeout: 5n, blocksPerEpoch: 40n, rotateOutEpoch: 2n });
 		if (setupInfo === undefined) {
 			skip();
 			// Don't run the test code
@@ -273,7 +276,7 @@ describe("integration", () => {
 		await waitForBlock(testClient, 60n);
 
 		const expectedGroupEpoch2 = calcGroupId(
-			calculateParticipantsRoot([participants[0], participants[1], participants[2], participants[3]]),
+			calculateParticipantsRoot([participants[0], participants[1], participants[2], participants[4]]),
 			4,
 			3,
 			calcGroupContext(consensus.address, 2n),
@@ -336,10 +339,11 @@ describe("integration", () => {
 		expect(stagedEpochs[0].args.proposedEpoch).toBe(proposedEpoch);
 		expect(abortedEpoch).not.toBe(proposedEpoch);
 		// Calculate group id with original group
+		const epochParticipants = participantsForEpoch(participants, proposedEpoch);
 		const expectedGroup = calcGroupId(
-			calculateParticipantsRoot(participants),
-			4,
-			3,
+			calculateParticipantsRoot(epochParticipants),
+			epochParticipants.length,
+			calcThreshold(epochParticipants.length),
 			calcGroupContext(consensus.address, proposedEpoch),
 		);
 		const expectedKey = await testClient.readContract({

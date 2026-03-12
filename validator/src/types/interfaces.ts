@@ -4,7 +4,7 @@ import type { SupportedChain } from "./schemas.js";
 
 export type ParticipantInfo = Participant & {
 	activeFrom: bigint;
-	activeUntil?: bigint;
+	activeBefore?: bigint;
 };
 
 export interface ProtocolConfig {

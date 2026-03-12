@@ -20,7 +20,7 @@ const PARTICIPANTS_INFO: ParticipantInfo[] = [
 		id: 3n,
 		address: entryPoint08Address,
 		activeFrom: 1n,
-		activeUntil: 3n,
+		activeBefore: 3n,
 	},
 	{
 		id: 4n,
@@ -41,8 +41,7 @@ describe("participants", () => {
 			PARTICIPANTS[2],
 		]);
 		expect(participantsForEpoch(PARTICIPANTS_INFO, 2n)).toStrictEqual(PARTICIPANTS);
-		expect(participantsForEpoch(PARTICIPANTS_INFO, 3n)).toStrictEqual(PARTICIPANTS);
-		expect(participantsForEpoch(PARTICIPANTS_INFO, 4n)).toStrictEqual([
+		expect(participantsForEpoch(PARTICIPANTS_INFO, 3n)).toStrictEqual([
 			PARTICIPANTS[0],
 			PARTICIPANTS[1],
 			PARTICIPANTS[3],
@@ -56,5 +55,8 @@ describe("participants", () => {
 		expect(
 			participantsForEpoch([PARTICIPANTS_INFO[3], { id: 4n, address: ethAddress, activeFrom: 3n }], 3n),
 		).toStrictEqual([PARTICIPANTS[3]]);
+	});
+	it("should return sorted", async () => {
+		expect(participantsForEpoch(PARTICIPANTS_INFO.toReversed(), 2n)).toStrictEqual(PARTICIPANTS);
 	});
 });

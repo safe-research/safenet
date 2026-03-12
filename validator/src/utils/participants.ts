@@ -6,10 +6,10 @@ export const participantsForEpoch = (participants: ParticipantInfo[], epoch: big
 	for (const participant of participants) {
 		if (
 			participant.activeFrom <= epoch &&
-			(participant.activeUntil === undefined || epoch <= participant.activeUntil)
+			(participant.activeBefore === undefined || epoch < participant.activeBefore)
 		) {
 			participantMap.set(participant.id.toString(), { address: participant.address, id: participant.id });
 		}
 	}
-	return Array.from(participantMap.values()).sort((a, b) => (a < b ? -1 : 1));
+	return Array.from(participantMap.values()).sort((a, b) => (a.id < b.id ? -1 : 1));
 };
