@@ -1563,4 +1563,91 @@ describe("GasFeeEstimator", () => {
 		expect(original).not.toBe(next);
 		expect(estimateFeesPerGas).toHaveBeenCalledTimes(2);
 	});
+
+	it("should not resubmit a transaction that is already in-flight", async () => {
+		const queue = new InMemoryQueue<ActionWithTimeout>();
+		const getTransactionCount = vi.fn();
+		const publicClient = {
+			getTransactionCount,
+		} as unknown as PublicClient;
+		const signTransaction = vi.fn();
+		const sendRawTransaction = vi.fn();
+		const chain = gnosisChiado;
+		const account = { address: entryPoint09Address };
+		const signingClient = {
+			account,
+			chain,
+			signTransaction,
+			sendRawTransaction,
+		} as unknown as WalletClient<Transport, Chain, Account>;
+		const estimateFees = vi.fn();
+		const gasFeeEstimator = {
+			estimateFees,
+		} as unknown as GasFeeEstimator;
+		const countPending = vi.fn();
+		const submittedUpTo = vi.fn();
+		const setSubmittedForPending = vi.fn();
+		const setExecutedUpTo = vi.fn();
+		const setPending = vi.fn();
+		const setFees = vi.fn();
+		const setHash = vi.fn();
+		const txStorage = {
+			countPending,
+			submittedUpTo,
+			setPending,
+			setFees,
+			setHash,
+			setSubmittedForPending,
+			setExecutedUpTo,
+		} as unknown as TransactionStorage;
+
+		const hash = keccak256("0x5afe5afe01");
+		const [, , tx] = TEST_ACTIONS[0];
+		const pendingTx = { ...tx, nonce: 10, hash };
+
+		countPending.mockReturnValue(1);
+		setSubmittedForPending.mockReturnValue(0);
+		setExecutedUpTo.mockReturnValue(0);
+		submittedUpTo.mockReturnValue([pendingTx]);
+		getTransactionCount.mockResolvedValue(10);
+		estimateFees.mockResolvedValue({ maxFeePerGas: 200n, maxPriorityFeePerGas: 100n });
+		signTransaction.mockResolvedValue("0x5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe");
+
+		// sendRawTransaction will be held pending until we resolve it manually
+		let resolveSendRaw!: (value: `0x${string}`) => void;
+		const sendRawPending = new Promise<`0x${string}`>((resolve) => {
+			resolveSendRaw = resolve;
+		});
+		sendRawTransaction.mockReturnValueOnce(sendRawPending);
+
+		const protocol = new OnchainProtocol({
+			publicClient,
+			signingClient,
+			gasFeeEstimator,
+			consensus: TEST_CONSENSUS,
+			coordinator: TEST_COORDINATOR,
+			queue,
+			txStorage,
+			logger: testLogger,
+		});
+
+		// Start first check — it will hang inside sendRawTransaction
+		const firstCheck = protocol.checkPendingActions(10n);
+
+		// Yield to allow the first check to reach sendRawTransaction
+		await Promise.resolve();
+		await Promise.resolve();
+		await Promise.resolve();
+
+		// Start second check while first is still in-flight
+		const secondCheck = protocol.checkPendingActions(11n);
+
+		// Resolve the first sendRawTransaction and await both checks
+		resolveSendRaw("0xdeadbeef");
+		await firstCheck;
+		await secondCheck;
+
+		// sendRawTransaction must have been called exactly once despite two concurrent checks
+		expect(sendRawTransaction).toBeCalledTimes(1);
+	});
 });

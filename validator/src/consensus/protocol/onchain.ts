@@ -85,6 +85,7 @@ export class OnchainProtocol extends BaseProtocol {
 	#coordinator: Address;
 	#logger: Logger;
 	#blocksBeforeResubmit: bigint;
+	#inFlightNonces: Set<number> = new Set();
 
 	constructor({
 		publicClient,
@@ -158,6 +159,10 @@ export class OnchainProtocol extends BaseProtocol {
 			// transactions at once.
 			const pendingTxs = this.#txStorage.submittedUpTo(blockNumber - this.#blocksBeforeResubmit);
 			for (const tx of pendingTxs) {
+				if (this.#inFlightNonces.has(tx.nonce)) {
+					this.#logger.debug(`Skipping in-flight transaction for nonce ${tx.nonce}`);
+					continue;
+				}
 				this.#logger.debug(`Resubmit transaction for ${tx.nonce}!`, { transaction: tx });
 				try {
 					await this.submitTransaction(tx);
@@ -186,33 +191,38 @@ export class OnchainProtocol extends BaseProtocol {
 	private async submitTransaction(
 		tx: EthTransactionData & Pick<EthTransactionDetails, "nonce" | "fees">,
 	): Promise<Hex> {
-		const estimatedFees = await this.#gasFeeEstimator.estimateFees();
-		// Use max of (previous fees + 10%) and estimate
-		const fees: FeeValues = {
-			maxFeePerGas: maxBigInt(estimatedFees.maxFeePerGas, ((tx.fees?.maxFeePerGas ?? 0n) * 110n) / 100n),
-			maxPriorityFeePerGas: maxBigInt(
-				estimatedFees.maxPriorityFeePerGas,
-				((tx.fees?.maxPriorityFeePerGas ?? 0n) * 110n) / 100n,
-			),
-		};
+		this.#inFlightNonces.add(tx.nonce);
+		try {
+			const estimatedFees = await this.#gasFeeEstimator.estimateFees();
+			// Use max of (previous fees + 10%) and estimate
+			const fees: FeeValues = {
+				maxFeePerGas: maxBigInt(estimatedFees.maxFeePerGas, ((tx.fees?.maxFeePerGas ?? 0n) * 110n) / 100n),
+				maxPriorityFeePerGas: maxBigInt(
+					estimatedFees.maxPriorityFeePerGas,
+					((tx.fees?.maxPriorityFeePerGas ?? 0n) * 110n) / 100n,
+				),
+			};
 
-		this.#txStorage.setPending(tx.nonce);
-		// Store fees before submission in case an error occurs
-		this.#txStorage.setFees(tx.nonce, fees);
-		const signedTx = await this.#signingClient.signTransaction({
-			to: tx.to,
-			value: tx.value,
-			data: tx.data,
-			nonce: tx.nonce,
-			gas: tx.gas,
-			chain: this.#signingClient.chain,
-			account: this.#signingClient.account,
-			...fees,
-		});
-		const txHash = keccak256(signedTx);
-		this.#txStorage.setHash(tx.nonce, txHash);
-		this.#logger.debug(`Submitting transaction for nonce ${tx.nonce}!`, { tx, txHash, fees });
-		return this.#signingClient.sendRawTransaction({ serializedTransaction: signedTx });
+			this.#txStorage.setPending(tx.nonce);
+			// Store fees before submission in case an error occurs
+			this.#txStorage.setFees(tx.nonce, fees);
+			const signedTx = await this.#signingClient.signTransaction({
+				to: tx.to,
+				value: tx.value,
+				data: tx.data,
+				nonce: tx.nonce,
+				gas: tx.gas,
+				chain: this.#signingClient.chain,
+				account: this.#signingClient.account,
+				...fees,
+			});
+			const txHash = keccak256(signedTx);
+			this.#txStorage.setHash(tx.nonce, txHash);
+			this.#logger.debug(`Submitting transaction for nonce ${tx.nonce}!`, { tx, txHash, fees });
+			return await this.#signingClient.sendRawTransaction({ serializedTransaction: signedTx });
+		} finally {
+			this.#inFlightNonces.delete(tx.nonce);
+		}
 	}
 
 	private async submitAction(action: SimulateContractParameters): Promise<Hex | null> {
