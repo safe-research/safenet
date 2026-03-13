@@ -37,7 +37,7 @@ const MACHINE_STATES: MachineStates = {
 		responseDeadline: 25n,
 		deadline: 30n,
 		missingSharesFrom: [],
-		confirmationsFrom: [3n, 1n],
+		confirmationsFrom: [entryPoint08Address, entryPoint06Address],
 		complaints: {},
 	},
 	signing: {},
@@ -47,10 +47,7 @@ const CONSENSUS_STATE: ConsensusState = {
 	activeEpoch: 0n,
 	groupPendingNonces: {},
 	epochGroups: {
-		"0": {
-			groupId: "0xffa9d1aa438a646139fe8d817f9c9dbb060ee7e2e58f2b100000000000000000",
-			participantId: 1n,
-		},
+		"0": "0xffa9d1aa438a646139fe8d817f9c9dbb060ee7e2e58f2b100000000000000000",
 	},
 	signatureIdToMessage: {},
 };
@@ -58,17 +55,14 @@ const CONSENSUS_STATE: ConsensusState = {
 const MACHINE_CONFIG: MachineConfig = {
 	participantsInfo: [
 		{
-			id: 1n,
 			address: entryPoint06Address,
 			activeFrom: 0n,
 		},
 		{
-			id: 2n,
 			address: entryPoint07Address,
 			activeFrom: 0n,
 		},
 		{
-			id: 3n,
 			address: entryPoint08Address,
 			activeFrom: 0n,
 		},
@@ -84,7 +78,7 @@ const EVENT: KeyGenConfirmedEvent = {
 	block: 4n,
 	index: 0,
 	gid: "0x06cb03baac74421225341827941e88d9547e5459c4b3715c0000000000000000",
-	identifier: 2n,
+	participant: entryPoint07Address,
 	confirmed: false,
 };
 
@@ -146,14 +140,14 @@ describe("key gen confirmed", () => {
 				responseDeadline: 25n,
 				deadline: 30n,
 				missingSharesFrom: [],
-				confirmationsFrom: [3n],
+				confirmationsFrom: [entryPoint08Address],
 				complaints: {},
 			},
 			signing: {},
 		};
 		const keyGenClient = {} as unknown as KeyGenClient;
 		const participants = vi.fn();
-		participants.mockReturnValueOnce([1n, 2n, 3n]);
+		participants.mockReturnValueOnce([entryPoint06Address, entryPoint07Address, entryPoint08Address]);
 		const signingClient = {
 			participants,
 		} as unknown as SigningClient;
@@ -179,8 +173,8 @@ describe("key gen confirmed", () => {
 				responseDeadline: 25n,
 				deadline: 30n,
 				missingSharesFrom: [],
-				confirmationsFrom: [3n, 2n],
-				lastParticipant: 2n,
+				confirmationsFrom: [entryPoint08Address, entryPoint07Address],
+				lastParticipant: entryPoint07Address,
 				complaints: {},
 			},
 		});
@@ -191,7 +185,7 @@ describe("key gen confirmed", () => {
 	it("should skip signing and trigger nonce tree generation if in genesis key gen", async () => {
 		const keyGenClient = {} as unknown as KeyGenClient;
 		const participants = vi.fn();
-		participants.mockReturnValueOnce([1n, 2n, 3n]);
+		participants.mockReturnValueOnce([entryPoint06Address, entryPoint07Address, entryPoint08Address]);
 		const generateNonceTree = vi.fn();
 		generateNonceTree.mockReturnValueOnce(keccak256("0x5afe"));
 		const signingClient = {
@@ -241,7 +235,7 @@ describe("key gen confirmed", () => {
 			groupPublicKey,
 		} as unknown as KeyGenClient;
 		const participants = vi.fn();
-		participants.mockReturnValueOnce([1n, 2n, 3n]);
+		participants.mockReturnValueOnce([entryPoint06Address, entryPoint07Address, entryPoint08Address]);
 		const signingClient = {
 			participants,
 		} as unknown as SigningClient;
@@ -276,7 +270,7 @@ describe("key gen confirmed", () => {
 			groupPublicKey,
 		} as unknown as KeyGenClient;
 		const participants = vi.fn();
-		participants.mockReturnValueOnce([1n, 2n, 3n]);
+		participants.mockReturnValueOnce([entryPoint06Address, entryPoint07Address, entryPoint08Address]);
 		const signingClient = {
 			participants,
 		} as unknown as SigningClient;
@@ -320,9 +314,13 @@ describe("key gen confirmed", () => {
 		} as unknown as KeyGenClient;
 		const participants = vi.fn();
 		// New group
-		participants.mockReturnValueOnce([1n, 2n, 3n]);
+		participants.mockReturnValueOnce([entryPoint06Address, entryPoint07Address, entryPoint08Address]);
 		// Active group
-		participants.mockReturnValueOnce([2n, 3n, 4n]);
+		participants.mockReturnValueOnce([
+			entryPoint07Address,
+			entryPoint08Address,
+			"0x0000000000000000000000000000000000000004",
+		]);
 		const signingClient = {
 			participants,
 		} as unknown as SigningClient;
@@ -378,11 +376,17 @@ describe("key gen confirmed", () => {
 		} as unknown as KeyGenClient;
 		const participants = vi.fn();
 		// New group
-		participants.mockReturnValueOnce([1n, 2n, 3n]);
+		participants.mockReturnValueOnce([entryPoint06Address, entryPoint07Address, entryPoint08Address]);
 		// Active group
-		participants.mockReturnValueOnce([2n, 3n, 4n]);
+		participants.mockReturnValueOnce([
+			entryPoint07Address,
+			entryPoint08Address,
+			"0x0000000000000000000000000000000000000004",
+		]);
+		const participant = vi.fn().mockReturnValueOnce(entryPoint06Address);
 		const signingClient = {
 			participants,
+			participant,
 		} as unknown as SigningClient;
 		const protocol = {
 			chainId: () => 100n,
@@ -433,10 +437,17 @@ describe("key gen confirmed", () => {
 			groupPublicKey,
 		} as unknown as KeyGenClient;
 		const participants = vi.fn();
-		participants.mockReturnValueOnce([1n, 2n, 3n]);
-		participants.mockReturnValueOnce([1n, 2n, 3n, 4n]);
+		participants.mockReturnValueOnce([entryPoint06Address, entryPoint07Address, entryPoint08Address]);
+		participants.mockReturnValueOnce([
+			entryPoint06Address,
+			entryPoint07Address,
+			entryPoint08Address,
+			"0x0000000000000000000000000000000000000004",
+		]);
+		const participant = vi.fn().mockReturnValueOnce(entryPoint06Address);
 		const signingClient = {
 			participants,
+			participant,
 		} as unknown as SigningClient;
 		const protocol = {
 			chainId: () => 100n,
@@ -463,8 +474,13 @@ describe("key gen confirmed", () => {
 		const signingState: SigningState = {
 			id: "waiting_for_request",
 			packet: EPOCH_PACKET,
-			responsible: 2n,
-			signers: [1n, 2n, 3n, 4n],
+			responsible: entryPoint07Address,
+			signers: [
+				entryPoint06Address,
+				entryPoint07Address,
+				entryPoint08Address,
+				"0x0000000000000000000000000000000000000004",
+			],
 			deadline: 24n,
 		};
 		const rollover: RolloverState = {

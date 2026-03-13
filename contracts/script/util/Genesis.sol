@@ -1,11 +1,15 @@
 // SPDX-License-Identifier: GPL-3.0-only
 pragma solidity ^0.8.30;
 
+import {Arrays} from "@oz/utils/Arrays.sol";
+
 /**
  * @title Safenet Genesis
  * @notice Library with utilities for computing Safenet genesis parameters.
  */
 library Genesis {
+    using Arrays for bytes32[];
+
     /**
      * @notice Computes the Merkle root for a set of participants. The participant FROST identifiers are assumed to
      *         be sequential starting at 1.
@@ -21,7 +25,9 @@ library Genesis {
         for (uint256 i = 0; i < participants.length; i++) {
             nodes[i] = bytes32(uint256(uint160(participants[i])));
         }
-        for (uint256 l = participants.length; l > 1; l = (l + 1) / 2) {
+        nodes.sort();
+
+        for (uint256 l = nodes.length; l > 1; l = (l + 1) / 2) {
             for (uint256 i = 0; i < l; i += 2) {
                 bytes32 a = nodes[i];
                 bytes32 b = i + 1 < l ? nodes[i + 1] : bytes32(0);

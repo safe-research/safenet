@@ -26,10 +26,6 @@ export const calculateMerkleRoot = (leaves: Hex[]): Hex => {
 	return rootLevel[0];
 };
 
-export const calculateParticipantsRoot = (participants: readonly Address[]): Hex => {
-	return calculateMerkleRoot(participants.map((p) => pad(p)));
-};
-
 export const verifyMerkleProof = (root: Hex, leaf: Hex, proof: Hex[]): boolean => {
 	let node: Hex = leaf;
 	for (const part of proof) {
@@ -67,10 +63,32 @@ export const generateMerkleProof = (leaves: Hex[], index: number): Hex[] => {
 	return proof;
 };
 
+const participantLeaves = (participants: readonly Address[]): Hex[] => {
+	const leaves = participants.map((p) => pad(p).toLowerCase() as Hex);
+
+	// The participant Merkle tree requires strictly sorted participants. Assert
+	// that this property holds for our set. The `participants` modules already
+	// ensures that this never happens, as it dedupes and sorts when creating
+	// the participant set for a given epoch.
+	leaves.reduce((previous, leaf) => {
+		if (previous >= leaf) {
+			throw new Error("participants not monotonic");
+		}
+		return leaf;
+	});
+
+	return leaves;
+};
+
+export const calculateParticipantsRoot = (participants: readonly Address[]): Hex => {
+	return calculateMerkleRoot(participantLeaves(participants));
+};
+
 export const generateParticipantProof = (participants: readonly Address[], participant: Address): Hex[] => {
+	const leaves = participantLeaves(participants);
 	const index = participants.findIndex((p) => p === participant);
-	return generateMerkleProof(
-		participants.map((p) => pad(p)),
-		index,
-	);
+	if (index < 0) {
+		throw new Error(`participant ${participant} not included`);
+	}
+	return generateMerkleProof(leaves, index);
 };

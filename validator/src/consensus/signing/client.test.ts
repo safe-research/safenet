@@ -2,87 +2,67 @@ import { type Address, type Hex, keccak256, stringToBytes } from "viem";
 import { describe, expect, it } from "vitest";
 import { createClientStorage, log } from "../../__tests__/config.js";
 import { addmod, g, toPoint } from "../../frost/math.js";
-import type { FrostPoint, ParticipantId, SignatureId } from "../../frost/types.js";
+import type { FrostPoint, SignatureId } from "../../frost/types.js";
 import { SigningClient } from "./client.js";
 import type { NonceCommitments, PublicNonceCommitments } from "./nonces.js";
 import { verifySignature } from "./verify.js";
 
 const TEST_GROUP = {
-	groupId: "0x0000000000000000000000007fa9385be102ac3eac297483dd6233d62b3e1496" as Hex,
+	groupId: "0x93df36aea8e8fc3d254282cf738cd4171a2675e12ae725680000000000000000",
 	participants: [
-		{
-			id: 1n,
-			address: "0x17dA3E04a30e9Dec247FddDCbFb7B0497Cd2AF95" as Address,
-		},
-		{
-			id: 2n,
-			address: "0x690f083b2968f6cB0Ab6d8885d563b7977cff43B" as Address,
-		},
-		{
-			id: 3n,
-			address: "0x89bEf0f3a116cf717e51F74C271A0a7aF527511D" as Address,
-		},
-		{
-			id: 4n,
-			address: "0xbF4e298652F7e39d9062A4e7ec5C48Bf76e48e10" as Address,
-		},
-		{
-			id: 5n,
-			address: "0xf22BE54C085Dc0621ad076D881de8251c5a25fF1" as Address,
-		},
+		"0x17dA3E04a30e9Dec247FddDCbFb7B0497Cd2AF95",
+		"0x690f083b2968f6cB0Ab6d8885d563b7977cff43B",
+		"0x89bEf0f3a116cf717e51F74C271A0a7aF527511D",
+		"0xbF4e298652F7e39d9062A4e7ec5C48Bf76e48e10",
+		"0xf22BE54C085Dc0621ad076D881de8251c5a25fF1",
 	],
 	publicKey: toPoint({
-		x: 71064083542762312543389424882566275462227917749849605078973795482529746018304n,
-		y: 18516174593957712908408406456950733439418726956735133896250976920482937040840n,
+		x: 84170342083342046397084658286143833881385705429382200330874980718209595271985n,
+		y: 111565381103637648897565888500643513470463855578292478313367060330928451504515n,
 	}),
-};
+} as const;
 const TEST_SIGNERS = [
 	{
-		account: "0x17dA3E04a30e9Dec247FddDCbFb7B0497Cd2AF95" as Address,
-		signingShare: 20562999615202090641202256481184490375429435244238288544262716592143955696382n,
-		participantId: 1n,
+		account: "0x17dA3E04a30e9Dec247FddDCbFb7B0497Cd2AF95",
+		signingShare: 92616603195930045475330214960755134594574429097855230829573477440534317429993n,
 		verificationShare: toPoint({
-			x: 8157951670743782207572742157759285246997125817591478561509454646417563755134n,
-			y: 56888799465634869784517292721691123160415451366201038719887189136540242661500n,
+			x: 64261139819204851855244563172704531594599903129651325303989702961646113765865n,
+			y: 84617880903058707597561846243195427190847825954421979576005455488635048167951n,
 		}),
 	},
 	{
-		account: "0x690f083b2968f6cB0Ab6d8885d563b7977cff43B" as Address,
-		signingShare: 11521112607527998281706776924866429794302295528584870815702418782215238588532n,
-		participantId: 2n,
+		account: "0x690f083b2968f6cB0Ab6d8885d563b7977cff43B",
+		signingShare: 65840621212864096956224136028940543657870580760596441578126625855708404229905n,
 		verificationShare: toPoint({
-			x: 73844941487532555987364396775795076447946974313865618280135872376303125438365n,
-			y: 29462187596282402403443212507099371496473451788807502182979305411073244917417n,
+			x: 37213650586135434554301508857716015703663624186131749523514676647747801089936n,
+			y: 6236367474068391151235483003042845133507117409844064500737987761560520755049n,
 		}),
 	},
 	{
-		account: "0x89bEf0f3a116cf717e51F74C271A0a7aF527511D" as Address,
-		signingShare: 49315800323439827956806304959772670422395371345712878244203054714816206370500n,
-		participantId: 3n,
+		account: "0x89bEf0f3a116cf717e51F74C271A0a7aF527511D",
+		signingShare: 68722891159576630907435858937774180708777996115765358145405774196995605039429n,
 		verificationShare: toPoint({
-			x: 44679288968503427008336055401348610670311019206231050966573026822674597087871n,
-			y: 55755209342996270094025410798290967844706637348941476346623362199006170171687n,
+			x: 41741098108972902426831876015445239529523912969640162546161086083710807385070n,
+			y: 48947717088249892923702441418821968428786331634365135200513906456433783689879n,
 		}),
 	},
 	{
-		account: "0xbF4e298652F7e39d9062A4e7ec5C48Bf76e48e10" as Address,
-		signingShare: 18154973525621384242929855577215304406871098416547406447159461248428697547949n,
-		participantId: 4n,
+		account: "0xbF4e298652F7e39d9062A4e7ec5C48Bf76e48e10",
+		signingShare: 44833201630411931922855141261524414673023026320673166473864650125267998209599n,
 		verificationShare: toPoint({
-			x: 112111548805574036052056537155641327571521863544152157231564193075408059401719n,
-			y: 76557092302104387621595723426764926750450467869008997389281566585102109438507n,
+			x: 84877201132516405020234240153119389112001594610742699913395786424745518339279n,
+			y: 73082033105851640734385047250007221059892527096280794788900747213539676720136n,
 		}),
 	},
 	{
-		account: "0xf22BE54C085Dc0621ad076D881de8251c5a25fF1" as Address,
-		signingShare: 33830721451388862563648413785882239600567041020163359807176801524570873615216n,
-		participantId: 5n,
+		account: "0xf22BE54C085Dc0621ad076D881de8251c5a25fF1",
+		signingShare: 13086322243572108858288841808712792921456551656485227174142249973868521057300n,
 		verificationShare: toPoint({
-			x: 105587021125387004117772930966558154492652686110919450580386247155506502192059n,
-			y: 97790146336079427917878178932139533907352200097479391118658154349645214584696n,
+			x: 9830174855169825843069194197328411062217074564768016955757420615522985358269n,
+			y: 25192176312498426392986427521508055061952211194077411665484541357835081011820n,
 		}),
 	},
-];
+] as const;
 const NONCE_TREES = [
 	{
 		d: 100339483097864921407303963156202886029728085263802626541507900904023147081938n,
@@ -109,19 +89,19 @@ const NONCE_TREES = [
 		e: 7177519604416187819675204115425593011080760721237062629048923898622487474786n,
 		root: "0x47341e5da9b21ea5f1695797980d22690cb57d0b517b665c7c4c062273a46bd4",
 	},
-];
+] as const;
 
 // --- Tests ---
 describe("signing", () => {
 	it("e2e signing flow", async () => {
 		const nonceRevealEvent: {
 			signatureId: SignatureId;
-			signerId: ParticipantId;
+			signer: Address;
 			nonces: PublicNonceCommitments;
 		}[] = [];
 		const signatureShareEvents: {
 			signatureId: SignatureId;
-			signerId: ParticipantId;
+			signer: Address;
 			z: bigint;
 			r: FrostPoint;
 		}[] = [];
@@ -139,8 +119,9 @@ describe("signing", () => {
 		const groupId = TEST_GROUP.groupId;
 		log("------------------------ Inject Nonce Commitments ------------------------");
 		for (const { client, storage } of clients) {
-			const participantId = storage.participantId(groupId);
-			const treeInfo = NONCE_TREES[Number(participantId) - 1];
+			const participant = storage.participant(groupId);
+			const participantIndex = TEST_GROUP.participants.findIndex((p) => p === participant);
+			const treeInfo = NONCE_TREES[participantIndex];
 			const commitments0: NonceCommitments = {
 				hidingNonce: treeInfo.d,
 				bindingNonce: treeInfo.e,
@@ -153,38 +134,32 @@ describe("signing", () => {
 				root: treeInfo.root as Hex,
 			};
 			storage.registerNonceTree(groupId, nonceTree);
-			client.handleNonceCommitmentsHash(groupId, participantId, nonceTree.root, 0n);
+			client.handleNonceCommitmentsHash(groupId, participant, nonceTree.root, 0n);
 		}
 		log("------------------------ Trigger Signing Request ------------------------");
 		const signatureId = "0x0000000000000000000000017fa9385be102ac3eac297483dd6233d62b3e1496";
 		const message = keccak256(stringToBytes("Hello, Safenet!"));
 		for (const { client, storage } of clients) {
-			log(`>>>> Signing request to ${storage.participantId(groupId)} >>>>`);
-			const commitments = client.createNonceCommitments(
-				groupId,
-				signatureId,
-				message,
-				0n,
-				TEST_GROUP.participants.map((p) => p.id),
-			);
+			log(`>>>> Signing request to ${storage.participant(groupId)} >>>>`);
+			const commitments = client.createNonceCommitments(groupId, signatureId, message, 0n, TEST_GROUP.participants);
 			nonceRevealEvent.push({
 				signatureId,
-				signerId: storage.participantId(groupId),
+				signer: storage.participant(groupId),
 				nonces: commitments.nonceCommitments,
 			});
 		}
 		log("------------------------ Reveal Nonces ------------------------");
 		for (const e of nonceRevealEvent) {
 			for (const { client, storage } of clients) {
-				log(`>>>> Nonce reveal from ${e.signerId} to ${storage.participantId(groupId)} >>>>`);
-				const readyToSubmit = client.handleNonceCommitments(e.signatureId, e.signerId, e.nonces);
+				log(`>>>> Nonce reveal from ${e.signer} to ${storage.participant(groupId)} >>>>`);
+				const readyToSubmit = client.handleNonceCommitments(e.signatureId, e.signer, e.nonces);
 				if (!readyToSubmit) continue;
 
 				const { commitmentShare, signatureShare } = client.createSignatureShare(e.signatureId);
 
 				signatureShareEvents.push({
 					signatureId: e.signatureId,
-					signerId: e.signerId,
+					signer: e.signer,
 					z: signatureShare,
 					r: commitmentShare,
 				});

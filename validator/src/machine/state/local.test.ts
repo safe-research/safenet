@@ -139,7 +139,7 @@ describe("LocalConsensusStates", () => {
 				"0x5afe5afe": true,
 			},
 			epochGroups: {
-				"0x5afe5af3": { groupId: "0x5afe5afe23", participantId: 1n },
+				"0x5afe5af3": "0x5afe5afe23",
 			},
 			signatureIdToMessage: {
 				"0x5afe5afe23": zeroHash,
@@ -149,10 +149,7 @@ describe("LocalConsensusStates", () => {
 
 		expect(localState.activeEpoch).toBe(7n);
 		expect(localState.groupPendingNonces["0x5afe5afe"]).toBeTruthy();
-		expect(localState.epochGroups["0x5afe5af3"]).toStrictEqual({
-			groupId: "0x5afe5afe23",
-			participantId: 1n,
-		});
+		expect(localState.epochGroups["0x5afe5af3"]).toStrictEqual("0x5afe5afe23");
 		expect(localState.signatureIdToMessage["0x5afe5afe23"]).toBe(zeroHash);
 	});
 
@@ -163,7 +160,7 @@ describe("LocalConsensusStates", () => {
 				"0x5afe5afe": true,
 			},
 			epochGroups: {
-				"0x5afe5af3": { groupId: "0x5afe5afe23", participantId: 1n },
+				"0x5afe5af3": "0x5afe5afe23",
 			},
 			signatureIdToMessage: {
 				"0x5afe5afe23": zeroHash,
@@ -184,10 +181,7 @@ describe("LocalConsensusStates", () => {
 		// Check that immutable state was not touched
 		expect(immutableState.activeEpoch).toBe(7n);
 		expect(immutableState.groupPendingNonces["0x5afe5afe"]).toBeTruthy();
-		expect(immutableState.epochGroups["0x5afe5af3"]).toStrictEqual({
-			groupId: "0x5afe5afe23",
-			participantId: 1n,
-		});
+		expect(immutableState.epochGroups["0x5afe5af3"]).toStrictEqual("0x5afe5afe23");
 		expect(immutableState.signatureIdToMessage["0x5afe5afe23"]).toBe(zeroHash);
 	});
 
@@ -198,7 +192,7 @@ describe("LocalConsensusStates", () => {
 				"0x5afe5afe": true,
 			},
 			epochGroups: {
-				"0x5afe5af3": { groupId: "0x5afe5afe23", participantId: 1n },
+				"0x5afe5af3": "0x5afe5afe23",
 			},
 			signatureIdToMessage: {
 				"0x5afe5afe23": zeroHash,
@@ -212,8 +206,8 @@ describe("LocalConsensusStates", () => {
 				"0x5afe5afe2": true,
 			},
 			epochGroups: {
-				"0x5afe5af3": { groupId: "0x5afe5afe23", participantId: 1n },
-				"0x5afe5af5": { groupId: "0x5afe5afe27", participantId: 1n },
+				"0x5afe5af3": "0x5afe5afe23",
+				"0x5afe5af5": "0x5afe5afe27",
 			},
 			signatureIdToMessage: {
 				"0x5afe5afe23": zeroHash,
@@ -224,7 +218,7 @@ describe("LocalConsensusStates", () => {
 			consensus: {
 				activeEpoch: 11n,
 				groupPendingNonces: ["0x5afe5afe2", true],
-				epochGroup: [0x5afe5af5n, { groupId: "0x5afe5afe27", participantId: 1n }],
+				epochGroup: [0x5afe5af5n, "0x5afe5afe27"],
 				signatureIdToMessage: ["0x5afe5afe27", zeroHash],
 			},
 		};
@@ -233,24 +227,15 @@ describe("LocalConsensusStates", () => {
 		expect(localState.activeEpoch).toBe(11n);
 		expect(localState.groupPendingNonces["0x5afe5afe"]).toBeTruthy();
 		expect(localState.groupPendingNonces["0x5afe5afe2"]).toBeTruthy();
-		expect(localState.epochGroups["0x5afe5af3"]).toStrictEqual({
-			groupId: "0x5afe5afe23",
-			participantId: 1n,
-		});
-		expect(localState.epochGroups[(0x5afe5af5).toString()]).toStrictEqual({
-			groupId: "0x5afe5afe27",
-			participantId: 1n,
-		});
+		expect(localState.epochGroups["0x5afe5af3"]).toStrictEqual("0x5afe5afe23");
+		expect(localState.epochGroups[(0x5afe5af5).toString()]).toStrictEqual("0x5afe5afe27");
 		expect(localState.signatureIdToMessage["0x5afe5afe23"]).toBe(zeroHash);
 		expect(localState.signatureIdToMessage["0x5afe5afe27"]).toBe(zeroHash);
 
 		// Check that immutable state was not touched
 		expect(immutableState.activeEpoch).toBe(7n);
 		expect(immutableState.groupPendingNonces["0x5afe5afe"]).toBeTruthy();
-		expect(immutableState.epochGroups["0x5afe5af3"]).toStrictEqual({
-			groupId: "0x5afe5afe23",
-			participantId: 1n,
-		});
+		expect(immutableState.epochGroups["0x5afe5af3"]).toStrictEqual("0x5afe5afe23");
 		expect(immutableState.signatureIdToMessage["0x5afe5afe23"]).toBe(zeroHash);
 	});
 
@@ -259,10 +244,10 @@ describe("LocalConsensusStates", () => {
 			activeEpoch: 7n,
 			groupPendingNonces: {},
 			epochGroups: {
-				"1": { groupId: "0xgroup1", participantId: 1n },
-				"3": { groupId: "0xgroup3", participantId: 1n },
-				"5": { groupId: "0xgroup5", participantId: 1n },
-				"7": { groupId: "0xgroup7", participantId: 1n },
+				"1": "0xgroup1",
+				"3": "0xgroup3",
+				"5": "0xgroup5",
+				"7": "0xgroup7",
 			},
 			signatureIdToMessage: {},
 		};
@@ -277,23 +262,11 @@ describe("LocalConsensusStates", () => {
 		// Epochs 1 and 3 should be removed (< 5), epochs 5 and 7 should remain
 		expect(localState.epochGroups["1"]).toBeUndefined();
 		expect(localState.epochGroups["3"]).toBeUndefined();
-		expect(localState.epochGroups["5"]).toStrictEqual({
-			groupId: "0xgroup5",
-			participantId: 1n,
-		});
-		expect(localState.epochGroups["7"]).toStrictEqual({
-			groupId: "0xgroup7",
-			participantId: 1n,
-		});
+		expect(localState.epochGroups["5"]).toStrictEqual("0xgroup5");
+		expect(localState.epochGroups["7"]).toStrictEqual("0xgroup7");
 
 		// Check that immutable state was not touched
-		expect(immutableState.epochGroups["1"]).toStrictEqual({
-			groupId: "0xgroup1",
-			participantId: 1n,
-		});
-		expect(immutableState.epochGroups["3"]).toStrictEqual({
-			groupId: "0xgroup3",
-			participantId: 1n,
-		});
+		expect(immutableState.epochGroups["1"]).toStrictEqual("0xgroup1");
+		expect(immutableState.epochGroups["3"]).toStrictEqual("0xgroup3");
 	});
 });
