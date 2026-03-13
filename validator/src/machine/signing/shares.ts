@@ -14,13 +14,13 @@ export const handleSigningShares = async (
 	if (status?.id !== "collect_signing_shares") return {};
 	// Track identity that has submitted last share
 	// Copy all elements to avoid mutating the original array
-	const sharesFrom = [...status.sharesFrom, event.identifier];
+	const sharesFrom = [...status.sharesFrom, event.participant];
 	return {
 		signing: [
 			message,
 			{
 				...status,
-				lastSigner: event.identifier,
+				lastSigner: event.participant,
 				sharesFrom,
 			},
 		],

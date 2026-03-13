@@ -44,7 +44,7 @@ const participantsSchema = jsonStringToValue(
 			activeBefore: z.coerce.bigint().optional(),
 		}),
 	),
-).transform((participantInfo) => participantInfo.map((info, i) => ({ ...info, id: BigInt(i + 1) })));
+);
 
 const genesisSaltSchema = z.preprocess((val) => {
 	if (val === undefined || val === "") {

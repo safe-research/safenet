@@ -1,15 +1,15 @@
-import type { Hex } from "viem";
+import type { Address, Hex } from "viem";
 import type { ProtocolAction } from "../consensus/protocol/types.js";
 import type { EpochRolloverPacket } from "../consensus/verify/rollover/schemas.js";
 import type { SafeTransactionPacket } from "../consensus/verify/safeTx/schemas.js";
-import type { GroupId, ParticipantId, SignatureId } from "../frost/types.js";
+import type { GroupId, SignatureId } from "../frost/types.js";
 import type { ParticipantInfo } from "../types/interfaces.js";
 
 export type Optional<T, K extends keyof T> = Omit<T, K> & Partial<Pick<T, K>>;
 
 export type Complaints = {
-	unresponded: bigint;
-	total: bigint;
+	unresponded: number;
+	total: number;
 };
 
 export type RolloverState = Readonly<
@@ -34,9 +34,9 @@ export type RolloverState = Readonly<
 			groupId: GroupId;
 			nextEpoch: bigint;
 			deadline: bigint;
-			complaints: Readonly<Record<string, Readonly<Complaints>>>;
-			missingSharesFrom: readonly ParticipantId[];
-			lastParticipant?: ParticipantId;
+			complaints: Readonly<Record<Address, Readonly<Complaints>>>;
+			missingSharesFrom: readonly Address[];
+			lastParticipant?: Address;
 	  }
 	| {
 			id: "collecting_confirmations";
@@ -45,10 +45,10 @@ export type RolloverState = Readonly<
 			complaintDeadline: bigint;
 			responseDeadline: bigint;
 			deadline: bigint;
-			lastParticipant?: ParticipantId;
-			complaints: Readonly<Record<string, Readonly<Complaints>>>;
-			missingSharesFrom: readonly ParticipantId[];
-			confirmationsFrom: readonly ParticipantId[];
+			lastParticipant?: Address;
+			complaints: Readonly<Record<Address, Readonly<Complaints>>>;
+			missingSharesFrom: readonly Address[];
+			confirmationsFrom: readonly Address[];
 	  }
 	| {
 			id: "sign_rollover";
@@ -71,42 +71,37 @@ export type SigningState = Readonly<
 		(
 			| {
 					id: "waiting_for_request";
-					responsible?: ParticipantId;
-					signers: readonly ParticipantId[];
+					responsible?: Address;
+					signers: readonly Address[];
 					deadline: bigint;
 			  }
 			| {
 					id: "collect_nonce_commitments";
 					signatureId: SignatureId;
-					lastSigner?: ParticipantId;
+					lastSigner?: Address;
 					deadline: bigint;
 			  }
 			| {
 					id: "collect_signing_shares";
 					signatureId: SignatureId;
-					sharesFrom: readonly ParticipantId[];
-					lastSigner?: ParticipantId;
+					sharesFrom: readonly Address[];
+					lastSigner?: Address;
 					deadline: bigint;
 			  }
 			| {
 					id: "waiting_for_attestation";
 					signatureId: SignatureId;
-					responsible?: ParticipantId;
+					responsible?: Address;
 					deadline: bigint;
 			  }
 		)
 >;
 
-export type GroupInfo = {
-	groupId: GroupId;
-	participantId: ParticipantId;
-};
-
 export type ConsensusDiff = {
 	groupPendingNonces?: [GroupId, true?];
 	activeEpoch?: bigint;
 	genesisGroupId?: GroupId;
-	epochGroup?: [bigint, GroupInfo];
+	epochGroup?: [bigint, GroupId];
 	removeEpochGroups?: bigint[];
 	signatureIdToMessage?: [SignatureId, Hex?];
 };
@@ -122,7 +117,7 @@ export type MutableConsensusState = {
 	genesisGroupId?: GroupId;
 	activeEpoch: bigint;
 	groupPendingNonces: Record<GroupId, boolean>;
-	epochGroups: Record<string, GroupInfo>;
+	epochGroups: Record<string, GroupId>;
 	signatureIdToMessage: Record<SignatureId, Hex>;
 };
 
@@ -130,7 +125,7 @@ export type ConsensusState = Readonly<{
 	genesisGroupId?: GroupId;
 	activeEpoch: bigint;
 	groupPendingNonces: Readonly<Record<GroupId, boolean>>;
-	epochGroups: Readonly<Record<string, Readonly<GroupInfo>>>;
+	epochGroups: Readonly<Record<string, GroupId>>;
 	signatureIdToMessage: Readonly<Record<SignatureId, Hex>>;
 }>;
 

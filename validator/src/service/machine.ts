@@ -121,7 +121,7 @@ export class SafenetStateMachine {
 					// to undefined and unregisterGroup is not called again (best-effort, not retried).
 					const epochGroups = this.#storage.consensusState().epochGroups;
 					for (const epoch of diff.consensus?.removeEpochGroups ?? []) {
-						const groupId = epochGroups[epoch.toString()]?.groupId;
+						const groupId = epochGroups[epoch.toString()];
 						if (groupId === undefined) continue;
 						try {
 							this.#keyGenClient.unregisterGroup(groupId);
