@@ -239,7 +239,7 @@ contract FROSTCoordinatorTest is Test {
         bytes32[] memory nonceProof = new bytes32[](10);
         Nonces[] memory nonces = new Nonces[](COUNT);
         {
-            bytes32[] memory commitments = new bytes32[](COUNT + 1);
+            bytes32[] memory commitments = new bytes32[](COUNT);
             for (uint256 i = 0; i < COUNT; i++) {
                 Nonces memory n = nonces[i];
                 uint256 d = FROST.nonce(bytes32(vm.randomUint()), s[i]);
