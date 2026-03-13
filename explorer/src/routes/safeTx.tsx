@@ -4,7 +4,7 @@ import { ConditionalBackButton } from "@/components/BackButton";
 import { Box, Container, ContainerTitle } from "@/components/Groups";
 import { Skeleton } from "@/components/Skeleton";
 import { SafeTxDataDetails } from "@/components/transaction/SafeTxDataDetails";
-import { SafeTxOverview } from "@/components/transaction/SafeTxOverview";
+import { SafeTxHeader } from "@/components/transaction/SafeTxHeader";
 import { SafeTxProposals } from "@/components/transaction/SafeTxProposals";
 import { useSafeTransactionDetails } from "@/hooks/useSafeTransactionDetails";
 import { bigIntSchema, bytes32Schema } from "@/lib/schemas";
@@ -31,7 +31,7 @@ export function SafeTransaction() {
 			{details.data !== null && (
 				<>
 					<Box>
-						<SafeTxOverview title={`Safe Tx Hash: ${safeTxHash}`} transaction={details.data} />
+						<SafeTxHeader safeTxHash={safeTxHash} transaction={details.data} fromSafeApi={details.fromSafeApi} />
 					</Box>
 					<Box>
 						<SafeTxDataDetails data={details.data.data} />

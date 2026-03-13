@@ -43,6 +43,10 @@ These helpers are extracted to a new `lib/safe/wallet.ts` utility module.
 A small `CopyButton` component encapsulates copy-to-clipboard using `navigator.clipboard.writeText`,
 showing a brief ✓ confirmation after copying.
 
+The Network row reuses the existing `NetworkBadge` component (also used in the transaction list).
+The badge shows the short chain name (e.g. "BASE") with its brand colour. The full chain name and
+chainId are surfaced via a native `title` tooltip shown on hover.
+
 ### Phase 2 — Transaction Summary Section
 
 `SafeTxOverview` currently renders operation, `to`, value, and data in a single prose sentence. On
@@ -98,7 +102,7 @@ to include the chain name (e.g. "No proposals found for this SafeTxHash on Base.
 SAFE TX
 +-----------------------------------------------------------------------------------+
 | SafeTxHash: 0x9f12…7aBc   [Open in Safe Wallet ↗]   [Copy]                       |
-| Network: Base (chainId 8453)                                                      |
+| Network: [BASE]  ← hover shows "Base (chain id 8453)"                             |
 | Safe: 0xA1b2…9CDe   [Open in Safe Wallet ↗]   [Copy]                             |
 +-----------------------------------------------------------------------------------+
 ```
