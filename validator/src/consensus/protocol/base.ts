@@ -41,7 +41,7 @@ export abstract class BaseProtocol implements SafenetProtocol {
 
 	process(action: ProtocolAction, timeout: number = ACTION_TIMEOUT): void {
 		this.#logger.info(`Enqueue ${action.id}`, { action });
-		this.#actionQueue.push({
+		this.#actionQueue.enqueue({
 			...action,
 			validUntil: Date.now() + timeout,
 		});
@@ -63,7 +63,7 @@ export abstract class BaseProtocol implements SafenetProtocol {
 		// Check if action is still valid
 		const actionSpan = { action: { id: action.id } };
 		if (action.validUntil < Date.now()) {
-			this.#actionQueue.pop();
+			this.#actionQueue.dequeue();
 			this.#logger.warn("Timeout exeeded. Dropping action!", actionSpan);
 			this.checkNextAction();
 			return;
@@ -73,7 +73,7 @@ export abstract class BaseProtocol implements SafenetProtocol {
 			.then((transactionHash) => {
 				// If action was successfully sent to the node, remove it from queue
 				this.#logger.info(`Sent action for ${action.id} transaction`, { ...actionSpan, transactionHash });
-				this.#actionQueue.pop();
+				this.#actionQueue.dequeue();
 				this.#currentAction = undefined;
 				this.checkNextAction();
 			})
