@@ -1,4 +1,4 @@
-import { keccak256 } from "viem";
+import { type Hex, keccak256, pad } from "viem";
 import { generatePrivateKey, privateKeyToAccount } from "viem/accounts";
 import { describe, expect, it } from "vitest";
 import { createClientStorage, log, testLogger } from "../../__tests__/config.js";
@@ -45,9 +45,7 @@ describe("keyGen", () => {
 			log(">>>> Keygen and Commit >>>>");
 			const { encryptionPublicKey, commitments, poap, pok } = client.setupGroup(participants, threshold, context);
 			const participant = client.participant(groupId);
-			const participantIndex = participants.findIndex((p) => p === participant);
-			if (participantIndex === -1) throw new Error(`Invalid participant: ${participant}`);
-			expect(verifyMerkleProof(participantsRoot, poap[participantIndex] as `0x${string}`, poap)).toBeTruthy();
+			expect(verifyMerkleProof(participantsRoot, pad(participant).toLowerCase() as Hex, poap)).toBeTruthy();
 			log("######################################");
 			commitmentEvents.push({
 				groupId,

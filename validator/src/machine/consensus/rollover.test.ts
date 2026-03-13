@@ -22,9 +22,7 @@ const PARTICIPANTS_INFO = [
 	},
 ];
 
-const PARTICIPANTS = PARTICIPANTS_INFO.map((i) => {
-	return { address: i.address };
-});
+const PARTICIPANTS = PARTICIPANTS_INFO.map((i) => i.address);
 
 const MACHINE_CONFIG: MachineConfig = {
 	participantsInfo: PARTICIPANTS_INFO,

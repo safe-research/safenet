@@ -142,7 +142,7 @@ describe("collecting shares", () => {
 			"0x5af35af3",
 			"0x5afe5afe",
 			0n,
-			[1n, 2n],
+			["0x0000000000000000000000000000000000000001", "0x0000000000000000000000000000000000000002"],
 		);
 		expect(createNonceCommitments).toBeCalledTimes(1);
 		expect(diff.rollover).toBeUndefined();
@@ -208,7 +208,7 @@ describe("collecting shares", () => {
 			"0x5af35af3",
 			"0x5afe5afe",
 			0n,
-			[1n, 2n],
+			["0x0000000000000000000000000000000000000001", "0x0000000000000000000000000000000000000002"],
 		);
 		expect(createNonceCommitments).toBeCalledTimes(1);
 		expect(availableNoncesCount).toBeCalledTimes(2);

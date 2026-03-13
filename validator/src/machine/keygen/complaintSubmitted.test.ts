@@ -100,12 +100,12 @@ describe("complaint submitted", () => {
 	});
 
 	it("should accept complaints when collecting shares", async () => {
-		const participantId = vi.fn();
+		const participant = vi.fn();
 		const threshold = vi.fn();
 		threshold.mockReturnValueOnce(3n);
-		participantId.mockReturnValueOnce(entryPoint06Address);
+		participant.mockReturnValueOnce(entryPoint06Address);
 		const keyGenClient = {
-			participantId,
+			participant,
 			threshold,
 		} as unknown as KeyGenClient;
 		const protocol = makeProtocol();
@@ -136,12 +136,12 @@ describe("complaint submitted", () => {
 	});
 
 	it("should accept complaints when collecting confirmations", async () => {
-		const participantId = vi.fn();
+		const participant = vi.fn();
 		const threshold = vi.fn();
 		threshold.mockReturnValueOnce(3n);
-		participantId.mockReturnValueOnce(entryPoint06Address);
+		participant.mockReturnValueOnce(entryPoint06Address);
 		const keyGenClient = {
-			participantId,
+			participant,
 			threshold,
 		} as unknown as KeyGenClient;
 		const protocol = makeProtocol();
@@ -178,12 +178,12 @@ describe("complaint submitted", () => {
 	});
 
 	it("should accept multiple complaints for different accused", async () => {
-		const participantId = vi.fn();
+		const participant = vi.fn();
 		const threshold = vi.fn();
 		threshold.mockReturnValueOnce(3n);
-		participantId.mockReturnValueOnce(entryPoint06Address);
+		participant.mockReturnValueOnce(entryPoint06Address);
 		const keyGenClient = {
-			participantId,
+			participant,
 			threshold,
 		} as unknown as KeyGenClient;
 		const protocol = makeProtocol();
@@ -217,12 +217,12 @@ describe("complaint submitted", () => {
 	});
 
 	it("should accept multiple complaints for same accused", async () => {
-		const participantId = vi.fn();
+		const participant = vi.fn();
 		const threshold = vi.fn();
 		threshold.mockReturnValueOnce(3n);
-		participantId.mockReturnValueOnce(entryPoint06Address);
+		participant.mockReturnValueOnce(entryPoint06Address);
 		const keyGenClient = {
-			participantId,
+			participant,
 			threshold,
 		} as unknown as KeyGenClient;
 		const protocol = makeProtocol();
@@ -255,16 +255,16 @@ describe("complaint submitted", () => {
 	});
 
 	it("should immediately react to complaint when accused", async () => {
-		const participantId = vi.fn();
+		const participant = vi.fn();
 		const threshold = vi.fn();
 		threshold.mockReturnValueOnce(3n);
-		participantId.mockReturnValueOnce(entryPoint07Address);
+		participant.mockReturnValueOnce(entryPoint07Address);
 		const secretShare = 0x5afe5afe5afen;
 		const createSecretShare = vi.fn();
 		createSecretShare.mockReturnValueOnce(secretShare);
 		const keyGenClient = {
 			createSecretShare,
-			participantId,
+			participant,
 			threshold,
 		} as unknown as KeyGenClient;
 		const protocol = makeProtocol();
@@ -306,16 +306,11 @@ describe("complaint submitted", () => {
 
 	it("should restart key gen when complaints exceed threshold", async () => {
 		const groupSetup = makeGroupSetup(1n);
-		const participants = [
-			{ address: entryPoint06Address },
-			{ address: entryPoint07Address },
-			{ address: entryPoint08Address },
-			{ address: entryPoint09Address },
-		];
+		const participants = [entryPoint06Address, entryPoint07Address, entryPoint08Address, entryPoint09Address];
 		const setupGroup = vi.fn();
 		setupGroup.mockReturnValueOnce(groupSetup);
 		const threshold = vi.fn();
-		threshold.mockReturnValueOnce(2n);
+		threshold.mockReturnValueOnce(2);
 		const keyGenClient = {
 			setupGroup,
 			threshold,

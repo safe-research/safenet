@@ -383,8 +383,10 @@ describe("key gen confirmed", () => {
 			entryPoint08Address,
 			"0x0000000000000000000000000000000000000004",
 		]);
+		const participant = vi.fn().mockReturnValueOnce(entryPoint06Address);
 		const signingClient = {
 			participants,
+			participant,
 		} as unknown as SigningClient;
 		const protocol = {
 			chainId: () => 100n,
@@ -442,8 +444,10 @@ describe("key gen confirmed", () => {
 			entryPoint08Address,
 			"0x0000000000000000000000000000000000000004",
 		]);
+		const participant = vi.fn().mockReturnValueOnce(entryPoint06Address);
 		const signingClient = {
 			participants,
+			participant,
 		} as unknown as SigningClient;
 		const protocol = {
 			chainId: () => 100n,

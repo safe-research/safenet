@@ -69,8 +69,9 @@ const checkSigningRequestTimeout = (
 				];
 			}
 			const signatureId = status.signatureId;
-			const groupId = signingClient.signingGroup(signatureId);
-			const act = everyoneResponsible || status.responsible === signingClient.participant(groupId);
+			const act =
+				everyoneResponsible ||
+				status.responsible === signingClient.participant(signingClient.signingGroup(signatureId));
 			if (!act) {
 				return stateDiff;
 			}

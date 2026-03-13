@@ -34,7 +34,7 @@ describe("handle preprocess", () => {
 
 		expect(handleNonceCommitmentsHash).toBeCalledWith(
 			"0x000000000000000000000000000000000000000000000000000000005af35af3",
-			1n,
+			"0x0000000000000000000000000000000000005aFE",
 			"0x5af35af35af35af35af35af35af35af35af35af35af35af35af35af35af35af3",
 			0n,
 		);
@@ -61,7 +61,7 @@ describe("handle preprocess", () => {
 
 		expect(handleNonceCommitmentsHash).toBeCalledWith(
 			"0x000000000000000000000000000000000000000000000000000000005af35af3",
-			1n,
+			"0x0000000000000000000000000000000000005aFE",
 			"0x5af35af35af35af35af35af35af35af35af35af35af35af35af35af35af35af3",
 			0n,
 		);
