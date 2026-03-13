@@ -4,12 +4,12 @@ import { contrastColor } from "@/lib/utils";
 
 const FALLBACK_COLOR = "#4B5563";
 
-export function NetworkBadge({ chainId }: { chainId: bigint }) {
+export function NetworkBadge({ chainId, title, className }: { chainId: bigint; title?: string; className?: string }) {
 	const chain = SAFE_SERVICE_CHAINS[chainId.toString()];
 	const label = (chain?.shortName ?? chainId.toString()).toUpperCase();
 	const bgColor = chain?.color ?? FALLBACK_COLOR;
 	return (
-		<Badge bgColor={bgColor} fgColor={contrastColor(bgColor)}>
+		<Badge bgColor={bgColor} fgColor={contrastColor(bgColor)} title={title} className={className}>
 			{label}
 		</Badge>
 	);
