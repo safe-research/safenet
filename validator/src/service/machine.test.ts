@@ -65,7 +65,6 @@ const makeKeyGenClient = (unregisterGroup: ReturnType<typeof vi.fn>): KeyGenClie
 		setupGroup: vi.fn().mockReturnValue({
 			groupId: "0xnewgroup",
 			participantsRoot: "0xabc",
-			participantId: 3n,
 			commitments: [TEST_POINT],
 			encryptionPublicKey: TEST_POINT,
 			pok: { r: TEST_POINT, mu: 100n },

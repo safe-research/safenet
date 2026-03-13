@@ -85,7 +85,6 @@ describe("trigger key gen", () => {
 				count: 3,
 				threshold: 2,
 				context,
-				participantId: 3n,
 				commitments: groupSetup.commitments,
 				encryptionPublicKey: groupSetup.encryptionPublicKey,
 				pok: groupSetup.pok,
@@ -99,7 +98,7 @@ describe("trigger key gen", () => {
 			deadline: 30n,
 		});
 		expect(diff.consensus).toStrictEqual({
-			epochGroup: [2n, { groupId: "0x5afe02", participantId: 3n }],
+			epochGroup: [2n, "0x5afe02"],
 		});
 		expect(diff.signing).toBeUndefined();
 

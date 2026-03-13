@@ -100,12 +100,12 @@ describe("epoch staged", () => {
 	});
 
 	it("should clean up state even if not part of signing group", async () => {
-		const participantId = vi.fn();
-		participantId.mockImplementationOnce(() => {
+		const participant = vi.fn();
+		participant.mockImplementationOnce(() => {
 			throw new Error("Test Error: unknown group!");
 		});
 		const signingClient: SigningClient = {
-			participantId,
+			participant,
 		} as unknown as SigningClient;
 		const machineStates: MachineStates = {
 			...MACHINE_STATES,
@@ -118,16 +118,16 @@ describe("epoch staged", () => {
 			rollover: { id: "epoch_staged", nextEpoch: 2n },
 			signing: ["0x5afe5afe", undefined],
 		});
-		expect(participantId).toBeCalledTimes(1);
-		expect(participantId).toBeCalledWith("0x5afe5af3");
+		expect(participant).toBeCalledTimes(1);
+		expect(participant).toBeCalledWith("0x5afe5af3");
 	});
 
 	it("should clean up states and trigger nonce commitments after staging rollover", async () => {
-		const participantId = vi.fn();
+		const participant = vi.fn();
 		const generateNonceTree = vi.fn();
 		generateNonceTree.mockReturnValueOnce("0xdeadb055");
 		const signingClient: SigningClient = {
-			participantId,
+			participant,
 			generateNonceTree,
 		} as unknown as SigningClient;
 		const diff = await handleEpochStaged(signingClient, MACHINE_STATES, EVENT);
@@ -144,7 +144,7 @@ describe("epoch staged", () => {
 			signatureIdToMessage: ["0x5af35af3", undefined],
 		});
 		expect(diff.signing).toStrictEqual(["0x5afe5afe", undefined]);
-		expect(participantId).toBeCalledTimes(1);
-		expect(participantId).toBeCalledWith("0x5afe5af3");
+		expect(participant).toBeCalledTimes(1);
+		expect(participant).toBeCalledWith("0x5afe5af3");
 	});
 });

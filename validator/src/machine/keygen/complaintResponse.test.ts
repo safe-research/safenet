@@ -127,13 +127,13 @@ describe("complaint responded", () => {
 
 	it("should accept responses when collecting shares", async () => {
 		const protocol = {} as unknown as SafenetProtocol;
-		const participantId = vi.fn();
-		participantId.mockReturnValueOnce(entryPoint06Address);
+		const participant = vi.fn();
+		participant.mockReturnValueOnce(entryPoint06Address);
 		const verifySecretShare = vi.fn();
 		verifySecretShare.mockReturnValueOnce(true);
 		const keyGenClient = {
 			verifySecretShare,
-			participantId,
+			participant,
 		} as unknown as KeyGenClient;
 		const machineStates: MachineStates = {
 			rollover: {
@@ -166,13 +166,13 @@ describe("complaint responded", () => {
 
 	it("should accept complaints when collecting confirmations", async () => {
 		const protocol = {} as unknown as SafenetProtocol;
-		const participantId = vi.fn();
-		participantId.mockReturnValueOnce(entryPoint06Address);
+		const participant = vi.fn();
+		participant.mockReturnValueOnce(entryPoint06Address);
 		const verifySecretShare = vi.fn();
 		verifySecretShare.mockReturnValueOnce(true);
 		const keyGenClient = {
 			verifySecretShare,
-			participantId,
+			participant,
 		} as unknown as KeyGenClient;
 		const machineStates: MachineStates = {
 			rollover: {
@@ -218,17 +218,17 @@ describe("complaint responded", () => {
 		const groupSetup = makeGroupSetup(4n);
 		const setupGroup = vi.fn();
 		setupGroup.mockReturnValueOnce(groupSetup);
-		const participantId = vi.fn();
-		participantId.mockReturnValueOnce(entryPoint07Address);
+		const participant = vi.fn();
+		participant.mockReturnValueOnce(entryPoint07Address);
 		const verifySecretShare = vi.fn();
 		verifySecretShare.mockReturnValueOnce(false);
 		const participants = vi.fn();
-		participants.mockReturnValueOnce(MACHINE_CONFIG.participantsInfo);
+		participants.mockReturnValueOnce(MACHINE_CONFIG.participantsInfo.map((p) => p.address));
 		const keyGenClient = {
 			participants,
 			setupGroup,
 			verifySecretShare,
-			participantId,
+			participant,
 		} as unknown as KeyGenClient;
 		const machineStates: MachineStates = {
 			rollover: {
@@ -279,17 +279,17 @@ describe("complaint responded", () => {
 		const groupSetup = makeGroupSetup(4n);
 		const setupGroup = vi.fn();
 		setupGroup.mockReturnValueOnce(groupSetup);
-		const participantId = vi.fn();
-		participantId.mockReturnValueOnce(entryPoint06Address);
+		const participant = vi.fn();
+		participant.mockReturnValueOnce(entryPoint06Address);
 		const participants = vi.fn();
-		participants.mockReturnValueOnce(MACHINE_CONFIG.participantsInfo);
+		participants.mockReturnValueOnce(MACHINE_CONFIG.participantsInfo.map((p) => p.address));
 		const registerPlainKeyGenSecret = vi.fn();
 		registerPlainKeyGenSecret.mockReturnValueOnce("invalid_share");
 		const keyGenClient = {
 			participants,
 			setupGroup,
 			registerPlainKeyGenSecret,
-			participantId,
+			participant,
 		} as unknown as KeyGenClient;
 		const machineStates: MachineStates = {
 			rollover: {
@@ -333,13 +333,13 @@ describe("complaint responded", () => {
 
 	it("should remove missing share once received", async () => {
 		const protocol = {} as unknown as SafenetProtocol;
-		const participantId = vi.fn();
-		participantId.mockReturnValueOnce(entryPoint06Address);
+		const participant = vi.fn();
+		participant.mockReturnValueOnce(entryPoint06Address);
 		const registerPlainKeyGenSecret = vi.fn();
 		registerPlainKeyGenSecret.mockReturnValueOnce("pending_shares");
 		const keyGenClient = {
 			registerPlainKeyGenSecret,
-			participantId,
+			participant,
 		} as unknown as KeyGenClient;
 		const machineStates: MachineStates = {
 			rollover: {
@@ -378,13 +378,13 @@ describe("complaint responded", () => {
 
 	it("should trigger confirmation if missing share in collecting confirmations", async () => {
 		const protocol = {} as unknown as SafenetProtocol;
-		const participantId = vi.fn();
-		participantId.mockReturnValueOnce(entryPoint06Address);
+		const participant = vi.fn();
+		participant.mockReturnValueOnce(entryPoint06Address);
 		const registerPlainKeyGenSecret = vi.fn();
 		registerPlainKeyGenSecret.mockReturnValueOnce("shares_completed");
 		const keyGenClient = {
 			registerPlainKeyGenSecret,
-			participantId,
+			participant,
 		} as unknown as KeyGenClient;
 		const machineStates: MachineStates = {
 			rollover: {

@@ -455,8 +455,10 @@ describe("signing timeouts - waiting for request", () => {
 
 	it("should timeout without action when someone else responsible (epoch rollover)", async () => {
 		const threshold = vi.fn().mockReturnValueOnce(2);
+		const participant = vi.fn().mockReturnValueOnce("0x0000000000000000000000000000000000000001");
 		const signingClient = {
 			threshold,
+			participant,
 		} as unknown as SigningClient;
 		const machineStates: MachineStates = {
 			...MACHINE_STATES,
@@ -483,7 +485,7 @@ describe("signing timeouts - waiting for request", () => {
 			{
 				id: "waiting_for_request",
 				deadline: 22n,
-				signers: [1n, 3n],
+				signers: ["0x0000000000000000000000000000000000000001", "0x0000000000000000000000000000000000000003"],
 				responsible: undefined,
 				packet: SIGNING_STATE.packet,
 			},
@@ -533,8 +535,10 @@ describe("signing timeouts - waiting for request", () => {
 
 	it("should timeout with actions when I am responsible (epoch rollover)", async () => {
 		const threshold = vi.fn().mockReturnValueOnce(2);
+		const participant = vi.fn().mockReturnValueOnce("0x0000000000000000000000000000000000000001");
 		const signingClient = {
 			threshold,
+			participant,
 		} as unknown as SigningClient;
 		const machineStates: MachineStates = {
 			...MACHINE_STATES,
@@ -561,7 +565,7 @@ describe("signing timeouts - waiting for request", () => {
 			{
 				id: "waiting_for_request",
 				deadline: 22n,
-				signers: [2n, 3n],
+				signers: ["0x0000000000000000000000000000000000000002", "0x0000000000000000000000000000000000000003"],
 				responsible: undefined,
 				packet: SIGNING_STATE.packet,
 			},
@@ -634,8 +638,10 @@ describe("signing timeouts - waiting for request", () => {
 
 	it("should timeout without action when someone else responsible (transaction attestation)", async () => {
 		const threshold = vi.fn().mockReturnValueOnce(2);
+		const participant = vi.fn().mockReturnValueOnce("0x0000000000000000000000000000000000000001");
 		const signingClient = {
 			threshold,
+			participant,
 		} as unknown as SigningClient;
 		const machineStates: MachineStates = {
 			...MACHINE_STATES,
@@ -663,7 +669,7 @@ describe("signing timeouts - waiting for request", () => {
 			{
 				id: "waiting_for_request",
 				deadline: 22n,
-				signers: [1n, 3n],
+				signers: ["0x0000000000000000000000000000000000000001", "0x0000000000000000000000000000000000000003"],
 				responsible: undefined,
 				packet: TX_ATTESTATION_PACKET,
 			},
@@ -714,8 +720,10 @@ describe("signing timeouts - waiting for request", () => {
 
 	it("should timeout with actions when I am responsible (transaction attestation)", async () => {
 		const threshold = vi.fn().mockReturnValueOnce(2);
+		const participant = vi.fn().mockReturnValueOnce("0x0000000000000000000000000000000000000001");
 		const signingClient = {
 			threshold,
+			participant,
 		} as unknown as SigningClient;
 		const machineStates: MachineStates = {
 			...MACHINE_STATES,
@@ -743,7 +751,7 @@ describe("signing timeouts - waiting for request", () => {
 			{
 				id: "waiting_for_request",
 				deadline: 22n,
-				signers: [2n, 3n],
+				signers: ["0x0000000000000000000000000000000000000002", "0x0000000000000000000000000000000000000003"],
 				responsible: undefined,
 				packet: TX_ATTESTATION_PACKET,
 			},
@@ -1163,7 +1171,13 @@ describe("signing timeouts - collect signing shares", () => {
 	});
 
 	it("should timeout without action when someone else responsible (epoch rollover)", async () => {
-		const signers = vi.fn().mockReturnValueOnce([1n, 2n, 3n]);
+		const signers = vi
+			.fn()
+			.mockReturnValueOnce([
+				"0x0000000000000000000000000000000000000001",
+				"0x0000000000000000000000000000000000000002",
+				"0x0000000000000000000000000000000000000003",
+			]);
 		const threshold = vi.fn().mockReturnValueOnce(2);
 		const participant = vi.fn().mockReturnValueOnce("0x0000000000000000000000000000000000000001");
 		const signingClient = {
@@ -1202,7 +1216,7 @@ describe("signing timeouts - collect signing shares", () => {
 				id: "waiting_for_request",
 				deadline: 22n,
 				responsible: "0x0000000000000000000000000000000000000002",
-				signers: [1n, 2n],
+				signers: ["0x0000000000000000000000000000000000000001", "0x0000000000000000000000000000000000000002"],
 				packet: SIGNING_STATE.packet,
 			},
 		]);
@@ -1219,7 +1233,13 @@ describe("signing timeouts - collect signing shares", () => {
 	});
 
 	it("should timeout without action when I am responsible (epoch rollover)", async () => {
-		const signers = vi.fn().mockReturnValueOnce([1n, 2n, 3n]);
+		const signers = vi
+			.fn()
+			.mockReturnValueOnce([
+				"0x0000000000000000000000000000000000000001",
+				"0x0000000000000000000000000000000000000002",
+				"0x0000000000000000000000000000000000000003",
+			]);
 		const threshold = vi.fn().mockReturnValueOnce(2);
 		const participant = vi.fn().mockReturnValueOnce("0x0000000000000000000000000000000000000002");
 		const signingClient = {
@@ -1258,7 +1278,7 @@ describe("signing timeouts - collect signing shares", () => {
 				id: "waiting_for_request",
 				deadline: 22n,
 				responsible: "0x0000000000000000000000000000000000000002",
-				signers: [1n, 2n],
+				signers: ["0x0000000000000000000000000000000000000001", "0x0000000000000000000000000000000000000002"],
 				packet: SIGNING_STATE.packet,
 			},
 		]);
@@ -1281,7 +1301,13 @@ describe("signing timeouts - collect signing shares", () => {
 	});
 
 	it("should timeout without action when someone else responsible (transaction attestation)", async () => {
-		const signers = vi.fn().mockReturnValueOnce([1n, 2n, 3n]);
+		const signers = vi
+			.fn()
+			.mockReturnValueOnce([
+				"0x0000000000000000000000000000000000000001",
+				"0x0000000000000000000000000000000000000002",
+				"0x0000000000000000000000000000000000000003",
+			]);
 		const threshold = vi.fn().mockReturnValueOnce(2);
 		const participant = vi.fn().mockReturnValueOnce("0x0000000000000000000000000000000000000001");
 		const signingClient = {
@@ -1320,7 +1346,7 @@ describe("signing timeouts - collect signing shares", () => {
 				id: "waiting_for_request",
 				deadline: 22n,
 				responsible: "0x0000000000000000000000000000000000000002",
-				signers: [1n, 2n],
+				signers: ["0x0000000000000000000000000000000000000001", "0x0000000000000000000000000000000000000002"],
 				packet: TX_ATTESTATION_PACKET,
 			},
 		]);
@@ -1337,7 +1363,13 @@ describe("signing timeouts - collect signing shares", () => {
 	});
 
 	it("should timeout without action when I am responsible (transaction attestation)", async () => {
-		const signers = vi.fn().mockReturnValueOnce([1n, 2n, 3n]);
+		const signers = vi
+			.fn()
+			.mockReturnValueOnce([
+				"0x0000000000000000000000000000000000000001",
+				"0x0000000000000000000000000000000000000002",
+				"0x0000000000000000000000000000000000000003",
+			]);
 		const threshold = vi.fn().mockReturnValueOnce(2);
 		const participant = vi.fn().mockReturnValueOnce("0x0000000000000000000000000000000000000002");
 		const signingClient = {
@@ -1376,7 +1408,7 @@ describe("signing timeouts - collect signing shares", () => {
 				id: "waiting_for_request",
 				deadline: 22n,
 				responsible: "0x0000000000000000000000000000000000000002",
-				signers: [1n, 2n],
+				signers: ["0x0000000000000000000000000000000000000001", "0x0000000000000000000000000000000000000002"],
 				packet: TX_ATTESTATION_PACKET,
 			},
 		]);

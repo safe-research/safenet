@@ -22,35 +22,28 @@ const CONSENSUS_STATE: ConsensusState = {
 
 const PARTICIPANTS_INFO = [
 	{
-		id: 1n,
 		address: entryPoint06Address,
 		activeFrom: 0n,
 	},
 	{
-		id: 2n,
 		address: entryPoint07Address,
 		activeFrom: 0n,
 	},
 	{
-		id: 3n,
 		address: entryPoint08Address,
 		activeFrom: 0n,
 	},
 	{
-		id: 4n,
 		address: entryPoint08Address,
 		activeFrom: 0n,
 	},
 	{
-		id: 5n,
 		address: ethAddress,
 		activeFrom: 1n,
 	},
 ];
 
-const PARTICIPANTS = PARTICIPANTS_INFO.map((i) => {
-	return { address: i.address, id: i.id };
-});
+const PARTICIPANTS = PARTICIPANTS_INFO.map((i) => i.address);
 
 const MACHINE_CONFIG: MachineConfig = {
 	participantsInfo: PARTICIPANTS_INFO,
@@ -64,8 +57,8 @@ const EVENT: KeyGenEvent = {
 	id: "event_key_gen",
 	block: 4n,
 	index: 0,
-	gid: "0x00a9d1aa438a646139fe8d817f9c9dbb060ee7e2e58f2b100000000000000000",
-	participants: "0x78d9152d3ca012af785cf642cd52803acabeaea430964b93136f31f83c7df9d0",
+	gid: "0xd07a06750521cf67354bb1708fa0f61dba2e9c690abf006d0000000000000000",
+	participants: "0xfae47191bcfc7cf4aaa5212b4a93d228bf4e2f2281944950cc3e43e37b26298c",
 	count: 4,
 	threshold: 3,
 	context: zeroHash,
@@ -114,7 +107,6 @@ describe("gensis key gen", () => {
 		const groupSetup = {
 			groupId: "0xffa9d1aa438a646139fe8d817f9c9dbb060ee7e2e58f2b100000000000000000",
 			participantsRoot: "0x78d9152d3ca012af785cf642cd52803acabeaea430964b93136f31f83c7df9d0",
-			participantId: 2n,
 			commitments: [TEST_POINT],
 			pok: {
 				r: TEST_POINT,
@@ -138,9 +130,8 @@ describe("gensis key gen", () => {
 
 	it("should trigger genesis key gen with correct parameters", async () => {
 		const groupSetup = {
-			groupId: "0x00a9d1aa438a646139fe8d817f9c9dbb060ee7e2e58f2b100000000000000000",
-			participantsRoot: "0x78d9152d3ca012af785cf642cd52803acabeaea430964b93136f31f83c7df9d0",
-			participantId: 2n,
+			groupId: "0xd07a06750521cf67354bb1708fa0f61dba2e9c690abf006d0000000000000000",
+			participantsRoot: "0xfae47191bcfc7cf4aaa5212b4a93d228bf4e2f2281944950cc3e43e37b26298c",
 			commitments: [TEST_POINT],
 			encryptionPublicKey: TEST_POINT,
 			pok: {
@@ -162,7 +153,6 @@ describe("gensis key gen", () => {
 				count: 4,
 				threshold: 3,
 				context: zeroHash,
-				participantId: 2n,
 				commitments: groupSetup.commitments,
 				encryptionPublicKey: groupSetup.encryptionPublicKey,
 				pok: groupSetup.pok,
@@ -171,16 +161,13 @@ describe("gensis key gen", () => {
 		]);
 		expect(diff.rollover).toStrictEqual({
 			id: "collecting_commitments",
-			groupId: "0x00a9d1aa438a646139fe8d817f9c9dbb060ee7e2e58f2b100000000000000000",
+			groupId: "0xd07a06750521cf67354bb1708fa0f61dba2e9c690abf006d0000000000000000",
 			nextEpoch: 0n,
 			deadline: maxUint64,
 		});
 		expect(diff.consensus).toStrictEqual({
-			genesisGroupId: "0x00a9d1aa438a646139fe8d817f9c9dbb060ee7e2e58f2b100000000000000000",
-			epochGroup: [
-				0n,
-				{ groupId: "0x00a9d1aa438a646139fe8d817f9c9dbb060ee7e2e58f2b100000000000000000", participantId: 2n },
-			],
+			genesisGroupId: "0xd07a06750521cf67354bb1708fa0f61dba2e9c690abf006d0000000000000000",
+			epochGroup: [0n, "0xd07a06750521cf67354bb1708fa0f61dba2e9c690abf006d0000000000000000"],
 		});
 		expect(diff.signing).toBeUndefined();
 		expect(setupGroup).toBeCalledTimes(1);

@@ -98,11 +98,7 @@ describe("key gen timeouts", () => {
 				deadline: 22n,
 				complaints: {},
 				missingSharesFrom: [],
-				confirmationsFrom: [
-					"0x0000000000000000000000000000000000000001",
-					"0x0000000000000000000000000000000000000007",
-					"0x000000000000000000000000000000000000000b",
-				],
+				confirmationsFrom: [entryPoint06Address, entryPoint08Address, ethAddress],
 			} as RolloverState,
 			keyGenInvocations: [0, 0],
 		},
@@ -116,14 +112,10 @@ describe("key gen timeouts", () => {
 				responseDeadline: 25n,
 				deadline: 35n,
 				complaints: {
-					"3": { unresponded: 1, total: 1 },
+					[entryPoint07Address]: { unresponded: 1, total: 1 },
 				},
 				missingSharesFrom: [],
-				confirmationsFrom: [
-					"0x0000000000000000000000000000000000000001",
-					"0x0000000000000000000000000000000000000003",
-					"0x000000000000000000000000000000000000000b",
-				],
+				confirmationsFrom: [entryPoint06Address, entryPoint07Address, ethAddress],
 			} as RolloverState,
 			keyGenInvocations: [0, 0],
 		},
@@ -147,13 +139,13 @@ describe("key gen timeouts", () => {
 				consensus,
 			} as unknown as SafenetProtocol;
 			const missingCommitments = vi.fn();
-			missingCommitments.mockReturnValueOnce([3n]);
+			missingCommitments.mockReturnValueOnce([entryPoint07Address]);
 			const missingSecretShares = vi.fn();
-			missingSecretShares.mockReturnValueOnce([3n]);
+			missingSecretShares.mockReturnValueOnce([entryPoint07Address]);
 			const setupGroup = vi.fn();
 			setupGroup.mockReturnValueOnce(groupSetup);
 			const participants = vi.fn();
-			participants.mockReturnValueOnce(MACHINE_CONFIG.participantsInfo);
+			participants.mockReturnValueOnce([entryPoint06Address, entryPoint07Address, entryPoint08Address, ethAddress]);
 			const keyGenClient = {
 				participants,
 				setupGroup,
@@ -185,7 +177,7 @@ describe("key gen timeouts", () => {
 				deadline: 30n,
 			});
 			expect(diff.consensus).toStrictEqual({
-				epochGroup: [10n, { groupId: "0x5afe02", participantId: 7n }],
+				epochGroup: [10n, "0x5afe02"],
 			});
 			expect(diff.signing).toBeUndefined();
 
@@ -200,7 +192,7 @@ describe("key gen timeouts", () => {
 			}
 			expect(setupGroup).toBeCalledTimes(1);
 			expect(setupGroup).toBeCalledWith(
-				[MACHINE_CONFIG.participantsInfo[0], MACHINE_CONFIG.participantsInfo[2], MACHINE_CONFIG.participantsInfo[3]],
+				[entryPoint06Address, entryPoint08Address, ethAddress],
 				2,
 				"0x00000000eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee000000000000000a",
 			);

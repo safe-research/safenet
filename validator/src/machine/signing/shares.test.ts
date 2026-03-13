@@ -103,8 +103,8 @@ describe("collecting shares", () => {
 				id: "collect_signing_shares",
 				signatureId: "0x5af35af3",
 				deadline: 23n,
-				lastSigner: 1n,
-				sharesFrom: [1n],
+				lastSigner: "0x0000000000000000000000000000000000005aFE",
+				sharesFrom: ["0x0000000000000000000000000000000000005aFE"],
 				packet: SIGNING_STATE.packet,
 			},
 		]);

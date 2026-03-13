@@ -441,7 +441,7 @@ export class SqliteClientStorage implements GroupInfoStorage, KeyGenInfoStorage,
 						SELECT 1
 						FROM group_participants AS p
 				 		LEFT JOIN group_secret_shares AS s
-				 		ON s.group_id = p.group_id AND s.address = ? AND s.from_participant = p.id
+				 		ON s.group_id = p.group_id AND s.address = ? AND s.from_participant = p.address
 				 		WHERE p.group_id = ? AND s.secret_share IS NULL
 					)
 					ELSE NULL
