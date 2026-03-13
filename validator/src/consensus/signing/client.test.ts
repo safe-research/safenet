@@ -1,6 +1,7 @@
-import { type Address, type Hex, keccak256, stringToBytes } from "viem";
+import { type Address, type Hex, keccak256, stringToBytes, zeroHash } from "viem";
 import { describe, expect, it } from "vitest";
-import { createClientStorage, log } from "../../__tests__/config.js";
+import { log } from "../../__tests__/config.js";
+import { createClientStorage } from "../../__tests__/utils.js";
 import { addmod, g, toPoint } from "../../frost/math.js";
 import type { FrostPoint, SignatureId } from "../../frost/types.js";
 import { SigningClient } from "./client.js";
@@ -130,7 +131,7 @@ describe("signing", () => {
 			};
 			const nonceTree = {
 				commitments: [commitments0],
-				leaves: ["0x" as Hex],
+				leaves: [zeroHash],
 				root: treeInfo.root as Hex,
 			};
 			storage.registerNonceTree(groupId, nonceTree);

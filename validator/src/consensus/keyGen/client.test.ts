@@ -1,7 +1,8 @@
 import { type Address, type Hex, keccak256, pad } from "viem";
 import { generatePrivateKey, privateKeyToAccount } from "viem/accounts";
 import { describe, expect, it } from "vitest";
-import { createClientStorage, log, testLogger } from "../../__tests__/config.js";
+import { log, testLogger } from "../../__tests__/config.js";
+import { createClientStorage } from "../../__tests__/utils.js";
 import type { FrostPoint, GroupId, ProofOfKnowledge } from "../../frost/types.js";
 import { participantsForEpoch } from "../../utils/participants.js";
 import { calculateParticipantsRoot, verifyMerkleProof } from "../merkle.js";
