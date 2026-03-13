@@ -1,11 +1,7 @@
-import Sqlite3, { type Database } from "better-sqlite3";
-import type { Address } from "viem";
-import { InMemoryClientStorage } from "../consensus/storage/inmemory.js";
-import { SqliteClientStorage } from "../consensus/storage/sqlite.js";
 import { createLogger } from "../utils/logging.js";
 import { createMetricsService } from "../utils/metrics/index.js";
 
-const { SAFENET_TEST_VERBOSE, SAFENET_TEST_STORAGE } = process.env;
+const { SAFENET_TEST_VERBOSE } = process.env;
 
 export const silentLogger = createLogger({ level: "silent" });
 export const testLogger = createLogger({
@@ -16,8 +12,3 @@ export const testLogger = createLogger({
 export const log = testLogger.debug.bind(testLogger);
 
 export const testMetrics = createMetricsService({ logger: silentLogger }).metrics;
-
-export const createClientStorage =
-	SAFENET_TEST_STORAGE === "sqlite"
-		? (account: Address, database?: Database) => new SqliteClientStorage(account, database ?? new Sqlite3(":memory:"))
-		: (account: Address) => new InMemoryClientStorage(account);
