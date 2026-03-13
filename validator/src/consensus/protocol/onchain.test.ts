@@ -15,9 +15,8 @@ import { gnosisChiado } from "viem/chains";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { testLogger } from "../../__tests__/config.js";
 import { TEST_ACTIONS, TEST_CONSENSUS, TEST_COORDINATOR } from "../../__tests__/data/protocol.js";
-import { InMemoryQueue } from "../../utils/queue.js";
+import { createActionQueue } from "../../__tests__/utils.js";
 import { GasFeeEstimator, OnchainProtocol, type TransactionStorage } from "./onchain.js";
-import type { ActionWithTimeout } from "./types.js";
 
 describe("OnchainProtocol", () => {
 	beforeEach(() => {
@@ -29,7 +28,7 @@ describe("OnchainProtocol", () => {
 	});
 
 	it("should return correct config params", async () => {
-		const queue = new InMemoryQueue<ActionWithTimeout>();
+		const queue = createActionQueue();
 		const publicClient = {} as unknown as PublicClient;
 		const signingClient = {
 			chain: { id: 100 },
@@ -59,7 +58,7 @@ describe("OnchainProtocol", () => {
 	});
 
 	it("should not check pending on setup (in constructor)", async () => {
-		const queue = new InMemoryQueue<ActionWithTimeout>();
+		const queue = createActionQueue();
 		const getTransactionCount = vi.fn();
 		const publicClient = {} as unknown as PublicClient;
 		const signingClient = {} as unknown as WalletClient<Transport, Chain, Account>;
@@ -92,7 +91,7 @@ describe("OnchainProtocol", () => {
 	});
 
 	it("should use bulk mark as executed", async () => {
-		const queue = new InMemoryQueue<ActionWithTimeout>();
+		const queue = createActionQueue();
 		const getTransactionCount = vi.fn();
 		const publicClient = {
 			getTransactionCount,
@@ -141,7 +140,7 @@ describe("OnchainProtocol", () => {
 	});
 
 	it("should do nothing on setSubmittedForPending error", async () => {
-		const queue = new InMemoryQueue<ActionWithTimeout>();
+		const queue = createActionQueue();
 		const publicClient = {} as unknown as PublicClient;
 		const signingClient = {
 			account: { address: entryPoint09Address },
@@ -173,7 +172,7 @@ describe("OnchainProtocol", () => {
 	});
 
 	it("should do nothing on rpc error", async () => {
-		const queue = new InMemoryQueue<ActionWithTimeout>();
+		const queue = createActionQueue();
 		const getTransactionCount = vi.fn();
 		const publicClient = {
 			getTransactionCount,
@@ -214,7 +213,7 @@ describe("OnchainProtocol", () => {
 	});
 
 	it("should do nothing on mark all tx as executed error", async () => {
-		const queue = new InMemoryQueue<ActionWithTimeout>();
+		const queue = createActionQueue();
 		const getTransactionCount = vi.fn();
 		const publicClient = {
 			getTransactionCount,
@@ -261,7 +260,7 @@ describe("OnchainProtocol", () => {
 	});
 
 	it("should do nothing on fetching submittedUpTo tx error", async () => {
-		const queue = new InMemoryQueue<ActionWithTimeout>();
+		const queue = createActionQueue();
 		const getTransactionCount = vi.fn();
 		const publicClient = {
 			getTransactionCount,
@@ -313,7 +312,7 @@ describe("OnchainProtocol", () => {
 	});
 
 	it("should do nothing on fetching gas fees error", async () => {
-		const queue = new InMemoryQueue<ActionWithTimeout>();
+		const queue = createActionQueue();
 		const getTransactionCount = vi.fn();
 		const publicClient = {
 			getTransactionCount,
@@ -383,7 +382,7 @@ describe("OnchainProtocol", () => {
 	});
 
 	it("should mark as completed if nonce too low error on submission", async () => {
-		const queue = new InMemoryQueue<ActionWithTimeout>();
+		const queue = createActionQueue();
 		const getTransactionCount = vi.fn();
 		const publicClient = {
 			getTransactionCount,
@@ -485,7 +484,7 @@ describe("OnchainProtocol", () => {
 	});
 
 	it("should mark as completed if nested nonce too low error on submission", async () => {
-		const queue = new InMemoryQueue<ActionWithTimeout>();
+		const queue = createActionQueue();
 		const getTransactionCount = vi.fn();
 		const publicClient = {
 			getTransactionCount,
@@ -598,7 +597,7 @@ describe("OnchainProtocol", () => {
 	});
 
 	it("should set tx hash on unexpected error on submission", async () => {
-		const queue = new InMemoryQueue<ActionWithTimeout>();
+		const queue = createActionQueue();
 		const getTransactionCount = vi.fn();
 		const publicClient = {
 			getTransactionCount,
@@ -694,7 +693,7 @@ describe("OnchainProtocol", () => {
 	});
 
 	it("should resubmit submittedUpTo tx without stored gas fees", async () => {
-		const queue = new InMemoryQueue<ActionWithTimeout>();
+		const queue = createActionQueue();
 		const getTransactionCount = vi.fn();
 		const publicClient = {
 			getTransactionCount,
@@ -797,7 +796,7 @@ describe("OnchainProtocol", () => {
 	});
 
 	it("should resubmit submittedUpTo tx with lower stored gas fees", async () => {
-		const queue = new InMemoryQueue<ActionWithTimeout>();
+		const queue = createActionQueue();
 		const getTransactionCount = vi.fn();
 		const publicClient = {
 			getTransactionCount,
@@ -901,7 +900,7 @@ describe("OnchainProtocol", () => {
 	});
 
 	it("should resubmit submittedUpTo tx with higher stored gas fees", async () => {
-		const queue = new InMemoryQueue<ActionWithTimeout>();
+		const queue = createActionQueue();
 		const getTransactionCount = vi.fn();
 		const publicClient = {
 			getTransactionCount,
@@ -1005,7 +1004,7 @@ describe("OnchainProtocol", () => {
 	});
 
 	it("should submit submittedUpTo tx without hash", async () => {
-		const queue = new InMemoryQueue<ActionWithTimeout>();
+		const queue = createActionQueue();
 		const getTransactionCount = vi.fn();
 		const publicClient = {
 			getTransactionCount,
@@ -1106,7 +1105,7 @@ describe("OnchainProtocol", () => {
 	});
 
 	it("should check pending when checkPendingActions is called", async () => {
-		const queue = new InMemoryQueue<ActionWithTimeout>();
+		const queue = createActionQueue();
 		const getTransactionCount = vi.fn();
 		const publicClient = {
 			getTransactionCount,
@@ -1207,7 +1206,7 @@ describe("OnchainProtocol", () => {
 	});
 
 	it("should delete tx on error if no additional tx was submitted", async () => {
-		const queue = new InMemoryQueue<ActionWithTimeout>();
+		const queue = createActionQueue();
 		const getTransactionCount = vi.fn();
 		const publicClient = {
 			getTransactionCount,
@@ -1298,7 +1297,7 @@ describe("OnchainProtocol", () => {
 	});
 
 	it("should not delete tx on error if additional tx was submitted", async () => {
-		const queue = new InMemoryQueue<ActionWithTimeout>();
+		const queue = createActionQueue();
 		const getTransactionCount = vi.fn();
 		const publicClient = {
 			getTransactionCount,
@@ -1406,7 +1405,7 @@ describe("OnchainProtocol", () => {
 		}),
 	)("for $description", ({ action, functionName, tx }) => {
 		it(`should call ${functionName}`, async () => {
-			const queue = new InMemoryQueue<ActionWithTimeout>();
+			const queue = createActionQueue();
 			const getTransactionCount = vi.fn();
 			const publicClient = {
 				getTransactionCount,
