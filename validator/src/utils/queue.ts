@@ -15,12 +15,13 @@ const queueSQLiteSchema = z.object({
 
 // FIFO tyle queue
 export type Queue<T> = {
-	// Insert at the beginning
-	push(element: T): void;
-	// Peek at the next element
+	// Adds an item to the back of the queue.
+	enqueue(element: T): void;
+	// Peek at the next element in the queue.
 	peek(): T | undefined;
-	// Pop from the end
-	pop(): T | undefined;
+	// Removes and returns the next element in the queue, or `undefined` when
+	// the queue is empty.
+	dequeue(): T | undefined;
 };
 
 export class SqliteQueue<T> implements Queue<T> {
@@ -41,7 +42,7 @@ export class SqliteQueue<T> implements Queue<T> {
 		`);
 	}
 
-	push(element: T): void {
+	enqueue(element: T): void {
 		const payloadJson = JSON.stringify(element, jsonReplacer);
 		this.#db
 			.prepare(`
@@ -68,7 +69,7 @@ export class SqliteQueue<T> implements Queue<T> {
 		const payloadJson = JSON.parse(message.payloadJson);
 		return this.#schema.parse(payloadJson);
 	}
-	pop(): T | undefined {
+	dequeue(): T | undefined {
 		return this.#db.transaction(() => {
 			// Step 1: Select the oldest message
 			const messageRow = this.#db
@@ -107,7 +108,7 @@ export class InMemoryQueue<T> implements Queue<T> {
 	#head?: QueueEntry<T>;
 	#tail?: QueueEntry<T>;
 
-	push(element: T) {
+	enqueue(element: T) {
 		const entry = {
 			next: this.#head,
 			element,
@@ -126,7 +127,7 @@ export class InMemoryQueue<T> implements Queue<T> {
 		return this.#tail?.element;
 	}
 
-	pop(): T | undefined {
+	dequeue(): T | undefined {
 		const entry = this.#tail;
 		this.#tail = entry?.prev;
 		if (entry?.prev === undefined) {
