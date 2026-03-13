@@ -1,4 +1,4 @@
-import { type Address, encodePacked, getAddress, type Hex, keccak256, pad, slice, zeroHash } from "viem";
+import { type Address, encodePacked, type Hex, keccak256, pad, zeroHash } from "viem";
 
 export const buildMerkleTree = (leaves: Hex[]): Hex[][] => {
 	if (leaves.length === 0) throw new Error("Cannot generate empty tree!");
@@ -63,32 +63,30 @@ export const generateMerkleProof = (leaves: Hex[], index: number): Hex[] => {
 	return proof;
 };
 
-const sortedParticipantLeaves = (participants: readonly Address[]): Hex[] => {
-	// In order to ensure stable participation roots, we make sure that we sort the addresses
-	// lexographically (i.e. based on their value and not checksummed string representation)
-	// before building our participant Merkle tree.
-	const sorted = participants.map((p) => pad(p).toLowerCase() as Hex).sort();
+const participantLeaves = (participants: readonly Address[]): Hex[] => {
+	const leaves = participants.map((p) => pad(p).toLowerCase() as Hex);
 
-	// We cannot support duplicate participants (they would have the same ID). This should be
-	// impossible to happen, so assert that it is true. Take advantage that the array is sorted
-	// and just check that no two consecutive items are equal.
-	sorted.reduce((previous, leaf) => {
-		if (previous === leaf) {
-			throw new Error(`duplicate participant ${getAddress(slice(leaf, 12))}`);
+	// The participant Merkle tree requires strictly sorted participants. Assert
+	// that this property holds for our set. The `participants` modules already
+	// ensures that this never happens, as it dedupes and sorts when creating
+	// the participant set for a given epoch.
+	leaves.reduce((previous, leaf) => {
+		if (previous >= leaf) {
+			throw new Error("participants not monotonic");
 		}
 		return leaf;
 	});
 
-	return sorted;
+	return leaves;
 };
 
 export const calculateParticipantsRoot = (participants: readonly Address[]): Hex => {
-	return calculateMerkleRoot(sortedParticipantLeaves(participants));
+	return calculateMerkleRoot(participantLeaves(participants));
 };
 
 export const generateParticipantProof = (participants: readonly Address[], participant: Address): Hex[] => {
-	const leaves = sortedParticipantLeaves(participants);
-	const index = leaves.findIndex((p) => BigInt(p) === BigInt(participant));
+	const leaves = participantLeaves(participants);
+	const index = participants.findIndex((p) => p === participant);
 	if (index < 0) {
 		throw new Error(`participant ${participant} not included`);
 	}

@@ -8,5 +8,9 @@ export const participantsForEpoch = (participants: ParticipantInfo[], epoch: big
 				.filter((p) => p.activeFrom <= epoch && (p.activeBefore === undefined || epoch < p.activeBefore))
 				.map((p) => p.address),
 		),
-	];
+	].sort((a, b) => {
+		const aa = a.toLowerCase();
+		const bb = b.toLowerCase();
+		return aa.localeCompare(bb);
+	});
 };

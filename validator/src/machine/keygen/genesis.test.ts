@@ -130,7 +130,7 @@ describe("gensis key gen", () => {
 			new Error("Unexpected genesis group 0xffa9d1aa438a646139fe8d817f9c9dbb060ee7e2e58f2b100000000000000000"),
 		);
 		expect(setupGroup).toBeCalledTimes(1);
-		expect(setupGroup).toBeCalledWith(PARTICIPANTS.slice(0, 4), 3, zeroHash);
+		expect(setupGroup).toBeCalledWith(PARTICIPANTS.slice(0, 4).sort(), 3, zeroHash);
 	});
 
 	it("should trigger genesis key gen with correct parameters", async () => {
@@ -176,6 +176,6 @@ describe("gensis key gen", () => {
 		});
 		expect(diff.signing).toBeUndefined();
 		expect(setupGroup).toBeCalledTimes(1);
-		expect(setupGroup).toBeCalledWith(PARTICIPANTS.slice(0, 4), 3, zeroHash);
+		expect(setupGroup).toBeCalledWith(PARTICIPANTS.slice(0, 4).sort(), 3, zeroHash);
 	});
 });
