@@ -26,10 +26,6 @@ export const calculateMerkleRoot = (leaves: Hex[]): Hex => {
 	return rootLevel[0];
 };
 
-export const calculateParticipantsRoot = (participants: readonly Address[]): Hex => {
-	return calculateMerkleRoot(participants.map((p) => pad(p)));
-};
-
 export const verifyMerkleProof = (root: Hex, leaf: Hex, proof: Hex[]): boolean => {
 	let node: Hex = leaf;
 	for (const part of proof) {
@@ -67,10 +63,19 @@ export const generateMerkleProof = (leaves: Hex[], index: number): Hex[] => {
 	return proof;
 };
 
+const sortedParticipantLeaves = (participants: readonly Address[]): Hex[] => {
+	// In order to ensure stable participation roots, we make sure that we sort the addresses
+	// lexographically (i.e. based on their value and not checksummed string representation)
+	// before building our participant Merkle tree.
+	return participants.map((p) => pad(p).toLowerCase() as Hex).sort();
+};
+
+export const calculateParticipantsRoot = (participants: readonly Address[]): Hex => {
+	return calculateMerkleRoot(sortedParticipantLeaves(participants));
+};
+
 export const generateParticipantProof = (participants: readonly Address[], participant: Address): Hex[] => {
-	const index = participants.findIndex((p) => p === participant);
-	return generateMerkleProof(
-		participants.map((p) => pad(p)),
-		index,
-	);
+	const leaves = sortedParticipantLeaves(participants);
+	const index = leaves.findIndex((p) => BigInt(p) === BigInt(participant));
+	return generateMerkleProof(sortedParticipantLeaves(participants), index);
 };
