@@ -2,23 +2,17 @@
 pragma solidity ^0.8.30;
 
 import {MerkleTreeBase} from "@test/util/MerkleTreeBase.sol";
-import {FROST} from "@/libraries/FROST.sol";
 
 contract ParticipantMerkleTree is MerkleTreeBase {
     // forge-lint: disable-next-line(mixed-case-variable)
-    mapping(address participant => FROST.Identifier) private $identifiers;
-    // forge-lint: disable-next-line(mixed-case-variable)
-    mapping(FROST.Identifier => address participant) private $addresses;
+    mapping(uint256 i => address participant) private $addresses;
 
     constructor(address[] memory participants) {
         address last = address(0);
         for (uint256 i = 0; i < participants.length; i++) {
-            // Note that for FROST, participant identifiers start from 1.
-            FROST.Identifier identifier = FROST.newIdentifier(i + 1);
             address participant = participants[i];
-            $identifiers[participant] = identifier;
-            $addresses[identifier] = participant;
-            _leaf(keccak256(abi.encode(identifier, participant)));
+            $addresses[i] = participant;
+            _leaf(bytes32(uint256(uint160(participant))));
 
             assert(participant > last);
             last = participant;
@@ -26,14 +20,13 @@ contract ParticipantMerkleTree is MerkleTreeBase {
         _build();
     }
 
-    function addr(uint256 identifier) external view returns (address participant) {
-        participant = $addresses[FROST.newIdentifier(identifier)];
+    function addr(uint256 i) public view returns (address participant) {
+        participant = $addresses[i];
         assert(participant != address(0));
     }
 
-    function proof(uint256 identifier) external view returns (address participant, bytes32[] memory poap) {
-        participant = $addresses[FROST.newIdentifier(identifier)];
-        poap = _proof(identifier - 1);
-        assert(participant != address(0));
+    function proof(uint256 i) external view returns (address participant, bytes32[] memory poap) {
+        participant = addr(i);
+        poap = _proof(i);
     }
 }

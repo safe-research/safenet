@@ -2,7 +2,6 @@
 pragma solidity ^0.8.30;
 
 import {Test} from "@forge-std/Test.sol";
-import {FROST} from "@/libraries/FROST.sol";
 import {FROSTNonceCommitmentSet} from "@/libraries/FROSTNonceCommitmentSet.sol";
 import {Secp256k1} from "@/libraries/Secp256k1.sol";
 import {NoncesChunkMerkleTree} from "@test/util/NoncesChunkMerkleTree.sol";
@@ -13,7 +12,7 @@ contract FROSTNonceCommitmentSetTest is Test {
     FROSTNonceCommitmentSet.T nonces;
 
     function test_ConsecutiveCommit() public {
-        FROST.Identifier me = FROST.Identifier.wrap(42);
+        address me = address(42);
         bytes32 commitment = keccak256("chunk");
         uint64 sequence = 1337;
 
@@ -22,7 +21,7 @@ contract FROSTNonceCommitmentSetTest is Test {
     }
 
     function test_CannotVerifyPastSequences() public {
-        FROST.Identifier me = FROST.Identifier.wrap(42);
+        address me = address(42);
         NoncesChunkMerkleTree.S[] memory ns = new NoncesChunkMerkleTree.S[](3);
         ns[0] = NoncesChunkMerkleTree.S({offset: 0, d: 1, e: 2});
         ns[1] = NoncesChunkMerkleTree.S({offset: 41, d: 3, e: 4});
@@ -59,12 +58,12 @@ contract FROSTNonceCommitmentSetTest is Test {
     }
 
     function callVerify(
-        FROST.Identifier identifier,
+        address participant,
         Secp256k1.Point memory d,
         Secp256k1.Point memory e,
         uint64 sequence,
         bytes32[] calldata proof
     ) external view {
-        nonces.verify(identifier, d, e, sequence, proof);
+        nonces.verify(participant, d, e, sequence, proof);
     }
 }
