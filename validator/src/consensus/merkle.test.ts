@@ -1,6 +1,12 @@
 import type { Hex } from "viem";
 import { describe, expect, it } from "vitest";
-import { calculateMerkleRoot, generateMerkleProof, verifyMerkleProof } from "./merkle.js";
+import {
+	calculateMerkleRoot,
+	calculateParticipantsRoot,
+	generateMerkleProof,
+	generateParticipantProof,
+	verifyMerkleProof,
+} from "./merkle.js";
 
 describe("merkle", () => {
 	it("should generate the correct merkle root", () => {
@@ -34,5 +40,28 @@ describe("merkle", () => {
 		expect(
 			verifyMerkleProof(root, "0x0000000000000000000000000000000000000000000000000000000000000003", proof),
 		).toBeTruthy();
+	});
+
+	it("participant Merkle trees should be ordfer independant", () => {
+		const ordered = [
+			"0x00000000000000000000000000000000000000a1",
+			"0x00000000000000000000000000000000000000A2",
+			"0x00000000000000000000000000000000000000b3",
+		] as const;
+		const unordered = [ordered[1], ordered[2], ordered[0]];
+
+		const participant = "0x00000000000000000000000000000000000000A2";
+		const participantLeaf = "0x00000000000000000000000000000000000000000000000000000000000000a2";
+		const expectedRoot = calculateMerkleRoot([
+			"0x00000000000000000000000000000000000000000000000000000000000000a1",
+			"0x00000000000000000000000000000000000000000000000000000000000000a2",
+			"0x00000000000000000000000000000000000000000000000000000000000000b3",
+		]);
+
+		for (const participants of [ordered, unordered]) {
+			expect(calculateParticipantsRoot(participants)).toBe(expectedRoot);
+			const proof = generateParticipantProof(participants, participant);
+			expect(verifyMerkleProof(expectedRoot, participantLeaf, proof)).toBe(true);
+		}
 	});
 });
