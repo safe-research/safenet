@@ -159,6 +159,7 @@ library FROSTParticipantMap {
      * @param y The participant's public verification share.
      */
     function set(T storage self, address participant, Secp256k1.Point memory y) internal {
+        y.requireNonZero();
         require(self.states[participant].status == ParticipantStatus.REGISTERED, InvalidParticipant());
         Secp256k1.Point storage key = self.keys[participant];
         require(key.x | key.y == 0, AlreadySet());
