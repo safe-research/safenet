@@ -26,37 +26,34 @@ const PARTICIPANTS_INFO: ParticipantInfo[] = [
 
 describe("participants", () => {
 	it("should correctly evaluate ranges", async () => {
-		expect(participantsForEpoch(PARTICIPANTS_INFO, 0n)).toStrictEqual([entryPoint06Address, entryPoint07Address]);
+		expect(participantsForEpoch(PARTICIPANTS_INFO, 0n)).toStrictEqual([entryPoint07Address, entryPoint06Address]);
 		expect(participantsForEpoch(PARTICIPANTS_INFO, 1n)).toStrictEqual([
-			entryPoint06Address,
 			entryPoint07Address,
 			entryPoint08Address,
+			entryPoint06Address,
 		]);
 		expect(participantsForEpoch(PARTICIPANTS_INFO, 2n)).toStrictEqual([
-			entryPoint06Address,
 			entryPoint07Address,
 			entryPoint08Address,
+			entryPoint06Address,
 			ethAddress,
 		]);
 		expect(participantsForEpoch(PARTICIPANTS_INFO, 3n)).toStrictEqual([
-			entryPoint06Address,
 			entryPoint07Address,
+			entryPoint06Address,
 			ethAddress,
 		]);
 	});
 
-	it("should preserve input order", async () => {
-		expect(participantsForEpoch(PARTICIPANTS_INFO.toReversed(), 2n)).toStrictEqual([
-			ethAddress,
-			entryPoint08Address,
-			entryPoint07Address,
-			entryPoint06Address,
-		]);
-	});
-
-	it("should remove duplicates", async () => {
+	it("should not return duplicates", async () => {
 		expect(participantsForEpoch([...PARTICIPANTS_INFO, ...PARTICIPANTS_INFO], 0n)).toStrictEqual(
 			participantsForEpoch(PARTICIPANTS_INFO, 0n),
+		);
+	});
+
+	it("should return sorted", async () => {
+		expect(participantsForEpoch(PARTICIPANTS_INFO.toReversed(), 2n)).toStrictEqual(
+			participantsForEpoch(PARTICIPANTS_INFO, 2n),
 		);
 	});
 });

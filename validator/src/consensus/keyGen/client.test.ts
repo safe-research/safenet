@@ -3,6 +3,7 @@ import { generatePrivateKey, privateKeyToAccount } from "viem/accounts";
 import { describe, expect, it } from "vitest";
 import { createClientStorage, log, testLogger } from "../../__tests__/config.js";
 import type { FrostPoint, GroupId, ProofOfKnowledge } from "../../frost/types.js";
+import { participantsForEpoch } from "../../utils/participants.js";
 import { calculateParticipantsRoot, verifyMerkleProof } from "../merkle.js";
 import { KeyGenClient } from "./client.js";
 import { calcGroupId } from "./utils.js";
@@ -13,9 +14,12 @@ describe("keyGen", () => {
 	it("e2e keygen flow", async () => {
 		const count = 3;
 		const threshold = 2;
-		const validatorAddresses = Array.from({ length: Number(count) }, () => createRandomAccount());
+		const participantsInfo = Array.from({ length: Number(count) }, () => ({
+			address: createRandomAccount().address,
+			activeFrom: 0n,
+		}));
 		log(`Run test with ${count} validators and threshold ${threshold}`);
-		const participants = validatorAddresses.map((a) => a.address);
+		const participants = participantsForEpoch(participantsInfo, 0n);
 		const participantsRoot = calculateParticipantsRoot(participants);
 		const context = keccak256(participantsRoot);
 		const groupId = calcGroupId(participantsRoot, count, threshold, context);
@@ -32,8 +36,8 @@ describe("keyGen", () => {
 			verificationShare: FrostPoint;
 			shares: bigint[];
 		}[] = [];
-		const clients = validatorAddresses.map((a) => {
-			const storage = createClientStorage(a.address);
+		const clients = participantsInfo.map((p) => {
+			const storage = createClientStorage(p.address);
 			const client = new KeyGenClient(storage, testLogger);
 			return {
 				storage,
