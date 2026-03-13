@@ -53,23 +53,23 @@ export const SafeTxHeader = ({
 	return (
 		<div className="space-y-2">
 			<BoxTitle>Safe Transaction</BoxTitle>
-			<div className="flex flex-wrap items-baseline gap-2">
+			<div className="flex flex-wrap items-center gap-2">
 				<span className="text-sm font-medium">SafeTxHash:</span>
-				<span className="font-mono text-sm">{shortHash(safeTxHash)}</span>
+				<span className="font-mono text-sm leading-none">{shortHash(safeTxHash)}</span>
 				<CopyButton value={safeTxHash} />
 				{fromSafeApi && chainInfo !== undefined && (
 					<SafeWalletTxLink chainInfo={chainInfo} safe={transaction.safe} safeTxHash={safeTxHash} />
 				)}
 			</div>
-			<div className="flex flex-wrap items-baseline gap-2">
+			<div className="flex flex-wrap items-center gap-2">
 				<span className="text-sm font-medium">Network:</span>
 				<span title={networkTooltip}>
 					<NetworkBadge chainId={transaction.chainId} />
 				</span>
 			</div>
-			<div className="flex flex-wrap items-baseline gap-2">
+			<div className="flex flex-wrap items-center gap-2">
 				<span className="text-sm font-medium">Safe:</span>
-				<span className="font-mono text-sm">{shortAddress(transaction.safe)}</span>
+				<span className="font-mono text-sm leading-none">{shortAddress(transaction.safe)}</span>
 				<CopyButton value={transaction.safe} />
 				{chainInfo !== undefined && <SafeWalletAccountLink chainInfo={chainInfo} safe={transaction.safe} />}
 			</div>
