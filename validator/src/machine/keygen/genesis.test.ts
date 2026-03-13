@@ -1,5 +1,10 @@
 import { ethAddress, maxUint64, zeroHash } from "viem";
-import { entryPoint06Address, entryPoint07Address, entryPoint08Address } from "viem/account-abstraction";
+import {
+	entryPoint06Address,
+	entryPoint07Address,
+	entryPoint08Address,
+	entryPoint09Address,
+} from "viem/account-abstraction";
 import { describe, expect, it, vi } from "vitest";
 import { TEST_POINT } from "../../__tests__/data/machine.js";
 import type { KeyGenClient } from "../../consensus/keyGen/client.js";
@@ -34,7 +39,7 @@ const PARTICIPANTS_INFO = [
 		activeFrom: 0n,
 	},
 	{
-		address: entryPoint08Address,
+		address: entryPoint09Address,
 		activeFrom: 0n,
 	},
 	{
@@ -57,8 +62,8 @@ const EVENT: KeyGenEvent = {
 	id: "event_key_gen",
 	block: 4n,
 	index: 0,
-	gid: "0xd07a06750521cf67354bb1708fa0f61dba2e9c690abf006d0000000000000000",
-	participants: "0xfae47191bcfc7cf4aaa5212b4a93d228bf4e2f2281944950cc3e43e37b26298c",
+	gid: "0x17f7ec82700b24361d1ebf306c41b6576356a5d694c2c5770000000000000000",
+	participants: "0xf6a7256cea0721b8aefffe3f379ed98ea362aaf86492593bbfbda337471ecf4e",
 	count: 4,
 	threshold: 3,
 	context: zeroHash,
@@ -130,8 +135,8 @@ describe("gensis key gen", () => {
 
 	it("should trigger genesis key gen with correct parameters", async () => {
 		const groupSetup = {
-			groupId: "0xd07a06750521cf67354bb1708fa0f61dba2e9c690abf006d0000000000000000",
-			participantsRoot: "0xfae47191bcfc7cf4aaa5212b4a93d228bf4e2f2281944950cc3e43e37b26298c",
+			groupId: "0x17f7ec82700b24361d1ebf306c41b6576356a5d694c2c5770000000000000000",
+			participantsRoot: "0xf6a7256cea0721b8aefffe3f379ed98ea362aaf86492593bbfbda337471ecf4e",
 			commitments: [TEST_POINT],
 			encryptionPublicKey: TEST_POINT,
 			pok: {
@@ -161,13 +166,13 @@ describe("gensis key gen", () => {
 		]);
 		expect(diff.rollover).toStrictEqual({
 			id: "collecting_commitments",
-			groupId: "0xd07a06750521cf67354bb1708fa0f61dba2e9c690abf006d0000000000000000",
+			groupId: "0x17f7ec82700b24361d1ebf306c41b6576356a5d694c2c5770000000000000000",
 			nextEpoch: 0n,
 			deadline: maxUint64,
 		});
 		expect(diff.consensus).toStrictEqual({
-			genesisGroupId: "0xd07a06750521cf67354bb1708fa0f61dba2e9c690abf006d0000000000000000",
-			epochGroup: [0n, "0xd07a06750521cf67354bb1708fa0f61dba2e9c690abf006d0000000000000000"],
+			genesisGroupId: "0x17f7ec82700b24361d1ebf306c41b6576356a5d694c2c5770000000000000000",
+			epochGroup: [0n, "0x17f7ec82700b24361d1ebf306c41b6576356a5d694c2c5770000000000000000"],
 		});
 		expect(diff.signing).toBeUndefined();
 		expect(setupGroup).toBeCalledTimes(1);

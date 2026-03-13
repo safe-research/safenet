@@ -64,4 +64,28 @@ describe("merkle", () => {
 			expect(verifyMerkleProof(expectedRoot, participantLeaf, proof)).toBe(true);
 		}
 	});
+
+	it("should throw on duplicate participants", () => {
+		const participants = [
+			"0x0000000000000000000000000000000000000001",
+			"0x0000000000000000000000000000000000000002",
+			"0x0000000000000000000000000000000000000001",
+		] as const;
+		expect(() => calculateParticipantsRoot(participants)).toThrowError(
+			"duplicate participant 0x0000000000000000000000000000000000000001",
+		);
+		expect(() => generateParticipantProof(participants, "0x0000000000000000000000000000000000000001")).toThrowError(
+			"duplicate participant 0x0000000000000000000000000000000000000001",
+		);
+	});
+
+	it("should throw when building proof for missing participant", () => {
+		const participants = [
+			"0x0000000000000000000000000000000000000001",
+			"0x0000000000000000000000000000000000000002",
+		] as const;
+		expect(() => generateParticipantProof(participants, "0x0000000000000000000000000000000000000003")).toThrowError(
+			"participant 0x0000000000000000000000000000000000000003 not included",
+		);
+	});
 });

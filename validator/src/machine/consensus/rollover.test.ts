@@ -7,30 +7,28 @@ import type { ConsensusState, MachineConfig, MachineStates, SigningState } from 
 import { checkEpochRollover } from "./rollover.js";
 
 // --- Test Data ---
-const PARTICIPANTS_INFO = [
-	{
-		address: zeroAddress,
-		activeFrom: 0n,
-	},
-	{
-		address: zeroAddress,
-		activeFrom: 0n,
-	},
-	{
-		address: zeroAddress,
-		activeFrom: 1n,
-	},
-];
-
-const PARTICIPANTS = PARTICIPANTS_INFO.map((i) => i.address);
-
 const MACHINE_CONFIG: MachineConfig = {
-	participantsInfo: PARTICIPANTS_INFO,
+	participantsInfo: [
+		{
+			address: "0x0000000000000000000000000000000000000001",
+			activeFrom: 0n,
+		},
+		{
+			address: "0x0000000000000000000000000000000000000002",
+			activeFrom: 0n,
+		},
+		{
+			address: "0x0000000000000000000000000000000000000003",
+			activeFrom: 1n,
+		},
+	],
 	genesisSalt: zeroHash,
 	keyGenTimeout: 20n,
 	signingTimeout: 0n,
 	blocksPerEpoch: 10n,
 };
+
+const PARTICIPANTS = MACHINE_CONFIG.participantsInfo.map((i) => i.address);
 
 // By default we setup in a genesis state
 // This avoids that nonce commitments are triggered every time

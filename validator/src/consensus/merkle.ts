@@ -1,4 +1,4 @@
-import { type Address, encodePacked, type Hex, keccak256, pad, zeroHash } from "viem";
+import { type Address, encodePacked, getAddress, type Hex, keccak256, pad, slice, zeroHash } from "viem";
 
 export const buildMerkleTree = (leaves: Hex[]): Hex[][] => {
 	if (leaves.length === 0) throw new Error("Cannot generate empty tree!");
@@ -67,7 +67,19 @@ const sortedParticipantLeaves = (participants: readonly Address[]): Hex[] => {
 	// In order to ensure stable participation roots, we make sure that we sort the addresses
 	// lexographically (i.e. based on their value and not checksummed string representation)
 	// before building our participant Merkle tree.
-	return participants.map((p) => pad(p).toLowerCase() as Hex).sort();
+	const sorted = participants.map((p) => pad(p).toLowerCase() as Hex).sort();
+
+	// We cannot support duplicate participants (they would have the same ID). This should be
+	// impossible to happen, so assert that it is true. Take advantage that the array is sorted
+	// and just check that no two consecutive items are equal.
+	sorted.reduce((previous, leaf) => {
+		if (previous === leaf) {
+			throw new Error(`duplicate participant ${getAddress(slice(leaf, 12))}`);
+		}
+		return leaf;
+	});
+
+	return sorted;
 };
 
 export const calculateParticipantsRoot = (participants: readonly Address[]): Hex => {
@@ -77,5 +89,8 @@ export const calculateParticipantsRoot = (participants: readonly Address[]): Hex
 export const generateParticipantProof = (participants: readonly Address[], participant: Address): Hex[] => {
 	const leaves = sortedParticipantLeaves(participants);
 	const index = leaves.findIndex((p) => BigInt(p) === BigInt(participant));
+	if (index < 0) {
+		throw new Error(`participant ${participant} not included`);
+	}
 	return generateMerkleProof(leaves, index);
 };
