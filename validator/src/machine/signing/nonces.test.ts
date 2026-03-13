@@ -51,7 +51,7 @@ const CONSENSUS_STATE: ConsensusState = {
 };
 
 const MACHINE_CONFIG: MachineConfig = {
-	defaultParticipants: [],
+	participantsInfo: [],
 	genesisSalt: zeroHash,
 	keyGenTimeout: 0n,
 	signingTimeout: 20n,

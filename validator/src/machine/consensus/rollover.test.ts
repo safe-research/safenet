@@ -7,21 +7,30 @@ import type { ConsensusState, MachineConfig, MachineStates, SigningState } from 
 import { checkEpochRollover } from "./rollover.js";
 
 // --- Test Data ---
+const PARTICIPANTS_INFO = [
+	{
+		id: 1n,
+		address: zeroAddress,
+		activeFrom: 0n,
+	},
+	{
+		id: 3n,
+		address: zeroAddress,
+		activeFrom: 0n,
+	},
+	{
+		id: 7n,
+		address: zeroAddress,
+		activeFrom: 1n,
+	},
+];
+
+const PARTICIPANTS = PARTICIPANTS_INFO.map((i) => {
+	return { address: i.address, id: i.id };
+});
+
 const MACHINE_CONFIG: MachineConfig = {
-	defaultParticipants: [
-		{
-			id: 1n,
-			address: zeroAddress,
-		},
-		{
-			id: 3n,
-			address: zeroAddress,
-		},
-		{
-			id: 7n,
-			address: zeroAddress,
-		},
-	],
+	participantsInfo: PARTICIPANTS_INFO,
 	genesisSalt: zeroHash,
 	keyGenTimeout: 20n,
 	signingTimeout: 0n,
@@ -221,7 +230,7 @@ describe("check rollover", () => {
 		expect(protocol.consensus).toBeCalledTimes(1);
 		expect(keyGenClient.setupGroup).toBeCalledTimes(1);
 		expect(keyGenClient.setupGroup).toBeCalledWith(
-			MACHINE_CONFIG.defaultParticipants,
+			PARTICIPANTS,
 			2,
 			"0x00000000eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee0000000000000003",
 		);
@@ -269,7 +278,7 @@ describe("check rollover", () => {
 		expect(protocol.consensus).toBeCalledTimes(1);
 		expect(keyGenClient.setupGroup).toBeCalledTimes(1);
 		expect(keyGenClient.setupGroup).toBeCalledWith(
-			MACHINE_CONFIG.defaultParticipants,
+			PARTICIPANTS,
 			2,
 			"0x00000000eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee0000000000000002",
 		);
@@ -313,7 +322,7 @@ describe("check rollover", () => {
 		expect(protocol.consensus).toBeCalledTimes(1);
 		expect(keyGenClient.setupGroup).toBeCalledTimes(1);
 		expect(keyGenClient.setupGroup).toBeCalledWith(
-			MACHINE_CONFIG.defaultParticipants,
+			PARTICIPANTS,
 			2,
 			"0x00000000eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee0000000000000002",
 		);

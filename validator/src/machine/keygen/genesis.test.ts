@@ -1,4 +1,4 @@
-import { maxUint64, zeroHash } from "viem";
+import { ethAddress, maxUint64, zeroHash } from "viem";
 import { entryPoint06Address, entryPoint07Address, entryPoint08Address } from "viem/account-abstraction";
 import { describe, expect, it, vi } from "vitest";
 import { TEST_POINT } from "../../__tests__/data/machine.js";
@@ -20,25 +20,40 @@ const CONSENSUS_STATE: ConsensusState = {
 	signatureIdToMessage: {},
 };
 
+const PARTICIPANTS_INFO = [
+	{
+		id: 1n,
+		address: entryPoint06Address,
+		activeFrom: 0n,
+	},
+	{
+		id: 2n,
+		address: entryPoint07Address,
+		activeFrom: 0n,
+	},
+	{
+		id: 3n,
+		address: entryPoint08Address,
+		activeFrom: 0n,
+	},
+	{
+		id: 4n,
+		address: entryPoint08Address,
+		activeFrom: 0n,
+	},
+	{
+		id: 5n,
+		address: ethAddress,
+		activeFrom: 1n,
+	},
+];
+
+const PARTICIPANTS = PARTICIPANTS_INFO.map((i) => {
+	return { address: i.address, id: i.id };
+});
+
 const MACHINE_CONFIG: MachineConfig = {
-	defaultParticipants: [
-		{
-			id: 1n,
-			address: entryPoint06Address,
-		},
-		{
-			id: 2n,
-			address: entryPoint07Address,
-		},
-		{
-			id: 3n,
-			address: entryPoint08Address,
-		},
-		{
-			id: 4n,
-			address: entryPoint08Address,
-		},
-	],
+	participantsInfo: PARTICIPANTS_INFO,
 	genesisSalt: zeroHash,
 	keyGenTimeout: 25n,
 	signingTimeout: 20n,
@@ -118,7 +133,7 @@ describe("gensis key gen", () => {
 			new Error("Unexpected genesis group 0xffa9d1aa438a646139fe8d817f9c9dbb060ee7e2e58f2b100000000000000000"),
 		);
 		expect(setupGroup).toBeCalledTimes(1);
-		expect(setupGroup).toBeCalledWith(MACHINE_CONFIG.defaultParticipants, 3, zeroHash);
+		expect(setupGroup).toBeCalledWith(PARTICIPANTS.slice(0, 4), 3, zeroHash);
 	});
 
 	it("should trigger genesis key gen with correct parameters", async () => {
@@ -169,6 +184,6 @@ describe("gensis key gen", () => {
 		});
 		expect(diff.signing).toBeUndefined();
 		expect(setupGroup).toBeCalledTimes(1);
-		expect(setupGroup).toBeCalledWith(MACHINE_CONFIG.defaultParticipants, 3, zeroHash);
+		expect(setupGroup).toBeCalledWith(PARTICIPANTS.slice(0, 4), 3, zeroHash);
 	});
 });

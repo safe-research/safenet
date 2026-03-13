@@ -1,6 +1,7 @@
 import type { KeyGenClient } from "../../consensus/keyGen/client.js";
 import type { SafenetProtocol } from "../../consensus/protocol/types.js";
 import type { Logger } from "../../utils/logging.js";
+import { participantsForEpoch } from "../../utils/participants.js";
 import { calcGroupContext } from "../keygen/group.js";
 import { triggerKeyGen } from "../keygen/trigger.js";
 import type { ConsensusState, MachineConfig, MachineStates, StateDiff } from "../types.js";
@@ -62,7 +63,7 @@ export const checkEpochRollover = (
 		keyGenClient,
 		nextEpoch,
 		block + machineConfig.keyGenTimeout,
-		machineConfig.defaultParticipants,
+		participantsForEpoch(machineConfig.participantsInfo, nextEpoch),
 		calcGroupContext(protocol.consensus(), nextEpoch),
 		logger,
 	);

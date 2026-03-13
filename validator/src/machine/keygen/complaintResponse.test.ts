@@ -10,22 +10,26 @@ import { handleComplaintResponded } from "./complaintResponse.js";
 
 // --- Test Data ---
 const MACHINE_CONFIG: MachineConfig = {
-	defaultParticipants: [
+	participantsInfo: [
 		{
 			id: 1n,
 			address: entryPoint06Address,
+			activeFrom: 0n,
 		},
 		{
 			id: 3n,
 			address: entryPoint07Address,
+			activeFrom: 0n,
 		},
 		{
 			id: 2n,
 			address: entryPoint08Address,
+			activeFrom: 0n,
 		},
 		{
 			id: 4n,
 			address: ethAddress,
+			activeFrom: 0n,
 		},
 	],
 	genesisSalt: zeroHash,
@@ -223,7 +227,7 @@ describe("complaint responded", () => {
 		const verifySecretShare = vi.fn();
 		verifySecretShare.mockReturnValueOnce(false);
 		const participants = vi.fn();
-		participants.mockReturnValueOnce(MACHINE_CONFIG.defaultParticipants);
+		participants.mockReturnValueOnce(MACHINE_CONFIG.participantsInfo);
 		const keyGenClient = {
 			participants,
 			setupGroup,
@@ -283,7 +287,7 @@ describe("complaint responded", () => {
 		const participantId = vi.fn();
 		participantId.mockReturnValueOnce(1n);
 		const participants = vi.fn();
-		participants.mockReturnValueOnce(MACHINE_CONFIG.defaultParticipants);
+		participants.mockReturnValueOnce(MACHINE_CONFIG.participantsInfo);
 		const registerPlainKeyGenSecret = vi.fn();
 		registerPlainKeyGenSecret.mockReturnValueOnce("invalid_share");
 		const keyGenClient = {

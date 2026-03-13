@@ -75,10 +75,10 @@ const CONSENSUS_STATE: ConsensusState = {
 };
 
 const MACHINE_CONFIG: MachineConfig = {
-	defaultParticipants: [
-		{ id: 1n, address: zeroAddress },
-		{ id: 2n, address: zeroAddress },
-		{ id: 3n, address: zeroAddress },
+	participantsInfo: [
+		{ id: 1n, address: zeroAddress, activeFrom: 0n },
+		{ id: 2n, address: zeroAddress, activeFrom: 0n },
+		{ id: 3n, address: zeroAddress, activeFrom: 0n },
 	],
 	genesisSalt: zeroHash,
 	keyGenTimeout: 0n,

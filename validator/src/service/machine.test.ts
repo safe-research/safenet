@@ -4,20 +4,20 @@ import { TEST_POINT } from "../__tests__/data/machine.js";
 import type { KeyGenClient } from "../consensus/keyGen/client.js";
 import type { SafenetProtocol } from "../consensus/protocol/types.js";
 import type { SigningClient } from "../consensus/signing/client.js";
-import type { Participant } from "../consensus/storage/types.js";
 import type { VerificationEngine } from "../consensus/verify/engine.js";
 import type { StateStorage } from "../machine/storage/types.js";
 import type { ConsensusState, MachineStates, StateDiff } from "../machine/types.js";
+import type { ParticipantInfo } from "../types/interfaces.js";
 import type { Logger } from "../utils/logging.js";
 import type { Metrics } from "../utils/metrics/index.js";
 import { SafenetStateMachine } from "./machine.js";
 
 // --- Test Data ---
 
-const PARTICIPANTS: Participant[] = [
-	{ id: 1n, address: zeroAddress },
-	{ id: 3n, address: zeroAddress },
-	{ id: 7n, address: zeroAddress },
+const PARTICIPANTS: ParticipantInfo[] = [
+	{ id: 1n, address: zeroAddress, activeFrom: 0n },
+	{ id: 3n, address: zeroAddress, activeFrom: 0n },
+	{ id: 7n, address: zeroAddress, activeFrom: 0n },
 ];
 
 const makeLogger = (): Logger =>
