@@ -44,6 +44,7 @@ describe("participants", () => {
 			ethAddress,
 		]);
 	});
+
 	it("should preserve input order", async () => {
 		expect(participantsForEpoch(PARTICIPANTS_INFO.toReversed(), 2n)).toStrictEqual([
 			ethAddress,
@@ -51,5 +52,11 @@ describe("participants", () => {
 			entryPoint07Address,
 			entryPoint06Address,
 		]);
+	});
+
+	it("should remove duplicates", async () => {
+		expect(participantsForEpoch([...PARTICIPANTS_INFO, ...PARTICIPANTS_INFO], 0n)).toStrictEqual(
+			participantsForEpoch(PARTICIPANTS_INFO, 0n),
+		);
 	});
 });
