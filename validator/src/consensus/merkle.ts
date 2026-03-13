@@ -77,5 +77,5 @@ export const calculateParticipantsRoot = (participants: readonly Address[]): Hex
 export const generateParticipantProof = (participants: readonly Address[], participant: Address): Hex[] => {
 	const leaves = sortedParticipantLeaves(participants);
 	const index = leaves.findIndex((p) => BigInt(p) === BigInt(participant));
-	return generateMerkleProof(sortedParticipantLeaves(participants), index);
+	return generateMerkleProof(leaves, index);
 };

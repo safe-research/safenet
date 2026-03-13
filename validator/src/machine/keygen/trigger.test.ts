@@ -7,43 +7,23 @@ import type { MachineConfig } from "../types.js";
 import { triggerKeyGen } from "./trigger.js";
 
 // --- Test Data ---
-const PARTICIPANTS = [
-	{
-		id: 1n,
-		address: entryPoint06Address,
-		activeFrom: 0n,
-	},
-	{
-		id: 3n,
-		address: entryPoint07Address,
-		activeFrom: 0n,
-	},
-	{
-		id: 7n,
-		address: entryPoint08Address,
-		activeFrom: 0n,
-	},
-];
-
 const MACHINE_CONFIG = {
 	participantsInfo: [
 		{
-			id: 1n,
 			address: entryPoint06Address,
 			activeFrom: 0n,
 		},
 		{
-			id: 2n,
 			address: entryPoint07Address,
 			activeFrom: 0n,
 		},
 		{
-			id: 3n,
 			address: entryPoint08Address,
 			activeFrom: 0n,
 		},
 	],
 } as unknown as MachineConfig;
+const PARTICIPANTS = MACHINE_CONFIG.participantsInfo.map((p) => p.address);
 
 // --- Tests ---
 describe("trigger key gen", () => {
@@ -63,22 +43,18 @@ describe("trigger key gen", () => {
 		const config = {
 			participantsInfo: [
 				{
-					id: 1n,
 					address: entryPoint06Address,
 					activeFrom: 0n,
 				},
 				{
-					id: 2n,
 					address: entryPoint07Address,
 					activeFrom: 0n,
 				},
 				{
-					id: 3n,
 					address: entryPoint08Address,
 					activeFrom: 0n,
 				},
 				{
-					id: 4n,
 					address: entryPoint08Address,
 					activeFrom: 0n,
 				},

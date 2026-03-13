@@ -9,7 +9,7 @@ import { handleSign } from "./sign.js";
 // --- Test Data ---
 const SIGNING_STATE: SigningState = {
 	id: "waiting_for_request",
-	signers: [1n, 2n],
+	signers: ["0x0000000000000000000000000000000000000001", "0x0000000000000000000000000000000000000002"],
 	responsible: undefined,
 	deadline: 23n,
 	packet: {
@@ -189,10 +189,7 @@ describe("collecting shares", () => {
 			...CONSENSUS_STATE,
 			activeEpoch: 1n,
 			epochGroups: {
-				"1": {
-					groupId: "0x0000000000000000000000007fa9385be102ac3eac297483dd6233d62b3e1496",
-					participantId: 1n,
-				},
+				"1": "0x0000000000000000000000007fa9385be102ac3eac297483dd6233d62b3e1496",
 			},
 		};
 		const diff = await handleSign(

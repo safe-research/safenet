@@ -179,7 +179,6 @@ export const TEST_ACTIONS: [ProtocolAction, keyof TestProtocol, EthTransactionDa
 			count: 4,
 			threshold: 3,
 			context: "0x5afe00aa00000000000000000000000000000000000000000000000000000000",
-			participantId: 1n,
 			encryptionPublicKey: TEST_POINT,
 			commitments: [TEST_POINT, TEST_POINT],
 			pok: {
@@ -218,7 +217,7 @@ export const TEST_ACTIONS: [ProtocolAction, keyof TestProtocol, EthTransactionDa
 		{
 			id: "key_gen_complain",
 			groupId: "0x5afe000000000000000000000000000000000000000000000000000000000000",
-			accused: 1n,
+			accused: "0x0000000000000000000000000000000000000001",
 		},
 		"complain",
 		{
@@ -232,7 +231,7 @@ export const TEST_ACTIONS: [ProtocolAction, keyof TestProtocol, EthTransactionDa
 		{
 			id: "key_gen_complaint_response",
 			groupId: "0x5afe000000000000000000000000000000000000000000000000000000000000",
-			plaintiff: 2n,
+			plaintiff: "0x0000000000000000000000000000000000000002",
 			secretShare: 0x5afe5afe5afen,
 		},
 		"complaintResponse",
@@ -355,11 +354,10 @@ export const TEST_EVENTS: [ProtocolLog | null, StateTransition][] = [
 		{
 			blockNumber: 111n,
 			logIndex: 0,
-			// KeyGenCommitted(bytes32 indexed gid, uint256 identifier, address participant, ((uint256 x, uint256 y) q, (uint256 x, uint256 y)[] c, (uint256 x, uint256 y) r, uint256 mu) commitment, bool committed)
+			// KeyGenCommitted(bytes32 indexed gid, address participant, ((uint256 x, uint256 y) q, (uint256 x, uint256 y)[] c, (uint256 x, uint256 y) r, uint256 mu) commitment, bool committed)
 			eventName: "KeyGenCommitted",
 			args: {
 				gid: "0x5afe000000000000000000000000000000000000000000000000000000000000",
-				identifier: 1n,
 				participant: zeroAddress,
 				commitment: {
 					q: TEST_POINT,
@@ -375,7 +373,6 @@ export const TEST_EVENTS: [ProtocolLog | null, StateTransition][] = [
 			block: 111n,
 			index: 0,
 			gid: "0x5afe000000000000000000000000000000000000000000000000000000000000",
-			identifier: 1n,
 			participant: zeroAddress,
 			commitment: {
 				q: TEST_POINT,
@@ -390,11 +387,11 @@ export const TEST_EVENTS: [ProtocolLog | null, StateTransition][] = [
 		{
 			blockNumber: 111n,
 			logIndex: 0,
-			// KeyGenSecretShared(bytes32 indexed gid, uint256 identifier, ((uint256 x, uint256 y) y, uint256[] f) share, bool shared)
+			// KeyGenSecretShared(bytes32 indexed gid, address participant, ((uint256 x, uint256 y) y, uint256[] f) share, bool shared)
 			eventName: "KeyGenSecretShared",
 			args: {
 				gid: "0x5afe000000000000000000000000000000000000000000000000000000000000",
-				identifier: 1n,
+				participant: zeroAddress,
 				share: {
 					y: TEST_POINT,
 					f: [1n, 2n, 3n, 5n, 8n],
@@ -407,7 +404,7 @@ export const TEST_EVENTS: [ProtocolLog | null, StateTransition][] = [
 			block: 111n,
 			index: 0,
 			gid: "0x5afe000000000000000000000000000000000000000000000000000000000000",
-			identifier: 1n,
+			participant: zeroAddress,
 			share: {
 				y: TEST_POINT,
 				f: [1n, 2n, 3n, 5n, 8n],
@@ -419,12 +416,12 @@ export const TEST_EVENTS: [ProtocolLog | null, StateTransition][] = [
 		{
 			blockNumber: 111n,
 			logIndex: 0,
-			// KeyGenComplained(bytes32 indexed gid, uint256 plaintiff, uint256 accused, bool compromised)
+			// KeyGenComplained(bytes32 indexed gid, address plaintiff, address accused, bool compromised)
 			eventName: "KeyGenComplained",
 			args: {
 				gid: "0x5afe000000000000000000000000000000000000000000000000000000000000",
-				plaintiff: 1n,
-				accused: 2n,
+				plaintiff: "0x0000000000000000000000000000000000000001",
+				accused: "0x0000000000000000000000000000000000000002",
 				compromised: false,
 			},
 		},
@@ -433,8 +430,8 @@ export const TEST_EVENTS: [ProtocolLog | null, StateTransition][] = [
 			block: 111n,
 			index: 0,
 			gid: "0x5afe000000000000000000000000000000000000000000000000000000000000",
-			plaintiff: 1n,
-			accused: 2n,
+			plaintiff: "0x0000000000000000000000000000000000000001",
+			accused: "0x0000000000000000000000000000000000000002",
 			compromised: false,
 		},
 	],
@@ -442,12 +439,12 @@ export const TEST_EVENTS: [ProtocolLog | null, StateTransition][] = [
 		{
 			blockNumber: 111n,
 			logIndex: 0,
-			// KeyGenComplaintResponded(bytes32 indexed gid, uint256 plaintiff, uint256 accused, uint256 secretShare)
+			// KeyGenComplaintResponded(bytes32 indexed gid, address plaintiff, address accused, uint256 secretShare)
 			eventName: "KeyGenComplaintResponded",
 			args: {
 				gid: "0x5afe000000000000000000000000000000000000000000000000000000000000",
-				plaintiff: 1n,
-				accused: 2n,
+				plaintiff: "0x0000000000000000000000000000000000000001",
+				accused: "0x0000000000000000000000000000000000000002",
 				secretShare: 0x5afe5afe5afen,
 			},
 		},
@@ -456,8 +453,8 @@ export const TEST_EVENTS: [ProtocolLog | null, StateTransition][] = [
 			block: 111n,
 			index: 0,
 			gid: "0x5afe000000000000000000000000000000000000000000000000000000000000",
-			plaintiff: 1n,
-			accused: 2n,
+			plaintiff: "0x0000000000000000000000000000000000000001",
+			accused: "0x0000000000000000000000000000000000000002",
 			secretShare: 0x5afe5afe5afen,
 		},
 	],
@@ -465,11 +462,11 @@ export const TEST_EVENTS: [ProtocolLog | null, StateTransition][] = [
 		{
 			blockNumber: 111n,
 			logIndex: 0,
-			// KeyGenConfirmed(bytes32 indexed gid, uint256 identifier, bool confirmed)
+			// KeyGenConfirmed(bytes32 indexed gid, address participant, bool confirmed)
 			eventName: "KeyGenConfirmed",
 			args: {
 				gid: "0x5afe000000000000000000000000000000000000000000000000000000000000",
-				identifier: 1n,
+				participant: zeroAddress,
 				confirmed: true,
 			},
 		},
@@ -478,7 +475,7 @@ export const TEST_EVENTS: [ProtocolLog | null, StateTransition][] = [
 			block: 111n,
 			index: 0,
 			gid: "0x5afe000000000000000000000000000000000000000000000000000000000000",
-			identifier: 1n,
+			participant: zeroAddress,
 			confirmed: true,
 		},
 	],
@@ -486,11 +483,11 @@ export const TEST_EVENTS: [ProtocolLog | null, StateTransition][] = [
 		{
 			blockNumber: 111n,
 			logIndex: 0,
-			// Preprocess(bytes32 indexed gid, uint256 identifier, uint64 chunk, bytes32 commitment)
+			// Preprocess(bytes32 indexed gid, address participant, uint64 chunk, bytes32 commitment)
 			eventName: "Preprocess",
 			args: {
 				gid: "0x5afe000000000000000000000000000000000000000000000000000000000000",
-				identifier: 1n,
+				participant: zeroAddress,
 				chunk: 100n,
 				commitment: "0x5afeaabb00000000000000000000000000000000000000000000000000000000",
 			},
@@ -500,7 +497,7 @@ export const TEST_EVENTS: [ProtocolLog | null, StateTransition][] = [
 			block: 111n,
 			index: 0,
 			gid: "0x5afe000000000000000000000000000000000000000000000000000000000000",
-			identifier: 1n,
+			participant: zeroAddress,
 			chunk: 100n,
 			commitment: "0x5afeaabb00000000000000000000000000000000000000000000000000000000",
 		},
@@ -534,11 +531,11 @@ export const TEST_EVENTS: [ProtocolLog | null, StateTransition][] = [
 		{
 			blockNumber: 111n,
 			logIndex: 0,
-			// SignRevealedNonces(bytes32 indexed sid, uint256 identifier, ((uint256 x, uint256 y) d, (uint256 x, uint256 y) e) nonces)
+			// SignRevealedNonces(bytes32 indexed sid, address participant, ((uint256 x, uint256 y) d, (uint256 x, uint256 y) e) nonces)
 			eventName: "SignRevealedNonces",
 			args: {
 				sid: "0x5af3000000000000000000000000000000000000000000000000000000000000",
-				identifier: 1n,
+				participant: zeroAddress,
 				nonces: {
 					d: TEST_POINT,
 					e: TEST_POINT,
@@ -550,7 +547,7 @@ export const TEST_EVENTS: [ProtocolLog | null, StateTransition][] = [
 			block: 111n,
 			index: 0,
 			sid: "0x5af3000000000000000000000000000000000000000000000000000000000000",
-			identifier: 1n,
+			participant: zeroAddress,
 			nonces: {
 				d: TEST_POINT,
 				e: TEST_POINT,
@@ -561,12 +558,12 @@ export const TEST_EVENTS: [ProtocolLog | null, StateTransition][] = [
 		{
 			blockNumber: 111n,
 			logIndex: 0,
-			// SignShared(bytes32 indexed sid, bytes32 indexed selectionRoot, uint256 identifier, uint256 z)
+			// SignShared(bytes32 indexed sid, bytes32 indexed selectionRoot, address participant, uint256 z)
 			eventName: "SignShared",
 			args: {
 				sid: "0x5af3000000000000000000000000000000000000000000000000000000000000",
 				selectionRoot: "0x5af35af35af35af3000000000000000000000000000000000000000000000000",
-				identifier: 1n,
+				participant: zeroAddress,
 				z: 12345n,
 			},
 		},
@@ -576,7 +573,7 @@ export const TEST_EVENTS: [ProtocolLog | null, StateTransition][] = [
 			index: 0,
 			sid: "0x5af3000000000000000000000000000000000000000000000000000000000000",
 			selectionRoot: "0x5af35af35af35af3000000000000000000000000000000000000000000000000",
-			identifier: 1n,
+			participant: zeroAddress,
 			z: 12345n,
 		},
 	],

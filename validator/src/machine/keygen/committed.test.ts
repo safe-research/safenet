@@ -1,4 +1,4 @@
-import { zeroAddress, zeroHash } from "viem";
+import { zeroHash } from "viem";
 import { entryPoint06Address, entryPoint07Address, entryPoint08Address } from "viem/account-abstraction";
 import { describe, expect, it, vi } from "vitest";
 import { TEST_POINT } from "../../__tests__/data/machine.js";
@@ -21,17 +21,14 @@ const MACHINE_STATES: MachineStates = {
 const MACHINE_CONFIG: MachineConfig = {
 	participantsInfo: [
 		{
-			id: 1n,
 			address: entryPoint06Address,
 			activeFrom: 0n,
 		},
 		{
-			id: 2n,
 			address: entryPoint07Address,
 			activeFrom: 0n,
 		},
 		{
-			id: 3n,
 			address: entryPoint08Address,
 			activeFrom: 0n,
 		},
@@ -47,8 +44,7 @@ const EVENT: KeyGenCommittedEvent = {
 	block: 4n,
 	index: 0,
 	gid: "0x06cb03baac74421225341827941e88d9547e5459c4b3715c0000000000000000",
-	identifier: 2n,
-	participant: zeroAddress,
+	participant: entryPoint07Address,
 	commitment: {
 		q: TEST_POINT,
 		r: TEST_POINT,
