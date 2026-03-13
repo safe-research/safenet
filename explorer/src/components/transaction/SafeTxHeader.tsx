@@ -11,10 +11,10 @@ import { safeWalletSafeUrl, safeWalletTxUrl } from "@/lib/safe/wallet";
 
 const shortHash = (hash: string): string => `${hash.slice(0, 6)}…${hash.slice(-4)}`;
 
-function SafeWalletTxLink({ chainInfo, safe, safeTxHash }: { chainInfo: ChainInfo; safe: Address; safeTxHash: Hex }) {
+function SafeWalletLink({ href }: { href: string }) {
 	return (
 		<a
-			href={safeWalletTxUrl(chainInfo.shortName, safe, safeTxHash)}
+			href={href}
 			target="_blank"
 			rel="noopener noreferrer"
 			className="inline-flex items-center gap-1 text-sm hover:underline"
@@ -24,17 +24,12 @@ function SafeWalletTxLink({ chainInfo, safe, safeTxHash }: { chainInfo: ChainInf
 	);
 }
 
+function SafeWalletTxLink({ chainInfo, safe, safeTxHash }: { chainInfo: ChainInfo; safe: Address; safeTxHash: Hex }) {
+	return <SafeWalletLink href={safeWalletTxUrl(chainInfo.shortName, safe, safeTxHash)} />;
+}
+
 function SafeWalletAccountLink({ chainInfo, safe }: { chainInfo: ChainInfo; safe: Address }) {
-	return (
-		<a
-			href={safeWalletSafeUrl(chainInfo.shortName, safe)}
-			target="_blank"
-			rel="noopener noreferrer"
-			className="inline-flex items-center gap-1 text-sm hover:underline"
-		>
-			Open in Safe Wallet <ArrowTopRightOnSquareIcon className="inline-block h-4 w-4" />
-		</a>
-	);
+	return <SafeWalletLink href={safeWalletSafeUrl(chainInfo.shortName, safe)} />;
 }
 
 export const SafeTxHeader = ({
