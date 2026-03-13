@@ -1,4 +1,4 @@
-import { type Hex, keccak256, pad } from "viem";
+import { type Address, type Hex, keccak256, pad } from "viem";
 import { generatePrivateKey, privateKeyToAccount } from "viem/accounts";
 import { describe, expect, it } from "vitest";
 import { createClientStorage, log, testLogger } from "../../__tests__/config.js";
@@ -21,14 +21,14 @@ describe("keyGen", () => {
 		const groupId = calcGroupId(participantsRoot, count, threshold, context);
 		const commitmentEvents: {
 			groupId: GroupId;
-			participant: `0x${string}`;
+			participant: Address;
 			encryptionPublicKey: FrostPoint;
 			commitments: FrostPoint[];
 			pok: ProofOfKnowledge;
 		}[] = [];
 		const shareEvents: {
 			groupId: GroupId;
-			participant: `0x${string}`;
+			participant: Address;
 			verificationShare: FrostPoint;
 			shares: bigint[];
 		}[] = [];
@@ -58,7 +58,7 @@ describe("keyGen", () => {
 		log("------------------------ Handle Commitments ------------------------");
 		for (const { client } of clients) {
 			for (const e of commitmentEvents) {
-				log(`>>>> Handle commitment from ${e.participant} by ${client.participant(e.groupId)} >>>>`);
+				log(`>>>> Handle commitment from ${e.participant} >>>>`);
 				client.handleKeygenCommitment(e.groupId, e.participant, e.encryptionPublicKey, e.commitments, e.pok);
 			}
 		}
@@ -77,7 +77,7 @@ describe("keyGen", () => {
 		log("------------------------ Handle Secret Shares ------------------------");
 		for (const { client } of clients) {
 			for (const e of shareEvents) {
-				log(`>>>> Handle secrets shares from ${e.participant} by ${client.participant(e.groupId)} >>>>`);
+				log(`>>>> Handle secrets shares from ${e.participant} >>>>`);
 				const response = await client.handleKeygenSecrets(e.groupId, e.participant, e.shares);
 				expect(response).not.toBe("invalid_share");
 			}

@@ -215,7 +215,7 @@ describe("complaint responded", () => {
 		const protocol = {
 			consensus,
 		} as unknown as SafenetProtocol;
-		const groupSetup = makeGroupSetup(4n);
+		const groupSetup = makeGroupSetup();
 		const setupGroup = vi.fn();
 		setupGroup.mockReturnValueOnce(groupSetup);
 		const participant = vi.fn();
@@ -276,7 +276,7 @@ describe("complaint responded", () => {
 		const protocol = {
 			consensus,
 		} as unknown as SafenetProtocol;
-		const groupSetup = makeGroupSetup(4n);
+		const groupSetup = makeGroupSetup();
 		const setupGroup = vi.fn();
 		setupGroup.mockReturnValueOnce(groupSetup);
 		const participant = vi.fn();

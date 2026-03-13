@@ -305,7 +305,7 @@ describe("complaint submitted", () => {
 	});
 
 	it("should restart key gen when complaints exceed threshold", async () => {
-		const groupSetup = makeGroupSetup(1n);
+		const groupSetup = makeGroupSetup();
 		const participants = [entryPoint06Address, entryPoint07Address, entryPoint08Address, entryPoint09Address];
 		const setupGroup = vi.fn();
 		setupGroup.mockReturnValueOnce(groupSetup);

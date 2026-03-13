@@ -71,7 +71,7 @@ describe("trigger key gen", () => {
 	it("should trigger key generation and return the correct state diff", () => {
 		const context = "0x00000000eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee0000000000000002";
 		const setupGroup = vi.fn();
-		const groupSetup = makeGroupSetup(3n);
+		const groupSetup = makeGroupSetup();
 		setupGroup.mockReturnValueOnce(groupSetup);
 		const keyGenClient = {
 			setupGroup,
