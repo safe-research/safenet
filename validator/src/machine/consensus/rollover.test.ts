@@ -48,7 +48,7 @@ const CONSENSUS_STATE: ConsensusState = {
 	signatureIdToMessage: {},
 };
 
-const GROUP_SETUP = makeGroupSetup(3n);
+const GROUP_SETUP = makeGroupSetup();
 
 const EMPTY_PROTOCOL = {} as unknown as SafenetProtocol;
 const EMPTY_KEY_GEN_CLIENT = {} as unknown as KeyGenClient;

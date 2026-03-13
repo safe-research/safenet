@@ -7,13 +7,13 @@ import { SqliteClientStorage } from "./sqlite.js";
 const groups = [`0x${"ff".repeat(31)}01`, `0x${"ff".repeat(31)}02`] as const;
 
 const participants = [
-	"0x0000000000000000000000000000000000000001" as Address,
-	"0x0000000000000000000000000000000000000002" as Address,
-	"0x0000000000000000000000000000000000000003" as Address,
+	"0x0000000000000000000000000000000000000001",
+	"0x0000000000000000000000000000000000000002",
+	"0x0000000000000000000000000000000000000003",
 ] as const;
 
 const sortedEntries = <T>(m: Map<Address, T>): [Address, T][] => {
-	return [...m.entries()].sort(([a], [b]) => a.localeCompare(b));
+	return [...m.entries()].sort(([a], [b]) => a.toLowerCase().localeCompare(b.toLowerCase()));
 };
 
 describe("sqlite", () => {
@@ -92,14 +92,14 @@ describe("sqlite", () => {
 		const encryptionSecretKey = 42n;
 		const coefficients = [11n, 22n];
 		const commitments = [
-			{ id: participants[0], value: [g(11n), g(22n)], encryptionPublicKey: g(111n) },
-			{ id: participants[1], value: [g(33n), g(44n)], encryptionPublicKey: g(222n) },
-			{ id: participants[2], value: [g(55n), g(66n)], encryptionPublicKey: g(333n) },
+			{ participant: participants[0], value: [g(11n), g(22n)], encryptionPublicKey: g(111n) },
+			{ participant: participants[1], value: [g(33n), g(44n)], encryptionPublicKey: g(222n) },
+			{ participant: participants[2], value: [g(55n), g(66n)], encryptionPublicKey: g(333n) },
 		];
 		const secretShares = [
-			{ id: participants[0], value: 101n },
-			{ id: participants[1], value: 102n },
-			{ id: participants[2], value: 103n },
+			{ participant: participants[0], value: 101n },
+			{ participant: participants[1], value: 102n },
+			{ participant: participants[2], value: 103n },
 		];
 
 		it("should register KeyGen coefficients", () => {
@@ -131,13 +131,13 @@ describe("sqlite", () => {
 			expect(() =>
 				storage.registerCommitments(
 					groups[0],
-					commitments[1].id,
+					commitments[1].participant,
 					commitments[1].encryptionPublicKey,
 					commitments[1].value,
 				),
 			).toThrowError();
-			expect(() => storage.commitments(groups[0], commitments[1].id)).toThrowError();
-			expect(() => storage.encryptionPublicKey(groups[0], commitments[1].id)).toThrowError();
+			expect(() => storage.commitments(groups[0], commitments[1].participant)).toThrowError();
+			expect(() => storage.encryptionPublicKey(groups[0], commitments[1].participant)).toThrowError();
 			expect(() => storage.missingCommitments(groups[0])).toThrowError();
 			expect(() => storage.checkIfCommitmentsComplete(groups[0])).toThrowError();
 			expect(() => storage.commitmentsMap(groups[0])).toThrowError();
@@ -146,17 +146,17 @@ describe("sqlite", () => {
 
 			storage.registerCommitments(
 				groups[0],
-				commitments[1].id,
+				commitments[1].participant,
 				commitments[1].encryptionPublicKey,
 				commitments[1].value,
 			);
 
-			expect(storage.missingCommitments(groups[0])).toEqual([commitments[0].id, commitments[2].id]);
+			expect(storage.missingCommitments(groups[0])).toEqual([commitments[0].participant, commitments[2].participant]);
 			expect(storage.checkIfCommitmentsComplete(groups[0])).toBe(false);
 			expect(() =>
 				storage.registerCommitments(
 					groups[0],
-					commitments[1].id,
+					commitments[1].participant,
 					commitments[1].encryptionPublicKey,
 					commitments[1].value,
 				),
@@ -164,13 +164,13 @@ describe("sqlite", () => {
 
 			storage.registerCommitments(
 				groups[0],
-				commitments[0].id,
+				commitments[0].participant,
 				commitments[0].encryptionPublicKey,
 				commitments[0].value,
 			);
 			storage.registerCommitments(
 				groups[0],
-				commitments[2].id,
+				commitments[2].participant,
 				commitments[2].encryptionPublicKey,
 				commitments[2].value,
 			);
@@ -178,14 +178,16 @@ describe("sqlite", () => {
 			expect(storage.missingCommitments(groups[0])).toEqual([]);
 			expect(storage.checkIfCommitmentsComplete(groups[0])).toBe(true);
 
-			for (const { id, value } of commitments) {
+			for (const { participant: id, value } of commitments) {
 				expect(storage.commitments(groups[0], id)).toEqual(value);
 			}
-			for (const { id, encryptionPublicKey } of commitments) {
+			for (const { participant: id, encryptionPublicKey } of commitments) {
 				expect(storage.encryptionPublicKey(groups[0], id)).toEqual(encryptionPublicKey);
 			}
 
-			expect(sortedEntries(storage.commitmentsMap(groups[0]))).toEqual(commitments.map((c) => [c.id, c.value]));
+			expect(sortedEntries(storage.commitmentsMap(groups[0]))).toEqual(
+				commitments.map((c) => [c.participant, c.value]),
+			);
 
 			storage.clearKeyGen(groups[0]);
 
@@ -201,26 +203,35 @@ describe("sqlite", () => {
 		it("should register secret shares", () => {
 			const storage = testStorage(participants[0]);
 
-			expect(() => storage.registerSecretShare(groups[0], secretShares[1].id, secretShares[1].value)).toThrowError();
+			expect(() =>
+				storage.registerSecretShare(groups[0], secretShares[1].participant, secretShares[1].value),
+			).toThrowError();
 			expect(() => storage.missingSecretShares(groups[0])).toThrowError();
 			expect(() => storage.checkIfSecretSharesComplete(groups[0])).toThrowError();
 			expect(() => storage.secretSharesMap(groups[0])).toThrowError();
 
 			storage.registerGroup(groups[0], participants, 2);
 
-			storage.registerSecretShare(groups[0], secretShares[1].id, secretShares[1].value);
+			storage.registerSecretShare(groups[0], secretShares[1].participant, secretShares[1].value);
 
-			expect(storage.missingSecretShares(groups[0])).toEqual([secretShares[0].id, secretShares[2].id]);
+			expect(storage.missingSecretShares(groups[0])).toEqual([
+				secretShares[0].participant,
+				secretShares[2].participant,
+			]);
 			expect(storage.checkIfSecretSharesComplete(groups[0])).toBe(false);
-			expect(() => storage.registerSecretShare(groups[0], secretShares[1].id, secretShares[1].value)).toThrowError();
+			expect(() =>
+				storage.registerSecretShare(groups[0], secretShares[1].participant, secretShares[1].value),
+			).toThrowError();
 
-			storage.registerSecretShare(groups[0], secretShares[0].id, secretShares[0].value);
-			storage.registerSecretShare(groups[0], secretShares[2].id, secretShares[2].value);
+			storage.registerSecretShare(groups[0], secretShares[0].participant, secretShares[0].value);
+			storage.registerSecretShare(groups[0], secretShares[2].participant, secretShares[2].value);
 
 			expect(storage.missingSecretShares(groups[0])).toEqual([]);
 			expect(storage.checkIfSecretSharesComplete(groups[0])).toBe(true);
 
-			expect(sortedEntries(storage.secretSharesMap(groups[0]))).toEqual(secretShares.map((s) => [s.id, s.value]));
+			expect(sortedEntries(storage.secretSharesMap(groups[0]))).toEqual(
+				secretShares.map((s) => [s.participant, s.value]),
+			);
 
 			storage.clearKeyGen(groups[0]);
 

@@ -96,12 +96,12 @@ describe("signing", () => {
 	it("e2e signing flow", async () => {
 		const nonceRevealEvent: {
 			signatureId: SignatureId;
-			signerId: Address;
+			signer: Address;
 			nonces: PublicNonceCommitments;
 		}[] = [];
 		const signatureShareEvents: {
 			signatureId: SignatureId;
-			signerId: Address;
+			signer: Address;
 			z: bigint;
 			r: FrostPoint;
 		}[] = [];
@@ -144,22 +144,22 @@ describe("signing", () => {
 			const commitments = client.createNonceCommitments(groupId, signatureId, message, 0n, TEST_GROUP.participants);
 			nonceRevealEvent.push({
 				signatureId,
-				signerId: storage.participant(groupId),
+				signer: storage.participant(groupId),
 				nonces: commitments.nonceCommitments,
 			});
 		}
 		log("------------------------ Reveal Nonces ------------------------");
 		for (const e of nonceRevealEvent) {
 			for (const { client, storage } of clients) {
-				log(`>>>> Nonce reveal from ${e.signerId} to ${storage.participant(groupId)} >>>>`);
-				const readyToSubmit = client.handleNonceCommitments(e.signatureId, e.signerId, e.nonces);
+				log(`>>>> Nonce reveal from ${e.signer} to ${storage.participant(groupId)} >>>>`);
+				const readyToSubmit = client.handleNonceCommitments(e.signatureId, e.signer, e.nonces);
 				if (!readyToSubmit) continue;
 
 				const { commitmentShare, signatureShare } = client.createSignatureShare(e.signatureId);
 
 				signatureShareEvents.push({
 					signatureId: e.signatureId,
-					signerId: e.signerId,
+					signer: e.signer,
 					z: signatureShare,
 					r: commitmentShare,
 				});

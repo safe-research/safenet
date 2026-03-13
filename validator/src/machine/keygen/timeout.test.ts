@@ -132,7 +132,7 @@ describe("key gen timeouts", () => {
 			expect(diff).toStrictEqual({});
 		});
 		it("should trigger key gen after deadline has passed", () => {
-			const groupSetup = makeGroupSetup(7n);
+			const groupSetup = makeGroupSetup();
 			const consensus = vi.fn();
 			consensus.mockReturnValueOnce(ethAddress);
 			const protocol = {
