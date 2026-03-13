@@ -1,5 +1,5 @@
-import { type Address, encodePacked, type Hex, keccak256 } from "viem";
-import { deriveParticipantId, sortedParticipantIds, toParticipantIdMap } from "../../frost/identifier.js";
+import { type Address, encodeAbiParameters, type Hex, keccak256, parseAbiParameters } from "viem";
+import { sortedParticipants, toParticipantIdMap } from "../../frost/identifier.js";
 import type { FrostPoint, GroupId, SignatureId } from "../../frost/types.js";
 import { generateMerkleProofWithRoot } from "../merkle.js";
 import type { GroupInfoStorage, SignatureRequestStorage } from "../storage/types.js";
@@ -15,6 +15,8 @@ import {
 } from "./nonces.js";
 import { createSignatureShare, lagrangeChallenge } from "./shares.js";
 import { verifySignatureShare } from "./verify.js";
+
+const COMMITMENT_LEAF_PARAMETERS = parseAbiParameters("address, uint256, uint256, uint256, uint256, uint256");
 
 export class SigningClient {
 	#storage: GroupInfoStorage & SignatureRequestStorage;
@@ -94,8 +96,9 @@ export class SigningClient {
 		const signer = this.#storage.participant(groupId);
 
 		// Derive the FROST identifiers from the signer addresses.
-		const signerIds = sortedParticipantIds(signers);
-		const signerIndex = signerIds.indexOf(deriveParticipantId(signer));
+		const sortedSigners = sortedParticipants(signers);
+		const signerIds = sortedSigners.map((s) => s.id);
+		const signerIndex = sortedSigners.findIndex(({ address }) => address === signer);
 
 		const groupPublicKey = this.#storage.publicKey(groupId);
 		if (groupPublicKey === undefined) throw new Error(`Missing public key for group ${groupId}`);
@@ -111,22 +114,26 @@ export class SigningClient {
 		const commitmentShares = groupCommitmentShares(bindingFactorList, signerNonceCommitments);
 		const groupCommitment = calculateGroupCommitment(commitmentShares);
 		const challenge = groupChallenge(groupCommitment, groupPublicKey, message);
-		const signerParts = signerIds.map((signerId, index) => {
-			const nonceCommitments = signerNonceCommitments.get(signerId);
+		const signerParts = sortedSigners.map((signer, index) => {
+			const nonceCommitments = signerNonceCommitments.get(signer.id);
 			if (nonceCommitments === undefined) {
-				throw new Error(`Missing nonce commitments for ${signerId}`);
+				throw new Error(`Missing nonce commitments for ${signer.id}`);
 			}
 			const r = commitmentShares[index];
-			const coeff = lagrangeCoefficient(signerIds, signerId);
+			const coeff = lagrangeCoefficient(signerIds, signer.id);
 			const cl = lagrangeChallenge(coeff, challenge);
 			const node = keccak256(
-				encodePacked(
-					["uint256", "uint256", "uint256", "uint256", "uint256", "uint256"],
-					[signerId, r.x, r.y, coeff, groupCommitment.x, groupCommitment.y],
-				),
+				encodeAbiParameters(COMMITMENT_LEAF_PARAMETERS, [
+					signer.address,
+					r.x,
+					r.y,
+					coeff,
+					groupCommitment.x,
+					groupCommitment.y,
+				]),
 			);
 			return {
-				signerId,
+				signer,
 				r,
 				l: coeff,
 				cl,
