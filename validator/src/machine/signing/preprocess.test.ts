@@ -18,7 +18,7 @@ const EVENT: NonceCommitmentsHashEvent = {
 	block: 2n,
 	index: 0,
 	gid: "0x000000000000000000000000000000000000000000000000000000005af35af3",
-	identifier: 1n,
+	participant: "0x0000000000000000000000000000000000005aFE",
 	chunk: 0n,
 	commitment: "0x5af35af35af35af35af35af35af35af35af35af35af35af35af35af35af35af3",
 };

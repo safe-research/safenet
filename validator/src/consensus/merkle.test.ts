@@ -42,7 +42,7 @@ describe("merkle", () => {
 		).toBeTruthy();
 	});
 
-	it("participant Merkle trees should be ordfer independant", () => {
+	it("participant Merkle trees should be order independant", () => {
 		const ordered = [
 			"0x00000000000000000000000000000000000000a1",
 			"0x00000000000000000000000000000000000000A2",

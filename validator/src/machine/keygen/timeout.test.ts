@@ -11,22 +11,18 @@ import { checkKeyGenTimeouts } from "./timeouts.js";
 const MACHINE_CONFIG: MachineConfig = {
 	participantsInfo: [
 		{
-			id: 1n,
 			address: entryPoint06Address,
 			activeFrom: 0n,
 		},
 		{
-			id: 3n,
 			address: entryPoint07Address,
 			activeFrom: 0n,
 		},
 		{
-			id: 7n,
 			address: entryPoint08Address,
 			activeFrom: 0n,
 		},
 		{
-			id: 11n,
 			address: ethAddress,
 			activeFrom: 0n,
 		},
@@ -102,7 +98,11 @@ describe("key gen timeouts", () => {
 				deadline: 22n,
 				complaints: {},
 				missingSharesFrom: [],
-				confirmationsFrom: [1n, 7n, 11n],
+				confirmationsFrom: [
+					"0x0000000000000000000000000000000000000001",
+					"0x0000000000000000000000000000000000000007",
+					"0x000000000000000000000000000000000000000b",
+				],
 			} as RolloverState,
 			keyGenInvocations: [0, 0],
 		},
@@ -116,10 +116,14 @@ describe("key gen timeouts", () => {
 				responseDeadline: 25n,
 				deadline: 35n,
 				complaints: {
-					"3": { unresponded: 1n, total: 1n },
+					"3": { unresponded: 1, total: 1 },
 				},
 				missingSharesFrom: [],
-				confirmationsFrom: [1n, 3n, 11n],
+				confirmationsFrom: [
+					"0x0000000000000000000000000000000000000001",
+					"0x0000000000000000000000000000000000000003",
+					"0x000000000000000000000000000000000000000b",
+				],
 			} as RolloverState,
 			keyGenInvocations: [0, 0],
 		},
@@ -168,7 +172,6 @@ describe("key gen timeouts", () => {
 					count: 3,
 					threshold: 2,
 					context: "0x00000000eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee000000000000000a",
-					participantId: 7n,
 					commitments: groupSetup.commitments,
 					encryptionPublicKey: groupSetup.encryptionPublicKey,
 					pok: groupSetup.pok,

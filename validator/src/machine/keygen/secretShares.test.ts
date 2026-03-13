@@ -23,17 +23,14 @@ const MACHINE_STATES: MachineStates = {
 const MACHINE_CONFIG: MachineConfig = {
 	participantsInfo: [
 		{
-			id: 1n,
 			address: entryPoint06Address,
 			activeFrom: 0n,
 		},
 		{
-			id: 2n,
 			address: entryPoint07Address,
 			activeFrom: 0n,
 		},
 		{
-			id: 3n,
 			address: entryPoint08Address,
 			activeFrom: 0n,
 		},
@@ -49,7 +46,7 @@ const EVENT: KeyGenSecretSharedEvent = {
 	block: 4n,
 	index: 0,
 	gid: "0x06cb03baac74421225341827941e88d9547e5459c4b3715c0000000000000000",
-	identifier: 2n,
+	participant: "0x0000000000000000000000000000000000005aFE",
 	share: {
 		y: TEST_POINT,
 		f: [0x5afe5afe5afe01n, 0x5afe5afe5afe02n, 0x5afe5afe5afe03n],
@@ -183,7 +180,7 @@ describe("receiving secret shares", () => {
 				complaintDeadline: 29n, // 4n (block) + 25n (key gen timeout)
 				responseDeadline: 54n, // 4n (block) + 2n * 25n (key gen timeout)
 				deadline: 79n, // 4n (block) + 3n * 25n (key gen timeout)
-				lastParticipant: EVENT.identifier,
+				lastParticipant: EVENT.participant,
 				complaints: {},
 				missingSharesFrom: [2n],
 				confirmationsFrom: [],
@@ -235,7 +232,7 @@ describe("receiving secret shares", () => {
 				complaintDeadline: 29n, // 4n (block) + 25n (key gen timeout)
 				responseDeadline: 54n, // 4n (block) + 2n * 25n (key gen timeout)
 				deadline: 79n, // 4n (block) + 3n * 25n (key gen timeout)
-				lastParticipant: EVENT.identifier,
+				lastParticipant: EVENT.participant,
 				complaints: {},
 				missingSharesFrom: [],
 				confirmationsFrom: [],
@@ -273,9 +270,9 @@ describe("receiving secret shares", () => {
 				groupId: "0x06cb03baac74421225341827941e88d9547e5459c4b3715c0000000000000000",
 				nextEpoch: 10n,
 				deadline: 30n,
-				missingSharesFrom: [1n],
+				missingSharesFrom: ["0x0000000000000000000000000000000000000001"],
 				complaints: {
-					"1": { total: 1n, unresponded: 1n },
+					"0x0000000000000000000000000000000000000001": { total: 1, unresponded: 1 },
 				},
 			},
 			signing: {},
@@ -291,7 +288,7 @@ describe("receiving secret shares", () => {
 				complaintDeadline: 29n, // 4n (block) + 25n (key gen timeout)
 				responseDeadline: 54n, // 4n (block) + 2n * 25n (key gen timeout)
 				deadline: 79n, // 4n (block) + 3n * 25n (key gen timeout)
-				lastParticipant: EVENT.identifier,
+				lastParticipant: EVENT.participant,
 				missingSharesFrom: [1n],
 				complaints: {
 					"1": { total: 1n, unresponded: 1n },
@@ -328,7 +325,7 @@ describe("receiving secret shares", () => {
 				complaintDeadline: 29n, // 4n (block) + 25n (key gen timeout)
 				responseDeadline: 54n, // 4n (block) + 2n * 25n (key gen timeout)
 				deadline: 79n, // 4n (block) + 3n * 25n (key gen timeout)
-				lastParticipant: EVENT.identifier,
+				lastParticipant: EVENT.participant,
 				complaints: {},
 				missingSharesFrom: [],
 				confirmationsFrom: [],

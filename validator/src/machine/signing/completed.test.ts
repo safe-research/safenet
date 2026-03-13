@@ -9,8 +9,8 @@ import { handleSigningCompleted } from "./completed.js";
 const SIGNING_STATE: SigningState = {
 	id: "collect_signing_shares",
 	signatureId: "0x5af35af3",
-	sharesFrom: [1n, 2n],
-	lastSigner: 2n,
+	sharesFrom: ["0x0000000000000000000000000000000000000001", "0x0000000000000000000000000000000000000002"],
+	lastSigner: "0x0000000000000000000000000000000000000002",
 	deadline: 23n,
 	packet: {
 		type: "epoch_rollover_packet",
@@ -134,7 +134,7 @@ describe("signing completed", () => {
 				id: "waiting_for_attestation",
 				signatureId: "0x5af35af3",
 				deadline: 22n,
-				responsible: 2n,
+				responsible: "0x0000000000000000000000000000000000000002",
 				packet: SIGNING_STATE.packet,
 			},
 		]);

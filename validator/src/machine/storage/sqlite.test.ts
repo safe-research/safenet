@@ -1,10 +1,13 @@
 import Sqlite3 from "better-sqlite3";
-import { type Hex, keccak256, zeroAddress } from "viem";
+import { type Address, type Hex, keccak256, zeroAddress } from "viem";
 import { beforeEach, describe, expect, it } from "vitest";
 import type { EpochRolloverPacket } from "../../consensus/verify/rollover/schemas.js";
 import type { SafeTransactionPacket } from "../../consensus/verify/safeTx/schemas.js";
 import type { RolloverState, SigningState } from "../types.js";
 import { SqliteStateStorage } from "./sqlite.js";
+
+const ADDR1 = "0x0000000000000000000000000000000000000001" as Address;
+const ADDR2 = "0x0000000000000000000000000000000000000002" as Address;
 
 const TX_ATTESTATION_PACKET: SafeTransactionPacket = {
 	type: "safe_transaction_packet",
@@ -68,15 +71,15 @@ const ROLLOVER_TEST_STATES: { [K in RolloverState["id"]]: RolloverState & { id: 
 		groupId: "0x5afe000000000000000000000000000000000000000000000000000000000000",
 		nextEpoch: 1n,
 		deadline: 100n,
-		missingSharesFrom: [1n],
+		missingSharesFrom: [ADDR1],
 		complaints: {
-			"1": {
-				total: 2n,
-				unresponded: 1n,
+			[ADDR1]: {
+				total: 2,
+				unresponded: 1,
 			},
-			"2": {
-				total: 1n,
-				unresponded: 0n,
+			[ADDR2]: {
+				total: 1,
+				unresponded: 0,
 			},
 		},
 	},
@@ -87,18 +90,18 @@ const ROLLOVER_TEST_STATES: { [K in RolloverState["id"]]: RolloverState & { id: 
 		deadline: 100n,
 		complaintDeadline: 80n,
 		responseDeadline: 60n,
-		missingSharesFrom: [1n],
+		missingSharesFrom: [ADDR1],
 		complaints: {
-			"1": {
-				total: 2n,
-				unresponded: 1n,
+			[ADDR1]: {
+				total: 2,
+				unresponded: 1,
 			},
-			"2": {
-				total: 1n,
-				unresponded: 0n,
+			[ADDR2]: {
+				total: 1,
+				unresponded: 0,
 			},
 		},
-		confirmationsFrom: [1n],
+		confirmationsFrom: [ADDR1],
 	},
 	sign_rollover: {
 		id: "sign_rollover",
@@ -154,10 +157,7 @@ describe("SqliteStateStorage", () => {
 		originalStorage.applyDiff({
 			consensus: {
 				activeEpoch: 1n,
-				epochGroup: [
-					1n,
-					{ groupId: "0x5afe000000000000000000000000000000000000000000000000000000000000", participantId: 1n },
-				],
+				epochGroup: [1n, "0x5afe000000000000000000000000000000000000000000000000000000000000"],
 				groupPendingNonces: ["0x5afe000000000000000000000000000000000000000000000000000000000000", true],
 				signatureIdToMessage: [
 					"0x5afe000000000000000000000000000000000000000000000000000000000000",
@@ -168,7 +168,7 @@ describe("SqliteStateStorage", () => {
 		expect(originalStorage.consensusState()).toStrictEqual({
 			activeEpoch: 1n,
 			epochGroups: {
-				"1": { groupId: "0x5afe000000000000000000000000000000000000000000000000000000000000", participantId: 1n },
+				"1": "0x5afe000000000000000000000000000000000000000000000000000000000000",
 			},
 			groupPendingNonces: {
 				"0x5afe000000000000000000000000000000000000000000000000000000000000": true,
@@ -182,7 +182,7 @@ describe("SqliteStateStorage", () => {
 		expect(recoveredStorage.consensusState()).toStrictEqual({
 			activeEpoch: 1n,
 			epochGroups: {
-				"1": { groupId: "0x5afe000000000000000000000000000000000000000000000000000000000000", participantId: 1n },
+				"1": "0x5afe000000000000000000000000000000000000000000000000000000000000",
 			},
 			groupPendingNonces: {
 				"0x5afe000000000000000000000000000000000000000000000000000000000000": true,
@@ -203,7 +203,7 @@ describe("SqliteStateStorage", () => {
 		expect(cleanedStorage.consensusState()).toStrictEqual({
 			activeEpoch: 1n,
 			epochGroups: {
-				"1": { groupId: "0x5afe000000000000000000000000000000000000000000000000000000000000", participantId: 1n },
+				"1": "0x5afe000000000000000000000000000000000000000000000000000000000000",
 			},
 			groupPendingNonces: {},
 			signatureIdToMessage: {},
@@ -221,7 +221,7 @@ describe("SqliteStateStorage", () => {
 					id: "collect_nonce_commitments",
 					packet: TX_ATTESTATION_PACKET,
 					signatureId: "0x5af3010000000000000000000000000000000000000000000000000000000000",
-					lastSigner: 1n,
+					lastSigner: ADDR1,
 					deadline: 10n,
 				},
 			],
@@ -233,7 +233,7 @@ describe("SqliteStateStorage", () => {
 					id: "collect_nonce_commitments",
 					packet: EPOCH_ROLLOVER_PACKET,
 					signatureId: "0x5af3010000000000000000000000000000000000000000000000000000000000",
-					lastSigner: 1n,
+					lastSigner: ADDR1,
 					deadline: 10n,
 				},
 			],
@@ -244,9 +244,9 @@ describe("SqliteStateStorage", () => {
 				{
 					id: "collect_signing_shares",
 					packet: TX_ATTESTATION_PACKET,
-					sharesFrom: [2n],
+					sharesFrom: [ADDR2],
 					signatureId: "0x5af3010000000000000000000000000000000000000000000000000000000000",
-					lastSigner: 1n,
+					lastSigner: ADDR1,
 					deadline: 10n,
 				},
 			],
@@ -257,9 +257,9 @@ describe("SqliteStateStorage", () => {
 				{
 					id: "collect_signing_shares",
 					packet: EPOCH_ROLLOVER_PACKET,
-					sharesFrom: [2n],
+					sharesFrom: [ADDR2],
 					signatureId: "0x5af3010000000000000000000000000000000000000000000000000000000000",
-					lastSigner: 1n,
+					lastSigner: ADDR1,
 					deadline: 10n,
 				},
 			],
@@ -271,7 +271,7 @@ describe("SqliteStateStorage", () => {
 					id: "waiting_for_attestation",
 					packet: TX_ATTESTATION_PACKET,
 					signatureId: "0x5af3010000000000000000000000000000000000000000000000000000000000",
-					responsible: 1n,
+					responsible: ADDR1,
 					deadline: 10n,
 				},
 			],
@@ -283,7 +283,7 @@ describe("SqliteStateStorage", () => {
 					id: "waiting_for_attestation",
 					packet: EPOCH_ROLLOVER_PACKET,
 					signatureId: "0x5af3010000000000000000000000000000000000000000000000000000000000",
-					responsible: 1n,
+					responsible: ADDR1,
 					deadline: 10n,
 				},
 			],
@@ -294,8 +294,8 @@ describe("SqliteStateStorage", () => {
 				{
 					id: "waiting_for_request",
 					packet: TX_ATTESTATION_PACKET,
-					signers: [1n, 2n],
-					responsible: 1n,
+					signers: [ADDR1, ADDR2],
+					responsible: ADDR1,
 					deadline: 10n,
 				},
 			],
@@ -306,8 +306,8 @@ describe("SqliteStateStorage", () => {
 				{
 					id: "waiting_for_request",
 					packet: EPOCH_ROLLOVER_PACKET,
-					signers: [1n, 2n],
-					responsible: 1n,
+					signers: [ADDR1, ADDR2],
+					responsible: ADDR1,
 					deadline: 10n,
 				},
 			],
@@ -317,58 +317,58 @@ describe("SqliteStateStorage", () => {
 				id: "collect_nonce_commitments",
 				packet: TX_ATTESTATION_PACKET,
 				signatureId: "0x5af3010000000000000000000000000000000000000000000000000000000000",
-				lastSigner: 1n,
+				lastSigner: ADDR1,
 				deadline: 10n,
 			},
 			"0x5afe1b0000000000000000000000000000000000000000000000000000000000": {
 				id: "collect_nonce_commitments",
 				packet: EPOCH_ROLLOVER_PACKET,
 				signatureId: "0x5af3010000000000000000000000000000000000000000000000000000000000",
-				lastSigner: 1n,
+				lastSigner: ADDR1,
 				deadline: 10n,
 			},
 			"0x5afe2a0000000000000000000000000000000000000000000000000000000000": {
 				id: "collect_signing_shares",
 				packet: TX_ATTESTATION_PACKET,
-				sharesFrom: [2n],
+				sharesFrom: [ADDR2],
 				signatureId: "0x5af3010000000000000000000000000000000000000000000000000000000000",
-				lastSigner: 1n,
+				lastSigner: ADDR1,
 				deadline: 10n,
 			},
 			"0x5afe2b0000000000000000000000000000000000000000000000000000000000": {
 				id: "collect_signing_shares",
 				packet: EPOCH_ROLLOVER_PACKET,
-				sharesFrom: [2n],
+				sharesFrom: [ADDR2],
 				signatureId: "0x5af3010000000000000000000000000000000000000000000000000000000000",
-				lastSigner: 1n,
+				lastSigner: ADDR1,
 				deadline: 10n,
 			},
 			"0x5afe3a0000000000000000000000000000000000000000000000000000000000": {
 				id: "waiting_for_attestation",
 				packet: TX_ATTESTATION_PACKET,
 				signatureId: "0x5af3010000000000000000000000000000000000000000000000000000000000",
-				responsible: 1n,
+				responsible: ADDR1,
 				deadline: 10n,
 			},
 			"0x5afe3b0000000000000000000000000000000000000000000000000000000000": {
 				id: "waiting_for_attestation",
 				packet: EPOCH_ROLLOVER_PACKET,
 				signatureId: "0x5af3010000000000000000000000000000000000000000000000000000000000",
-				responsible: 1n,
+				responsible: ADDR1,
 				deadline: 10n,
 			},
 			"0x5afe4a0000000000000000000000000000000000000000000000000000000000": {
 				id: "waiting_for_request",
 				packet: TX_ATTESTATION_PACKET,
-				signers: [1n, 2n],
-				responsible: 1n,
+				signers: [ADDR1, ADDR2],
+				responsible: ADDR1,
 				deadline: 10n,
 			},
 			"0x5afe4b0000000000000000000000000000000000000000000000000000000000": {
 				id: "waiting_for_request",
 				packet: EPOCH_ROLLOVER_PACKET,
-				signers: [1n, 2n],
-				responsible: 1n,
+				signers: [ADDR1, ADDR2],
+				responsible: ADDR1,
 				deadline: 10n,
 			},
 		};

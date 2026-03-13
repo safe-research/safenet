@@ -49,7 +49,7 @@ const EVENT: SignatureShareEvent = {
 	block: 2n,
 	index: 0,
 	sid: "0x5af35af3",
-	identifier: 1n,
+	participant: "0x0000000000000000000000000000000000005aFE",
 	z: 1n,
 	selectionRoot: "0x5af35af35af35af3000000000000000000000000000000000000000000000000",
 };
