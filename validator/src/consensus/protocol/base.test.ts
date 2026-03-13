@@ -2,8 +2,7 @@ import { zeroHash } from "viem";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { testLogger } from "../../__tests__/config.js";
 import { TEST_ACTIONS, TestProtocol } from "../../__tests__/data/protocol.js";
-import { InMemoryQueue } from "../../utils/queue.js";
-import type { ActionWithTimeout } from "./types.js";
+import { createActionQueue } from "../../__tests__/utils.js";
 
 describe("BaseProtocol", () => {
 	beforeEach(() => {
@@ -16,7 +15,7 @@ describe("BaseProtocol", () => {
 
 	it("should retry actions that errored", async () => {
 		const timeoutSpy = vi.spyOn(global, "setTimeout");
-		const queue = new InMemoryQueue<ActionWithTimeout>();
+		const queue = createActionQueue();
 		const enqueueSpy = vi.spyOn(queue, "enqueue");
 		const peekSpy = vi.spyOn(queue, "peek");
 		const dequeueSpy = vi.spyOn(queue, "dequeue");
@@ -57,7 +56,7 @@ describe("BaseProtocol", () => {
 
 	it("should drop actions after timeout", async () => {
 		const timeoutSpy = vi.spyOn(global, "setTimeout");
-		const queue = new InMemoryQueue<ActionWithTimeout>();
+		const queue = createActionQueue();
 		const enqueueSpy = vi.spyOn(queue, "enqueue");
 		const peekSpy = vi.spyOn(queue, "peek");
 		const dequeueSpy = vi.spyOn(queue, "dequeue");
@@ -99,7 +98,7 @@ describe("BaseProtocol", () => {
 
 	it("should not trigger immediate processing if retry is scheduled", async () => {
 		const timeoutSpy = vi.spyOn(global, "setTimeout");
-		const queue = new InMemoryQueue<ActionWithTimeout>();
+		const queue = createActionQueue();
 		const enqueueSpy = vi.spyOn(queue, "enqueue");
 		const peekSpy = vi.spyOn(queue, "peek");
 		const dequeueSpy = vi.spyOn(queue, "dequeue");
@@ -146,7 +145,7 @@ describe("BaseProtocol", () => {
 
 	it("should increase delay on error retry until maximum is reached", async () => {
 		const timeoutSpy = vi.spyOn(global, "setTimeout");
-		const queue = new InMemoryQueue<ActionWithTimeout>();
+		const queue = createActionQueue();
 		const enqueueSpy = vi.spyOn(queue, "enqueue");
 		const peekSpy = vi.spyOn(queue, "peek");
 		const dequeueSpy = vi.spyOn(queue, "dequeue");
@@ -186,7 +185,7 @@ describe("BaseProtocol", () => {
 
 	it("should reset delay after successfull action submission", async () => {
 		const timeoutSpy = vi.spyOn(global, "setTimeout");
-		const queue = new InMemoryQueue<ActionWithTimeout>();
+		const queue = createActionQueue();
 		const enqueueSpy = vi.spyOn(queue, "enqueue");
 		const peekSpy = vi.spyOn(queue, "peek");
 		const dequeueSpy = vi.spyOn(queue, "dequeue");
@@ -235,7 +234,7 @@ describe("BaseProtocol", () => {
 
 	it("should reset delay after action timed out", async () => {
 		const timeoutSpy = vi.spyOn(global, "setTimeout");
-		const queue = new InMemoryQueue<ActionWithTimeout>();
+		const queue = createActionQueue();
 		const enqueueSpy = vi.spyOn(queue, "enqueue");
 		const peekSpy = vi.spyOn(queue, "peek");
 		const dequeueSpy = vi.spyOn(queue, "dequeue");
@@ -281,7 +280,7 @@ describe("BaseProtocol", () => {
 
 	it("should be able to enqueue multiple actions", async () => {
 		const timeoutSpy = vi.spyOn(global, "setTimeout");
-		const queue = new InMemoryQueue<ActionWithTimeout>();
+		const queue = createActionQueue();
 		const dequeueSpy = vi.spyOn(queue, "dequeue");
 		const protocol = new TestProtocol(queue, testLogger);
 		const protocolSpy = vi.spyOn(protocol, "requestSignature");
@@ -313,7 +312,7 @@ describe("BaseProtocol", () => {
 		}),
 	)("for $description", ({ action, functionName }) => {
 		it(`should call ${functionName}`, async () => {
-			const queue = new InMemoryQueue<ActionWithTimeout>();
+			const queue = createActionQueue();
 			const enqueueSpy = vi.spyOn(queue, "enqueue");
 			const peekSpy = vi.spyOn(queue, "peek");
 			const dequeueSpy = vi.spyOn(queue, "dequeue");

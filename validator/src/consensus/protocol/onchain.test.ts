@@ -15,9 +15,8 @@ import { gnosisChiado } from "viem/chains";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { testLogger } from "../../__tests__/config.js";
 import { TEST_ACTIONS, TEST_CONSENSUS, TEST_COORDINATOR } from "../../__tests__/data/protocol.js";
-import { InMemoryQueue } from "../../utils/queue.js";
+import { createActionQueue } from "../../__tests__/utils.js";
 import { GasFeeEstimator, OnchainProtocol, type TransactionStorage } from "./onchain.js";
-import type { ActionWithTimeout } from "./types.js";
 
 describe("OnchainProtocol", () => {
 	beforeEach(() => {
@@ -29,7 +28,7 @@ describe("OnchainProtocol", () => {
 	});
 
 	function createTestContext(overrides?: { chain?: Chain; blocksBeforeResubmit?: bigint }) {
-		const queue = new InMemoryQueue<ActionWithTimeout>();
+		const queue = createActionQueue();
 
 		const chain = overrides?.chain ?? gnosisChiado;
 		const account = { address: entryPoint09Address };
