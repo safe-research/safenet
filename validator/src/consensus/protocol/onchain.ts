@@ -85,7 +85,7 @@ export class OnchainProtocol extends BaseProtocol {
 	#coordinator: Address;
 	#logger: Logger;
 	#blocksBeforeResubmit: bigint;
-	#inFlightNonces: Set<number> = new Set();
+	#runningPendingCheck = false;
 
 	constructor({
 		publicClient,
@@ -132,97 +132,100 @@ export class OnchainProtocol extends BaseProtocol {
 		return this.#coordinator;
 	}
 
-	async checkPendingActions(blockNumber: bigint) {
-		try {
-			// Optimistically check whether or not we have pending actions. If we don't then we can just exit early and
-			// save on some RPC calls and database reads.
-			if (this.#txStorage.countPending() === 0) {
-				return;
-			}
+	isRunningPendingCheck(): boolean {
+		return this.#runningPendingCheck;
+	}
 
-			// For transaction without a submission block set it to this block
-			// This assumes that the transaction should be included in this block
-			// If the blocksBeforeResubmit is 1 block, these transactions will only be retried on the next block
-			const newPendingTxs = this.#txStorage.setSubmittedForPending(blockNumber);
-			if (newPendingTxs > 0) {
-				this.#logger.debug(`Marked ${newPendingTxs} transactions as submitted at block ${blockNumber}`);
-			}
-			const currentNonce = await this.#publicClient.getTransactionCount({
-				address: this.#signingClient.account.address,
-				blockTag: "latest",
+	triggerPendingCheck(blockNumber: bigint) {
+		if (this.#runningPendingCheck) return;
+		this.#runningPendingCheck = true;
+		this.checkPendingActions(blockNumber)
+			.catch((e) => {
+				this.#logger.error("Error while checking pending transactions.", { error: formatError(e) });
+			})
+			.finally(() => {
+				this.#runningPendingCheck = false;
 			});
-			const executedTxs = this.#txStorage.setExecutedUpTo(currentNonce - 1);
-			if (executedTxs > 0) {
-				this.#logger.debug(`Marked ${executedTxs} transactions as executed`);
-			}
-			// Only fetch the first page of pending transactions (default limit is 100) to avoid retrying too many
-			// transactions at once.
-			const pendingTxs = this.#txStorage.submittedUpTo(blockNumber - this.#blocksBeforeResubmit);
-			for (const tx of pendingTxs) {
-				if (this.#inFlightNonces.has(tx.nonce)) {
-					this.#logger.debug(`Skipping in-flight transaction for nonce ${tx.nonce}`);
+	}
+
+	async checkPendingActions(blockNumber: bigint) {
+		// Optimistically check whether or not we have pending actions. If we don't then we can just exit early and
+		// save on some RPC calls and database reads.
+		if (this.#txStorage.countPending() === 0) {
+			return;
+		}
+
+		// For transaction without a submission block set it to this block
+		// This assumes that the transaction should be included in this block
+		// If the blocksBeforeResubmit is 1 block, these transactions will only be retried on the next block
+		const newPendingTxs = this.#txStorage.setSubmittedForPending(blockNumber);
+		if (newPendingTxs > 0) {
+			this.#logger.debug(`Marked ${newPendingTxs} transactions as submitted at block ${blockNumber}`);
+		}
+		const currentNonce = await this.#publicClient.getTransactionCount({
+			address: this.#signingClient.account.address,
+			blockTag: "latest",
+		});
+		const executedTxs = this.#txStorage.setExecutedUpTo(currentNonce - 1);
+		if (executedTxs > 0) {
+			this.#logger.debug(`Marked ${executedTxs} transactions as executed`);
+		}
+		// Only fetch the first page of pending transactions (default limit is 100) to avoid retrying too many
+		// transactions at once.
+		const pendingTxs = this.#txStorage.submittedUpTo(blockNumber - this.#blocksBeforeResubmit);
+		for (const tx of pendingTxs) {
+			this.#logger.debug(`Resubmit transaction for ${tx.nonce}!`, { transaction: tx });
+			try {
+				await this.submitTransaction(tx);
+			} catch (error) {
+				if (
+					error instanceof NonceTooLowError ||
+					// Nonce error might be nested as cause error
+					(error instanceof TransactionExecutionError && error.cause instanceof NonceTooLowError)
+				) {
+					this.#logger.info(`Nonce already used. Marking transaction with nonce ${tx.nonce} as executed!`, {
+						transaction: tx,
+					});
+					this.#txStorage.setExecutedUpTo(tx.nonce);
 					continue;
 				}
-				this.#logger.debug(`Resubmit transaction for ${tx.nonce}!`, { transaction: tx });
-				try {
-					await this.submitTransaction(tx);
-				} catch (error) {
-					if (
-						error instanceof NonceTooLowError ||
-						// Nonce error might be nested as cause error
-						(error instanceof TransactionExecutionError && error.cause instanceof NonceTooLowError)
-					) {
-						this.#logger.info(`Nonce already used. Marking transaction with nonce ${tx.nonce} as executed!`, {
-							transaction: tx,
-						});
-						this.#txStorage.setExecutedUpTo(tx.nonce);
-						continue;
-					}
-					this.#logger.warn(`Error submitting transaction for ${tx.nonce}!`, { error: formatError(error) });
-					// If an error occurs skip rest of pending transactions, to avoid triggering more errors
-					return;
-				}
+				this.#logger.warn(`Error submitting transaction for ${tx.nonce}!`, { error: formatError(error) });
+				// If an error occurs skip rest of pending transactions, to avoid triggering more errors
+				return;
 			}
-		} catch (error) {
-			this.#logger.error("Error while checking pending transactions.", { error: formatError(error) });
 		}
 	}
 
 	private async submitTransaction(
 		tx: EthTransactionData & Pick<EthTransactionDetails, "nonce" | "fees">,
 	): Promise<Hex> {
-		this.#inFlightNonces.add(tx.nonce);
-		try {
-			const estimatedFees = await this.#gasFeeEstimator.estimateFees();
-			// Use max of (previous fees + 10%) and estimate
-			const fees: FeeValues = {
-				maxFeePerGas: maxBigInt(estimatedFees.maxFeePerGas, ((tx.fees?.maxFeePerGas ?? 0n) * 110n) / 100n),
-				maxPriorityFeePerGas: maxBigInt(
-					estimatedFees.maxPriorityFeePerGas,
-					((tx.fees?.maxPriorityFeePerGas ?? 0n) * 110n) / 100n,
-				),
-			};
+		const estimatedFees = await this.#gasFeeEstimator.estimateFees();
+		// Use max of (previous fees + 10%) and estimate
+		const fees: FeeValues = {
+			maxFeePerGas: maxBigInt(estimatedFees.maxFeePerGas, ((tx.fees?.maxFeePerGas ?? 0n) * 110n) / 100n),
+			maxPriorityFeePerGas: maxBigInt(
+				estimatedFees.maxPriorityFeePerGas,
+				((tx.fees?.maxPriorityFeePerGas ?? 0n) * 110n) / 100n,
+			),
+		};
 
-			this.#txStorage.setPending(tx.nonce);
-			// Store fees before submission in case an error occurs
-			this.#txStorage.setFees(tx.nonce, fees);
-			const signedTx = await this.#signingClient.signTransaction({
-				to: tx.to,
-				value: tx.value,
-				data: tx.data,
-				nonce: tx.nonce,
-				gas: tx.gas,
-				chain: this.#signingClient.chain,
-				account: this.#signingClient.account,
-				...fees,
-			});
-			const txHash = keccak256(signedTx);
-			this.#txStorage.setHash(tx.nonce, txHash);
-			this.#logger.debug(`Submitting transaction for nonce ${tx.nonce}!`, { tx, txHash, fees });
-			return await this.#signingClient.sendRawTransaction({ serializedTransaction: signedTx });
-		} finally {
-			this.#inFlightNonces.delete(tx.nonce);
-		}
+		this.#txStorage.setPending(tx.nonce);
+		// Store fees before submission in case an error occurs
+		this.#txStorage.setFees(tx.nonce, fees);
+		const signedTx = await this.#signingClient.signTransaction({
+			to: tx.to,
+			value: tx.value,
+			data: tx.data,
+			nonce: tx.nonce,
+			gas: tx.gas,
+			chain: this.#signingClient.chain,
+			account: this.#signingClient.account,
+			...fees,
+		});
+		const txHash = keccak256(signedTx);
+		this.#txStorage.setHash(tx.nonce, txHash);
+		this.#logger.debug(`Submitting transaction for nonce ${tx.nonce}!`, { tx, txHash, fees });
+		return await this.#signingClient.sendRawTransaction({ serializedTransaction: signedTx });
 	}
 
 	private async submitAction(action: SimulateContractParameters): Promise<Hex | null> {

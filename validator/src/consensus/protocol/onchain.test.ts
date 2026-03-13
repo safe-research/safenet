@@ -140,9 +140,13 @@ describe("OnchainProtocol", () => {
 
 	it("should do nothing on setSubmittedForPending error", async () => {
 		const { protocol, countPending, setSubmittedForPending } = createTestContext();
+		const loggerSpy = vi.spyOn(testLogger, "error");
 		countPending.mockReturnValue(1);
-		setSubmittedForPending.mockRejectedValueOnce(new Error("Test unexpected!"));
-		await protocol.checkPendingActions(10n);
+		setSubmittedForPending.mockImplementationOnce(() => {
+			throw new Error("Test unexpected!");
+		});
+		protocol.triggerPendingCheck(10n);
+		await vi.waitFor(() => expect(loggerSpy).toHaveBeenCalled());
 		expect(countPending).toBeCalledTimes(1);
 		expect(setSubmittedForPending).toBeCalledTimes(1);
 		expect(setSubmittedForPending).toBeCalledWith(10n);
@@ -150,10 +154,12 @@ describe("OnchainProtocol", () => {
 
 	it("should do nothing on rpc error", async () => {
 		const { protocol, countPending, setSubmittedForPending, getTransactionCount } = createTestContext();
+		const loggerSpy = vi.spyOn(testLogger, "error");
 		countPending.mockReturnValue(1);
-		setSubmittedForPending.mockResolvedValueOnce(10);
+		setSubmittedForPending.mockReturnValueOnce(0);
 		getTransactionCount.mockRejectedValueOnce(new Error("Test unexpected!"));
-		await protocol.checkPendingActions(10n);
+		protocol.triggerPendingCheck(10n);
+		await vi.waitFor(() => expect(loggerSpy).toHaveBeenCalled());
 		expect(countPending).toBeCalledTimes(1);
 		expect(setSubmittedForPending).toBeCalledTimes(1);
 		expect(setSubmittedForPending).toBeCalledWith(10n);
@@ -167,13 +173,15 @@ describe("OnchainProtocol", () => {
 	it("should do nothing on mark all tx as executed error", async () => {
 		const { protocol, countPending, setSubmittedForPending, getTransactionCount, setExecutedUpTo } =
 			createTestContext();
+		const loggerSpy = vi.spyOn(testLogger, "error");
 		countPending.mockReturnValue(1);
-		setSubmittedForPending.mockResolvedValueOnce(10);
+		setSubmittedForPending.mockReturnValueOnce(0);
 		getTransactionCount.mockResolvedValueOnce(10);
 		setExecutedUpTo.mockImplementationOnce(() => {
 			throw new Error("Test unexpected!");
 		});
-		await protocol.checkPendingActions(10n);
+		protocol.triggerPendingCheck(10n);
+		await vi.waitFor(() => expect(loggerSpy).toHaveBeenCalled());
 		expect(countPending).toBeCalledTimes(1);
 		expect(setSubmittedForPending).toBeCalledTimes(1);
 		expect(setSubmittedForPending).toBeCalledWith(10n);
@@ -188,6 +196,7 @@ describe("OnchainProtocol", () => {
 	it("should do nothing on fetching submittedUpTo tx error", async () => {
 		const { protocol, countPending, submittedUpTo, setSubmittedForPending, getTransactionCount, setExecutedUpTo } =
 			createTestContext();
+		const loggerSpy = vi.spyOn(testLogger, "error");
 		countPending.mockReturnValue(1);
 		getTransactionCount.mockResolvedValueOnce(10);
 		setSubmittedForPending.mockReturnValueOnce(0);
@@ -195,7 +204,8 @@ describe("OnchainProtocol", () => {
 		submittedUpTo.mockImplementationOnce(() => {
 			throw new Error("Test unexpected!");
 		});
-		await protocol.checkPendingActions(10n);
+		protocol.triggerPendingCheck(10n);
+		await vi.waitFor(() => expect(loggerSpy).toHaveBeenCalled());
 		expect(countPending).toBeCalledTimes(1);
 		expect(setSubmittedForPending).toBeCalledTimes(1);
 		expect(setSubmittedForPending).toBeCalledWith(10n);
@@ -1081,26 +1091,25 @@ describe("OnchainProtocol", () => {
 		sendRawTransaction.mockReturnValueOnce(sendRawPending);
 
 		// Start first check — it will hang inside sendRawTransaction
-		const firstCheck = protocol.checkPendingActions(10n);
+		protocol.triggerPendingCheck(10n);
 
 		// Wait until sendRawTransaction has been called (first check has entered in-flight state)
 		await vi.waitFor(() => expect(sendRawTransaction).toHaveBeenCalledTimes(1));
 
-		// Start second check while first is still in-flight
-		const secondCheck = protocol.checkPendingActions(11n);
+		// Attempt second check while first is still in-flight — should be skipped (lock held)
+		protocol.triggerPendingCheck(11n);
 
-		// Resolve the first sendRawTransaction and await both checks
+		// Resolve the first sendRawTransaction and wait for the lock to be released
 		resolveSendRaw("0xdeadbeef");
-		await firstCheck;
-		await secondCheck;
+		await vi.waitFor(() => expect(protocol.isRunningPendingCheck()).toBe(false));
 
 		// sendRawTransaction must have been called exactly once despite two concurrent checks
 		expect(sendRawTransaction).toBeCalledTimes(1);
 
 		// After the in-flight work is done, a subsequent check can resubmit the tx (guard is not sticky)
 		sendRawTransaction.mockReturnValueOnce(Promise.resolve("0xdeadbeef2"));
-		await protocol.checkPendingActions(12n);
-		expect(sendRawTransaction).toBeCalledTimes(2);
+		protocol.triggerPendingCheck(12n);
+		await vi.waitFor(() => expect(sendRawTransaction).toBeCalledTimes(2));
 	});
 });
 
