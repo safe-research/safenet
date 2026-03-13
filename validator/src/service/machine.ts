@@ -48,7 +48,7 @@ export class SafenetStateMachine {
 	// Event queue state
 	#lastProcessedBlock = 0n;
 	#lastProcessedIndex = 0;
-	#transitionQueue: Queue<StateTransition> = new InMemoryQueue<StateTransition>();
+	#transitionQueue: Queue<StateTransition> = new InMemoryQueue();
 	#currentTransition?: StateTransition;
 
 	constructor({
