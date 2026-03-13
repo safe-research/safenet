@@ -17,7 +17,7 @@ function SafeWalletTxLink({ chainInfo, safe, safeTxHash }: { chainInfo: ChainInf
 			href={safeWalletTxUrl(chainInfo.shortName, safe, safeTxHash)}
 			target="_blank"
 			rel="noopener noreferrer"
-			className="self-center inline-flex items-center gap-1 text-sm hover:underline"
+			className="inline-flex items-center gap-1 text-sm hover:underline"
 		>
 			Open in Safe Wallet <ArrowTopRightOnSquareIcon className="inline-block h-4 w-4" />
 		</a>
@@ -30,7 +30,7 @@ function SafeWalletAccountLink({ chainInfo, safe }: { chainInfo: ChainInfo; safe
 			href={safeWalletSafeUrl(chainInfo.shortName, safe)}
 			target="_blank"
 			rel="noopener noreferrer"
-			className="self-center inline-flex items-center gap-1 text-sm hover:underline"
+			className="inline-flex items-center gap-1 text-sm hover:underline"
 		>
 			Open in Safe Wallet <ArrowTopRightOnSquareIcon className="inline-block h-4 w-4" />
 		</a>
@@ -53,22 +53,22 @@ export const SafeTxHeader = ({
 	return (
 		<div className="space-y-2">
 			<BoxTitle>Safe Transaction</BoxTitle>
-			<div className="flex flex-wrap items-baseline gap-2">
+			<div className="flex flex-wrap items-center gap-2">
 				<span className="text-sm font-medium">SafeTxHash:</span>
-				<span className="font-mono text-sm leading-none">{shortHash(safeTxHash)}</span>
-				<CopyButton value={safeTxHash} className="self-center" />
+				<span className="font-mono text-sm leading-none mt-1">{shortHash(safeTxHash)}</span>
+				<CopyButton value={safeTxHash} />
 				{fromSafeApi && chainInfo !== undefined && (
 					<SafeWalletTxLink chainInfo={chainInfo} safe={transaction.safe} safeTxHash={safeTxHash} />
 				)}
 			</div>
-			<div className="flex flex-wrap items-baseline gap-2">
+			<div className="flex flex-wrap items-center gap-2">
 				<span className="text-sm font-medium">Network:</span>
-				<NetworkBadge chainId={transaction.chainId} title={networkTooltip} className="self-center" />
+				<NetworkBadge chainId={transaction.chainId} title={networkTooltip} />
 			</div>
-			<div className="flex flex-wrap items-baseline gap-2">
+			<div className="flex flex-wrap items-center gap-2">
 				<span className="text-sm font-medium">Safe:</span>
-				<span className="font-mono text-sm leading-none">{shortAddress(transaction.safe)}</span>
-				<CopyButton value={transaction.safe} className="self-center" />
+				<span className="font-mono text-sm leading-none mt-1">{shortAddress(transaction.safe)}</span>
+				<CopyButton value={transaction.safe} />
 				{chainInfo !== undefined && <SafeWalletAccountLink chainInfo={chainInfo} safe={transaction.safe} />}
 			</div>
 		</div>

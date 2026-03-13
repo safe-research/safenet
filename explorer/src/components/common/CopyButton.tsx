@@ -1,5 +1,6 @@
 import { CheckIcon, ClipboardDocumentIcon } from "@heroicons/react/24/outline";
 import { useEffect, useRef, useState } from "react";
+import { cn } from "@/lib/utils";
 
 export const CopyButton = ({ value, className }: { value: string; className?: string }) => {
 	const [copied, setCopied] = useState(false);
@@ -27,7 +28,10 @@ export const CopyButton = ({ value, className }: { value: string; className?: st
 			type="button"
 			onClick={handleCopy}
 			aria-label={copied ? "Copied" : "Copy to clipboard"}
-			className={`inline-flex items-center text-xs px-1.5 py-0.5 rounded border border-surface-outline hover:bg-surface-1 transition-colors cursor-pointer${className !== undefined ? ` ${className}` : ""}`}
+			className={cn(
+				"inline-flex items-center text-xs px-1.5 py-0.5 rounded border border-surface-outline hover:bg-surface-1 transition-colors cursor-pointer",
+				className,
+			)}
 		>
 			{copied ? <CheckIcon className="h-4 w-4" /> : <ClipboardDocumentIcon className="h-4 w-4" />}
 		</button>
