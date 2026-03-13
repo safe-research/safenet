@@ -2,16 +2,8 @@ import type { Database } from "better-sqlite3";
 import type { ProtocolAction } from "../../consensus/protocol/types.js";
 import type { SignatureId } from "../../frost/types.js";
 import { jsonReplacer } from "../../utils/json.js";
-import { applyConsensus, applyMachines } from "../state/diff.js";
-import type {
-	ConsensusState,
-	MachineStates,
-	MutableConsensusState,
-	MutableMachineStates,
-	RolloverState,
-	SigningState,
-	StateDiff,
-} from "../types.js";
+import type { ConsensusState, MutableConsensusState, RolloverState, SigningState, StateDiff } from "../types.js";
+import { InMemoryStateStorage } from "./inmemory.js";
 import {
 	consensusStateSchema,
 	jsonQueryResultSchema,
@@ -19,20 +11,14 @@ import {
 	signingQueryResultSchema,
 	signingStateSchema,
 } from "./schemas.js";
-import type { StateStorage } from "./types.js";
 
-function loadConsensusState(db: Database): MutableConsensusState {
+function loadConsensusState(db: Database): MutableConsensusState | undefined {
 	const stmt = db.prepare("SELECT stateJson FROM consensus_state WHERE id = 1");
 	const result = jsonQueryResultSchema.parse(stmt.get());
 
 	if (!result) {
 		// No entries stored, lets start fresh
-		return {
-			epochGroups: {},
-			activeEpoch: 0n,
-			groupPendingNonces: {},
-			signatureIdToMessage: {},
-		};
+		return undefined;
 	}
 
 	// If this fails we should abort as the db is in an invalid state
@@ -87,6 +73,7 @@ function loadRolloverState(db: Database): RolloverState | undefined {
 	const result = jsonQueryResultSchema.parse(stmt.get());
 
 	if (!result) {
+		// No entries stored, lets start fresh
 		return undefined;
 	}
 
@@ -105,14 +92,11 @@ function writeRolloverState(db: Database, state: RolloverState): void {
 	`).run(stateJson);
 }
 
-export class SqliteStateStorage implements StateStorage {
+export class SqliteStateStorage extends InMemoryStateStorage {
 	#db: Database;
-	#consensusState: MutableConsensusState;
-	#machineStates: MutableMachineStates;
 
-	constructor(database: Database, initialRolloverState: RolloverState = { id: "waiting_for_genesis" }) {
-		this.#db = database;
-		this.#db.exec(`
+	constructor(database: Database, initialRolloverState: RolloverState) {
+		database.exec(`
 			CREATE TABLE IF NOT EXISTS consensus_state (
 				-- Enforce a single row for the global consensus data
 				id INTEGER PRIMARY KEY CHECK (id = 1),
@@ -128,7 +112,7 @@ export class SqliteStateStorage implements StateStorage {
 				stateJson TEXT NOT NULL
 			);
 			CREATE TABLE IF NOT EXISTS signing_states (
-				-- The SignatureId is the unique key for each signing session
+				-- The Message is used as the id and is the unique key for each signing session
 				id TEXT PRIMARY KEY NOT NULL,
 
 				-- Stores the JSON serialized representation of a single SigningState object
@@ -136,29 +120,21 @@ export class SqliteStateStorage implements StateStorage {
 			);
 		`);
 
-		// Load the database state
-		this.#consensusState = loadConsensusState(database);
-		this.#machineStates = {
-			rollover: loadRolloverState(database) ?? initialRolloverState,
-			signing: loadSigningStates(database),
-		};
-	}
+		// Load the database state and initialize the InMemoryStateStorage with it
+		const consensus = loadConsensusState(database);
+		const rollover = loadRolloverState(database) ?? initialRolloverState;
+		const signing = loadSigningStates(database);
+		super(consensus, { rollover, signing });
 
-	consensusState(): ConsensusState {
-		return this.#consensusState;
-	}
-	machineStates(): MachineStates {
-		return this.#machineStates;
+		this.#db = database;
 	}
 
 	applyDiff(diff: StateDiff): ProtocolAction[] {
-		// Apply the diff to the current states.
-		applyMachines(diff, this.#machineStates);
-		applyConsensus(diff, this.#consensusState);
-
-		// Sync the db
+		// Use the actions from the inmemory storage as a return value
+		const actions = super.applyDiff(diff);
+		// Sync the db with the inmemory storage
 		this.#db.transaction(() => {
-			writeConsensusState(this.#db, this.#consensusState);
+			writeConsensusState(this.#db, super.consensusState());
 			if (diff.rollover) {
 				writeRolloverState(this.#db, diff.rollover);
 			}
@@ -171,7 +147,6 @@ export class SqliteStateStorage implements StateStorage {
 				}
 			}
 		})();
-
-		return diff.actions ?? [];
+		return actions;
 	}
 }
