@@ -1058,7 +1058,7 @@ describe("OnchainProtocol", () => {
 		});
 	});
 
-	it("should not resubmit a transaction that is already in-flight", async () => {
+	it("should not run concurrent pending checks", async () => {
 		const {
 			protocol,
 			countPending,
