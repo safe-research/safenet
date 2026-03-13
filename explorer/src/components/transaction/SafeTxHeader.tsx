@@ -1,6 +1,7 @@
 import { ArrowTopRightOnSquareIcon } from "@heroicons/react/24/solid";
 import type { Address, Hex } from "viem";
 import { CopyButton } from "@/components/common/CopyButton";
+import { NetworkBadge } from "@/components/common/NetworkBadge";
 import { BoxTitle } from "@/components/Groups";
 import { useChainInfo } from "@/hooks/useChainInfo";
 import { shortAddress } from "@/lib/address";
@@ -46,27 +47,27 @@ export const SafeTxHeader = ({
 	fromSafeApi: boolean;
 }) => {
 	const chainInfo = useChainInfo(transaction.chainId);
+	const networkTooltip =
+		chainInfo !== undefined ? `${chainInfo.name} (chainId ${transaction.chainId})` : `chainId ${transaction.chainId}`;
 
 	return (
 		<div className="space-y-2">
 			<BoxTitle>Safe Transaction</BoxTitle>
-			<div className="flex flex-wrap items-center gap-2">
+			<div className="flex flex-wrap items-baseline gap-2">
 				<span className="text-sm font-medium">SafeTxHash:</span>
-				<span className="font-mono text-sm break-all">{shortHash(safeTxHash)}</span>
+				<span className="font-mono text-sm">{shortHash(safeTxHash)}</span>
 				<CopyButton value={safeTxHash} />
 				{fromSafeApi && chainInfo !== undefined && (
 					<SafeWalletTxLink chainInfo={chainInfo} safe={transaction.safe} safeTxHash={safeTxHash} />
 				)}
 			</div>
-			<div className="flex flex-wrap items-center gap-2">
+			<div className="flex flex-wrap items-baseline gap-2">
 				<span className="text-sm font-medium">Network:</span>
-				<span className="text-sm">
-					{chainInfo !== undefined
-						? `${chainInfo.name} (chainId ${transaction.chainId})`
-						: `chainId ${transaction.chainId}`}
+				<span title={networkTooltip}>
+					<NetworkBadge chainId={transaction.chainId} />
 				</span>
 			</div>
-			<div className="flex flex-wrap items-center gap-2">
+			<div className="flex flex-wrap items-baseline gap-2">
 				<span className="text-sm font-medium">Safe:</span>
 				<span className="font-mono text-sm">{shortAddress(transaction.safe)}</span>
 				<CopyButton value={transaction.safe} />
