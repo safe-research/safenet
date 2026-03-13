@@ -1,5 +1,6 @@
 import { ArrowTopRightOnSquareIcon } from "@heroicons/react/24/solid";
 import { useState } from "react";
+import { Badge } from "@/components/common/Badge";
 import { CopyButton } from "@/components/common/CopyButton";
 import { InlineAddress } from "@/components/common/InlineAddress";
 import { BoxTitle } from "@/components/Groups";
@@ -20,7 +21,9 @@ export function SafeTxSummary({ transaction }: { transaction: SafeTransaction })
 			<BoxTitle>Transaction Summary</BoxTitle>
 			<div className="flex flex-wrap items-center gap-2">
 				<span className="text-sm font-medium">Operation:</span>
-				<span className="text-sm">{opString(operation)}</span>
+				<Badge className={operation === 1 ? "bg-warning-surface text-warning" : "bg-surface-outline text-title"}>
+					{opString(operation)}
+				</Badge>
 			</div>
 			<div className="flex flex-wrap items-center gap-2">
 				<span className="text-sm font-medium">To:</span>

@@ -14,11 +14,11 @@ export function InlineAddress({
 	const chainInfo = SAFE_SERVICE_CHAINS[chainId.toString()];
 	const formattedAddress = shortAddress(address);
 	if (disableLinks === true || chainInfo?.blockExplorers === undefined) {
-		return <span className="font-mono">{formattedAddress}</span>;
+		return <span className="font-mono text-sm leading-none mt-1">{formattedAddress}</span>;
 	}
 	const explorerLink = `${chainInfo.blockExplorers.default.url}/address/${address}`;
 	return (
-		<a href={explorerLink} target="_blank" rel="noopener noreferrer" className="font-mono">
+		<a href={explorerLink} target="_blank" rel="noopener noreferrer" className="font-mono text-sm leading-none mt-1">
 			{formattedAddress}
 		</a>
 	);
