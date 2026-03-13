@@ -66,7 +66,7 @@ describe("SafeTxHeader", () => {
 		const transaction = makeTransaction(8453n); // base
 		render(<SafeTxHeader safeTxHash={SAFE_TX_HASH} transaction={transaction} fromSafeApi={false} />);
 		expect(screen.getByText("BASE")).toBeTruthy();
-		expect(screen.getByTitle("Base (chainId 8453)")).toBeTruthy();
+		expect(screen.getByTitle("Base (chain id 8453)")).toBeTruthy();
 	});
 
 	it("shows the raw chainId for unsupported chains", () => {

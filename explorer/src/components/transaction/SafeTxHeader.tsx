@@ -48,7 +48,7 @@ export const SafeTxHeader = ({
 }) => {
 	const chainInfo = useChainInfo(transaction.chainId);
 	const networkTooltip =
-		chainInfo !== undefined ? `${chainInfo.name} (chainId ${transaction.chainId})` : `chainId ${transaction.chainId}`;
+		chainInfo !== undefined ? `${chainInfo.name} (chain id ${transaction.chainId})` : `chain id ${transaction.chainId}`;
 
 	return (
 		<div className="space-y-2">
