@@ -1,8 +1,10 @@
-import { type Address, type Hex, keccak256, stringToBytes } from "viem";
+import Sqlite3 from "better-sqlite3";
+import { type Address, type Hex, keccak256, stringToBytes, zeroHash } from "viem";
 import { describe, expect, it } from "vitest";
-import { createClientStorage, log } from "../../__tests__/config.js";
+import { log } from "../../__tests__/config.js";
 import { addmod, g, toPoint } from "../../frost/math.js";
 import type { FrostPoint, ParticipantId, SignatureId } from "../../frost/types.js";
+import { SqliteClientStorage } from "../storage/sqlite.js";
 import { SigningClient } from "./client.js";
 import type { NonceCommitments, PublicNonceCommitments } from "./nonces.js";
 import { verifySignature } from "./verify.js";
@@ -126,7 +128,7 @@ describe("signing", () => {
 			r: FrostPoint;
 		}[] = [];
 		const clients = TEST_SIGNERS.map((a) => {
-			const storage = createClientStorage(a.account);
+			const storage = new SqliteClientStorage(a.account, new Sqlite3(":memory:"));
 			storage.registerGroup(TEST_GROUP.groupId, TEST_GROUP.participants, TEST_GROUP.participants.length);
 			storage.registerVerification(TEST_GROUP.groupId, TEST_GROUP.publicKey, a.verificationShare);
 			storage.registerSigningShare(TEST_GROUP.groupId, a.signingShare);
@@ -149,7 +151,7 @@ describe("signing", () => {
 			};
 			const nonceTree = {
 				commitments: [commitments0],
-				leaves: ["0x" as Hex],
+				leaves: [zeroHash],
 				root: treeInfo.root as Hex,
 			};
 			storage.registerNonceTree(groupId, nonceTree);
