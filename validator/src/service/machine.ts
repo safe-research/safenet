@@ -29,6 +29,7 @@ import type { ConsensusState, MachineConfig, MachineStates, StateDiff } from "..
 import { formatError } from "../utils/errors.js";
 import type { Logger } from "../utils/logging.js";
 import type { Metrics } from "../utils/metrics/index.js";
+import { InMemoryQueue, type Queue } from "../utils/queue.js";
 
 const BLOCKS_PER_EPOCH = (24n * 60n * 60n) / 5n; // ~ blocks for 1 day
 const DEFAULT_TIMEOUT = (10n * 60n) / 5n; // ~ blocks for 10 minutes
@@ -47,7 +48,7 @@ export class SafenetStateMachine {
 	// Event queue state
 	#lastProcessedBlock = 0n;
 	#lastProcessedIndex = 0;
-	#transitionQueue: StateTransition[] = [];
+	#transitionQueue: Queue<StateTransition> = new InMemoryQueue<StateTransition>();
 	#currentTransition?: StateTransition;
 
 	constructor({
@@ -106,7 +107,7 @@ export class SafenetStateMachine {
 	private checkNextTransition() {
 		// Still processing
 		if (this.#currentTransition !== undefined) return;
-		const transition = this.#transitionQueue.at(0);
+		const transition = this.#transitionQueue.peek();
 		// Nothing queued
 		if (transition === undefined) return;
 		this.#currentTransition = transition;
@@ -144,7 +145,7 @@ export class SafenetStateMachine {
 			.finally(() => {
 				this.#metrics.blockNumber.set(Number(this.#lastProcessedBlock));
 				this.#metrics.eventIndex.set(this.#lastProcessedIndex);
-				this.#transitionQueue.shift();
+				this.#transitionQueue.pop();
 				this.#currentTransition = undefined;
 				this.checkNextTransition();
 			});

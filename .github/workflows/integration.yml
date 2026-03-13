@@ -9,8 +9,13 @@ on:
 jobs:
   integration:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        storage: ["inmemory", "sqlite"]
     env:
       SAFENET_TEST_VERBOSE: "1"
+      SAFENET_TEST_STORAGE: ${{ matrix.storage }}
 
     steps:
       - uses: actions/checkout@v5

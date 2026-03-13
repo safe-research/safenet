@@ -1,7 +1,7 @@
 import type { Address, Hex } from "viem";
 import { formatError } from "../../utils/errors.js";
 import type { Logger } from "../../utils/logging.js";
-import type { Queue } from "../../utils/queue.js";
+import { InMemoryQueue, type Queue } from "../../utils/queue.js";
 import type {
 	ActionWithTimeout,
 	AttestTransaction,
@@ -25,7 +25,7 @@ const ERROR_RETRY_DELAY = 1000;
 const ERROR_RETRY_MAX_DELAY = 5000;
 
 export abstract class BaseProtocol implements SafenetProtocol {
-	#actionQueue: Queue<ActionWithTimeout>;
+	#actionQueue: Queue<ActionWithTimeout> = new InMemoryQueue<ActionWithTimeout>();
 	#currentAction?: ActionWithTimeout;
 	#retryDelay?: number;
 	#logger: Logger;
@@ -41,7 +41,7 @@ export abstract class BaseProtocol implements SafenetProtocol {
 
 	process(action: ProtocolAction, timeout: number = ACTION_TIMEOUT): void {
 		this.#logger.info(`Enqueue ${action.id}`, { action });
-		this.#actionQueue.enqueue({
+		this.#actionQueue.push({
 			...action,
 			validUntil: Date.now() + timeout,
 		});
@@ -63,7 +63,7 @@ export abstract class BaseProtocol implements SafenetProtocol {
 		// Check if action is still valid
 		const actionSpan = { action: { id: action.id } };
 		if (action.validUntil < Date.now()) {
-			this.#actionQueue.dequeue();
+			this.#actionQueue.pop();
 			this.#logger.warn("Timeout exeeded. Dropping action!", actionSpan);
 			this.checkNextAction();
 			return;
@@ -73,7 +73,7 @@ export abstract class BaseProtocol implements SafenetProtocol {
 			.then((transactionHash) => {
 				// If action was successfully sent to the node, remove it from queue
 				this.#logger.info(`Sent action for ${action.id} transaction`, { ...actionSpan, transactionHash });
-				this.#actionQueue.dequeue();
+				this.#actionQueue.pop();
 				this.#currentAction = undefined;
 				this.checkNextAction();
 			})
