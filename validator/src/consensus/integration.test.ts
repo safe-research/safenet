@@ -14,9 +14,10 @@ import {
 } from "viem";
 import { type Account, type PrivateKeyAccount, privateKeyToAccount } from "viem/accounts";
 import { anvil } from "viem/chains";
-import { afterEach, beforeAll, describe, expect, it } from "vitest";
+import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { silentLogger, testLogger, testMetrics } from "../__tests__/config.js";
 import { waitForBlock, waitForBlocks } from "../__tests__/utils.js";
+import { hashNonceCommitments, type NonceTree } from "../consensus/signing/nonces.js";
 import { toPoint } from "../frost/math.js";
 import { calcGenesisGroup, calcGroupContext, calcThreshold } from "../machine/keygen/group.js";
 import type { WatcherConfig } from "../machine/transitions/watcher.js";
@@ -31,12 +32,39 @@ import {
 import type { ProtocolConfig } from "../types/interfaces.js";
 import { participantsForEpoch } from "../utils/participants.js";
 import { calcGroupId } from "./keyGen/utils.js";
-import { calculateParticipantsRoot } from "./merkle.js";
+import { calculateMerkleRoot, calculateParticipantsRoot } from "./merkle.js";
 import { verifySignature } from "./signing/verify.js";
 
 const BLOCK_TIME_MS = 200;
 const BLOCKS_PER_EPOCH = 20n;
 const TEST_RUNTIME_IN_SECONDS = 60;
+
+vi.mock(import("../consensus/signing/nonces.js"), async (importOriginal) => {
+	const { createNonceTree, ...mod } = await importOriginal();
+	return {
+		...mod,
+		// Creating a nonce tree takes hundreds of milliseconds. Since we are
+		// running multiple parallel validators, this means that we may lock up
+		// the main thread for seconds at a time, and cause very indeterministic
+		// ordering of transaction mining (with transactions being sometimes
+		// received by the node several blocks after the action was created, as
+		// the NodeJS runtime catches up on running promise continuations),
+		// making tests flaky. Mock the nonces tree creation function to create
+		// and reuse a single nonce, in order to speed up the method by an order
+		// of magnitude. Note that this is **FUNDAMENTALLY UNSAFE** and if used
+		// in production will cause the validator to leak its secret signing
+		// share. It is, however, OK in order to speed up integration tests.
+		createNonceTree: (secret: bigint, size = 1024n): NonceTree => {
+			const {
+				commitments: [commitment],
+			} = createNonceTree(secret, 1n);
+			const commitments = [...Array(Number(size))].map(() => commitment);
+			const leaves = commitments.map((commitment, i) => hashNonceCommitments(BigInt(i), commitment));
+			const root = calculateMerkleRoot(leaves);
+			return { commitments, leaves, root };
+		},
+	};
+});
 
 describe("integration", () => {
 	const testClient = createTestClient({
@@ -157,6 +185,7 @@ describe("integration", () => {
 			const service = createValidatorService({
 				account: a,
 				rpcUrl: "http://127.0.0.1:8545",
+				storageFile: ":memory:",
 				logger,
 				config,
 				watcherConfig,
