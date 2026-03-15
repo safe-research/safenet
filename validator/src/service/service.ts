@@ -15,14 +15,11 @@ import {
 import { KeyGenClient } from "../consensus/keyGen/client.js";
 import { GasFeeEstimator, OnchainProtocol } from "../consensus/protocol/onchain.js";
 import { SqliteActionQueue, SqliteTxStorage } from "../consensus/protocol/sqlite.js";
-import type { ActionWithTimeout } from "../consensus/protocol/types.js";
 import { SigningClient } from "../consensus/signing/client.js";
-import { InMemoryClientStorage } from "../consensus/storage/inmemory.js";
 import { SqliteClientStorage } from "../consensus/storage/sqlite.js";
 import { type PacketHandler, type Typed, VerificationEngine } from "../consensus/verify/engine.js";
 import { EpochRolloverHandler } from "../consensus/verify/rollover/handler.js";
 import { SafeTransactionHandler } from "../consensus/verify/safeTx/handler.js";
-import { InMemoryStateStorage } from "../machine/storage/inmemory.js";
 import { SqliteStateStorage } from "../machine/storage/sqlite.js";
 import { OnchainTransitionWatcher, type WatcherConfig } from "../machine/transitions/watcher.js";
 import type { RolloverState } from "../machine/types.js";
@@ -33,7 +30,6 @@ import { formatError } from "../utils/errors.js";
 import type { Logger } from "../utils/logging.js";
 import type { Metrics } from "../utils/metrics/index.js";
 import { withMetrics } from "../utils/metrics/transport.js";
-import { InMemoryQueue } from "../utils/queue.js";
 import { buildSafeTransactionCheck } from "./checks.js";
 import { SafenetStateMachine } from "./machine.js";
 
@@ -62,16 +58,13 @@ export class ValidatorService {
 		chain: Chain;
 		logger: Logger;
 		metrics: Metrics;
-		database?: Database;
+		database: Database;
 		skipGenesis?: boolean;
 	}) {
 		this.#logger = logger;
 		this.#publicClient = createPublicClient({ chain, transport });
 		const walletClient = createWalletClient({ chain, transport, account });
-		const storage =
-			database !== undefined
-				? new SqliteClientStorage(account.address, database)
-				: new InMemoryClientStorage(account.address);
+		const storage = new SqliteClientStorage(account.address, database);
 		const signingClient = new SigningClient(storage);
 		const keyGenClient = new KeyGenClient(storage, this.#logger);
 		const verificationHandlers = new Map<string, PacketHandler<Typed>>();
@@ -79,9 +72,8 @@ export class ValidatorService {
 		verificationHandlers.set("safe_transaction_packet", new SafeTransactionHandler(check, metrics));
 		verificationHandlers.set("epoch_rollover_packet", new EpochRolloverHandler());
 		const verificationEngine = new VerificationEngine(verificationHandlers);
-		const actionStorage =
-			database !== undefined ? new SqliteActionQueue(database) : new InMemoryQueue<ActionWithTimeout>();
-		const txStorage = new SqliteTxStorage(database ?? new Sqlite3(":memory:"));
+		const actionStorage = new SqliteActionQueue(database);
+		const txStorage = new SqliteTxStorage(database);
 		const gasFeeEstimator = new GasFeeEstimator(this.#publicClient);
 		const protocol = new OnchainProtocol({
 			publicClient: this.#publicClient,
@@ -98,10 +90,7 @@ export class ValidatorService {
 			logger.notice("Skipping genesis key gen!");
 		}
 		const initialRolloverState: RolloverState = skipGenesis ? { id: "skip_genesis" } : { id: "waiting_for_genesis" };
-		const stateStorage =
-			database !== undefined
-				? new SqliteStateStorage(database, initialRolloverState)
-				: new InMemoryStateStorage(undefined, { rollover: initialRolloverState });
+		const stateStorage = new SqliteStateStorage(database, initialRolloverState);
 		this.#stateMachine = new SafenetStateMachine({
 			participants: config.participants,
 			blocksPerEpoch: config.blocksPerEpoch,
@@ -118,7 +107,7 @@ export class ValidatorService {
 		});
 		this.#watcher = new OnchainTransitionWatcher({
 			publicClient: this.#publicClient,
-			database: database ?? new Sqlite3(":memory:"),
+			database,
 			config,
 			watcherConfig,
 			logger,
@@ -193,7 +182,7 @@ export const createValidatorService = ({
 		}),
 		fees,
 	};
-	const database = storageFile !== undefined ? new Sqlite3(storageFile) : undefined;
+	const database = new Sqlite3(storageFile ?? ":memory:");
 	return new ValidatorService({
 		account,
 		transport,

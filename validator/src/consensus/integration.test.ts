@@ -185,7 +185,6 @@ describe("integration", () => {
 			const service = createValidatorService({
 				account: a,
 				rpcUrl: "http://127.0.0.1:8545",
-				storageFile: ":memory:",
 				logger,
 				config,
 				watcherConfig,
