@@ -15,7 +15,7 @@ import {
 import { type Account, type PrivateKeyAccount, privateKeyToAccount } from "viem/accounts";
 import { anvil } from "viem/chains";
 import { afterEach, beforeAll, describe, expect, it } from "vitest";
-import { silentLogger, testLogger, testMetrics } from "../__tests__/config.js";
+import { serviceConfig, silentLogger, testLogger, testMetrics } from "../__tests__/config.js";
 import { waitForBlock, waitForBlocks } from "../__tests__/utils.js";
 import { toPoint } from "../frost/math.js";
 import { calcGenesisGroup, calcGroupContext, calcThreshold } from "../machine/keygen/group.js";
@@ -155,6 +155,7 @@ describe("integration", () => {
 				blockRetryDelays: [Math.floor(blockTime / 10), Math.floor(blockTime / 20), Math.floor(blockTime / 20)],
 			};
 			const service = createValidatorService({
+				...serviceConfig,
 				account: a,
 				rpcUrl: "http://127.0.0.1:8545",
 				logger,

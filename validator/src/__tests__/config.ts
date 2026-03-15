@@ -21,3 +21,5 @@ export const createClientStorage =
 	SAFENET_TEST_STORAGE === "sqlite"
 		? (account: Address, database?: Database) => new SqliteClientStorage(account, database ?? new Sqlite3(":memory:"))
 		: (account: Address) => new InMemoryClientStorage(account);
+
+export const serviceConfig = SAFENET_TEST_STORAGE === "sqlite" ? { storageFile: ":memory:" } : {};
