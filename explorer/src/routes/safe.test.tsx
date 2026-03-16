@@ -62,9 +62,7 @@ vi.mock("@/components/transaction/TransactionProposalsList", () => ({
 			) : proposals.length === 0 ? (
 				<div>{emptyLabel ?? "No transactions found"}</div>
 			) : (
-				proposals.map((p) => (
-					<div key={p.safeTxHash}>{p.safeTxHash}</div>
-				))
+				proposals.map((p) => <div key={p.safeTxHash}>{p.safeTxHash}</div>)
 			)}
 			{hasMore && (
 				<button type="button" onClick={onShowMore} disabled={isLoadingMore}>
