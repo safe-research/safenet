@@ -7,12 +7,12 @@ const STORAGE_KEY_SAFE_API_SETTINGS = "localStorage.safe_api_settings.object.v1"
 const STORAGE_KEY_SAFE_UI_SETTINGS = "localStorage.safe_ui_settings.object.v1";
 
 const DEFAULT_SETTINGS = {
-	consensus: "0x566fAcad24a123f47937b9a7871f24628958Fd98" as Address,
+	consensus: "0x21c2B6C8473051fb6dED83fE6F0609e53747Cbb4" as Address,
 	rpc: "https://1rpc.io/gnosis",
 	decoder: "https://calldata.swiss-knife.xyz/decoder?calldata=",
 	maxBlockRange: 10000,
 	validatorInfo:
-		"https://raw.githubusercontent.com/safe-fndn/safenet-beta-data/refs/heads/main/assets/validator-info.devnet.json",
+		"https://raw.githubusercontent.com/safe-fndn/safenet-beta-data/refs/heads/devnet/assets/validator-info.json",
 	refetchInterval: 10000,
 	blocksPerEpoch: 1440,
 };
