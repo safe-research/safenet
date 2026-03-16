@@ -44,19 +44,17 @@ function AppInner() {
 
 			<SearchBar className="mb-8" onSelectNetwork={updateSelectedNetwork} selectedNetwork={network} />
 
-			{(proposals.isFetching || proposals.data.length > 0) && (
-				<RecentTransactionProposals
-					proposals={proposals.data}
-					itemsToShow={limit ?? PAGE_SIZE}
-					onShowMore={handleShowMore}
-					isFetching={proposals.isFetching}
-					dataUpdatedAt={proposals.dataUpdatedAt}
-					autoRefresh={autoRefresh}
-					onRefetch={() => proposals.refetch()}
-					onToggleAutoRefresh={() => setAutoRefresh((prev) => !prev)}
-					isLoading={proposals.data.length === 0 && proposals.isFetching}
-				/>
-			)}
+			<RecentTransactionProposals
+				proposals={proposals.data}
+				itemsToShow={limit ?? PAGE_SIZE}
+				onShowMore={handleShowMore}
+				isFetching={proposals.isFetching}
+				dataUpdatedAt={proposals.dataUpdatedAt}
+				autoRefresh={autoRefresh}
+				onRefetch={() => proposals.refetch()}
+				onToggleAutoRefresh={() => setAutoRefresh((prev) => !prev)}
+				isLoading={proposals.data.length === 0 && proposals.isFetching}
+			/>
 		</Container>
 	);
 }

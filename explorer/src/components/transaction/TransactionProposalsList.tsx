@@ -43,13 +43,17 @@ export function TransactionProposalsList({
 				<TransactionListHeader />
 			</div>
 			<div className="space-y-2">
-				{isLoading
-					? SKELETON_ROWS.map((key) => <TransactionListRowSkeleton key={key} />)
-					: proposals.map((proposal) => (
-							<div key={`${proposal.safeTxHash}:${proposal.epoch}`}>
-								<TransactionListRow proposal={proposal} />
-							</div>
-						))}
+				{isLoading ? (
+					SKELETON_ROWS.map((key) => <TransactionListRowSkeleton key={key} />)
+				) : proposals.length === 0 ? (
+					<div className="w-full p-8 text-center text-sub-title">No recent proposals found</div>
+				) : (
+					proposals.map((proposal) => (
+						<div key={`${proposal.safeTxHash}:${proposal.epoch}`}>
+							<TransactionListRow proposal={proposal} />
+						</div>
+					))
+				)}
 				{!isLoading && hasMore && (
 					<button
 						type="button"
