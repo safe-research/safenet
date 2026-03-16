@@ -59,7 +59,7 @@ export function getProposalStatus(
 }
 
 export type LoadTransactionProposalsResult = {
-	proposals: TransactionProposal[];
+	proposals: TransactionProposalWithStatus[];
 	fromBlock: bigint;
 	toBlock: bigint;
 };
@@ -99,6 +99,7 @@ export const loadTransactionProposals = async ({
 	safe,
 	toBlock: referenceBlock,
 	maxBlockRange,
+	signingTimeout,
 }: {
 	provider: PublicClient;
 	consensus: Address;
@@ -106,6 +107,7 @@ export const loadTransactionProposals = async ({
 	safe?: Address;
 	toBlock?: bigint;
 	maxBlockRange: bigint;
+	signingTimeout: number;
 }): Promise<LoadTransactionProposalsResult> => {
 	const { fromBlock, toBlock } = await getBlockRange(provider, maxBlockRange, referenceBlock);
 	const blockRange = { fromBlock: numberToHex(fromBlock), toBlock: numberToHex(toBlock) };
@@ -151,7 +153,7 @@ export const loadTransactionProposals = async ({
 			}
 
 			const attestation = attestations.get(attestationKey(log));
-			return {
+			const proposal: TransactionProposal = {
 				chainId: log.args.chainId,
 				safeTxHash: log.args.safeTxHash,
 				epoch: log.args.epoch,
@@ -162,6 +164,7 @@ export const loadTransactionProposals = async ({
 				},
 				attestedAt: attestation ?? null,
 			};
+			return { ...proposal, status: getProposalStatus(proposal, toBlock, signingTimeout) };
 		})
 		.filter((proposal) => proposal !== undefined);
 

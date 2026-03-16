@@ -1,8 +1,6 @@
 import { Badge } from "@/components/common/Badge";
 import type { ProposalStatus } from "@/lib/consensus";
 
-export type { ProposalStatus };
-
 export function StatusBadge({ status }: { status: ProposalStatus }) {
 	if (status === "TIMED_OUT") {
 		return <Badge className="bg-error text-white">TIMED OUT</Badge>;
