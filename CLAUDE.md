@@ -24,7 +24,7 @@ Code changes should be easy to review and to understand. For this it is importan
 
 Code should focus on security and maintainability. Existing code and components should be reused. New components should be written in a way that they can be reused. If code duplication is introduced, new shared components and styles should be extracted whenever it makes sense. Best practices should be applied, and before code is submitted, it should be properly inspected and tested.
 
-All newly added code should be covered by unit tests and if possible integration tests. 
+All newly added code should be covered by unit tests and if possible integration tests.
 
 If in doubt, refer to existing code to determine which implementation to choose. Do not re-invent the wheel and follow existing paradigms.
 
@@ -42,14 +42,14 @@ The steps for project setup are documented in the root [README.md](./README.md#p
 
 ### Commands
 
-All commands are specified in the root [package.json](./package.json). Workspace specific commands can be found in the `package.json` of each corresponding workspace. 
+All commands are specified in the root [package.json](./package.json). Workspace specific commands can be found in the `package.json` of each corresponding workspace.
 
 To run a command in a specific workspace use `--workspace` or `-w`.
 
 
 ### Integration Tests
 
-Integration tests start a local Anvil chain, deploy contracts, and run the validator against both storage backends:
+Integration tests start a local Anvil chain, deploy contracts, and run the validator:
 
 ```sh
 npm run test:integration        # Run all integration tests
@@ -59,13 +59,6 @@ The script (`./scripts/run_integration_test.sh`) requires:
 - **Anvil** — part of the Foundry toolchain (`foundryup` to install)
 - **Forge** — for contract deployment
 - **Node.js** — validator service
-
-To run against a specific storage backend:
-
-```sh
-SAFENET_TEST_STORAGE=inmemory npm run test:integration
-SAFENET_TEST_STORAGE=sqlite   npm run test:integration
-```
 
 ### Local devnet
 
