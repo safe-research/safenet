@@ -127,8 +127,8 @@ const createTestClient = (signerIndex: number, threshold = TEST_GROUP.participan
 	return { storage, client };
 };
 
-const createTestClientWithNonces = (signerIndex: number) => {
-	const { storage, client } = createTestClient(signerIndex);
+const createTestClientWithNonces = (signerIndex: number, threshold = TEST_GROUP.participants.length) => {
+	const { storage, client } = createTestClient(signerIndex, threshold);
 	const treeInfo = NONCE_TREES[signerIndex];
 	const commitments0: NonceCommitments = {
 		hidingNonce: treeInfo.d,
@@ -597,13 +597,7 @@ describe("SigningClient", () => {
 		it("produces a valid signature with threshold-many signers when threshold < n", () => {
 			// Create a group with threshold 3 out of 5
 			const threshold = 3;
-			const subsetClients = TEST_SIGNERS.slice(0, threshold).map((_, i) => {
-				const { client, storage } = createTestClient(i, threshold);
-				const ownId = storage.participantId(TEST_GROUP.groupId);
-				const root = client.generateNonceTree(TEST_GROUP.groupId);
-				client.handleNonceCommitmentsHash(TEST_GROUP.groupId, ownId, root, 0n);
-				return { client, storage };
-			});
+			const subsetClients = TEST_SIGNERS.slice(0, threshold).map((_, i) => createTestClientWithNonces(i, threshold));
 
 			const signers = TEST_SIGNERS.slice(0, threshold).map((s) => s.participantId);
 			const allNonces: { signerId: ParticipantId; nonces: PublicNonceCommitments }[] = [];
