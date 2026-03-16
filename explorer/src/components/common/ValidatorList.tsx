@@ -1,9 +1,10 @@
 import type { Address } from "viem";
+import { shortAddress } from "@/lib/address";
 import type { ValidatorInfo } from "@/lib/validators/info";
 
 export const createMapInfo =
 	(validatorInfoMap: Map<Address, ValidatorInfo> | null | undefined) => (suffix: string) => (address: Address) =>
-		`${validatorInfoMap?.get(address)?.label ?? `${address.slice(0, 6)}…${address.slice(-4)}`} ${suffix}`;
+		`${validatorInfoMap?.get(address)?.label ?? shortAddress(address)} ${suffix}`;
 
 export function ValidatorList({
 	all,
