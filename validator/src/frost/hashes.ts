@@ -1,9 +1,8 @@
 import { type H2COpts, hash_to_field } from "@noble/curves/abstract/hash-to-curve.js";
 import { secp256k1 } from "@noble/curves/secp256k1.js";
-import { concatBytes, numberToBytesBE } from "@noble/curves/utils.js";
+import { concatBytes } from "@noble/curves/utils.js";
 import { sha256 } from "@noble/hashes/sha2.js";
 import { stringToBytes } from "viem";
-import type { FrostPoint } from "./types.js";
 
 const N = secp256k1.Point.CURVE().n;
 const CONTEXT = "FROST-secp256k1-SHA256-v1";
@@ -19,22 +18,6 @@ const opts = (discriminant: string): H2COpts => {
 		hash: sha256,
 		DST: dst(discriminant),
 	};
-};
-
-export const keyGenChallenge = (id: bigint, ga0: FrostPoint, r: FrostPoint): bigint => {
-	return hdkg(concatBytes(numberToBytesBE(id, 32), ga0.toBytes(true), r.toBytes(true)));
-};
-
-export const henc = (input: Uint8Array): bigint => {
-	return hash_to_field(input, 1, opts("enc"))[0][0];
-};
-
-export const hdkg = (input: Uint8Array): bigint => {
-	return hash_to_field(input, 1, opts("dkg"))[0][0];
-};
-
-export const hpok = (input: Uint8Array): bigint => {
-	return hash_to_field(input, 1, opts("pok"))[0][0];
 };
 
 export const h1 = (input: Uint8Array): bigint => {
@@ -57,4 +40,20 @@ export const h4 = (input: Uint8Array): Uint8Array => {
 export const h5 = (input: Uint8Array): Uint8Array => {
 	const dstBytes = stringToBytes(dst("com"));
 	return sha256(concatBytes(dstBytes, input));
+};
+
+export const hdkg = (input: Uint8Array): bigint => {
+	return hash_to_field(input, 1, opts("dkg"))[0][0];
+};
+
+export const hid = (input: Uint8Array): bigint => {
+	return hash_to_field(input, 1, opts("id"))[0][0];
+};
+
+export const henc = (input: Uint8Array): bigint => {
+	return hash_to_field(input, 1, opts("enc"))[0][0];
+};
+
+export const hpok = (input: Uint8Array): bigint => {
+	return hash_to_field(input, 1, opts("pok"))[0][0];
 };

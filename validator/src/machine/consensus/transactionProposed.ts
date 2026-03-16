@@ -15,8 +15,8 @@ export const handleTransactionProposed = async (
 	event: TransactionProposedEvent,
 	logger?: Logger,
 ): Promise<StateDiff> => {
-	const group = consensusState.epochGroups[event.epoch.toString()];
-	if (group === undefined) {
+	const groupId = consensusState.epochGroups[event.epoch.toString()];
+	if (groupId === undefined) {
 		logger?.info?.(`Unknown epoch ${event.epoch}!`);
 		return {};
 	}
@@ -41,7 +41,7 @@ export const handleTransactionProposed = async (
 	const message = result.packetId;
 	logger?.info?.(`Verified transaction packet: ${message}`, span);
 	// The signing will be triggered in a separate event
-	const signers = signingClient.participants(group.groupId);
+	const signers = signingClient.participants(groupId);
 	return {
 		signing: [
 			message,

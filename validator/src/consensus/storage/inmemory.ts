@@ -1,12 +1,11 @@
 import { type Address, encodePacked, type Hex, keccak256 } from "viem";
-import type { FrostPoint, GroupId, ParticipantId, SignatureId } from "../../frost/types.js";
+import type { FrostPoint, GroupId, SignatureId } from "../../frost/types.js";
 import type { NonceTree, PublicNonceCommitments } from "../signing/nonces.js";
-import type { GroupInfoStorage, KeyGenInfoStorage, Participant, SignatureRequestStorage } from "./types.js";
+import type { GroupInfoStorage, KeyGenInfoStorage, SignatureRequestStorage } from "./types.js";
 
 type GroupInfo = {
 	groupId: GroupId;
-	participants: readonly Participant[];
-	participantId: bigint;
+	participants: readonly Address[];
 	threshold: number;
 	verificationShare?: FrostPoint;
 	groupPublicKey?: FrostPoint;
@@ -15,18 +14,18 @@ type GroupInfo = {
 
 type KeyGenInfo = {
 	encryptionSecretKey: bigint;
-	encryptionPublicKeys: Map<ParticipantId, FrostPoint>;
+	encryptionPublicKeys: Map<Address, FrostPoint>;
 	coefficients: readonly bigint[];
-	commitments: Map<ParticipantId, readonly FrostPoint[]>;
-	secretShares: Map<ParticipantId, bigint>;
+	commitments: Map<Address, readonly FrostPoint[]>;
+	secretShares: Map<Address, bigint>;
 };
 
 type SignatureRequest = {
 	sequence: bigint;
 	groupId: Hex;
 	message: Hex;
-	signerNonceCommitments: Map<ParticipantId, PublicNonceCommitments>;
-	signers: ParticipantId[];
+	signerNonceCommitments: Map<Address, PublicNonceCommitments>;
+	signers: Address[];
 };
 
 export class InMemoryClientStorage implements KeyGenInfoStorage, GroupInfoStorage, SignatureRequestStorage {
@@ -53,9 +52,9 @@ export class InMemoryClientStorage implements KeyGenInfoStorage, GroupInfoStorag
 		return info;
 	}
 
-	private checkInformationComplete(participants: readonly ParticipantId[], information: Map<bigint, unknown>): boolean {
-		for (const id of participants) {
-			if (!information.has(id)) {
+	private checkInformationComplete(participants: readonly Address[], information: Map<Address, unknown>): boolean {
+		for (const address of participants) {
+			if (!information.has(address)) {
 				return false;
 			}
 		}
@@ -80,37 +79,34 @@ export class InMemoryClientStorage implements KeyGenInfoStorage, GroupInfoStorag
 	}
 	registerCommitments(
 		groupId: GroupId,
-		participantId: ParticipantId,
+		participant: Address,
 		encryptionPublicKey: FrostPoint,
 		commitments: readonly FrostPoint[],
 	): void {
 		const info = this.keyGenInfo(groupId);
-		if (info.commitments.has(participantId))
-			throw new Error(`Commitments for ${groupId}:${participantId} already registered!`);
-		info.commitments.set(participantId, commitments);
-		info.encryptionPublicKeys.set(participantId, encryptionPublicKey);
+		if (info.commitments.has(participant))
+			throw new Error(`Commitments for ${groupId}:${participant} already registered!`);
+		info.commitments.set(participant, commitments);
+		info.encryptionPublicKeys.set(participant, encryptionPublicKey);
 	}
-	registerSecretShare(groupId: GroupId, participantId: ParticipantId, share: bigint): void {
+	registerSecretShare(groupId: GroupId, participant: Address, share: bigint): void {
 		const info = this.keyGenInfo(groupId);
-		if (info.secretShares.has(participantId))
-			throw new Error(`Secret share for ${groupId}:${participantId} already registered!`);
-		info.secretShares.set(participantId, share);
+		if (info.secretShares.has(participant))
+			throw new Error(`Secret share for ${groupId}:${participant} already registered!`);
+		info.secretShares.set(participant, share);
 	}
 	checkIfCommitmentsComplete(groupId: GroupId): boolean {
 		const participants = this.participants(groupId);
 		const info = this.keyGenInfo(groupId);
-		return this.checkInformationComplete(
-			participants.map((p) => p.id),
-			info.commitments,
-		);
+		return this.checkInformationComplete(participants, info.commitments);
 	}
-	missingCommitments(groupId: GroupId): ParticipantId[] {
-		const missing: ParticipantId[] = [];
+	missingCommitments(groupId: GroupId): Address[] {
+		const missing: Address[] = [];
 		const participants = this.participants(groupId);
 		const info = this.keyGenInfo(groupId);
-		for (const p of participants) {
-			if (!info.commitments.has(p.id)) {
-				missing.push(p.id);
+		for (const address of participants) {
+			if (!info.commitments.has(address)) {
+				missing.push(address);
 			}
 		}
 		return missing;
@@ -118,18 +114,15 @@ export class InMemoryClientStorage implements KeyGenInfoStorage, GroupInfoStorag
 	checkIfSecretSharesComplete(groupId: GroupId): boolean {
 		const participants = this.participants(groupId);
 		const info = this.keyGenInfo(groupId);
-		return this.checkInformationComplete(
-			participants.map((p) => p.id),
-			info.secretShares,
-		);
+		return this.checkInformationComplete(participants, info.secretShares);
 	}
-	missingSecretShares(groupId: GroupId): ParticipantId[] {
-		const missing: ParticipantId[] = [];
+	missingSecretShares(groupId: GroupId): Address[] {
+		const missing: Address[] = [];
 		const participants = this.participants(groupId);
 		const info = this.keyGenInfo(groupId);
-		for (const p of participants) {
-			if (!info.secretShares.has(p.id)) {
-				missing.push(p.id);
+		for (const address of participants) {
+			if (!info.secretShares.has(address)) {
+				missing.push(address);
 			}
 		}
 		return missing;
@@ -138,27 +131,27 @@ export class InMemoryClientStorage implements KeyGenInfoStorage, GroupInfoStorag
 		const info = this.keyGenInfo(groupId);
 		return info.encryptionSecretKey;
 	}
-	encryptionPublicKey(groupId: GroupId, participantId: ParticipantId): FrostPoint {
+	encryptionPublicKey(groupId: GroupId, participant: Address): FrostPoint {
 		const info = this.keyGenInfo(groupId);
-		const encryptionPublicKey = info.encryptionPublicKeys.get(participantId);
-		if (encryptionPublicKey === undefined) throw new Error(`No encryption public key for ${participantId} available!`);
+		const encryptionPublicKey = info.encryptionPublicKeys.get(participant);
+		if (encryptionPublicKey === undefined) throw new Error(`No encryption public key for ${participant} available!`);
 		return encryptionPublicKey;
 	}
 	coefficients(groupId: GroupId): readonly bigint[] {
 		const info = this.keyGenInfo(groupId);
 		return info.coefficients;
 	}
-	commitments(groupId: GroupId, participantId: ParticipantId): readonly FrostPoint[] {
+	commitments(groupId: GroupId, participant: Address): readonly FrostPoint[] {
 		const info = this.keyGenInfo(groupId);
-		const commitments = info.commitments.get(participantId);
-		if (commitments === undefined) throw new Error(`No commitments for ${participantId} available!`);
+		const commitments = info.commitments.get(participant);
+		if (commitments === undefined) throw new Error(`No commitments for ${participant} available!`);
 		return commitments;
 	}
-	commitmentsMap(groupId: GroupId): Map<ParticipantId, readonly FrostPoint[]> {
+	commitmentsMap(groupId: GroupId): Map<Address, readonly FrostPoint[]> {
 		const info = this.keyGenInfo(groupId);
 		return info.commitments;
 	}
-	secretSharesMap(groupId: GroupId): Map<ParticipantId, bigint> {
+	secretSharesMap(groupId: GroupId): Map<Address, bigint> {
 		const info = this.keyGenInfo(groupId);
 		return info.secretShares;
 	}
@@ -168,17 +161,15 @@ export class InMemoryClientStorage implements KeyGenInfoStorage, GroupInfoStorag
 	knownGroups(): GroupId[] {
 		return Array.from(this.#groupInfo.values().map((g) => g.groupId));
 	}
-	registerGroup(groupId: GroupId, participants: readonly Participant[], threshold: number): ParticipantId {
+	registerGroup(groupId: GroupId, participants: readonly Address[], threshold: number): Address {
 		if (this.#groupInfo.has(groupId)) throw new Error(`Group ${groupId} already registered!`);
-		const participantId = participants.find((p) => p.address === this.#account)?.id;
-		if (participantId === undefined) throw new Error(`Not part of Group ${groupId}!`);
+		if (!participants.includes(this.#account)) throw new Error(`Not part of Group ${groupId}!`);
 		this.#groupInfo.set(groupId, {
-			participantId,
 			groupId,
 			participants,
 			threshold,
 		});
-		return participantId;
+		return this.#account;
 	}
 	registerVerification(groupId: GroupId, groupPublicKey: FrostPoint, verificationShare: FrostPoint): void {
 		const info = this.groupInfo(groupId);
@@ -192,13 +183,15 @@ export class InMemoryClientStorage implements KeyGenInfoStorage, GroupInfoStorag
 		if (info.signingShare !== undefined) throw new Error(`Signing share for ${groupId} already set!`);
 		info.signingShare = signingShare;
 	}
-	participantId(groupId: GroupId): ParticipantId {
-		return this.groupInfo(groupId).participantId;
+	participant(groupId: GroupId): Address {
+		if (!this.groupInfo(groupId).participants.includes(this.#account))
+			throw new Error(`Not participating in ${groupId}!`);
+		return this.#account;
 	}
 	publicKey(groupId: GroupId): FrostPoint | undefined {
 		return this.groupInfo(groupId).groupPublicKey;
 	}
-	participants(groupId: GroupId): readonly Participant[] {
+	participants(groupId: GroupId): readonly Address[] {
 		return this.groupInfo(groupId).participants;
 	}
 	threshold(groupId: GroupId): number {
@@ -230,7 +223,7 @@ export class InMemoryClientStorage implements KeyGenInfoStorage, GroupInfoStorag
 		signatureId: SignatureId,
 		groupId: GroupId,
 		message: Hex,
-		signers: ParticipantId[],
+		signers: Address[],
 		sequence: bigint,
 	): void {
 		// Check if group is known, otherwise this will throw
@@ -247,7 +240,7 @@ export class InMemoryClientStorage implements KeyGenInfoStorage, GroupInfoStorag
 	}
 	registerNonceCommitments(
 		signatureId: SignatureId,
-		signerId: ParticipantId,
+		signerId: Address,
 		nonceCommitments: PublicNonceCommitments,
 	): void {
 		const request = this.signatureRequest(signatureId);
@@ -260,8 +253,8 @@ export class InMemoryClientStorage implements KeyGenInfoStorage, GroupInfoStorag
 		const request = this.signatureRequest(signatureId);
 		return this.checkInformationComplete(request.signers, request.signerNonceCommitments);
 	}
-	missingNonces(signatureId: SignatureId): ParticipantId[] {
-		const missing: ParticipantId[] = [];
+	missingNonces(signatureId: SignatureId): Address[] {
+		const missing: Address[] = [];
 		const request = this.signatureRequest(signatureId);
 		for (const id of request.signers) {
 			if (!request.signerNonceCommitments.has(id)) {
@@ -273,7 +266,7 @@ export class InMemoryClientStorage implements KeyGenInfoStorage, GroupInfoStorag
 	signingGroup(signatureId: SignatureId): GroupId {
 		return this.signatureRequest(signatureId).groupId;
 	}
-	signers(signatureId: SignatureId): ParticipantId[] {
+	signers(signatureId: SignatureId): Address[] {
 		return this.signatureRequest(signatureId).signers;
 	}
 	message(signatureId: SignatureId): Hex {
@@ -282,7 +275,7 @@ export class InMemoryClientStorage implements KeyGenInfoStorage, GroupInfoStorag
 	sequence(signatureId: SignatureId): bigint {
 		return this.signatureRequest(signatureId).sequence;
 	}
-	nonceCommitmentsMap(signatureId: SignatureId): Map<ParticipantId, PublicNonceCommitments> {
+	nonceCommitmentsMap(signatureId: SignatureId): Map<Address, PublicNonceCommitments> {
 		return this.signatureRequest(signatureId).signerNonceCommitments;
 	}
 

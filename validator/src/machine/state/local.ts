@@ -1,6 +1,6 @@
 import type { Hex } from "viem";
-import type { SignatureId } from "../../frost/types.js";
-import type { ConsensusState, GroupInfo, MachineStates, RolloverState, SigningState, StateDiff } from "../types.js";
+import type { GroupId, SignatureId } from "../../frost/types.js";
+import type { ConsensusState, MachineStates, RolloverState, SigningState, StateDiff } from "../types.js";
 import { applyConsensus, applyMachines, type UpdatableConsensusState, type UpdatableMachineState } from "./diff.js";
 
 const proxy = <K extends string, V, T extends Record<K, V>>(source: T, temp: Record<K, V | undefined>) =>
@@ -99,7 +99,7 @@ export class LocalConsensusStates implements ConsensusState {
 		return proxy(this.immutableState.groupPendingNonces, this.tempState.groupPendingNonces ?? {});
 	}
 
-	public get epochGroups(): Record<string, GroupInfo> {
+	public get epochGroups(): Record<string, GroupId> {
 		return proxy(this.immutableState.epochGroups, this.tempState.epochGroups ?? {});
 	}
 

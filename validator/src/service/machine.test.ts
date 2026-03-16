@@ -110,11 +110,12 @@ describe("SafenetStateMachine FROST group cleanup", () => {
 	it("should call unregisterGroup with the correct group IDs on epoch rollover", async () => {
 		// Epochs 1, 3, 5 exist; activating epoch 5 → activeEpoch = 3, epochCutoff = 3
 		// epoch "1" (1 < 3) should be cleaned up; epoch "3" and "5" preserved
+		const participant = `0x${"00".repeat(19)}01` as const;
 		const epochGroups = {
-			"1": { groupId: "0xgroup1" as const, participantId: 1n },
-			"3": { groupId: "0xgroup3" as const, participantId: 1n },
-			"5": { groupId: "0xgroup5" as const, participantId: 1n },
-		};
+			"1": { groupId: "0xgroup1", participant },
+			"3": { groupId: "0xgroup3", participant },
+			"5": { groupId: "0xgroup5", participant },
+		} as const;
 		const storage = makeStorage(epochGroups, { id: "epoch_staged", nextEpoch: 5n }, 3n);
 		const unregisterGroup = vi.fn();
 		const keyGenClient = makeKeyGenClient(unregisterGroup);
@@ -134,11 +135,12 @@ describe("SafenetStateMachine FROST group cleanup", () => {
 	});
 
 	it("should tolerate unregisterGroup failure, log a warning, and increment the metric", async () => {
+		const participant = `0x${"00".repeat(19)}01` as const;
 		const epochGroups = {
-			"1": { groupId: "0xgroup1" as const, participantId: 1n },
-			"3": { groupId: "0xgroup3" as const, participantId: 1n },
-			"5": { groupId: "0xgroup5" as const, participantId: 1n },
-		};
+			"1": { groupId: "0xgroup1", participant },
+			"3": { groupId: "0xgroup3", participant },
+			"5": { groupId: "0xgroup5", participant },
+		} as const;
 		const storage = makeStorage(epochGroups, { id: "epoch_staged", nextEpoch: 5n }, 3n);
 		const unregisterGroup = vi.fn().mockImplementation(() => {
 			throw new Error("crypto DB unavailable");
