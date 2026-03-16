@@ -16,7 +16,7 @@ export function SafeTxAttestationStatus({ proposal }: { proposal: TransactionPro
 	const allValidatorIds = Array.from(validatorInfo.data?.keys() ?? []);
 	return (
 		<>
-			{status.isFetching && status.data === null && <Skeleton className="w-full h-10 bg-primary/10" />}
+			{status.isFetching && status.data === null && <Skeleton className="w-full h-10 bg-surface-outline" />}
 			{status.data !== null && (
 				<div key={status.data.sid}>
 					<p>Validators:</p>

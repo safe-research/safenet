@@ -60,7 +60,7 @@ export function TransactionListRow({ proposal }: { proposal: TransactionProposal
 				{/* Column 1: Network + Status badges */}
 				<div className="flex flex-col gap-1">
 					<NetworkBadge chainId={proposal.chainId} />
-					<StatusBadge attested={proposal.attestedAt !== null} />
+					<StatusBadge status={proposal.attestedAt !== null ? "ATTESTED" : "PROPOSED"} />
 				</div>
 
 				{/* Column 2: Safe address */}
