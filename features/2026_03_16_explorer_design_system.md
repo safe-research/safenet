@@ -182,7 +182,7 @@ Two visual patterns are used deliberately:
 | `error` | tinted | `bg-error-surface text-error border border-error-outline` |
 | `warning` | tinted | `bg-warning-surface text-warning border border-warning-outline` |
 | `neutral` | tinted | `bg-surface-0 text-muted border border-surface-outline` |
-| `info` | tinted | `bg-color-info/10 text-info border border-info/30` ← added in Phase 4 |
+| `info` | tinted | `bg-info/10 text-info border border-info/30` ← added in Phase 4 |
 
 `--color-error-foreground` and `--color-warning-foreground` are added to the token inventory (Phase 1) for completeness and to allow a solid `error`/`warning` chip in future if needed, even though the tinted pattern is used for Phase 2 badge variants.
 
@@ -255,7 +255,10 @@ Files touched:
 - `src/components/epoch/KeyGenStatusItem.tsx` — replace `text-red-500`/`text-green-500`/`text-yellow-500` with `text-error`/`text-positive`/`text-pending` (reuse existing status tokens; no new aliases needed)
 - `src/components/transaction/TransactionListControls.tsx` — use `Spinner` primitive
 - `src/components/common/CopyButton.tsx` — replace inline class string with `Button` `icon` variant
-- All components using `rounded-lg`/`rounded-md`/`rounded-full`/`rounded` — replace with `rounded-card`/`rounded-input`/`rounded-badge` as appropriate
+- `src/components/Groups.tsx` — `Box`: `rounded-lg` → `rounded-card`; `Skeleton`: `rounded-lg` → `rounded-card`
+- `src/components/common/Badge.tsx` — `rounded-full` → `rounded-badge`
+- `src/components/search/SearchBar.tsx` — `rounded-full` → `rounded-badge`
+- All remaining components using `rounded-lg`/`rounded-md`/`rounded-full`/`rounded` — replace with `rounded-card`/`rounded-input`/`rounded-badge` as appropriate (project-wide grep for `rounded-` to catch any missed instances)
 
 All existing tests must pass. `npm run check` must pass.
 
@@ -271,7 +274,7 @@ All existing tests must pass. `npm run check` must pass.
 - Monospace font (`Geist Mono Variable`) as the default sans, `Citerne` serif for headings
 - Colours are hex-based (`#FFFFFF`, `#121312`, `#12FF80`), not oklch
 
-**Token value updates** — names unchanged, values updated to match the Safenet brand palette:
+**Token value updates** — names unchanged, values updated to match the Safenet brand palette. `--color-surface-hover` is **deprecated**: remove it from `styles.css` and migrate all usages to `--color-secondary`:
 
 | Token (name unchanged) | Light | Dark |
 |---|---|---|
@@ -296,7 +299,7 @@ All existing tests must pass. `npm run check` must pass.
 | Token | Light | Dark | Purpose | Immediate usage in Phase 4 |
 |---|---|---|---|---|
 | `--color-info` | `#5FDDFF` | `#5FDDFF` | Informational highlights | `info` badge variant added to `Badge`; used in `SafeResearchBanner` (currently uses warning, which is semantically wrong for an info notice) |
-| `--color-secondary` | `#EFFFF4` | `#1E201E` | Subtle tinted accent surface | Replaces `--color-surface-hover` in hover states; available for secondary action backgrounds |
+| `--color-secondary` | `#EFFFF4` | `#1E201E` | Subtle tinted accent surface | Replaces `--color-surface-hover` in hover states; `--color-surface-hover` is deprecated in Phase 4 — its usages are migrated to `--color-secondary` and the token is removed from `styles.css` |
 | `--color-safe-light-green` | `#B0FFC9` | `#B0FFC9` | Brand tint | No component usage in Phase 4 — included to complete the brand palette for future use |
 | `--color-guardians-blue` | `#001F26` | `#001F26` | Deep brand dark | No component usage in Phase 4 — included to complete the brand palette for future use |
 | `--shadow-card` | `0 1px 3px 0 rgb(0 0 0/0.06), 0 1px 2px -1px rgb(0 0 0/0.06)` | `none` | Default card depth | Applied to `Box` (replaces border) |
@@ -321,7 +324,8 @@ Files touched:
 - `src/components/Groups.tsx` — `Box`: remove border and radius classes, add shadow classes
 - `src/components/common/Badge.tsx` — add `info` variant using `--color-info`
 - `src/components/SafeResearch.tsx` — update `SafeResearchBanner` to use `info` variant instead of warning tokens
+- Any component using `bg-surface-hover` / `hover:bg-surface-hover` — migrate to `bg-secondary` / `hover:bg-secondary` as part of `--color-surface-hover` deprecation
 - `package.json` — add `@fontsource-variable/geist-mono` dependency
 
-No token names change. All existing tests must pass. `npm run check` must pass.
+No token names change (except `--color-surface-hover` which is removed). All existing tests must pass. `npm run check` must pass.
 
