@@ -35,13 +35,16 @@ All semantic colour names, spacing aliases, typography scale, and radius values 
 **Colours to add/fix:**
 - `--color-muted` / `text-muted` — secondary/helper text colour (currently missing; some components fall back to ad-hoc grays)
 - Fix misleading comment on `--color-surface-1` in light mode (value is `oklch(1 0 0)` = white, not "black")
+- Fix `@theme` mapping bug: `--color-sub-title` currently resolves to `var(--color-title)` instead of `var(--color-sub-title)`. Both happen to share the same value today so the bug is silent — but Phase 4 assigns them different values, which would break.
+- Fix `@theme` mapping bugs: `--color-error`, `--color-error-outline`, and `--color-error-surface` all resolve to their `warning` counterparts (`var(--color-warning)`, `var(--color-warning-outline)`, `var(--color-warning-surface)`). This means `text-error`, `border-error-outline`, and `bg-error-surface` currently render with the warning colour.
 
 **Radius scale to formalise** — use use-case based naming, consistent with the colour token convention (e.g. `--color-button`, not `--color-sm`).
 
-The current codebase uses `rounded-lg`, `rounded-md`, and `rounded-full` without clear use-case semantics:
-- `rounded-lg` appears in `Box`, `Skeleton`, `SearchBar`, and `KeyGenStatusItem` — all cards/containers, but also in `CopyButton` which is not a card
+The current codebase uses `rounded-lg`, `rounded-md`, `rounded-full`, and plain `rounded` without clear use-case semantics:
+- `rounded-lg` appears in `Box`, `Skeleton`, and `KeyGenStatusItem` — containers/cards
 - `rounded-md` appears in `FormItem` inputs and the `EpochRolloverItem` expand panel — two different use cases sharing the same class with no shared intent
-- `rounded-full` appears in `Badge` — this one is clear, but unnamed
+- `rounded-full` appears in `Badge` and `SearchBar` (the search field border) — pill-shaped elements
+- `rounded` (default) appears in `CopyButton` — icon button
 
 Formalising these as use-case tokens removes the ambiguity:
 
@@ -199,11 +202,13 @@ Files touched:
 Changes:
 1. Add `--color-muted` (light: `oklch(44.6% 0.03 256.802)`, dark: `oklch(63% 0.02 256.802)`) and map in `@theme`. This is a new token for decorative/helper text; it is intentionally distinct from `--color-sub-title`, which is for structural secondary text (section labels, descriptions).
 2. Fix the comment on `--color-surface-1` in light mode (says "black", value is correct white — comment-only fix, do not change the value).
-3. Add `--radius-card` (0.5rem), `--radius-input` (0.375rem), `--radius-badge` (9999px) in `@theme` using use-case based naming (consistent with colour token convention, e.g. `--color-button` not `--color-sm`).
-4. Add `--font-mono` in `@theme`
-5. Add a comment block above each token group (Surfaces, Text, Button, Status, Radius, Typography) for discoverability
+3. Fix `@theme` mapping bug: `--color-sub-title: var(--color-title)` → `--color-sub-title: var(--color-sub-title)`. Silent today (same value), but would break in Phase 4.
+4. Fix `@theme` mapping bugs: `--color-error`, `--color-error-outline`, and `--color-error-surface` all currently point to their `warning` counterparts. Correct each to reference its own variable. This is an existing visual bug — `text-error` renders in warning colour today.
+5. Add `--radius-card` (0.5rem), `--radius-input` (0.375rem), `--radius-badge` (9999px) in `@theme` using use-case based naming (consistent with colour token convention, e.g. `--color-button` not `--color-sm`).
+6. Add `--font-mono` in `@theme`
+7. Add a comment block above each token group (Surfaces, Text, Button, Status, Radius, Typography) for discoverability
 
-No component changes. No visual changes. `npm run check` must pass.
+No component changes. `npm run check` must pass. Note: steps 3 and 4 fix existing bugs, so this PR will have a minor visible change (error states will now display the correct error colour).
 
 ---
 
@@ -240,7 +245,8 @@ Files touched:
 - `src/components/common/NetworkBadge.tsx` — replace hardcoded fallback `#4B5563` with `text-muted`
 - `src/components/epoch/KeyGenStatusItem.tsx` — replace `text-red-500`/`text-green-500`/`text-yellow-500` with `text-error`/`text-positive`/`text-pending` (reuse existing status tokens; no new aliases needed)
 - `src/components/transaction/TransactionListControls.tsx` — use `Spinner` primitive
-- All components using `rounded-lg`/`rounded-md`/`rounded-full` — replace with `rounded-card`/`rounded-input`/`rounded-badge`
+- `src/components/common/CopyButton.tsx` — replace inline class string with `Button` `icon` variant
+- All components using `rounded-lg`/`rounded-md`/`rounded-full`/`rounded` — replace with `rounded-card`/`rounded-input`/`rounded-badge` as appropriate
 
 All existing tests must pass. `npm run check` must pass.
 
