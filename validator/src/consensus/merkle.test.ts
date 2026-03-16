@@ -1,6 +1,12 @@
 import type { Hex } from "viem";
 import { describe, expect, it } from "vitest";
-import { calculateMerkleRoot, generateMerkleProof, verifyMerkleProof } from "./merkle.js";
+import {
+	calculateMerkleRoot,
+	calculateParticipantsRoot,
+	generateMerkleProof,
+	generateParticipantProof,
+	verifyMerkleProof,
+} from "./merkle.js";
 
 describe("merkle", () => {
 	it("should generate the correct merkle root", () => {
@@ -34,5 +40,57 @@ describe("merkle", () => {
 		expect(
 			verifyMerkleProof(root, "0x0000000000000000000000000000000000000000000000000000000000000003", proof),
 		).toBeTruthy();
+	});
+
+	it("participant Merkle trees should be order independant", () => {
+		const participants = [
+			"0x00000000000000000000000000000000000000a1",
+			"0x00000000000000000000000000000000000000A2",
+			"0x00000000000000000000000000000000000000b3",
+		] as const;
+
+		const participant = "0x00000000000000000000000000000000000000A2";
+		const participantLeaf = "0x00000000000000000000000000000000000000000000000000000000000000a2";
+		const expectedRoot = calculateMerkleRoot([
+			"0x00000000000000000000000000000000000000000000000000000000000000a1",
+			"0x00000000000000000000000000000000000000000000000000000000000000a2",
+			"0x00000000000000000000000000000000000000000000000000000000000000b3",
+		]);
+
+		expect(calculateParticipantsRoot(participants)).toBe(expectedRoot);
+		const proof = generateParticipantProof(participants, participant);
+		expect(verifyMerkleProof(expectedRoot, participantLeaf, proof)).toBe(true);
+	});
+
+	it("participant Merkle trees should throw on unsorted participants", () => {
+		const participants = [
+			"0x0000000000000000000000000000000000000002",
+			"0x0000000000000000000000000000000000000001",
+		] as const;
+		expect(() => calculateParticipantsRoot(participants)).toThrowError("participants not monotonic");
+		expect(() => generateParticipantProof(participants, "0x0000000000000000000000000000000000000001")).toThrowError(
+			"participants not monotonic",
+		);
+	});
+
+	it("participant Merkle trees should throw on duplicate participants", () => {
+		const participants = [
+			"0x0000000000000000000000000000000000000001",
+			"0x0000000000000000000000000000000000000001",
+		] as const;
+		expect(() => calculateParticipantsRoot(participants)).toThrowError("participants not monotonic");
+		expect(() => generateParticipantProof(participants, "0x0000000000000000000000000000000000000001")).toThrowError(
+			"participants not monotonic",
+		);
+	});
+
+	it("participant Merkle trees should throw when building proof for missing participant", () => {
+		const participants = [
+			"0x0000000000000000000000000000000000000001",
+			"0x0000000000000000000000000000000000000002",
+		] as const;
+		expect(() => generateParticipantProof(participants, "0x0000000000000000000000000000000000000003")).toThrowError(
+			"participant 0x0000000000000000000000000000000000000003 not included",
+		);
 	});
 });

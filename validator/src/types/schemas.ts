@@ -33,14 +33,18 @@ export const hexBytes32Schema = hexDataSchema.refine((bytes) => size(bytes) === 
 
 const supportedChainsSchema = z.coerce.number().pipe(z.union(supportedChains.map((chain) => z.literal(chain.id))));
 
-const participantsSchema = z
-	.preprocess((val) => {
-		if (typeof val === "string") {
-			return val.split(",");
-		}
-		return val;
-	}, z.array(checkedAddressSchema))
-	.transform((participants) => participants.map((address, i) => ({ address, id: BigInt(i + 1) })));
+const jsonStringToValue = <V extends z.ZodTypeAny>(valueSchema: V) =>
+	z.preprocess((val) => (typeof val === "string" ? JSON.parse(val) : val), valueSchema);
+
+const participantsSchema = jsonStringToValue(
+	z.array(
+		z.object({
+			address: checkedAddressSchema,
+			activeFrom: z.coerce.bigint().default(0n),
+			activeBefore: z.coerce.bigint().optional(),
+		}),
+	),
+);
 
 const genesisSaltSchema = z.preprocess((val) => {
 	if (val === undefined || val === "") {

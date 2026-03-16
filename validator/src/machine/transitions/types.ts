@@ -1,6 +1,6 @@
 import type { Address, Hex } from "viem";
 import type { SafeTransaction } from "../../consensus/verify/safeTx/schemas.js";
-import type { FrostPoint, GroupId, ParticipantId, ProofOfKnowledge, SignatureId } from "../../frost/types.js";
+import type { FrostPoint, GroupId, ProofOfKnowledge, SignatureId } from "../../frost/types.js";
 
 export type NewBlock = {
 	id: "block_new";
@@ -23,7 +23,6 @@ export type KeyGenCommittedEvent = {
 	block: bigint;
 	index: number;
 	gid: GroupId;
-	identifier: ParticipantId;
 	participant: Address;
 	commitment: ProofOfKnowledge & { q: FrostPoint; c: FrostPoint[] };
 	committed: boolean;
@@ -34,7 +33,7 @@ export type KeyGenSecretSharedEvent = {
 	block: bigint;
 	index: number;
 	gid: GroupId;
-	identifier: ParticipantId;
+	participant: Address;
 	share: {
 		y: FrostPoint;
 		f: bigint[];
@@ -47,8 +46,8 @@ export type KeyGenComplaintSubmittedEvent = {
 	block: bigint;
 	index: number;
 	gid: GroupId;
-	plaintiff: ParticipantId;
-	accused: ParticipantId;
+	plaintiff: Address;
+	accused: Address;
 	compromised: boolean;
 };
 
@@ -57,8 +56,8 @@ export type KeyGenComplaintResponsedEvent = {
 	block: bigint;
 	index: number;
 	gid: GroupId;
-	plaintiff: ParticipantId;
-	accused: ParticipantId;
+	plaintiff: Address;
+	accused: Address;
 	secretShare: bigint;
 };
 
@@ -67,7 +66,7 @@ export type KeyGenConfirmedEvent = {
 	block: bigint;
 	index: number;
 	gid: GroupId;
-	identifier: ParticipantId;
+	participant: Address;
 	confirmed: boolean;
 };
 
@@ -76,7 +75,7 @@ export type NonceCommitmentsHashEvent = {
 	block: bigint;
 	index: number;
 	gid: GroupId;
-	identifier: ParticipantId;
+	participant: Address;
 	chunk: bigint;
 	commitment: Hex;
 };
@@ -97,7 +96,7 @@ export type NonceCommitmentsEvent = {
 	block: bigint;
 	index: number;
 	sid: SignatureId;
-	identifier: ParticipantId;
+	participant: Address;
 	nonces: {
 		d: FrostPoint;
 		e: FrostPoint;
@@ -110,7 +109,7 @@ export type SignatureShareEvent = {
 	index: number;
 	sid: SignatureId;
 	selectionRoot: Hex;
-	identifier: ParticipantId;
+	participant: Address;
 	z: bigint;
 };
 

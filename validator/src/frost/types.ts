@@ -28,6 +28,4 @@ export type ProofOfAttestationParticipation = Hex[];
 
 export type GroupId = Hex;
 
-export type ParticipantId = bigint;
-
 export type SignatureId = Hex;

@@ -17,18 +17,13 @@ library FROST {
     // ============================================================
 
     /**
-     * @notice Type alias for a FROST participant identifier.
-     */
-    type Identifier is uint256;
-
-    /**
      * @notice Group commitment used in FROST signing.
-     * @custom:param identifier The participant identifier associated with this commitment.
+     * @custom:param participant The participant address associated with this commitment.
      * @custom:param d The hiding nonce commitment point.
      * @custom:param e The binding nonce commitment point.
      */
     struct Commitment {
-        Identifier identifier;
+        address participant;
         Secp256k1.Point d;
         Secp256k1.Point e;
     }
@@ -60,12 +55,7 @@ library FROST {
     // ============================================================
 
     /**
-     * @notice Thrown when a participant identifier is zero or otherwise invalid.
-     */
-    error InvalidIdentifier();
-
-    /**
-     * @notice Thrown when commitments are not strictly ordered by identifier.
+     * @notice Thrown when commitments are not strictly ordered by participant.
      */
     error UnorderedCommitments();
 
@@ -75,30 +65,17 @@ library FROST {
     error InvalidScalar();
 
     // ============================================================
-    // INTERNAL FUNCTIONS - IDENTIFIERS
+    // INTERNAL FUNCTIONS
     // ============================================================
 
     /**
-     * @notice Constructs a FROST participant identifier.
-     * @param value The raw identifier value.
-     * @return identifier The wrapped identifier.
+     * @notice Derives a FROST participant identifier for a given address.
+     * @param participant The participant address.
+     * @return id The derived identifier.
      */
-    function newIdentifier(uint256 value) internal pure returns (Identifier identifier) {
-        identifier = Identifier.wrap(value);
-        requireValidIdentifier(identifier);
+    function identifier(address participant) internal view returns (uint256 id) {
+        return _hid(abi.encodePacked(participant));
     }
-
-    /**
-     * @notice Ensures that an identifier is valid.
-     * @param identifier The identifier to validate.
-     */
-    function requireValidIdentifier(Identifier identifier) internal pure {
-        require(Identifier.unwrap(identifier) != 0, InvalidIdentifier());
-    }
-
-    // ============================================================
-    // INTERNAL FUNCTIONS - NONCES AND CHALLENGES
-    // ============================================================
 
     /**
      * @notice Generates a random nonce from randomness and a secret key.
@@ -127,6 +104,9 @@ library FROST {
     {
         // The RFC-9591 `compute_binding_factors` function.
         // <https://datatracker.ietf.org/doc/html/rfc9591#section-4.4>
+        //
+        // This implementation uses identifiers derived from the participant's address.
+        // <https://github.com/ZcashFoundation/frost/blob/3ffc19d8f473d5bc4e07ed41bc884bdb42d6c29f/frost-core/src/identifier.rs#L50-L62>
 
         (uint8 yv, bytes32 yx) = y.serialize();
         bytes32 msgHash = _h4(abi.encode(message));
@@ -139,9 +119,9 @@ library FROST {
 
         rho = new uint256[](commitments.length);
         for (uint256 i = 0; i < commitments.length; i++) {
-            Identifier identifier = commitments[i].identifier;
+            uint256 id = identifier(commitments[i].participant);
             assembly ("memory-safe") {
-                mstore(rhoIndexPtr, identifier)
+                mstore(rhoIndexPtr, id)
             }
             rho[i] = _h1(rhoInput);
         }
@@ -203,13 +183,13 @@ library FROST {
 
     /**
      * @notice Generates a key generation challenge for the proof of knowledge.
-     * @param identifier The participant identifier.
+     * @param participant The participant address.
      * @param phi The participant public key share.
      * @param r The commitment point used in the proof.
      * @return c The computed challenge scalar.
      * @dev Matches the official FROST implementation KeyGen `challenge` function.
      */
-    function keyGenChallenge(Identifier identifier, Secp256k1.Point memory phi, Secp256k1.Point memory r)
+    function keyGenChallenge(address participant, Secp256k1.Point memory phi, Secp256k1.Point memory r)
         internal
         view
         returns (uint256 c)
@@ -218,13 +198,14 @@ library FROST {
         // <https://github.com/ZcashFoundation/frost/blob/3ffc19d8f473d5bc4e07ed41bc884bdb42d6c29f/frost-core/src/keys/dkg.rs#L413-L430>
         // <https://github.com/ZcashFoundation/frost/blob/3ffc19d8f473d5bc4e07ed41bc884bdb42d6c29f/frost-secp256k1/src/lib.rs#L222-L224>
 
+        uint256 id = identifier(participant);
         (uint8 phiv, bytes32 phix) = phi.serialize();
         (uint8 rv, bytes32 rx) = r.serialize();
-        return _hdkg(abi.encodePacked(identifier, phiv, phix, rv, rx));
+        return _hdkg(abi.encodePacked(id, phiv, phix, rv, rx));
     }
 
     // ============================================================
-    // PRIVATE FUNCTIONS - ENCODING
+    // PRIVATE FUNCTIONS
     // ============================================================
 
     /**
@@ -232,24 +213,26 @@ library FROST {
      * @param commitments The commitments to encode.
      * @return result The encoded commitment list.
      */
-    function _encodeCommitments(Commitment[] memory commitments) private pure returns (bytes memory result) {
+    function _encodeCommitments(Commitment[] memory commitments) private view returns (bytes memory result) {
         // The RFC-9591 `encode_group_commitment_list` function.
         // <https://datatracker.ietf.org/doc/html/rfc9591#section-4.3>
+        //
+        // This implementation uses identifiers derived from the participant's address.
+        // <https://github.com/ZcashFoundation/frost/blob/3ffc19d8f473d5bc4e07ed41bc884bdb42d6c29f/frost-core/src/identifier.rs#L50-L62>
 
         result = new bytes(commitments.length * 98);
 
-        uint256 identifier = 0;
+        uint256 last = 0;
         for (uint256 i = 0; i < commitments.length; i++) {
             Commitment memory commitment = commitments[i];
-
-            require(Identifier.unwrap(commitment.identifier) > identifier, UnorderedCommitments());
-            identifier = Identifier.unwrap(commitment.identifier);
-
+            uint256 id = identifier(commitment.participant);
+            require(id > last, UnorderedCommitments());
+            last = id;
             (uint8 dv, bytes32 dx) = commitment.d.serialize();
             (uint8 ev, bytes32 ex) = commitment.e.serialize();
             assembly ("memory-safe") {
                 let ptr := add(add(result, 0x20), mul(i, 98))
-                mstore(ptr, identifier)
+                mstore(ptr, id)
                 mstore8(add(ptr, 0x20), dv)
                 mstore(add(ptr, 0x21), dx)
                 mstore8(add(ptr, 0x41), ev)
@@ -257,10 +240,6 @@ library FROST {
             }
         }
     }
-
-    // ============================================================
-    // PRIVATE FUNCTIONS - HASH DOMAINS
-    // ============================================================
 
     /**
      * @notice H1: Hashes input to a field element for calculating binding factors (rho).
@@ -322,16 +301,29 @@ library FROST {
      * @param input The input bytes, which include identifier, public key share, and commitment point.
      * @return result The field element.
      * @dev Uses a domain separation tag "FROST-secp256k1-SHA256-v1dkg" inspired by the Zcash Foundation reference
-     *      implementation (https://github.com/ZcashFoundation/frost/blob/main/frost-secp256k1/src/lib.rs#L221-L224).
-     *      This ensures the challenge is unique to the DKG context. The length of the DST is 28 (0x1c).
+     *      implementation. This ensures the challenge is unique to the DKG context. The length of the DST is 28 (0x1c).
      */
     function _hdkg(bytes memory input) private view returns (uint256 result) {
+        // The FROST(secp256k1, SHA-256) `HDKG` function.
+        // <https://github.com/ZcashFoundation/frost/blob/3ffc19d8f473d5bc4e07ed41bc884bdb42d6c29f/frost-secp256k1/src/lib.rs#L221-L224>
+
         return _hashToField(input, "FROST-secp256k1-SHA256-v1dkg\x00\x00\x00\x1c");
     }
 
-    // ============================================================
-    // PRIVATE FUNCTIONS - HASH TO FIELD
-    // ============================================================
+    /**
+     * @notice HID: Hashes input to a field element for deterministic FROST identifiers.
+     * @param input The encoded participant address.
+     * @return result The field element.
+     * @dev Uses a domain separation tag "FROST-secp256k1-SHA256-v1id" inspired by the Zcash Foundation reference
+     *      implementation. This ensures the identifiers are unique with uniform distribution per participant. The
+     *      length of the DST is 27 (0x1b).
+     */
+    function _hid(bytes memory input) private view returns (uint256 result) {
+        // The FROST(secp256k1, SHA-256) `HID` function.
+        // <https://github.com/ZcashFoundation/frost/blob/3ffc19d8f473d5bc4e07ed41bc884bdb42d6c29f/frost-secp256k1/src/lib.rs#L226-L229>
+
+        return _hashToField(input, "FROST-secp256k1-SHA256-v1id\x00\x00\x00\x00\x1b");
+    }
 
     /**
      * @notice Hashes a message to a field element modulo Secp256k1.N.
@@ -449,19 +441,5 @@ library FROST {
             digest := mload(0x00)
             mstore(input, len)
         }
-    }
-
-    // ============================================================
-    // INTERNAL FUNCTIONS - COMPARISON
-    // ============================================================
-
-    /**
-     * @notice Compares two identifiers for equality.
-     * @param a The first identifier.
-     * @param b The second identifier.
-     * @return True if the identifiers are equal, false otherwise.
-     */
-    function identifierEq(Identifier a, Identifier b) internal pure returns (bool) {
-        return Identifier.unwrap(a) == Identifier.unwrap(b);
     }
 }

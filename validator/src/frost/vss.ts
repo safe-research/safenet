@@ -1,5 +1,6 @@
 import { randomBytes } from "node:crypto";
-import { hdkg, henc, hpok, keyGenChallenge } from "./hashes.js";
+import { concatBytes, numberToBytesBE } from "@noble/curves/utils.js";
+import { hdkg, henc, hpok } from "./hashes.js";
 import { addmod, g, mulmod } from "./math.js";
 import type { EncryptionKey, FrostPoint, ProofOfKnowledge } from "./types.js";
 
@@ -29,6 +30,9 @@ export const createCoefficients = (threshold: number): bigint[] => {
 };
 
 // Round 1.2
+export const keyGenChallenge = (id: bigint, ga0: FrostPoint, r: FrostPoint): bigint => {
+	return hdkg(concatBytes(numberToBytesBE(id, 32), ga0.toBytes(true), r.toBytes(true)));
+};
 const generateProofOfKnowledgeNonce = (): bigint => {
 	return hpok(randomBytes(32));
 };

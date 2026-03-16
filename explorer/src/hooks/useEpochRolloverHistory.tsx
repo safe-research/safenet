@@ -1,19 +1,17 @@
 import { useInfiniteQuery } from "@tanstack/react-query";
 import { useCallback } from "react";
-import { useProvider } from "@/hooks/useProvider";
 import { useSettings } from "@/hooks/useSettings";
-import { loadEpochRolloverHistory } from "@/lib/consensus";
+import { getConsensusWorker } from "@/lib/consensus";
 
 export function useEpochRolloverHistory() {
 	const [settings] = useSettings();
-	const provider = useProvider();
 	const maxBlockRange = BigInt(settings.maxBlockRange);
 
 	const query = useInfiniteQuery({
 		queryKey: ["epochRolloverHistory", settings.consensus, settings.maxBlockRange],
 		queryFn: async ({ pageParam }) => {
-			return loadEpochRolloverHistory({
-				provider,
+			return getConsensusWorker().loadEpochRolloverHistory({
+				rpc: settings.rpc,
 				consensus: settings.consensus,
 				maxBlockRange,
 				cursor: pageParam,

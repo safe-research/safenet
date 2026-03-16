@@ -10,22 +10,22 @@ import { handleComplaintResponded } from "./complaintResponse.js";
 
 // --- Test Data ---
 const MACHINE_CONFIG: MachineConfig = {
-	defaultParticipants: [
+	participantsInfo: [
 		{
-			id: 1n,
 			address: entryPoint06Address,
+			activeFrom: 0n,
 		},
 		{
-			id: 3n,
 			address: entryPoint07Address,
+			activeFrom: 0n,
 		},
 		{
-			id: 2n,
 			address: entryPoint08Address,
+			activeFrom: 0n,
 		},
 		{
-			id: 4n,
 			address: ethAddress,
+			activeFrom: 0n,
 		},
 	],
 	genesisSalt: zeroHash,
@@ -39,8 +39,8 @@ const EVENT: KeyGenComplaintRespondedEvent = {
 	block: 21n,
 	index: 0,
 	gid: "0x06cb03baac74421225341827941e88d9547e5459c4b3715c0000000000000000",
-	plaintiff: 1n,
-	accused: 2n,
+	plaintiff: entryPoint06Address,
+	accused: entryPoint08Address,
 	secretShare: 0x5afe5afe5afen,
 };
 
@@ -127,13 +127,13 @@ describe("complaint responded", () => {
 
 	it("should accept responses when collecting shares", async () => {
 		const protocol = {} as unknown as SafenetProtocol;
-		const participantId = vi.fn();
-		participantId.mockReturnValueOnce(1n);
+		const participant = vi.fn();
+		participant.mockReturnValueOnce(entryPoint06Address);
 		const verifySecretShare = vi.fn();
 		verifySecretShare.mockReturnValueOnce(true);
 		const keyGenClient = {
 			verifySecretShare,
-			participantId,
+			participant,
 		} as unknown as KeyGenClient;
 		const machineStates: MachineStates = {
 			rollover: {
@@ -143,7 +143,7 @@ describe("complaint responded", () => {
 				deadline: 30n,
 				missingSharesFrom: [],
 				complaints: {
-					"2": { total: 1n, unresponded: 1n },
+					[entryPoint08Address]: { total: 1, unresponded: 1 },
 				},
 			},
 			signing: {},
@@ -157,7 +157,7 @@ describe("complaint responded", () => {
 				deadline: 30n,
 				missingSharesFrom: [],
 				complaints: {
-					"2": { unresponded: 0n, total: 1n },
+					[entryPoint08Address]: { unresponded: 0, total: 1 },
 				},
 			},
 			actions: [],
@@ -166,13 +166,13 @@ describe("complaint responded", () => {
 
 	it("should accept complaints when collecting confirmations", async () => {
 		const protocol = {} as unknown as SafenetProtocol;
-		const participantId = vi.fn();
-		participantId.mockReturnValueOnce(1n);
+		const participant = vi.fn();
+		participant.mockReturnValueOnce(entryPoint06Address);
 		const verifySecretShare = vi.fn();
 		verifySecretShare.mockReturnValueOnce(true);
 		const keyGenClient = {
 			verifySecretShare,
-			participantId,
+			participant,
 		} as unknown as KeyGenClient;
 		const machineStates: MachineStates = {
 			rollover: {
@@ -183,7 +183,7 @@ describe("complaint responded", () => {
 				responseDeadline: 30n,
 				deadline: 30n,
 				complaints: {
-					"2": { total: 1n, unresponded: 1n },
+					[entryPoint08Address]: { total: 1, unresponded: 1 },
 				},
 				missingSharesFrom: [],
 				confirmationsFrom: [],
@@ -200,7 +200,7 @@ describe("complaint responded", () => {
 				responseDeadline: 30n,
 				deadline: 30n,
 				complaints: {
-					"2": { unresponded: 0n, total: 1n },
+					[entryPoint08Address]: { unresponded: 0, total: 1 },
 				},
 				missingSharesFrom: [],
 				confirmationsFrom: [],
@@ -215,20 +215,20 @@ describe("complaint responded", () => {
 		const protocol = {
 			consensus,
 		} as unknown as SafenetProtocol;
-		const groupSetup = makeGroupSetup(4n);
+		const groupSetup = makeGroupSetup();
 		const setupGroup = vi.fn();
 		setupGroup.mockReturnValueOnce(groupSetup);
-		const participantId = vi.fn();
-		participantId.mockReturnValueOnce(2n);
+		const participant = vi.fn();
+		participant.mockReturnValueOnce(entryPoint07Address);
 		const verifySecretShare = vi.fn();
 		verifySecretShare.mockReturnValueOnce(false);
 		const participants = vi.fn();
-		participants.mockReturnValueOnce(MACHINE_CONFIG.defaultParticipants);
+		participants.mockReturnValueOnce(MACHINE_CONFIG.participantsInfo.map((p) => p.address));
 		const keyGenClient = {
 			participants,
 			setupGroup,
 			verifySecretShare,
-			participantId,
+			participant,
 		} as unknown as KeyGenClient;
 		const machineStates: MachineStates = {
 			rollover: {
@@ -238,7 +238,7 @@ describe("complaint responded", () => {
 				deadline: 30n,
 				missingSharesFrom: [],
 				complaints: {
-					"2": { unresponded: 1n, total: 1n },
+					[entryPoint08Address]: { unresponded: 1, total: 1 },
 				},
 			},
 			signing: {},
@@ -252,7 +252,7 @@ describe("complaint responded", () => {
 				deadline: 36n,
 			},
 			consensus: {
-				epochGroup: [10n, { groupId: "0x5afe02", participantId: 4n }],
+				epochGroup: [10n, "0x5afe02"],
 			},
 			actions: [
 				{
@@ -261,7 +261,6 @@ describe("complaint responded", () => {
 					count: 3,
 					threshold: 2,
 					context: "0x00000000eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee000000000000000a",
-					participantId: 4n,
 					commitments: groupSetup.commitments,
 					encryptionPublicKey: groupSetup.encryptionPublicKey,
 					pok: groupSetup.pok,
@@ -277,20 +276,20 @@ describe("complaint responded", () => {
 		const protocol = {
 			consensus,
 		} as unknown as SafenetProtocol;
-		const groupSetup = makeGroupSetup(4n);
+		const groupSetup = makeGroupSetup();
 		const setupGroup = vi.fn();
 		setupGroup.mockReturnValueOnce(groupSetup);
-		const participantId = vi.fn();
-		participantId.mockReturnValueOnce(1n);
+		const participant = vi.fn();
+		participant.mockReturnValueOnce(entryPoint06Address);
 		const participants = vi.fn();
-		participants.mockReturnValueOnce(MACHINE_CONFIG.defaultParticipants);
+		participants.mockReturnValueOnce(MACHINE_CONFIG.participantsInfo.map((p) => p.address));
 		const registerPlainKeyGenSecret = vi.fn();
 		registerPlainKeyGenSecret.mockReturnValueOnce("invalid_share");
 		const keyGenClient = {
 			participants,
 			setupGroup,
 			registerPlainKeyGenSecret,
-			participantId,
+			participant,
 		} as unknown as KeyGenClient;
 		const machineStates: MachineStates = {
 			rollover: {
@@ -298,9 +297,9 @@ describe("complaint responded", () => {
 				groupId: "0x06cb03baac74421225341827941e88d9547e5459c4b3715c0000000000000000",
 				nextEpoch: 10n,
 				deadline: 30n,
-				missingSharesFrom: [2n],
+				missingSharesFrom: [entryPoint08Address],
 				complaints: {
-					"2": { unresponded: 1n, total: 1n },
+					[entryPoint08Address]: { unresponded: 1, total: 1 },
 				},
 			},
 			signing: {},
@@ -314,7 +313,7 @@ describe("complaint responded", () => {
 				deadline: 36n,
 			},
 			consensus: {
-				epochGroup: [10n, { groupId: "0x5afe02", participantId: 4n }],
+				epochGroup: [10n, "0x5afe02"],
 			},
 			actions: [
 				{
@@ -323,7 +322,6 @@ describe("complaint responded", () => {
 					count: 3,
 					threshold: 2,
 					context: "0x00000000eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee000000000000000a",
-					participantId: 4n,
 					commitments: groupSetup.commitments,
 					encryptionPublicKey: groupSetup.encryptionPublicKey,
 					pok: groupSetup.pok,
@@ -335,13 +333,13 @@ describe("complaint responded", () => {
 
 	it("should remove missing share once received", async () => {
 		const protocol = {} as unknown as SafenetProtocol;
-		const participantId = vi.fn();
-		participantId.mockReturnValueOnce(1n);
+		const participant = vi.fn();
+		participant.mockReturnValueOnce(entryPoint06Address);
 		const registerPlainKeyGenSecret = vi.fn();
 		registerPlainKeyGenSecret.mockReturnValueOnce("pending_shares");
 		const keyGenClient = {
 			registerPlainKeyGenSecret,
-			participantId,
+			participant,
 		} as unknown as KeyGenClient;
 		const machineStates: MachineStates = {
 			rollover: {
@@ -351,10 +349,10 @@ describe("complaint responded", () => {
 				complaintDeadline: 25n,
 				responseDeadline: 30n,
 				deadline: 30n,
-				missingSharesFrom: [2n],
+				missingSharesFrom: [entryPoint08Address],
 				confirmationsFrom: [],
 				complaints: {
-					"2": { unresponded: 1n, total: 1n },
+					[entryPoint08Address]: { unresponded: 1, total: 1 },
 				},
 			},
 			signing: {},
@@ -371,7 +369,7 @@ describe("complaint responded", () => {
 				missingSharesFrom: [],
 				confirmationsFrom: [],
 				complaints: {
-					"2": { unresponded: 0n, total: 1n },
+					[entryPoint08Address]: { unresponded: 0, total: 1 },
 				},
 			},
 			actions: [],
@@ -380,13 +378,13 @@ describe("complaint responded", () => {
 
 	it("should trigger confirmation if missing share in collecting confirmations", async () => {
 		const protocol = {} as unknown as SafenetProtocol;
-		const participantId = vi.fn();
-		participantId.mockReturnValueOnce(1n);
+		const participant = vi.fn();
+		participant.mockReturnValueOnce(entryPoint06Address);
 		const registerPlainKeyGenSecret = vi.fn();
 		registerPlainKeyGenSecret.mockReturnValueOnce("shares_completed");
 		const keyGenClient = {
 			registerPlainKeyGenSecret,
-			participantId,
+			participant,
 		} as unknown as KeyGenClient;
 		const machineStates: MachineStates = {
 			rollover: {
@@ -396,10 +394,10 @@ describe("complaint responded", () => {
 				complaintDeadline: 25n,
 				responseDeadline: 30n,
 				deadline: 30n,
-				missingSharesFrom: [2n],
+				missingSharesFrom: [entryPoint08Address],
 				confirmationsFrom: [],
 				complaints: {
-					"2": { unresponded: 1n, total: 1n },
+					[entryPoint08Address]: { unresponded: 1, total: 1 },
 				},
 			},
 			signing: {},
@@ -416,7 +414,7 @@ describe("complaint responded", () => {
 				missingSharesFrom: [],
 				confirmationsFrom: [],
 				complaints: {
-					"2": { unresponded: 0n, total: 1n },
+					[entryPoint08Address]: { unresponded: 0, total: 1 },
 				},
 			},
 			actions: [

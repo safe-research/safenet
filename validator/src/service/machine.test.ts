@@ -4,20 +4,20 @@ import { TEST_POINT } from "../__tests__/data/machine.js";
 import type { KeyGenClient } from "../consensus/keyGen/client.js";
 import type { SafenetProtocol } from "../consensus/protocol/types.js";
 import type { SigningClient } from "../consensus/signing/client.js";
-import type { Participant } from "../consensus/storage/types.js";
 import type { VerificationEngine } from "../consensus/verify/engine.js";
 import type { StateStorage } from "../machine/storage/types.js";
 import type { ConsensusState, MachineStates, StateDiff } from "../machine/types.js";
+import type { ParticipantInfo } from "../types/interfaces.js";
 import type { Logger } from "../utils/logging.js";
 import type { Metrics } from "../utils/metrics/index.js";
 import { SafenetStateMachine } from "./machine.js";
 
 // --- Test Data ---
 
-const PARTICIPANTS: Participant[] = [
-	{ id: 1n, address: zeroAddress },
-	{ id: 3n, address: zeroAddress },
-	{ id: 7n, address: zeroAddress },
+const PARTICIPANTS: ParticipantInfo[] = [
+	{ address: zeroAddress, activeFrom: 0n },
+	{ address: zeroAddress, activeFrom: 0n },
+	{ address: zeroAddress, activeFrom: 0n },
 ];
 
 const makeLogger = (): Logger =>
@@ -65,7 +65,6 @@ const makeKeyGenClient = (unregisterGroup: ReturnType<typeof vi.fn>): KeyGenClie
 		setupGroup: vi.fn().mockReturnValue({
 			groupId: "0xnewgroup",
 			participantsRoot: "0xabc",
-			participantId: 3n,
 			commitments: [TEST_POINT],
 			encryptionPublicKey: TEST_POINT,
 			pok: { r: TEST_POINT, mu: 100n },
@@ -111,10 +110,10 @@ describe("SafenetStateMachine FROST group cleanup", () => {
 		// Epochs 1, 3, 5 exist; activating epoch 5 → activeEpoch = 3, epochCutoff = 3
 		// epoch "1" (1 < 3) should be cleaned up; epoch "3" and "5" preserved
 		const epochGroups = {
-			"1": { groupId: "0xgroup1" as const, participantId: 1n },
-			"3": { groupId: "0xgroup3" as const, participantId: 1n },
-			"5": { groupId: "0xgroup5" as const, participantId: 1n },
-		};
+			"1": "0xgroup1",
+			"3": "0xgroup3",
+			"5": "0xgroup5",
+		} as const;
 		const storage = makeStorage(epochGroups, { id: "epoch_staged", nextEpoch: 5n }, 3n);
 		const unregisterGroup = vi.fn();
 		const keyGenClient = makeKeyGenClient(unregisterGroup);
@@ -135,10 +134,10 @@ describe("SafenetStateMachine FROST group cleanup", () => {
 
 	it("should tolerate unregisterGroup failure, log a warning, and increment the metric", async () => {
 		const epochGroups = {
-			"1": { groupId: "0xgroup1" as const, participantId: 1n },
-			"3": { groupId: "0xgroup3" as const, participantId: 1n },
-			"5": { groupId: "0xgroup5" as const, participantId: 1n },
-		};
+			"1": "0xgroup1",
+			"3": "0xgroup3",
+			"5": "0xgroup5",
+		} as const;
 		const storage = makeStorage(epochGroups, { id: "epoch_staged", nextEpoch: 5n }, 3n);
 		const unregisterGroup = vi.fn().mockImplementation(() => {
 			throw new Error("crypto DB unavailable");

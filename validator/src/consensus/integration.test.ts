@@ -12,13 +12,14 @@ import {
 	zeroAddress,
 	zeroHash,
 } from "viem";
-import { type Account, privateKeyToAccount } from "viem/accounts";
+import { type Account, type PrivateKeyAccount, privateKeyToAccount } from "viem/accounts";
 import { anvil } from "viem/chains";
-import { afterEach, beforeAll, describe, expect, it } from "vitest";
+import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { silentLogger, testLogger, testMetrics } from "../__tests__/config.js";
 import { waitForBlock, waitForBlocks } from "../__tests__/utils.js";
+import { hashNonceCommitments, type NonceTree } from "../consensus/signing/nonces.js";
 import { toPoint } from "../frost/math.js";
-import { calcGenesisGroup, calcGroupContext } from "../machine/keygen/group.js";
+import { calcGenesisGroup, calcGroupContext, calcThreshold } from "../machine/keygen/group.js";
 import type { WatcherConfig } from "../machine/transitions/watcher.js";
 import { createValidatorService, type ValidatorService } from "../service/service.js";
 import {
@@ -29,14 +30,41 @@ import {
 	COORDINATOR_SIGN_EVENT,
 } from "../types/abis.js";
 import type { ProtocolConfig } from "../types/interfaces.js";
+import { participantsForEpoch } from "../utils/participants.js";
 import { calcGroupId } from "./keyGen/utils.js";
-import { calculateParticipantsRoot } from "./merkle.js";
+import { calculateMerkleRoot, calculateParticipantsRoot } from "./merkle.js";
 import { verifySignature } from "./signing/verify.js";
-import type { Participant } from "./storage/types.js";
 
-const BLOCK_TIME_MS = 200;
+const BLOCK_TIME_MS = 250;
 const BLOCKS_PER_EPOCH = 20n;
 const TEST_RUNTIME_IN_SECONDS = 60;
+
+vi.mock(import("../consensus/signing/nonces.js"), async (importOriginal) => {
+	const { createNonceTree, ...mod } = await importOriginal();
+	return {
+		...mod,
+		// Creating a nonce tree takes hundreds of milliseconds. Since we are
+		// running multiple parallel validators, this means that we may lock up
+		// the main thread for seconds at a time, and cause very indeterministic
+		// ordering of transaction mining (with transactions being sometimes
+		// received by the node several blocks after the action was created, as
+		// the NodeJS runtime catches up on running promise continuations),
+		// making tests flaky. Mock the nonces tree creation function to create
+		// and reuse a single nonce, in order to speed up the method by an order
+		// of magnitude. Note that this is **FUNDAMENTALLY UNSAFE** and if used
+		// in production will cause the validator to leak its secret signing
+		// share. It is, however, OK in order to speed up integration tests.
+		createNonceTree: (secret: bigint, size = 1024n): NonceTree => {
+			const {
+				commitments: [commitment],
+			} = createNonceTree(secret, 1n);
+			const commitments = [...Array(Number(size))].map(() => commitment);
+			const leaves = commitments.map((commitment, i) => hashNonceCommitments(BigInt(i), commitment));
+			const root = calculateMerkleRoot(leaves);
+			return { commitments, leaves, root };
+		},
+	};
+});
 
 describe("integration", () => {
 	const testClient = createTestClient({
@@ -63,10 +91,12 @@ describe("integration", () => {
 		blocksPerEpoch,
 		timeout,
 		blockTimeMs,
+		rotateOutEpoch,
 	}: {
 		blocksPerEpoch?: bigint;
 		timeout?: bigint;
 		blockTimeMs?: number;
+		rotateOutEpoch?: bigint;
 	}) => {
 		// Check deployment information is available
 		const deploymentInfoFile = path.join(
@@ -122,17 +152,18 @@ describe("integration", () => {
 		testLogger.notice(`Use consensus at ${consensus.address}`);
 
 		// Private keys from anvil testnet
-		const accounts = [
-			privateKeyToAccount("0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d"),
-			privateKeyToAccount("0x5de4111afa1a4b94908f83103eb1f1706367c2e68ca870fc3fb9a804cdab365a"),
-			privateKeyToAccount("0x7c852118294e51e653712a81e05800f419141751be58f605c371e15141b007a6"),
-			privateKeyToAccount("0x47e179ec197488593b187f80a00eb0da91f1b9d0b13f8733639f19c30a34926a"),
+		const accounts: [PrivateKeyAccount, bigint, bigint | undefined][] = [
+			[privateKeyToAccount("0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d"), 0n, undefined],
+			[privateKeyToAccount("0x5de4111afa1a4b94908f83103eb1f1706367c2e68ca870fc3fb9a804cdab365a"), 0n, undefined],
+			[privateKeyToAccount("0x7c852118294e51e653712a81e05800f419141751be58f605c371e15141b007a6"), 0n, undefined],
+			[privateKeyToAccount("0x47e179ec197488593b187f80a00eb0da91f1b9d0b13f8733639f19c30a34926a"), 0n, rotateOutEpoch],
+			[privateKeyToAccount("0x8b3a350cf5c34c9194ca85829a2df0ec3153be0318b5e2d3348e872092edffba"), 2n, undefined],
 		];
-		const participants: Participant[] = accounts.map((a, i) => {
-			return { id: BigInt(i + 1), address: a.address };
+		const participants = accounts.map(([a, activeFrom, activeBefore]) => {
+			return { address: a.address, activeFrom, activeBefore };
 		});
 
-		const clients = accounts.map((a, i) => {
+		const clients = accounts.map(([a, activeFrom], i) => {
 			const logger = i === 0 ? testLogger : silentLogger;
 			const config: ProtocolConfig = {
 				chainId: 31_337,
@@ -158,6 +189,7 @@ describe("integration", () => {
 				config,
 				watcherConfig,
 				metrics: testMetrics,
+				skipGenesis: activeFrom > 0n,
 			});
 			return {
 				account: a,
@@ -168,7 +200,7 @@ describe("integration", () => {
 		currentClients = clients;
 
 		const genesisGroup = calcGenesisGroup({
-			defaultParticipants: participants,
+			participantsInfo: participants,
 			genesisSalt: zeroHash,
 		});
 		expect(
@@ -218,7 +250,7 @@ describe("integration", () => {
 	});
 
 	it("keygen timeout", { timeout: TEST_RUNTIME_IN_SECONDS * 1000 * 5 }, async ({ skip }) => {
-		const setupInfo = await setup({ timeout: 5n, blocksPerEpoch: 40n });
+		const setupInfo = await setup({ timeout: 5n, blocksPerEpoch: 40n, rotateOutEpoch: 2n });
 		if (setupInfo === undefined) {
 			skip();
 			// Don't run the test code
@@ -252,7 +284,7 @@ describe("integration", () => {
 		expect(stagedEpochs.length).toBe(1);
 		// Calculate group id for reduced group
 		const expectedGroup = calcGroupId(
-			calculateParticipantsRoot([participants[0], participants[1], participants[3]]),
+			calculateParticipantsRoot([participants[3].address, participants[1].address, participants[0].address]),
 			3,
 			2,
 			calcGroupContext(consensus.address, stagedEpochs[0].args.proposedEpoch),
@@ -272,7 +304,12 @@ describe("integration", () => {
 		await waitForBlock(testClient, 60n);
 
 		const expectedGroupEpoch2 = calcGroupId(
-			calculateParticipantsRoot([participants[0], participants[1], participants[2], participants[3]]),
+			calculateParticipantsRoot([
+				participants[1].address,
+				participants[0].address,
+				participants[2].address,
+				participants[4].address,
+			]),
 			4,
 			3,
 			calcGroupContext(consensus.address, 2n),
@@ -335,10 +372,11 @@ describe("integration", () => {
 		expect(stagedEpochs[0].args.proposedEpoch).toBe(proposedEpoch);
 		expect(abortedEpoch).not.toBe(proposedEpoch);
 		// Calculate group id with original group
+		const epochParticipants = participantsForEpoch(participants, proposedEpoch);
 		const expectedGroup = calcGroupId(
-			calculateParticipantsRoot(participants),
-			4,
-			3,
+			calculateParticipantsRoot(epochParticipants),
+			epochParticipants.length,
+			calcThreshold(epochParticipants.length),
 			calcGroupContext(consensus.address, proposedEpoch),
 		);
 		const expectedKey = await testClient.readContract({

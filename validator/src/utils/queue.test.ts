@@ -7,28 +7,28 @@ import { InMemoryQueue, SqliteQueue } from "./queue.js";
 describe("inmemory queue", () => {
 	it("should return undefined on empty pop", () => {
 		const queue = new InMemoryQueue<unknown>();
-		expect(queue.pop()).toBeUndefined();
+		expect(queue.dequeue()).toBeUndefined();
 	});
 	it("should return last added item and undefined when empty", () => {
 		const queue = new InMemoryQueue<unknown>();
 		const values = [1, 2, 3, 4, 5, 6];
 		for (const value of values) {
-			queue.push(value);
+			queue.enqueue(value);
 		}
 		for (const value of values) {
-			expect(queue.pop()).toBe(value);
+			expect(queue.dequeue()).toBe(value);
 		}
-		expect(queue.pop()).toBeUndefined();
+		expect(queue.dequeue()).toBeUndefined();
 	});
 	it("should not delete element when peeking", () => {
 		const queue = new InMemoryQueue<unknown>();
 		const values = [1, 2, 3, 4, 5, 6];
 		for (const value of values) {
-			queue.push(value);
+			queue.enqueue(value);
 		}
 		expect(queue.peek()).toBe(1);
 		expect(queue.peek()).toBe(1);
-		expect(queue.pop()).toBe(1);
+		expect(queue.dequeue()).toBe(1);
 		expect(queue.peek()).toBe(2);
 	});
 });
@@ -36,30 +36,30 @@ describe("inmemory queue", () => {
 describe("sqlite queue", () => {
 	const sqliteQueue = () => new SqliteQueue<number>(z.number(), new Sqlite3(":memory:"), "test");
 
-	it("should return undefined on empty pop", () => {
+	it("should return undefined on empty dequeue", () => {
 		const queue = sqliteQueue();
-		expect(queue.pop()).toBeUndefined();
+		expect(queue.dequeue()).toBeUndefined();
 	});
 	it("should return last added item and undefined when empty", () => {
 		const queue = sqliteQueue();
 		const values = [1, 2, 3, 4, 5, 6];
 		for (const value of values) {
-			queue.push(value);
+			queue.enqueue(value);
 		}
 		for (const value of values) {
-			expect(queue.pop()).toBe(value);
+			expect(queue.dequeue()).toBe(value);
 		}
-		expect(queue.pop()).toBeUndefined();
+		expect(queue.dequeue()).toBeUndefined();
 	});
 	it("should not delete element when peeking", () => {
 		const queue = sqliteQueue();
 		const values = [1, 2, 3, 4, 5, 6];
 		for (const value of values) {
-			queue.push(value);
+			queue.enqueue(value);
 		}
 		expect(queue.peek()).toBe(1);
 		expect(queue.peek()).toBe(1);
-		expect(queue.pop()).toBe(1);
+		expect(queue.dequeue()).toBe(1);
 		expect(queue.peek()).toBe(2);
 	});
 });

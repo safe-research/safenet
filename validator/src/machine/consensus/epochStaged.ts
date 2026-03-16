@@ -32,10 +32,9 @@ export const handleEpochStaged = async (
 
 	try {
 		// Check if validator is part of group, method will throw if not
-		signingClient.participantId(groupId);
+		signingClient.participant(groupId);
 	} catch {
-		// If there is no participant id, then this validator is not part of the group
-		// In this case don't generate a nonce tree
+		// This validator is not part of the group, don't generate a nonce tree
 		return diff;
 	}
 

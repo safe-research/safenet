@@ -1,7 +1,6 @@
-import type { Hex } from "viem";
+import type { Address, Hex } from "viem";
 import type { KeyGenClient } from "../../consensus/keyGen/client.js";
 import type { ProtocolAction } from "../../consensus/protocol/types.js";
-import type { Participant } from "../../consensus/storage/types.js";
 import type { Logger } from "../../utils/logging.js";
 import type { MachineConfig, StateDiff } from "../types.js";
 import { calcMinimumParticipants, calcThreshold } from "./group.js";
@@ -11,11 +10,11 @@ export const triggerKeyGen = (
 	keyGenClient: KeyGenClient,
 	epoch: bigint,
 	deadline: bigint,
-	participants: Participant[],
+	participants: Address[],
 	context: Hex,
 	logger?: Logger,
 ): StateDiff => {
-	const requiredParticipants = calcMinimumParticipants(machineConfig);
+	const requiredParticipants = calcMinimumParticipants(machineConfig, epoch);
 	if (participants.length < requiredParticipants) {
 		logger?.info?.(`Skipped epoch ${epoch}!`, { requiredParticipants, participants });
 		return {
@@ -27,8 +26,11 @@ export const triggerKeyGen = (
 	}
 	const count = participants.length;
 	const threshold = calcThreshold(count);
-	const { groupId, participantsRoot, participantId, commitments, encryptionPublicKey, pok, poap } =
-		keyGenClient.setupGroup(participants, threshold, context);
+	const { groupId, participantsRoot, commitments, encryptionPublicKey, pok, poap } = keyGenClient.setupGroup(
+		participants,
+		threshold,
+		context,
+	);
 
 	const actions: ProtocolAction[] = [
 		{
@@ -37,7 +39,6 @@ export const triggerKeyGen = (
 			count,
 			threshold,
 			context,
-			participantId,
 			encryptionPublicKey,
 			commitments,
 			pok,
@@ -48,7 +49,7 @@ export const triggerKeyGen = (
 	logger?.info?.(`Triggered key gen for epoch ${epoch} with ${groupId}`, { participants });
 	return {
 		consensus: {
-			epochGroup: [epoch, { groupId, participantId }],
+			epochGroup: [epoch, groupId],
 		},
 		rollover: {
 			id: "collecting_commitments",

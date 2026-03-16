@@ -30,7 +30,7 @@ const readBytecode = async (contract: string): Promise<Hex> => {
 const main = async (): Promise<void> => {
 	const config = validatorConfigSchema.pick({ PARTICIPANTS: true, GENESIS_SALT: true }).parse(process.env);
 	const genesisGroup = calcGenesisGroup({
-		defaultParticipants: config.PARTICIPANTS,
+		participantsInfo: config.PARTICIPANTS,
 		genesisSalt: config.GENESIS_SALT,
 	});
 	const coordinator = getContractAddress({

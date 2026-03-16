@@ -2,7 +2,7 @@ import type { Database } from "better-sqlite3";
 import type { Hex } from "viem";
 import { z } from "zod";
 import { toPoint } from "../../frost/math.js";
-import type { GroupId, ParticipantId, SignatureId } from "../../frost/types.js";
+import type { GroupId, SignatureId } from "../../frost/types.js";
 import { checkedAddressSchema, hexBytes32Schema, hexDataSchema } from "../../types/schemas.js";
 import { jsonReplacer } from "../../utils/json.js";
 import { SqliteQueue } from "../../utils/queue.js";
@@ -11,7 +11,6 @@ import type { ActionWithTimeout } from "./types.js";
 
 const groupIdSchema = hexBytes32Schema.transform((v) => v as GroupId);
 const coercedBigIntSchema = z.coerce.bigint().nonnegative();
-const participantIdSchema = coercedBigIntSchema.transform((v) => v as ParticipantId);
 const signatureIdSchema = hexBytes32Schema.transform((v) => v as SignatureId);
 
 // Complex objects from imports
@@ -81,7 +80,6 @@ export const startKeyGenSchema = z.object({
 	count: z.int(),
 	threshold: z.int(),
 	context: hexBytes32Schema,
-	participantId: participantIdSchema,
 	encryptionPublicKey: frostPointSchema,
 	commitments: z.array(frostPointSchema),
 	pok: proofOfKnowledgeSchema,
@@ -98,13 +96,13 @@ export const publishSecretSharesSchema = z.object({
 export const keyGenComplainSchema = z.object({
 	id: z.literal("key_gen_complain"),
 	groupId: groupIdSchema,
-	accused: participantIdSchema,
+	accused: checkedAddressSchema,
 });
 
 export const keyGenComplaintResponseSchema = z.object({
 	id: z.literal("key_gen_complaint_response"),
 	groupId: groupIdSchema,
-	plaintiff: participantIdSchema,
+	plaintiff: checkedAddressSchema,
 	secretShare: coercedBigIntSchema,
 });
 

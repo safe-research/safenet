@@ -2,6 +2,7 @@ import { type Address, encodePacked, type Hex, keccak256, zeroHash } from "viem"
 import { calcGroupId } from "../../consensus/keyGen/utils.js";
 import { calculateParticipantsRoot } from "../../consensus/merkle.js";
 import type { GroupId } from "../../frost/types.js";
+import { participantsForEpoch } from "../../utils/participants.js";
 import type { MachineConfig } from "../types.js";
 
 /**
@@ -34,10 +35,11 @@ import type { MachineConfig } from "../types.js";
  * Therefore the minimum participant set must be more than 2 / 3 aka 66% of the default participant count
  */
 
-export const calcMinimumParticipants = ({
-	defaultParticipants,
-}: Pick<MachineConfig, "defaultParticipants">): number => {
-	const count = defaultParticipants.length;
+export const calcMinimumParticipants = (
+	{ participantsInfo }: Pick<MachineConfig, "participantsInfo">,
+	epoch: bigint,
+): number => {
+	const count = participantsForEpoch(participantsInfo, epoch).length;
 	// The defined minimum participantion group size is 2/3 or 66.66...%
 	return Math.max(2, Math.floor((count * 2) / 3) + 1);
 };
@@ -60,12 +62,13 @@ export type GenesisGroup = {
 };
 
 export const calcGenesisGroup = ({
-	defaultParticipants,
+	participantsInfo,
 	genesisSalt,
-}: Pick<MachineConfig, "defaultParticipants" | "genesisSalt">): GenesisGroup => {
-	const participantsRoot = calculateParticipantsRoot(defaultParticipants);
-	const count = defaultParticipants.length;
-	const threshold = calcThreshold(defaultParticipants.length);
+}: Pick<MachineConfig, "participantsInfo" | "genesisSalt">): GenesisGroup => {
+	const participants = participantsForEpoch(participantsInfo, 0n);
+	const participantsRoot = calculateParticipantsRoot(participants);
+	const count = participants.length;
+	const threshold = calcThreshold(participants.length);
 	// For genesis, we don't know the consensus contract address since it
 	// depends on the genesis group ID (🐓 and 🥚 problem). Instead, compute a
 	// different context based on the user-provided genesis salt (allowing the

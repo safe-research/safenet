@@ -51,7 +51,7 @@ const CONSENSUS_STATE: ConsensusState = {
 };
 
 const MACHINE_CONFIG: MachineConfig = {
-	defaultParticipants: [],
+	participantsInfo: [],
 	genesisSalt: zeroHash,
 	keyGenTimeout: 0n,
 	signingTimeout: 20n,
@@ -63,7 +63,7 @@ const EVENT: NonceCommitmentsEvent = {
 	block: 2n,
 	index: 0,
 	sid: "0x000000000000000000000000000000000000000000000000000000005af35af3",
-	identifier: 1n,
+	participant: "0x0000000000000000000000000000000000005aFE",
 	nonces: {
 		d: toPoint({
 			x: 8157951670743782207572742157759285246997125817591478561509454646417563755134n,
@@ -116,7 +116,7 @@ describe("nonces revealed", () => {
 
 		expect(handleNonceCommitments).toBeCalledWith(
 			"0x000000000000000000000000000000000000000000000000000000005af35af3",
-			1n,
+			"0x0000000000000000000000000000000000005aFE",
 			{
 				hidingNonceCommitment: EVENT.nonces.d,
 				bindingNonceCommitment: EVENT.nonces.e,
@@ -131,7 +131,7 @@ describe("nonces revealed", () => {
 			"0x5afe5afe",
 			{
 				...SIGNING_STATE,
-				lastSigner: 1n,
+				lastSigner: "0x0000000000000000000000000000000000005aFE",
 			},
 		]);
 	});
@@ -157,7 +157,7 @@ describe("nonces revealed", () => {
 
 		expect(handleNonceCommitments).toBeCalledWith(
 			"0x000000000000000000000000000000000000000000000000000000005af35af3",
-			1n,
+			"0x0000000000000000000000000000000000005aFE",
 			{
 				hidingNonceCommitment: EVENT.nonces.d,
 				bindingNonceCommitment: EVENT.nonces.e,
@@ -177,7 +177,7 @@ describe("nonces revealed", () => {
 				id: "collect_signing_shares",
 				sharesFrom: [],
 				deadline: 22n,
-				lastSigner: 1n,
+				lastSigner: "0x0000000000000000000000000000000000005aFE",
 			},
 		]);
 		const callbackContext =
@@ -254,7 +254,7 @@ describe("nonces revealed", () => {
 
 		expect(handleNonceCommitments).toBeCalledWith(
 			"0x000000000000000000000000000000000000000000000000000000005af35af3",
-			1n,
+			"0x0000000000000000000000000000000000005aFE",
 			{
 				hidingNonceCommitment: EVENT.nonces.d,
 				bindingNonceCommitment: EVENT.nonces.e,
@@ -274,7 +274,7 @@ describe("nonces revealed", () => {
 				id: "collect_signing_shares",
 				sharesFrom: [],
 				deadline: 22n,
-				lastSigner: 1n,
+				lastSigner: "0x0000000000000000000000000000000000005aFE",
 			},
 		]);
 		const callbackContext =
@@ -320,7 +320,7 @@ describe("nonces revealed", () => {
 
 		expect(handleNonceCommitments).toBeCalledWith(
 			"0x000000000000000000000000000000000000000000000000000000005af35af3",
-			1n,
+			"0x0000000000000000000000000000000000005aFE",
 			{
 				hidingNonceCommitment: EVENT.nonces.d,
 				bindingNonceCommitment: EVENT.nonces.e,
@@ -340,7 +340,7 @@ describe("nonces revealed", () => {
 				id: "collect_signing_shares",
 				sharesFrom: [],
 				deadline: 22n,
-				lastSigner: 1n,
+				lastSigner: "0x0000000000000000000000000000000000005aFE",
 			},
 		]);
 		expect(diff.actions).toStrictEqual([
