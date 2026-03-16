@@ -410,7 +410,7 @@ describe("SigningClient", () => {
 	});
 
 	describe("createSignatureShare", () => {
-		function setupFullCeremony() {
+		const setupFullCeremony = () => {
 			const allClients = TEST_SIGNERS.map((_, i) => createTestClientWithNonces(i));
 			const signers = TEST_GROUP.participants.map((p) => p.id);
 
@@ -438,7 +438,7 @@ describe("SigningClient", () => {
 			}
 
 			return allClients;
-		}
+		};
 
 		it("returns a valid signature share with required fields", () => {
 			const allClients = setupFullCeremony();
@@ -493,9 +493,8 @@ describe("SigningClient", () => {
 			});
 
 			// All participants should compute the same group commitment
-			for (let i = 1; i < groupCommitments.length; i++) {
-				expect(groupCommitments[i].x).toBe(groupCommitments[0].x);
-				expect(groupCommitments[i].y).toBe(groupCommitments[0].y);
+			for (const commitment of groupCommitments.slice(1)) {
+				expect({ x: commitment.x, y: commitment.y }).toEqual({ x: groupCommitments[0].x, y: groupCommitments[0].y });
 			}
 		});
 
@@ -637,7 +636,7 @@ describe("SigningClient", () => {
 
 	describe("signing with different messages", () => {
 		it("produces different signatures for different messages", () => {
-			function signMessage(message: Hex) {
+			const signMessage = (message: Hex) => {
 				const allClients = TEST_SIGNERS.map((_, i) => createTestClientWithNonces(i));
 				const signers = TEST_GROUP.participants.map((p) => p.id);
 				const sigId = keccak256(stringToBytes(`sig-${message}`));
@@ -666,7 +665,7 @@ describe("SigningClient", () => {
 				}
 				if (r == null) throw new Error("r is null");
 				return { r, z };
-			}
+			};
 
 			const msg1 = keccak256(stringToBytes("message A"));
 			const msg2 = keccak256(stringToBytes("message B"));
