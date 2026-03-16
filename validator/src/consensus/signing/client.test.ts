@@ -1,4 +1,12 @@
-import { type Address, encodeAbiParameters, type Hex, keccak256, parseAbiParameters, stringToBytes, zeroHash } from "viem";
+import {
+	type Address,
+	encodeAbiParameters,
+	type Hex,
+	keccak256,
+	parseAbiParameters,
+	stringToBytes,
+	zeroHash,
+} from "viem";
 import { describe, expect, it } from "vitest";
 import { log } from "../../__tests__/config.js";
 import { createClientStorage } from "../../__tests__/utils.js";
@@ -178,13 +186,7 @@ describe("SigningClient", () => {
 			for (const { client, storage } of clients) {
 				const participant = storage.participant(groupId);
 				log(`>>>> Signing request to ${participant} >>>>`);
-				const commitments = client.createNonceCommitments(
-					groupId,
-					signatureId,
-					message,
-					0n,
-					TEST_GROUP.participants,
-				);
+				const commitments = client.createNonceCommitments(groupId, signatureId, message, 0n, TEST_GROUP.participants);
 				nonceRevealEvent.push({
 					signatureId,
 					signer: participant,
