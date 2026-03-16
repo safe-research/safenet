@@ -36,7 +36,7 @@ describe("inmemory queue", () => {
 describe("sqlite queue", () => {
 	const sqliteQueue = () => new SqliteQueue<number>(z.number(), new Sqlite3(":memory:"), "test");
 
-	it("should return undefined on empty pop", () => {
+	it("should return undefined on empty dequeue", () => {
 		const queue = sqliteQueue();
 		expect(queue.dequeue()).toBeUndefined();
 	});
