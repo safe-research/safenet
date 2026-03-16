@@ -4,7 +4,6 @@ import { zeroAddress } from "viem";
 import z from "zod";
 import { ConditionalBackButton } from "@/components/BackButton";
 import { Container, ContainerTitle } from "@/components/Groups";
-import { Skeleton } from "@/components/Skeleton";
 import { TransactionListControls } from "@/components/transaction/TransactionListControls";
 import { TransactionProposalsList } from "@/components/transaction/TransactionProposalsList";
 import { useSafeTransactionProposals } from "@/hooks/useSafeTransactionProposals";
@@ -34,28 +33,22 @@ export function SafePage() {
 		<Container className="space-y-4">
 			<ConditionalBackButton />
 			<ContainerTitle>Proposals for {shortAddress(safeAddress)}</ContainerTitle>
-			{isFirstLoad && <Skeleton className="w-full h-25" />}
-			{!isFirstLoad && proposals.length === 0 && (
-				<p className="text-center text-sub-title py-8">No proposals found for this Safe address.</p>
-			)}
-			{proposals.length > 0 && (
-				<>
-					<TransactionListControls
-						isFetching={isFetching}
-						dataUpdatedAt={dataUpdatedAt}
-						autoRefresh={autoRefresh}
-						onRefetch={refetch}
-						onToggleAutoRefresh={() => setAutoRefresh((prev) => !prev)}
-					/>
-					<TransactionProposalsList
-						proposals={proposals}
-						hasMore={hasNextPage}
-						onShowMore={fetchNextPage}
-						isLoadingMore={isFetchingNextPage}
-						showMoreLabel="Load More"
-					/>
-				</>
-			)}
+			<TransactionListControls
+				isFetching={isFetching}
+				dataUpdatedAt={dataUpdatedAt}
+				autoRefresh={autoRefresh}
+				onRefetch={refetch}
+				onToggleAutoRefresh={() => setAutoRefresh((prev) => !prev)}
+			/>
+			<TransactionProposalsList
+				proposals={proposals}
+				hasMore={hasNextPage}
+				onShowMore={fetchNextPage}
+				isLoading={isFirstLoad}
+				isLoadingMore={isFetchingNextPage}
+				showMoreLabel="Load More"
+				emptyLabel="No proposals found for this Safe address."
+			/>
 		</Container>
 	);
 }

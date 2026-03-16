@@ -43,19 +43,27 @@ vi.mock("@/components/transaction/TransactionProposalsList", () => ({
 		proposals,
 		hasMore,
 		onShowMore,
+		isLoading,
 		isLoadingMore,
 		showMoreLabel,
+		emptyLabel,
 	}: {
 		proposals: TransactionProposal[];
 		hasMore: boolean;
 		onShowMore: () => void;
+		isLoading?: boolean;
 		isLoadingMore?: boolean;
 		showMoreLabel?: string;
+		emptyLabel?: string;
 	}) => (
 		<div data-testid="proposals-list">
-			{proposals.map((p) => (
-				<div key={p.safeTxHash}>{p.safeTxHash}</div>
-			))}
+			{isLoading ? (
+				<div data-testid="proposals-loading" />
+			) : proposals.length === 0 ? (
+				<div>{emptyLabel ?? "No transactions found"}</div>
+			) : (
+				proposals.map((p) => <div key={p.safeTxHash}>{p.safeTxHash}</div>)
+			)}
 			{hasMore && (
 				<button type="button" onClick={onShowMore} disabled={isLoadingMore}>
 					{isLoadingMore ? "Loading" : (showMoreLabel ?? "Load More")}
@@ -95,7 +103,7 @@ const makeProposal = (safeTxHash: string): TransactionProposal => ({
 });
 
 describe("SafePage", () => {
-	it("shows skeleton while first page is loading", async () => {
+	it("shows loading indicator while first page is loading", async () => {
 		mockUseSafeTransactionProposals.mockReturnValue({
 			data: undefined,
 			isFetching: true,
@@ -109,8 +117,7 @@ describe("SafePage", () => {
 		const { SafePage } = await import("./safe");
 		render(<SafePage />);
 
-		expect(document.querySelector(".animate-pulse")).toBeTruthy();
-		expect(screen.queryByTestId("proposals-list")).toBeNull();
+		expect(screen.getByTestId("proposals-loading")).toBeTruthy();
 	});
 
 	it("renders proposals list when data is available", async () => {
@@ -147,8 +154,7 @@ describe("SafePage", () => {
 		const { SafePage } = await import("./safe");
 		render(<SafePage />);
 
-		expect(screen.getByText(/no proposals found/i)).toBeTruthy();
-		expect(screen.queryByTestId("proposals-list")).toBeNull();
+		expect(screen.getByText(/no proposals found for this safe address/i)).toBeTruthy();
 	});
 
 	it("Load More button calls fetchNextPage", async () => {

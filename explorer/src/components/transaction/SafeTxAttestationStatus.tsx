@@ -26,7 +26,7 @@ export function SafeTxAttestationStatus({ proposal }: { proposal: TransactionPro
 							<p>
 								<ValidatorList
 									all={allValidatorIds}
-									active={status.data.committed.map((s) => s.identifier)}
+									active={status.data.committed.map((s) => s.address)}
 									mapInfo={mapInfo}
 									completed={status.data.completed}
 								/>
@@ -38,7 +38,7 @@ export function SafeTxAttestationStatus({ proposal }: { proposal: TransactionPro
 						<p>
 							<ValidatorList
 								all={allValidatorIds}
-								active={status.data.signed.map((s) => s.identifier)}
+								active={status.data.signed.map((s) => s.address)}
 								mapInfo={mapInfo}
 								completed={status.data.completed}
 							/>

@@ -34,7 +34,7 @@ export const loadCoordinator = (provider: PublicClient, consensus: Address): Pro
 };
 
 export type AttestationParticipation = {
-	identifier: bigint;
+	address: Address;
 	block: bigint;
 };
 
@@ -125,7 +125,7 @@ export const loadLatestAttestationStatus = async ({
 			switch (log.eventName) {
 				case "SignRevealedNonces": {
 					status.committed.push({
-						identifier: log.args.identifier,
+						address: log.args.participant,
 						block: log.blockNumber,
 					});
 					break;
@@ -133,7 +133,7 @@ export const loadLatestAttestationStatus = async ({
 				case "SignShared": {
 					const shares = status.signedBySelection[log.args.selectionRoot] ?? [];
 					shares.push({
-						identifier: log.args.identifier,
+						address: log.args.participant,
 						block: log.blockNumber,
 					});
 					status.signedBySelection[log.args.selectionRoot] = shares;

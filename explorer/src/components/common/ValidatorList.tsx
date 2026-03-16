@@ -1,8 +1,10 @@
+import type { Address } from "viem";
+import { shortAddress } from "@/lib/address";
 import type { ValidatorInfo } from "@/lib/validators/info";
 
 export const createMapInfo =
-	(validatorInfoMap: Map<bigint, ValidatorInfo> | null | undefined) => (suffix: string) => (identifier: bigint) =>
-		`${validatorInfoMap?.get(identifier)?.label ?? `Validator ${identifier}`} ${suffix}`;
+	(validatorInfoMap: Map<Address, ValidatorInfo> | null | undefined) => (suffix: string) => (address: Address) =>
+		`${validatorInfoMap?.get(address)?.label ?? shortAddress(address)} ${suffix}`;
 
 export function ValidatorList({
 	all,
@@ -10,9 +12,9 @@ export function ValidatorList({
 	mapInfo,
 	completed,
 }: {
-	all: bigint[];
-	active: bigint[];
-	mapInfo: (suffix: string) => (identifier: bigint) => string;
+	all: Address[];
+	active: Address[];
+	mapInfo: (suffix: string) => (address: Address) => string;
 	completed: boolean;
 }) {
 	const activeSet = new Set(active);

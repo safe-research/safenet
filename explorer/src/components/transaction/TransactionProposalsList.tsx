@@ -5,8 +5,6 @@ import {
 } from "@/components/transaction/TransactionListRow";
 import type { TransactionProposal } from "@/lib/consensus";
 
-const SKELETON_ROWS = ["skeleton-0", "skeleton-1", "skeleton-2"];
-
 function TransactionListHeader() {
 	return (
 		<TransactionRowGrid className="px-3 py-1.5 text-2xs font-medium text-sub-title uppercase tracking-wide">
@@ -27,6 +25,7 @@ export function TransactionProposalsList({
 	isLoading,
 	isLoadingMore,
 	showMoreLabel = "Show More",
+	emptyLabel = "No transactions found",
 }: {
 	proposals: TransactionProposal[];
 	label?: string;
@@ -35,6 +34,7 @@ export function TransactionProposalsList({
 	isLoading?: boolean;
 	isLoadingMore?: boolean;
 	showMoreLabel?: string;
+	emptyLabel?: string;
 }) {
 	return (
 		<>
@@ -43,13 +43,17 @@ export function TransactionProposalsList({
 				<TransactionListHeader />
 			</div>
 			<div className="space-y-2">
-				{isLoading
-					? SKELETON_ROWS.map((key) => <TransactionListRowSkeleton key={key} />)
-					: proposals.map((proposal) => (
-							<div key={`${proposal.safeTxHash}:${proposal.epoch}`}>
-								<TransactionListRow proposal={proposal} />
-							</div>
-						))}
+				{isLoading ? (
+					<TransactionListRowSkeleton />
+				) : proposals.length === 0 ? (
+					<div className="w-full p-8 text-center text-sub-title">{emptyLabel}</div>
+				) : (
+					proposals.map((proposal) => (
+						<div key={`${proposal.safeTxHash}:${proposal.epoch}`}>
+							<TransactionListRow proposal={proposal} />
+						</div>
+					))
+				)}
 				{!isLoading && hasMore && (
 					<button
 						type="button"
