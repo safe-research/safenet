@@ -4,11 +4,11 @@ import type { DefinedUseQueryResult } from "@tanstack/react-query";
 import { cleanup, render, screen } from "@testing-library/react";
 import type { Address, Hex } from "viem";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { SafeTransaction, TransactionProposal } from "@/lib/consensus";
+import type { SafeTransaction, TransactionProposalWithStatus } from "@/lib/consensus";
 import { SafeTxProposals } from "./SafeTxProposals";
 
-const mockQueryResult = (data: TransactionProposal[], isFetching = false) =>
-	({ isFetching, data }) as unknown as DefinedUseQueryResult<TransactionProposal[], Error>;
+const mockQueryResult = (data: TransactionProposalWithStatus[], isFetching = false) =>
+	({ isFetching, data }) as unknown as DefinedUseQueryResult<TransactionProposalWithStatus[], Error>;
 
 vi.mock("@/hooks/useProposalsForTransaction", () => ({
 	useProposalsForTransaction: vi.fn(() => mockQueryResult([])),
@@ -48,104 +48,56 @@ const makeTransaction = (chainId = 8453n): SafeTransaction => ({
 	nonce: 0n,
 });
 
-const makeProposal = (overrides?: Partial<TransactionProposal>): TransactionProposal => ({
+const makeProposal = (overrides?: Partial<TransactionProposalWithStatus>): TransactionProposalWithStatus => ({
 	chainId: 8453n,
 	safeTxHash: SAFE_TX_HASH,
 	epoch: 1n,
 	transaction: makeTransaction(),
 	proposedAt: { block: 100n, tx: "0xabc" as Hex },
 	attestedAt: null,
+	status: "PROPOSED",
 	...overrides,
 });
 
 describe("SafeTxProposals", () => {
 	it("labels an attested proposal as ATTESTED", () => {
 		vi.mocked(useProposalsForTransaction).mockReturnValue(
-			mockQueryResult([makeProposal({ attestedAt: { block: 110n, tx: "0xdef" as Hex } })]),
+			mockQueryResult([makeProposal({ status: "ATTESTED", attestedAt: { block: 110n, tx: "0xdef" as Hex } })]),
 		);
-		render(
-			<SafeTxProposals
-				safeTxHash={SAFE_TX_HASH}
-				transaction={makeTransaction()}
-				currentBlock={200n}
-				signingTimeout={12}
-			/>,
-		);
+		render(<SafeTxProposals safeTxHash={SAFE_TX_HASH} transaction={makeTransaction()} />);
 		expect(screen.getByText("ATTESTED")).toBeTruthy();
 	});
 
-	it("labels a proposal as TIMED OUT when currentBlock - proposedAt.block > signingTimeout", () => {
-		vi.mocked(useProposalsForTransaction).mockReturnValue(
-			mockQueryResult([makeProposal({ proposedAt: { block: 100n, tx: "0xabc" as Hex }, attestedAt: null })]),
-		);
-		render(
-			<SafeTxProposals
-				safeTxHash={SAFE_TX_HASH}
-				transaction={makeTransaction()}
-				currentBlock={113n}
-				signingTimeout={12}
-			/>,
-		);
+	it("labels a timed-out proposal as TIMED OUT", () => {
+		vi.mocked(useProposalsForTransaction).mockReturnValue(mockQueryResult([makeProposal({ status: "TIMED_OUT" })]));
+		render(<SafeTxProposals safeTxHash={SAFE_TX_HASH} transaction={makeTransaction()} />);
 		expect(screen.getByText("TIMED OUT")).toBeTruthy();
 	});
 
-	it("labels a proposal as PROPOSED when within signingTimeout blocks and no attestedAt", () => {
-		vi.mocked(useProposalsForTransaction).mockReturnValue(
-			mockQueryResult([makeProposal({ proposedAt: { block: 100n, tx: "0xabc" as Hex }, attestedAt: null })]),
-		);
-		render(
-			<SafeTxProposals
-				safeTxHash={SAFE_TX_HASH}
-				transaction={makeTransaction()}
-				currentBlock={112n}
-				signingTimeout={12}
-			/>,
-		);
+	it("labels an in-progress proposal as PROPOSED", () => {
+		vi.mocked(useProposalsForTransaction).mockReturnValue(mockQueryResult([makeProposal({ status: "PROPOSED" })]));
+		render(<SafeTxProposals safeTxHash={SAFE_TX_HASH} transaction={makeTransaction()} />);
 		expect(screen.getByText("PROPOSED")).toBeTruthy();
 	});
 
 	it("numbers proposals starting at Proposal #1", () => {
 		vi.mocked(useProposalsForTransaction).mockReturnValue(
-			mockQueryResult([
-				makeProposal({ epoch: 1n }),
-				makeProposal({ epoch: 2n, attestedAt: { block: 110n, tx: "0xdef" as Hex } }),
-			]),
+			mockQueryResult([makeProposal({ epoch: 1n }), makeProposal({ epoch: 2n, status: "ATTESTED" })]),
 		);
-		render(
-			<SafeTxProposals
-				safeTxHash={SAFE_TX_HASH}
-				transaction={makeTransaction()}
-				currentBlock={200n}
-				signingTimeout={12}
-			/>,
-		);
+		render(<SafeTxProposals safeTxHash={SAFE_TX_HASH} transaction={makeTransaction()} />);
 		expect(screen.getByText("Proposal #1")).toBeTruthy();
 		expect(screen.getByText("Proposal #2")).toBeTruthy();
 	});
 
 	it("shows no-proposals message with chain name for a known chain", () => {
 		vi.mocked(useProposalsForTransaction).mockReturnValue(mockQueryResult([]));
-		render(
-			<SafeTxProposals
-				safeTxHash={SAFE_TX_HASH}
-				transaction={makeTransaction(8453n)}
-				currentBlock={200n}
-				signingTimeout={12}
-			/>,
-		);
+		render(<SafeTxProposals safeTxHash={SAFE_TX_HASH} transaction={makeTransaction(8453n)} />);
 		expect(screen.getByText(/No proposals found for this SafeTxHash on Base/)).toBeTruthy();
 	});
 
 	it("shows no-proposals message with raw chainId for an unknown chain", () => {
 		vi.mocked(useProposalsForTransaction).mockReturnValue(mockQueryResult([]));
-		render(
-			<SafeTxProposals
-				safeTxHash={SAFE_TX_HASH}
-				transaction={makeTransaction(99999n)}
-				currentBlock={200n}
-				signingTimeout={12}
-			/>,
-		);
+		render(<SafeTxProposals safeTxHash={SAFE_TX_HASH} transaction={makeTransaction(99999n)} />);
 		expect(screen.getByText(/No proposals found for this SafeTxHash on chain 99999/)).toBeTruthy();
 	});
 });

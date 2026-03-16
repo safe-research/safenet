@@ -44,6 +44,20 @@ export type TransactionProposal = {
 	attestedAt: ExecutionLink | null;
 };
 
+export type ProposalStatus = "ATTESTED" | "PROPOSED" | "TIMED_OUT";
+
+export type TransactionProposalWithStatus = TransactionProposal & { status: ProposalStatus };
+
+export function getProposalStatus(
+	proposal: TransactionProposal,
+	currentBlock: bigint,
+	signingTimeout: number,
+): ProposalStatus {
+	if (proposal.attestedAt !== null) return "ATTESTED";
+	if (currentBlock - proposal.proposedAt.block > BigInt(signingTimeout)) return "TIMED_OUT";
+	return "PROPOSED";
+}
+
 export type LoadTransactionProposalsResult = {
 	proposals: TransactionProposal[];
 	fromBlock: bigint;

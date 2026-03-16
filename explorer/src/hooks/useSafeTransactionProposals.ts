@@ -1,7 +1,13 @@
 import { type InfiniteData, useInfiniteQuery } from "@tanstack/react-query";
 import type { Address } from "viem";
+import { useConsensusState } from "@/hooks/useConsensusState";
 import { useSettings } from "@/hooks/useSettings";
-import { getConsensusWorker, type LoadTransactionProposalsResult, type TransactionProposal } from "@/lib/consensus";
+import {
+	getConsensusWorker,
+	getProposalStatus,
+	type LoadTransactionProposalsResult,
+	type TransactionProposalWithStatus,
+} from "@/lib/consensus";
 
 export function useSafeTransactionProposals({
 	safeAddress,
@@ -13,11 +19,13 @@ export function useSafeTransactionProposals({
 	autoRefresh?: boolean;
 }) {
 	const [settings] = useSettings();
+	const consensusState = useConsensusState();
+	const currentBlock = consensusState.data.currentBlock;
 
 	return useInfiniteQuery<
 		LoadTransactionProposalsResult,
 		Error,
-		InfiniteData<TransactionProposal[]>,
+		InfiniteData<TransactionProposalWithStatus[]>,
 		unknown[],
 		bigint | undefined
 	>({
@@ -37,8 +45,13 @@ export function useSafeTransactionProposals({
 		initialPageParam: undefined,
 		// The next window ends one block before where the previous one started.
 		getNextPageParam: (lastPage) => (lastPage.fromBlock > 0n ? lastPage.fromBlock - 1n : undefined),
-		select: (data): InfiniteData<TransactionProposal[]> => ({
-			pages: data.pages.map((p) => p.proposals),
+		select: (data): InfiniteData<TransactionProposalWithStatus[]> => ({
+			pages: data.pages.map((p) =>
+				p.proposals.map((proposal) => ({
+					...proposal,
+					status: getProposalStatus(proposal, currentBlock, settings.signingTimeout),
+				})),
+			),
 			pageParams: data.pageParams,
 		}),
 	});

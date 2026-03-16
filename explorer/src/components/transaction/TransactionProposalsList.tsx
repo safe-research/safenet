@@ -3,7 +3,7 @@ import {
 	TransactionListRowSkeleton,
 	TransactionRowGrid,
 } from "@/components/transaction/TransactionListRow";
-import type { TransactionProposal } from "@/lib/consensus";
+import type { TransactionProposalWithStatus } from "@/lib/consensus";
 
 function TransactionListHeader() {
 	return (
@@ -27,7 +27,7 @@ export function TransactionProposalsList({
 	showMoreLabel = "Show More",
 	emptyLabel = "No transactions found",
 }: {
-	proposals: TransactionProposal[];
+	proposals: TransactionProposalWithStatus[];
 	label?: string;
 	hasMore: boolean;
 	onShowMore: () => void;

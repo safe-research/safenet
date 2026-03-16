@@ -6,9 +6,7 @@ import { Skeleton } from "@/components/Skeleton";
 import { SafeTxHeader } from "@/components/transaction/SafeTxHeader";
 import { SafeTxProposals } from "@/components/transaction/SafeTxProposals";
 import { SafeTxSummary } from "@/components/transaction/SafeTxSummary";
-import { useConsensusState } from "@/hooks/useConsensusState";
 import { useSafeTransactionDetails } from "@/hooks/useSafeTransactionDetails";
-import { useSettings } from "@/hooks/useSettings";
 import { bigIntSchema, bytes32Schema } from "@/lib/schemas";
 
 const validateSearch = z.object({
@@ -24,8 +22,6 @@ export const Route = createFileRoute("/safeTx")({
 export function SafeTransaction() {
 	const { chainId, safeTxHash } = Route.useSearch();
 	const details = useSafeTransactionDetails(chainId, safeTxHash);
-	const consensusState = useConsensusState();
-	const [settings] = useSettings();
 	return (
 		<Container className="space-y-4">
 			<ConditionalBackButton />
@@ -41,12 +37,7 @@ export function SafeTransaction() {
 						<SafeTxSummary transaction={details.data} />
 					</Box>
 					<Box>
-						<SafeTxProposals
-							safeTxHash={safeTxHash}
-							transaction={details.data}
-							currentBlock={consensusState.data.currentBlock}
-							signingTimeout={settings.signingTimeout}
-						/>
+						<SafeTxProposals safeTxHash={safeTxHash} transaction={details.data} />
 					</Box>
 				</>
 			)}

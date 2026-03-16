@@ -1,6 +1,6 @@
 import { TransactionListControls } from "@/components/transaction/TransactionListControls";
 import { TransactionProposalsList } from "@/components/transaction/TransactionProposalsList";
-import type { TransactionProposal } from "@/lib/consensus";
+import type { TransactionProposalWithStatus } from "@/lib/consensus";
 
 export function RecentTransactionProposals({
 	proposals,
@@ -13,7 +13,7 @@ export function RecentTransactionProposals({
 	onToggleAutoRefresh,
 	isLoading,
 }: {
-	proposals: TransactionProposal[];
+	proposals: TransactionProposalWithStatus[];
 	itemsToShow: number;
 	onShowMore: () => void;
 	isFetching: boolean;
