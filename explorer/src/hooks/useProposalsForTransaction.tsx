@@ -11,7 +11,13 @@ export function useProposalsForTransaction(proposalTxHash: Hex) {
 	const [settings] = useSettings();
 
 	return useQuery<LoadTransactionProposalsResult, Error, TransactionProposalWithStatus[]>({
-		queryKey: ["proposalsForTransactionHash", settings.consensus, proposalTxHash, settings.maxBlockRange],
+		queryKey: [
+			"proposalsForTransactionHash",
+			settings.consensus,
+			proposalTxHash,
+			settings.maxBlockRange,
+			settings.signingTimeout,
+		],
 		queryFn: () =>
 			getConsensusWorker().loadTransactionProposals({
 				rpc: settings.rpc,

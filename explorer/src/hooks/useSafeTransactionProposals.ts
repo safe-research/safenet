@@ -25,7 +25,14 @@ export function useSafeTransactionProposals({
 		unknown[],
 		bigint | undefined
 	>({
-		queryKey: ["safeProposals", safeAddress, chainId.toString(), settings.consensus, settings.maxBlockRange],
+		queryKey: [
+			"safeProposals",
+			safeAddress,
+			chainId.toString(),
+			settings.consensus,
+			settings.maxBlockRange,
+			settings.signingTimeout,
+		],
 		refetchInterval: autoRefresh ? settings.refetchInterval : false,
 		// pageParam is the toBlock for this window. undefined on the first page so
 		// loadTransactionProposals resolves it from the current block at fetch time,

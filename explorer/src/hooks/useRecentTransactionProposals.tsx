@@ -10,7 +10,7 @@ export function useRecentTransactionProposals(autoRefresh = true) {
 	const [settings] = useSettings();
 
 	return useQuery<LoadTransactionProposalsResult, Error, TransactionProposalWithStatus[]>({
-		queryKey: ["recentProposals", settings.consensus, settings.maxBlockRange],
+		queryKey: ["recentProposals", settings.consensus, settings.maxBlockRange, settings.signingTimeout],
 		queryFn: () =>
 			getConsensusWorker().loadTransactionProposals({
 				rpc: settings.rpc,
