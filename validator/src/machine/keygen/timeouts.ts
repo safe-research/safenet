@@ -1,6 +1,6 @@
+import { type Address, getAddress } from "viem";
 import type { KeyGenClient } from "../../consensus/keyGen/client.js";
 import type { SafenetProtocol } from "../../consensus/protocol/types.js";
-import type { Participant } from "../../consensus/storage/types.js";
 import type { Logger } from "../../utils/logging.js";
 import type { MachineConfig, MachineStates, RolloverState, StateDiff } from "../types.js";
 import { calcGroupContext } from "./group.js";
@@ -10,24 +10,24 @@ const handleCollectingConfirmations = (
 	keyGenClient: KeyGenClient,
 	rollover: Extract<RolloverState, { id: "collecting_confirmations" }>,
 	block: bigint,
-): [Participant[], bigint] | undefined => {
+): [Address[], bigint] | undefined => {
 	if (rollover.responseDeadline <= block) {
 		// Check if there are any responses that timed out
 		const unresponded = new Set(
 			Object.entries(rollover.complaints)
 				.filter(([_, c]) => c.unresponded > 0)
-				.map(([id]) => BigInt(id)),
+				.map(([a]) => getAddress(a)),
 		);
 		if (unresponded.size > 0) {
 			const currentPariticipants = keyGenClient.participants(rollover.groupId);
-			return [currentPariticipants.filter((p) => !unresponded.has(p.id)), rollover.nextEpoch];
+			return [currentPariticipants.filter((p) => !unresponded.has(p)), rollover.nextEpoch];
 		}
 	}
 	if (rollover.deadline <= block) {
 		// Check if confirmations timed out
 		const confirmedSet = new Set(rollover.confirmationsFrom);
 		const currentPariticipants = keyGenClient.participants(rollover.groupId);
-		return [currentPariticipants.filter((p) => confirmedSet.has(p.id)), rollover.nextEpoch];
+		return [currentPariticipants.filter((p) => confirmedSet.has(p)), rollover.nextEpoch];
 	}
 	// Still within deadline
 	return undefined;
@@ -37,35 +37,35 @@ const handleCollectingCommitments = (
 	keyGenClient: KeyGenClient,
 	rollover: Extract<RolloverState, { id: "collecting_commitments" }>,
 	block: bigint,
-): [Participant[], bigint] | undefined => {
+): [Address[], bigint] | undefined => {
 	if (rollover.deadline > block) {
 		// Still within deadline
 		return undefined;
 	}
 	const missingParticipants = new Set(keyGenClient.missingCommitments(rollover.groupId));
 	const currentPariticipants = keyGenClient.participants(rollover.groupId);
-	return [currentPariticipants.filter((p) => !missingParticipants.has(p.id)), rollover.nextEpoch];
+	return [currentPariticipants.filter((p) => !missingParticipants.has(p)), rollover.nextEpoch];
 };
 
 const handleCollectingShares = (
 	keyGenClient: KeyGenClient,
 	rollover: Extract<RolloverState, { id: "collecting_shares" }>,
 	block: bigint,
-): [Participant[], bigint] | undefined => {
+): [Address[], bigint] | undefined => {
 	if (rollover.deadline > block) {
 		// Still within deadline
 		return undefined;
 	}
 	const missingParticipants = new Set(keyGenClient.missingSecretShares(rollover.groupId));
 	const currentPariticipants = keyGenClient.participants(rollover.groupId);
-	return [currentPariticipants.filter((p) => !missingParticipants.has(p.id)), rollover.nextEpoch];
+	return [currentPariticipants.filter((p) => !missingParticipants.has(p)), rollover.nextEpoch];
 };
 
 const getTimeoutInfo = (
 	keyGenClient: KeyGenClient,
 	rollover: RolloverState,
 	block: bigint,
-): [Participant[], bigint] | undefined => {
+): [Address[], bigint] | undefined => {
 	switch (rollover.id) {
 		case "collecting_commitments": {
 			return handleCollectingCommitments(keyGenClient, rollover, block);

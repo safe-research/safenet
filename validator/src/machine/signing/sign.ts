@@ -75,13 +75,12 @@ const checkAvailableNonces = (
 		// We are in the genesis setup
 		return {};
 	}
-	const activeGroup = consensusState.epochGroups[consensusState.activeEpoch.toString()];
-	if (activeGroup !== undefined && !consensusState.groupPendingNonces[activeGroup.groupId] === true) {
-		const groupId = activeGroup.groupId;
+	const groupId = consensusState.epochGroups[consensusState.activeEpoch.toString()];
+	if (groupId !== undefined && !consensusState.groupPendingNonces[groupId] === true) {
 		let { chunk, offset } = decodeSequence(sequence);
 		let availableNonces = 0n;
 		while (true) {
-			const noncesInChunk = signingClient.availableNoncesCount(activeGroup.groupId, chunk);
+			const noncesInChunk = signingClient.availableNoncesCount(groupId, chunk);
 			availableNonces += noncesInChunk - offset;
 			// Chunk has no nonces, meaning the chunk was not initialized yet.
 			if (noncesInChunk === 0n) break;

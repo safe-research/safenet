@@ -30,15 +30,14 @@ export const handleComplaintResponded = async (
 		return {};
 	}
 
-	const accusedId = event.accused.toString();
-	const complaint = machineStates.rollover.complaints[accusedId];
+	const complaint = machineStates.rollover.complaints[event.accused];
 
-	if (complaint === undefined || complaint.unresponded === 0n) {
+	if (complaint === undefined || complaint.unresponded === 0) {
 		return {};
 	}
 	// If reponse is required to finalize shares get state by registering secret, otherwise only verify
 	const sharesState =
-		keyGenClient.participantId(event.gid) === event.plaintiff &&
+		keyGenClient.participant(event.gid) === event.plaintiff &&
 		machineStates.rollover.missingSharesFrom.includes(event.accused)
 			? await keyGenClient.registerPlainKeyGenSecret(event.gid, event.accused, event.secretShare)
 			: !keyGenClient.verifySecretShare(event.gid, event.accused, event.plaintiff, event.secretShare)
@@ -46,10 +45,8 @@ export const handleComplaintResponded = async (
 				: undefined;
 
 	if (sharesState === "invalid_share") {
-		logger?.info?.(`Invalid share submitted by ${accusedId}`);
-		const participants = keyGenClient
-			.participants(machineStates.rollover.groupId)
-			.filter((p) => p.id !== event.accused);
+		logger?.info?.(`Invalid share submitted by ${event.accused}`);
+		const participants = keyGenClient.participants(machineStates.rollover.groupId).filter((p) => p !== event.accused);
 		return triggerKeyGen(
 			machineConfig,
 			keyGenClient,
@@ -63,7 +60,7 @@ export const handleComplaintResponded = async (
 
 	const actions: ProtocolAction[] = [];
 	if (sharesState === "shares_completed") {
-		logger?.debug?.(`Valid complaint response from ${accusedId}`);
+		logger?.debug?.(`Valid complaint response from ${event.accused}`);
 		const nextEpoch = machineStates.rollover.nextEpoch;
 		const callbackContext = buildKeyGenCallback(machineConfig, nextEpoch);
 		actions.push({
@@ -80,9 +77,9 @@ export const handleComplaintResponded = async (
 
 	const complaints = {
 		...machineStates.rollover.complaints,
-		[accusedId]: {
+		[event.accused]: {
 			total: complaint.total,
-			unresponded: complaint.unresponded - 1n,
+			unresponded: complaint.unresponded - 1,
 		},
 	};
 

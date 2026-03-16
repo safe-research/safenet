@@ -2,7 +2,6 @@ import type { Address, Hex } from "viem";
 import type {
 	FrostPoint,
 	GroupId,
-	ParticipantId,
 	ProofOfAttestationParticipation,
 	ProofOfKnowledge,
 	SignatureId,
@@ -59,7 +58,6 @@ export type StartKeyGen = {
 	count: number;
 	threshold: number;
 	context: Hex;
-	participantId: ParticipantId;
 	encryptionPublicKey: FrostPoint;
 	commitments: FrostPoint[];
 	pok: ProofOfKnowledge;
@@ -76,13 +74,13 @@ export type PublishSecretShares = {
 export type Complain = {
 	id: "key_gen_complain";
 	groupId: GroupId;
-	accused: ParticipantId;
+	accused: Address;
 };
 
 export type ComplaintResponse = {
 	id: "key_gen_complaint_response";
 	groupId: GroupId;
-	plaintiff: ParticipantId;
+	plaintiff: Address;
 	secretShare: bigint;
 };
 

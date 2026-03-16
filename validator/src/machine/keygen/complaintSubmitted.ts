@@ -29,20 +29,19 @@ export const handleComplaintSubmitted = async (
 		return {};
 	}
 
-	const accusedId = event.accused.toString();
 	// Get or create complaints entry for accused
-	const complaint = machineStates.rollover.complaints[accusedId] ?? { total: 0n, unresponded: 0n };
+	const complaint = machineStates.rollover.complaints[event.accused] ?? { total: 0, unresponded: 0 };
 	// Copy complaints with update
 	const nextComplaint = {
-		total: complaint.total + 1n,
-		unresponded: complaint.unresponded + 1n,
+		total: complaint.total + 1,
+		unresponded: complaint.unresponded + 1,
 	};
 
 	const threshold = keyGenClient.threshold(event.gid);
 	if (nextComplaint.total >= threshold) {
 		const participants = keyGenClient.participants(event.gid);
-		const nextParticipants = participants.filter((participant) => participant.id !== event.accused);
-		logger?.info?.(`Restarting key gen after too many complaints against participant ${accusedId}`);
+		const nextParticipants = participants.filter((p) => p !== event.accused);
+		logger?.info?.(`Restarting key gen after too many complaints against participant ${event.accused}`);
 		return triggerKeyGen(
 			machineConfig,
 			keyGenClient,
@@ -58,11 +57,11 @@ export const handleComplaintSubmitted = async (
 		...machineStates.rollover,
 		complaints: {
 			...machineStates.rollover.complaints,
-			[accusedId]: nextComplaint,
+			[event.accused]: nextComplaint,
 		},
 	};
 
-	if (event.accused !== keyGenClient.participantId(event.gid)) {
+	if (event.accused !== keyGenClient.participant(event.gid)) {
 		return {
 			rollover,
 		};
