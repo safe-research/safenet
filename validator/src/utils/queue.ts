@@ -13,7 +13,7 @@ const queueSQLiteSchema = z.object({
 	payloadJson: z.string(),
 });
 
-// FIFO tyle queue
+// FIFO style queue
 export type Queue<T> = {
 	// Adds an item to the back of the queue.
 	enqueue(element: T): void;
