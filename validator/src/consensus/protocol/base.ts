@@ -1,7 +1,7 @@
 import type { Address, Hex } from "viem";
 import { formatError } from "../../utils/errors.js";
 import type { Logger } from "../../utils/logging.js";
-import { InMemoryQueue, type Queue } from "../../utils/queue.js";
+import type { Queue } from "../../utils/queue.js";
 import type {
 	ActionWithTimeout,
 	AttestTransaction,
@@ -25,7 +25,7 @@ const ERROR_RETRY_DELAY = 1000;
 const ERROR_RETRY_MAX_DELAY = 5000;
 
 export abstract class BaseProtocol implements SafenetProtocol {
-	#actionQueue: Queue<ActionWithTimeout> = new InMemoryQueue<ActionWithTimeout>();
+	#actionQueue: Queue<ActionWithTimeout>;
 	#currentAction?: ActionWithTimeout;
 	#retryDelay?: number;
 	#logger: Logger;
