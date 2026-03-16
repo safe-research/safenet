@@ -82,12 +82,12 @@ function writeSigningState(db: Database, id: SignatureId, state: SigningState): 
 	`).run(id, stateJson);
 }
 
-function loadRolloverState(db: Database, initialRolloverState: RolloverState): RolloverState {
+function loadRolloverState(db: Database, defaultRolloverState: RolloverState): RolloverState {
 	const stmt = db.prepare("SELECT stateJson FROM rollover_state WHERE id = 1");
 	const result = jsonQueryResultSchema.parse(stmt.get());
 
 	if (!result) {
-		return initialRolloverState;
+		return defaultRolloverState;
 	}
 
 	// If this fails we should abort as the db is in an invalid state
