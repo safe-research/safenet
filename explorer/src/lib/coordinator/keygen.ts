@@ -3,7 +3,7 @@ import { COORDINATOR_KEY_GEN_EVENTS, COORDINATOR_KEY_GEN_SELECTORS } from "@/lib
 import { loadCoordinator } from "@/lib/coordinator/signing";
 
 export type KeyGenParticipation = {
-	identifier: bigint;
+	address: Address;
 	block: bigint;
 };
 
@@ -63,8 +63,8 @@ export const loadKeyGenDetails = async ({
 	const count = keyGenLog.args.count;
 	const threshold = keyGenLog.args.threshold;
 
-	const toParticipation = (log: { args: { identifier: bigint }; blockNumber: bigint }): KeyGenParticipation => ({
-		identifier: log.args.identifier,
+	const toParticipation = (log: { args: { participant: Address }; blockNumber: bigint }): KeyGenParticipation => ({
+		address: log.args.participant,
 		block: log.blockNumber,
 	});
 

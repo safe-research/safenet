@@ -47,7 +47,7 @@ export function KeyGenStatusItem({ status }: { status: KeyGenStatus | null }) {
 					<p>
 						<ValidatorList
 							all={allIds}
-							active={status.committed.map((p) => p.identifier)}
+							active={status.committed.map((p) => p.address)}
 							mapInfo={mapInfo}
 							completed={false}
 						/>
@@ -61,7 +61,7 @@ export function KeyGenStatusItem({ status }: { status: KeyGenStatus | null }) {
 					<p>
 						<ValidatorList
 							all={allIds}
-							active={status.shared.map((p) => p.identifier)}
+							active={status.shared.map((p) => p.address)}
 							mapInfo={mapInfo}
 							completed={false}
 						/>
@@ -74,7 +74,7 @@ export function KeyGenStatusItem({ status }: { status: KeyGenStatus | null }) {
 				<p>
 					<ValidatorList
 						all={allIds}
-						active={status.confirmed.map((p) => p.identifier)}
+						active={status.confirmed.map((p) => p.address)}
 						mapInfo={mapInfo}
 						completed={terminal}
 					/>
