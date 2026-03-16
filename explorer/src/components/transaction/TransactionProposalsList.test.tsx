@@ -128,10 +128,27 @@ describe("TransactionProposalsList", () => {
 		expect(screen.getByText("0xhash3")).toBeTruthy();
 	});
 
-	it("renders skeleton rows instead of proposals when isLoading is true", () => {
+	it("renders a single skeleton row instead of proposals when isLoading is true", () => {
 		render(<TransactionProposalsList proposals={[]} hasMore={false} onShowMore={vi.fn()} isLoading={true} />);
-		expect(screen.getAllByTestId("transaction-list-row-skeleton").length).toBeGreaterThan(0);
+		expect(screen.getAllByTestId("transaction-list-row-skeleton")).toHaveLength(1);
 		expect(screen.queryAllByTestId("transaction-list-row")).toHaveLength(0);
+	});
+
+	it("renders the default empty label when not loading and proposals are empty", () => {
+		render(<TransactionProposalsList proposals={[]} hasMore={false} onShowMore={vi.fn()} />);
+		expect(screen.getByText("No transactions found")).toBeTruthy();
+	});
+
+	it("renders a custom emptyLabel when provided and proposals are empty", () => {
+		render(
+			<TransactionProposalsList
+				proposals={[]}
+				hasMore={false}
+				onShowMore={vi.fn()}
+				emptyLabel="No proposals for this Safe."
+			/>,
+		);
+		expect(screen.getByText("No proposals for this Safe.")).toBeTruthy();
 	});
 
 	it("always renders the header row", () => {
