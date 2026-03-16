@@ -100,7 +100,7 @@ export class SafenetStateMachine {
 
 	transition(transition: StateTransition) {
 		this.#logger.debug(`Enqueue ${transition.id} at ${transition.block}`);
-		this.#transitionQueue.push(transition);
+		this.#transitionQueue.enqueue(transition);
 		this.checkNextTransition();
 	}
 
@@ -145,7 +145,7 @@ export class SafenetStateMachine {
 			.finally(() => {
 				this.#metrics.blockNumber.set(Number(this.#lastProcessedBlock));
 				this.#metrics.eventIndex.set(this.#lastProcessedIndex);
-				this.#transitionQueue.pop();
+				this.#transitionQueue.dequeue();
 				this.#currentTransition = undefined;
 				this.checkNextTransition();
 			});
