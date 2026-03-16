@@ -7,35 +7,28 @@ import type { ConsensusState, MachineConfig, MachineStates, SigningState } from 
 import { checkEpochRollover } from "./rollover.js";
 
 // --- Test Data ---
-const PARTICIPANTS_INFO = [
-	{
-		id: 1n,
-		address: zeroAddress,
-		activeFrom: 0n,
-	},
-	{
-		id: 3n,
-		address: zeroAddress,
-		activeFrom: 0n,
-	},
-	{
-		id: 7n,
-		address: zeroAddress,
-		activeFrom: 1n,
-	},
-];
-
-const PARTICIPANTS = PARTICIPANTS_INFO.map((i) => {
-	return { address: i.address, id: i.id };
-});
-
 const MACHINE_CONFIG: MachineConfig = {
-	participantsInfo: PARTICIPANTS_INFO,
+	participantsInfo: [
+		{
+			address: "0x0000000000000000000000000000000000000001",
+			activeFrom: 0n,
+		},
+		{
+			address: "0x0000000000000000000000000000000000000002",
+			activeFrom: 0n,
+		},
+		{
+			address: "0x0000000000000000000000000000000000000003",
+			activeFrom: 1n,
+		},
+	],
 	genesisSalt: zeroHash,
 	keyGenTimeout: 20n,
 	signingTimeout: 0n,
 	blocksPerEpoch: 10n,
 };
+
+const PARTICIPANTS = MACHINE_CONFIG.participantsInfo.map((i) => i.address);
 
 // By default we setup in a genesis state
 // This avoids that nonce commitments are triggered every time
@@ -53,7 +46,7 @@ const CONSENSUS_STATE: ConsensusState = {
 	signatureIdToMessage: {},
 };
 
-const GROUP_SETUP = makeGroupSetup(3n);
+const GROUP_SETUP = makeGroupSetup();
 
 const EMPTY_PROTOCOL = {} as unknown as SafenetProtocol;
 const EMPTY_KEY_GEN_CLIENT = {} as unknown as KeyGenClient;
@@ -209,7 +202,6 @@ describe("check rollover", () => {
 				count: 3,
 				threshold: 2,
 				context: "0x00000000eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee0000000000000003",
-				participantId: 3n,
 				commitments: GROUP_SETUP.commitments,
 				encryptionPublicKey: GROUP_SETUP.encryptionPublicKey,
 				pok: GROUP_SETUP.pok,
@@ -223,7 +215,7 @@ describe("check rollover", () => {
 			deadline: 40n,
 		});
 		expect(diff.consensus).toStrictEqual({
-			epochGroup: [3n, { groupId: "0x5afe02", participantId: 3n }],
+			epochGroup: [3n, "0x5afe02"],
 		});
 		expect(diff.signing).toBeUndefined();
 
@@ -257,7 +249,6 @@ describe("check rollover", () => {
 				count: 3,
 				threshold: 2,
 				context: "0x00000000eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee0000000000000002",
-				participantId: 3n,
 				commitments: GROUP_SETUP.commitments,
 				encryptionPublicKey: GROUP_SETUP.encryptionPublicKey,
 				pok: GROUP_SETUP.pok,
@@ -271,7 +262,7 @@ describe("check rollover", () => {
 			deadline: 30n,
 		});
 		expect(diff.consensus).toStrictEqual({
-			epochGroup: [2n, { groupId: "0x5afe02", participantId: 3n }],
+			epochGroup: [2n, "0x5afe02"],
 		});
 		expect(diff.signing).toBeUndefined();
 
@@ -300,7 +291,6 @@ describe("check rollover", () => {
 				count: 3,
 				threshold: 2,
 				context: "0x00000000eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee0000000000000002",
-				participantId: 3n,
 				commitments: GROUP_SETUP.commitments,
 				encryptionPublicKey: GROUP_SETUP.encryptionPublicKey,
 				pok: GROUP_SETUP.pok,
@@ -314,7 +304,7 @@ describe("check rollover", () => {
 			deadline: 30n,
 		});
 		expect(diff.consensus).toStrictEqual({
-			epochGroup: [2n, { groupId: "0x5afe02", participantId: 3n }],
+			epochGroup: [2n, "0x5afe02"],
 			activeEpoch: 1n,
 		});
 		expect(diff.signing).toBeUndefined();
@@ -340,10 +330,10 @@ describe("check rollover", () => {
 			...CONSENSUS_STATE,
 			activeEpoch: 5n,
 			epochGroups: {
-				"1": { groupId: "0xgroup1", participantId: 1n },
-				"2": { groupId: "0xgroup2", participantId: 1n },
-				"5": { groupId: "0xgroup5", participantId: 1n },
-				"7": { groupId: "0xgroup7", participantId: 1n },
+				"1": "0xgroup1",
+				"2": "0xgroup2",
+				"5": "0xgroup5",
+				"7": "0xgroup7",
 			},
 		};
 		// blocksPerEpoch = 10, so block 70 => currentEpoch = 7
@@ -368,7 +358,7 @@ describe("check rollover", () => {
 		// Active signing session referencing epoch 2
 		const signingState: SigningState = {
 			id: "waiting_for_request",
-			signers: [1n],
+			signers: [zeroAddress],
 			deadline: 100n,
 			packet: {
 				type: "safe_transaction_packet",
@@ -405,11 +395,11 @@ describe("check rollover", () => {
 			...CONSENSUS_STATE,
 			activeEpoch: 5n,
 			epochGroups: {
-				"1": { groupId: "0xgroup1", participantId: 1n },
-				"2": { groupId: "0xgroup2", participantId: 1n },
-				"3": { groupId: "0xgroup3", participantId: 1n },
-				"5": { groupId: "0xgroup5", participantId: 1n },
-				"7": { groupId: "0xgroup7", participantId: 1n },
+				"1": "0xgroup1",
+				"2": "0xgroup2",
+				"3": "0xgroup3",
+				"5": "0xgroup5",
+				"7": "0xgroup7",
 			},
 		};
 		const diff = checkEpochRollover(
@@ -433,7 +423,7 @@ describe("check rollover", () => {
 		// Active signing session with epoch_rollover_packet referencing epoch 3
 		const signingState: SigningState = {
 			id: "waiting_for_request",
-			signers: [1n],
+			signers: [zeroAddress],
 			deadline: 100n,
 			packet: {
 				type: "epoch_rollover_packet",
@@ -461,10 +451,10 @@ describe("check rollover", () => {
 			...CONSENSUS_STATE,
 			activeEpoch: 3n,
 			epochGroups: {
-				"1": { groupId: "0xgroup1", participantId: 1n },
-				"2": { groupId: "0xgroup2", participantId: 1n },
-				"3": { groupId: "0xgroup3", participantId: 1n },
-				"5": { groupId: "0xgroup5", participantId: 1n },
+				"1": "0xgroup1",
+				"2": "0xgroup2",
+				"3": "0xgroup3",
+				"5": "0xgroup5",
 			},
 		};
 		// blocksPerEpoch = 10, so block 50 => currentEpoch = 5
@@ -495,8 +485,8 @@ describe("check rollover", () => {
 			...CONSENSUS_STATE,
 			activeEpoch: 5n,
 			epochGroups: {
-				"5": { groupId: "0xgroup5", participantId: 1n },
-				"7": { groupId: "0xgroup7", participantId: 1n },
+				"5": "0xgroup5",
+				"7": "0xgroup7",
 			},
 		};
 		const diff = checkEpochRollover(
@@ -519,7 +509,7 @@ describe("check rollover", () => {
 		// Signing session referencing epoch 6, which is > activeEpoch (5)
 		const signingState: SigningState = {
 			id: "waiting_for_request",
-			signers: [1n],
+			signers: [zeroAddress],
 			deadline: 100n,
 			packet: {
 				type: "safe_transaction_packet",
@@ -556,10 +546,10 @@ describe("check rollover", () => {
 			...CONSENSUS_STATE,
 			activeEpoch: 5n,
 			epochGroups: {
-				"1": { groupId: "0xgroup1", participantId: 1n },
-				"3": { groupId: "0xgroup3", participantId: 1n },
-				"5": { groupId: "0xgroup5", participantId: 1n },
-				"7": { groupId: "0xgroup7", participantId: 1n },
+				"1": "0xgroup1",
+				"3": "0xgroup3",
+				"5": "0xgroup5",
+				"7": "0xgroup7",
 			},
 		};
 		const diff = checkEpochRollover(
@@ -582,7 +572,7 @@ describe("check rollover", () => {
 		// Two signing sessions: one at epoch 2, one at epoch 4
 		const signingState2: SigningState = {
 			id: "waiting_for_request",
-			signers: [1n],
+			signers: [zeroAddress],
 			deadline: 100n,
 			packet: {
 				type: "safe_transaction_packet",
@@ -611,7 +601,7 @@ describe("check rollover", () => {
 		};
 		const signingState4: SigningState = {
 			id: "waiting_for_request",
-			signers: [1n],
+			signers: [zeroAddress],
 			deadline: 100n,
 			packet: {
 				type: "safe_transaction_packet",
@@ -649,11 +639,11 @@ describe("check rollover", () => {
 			...CONSENSUS_STATE,
 			activeEpoch: 5n,
 			epochGroups: {
-				"1": { groupId: "0xgroup1", participantId: 1n },
-				"2": { groupId: "0xgroup2", participantId: 1n },
-				"3": { groupId: "0xgroup3", participantId: 1n },
-				"5": { groupId: "0xgroup5", participantId: 1n },
-				"7": { groupId: "0xgroup7", participantId: 1n },
+				"1": "0xgroup1",
+				"2": "0xgroup2",
+				"3": "0xgroup3",
+				"5": "0xgroup5",
+				"7": "0xgroup7",
 			},
 		};
 		const diff = checkEpochRollover(
@@ -681,7 +671,7 @@ describe("check rollover", () => {
 		const consensusStateWithGroups: ConsensusState = {
 			...CONSENSUS_STATE,
 			epochGroups: {
-				"1": { groupId: "0xgroup1", participantId: 1n },
+				"1": "0xgroup1",
 			},
 		};
 		const diff = checkEpochRollover(

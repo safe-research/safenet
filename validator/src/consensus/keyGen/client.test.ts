@@ -1,10 +1,10 @@
-import { keccak256 } from "viem";
+import { type Address, type Hex, keccak256, pad } from "viem";
 import { generatePrivateKey, privateKeyToAccount } from "viem/accounts";
 import { describe, expect, it } from "vitest";
 import { createClientStorage, log, testLogger } from "../../__tests__/config.js";
 import type { FrostPoint, GroupId, ProofOfKnowledge } from "../../frost/types.js";
-import { calculateParticipantsRoot, hashParticipant, verifyMerkleProof } from "../merkle.js";
-import type { Participant } from "../storage/types.js";
+import { participantsForEpoch } from "../../utils/participants.js";
+import { calculateParticipantsRoot, verifyMerkleProof } from "../merkle.js";
 import { KeyGenClient } from "./client.js";
 import { calcGroupId } from "./utils.js";
 
@@ -14,53 +14,46 @@ describe("keyGen", () => {
 	it("e2e keygen flow", async () => {
 		const count = 3;
 		const threshold = 2;
-		const validatorAddresses = Array.from({ length: Number(count) }, () => createRandomAccount());
+		const participantsInfo = Array.from({ length: Number(count) }, () => ({
+			address: createRandomAccount().address,
+			activeFrom: 0n,
+		}));
 		log(`Run test with ${count} validators and threshold ${threshold}`);
-		const participants: Participant[] = validatorAddresses.map((a) => {
-			return { id: BigInt(a.address), address: a.address };
-		});
+		const participants = participantsForEpoch(participantsInfo, 0n);
 		const participantsRoot = calculateParticipantsRoot(participants);
 		const context = keccak256(participantsRoot);
 		const groupId = calcGroupId(participantsRoot, count, threshold, context);
 		const commitmentEvents: {
 			groupId: GroupId;
-			participantId: bigint;
+			participant: Address;
 			encryptionPublicKey: FrostPoint;
 			commitments: FrostPoint[];
 			pok: ProofOfKnowledge;
 		}[] = [];
 		const shareEvents: {
 			groupId: GroupId;
-			id: bigint;
+			participant: Address;
 			verificationShare: FrostPoint;
 			shares: bigint[];
 		}[] = [];
-		const clients = validatorAddresses.map((a) => {
-			const ids = new Map<GroupId, bigint>();
-			const storage = createClientStorage(a.address);
+		const clients = participantsInfo.map((p) => {
+			const storage = createClientStorage(p.address);
 			const client = new KeyGenClient(storage, testLogger);
 			return {
-				ids,
 				storage,
 				client,
 			};
 		});
 		log("------------------------ Trigger Keygen Init and Commitments ------------------------");
-		for (const { client, ids } of clients) {
+		for (const { client } of clients) {
 			log(">>>> Keygen and Commit >>>>");
-			const { participantId, encryptionPublicKey, commitments, poap, pok } = client.setupGroup(
-				participants,
-				threshold,
-				context,
-			);
-			ids.set(groupId, participantId);
-			const leaf = participants.find((p) => p.id === participantId);
-			if (leaf === undefined) throw new Error(`Invalid id: ${participantId}`);
-			expect(verifyMerkleProof(participantsRoot, hashParticipant(leaf), poap)).toBeTruthy();
+			const { encryptionPublicKey, commitments, poap, pok } = client.setupGroup(participants, threshold, context);
+			const participant = client.participant(groupId);
+			expect(verifyMerkleProof(participantsRoot, pad(participant).toLowerCase() as Hex, poap)).toBeTruthy();
 			log("######################################");
 			commitmentEvents.push({
 				groupId,
-				participantId,
+				participant,
 				encryptionPublicKey,
 				commitments,
 				pok,
@@ -69,18 +62,18 @@ describe("keyGen", () => {
 		log("------------------------ Handle Commitments ------------------------");
 		for (const { client } of clients) {
 			for (const e of commitmentEvents) {
-				log(`>>>> Handle commitment from ${e.participantId} by ${client.participantId(e.groupId)} >>>>`);
-				client.handleKeygenCommitment(e.groupId, e.participantId, e.encryptionPublicKey, e.commitments, e.pok);
+				log(`>>>> Handle commitment from ${e.participant} >>>>`);
+				client.handleKeygenCommitment(e.groupId, e.participant, e.encryptionPublicKey, e.commitments, e.pok);
 			}
 		}
 		log("------------------------ Publish Secret Shares ------------------------");
-		for (const { client, ids } of clients) {
-			log(`>>>> Publish secret share of ${client.participantId(groupId)} >>>>`);
+		for (const { client } of clients) {
+			log(`>>>> Publish secret share of ${client.participant(groupId)} >>>>`);
 			const { verificationShare, shares } = client.createSecretShares(groupId);
-			const id = ids.get(groupId) ?? -1n;
+			const participant = client.participant(groupId);
 			shareEvents.push({
 				groupId,
-				id,
+				participant,
 				verificationShare,
 				shares,
 			});
@@ -88,8 +81,8 @@ describe("keyGen", () => {
 		log("------------------------ Handle Secret Shares ------------------------");
 		for (const { client } of clients) {
 			for (const e of shareEvents) {
-				log(`>>>> Handle secrets shares from ${e.id} by ${client.participantId(e.groupId)} >>>>`);
-				const response = await client.handleKeygenSecrets(e.groupId, e.id, e.shares);
+				log(`>>>> Handle secrets shares from ${e.participant} >>>>`);
+				const response = await client.handleKeygenSecrets(e.groupId, e.participant, e.shares);
 				expect(response).not.toBe("invalid_share");
 			}
 		}
@@ -102,7 +95,7 @@ describe("keyGen", () => {
 					groupId,
 					signingShare: storage.signingShare(groupId),
 					participants: storage.participants(groupId),
-					participantId: storage.participantId(groupId),
+					participant: storage.participant(groupId),
 					verificationShare: {
 						x: verificationShare?.x,
 						y: verificationShare?.y,

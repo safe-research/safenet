@@ -15,9 +15,9 @@ import { SafenetStateMachine } from "./machine.js";
 // --- Test Data ---
 
 const PARTICIPANTS: ParticipantInfo[] = [
-	{ id: 1n, address: zeroAddress, activeFrom: 0n },
-	{ id: 3n, address: zeroAddress, activeFrom: 0n },
-	{ id: 7n, address: zeroAddress, activeFrom: 0n },
+	{ address: zeroAddress, activeFrom: 0n },
+	{ address: zeroAddress, activeFrom: 0n },
+	{ address: zeroAddress, activeFrom: 0n },
 ];
 
 const makeLogger = (): Logger =>
@@ -65,7 +65,6 @@ const makeKeyGenClient = (unregisterGroup: ReturnType<typeof vi.fn>): KeyGenClie
 		setupGroup: vi.fn().mockReturnValue({
 			groupId: "0xnewgroup",
 			participantsRoot: "0xabc",
-			participantId: 3n,
 			commitments: [TEST_POINT],
 			encryptionPublicKey: TEST_POINT,
 			pok: { r: TEST_POINT, mu: 100n },
@@ -110,11 +109,10 @@ describe("SafenetStateMachine FROST group cleanup", () => {
 	it("should call unregisterGroup with the correct group IDs on epoch rollover", async () => {
 		// Epochs 1, 3, 5 exist; activating epoch 5 → activeEpoch = 3, epochCutoff = 3
 		// epoch "1" (1 < 3) should be cleaned up; epoch "3" and "5" preserved
-		const participant = `0x${"00".repeat(19)}01` as const;
 		const epochGroups = {
-			"1": { groupId: "0xgroup1", participant },
-			"3": { groupId: "0xgroup3", participant },
-			"5": { groupId: "0xgroup5", participant },
+			"1": "0xgroup1",
+			"3": "0xgroup3",
+			"5": "0xgroup5",
 		} as const;
 		const storage = makeStorage(epochGroups, { id: "epoch_staged", nextEpoch: 5n }, 3n);
 		const unregisterGroup = vi.fn();
@@ -135,11 +133,10 @@ describe("SafenetStateMachine FROST group cleanup", () => {
 	});
 
 	it("should tolerate unregisterGroup failure, log a warning, and increment the metric", async () => {
-		const participant = `0x${"00".repeat(19)}01` as const;
 		const epochGroups = {
-			"1": { groupId: "0xgroup1", participant },
-			"3": { groupId: "0xgroup3", participant },
-			"5": { groupId: "0xgroup5", participant },
+			"1": "0xgroup1",
+			"3": "0xgroup3",
+			"5": "0xgroup5",
 		} as const;
 		const storage = makeStorage(epochGroups, { id: "epoch_staged", nextEpoch: 5n }, 3n);
 		const unregisterGroup = vi.fn().mockImplementation(() => {

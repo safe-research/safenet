@@ -8,7 +8,6 @@ export type GroupInfoStorage = {
 	registerVerification(groupId: GroupId, groupPublicKey: FrostPoint, verificationShare: FrostPoint): void;
 	registerSigningShare(groupId: GroupId, signingShare: bigint): void;
 
-	// TODO(nlordell): maybe remove me?
 	participant(groupId: GroupId): Address;
 	publicKey(groupId: GroupId): FrostPoint | undefined;
 	participants(groupId: GroupId): readonly Address[];

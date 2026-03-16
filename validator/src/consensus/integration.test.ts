@@ -256,7 +256,7 @@ describe("integration", () => {
 		expect(stagedEpochs.length).toBe(1);
 		// Calculate group id for reduced group
 		const expectedGroup = calcGroupId(
-			calculateParticipantsRoot([participants[0].address, participants[1].address, participants[3].address]),
+			calculateParticipantsRoot([participants[3].address, participants[1].address, participants[0].address]),
 			3,
 			2,
 			calcGroupContext(consensus.address, stagedEpochs[0].args.proposedEpoch),
@@ -277,8 +277,8 @@ describe("integration", () => {
 
 		const expectedGroupEpoch2 = calcGroupId(
 			calculateParticipantsRoot([
-				participants[0].address,
 				participants[1].address,
+				participants[0].address,
 				participants[2].address,
 				participants[4].address,
 			]),
