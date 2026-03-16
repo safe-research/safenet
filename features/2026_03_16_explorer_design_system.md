@@ -41,8 +41,8 @@ All semantic colour names, spacing aliases, typography scale, and radius values 
 **Radius scale to formalise** — use use-case based naming, consistent with the colour token convention (e.g. `--color-button`, not `--color-sm`).
 
 The current codebase uses `rounded-lg`, `rounded-md`, `rounded-full`, and plain `rounded` without clear use-case semantics:
-- `rounded-lg` appears in `Box`, `Skeleton`, and `KeyGenStatusItem` — containers/cards
-- `rounded-md` appears in `FormItem` inputs and the `EpochRolloverItem` expand panel — two different use cases sharing the same class with no shared intent
+- `rounded-lg` appears in `Box` and `Skeleton` — containers/cards
+- `rounded-md` appears in `FormItem` inputs, `EpochRolloverItem` expand panel, and `KeyGenStatusItem` — multiple use cases sharing the same class with no shared intent
 - `rounded-full` appears in `Badge` and `SearchBar` (the search field border) — pill-shaped elements
 - `rounded` (default) appears in `CopyButton` — icon button
 
@@ -110,9 +110,9 @@ No new user-facing flows. This is a developer-facing refactor. Visual output is 
 | `src/components/common/Badge.tsx` | Extend existing — add `variant` prop (`positive`, `pending`, `error`, `warning`, `neutral`) replacing ad-hoc inline styles |
 | `src/components/common/Spinner.tsx` | Extract `LoadingSpinner` out of `Forms.tsx` into a standalone primitive |
 | `src/components/Forms.tsx` | Refactor `FormItem`/`SubmitItem` to use new `Input`, `Label`, `Button`, `Spinner` primitives |
-| `src/components/KeyGenStatusItem.tsx` | Replace `text-red-500`/`text-green-500`/`text-yellow-500` with token-based utilities |
-| `src/components/NetworkBadge.tsx` | Replace hardcoded fallback `#4B5563` with `--color-muted` token |
-| `src/components/TransactionListControls.tsx` | Replace local spinner with `Spinner` primitive |
+| `src/components/epoch/KeyGenStatusItem.tsx` | Replace `text-red-500`/`text-green-500`/`text-yellow-500` with token-based utilities |
+| `src/components/common/NetworkBadge.tsx` | Replace hardcoded fallback `#4B5563` with `--color-muted` token |
+| `src/components/transaction/TransactionListControls.tsx` | Replace local spinner with `Spinner` primitive |
 
 ### Token Inventory (after Phase 1)
 
