@@ -1,4 +1,4 @@
-import { zeroAddress, zeroHash } from "viem";
+import { ethAddress, zeroAddress, zeroHash } from "viem";
 import { describe, expect, it, vi } from "vitest";
 import type { SigningClient } from "../../consensus/signing/client.js";
 import type { SafeTransactionPacket } from "../../consensus/verify/safeTx/schemas.js";
@@ -51,6 +51,7 @@ const CONSENSUS_STATE: ConsensusState = {
 };
 
 const MACHINE_CONFIG: MachineConfig = {
+	account: ethAddress,
 	participantsInfo: [],
 	genesisSalt: zeroHash,
 	keyGenTimeout: 0n,
@@ -121,6 +122,7 @@ describe("nonces revealed", () => {
 				hidingNonceCommitment: EVENT.nonces.d,
 				bindingNonceCommitment: EVENT.nonces.e,
 			},
+			ethAddress,
 		);
 		expect(handleNonceCommitments).toBeCalledTimes(1);
 
@@ -162,10 +164,14 @@ describe("nonces revealed", () => {
 				hidingNonceCommitment: EVENT.nonces.d,
 				bindingNonceCommitment: EVENT.nonces.e,
 			},
+			ethAddress,
 		);
 		expect(handleNonceCommitments).toBeCalledTimes(1);
 
-		expect(createSignatureShare).toBeCalledWith("0x000000000000000000000000000000000000000000000000000000005af35af3");
+		expect(createSignatureShare).toBeCalledWith(
+			"0x000000000000000000000000000000000000000000000000000000005af35af3",
+			ethAddress,
+		);
 		expect(createSignatureShare).toBeCalledTimes(1);
 
 		expect(diff.consensus).toBeUndefined();
@@ -259,10 +265,14 @@ describe("nonces revealed", () => {
 				hidingNonceCommitment: EVENT.nonces.d,
 				bindingNonceCommitment: EVENT.nonces.e,
 			},
+			ethAddress,
 		);
 		expect(handleNonceCommitments).toBeCalledTimes(1);
 
-		expect(createSignatureShare).toBeCalledWith("0x000000000000000000000000000000000000000000000000000000005af35af3");
+		expect(createSignatureShare).toBeCalledWith(
+			"0x000000000000000000000000000000000000000000000000000000005af35af3",
+			ethAddress,
+		);
 		expect(createSignatureShare).toBeCalledTimes(1);
 
 		expect(diff.consensus).toBeUndefined();
@@ -325,10 +335,14 @@ describe("nonces revealed", () => {
 				hidingNonceCommitment: EVENT.nonces.d,
 				bindingNonceCommitment: EVENT.nonces.e,
 			},
+			ethAddress,
 		);
 		expect(handleNonceCommitments).toBeCalledTimes(1);
 
-		expect(createSignatureShare).toBeCalledWith("0x000000000000000000000000000000000000000000000000000000005af35af3");
+		expect(createSignatureShare).toBeCalledWith(
+			"0x000000000000000000000000000000000000000000000000000000005af35af3",
+			ethAddress,
+		);
 		expect(createSignatureShare).toBeCalledTimes(1);
 
 		expect(diff.consensus).toBeUndefined();

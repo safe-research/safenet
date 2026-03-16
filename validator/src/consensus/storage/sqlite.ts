@@ -165,7 +165,8 @@ export class SqliteClientStorage implements GroupInfoStorage, KeyGenInfoStorage,
 			.map((row) => hexBytes32Schema.parse(row));
 	}
 
-	registerGroup(groupId: GroupId, participants: readonly Address[], threshold: number): Address {
+	registerGroup(groupId: GroupId, participants: readonly Address[], threshold: number) {
+		// TODO: [observe mode] -> move account to machine config
 		if (!participants.includes(this.#account)) {
 			throw new Error(`Not part of Group ${groupId}!`);
 		}
@@ -181,7 +182,6 @@ export class SqliteClientStorage implements GroupInfoStorage, KeyGenInfoStorage,
 				insertParticipant.run(groupId, participant);
 			}
 		})();
-		return this.#account;
 	}
 
 	private setGroupColumn(groupId: GroupId, column: string, value: unknown): void {
@@ -277,10 +277,6 @@ export class SqliteClientStorage implements GroupInfoStorage, KeyGenInfoStorage,
 			throw new Error("group not found");
 		}
 		return result;
-	}
-
-	participant(groupId: GroupId): Address {
-		return this.getGroupThisParticipantColumn(groupId, "address", checkedAddressSchema);
 	}
 
 	threshold(groupId: GroupId): number {

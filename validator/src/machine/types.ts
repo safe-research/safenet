@@ -140,6 +140,7 @@ export type MachineStates = Readonly<{
 }>;
 
 export type MachineConfig = {
+	account: Address;
 	participantsInfo: ParticipantInfo[];
 	genesisSalt: Hex;
 	keyGenTimeout: bigint;

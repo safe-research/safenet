@@ -4,11 +4,10 @@ import type { NonceTree, PublicNonceCommitments } from "../signing/nonces.js";
 
 export type GroupInfoStorage = {
 	knownGroups(): GroupId[];
-	registerGroup(groupId: GroupId, participants: readonly Address[], threshold: number): Address;
+	registerGroup(groupId: GroupId, participants: readonly Address[], threshold: number): void;
 	registerVerification(groupId: GroupId, groupPublicKey: FrostPoint, verificationShare: FrostPoint): void;
 	registerSigningShare(groupId: GroupId, signingShare: bigint): void;
 
-	participant(groupId: GroupId): Address;
 	publicKey(groupId: GroupId): FrostPoint | undefined;
 	participants(groupId: GroupId): readonly Address[];
 	threshold(groupId: GroupId): number;

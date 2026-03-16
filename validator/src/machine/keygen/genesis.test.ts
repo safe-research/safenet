@@ -51,6 +51,7 @@ const PARTICIPANTS_INFO = [
 const PARTICIPANTS = PARTICIPANTS_INFO.map((i) => i.address);
 
 const MACHINE_CONFIG: MachineConfig = {
+	account: entryPoint06Address,
 	participantsInfo: PARTICIPANTS_INFO,
 	genesisSalt: zeroHash,
 	keyGenTimeout: 25n,
@@ -112,6 +113,8 @@ describe("gensis key gen", () => {
 		const groupSetup = {
 			groupId: "0xffa9d1aa438a646139fe8d817f9c9dbb060ee7e2e58f2b100000000000000000",
 			participantsRoot: "0x78d9152d3ca012af785cf642cd52803acabeaea430964b93136f31f83c7df9d0",
+		};
+		const keyGenSetup = {
 			commitments: [TEST_POINT],
 			pok: {
 				r: TEST_POINT,
@@ -121,8 +124,11 @@ describe("gensis key gen", () => {
 		};
 		const setupGroup = vi.fn();
 		setupGroup.mockReturnValueOnce(groupSetup);
+		const setupKeyGen = vi.fn();
+		setupKeyGen.mockReturnValueOnce(keyGenSetup);
 		const keyGenClient = {
 			setupGroup,
+			setupKeyGen,
 		} as unknown as KeyGenClient;
 		await expect(
 			handleGenesisKeyGen(MACHINE_CONFIG, keyGenClient, CONSENSUS_STATE, MACHINE_STATES, EVENT),
@@ -131,12 +137,16 @@ describe("gensis key gen", () => {
 		);
 		expect(setupGroup).toBeCalledTimes(1);
 		expect(setupGroup).toBeCalledWith(PARTICIPANTS.slice(0, 4).sort(), 3, zeroHash);
+		expect(setupKeyGen).toBeCalledTimes(1);
+		expect(setupKeyGen).toBeCalledWith(groupSetup.groupId, PARTICIPANTS.slice(0, 4).sort(), 3, entryPoint06Address);
 	});
 
 	it("should trigger genesis key gen with correct parameters", async () => {
 		const groupSetup = {
 			groupId: "0x17f7ec82700b24361d1ebf306c41b6576356a5d694c2c5770000000000000000",
 			participantsRoot: "0xf6a7256cea0721b8aefffe3f379ed98ea362aaf86492593bbfbda337471ecf4e",
+		};
+		const keyGenSetup = {
 			commitments: [TEST_POINT],
 			encryptionPublicKey: TEST_POINT,
 			pok: {
@@ -147,8 +157,11 @@ describe("gensis key gen", () => {
 		};
 		const setupGroup = vi.fn();
 		setupGroup.mockReturnValueOnce(groupSetup);
+		const setupKeyGen = vi.fn();
+		setupKeyGen.mockReturnValueOnce(keyGenSetup);
 		const keyGenClient = {
 			setupGroup,
+			setupKeyGen,
 		} as unknown as KeyGenClient;
 		const diff = await handleGenesisKeyGen(MACHINE_CONFIG, keyGenClient, CONSENSUS_STATE, MACHINE_STATES, EVENT);
 		expect(diff.actions).toStrictEqual([
@@ -158,10 +171,10 @@ describe("gensis key gen", () => {
 				count: 4,
 				threshold: 3,
 				context: zeroHash,
-				commitments: groupSetup.commitments,
-				encryptionPublicKey: groupSetup.encryptionPublicKey,
-				pok: groupSetup.pok,
-				poap: groupSetup.poap,
+				commitments: keyGenSetup.commitments,
+				encryptionPublicKey: keyGenSetup.encryptionPublicKey,
+				pok: keyGenSetup.pok,
+				poap: keyGenSetup.poap,
 			},
 		]);
 		expect(diff.rollover).toStrictEqual({
@@ -177,5 +190,7 @@ describe("gensis key gen", () => {
 		expect(diff.signing).toBeUndefined();
 		expect(setupGroup).toBeCalledTimes(1);
 		expect(setupGroup).toBeCalledWith(PARTICIPANTS.slice(0, 4).sort(), 3, zeroHash);
+		expect(setupKeyGen).toBeCalledTimes(1);
+		expect(setupKeyGen).toBeCalledWith(groupSetup.groupId, PARTICIPANTS.slice(0, 4).sort(), 3, entryPoint06Address);
 	});
 });

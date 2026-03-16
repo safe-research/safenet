@@ -1,4 +1,4 @@
-import { zeroAddress, zeroHash } from "viem";
+import { ethAddress, zeroAddress, zeroHash } from "viem";
 import { describe, expect, it, vi } from "vitest";
 import { log } from "../../__tests__/config.js";
 import type { SigningClient } from "../../consensus/signing/client.js";
@@ -79,6 +79,7 @@ const CONSENSUS_STATE: ConsensusState = {
 };
 
 const MACHINE_CONFIG: MachineConfig = {
+	account: ethAddress,
 	participantsInfo: [
 		{ address: zeroAddress, activeFrom: 0n },
 		{ address: zeroAddress, activeFrom: 0n },
@@ -112,12 +113,7 @@ describe("signing timeouts - base conditions", () => {
 
 describe("signing timeouts - waiting for attestation", () => {
 	it("should timeout without action when someone else responsible", async () => {
-		const signingGroup = vi.fn().mockReturnValueOnce("0x5afe");
-		const participant = vi.fn().mockReturnValueOnce("0x0000000000000000000000000000000000000002");
-		const signingClient = {
-			signingGroup,
-			participant,
-		} as unknown as SigningClient;
+		const signingClient = {} as unknown as SigningClient;
 		const machineStates: MachineStates = {
 			...MACHINE_STATES,
 			signing: {
@@ -147,21 +143,14 @@ describe("signing timeouts - waiting for attestation", () => {
 			},
 		]);
 		expect(diff[0].actions).toBeUndefined();
-
-		expect(signingGroup).toBeCalledTimes(1);
-		expect(signingGroup).toBeCalledWith("0x5af35af3");
-
-		expect(participant).toBeCalledTimes(1);
-		expect(participant).toBeCalledWith("0x5afe");
 	});
 
 	it("should timeout with actions when I am responsible (epoch rollover)", async () => {
-		const signingGroup = vi.fn().mockReturnValueOnce("0x5afe");
-		const participant = vi.fn().mockReturnValueOnce("0x0000000000000000000000000000000000000001");
-		const signingClient = {
-			signingGroup,
-			participant,
-		} as unknown as SigningClient;
+		const signingClient = {} as unknown as SigningClient;
+		const machineConfig: MachineConfig = {
+			...MACHINE_CONFIG,
+			account: "0x0000000000000000000000000000000000000001",
+		};
 		const machineStates: MachineStates = {
 			...MACHINE_STATES,
 			signing: {
@@ -174,7 +163,7 @@ describe("signing timeouts - waiting for attestation", () => {
 				},
 			},
 		};
-		const diff = checkSigningTimeouts(MACHINE_CONFIG, signingClient, CONSENSUS_STATE, machineStates, 2n, log);
+		const diff = checkSigningTimeouts(machineConfig, signingClient, CONSENSUS_STATE, machineStates, 2n, log);
 		expect(diff.length).toBe(1);
 		expect(diff[0].consensus).toStrictEqual({
 			signatureIdToMessage: ["0x5af35af3", undefined],
@@ -199,21 +188,14 @@ describe("signing timeouts - waiting for attestation", () => {
 				signatureId: "0x5af35af3",
 			},
 		]);
-
-		expect(signingGroup).toBeCalledTimes(1);
-		expect(signingGroup).toBeCalledWith("0x5af35af3");
-
-		expect(participant).toBeCalledTimes(1);
-		expect(participant).toBeCalledWith("0x5afe");
 	});
 
 	it("should timeout with actions when I am responsible (transaction attestation)", async () => {
-		const signingGroup = vi.fn().mockReturnValueOnce("0x5afe");
-		const participant = vi.fn().mockReturnValueOnce("0x0000000000000000000000000000000000000001");
-		const signingClient = {
-			signingGroup,
-			participant,
-		} as unknown as SigningClient;
+		const signingClient = {} as unknown as SigningClient;
+		const machineConfig: MachineConfig = {
+			...MACHINE_CONFIG,
+			account: "0x0000000000000000000000000000000000000001",
+		};
 		// Set package for a Safe transaction attestation
 		const signingState: SigningState = {
 			packet: TX_ATTESTATION_PACKET,
@@ -228,7 +210,7 @@ describe("signing timeouts - waiting for attestation", () => {
 				"0x5afe5afe5afe": signingState,
 			},
 		};
-		const diff = checkSigningTimeouts(MACHINE_CONFIG, signingClient, CONSENSUS_STATE, machineStates, 2n, log);
+		const diff = checkSigningTimeouts(machineConfig, signingClient, CONSENSUS_STATE, machineStates, 2n, log);
 		expect(diff.length).toBe(1);
 		expect(diff[0].consensus).toStrictEqual({
 			signatureIdToMessage: ["0x5af35af3", undefined],
@@ -254,21 +236,14 @@ describe("signing timeouts - waiting for attestation", () => {
 				signatureId: "0x5af35af3",
 			},
 		]);
-
-		expect(signingGroup).toBeCalledTimes(1);
-		expect(signingGroup).toBeCalledWith("0x5af35af3");
-
-		expect(participant).toBeCalledTimes(1);
-		expect(participant).toBeCalledWith("0x5afe");
 	});
 
 	it("should timeout with actions when I am responsible (epoch rollover)", async () => {
-		const signingGroup = vi.fn().mockReturnValueOnce("0x5afe");
-		const participant = vi.fn().mockReturnValueOnce("0x0000000000000000000000000000000000000001");
-		const signingClient = {
-			signingGroup,
-			participant,
-		} as unknown as SigningClient;
+		const signingClient = {} as unknown as SigningClient;
+		const machineConfig: MachineConfig = {
+			...MACHINE_CONFIG,
+			account: "0x0000000000000000000000000000000000000001",
+		};
 		const machineStates: MachineStates = {
 			...MACHINE_STATES,
 			signing: {
@@ -281,7 +256,7 @@ describe("signing timeouts - waiting for attestation", () => {
 				},
 			},
 		};
-		const diff = checkSigningTimeouts(MACHINE_CONFIG, signingClient, CONSENSUS_STATE, machineStates, 2n, log);
+		const diff = checkSigningTimeouts(machineConfig, signingClient, CONSENSUS_STATE, machineStates, 2n, log);
 		expect(diff.length).toBe(1);
 		expect(diff[0].consensus).toStrictEqual({
 			signatureIdToMessage: ["0x5af35af3", undefined],
@@ -298,12 +273,6 @@ describe("signing timeouts - waiting for attestation", () => {
 			},
 		]);
 		expect(diff[0].actions).toBeUndefined();
-
-		expect(signingGroup).toBeCalledTimes(1);
-		expect(signingGroup).toBeCalledWith("0x5af35af3");
-
-		expect(participant).toBeCalledTimes(1);
-		expect(participant).toBeCalledWith("0x5afe");
 	});
 
 	it("should timeout with actions when everyone is responsible (epoch rollover)", async () => {
@@ -535,11 +504,13 @@ describe("signing timeouts - waiting for request", () => {
 
 	it("should timeout with actions when I am responsible (epoch rollover)", async () => {
 		const threshold = vi.fn().mockReturnValueOnce(2);
-		const participant = vi.fn().mockReturnValueOnce("0x0000000000000000000000000000000000000001");
 		const signingClient = {
 			threshold,
-			participant,
 		} as unknown as SigningClient;
+		const machineConfig: MachineConfig = {
+			...MACHINE_CONFIG,
+			account: "0x0000000000000000000000000000000000000001",
+		};
 		const machineStates: MachineStates = {
 			...MACHINE_STATES,
 			signing: {
@@ -556,7 +527,7 @@ describe("signing timeouts - waiting for request", () => {
 				"0": "0x5afe",
 			},
 		};
-		const diff = checkSigningTimeouts(MACHINE_CONFIG, signingClient, consensusState, machineStates, 2n, log);
+		const diff = checkSigningTimeouts(machineConfig, signingClient, consensusState, machineStates, 2n, log);
 		expect(diff.length).toBe(1);
 		expect(diff[0].consensus).toBeUndefined();
 		expect(diff[0].rollover).toBeUndefined();
@@ -720,11 +691,13 @@ describe("signing timeouts - waiting for request", () => {
 
 	it("should timeout with actions when I am responsible (transaction attestation)", async () => {
 		const threshold = vi.fn().mockReturnValueOnce(2);
-		const participant = vi.fn().mockReturnValueOnce("0x0000000000000000000000000000000000000001");
 		const signingClient = {
 			threshold,
-			participant,
 		} as unknown as SigningClient;
+		const machineConfig: MachineConfig = {
+			...MACHINE_CONFIG,
+			account: "0x0000000000000000000000000000000000000001",
+		};
 		const machineStates: MachineStates = {
 			...MACHINE_STATES,
 			signing: {
@@ -742,7 +715,7 @@ describe("signing timeouts - waiting for request", () => {
 				"22": "0x5afe",
 			},
 		};
-		const diff = checkSigningTimeouts(MACHINE_CONFIG, signingClient, consensusState, machineStates, 2n, log);
+		const diff = checkSigningTimeouts(machineConfig, signingClient, consensusState, machineStates, 2n, log);
 		expect(diff.length).toBe(1);
 		expect(diff[0].consensus).toBeUndefined();
 		expect(diff[0].rollover).toBeUndefined();
@@ -851,9 +824,7 @@ describe("signing timeouts - collect nonce commitments", () => {
 		const signers = vi.fn().mockReturnValueOnce([1n, 2n, 3n]);
 		const threshold = vi.fn().mockReturnValueOnce(2);
 		const missingNonces = vi.fn().mockReturnValueOnce([3n]);
-		const participant = vi.fn().mockReturnValueOnce("0x0000000000000000000000000000000000000001");
 		const signingClient = {
-			participant,
 			missingNonces,
 			signers,
 			threshold,
@@ -902,22 +873,21 @@ describe("signing timeouts - collect nonce commitments", () => {
 
 		expect(missingNonces).toBeCalledTimes(1);
 		expect(missingNonces).toBeCalledWith("0x5af35af3");
-
-		expect(participant).toBeCalledTimes(1);
-		expect(participant).toBeCalledWith("0x5afe");
 	});
 
 	it("should timeout without action when I am responsible (epoch rollover)", async () => {
 		const signers = vi.fn().mockReturnValueOnce([1n, 2n, 3n]);
 		const threshold = vi.fn().mockReturnValueOnce(2);
 		const missingNonces = vi.fn().mockReturnValueOnce([3n]);
-		const participant = vi.fn().mockReturnValueOnce("0x0000000000000000000000000000000000000002");
 		const signingClient = {
-			participant,
 			missingNonces,
 			signers,
 			threshold,
 		} as unknown as SigningClient;
+		const machineConfig: MachineConfig = {
+			...MACHINE_CONFIG,
+			account: "0x0000000000000000000000000000000000000002",
+		};
 		const consensusState: ConsensusState = {
 			...CONSENSUS_STATE,
 			epochGroups: {
@@ -936,7 +906,7 @@ describe("signing timeouts - collect nonce commitments", () => {
 				},
 			},
 		};
-		const diff = checkSigningTimeouts(MACHINE_CONFIG, signingClient, consensusState, machineStates, 2n, log);
+		const diff = checkSigningTimeouts(machineConfig, signingClient, consensusState, machineStates, 2n, log);
 		expect(diff.length).toBe(1);
 		expect(diff[0].consensus).toStrictEqual({
 			signatureIdToMessage: ["0x5af35af3", undefined],
@@ -968,18 +938,13 @@ describe("signing timeouts - collect nonce commitments", () => {
 
 		expect(missingNonces).toBeCalledTimes(1);
 		expect(missingNonces).toBeCalledWith("0x5af35af3");
-
-		expect(participant).toBeCalledTimes(1);
-		expect(participant).toBeCalledWith("0x5afe");
 	});
 
 	it("should timeout without action when someone else responsible (transaction attestation)", async () => {
 		const signers = vi.fn().mockReturnValueOnce([1n, 2n, 3n]);
 		const threshold = vi.fn().mockReturnValueOnce(2);
 		const missingNonces = vi.fn().mockReturnValueOnce([3n]);
-		const participant = vi.fn().mockReturnValueOnce("0x0000000000000000000000000000000000000001");
 		const signingClient = {
-			participant,
 			missingNonces,
 			signers,
 			threshold,
@@ -1028,22 +993,21 @@ describe("signing timeouts - collect nonce commitments", () => {
 
 		expect(missingNonces).toBeCalledTimes(1);
 		expect(missingNonces).toBeCalledWith("0x5af35af3");
-
-		expect(participant).toBeCalledTimes(1);
-		expect(participant).toBeCalledWith("0x5afe");
 	});
 
 	it("should timeout without action when I am responsible (transaction attestation)", async () => {
 		const signers = vi.fn().mockReturnValueOnce([1n, 2n, 3n]);
 		const threshold = vi.fn().mockReturnValueOnce(2);
 		const missingNonces = vi.fn().mockReturnValueOnce([3n]);
-		const participant = vi.fn().mockReturnValueOnce("0x0000000000000000000000000000000000000002");
 		const signingClient = {
-			participant,
 			missingNonces,
 			signers,
 			threshold,
 		} as unknown as SigningClient;
+		const machineConfig: MachineConfig = {
+			...MACHINE_CONFIG,
+			account: "0x0000000000000000000000000000000000000002",
+		};
 		const consensusState: ConsensusState = {
 			...CONSENSUS_STATE,
 			epochGroups: {
@@ -1062,7 +1026,7 @@ describe("signing timeouts - collect nonce commitments", () => {
 				},
 			},
 		};
-		const diff = checkSigningTimeouts(MACHINE_CONFIG, signingClient, consensusState, machineStates, 2n, log);
+		const diff = checkSigningTimeouts(machineConfig, signingClient, consensusState, machineStates, 2n, log);
 		expect(diff.length).toBe(1);
 		expect(diff[0].consensus).toStrictEqual({
 			signatureIdToMessage: ["0x5af35af3", undefined],
@@ -1094,9 +1058,6 @@ describe("signing timeouts - collect nonce commitments", () => {
 
 		expect(missingNonces).toBeCalledTimes(1);
 		expect(missingNonces).toBeCalledWith("0x5af35af3");
-
-		expect(participant).toBeCalledTimes(1);
-		expect(participant).toBeCalledWith("0x5afe");
 	});
 });
 
@@ -1179,9 +1140,7 @@ describe("signing timeouts - collect signing shares", () => {
 				"0x0000000000000000000000000000000000000003",
 			]);
 		const threshold = vi.fn().mockReturnValueOnce(2);
-		const participant = vi.fn().mockReturnValueOnce("0x0000000000000000000000000000000000000001");
 		const signingClient = {
-			participant,
 			signers,
 			threshold,
 		} as unknown as SigningClient;
@@ -1227,9 +1186,6 @@ describe("signing timeouts - collect signing shares", () => {
 
 		expect(threshold).toBeCalledTimes(1);
 		expect(threshold).toBeCalledWith("0x5afe");
-
-		expect(participant).toBeCalledTimes(1);
-		expect(participant).toBeCalledWith("0x5afe");
 	});
 
 	it("should timeout without action when I am responsible (epoch rollover)", async () => {
@@ -1241,12 +1197,14 @@ describe("signing timeouts - collect signing shares", () => {
 				"0x0000000000000000000000000000000000000003",
 			]);
 		const threshold = vi.fn().mockReturnValueOnce(2);
-		const participant = vi.fn().mockReturnValueOnce("0x0000000000000000000000000000000000000002");
 		const signingClient = {
-			participant,
 			signers,
 			threshold,
 		} as unknown as SigningClient;
+		const machineConfig: MachineConfig = {
+			...MACHINE_CONFIG,
+			account: "0x0000000000000000000000000000000000000002",
+		};
 		const consensusState: ConsensusState = {
 			...CONSENSUS_STATE,
 			epochGroups: {
@@ -1266,7 +1224,7 @@ describe("signing timeouts - collect signing shares", () => {
 				},
 			},
 		};
-		const diff = checkSigningTimeouts(MACHINE_CONFIG, signingClient, consensusState, machineStates, 2n, log);
+		const diff = checkSigningTimeouts(machineConfig, signingClient, consensusState, machineStates, 2n, log);
 		expect(diff.length).toBe(1);
 		expect(diff[0].consensus).toStrictEqual({
 			signatureIdToMessage: ["0x5af35af3", undefined],
@@ -1295,9 +1253,6 @@ describe("signing timeouts - collect signing shares", () => {
 
 		expect(threshold).toBeCalledTimes(1);
 		expect(threshold).toBeCalledWith("0x5afe");
-
-		expect(participant).toBeCalledTimes(1);
-		expect(participant).toBeCalledWith("0x5afe");
 	});
 
 	it("should timeout without action when someone else responsible (transaction attestation)", async () => {
@@ -1309,9 +1264,7 @@ describe("signing timeouts - collect signing shares", () => {
 				"0x0000000000000000000000000000000000000003",
 			]);
 		const threshold = vi.fn().mockReturnValueOnce(2);
-		const participant = vi.fn().mockReturnValueOnce("0x0000000000000000000000000000000000000001");
 		const signingClient = {
-			participant,
 			signers,
 			threshold,
 		} as unknown as SigningClient;
@@ -1357,9 +1310,6 @@ describe("signing timeouts - collect signing shares", () => {
 
 		expect(threshold).toBeCalledTimes(1);
 		expect(threshold).toBeCalledWith("0x5afe");
-
-		expect(participant).toBeCalledTimes(1);
-		expect(participant).toBeCalledWith("0x5afe");
 	});
 
 	it("should timeout without action when I am responsible (transaction attestation)", async () => {
@@ -1371,12 +1321,14 @@ describe("signing timeouts - collect signing shares", () => {
 				"0x0000000000000000000000000000000000000003",
 			]);
 		const threshold = vi.fn().mockReturnValueOnce(2);
-		const participant = vi.fn().mockReturnValueOnce("0x0000000000000000000000000000000000000002");
 		const signingClient = {
 			threshold,
-			participant,
 			signers,
 		} as unknown as SigningClient;
+		const machineConfig: MachineConfig = {
+			...MACHINE_CONFIG,
+			account: "0x0000000000000000000000000000000000000002",
+		};
 		const consensusState: ConsensusState = {
 			...CONSENSUS_STATE,
 			epochGroups: {
@@ -1396,7 +1348,7 @@ describe("signing timeouts - collect signing shares", () => {
 				},
 			},
 		};
-		const diff = checkSigningTimeouts(MACHINE_CONFIG, signingClient, consensusState, machineStates, 2n, log);
+		const diff = checkSigningTimeouts(machineConfig, signingClient, consensusState, machineStates, 2n, log);
 		expect(diff.length).toBe(1);
 		expect(diff[0].consensus).toStrictEqual({
 			signatureIdToMessage: ["0x5af35af3", undefined],
@@ -1425,8 +1377,5 @@ describe("signing timeouts - collect signing shares", () => {
 
 		expect(threshold).toBeCalledTimes(1);
 		expect(threshold).toBeCalledWith("0x5afe");
-
-		expect(participant).toBeCalledTimes(1);
-		expect(participant).toBeCalledWith("0x5afe");
 	});
 });

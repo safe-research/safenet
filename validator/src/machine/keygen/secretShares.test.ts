@@ -21,6 +21,7 @@ const MACHINE_STATES: MachineStates = {
 };
 
 const MACHINE_CONFIG: MachineConfig = {
+	account: entryPoint06Address,
 	participantsInfo: [
 		{
 			address: entryPoint06Address,
@@ -79,18 +80,16 @@ describe("receiving secret shares", () => {
 	});
 
 	it("should not handle event if not part of group", async () => {
-		const participant = vi.fn();
-		participant.mockImplementationOnce(() => {
-			throw new Error("Test Error: unknown group!");
-		});
+		const participants = vi.fn();
+		participants.mockReturnValue([]);
 		const keyGenClient = {
-			participant,
+			participants,
 		} as unknown as KeyGenClient;
 		const diff = await handleKeyGenSecretShared(MACHINE_CONFIG, keyGenClient, MACHINE_STATES, EVENT);
 
 		expect(diff).toStrictEqual({});
-		expect(participant).toBeCalledTimes(1);
-		expect(participant).toBeCalledWith("0x06cb03baac74421225341827941e88d9547e5459c4b3715c0000000000000000");
+		expect(participants).toBeCalledTimes(1);
+		expect(participants).toBeCalledWith("0x06cb03baac74421225341827941e88d9547e5459c4b3715c0000000000000000");
 	});
 
 	it("should only update last participant if not completed", async () => {
@@ -98,11 +97,12 @@ describe("receiving secret shares", () => {
 			...EVENT,
 			shared: false,
 		};
-		const participant = vi.fn();
+		const participants = vi.fn();
+		participants.mockReturnValue(MACHINE_CONFIG.participantsInfo.map((p) => p.address));
 		const handleKeygenSecrets = vi.fn();
 		handleKeygenSecrets.mockReturnValue("pending_shares");
 		const keyGenClient = {
-			participant,
+			participants,
 			handleKeygenSecrets,
 		} as unknown as KeyGenClient;
 		const diff = await handleKeyGenSecretShared(MACHINE_CONFIG, keyGenClient, MACHINE_STATES, event);
@@ -114,13 +114,14 @@ describe("receiving secret shares", () => {
 			},
 			actions: [],
 		});
-		expect(participant).toBeCalledTimes(1);
-		expect(participant).toBeCalledWith("0x06cb03baac74421225341827941e88d9547e5459c4b3715c0000000000000000");
+		expect(participants).toBeCalledTimes(1);
+		expect(participants).toBeCalledWith("0x06cb03baac74421225341827941e88d9547e5459c4b3715c0000000000000000");
 		expect(handleKeygenSecrets).toBeCalledTimes(1);
 		expect(handleKeygenSecrets).toBeCalledWith(
 			"0x06cb03baac74421225341827941e88d9547e5459c4b3715c0000000000000000",
 			EVENT.participant,
 			[0x5afe5afe5afe01n, 0x5afe5afe5afe02n, 0x5afe5afe5afe03n],
+			entryPoint06Address,
 		);
 	});
 
@@ -129,11 +130,12 @@ describe("receiving secret shares", () => {
 			...EVENT,
 			shared: false,
 		};
-		const participant = vi.fn();
+		const participants = vi.fn();
+		participants.mockReturnValue(MACHINE_CONFIG.participantsInfo.map((p) => p.address));
 		const handleKeygenSecrets = vi.fn();
 		handleKeygenSecrets.mockReturnValue("invalid_share");
 		const keyGenClient = {
-			participant,
+			participants,
 			handleKeygenSecrets,
 		} as unknown as KeyGenClient;
 		const diff = await handleKeyGenSecretShared(MACHINE_CONFIG, keyGenClient, MACHINE_STATES, event);
@@ -152,22 +154,24 @@ describe("receiving secret shares", () => {
 				},
 			],
 		});
-		expect(participant).toBeCalledTimes(1);
-		expect(participant).toBeCalledWith("0x06cb03baac74421225341827941e88d9547e5459c4b3715c0000000000000000");
+		expect(participants).toBeCalledTimes(1);
+		expect(participants).toBeCalledWith("0x06cb03baac74421225341827941e88d9547e5459c4b3715c0000000000000000");
 		expect(handleKeygenSecrets).toBeCalledTimes(1);
 		expect(handleKeygenSecrets).toBeCalledWith(
 			"0x06cb03baac74421225341827941e88d9547e5459c4b3715c0000000000000000",
 			EVENT.participant,
 			[0x5afe5afe5afe01n, 0x5afe5afe5afe02n, 0x5afe5afe5afe03n],
+			entryPoint06Address,
 		);
 	});
 
 	it("should track invalid shares have been submitted and proceed to key gen without sending confirmation", async () => {
-		const participant = vi.fn();
+		const participants = vi.fn();
+		participants.mockReturnValue(MACHINE_CONFIG.participantsInfo.map((p) => p.address));
 		const handleKeygenSecrets = vi.fn();
 		handleKeygenSecrets.mockReturnValue("invalid_share");
 		const keyGenClient = {
-			participant,
+			participants,
 			handleKeygenSecrets,
 		} as unknown as KeyGenClient;
 		const diff = await handleKeyGenSecretShared(MACHINE_CONFIG, keyGenClient, MACHINE_STATES, EVENT);
@@ -193,13 +197,14 @@ describe("receiving secret shares", () => {
 				},
 			],
 		});
-		expect(participant).toBeCalledTimes(1);
-		expect(participant).toBeCalledWith("0x06cb03baac74421225341827941e88d9547e5459c4b3715c0000000000000000");
+		expect(participants).toBeCalledTimes(1);
+		expect(participants).toBeCalledWith("0x06cb03baac74421225341827941e88d9547e5459c4b3715c0000000000000000");
 		expect(handleKeygenSecrets).toBeCalledTimes(1);
 		expect(handleKeygenSecrets).toBeCalledWith(
 			"0x06cb03baac74421225341827941e88d9547e5459c4b3715c0000000000000000",
 			EVENT.participant,
 			[0x5afe5afe5afe01n, 0x5afe5afe5afe02n, 0x5afe5afe5afe03n],
+			entryPoint06Address,
 		);
 	});
 
@@ -215,11 +220,12 @@ describe("receiving secret shares", () => {
 			},
 			signing: {},
 		};
-		const participant = vi.fn();
+		const participants = vi.fn();
+		participants.mockReturnValue(MACHINE_CONFIG.participantsInfo.map((p) => p.address));
 		const handleKeygenSecrets = vi.fn();
 		handleKeygenSecrets.mockReturnValue("shares_completed");
 		const keyGenClient = {
-			participant,
+			participants,
 			handleKeygenSecrets,
 		} as unknown as KeyGenClient;
 		const diff = await handleKeyGenSecretShared(MACHINE_CONFIG, keyGenClient, machineStates, EVENT);
@@ -245,22 +251,24 @@ describe("receiving secret shares", () => {
 				},
 			],
 		});
-		expect(participant).toBeCalledTimes(1);
-		expect(participant).toBeCalledWith("0x06cb03baac74421225341827941e88d9547e5459c4b3715c0000000000000000");
+		expect(participants).toBeCalledTimes(1);
+		expect(participants).toBeCalledWith("0x06cb03baac74421225341827941e88d9547e5459c4b3715c0000000000000000");
 		expect(handleKeygenSecrets).toBeCalledTimes(1);
 		expect(handleKeygenSecrets).toBeCalledWith(
 			"0x06cb03baac74421225341827941e88d9547e5459c4b3715c0000000000000000",
 			EVENT.participant,
 			[0x5afe5afe5afe01n, 0x5afe5afe5afe02n, 0x5afe5afe5afe03n],
+			entryPoint06Address,
 		);
 	});
 
 	it("should carry over complaints and missing shares", async () => {
-		const participant = vi.fn();
+		const participants = vi.fn();
+		participants.mockReturnValue(MACHINE_CONFIG.participantsInfo.map((p) => p.address));
 		const handleKeygenSecrets = vi.fn();
 		handleKeygenSecrets.mockReturnValue("pending_shares");
 		const keyGenClient = {
-			participant,
+			participants,
 			handleKeygenSecrets,
 		} as unknown as KeyGenClient;
 
@@ -297,22 +305,24 @@ describe("receiving secret shares", () => {
 			},
 			actions: [],
 		});
-		expect(participant).toBeCalledTimes(1);
-		expect(participant).toBeCalledWith("0x06cb03baac74421225341827941e88d9547e5459c4b3715c0000000000000000");
+		expect(participants).toBeCalledTimes(1);
+		expect(participants).toBeCalledWith("0x06cb03baac74421225341827941e88d9547e5459c4b3715c0000000000000000");
 		expect(handleKeygenSecrets).toBeCalledTimes(1);
 		expect(handleKeygenSecrets).toBeCalledWith(
 			"0x06cb03baac74421225341827941e88d9547e5459c4b3715c0000000000000000",
 			EVENT.participant,
 			[0x5afe5afe5afe01n, 0x5afe5afe5afe02n, 0x5afe5afe5afe03n],
+			entryPoint06Address,
 		);
 	});
 
 	it("should trigger key gen confirm with callback", async () => {
-		const participant = vi.fn();
+		const participants = vi.fn();
+		participants.mockReturnValue(MACHINE_CONFIG.participantsInfo.map((p) => p.address));
 		const handleKeygenSecrets = vi.fn();
 		handleKeygenSecrets.mockReturnValue("shares_completed");
 		const keyGenClient = {
-			participant,
+			participants,
 			handleKeygenSecrets,
 		} as unknown as KeyGenClient;
 		const diff = await handleKeyGenSecretShared(MACHINE_CONFIG, keyGenClient, MACHINE_STATES, EVENT);
@@ -339,13 +349,14 @@ describe("receiving secret shares", () => {
 				},
 			],
 		});
-		expect(participant).toBeCalledTimes(1);
-		expect(participant).toBeCalledWith("0x06cb03baac74421225341827941e88d9547e5459c4b3715c0000000000000000");
+		expect(participants).toBeCalledTimes(1);
+		expect(participants).toBeCalledWith("0x06cb03baac74421225341827941e88d9547e5459c4b3715c0000000000000000");
 		expect(handleKeygenSecrets).toBeCalledTimes(1);
 		expect(handleKeygenSecrets).toBeCalledWith(
 			"0x06cb03baac74421225341827941e88d9547e5459c4b3715c0000000000000000",
 			EVENT.participant,
 			[0x5afe5afe5afe01n, 0x5afe5afe5afe02n, 0x5afe5afe5afe03n],
+			entryPoint06Address,
 		);
 	});
 });

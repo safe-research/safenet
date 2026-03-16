@@ -19,6 +19,7 @@ const MACHINE_STATES: MachineStates = {
 };
 
 const MACHINE_CONFIG: MachineConfig = {
+	account: entryPoint06Address,
 	participantsInfo: [
 		{
 			address: entryPoint06Address,
@@ -79,32 +80,30 @@ describe("key gen committed", () => {
 	});
 
 	it("should not handle event if part of the group", async () => {
-		const participant = vi.fn();
+		const participants = vi.fn();
 		const keyGenClient = {
-			participant,
+			participants,
 		} as unknown as KeyGenClient;
-		participant.mockImplementationOnce(() => {
-			throw new Error("Test Error: Unknown group!");
-		});
+		participants.mockReturnValueOnce([]);
 		const diff = await handleKeyGenCommitted(MACHINE_CONFIG, keyGenClient, MACHINE_STATES, EVENT);
 
 		expect(diff).toStrictEqual({});
-		expect(participant).toBeCalledTimes(1);
-		expect(participant).toBeCalledWith("0x06cb03baac74421225341827941e88d9547e5459c4b3715c0000000000000000");
+		expect(participants).toBeCalledTimes(1);
+		expect(participants).toBeCalledWith("0x06cb03baac74421225341827941e88d9547e5459c4b3715c0000000000000000");
 	});
 
 	it("should not update state if invalid commitment", async () => {
-		const participant = vi.fn();
+		const participants = vi.fn().mockReturnValueOnce(MACHINE_CONFIG.participantsInfo.map((p) => p.address));
 		const handleKeygenCommitment = vi.fn().mockReturnValueOnce(false);
 		const keyGenClient = {
 			handleKeygenCommitment,
-			participant,
+			participants,
 		} as unknown as KeyGenClient;
 		const diff = await handleKeyGenCommitted(MACHINE_CONFIG, keyGenClient, MACHINE_STATES, EVENT);
 
 		expect(diff).toStrictEqual({});
-		expect(participant).toBeCalledTimes(1);
-		expect(participant).toBeCalledWith("0x06cb03baac74421225341827941e88d9547e5459c4b3715c0000000000000000");
+		expect(participants).toBeCalledTimes(1);
+		expect(participants).toBeCalledWith("0x06cb03baac74421225341827941e88d9547e5459c4b3715c0000000000000000");
 		expect(handleKeygenCommitment).toBeCalledTimes(1);
 		expect(handleKeygenCommitment).toBeCalledWith(
 			"0x06cb03baac74421225341827941e88d9547e5459c4b3715c0000000000000000",
@@ -123,17 +122,17 @@ describe("key gen committed", () => {
 			...EVENT,
 			committed: false,
 		};
-		const participant = vi.fn();
+		const participants = vi.fn().mockReturnValueOnce(MACHINE_CONFIG.participantsInfo.map((p) => p.address));
 		const handleKeygenCommitment = vi.fn();
 		const keyGenClient = {
 			handleKeygenCommitment,
-			participant,
+			participants,
 		} as unknown as KeyGenClient;
 		const diff = await handleKeyGenCommitted(MACHINE_CONFIG, keyGenClient, MACHINE_STATES, event);
 
 		expect(diff).toStrictEqual({});
-		expect(participant).toBeCalledTimes(1);
-		expect(participant).toBeCalledWith("0x06cb03baac74421225341827941e88d9547e5459c4b3715c0000000000000000");
+		expect(participants).toBeCalledTimes(1);
+		expect(participants).toBeCalledWith("0x06cb03baac74421225341827941e88d9547e5459c4b3715c0000000000000000");
 		expect(handleKeygenCommitment).toBeCalledTimes(1);
 		expect(handleKeygenCommitment).toBeCalledWith(
 			"0x06cb03baac74421225341827941e88d9547e5459c4b3715c0000000000000000",
@@ -148,7 +147,7 @@ describe("key gen committed", () => {
 	});
 
 	it("should publish secret shares once fully committed", async () => {
-		const participant = vi.fn();
+		const participants = vi.fn().mockReturnValueOnce(MACHINE_CONFIG.participantsInfo.map((p) => p.address));
 		const handleKeygenCommitment = vi.fn().mockReturnValueOnce(true);
 		const createSecretShares = vi.fn();
 		createSecretShares.mockReturnValueOnce({
@@ -156,7 +155,7 @@ describe("key gen committed", () => {
 			shares: [0x5afe01n, 0x5afe03n],
 		});
 		const keyGenClient = {
-			participant,
+			participants,
 			handleKeygenCommitment,
 			createSecretShares,
 		} as unknown as KeyGenClient;
@@ -180,8 +179,8 @@ describe("key gen committed", () => {
 				},
 			],
 		});
-		expect(participant).toBeCalledTimes(1);
-		expect(participant).toBeCalledWith("0x06cb03baac74421225341827941e88d9547e5459c4b3715c0000000000000000");
+		expect(participants).toBeCalledTimes(1);
+		expect(participants).toBeCalledWith("0x06cb03baac74421225341827941e88d9547e5459c4b3715c0000000000000000");
 		expect(handleKeygenCommitment).toBeCalledTimes(1);
 		expect(handleKeygenCommitment).toBeCalledWith(
 			"0x06cb03baac74421225341827941e88d9547e5459c4b3715c0000000000000000",
@@ -194,6 +193,9 @@ describe("key gen committed", () => {
 			},
 		);
 		expect(createSecretShares).toBeCalledTimes(1);
-		expect(createSecretShares).toBeCalledWith("0x06cb03baac74421225341827941e88d9547e5459c4b3715c0000000000000000");
+		expect(createSecretShares).toBeCalledWith(
+			"0x06cb03baac74421225341827941e88d9547e5459c4b3715c0000000000000000",
+			entryPoint06Address,
+		);
 	});
 });

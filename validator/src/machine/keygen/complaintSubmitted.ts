@@ -61,7 +61,8 @@ export const handleComplaintSubmitted = async (
 		},
 	};
 
-	if (event.accused !== keyGenClient.participant(event.gid)) {
+	// TODO: [observe mode] make sure that this doesn't throw
+	if (event.accused !== machineConfig.account) {
 		return {
 			rollover,
 		};

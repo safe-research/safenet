@@ -41,20 +41,26 @@ describe("keyGen", () => {
 			const storage = createClientStorage(p.address);
 			const client = new KeyGenClient(storage, testLogger);
 			return {
+				account: p.address,
 				storage,
 				client,
 			};
 		});
 		log("------------------------ Trigger Keygen Init and Commitments ------------------------");
-		for (const { client } of clients) {
+		for (const { client, account } of clients) {
 			log(">>>> Keygen and Commit >>>>");
-			const { encryptionPublicKey, commitments, poap, pok } = client.setupGroup(participants, threshold, context);
-			const participant = client.participant(groupId);
-			expect(verifyMerkleProof(participantsRoot, pad(participant).toLowerCase() as Hex, poap)).toBeTruthy();
+			const { groupId } = client.setupGroup(participants, threshold, context);
+			const { encryptionPublicKey, commitments, poap, pok } = client.setupKeyGen(
+				groupId,
+				participants,
+				threshold,
+				account,
+			);
+			expect(verifyMerkleProof(participantsRoot, pad(account).toLowerCase() as Hex, poap)).toBeTruthy();
 			log("######################################");
 			commitmentEvents.push({
 				groupId,
-				participant,
+				participant: account,
 				encryptionPublicKey,
 				commitments,
 				pok,
@@ -68,26 +74,25 @@ describe("keyGen", () => {
 			}
 		}
 		log("------------------------ Publish Secret Shares ------------------------");
-		for (const { client } of clients) {
-			log(`>>>> Publish secret share of ${client.participant(groupId)} >>>>`);
-			const { verificationShare, shares } = client.createSecretShares(groupId);
-			const participant = client.participant(groupId);
+		for (const { client, account } of clients) {
+			log(`>>>> Publish secret share of ${account} >>>>`);
+			const { verificationShare, shares } = client.createSecretShares(groupId, account);
 			shareEvents.push({
 				groupId,
-				participant,
+				participant: account,
 				verificationShare,
 				shares,
 			});
 		}
 		log("------------------------ Handle Secret Shares ------------------------");
-		for (const { client } of clients) {
+		for (const { client, account } of clients) {
 			for (const e of shareEvents) {
 				log(`>>>> Handle secrets shares from ${e.participant} >>>>`);
-				const response = await client.handleKeygenSecrets(e.groupId, e.participant, e.shares);
+				const response = await client.handleKeygenSecrets(e.groupId, e.participant, e.shares, account);
 				expect(response).not.toBe("invalid_share");
 			}
 		}
-		for (const { storage } of clients) {
+		for (const { storage, account } of clients) {
 			log(storage.accountAddress());
 			for (const groupId of storage.knownGroups()) {
 				const publicKey = storage.publicKey(groupId);
@@ -96,7 +101,7 @@ describe("keyGen", () => {
 					groupId,
 					signingShare: storage.signingShare(groupId),
 					participants: storage.participants(groupId),
-					participant: storage.participant(groupId),
+					participant: account,
 					verificationShare: {
 						x: verificationShare?.x,
 						y: verificationShare?.y,

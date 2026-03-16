@@ -1,4 +1,4 @@
-import { zeroAddress, zeroHash } from "viem";
+import { ethAddress, zeroAddress, zeroHash } from "viem";
 import { describe, expect, it, vi } from "vitest";
 import type { SafenetProtocol } from "../../consensus/protocol/types.js";
 import type { SigningClient } from "../../consensus/signing/client.js";
@@ -18,6 +18,7 @@ const CONSENSUS_STATE: ConsensusState = {
 };
 
 const MACHINE_CONFIG: MachineConfig = {
+	account: ethAddress,
 	participantsInfo: [
 		{
 			address: zeroAddress,

@@ -1,9 +1,10 @@
 import type { ProtocolAction } from "../../consensus/protocol/types.js";
 import type { SigningClient } from "../../consensus/signing/client.js";
 import type { EpochStagedEvent } from "../transitions/types.js";
-import type { ConsensusDiff, MachineStates, StateDiff } from "../types.js";
+import type { ConsensusDiff, MachineConfig, MachineStates, StateDiff } from "../types.js";
 
 export const handleEpochStaged = async (
+	machineConfig: MachineConfig,
 	signingClient: SigningClient,
 	machineStates: MachineStates,
 	event: EpochStagedEvent,
@@ -30,11 +31,7 @@ export const handleEpochStaged = async (
 		signing: [machineStates.rollover.message, undefined],
 	};
 
-	try {
-		// Check if validator is part of group, method will throw if not
-		signingClient.participant(groupId);
-	} catch {
-		// This validator is not part of the group, don't generate a nonce tree
+	if (!signingClient.participants(groupId).includes(machineConfig.account)) {
 		return diff;
 	}
 

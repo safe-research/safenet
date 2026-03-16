@@ -1,4 +1,4 @@
-import { zeroHash } from "viem";
+import { ethAddress, zeroHash } from "viem";
 import { describe, expect, it, vi } from "vitest";
 import type { SigningClient } from "../../consensus/signing/client.js";
 import type { VerificationEngine } from "../../consensus/verify/engine.js";
@@ -47,6 +47,7 @@ const CONSENSUS_STATE: ConsensusState = {
 };
 
 const MACHINE_CONFIG: MachineConfig = {
+	account: ethAddress,
 	participantsInfo: [],
 	genesisSalt: zeroHash,
 	keyGenTimeout: 0n,
@@ -143,6 +144,7 @@ describe("collecting shares", () => {
 			"0x5afe5afe",
 			0n,
 			["0x0000000000000000000000000000000000000001", "0x0000000000000000000000000000000000000002"],
+			ethAddress,
 		);
 		expect(createNonceCommitments).toBeCalledTimes(1);
 		expect(diff.rollover).toBeUndefined();
@@ -209,6 +211,7 @@ describe("collecting shares", () => {
 			"0x5afe5afe",
 			0n,
 			["0x0000000000000000000000000000000000000001", "0x0000000000000000000000000000000000000002"],
+			ethAddress,
 		);
 		expect(createNonceCommitments).toBeCalledTimes(1);
 		expect(availableNoncesCount).toBeCalledTimes(2);

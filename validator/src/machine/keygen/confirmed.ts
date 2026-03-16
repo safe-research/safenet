@@ -130,7 +130,7 @@ export const handleKeyGenConfirmed = async (
 		};
 	}
 	const signers = signingClient.participants(activeGroup);
-	if (!signers.includes(signingClient.participant(activeGroup))) {
+	if (!signers.includes(machineConfig.account)) {
 		// Not part of active group, don't participate in epoch signing
 		return {
 			rollover,

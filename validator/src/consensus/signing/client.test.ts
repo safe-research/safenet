@@ -113,15 +113,15 @@ describe("signing", () => {
 			storage.registerSigningShare(TEST_GROUP.groupId, a.signingShare);
 			const client = new SigningClient(storage);
 			return {
+				account: a.account,
 				storage,
 				client,
 			};
 		});
 		const groupId = TEST_GROUP.groupId;
 		log("------------------------ Inject Nonce Commitments ------------------------");
-		for (const { client, storage } of clients) {
-			const participant = storage.participant(groupId);
-			const participantIndex = TEST_GROUP.participants.findIndex((p) => p === participant);
+		for (const { client, storage, account } of clients) {
+			const participantIndex = TEST_GROUP.participants.findIndex((p) => p === account);
 			const treeInfo = NONCE_TREES[participantIndex];
 			const commitments0: NonceCommitments = {
 				hidingNonce: treeInfo.d,
@@ -135,28 +135,35 @@ describe("signing", () => {
 				root: treeInfo.root as Hex,
 			};
 			storage.registerNonceTree(groupId, nonceTree);
-			client.handleNonceCommitmentsHash(groupId, participant, nonceTree.root, 0n);
+			client.handleNonceCommitmentsHash(groupId, nonceTree.root, 0n);
 		}
 		log("------------------------ Trigger Signing Request ------------------------");
 		const signatureId = "0x0000000000000000000000017fa9385be102ac3eac297483dd6233d62b3e1496";
 		const message = keccak256(stringToBytes("Hello, Safenet!"));
-		for (const { client, storage } of clients) {
-			log(`>>>> Signing request to ${storage.participant(groupId)} >>>>`);
-			const commitments = client.createNonceCommitments(groupId, signatureId, message, 0n, TEST_GROUP.participants);
+		for (const { client, account } of clients) {
+			log(`>>>> Signing request to ${account} >>>>`);
+			const commitments = client.createNonceCommitments(
+				groupId,
+				signatureId,
+				message,
+				0n,
+				TEST_GROUP.participants,
+				account,
+			);
 			nonceRevealEvent.push({
 				signatureId,
-				signer: storage.participant(groupId),
+				signer: account,
 				nonces: commitments.nonceCommitments,
 			});
 		}
 		log("------------------------ Reveal Nonces ------------------------");
 		for (const e of nonceRevealEvent) {
-			for (const { client, storage } of clients) {
-				log(`>>>> Nonce reveal from ${e.signer} to ${storage.participant(groupId)} >>>>`);
-				const readyToSubmit = client.handleNonceCommitments(e.signatureId, e.signer, e.nonces);
+			for (const { client, account } of clients) {
+				log(`>>>> Nonce reveal from ${e.signer} to ${account} >>>>`);
+				const readyToSubmit = client.handleNonceCommitments(e.signatureId, e.signer, e.nonces, account);
 				if (!readyToSubmit) continue;
 
-				const { commitmentShare, signatureShare } = client.createSignatureShare(e.signatureId);
+				const { commitmentShare, signatureShare } = client.createSignatureShare(e.signatureId, account);
 
 				signatureShareEvents.push({
 					signatureId: e.signatureId,

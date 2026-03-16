@@ -1,4 +1,4 @@
-import { zeroAddress, zeroHash } from "viem";
+import { ethAddress, zeroAddress, zeroHash } from "viem";
 import { describe, expect, it, vi } from "vitest";
 import { TEST_POINT } from "../__tests__/data/machine.js";
 import type { KeyGenClient } from "../consensus/keyGen/client.js";
@@ -86,6 +86,7 @@ const makeMachine = (
 	metrics: Metrics,
 ): SafenetStateMachine =>
 	new SafenetStateMachine({
+		account: ethAddress,
 		participants: PARTICIPANTS,
 		genesisSalt: zeroHash,
 		protocol: makeProtocol(),

@@ -44,10 +44,6 @@ export class KeyGenClient {
 		this.#logger = logger;
 	}
 
-	participant(groupId: GroupId): Address {
-		return this.#storage.participant(groupId);
-	}
-
 	participants(groupId: GroupId): readonly Address[] {
 		return this.#storage.participants(groupId);
 	}
@@ -83,15 +79,30 @@ export class KeyGenClient {
 	): {
 		groupId: GroupId;
 		participantsRoot: Hex;
+		// TODO: allow to observe
+	} {
+		const participantsRoot = calculateParticipantsRoot(participants);
+		const count = participants.length;
+		const groupId = calcGroupId(participantsRoot, count, threshold, context);
+		// TODO: [observe mode] calculate participant id elsewhere
+		this.#storage.registerGroup(groupId, participants, threshold);
+		return {
+			groupId,
+			participantsRoot,
+		};
+	}
+
+	setupKeyGen(
+		groupId: GroupId,
+		participants: Address[],
+		threshold: number,
+		participant: Address,
+	): {
 		encryptionPublicKey: FrostPoint;
 		commitments: FrostPoint[];
 		pok: ProofOfKnowledge;
 		poap: ProofOfAttestationParticipation;
 	} {
-		const participantsRoot = calculateParticipantsRoot(participants);
-		const count = participants.length;
-		const groupId = calcGroupId(participantsRoot, count, threshold, context);
-		const participant = this.#storage.registerGroup(groupId, participants, threshold);
 		const encryption = createEncryptionKey();
 		const coefficients = createCoefficients(threshold);
 		this.#storage.registerKeyGen(groupId, encryption.secretKey, coefficients);
@@ -99,8 +110,6 @@ export class KeyGenClient {
 		const commitments = createCommitments(coefficients);
 		const poap = generateParticipantProof(participants, participant);
 		return {
-			groupId,
-			participantsRoot,
 			pok,
 			poap,
 			encryptionPublicKey: encryption.publicKey,
@@ -121,14 +130,17 @@ export class KeyGenClient {
 	}
 
 	// Round 2.1
-	createSecretShares(groupId: GroupId): {
+	createSecretShares(
+		groupId: GroupId,
+		participant: Address,
+	): {
 		verificationShare: FrostPoint;
 		shares: bigint[];
 	} {
 		const commitments = toParticipantIdMap(this.#storage.commitmentsMap(groupId));
 		const groupPublicKey = createVerificationShare(commitments, 0n);
+		// TODO: [observe mode] allow to register group public key
 		// Will be published as y
-		const participant = this.#storage.participant(groupId);
 		const verificationShare = createVerificationShare(commitments, deriveParticipantId(participant));
 		this.#storage.registerVerification(groupId, groupPublicKey, verificationShare);
 
@@ -139,6 +151,7 @@ export class KeyGenClient {
 		for (const peer of participants) {
 			if (peer === participant) continue;
 			const peerId = deriveParticipantId(peer);
+			// TODO: [observe mode] remove - peerCommitments are not used here anymore (previously it was utilized for encryption)
 			const peerCommitments = commitments.get(peerId);
 			if (peerCommitments === undefined) throw new Error(`Commitments for ${groupId}:${peer} are not available!`);
 			const peerEncryptionPublicKey = this.#storage.encryptionPublicKey(groupId, peer);
@@ -197,8 +210,8 @@ export class KeyGenClient {
 		groupId: GroupId,
 		sender: Address,
 		secretShare: bigint,
+		participant: Address,
 	): Promise<"invalid_share" | "pending_shares" | "shares_completed"> {
-		const participant = this.#storage.participant(groupId);
 		if (!this.verifySecretShare(groupId, sender, participant, secretShare)) {
 			return "invalid_share";
 		}
@@ -211,13 +224,13 @@ export class KeyGenClient {
 		groupId: GroupId,
 		sender: Address,
 		peerShares: readonly bigint[],
+		participant: Address,
 	): Promise<"invalid_share" | "pending_shares" | "shares_completed"> {
 		const participants = this.#storage.participants(groupId);
 		if (peerShares.length !== participants.length - 1) {
 			// Invalid data was submitted, flag this so a complaint can be issued
 			return "invalid_share";
 		}
-		const participant = this.#storage.participant(groupId);
 		const participantId = deriveParticipantId(participant);
 		if (sender === participant) {
 			this.#logger.debug("Register own shares");

@@ -39,6 +39,7 @@ export const handleSign = async (
 		event.message,
 		event.sequence,
 		status.signers,
+		machineConfig.account,
 	);
 
 	const actions = diff.actions ?? [];

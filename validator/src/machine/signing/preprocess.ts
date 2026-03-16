@@ -1,8 +1,9 @@
 import type { SigningClient } from "../../consensus/signing/client.js";
 import type { NonceCommitmentsHashEvent } from "../transitions/types.js";
-import type { ConsensusDiff, ConsensusState, StateDiff } from "../types.js";
+import type { ConsensusDiff, ConsensusState, MachineConfig, StateDiff } from "../types.js";
 
 export const handlePreprocess = async (
+	machineConfig: MachineConfig,
 	signingClient: SigningClient,
 	consensusState: ConsensusState,
 	event: NonceCommitmentsHashEvent,
@@ -16,6 +17,8 @@ export const handlePreprocess = async (
 	if (consensusState.groupPendingNonces[event.gid] === true) {
 		consensus.groupPendingNonces = [event.gid];
 	}
-	signingClient.handleNonceCommitmentsHash(event.gid, event.participant, event.commitment, event.chunk);
+	if (event.participant === machineConfig.account) {
+		signingClient.handleNonceCommitmentsHash(event.gid, event.commitment, event.chunk);
+	}
 	return { consensus };
 };
