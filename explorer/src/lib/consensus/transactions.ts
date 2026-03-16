@@ -48,16 +48,6 @@ export type ProposalStatus = "ATTESTED" | "PROPOSED" | "TIMED_OUT";
 
 export type TransactionProposalWithStatus = TransactionProposal & { status: ProposalStatus };
 
-export function getProposalStatus(
-	proposal: TransactionProposal,
-	currentBlock: bigint,
-	signingTimeout: number,
-): ProposalStatus {
-	if (proposal.attestedAt !== null) return "ATTESTED";
-	if (currentBlock - proposal.proposedAt.block > BigInt(signingTimeout)) return "TIMED_OUT";
-	return "PROPOSED";
-}
-
 export type LoadTransactionProposalsResult = {
 	proposals: TransactionProposalWithStatus[];
 	fromBlock: bigint;
@@ -152,19 +142,23 @@ export const loadTransactionProposals = async ({
 				return undefined;
 			}
 
-			const attestation = attestations.get(attestationKey(log));
-			const proposal: TransactionProposal = {
+			const attestedAt = attestations.get(attestationKey(log)) ?? null;
+			const proposedAt = { block: log.blockNumber, tx: log.transactionHash };
+			const status: ProposalStatus =
+				attestedAt !== null
+					? "ATTESTED"
+					: toBlock - proposedAt.block > BigInt(signingTimeout)
+						? "TIMED_OUT"
+						: "PROPOSED";
+			return {
 				chainId: log.args.chainId,
 				safeTxHash: log.args.safeTxHash,
 				epoch: log.args.epoch,
 				transaction: transaction.data,
-				proposedAt: {
-					block: log.blockNumber,
-					tx: log.transactionHash,
-				},
-				attestedAt: attestation ?? null,
+				proposedAt,
+				attestedAt,
+				status,
 			};
-			return { ...proposal, status: getProposalStatus(proposal, toBlock, signingTimeout) };
 		})
 		.filter((proposal) => proposal !== undefined);
 
