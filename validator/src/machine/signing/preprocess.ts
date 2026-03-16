@@ -16,6 +16,6 @@ export const handlePreprocess = async (
 	if (consensusState.groupPendingNonces[event.gid] === true) {
 		consensus.groupPendingNonces = [event.gid];
 	}
-	signingClient.handleNonceCommitmentsHash(event.gid, event.identifier, event.commitment, event.chunk);
+	signingClient.handleNonceCommitmentsHash(event.gid, event.participant, event.commitment, event.chunk);
 	return { consensus };
 };
