@@ -11,7 +11,7 @@ interface ZodSchema<Output> {
 	parse(data: unknown): Output;
 }
 
-const dbIntegerSchema = z.int().transform((id) => BigInt(id));
+const dbIntegerSchema = z.int().transform((i) => BigInt(i));
 const dbPointSchema = z.instanceof(Buffer).transform(pointFromBytes);
 const dbScalarSchema = z.instanceof(Buffer).transform(scalarFromBytes);
 const dbPointArraySchema = z.instanceof(Buffer).transform(chunked(33, pointFromBytes));
@@ -342,11 +342,11 @@ export class SqliteClientStorage implements GroupInfoStorage, KeyGenInfoStorage,
 		// Because we are selecting the `groups` table and using a `LEFT JOIN`,
 		// then if the group with `groupId` exists then the query will return
 		// at least one row regardless of whether or not there are matching
-		// participants (with a `group_participants.id` value of `NULL` in case
-		// there are no rows from the `group_participants` table to join on).
-		// If there are no matching groups with `groupId`, then the select will
-		// return no rows. This, critically, allows us to differentiate between
-		// missing groups, and groups with no missing commitments:
+		// participants (with a `group_participants.address` value of `NULL` in
+		// case there are no rows from the `group_participants` table to join
+		// on). If there are no matching groups with `groupId`, then the select
+		// will return no rows. This, critically, allows us to differentiate
+		// between missing groups, and groups with no missing commitments:
 		//
 		// - returns `[]` in case there is no rows in `groups` with `groupId`.
 		// - returns `[null]` in case there is a row in `groups` with `groupId`
@@ -441,7 +441,7 @@ export class SqliteClientStorage implements GroupInfoStorage, KeyGenInfoStorage,
 						SELECT 1
 						FROM group_participants AS p
 				 		LEFT JOIN group_secret_shares AS s
-				 		ON s.group_id = p.group_id AND s.address = ? AND s.from_participant = p.id
+				 		ON s.group_id = p.group_id AND s.address = ? AND s.from_participant = p.address
 				 		WHERE p.group_id = ? AND s.secret_share IS NULL
 					)
 					ELSE NULL

@@ -18,8 +18,8 @@ const MOCK_VALID_URL = "http://127.0.0.1:8545";
 const MOCK_INVALID_URL = "not_a_real_url";
 const VALID_PARTICIPANTS_INPUT = `[{ "address": "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266" }, { "address": "0x6Adb3baB5730852eB53987EA89D8e8f16393C200" }]`;
 const VALID_PARTICIPANTS_OUTPUT = [
-	{ id: 1n, address: "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266", activeFrom: 0n },
-	{ id: 2n, address: "0x6Adb3baB5730852eB53987EA89D8e8f16393C200", activeFrom: 0n },
+	{ address: "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266", activeFrom: 0n },
+	{ address: "0x6Adb3baB5730852eB53987EA89D8e8f16393C200", activeFrom: 0n },
 ];
 
 // --- Tests ---

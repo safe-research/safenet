@@ -1,5 +1,10 @@
 import { ethAddress, maxUint64, zeroHash } from "viem";
-import { entryPoint06Address, entryPoint07Address, entryPoint08Address } from "viem/account-abstraction";
+import {
+	entryPoint06Address,
+	entryPoint07Address,
+	entryPoint08Address,
+	entryPoint09Address,
+} from "viem/account-abstraction";
 import { describe, expect, it, vi } from "vitest";
 import { TEST_POINT } from "../../__tests__/data/machine.js";
 import type { KeyGenClient } from "../../consensus/keyGen/client.js";
@@ -22,35 +27,28 @@ const CONSENSUS_STATE: ConsensusState = {
 
 const PARTICIPANTS_INFO = [
 	{
-		id: 1n,
 		address: entryPoint06Address,
 		activeFrom: 0n,
 	},
 	{
-		id: 2n,
 		address: entryPoint07Address,
 		activeFrom: 0n,
 	},
 	{
-		id: 3n,
 		address: entryPoint08Address,
 		activeFrom: 0n,
 	},
 	{
-		id: 4n,
-		address: entryPoint08Address,
+		address: entryPoint09Address,
 		activeFrom: 0n,
 	},
 	{
-		id: 5n,
 		address: ethAddress,
 		activeFrom: 1n,
 	},
 ];
 
-const PARTICIPANTS = PARTICIPANTS_INFO.map((i) => {
-	return { address: i.address, id: i.id };
-});
+const PARTICIPANTS = PARTICIPANTS_INFO.map((i) => i.address);
 
 const MACHINE_CONFIG: MachineConfig = {
 	participantsInfo: PARTICIPANTS_INFO,
@@ -64,8 +62,8 @@ const EVENT: KeyGenEvent = {
 	id: "event_key_gen",
 	block: 4n,
 	index: 0,
-	gid: "0x00a9d1aa438a646139fe8d817f9c9dbb060ee7e2e58f2b100000000000000000",
-	participants: "0x78d9152d3ca012af785cf642cd52803acabeaea430964b93136f31f83c7df9d0",
+	gid: "0x17f7ec82700b24361d1ebf306c41b6576356a5d694c2c5770000000000000000",
+	participants: "0xf6a7256cea0721b8aefffe3f379ed98ea362aaf86492593bbfbda337471ecf4e",
 	count: 4,
 	threshold: 3,
 	context: zeroHash,
@@ -114,7 +112,6 @@ describe("gensis key gen", () => {
 		const groupSetup = {
 			groupId: "0xffa9d1aa438a646139fe8d817f9c9dbb060ee7e2e58f2b100000000000000000",
 			participantsRoot: "0x78d9152d3ca012af785cf642cd52803acabeaea430964b93136f31f83c7df9d0",
-			participantId: 2n,
 			commitments: [TEST_POINT],
 			pok: {
 				r: TEST_POINT,
@@ -133,14 +130,13 @@ describe("gensis key gen", () => {
 			new Error("Unexpected genesis group 0xffa9d1aa438a646139fe8d817f9c9dbb060ee7e2e58f2b100000000000000000"),
 		);
 		expect(setupGroup).toBeCalledTimes(1);
-		expect(setupGroup).toBeCalledWith(PARTICIPANTS.slice(0, 4), 3, zeroHash);
+		expect(setupGroup).toBeCalledWith(PARTICIPANTS.slice(0, 4).sort(), 3, zeroHash);
 	});
 
 	it("should trigger genesis key gen with correct parameters", async () => {
 		const groupSetup = {
-			groupId: "0x00a9d1aa438a646139fe8d817f9c9dbb060ee7e2e58f2b100000000000000000",
-			participantsRoot: "0x78d9152d3ca012af785cf642cd52803acabeaea430964b93136f31f83c7df9d0",
-			participantId: 2n,
+			groupId: "0x17f7ec82700b24361d1ebf306c41b6576356a5d694c2c5770000000000000000",
+			participantsRoot: "0xf6a7256cea0721b8aefffe3f379ed98ea362aaf86492593bbfbda337471ecf4e",
 			commitments: [TEST_POINT],
 			encryptionPublicKey: TEST_POINT,
 			pok: {
@@ -162,7 +158,6 @@ describe("gensis key gen", () => {
 				count: 4,
 				threshold: 3,
 				context: zeroHash,
-				participantId: 2n,
 				commitments: groupSetup.commitments,
 				encryptionPublicKey: groupSetup.encryptionPublicKey,
 				pok: groupSetup.pok,
@@ -171,19 +166,16 @@ describe("gensis key gen", () => {
 		]);
 		expect(diff.rollover).toStrictEqual({
 			id: "collecting_commitments",
-			groupId: "0x00a9d1aa438a646139fe8d817f9c9dbb060ee7e2e58f2b100000000000000000",
+			groupId: "0x17f7ec82700b24361d1ebf306c41b6576356a5d694c2c5770000000000000000",
 			nextEpoch: 0n,
 			deadline: maxUint64,
 		});
 		expect(diff.consensus).toStrictEqual({
-			genesisGroupId: "0x00a9d1aa438a646139fe8d817f9c9dbb060ee7e2e58f2b100000000000000000",
-			epochGroup: [
-				0n,
-				{ groupId: "0x00a9d1aa438a646139fe8d817f9c9dbb060ee7e2e58f2b100000000000000000", participantId: 2n },
-			],
+			genesisGroupId: "0x17f7ec82700b24361d1ebf306c41b6576356a5d694c2c5770000000000000000",
+			epochGroup: [0n, "0x17f7ec82700b24361d1ebf306c41b6576356a5d694c2c5770000000000000000"],
 		});
 		expect(diff.signing).toBeUndefined();
 		expect(setupGroup).toBeCalledTimes(1);
-		expect(setupGroup).toBeCalledWith(PARTICIPANTS.slice(0, 4), 3, zeroHash);
+		expect(setupGroup).toBeCalledWith(PARTICIPANTS.slice(0, 4).sort(), 3, zeroHash);
 	});
 });

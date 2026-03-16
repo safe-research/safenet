@@ -11,22 +11,18 @@ import { checkKeyGenTimeouts } from "./timeouts.js";
 const MACHINE_CONFIG: MachineConfig = {
 	participantsInfo: [
 		{
-			id: 1n,
 			address: entryPoint06Address,
 			activeFrom: 0n,
 		},
 		{
-			id: 3n,
 			address: entryPoint07Address,
 			activeFrom: 0n,
 		},
 		{
-			id: 7n,
 			address: entryPoint08Address,
 			activeFrom: 0n,
 		},
 		{
-			id: 11n,
 			address: ethAddress,
 			activeFrom: 0n,
 		},
@@ -102,7 +98,7 @@ describe("key gen timeouts", () => {
 				deadline: 22n,
 				complaints: {},
 				missingSharesFrom: [],
-				confirmationsFrom: [1n, 7n, 11n],
+				confirmationsFrom: [entryPoint06Address, entryPoint08Address, ethAddress],
 			} as RolloverState,
 			keyGenInvocations: [0, 0],
 		},
@@ -116,10 +112,10 @@ describe("key gen timeouts", () => {
 				responseDeadline: 25n,
 				deadline: 35n,
 				complaints: {
-					"3": { unresponded: 1n, total: 1n },
+					[entryPoint07Address]: { unresponded: 1, total: 1 },
 				},
 				missingSharesFrom: [],
-				confirmationsFrom: [1n, 3n, 11n],
+				confirmationsFrom: [entryPoint06Address, entryPoint07Address, ethAddress],
 			} as RolloverState,
 			keyGenInvocations: [0, 0],
 		},
@@ -136,20 +132,20 @@ describe("key gen timeouts", () => {
 			expect(diff).toStrictEqual({});
 		});
 		it("should trigger key gen after deadline has passed", () => {
-			const groupSetup = makeGroupSetup(7n);
+			const groupSetup = makeGroupSetup();
 			const consensus = vi.fn();
 			consensus.mockReturnValueOnce(ethAddress);
 			const protocol = {
 				consensus,
 			} as unknown as SafenetProtocol;
 			const missingCommitments = vi.fn();
-			missingCommitments.mockReturnValueOnce([3n]);
+			missingCommitments.mockReturnValueOnce([entryPoint07Address]);
 			const missingSecretShares = vi.fn();
-			missingSecretShares.mockReturnValueOnce([3n]);
+			missingSecretShares.mockReturnValueOnce([entryPoint07Address]);
 			const setupGroup = vi.fn();
 			setupGroup.mockReturnValueOnce(groupSetup);
 			const participants = vi.fn();
-			participants.mockReturnValueOnce(MACHINE_CONFIG.participantsInfo);
+			participants.mockReturnValueOnce([entryPoint06Address, entryPoint07Address, entryPoint08Address, ethAddress]);
 			const keyGenClient = {
 				participants,
 				setupGroup,
@@ -168,7 +164,6 @@ describe("key gen timeouts", () => {
 					count: 3,
 					threshold: 2,
 					context: "0x00000000eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee000000000000000a",
-					participantId: 7n,
 					commitments: groupSetup.commitments,
 					encryptionPublicKey: groupSetup.encryptionPublicKey,
 					pok: groupSetup.pok,
@@ -182,7 +177,7 @@ describe("key gen timeouts", () => {
 				deadline: 30n,
 			});
 			expect(diff.consensus).toStrictEqual({
-				epochGroup: [10n, { groupId: "0x5afe02", participantId: 7n }],
+				epochGroup: [10n, "0x5afe02"],
 			});
 			expect(diff.signing).toBeUndefined();
 
@@ -197,7 +192,7 @@ describe("key gen timeouts", () => {
 			}
 			expect(setupGroup).toBeCalledTimes(1);
 			expect(setupGroup).toBeCalledWith(
-				[MACHINE_CONFIG.participantsInfo[0], MACHINE_CONFIG.participantsInfo[2], MACHINE_CONFIG.participantsInfo[3]],
+				[entryPoint06Address, entryPoint08Address, ethAddress],
 				2,
 				"0x00000000eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee000000000000000a",
 			);

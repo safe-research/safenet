@@ -12,7 +12,7 @@ const CONSENSUS_STATE: ConsensusState = {
 	activeEpoch: 0n,
 	groupPendingNonces: {},
 	epochGroups: {
-		"10": { groupId: "0x5af3", participantId: 1n },
+		"10": "0x5af3",
 	},
 	signatureIdToMessage: {},
 };
@@ -20,22 +20,18 @@ const CONSENSUS_STATE: ConsensusState = {
 const MACHINE_CONFIG: MachineConfig = {
 	participantsInfo: [
 		{
-			id: 1n,
 			address: zeroAddress,
 			activeFrom: 0n,
 		},
 		{
-			id: 3n,
 			address: zeroAddress,
 			activeFrom: 0n,
 		},
 		{
-			id: 7n,
 			address: zeroAddress,
 			activeFrom: 0n,
 		},
 		{
-			id: 10n,
 			address: zeroAddress,
 			activeFrom: 0n,
 		},
