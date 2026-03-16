@@ -6,7 +6,7 @@ import {
 	entryPoint09Address,
 } from "viem/account-abstraction";
 import { describe, expect, it, vi } from "vitest";
-import { makeGroupSetup } from "../../__tests__/data/machine.js";
+import { makeGroupSetup, makeKeyGenSetup } from "../../__tests__/data/machine.js";
 import type { KeyGenClient } from "../../consensus/keyGen/client.js";
 import type { SafenetProtocol } from "../../consensus/protocol/types.js";
 import type { KeyGenComplaintSubmittedEvent } from "../transitions/types.js";
@@ -25,6 +25,7 @@ const EVENT: KeyGenComplaintSubmittedEvent = {
 	compromised: false,
 };
 const MACHINE_CONFIG: MachineConfig = {
+	account: entryPoint06Address,
 	participantsInfo: [
 		{ address: entryPoint06Address, activeFrom: 0n },
 		{ address: entryPoint07Address, activeFrom: 0n },
@@ -268,6 +269,10 @@ describe("complaint submitted", () => {
 			threshold,
 		} as unknown as KeyGenClient;
 		const protocol = makeProtocol();
+		const machineConfig = {
+			...MACHINE_CONFIG,
+			account: entryPoint07Address,
+		};
 		const machineStates: MachineStates = {
 			rollover: {
 				id: "collecting_shares",
@@ -281,7 +286,7 @@ describe("complaint submitted", () => {
 			},
 			signing: {},
 		};
-		const diff = await handleComplaintSubmitted(MACHINE_CONFIG, protocol, keyGenClient, machineStates, EVENT);
+		const diff = await handleComplaintSubmitted(machineConfig, protocol, keyGenClient, machineStates, EVENT);
 		expect(diff).toStrictEqual({
 			rollover: {
 				id: "collecting_shares",
@@ -306,13 +311,17 @@ describe("complaint submitted", () => {
 
 	it("should restart key gen when complaints exceed threshold", async () => {
 		const groupSetup = makeGroupSetup();
+		const keyGenSetup = makeKeyGenSetup();
 		const participants = [entryPoint06Address, entryPoint07Address, entryPoint08Address, entryPoint09Address];
 		const setupGroup = vi.fn();
 		setupGroup.mockReturnValueOnce(groupSetup);
+		const setupKeyGen = vi.fn();
+		setupKeyGen.mockReturnValueOnce(keyGenSetup);
 		const threshold = vi.fn();
 		threshold.mockReturnValueOnce(2);
 		const keyGenClient = {
 			setupGroup,
+			setupKeyGen,
 			threshold,
 			participants: vi.fn().mockReturnValueOnce(participants),
 		} as unknown as KeyGenClient;
@@ -342,10 +351,10 @@ describe("complaint submitted", () => {
 				count: 3,
 				threshold: 2,
 				context: calcGroupContext(ethAddress, 10n),
-				commitments: groupSetup.commitments,
-				encryptionPublicKey: groupSetup.encryptionPublicKey,
-				pok: groupSetup.pok,
-				poap: groupSetup.poap,
+				commitments: keyGenSetup.commitments,
+				encryptionPublicKey: keyGenSetup.encryptionPublicKey,
+				pok: keyGenSetup.pok,
+				poap: keyGenSetup.poap,
 			},
 		]);
 		expect(diff.rollover).toStrictEqual({

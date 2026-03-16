@@ -92,6 +92,7 @@ export class ValidatorService {
 		const initialRolloverState: RolloverState = skipGenesis ? { id: "skip_genesis" } : { id: "waiting_for_genesis" };
 		const stateStorage = new SqliteStateStorage(database, initialRolloverState);
 		this.#stateMachine = new SafenetStateMachine({
+			account: account.address,
 			participants: config.participants,
 			blocksPerEpoch: config.blocksPerEpoch,
 			logger: this.#logger,

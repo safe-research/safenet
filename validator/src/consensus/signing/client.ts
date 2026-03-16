@@ -33,10 +33,8 @@ export class SigningClient {
 		return nonceTreeRoot;
 	}
 
-	handleNonceCommitmentsHash(groupId: GroupId, sender: Address, nonceCommitmentsHash: Hex, chunk: bigint) {
-		const participant = this.#storage.participant(groupId);
-		// Only link own nonce commitments
-		if (sender !== participant) return;
+	// TODO: [observe mode]
+	handleNonceCommitmentsHash(groupId: GroupId, nonceCommitmentsHash: Hex, chunk: bigint) {
 		this.#storage.linkNonceTree(groupId, chunk, nonceCommitmentsHash);
 	}
 
@@ -46,6 +44,7 @@ export class SigningClient {
 		message: Hex,
 		sequence: bigint,
 		signers: readonly Address[],
+		participant: Address,
 	): {
 		nonceCommitments: PublicNonceCommitments;
 		nonceProof: Hex[];
@@ -65,7 +64,6 @@ export class SigningClient {
 		const { chunk, offset } = decodeSequence(sequence);
 		const nonceTree = this.#storage.nonceTree(groupId, chunk);
 		const { nonceCommitments, nonceProof } = nonceCommitmentsWithProof(nonceTree, offset);
-		const participant = this.#storage.participant(groupId);
 		this.#storage.registerNonceCommitments(signatureId, participant, nonceCommitments);
 		return {
 			nonceCommitments,
@@ -73,17 +71,23 @@ export class SigningClient {
 		};
 	}
 
-	handleNonceCommitments(signatureId: SignatureId, peer: Address, nonceCommitments: PublicNonceCommitments): boolean {
-		const groupId = this.#storage.signingGroup(signatureId);
-		const signer = this.#storage.participant(groupId);
+	handleNonceCommitments(
+		signatureId: SignatureId,
+		peer: Address,
+		nonceCommitments: PublicNonceCommitments,
+		participant: Address,
+	): boolean {
 		// Skip own commits
-		if (signer === peer) return false;
+		if (participant === peer) return false;
 		this.#storage.registerNonceCommitments(signatureId, peer, nonceCommitments);
 
 		return this.#storage.checkIfNoncesComplete(signatureId);
 	}
 
-	createSignatureShare(signatureId: SignatureId): {
+	createSignatureShare(
+		signatureId: SignatureId,
+		signer: Address,
+	): {
 		signersRoot: Hex;
 		signersProof: Hex[];
 		groupCommitment: FrostPoint;
@@ -93,7 +97,6 @@ export class SigningClient {
 	} {
 		const groupId = this.#storage.signingGroup(signatureId);
 		const signers = this.signers(signatureId);
-		const signer = this.#storage.participant(groupId);
 
 		// Derive the FROST identifiers from the signer addresses.
 		const sortedSigners = sortedParticipants(signers);
@@ -205,9 +208,5 @@ export class SigningClient {
 
 	threshold(groupId: GroupId): number {
 		return this.#storage.threshold(groupId);
-	}
-
-	participant(groupId: GroupId): Address {
-		return this.#storage.participant(groupId);
 	}
 }

@@ -1,13 +1,14 @@
 import { zeroHash } from "viem";
 import { entryPoint06Address, entryPoint07Address, entryPoint08Address } from "viem/account-abstraction";
 import { describe, expect, it, vi } from "vitest";
-import { makeGroupSetup } from "../../__tests__/data/machine.js";
+import { makeGroupSetup, makeKeyGenSetup } from "../../__tests__/data/machine.js";
 import type { KeyGenClient } from "../../consensus/keyGen/client.js";
 import type { MachineConfig } from "../types.js";
 import { triggerKeyGen } from "./trigger.js";
 
 // --- Test Data ---
 const MACHINE_CONFIG = {
+	account: entryPoint06Address,
 	participantsInfo: [
 		{
 			address: entryPoint06Address,
@@ -73,8 +74,12 @@ describe("trigger key gen", () => {
 		const setupGroup = vi.fn();
 		const groupSetup = makeGroupSetup();
 		setupGroup.mockReturnValueOnce(groupSetup);
+		const setupKeyGen = vi.fn();
+		const keyGenSetup = makeKeyGenSetup();
+		setupKeyGen.mockReturnValueOnce(keyGenSetup);
 		const keyGenClient = {
 			setupGroup,
+			setupKeyGen,
 		} as unknown as KeyGenClient;
 		const diff = triggerKeyGen(MACHINE_CONFIG, keyGenClient, 2n, 30n, PARTICIPANTS, context);
 
@@ -85,10 +90,10 @@ describe("trigger key gen", () => {
 				count: 3,
 				threshold: 2,
 				context,
-				commitments: groupSetup.commitments,
-				encryptionPublicKey: groupSetup.encryptionPublicKey,
-				pok: groupSetup.pok,
-				poap: groupSetup.poap,
+				commitments: keyGenSetup.commitments,
+				encryptionPublicKey: keyGenSetup.encryptionPublicKey,
+				pok: keyGenSetup.pok,
+				poap: keyGenSetup.poap,
 			},
 		]);
 		expect(diff.rollover).toStrictEqual({

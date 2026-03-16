@@ -1,4 +1,4 @@
-import type { Hex } from "viem";
+import type { Address, Hex } from "viem";
 import type { KeyGenClient } from "../consensus/keyGen/client.js";
 import type { ProtocolAction, SafenetProtocol } from "../consensus/protocol/types.js";
 import type { SigningClient } from "../consensus/signing/client.js";
@@ -52,6 +52,7 @@ export class SafenetStateMachine {
 	#currentTransition?: StateTransition;
 
 	constructor({
+		account,
 		participants,
 		protocol,
 		keyGenClient,
@@ -65,6 +66,7 @@ export class SafenetStateMachine {
 		signingTimeout,
 		storage,
 	}: {
+		account: Address;
 		participants: ParticipantInfo[];
 		genesisSalt: Hex;
 		protocol: SafenetProtocol;
@@ -79,6 +81,7 @@ export class SafenetStateMachine {
 		storage: StateStorage;
 	}) {
 		this.#machineConfig = {
+			account,
 			participantsInfo: participants,
 			genesisSalt: genesisSalt,
 			blocksPerEpoch: blocksPerEpoch ?? BLOCKS_PER_EPOCH,
@@ -287,7 +290,13 @@ export class SafenetStateMachine {
 			}
 			// aka Preprocess
 			case "event_nonce_commitments_hash": {
-				return await handlePreprocess(this.#signingClient, consensusState, transition, this.#logger.info);
+				return await handlePreprocess(
+					this.#machineConfig,
+					this.#signingClient,
+					consensusState,
+					transition,
+					this.#logger.info,
+				);
 			}
 			case "event_sign_request": {
 				return await handleSign(
@@ -320,7 +329,7 @@ export class SafenetStateMachine {
 				return {};
 			}
 			case "event_epoch_staged": {
-				return await handleEpochStaged(this.#signingClient, machineStates, transition);
+				return await handleEpochStaged(this.#machineConfig, this.#signingClient, machineStates, transition);
 			}
 			case "event_transaction_proposed": {
 				return await handleTransactionProposed(

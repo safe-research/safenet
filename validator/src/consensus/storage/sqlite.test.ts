@@ -24,14 +24,12 @@ describe("sqlite", () => {
 			const storage = testStorage(participants[1]);
 
 			expect(storage.knownGroups()).toEqual([]);
-			expect(() => storage.participant(groups[0])).toThrowError();
 			expect(() => storage.participants(groups[0])).toThrowError();
 			expect(() => storage.threshold(groups[0])).toThrowError();
 
 			storage.registerGroup(groups[0], participants, 2);
 
 			expect(storage.knownGroups()).toEqual([groups[0]]);
-			expect(storage.participant(groups[0])).toBe(participants[1]);
 			expect(storage.participants(groups[0])).toEqual(participants);
 			expect(storage.threshold(groups[0])).toBe(2);
 		});
@@ -83,7 +81,6 @@ describe("sqlite", () => {
 			storage.unregisterGroup(groups[0]);
 
 			expect(storage.knownGroups()).toEqual([groups[1]]);
-			expect(() => storage.participant(groups[0])).toThrowError();
 			expect(() => storage.participants(groups[0])).toThrowError();
 		});
 	});

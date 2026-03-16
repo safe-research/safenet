@@ -19,10 +19,15 @@ export const handleRevealedNonces = async (
 	// Check that state for signature id is "collect_nonce_commitments"
 	const status = machineStates.signing[message];
 	if (status?.id !== "collect_nonce_commitments") return {};
-	const readyToSubmit = signingClient.handleNonceCommitments(event.sid, event.participant, {
-		hidingNonceCommitment: event.nonces.d,
-		bindingNonceCommitment: event.nonces.e,
-	});
+	const readyToSubmit = signingClient.handleNonceCommitments(
+		event.sid,
+		event.participant,
+		{
+			hidingNonceCommitment: event.nonces.d,
+			bindingNonceCommitment: event.nonces.e,
+		},
+		machineConfig.account,
+	);
 	if (!readyToSubmit)
 		return {
 			signing: [
@@ -35,7 +40,7 @@ export const handleRevealedNonces = async (
 		};
 	// If all participants have committed update state for request id to "collect_signing_shares"
 	const { signersRoot, signersProof, groupCommitment, commitmentShare, signatureShare, lagrangeCoefficient } =
-		signingClient.createSignatureShare(event.sid);
+		signingClient.createSignatureShare(event.sid, machineConfig.account);
 
 	const callbackContext =
 		machineStates.rollover.id === "sign_rollover" && machineStates.rollover.message === message

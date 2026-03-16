@@ -113,11 +113,11 @@ const createTestClient = (signerIndex: number, threshold: number = TEST_GROUP.pa
 	storage.registerVerification(TEST_GROUP.groupId, TEST_GROUP.publicKey, signer.verificationShare);
 	storage.registerSigningShare(TEST_GROUP.groupId, signer.signingShare);
 	const client = new SigningClient(storage);
-	return { storage, client };
+	return { storage, client, account: signer.account };
 };
 
 const createTestClientWithNonces = (signerIndex: number, threshold: number = TEST_GROUP.participants.length) => {
-	const { storage, client } = createTestClient(signerIndex, threshold);
+	const { storage, client, account } = createTestClient(signerIndex, threshold);
 	const treeInfo = NONCE_TREES[signerIndex];
 	const commitments0: NonceCommitments = {
 		hidingNonce: treeInfo.d,
@@ -131,8 +131,8 @@ const createTestClientWithNonces = (signerIndex: number, threshold: number = TES
 		root: treeInfo.root as Hex,
 	};
 	storage.registerNonceTree(TEST_GROUP.groupId, nonceTree);
-	client.handleNonceCommitmentsHash(TEST_GROUP.groupId, storage.participant(TEST_GROUP.groupId), nonceTree.root, 0n);
-	return { storage, client };
+	client.handleNonceCommitmentsHash(TEST_GROUP.groupId, nonceTree.root, 0n);
+	return { storage, client, account };
 };
 
 // --- Tests ---
@@ -157,15 +157,15 @@ describe("SigningClient", () => {
 				storage.registerSigningShare(TEST_GROUP.groupId, a.signingShare);
 				const client = new SigningClient(storage);
 				return {
+					account: a.account,
 					storage,
 					client,
 				};
 			});
 			const groupId = TEST_GROUP.groupId;
 			log("------------------------ Inject Nonce Commitments ------------------------");
-			for (const { client, storage } of clients) {
-				const participant = storage.participant(groupId);
-				const treeInfo = NONCE_TREES[TEST_SIGNERS.findIndex((s) => s.account === participant)];
+			for (const { client, storage, account } of clients) {
+				const treeInfo = NONCE_TREES[TEST_SIGNERS.findIndex((s) => s.account === account)];
 				const commitments0: NonceCommitments = {
 					hidingNonce: treeInfo.d,
 					bindingNonce: treeInfo.e,
@@ -178,33 +178,39 @@ describe("SigningClient", () => {
 					root: treeInfo.root as Hex,
 				};
 				storage.registerNonceTree(groupId, nonceTree);
-				client.handleNonceCommitmentsHash(groupId, participant, nonceTree.root, 0n);
+				client.handleNonceCommitmentsHash(groupId, nonceTree.root, 0n);
 			}
 			log("------------------------ Trigger Signing Request ------------------------");
 			const signatureId = SIGNATURE_ID;
 			const message = MESSAGE;
-			for (const { client, storage } of clients) {
-				const participant = storage.participant(groupId);
-				log(`>>>> Signing request to ${participant} >>>>`);
-				const commitments = client.createNonceCommitments(groupId, signatureId, message, 0n, TEST_GROUP.participants);
+			for (const { client, account } of clients) {
+				log(`>>>> Signing request to ${account} >>>>`);
+				const commitments = client.createNonceCommitments(
+					groupId,
+					signatureId,
+					message,
+					0n,
+					TEST_GROUP.participants,
+					account,
+				);
 				nonceRevealEvent.push({
 					signatureId,
-					signer: participant,
+					signer: account,
 					nonces: commitments.nonceCommitments,
 				});
 			}
 			log("------------------------ Reveal Nonces ------------------------");
 			for (const e of nonceRevealEvent) {
-				for (const { client, storage } of clients) {
-					log(`>>>> Nonce reveal from ${e.signer} to ${storage.participant(groupId)} >>>>`);
-					const readyToSubmit = client.handleNonceCommitments(e.signatureId, e.signer, e.nonces);
+				for (const { client, account } of clients) {
+					log(`>>>> Nonce reveal from ${e.signer} to ${account} >>>>`);
+					const readyToSubmit = client.handleNonceCommitments(e.signatureId, e.signer, e.nonces, account);
 					if (!readyToSubmit) continue;
 
-					const { commitmentShare, signatureShare } = client.createSignatureShare(e.signatureId);
+					const { commitmentShare, signatureShare } = client.createSignatureShare(e.signatureId, account);
 
 					signatureShareEvents.push({
 						signatureId: e.signatureId,
-						signer: storage.participant(groupId),
+						signer: account,
 						z: signatureShare,
 						r: commitmentShare,
 					});
@@ -246,39 +252,24 @@ describe("SigningClient", () => {
 	describe("handleNonceCommitmentsHash", () => {
 		it("links nonce tree when sender is own participant ID", () => {
 			const { client, storage } = createTestClient(0);
-			const ownAddress = storage.participant(TEST_GROUP.groupId);
 
 			const treeRoot = client.generateNonceTree(TEST_GROUP.groupId);
-			client.handleNonceCommitmentsHash(TEST_GROUP.groupId, ownAddress, treeRoot, 0n);
+			client.handleNonceCommitmentsHash(TEST_GROUP.groupId, treeRoot, 0n);
 
 			expect(storage.nonceTree(TEST_GROUP.groupId, 0n)).toBeDefined();
-		});
-
-		it("ignores nonce commitments hash from other participants", () => {
-			const { client, storage } = createTestClient(0);
-			const ownAddress = storage.participant(TEST_GROUP.groupId);
-			const otherAddress = TEST_GROUP.participants.find((p) => p !== ownAddress) as Address;
-
-			const treeRoot = client.generateNonceTree(TEST_GROUP.groupId);
-
-			// Should silently skip — nothing gets linked
-			client.handleNonceCommitmentsHash(TEST_GROUP.groupId, otherAddress, treeRoot, 0n);
-
-			expect(() => storage.nonceTree(TEST_GROUP.groupId, 0n)).toThrow();
 		});
 	});
 
 	describe("createNonceCommitments", () => {
 		it("returns nonce commitments and merkle proof", () => {
-			const { client, storage } = createTestClient(0);
-			const ownAddress = storage.participant(TEST_GROUP.groupId);
+			const { client, storage, account } = createTestClient(0);
 			const signers = TEST_GROUP.participants;
 
 			// Generate and link a real nonce tree
 			const root = client.generateNonceTree(TEST_GROUP.groupId);
-			client.handleNonceCommitmentsHash(TEST_GROUP.groupId, ownAddress, root, 0n);
+			client.handleNonceCommitmentsHash(TEST_GROUP.groupId, root, 0n);
 
-			const result = client.createNonceCommitments(TEST_GROUP.groupId, SIGNATURE_ID, MESSAGE, 0n, signers);
+			const result = client.createNonceCommitments(TEST_GROUP.groupId, SIGNATURE_ID, MESSAGE, 0n, signers, account);
 
 			// Retrieve the stored nonce tree to access actual scalar nonces
 			const nonceTree = storage.nonceTree(TEST_GROUP.groupId, 0n);
@@ -293,30 +284,30 @@ describe("SigningClient", () => {
 		});
 
 		it("throws when signers count is below threshold", () => {
-			const { client } = createTestClientWithNonces(0);
+			const { client, account } = createTestClientWithNonces(0);
 			// Threshold is 5 (all participants), so providing only 2 signers should fail
 			const signers = TEST_GROUP.participants.slice(0, 2);
 
-			expect(() => client.createNonceCommitments(TEST_GROUP.groupId, SIGNATURE_ID, MESSAGE, 0n, signers)).toThrow(
-				"Not enough signers to start signing process",
-			);
+			expect(() =>
+				client.createNonceCommitments(TEST_GROUP.groupId, SIGNATURE_ID, MESSAGE, 0n, signers, account),
+			).toThrow("Not enough signers to start signing process");
 		});
 
 		it("throws when signer ID is not a valid participant", () => {
-			const { client } = createTestClientWithNonces(0);
+			const { client, account } = createTestClientWithNonces(0);
 			const invalidAddress = "0x0000000000000000000000000000000000000999" as const;
 			const signers = [...TEST_GROUP.participants.slice(0, 4), invalidAddress];
 
-			expect(() => client.createNonceCommitments(TEST_GROUP.groupId, SIGNATURE_ID, MESSAGE, 0n, signers)).toThrow(
-				"Invalid signer id provided:",
-			);
+			expect(() =>
+				client.createNonceCommitments(TEST_GROUP.groupId, SIGNATURE_ID, MESSAGE, 0n, signers, account),
+			).toThrow("Invalid signer id provided:");
 		});
 
 		it("stores the signature request for later retrieval", () => {
-			const { client } = createTestClientWithNonces(0);
+			const { client, account } = createTestClientWithNonces(0);
 			const signers = TEST_GROUP.participants;
 
-			client.createNonceCommitments(TEST_GROUP.groupId, SIGNATURE_ID, MESSAGE, 0n, signers);
+			client.createNonceCommitments(TEST_GROUP.groupId, SIGNATURE_ID, MESSAGE, 0n, signers, account);
 
 			// After creating nonce commitments, we should be able to query signers and signing group
 			expect(client.signers(SIGNATURE_ID)).toEqual(signers);
@@ -326,8 +317,7 @@ describe("SigningClient", () => {
 
 	describe("handleNonceCommitments", () => {
 		it("returns false for own nonce commitments", () => {
-			const { client, storage } = createTestClientWithNonces(0);
-			const ownAddress = storage.participant(TEST_GROUP.groupId);
+			const { client, account } = createTestClientWithNonces(0);
 			const signers = TEST_GROUP.participants;
 			const { nonceCommitments } = client.createNonceCommitments(
 				TEST_GROUP.groupId,
@@ -335,19 +325,20 @@ describe("SigningClient", () => {
 				MESSAGE,
 				0n,
 				signers,
+				account,
 			);
 
-			const result = client.handleNonceCommitments(SIGNATURE_ID, ownAddress, nonceCommitments);
+			const result = client.handleNonceCommitments(SIGNATURE_ID, account, nonceCommitments, account);
 			expect(result).toBe(false);
 		});
 
 		it("returns false when not all nonces have been received", () => {
-			const { client: client0 } = createTestClientWithNonces(0);
-			const { client: client1 } = createTestClientWithNonces(1);
+			const { client: client0, account: account0 } = createTestClientWithNonces(0);
+			const { client: client1, account: account1 } = createTestClientWithNonces(1);
 			const signers = TEST_GROUP.participants;
 
 			// Set up signature request on client 0
-			client0.createNonceCommitments(TEST_GROUP.groupId, SIGNATURE_ID, MESSAGE, 0n, signers);
+			client0.createNonceCommitments(TEST_GROUP.groupId, SIGNATURE_ID, MESSAGE, 0n, signers, account0);
 
 			// Get nonce commitments from client 1
 			const { nonceCommitments: nonces1 } = client1.createNonceCommitments(
@@ -356,10 +347,11 @@ describe("SigningClient", () => {
 				MESSAGE,
 				0n,
 				signers,
+				account1,
 			);
 
 			// Only one peer's nonces received, not complete yet
-			const result = client0.handleNonceCommitments(SIGNATURE_ID, TEST_SIGNERS[1].account, nonces1);
+			const result = client0.handleNonceCommitments(SIGNATURE_ID, TEST_SIGNERS[1].account, nonces1, account1);
 			expect(result).toBe(false);
 		});
 
@@ -369,24 +361,25 @@ describe("SigningClient", () => {
 
 			// All clients create nonce commitments
 			const allNonces: { signer: Address; nonces: PublicNonceCommitments }[] = [];
-			for (const { client, storage } of allClients) {
+			for (const { client, account } of allClients) {
 				const { nonceCommitments } = client.createNonceCommitments(
 					TEST_GROUP.groupId,
 					SIGNATURE_ID,
 					MESSAGE,
 					0n,
 					signers,
+					account,
 				);
 				allNonces.push({
-					signer: storage.participant(TEST_GROUP.groupId),
+					signer: account,
 					nonces: nonceCommitments,
 				});
 			}
 
 			// Feed all peer nonces to client 0
-			const { client: targetClient } = allClients[0];
+			const { client: targetClient, account: targetAccount } = allClients[0];
 			const results = allNonces.map(({ signer, nonces }) =>
-				targetClient.handleNonceCommitments(SIGNATURE_ID, signer, nonces),
+				targetClient.handleNonceCommitments(SIGNATURE_ID, signer, nonces, targetAccount),
 			);
 
 			// Ready state should have been reached at some point during nonce collection
@@ -401,24 +394,25 @@ describe("SigningClient", () => {
 
 			// All clients create nonce commitments
 			const allNonces: { signer: Address; nonces: PublicNonceCommitments }[] = [];
-			for (const { client, storage } of allClients) {
+			for (const { client, account } of allClients) {
 				const { nonceCommitments } = client.createNonceCommitments(
 					TEST_GROUP.groupId,
 					SIGNATURE_ID,
 					MESSAGE,
 					0n,
 					signers,
+					account,
 				);
 				allNonces.push({
-					signer: storage.participant(TEST_GROUP.groupId),
+					signer: account,
 					nonces: nonceCommitments,
 				});
 			}
 
 			// Feed all nonces to all clients
-			for (const { client } of allClients) {
+			for (const { client, account } of allClients) {
 				for (const { signer, nonces } of allNonces) {
-					client.handleNonceCommitments(SIGNATURE_ID, signer, nonces);
+					client.handleNonceCommitments(SIGNATURE_ID, signer, nonces, account);
 				}
 			}
 
@@ -427,15 +421,14 @@ describe("SigningClient", () => {
 
 		it("returns a valid signature share with required fields", () => {
 			const allClients = setupFullCeremony();
-			const { client, storage } = allClients[0];
-			const signerAddress = storage.participant(TEST_GROUP.groupId);
+			const { client, account } = allClients[0];
 
-			const result = client.createSignatureShare(SIGNATURE_ID);
+			const result = client.createSignatureShare(SIGNATURE_ID, account);
 
 			// Verify the signers merkle proof is valid for this signer's leaf
 			const leaf = keccak256(
 				encodeAbiParameters(parseAbiParameters("address, uint256, uint256, uint256, uint256, uint256"), [
-					signerAddress,
+					account,
 					result.commitmentShare.x,
 					result.commitmentShare.y,
 					result.lagrangeCoefficient,
@@ -456,8 +449,8 @@ describe("SigningClient", () => {
 		it("each signature share is individually verifiable", () => {
 			const allClients = setupFullCeremony();
 
-			for (const [i, { client }] of allClients.entries()) {
-				const result = client.createSignatureShare(SIGNATURE_ID);
+			for (const [i, { client, account }] of allClients.entries()) {
+				const result = client.createSignatureShare(SIGNATURE_ID, account);
 				const challenge = groupChallenge(result.groupCommitment, TEST_GROUP.publicKey, MESSAGE);
 				const cl = lagrangeChallenge(result.lagrangeCoefficient, challenge);
 				expect(
@@ -469,8 +462,8 @@ describe("SigningClient", () => {
 		it("produces consistent group commitment across all participants", () => {
 			const allClients = setupFullCeremony();
 
-			const groupCommitments = allClients.map(({ client }) => {
-				const result = client.createSignatureShare(SIGNATURE_ID);
+			const groupCommitments = allClients.map(({ client, account }) => {
+				const result = client.createSignatureShare(SIGNATURE_ID, account);
 				return result.groupCommitment;
 			});
 
@@ -483,8 +476,8 @@ describe("SigningClient", () => {
 		it("produces unique commitment shares per participant", () => {
 			const allClients = setupFullCeremony();
 
-			const commitmentShares = allClients.map(({ client }) => {
-				const result = client.createSignatureShare(SIGNATURE_ID);
+			const commitmentShares = allClients.map(({ client, account }) => {
+				const result = client.createSignatureShare(SIGNATURE_ID, account);
 				return result.commitmentShare;
 			});
 
@@ -504,18 +497,21 @@ describe("SigningClient", () => {
 			const signers = TEST_GROUP.participants;
 			const allClients = TEST_SIGNERS.map((_, i) => createTestClientWithNonces(i));
 
-			const allNonces = allClients.map(({ client, storage }) => ({
-				signer: storage.participant(TEST_GROUP.groupId),
-				nonces: client.createNonceCommitments(TEST_GROUP.groupId, SIGNATURE_ID, MESSAGE, 0n, signers).nonceCommitments,
+			const allNonces = allClients.map(({ client, account }) => ({
+				signer: account,
+				nonces: client.createNonceCommitments(TEST_GROUP.groupId, SIGNATURE_ID, MESSAGE, 0n, signers, account)
+					.nonceCommitments,
 			}));
 
-			for (const { client } of allClients) {
+			for (const { client, account } of allClients) {
 				for (const { signer, nonces } of allNonces) {
-					client.handleNonceCommitments(SIGNATURE_ID, signer, nonces);
+					client.handleNonceCommitments(SIGNATURE_ID, signer, nonces, account);
 				}
 			}
 
-			const roots = allClients.map(({ client }) => client.createSignatureShare(SIGNATURE_ID).signersRoot);
+			const roots = allClients.map(
+				({ client, account }) => client.createSignatureShare(SIGNATURE_ID, account).signersRoot,
+			);
 			for (const root of roots.slice(1)) {
 				expect(root).toBe(roots[0]);
 			}
@@ -523,33 +519,32 @@ describe("SigningClient", () => {
 
 		it("burns nonces after creating signature share", () => {
 			const allClients = setupFullCeremony();
-			const { client, storage: ownStorage } = allClients[0];
-			const ownAddress = ownStorage.participant(TEST_GROUP.groupId);
+			const { client, account } = allClients[0];
 
-			client.createSignatureShare(SIGNATURE_ID);
+			client.createSignatureShare(SIGNATURE_ID, account);
 
 			// Attempting to use the same nonces again should throw
 			// We need to set up a new signature request with the same sequence
 			const signers = TEST_GROUP.participants;
 			const newSigId = "0x0000000000000000000000027fa9385be102ac3eac297483dd6233d62b3e1496";
-			client.createNonceCommitments(TEST_GROUP.groupId, newSigId, MESSAGE, 0n, signers);
+			client.createNonceCommitments(TEST_GROUP.groupId, newSigId, MESSAGE, 0n, signers, account);
 
 			// Feed nonces for new signature
-			for (const { client: peerClient, storage } of allClients) {
-				const peerAddress = storage.participant(TEST_GROUP.groupId);
-				if (peerAddress === ownAddress) continue;
+			for (const { client: peerClient, account: peerAccount } of allClients) {
+				if (account === peerAccount) continue;
 				const { nonceCommitments } = peerClient.createNonceCommitments(
 					TEST_GROUP.groupId,
 					newSigId,
 					MESSAGE,
 					0n,
 					signers,
+					peerAccount,
 				);
-				client.handleNonceCommitments(newSigId, peerAddress, nonceCommitments);
+				client.handleNonceCommitments(newSigId, peerAccount, nonceCommitments, account);
 			}
 
 			// Should throw because nonces at sequence 0 were already burned
-			expect(() => client.createSignatureShare(newSigId)).toThrow("already burned");
+			expect(() => client.createSignatureShare(newSigId, account)).toThrow("already burned");
 		});
 	});
 
@@ -561,10 +556,9 @@ describe("SigningClient", () => {
 
 		it("returns the number of nonces after tree generation", () => {
 			const { client, storage } = createTestClient(0);
-			const ownAddress = storage.participant(TEST_GROUP.groupId);
 			const nonceTree = createNonceTree(TEST_SIGNERS[0].signingShare, 4n);
 			storage.registerNonceTree(TEST_GROUP.groupId, nonceTree);
-			client.handleNonceCommitmentsHash(TEST_GROUP.groupId, ownAddress, nonceTree.root, 0n);
+			client.handleNonceCommitmentsHash(TEST_GROUP.groupId, nonceTree.root, 0n);
 			expect(client.availableNoncesCount(TEST_GROUP.groupId, 0n)).toBe(4n);
 		});
 
@@ -583,30 +577,31 @@ describe("SigningClient", () => {
 			const signers = TEST_SIGNERS.slice(0, threshold).map((s) => s.account);
 			const allNonces: { signer: Address; nonces: PublicNonceCommitments }[] = [];
 
-			for (const { client, storage } of subsetClients) {
+			for (const { client, account } of subsetClients) {
 				const { nonceCommitments } = client.createNonceCommitments(
 					TEST_GROUP.groupId,
 					SIGNATURE_ID,
 					MESSAGE,
 					0n,
 					signers,
+					account,
 				);
 				allNonces.push({
-					signer: storage.participant(TEST_GROUP.groupId),
+					signer: account,
 					nonces: nonceCommitments,
 				});
 			}
 
-			for (const { client } of subsetClients) {
+			for (const { client, account } of subsetClients) {
 				for (const { signer, nonces } of allNonces) {
-					client.handleNonceCommitments(SIGNATURE_ID, signer, nonces);
+					client.handleNonceCommitments(SIGNATURE_ID, signer, nonces, account);
 				}
 			}
 
 			let r: FrostPoint | null = null;
 			let z = 0n;
-			for (const { client } of subsetClients) {
-				const { commitmentShare, signatureShare } = client.createSignatureShare(SIGNATURE_ID);
+			for (const { client, account } of subsetClients) {
+				const { commitmentShare, signatureShare } = client.createSignatureShare(SIGNATURE_ID, account);
 				r = r == null ? commitmentShare : r.add(commitmentShare);
 				z = addmod(z, signatureShare);
 			}
@@ -624,24 +619,31 @@ describe("SigningClient", () => {
 				const sigId = keccak256(stringToBytes(`sig-${message}`));
 
 				const allNonces: { signer: Address; nonces: PublicNonceCommitments }[] = [];
-				for (const { client, storage } of allClients) {
-					const { nonceCommitments } = client.createNonceCommitments(TEST_GROUP.groupId, sigId, message, 0n, signers);
+				for (const { client, account } of allClients) {
+					const { nonceCommitments } = client.createNonceCommitments(
+						TEST_GROUP.groupId,
+						sigId,
+						message,
+						0n,
+						signers,
+						account,
+					);
 					allNonces.push({
-						signer: storage.participant(TEST_GROUP.groupId),
+						signer: account,
 						nonces: nonceCommitments,
 					});
 				}
 
-				for (const { client } of allClients) {
+				for (const { client, account } of allClients) {
 					for (const { signer, nonces } of allNonces) {
-						client.handleNonceCommitments(sigId, signer, nonces);
+						client.handleNonceCommitments(sigId, signer, nonces, account);
 					}
 				}
 
 				let r: FrostPoint | null = null;
 				let z = 0n;
-				for (const { client } of allClients) {
-					const { commitmentShare, signatureShare } = client.createSignatureShare(sigId);
+				for (const { client, account } of allClients) {
+					const { commitmentShare, signatureShare } = client.createSignatureShare(sigId, account);
 					r = r == null ? commitmentShare : r.add(commitmentShare);
 					z = addmod(z, signatureShare);
 				}

@@ -1,4 +1,4 @@
-import { zeroHash } from "viem";
+import { ethAddress, zeroHash } from "viem";
 import { describe, expect, it } from "vitest";
 import { toPoint } from "../../frost/math.js";
 import type { SignedEvent } from "../transitions/types.js";
@@ -47,6 +47,7 @@ const CONSENSUS_STATE: ConsensusState = {
 };
 
 const MACHINE_CONFIG: MachineConfig = {
+	account: ethAddress,
 	participantsInfo: [],
 	genesisSalt: zeroHash,
 	keyGenTimeout: 0n,
