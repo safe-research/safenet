@@ -35,7 +35,7 @@ import { calcGroupId } from "./keyGen/utils.js";
 import { calculateMerkleRoot, calculateParticipantsRoot } from "./merkle.js";
 import { verifySignature } from "./signing/verify.js";
 
-const BLOCK_TIME_MS = 200;
+const BLOCK_TIME_MS = 250;
 const BLOCKS_PER_EPOCH = 20n;
 const TEST_RUNTIME_IN_SECONDS = 60;
 
