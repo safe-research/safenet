@@ -129,7 +129,7 @@ export class ValidatorService {
 				// - check pending actions
 				if (t.id === "block_new") {
 					gasFeeEstimator.invalidate();
-					protocol.checkPendingActions(t.block);
+					protocol.triggerPendingCheck(t.block);
 				}
 			},
 		});

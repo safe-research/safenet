@@ -28,105 +28,87 @@ describe("OnchainProtocol", () => {
 		vi.useRealTimers();
 	});
 
-	it("should return correct config params", async () => {
+	function createTestContext(overrides?: { chain?: Chain; blocksBeforeResubmit?: bigint }) {
 		const queue = new InMemoryQueue<ActionWithTimeout>();
-		const publicClient = {} as unknown as PublicClient;
+
+		const chain = overrides?.chain ?? gnosisChiado;
+		const account = { address: entryPoint09Address };
+
+		const publicClient = {
+			getTransactionCount: vi.fn(),
+		};
 		const signingClient = {
-			chain: { id: 100 },
-		} as unknown as WalletClient<Transport, Chain, Account>;
-		const gasFeeEstimator = {} as unknown as GasFeeEstimator;
-		const submittedUpTo = vi.fn();
-		const setExecutedUpTo = vi.fn();
+			account,
+			chain,
+			signTransaction: vi.fn(),
+			sendRawTransaction: vi.fn(),
+		};
+		const gasFeeEstimator = {
+			estimateFees: vi.fn(),
+		};
 		const txStorage = {
-			setExecutedUpTo,
-			submittedUpTo,
-		} as unknown as TransactionStorage;
-		setExecutedUpTo.mockReturnValue(0);
-		submittedUpTo.mockReturnValue([]);
+			countPending: vi.fn(),
+			submittedUpTo: vi.fn(),
+			setSubmittedForPending: vi.fn(),
+			setExecutedUpTo: vi.fn(),
+			setPending: vi.fn(),
+			setFees: vi.fn(),
+			setHash: vi.fn(),
+			register: vi.fn(),
+			delete: vi.fn(),
+			maxNonce: vi.fn(),
+		};
+
 		const protocol = new OnchainProtocol({
-			publicClient,
-			signingClient,
-			gasFeeEstimator,
+			publicClient: publicClient as unknown as PublicClient,
+			signingClient: signingClient as unknown as WalletClient<Transport, Chain, Account>,
+			gasFeeEstimator: gasFeeEstimator as unknown as GasFeeEstimator,
 			consensus: TEST_CONSENSUS,
 			coordinator: TEST_COORDINATOR,
 			queue,
-			txStorage,
+			txStorage: txStorage as unknown as TransactionStorage,
 			logger: testLogger,
+			blocksBeforeResubmit: overrides?.blocksBeforeResubmit,
 		});
+
+		return {
+			protocol,
+			queue,
+			signingClient,
+			publicClient,
+			gasFeeEstimator,
+			txStorage,
+		};
+	}
+
+	it("should return correct config params", async () => {
+		const { protocol } = createTestContext({ chain: { id: 100 } as Chain });
 		expect(protocol.chainId()).toBe(100n);
 		expect(protocol.consensus()).toBe(TEST_CONSENSUS);
 		expect(protocol.coordinator()).toBe(TEST_COORDINATOR);
 	});
 
 	it("should not check pending on setup (in constructor)", async () => {
-		const queue = new InMemoryQueue<ActionWithTimeout>();
-		const getTransactionCount = vi.fn();
-		const publicClient = {} as unknown as PublicClient;
-		const signingClient = {} as unknown as WalletClient<Transport, Chain, Account>;
-		const gasFeeEstimator = {} as unknown as GasFeeEstimator;
-		const submittedUpTo = vi.fn();
-		const setExecutedUpTo = vi.fn();
-		const setSubmittedForPending = vi.fn();
-		const txStorage = {
-			setSubmittedForPending,
-			setExecutedUpTo,
-			submittedUpTo,
-		} as unknown as TransactionStorage;
-		setSubmittedForPending.mockReturnValue(0);
-		setExecutedUpTo.mockReturnValue(2);
-		submittedUpTo.mockReturnValue([]);
-		getTransactionCount.mockResolvedValueOnce(12);
-		new OnchainProtocol({
-			publicClient,
-			signingClient,
-			gasFeeEstimator,
-			consensus: TEST_CONSENSUS,
-			coordinator: TEST_COORDINATOR,
-			queue,
-			txStorage,
-			logger: testLogger,
-		});
+		const {
+			txStorage: { setSubmittedForPending, setExecutedUpTo, submittedUpTo },
+		} = createTestContext();
 		expect(setSubmittedForPending).toBeCalledTimes(0);
 		expect(setExecutedUpTo).toBeCalledTimes(0);
 		expect(submittedUpTo).toBeCalledTimes(0);
 	});
 
 	it("should use bulk mark as executed", async () => {
-		const queue = new InMemoryQueue<ActionWithTimeout>();
-		const getTransactionCount = vi.fn();
-		const publicClient = {
-			getTransactionCount,
-		} as unknown as PublicClient;
-		const signingClient = {
-			account: { address: entryPoint09Address },
-		} as unknown as WalletClient<Transport, Chain, Account>;
-		const gasFeeEstimator = {} as unknown as GasFeeEstimator;
-		const countPending = vi.fn();
-		const submittedUpTo = vi.fn();
-		const setExecutedUpTo = vi.fn();
-		const setSubmittedForPending = vi.fn();
-		const txStorage = {
-			countPending,
-			setSubmittedForPending,
-			setExecutedUpTo,
-			submittedUpTo,
-		} as unknown as TransactionStorage;
+		const {
+			protocol,
+			publicClient: { getTransactionCount },
+			txStorage: { countPending, submittedUpTo, setExecutedUpTo, setSubmittedForPending },
+		} = createTestContext();
 		const loggerSpy = vi.spyOn(testLogger, "debug");
 		countPending.mockReturnValue(2);
 		setSubmittedForPending.mockReturnValue(0);
 		setExecutedUpTo.mockReturnValue(2);
 		submittedUpTo.mockReturnValue([]);
 		getTransactionCount.mockResolvedValueOnce(12);
-		const protocol = new OnchainProtocol({
-			publicClient,
-			signingClient,
-			gasFeeEstimator,
-			consensus: TEST_CONSENSUS,
-			coordinator: TEST_COORDINATOR,
-			queue,
-			txStorage,
-			logger: testLogger,
-		});
 		await protocol.checkPendingActions(10n);
 		expect(countPending).toBeCalledTimes(1);
 		expect(getTransactionCount).toBeCalledTimes(1);
@@ -141,68 +123,34 @@ describe("OnchainProtocol", () => {
 	});
 
 	it("should do nothing on setSubmittedForPending error", async () => {
-		const queue = new InMemoryQueue<ActionWithTimeout>();
-		const publicClient = {} as unknown as PublicClient;
-		const signingClient = {
-			account: { address: entryPoint09Address },
-			chain: { id: 100 },
-		} as unknown as WalletClient<Transport, Chain, Account>;
-		const gasFeeEstimator = {} as unknown as GasFeeEstimator;
-		const countPending = vi.fn();
-		const setSubmittedForPending = vi.fn();
-		const txStorage = {
-			countPending,
-			setSubmittedForPending,
-		} as unknown as TransactionStorage;
+		const {
+			protocol,
+			txStorage: { countPending, setSubmittedForPending },
+		} = createTestContext();
+		const loggerSpy = vi.spyOn(testLogger, "error");
 		countPending.mockReturnValue(1);
-		setSubmittedForPending.mockRejectedValueOnce(new Error("Test unexpected!"));
-		const protocol = new OnchainProtocol({
-			publicClient,
-			signingClient,
-			gasFeeEstimator,
-			consensus: TEST_CONSENSUS,
-			coordinator: TEST_COORDINATOR,
-			queue,
-			txStorage,
-			logger: testLogger,
+		setSubmittedForPending.mockImplementationOnce(() => {
+			throw new Error("Test unexpected!");
 		});
-		await protocol.checkPendingActions(10n);
+		protocol.triggerPendingCheck(10n);
+		await vi.waitFor(() => expect(loggerSpy).toHaveBeenCalled());
 		expect(countPending).toBeCalledTimes(1);
 		expect(setSubmittedForPending).toBeCalledTimes(1);
 		expect(setSubmittedForPending).toBeCalledWith(10n);
 	});
 
 	it("should do nothing on rpc error", async () => {
-		const queue = new InMemoryQueue<ActionWithTimeout>();
-		const getTransactionCount = vi.fn();
-		const publicClient = {
-			getTransactionCount,
-		} as unknown as PublicClient;
-		const signingClient = {
-			account: { address: entryPoint09Address },
-			chain: { id: 100 },
-		} as unknown as WalletClient<Transport, Chain, Account>;
-		const gasFeeEstimator = {} as unknown as GasFeeEstimator;
-		const countPending = vi.fn();
-		const setSubmittedForPending = vi.fn();
-		const txStorage = {
-			countPending,
-			setSubmittedForPending,
-		} as unknown as TransactionStorage;
+		const {
+			protocol,
+			publicClient: { getTransactionCount },
+			txStorage: { countPending, setSubmittedForPending },
+		} = createTestContext();
+		const loggerSpy = vi.spyOn(testLogger, "error");
 		countPending.mockReturnValue(1);
-		setSubmittedForPending.mockResolvedValueOnce(10);
+		setSubmittedForPending.mockReturnValueOnce(0);
 		getTransactionCount.mockRejectedValueOnce(new Error("Test unexpected!"));
-		const protocol = new OnchainProtocol({
-			publicClient,
-			signingClient,
-			gasFeeEstimator,
-			consensus: TEST_CONSENSUS,
-			coordinator: TEST_COORDINATOR,
-			queue,
-			txStorage,
-			logger: testLogger,
-		});
-		await protocol.checkPendingActions(10n);
+		protocol.triggerPendingCheck(10n);
+		await vi.waitFor(() => expect(loggerSpy).toHaveBeenCalled());
 		expect(countPending).toBeCalledTimes(1);
 		expect(setSubmittedForPending).toBeCalledTimes(1);
 		expect(setSubmittedForPending).toBeCalledWith(10n);
@@ -214,41 +162,20 @@ describe("OnchainProtocol", () => {
 	});
 
 	it("should do nothing on mark all tx as executed error", async () => {
-		const queue = new InMemoryQueue<ActionWithTimeout>();
-		const getTransactionCount = vi.fn();
-		const publicClient = {
-			getTransactionCount,
-		} as unknown as PublicClient;
-		const signingClient = {
-			account: { address: entryPoint09Address },
-			chain: { id: 100 },
-		} as unknown as WalletClient<Transport, Chain, Account>;
-		const gasFeeEstimator = {} as unknown as GasFeeEstimator;
-		const countPending = vi.fn();
-		const setSubmittedForPending = vi.fn();
-		const setExecutedUpTo = vi.fn();
-		const txStorage = {
-			countPending,
-			setSubmittedForPending,
-			setExecutedUpTo,
-		} as unknown as TransactionStorage;
+		const {
+			protocol,
+			publicClient: { getTransactionCount },
+			txStorage: { countPending, setSubmittedForPending, setExecutedUpTo },
+		} = createTestContext();
+		const loggerSpy = vi.spyOn(testLogger, "error");
 		countPending.mockReturnValue(1);
-		setSubmittedForPending.mockResolvedValueOnce(10);
+		setSubmittedForPending.mockReturnValueOnce(0);
 		getTransactionCount.mockResolvedValueOnce(10);
 		setExecutedUpTo.mockImplementationOnce(() => {
 			throw new Error("Test unexpected!");
 		});
-		const protocol = new OnchainProtocol({
-			publicClient,
-			signingClient,
-			gasFeeEstimator,
-			consensus: TEST_CONSENSUS,
-			coordinator: TEST_COORDINATOR,
-			queue,
-			txStorage,
-			logger: testLogger,
-		});
-		await protocol.checkPendingActions(10n);
+		protocol.triggerPendingCheck(10n);
+		await vi.waitFor(() => expect(loggerSpy).toHaveBeenCalled());
 		expect(countPending).toBeCalledTimes(1);
 		expect(setSubmittedForPending).toBeCalledTimes(1);
 		expect(setSubmittedForPending).toBeCalledWith(10n);
@@ -261,26 +188,12 @@ describe("OnchainProtocol", () => {
 	});
 
 	it("should do nothing on fetching submittedUpTo tx error", async () => {
-		const queue = new InMemoryQueue<ActionWithTimeout>();
-		const getTransactionCount = vi.fn();
-		const publicClient = {
-			getTransactionCount,
-		} as unknown as PublicClient;
-		const signingClient = {
-			account: { address: entryPoint09Address },
-			chain: { id: 100 },
-		} as unknown as WalletClient<Transport, Chain, Account>;
-		const gasFeeEstimator = {} as unknown as GasFeeEstimator;
-		const countPending = vi.fn();
-		const submittedUpTo = vi.fn();
-		const setSubmittedForPending = vi.fn();
-		const setExecutedUpTo = vi.fn();
-		const txStorage = {
-			countPending,
-			submittedUpTo,
-			setSubmittedForPending,
-			setExecutedUpTo,
-		} as unknown as TransactionStorage;
+		const {
+			protocol,
+			publicClient: { getTransactionCount },
+			txStorage: { countPending, submittedUpTo, setSubmittedForPending, setExecutedUpTo },
+		} = createTestContext();
+		const loggerSpy = vi.spyOn(testLogger, "error");
 		countPending.mockReturnValue(1);
 		getTransactionCount.mockResolvedValueOnce(10);
 		setSubmittedForPending.mockReturnValueOnce(0);
@@ -288,17 +201,8 @@ describe("OnchainProtocol", () => {
 		submittedUpTo.mockImplementationOnce(() => {
 			throw new Error("Test unexpected!");
 		});
-		const protocol = new OnchainProtocol({
-			publicClient,
-			signingClient,
-			gasFeeEstimator,
-			consensus: TEST_CONSENSUS,
-			coordinator: TEST_COORDINATOR,
-			queue,
-			txStorage,
-			logger: testLogger,
-		});
-		await protocol.checkPendingActions(10n);
+		protocol.triggerPendingCheck(10n);
+		await vi.waitFor(() => expect(loggerSpy).toHaveBeenCalled());
 		expect(countPending).toBeCalledTimes(1);
 		expect(setSubmittedForPending).toBeCalledTimes(1);
 		expect(setSubmittedForPending).toBeCalledWith(10n);
@@ -313,29 +217,12 @@ describe("OnchainProtocol", () => {
 	});
 
 	it("should do nothing on fetching gas fees error", async () => {
-		const queue = new InMemoryQueue<ActionWithTimeout>();
-		const getTransactionCount = vi.fn();
-		const publicClient = {
-			getTransactionCount,
-		} as unknown as PublicClient;
-		const signingClient = {
-			account: { address: entryPoint09Address },
-			chain: { id: 100 },
-		} as unknown as WalletClient<Transport, Chain, Account>;
-		const estimateFees = vi.fn();
-		const gasFeeEstimator = {
-			estimateFees,
-		} as unknown as GasFeeEstimator;
-		const countPending = vi.fn();
-		const submittedUpTo = vi.fn();
-		const setSubmittedForPending = vi.fn();
-		const setExecutedUpTo = vi.fn();
-		const txStorage = {
-			countPending,
-			submittedUpTo,
-			setSubmittedForPending,
-			setExecutedUpTo,
-		} as unknown as TransactionStorage;
+		const {
+			protocol,
+			publicClient: { getTransactionCount },
+			gasFeeEstimator: { estimateFees },
+			txStorage: { countPending, submittedUpTo, setSubmittedForPending, setExecutedUpTo },
+		} = createTestContext();
 		countPending.mockReturnValue(1);
 		getTransactionCount.mockResolvedValueOnce(10);
 		setSubmittedForPending.mockReturnValueOnce(0);
@@ -356,16 +243,6 @@ describe("OnchainProtocol", () => {
 			},
 		]);
 		estimateFees.mockRejectedValueOnce("Test unexpected!");
-		const protocol = new OnchainProtocol({
-			publicClient,
-			signingClient,
-			gasFeeEstimator,
-			consensus: TEST_CONSENSUS,
-			coordinator: TEST_COORDINATOR,
-			queue,
-			txStorage,
-			logger: testLogger,
-		});
 		await protocol.checkPendingActions(10n);
 		expect(countPending).toBeCalledTimes(1);
 		expect(setSubmittedForPending).toBeCalledTimes(1);
@@ -383,41 +260,13 @@ describe("OnchainProtocol", () => {
 	});
 
 	it("should mark as completed if nonce too low error on submission", async () => {
-		const queue = new InMemoryQueue<ActionWithTimeout>();
-		const getTransactionCount = vi.fn();
-		const publicClient = {
-			getTransactionCount,
-		} as unknown as PublicClient;
-		const signTransaction = vi.fn();
-		const sendRawTransaction = vi.fn();
-		const chain = gnosisChiado;
-		const account = { address: entryPoint09Address };
-		const signingClient = {
-			account,
-			chain,
-			signTransaction,
-			sendRawTransaction,
-		} as unknown as WalletClient<Transport, Chain, Account>;
-		const estimateFees = vi.fn();
-		const gasFeeEstimator = {
-			estimateFees,
-		} as unknown as GasFeeEstimator;
-		const countPending = vi.fn();
-		const submittedUpTo = vi.fn();
-		const setSubmittedForPending = vi.fn();
-		const setExecutedUpTo = vi.fn();
-		const setPending = vi.fn();
-		const setFees = vi.fn();
-		const setHash = vi.fn();
-		const txStorage = {
-			countPending,
-			submittedUpTo,
-			setPending,
-			setFees,
-			setHash,
-			setSubmittedForPending,
-			setExecutedUpTo,
-		} as unknown as TransactionStorage;
+		const {
+			protocol,
+			signingClient: { account, chain, signTransaction, sendRawTransaction },
+			publicClient: { getTransactionCount },
+			gasFeeEstimator: { estimateFees },
+			txStorage: { countPending, submittedUpTo, setSubmittedForPending, setExecutedUpTo, setFees, setHash },
+		} = createTestContext();
 
 		const hash = keccak256("0x5afe5afe01");
 		const [, , tx] = TEST_ACTIONS[0];
@@ -438,16 +287,6 @@ describe("OnchainProtocol", () => {
 		});
 		signTransaction.mockResolvedValueOnce("0x5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe");
 		sendRawTransaction.mockRejectedValueOnce(new NonceTooLowError());
-		const protocol = new OnchainProtocol({
-			publicClient,
-			signingClient,
-			gasFeeEstimator,
-			consensus: TEST_CONSENSUS,
-			coordinator: TEST_COORDINATOR,
-			queue,
-			txStorage,
-			logger: testLogger,
-		});
 		await protocol.checkPendingActions(10n);
 		expect(countPending).toBeCalledTimes(1);
 		expect(setSubmittedForPending).toBeCalledTimes(1);
@@ -485,41 +324,13 @@ describe("OnchainProtocol", () => {
 	});
 
 	it("should mark as completed if nested nonce too low error on submission", async () => {
-		const queue = new InMemoryQueue<ActionWithTimeout>();
-		const getTransactionCount = vi.fn();
-		const publicClient = {
-			getTransactionCount,
-		} as unknown as PublicClient;
-		const signTransaction = vi.fn();
-		const sendRawTransaction = vi.fn();
-		const chain = gnosisChiado;
-		const account = { address: entryPoint09Address };
-		const signingClient = {
-			account,
-			chain,
-			signTransaction,
-			sendRawTransaction,
-		} as unknown as WalletClient<Transport, Chain, Account>;
-		const estimateFees = vi.fn();
-		const gasFeeEstimator = {
-			estimateFees,
-		} as unknown as GasFeeEstimator;
-		const countPending = vi.fn();
-		const submittedUpTo = vi.fn();
-		const setSubmittedForPending = vi.fn();
-		const setExecutedUpTo = vi.fn();
-		const setPending = vi.fn();
-		const setFees = vi.fn();
-		const setHash = vi.fn();
-		const txStorage = {
-			countPending,
-			setPending,
-			submittedUpTo,
-			setFees,
-			setHash,
-			setSubmittedForPending,
-			setExecutedUpTo,
-		} as unknown as TransactionStorage;
+		const {
+			protocol,
+			signingClient: { account, chain, signTransaction, sendRawTransaction },
+			publicClient: { getTransactionCount },
+			gasFeeEstimator: { estimateFees },
+			txStorage: { countPending, submittedUpTo, setSubmittedForPending, setExecutedUpTo, setPending, setFees, setHash },
+		} = createTestContext();
 
 		const hash = keccak256("0x5afe5afe01");
 		const [, , tx] = TEST_ACTIONS[0];
@@ -549,16 +360,6 @@ describe("OnchainProtocol", () => {
 				},
 			),
 		);
-		const protocol = new OnchainProtocol({
-			publicClient,
-			signingClient,
-			gasFeeEstimator,
-			consensus: TEST_CONSENSUS,
-			coordinator: TEST_COORDINATOR,
-			queue,
-			txStorage,
-			logger: testLogger,
-		});
 		await protocol.checkPendingActions(10n);
 		expect(countPending).toBeCalledTimes(1);
 		expect(setSubmittedForPending).toBeCalledTimes(1);
@@ -598,41 +399,13 @@ describe("OnchainProtocol", () => {
 	});
 
 	it("should set tx hash on unexpected error on submission", async () => {
-		const queue = new InMemoryQueue<ActionWithTimeout>();
-		const getTransactionCount = vi.fn();
-		const publicClient = {
-			getTransactionCount,
-		} as unknown as PublicClient;
-		const signTransaction = vi.fn();
-		const sendRawTransaction = vi.fn();
-		const chain = gnosisChiado;
-		const account = { address: entryPoint09Address };
-		const signingClient = {
-			account,
-			chain,
-			signTransaction,
-			sendRawTransaction,
-		} as unknown as WalletClient<Transport, Chain, Account>;
-		const estimateFees = vi.fn();
-		const gasFeeEstimator = {
-			estimateFees,
-		} as unknown as GasFeeEstimator;
-		const countPending = vi.fn();
-		const submittedUpTo = vi.fn();
-		const setSubmittedForPending = vi.fn();
-		const setExecutedUpTo = vi.fn();
-		const setPending = vi.fn();
-		const setFees = vi.fn();
-		const setHash = vi.fn();
-		const txStorage = {
-			countPending,
-			submittedUpTo,
-			setPending,
-			setFees,
-			setHash,
-			setSubmittedForPending,
-			setExecutedUpTo,
-		} as unknown as TransactionStorage;
+		const {
+			protocol,
+			signingClient: { account, chain, signTransaction, sendRawTransaction },
+			publicClient: { getTransactionCount },
+			gasFeeEstimator: { estimateFees },
+			txStorage: { countPending, submittedUpTo, setSubmittedForPending, setExecutedUpTo, setHash },
+		} = createTestContext();
 
 		const hash = keccak256("0x5afe5afe01");
 		const [, , tx] = TEST_ACTIONS[0];
@@ -653,16 +426,6 @@ describe("OnchainProtocol", () => {
 		});
 		signTransaction.mockResolvedValueOnce("0x5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe");
 		sendRawTransaction.mockRejectedValueOnce(new Error("Test unexpected!"));
-		const protocol = new OnchainProtocol({
-			publicClient,
-			signingClient,
-			gasFeeEstimator,
-			consensus: TEST_CONSENSUS,
-			coordinator: TEST_COORDINATOR,
-			queue,
-			txStorage,
-			logger: testLogger,
-		});
 		await protocol.checkPendingActions(10n);
 		expect(countPending).toBeCalledTimes(1);
 		expect(setSubmittedForPending).toBeCalledTimes(1);
@@ -694,41 +457,13 @@ describe("OnchainProtocol", () => {
 	});
 
 	it("should resubmit submittedUpTo tx without stored gas fees", async () => {
-		const queue = new InMemoryQueue<ActionWithTimeout>();
-		const getTransactionCount = vi.fn();
-		const publicClient = {
-			getTransactionCount,
-		} as unknown as PublicClient;
-		const signTransaction = vi.fn();
-		const sendRawTransaction = vi.fn();
-		const chain = gnosisChiado;
-		const account = { address: entryPoint09Address };
-		const signingClient = {
-			account,
-			chain,
-			signTransaction,
-			sendRawTransaction,
-		} as unknown as WalletClient<Transport, Chain, Account>;
-		const estimateFees = vi.fn();
-		const gasFeeEstimator = {
-			estimateFees,
-		} as unknown as GasFeeEstimator;
-		const countPending = vi.fn();
-		const submittedUpTo = vi.fn();
-		const setSubmittedForPending = vi.fn();
-		const setExecutedUpTo = vi.fn();
-		const setPending = vi.fn();
-		const setHash = vi.fn();
-		const setFees = vi.fn();
-		const txStorage = {
-			countPending,
-			submittedUpTo,
-			setPending,
-			setHash,
-			setFees,
-			setSubmittedForPending,
-			setExecutedUpTo,
-		} as unknown as TransactionStorage;
+		const {
+			protocol,
+			signingClient: { account, chain, signTransaction, sendRawTransaction },
+			publicClient: { getTransactionCount },
+			gasFeeEstimator: { estimateFees },
+			txStorage: { countPending, submittedUpTo, setSubmittedForPending, setExecutedUpTo, setFees, setHash },
+		} = createTestContext();
 
 		const hash = keccak256("0x5afe5afe01");
 		const [, , tx] = TEST_ACTIONS[0];
@@ -752,16 +487,6 @@ describe("OnchainProtocol", () => {
 		signTransaction.mockResolvedValueOnce("0x5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe");
 		const retryHash = keccak256("0x5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe");
 		sendRawTransaction.mockResolvedValueOnce(retryHash);
-		const protocol = new OnchainProtocol({
-			publicClient,
-			signingClient,
-			gasFeeEstimator,
-			consensus: TEST_CONSENSUS,
-			coordinator: TEST_COORDINATOR,
-			queue,
-			txStorage,
-			logger: testLogger,
-		});
 		await protocol.checkPendingActions(10n);
 		expect(countPending).toBeCalledTimes(1);
 		expect(getTransactionCount).toBeCalledTimes(1);
@@ -797,41 +522,13 @@ describe("OnchainProtocol", () => {
 	});
 
 	it("should resubmit submittedUpTo tx with lower stored gas fees", async () => {
-		const queue = new InMemoryQueue<ActionWithTimeout>();
-		const getTransactionCount = vi.fn();
-		const publicClient = {
-			getTransactionCount,
-		} as unknown as PublicClient;
-		const signTransaction = vi.fn();
-		const sendRawTransaction = vi.fn();
-		const chain = gnosisChiado;
-		const account = { address: entryPoint09Address };
-		const signingClient = {
-			account,
-			chain,
-			signTransaction,
-			sendRawTransaction,
-		} as unknown as WalletClient<Transport, Chain, Account>;
-		const estimateFees = vi.fn();
-		const gasFeeEstimator = {
-			estimateFees,
-		} as unknown as GasFeeEstimator;
-		const countPending = vi.fn();
-		const submittedUpTo = vi.fn();
-		const setSubmittedForPending = vi.fn();
-		const setExecutedUpTo = vi.fn();
-		const setPending = vi.fn();
-		const setHash = vi.fn();
-		const setFees = vi.fn();
-		const txStorage = {
-			countPending,
-			submittedUpTo,
-			setPending,
-			setHash,
-			setFees,
-			setSubmittedForPending,
-			setExecutedUpTo,
-		} as unknown as TransactionStorage;
+		const {
+			protocol,
+			signingClient: { account, chain, signTransaction, sendRawTransaction },
+			publicClient: { getTransactionCount },
+			gasFeeEstimator: { estimateFees },
+			txStorage: { countPending, submittedUpTo, setSubmittedForPending, setExecutedUpTo, setFees, setHash },
+		} = createTestContext();
 
 		const hash = keccak256("0x5afe5afe01");
 		const [, , tx] = TEST_ACTIONS[0];
@@ -858,16 +555,6 @@ describe("OnchainProtocol", () => {
 		signTransaction.mockResolvedValueOnce("0x5afe5afe02");
 		const retryHash = keccak256("0x5afe5afe02");
 		sendRawTransaction.mockResolvedValueOnce(retryHash);
-		const protocol = new OnchainProtocol({
-			publicClient,
-			signingClient,
-			gasFeeEstimator,
-			consensus: TEST_CONSENSUS,
-			coordinator: TEST_COORDINATOR,
-			queue,
-			txStorage,
-			logger: testLogger,
-		});
 		await protocol.checkPendingActions(10n);
 		expect(countPending).toBeCalledTimes(1);
 		expect(getTransactionCount).toBeCalledTimes(1);
@@ -901,41 +588,13 @@ describe("OnchainProtocol", () => {
 	});
 
 	it("should resubmit submittedUpTo tx with higher stored gas fees", async () => {
-		const queue = new InMemoryQueue<ActionWithTimeout>();
-		const getTransactionCount = vi.fn();
-		const publicClient = {
-			getTransactionCount,
-		} as unknown as PublicClient;
-		const signTransaction = vi.fn();
-		const sendRawTransaction = vi.fn();
-		const chain = gnosisChiado;
-		const account = { address: entryPoint09Address };
-		const signingClient = {
-			account,
-			chain,
-			signTransaction,
-			sendRawTransaction,
-		} as unknown as WalletClient<Transport, Chain, Account>;
-		const estimateFees = vi.fn();
-		const gasFeeEstimator = {
-			estimateFees,
-		} as unknown as GasFeeEstimator;
-		const countPending = vi.fn();
-		const submittedUpTo = vi.fn();
-		const setSubmittedForPending = vi.fn();
-		const setExecutedUpTo = vi.fn();
-		const setPending = vi.fn();
-		const setHash = vi.fn();
-		const setFees = vi.fn();
-		const txStorage = {
-			countPending,
-			submittedUpTo,
-			setPending,
-			setHash,
-			setFees,
-			setSubmittedForPending,
-			setExecutedUpTo,
-		} as unknown as TransactionStorage;
+		const {
+			protocol,
+			signingClient: { account, chain, signTransaction, sendRawTransaction },
+			publicClient: { getTransactionCount },
+			gasFeeEstimator: { estimateFees },
+			txStorage: { countPending, submittedUpTo, setSubmittedForPending, setExecutedUpTo, setFees, setHash },
+		} = createTestContext();
 
 		const hash = keccak256("0x5afe5afe01");
 		const [, , tx] = TEST_ACTIONS[0];
@@ -962,16 +621,6 @@ describe("OnchainProtocol", () => {
 		signTransaction.mockResolvedValueOnce("0x5afe5afe02");
 		const retryHash = keccak256("0x5afe5afe02");
 		sendRawTransaction.mockResolvedValueOnce(retryHash);
-		const protocol = new OnchainProtocol({
-			publicClient,
-			signingClient,
-			gasFeeEstimator,
-			consensus: TEST_CONSENSUS,
-			coordinator: TEST_COORDINATOR,
-			queue,
-			txStorage,
-			logger: testLogger,
-		});
 		await protocol.checkPendingActions(10n);
 		expect(countPending).toBeCalledTimes(1);
 		expect(getTransactionCount).toBeCalledTimes(1);
@@ -1005,41 +654,13 @@ describe("OnchainProtocol", () => {
 	});
 
 	it("should submit submittedUpTo tx without hash", async () => {
-		const queue = new InMemoryQueue<ActionWithTimeout>();
-		const getTransactionCount = vi.fn();
-		const publicClient = {
-			getTransactionCount,
-		} as unknown as PublicClient;
-		const signTransaction = vi.fn();
-		const sendRawTransaction = vi.fn();
-		const chain = gnosisChiado;
-		const account = { address: entryPoint09Address };
-		const signingClient = {
-			account,
-			chain,
-			signTransaction,
-			sendRawTransaction,
-		} as unknown as WalletClient<Transport, Chain, Account>;
-		const estimateFees = vi.fn();
-		const gasFeeEstimator = {
-			estimateFees,
-		} as unknown as GasFeeEstimator;
-		const countPending = vi.fn();
-		const submittedUpTo = vi.fn();
-		const setSubmittedForPending = vi.fn();
-		const setExecutedUpTo = vi.fn();
-		const setPending = vi.fn();
-		const setFees = vi.fn();
-		const setHash = vi.fn();
-		const txStorage = {
-			countPending,
-			setPending,
-			submittedUpTo,
-			setFees,
-			setHash,
-			setSubmittedForPending,
-			setExecutedUpTo,
-		} as unknown as TransactionStorage;
+		const {
+			protocol,
+			signingClient: { account, chain, signTransaction, sendRawTransaction },
+			publicClient: { getTransactionCount },
+			gasFeeEstimator: { estimateFees },
+			txStorage: { countPending, submittedUpTo, setSubmittedForPending, setExecutedUpTo, setFees, setHash },
+		} = createTestContext();
 
 		setSubmittedForPending.mockReturnValueOnce(0);
 		getTransactionCount.mockResolvedValueOnce(10);
@@ -1061,16 +682,6 @@ describe("OnchainProtocol", () => {
 		signTransaction.mockResolvedValueOnce("0x5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe");
 		const hash = keccak256("0x5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe");
 		sendRawTransaction.mockResolvedValueOnce(hash);
-		const protocol = new OnchainProtocol({
-			publicClient,
-			signingClient,
-			gasFeeEstimator,
-			consensus: TEST_CONSENSUS,
-			coordinator: TEST_COORDINATOR,
-			queue,
-			txStorage,
-			logger: testLogger,
-		});
 		await protocol.checkPendingActions(10n);
 		expect(countPending).toBeCalledTimes(1);
 		expect(setSubmittedForPending).toBeCalledTimes(1);
@@ -1106,52 +717,13 @@ describe("OnchainProtocol", () => {
 	});
 
 	it("should check pending when checkPendingActions is called", async () => {
-		const queue = new InMemoryQueue<ActionWithTimeout>();
-		const getTransactionCount = vi.fn();
-		const publicClient = {
-			getTransactionCount,
-		} as unknown as PublicClient;
-		const signTransaction = vi.fn();
-		const sendRawTransaction = vi.fn();
-		const chain = gnosisChiado;
-		const account = { address: entryPoint09Address };
-		const signingClient = {
-			account,
-			chain,
-			signTransaction,
-			sendRawTransaction,
-		} as unknown as WalletClient<Transport, Chain, Account>;
-		const estimateFees = vi.fn();
-		const gasFeeEstimator = {
-			estimateFees,
-		} as unknown as GasFeeEstimator;
-		const countPending = vi.fn();
-		const setPending = vi.fn();
-		const setHash = vi.fn();
-		const setFees = vi.fn();
-		const submittedUpTo = vi.fn();
-		const setExecutedUpTo = vi.fn();
-		const setSubmittedForPending = vi.fn();
-		const txStorage = {
-			countPending,
-			setPending,
-			submittedUpTo,
-			setFees,
-			setHash,
-			setExecutedUpTo,
-			setSubmittedForPending,
-		} as unknown as TransactionStorage;
-
-		const protocol = new OnchainProtocol({
-			publicClient,
-			signingClient,
-			gasFeeEstimator,
-			consensus: TEST_CONSENSUS,
-			coordinator: TEST_COORDINATOR,
-			queue,
-			txStorage,
-			logger: testLogger,
-		});
+		const {
+			protocol,
+			signingClient: { account, chain, signTransaction, sendRawTransaction },
+			publicClient: { getTransactionCount },
+			gasFeeEstimator: { estimateFees },
+			txStorage: { countPending, submittedUpTo, setSubmittedForPending, setExecutedUpTo, setPending, setFees, setHash },
+		} = createTestContext();
 
 		countPending.mockReturnValue(1);
 		setSubmittedForPending.mockReturnValue(0);
@@ -1207,39 +779,14 @@ describe("OnchainProtocol", () => {
 	});
 
 	it("should delete tx on error if no additional tx was submitted", async () => {
-		const queue = new InMemoryQueue<ActionWithTimeout>();
-		const getTransactionCount = vi.fn();
-		const publicClient = {
-			getTransactionCount,
-		} as unknown as PublicClient;
-		const signTransaction = vi.fn();
-		const sendRawTransaction = vi.fn();
-		const chain = gnosisChiado;
-		const account = { address: entryPoint09Address };
-		const signingClient = {
-			account,
-			chain,
-			signTransaction,
-			sendRawTransaction,
-		} as unknown as WalletClient<Transport, Chain, Account>;
-		const estimateFees = vi.fn();
-		const gasFeeEstimator = {
-			estimateFees,
-		} as unknown as GasFeeEstimator;
-		const register = vi.fn();
-		const setPending = vi.fn();
-		const setFees = vi.fn();
-		const maxNonce = vi.fn();
-		const deleteTx = vi.fn();
-		const setHash = vi.fn();
-		const txStorage = {
-			register,
-			setPending,
-			setFees,
-			maxNonce,
-			setHash,
-			delete: deleteTx,
-		} as unknown as TransactionStorage;
+		const {
+			protocol,
+			queue,
+			signingClient: { account, chain, signTransaction, sendRawTransaction },
+			publicClient: { getTransactionCount },
+			gasFeeEstimator: { estimateFees },
+			txStorage: { register, maxNonce, delete: deleteTx, setHash },
+		} = createTestContext();
 
 		const [action, , tx] = TEST_ACTIONS[0];
 		getTransactionCount.mockResolvedValueOnce(10);
@@ -1251,16 +798,6 @@ describe("OnchainProtocol", () => {
 		sendRawTransaction.mockRejectedValueOnce(new Error("Test unexpected!"));
 		register.mockReturnValueOnce(10);
 		maxNonce.mockReturnValueOnce(10);
-		const protocol = new OnchainProtocol({
-			publicClient,
-			signingClient,
-			gasFeeEstimator,
-			consensus: TEST_CONSENSUS,
-			coordinator: TEST_COORDINATOR,
-			queue,
-			txStorage,
-			logger: testLogger,
-		});
 		protocol.process(action);
 		// Action was submitted and should be in the queue
 		expect(queue.peek()).toBeDefined();
@@ -1298,39 +835,14 @@ describe("OnchainProtocol", () => {
 	});
 
 	it("should not delete tx on error if additional tx was submitted", async () => {
-		const queue = new InMemoryQueue<ActionWithTimeout>();
-		const getTransactionCount = vi.fn();
-		const publicClient = {
-			getTransactionCount,
-		} as unknown as PublicClient;
-		const signTransaction = vi.fn();
-		const sendRawTransaction = vi.fn();
-		const chain = gnosisChiado;
-		const account = { address: entryPoint09Address };
-		const signingClient = {
-			account,
-			chain,
-			signTransaction,
-			sendRawTransaction,
-		} as unknown as WalletClient<Transport, Chain, Account>;
-		const estimateFees = vi.fn();
-		const gasFeeEstimator = {
-			estimateFees,
-		} as unknown as GasFeeEstimator;
-		const register = vi.fn();
-		const setPending = vi.fn();
-		const setFees = vi.fn();
-		const maxNonce = vi.fn();
-		const deleteTx = vi.fn();
-		const setHash = vi.fn();
-		const txStorage = {
-			register,
-			setPending,
-			setFees,
-			setHash,
-			maxNonce,
-			delete: deleteTx,
-		} as unknown as TransactionStorage;
+		const {
+			protocol,
+			queue,
+			signingClient: { account, chain, signTransaction, sendRawTransaction },
+			publicClient: { getTransactionCount },
+			gasFeeEstimator: { estimateFees },
+			txStorage: { register, setPending, setFees, maxNonce, delete: deleteTx, setHash },
+		} = createTestContext();
 
 		const [action, , tx] = TEST_ACTIONS[0];
 		getTransactionCount.mockResolvedValueOnce(10);
@@ -1342,16 +854,6 @@ describe("OnchainProtocol", () => {
 		sendRawTransaction.mockRejectedValueOnce(new Error("Test unexpected!"));
 		register.mockReturnValueOnce(10);
 		maxNonce.mockReturnValueOnce(11);
-		const protocol = new OnchainProtocol({
-			publicClient,
-			signingClient,
-			gasFeeEstimator,
-			consensus: TEST_CONSENSUS,
-			coordinator: TEST_COORDINATOR,
-			queue,
-			txStorage,
-			logger: testLogger,
-		});
 		protocol.process(action);
 		// Action was submitted and should be in the queue
 		expect(queue.peek()).toBeDefined();
@@ -1406,45 +908,13 @@ describe("OnchainProtocol", () => {
 		}),
 	)("for $description", ({ action, functionName, tx }) => {
 		it(`should call ${functionName}`, async () => {
-			const queue = new InMemoryQueue<ActionWithTimeout>();
-			const getTransactionCount = vi.fn();
-			const publicClient = {
-				getTransactionCount,
-			} as unknown as PublicClient;
-			const signTransaction = vi.fn();
-			const sendRawTransaction = vi.fn();
-			const chain = gnosisChiado;
-			const account = { address: entryPoint09Address };
-			const signingClient = {
-				account,
-				chain,
-				signTransaction,
-				sendRawTransaction,
-			} as unknown as WalletClient<Transport, Chain, Account>;
-			const estimateFees = vi.fn();
-			const gasFeeEstimator = {
-				estimateFees,
-			} as unknown as GasFeeEstimator;
-			const register = vi.fn();
-			const setPending = vi.fn();
-			const setHash = vi.fn();
-			const setFees = vi.fn();
-			const txStorage = {
-				register,
-				setPending,
-				setFees,
-				setHash,
-			} as unknown as TransactionStorage;
-			const protocol = new OnchainProtocol({
-				publicClient,
-				signingClient,
-				gasFeeEstimator,
-				consensus: TEST_CONSENSUS,
-				coordinator: TEST_COORDINATOR,
-				queue,
-				txStorage,
-				logger: testLogger,
-			});
+			const {
+				protocol,
+				signingClient: { account, chain, signTransaction, sendRawTransaction },
+				publicClient: { getTransactionCount },
+				gasFeeEstimator: { estimateFees },
+				txStorage: { register, setPending, setFees, setHash },
+			} = createTestContext();
 
 			getTransactionCount.mockResolvedValueOnce(2);
 			// Mock high nonce to ensure overwrite works
@@ -1495,6 +965,56 @@ describe("OnchainProtocol", () => {
 			expect(setHash).toBeCalledTimes(1);
 			expect(setHash).toBeCalledWith(10, txHash);
 		});
+	});
+
+	it("should not run concurrent pending checks", async () => {
+		const {
+			protocol,
+			signingClient: { signTransaction, sendRawTransaction },
+			publicClient: { getTransactionCount },
+			gasFeeEstimator: { estimateFees },
+			txStorage: { countPending, submittedUpTo, setSubmittedForPending, setExecutedUpTo },
+		} = createTestContext();
+
+		const hash = keccak256("0x5afe5afe01");
+		const [, , tx] = TEST_ACTIONS[0];
+		const pendingTx = { ...tx, nonce: 10, hash };
+
+		countPending.mockReturnValue(1);
+		setSubmittedForPending.mockReturnValue(0);
+		setExecutedUpTo.mockReturnValue(0);
+		submittedUpTo.mockReturnValue([pendingTx]);
+		getTransactionCount.mockResolvedValue(10);
+		estimateFees.mockResolvedValue({ maxFeePerGas: 200n, maxPriorityFeePerGas: 100n });
+		signTransaction.mockResolvedValue("0x5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe");
+
+		// sendRawTransaction will be held pending until we resolve it manually
+		let resolveSendRaw!: (value: `0x${string}`) => void;
+		const sendRawPending = new Promise<`0x${string}`>((resolve) => {
+			resolveSendRaw = resolve;
+		});
+		sendRawTransaction.mockReturnValueOnce(sendRawPending);
+
+		// Start first check — it will hang inside sendRawTransaction
+		protocol.triggerPendingCheck(10n);
+
+		// Wait until sendRawTransaction has been called (first check has entered in-flight state)
+		await vi.waitFor(() => expect(sendRawTransaction).toHaveBeenCalledTimes(1));
+
+		// Attempt second check while first is still in-flight — should be skipped (lock held)
+		protocol.triggerPendingCheck(11n);
+
+		// Resolve the first sendRawTransaction and wait for the lock to be released
+		resolveSendRaw("0xdeadbeef");
+		await vi.waitFor(() => expect(protocol.isRunningPendingCheck()).toBe(false));
+
+		// sendRawTransaction must have been called exactly once despite two concurrent checks
+		expect(sendRawTransaction).toBeCalledTimes(1);
+
+		// After the in-flight work is done, a subsequent check can resubmit the tx (guard is not sticky)
+		sendRawTransaction.mockReturnValueOnce(Promise.resolve("0xdeadbeef2"));
+		protocol.triggerPendingCheck(12n);
+		await vi.waitFor(() => expect(sendRawTransaction).toBeCalledTimes(2));
 	});
 });
 
