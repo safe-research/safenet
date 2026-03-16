@@ -51,12 +51,6 @@ export function SafeTxProposals({
 	);
 }
 
-function borderClass(status: ProposalStatus): string {
-	if (status === "ATTESTED") return "border-positive";
-	if (status === "TIMED_OUT") return "border-error";
-	return "border-pending";
-}
-
 function SafeTxProposal({
 	proposal,
 	number,
@@ -67,7 +61,7 @@ function SafeTxProposal({
 	status: ProposalStatus;
 }) {
 	return (
-		<Box className={`${borderClass(status)} space-y-2`}>
+		<Box className="space-y-2">
 			<p className="font-semibold">Proposal #{number}</p>
 			<div className="md:flex md:justify-between">
 				<p>Status:</p>

@@ -4,6 +4,7 @@ import { NetworkBadge } from "@/components/common/NetworkBadge";
 import { StatusBadge } from "@/components/common/StatusBadge";
 import { Skeleton } from "@/components/Skeleton";
 import { useConsensusState } from "@/hooks/useConsensusState";
+import { useSettings } from "@/hooks/useSettings";
 import { shortAddress } from "@/lib/address";
 import { SAFE_SERVICE_CHAINS } from "@/lib/chains";
 import type { TransactionProposal } from "@/lib/consensus";
@@ -45,6 +46,7 @@ export function TransactionListRowSkeleton() {
 export function TransactionListRow({ proposal }: { proposal: TransactionProposal }) {
 	const { data: consensusState } = useConsensusState();
 	const currentBlock = consensusState?.currentBlock ?? 0n;
+	const [settings] = useSettings();
 	const chain = SAFE_SERVICE_CHAINS[proposal.chainId.toString()];
 
 	const blockDiff = currentBlock > proposal.proposedAt.block ? currentBlock - proposal.proposedAt.block : 0n;
@@ -60,7 +62,15 @@ export function TransactionListRow({ proposal }: { proposal: TransactionProposal
 				{/* Column 1: Network + Status badges */}
 				<div className="flex flex-col gap-1">
 					<NetworkBadge chainId={proposal.chainId} />
-					<StatusBadge status={proposal.attestedAt !== null ? "ATTESTED" : "PROPOSED"} />
+					<StatusBadge
+						status={
+							proposal.attestedAt !== null
+								? "ATTESTED"
+								: currentBlock - proposal.proposedAt.block > BigInt(settings.signingTimeout)
+									? "TIMED_OUT"
+									: "PROPOSED"
+						}
+					/>
 				</div>
 
 				{/* Column 2: Safe address */}
