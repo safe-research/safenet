@@ -64,7 +64,7 @@ export abstract class BaseProtocol implements SafenetProtocol {
 		const actionSpan = { action: { id: action.id } };
 		if (action.validUntil < Date.now()) {
 			this.#actionQueue.dequeue();
-			this.#logger.warn("Timeout exeeded. Dropping action!", actionSpan);
+			this.#logger.warn("Timeout exceeded. Dropping action!", actionSpan);
 			this.checkNextAction();
 			return;
 		}
