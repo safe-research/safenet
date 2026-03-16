@@ -30,52 +30,43 @@ describe("OnchainProtocol", () => {
 
 	function createTestContext(overrides?: { chain?: Chain; blocksBeforeResubmit?: bigint }) {
 		const queue = new InMemoryQueue<ActionWithTimeout>();
-		const getTransactionCount = vi.fn();
-		const signTransaction = vi.fn();
-		const sendRawTransaction = vi.fn();
-		const estimateFees = vi.fn();
-		const countPending = vi.fn();
-		const submittedUpTo = vi.fn();
-		const setSubmittedForPending = vi.fn();
-		const setExecutedUpTo = vi.fn();
-		const setPending = vi.fn();
-		const setFees = vi.fn();
-		const setHash = vi.fn();
-		const register = vi.fn();
-		const deleteTx = vi.fn();
-		const maxNonce = vi.fn();
 
 		const chain = overrides?.chain ?? gnosisChiado;
 		const account = { address: entryPoint09Address };
-		const publicClient = { getTransactionCount } as unknown as PublicClient;
+
+		const publicClient = {
+			getTransactionCount: vi.fn(),
+		};
 		const signingClient = {
 			account,
 			chain,
-			signTransaction,
-			sendRawTransaction,
-		} as unknown as WalletClient<Transport, Chain, Account>;
-		const gasFeeEstimator = { estimateFees } as unknown as GasFeeEstimator;
+			signTransaction: vi.fn(),
+			sendRawTransaction: vi.fn(),
+		};
+		const gasFeeEstimator = {
+			estimateFees: vi.fn(),
+		};
 		const txStorage = {
-			countPending,
-			submittedUpTo,
-			setSubmittedForPending,
-			setExecutedUpTo,
-			setPending,
-			setFees,
-			setHash,
-			register,
-			delete: deleteTx,
-			maxNonce,
-		} as unknown as TransactionStorage;
+			countPending: vi.fn(),
+			submittedUpTo: vi.fn(),
+			setSubmittedForPending: vi.fn(),
+			setExecutedUpTo: vi.fn(),
+			setPending: vi.fn(),
+			setFees: vi.fn(),
+			setHash: vi.fn(),
+			register: vi.fn(),
+			delete: vi.fn(),
+			maxNonce: vi.fn(),
+		};
 
 		const protocol = new OnchainProtocol({
-			publicClient,
-			signingClient,
-			gasFeeEstimator,
+			publicClient: publicClient as unknown as PublicClient,
+			signingClient: signingClient as unknown as WalletClient<Transport, Chain, Account>,
+			gasFeeEstimator: gasFeeEstimator as unknown as GasFeeEstimator,
 			consensus: TEST_CONSENSUS,
 			coordinator: TEST_COORDINATOR,
 			queue,
-			txStorage,
+			txStorage: txStorage as unknown as TransactionStorage,
 			logger: testLogger,
 			blocksBeforeResubmit: overrides?.blocksBeforeResubmit,
 		});
@@ -83,22 +74,10 @@ describe("OnchainProtocol", () => {
 		return {
 			protocol,
 			queue,
-			account,
-			chain,
-			getTransactionCount,
-			signTransaction,
-			sendRawTransaction,
-			estimateFees,
-			countPending,
-			submittedUpTo,
-			setSubmittedForPending,
-			setExecutedUpTo,
-			setPending,
-			setFees,
-			setHash,
-			register,
-			deleteTx,
-			maxNonce,
+			signingClient,
+			publicClient,
+			gasFeeEstimator,
+			txStorage,
 		};
 	}
 
@@ -110,15 +89,20 @@ describe("OnchainProtocol", () => {
 	});
 
 	it("should not check pending on setup (in constructor)", async () => {
-		const { setSubmittedForPending, setExecutedUpTo, submittedUpTo } = createTestContext();
+		const {
+			txStorage: { setSubmittedForPending, setExecutedUpTo, submittedUpTo },
+		} = createTestContext();
 		expect(setSubmittedForPending).toBeCalledTimes(0);
 		expect(setExecutedUpTo).toBeCalledTimes(0);
 		expect(submittedUpTo).toBeCalledTimes(0);
 	});
 
 	it("should use bulk mark as executed", async () => {
-		const { protocol, getTransactionCount, countPending, submittedUpTo, setExecutedUpTo, setSubmittedForPending } =
-			createTestContext();
+		const {
+			protocol,
+			publicClient: { getTransactionCount },
+			txStorage: { countPending, submittedUpTo, setExecutedUpTo, setSubmittedForPending },
+		} = createTestContext();
 		const loggerSpy = vi.spyOn(testLogger, "debug");
 		countPending.mockReturnValue(2);
 		setSubmittedForPending.mockReturnValue(0);
@@ -139,7 +123,10 @@ describe("OnchainProtocol", () => {
 	});
 
 	it("should do nothing on setSubmittedForPending error", async () => {
-		const { protocol, countPending, setSubmittedForPending } = createTestContext();
+		const {
+			protocol,
+			txStorage: { countPending, setSubmittedForPending },
+		} = createTestContext();
 		const loggerSpy = vi.spyOn(testLogger, "error");
 		countPending.mockReturnValue(1);
 		setSubmittedForPending.mockImplementationOnce(() => {
@@ -153,7 +140,11 @@ describe("OnchainProtocol", () => {
 	});
 
 	it("should do nothing on rpc error", async () => {
-		const { protocol, countPending, setSubmittedForPending, getTransactionCount } = createTestContext();
+		const {
+			protocol,
+			publicClient: { getTransactionCount },
+			txStorage: { countPending, setSubmittedForPending },
+		} = createTestContext();
 		const loggerSpy = vi.spyOn(testLogger, "error");
 		countPending.mockReturnValue(1);
 		setSubmittedForPending.mockReturnValueOnce(0);
@@ -171,8 +162,11 @@ describe("OnchainProtocol", () => {
 	});
 
 	it("should do nothing on mark all tx as executed error", async () => {
-		const { protocol, countPending, setSubmittedForPending, getTransactionCount, setExecutedUpTo } =
-			createTestContext();
+		const {
+			protocol,
+			publicClient: { getTransactionCount },
+			txStorage: { countPending, setSubmittedForPending, setExecutedUpTo },
+		} = createTestContext();
 		const loggerSpy = vi.spyOn(testLogger, "error");
 		countPending.mockReturnValue(1);
 		setSubmittedForPending.mockReturnValueOnce(0);
@@ -194,8 +188,11 @@ describe("OnchainProtocol", () => {
 	});
 
 	it("should do nothing on fetching submittedUpTo tx error", async () => {
-		const { protocol, countPending, submittedUpTo, setSubmittedForPending, getTransactionCount, setExecutedUpTo } =
-			createTestContext();
+		const {
+			protocol,
+			publicClient: { getTransactionCount },
+			txStorage: { countPending, submittedUpTo, setSubmittedForPending, setExecutedUpTo },
+		} = createTestContext();
 		const loggerSpy = vi.spyOn(testLogger, "error");
 		countPending.mockReturnValue(1);
 		getTransactionCount.mockResolvedValueOnce(10);
@@ -222,12 +219,9 @@ describe("OnchainProtocol", () => {
 	it("should do nothing on fetching gas fees error", async () => {
 		const {
 			protocol,
-			countPending,
-			submittedUpTo,
-			setSubmittedForPending,
-			getTransactionCount,
-			setExecutedUpTo,
-			estimateFees,
+			publicClient: { getTransactionCount },
+			gasFeeEstimator: { estimateFees },
+			txStorage: { countPending, submittedUpTo, setSubmittedForPending, setExecutedUpTo },
 		} = createTestContext();
 		countPending.mockReturnValue(1);
 		getTransactionCount.mockResolvedValueOnce(10);
@@ -268,18 +262,10 @@ describe("OnchainProtocol", () => {
 	it("should mark as completed if nonce too low error on submission", async () => {
 		const {
 			protocol,
-			account,
-			chain,
-			countPending,
-			submittedUpTo,
-			setSubmittedForPending,
-			setExecutedUpTo,
-			getTransactionCount,
-			estimateFees,
-			signTransaction,
-			sendRawTransaction,
-			setFees,
-			setHash,
+			signingClient: { account, chain, signTransaction, sendRawTransaction },
+			publicClient: { getTransactionCount },
+			gasFeeEstimator: { estimateFees },
+			txStorage: { countPending, submittedUpTo, setSubmittedForPending, setExecutedUpTo, setFees, setHash },
 		} = createTestContext();
 
 		const hash = keccak256("0x5afe5afe01");
@@ -340,19 +326,10 @@ describe("OnchainProtocol", () => {
 	it("should mark as completed if nested nonce too low error on submission", async () => {
 		const {
 			protocol,
-			account,
-			chain,
-			countPending,
-			submittedUpTo,
-			setSubmittedForPending,
-			setExecutedUpTo,
-			getTransactionCount,
-			estimateFees,
-			signTransaction,
-			sendRawTransaction,
-			setPending,
-			setFees,
-			setHash,
+			signingClient: { account, chain, signTransaction, sendRawTransaction },
+			publicClient: { getTransactionCount },
+			gasFeeEstimator: { estimateFees },
+			txStorage: { countPending, submittedUpTo, setSubmittedForPending, setExecutedUpTo, setPending, setFees, setHash },
 		} = createTestContext();
 
 		const hash = keccak256("0x5afe5afe01");
@@ -424,17 +401,10 @@ describe("OnchainProtocol", () => {
 	it("should set tx hash on unexpected error on submission", async () => {
 		const {
 			protocol,
-			account,
-			chain,
-			countPending,
-			submittedUpTo,
-			setSubmittedForPending,
-			setExecutedUpTo,
-			getTransactionCount,
-			estimateFees,
-			signTransaction,
-			sendRawTransaction,
-			setHash,
+			signingClient: { account, chain, signTransaction, sendRawTransaction },
+			publicClient: { getTransactionCount },
+			gasFeeEstimator: { estimateFees },
+			txStorage: { countPending, submittedUpTo, setSubmittedForPending, setExecutedUpTo, setHash },
 		} = createTestContext();
 
 		const hash = keccak256("0x5afe5afe01");
@@ -489,18 +459,10 @@ describe("OnchainProtocol", () => {
 	it("should resubmit submittedUpTo tx without stored gas fees", async () => {
 		const {
 			protocol,
-			account,
-			chain,
-			countPending,
-			submittedUpTo,
-			setSubmittedForPending,
-			setExecutedUpTo,
-			getTransactionCount,
-			estimateFees,
-			signTransaction,
-			sendRawTransaction,
-			setFees,
-			setHash,
+			signingClient: { account, chain, signTransaction, sendRawTransaction },
+			publicClient: { getTransactionCount },
+			gasFeeEstimator: { estimateFees },
+			txStorage: { countPending, submittedUpTo, setSubmittedForPending, setExecutedUpTo, setFees, setHash },
 		} = createTestContext();
 
 		const hash = keccak256("0x5afe5afe01");
@@ -562,18 +524,10 @@ describe("OnchainProtocol", () => {
 	it("should resubmit submittedUpTo tx with lower stored gas fees", async () => {
 		const {
 			protocol,
-			account,
-			chain,
-			countPending,
-			submittedUpTo,
-			setSubmittedForPending,
-			setExecutedUpTo,
-			getTransactionCount,
-			estimateFees,
-			signTransaction,
-			sendRawTransaction,
-			setFees,
-			setHash,
+			signingClient: { account, chain, signTransaction, sendRawTransaction },
+			publicClient: { getTransactionCount },
+			gasFeeEstimator: { estimateFees },
+			txStorage: { countPending, submittedUpTo, setSubmittedForPending, setExecutedUpTo, setFees, setHash },
 		} = createTestContext();
 
 		const hash = keccak256("0x5afe5afe01");
@@ -636,18 +590,10 @@ describe("OnchainProtocol", () => {
 	it("should resubmit submittedUpTo tx with higher stored gas fees", async () => {
 		const {
 			protocol,
-			account,
-			chain,
-			countPending,
-			submittedUpTo,
-			setSubmittedForPending,
-			setExecutedUpTo,
-			getTransactionCount,
-			estimateFees,
-			signTransaction,
-			sendRawTransaction,
-			setFees,
-			setHash,
+			signingClient: { account, chain, signTransaction, sendRawTransaction },
+			publicClient: { getTransactionCount },
+			gasFeeEstimator: { estimateFees },
+			txStorage: { countPending, submittedUpTo, setSubmittedForPending, setExecutedUpTo, setFees, setHash },
 		} = createTestContext();
 
 		const hash = keccak256("0x5afe5afe01");
@@ -710,18 +656,10 @@ describe("OnchainProtocol", () => {
 	it("should submit submittedUpTo tx without hash", async () => {
 		const {
 			protocol,
-			account,
-			chain,
-			countPending,
-			submittedUpTo,
-			setSubmittedForPending,
-			setExecutedUpTo,
-			getTransactionCount,
-			estimateFees,
-			signTransaction,
-			sendRawTransaction,
-			setFees,
-			setHash,
+			signingClient: { account, chain, signTransaction, sendRawTransaction },
+			publicClient: { getTransactionCount },
+			gasFeeEstimator: { estimateFees },
+			txStorage: { countPending, submittedUpTo, setSubmittedForPending, setExecutedUpTo, setFees, setHash },
 		} = createTestContext();
 
 		setSubmittedForPending.mockReturnValueOnce(0);
@@ -781,19 +719,10 @@ describe("OnchainProtocol", () => {
 	it("should check pending when checkPendingActions is called", async () => {
 		const {
 			protocol,
-			account,
-			chain,
-			countPending,
-			submittedUpTo,
-			setSubmittedForPending,
-			setExecutedUpTo,
-			getTransactionCount,
-			estimateFees,
-			signTransaction,
-			sendRawTransaction,
-			setPending,
-			setFees,
-			setHash,
+			signingClient: { account, chain, signTransaction, sendRawTransaction },
+			publicClient: { getTransactionCount },
+			gasFeeEstimator: { estimateFees },
+			txStorage: { countPending, submittedUpTo, setSubmittedForPending, setExecutedUpTo, setPending, setFees, setHash },
 		} = createTestContext();
 
 		countPending.mockReturnValue(1);
@@ -852,17 +781,11 @@ describe("OnchainProtocol", () => {
 	it("should delete tx on error if no additional tx was submitted", async () => {
 		const {
 			protocol,
-			account,
-			chain,
 			queue,
-			getTransactionCount,
-			estimateFees,
-			signTransaction,
-			sendRawTransaction,
-			register,
-			maxNonce,
-			deleteTx,
-			setHash,
+			signingClient: { account, chain, signTransaction, sendRawTransaction },
+			publicClient: { getTransactionCount },
+			gasFeeEstimator: { estimateFees },
+			txStorage: { register, maxNonce, delete: deleteTx, setHash },
 		} = createTestContext();
 
 		const [action, , tx] = TEST_ACTIONS[0];
@@ -914,19 +837,11 @@ describe("OnchainProtocol", () => {
 	it("should not delete tx on error if additional tx was submitted", async () => {
 		const {
 			protocol,
-			account,
-			chain,
 			queue,
-			getTransactionCount,
-			estimateFees,
-			signTransaction,
-			sendRawTransaction,
-			register,
-			setPending,
-			setFees,
-			maxNonce,
-			deleteTx,
-			setHash,
+			signingClient: { account, chain, signTransaction, sendRawTransaction },
+			publicClient: { getTransactionCount },
+			gasFeeEstimator: { estimateFees },
+			txStorage: { register, setPending, setFees, maxNonce, delete: deleteTx, setHash },
 		} = createTestContext();
 
 		const [action, , tx] = TEST_ACTIONS[0];
@@ -995,16 +910,10 @@ describe("OnchainProtocol", () => {
 		it(`should call ${functionName}`, async () => {
 			const {
 				protocol,
-				account,
-				chain,
-				getTransactionCount,
-				estimateFees,
-				signTransaction,
-				sendRawTransaction,
-				register,
-				setPending,
-				setFees,
-				setHash,
+				signingClient: { account, chain, signTransaction, sendRawTransaction },
+				publicClient: { getTransactionCount },
+				gasFeeEstimator: { estimateFees },
+				txStorage: { register, setPending, setFees, setHash },
 			} = createTestContext();
 
 			getTransactionCount.mockResolvedValueOnce(2);
@@ -1061,14 +970,10 @@ describe("OnchainProtocol", () => {
 	it("should not run concurrent pending checks", async () => {
 		const {
 			protocol,
-			countPending,
-			submittedUpTo,
-			setSubmittedForPending,
-			setExecutedUpTo,
-			getTransactionCount,
-			estimateFees,
-			signTransaction,
-			sendRawTransaction,
+			signingClient: { signTransaction, sendRawTransaction },
+			publicClient: { getTransactionCount },
+			gasFeeEstimator: { estimateFees },
+			txStorage: { countPending, submittedUpTo, setSubmittedForPending, setExecutedUpTo },
 		} = createTestContext();
 
 		const hash = keccak256("0x5afe5afe01");

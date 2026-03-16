@@ -225,7 +225,7 @@ export class OnchainProtocol extends BaseProtocol {
 		const txHash = keccak256(signedTx);
 		this.#txStorage.setHash(tx.nonce, txHash);
 		this.#logger.debug(`Submitting transaction for nonce ${tx.nonce}!`, { tx, txHash, fees });
-		return await this.#signingClient.sendRawTransaction({ serializedTransaction: signedTx });
+		return this.#signingClient.sendRawTransaction({ serializedTransaction: signedTx });
 	}
 
 	private async submitAction(action: SimulateContractParameters): Promise<Hex | null> {
