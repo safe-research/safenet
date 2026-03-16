@@ -1,15 +1,14 @@
 import { ArrowTopRightOnSquareIcon } from "@heroicons/react/24/solid";
 import type { Address, Hex } from "viem";
 import { CopyButton } from "@/components/common/CopyButton";
+import { InlineAddress } from "@/components/common/InlineAddress";
+import { InlineHash } from "@/components/common/InlineHash";
 import { NetworkBadge } from "@/components/common/NetworkBadge";
 import { BoxTitle } from "@/components/Groups";
 import { useChainInfo } from "@/hooks/useChainInfo";
-import { shortAddress } from "@/lib/address";
 import type { ChainInfo } from "@/lib/chains";
 import type { SafeTransaction } from "@/lib/consensus";
 import { safeWalletSafeUrl, safeWalletTxUrl } from "@/lib/safe/wallet";
-
-const shortHash = (hash: string): string => `${hash.slice(0, 6)}…${hash.slice(-4)}`;
 
 function SafeWalletLink({ href }: { href: string }) {
 	return (
@@ -50,7 +49,7 @@ export const SafeTxHeader = ({
 			<BoxTitle>Safe Transaction</BoxTitle>
 			<div className="flex flex-wrap items-center gap-2">
 				<span className="text-sm font-medium">SafeTxHash:</span>
-				<span className="font-mono text-sm leading-none mt-1">{shortHash(safeTxHash)}</span>
+				<InlineHash hash={safeTxHash} />
 				<CopyButton value={safeTxHash} />
 				{fromSafeApi && chainInfo !== undefined && (
 					<SafeWalletTxLink chainInfo={chainInfo} safe={transaction.safe} safeTxHash={safeTxHash} />
@@ -62,7 +61,7 @@ export const SafeTxHeader = ({
 			</div>
 			<div className="flex flex-wrap items-center gap-2">
 				<span className="text-sm font-medium">Safe:</span>
-				<span className="font-mono text-sm leading-none mt-1">{shortAddress(transaction.safe)}</span>
+				<InlineAddress chainId={transaction.chainId} address={transaction.safe} />
 				<CopyButton value={transaction.safe} />
 				{chainInfo !== undefined && <SafeWalletAccountLink chainInfo={chainInfo} safe={transaction.safe} />}
 			</div>
