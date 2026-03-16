@@ -12,6 +12,7 @@ This specification formalises the existing approach — no new frameworks — in
 1. **Phase 1 (PR 1)**: Audit and complete the token layer in `styles.css`
 2. **Phase 2 (PR 2)**: Establish primitive component layer (`Button`, `Input`, `Label`, `Badge` variants)
 3. **Phase 3 (PR 3)**: Standardise composite components — eliminate hardcoded colour bypasses and unify repeated class patterns
+4. **Phase 4 (PR 4)**: Align colour palette, typography, and card visual style with the Safenet staking UI brand
 
 Each phase produces a standalone, reviewable PR.
 
@@ -33,18 +34,24 @@ All semantic colour names, spacing aliases, typography scale, and radius values 
 
 **Colours to add/fix:**
 - `--color-muted` / `text-muted` — secondary/helper text colour (currently missing; some components fall back to ad-hoc grays)
-- `--color-keygen-error` / `--color-keygen-success` / `--color-keygen-pending` — semantic aliases for `red-500`, `green-500`, `yellow-500` used in `KeyGenStatusItem`
 - Fix misleading comment on `--color-surface-1` in light mode (value is `oklch(1 0 0)` = white, not "black")
 
-**Radius scale to formalise** (currently `rounded-lg`, `rounded-md`, `rounded-full` are used ad-hoc):
+**Radius scale to formalise** — use use-case based naming, consistent with the colour token convention (e.g. `--color-button`, not `--color-sm`).
+
+The current codebase uses `rounded-lg`, `rounded-md`, and `rounded-full` without clear use-case semantics:
+- `rounded-lg` appears in `Box`, `Skeleton`, `SearchBar`, and `KeyGenStatusItem` — all cards/containers, but also in `CopyButton` which is not a card
+- `rounded-md` appears in `FormItem` inputs and the `EpochRolloverItem` expand panel — two different use cases sharing the same class with no shared intent
+- `rounded-full` appears in `Badge` — this one is clear, but unnamed
+
+Formalising these as use-case tokens removes the ambiguity:
 
 | Token | Value | Usage |
 |---|---|---|
-| `--radius-sm` | `0.375rem` | Inputs, inline chips |
-| `--radius-md` | `0.5rem` | Cards (Box), dropdowns |
-| `--radius-full` | `9999px` | Badges, avatars |
+| `--radius-card` | `0.5rem` | `Box`, `Skeleton`, containers |
+| `--radius-input` | `0.375rem` | Inputs, dropdowns |
+| `--radius-badge` | `9999px` | Badges, pills |
 
-Map these into `@theme` so that `rounded-sm`, `rounded-md`, `rounded-full` resolve to the design system values, not Tailwind defaults.
+Map these into `@theme` as `rounded-card`, `rounded-input`, `rounded-badge` so the intent is explicit at the call site.
 
 **Typography scale** (currently only `--text-2xs` is custom):
 
@@ -93,7 +100,7 @@ No new user-facing flows. This is a developer-facing refactor. Visual output is 
 
 | File | Change |
 |---|---|
-| `src/styles.css` | Add missing tokens, fix comment, add radius scale, add `--color-muted`, add keygen semantic colour tokens |
+| `src/styles.css` | Add `--color-muted`, fix surface-1 comment, add use-case radius tokens, add `--font-mono`, add token-group comment headers. **Phase 4**: update token values to Safenet brand palette; add font imports, shadow tokens, set `--radius-card` to `0` |
 | `src/components/common/Button.tsx` | New primitive — wraps `<button>` with variant props (`primary`, `ghost`, `icon`) |
 | `src/components/common/Input.tsx` | New primitive — wraps `<input>` with consistent border/bg/text styling |
 | `src/components/common/Label.tsx` | New primitive — `<label>` with consistent typography |
@@ -134,12 +141,12 @@ No new user-facing flows. This is a developer-facing refactor. Visual output is 
 --color-warning-surface
 ```
 
-**Radii** (new, in `@theme`):
+**Radii** (new, use-case named, in `@theme`):
 
 ```
---radius-sm   → rounded-sm
---radius-md   → rounded-md   (override Tailwind default)
---radius-full → rounded-full (keep Tailwind default value)
+--radius-card  → rounded-card   (0.5rem  — containers, cards)
+--radius-input → rounded-input  (0.375rem — inputs, dropdowns)
+--radius-badge → rounded-badge  (9999px  — badges, pills)
 ```
 
 **Typography** (additions to `@theme`):
@@ -153,9 +160,9 @@ No new user-facing flows. This is a developer-facing refactor. Visual output is 
 
 | Variant | Base classes |
 |---|---|
-| `primary` | `bg-button hover:bg-button-hover text-button-content rounded-sm px-4 py-2` |
+| `primary` | `bg-button hover:bg-button-hover text-button-content rounded-input px-4 py-2` |
 | `ghost` | `text-sub-title hover:text-title hover:underline` |
-| `icon` | `inline-flex items-center text-xs px-1.5 py-0.5 border border-surface-outline rounded-sm` |
+| `icon` | `inline-flex items-center text-xs px-1.5 py-0.5 border border-surface-outline rounded-input` |
 
 ### Badge Variants
 
@@ -190,11 +197,11 @@ Files touched:
 - `src/styles.css`
 
 Changes:
-1. Add `--color-muted` (light: `oklch(44.6% 0.03 256.802)`, dark: `oklch(63% 0.02 256.802)`) and map in `@theme`
-2. Fix the comment on `--color-surface-1` in light mode (says "black", value is white)
-4. Add `--radius-sm`, `--radius-md` in `@theme` (override Tailwind defaults to match current ad-hoc usage)
-5. Add `--font-mono` in `@theme`
-6. Add a comment block above each token group (Surfaces, Text, Button, Status, Radius, Typography) for discoverability
+1. Add `--color-muted` (light: `oklch(44.6% 0.03 256.802)`, dark: `oklch(63% 0.02 256.802)`) and map in `@theme`. This is a new token for decorative/helper text; it is intentionally distinct from `--color-sub-title`, which is for structural secondary text (section labels, descriptions).
+2. Fix the comment on `--color-surface-1` in light mode (says "black", value is correct white — comment-only fix, do not change the value).
+3. Add `--radius-card` (0.5rem), `--radius-input` (0.375rem), `--radius-badge` (9999px) in `@theme` using use-case based naming (consistent with colour token convention, e.g. `--color-button` not `--color-sm`).
+4. Add `--font-mono` in `@theme`
+5. Add a comment block above each token group (Surfaces, Text, Button, Status, Radius, Typography) for discoverability
 
 No component changes. No visual changes. `npm run check` must pass.
 
@@ -230,22 +237,74 @@ Constraints:
 Files touched:
 - `src/components/Forms.tsx` — use `Input`, `Label`, `Button`, `Spinner`
 - `src/components/common/StatusBadge.tsx` — use `Badge` variant prop
-- `src/components/common/NetworkBadge.tsx` — replace `#4B5563` with `text-muted`/`bg-muted`
-- `src/components/epoch/KeyGenStatusItem.tsx` — replace `text-red-500`/`text-green-500`/`text-yellow-500` with `text-error`/`text-positive`/`text-pending`
+- `src/components/common/NetworkBadge.tsx` — replace hardcoded fallback `#4B5563` with `text-muted`
+- `src/components/epoch/KeyGenStatusItem.tsx` — replace `text-red-500`/`text-green-500`/`text-yellow-500` with `text-error`/`text-positive`/`text-pending` (reuse existing status tokens; no new aliases needed)
 - `src/components/transaction/TransactionListControls.tsx` — use `Spinner` primitive
+- All components using `rounded-lg`/`rounded-md`/`rounded-full` — replace with `rounded-card`/`rounded-input`/`rounded-badge`
 
 All existing tests must pass. `npm run check` must pass.
 
 ---
 
-## Open Questions / Assumptions
+### Phase 4 — Safenet Brand Alignment (PR 4)
 
-1. **`--color-surface-1` light mode value**: ✅ Fix comment only — value `oklch(1 0 0)` is correct (white), the comment erroneously says "black".
+**Goal**: Align the explorer's visual identity with the Safenet staking UI so both products feel like part of the same family. Token names established in Phases 1–3 are preserved; only token **values**, fonts, shadow system, and the card visual style change.
 
-2. **`--radius-md` override**: ⚠️ **Open** — Tailwind's default `rounded-md` is `0.375rem`; the app currently uses `rounded-lg` (`0.5rem`) for cards and `rounded-md` for inputs. Remapping `--radius-md` to `0.5rem` would make `rounded-md` mean "card radius". Needs confirmation before Phase 1 lands.
+**Design principles from the staking UI**:
+- Cards have **no border radius** and share the **same background colour as the underlying layer** — depth comes from shadows, not borders or elevation
+- Dark mode cards use a subtle green-tinted glow on hover instead of a visible border
+- Monospace font (`Geist Mono Variable`) as the default sans, `Citerne` serif for headings
+- Colours are hex-based (`#FFFFFF`, `#121312`, `#12FF80`), not oklch
 
-3. **`text-muted` vs `text-sub-title`**: ✅ They remain separate — `text-sub-title` for structural secondary text, `text-muted` for decorative/helper text.
+**Token value updates** — names unchanged, values updated to match the Safenet brand palette:
 
-4. **Keygen status colours**: ✅ Reuse existing status tokens — `text-error`, `text-positive`, `text-pending` replace `text-red-500`, `text-green-500`, `text-yellow-500` directly. No new aliases needed.
+| Token (name unchanged) | Light | Dark |
+|---|---|---|
+| `--color-surface-0` | `#FFFFFF` | `#121312` |
+| `--color-surface-1` | `#FFFFFF` | `#1A1B1A` |
+| `--color-title` | `#000000` | `#FFFFFF` |
+| `--color-title-hover` | `#1A1B1A` | `#E0E0E0` |
+| `--color-sub-title` | `#808B85` | `#A1A3A7` |
+| `--color-muted` | `#CCD1CE` | `#1E201E` |
+| `--color-surface-outline` | `rgba(0,0,0,0.12)` | `rgba(255,255,255,0.32)` |
+| `--color-primary` | `#12FF80` | `#12FF80` |
+| `--color-button` | `#000000` | `#12FF80` |
+| `--color-button-hover` | `#1A1B1A` | `#0FDA6D` |
+| `--color-button-content` | `#FFFFFF` | `#000000` |
+| `--color-positive` | `#00B460` | `#27D18B` |
+| `--color-error` | `#FF5F72` | `#FF5F72` |
+| `--color-warning` | `#FF8061` | `#FF8061` |
+| `--radius-card` | `0` | `0` |
 
-5. **Storybook / component catalogue**: ✅ Out of scope for now. May be revisited as a future feature (framework-free option: an in-app `/dev/components` route).
+**New tokens** (following existing naming convention):
+
+| Token | Light | Dark | Purpose |
+|---|---|---|---|
+| `--color-info` | `#5FDDFF` | `#5FDDFF` | Informational highlights |
+| `--color-secondary` | `#EFFFF4` | `#1E201E` | Subtle tinted surfaces |
+| `--color-safe-light-green` | `#B0FFC9` | `#B0FFC9` | Brand tint |
+| `--color-guardians-blue` | `#001F26` | `#001F26` | Deep brand dark |
+| `--shadow-card` | `0 1px 3px 0 rgb(0 0 0/0.06), 0 1px 2px -1px rgb(0 0 0/0.06)` | `none` | Default card depth |
+| `--shadow-card-hover` | `0 4px 12px -2px rgb(0 0 0/0.10), 0 2px 4px -2px rgb(0 0 0/0.06)` | `0 0 0 1px rgb(18 255 128/0.08)` | Card hover state |
+| `--shadow-elevated` | `0 8px 24px -4px rgb(0 0 0/0.10), 0 4px 8px -4px rgb(0 0 0/0.06)` | `0 0 0 1px rgb(18 255 128/0.10), 0 4px 16px -4px rgb(0 0 0/0.40)` | Modals, popovers |
+
+Map `--shadow-*` in `@theme` as `shadow-card`, `shadow-card-hover`, `shadow-elevated`.
+
+**Typography changes**:
+- Replace `@import` of Inter with `@fontsource-variable/geist-mono`
+- Add `Citerne` `@font-face` declarations (woff2 files added to `src/assets/fonts/`)
+- Update `--font-sans` → `Geist Mono Variable, ui-monospace, monospace`
+- Add `--font-heading` → `Citerne, Georgia, serif`
+
+**Card design changes** (component updates to match zero-radius, same-background style):
+- `Box` component: remove `rounded-card` and `border border-surface-outline`; add `shadow-card` with `hover:shadow-card-hover transition-shadow`
+- `--radius-card` is already the token controlling card radius; setting it to `0` in `styles.css` is the only change needed for all cards — no component edits beyond `Box` itself
+
+Files touched:
+- `src/styles.css` — update token values, add shadow tokens, new font imports
+- `src/assets/fonts/` — add `Citerne-Regular.woff2`, `Citerne-Medium.woff2`
+- `src/components/Groups.tsx` — `Box`: remove border and radius classes, add shadow classes
+- `package.json` — add `@fontsource-variable/geist-mono` dependency
+
+No token names change. No other component files require edits. All existing tests must pass. `npm run check` must pass.
+
