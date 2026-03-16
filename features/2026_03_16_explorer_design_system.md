@@ -139,9 +139,11 @@ No new user-facing flows. This is a developer-facing refactor. Visual output is 
 --color-error
 --color-error-outline
 --color-error-surface
+--color-error-foreground    ← NEW
 --color-warning
 --color-warning-outline
 --color-warning-surface
+--color-warning-foreground  ← NEW
 ```
 
 **Radii** (new, use-case named, in `@theme`):
@@ -169,13 +171,20 @@ No new user-facing flows. This is a developer-facing refactor. Visual output is 
 
 ### Badge Variants
 
-| Variant | Tailwind classes |
-|---|---|
-| `positive` | `bg-positive text-positive-foreground` |
-| `pending` | `bg-pending text-pending-foreground` |
-| `error` | `bg-error-surface text-error border border-error-outline` |
-| `warning` | `bg-warning-surface text-warning border border-warning-outline` |
-| `neutral` | `bg-surface-0 text-muted border border-surface-outline` |
+Two visual patterns are used deliberately:
+- **Solid** (`positive`, `pending`): high-contrast coloured background — used for compact status chips in lists where the label must stand out at a glance.
+- **Tinted surface** (`error`, `warning`, `neutral`): light background with coloured border and text — used in alert/form contexts where the surrounding copy needs to remain readable.
+
+| Variant | Pattern | Tailwind classes |
+|---|---|---|
+| `positive` | solid | `bg-positive text-positive-foreground` |
+| `pending` | solid | `bg-pending text-pending-foreground` |
+| `error` | tinted | `bg-error-surface text-error border border-error-outline` |
+| `warning` | tinted | `bg-warning-surface text-warning border border-warning-outline` |
+| `neutral` | tinted | `bg-surface-0 text-muted border border-surface-outline` |
+| `info` | tinted | `bg-color-info/10 text-info border border-info/30` ← added in Phase 4 |
+
+`--color-error-foreground` and `--color-warning-foreground` are added to the token inventory (Phase 1) for completeness and to allow a solid `error`/`warning` chip in future if needed, even though the tinted pattern is used for Phase 2 badge variants.
 
 ### Test Cases
 
@@ -200,7 +209,7 @@ Files touched:
 - `src/styles.css`
 
 Changes:
-1. Add `--color-muted` (light: `oklch(44.6% 0.03 256.802)`, dark: `oklch(63% 0.02 256.802)`) and map in `@theme`. This is a new token for decorative/helper text; it is intentionally distinct from `--color-sub-title`, which is for structural secondary text (section labels, descriptions).
+1. Add `--color-muted` (light: `oklch(44.6% 0.03 256.802)`, dark: `oklch(63% 0.02 256.802)`) and map in `@theme`. This is a new token for decorative/helper text; it is intentionally distinct from `--color-sub-title`, which is for structural secondary text (section labels, descriptions). Also add `--color-error-foreground` and `--color-warning-foreground` (text colour suitable for a solid error/warning chip, mirroring `--color-positive-foreground` and `--color-pending-foreground`) to complete the status token set symmetrically.
 2. Fix the comment on `--color-surface-1` in light mode (says "black", value is correct white — comment-only fix, do not change the value).
 3. Fix `@theme` mapping bug: `--color-sub-title: var(--color-title)` → `--color-sub-title: var(--color-sub-title)`. Silent today (same value), but would break in Phase 4.
 4. Fix `@theme` mapping bugs: `--color-error`, `--color-error-outline`, and `--color-error-surface` all currently point to their `warning` counterparts. Correct each to reference its own variable. This is an existing visual bug — `text-error` renders in warning colour today.
@@ -284,22 +293,22 @@ All existing tests must pass. `npm run check` must pass.
 
 **New tokens** (following existing naming convention):
 
-| Token | Light | Dark | Purpose |
-|---|---|---|---|
-| `--color-info` | `#5FDDFF` | `#5FDDFF` | Informational highlights |
-| `--color-secondary` | `#EFFFF4` | `#1E201E` | Subtle tinted surfaces |
-| `--color-safe-light-green` | `#B0FFC9` | `#B0FFC9` | Brand tint |
-| `--color-guardians-blue` | `#001F26` | `#001F26` | Deep brand dark |
-| `--shadow-card` | `0 1px 3px 0 rgb(0 0 0/0.06), 0 1px 2px -1px rgb(0 0 0/0.06)` | `none` | Default card depth |
-| `--shadow-card-hover` | `0 4px 12px -2px rgb(0 0 0/0.10), 0 2px 4px -2px rgb(0 0 0/0.06)` | `0 0 0 1px rgb(18 255 128/0.08)` | Card hover state |
-| `--shadow-elevated` | `0 8px 24px -4px rgb(0 0 0/0.10), 0 4px 8px -4px rgb(0 0 0/0.06)` | `0 0 0 1px rgb(18 255 128/0.10), 0 4px 16px -4px rgb(0 0 0/0.40)` | Modals, popovers |
+| Token | Light | Dark | Purpose | Immediate usage in Phase 4 |
+|---|---|---|---|---|
+| `--color-info` | `#5FDDFF` | `#5FDDFF` | Informational highlights | `info` badge variant added to `Badge`; used in `SafeResearchBanner` (currently uses warning, which is semantically wrong for an info notice) |
+| `--color-secondary` | `#EFFFF4` | `#1E201E` | Subtle tinted accent surface | Replaces `--color-surface-hover` in hover states; available for secondary action backgrounds |
+| `--color-safe-light-green` | `#B0FFC9` | `#B0FFC9` | Brand tint | No component usage in Phase 4 — included to complete the brand palette for future use |
+| `--color-guardians-blue` | `#001F26` | `#001F26` | Deep brand dark | No component usage in Phase 4 — included to complete the brand palette for future use |
+| `--shadow-card` | `0 1px 3px 0 rgb(0 0 0/0.06), 0 1px 2px -1px rgb(0 0 0/0.06)` | `none` | Default card depth | Applied to `Box` (replaces border) |
+| `--shadow-card-hover` | `0 4px 12px -2px rgb(0 0 0/0.10), 0 2px 4px -2px rgb(0 0 0/0.06)` | `0 0 0 1px rgb(18 255 128/0.08)` | Card hover state | Applied to `Box` hover |
+| `--shadow-elevated` | `0 8px 24px -4px rgb(0 0 0/0.10), 0 4px 8px -4px rgb(0 0 0/0.06)` | `0 0 0 1px rgb(18 255 128/0.10), 0 4px 16px -4px rgb(0 0 0/0.40)` | Modals, popovers | Available for future modal/popover components |
 
 Map `--shadow-*` in `@theme` as `shadow-card`, `shadow-card-hover`, `shadow-elevated`.
 
 **Typography changes**:
 - Replace `@import` of Inter with `@fontsource-variable/geist-mono`
 - Add `Citerne` `@font-face` declarations (woff2 files added to `src/assets/fonts/`)
-- Update `--font-sans` → `Geist Mono Variable, ui-monospace, monospace`
+- Update `--font-sans` → `Geist Mono Variable, ui-monospace, monospace`. Using a monospace font as the default UI font is a deliberate Safenet brand decision — the staking UI applies the same choice explicitly. The mono aesthetic reinforces the cryptographic, terminal-native identity of the product.
 - Add `--font-heading` → `Citerne, Georgia, serif`
 
 **Card design changes** (component updates to match zero-radius, same-background style):
@@ -310,7 +319,9 @@ Files touched:
 - `src/styles.css` — update token values, add shadow tokens, new font imports
 - `src/assets/fonts/` — add `Citerne-Regular.woff2`, `Citerne-Medium.woff2`
 - `src/components/Groups.tsx` — `Box`: remove border and radius classes, add shadow classes
+- `src/components/common/Badge.tsx` — add `info` variant using `--color-info`
+- `src/components/SafeResearch.tsx` — update `SafeResearchBanner` to use `info` variant instead of warning tokens
 - `package.json` — add `@fontsource-variable/geist-mono` dependency
 
-No token names change. No other component files require edits. All existing tests must pass. `npm run check` must pass.
+No token names change. All existing tests must pass. `npm run check` must pass.
 
