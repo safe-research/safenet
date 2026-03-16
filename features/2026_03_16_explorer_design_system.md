@@ -167,7 +167,7 @@ No new user-facing flows. This is a developer-facing refactor. Visual output is 
 |---|---|
 | `primary` | `bg-button hover:bg-button-hover text-button-content rounded-input px-4 py-2` |
 | `ghost` | `text-sub-title hover:text-title hover:underline` |
-| `icon` | `inline-flex items-center text-xs px-1.5 py-0.5 border border-surface-outline rounded-input` |
+| `icon` | `inline-flex items-center text-xs px-1.5 py-0.5 border border-surface-outline rounded-input hover:bg-surface-1 transition-colors cursor-pointer` |
 
 ### Badge Variants
 
@@ -315,13 +315,12 @@ Map `--shadow-*` in `@theme` as `shadow-card`, `shadow-card-hover`, `shadow-elev
 - Add `--font-heading` → `Citerne, Georgia, serif`
 
 **Card design changes** (component updates to match zero-radius, same-background style):
-- `Box` component: remove `rounded-card` and `border border-surface-outline`; add `shadow-card` with `hover:shadow-card-hover transition-shadow`
-- `--radius-card` is already the token controlling card radius; setting it to `0` in `styles.css` is the only change needed for all cards — no component edits beyond `Box` itself
+- `Box` component: remove `border border-surface-outline`; add `shadow-card hover:shadow-card-hover transition-shadow`. Do **not** remove `rounded-card` — the class stays, and setting `--radius-card: 0` in `styles.css` propagates the zero-radius to every component using it automatically, with no further component edits needed.
 
 Files touched:
 - `src/styles.css` — update token values, add shadow tokens, new font imports
 - `src/assets/fonts/` — add `Citerne-Regular.woff2`, `Citerne-Medium.woff2`
-- `src/components/Groups.tsx` — `Box`: remove border and radius classes, add shadow classes
+- `src/components/Groups.tsx` — `Box`: remove border class, add shadow classes (`rounded-card` stays; zero radius comes from the token value)
 - `src/components/common/Badge.tsx` — add `info` variant using `--color-info`
 - `src/components/SafeResearch.tsx` — update `SafeResearchBanner` to use `info` variant instead of warning tokens
 - Any component using `bg-surface-hover` / `hover:bg-surface-hover` — migrate to `bg-secondary` / `hover:bg-secondary` as part of `--color-surface-hover` deprecation
