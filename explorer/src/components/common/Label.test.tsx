@@ -7,17 +7,21 @@ afterEach(cleanup);
 
 describe("Label", () => {
 	it("renders children", () => {
-		render(<Label>My label</Label>);
+		render(<Label htmlFor="x">My label</Label>);
 		expect(screen.getByText("My label")).toBeTruthy();
 	});
 
-	it("merges className via cn()", () => {
-		const { container } = render(<Label className="extra-class">X</Label>);
+	it("provided className is applied", () => {
+		const { container } = render(
+			<Label htmlFor="x" className="extra-class">
+				X
+			</Label>,
+		);
 		expect((container.firstChild as HTMLElement).className).toContain("extra-class");
 	});
 
 	it("applies base typography classes", () => {
-		const { container } = render(<Label>X</Label>);
+		const { container } = render(<Label htmlFor="x">X</Label>);
 		const el = container.firstChild as HTMLElement;
 		expect(el.className).toContain("text-sm");
 		expect(el.className).toContain("font-medium");

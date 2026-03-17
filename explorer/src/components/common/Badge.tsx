@@ -1,14 +1,14 @@
 import { cn } from "@/lib/utils";
 
-type BadgeVariant = "positive" | "pending" | "error" | "warning" | "neutral";
-
-const variantClasses: Record<BadgeVariant, string> = {
+const variantClasses = {
 	positive: "bg-positive text-positive-foreground",
 	pending: "bg-pending text-pending-foreground",
 	error: "bg-error-surface text-error border border-error-outline",
 	warning: "bg-warning-surface text-warning border border-warning-outline",
 	neutral: "bg-surface-0 text-muted border border-surface-outline",
-};
+} as const;
+
+type BadgeVariant = keyof typeof variantClasses;
 
 export function Badge({
 	className,

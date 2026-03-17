@@ -12,28 +12,24 @@ describe("Badge", () => {
 	});
 
 	it.each([
-		{ variant: "positive" as const, text: "OK" },
-		{ variant: "pending" as const, text: "PENDING" },
-		{ variant: "error" as const, text: "ERROR" },
-		{ variant: "warning" as const, text: "WARN" },
-		{ variant: "neutral" as const, text: "NEUTRAL" },
-	])("renders with $variant variant", ({ variant, text }) => {
-		render(<Badge variant={variant}>{text}</Badge>);
+		{ variant: "positive" as const, text: "OK", expectedClass: "bg-positive" },
+		{ variant: "pending" as const, text: "PENDING", expectedClass: "bg-pending" },
+		{ variant: "error" as const, text: "ERROR", expectedClass: "bg-error-surface" },
+		{ variant: "warning" as const, text: "WARN", expectedClass: "bg-warning-surface" },
+		{ variant: "neutral" as const, text: "NEUTRAL", expectedClass: "bg-surface-0" },
+	])("renders with $variant variant and applies correct class", ({ variant, text, expectedClass }) => {
+		const { container } = render(<Badge variant={variant}>{text}</Badge>);
 		expect(screen.getByText(text)).toBeTruthy();
+		expect((container.firstChild as HTMLElement).className).toContain(expectedClass);
 	});
 
-	it("merges className via cn()", () => {
+	it("provided className is applied", () => {
 		const { container } = render(<Badge className="extra-class">X</Badge>);
 		expect((container.firstChild as HTMLElement).className).toContain("extra-class");
 	});
 
-	it("applies variant classes when variant is set", () => {
-		const { container } = render(<Badge variant="positive">X</Badge>);
-		expect((container.firstChild as HTMLElement).className).toContain("bg-positive");
-	});
-
-	it("applies inline style when bgColor is provided", () => {
+	it("applies the provided bgColor as inline style", () => {
 		const { container } = render(<Badge bgColor="#ff0000">X</Badge>);
-		expect((container.firstChild as HTMLElement).getAttribute("style")).toContain("background-color");
+		expect((container.firstChild as HTMLElement).style.backgroundColor).toBe("rgb(255, 0, 0)");
 	});
 });

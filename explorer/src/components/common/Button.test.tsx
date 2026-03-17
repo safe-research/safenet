@@ -7,8 +7,9 @@ afterEach(cleanup);
 
 describe("Button", () => {
 	it("renders with default primary variant", () => {
-		render(<Button>Click me</Button>);
+		const { container } = render(<Button>Click me</Button>);
 		expect(screen.getByRole("button", { name: "Click me" })).toBeTruthy();
+		expect((container.firstChild as HTMLElement).className).toContain("bg-button");
 	});
 
 	it("renders with ghost variant", () => {
@@ -26,7 +27,7 @@ describe("Button", () => {
 		expect((container.firstChild as HTMLElement).className).toContain("bg-button");
 	});
 
-	it("merges className via cn()", () => {
+	it("provided className is applied", () => {
 		const { container } = render(<Button className="extra-class">X</Button>);
 		expect((container.firstChild as HTMLElement).className).toContain("extra-class");
 	});
