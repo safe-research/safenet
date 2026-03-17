@@ -2,7 +2,7 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import type { Address, Hex } from "viem";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { TransactionProposal } from "@/lib/consensus";
+import type { TransactionProposalWithStatus } from "@/lib/consensus";
 import { RecentTransactionProposals } from "./RecentTransactionProposals";
 import { TransactionProposalsList } from "./TransactionProposalsList";
 
@@ -10,7 +10,7 @@ vi.mock("@/components/transaction/TransactionListRow", async (importOriginal) =>
 	const actual = await importOriginal<typeof import("@/components/transaction/TransactionListRow")>();
 	return {
 		...actual,
-		TransactionListRow: ({ proposal }: { proposal: TransactionProposal }) => (
+		TransactionListRow: ({ proposal }: { proposal: TransactionProposalWithStatus }) => (
 			<div data-testid="transaction-list-row">{proposal.safeTxHash}</div>
 		),
 		TransactionListRowSkeleton: () => <div data-testid="transaction-list-row-skeleton" />,
@@ -19,7 +19,7 @@ vi.mock("@/components/transaction/TransactionListRow", async (importOriginal) =>
 
 afterEach(cleanup);
 
-const makeProposal = (safeTxHash: string, epoch = 1n): TransactionProposal => ({
+const makeProposal = (safeTxHash: string, epoch = 1n): TransactionProposalWithStatus => ({
 	chainId: 1n,
 	safeTxHash: safeTxHash as Hex,
 	epoch,
@@ -39,6 +39,7 @@ const makeProposal = (safeTxHash: string, epoch = 1n): TransactionProposal => ({
 	},
 	proposedAt: { block: 100n, tx: "0xabc" as Hex },
 	attestedAt: null,
+	status: "PROPOSED",
 });
 
 const PROPOSALS = [makeProposal("0xhash1"), makeProposal("0xhash2"), makeProposal("0xhash3")];

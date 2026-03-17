@@ -9,6 +9,7 @@ const SAFE_TX_HASH = `0x${"ab".repeat(32)}` as Hex;
 const SAFE_ADDRESS = "0xDeaDbeefdEAdbeefdEadbEEFdeadbeEFdEaDbeeF" as Address;
 const CURRENT_BLOCK = 10000n;
 const MAX_BLOCK_RANGE = 1000n;
+const SIGNING_TIMEOUT = 12;
 
 const GROUP_ID_A = `0x${"aa".repeat(32)}` as Hex;
 const GROUP_ID_B = `0x${"bb".repeat(32)}` as Hex;
@@ -25,20 +26,35 @@ describe("loadTransactionProposals", () => {
 	describe("topic filters", () => {
 		it("makes a single eth_getLogs request", async () => {
 			const provider = makeProvider();
-			await loadTransactionProposals({ provider, consensus: CONSENSUS, maxBlockRange: MAX_BLOCK_RANGE });
+			await loadTransactionProposals({
+				provider,
+				consensus: CONSENSUS,
+				maxBlockRange: MAX_BLOCK_RANGE,
+				signingTimeout: SIGNING_TIMEOUT,
+			});
 			expect((provider.request as ReturnType<typeof vi.fn>).mock.calls).toHaveLength(1);
 		});
 
 		it("passes both event selectors as an OR filter in topic[0]", async () => {
 			const provider = makeProvider();
-			await loadTransactionProposals({ provider, consensus: CONSENSUS, maxBlockRange: MAX_BLOCK_RANGE });
+			await loadTransactionProposals({
+				provider,
+				consensus: CONSENSUS,
+				maxBlockRange: MAX_BLOCK_RANGE,
+				signingTimeout: SIGNING_TIMEOUT,
+			});
 			expect(Array.isArray(firstCall(provider).topics[0])).toBe(true);
 			expect(firstCall(provider).topics[0]).toHaveLength(2);
 		});
 
 		it("uses null for topic[1] when safeTxHash is not provided", async () => {
 			const provider = makeProvider();
-			await loadTransactionProposals({ provider, consensus: CONSENSUS, maxBlockRange: MAX_BLOCK_RANGE });
+			await loadTransactionProposals({
+				provider,
+				consensus: CONSENSUS,
+				maxBlockRange: MAX_BLOCK_RANGE,
+				signingTimeout: SIGNING_TIMEOUT,
+			});
 			expect(firstCall(provider).topics[1]).toBeNull();
 		});
 
@@ -49,13 +65,19 @@ describe("loadTransactionProposals", () => {
 				consensus: CONSENSUS,
 				safeTxHash: SAFE_TX_HASH,
 				maxBlockRange: MAX_BLOCK_RANGE,
+				signingTimeout: SIGNING_TIMEOUT,
 			});
 			expect(firstCall(provider).topics[1]).toBe(SAFE_TX_HASH);
 		});
 
 		it("uses null for topic[3] when safe is not provided", async () => {
 			const provider = makeProvider();
-			await loadTransactionProposals({ provider, consensus: CONSENSUS, maxBlockRange: MAX_BLOCK_RANGE });
+			await loadTransactionProposals({
+				provider,
+				consensus: CONSENSUS,
+				maxBlockRange: MAX_BLOCK_RANGE,
+				signingTimeout: SIGNING_TIMEOUT,
+			});
 			expect(firstCall(provider).topics[3]).toBeNull();
 		});
 
@@ -66,6 +88,7 @@ describe("loadTransactionProposals", () => {
 				consensus: CONSENSUS,
 				safe: SAFE_ADDRESS,
 				maxBlockRange: MAX_BLOCK_RANGE,
+				signingTimeout: SIGNING_TIMEOUT,
 			});
 			expect(firstCall(provider).topics[2]).toBeNull(); // chainId wildcard
 			expect(firstCall(provider).topics[3]).toBe("0x000000000000000000000000DeaDbeefdEAdbeefdEadbEEFdeadbeEFdEaDbeeF");
@@ -75,7 +98,12 @@ describe("loadTransactionProposals", () => {
 	describe("block range", () => {
 		it("always includes an explicit toBlock in the request", async () => {
 			const provider = makeProvider();
-			await loadTransactionProposals({ provider, consensus: CONSENSUS, maxBlockRange: MAX_BLOCK_RANGE });
+			await loadTransactionProposals({
+				provider,
+				consensus: CONSENSUS,
+				maxBlockRange: MAX_BLOCK_RANGE,
+				signingTimeout: SIGNING_TIMEOUT,
+			});
 			expect(firstCall(provider).toBlock).toBe(numberToHex(CURRENT_BLOCK));
 		});
 
@@ -86,6 +114,7 @@ describe("loadTransactionProposals", () => {
 				consensus: CONSENSUS,
 				toBlock: 6000n,
 				maxBlockRange: MAX_BLOCK_RANGE,
+				signingTimeout: SIGNING_TIMEOUT,
 			});
 			expect(provider.getBlockNumber).not.toHaveBeenCalled();
 		});
@@ -99,6 +128,7 @@ describe("loadTransactionProposals", () => {
 				consensus: CONSENSUS,
 				toBlock: 6000n,
 				maxBlockRange: MAX_BLOCK_RANGE,
+				signingTimeout: SIGNING_TIMEOUT,
 			});
 			expect(result.fromBlock).toBe(5000n);
 			expect(result.toBlock).toBe(6000n);

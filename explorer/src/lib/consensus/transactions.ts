@@ -44,8 +44,12 @@ export type TransactionProposal = {
 	attestedAt: ExecutionLink | null;
 };
 
+export type ProposalStatus = "ATTESTED" | "PROPOSED" | "TIMED_OUT";
+
+export type TransactionProposalWithStatus = TransactionProposal & { status: ProposalStatus };
+
 export type LoadTransactionProposalsResult = {
-	proposals: TransactionProposal[];
+	proposals: TransactionProposalWithStatus[];
 	fromBlock: bigint;
 	toBlock: bigint;
 };
@@ -85,6 +89,7 @@ export const loadTransactionProposals = async ({
 	safe,
 	toBlock: referenceBlock,
 	maxBlockRange,
+	signingTimeout,
 }: {
 	provider: PublicClient;
 	consensus: Address;
@@ -92,6 +97,7 @@ export const loadTransactionProposals = async ({
 	safe?: Address;
 	toBlock?: bigint;
 	maxBlockRange: bigint;
+	signingTimeout: number;
 }): Promise<LoadTransactionProposalsResult> => {
 	const { fromBlock, toBlock } = await getBlockRange(provider, maxBlockRange, referenceBlock);
 	const blockRange = { fromBlock: numberToHex(fromBlock), toBlock: numberToHex(toBlock) };
@@ -136,17 +142,22 @@ export const loadTransactionProposals = async ({
 				return undefined;
 			}
 
-			const attestation = attestations.get(attestationKey(log));
+			const attestedAt = attestations.get(attestationKey(log)) ?? null;
+			const proposedAt = { block: log.blockNumber, tx: log.transactionHash };
+			const status: ProposalStatus =
+				attestedAt !== null
+					? "ATTESTED"
+					: toBlock - proposedAt.block > BigInt(signingTimeout)
+						? "TIMED_OUT"
+						: "PROPOSED";
 			return {
 				chainId: log.args.chainId,
 				safeTxHash: log.args.safeTxHash,
 				epoch: log.args.epoch,
 				transaction: transaction.data,
-				proposedAt: {
-					block: log.blockNumber,
-					tx: log.transactionHash,
-				},
-				attestedAt: attestation ?? null,
+				proposedAt,
+				attestedAt,
+				status,
 			};
 		})
 		.filter((proposal) => proposal !== undefined);

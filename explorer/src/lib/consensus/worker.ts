@@ -15,6 +15,7 @@ const workerApi = {
 		safe?: Address;
 		toBlock?: bigint;
 		maxBlockRange: bigint;
+		signingTimeout: number;
 	}) => loadTransactionProposals({ ...params, provider: createRpcClient(rpc) }),
 
 	loadConsensusState: ({ rpc, consensus }: { rpc: string; consensus: Address }) =>

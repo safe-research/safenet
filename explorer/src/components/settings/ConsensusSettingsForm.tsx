@@ -20,6 +20,7 @@ const settingsFormSchema = z.object({
 	validatorInfo: emptyToUndefined(z.url()),
 	refetchInterval: numberOrStringAsNumber.pipe(z.number().int().nonnegative().optional()),
 	blocksPerEpoch: numberOrStringAsNumber.pipe(z.number().int().positive().optional()),
+	signingTimeout: numberOrStringAsNumber.pipe(z.number().int().positive().optional()),
 });
 
 type SettingsFormInput = z.input<typeof settingsFormSchema>;
@@ -70,6 +71,12 @@ function ConsensusSettingsForm({ onSubmitted }: { onSubmitted?: () => void }) {
 			/>
 
 			<FormItem id="blocksPerEpoch" register={register} error={errors.blocksPerEpoch} label="Blocks Per Epoch" />
+			<FormItem
+				id="signingTimeout"
+				register={register}
+				error={errors.signingTimeout}
+				label="Signing Timeout (blocks)"
+			/>
 			<FormItem id="validatorInfo" register={register} error={errors.validatorInfo} label="Validator Info Url" />
 
 			<FormItem

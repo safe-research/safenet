@@ -15,6 +15,7 @@ const DEFAULT_SETTINGS = {
 		"https://raw.githubusercontent.com/safe-fndn/safenet-beta-data/refs/heads/devnet/assets/validator-info.json",
 	refetchInterval: 10000,
 	blocksPerEpoch: 1440,
+	signingTimeout: 12,
 };
 
 const settingsSchema = z.object({
@@ -26,6 +27,7 @@ const settingsSchema = z.object({
 	validatorInfo: z.url().default(DEFAULT_SETTINGS.validatorInfo),
 	refetchInterval: z.number().int().nonnegative().default(DEFAULT_SETTINGS.refetchInterval),
 	blocksPerEpoch: z.number().int().positive().default(DEFAULT_SETTINGS.blocksPerEpoch),
+	signingTimeout: z.number().int().positive().default(DEFAULT_SETTINGS.signingTimeout),
 });
 
 export type Settings = z.output<typeof settingsSchema>;
