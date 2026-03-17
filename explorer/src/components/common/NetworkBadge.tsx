@@ -5,15 +5,11 @@ import { contrastColor } from "@/lib/utils";
 export function NetworkBadge({ chainId, title, className }: { chainId: bigint; title?: string; className?: string }) {
 	const chain = SAFE_SERVICE_CHAINS[chainId.toString()];
 	const label = (chain?.shortName ?? chainId.toString()).toUpperCase();
-	if (chain?.color !== undefined) {
-		return (
-			<Badge bgColor={chain.color} fgColor={contrastColor(chain.color)} title={title} className={className}>
-				{label}
-			</Badge>
-		);
-	}
+	const badgeProps = chain?.color
+		? { bgColor: chain.color, fgColor: contrastColor(chain.color) }
+		: { variant: "neutral" as const };
 	return (
-		<Badge variant="neutral" title={title} className={className}>
+		<Badge {...badgeProps} title={title} className={className}>
 			{label}
 		</Badge>
 	);
