@@ -14,9 +14,9 @@ function statusLabel(status: KeyGenStatus): string {
 }
 
 function statusColor(status: KeyGenStatus): string {
-	if (status.compromised) return "text-red-500";
-	if (status.finalized) return "text-green-500";
-	return "text-yellow-500";
+	if (status.compromised) return "text-error";
+	if (status.finalized) return "text-positive";
+	return "text-pending";
 }
 
 export function KeyGenStatusItem({ status }: { status: KeyGenStatus | null }) {

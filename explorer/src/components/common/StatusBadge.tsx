@@ -2,11 +2,12 @@ import { Badge } from "@/components/common/Badge";
 import type { ProposalStatus } from "@/lib/consensus";
 
 export function StatusBadge({ status }: { status: ProposalStatus }) {
-	if (status === "TIMED_OUT") {
-		return <Badge className="bg-error text-white">TIMED OUT</Badge>;
+	switch (status) {
+		case "TIMED_OUT":
+			return <Badge variant="error">TIMED OUT</Badge>;
+		case "ATTESTED":
+			return <Badge variant="positive">ATTESTED</Badge>;
+		default:
+			return <Badge variant="pending">PROPOSED</Badge>;
 	}
-	if (status === "ATTESTED") {
-		return <Badge className="bg-positive text-positive-foreground">ATTESTED</Badge>;
-	}
-	return <Badge className="bg-pending text-pending-foreground">PROPOSED</Badge>;
 }
