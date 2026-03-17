@@ -3,6 +3,31 @@ import type { Hex } from "viem";
 import { useBlockInfo, useChainId } from "@/hooks/useProvider";
 import { SAFE_SERVICE_CHAINS } from "@/lib/chains";
 
+function InlineExplorerLink({
+	children,
+	explorerPath,
+	hideWithoutLink = false,
+}: {
+	children?: React.ReactNode;
+	explorerPath: string;
+	hideWithoutLink?: boolean;
+}) {
+	const chainId = useChainId();
+	const chainInfo = chainId.data === null ? null : SAFE_SERVICE_CHAINS[chainId.data.toString()];
+	if (chainInfo?.blockExplorers === undefined && hideWithoutLink) return;
+	if (chainInfo?.blockExplorers === undefined) return children;
+	const explorerLink = `${chainInfo.blockExplorers.default.url}/${explorerPath}`;
+	return (
+		<>
+			[
+			<a href={explorerLink} target="_blank" rel="noopener noreferrer">
+				{children} <ArrowTopRightOnSquareIcon className="inline-block h-4 w-4 mb-1" />
+			</a>
+			]
+		</>
+	);
+}
+
 export function InlineExplorerTxLink({
 	children,
 	txHash,
@@ -12,19 +37,10 @@ export function InlineExplorerTxLink({
 	txHash: Hex;
 	hideWithoutLink?: boolean;
 }) {
-	const chainId = useChainId();
-	const chainInfo = chainId.data === null ? null : SAFE_SERVICE_CHAINS[chainId.data.toString()];
-	if (chainInfo?.blockExplorers === undefined && hideWithoutLink) return;
-	if (chainInfo?.blockExplorers === undefined) return children;
-	const explorerLink = `${chainInfo.blockExplorers.default.url}/tx/${txHash}`;
 	return (
-		<>
-			[
-			<a href={explorerLink} target="_blank" rel="noopener noreferrer">
-				{children} <ArrowTopRightOnSquareIcon className="inline-block h-4 w-4 mb-1" />
-			</a>
-			]
-		</>
+		<InlineExplorerLink explorerPath={`tx/${txHash}`} hideWithoutLink={hideWithoutLink}>
+			{children}
+		</InlineExplorerLink>
 	);
 }
 
@@ -37,19 +53,10 @@ export function InlineExplorerBlockLink({
 	blockNumber: bigint;
 	hideWithoutLink?: boolean;
 }) {
-	const chainId = useChainId();
-	const chainInfo = chainId.data === null ? null : SAFE_SERVICE_CHAINS[chainId.data.toString()];
-	if (chainInfo?.blockExplorers === undefined && hideWithoutLink) return;
-	if (chainInfo?.blockExplorers === undefined) return children;
-	const explorerLink = `${chainInfo.blockExplorers.default.url}/block/${blockNumber}`;
 	return (
-		<>
-			[
-			<a href={explorerLink} target="_blank" rel="noopener noreferrer">
-				{children} <ArrowTopRightOnSquareIcon className="inline-block h-4 w-4 mb-1" />
-			</a>
-			]
-		</>
+		<InlineExplorerLink explorerPath={`block/${blockNumber}`} hideWithoutLink={hideWithoutLink}>
+			{children}
+		</InlineExplorerLink>
 	);
 }
 
