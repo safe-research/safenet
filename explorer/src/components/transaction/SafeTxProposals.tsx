@@ -1,9 +1,11 @@
 import type { Hex } from "viem";
+import { StatusBadge } from "@/components/common/StatusBadge";
 import { Box, BoxTitle } from "@/components/Groups";
 import { Skeleton } from "@/components/Skeleton";
 import { useProposalsForTransaction } from "@/hooks/useProposalsForTransaction";
 import { useSubmitProposal } from "@/hooks/useSubmitProposal";
-import type { SafeTransaction, TransactionProposal } from "@/lib/consensus";
+import { SAFE_SERVICE_CHAINS } from "@/lib/chains";
+import type { SafeTransaction, TransactionProposalWithStatus } from "@/lib/consensus";
 import { InlineBlockInfo, InlineExplorerTxLink } from "../common/Info";
 import { SafeTxAttestationStatus } from "./SafeTxAttestationStatus";
 
@@ -16,21 +18,22 @@ export function SafeTxProposals({ safeTxHash, transaction }: { safeTxHash: Hex; 
 			{proposals.isFetching && proposals.data.length === 0 && <Skeleton className="w-full h-25" />}
 			{!proposals.isFetching && proposals.data.length === 0 && <NoSafeTxProposals transaction={transaction} />}
 			{proposals.data.length !== 0 &&
-				proposals.data.map((proposal) => (
+				proposals.data.map((proposal, index) => (
 					<div key={`${proposal.safeTxHash}:${proposal.epoch}`}>
-						<SafeTxProposal proposal={proposal} />
+						<SafeTxProposal proposal={proposal} number={index + 1} />
 					</div>
 				))}
 		</div>
 	);
 }
 
-function SafeTxProposal({ proposal }: { proposal: TransactionProposal }) {
+function SafeTxProposal({ proposal, number }: { proposal: TransactionProposalWithStatus; number: number }) {
 	return (
-		<Box className={`${proposal.attestedAt !== null ? "border-positive" : "border-pending"} space-y-2`}>
+		<Box className="space-y-2">
+			<p className="font-semibold">Proposal #{number}</p>
 			<div className="md:flex md:justify-between">
 				<p>Status:</p>
-				<p>{proposal.attestedAt !== null ? "ATTESTED" : "PROPOSED"}</p>
+				<StatusBadge status={proposal.status} />
 			</div>
 			<div className="md:flex md:justify-between">
 				<p className="mr-2">Proposed:</p>
@@ -59,9 +62,11 @@ function SafeTxProposal({ proposal }: { proposal: TransactionProposal }) {
 
 function NoSafeTxProposals({ transaction }: { transaction: SafeTransaction }) {
 	const { enabled, mutation } = useSubmitProposal();
+	const chain = SAFE_SERVICE_CHAINS[transaction.chainId.toString()];
+	const chainName = chain?.name ?? `chain ${transaction.chainId}`;
 	return (
 		<Box className="flex w-full flex-col justify-center items-center space-y-4">
-			<div>No proposals for this transaction!</div>
+			<div>No proposals found for this SafeTxHash on {chainName}.</div>
 			{enabled && !mutation.isSuccess && (
 				<>
 					<button

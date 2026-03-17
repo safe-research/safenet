@@ -22,6 +22,7 @@ const DEFAULT_SETTINGS: Settings = {
 	validatorInfo: "https://example.com/validator-info.json",
 	refetchInterval: 0,
 	blocksPerEpoch: 1440,
+	signingTimeout: 12,
 };
 
 vi.mock("@/hooks/useSettings", () => ({
