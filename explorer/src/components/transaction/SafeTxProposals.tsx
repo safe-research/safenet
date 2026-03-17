@@ -71,7 +71,7 @@ function NoSafeTxProposals({ transaction }: { transaction: SafeTransaction }) {
 				<>
 					<button
 						type="button"
-						className="px-4 py-2 border rounded-full bg-surface-1 hover:bg-surface-hover cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed "
+						className="px-4 py-2 border rounded-full bg-surface-1 hover:bg-secondary cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
 						onClick={() => mutation.mutate(transaction)}
 						disabled={mutation.isPending}
 					>

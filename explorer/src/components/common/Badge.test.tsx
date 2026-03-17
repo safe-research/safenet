@@ -17,6 +17,7 @@ describe("Badge", () => {
 		{ variant: "error" as const, text: "ERROR", expectedClass: "bg-error" },
 		{ variant: "warning" as const, text: "WARN", expectedClass: "bg-warning-surface" },
 		{ variant: "neutral" as const, text: "NEUTRAL", expectedClass: "bg-surface-0" },
+		{ variant: "info" as const, text: "INFO", expectedClass: "text-info" },
 	])("renders with $variant variant and applies correct class", ({ variant, text, expectedClass }) => {
 		const { container } = render(<Badge variant={variant}>{text}</Badge>);
 		expect(screen.getByText(text)).toBeTruthy();
