@@ -36,7 +36,7 @@ export const handleEpochStaged = async (
 	}
 
 	// Start preprocessing for the new group (per spec's epoch_staged handler)
-	const nonceTreeRoot = signingClient.generateNonceTree(groupId);
+	const nonceTreeRoot = signingClient.generateNonceTree(groupId, machineConfig.account);
 	const actions: ProtocolAction[] = [
 		{
 			id: "sign_register_nonce_commitments",

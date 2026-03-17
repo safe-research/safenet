@@ -193,7 +193,7 @@ describe("key gen timeouts", () => {
 			}
 			expect(missingSecretShares).toBeCalledTimes(keyGenInvocations[1]);
 			if (keyGenInvocations[1] > 0) {
-				expect(missingSecretShares).toBeCalledWith("0x5afe02");
+				expect(missingSecretShares).toBeCalledWith("0x5afe02", ethAddress);
 			}
 			expect(setupGroup).toBeCalledTimes(1);
 			expect(setupGroup).toBeCalledWith(

@@ -34,9 +34,9 @@ export const handleKeyGenSecretShared = async (
 	// Track identity that has submitted last share
 	const response = await keyGenClient.handleKeygenSecrets(
 		groupId,
+		machineConfig.account,
 		event.participant,
 		event.share.f,
-		machineConfig.account,
 	);
 	const missingSharesFrom = machineStates.rollover.missingSharesFrom.slice();
 	const actions: ProtocolAction[] = [];

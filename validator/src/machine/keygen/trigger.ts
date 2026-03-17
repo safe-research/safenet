@@ -31,9 +31,9 @@ export const triggerKeyGen = (
 	if (participants.includes(machineConfig.account)) {
 		const { commitments, encryptionPublicKey, pok, poap } = keyGenClient.setupKeyGen(
 			groupId,
+			machineConfig.account,
 			participants,
 			threshold,
-			machineConfig.account,
 		);
 		actions.push({
 			id: "key_gen_start",

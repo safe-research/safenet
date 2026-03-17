@@ -72,7 +72,7 @@ export const handleComplaintSubmitted = async (
 		id: "key_gen_complaint_response",
 		groupId: event.gid,
 		plaintiff: event.plaintiff,
-		secretShare: keyGenClient.createSecretShare(event.gid, event.plaintiff),
+		secretShare: keyGenClient.createSecretShare(event.gid, machineConfig.account, event.plaintiff),
 	};
 	return {
 		rollover,

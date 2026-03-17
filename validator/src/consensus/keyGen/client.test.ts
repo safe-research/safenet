@@ -38,7 +38,7 @@ describe("keyGen", () => {
 			shares: bigint[];
 		}[] = [];
 		const clients = participantsInfo.map((p) => {
-			const storage = createClientStorage(p.address);
+			const storage = createClientStorage();
 			const client = new KeyGenClient(storage, testLogger);
 			return {
 				account: p.address,
@@ -52,9 +52,9 @@ describe("keyGen", () => {
 			const { groupId } = client.setupGroup(participants, threshold, context);
 			const { encryptionPublicKey, commitments, poap, pok } = client.setupKeyGen(
 				groupId,
+				account,
 				participants,
 				threshold,
-				account,
 			);
 			expect(verifyMerkleProof(participantsRoot, pad(account).toLowerCase() as Hex, poap)).toBeTruthy();
 			log("######################################");
@@ -88,18 +88,17 @@ describe("keyGen", () => {
 		for (const { client, account } of clients) {
 			for (const e of shareEvents) {
 				log(`>>>> Handle secrets shares from ${e.participant} >>>>`);
-				const response = await client.handleKeygenSecrets(e.groupId, e.participant, e.shares, account);
+				const response = await client.handleKeygenSecrets(e.groupId, account, e.participant, e.shares);
 				expect(response).not.toBe("invalid_share");
 			}
 		}
 		for (const { storage, account } of clients) {
-			log(storage.accountAddress());
 			for (const groupId of storage.knownGroups()) {
 				const publicKey = storage.publicKey(groupId);
-				const verificationShare = storage.verificationShare(groupId);
+				const verificationShare = storage.verificationShare(groupId, account);
 				log({
 					groupId,
-					signingShare: storage.signingShare(groupId),
+					signingShare: storage.signingShare(groupId, account),
 					participants: storage.participants(groupId),
 					participant: account,
 					verificationShare: {

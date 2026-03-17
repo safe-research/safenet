@@ -64,7 +64,7 @@ export class ValidatorService {
 		this.#logger = logger;
 		this.#publicClient = createPublicClient({ chain, transport });
 		const walletClient = createWalletClient({ chain, transport, account });
-		const storage = new SqliteClientStorage(account.address, database);
+		const storage = new SqliteClientStorage(database);
 		const signingClient = new SigningClient(storage);
 		const keyGenClient = new KeyGenClient(storage, this.#logger);
 		const verificationHandlers = new Map<string, PacketHandler<Typed>>();
