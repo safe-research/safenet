@@ -114,22 +114,22 @@ code {
 	/* Button */
 	--color-button: #000000;
 	--color-button-hover: #1a1b1a;
-	--color-button-outline: oklch(44.6% 0.03 256.802);
+	--color-button-outline: #4a5565;
 	--color-button-content: #ffffff;
 
 	/* Status */
 	--color-positive: #00b460;
-	--color-positive-foreground: oklch(1 0 0);
-	--color-pending: oklch(85.2% 0.199 91.936);
-	--color-pending-foreground: oklch(21% 0.034 264.665);
+	--color-positive-foreground: #ffffff;
+	--color-pending: #fdc700;
+	--color-pending-foreground: #101828;
 	--color-error: #ff5f72;
-	--color-error-outline: oklch(70.4% 0.191 22.216);
-	--color-error-surface: oklch(97.1% 0.013 17.38);
-	--color-error-foreground: oklch(1 0 0);
+	--color-error-outline: #ff6467;
+	--color-error-surface: #fef2f2;
+	--color-error-foreground: #ffffff;
 	--color-warning: #ff8061;
-	--color-warning-outline: oklch(87.9% 0.169 91.605);
-	--color-warning-surface: oklch(98.7% 0.026 102.212);
-	--color-warning-foreground: oklch(1 0 0);
+	--color-warning-outline: #ffd230;
+	--color-warning-surface: #fefce8;
+	--color-warning-foreground: #ffffff;
 	--color-info: #5fddff;
 
 	/* Brand palette */
@@ -159,22 +159,22 @@ code {
 	/* Button */
 	--color-button: #12ff80;
 	--color-button-hover: #0fda6d;
-	--color-button-outline: oklch(92.8% 0.006 264.531);
+	--color-button-outline: #e5e7eb;
 	--color-button-content: #000000;
 
 	/* Status */
 	--color-positive: #27d18b;
-	--color-positive-foreground: oklch(21% 0.034 264.665);
-	--color-pending: oklch(91.698% 0.19298 107.115);
-	--color-pending-foreground: oklch(21% 0.034 264.665);
+	--color-positive-foreground: #101828;
+	--color-pending: #f3eb1a;
+	--color-pending-foreground: #101828;
 	--color-error: #ff5f72;
-	--color-error-outline: oklch(70.4% 0.191 22.216);
-	--color-error-surface: oklch(97.1% 0.013 17.38);
-	--color-error-foreground: oklch(1 0 0);
+	--color-error-outline: #ff6467;
+	--color-error-surface: #fef2f2;
+	--color-error-foreground: #ffffff;
 	--color-warning: #ff8061;
-	--color-warning-outline: oklch(87.9% 0.169 91.605);
-	--color-warning-surface: oklch(98.7% 0.026 102.212);
-	--color-warning-foreground: oklch(1 0 0);
+	--color-warning-outline: #ffd230;
+	--color-warning-surface: #fefce8;
+	--color-warning-foreground: #ffffff;
 	--color-info: #5fddff;
 
 	/* Brand palette */
