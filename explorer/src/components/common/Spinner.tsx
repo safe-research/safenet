@@ -1,6 +1,7 @@
+import type { ComponentPropsWithoutRef } from "react";
 import { cn } from "@/lib/utils";
 
-export function Spinner({ className }: { className?: string }) {
+export function Spinner({ className, ...props }: ComponentPropsWithoutRef<"svg">) {
 	return (
 		<svg
 			className={cn("animate-spin h-5 w-5", className)}
@@ -9,6 +10,7 @@ export function Spinner({ className }: { className?: string }) {
 			viewBox="0 0 24 24"
 			aria-label="Loading"
 			role="img"
+			{...props}
 		>
 			<circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
 			<path

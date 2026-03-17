@@ -36,7 +36,7 @@ describe("Button", () => {
 		expect((screen.getByRole("button") as HTMLButtonElement).disabled).toBe(true);
 	});
 
-	it("forwards onClick handler", async () => {
+	it("forwards onClick handler", () => {
 		let clicked = false;
 		render(
 			<Button

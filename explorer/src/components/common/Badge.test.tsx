@@ -11,29 +11,15 @@ describe("Badge", () => {
 		expect(screen.getByText("LABEL")).toBeTruthy();
 	});
 
-	it("renders with positive variant", () => {
-		render(<Badge variant="positive">OK</Badge>);
-		expect(screen.getByText("OK")).toBeTruthy();
-	});
-
-	it("renders with pending variant", () => {
-		render(<Badge variant="pending">PENDING</Badge>);
-		expect(screen.getByText("PENDING")).toBeTruthy();
-	});
-
-	it("renders with error variant", () => {
-		render(<Badge variant="error">ERROR</Badge>);
-		expect(screen.getByText("ERROR")).toBeTruthy();
-	});
-
-	it("renders with warning variant", () => {
-		render(<Badge variant="warning">WARN</Badge>);
-		expect(screen.getByText("WARN")).toBeTruthy();
-	});
-
-	it("renders with neutral variant", () => {
-		render(<Badge variant="neutral">NEUTRAL</Badge>);
-		expect(screen.getByText("NEUTRAL")).toBeTruthy();
+	it.each([
+		{ variant: "positive" as const, text: "OK" },
+		{ variant: "pending" as const, text: "PENDING" },
+		{ variant: "error" as const, text: "ERROR" },
+		{ variant: "warning" as const, text: "WARN" },
+		{ variant: "neutral" as const, text: "NEUTRAL" },
+	])("renders with $variant variant", ({ variant, text }) => {
+		render(<Badge variant={variant}>{text}</Badge>);
+		expect(screen.getByText(text)).toBeTruthy();
 	});
 
 	it("merges className via cn()", () => {

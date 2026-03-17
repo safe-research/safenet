@@ -29,7 +29,7 @@ export function Badge({
 		<span
 			className={cn(
 				"inline-block w-fit px-1.5 py-0.5 text-2xs font-semibold leading-none rounded-full",
-				variant !== undefined ? variantClasses[variant] : undefined,
+				variant && variantClasses[variant],
 				className,
 			)}
 			style={bgColor !== undefined || fgColor !== undefined ? { backgroundColor: bgColor, color: fgColor } : undefined}
