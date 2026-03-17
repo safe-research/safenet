@@ -63,6 +63,7 @@ export class EventWatcher<E extends Events> {
 	#logger: Logger;
 	#client: Client;
 	#address: Address[];
+	#addressSet: Set<bigint>;
 	#events: E;
 	#config: Config;
 	#step: Step;
@@ -71,6 +72,7 @@ export class EventWatcher<E extends Events> {
 		this.#logger = logger;
 		this.#client = client;
 		this.#address = address;
+		this.#addressSet = new Set(address.map((a) => BigInt(a)));
 		this.#events = events;
 		this.#config = withDefaults(config, DEFAULT_CONFIG);
 		this.#step = { type: "idle" };
@@ -129,7 +131,8 @@ export class EventWatcher<E extends Events> {
 
 		const logs = parseEventLogs({
 			abi: this.#events,
-			logs: allLogs.filter(({ address }) => this.#address.includes(address)),
+			// Note the `getLogs` API is not guaranteed to return checksummed addresses.
+			logs: allLogs.filter(({ address }) => this.#addressSet.has(BigInt(address))),
 			strict: true,
 		});
 		return this.#sortLogs(logs);
