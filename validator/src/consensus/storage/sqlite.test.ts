@@ -1,5 +1,5 @@
 import Sqlite3 from "better-sqlite3";
-import type { Address } from "viem";
+import { type Address, ethAddress } from "viem";
 import { describe, expect, it } from "vitest";
 import { g } from "../../frost/math.js";
 import { SqliteClientStorage } from "./sqlite.js";
@@ -32,6 +32,17 @@ describe("sqlite", () => {
 			expect(storage.knownGroups()).toEqual([groups[0]]);
 			expect(storage.participants(groups[0])).toEqual(participants);
 			expect(storage.threshold(groups[0])).toBe(2);
+		});
+
+		it("should correctly check for participants", () => {
+			const storage = testStorage();
+			storage.registerGroup(groups[0], participants, 2);
+			expect(storage.participants(groups[0])).toEqual(participants);
+
+			for (const participant of participants) {
+				expect(storage.hasParticipant(groups[0], participant)).toBeTruthy();
+			}
+			expect(storage.hasParticipant(groups[0], ethAddress)).toBeFalsy();
 		});
 
 		it("should register group public key and verification share", () => {
