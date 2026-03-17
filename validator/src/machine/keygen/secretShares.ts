@@ -35,7 +35,7 @@ export const handleKeyGenSecretShared = async (
 
 	// Track identity that has submitted last share
 	const response = await keyGenClient.handleKeygenSecrets(groupId, event.participant, event.share.f);
-	const missingSharesFrom = machineStates.rollover.missingSharesFrom.slice();
+	const missingSharesFrom = [...machineStates.rollover.missingSharesFrom];
 	const actions: ProtocolAction[] = [];
 	if (response === "invalid_share") {
 		logger?.(`Invalid share submitted by ${event.participant} for group ${groupId}`);

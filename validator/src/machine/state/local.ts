@@ -22,7 +22,7 @@ const proxy = <K extends string, V, T extends Record<K, V>>(source: T, temp: Rec
 			return Reflect.has(source, key);
 		},
 		ownKeys(temp) {
-			const keys = [...new Set([...Reflect.ownKeys(source), ...Reflect.ownKeys(temp)])];
+			const keys = Array.from(new Set([...Reflect.ownKeys(source), ...Reflect.ownKeys(temp)]));
 			return keys.filter((key) => (Reflect.has(temp, key) ? temp[key as K] !== undefined : Reflect.has(source, key)));
 		},
 		getOwnPropertyDescriptor(temp, key) {

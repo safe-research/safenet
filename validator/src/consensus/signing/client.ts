@@ -187,7 +187,7 @@ export class SigningClient {
 	}
 
 	participants(groupId: GroupId): Address[] {
-		return this.#storage.participants(groupId).slice();
+		return [...this.#storage.participants(groupId)];
 	}
 
 	missingNonces(groupId: GroupId): Address[] {

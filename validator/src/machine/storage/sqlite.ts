@@ -82,12 +82,12 @@ function writeSigningState(db: Database, id: SignatureId, state: SigningState): 
 	`).run(id, stateJson);
 }
 
-function loadRolloverState(db: Database, initialRolloverState: RolloverState): RolloverState {
+function loadRolloverState(db: Database, defaultRolloverState: RolloverState): RolloverState {
 	const stmt = db.prepare("SELECT stateJson FROM rollover_state WHERE id = 1");
 	const result = jsonQueryResultSchema.parse(stmt.get());
 
 	if (!result) {
-		return initialRolloverState;
+		return defaultRolloverState;
 	}
 
 	// If this fails we should abort as the db is in an invalid state
@@ -110,7 +110,7 @@ export class SqliteStateStorage implements StateStorage {
 	#consensusState: MutableConsensusState;
 	#machineStates: MutableMachineStates;
 
-	constructor(database: Database, initialRolloverState: RolloverState = { id: "waiting_for_genesis" }) {
+	constructor(database: Database, defaultRolloverState: RolloverState = { id: "waiting_for_genesis" }) {
 		this.#db = database;
 		this.#db.exec(`
 			CREATE TABLE IF NOT EXISTS consensus_state (
@@ -139,7 +139,7 @@ export class SqliteStateStorage implements StateStorage {
 		// Load the database state
 		this.#consensusState = loadConsensusState(database);
 		this.#machineStates = {
-			rollover: loadRolloverState(database, initialRolloverState),
+			rollover: loadRolloverState(database, defaultRolloverState),
 			signing: loadSigningStates(database),
 		};
 	}
