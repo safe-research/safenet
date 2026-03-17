@@ -4,6 +4,14 @@ cache_path = "build/cache"
 broadcast = "build/broadcast"
 
 solc_version = "0.8.30"
+additional_compiler_profiles = [
+  { name = "optimized", optimizer = true, optimizer_runs = 1000000, via_ir = true },
+]
+compilation_restrictions = [
+  { paths = "src/Consensus.sol", via_ir = true },
+  { paths = "src/FROSTCoordinator.sol", via_ir = true },
+]
+
 remappings = [
   "@/=src/",
   "@script/=script/",
