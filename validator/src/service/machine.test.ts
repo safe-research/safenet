@@ -9,7 +9,7 @@ import type { StateStorage } from "../machine/storage/types.js";
 import type { ConsensusState, MachineStates, StateDiff } from "../machine/types.js";
 import type { ParticipantInfo } from "../types/interfaces.js";
 import type { Logger } from "../utils/logging.js";
-import type { Metrics } from "../utils/metrics/index.js";
+import type { Metrics } from "../utils/metrics.js";
 import { SafenetStateMachine } from "./machine.js";
 
 // --- Test Data ---

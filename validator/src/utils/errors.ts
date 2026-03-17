@@ -1,4 +1,4 @@
-import { BaseError } from "viem";
+import { BaseError, RpcError } from "viem";
 
 export const formatError = (err: unknown): unknown => {
 	if (err instanceof BaseError) {
@@ -15,4 +15,14 @@ export const formatError = (err: unknown): unknown => {
 	}
 
 	return err;
+};
+
+export const formatRpcError = (err: unknown): unknown => {
+	if (err instanceof RpcError) {
+		return { message: err.shortMessage, code: err.code };
+	}
+	if (err instanceof Error) {
+		return { message: err.message };
+	}
+	return { message: "Unknown error" };
 };

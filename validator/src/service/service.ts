@@ -28,8 +28,8 @@ import { supportedChains } from "../types/chains.js";
 import type { ProtocolConfig } from "../types/interfaces.js";
 import { formatError } from "../utils/errors.js";
 import type { Logger } from "../utils/logging.js";
-import type { Metrics } from "../utils/metrics/index.js";
-import { withMetrics } from "../utils/metrics/transport.js";
+import type { Metrics } from "../utils/metrics.js";
+import { withTracing } from "../utils/transport.js";
 import { buildSafeTransactionCheck } from "./checks.js";
 import { SafenetStateMachine } from "./machine.js";
 
@@ -174,7 +174,7 @@ export const createValidatorService = ({
 	fees?: ChainFees;
 	skipGenesis?: boolean;
 }): ValidatorService => {
-	const transport = withMetrics(rpcUrl.startsWith("wss") ? webSocket(rpcUrl) : http(rpcUrl), metrics);
+	const transport = withTracing(rpcUrl.startsWith("wss") ? webSocket(rpcUrl) : http(rpcUrl), { logger, metrics });
 	const chain: Chain = {
 		...extractChain({
 			chains: supportedChains,

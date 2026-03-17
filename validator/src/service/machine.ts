@@ -28,7 +28,7 @@ import type { ConsensusState, MachineConfig, MachineStates, StateDiff } from "..
 import type { ParticipantInfo } from "../types/interfaces.js";
 import { formatError } from "../utils/errors.js";
 import type { Logger } from "../utils/logging.js";
-import type { Metrics } from "../utils/metrics/index.js";
+import type { Metrics } from "../utils/metrics.js";
 import { InMemoryQueue, type Queue } from "../utils/queue.js";
 
 const BLOCKS_PER_EPOCH = (24n * 60n * 60n) / 5n; // ~ blocks for 1 day

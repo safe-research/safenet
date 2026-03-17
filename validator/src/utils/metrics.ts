@@ -1,6 +1,6 @@
 import http, { type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import { Counter, collectDefaultMetrics, Gauge, Registry } from "prom-client";
-import type { Logger } from "../logging.js";
+import type { Logger } from "./logging.js";
 
 export type Metrics = {
 	blockNumber: Gauge;
