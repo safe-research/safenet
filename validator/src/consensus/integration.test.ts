@@ -180,7 +180,7 @@ describe("integration", () => {
 				maxReorgDepth: 1,
 				blockTimeOverride: blockTime,
 				blockPropagationDelay: Math.floor(blockTime / 5),
-				blockRetryDelays: [Math.floor(blockTime / 10), Math.floor(blockTime / 20), Math.floor(blockTime / 20)],
+				blockRetryDelays: [Math.floor(blockTime / 20), Math.floor(blockTime / 10), Math.floor(blockTime / 5)],
 			};
 			const service = createValidatorService({
 				account: a,

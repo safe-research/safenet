@@ -1,5 +1,5 @@
 import { createLogger } from "../utils/logging.js";
-import { createMetricsService } from "../utils/metrics/index.js";
+import { createMetricsService } from "../utils/metrics.js";
 
 const { SAFENET_TEST_VERBOSE } = process.env;
 

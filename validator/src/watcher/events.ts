@@ -105,6 +105,7 @@ export class EventWatcher<E extends Events> {
 			query.blockHash !== undefined &&
 			!(areAddressesInLogsBloom(query.logsBloom, this.#address) && areEventsInLogsBloom(query.logsBloom, this.#events))
 		) {
+			this.#logger.silly(`Skip querying logs on block ${query.blockHash}`);
 			return [];
 		}
 
@@ -145,6 +146,7 @@ export class EventWatcher<E extends Events> {
 				// event, since we would only be in this fallback state if we had failed `getLogs`
 				// queries which means that at least one address is in the bloom filter.
 				if (query.blockHash !== undefined && !areEventsInLogsBloom(query.logsBloom, [event])) {
+					this.#logger.silly(`Skip querying logs for event ${event.name} on block ${query.blockHash}`);
 					return [];
 				}
 

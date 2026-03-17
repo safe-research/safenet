@@ -1,5 +1,5 @@
 import type { Hex } from "viem";
-import type { Metrics } from "../../../utils/metrics/index.js";
+import type { Metrics } from "../../../utils/metrics.js";
 import type { PacketHandler } from "../engine.js";
 import { TransactionCheckError } from "./checks/errors.js";
 import { safeTxPacketHash } from "./hashing.js";

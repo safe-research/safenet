@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { createLogger } from "../logging.js";
-import { MetricsService } from "./index.js";
+import { createLogger } from "./logging.js";
+import { MetricsService } from "./metrics.js";
 
 describe("MetricsService HTTP routes", () => {
 	let service: MetricsService;
