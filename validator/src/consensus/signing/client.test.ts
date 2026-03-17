@@ -27,7 +27,7 @@ const TEST_GROUP = {
 		"0x89bEf0f3a116cf717e51F74C271A0a7aF527511D",
 		"0xbF4e298652F7e39d9062A4e7ec5C48Bf76e48e10",
 		"0xf22BE54C085Dc0621ad076D881de8251c5a25fF1",
-	] as Address[],
+	],
 	publicKey: toPoint({
 		x: 84170342083342046397084658286143833881385705429382200330874980718209595271985n,
 		y: 111565381103637648897565888500643513470463855578292478313367060330928451504515n,
@@ -35,7 +35,7 @@ const TEST_GROUP = {
 } as const;
 const TEST_SIGNERS = [
 	{
-		account: "0x17dA3E04a30e9Dec247FddDCbFb7B0497Cd2AF95" as Address,
+		account: "0x17dA3E04a30e9Dec247FddDCbFb7B0497Cd2AF95",
 		signingShare: 92616603195930045475330214960755134594574429097855230829573477440534317429993n,
 		verificationShare: toPoint({
 			x: 64261139819204851855244563172704531594599903129651325303989702961646113765865n,
@@ -43,7 +43,7 @@ const TEST_SIGNERS = [
 		}),
 	},
 	{
-		account: "0x690f083b2968f6cB0Ab6d8885d563b7977cff43B" as Address,
+		account: "0x690f083b2968f6cB0Ab6d8885d563b7977cff43B",
 		signingShare: 65840621212864096956224136028940543657870580760596441578126625855708404229905n,
 		verificationShare: toPoint({
 			x: 37213650586135434554301508857716015703663624186131749523514676647747801089936n,
@@ -51,7 +51,7 @@ const TEST_SIGNERS = [
 		}),
 	},
 	{
-		account: "0x89bEf0f3a116cf717e51F74C271A0a7aF527511D" as Address,
+		account: "0x89bEf0f3a116cf717e51F74C271A0a7aF527511D",
 		signingShare: 68722891159576630907435858937774180708777996115765358145405774196995605039429n,
 		verificationShare: toPoint({
 			x: 41741098108972902426831876015445239529523912969640162546161086083710807385070n,
@@ -59,7 +59,7 @@ const TEST_SIGNERS = [
 		}),
 	},
 	{
-		account: "0xbF4e298652F7e39d9062A4e7ec5C48Bf76e48e10" as Address,
+		account: "0xbF4e298652F7e39d9062A4e7ec5C48Bf76e48e10",
 		signingShare: 44833201630411931922855141261524414673023026320673166473864650125267998209599n,
 		verificationShare: toPoint({
 			x: 84877201132516405020234240153119389112001594610742699913395786424745518339279n,
@@ -67,7 +67,7 @@ const TEST_SIGNERS = [
 		}),
 	},
 	{
-		account: "0xf22BE54C085Dc0621ad076D881de8251c5a25fF1" as Address,
+		account: "0xf22BE54C085Dc0621ad076D881de8251c5a25fF1",
 		signingShare: 13086322243572108858288841808712792921456551656485227174142249973868521057300n,
 		verificationShare: toPoint({
 			x: 9830174855169825843069194197328411062217074564768016955757420615522985358269n,
@@ -106,7 +106,7 @@ const NONCE_TREES = [
 const SIGNATURE_ID = "0x0000000000000000000000017fa9385be102ac3eac297483dd6233d62b3e1496";
 const MESSAGE = keccak256(stringToBytes("Hello, Safenet!"));
 
-const createTestClient = (signerIndex: number, threshold = TEST_GROUP.participants.length) => {
+const createTestClient = (signerIndex: number, threshold: number = TEST_GROUP.participants.length) => {
 	const signer = TEST_SIGNERS[signerIndex];
 	const storage = createClientStorage(signer.account);
 	storage.registerGroup(TEST_GROUP.groupId, TEST_GROUP.participants, threshold);
@@ -116,7 +116,7 @@ const createTestClient = (signerIndex: number, threshold = TEST_GROUP.participan
 	return { storage, client };
 };
 
-const createTestClientWithNonces = (signerIndex: number, threshold = TEST_GROUP.participants.length) => {
+const createTestClientWithNonces = (signerIndex: number, threshold: number = TEST_GROUP.participants.length) => {
 	const { storage, client } = createTestClient(signerIndex, threshold);
 	const treeInfo = NONCE_TREES[signerIndex];
 	const commitments0: NonceCommitments = {
@@ -304,7 +304,7 @@ describe("SigningClient", () => {
 
 		it("throws when signer ID is not a valid participant", () => {
 			const { client } = createTestClientWithNonces(0);
-			const invalidAddress = "0x0000000000000000000000000000000000000999" as Address;
+			const invalidAddress = "0x0000000000000000000000000000000000000999" as const;
 			const signers = [...TEST_GROUP.participants.slice(0, 4), invalidAddress];
 
 			expect(() => client.createNonceCommitments(TEST_GROUP.groupId, SIGNATURE_ID, MESSAGE, 0n, signers)).toThrow(
