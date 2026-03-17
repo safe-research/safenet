@@ -15,7 +15,14 @@ export const handleSign = async (
 	event: SignRequestEvent,
 	logger?: (msg: unknown) => void,
 ): Promise<StateDiff> => {
-	const diff = checkAvailableNonces(signingClient, consensusState, machineStates, event.sequence, logger);
+	const diff = checkAvailableNonces(
+		machineConfig,
+		signingClient,
+		consensusState,
+		machineStates,
+		event.sequence,
+		logger,
+	);
 	const status = machineStates.signing[event.message];
 	// Check that there is no state or it is the retry flow
 	if (status?.id !== "waiting_for_request") {
@@ -35,11 +42,11 @@ export const handleSign = async (
 
 	const { nonceCommitments, nonceProof } = signingClient.createNonceCommitments(
 		event.gid,
+		machineConfig.account,
 		event.sid,
 		event.message,
 		event.sequence,
 		status.signers,
-		machineConfig.account,
 	);
 
 	const actions = diff.actions ?? [];
@@ -66,6 +73,7 @@ export const handleSign = async (
 };
 
 const checkAvailableNonces = (
+	machineConfig: MachineConfig,
 	signingClient: SigningClient,
 	consensusState: ConsensusState,
 	machineStates: MachineStates,
@@ -81,7 +89,7 @@ const checkAvailableNonces = (
 		let { chunk, offset } = decodeSequence(sequence);
 		let availableNonces = 0n;
 		while (true) {
-			const noncesInChunk = signingClient.availableNoncesCount(groupId, chunk);
+			const noncesInChunk = signingClient.availableNoncesCount(groupId, machineConfig.account, chunk);
 			availableNonces += noncesInChunk - offset;
 			// Chunk has no nonces, meaning the chunk was not initialized yet.
 			if (noncesInChunk === 0n) break;
@@ -91,7 +99,7 @@ const checkAvailableNonces = (
 		}
 		if (availableNonces < NONCE_THRESHOLD) {
 			logger?.(`Commit nonces for ${groupId}!`);
-			const nonceTreeRoot = signingClient.generateNonceTree(groupId);
+			const nonceTreeRoot = signingClient.generateNonceTree(groupId, machineConfig.account);
 
 			return {
 				consensus: {
