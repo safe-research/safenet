@@ -104,8 +104,10 @@ chain-indexing progress. Key things to know:
   `.run()`, `.get()`, or `.all()` on.
 - **`ON CONFLICT` upsert**: Used extensively for idempotent writes (e.g., updating
   `lastIndexedBlock` only if the new value is greater than the stored one).
-- **WAL mode**: Not explicitly set in the code seen, but recommended for
-  concurrent read performance.
+- **WAL mode**: Intentionally **not set**. The validator process is the sole
+  writer — there is no concurrent file access. WAL mode would add complexity
+  (WAL file management, checkpointing) with no benefit in this single-writer
+  scenario.
 
 ### secp256k1 Elliptic Curve Cryptography
 
@@ -122,8 +124,13 @@ Ethereum and Bitcoin). You need a mental model of:
   DKG to encrypt secret shares between participants.
 
 The validator uses the `@noble/curves` library for all EC math
-(`validator/src/frost/math.ts`). Noble curves is audited, pure-JS, and
-constant-time where it matters.
+(`validator/src/frost/math.ts`). Noble curves is audited and pure-JS, but it is
+**not constant-time**. JavaScript `bigint` arithmetic is not constant-time at
+the hardware level, even when the algorithm is designed to be. This was
+identified as a finding in the Cure53 security audit of noble-curves and is
+documented in the noble-curves README. In practice this is a theoretical
+side-channel risk rather than an immediate exploit, but it is something to be
+aware of for future hardening.
 
 ### Merkle Trees
 
@@ -372,6 +379,45 @@ watcher loop to prevent hammering the RPC node on failures.
   hardcoded in config.
 - **PR #241 – Remove multicall**: Multicall usage removed as it wasn't configured;
   validator labels improved.
+
+---
+
+### Phase 6 – Transaction Clarity and Security Hardening (PRs #239–262, Mar 2026)
+
+- **PR #239 – `toZeroIsSelf` for MultiSend 1.5.0**: MultiSend 1.5.0 introduced
+  `to = address(0)` as a self-call shorthand to avoid hash cycles during Safe
+  `setup`. The validator now correctly decodes this, preventing an attacker from
+  using `to=0` to bypass self-call checks and enable unsupported modules.
+- **PR #242 – Allow `MultiSend` (not just `CallOnly`)**: Both `MultiSend` and
+  `MultiSendCallOnly` variants are now permitted. The inner-call checks already
+  block disallowed delegatecalls, so this does not weaken security but enables
+  batches that legitimately mix calls and delegatecalls (e.g., `signMessage` +
+  `approve`). The `value` field on the MultiSend wrapper is no longer required to
+  be zero — it is ignored by the contract anyway.
+- **PR #243 – Add supported modules**: `AllowanceModule 1.0.0` and
+  `SocialRecoveryModule 0.1.0` are added to the `enableModule` allowlist.
+- **PR #244 – FROST IDs in consensus events**: `EpochStaged` now carries
+  `groupId` and `signatureId`; `TransactionAttested` now carries `signatureId`,
+  `chainId`, and `safe`. This makes it possible to join consensus events with
+  coordinator FROST events directly without additional lookups.
+- **PR #245 – Index KeyGen context**: The `context` field of the coordinator's
+  `KeyGen` event is now indexed, allowing the explorer and reward systems to
+  efficiently find all groups associated with a specific epoch context.
+- **PR #248 – Configurable timeouts**: `KEY_GEN_TIMEOUT` and `SIGNING_TIMEOUT`
+  are added as env vars, removing the previously hardcoded 120-block defaults.
+- **PR #256 – Health check endpoint**: `MetricsService` gains a `/health` route
+  returning `{"status":"ok"}`, suitable for container readiness/liveness probes.
+- **PR #257 – Safe info in `TransactionAttested`**: `chainId` and `safe` are
+  added to the `TransactionAttested` event and made indexed. The `transactionHash`
+  field is renamed to `safeTxHash` across all events and code to avoid confusion
+  with EVM transaction hashes. `attestTransaction` now takes `safeTxStructHash`
+  (struct hash, no domain) instead of the full hash, letting the contract
+  reconstruct the canonical `safeTxHash` internally.
+- **PR #262 – `calcThreshold` rename + epoch rollover verification**: Fixes the
+  `calcTreshold` typo. Implements the previously-stubbed epoch validation in
+  `EpochRolloverHandler`: rejects rollover packets where `proposedEpoch ≤
+  activeEpoch`. Adds an optional `EpochCheck` callback on the handler for future
+  state-dependent checks.
 
 ---
 
@@ -678,7 +724,7 @@ waiting_for_attestation    <--- timeout --> failure
 | `event_nonce_commitments` | `machine/signing/nonces.ts` |
 | `event_signature_share` | `machine/signing/shares.ts` |
 | `event_signed` | `machine/signing/completed.ts` |
-| `event_epoch_proposed` | `machine/consensus/rollover.ts` |
+| `event_epoch_proposed` | No-op (message already computed in `handleKeyGenConfirmed`) |
 | `event_epoch_staged` | `machine/consensus/epochStaged.ts` |
 | `event_transaction_proposed` | `machine/consensus/transactionProposed.ts` |
 | `event_transaction_attested` | `machine/consensus/transactionAttested.ts` |
@@ -845,8 +891,10 @@ The production implementation of `SafenetProtocol`. Each action is:
    incremented and retried.
 4. If the transaction is successfully mined, the action is removed from the
    queue.
-5. A global exponential backoff is applied to action submissions to handle
-   RPC rate limits gracefully.
+5. On any submission error a **linear** backoff is applied: delay increases by
+   1 s per consecutive failure, capped at 5 s (`ERROR_RETRY_DELAY = 1000`,
+   `ERROR_RETRY_MAX_DELAY = 5000` in `protocol/base.ts`). The delay resets to
+   zero on the next success.
 
 ### GasFeeEstimator
 
@@ -916,8 +964,18 @@ a BFT network to agree.
 
 ### EpochRolloverHandler (`consensus/verify/rollover/handler.ts`)
 
-Verifies that the epoch rollover being proposed is consistent with the validator's
-own view of the new epoch (same group key, same participants, same epoch number).
+Verifies that the epoch rollover being proposed is valid before hashing:
+
+1. **Sequential epoch check**: asserts `proposedEpoch > activeEpoch`. A rollover
+   that tries to skip multiple epochs or re-propose the current epoch is rejected
+   immediately with an error.
+2. **Optional `EpochCheck` callback**: the constructor accepts an optional
+   `EpochCheck = (rollover) => void` callback for additional state-dependent
+   validation (matching the `SafeTransactionHandler` pattern). This hook is
+   reserved for future checks such as confirming the proposedEpoch matches the
+   validator's own state machine.
+3. **Hash**: calls `epochRolloverHash(packet)` to produce the deterministic
+   message hash used in the signing ceremony.
 
 ### `buildSafeTransactionCheck()` — The Security Policy in Detail
 
@@ -931,19 +989,24 @@ routes it through the appropriate sub-check:
 ```
 incoming transaction
   ↓
-buildAddressSplitCheck({
-  "0xA83c..."  → buildMultiSendCallOnlyCheck(baseChecks)    (MultiSend 1.3.0)
-  "0x9641..."  → buildMultiSendCallOnlyCheck(baseChecks)    (MultiSend 1.4.1)
-  "0x40A2..."  → buildMultiSendCallOnlyCheck(baseChecks)    (MultiSend 1.5.0)
+buildAddressSplitCheck({          ← supportedMultiSendChecks
+  "0x2185..."  → buildMultiSendCallOnlyCheck(allowedDelegateCalls, {toZeroIsSelf:true})  (MultiSend 1.5.0)
+  "0xA83c..."  → buildMultiSendCallOnlyCheck(allowedDelegateCalls, {toZeroIsSelf:true})  (MultiSendCallOnly 1.5.0)
+  "0x3886..."  → buildMultiSendCallOnlyCheck(allowedDelegateCalls)                       (MultiSend 1.4.1)
+  "0x9641..."  → buildMultiSendCallOnlyCheck(allowedDelegateCalls)                       (MultiSendCallOnly 1.4.1)
+  "0xA238..."  → buildMultiSendCallOnlyCheck(allowedDelegateCalls)                       (MultiSend 1.3.0 canonical)
+  "0x40A2..."  → buildMultiSendCallOnlyCheck(allowedDelegateCalls)                       (MultiSendCallOnly 1.3.0 canonical)
+  "0x9987..."  → buildMultiSendCallOnlyCheck(allowedDelegateCalls)                       (MultiSend 1.3.0 eip155)
+  "0xA1da..."  → buildMultiSendCallOnlyCheck(allowedDelegateCalls)                       (MultiSendCallOnly 1.3.0 eip155)
   fallback     → allowedDelegateCalls
 })
-  ↓ (if not MultiSend)
-buildAddressSplitCheck({
-  "0x6439..."  → buildSingletonUpgradeChecks()  (Safe Migration 1.x)
-  "0x5266..."  → buildSingletonUpgradeChecks()  (Safe Migration 2.x)
-  fallback     → baseChecks
+  ↓ (if not MultiSend, or for each inner call of a MultiSend)
+allowedDelegateCalls = buildAddressSplitCheck({
+  "0x6439..." / "0x5266..."  → buildSingletonUpgradeChecks()  (Safe Migration 1.x / 2.x)
+  SafeSignMessage addresses   → buildSignMessageChecks()
+  fallback                    → baseChecks
 })
-  ↓ (if not MultiSend or singleton migration)
+  ↓ (if not a delegatecall allowlist target)
 baseChecks = buildCombinedChecks([
   selfChecks,               (if to == Safe itself)
   buildNoDelegateCallCheck()
@@ -983,19 +1046,29 @@ Any other function selector on the Safe itself is rejected with
 | `0x017062...` | CompatibilityFallbackHandler 1.3.0 EIP-155 |
 | `address(0)` | Removing the fallback handler |
 
-#### Currently empty allowlists
+#### Currently allowed modules
 
 - **Guards** (`setGuard`): no guards are currently allowed. A transaction
   attempting `setGuard(nonZeroAddress)` is rejected.
-- **Modules** (`enableModule`): no modules are currently allowed.
+- **Modules** (`enableModule`): two modules are currently allowed:
+  - `AllowanceModule 1.0.0` — `0x691f59471Bfd2B7d639DCF74671a2d648ED1E331`
+  - `SocialRecoveryModule 0.1.0` — `0x4Aa5Bf7D840aC607cb5BD3249e6Af6FC86C04897`
 - **Module guards** (`setModuleGuard`): no module guards are currently allowed.
 
 #### MultiSend checks
 
-The three hardcoded MultiSend addresses (1.3.0, 1.4.1, 1.5.0) are allowed only
-with `operation = 1` (delegatecall). Each inner call is decoded and recursively
-checked against `baseChecks`. A MultiSend that includes any disallowed inner
-call causes the whole transaction to be rejected.
+Eight MultiSend/MultiSendCallOnly addresses (versions 1.3.0 eip155, 1.3.0
+canonical, 1.4.1, and 1.5.0) are allowed only with `operation = 1`
+(delegatecall). Each inner call is decoded and recursively checked against
+`allowedDelegateCalls` — not `baseChecks`. This means MultiSend inner calls can
+themselves target singleton migration or `SignMessage` contracts as delegatecalls.
+
+The 1.5.0 variants are constructed with `{ toZeroIsSelf: true }`, meaning an
+inner call with `to = address(0)` is treated as `to = Safe address` (a self-call
+within the batch).
+
+A MultiSend that includes any disallowed inner call causes the whole transaction
+to be rejected.
 
 #### Singleton migration (delegatecall)
 
@@ -1059,9 +1132,9 @@ disagree and the network would never reach consensus.
 |---|---|---|
 | Reorg handling | Logs a warning, but no state rollback logic | Full state rollback on deep reorg |
 | Key management | Private key loaded from env var in plaintext | KMS / HSM integration |
-| SQLite WAL mode | Not explicitly configured | `PRAGMA journal_mode=WAL` at startup |
+| SQLite WAL mode | Not set (single writer, no concurrent access needed) | Could add `PRAGMA journal_mode=WAL` if read-side tooling requires it |
 | SQLite plaintext secrets | Secret shares stored unencrypted | Encrypt-at-rest with a KMS-backed key |
-| Action retry strategy | Fixed retry with global backoff | Per-action exponential backoff with jitter |
+| Action retry strategy | Linear backoff per error (1 s increments, max 5 s) | Per-action exponential backoff with jitter |
 | Formal spec | Exists in PR #42 as prose | Formal model in TLA+ or a similar spec language |
 
 ---
@@ -1133,7 +1206,9 @@ proposed to when it is attested.
 A Safe wallet owner calls `consensus.proposeTransaction(tx)` on-chain.
 The consensus contract:
 1. Validates the transaction format.
-2. Emits `TransactionProposed(transactionHash, chainId, safe, epoch, transaction)`.
+2. Emits `TransactionProposed(safeTxHash, chainId, safe, epoch, transaction)`
+   where `safeTxHash`, `chainId`, and `safe` are all indexed, making proposals
+   queryable by Safe address or chain directly.
 
 ### Step 2: Validator Sees the Event
 
@@ -1158,7 +1233,7 @@ through `transactionProposedEventTransitionSchema` (Zod). The result is a typed
 ### Step 4: Request Sign Action Submitted
 
 `OnchainProtocol` picks up the `consensus_request_sign` action. It calls
-`consensus.requestSign(transactionHash)`. The consensus contract calls
+`consensus.requestSign(safeTxHash)`. The consensus contract calls
 `coordinator.sign(groupKey, message, callback)`.
 
 ### Step 5: Sign Event
@@ -1194,8 +1269,18 @@ computes `R`, and emits `SignCompleted(sid, selectionRoot, (R, z))`.
 
 The state transitions to `waiting_for_attestation`. The consensus contract
 (via the callback registered in step 4) receives the completed signature and
-calls `attestTransaction(transactionHash, (R, z))`. It emits
-`TransactionAttested(transactionHash, epoch, (R, z))`.
+calls `attestTransaction(epoch, chainId, safe, safeTxStructHash, signatureId)`.
+It emits `TransactionAttested(safeTxHash, chainId, safe, epoch, signatureId,
+attestation)` — `safeTxHash`, `chainId`, and `safe` are all indexed, making
+attestations efficiently queryable by Safe address or chain.
+
+Note the distinction between the two hash types used:
+- **`safeTxHash`**: full EIP-712 hash including the domain (chainId + Safe
+  address as verifying contract). This is what is indexed in the event.
+- **`safeTxStructHash`**: EIP-712 *struct* hash of the transaction data only,
+  without the domain separator. This is what is passed to `attestTransaction`
+  on-chain, allowing the Consensus contract to reconstruct the full `safeTxHash`
+  using the domain it already knows.
 
 The validator's event watcher picks up `TransactionAttested`. The state machine
 transitions the signing state to "done" and removes it from the signing states
@@ -1371,13 +1456,24 @@ ceremony.
 
 ### Step 7: `EpochProposed` event
 
-When the signing ceremony succeeds, the coordinator fires its callback, which
-calls `consensus.proposeEpoch(...)`. The consensus contract emits `EpochProposed(
-activeEpoch, proposedEpoch, rolloverBlock, groupKey)`.
+The `key_gen_confirm` action calls
+`coordinator.keyGenConfirmWithCallback(gid, callback)` where the callback
+instructs the coordinator to call `consensus.proposeEpoch(...)` once the last
+confirmation is accepted on-chain. The consensus contract emits `EpochProposed(
+activeEpoch, proposedEpoch, rolloverBlock, groupId, groupKey)`.
 
-`machine/signing/sign.ts` picks this up via `event_epoch_proposed` and starts
-the signing process for the epoch rollover message by queuing
-`sign_reveal_nonce_commitments`.
+`event_epoch_proposed` is a **no-op** in the validator state machine. The
+rollover signing state was already fully set up earlier, inside
+`handleKeyGenConfirmed`, when the last confirmation arrived:
+
+- The epoch rollover message hash was computed via `verificationEngine.verify()`.
+- The `RolloverState` transitioned to `sign_rollover { groupId, nextEpoch, message }`.
+- A `SigningState { id: "waiting_for_request" }` was created for that message,
+  with the last-confirming participant set as `responsible`.
+
+The `EpochProposed` event arriving on-chain simply confirms the on-chain
+side-effect of the callback; the validator does not need to react to it because
+everything necessary was already done at confirmation time.
 
 ---
 
@@ -1739,7 +1835,7 @@ variable to the code path it feeds and the consequence of a wrong value.
 | Variable | Default | Effect |
 |---|---|---|
 | `LOG_LEVEL` | `"notice"` | Verbosity. `"debug"` shows per-transition details; `"silly"` shows crypto internals |
-| `METRICS_PORT` | none | Starts Prometheus HTTP server on this port, exposing `/metrics` |
+| `METRICS_PORT` | none | Starts HTTP server on this port. Exposes `/metrics` (Prometheus) and `/health` (returns `{"status":"ok"}`, useful for container health checks) |
 
 ### Optional variables — storage
 
@@ -1755,6 +1851,8 @@ variable to the code path it feeds and the consequence of a wrong value.
 | `GENESIS_SALT` | `0x000...0` | Bytes32 salt for genesis group context. Must differ per independent consensus deployment. See Section 16 |
 | `SKIP_GENESIS` | `false` | Set `true` when joining a network after genesis completed. Skips `waiting_for_genesis` |
 | `BLOCKS_PER_EPOCH` | `17280` (~1 day at 5s/block) | `currentEpoch = block / blocksPerEpoch`. Must match all peers |
+| `KEY_GEN_TIMEOUT` | `120` blocks | Number of blocks after a KeyGen starts before it is considered timed-out and retried |
+| `SIGNING_TIMEOUT` | `120` blocks | Number of blocks after a signing ceremony starts before it is considered timed-out |
 | `STAKER_ADDRESS` | validator's own address | Updated on startup via `consensus_set_validator_staker`. Use when a delegator stakes on your behalf |
 
 ### Optional variables — transaction submission
@@ -1815,13 +1913,13 @@ timestamp and executed by `OnchainProtocol` on each `block_new`.
 | `sign_register_nonce_commitments` | `coordinator.commitNonces(groupId, root)` | After genesis/epoch confirmed; when nonce chunk exhausted |
 | `sign_reveal_nonce_commitments` | `coordinator.revealNonces(sid, nonces, proof)` | When a `Sign` event is received and nonces are available |
 | `sign_request` | `consensus.requestSign(gid, message)` | When `waiting_for_request` and this validator is the responsible participant |
-| `sign_publish_signature_share` | `coordinator.shareWithCallback(sid, signersRoot, signersProof, R, R_i, z_i, lambda_i, callbackContext)` | After all nonce commitments are revealed |
+| `sign_publish_signature_share` | `coordinator.signShare(...)` / `coordinator.signShareWithCallback(..., callbackContext)` | After all nonce commitments are revealed |
 
 ### Consensus actions
 
 | `id` | Contract call | When queued |
 |---|---|---|
-| `consensus_attest_transaction` | `consensus.attestTransaction(epoch, txHash, signatureId)` | After `SignCompleted` event when this validator is responsible |
+| `consensus_attest_transaction` | `consensus.attestTransaction(epoch, chainId, safe, safeTxStructHash, signatureId)` | After `SignCompleted` event when this validator is responsible |
 | `consensus_stage_epoch` | `consensus.stageEpoch(proposedEpoch, rolloverBlock, groupId, signatureId)` | Via callback from the last KeyGen confirmation |
 | `consensus_set_validator_staker` | `consensus.setValidatorStaker(staker)` | On startup if on-chain staker doesn't match config |
 
@@ -1839,7 +1937,7 @@ block_new fires
           → walletClient.writeContract(...)
           → success          → remove from queue
           → nonce too low    → increment nonce, retry immediately
-          → rate limit       → global exponential backoff (1→64 seconds)
+          → any error        → linear backoff (1 s, 2 s, … capped at 5 s), then retry
           → validUntil past  → drop action, log warning
 ```
 
@@ -1950,4 +2048,4 @@ validating that state survives across simulated restarts.
 
 ---
 
-*Last updated: 2026-03-07. Written against commit 9c7abb7 (main branch).*
+*Last updated: 2026-03-17. Updated through commit ccafe37 (main branch).*
