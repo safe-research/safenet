@@ -110,7 +110,7 @@ export class SqliteStateStorage implements StateStorage {
 	#consensusState: MutableConsensusState;
 	#machineStates: MutableMachineStates;
 
-	constructor(database: Database, initialRolloverState: RolloverState = { id: "waiting_for_genesis" }) {
+	constructor(database: Database, defaultRolloverState: RolloverState = { id: "waiting_for_genesis" }) {
 		this.#db = database;
 		this.#db.exec(`
 			CREATE TABLE IF NOT EXISTS consensus_state (
@@ -139,7 +139,7 @@ export class SqliteStateStorage implements StateStorage {
 		// Load the database state
 		this.#consensusState = loadConsensusState(database);
 		this.#machineStates = {
-			rollover: loadRolloverState(database, initialRolloverState),
+			rollover: loadRolloverState(database, defaultRolloverState),
 			signing: loadSigningStates(database),
 		};
 	}
