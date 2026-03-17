@@ -21,6 +21,9 @@ export default defineConfig(({ mode }) => {
 
 	return {
 		base: basePath,
+		worker: {
+			format: "es",
+		},
 		plugins: [
 			tanstackRouter({ 
 				target: "react",

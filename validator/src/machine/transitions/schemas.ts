@@ -39,7 +39,6 @@ export const keyGenEventSchema = z.object({
 
 export const keyGenCommittedEventSchema = z.object({
 	gid: hexBytes32Schema,
-	identifier: eventBigIntSchema,
 	participant: checkedAddressSchema,
 	commitment: frostCommitmentSchema,
 	committed: z.boolean(),
@@ -47,34 +46,34 @@ export const keyGenCommittedEventSchema = z.object({
 
 export const keyGenSecretSharedEventSchema = z.object({
 	gid: hexBytes32Schema,
-	identifier: eventBigIntSchema,
+	participant: checkedAddressSchema,
 	share: frostShareSchema,
 	shared: z.boolean(),
 });
 
 export const keyGenConfirmedEventSchema = z.object({
 	gid: hexBytes32Schema,
-	identifier: eventBigIntSchema,
+	participant: checkedAddressSchema,
 	confirmed: z.boolean(),
 });
 
 export const keyGenComplaintSubmittedEventSchema = z.object({
 	gid: hexBytes32Schema,
-	plaintiff: eventBigIntSchema,
-	accused: eventBigIntSchema,
+	plaintiff: checkedAddressSchema,
+	accused: checkedAddressSchema,
 	compromised: z.boolean(),
 });
 
 export const keyGenComplaintRespondedEventSchema = z.object({
 	gid: hexBytes32Schema,
-	plaintiff: eventBigIntSchema,
-	accused: eventBigIntSchema,
+	plaintiff: checkedAddressSchema,
+	accused: checkedAddressSchema,
 	secretShare: eventBigIntSchema,
 });
 
 export const nonceCommitmentsHashEventSchema = z.object({
 	gid: hexBytes32Schema,
-	identifier: eventBigIntSchema,
+	participant: checkedAddressSchema,
 	chunk: eventBigIntSchema,
 	commitment: hexBytes32Schema,
 });
@@ -94,14 +93,14 @@ export const nonceCommitmentsSchema = z.object({
 
 export const nonceCommitmentsEventSchema = z.object({
 	sid: hexBytes32Schema,
-	identifier: eventBigIntSchema,
+	participant: checkedAddressSchema,
 	nonces: nonceCommitmentsSchema,
 });
 
 export const signatureShareEventSchema = z.object({
 	sid: hexBytes32Schema,
 	selectionRoot: hexBytes32Schema,
-	identifier: eventBigIntSchema,
+	participant: checkedAddressSchema,
 	z: eventBigIntSchema,
 });
 

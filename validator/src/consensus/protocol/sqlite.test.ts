@@ -13,12 +13,12 @@ describe("protocol - sqlite", () => {
 
 			expect(storage.peek()).toBeUndefined();
 			for (const [action] of TEST_ACTIONS) {
-				storage.push({ ...action, validUntil: 1 });
+				storage.enqueue({ ...action, validUntil: 1 });
 			}
 			for (const [action] of TEST_ACTIONS) {
 				const actionWithTimeout = { ...action, validUntil: 1 };
 				expect(storage.peek()).toStrictEqual(actionWithTimeout);
-				expect(storage.pop()).toStrictEqual(actionWithTimeout);
+				expect(storage.dequeue()).toStrictEqual(actionWithTimeout);
 			}
 			expect(storage.peek()).toBeUndefined();
 		});

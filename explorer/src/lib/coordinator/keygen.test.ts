@@ -18,6 +18,10 @@ const COORDINATOR = "0x2222222222222222222222222222222222222222" as Address;
 const GID = `0x${"aa".repeat(32)}` as Hex;
 const CONTEXT = `0x${"cc".repeat(32)}` as Hex;
 
+const PARTICIPANT_1 = "0x0000000000000000000000000000000000000001" as Address;
+const PARTICIPANT_2 = "0x0000000000000000000000000000000000000002" as Address;
+const PARTICIPANT_3 = "0x0000000000000000000000000000000000000003" as Address;
+
 type LoadKeyGenDetails = typeof import("./keygen").loadKeyGenDetails;
 
 const loadModule = async () => {
@@ -51,7 +55,7 @@ const encodeKeyGenLog = (blockNumber: bigint, logIndex = 0, count = 3, threshold
 	};
 };
 
-const encodeKeyGenCommittedLog = (blockNumber: bigint, identifier: bigint, logIndex = 1) => {
+const encodeKeyGenCommittedLog = (blockNumber: bigint, participant: Address, logIndex = 1) => {
 	const topics = encodeEventTopics({
 		abi: COORDINATOR_KEY_GEN_EVENTS,
 		eventName: "KeyGenCommitted",
@@ -60,7 +64,7 @@ const encodeKeyGenCommittedLog = (blockNumber: bigint, identifier: bigint, logIn
 	const commitment = { q: zeroPoint, c: [zeroPoint], r: zeroPoint, mu: 0n };
 	const data = encodeAbiParameters(
 		nonIndexedInputs(getAbiItem({ abi: COORDINATOR_KEY_GEN_EVENTS, name: "KeyGenCommitted" }).inputs),
-		[identifier, "0x0000000000000000000000000000000000000003", commitment, true],
+		[participant, commitment, true],
 	);
 	return {
 		address: COORDINATOR,
@@ -75,7 +79,7 @@ const encodeKeyGenCommittedLog = (blockNumber: bigint, identifier: bigint, logIn
 	};
 };
 
-const encodeKeyGenSecretSharedLog = (blockNumber: bigint, identifier: bigint, logIndex = 2) => {
+const encodeKeyGenSecretSharedLog = (blockNumber: bigint, participant: Address, logIndex = 2) => {
 	const topics = encodeEventTopics({
 		abi: COORDINATOR_KEY_GEN_EVENTS,
 		eventName: "KeyGenSecretShared",
@@ -84,7 +88,7 @@ const encodeKeyGenSecretSharedLog = (blockNumber: bigint, identifier: bigint, lo
 	const share = { y: zeroPoint, f: [0n] };
 	const data = encodeAbiParameters(
 		nonIndexedInputs(getAbiItem({ abi: COORDINATOR_KEY_GEN_EVENTS, name: "KeyGenSecretShared" }).inputs),
-		[identifier, share, true],
+		[participant, share, true],
 	);
 	return {
 		address: COORDINATOR,
@@ -99,7 +103,7 @@ const encodeKeyGenSecretSharedLog = (blockNumber: bigint, identifier: bigint, lo
 	};
 };
 
-const encodeKeyGenConfirmedLog = (blockNumber: bigint, identifier: bigint, logIndex = 3) => {
+const encodeKeyGenConfirmedLog = (blockNumber: bigint, participant: Address, logIndex = 3) => {
 	const topics = encodeEventTopics({
 		abi: COORDINATOR_KEY_GEN_EVENTS,
 		eventName: "KeyGenConfirmed",
@@ -107,7 +111,7 @@ const encodeKeyGenConfirmedLog = (blockNumber: bigint, identifier: bigint, logIn
 	});
 	const data = encodeAbiParameters(
 		nonIndexedInputs(getAbiItem({ abi: COORDINATOR_KEY_GEN_EVENTS, name: "KeyGenConfirmed" }).inputs),
-		[identifier, true],
+		[participant, true],
 	);
 	return {
 		address: COORDINATOR,
@@ -124,8 +128,8 @@ const encodeKeyGenConfirmedLog = (blockNumber: bigint, identifier: bigint, logIn
 
 const encodeKeyGenComplainedLog = (
 	blockNumber: bigint,
-	plaintiff: bigint,
-	accused: bigint,
+	plaintiff: Address,
+	accused: Address,
 	compromised: boolean,
 	logIndex = 4,
 ) => {
@@ -199,15 +203,19 @@ describe("loadKeyGenDetails", () => {
 	});
 
 	it("tracks committed participants", async () => {
-		const logs = [encodeKeyGenLog(900n), encodeKeyGenCommittedLog(910n, 1n), encodeKeyGenCommittedLog(920n, 2n, 2)];
+		const logs = [
+			encodeKeyGenLog(900n),
+			encodeKeyGenCommittedLog(910n, PARTICIPANT_1),
+			encodeKeyGenCommittedLog(920n, PARTICIPANT_2, 2),
+		];
 		const load = await loadModule();
 		const result = await load({ provider: makeProvider(logs), ...baseArgs });
 
 		expect(result).toEqual(
 			expect.objectContaining({
 				committed: [
-					{ identifier: 1n, block: 910n },
-					{ identifier: 2n, block: 920n },
+					{ address: PARTICIPANT_1, block: 910n },
+					{ address: PARTICIPANT_2, block: 920n },
 				],
 			}),
 		);
@@ -216,8 +224,8 @@ describe("loadKeyGenDetails", () => {
 	it("tracks shared participants", async () => {
 		const logs = [
 			encodeKeyGenLog(900n),
-			encodeKeyGenSecretSharedLog(930n, 1n),
-			encodeKeyGenSecretSharedLog(940n, 2n, 3),
+			encodeKeyGenSecretSharedLog(930n, PARTICIPANT_1),
+			encodeKeyGenSecretSharedLog(940n, PARTICIPANT_2, 3),
 		];
 		const load = await loadModule();
 		const result = await load({ provider: makeProvider(logs), ...baseArgs });
@@ -225,8 +233,8 @@ describe("loadKeyGenDetails", () => {
 		expect(result).toEqual(
 			expect.objectContaining({
 				shared: [
-					{ identifier: 1n, block: 930n },
-					{ identifier: 2n, block: 940n },
+					{ address: PARTICIPANT_1, block: 930n },
+					{ address: PARTICIPANT_2, block: 940n },
 				],
 			}),
 		);
@@ -235,15 +243,15 @@ describe("loadKeyGenDetails", () => {
 	it("marks as finalized when confirmed count meets threshold", async () => {
 		const logs = [
 			encodeKeyGenLog(900n, 0, 3, 2),
-			encodeKeyGenConfirmedLog(950n, 1n),
-			encodeKeyGenConfirmedLog(960n, 2n, 4),
+			encodeKeyGenConfirmedLog(950n, PARTICIPANT_1),
+			encodeKeyGenConfirmedLog(960n, PARTICIPANT_2, 4),
 		];
 		const load = await loadModule();
 		const result = await load({ provider: makeProvider(logs), ...baseArgs });
 
 		expect(result).toEqual(
 			expect.objectContaining({
-				confirmed: expect.arrayContaining([expect.objectContaining({ identifier: 1n })]),
+				confirmed: expect.arrayContaining([expect.objectContaining({ address: PARTICIPANT_1 })]),
 				finalized: true,
 				compromised: false,
 			}),
@@ -251,7 +259,7 @@ describe("loadKeyGenDetails", () => {
 	});
 
 	it("does not mark as finalized when confirmed count is below threshold", async () => {
-		const logs = [encodeKeyGenLog(900n, 0, 3, 2), encodeKeyGenConfirmedLog(950n, 1n)];
+		const logs = [encodeKeyGenLog(900n, 0, 3, 2), encodeKeyGenConfirmedLog(950n, PARTICIPANT_1)];
 		const load = await loadModule();
 		const result = await load({ provider: makeProvider(logs), ...baseArgs });
 
@@ -265,9 +273,9 @@ describe("loadKeyGenDetails", () => {
 	it("marks as compromised and not finalized when complaint succeeds", async () => {
 		const logs = [
 			encodeKeyGenLog(900n, 0, 3, 2),
-			encodeKeyGenComplainedLog(940n, 1n, 2n, true),
-			encodeKeyGenConfirmedLog(950n, 1n, 5),
-			encodeKeyGenConfirmedLog(960n, 3n, 6),
+			encodeKeyGenComplainedLog(940n, PARTICIPANT_1, PARTICIPANT_2, true),
+			encodeKeyGenConfirmedLog(950n, PARTICIPANT_1, 5),
+			encodeKeyGenConfirmedLog(960n, PARTICIPANT_3, 6),
 		];
 		const load = await loadModule();
 		const result = await load({ provider: makeProvider(logs), ...baseArgs });
@@ -283,9 +291,9 @@ describe("loadKeyGenDetails", () => {
 	it("ignores non-compromising complaints", async () => {
 		const logs = [
 			encodeKeyGenLog(900n, 0, 3, 2),
-			encodeKeyGenComplainedLog(940n, 1n, 2n, false),
-			encodeKeyGenConfirmedLog(950n, 1n, 5),
-			encodeKeyGenConfirmedLog(960n, 3n, 6),
+			encodeKeyGenComplainedLog(940n, PARTICIPANT_1, PARTICIPANT_2, false),
+			encodeKeyGenConfirmedLog(950n, PARTICIPANT_1, 5),
+			encodeKeyGenConfirmedLog(960n, PARTICIPANT_3, 6),
 		];
 		const load = await loadModule();
 		const result = await load({ provider: makeProvider(logs), ...baseArgs });

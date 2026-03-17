@@ -45,7 +45,7 @@ export const generateNonceCommitments = (secret: bigint): NonceCommitments => {
 	};
 };
 
-const hashNonceCommitments = (id: bigint, c: PublicNonceCommitments): Hex =>
+export const hashNonceCommitments = (id: bigint, c: PublicNonceCommitments): Hex =>
 	keccak256(
 		encodePacked(
 			["uint256", "uint256", "uint256", "uint256", "uint256"],
@@ -130,7 +130,7 @@ export const groupCommitmentShare = (bindingFactor: bigint, nonceCommitments: Pu
 	return nonceCommitments.hidingNonceCommitment.add(factor);
 };
 
-export const groupCommitementShares = (
+export const groupCommitmentShares = (
 	bindingFactors: BindingFactor[],
 	nonceCommitments: Map<bigint, PublicNonceCommitments>,
 ): FrostPoint[] => {

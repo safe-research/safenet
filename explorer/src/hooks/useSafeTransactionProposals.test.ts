@@ -2,8 +2,7 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { createElement } from "react";
-import type { Address, PublicClient } from "viem";
-import { numberToHex } from "viem";
+import type { Address } from "viem";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Settings } from "@/lib/settings";
 import { useSafeTransactionProposals } from "./useSafeTransactionProposals";
@@ -13,28 +12,33 @@ const SAFE_ADDRESS = "0xDeaDbeefdEAdbeefdEadbEEFdeadbeEFdEaDbeeF" as Address;
 const CHAIN_ID = 1n;
 const CURRENT_BLOCK = 5000n;
 const MAX_BLOCK_RANGE = 1000;
+const RPC = "https://example.com";
 
 const DEFAULT_SETTINGS: Settings = {
 	consensus: CONSENSUS,
-	rpc: "https://example.com",
+	rpc: RPC,
 	decoder: "https://example.com/decoder?calldata=",
 	maxBlockRange: MAX_BLOCK_RANGE,
 	validatorInfo: "https://example.com/validator-info.json",
 	refetchInterval: 0,
+	blocksPerEpoch: 1440,
 };
 
 vi.mock("@/hooks/useSettings", () => ({
 	useSettings: vi.fn(() => [DEFAULT_SETTINGS]),
 }));
 
-const mockProvider: PublicClient = {
-	getBlockNumber: vi.fn().mockResolvedValue(CURRENT_BLOCK),
-	request: vi.fn().mockResolvedValue([]),
-} as unknown as PublicClient;
+const mockLoadTransactionProposals = vi.fn();
 
-vi.mock("@/hooks/useProvider", () => ({
-	useProvider: vi.fn(() => mockProvider),
-}));
+vi.mock("@/lib/consensus", async (importOriginal) => {
+	const actual = await importOriginal<typeof import("@/lib/consensus")>();
+	return {
+		...actual,
+		getConsensusWorker: () => ({ loadTransactionProposals: mockLoadTransactionProposals }),
+	};
+});
+
+const makeResult = (fromBlock: bigint, toBlock: bigint) => Promise.resolve({ proposals: [], fromBlock, toBlock });
 
 const createWrapper = () => {
 	const queryClient = new QueryClient({
@@ -44,13 +48,13 @@ const createWrapper = () => {
 		createElement(QueryClientProvider, { client: queryClient }, children);
 };
 
-const logsCalls = () =>
-	(mockProvider.request as ReturnType<typeof vi.fn>).mock.calls.filter((c) => c[0].method === "eth_getLogs");
-
 beforeEach(() => {
 	vi.clearAllMocks();
-	(mockProvider.getBlockNumber as ReturnType<typeof vi.fn>).mockResolvedValue(CURRENT_BLOCK);
-	(mockProvider.request as ReturnType<typeof vi.fn>).mockResolvedValue([]);
+	mockLoadTransactionProposals.mockImplementation(({ toBlock }: { toBlock?: bigint }) => {
+		const to = toBlock ?? CURRENT_BLOCK;
+		const from = to > BigInt(MAX_BLOCK_RANGE) ? to - BigInt(MAX_BLOCK_RANGE) : 0n;
+		return makeResult(from, to);
+	});
 });
 
 afterEach(() => {
@@ -65,21 +69,19 @@ describe("useSafeTransactionProposals", () => {
 
 		await waitFor(() => expect(result.current.isSuccess).toBe(true));
 
-		expect(mockProvider.getBlockNumber).toHaveBeenCalled();
-		// toBlock = 5000 = 0x1388
-		expect(logsCalls()[0][0].params[0].toBlock).toBe(numberToHex(CURRENT_BLOCK));
-		// fromBlock = 5000 - 1000 = 4000 = 0xfa0
-		expect(logsCalls()[0][0].params[0].fromBlock).toBe(numberToHex(CURRENT_BLOCK - BigInt(MAX_BLOCK_RANGE)));
+		expect(mockLoadTransactionProposals).toHaveBeenCalledWith(
+			expect.objectContaining({ rpc: RPC, consensus: CONSENSUS, toBlock: undefined }),
+		);
 	});
 
-	it("filters by safe address as the fourth topic", async () => {
+	it("filters by safe address in params", async () => {
 		const { result } = renderHook(() => useSafeTransactionProposals({ safeAddress: SAFE_ADDRESS, chainId: CHAIN_ID }), {
 			wrapper: createWrapper(),
 		});
 
 		await waitFor(() => expect(result.current.isSuccess).toBe(true));
 
-		expect(logsCalls()[0][0].params[0].topics[3]).toBe(SAFE_ADDRESS);
+		expect(mockLoadTransactionProposals).toHaveBeenCalledWith(expect.objectContaining({ safe: SAFE_ADDRESS }));
 	});
 
 	it("exposes a flat list of proposals across all pages", async () => {
@@ -104,8 +106,8 @@ describe("useSafeTransactionProposals", () => {
 	});
 
 	it("hasNextPage is false when fromBlock reaches 0", async () => {
-		// currentBlock=500 < maxBlockRange=1000 → fromBlock=0; 0 > 0 is false → no next page
-		(mockProvider.getBlockNumber as ReturnType<typeof vi.fn>).mockResolvedValue(500n);
+		// currentBlock < maxBlockRange → fromBlock=0; 0 > 0 is false → no next page
+		mockLoadTransactionProposals.mockResolvedValue(makeResult(0n, 500n));
 
 		const { result } = renderHook(() => useSafeTransactionProposals({ safeAddress: SAFE_ADDRESS, chainId: CHAIN_ID }), {
 			wrapper: createWrapper(),
@@ -127,11 +129,9 @@ describe("useSafeTransactionProposals", () => {
 			result.current.fetchNextPage();
 		});
 
-		await waitFor(() => expect(logsCalls().length).toBe(2));
+		// Page 1 toBlock = fromBlock_p0 - 1 = 4000 - 1 = 3999
+		await waitFor(() => expect(mockLoadTransactionProposals).toHaveBeenCalledTimes(2));
 
-		// Page 1: toBlock = fromBlock_p0 - 1 = 4000 - 1 = 3999; fromBlock = 3999 - 1000 = 2999
-		const p1Params = logsCalls()[1][0].params[0];
-		expect(p1Params.toBlock).toBe(numberToHex(3999n));
-		expect(p1Params.fromBlock).toBe(numberToHex(2999n));
+		expect(mockLoadTransactionProposals).toHaveBeenNthCalledWith(2, expect.objectContaining({ toBlock: 3999n }));
 	});
 });

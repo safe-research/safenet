@@ -20,15 +20,15 @@ const EVENT: KeyGenComplaintSubmittedEvent = {
 	block: 21n,
 	index: 0,
 	gid: "0x06cb03baac74421225341827941e88d9547e5459c4b3715c0000000000000000",
-	plaintiff: 1n,
-	accused: 2n,
+	plaintiff: entryPoint06Address,
+	accused: entryPoint07Address,
 	compromised: false,
 };
 const MACHINE_CONFIG: MachineConfig = {
-	defaultParticipants: [
-		{ id: 1n, address: entryPoint06Address },
-		{ id: 2n, address: entryPoint07Address },
-		{ id: 3n, address: entryPoint08Address },
+	participantsInfo: [
+		{ address: entryPoint06Address, activeFrom: 0n },
+		{ address: entryPoint07Address, activeFrom: 0n },
+		{ address: entryPoint08Address, activeFrom: 0n },
 	],
 	genesisSalt: zeroHash,
 	keyGenTimeout: 10n,
@@ -100,12 +100,12 @@ describe("complaint submitted", () => {
 	});
 
 	it("should accept complaints when collecting shares", async () => {
-		const participantId = vi.fn();
+		const participant = vi.fn();
 		const threshold = vi.fn();
 		threshold.mockReturnValueOnce(3n);
-		participantId.mockReturnValueOnce(1n);
+		participant.mockReturnValueOnce(entryPoint06Address);
 		const keyGenClient = {
-			participantId,
+			participant,
 			threshold,
 		} as unknown as KeyGenClient;
 		const protocol = makeProtocol();
@@ -129,19 +129,19 @@ describe("complaint submitted", () => {
 				deadline: 30n,
 				missingSharesFrom: [],
 				complaints: {
-					"2": { unresponded: 1n, total: 1n },
+					[entryPoint07Address]: { unresponded: 1, total: 1 },
 				},
 			},
 		});
 	});
 
 	it("should accept complaints when collecting confirmations", async () => {
-		const participantId = vi.fn();
+		const participant = vi.fn();
 		const threshold = vi.fn();
 		threshold.mockReturnValueOnce(3n);
-		participantId.mockReturnValueOnce(1n);
+		participant.mockReturnValueOnce(entryPoint06Address);
 		const keyGenClient = {
-			participantId,
+			participant,
 			threshold,
 		} as unknown as KeyGenClient;
 		const protocol = makeProtocol();
@@ -169,7 +169,7 @@ describe("complaint submitted", () => {
 				responseDeadline: 30n,
 				deadline: 30n,
 				complaints: {
-					"2": { unresponded: 1n, total: 1n },
+					[entryPoint07Address]: { unresponded: 1, total: 1 },
 				},
 				missingSharesFrom: [],
 				confirmationsFrom: [],
@@ -178,12 +178,12 @@ describe("complaint submitted", () => {
 	});
 
 	it("should accept multiple complaints for different accused", async () => {
-		const participantId = vi.fn();
+		const participant = vi.fn();
 		const threshold = vi.fn();
 		threshold.mockReturnValueOnce(3n);
-		participantId.mockReturnValueOnce(1n);
+		participant.mockReturnValueOnce(entryPoint06Address);
 		const keyGenClient = {
-			participantId,
+			participant,
 			threshold,
 		} as unknown as KeyGenClient;
 		const protocol = makeProtocol();
@@ -195,7 +195,7 @@ describe("complaint submitted", () => {
 				deadline: 30n,
 				missingSharesFrom: [],
 				complaints: {
-					"1": { unresponded: 1n, total: 1n },
+					[entryPoint06Address]: { unresponded: 1, total: 1 },
 				},
 			},
 			signing: {},
@@ -209,20 +209,20 @@ describe("complaint submitted", () => {
 				deadline: 30n,
 				missingSharesFrom: [],
 				complaints: {
-					"1": { unresponded: 1n, total: 1n },
-					"2": { unresponded: 1n, total: 1n },
+					[entryPoint06Address]: { unresponded: 1, total: 1 },
+					[entryPoint07Address]: { unresponded: 1, total: 1 },
 				},
 			},
 		});
 	});
 
 	it("should accept multiple complaints for same accused", async () => {
-		const participantId = vi.fn();
+		const participant = vi.fn();
 		const threshold = vi.fn();
 		threshold.mockReturnValueOnce(3n);
-		participantId.mockReturnValueOnce(1n);
+		participant.mockReturnValueOnce(entryPoint06Address);
 		const keyGenClient = {
-			participantId,
+			participant,
 			threshold,
 		} as unknown as KeyGenClient;
 		const protocol = makeProtocol();
@@ -234,7 +234,7 @@ describe("complaint submitted", () => {
 				deadline: 30n,
 				missingSharesFrom: [],
 				complaints: {
-					"2": { unresponded: 1n, total: 1n },
+					[entryPoint07Address]: { unresponded: 1, total: 1 },
 				},
 			},
 			signing: {},
@@ -248,23 +248,23 @@ describe("complaint submitted", () => {
 				deadline: 30n,
 				missingSharesFrom: [],
 				complaints: {
-					"2": { unresponded: 2n, total: 2n },
+					[entryPoint07Address]: { unresponded: 2, total: 2 },
 				},
 			},
 		});
 	});
 
 	it("should immediately react to complaint when accused", async () => {
-		const participantId = vi.fn();
+		const participant = vi.fn();
 		const threshold = vi.fn();
 		threshold.mockReturnValueOnce(3n);
-		participantId.mockReturnValueOnce(2n);
+		participant.mockReturnValueOnce(entryPoint07Address);
 		const secretShare = 0x5afe5afe5afen;
 		const createSecretShare = vi.fn();
 		createSecretShare.mockReturnValueOnce(secretShare);
 		const keyGenClient = {
 			createSecretShare,
-			participantId,
+			participant,
 			threshold,
 		} as unknown as KeyGenClient;
 		const protocol = makeProtocol();
@@ -276,7 +276,7 @@ describe("complaint submitted", () => {
 				deadline: 30n,
 				missingSharesFrom: [],
 				complaints: {
-					"2": { unresponded: 1n, total: 1n },
+					[entryPoint07Address]: { unresponded: 1, total: 1 },
 				},
 			},
 			signing: {},
@@ -290,14 +290,14 @@ describe("complaint submitted", () => {
 				deadline: 30n,
 				missingSharesFrom: [],
 				complaints: {
-					"2": { unresponded: 2n, total: 2n },
+					[entryPoint07Address]: { unresponded: 2, total: 2 },
 				},
 			},
 			actions: [
 				{
 					id: "key_gen_complaint_response",
 					groupId: "0x06cb03baac74421225341827941e88d9547e5459c4b3715c0000000000000000",
-					plaintiff: 1n,
+					plaintiff: entryPoint06Address,
 					secretShare,
 				},
 			],
@@ -305,17 +305,12 @@ describe("complaint submitted", () => {
 	});
 
 	it("should restart key gen when complaints exceed threshold", async () => {
-		const groupSetup = makeGroupSetup(1n);
-		const participants = [
-			{ id: 1n, address: entryPoint06Address },
-			{ id: 2n, address: entryPoint07Address },
-			{ id: 3n, address: entryPoint08Address },
-			{ id: 4n, address: entryPoint09Address },
-		];
+		const groupSetup = makeGroupSetup();
+		const participants = [entryPoint06Address, entryPoint07Address, entryPoint08Address, entryPoint09Address];
 		const setupGroup = vi.fn();
 		setupGroup.mockReturnValueOnce(groupSetup);
 		const threshold = vi.fn();
-		threshold.mockReturnValueOnce(2n);
+		threshold.mockReturnValueOnce(2);
 		const keyGenClient = {
 			setupGroup,
 			threshold,
@@ -332,7 +327,7 @@ describe("complaint submitted", () => {
 				deadline: 30n,
 				missingSharesFrom: [],
 				complaints: {
-					"2": { unresponded: 0n, total: 1n },
+					[entryPoint07Address]: { unresponded: 0, total: 1 },
 				},
 			},
 			signing: {},
@@ -347,7 +342,6 @@ describe("complaint submitted", () => {
 				count: 3,
 				threshold: 2,
 				context: calcGroupContext(ethAddress, 10n),
-				participantId: 1n,
 				commitments: groupSetup.commitments,
 				encryptionPublicKey: groupSetup.encryptionPublicKey,
 				pok: groupSetup.pok,
@@ -361,7 +355,7 @@ describe("complaint submitted", () => {
 			deadline: 31n,
 		});
 		expect(diff.consensus).toStrictEqual({
-			epochGroup: [10n, { groupId: "0x5afe02", participantId: 1n }],
+			epochGroup: [10n, "0x5afe02"],
 		});
 		expect(consensus).toBeCalledTimes(1);
 		expect(setupGroup).toBeCalledTimes(1);

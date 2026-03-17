@@ -1,7 +1,8 @@
 import type { Address, Hex, PublicClient } from "viem";
 import { numberToHex } from "viem";
 import { describe, expect, it, vi } from "vitest";
-import { loadEpochRolloverHistory, loadEpochsState, loadTransactionProposals } from "./consensus";
+import { loadEpochRolloverHistory, loadEpochsState } from "./epochs";
+import { loadTransactionProposals } from "./transactions";
 
 const CONSENSUS = "0x0000000000000000000000000000000000000001" as Address;
 const SAFE_TX_HASH = `0x${"ab".repeat(32)}` as Hex;
@@ -67,7 +68,7 @@ describe("loadTransactionProposals", () => {
 				maxBlockRange: MAX_BLOCK_RANGE,
 			});
 			expect(firstCall(provider).topics[2]).toBeNull(); // chainId wildcard
-			expect(firstCall(provider).topics[3]).toBe(SAFE_ADDRESS);
+			expect(firstCall(provider).topics[3]).toBe("0x000000000000000000000000DeaDbeefdEAdbeefdEadbEEFdeadbeEFdEaDbeeF");
 		});
 	});
 

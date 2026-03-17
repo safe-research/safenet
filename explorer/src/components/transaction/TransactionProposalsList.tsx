@@ -1,20 +1,19 @@
-import { Link } from "@tanstack/react-router";
-import { Box } from "@/components/Groups";
-import { SafeTxOverview } from "@/components/transaction/SafeTxOverview";
+import {
+	TransactionListRow,
+	TransactionListRowSkeleton,
+	TransactionRowGrid,
+} from "@/components/transaction/TransactionListRow";
 import type { TransactionProposal } from "@/lib/consensus";
 
-export function TransactionProposalItem({ proposal }: { proposal: TransactionProposal }) {
+function TransactionListHeader() {
 	return (
-		<Link to="/safeTx" search={{ chainId: `${proposal.transaction.chainId}`, safeTxHash: proposal.safeTxHash }}>
-			<Box className={`hover:bg-surface-hover ${proposal.attestedAt ? "border-positive" : "border-pending"}`}>
-				<SafeTxOverview
-					transaction={proposal.transaction}
-					title={`Safe Tx Hash: ${proposal.safeTxHash}`}
-					timestamp={`${proposal.proposedAt.block}`}
-					disableLinks={true}
-				/>
-			</Box>
-		</Link>
+		<TransactionRowGrid className="px-3 py-1.5 text-2xs font-medium text-sub-title uppercase tracking-wide">
+			<div>Network</div>
+			<div>Safe</div>
+			<div>Tx Hash</div>
+			<div>Details</div>
+			<div className="text-right">When</div>
+		</TransactionRowGrid>
 	);
 }
 
@@ -23,26 +22,39 @@ export function TransactionProposalsList({
 	label,
 	hasMore,
 	onShowMore,
+	isLoading,
 	isLoadingMore,
 	showMoreLabel = "Show More",
+	emptyLabel = "No transactions found",
 }: {
 	proposals: TransactionProposal[];
 	label?: string;
 	hasMore: boolean;
 	onShowMore: () => void;
+	isLoading?: boolean;
 	isLoadingMore?: boolean;
 	showMoreLabel?: string;
+	emptyLabel?: string;
 }) {
 	return (
 		<>
 			{label !== undefined && <div className="w-full p-2 text-xs text-right">{label}</div>}
-			<div className="space-y-4">
-				{proposals.map((proposal) => (
-					<div key={`${proposal.safeTxHash}:${proposal.epoch}`}>
-						<TransactionProposalItem proposal={proposal} />
-					</div>
-				))}
-				{hasMore && (
+			<div className="hidden sm:block">
+				<TransactionListHeader />
+			</div>
+			<div className="space-y-2">
+				{isLoading ? (
+					<TransactionListRowSkeleton />
+				) : proposals.length === 0 ? (
+					<div className="w-full p-8 text-center text-sub-title">{emptyLabel}</div>
+				) : (
+					proposals.map((proposal) => (
+						<div key={`${proposal.safeTxHash}:${proposal.epoch}`}>
+							<TransactionListRow proposal={proposal} />
+						</div>
+					))
+				)}
+				{!isLoading && hasMore && (
 					<button
 						type="button"
 						className="w-full p-2 text-center cursor-pointer"

@@ -11,6 +11,7 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as SettingsRouteImport } from './routes/settings'
 import { Route as SafeTxRouteImport } from './routes/safeTx'
+import { Route as SafeRouteImport } from './routes/safe'
 import { Route as EpochRouteImport } from './routes/epoch'
 import { Route as IndexRouteImport } from './routes/index'
 
@@ -22,6 +23,11 @@ const SettingsRoute = SettingsRouteImport.update({
 const SafeTxRoute = SafeTxRouteImport.update({
   id: '/safeTx',
   path: '/safeTx',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const SafeRoute = SafeRouteImport.update({
+  id: '/safe',
+  path: '/safe',
   getParentRoute: () => rootRouteImport,
 } as any)
 const EpochRoute = EpochRouteImport.update({
@@ -38,12 +44,14 @@ const IndexRoute = IndexRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/epoch': typeof EpochRoute
+  '/safe': typeof SafeRoute
   '/safeTx': typeof SafeTxRoute
   '/settings': typeof SettingsRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/epoch': typeof EpochRoute
+  '/safe': typeof SafeRoute
   '/safeTx': typeof SafeTxRoute
   '/settings': typeof SettingsRoute
 }
@@ -51,20 +59,22 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/epoch': typeof EpochRoute
+  '/safe': typeof SafeRoute
   '/safeTx': typeof SafeTxRoute
   '/settings': typeof SettingsRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/epoch' | '/safeTx' | '/settings'
+  fullPaths: '/' | '/epoch' | '/safe' | '/safeTx' | '/settings'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/epoch' | '/safeTx' | '/settings'
-  id: '__root__' | '/' | '/epoch' | '/safeTx' | '/settings'
+  to: '/' | '/epoch' | '/safe' | '/safeTx' | '/settings'
+  id: '__root__' | '/' | '/epoch' | '/safe' | '/safeTx' | '/settings'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   EpochRoute: typeof EpochRoute
+  SafeRoute: typeof SafeRoute
   SafeTxRoute: typeof SafeTxRoute
   SettingsRoute: typeof SettingsRoute
 }
@@ -83,6 +93,13 @@ declare module '@tanstack/react-router' {
       path: '/safeTx'
       fullPath: '/safeTx'
       preLoaderRoute: typeof SafeTxRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/safe': {
+      id: '/safe'
+      path: '/safe'
+      fullPath: '/safe'
+      preLoaderRoute: typeof SafeRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/epoch': {
@@ -105,6 +122,7 @@ declare module '@tanstack/react-router' {
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   EpochRoute: EpochRoute,
+  SafeRoute: SafeRoute,
   SafeTxRoute: SafeTxRoute,
   SettingsRoute: SettingsRoute,
 }

@@ -7,37 +7,23 @@ import type { MachineConfig } from "../types.js";
 import { triggerKeyGen } from "./trigger.js";
 
 // --- Test Data ---
-const PARTICIPANTS = [
-	{
-		id: 1n,
-		address: entryPoint06Address,
-	},
-	{
-		id: 3n,
-		address: entryPoint07Address,
-	},
-	{
-		id: 7n,
-		address: entryPoint08Address,
-	},
-];
-
 const MACHINE_CONFIG = {
-	defaultParticipants: [
+	participantsInfo: [
 		{
-			id: 1n,
 			address: entryPoint06Address,
+			activeFrom: 0n,
 		},
 		{
-			id: 2n,
 			address: entryPoint07Address,
+			activeFrom: 0n,
 		},
 		{
-			id: 3n,
 			address: entryPoint08Address,
+			activeFrom: 0n,
 		},
 	],
 } as unknown as MachineConfig;
+const PARTICIPANTS = MACHINE_CONFIG.participantsInfo.map((p) => p.address);
 
 // --- Tests ---
 describe("trigger key gen", () => {
@@ -55,22 +41,22 @@ describe("trigger key gen", () => {
 	it("should throw if not enough participants are provided (below crash fault tolerance)", () => {
 		const keyGenClient = {} as unknown as KeyGenClient;
 		const config = {
-			defaultParticipants: [
+			participantsInfo: [
 				{
-					id: 1n,
 					address: entryPoint06Address,
+					activeFrom: 0n,
 				},
 				{
-					id: 2n,
 					address: entryPoint07Address,
+					activeFrom: 0n,
 				},
 				{
-					id: 3n,
 					address: entryPoint08Address,
+					activeFrom: 0n,
 				},
 				{
-					id: 4n,
 					address: entryPoint08Address,
+					activeFrom: 0n,
 				},
 			],
 		} as unknown as MachineConfig;
@@ -85,7 +71,7 @@ describe("trigger key gen", () => {
 	it("should trigger key generation and return the correct state diff", () => {
 		const context = "0x00000000eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee0000000000000002";
 		const setupGroup = vi.fn();
-		const groupSetup = makeGroupSetup(3n);
+		const groupSetup = makeGroupSetup();
 		setupGroup.mockReturnValueOnce(groupSetup);
 		const keyGenClient = {
 			setupGroup,
@@ -99,7 +85,6 @@ describe("trigger key gen", () => {
 				count: 3,
 				threshold: 2,
 				context,
-				participantId: 3n,
 				commitments: groupSetup.commitments,
 				encryptionPublicKey: groupSetup.encryptionPublicKey,
 				pok: groupSetup.pok,
@@ -113,7 +98,7 @@ describe("trigger key gen", () => {
 			deadline: 30n,
 		});
 		expect(diff.consensus).toStrictEqual({
-			epochGroup: [2n, { groupId: "0x5afe02", participantId: 3n }],
+			epochGroup: [2n, "0x5afe02"],
 		});
 		expect(diff.signing).toBeUndefined();
 

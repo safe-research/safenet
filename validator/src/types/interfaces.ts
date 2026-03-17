@@ -1,6 +1,11 @@
 import type { Address, Hex } from "viem";
-import type { Participant } from "../consensus/storage/types.js";
 import type { SupportedChain } from "./schemas.js";
+
+export type ParticipantInfo = {
+	address: Address;
+	activeFrom: bigint;
+	activeBefore?: bigint;
+};
 
 export interface ProtocolConfig {
 	chainId: SupportedChain;
@@ -8,7 +13,7 @@ export interface ProtocolConfig {
 	coordinator: Address;
 	staker: Address;
 	blocksPerEpoch: bigint;
-	participants: Participant[];
+	participants: ParticipantInfo[];
 	genesisSalt: Hex;
 	keyGenTimeout?: bigint;
 	signingTimeout?: bigint;

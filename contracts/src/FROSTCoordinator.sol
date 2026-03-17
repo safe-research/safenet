@@ -168,37 +168,28 @@ contract FROSTCoordinator {
     /**
      * @notice Emitted when a key generation commitment is submitted.
      * @param gid The group ID.
-     * @param identifier The participant identifier.
      * @param participant The participant address that commited to the key generation.
      * @param commitment The key generation commitment.
      * @param committed True if all commitments are received and the phase completes.
      */
-    event KeyGenCommitted(
-        FROSTGroupId.T indexed gid,
-        FROST.Identifier identifier,
-        address participant,
-        KeyGenCommitment commitment,
-        bool committed
-    );
+    event KeyGenCommitted(FROSTGroupId.T indexed gid, address participant, KeyGenCommitment commitment, bool committed);
 
     /**
      * @notice Emitted when a key generation secret share is submitted.
      * @param gid The group ID.
-     * @param identifier The participant identifier.
+     * @param participant The participant address.
      * @param share The key generation secret share.
      * @param shared True if all shares are received and the phase completes.
      */
-    event KeyGenSecretShared(
-        FROSTGroupId.T indexed gid, FROST.Identifier identifier, KeyGenSecretShare share, bool shared
-    );
+    event KeyGenSecretShared(FROSTGroupId.T indexed gid, address participant, KeyGenSecretShare share, bool shared);
 
     /**
      * @notice Emitted when key generation is confirmed by a participant.
      * @param gid The group ID.
-     * @param identifier The participant identifier.
+     * @param participant The participant address.
      * @param confirmed All group participants have confirmed.
      */
-    event KeyGenConfirmed(FROSTGroupId.T indexed gid, FROST.Identifier identifier, bool confirmed);
+    event KeyGenConfirmed(FROSTGroupId.T indexed gid, address participant, bool confirmed);
 
     /**
      * @notice Emitted when a complaint is submitted during key generation.
@@ -207,9 +198,7 @@ contract FROSTCoordinator {
      * @param accused The accused participant.
      * @param compromised The group has become compromised due to too many complaints.
      */
-    event KeyGenComplained(
-        FROSTGroupId.T indexed gid, FROST.Identifier plaintiff, FROST.Identifier accused, bool compromised
-    );
+    event KeyGenComplained(FROSTGroupId.T indexed gid, address plaintiff, address accused, bool compromised);
 
     /**
      * @notice Emitted when a complaint response is submitted.
@@ -218,18 +207,16 @@ contract FROSTCoordinator {
      * @param accused The accused participant.
      * @param secretShare The revealed secret share.
      */
-    event KeyGenComplaintResponded(
-        FROSTGroupId.T indexed gid, FROST.Identifier plaintiff, FROST.Identifier accused, uint256 secretShare
-    );
+    event KeyGenComplaintResponded(FROSTGroupId.T indexed gid, address plaintiff, address accused, uint256 secretShare);
 
     /**
      * @notice Emitted when a nonce commitment is submitted for preprocessing.
      * @param gid The group ID.
-     * @param identifier The participant identifier.
+     * @param participant The participant address.
      * @param chunk The chunk index.
      * @param commitment The nonce commitment Merkle root.
      */
-    event Preprocess(FROSTGroupId.T indexed gid, FROST.Identifier identifier, uint64 chunk, bytes32 commitment);
+    event Preprocess(FROSTGroupId.T indexed gid, address participant, uint64 chunk, bytes32 commitment);
 
     /**
      * @notice Emitted when a signing ceremony is initiated.
@@ -250,21 +237,19 @@ contract FROSTCoordinator {
     /**
      * @notice Emitted when a participant reveals nonces for signing.
      * @param sid The signature ID.
-     * @param identifier The participant identifier.
+     * @param participant The participant address.
      * @param nonces The revealed nonces.
      */
-    event SignRevealedNonces(FROSTSignatureId.T indexed sid, FROST.Identifier identifier, SignNonces nonces);
+    event SignRevealedNonces(FROSTSignatureId.T indexed sid, address participant, SignNonces nonces);
 
     /**
      * @notice Emitted when a participant submits a signature share.
      * @param sid The signature ID.
-     * @param identifier The participant identifier.
+     * @param participant The participant address.
      * @param z The scalar component of the share.
      * @param selectionRoot The Merkle root of the selected participants.
      */
-    event SignShared(
-        FROSTSignatureId.T indexed sid, bytes32 indexed selectionRoot, FROST.Identifier identifier, uint256 z
-    );
+    event SignShared(FROSTSignatureId.T indexed sid, bytes32 indexed selectionRoot, address participant, uint256 z);
 
     /**
      * @notice Emitted when a FROST signing ceremony successfully completed.
@@ -368,18 +353,15 @@ contract FROSTCoordinator {
     /**
      * @notice Submits a commitment and proof for a key generation participant.
      * @param gid The group ID.
-     * @param identifier The participant identifier.
      * @param poap The Merkle proof of participation.
      * @param commitment The key generation commitment.
      * @return committed True if all commitments are received and the phase completes.
      * @dev This corresponds to Round 1 of the FROST KeyGen algorithm.
      */
-    function keyGenCommit(
-        FROSTGroupId.T gid,
-        FROST.Identifier identifier,
-        bytes32[] calldata poap,
-        KeyGenCommitment calldata commitment
-    ) public returns (bool committed) {
+    function keyGenCommit(FROSTGroupId.T gid, bytes32[] calldata poap, KeyGenCommitment calldata commitment)
+        public
+        returns (bool committed)
+    {
         Group storage group = $groups[gid];
         GroupState memory state = group.state;
         require(state.status == GroupStatus.COMMITTING, GroupNotReady());
@@ -390,10 +372,10 @@ contract FROSTCoordinator {
         }
         Secp256k1.requireNonZero(commitment.q);
         require(commitment.c.length == state.threshold, InvalidGroupCommitment());
-        group.participants.register(identifier, msg.sender, poap);
+        group.participants.register(msg.sender, poap);
         group.state = state;
         group.key = Secp256k1.add(group.key, commitment.c[0]);
-        emit KeyGenCommitted(gid, identifier, msg.sender, commitment, committed);
+        emit KeyGenCommitted(gid, msg.sender, commitment, committed);
     }
 
     /**
@@ -402,7 +384,6 @@ contract FROSTCoordinator {
      * @param count The number of participants.
      * @param threshold The signing threshold.
      * @param context Application-specific context.
-     * @param identifier The participant identifier.
      * @param poap The Merkle proof of participation.
      * @param commitment The key generation commitment.
      * @return gid The group ID.
@@ -414,7 +395,6 @@ contract FROSTCoordinator {
         uint16 count,
         uint16 threshold,
         bytes32 context,
-        FROST.Identifier identifier,
         bytes32[] calldata poap,
         KeyGenCommitment calldata commitment
     ) external returns (FROSTGroupId.T gid, bool committed) {
@@ -422,7 +402,7 @@ contract FROSTCoordinator {
         if (!$groups[gid].participants.initialized()) {
             keyGen(participants, count, threshold, context);
         }
-        committed = keyGenCommit(gid, identifier, poap, commitment);
+        committed = keyGenCommit(gid, poap, commitment);
     }
 
     /**
@@ -445,9 +425,9 @@ contract FROSTCoordinator {
         unchecked {
             require(share.f.length == state.count - 1, InvalidSecretShare());
         }
-        FROST.Identifier identifier = group.participants.set(msg.sender, share.y);
+        group.participants.set(msg.sender, share.y);
         group.state = state;
-        emit KeyGenSecretShared(gid, identifier, share, shared);
+        emit KeyGenSecretShared(gid, msg.sender, share, shared);
     }
 
     /**
@@ -460,14 +440,13 @@ contract FROSTCoordinator {
         Group storage group = $groups[gid];
         GroupState memory state = group.state;
         require(state.status == GroupStatus.CONFIRMING, GroupNotReady());
-        FROST.Identifier identifier = group.participants.identifierOf(msg.sender);
-        group.participants.confirm(identifier);
+        group.participants.confirm(msg.sender);
         confirmed = --state.pending == 0;
         if (confirmed) {
             state.status = GroupStatus.FINALIZED;
         }
         group.state = state;
-        emit KeyGenConfirmed(gid, identifier, confirmed);
+        emit KeyGenConfirmed(gid, msg.sender, confirmed);
     }
 
     /**
@@ -487,35 +466,33 @@ contract FROSTCoordinator {
     /**
      * @notice Submits a complaint from the sender against another participant during key generation.
      * @param gid The group ID.
-     * @param accused The accused participant identifier.
+     * @param accused The accused participant.
      * @return compromised Whether the group has become compromised due to too many complaints.
      */
-    function keyGenComplain(FROSTGroupId.T gid, FROST.Identifier accused) external returns (bool compromised) {
+    function keyGenComplain(FROSTGroupId.T gid, address accused) external returns (bool compromised) {
         Group storage group = $groups[gid];
         GroupState memory state = group.state;
         require(state.status == GroupStatus.SHARING || state.status == GroupStatus.CONFIRMING, GroupNotReady());
-        FROST.Identifier plaintiff = group.participants.identifierOf(msg.sender);
-        compromised = group.participants.complain(plaintiff, accused) >= state.threshold;
+        compromised = group.participants.complain(msg.sender, accused) >= state.threshold;
         if (compromised) {
             state.status = GroupStatus.COMPROMISED;
             group.state = state;
         }
-        emit KeyGenComplained(gid, plaintiff, accused, compromised);
+        emit KeyGenComplained(gid, msg.sender, accused, compromised);
     }
 
     /**
      * @notice Responds to a complaint by revealing the secret share publicly.
      * @param gid The group ID.
-     * @param plaintiff The complaining participant identifier.
+     * @param plaintiff The complaining participant.
      * @param secretShare The revealed secret share.
      */
-    function keyGenComplaintResponse(FROSTGroupId.T gid, FROST.Identifier plaintiff, uint256 secretShare) external {
+    function keyGenComplaintResponse(FROSTGroupId.T gid, address plaintiff, uint256 secretShare) external {
         Group storage group = $groups[gid];
         GroupStatus status = group.state.status;
         require(status == GroupStatus.SHARING || status == GroupStatus.CONFIRMING, GroupNotReady());
-        FROST.Identifier accused = group.participants.identifierOf(msg.sender);
-        group.participants.respond(plaintiff, accused);
-        emit KeyGenComplaintResponded(gid, plaintiff, accused, secretShare);
+        group.participants.respond(plaintiff, msg.sender);
+        emit KeyGenComplaintResponded(gid, plaintiff, msg.sender, secretShare);
     }
 
     /**
@@ -531,9 +508,9 @@ contract FROSTCoordinator {
      */
     function preprocess(FROSTGroupId.T gid, bytes32 commitment) external returns (uint64 chunk) {
         Group storage group = $groups[gid];
-        FROST.Identifier identifier = group.participants.identifierOf(msg.sender);
-        chunk = group.nonces.commit(identifier, commitment, group.state.sequence);
-        emit Preprocess(gid, identifier, chunk, commitment);
+        group.participants.verify(msg.sender);
+        chunk = group.nonces.commit(msg.sender, commitment, group.state.sequence);
+        emit Preprocess(gid, msg.sender, chunk, commitment);
     }
 
     // ============================================================
@@ -572,9 +549,8 @@ contract FROSTCoordinator {
      */
     function signRevealNonces(FROSTSignatureId.T sid, SignNonces calldata nonces, bytes32[] calldata proof) external {
         (Group storage group,) = _signatureGroupAndMessage(sid);
-        FROST.Identifier identifier = group.participants.identifierOf(msg.sender);
-        group.nonces.verify(identifier, nonces.d, nonces.e, sid.sequence(), proof);
-        emit SignRevealedNonces(sid, identifier, nonces);
+        group.nonces.verify(msg.sender, nonces.d, nonces.e, sid.sequence(), proof);
+        emit SignRevealedNonces(sid, msg.sender, nonces);
     }
 
     /**
@@ -597,13 +573,12 @@ contract FROSTCoordinator {
         bytes32[] calldata proof
     ) public returns (bool signed) {
         (Group storage group, bytes32 message) = _signatureGroupAndMessage(sid);
-        FROST.Identifier identifier = group.participants.identifierOf(msg.sender);
         Secp256k1.Point memory key = group.key;
-        FROST.verifyShare(key, selection.r, group.participants.getKey(identifier), share, message);
+        FROST.verifyShare(key, selection.r, group.participants.getKey(msg.sender), share, message);
         Signature storage signature = $signatures[sid];
         FROST.Signature memory accumulator =
-            signature.shares.register(identifier, share, selection.r, selection.root, proof);
-        emit SignShared(sid, selection.root, identifier, share.z);
+            signature.shares.register(msg.sender, share, selection.r, selection.root, proof);
+        emit SignShared(sid, selection.root, msg.sender, share.z);
         if (Secp256k1.eq(selection.r, accumulator.r)) {
             FROST.verify(key, accumulator, message);
             if (signature.signed == bytes32(0)) {
@@ -683,15 +658,15 @@ contract FROSTCoordinator {
     /**
      * @notice Retrieves a participant's public key.
      * @param gid The group ID.
-     * @param identifier The participant identifier.
+     * @param participant The participant address.
      * @return key The participant's public key.
      */
-    function participantKey(FROSTGroupId.T gid, FROST.Identifier identifier)
+    function participantKey(FROSTGroupId.T gid, address participant)
         external
         view
         returns (Secp256k1.Point memory key)
     {
-        return $groups[gid].participants.getKey(identifier);
+        return $groups[gid].participants.getKey(participant);
     }
 
     /**

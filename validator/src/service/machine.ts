@@ -2,7 +2,6 @@ import type { Hex } from "viem";
 import type { KeyGenClient } from "../consensus/keyGen/client.js";
 import type { ProtocolAction, SafenetProtocol } from "../consensus/protocol/types.js";
 import type { SigningClient } from "../consensus/signing/client.js";
-import type { Participant } from "../consensus/storage/types.js";
 import type { VerificationEngine } from "../consensus/verify/engine.js";
 import { handleEpochStaged } from "../machine/consensus/epochStaged.js";
 import { checkEpochRollover } from "../machine/consensus/rollover.js";
@@ -26,6 +25,7 @@ import { TransitionState } from "../machine/state/local.js";
 import type { StateStorage } from "../machine/storage/types.js";
 import type { EventTransition, StateTransition } from "../machine/transitions/types.js";
 import type { ConsensusState, MachineConfig, MachineStates, StateDiff } from "../machine/types.js";
+import type { ParticipantInfo } from "../types/interfaces.js";
 import { formatError } from "../utils/errors.js";
 import type { Logger } from "../utils/logging.js";
 import type { Metrics } from "../utils/metrics/index.js";
@@ -48,7 +48,7 @@ export class SafenetStateMachine {
 	// Event queue state
 	#lastProcessedBlock = 0n;
 	#lastProcessedIndex = 0;
-	#transitionQueue: Queue<StateTransition> = new InMemoryQueue<StateTransition>();
+	#transitionQueue: Queue<StateTransition> = new InMemoryQueue();
 	#currentTransition?: StateTransition;
 
 	constructor({
@@ -65,7 +65,7 @@ export class SafenetStateMachine {
 		signingTimeout,
 		storage,
 	}: {
-		participants: Participant[];
+		participants: ParticipantInfo[];
 		genesisSalt: Hex;
 		protocol: SafenetProtocol;
 		keyGenClient: KeyGenClient;
@@ -79,7 +79,7 @@ export class SafenetStateMachine {
 		storage: StateStorage;
 	}) {
 		this.#machineConfig = {
-			defaultParticipants: participants,
+			participantsInfo: participants,
 			genesisSalt: genesisSalt,
 			blocksPerEpoch: blocksPerEpoch ?? BLOCKS_PER_EPOCH,
 			keyGenTimeout: keyGenTimeout ?? DEFAULT_TIMEOUT,
@@ -100,7 +100,7 @@ export class SafenetStateMachine {
 
 	transition(transition: StateTransition) {
 		this.#logger.debug(`Enqueue ${transition.id} at ${transition.block}`);
-		this.#transitionQueue.push(transition);
+		this.#transitionQueue.enqueue(transition);
 		this.checkNextTransition();
 	}
 
@@ -121,7 +121,7 @@ export class SafenetStateMachine {
 					// to undefined and unregisterGroup is not called again (best-effort, not retried).
 					const epochGroups = this.#storage.consensusState().epochGroups;
 					for (const epoch of diff.consensus?.removeEpochGroups ?? []) {
-						const groupId = epochGroups[epoch.toString()]?.groupId;
+						const groupId = epochGroups[epoch.toString()];
 						if (groupId === undefined) continue;
 						try {
 							this.#keyGenClient.unregisterGroup(groupId);
@@ -145,7 +145,7 @@ export class SafenetStateMachine {
 			.finally(() => {
 				this.#metrics.blockNumber.set(Number(this.#lastProcessedBlock));
 				this.#metrics.eventIndex.set(this.#lastProcessedIndex);
-				this.#transitionQueue.pop();
+				this.#transitionQueue.dequeue();
 				this.#currentTransition = undefined;
 				this.checkNextTransition();
 			});

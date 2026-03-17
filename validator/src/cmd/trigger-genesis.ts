@@ -20,7 +20,7 @@ const main = async (): Promise<void> => {
 		.parse(process.env);
 
 	const { participantsRoot, count, threshold, context } = calcGenesisGroup({
-		defaultParticipants: config.PARTICIPANTS,
+		participantsInfo: config.PARTICIPANTS,
 		genesisSalt: config.GENESIS_SALT,
 	});
 

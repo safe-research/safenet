@@ -1,21 +1,16 @@
 import type { Address, Hex } from "viem";
-import type { FrostPoint, GroupId, ParticipantId, SignatureId } from "../../frost/types.js";
+import type { FrostPoint, GroupId, SignatureId } from "../../frost/types.js";
 import type { NonceTree, PublicNonceCommitments } from "../signing/nonces.js";
-
-export type Participant = {
-	id: ParticipantId;
-	address: Address;
-};
 
 export type GroupInfoStorage = {
 	knownGroups(): GroupId[];
-	registerGroup(groupId: GroupId, participants: readonly Participant[], threshold: number): ParticipantId;
+	registerGroup(groupId: GroupId, participants: readonly Address[], threshold: number): Address;
 	registerVerification(groupId: GroupId, groupPublicKey: FrostPoint, verificationShare: FrostPoint): void;
 	registerSigningShare(groupId: GroupId, signingShare: bigint): void;
 
-	participantId(groupId: GroupId): ParticipantId;
+	participant(groupId: GroupId): Address;
 	publicKey(groupId: GroupId): FrostPoint | undefined;
-	participants(groupId: GroupId): readonly Participant[];
+	participants(groupId: GroupId): readonly Address[];
 	threshold(groupId: GroupId): number;
 	signingShare(groupId: GroupId): bigint | undefined;
 	verificationShare(groupId: GroupId): FrostPoint;
@@ -26,23 +21,23 @@ export type KeyGenInfoStorage = {
 	registerKeyGen(groupId: GroupId, encryptionSecretKey: bigint, coefficients: readonly bigint[]): void;
 	registerCommitments(
 		groupId: GroupId,
-		participantId: ParticipantId,
+		participant: Address,
 		encryptionPublicKey: FrostPoint,
 		commitments: readonly FrostPoint[],
 	): void;
-	registerSecretShare(groupId: GroupId, participantId: ParticipantId, share: bigint): void;
+	registerSecretShare(groupId: GroupId, participant: Address, share: bigint): void;
 
-	missingCommitments(groupId: GroupId): ParticipantId[];
+	missingCommitments(groupId: GroupId): Address[];
 	checkIfCommitmentsComplete(groupId: GroupId): boolean;
-	missingSecretShares(groupId: GroupId): ParticipantId[];
+	missingSecretShares(groupId: GroupId): Address[];
 	checkIfSecretSharesComplete(groupId: GroupId): boolean;
 
 	encryptionSecretKey(groupId: GroupId): bigint;
-	encryptionPublicKey(groupId: GroupId, participantId: ParticipantId): FrostPoint;
+	encryptionPublicKey(groupId: GroupId, participant: Address): FrostPoint;
 	coefficients(groupId: GroupId): readonly bigint[];
-	commitments(groupId: GroupId, participantId: ParticipantId): readonly FrostPoint[];
-	commitmentsMap(groupId: GroupId): Map<ParticipantId, readonly FrostPoint[]>;
-	secretSharesMap(groupId: GroupId): Map<ParticipantId, bigint>;
+	commitments(groupId: GroupId, participant: Address): readonly FrostPoint[];
+	commitmentsMap(groupId: GroupId): Map<Address, readonly FrostPoint[]>;
+	secretSharesMap(groupId: GroupId): Map<Address, bigint>;
 	clearKeyGen(groupId: GroupId): void;
 };
 
@@ -58,21 +53,17 @@ export type SignatureRequestStorage = {
 		signatureId: SignatureId,
 		groupId: GroupId,
 		message: Hex,
-		signers: readonly ParticipantId[],
+		signers: readonly Address[],
 		sequence: bigint,
 	): void;
-	registerNonceCommitments(
-		signatureId: SignatureId,
-		signerId: ParticipantId,
-		nonceCommitments: PublicNonceCommitments,
-	): void;
+	registerNonceCommitments(signatureId: SignatureId, signer: Address, nonceCommitments: PublicNonceCommitments): void;
 
 	checkIfNoncesComplete(signatureId: SignatureId): boolean;
-	missingNonces(signatureId: SignatureId): ParticipantId[];
+	missingNonces(signatureId: SignatureId): Address[];
 
 	signingGroup(signatureId: SignatureId): GroupId;
-	signers(signatureId: SignatureId): ParticipantId[];
+	signers(signatureId: SignatureId): Address[];
 	message(signatureId: SignatureId): Hex;
 	sequence(signatureId: SignatureId): bigint;
-	nonceCommitmentsMap(signatureId: SignatureId): Map<ParticipantId, PublicNonceCommitments>;
+	nonceCommitmentsMap(signatureId: SignatureId): Map<Address, PublicNonceCommitments>;
 } & NonceStorage;

@@ -7,7 +7,7 @@ import {Secp256k1} from "@/libraries/Secp256k1.sol";
 
 contract CommitmentShareMerkleTree is MerkleTreeBase {
     struct S {
-        FROST.Identifier identifier;
+        address participant;
         Secp256k1.Point r;
         uint256 l;
     }
@@ -22,10 +22,11 @@ contract CommitmentShareMerkleTree is MerkleTreeBase {
         uint256 last = 0;
         for (uint256 i = 0; i < shares.length; i++) {
             S memory share = shares[i];
-            _leaf(keccak256(abi.encode(share.identifier, share.r.x, share.r.y, share.l, r.x, r.y)));
+            _leaf(keccak256(abi.encode(share.participant, share.r.x, share.r.y, share.l, r.x, r.y)));
 
-            assert(FROST.Identifier.unwrap(share.identifier) > last);
-            last = FROST.Identifier.unwrap(share.identifier);
+            uint256 id = FROST.identifier(share.participant);
+            assert(id > last);
+            last = id;
         }
         _build();
     }

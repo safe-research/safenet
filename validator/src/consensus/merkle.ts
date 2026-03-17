@@ -1,6 +1,4 @@
-import { encodePacked, type Hex, keccak256, zeroHash } from "viem";
-import type { ParticipantId } from "../frost/types.js";
-import type { Participant } from "./storage/types.js";
+import { type Address, encodePacked, type Hex, keccak256, pad, zeroHash } from "viem";
 
 export const buildMerkleTree = (leaves: Hex[]): Hex[][] => {
 	if (leaves.length === 0) throw new Error("Cannot generate empty tree!");
@@ -26,13 +24,6 @@ export const calculateMerkleRoot = (leaves: Hex[]): Hex => {
 	const rootLevel = buildMerkleTree(leaves).at(-1);
 	if (rootLevel?.length !== 1) throw new Error("Unexpected Merkle Tree");
 	return rootLevel[0];
-};
-
-export const hashParticipant = (p: Participant): Hex =>
-	keccak256(encodePacked(["uint256", "uint256"], [p.id, BigInt(p.address)]));
-
-export const calculateParticipantsRoot = (participants: readonly Participant[]): Hex => {
-	return calculateMerkleRoot(participants.map(hashParticipant));
 };
 
 export const verifyMerkleProof = (root: Hex, leaf: Hex, proof: Hex[]): boolean => {
@@ -72,7 +63,32 @@ export const generateMerkleProof = (leaves: Hex[], index: number): Hex[] => {
 	return proof;
 };
 
-export const generateParticipantProof = (participants: readonly Participant[], participantId: ParticipantId): Hex[] => {
-	const index = participants.findIndex((p) => p.id === participantId);
-	return generateMerkleProof(participants.map(hashParticipant), index);
+const participantLeaves = (participants: readonly Address[]): Hex[] => {
+	const leaves = participants.map((p) => pad(p).toLowerCase() as Hex);
+
+	// The participant Merkle tree requires strictly sorted participants. Assert
+	// that this property holds for our set. The `participants` modules already
+	// ensures that this never happens, as it dedupes and sorts when creating
+	// the participant set for a given epoch.
+	leaves.reduce((previous, leaf) => {
+		if (previous >= leaf) {
+			throw new Error("participants not monotonic");
+		}
+		return leaf;
+	});
+
+	return leaves;
+};
+
+export const calculateParticipantsRoot = (participants: readonly Address[]): Hex => {
+	return calculateMerkleRoot(participantLeaves(participants));
+};
+
+export const generateParticipantProof = (participants: readonly Address[], participant: Address): Hex[] => {
+	const leaves = participantLeaves(participants);
+	const index = participants.findIndex((p) => p === participant);
+	if (index < 0) {
+		throw new Error(`participant ${participant} not included`);
+	}
+	return generateMerkleProof(leaves, index);
 };

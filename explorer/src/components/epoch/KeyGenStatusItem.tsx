@@ -1,3 +1,4 @@
+import type { Address } from "viem";
 import { createMapInfo, ValidatorList } from "@/components/common/ValidatorList";
 import { Skeleton } from "@/components/Skeleton";
 import { useValidatorInfoMap } from "@/hooks/useValidatorInfo";
@@ -29,7 +30,7 @@ export function KeyGenStatusItem({ status }: { status: KeyGenStatus | null }) {
 
 	const terminal = status.finalized || status.compromised;
 	const label = statusLabel(status);
-	const allIds = Array.from(validatorInfo.data?.keys() ?? []);
+	const allIds: Address[] = Array.from(validatorInfo.data?.keys() ?? []);
 
 	return (
 		<div className="bg-surface-0 border border-surface-outline rounded-md p-4 space-y-2 text-sm">
@@ -47,7 +48,7 @@ export function KeyGenStatusItem({ status }: { status: KeyGenStatus | null }) {
 					<p>
 						<ValidatorList
 							all={allIds}
-							active={status.committed.map((p) => p.identifier)}
+							active={status.committed.map((p) => p.address)}
 							mapInfo={mapInfo}
 							completed={false}
 						/>
@@ -61,7 +62,7 @@ export function KeyGenStatusItem({ status }: { status: KeyGenStatus | null }) {
 					<p>
 						<ValidatorList
 							all={allIds}
-							active={status.shared.map((p) => p.identifier)}
+							active={status.shared.map((p) => p.address)}
 							mapInfo={mapInfo}
 							completed={false}
 						/>
@@ -74,7 +75,7 @@ export function KeyGenStatusItem({ status }: { status: KeyGenStatus | null }) {
 				<p>
 					<ValidatorList
 						all={allIds}
-						active={status.confirmed.map((p) => p.identifier)}
+						active={status.confirmed.map((p) => p.address)}
 						mapInfo={mapInfo}
 						completed={terminal}
 					/>

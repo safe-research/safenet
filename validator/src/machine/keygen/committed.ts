@@ -18,24 +18,23 @@ export const handleKeyGenCommitted = async (
 
 	try {
 		// Check if validator is part of group, method will throw if not
-		keyGenClient.participantId(event.gid);
+		keyGenClient.participant(event.gid);
 	} catch {
-		// If there is no participant id, then this validator is not part of the group
-		// In this case ignore this request
+		// This validator is not part of the group, ignore this request
 		return {};
 	}
 
 	if (
-		!keyGenClient.handleKeygenCommitment(event.gid, event.identifier, event.commitment.q, event.commitment.c, {
+		!keyGenClient.handleKeygenCommitment(event.gid, event.participant, event.commitment.q, event.commitment.c, {
 			r: event.commitment.r,
 			mu: event.commitment.mu,
 		})
 	) {
-		logger?.(`Invalid key gen commitment from participant ${event.identifier}`);
+		logger?.(`Invalid key gen commitment from participant ${event.participant}`);
 		// No state changes for invalid key gen commitments, participant will be removed on timeout
 		return {};
 	}
-	logger?.(`Registered key gen commitment for participant ${event.identifier}`);
+	logger?.(`Registered key gen commitment for participant ${event.participant}`);
 	if (!event.committed) {
 		return {};
 	}
