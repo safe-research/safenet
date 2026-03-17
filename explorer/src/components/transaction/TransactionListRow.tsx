@@ -6,7 +6,7 @@ import { Skeleton } from "@/components/Skeleton";
 import { useConsensusState } from "@/hooks/useConsensusState";
 import { shortAddress } from "@/lib/address";
 import { SAFE_SERVICE_CHAINS } from "@/lib/chains";
-import type { TransactionProposal } from "@/lib/consensus";
+import type { TransactionProposalWithStatus } from "@/lib/consensus";
 import { dataString, formatBlockAge, formatHashShort, opString, valueString } from "@/lib/safe/formatting";
 
 /** Grid wrapper shared by the header and data rows of the transaction list. */
@@ -42,7 +42,7 @@ export function TransactionListRowSkeleton() {
 	);
 }
 
-export function TransactionListRow({ proposal }: { proposal: TransactionProposal }) {
+export function TransactionListRow({ proposal }: { proposal: TransactionProposalWithStatus }) {
 	const { data: consensusState } = useConsensusState();
 	const currentBlock = consensusState?.currentBlock ?? 0n;
 	const chain = SAFE_SERVICE_CHAINS[proposal.chainId.toString()];
@@ -60,7 +60,7 @@ export function TransactionListRow({ proposal }: { proposal: TransactionProposal
 				{/* Column 1: Network + Status badges */}
 				<div className="flex flex-col gap-1">
 					<NetworkBadge chainId={proposal.chainId} />
-					<StatusBadge attested={proposal.attestedAt !== null} />
+					<StatusBadge status={proposal.status} />
 				</div>
 
 				{/* Column 2: Safe address */}

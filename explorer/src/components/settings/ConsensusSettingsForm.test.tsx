@@ -14,6 +14,7 @@ const DEFAULT_SETTINGS: Settings = {
 		"https://raw.githubusercontent.com/safe-fndn/safenet-beta-data/refs/heads/main/assets/validator-info.json",
 	refetchInterval: 10000,
 	blocksPerEpoch: 1440,
+	signingTimeout: 12,
 };
 
 const mockUpdateSettings = vi.hoisted(() => vi.fn());
@@ -41,6 +42,7 @@ describe("ConsensusSettingsForm", () => {
 		expect(screen.getByLabelText("Consensus Address")).toBeTruthy();
 		expect(screen.getByLabelText("Validator Info Url")).toBeTruthy();
 		expect(screen.getByLabelText("Refetch Interval (0 to disable refetching)")).toBeTruthy();
+		expect(screen.getByLabelText("Signing Timeout (blocks)")).toBeTruthy();
 	});
 
 	it("displays default values from settings", () => {
@@ -86,6 +88,32 @@ describe("ConsensusSettingsForm", () => {
 		render(<ConsensusSettingsForm />);
 		const input = screen.getByLabelText("Max Block Range") as HTMLInputElement;
 		fireEvent.change(input, { target: { value: "-1" } });
+		fireEvent.submit(input.closest("form") as HTMLFormElement);
+		await waitFor(() => {
+			expect(screen.getByText(/too small/i)).toBeTruthy();
+		});
+	});
+
+	it("displays the default signingTimeout value from settings", () => {
+		render(<ConsensusSettingsForm />);
+		const input = screen.getByLabelText("Signing Timeout (blocks)") as HTMLInputElement;
+		expect(input.value).toBe(String(DEFAULT_SETTINGS.signingTimeout));
+	});
+
+	it("calls updateSettings with parsed signingTimeout when a string number is entered", async () => {
+		render(<ConsensusSettingsForm />);
+		const input = screen.getByLabelText("Signing Timeout (blocks)") as HTMLInputElement;
+		fireEvent.change(input, { target: { value: "24" } });
+		fireEvent.submit(input.closest("form") as HTMLFormElement);
+		await waitFor(() => {
+			expect(mockUpdateSettings).toHaveBeenCalledWith(expect.objectContaining({ signingTimeout: 24 }));
+		});
+	});
+
+	it("shows a validation error for an invalid signing timeout value", async () => {
+		render(<ConsensusSettingsForm />);
+		const input = screen.getByLabelText("Signing Timeout (blocks)") as HTMLInputElement;
+		fireEvent.change(input, { target: { value: "0" } });
 		fireEvent.submit(input.closest("form") as HTMLFormElement);
 		await waitFor(() => {
 			expect(screen.getByText(/too small/i)).toBeTruthy();
