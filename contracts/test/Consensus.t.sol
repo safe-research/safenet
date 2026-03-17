@@ -67,23 +67,23 @@ contract ConsensusTest is Test {
     }
 
     function test_GetCurrentEpochs_MultipleEpochs() public {
+        uint64 nextBlock = uint64(block.number + 1);
         consensus.stageEpoch(
-            0x5afe01, uint64(block.number + 1), FROSTGroupId.T.wrap(keccak256("testGroup")), FROSTSignatureId.T.wrap("")
+            0x5afe01, nextBlock, FROSTGroupId.T.wrap(keccak256("testGroup")), FROSTSignatureId.T.wrap("")
         );
-        vm.roll(block.number + 1);
+        vm.roll(nextBlock++);
         consensus.stageEpoch(
-            0x5afe02, uint64(block.number + 1), FROSTGroupId.T.wrap(keccak256("testGroup")), FROSTSignatureId.T.wrap("")
+            0x5afe02, nextBlock, FROSTGroupId.T.wrap(keccak256("testGroup")), FROSTSignatureId.T.wrap("")
         );
-        vm.roll(block.number + 1);
-        // Use vm.expectCall(address(dep), abi.encodeWithSelector(dep.foo.selector, param1, paramN));
+        vm.roll(nextBlock++);
         consensus.stageEpoch(
-            0x5afe03, uint64(block.number + 1), FROSTGroupId.T.wrap(keccak256("testGroup")), FROSTSignatureId.T.wrap("")
+            0x5afe03, nextBlock, FROSTGroupId.T.wrap(keccak256("testGroup")), FROSTSignatureId.T.wrap("")
         );
         (Consensus.Epochs memory epochs) = consensus.getEpochsState();
         assertEq(0x5afe01, epochs.previous);
         assertEq(0x5afe02, epochs.active);
         assertEq(0x5afe03, epochs.staged);
-        assertEq(block.number + 1, epochs.rolloverBlock);
+        assertEq(nextBlock, epochs.rolloverBlock);
     }
 
     function test_updateValidatorStaker() public {
