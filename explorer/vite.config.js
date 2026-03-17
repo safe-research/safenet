@@ -25,9 +25,10 @@ export default defineConfig(({ mode }) => {
 			format: "es",
 		},
 		plugins: [
-			tanstackRouter({ 
+			tanstackRouter({
 				target: "react",
-				autoCodeSplitting: true 
+				autoCodeSplitting: true,
+				routeFileIgnorePattern: ".test.tsx?",
 			}),
 			viteReact(),
 			tailwindcss(),

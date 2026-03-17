@@ -8,6 +8,8 @@
 			"**/package.json",
 			"**/tsconfig.json",
 			"**/tsconfig.*.json",
+			"**/vite.config.js",
+			"**/vitest.config.ts",
 			"!**/src/*.gen.ts",
 			"!contracts/lib"
 		],

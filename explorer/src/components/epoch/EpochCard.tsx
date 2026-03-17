@@ -1,4 +1,5 @@
 import type { Hex } from "viem";
+import { InlineExplorerBlockLink } from "@/components/common/Info";
 import { Box, BoxTitle } from "@/components/Groups";
 
 export function EpochCard({
@@ -27,7 +28,11 @@ export function EpochCard({
 				{rolloverBlock !== undefined && rolloverBlock > 0n && (
 					<div className="flex justify-between">
 						<dt className="text-muted">Rollover Block</dt>
-						<dd className="font-mono">{rolloverBlock.toString()}</dd>
+						<dd>
+							<InlineExplorerBlockLink blockNumber={rolloverBlock}>
+								<span className="font-mono">{rolloverBlock.toString()}</span>
+							</InlineExplorerBlockLink>
+						</dd>
 					</div>
 				)}
 			</dl>

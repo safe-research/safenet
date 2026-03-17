@@ -28,6 +28,31 @@ export function InlineExplorerTxLink({
 	);
 }
 
+export function InlineExplorerBlockLink({
+	children,
+	blockNumber,
+	hideWithoutLink = false,
+}: {
+	children?: React.ReactNode;
+	blockNumber: bigint;
+	hideWithoutLink?: boolean;
+}) {
+	const chainId = useChainId();
+	const chainInfo = chainId.data === null ? null : SAFE_SERVICE_CHAINS[chainId.data.toString()];
+	if (chainInfo?.blockExplorers === undefined && hideWithoutLink) return;
+	if (chainInfo?.blockExplorers === undefined) return children;
+	const explorerLink = `${chainInfo.blockExplorers.default.url}/block/${blockNumber}`;
+	return (
+		<>
+			[
+			<a href={explorerLink} target="_blank" rel="noopener noreferrer">
+				{children} <ArrowTopRightOnSquareIcon className="inline-block h-4 w-4 mb-1" />
+			</a>
+			]
+		</>
+	);
+}
+
 export function InlineBlockInfo({ block }: { block: bigint }) {
 	const blockInfo = useBlockInfo(block);
 	if (blockInfo.data === null) {
