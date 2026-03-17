@@ -1,5 +1,5 @@
 import Sqlite3 from "better-sqlite3";
-import { ethAddress, type Address } from "viem";
+import { type Address, ethAddress } from "viem";
 import { describe, expect, it } from "vitest";
 import { g } from "../../frost/math.js";
 import { SqliteClientStorage } from "./sqlite.js";

@@ -223,8 +223,8 @@ export class SqliteClientStorage implements GroupInfoStorage, KeyGenInfoStorage,
 		this.setGroupColumn(groupId, "public_key", groupPublicKey.toBytes());
 	}
 
-	registerVerificationShare(groupId: GroupId, me: Address, verificationShare: FrostPoint): void {
-		this.setGroupParticipantColumn(groupId, me, "verification_share", verificationShare.toBytes());
+	registerVerificationShare(groupId: GroupId, participant: Address, verificationShare: FrostPoint): void {
+		this.setGroupParticipantColumn(groupId, participant, "verification_share", verificationShare.toBytes());
 	}
 
 	registerSigningShare(groupId: GroupId, me: Address, signingShare: bigint): void {
@@ -233,10 +233,10 @@ export class SqliteClientStorage implements GroupInfoStorage, KeyGenInfoStorage,
 
 	hasParticipant(groupId: GroupId, participant: Address): boolean {
 		const result = this.#db
-			.prepare("SELECT address FROM group_participants WHERE group_id = ? AND address = ?")
+			.prepare("SELECT EXISTS (SELECT 1 FROM group_participants WHERE group_id = ? AND address = ?)")
 			.pluck()
-			.all(groupId, participant)
-		return result.length > 0;
+			.get(groupId, participant);
+		return result === 1;
 	}
 
 	participants(groupId: GroupId): readonly Address[] {
@@ -275,12 +275,7 @@ export class SqliteClientStorage implements GroupInfoStorage, KeyGenInfoStorage,
 		this.#db.prepare("DELETE FROM groups WHERE id = ?").run(groupId);
 	}
 
-	registerKeyGen(
-		groupId: GroupId,
-		me: Address,
-		encryptionSecretKey: bigint,
-		coefficients: readonly bigint[],
-	): void {
+	registerKeyGen(groupId: GroupId, me: Address, encryptionSecretKey: bigint, coefficients: readonly bigint[]): void {
 		this.#db.transaction(() => {
 			this.setGroupParticipantColumn(groupId, me, "encryption_secret_key", scalarToBytes(encryptionSecretKey));
 			this.setGroupParticipantColumn(groupId, me, "coefficients", concat(coefficients.map(scalarToBytes)));

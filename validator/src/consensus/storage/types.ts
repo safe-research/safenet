@@ -6,7 +6,7 @@ export type GroupInfoStorage = {
 	knownGroups(): GroupId[];
 	registerGroup(groupId: GroupId, participants: readonly Address[], threshold: number): void;
 	registerGroupKey(groupId: GroupId, groupPublicKey: FrostPoint): void;
-	registerVerificationShare(groupId: GroupId, me: Address, verificationShare: FrostPoint): void;
+	registerVerificationShare(groupId: GroupId, participant: Address, verificationShare: FrostPoint): void;
 	registerSigningShare(groupId: GroupId, me: Address, signingShare: bigint): void;
 
 	publicKey(groupId: GroupId): FrostPoint | undefined;
@@ -19,12 +19,7 @@ export type GroupInfoStorage = {
 };
 
 export type KeyGenInfoStorage = {
-	registerKeyGen(
-		groupId: GroupId,
-		me: Address,
-		encryptionSecretKey: bigint,
-		coefficients: readonly bigint[],
-	): void;
+	registerKeyGen(groupId: GroupId, me: Address, encryptionSecretKey: bigint, coefficients: readonly bigint[]): void;
 	registerCommitments(
 		groupId: GroupId,
 		peer: Address,
