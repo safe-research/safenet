@@ -119,9 +119,9 @@ describe("receiving secret shares", () => {
 		expect(handleKeygenSecrets).toBeCalledTimes(1);
 		expect(handleKeygenSecrets).toBeCalledWith(
 			"0x06cb03baac74421225341827941e88d9547e5459c4b3715c0000000000000000",
+			entryPoint06Address,
 			EVENT.participant,
 			[0x5afe5afe5afe01n, 0x5afe5afe5afe02n, 0x5afe5afe5afe03n],
-			entryPoint06Address,
 		);
 	});
 
@@ -159,9 +159,9 @@ describe("receiving secret shares", () => {
 		expect(handleKeygenSecrets).toBeCalledTimes(1);
 		expect(handleKeygenSecrets).toBeCalledWith(
 			"0x06cb03baac74421225341827941e88d9547e5459c4b3715c0000000000000000",
+			entryPoint06Address,
 			EVENT.participant,
 			[0x5afe5afe5afe01n, 0x5afe5afe5afe02n, 0x5afe5afe5afe03n],
-			entryPoint06Address,
 		);
 	});
 
@@ -202,9 +202,9 @@ describe("receiving secret shares", () => {
 		expect(handleKeygenSecrets).toBeCalledTimes(1);
 		expect(handleKeygenSecrets).toBeCalledWith(
 			"0x06cb03baac74421225341827941e88d9547e5459c4b3715c0000000000000000",
+			entryPoint06Address,
 			EVENT.participant,
 			[0x5afe5afe5afe01n, 0x5afe5afe5afe02n, 0x5afe5afe5afe03n],
-			entryPoint06Address,
 		);
 	});
 
@@ -256,9 +256,9 @@ describe("receiving secret shares", () => {
 		expect(handleKeygenSecrets).toBeCalledTimes(1);
 		expect(handleKeygenSecrets).toBeCalledWith(
 			"0x06cb03baac74421225341827941e88d9547e5459c4b3715c0000000000000000",
+			entryPoint06Address,
 			EVENT.participant,
 			[0x5afe5afe5afe01n, 0x5afe5afe5afe02n, 0x5afe5afe5afe03n],
-			entryPoint06Address,
 		);
 	});
 
@@ -310,9 +310,9 @@ describe("receiving secret shares", () => {
 		expect(handleKeygenSecrets).toBeCalledTimes(1);
 		expect(handleKeygenSecrets).toBeCalledWith(
 			"0x06cb03baac74421225341827941e88d9547e5459c4b3715c0000000000000000",
+			entryPoint06Address,
 			EVENT.participant,
 			[0x5afe5afe5afe01n, 0x5afe5afe5afe02n, 0x5afe5afe5afe03n],
-			entryPoint06Address,
 		);
 	});
 
@@ -354,9 +354,9 @@ describe("receiving secret shares", () => {
 		expect(handleKeygenSecrets).toBeCalledTimes(1);
 		expect(handleKeygenSecrets).toBeCalledWith(
 			"0x06cb03baac74421225341827941e88d9547e5459c4b3715c0000000000000000",
+			entryPoint06Address,
 			EVENT.participant,
 			[0x5afe5afe5afe01n, 0x5afe5afe5afe02n, 0x5afe5afe5afe03n],
-			entryPoint06Address,
 		);
 	});
 });

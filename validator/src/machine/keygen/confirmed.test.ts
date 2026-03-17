@@ -226,7 +226,10 @@ describe("key gen confirmed", () => {
 		expect(participants).toBeCalledTimes(1);
 		expect(participants).toBeCalledWith("0x06cb03baac74421225341827941e88d9547e5459c4b3715c0000000000000000");
 		expect(generateNonceTree).toBeCalledTimes(1);
-		expect(generateNonceTree).toBeCalledWith("0x06cb03baac74421225341827941e88d9547e5459c4b3715c0000000000000000");
+		expect(generateNonceTree).toBeCalledWith(
+			"0x06cb03baac74421225341827941e88d9547e5459c4b3715c0000000000000000",
+			entryPoint06Address,
+		);
 	});
 
 	it("should throw if missing public key for group", async () => {

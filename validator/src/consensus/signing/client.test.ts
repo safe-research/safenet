@@ -107,10 +107,11 @@ describe("signing", () => {
 			r: FrostPoint;
 		}[] = [];
 		const clients = TEST_SIGNERS.map((a) => {
-			const storage = createClientStorage(a.account);
+			const storage = createClientStorage();
 			storage.registerGroup(TEST_GROUP.groupId, TEST_GROUP.participants, TEST_GROUP.participants.length);
-			storage.registerVerification(TEST_GROUP.groupId, TEST_GROUP.publicKey, a.verificationShare);
-			storage.registerSigningShare(TEST_GROUP.groupId, a.signingShare);
+			storage.registerGroupKey(TEST_GROUP.groupId, TEST_GROUP.publicKey);
+			storage.registerVerificationShare(TEST_GROUP.groupId, a.account, a.verificationShare);
+			storage.registerSigningShare(TEST_GROUP.groupId, a.account, a.signingShare);
 			const client = new SigningClient(storage);
 			return {
 				account: a.account,
@@ -134,8 +135,8 @@ describe("signing", () => {
 				leaves: [zeroHash],
 				root: treeInfo.root as Hex,
 			};
-			storage.registerNonceTree(groupId, nonceTree);
-			client.handleNonceCommitmentsHash(groupId, nonceTree.root, 0n);
+			storage.registerNonceTree(groupId, account, nonceTree);
+			client.handleNonceCommitmentsHash(groupId, account, nonceTree.root, 0n);
 		}
 		log("------------------------ Trigger Signing Request ------------------------");
 		const signatureId = "0x0000000000000000000000017fa9385be102ac3eac297483dd6233d62b3e1496";
@@ -144,11 +145,11 @@ describe("signing", () => {
 			log(`>>>> Signing request to ${account} >>>>`);
 			const commitments = client.createNonceCommitments(
 				groupId,
+				account,
 				signatureId,
 				message,
 				0n,
 				TEST_GROUP.participants,
-				account,
 			);
 			nonceRevealEvent.push({
 				signatureId,

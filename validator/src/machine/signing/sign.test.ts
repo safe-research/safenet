@@ -140,11 +140,11 @@ describe("collecting shares", () => {
 		expect(isVerified).toBeCalledTimes(1);
 		expect(createNonceCommitments).toBeCalledWith(
 			"0x0000000000000000000000007fa9385be102ac3eac297483dd6233d62b3e1496",
+			ethAddress,
 			"0x5af35af3",
 			"0x5afe5afe",
 			0n,
 			["0x0000000000000000000000000000000000000001", "0x0000000000000000000000000000000000000002"],
-			ethAddress,
 		);
 		expect(createNonceCommitments).toBeCalledTimes(1);
 		expect(diff.rollover).toBeUndefined();
@@ -207,25 +207,30 @@ describe("collecting shares", () => {
 		expect(isVerified).toBeCalledTimes(1);
 		expect(createNonceCommitments).toBeCalledWith(
 			"0x0000000000000000000000007fa9385be102ac3eac297483dd6233d62b3e1496",
+			ethAddress,
 			"0x5af35af3",
 			"0x5afe5afe",
 			0n,
 			["0x0000000000000000000000000000000000000001", "0x0000000000000000000000000000000000000002"],
-			ethAddress,
 		);
 		expect(createNonceCommitments).toBeCalledTimes(1);
 		expect(availableNoncesCount).toBeCalledTimes(2);
 		expect(availableNoncesCount).nthCalledWith(
 			1,
 			"0x0000000000000000000000007fa9385be102ac3eac297483dd6233d62b3e1496",
+			ethAddress,
 			0n,
 		);
 		expect(availableNoncesCount).nthCalledWith(
 			2,
 			"0x0000000000000000000000007fa9385be102ac3eac297483dd6233d62b3e1496",
+			ethAddress,
 			1n,
 		);
-		expect(generateNonceTree).toBeCalledWith("0x0000000000000000000000007fa9385be102ac3eac297483dd6233d62b3e1496");
+		expect(generateNonceTree).toBeCalledWith(
+			"0x0000000000000000000000007fa9385be102ac3eac297483dd6233d62b3e1496",
+			ethAddress,
+		);
 		expect(generateNonceTree).toBeCalledTimes(1);
 
 		expect(diff.rollover).toBeUndefined();

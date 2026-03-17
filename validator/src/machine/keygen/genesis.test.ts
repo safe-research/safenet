@@ -138,7 +138,7 @@ describe("gensis key gen", () => {
 		expect(setupGroup).toBeCalledTimes(1);
 		expect(setupGroup).toBeCalledWith(PARTICIPANTS.slice(0, 4).sort(), 3, zeroHash);
 		expect(setupKeyGen).toBeCalledTimes(1);
-		expect(setupKeyGen).toBeCalledWith(groupSetup.groupId, PARTICIPANTS.slice(0, 4).sort(), 3, entryPoint06Address);
+		expect(setupKeyGen).toBeCalledWith(groupSetup.groupId, entryPoint06Address, PARTICIPANTS.slice(0, 4).sort(), 3);
 	});
 
 	it("should trigger genesis key gen with correct parameters", async () => {
@@ -191,6 +191,6 @@ describe("gensis key gen", () => {
 		expect(setupGroup).toBeCalledTimes(1);
 		expect(setupGroup).toBeCalledWith(PARTICIPANTS.slice(0, 4).sort(), 3, zeroHash);
 		expect(setupKeyGen).toBeCalledTimes(1);
-		expect(setupKeyGen).toBeCalledWith(groupSetup.groupId, PARTICIPANTS.slice(0, 4).sort(), 3, entryPoint06Address);
+		expect(setupKeyGen).toBeCalledWith(groupSetup.groupId, entryPoint06Address, PARTICIPANTS.slice(0, 4).sort(), 3);
 	});
 });
