@@ -3,10 +3,10 @@ import type { ProposalStatus } from "@/lib/consensus";
 
 export function StatusBadge({ status }: { status: ProposalStatus }) {
 	if (status === "TIMED_OUT") {
-		return <Badge className="bg-error text-white">TIMED OUT</Badge>;
+		return <Badge variant="error">TIMED OUT</Badge>;
 	}
 	if (status === "ATTESTED") {
-		return <Badge className="bg-positive text-positive-foreground">ATTESTED</Badge>;
+		return <Badge variant="positive">ATTESTED</Badge>;
 	}
-	return <Badge className="bg-pending text-pending-foreground">PROPOSED</Badge>;
+	return <Badge variant="pending">PROPOSED</Badge>;
 }

@@ -14,7 +14,7 @@ describe("Badge", () => {
 	it.each([
 		{ variant: "positive" as const, text: "OK", expectedClass: "bg-positive" },
 		{ variant: "pending" as const, text: "PENDING", expectedClass: "bg-pending" },
-		{ variant: "error" as const, text: "ERROR", expectedClass: "bg-error-surface" },
+		{ variant: "error" as const, text: "ERROR", expectedClass: "bg-error" },
 		{ variant: "warning" as const, text: "WARN", expectedClass: "bg-warning-surface" },
 		{ variant: "neutral" as const, text: "NEUTRAL", expectedClass: "bg-surface-0" },
 	])("renders with $variant variant and applies correct class", ({ variant, text, expectedClass }) => {

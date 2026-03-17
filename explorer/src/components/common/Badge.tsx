@@ -3,7 +3,7 @@ import { cn } from "@/lib/utils";
 const variantClasses = {
 	positive: "bg-positive text-positive-foreground",
 	pending: "bg-pending text-pending-foreground",
-	error: "bg-error-surface text-error border border-error-outline",
+	error: "bg-error text-error-foreground",
 	warning: "bg-warning-surface text-warning border border-warning-outline",
 	neutral: "bg-surface-0 text-muted border border-surface-outline",
 } as const;

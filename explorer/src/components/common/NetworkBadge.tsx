@@ -2,14 +2,18 @@ import { Badge } from "@/components/common/Badge";
 import { SAFE_SERVICE_CHAINS } from "@/lib/chains";
 import { contrastColor } from "@/lib/utils";
 
-const FALLBACK_COLOR = "#4B5563";
-
 export function NetworkBadge({ chainId, title, className }: { chainId: bigint; title?: string; className?: string }) {
 	const chain = SAFE_SERVICE_CHAINS[chainId.toString()];
 	const label = (chain?.shortName ?? chainId.toString()).toUpperCase();
-	const bgColor = chain?.color ?? FALLBACK_COLOR;
+	if (chain?.color !== undefined) {
+		return (
+			<Badge bgColor={chain.color} fgColor={contrastColor(chain.color)} title={title} className={className}>
+				{label}
+			</Badge>
+		);
+	}
 	return (
-		<Badge bgColor={bgColor} fgColor={contrastColor(bgColor)} title={title} className={className}>
+		<Badge variant="neutral" title={title} className={className}>
 			{label}
 		</Badge>
 	);

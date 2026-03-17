@@ -8,7 +8,7 @@ interface GroupProps {
 }
 
 function Box({ children, className = "" }: GroupProps) {
-	return <div className={cn("bg-surface-1 p-6 border border-surface-outline rounded-lg", className)}>{children}</div>;
+	return <div className={cn("bg-surface-1 p-6 border border-surface-outline rounded-card", className)}>{children}</div>;
 }
 
 function BoxTitle({ children }: { children: React.ReactNode }) {
