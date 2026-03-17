@@ -31,7 +31,7 @@ export const handleEpochStaged = async (
 		signing: [machineStates.rollover.message, undefined],
 	};
 
-	if (!signingClient.participants(groupId).includes(machineConfig.account)) {
+	if (!signingClient.hasParticipant(groupId, machineConfig.account)) {
 		return diff;
 	}
 

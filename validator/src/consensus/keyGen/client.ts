@@ -44,6 +44,10 @@ export class KeyGenClient {
 		this.#logger = logger;
 	}
 
+	hasParticipant(groupId: GroupId, participant: Address): boolean {
+		return this.#storage.hasParticipant(groupId, participant);
+	}
+
 	participants(groupId: GroupId): readonly Address[] {
 		return this.#storage.participants(groupId);
 	}

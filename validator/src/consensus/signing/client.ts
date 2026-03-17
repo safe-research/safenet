@@ -191,6 +191,10 @@ export class SigningClient {
 		return this.#storage.signingGroup(signatureId);
 	}
 
+	hasParticipant(groupId: GroupId, participant: Address): boolean {
+		return this.#storage.hasParticipant(groupId, participant);
+	}
+
 	participants(groupId: GroupId): Address[] {
 		return this.#storage.participants(groupId).slice();
 	}

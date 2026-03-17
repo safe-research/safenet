@@ -26,7 +26,7 @@ export const handleKeyGenSecretShared = async (
 	}
 
 	// TODO: [observe mode] allow to observe state of shared secrets (to check once it is done)
-	if (!keyGenClient.participants(groupId).includes(machineConfig.account)) {
+	if (!keyGenClient.hasParticipant(groupId, machineConfig.account)) {
 		return {};
 	}
 

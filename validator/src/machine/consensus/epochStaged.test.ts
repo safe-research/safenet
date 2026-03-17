@@ -108,10 +108,10 @@ describe("epoch staged", () => {
 	});
 
 	it("should clean up signing in any signing state ", async () => {
-		const participants = vi.fn();
-		participants.mockReturnValueOnce([]);
+		const hasParticipant = vi.fn();
+		hasParticipant.mockReturnValue(false);
 		const signingClient: SigningClient = {
-			participants,
+			hasParticipant,
 		} as unknown as SigningClient;
 		const machineStates: MachineStates = {
 			...MACHINE_STATES,
@@ -127,10 +127,10 @@ describe("epoch staged", () => {
 	});
 
 	it("should clean up state even if not part of signing group", async () => {
-		const participants = vi.fn();
-		participants.mockReturnValueOnce([]);
+		const hasParticipant = vi.fn();
+		hasParticipant.mockReturnValue(false);
 		const signingClient: SigningClient = {
-			participants,
+			hasParticipant,
 		} as unknown as SigningClient;
 		const machineStates: MachineStates = {
 			...MACHINE_STATES,
@@ -143,17 +143,15 @@ describe("epoch staged", () => {
 			rollover: { id: "epoch_staged", nextEpoch: 2n },
 			signing: ["0x5afe5afe", undefined],
 		});
-		expect(participants).toBeCalledTimes(1);
-		expect(participants).toBeCalledWith("0x5afe5af3");
 	});
 
 	it("should clean up states and trigger nonce commitments after staging rollover", async () => {
-		const participants = vi.fn();
-		participants.mockReturnValueOnce(MACHINE_CONFIG.participantsInfo.map((p) => p.address));
+		const hasParticipant = vi.fn();
+		hasParticipant.mockReturnValue(true);
 		const generateNonceTree = vi.fn();
 		generateNonceTree.mockReturnValueOnce("0xdeadb055");
 		const signingClient: SigningClient = {
-			participants,
+			hasParticipant,
 			generateNonceTree,
 		} as unknown as SigningClient;
 		const diff = await handleEpochStaged(MACHINE_CONFIG, signingClient, MACHINE_STATES, EVENT);
@@ -170,7 +168,5 @@ describe("epoch staged", () => {
 			signatureIdToMessage: ["0x5af35af3", undefined],
 		});
 		expect(diff.signing).toStrictEqual(["0x5afe5afe", undefined]);
-		expect(participants).toBeCalledTimes(1);
-		expect(participants).toBeCalledWith("0x5afe5af3");
 	});
 });

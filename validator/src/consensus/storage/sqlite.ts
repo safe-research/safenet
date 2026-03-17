@@ -223,12 +223,20 @@ export class SqliteClientStorage implements GroupInfoStorage, KeyGenInfoStorage,
 		this.setGroupColumn(groupId, "public_key", groupPublicKey.toBytes());
 	}
 
-	registerVerificationShare(groupId: GroupId, participant: Address, verificationShare: FrostPoint): void {
-		this.setGroupParticipantColumn(groupId, participant, "verification_share", verificationShare.toBytes());
+	registerVerificationShare(groupId: GroupId, me: Address, verificationShare: FrostPoint): void {
+		this.setGroupParticipantColumn(groupId, me, "verification_share", verificationShare.toBytes());
 	}
 
-	registerSigningShare(groupId: GroupId, participant: Address, signingShare: bigint): void {
-		this.setGroupParticipantColumn(groupId, participant, "signing_share", scalarToBytes(signingShare));
+	registerSigningShare(groupId: GroupId, me: Address, signingShare: bigint): void {
+		this.setGroupParticipantColumn(groupId, me, "signing_share", scalarToBytes(signingShare));
+	}
+
+	hasParticipant(groupId: GroupId, participant: Address): boolean {
+		const result = this.#db
+			.prepare("SELECT address FROM group_participants WHERE group_id = ? AND address = ?")
+			.pluck()
+			.all(groupId, participant)
+		return result.length > 0;
 	}
 
 	participants(groupId: GroupId): readonly Address[] {
@@ -255,12 +263,12 @@ export class SqliteClientStorage implements GroupInfoStorage, KeyGenInfoStorage,
 		return this.getGroupColumn(groupId, "public_key", dbPointSchema.optional());
 	}
 
-	verificationShare(groupId: GroupId, participant: Address): FrostPoint {
-		return this.getGroupParticipantColumn(groupId, participant, "verification_share", dbPointSchema);
+	verificationShare(groupId: GroupId, me: Address): FrostPoint {
+		return this.getGroupParticipantColumn(groupId, me, "verification_share", dbPointSchema);
 	}
 
-	signingShare(groupId: GroupId, participant: Address): bigint | undefined {
-		return this.getGroupParticipantColumn(groupId, participant, "signing_share", dbScalarSchema.optional());
+	signingShare(groupId: GroupId, me: Address): bigint | undefined {
+		return this.getGroupParticipantColumn(groupId, me, "signing_share", dbScalarSchema.optional());
 	}
 
 	unregisterGroup(groupId: GroupId): void {
@@ -269,13 +277,13 @@ export class SqliteClientStorage implements GroupInfoStorage, KeyGenInfoStorage,
 
 	registerKeyGen(
 		groupId: GroupId,
-		participant: Address,
+		me: Address,
 		encryptionSecretKey: bigint,
 		coefficients: readonly bigint[],
 	): void {
 		this.#db.transaction(() => {
-			this.setGroupParticipantColumn(groupId, participant, "encryption_secret_key", scalarToBytes(encryptionSecretKey));
-			this.setGroupParticipantColumn(groupId, participant, "coefficients", concat(coefficients.map(scalarToBytes)));
+			this.setGroupParticipantColumn(groupId, me, "encryption_secret_key", scalarToBytes(encryptionSecretKey));
+			this.setGroupParticipantColumn(groupId, me, "coefficients", concat(coefficients.map(scalarToBytes)));
 		})();
 	}
 
@@ -419,19 +427,20 @@ export class SqliteClientStorage implements GroupInfoStorage, KeyGenInfoStorage,
 		return exists === 0;
 	}
 
-	encryptionSecretKey(groupId: GroupId, participant: Address): bigint {
-		return this.getGroupParticipantColumn(groupId, participant, "encryption_secret_key", dbScalarSchema);
-	}
-	encryptionPublicKey(groupId: GroupId, participant: Address): FrostPoint {
-		return this.getGroupParticipantColumn(groupId, participant, "encryption_public_key", dbPointSchema);
+	encryptionSecretKey(groupId: GroupId, me: Address): bigint {
+		return this.getGroupParticipantColumn(groupId, me, "encryption_secret_key", dbScalarSchema);
 	}
 
-	coefficients(groupId: GroupId, participant: Address): readonly bigint[] {
-		return this.getGroupParticipantColumn(groupId, participant, "coefficients", dbScalarArraySchema);
+	encryptionPublicKey(groupId: GroupId, peer: Address): FrostPoint {
+		return this.getGroupParticipantColumn(groupId, peer, "encryption_public_key", dbPointSchema);
 	}
 
-	commitments(groupId: GroupId, participant: Address): readonly FrostPoint[] {
-		return this.getGroupParticipantColumn(groupId, participant, "commitments", dbPointArraySchema);
+	coefficients(groupId: GroupId, me: Address): readonly bigint[] {
+		return this.getGroupParticipantColumn(groupId, me, "coefficients", dbScalarArraySchema);
+	}
+
+	commitments(groupId: GroupId, peer: Address): readonly FrostPoint[] {
+		return this.getGroupParticipantColumn(groupId, peer, "commitments", dbPointArraySchema);
 	}
 
 	commitmentsMap(groupId: GroupId): Map<Address, readonly FrostPoint[]> {
