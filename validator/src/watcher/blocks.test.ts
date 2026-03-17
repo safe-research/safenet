@@ -1,7 +1,7 @@
 import { type Block, BlockNotFoundError, type GetBlockParameters, keccak256, numberToHex, toHex } from "viem";
 import { describe, expect, it, vi } from "vitest";
-
-import { BlockWatcher, type Client, type Timer } from "./blocks.js";
+import { BlockWatcher, type Client } from "./blocks.js";
+import type { Timer } from "./timer.js";
 
 const CONFIG = {
 	blockTime: 2000,
@@ -12,8 +12,8 @@ const CONFIG = {
 
 const setupCreate = (config: { lastIndexedBlock: bigint | null; maxReorgDepth?: number }) => {
 	const getBlock = vi.fn();
-	const now = vi.fn();
 	const sleep = vi.fn();
+	const sleepUntil = vi.fn();
 
 	return {
 		create() {
@@ -24,15 +24,15 @@ const setupCreate = (config: { lastIndexedBlock: bigint | null; maxReorgDepth?: 
 					getBlock,
 				} as unknown as Client,
 				timer: {
-					now,
 					sleep,
+					sleepUntil,
 				} as unknown as Timer,
 			});
 		},
 		mocks: {
 			getBlock,
-			now,
 			sleep,
+			sleepUntil,
 		},
 	};
 };
@@ -69,9 +69,12 @@ const setupNext = async (config: { latestBlock: bigint; startTime: number; maxRe
 
 	// Setup useful default mocks for the timer.
 	let time = config.startTime;
-	mocks.now.mockImplementation(() => time);
 	mocks.sleep.mockImplementation((ms: number) => {
 		time += ms;
+		return Promise.resolve();
+	});
+	mocks.sleepUntil.mockImplementation((unixTimestampMs: number) => {
+		time = Math.max(time, unixTimestampMs);
 		return Promise.resolve();
 	});
 
@@ -98,11 +101,12 @@ const block = (
 const newBlockUpdate = (
 	b: {
 		number: bigint;
-	} & Partial<Pick<Block<bigint, false, "latest">, "hash" | "logsBloom">>,
+	} & Partial<Pick<Block<bigint, false, "latest">, "hash" | "timestamp" | "logsBloom">>,
 ) => ({
 	type: "watcher_update_new_block",
 	blockNumber: b.number,
 	blockHash: b.hash ?? numberToHex(b.number, { size: 32 }),
+	blockTimestamp: b.timestamp ?? (b.number * BigInt(CONFIG.blockTime)) / 1000n,
 	logsBloom: b.logsBloom ?? numberToHex(b.number, { size: 512 }),
 });
 
@@ -202,7 +206,7 @@ describe("BlockWatcher", () => {
 			mocks.getBlock.mockResolvedValueOnce(block({ number: 1001n }));
 
 			const update = await next();
-			expect(mocks.sleep.mock.calls).toEqual([[1900 + 500]]);
+			expect(mocks.sleepUntil.mock.calls).toEqual([[2002500]]);
 			expect(mocks.getBlock.mock.calls).toEqual([[{ blockNumber: 1001n }]]);
 
 			expect(update).toStrictEqual(newBlockUpdate({ number: 1001n }));
@@ -216,7 +220,8 @@ describe("BlockWatcher", () => {
 			mocks.getBlock.mockResolvedValueOnce(block({ number: 1001n }));
 
 			const update = await next();
-			expect(mocks.sleep.mock.calls).toEqual([[1900 + 500], [200], [100]]);
+			expect(mocks.sleepUntil.mock.calls).toEqual([[2002500], [2002500], [2002500]]);
+			expect(mocks.sleep.mock.calls).toEqual([[200], [100]]);
 			expect(mocks.getBlock.mock.calls).toEqual([
 				[{ blockNumber: 1001n }],
 				[{ blockNumber: 1001n }],
@@ -233,10 +238,11 @@ describe("BlockWatcher", () => {
 			mocks.getBlock.mockRejectedValueOnce(new BlockNotFoundError({ blockNumber: 1001n }));
 			mocks.getBlock.mockRejectedValueOnce(new BlockNotFoundError({ blockNumber: 1001n }));
 			mocks.getBlock.mockRejectedValueOnce(new BlockNotFoundError({ blockNumber: 1001n }));
-			mocks.getBlock.mockResolvedValueOnce(block({ number: 1001n }));
+			mocks.getBlock.mockResolvedValueOnce(block({ number: 1001n, timestamp: 2004000n }));
 
 			const update = await next();
-			expect(mocks.sleep.mock.calls).toEqual([[1900 + 500], [200], [100], [50], [1650]]);
+			expect(mocks.sleepUntil.mock.calls).toEqual([[2002500], [2002500], [2002500], [2002500], [2004500]]);
+			expect(mocks.sleep.mock.calls).toEqual([[200], [100], [50]]);
 			expect(mocks.getBlock.mock.calls).toEqual([
 				[{ blockNumber: 1001n }],
 				[{ blockNumber: 1001n }],
@@ -245,7 +251,7 @@ describe("BlockWatcher", () => {
 				[{ blockNumber: 1001n }],
 			]);
 
-			expect(update).toStrictEqual(newBlockUpdate({ number: 1001n }));
+			expect(update).toStrictEqual(newBlockUpdate({ number: 1001n, timestamp: 2004000n }));
 		});
 
 		it("supports deep reorgs", async () => {
@@ -266,7 +272,7 @@ describe("BlockWatcher", () => {
 			);
 
 			const updates = [await next(), await next(), await next(), await next(), await next()];
-			expect(mocks.sleep.mock.calls).toEqual([[1900 + 500]]);
+			expect(mocks.sleepUntil.mock.calls).toEqual([[2002500], [2000500], [1998500], [1996500], [1998500]]);
 			expect(mocks.getBlock.mock.calls).toEqual([
 				[{ blockNumber: 1001n }],
 				[{ blockNumber: 1000n }],

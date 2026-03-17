@@ -8,12 +8,9 @@
 import { BlockNotFoundError, type Hex, type Prettify, type PublicClient, type Block as ViemBlock } from "viem";
 import { withDefaults } from "../utils/config.js";
 import { maxBigInt } from "../utils/math.js";
+import { DEFAULT_TIMER, type Timer } from "./timer.js";
 
 export type Client = Pick<PublicClient, "getBlock">;
-export type Timer = {
-	now(): number;
-	sleep(ms: number): Promise<void>;
-};
 
 /**
  * Required block watcher settings.
@@ -47,9 +44,22 @@ export type CreateParams = Prettify<
  * Block watcher update.
  */
 export type BlockUpdate =
-	| { type: "watcher_update_warp_to_block"; fromBlock: bigint; toBlock: bigint }
-	| { type: "watcher_update_uncle_block"; blockNumber: bigint }
-	| { type: "watcher_update_new_block"; blockNumber: bigint; blockHash: Hex; logsBloom: Hex };
+	| {
+			type: "watcher_update_warp_to_block";
+			fromBlock: bigint;
+			toBlock: bigint;
+	  }
+	| {
+			type: "watcher_update_uncle_block";
+			blockNumber: bigint;
+	  }
+	| {
+			type: "watcher_update_new_block";
+			blockNumber: bigint;
+			blockHash: Hex;
+			blockTimestamp: bigint;
+			logsBloom: Hex;
+	  };
 
 type Config = Settings & Options;
 type Block = ViemBlock<bigint, false, "latest">;
@@ -61,12 +71,7 @@ type PendingBlock = {
 export const DEFAULT_OPTIONS = {
 	blockPropagationDelay: 500,
 	blockRetryDelays: [200, 100, 100],
-	timer: {
-		now: Date.now,
-		sleep(ms: number): Promise<void> {
-			return new Promise((resolve) => setTimeout(resolve, ms));
-		},
-	},
+	timer: DEFAULT_TIMER,
 };
 
 export class BlockWatcher {
@@ -145,6 +150,7 @@ export class BlockWatcher {
 						type: "watcher_update_new_block",
 						blockNumber: block.number,
 						blockHash: block.hash,
+						blockTimestamp: block.timestamp,
 						logsBloom: block.logsBloom,
 					}) as const,
 			),
@@ -164,12 +170,9 @@ export class BlockWatcher {
 	/**
 	 * Sleeps until the pending block is suspected to be ready.
 	 */
-	async #waitForPendingBlock() {
-		const now = this.#config.timer.now();
-		const delay = Number(this.#pending.timestampMs) + this.#config.blockPropagationDelay - now;
-		if (delay > 0) {
-			await this.#config.timer.sleep(delay);
-		}
+	#waitForPendingBlock() {
+		const until = Number(this.#pending.timestampMs) + this.#config.blockPropagationDelay;
+		return this.#config.timer.sleepUntil(until);
 	}
 
 	/**
@@ -250,6 +253,7 @@ export class BlockWatcher {
 			type: "watcher_update_new_block",
 			blockNumber: block.number,
 			blockHash: block.hash,
+			blockTimestamp: block.timestamp,
 			logsBloom: block.logsBloom,
 		};
 	}

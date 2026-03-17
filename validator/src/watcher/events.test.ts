@@ -4,6 +4,7 @@ import { describe, expect, it, vi } from "vitest";
 import { testLogger } from "../__tests__/config.js";
 import type { BlockUpdate } from "./blocks.js";
 import { type Client, type Config, EventWatcher, type Log } from "./events.js";
+import type { Timer } from "./timer.js";
 
 const CONFIG = {
 	blockPageSize: 5,
@@ -22,8 +23,12 @@ const WATCH = {
 
 type TestLog = Log<typeof WATCH.events>;
 
-const setup = ({ fallibleEvents }: Partial<Pick<Config, "fallibleEvents">> = {}) => {
+const setup = ({
+	fallibleEvents,
+	blockIndexingDelay,
+}: Partial<Pick<Config, "fallibleEvents" | "blockIndexingDelay">> = {}) => {
 	const getLogs = vi.fn();
+	const sleepUntil = vi.fn();
 
 	return {
 		events: new EventWatcher({
@@ -33,10 +38,15 @@ const setup = ({ fallibleEvents }: Partial<Pick<Config, "fallibleEvents">> = {})
 			client: {
 				getLogs,
 			} as unknown as Client,
+			blockIndexingDelay,
 			fallibleEvents: fallibleEvents ?? CONFIG.fallibleEvents,
+			timer: {
+				sleepUntil,
+			} as unknown as Timer,
 		}),
 		mocks: {
 			getLogs,
+			sleepUntil,
 		},
 	};
 };
@@ -105,7 +115,13 @@ describe("EventWatcher", () => {
 		it("does not process new block updates before the previous is done", async () => {
 			for (const update of [
 				{ type: "watcher_update_warp_to_block", fromBlock: 123n, toBlock: 130n },
-				{ type: "watcher_update_new_block", blockNumber: 0n, blockHash: zeroHash, logsBloom: BLOOM_ZERO },
+				{
+					type: "watcher_update_new_block",
+					blockNumber: 0n,
+					blockHash: zeroHash,
+					blockTimestamp: 0n,
+					logsBloom: BLOOM_ZERO,
+				},
 			] as const) {
 				const { events } = setup();
 
@@ -296,6 +312,7 @@ describe("EventWatcher", () => {
 				type: "watcher_update_new_block",
 				blockNumber: 1337n,
 				blockHash: keccak256(toHex("1337")),
+				blockTimestamp: 42n,
 				logsBloom: BLOOM_ALL,
 			});
 
@@ -320,6 +337,26 @@ describe("EventWatcher", () => {
 			]);
 		});
 
+		it("should wait for configured indexing delay", async () => {
+			const { events, mocks } = setup({ blockIndexingDelay: 1337 });
+
+			events.onBlockUpdate({
+				type: "watcher_update_new_block",
+				blockNumber: 1337n,
+				blockHash: keccak256(toHex("1337")),
+				blockTimestamp: 41n,
+				logsBloom: bloom(WATCH.address[0], toEventSelector(WATCH.events[1])),
+			});
+
+			mocks.sleepUntil.mockResolvedValue(undefined);
+			mocks.getLogs.mockResolvedValue([]);
+
+			await events.next();
+
+			expect(mocks.sleepUntil.mock.calls).toEqual([[42337]]);
+			expect(mocks.getLogs).toBeCalledTimes(1);
+		});
+
 		it("query blocks if at least one address and event is in the bloom filter", async () => {
 			const { events, mocks } = setup();
 
@@ -327,6 +364,7 @@ describe("EventWatcher", () => {
 				type: "watcher_update_new_block",
 				blockNumber: 1337n,
 				blockHash: keccak256(toHex("1337")),
+				blockTimestamp: 42n,
 				logsBloom: bloom(WATCH.address[0], toEventSelector(WATCH.events[1])),
 			});
 
@@ -351,6 +389,7 @@ describe("EventWatcher", () => {
 					type: "watcher_update_new_block",
 					blockNumber: 42n,
 					blockHash: keccak256(toHex("the answer to life, the universe, and everything")),
+					blockTimestamp: 42n,
 					logsBloom,
 				});
 
@@ -368,6 +407,7 @@ describe("EventWatcher", () => {
 				type: "watcher_update_new_block",
 				blockNumber: 42n,
 				blockHash: keccak256(toHex("the answer to life, the universe, and everything")),
+				blockTimestamp: 42n,
 				logsBloom: BLOOM_ALL,
 			});
 
@@ -385,6 +425,7 @@ describe("EventWatcher", () => {
 				type: "watcher_update_new_block",
 				blockNumber: 1337n,
 				blockHash: keccak256(toHex("1337")),
+				blockTimestamp: 42n,
 				logsBloom: BLOOM_ALL,
 			});
 
@@ -407,6 +448,7 @@ describe("EventWatcher", () => {
 				type: "watcher_update_new_block",
 				blockNumber: 1337n,
 				blockHash: keccak256(toHex("1337")),
+				blockTimestamp: 42n,
 				logsBloom: bloom(...WATCH.address, toEventSelector(WATCH.events[1])),
 			});
 
@@ -426,6 +468,7 @@ describe("EventWatcher", () => {
 				type: "watcher_update_new_block",
 				blockNumber: 1337n,
 				blockHash: keccak256(toHex("1337")),
+				blockTimestamp: 42n,
 				logsBloom: BLOOM_ALL,
 			});
 
@@ -440,6 +483,7 @@ describe("EventWatcher", () => {
 				type: "watcher_update_new_block",
 				blockNumber: 1337n,
 				blockHash: keccak256(toHex("1337")),
+				blockTimestamp: 42n,
 				logsBloom: BLOOM_ALL,
 			});
 
@@ -459,6 +503,7 @@ describe("EventWatcher", () => {
 					type: "watcher_update_new_block",
 					blockNumber: 1337n,
 					blockHash: keccak256(toHex("1337")),
+					blockTimestamp: 42n,
 					logsBloom: BLOOM_ALL,
 				},
 				{
@@ -483,6 +528,7 @@ describe("EventWatcher", () => {
 					type: "watcher_update_new_block",
 					blockNumber: 1337n,
 					blockHash: keccak256(toHex("1337")),
+					blockTimestamp: 42n,
 					logsBloom: BLOOM_ALL,
 				},
 				{

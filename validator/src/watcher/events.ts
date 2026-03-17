@@ -17,6 +17,7 @@ import { isInBloom } from "../utils/bloom.js";
 import { withDefaults } from "../utils/config.js";
 import type { Logger } from "../utils/logging.js";
 import type { BlockUpdate } from "./blocks.js";
+import { DEFAULT_TIMER, type Timer } from "./timer.js";
 
 export type Client = Pick<PublicClient, "getLogs">;
 export type Events = readonly AbiEvent[];
@@ -26,9 +27,11 @@ export type Events = readonly AbiEvent[];
  */
 export type Config = {
 	blockPageSize: number;
+	blockIndexingDelay: number;
 	blockSingleQueryRetryCount: number;
 	maxLogsPerQuery: number | null;
 	fallibleEvents: string[];
+	timer: Pick<Timer, "sleepUntil">;
 };
 
 export type ConstructorParams<I> = Prettify<
@@ -47,13 +50,24 @@ export type Log<E extends Events> = ViemLog<bigint, number, false, undefined, tr
 
 export const DEFAULT_CONFIG = {
 	blockPageSize: 100,
+	blockIndexingDelay: 0,
 	blockSingleQueryRetryCount: 3,
 	maxLogsPerQuery: null,
 	fallibleEvents: [],
+	timer: DEFAULT_TIMER,
 };
 
-type WarpingStep = { fromBlock: bigint; toBlock: bigint; pageSize: bigint };
-type BlockStep = { blockHash: Hex; logsBloom: Hex; retries: number };
+type WarpingStep = {
+	fromBlock: bigint;
+	toBlock: bigint;
+	pageSize: bigint;
+};
+type BlockStep = {
+	blockHash: Hex;
+	blockTimestamp: bigint;
+	logsBloom: Hex;
+	retries: number;
+};
 type Step = { type: "idle" } | ({ type: "warping" } & WarpingStep) | ({ type: "block" } & BlockStep);
 
 export class EventWatcher<E extends Events> {
@@ -213,8 +227,17 @@ export class EventWatcher<E extends Events> {
 		}
 	}
 
-	async #block({ blockHash, logsBloom, retries }: BlockStep) {
+	async #block({ blockHash, blockTimestamp, logsBloom, retries }: BlockStep) {
 		try {
+			// Some nodes have an additional delay after they see the block for them to index logs
+			// and receipts. Unfortunately, during that time, instead of erroring or waiting for the
+			// indexing to complete, the RPC nodes just return an empty list of events. To work
+			// around this issue wait an additional delay
+			if (this.#config.blockIndexingDelay > 0) {
+				const until = Number(blockTimestamp) * 1000 + this.#config.blockIndexingDelay;
+				await this.#config.timer.sleepUntil(until);
+			}
+
 			const logs =
 				retries < this.#config.blockSingleQueryRetryCount
 					? await this.#getLogsOneQueryAllEvents({ blockHash, logsBloom })
@@ -223,7 +246,7 @@ export class EventWatcher<E extends Events> {
 			return logs;
 		} catch (err) {
 			// Count the number of retries that we hit when fetching logs for a specific block.
-			this.#step = { type: "block", blockHash, logsBloom, retries: retries + 1 };
+			this.#step = { type: "block", blockHash, blockTimestamp, logsBloom, retries: retries + 1 };
 			throw err;
 		}
 	}
@@ -253,6 +276,7 @@ export class EventWatcher<E extends Events> {
 				step = {
 					type: "block",
 					blockHash: update.blockHash,
+					blockTimestamp: update.blockTimestamp,
 					logsBloom: update.logsBloom,
 					retries: 0,
 				};
