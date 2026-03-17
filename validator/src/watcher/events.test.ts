@@ -1,12 +1,29 @@
-import { type AbiEvent, type Address, type Hex, keccak256, parseAbi, toEventSelector, toHex, zeroHash } from "viem";
+import {
+	type AbiEvent,
+	type Address,
+	encodeAbiParameters,
+	encodeEventTopics,
+	formatLog,
+	getAddress,
+	type Hex,
+	keccak256,
+	parseAbi,
+	parseAbiParameters,
+	type RpcLog,
+	toEventSelector,
+	toHex,
+	zeroHash,
+} from "viem";
 import { describe, expect, it, vi } from "vitest";
 
 import { testLogger } from "../__tests__/config.js";
+import { computeLogsBloom } from "../utils/bloom.js";
 import type { BlockUpdate } from "./blocks.js";
 import { type Client, type Config, EventWatcher, type Log } from "./events.js";
 
 const CONFIG = {
 	blockPageSize: 5,
+	blockAllLogsQueryRetryCount: 0,
 	blockSingleQueryRetryCount: 2,
 	maxLogsPerQuery: 10,
 	fallibleEvents: [],
@@ -21,27 +38,31 @@ const WATCH = {
 } as const;
 
 type TestLog = Log<typeof WATCH.events>;
+type TestConfig = Partial<Pick<Config, "blockAllLogsQueryRetryCount" | "fallibleEvents">>;
 
-const setup = ({ fallibleEvents }: Partial<Pick<Config, "fallibleEvents">> = {}) => {
+const setup = ({ blockAllLogsQueryRetryCount, fallibleEvents }: TestConfig = {}) => {
 	const getLogs = vi.fn();
+	const config = {
+		...CONFIG,
+		...WATCH,
+		logger: testLogger,
+		client: {
+			getLogs,
+		} as unknown as Client,
+		blockAllLogsQueryRetryCount: blockAllLogsQueryRetryCount ?? CONFIG.blockAllLogsQueryRetryCount,
+		fallibleEvents: fallibleEvents ?? CONFIG.fallibleEvents,
+	};
 
 	return {
-		events: new EventWatcher({
-			...CONFIG,
-			...WATCH,
-			logger: testLogger,
-			client: {
-				getLogs,
-			} as unknown as Client,
-			fallibleEvents: fallibleEvents ?? CONFIG.fallibleEvents,
-		}),
+		config,
+		events: new EventWatcher(config),
 		mocks: {
 			getLogs,
 		},
 	};
 };
 
-const setupOneQueryPerEvent = async (update: BlockUpdate, config: Partial<Pick<Config, "fallibleEvents">> = {}) => {
+const setupOneQueryPerEvent = async (update: BlockUpdate, config: TestConfig = {}) => {
 	const { events, mocks } = setup(config);
 
 	events.onBlockUpdate(update);
@@ -53,7 +74,8 @@ const setupOneQueryPerEvent = async (update: BlockUpdate, config: Partial<Pick<C
 			await expect(events.next()).rejects.toThrow();
 		}
 	} else if (update.type === "watcher_update_new_block") {
-		for (let i = 0; i < CONFIG.blockSingleQueryRetryCount; i++) {
+		const totalRetries = CONFIG.blockAllLogsQueryRetryCount + CONFIG.blockSingleQueryRetryCount;
+		for (let i = 0; i < totalRetries; i++) {
 			await expect(events.next()).rejects.toThrow();
 		}
 	}
@@ -74,6 +96,18 @@ const log = (l: Pick<TestLog, "eventName" | "logIndex"> & Partial<Pick<TestLog, 
 	blockNumber: 0n,
 	...l,
 });
+
+const rpcLog = ({ logIndex, ...l }: { logIndex: number } & Pick<RpcLog, "address" | "topics" | "data">) =>
+	formatLog({
+		...l,
+		logIndex: toHex(logIndex),
+		blockNumber: "0x0",
+		transactionHash: zeroHash,
+		transactionIndex: "0x0",
+		blockHash: zeroHash,
+		blockTimestamp: "0x0",
+		removed: false,
+	});
 
 const BLOOM_ZERO = `0x${"00".repeat(256)}` as const;
 const BLOOM_ALL = `0x${"ff".repeat(256)}` as const;
@@ -320,6 +354,146 @@ describe("EventWatcher", () => {
 			]);
 		});
 
+		it("should locally filter logs when querying all block logs", async () => {
+			const { events, mocks } = setup({
+				blockAllLogsQueryRetryCount: 1,
+			});
+
+			const allLogs = [
+				rpcLog({
+					logIndex: 0,
+					address: WATCH.address[0],
+					topics: encodeEventTopics({
+						abi: WATCH.events,
+						eventName: "Approval",
+						args: {
+							owner: `0x${"aa".repeat(20)}`,
+							spender: `0x${"bb".repeat(20)}`,
+						},
+					}) as RpcLog["topics"],
+					data: encodeAbiParameters(parseAbiParameters("uint256 amount"), [42n]),
+				}),
+				rpcLog({
+					logIndex: 1,
+					address: `0x${"fe".repeat(20)}`,
+					topics: encodeEventTopics({
+						abi: WATCH.events,
+						eventName: "Transfer",
+						args: {
+							from: `0x${"cc".repeat(20)}`,
+							to: `0x${"dd".repeat(20)}`,
+						},
+					}) as RpcLog["topics"],
+					data: encodeAbiParameters(parseAbiParameters("uint256 amount"), [100n]),
+				}),
+				rpcLog({
+					logIndex: 2,
+					address: WATCH.address[0],
+					topics: encodeEventTopics({
+						abi: parseAbi(["event Deposit(address indexed owner, uint256 amount)"]),
+						eventName: "Deposit",
+						args: {
+							owner: `0x${"88".repeat(20)}`,
+						},
+					}) as RpcLog["topics"],
+					data: encodeAbiParameters(parseAbiParameters("uint256 amount"), [1000000000000000000n]),
+				}),
+				rpcLog({
+					logIndex: 3,
+					address: WATCH.address[1],
+					topics: encodeEventTopics({
+						abi: WATCH.events,
+						eventName: "Transfer",
+						args: {
+							from: `0x${"ee".repeat(20)}`,
+							to: `0x${"ff".repeat(20)}`,
+						},
+					}) as RpcLog["topics"],
+					data: encodeAbiParameters(parseAbiParameters("uint256 amount"), [1337n]),
+				}),
+			];
+
+			events.onBlockUpdate({
+				type: "watcher_update_new_block",
+				blockNumber: 1337n,
+				blockHash: keccak256(toHex("1337")),
+				logsBloom: computeLogsBloom(allLogs),
+			});
+
+			mocks.getLogs.mockResolvedValueOnce(allLogs);
+
+			const logs = await events.next();
+
+			expect(mocks.getLogs.mock.calls).toEqual([[{ blockHash: keccak256(toHex("1337")) }]]);
+			expect(logs).toEqual([
+				{
+					...allLogs[0],
+					eventName: "Approval",
+					args: {
+						owner: getAddress(`0x${"aa".repeat(20)}`),
+						spender: getAddress(`0x${"bb".repeat(20)}`),
+						amount: 42n,
+					},
+				},
+				{
+					...allLogs[3],
+					eventName: "Transfer",
+					args: {
+						from: getAddress(`0x${"ee".repeat(20)}`),
+						to: getAddress(`0x${"ff".repeat(20)}`),
+						amount: 1337n,
+					},
+				},
+			]);
+		});
+
+		it("should error if returned logs does not match bloom filter", async () => {
+			const { events, mocks } = setup({
+				blockAllLogsQueryRetryCount: 3,
+			});
+
+			const allLogs = [
+				rpcLog({
+					logIndex: 0,
+					address: WATCH.address[0],
+					topics: encodeEventTopics({
+						abi: WATCH.events,
+						eventName: "Approval",
+						args: {
+							owner: `0x${"aa".repeat(20)}`,
+							spender: `0x${"bb".repeat(20)}`,
+						},
+					}) as RpcLog["topics"],
+					data: encodeAbiParameters(parseAbiParameters("uint256 amount"), [42n]),
+				}),
+				rpcLog({
+					logIndex: 1,
+					address: `0x${"fe".repeat(20)}`,
+					topics: encodeEventTopics({
+						abi: WATCH.events,
+						eventName: "Transfer",
+						args: {
+							from: `0x${"cc".repeat(20)}`,
+							to: `0x${"dd".repeat(20)}`,
+						},
+					}) as RpcLog["topics"],
+					data: encodeAbiParameters(parseAbiParameters("uint256 amount"), [100n]),
+				}),
+			];
+
+			events.onBlockUpdate({
+				type: "watcher_update_new_block",
+				blockNumber: 1337n,
+				blockHash: keccak256(toHex("1337")),
+				logsBloom: computeLogsBloom(allLogs),
+			});
+
+			for (const someLogs of [[allLogs[0]], [allLogs[1]], []]) {
+				mocks.getLogs.mockResolvedValueOnce(someLogs);
+				await expect(events.next()).rejects.toThrow();
+			}
+		});
+
 		it("query blocks if at least one address and event is in the bloom filter", async () => {
 			const { events, mocks } = setup();
 
@@ -379,7 +553,7 @@ describe("EventWatcher", () => {
 		});
 
 		it("falls back to multiple requests per query", async () => {
-			const { events, mocks } = setup();
+			const { config, events, mocks } = setup({ blockAllLogsQueryRetryCount: 3 });
 
 			events.onBlockUpdate({
 				type: "watcher_update_new_block",
@@ -390,13 +564,15 @@ describe("EventWatcher", () => {
 
 			mocks.getLogs.mockRejectedValue(new Error("test"));
 
-			for (let i = 0; i < CONFIG.blockSingleQueryRetryCount; i++) {
+			const totalRetries = config.blockAllLogsQueryRetryCount + config.blockSingleQueryRetryCount;
+			for (let i = 0; i < totalRetries; i++) {
 				await expect(events.next()).rejects.toThrow();
 			}
 			await expect(events.next()).rejects.toThrow();
 
 			expect(mocks.getLogs.mock.calls).toEqual([
-				...[...Array(CONFIG.blockSingleQueryRetryCount)].map(() => [query({ blockHash: keccak256(toHex("1337")) })]),
+				...[...Array(config.blockAllLogsQueryRetryCount)].map(() => [{ blockHash: keccak256(toHex("1337")) }]),
+				...[...Array(config.blockSingleQueryRetryCount)].map(() => [query({ blockHash: keccak256(toHex("1337")) })]),
 				// Note on the last attempt that the query is split into one request per event.
 				...WATCH.events.map((event) => [query({ blockHash: keccak256(toHex("1337")), event })]),
 			]);
