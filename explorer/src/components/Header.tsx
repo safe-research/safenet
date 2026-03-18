@@ -1,7 +1,7 @@
 import { Cog6ToothIcon } from "@heroicons/react/24/solid";
 import { Link } from "@tanstack/react-router";
-import { SafeResearchBanner } from "@/components/SafeResearch";
 import { SafenetBetaLogo } from "@/components/common/SafenetBetaLogo";
+import { SafeResearchBanner } from "@/components/SafeResearch";
 import { useConsensusState } from "@/hooks/useConsensusState";
 
 export default function Header() {

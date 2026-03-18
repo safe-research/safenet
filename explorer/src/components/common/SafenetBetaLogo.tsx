@@ -12,6 +12,7 @@ export function SafenetBetaLogo({ className }: SafenetBetaLogoProps) {
 			viewBox="0 0 109 32"
 			fill="none"
 			xmlns="http://www.w3.org/2000/svg"
+			role="img"
 			aria-label="Safenet Beta"
 			className={cn("fill-title", className)}
 		>
