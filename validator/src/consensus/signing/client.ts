@@ -25,23 +25,22 @@ export class SigningClient {
 		this.#storage = storage;
 	}
 
-	generateNonceTree(groupId: GroupId): Hex {
-		const signingShare = this.#storage.signingShare(groupId);
+	generateNonceTree(groupId: GroupId, me: Address): Hex {
+		const signingShare = this.#storage.signingShare(groupId, me);
 		if (signingShare === undefined) throw new Error(`No info for ${groupId}`);
 		const nonceTree = createNonceTree(signingShare);
-		const nonceTreeRoot = this.#storage.registerNonceTree(groupId, nonceTree);
+		const nonceTreeRoot = this.#storage.registerNonceTree(groupId, me, nonceTree);
 		return nonceTreeRoot;
 	}
 
-	handleNonceCommitmentsHash(groupId: GroupId, sender: Address, nonceCommitmentsHash: Hex, chunk: bigint) {
-		const participant = this.#storage.participant(groupId);
-		// Only link own nonce commitments
-		if (sender !== participant) return;
-		this.#storage.linkNonceTree(groupId, chunk, nonceCommitmentsHash);
+	// TODO: [observe mode]
+	handleNonceCommitmentsHash(groupId: GroupId, me: Address, nonceCommitmentsHash: Hex, chunk: bigint) {
+		this.#storage.linkNonceTree(groupId, me, chunk, nonceCommitmentsHash);
 	}
 
 	createNonceCommitments(
 		groupId: GroupId,
+		me: Address,
 		signatureId: SignatureId,
 		message: Hex,
 		sequence: bigint,
@@ -63,27 +62,32 @@ export class SigningClient {
 		this.#storage.registerSignatureRequest(signatureId, groupId, message, signers, sequence);
 		// Set own nonce commitments
 		const { chunk, offset } = decodeSequence(sequence);
-		const nonceTree = this.#storage.nonceTree(groupId, chunk);
+		const nonceTree = this.#storage.nonceTree(groupId, me, chunk);
 		const { nonceCommitments, nonceProof } = nonceCommitmentsWithProof(nonceTree, offset);
-		const participant = this.#storage.participant(groupId);
-		this.#storage.registerNonceCommitments(signatureId, participant, nonceCommitments);
+		this.#storage.registerNonceCommitments(signatureId, me, nonceCommitments);
 		return {
 			nonceCommitments,
 			nonceProof,
 		};
 	}
 
-	handleNonceCommitments(signatureId: SignatureId, peer: Address, nonceCommitments: PublicNonceCommitments): boolean {
-		const groupId = this.#storage.signingGroup(signatureId);
-		const signer = this.#storage.participant(groupId);
+	handleNonceCommitments(
+		signatureId: SignatureId,
+		peer: Address,
+		nonceCommitments: PublicNonceCommitments,
+		me: Address,
+	): boolean {
 		// Skip own commits
-		if (signer === peer) return false;
+		if (me === peer) return false;
 		this.#storage.registerNonceCommitments(signatureId, peer, nonceCommitments);
 
 		return this.#storage.checkIfNoncesComplete(signatureId);
 	}
 
-	createSignatureShare(signatureId: SignatureId): {
+	createSignatureShare(
+		signatureId: SignatureId,
+		me: Address,
+	): {
 		signersRoot: Hex;
 		signersProof: Hex[];
 		groupCommitment: FrostPoint;
@@ -93,17 +97,16 @@ export class SigningClient {
 	} {
 		const groupId = this.#storage.signingGroup(signatureId);
 		const signers = this.signers(signatureId);
-		const signer = this.#storage.participant(groupId);
 
 		// Derive the FROST identifiers from the signer addresses.
 		const sortedSigners = sortedParticipants(signers);
 		const signerIds = sortedSigners.map((s) => s.id);
-		const signerIndex = sortedSigners.findIndex(({ address }) => address === signer);
+		const signerIndex = sortedSigners.findIndex(({ address }) => address === me);
 
 		const groupPublicKey = this.#storage.publicKey(groupId);
 		if (groupPublicKey === undefined) throw new Error(`Missing public key for group ${groupId}`);
 
-		const signingShare = this.#storage.signingShare(groupId);
+		const signingShare = this.#storage.signingShare(groupId, me);
 		if (signingShare === undefined) throw new Error(`Missing signing share for group ${groupId}`);
 
 		const signerNonceCommitments = toParticipantIdMap(this.#storage.nonceCommitmentsMap(signatureId));
@@ -143,7 +146,7 @@ export class SigningClient {
 
 		const sequence = this.#storage.sequence(signatureId);
 		const { chunk, offset } = decodeSequence(sequence);
-		const nonceTree = this.#storage.nonceTree(groupId, chunk);
+		const nonceTree = this.#storage.nonceTree(groupId, me, chunk);
 		// Calculate information specific to this signer
 		const nonceCommitments = nonceTree.commitments[Number(offset)];
 		if (nonceCommitments.bindingNonce === 0n && nonceCommitments.hidingNonce === 0n) {
@@ -161,12 +164,14 @@ export class SigningClient {
 			signerIndex,
 		);
 
-		if (!verifySignatureShare(signatureShare, this.#storage.verificationShare(groupId), signerPart.cl, signerPart.r)) {
+		if (
+			!verifySignatureShare(signatureShare, this.#storage.verificationShare(groupId, me), signerPart.cl, signerPart.r)
+		) {
 			// This should never happen as all inputs have been verified before
 			throw new Error("Could not create valid signature share!");
 		}
 
-		this.#storage.burnNonce(groupId, chunk, offset);
+		this.#storage.burnNonce(groupId, me, chunk, offset);
 
 		return {
 			signersRoot,
@@ -186,6 +191,10 @@ export class SigningClient {
 		return this.#storage.signingGroup(signatureId);
 	}
 
+	hasParticipant(groupId: GroupId, participant: Address): boolean {
+		return this.#storage.hasParticipant(groupId, participant);
+	}
+
 	participants(groupId: GroupId): Address[] {
 		return [...this.#storage.participants(groupId)];
 	}
@@ -194,9 +203,9 @@ export class SigningClient {
 		return this.#storage.missingNonces(groupId);
 	}
 
-	availableNoncesCount(groupId: GroupId, chunk: bigint): bigint {
+	availableNoncesCount(groupId: GroupId, me: Address, chunk: bigint): bigint {
 		try {
-			const nonceTree = this.#storage.nonceTree(groupId, chunk);
+			const nonceTree = this.#storage.nonceTree(groupId, me, chunk);
 			return BigInt(nonceTree.leaves.length);
 		} catch {
 			return 0n;
@@ -205,9 +214,5 @@ export class SigningClient {
 
 	threshold(groupId: GroupId): number {
 		return this.#storage.threshold(groupId);
-	}
-
-	participant(groupId: GroupId): Address {
-		return this.#storage.participant(groupId);
 	}
 }

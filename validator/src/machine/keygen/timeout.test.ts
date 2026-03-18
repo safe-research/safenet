@@ -1,7 +1,7 @@
 import { ethAddress, zeroHash } from "viem";
 import { entryPoint06Address, entryPoint07Address, entryPoint08Address } from "viem/account-abstraction";
 import { describe, expect, it, vi } from "vitest";
-import { makeGroupSetup } from "../../__tests__/data/machine.js";
+import { makeGroupSetup, makeKeyGenSetup } from "../../__tests__/data/machine.js";
 import type { KeyGenClient } from "../../consensus/keyGen/client.js";
 import type { SafenetProtocol } from "../../consensus/protocol/types.js";
 import type { MachineConfig, MachineStates, RolloverState } from "../types.js";
@@ -9,6 +9,7 @@ import { checkKeyGenTimeouts } from "./timeouts.js";
 
 // --- Test Data ---
 const MACHINE_CONFIG: MachineConfig = {
+	account: ethAddress,
 	participantsInfo: [
 		{
 			address: entryPoint06Address,
@@ -133,6 +134,7 @@ describe("key gen timeouts", () => {
 		});
 		it("should trigger key gen after deadline has passed", () => {
 			const groupSetup = makeGroupSetup();
+			const keyGenSetup = makeKeyGenSetup();
 			const consensus = vi.fn();
 			consensus.mockReturnValueOnce(ethAddress);
 			const protocol = {
@@ -144,11 +146,14 @@ describe("key gen timeouts", () => {
 			missingSecretShares.mockReturnValueOnce([entryPoint07Address]);
 			const setupGroup = vi.fn();
 			setupGroup.mockReturnValueOnce(groupSetup);
+			const setupKeyGen = vi.fn();
+			setupKeyGen.mockReturnValueOnce(keyGenSetup);
 			const participants = vi.fn();
 			participants.mockReturnValueOnce([entryPoint06Address, entryPoint07Address, entryPoint08Address, ethAddress]);
 			const keyGenClient = {
 				participants,
 				setupGroup,
+				setupKeyGen,
 				missingCommitments,
 				missingSecretShares,
 			} as unknown as KeyGenClient;
@@ -164,10 +169,10 @@ describe("key gen timeouts", () => {
 					count: 3,
 					threshold: 2,
 					context: "0x00000000eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee000000000000000a",
-					commitments: groupSetup.commitments,
-					encryptionPublicKey: groupSetup.encryptionPublicKey,
-					pok: groupSetup.pok,
-					poap: groupSetup.poap,
+					commitments: keyGenSetup.commitments,
+					encryptionPublicKey: keyGenSetup.encryptionPublicKey,
+					pok: keyGenSetup.pok,
+					poap: keyGenSetup.poap,
 				},
 			]);
 			expect(diff.rollover).toStrictEqual({
@@ -188,7 +193,7 @@ describe("key gen timeouts", () => {
 			}
 			expect(missingSecretShares).toBeCalledTimes(keyGenInvocations[1]);
 			if (keyGenInvocations[1] > 0) {
-				expect(missingSecretShares).toBeCalledWith("0x5afe02");
+				expect(missingSecretShares).toBeCalledWith("0x5afe02", ethAddress);
 			}
 			expect(setupGroup).toBeCalledTimes(1);
 			expect(setupGroup).toBeCalledWith(

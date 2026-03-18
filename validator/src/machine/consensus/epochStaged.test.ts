@@ -1,12 +1,35 @@
+import { zeroHash } from "viem";
 import { describe, expect, it, vi } from "vitest";
 import type { SigningClient } from "../../consensus/signing/client.js";
 import type { EpochRolloverPacket } from "../../consensus/verify/rollover/schemas.js";
 import { toPoint } from "../../frost/math.js";
 import type { EpochStagedEvent } from "../transitions/types.js";
-import type { MachineStates, SigningState } from "../types.js";
+import type { MachineConfig, MachineStates, SigningState } from "../types.js";
 import { handleEpochStaged } from "./epochStaged.js";
 
 // --- Test Data ---
+const MACHINE_CONFIG: MachineConfig = {
+	account: "0x0000000000000000000000000000000000000001",
+	participantsInfo: [
+		{
+			address: "0x0000000000000000000000000000000000000001",
+			activeFrom: 0n,
+		},
+		{
+			address: "0x0000000000000000000000000000000000000002",
+			activeFrom: 0n,
+		},
+		{
+			address: "0x0000000000000000000000000000000000000003",
+			activeFrom: 1n,
+		},
+	],
+	genesisSalt: zeroHash,
+	keyGenTimeout: 20n,
+	signingTimeout: 0n,
+	blocksPerEpoch: 10n,
+};
+
 const PACKET: EpochRolloverPacket = {
 	type: "epoch_rollover_packet",
 	domain: {
@@ -79,18 +102,22 @@ describe("epoch staged", () => {
 			rollover: { id: "waiting_for_genesis" },
 			signing: {},
 		};
-		const diff = await handleEpochStaged(signingClient, machineStates, EVENT);
+		const diff = await handleEpochStaged(MACHINE_CONFIG, signingClient, machineStates, EVENT);
 
 		expect(diff).toStrictEqual({});
 	});
 
 	it("should clean up signing in any signing state ", async () => {
-		const signingClient: SigningClient = {} as unknown as SigningClient;
+		const hasParticipant = vi.fn();
+		hasParticipant.mockReturnValue(false);
+		const signingClient: SigningClient = {
+			hasParticipant,
+		} as unknown as SigningClient;
 		const machineStates: MachineStates = {
 			...MACHINE_STATES,
 			signing: { "0x5afe5afe": INVALID_SIGNING_STATE },
 		};
-		const diff = await handleEpochStaged(signingClient, machineStates, EVENT);
+		const diff = await handleEpochStaged(MACHINE_CONFIG, signingClient, machineStates, EVENT);
 
 		expect(diff).toStrictEqual({
 			consensus: {},
@@ -100,37 +127,34 @@ describe("epoch staged", () => {
 	});
 
 	it("should clean up state even if not part of signing group", async () => {
-		const participant = vi.fn();
-		participant.mockImplementationOnce(() => {
-			throw new Error("Test Error: unknown group!");
-		});
+		const hasParticipant = vi.fn();
+		hasParticipant.mockReturnValue(false);
 		const signingClient: SigningClient = {
-			participant,
+			hasParticipant,
 		} as unknown as SigningClient;
 		const machineStates: MachineStates = {
 			...MACHINE_STATES,
 			signing: {},
 		};
-		const diff = await handleEpochStaged(signingClient, machineStates, EVENT);
+		const diff = await handleEpochStaged(MACHINE_CONFIG, signingClient, machineStates, EVENT);
 
 		expect(diff).toStrictEqual({
 			consensus: {},
 			rollover: { id: "epoch_staged", nextEpoch: 2n },
 			signing: ["0x5afe5afe", undefined],
 		});
-		expect(participant).toBeCalledTimes(1);
-		expect(participant).toBeCalledWith("0x5afe5af3");
 	});
 
 	it("should clean up states and trigger nonce commitments after staging rollover", async () => {
-		const participant = vi.fn();
+		const hasParticipant = vi.fn();
+		hasParticipant.mockReturnValue(true);
 		const generateNonceTree = vi.fn();
 		generateNonceTree.mockReturnValueOnce("0xdeadb055");
 		const signingClient: SigningClient = {
-			participant,
+			hasParticipant,
 			generateNonceTree,
 		} as unknown as SigningClient;
-		const diff = await handleEpochStaged(signingClient, MACHINE_STATES, EVENT);
+		const diff = await handleEpochStaged(MACHINE_CONFIG, signingClient, MACHINE_STATES, EVENT);
 		expect(diff.actions).toStrictEqual([
 			{
 				id: "sign_register_nonce_commitments",
@@ -144,7 +168,5 @@ describe("epoch staged", () => {
 			signatureIdToMessage: ["0x5af35af3", undefined],
 		});
 		expect(diff.signing).toStrictEqual(["0x5afe5afe", undefined]);
-		expect(participant).toBeCalledTimes(1);
-		expect(participant).toBeCalledWith("0x5afe5af3");
 	});
 });

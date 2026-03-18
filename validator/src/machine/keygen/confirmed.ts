@@ -66,7 +66,8 @@ export const handleKeyGenConfirmed = async (
 		const consensus: ConsensusDiff = {
 			groupPendingNonces: [groupId, true],
 		};
-		const nonceTreeRoot = signingClient.generateNonceTree(groupId);
+		// TODO: [observe mode] only generate nonce tree if part of genesis group
+		const nonceTreeRoot = signingClient.generateNonceTree(groupId, machineConfig.account);
 		const actions: ProtocolAction[] = [
 			{
 				id: "sign_register_nonce_commitments",
@@ -130,7 +131,7 @@ export const handleKeyGenConfirmed = async (
 		};
 	}
 	const signers = signingClient.participants(activeGroup);
-	if (!signers.includes(signingClient.participant(activeGroup))) {
+	if (!signers.includes(machineConfig.account)) {
 		// Not part of active group, don't participate in epoch signing
 		return {
 			rollover,

@@ -16,11 +16,8 @@ export const handleKeyGenCommitted = async (
 	if (machineStates.rollover.groupId !== event.gid) return {};
 	const nextEpoch = machineStates.rollover.nextEpoch;
 
-	try {
-		// Check if validator is part of group, method will throw if not
-		keyGenClient.participant(event.gid);
-	} catch {
-		// This validator is not part of the group, ignore this request
+	// TODO: [observe mode] allow to collect commitments as non participant
+	if (!keyGenClient.participants(event.gid).includes(machineConfig.account)) {
 		return {};
 	}
 
@@ -38,8 +35,9 @@ export const handleKeyGenCommitted = async (
 	if (!event.committed) {
 		return {};
 	}
+	// TODO: [observe mode] don't generate secrets and perform actions in observe mode BUT build group public key
 	// If all participants have committed update state to "collecting_shares"
-	const { verificationShare, shares } = keyGenClient.createSecretShares(event.gid);
+	const { verificationShare, shares } = keyGenClient.createSecretShares(event.gid, machineConfig.account);
 	return {
 		rollover: {
 			id: "collecting_shares",

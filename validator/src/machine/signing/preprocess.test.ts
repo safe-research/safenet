@@ -1,10 +1,19 @@
+import { ethAddress, zeroHash } from "viem";
 import { describe, expect, it, vi } from "vitest";
 import type { SigningClient } from "../../consensus/signing/client.js";
 import type { NonceCommitmentsHashEvent } from "../transitions/types.js";
-import type { ConsensusState } from "../types.js";
+import type { ConsensusState, MachineConfig } from "../types.js";
 import { handlePreprocess } from "./preprocess.js";
 
 // --- Test Data ---
+const MACHINE_CONFIG: MachineConfig = {
+	account: "0x0000000000000000000000000000000000005aFE",
+	participantsInfo: [],
+	genesisSalt: zeroHash,
+	keyGenTimeout: 0n,
+	signingTimeout: 20n,
+	blocksPerEpoch: 8n,
+};
 const CONSENSUS_STATE: ConsensusState = {
 	activeEpoch: 0n,
 	groupPendingNonces: {
@@ -30,7 +39,7 @@ describe("handle preprocess", () => {
 		const signingClient = {
 			handleNonceCommitmentsHash,
 		} as unknown as SigningClient;
-		const diff = await handlePreprocess(signingClient, CONSENSUS_STATE, EVENT);
+		const diff = await handlePreprocess(MACHINE_CONFIG, signingClient, CONSENSUS_STATE, EVENT);
 
 		expect(handleNonceCommitmentsHash).toBeCalledWith(
 			"0x000000000000000000000000000000000000000000000000000000005af35af3",
@@ -57,7 +66,7 @@ describe("handle preprocess", () => {
 			...CONSENSUS_STATE,
 			groupPendingNonces: {},
 		};
-		const diff = await handlePreprocess(signingClient, consensusState, EVENT);
+		const diff = await handlePreprocess(MACHINE_CONFIG, signingClient, consensusState, EVENT);
 
 		expect(handleNonceCommitmentsHash).toBeCalledWith(
 			"0x000000000000000000000000000000000000000000000000000000005af35af3",
@@ -66,6 +75,29 @@ describe("handle preprocess", () => {
 			0n,
 		);
 		expect(handleNonceCommitmentsHash).toBeCalledTimes(1);
+
+		expect(diff.signing).toBeUndefined();
+		expect(diff.rollover).toBeUndefined();
+		expect(diff.actions).toBeUndefined();
+		expect(diff.consensus).toStrictEqual({});
+	});
+
+	it("should not handle nonces of other accounts", async () => {
+		const handleNonceCommitmentsHash = vi.fn();
+		const signingClient = {
+			handleNonceCommitmentsHash,
+		} as unknown as SigningClient;
+		const machineConfig = {
+			...MACHINE_CONFIG,
+			account: ethAddress,
+		};
+		const consensusState = {
+			...CONSENSUS_STATE,
+			groupPendingNonces: {},
+		};
+		const diff = await handlePreprocess(machineConfig, signingClient, consensusState, EVENT);
+
+		expect(handleNonceCommitmentsHash).toBeCalledTimes(0);
 
 		expect(diff.signing).toBeUndefined();
 		expect(diff.rollover).toBeUndefined();

@@ -69,9 +69,7 @@ const checkSigningRequestTimeout = (
 				];
 			}
 			const signatureId = status.signatureId;
-			const act =
-				everyoneResponsible ||
-				status.responsible === signingClient.participant(signingClient.signingGroup(signatureId));
+			const act = everyoneResponsible || status.responsible === machineConfig.account;
 			if (!act) {
 				return stateDiff;
 			}
@@ -140,7 +138,7 @@ const checkSigningRequestTimeout = (
 					},
 				];
 			}
-			const act = everyoneResponsible || status.responsible === signingClient.participant(groupId);
+			const act = everyoneResponsible || status.responsible === machineConfig.account;
 			if (!act) {
 				return stateDiff;
 			}
@@ -196,7 +194,7 @@ const checkSigningRequestTimeout = (
 					packet: status.packet,
 				},
 			];
-			if (status.lastSigner !== signingClient.participant(groupId)) {
+			if (status.lastSigner !== machineConfig.account) {
 				return stateDiff;
 			}
 			return {

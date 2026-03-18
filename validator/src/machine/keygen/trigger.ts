@@ -26,14 +26,16 @@ export const triggerKeyGen = (
 	}
 	const count = participants.length;
 	const threshold = calcThreshold(count);
-	const { groupId, participantsRoot, commitments, encryptionPublicKey, pok, poap } = keyGenClient.setupGroup(
-		participants,
-		threshold,
-		context,
-	);
-
-	const actions: ProtocolAction[] = [
-		{
+	const { groupId, participantsRoot } = keyGenClient.setupGroup(participants, threshold, context);
+	const actions: ProtocolAction[] = [];
+	if (participants.includes(machineConfig.account)) {
+		const { commitments, encryptionPublicKey, pok, poap } = keyGenClient.setupKeyGen(
+			groupId,
+			machineConfig.account,
+			participants,
+			threshold,
+		);
+		actions.push({
 			id: "key_gen_start",
 			participants: participantsRoot,
 			count,
@@ -43,8 +45,8 @@ export const triggerKeyGen = (
 			commitments,
 			pok,
 			poap,
-		},
-	];
+		});
+	}
 
 	logger?.info?.(`Triggered key gen for epoch ${epoch} with ${groupId}`, { participants });
 	return {

@@ -1,4 +1,4 @@
-import { zeroHash } from "viem";
+import { ethAddress, zeroHash } from "viem";
 import { describe, expect, it, vi } from "vitest";
 import type { SigningClient } from "../../consensus/signing/client.js";
 import type { VerificationEngine } from "../../consensus/verify/engine.js";
@@ -47,6 +47,7 @@ const CONSENSUS_STATE: ConsensusState = {
 };
 
 const MACHINE_CONFIG: MachineConfig = {
+	account: ethAddress,
 	participantsInfo: [],
 	genesisSalt: zeroHash,
 	keyGenTimeout: 0n,
@@ -139,6 +140,7 @@ describe("collecting shares", () => {
 		expect(isVerified).toBeCalledTimes(1);
 		expect(createNonceCommitments).toBeCalledWith(
 			"0x0000000000000000000000007fa9385be102ac3eac297483dd6233d62b3e1496",
+			ethAddress,
 			"0x5af35af3",
 			"0x5afe5afe",
 			0n,
@@ -205,6 +207,7 @@ describe("collecting shares", () => {
 		expect(isVerified).toBeCalledTimes(1);
 		expect(createNonceCommitments).toBeCalledWith(
 			"0x0000000000000000000000007fa9385be102ac3eac297483dd6233d62b3e1496",
+			ethAddress,
 			"0x5af35af3",
 			"0x5afe5afe",
 			0n,
@@ -215,14 +218,19 @@ describe("collecting shares", () => {
 		expect(availableNoncesCount).nthCalledWith(
 			1,
 			"0x0000000000000000000000007fa9385be102ac3eac297483dd6233d62b3e1496",
+			ethAddress,
 			0n,
 		);
 		expect(availableNoncesCount).nthCalledWith(
 			2,
 			"0x0000000000000000000000007fa9385be102ac3eac297483dd6233d62b3e1496",
+			ethAddress,
 			1n,
 		);
-		expect(generateNonceTree).toBeCalledWith("0x0000000000000000000000007fa9385be102ac3eac297483dd6233d62b3e1496");
+		expect(generateNonceTree).toBeCalledWith(
+			"0x0000000000000000000000007fa9385be102ac3eac297483dd6233d62b3e1496",
+			ethAddress,
+		);
 		expect(generateNonceTree).toBeCalledTimes(1);
 
 		expect(diff.rollover).toBeUndefined();

@@ -66,11 +66,9 @@ const dbMap = <T, K, V>(result: unknown[], schema: ZodSchema<T>, f: (value: T) =
 };
 
 export class SqliteClientStorage implements GroupInfoStorage, KeyGenInfoStorage, SignatureRequestStorage {
-	#account: Address;
 	#db: Database;
 
-	constructor(account: Address, database: Database) {
-		this.#account = account;
+	constructor(database: Database) {
 		this.#db = database;
 
 		this.#db.exec(`
@@ -153,10 +151,6 @@ export class SqliteClientStorage implements GroupInfoStorage, KeyGenInfoStorage,
 		// in the future.
 	}
 
-	accountAddress(): Address {
-		return this.#account;
-	}
-
 	knownGroups(): GroupId[] {
 		return this.#db
 			.prepare("SELECT id FROM groups")
@@ -165,11 +159,7 @@ export class SqliteClientStorage implements GroupInfoStorage, KeyGenInfoStorage,
 			.map((row) => hexBytes32Schema.parse(row));
 	}
 
-	registerGroup(groupId: GroupId, participants: readonly Address[], threshold: number): Address {
-		if (!participants.includes(this.#account)) {
-			throw new Error(`Not part of Group ${groupId}!`);
-		}
-
+	registerGroup(groupId: GroupId, participants: readonly Address[], threshold: number) {
 		const insertGroup = this.#db.prepare("INSERT INTO groups (id, threshold) VALUES (?, ?)");
 		const insertParticipant = this.#db.prepare("INSERT INTO group_participants (group_id, address) VALUES (?, ?)");
 		this.#db.transaction(() => {
@@ -181,7 +171,6 @@ export class SqliteClientStorage implements GroupInfoStorage, KeyGenInfoStorage,
 				insertParticipant.run(groupId, participant);
 			}
 		})();
-		return this.#account;
 	}
 
 	private setGroupColumn(groupId: GroupId, column: string, value: unknown): void {
@@ -190,15 +179,6 @@ export class SqliteClientStorage implements GroupInfoStorage, KeyGenInfoStorage,
 			.run(value, groupId);
 		if (changes !== 1) {
 			throw new Error("group not found or value already set");
-		}
-	}
-
-	private setGroupThisParticipantColumn(groupId: GroupId, column: string, value: unknown): void {
-		const { changes } = this.#db
-			.prepare(`UPDATE group_participants SET ${column} = ? WHERE group_id = ? AND address = ? AND ${column} IS NULL`)
-			.run(value, groupId, this.#account);
-		if (changes !== 1) {
-			throw new Error("group participant not found or value already set");
 		}
 	}
 
@@ -239,28 +219,24 @@ export class SqliteClientStorage implements GroupInfoStorage, KeyGenInfoStorage,
 		return schema.parse(result ?? undefined);
 	}
 
-	private getGroupThisParticipantColumn<T>(groupId: GroupId, column: string, schema: ZodSchema<T>): T {
+	registerGroupKey(groupId: GroupId, groupPublicKey: FrostPoint): void {
+		this.setGroupColumn(groupId, "public_key", groupPublicKey.toBytes());
+	}
+
+	registerVerificationShare(groupId: GroupId, participant: Address, verificationShare: FrostPoint): void {
+		this.setGroupParticipantColumn(groupId, participant, "verification_share", verificationShare.toBytes());
+	}
+
+	registerSigningShare(groupId: GroupId, me: Address, signingShare: bigint): void {
+		this.setGroupParticipantColumn(groupId, me, "signing_share", scalarToBytes(signingShare));
+	}
+
+	hasParticipant(groupId: GroupId, participant: Address): boolean {
 		const result = this.#db
-			.prepare(`SELECT ${column} FROM group_participants WHERE group_id = ? AND address = ?`)
-			.pluck(true)
-			.get(groupId, this.#account);
-		if (result === undefined) {
-			throw new Error("group participant not found");
-		}
-		// The interface expects "undefined" to signal a missing value instead
-		// of null, so map that here.
-		return schema.parse(result ?? undefined);
-	}
-
-	registerVerification(groupId: GroupId, groupPublicKey: FrostPoint, verificationShare: FrostPoint): void {
-		this.#db.transaction(() => {
-			this.setGroupColumn(groupId, "public_key", groupPublicKey.toBytes());
-			this.setGroupThisParticipantColumn(groupId, "verification_share", verificationShare.toBytes());
-		})();
-	}
-
-	registerSigningShare(groupId: GroupId, signingShare: bigint): void {
-		this.setGroupThisParticipantColumn(groupId, "signing_share", scalarToBytes(signingShare));
+			.prepare("SELECT EXISTS (SELECT 1 FROM group_participants WHERE group_id = ? AND address = ?)")
+			.pluck()
+			.get(groupId, participant);
+		return result === 1;
 	}
 
 	participants(groupId: GroupId): readonly Address[] {
@@ -279,10 +255,6 @@ export class SqliteClientStorage implements GroupInfoStorage, KeyGenInfoStorage,
 		return result;
 	}
 
-	participant(groupId: GroupId): Address {
-		return this.getGroupThisParticipantColumn(groupId, "address", checkedAddressSchema);
-	}
-
 	threshold(groupId: GroupId): number {
 		return this.getGroupColumn(groupId, "threshold", z.int());
 	}
@@ -291,48 +263,43 @@ export class SqliteClientStorage implements GroupInfoStorage, KeyGenInfoStorage,
 		return this.getGroupColumn(groupId, "public_key", dbPointSchema.optional());
 	}
 
-	verificationShare(groupId: GroupId): FrostPoint {
-		return this.getGroupThisParticipantColumn(groupId, "verification_share", dbPointSchema);
+	verificationShare(groupId: GroupId, me: Address): FrostPoint {
+		return this.getGroupParticipantColumn(groupId, me, "verification_share", dbPointSchema);
 	}
 
-	signingShare(groupId: GroupId): bigint | undefined {
-		return this.getGroupThisParticipantColumn(groupId, "signing_share", dbScalarSchema.optional());
+	signingShare(groupId: GroupId, me: Address): bigint | undefined {
+		return this.getGroupParticipantColumn(groupId, me, "signing_share", dbScalarSchema.optional());
 	}
 
 	unregisterGroup(groupId: GroupId): void {
 		this.#db.prepare("DELETE FROM groups WHERE id = ?").run(groupId);
 	}
 
-	registerKeyGen(groupId: GroupId, encryptionSecretKey: bigint, coefficients: readonly bigint[]): void {
+	registerKeyGen(groupId: GroupId, me: Address, encryptionSecretKey: bigint, coefficients: readonly bigint[]): void {
 		this.#db.transaction(() => {
-			this.setGroupThisParticipantColumn(groupId, "encryption_secret_key", scalarToBytes(encryptionSecretKey));
-			this.setGroupThisParticipantColumn(groupId, "coefficients", concat(coefficients.map(scalarToBytes)));
+			this.setGroupParticipantColumn(groupId, me, "encryption_secret_key", scalarToBytes(encryptionSecretKey));
+			this.setGroupParticipantColumn(groupId, me, "coefficients", concat(coefficients.map(scalarToBytes)));
 		})();
 	}
 
 	registerCommitments(
 		groupId: GroupId,
-		participant: Address,
+		peer: Address,
 		encryptionPublicKey: FrostPoint,
 		commitments: readonly FrostPoint[],
 	): void {
 		this.#db.transaction(() => {
-			this.setGroupParticipantColumn(groupId, participant, "encryption_public_key", encryptionPublicKey.toBytes());
-			this.setGroupParticipantColumn(
-				groupId,
-				participant,
-				"commitments",
-				concat(commitments.map((point) => point.toBytes())),
-			);
+			this.setGroupParticipantColumn(groupId, peer, "encryption_public_key", encryptionPublicKey.toBytes());
+			this.setGroupParticipantColumn(groupId, peer, "commitments", concat(commitments.map((point) => point.toBytes())));
 		})();
 	}
 
-	registerSecretShare(groupId: GroupId, participant: Address, share: bigint): void {
+	registerSecretShare(groupId: GroupId, me: Address, peer: Address, share: bigint): void {
 		this.#db
 			.prepare(
 				"INSERT INTO group_secret_shares (group_id, address, from_participant, secret_share) VALUES (?, ?, ?, ?)",
 			)
-			.run(groupId, this.#account, participant, scalarToBytes(share));
+			.run(groupId, me, peer, scalarToBytes(share));
 	}
 
 	missingCommitments(groupId: GroupId): Address[] {
@@ -403,7 +370,7 @@ export class SqliteClientStorage implements GroupInfoStorage, KeyGenInfoStorage,
 		return exists === 0;
 	}
 
-	missingSecretShares(groupId: GroupId): Address[] {
+	missingSecretShares(groupId: GroupId, me: Address): Address[] {
 		// Use the `LEFT JOIN` trick described in `dbList` and in the
 		// `missingCommitments` query. Note that the query has some additional
 		// complexity around secret shares and participants being split into
@@ -425,12 +392,12 @@ export class SqliteClientStorage implements GroupInfoStorage, KeyGenInfoStorage,
 					ORDER BY t.address COLLATE NOCASE ASC
 				`)
 				.pluck(true)
-				.all(this.#account, groupId),
+				.all(me, groupId),
 			checkedAddressSchema,
 		);
 	}
 
-	checkIfSecretSharesComplete(groupId: GroupId): boolean {
+	checkIfSecretSharesComplete(groupId: GroupId, me: Address): boolean {
 		// Differentiate between "group not found" and "no missing secret
 		// shares"; see `checkIfCommitmentsComplete` for more information.
 
@@ -448,26 +415,27 @@ export class SqliteClientStorage implements GroupInfoStorage, KeyGenInfoStorage,
 				END
 			`)
 			.pluck(true)
-			.get(groupId, this.#account, groupId);
+			.get(groupId, me, groupId);
 		if (exists === null) {
 			throw new Error("group not found");
 		}
 		return exists === 0;
 	}
 
-	encryptionSecretKey(groupId: GroupId): bigint {
-		return this.getGroupThisParticipantColumn(groupId, "encryption_secret_key", dbScalarSchema);
-	}
-	encryptionPublicKey(groupId: GroupId, participant: Address): FrostPoint {
-		return this.getGroupParticipantColumn(groupId, participant, "encryption_public_key", dbPointSchema);
+	encryptionSecretKey(groupId: GroupId, me: Address): bigint {
+		return this.getGroupParticipantColumn(groupId, me, "encryption_secret_key", dbScalarSchema);
 	}
 
-	coefficients(groupId: GroupId): readonly bigint[] {
-		return this.getGroupThisParticipantColumn(groupId, "coefficients", dbScalarArraySchema);
+	encryptionPublicKey(groupId: GroupId, peer: Address): FrostPoint {
+		return this.getGroupParticipantColumn(groupId, peer, "encryption_public_key", dbPointSchema);
 	}
 
-	commitments(groupId: GroupId, participant: Address): readonly FrostPoint[] {
-		return this.getGroupParticipantColumn(groupId, participant, "commitments", dbPointArraySchema);
+	coefficients(groupId: GroupId, me: Address): readonly bigint[] {
+		return this.getGroupParticipantColumn(groupId, me, "coefficients", dbScalarArraySchema);
+	}
+
+	commitments(groupId: GroupId, peer: Address): readonly FrostPoint[] {
+		return this.getGroupParticipantColumn(groupId, peer, "commitments", dbPointArraySchema);
 	}
 
 	commitmentsMap(groupId: GroupId): Map<Address, readonly FrostPoint[]> {
@@ -489,7 +457,7 @@ export class SqliteClientStorage implements GroupInfoStorage, KeyGenInfoStorage,
 		);
 	}
 
-	secretSharesMap(groupId: GroupId): Map<Address, bigint> {
+	secretSharesMap(groupId: GroupId, me: Address): Map<Address, bigint> {
 		// Use the `LEFT JOIN` trick decribed in `dbList` and in the
 		// `missingSecretShares` query, adapted to mappings.
 
@@ -502,7 +470,7 @@ export class SqliteClientStorage implements GroupInfoStorage, KeyGenInfoStorage,
 					ON s.group_id = g.id AND s.address = ? AND s.secret_share IS NOT NULL
 					WHERE g.id = ?
 				`)
-				.all(this.#account, groupId),
+				.all(me, groupId),
 			dbSecretShareSchema,
 			({ address, secretShare }) => [address, secretShare],
 		);
@@ -525,13 +493,13 @@ export class SqliteClientStorage implements GroupInfoStorage, KeyGenInfoStorage,
 		})();
 	}
 
-	registerNonceTree(groupId: GroupId, tree: NonceTree): Hex {
+	registerNonceTree(groupId: GroupId, me: Address, tree: NonceTree): Hex {
 		const insertNoncesLink = this.#db.prepare("INSERT INTO nonces_links (root, group_id, address) VALUES (?, ?, ?)");
 		const insertNoncesLeaf = this.#db.prepare(
 			"INSERT INTO nonces (leaf, root, offset, hiding, hiding_commitment, binding, binding_commitment) VALUES (?, ?, ?, ?, ?, ?, ?)",
 		);
 		this.#db.transaction(() => {
-			insertNoncesLink.run(tree.root, groupId, this.#account);
+			insertNoncesLink.run(tree.root, groupId, me);
 			for (let offset = 0; offset < tree.commitments.length; offset++) {
 				insertNoncesLeaf.run(
 					tree.leaves[offset],
@@ -548,16 +516,16 @@ export class SqliteClientStorage implements GroupInfoStorage, KeyGenInfoStorage,
 		return tree.root;
 	}
 
-	linkNonceTree(groupId: GroupId, chunk: bigint, treeHash: Hex): void {
+	linkNonceTree(groupId: GroupId, me: Address, chunk: bigint, treeHash: Hex): void {
 		const { changes } = this.#db
-			.prepare("UPDATE nonces_links SET chunk = ? WHERE root = ? AND group_id = ? AND chunk is NULL")
-			.run(chunk, treeHash, groupId);
+			.prepare("UPDATE nonces_links SET chunk = ? WHERE root = ? AND group_id = ? AND address = ? AND chunk is NULL")
+			.run(chunk, treeHash, groupId, me);
 		if (changes !== 1) {
 			throw new Error("nonces root not found or already linked to chunk");
 		}
 	}
 
-	nonceTree(groupId: GroupId, chunk: bigint): NonceTree {
+	nonceTree(groupId: GroupId, me: Address, chunk: bigint): NonceTree {
 		const nonces = this.#db
 			.prepare(`
 				SELECT
@@ -574,7 +542,7 @@ export class SqliteClientStorage implements GroupInfoStorage, KeyGenInfoStorage,
 				)
 				ORDER BY offset ASC
 			`)
-			.all(groupId, this.#account, chunk)
+			.all(groupId, me, chunk)
 			.map((row) => dbNoncesCommitmentSchema.parse(row));
 		if (nonces.length === 0) {
 			throw new Error("nonce tree not found");
@@ -591,7 +559,7 @@ export class SqliteClientStorage implements GroupInfoStorage, KeyGenInfoStorage,
 		};
 	}
 
-	burnNonce(groupId: GroupId, chunk: bigint, offset: bigint): void {
+	burnNonce(groupId: GroupId, me: Address, chunk: bigint, offset: bigint): void {
 		const { changes } = this.#db
 			.prepare(`
 				UPDATE nonces
@@ -602,7 +570,7 @@ export class SqliteClientStorage implements GroupInfoStorage, KeyGenInfoStorage,
 				)
 				AND offset = ? AND hiding IS NOT NULL AND binding IS NOT NULL
 			`)
-			.run(groupId, this.#account, chunk, offset);
+			.run(groupId, me, chunk, offset);
 		if (changes !== 1) {
 			throw new Error("nonce not found or already burned");
 		}

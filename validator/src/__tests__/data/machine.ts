@@ -9,6 +9,9 @@ export const TEST_POINT: FrostPoint = toPoint({
 export const makeGroupSetup = () => ({
 	groupId: "0x5afe02",
 	participantsRoot: "0x5afe5afe5afe",
+});
+
+export const makeKeyGenSetup = () => ({
 	commitments: [TEST_POINT],
 	encryptionPublicKey: TEST_POINT,
 	pok: {

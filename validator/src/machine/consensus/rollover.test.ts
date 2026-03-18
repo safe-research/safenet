@@ -1,6 +1,6 @@
 import { ethAddress, zeroAddress, zeroHash } from "viem";
 import { describe, expect, it, vi } from "vitest";
-import { makeGroupSetup } from "../../__tests__/data/machine.js";
+import { makeGroupSetup, makeKeyGenSetup } from "../../__tests__/data/machine.js";
 import type { KeyGenClient } from "../../consensus/keyGen/client.js";
 import type { SafenetProtocol } from "../../consensus/protocol/types.js";
 import type { ConsensusState, MachineConfig, MachineStates, SigningState } from "../types.js";
@@ -8,6 +8,7 @@ import { checkEpochRollover } from "./rollover.js";
 
 // --- Test Data ---
 const MACHINE_CONFIG: MachineConfig = {
+	account: "0x0000000000000000000000000000000000000001",
 	participantsInfo: [
 		{
 			address: "0x0000000000000000000000000000000000000001",
@@ -47,6 +48,7 @@ const CONSENSUS_STATE: ConsensusState = {
 };
 
 const GROUP_SETUP = makeGroupSetup();
+const KEYGEN_SETUP = makeKeyGenSetup();
 
 const EMPTY_PROTOCOL = {} as unknown as SafenetProtocol;
 const EMPTY_KEY_GEN_CLIENT = {} as unknown as KeyGenClient;
@@ -55,7 +57,10 @@ const makeProtocol = (): SafenetProtocol =>
 	({ consensus: vi.fn().mockReturnValueOnce(ethAddress) }) as unknown as SafenetProtocol;
 
 const makeKeyGenClient = (): KeyGenClient =>
-	({ setupGroup: vi.fn().mockReturnValueOnce(GROUP_SETUP) }) as unknown as KeyGenClient;
+	({
+		setupGroup: vi.fn().mockReturnValueOnce(GROUP_SETUP),
+		setupKeyGen: vi.fn().mockReturnValueOnce(KEYGEN_SETUP),
+	}) as unknown as KeyGenClient;
 
 // --- Tests ---
 describe("check rollover", () => {
@@ -202,10 +207,10 @@ describe("check rollover", () => {
 				count: 3,
 				threshold: 2,
 				context: "0x00000000eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee0000000000000003",
-				commitments: GROUP_SETUP.commitments,
-				encryptionPublicKey: GROUP_SETUP.encryptionPublicKey,
-				pok: GROUP_SETUP.pok,
-				poap: GROUP_SETUP.poap,
+				commitments: KEYGEN_SETUP.commitments,
+				encryptionPublicKey: KEYGEN_SETUP.encryptionPublicKey,
+				pok: KEYGEN_SETUP.pok,
+				poap: KEYGEN_SETUP.poap,
 			},
 		]);
 		expect(diff.rollover).toStrictEqual({
@@ -249,10 +254,10 @@ describe("check rollover", () => {
 				count: 3,
 				threshold: 2,
 				context: "0x00000000eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee0000000000000002",
-				commitments: GROUP_SETUP.commitments,
-				encryptionPublicKey: GROUP_SETUP.encryptionPublicKey,
-				pok: GROUP_SETUP.pok,
-				poap: GROUP_SETUP.poap,
+				commitments: KEYGEN_SETUP.commitments,
+				encryptionPublicKey: KEYGEN_SETUP.encryptionPublicKey,
+				pok: KEYGEN_SETUP.pok,
+				poap: KEYGEN_SETUP.poap,
 			},
 		]);
 		expect(diff.rollover).toStrictEqual({
@@ -275,7 +280,7 @@ describe("check rollover", () => {
 		);
 	});
 
-	it("should trigger key gen after when staged epoch becomes active", async () => {
+	it("should trigger key gen when staged epoch becomes active", async () => {
 		const protocol = makeProtocol();
 		const keyGenClient = makeKeyGenClient();
 		const machineStates: MachineStates = {
@@ -291,10 +296,10 @@ describe("check rollover", () => {
 				count: 3,
 				threshold: 2,
 				context: "0x00000000eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee0000000000000002",
-				commitments: GROUP_SETUP.commitments,
-				encryptionPublicKey: GROUP_SETUP.encryptionPublicKey,
-				pok: GROUP_SETUP.pok,
-				poap: GROUP_SETUP.poap,
+				commitments: KEYGEN_SETUP.commitments,
+				encryptionPublicKey: KEYGEN_SETUP.encryptionPublicKey,
+				pok: KEYGEN_SETUP.pok,
+				poap: KEYGEN_SETUP.poap,
 			},
 		]);
 		expect(diff.rollover).toStrictEqual({

@@ -1,7 +1,7 @@
 import { ethAddress, zeroHash } from "viem";
 import { entryPoint06Address, entryPoint07Address, entryPoint08Address } from "viem/account-abstraction";
 import { describe, expect, it, vi } from "vitest";
-import { makeGroupSetup } from "../../__tests__/data/machine.js";
+import { makeGroupSetup, makeKeyGenSetup } from "../../__tests__/data/machine.js";
 import type { KeyGenClient } from "../../consensus/keyGen/client.js";
 import type { SafenetProtocol } from "../../consensus/protocol/types.js";
 import type { KeyGenComplaintResponsedEvent as KeyGenComplaintRespondedEvent } from "../transitions/types.js";
@@ -10,6 +10,7 @@ import { handleComplaintResponded } from "./complaintResponse.js";
 
 // --- Test Data ---
 const MACHINE_CONFIG: MachineConfig = {
+	account: entryPoint06Address,
 	participantsInfo: [
 		{
 			address: entryPoint06Address,
@@ -218,6 +219,9 @@ describe("complaint responded", () => {
 		const groupSetup = makeGroupSetup();
 		const setupGroup = vi.fn();
 		setupGroup.mockReturnValueOnce(groupSetup);
+		const keyGenSetup = makeKeyGenSetup();
+		const setupKeyGen = vi.fn();
+		setupKeyGen.mockReturnValueOnce(keyGenSetup);
 		const participant = vi.fn();
 		participant.mockReturnValueOnce(entryPoint07Address);
 		const verifySecretShare = vi.fn();
@@ -227,6 +231,7 @@ describe("complaint responded", () => {
 		const keyGenClient = {
 			participants,
 			setupGroup,
+			setupKeyGen,
 			verifySecretShare,
 			participant,
 		} as unknown as KeyGenClient;
@@ -261,10 +266,10 @@ describe("complaint responded", () => {
 					count: 3,
 					threshold: 2,
 					context: "0x00000000eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee000000000000000a",
-					commitments: groupSetup.commitments,
-					encryptionPublicKey: groupSetup.encryptionPublicKey,
-					pok: groupSetup.pok,
-					poap: groupSetup.poap,
+					commitments: keyGenSetup.commitments,
+					encryptionPublicKey: keyGenSetup.encryptionPublicKey,
+					pok: keyGenSetup.pok,
+					poap: keyGenSetup.poap,
 				},
 			],
 		});
@@ -279,6 +284,9 @@ describe("complaint responded", () => {
 		const groupSetup = makeGroupSetup();
 		const setupGroup = vi.fn();
 		setupGroup.mockReturnValueOnce(groupSetup);
+		const keyGenSetup = makeKeyGenSetup();
+		const setupKeyGen = vi.fn();
+		setupKeyGen.mockReturnValueOnce(keyGenSetup);
 		const participant = vi.fn();
 		participant.mockReturnValueOnce(entryPoint06Address);
 		const participants = vi.fn();
@@ -288,6 +296,7 @@ describe("complaint responded", () => {
 		const keyGenClient = {
 			participants,
 			setupGroup,
+			setupKeyGen,
 			registerPlainKeyGenSecret,
 			participant,
 		} as unknown as KeyGenClient;
@@ -322,10 +331,10 @@ describe("complaint responded", () => {
 					count: 3,
 					threshold: 2,
 					context: "0x00000000eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee000000000000000a",
-					commitments: groupSetup.commitments,
-					encryptionPublicKey: groupSetup.encryptionPublicKey,
-					pok: groupSetup.pok,
-					poap: groupSetup.poap,
+					commitments: keyGenSetup.commitments,
+					encryptionPublicKey: keyGenSetup.encryptionPublicKey,
+					pok: keyGenSetup.pok,
+					poap: keyGenSetup.poap,
 				},
 			],
 		});
@@ -341,6 +350,10 @@ describe("complaint responded", () => {
 			registerPlainKeyGenSecret,
 			participant,
 		} as unknown as KeyGenClient;
+		const machineConfig = {
+			...MACHINE_CONFIG,
+			account: entryPoint06Address,
+		};
 		const machineStates: MachineStates = {
 			rollover: {
 				id: "collecting_confirmations",
@@ -357,7 +370,7 @@ describe("complaint responded", () => {
 			},
 			signing: {},
 		};
-		const diff = await handleComplaintResponded(MACHINE_CONFIG, protocol, keyGenClient, machineStates, EVENT);
+		const diff = await handleComplaintResponded(machineConfig, protocol, keyGenClient, machineStates, EVENT);
 		expect(diff).toStrictEqual({
 			rollover: {
 				id: "collecting_confirmations",
@@ -378,13 +391,10 @@ describe("complaint responded", () => {
 
 	it("should trigger confirmation if missing share in collecting confirmations", async () => {
 		const protocol = {} as unknown as SafenetProtocol;
-		const participant = vi.fn();
-		participant.mockReturnValueOnce(entryPoint06Address);
 		const registerPlainKeyGenSecret = vi.fn();
 		registerPlainKeyGenSecret.mockReturnValueOnce("shares_completed");
 		const keyGenClient = {
 			registerPlainKeyGenSecret,
-			participant,
 		} as unknown as KeyGenClient;
 		const machineStates: MachineStates = {
 			rollover: {

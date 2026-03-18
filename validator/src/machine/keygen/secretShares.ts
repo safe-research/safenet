@@ -25,16 +25,19 @@ export const handleKeyGenSecretShared = async (
 		return {};
 	}
 
-	try {
-		// Check if validator is part of group, method will throw if not
-		keyGenClient.participant(groupId);
-	} catch {
-		// The validator is not part of the group, ignore this request
+	// TODO: [observe mode] allow to observe state of shared secrets (to check once it is done)
+	if (!keyGenClient.hasParticipant(groupId, machineConfig.account)) {
 		return {};
 	}
 
+	// TODO: [observe mode] do not handle secrets or perform actions in observe mode
 	// Track identity that has submitted last share
-	const response = await keyGenClient.handleKeygenSecrets(groupId, event.participant, event.share.f);
+	const response = await keyGenClient.handleKeygenSecrets(
+		groupId,
+		machineConfig.account,
+		event.participant,
+		event.share.f,
+	);
 	const missingSharesFrom = [...machineStates.rollover.missingSharesFrom];
 	const actions: ProtocolAction[] = [];
 	if (response === "invalid_share") {
