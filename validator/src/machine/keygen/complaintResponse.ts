@@ -38,7 +38,7 @@ export const handleComplaintResponded = async (
 
 	// If reponse is required to finalize shares get state by registering secret, otherwise only verify
 	const sharesState =
-		machineConfig.account === event.plaintiff && !machineStates.rollover.sharesFrom.includes(event.accused)
+		machineConfig.account === event.plaintiff
 			? await keyGenClient.registerPlainKeyGenSecret(event.gid, machineConfig.account, event.accused, event.secretShare)
 			: !keyGenClient.verifySecretShare(event.gid, event.plaintiff, event.accused, event.secretShare)
 				? "invalid_share"
@@ -71,11 +71,6 @@ export const handleComplaintResponded = async (
 		});
 	}
 
-	const sharesFrom =
-		sharesState === "pending_shares" || sharesState === "shares_completed"
-			? [...machineStates.rollover.sharesFrom, event.accused]
-			: machineStates.rollover.sharesFrom;
-
 	const complaints = {
 		...machineStates.rollover.complaints,
 		[event.accused]: {
@@ -86,7 +81,6 @@ export const handleComplaintResponded = async (
 
 	const rollover: RolloverState = {
 		...machineStates.rollover,
-		sharesFrom,
 		complaints,
 	};
 	return {

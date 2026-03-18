@@ -31,7 +31,7 @@ export const handleKeyGenSecretShared = async (
 		: undefined;
 
 	const actions: ProtocolAction[] = [];
-	const sharesFrom = [...machineStates.rollover.sharesFrom];
+	const sharesFrom = [...machineStates.rollover.sharesFrom, event.participant];
 	if (response === "invalid_share") {
 		logger?.(`Invalid share submitted by ${event.participant} for group ${groupId}`);
 		actions.push({
@@ -39,8 +39,6 @@ export const handleKeyGenSecretShared = async (
 			groupId,
 			accused: event.participant,
 		});
-	} else {
-		sharesFrom.push(event.participant);
 	}
 	// Share collection is completed when every paritcipant submitted a share, no matter if valid or invalid
 	// `response` will only be "shares_completed" when all valid shares have been received

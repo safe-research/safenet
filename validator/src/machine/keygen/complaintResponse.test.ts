@@ -126,15 +126,12 @@ describe("complaint responded", () => {
 		expect(diff).toStrictEqual({});
 	});
 
-	it("should accept complaint responses when collecting shares", async () => {
+	it("should accept complaint responses when collecting shares and validator is plaintiff", async () => {
 		const protocol = {} as unknown as SafenetProtocol;
-		const participant = vi.fn();
-		participant.mockReturnValueOnce(entryPoint06Address);
-		const verifySecretShare = vi.fn();
-		verifySecretShare.mockReturnValueOnce(true);
+		const registerPlainKeyGenSecret = vi.fn();
+		registerPlainKeyGenSecret.mockResolvedValueOnce("pending_shares");
 		const keyGenClient = {
-			verifySecretShare,
-			participant,
+			registerPlainKeyGenSecret,
 		} as unknown as KeyGenClient;
 		const machineStates: MachineStates = {
 			rollover: {
@@ -165,15 +162,51 @@ describe("complaint responded", () => {
 		});
 	});
 
-	it("should accept complaint response when collecting confirmations", async () => {
+	it("should accept complaint responses when collecting shares and validator is not plaintiff", async () => {
 		const protocol = {} as unknown as SafenetProtocol;
-		const participant = vi.fn();
-		participant.mockReturnValueOnce(entryPoint06Address);
-		const verifySecretShare = vi.fn();
-		verifySecretShare.mockReturnValueOnce(true);
+		const verifySecretShare = vi.fn().mockReturnValueOnce(true);
 		const keyGenClient = {
 			verifySecretShare,
-			participant,
+		} as unknown as KeyGenClient;
+		const machineConfig = {
+			...MACHINE_CONFIG,
+			account: ethAddress,
+		};
+		const machineStates: MachineStates = {
+			rollover: {
+				id: "collecting_shares",
+				groupId: "0x06cb03baac74421225341827941e88d9547e5459c4b3715c0000000000000000",
+				nextEpoch: 10n,
+				deadline: 30n,
+				sharesFrom: [entryPoint08Address],
+				complaints: {
+					[entryPoint08Address]: { total: 1, unresponded: 1 },
+				},
+			},
+			signing: {},
+		};
+		const diff = await handleComplaintResponded(machineConfig, protocol, keyGenClient, machineStates, EVENT);
+		expect(diff).toStrictEqual({
+			rollover: {
+				id: "collecting_shares",
+				groupId: "0x06cb03baac74421225341827941e88d9547e5459c4b3715c0000000000000000",
+				nextEpoch: 10n,
+				deadline: 30n,
+				sharesFrom: [entryPoint08Address],
+				complaints: {
+					[entryPoint08Address]: { unresponded: 0, total: 1 },
+				},
+			},
+			actions: [],
+		});
+	});
+
+	it("should accept complaint response when collecting confirmations and validator is plaintiff", async () => {
+		const protocol = {} as unknown as SafenetProtocol;
+		const registerPlainKeyGenSecret = vi.fn();
+		registerPlainKeyGenSecret.mockResolvedValueOnce("pending_shares");
+		const keyGenClient = {
+			registerPlainKeyGenSecret,
 		} as unknown as KeyGenClient;
 		const machineStates: MachineStates = {
 			rollover: {
@@ -192,6 +225,51 @@ describe("complaint responded", () => {
 			signing: {},
 		};
 		const diff = await handleComplaintResponded(MACHINE_CONFIG, protocol, keyGenClient, machineStates, EVENT);
+		expect(diff).toStrictEqual({
+			rollover: {
+				id: "collecting_confirmations",
+				groupId: "0x06cb03baac74421225341827941e88d9547e5459c4b3715c0000000000000000",
+				nextEpoch: 10n,
+				complaintDeadline: 25n,
+				responseDeadline: 30n,
+				deadline: 30n,
+				complaints: {
+					[entryPoint08Address]: { unresponded: 0, total: 1 },
+				},
+				sharesFrom: [entryPoint08Address],
+				confirmationsFrom: [],
+			},
+			actions: [],
+		});
+	});
+
+	it("should accept complaint response when collecting confirmations and validator is not plaintiff", async () => {
+		const protocol = {} as unknown as SafenetProtocol;
+		const verifySecretShare = vi.fn().mockReturnValueOnce(true);
+		const keyGenClient = {
+			verifySecretShare,
+		} as unknown as KeyGenClient;
+		const machineConfig = {
+			...MACHINE_CONFIG,
+			account: ethAddress,
+		};
+		const machineStates: MachineStates = {
+			rollover: {
+				id: "collecting_confirmations",
+				groupId: "0x06cb03baac74421225341827941e88d9547e5459c4b3715c0000000000000000",
+				nextEpoch: 10n,
+				complaintDeadline: 25n,
+				responseDeadline: 30n,
+				deadline: 30n,
+				complaints: {
+					[entryPoint08Address]: { total: 1, unresponded: 1 },
+				},
+				sharesFrom: [entryPoint08Address],
+				confirmationsFrom: [],
+			},
+			signing: {},
+		};
+		const diff = await handleComplaintResponded(machineConfig, protocol, keyGenClient, machineStates, EVENT);
 		expect(diff).toStrictEqual({
 			rollover: {
 				id: "collecting_confirmations",
@@ -222,8 +300,6 @@ describe("complaint responded", () => {
 		const keyGenSetup = makeKeyGenSetup();
 		const setupKeyGen = vi.fn();
 		setupKeyGen.mockReturnValueOnce(keyGenSetup);
-		const participant = vi.fn();
-		participant.mockReturnValueOnce(entryPoint07Address);
 		const verifySecretShare = vi.fn();
 		verifySecretShare.mockReturnValueOnce(false);
 		const participants = vi.fn();
@@ -233,7 +309,6 @@ describe("complaint responded", () => {
 			setupGroup,
 			setupKeyGen,
 			verifySecretShare,
-			participant,
 		} as unknown as KeyGenClient;
 		const machineConfig = {
 			...MACHINE_CONFIG,
@@ -344,7 +419,7 @@ describe("complaint responded", () => {
 		});
 	});
 
-	it("should remove missing share once received", async () => {
+	it("should continue not confirm responses when pending shares", async () => {
 		const protocol = {} as unknown as SafenetProtocol;
 		const participant = vi.fn();
 		participant.mockReturnValueOnce(entryPoint06Address);
@@ -366,7 +441,7 @@ describe("complaint responded", () => {
 				complaintDeadline: 25n,
 				responseDeadline: 30n,
 				deadline: 30n,
-				sharesFrom: [entryPoint06Address],
+				sharesFrom: [entryPoint06Address, entryPoint08Address],
 				confirmationsFrom: [],
 				complaints: {
 					[entryPoint08Address]: { unresponded: 1, total: 1 },
@@ -408,7 +483,7 @@ describe("complaint responded", () => {
 				complaintDeadline: 25n,
 				responseDeadline: 30n,
 				deadline: 30n,
-				sharesFrom: [entryPoint06Address],
+				sharesFrom: [entryPoint06Address, entryPoint08Address],
 				confirmationsFrom: [],
 				complaints: {
 					[entryPoint08Address]: { unresponded: 1, total: 1 },

@@ -157,7 +157,7 @@ describe("receiving secret shares", () => {
 				deadline: 79n, // 4n (block) + 3n * 25n (key gen timeout)
 				lastParticipant: EVENT.participant,
 				complaints: {},
-				sharesFrom: [],
+				sharesFrom: ["0x0000000000000000000000000000000000005aFE"],
 				confirmationsFrom: [],
 			},
 			actions: [
