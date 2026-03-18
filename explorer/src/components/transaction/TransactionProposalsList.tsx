@@ -23,6 +23,7 @@ export function TransactionProposalsList({
 	hasMore,
 	onShowMore,
 	isLoading,
+	skeletonCount = 1,
 	isLoadingMore,
 	showMoreLabel = "Show More",
 	emptyLabel = "No transactions found",
@@ -32,6 +33,7 @@ export function TransactionProposalsList({
 	hasMore: boolean;
 	onShowMore: () => void;
 	isLoading?: boolean;
+	skeletonCount?: number;
 	isLoadingMore?: boolean;
 	showMoreLabel?: string;
 	emptyLabel?: string;
@@ -44,7 +46,8 @@ export function TransactionProposalsList({
 			</div>
 			<div className="space-y-2">
 				{isLoading ? (
-					<TransactionListRowSkeleton />
+					// biome-ignore lint/suspicious/noArrayIndexKey: skeleton rows are static placeholders with no identity
+					Array.from({ length: skeletonCount }, (_, i) => <TransactionListRowSkeleton key={`skeleton-${i}`} />)
 				) : proposals.length === 0 ? (
 					<div className="w-full p-8 text-center text-sub-title">{emptyLabel}</div>
 				) : (

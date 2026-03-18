@@ -38,6 +38,7 @@ export function RecentTransactionProposals({
 				hasMore={proposals.length > itemsToShow}
 				onShowMore={onShowMore}
 				isLoading={isLoading}
+				skeletonCount={itemsToShow}
 				showMoreLabel="Show More"
 			/>
 		</>
