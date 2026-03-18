@@ -6,7 +6,17 @@
 
 @import "tailwindcss";
 
+@keyframes shimmer {
+	from {
+		transform: translateX(-100%);
+	}
+	to {
+		transform: translateX(200%);
+	}
+}
+
 @theme {
+	--animate-shimmer: shimmer 1s ease-in-out infinite;
 	/* Typography */
 	--text-2xs: 0.625rem;
 	--font-mono: "Geist Mono Variable", "Geist Mono", ui-monospace, monospace;
@@ -94,7 +104,7 @@ code {
 	--color-title: #000000;
 	--color-title-hover: #1a1b1a;
 	--color-sub-title: #808b85;
-	--color-muted: #ccd1ce;
+	--color-muted: #9b9c9c;
 
 	/* Button */
 	--color-button: #000000;
@@ -139,7 +149,7 @@ code {
 	--color-title: #ffffff;
 	--color-title-hover: #e0e0e0;
 	--color-sub-title: #a1a3a7;
-	--color-muted: #1e201e;
+	--color-muted: #727272;
 
 	/* Button */
 	--color-button: #12ff80;

@@ -1,3 +1,4 @@
+import { Spinner } from "@/components/common/Spinner";
 import {
 	TransactionListRow,
 	TransactionListRowSkeleton,
@@ -23,6 +24,7 @@ export function TransactionProposalsList({
 	hasMore,
 	onShowMore,
 	isLoading,
+	skeletonCount = 1,
 	isLoadingMore,
 	showMoreLabel = "Show More",
 	emptyLabel = "No transactions found",
@@ -32,19 +34,26 @@ export function TransactionProposalsList({
 	hasMore: boolean;
 	onShowMore: () => void;
 	isLoading?: boolean;
+	skeletonCount?: number;
 	isLoadingMore?: boolean;
 	showMoreLabel?: string;
 	emptyLabel?: string;
 }) {
 	return (
 		<>
-			{label !== undefined && <div className="w-full p-2 text-xs text-right">{label}</div>}
+			{(label !== undefined || isLoading) && (
+				<div className="w-full p-2 text-xs text-right flex justify-end items-center">
+					{isLoading ? <Spinner className="h-3 w-3" /> : label}
+					&nbsp;recent proposals
+				</div>
+			)}
 			<div className="hidden sm:block">
 				<TransactionListHeader />
 			</div>
 			<div className="space-y-2">
 				{isLoading ? (
-					<TransactionListRowSkeleton />
+					// biome-ignore lint/suspicious/noArrayIndexKey: skeleton rows are static placeholders with no identity
+					Array.from({ length: skeletonCount }, (_, i) => <TransactionListRowSkeleton key={`skeleton-${i}`} />)
 				) : proposals.length === 0 ? (
 					<div className="w-full p-8 text-center text-sub-title">{emptyLabel}</div>
 				) : (
