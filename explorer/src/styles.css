@@ -6,7 +6,17 @@
 
 @import "tailwindcss";
 
+@keyframes shimmer {
+	from {
+		background-position: -200% center;
+	}
+	to {
+		background-position: 200% center;
+	}
+}
+
 @theme {
+	--animate-shimmer: shimmer 1.6s ease-in-out infinite;
 	/* Typography */
 	--text-2xs: 0.625rem;
 	--font-mono: "Geist Mono Variable", "Geist Mono", ui-monospace, monospace;
