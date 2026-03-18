@@ -1,9 +1,6 @@
 export const SafeResearchBanner = () => {
 	return (
-		<div
-			className="flex items-center p-2 text-sm text-warning border border-warning-outline rounded-lg bg-warning-surface"
-			role="alert"
-		>
+		<div className="flex items-center p-2 text-sm text-info border border-info/30 rounded-card bg-info/10" role="alert">
 			<svg
 				className="shrink-0 inline w-4 h-4 me-3"
 				aria-hidden="true"

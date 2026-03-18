@@ -33,7 +33,7 @@ export function KeyGenStatusItem({ status }: { status: KeyGenStatus | null }) {
 	const allIds: Address[] = Array.from(validatorInfo.data?.keys() ?? []);
 
 	return (
-		<div className="bg-surface-0 border border-surface-outline rounded-md p-4 space-y-2 text-sm">
+		<div className="bg-surface-0 border border-surface-outline rounded-card p-4 space-y-2 text-sm">
 			<div className="flex items-center gap-2">
 				<span className={`font-semibold ${statusColor(status)}`}>[{label}]</span>
 				<span className="font-mono text-muted">KeyGen {status.gid.slice(0, 18)}…</span>

@@ -1,5 +1,6 @@
 import { Cog6ToothIcon } from "@heroicons/react/24/solid";
 import { Link } from "@tanstack/react-router";
+import { SafenetBetaLogo } from "@/components/common/SafenetBetaLogo";
 import { SafeResearchBanner } from "@/components/SafeResearch";
 import { useConsensusState } from "@/hooks/useConsensusState";
 
@@ -11,8 +12,8 @@ export default function Header() {
 		// Element 2 is the Safe Research banner.
 		<header className="sticky top-0 z-50 w-full flex flex-col items-center px-2 py-2 bg-surface-1 border-b border-surface-outline">
 			<nav className="flex flex-row w-full justify-between mb-2">
-				<Link to="/" className="text-xl font-semibold text-title hover:opacity-75 transition" search={{}}>
-					Safenet
+				<Link to="/" className="hover:opacity-75 transition" search={{}}>
+					<SafenetBetaLogo />
 				</Link>
 				<div className="flex items-center gap-2">
 					Block: {state.data.currentBlock} | Epoch: {state.data.currentEpoch} | GroupId:{" "}

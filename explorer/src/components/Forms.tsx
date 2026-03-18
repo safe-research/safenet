@@ -69,7 +69,7 @@ function SubmitItem({
 function ErrorItem({ error }: { error: string | undefined }) {
 	return (
 		error && (
-			<div className="mt-6 p-4 bg-error-surface border border-error-outline rounded-md">
+			<div className="mt-6 p-4 bg-error-surface border border-error-outline rounded-card">
 				<h3 className="text-sm font-medium text-error">Error</h3>
 				<p className="mt-1 text-sm text-error">{error}</p>
 			</div>

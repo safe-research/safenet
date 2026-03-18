@@ -6,6 +6,7 @@ const variantClasses = {
 	error: "bg-error text-error-foreground",
 	warning: "bg-warning-surface text-warning border border-warning-outline",
 	neutral: "bg-surface-0 text-muted border border-surface-outline",
+	info: "bg-info/10 text-info border border-info/30",
 } as const;
 
 type BadgeVariant = keyof typeof variantClasses;

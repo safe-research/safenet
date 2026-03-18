@@ -15,6 +15,8 @@
 		"coverage": "vitest run --coverage"
 	},
 	"dependencies": {
+		"@fontsource-variable/dm-sans": "^5.2.8",
+		"@fontsource-variable/geist-mono": "^5.2.7",
 		"@heroicons/react": "^2.2.0",
 		"@hookform/resolvers": "^5.2.2",
 		"@noble/curves": "^2.0.1",

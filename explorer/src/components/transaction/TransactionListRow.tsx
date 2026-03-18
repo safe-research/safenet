@@ -23,7 +23,7 @@ export function TransactionRowGrid({ children, className }: { children: React.Re
 /** Placeholder row shown while the transaction list is loading. Matches the grid layout of TransactionListRow. */
 export function TransactionListRowSkeleton() {
 	return (
-		<TransactionRowGrid className="items-start bg-surface-1 border border-surface-outline rounded-lg px-3 py-2.5">
+		<TransactionRowGrid className="items-start bg-surface-1 border border-surface-outline rounded-card px-3 py-2.5">
 			<div className="flex flex-col gap-1">
 				<Skeleton className="h-5 w-full" />
 				<Skeleton className="h-5 w-full" />
@@ -56,7 +56,7 @@ export function TransactionListRow({ proposal }: { proposal: TransactionProposal
 
 	return (
 		<Link to="/safeTx" search={{ chainId: `${proposal.chainId}`, safeTxHash: proposal.safeTxHash }}>
-			<TransactionRowGrid className="items-start bg-surface-1 border border-surface-outline rounded-lg px-3 py-2.5 hover:bg-surface-hover cursor-pointer">
+			<TransactionRowGrid className="items-start bg-surface-1 border border-surface-outline rounded-card px-3 py-2.5 hover:bg-secondary cursor-pointer">
 				{/* Column 1: Network + Status badges */}
 				<div className="flex flex-col gap-1">
 					<NetworkBadge chainId={proposal.chainId} />
@@ -64,9 +64,7 @@ export function TransactionListRow({ proposal }: { proposal: TransactionProposal
 				</div>
 
 				{/* Column 2: Safe address */}
-				<div className="col-span-2 sm:col-span-1 text-xs font-mono text-sub-title truncate self-center">
-					{shortAddress(tx.safe)}
-				</div>
+				<div className="col-span-2 sm:col-span-1 text-xs font-mono truncate self-center">{shortAddress(tx.safe)}</div>
 
 				{/* Column 3: SafeTxHash */}
 				<div className="hidden sm:block text-xs font-mono truncate self-center">
