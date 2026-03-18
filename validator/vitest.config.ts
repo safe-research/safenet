@@ -18,9 +18,9 @@ export default defineConfig({
 		globals: false,
 
 		coverage: {
-			provider: 'v8',
-			exclude: ['src/__tests__/**'],
-			reporter: ['text', 'json', 'html', 'lcov'],
+			provider: "v8",
+			exclude: ["src/__tests__/**"],
+			reporter: ["text", "json", "html", "lcov"],
 		},
 	},
 });

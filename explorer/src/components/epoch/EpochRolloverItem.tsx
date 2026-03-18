@@ -18,9 +18,7 @@ export function EpochRolloverItem({ entry, prevStagedAt }: { entry: EpochRollove
 	return (
 		<Box className="space-y-3">
 			<div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
-				<span className="font-semibold text-title">
-					Epoch {entry.activeEpoch.toString()} → {entry.proposedEpoch.toString()}
-				</span>
+				<span className="font-semibold text-title">Epoch {entry.proposedEpoch.toString()}</span>
 				<div className="text-sm text-muted">
 					<p>Staged: block {entry.stagedAt.toString()}</p>
 				</div>
