@@ -34,7 +34,7 @@ export function RecentTransactionProposals({
 			/>
 			<TransactionProposalsList
 				proposals={proposals.slice(0, itemsToShow)}
-				label={isLoading ? "" : `${proposals.length} recent proposals`}
+				label={isLoading ? undefined : `${proposals.length}`}
 				hasMore={proposals.length > itemsToShow}
 				onShowMore={onShowMore}
 				isLoading={isLoading}

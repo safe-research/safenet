@@ -1,3 +1,4 @@
+import { Spinner } from "@/components/common/Spinner";
 import {
 	TransactionListRow,
 	TransactionListRowSkeleton,
@@ -40,7 +41,12 @@ export function TransactionProposalsList({
 }) {
 	return (
 		<>
-			{label !== undefined && <div className="w-full p-2 text-xs text-right">{label}</div>}
+			{(label !== undefined || isLoading) && (
+				<div className="w-full p-2 text-xs text-right flex justify-end items-center">
+					{isLoading ? <Spinner className="h-3 w-3" /> : label}
+					&nbsp;recent proposals
+				</div>
+			)}
 			<div className="hidden sm:block">
 				<TransactionListHeader />
 			</div>
