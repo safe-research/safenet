@@ -24,10 +24,10 @@ Genesis Group Id: `0xf3d78298339ca6b6f2885e1157089bc86ac55520544a838400000000000
     - `100`
 - Coordinator
     - `0xaE27021CEB45316f1efe69D8E362aC07ED3Bd7E4`
-    - [Gnosisscan](https://gnosisscan.io/address/0xaE27021CEB45316f1efe69D8E362aC07ED3Bd7E4#code)
+    - [Gnosisscan](https://gnosisscan.io/address/0xaE27021CEB45316f1efe69D8E362aC07ED3Bd7E4)
 - Consensus
     - `0x223624cBF099e5a8f8cD5aF22aFa424a1d1acEE9`
-    - [Gnosisscan](https://gnosisscan.io/address/0x223624cBF099e5a8f8cD5aF22aFa424a1d1acEE9#code)
+    - [Gnosisscan](https://gnosisscan.io/address/0x223624cBF099e5a8f8cD5aF22aFa424a1d1acEE9)
 - Genesis Salt
     - `0x5afe000000000000000000000000000000000000000000000000000000000000`
 - Blocks per epoch
@@ -53,4 +53,4 @@ STAKER_ADDRESS=# Address that manages the stake on Ethereum Mainnet for the vali
 PRIVATE_KEY=# EOA that is funded on Gnosis Chain to interact with the consensus contract
 ```
 
-See validator [.env.sample](../validator/.env.sample) for reference.
+See validator [.env.sample](../validator/.env.sample) for reference and additional configuration options.
