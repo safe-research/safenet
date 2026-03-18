@@ -70,7 +70,7 @@ describe("complaint submitted", () => {
 				responseDeadline: 30n,
 				deadline: 30n,
 				complaints: {},
-				missingSharesFrom: [],
+				sharesFrom: [],
 				confirmationsFrom: [],
 			},
 			signing: {},
@@ -91,7 +91,7 @@ describe("complaint submitted", () => {
 				responseDeadline: 25n,
 				deadline: 30n,
 				complaints: {},
-				missingSharesFrom: [],
+				sharesFrom: [],
 				confirmationsFrom: [],
 			},
 			signing: {},
@@ -116,7 +116,7 @@ describe("complaint submitted", () => {
 				groupId: "0x06cb03baac74421225341827941e88d9547e5459c4b3715c0000000000000000",
 				nextEpoch: 10n,
 				deadline: 30n,
-				missingSharesFrom: [],
+				sharesFrom: [],
 				complaints: {},
 			},
 			signing: {},
@@ -128,7 +128,7 @@ describe("complaint submitted", () => {
 				groupId: "0x06cb03baac74421225341827941e88d9547e5459c4b3715c0000000000000000",
 				nextEpoch: 10n,
 				deadline: 30n,
-				missingSharesFrom: [],
+				sharesFrom: [],
 				complaints: {
 					[entryPoint07Address]: { unresponded: 1, total: 1 },
 				},
@@ -155,7 +155,7 @@ describe("complaint submitted", () => {
 				responseDeadline: 30n,
 				deadline: 30n,
 				complaints: {},
-				missingSharesFrom: [],
+				sharesFrom: [],
 				confirmationsFrom: [],
 			},
 			signing: {},
@@ -172,7 +172,7 @@ describe("complaint submitted", () => {
 				complaints: {
 					[entryPoint07Address]: { unresponded: 1, total: 1 },
 				},
-				missingSharesFrom: [],
+				sharesFrom: [],
 				confirmationsFrom: [],
 			},
 		});
@@ -194,7 +194,7 @@ describe("complaint submitted", () => {
 				groupId: "0x06cb03baac74421225341827941e88d9547e5459c4b3715c0000000000000000",
 				nextEpoch: 10n,
 				deadline: 30n,
-				missingSharesFrom: [],
+				sharesFrom: [],
 				complaints: {
 					[entryPoint06Address]: { unresponded: 1, total: 1 },
 				},
@@ -208,7 +208,7 @@ describe("complaint submitted", () => {
 				groupId: "0x06cb03baac74421225341827941e88d9547e5459c4b3715c0000000000000000",
 				nextEpoch: 10n,
 				deadline: 30n,
-				missingSharesFrom: [],
+				sharesFrom: [],
 				complaints: {
 					[entryPoint06Address]: { unresponded: 1, total: 1 },
 					[entryPoint07Address]: { unresponded: 1, total: 1 },
@@ -233,7 +233,7 @@ describe("complaint submitted", () => {
 				groupId: "0x06cb03baac74421225341827941e88d9547e5459c4b3715c0000000000000000",
 				nextEpoch: 10n,
 				deadline: 30n,
-				missingSharesFrom: [],
+				sharesFrom: [],
 				complaints: {
 					[entryPoint07Address]: { unresponded: 1, total: 1 },
 				},
@@ -247,7 +247,7 @@ describe("complaint submitted", () => {
 				groupId: "0x06cb03baac74421225341827941e88d9547e5459c4b3715c0000000000000000",
 				nextEpoch: 10n,
 				deadline: 30n,
-				missingSharesFrom: [],
+				sharesFrom: [],
 				complaints: {
 					[entryPoint07Address]: { unresponded: 2, total: 2 },
 				},
@@ -279,7 +279,7 @@ describe("complaint submitted", () => {
 				groupId: "0x06cb03baac74421225341827941e88d9547e5459c4b3715c0000000000000000",
 				nextEpoch: 10n,
 				deadline: 30n,
-				missingSharesFrom: [],
+				sharesFrom: [],
 				complaints: {
 					[entryPoint07Address]: { unresponded: 1, total: 1 },
 				},
@@ -293,7 +293,7 @@ describe("complaint submitted", () => {
 				groupId: "0x06cb03baac74421225341827941e88d9547e5459c4b3715c0000000000000000",
 				nextEpoch: 10n,
 				deadline: 30n,
-				missingSharesFrom: [],
+				sharesFrom: [],
 				complaints: {
 					[entryPoint07Address]: { unresponded: 2, total: 2 },
 				},
@@ -334,7 +334,7 @@ describe("complaint submitted", () => {
 				groupId: EVENT.gid,
 				nextEpoch: 10n,
 				deadline: 30n,
-				missingSharesFrom: [],
+				sharesFrom: [],
 				complaints: {
 					[entryPoint07Address]: { unresponded: 0, total: 1 },
 				},

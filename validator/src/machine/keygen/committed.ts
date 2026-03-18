@@ -1,4 +1,5 @@
 import type { KeyGenClient } from "../../consensus/keyGen/client.js";
+import type { ProtocolAction } from "../../consensus/protocol/types.js";
 import type { KeyGenCommittedEvent } from "../transitions/types.js";
 import type { MachineConfig, MachineStates, StateDiff } from "../types.js";
 
@@ -16,11 +17,6 @@ export const handleKeyGenCommitted = async (
 	if (machineStates.rollover.groupId !== event.gid) return {};
 	const nextEpoch = machineStates.rollover.nextEpoch;
 
-	// TODO: [observe mode] allow to collect commitments as non participant
-	if (!keyGenClient.participants(event.gid).includes(machineConfig.account)) {
-		return {};
-	}
-
 	if (
 		!keyGenClient.handleKeygenCommitment(event.gid, event.participant, event.commitment.q, event.commitment.c, {
 			r: event.commitment.r,
@@ -35,25 +31,27 @@ export const handleKeyGenCommitted = async (
 	if (!event.committed) {
 		return {};
 	}
-	// TODO: [observe mode] don't generate secrets and perform actions in observe mode BUT build group public key
 	// If all participants have committed update state to "collecting_shares"
-	const { verificationShare, shares } = keyGenClient.createSecretShares(event.gid, machineConfig.account);
+	keyGenClient.createGroupKey(event.gid);
+	const actions: ProtocolAction[] = [];
+	if (keyGenClient.hasParticipant(event.gid, machineConfig.account)) {
+		const { verificationShare, shares } = keyGenClient.createSecretShares(event.gid, machineConfig.account);
+		actions.push({
+			id: "key_gen_publish_secret_shares",
+			groupId: event.gid,
+			verificationShare,
+			shares,
+		});
+	}
 	return {
 		rollover: {
 			id: "collecting_shares",
 			groupId: event.gid,
 			nextEpoch,
 			deadline: event.block + machineConfig.keyGenTimeout,
-			missingSharesFrom: [],
+			sharesFrom: [],
 			complaints: {},
 		},
-		actions: [
-			{
-				id: "key_gen_publish_secret_shares",
-				groupId: event.gid,
-				verificationShare,
-				shares,
-			},
-		],
+		actions,
 	};
 };

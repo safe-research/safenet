@@ -36,10 +36,9 @@ export const handleComplaintResponded = async (
 		return {};
 	}
 
-	// TODO: [observe mode] make sure that participantId doesn't throw
 	// If reponse is required to finalize shares get state by registering secret, otherwise only verify
 	const sharesState =
-		machineConfig.account === event.plaintiff && machineStates.rollover.missingSharesFrom.includes(event.accused)
+		machineConfig.account === event.plaintiff && !machineStates.rollover.sharesFrom.includes(event.accused)
 			? await keyGenClient.registerPlainKeyGenSecret(event.gid, machineConfig.account, event.accused, event.secretShare)
 			: !keyGenClient.verifySecretShare(event.gid, event.plaintiff, event.accused, event.secretShare)
 				? "invalid_share"
@@ -60,7 +59,7 @@ export const handleComplaintResponded = async (
 	}
 
 	const actions: ProtocolAction[] = [];
-	// TODO: [observe mode] do not perform actions
+	// If the complaint was not for this validator then this state cannot be triggered
 	if (sharesState === "shares_completed") {
 		logger?.debug?.(`Valid complaint response from ${event.accused}`);
 		const nextEpoch = machineStates.rollover.nextEpoch;
@@ -72,10 +71,10 @@ export const handleComplaintResponded = async (
 		});
 	}
 
-	const missingSharesFrom =
+	const sharesFrom =
 		sharesState === "pending_shares" || sharesState === "shares_completed"
-			? machineStates.rollover.missingSharesFrom.filter((p) => p !== event.accused)
-			: machineStates.rollover.missingSharesFrom;
+			? [...machineStates.rollover.sharesFrom, event.accused]
+			: machineStates.rollover.sharesFrom;
 
 	const complaints = {
 		...machineStates.rollover.complaints,
@@ -87,7 +86,7 @@ export const handleComplaintResponded = async (
 
 	const rollover: RolloverState = {
 		...machineStates.rollover,
-		missingSharesFrom,
+		sharesFrom,
 		complaints,
 	};
 	return {

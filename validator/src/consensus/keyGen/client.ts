@@ -83,12 +83,10 @@ export class KeyGenClient {
 	): {
 		groupId: GroupId;
 		participantsRoot: Hex;
-		// TODO: allow to observe
 	} {
 		const participantsRoot = calculateParticipantsRoot(participants);
 		const count = participants.length;
 		const groupId = calcGroupId(participantsRoot, count, threshold, context);
-		// TODO: [observe mode] calculate participant id elsewhere
 		this.#storage.registerGroup(groupId, participants, threshold);
 		return {
 			groupId,
@@ -134,6 +132,11 @@ export class KeyGenClient {
 	}
 
 	// Round 2.1
+	createGroupKey(groupId: GroupId) {
+		const commitments = toParticipantIdMap(this.#storage.commitmentsMap(groupId));
+		const groupPublicKey = createVerificationShare(commitments, 0n);
+		this.#storage.registerGroupKey(groupId, groupPublicKey);
+	}
 	createSecretShares(
 		groupId: GroupId,
 		me: Address,
@@ -142,9 +145,6 @@ export class KeyGenClient {
 		shares: bigint[];
 	} {
 		const commitments = toParticipantIdMap(this.#storage.commitmentsMap(groupId));
-		const groupPublicKey = createVerificationShare(commitments, 0n);
-		this.#storage.registerGroupKey(groupId, groupPublicKey);
-		// TODO: [observe mode] allow to register group public key
 		// Will be published as y
 		const verificationShare = createVerificationShare(commitments, deriveParticipantId(me));
 		this.#storage.registerVerificationShare(groupId, me, verificationShare);
@@ -156,7 +156,6 @@ export class KeyGenClient {
 		for (const peer of participants) {
 			if (peer === me) continue;
 			const peerId = deriveParticipantId(peer);
-			// TODO: [observe mode] remove - peerCommitments are not used here anymore (previously it was utilized for encryption)
 			const peerCommitments = commitments.get(peerId);
 			if (peerCommitments === undefined) throw new Error(`Commitments for ${groupId}:${peer} are not available!`);
 			const peerEncryptionPublicKey = this.#storage.encryptionPublicKey(groupId, peer);
@@ -180,10 +179,10 @@ export class KeyGenClient {
 	}
 
 	// Complaint flow verify revealed
-	verifySecretShare(groupId: GroupId, me: Address, peer: Address, secretShare: bigint): boolean {
-		const commitment = this.#storage.commitments(groupId, peer);
-		if (commitment === undefined) throw new Error(`Commitments for ${groupId}:${peer} are not available!`);
-		const partialVerificationShare = evalCommitment(commitment, deriveParticipantId(me));
+	verifySecretShare(groupId: GroupId, forParticipant: Address, fromParticipant: Address, secretShare: bigint): boolean {
+		const commitment = this.#storage.commitments(groupId, fromParticipant);
+		if (commitment === undefined) throw new Error(`Commitments for ${groupId}:${fromParticipant} are not available!`);
+		const partialVerificationShare = evalCommitment(commitment, deriveParticipantId(forParticipant));
 		return verifyKey(partialVerificationShare, secretShare);
 	}
 

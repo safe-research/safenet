@@ -36,7 +36,7 @@ const MACHINE_STATES: MachineStates = {
 		complaintDeadline: 20n,
 		responseDeadline: 25n,
 		deadline: 30n,
-		missingSharesFrom: [],
+		sharesFrom: [],
 		confirmationsFrom: [entryPoint08Address, entryPoint06Address],
 		complaints: {},
 	},
@@ -140,7 +140,7 @@ describe("key gen confirmed", () => {
 				complaintDeadline: 20n,
 				responseDeadline: 25n,
 				deadline: 30n,
-				missingSharesFrom: [],
+				sharesFrom: [],
 				confirmationsFrom: [entryPoint08Address],
 				complaints: {},
 			},
@@ -173,7 +173,7 @@ describe("key gen confirmed", () => {
 				complaintDeadline: 20n,
 				responseDeadline: 25n,
 				deadline: 30n,
-				missingSharesFrom: [],
+				sharesFrom: [],
 				confirmationsFrom: [entryPoint08Address, entryPoint07Address],
 				lastParticipant: entryPoint07Address,
 				complaints: {},
@@ -183,15 +183,17 @@ describe("key gen confirmed", () => {
 		expect(participants).toBeCalledWith("0x06cb03baac74421225341827941e88d9547e5459c4b3715c0000000000000000");
 	});
 
-	it("should skip signing and trigger nonce tree generation if in genesis key gen", async () => {
+	it("should skip signing and trigger nonce tree generation if in genesis key gen and part of genesis", async () => {
 		const keyGenClient = {} as unknown as KeyGenClient;
 		const participants = vi.fn();
 		participants.mockReturnValueOnce([entryPoint06Address, entryPoint07Address, entryPoint08Address]);
 		const generateNonceTree = vi.fn();
 		generateNonceTree.mockReturnValueOnce(keccak256("0x5afe"));
+		const hasParticipant = vi.fn().mockReturnValue(true);
 		const signingClient = {
 			participants,
 			generateNonceTree,
+			hasParticipant,
 		} as unknown as SigningClient;
 		const consensusState: ConsensusState = {
 			...CONSENSUS_STATE,
@@ -230,6 +232,41 @@ describe("key gen confirmed", () => {
 			"0x06cb03baac74421225341827941e88d9547e5459c4b3715c0000000000000000",
 			entryPoint06Address,
 		);
+	});
+
+	it("should skip signing and trigger nonce tree generation if in genesis key gen and part of genesis", async () => {
+		const keyGenClient = {} as unknown as KeyGenClient;
+		const participants = vi.fn();
+		participants.mockReturnValueOnce([entryPoint06Address, entryPoint07Address, entryPoint08Address]);
+		const hasParticipant = vi.fn().mockReturnValue(false);
+		const signingClient = {
+			participants,
+			hasParticipant,
+		} as unknown as SigningClient;
+		const consensusState: ConsensusState = {
+			...CONSENSUS_STATE,
+			genesisGroupId: "0x06cb03baac74421225341827941e88d9547e5459c4b3715c0000000000000000",
+		};
+		const protocol = {} as unknown as SafenetProtocol;
+		const verificationEngine = {} as unknown as VerificationEngine;
+		const diff = await handleKeyGenConfirmed(
+			MACHINE_CONFIG,
+			protocol,
+			verificationEngine,
+			keyGenClient,
+			signingClient,
+			consensusState,
+			MACHINE_STATES,
+			EVENT,
+		);
+
+		expect(diff).toStrictEqual({
+			rollover: { id: "epoch_staged", nextEpoch: 0n },
+			consensus: {},
+			actions: [],
+		});
+		expect(participants).toBeCalledTimes(1);
+		expect(participants).toBeCalledWith("0x06cb03baac74421225341827941e88d9547e5459c4b3715c0000000000000000");
 	});
 
 	it("should throw if missing public key for group", async () => {
@@ -372,23 +409,24 @@ describe("key gen confirmed", () => {
 		expect(verify).toBeCalledWith(EPOCH_PACKET);
 	});
 
-	it("should wait for epoch signing if not part of active group", async () => {
+	it("should only verify packet when not part of signing group", async () => {
 		const groupPublicKey = vi.fn();
 		groupPublicKey.mockReturnValueOnce(TEST_POINT);
 		const keyGenClient = {
 			groupPublicKey,
 		} as unknown as KeyGenClient;
 		const participants = vi.fn();
-		// New group
 		participants.mockReturnValueOnce([entryPoint06Address, entryPoint07Address, entryPoint08Address]);
-		// Active group
 		participants.mockReturnValueOnce([
+			entryPoint06Address,
 			entryPoint07Address,
 			entryPoint08Address,
 			"0x0000000000000000000000000000000000000004",
 		]);
+		const hasParticipant = vi.fn().mockReturnValue(false);
 		const signingClient = {
 			participants,
+			hasParticipant,
 		} as unknown as SigningClient;
 		const protocol = {
 			chainId: () => 100n,
@@ -421,18 +459,16 @@ describe("key gen confirmed", () => {
 		expect(diff).toStrictEqual({
 			rollover,
 		});
-		expect(participants).toBeCalledTimes(2);
+		expect(participants).toBeCalledTimes(1);
 		// New group
 		expect(participants).toBeCalledWith("0x06cb03baac74421225341827941e88d9547e5459c4b3715c0000000000000000");
-		// Active group
-		expect(participants).toBeCalledWith("0xffa9d1aa438a646139fe8d817f9c9dbb060ee7e2e58f2b100000000000000000");
 		expect(groupPublicKey).toBeCalledTimes(1);
 		expect(groupPublicKey).toBeCalledWith("0x06cb03baac74421225341827941e88d9547e5459c4b3715c0000000000000000");
 		expect(verify).toBeCalledTimes(1);
 		expect(verify).toBeCalledWith(EPOCH_PACKET);
 	});
 
-	it("should verify packet and trigger signing for rollover", async () => {
+	it("should verify packet and trigger signing for rollover when part of signing group", async () => {
 		const groupPublicKey = vi.fn();
 		groupPublicKey.mockReturnValueOnce(TEST_POINT);
 		const keyGenClient = {
@@ -446,8 +482,10 @@ describe("key gen confirmed", () => {
 			entryPoint08Address,
 			"0x0000000000000000000000000000000000000004",
 		]);
+		const hasParticipant = vi.fn().mockReturnValue(true);
 		const signingClient = {
 			participants,
+			hasParticipant,
 		} as unknown as SigningClient;
 		const protocol = {
 			chainId: () => 100n,

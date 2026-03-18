@@ -92,7 +92,7 @@ const collectingSharesSchema = z.object({
 	nextEpoch: coercedBigIntSchema,
 	deadline: coercedBigIntSchema,
 	complaints: complaintsSchema,
-	missingSharesFrom: checkedAddressSchema.array(),
+	sharesFrom: checkedAddressSchema.array(),
 	lastParticipant: checkedAddressSchema.optional(),
 });
 
@@ -105,7 +105,7 @@ const collectingConfirmationsSchema = z.object({
 	responseDeadline: coercedBigIntSchema,
 	deadline: coercedBigIntSchema,
 	lastParticipant: checkedAddressSchema.optional(),
-	missingSharesFrom: checkedAddressSchema.array(),
+	sharesFrom: checkedAddressSchema.array(),
 	confirmationsFrom: checkedAddressSchema.array(),
 });
 

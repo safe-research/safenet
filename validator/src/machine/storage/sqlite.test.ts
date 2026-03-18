@@ -68,7 +68,7 @@ const ROLLOVER_TEST_STATES: { [K in RolloverState["id"]]: RolloverState & { id: 
 		groupId: "0x5afe000000000000000000000000000000000000000000000000000000000000",
 		nextEpoch: 1n,
 		deadline: 100n,
-		missingSharesFrom: ["0x0000000000000000000000000000000000000001"],
+		sharesFrom: ["0x0000000000000000000000000000000000000001"],
 		complaints: {
 			"0x0000000000000000000000000000000000000001": {
 				total: 2,
@@ -87,7 +87,7 @@ const ROLLOVER_TEST_STATES: { [K in RolloverState["id"]]: RolloverState & { id: 
 		deadline: 100n,
 		complaintDeadline: 80n,
 		responseDeadline: 60n,
-		missingSharesFrom: ["0x0000000000000000000000000000000000000001"],
+		sharesFrom: ["0x0000000000000000000000000000000000000001"],
 		complaints: {
 			"0x0000000000000000000000000000000000000001": {
 				total: 2,

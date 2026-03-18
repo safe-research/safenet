@@ -25,29 +25,22 @@ export const handleKeyGenSecretShared = async (
 		return {};
 	}
 
-	// TODO: [observe mode] allow to observe state of shared secrets (to check once it is done)
-	if (!keyGenClient.hasParticipant(groupId, machineConfig.account)) {
-		return {};
-	}
-
-	// TODO: [observe mode] do not handle secrets or perform actions in observe mode
 	// Track identity that has submitted last share
-	const response = await keyGenClient.handleKeygenSecrets(
-		groupId,
-		machineConfig.account,
-		event.participant,
-		event.share.f,
-	);
-	const missingSharesFrom = [...machineStates.rollover.missingSharesFrom];
+	const response = keyGenClient.hasParticipant(groupId, machineConfig.account)
+		? await keyGenClient.handleKeygenSecrets(groupId, machineConfig.account, event.participant, event.share.f)
+		: undefined;
+
 	const actions: ProtocolAction[] = [];
+	const sharesFrom = [...machineStates.rollover.sharesFrom];
 	if (response === "invalid_share") {
 		logger?.(`Invalid share submitted by ${event.participant} for group ${groupId}`);
-		missingSharesFrom.push(event.participant);
 		actions.push({
 			id: "key_gen_complain",
 			groupId,
 			accused: event.participant,
 		});
+	} else {
+		sharesFrom.push(event.participant);
 	}
 	// Share collection is completed when every paritcipant submitted a share, no matter if valid or invalid
 	// `response` will only be "shares_completed" when all valid shares have been received
@@ -56,7 +49,7 @@ export const handleKeyGenSecretShared = async (
 		return {
 			rollover: {
 				...machineStates.rollover,
-				missingSharesFrom,
+				sharesFrom,
 				lastParticipant: event.participant,
 			},
 			actions,
@@ -85,7 +78,7 @@ export const handleKeyGenSecretShared = async (
 			deadline: event.block + 3n * machineConfig.keyGenTimeout,
 			lastParticipant: event.participant,
 			complaints: machineStates.rollover.complaints,
-			missingSharesFrom,
+			sharesFrom,
 			confirmationsFrom: [],
 		},
 		actions,

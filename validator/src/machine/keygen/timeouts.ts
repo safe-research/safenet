@@ -48,7 +48,6 @@ const handleCollectingCommitments = (
 };
 
 const handleCollectingShares = (
-	machineConfig: MachineConfig,
 	keyGenClient: KeyGenClient,
 	rollover: Extract<RolloverState, { id: "collecting_shares" }>,
 	block: bigint,
@@ -57,13 +56,12 @@ const handleCollectingShares = (
 		// Still within deadline
 		return undefined;
 	}
-	const missingParticipants = new Set(keyGenClient.missingSecretShares(rollover.groupId, machineConfig.account));
+	const sharesFromSet = new Set(rollover.sharesFrom);
 	const currentPariticipants = keyGenClient.participants(rollover.groupId);
-	return [currentPariticipants.filter((p) => !missingParticipants.has(p)), rollover.nextEpoch];
+	return [currentPariticipants.filter((p) => sharesFromSet.has(p)), rollover.nextEpoch];
 };
 
 const getTimeoutInfo = (
-	machineConfig: MachineConfig,
 	keyGenClient: KeyGenClient,
 	rollover: RolloverState,
 	block: bigint,
@@ -73,7 +71,7 @@ const getTimeoutInfo = (
 			return handleCollectingCommitments(keyGenClient, rollover, block);
 		}
 		case "collecting_shares": {
-			return handleCollectingShares(machineConfig, keyGenClient, rollover, block);
+			return handleCollectingShares(keyGenClient, rollover, block);
 		}
 		case "collecting_confirmations": {
 			return handleCollectingConfirmations(keyGenClient, rollover, block);
@@ -92,7 +90,7 @@ export const checkKeyGenTimeouts = (
 	block: bigint,
 	logger?: Logger,
 ): StateDiff => {
-	const timeoutInfo = getTimeoutInfo(machineConfig, keyGenClient, machineStates.rollover, block);
+	const timeoutInfo = getTimeoutInfo(keyGenClient, machineStates.rollover, block);
 
 	if (timeoutInfo === undefined) {
 		// No need to adjust participants, as no timeout

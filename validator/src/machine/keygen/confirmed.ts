@@ -63,18 +63,18 @@ export const handleKeyGenConfirmed = async (
 	if (consensusState.genesisGroupId === groupId) {
 		// All confirmed for genesis group - start preprocessing and return to waiting state
 		logger?.("Genesis group all confirmations received, starting preprocessing");
-		const consensus: ConsensusDiff = {
-			groupPendingNonces: [groupId, true],
-		};
+		const consensus: ConsensusDiff = {};
 		// TODO: [observe mode] only generate nonce tree if part of genesis group
-		const nonceTreeRoot = signingClient.generateNonceTree(groupId, machineConfig.account);
-		const actions: ProtocolAction[] = [
-			{
+		const actions: ProtocolAction[] = [];
+		if (signingClient.hasParticipant(groupId, machineConfig.account)) {
+			const nonceTreeRoot = signingClient.generateNonceTree(groupId, machineConfig.account);
+			consensus.groupPendingNonces = [groupId, true];
+			actions.push({
 				id: "sign_register_nonce_commitments",
 				groupId,
 				nonceCommitmentsHash: nonceTreeRoot,
-			},
-		];
+			});
+		}
 		// Epoch 0 (Genesis) is setup. This should trigger the first non-genesis key gen
 		return { consensus, rollover: { id: "epoch_staged", nextEpoch: 0n }, actions };
 	}
@@ -130,8 +130,7 @@ export const handleKeyGenConfirmed = async (
 			rollover,
 		};
 	}
-	const signers = signingClient.participants(activeGroup);
-	if (!signers.includes(machineConfig.account)) {
+	if (!signingClient.hasParticipant(activeGroup, machineConfig.account)) {
 		// Not part of active group, don't participate in epoch signing
 		return {
 			rollover,
@@ -145,7 +144,7 @@ export const handleKeyGenConfirmed = async (
 				id: "waiting_for_request",
 				responsible: event.participant,
 				packet,
-				signers,
+				signers: signingClient.participants(activeGroup),
 				deadline: block + machineConfig.signingTimeout,
 			},
 		],

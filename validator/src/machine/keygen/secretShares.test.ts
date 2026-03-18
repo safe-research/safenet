@@ -14,7 +14,7 @@ const MACHINE_STATES: MachineStates = {
 		groupId: "0x06cb03baac74421225341827941e88d9547e5459c4b3715c0000000000000000",
 		nextEpoch: 10n,
 		deadline: 30n,
-		missingSharesFrom: [],
+		sharesFrom: [],
 		complaints: {},
 	},
 	signing: {},
@@ -79,17 +79,6 @@ describe("receiving secret shares", () => {
 		expect(diff).toStrictEqual({});
 	});
 
-	it("should not handle event if not part of group", async () => {
-		const hasParticipant = vi.fn();
-		hasParticipant.mockReturnValue(false);
-		const keyGenClient = {
-			hasParticipant,
-		} as unknown as KeyGenClient;
-		const diff = await handleKeyGenSecretShared(MACHINE_CONFIG, keyGenClient, MACHINE_STATES, EVENT);
-
-		expect(diff).toStrictEqual({});
-	});
-
 	it("should only update last participant if not completed", async () => {
 		const event: KeyGenSecretSharedEvent = {
 			...EVENT,
@@ -108,6 +97,7 @@ describe("receiving secret shares", () => {
 		expect(diff).toStrictEqual({
 			rollover: {
 				...MACHINE_STATES.rollover,
+				sharesFrom: [EVENT.participant],
 				lastParticipant: EVENT.participant,
 			},
 			actions: [],
@@ -121,13 +111,13 @@ describe("receiving secret shares", () => {
 		);
 	});
 
-	it("should track who submitted invalid shares", async () => {
+	it("should track who submitted shares (even if invalid) when not participating", async () => {
 		const event: KeyGenSecretSharedEvent = {
 			...EVENT,
 			shared: false,
 		};
 		const hasParticipant = vi.fn();
-		hasParticipant.mockReturnValue(true);
+		hasParticipant.mockReturnValue(false);
 		const handleKeygenSecrets = vi.fn();
 		handleKeygenSecrets.mockReturnValue("invalid_share");
 		const keyGenClient = {
@@ -139,24 +129,11 @@ describe("receiving secret shares", () => {
 		expect(diff).toStrictEqual({
 			rollover: {
 				...MACHINE_STATES.rollover,
-				missingSharesFrom: [EVENT.participant],
+				sharesFrom: [EVENT.participant],
 				lastParticipant: EVENT.participant,
 			},
-			actions: [
-				{
-					id: "key_gen_complain",
-					groupId: "0x06cb03baac74421225341827941e88d9547e5459c4b3715c0000000000000000",
-					accused: EVENT.participant,
-				},
-			],
+			actions: [],
 		});
-		expect(handleKeygenSecrets).toBeCalledTimes(1);
-		expect(handleKeygenSecrets).toBeCalledWith(
-			"0x06cb03baac74421225341827941e88d9547e5459c4b3715c0000000000000000",
-			entryPoint06Address,
-			EVENT.participant,
-			[0x5afe5afe5afe01n, 0x5afe5afe5afe02n, 0x5afe5afe5afe03n],
-		);
 	});
 
 	it("should track invalid shares have been submitted and proceed to key gen without sending confirmation", async () => {
@@ -180,7 +157,7 @@ describe("receiving secret shares", () => {
 				deadline: 79n, // 4n (block) + 3n * 25n (key gen timeout)
 				lastParticipant: EVENT.participant,
 				complaints: {},
-				missingSharesFrom: [EVENT.participant],
+				sharesFrom: [],
 				confirmationsFrom: [],
 			},
 			actions: [
@@ -207,7 +184,7 @@ describe("receiving secret shares", () => {
 				groupId: "0x06cb03baac74421225341827941e88d9547e5459c4b3715c0000000000000000",
 				nextEpoch: 0n,
 				deadline: 30n,
-				missingSharesFrom: [],
+				sharesFrom: [],
 				complaints: {},
 			},
 			signing: {},
@@ -232,7 +209,7 @@ describe("receiving secret shares", () => {
 				deadline: 79n, // 4n (block) + 3n * 25n (key gen timeout)
 				lastParticipant: EVENT.participant,
 				complaints: {},
-				missingSharesFrom: [],
+				sharesFrom: ["0x0000000000000000000000000000000000005aFE"],
 				confirmationsFrom: [],
 			},
 			actions: [
@@ -268,7 +245,7 @@ describe("receiving secret shares", () => {
 				groupId: "0x06cb03baac74421225341827941e88d9547e5459c4b3715c0000000000000000",
 				nextEpoch: 10n,
 				deadline: 30n,
-				missingSharesFrom: ["0x0000000000000000000000000000000000000001"],
+				sharesFrom: ["0x0000000000000000000000000000000000000001"],
 				complaints: {
 					"0x0000000000000000000000000000000000000001": { total: 1, unresponded: 1 },
 				},
@@ -287,7 +264,7 @@ describe("receiving secret shares", () => {
 				responseDeadline: 54n, // 4n (block) + 2n * 25n (key gen timeout)
 				deadline: 79n, // 4n (block) + 3n * 25n (key gen timeout)
 				lastParticipant: EVENT.participant,
-				missingSharesFrom: ["0x0000000000000000000000000000000000000001"],
+				sharesFrom: ["0x0000000000000000000000000000000000000001", "0x0000000000000000000000000000000000005aFE"],
 				complaints: {
 					"0x0000000000000000000000000000000000000001": { total: 1, unresponded: 1 },
 				},
@@ -325,7 +302,7 @@ describe("receiving secret shares", () => {
 				deadline: 79n, // 4n (block) + 3n * 25n (key gen timeout)
 				lastParticipant: EVENT.participant,
 				complaints: {},
-				missingSharesFrom: [],
+				sharesFrom: ["0x0000000000000000000000000000000000005aFE"],
 				confirmationsFrom: [],
 			},
 			actions: [
