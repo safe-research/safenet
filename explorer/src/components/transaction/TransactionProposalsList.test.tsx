@@ -46,14 +46,7 @@ const PROPOSALS = [makeProposal("0xhash1"), makeProposal("0xhash2"), makeProposa
 
 describe("TransactionProposalsList", () => {
 	it("renders the label count with 'recent proposals' suffix", () => {
-		render(
-			<TransactionProposalsList
-				proposals={PROPOSALS}
-				label="3"
-				hasMore={false}
-				onShowMore={vi.fn()}
-			/>,
-		);
+		render(<TransactionProposalsList proposals={PROPOSALS} label="3" hasMore={false} onShowMore={vi.fn()} />);
 		expect(screen.getByText(/3\s+recent proposals/)).toBeTruthy();
 	});
 
