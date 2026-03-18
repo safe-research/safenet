@@ -48,6 +48,8 @@ const watcherConfig: WatcherConfig = {
 	blockTimeOverride: validatorConfig.BLOCK_TIME_OVERRIDE,
 	maxReorgDepth: validatorConfig.MAX_REORG_DEPTH ?? 5,
 	blockPageSize: validatorConfig.BLOCK_PAGE_SIZE,
+	blockAllLogsQueryRetryCount: validatorConfig.BLOCK_ALL_LOGS_QUERY_RETRY_COUNT,
+	blockSingleQueryRetryCount: validatorConfig.BLOCK_SINGLE_QUERY_RETRY_COUNT,
 	maxLogsPerQuery: validatorConfig.MAX_LOGS_PER_QUERY,
 };
 logger.notice("Using configuration", { config, watcherConfig });

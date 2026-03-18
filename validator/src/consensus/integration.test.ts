@@ -176,11 +176,20 @@ describe("integration", () => {
 				keyGenTimeout: timeout,
 				signingTimeout: timeout,
 			};
+			const blockRetryCounts =
+				(i & 1) === 0
+					? // For half of the validators, use the log querying strategy for unreliable nodes.
+						{
+							blockAllLogsQueryRetryCount: 2,
+							blockSingleQueryRetryCount: 0,
+						}
+					: {};
 			const watcherConfig: WatcherConfig = {
 				maxReorgDepth: 1,
 				blockTimeOverride: blockTime,
 				blockPropagationDelay: Math.floor(blockTime / 5),
 				blockRetryDelays: [Math.floor(blockTime / 20), Math.floor(blockTime / 10), Math.floor(blockTime / 5)],
+				...blockRetryCounts,
 			};
 			const service = createValidatorService({
 				account: a,

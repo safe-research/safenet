@@ -24,6 +24,7 @@ export type WatcherConfig = Prettify<
 		| "blockPageSize"
 		| "blockPropagationDelay"
 		| "blockRetryDelays"
+		| "blockAllLogsQueryRetryCount"
 		| "blockSingleQueryRetryCount"
 		| "maxLogsPerQuery"
 		| "backoffDelays"

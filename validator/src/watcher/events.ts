@@ -10,10 +10,11 @@ import {
 	type Hex,
 	type Prettify,
 	type PublicClient,
+	parseEventLogs,
 	toEventSelector,
 	type Log as ViemLog,
 } from "viem";
-import { isInBloom } from "../utils/bloom.js";
+import { computeLogsBloom, isInBloom } from "../utils/bloom.js";
 import { withDefaults } from "../utils/config.js";
 import type { Logger } from "../utils/logging.js";
 import type { BlockUpdate } from "./blocks.js";
@@ -26,6 +27,7 @@ export type Events = readonly AbiEvent[];
  */
 export type Config = {
 	blockPageSize: number;
+	blockAllLogsQueryRetryCount: number;
 	blockSingleQueryRetryCount: number;
 	maxLogsPerQuery: number | null;
 	fallibleEvents: string[];
@@ -47,6 +49,7 @@ export type Log<E extends Events> = ViemLog<bigint, number, false, undefined, tr
 
 export const DEFAULT_CONFIG = {
 	blockPageSize: 100,
+	blockAllLogsQueryRetryCount: 0,
 	blockSingleQueryRetryCount: 3,
 	maxLogsPerQuery: null,
 	fallibleEvents: [],
@@ -60,6 +63,7 @@ export class EventWatcher<E extends Events> {
 	#logger: Logger;
 	#client: Client;
 	#address: Address[];
+	#addressSet: Set<bigint>;
 	#events: E;
 	#config: Config;
 	#step: Step;
@@ -68,9 +72,17 @@ export class EventWatcher<E extends Events> {
 		this.#logger = logger;
 		this.#client = client;
 		this.#address = address;
+		this.#addressSet = new Set(address.map((a) => BigInt(a)));
 		this.#events = events;
 		this.#config = withDefaults(config, DEFAULT_CONFIG);
 		this.#step = { type: "idle" };
+	}
+
+	#canSkipBlock(logsBloom: Hex): boolean {
+		// We can query the bloom filter to skip queries for blocks with no relevant logs. If the
+		// bloom filter does not include at least one relevant address or event topic, then we know
+		// for sure that there are no events we care about.
+		return !areAddressesInLogsBloom(logsBloom, this.#address) || !areEventsInLogsBloom(logsBloom, this.#events);
 	}
 
 	#checkForPotentiallyMissedLogs(logsLength: number) {
@@ -95,16 +107,41 @@ export class EventWatcher<E extends Events> {
 		});
 	}
 
+	async #getLogsFromAllBlockLogs(query: { blockHash: Hex; logsBloom: Hex }) {
+		// Some nodes have an additional delay after they see the block for them to index logs and
+		// receipts. Unfortunately, during that time, instead of erroring or waiting for the
+		// indexing to complete, the RPC nodes just return an empty list of events. To work around
+		// this issue, we query all logs for a particular block, compute the `logsBloom` and ensure
+		// it matches the value we expect. If not, we assume that the node is in a state where it is
+		// not able to provide the block logs reliably. The downside to this pattern is that we
+		// query many more logs than required, using a lot more bandwidth and more likely to hit
+		// node response size limits.
+
+		if (this.#canSkipBlock(query.logsBloom)) {
+			this.#logger.silly(`Skip querying all logs for block ${query.blockHash}`);
+			return [];
+		}
+
+		const allLogs = await this.#client.getLogs({
+			blockHash: query.blockHash,
+		});
+		if (query.logsBloom !== computeLogsBloom(allLogs)) {
+			throw new Error(`Missing logs for block ${query.blockHash}`);
+		}
+
+		const logs = parseEventLogs({
+			abi: this.#events,
+			// Note the `getLogs` API is not guaranteed to return checksummed addresses.
+			logs: allLogs.filter(({ address }) => this.#addressSet.has(BigInt(address))),
+			strict: true,
+		});
+		return this.#sortLogs(logs);
+	}
+
 	async #getLogsOneQueryAllEvents(
 		query: { blockHash: Hex; logsBloom: Hex } | { blockHash?: undefined; fromBlock: bigint; toBlock: bigint },
 	) {
-		// Skip log queries where we can determine that they are not in the block by checking the
-		// bloom filter. We require that at least one of the contract addresses are in the bloom
-		// filter **and** that at least one of the topics are in the bloom filter.
-		if (
-			query.blockHash !== undefined &&
-			!(areAddressesInLogsBloom(query.logsBloom, this.#address) && areEventsInLogsBloom(query.logsBloom, this.#events))
-		) {
+		if (query.blockHash !== undefined && this.#canSkipBlock(query.logsBloom)) {
 			this.#logger.silly(`Skip querying logs on block ${query.blockHash}`);
 			return [];
 		}
@@ -215,10 +252,13 @@ export class EventWatcher<E extends Events> {
 
 	async #block({ blockHash, logsBloom, retries }: BlockStep) {
 		try {
+			const query = { blockHash, logsBloom };
 			const logs =
-				retries < this.#config.blockSingleQueryRetryCount
-					? await this.#getLogsOneQueryAllEvents({ blockHash, logsBloom })
-					: await this.#getLogsOneQueryPerEvent({ blockHash, logsBloom });
+				retries < this.#config.blockAllLogsQueryRetryCount
+					? await this.#getLogsFromAllBlockLogs(query)
+					: retries < this.#config.blockAllLogsQueryRetryCount + this.#config.blockSingleQueryRetryCount
+						? await this.#getLogsOneQueryAllEvents(query)
+						: await this.#getLogsOneQueryPerEvent(query);
 			this.#step = { type: "idle" };
 			return logs;
 		} catch (err) {
