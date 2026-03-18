@@ -45,16 +45,16 @@ const makeProposal = (safeTxHash: string, epoch = 1n): TransactionProposalWithSt
 const PROPOSALS = [makeProposal("0xhash1"), makeProposal("0xhash2"), makeProposal("0xhash3")];
 
 describe("TransactionProposalsList", () => {
-	it("renders the label text as-is when provided", () => {
+	it("renders the label count with 'recent proposals' suffix", () => {
 		render(
 			<TransactionProposalsList
 				proposals={PROPOSALS}
-				label="3 recent proposals"
+				label="3"
 				hasMore={false}
 				onShowMore={vi.fn()}
 			/>,
 		);
-		expect(screen.getByText("3 recent proposals")).toBeTruthy();
+		expect(screen.getByText(/3\s+recent proposals/)).toBeTruthy();
 	});
 
 	it("does not render a label row when label is omitted", () => {
