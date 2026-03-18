@@ -62,7 +62,7 @@ Loss of these secrets would prevent the validator from participating in consensu
 
 ## Running
 
-Configure the validator:
+Configure the validator. See the [configuration documentation](./configuration.md) for reference.
 
 ```shell
 cp validator/.env.sample validator/.env
