@@ -4,7 +4,10 @@ function Skeleton({ className, ...props }: React.HTMLAttributes<HTMLDivElement>)
 	return (
 		<div
 			className={cn(
-				"animate-shimmer motion-reduce:animate-none rounded-card bg-gradient-to-r from-transparent via-surface-outline/40 to-transparent bg-[length:200%_100%]",
+				"relative overflow-hidden rounded-card bg-surface-outline",
+				"after:content-[''] after:absolute after:inset-0 after:translate-x-[-100%]",
+				"after:bg-gradient-to-r after:from-transparent after:via-white/40 after:to-transparent",
+				"after:animate-shimmer motion-reduce:after:animate-none",
 				className,
 			)}
 			{...props}
