@@ -64,9 +64,7 @@ export function TransactionListRow({ proposal }: { proposal: TransactionProposal
 				</div>
 
 				{/* Column 2: Safe address */}
-				<div className="col-span-2 sm:col-span-1 text-xs font-mono text-sub-title truncate self-center">
-					{shortAddress(tx.safe)}
-				</div>
+				<div className="col-span-2 sm:col-span-1 text-xs font-mono truncate self-center">{shortAddress(tx.safe)}</div>
 
 				{/* Column 3: SafeTxHash */}
 				<div className="hidden sm:block text-xs font-mono truncate self-center">

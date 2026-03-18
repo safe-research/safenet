@@ -9,8 +9,7 @@
 @theme {
 	/* Typography */
 	--text-2xs: 0.625rem;
-	--font-mono: source-code-pro, Menlo, Monaco, Consolas, "Courier New", monospace;
-	--font-sans: "Geist Mono Variable", "Geist Mono", ui-monospace, monospace;
+	--font-mono: "Geist Mono Variable", "Geist Mono", ui-monospace, monospace;
 	--font-heading: "DM Sans Variable", "DM Sans", sans-serif;
 
 	/* Surfaces */
