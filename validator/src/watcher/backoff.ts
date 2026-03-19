@@ -17,13 +17,13 @@ export const DEFAULT_CONFIG = {
 };
 
 /**
- * Error to explicitly indicate that a backoff is requested	
+ * Error to explicitly indicate that a backoff is requested
  */
 export class BackoffError extends Error {
-  constructor(message: string, options?: ErrorOptions) {
-    super(message, options);
-    this.name = "BackoffError";
-  }
+	constructor(message: string, options?: ErrorOptions) {
+		super(message, options);
+		this.name = "BackoffError";
+	}
 }
 
 /**

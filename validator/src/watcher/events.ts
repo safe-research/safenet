@@ -17,8 +17,8 @@ import {
 import { computeLogsBloom, isInBloom } from "../utils/bloom.js";
 import { withDefaults } from "../utils/config.js";
 import type { Logger } from "../utils/logging.js";
-import type { BlockUpdate } from "./blocks.js";
 import { BackoffError } from "./backoff.js";
+import type { BlockUpdate } from "./blocks.js";
 
 export type Client = Pick<PublicClient, "getLogs">;
 export type Events = readonly AbiEvent[];
