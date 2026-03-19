@@ -98,7 +98,7 @@ export class SafenetStateMachine {
 
 		// Log genesis group id on start
 		const genesisGroup = calcGenesisGroup(this.#machineConfig);
-		logger.info(`Genesis group id: ${genesisGroup.id}`);
+		logger.notice(`Genesis group id: ${genesisGroup.id}`);
 	}
 
 	transition(transition: StateTransition) {

@@ -45,7 +45,7 @@ export const handleComplaintResponded = async (
 				: undefined;
 
 	if (sharesState === "invalid_share") {
-		logger?.info?.(`Invalid share submitted by ${event.accused}`);
+		logger?.notice?.(`Invalid share submitted by ${event.accused}`);
 		const participants = keyGenClient.participants(machineStates.rollover.groupId).filter((p) => p !== event.accused);
 		return triggerKeyGen(
 			machineConfig,

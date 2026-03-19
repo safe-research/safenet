@@ -31,7 +31,7 @@ export const handleSign = async (
 	const status = machineStates.signing[event.message];
 	// Check that there is no state or it is the retry flow
 	if (status?.id !== "waiting_for_request") {
-		logger?.info?.(`Unexpected signing request for ${event.message}!`);
+		logger?.debug?.(`Unexpected signing request for ${event.message}!`);
 		return diff;
 	}
 	// Check that message is verified, this should not happend in this state

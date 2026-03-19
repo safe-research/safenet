@@ -34,7 +34,7 @@ export const handleKeyGenSecretShared = async (
 	const actions: ProtocolAction[] = [];
 	const sharesFrom = [...machineStates.rollover.sharesFrom, event.participant];
 	if (response === "invalid_share") {
-		logger?.info?.(`Invalid share submitted by ${event.participant} for group ${groupId}`);
+		logger?.notice?.(`Invalid share submitted by ${event.participant} for group ${groupId}`);
 		actions.push({
 			id: "key_gen_complain",
 			groupId,

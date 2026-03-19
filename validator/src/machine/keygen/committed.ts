@@ -30,7 +30,7 @@ export const handleKeyGenCommitted = async (
 			mu: event.commitment.mu,
 		})
 	) {
-		logger?.info?.(`Invalid key gen commitment from participant ${event.participant}`);
+		logger?.warn?.(`Invalid key gen commitment from participant ${event.participant}`);
 		// No state changes for invalid key gen commitments, participant will be removed on timeout
 		return {};
 	}

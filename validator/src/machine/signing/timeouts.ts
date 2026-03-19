@@ -43,7 +43,7 @@ const checkSigningRequestTimeout = (
 ): StateDiff => {
 	// Still within deadline
 	if (status.deadline > block) return {};
-	logger?.info?.(`Signing request ${status.id} timed out`, { signingStatus: status });
+	logger?.notice?.(`Signing request ${status.id} timed out`, { signingStatus: status });
 	const stateDiff: StateDiff = {};
 	switch (status.id) {
 		case "waiting_for_attestation": {
