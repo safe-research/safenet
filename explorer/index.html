@@ -40,7 +40,11 @@
       // This script runs immediately, preventing the "white flash"
       (function() {
         try {
-          const theme = localStorage.getItem('theme');
+          function getThemeSetting() {
+            const stored = localStorage.getItem('localStorage.safe_ui_settings.object.v1');
+            return stored ? JSON.parse(stored).theme : undefined;
+          }
+          const theme = getThemeSetting();
           const supportDarkMode = window.matchMedia('(prefers-color-scheme: dark)').matches === true;
 
           if (theme === 'dark' || (!theme && supportDarkMode)) {
@@ -49,7 +53,7 @@
             document.documentElement.classList.remove('dark');
           }
           window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', (e) => {
-            if (!localStorage.getItem('theme')) { // Only update if user hasn't set a manual preference
+            if (!getThemeSetting()) { // Only update if user hasn't set a manual preference
               document.documentElement.classList.toggle('dark', e.matches);
             }
           });
