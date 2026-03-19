@@ -17,6 +17,7 @@ import {
 import { computeLogsBloom, isInBloom } from "../utils/bloom.js";
 import { withDefaults } from "../utils/config.js";
 import type { Logger } from "../utils/logging.js";
+import { BackoffError } from "./backoff.js";
 import type { BlockUpdate } from "./blocks.js";
 
 export type Client = Pick<PublicClient, "getLogs">;
@@ -126,7 +127,7 @@ export class EventWatcher<E extends Events> {
 			blockHash: query.blockHash,
 		});
 		if (query.logsBloom !== computeLogsBloom(allLogs)) {
-			throw new Error(`Missing logs for block ${query.blockHash}`);
+			throw new BackoffError(`Missing logs for block ${query.blockHash}`);
 		}
 
 		const logs = parseEventLogs({
