@@ -3,8 +3,6 @@ name: ci
 on:
   pull_request:
   push:
-    tags:
-      - beta
     branches:
       - main
 
