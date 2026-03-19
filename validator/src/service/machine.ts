@@ -225,10 +225,10 @@ export class SafenetStateMachine {
 		consensusState: ConsensusState,
 		machineStates: MachineStates,
 	): Promise<StateDiff> {
-		// This is kind of hacky, but logs for the `transaction_proposed`
+		// This is kind of hacky, but logs for the `event_transaction_proposed`
 		// transition are just too long (because of the large calldata). For
-		// that specific transition, emit an additional `silly` level log with
-		// the transaction data.
+		// that specific transition, log a separate `silly` level message that
+		// contains the transaction data.
 		if (transition.id === "event_transaction_proposed") {
 			const { transaction, ...elided } = transition;
 			this.#logger.debug(`Handle event ${transition.id}`, { transition: elided });
