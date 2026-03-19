@@ -13,8 +13,6 @@ export const portSchema = z.preprocess((val) => {
 	return val;
 }, z.int().gte(0).lte(65535).optional());
 
-export const fileNameSchema = z.preprocess((val) => (val === "" ? undefined : val), z.string().optional());
-
 export const checkedAddressSchema = z
 	.string()
 	// Strict is disabled here, as a manual check for the correct checksum is performed.
@@ -68,11 +66,12 @@ const emptyToDefault = <T>(schema: ZodType<T>, defaultVal?: unknown): ZodType<T>
 
 export const validatorConfigSchema = z.object({
 	LOG_LEVEL: logLevelSchema.optional(),
+	METRICS_HOST: emptyToDefault(z.string().optional()),
 	METRICS_PORT: portSchema,
-	STORAGE_FILE: fileNameSchema,
+	STORAGE_FILE: emptyToDefault(z.string().optional()),
 	RPC_URL: z.url(),
 	PRIVATE_KEY: hexBytes32Schema,
-	STAKER_ADDRESS: checkedAddressSchema.optional(),
+	STAKER_ADDRESS: emptyToDefault(checkedAddressSchema.optional()),
 	CONSENSUS_ADDRESS: checkedAddressSchema,
 	COORDINATOR_ADDRESS: checkedAddressSchema,
 	CHAIN_ID: supportedChainsSchema,
