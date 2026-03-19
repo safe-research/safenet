@@ -33,7 +33,6 @@ export class SigningClient {
 		return nonceTreeRoot;
 	}
 
-	// TODO: [observe mode]
 	handleNonceCommitmentsHash(groupId: GroupId, me: Address, nonceCommitmentsHash: Hex, chunk: bigint) {
 		this.#storage.linkNonceTree(groupId, me, chunk, nonceCommitmentsHash);
 	}

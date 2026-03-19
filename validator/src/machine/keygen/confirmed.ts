@@ -4,6 +4,7 @@ import type { SigningClient } from "../../consensus/signing/client.js";
 import type { VerificationEngine } from "../../consensus/verify/engine.js";
 import type { EpochRolloverPacket } from "../../consensus/verify/rollover/schemas.js";
 import { jsonReplacer } from "../../utils/json.js";
+import type { Logger } from "../../utils/logging.js";
 import type { KeyGenConfirmedEvent } from "../transitions/types.js";
 import type {
 	ConsensusDiff,
@@ -23,18 +24,18 @@ export const handleKeyGenConfirmed = async (
 	consensusState: ConsensusState,
 	machineStates: MachineStates,
 	event: KeyGenConfirmedEvent,
-	logger?: (msg: unknown) => void,
+	logger?: Logger,
 ): Promise<StateDiff> => {
 	const block = event.block;
 	// A participant has confirmed their participation in the key gen ceremony
 	// Ignore if not in "collecting_confirmations" state
 	if (machineStates.rollover.id !== "collecting_confirmations") {
-		logger?.(`Unexpected state ${machineStates.rollover.id}`);
+		logger?.debug?.(`Unexpected state ${machineStates.rollover.id}`);
 		return {};
 	}
 	// Verify that the group corresponds to the expected group
 	if (machineStates.rollover.groupId !== event.gid) {
-		logger?.(`Unexpected groupId ${event.gid}`);
+		logger?.debug?.(`Unexpected groupId ${event.gid}`);
 		return {};
 	}
 	const groupId = event.gid;
@@ -44,7 +45,7 @@ export const handleKeyGenConfirmed = async (
 	const participants = signingClient.participants(groupId);
 	const allConfirmed = participants.every((p) => confirmationsFrom.includes(p));
 
-	logger?.(
+	logger?.info?.(
 		`Group ${groupId} confirmation from ${event.participant} (${confirmationsFrom.length}/${participants.length})`,
 	);
 
@@ -62,9 +63,8 @@ export const handleKeyGenConfirmed = async (
 	// Genesis group: after all confirmations, we're done with keygen
 	if (consensusState.genesisGroupId === groupId) {
 		// All confirmed for genesis group - start preprocessing and return to waiting state
-		logger?.("Genesis group all confirmations received, starting preprocessing");
+		logger?.info?.("Genesis group all confirmations received, starting preprocessing");
 		const consensus: ConsensusDiff = {};
-		// TODO: [observe mode] only generate nonce tree if part of genesis group
 		const actions: ProtocolAction[] = [];
 		if (signingClient.hasParticipant(groupId, machineConfig.account)) {
 			const nonceTreeRoot = signingClient.generateNonceTree(groupId, machineConfig.account);
@@ -80,7 +80,7 @@ export const handleKeyGenConfirmed = async (
 	}
 
 	// All participants have confirmed - compute the epoch rollover message locally
-	logger?.(`Group ${groupId} all participants confirmed, computing epoch rollover message`);
+	logger?.info?.(`Group ${groupId} all participants confirmed, computing epoch rollover message`);
 
 	const groupPublicKey = keyGenClient.groupPublicKey(groupId);
 	if (!groupPublicKey) {
@@ -112,7 +112,7 @@ export const handleKeyGenConfirmed = async (
 		throw new Error(`Invalid epoch packet created ${JSON.stringify(packet, jsonReplacer)}`);
 	}
 	const message = result.packetId;
-	logger?.(`Computed epoch rollover message ${message}`);
+	logger?.info?.(`Computed epoch rollover message ${message}`);
 
 	// Transition to sign_rollover with the proper message
 	// Note: Preprocessing (nonce generation) will be triggered after the epoch is staged,

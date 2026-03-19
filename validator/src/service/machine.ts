@@ -194,7 +194,7 @@ export class SafenetStateMachine {
 			state.consensus,
 			state.machines,
 			block,
-			this.#logger.info,
+			this.#logger,
 		)) {
 			state.apply(diff);
 		}
@@ -243,7 +243,7 @@ export class SafenetStateMachine {
 					this.#keyGenClient,
 					machineStates,
 					transition,
-					this.#logger.info,
+					this.#logger,
 				);
 			}
 			case "event_key_gen_secret_shared": {
@@ -252,7 +252,7 @@ export class SafenetStateMachine {
 					this.#keyGenClient,
 					machineStates,
 					transition,
-					this.#logger.info,
+					this.#logger,
 				);
 			}
 			case "event_key_gen_complaint_submitted": {
@@ -285,7 +285,7 @@ export class SafenetStateMachine {
 					consensusState,
 					machineStates,
 					transition,
-					this.#logger.info,
+					this.#logger,
 				);
 			}
 			// aka Preprocess
@@ -295,7 +295,7 @@ export class SafenetStateMachine {
 					this.#signingClient,
 					consensusState,
 					transition,
-					this.#logger.info,
+					this.#logger,
 				);
 			}
 			case "event_sign_request": {
@@ -306,7 +306,7 @@ export class SafenetStateMachine {
 					consensusState,
 					machineStates,
 					transition,
-					this.#logger.info,
+					this.#logger,
 				);
 			}
 			case "event_nonce_commitments": {

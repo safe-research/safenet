@@ -1,6 +1,7 @@
 import type { SigningClient } from "../../consensus/signing/client.js";
 import { decodeSequence } from "../../consensus/signing/nonces.js";
 import type { VerificationEngine } from "../../consensus/verify/engine.js";
+import type { Logger } from "../../utils/logging.js";
 import type { SignRequestEvent } from "../transitions/types.js";
 import type { ConsensusState, MachineConfig, MachineStates, StateDiff } from "../types.js";
 
@@ -13,8 +14,12 @@ export const handleSign = async (
 	consensusState: ConsensusState,
 	machineStates: MachineStates,
 	event: SignRequestEvent,
-	logger?: (msg: unknown) => void,
+	logger?: Logger,
 ): Promise<StateDiff> => {
+	if (!signingClient.hasParticipant(event.gid, machineConfig.account)) {
+		logger?.debug?.(`Not part of signing group ${event.gid}!`);
+		return {};
+	}
 	const diff = checkAvailableNonces(
 		machineConfig,
 		signingClient,
@@ -26,12 +31,12 @@ export const handleSign = async (
 	const status = machineStates.signing[event.message];
 	// Check that there is no state or it is the retry flow
 	if (status?.id !== "waiting_for_request") {
-		logger?.(`Unexpected signing request for ${event.message}!`);
+		logger?.info?.(`Unexpected signing request for ${event.message}!`);
 		return diff;
 	}
-	// Check that message is verified
+	// Check that message is verified, this should not happend in this state
 	if (!verificationEngine.isVerified(event.message)) {
-		logger?.(`Message ${event.message} not verified!`);
+		logger?.warn?.(`Message ${event.message} not verified!`);
 		return diff;
 	}
 
@@ -78,7 +83,7 @@ const checkAvailableNonces = (
 	consensusState: ConsensusState,
 	machineStates: MachineStates,
 	sequence: bigint,
-	logger?: (msg: unknown) => void,
+	logger?: Logger,
 ): Pick<StateDiff, "consensus"> & Pick<StateDiff, "actions"> => {
 	if (consensusState.activeEpoch === 0n && machineStates.rollover.id !== "epoch_staged") {
 		// We are in the genesis setup
@@ -98,7 +103,7 @@ const checkAvailableNonces = (
 			offset = 0n;
 		}
 		if (availableNonces < NONCE_THRESHOLD) {
-			logger?.(`Commit nonces for ${groupId}!`);
+			logger?.info?.(`Commit nonces for ${groupId}!`);
 			const nonceTreeRoot = signingClient.generateNonceTree(groupId, machineConfig.account);
 
 			return {

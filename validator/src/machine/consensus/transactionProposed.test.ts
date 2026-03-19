@@ -69,10 +69,31 @@ const EVENT: TransactionProposedEvent = {
 
 // --- Tests ---
 describe("transaction proposed", () => {
+	it("should not handle proposed event if not part of signing group", async () => {
+		const protocol: SafenetProtocol = {} as unknown as SafenetProtocol;
+		const verificationEngine: VerificationEngine = {} as unknown as VerificationEngine;
+		const hasParticipant = vi.fn().mockReturnValueOnce(false);
+		const signingClient: SigningClient = {
+			hasParticipant,
+		} as unknown as SigningClient;
+		const diff = await handleTransactionProposed(
+			MACHINE_CONFIG,
+			protocol,
+			verificationEngine,
+			signingClient,
+			CONSENSUS_STATE,
+			EVENT,
+		);
+
+		expect(diff).toStrictEqual({});
+	});
 	it("should not handle proposed event if epoch group is unknown", async () => {
 		const protocol: SafenetProtocol = {} as unknown as SafenetProtocol;
 		const verificationEngine: VerificationEngine = {} as unknown as VerificationEngine;
-		const signingClient: SigningClient = {} as unknown as SigningClient;
+		const hasParticipant = vi.fn().mockReturnValueOnce(true);
+		const signingClient: SigningClient = {
+			hasParticipant,
+		} as unknown as SigningClient;
 		const consensus = {
 			...CONSENSUS_STATE,
 			epochGroups: {},
@@ -102,7 +123,10 @@ describe("transaction proposed", () => {
 		const verificationEngine: VerificationEngine = {
 			verify,
 		} as unknown as VerificationEngine;
-		const signingClient: SigningClient = {} as unknown as SigningClient;
+		const hasParticipant = vi.fn().mockReturnValueOnce(true);
+		const signingClient: SigningClient = {
+			hasParticipant,
+		} as unknown as SigningClient;
 		const diff = await handleTransactionProposed(
 			MACHINE_CONFIG,
 			protocol,
@@ -139,10 +163,12 @@ describe("transaction proposed", () => {
 		const verificationEngine: VerificationEngine = {
 			verify,
 		} as unknown as VerificationEngine;
+		const hasParticipant = vi.fn().mockReturnValueOnce(true);
 		const participants = vi.fn();
 		// Only use a partial set of the default participants
 		participants.mockReturnValue([3n, 7n]);
 		const signingClient: SigningClient = {
+			hasParticipant,
 			participants,
 		} as unknown as SigningClient;
 		const diff = await handleTransactionProposed(

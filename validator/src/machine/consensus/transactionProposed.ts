@@ -17,7 +17,11 @@ export const handleTransactionProposed = async (
 ): Promise<StateDiff> => {
 	const groupId = consensusState.epochGroups[event.epoch.toString()];
 	if (groupId === undefined) {
-		logger?.info?.(`Unknown epoch ${event.epoch}!`);
+		logger?.debug?.(`Unknown epoch ${event.epoch}!`);
+		return {};
+	}
+	if (!signingClient.hasParticipant(groupId, machineConfig.account)) {
+		logger?.debug?.(`Not part of signing group ${groupId}!`);
 		return {};
 	}
 	const packet: SafeTransactionPacket = {
