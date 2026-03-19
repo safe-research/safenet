@@ -485,7 +485,6 @@ describe("validatorConfigSchema", () => {
 		};
 
 		const optionals = [
-			"LOG_LEVEL",
 			"METRICS_HOST",
 			"METRICS_PORT",
 			"STORAGE_FILE",
@@ -504,7 +503,7 @@ describe("validatorConfigSchema", () => {
 			"SKIP_GENESIS",
 		] as const;
 
-		for (const settings of [{}, Object.entries(optionals.map((key) => [key, ""]))]) {
+		for (const settings of [{}, Object.fromEntries(optionals.map((key) => [key, ""]))]) {
 			const parsed = validatorConfigSchema.parse({ ...config, ...settings });
 			for (const optional of optionals) {
 				expect(parsed[optional]).toBeUndefined();

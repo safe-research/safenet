@@ -71,7 +71,7 @@ export const validatorConfigSchema = z.object({
 	STORAGE_FILE: emptyToDefault(z.string().optional()),
 	RPC_URL: z.url(),
 	PRIVATE_KEY: hexBytes32Schema,
-	STAKER_ADDRESS: checkedAddressSchema.optional(),
+	STAKER_ADDRESS: emptyToDefault(checkedAddressSchema.optional()),
 	CONSENSUS_ADDRESS: checkedAddressSchema,
 	COORDINATOR_ADDRESS: checkedAddressSchema,
 	CHAIN_ID: supportedChainsSchema,
