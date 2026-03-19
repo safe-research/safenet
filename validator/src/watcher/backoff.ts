@@ -17,6 +17,16 @@ export const DEFAULT_CONFIG = {
 };
 
 /**
+ * Error to explicitly indicate that a backoff is requested	
+ */
+export class BackoffError extends Error {
+  constructor(message: string, options?: ErrorOptions) {
+    super(message, options);
+    this.name = "BackoffError";
+  }
+}
+
+/**
  * Request backoff throttling.
  */
 export class Backoff {
@@ -29,6 +39,10 @@ export class Backoff {
 	}
 
 	#isRateLimitError(error: unknown) {
+		if (error instanceof BackoffError) {
+			return true;
+		}
+
 		const e = error as RequestErrorType | { name: undefined } | undefined | null;
 
 		// Is it an EIP-1474 standard error code indicating that requests are being exceed the
