@@ -35,7 +35,7 @@ Genesis Group Id: `0xf3d78298339ca6b6f2885e1157089bc86ac55520544a838400000000000
 - Signing timeout
     - `6` (~30 seconds)
 
-### Environment Variable
+### Environment Variables
 
 ```bash
 LOG_LEVEL=notice
