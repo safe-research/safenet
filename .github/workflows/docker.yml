@@ -30,7 +30,13 @@ jobs:
         uses: docker/metadata-action@v5
         with:
           images: ghcr.io/safe-research/safenet-validator
-          flavor: latest=false
+          tags: |
+            type=ref,event=branch
+            type=ref,event=tag
+            # create beta tags on new releases
+            type=raw,value=beta,enable=${{ startsWith(github.ref, 'refs/tags/v') }}
+          flavor: |
+            latest=false
 
       - uses: docker/setup-qemu-action@v3
       - uses: docker/setup-buildx-action@v3
