@@ -473,6 +473,44 @@ describe("validatorConfigSchema", () => {
 			expect(addressError).toBeDefined();
 		}
 	});
+
+	it("should use default values for optional fields", () => {
+		const config = {
+			RPC_URL: MOCK_VALID_URL,
+			CONSENSUS_ADDRESS: MOCK_CHECKSUMMED_ADDRESS,
+			COORDINATOR_ADDRESS: MOCK_CHECKSUMMED_ADDRESS,
+			CHAIN_ID: 100,
+			PRIVATE_KEY: generatePrivateKey(),
+			PARTICIPANTS: VALID_PARTICIPANTS_INPUT,
+		};
+
+		const optionals = [
+			"LOG_LEVEL",
+			"METRICS_HOST",
+			"METRICS_PORT",
+			"STORAGE_FILE",
+			"STAKER_ADDRESS",
+			"BLOCKS_BEFORE_RESUBMIT",
+			"BASE_FEE_MULTIPLIER",
+			"PRIORITY_FEE_PER_GAS",
+			"BLOCK_TIME_OVERRIDE",
+			"MAX_REORG_DEPTH",
+			"BLOCK_PAGE_SIZE",
+			"BLOCK_ALL_LOGS_QUERY_RETRY_COUNT",
+			"BLOCK_SINGLE_QUERY_RETRY_COUNT",
+			"KEY_GEN_TIMEOUT",
+			"SIGNING_TIMEOUT",
+			"MAX_LOGS_PER_QUERY",
+			"SKIP_GENESIS",
+		] as const;
+
+		for (const settings of [{}, Object.entries(optionals.map((key) => [key, ""]))]) {
+			const parsed = validatorConfigSchema.parse({ ...config, ...settings });
+			for (const optional of optionals) {
+				expect(parsed[optional]).toBeUndefined();
+			}
+		}
+	});
 });
 
 describe("frostPointSchema", () => {

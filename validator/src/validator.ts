@@ -61,7 +61,11 @@ const fees: ChainFees = {
 	maxPriorityFeePerGas: validatorConfig.PRIORITY_FEE_PER_GAS,
 };
 
-const metrics = createMetricsService({ logger, port: validatorConfig.METRICS_PORT });
+const metrics = createMetricsService({
+	logger,
+	host: validatorConfig.METRICS_HOST,
+	port: validatorConfig.METRICS_PORT,
+});
 const service = createValidatorService({
 	account,
 	rpcUrl: validatorConfig.RPC_URL,
