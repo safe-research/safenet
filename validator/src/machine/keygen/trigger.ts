@@ -50,9 +50,6 @@ export const triggerKeyGen = (
 
 	logger?.info?.(`Triggered key gen for epoch ${epoch} with ${groupId}`, { participants });
 	return {
-		consensus: {
-			epochGroup: [epoch, groupId],
-		},
 		rollover: {
 			id: "collecting_commitments",
 			nextEpoch: epoch,

@@ -185,7 +185,6 @@ describe("gensis key gen", () => {
 		});
 		expect(diff.consensus).toStrictEqual({
 			genesisGroupId: "0x17f7ec82700b24361d1ebf306c41b6576356a5d694c2c5770000000000000000",
-			epochGroup: [0n, "0x17f7ec82700b24361d1ebf306c41b6576356a5d694c2c5770000000000000000"],
 		});
 		expect(diff.signing).toBeUndefined();
 		expect(setupGroup).toBeCalledTimes(1);

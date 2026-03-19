@@ -32,9 +32,12 @@ export const handleGenesisKeyGen = async (
 			genesisGroup.context,
 			logger,
 		);
-		const epochGroup = diff.consensus?.epochGroup;
-		if (epochGroup === undefined || epochGroup[0] !== 0n || epochGroup[1] !== genesisGroup.id) {
-			throw new Error(`Unexpected genesis group ${epochGroup?.[1]}`);
+		const rollover = diff.rollover;
+		if (rollover?.id !== "collecting_commitments") {
+			throw new Error(`Unexpected genesis rollover state ${rollover?.id}`);
+		}
+		if (rollover?.nextEpoch !== 0n || rollover?.groupId !== genesisGroup.id) {
+			throw new Error(`Unexpected genesis group ${rollover?.groupId}`);
 		}
 		const consensus = diff.consensus ?? {};
 		consensus.genesisGroupId = genesisGroup.id;

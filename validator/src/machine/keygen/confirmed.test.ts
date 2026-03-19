@@ -216,6 +216,7 @@ describe("key gen confirmed", () => {
 			rollover: { id: "epoch_staged", nextEpoch: 0n },
 			consensus: {
 				groupPendingNonces: ["0x06cb03baac74421225341827941e88d9547e5459c4b3715c0000000000000000", true],
+				epochGroup: [0n, "0x06cb03baac74421225341827941e88d9547e5459c4b3715c0000000000000000"],
 			},
 			actions: [
 				{
@@ -262,7 +263,9 @@ describe("key gen confirmed", () => {
 
 		expect(diff).toStrictEqual({
 			rollover: { id: "epoch_staged", nextEpoch: 0n },
-			consensus: {},
+			consensus: {
+				epochGroup: [0n, "0x06cb03baac74421225341827941e88d9547e5459c4b3715c0000000000000000"],
+			},
 			actions: [],
 		});
 		expect(participants).toBeCalledTimes(1);

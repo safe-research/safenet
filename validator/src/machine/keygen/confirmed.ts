@@ -64,7 +64,9 @@ export const handleKeyGenConfirmed = async (
 	if (consensusState.genesisGroupId === groupId) {
 		// All confirmed for genesis group - start preprocessing and return to waiting state
 		logger?.info?.("Genesis group all confirmations received, starting preprocessing");
-		const consensus: ConsensusDiff = {};
+		const consensus: ConsensusDiff = {
+			epochGroup: [0n, groupId],
+		};
 		const actions: ProtocolAction[] = [];
 		if (signingClient.hasParticipant(groupId, machineConfig.account)) {
 			const nonceTreeRoot = signingClient.generateNonceTree(groupId, machineConfig.account);

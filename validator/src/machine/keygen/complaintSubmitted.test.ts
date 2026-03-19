@@ -363,9 +363,7 @@ describe("complaint submitted", () => {
 			nextEpoch: 10n,
 			deadline: 31n,
 		});
-		expect(diff.consensus).toStrictEqual({
-			epochGroup: [10n, "0x5afe02"],
-		});
+		expect(diff.consensus).toBeUndefined();
 		expect(consensus).toBeCalledTimes(1);
 		expect(setupGroup).toBeCalledTimes(1);
 		expect(setupGroup).toBeCalledWith(
