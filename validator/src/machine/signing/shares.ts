@@ -6,7 +6,7 @@ export const handleSigningShares = async (
 	machineStates: MachineStates,
 	event: SignatureShareEvent,
 ): Promise<StateDiff> => {
-	// Check that this is a request related to a message that is handled"
+	// Check that this is a request related to a message that is handled
 	const message = consensusState.signatureIdToMessage[event.sid];
 	if (message === undefined) return {};
 	const status = machineStates.signing[message];

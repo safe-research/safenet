@@ -1,4 +1,4 @@
-import { zeroHash } from "viem";
+import { ethAddress, zeroHash } from "viem";
 import { entryPoint06Address, entryPoint07Address, entryPoint08Address } from "viem/account-abstraction";
 import { describe, expect, it, vi } from "vitest";
 import { TEST_POINT } from "../../__tests__/data/machine.js";
@@ -79,31 +79,14 @@ describe("key gen committed", () => {
 		expect(diff).toStrictEqual({});
 	});
 
-	it("should not handle event if part of the group", async () => {
-		const participants = vi.fn();
-		const keyGenClient = {
-			participants,
-		} as unknown as KeyGenClient;
-		participants.mockReturnValueOnce([]);
-		const diff = await handleKeyGenCommitted(MACHINE_CONFIG, keyGenClient, MACHINE_STATES, EVENT);
-
-		expect(diff).toStrictEqual({});
-		expect(participants).toBeCalledTimes(1);
-		expect(participants).toBeCalledWith("0x06cb03baac74421225341827941e88d9547e5459c4b3715c0000000000000000");
-	});
-
 	it("should not update state if invalid commitment", async () => {
-		const participants = vi.fn().mockReturnValueOnce(MACHINE_CONFIG.participantsInfo.map((p) => p.address));
 		const handleKeygenCommitment = vi.fn().mockReturnValueOnce(false);
 		const keyGenClient = {
 			handleKeygenCommitment,
-			participants,
 		} as unknown as KeyGenClient;
 		const diff = await handleKeyGenCommitted(MACHINE_CONFIG, keyGenClient, MACHINE_STATES, EVENT);
 
 		expect(diff).toStrictEqual({});
-		expect(participants).toBeCalledTimes(1);
-		expect(participants).toBeCalledWith("0x06cb03baac74421225341827941e88d9547e5459c4b3715c0000000000000000");
 		expect(handleKeygenCommitment).toBeCalledTimes(1);
 		expect(handleKeygenCommitment).toBeCalledWith(
 			"0x06cb03baac74421225341827941e88d9547e5459c4b3715c0000000000000000",
@@ -122,17 +105,13 @@ describe("key gen committed", () => {
 			...EVENT,
 			committed: false,
 		};
-		const participants = vi.fn().mockReturnValueOnce(MACHINE_CONFIG.participantsInfo.map((p) => p.address));
 		const handleKeygenCommitment = vi.fn();
 		const keyGenClient = {
 			handleKeygenCommitment,
-			participants,
 		} as unknown as KeyGenClient;
 		const diff = await handleKeyGenCommitted(MACHINE_CONFIG, keyGenClient, MACHINE_STATES, event);
 
 		expect(diff).toStrictEqual({});
-		expect(participants).toBeCalledTimes(1);
-		expect(participants).toBeCalledWith("0x06cb03baac74421225341827941e88d9547e5459c4b3715c0000000000000000");
 		expect(handleKeygenCommitment).toBeCalledTimes(1);
 		expect(handleKeygenCommitment).toBeCalledWith(
 			"0x06cb03baac74421225341827941e88d9547e5459c4b3715c0000000000000000",
@@ -146,20 +125,20 @@ describe("key gen committed", () => {
 		);
 	});
 
-	it("should publish secret shares once fully committed", async () => {
-		const participants = vi.fn().mockReturnValueOnce(MACHINE_CONFIG.participantsInfo.map((p) => p.address));
+	it("should only create group key if not participating in key gen", async () => {
 		const handleKeygenCommitment = vi.fn().mockReturnValueOnce(true);
-		const createSecretShares = vi.fn();
-		createSecretShares.mockReturnValueOnce({
-			verificationShare: TEST_POINT,
-			shares: [0x5afe01n, 0x5afe03n],
-		});
+		const createGroupKey = vi.fn();
+		const hasParticipant = vi.fn().mockReturnValue(false);
 		const keyGenClient = {
-			participants,
 			handleKeygenCommitment,
-			createSecretShares,
+			createGroupKey,
+			hasParticipant,
 		} as unknown as KeyGenClient;
-		const diff = await handleKeyGenCommitted(MACHINE_CONFIG, keyGenClient, MACHINE_STATES, EVENT);
+		const machineConfig = {
+			...MACHINE_CONFIG,
+			account: ethAddress,
+		};
+		const diff = await handleKeyGenCommitted(machineConfig, keyGenClient, MACHINE_STATES, EVENT);
 
 		expect(diff).toStrictEqual({
 			rollover: {
@@ -167,20 +146,11 @@ describe("key gen committed", () => {
 				groupId: "0x06cb03baac74421225341827941e88d9547e5459c4b3715c0000000000000000",
 				nextEpoch: 10n,
 				deadline: 29n,
-				missingSharesFrom: [],
+				sharesFrom: [],
 				complaints: {},
 			},
-			actions: [
-				{
-					id: "key_gen_publish_secret_shares",
-					groupId: "0x06cb03baac74421225341827941e88d9547e5459c4b3715c0000000000000000",
-					verificationShare: TEST_POINT,
-					shares: [0x5afe01n, 0x5afe03n],
-				},
-			],
+			actions: [],
 		});
-		expect(participants).toBeCalledTimes(1);
-		expect(participants).toBeCalledWith("0x06cb03baac74421225341827941e88d9547e5459c4b3715c0000000000000000");
 		expect(handleKeygenCommitment).toBeCalledTimes(1);
 		expect(handleKeygenCommitment).toBeCalledWith(
 			"0x06cb03baac74421225341827941e88d9547e5459c4b3715c0000000000000000",
@@ -192,6 +162,56 @@ describe("key gen committed", () => {
 				mu: 0x5afen,
 			},
 		);
+		expect(createGroupKey).toBeCalledTimes(1);
+	});
+
+	it("should publish secret shares once fully committed", async () => {
+		const handleKeygenCommitment = vi.fn().mockReturnValueOnce(true);
+		const createGroupKey = vi.fn();
+		const createSecretShares = vi.fn();
+		const hasParticipant = vi.fn().mockReturnValue(true);
+		createSecretShares.mockReturnValueOnce({
+			verificationShare: TEST_POINT,
+			shares: [0x5afe01n, 0x5afe03n],
+		});
+		const keyGenClient = {
+			handleKeygenCommitment,
+			createSecretShares,
+			createGroupKey,
+			hasParticipant,
+		} as unknown as KeyGenClient;
+		const diff = await handleKeyGenCommitted(MACHINE_CONFIG, keyGenClient, MACHINE_STATES, EVENT);
+
+		expect(diff).toStrictEqual({
+			rollover: {
+				id: "collecting_shares",
+				groupId: "0x06cb03baac74421225341827941e88d9547e5459c4b3715c0000000000000000",
+				nextEpoch: 10n,
+				deadline: 29n,
+				sharesFrom: [],
+				complaints: {},
+			},
+			actions: [
+				{
+					id: "key_gen_publish_secret_shares",
+					groupId: "0x06cb03baac74421225341827941e88d9547e5459c4b3715c0000000000000000",
+					verificationShare: TEST_POINT,
+					shares: [0x5afe01n, 0x5afe03n],
+				},
+			],
+		});
+		expect(handleKeygenCommitment).toBeCalledTimes(1);
+		expect(handleKeygenCommitment).toBeCalledWith(
+			"0x06cb03baac74421225341827941e88d9547e5459c4b3715c0000000000000000",
+			entryPoint07Address,
+			TEST_POINT,
+			[TEST_POINT, TEST_POINT, TEST_POINT],
+			{
+				r: TEST_POINT,
+				mu: 0x5afen,
+			},
+		);
+		expect(createGroupKey).toBeCalledTimes(1);
 		expect(createSecretShares).toBeCalledTimes(1);
 		expect(createSecretShares).toBeCalledWith(
 			"0x06cb03baac74421225341827941e88d9547e5459c4b3715c0000000000000000",

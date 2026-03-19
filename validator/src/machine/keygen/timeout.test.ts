@@ -83,7 +83,7 @@ describe("key gen timeouts", () => {
 				groupId: "0x5afe02",
 				nextEpoch: 10n,
 				deadline: 22n,
-				missingSharesFrom: [],
+				sharesFrom: [entryPoint06Address, entryPoint08Address, ethAddress],
 				complaints: {},
 			} as RolloverState,
 			keyGenInvocations: [0, 1],
@@ -98,7 +98,7 @@ describe("key gen timeouts", () => {
 				responseDeadline: 17n,
 				deadline: 22n,
 				complaints: {},
-				missingSharesFrom: [],
+				sharesFrom: [entryPoint06Address, entryPoint08Address, ethAddress],
 				confirmationsFrom: [entryPoint06Address, entryPoint08Address, ethAddress],
 			} as RolloverState,
 			keyGenInvocations: [0, 0],
@@ -115,7 +115,7 @@ describe("key gen timeouts", () => {
 				complaints: {
 					[entryPoint07Address]: { unresponded: 1, total: 1 },
 				},
-				missingSharesFrom: [],
+				sharesFrom: [entryPoint06Address, ethAddress],
 				confirmationsFrom: [entryPoint06Address, entryPoint07Address, ethAddress],
 			} as RolloverState,
 			keyGenInvocations: [0, 0],
@@ -190,10 +190,6 @@ describe("key gen timeouts", () => {
 			expect(missingCommitments).toBeCalledTimes(keyGenInvocations[0]);
 			if (keyGenInvocations[0] > 0) {
 				expect(missingCommitments).toBeCalledWith("0x5afe02");
-			}
-			expect(missingSecretShares).toBeCalledTimes(keyGenInvocations[1]);
-			if (keyGenInvocations[1] > 0) {
-				expect(missingSecretShares).toBeCalledWith("0x5afe02", ethAddress);
 			}
 			expect(setupGroup).toBeCalledTimes(1);
 			expect(setupGroup).toBeCalledWith(

@@ -16,7 +16,7 @@ export const triggerKeyGen = (
 ): StateDiff => {
 	const requiredParticipants = calcMinimumParticipants(machineConfig, epoch);
 	if (participants.length < requiredParticipants) {
-		logger?.info?.(`Skipped epoch ${epoch}!`, { requiredParticipants, participants });
+		logger?.notice?.(`Skipped epoch ${epoch}!`, { requiredParticipants, participants });
 		return {
 			rollover: {
 				id: "epoch_skipped",

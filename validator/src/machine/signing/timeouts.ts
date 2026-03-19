@@ -1,6 +1,7 @@
 import type { Hex } from "viem";
 import type { SigningClient } from "../../consensus/signing/client.js";
 import { safeTxStructHash } from "../../consensus/verify/safeTx/hashing.js";
+import type { Logger } from "../../utils/logging.js";
 import type { ConsensusState, MachineConfig, MachineStates, SigningState, StateDiff } from "../types.js";
 
 export const checkSigningTimeouts = (
@@ -9,7 +10,7 @@ export const checkSigningTimeouts = (
 	consensusState: ConsensusState,
 	machineStates: MachineStates,
 	block: bigint,
-	logger: (msg: unknown, span?: unknown) => void,
+	logger?: Logger,
 ): StateDiff[] => {
 	const statesToProcess = Object.entries(machineStates.signing) as [Hex, SigningState][];
 	const diffs: StateDiff[] = [];
@@ -38,11 +39,11 @@ const checkSigningRequestTimeout = (
 	block: bigint,
 	message: Hex,
 	status: SigningState,
-	logger: (msg: unknown, span?: unknown) => void,
+	logger?: Logger,
 ): StateDiff => {
 	// Still within deadline
 	if (status.deadline > block) return {};
-	logger?.(`Signing request ${status.id} timed out`, { signingStatus: status });
+	logger?.notice?.(`Signing request ${status.id} timed out`, { signingStatus: status });
 	const stateDiff: StateDiff = {};
 	switch (status.id) {
 		case "waiting_for_attestation": {
@@ -165,7 +166,7 @@ const checkSigningRequestTimeout = (
 				status.id === "collect_nonce_commitments"
 					? signingClient.missingNonces(status.signatureId)
 					: currentSigners.filter((s) => status.sharesFrom.indexOf(s) < 0);
-			logger?.("Removing signers for not participating", { missingParticipants });
+			logger?.info?.("Removing signers for not participating", { missingParticipants });
 			const epoch =
 				status.packet.type === "epoch_rollover_packet"
 					? status.packet.rollover.activeEpoch

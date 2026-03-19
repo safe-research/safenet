@@ -77,8 +77,11 @@ describe("collecting shares", () => {
 	});
 
 	it("should not handle signing shares when not collecting shares", async () => {
+		const hasParticipant = vi.fn().mockReturnValueOnce(true);
 		const verificationEngine = {} as unknown as VerificationEngine;
-		const signingClient = {} as unknown as SigningClient;
+		const signingClient = {
+			hasParticipant,
+		} as unknown as SigningClient;
 		const machineStates: MachineStates = {
 			...MACHINE_STATES,
 			signing: {},
@@ -100,7 +103,10 @@ describe("collecting shares", () => {
 		const verificationEngine = {
 			isVerified,
 		} as unknown as VerificationEngine;
-		const signingClient = {} as unknown as SigningClient;
+		const hasParticipant = vi.fn().mockReturnValueOnce(true);
+		const signingClient = {
+			hasParticipant,
+		} as unknown as SigningClient;
 		const diff = await handleSign(
 			MACHINE_CONFIG,
 			verificationEngine,
@@ -120,11 +126,13 @@ describe("collecting shares", () => {
 		const verificationEngine = {
 			isVerified,
 		} as unknown as VerificationEngine;
+		const hasParticipant = vi.fn().mockReturnValueOnce(true);
 		const createNonceCommitments = vi.fn().mockReturnValueOnce({
 			nonceCommitments: zeroHash,
 			nonceProof: [zeroHash],
 		});
 		const signingClient = {
+			hasParticipant,
 			createNonceCommitments,
 		} as unknown as SigningClient;
 		const diff = await handleSign(
@@ -180,12 +188,14 @@ describe("collecting shares", () => {
 			nonceCommitments: zeroHash,
 			nonceProof: [zeroHash],
 		});
+		const hasParticipant = vi.fn().mockReturnValueOnce(true);
 		const availableNoncesCount = vi.fn().mockReturnValueOnce(10n).mockReturnValueOnce(0n);
 		const generateNonceTree = vi.fn().mockReturnValueOnce(zeroHash);
 		const signingClient = {
 			createNonceCommitments,
 			availableNoncesCount,
 			generateNonceTree,
+			hasParticipant,
 		} as unknown as SigningClient;
 		const consensusState: ConsensusState = {
 			...CONSENSUS_STATE,
@@ -261,5 +271,22 @@ describe("collecting shares", () => {
 				nonceProof: [zeroHash],
 			},
 		]);
+	});
+
+	it("should not do anything if not part of group", async () => {
+		const hasParticipant = vi.fn().mockReturnValueOnce(false);
+		const signingClient = {
+			hasParticipant,
+		} as unknown as SigningClient;
+		const diff = await handleSign(
+			MACHINE_CONFIG,
+			{} as VerificationEngine,
+			signingClient,
+			CONSENSUS_STATE,
+			MACHINE_STATES,
+			EVENT,
+		);
+
+		expect(diff).toStrictEqual({});
 	});
 });

@@ -398,7 +398,7 @@ describe("integration", () => {
 	});
 
 	it("keygen and signing flow", { timeout: TEST_RUNTIME_IN_SECONDS * 1000 * 5 }, async ({ skip }) => {
-		const setupInfo = await setup({});
+		const setupInfo = await setup({ rotateOutEpoch: 2n });
 		if (setupInfo === undefined) {
 			skip();
 			// Don't run the test code

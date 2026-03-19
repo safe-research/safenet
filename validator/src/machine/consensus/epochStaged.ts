@@ -15,18 +15,16 @@ export const handleEpochStaged = async (
 		return {};
 	}
 
-	const signatureIdDiff: ConsensusDiff = {};
+	const consensus: ConsensusDiff = {};
 	// Check if there is a signatureId that needs to be cleaned up
 	const status = machineStates.signing[machineStates.rollover.message];
 	if (status !== undefined && status.id !== "waiting_for_request") {
-		signatureIdDiff.signatureIdToMessage = [status.signatureId, undefined];
+		consensus.signatureIdToMessage = [status.signatureId, undefined];
 	}
 	const groupId = machineStates.rollover.groupId;
 	// The signing state should be cleaned up in any case, as the rollover was attested
 	const diff: StateDiff = {
-		consensus: {
-			...signatureIdDiff,
-		},
+		consensus,
 		rollover: { id: "epoch_staged", nextEpoch: event.proposedEpoch },
 		signing: [machineStates.rollover.message, undefined],
 	};

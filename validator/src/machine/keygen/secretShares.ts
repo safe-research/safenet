@@ -1,5 +1,6 @@
 import type { KeyGenClient } from "../../consensus/keyGen/client.js";
 import type { ProtocolAction } from "../../consensus/protocol/types.js";
+import type { Logger } from "../../utils/logging.js";
 import type { KeyGenSecretSharedEvent } from "../transitions/types.js";
 import type { MachineConfig, MachineStates, StateDiff } from "../types.js";
 import { buildKeyGenCallback } from "./utils.js";
@@ -9,40 +10,31 @@ export const handleKeyGenSecretShared = async (
 	keyGenClient: KeyGenClient,
 	machineStates: MachineStates,
 	event: KeyGenSecretSharedEvent,
-	logger?: (msg: unknown) => void,
+	logger?: Logger,
 ): Promise<StateDiff> => {
 	// A participant has submitted secret share for new group
 	// Ignore if not in "collecting_shares" state
 	if (machineStates.rollover.id !== "collecting_shares") {
-		logger?.(`Unexpected state ${machineStates.rollover.id}`);
+		logger?.debug?.(`Unexpected state ${machineStates.rollover.id}`);
 		return {};
 	}
 	const groupId = event.gid;
 
 	// Verify that the group corresponds to the next epoch
 	if (machineStates.rollover.groupId !== groupId) {
-		logger?.(`Unexpected groupId ${groupId}`);
+		logger?.debug?.(`Unexpected groupId ${groupId}`);
 		return {};
 	}
 
-	// TODO: [observe mode] allow to observe state of shared secrets (to check once it is done)
-	if (!keyGenClient.hasParticipant(groupId, machineConfig.account)) {
-		return {};
-	}
-
-	// TODO: [observe mode] do not handle secrets or perform actions in observe mode
 	// Track identity that has submitted last share
-	const response = await keyGenClient.handleKeygenSecrets(
-		groupId,
-		machineConfig.account,
-		event.participant,
-		event.share.f,
-	);
-	const missingSharesFrom = [...machineStates.rollover.missingSharesFrom];
+	const response = keyGenClient.hasParticipant(groupId, machineConfig.account)
+		? await keyGenClient.handleKeygenSecrets(groupId, machineConfig.account, event.participant, event.share.f)
+		: undefined;
+
 	const actions: ProtocolAction[] = [];
+	const sharesFrom = [...machineStates.rollover.sharesFrom, event.participant];
 	if (response === "invalid_share") {
-		logger?.(`Invalid share submitted by ${event.participant} for group ${groupId}`);
-		missingSharesFrom.push(event.participant);
+		logger?.notice?.(`Invalid share submitted by ${event.participant} for group ${groupId}`);
 		actions.push({
 			id: "key_gen_complain",
 			groupId,
@@ -52,18 +44,18 @@ export const handleKeyGenSecretShared = async (
 	// Share collection is completed when every paritcipant submitted a share, no matter if valid or invalid
 	// `response` will only be "shares_completed" when all valid shares have been received
 	if (!event.shared) {
-		logger?.(`Group ${groupId} secret shares not completed yet`);
+		logger?.info?.(`Group ${groupId} secret shares not completed yet`);
 		return {
 			rollover: {
 				...machineStates.rollover,
-				missingSharesFrom,
+				sharesFrom,
 				lastParticipant: event.participant,
 			},
 			actions,
 		};
 	}
 	// All secret shares collected, now each participant must confirm or complain
-	logger?.(`Group ${groupId} secret shares completed, triggering confirmation`);
+	logger?.info?.(`Group ${groupId} secret shares completed, triggering confirmation`);
 
 	if (response === "shares_completed") {
 		const nextEpoch = machineStates.rollover.nextEpoch;
@@ -85,7 +77,7 @@ export const handleKeyGenSecretShared = async (
 			deadline: event.block + 3n * machineConfig.keyGenTimeout,
 			lastParticipant: event.participant,
 			complaints: machineStates.rollover.complaints,
-			missingSharesFrom,
+			sharesFrom,
 			confirmationsFrom: [],
 		},
 		actions,
