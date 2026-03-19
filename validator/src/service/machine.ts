@@ -329,7 +329,13 @@ export class SafenetStateMachine {
 				return {};
 			}
 			case "event_epoch_staged": {
-				return await handleEpochStaged(this.#machineConfig, this.#signingClient, machineStates, transition);
+				return await handleEpochStaged(
+					this.#machineConfig,
+					this.#signingClient,
+					machineStates,
+					transition,
+					this.#logger,
+				);
 			}
 			case "event_transaction_proposed": {
 				return await handleTransactionProposed(
@@ -343,7 +349,7 @@ export class SafenetStateMachine {
 				);
 			}
 			case "event_transaction_attested": {
-				return await handleTransactionAttested(this.#protocol, machineStates, transition);
+				return await handleTransactionAttested(this.#protocol, machineStates, transition, this.#logger);
 			}
 		}
 	}

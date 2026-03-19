@@ -102,9 +102,7 @@ describe("trigger key gen", () => {
 			nextEpoch: 2n,
 			deadline: 30n,
 		});
-		expect(diff.consensus).toStrictEqual({
-			epochGroup: [2n, "0x5afe02"],
-		});
+		expect(diff.consensus).toBeUndefined();
 		expect(diff.signing).toBeUndefined();
 
 		expect(setupGroup).toBeCalledTimes(1);

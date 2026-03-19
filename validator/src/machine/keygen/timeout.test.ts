@@ -181,9 +181,7 @@ describe("key gen timeouts", () => {
 				nextEpoch: 10n,
 				deadline: 30n,
 			});
-			expect(diff.consensus).toStrictEqual({
-				epochGroup: [10n, "0x5afe02"],
-			});
+			expect(diff.consensus).toBeUndefined();
 			expect(diff.signing).toBeUndefined();
 
 			expect(consensus).toBeCalledTimes(1);

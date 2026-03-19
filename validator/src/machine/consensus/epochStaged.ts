@@ -1,5 +1,6 @@
 import type { ProtocolAction } from "../../consensus/protocol/types.js";
 import type { SigningClient } from "../../consensus/signing/client.js";
+import type { Logger } from "../../utils/logging.js";
 import type { EpochStagedEvent } from "../transitions/types.js";
 import type { ConsensusDiff, MachineConfig, MachineStates, StateDiff } from "../types.js";
 
@@ -8,6 +9,7 @@ export const handleEpochStaged = async (
 	signingClient: SigningClient,
 	machineStates: MachineStates,
 	event: EpochStagedEvent,
+	logger?: Logger,
 ): Promise<StateDiff> => {
 	// An epoch was staged
 	// Ignore if not in "sign_rollover" state
@@ -15,13 +17,21 @@ export const handleEpochStaged = async (
 		return {};
 	}
 
-	const consensus: ConsensusDiff = {};
+	const groupId = machineStates.rollover.groupId;
+	if (groupId !== event.groupId) {
+		logger?.debug?.(`Unexpected groupId ${event.groupId}`);
+		return {};
+	}
+	logger?.notice?.(`Staged epoch ${event.proposedEpoch} with group ${groupId}`);
+
+	const consensus: ConsensusDiff = {
+		epochGroup: [event.proposedEpoch, groupId],
+	};
 	// Check if there is a signatureId that needs to be cleaned up
 	const status = machineStates.signing[machineStates.rollover.message];
 	if (status !== undefined && status.id !== "waiting_for_request") {
 		consensus.signatureIdToMessage = [status.signatureId, undefined];
 	}
-	const groupId = machineStates.rollover.groupId;
 	// The signing state should be cleaned up in any case, as the rollover was attested
 	const diff: StateDiff = {
 		consensus,

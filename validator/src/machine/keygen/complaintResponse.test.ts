@@ -335,9 +335,6 @@ describe("complaint responded", () => {
 				nextEpoch: 10n,
 				deadline: 36n,
 			},
-			consensus: {
-				epochGroup: [10n, "0x5afe02"],
-			},
 			actions: [
 				{
 					id: "key_gen_start",
@@ -399,9 +396,6 @@ describe("complaint responded", () => {
 				groupId: "0x5afe02",
 				nextEpoch: 10n,
 				deadline: 36n,
-			},
-			consensus: {
-				epochGroup: [10n, "0x5afe02"],
 			},
 			actions: [
 				{

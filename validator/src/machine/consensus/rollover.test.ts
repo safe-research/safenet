@@ -219,9 +219,7 @@ describe("check rollover", () => {
 			nextEpoch: 3n,
 			deadline: 40n,
 		});
-		expect(diff.consensus).toStrictEqual({
-			epochGroup: [3n, "0x5afe02"],
-		});
+		expect(diff.consensus).toStrictEqual({});
 		expect(diff.signing).toBeUndefined();
 
 		expect(protocol.consensus).toBeCalledTimes(1);
@@ -266,9 +264,7 @@ describe("check rollover", () => {
 			nextEpoch: 2n,
 			deadline: 30n,
 		});
-		expect(diff.consensus).toStrictEqual({
-			epochGroup: [2n, "0x5afe02"],
-		});
+		expect(diff.consensus).toStrictEqual({});
 		expect(diff.signing).toBeUndefined();
 
 		expect(protocol.consensus).toBeCalledTimes(1);
@@ -309,7 +305,6 @@ describe("check rollover", () => {
 			deadline: 30n,
 		});
 		expect(diff.consensus).toStrictEqual({
-			epochGroup: [2n, "0x5afe02"],
 			activeEpoch: 1n,
 		});
 		expect(diff.signing).toBeUndefined();

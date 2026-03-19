@@ -120,7 +120,9 @@ describe("epoch staged", () => {
 		const diff = await handleEpochStaged(MACHINE_CONFIG, signingClient, machineStates, EVENT);
 
 		expect(diff).toStrictEqual({
-			consensus: {},
+			consensus: {
+				epochGroup: [2n, "0x5afe5af3"],
+			},
 			rollover: { id: "epoch_staged", nextEpoch: 2n },
 			signing: ["0x5afe5afe", undefined],
 		});
@@ -139,7 +141,9 @@ describe("epoch staged", () => {
 		const diff = await handleEpochStaged(MACHINE_CONFIG, signingClient, machineStates, EVENT);
 
 		expect(diff).toStrictEqual({
-			consensus: {},
+			consensus: {
+				epochGroup: [2n, "0x5afe5af3"],
+			},
 			rollover: { id: "epoch_staged", nextEpoch: 2n },
 			signing: ["0x5afe5afe", undefined],
 		});
@@ -164,6 +168,7 @@ describe("epoch staged", () => {
 		]);
 		expect(diff.rollover).toStrictEqual({ id: "epoch_staged", nextEpoch: 2n });
 		expect(diff.consensus).toStrictEqual({
+			epochGroup: [2n, "0x5afe5af3"],
 			groupPendingNonces: ["0x5afe5af3", true],
 			signatureIdToMessage: ["0x5af35af3", undefined],
 		});
