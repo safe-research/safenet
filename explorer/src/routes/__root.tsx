@@ -1,7 +1,7 @@
 import type { QueryClient } from "@tanstack/react-query";
 import { createRootRouteWithContext, Outlet } from "@tanstack/react-router";
+import Footer from "@/components/Footer";
 import Header from "@/components/Header";
-import { SafeResearchFooter } from "@/components/SafeResearch";
 import ReactQueryDevtoolsSetup from "@/integrations/tanstack-query/layout";
 
 /**
@@ -22,7 +22,7 @@ export const Route = createRootRouteWithContext<MyRouterContext>()({
 		<>
 			<Header />
 			<Outlet />
-			<SafeResearchFooter repo="safenet" />
+			<Footer />
 			<ReactQueryDevtoolsSetup />
 		</>
 	),

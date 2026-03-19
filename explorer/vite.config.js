@@ -45,6 +45,11 @@ export default defineConfig(({ mode }) => {
 		define: {
 			// Expose the normalized base path as a constant that can be used in client code
 			__BASE_PATH__: JSON.stringify(basePath),
+			// Link URLs — configurable per deployment, with sensible defaults
+			__DOCS_URL__: JSON.stringify(env.VITE_DOCS_URL || "https://docs.safefoundation.org/safenet"),
+			__TERMS_URL__: JSON.stringify(env.VITE_TERMS_URL || ""),
+			__PRIVACY_URL__: JSON.stringify(env.VITE_PRIVACY_URL || ""),
+			__IMPRINT_URL__: JSON.stringify(env.VITE_IMPRINT_URL || ""),
 		},
 	};
 });

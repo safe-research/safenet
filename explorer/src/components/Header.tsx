@@ -1,31 +1,45 @@
 import { Cog6ToothIcon } from "@heroicons/react/24/solid";
 import { Link } from "@tanstack/react-router";
 import { SafenetBetaLogo } from "@/components/common/SafenetBetaLogo";
-import { SafeResearchBanner } from "@/components/SafeResearch";
 import { useConsensusState } from "@/hooks/useConsensusState";
 
 export default function Header() {
 	const state = useConsensusState();
 	return (
-		// Header is a flex-col with 2 elements.
-		// Element 1 is a flex-row with the Harbour name on the left and the wallet connection button / info on the right.
-		// Element 2 is the Safe Research banner.
-		<header className="sticky top-0 z-50 w-full flex flex-col items-center px-2 py-2 bg-surface-1 border-b border-surface-outline">
-			<nav className="flex flex-row w-full justify-between mb-2">
-				<Link to="/" className="hover:opacity-75 transition" search={{}}>
-					<SafenetBetaLogo />
-				</Link>
-				<div className="flex items-center gap-2">
-					Block: {state.data.currentBlock} | Epoch: {state.data.currentEpoch} | GroupId:{" "}
-					<Link to="/epoch" className="hover:opacity-75 transition">
-						{state.data.currentGroupId.slice(0, 10)}
+		<header className="sticky top-0 z-50 w-full flex flex-col gap-1 px-4 py-2 bg-surface-1 border-b border-surface-outline">
+			{/* Primary nav row: logo + links + docs */}
+			<div className="flex items-center justify-between w-full gap-4">
+				<div className="flex items-center gap-4">
+					<Link to="/" className="hover:opacity-75 transition shrink-0" search={{}}>
+						<SafenetBetaLogo />
 					</Link>
-					<Link to="/settings">
-						<Cog6ToothIcon className="size-8 p-1 hover:opacity-40 transition-opacity duration-300 cursor-pointer" />
+					<Link to="/" className="text-sm text-muted hover:text-title transition-colors" search={{}}>
+						Explore
+					</Link>
+					<Link to="/settings" className="text-sm text-muted hover:text-title transition-colors">
+						Settings
 					</Link>
 				</div>
-			</nav>
-			<SafeResearchBanner />
+				<a
+					href={__DOCS_URL__}
+					target="_blank"
+					rel="noopener noreferrer"
+					className="text-sm text-muted hover:text-title transition-colors whitespace-nowrap"
+				>
+					Docs ↗
+				</a>
+			</div>
+
+			{/* Status row: block / epoch / group id + settings icon — always below on all screen sizes */}
+			<div className="flex items-center justify-end gap-2 w-full text-sm text-muted">
+				Block: {state.data.currentBlock} | Epoch: {state.data.currentEpoch} | GroupId:{" "}
+				<Link to="/epoch" className="hover:opacity-75 transition">
+					{state.data.currentGroupId.slice(0, 10)}
+				</Link>
+				<Link to="/settings">
+					<Cog6ToothIcon className="size-8 p-1 hover:opacity-40 transition-opacity duration-300 cursor-pointer" />
+				</Link>
+			</div>
 		</header>
 	);
 }
