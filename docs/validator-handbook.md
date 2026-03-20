@@ -26,11 +26,22 @@ To run a validator, you need a reliable Ethereum RPC node that can accommodate a
 
 | eth_getBlockByNumber | eth_sendRawTransaction | eth_maxPriorityFeePerGas | eth_getLogs | eth_getTransactionCount |
 | -------------------- | ---------------------- | ------------------------ | ----------- | ----------------------- |
-| 33%                  | 16%                    | 7%                       | 11%         | 33%                     |
+| 42%                  | 8%                     | 11%                      | 11%         | 28%                     |
+
+##### `eth_getLogs` Reliability
+
+Unfortunately, some RPC providers are unreliable with `eth_getLogs` requests: if the logs are queried too soon after a block is observed then an empty array will be returned even if there logs in that block. This seems to affect RPC providers that use older versions of Nethermind before 1.36.
+
+The integrity of logs are critical for proper validator operation. In order to work around these RPC issues, the validators have a built-in mechanism to check log query integrity at the cost of additional bandwidth. If you have reason to believe your RPC may not reliably return all logs, then enable the following configuration:
+
+```sh
+BLOCK_ALL_LOGS_QUERY_RETRY_COUNT=1
+BLOCK_SINGLE_QUERY_RETRY_COUNT=1
+```
 
 #### Logging and Metrics
 
-The validator node writes JSON-formatted logs to standard output. It also exposes Prometheus metrics on `:3555` by default, which can be scraped over HTTP.
+The validator node writes JSON-formatted logs to standard output. It also exposes Prometheus metrics on `:3555` by default, which can be scraped over HTTP. Note that, by default, the metrics service binds to `localhost`, which can be inconvenient if running from a container. In that case, use `METRICS_HOST=0.0.0.0` to expose metrics to outside of the container. 
 
 ### Secrets
 
@@ -64,14 +75,14 @@ Loss of these secrets would prevent the validator from participating in consensu
 
 Configure the validator. See the [configuration documentation](./configuration.md) for reference.
 
-```shell
+```sh
 cp validator/.env.sample validator/.env
 $EDITOR validator/.env
 ```
 
 Use the provided OCI image to run the validator. For example, with `docker` and assuming that the `STORAGE_FILE` was configured to be in the `/var/lib/safenet/validator/data` directory:
 
-```shell
+```sh
 docker run --name safenet-validator \
     --env-file validator/.env \
     --volume validator/data:/var/lib/safenet/validator/data \
@@ -83,12 +94,14 @@ docker run --name safenet-validator \
 There are a few things you can do to verify your validator is running as expected:
 
 - Check the logs. For example, if running with `docker`:
-  ```shell
+  ```sh
   docker logs --follow safenet-validator
   ```
 - Check the validator EVM account on a block explorer. There should be recent transactions to the `Consensus` and `FROSTCoordinator` contracts.
 
 ### Common Problems
 
-- Ethereum node RPC issues such as rate limits. While the validator implements exponential backoff for some RPC requests, rate limits can still prevent full participation in Safenet Beta.
+- Ethereum node RPC issues:
+  -  Rate limits. While the validator implements exponential backoff for some RPC requests, rate limits can still prevent full participation in Safenet Beta.
+  -  Missing logs. Some RPC providers do not reliably return all logs for `eth_getLogs` requests. This issue can be mitigated with the appropriate configuration (see [`eth_getLogs` Reliability](#eth_getlogs-reliability)).
 - Insufficient funds on the validator account to submit onchain transactions. Logs will show that `actions` could not be submitted because of insufficient gas.
