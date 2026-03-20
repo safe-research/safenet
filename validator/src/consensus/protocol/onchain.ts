@@ -1,5 +1,4 @@
 import {
-	type Account,
 	type Address,
 	type Chain,
 	encodeFunctionData,
@@ -11,10 +10,10 @@ import {
 	type SimulateContractParameters,
 	TransactionExecutionError,
 	type Transport,
-	type WalletClient,
 } from "viem";
 import type { FrostPoint, GroupId, SignatureId } from "../../frost/types.js";
 import { CONSENSUS_FUNCTIONS, COORDINATOR_FUNCTIONS } from "../../types/abis.js";
+import type { ValidatorAccount } from "../../types/account.js";
 import { formatError } from "../../utils/errors.js";
 import type { Logger } from "../../utils/logging.js";
 import { maxBigInt } from "../../utils/math.js";
@@ -77,8 +76,8 @@ export class GasFeeEstimator {
 }
 
 export class OnchainProtocol extends BaseProtocol {
-	#publicClient: PublicClient;
-	#signingClient: WalletClient<Transport, Chain, Account>;
+	#publicClient: PublicClient<Transport, Chain>;
+	#account: ValidatorAccount;
 	#gasFeeEstimator: GasFeeEstimator;
 	#txStorage: TransactionStorage;
 	#consensus: Address;
@@ -89,7 +88,7 @@ export class OnchainProtocol extends BaseProtocol {
 
 	constructor({
 		publicClient,
-		signingClient,
+		account,
 		gasFeeEstimator,
 		consensus,
 		coordinator,
@@ -98,8 +97,8 @@ export class OnchainProtocol extends BaseProtocol {
 		logger,
 		blocksBeforeResubmit,
 	}: {
-		publicClient: PublicClient;
-		signingClient: WalletClient<Transport, Chain, Account>;
+		publicClient: PublicClient<Transport, Chain>;
+		account: ValidatorAccount;
 		gasFeeEstimator: GasFeeEstimator;
 		consensus: Address;
 		coordinator: Address;
@@ -110,7 +109,7 @@ export class OnchainProtocol extends BaseProtocol {
 	}) {
 		super(queue, logger);
 		this.#publicClient = publicClient;
-		this.#signingClient = signingClient;
+		this.#account = account;
 		this.#gasFeeEstimator = gasFeeEstimator;
 		this.#txStorage = txStorage;
 		this.#consensus = consensus;
@@ -120,7 +119,7 @@ export class OnchainProtocol extends BaseProtocol {
 	}
 
 	chainId(): bigint {
-		const chainId = this.#signingClient.chain.id;
+		const chainId = this.#publicClient.chain.id;
 		return BigInt(chainId);
 	}
 
@@ -163,7 +162,7 @@ export class OnchainProtocol extends BaseProtocol {
 			this.#logger.debug(`Marked ${newPendingTxs} transactions as submitted at block ${blockNumber}`);
 		}
 		const currentNonce = await this.#publicClient.getTransactionCount({
-			address: this.#signingClient.account.address,
+			address: this.#account.address,
 			blockTag: "latest",
 		});
 		const executedTxs = this.#txStorage.setExecutedUpTo(currentNonce - 1);
@@ -212,27 +211,26 @@ export class OnchainProtocol extends BaseProtocol {
 		this.#txStorage.setPending(tx.nonce);
 		// Store fees before submission in case an error occurs
 		this.#txStorage.setFees(tx.nonce, fees);
-		const signedTx = await this.#signingClient.signTransaction({
+		const signedTx = await this.#account.signTransaction({
 			to: tx.to,
 			value: tx.value,
 			data: tx.data,
 			nonce: tx.nonce,
 			gas: tx.gas,
-			chain: this.#signingClient.chain,
-			account: this.#signingClient.account,
+			chainId: this.#publicClient.chain.id,
 			...fees,
 		});
 		const txHash = keccak256(signedTx);
 		this.#txStorage.setHash(tx.nonce, txHash);
 		this.#logger.debug(`Submitting transaction for nonce ${tx.nonce}!`, { tx, txHash, fees });
-		return this.#signingClient.sendRawTransaction({ serializedTransaction: signedTx });
+		return this.#publicClient.sendRawTransaction({ serializedTransaction: signedTx });
 	}
 
 	private async submitAction(action: SimulateContractParameters): Promise<Hex | null> {
 		// 1. Get Network Baseline (The "Minimum Nonce")
 		// Use 'latest' as all pending transactions are tracked in the tx storage
 		const onChainNonce = await this.#publicClient.getTransactionCount({
-			address: this.#signingClient.account.address,
+			address: this.#account.address,
 			blockTag: "latest",
 		});
 

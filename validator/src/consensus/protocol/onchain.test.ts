@@ -8,7 +8,6 @@ import {
 	type SendTransactionParameters,
 	TransactionExecutionError,
 	type Transport,
-	type WalletClient,
 } from "viem";
 import { entryPoint09Address } from "viem/account-abstraction";
 import { gnosisChiado } from "viem/chains";
@@ -16,6 +15,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { testLogger } from "../../__tests__/config.js";
 import { TEST_ACTIONS, TEST_CONSENSUS, TEST_COORDINATOR } from "../../__tests__/data/protocol.js";
 import { createActionQueue } from "../../__tests__/utils.js";
+import type { ValidatorAccount } from "../../types/account.js";
 import { GasFeeEstimator, OnchainProtocol, type TransactionStorage } from "./onchain.js";
 
 describe("OnchainProtocol", () => {
@@ -31,16 +31,15 @@ describe("OnchainProtocol", () => {
 		const queue = createActionQueue();
 
 		const chain = overrides?.chain ?? gnosisChiado;
-		const account = { address: entryPoint09Address };
 
 		const publicClient = {
-			getTransactionCount: vi.fn(),
-		};
-		const signingClient = {
-			account,
 			chain,
-			signTransaction: vi.fn(),
+			getTransactionCount: vi.fn(),
 			sendRawTransaction: vi.fn(),
+		};
+		const account = {
+			address: entryPoint09Address,
+			signTransaction: vi.fn(),
 		};
 		const gasFeeEstimator = {
 			estimateFees: vi.fn(),
@@ -59,8 +58,8 @@ describe("OnchainProtocol", () => {
 		};
 
 		const protocol = new OnchainProtocol({
-			publicClient: publicClient as unknown as PublicClient,
-			signingClient: signingClient as unknown as WalletClient<Transport, Chain, Account>,
+			publicClient: publicClient as unknown as PublicClient<Transport, Chain>,
+			account: account as unknown as ValidatorAccount,
 			gasFeeEstimator: gasFeeEstimator as unknown as GasFeeEstimator,
 			consensus: TEST_CONSENSUS,
 			coordinator: TEST_COORDINATOR,
@@ -73,8 +72,8 @@ describe("OnchainProtocol", () => {
 		return {
 			protocol,
 			queue,
-			signingClient,
 			publicClient,
+			account,
 			gasFeeEstimator,
 			txStorage,
 		};
@@ -261,8 +260,8 @@ describe("OnchainProtocol", () => {
 	it("should mark as completed if nonce too low error on submission", async () => {
 		const {
 			protocol,
-			signingClient: { account, chain, signTransaction, sendRawTransaction },
-			publicClient: { getTransactionCount },
+			publicClient: { chain, getTransactionCount, sendRawTransaction },
+			account: { signTransaction },
 			gasFeeEstimator: { estimateFees },
 			txStorage: { countPending, submittedUpTo, setSubmittedForPending, setExecutedUpTo, setFees, setHash },
 		} = createTestContext();
@@ -308,8 +307,7 @@ describe("OnchainProtocol", () => {
 		expect(signTransaction).toBeCalledWith({
 			...tx,
 			nonce: 10,
-			account,
-			chain,
+			chainId: chain.id,
 			maxFeePerGas: 200n,
 			maxPriorityFeePerGas: 100n,
 		});
@@ -325,8 +323,8 @@ describe("OnchainProtocol", () => {
 	it("should mark as completed if nested nonce too low error on submission", async () => {
 		const {
 			protocol,
-			signingClient: { account, chain, signTransaction, sendRawTransaction },
-			publicClient: { getTransactionCount },
+			publicClient: { chain, getTransactionCount, sendRawTransaction },
+			account: { signTransaction },
 			gasFeeEstimator: { estimateFees },
 			txStorage: { countPending, submittedUpTo, setSubmittedForPending, setExecutedUpTo, setPending, setFees, setHash },
 		} = createTestContext();
@@ -383,8 +381,7 @@ describe("OnchainProtocol", () => {
 		expect(signTransaction).toBeCalledWith({
 			...tx,
 			nonce: 10,
-			account,
-			chain,
+			chainId: chain.id,
 			maxFeePerGas: 200n,
 			maxPriorityFeePerGas: 100n,
 		});
@@ -400,8 +397,8 @@ describe("OnchainProtocol", () => {
 	it("should set tx hash on unexpected error on submission", async () => {
 		const {
 			protocol,
-			signingClient: { account, chain, signTransaction, sendRawTransaction },
-			publicClient: { getTransactionCount },
+			publicClient: { chain, getTransactionCount, sendRawTransaction },
+			account: { signTransaction },
 			gasFeeEstimator: { estimateFees },
 			txStorage: { countPending, submittedUpTo, setSubmittedForPending, setExecutedUpTo, setHash },
 		} = createTestContext();
@@ -441,8 +438,7 @@ describe("OnchainProtocol", () => {
 		expect(signTransaction).toBeCalledWith({
 			...tx,
 			nonce: 10,
-			account,
-			chain,
+			chainId: chain.id,
 			maxFeePerGas: 200n,
 			maxPriorityFeePerGas: 100n,
 		});
@@ -458,8 +454,8 @@ describe("OnchainProtocol", () => {
 	it("should resubmit submittedUpTo tx without stored gas fees", async () => {
 		const {
 			protocol,
-			signingClient: { account, chain, signTransaction, sendRawTransaction },
-			publicClient: { getTransactionCount },
+			publicClient: { chain, getTransactionCount, sendRawTransaction },
+			account: { signTransaction },
 			gasFeeEstimator: { estimateFees },
 			txStorage: { countPending, submittedUpTo, setSubmittedForPending, setExecutedUpTo, setFees, setHash },
 		} = createTestContext();
@@ -502,8 +498,7 @@ describe("OnchainProtocol", () => {
 		expect(signTransaction).toBeCalledWith({
 			...tx,
 			nonce: 10,
-			account,
-			chain,
+			chainId: chain.id,
 			maxFeePerGas: 200n,
 			maxPriorityFeePerGas: 100n,
 		});
@@ -523,8 +518,8 @@ describe("OnchainProtocol", () => {
 	it("should resubmit submittedUpTo tx with lower stored gas fees", async () => {
 		const {
 			protocol,
-			signingClient: { account, chain, signTransaction, sendRawTransaction },
-			publicClient: { getTransactionCount },
+			publicClient: { chain, getTransactionCount, sendRawTransaction },
+			account: { signTransaction },
 			gasFeeEstimator: { estimateFees },
 			txStorage: { countPending, submittedUpTo, setSubmittedForPending, setExecutedUpTo, setFees, setHash },
 		} = createTestContext();
@@ -570,8 +565,7 @@ describe("OnchainProtocol", () => {
 		expect(signTransaction).toBeCalledWith({
 			...tx,
 			nonce: 10,
-			account,
-			chain,
+			chainId: chain.id,
 			maxFeePerGas: 200n,
 			maxPriorityFeePerGas: 100n,
 		});
@@ -589,8 +583,8 @@ describe("OnchainProtocol", () => {
 	it("should resubmit submittedUpTo tx with higher stored gas fees", async () => {
 		const {
 			protocol,
-			signingClient: { account, chain, signTransaction, sendRawTransaction },
-			publicClient: { getTransactionCount },
+			publicClient: { chain, getTransactionCount, sendRawTransaction },
+			account: { signTransaction },
 			gasFeeEstimator: { estimateFees },
 			txStorage: { countPending, submittedUpTo, setSubmittedForPending, setExecutedUpTo, setFees, setHash },
 		} = createTestContext();
@@ -636,8 +630,7 @@ describe("OnchainProtocol", () => {
 		expect(signTransaction).toBeCalledWith({
 			...tx,
 			nonce: 10,
-			account,
-			chain,
+			chainId: chain.id,
 			maxFeePerGas: 209n,
 			maxPriorityFeePerGas: 108n,
 		});
@@ -655,8 +648,8 @@ describe("OnchainProtocol", () => {
 	it("should submit submittedUpTo tx without hash", async () => {
 		const {
 			protocol,
-			signingClient: { account, chain, signTransaction, sendRawTransaction },
-			publicClient: { getTransactionCount },
+			publicClient: { chain, getTransactionCount, sendRawTransaction },
+			account: { signTransaction },
 			gasFeeEstimator: { estimateFees },
 			txStorage: { countPending, submittedUpTo, setSubmittedForPending, setExecutedUpTo, setFees, setHash },
 		} = createTestContext();
@@ -697,8 +690,7 @@ describe("OnchainProtocol", () => {
 		expect(signTransaction).toBeCalledWith({
 			...tx,
 			nonce: 11,
-			account,
-			chain,
+			chainId: chain.id,
 			maxFeePerGas: 200n,
 			maxPriorityFeePerGas: 100n,
 		});
@@ -718,8 +710,8 @@ describe("OnchainProtocol", () => {
 	it("should check pending when checkPendingActions is called", async () => {
 		const {
 			protocol,
-			signingClient: { account, chain, signTransaction, sendRawTransaction },
-			publicClient: { getTransactionCount },
+			publicClient: { chain, getTransactionCount, sendRawTransaction },
+			account: { signTransaction },
 			gasFeeEstimator: { estimateFees },
 			txStorage: { countPending, submittedUpTo, setSubmittedForPending, setExecutedUpTo, setPending, setFees, setHash },
 		} = createTestContext();
@@ -759,8 +751,7 @@ describe("OnchainProtocol", () => {
 		expect(signTransaction).toBeCalledWith({
 			...tx,
 			nonce: 11,
-			account,
-			chain,
+			chainId: chain.id,
 			maxFeePerGas: 200n,
 			maxPriorityFeePerGas: 100n,
 		});
@@ -781,8 +772,8 @@ describe("OnchainProtocol", () => {
 		const {
 			protocol,
 			queue,
-			signingClient: { account, chain, signTransaction, sendRawTransaction },
-			publicClient: { getTransactionCount },
+			publicClient: { chain, getTransactionCount, sendRawTransaction },
+			account: { signTransaction },
 			gasFeeEstimator: { estimateFees },
 			txStorage: { register, maxNonce, delete: deleteTx, setHash },
 		} = createTestContext();
@@ -817,8 +808,7 @@ describe("OnchainProtocol", () => {
 		expect(signTransaction).toBeCalledWith({
 			...tx,
 			nonce: 10,
-			account,
-			chain,
+			chainId: chain.id,
 			maxFeePerGas: 200n,
 			maxPriorityFeePerGas: 100n,
 		});
@@ -837,8 +827,8 @@ describe("OnchainProtocol", () => {
 		const {
 			protocol,
 			queue,
-			signingClient: { account, chain, signTransaction, sendRawTransaction },
-			publicClient: { getTransactionCount },
+			publicClient: { chain, getTransactionCount, sendRawTransaction },
+			account: { signTransaction },
 			gasFeeEstimator: { estimateFees },
 			txStorage: { register, setPending, setFees, maxNonce, delete: deleteTx, setHash },
 		} = createTestContext();
@@ -881,8 +871,7 @@ describe("OnchainProtocol", () => {
 		expect(signTransaction).toBeCalledWith({
 			...tx,
 			nonce: 10,
-			account,
-			chain,
+			chainId: chain.id,
 			maxFeePerGas: 200n,
 			maxPriorityFeePerGas: 100n,
 		});
@@ -909,8 +898,8 @@ describe("OnchainProtocol", () => {
 		it(`should call ${functionName}`, async () => {
 			const {
 				protocol,
-				signingClient: { account, chain, signTransaction, sendRawTransaction },
-				publicClient: { getTransactionCount },
+				publicClient: { chain, getTransactionCount, sendRawTransaction },
+				account: { signTransaction },
 				gasFeeEstimator: { estimateFees },
 				txStorage: { register, setPending, setFees, setHash },
 			} = createTestContext();
@@ -952,8 +941,7 @@ describe("OnchainProtocol", () => {
 			expect(signTransaction).toBeCalledWith({
 				...tx,
 				nonce: 10,
-				account,
-				chain,
+				chainId: chain.id,
 				maxFeePerGas: 200n,
 				maxPriorityFeePerGas: 100n,
 			});
@@ -969,8 +957,8 @@ describe("OnchainProtocol", () => {
 	it("should not run concurrent pending checks", async () => {
 		const {
 			protocol,
-			signingClient: { signTransaction, sendRawTransaction },
-			publicClient: { getTransactionCount },
+			publicClient: { getTransactionCount, sendRawTransaction },
+			account: { signTransaction },
 			gasFeeEstimator: { estimateFees },
 			txStorage: { countPending, submittedUpTo, setSubmittedForPending, setExecutedUpTo },
 		} = createTestContext();
