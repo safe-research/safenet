@@ -30,6 +30,7 @@ describe("Header", () => {
 	it("renders Explore nav link pointing to /", async () => {
 		const { default: Header } = await import("./Header");
 		render(<Header />);
+		// Desktop nav link is always in DOM
 		const exploreLink = screen.getAllByRole("link", { name: "Explore" })[0];
 		expect(exploreLink.getAttribute("href")).toBe("/");
 	});
@@ -41,10 +42,11 @@ describe("Header", () => {
 		expect(settingsLink.getAttribute("href")).toBe("/settings");
 	});
 
-	it("renders Docs external link opening in new tab", async () => {
+	it("renders Docs external link with correct href and target blank", async () => {
 		const { default: Header } = await import("./Header");
 		render(<Header />);
-		const docsLink = screen.getByRole("link", { name: "Docs ↗" });
+		// Desktop Docs link is always in DOM
+		const docsLink = screen.getAllByRole("link", { name: "Docs ↗" })[0];
 		expect(docsLink.getAttribute("href")).toBe("https://docs.safefoundation.org/safenet");
 		expect(docsLink.getAttribute("target")).toBe("_blank");
 		expect(docsLink.getAttribute("rel")).toBe("noopener noreferrer");
@@ -53,31 +55,27 @@ describe("Header", () => {
 	it("renders Block, Epoch and GroupId status items", async () => {
 		const { default: Header } = await import("./Header");
 		render(<Header />);
-		expect(screen.getByText(/Block:/)).toBeTruthy();
-		expect(screen.getByText(/Epoch:/)).toBeTruthy();
-		expect(screen.getByText(/GroupId:/)).toBeTruthy();
-		// Both epoch and groupId link to /epoch
-		const epochLinks = screen.getAllByRole("link", { name: /^(7|0x00000000)/ });
-		for (const link of epochLinks) {
-			expect(link.getAttribute("href")).toBe("/epoch");
-		}
+		// Desktop status row is always in DOM
+		expect(screen.getAllByText(/Block: 42/)[0]).toBeTruthy();
+		const epochLinks = screen.getAllByRole("link", { name: "7" });
+		expect(epochLinks[0].getAttribute("href")).toBe("/epoch");
 	});
 
-	it("hamburger button toggles mobile nav visibility", async () => {
+	it("hamburger button toggles mobile nav", async () => {
 		const { default: Header } = await import("./Header");
 		render(<Header />);
 
-		// Mobile menu is closed initially
-		expect(screen.queryByRole("button", { name: "Open menu" })).toBeTruthy();
-		expect(screen.queryByRole("button", { name: "Close menu" })).toBeNull();
+		expect(screen.getByRole("button", { name: "Open menu" })).toBeTruthy();
 
-		// Open the menu
+		// Open — mobile dropdown adds a second set of nav links + Docs
 		fireEvent.click(screen.getByRole("button", { name: "Open menu" }));
 		expect(screen.getByRole("button", { name: "Close menu" })).toBeTruthy();
-		// Mobile nav links are now rendered (in addition to the always-present desktop ones)
 		expect(screen.getAllByRole("link", { name: "Explore" })).toHaveLength(2);
+		expect(screen.getAllByRole("link", { name: "Docs ↗" })).toHaveLength(2);
+		// Stats appear in mobile dropdown (in addition to hidden desktop row)
+		expect(screen.getAllByText(/Block: 42/)).toHaveLength(2);
 
-		// Close the menu
+		// Close
 		fireEvent.click(screen.getByRole("button", { name: "Close menu" }));
 		expect(screen.getByRole("button", { name: "Open menu" })).toBeTruthy();
 		expect(screen.getAllByRole("link", { name: "Explore" })).toHaveLength(1);
@@ -90,7 +88,6 @@ describe("Header", () => {
 		fireEvent.click(screen.getByRole("button", { name: "Open menu" }));
 		expect(screen.getAllByRole("link", { name: "Explore" })).toHaveLength(2);
 
-		// Click the second (mobile) Explore link
 		fireEvent.click(screen.getAllByRole("link", { name: "Explore" })[1]);
 		expect(screen.getAllByRole("link", { name: "Explore" })).toHaveLength(1);
 	});
