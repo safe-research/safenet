@@ -27,7 +27,7 @@ const main = async (): Promise<void> => {
 		})
 		.parse(process.env);
 
-	console.log(config);
+	console.log("Running with configuration:", config);
 
 	const client = createPublicClient({
 		transport: http(config.RPC_URL),
@@ -39,7 +39,7 @@ const main = async (): Promise<void> => {
 		throw new Error("must configure BLOCK_TIME_OVERRIDE");
 	}
 
-	console.log({
+	console.log("Connected to client:", {
 		version: await client.request({ method: "web3_clientVersion" }),
 	});
 
@@ -64,6 +64,7 @@ const main = async (): Promise<void> => {
 		if (update.logsBloom !== computeLogsBloom(logs)) {
 			console.log("=== DETECTED MISSING EVENTS! ===");
 			console.log("The connected RPC does not reliably query logs.");
+			process.exitCode = 1;
 			break;
 		}
 	}
