@@ -1,4 +1,4 @@
-import { base, type Chain, gnosis, gnosisChiado, mainnet, sepolia } from "viem/chains";
+import { arbitrum, base, type Chain, gnosis, gnosisChiado, mainnet, optimism, sepolia } from "viem/chains";
 
 export type ChainInfo = Chain & {
 	shortName: string;
@@ -12,10 +12,20 @@ export const SAFE_SERVICE_CHAINS: Record<string, ChainInfo> = {
 		shortName: "eth",
 		color: "#3B5CE6",
 	},
+	"10": {
+		...optimism,
+		shortName: "oeth",
+		color: "#FF0420",
+	},
 	"100": {
 		...gnosis,
 		shortName: "gno",
 		color: "#04795B",
+	},
+	"42161": {
+		...arbitrum,
+		shortName: "arb1",
+		color: "#28A0F0",
 	},
 	"8453": {
 		...base,
