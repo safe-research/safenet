@@ -7,8 +7,13 @@ function FooterLink({ href, children }: FooterLinkProps) {
 	if (!href) {
 		return <span className="text-muted">{children}</span>;
 	}
+	const isExternal = !href.startsWith("#");
 	return (
-		<a href={href} target="_blank" rel="noopener noreferrer" className="text-muted hover:text-title transition-colors">
+		<a
+			href={href}
+			{...(isExternal ? { target: "_blank", rel: "noopener noreferrer" } : {})}
+			className="text-muted hover:text-title transition-colors"
+		>
 			{children}
 		</a>
 	);
