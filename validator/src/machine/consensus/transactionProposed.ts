@@ -36,7 +36,7 @@ export const handleTransactionProposed = async (
 		},
 	};
 	const result = await verificationEngine.verify(packet);
-	const span = { tx: event.transaction, safeTxHash: event.safeTxHash };
+	const span = { epoch: event.epoch, safeTxHash: event.safeTxHash };
 	if (result.status === "invalid") {
 		// Invalid packet, don't update state
 		logger?.info?.(`Invalid transaction packet: ${result.error.message}`, span);
