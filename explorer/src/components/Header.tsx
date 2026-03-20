@@ -20,7 +20,7 @@ export default function Header() {
 				</div>
 
 				{/* Centre col: nav links (desktop only) */}
-				<nav className="hidden md:flex flex-1 items-start justify-center gap-6 pt-1">
+				<nav className="hidden md:flex flex-1 items-start justify-center gap-6">
 					<Link to="/" className="text-base text-muted hover:text-title transition-colors" search={{}}>
 						Explore
 					</Link>
@@ -30,7 +30,7 @@ export default function Header() {
 				</nav>
 
 				{/* Right col: Docs (desktop only) + hamburger (mobile only) */}
-				<div className="flex flex-1 items-start justify-end gap-3 pt-1">
+				<div className="flex flex-1 items-start justify-end gap-3">
 					<a
 						href={__DOCS_URL__}
 						target="_blank"
