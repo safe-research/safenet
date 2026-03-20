@@ -1,6 +1,7 @@
 import { Bars3Icon, XMarkIcon } from "@heroicons/react/24/solid";
 import { Link } from "@tanstack/react-router";
 import { useState } from "react";
+import { Button } from "@/components/common/Button";
 import { SafenetBetaLogo } from "@/components/common/SafenetBetaLogo";
 import { useConsensusState } from "@/hooks/useConsensusState";
 
@@ -65,14 +66,14 @@ export default function Header() {
 					<NavLink href={__DOCS_URL__} className="hidden md:inline text-sm whitespace-nowrap">
 						Docs ↗
 					</NavLink>
-					<button
-						type="button"
-						className="md:hidden p-1 -mt-1 text-muted hover:text-title transition-colors"
+					<Button
+						variant="ghost"
+						className="md:hidden p-1 -mt-1 text-muted"
 						aria-label={isOpen ? "Close menu" : "Open menu"}
 						onClick={() => setIsOpen((o) => !o)}
 					>
 						{isOpen ? <XMarkIcon className="size-6" /> : <Bars3Icon className="size-6" />}
-					</button>
+					</Button>
 				</div>
 			</div>
 
