@@ -1,10 +1,8 @@
 import Sqlite3, { type Database } from "better-sqlite3";
 import {
-	type Account,
 	type Chain,
 	type ChainFees,
 	createPublicClient,
-	createWalletClient,
 	extractChain,
 	http,
 	isAddressEqual,
@@ -24,6 +22,7 @@ import { SqliteStateStorage } from "../machine/storage/sqlite.js";
 import { OnchainTransitionWatcher, type WatcherConfig } from "../machine/transitions/watcher.js";
 import type { RolloverState } from "../machine/types.js";
 import { CONSENSUS_FUNCTIONS } from "../types/abis.js";
+import type { ValidatorAccount } from "../types/account.js";
 import { supportedChains } from "../types/chains.js";
 import type { ProtocolConfig } from "../types/interfaces.js";
 import { formatError } from "../utils/errors.js";
@@ -35,7 +34,7 @@ import { SafenetStateMachine } from "./machine.js";
 
 export class ValidatorService {
 	#logger: Logger;
-	#publicClient: PublicClient;
+	#publicClient: PublicClient<Transport, Chain>;
 	#watcher: OnchainTransitionWatcher;
 	#stateMachine: SafenetStateMachine;
 	#setStakerAddress: () => Promise<void>;
@@ -51,7 +50,7 @@ export class ValidatorService {
 		database,
 		skipGenesis = false,
 	}: {
-		account: Account;
+		account: ValidatorAccount;
 		transport: Transport;
 		config: ProtocolConfig;
 		watcherConfig: WatcherConfig;
@@ -63,7 +62,6 @@ export class ValidatorService {
 	}) {
 		this.#logger = logger;
 		this.#publicClient = createPublicClient({ chain, transport });
-		const walletClient = createWalletClient({ chain, transport, account });
 		const storage = new SqliteClientStorage(database);
 		const signingClient = new SigningClient(storage);
 		const keyGenClient = new KeyGenClient(storage, this.#logger);
@@ -77,7 +75,7 @@ export class ValidatorService {
 		const gasFeeEstimator = new GasFeeEstimator(this.#publicClient);
 		const protocol = new OnchainProtocol({
 			publicClient: this.#publicClient,
-			signingClient: walletClient,
+			account,
 			gasFeeEstimator,
 			consensus: config.consensus,
 			coordinator: config.coordinator,
@@ -165,7 +163,7 @@ export const createValidatorService = ({
 	fees,
 	skipGenesis,
 }: {
-	account: Account;
+	account: ValidatorAccount;
 	rpcUrl: string;
 	storageFile?: string;
 	config: ProtocolConfig;
