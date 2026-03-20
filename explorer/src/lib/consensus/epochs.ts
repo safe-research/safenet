@@ -9,17 +9,17 @@ export type ConsensusState = {
 	currentBlock: bigint;
 };
 
-let cachedChainId: { provider: PublicClient, chainId: Promise<number> } | undefined = undefined
+let cachedChainId: { provider: PublicClient; chainId: Promise<number> } | undefined;
 
 const loadChainId = async (provider: PublicClient): Promise<number> => {
 	if (provider !== cachedChainId?.provider) {
 		cachedChainId = {
 			provider,
-			chainId: provider.getChainId()
-		}
+			chainId: provider.getChainId(),
+		};
 	}
-	return cachedChainId.chainId
-}
+	return cachedChainId.chainId;
+};
 
 export const loadConsensusState = async (provider: PublicClient, consensus: Address): Promise<ConsensusState> => {
 	const currentBlock = await provider.getBlockNumber();
