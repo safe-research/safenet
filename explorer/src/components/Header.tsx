@@ -30,7 +30,7 @@ export default function Header() {
 				</nav>
 
 				{/* Right col: Docs (desktop only) + hamburger (mobile only) */}
-				<div className="flex flex-1 items-start justify-end gap-3">
+				<div className="flex flex-1 items-start justify-end gap-3 pt-1">
 					<a
 						href={__DOCS_URL__}
 						target="_blank"
