@@ -32,7 +32,7 @@ To run a validator, you need a reliable Ethereum RPC node that can accommodate a
 
 Unfortunately, some RPC providers are unreliable with `eth_getLogs` requests: if the logs are queried too soon after a block is observed then an empty array will be returned even if there logs in that block. This seems to affect RPC providers that use older versions of Nethermind before 1.36.
 
-The integrity of logs are critical for proper validator operation. Because of this, in order to work around these RPC issues, the validators have a built-in mechanism to check log query integrity at the cost of additional bandwidth. If you have reason to believe your RPC may not reliably return all logs, then enable the following configuration:
+The integrity of logs are critical for proper validator operation. In order to work around these RPC issues, the validators have a built-in mechanism to check log query integrity at the cost of additional bandwidth. If you have reason to believe your RPC may not reliably return all logs, then enable the following configuration:
 
 ```sh
 BLOCK_ALL_LOGS_QUERY_RETRY_COUNT=1
