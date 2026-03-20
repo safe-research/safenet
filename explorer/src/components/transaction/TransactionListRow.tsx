@@ -45,7 +45,7 @@ export function TransactionListRowSkeleton() {
 export function TransactionListRow({ proposal }: { proposal: TransactionProposalWithStatus }) {
 	const { data: consensusState } = useConsensusState();
 	const currentBlock = consensusState?.currentBlock ?? 0n;
-	const chain = SAFE_SERVICE_CHAINS[proposal.chainId.toString()];
+	const chain = SAFE_SERVICE_CHAINS[consensusState.chainId.toString()];
 
 	const blockDiff = currentBlock > proposal.proposedAt.block ? currentBlock - proposal.proposedAt.block : 0n;
 	const when = chain && blockDiff > 0n ? formatBlockAge(blockDiff, chain) : "";

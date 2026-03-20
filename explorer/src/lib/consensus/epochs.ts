@@ -3,9 +3,22 @@ import { getBlockRange, mostRecentFirst } from "@/lib/utils";
 import { consensusAbi } from "./abi";
 
 export type ConsensusState = {
+	chainId: bigint;
 	currentEpoch: bigint;
 	currentGroupId: Hex;
 	currentBlock: bigint;
+};
+
+let cachedChainId: { provider: PublicClient; chainId: Promise<number> } | undefined;
+
+const loadChainId = async (provider: PublicClient): Promise<number> => {
+	if (provider !== cachedChainId?.provider) {
+		cachedChainId = {
+			provider,
+			chainId: provider.getChainId(),
+		};
+	}
+	return cachedChainId.chainId;
 };
 
 export const loadConsensusState = async (provider: PublicClient, consensus: Address): Promise<ConsensusState> => {
@@ -15,7 +28,9 @@ export const loadConsensusState = async (provider: PublicClient, consensus: Addr
 		abi: consensusAbi,
 		functionName: "getActiveEpoch",
 	});
+	const chainId = await loadChainId(provider);
 	return {
+		chainId: BigInt(chainId),
 		currentEpoch: epoch,
 		currentGroupId: groupId,
 		currentBlock,
