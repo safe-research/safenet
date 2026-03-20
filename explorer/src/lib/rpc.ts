@@ -1,3 +1,16 @@
 import { createPublicClient, http, type PublicClient } from "viem";
 
-export const createRpcClient = (rpc: string): PublicClient => createPublicClient({ transport: http(rpc) });
+let currentProvider: {
+    rpc: string,
+    client: PublicClient
+} | undefined = undefined 
+
+export const createRpcClient = (rpc: string): PublicClient => {
+    if (currentProvider?.rpc !== rpc) {
+        currentProvider = {
+            rpc,
+            client: createPublicClient({ transport: http(rpc) })
+        } 
+    }
+    return currentProvider.client
+}

@@ -29,6 +29,7 @@ export const loadSafeTransactionDetails = async (chainId: bigint, safeTxHash: He
 	const chainInfo = SAFE_SERVICE_CHAINS[chainId.toString()];
 	if (chainInfo === undefined) return null;
 	const response = await fetch(buildSafeTxDetailsEndpoint(url, chainInfo.shortName, safeTxHash));
+	if (!response.ok) return null;
 	const parsed = safeTransactionSchema.safeParse(await response.json());
 	if (!parsed.success) return null;
 	const transaction = {

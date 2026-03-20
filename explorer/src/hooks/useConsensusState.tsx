@@ -9,6 +9,6 @@ export function useConsensusState() {
 		queryKey: ["consensusState", settings.consensus],
 		queryFn: () => getConsensusWorker().loadConsensusState({ rpc: settings.rpc, consensus: settings.consensus }),
 		refetchInterval: () => (settings.refetchInterval > 0 ? settings.refetchInterval : false),
-		initialData: { currentBlock: 0n, currentEpoch: 0n, currentGroupId: zeroHash },
+		initialData: { currentBlock: 0n, currentEpoch: 0n, currentGroupId: zeroHash, chainId: 0n },
 	});
 }
