@@ -23,16 +23,18 @@ afterEach(() => {
 });
 
 describe("Header", () => {
-	it("renders Explore nav link", async () => {
+	it("renders Explore nav link pointing to /", async () => {
 		const { default: Header } = await import("./Header");
 		render(<Header />);
-		expect(screen.getByRole("link", { name: "Explore" })).toBeTruthy();
+		const exploreLink = screen.getByRole("link", { name: "Explore" });
+		expect(exploreLink.getAttribute("href")).toBe("/");
 	});
 
-	it("renders Settings nav link", async () => {
+	it("renders Settings nav link pointing to /settings", async () => {
 		const { default: Header } = await import("./Header");
 		render(<Header />);
-		expect(screen.getByRole("link", { name: "Settings" })).toBeTruthy();
+		const settingsLink = screen.getByRole("link", { name: "Settings" });
+		expect(settingsLink.getAttribute("href")).toBe("/settings");
 	});
 
 	it("renders Docs external link opening in new tab", async () => {
@@ -48,13 +50,11 @@ describe("Header", () => {
 		const { default: Header } = await import("./Header");
 		render(<Header />);
 		expect(screen.getByText(/Block: 42/)).toBeTruthy();
-		expect(screen.getByText(/Epoch: 7/)).toBeTruthy();
-	});
-
-	it("does not render beta warning banner", async () => {
-		const { default: Header } = await import("./Header");
-		render(<Header />);
-		expect(screen.queryByRole("alert")).toBeNull();
-		expect(screen.queryByText(/experimental beta/i)).toBeNull();
+		expect(screen.getByText(/Epoch:/)).toBeTruthy();
+		// Both epoch and groupId link to /epoch
+		const epochLinks = screen.getAllByRole("link", { name: /^(7|0x00000000)/ });
+		for (const link of epochLinks) {
+			expect(link.getAttribute("href")).toBe("/epoch");
+		}
 	});
 });

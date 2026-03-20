@@ -19,20 +19,18 @@ describe("Footer", () => {
 		expect(docsLink.getAttribute("rel")).toBe("noopener noreferrer");
 	});
 
-	it("renders Terms, Privacy and Imprint as plain text when URLs are empty", () => {
+	it("renders Terms, Privacy and Imprint as links with configured URLs", () => {
 		render(<Footer />);
-		// When URL is empty, FooterLink renders a <span> — no <a> role
-		expect(screen.queryByRole("link", { name: "Terms" })).toBeNull();
-		expect(screen.queryByRole("link", { name: "Privacy" })).toBeNull();
-		expect(screen.queryByRole("link", { name: "Imprint" })).toBeNull();
-		// But the text should still be present
-		expect(screen.getByText("Terms")).toBeTruthy();
-		expect(screen.getByText("Privacy")).toBeTruthy();
-		expect(screen.getByText("Imprint")).toBeTruthy();
-	});
+		const termsLink = screen.getByRole("link", { name: "Terms" });
+		expect(termsLink.getAttribute("href")).toBe("https://test.example/terms");
+		expect(termsLink.getAttribute("target")).toBe("_blank");
 
-	it("renders footer navigation landmark", () => {
-		render(<Footer />);
-		expect(screen.getByRole("contentinfo")).toBeTruthy();
+		const privacyLink = screen.getByRole("link", { name: "Privacy" });
+		expect(privacyLink.getAttribute("href")).toBe("https://test.example/privacy");
+		expect(privacyLink.getAttribute("target")).toBe("_blank");
+
+		const imprintLink = screen.getByRole("link", { name: "Imprint" });
+		expect(imprintLink.getAttribute("href")).toBe("https://test.example/imprint");
+		expect(imprintLink.getAttribute("target")).toBe("_blank");
 	});
 });

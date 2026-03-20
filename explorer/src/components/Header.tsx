@@ -1,4 +1,3 @@
-import { Cog6ToothIcon } from "@heroicons/react/24/solid";
 import { Link } from "@tanstack/react-router";
 import { SafenetBetaLogo } from "@/components/common/SafenetBetaLogo";
 import { useConsensusState } from "@/hooks/useConsensusState";
@@ -30,14 +29,15 @@ export default function Header() {
 				</a>
 			</div>
 
-			{/* Status row: block / epoch / group id + settings icon — always below on all screen sizes */}
+			{/* Status row: block / epoch / group id — always below on all screen sizes */}
 			<div className="flex items-center justify-end gap-2 w-full text-sm text-muted">
-				Block: {state.data.currentBlock} | Epoch: {state.data.currentEpoch} | GroupId:{" "}
+				Block: {state.data.currentBlock} | Epoch:{" "}
+				<Link to="/epoch" className="hover:opacity-75 transition">
+					{state.data.currentEpoch}
+				</Link>{" "}
+				| GroupId:{" "}
 				<Link to="/epoch" className="hover:opacity-75 transition">
 					{state.data.currentGroupId.slice(0, 10)}
-				</Link>
-				<Link to="/settings">
-					<Cog6ToothIcon className="size-8 p-1 hover:opacity-40 transition-opacity duration-300 cursor-pointer" />
 				</Link>
 			</div>
 		</header>
