@@ -4,6 +4,37 @@ import { useState } from "react";
 import { SafenetBetaLogo } from "@/components/common/SafenetBetaLogo";
 import { useConsensusState } from "@/hooks/useConsensusState";
 
+type NavLinkProps = {
+	children: React.ReactNode;
+	className?: string;
+	onClick?: () => void;
+} & ({ to: string; search?: Record<string, unknown>; href?: never } | { href: string; to?: never; search?: never });
+
+function NavLink({ children, className, onClick, ...rest }: NavLinkProps) {
+	const cls = `text-muted hover:text-title transition-colors${className ? ` ${className}` : ""}`;
+	if ("href" in rest && rest.href) {
+		return (
+			<a href={rest.href} target="_blank" rel="noopener noreferrer" className={cls} onClick={onClick}>
+				{children}
+			</a>
+		);
+	}
+	const { to, search } = rest as { to: string; search?: Record<string, unknown> };
+	return (
+		<Link to={to} search={search ?? {}} className={cls} onClick={onClick}>
+			{children}
+		</Link>
+	);
+}
+
+function StatLink({ to, children, onClick }: { to: string; children: React.ReactNode; onClick?: () => void }) {
+	return (
+		<Link to={to} className="hover:opacity-75 transition" onClick={onClick}>
+			{children}
+		</Link>
+	);
+}
+
 export default function Header() {
 	const state = useConsensusState();
 	const [isOpen, setIsOpen] = useState(false);
@@ -21,24 +52,19 @@ export default function Header() {
 
 				{/* Centre col: nav links (desktop only) */}
 				<nav className="hidden md:flex flex-1 items-start justify-center gap-6">
-					<Link to="/" className="text-base text-muted hover:text-title transition-colors" search={{}}>
+					<NavLink to="/" search={{}} className="text-base">
 						Explore
-					</Link>
-					<Link to="/settings" className="text-base text-muted hover:text-title transition-colors">
+					</NavLink>
+					<NavLink to="/settings" className="text-base">
 						Settings
-					</Link>
+					</NavLink>
 				</nav>
 
 				{/* Right col: Docs (desktop only) + hamburger (mobile only) */}
 				<div className="flex flex-1 items-start justify-end gap-3 pt-1">
-					<a
-						href={__DOCS_URL__}
-						target="_blank"
-						rel="noopener noreferrer"
-						className="hidden md:inline text-sm text-muted hover:text-title transition-colors whitespace-nowrap"
-					>
+					<NavLink href={__DOCS_URL__} className="hidden md:inline text-sm whitespace-nowrap">
 						Docs ↗
-					</a>
+					</NavLink>
 					<button
 						type="button"
 						className="md:hidden p-1 -mt-1 text-muted hover:text-title transition-colors"
@@ -54,40 +80,29 @@ export default function Header() {
 			{isOpen && (
 				<div className="md:hidden flex flex-col py-2 border-t border-surface-outline">
 					<nav className="flex flex-col gap-3 pb-3">
-						<Link
-							to="/"
-							className="text-base text-muted hover:text-title transition-colors"
-							search={{}}
-							onClick={close}
-						>
+						<NavLink to="/" search={{}} className="text-base" onClick={close}>
 							Explore
-						</Link>
-						<Link to="/settings" className="text-base text-muted hover:text-title transition-colors" onClick={close}>
+						</NavLink>
+						<NavLink to="/settings" className="text-base" onClick={close}>
 							Settings
-						</Link>
-						<a
-							href={__DOCS_URL__}
-							target="_blank"
-							rel="noopener noreferrer"
-							className="text-base text-muted hover:text-title transition-colors"
-							onClick={close}
-						>
+						</NavLink>
+						<NavLink href={__DOCS_URL__} className="text-base" onClick={close}>
 							Docs ↗
-						</a>
+						</NavLink>
 					</nav>
 					<div className="flex flex-col gap-1 pt-3 border-t border-surface-outline text-sm text-muted">
 						<span>Block: {state.data.currentBlock}</span>
 						<span>
 							Epoch:{" "}
-							<Link to="/epoch" className="hover:opacity-75 transition" onClick={close}>
+							<StatLink to="/epoch" onClick={close}>
 								{state.data.currentEpoch}
-							</Link>
+							</StatLink>
 						</span>
 						<span>
 							GroupId:{" "}
-							<Link to="/epoch" className="hover:opacity-75 transition" onClick={close}>
+							<StatLink to="/epoch" onClick={close}>
 								{state.data.currentGroupId.slice(0, 10)}
-							</Link>
+							</StatLink>
 						</span>
 					</div>
 				</div>
@@ -98,17 +113,11 @@ export default function Header() {
 				<span>Block: {state.data.currentBlock}</span>
 				<span>|</span>
 				<span>
-					Epoch:{" "}
-					<Link to="/epoch" className="hover:opacity-75 transition">
-						{state.data.currentEpoch}
-					</Link>
+					Epoch: <StatLink to="/epoch">{state.data.currentEpoch}</StatLink>
 				</span>
 				<span>|</span>
 				<span>
-					GroupId:{" "}
-					<Link to="/epoch" className="hover:opacity-75 transition">
-						{state.data.currentGroupId.slice(0, 10)}
-					</Link>
+					GroupId: <StatLink to="/epoch">{state.data.currentGroupId.slice(0, 10)}</StatLink>
 				</span>
 			</div>
 		</header>
