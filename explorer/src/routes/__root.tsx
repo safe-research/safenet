@@ -20,12 +20,11 @@ interface MyRouterContext {
  */
 export const Route = createRootRouteWithContext<MyRouterContext>()({
 	component: () => (
-		<>
-			<Analytics />
+		<Analytics>
 			<Header />
 			<Outlet />
 			<Footer />
 			<ReactQueryDevtoolsSetup />
-		</>
+		</Analytics>
 	),
 });
