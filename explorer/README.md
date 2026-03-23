@@ -47,7 +47,13 @@ npm test -w explorer
 
 ## Environment Variables
 
-All variables are optional. Set them in a `.env` file inside the `explorer/` directory, or as build-time environment variables.
+All variables are optional. Copy `.env.sample` to `.env` and fill in the values you need:
+
+```sh
+cp explorer/.env.sample explorer/.env
+```
+
+Set them in a `.env` file inside the `explorer/` directory, or as build-time environment variables.
 
 | Variable | Default | Description |
 |---|---|---|
