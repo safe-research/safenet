@@ -10,7 +10,7 @@
 		"check": "biome check && tsc",
 		"fix": "biome check --write",
 		"serve": "vite preview",
-		"deploy:ipfs": "node scripts/deploy-ipfs.mjs",
+		"deploy:ipfs": "node --env-file-if-exists=.env scripts/deploy-ipfs.mjs",
 		"test": "vitest run",
 		"test:watch": "vitest",
 		"coverage": "vitest run --coverage"
