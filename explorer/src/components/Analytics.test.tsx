@@ -1,16 +1,23 @@
 // @vitest-environment jsdom
 import { cleanup, render } from "@testing-library/react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import type React from "react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-const mockInit = vi.fn();
-vi.mock("@plausible-analytics/tracker", () => ({ init: mockInit }));
+let mockInit: ReturnType<typeof vi.fn>;
+let Analytics: React.ComponentType;
 
-// Re-import after mock is set up
-const { default: Analytics } = await import("./Analytics.tsx");
+beforeEach(async () => {
+	// Reset the module registry so the module-level `initialized` flag in
+	// Analytics.tsx is reset to false for each test.
+	vi.resetModules();
+	mockInit = vi.fn();
+	vi.doMock("@plausible-analytics/tracker", () => ({ init: mockInit }));
+	const module = await import("./Analytics.tsx");
+	Analytics = module.default;
+});
 
 afterEach(() => {
 	cleanup();
-	mockInit.mockReset();
 	vi.unstubAllEnvs();
 });
 
