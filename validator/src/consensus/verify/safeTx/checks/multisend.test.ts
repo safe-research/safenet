@@ -1,4 +1,4 @@
-import { zeroAddress } from "viem";
+import { parseEther, zeroAddress } from "viem";
 import { describe, expect, it, vi } from "vitest";
 import { buildMultiSendCallOnlyCheck } from "./multisend.js";
 
@@ -63,5 +63,102 @@ describe("buildMultiSendCallOnlyCheck", () => {
 			refundReceiver: zeroAddress,
 			nonce: 0n,
 		});
+	});
+
+	it("should handle multisends ending in transfers", async () => {
+		const subCheck = vi.fn();
+		const multiSendCheck = buildMultiSendCallOnlyCheck(subCheck);
+		multiSendCheck({
+			chainId: 1n,
+			safe: "0xd843cb7B55c96dbd6559E0431680dD98e115A67a",
+			to: "0x9641d764fc13c8B624c04430C7356C1C7C8102e2",
+			value: 0n,
+			data: "0x8d80ff0a000000000000000000000000000000000000000000000000000000000000002000000000000000000000000000000000000000000000000000000000000000aa00abe7560776a8003df05e257e2d73541fd0fcf83b00000000000000000000000000000000000000000000000000470de4df8200000000000000000000000000000000000000000000000000000000000000000000009f011d5af907c7a8129f134bcb397f55e65b766f00000000000000000000000000000000000000000000000000470de4df820000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+			operation: 1,
+			safeTxGas: 0n,
+			baseGas: 0n,
+			gasPrice: 0n,
+			gasToken: zeroAddress,
+			refundReceiver: zeroAddress,
+			nonce: 32n,
+		});
+		expect(subCheck.mock.calls).toEqual([
+			[
+				{
+					chainId: 1n,
+					safe: "0xd843cb7B55c96dbd6559E0431680dD98e115A67a",
+					to: "0xabe7560776A8003Df05E257E2d73541fD0fcf83b",
+					value: parseEther("0.02"),
+					data: "0x",
+					operation: 0,
+					safeTxGas: 0n,
+					baseGas: 0n,
+					gasPrice: 0n,
+					gasToken: zeroAddress,
+					refundReceiver: zeroAddress,
+					nonce: 32n,
+				},
+			],
+			[
+				{
+					chainId: 1n,
+					safe: "0xd843cb7B55c96dbd6559E0431680dD98e115A67a",
+					to: "0x9f011d5Af907c7A8129f134BCb397f55e65b766f",
+					value: parseEther("0.02"),
+					data: "0x",
+					operation: 0,
+					safeTxGas: 0n,
+					baseGas: 0n,
+					gasPrice: 0n,
+					gasToken: zeroAddress,
+					refundReceiver: zeroAddress,
+					nonce: 32n,
+				},
+			],
+		]);
+	});
+
+	it("should throw if there is missing sub-transaction fixed data", async () => {
+		const subCheck = vi.fn();
+		const multiSendCheck = buildMultiSendCallOnlyCheck(subCheck);
+		expect(() =>
+			multiSendCheck({
+				chainId: 1n,
+				safe: "0xd843cb7B55c96dbd6559E0431680dD98e115A67a",
+				to: "0x9641d764fc13c8B624c04430C7356C1C7C8102e2",
+				value: 0n,
+				// Missing a byte of sub-tx calldata.
+				data: "0x8d80ff0a0000000000000000000000000000000000000000000000000000000000000020000000000000000000000000000000000000000000000000000000000000002000abe7560776a8003df05e257e2d73541fd0fcf83b0000000000000000000000",
+				operation: 1,
+				safeTxGas: 0n,
+				baseGas: 0n,
+				gasPrice: 0n,
+				gasToken: zeroAddress,
+				refundReceiver: zeroAddress,
+				nonce: 32n,
+			}),
+		).toThrow("Invalid MultiSend transaction encoding");
+	});
+
+	it("should throw if there is insufficient sub-transaction data", async () => {
+		const subCheck = vi.fn();
+		const multiSendCheck = buildMultiSendCallOnlyCheck(subCheck);
+		expect(() =>
+			multiSendCheck({
+				chainId: 1n,
+				safe: "0xd843cb7B55c96dbd6559E0431680dD98e115A67a",
+				to: "0x9641d764fc13c8B624c04430C7356C1C7C8102e2",
+				value: 0n,
+				// Missing a byte of sub-tx calldata.
+				data: "0x8d80ff0a0000000000000000000000000000000000000000000000000000000000000020000000000000000000000000000000000000000000000000000000000000005800abe7560776a8003df05e257e2d73541fd0fcf83b00000000000000000000000000000000000000000000000000470de4df8200000000000000000000000000000000000000000000000000000000000000000004112233",
+				operation: 1,
+				safeTxGas: 0n,
+				baseGas: 0n,
+				gasPrice: 0n,
+				gasToken: zeroAddress,
+				refundReceiver: zeroAddress,
+				nonce: 32n,
+			}),
+		).toThrow("Invalid MultiSend transaction encoding");
 	});
 });
