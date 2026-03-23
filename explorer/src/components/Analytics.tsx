@@ -1,16 +1,15 @@
-import type { ReactNode } from "react";
-
 /**
  * Analytics integration point.
  *
- * This component is intentionally a pass-through. Forks that want to add
- * analytics (e.g. Google Analytics, Plausible, Mixpanel) should replace this
- * file with their own implementation.
+ * This component is intentionally empty. Forks that want to add analytics
+ * (e.g. Google Analytics, Plausible, Mixpanel) should replace this file
+ * with their own implementation.
  *
- * The component wraps the entire application via the root layout, so it is
- * present on every page of the explorer. Wrapping children allows forks to
- * provide analytics context (e.g. a usePlausible hook) to the rest of the app.
+ * The component is rendered once in the root layout, before any page content,
+ * so it is present on every page of the explorer. Implementations that track
+ * SPA navigation can call their page-view method inside a `useEffect` — the
+ * component re-renders on every route change via the root layout.
  */
-export default function Analytics({ children }: { children: ReactNode }) {
-	return <>{children}</>;
+export default function Analytics() {
+	return null;
 }

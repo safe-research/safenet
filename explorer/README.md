@@ -63,48 +63,42 @@ The explorer ships with a no-op `Analytics` component (`src/components/Analytics
 
 **Forks that want to add analytics should replace this file** with their own implementation. The component is intentionally kept minimal so no assumptions are made about which analytics provider is used.
 
-### Example: Plausible Analytics
-
-The example below mirrors the [`PlausibleProvider`](https://github.com/4lejandrito/next-plausible) pattern for Vite / React 19. React 19 hoists `<script>` tags rendered inside components into `<head>` automatically, so no Next.js `<Script>` component is needed. Wrapping `children` makes the `usePlausible` hook available throughout the app, matching the ergonomics of `next-plausible`.
+### Example: page-view tracking
 
 ```tsx
 // src/components/Analytics.tsx
-import { createContext, useContext, type ReactNode } from "react";
+import { useEffect } from "react";
+import { useLocation } from "@tanstack/react-router";
 
-type PlausibleFn = (
-  event: string,
-  options?: { props?: Record<string, string | number | boolean> },
-) => void;
+export default function Analytics() {
+  const location = useLocation();
 
-const PlausibleContext = createContext<PlausibleFn>(() => {});
+  useEffect(() => {
+    // Called on every route change because this component lives in the root layout.
+    myAnalytics.page({ path: location.pathname });
+  }, [location.pathname]);
 
-/** Track a custom Plausible event from any component. */
-export function usePlausible() {
-  return useContext(PlausibleContext);
+  return null;
 }
+```
 
-export default function Analytics({ children }: { children: ReactNode }) {
-  const plausible: PlausibleFn = (event, options) => {
-    (window as Window & { plausible?: PlausibleFn }).plausible?.(event, options);
-  };
+### Example: script injection (e.g. Plausible)
 
+React 19 hoists `<script>` tags rendered by components into `<head>` automatically, so no manual DOM manipulation is needed:
+
+```tsx
+// src/components/Analytics.tsx
+export default function Analytics() {
   return (
-    <PlausibleContext.Provider value={plausible}>
-      {/* React 19 hoists this <script> into <head> automatically. */}
-      <script defer src="https://plausible.io/js/script.js" data-domain="yourdomain.com" />
-      {children}
-    </PlausibleContext.Provider>
+    <script
+      defer
+      src="https://plausible.io/js/script.js"
+      data-domain="yourdomain.com"
+    />
   );
 }
 ```
 
-Because `Analytics` wraps the entire app via the root layout, `usePlausible` is available in any component:
+React 19 deduplicates the tag and moves it to `<head>`, matching the behaviour of Next.js `<Script>` components.
 
-```tsx
-import { usePlausible } from "@/components/Analytics";
-
-export function MyButton() {
-  const plausible = usePlausible();
-  return <button onClick={() => plausible("ButtonClicked")}>Click me</button>;
-}
-```
+Because `<Analytics />` is the first element in the root layout, it initializes before `<Header />` or any page content renders.
