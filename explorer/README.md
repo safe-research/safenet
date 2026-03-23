@@ -84,21 +84,21 @@ export default function Analytics() {
 
 ### Example: script injection (e.g. Plausible)
 
+React 19 hoists `<script>` tags rendered by components into `<head>` automatically, so no manual DOM manipulation is needed:
+
 ```tsx
 // src/components/Analytics.tsx
-import { useEffect } from "react";
-
 export default function Analytics() {
-  useEffect(() => {
-    const script = document.createElement("script");
-    script.src = "https://plausible.io/js/script.js";
-    script.defer = true;
-    script.dataset.domain = "yourdomain.com";
-    document.head.appendChild(script);
-  }, []);
-
-  return null;
+  return (
+    <script
+      defer
+      src="https://plausible.io/js/script.js"
+      data-domain="yourdomain.com"
+    />
+  );
 }
 ```
+
+React 19 deduplicates the tag and moves it to `<head>`, matching the behaviour of Next.js `<Script>` components.
 
 Because `<Analytics />` is the first element in the root layout, it initializes before `<Header />` or any page content renders.
