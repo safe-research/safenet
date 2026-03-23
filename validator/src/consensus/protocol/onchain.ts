@@ -84,7 +84,7 @@ export class OnchainProtocol extends BaseProtocol {
 	#coordinator: Address;
 	#logger: Logger;
 	#blocksBeforeResubmit: bigint;
-	#queuedPendingCheck = false;
+	#queuedPendingCheckBlockNumber: bigint | null = null;
 	#runningPendingCheck = false;
 
 	constructor({
@@ -138,18 +138,20 @@ export class OnchainProtocol extends BaseProtocol {
 
 	async triggerPendingCheck(blockNumber: bigint) {
 		if (this.#runningPendingCheck) {
-			this.#queuedPendingCheck = true;
+			this.#queuedPendingCheckBlockNumber = blockNumber;
 			return;
 		}
 		this.#runningPendingCheck = true;
-		do {
-			this.#queuedPendingCheck = false;
+		let blockForCheck: bigint | null = blockNumber;
+		while (blockForCheck !== null) {
 			try {
-				await this.checkPendingActions(blockNumber);
+				await this.checkPendingActions(blockForCheck);
 			} catch (e) {
 				this.#logger.error("Error while checking pending transactions.", { error: formatError(e) });
 			}
-		} while (this.#queuedPendingCheck);
+			blockForCheck = this.#queuedPendingCheckBlockNumber;
+			this.#queuedPendingCheckBlockNumber = null;
+		}
 		this.#runningPendingCheck = false;
 	}
 

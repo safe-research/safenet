@@ -991,8 +991,8 @@ describe("OnchainProtocol", () => {
 		// Attempt second check while first is still in-flight — should be queued (lock held)
 		protocol.triggerPendingCheck(11n);
 
-		// Attempt third check while first is still in-flight — should be skipped (lock held and already queued)
-		protocol.triggerPendingCheck(11n);
+		// Attempt third check while first is still in-flight — should be overwrite other queued (lock held)
+		protocol.triggerPendingCheck(12n);
 
 		// sendRawTransaction must have been called exactly once despite two concurrent checks
 		expect(sendRawTransaction).toBeCalledTimes(1);
@@ -1003,11 +1003,16 @@ describe("OnchainProtocol", () => {
 
 		// sendRawTransaction must have been called twice due to queued checks
 		expect(sendRawTransaction).toBeCalledTimes(2);
+		expect(setSubmittedForPending).toBeCalledTimes(2);
+		expect(setSubmittedForPending).nthCalledWith(1, 10n);
+		// Skip 11 as this was pending and a newer block came in
+		expect(setSubmittedForPending).nthCalledWith(2, 12n);
 
 		// After the in-flight work is done, a subsequent check can resubmit the tx (guard is not sticky)
 		sendRawTransaction.mockReturnValueOnce(Promise.resolve("0xdeadbeef2"));
-		protocol.triggerPendingCheck(12n);
+		protocol.triggerPendingCheck(13n);
 		await vi.waitFor(() => expect(sendRawTransaction).toBeCalledTimes(3));
+		expect(setSubmittedForPending).nthCalledWith(3, 13n);
 	});
 });
 
