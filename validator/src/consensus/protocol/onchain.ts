@@ -142,7 +142,15 @@ export class OnchainProtocol extends BaseProtocol {
 			return;
 		}
 		this.#runningPendingCheck = true;
-		let blockForCheck: bigint | null = blockNumber;
+		try {
+			await this.checkPendingActionsLoop(blockNumber);
+		} finally {
+			this.#runningPendingCheck = false;
+		}
+	}
+
+	private async checkPendingActionsLoop(initialBlockNumber: bigint) {
+		let blockForCheck: bigint | null = initialBlockNumber;
 		while (blockForCheck !== null) {
 			try {
 				await this.checkPendingActions(blockForCheck);
@@ -152,7 +160,6 @@ export class OnchainProtocol extends BaseProtocol {
 			blockForCheck = this.#queuedPendingCheckBlockNumber;
 			this.#queuedPendingCheckBlockNumber = null;
 		}
-		this.#runningPendingCheck = false;
 	}
 
 	private async checkPendingActions(blockNumber: bigint) {
