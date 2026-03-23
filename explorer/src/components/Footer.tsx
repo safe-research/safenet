@@ -15,7 +15,6 @@ export default function Footer() {
 	return (
 		<footer className="w-full border-t border-surface-outline bg-surface-1 mt-8">
 			<div className="max-w-4xl mx-auto px-4 py-6 flex flex-col items-center gap-3 text-sm">
-				<p className="text-muted">© Safenet / Safe Ecosystem Foundation</p>
 				<nav className="flex flex-wrap justify-center gap-x-4 gap-y-2" aria-label="Footer navigation">
 					<FooterLink href={__TERMS_URL__}>Terms</FooterLink>
 					<FooterLink href={__PRIVACY_URL__}>Privacy</FooterLink>
