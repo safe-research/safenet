@@ -56,14 +56,32 @@ All variables are optional. Set them in a `.env` file inside the `explorer/` dir
 | `VITE_TERMS_URL` | `#tos` | URL for the "Terms" link in the footer. |
 | `VITE_PRIVACY_URL` | `#privacy` | URL for the "Privacy" link in the footer. |
 | `VITE_IMPRINT_URL` | `#imprint` | URL for the "Imprint" link in the footer. |
+| `VITE_PLAUSIBLE_DOMAIN` | — | Plausible site domain (e.g. `explorer.safenet.io`). When set, the Plausible script is injected. When unset, no analytics script is loaded. |
+| `VITE_PLAUSIBLE_SCRIPT_URL` | `https://plausible.io/js/script.js` | URL of the Plausible script. Override for self-hosted Plausible instances. |
 
 ## Analytics Integration
 
-The explorer ships with a no-op `Analytics` component (`src/components/Analytics.tsx`) that is rendered first in the root layout, making it present on every page. By default it does nothing and returns `null`.
+The explorer ships with a Plausible Analytics integration in `src/components/Analytics.tsx`. The component is rendered first in the root layout, so it is present on every page.
 
-**Forks that want to add analytics should replace this file** with their own implementation. The component is intentionally kept minimal so no assumptions are made about which analytics provider is used.
+To enable Plausible, set `VITE_PLAUSIBLE_DOMAIN` to your site's domain. If the variable is not set, no analytics script is injected.
 
-### Example: page-view tracking
+```sh
+# explorer/.env
+VITE_PLAUSIBLE_DOMAIN=explorer.safenet.io
+```
+
+For self-hosted Plausible, additionally set `VITE_PLAUSIBLE_SCRIPT_URL`:
+
+```sh
+VITE_PLAUSIBLE_DOMAIN=explorer.safenet.io
+VITE_PLAUSIBLE_SCRIPT_URL=https://plausible.example.com/js/script.js
+```
+
+React 19 hoists `<script>` tags rendered by components into `<head>` automatically, so no manual DOM manipulation is needed. React deduplicates the tag and moves it to `<head>`, matching the behaviour of Next.js `<Script>` components.
+
+### Using a different analytics provider
+
+To replace Plausible with another provider, overwrite `src/components/Analytics.tsx` with your own implementation. The component re-renders on every route change via the root layout, so implementations that track SPA navigation can call their page-view method inside a `useEffect`:
 
 ```tsx
 // src/components/Analytics.tsx
@@ -81,24 +99,5 @@ export default function Analytics() {
   return null;
 }
 ```
-
-### Example: script injection (e.g. Plausible)
-
-React 19 hoists `<script>` tags rendered by components into `<head>` automatically, so no manual DOM manipulation is needed:
-
-```tsx
-// src/components/Analytics.tsx
-export default function Analytics() {
-  return (
-    <script
-      defer
-      src="https://plausible.io/js/script.js"
-      data-domain="yourdomain.com"
-    />
-  );
-}
-```
-
-React 19 deduplicates the tag and moves it to `<head>`, matching the behaviour of Next.js `<Script>` components.
 
 Because `<Analytics />` is the first element in the root layout, it initializes before `<Header />` or any page content renders.
