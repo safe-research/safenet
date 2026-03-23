@@ -153,7 +153,7 @@ export class OnchainProtocol extends BaseProtocol {
 		this.#runningPendingCheck = false;
 	}
 
-	async checkPendingActions(blockNumber: bigint) {
+	private async checkPendingActions(blockNumber: bigint) {
 		// Optimistically check whether or not we have pending actions. If we don't then we can just exit early and
 		// save on some RPC calls and database reads.
 		if (this.#txStorage.countPending() === 0) {
