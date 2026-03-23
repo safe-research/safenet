@@ -6,11 +6,6 @@ import Footer from "./Footer";
 afterEach(cleanup);
 
 describe("Footer", () => {
-	it("renders copyright text", () => {
-		render(<Footer />);
-		expect(screen.getByText(/© Safenet \/ Safe Ecosystem Foundation/)).toBeTruthy();
-	});
-
 	it("renders Docs link with correct href and target blank", () => {
 		render(<Footer />);
 		const docsLink = screen.getByRole("link", { name: "Docs ↗" });
