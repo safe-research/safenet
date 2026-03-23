@@ -21,6 +21,7 @@
 		"@hookform/resolvers": "^5.2.2",
 		"@noble/curves": "^2.0.1",
 		"@noble/hashes": "^2.0.1",
+		"@plausible-analytics/tracker": "^0.4.4",
 		"@tailwindcss/vite": "^4.1.11",
 		"@tanstack/react-query": "^5.81.2",
 		"@tanstack/react-query-devtools": "^5.81.2",

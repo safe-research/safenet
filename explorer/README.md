@@ -56,28 +56,28 @@ All variables are optional. Set them in a `.env` file inside the `explorer/` dir
 | `VITE_TERMS_URL` | `#tos` | URL for the "Terms" link in the footer. |
 | `VITE_PRIVACY_URL` | `#privacy` | URL for the "Privacy" link in the footer. |
 | `VITE_IMPRINT_URL` | `#imprint` | URL for the "Imprint" link in the footer. |
-| `VITE_PLAUSIBLE_DOMAIN` | — | Plausible site domain (e.g. `explorer.safenet.io`). When set, the Plausible script is injected. When unset, no analytics script is loaded. |
-| `VITE_PLAUSIBLE_SCRIPT_URL` | `https://plausible.io/js/script.js` | URL of the Plausible script. Override for self-hosted Plausible instances. |
+| `VITE_PLAUSIBLE_DOMAIN` | — | Plausible site domain (e.g. `explorer.safenet.io`). When set, Plausible tracking is initialized. When unset, no analytics run. |
+| `VITE_PLAUSIBLE_ENDPOINT` | `https://plausible.io/api/event` | Full URL of the Plausible API endpoint. Override for self-hosted Plausible instances. |
 
 ## Analytics Integration
 
-The explorer ships with a Plausible Analytics integration in `src/components/Analytics.tsx`. The component is rendered first in the root layout, so it is present on every page.
+The explorer ships with a Plausible Analytics integration in `src/components/Analytics.tsx` using the [`@plausible-analytics/tracker`](https://www.npmjs.com/package/@plausible-analytics/tracker) npm package. The tracker is bundled with the application — no external script is fetched at runtime. The component is rendered first in the root layout, so it is present on every page.
 
-To enable Plausible, set `VITE_PLAUSIBLE_DOMAIN` to your site's domain. If the variable is not set, no analytics script is injected.
+To enable Plausible, set `VITE_PLAUSIBLE_DOMAIN` to your site's domain. If the variable is not set, no analytics are initialized.
 
 ```sh
 # explorer/.env
 VITE_PLAUSIBLE_DOMAIN=explorer.safenet.io
 ```
 
-For self-hosted Plausible, additionally set `VITE_PLAUSIBLE_SCRIPT_URL`:
+For self-hosted Plausible, additionally set `VITE_PLAUSIBLE_ENDPOINT`:
 
 ```sh
 VITE_PLAUSIBLE_DOMAIN=explorer.safenet.io
-VITE_PLAUSIBLE_SCRIPT_URL=https://plausible.example.com/js/script.js
+VITE_PLAUSIBLE_ENDPOINT=https://plausible.example.com/api/event
 ```
 
-React 19 hoists `<script>` tags rendered by components into `<head>` automatically, so no manual DOM manipulation is needed. React deduplicates the tag and moves it to `<head>`, matching the behaviour of Next.js `<Script>` components.
+SPA page-view tracking works automatically — the tracker hooks into the History API (`pushState`/`popstate`) via `autoCapturePageviews` (enabled by default), so all client-side navigations are captured without manual instrumentation.
 
 ### Using a different analytics provider
 

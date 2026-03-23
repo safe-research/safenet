@@ -1,24 +1,29 @@
 /**
  * Analytics integration point.
  *
- * By default this component loads Plausible Analytics when VITE_PLAUSIBLE_DOMAIN
- * is set. If the variable is not set, no analytics script is injected.
+ * By default this component initializes Plausible Analytics when
+ * VITE_PLAUSIBLE_DOMAIN is set. If the variable is not set, no tracking is
+ * initialized. The Plausible tracker package is bundled with the application
+ * — no external script is fetched at runtime.
+ *
+ * `autoCapturePageviews` (enabled by default) hooks into the History API so
+ * all SPA navigations are tracked automatically without manual instrumentation.
  *
  * To use a different analytics provider, replace this file with your own
- * implementation. The component is rendered once in the root layout, before any
- * page content, so it is present on every page of the explorer. Implementations
- * that track SPA navigation can call their page-view method inside a `useEffect`
- * — the component re-renders on every route change via the root layout.
- *
- * React 19 hoists `<script>` tags rendered by components into `<head>`
- * automatically, so no manual DOM manipulation is needed.
+ * implementation. The component is rendered once in the root layout, before
+ * any page content, so it is present on every page of the explorer.
  */
+import { useEffect } from "react";
+import { init } from "@plausible-analytics/tracker";
 
 const domain = import.meta.env.VITE_PLAUSIBLE_DOMAIN as string | undefined;
-const scriptUrl = (import.meta.env.VITE_PLAUSIBLE_SCRIPT_URL as string | undefined) ?? "https://plausible.io/js/script.js";
+const endpoint = import.meta.env.VITE_PLAUSIBLE_ENDPOINT as string | undefined;
 
 export default function Analytics() {
-	if (!domain) return null;
+	useEffect(() => {
+		if (!domain) return;
+		init({ domain, ...(endpoint ? { endpoint } : {}) });
+	}, []);
 
-	return <script defer src={scriptUrl} data-domain={domain} />;
+	return null;
 }
