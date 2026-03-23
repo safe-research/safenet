@@ -18,6 +18,7 @@ export default defineConfig({
 		},
 	},
 	resolve: {
+		mainFields: ["browser", "module", "main"],
 		alias: {
 			"@": resolve(__dirname, "./src"),
 		},
