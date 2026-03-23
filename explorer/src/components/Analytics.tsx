@@ -13,8 +13,8 @@
  * implementation. The component is rendered once in the root layout, before
  * any page content, so it is present on every page of the explorer.
  */
-import { useEffect } from "react";
 import { init } from "@plausible-analytics/tracker";
+import { useEffect } from "react";
 
 const domain = import.meta.env.VITE_PLAUSIBLE_DOMAIN as string | undefined;
 const endpoint = import.meta.env.VITE_PLAUSIBLE_ENDPOINT as string | undefined;
