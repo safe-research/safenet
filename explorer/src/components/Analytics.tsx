@@ -16,10 +16,11 @@
 import { useEffect } from "react";
 import { init } from "@plausible-analytics/tracker";
 
+const domain = import.meta.env.VITE_PLAUSIBLE_DOMAIN as string | undefined;
+const endpoint = import.meta.env.VITE_PLAUSIBLE_ENDPOINT as string | undefined;
+
 export default function Analytics() {
 	useEffect(() => {
-		const domain = import.meta.env.VITE_PLAUSIBLE_DOMAIN as string | undefined;
-		const endpoint = import.meta.env.VITE_PLAUSIBLE_ENDPOINT as string | undefined;
 		if (!domain) return;
 		init({ domain, ...(endpoint ? { endpoint } : {}) });
 	}, []);
