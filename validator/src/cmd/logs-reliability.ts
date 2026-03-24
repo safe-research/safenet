@@ -36,7 +36,7 @@ const main = async (): Promise<void> => {
 	const chainId = await client.getChainId();
 	const blockTime = config.BLOCK_TIME_OVERRIDE ?? chainBlockTime(chainId);
 	if (blockTime === undefined) {
-		throw new Error("must configure BLOCK_TIME_OVERRIDE");
+		throw new Error("Must configure BLOCK_TIME_OVERRIDE");
 	}
 
 	console.log("Connected to client:", {
@@ -47,6 +47,11 @@ const main = async (): Promise<void> => {
 		client,
 		lastIndexedBlock: null,
 		blockTime,
+		// More aggressively poll for new blocks so we know about it as soon as
+		// possible (at the cost of making more RPC requests on average).
+		blockPropagationDelay: 250,
+		blockRetryDelays: [...Array(15)].map(() => 50),
+		// We don't care about reorgs here.
 		maxReorgDepth: 0,
 	});
 
@@ -56,14 +61,14 @@ const main = async (): Promise<void> => {
 			continue;
 		}
 
-		console.log(`saw block ${update.blockNumber}`);
+		console.log(`Saw block ${update.blockNumber}`);
 
 		const logs = await client.getLogs({
 			blockHash: update.blockHash,
 		});
 		if (update.logsBloom !== computeLogsBloom(logs)) {
-			console.log("=== DETECTED MISSING EVENTS! ===");
-			console.log("The connected RPC does not reliably query logs.");
+			console.log("=== DETECTED MISSING EVENTS ===");
+			console.log("The connected RPC does not reliably query logs");
 			process.exitCode = 1;
 			break;
 		}
