@@ -84,8 +84,9 @@ export class OnchainProtocol extends BaseProtocol {
 	#coordinator: Address;
 	#logger: Logger;
 	#blocksBeforeResubmit: bigint;
+	#runningPendingCheck: Promise<unknown> | null = null;
+	#queuedPendingCheck: Promise<unknown> | null = null;
 	#queuedPendingCheckBlockNumber: bigint | null = null;
-	#runningPendingCheck = false;
 
 	constructor({
 		publicClient,
@@ -133,27 +134,32 @@ export class OnchainProtocol extends BaseProtocol {
 	}
 
 	isRunningPendingCheck(): boolean {
+		return this.#runningPendingCheck !== null;
+	}
+
+	triggerPendingCheck(blockNumber: bigint) {
+		if (this.#runningPendingCheck !== null) {
+			this.#queuedPendingCheckBlockNumber = blockNumber;
+			this.#queuedPendingCheck ??= this.#runningPendingCheck.then(() => {
+				if (this.#queuedPendingCheckBlockNumber !== null) {
+					this.triggerPendingCheck(this.#queuedPendingCheckBlockNumber);
+				}
+			});
+			return this.#queuedPendingCheck;
+		}
+		this.#queuedPendingCheck = null;
+		this.#queuedPendingCheckBlockNumber = null;
+		this.#runningPendingCheck = this.#checkPendingActionsLoop(blockNumber).finally(() => {
+			this.#runningPendingCheck = null;
+		});
 		return this.#runningPendingCheck;
 	}
 
-	async triggerPendingCheck(blockNumber: bigint) {
-		if (this.#runningPendingCheck) {
-			this.#queuedPendingCheckBlockNumber = blockNumber;
-			return;
-		}
-		this.#runningPendingCheck = true;
-		try {
-			await this.checkPendingActionsLoop(blockNumber);
-		} finally {
-			this.#runningPendingCheck = false;
-		}
-	}
-
-	private async checkPendingActionsLoop(initialBlockNumber: bigint) {
+	async #checkPendingActionsLoop(initialBlockNumber: bigint) {
 		let blockForCheck: bigint | null = initialBlockNumber;
 		while (blockForCheck !== null) {
 			try {
-				await this.checkPendingActions(blockForCheck);
+				await this.#checkPendingActions(blockForCheck);
 			} catch (e) {
 				this.#logger.error("Error while checking pending transactions.", { error: formatError(e) });
 			}
@@ -162,7 +168,7 @@ export class OnchainProtocol extends BaseProtocol {
 		}
 	}
 
-	private async checkPendingActions(blockNumber: bigint) {
+	async #checkPendingActions(blockNumber: bigint) {
 		// Optimistically check whether or not we have pending actions. If we don't then we can just exit early and
 		// save on some RPC calls and database reads.
 		if (this.#txStorage.countPending() === 0) {
