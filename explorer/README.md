@@ -59,6 +59,7 @@ This builds the app and uploads the `dist/` directory to Pinata. The upload is a
 
 ```sh
 npm run deploy:ipfs -w explorer -- --skip-build
+
 ```
 
 ## Environment Variables

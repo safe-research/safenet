@@ -1,4 +1,5 @@
-#!/usr/bin/env node
+#!/usr/bin/env tsx
+/// <reference types="node" />
 
 /**
  * Deploy the built dist/ directory to IPFS via Pinata.
@@ -10,15 +11,15 @@
  *   PINATA_GATEWAY      — Your dedicated gateway domain (e.g. "my-gateway.mypinata.cloud")
  *
  * Usage:
- *   node scripts/deploy-ipfs.mjs              # build + upload
- *   node scripts/deploy-ipfs.mjs --skip-build # upload only (dist/ must exist)
+ *   tsx scripts/deploy-ipfs.ts              # build + upload
+ *   tsx scripts/deploy-ipfs.ts --skip-build # upload only (dist/ must exist)
  *
  * The upload is always named with a snapshot timestamp, e.g. "safenet-explorer-2026-03-18T14:30:00.000Z".
  */
 
-import { execSync } from "node:child_process";
+import { execSync, type ExecSyncOptions } from "node:child_process";
 import { existsSync, globSync, readFileSync } from "node:fs";
-import { resolve, relative, join } from "node:path";
+import { join, relative, resolve } from "node:path";
 import { PinataSDK } from "pinata";
 
 const ROOT = resolve(import.meta.dirname, "..");
@@ -28,14 +29,14 @@ const skipBuild = process.argv.includes("--skip-build");
 
 const uploadName = `safenet-explorer-${new Date().toISOString()}`;
 
-function run(cmd, opts = {}) {
+function run(cmd: string, opts: ExecSyncOptions = {}): Buffer {
 	console.log(`\n> ${cmd}`);
-	return execSync(cmd, { cwd: ROOT, ...opts });
+	return execSync(cmd, { cwd: ROOT, ...opts }) as Buffer;
 }
 
 /** Collect all files in a directory into File objects with relative paths. */
-function collectFiles(dir) {
-	const files = [];
+function collectFiles(dir: string): File[] {
+	const files: File[] = [];
 	for (const entry of globSync(`${dir}/**/*`, { withFileTypes: true })) {
 		if (entry.isFile()) {
 			const path = join(entry.parentPath, entry.name);
