@@ -14,21 +14,16 @@
  * any page content, so it is present on every page of the explorer.
  */
 import { init } from "@plausible-analytics/tracker";
-import { useEffect } from "react";
 
-// Module-level guard so init() is only called once. Without this, React
-// StrictMode's intentional double-mount in development causes a second
-// useEffect call which makes the Plausible SDK throw.
-let initialized = false;
+// Called at module load time — runs exactly once regardless of React's
+// component lifecycle, so no guard or useEffect is needed.
+const domain = import.meta.env.VITE_PLAUSIBLE_DOMAIN as string | undefined;
+const endpoint = import.meta.env.VITE_PLAUSIBLE_ENDPOINT as string | undefined;
+
+if (domain) {
+	init({ domain, ...(endpoint ? { endpoint } : {}) });
+}
 
 export default function Analytics() {
-	useEffect(() => {
-		const domain = import.meta.env.VITE_PLAUSIBLE_DOMAIN as string | undefined;
-		const endpoint = import.meta.env.VITE_PLAUSIBLE_ENDPOINT as string | undefined;
-		if (!domain || initialized) return;
-		initialized = true;
-		init({ domain, ...(endpoint ? { endpoint } : {}) });
-	}, []);
-
 	return null;
 }
