@@ -84,9 +84,8 @@ export class OnchainProtocol extends BaseProtocol {
 	#coordinator: Address;
 	#logger: Logger;
 	#blocksBeforeResubmit: bigint;
-	#runningPendingCheck: Promise<unknown> | null = null;
-	#queuedPendingCheck: Promise<unknown> | null = null;
 	#queuedPendingCheckBlockNumber: bigint | null = null;
+	#runningPendingCheck = false;
 
 	constructor({
 		publicClient,
@@ -134,25 +133,18 @@ export class OnchainProtocol extends BaseProtocol {
 	}
 
 	isRunningPendingCheck(): boolean {
-		return this.#runningPendingCheck !== null;
+		return this.#runningPendingCheck;
 	}
 
 	triggerPendingCheck(blockNumber: bigint) {
-		if (this.#runningPendingCheck !== null) {
+		if (this.#runningPendingCheck) {
 			this.#queuedPendingCheckBlockNumber = blockNumber;
-			this.#queuedPendingCheck ??= this.#runningPendingCheck.then(() => {
-				if (this.#queuedPendingCheckBlockNumber !== null) {
-					this.triggerPendingCheck(this.#queuedPendingCheckBlockNumber);
-				}
-			});
-			return this.#queuedPendingCheck;
+			return;
 		}
-		this.#queuedPendingCheck = null;
-		this.#queuedPendingCheckBlockNumber = null;
-		this.#runningPendingCheck = this.#checkPendingActionsLoop(blockNumber).finally(() => {
-			this.#runningPendingCheck = null;
+		this.#runningPendingCheck = true;
+		this.#checkPendingActionsLoop(blockNumber).finally(() => {
+			this.#runningPendingCheck = false;
 		});
-		return this.#runningPendingCheck;
 	}
 
 	async #checkPendingActionsLoop(initialBlockNumber: bigint) {
