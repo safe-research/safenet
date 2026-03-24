@@ -107,7 +107,8 @@ describe("OnchainProtocol", () => {
 		setExecutedUpTo.mockReturnValue(2);
 		submittedUpTo.mockReturnValue([]);
 		getTransactionCount.mockResolvedValueOnce(12);
-		await protocol.checkPendingActions(10n);
+		protocol.triggerPendingCheck(10n);
+		await vi.waitFor(() => expect(protocol.isRunningPendingCheck()).toBe(false));
 		expect(countPending).toBeCalledTimes(1);
 		expect(getTransactionCount).toBeCalledTimes(1);
 		expect(getTransactionCount).toBeCalledWith({
@@ -241,7 +242,8 @@ describe("OnchainProtocol", () => {
 			},
 		]);
 		estimateFees.mockRejectedValueOnce("Test unexpected!");
-		await protocol.checkPendingActions(10n);
+		protocol.triggerPendingCheck(10n);
+		await vi.waitFor(() => expect(protocol.isRunningPendingCheck()).toBe(false));
 		expect(countPending).toBeCalledTimes(1);
 		expect(setSubmittedForPending).toBeCalledTimes(1);
 		expect(setSubmittedForPending).toBeCalledWith(10n);
@@ -285,7 +287,8 @@ describe("OnchainProtocol", () => {
 		});
 		signTransaction.mockResolvedValueOnce("0x5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe");
 		sendRawTransaction.mockRejectedValueOnce(new NonceTooLowError());
-		await protocol.checkPendingActions(10n);
+		protocol.triggerPendingCheck(10n);
+		await vi.waitFor(() => expect(protocol.isRunningPendingCheck()).toBe(false));
 		expect(countPending).toBeCalledTimes(1);
 		expect(setSubmittedForPending).toBeCalledTimes(1);
 		expect(setSubmittedForPending).toBeCalledWith(10n);
@@ -357,7 +360,8 @@ describe("OnchainProtocol", () => {
 				},
 			),
 		);
-		await protocol.checkPendingActions(10n);
+		protocol.triggerPendingCheck(10n);
+		await vi.waitFor(() => expect(protocol.isRunningPendingCheck()).toBe(false));
 		expect(countPending).toBeCalledTimes(1);
 		expect(setSubmittedForPending).toBeCalledTimes(1);
 		expect(setSubmittedForPending).toBeCalledWith(10n);
@@ -422,7 +426,8 @@ describe("OnchainProtocol", () => {
 		});
 		signTransaction.mockResolvedValueOnce("0x5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe");
 		sendRawTransaction.mockRejectedValueOnce(new Error("Test unexpected!"));
-		await protocol.checkPendingActions(10n);
+		protocol.triggerPendingCheck(10n);
+		await vi.waitFor(() => expect(protocol.isRunningPendingCheck()).toBe(false));
 		expect(countPending).toBeCalledTimes(1);
 		expect(setSubmittedForPending).toBeCalledTimes(1);
 		expect(setSubmittedForPending).toBeCalledWith(10n);
@@ -482,7 +487,8 @@ describe("OnchainProtocol", () => {
 		signTransaction.mockResolvedValueOnce("0x5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe");
 		const retryHash = keccak256("0x5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe");
 		sendRawTransaction.mockResolvedValueOnce(retryHash);
-		await protocol.checkPendingActions(10n);
+		protocol.triggerPendingCheck(10n);
+		await vi.waitFor(() => expect(protocol.isRunningPendingCheck()).toBe(false));
 		expect(countPending).toBeCalledTimes(1);
 		expect(getTransactionCount).toBeCalledTimes(1);
 		expect(getTransactionCount).toBeCalledWith({
@@ -549,7 +555,8 @@ describe("OnchainProtocol", () => {
 		signTransaction.mockResolvedValueOnce("0x5afe5afe02");
 		const retryHash = keccak256("0x5afe5afe02");
 		sendRawTransaction.mockResolvedValueOnce(retryHash);
-		await protocol.checkPendingActions(10n);
+		protocol.triggerPendingCheck(10n);
+		await vi.waitFor(() => expect(protocol.isRunningPendingCheck()).toBe(false));
 		expect(countPending).toBeCalledTimes(1);
 		expect(getTransactionCount).toBeCalledTimes(1);
 		expect(getTransactionCount).toBeCalledWith({
@@ -614,7 +621,8 @@ describe("OnchainProtocol", () => {
 		signTransaction.mockResolvedValueOnce("0x5afe5afe02");
 		const retryHash = keccak256("0x5afe5afe02");
 		sendRawTransaction.mockResolvedValueOnce(retryHash);
-		await protocol.checkPendingActions(10n);
+		protocol.triggerPendingCheck(10n);
+		await vi.waitFor(() => expect(protocol.isRunningPendingCheck()).toBe(false));
 		expect(countPending).toBeCalledTimes(1);
 		expect(getTransactionCount).toBeCalledTimes(1);
 		expect(getTransactionCount).toBeCalledWith({
@@ -674,7 +682,8 @@ describe("OnchainProtocol", () => {
 		signTransaction.mockResolvedValueOnce("0x5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe");
 		const hash = keccak256("0x5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe");
 		sendRawTransaction.mockResolvedValueOnce(hash);
-		await protocol.checkPendingActions(10n);
+		protocol.triggerPendingCheck(10n);
+		await vi.waitFor(() => expect(protocol.isRunningPendingCheck()).toBe(false));
 		expect(countPending).toBeCalledTimes(1);
 		expect(setSubmittedForPending).toBeCalledTimes(1);
 		expect(setSubmittedForPending).toBeCalledWith(10n);
@@ -707,7 +716,7 @@ describe("OnchainProtocol", () => {
 		expect(setHash).toBeCalledWith(11, hash);
 	});
 
-	it("should check pending when checkPendingActions is called", async () => {
+	it("should check pending when triggerPendingCheck is called", async () => {
 		const {
 			protocol,
 			publicClient: { chain, getTransactionCount, sendRawTransaction },
@@ -735,7 +744,8 @@ describe("OnchainProtocol", () => {
 		});
 		signTransaction.mockResolvedValueOnce("0x5afe5afe");
 		sendRawTransaction.mockResolvedValueOnce(hash);
-		await protocol.checkPendingActions(10n);
+		protocol.triggerPendingCheck(10n);
+		await vi.waitFor(() => expect(protocol.isRunningPendingCheck()).toBe(false));
 		expect(countPending).toBeCalledTimes(1);
 		expect(setSubmittedForPending).toBeCalledTimes(1);
 		expect(setSubmittedForPending).toBeCalledWith(10n);
@@ -954,7 +964,7 @@ describe("OnchainProtocol", () => {
 		});
 	});
 
-	it("should not run concurrent pending checks", async () => {
+	it("should not run concurrent pending checks and execute queued check after", async () => {
 		const {
 			protocol,
 			publicClient: { getTransactionCount, sendRawTransaction },
@@ -988,20 +998,31 @@ describe("OnchainProtocol", () => {
 		// Wait until sendRawTransaction has been called (first check has entered in-flight state)
 		await vi.waitFor(() => expect(sendRawTransaction).toHaveBeenCalledTimes(1));
 
-		// Attempt second check while first is still in-flight — should be skipped (lock held)
+		// Attempt second check while first is still in-flight — should be queued (lock held)
 		protocol.triggerPendingCheck(11n);
+
+		// Attempt third check while first is still in-flight — should be overwrite other queued (lock held)
+		protocol.triggerPendingCheck(12n);
+
+		// sendRawTransaction must have been called exactly once despite two concurrent checks
+		expect(sendRawTransaction).toBeCalledTimes(1);
 
 		// Resolve the first sendRawTransaction and wait for the lock to be released
 		resolveSendRaw("0xdeadbeef");
 		await vi.waitFor(() => expect(protocol.isRunningPendingCheck()).toBe(false));
 
-		// sendRawTransaction must have been called exactly once despite two concurrent checks
-		expect(sendRawTransaction).toBeCalledTimes(1);
+		// sendRawTransaction must have been called twice due to queued checks
+		expect(sendRawTransaction).toBeCalledTimes(2);
+		expect(setSubmittedForPending).toBeCalledTimes(2);
+		expect(setSubmittedForPending).nthCalledWith(1, 10n);
+		// Skip 11 as this was pending and a newer block came in
+		expect(setSubmittedForPending).nthCalledWith(2, 12n);
 
 		// After the in-flight work is done, a subsequent check can resubmit the tx (guard is not sticky)
 		sendRawTransaction.mockReturnValueOnce(Promise.resolve("0xdeadbeef2"));
-		protocol.triggerPendingCheck(12n);
-		await vi.waitFor(() => expect(sendRawTransaction).toBeCalledTimes(2));
+		protocol.triggerPendingCheck(13n);
+		await vi.waitFor(() => expect(sendRawTransaction).toBeCalledTimes(3));
+		expect(setSubmittedForPending).nthCalledWith(3, 13n);
 	});
 });
 

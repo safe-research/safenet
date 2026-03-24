@@ -84,6 +84,7 @@ export class OnchainProtocol extends BaseProtocol {
 	#coordinator: Address;
 	#logger: Logger;
 	#blocksBeforeResubmit: bigint;
+	#queuedPendingCheckBlockNumber: bigint | null = null;
 	#runningPendingCheck = false;
 
 	constructor({
@@ -136,18 +137,30 @@ export class OnchainProtocol extends BaseProtocol {
 	}
 
 	triggerPendingCheck(blockNumber: bigint) {
-		if (this.#runningPendingCheck) return;
+		if (this.#runningPendingCheck) {
+			this.#queuedPendingCheckBlockNumber = blockNumber;
+			return;
+		}
 		this.#runningPendingCheck = true;
-		this.checkPendingActions(blockNumber)
-			.catch((e) => {
-				this.#logger.error("Error while checking pending transactions.", { error: formatError(e) });
-			})
-			.finally(() => {
-				this.#runningPendingCheck = false;
-			});
+		this.#checkPendingActionsLoop(blockNumber).finally(() => {
+			this.#runningPendingCheck = false;
+		});
 	}
 
-	async checkPendingActions(blockNumber: bigint) {
+	async #checkPendingActionsLoop(initialBlockNumber: bigint) {
+		let blockForCheck: bigint | null = initialBlockNumber;
+		while (blockForCheck !== null) {
+			try {
+				await this.#checkPendingActions(blockForCheck);
+			} catch (e) {
+				this.#logger.error("Error while checking pending transactions.", { error: formatError(e) });
+			}
+			blockForCheck = this.#queuedPendingCheckBlockNumber;
+			this.#queuedPendingCheckBlockNumber = null;
+		}
+	}
+
+	async #checkPendingActions(blockNumber: bigint) {
 		// Optimistically check whether or not we have pending actions. If we don't then we can just exit early and
 		// save on some RPC calls and database reads.
 		if (this.#txStorage.countPending() === 0) {
