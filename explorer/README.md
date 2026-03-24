@@ -45,9 +45,32 @@ npm run fix -w explorer        # auto-fix formatting issues
 npm test -w explorer
 ```
 
+## Deployment
+
+### IPFS
+
+The explorer can be deployed to IPFS via Pinata:
+
+```sh
+npm run deploy:ipfs -w explorer
+```
+
+This builds the app and uploads the `dist/` directory to Pinata. The upload is always named with a snapshot timestamp (e.g. `safenet-explorer-2026-03-18T14:30:00.000Z`). Set `PINATA_JWT` (required) and `PINATA_GATEWAY` (optional) in your environment before running. To skip the build step and upload an existing `dist/`, pass `--skip-build`:
+
+```sh
+npm run deploy:ipfs -w explorer -- --skip-build
+
+```
+
 ## Environment Variables
 
-All variables are optional. Set them in a `.env` file inside the `explorer/` directory, or as build-time environment variables.
+All variables are optional. Copy `.env.sample` to `.env` and fill in the values you need:
+
+```sh
+cp explorer/.env.sample explorer/.env
+```
+
+Set them in a `.env` file inside the `explorer/` directory, or as build-time environment variables.
 
 | Variable | Default | Description |
 |---|---|---|
