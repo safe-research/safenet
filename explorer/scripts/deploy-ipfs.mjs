@@ -13,7 +13,7 @@
  *   node scripts/deploy-ipfs.mjs              # build + upload
  *   node scripts/deploy-ipfs.mjs --skip-build # upload only (dist/ must exist)
  *
- * The upload is always named with a snapshot timestamp, e.g. "safenet-explorer-2026-03-18_14-30-00".
+ * The upload is always named with a snapshot timestamp, e.g. "safenet-explorer-2026-03-18T14:30:00.000Z".
  */
 
 import { execSync } from "node:child_process";
@@ -26,12 +26,7 @@ const DIST = resolve(ROOT, "dist");
 
 const skipBuild = process.argv.includes("--skip-build");
 
-const timestamp = new Date()
-	.toISOString()
-	.replace(/T/, "_")
-	.replace(/:/g, "-")
-	.slice(0, 19);
-const uploadName = `safenet-explorer-${timestamp}`;
+const uploadName = `safenet-explorer-${new Date().toISOString()}`;
 
 function run(cmd, opts = {}) {
 	console.log(`\n> ${cmd}`);
