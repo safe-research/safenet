@@ -1,3 +1,4 @@
+import { Fragment } from "react";
 import type { Address } from "viem";
 import { shortAddress } from "@/lib/address";
 import type { ValidatorInfo } from "@/lib/validators/info";
@@ -18,18 +19,26 @@ export function ValidatorList({
 	completed: boolean;
 }) {
 	const activeSet = new Set(active);
+
+	const activeItems = active
+		.map((address) => ({ address, label: mapInfo("✅")(address) }))
+		.sort((a, b) => a.label.localeCompare(b.label));
+
+	const inactiveItems = all
+		.filter((address) => !activeSet.has(address))
+		.map((address) => ({ address, label: mapInfo(completed ? "❌" : "⏳")(address) }))
+		.sort((a, b) => a.label.localeCompare(b.label));
+
+	const allItems = [...activeItems, ...inactiveItems];
+
 	return (
 		<>
-			{active
-				.map(mapInfo("✅"))
-				.sort()
-				.concat(
-					all
-						.filter((v) => !activeSet.has(v))
-						.map(mapInfo(completed ? "❌" : "⏳"))
-						.sort(),
-				)
-				.join(", ")}
+			{allItems.map((item, index) => (
+				<Fragment key={item.address}>
+					<span title={item.address}>{item.label}</span>
+					{index < allItems.length - 1 && ", "}
+				</Fragment>
+			))}
 		</>
 	);
 }

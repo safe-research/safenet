@@ -1,3 +1,5 @@
+import { CopyButton } from "@/components/common/CopyButton";
+import { InlineHash } from "@/components/common/InlineHash";
 import { createMapInfo, ValidatorList } from "@/components/common/ValidatorList";
 import { useAttestationStatus } from "@/hooks/useSigningProgress";
 import { useValidatorInfoMap } from "@/hooks/useValidatorInfo";
@@ -19,6 +21,20 @@ export function SafeTxAttestationStatus({ proposal }: { proposal: TransactionPro
 			{status.isFetching && status.data === null && <Skeleton className="w-full h-10" />}
 			{status.data !== null && (
 				<div key={status.data.sid}>
+					<div className={"md:flex md:justify-between"}>
+						<p>Signature ID:</p>
+						<p className="flex items-center gap-1">
+							<InlineHash hash={status.data.sid} />
+							<CopyButton value={status.data.sid} />
+						</p>
+					</div>
+					<div className={"md:flex md:justify-between"}>
+						<p>Group ID:</p>
+						<p className="flex items-center gap-1">
+							<InlineHash hash={status.data.groupId} />
+							<CopyButton value={status.data.groupId} />
+						</p>
+					</div>
 					<p>Validators:</p>
 					{!status.data.completed && (
 						<div className={"md:flex md:justify-between"}>
