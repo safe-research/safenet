@@ -19,15 +19,10 @@ export const handleRevealedNonces = async (
 	// Check that state for signature id is "collect_nonce_commitments"
 	const status = machineStates.signing[message];
 	if (status?.id !== "collect_nonce_commitments") return {};
-	const readyToSubmit = signingClient.handleNonceCommitments(
-		event.sid,
-		event.participant,
-		{
-			hidingNonceCommitment: event.nonces.d,
-			bindingNonceCommitment: event.nonces.e,
-		},
-		machineConfig.account,
-	);
+	const readyToSubmit = signingClient.handleNonceCommitments(event.sid, event.participant, {
+		hidingNonceCommitment: event.nonces.d,
+		bindingNonceCommitment: event.nonces.e,
+	});
 	if (!readyToSubmit)
 		return {
 			signing: [

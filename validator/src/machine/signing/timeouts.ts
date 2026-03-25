@@ -47,17 +47,16 @@ const checkSigningRequestTimeout = (
 	const stateDiff: StateDiff = {};
 	switch (status.id) {
 		case "waiting_for_attestation": {
-			// Remove pending request
-			stateDiff.consensus = {
-				signatureIdToMessage: [status.signatureId, undefined],
-			};
 			const everyoneResponsible = status.responsible === undefined;
 			if (everyoneResponsible) {
 				// Everyone is responsible
-				// Signature request will be re-added once it is submitted
-				// and no more state needs to be tracked
-				// if the deadline is hit again this would be a critical failure
+				// Signature request will not be re-attempted and no more state
+				// needs to be tracked. If the deadline is hit again this would
+				// be a critical failure.
 				stateDiff.signing = [message, undefined];
+				stateDiff.consensus = {
+					signatureIdToMessage: [status.signatureId, undefined],
+				};
 			} else {
 				// Make everyone responsible for next retry
 				stateDiff.signing = [

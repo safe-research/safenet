@@ -205,7 +205,7 @@ describe("SigningClient", () => {
 			for (const e of nonceRevealEvent) {
 				for (const { client, account } of clients) {
 					log(`>>>> Nonce reveal from ${e.signer} to ${account} >>>>`);
-					const readyToSubmit = client.handleNonceCommitments(e.signatureId, e.signer, e.nonces, account);
+					const readyToSubmit = client.handleNonceCommitments(e.signatureId, e.signer, e.nonces);
 					if (!readyToSubmit) continue;
 
 					const { commitmentShare, signatureShare } = client.createSignatureShare(e.signatureId, account);
@@ -318,12 +318,6 @@ describe("SigningClient", () => {
 	});
 
 	describe("handleNonceCommitments", () => {
-		it("returns false for own nonce commitments", () => {
-			const { client, account } = createTestClientWithNonces(0);
-			const result = client.handleNonceCommitments(SIGNATURE_ID, account, {} as PublicNonceCommitments, account);
-			expect(result).toBe(false);
-		});
-
 		it("returns false when not all nonces have been received", () => {
 			const { client: client0, account: account0 } = createTestClientWithNonces(0);
 			const { client: client1, account: account1 } = createTestClientWithNonces(1);
@@ -343,7 +337,7 @@ describe("SigningClient", () => {
 			);
 
 			// Only one peer's nonces received, not complete yet
-			const result = client0.handleNonceCommitments(SIGNATURE_ID, TEST_SIGNERS[1].account, nonces1, account1);
+			const result = client0.handleNonceCommitments(SIGNATURE_ID, TEST_SIGNERS[1].account, nonces1);
 			expect(result).toBe(false);
 		});
 
@@ -368,14 +362,47 @@ describe("SigningClient", () => {
 				});
 			}
 
-			// Feed all peer nonces to client 0
-			const { client: targetClient, account: targetAccount } = allClients[0];
+			// Feed all nonces to client 0
+			const { client: targetClient } = allClients[0];
 			const results = allNonces.map(({ signer, nonces }) =>
-				targetClient.handleNonceCommitments(SIGNATURE_ID, signer, nonces, targetAccount),
+				targetClient.handleNonceCommitments(SIGNATURE_ID, signer, nonces),
 			);
 
-			// Ready state should have been reached at some point during nonce collection
-			expect(results.includes(true)).toBe(true);
+			// Ready state should have been reached with the last commitment.
+			expect(results.slice(0, -1)).not.toContain(true);
+			expect(results.at(-1)).toBe(true);
+		});
+
+		it("returns true when last nonces have been received is from themselves", () => {
+			const allClients = TEST_SIGNERS.map((_, i) => createTestClientWithNonces(i));
+			const signers = TEST_GROUP.participants;
+
+			// All clients create nonce commitments
+			const allNonces = allClients.map(({ client, account }) => {
+				const { nonceCommitments } = client.createNonceCommitments(
+					TEST_GROUP.groupId,
+					account,
+					SIGNATURE_ID,
+					MESSAGE,
+					0n,
+					signers,
+				);
+				return {
+					signer: account,
+					nonces: nonceCommitments,
+				};
+			});
+
+			// Feed all peer nonces to client 0
+			const { client: targetClient } = allClients[0];
+			for (const { signer, nonces } of allNonces.slice(1)) {
+				const result = targetClient.handleNonceCommitments(SIGNATURE_ID, signer, nonces);
+				expect(result).toBe(false);
+			}
+
+			// Once the target nonce is registered, client should be ready.
+			const result = targetClient.handleNonceCommitments(SIGNATURE_ID, allNonces[0].signer, allNonces[0].nonces);
+			expect(result).toBe(true);
 		});
 	});
 
@@ -402,9 +429,9 @@ describe("SigningClient", () => {
 			}
 
 			// Feed all nonces to all clients
-			for (const { client, account } of allClients) {
+			for (const { client } of allClients) {
 				for (const { signer, nonces } of allNonces) {
-					client.handleNonceCommitments(SIGNATURE_ID, signer, nonces, account);
+					client.handleNonceCommitments(SIGNATURE_ID, signer, nonces);
 				}
 			}
 
@@ -495,9 +522,9 @@ describe("SigningClient", () => {
 					.nonceCommitments,
 			}));
 
-			for (const { client, account } of allClients) {
+			for (const { client } of allClients) {
 				for (const { signer, nonces } of allNonces) {
-					client.handleNonceCommitments(SIGNATURE_ID, signer, nonces, account);
+					client.handleNonceCommitments(SIGNATURE_ID, signer, nonces);
 				}
 			}
 
@@ -519,20 +546,18 @@ describe("SigningClient", () => {
 			// We need to set up a new signature request with the same sequence
 			const signers = TEST_GROUP.participants;
 			const newSigId = "0x0000000000000000000000027fa9385be102ac3eac297483dd6233d62b3e1496";
-			client.createNonceCommitments(TEST_GROUP.groupId, account, newSigId, MESSAGE, 0n, signers);
 
 			// Feed nonces for new signature
-			for (const { client: peerClient, account: peerAccount } of allClients) {
-				if (account === peerAccount) continue;
-				const { nonceCommitments } = peerClient.createNonceCommitments(
+			for (const { client: noncesClient, account } of allClients) {
+				const { nonceCommitments } = noncesClient.createNonceCommitments(
 					TEST_GROUP.groupId,
-					peerAccount,
+					account,
 					newSigId,
 					MESSAGE,
 					0n,
 					signers,
 				);
-				client.handleNonceCommitments(newSigId, peerAccount, nonceCommitments, account);
+				client.handleNonceCommitments(newSigId, account, nonceCommitments);
 			}
 
 			// Should throw because nonces at sequence 0 were already burned
@@ -584,9 +609,9 @@ describe("SigningClient", () => {
 				});
 			}
 
-			for (const { client, account } of subsetClients) {
+			for (const { client } of subsetClients) {
 				for (const { signer, nonces } of allNonces) {
-					client.handleNonceCommitments(SIGNATURE_ID, signer, nonces, account);
+					client.handleNonceCommitments(SIGNATURE_ID, signer, nonces);
 				}
 			}
 
@@ -626,9 +651,9 @@ describe("SigningClient", () => {
 					});
 				}
 
-				for (const { client, account } of allClients) {
+				for (const { client } of allClients) {
 					for (const { signer, nonces } of allNonces) {
-						client.handleNonceCommitments(sigId, signer, nonces, account);
+						client.handleNonceCommitments(sigId, signer, nonces);
 					}
 				}
 
