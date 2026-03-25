@@ -40,7 +40,7 @@ const trimSigningStatus = (status: Readonly<SigningState>): unknown => {
 			packet: {
 				...status.packet,
 				proposal: {
-					...status.packet.proposal,
+					epoch: status.packet.proposal.epoch,
 					safeTxHash: safeTxHash(status.packet.proposal.transaction),
 				},
 			},
