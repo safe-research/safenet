@@ -18,4 +18,4 @@ if [[ -f "${STORAGE_FILE:-}" && -n "${STORAGE_BACKUP:-}" ]]; then
 	cp "$STORAGE_FILE" "$backup_file"
 fi
 
-node validator/dist/validator.js
+exec node validator/dist/validator.js
