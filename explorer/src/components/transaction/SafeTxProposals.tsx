@@ -42,15 +42,17 @@ function ProposalInfoButton({ proposal }: { proposal: TransactionProposal }) {
 	if (status.data === null) return null;
 	return (
 		<InfoPopover trigger={<InformationCircleIcon className="h-4 w-4 text-muted" />}>
-			<div className="flex items-center gap-1">
+			<div className="grid grid-cols-[max-content_auto] items-center gap-x-2 gap-y-1">
 				<span className="text-muted">Signature ID:</span>
-				<InlineHash hash={status.data.sid} />
-				<CopyButton value={status.data.sid} />
-			</div>
-			<div className="flex items-center gap-1">
+				<div className="flex items-center gap-1 whitespace-nowrap">
+					<InlineHash hash={status.data.sid} />
+					<CopyButton value={status.data.sid} />
+				</div>
 				<span className="text-muted">Group ID:</span>
-				<InlineHash hash={status.data.groupId} />
-				<CopyButton value={status.data.groupId} />
+				<div className="flex items-center gap-1 whitespace-nowrap">
+					<InlineHash hash={status.data.groupId} />
+					<CopyButton value={status.data.groupId} />
+				</div>
 			</div>
 		</InfoPopover>
 	);
