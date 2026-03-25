@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import type { Address } from "viem";
 import { afterEach, describe, expect, it } from "vitest";
 import { createMapInfo, ValidatorList } from "./ValidatorList";
@@ -34,19 +34,23 @@ describe("ValidatorList", () => {
 		expect(screen.getByText("Bob ❌")).toBeTruthy();
 	});
 
-	it("renders each validator as a span with the address as title", () => {
-		render(<ValidatorList all={[ADDR_A, ADDR_B]} active={[ADDR_A, ADDR_B]} mapInfo={mapInfo} completed={false} />);
-		const aliceSpan = screen.getByText("Alice ✅");
-		const bobSpan = screen.getByText("Bob ✅");
-		expect(aliceSpan.getAttribute("title")).toBe(ADDR_A);
-		expect(bobSpan.getAttribute("title")).toBe(ADDR_B);
+	it("shows the validator address in a popover when clicking a validator label", () => {
+		render(<ValidatorList all={[ADDR_A]} active={[ADDR_A]} mapInfo={mapInfo} completed={false} />);
+		fireEvent.click(screen.getByText("Alice ✅"));
+		expect(screen.getByText(ADDR_A)).toBeTruthy();
 	});
 
-	it("uses the validator address as title when no label is available", () => {
+	it("shows a copy button in the popover when clicking a validator label", () => {
+		render(<ValidatorList all={[ADDR_A]} active={[ADDR_A]} mapInfo={mapInfo} completed={false} />);
+		fireEvent.click(screen.getByText("Alice ✅"));
+		expect(screen.getByRole("button", { name: "Copy to clipboard" })).toBeTruthy();
+	});
+
+	it("shows the full address in the popover when no validator info is available", () => {
 		const noLabelMapInfo = createMapInfo(null);
 		render(<ValidatorList all={[ADDR_A]} active={[ADDR_A]} mapInfo={noLabelMapInfo} completed={false} />);
-		const span = screen.getByTitle(ADDR_A);
-		expect(span).toBeTruthy();
+		fireEvent.click(screen.getByRole("button"));
+		expect(screen.getByText(ADDR_A)).toBeTruthy();
 	});
 
 	it("renders all validators when none are active", () => {

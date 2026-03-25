@@ -2,6 +2,8 @@ import { Fragment } from "react";
 import type { Address } from "viem";
 import { shortAddress } from "@/lib/address";
 import type { ValidatorInfo } from "@/lib/validators/info";
+import { CopyButton } from "./CopyButton";
+import { InfoPopover } from "./InfoPopover";
 
 export const createMapInfo =
 	(validatorInfoMap: Map<Address, ValidatorInfo> | null | undefined) => (suffix: string) => (address: Address) =>
@@ -35,7 +37,12 @@ export function ValidatorList({
 		<>
 			{allItems.map((item, index) => (
 				<Fragment key={item.address}>
-					<span title={item.address}>{item.label}</span>
+					<InfoPopover trigger={<span className="cursor-pointer underline decoration-dotted">{item.label}</span>}>
+						<div className="flex items-center gap-1">
+							<span className="font-mono text-xs">{item.address}</span>
+							<CopyButton value={item.address} />
+						</div>
+					</InfoPopover>
 					{index < allItems.length - 1 && ", "}
 				</Fragment>
 			))}

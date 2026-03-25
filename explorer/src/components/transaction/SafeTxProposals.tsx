@@ -1,11 +1,16 @@
+import { InformationCircleIcon } from "@heroicons/react/24/outline";
 import type { Hex } from "viem";
+import { CopyButton } from "@/components/common/CopyButton";
+import { InfoPopover } from "@/components/common/InfoPopover";
+import { InlineHash } from "@/components/common/InlineHash";
 import { StatusBadge } from "@/components/common/StatusBadge";
 import { Box, BoxTitle } from "@/components/Groups";
 import { Skeleton } from "@/components/Skeleton";
 import { useProposalsForTransaction } from "@/hooks/useProposalsForTransaction";
+import { useAttestationStatus } from "@/hooks/useSigningProgress";
 import { useSubmitProposal } from "@/hooks/useSubmitProposal";
 import { SAFE_SERVICE_CHAINS } from "@/lib/chains";
-import type { SafeTransaction, TransactionProposalWithStatus } from "@/lib/consensus";
+import type { SafeTransaction, TransactionProposal, TransactionProposalWithStatus } from "@/lib/consensus";
 import { InlineBlockInfo, InlineExplorerTxLink } from "../common/Info";
 import { SafeTxAttestationStatus } from "./SafeTxAttestationStatus";
 
@@ -27,10 +32,37 @@ export function SafeTxProposals({ safeTxHash, transaction }: { safeTxHash: Hex; 
 	);
 }
 
+function ProposalInfoButton({ proposal }: { proposal: TransactionProposal }) {
+	const status = useAttestationStatus(
+		proposal.safeTxHash,
+		proposal.epoch,
+		proposal.proposedAt.block,
+		proposal.attestedAt?.block ?? null,
+	);
+	if (status.data === null) return null;
+	return (
+		<InfoPopover trigger={<InformationCircleIcon className="h-4 w-4 text-muted" />}>
+			<div className="flex items-center gap-1">
+				<span className="text-muted">Signature ID:</span>
+				<InlineHash hash={status.data.sid} />
+				<CopyButton value={status.data.sid} />
+			</div>
+			<div className="flex items-center gap-1">
+				<span className="text-muted">Group ID:</span>
+				<InlineHash hash={status.data.groupId} />
+				<CopyButton value={status.data.groupId} />
+			</div>
+		</InfoPopover>
+	);
+}
+
 function SafeTxProposal({ proposal, number }: { proposal: TransactionProposalWithStatus; number: number }) {
 	return (
 		<Box className="space-y-2">
-			<p className="font-semibold">Proposal #{number}</p>
+			<div className="flex items-center gap-2">
+				<p className="font-semibold">Proposal #{number}</p>
+				<ProposalInfoButton proposal={proposal} />
+			</div>
 			<div className="md:flex md:justify-between">
 				<p>Status:</p>
 				<StatusBadge status={proposal.status} />
