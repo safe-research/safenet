@@ -24,6 +24,11 @@ const ACTION_TIMEOUT = 10 * 60 * 1000; // 10 minutes
 const ERROR_RETRY_DELAY = 1000;
 const ERROR_RETRY_MAX_DELAY = 5000;
 
+export type SubmittedAction = {
+	nonce: number;
+	hash: Hex | null;
+};
+
 export abstract class BaseProtocol implements SafenetProtocol {
 	#actionQueue: Queue<ActionWithTimeout>;
 	#currentAction?: ActionWithTimeout;
@@ -70,9 +75,9 @@ export abstract class BaseProtocol implements SafenetProtocol {
 		}
 		this.#currentAction = action;
 		this.performAction(action)
-			.then((transactionHash) => {
+			.then((submitted) => {
 				// If action was successfully sent to the node, remove it from queue
-				this.#logger.info(`Sent action for ${action.id} transaction`, { ...actionSpan, transactionHash });
+				this.#logger.info(`Sent action for ${action.id} transaction`, { ...actionSpan, tx: submitted });
 				this.#actionQueue.dequeue();
 				this.#currentAction = undefined;
 				this.checkNextAction();
@@ -91,7 +96,7 @@ export abstract class BaseProtocol implements SafenetProtocol {
 			});
 	}
 
-	private async performAction(action: ProtocolAction): Promise<Hex | null> {
+	private async performAction(action: ProtocolAction): Promise<SubmittedAction> {
 		switch (action.id) {
 			case "key_gen_start":
 				return await this.startKeyGen(action);
@@ -119,27 +124,27 @@ export abstract class BaseProtocol implements SafenetProtocol {
 				return await this.setValidatorStaker(action);
 		}
 	}
-	protected abstract startKeyGen(args: StartKeyGen): Promise<Hex | null>;
+	protected abstract startKeyGen(args: StartKeyGen): Promise<SubmittedAction>;
 
-	protected abstract publishKeygenSecretShares(args: PublishSecretShares): Promise<Hex | null>;
+	protected abstract publishKeygenSecretShares(args: PublishSecretShares): Promise<SubmittedAction>;
 
-	protected abstract complain(args: Complain): Promise<Hex | null>;
+	protected abstract complain(args: Complain): Promise<SubmittedAction>;
 
-	protected abstract complaintResponse(args: ComplaintResponse): Promise<Hex | null>;
+	protected abstract complaintResponse(args: ComplaintResponse): Promise<SubmittedAction>;
 
-	protected abstract confirmKeyGen(args: ConfirmKeyGen): Promise<Hex | null>;
+	protected abstract confirmKeyGen(args: ConfirmKeyGen): Promise<SubmittedAction>;
 
-	protected abstract requestSignature(args: RequestSignature): Promise<Hex | null>;
+	protected abstract requestSignature(args: RequestSignature): Promise<SubmittedAction>;
 
-	protected abstract registerNonceCommitments(args: RegisterNonceCommitments): Promise<Hex | null>;
+	protected abstract registerNonceCommitments(args: RegisterNonceCommitments): Promise<SubmittedAction>;
 
-	protected abstract revealNonceCommitments(args: RevealNonceCommitments): Promise<Hex | null>;
+	protected abstract revealNonceCommitments(args: RevealNonceCommitments): Promise<SubmittedAction>;
 
-	protected abstract publishSignatureShare(args: PublishSignatureShare): Promise<Hex | null>;
+	protected abstract publishSignatureShare(args: PublishSignatureShare): Promise<SubmittedAction>;
 
-	protected abstract attestTransaction(args: AttestTransaction): Promise<Hex | null>;
+	protected abstract attestTransaction(args: AttestTransaction): Promise<SubmittedAction>;
 
-	protected abstract stageEpoch(args: StageEpoch): Promise<Hex | null>;
+	protected abstract stageEpoch(args: StageEpoch): Promise<SubmittedAction>;
 
-	protected abstract setValidatorStaker(args: SetValidatorStaker): Promise<Hex | null>;
+	protected abstract setValidatorStaker(args: SetValidatorStaker): Promise<SubmittedAction>;
 }

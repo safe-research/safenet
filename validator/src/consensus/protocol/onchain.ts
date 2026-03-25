@@ -18,7 +18,7 @@ import { formatError } from "../../utils/errors.js";
 import type { Logger } from "../../utils/logging.js";
 import { maxBigInt } from "../../utils/math.js";
 import type { Queue } from "../../utils/queue.js";
-import { BaseProtocol } from "./base.js";
+import { BaseProtocol, type SubmittedAction } from "./base.js";
 import type {
 	ActionWithTimeout,
 	AttestTransaction,
@@ -138,6 +138,7 @@ export class OnchainProtocol extends BaseProtocol {
 
 	triggerPendingCheck(blockNumber: bigint) {
 		if (this.#runningPendingCheck) {
+			this.#logger.debug(`Queueing pending actions check for block ${blockNumber}`);
 			this.#queuedPendingCheckBlockNumber = blockNumber;
 			return;
 		}
@@ -178,9 +179,12 @@ export class OnchainProtocol extends BaseProtocol {
 			address: this.#account.address,
 			blockTag: "latest",
 		});
-		const executedTxs = this.#txStorage.setExecutedUpTo(currentNonce - 1);
+		const executedNonce = currentNonce - 1;
+		const executedTxs = this.#txStorage.setExecutedUpTo(executedNonce);
 		if (executedTxs > 0) {
-			this.#logger.debug(`Marked ${executedTxs} transactions as executed`);
+			this.#logger.debug(
+				`Marked ${executedTxs} transactions as executed up to nonce ${executedNonce} on block ${blockNumber}`,
+			);
 		}
 		// Only fetch the first page of pending transactions (default limit is 100) to avoid retrying too many
 		// transactions at once.
@@ -224,7 +228,7 @@ export class OnchainProtocol extends BaseProtocol {
 		this.#txStorage.setPending(tx.nonce);
 		// Store fees before submission in case an error occurs
 		this.#txStorage.setFees(tx.nonce, fees);
-		const signedTx = await this.#account.signTransaction({
+		const unsignedTx = {
 			to: tx.to,
 			value: tx.value,
 			data: tx.data,
@@ -232,14 +236,15 @@ export class OnchainProtocol extends BaseProtocol {
 			gas: tx.gas,
 			chainId: this.#publicClient.chain.id,
 			...fees,
-		});
+		};
+		const signedTx = await this.#account.signTransaction(unsignedTx);
 		const txHash = keccak256(signedTx);
 		this.#txStorage.setHash(tx.nonce, txHash);
-		this.#logger.debug(`Submitting transaction for nonce ${tx.nonce}!`, { tx, txHash, fees });
+		this.#logger.debug(`Submitting transaction for nonce ${tx.nonce}!`, { tx: { hash: txHash, ...unsignedTx } });
 		return this.#publicClient.sendRawTransaction({ serializedTransaction: signedTx });
 	}
 
-	private async submitAction(action: SimulateContractParameters): Promise<Hex | null> {
+	private async submitAction(action: SimulateContractParameters): Promise<SubmittedAction> {
 		// 1. Get Network Baseline (The "Minimum Nonce")
 		// Use 'latest' as all pending transactions are tracked in the tx storage
 		const onChainNonce = await this.#publicClient.getTransactionCount({
@@ -257,7 +262,7 @@ export class OnchainProtocol extends BaseProtocol {
 			gas: action.gas,
 		};
 		const nonce = this.#txStorage.register(txData, onChainNonce);
-		return this.submitTransaction({
+		const hash = await this.submitTransaction({
 			...txData,
 			nonce,
 			fees: null,
@@ -273,6 +278,7 @@ export class OnchainProtocol extends BaseProtocol {
 			// No error is thrown to avoid that the action is retried.
 			return null;
 		});
+		return { nonce, hash };
 	}
 
 	protected startKeyGen({
@@ -284,7 +290,7 @@ export class OnchainProtocol extends BaseProtocol {
 		commitments,
 		pok,
 		poap,
-	}: StartKeyGen): Promise<Hex | null> {
+	}: StartKeyGen): Promise<SubmittedAction> {
 		return this.submitAction({
 			address: this.#coordinator,
 			abi: COORDINATOR_FUNCTIONS,
@@ -310,7 +316,7 @@ export class OnchainProtocol extends BaseProtocol {
 		groupId,
 		verificationShare,
 		shares,
-	}: PublishSecretShares): Promise<Hex | null> {
+	}: PublishSecretShares): Promise<SubmittedAction> {
 		return this.submitAction({
 			address: this.#coordinator,
 			abi: COORDINATOR_FUNCTIONS,
@@ -326,7 +332,7 @@ export class OnchainProtocol extends BaseProtocol {
 		});
 	}
 
-	private confirmKeyGenWithCallback(groupId: GroupId, callbackContext: Hex): Promise<Hex | null> {
+	private confirmKeyGenWithCallback(groupId: GroupId, callbackContext: Hex): Promise<SubmittedAction> {
 		return this.submitAction({
 			address: this.#coordinator,
 			abi: COORDINATOR_FUNCTIONS,
@@ -342,7 +348,7 @@ export class OnchainProtocol extends BaseProtocol {
 		});
 	}
 
-	protected complain({ groupId, accused }: Complain): Promise<Hex | null> {
+	protected complain({ groupId, accused }: Complain): Promise<SubmittedAction> {
 		return this.submitAction({
 			address: this.#coordinator,
 			abi: COORDINATOR_FUNCTIONS,
@@ -352,7 +358,7 @@ export class OnchainProtocol extends BaseProtocol {
 		});
 	}
 
-	protected complaintResponse({ groupId, plaintiff, secretShare }: ComplaintResponse): Promise<Hex | null> {
+	protected complaintResponse({ groupId, plaintiff, secretShare }: ComplaintResponse): Promise<SubmittedAction> {
 		return this.submitAction({
 			address: this.#coordinator,
 			abi: COORDINATOR_FUNCTIONS,
@@ -362,7 +368,7 @@ export class OnchainProtocol extends BaseProtocol {
 		});
 	}
 
-	protected confirmKeyGen({ groupId, callbackContext }: ConfirmKeyGen): Promise<Hex | null> {
+	protected confirmKeyGen({ groupId, callbackContext }: ConfirmKeyGen): Promise<SubmittedAction> {
 		if (callbackContext !== undefined) {
 			return this.confirmKeyGenWithCallback(groupId, callbackContext);
 		}
@@ -375,7 +381,7 @@ export class OnchainProtocol extends BaseProtocol {
 		});
 	}
 
-	protected requestSignature({ groupId, message }: RequestSignature): Promise<Hex | null> {
+	protected requestSignature({ groupId, message }: RequestSignature): Promise<SubmittedAction> {
 		return this.submitAction({
 			address: this.#coordinator,
 			abi: COORDINATOR_FUNCTIONS,
@@ -385,7 +391,10 @@ export class OnchainProtocol extends BaseProtocol {
 		});
 	}
 
-	protected registerNonceCommitments({ groupId, nonceCommitmentsHash }: RegisterNonceCommitments): Promise<Hex | null> {
+	protected registerNonceCommitments({
+		groupId,
+		nonceCommitmentsHash,
+	}: RegisterNonceCommitments): Promise<SubmittedAction> {
 		return this.submitAction({
 			address: this.#coordinator,
 			abi: COORDINATOR_FUNCTIONS,
@@ -399,7 +408,7 @@ export class OnchainProtocol extends BaseProtocol {
 		signatureId,
 		nonceCommitments,
 		nonceProof,
-	}: RevealNonceCommitments): Promise<Hex | null> {
+	}: RevealNonceCommitments): Promise<SubmittedAction> {
 		return this.submitAction({
 			address: this.#coordinator,
 			abi: COORDINATOR_FUNCTIONS,
@@ -425,7 +434,7 @@ export class OnchainProtocol extends BaseProtocol {
 		signatureShare: bigint,
 		lagrangeCoefficient: bigint,
 		callbackContext: Hex,
-	): Promise<Hex | null> {
+	): Promise<SubmittedAction> {
 		return this.submitAction({
 			address: this.#coordinator,
 			abi: COORDINATOR_FUNCTIONS,
@@ -460,7 +469,7 @@ export class OnchainProtocol extends BaseProtocol {
 		signatureShare,
 		lagrangeCoefficient,
 		callbackContext,
-	}: PublishSignatureShare): Promise<Hex | null> {
+	}: PublishSignatureShare): Promise<SubmittedAction> {
 		if (callbackContext !== undefined) {
 			return this.publishSignatureShareWithCallback(
 				signatureId,
@@ -500,7 +509,7 @@ export class OnchainProtocol extends BaseProtocol {
 		safe,
 		safeTxStructHash,
 		signatureId,
-	}: AttestTransaction): Promise<Hex | null> {
+	}: AttestTransaction): Promise<SubmittedAction> {
 		return this.submitAction({
 			address: this.#consensus,
 			abi: CONSENSUS_FUNCTIONS,
@@ -510,7 +519,7 @@ export class OnchainProtocol extends BaseProtocol {
 		});
 	}
 
-	protected stageEpoch({ proposedEpoch, rolloverBlock, groupId, signatureId }: StageEpoch): Promise<Hex | null> {
+	protected stageEpoch({ proposedEpoch, rolloverBlock, groupId, signatureId }: StageEpoch): Promise<SubmittedAction> {
 		return this.submitAction({
 			address: this.#consensus,
 			abi: CONSENSUS_FUNCTIONS,
@@ -520,7 +529,7 @@ export class OnchainProtocol extends BaseProtocol {
 		});
 	}
 
-	protected setValidatorStaker({ staker }: SetValidatorStaker): Promise<Hex | null> {
+	protected setValidatorStaker({ staker }: SetValidatorStaker): Promise<SubmittedAction> {
 		return this.submitAction({
 			address: this.#consensus,
 			abi: CONSENSUS_FUNCTIONS,

@@ -39,7 +39,7 @@ describe("BaseProtocol", () => {
 		});
 		expect(protocolSpy).toBeCalledTimes(1);
 		// Test successful retry
-		protocolSpy.mockResolvedValueOnce(zeroHash);
+		protocolSpy.mockResolvedValueOnce({ nonce: 0, hash: zeroHash });
 		vi.advanceTimersByTime(1000);
 		// Wait for retry to be successful
 		await vi.waitFor(() => {
@@ -193,7 +193,7 @@ describe("BaseProtocol", () => {
 		const protocolSpy = vi.spyOn(protocol, "requestSignature");
 		protocolSpy.mockRejectedValueOnce("Test Error");
 		protocolSpy.mockRejectedValueOnce("Test Error");
-		protocolSpy.mockResolvedValueOnce(zeroHash);
+		protocolSpy.mockResolvedValueOnce({ nonce: 0, hash: zeroHash });
 		protocolSpy.mockRejectedValueOnce("Test Error");
 		expect(queue.peek()).toBeUndefined();
 		const action = TEST_ACTIONS[0][0];
