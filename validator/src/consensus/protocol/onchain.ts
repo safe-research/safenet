@@ -262,23 +262,22 @@ export class OnchainProtocol extends BaseProtocol {
 			gas: action.gas,
 		};
 		const nonce = this.#txStorage.register(txData, onChainNonce);
-		const hash = await this.submitTransaction({
-			...txData,
-			nonce,
-			fees: null,
-		}).catch((e) => {
+		try {
+			const hash = await this.submitTransaction({ ...txData, nonce, fees: null });
+			return { nonce, hash };
+		} catch (err) {
 			// Check if this tx is still the latest, if so delete it and throw error
 			// Retrying should happen on action level, which allows timeouts to apply
 			if (nonce === this.#txStorage.maxNonce()) {
 				this.#txStorage.delete(nonce);
-				throw e;
+				throw err;
 			}
+
 			// If another action was already submitted it is important to prevent potential unused nonces
 			// In this case the transaction is kept and retried until executed (to use up the nonce)
 			// No error is thrown to avoid that the action is retried.
-			return null;
-		});
-		return { nonce, hash };
+			return { nonce, hash: null };
+		}
 	}
 
 	protected startKeyGen({
