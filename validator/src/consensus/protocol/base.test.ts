@@ -318,7 +318,7 @@ describe("BaseProtocol", () => {
 			const dequeueSpy = vi.spyOn(queue, "dequeue");
 			const protocol = new TestProtocol(queue, testLogger);
 			const protocolSpy = vi.spyOn(protocol, functionName);
-			protocolSpy.mockResolvedValueOnce(zeroHash);
+			protocolSpy.mockResolvedValueOnce({ nonce: 0, hash: zeroHash });
 			protocol.process(action, 0);
 			const actionWithTimeout = {
 				...action,
