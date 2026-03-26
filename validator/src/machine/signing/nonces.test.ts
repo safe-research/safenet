@@ -122,7 +122,6 @@ describe("nonces revealed", () => {
 				hidingNonceCommitment: EVENT.nonces.d,
 				bindingNonceCommitment: EVENT.nonces.e,
 			},
-			ethAddress,
 		);
 		expect(handleNonceCommitments).toBeCalledTimes(1);
 
@@ -164,7 +163,6 @@ describe("nonces revealed", () => {
 				hidingNonceCommitment: EVENT.nonces.d,
 				bindingNonceCommitment: EVENT.nonces.e,
 			},
-			ethAddress,
 		);
 		expect(handleNonceCommitments).toBeCalledTimes(1);
 
@@ -265,7 +263,6 @@ describe("nonces revealed", () => {
 				hidingNonceCommitment: EVENT.nonces.d,
 				bindingNonceCommitment: EVENT.nonces.e,
 			},
-			ethAddress,
 		);
 		expect(handleNonceCommitments).toBeCalledTimes(1);
 
@@ -335,7 +332,6 @@ describe("nonces revealed", () => {
 				hidingNonceCommitment: EVENT.nonces.d,
 				bindingNonceCommitment: EVENT.nonces.e,
 			},
-			ethAddress,
 		);
 		expect(handleNonceCommitments).toBeCalledTimes(1);
 

@@ -59,11 +59,10 @@ export class SigningClient {
 			}
 		}
 		this.#storage.registerSignatureRequest(signatureId, groupId, message, signers, sequence);
-		// Set own nonce commitments
+		// Get own nonce commitments from the stored nonce tree
 		const { chunk, offset } = decodeSequence(sequence);
 		const nonceTree = this.#storage.nonceTree(groupId, me, chunk);
 		const { nonceCommitments, nonceProof } = nonceCommitmentsWithProof(nonceTree, offset);
-		this.#storage.registerNonceCommitments(signatureId, me, nonceCommitments);
 		return {
 			nonceCommitments,
 			nonceProof,
@@ -72,14 +71,10 @@ export class SigningClient {
 
 	handleNonceCommitments(
 		signatureId: SignatureId,
-		peer: Address,
+		participant: Address,
 		nonceCommitments: PublicNonceCommitments,
-		me: Address,
 	): boolean {
-		// Skip own commits
-		if (me === peer) return false;
-		this.#storage.registerNonceCommitments(signatureId, peer, nonceCommitments);
-
+		this.#storage.registerNonceCommitments(signatureId, participant, nonceCommitments);
 		return this.#storage.checkIfNoncesComplete(signatureId);
 	}
 
