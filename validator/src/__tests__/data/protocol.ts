@@ -1,6 +1,6 @@
 import { type Address, type Hex, zeroAddress } from "viem";
 import { entryPoint06Address, entryPoint07Address } from "viem/account-abstraction";
-import { BaseProtocol } from "../../consensus/protocol/base.js";
+import { BaseProtocol, type SubmittedAction } from "../../consensus/protocol/base.js";
 import type { EthTransactionData } from "../../consensus/protocol/onchain.js";
 import type {
 	AttestTransaction,
@@ -31,40 +31,40 @@ export class TestProtocol extends BaseProtocol {
 	coordinator(): Address {
 		throw new Error("Method not implemented.");
 	}
-	public startKeyGen(_args: StartKeyGen): Promise<Hex> {
+	public startKeyGen(_args: StartKeyGen): Promise<SubmittedAction> {
 		throw new Error("Method not implemented.");
 	}
-	public publishKeygenSecretShares(_args: PublishSecretShares): Promise<Hex> {
+	public publishKeygenSecretShares(_args: PublishSecretShares): Promise<SubmittedAction> {
 		throw new Error("Method not implemented.");
 	}
-	public complain(_args: Complain): Promise<Hex> {
+	public complain(_args: Complain): Promise<SubmittedAction> {
 		throw new Error("Method not implemented.");
 	}
-	public complaintResponse(_args: ComplaintResponse): Promise<Hex> {
+	public complaintResponse(_args: ComplaintResponse): Promise<SubmittedAction> {
 		throw new Error("Method not implemented.");
 	}
-	public confirmKeyGen(_args: ConfirmKeyGen): Promise<Hex> {
+	public confirmKeyGen(_args: ConfirmKeyGen): Promise<SubmittedAction> {
 		throw new Error("Method not implemented.");
 	}
-	public requestSignature(_args: RequestSignature): Promise<Hex> {
+	public requestSignature(_args: RequestSignature): Promise<SubmittedAction> {
 		throw new Error("Method not implemented.");
 	}
-	public registerNonceCommitments(_args: RegisterNonceCommitments): Promise<Hex> {
+	public registerNonceCommitments(_args: RegisterNonceCommitments): Promise<SubmittedAction> {
 		throw new Error("Method not implemented.");
 	}
-	public revealNonceCommitments(_args: RevealNonceCommitments): Promise<Hex> {
+	public revealNonceCommitments(_args: RevealNonceCommitments): Promise<SubmittedAction> {
 		throw new Error("Method not implemented.");
 	}
-	public publishSignatureShare(_args: PublishSignatureShare): Promise<Hex> {
+	public publishSignatureShare(_args: PublishSignatureShare): Promise<SubmittedAction> {
 		throw new Error("Method not implemented.");
 	}
-	public attestTransaction(_args: AttestTransaction): Promise<Hex> {
+	public attestTransaction(_args: AttestTransaction): Promise<SubmittedAction> {
 		throw new Error("Method not implemented.");
 	}
-	public stageEpoch(_args: StageEpoch): Promise<Hex> {
+	public stageEpoch(_args: StageEpoch): Promise<SubmittedAction> {
 		throw new Error("Method not implemented.");
 	}
-	public setValidatorStaker(_args: SetValidatorStaker): Promise<Hex> {
+	public setValidatorStaker(_args: SetValidatorStaker): Promise<SubmittedAction> {
 		throw new Error("Method not implemented.");
 	}
 }

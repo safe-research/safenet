@@ -118,7 +118,7 @@ describe("OnchainProtocol", () => {
 		expect(setExecutedUpTo).toBeCalledTimes(1);
 		expect(setExecutedUpTo).toBeCalledWith(11);
 		expect(loggerSpy).toBeCalledTimes(1);
-		expect(loggerSpy).toBeCalledWith("Marked 2 transactions as executed");
+		expect(loggerSpy).toBeCalledWith("Marked 2 transactions as executed up to nonce 11 on block 10");
 	});
 
 	it("should do nothing on setSubmittedForPending error", async () => {

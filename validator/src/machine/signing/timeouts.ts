@@ -1,6 +1,6 @@
 import type { Hex } from "viem";
 import type { SigningClient } from "../../consensus/signing/client.js";
-import { safeTxStructHash } from "../../consensus/verify/safeTx/hashing.js";
+import { safeTxHash, safeTxStructHash } from "../../consensus/verify/safeTx/hashing.js";
 import type { Logger } from "../../utils/logging.js";
 import type { ConsensusState, MachineConfig, MachineStates, SigningState, StateDiff } from "../types.js";
 
@@ -31,6 +31,24 @@ export const checkSigningTimeouts = (
 	return diffs;
 };
 
+const trimSigningStatus = (status: Readonly<SigningState>): unknown => {
+	// Signing statuses may contain full transaction information, which we do
+	// not want because it makes for very large log lines. Trim this down.
+	if (status.packet.type === "safe_transaction_packet") {
+		return {
+			...status,
+			packet: {
+				...status.packet,
+				proposal: {
+					epoch: status.packet.proposal.epoch,
+					safeTxHash: safeTxHash(status.packet.proposal.transaction),
+				},
+			},
+		};
+	}
+	return status;
+};
+
 const checkSigningRequestTimeout = (
 	machineConfig: MachineConfig,
 	signingClient: SigningClient,
@@ -43,7 +61,7 @@ const checkSigningRequestTimeout = (
 ): StateDiff => {
 	// Still within deadline
 	if (status.deadline > block) return {};
-	logger?.notice?.(`Signing request ${status.id} timed out`, { signingStatus: status });
+	logger?.notice?.(`Signing request ${status.id} timed out`, { signingStatus: trimSigningStatus(status) });
 	const stateDiff: StateDiff = {};
 	switch (status.id) {
 		case "waiting_for_attestation": {
@@ -165,7 +183,10 @@ const checkSigningRequestTimeout = (
 				status.id === "collect_nonce_commitments"
 					? signingClient.missingNonces(status.signatureId)
 					: currentSigners.filter((s) => status.sharesFrom.indexOf(s) < 0);
-			logger?.info?.("Removing signers for not participating", { missingParticipants });
+			logger?.info?.("Removing signers for not participating", {
+				signatureId: status.signatureId,
+				missingParticipants,
+			});
 			const epoch =
 				status.packet.type === "epoch_rollover_packet"
 					? status.packet.rollover.activeEpoch
