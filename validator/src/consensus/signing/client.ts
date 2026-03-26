@@ -59,7 +59,7 @@ export class SigningClient {
 			}
 		}
 		this.#storage.registerSignatureRequest(signatureId, groupId, message, signers, sequence);
-		// Set own nonce commitments
+		// Get own nonce commitments from the stored nonce tree
 		const { chunk, offset } = decodeSequence(sequence);
 		const nonceTree = this.#storage.nonceTree(groupId, me, chunk);
 		const { nonceCommitments, nonceProof } = nonceCommitmentsWithProof(nonceTree, offset);
