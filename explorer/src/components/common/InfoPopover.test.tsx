@@ -6,25 +6,12 @@ import { InfoPopover } from "./InfoPopover";
 afterEach(cleanup);
 
 describe("InfoPopover", () => {
-	it("renders the trigger", () => {
-		render(<InfoPopover trigger={<span>click me</span>}>content</InfoPopover>);
+	it("shows content when trigger is clicked and hides it when clicked again", () => {
+		render(<InfoPopover trigger={<span>click me</span>}>popover content</InfoPopover>);
 		expect(screen.getByText("click me")).toBeTruthy();
-	});
-
-	it("hides content by default", () => {
-		render(<InfoPopover trigger={<span>trigger</span>}>hidden content</InfoPopover>);
-		expect(screen.queryByText("hidden content")).toBeNull();
-	});
-
-	it("shows content after clicking the trigger", () => {
-		render(<InfoPopover trigger={<span>trigger</span>}>popover content</InfoPopover>);
+		expect(screen.queryByText("popover content")).toBeNull();
 		fireEvent.click(screen.getByRole("button"));
 		expect(screen.getByText("popover content")).toBeTruthy();
-	});
-
-	it("hides content after clicking the trigger again", () => {
-		render(<InfoPopover trigger={<span>trigger</span>}>popover content</InfoPopover>);
-		fireEvent.click(screen.getByRole("button"));
 		fireEvent.click(screen.getByRole("button"));
 		expect(screen.queryByText("popover content")).toBeNull();
 	});

@@ -34,15 +34,10 @@ describe("ValidatorList", () => {
 		expect(screen.getByText("Bob ❌")).toBeTruthy();
 	});
 
-	it("shows the validator address in a popover when clicking a validator label", () => {
+	it("shows the validator address and a copy button in a popover when clicking a validator label", () => {
 		render(<ValidatorList all={[ADDR_A]} active={[ADDR_A]} mapInfo={mapInfo} completed={false} />);
 		fireEvent.click(screen.getByText("Alice ✅"));
 		expect(screen.getByText(ADDR_A)).toBeTruthy();
-	});
-
-	it("shows a copy button in the popover when clicking a validator label", () => {
-		render(<ValidatorList all={[ADDR_A]} active={[ADDR_A]} mapInfo={mapInfo} completed={false} />);
-		fireEvent.click(screen.getByText("Alice ✅"));
 		expect(screen.getByRole("button", { name: "Copy to clipboard" })).toBeTruthy();
 	});
 
