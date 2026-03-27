@@ -50,6 +50,21 @@ export default defineConfig(({ mode }) => {
 			__TERMS_URL__: JSON.stringify(env.VITE_TERMS_URL || "#tos"),
 			__PRIVACY_URL__: JSON.stringify(env.VITE_PRIVACY_URL || "#privacy"),
 			__IMPRINT_URL__: JSON.stringify(env.VITE_IMPRINT_URL || "#imprint"),
+			// Default explorer settings — configurable per deployment, users can still override in the UI
+			__DEFAULT_CONSENSUS__: JSON.stringify(env.VITE_DEFAULT_CONSENSUS || "0x223624cBF099e5a8f8cD5aF22aFa424a1d1acEE9"),
+			__DEFAULT_RPC__: JSON.stringify(env.VITE_DEFAULT_RPC || "https://1rpc.io/gnosis"),
+			__DEFAULT_DECODER__: JSON.stringify(
+				env.VITE_DEFAULT_DECODER || "https://calldata.swiss-knife.xyz/decoder?calldata=",
+			),
+			__DEFAULT_RELAYER__: JSON.stringify(env.VITE_DEFAULT_RELAYER || ""),
+			__DEFAULT_MAX_BLOCK_RANGE__: Number(env.VITE_DEFAULT_MAX_BLOCK_RANGE) || 10000,
+			__DEFAULT_VALIDATOR_INFO__: JSON.stringify(
+				env.VITE_DEFAULT_VALIDATOR_INFO ||
+					"https://raw.githubusercontent.com/safe-fndn/safenet-beta-data/refs/heads/main/assets/validator-info.json",
+			),
+			__DEFAULT_REFETCH_INTERVAL__: Number(env.VITE_DEFAULT_REFETCH_INTERVAL) || 10000,
+			__DEFAULT_BLOCKS_PER_EPOCH__: Number(env.VITE_DEFAULT_BLOCKS_PER_EPOCH) || 1440,
+			__DEFAULT_SIGNING_TIMEOUT__: Number(env.VITE_DEFAULT_SIGNING_TIMEOUT) || 12,
 		},
 	};
 });
