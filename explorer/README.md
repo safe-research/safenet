@@ -17,7 +17,7 @@ The Safenet Explorer is a React 19 single-page application for inspecting the st
 Install dependencies from the repository root:
 
 ```sh
-npm install
+npm ci
 ```
 
 ### Run the dev server
