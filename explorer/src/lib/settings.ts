@@ -7,15 +7,15 @@ const STORAGE_KEY_SAFE_API_SETTINGS = "localStorage.safe_api_settings.object.v1"
 const STORAGE_KEY_SAFE_UI_SETTINGS = "localStorage.safe_ui_settings.object.v1";
 
 const DEFAULT_SETTINGS = {
-	consensus: "0x223624cBF099e5a8f8cD5aF22aFa424a1d1acEE9" as Address,
-	rpc: "https://1rpc.io/gnosis",
-	decoder: "https://calldata.swiss-knife.xyz/decoder?calldata=",
-	maxBlockRange: 10000,
-	validatorInfo:
-		"https://raw.githubusercontent.com/safe-fndn/safenet-beta-data/refs/heads/main/assets/validator-info.json",
-	refetchInterval: 10000,
-	blocksPerEpoch: 1440,
-	signingTimeout: 12,
+	consensus: __DEFAULT_CONSENSUS__ as Address,
+	rpc: __DEFAULT_RPC__,
+	decoder: __DEFAULT_DECODER__,
+	maxBlockRange: __DEFAULT_MAX_BLOCK_RANGE__,
+	validatorInfo: __DEFAULT_VALIDATOR_INFO__,
+	refetchInterval: __DEFAULT_REFETCH_INTERVAL__,
+	blocksPerEpoch: __DEFAULT_BLOCKS_PER_EPOCH__,
+	signingTimeout: __DEFAULT_SIGNING_TIMEOUT__,
+	relayer: __DEFAULT_RELAYER__ || undefined,
 };
 
 const settingsSchema = z.object({
@@ -35,10 +35,11 @@ export type Settings = z.output<typeof settingsSchema>;
 export function loadSettings(): Settings {
 	try {
 		const stored = localStorage.getItem(STORAGE_KEY_SETTINGS);
-		return stored ? settingsSchema.parse(JSON.parse(stored)) : DEFAULT_SETTINGS;
+		const parsed = stored ? JSON.parse(stored) : {};
+		return settingsSchema.parse({ ...DEFAULT_SETTINGS, ...parsed });
 	} catch (e) {
 		console.error(e);
-		return DEFAULT_SETTINGS;
+		return settingsSchema.parse(DEFAULT_SETTINGS);
 	}
 }
 
