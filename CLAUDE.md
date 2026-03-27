@@ -40,6 +40,8 @@ For detailed architecture and setup information, refer to the local [docs](./doc
 
 The steps for project setup are documented in the root [README.md](./README.md#project-setup).
 
+Always use `npm ci` instead of `npm install` / `npm i`. `npm ci` installs exactly what is in `package-lock.json` and never modifies it, keeping the lock file stable.
+
 ### Commands
 
 All commands are specified in the root [package.json](./package.json). Workspace specific commands can be found in the `package.json` of each corresponding workspace.
