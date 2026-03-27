@@ -4,7 +4,7 @@
 
 - Install dependencies
 ```sh
-npm install
+npm ci
 ```
 
 ### Validator Docker setup

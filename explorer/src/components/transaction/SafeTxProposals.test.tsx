@@ -22,6 +22,10 @@ vi.mock("./SafeTxAttestationStatus", () => ({
 	SafeTxAttestationStatus: () => null,
 }));
 
+vi.mock("@/hooks/useSigningProgress", () => ({
+	useAttestationStatus: vi.fn(() => ({ data: null, isFetching: false })),
+}));
+
 vi.mock("../common/Info", () => ({
 	InlineBlockInfo: ({ block }: { block: bigint }) => <span>{block.toString()}</span>,
 	InlineExplorerTxLink: ({ children }: { children: React.ReactNode }) => <span>{children}</span>,
