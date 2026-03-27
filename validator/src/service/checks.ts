@@ -5,6 +5,7 @@ import {
 	buildSupportedSignaturesCheck,
 } from "../consensus/verify/safeTx/checks/basic.js";
 import { buildAddressSplitCheck, buildCombinedChecks } from "../consensus/verify/safeTx/checks/combined.js";
+import { buildCreateCallChecks } from "../consensus/verify/safeTx/checks/config/createCall.js";
 import { buildSetFallbackHandlerCheck } from "../consensus/verify/safeTx/checks/config/fallback.js";
 import { buildSetGuardCheck } from "../consensus/verify/safeTx/checks/config/guards.js";
 import { buildSignMessageChecks } from "../consensus/verify/safeTx/checks/config/messages.js";
@@ -44,6 +45,7 @@ export const buildSafeTransactionCheck = (): TransactionCheck => {
 		{
 			...buildSingletonUpgradeChecks(),
 			...buildSignMessageChecks(),
+			...buildCreateCallChecks(),
 		},
 		baseChecks,
 	);

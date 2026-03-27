@@ -8,6 +8,7 @@ export type TransactionCheckErrorCode =
 	| "invalid_multisend"
 	| "invalid_migration"
 	| "invalid_sign_message"
+	| "invalid_create_call"
 	| "unknown";
 
 export class TransactionCheckError extends Error {
