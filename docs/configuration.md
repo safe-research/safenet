@@ -6,17 +6,17 @@
 
 Genesis Group Id: `0xf3d78298339ca6b6f2885e1157089bc86ac55520544a83840000000000000000`
 
-- Validator 1:
+- Gnosis:
     - `0x3D58a5475c1336b0A755c3aBd298CeB9b7BB9CDe`
-- Validator 2:
+- Greenfield:
     - `0x7B0A8EFA45dE81F11F2846EC28259B62155a2b37`
-- Validator 3:
+- Rockaway:
     - `0xb0E735D4a3b70195420E0ae933689A55750CFcd2`
-- Validator 4:
+- Core Contributors:
     - `0xCc00DE0eA14c08669b26DcBFE365dBD9890B04D9`
-- Validator 5:
+- Blockchain Capital:
     - `0xD8997c2a94052C4FB79B53b3e255c1F07c99305B`
-- Validator 6:
+- Safe Labs:
     - `0xF6EA21D702983c443f58A267265912FE03D2FF0b`
 
 ### Network Configuration
