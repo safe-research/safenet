@@ -57,6 +57,6 @@ See validator [.env.sample](../validator/.env.sample) for reference and addition
 
 #### Staking
 
-The `STAKER_ADDRESS` environment variable is of particular importance: it specifies which account is responsible for putting up the validator stake on Ethereum Mainnet. This allows a separate account (such as a Safe multisig) to be used to manage tha large validator stake, instead of the same private key that used by the validator for participating in consensus on Gnosis Chain.
+The `STAKER_ADDRESS` environment variable is of particular importance: it specifies which account is responsible for putting up the validator stake on Ethereum Mainnet. This allows a separate account (such as a Safe multisig) to be used to manage the large validator stake, instead of the same private key that is used by the validator for participating in consensus on Gnosis Chain.
 
-When set, the validator will publish this address to the consensus contract on Gnosis Chain. This value must be set to the Ethereum Mainnet account that will put up the validator stake on the Safenet staking contract ([Etherscan](0x115E78f160e1E3eF163B05C84562Fa16fA338509)).
+When set, the validator will publish this address to the consensus contract on Gnosis Chain. This value must be set to the Ethereum Mainnet account that will put up the validator stake on the Safenet staking contract ([Etherscan](https://etherscan.io/address/0x115E78f160e1E3eF163B05C84562Fa16fA338509)).
