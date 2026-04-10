@@ -9,14 +9,20 @@ export default defineConfig(({ mode }) => {
 	// Load environment variables and set base path for nested routes
 	const env = loadEnv(mode, process.cwd());
 
-	// Normalize base path to ensure it always starts and ends with a slash
-	// This prevents routing issues and ensures consistent path handling across environments
-	let basePath = env.VITE_BASE_PATH || "/";
-	if (!basePath.startsWith("/")) {
-		basePath = `/${basePath}`;
-	}
-	if (!basePath.endsWith("/")) {
-		basePath = `${basePath}/`;
+	// Normalize base path to ensure it always starts and ends with a slash.
+	// When VITE_BASE_PATH is not set, default to "./" (relative paths) so the
+	// build works on both IPFS path gateways (ipfs.io/ipfs/<CID>/) and subdomain
+	// gateways (<CID>.ipfs.dweb.link/) without needing to know the CID at build time.
+	let basePath = env.VITE_BASE_PATH;
+	if (basePath) {
+		if (!basePath.startsWith("/")) {
+			basePath = `/${basePath}`;
+		}
+		if (!basePath.endsWith("/")) {
+			basePath = `${basePath}/`;
+		}
+	} else {
+		basePath = "./";
 	}
 
 	// Validate VITE_DEFAULT_* overrides at build time (only when explicitly set)
