@@ -9,12 +9,13 @@ export default defineConfig(({ mode }) => {
 	// Load environment variables and set base path for nested routes
 	const env = loadEnv(mode, process.cwd());
 
-	// Normalize base path to ensure it always starts and ends with a slash.
-	// Relative paths (e.g. "./") are passed through unchanged — they are used for
-	// IPFS path-gateway deployments where absolute paths would resolve to the
-	// gateway domain root instead of the CID subtree.
-	let basePath = env.VITE_BASE_PATH || "/";
-	if (!basePath.startsWith(".")) {
+	// Default to "" (Vite's relative base) so asset URLs resolve correctly at any
+	// mount point — IPFS path gateways, subdomain gateways, and regular web
+	// servers at any subpath — without knowing the deployment path at build time.
+	// Set VITE_BASE_PATH to an explicit absolute path (e.g. /safenet/) only when
+	// assets must be served from a different origin than the HTML (e.g. a CDN).
+	let basePath = env.VITE_BASE_PATH || "";
+	if (basePath) {
 		if (!basePath.startsWith("/")) {
 			basePath = `/${basePath}`;
 		}
