@@ -62,4 +62,4 @@ Files touched:
 ## Open Questions / Assumptions
 
 - External sites linking into the explorer with path-based URLs will break. Assumed acceptable given those links already break on IPFS.
-- The `safe.dev` deployment is a regular web server; it will continue to work after the change because hash fragments are handled client-side there too.
+- The `safe.dev` deployment is a regular web server. The root URL (`safe.dev/safenet/`) will continue to work. However, existing path-based deep links (e.g. `safe.dev/safenet/safeTx?...`) will load `index.html` correctly but the router (now in hash mode) ignores the URL path and renders the root route. If backward compat is needed, `safe.dev` should handle it server-side with a redirect from `/safenet/<path>` → `/safenet/#/<path>`.
