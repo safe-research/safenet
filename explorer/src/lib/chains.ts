@@ -31,7 +31,7 @@ export const SAFE_SERVICE_CHAINS: Record<string, ChainInfo> = {
 	},
 	"56": {
 		...bsc,
-		shortName: "gno",
+		shortName: "bnb",
 		color: "#F0B90B",
 	},
 	"100": {
