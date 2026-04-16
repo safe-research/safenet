@@ -131,6 +131,7 @@ export class OnchainTransitionWatcher {
 				switch (update.type) {
 					case "watcher_update_warp_to_block": {
 						this.#metrics.blockNumber.labels({ status: "seen" }).set(Number(update.toBlock));
+						this.#metrics.eventIndex.labels({ status: "seen" }).set(-1);
 						// Note that we don't explicitely handle warping in our state machine,
 						// instead if any events are found in the log range, the state machine is
 						// updated to the correct block accordingly.
@@ -144,6 +145,7 @@ export class OnchainTransitionWatcher {
 					}
 					case "watcher_update_new_block": {
 						this.#metrics.blockNumber.labels({ status: "seen" }).set(Number(update.blockNumber));
+						this.#metrics.eventIndex.labels({ status: "seen" }).set(-1);
 						this.handleTransition({ id: "block_new", block: update.blockNumber });
 						break;
 					}
