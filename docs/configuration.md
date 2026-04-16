@@ -65,10 +65,11 @@ The `STAKER_ADDRESS` will receive all validator rewards including commission, un
 
 ##### Configuring a Separate Commission Beneficiary
 
-Per default, the `STAKER_ADDRESS` will receive all validator rewards including commission **on Ethereum Mainnet**. In order to have commission be distributed to another beneficiary **on Ethereum Mainnet**, validators must set a delegate on the [DelegateRegistry](https://etherscan.io/address/0x469788fE6E9E9681C6ebF3bF78e7Fd26Fc015446) with `id = keccak256(toHex("Safenet Beta validator commission beneficiary"))`
+By default, the `STAKER_ADDRESS` will receive all validator rewards including commission. In order to have commission be distributed to another beneficiary, the `STAKER_ADDRESS` must set a delegate on the [DelegateRegistry](https://etherscan.io/address/0x469788fE6E9E9681C6ebF3bF78e7Fd26Fc015446) with `id = keccak256(toHex("Safenet Beta validator commission beneficiary"))`.
 
 ```
-to: 0x469788fE6E9E9681C6ebF3bF78e7Fd26Fc015446
+from: STAKER_ADDRESS
+to: 0x469788fE6E9E9681C6ebF3bF78e7Fd26Fc015446 // DelegateRegistry
 function: setDelegate
     id: 0x45c518fef2d01542b884830ef4eaae3137aebc8a3df6e4c4b73c585f85e709b0  // keccak256(toHex("Safenet Beta validator commission beneficiary"))
     delegate: 0x...  // beneficiary address **on Ethereum Mainnet**
