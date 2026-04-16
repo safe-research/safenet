@@ -57,6 +57,25 @@ See validator [.env.sample](../validator/.env.sample) for reference and addition
 
 #### Staking
 
-The `STAKER_ADDRESS` environment variable is of particular importance: it specifies which account is responsible for putting up the validator stake on Ethereum Mainnet. This allows a separate account (such as a Safe multisig) to be used to manage the large validator stake, instead of the same private key that is used by the validator for participating in consensus on Gnosis Chain. Validators earn a commission on delegated stake which will only be earned if the `STAKER_ADDRESS` is set and the minimum stake has been put up by the `STAKER_ADDRESS`. This value must be set to the Ethereum Mainnet account that will put up the validator stake on the Safenet staking contract ([Etherscan](https://etherscan.io/address/0x115E78f160e1E3eF163B05C84562Fa16fA338509)).
+The `STAKER_ADDRESS` environment variable is of particular importance: it specifies which account is responsible for putting up the validator stake **on Ethereum Mainnet**. This allows a separate account (such as a Safe multisig) to be used to manage the large validator stake, instead of the same private key that is used by the validator for participating in consensus on Gnosis Chain. Validators earn a commission on delegated stake which will only be earned if the `STAKER_ADDRESS` is set and the minimum stake has been put up by the `STAKER_ADDRESS`. This value must be set to the Ethereum Mainnet account that will put up the validator stake on the Safenet staking contract ([Etherscan](https://etherscan.io/address/0x115E78f160e1E3eF163B05C84562Fa16fA338509)).
 
 More information can be found on the [Safenet rewards documentation](https://docs.safefoundation.org/safenet/staking/rewards)
+
+The `STAKER_ADDRESS` will receive all validator rewards including commission, unless another beneficiary has been set.
+
+##### Configuring a Separate Commission Beneficiary
+
+By default, the `STAKER_ADDRESS` will receive all validator rewards including commission  **on Ethereum Mainnet**. In order to have commission be distributed to another beneficiary  **on Ethereum Mainnet**, the `STAKER_ADDRESS` must set a delegate on the [DelegateRegistry](https://etherscan.io/address/0x469788fE6E9E9681C6ebF3bF78e7Fd26Fc015446) with `id = keccak256(toHex("Safenet Beta validator commission beneficiary"))`.
+
+```
+from: STAKER_ADDRESS
+to: 0x469788fE6E9E9681C6ebF3bF78e7Fd26Fc015446 // DelegateRegistry
+function: setDelegate
+    id: 0x45c518fef2d01542b884830ef4eaae3137aebc8a3df6e4c4b73c585f85e709b0  // keccak256(toHex("Safenet Beta validator commission beneficiary"))
+    delegate: 0x...  // beneficiary address **on Ethereum Mainnet**
+```
+
+Please inform the Safe team in case you intend to do this so we can make sure everything is accounted properly. 
+
+Once executed, `STAKER_ADDRESS` will only receive rewards on its own stake. `beneficiary` will only receive the commission.
+
