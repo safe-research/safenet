@@ -72,7 +72,6 @@ to: 0x469788fE6E9E9681C6ebF3bF78e7Fd26Fc015446
 function: setDelegate
     id: 0x45c518fef2d01542b884830ef4eaae3137aebc8a3df6e4c4b73c585f85e709b0  // keccak256(toHex("Safenet Beta validator commission beneficiary"))
     delegate: 0x...  // beneficiary address **on Ethereum Mainnet**
-
 ```
 
 Please inform the Safe team in case you intend to do this so we can make sure everything is accounted properly. 
