@@ -5,6 +5,7 @@ import type { Logger } from "./logging.js";
 export type Metrics = {
 	blockNumber: Gauge;
 	eventIndex: Gauge;
+	reorgs: Counter;
 	transitions: Counter;
 	rpcRequests: Counter;
 	transactionChecks: Counter;
@@ -30,12 +31,19 @@ export class MetricsService {
 		this.#metrics = {
 			blockNumber: new Gauge({
 				name: "validator_block_number",
-				help: "The last processed block number by the validator",
+				help: "Block number by processing stage (seen: received from chain, processed: applied to state machine)",
+				labelNames: ["status"],
 				registers: [this.#register],
 			}),
 			eventIndex: new Gauge({
 				name: "validator_event_index",
-				help: "The last processed event index by the validator",
+				help: "Event index by processing stage (seen: received from chain, processed: applied to state machine)",
+				labelNames: ["status"],
+				registers: [this.#register],
+			}),
+			reorgs: new Counter({
+				name: "validator_reorgs",
+				help: "Number of chain reorgs observed by the validator",
 				registers: [this.#register],
 			}),
 			transitions: new Counter({

@@ -33,8 +33,9 @@ const makeLogger = (): Logger =>
 const makeMetrics = (): Metrics =>
 	({
 		transitions: { labels: vi.fn().mockReturnValue({ inc: vi.fn() }) },
-		blockNumber: { set: vi.fn() },
-		eventIndex: { set: vi.fn() },
+		blockNumber: { labels: vi.fn().mockReturnValue({ set: vi.fn() }) },
+		eventIndex: { labels: vi.fn().mockReturnValue({ set: vi.fn() }) },
+		reorgs: { inc: vi.fn() },
 		frostGroupCleanups: { labels: vi.fn().mockReturnValue({ inc: vi.fn() }) },
 	}) as unknown as Metrics;
 
