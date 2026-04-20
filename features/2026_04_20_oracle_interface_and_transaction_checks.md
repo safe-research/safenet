@@ -69,7 +69,7 @@ If the oracle result is `approved = false`, or if the oracle address is not in t
 
 - **No value transferred**: The call is `oracle.postRequest(requestId)` — no ETH is sent.
 - **Fixed calldata**: The selector and argument type are fixed by `IOracle`; the only variable is the `requestId` (a `bytes32`), so the oracle cannot be manipulated into executing arbitrary logic on the Consensus contract's behalf.
-- **Call-last ordering with gas cap**: The oracle call is made as the final statement in `proposeOracleTransaction`, after all state changes and event emissions, using a low-level call with a fixed gas stipend (e.g. `oracle.call{gas: 50_000}(abi.encodeCall(IOracle.postRequest, (requestId)))`). This eliminates reentrancy impact and ensures a malicious or broken oracle (non-contract, reverting, or gas-exhausting) cannot prevent the transaction from being proposed — the call failure is silently ignored.
+- **Call-last ordering**: The oracle call is made as the final statement in `proposeOracleTransaction`, after all state changes and event emissions. This eliminates any reentrancy impact — even if the oracle contract re-enters `Consensus.sol`, all relevant state is already written. If the oracle call reverts (broken or malicious oracle), the entire proposal reverts; this is acceptable since proposers choose the oracle and can retry with a different one.
 - **Validator allowlist**: Validators independently verify that the oracle address is trusted before signing. A malicious oracle that emits a false approval cannot produce a FROST signature without a validator quorum.
 
 ### Alternatives Considered
