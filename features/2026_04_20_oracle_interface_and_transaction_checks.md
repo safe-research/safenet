@@ -90,7 +90,7 @@ Proposer                Consensus.sol           Oracle.sol          Validators
    |                        |                       |                   |
    |-- proposeOracleTransaction(oracle, tx) ------->|                   |
    |<-- safeTxHash ----------------------------------|                   |
-   |                        |-- OracleTransactionProposed(requestId) -->|
+   |                        |-- OracleTransactionProposed event ------->|
    |-- postRequest(requestId) ------------------- >|                   |
    |                        |                       |-- OracleResult -->|
    |                        |                       |   (approved=true) |
@@ -151,7 +151,6 @@ event OracleTransactionProposed(
     bytes32 indexed safeTxHash,
     uint256 indexed chainId,
     address indexed safe,
-    bytes32 requestId,   // EIP-712 hash — enables direct correlation with OracleResult
     uint64 epoch,
     address oracle,
     SafeTransaction.T transaction
