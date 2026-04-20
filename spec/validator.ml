@@ -92,6 +92,13 @@ type rollover =
     }
   | Collecting_key_gen_secret_shares of rollover_secret_shares
   | Confirming_key_gen of rollover_finalization
+  | Proposing_epoch of {
+      epoch : epoch;
+      message : string;
+      participants : AddressSet.t;
+      responsible : FROST.Identifier.t;
+      deadline : int;
+    }
   | Signing_epoch_rollover of { epoch : epoch; message : string }
   | Staged_epoch of { epoch : epoch }
   | Skipped of { epoch : int }
@@ -145,11 +152,16 @@ type state = {
 
 type transaction = {
   chain_id : int;
-  account : Address.t;
+  safe : Address.t;
   to_ : Address.t;
   value : int;
-  operation : [ `Call | `Delegatecall ];
   data : string;
+  operation : [ `Call | `Delegatecall ];
+  safe_tx_gas : int;
+  base_gas : int;
+  gas_price : int;
+  gas_token : Address.t;
+  refund_receiver : Address.t;
   nonce : int;
 }
 
@@ -238,9 +250,11 @@ struct
     (* For our consensus to never get stuck due to dishonest participants, we
        require more than 2/3rds of the total participant set to participate. Any
        less and dishonest participants can be a majority in any group if you
-       consider intermittent failures from honest participants. *)
+       consider intermittent failures from honest participants. Additionally,
+       we enforce a minimum participant count of 2. *)
     let min_count =
-      ((2 * AddressSet.cardinal Configuration.all_participants) + 1) /^ 3
+      max 2
+      @@ (((2 * AddressSet.cardinal Configuration.all_participants) + 1) /^ 3)
     in
     if count >= min_count then
       (* The threshold is always the absolute majority of participants. *)
@@ -331,6 +345,7 @@ struct
     | Collecting_key_gen_commitments { epoch; _ }
     | Collecting_key_gen_secret_shares { epoch; _ }
     | Confirming_key_gen { epoch; _ }
+    | Proposing_epoch { epoch = { epoch; _ }; _ }
     | Signing_epoch_rollover { epoch = { epoch; _ }; _ }
     | Skipped { epoch } ->
         if rollover_block epoch = state.block then
@@ -369,7 +384,12 @@ struct
           confirm_deadline;
           _;
         } ->
-        if response_deadline = state.block then
+        if
+          response_deadline = state.block
+          && ParticipantMap.exists
+               (fun _ { unresponded; _ } -> unresponded <> 0)
+               complaints
+        then
           (* Remove participants that did not respond to complaints in time. *)
           let participants' =
             ParticipantMap.fold
@@ -390,6 +410,13 @@ struct
                 AddressSet.remove address participants)
               confirmations group.participants
           in
+          key_gen_and_commit state participants'
+        else (state, [])
+    | Proposing_epoch { participants; responsible; deadline; _ } ->
+        if deadline = state.block then
+          (* Remove the participant responsible for proposing the rollover. *)
+          let address = participant_address participants responsible in
+          let participants' = AddressSet.remove address participants in
           key_gen_and_commit state participants'
         else (state, [])
     (* Other KeyGen states either don't have deadlines, or they are handled in
@@ -595,22 +622,19 @@ struct
                 };
             }
           in
-          let rollover' = Signing_epoch_rollover { epoch; message } in
-          let signatures' =
-            StringMap.add message
+          let rollover' =
+            Proposing_epoch
               {
-                status =
-                  Waiting_for_sign_request { responsible = Some identifier };
-                epoch = state.active_epoch;
-                packet;
-                selection = state.active_epoch.group.participants;
-                deadline = state.block + Configuration.signing_block_timeout;
+                epoch;
+                message;
+                participants = st.group.participants;
+                (* The last participant to confirm is the one responsible for
+                   proposing the epoch rotation. *)
+                responsible = identifier;
+                deadline = state.block + Configuration.key_gen_block_timeout;
               }
-              state.signatures
           in
-          let state' =
-            { state with rollover = rollover'; signatures = signatures' }
-          in
+          let state' = { state with rollover = rollover' } in
           (state', [])
         else
           let rollover' =
@@ -1076,6 +1100,35 @@ struct
     let state' = { state with signatures = signatures' } in
     (state', actions)
 
+  let epoch_proposed state proposed_epoch =
+    match state.rollover with
+    | Proposing_epoch { epoch; message; responsible; _ }
+      when epoch.epoch = proposed_epoch ->
+        let rollover' = Signing_epoch_rollover { epoch; message } in
+        let signatures' =
+          StringMap.add message
+            {
+              status =
+                Waiting_for_sign_request { responsible = Some responsible };
+              epoch = state.active_epoch;
+              packet =
+                Epoch_rollover
+                  {
+                    epoch = epoch.epoch;
+                    rollover_block = rollover_block epoch.epoch;
+                    group_key = epoch.group.key;
+                  };
+              selection = state.active_epoch.group.participants;
+              deadline = state.block + Configuration.signing_block_timeout;
+            }
+            state.signatures
+        in
+        let state' =
+          { state with rollover = rollover'; signatures = signatures' }
+        in
+        (state', [])
+    | _ -> (state, [])
+
   let epoch_staged state proposed_epoch =
     match state.rollover with
     | Signing_epoch_rollover { epoch; message }
@@ -1105,27 +1158,40 @@ struct
         (state', [ `Coordinator_preprocess (epoch.group.id, nonces_commitment) ])
     | _ -> (state, [])
 
-  let transaction_proposed state message transaction_hash epoch transaction =
+  let transaction_proposed state transaction_hash epoch transaction =
     if
       epoch = state.active_epoch.epoch
       && Configuration.validate_transaction transaction
     then
+      let packet = Transaction_proposal { epoch; hash = transaction_hash } in
+      let message = Abi.hash_typed_data packet in
       let signatures' =
-        StringMap.add message
-          {
-            status = Waiting_for_sign_request { responsible = None };
-            epoch = state.active_epoch;
-            packet = Transaction_proposal { epoch; hash = transaction_hash };
-            selection = state.active_epoch.group.participants;
-            deadline = state.block + Configuration.signing_block_timeout;
-          }
+        StringMap.update message
+          (function
+            (* We only consider the first proposal for a given transaction and
+               epoch, this prevents validators from performing multiple signing
+               ceremonies for attesting the same packet. *)
+            | Some existing -> Some existing
+            | None ->
+                Some
+                  {
+                    status = Waiting_for_sign_request { responsible = None };
+                    epoch = state.active_epoch;
+                    packet;
+                    selection = state.active_epoch.group.participants;
+                    deadline = state.block + Configuration.signing_block_timeout;
+                  })
           state.signatures
       in
       let state' = { state with signatures = signatures' } in
       (state', [])
     else (state, [])
 
-  let transaction_attested state message =
+  let transaction_attested state transaction_hash epoch =
+    let message =
+      Abi.hash_typed_data
+      @@ Transaction_proposal { epoch; hash = transaction_hash }
+    in
     let signatures' = StringMap.remove message state.signatures in
     ({ state with signatures = signatures' }, [])
 
@@ -1187,13 +1253,15 @@ struct
           (signature_id, identifier, signature_share, binding_root) ->
           signing_ceremony_share state signature_id identifier signature_share
             binding_root
-      | `Consensus_epoch_staged (_, proposed_epoch, _, _) ->
+      | `Consensus_epoch_proposed (_, proposed_epoch, _, _) ->
+          epoch_proposed state proposed_epoch
+      | `Consensus_epoch_staged (_, proposed_epoch, _, _, _) ->
           epoch_staged state proposed_epoch
       | `Consensus_transaction_proposed
-          (message, transaction_hash, epoch, transaction) ->
-          transaction_proposed state message transaction_hash epoch transaction
-      | `Consensus_transaction_attested message ->
-          transaction_attested state message
+          (transaction_hash, _, _, epoch, transaction) ->
+          transaction_proposed state transaction_hash epoch transaction
+      | `Consensus_transaction_attested (transaction_hash, epoch, _) ->
+          transaction_attested state transaction_hash epoch
     in
     (garbage_collect state', actions)
 end
