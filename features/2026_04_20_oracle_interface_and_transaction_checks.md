@@ -69,7 +69,7 @@ If the oracle result is `approved = false`, or if the oracle address is not in t
 
 - **No value transferred**: The call is `oracle.postRequest(requestId)` — no ETH is sent.
 - **Fixed calldata**: The selector and argument type are fixed by `IOracle`; the only variable is the `requestId` (a `bytes32`), so the oracle cannot be manipulated into executing arbitrary logic on the Consensus contract's behalf.
-- **Call-last ordering**: The oracle call is made as the final statement in `proposeOracleTransaction`, after all state changes and event emissions. This eliminates any reentrancy impact — even if the oracle contract re-enters `Consensus.sol`, all relevant state is already written.
+- **Call-last ordering with gas cap**: The oracle call is made as the final statement in `proposeOracleTransaction`, after all state changes and event emissions, using a low-level call with a fixed gas stipend (e.g. `oracle.call{gas: 50_000}(abi.encodeCall(IOracle.postRequest, (requestId)))`). This eliminates reentrancy impact and ensures a malicious or broken oracle (non-contract, reverting, or gas-exhausting) cannot prevent the transaction from being proposed — the call failure is silently ignored.
 - **Validator allowlist**: Validators independently verify that the oracle address is trusted before signing. A malicious oracle that emits a false approval cannot produce a FROST signature without a validator quorum.
 
 ### Alternatives Considered
@@ -89,7 +89,8 @@ Oracle-checked transactions are proposed on-chain similarly to regular transacti
 Proposer                Consensus.sol           Oracle.sol          Validators
    |                        |                       |                   |
    |-- proposeOracleTransaction(oracle, tx) ------->|                   |
-   |                        |-- OracleTransactionProposed event ------->|
+   |<-- (safeTxHash, requestId) --------------------|                   |
+   |                        |-- OracleTransactionProposed(requestId) -->|
    |-- postRequest(requestId) ------------------- >|                   |
    |                        |                       |-- OracleResult -->|
    |                        |                       |   (approved=true) |
@@ -150,6 +151,7 @@ event OracleTransactionProposed(
     bytes32 indexed safeTxHash,
     uint256 indexed chainId,
     address indexed safe,
+    bytes32 requestId,   // EIP-712 hash — enables direct correlation with OracleResult
     uint64 epoch,
     address oracle,
     SafeTransaction.T transaction
@@ -171,10 +173,13 @@ New functions:
 /// @notice Proposes a transaction for oracle-checked validator approval.
 /// @param oracle Address of the oracle contract to use for evaluation.
 /// @param transaction The Safe transaction to propose.
+/// @return safeTxHash The Safe transaction hash.
+/// @return requestId The EIP-712 hash of the OracleTransactionProposal message,
+///         needed to call oracle.postRequest() and to correlate OracleResult events.
 function proposeOracleTransaction(
     address oracle,
     SafeTransaction.T memory transaction
-) external returns (bytes32 safeTxHash);
+) external returns (bytes32 safeTxHash, bytes32 requestId);
 
 /// @notice Attests to an oracle-checked transaction.
 /// Called internally via onSignCompleted callback.
@@ -315,7 +320,7 @@ Add `IOracle.OracleResult` ABI event definition for use by the watcher.
 - `IOracle.sol` interface with `postRequest` and `OracleResult`
 - `OracleTransactionProposal` EIP-712 message type in `ConsensusMessages.sol`
 - `proposeOracleTransaction` and `attestOracleTransaction` in `Consensus.sol` / `IConsensus.sol`
-- New storage mapping: `$oracleAttestations[bytes32 oracleProposalMessage]`
+- Reuse existing `$attestations[bytes32 message]` mapping — oracle proposal hashes are distinct from transaction proposal hashes due to differing TypeHash, so no new mapping is needed
 - `onSignCompleted` branch for the new selector
 - `SimpleOracle.sol` and `AlwaysApproveOracle.sol` PoC contracts
 - Full test coverage for all new contract code
