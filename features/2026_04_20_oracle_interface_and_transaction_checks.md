@@ -89,7 +89,7 @@ Oracle-checked transactions are proposed on-chain similarly to regular transacti
 Proposer                Consensus.sol           Oracle.sol          Validators
    |                        |                       |                   |
    |-- proposeOracleTransaction(oracle, tx) ------->|                   |
-   |<-- (safeTxHash, requestId) --------------------|                   |
+   |<-- safeTxHash ----------------------------------|                   |
    |                        |-- OracleTransactionProposed(requestId) -->|
    |-- postRequest(requestId) ------------------- >|                   |
    |                        |                       |-- OracleResult -->|
@@ -174,12 +174,10 @@ New functions:
 /// @param oracle Address of the oracle contract to use for evaluation.
 /// @param transaction The Safe transaction to propose.
 /// @return safeTxHash The Safe transaction hash.
-/// @return requestId The EIP-712 hash of the OracleTransactionProposal message,
-///         needed to call oracle.postRequest() and to correlate OracleResult events.
 function proposeOracleTransaction(
     address oracle,
     SafeTransaction.T memory transaction
-) external returns (bytes32 safeTxHash, bytes32 requestId);
+) external returns (bytes32 safeTxHash);
 
 /// @notice Attests to an oracle-checked transaction.
 /// Called internally via onSignCompleted callback.
