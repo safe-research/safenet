@@ -21,7 +21,7 @@ const domain = import.meta.env.VITE_PLAUSIBLE_DOMAIN as string | undefined;
 const endpoint = import.meta.env.VITE_PLAUSIBLE_ENDPOINT as string | undefined;
 
 if (domain) {
-	init({ domain, ...(endpoint ? { endpoint } : {}) });
+	init({ domain, hashBasedRouting: true, ...(endpoint ? { endpoint } : {}) });
 }
 
 export default function Analytics() {
