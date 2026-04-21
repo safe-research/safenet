@@ -84,19 +84,21 @@ If the oracle result is `approved = false`, or if the oracle address is not in t
 
 Oracle-checked transactions are proposed on-chain similarly to regular transactions. `Consensus.sol` calls `oracle.postRequest()` automatically as part of `proposeOracleTransaction` — the proposer does not need to interact with the oracle separately. Validators watch for the oracle result before participating in signing.
 
-```
-Proposer                Consensus.sol           Oracle.sol          Validators
-   |                        |                       |                   |
-   |-- proposeOracleTransaction(oracle, tx) ------->|                   |
-   |<-- safeTxHash ----------------------------------|                   |
-   |                        |-- postRequest(requestId) --------------->|
-   |                        |-- OracleTransactionProposed event ------->|
-   |                        |                       |-- OracleResult -->|
-   |                        |                       |   (approved=true) |
-   |                        |<-- sign(groupId, oracleMsg) -------------|
-   |                        |       (FROST signing round)              |
-   |                        |-- OracleTransactionAttested event ------>|
-   |<-- getOracleTransactionAttestation() ----------|                  |
+```mermaid
+sequenceDiagram
+    actor Proposer
+    participant Consensus.sol
+    participant Oracle.sol
+    participant Validators
+
+    Proposer->>Consensus.sol: proposeOracleTransaction(oracle, tx)
+    Consensus.sol-->>Proposer: safeTxHash
+    Consensus.sol->>Oracle.sol: postRequest(requestId, proposer)
+    Consensus.sol->>Validators: OracleTransactionProposed event
+    Oracle.sol->>Validators: OracleResult(requestId, proposer, approved=true)
+    Validators->>Consensus.sol: sign(groupId, oracleMsg) — FROST signing round
+    Consensus.sol->>Validators: OracleTransactionAttested event
+    Proposer->>Consensus.sol: getOracleTransactionAttestation()
 ```
 
 ---
