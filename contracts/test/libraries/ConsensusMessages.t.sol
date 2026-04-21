@@ -22,4 +22,18 @@ contract ConsensusMessagesTest is Test {
 
         assertEq(message, hex"c1e4d484d6c376741c904290cc043f4afb4618f9d567dcdd0edcbf22abae57f7");
     }
+
+    function test_OracleTransactionProposalTypehash() public pure {
+        assertEq(
+            ConsensusMessages.ORACLE_TRANSACTION_PROPOSAL_TYPEHASH,
+            keccak256("OracleTransactionProposal(uint64 epoch,address oracle,bytes32 safeTxHash)")
+        );
+    }
+
+    function test_OracleTransactionProposal() public pure {
+        bytes32 message = ConsensusMessages.domain(23, 0x4838B106FCe9647Bdf1E7877BF73cE8B0BAD5f97)
+            .oracleTransactionProposal(1, 0x1234567890123456789012345678901234567890, bytes32(uint256(42)));
+
+        assertEq(message, hex"8c14cc0ff2766f091808488a64caf93c17362432d9384fd7ee3d9c6975dea85f");
+    }
 }

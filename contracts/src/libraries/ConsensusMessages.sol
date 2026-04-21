@@ -29,6 +29,12 @@ library ConsensusMessages {
     bytes32 internal constant TRANSACTION_PROPOSAL_TYPEHASH =
         hex"0791f9d2a47e59f417d6c5d2ac1c700ccf949a66461ac7842e6d104c1a92b152";
 
+    /**
+     * @custom:precomputed keccak256("OracleTransactionProposal(uint64 epoch,address oracle,bytes32 safeTxHash)")
+     */
+    bytes32 internal constant ORACLE_TRANSACTION_PROPOSAL_TYPEHASH =
+        hex"30673a82bcf1a0fa66d1c97cbe53999fc6c0b3e987742353c9aaecb3890205e9";
+
     // ============================================================
     // INTERNAL FUNCTIONS
     // ============================================================
@@ -97,6 +103,32 @@ library ConsensusMessages {
             mstore(add(ptr, 0x20), epoch)
             mstore(add(ptr, 0x40), transactionHash)
             mstore(add(ptr, 0x22), keccak256(ptr, 0x60))
+            mstore(ptr, hex"1901")
+            mstore(add(ptr, 0x02), domainSeparator)
+            result := keccak256(ptr, 0x42)
+        }
+    }
+
+    /**
+     * @notice Computes the oracle transaction proposal message that must be attested to by validators.
+     * @param domainSeparator The EIP-712 domain separator.
+     * @param epoch The epoch for the oracle transaction proposal.
+     * @param oracle The address of the oracle contract used for evaluation.
+     * @param safeTxHash The hash of the Safe transaction.
+     * @return result The oracle transaction proposal message hash, used as the oracle requestId.
+     */
+    function oracleTransactionProposal(bytes32 domainSeparator, uint64 epoch, address oracle, bytes32 safeTxHash)
+        internal
+        pure
+        returns (bytes32 result)
+    {
+        assembly ("memory-safe") {
+            let ptr := mload(0x40)
+            mstore(ptr, ORACLE_TRANSACTION_PROPOSAL_TYPEHASH)
+            mstore(add(ptr, 0x20), epoch)
+            mstore(add(ptr, 0x40), oracle)
+            mstore(add(ptr, 0x60), safeTxHash)
+            mstore(add(ptr, 0x22), keccak256(ptr, 0x80))
             mstore(ptr, hex"1901")
             mstore(add(ptr, 0x02), domainSeparator)
             result := keccak256(ptr, 0x42)
