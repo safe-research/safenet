@@ -112,19 +112,23 @@ Proposer                Consensus.sol           Oracle.sol          Validators
 interface IOracle {
     /// @notice Emitted when an oracle produces a result for a request.
     /// @param requestId The EIP-712 hash of the OracleTransactionProposal message.
+    /// @param proposer The address that originally proposed the transaction.
     /// @param result Arbitrary result data (oracle-specific encoding).
     /// @param approved Whether the oracle approves the transaction.
     event OracleResult(
         bytes32 indexed requestId,
+        address indexed proposer,
         bytes result,
         bool approved
     );
 
     /// @notice Post a signing request to the oracle for evaluation.
     /// @param requestId The EIP-712 hash of the OracleTransactionProposal message.
+    /// @param proposer The address that originally proposed the transaction.
     /// @dev Transaction data is not passed here; the oracle is expected to fetch it
     ///      independently from the OracleTransactionProposed event.
-    function postRequest(bytes32 requestId) external;
+    ///      The oracle may use proposer to restrict who it accepts requests from.
+    function postRequest(bytes32 requestId, address proposer) external;
 }
 ```
 
@@ -153,7 +157,6 @@ event OracleTransactionProposed(
     address indexed safe,
     uint64 epoch,
     address oracle,
-    address proposer,
     SafeTransaction.T transaction
 );
 
@@ -397,7 +400,7 @@ Add `IOracle.OracleResult` ABI event definition for use by the watcher.
 1. **Oracle allowlist management**: Validators configure `allowedOracles` statically in their config file. If a new oracle contract is deployed, validators must update config and restart. A more dynamic approach (on-chain registry) is left for a future iteration.
 2. **Multiple oracle results for the same request**: The spec treats the first `OracleResult` as final. If an oracle emits a second (conflicting) event, validators ignore it. This assumes well-behaved oracle contracts; malicious oracles that emit multiple results would be removed from validator allowlists.
 3. **Oracle result timing**: Validators wait at most `ORACLE_TIMEOUT_BLOCKS` blocks for an oracle result. After the deadline, the signing request is silently dropped. The proposer may re-propose if needed.
-4. **Oracle access control**: `Consensus.sol` calls `oracle.postRequest(requestId)` automatically with `msg.sender` as the proposer (emitted in `OracleTransactionProposed`). Whether the oracle restricts which callers it accepts is up to the oracle implementation.
+4. **Oracle access control**: `Consensus.sol` calls `oracle.postRequest(requestId, proposer)` passing the original `msg.sender`. The oracle emits `proposer` in `OracleResult`, allowing validators to filter results. Whether the oracle restricts which proposers it accepts is up to the oracle implementation.
 5. **Oracle result storage**: Oracle contracts are not required to store results on-chain. Validators only need the event. If a validator comes online late and misses the event, it may need to query historical logs. The watcher's backfill mechanism handles this.
 6. **Certora specs**: Formal verification of the new `Consensus.sol` oracle paths is deferred to a follow-up. The existing `StakingRules.spec` pattern can guide future oracle specs.
 7. **Collaborative oracle design**: The most powerful oracle form — where market participants stake capital and compete on security assessments — is described in `docs/oracle-game-rules.md` but its full implementation is out of scope for this PoC. The PoC focuses on externally-controlled simple oracles to validate the interface and end-to-end flow.
