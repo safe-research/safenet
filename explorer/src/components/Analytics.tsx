@@ -6,8 +6,9 @@
  * initialized. The Plausible tracker package is bundled with the application
  * — no external script is fetched at runtime.
  *
- * `autoCapturePageviews` (enabled by default) hooks into the History API so
- * all SPA navigations are tracked automatically without manual instrumentation.
+ * `hashBasedRouting` is enabled because the explorer uses hash-based routing.
+ * This makes the tracker fire a pageview on every `hashchange` event so all
+ * in-app navigations are captured automatically.
  *
  * To use a different analytics provider, replace this file with your own
  * implementation. The component is rendered once in the root layout, before

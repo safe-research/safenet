@@ -27,7 +27,7 @@ No new components, environment variables, or dependencies are required.
 
 - **File changed**: `explorer/src/components/Analytics.tsx`
 - **Config option added**: `hashBasedRouting: true` in the `init()` call
-- **Test cases**: existing Vitest unit tests cover the Analytics component; no new test surface is introduced by a boolean flag.
+- **Test cases**: existing Vitest unit tests in `Analytics.test.tsx` have been updated to verify that `hashBasedRouting: true` is correctly passed to the Plausible `init()` call.
 
 ---
 
