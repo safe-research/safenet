@@ -1,5 +1,6 @@
-import { ethAddress, zeroAddress, zeroHash } from "viem";
+import { zeroAddress } from "viem";
 import { describe, expect, it, vi } from "vitest";
+import { makeMachineConfig } from "../../__tests__/data/machine.js";
 import type { SigningClient } from "../../consensus/signing/client.js";
 import type { SafeTransactionPacket } from "../../consensus/verify/safeTx/schemas.js";
 import type { ConsensusState, MachineConfig, MachineStates, SigningState } from "../types.js";
@@ -77,20 +78,15 @@ const CONSENSUS_STATE: ConsensusState = {
 	signatureIdToMessage: {},
 };
 
-const MACHINE_CONFIG: MachineConfig = {
-	account: ethAddress,
+const MACHINE_CONFIG = makeMachineConfig({
 	participantsInfo: [
 		{ address: zeroAddress, activeFrom: 0n },
 		{ address: zeroAddress, activeFrom: 0n },
 		{ address: zeroAddress, activeFrom: 0n },
 	],
-	genesisSalt: zeroHash,
-	keyGenTimeout: 0n,
 	signingTimeout: 20n,
 	blocksPerEpoch: 8n,
-	allowedOracles: [],
-	oracleTimeout: 0n,
-};
+});
 
 // --- Tests ---
 describe("signing timeouts - base conditions", () => {

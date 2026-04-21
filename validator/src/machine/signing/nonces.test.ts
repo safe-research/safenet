@@ -1,10 +1,11 @@
-import { ethAddress, zeroAddress, zeroHash } from "viem";
+import { ethAddress, zeroAddress } from "viem";
 import { describe, expect, it, vi } from "vitest";
+import { makeMachineConfig } from "../../__tests__/data/machine.js";
 import type { SigningClient } from "../../consensus/signing/client.js";
 import type { SafeTransactionPacket } from "../../consensus/verify/safeTx/schemas.js";
 import { toPoint } from "../../frost/math.js";
 import type { NonceCommitmentsEvent } from "../transitions/types.js";
-import type { ConsensusState, MachineConfig, MachineStates, SigningState } from "../types.js";
+import type { ConsensusState, MachineStates, SigningState } from "../types.js";
 import { handleRevealedNonces } from "./nonces.js";
 
 // --- Test Data ---
@@ -50,16 +51,7 @@ const CONSENSUS_STATE: ConsensusState = {
 	},
 };
 
-const MACHINE_CONFIG: MachineConfig = {
-	account: ethAddress,
-	participantsInfo: [],
-	genesisSalt: zeroHash,
-	keyGenTimeout: 0n,
-	signingTimeout: 20n,
-	blocksPerEpoch: 8n,
-	allowedOracles: [],
-	oracleTimeout: 0n,
-};
+const MACHINE_CONFIG = makeMachineConfig({ participantsInfo: [], signingTimeout: 20n, blocksPerEpoch: 8n });
 
 const EVENT: NonceCommitmentsEvent = {
 	id: "event_nonce_commitments",

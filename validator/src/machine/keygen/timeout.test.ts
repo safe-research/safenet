@@ -1,40 +1,23 @@
-import { ethAddress, zeroHash } from "viem";
+import { ethAddress } from "viem";
 import { entryPoint06Address, entryPoint07Address, entryPoint08Address } from "viem/account-abstraction";
 import { describe, expect, it, vi } from "vitest";
-import { makeGroupSetup, makeKeyGenSetup } from "../../__tests__/data/machine.js";
+import { makeGroupSetup, makeKeyGenSetup, makeMachineConfig } from "../../__tests__/data/machine.js";
 import type { KeyGenClient } from "../../consensus/keyGen/client.js";
 import type { SafenetProtocol } from "../../consensus/protocol/types.js";
-import type { MachineConfig, MachineStates, RolloverState } from "../types.js";
+import type { MachineStates, RolloverState } from "../types.js";
 import { checkKeyGenTimeouts } from "./timeouts.js";
 
 // --- Test Data ---
-const MACHINE_CONFIG: MachineConfig = {
-	account: ethAddress,
+const MACHINE_CONFIG = makeMachineConfig({
 	participantsInfo: [
-		{
-			address: entryPoint06Address,
-			activeFrom: 0n,
-		},
-		{
-			address: entryPoint07Address,
-			activeFrom: 0n,
-		},
-		{
-			address: entryPoint08Address,
-			activeFrom: 0n,
-		},
-		{
-			address: ethAddress,
-			activeFrom: 0n,
-		},
+		{ address: entryPoint06Address, activeFrom: 0n },
+		{ address: entryPoint07Address, activeFrom: 0n },
+		{ address: entryPoint08Address, activeFrom: 0n },
+		{ address: ethAddress, activeFrom: 0n },
 	],
-	genesisSalt: zeroHash,
-	keyGenTimeout: 0n,
 	signingTimeout: 20n,
 	blocksPerEpoch: 10n,
-	allowedOracles: [],
-	oracleTimeout: 0n,
-};
+});
 
 // --- Tests ---
 describe("key gen timeouts", () => {

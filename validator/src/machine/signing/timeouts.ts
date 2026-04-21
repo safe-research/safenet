@@ -171,7 +171,7 @@ const checkSigningRequestTimeout = (
 				],
 			};
 		}
-		case "wait_for_oracle": {
+		case "waiting_for_oracle": {
 			// Oracle did not respond in time — drop the signing request silently
 			return {
 				signing: [message, undefined],

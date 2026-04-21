@@ -49,11 +49,10 @@ export const handleOracleTransactionProposed = async (
 		signing: [
 			message,
 			{
-				id: "wait_for_oracle",
-				oracle: event.oracle,
+				id: "waiting_for_request",
 				packet,
 				signers,
-				deadline: event.block + machineConfig.oracleTimeout,
+				deadline: event.block + machineConfig.signingTimeout,
 			},
 		],
 	};

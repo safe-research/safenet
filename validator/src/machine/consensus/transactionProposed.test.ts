@@ -1,10 +1,11 @@
-import { ethAddress, zeroAddress, zeroHash } from "viem";
+import { zeroAddress } from "viem";
 import { describe, expect, it, vi } from "vitest";
+import { makeMachineConfig } from "../../__tests__/data/machine.js";
 import type { SafenetProtocol } from "../../consensus/protocol/types.js";
 import type { SigningClient } from "../../consensus/signing/client.js";
 import type { VerificationEngine } from "../../consensus/verify/engine.js";
 import type { TransactionProposedEvent } from "../transitions/types.js";
-import type { ConsensusState, MachineConfig } from "../types.js";
+import type { ConsensusState } from "../types.js";
 import { handleTransactionProposed } from "./transactionProposed.js";
 
 // --- Test Data ---
@@ -17,33 +18,7 @@ const CONSENSUS_STATE: ConsensusState = {
 	signatureIdToMessage: {},
 };
 
-const MACHINE_CONFIG: MachineConfig = {
-	account: ethAddress,
-	participantsInfo: [
-		{
-			address: zeroAddress,
-			activeFrom: 0n,
-		},
-		{
-			address: zeroAddress,
-			activeFrom: 0n,
-		},
-		{
-			address: zeroAddress,
-			activeFrom: 0n,
-		},
-		{
-			address: zeroAddress,
-			activeFrom: 0n,
-		},
-	],
-	genesisSalt: zeroHash,
-	keyGenTimeout: 0n,
-	signingTimeout: 20n,
-	blocksPerEpoch: 0n,
-	allowedOracles: [],
-	oracleTimeout: 0n,
-};
+const MACHINE_CONFIG = makeMachineConfig({ signingTimeout: 20n });
 
 const EVENT: TransactionProposedEvent = {
 	id: "event_transaction_proposed",

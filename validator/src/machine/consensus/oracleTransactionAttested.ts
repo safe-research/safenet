@@ -27,7 +27,7 @@ export const handleOracleTransactionAttested = async (
 
 	return {
 		consensus: {
-			signatureIdToMessage: [status.signatureId],
+			signatureIdToMessage: [status.signatureId, undefined],
 		},
 		signing: [message],
 	};

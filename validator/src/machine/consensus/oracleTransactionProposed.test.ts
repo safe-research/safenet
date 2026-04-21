@@ -1,10 +1,11 @@
-import { ethAddress, zeroAddress, zeroHash } from "viem";
+import { zeroAddress } from "viem";
 import { describe, expect, it, vi } from "vitest";
+import { makeMachineConfig } from "../../__tests__/data/machine.js";
 import type { SafenetProtocol } from "../../consensus/protocol/types.js";
 import type { SigningClient } from "../../consensus/signing/client.js";
 import type { VerificationEngine } from "../../consensus/verify/engine.js";
 import type { OracleTransactionProposedEvent } from "../transitions/types.js";
-import type { ConsensusState, MachineConfig } from "../types.js";
+import type { ConsensusState } from "../types.js";
 import { handleOracleTransactionProposed } from "./oracleTransactionProposed.js";
 
 // --- Test Data ---
@@ -19,21 +20,7 @@ const CONSENSUS_STATE: ConsensusState = {
 	signatureIdToMessage: {},
 };
 
-const MACHINE_CONFIG: MachineConfig = {
-	account: ethAddress,
-	participantsInfo: [
-		{ address: zeroAddress, activeFrom: 0n },
-		{ address: zeroAddress, activeFrom: 0n },
-		{ address: zeroAddress, activeFrom: 0n },
-		{ address: zeroAddress, activeFrom: 0n },
-	],
-	genesisSalt: zeroHash,
-	keyGenTimeout: 0n,
-	signingTimeout: 20n,
-	blocksPerEpoch: 0n,
-	allowedOracles: [ORACLE_ADDRESS],
-	oracleTimeout: 30n,
-};
+const MACHINE_CONFIG = makeMachineConfig({ signingTimeout: 20n, allowedOracles: [ORACLE_ADDRESS], oracleTimeout: 30n });
 
 const EVENT: OracleTransactionProposedEvent = {
 	id: "event_oracle_transaction_proposed",
@@ -145,7 +132,7 @@ describe("oracle transaction proposed", () => {
 		});
 	});
 
-	it("should transition to wait_for_oracle after verifying oracle transaction", async () => {
+	it("should transition to waiting_for_request after verifying oracle transaction", async () => {
 		const protocol: SafenetProtocol = {
 			chainId: () => 23n,
 			consensus: () => zeroAddress,
@@ -191,11 +178,10 @@ describe("oracle transaction proposed", () => {
 		expect(diff.signing).toStrictEqual([
 			"0x5af35afe",
 			{
-				id: "wait_for_oracle",
-				oracle: ORACLE_ADDRESS,
+				id: "waiting_for_request",
 				packet,
 				signers: [3n, 7n],
-				deadline: 32n, // block(2) + oracleTimeout(30)
+				deadline: 22n, // block(2) + signingTimeout(20)
 			},
 		]);
 		expect(verify).toBeCalledTimes(1);

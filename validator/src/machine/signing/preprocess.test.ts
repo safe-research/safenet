@@ -1,21 +1,18 @@
-import { ethAddress, zeroHash } from "viem";
+import { type Address, ethAddress } from "viem";
 import { describe, expect, it, vi } from "vitest";
+import { makeMachineConfig } from "../../__tests__/data/machine.js";
 import type { SigningClient } from "../../consensus/signing/client.js";
 import type { NonceCommitmentsHashEvent } from "../transitions/types.js";
-import type { ConsensusState, MachineConfig } from "../types.js";
+import type { ConsensusState } from "../types.js";
 import { handlePreprocess } from "./preprocess.js";
 
 // --- Test Data ---
-const MACHINE_CONFIG: MachineConfig = {
-	account: "0x0000000000000000000000000000000000005aFE",
+const MACHINE_CONFIG = makeMachineConfig({
+	account: "0x0000000000000000000000000000000000005aFE" as Address,
 	participantsInfo: [],
-	genesisSalt: zeroHash,
-	keyGenTimeout: 0n,
 	signingTimeout: 20n,
 	blocksPerEpoch: 8n,
-	allowedOracles: [],
-	oracleTimeout: 0n,
-};
+});
 const CONSENSUS_STATE: ConsensusState = {
 	activeEpoch: 0n,
 	groupPendingNonces: {

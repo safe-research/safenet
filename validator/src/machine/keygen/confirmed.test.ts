@@ -1,7 +1,7 @@
-import { keccak256, zeroHash } from "viem";
+import { keccak256 } from "viem";
 import { entryPoint06Address, entryPoint07Address, entryPoint08Address } from "viem/account-abstraction";
 import { describe, expect, it, vi } from "vitest";
-import { TEST_POINT } from "../../__tests__/data/machine.js";
+import { makeMachineConfig, TEST_POINT } from "../../__tests__/data/machine.js";
 import type { KeyGenClient } from "../../consensus/keyGen/client.js";
 import type { SafenetProtocol } from "../../consensus/protocol/types.js";
 import type { SigningClient } from "../../consensus/signing/client.js";
@@ -9,7 +9,7 @@ import type { VerificationEngine } from "../../consensus/verify/engine.js";
 import type { EpochRolloverPacket } from "../../consensus/verify/rollover/schemas.js";
 import { jsonReplacer } from "../../utils/json.js";
 import type { KeyGenConfirmedEvent } from "../transitions/types.js";
-import type { ConsensusState, MachineConfig, MachineStates, RolloverState, SigningState } from "../types.js";
+import type { ConsensusState, MachineStates, RolloverState, SigningState } from "../types.js";
 import { handleKeyGenConfirmed } from "./confirmed.js";
 
 // --- Test Data ---
@@ -52,29 +52,17 @@ const CONSENSUS_STATE: ConsensusState = {
 	signatureIdToMessage: {},
 };
 
-const MACHINE_CONFIG: MachineConfig = {
+const MACHINE_CONFIG = makeMachineConfig({
 	account: entryPoint06Address,
 	participantsInfo: [
-		{
-			address: entryPoint06Address,
-			activeFrom: 0n,
-		},
-		{
-			address: entryPoint07Address,
-			activeFrom: 0n,
-		},
-		{
-			address: entryPoint08Address,
-			activeFrom: 0n,
-		},
+		{ address: entryPoint06Address, activeFrom: 0n },
+		{ address: entryPoint07Address, activeFrom: 0n },
+		{ address: entryPoint08Address, activeFrom: 0n },
 	],
-	genesisSalt: zeroHash,
 	keyGenTimeout: 25n,
 	signingTimeout: 20n,
 	blocksPerEpoch: 2n,
-	allowedOracles: [],
-	oracleTimeout: 0n,
-};
+});
 
 const EVENT: KeyGenConfirmedEvent = {
 	id: "event_key_gen_confirmed",

@@ -1,10 +1,9 @@
-import { zeroHash } from "viem";
 import { entryPoint06Address, entryPoint07Address, entryPoint08Address } from "viem/account-abstraction";
 import { describe, expect, it, vi } from "vitest";
-import { TEST_POINT } from "../../__tests__/data/machine.js";
+import { makeMachineConfig, TEST_POINT } from "../../__tests__/data/machine.js";
 import type { KeyGenClient } from "../../consensus/keyGen/client.js";
 import type { KeyGenSecretSharedEvent } from "../transitions/types.js";
-import type { MachineConfig, MachineStates } from "../types.js";
+import type { MachineStates } from "../types.js";
 import { handleKeyGenSecretShared } from "./secretShares.js";
 
 // --- Test Data ---
@@ -20,29 +19,17 @@ const MACHINE_STATES: MachineStates = {
 	signing: {},
 };
 
-const MACHINE_CONFIG: MachineConfig = {
+const MACHINE_CONFIG = makeMachineConfig({
 	account: entryPoint06Address,
 	participantsInfo: [
-		{
-			address: entryPoint06Address,
-			activeFrom: 0n,
-		},
-		{
-			address: entryPoint07Address,
-			activeFrom: 0n,
-		},
-		{
-			address: entryPoint08Address,
-			activeFrom: 0n,
-		},
+		{ address: entryPoint06Address, activeFrom: 0n },
+		{ address: entryPoint07Address, activeFrom: 0n },
+		{ address: entryPoint08Address, activeFrom: 0n },
 	],
-	genesisSalt: zeroHash,
 	keyGenTimeout: 25n,
 	signingTimeout: 20n,
 	blocksPerEpoch: 2n,
-	allowedOracles: [],
-	oracleTimeout: 0n,
-};
+});
 
 const EVENT: KeyGenSecretSharedEvent = {
 	id: "event_key_gen_secret_shared",

@@ -70,7 +70,10 @@ export class ValidatorService {
 		const check = buildSafeTransactionCheck();
 		verificationHandlers.set("safe_transaction_packet", new SafeTransactionHandler(check, metrics));
 		verificationHandlers.set("epoch_rollover_packet", new EpochRolloverHandler());
-		verificationHandlers.set("oracle_transaction_packet", new OracleTransactionHandler([], metrics));
+		verificationHandlers.set(
+			"oracle_transaction_packet",
+			new OracleTransactionHandler(config.allowedOracles ?? [], metrics),
+		);
 		const verificationEngine = new VerificationEngine(verificationHandlers);
 		const actionStorage = new SqliteActionQueue(database);
 		const txStorage = new SqliteTxStorage(database);

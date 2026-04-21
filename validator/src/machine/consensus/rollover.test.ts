@@ -1,35 +1,22 @@
-import { ethAddress, zeroAddress, zeroHash } from "viem";
+import { type Address, ethAddress, zeroAddress } from "viem";
 import { describe, expect, it, vi } from "vitest";
-import { makeGroupSetup, makeKeyGenSetup } from "../../__tests__/data/machine.js";
+import { makeGroupSetup, makeKeyGenSetup, makeMachineConfig } from "../../__tests__/data/machine.js";
 import type { KeyGenClient } from "../../consensus/keyGen/client.js";
 import type { SafenetProtocol } from "../../consensus/protocol/types.js";
-import type { ConsensusState, MachineConfig, MachineStates, SigningState } from "../types.js";
+import type { ConsensusState, MachineStates, SigningState } from "../types.js";
 import { checkEpochRollover } from "./rollover.js";
 
 // --- Test Data ---
-const MACHINE_CONFIG: MachineConfig = {
-	account: "0x0000000000000000000000000000000000000001",
+const MACHINE_CONFIG = makeMachineConfig({
+	account: "0x0000000000000000000000000000000000000001" as Address,
 	participantsInfo: [
-		{
-			address: "0x0000000000000000000000000000000000000001",
-			activeFrom: 0n,
-		},
-		{
-			address: "0x0000000000000000000000000000000000000002",
-			activeFrom: 0n,
-		},
-		{
-			address: "0x0000000000000000000000000000000000000003",
-			activeFrom: 1n,
-		},
+		{ address: "0x0000000000000000000000000000000000000001", activeFrom: 0n },
+		{ address: "0x0000000000000000000000000000000000000002", activeFrom: 0n },
+		{ address: "0x0000000000000000000000000000000000000003", activeFrom: 1n },
 	],
-	genesisSalt: zeroHash,
 	keyGenTimeout: 20n,
-	signingTimeout: 0n,
 	blocksPerEpoch: 10n,
-	allowedOracles: [],
-	oracleTimeout: 0n,
-};
+});
 
 const PARTICIPANTS = MACHINE_CONFIG.participantsInfo.map((i) => i.address);
 

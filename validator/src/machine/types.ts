@@ -96,7 +96,7 @@ export type SigningState = Readonly<
 					deadline: bigint;
 			  }
 			| {
-					id: "wait_for_oracle";
+					id: "waiting_for_oracle";
 					oracle: Address;
 					signers: readonly Address[];
 					deadline: bigint;

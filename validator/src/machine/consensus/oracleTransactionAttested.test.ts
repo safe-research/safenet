@@ -46,7 +46,7 @@ const PACKET: OracleTransactionPacket = {
 const MESSAGE = oracleTxPacketHash(PACKET);
 
 const INVALID_SIGNING_STATE: SigningState = {
-	id: "wait_for_oracle",
+	id: "waiting_for_oracle",
 	oracle: ORACLE_ADDRESS,
 	packet: PACKET,
 	signers: [zeroAddress],
@@ -101,7 +101,7 @@ describe("oracle transaction attested", () => {
 		const diff = await handleOracleTransactionAttested(PROTOCOL, MACHINE_STATES, EVENT);
 		expect(diff.actions).toBeUndefined();
 		expect(diff.rollover).toBeUndefined();
-		expect(diff.consensus).toStrictEqual({ signatureIdToMessage: ["0x5af35af3"] });
+		expect(diff.consensus).toStrictEqual({ signatureIdToMessage: ["0x5af35af3", undefined] });
 		expect(diff.signing).toStrictEqual([MESSAGE]);
 	});
 });
