@@ -71,7 +71,7 @@ describe("Analytics", () => {
 		vi.stubEnv("VITE_PLAUSIBLE_DOMAIN", "explorer.safenet.io");
 		const { default: Analytics } = await import("./Analytics.tsx");
 		render(<Analytics />);
-		expect(mockTrack).toHaveBeenCalledWith("pageview", { url: `${window.location.origin}/#/` });
+		expect(mockTrack).toHaveBeenCalledWith("pageview");
 	});
 
 	it("tracks a new pageview on navigation", async () => {
@@ -83,7 +83,7 @@ describe("Analytics", () => {
 		mockUseRouterState.mockReturnValue("/#/settings");
 		rerender(<Analytics />);
 		expect(mockTrack).toHaveBeenCalledTimes(2);
-		expect(mockTrack).toHaveBeenLastCalledWith("pageview", { url: `${window.location.origin}/#/settings` });
+		expect(mockTrack).toHaveBeenLastCalledWith("pageview");
 	});
 
 	it("does not track pageviews when domain is not set", async () => {
