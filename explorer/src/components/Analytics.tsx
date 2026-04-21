@@ -34,9 +34,8 @@ if (domain) {
 export default function Analytics() {
 	const href = useRouterState({ select: (s) => s.location.href });
 
-	// biome-ignore lint/correctness/useExhaustiveDependencies: href is not used inside the callback but is the intended trigger
 	useEffect(() => {
-		if (domain) track("pageview");
+		if (domain) track("pageview", { url: `${window.location.origin}${href}` });
 	}, [href]);
 
 	return null;
