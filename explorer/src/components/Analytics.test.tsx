@@ -86,6 +86,17 @@ describe("Analytics", () => {
 		expect(mockTrack).toHaveBeenLastCalledWith("pageview", {});
 	});
 
+	it("does not track a duplicate pageview on re-render without navigation", async () => {
+		vi.stubEnv("VITE_PLAUSIBLE_DOMAIN", "explorer.safenet.io");
+		const { default: Analytics } = await import("./Analytics.tsx");
+		const { rerender } = render(<Analytics />);
+		expect(mockTrack).toHaveBeenCalledTimes(1);
+
+		rerender(<Analytics />);
+		rerender(<Analytics />);
+		expect(mockTrack).toHaveBeenCalledTimes(1);
+	});
+
 	it("does not track pageviews when domain is not set", async () => {
 		vi.stubEnv("VITE_PLAUSIBLE_DOMAIN", "");
 		const { default: Analytics } = await import("./Analytics.tsx");
