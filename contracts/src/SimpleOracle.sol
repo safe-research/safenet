@@ -37,6 +37,11 @@ contract SimpleOracle is IOracle {
     error NotApprover();
 
     /**
+     * @notice Thrown when postRequest is called for a request that is already pending.
+     */
+    error RequestAlreadyPending();
+
+    /**
      * @notice Thrown when approve or reject is called for a request that has not been posted.
      */
     error RequestNotPending();
@@ -61,6 +66,7 @@ contract SimpleOracle is IOracle {
      * @inheritdoc IOracle
      */
     function postRequest(bytes32 requestId) external {
+        require($proposers[requestId] == address(0), RequestAlreadyPending());
         $proposers[requestId] = msg.sender;
     }
 

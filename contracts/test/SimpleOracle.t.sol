@@ -27,6 +27,15 @@ contract SimpleOracleTest is Test {
         oracle.approve(REQUEST_ID);
     }
 
+    function test_PostRequest_AlreadyPending_Reverts() public {
+        vm.prank(requester);
+        oracle.postRequest(REQUEST_ID);
+
+        vm.expectRevert(SimpleOracle.RequestAlreadyPending.selector);
+        vm.prank(requester);
+        oracle.postRequest(REQUEST_ID);
+    }
+
     function test_Approve_EmitsOracleResult_True() public {
         vm.prank(requester);
         oracle.postRequest(REQUEST_ID);
