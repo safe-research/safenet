@@ -36,7 +36,7 @@ export default function Analytics() {
 
 	// biome-ignore lint/correctness/useExhaustiveDependencies: href is intentionally a trigger — the effect re-runs on navigation but does not need href's value inside the callback
 	useEffect(() => {
-		if (domain) track("pageview");
+		if (domain) track("pageview", {});
 	}, [href]);
 
 	return null;
