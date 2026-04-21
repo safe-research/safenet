@@ -178,6 +178,34 @@ export type TransactionAttestedEvent = {
 	};
 };
 
+export type OracleTransactionProposedEvent = {
+	id: "event_oracle_transaction_proposed";
+	block: bigint;
+	index: number;
+	safeTxHash: Hex;
+	chainId: bigint;
+	safe: Address;
+	epoch: bigint;
+	oracle: Address;
+	transaction: SafeTransaction;
+};
+
+export type OracleTransactionAttestedEvent = {
+	id: "event_oracle_transaction_attested";
+	block: bigint;
+	index: number;
+	safeTxHash: Hex;
+	chainId: bigint;
+	safe: Address;
+	epoch: bigint;
+	oracle: Address;
+	signatureId: SignatureId;
+	attestation: {
+		z: bigint;
+		r: FrostPoint;
+	};
+};
+
 export type EventTransition =
 	| KeyGenEvent
 	| KeyGenCommittedEvent
@@ -193,6 +221,8 @@ export type EventTransition =
 	| EpochProposedEvent
 	| EpochStagedEvent
 	| TransactionProposedEvent
-	| TransactionAttestedEvent;
+	| TransactionAttestedEvent
+	| OracleTransactionProposedEvent
+	| OracleTransactionAttestedEvent;
 
 export type StateTransition = NewBlock | EventTransition;

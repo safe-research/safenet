@@ -32,6 +32,8 @@ const MACHINE_CONFIG: MachineConfig = {
 	keyGenTimeout: 0n,
 	signingTimeout: 20n,
 	blocksPerEpoch: 10n,
+	allowedOracles: [],
+	oracleTimeout: 0n,
 };
 
 // --- Tests ---

@@ -16,6 +16,7 @@ import { SqliteActionQueue, SqliteTxStorage } from "../consensus/protocol/sqlite
 import { SigningClient } from "../consensus/signing/client.js";
 import { SqliteClientStorage } from "../consensus/storage/sqlite.js";
 import { type PacketHandler, type Typed, VerificationEngine } from "../consensus/verify/engine.js";
+import { OracleTransactionHandler } from "../consensus/verify/oracleTx/handler.js";
 import { EpochRolloverHandler } from "../consensus/verify/rollover/handler.js";
 import { SafeTransactionHandler } from "../consensus/verify/safeTx/handler.js";
 import { SqliteStateStorage } from "../machine/storage/sqlite.js";
@@ -69,6 +70,7 @@ export class ValidatorService {
 		const check = buildSafeTransactionCheck();
 		verificationHandlers.set("safe_transaction_packet", new SafeTransactionHandler(check, metrics));
 		verificationHandlers.set("epoch_rollover_packet", new EpochRolloverHandler());
+		verificationHandlers.set("oracle_transaction_packet", new OracleTransactionHandler([], metrics));
 		const verificationEngine = new VerificationEngine(verificationHandlers);
 		const actionStorage = new SqliteActionQueue(database);
 		const txStorage = new SqliteTxStorage(database);

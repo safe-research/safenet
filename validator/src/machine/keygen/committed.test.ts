@@ -38,6 +38,8 @@ const MACHINE_CONFIG: MachineConfig = {
 	keyGenTimeout: 25n,
 	signingTimeout: 20n,
 	blocksPerEpoch: 2n,
+	allowedOracles: [],
+	oracleTimeout: 0n,
 };
 
 const EVENT: KeyGenCommittedEvent = {

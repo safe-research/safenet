@@ -13,6 +13,8 @@ const MACHINE_CONFIG: MachineConfig = {
 	keyGenTimeout: 0n,
 	signingTimeout: 20n,
 	blocksPerEpoch: 8n,
+	allowedOracles: [],
+	oracleTimeout: 0n,
 };
 const CONSENSUS_STATE: ConsensusState = {
 	activeEpoch: 0n,

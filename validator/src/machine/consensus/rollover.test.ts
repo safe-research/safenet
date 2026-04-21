@@ -27,6 +27,8 @@ const MACHINE_CONFIG: MachineConfig = {
 	keyGenTimeout: 20n,
 	signingTimeout: 0n,
 	blocksPerEpoch: 10n,
+	allowedOracles: [],
+	oracleTimeout: 0n,
 };
 
 const PARTICIPANTS = MACHINE_CONFIG.participantsInfo.map((i) => i.address);

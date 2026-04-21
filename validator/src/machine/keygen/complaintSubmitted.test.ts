@@ -35,6 +35,8 @@ const MACHINE_CONFIG: MachineConfig = {
 	keyGenTimeout: 10n,
 	signingTimeout: 20n,
 	blocksPerEpoch: 10n,
+	allowedOracles: [],
+	oracleTimeout: 0n,
 };
 
 const makeProtocol = (): SafenetProtocol =>
