@@ -33,7 +33,7 @@ describe("Analytics", () => {
 		vi.stubEnv("VITE_PLAUSIBLE_DOMAIN", "explorer.safenet.io");
 		await import("./Analytics.tsx");
 		expect(mockInit).toHaveBeenCalledOnce();
-		expect(mockInit).toHaveBeenCalledWith({ domain: "explorer.safenet.io", autoCapturePageviews: false });
+		expect(mockInit).toHaveBeenCalledWith({ domain: "explorer.safenet.io", hashBasedRouting: true, autoCapturePageviews: false });
 	});
 
 	it("passes a custom endpoint when VITE_PLAUSIBLE_ENDPOINT is set", async () => {
@@ -42,6 +42,7 @@ describe("Analytics", () => {
 		await import("./Analytics.tsx");
 		expect(mockInit).toHaveBeenCalledWith({
 			domain: "explorer.safenet.io",
+			hashBasedRouting: true,
 			autoCapturePageviews: false,
 			endpoint: "https://plausible.example.com/api/event",
 		});
