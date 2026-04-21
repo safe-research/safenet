@@ -19,7 +19,7 @@ contract ConsensusTest is Test {
 
     FROSTGroupId.T immutable GENESIS_GROUP = FROSTGroupId.T.wrap(keccak256("genesisGroup"));
 
-    address constant SAFE = address(0x5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe);
+    address constant SAFE = address(0x5afe5afE5afE5afE5afE5aFe5aFe5Afe5Afe5AfE);
 
     Vm.Wallet public group;
 
