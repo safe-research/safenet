@@ -7,12 +7,11 @@ Component: `all`
 
 This feature introduces an oracle framework to Safenet, enabling external contracts to participate in transaction security checks. Rather than relying solely on deterministic validator-side logic, oracles allow market participants and off-chain data sources to express security judgements that validators then attest to using FROST threshold signatures.
 
-The implementation is structured in four independently releasable PRs:
+The implementation is structured in three independently releasable PRs:
 
 1. **PR 1 — Oracle contract interface + Consensus extension**: Define `IOracle.sol`, add `OracleTransactionProposal` as a new FROST-signed package type in `Consensus.sol`.
 2. **PR 2 — Validator new package type** (parallel to PR 1): New `oracle_transaction_packet` handler, EIP-712 hashing, and machine states for `OracleTransactionProposed` / `OracleTransactionAttested` events.
 3. **PR 3 — Validator oracle event integration** (depends on PR 2): Oracle event listener, `wait_for_oracle` signing state with configurable timeout, and `OracleResult` machine handler.
-4. **PR 4 — PoC oracle implementations + game rules** (parallel to PR 2/3, depends on PR 1): Reference oracle contracts, oracle game rules documentation, and end-to-end integration test.
 
 ---
 
@@ -280,7 +279,7 @@ Add `IOracle.OracleResult` ABI event definition for use by the watcher.
 - Add `allowedOracles: Address[]` field to `MachineConfig`.
 - Add `oracleTimeout: bigint` field to `MachineConfig`, sourced from env var `ORACLE_TIMEOUT_BLOCKS` (blocks to wait for an oracle result before dropping the signing request).
 
-### Oracle Game Rules (new doc: `docs/oracle-game-rules.md`)
+### Oracle Game Rules
 
 | Rule | Description |
 |------|-------------|
@@ -379,19 +378,6 @@ Add `IOracle.OracleResult` ABI event definition for use by the watcher.
 - `validator/src/machine/transitions/onchain.ts` — map `OracleResult` log to transition
 - `validator/src/service/service.ts` — add oracle contract(s) to watcher subscription; add `oracleTimeout` to `MachineConfig`
 
----
-
-### Phase 4 — Oracle Game Rules + PoC Documentation (PR 4, parallel to PR 2/3, depends on PR 1)
-
-**What this covers:**
-- Formal documentation of oracle game rules (request identity, finality, timeout, validator allowlist)
-- Survey of oracle types: deterministic (allowlist/blocklist), collaborative (multi-sig veto), time-locked (challenge period), market-based (future)
-- End-to-end integration test demonstrating the full oracle flow using `AlwaysApproveOracle`
-
-**Files touched:**
-- `docs/oracle-game-rules.md` — new: game rules, oracle taxonomy, design rationale
-- `contracts/script/OracleDemo.s.sol` — Forge script demonstrating oracle flow end-to-end
-- `validator/src/consensus/integration.test.ts` — extend with oracle integration test scenario
 
 ---
 
@@ -403,4 +389,4 @@ Add `IOracle.OracleResult` ABI event definition for use by the watcher.
 4. **Oracle access control**: `Consensus.sol` calls `oracle.postRequest(requestId, proposer)` passing the original `msg.sender`. The oracle emits `proposer` in `OracleResult`, allowing validators to filter results. Whether the oracle restricts which proposers it accepts is up to the oracle implementation.
 5. **Oracle result storage**: Oracle contracts are not required to store results on-chain. Validators only need the event. If a validator comes online late and misses the event, it may need to query historical logs. The watcher's backfill mechanism handles this.
 6. **Certora specs**: Formal verification of the new `Consensus.sol` oracle paths is deferred to a follow-up. The existing `StakingRules.spec` pattern can guide future oracle specs.
-7. **Collaborative oracle design**: The most powerful oracle form — where market participants stake capital and compete on security assessments — is described in `docs/oracle-game-rules.md` but its full implementation is out of scope for this PoC. The PoC focuses on externally-controlled simple oracles to validate the interface and end-to-end flow.
+7. **Oracle game rules and taxonomy (next step)**: Defining formal rules for oracle request identity, finality, and validator allowlist enforcement — as well as a survey of oracle types (deterministic, collaborative, time-locked, market-based) — requires dedicated research and is out of scope for these three PRs. This should be pursued as a follow-up once the interface is live and experience with real oracle implementations informs the design.
