@@ -110,6 +110,7 @@ export class ValidatorService {
 			config,
 			watcherConfig,
 			logger,
+			metrics,
 			onTransition: (t) => {
 				this.#stateMachine.transition(t);
 				// If new block:

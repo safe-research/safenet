@@ -5,6 +5,7 @@ import { ALL_EVENTS } from "../../types/abis.js";
 import type { ProtocolConfig } from "../../types/interfaces.js";
 import { formatError } from "../../utils/errors.js";
 import type { Logger } from "../../utils/logging.js";
+import type { Metrics } from "../../utils/metrics.js";
 import { type Stop, type WatchParams, watchBlocksAndEvents } from "../../watcher/index.js";
 import { logToTransition } from "./onchain.js";
 import type { StateTransition } from "./types.js";
@@ -33,6 +34,7 @@ export type WatcherConfig = Prettify<
 
 export class OnchainTransitionWatcher {
 	#logger: Logger;
+	#metrics: Metrics;
 	#config: Config;
 	#watcherConfig: WatcherConfig;
 	#db: Database;
@@ -46,6 +48,7 @@ export class OnchainTransitionWatcher {
 		config,
 		watcherConfig,
 		logger,
+		metrics,
 		onTransition,
 	}: {
 		database: Database;
@@ -54,11 +57,13 @@ export class OnchainTransitionWatcher {
 		watcherConfig: WatcherConfig;
 		onTransition: (transition: StateTransition) => void;
 		logger: Logger;
+		metrics: Metrics;
 	}) {
 		this.#db = database;
 		this.#config = config;
 		this.#watcherConfig = watcherConfig;
 		this.#logger = logger;
+		this.#metrics = metrics;
 		this.#publicClient = publicClient;
 		this.#onTransition = onTransition;
 
@@ -125,6 +130,8 @@ export class OnchainTransitionWatcher {
 			handler: (update) => {
 				switch (update.type) {
 					case "watcher_update_warp_to_block": {
+						this.#metrics.blockNumber.labels({ status: "seen" }).set(Number(update.toBlock));
+						this.#metrics.eventIndex.labels({ status: "seen" }).set(-1);
 						// Note that we don't explicitely handle warping in our state machine,
 						// instead if any events are found in the log range, the state machine is
 						// updated to the correct block accordingly.
@@ -132,14 +139,18 @@ export class OnchainTransitionWatcher {
 						break;
 					}
 					case "watcher_update_uncle_block": {
+						this.#metrics.reorgs.inc();
 						this.#logger.warn("Reorg detected, but currently not supported.", { update });
 						break;
 					}
 					case "watcher_update_new_block": {
+						this.#metrics.blockNumber.labels({ status: "seen" }).set(Number(update.blockNumber));
+						this.#metrics.eventIndex.labels({ status: "seen" }).set(-1);
 						this.handleTransition({ id: "block_new", block: update.blockNumber });
 						break;
 					}
 					case "watcher_update_new_logs": {
+						this.#metrics.eventIndex.labels({ status: "seen" }).set(update.logs.at(-1)?.logIndex ?? -1);
 						for (const log of update.logs) {
 							this.handleTransition(logToTransition(log));
 						}

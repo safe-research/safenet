@@ -146,8 +146,8 @@ export class SafenetStateMachine {
 				this.#metrics.transitions.labels({ result: "failure" }).inc();
 			})
 			.finally(() => {
-				this.#metrics.blockNumber.set(Number(this.#lastProcessedBlock));
-				this.#metrics.eventIndex.set(this.#lastProcessedIndex);
+				this.#metrics.blockNumber.labels({ status: "processed" }).set(Number(this.#lastProcessedBlock));
+				this.#metrics.eventIndex.labels({ status: "processed" }).set(this.#lastProcessedIndex);
 				this.#transitionQueue.dequeue();
 				this.#currentTransition = undefined;
 				this.checkNextTransition();

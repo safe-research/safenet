@@ -1,6 +1,9 @@
+import { Fragment } from "react";
 import type { Address } from "viem";
 import { shortAddress } from "@/lib/address";
 import type { ValidatorInfo } from "@/lib/validators/info";
+import { CopyButton } from "./CopyButton";
+import { InfoPopover } from "./InfoPopover";
 
 export const createMapInfo =
 	(validatorInfoMap: Map<Address, ValidatorInfo> | null | undefined) => (suffix: string) => (address: Address) =>
@@ -18,18 +21,31 @@ export function ValidatorList({
 	completed: boolean;
 }) {
 	const activeSet = new Set(active);
+
+	const activeItems = active
+		.map((address) => ({ address, label: mapInfo("✅")(address) }))
+		.sort((a, b) => a.label.localeCompare(b.label));
+
+	const inactiveItems = all
+		.filter((address) => !activeSet.has(address))
+		.map((address) => ({ address, label: mapInfo(completed ? "❌" : "⏳")(address) }))
+		.sort((a, b) => a.label.localeCompare(b.label));
+
+	const allItems = [...activeItems, ...inactiveItems];
+
 	return (
 		<>
-			{active
-				.map(mapInfo("✅"))
-				.sort()
-				.concat(
-					all
-						.filter((v) => !activeSet.has(v))
-						.map(mapInfo(completed ? "❌" : "⏳"))
-						.sort(),
-				)
-				.join(", ")}
+			{allItems.map((item, index) => (
+				<Fragment key={item.address}>
+					<InfoPopover trigger={<span className="cursor-pointer underline decoration-dotted">{item.label}</span>}>
+						<div className="flex items-center gap-1">
+							<span className="font-mono text-xs">{item.address}</span>
+							<CopyButton value={item.address} />
+						</div>
+					</InfoPopover>
+					{index < allItems.length - 1 && ", "}
+				</Fragment>
+			))}
 		</>
 	);
 }
