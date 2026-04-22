@@ -18,6 +18,7 @@ remappings = [
   "@test/=test/",
   "@forge-std/=lib/forge-std/src/",
   "@oz/=lib/openzeppelin-contracts/contracts/",
+  "@safe/=lib/safe-smart-account/contracts/",
 ]
 auto_detect_remappings = false
 
