@@ -6,59 +6,37 @@ import {FROST} from "@/libraries/FROST.sol";
 import {SafeTransaction} from "@/libraries/SafeTransaction.sol";
 import {Secp256k1} from "@/libraries/Secp256k1.sol";
 import {Enum} from "@safe/interfaces/Enum.sol";
-import {BaseGuard} from "@safe/examples/guards/BaseGuard.sol";
+import {BaseTransactionGuard} from "@safe/base/GuardManager.sol";
 import {ISafe} from "@safe/interfaces/ISafe.sol";
 
 /**
  * @title SafenetGuard
- * @notice Safe Transaction Guard and Module Guard that gates every Safe transaction behind
- *         Safenet threshold-signature attestation.
+ * @notice Safe Transaction Guard that gates every Safe transaction behind Safenet
+ *         threshold-signature attestation.
  *
  * @dev ## Security model
  *
  *      The Safenet Consensus contract lives exclusively on Gnosis Chain. Because cross-chain
- *      calls are not feasible, this guard maintains its own local consensus state and accepts
- *      pre-submitted FROST attestations delivered by validators or relayers before a transaction
- *      executes.
+ *      calls are not feasible, this guard maintains its own local consensus state.
  *
- *      **Epoch pair.** Two `EpochState` entries are kept: `_currentEpoch` and `_previousEpoch`.
- *      Attestations are accepted for either epoch, allowing signing ceremonies that straddle a
- *      rollover boundary to be submitted after the epoch has advanced. `_resolveGroupKey` checks
- *      the current epoch first and falls back to the previous one when present.
+ *      **Epoch history.** Group keys are stored in `_epochGroupKeys`, a mapping from epoch number
+ *      to FROST group public key. Each `updateEpoch` call adds the new epoch's key to the mapping,
+ *      so all historic keys remain available for signature verification. `_activeEpoch` tracks the
+ *      current epoch number; keys for all past epochs remain resolvable via `_resolveGroupKey`.
  *
- *      **Unified attestation.** Both regular and module transactions use `submitAttestation`.
- *      Each call stores `sigId = keccak256(sig.r.x, sig.r.y, sig.z)` against the `safeTxHash`.
- *      The sigId lifecycle differs by execution path:
- *      - Regular transactions: `checkTransaction` deletes the `_attestations` entry on execution
- *        and does NOT write `_usedModuleSigs`. The Safe nonce makes every regular `safeTxHash`
- *        unique, so deleting the entry is sufficient to prevent replay.
- *      - Module transactions: `checkModuleTransaction` deletes the `_attestations` entry AND
- *        permanently marks the sigId in `_usedModuleSigs`. Module transactions carry no nonce,
- *        so the same `safeTxHash` can recur; spending the sigId prevents the same signing
- *        ceremony from unlocking multiple executions. `submitAttestation` also reads
- *        `_usedModuleSigs` to block resubmission of a spent ceremony for any hash.
+ *      **Inline attestation.** FROST attestations are passed as a trailer appended to Safe's
+ *      `signatures` bytes: `[safe signatures][abi.encode(epoch, FROST.Signature)][length: uint256]`.
+ *      `checkTransaction` decodes and verifies the attestation atomically during execution.
+ *      The Safe nonce makes every `safeTxHash` unique, preventing replay without an explicit
+ *      spent-signature registry.
  *
  *      **Escape hatch.** Safe owners can register a specific transaction for time-delayed
  *      execution via `allowTransaction`. The guard auto-allows calls to itself for this selector
- *      and for `cancelAllowTransaction` and `cancelModuleAttestation`, requiring only the Safe's
- *      own threshold signature rather than a Safenet attestation. `DELEGATECALL` to the guard is
- *      never auto-allowed: it would execute guard functions in the Safe's storage context.
+ *      and for `cancelAllowTransaction`, requiring only the Safe's own threshold signature
+ *      rather than a Safenet attestation. `DELEGATECALL` to the guard is never auto-allowed:
+ *      it would execute guard functions in the Safe's storage context.
  */
-contract SafenetGuard is BaseGuard {
-    // ============================================================
-    // TYPES
-    // ============================================================
-
-    /**
-     * @notice Pairs an epoch number with the FROST group public key active during that epoch.
-     * @custom:member epoch    The epoch number assigned by the Consensus contract.
-     * @custom:member groupKey The FROST group public key used to verify signatures for this epoch.
-     */
-    struct EpochState {
-        uint64 epoch;
-        Secp256k1.Point groupKey;
-    }
-
+contract SafenetGuard is BaseTransactionGuard {
     // ============================================================
     // STORAGE VARIABLES
     // ============================================================
@@ -80,59 +58,28 @@ contract SafenetGuard is BaseGuard {
     uint256 private immutable _ALLOW_TX_DELAY;
 
     /**
-     * @notice The most recently activated epoch: its number and FROST group key.
-     * @dev Set at construction and overwritten on every `updateEpoch` call.
-     *      Always holds a valid entry — there is no uninitialised state.
+     * @notice The currently active epoch number.
+     * @dev Set at construction and advanced on every `updateEpoch` call.
      */
-    EpochState private _currentEpoch;
+    uint64 private _activeEpoch;
 
     /**
-     * @notice The epoch immediately preceding `_currentEpoch`.
-     * @dev Only valid when `_hasPreviousEpoch` is true (after the first `updateEpoch` call).
-     *      Retaining the previous epoch allows attestations produced during a signing ceremony
-     *      that straddles a rollover boundary to be submitted after the epoch has advanced.
+     * @notice Maps each epoch number to its FROST group public key.
+     * @dev Written at construction for `initialEpoch` and on every `updateEpoch` call for the new
+     *      epoch. Once written, an entry is never overwritten — epoch numbers are strictly increasing
+     *      so each epoch gets exactly one key. A zero point (`x == 0 && y == 0`) indicates the
+     *      epoch was never stored and is used as the sentinel by `_resolveGroupKey`.
+     *      All stored keys are guaranteed non-zero because both the constructor and `updateEpoch`
+     *      call `Secp256k1.requireNonZero` before writing.
      */
-    EpochState private _previousEpoch;
-
-    /**
-     * @notice True once the first `updateEpoch` call has populated `_previousEpoch`.
-     * @dev Guards `previousEpoch()` and `_resolveGroupKey` against treating the zero-initialised
-     *      `_previousEpoch` slot as a valid epoch entry before any rollover has occurred.
-     *      Without this flag, `_resolveGroupKey(0)` would match the zero-initialised
-     *      `_previousEpoch.epoch` and return a zero group key. FROST verification against a zero
-     *      key is trivially forgeable (z·G == R holds for any z when Y = 0), so an attacker could
-     *      register a fake attestation for any transaction without a real signing ceremony.
-     */
-    bool private _hasPreviousEpoch;
-
-    /**
-     * @notice Pending attestation registry shared by regular and module transactions.
-     * @dev A non-zero value indicates a valid FROST attestation has been submitted for that hash
-     *      and not yet consumed by execution. The stored value is the sigId of the signing ceremony.
-     *      Written exclusively by `submitAttestation`. Cleared by `checkTransaction`,
-     *      `checkModuleTransaction`, and `cancelModuleAttestation`. `bytes32(0)` is the sentinel
-     *      for "no pending attestation".
-     */
-    mapping(bytes32 safeTxHash => bytes32 sigId) private _attestations;
-
-    /**
-     * @notice Registry of FROST signing ceremonies permanently spent by module executions.
-     * @dev Written exclusively by `checkModuleTransaction` when it consumes a module attestation.
-     *      Regular transaction executions never write here — the Safe nonce makes each regular
-     *      `safeTxHash` unique, so deleting the `_attestations` entry is sufficient.
-     *      `submitAttestation` reads this mapping to prevent a ceremony spent by a module
-     *      execution from being resubmitted as a fresh pending attestation for any `safeTxHash`.
-     *      Entries are permanent; once `true`, a sigId can never again unlock a module execution.
-     */
-    mapping(bytes32 sigId => bool spent) private _usedModuleSigs;
+    mapping(uint64 epoch => Secp256k1.Point groupKey) private _epochGroupKeys;
 
     /**
      * @notice Time-delayed execution allowances for the escape hatch, keyed by Safe address.
      * @dev A non-zero value is the earliest Unix timestamp at which the corresponding transaction
      *      may execute without a Safenet attestation. Written by `allowTransaction`, consumed and
-     *      deleted on use by `checkTransaction` or `checkModuleTransaction`, and deleted early by
-     *      `cancelAllowTransaction`. Keying by `msg.sender` (the Safe) ensures no Safe can
-     *      interfere with another's allowances.
+     *      deleted on use by `checkTransaction`, and deleted early by `cancelAllowTransaction`.
+     *      Keying by `msg.sender` (the Safe) ensures no Safe can interfere with another's allowances.
      */
     mapping(address safe => mapping(bytes32 safeTxHash => uint256 executableAt)) private _allowedTransactions;
 
@@ -147,28 +94,6 @@ contract SafenetGuard is BaseGuard {
      * @param activeGroupKey The FROST group public key for the new active epoch.
      */
     event EpochUpdated(uint64 indexed previousEpoch, uint64 indexed activeEpoch, Secp256k1.Point activeGroupKey);
-
-    /**
-     * @notice Emitted when a FROST attestation is verified and stored for a transaction.
-     * @param safeTxHash The EIP-712 hash of the attested Safe transaction.
-     * @param epoch      The epoch under which the attestation was produced.
-     * @param sigId      The keccak256 identifier of the FROST signing ceremony.
-     */
-    event AttestationSubmitted(bytes32 indexed safeTxHash, uint64 indexed epoch, bytes32 indexed sigId);
-
-    /**
-     * @notice Emitted when a module attestation is consumed by `checkModuleTransaction`.
-     * @param safeTxHash The hash of the module transaction that executed.
-     * @param sigId      The signing ceremony identifier permanently marked spent.
-     */
-    event ModuleAttestationConsumed(bytes32 indexed safeTxHash, bytes32 indexed sigId);
-
-    /**
-     * @notice Emitted when a pending module attestation is cleared by `cancelModuleAttestation`
-     *         without spending the sigId.
-     * @param safeTxHash The hash whose pending attestation was removed.
-     */
-    event ModuleAttestationCancelled(bytes32 indexed safeTxHash);
 
     /**
      * @notice Emitted when a Safe registers a transaction for time-delayed execution.
@@ -197,21 +122,15 @@ contract SafenetGuard is BaseGuard {
     // ============================================================
 
     /**
-     * @notice Thrown by `checkTransaction` and `checkModuleTransaction` when neither a valid
-     *         attestation nor a matured time-delayed allowance exists for the transaction.
+     * @notice Thrown by `checkTransaction` when neither a valid inline attestation nor a matured
+     *         time-delayed allowance exists for the transaction.
      */
     error AttestationNotFound();
 
     /**
-     * @notice Thrown by `submitAttestation` when `_attestations` already holds a non-zero entry
-     *         for the supplied `safeTxHash`. Call `cancelModuleAttestation` first to replace a
-     *         stale pending module attestation.
-     */
-    error AttestationAlreadySubmitted();
-
-    /**
-     * @notice Thrown by `submitAttestation` when the requested epoch matches neither the current
-     *         nor the previous epoch, and by `previousEpoch` before any rollover has occurred.
+     * @notice Thrown by `_resolveGroupKey` when the requested epoch has no group key stored in
+     *         `_epochGroupKeys` — i.e., the epoch was never activated via `updateEpoch` or set
+     *         as the initial epoch in the constructor.
      */
     error InvalidEpoch();
 
@@ -220,19 +139,6 @@ contract SafenetGuard is BaseGuard {
      *         current active epoch. Prevents epoch replay and backwards transitions.
      */
     error EpochNotAdvancing();
-
-    /**
-     * @notice Thrown by `submitAttestation` when the derived sigId is already present in
-     *         `_usedModuleSigs`. Prevents a ceremony spent by a module execution from being
-     *         resubmitted as a new pending attestation for any `safeTxHash`.
-     */
-    error SignatureAlreadySpent();
-
-    /**
-     * @notice Thrown by `cancelModuleAttestation` when `_attestations` holds no entry for the
-     *         computed module transaction hash under `msg.sender`.
-     */
-    error NoModuleAttestationPending();
 
     /**
      * @notice Thrown by `allowTransaction` when an allowance already exists for this Safe and
@@ -292,7 +198,8 @@ contract SafenetGuard is BaseGuard {
         Secp256k1.requireNonZero(initialGroupKey);
         _CONSENSUS_DOMAIN_SEPARATOR = ConsensusMessages.domain(consensusChainId, consensusAddress);
         _ALLOW_TX_DELAY = allowTransactionDelay;
-        _currentEpoch = EpochState({epoch: initialEpoch, groupKey: initialGroupKey});
+        _activeEpoch = initialEpoch;
+        _epochGroupKeys[initialEpoch] = initialGroupKey;
         emit EpochUpdated(0, initialEpoch, initialGroupKey);
     }
 
@@ -304,13 +211,14 @@ contract SafenetGuard is BaseGuard {
      * @notice Advances the guard's epoch state using a FROST-signed rollover from the current
      *         active validator group.
      * @dev Permissionless — any party holding the rollover signature may call this (validators,
-     *      relayers, Safe owners). Multi-epoch jumps are permitted: if validators sign a rollover
+     *      relayers, Safe owners). Multi-epoch jumps are permitted: validators may sign a rollover
      *      that skips intermediate epoch numbers.
      *      To catch up multiple epochs in sequence, batch calls in ascending order via
      *      MultiSendCallOnly.
      *      `rolloverBlock` is a Gnosis Chain block number embedded in the signed message; no check
      *      against `block.number` is performed because the local chain's block number is unrelated.
-     *      `_currentEpoch` shifts to `_previousEpoch` and the new epoch becomes `_currentEpoch`.
+     *      The new epoch's group key is written to `_epochGroupKeys[proposedEpoch]` and
+     *      `_activeEpoch` is advanced. All previously stored keys remain in the mapping.
      * @param proposedEpoch  New epoch number. Must be strictly greater than the active epoch;
      *                       equal or lower values revert with `EpochNotAdvancing`.
      * @param rolloverBlock  Gnosis Chain block number from the epoch rollover message. Required
@@ -326,92 +234,16 @@ contract SafenetGuard is BaseGuard {
         Secp256k1.Point calldata newGroupKey,
         FROST.Signature calldata signature
     ) external {
-        require(proposedEpoch > _currentEpoch.epoch, EpochNotAdvancing());
+        require(proposedEpoch > _activeEpoch, EpochNotAdvancing());
         Secp256k1.requireNonZero(newGroupKey);
         bytes32 message = ConsensusMessages.epochRollover(
-            _CONSENSUS_DOMAIN_SEPARATOR, _currentEpoch.epoch, proposedEpoch, rolloverBlock, newGroupKey
+            _CONSENSUS_DOMAIN_SEPARATOR, _activeEpoch, proposedEpoch, rolloverBlock, newGroupKey
         );
-        FROST.verify(_currentEpoch.groupKey, signature, message);
-        uint64 prevEpoch = _currentEpoch.epoch;
-        _previousEpoch = _currentEpoch;
-        _hasPreviousEpoch = true;
-        _currentEpoch = EpochState({epoch: proposedEpoch, groupKey: newGroupKey});
+        FROST.verify(_epochGroupKeys[_activeEpoch], signature, message);
+        uint64 prevEpoch = _activeEpoch;
+        _activeEpoch = proposedEpoch;
+        _epochGroupKeys[proposedEpoch] = newGroupKey;
         emit EpochUpdated(prevEpoch, proposedEpoch, newGroupKey);
-    }
-
-    // ============================================================
-    // ATTESTATION
-    // ============================================================
-
-    /**
-     * @notice Pre-submits a FROST attestation authorising a Safe transaction (regular or module).
-     * @dev Permissionless — typically called by validators or relayers immediately after a signing
-     *      ceremony completes. Must be called before the Safe executes the transaction.
-     *      The sigId is checked against `_usedModuleSigs` before signature verification. This
-     *      prevents a ceremony spent by a prior module execution from being resubmitted for any
-     *      `safeTxHash`, including a different one. For regular transactions this check is applied
-     *      consistently even though the nonce independently prevents replay.
-     *      Only one pending attestation per `safeTxHash` is permitted at a time. If a stale module
-     *      attestation exists, call `cancelModuleAttestation` first to clear it.
-     *      Module transactions must be hashed with all gas and nonce fields set to zero, matching
-     *      the convention used by `checkModuleTransaction` and `cancelModuleAttestation`.
-     * @param safeTxHash EIP-712 hash of the Safe transaction. For module transactions this must
-     *                   be computed with zeroed gas and nonce fields.
-     * @param epoch      Epoch in which the attestation was produced. Must be either the current
-     *                   or the previous epoch; any other value reverts with `InvalidEpoch`.
-     * @param signature  FROST threshold signature over the transaction proposal message.
-     */
-    function submitAttestation(bytes32 safeTxHash, uint64 epoch, FROST.Signature calldata signature) external {
-        require(_attestations[safeTxHash] == bytes32(0), AttestationAlreadySubmitted());
-        // forge-lint: disable-next-line(asm-keccak256)
-        bytes32 sigId = keccak256(abi.encode(signature.r.x, signature.r.y, signature.z));
-        require(!_usedModuleSigs[sigId], SignatureAlreadySpent());
-        Secp256k1.Point memory groupKey = _resolveGroupKey(epoch);
-        bytes32 message = ConsensusMessages.transactionProposal(_CONSENSUS_DOMAIN_SEPARATOR, epoch, safeTxHash);
-        FROST.verify(groupKey, signature, message);
-        _attestations[safeTxHash] = sigId;
-        emit AttestationSubmitted(safeTxHash, epoch, sigId);
-    }
-
-    /**
-     * @notice Clears a pending module attestation that will not be executed.
-     * @dev Must be called by the Safe itself via `execTransaction`. No Safenet attestation is
-     *      required — the guard auto-allows this selector, and authentication is provided by the
-     *      Safe's threshold signature on the outer `execTransaction`.
-     *      The module transaction hash is recomputed from the supplied parameters using `msg.sender`
-     *      as the Safe address and zeroed gas/nonce fields — the same convention as
-     *      `checkModuleTransaction`. A caller can therefore only cancel attestations registered
-     *      under their own address; passing identical parameters from a different address produces
-     *      a different hash and finds no entry.
-     *      Cancellation does not spend the sigId: the signing ceremony remains reusable and a
-     *      subsequent `submitAttestation` call with the same signature will succeed.
-     * @param to        Destination address of the module transaction.
-     * @param value     Ether value of the module transaction.
-     * @param data      Calldata of the module transaction.
-     * @param operation Operation type of the module transaction.
-     */
-    function cancelModuleAttestation(address to, uint256 value, bytes calldata data, Enum.Operation operation)
-        external
-    {
-        bytes32 safeTxHash = SafeTransaction.hash(
-            SafeTransaction.T({
-                chainId: block.chainid,
-                safe: msg.sender,
-                to: to,
-                value: value,
-                data: data,
-                operation: SafeTransaction.Operation(uint8(operation)),
-                safeTxGas: 0,
-                baseGas: 0,
-                gasPrice: 0,
-                gasToken: address(0),
-                refundReceiver: address(0),
-                nonce: 0
-            })
-        );
-        require(_attestations[safeTxHash] != bytes32(0), NoModuleAttestationPending());
-        delete _attestations[safeTxHash];
-        emit ModuleAttestationCancelled(safeTxHash);
     }
 
     // ============================================================
@@ -424,7 +256,7 @@ contract SafenetGuard is BaseGuard {
      *      selector, so no Safenet attestation is needed for the registration call itself —
      *      authentication is provided by the Safe's own threshold signature mechanism.
      *      After `_ALLOW_TX_DELAY` seconds, the registered hash may execute without attestation
-     *      via `checkTransaction` or `checkModuleTransaction`.
+     *      via `checkTransaction`.
      * @param safeTxHash Hash of the transaction to allow. Reverts `TransactionAlreadyAllowed`
      *                   if an allowance is already pending for this Safe and hash.
      */
@@ -438,10 +270,8 @@ contract SafenetGuard is BaseGuard {
     /**
      * @notice Cancels a pending time-delayed allowance registered by this Safe.
      * @dev Must be called by the Safe itself via `execTransaction`. Also auto-allowed by the guard.
-     *      For regular Safe transactions, burning the nonce by executing any other attested
-     *      transaction at the same nonce also invalidates the registered hash implicitly.
-     *      For module transactions — which carry no nonce — this is the only explicit cancellation
-     *      path.
+     *      Burning the nonce by executing any other attested transaction at the same nonce also
+     *      invalidates the registered hash implicitly.
      * @param safeTxHash Hash whose allowance should be cancelled. Reverts `AllowanceNotFound` if
      *                   no allowance exists for this Safe and hash.
      */
@@ -459,12 +289,13 @@ contract SafenetGuard is BaseGuard {
      * @notice Pre-execution hook called by Safe's GuardManager for every owner-signed transaction.
      * @dev Execution is permitted if any of the following conditions holds (checked in order):
      *      1. Auto-allow: the call targets this guard with a whitelisted selector
-     *         (`allowTransaction`, `cancelAllowTransaction`, `cancelModuleAttestation`), zero
-     *         value, and `CALL` operation.
-     *      2. A pending attestation exists for the `safeTxHash` — the entry is deleted on passage.
+     *         (`allowTransaction`, `cancelAllowTransaction`), zero value, and `CALL` operation.
+     *      2. The `signatures` bytes contain a valid inline FROST attestation trailer
+     *         (`[abi.encode(epoch, FROST.Signature)][length: uint256]`) — decoded and verified
+     *         atomically against the stored group key for `epoch`.
      *      3. A time-delayed allowance exists and its delay has elapsed — the entry is deleted.
      *      Safe increments its nonce before invoking this hook, so the pre-execution nonce used
-     *      when the attestation was registered is `ISafe(msg.sender).nonce() - 1`.
+     *      when the attestation was produced is `ISafe(msg.sender).nonce() - 1`.
      *      Reverts `AttestationNotFound` if none of the above conditions hold.
      */
     function checkTransaction(
@@ -477,7 +308,7 @@ contract SafenetGuard is BaseGuard {
         uint256 gasPrice,
         address gasToken,
         address payable refundReceiver,
-        bytes memory, /* signatures */
+        bytes calldata signatures,
         address /* msgSender */
     ) external override {
         if (_isAutoAllowed(to, value, data, operation)) return;
@@ -502,9 +333,12 @@ contract SafenetGuard is BaseGuard {
             })
         );
 
-        bytes32 sigId = _attestations[safeTxHash];
-        if (sigId != bytes32(0)) {
-            delete _attestations[safeTxHash];
+        bytes calldata attestation = _decodeAttestation(signatures);
+        if (attestation.length > 0) {
+            (uint64 epoch, FROST.Signature memory signature) = abi.decode(attestation, (uint64, FROST.Signature));
+            Secp256k1.Point memory groupKey = _resolveGroupKey(epoch);
+            bytes32 message = ConsensusMessages.transactionProposal(_CONSENSUS_DOMAIN_SEPARATOR, epoch, safeTxHash);
+            FROST.verify(groupKey, signature, message);
             return;
         }
 
@@ -519,84 +353,34 @@ contract SafenetGuard is BaseGuard {
     }
 
     /**
+     * @dev Decodes the attestation from the provided safe tx signature.
+     */
+    function _decodeAttestation(bytes calldata signatures) internal pure virtual returns (bytes calldata) {
+        if (signatures.length < 66) {
+            return _emptyContext();
+        }
+
+        uint256 end = signatures.length - 32;
+        uint256 length = uint256(bytes32(signatures[end:]));
+        if (length > end) {
+            return _emptyContext();
+        }
+
+        return signatures[end - length:end];
+    }
+
+    /**
+     * @dev Returns an empty calldata slice. Used as a typed zero-value for `bytes calldata`.
+     */
+    function _emptyContext() internal pure returns (bytes calldata) {
+        return msg.data[0:0];
+    }
+
+    /**
      * @notice Post-execution hook called by Safe's GuardManager after every owner-signed transaction.
      * @dev Intentionally empty. Reserved for future post-execution logic.
      */
     function checkAfterExecution(bytes32, bool) external pure override {}
-
-    // ============================================================
-    // SAFE MODULE GUARD
-    // ============================================================
-
-    /**
-     * @notice Pre-execution hook called by Safe's ModuleManager for every module transaction.
-     * @dev Execution is permitted under the same three conditions as `checkTransaction`.
-     *      When a pending attestation is consumed, the sigId is permanently marked spent in
-     *      `_usedModuleSigs` — this prevents the same signing ceremony from unlocking a future
-     *      execution even if the module resubmits with identical parameters.
-     *      Module transactions carry no nonce, so all gas and nonce fields in the `SafeTransaction.T`
-     *      struct are set to zero. Validators and relayers must hash with the same zeroed fields
-     *      when calling `submitAttestation`.
-     *      Reverts `AttestationNotFound` if none of the conditions hold.
-     * @return moduleTxHash The computed Safe transaction hash for this module execution. Returns
-     *         `bytes32(0)` for auto-allowed calls — `checkAfterModuleExecution` is a no-op so
-     *         this is safe, but any future post-hook logic must not treat a zero return as
-     *         meaningful.
-     */
-    function checkModuleTransaction(
-        address to,
-        uint256 value,
-        bytes memory data,
-        Enum.Operation operation,
-        address /* module */
-    )
-        external
-        override
-        returns (bytes32 moduleTxHash)
-    {
-        if (_isAutoAllowed(to, value, data, operation)) return bytes32(0);
-
-        // Module transactions carry no nonce; all gas and nonce fields are zeroed.
-        moduleTxHash = SafeTransaction.hash(
-            SafeTransaction.T({
-                chainId: block.chainid,
-                safe: msg.sender,
-                to: to,
-                value: value,
-                data: data,
-                operation: SafeTransaction.Operation(uint8(operation)),
-                safeTxGas: 0,
-                baseGas: 0,
-                gasPrice: 0,
-                gasToken: address(0),
-                refundReceiver: address(0),
-                nonce: 0
-            })
-        );
-
-        bytes32 sigId = _attestations[moduleTxHash];
-        if (sigId != bytes32(0)) {
-            _usedModuleSigs[sigId] = true;
-            delete _attestations[moduleTxHash];
-            emit ModuleAttestationConsumed(moduleTxHash, sigId);
-            return moduleTxHash;
-        }
-
-        uint256 executableAt = _allowedTransactions[msg.sender][moduleTxHash];
-        if (executableAt != 0 && block.timestamp >= executableAt) {
-            delete _allowedTransactions[msg.sender][moduleTxHash];
-            emit TransactionExecutedViaAllowance(msg.sender, moduleTxHash);
-            return moduleTxHash;
-        }
-
-        revert AttestationNotFound();
-    }
-
-    /**
-     * @notice Post-execution hook called by Safe's ModuleManager after every module transaction.
-     * @dev Intentionally empty. Reserved for future post-execution logic.
-     */
-    function checkAfterModuleExecution(bytes32, bool) external pure override {}
 
     // ============================================================
     // VIEW FUNCTIONS
@@ -606,17 +390,7 @@ contract SafenetGuard is BaseGuard {
      * @notice Returns the epoch number of the current active epoch.
      */
     function activeEpoch() external view returns (uint64) {
-        return _currentEpoch.epoch;
-    }
-
-    /**
-     * @notice Returns the epoch number of the previous epoch.
-     * @dev Only valid after the first `updateEpoch` call. Reverts `InvalidEpoch` before any
-     *      rollover has occurred.
-     */
-    function previousEpoch() external view returns (uint64) {
-        if (!_hasPreviousEpoch) revert InvalidEpoch();
-        return _previousEpoch.epoch;
+        return _activeEpoch;
     }
 
     /**
@@ -634,24 +408,6 @@ contract SafenetGuard is BaseGuard {
     }
 
     /**
-     * @notice Returns the sigId stored for a pending attestation, or `bytes32(0)` if none.
-     * @dev Applies to both regular and module transaction attestations.
-     */
-    function getAttestation(bytes32 safeTxHash) external view returns (bytes32 sigId) {
-        return _attestations[safeTxHash];
-    }
-
-    /**
-     * @notice Returns whether a signing ceremony has been permanently spent by a module execution.
-     * @dev A `true` result means the sigId was consumed by `checkModuleTransaction` and can
-     *      never again be used to unlock a module execution or pass the `submitAttestation`
-     *      resubmission check.
-     */
-    function isModuleSigSpent(bytes32 sigId) external view returns (bool) {
-        return _usedModuleSigs[sigId];
-    }
-
-    /**
      * @notice Returns the earliest Unix timestamp at which a pending allowance may execute,
      *         or zero if no allowance exists for the given Safe and hash.
      */
@@ -664,13 +420,14 @@ contract SafenetGuard is BaseGuard {
     // ============================================================
 
     /**
-     * @dev Returns the group key for `epoch`. Checks current first, then previous.
-     *      Reverts `InvalidEpoch` if neither entry matches.
+     * @dev Returns the group key for `epoch` from `_epochGroupKeys`.
+     *      Reverts `InvalidEpoch` if no key was ever stored for this epoch.
+     *      A zero point is treated as "not stored" — guaranteed safe because the constructor
+     *      and `updateEpoch` both call `Secp256k1.requireNonZero` before writing.
      */
-    function _resolveGroupKey(uint64 epoch) private view returns (Secp256k1.Point memory) {
-        if (_currentEpoch.epoch == epoch) return _currentEpoch.groupKey;
-        if (_hasPreviousEpoch && _previousEpoch.epoch == epoch) return _previousEpoch.groupKey;
-        revert InvalidEpoch();
+    function _resolveGroupKey(uint64 epoch) private view returns (Secp256k1.Point memory key) {
+        key = _epochGroupKeys[epoch];
+        if (key.x == 0 && key.y == 0) revert InvalidEpoch();
     }
 
     /**
@@ -691,8 +448,8 @@ contract SafenetGuard is BaseGuard {
         if (operation != Enum.Operation.Call) return false;
         // forge-lint: disable-next-line(unsafe-typecast)
         bytes4 selector = bytes4(data);
-        return selector == SafenetGuard.allowTransaction.selector
-            || selector == SafenetGuard.cancelAllowTransaction.selector
-            || selector == SafenetGuard.cancelModuleAttestation.selector;
+        return
+            selector == SafenetGuard.allowTransaction.selector
+                || selector == SafenetGuard.cancelAllowTransaction.selector;
     }
 }

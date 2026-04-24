@@ -9,12 +9,10 @@ import {Secp256k1} from "@/libraries/Secp256k1.sol";
 import {Enum} from "@safe/interfaces/Enum.sol";
 import {ISafe} from "@safe/interfaces/ISafe.sol";
 import {IGuardManager} from "@safe/interfaces/IGuardManager.sol";
-import {IModuleManager} from "@safe/interfaces/IModuleManager.sol";
 import {Safe} from "@safe/Safe.sol";
 import {SafeProxyFactory} from "@safe/proxies/SafeProxyFactory.sol";
 import {SafenetGuard} from "@/SafenetGuard.sol";
 import {ForgeSecp256k1} from "@test/util/ForgeSecp256k1.sol";
-import {DummyModule} from "@test/util/DummyModule.sol";
 
 contract SafenetGuardTest is Test {
     using ForgeSecp256k1 for ForgeSecp256k1.P;
@@ -43,13 +41,9 @@ contract SafenetGuardTest is Test {
 
     uint256 public constant GROUP_SK = 1; // epoch 1 group secret key; public key = G
     uint256 public constant GROUP_NK = 2; // epoch 1 signing nonce; R = 2*G
-    uint256 public constant GROUP_NK_2 = 3; // alternate nonce for second module signing ceremony
 
     uint256 public constant GROUP_SK_NEXT = 5; // epoch 2 group secret key
     uint256 public constant GROUP_NK_NEXT = 6; // epoch 2 signing nonce
-
-    uint256 public constant GROUP_SK_THIRD = 7; // epoch 3 group secret key
-    uint256 public constant GROUP_NK_THIRD = 8; // epoch 3 signing nonce
 
     // ============================================================
     // CONSTANTS — DEFAULT TRANSACTION PARAMETERS
@@ -66,7 +60,6 @@ contract SafenetGuardTest is Test {
 
     ISafe public safe;
     uint256 public ownerKey;
-    DummyModule public dummyModule;
 
     function setUp() public {
         // Owner for signing Safe transactions
@@ -94,25 +87,6 @@ contract SafenetGuardTest is Test {
             abi.encodeCall(IGuardManager.setGuard, (address(guard))),
             Enum.Operation.Call,
             ExecMode.Direct
-        );
-
-        // Install module guard (transaction guard now active — must be attested)
-        _execSafeTx(
-            address(safe),
-            0,
-            abi.encodeCall(IModuleManager.setModuleGuard, (address(guard))),
-            Enum.Operation.Call,
-            ExecMode.Attested
-        );
-
-        // Enable DummyModule so module transaction tests go through the real ModuleManager path
-        dummyModule = new DummyModule();
-        _execSafeTx(
-            address(safe),
-            0,
-            abi.encodeCall(IModuleManager.enableModule, (address(dummyModule))),
-            Enum.Operation.Call,
-            ExecMode.Attested
         );
     }
 
@@ -162,29 +136,35 @@ contract SafenetGuardTest is Test {
         );
     }
 
-    /// @dev Returns the safeTxHash for the default transaction params at the current Safe nonce.
-    function _defaultSafeTxHash() internal view returns (bytes32) {
-        return _safeTxHash(TX_TO, TX_VALUE, TX_DATA, TX_OP, safe.nonce());
-    }
-
-    /// @dev Returns the safeTxHash for the default module transaction (zeroed gas/nonce).
-    function _defaultModuleSafeTxHash() internal view returns (bytes32) {
-        return _safeTxHash(TX_TO, TX_VALUE, TX_DATA, TX_OP, 0);
-    }
-
     /// @dev Produces a packed ECDSA signature from the owner for a Safe transaction hash.
     function _signSafeTx(bytes32 txHash) internal view returns (bytes memory) {
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(ownerKey, txHash);
         return abi.encodePacked(r, s, v);
     }
 
+    /// @dev Builds an inline FROST attestation trailer for the given tx hash and epoch key pair.
+    ///      Format: abi.encode(epoch, FROST.Signature) ++ bytes32(attestation.length)
+    function _buildInlineAttestation(bytes32 txHash, uint64 epoch, uint256 sk, uint256 nk)
+        internal
+        returns (bytes memory)
+    {
+        bytes32 message = ConsensusMessages.transactionProposal(guard.consensusDomainSeparator(), epoch, txHash);
+        FROST.Signature memory sig = _frostSign(sk, nk, message);
+        bytes memory attestation = abi.encode(epoch, sig);
+        return abi.encodePacked(attestation, bytes32(attestation.length));
+    }
+
     /// @dev Signs and executes a Safe transaction. `Direct` skips attestation (used before the
-    ///      transaction guard is installed); `Attested` pre-submits a FROST attestation first.
+    ///      transaction guard is installed or for auto-allowed calls); `Attested` appends an inline
+    ///      FROST attestation trailer to the Safe signatures bytes.
     function _execSafeTx(address to, uint256 value, bytes memory data, Enum.Operation op, ExecMode mode) internal {
         uint256 nonce = safe.nonce();
         bytes32 txHash = _safeTxHash(to, value, data, op, nonce);
-        if (mode == ExecMode.Attested) _submitAttestation(txHash, INITIAL_EPOCH, GROUP_SK, GROUP_NK);
-        safe.execTransaction(to, value, data, op, 0, 0, 0, address(0), payable(address(0)), _signSafeTx(txHash));
+        bytes memory safeSig = _signSafeTx(txHash);
+        if (mode == ExecMode.Attested) {
+            safeSig = bytes.concat(safeSig, _buildInlineAttestation(txHash, INITIAL_EPOCH, GROUP_SK, GROUP_NK));
+        }
+        safe.execTransaction(to, value, data, op, 0, 0, 0, address(0), payable(address(0)), safeSig);
     }
 
     /// @dev Like _execSafeTx(Direct) but takes a pre-computed nonce, making safe.execTransaction
@@ -197,13 +177,6 @@ contract SafenetGuardTest is Test {
         safe.execTransaction(to, value, data, op, 0, 0, 0, address(0), payable(address(0)), _signSafeTx(txHash));
     }
 
-    /// @dev Submits a valid regular attestation for the given hash using the given epoch key pair.
-    function _submitAttestation(bytes32 safeTxHash, uint64 epoch, uint256 sk, uint256 nk) internal {
-        bytes32 message = ConsensusMessages.transactionProposal(guard.consensusDomainSeparator(), epoch, safeTxHash);
-        FROST.Signature memory sig = _frostSign(sk, nk, message);
-        guard.submitAttestation(safeTxHash, epoch, sig);
-    }
-
     /// @dev Registers a time-delayed allowance via a real Safe execTransaction.
     ///      The guard auto-allows the allowTransaction selector, so no attestation is needed.
     ///      Callers that need to reference the subsequent tx hash should compute it at nonce + 1.
@@ -211,12 +184,6 @@ contract SafenetGuardTest is Test {
         uint256 nonce = safe.nonce();
         bytes memory data = abi.encodeCall(SafenetGuard.allowTransaction, (safeTxHash));
         _execSafeTxWithNonce(address(guard), 0, data, Enum.Operation.Call, nonce);
-    }
-
-    /// @dev Executes a module transaction with the default parameters via DummyModule.
-    ///      Drives checkModuleTransaction through the real ModuleManager path.
-    function _execDefaultModuleTransaction() internal {
-        dummyModule.execute(address(safe), TX_TO, TX_VALUE, TX_DATA, TX_OP);
     }
 
     // ============================================================
@@ -250,12 +217,6 @@ contract SafenetGuardTest is Test {
         assertEq(guard.allowTxDelay(), ALLOW_TX_DELAY_SECONDS);
     }
 
-    function test_previousEpoch_revertsBeforeFirstRollover() public {
-        // No previous epoch at construction — must revert
-        vm.expectRevert(SafenetGuard.InvalidEpoch.selector);
-        guard.previousEpoch();
-    }
-
     function test_constructor_emitsEpochUpdated() public {
         Secp256k1.Point memory key = ForgeSecp256k1.g(GROUP_SK).toPoint();
         vm.expectEmit(true, true, false, true);
@@ -269,10 +230,6 @@ contract SafenetGuardTest is Test {
 
     function test_supportsInterface_txGuard() public view {
         assertTrue(guard.supportsInterface(0xe6d7a83a));
-    }
-
-    function test_supportsInterface_moduleGuard() public view {
-        assertTrue(guard.supportsInterface(0x58401ed8));
     }
 
     function test_supportsInterface_erc165() public view {
@@ -293,13 +250,20 @@ contract SafenetGuardTest is Test {
         _execSafeTxWithNonce(TX_TO, TX_VALUE, TX_DATA, TX_OP, nonce);
     }
 
-    function test_checkTransaction_passesWhenAttested() public {
-        bytes32 safeTxHash = _defaultSafeTxHash();
-        _submitAttestation(safeTxHash, INITIAL_EPOCH, GROUP_SK, GROUP_NK);
-        assertNotEq(guard.getAttestation(safeTxHash), bytes32(0));
-        _execSafeTx(TX_TO, TX_VALUE, TX_DATA, TX_OP, ExecMode.Direct); // must not revert
-        // Attestation entry is consumed on execution
-        assertEq(guard.getAttestation(safeTxHash), bytes32(0));
+    function test_checkTransaction_passesWithInlineAttestation() public {
+        _execSafeTx(TX_TO, TX_VALUE, TX_DATA, TX_OP, ExecMode.Attested); // must not revert
+    }
+
+    function test_checkTransaction_revertsWithInvalidEpochInInlineAttestation() public {
+        uint256 nonce = safe.nonce();
+        bytes32 txHash = _safeTxHash(TX_TO, TX_VALUE, TX_DATA, TX_OP, nonce);
+        bytes32 message = ConsensusMessages.transactionProposal(guard.consensusDomainSeparator(), 99, txHash);
+        FROST.Signature memory sig = _frostSign(GROUP_SK, GROUP_NK, message);
+        bytes memory attestation = abi.encode(uint64(99), sig);
+        bytes memory combined =
+            bytes.concat(_signSafeTx(txHash), abi.encodePacked(attestation, bytes32(attestation.length)));
+        vm.expectRevert(SafenetGuard.InvalidEpoch.selector);
+        safe.execTransaction(TX_TO, TX_VALUE, TX_DATA, TX_OP, 0, 0, 0, address(0), payable(address(0)), combined);
     }
 
     function test_checkTransaction_autoAllowsAllowTransactionCall() public {
@@ -317,14 +281,6 @@ contract SafenetGuardTest is Test {
         bytes32 anyHash = keccak256("any");
         _allowTransaction(anyHash);
         bytes memory data = abi.encodeCall(SafenetGuard.cancelAllowTransaction, (anyHash));
-        _execSafeTx(address(guard), 0, data, Enum.Operation.Call, ExecMode.Direct); // auto-allowed
-    }
-
-    function test_checkTransaction_autoAllowsCancelModuleAttestationCall() public {
-        // Pre-register a module attestation so cancelModuleAttestation's inner call succeeds
-        bytes32 safeTxHash = _defaultModuleSafeTxHash();
-        _submitAttestation(safeTxHash, INITIAL_EPOCH, GROUP_SK, GROUP_NK);
-        bytes memory data = abi.encodeCall(SafenetGuard.cancelModuleAttestation, (TX_TO, TX_VALUE, TX_DATA, TX_OP));
         _execSafeTx(address(guard), 0, data, Enum.Operation.Call, ExecMode.Direct); // auto-allowed
     }
 
@@ -389,129 +345,6 @@ contract SafenetGuardTest is Test {
         vm.expectEmit(true, true, false, false);
         emit SafenetGuard.TransactionExecutedViaAllowance(address(safe), safeTxHash);
         _execSafeTx(TX_TO, TX_VALUE, TX_DATA, TX_OP, ExecMode.Direct);
-    }
-
-    // ============================================================
-    // CHECK MODULE TRANSACTION
-    // ============================================================
-
-    function test_checkModuleTransaction_revertsWhenNoAttestation() public {
-        vm.expectRevert(SafenetGuard.AttestationNotFound.selector);
-        _execDefaultModuleTransaction();
-    }
-
-    function test_checkModuleTransaction_passesWhenModuleAttested() public {
-        bytes32 safeTxHash = _defaultModuleSafeTxHash();
-        _submitAttestation(safeTxHash, INITIAL_EPOCH, GROUP_SK, GROUP_NK);
-        _execDefaultModuleTransaction(); // must not revert
-    }
-
-    function test_checkModuleTransaction_consumesSigIdOnUse() public {
-        bytes32 safeTxHash = _defaultModuleSafeTxHash();
-        _submitAttestation(safeTxHash, INITIAL_EPOCH, GROUP_SK, GROUP_NK);
-
-        bytes32 sigId = guard.getAttestation(safeTxHash);
-        _execDefaultModuleTransaction();
-
-        assertEq(guard.getAttestation(safeTxHash), bytes32(0));
-        assertTrue(guard.isModuleSigSpent(sigId));
-    }
-
-    function test_checkModuleTransaction_revertsOnSecondExecution() public {
-        bytes32 safeTxHash = _defaultModuleSafeTxHash();
-        _submitAttestation(safeTxHash, INITIAL_EPOCH, GROUP_SK, GROUP_NK);
-        _execDefaultModuleTransaction();
-
-        // Second execution: sigId spent, no allowance → revert
-        vm.expectRevert(SafenetGuard.AttestationNotFound.selector);
-        _execDefaultModuleTransaction();
-    }
-
-    function test_checkModuleTransaction_revertsBeforeAllowanceDelay() public {
-        bytes32 safeTxHash = _defaultModuleSafeTxHash();
-        _allowTransaction(safeTxHash);
-        vm.warp(block.timestamp + ALLOW_TX_DELAY_SECONDS - 1);
-        vm.expectRevert(SafenetGuard.AttestationNotFound.selector);
-        _execDefaultModuleTransaction();
-    }
-
-    function test_checkModuleTransaction_passesAfterAllowanceDelay() public {
-        bytes32 safeTxHash = _defaultModuleSafeTxHash();
-        _allowTransaction(safeTxHash);
-        vm.warp(block.timestamp + ALLOW_TX_DELAY_SECONDS);
-        _execDefaultModuleTransaction(); // must not revert
-    }
-
-    function test_checkModuleTransaction_consumesAllowanceOnUse() public {
-        bytes32 safeTxHash = _defaultModuleSafeTxHash();
-        _allowTransaction(safeTxHash);
-        vm.warp(block.timestamp + ALLOW_TX_DELAY_SECONDS);
-        _execDefaultModuleTransaction();
-        assertEq(guard.getAllowedTxTimestamp(address(safe), safeTxHash), 0);
-    }
-
-    function test_checkModuleTransaction_emitsTransactionExecutedViaAllowance() public {
-        bytes32 safeTxHash = _defaultModuleSafeTxHash();
-        _allowTransaction(safeTxHash);
-        vm.warp(block.timestamp + ALLOW_TX_DELAY_SECONDS);
-        vm.expectEmit(true, true, false, false);
-        emit SafenetGuard.TransactionExecutedViaAllowance(address(safe), safeTxHash);
-        _execDefaultModuleTransaction();
-    }
-
-    function test_checkModuleTransaction_autoAllowsAllowTransactionCall() public {
-        bytes32 anyHash = keccak256("any");
-        bytes memory data = abi.encodeCall(SafenetGuard.allowTransaction, (anyHash));
-        dummyModule.execute(address(safe), address(guard), 0, data, Enum.Operation.Call);
-    }
-
-    function test_checkModuleTransaction_autoAllowsCancelModuleAttestationCall() public {
-        // Pre-register a module attestation so cancelModuleAttestation's inner call succeeds
-        bytes32 safeTxHash = _defaultModuleSafeTxHash();
-        _submitAttestation(safeTxHash, INITIAL_EPOCH, GROUP_SK, GROUP_NK);
-        bytes memory data = abi.encodeCall(SafenetGuard.cancelModuleAttestation, (TX_TO, TX_VALUE, TX_DATA, TX_OP));
-        dummyModule.execute(address(safe), address(guard), 0, data, Enum.Operation.Call);
-    }
-
-    function test_checkModuleTransaction_emitsModuleAttestationConsumed() public {
-        bytes32 safeTxHash = _defaultModuleSafeTxHash();
-        bytes32 message =
-            ConsensusMessages.transactionProposal(guard.consensusDomainSeparator(), INITIAL_EPOCH, safeTxHash);
-        FROST.Signature memory sig = _frostSign(GROUP_SK, GROUP_NK, message);
-        bytes32 expectedSigId = keccak256(abi.encode(sig.r.x, sig.r.y, sig.z));
-
-        guard.submitAttestation(safeTxHash, INITIAL_EPOCH, sig);
-
-        vm.expectEmit(true, true, false, false);
-        emit SafenetGuard.ModuleAttestationConsumed(safeTxHash, expectedSigId);
-        _execDefaultModuleTransaction();
-    }
-
-    function test_checkModuleTransaction_doesNotAutoAllowNonZeroValue() public {
-        bytes memory data = abi.encodeCall(SafenetGuard.allowTransaction, (keccak256("any")));
-        vm.expectRevert(SafenetGuard.AttestationNotFound.selector);
-        dummyModule.execute(address(safe), address(guard), 1, data, Enum.Operation.Call);
-    }
-
-    function test_checkModuleTransaction_doesNotAutoAllowShortData() public {
-        vm.expectRevert(SafenetGuard.AttestationNotFound.selector);
-        dummyModule.execute(address(safe), address(guard), 0, hex"aabbcc", Enum.Operation.Call); // 3 bytes < 4
-    }
-
-    function test_checkModuleTransaction_doesNotAutoAllowDelegatecall() public {
-        bytes32 anyHash = keccak256("any");
-        bytes memory data = abi.encodeCall(SafenetGuard.allowTransaction, (anyHash));
-        vm.expectRevert(SafenetGuard.AttestationNotFound.selector);
-        dummyModule.execute(address(safe), address(guard), 0, data, Enum.Operation.DelegateCall);
-    }
-
-    function test_checkModuleTransaction_returnsModuleTxHash() public {
-        bytes32 safeTxHash = _defaultModuleSafeTxHash();
-        _submitAttestation(safeTxHash, INITIAL_EPOCH, GROUP_SK, GROUP_NK);
-        // Execute via DummyModule: the guard must compute safeTxHash to find and consume the attestation.
-        // If the hash is wrong, the attestation stays pending; if correct, it is cleared.
-        _execDefaultModuleTransaction();
-        assertEq(guard.getAttestation(safeTxHash), bytes32(0));
     }
 
     // ============================================================
@@ -581,138 +414,6 @@ contract SafenetGuardTest is Test {
     }
 
     // ============================================================
-    // SUBMIT ATTESTATION
-    // ============================================================
-
-    function test_submitAttestation_setsAttestation() public {
-        bytes32 safeTxHash = keccak256("hash");
-        bytes32 otherHash = keccak256("other");
-        bytes32 message =
-            ConsensusMessages.transactionProposal(guard.consensusDomainSeparator(), INITIAL_EPOCH, safeTxHash);
-        FROST.Signature memory sig = _frostSign(GROUP_SK, GROUP_NK, message);
-        bytes32 expectedSigId = keccak256(abi.encode(sig.r.x, sig.r.y, sig.z));
-        guard.submitAttestation(safeTxHash, INITIAL_EPOCH, sig);
-        assertEq(guard.getAttestation(safeTxHash), expectedSigId);
-        assertEq(guard.getAttestation(otherHash), bytes32(0));
-    }
-
-    function test_submitAttestation_revertsOnInvalidEpoch() public {
-        FROST.Signature memory dummySig = FROST.Signature({r: ForgeSecp256k1.g(GROUP_NK).toPoint(), z: 1});
-        vm.expectRevert(SafenetGuard.InvalidEpoch.selector);
-        guard.submitAttestation(keccak256("hash"), 99, dummySig);
-    }
-
-    function test_submitAttestation_revertsOnNoPreviousEpoch() public {
-        // Epoch 0 was never added to the ring buffer — only INITIAL_EPOCH (1) is present
-        FROST.Signature memory dummySig = FROST.Signature({r: ForgeSecp256k1.g(GROUP_NK).toPoint(), z: 1});
-        vm.expectRevert(SafenetGuard.InvalidEpoch.selector);
-        guard.submitAttestation(keccak256("hash"), 0, dummySig);
-    }
-
-    function test_submitAttestation_revertsOnDuplicate() public {
-        bytes32 safeTxHash = keccak256("hash");
-        _submitAttestation(safeTxHash, INITIAL_EPOCH, GROUP_SK, GROUP_NK);
-        // Second submission for the same hash — signature verification passes but duplicate check fires
-        bytes32 message =
-            ConsensusMessages.transactionProposal(guard.consensusDomainSeparator(), INITIAL_EPOCH, safeTxHash);
-        FROST.Signature memory sig = _frostSign(GROUP_SK, GROUP_NK, message);
-        vm.expectRevert(SafenetGuard.AttestationAlreadySubmitted.selector);
-        guard.submitAttestation(safeTxHash, INITIAL_EPOCH, sig);
-    }
-
-    function test_submitAttestation_revertsOnSpentSigId() public {
-        // A sigId permanently spent by a module execution cannot be resubmitted
-        bytes32 safeTxHash = _defaultModuleSafeTxHash();
-        bytes32 message =
-            ConsensusMessages.transactionProposal(guard.consensusDomainSeparator(), INITIAL_EPOCH, safeTxHash);
-        FROST.Signature memory sig = _frostSign(GROUP_SK, GROUP_NK, message);
-
-        guard.submitAttestation(safeTxHash, INITIAL_EPOCH, sig);
-        _execDefaultModuleTransaction(); // module execution permanently spends sigId
-
-        vm.expectRevert(SafenetGuard.SignatureAlreadySpent.selector);
-        guard.submitAttestation(safeTxHash, INITIAL_EPOCH, sig);
-    }
-
-    function test_submitAttestation_succeedsAfterCancel() public {
-        bytes32 safeTxHash = _defaultModuleSafeTxHash();
-        bytes32 message =
-            ConsensusMessages.transactionProposal(guard.consensusDomainSeparator(), INITIAL_EPOCH, safeTxHash);
-        FROST.Signature memory sig = _frostSign(GROUP_SK, GROUP_NK, message);
-
-        guard.submitAttestation(safeTxHash, INITIAL_EPOCH, sig);
-        vm.prank(address(safe));
-        guard.cancelModuleAttestation(TX_TO, TX_VALUE, TX_DATA, TX_OP); // does NOT spend sigId
-
-        // Resubmit same sig → sigId was not spent, so this succeeds
-        guard.submitAttestation(safeTxHash, INITIAL_EPOCH, sig);
-        assertNotEq(guard.getAttestation(safeTxHash), bytes32(0));
-    }
-
-    function test_submitAttestation_emitsEvent() public {
-        bytes32 safeTxHash = keccak256("hash");
-        bytes32 message =
-            ConsensusMessages.transactionProposal(guard.consensusDomainSeparator(), INITIAL_EPOCH, safeTxHash);
-        FROST.Signature memory sig = _frostSign(GROUP_SK, GROUP_NK, message);
-        bytes32 expectedSigId = keccak256(abi.encode(sig.r.x, sig.r.y, sig.z));
-        vm.expectEmit(true, true, true, false);
-        emit SafenetGuard.AttestationSubmitted(safeTxHash, INITIAL_EPOCH, expectedSigId);
-        guard.submitAttestation(safeTxHash, INITIAL_EPOCH, sig);
-    }
-
-    // ============================================================
-    // CANCEL MODULE ATTESTATION
-    // ============================================================
-
-    function test_cancelModuleAttestation_clearsMapping() public {
-        bytes32 safeTxHash = _defaultModuleSafeTxHash();
-        _submitAttestation(safeTxHash, INITIAL_EPOCH, GROUP_SK, GROUP_NK);
-        vm.prank(address(safe));
-        guard.cancelModuleAttestation(TX_TO, TX_VALUE, TX_DATA, TX_OP);
-        assertEq(guard.getAttestation(safeTxHash), bytes32(0));
-    }
-
-    function test_cancelModuleAttestation_doesNotSpendSigId() public {
-        bytes32 safeTxHash = _defaultModuleSafeTxHash();
-        bytes32 message =
-            ConsensusMessages.transactionProposal(guard.consensusDomainSeparator(), INITIAL_EPOCH, safeTxHash);
-        FROST.Signature memory sig = _frostSign(GROUP_SK, GROUP_NK, message);
-        bytes32 sigId = keccak256(abi.encode(sig.r.x, sig.r.y, sig.z));
-
-        guard.submitAttestation(safeTxHash, INITIAL_EPOCH, sig);
-        vm.prank(address(safe));
-        guard.cancelModuleAttestation(TX_TO, TX_VALUE, TX_DATA, TX_OP);
-
-        assertFalse(guard.isModuleSigSpent(sigId));
-    }
-
-    function test_cancelModuleAttestation_revertsIfNoPending() public {
-        vm.expectRevert(SafenetGuard.NoModuleAttestationPending.selector);
-        vm.prank(address(safe));
-        guard.cancelModuleAttestation(TX_TO, TX_VALUE, TX_DATA, TX_OP);
-    }
-
-    function test_cancelModuleAttestation_revertsIfCalledByNonSafe() public {
-        // Submit attestation for the Safe's default module tx
-        bytes32 safeTxHash = _defaultModuleSafeTxHash();
-        _submitAttestation(safeTxHash, INITIAL_EPOCH, GROUP_SK, GROUP_NK);
-        // A different caller with the same params computes a different hash (msg.sender baked in)
-        // → the entry is not found → NoModuleAttestationPending
-        vm.expectRevert(SafenetGuard.NoModuleAttestationPending.selector);
-        vm.prank(other);
-        guard.cancelModuleAttestation(TX_TO, TX_VALUE, TX_DATA, TX_OP);
-    }
-
-    function test_cancelModuleAttestation_emitsEvent() public {
-        bytes32 safeTxHash = _defaultModuleSafeTxHash();
-        _submitAttestation(safeTxHash, INITIAL_EPOCH, GROUP_SK, GROUP_NK);
-        vm.expectEmit(true, false, false, false);
-        emit SafenetGuard.ModuleAttestationCancelled(safeTxHash);
-        vm.prank(address(safe));
-        guard.cancelModuleAttestation(TX_TO, TX_VALUE, TX_DATA, TX_OP);
-    }
-
-    // ============================================================
     // UPDATE EPOCH
     // ============================================================
 
@@ -741,7 +442,6 @@ contract SafenetGuardTest is Test {
         guard.updateEpoch(newEpoch, 100, newKey, sig);
 
         assertEq(guard.activeEpoch(), newEpoch);
-        assertEq(guard.previousEpoch(), INITIAL_EPOCH);
     }
 
     function test_updateEpoch_isPermissionless() public {
@@ -764,7 +464,6 @@ contract SafenetGuardTest is Test {
         guard.updateEpoch(targetEpoch, 100, newKey, sig);
 
         assertEq(guard.activeEpoch(), targetEpoch);
-        assertEq(guard.previousEpoch(), INITIAL_EPOCH);
     }
 
     function test_updateEpoch_skippedEpochAttestationReverts() public {
@@ -775,10 +474,17 @@ contract SafenetGuardTest is Test {
             ConsensusMessages.epochRollover(guard.consensusDomainSeparator(), INITIAL_EPOCH, targetEpoch, 100, newKey);
         guard.updateEpoch(targetEpoch, 100, newKey, _frostSign(GROUP_SK, GROUP_NK, rolloverMsg));
 
-        // Epoch 2 was skipped — neither active (3) nor previous (1) → InvalidEpoch
-        FROST.Signature memory dummySig = FROST.Signature({r: ForgeSecp256k1.g(GROUP_NK).toPoint(), z: 1});
+        // Epoch 2 was skipped — inline attestation for epoch 2 must revert InvalidEpoch
+        uint256 nonce = safe.nonce();
+        bytes32 txHash = _safeTxHash(TX_TO, TX_VALUE, TX_DATA, TX_OP, nonce);
+        bytes32 message =
+            ConsensusMessages.transactionProposal(guard.consensusDomainSeparator(), INITIAL_EPOCH + 1, txHash);
+        FROST.Signature memory sig = _frostSign(GROUP_SK, GROUP_NK, message);
+        bytes memory attestation = abi.encode(uint64(INITIAL_EPOCH + 1), sig);
+        bytes memory combined =
+            bytes.concat(_signSafeTx(txHash), abi.encodePacked(attestation, bytes32(attestation.length)));
         vm.expectRevert(SafenetGuard.InvalidEpoch.selector);
-        guard.submitAttestation(keccak256("hash"), INITIAL_EPOCH + 1, dummySig);
+        safe.execTransaction(TX_TO, TX_VALUE, TX_DATA, TX_OP, 0, 0, 0, address(0), payable(address(0)), combined);
     }
 
     function test_updateEpoch_emitsEvent() public {
@@ -793,75 +499,43 @@ contract SafenetGuardTest is Test {
         guard.updateEpoch(newEpoch, 100, newKey, sig);
     }
 
-    function test_submitAttestation_onAnyWindowEpoch() public {
-        // Both the current and previous epoch are valid after a rollover
+    function test_checkTransaction_acceptsInlineAttestationOnAnyWindowEpoch() public {
+        // Roll over to epoch 2
         uint64 epoch2 = INITIAL_EPOCH + 1;
         Secp256k1.Point memory key2 = ForgeSecp256k1.g(GROUP_SK_NEXT).toPoint();
         bytes32 rolloverMsg =
             ConsensusMessages.epochRollover(guard.consensusDomainSeparator(), INITIAL_EPOCH, epoch2, 100, key2);
         guard.updateEpoch(epoch2, 100, key2, _frostSign(GROUP_SK, GROUP_NK, rolloverMsg));
 
-        bytes32 hash1 = keccak256("active");
-        bytes32 hash2 = keccak256("previous");
-        bytes32 m1 = ConsensusMessages.transactionProposal(guard.consensusDomainSeparator(), epoch2, hash1);
-        bytes32 m2 = ConsensusMessages.transactionProposal(guard.consensusDomainSeparator(), INITIAL_EPOCH, hash2);
-        guard.submitAttestation(hash1, epoch2, _frostSign(GROUP_SK_NEXT, GROUP_NK_NEXT, m1));
-        guard.submitAttestation(hash2, INITIAL_EPOCH, _frostSign(GROUP_SK, GROUP_NK, m2));
-        assertTrue(guard.getAttestation(hash1) != bytes32(0));
-        assertTrue(guard.getAttestation(hash2) != bytes32(0));
+        // Execute with active epoch (2) inline attestation — must pass
+        uint256 nonce = safe.nonce();
+        bytes32 txHash = _safeTxHash(TX_TO, TX_VALUE, TX_DATA, TX_OP, nonce);
+        bytes memory combined =
+            bytes.concat(_signSafeTx(txHash), _buildInlineAttestation(txHash, epoch2, GROUP_SK_NEXT, GROUP_NK_NEXT));
+        safe.execTransaction(TX_TO, TX_VALUE, TX_DATA, TX_OP, 0, 0, 0, address(0), payable(address(0)), combined);
+
+        // Execute with previous epoch (1) inline attestation — must also pass
+        nonce = safe.nonce();
+        txHash = _safeTxHash(TX_TO, TX_VALUE, TX_DATA, TX_OP, nonce);
+        combined = bytes.concat(_signSafeTx(txHash), _buildInlineAttestation(txHash, INITIAL_EPOCH, GROUP_SK, GROUP_NK));
+        safe.execTransaction(TX_TO, TX_VALUE, TX_DATA, TX_OP, 0, 0, 0, address(0), payable(address(0)), combined);
     }
 
     // ============================================================
     // INTEGRATION — REAL EC MATH
     // ============================================================
 
-    function test_integration_submitAndVerifyTransactionAttestation() public {
-        bytes32 safeTxHash = _defaultSafeTxHash();
-        _submitAttestation(safeTxHash, INITIAL_EPOCH, GROUP_SK, GROUP_NK);
-
-        assertTrue(guard.getAttestation(safeTxHash) != bytes32(0));
-        _execSafeTx(TX_TO, TX_VALUE, TX_DATA, TX_OP, ExecMode.Direct); // must pass
-    }
-
-    function test_integration_submitAttestation_revertsWithTamperedSignature() public {
-        bytes32 safeTxHash = _defaultSafeTxHash();
-        bytes32 message =
-            ConsensusMessages.transactionProposal(guard.consensusDomainSeparator(), INITIAL_EPOCH, safeTxHash);
+    function test_integration_inlineAttestation_revertsWithTamperedSignature() public {
+        uint256 nonce = safe.nonce();
+        bytes32 txHash = _safeTxHash(TX_TO, TX_VALUE, TX_DATA, TX_OP, nonce);
+        bytes32 message = ConsensusMessages.transactionProposal(guard.consensusDomainSeparator(), INITIAL_EPOCH, txHash);
         FROST.Signature memory sig = _frostSign(GROUP_SK, GROUP_NK, message);
         sig.z = addmod(sig.z, 1, Secp256k1.N); // tamper
-
+        bytes memory attestation = abi.encode(INITIAL_EPOCH, sig);
+        bytes memory combined =
+            bytes.concat(_signSafeTx(txHash), abi.encodePacked(attestation, bytes32(attestation.length)));
         vm.expectRevert(Secp256k1.InvalidMulMulAddWitness.selector);
-        guard.submitAttestation(safeTxHash, INITIAL_EPOCH, sig);
-    }
-
-    function test_integration_submitAttestation_moduleOneTimeUse() public {
-        bytes32 safeTxHash = _defaultModuleSafeTxHash();
-        bytes32 message =
-            ConsensusMessages.transactionProposal(guard.consensusDomainSeparator(), INITIAL_EPOCH, safeTxHash);
-        FROST.Signature memory sig1 = _frostSign(GROUP_SK, GROUP_NK, message);
-
-        guard.submitAttestation(safeTxHash, INITIAL_EPOCH, sig1);
-        _execDefaultModuleTransaction(); // first execution: passes and spends sig1
-
-        // Resubmit sig1 → permanently spent
-        vm.expectRevert(SafenetGuard.SignatureAlreadySpent.selector);
-        guard.submitAttestation(safeTxHash, INITIAL_EPOCH, sig1);
-
-        // New signing ceremony with different nonce → different sigId → succeeds
-        FROST.Signature memory sig2 = _frostSign(GROUP_SK, GROUP_NK_2, message);
-        guard.submitAttestation(safeTxHash, INITIAL_EPOCH, sig2);
-        _execDefaultModuleTransaction(); // second execution passes
-    }
-
-    function test_integration_submitAttestation_moduleRevertsWithTamperedSignature() public {
-        bytes32 safeTxHash = _defaultModuleSafeTxHash();
-        bytes32 message =
-            ConsensusMessages.transactionProposal(guard.consensusDomainSeparator(), INITIAL_EPOCH, safeTxHash);
-        FROST.Signature memory sig = _frostSign(GROUP_SK, GROUP_NK, message);
-        sig.z = addmod(sig.z, 1, Secp256k1.N); // tamper
-
-        vm.expectRevert(Secp256k1.InvalidMulMulAddWitness.selector);
-        guard.submitAttestation(safeTxHash, INITIAL_EPOCH, sig);
+        safe.execTransaction(TX_TO, TX_VALUE, TX_DATA, TX_OP, 0, 0, 0, address(0), payable(address(0)), combined);
     }
 
     function test_integration_updateEpoch_revertsWithTamperedSignature() public {
@@ -874,36 +548,6 @@ contract SafenetGuardTest is Test {
 
         vm.expectRevert(Secp256k1.InvalidMulMulAddWitness.selector);
         guard.updateEpoch(newEpoch, 9999, newKey, sig);
-    }
-
-    function test_integration_attestationOnPreviousEpochValidAfterRollover() public {
-        // Submit attestation on epoch 1 for the next tx
-        bytes32 safeTxHash = _defaultSafeTxHash();
-        _submitAttestation(safeTxHash, INITIAL_EPOCH, GROUP_SK, GROUP_NK);
-
-        // Roll over to epoch 2
-        uint64 newEpoch = INITIAL_EPOCH + 1;
-        Secp256k1.Point memory newKey = ForgeSecp256k1.g(GROUP_SK_NEXT).toPoint();
-        bytes32 rolloverMsg =
-            ConsensusMessages.epochRollover(guard.consensusDomainSeparator(), INITIAL_EPOCH, newEpoch, 100, newKey);
-        guard.updateEpoch(newEpoch, 100, newKey, _frostSign(GROUP_SK, GROUP_NK, rolloverMsg));
-
-        // Attestation stored in epoch 1 remains valid (permanent flag)
-        _execSafeTx(TX_TO, TX_VALUE, TX_DATA, TX_OP, ExecMode.Direct); // must pass
-    }
-
-    function test_integration_previousEpochAttestationAccepted() public {
-        // Roll over to epoch 2
-        uint64 newEpoch = INITIAL_EPOCH + 1;
-        Secp256k1.Point memory newKey = ForgeSecp256k1.g(GROUP_SK_NEXT).toPoint();
-        bytes32 rolloverMsg =
-            ConsensusMessages.epochRollover(guard.consensusDomainSeparator(), INITIAL_EPOCH, newEpoch, 100, newKey);
-        guard.updateEpoch(newEpoch, 100, newKey, _frostSign(GROUP_SK, GROUP_NK, rolloverMsg));
-
-        // Submit using epoch 1 (now previous) — should still be accepted
-        bytes32 safeTxHash = keccak256("another-hash");
-        _submitAttestation(safeTxHash, INITIAL_EPOCH, GROUP_SK, GROUP_NK);
-        assertTrue(guard.getAttestation(safeTxHash) != bytes32(0));
     }
 
     function test_integration_allowTransactionFullFlow() public {
@@ -924,24 +568,5 @@ contract SafenetGuardTest is Test {
         uint256 nonce2 = safe.nonce();
         vm.expectRevert(SafenetGuard.AttestationNotFound.selector);
         _execSafeTxWithNonce(TX_TO, TX_VALUE, TX_DATA, TX_OP, nonce2);
-    }
-
-    function test_integration_moduleHashReconstructionMatchesSafeLibrary() public {
-        bytes32 expectedHash = _defaultModuleSafeTxHash();
-        _submitAttestation(expectedHash, INITIAL_EPOCH, GROUP_SK, GROUP_NK);
-        // checkModuleTransaction must reconstruct the same hash and find the attestation
-        _execDefaultModuleTransaction(); // passes → hash reconstruction matches
-        assertEq(guard.getAttestation(expectedHash), bytes32(0)); // attestation consumed
-    }
-
-    function test_integration_hashReconstructionMatchesSafeLibrary() public {
-        // Compute the expected hash externally using SafeTransaction.hash()
-        bytes32 expectedHash = _defaultSafeTxHash();
-
-        // Submit an attestation keyed to this hash
-        _submitAttestation(expectedHash, INITIAL_EPOCH, GROUP_SK, GROUP_NK);
-
-        // checkTransaction must reconstruct the same hash and find the attestation
-        _execSafeTx(TX_TO, TX_VALUE, TX_DATA, TX_OP, ExecMode.Direct); // passes → hash reconstruction matches
     }
 }
