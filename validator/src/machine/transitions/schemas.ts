@@ -287,6 +287,7 @@ const oracleTransactionAttestedEventTransitionSchema = baseEventTransitionParams
 
 const oracleResultEventTransitionSchema = baseEventTransitionParamsSchema.extend(oracleResultEventSchema.shape).extend({
 	id: z.literal("event_oracle_result"),
+	oracle: checkedAddressSchema,
 });
 
 const newBlockTransition = z.object({

@@ -22,13 +22,14 @@ import {
 } from "./schemas.js";
 import type { EventTransition } from "./types.js";
 
-export type ProtocolLog = Pick<Log<typeof ALL_EVENTS>, "blockNumber" | "logIndex" | "eventName" | "args">;
+export type ProtocolLog = Pick<Log<typeof ALL_EVENTS>, "blockNumber" | "logIndex" | "eventName" | "args" | "address">;
 
 export const logToTransition = ({
 	blockNumber: block,
 	logIndex: index,
 	eventName,
 	args: eventArgs,
+	address,
 }: ProtocolLog): EventTransition => {
 	switch (eventName) {
 		case "KeyGenCommitted": {
@@ -190,6 +191,7 @@ export const logToTransition = ({
 				id: "event_oracle_result",
 				block,
 				index,
+				oracle: address,
 				...args,
 			};
 		}

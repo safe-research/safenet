@@ -15,6 +15,10 @@ export const handleOracleResult = async (
 		logger?.debug?.(`No waiting_for_oracle state for oracle result ${event.requestId}`);
 		return {};
 	}
+	if (event.oracle !== status.oracle) {
+		logger?.debug?.(`Oracle mismatch for result ${event.requestId}: expected ${status.oracle}, got ${event.oracle}`);
+		return {};
+	}
 	if (!event.approved) {
 		logger?.info?.("Oracle rejected transaction, dropping state", { requestId: event.requestId });
 		return { signing: [event.requestId] };

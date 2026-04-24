@@ -198,6 +198,7 @@ export type OracleResultEvent = {
 	id: "event_oracle_result";
 	block: bigint;
 	index: number;
+	oracle: Address;
 	requestId: Hex;
 	proposer: Address;
 	result: Hex;

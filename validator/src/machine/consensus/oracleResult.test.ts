@@ -10,6 +10,7 @@ import { handleOracleResult } from "./oracleResult.js";
 
 // --- Test Data ---
 const ORACLE_ADDRESS = "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266";
+const OTHER_ORACLE_ADDRESS = "0x70997970C51812dc3A010C7d01b50e0d17dc79C8";
 const GROUP_ID = "0x0000000000000000000000007fa9385be102ac3eac297483dd6233d62b3e1496";
 const SIGNATURE_ID = "0x5af35af300000000000000000000000000000000000000000000000000000000";
 
@@ -65,6 +66,7 @@ const APPROVED_EVENT: OracleResultEvent = {
 	id: "event_oracle_result",
 	block: 50n,
 	index: 0,
+	oracle: ORACLE_ADDRESS,
 	requestId: REQUEST_ID,
 	proposer: "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266",
 	result: "0x",
@@ -99,6 +101,13 @@ describe("oracle result", () => {
 			signing: { [REQUEST_ID]: wrongState },
 		};
 		const diff = await handleOracleResult(MACHINE_CONFIG, signingClient, machineStates, APPROVED_EVENT);
+		expect(diff).toStrictEqual({});
+	});
+
+	it("should not handle oracle result from a different oracle than expected", async () => {
+		const signingClient = {} as unknown as SigningClient;
+		const wrongOracleEvent: OracleResultEvent = { ...APPROVED_EVENT, oracle: OTHER_ORACLE_ADDRESS };
+		const diff = await handleOracleResult(MACHINE_CONFIG, signingClient, MACHINE_STATES, wrongOracleEvent);
 		expect(diff).toStrictEqual({});
 	});
 

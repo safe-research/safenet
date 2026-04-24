@@ -329,6 +329,7 @@ export const TEST_EVENTS: [ProtocolLog | null, StateTransition][] = [
 		{
 			blockNumber: 111n,
 			logIndex: 0,
+			address: zeroAddress,
 			// KeyGen(bytes32 indexed gid, bytes32 participants, uint16 count, uint16 threshold, bytes32 indexed context)
 			eventName: "KeyGen",
 			args: {
@@ -354,6 +355,7 @@ export const TEST_EVENTS: [ProtocolLog | null, StateTransition][] = [
 		{
 			blockNumber: 111n,
 			logIndex: 0,
+			address: zeroAddress,
 			// KeyGenCommitted(bytes32 indexed gid, address participant, ((uint256 x, uint256 y) q, (uint256 x, uint256 y)[] c, (uint256 x, uint256 y) r, uint256 mu) commitment, bool committed)
 			eventName: "KeyGenCommitted",
 			args: {
@@ -387,6 +389,7 @@ export const TEST_EVENTS: [ProtocolLog | null, StateTransition][] = [
 		{
 			blockNumber: 111n,
 			logIndex: 0,
+			address: zeroAddress,
 			// KeyGenSecretShared(bytes32 indexed gid, address participant, ((uint256 x, uint256 y) y, uint256[] f) share, bool shared)
 			eventName: "KeyGenSecretShared",
 			args: {
@@ -416,6 +419,7 @@ export const TEST_EVENTS: [ProtocolLog | null, StateTransition][] = [
 		{
 			blockNumber: 111n,
 			logIndex: 0,
+			address: zeroAddress,
 			// KeyGenComplained(bytes32 indexed gid, address plaintiff, address accused, bool compromised)
 			eventName: "KeyGenComplained",
 			args: {
@@ -439,6 +443,7 @@ export const TEST_EVENTS: [ProtocolLog | null, StateTransition][] = [
 		{
 			blockNumber: 111n,
 			logIndex: 0,
+			address: zeroAddress,
 			// KeyGenComplaintResponded(bytes32 indexed gid, address plaintiff, address accused, uint256 secretShare)
 			eventName: "KeyGenComplaintResponded",
 			args: {
@@ -462,6 +467,7 @@ export const TEST_EVENTS: [ProtocolLog | null, StateTransition][] = [
 		{
 			blockNumber: 111n,
 			logIndex: 0,
+			address: zeroAddress,
 			// KeyGenConfirmed(bytes32 indexed gid, address participant, bool confirmed)
 			eventName: "KeyGenConfirmed",
 			args: {
@@ -483,6 +489,7 @@ export const TEST_EVENTS: [ProtocolLog | null, StateTransition][] = [
 		{
 			blockNumber: 111n,
 			logIndex: 0,
+			address: zeroAddress,
 			// Preprocess(bytes32 indexed gid, address participant, uint64 chunk, bytes32 commitment)
 			eventName: "Preprocess",
 			args: {
@@ -506,6 +513,7 @@ export const TEST_EVENTS: [ProtocolLog | null, StateTransition][] = [
 		{
 			blockNumber: 111n,
 			logIndex: 0,
+			address: zeroAddress,
 			// Sign(address indexed initiator, bytes32 indexed gid, bytes32 indexed message, bytes32 sid, uint64 sequence)
 			eventName: "Sign",
 			args: {
@@ -531,6 +539,7 @@ export const TEST_EVENTS: [ProtocolLog | null, StateTransition][] = [
 		{
 			blockNumber: 111n,
 			logIndex: 0,
+			address: zeroAddress,
 			// SignRevealedNonces(bytes32 indexed sid, address participant, ((uint256 x, uint256 y) d, (uint256 x, uint256 y) e) nonces)
 			eventName: "SignRevealedNonces",
 			args: {
@@ -558,6 +567,7 @@ export const TEST_EVENTS: [ProtocolLog | null, StateTransition][] = [
 		{
 			blockNumber: 111n,
 			logIndex: 0,
+			address: zeroAddress,
 			// SignShared(bytes32 indexed sid, bytes32 indexed selectionRoot, address participant, uint256 z)
 			eventName: "SignShared",
 			args: {
@@ -581,6 +591,7 @@ export const TEST_EVENTS: [ProtocolLog | null, StateTransition][] = [
 		{
 			blockNumber: 111n,
 			logIndex: 0,
+			address: zeroAddress,
 			// SignCompleted(bytes32 indexed sid, bytes32 indexed selectionRoot, ((uint256 x, uint256 y) r, uint256 z) signature)
 			eventName: "SignCompleted",
 			args: {
@@ -608,6 +619,7 @@ export const TEST_EVENTS: [ProtocolLog | null, StateTransition][] = [
 		{
 			blockNumber: 111n,
 			logIndex: 0,
+			address: zeroAddress,
 			// EpochProposed(uint64 indexed activeEpoch, uint64 indexed proposedEpoch, uint64 rolloverBlock, bytes32 groupId, (uint256 x, uint256 y) groupKey)
 			eventName: "EpochProposed",
 			args: {
@@ -633,6 +645,7 @@ export const TEST_EVENTS: [ProtocolLog | null, StateTransition][] = [
 		{
 			blockNumber: 111n,
 			logIndex: 0,
+			address: zeroAddress,
 			// EpochStaged(uint64 indexed activeEpoch, uint64 indexed proposedEpoch, uint64 rolloverBlock, bytes32 groupId, (uint256 x, uint256 y) groupKey, bytes32 signatureId, ((uint256 x, uint256 y) r, uint256 z) attestation)
 			eventName: "EpochStaged",
 			args: {
@@ -668,6 +681,7 @@ export const TEST_EVENTS: [ProtocolLog | null, StateTransition][] = [
 		{
 			blockNumber: 111n,
 			logIndex: 0,
+			address: zeroAddress,
 			// TransactionProposed(bytes32 indexed safeTxHash, uint256 indexed chainId, address indexed safe, uint64 epoch, (uint256 chainId, address safe, address to, uint256 value, bytes data, uint8 operation, uint256 safeTxGas, uint256 baseGas, uint256 gasPrice, address gasToken, address refundReceiver, uint256 nonce) transaction)
 			eventName: "TransactionProposed",
 			args: {
@@ -719,6 +733,7 @@ export const TEST_EVENTS: [ProtocolLog | null, StateTransition][] = [
 		{
 			blockNumber: 111n,
 			logIndex: 0,
+			address: zeroAddress,
 			// TransactionAttested(bytes32 indexed safeTxHash, uint256 indexed chainId, address indexed safe, uint64 epoch, bytes32 signatureId, ((uint256 x, uint256 y) r, uint256 z) attestation)
 			eventName: "TransactionAttested",
 			args: {
@@ -752,6 +767,7 @@ export const TEST_EVENTS: [ProtocolLog | null, StateTransition][] = [
 		{
 			blockNumber: 111n,
 			logIndex: 0,
+			address: zeroAddress,
 			// OracleResult(bytes32 indexed requestId, address indexed proposer, bytes result, bool approved)
 			eventName: "OracleResult",
 			args: {
@@ -765,6 +781,7 @@ export const TEST_EVENTS: [ProtocolLog | null, StateTransition][] = [
 			id: "event_oracle_result",
 			block: 111n,
 			index: 0,
+			oracle: zeroAddress,
 			requestId: "0x5afe000000000000000000000000000000000000000000000000000000000000",
 			proposer: zeroAddress,
 			result: "0x",
