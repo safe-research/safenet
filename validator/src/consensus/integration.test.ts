@@ -24,10 +24,12 @@ import type { WatcherConfig } from "../machine/transitions/watcher.js";
 import { createValidatorService, type ValidatorService } from "../service/service.js";
 import {
 	CONSENSUS_EPOCH_STAGED_EVENT,
+	CONSENSUS_ORACLE_TRANSACTION_PROPOSED_EVENT,
 	CONSENSUS_TRANSACTION_PROPOSED_EVENT,
 	COORDINATOR_EVENTS,
 	COORDINATOR_SIGN_COMPLETED_EVENT,
 	COORDINATOR_SIGN_EVENT,
+	ORACLE_RESULT_EVENT,
 } from "../types/abis.js";
 import type { ProtocolConfig } from "../types/interfaces.js";
 import { participantsForEpoch } from "../utils/participants.js";
@@ -92,11 +94,15 @@ describe("integration", () => {
 		timeout,
 		blockTimeMs,
 		rotateOutEpoch,
+		allowedOracles,
+		oracleTimeout,
 	}: {
 		blocksPerEpoch?: bigint;
 		timeout?: bigint;
 		blockTimeMs?: number;
 		rotateOutEpoch?: bigint;
+		allowedOracles?: Address[];
+		oracleTimeout?: bigint;
 	}) => {
 		// Check deployment information is available
 		const deploymentInfoFile = path.join(
@@ -145,7 +151,9 @@ describe("integration", () => {
 			address: deploymentInfo.returns.consensus.value as Address,
 			abi: parseAbi([
 				"function proposeTransaction((uint256 chainId, address safe, address to, uint256 value, bytes data, uint8 operation, uint256 safeTxGas, uint256 baseGas, uint256 gasPrice, address gasToken, address refundReceiver, uint256 nonce) transaction) external returns (bytes32 safeTxHash)",
+				"function proposeOracleTransaction(address oracle, (uint256 chainId, address safe, address to, uint256 value, bytes data, uint8 operation, uint256 safeTxGas, uint256 baseGas, uint256 gasPrice, address gasToken, address refundReceiver, uint256 nonce) transaction) external returns (bytes32 safeTxHash)",
 				"function getTransactionAttestation(uint64 epoch, (uint256 chainId, address safe, address to, uint256 value, bytes data, uint8 operation, uint256 safeTxGas, uint256 baseGas, uint256 gasPrice, address gasToken, address refundReceiver, uint256 nonce) transaction) external view returns (((uint256 x, uint256 y) r, uint256 z) signature)",
+				"function getOracleTransactionAttestationByHash(uint64 epoch, address oracle, bytes32 safeTxHash) external view returns (((uint256 x, uint256 y) r, uint256 z) signature)",
 				"function getActiveEpoch() external view returns (uint64 epoch, bytes32 group)",
 			]),
 		} as const;
@@ -175,6 +183,8 @@ describe("integration", () => {
 				blocksPerEpoch: blocksPerEpoch ?? BLOCKS_PER_EPOCH,
 				keyGenTimeout: timeout,
 				signingTimeout: timeout,
+				allowedOracles,
+				oracleTimeout,
 			};
 			const blockRetryCounts =
 				(i & 1) === 0
@@ -539,5 +549,134 @@ describe("integration", () => {
 			args: [proposal.args.epoch, proposal.args.transaction],
 		});
 		expect(verifySignature(toPoint(attestation.r), attestation.z, toPoint(groupKey), proposalMessage)).toBeTruthy();
+	});
+
+	it("keygen and oracle signing flow", { timeout: TEST_RUNTIME_IN_SECONDS * 1000 * 5 }, async ({ skip }) => {
+		// Load AlwaysApproveOracle bytecode from compiled artifacts
+		const oracleBytecodeFile = path.join(
+			process.cwd(),
+			"..",
+			"contracts",
+			"out",
+			"AlwaysApproveOracle.sol",
+			"AlwaysApproveOracle.json",
+		);
+		if (!fs.existsSync(oracleBytecodeFile)) {
+			skip();
+			return;
+		}
+		const oracleArtifact = JSON.parse(fs.readFileSync(oracleBytecodeFile, "utf-8"));
+		const oracleBytecode = oracleArtifact.bytecode.object as `0x${string}`;
+
+		// Deploy AlwaysApproveOracle before setup so we know the address for allowedOracles config
+		if (snapshotId === undefined) {
+			skip();
+			return;
+		}
+		await testClient.revert({ id: snapshotId });
+		snapshotId = await testClient.snapshot();
+		const deployHash = await testClient.deployContract({ abi: [], bytecode: oracleBytecode });
+		await testClient.mine({ blocks: 1 });
+		const deployReceipt = await testClient.getTransactionReceipt({ hash: deployHash });
+		const oracleAddress = deployReceipt.contractAddress as Address;
+		testLogger.notice(`Deployed AlwaysApproveOracle at ${oracleAddress}`);
+
+		// Reset snapshot so setup() sees the oracle deployment
+		snapshotId = await testClient.snapshot();
+
+		const setupInfo = await setup({ allowedOracles: [oracleAddress], oracleTimeout: 20n });
+		if (setupInfo === undefined) {
+			skip();
+			return;
+		}
+		const { coordinator, consensus, triggerKeyGen } = setupInfo;
+		await triggerKeyGen();
+
+		await waitForBlocks(testClient, 15n);
+
+		// Propose an oracle-checked transaction
+		const transaction = {
+			chainId: 1n,
+			safe: "0xb3D9cf8E163bbc840195a97E81F8A34E295B8f39",
+			to: "0x74F665BE90ffcd9ce9dcA68cB5875570B711CEca",
+			value: 0n,
+			data: "0x",
+			operation: 0,
+			safeTxGas: 0n,
+			baseGas: 0n,
+			gasPrice: 0n,
+			gasToken: zeroAddress,
+			refundReceiver: zeroAddress,
+			nonce: 0n,
+		} as const;
+		testLogger.notice("Propose oracle transaction", transaction);
+		await testClient.writeContract({
+			...consensus,
+			functionName: "proposeOracleTransaction",
+			args: [oracleAddress, transaction],
+		});
+
+		// Wait until the end of the epoch
+		await waitForBlock(testClient, 40n);
+
+		// Verify the oracle proposal was emitted
+		const oracleProposals = await testClient.getLogs({
+			address: consensus.address,
+			event: CONSENSUS_ORACLE_TRANSACTION_PROPOSED_EVENT,
+			fromBlock: "earliest",
+			strict: true,
+		});
+		expect(oracleProposals.length).toBe(1);
+		const oracleProposal = oracleProposals[0];
+		expect(oracleProposal.args.oracle).toBe(oracleAddress);
+
+		// Verify OracleResult was emitted by the AlwaysApproveOracle
+		const oracleResults = await testClient.getLogs({
+			address: oracleAddress,
+			event: ORACLE_RESULT_EVENT,
+			fromBlock: "earliest",
+			strict: true,
+		});
+		expect(oracleResults.length).toBe(1);
+		expect(oracleResults[0].args.approved).toBe(true);
+
+		// Verify signature request and completion
+		const signatureRequests = await testClient.getLogs({
+			address: coordinator.address,
+			event: COORDINATOR_SIGN_EVENT,
+			fromBlock: "earliest",
+			strict: true,
+		});
+		expect(signatureRequests.length).toBeGreaterThan(0);
+		const request = signatureRequests.at(-1)!;
+
+		const completedRequests = await testClient.getLogs({
+			address: coordinator.address,
+			event: COORDINATOR_SIGN_COMPLETED_EVENT,
+			fromBlock: "earliest",
+			args: { sid: request.args.sid },
+			strict: true,
+		});
+		expect(completedRequests.length).toBe(1);
+		const completedRequest = completedRequests[0];
+		const signature = completedRequest.args.signature;
+
+		// Verify the signature is valid
+		const groupKey = await testClient.readContract({
+			...coordinator,
+			functionName: "groupKey",
+			args: [request.args.gid],
+		});
+		expect(verifySignature(toPoint(signature.r), signature.z, toPoint(groupKey), request.args.message)).toBeTruthy();
+
+		// Verify the oracle transaction attestation is stored in the consensus contract
+		const attestation = await testClient.readContract({
+			...consensus,
+			functionName: "getOracleTransactionAttestationByHash",
+			args: [oracleProposal.args.epoch, oracleAddress, oracleProposal.args.safeTxHash],
+		});
+		expect(
+			verifySignature(toPoint(attestation.r), attestation.z, toPoint(groupKey), request.args.message),
+		).toBeTruthy();
 	});
 });

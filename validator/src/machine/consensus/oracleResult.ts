@@ -1,5 +1,6 @@
 import type { SigningClient } from "../../consensus/signing/client.js";
 import type { Logger } from "../../utils/logging.js";
+import { buildNonceCommitmentsDiff } from "../signing/commitments.js";
 import type { OracleResultEvent } from "../transitions/types.js";
 import type { MachineConfig, MachineStates, StateDiff } from "../types.js";
 
@@ -24,26 +25,13 @@ export const handleOracleResult = async (
 		return { signing: [event.requestId] };
 	}
 	logger?.info?.("Oracle approved transaction, participating in signing", { requestId: event.requestId });
-	const { nonceCommitments, nonceProof } = signingClient.createNonceCommitments(
-		status.gid,
-		machineConfig.account,
-		status.signatureId,
-		event.requestId,
-		status.sequence,
-		status.signers,
-	);
-	return {
-		consensus: { signatureIdToMessage: [status.signatureId, event.requestId] },
-		signing: [
-			event.requestId,
-			{
-				id: "collect_nonce_commitments",
-				signatureId: status.signatureId,
-				deadline: event.block + machineConfig.signingTimeout,
-				lastSigner: undefined,
-				packet: status.packet,
-			},
-		],
-		actions: [{ id: "sign_reveal_nonce_commitments", signatureId: status.signatureId, nonceCommitments, nonceProof }],
-	};
+	return buildNonceCommitmentsDiff(machineConfig, signingClient, {
+		gid: status.gid,
+		signatureId: status.signatureId,
+		message: event.requestId,
+		sequence: status.sequence,
+		signers: status.signers,
+		block: event.block,
+		packet: status.packet,
+	});
 };
