@@ -748,4 +748,27 @@ export const TEST_EVENTS: [ProtocolLog | null, StateTransition][] = [
 			},
 		},
 	],
+	[
+		{
+			blockNumber: 111n,
+			logIndex: 0,
+			// OracleResult(bytes32 indexed requestId, address indexed proposer, bytes result, bool approved)
+			eventName: "OracleResult",
+			args: {
+				requestId: "0x5afe000000000000000000000000000000000000000000000000000000000000",
+				proposer: zeroAddress,
+				result: "0x",
+				approved: true,
+			},
+		},
+		{
+			id: "event_oracle_result",
+			block: 111n,
+			index: 0,
+			requestId: "0x5afe000000000000000000000000000000000000000000000000000000000000",
+			proposer: zeroAddress,
+			result: "0x",
+			approved: true,
+		},
+	],
 ];

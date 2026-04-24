@@ -88,6 +88,8 @@ export const validatorConfigSchema = z.object({
 	BLOCK_SINGLE_QUERY_RETRY_COUNT: emptyToDefault(z.coerce.number().int().optional()),
 	KEY_GEN_TIMEOUT: emptyToDefault(z.coerce.bigint().optional()),
 	SIGNING_TIMEOUT: emptyToDefault(z.coerce.bigint().optional()),
+	ORACLE_TIMEOUT_BLOCKS: emptyToDefault(z.coerce.bigint().optional()),
+	ALLOWED_ORACLES: emptyToDefault(jsonStringToValue(z.array(checkedAddressSchema)).optional(), []),
 	MAX_LOGS_PER_QUERY: emptyToDefault(z.coerce.number().int().optional()),
 	SKIP_GENESIS: emptyToDefault(strictBoolSchema.optional()),
 });

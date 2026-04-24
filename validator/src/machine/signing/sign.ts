@@ -49,6 +49,9 @@ export const handleSign = async (
 				{
 					id: "waiting_for_oracle",
 					oracle: status.packet.proposal.oracle,
+					gid: event.gid,
+					signatureId: event.sid,
+					sequence: event.sequence,
 					signers: status.signers,
 					deadline: event.block + machineConfig.oracleTimeout,
 					packet: status.packet,

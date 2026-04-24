@@ -342,6 +342,9 @@ describe("collecting shares", () => {
 			{
 				id: "waiting_for_oracle",
 				oracle: ORACLE_ADDRESS,
+				gid: EVENT.gid,
+				signatureId: EVENT.sid,
+				sequence: EVENT.sequence,
 				signers: ORACLE_SIGNING_STATE.signers,
 				deadline: 52n, // block(2) + oracleTimeout(50)
 				packet: ORACLE_SIGNING_STATE.packet,

@@ -194,6 +194,16 @@ export type OracleTransactionAttestedEvent = {
 	attestation: FrostSignature;
 };
 
+export type OracleResultEvent = {
+	id: "event_oracle_result";
+	block: bigint;
+	index: number;
+	requestId: Hex;
+	proposer: Address;
+	result: Hex;
+	approved: boolean;
+};
+
 export type EventTransition =
 	| KeyGenEvent
 	| KeyGenCommittedEvent
@@ -211,6 +221,7 @@ export type EventTransition =
 	| TransactionProposedEvent
 	| TransactionAttestedEvent
 	| OracleTransactionProposedEvent
-	| OracleTransactionAttestedEvent;
+	| OracleTransactionAttestedEvent
+	| OracleResultEvent;
 
 export type StateTransition = NewBlock | EventTransition;
