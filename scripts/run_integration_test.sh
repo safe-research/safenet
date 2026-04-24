@@ -34,14 +34,19 @@ npm run -w contracts cmd:deploy -- \
 
 # --- 4. Deploy Oracle for Integration Testing ---
 echo "Deploying AlwaysApproveOracle..."
-ORACLE_ADDRESS=$(cd contracts && forge create \
+FORGE_CREATE_OUTPUT=$(cd contracts && forge create \
     --rpc-url $ANVIL_RPC_URL \
     --unlocked \
     --from 0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266 \
     --json \
-    src/AlwaysApproveOracle.sol:AlwaysApproveOracle | jq -r '.deployedTo')
+    src/AlwaysApproveOracle.sol:AlwaysApproveOracle) || {
+    echo "ERROR: forge create AlwaysApproveOracle failed (see output above)"
+    exit 1
+}
+ORACLE_ADDRESS=$(echo "$FORGE_CREATE_OUTPUT" | jq -r '.deployedTo')
 if [ -z "$ORACLE_ADDRESS" ] || [ "$ORACLE_ADDRESS" = "null" ]; then
     echo "ERROR: Failed to deploy AlwaysApproveOracle — forge create returned no address"
+    echo "forge create output: $FORGE_CREATE_OUTPUT"
     exit 1
 fi
 echo "AlwaysApproveOracle deployed at $ORACLE_ADDRESS"
