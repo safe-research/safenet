@@ -11,6 +11,8 @@ import {
 	keyGenSecretSharedEventSchema,
 	nonceCommitmentsEventSchema,
 	nonceCommitmentsHashEventSchema,
+	oracleTransactionAttestedEventSchema,
+	oracleTransactionProposedEventSchema,
 	signatureShareEventSchema,
 	signedEventSchema,
 	signRequestEventSchema,
@@ -158,6 +160,24 @@ export const logToTransition = ({
 			const args = epochProposedEventSchema.parse(eventArgs);
 			return {
 				id: "event_epoch_proposed",
+				block,
+				index,
+				...args,
+			};
+		}
+		case "OracleTransactionProposed": {
+			const args = oracleTransactionProposedEventSchema.parse(eventArgs);
+			return {
+				id: "event_oracle_transaction_proposed",
+				block,
+				index,
+				...args,
+			};
+		}
+		case "OracleTransactionAttested": {
+			const args = oracleTransactionAttestedEventSchema.parse(eventArgs);
+			return {
+				id: "event_oracle_transaction_attested",
 				block,
 				index,
 				...args,

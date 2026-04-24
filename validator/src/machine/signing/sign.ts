@@ -40,6 +40,23 @@ export const handleSign = async (
 		return diff;
 	}
 
+	// Oracle packet: wait for oracle approval before participating in signing
+	if (status.packet.type === "oracle_transaction_packet") {
+		return {
+			...diff,
+			signing: [
+				event.message,
+				{
+					id: "waiting_for_oracle",
+					oracle: status.packet.proposal.oracle,
+					signers: status.signers,
+					deadline: event.block + machineConfig.oracleTimeout,
+					packet: status.packet,
+				},
+			],
+		};
+	}
+
 	const consensus = {
 		...diff.consensus,
 	};

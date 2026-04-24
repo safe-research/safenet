@@ -171,6 +171,12 @@ const checkSigningRequestTimeout = (
 				],
 			};
 		}
+		case "waiting_for_oracle": {
+			// Oracle did not respond in time — drop the signing request silently
+			return {
+				signing: [message, undefined],
+			};
+		}
 		case "collect_nonce_commitments":
 		case "collect_signing_shares": {
 			// Remove pending request

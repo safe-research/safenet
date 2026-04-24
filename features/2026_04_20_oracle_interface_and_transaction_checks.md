@@ -11,7 +11,7 @@ The implementation is structured in three independently releasable PRs:
 
 1. **PR 1 — Oracle contract interface + Consensus extension**: Define `IOracle.sol`, add `OracleTransactionProposal` as a new FROST-signed package type in `Consensus.sol`.
 2. **PR 2 — Validator new package type** (parallel to PR 1): New `oracle_transaction_packet` handler, EIP-712 hashing, and machine states for `OracleTransactionProposed` / `OracleTransactionAttested` events.
-3. **PR 3 — Validator oracle event integration** (depends on PR 2): Oracle event listener, `wait_for_oracle` signing state with configurable timeout, and `OracleResult` machine handler.
+3. **PR 3 — Validator oracle event integration** (depends on PR 2): Oracle event listener, `waiting_for_oracle` signing state with configurable timeout, and `OracleResult` machine handler.
 
 ---
 
@@ -40,14 +40,14 @@ requestId = keccak256("\x19\x01" || domainSeparator || keccak256(OracleTransacti
 
 When the oracle emits `OracleResult(requestId, result, approved)`, validators correlate it to the pending signing state via this `requestId`.
 
-### New Signing State: `wait_for_oracle`
+### New Signing State: `waiting_for_oracle`
 
 The existing signing state machine for transactions is extended with an intermediate state:
 
 ```
 waiting_for_request
   → [OracleTransactionProposed event]
-wait_for_oracle              ← new state (timeout: ORACLE_TIMEOUT_BLOCKS env var)
+waiting_for_oracle              ← new state (timeout: ORACLE_TIMEOUT_BLOCKS env var)
   → [OracleResult(approved=true) event]
 collect_nonce_commitments
   → ... (existing FROST signing flow)
@@ -249,11 +249,11 @@ EIP-712 hash for `OracleTransactionProposal` — mirrors `safeTxProposalHash` in
 
 #### New: `validator/src/machine/consensus/oracleTransactionProposed.ts`
 
-Handles `OracleTransactionProposed` event. Returns `StateDiff` with a new `wait_for_oracle` signing entry, recording the oracle address, packet, and a deadline of `event.block + oracleTimeout` (read from `MachineConfig.oracleTimeout`, sourced from env var `ORACLE_TIMEOUT_BLOCKS`).
+Handles `OracleTransactionProposed` event. Returns `StateDiff` with a new `waiting_for_oracle` signing entry, recording the oracle address, packet, and a deadline of `event.block + oracleTimeout` (read from `MachineConfig.oracleTimeout`, sourced from env var `ORACLE_TIMEOUT_BLOCKS`).
 
 #### New: `validator/src/machine/consensus/oracleResult.ts`
 
-Handles `OracleResult` event from oracle contracts. If `approved = true` and state is `wait_for_oracle`, transitions to the signing flow (`collect_nonce_commitments`). If `approved = false`, drops state. If the current block exceeds the deadline (checked on each new-block transition), state is also dropped.
+Handles `OracleResult` event from oracle contracts. If `approved = true` and state is `waiting_for_oracle`, transitions to the signing flow (`collect_nonce_commitments`). If `approved = false`, drops state. If the current block exceeds the deadline (checked on each new-block transition), state is also dropped.
 
 #### New: `validator/src/machine/consensus/oracleTransactionAttested.ts`
 
@@ -268,7 +268,7 @@ Add new transition types:
 
 #### Modified: `validator/src/machine/types.ts`
 
-Extend `SigningStateData` union with `wait_for_oracle` state variant, storing the oracle address, packet, and block deadline for later reference.
+Extend `SigningStateData` union with `waiting_for_oracle` state variant, storing the oracle address, packet, and block deadline for later reference.
 
 #### Modified: `validator/src/types/abis.ts`
 
@@ -307,7 +307,7 @@ Add `IOracle.OracleResult` ABI event definition for use by the watcher.
 | `oracleTransactionPacketSchema` rejects invalid oracle address | `validator/src/consensus/verify/oracleTx/handler.test.ts` |
 | `OracleTransactionHandler.hashAndVerify` rejects unlisted oracle | `validator/src/consensus/verify/oracleTx/handler.test.ts` |
 | `OracleTransactionHandler.hashAndVerify` returns correct EIP-712 hash | `validator/src/consensus/verify/oracleTx/handler.test.ts` |
-| `handleOracleTransactionProposed` stores `wait_for_oracle` state | `validator/src/machine/consensus/oracleTransactionProposed.test.ts` |
+| `handleOracleTransactionProposed` stores `waiting_for_oracle` state | `validator/src/machine/consensus/oracleTransactionProposed.test.ts` |
 | `handleOracleResult` (approved) transitions to signing | `validator/src/machine/consensus/oracleResult.test.ts` |
 | `handleOracleResult` (rejected) cleans up state | `validator/src/machine/consensus/oracleResult.test.ts` |
 | `handleOracleTransactionAttested` cleans up signing state | `validator/src/machine/consensus/oracleTransactionAttested.test.ts` |
@@ -360,7 +360,7 @@ Add `IOracle.OracleResult` ABI event definition for use by the watcher.
 - `validator/src/machine/consensus/oracleTransactionAttested.test.ts` — new
 - `validator/src/machine/transitions/types.ts` — add `event_oracle_transaction_proposed`, `event_oracle_transaction_attested`
 - `validator/src/machine/transitions/onchain.ts` — map new events to transitions
-- `validator/src/machine/types.ts` — add `wait_for_oracle` to `SigningStateData` union
+- `validator/src/machine/types.ts` — add `waiting_for_oracle` to `SigningStateData` union
 - `validator/src/service/service.ts` — register `oracle_transaction_packet` handler; add `allowedOracles` to `MachineConfig`
 
 ---

@@ -1,6 +1,6 @@
 import type { Address, Hex } from "viem";
 import type { SafeTransaction } from "../../consensus/verify/safeTx/schemas.js";
-import type { FrostPoint, GroupId, ProofOfKnowledge, SignatureId } from "../../frost/types.js";
+import type { FrostPoint, FrostSignature, GroupId, ProofOfKnowledge, SignatureId } from "../../frost/types.js";
 
 export type NewBlock = {
 	id: "block_new";
@@ -119,10 +119,7 @@ export type SignedEvent = {
 	index: number;
 	sid: SignatureId;
 	selectionRoot: Hex;
-	signature: {
-		z: bigint;
-		r: FrostPoint;
-	};
+	signature: FrostSignature;
 };
 
 export type EpochProposedEvent = {
@@ -146,10 +143,7 @@ export type EpochStagedEvent = {
 	groupId: GroupId;
 	groupKey: FrostPoint;
 	signatureId: SignatureId;
-	attestation: {
-		z: bigint;
-		r: FrostPoint;
-	};
+	attestation: FrostSignature;
 };
 
 export type TransactionProposedEvent = {
@@ -172,10 +166,32 @@ export type TransactionAttestedEvent = {
 	safe: Address;
 	epoch: bigint;
 	signatureId: SignatureId;
-	attestation: {
-		z: bigint;
-		r: FrostPoint;
-	};
+	attestation: FrostSignature;
+};
+
+export type OracleTransactionProposedEvent = {
+	id: "event_oracle_transaction_proposed";
+	block: bigint;
+	index: number;
+	safeTxHash: Hex;
+	chainId: bigint;
+	safe: Address;
+	epoch: bigint;
+	oracle: Address;
+	transaction: SafeTransaction;
+};
+
+export type OracleTransactionAttestedEvent = {
+	id: "event_oracle_transaction_attested";
+	block: bigint;
+	index: number;
+	safeTxHash: Hex;
+	chainId: bigint;
+	safe: Address;
+	epoch: bigint;
+	oracle: Address;
+	signatureId: SignatureId;
+	attestation: FrostSignature;
 };
 
 export type EventTransition =
@@ -193,6 +209,8 @@ export type EventTransition =
 	| EpochProposedEvent
 	| EpochStagedEvent
 	| TransactionProposedEvent
-	| TransactionAttestedEvent;
+	| TransactionAttestedEvent
+	| OracleTransactionProposedEvent
+	| OracleTransactionAttestedEvent;
 
 export type StateTransition = NewBlock | EventTransition;

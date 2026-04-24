@@ -8,6 +8,14 @@ export const CONSENSUS_TRANSACTION_PROPOSED_EVENT = parseAbiItem(
 	"event TransactionProposed(bytes32 indexed safeTxHash, uint256 indexed chainId, address indexed safe, uint64 epoch, (uint256 chainId, address safe, address to, uint256 value, bytes data, uint8 operation, uint256 safeTxGas, uint256 baseGas, uint256 gasPrice, address gasToken, address refundReceiver, uint256 nonce) transaction)",
 );
 
+export const CONSENSUS_ORACLE_TRANSACTION_PROPOSED_EVENT = parseAbiItem(
+	"event OracleTransactionProposed(bytes32 indexed safeTxHash, uint256 indexed chainId, address indexed safe, uint64 epoch, address oracle, (uint256 chainId, address safe, address to, uint256 value, bytes data, uint8 operation, uint256 safeTxGas, uint256 baseGas, uint256 gasPrice, address gasToken, address refundReceiver, uint256 nonce) transaction)",
+);
+
+export const CONSENSUS_ORACLE_TRANSACTION_ATTESTED_EVENT = parseAbiItem(
+	"event OracleTransactionAttested(bytes32 indexed safeTxHash, uint256 indexed chainId, address indexed safe, uint64 epoch, address oracle, bytes32 signatureId, ((uint256 x, uint256 y) r, uint256 z) attestation)",
+);
+
 export const CONSENSUS_OTHER_EVENTS = parseAbi([
 	"event EpochProposed(uint64 indexed activeEpoch, uint64 indexed proposedEpoch, uint64 rolloverBlock, bytes32 groupId, (uint256 x, uint256 y) groupKey)",
 	"event TransactionAttested(bytes32 indexed safeTxHash, uint256 indexed chainId, address indexed safe, uint64 epoch, bytes32 signatureId, ((uint256 x, uint256 y) r, uint256 z) attestation)",
@@ -16,6 +24,8 @@ export const CONSENSUS_OTHER_EVENTS = parseAbi([
 export const CONSENSUS_EVENTS = [
 	CONSENSUS_EPOCH_STAGED_EVENT,
 	CONSENSUS_TRANSACTION_PROPOSED_EVENT,
+	CONSENSUS_ORACLE_TRANSACTION_PROPOSED_EVENT,
+	CONSENSUS_ORACLE_TRANSACTION_ATTESTED_EVENT,
 	...CONSENSUS_OTHER_EVENTS,
 ] as const;
 
