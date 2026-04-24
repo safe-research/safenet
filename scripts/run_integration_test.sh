@@ -32,8 +32,18 @@ npm run -w contracts cmd:deploy -- \
     --sender 0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266 \
     --broadcast
 
-# --- 4. Run Client Integration Tests ---
+# --- 4. Deploy Oracle for Integration Testing ---
+echo "Deploying AlwaysApproveOracle..."
+ORACLE_ADDRESS=$(cd contracts && forge create \
+    --rpc-url $ANVIL_RPC_URL \
+    --unlocked \
+    --from 0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266 \
+    --json \
+    src/AlwaysApproveOracle.sol:AlwaysApproveOracle | jq -r '.deployedTo')
+echo "AlwaysApproveOracle deployed at $ORACLE_ADDRESS"
+
+# --- 5. Run Client Integration Tests ---
 echo "Running integration tests..."
-npm test -w validator -- integration
+ORACLE_ADDRESS=$ORACLE_ADDRESS npm test -w validator -- integration
 
 echo "Integration tests finished successfully."

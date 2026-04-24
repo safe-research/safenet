@@ -552,44 +552,16 @@ describe("integration", () => {
 	});
 
 	it("keygen and oracle signing flow", { timeout: TEST_RUNTIME_IN_SECONDS * 1000 * 5 }, async ({ skip }) => {
-		// Load AlwaysApproveOracle bytecode from compiled artifacts
-		const oracleBytecodeFile = path.join(
-			process.cwd(),
-			"..",
-			"contracts",
-			"out",
-			"AlwaysApproveOracle.sol",
-			"AlwaysApproveOracle.json",
-		);
-		if (!fs.existsSync(oracleBytecodeFile)) {
-			skip();
-			return;
-		}
-		const oracleArtifact = JSON.parse(fs.readFileSync(oracleBytecodeFile, "utf-8"));
-		const oracleBytecode = oracleArtifact.bytecode.object as `0x${string}`;
-
-		// Deploy AlwaysApproveOracle before setup so we know the address for allowedOracles config
-		if (snapshotId === undefined) {
-			skip();
-			return;
-		}
-		await testClient.revert({ id: snapshotId });
-		snapshotId = await testClient.snapshot();
-		const deployHash = await testClient.deployContract({ abi: [], bytecode: oracleBytecode });
-		await testClient.mine({ blocks: 1 });
-		const deployReceipt = await testClient.getTransactionReceipt({ hash: deployHash });
-		const oracleAddress = deployReceipt.contractAddress as Address;
-		testLogger.notice(`Deployed AlwaysApproveOracle at ${oracleAddress}`);
-
-		// Reset snapshot so setup() sees the oracle deployment
-		snapshotId = await testClient.snapshot();
-
-		const setupInfo = await setup({ allowedOracles: [oracleAddress], oracleTimeout: 20n });
-		if (setupInfo === undefined) {
+		// The oracle address is deployed by the integration test script (run_integration_test.sh)
+		// and passed via the ORACLE_ADDRESS environment variable.
+		const oracleAddress = process.env.ORACLE_ADDRESS as Address | undefined;
+		const setupInfo = await setup({ allowedOracles: oracleAddress ? [oracleAddress] : undefined, oracleTimeout: 20n });
+		if (setupInfo === undefined || oracleAddress === undefined) {
 			skip();
 			return;
 		}
 		const { coordinator, consensus, triggerKeyGen } = setupInfo;
+		testLogger.notice(`Using AlwaysApproveOracle at ${oracleAddress}`);
 		await triggerKeyGen();
 
 		await waitForBlocks(testClient, 15n);
@@ -648,6 +620,7 @@ describe("integration", () => {
 			strict: true,
 		});
 		expect(signatureRequests.length).toBeGreaterThan(0);
+		// biome-ignore lint/style/noNonNullAssertion: length check above guarantees element exists
 		const request = signatureRequests.at(-1)!;
 
 		const completedRequests = await testClient.getLogs({
