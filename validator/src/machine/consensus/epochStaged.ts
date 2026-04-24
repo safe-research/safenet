@@ -29,7 +29,7 @@ export const handleEpochStaged = async (
 	};
 	// Check if there is a signatureId that needs to be cleaned up
 	const status = machineStates.signing[machineStates.rollover.message];
-	if (status !== undefined && status.id !== "waiting_for_request") {
+	if (status !== undefined && "signatureId" in status) {
 		consensus.signatureIdToMessage = [status.signatureId, undefined];
 	}
 	// The signing state should be cleaned up in any case, as the rollover was attested

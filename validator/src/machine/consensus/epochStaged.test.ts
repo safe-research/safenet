@@ -1,34 +1,24 @@
-import { zeroHash } from "viem";
+import type { Address } from "viem";
 import { describe, expect, it, vi } from "vitest";
+import { makeMachineConfig } from "../../__tests__/data/machine.js";
 import type { SigningClient } from "../../consensus/signing/client.js";
 import type { EpochRolloverPacket } from "../../consensus/verify/rollover/schemas.js";
 import { toPoint } from "../../frost/math.js";
 import type { EpochStagedEvent } from "../transitions/types.js";
-import type { MachineConfig, MachineStates, SigningState } from "../types.js";
+import type { MachineStates, SigningState } from "../types.js";
 import { handleEpochStaged } from "./epochStaged.js";
 
 // --- Test Data ---
-const MACHINE_CONFIG: MachineConfig = {
-	account: "0x0000000000000000000000000000000000000001",
+const MACHINE_CONFIG = makeMachineConfig({
+	account: "0x0000000000000000000000000000000000000001" as Address,
 	participantsInfo: [
-		{
-			address: "0x0000000000000000000000000000000000000001",
-			activeFrom: 0n,
-		},
-		{
-			address: "0x0000000000000000000000000000000000000002",
-			activeFrom: 0n,
-		},
-		{
-			address: "0x0000000000000000000000000000000000000003",
-			activeFrom: 1n,
-		},
+		{ address: "0x0000000000000000000000000000000000000001", activeFrom: 0n },
+		{ address: "0x0000000000000000000000000000000000000002", activeFrom: 0n },
+		{ address: "0x0000000000000000000000000000000000000003", activeFrom: 1n },
 	],
-	genesisSalt: zeroHash,
 	keyGenTimeout: 20n,
-	signingTimeout: 0n,
 	blocksPerEpoch: 10n,
-};
+});
 
 const PACKET: EpochRolloverPacket = {
 	type: "epoch_rollover_packet",

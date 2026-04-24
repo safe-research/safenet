@@ -1,5 +1,6 @@
-import { ethAddress, zeroHash } from "viem";
+import { ethAddress, zeroAddress, zeroHash } from "viem";
 import { describe, expect, it, vi } from "vitest";
+import { makeMachineConfig } from "../../__tests__/data/machine.js";
 import type { SigningClient } from "../../consensus/signing/client.js";
 import type { VerificationEngine } from "../../consensus/verify/engine.js";
 import type { SignRequestEvent } from "../transitions/types.js";
@@ -46,14 +47,7 @@ const CONSENSUS_STATE: ConsensusState = {
 	signatureIdToMessage: {},
 };
 
-const MACHINE_CONFIG: MachineConfig = {
-	account: ethAddress,
-	participantsInfo: [],
-	genesisSalt: zeroHash,
-	keyGenTimeout: 0n,
-	signingTimeout: 20n,
-	blocksPerEpoch: 0n,
-};
+const MACHINE_CONFIG = makeMachineConfig({ participantsInfo: [], signingTimeout: 20n });
 
 const EVENT: SignRequestEvent = {
 	id: "event_sign_request",
@@ -64,6 +58,40 @@ const EVENT: SignRequestEvent = {
 	message: "0x5afe5afe",
 	sid: "0x5af35af3",
 	sequence: 0n,
+};
+
+const ORACLE_ADDRESS = "0x4838B106FCe9647Bdf1E7877BF73cE8B0BAD5f97";
+
+const ORACLE_SIGNING_STATE: SigningState = {
+	id: "waiting_for_request",
+	signers: ["0x0000000000000000000000000000000000000001", "0x0000000000000000000000000000000000000002"],
+	responsible: undefined,
+	deadline: 23n,
+	packet: {
+		type: "oracle_transaction_packet",
+		domain: {
+			chain: 1n,
+			consensus: "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266",
+		},
+		proposal: {
+			epoch: 1n,
+			oracle: ORACLE_ADDRESS,
+			transaction: {
+				chainId: 1n,
+				safe: zeroAddress,
+				to: zeroAddress,
+				value: 0n,
+				data: "0x",
+				operation: 0,
+				safeTxGas: 0n,
+				baseGas: 0n,
+				gasPrice: 0n,
+				gasToken: zeroAddress,
+				refundReceiver: zeroAddress,
+				nonce: 0n,
+			},
+		},
+	},
 };
 
 // --- Tests ---
@@ -288,5 +316,36 @@ describe("collecting shares", () => {
 		);
 
 		expect(diff).toStrictEqual({});
+	});
+
+	it("should transition to waiting_for_oracle for oracle packets", async () => {
+		const isVerified = vi.fn().mockReturnValueOnce(true);
+		const verificationEngine = {
+			isVerified,
+		} as unknown as VerificationEngine;
+		const hasParticipant = vi.fn().mockReturnValueOnce(true);
+		const signingClient = {
+			hasParticipant,
+		} as unknown as SigningClient;
+		const machineStates: MachineStates = {
+			...MACHINE_STATES,
+			signing: { "0x5afe5afe": ORACLE_SIGNING_STATE },
+		};
+		const config: MachineConfig = { ...MACHINE_CONFIG, oracleTimeout: 50n };
+		const diff = await handleSign(config, verificationEngine, signingClient, CONSENSUS_STATE, machineStates, EVENT);
+
+		expect(diff.rollover).toBeUndefined();
+		expect(diff.consensus).toBeUndefined();
+		expect(diff.actions).toBeUndefined();
+		expect(diff.signing).toStrictEqual([
+			"0x5afe5afe",
+			{
+				id: "waiting_for_oracle",
+				oracle: ORACLE_ADDRESS,
+				signers: ORACLE_SIGNING_STATE.signers,
+				deadline: 52n, // block(2) + oracleTimeout(50)
+				packet: ORACLE_SIGNING_STATE.packet,
+			},
+		]);
 	});
 });

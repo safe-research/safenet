@@ -160,6 +160,25 @@ export const transactionAttestedEventSchema = z.object({
 	attestation: signatureSchema,
 });
 
+export const oracleTransactionProposedEventSchema = z.object({
+	safeTxHash: hexBytes32Schema,
+	chainId: eventBigIntSchema,
+	safe: checkedAddressSchema,
+	epoch: eventBigIntSchema,
+	oracle: checkedAddressSchema,
+	transaction: transactionSchema,
+});
+
+export const oracleTransactionAttestedEventSchema = z.object({
+	safeTxHash: hexBytes32Schema,
+	chainId: eventBigIntSchema,
+	safe: checkedAddressSchema,
+	epoch: eventBigIntSchema,
+	oracle: checkedAddressSchema,
+	signatureId: hexBytes32Schema,
+	attestation: signatureSchema,
+});
+
 const baseEventTransitionParamsSchema = z.object({
 	block: eventBigIntSchema,
 	index: z.number(),
@@ -247,6 +266,18 @@ const transactionAttestedEventTransitionSchema = baseEventTransitionParamsSchema
 		id: z.literal("event_transaction_attested"),
 	});
 
+const oracleTransactionProposedEventTransitionSchema = baseEventTransitionParamsSchema
+	.extend(oracleTransactionProposedEventSchema.shape)
+	.extend({
+		id: z.literal("event_oracle_transaction_proposed"),
+	});
+
+const oracleTransactionAttestedEventTransitionSchema = baseEventTransitionParamsSchema
+	.extend(oracleTransactionAttestedEventSchema.shape)
+	.extend({
+		id: z.literal("event_oracle_transaction_attested"),
+	});
+
 const newBlockTransition = z.object({
 	id: z.literal("block_new"),
 	block: eventBigIntSchema,
@@ -271,6 +302,8 @@ export const stateTransitionSchema = z.discriminatedUnion("id", [
 	epochStagedEventTransitionSchema,
 	transactionProposedEventTransitionSchema,
 	transactionAttestedEventTransitionSchema,
+	oracleTransactionProposedEventTransitionSchema,
+	oracleTransactionAttestedEventTransitionSchema,
 	// Consensus Clock
 	newBlockTransition,
 ]);
