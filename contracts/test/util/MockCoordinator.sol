@@ -17,9 +17,13 @@ contract MockCoordinator {
         return groupKeys[group];
     }
 
+    function sign(FROSTGroupId.T, bytes32) external pure returns (FROSTSignatureId.T sid) {}
+
     function signatureVerify(FROSTSignatureId.T, FROSTGroupId.T, bytes32)
         external
-        view
+        pure
         returns (FROST.Signature memory signature)
     {}
+
+    function signatureValue(FROSTSignatureId.T) external pure returns (FROST.Signature memory) {}
 }

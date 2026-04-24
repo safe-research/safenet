@@ -98,6 +98,44 @@ interface IConsensus {
         FROST.Signature attestation
     );
 
+    /**
+     * @notice Emitted when a transaction is proposed for oracle-checked validator approval.
+     * @param safeTxHash The hash of the proposed Safe transaction.
+     * @param chainId The chain ID of the Safe account.
+     * @param safe The address of the Safe.
+     * @param epoch The epoch in which the transaction is proposed.
+     * @param oracle The address of the oracle contract used for evaluation.
+     * @param transaction The proposed Safe transaction.
+     */
+    event OracleTransactionProposed(
+        bytes32 indexed safeTxHash,
+        uint256 indexed chainId,
+        address indexed safe,
+        uint64 epoch,
+        address oracle,
+        SafeTransaction.T transaction
+    );
+
+    /**
+     * @notice Emitted when an oracle-checked transaction is attested by the validator set.
+     * @param safeTxHash The hash of the attested Safe transaction.
+     * @param chainId The chain ID of the Safe account.
+     * @param safe The address of the Safe account.
+     * @param epoch The epoch in which the attested transaction was proposed.
+     * @param oracle The address of the oracle contract used for evaluation.
+     * @param signatureId The FROST signature identifier corresponding to the attestation.
+     * @param attestation The attestation to the oracle-checked Safe transaction.
+     */
+    event OracleTransactionAttested(
+        bytes32 indexed safeTxHash,
+        uint256 indexed chainId,
+        address indexed safe,
+        uint64 epoch,
+        address oracle,
+        FROSTSignatureId.T signatureId,
+        FROST.Signature attestation
+    );
+
     // ============================================================
     // CONFIGURATION
     // ============================================================
@@ -259,4 +297,45 @@ interface IConsensus {
         bytes32 safeTxStructHash,
         FROSTSignatureId.T signatureId
     ) external;
+
+    /**
+     * @notice Proposes a transaction for oracle-checked validator approval.
+     * @param oracle Address of the oracle contract to use for evaluation.
+     * @param transaction The Safe transaction to propose.
+     * @return safeTxHash The Safe transaction hash.
+     */
+    function proposeOracleTransaction(address oracle, SafeTransaction.T memory transaction)
+        external
+        returns (bytes32 safeTxHash);
+
+    /**
+     * @notice Attests to an oracle-checked transaction.
+     * @param epoch The epoch in which the transaction was proposed.
+     * @param oracle The address of the oracle contract used for evaluation.
+     * @param chainId The chain ID of the Safe account.
+     * @param safe The address of the Safe account.
+     * @param safeTxStructHash The EIP-712 struct hash of the Safe transaction data.
+     * @param signatureId The FROST signature identifier attesting to the transaction.
+     * @dev Called internally via the onSignCompleted callback. No explicit time limit is imposed.
+     */
+    function attestOracleTransaction(
+        uint64 epoch,
+        address oracle,
+        uint256 chainId,
+        address safe,
+        bytes32 safeTxStructHash,
+        FROSTSignatureId.T signatureId
+    ) external;
+
+    /**
+     * @notice Gets an oracle transaction attestation by transaction hash.
+     * @param epoch The epoch in which the transaction was proposed.
+     * @param oracle The address of the oracle contract used for evaluation.
+     * @param safeTxHash The Safe transaction hash to query the attestation for.
+     * @return signature The FROST signature attesting to the oracle-checked transaction.
+     */
+    function getOracleTransactionAttestationByHash(uint64 epoch, address oracle, bytes32 safeTxHash)
+        external
+        view
+        returns (FROST.Signature memory signature);
 }
