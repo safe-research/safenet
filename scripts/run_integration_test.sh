@@ -1,5 +1,5 @@
 #!/bin/bash
-set -e
+set -eo pipefail
 
 # --- Configuration ---
 ANVIL_RPC_URL="http://127.0.0.1:8545"
@@ -40,6 +40,10 @@ ORACLE_ADDRESS=$(cd contracts && forge create \
     --from 0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266 \
     --json \
     src/AlwaysApproveOracle.sol:AlwaysApproveOracle | jq -r '.deployedTo')
+if [ -z "$ORACLE_ADDRESS" ] || [ "$ORACLE_ADDRESS" = "null" ]; then
+    echo "ERROR: Failed to deploy AlwaysApproveOracle — forge create returned no address"
+    exit 1
+fi
 echo "AlwaysApproveOracle deployed at $ORACLE_ADDRESS"
 
 # --- 5. Run Client Integration Tests ---

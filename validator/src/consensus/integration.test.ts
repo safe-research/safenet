@@ -554,7 +554,8 @@ describe("integration", () => {
 	it("keygen and oracle signing flow", { timeout: TEST_RUNTIME_IN_SECONDS * 1000 * 5 }, async ({ skip }) => {
 		// The oracle address is deployed by the integration test script (run_integration_test.sh)
 		// and passed via the ORACLE_ADDRESS environment variable.
-		const oracleAddress = process.env.ORACLE_ADDRESS as Address | undefined;
+		const rawOracleEnv = process.env.ORACLE_ADDRESS;
+		const oracleAddress = rawOracleEnv?.startsWith("0x") ? (rawOracleEnv as Address) : undefined;
 		const setupInfo = await setup({ allowedOracles: oracleAddress ? [oracleAddress] : undefined, oracleTimeout: 20n });
 		if (setupInfo === undefined || oracleAddress === undefined) {
 			skip();
