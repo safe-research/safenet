@@ -1,5 +1,6 @@
 import { encodeFunctionData, type Hex, zeroHash } from "viem";
 import type { SigningClient } from "../../consensus/signing/client.js";
+import type { OracleTransactionPacket } from "../../consensus/verify/oracleTx/schemas.js";
 import { safeTxStructHash } from "../../consensus/verify/safeTx/hashing.js";
 import type { SafeTransactionPacket } from "../../consensus/verify/safeTx/schemas.js";
 import { CONSENSUS_FUNCTIONS } from "../../types/abis.js";
@@ -51,7 +52,9 @@ export const handleRevealedNonces = async (
 				})
 			: status.packet.type === "safe_transaction_packet"
 				? buildTransactionAttestationCallback(status.packet)
-				: undefined;
+				: status.packet.type === "oracle_transaction_packet"
+					? buildOracleTransactionAttestationCallback(status.packet)
+					: undefined;
 	return {
 		signing: [
 			message,
@@ -86,5 +89,14 @@ const buildTransactionAttestationCallback = (packet: SafeTransactionPacket): Hex
 		abi: CONSENSUS_FUNCTIONS,
 		functionName: "attestTransaction",
 		args: [packet.proposal.epoch, chainId, safe, safeTxStructHash(transactionData), zeroHash],
+	});
+};
+
+const buildOracleTransactionAttestationCallback = (packet: OracleTransactionPacket): Hex => {
+	const { chainId, safe, ...transactionData } = packet.proposal.transaction;
+	return encodeFunctionData({
+		abi: CONSENSUS_FUNCTIONS,
+		functionName: "attestOracleTransaction",
+		args: [packet.proposal.epoch, packet.proposal.oracle, chainId, safe, safeTxStructHash(transactionData), zeroHash],
 	});
 };

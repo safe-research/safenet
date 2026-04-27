@@ -94,6 +94,7 @@ export const CONSENSUS_FUNCTIONS = parseAbi([
 	"function proposeEpoch(uint64 proposedEpoch, uint64 rolloverBlock, bytes32 groupId) external",
 	"function stageEpoch(uint64 proposedEpoch, uint64 rolloverBlock, bytes32 groupId, bytes32 signatureId) external",
 	"function attestTransaction(uint64 epoch, uint256 chainId, address safe, bytes32 safeTxStructHash, bytes32 signatureId) external",
+	"function attestOracleTransaction(uint64 epoch, address oracle, uint256 chainId, address safe, bytes32 safeTxStructHash, bytes32 signatureId) external",
 	"function setValidatorStaker(address staker) external",
 	"function getValidatorStaker(address validator) external view returns (address staker)",
 ]);
