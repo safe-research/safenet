@@ -1,9 +1,11 @@
 mod bindings;
 mod config;
+mod state;
 mod watcher;
 
 use argh::FromArgs;
 use config::ValidatorConfig;
+use state::ValidatorState;
 use std::path::PathBuf;
 use tracing::{debug, info};
 use tracing_subscriber::EnvFilter;
@@ -33,6 +35,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let config = ValidatorConfig::from_toml(&config_toml)?;
 
     info!("validator configuration loaded");
-    watcher::run(&config).await?;
+    let mut state = ValidatorState::default();
+    watcher::run(&config, &mut state).await?;
     Ok(())
 }

@@ -1,13 +1,18 @@
 use alloy::{
     providers::{Provider as _, ProviderBuilder},
-    rpc::types::Filter,
+    rpc::types::{Filter, Log},
+    sol_types::SolEventInterface,
 };
 use anyhow::{Context as _, Result};
 use tokio_stream::StreamExt as _;
 
-use crate::{bindings::Consensus, config::ValidatorConfig};
+use crate::{
+    bindings::{Consensus, Coordinator},
+    config::ValidatorConfig,
+    state::ValidatorState,
+};
 
-pub async fn run(config: &ValidatorConfig) -> Result<()> {
+pub async fn run(config: &ValidatorConfig, state: &mut ValidatorState) -> Result<()> {
     let provider = ProviderBuilder::new()
         .connect(config.rpc_url.as_str())
         .await?;
@@ -29,13 +34,21 @@ pub async fn run(config: &ValidatorConfig) -> Result<()> {
         tokio::select! {
             blocks = blocks.next() => {
                 for block_hash in blocks.context("block subscription ended")? {
-                    let block = provider.get_block_by_hash(block_hash).await?;
-                    tracing::debug!(?block, "new block");
+                    let block = provider.get_block_by_hash(block_hash).await?.context("missing block")?;
+                    tracing::trace!(?block, "new block");
+                    state.on_block(block.header.number);
 
                     let filter = filter.clone().at_block_hash(block_hash);
                     let logs = provider.get_logs(&filter).await?;
                     for log in logs {
-                        tracing::debug!(?log, "new log")
+                        tracing::trace!(?log, "new log");
+                        if log.address() == config.consensus_address {
+                            let event = decode_consensus_log(log)?;
+                            state.on_consensus_event(event);
+                        } else if log.address() == coordinator_address {
+                            let event = decode_coordinator_log(log)?;
+                            state.on_coordinator_event(event);
+                        }
                     }
                 }
             }
@@ -46,4 +59,18 @@ pub async fn run(config: &ValidatorConfig) -> Result<()> {
             }
         }
     }
+}
+
+fn decode_consensus_log(log: Log) -> Result<Consensus::ConsensusEvents> {
+    Ok(Consensus::ConsensusEvents::decode_log(&log.into_inner())
+        .context("failed to decode consensus log")?
+        .data)
+}
+
+fn decode_coordinator_log(log: Log) -> Result<Coordinator::CoordinatorEvents> {
+    Ok(
+        Coordinator::CoordinatorEvents::decode_log(&log.into_inner())
+            .context("failed to decode coordinator log")?
+            .data,
+    )
 }
