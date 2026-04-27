@@ -8,6 +8,7 @@ dist/
 foundry.lock
 node_modules/
 target/
+validator*.toml
 
 # Coverage related files
 coverage/

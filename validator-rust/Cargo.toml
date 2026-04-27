@@ -4,9 +4,12 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-alloy = "1"
+alloy = "2"
+anyhow = "1"
 argh = "0.1"
 serde = { version = "1", features = ["derive"] }
+tokio = { version = "1", features = ["full"] }
+tokio-stream = "0.1"
 toml = "0.8"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }

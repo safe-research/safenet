@@ -1,5 +1,6 @@
-mod chain;
+mod bindings;
 mod config;
+mod watcher;
 
 use argh::FromArgs;
 use config::ValidatorConfig;
@@ -19,7 +20,8 @@ struct Cli {
     config_file: PathBuf,
 }
 
-fn main() -> Result<(), Box<dyn std::error::Error>> {
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let cli: Cli = argh::from_env();
 
     tracing_subscriber::fmt()
@@ -28,8 +30,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     debug!(config_file = %cli.config_file.display(), "loading validator configuration");
     let config_toml = std::fs::read_to_string(&cli.config_file)?;
-    let _config = ValidatorConfig::from_toml(&config_toml)?;
+    let config = ValidatorConfig::from_toml(&config_toml)?;
 
     info!("validator configuration loaded");
+    watcher::run(&config).await?;
     Ok(())
 }
