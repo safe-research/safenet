@@ -10,6 +10,7 @@ additional_compiler_profiles = [
 compilation_restrictions = [
   { paths = "src/Consensus.sol", via_ir = true },
   { paths = "src/FROSTCoordinator.sol", via_ir = true },
+  { paths = "src/guard/SafenetGuardA.sol", via_ir = true },
 ]
 
 remappings = [
@@ -18,6 +19,7 @@ remappings = [
   "@test/=test/",
   "@forge-std/=lib/forge-std/src/",
   "@oz/=lib/openzeppelin-contracts/contracts/",
+  "@safe/=lib/safe-smart-account/contracts/",
 ]
 auto_detect_remappings = false
 
