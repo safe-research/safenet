@@ -5,7 +5,7 @@ import { safeTxStructHash } from "../../consensus/verify/safeTx/hashing.js";
 import type { SafeTransactionPacket } from "../../consensus/verify/safeTx/schemas.js";
 import { CONSENSUS_FUNCTIONS } from "../../types/abis.js";
 import type { NonceCommitmentsEvent } from "../transitions/types.js";
-import type { ConsensusState, MachineConfig, MachineStates, StateDiff } from "../types.js";
+import type { BaseSigningState, ConsensusState, MachineConfig, MachineStates, StateDiff } from "../types.js";
 
 export const handleRevealedNonces = async (
 	machineConfig: MachineConfig,
@@ -38,23 +38,7 @@ export const handleRevealedNonces = async (
 	const { signersRoot, signersProof, groupCommitment, commitmentShare, signatureShare, lagrangeCoefficient } =
 		signingClient.createSignatureShare(event.sid, machineConfig.account);
 
-	const callbackContext =
-		machineStates.rollover.id === "sign_rollover" && machineStates.rollover.message === message
-			? encodeFunctionData({
-					abi: CONSENSUS_FUNCTIONS,
-					functionName: "stageEpoch",
-					args: [
-						machineStates.rollover.nextEpoch,
-						machineStates.rollover.nextEpoch * machineConfig.blocksPerEpoch,
-						machineStates.rollover.groupId,
-						zeroHash,
-					],
-				})
-			: status.packet.type === "safe_transaction_packet"
-				? buildTransactionAttestationCallback(status.packet)
-				: status.packet.type === "oracle_transaction_packet"
-					? buildOracleTransactionAttestationCallback(status.packet)
-					: undefined;
+	const callbackContext = buildCallbackContext(machineConfig, machineStates, message, status.packet);
 	return {
 		signing: [
 			message,
@@ -81,6 +65,33 @@ export const handleRevealedNonces = async (
 			},
 		],
 	};
+};
+
+const buildCallbackContext = (
+	machineConfig: MachineConfig,
+	machineStates: MachineStates,
+	message: Hex,
+	packet: BaseSigningState["packet"],
+): Hex | undefined => {
+	if (machineStates.rollover.id === "sign_rollover" && machineStates.rollover.message === message) {
+		return encodeFunctionData({
+			abi: CONSENSUS_FUNCTIONS,
+			functionName: "stageEpoch",
+			args: [
+				machineStates.rollover.nextEpoch,
+				machineStates.rollover.nextEpoch * machineConfig.blocksPerEpoch,
+				machineStates.rollover.groupId,
+				zeroHash,
+			],
+		});
+	}
+	if (packet.type === "safe_transaction_packet") {
+		return buildTransactionAttestationCallback(packet);
+	}
+	if (packet.type === "oracle_transaction_packet") {
+		return buildOracleTransactionAttestationCallback(packet);
+	}
+	return undefined;
 };
 
 const buildTransactionAttestationCallback = (packet: SafeTransactionPacket): Hex | undefined => {

@@ -22,7 +22,7 @@ export const handleOracleResult = async (
 	}
 	if (!event.approved) {
 		logger?.info?.("Oracle rejected transaction, dropping state", { requestId: event.requestId });
-		return { signing: [event.requestId] };
+		return { signing: [event.requestId, undefined] };
 	}
 	logger?.info?.("Oracle approved transaction, participating in signing", { requestId: event.requestId });
 	return buildNonceCommitmentsDiff(machineConfig, signingClient, {

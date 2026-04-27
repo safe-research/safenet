@@ -117,7 +117,7 @@ describe("oracle result", () => {
 		expect(diff.actions).toBeUndefined();
 		expect(diff.rollover).toBeUndefined();
 		expect(diff.consensus).toBeUndefined();
-		expect(diff.signing).toStrictEqual([REQUEST_ID]);
+		expect(diff.signing).toStrictEqual([REQUEST_ID, undefined]);
 	});
 
 	it("should transition to collect_nonce_commitments when oracle approves", async () => {
