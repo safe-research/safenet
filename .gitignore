@@ -5,6 +5,7 @@ build/
 .DS_Store
 .env
 anvil_logs.txt
+integration_logs.txt
 foundry.lock
 .certora_internal
 
