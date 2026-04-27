@@ -590,16 +590,63 @@ describe("integration", () => {
 		// Wait until the end of the epoch
 		await waitForBlock(testClient, 40n);
 
+		// Check if signature request worked
+		// Calculate transaction hash
+		const safeTxHash = hashTypedData({
+			domain: {
+				chainId: transaction.chainId,
+				verifyingContract: transaction.safe,
+			},
+			types: {
+				SafeTx: [
+					{ type: "address", name: "to" },
+					{ type: "uint256", name: "value" },
+					{ type: "bytes", name: "data" },
+					{ type: "uint8", name: "operation" },
+					{ type: "uint256", name: "safeTxGas" },
+					{ type: "uint256", name: "baseGas" },
+					{ type: "uint256", name: "gasPrice" },
+					{ type: "address", name: "gasToken" },
+					{ type: "address", name: "refundReceiver" },
+					{ type: "uint256", name: "nonce" },
+				],
+			},
+			primaryType: "SafeTx",
+			message: transaction,
+		});
 		// Verify the oracle proposal was emitted
-		const oracleProposals = await testClient.getLogs({
+		const proposedTransactions = await testClient.getLogs({
 			address: consensus.address,
 			event: CONSENSUS_ORACLE_TRANSACTION_PROPOSED_EVENT,
 			fromBlock: "earliest",
+			args: {
+				safeTxHash,
+			},
 			strict: true,
 		});
-		expect(oracleProposals.length).toBe(1);
-		const oracleProposal = oracleProposals[0];
-		expect(oracleProposal.args.oracle).toBe(oracleAddress);
+		expect(proposedTransactions.length).toBe(1);
+		const proposal = proposedTransactions[0];
+		expect(proposal.args.oracle).toBe(oracleAddress);
+		// Load signature request for transaction proposal
+		const proposalMessage = hashTypedData({
+			domain: {
+				chainId: 31_337,
+				verifyingContract: proposal.address,
+			},
+			types: {
+				OracleTransactionProposal: [
+					{ type: "uint64", name: "epoch" },
+					{ type: "address", name: "oracle" },
+					{ type: "bytes32", name: "safeTxHash" },
+				],
+			},
+			primaryType: "OracleTransactionProposal",
+			message: {
+				epoch: proposal.args.epoch,
+				oracle: proposal.args.oracle,
+				safeTxHash: proposal.args.safeTxHash,
+			},
+		});
 
 		// Verify OracleResult was emitted by the AlwaysApproveOracle
 		const oracleResults = await testClient.getLogs({
@@ -616,6 +663,9 @@ describe("integration", () => {
 			address: coordinator.address,
 			event: COORDINATOR_SIGN_EVENT,
 			fromBlock: "earliest",
+			args: {
+				message: proposalMessage,
+			},
 			strict: true,
 		});
 		expect(signatureRequests.length).toBeGreaterThan(0);
@@ -645,7 +695,7 @@ describe("integration", () => {
 		const attestation = await testClient.readContract({
 			...consensus,
 			functionName: "getOracleTransactionAttestationByHash",
-			args: [oracleProposal.args.epoch, oracleAddress, oracleProposal.args.safeTxHash],
+			args: [proposal.args.epoch, oracleAddress, proposal.args.safeTxHash],
 		});
 		expect(
 			verifySignature(toPoint(attestation.r), attestation.z, toPoint(groupKey), request.args.message),

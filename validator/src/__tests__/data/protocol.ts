@@ -1,4 +1,4 @@
-import { type Address, type Hex, zeroAddress } from "viem";
+import { type Address, ethAddress, type Hex, zeroAddress } from "viem";
 import { entryPoint06Address, entryPoint07Address } from "viem/account-abstraction";
 import { BaseProtocol, type SubmittedAction } from "../../consensus/protocol/base.js";
 import type { EthTransactionData } from "../../consensus/protocol/onchain.js";
@@ -767,7 +767,7 @@ export const TEST_EVENTS: [ProtocolLog | null, StateTransition][] = [
 		{
 			blockNumber: 111n,
 			logIndex: 0,
-			address: zeroAddress,
+			address: ethAddress,
 			// OracleResult(bytes32 indexed requestId, address indexed proposer, bytes result, bool approved)
 			eventName: "OracleResult",
 			args: {
@@ -781,7 +781,7 @@ export const TEST_EVENTS: [ProtocolLog | null, StateTransition][] = [
 			id: "event_oracle_result",
 			block: 111n,
 			index: 0,
-			oracle: zeroAddress,
+			oracle: "0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE",
 			requestId: "0x5afe000000000000000000000000000000000000000000000000000000000000",
 			proposer: zeroAddress,
 			result: "0x",

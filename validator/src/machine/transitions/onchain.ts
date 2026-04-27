@@ -1,3 +1,4 @@
+import { getAddress } from "viem";
 import type { ALL_EVENTS } from "../../types/abis.js";
 import type { Log } from "../../watcher/events.js";
 import {
@@ -191,7 +192,7 @@ export const logToTransition = ({
 				id: "event_oracle_result",
 				block,
 				index,
-				oracle: address,
+				oracle: getAddress(address),
 				...args,
 			};
 		}

@@ -1,0 +1,2620 @@
+
+> test:integration
+> ./scripts/run_integration_test.sh
+
+Starting Anvil...
+Anvil started with PID 280699
+Deploying contracts...
+
+> cmd:deploy
+> forge script DeployScript --rpc-url http://127.0.0.1:8545 --unlocked --sender 0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266 --broadcast
+
+No files changed, compilation skipped
+Script ran successfully.
+
+== Return ==
+coordinator: contract FROSTCoordinator 0xaE27021CEB45316f1efe69D8E362aC07ED3Bd7E4
+consensus: contract Consensus 0x633Bc37aDF150719844854260CAbEC5492097435
+alwaysApproveOracle: contract AlwaysApproveOracle 0x9fE46736679d2D9a65F0992F2272dE9f3c7fa6e0
+
+== Logs ==
+  Genesis Group ID: 0xe76945035b9326a9cc44a31c87fe5c17a47f81406382e89b0000000000000000
+  Genesis Group Participants Root: 0x361dfe05b50639813bc042e5d35ad7704f7e8f6b5cba7cd2605548a66bf7226b
+  Genesis Group Count: 4
+  Genesis Group Threshold: 3
+  Genesis Group Context: 0x0000000000000000000000000000000000000000000000000000000000000000
+  FROSTCoordinator: 0xaE27021CEB45316f1efe69D8E362aC07ED3Bd7E4
+  Consensus: 0x633Bc37aDF150719844854260CAbEC5492097435
+  AlwaysApproveOracle: 0x9fE46736679d2D9a65F0992F2272dE9f3c7fa6e0
+
+## Setting up 1 EVM.
+
+==========================
+
+Chain 31337
+
+Estimated gas price: 2.000000001 gwei
+
+Estimated total gas used for script: 7836987
+
+Estimated amount required: 0.015673974007836987 ETH
+
+==========================
+
+
+==========================
+
+ONCHAIN EXECUTION COMPLETE & SUCCESSFUL.
+
+Transactions saved to: /workspaces/shield-net/contracts/build/broadcast/Deploy.s.sol/31337/run-latest.json
+
+Sensitive values saved to: /workspaces/shield-net/contracts/build/cache/Deploy.s.sol/31337/run-latest.json
+
+Running integration tests...
+
+> test
+> vitest run integration
+
+
+[1m[46m RUN [49m[22m [36mv4.0.16 [39m[90m/workspaces/shield-net/validator[39m
+
+[90mstdout[2m | src/consensus/integration.test.ts[2m > [22m[2mintegration[2m > [22m[2mkeygen and oracle signing flow
+[22m[39m[2026-04-27T12:02:57.205Z [36mnotice[39m]: Use coordinator at 0xaE27021CEB45316f1efe69D8E362aC07ED3Bd7E4
+[2026-04-27T12:02:57.206Z [36mnotice[39m]: Use consensus at 0x633Bc37aDF150719844854260CAbEC5492097435
+[2026-04-27T12:02:57.213Z [36mnotice[39m]: Genesis group id: 0xe76945035b9326a9cc44a31c87fe5c17a47f81406382e89b0000000000000000
+
+[90mstdout[2m | src/consensus/integration.test.ts[2m > [22m[2mintegration[2m > [22m[2mkeygen and oracle signing flow
+[22m[39m[2026-04-27T12:02:57.224Z [32minfo[39m]: Setting validator staker address to 0x70997970C51812dc3A010C7d01b50e0d17dc79C8...
+[2026-04-27T12:02:57.224Z [32minfo[39m]: Enqueue consensus_set_validator_staker {
+  action: {
+    id: [32m'consensus_set_validator_staker'[39m,
+    staker: [32m'0x70997970C51812dc3A010C7d01b50e0d17dc79C8'[39m
+  }
+}
+
+[90mstdout[2m | src/consensus/integration.test.ts[2m > [22m[2mintegration[2m > [22m[2mkeygen and oracle signing flow
+[22m[39m[2026-04-27T12:02:57.233Z [34mdebug[39m]: Enqueue block_new at 1
+[2026-04-27T12:02:57.235Z [34mdebug[39m]: Marked 1 transactions as submitted at block 1
+
+[90mstdout[2m | src/consensus/integration.test.ts[2m > [22m[2mintegration[2m > [22m[2mkeygen and oracle signing flow
+[22m[39m[2026-04-27T12:02:57.248Z [34mdebug[39m]: Submitting transaction for nonce 0! {
+  tx: {
+    hash: [32m'0xb489c1958748665a7e32f295a446360ae4e69e4a02b280e49ab90263a7657118'[39m,
+    to: [32m'0x633Bc37aDF150719844854260CAbEC5492097435'[39m,
+    value: [33m0n[39m,
+    data: [32m'0xbbce66a600000000000000000000000070997970c51812dc3a010c7d01b50e0d17dc79c8'[39m,
+    nonce: [33m0[39m,
+    gas: [33m400000n[39m,
+    chainId: [33m31337[39m,
+    maxFeePerGas: [33m2200000000n[39m,
+    maxPriorityFeePerGas: [33m1000000000n[39m
+  }
+}
+
+[90mstdout[2m | src/consensus/integration.test.ts[2m > [22m[2mintegration[2m > [22m[2mkeygen and oracle signing flow
+[22m[39m[2026-04-27T12:02:57.251Z [32minfo[39m]: Sent action for consensus_set_validator_staker transaction {
+  action: { id: [32m'consensus_set_validator_staker'[39m },
+  tx: {
+    nonce: [33m0[39m,
+    hash: [32m'0xb489c1958748665a7e32f295a446360ae4e69e4a02b280e49ab90263a7657118'[39m
+  }
+}
+
+[90mstdout[2m | src/consensus/integration.test.ts[2m > [22m[2mintegration[2m > [22m[2mkeygen and oracle signing flow
+[22m[39m[2026-04-27T12:02:57.265Z [36mnotice[39m]: Using AlwaysApproveOracle at 0x9fE46736679d2D9a65F0992F2272dE9f3c7fa6e0
+
+[90mstdout[2m | src/consensus/integration.test.ts[2m > [22m[2mintegration[2m > [22m[2mkeygen and oracle signing flow
+[22m[39m[2026-04-27T12:02:57.470Z [34mdebug[39m]: Enqueue block_new at 2
+[2026-04-27T12:02:57.471Z [34mdebug[39m]: Marked 1 transactions as submitted at block 2
+
+[90mstdout[2m | src/consensus/integration.test.ts[2m > [22m[2mintegration[2m > [22m[2mkeygen and oracle signing flow
+[22m[39m[2026-04-27T12:02:57.472Z [34mdebug[39m]: Marked 1 transactions as executed up to nonce 0 on block 2
+
+[90mstdout[2m | src/consensus/integration.test.ts[2m > [22m[2mintegration[2m > [22m[2mkeygen and oracle signing flow
+[22m[39m[2026-04-27T12:02:57.474Z [34mdebug[39m]: Enqueue event_key_gen at 2
+[2026-04-27T12:02:57.474Z [34mdebug[39m]: Handle event event_key_gen {
+  transition: {
+    id: [32m'event_key_gen'[39m,
+    block: [33m2n[39m,
+    index: [33m5[39m,
+    gid: [32m'0xe76945035b9326a9cc44a31c87fe5c17a47f81406382e89b0000000000000000'[39m,
+    participants: [32m'0x361dfe05b50639813bc042e5d35ad7704f7e8f6b5cba7cd2605548a66bf7226b'[39m,
+    count: [33m4[39m,
+    threshold: [33m3[39m,
+    context: [32m'0x0000000000000000000000000000000000000000000000000000000000000000'[39m
+  }
+}
+[2026-04-27T12:02:57.474Z [32minfo[39m]: Trigger Genesis Group Generation {
+  genesisGroup: {
+    id: [32m'0xe76945035b9326a9cc44a31c87fe5c17a47f81406382e89b0000000000000000'[39m,
+    participantsRoot: [32m'0x361dfe05b50639813bc042e5d35ad7704f7e8f6b5cba7cd2605548a66bf7226b'[39m,
+    count: [33m4[39m,
+    threshold: [33m3[39m,
+    context: [32m'0x0000000000000000000000000000000000000000000000000000000000000000'[39m
+  }
+}
+[2026-04-27T12:02:57.494Z [32minfo[39m]: Triggered key gen for epoch 0 with 0xe76945035b9326a9cc44a31c87fe5c17a47f81406382e89b0000000000000000 {
+  participants: [
+    [32m'0x15d34AAf54267DB7D7c367839AAf71A00a2C6A65'[39m,
+    [32m'0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC'[39m,
+    [32m'0x70997970C51812dc3A010C7d01b50e0d17dc79C8'[39m,
+    [32m'0x90F79bf6EB2c4f870365E785982E1f101E93b906'[39m
+  ]
+}
+
+[90mstdout[2m | src/consensus/integration.test.ts[2m > [22m[2mintegration[2m > [22m[2mkeygen and oracle signing flow
+[22m[39m[2026-04-27T12:02:57.494Z [32minfo[39m]: Enqueue key_gen_start {
+  action: {
+    id: [32m'key_gen_start'[39m,
+    participants: [32m'0x361dfe05b50639813bc042e5d35ad7704f7e8f6b5cba7cd2605548a66bf7226b'[39m,
+    count: [33m4[39m,
+    threshold: [33m3[39m,
+    context: [32m'0x0000000000000000000000000000000000000000000000000000000000000000'[39m,
+    encryptionPublicKey: Point {
+      X: [33m71774967450844642185352127278690578481211620731294146640594158895670359975067n[39m,
+      Y: [33m74510620483555579633842190236840068443285253773472182285753775131107963757417n[39m,
+      Z: [33m1n[39m
+    },
+    commitments: [ [36m[Point][39m, [36m[Point][39m, [36m[Point][39m ],
+    pok: {
+      r: [36m[Point][39m,
+      mu: [33m6274232136354657856774185543571920723214313744224730506388794068895673767766n[39m
+    },
+    poap: [
+      [32m'0x00000000000000000000000090f79bf6eb2c4f870365e785982e1f101e93b906'[39m,
+      [32m'0xd02289e77aa6d6e568e156b6eb5d8f5d7a3c804391d444b4845416a470487ef5'[39m
+    ]
+  }
+}
+
+[90mstdout[2m | src/consensus/integration.test.ts[2m > [22m[2mintegration[2m > [22m[2mkeygen and oracle signing flow
+[22m[39m[2026-04-27T12:02:57.519Z [34mdebug[39m]: Submitting transaction for nonce 1! {
+  tx: {
+    hash: [32m'0xaf1e145a3b988dfbee156576db5967baa5e50cd0f05448453c381cb9ef609b87'[39m,
+    to: [32m'0xaE27021CEB45316f1efe69D8E362aC07ED3Bd7E4'[39m,
+    value: [33m0n[39m,
+    data: [32m'0x38b54463361dfe05b50639813bc042e5d35ad7704f7e8f6b5cba7cd2605548a66bf7226b00000000000000000000000000000000000000000000000000000000000000040000000000000000000000000000000000000000000000000000000000000003000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000c00000000000000000000000000000000000000000000000000000000000000120000000000000000000000000000000000000000000000000000000000000000200000000000000000000000090f79bf6eb2c4f870365e785982e1f101e93b906d02289e77aa6d6e568e156b6eb5d8f5d7a3c804391d444b4845416a470487ef59eaf312357332549923a1019edc32018030d4b97bf1ba2ea721084912c2f649ba4bb8445e4332239f27bc22ef37ec861d91cb9c99b0841d60383801c73cce36900000000000000000000000000000000000000000000000000000000000000c0842122514ec82217157414de54f102846ecccd42822b1702a1a4d310195860404ca41a7407c152e45ef7e94dc89752061de57c297b4e60b0737181179731aaf50ddf16ec4f60fe972fceddbe9de97d323b42e11f0bb1ad45155350a3eba25756000000000000000000000000000000000000000000000000000000000000000301cab270b46e27df478baa762256156454ffd3e96af91e6852e220ca3a36e3ca8f9e666828a7568f167a6de8019fc11b87a6fe604ac74d1d81fdab03f92128dcc10907bae8a1717c108438eb625243aeabbb38f97dda58959b0e096fd19e17d18ed5076d0c425f6d4aad6dde558161db8287439e423aab5e6e6cfdc583dcfdbffc3418c5e7b16fc5512a3fd5b65fe4d336f38a28c6d92b22f3f86ebc75d45324a33c16e1d6239de4cf4ef095bbb5c67033799eb701ec65c5e1d776bb08cbc784'[39m,
+    nonce: [33m1[39m,
+    gas: [33m250000n[39m,
+    chainId: [33m31337[39m,
+    maxFeePerGas: [33m2105007080n[39m,
+    maxPriorityFeePerGas: [33m1000000000n[39m
+  }
+}
+
+[90mstdout[2m | src/consensus/integration.test.ts[2m > [22m[2mintegration[2m > [22m[2mkeygen and oracle signing flow
+[22m[39m[2026-04-27T12:02:57.522Z [32minfo[39m]: Sent action for key_gen_start transaction {
+  action: { id: [32m'key_gen_start'[39m },
+  tx: {
+    nonce: [33m1[39m,
+    hash: [32m'0xaf1e145a3b988dfbee156576db5967baa5e50cd0f05448453c381cb9ef609b87'[39m
+  }
+}
+
+[90mstdout[2m | src/consensus/integration.test.ts[2m > [22m[2mintegration[2m > [22m[2mkeygen and oracle signing flow
+[22m[39m[2026-04-27T12:02:57.753Z [34mdebug[39m]: Enqueue block_new at 3
+[2026-04-27T12:02:57.753Z [34mdebug[39m]: Marked 1 transactions as submitted at block 3
+
+[90mstdout[2m | src/consensus/integration.test.ts[2m > [22m[2mintegration[2m > [22m[2mkeygen and oracle signing flow
+[22m[39m[2026-04-27T12:02:57.759Z [34mdebug[39m]: Marked 1 transactions as executed up to nonce 1 on block 3
+
+[90mstdout[2m | src/consensus/integration.test.ts[2m > [22m[2mintegration[2m > [22m[2mkeygen and oracle signing flow
+[22m[39m[2026-04-27T12:02:57.761Z [34mdebug[39m]: Enqueue event_key_gen_committed at 3
+[2026-04-27T12:02:57.761Z [34mdebug[39m]: Handle event event_key_gen_committed {
+  transition: {
+    id: [32m'event_key_gen_committed'[39m,
+    block: [33m3n[39m,
+    index: [33m0[39m,
+    gid: [32m'0xe76945035b9326a9cc44a31c87fe5c17a47f81406382e89b0000000000000000'[39m,
+    participant: [32m'0x70997970C51812dc3A010C7d01b50e0d17dc79C8'[39m,
+    commitment: {
+      q: [36m[Point][39m,
+      c: [36m[Array][39m,
+      r: [36m[Point][39m,
+      mu: [33m6274232136354657856774185543571920723214313744224730506388794068895673767766n[39m
+    },
+    committed: [33mfalse[39m
+  }
+}
+[2026-04-27T12:02:57.763Z [32minfo[39m]: Registered key gen commitment for participant 0x70997970C51812dc3A010C7d01b50e0d17dc79C8
+[2026-04-27T12:02:57.763Z [34mdebug[39m]: Enqueue event_key_gen_committed at 3
+[2026-04-27T12:02:57.763Z [34mdebug[39m]: Enqueue event_key_gen_committed at 3
+[2026-04-27T12:02:57.763Z [34mdebug[39m]: Enqueue event_key_gen_committed at 3
+
+[90mstdout[2m | src/consensus/integration.test.ts[2m > [22m[2mintegration[2m > [22m[2mkeygen and oracle signing flow
+[22m[39m[2026-04-27T12:02:57.763Z [34mdebug[39m]: Handle event event_key_gen_committed {
+  transition: {
+    id: [32m'event_key_gen_committed'[39m,
+    block: [33m3n[39m,
+    index: [33m1[39m,
+    gid: [32m'0xe76945035b9326a9cc44a31c87fe5c17a47f81406382e89b0000000000000000'[39m,
+    participant: [32m'0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC'[39m,
+    commitment: {
+      q: [36m[Point][39m,
+      c: [36m[Array][39m,
+      r: [36m[Point][39m,
+      mu: [33m38275267183706253190183052003533305116069865441339912140136617504628508727224n[39m
+    },
+    committed: [33mfalse[39m
+  }
+}
+[2026-04-27T12:02:57.766Z [32minfo[39m]: Registered key gen commitment for participant 0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC
+
+[90mstdout[2m | src/consensus/integration.test.ts[2m > [22m[2mintegration[2m > [22m[2mkeygen and oracle signing flow
+[22m[39m[2026-04-27T12:02:57.766Z [34mdebug[39m]: Handle event event_key_gen_committed {
+  transition: {
+    id: [32m'event_key_gen_committed'[39m,
+    block: [33m3n[39m,
+    index: [33m2[39m,
+    gid: [32m'0xe76945035b9326a9cc44a31c87fe5c17a47f81406382e89b0000000000000000'[39m,
+    participant: [32m'0x90F79bf6EB2c4f870365E785982E1f101E93b906'[39m,
+    commitment: {
+      q: [36m[Point][39m,
+      c: [36m[Array][39m,
+      r: [36m[Point][39m,
+      mu: [33m84979813110962393681391301571621177630277197636260806644997606759553079308429n[39m
+    },
+    committed: [33mfalse[39m
+  }
+}
+[2026-04-27T12:02:57.768Z [32minfo[39m]: Registered key gen commitment for participant 0x90F79bf6EB2c4f870365E785982E1f101E93b906
+
+[90mstdout[2m | src/consensus/integration.test.ts[2m > [22m[2mintegration[2m > [22m[2mkeygen and oracle signing flow
+[22m[39m[2026-04-27T12:02:57.768Z [34mdebug[39m]: Handle event event_key_gen_committed {
+  transition: {
+    id: [32m'event_key_gen_committed'[39m,
+    block: [33m3n[39m,
+    index: [33m3[39m,
+    gid: [32m'0xe76945035b9326a9cc44a31c87fe5c17a47f81406382e89b0000000000000000'[39m,
+    participant: [32m'0x15d34AAf54267DB7D7c367839AAf71A00a2C6A65'[39m,
+    commitment: {
+      q: [36m[Point][39m,
+      c: [36m[Array][39m,
+      r: [36m[Point][39m,
+      mu: [33m102605659381100507127965042395737011177565441947446486661759968973522636782433n[39m
+    },
+    committed: [33mtrue[39m
+  }
+}
+[2026-04-27T12:02:57.770Z [32minfo[39m]: Registered key gen commitment for participant 0x15d34AAf54267DB7D7c367839AAf71A00a2C6A65
+
+[90mstdout[2m | src/consensus/integration.test.ts[2m > [22m[2mintegration[2m > [22m[2mkeygen and oracle signing flow
+[22m[39m[2026-04-27T12:02:57.796Z [32minfo[39m]: Enqueue key_gen_publish_secret_shares {
+  action: {
+    id: [32m'key_gen_publish_secret_shares'[39m,
+    groupId: [32m'0xe76945035b9326a9cc44a31c87fe5c17a47f81406382e89b0000000000000000'[39m,
+    verificationShare: Point {
+      X: [33m35114616927253391314404606251477358753674812969538014997033153075912278915541n[39m,
+      Y: [33m86446735997814148889405731802108028615843189490219675139858263207260690859185n[39m,
+      Z: [33m107617278280793907760800404288001707372977769895988433773811173261365293885086n[39m
+    },
+    shares: [
+      [33m12370364965697912697004492930042761437944088189807486772688441217812132885784n[39m,
+      [33m21056107399968984964143968996663988446692897800262349088216999478499408932279n[39m,
+      [33m41431700743495239453489495009720446780482799506956533284643557166747594193204n[39m
+    ]
+  }
+}
+
+[90mstdout[2m | src/consensus/integration.test.ts[2m > [22m[2mintegration[2m > [22m[2mkeygen and oracle signing flow
+[22m[39m[2026-04-27T12:02:57.869Z [34mdebug[39m]: Submitting transaction for nonce 2! {
+  tx: {
+    hash: [32m'0x513f02769ab1f30abef774e1ef529f14ce334ab7286734daa9cc6505a7ff6230'[39m,
+    to: [32m'0xaE27021CEB45316f1efe69D8E362aC07ED3Bd7E4'[39m,
+    value: [33m0n[39m,
+    data: [32m'0x7d10c04be76945035b9326a9cc44a31c87fe5c17a47f81406382e89b00000000000000000000000000000000000000000000000000000000000000000000000000000040b9702419d689fb77f0df8cc3f0c2dc515d044873ad9d08120ac8ebac2a25c612f4eacdc923a59283ad9a91c26823a91aa2ee5b751315a239a682ae94d3709c44000000000000000000000000000000000000000000000000000000000000006000000000000000000000000000000000000000000000000000000000000000031b5960e22b8ee0e374ea79b4db1c70e416a938e58da319292e2104c8a60175182e8d559ec6665380c65f67969b27964482416e043d5792be9a77d29c0648edb75b9982f84fe7d9e68071395e1ba4dddc1b40d4dd0d11d1b640ef567ff5aef934'[39m,
+    nonce: [33m2[39m,
+    gas: [33m325000n[39m,
+    chainId: [33m31337[39m,
+    maxFeePerGas: [33m1969628768n[39m,
+    maxPriorityFeePerGas: [33m1000000000n[39m
+  }
+}
+
+[90mstdout[2m | src/consensus/integration.test.ts[2m > [22m[2mintegration[2m > [22m[2mkeygen and oracle signing flow
+[22m[39m[2026-04-27T12:02:57.871Z [32minfo[39m]: Sent action for key_gen_publish_secret_shares transaction {
+  action: { id: [32m'key_gen_publish_secret_shares'[39m },
+  tx: {
+    nonce: [33m2[39m,
+    hash: [32m'0x513f02769ab1f30abef774e1ef529f14ce334ab7286734daa9cc6505a7ff6230'[39m
+  }
+}
+
+[90mstdout[2m | src/consensus/integration.test.ts[2m > [22m[2mintegration[2m > [22m[2mkeygen and oracle signing flow
+[22m[39m[2026-04-27T12:02:57.971Z [34mdebug[39m]: Enqueue block_new at 4
+[2026-04-27T12:02:57.971Z [34mdebug[39m]: Marked 1 transactions as submitted at block 4
+
+[90mstdout[2m | src/consensus/integration.test.ts[2m > [22m[2mintegration[2m > [22m[2mkeygen and oracle signing flow
+[22m[39m[2026-04-27T12:02:57.977Z [34mdebug[39m]: Marked 1 transactions as executed up to nonce 2 on block 4
+
+[90mstdout[2m | src/consensus/integration.test.ts[2m > [22m[2mintegration[2m > [22m[2mkeygen and oracle signing flow
+[22m[39m[2026-04-27T12:02:57.979Z [34mdebug[39m]: Enqueue event_key_gen_secret_shared at 4
+[2026-04-27T12:02:57.979Z [34mdebug[39m]: Handle event event_key_gen_secret_shared {
+  transition: {
+    id: [32m'event_key_gen_secret_shared'[39m,
+    block: [33m4n[39m,
+    index: [33m0[39m,
+    gid: [32m'0xe76945035b9326a9cc44a31c87fe5c17a47f81406382e89b0000000000000000'[39m,
+    participant: [32m'0x15d34AAf54267DB7D7c367839AAf71A00a2C6A65'[39m,
+    share: { y: [36m[Point][39m, f: [36m[Array][39m },
+    shared: [33mfalse[39m
+  }
+}
+[2026-04-27T12:02:57.985Z [34mdebug[39m]: Enqueue event_key_gen_secret_shared at 4
+[2026-04-27T12:02:57.985Z [34mdebug[39m]: Enqueue event_key_gen_secret_shared at 4
+[2026-04-27T12:02:57.985Z [34mdebug[39m]: Enqueue event_key_gen_secret_shared at 4
+[2026-04-27T12:02:57.985Z [32minfo[39m]: Group 0xe76945035b9326a9cc44a31c87fe5c17a47f81406382e89b0000000000000000 secret shares not completed yet
+
+[90mstdout[2m | src/consensus/integration.test.ts[2m > [22m[2mintegration[2m > [22m[2mkeygen and oracle signing flow
+[22m[39m[2026-04-27T12:02:57.985Z [34mdebug[39m]: Handle event event_key_gen_secret_shared {
+  transition: {
+    id: [32m'event_key_gen_secret_shared'[39m,
+    block: [33m4n[39m,
+    index: [33m1[39m,
+    gid: [32m'0xe76945035b9326a9cc44a31c87fe5c17a47f81406382e89b0000000000000000'[39m,
+    participant: [32m'0x70997970C51812dc3A010C7d01b50e0d17dc79C8'[39m,
+    share: { y: [36m[Point][39m, f: [36m[Array][39m },
+    shared: [33mfalse[39m
+  }
+}
+[2026-04-27T12:02:57.986Z [34mdebug[39m]: Register own shares
+
+[90mstdout[2m | src/consensus/integration.test.ts[2m > [22m[2mintegration[2m > [22m[2mkeygen and oracle signing flow
+[22m[39m[2026-04-27T12:02:57.986Z [32minfo[39m]: Group 0xe76945035b9326a9cc44a31c87fe5c17a47f81406382e89b0000000000000000 secret shares not completed yet
+
+[90mstdout[2m | src/consensus/integration.test.ts[2m > [22m[2mintegration[2m > [22m[2mkeygen and oracle signing flow
+[22m[39m[2026-04-27T12:02:57.986Z [34mdebug[39m]: Handle event event_key_gen_secret_shared {
+  transition: {
+    id: [32m'event_key_gen_secret_shared'[39m,
+    block: [33m4n[39m,
+    index: [33m2[39m,
+    gid: [32m'0xe76945035b9326a9cc44a31c87fe5c17a47f81406382e89b0000000000000000'[39m,
+    participant: [32m'0x90F79bf6EB2c4f870365E785982E1f101E93b906'[39m,
+    share: { y: [36m[Point][39m, f: [36m[Array][39m },
+    shared: [33mfalse[39m
+  }
+}
+
+[90mstdout[2m | src/consensus/integration.test.ts[2m > [22m[2mintegration[2m > [22m[2mkeygen and oracle signing flow
+[22m[39m[2026-04-27T12:02:57.991Z [32minfo[39m]: Group 0xe76945035b9326a9cc44a31c87fe5c17a47f81406382e89b0000000000000000 secret shares not completed yet
+
+[90mstdout[2m | src/consensus/integration.test.ts[2m > [22m[2mintegration[2m > [22m[2mkeygen and oracle signing flow
+[22m[39m[2026-04-27T12:02:57.992Z [34mdebug[39m]: Handle event event_key_gen_secret_shared {
+  transition: {
+    id: [32m'event_key_gen_secret_shared'[39m,
+    block: [33m4n[39m,
+    index: [33m3[39m,
+    gid: [32m'0xe76945035b9326a9cc44a31c87fe5c17a47f81406382e89b0000000000000000'[39m,
+    participant: [32m'0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC'[39m,
+    share: { y: [36m[Point][39m, f: [36m[Array][39m },
+    shared: [33mtrue[39m
+  }
+}
+
+[90mstdout[2m | src/consensus/integration.test.ts[2m > [22m[2mintegration[2m > [22m[2mkeygen and oracle signing flow
+[22m[39m[2026-04-27T12:02:57.998Z [32minfo[39m]: Group 0xe76945035b9326a9cc44a31c87fe5c17a47f81406382e89b0000000000000000 secret shares completed, triggering confirmation
+
+[90mstdout[2m | src/consensus/integration.test.ts[2m > [22m[2mintegration[2m > [22m[2mkeygen and oracle signing flow
+[22m[39m[2026-04-27T12:02:57.998Z [32minfo[39m]: Enqueue key_gen_confirm {
+  action: {
+    id: [32m'key_gen_confirm'[39m,
+    groupId: [32m'0xe76945035b9326a9cc44a31c87fe5c17a47f81406382e89b0000000000000000'[39m,
+    callbackContext: [90mundefined[39m
+  }
+}
+
+[90mstdout[2m | src/consensus/integration.test.ts[2m > [22m[2mintegration[2m > [22m[2mkeygen and oracle signing flow
+[22m[39m[2026-04-27T12:02:58.067Z [34mdebug[39m]: Submitting transaction for nonce 3! {
+  tx: {
+    hash: [32m'0x6e35779ae1ee0597cfd0d18a16955f8810a6d258ca5772cb566369ed36dade91'[39m,
+    to: [32m'0xaE27021CEB45316f1efe69D8E362aC07ED3Bd7E4'[39m,
+    value: [33m0n[39m,
+    data: [32m'0x1169f60ee76945035b9326a9cc44a31c87fe5c17a47f81406382e89b0000000000000000'[39m,
+    nonce: [33m3[39m,
+    gas: [33m200000n[39m,
+    chainId: [33m31337[39m,
+    maxFeePerGas: [33m1851330262n[39m,
+    maxPriorityFeePerGas: [33m1000000000n[39m
+  }
+}
+
+[90mstdout[2m | src/consensus/integration.test.ts[2m > [22m[2mintegration[2m > [22m[2mkeygen and oracle signing flow
+[22m[39m[2026-04-27T12:02:58.071Z [32minfo[39m]: Sent action for key_gen_confirm transaction {
+  action: { id: [32m'key_gen_confirm'[39m },
+  tx: {
+    nonce: [33m3[39m,
+    hash: [32m'0x6e35779ae1ee0597cfd0d18a16955f8810a6d258ca5772cb566369ed36dade91'[39m
+  }
+}
+
+[90mstdout[2m | src/consensus/integration.test.ts[2m > [22m[2mintegration[2m > [22m[2mkeygen and oracle signing flow
+[22m[39m[2026-04-27T12:02:58.241Z [34mdebug[39m]: Enqueue block_new at 5
+[2026-04-27T12:02:58.241Z [34mdebug[39m]: Marked 1 transactions as submitted at block 5
+
+[90mstdout[2m | src/consensus/integration.test.ts[2m > [22m[2mintegration[2m > [22m[2mkeygen and oracle signing flow
+[22m[39m[2026-04-27T12:02:58.278Z [34mdebug[39m]: Marked 1 transactions as executed up to nonce 3 on block 5
+
+[90mstdout[2m | src/consensus/integration.test.ts[2m > [22m[2mintegration[2m > [22m[2mkeygen and oracle signing flow
+[22m[39m[2026-04-27T12:02:58.280Z [34mdebug[39m]: Enqueue event_key_gen_confirmed at 5
+[2026-04-27T12:02:58.280Z [34mdebug[39m]: Handle event event_key_gen_confirmed {
+  transition: {
+    id: [32m'event_key_gen_confirmed'[39m,
+    block: [33m5n[39m,
+    index: [33m0[39m,
+    gid: [32m'0xe76945035b9326a9cc44a31c87fe5c17a47f81406382e89b0000000000000000'[39m,
+    participant: [32m'0x70997970C51812dc3A010C7d01b50e0d17dc79C8'[39m,
+    confirmed: [33mfalse[39m
+  }
+}
+[2026-04-27T12:02:58.280Z [32minfo[39m]: Group 0xe76945035b9326a9cc44a31c87fe5c17a47f81406382e89b0000000000000000 confirmation from 0x70997970C51812dc3A010C7d01b50e0d17dc79C8 (1/4)
+[2026-04-27T12:02:58.280Z [34mdebug[39m]: Enqueue event_key_gen_confirmed at 5
+[2026-04-27T12:02:58.280Z [34mdebug[39m]: Enqueue event_key_gen_confirmed at 5
+[2026-04-27T12:02:58.280Z [34mdebug[39m]: Enqueue event_key_gen_confirmed at 5
+
+[90mstdout[2m | src/consensus/integration.test.ts[2m > [22m[2mintegration[2m > [22m[2mkeygen and oracle signing flow
+[22m[39m[2026-04-27T12:02:58.280Z [34mdebug[39m]: Handle event event_key_gen_confirmed {
+  transition: {
+    id: [32m'event_key_gen_confirmed'[39m,
+    block: [33m5n[39m,
+    index: [33m1[39m,
+    gid: [32m'0xe76945035b9326a9cc44a31c87fe5c17a47f81406382e89b0000000000000000'[39m,
+    participant: [32m'0x90F79bf6EB2c4f870365E785982E1f101E93b906'[39m,
+    confirmed: [33mfalse[39m
+  }
+}
+[2026-04-27T12:02:58.280Z [32minfo[39m]: Group 0xe76945035b9326a9cc44a31c87fe5c17a47f81406382e89b0000000000000000 confirmation from 0x90F79bf6EB2c4f870365E785982E1f101E93b906 (2/4)
+
+[90mstdout[2m | src/consensus/integration.test.ts[2m > [22m[2mintegration[2m > [22m[2mkeygen and oracle signing flow
+[22m[39m[2026-04-27T12:02:58.280Z [34mdebug[39m]: Handle event event_key_gen_confirmed {
+  transition: {
+    id: [32m'event_key_gen_confirmed'[39m,
+    block: [33m5n[39m,
+    index: [33m2[39m,
+    gid: [32m'0xe76945035b9326a9cc44a31c87fe5c17a47f81406382e89b0000000000000000'[39m,
+    participant: [32m'0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC'[39m,
+    confirmed: [33mfalse[39m
+  }
+}
+[2026-04-27T12:02:58.281Z [32minfo[39m]: Group 0xe76945035b9326a9cc44a31c87fe5c17a47f81406382e89b0000000000000000 confirmation from 0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC (3/4)
+
+[90mstdout[2m | src/consensus/integration.test.ts[2m > [22m[2mintegration[2m > [22m[2mkeygen and oracle signing flow
+[22m[39m[2026-04-27T12:02:58.281Z [34mdebug[39m]: Handle event event_key_gen_confirmed {
+  transition: {
+    id: [32m'event_key_gen_confirmed'[39m,
+    block: [33m5n[39m,
+    index: [33m3[39m,
+    gid: [32m'0xe76945035b9326a9cc44a31c87fe5c17a47f81406382e89b0000000000000000'[39m,
+    participant: [32m'0x15d34AAf54267DB7D7c367839AAf71A00a2C6A65'[39m,
+    confirmed: [33mtrue[39m
+  }
+}
+[2026-04-27T12:02:58.281Z [32minfo[39m]: Group 0xe76945035b9326a9cc44a31c87fe5c17a47f81406382e89b0000000000000000 confirmation from 0x15d34AAf54267DB7D7c367839AAf71A00a2C6A65 (4/4)
+[2026-04-27T12:02:58.281Z [32minfo[39m]: Genesis group all confirmations received, starting preprocessing
+
+[90mstdout[2m | src/consensus/integration.test.ts[2m > [22m[2mintegration[2m > [22m[2mkeygen and oracle signing flow
+[22m[39m[2026-04-27T12:02:58.309Z [32minfo[39m]: Enqueue sign_register_nonce_commitments {
+  action: {
+    id: [32m'sign_register_nonce_commitments'[39m,
+    groupId: [32m'0xe76945035b9326a9cc44a31c87fe5c17a47f81406382e89b0000000000000000'[39m,
+    nonceCommitmentsHash: [32m'0x705b487e53b2e1e2fe2f99ce9aa59d90fd8367fdf16ec3b9771480d8edbc958e'[39m
+  }
+}
+
+[90mstdout[2m | src/consensus/integration.test.ts[2m > [22m[2mintegration[2m > [22m[2mkeygen and oracle signing flow
+[22m[39m[2026-04-27T12:02:58.377Z [34mdebug[39m]: Submitting transaction for nonce 4! {
+  tx: {
+    hash: [32m'0x64a83c1a96b0f7a3abf850f6022bc96fcc2c62ee541c3146823c4c454ee4896b'[39m,
+    to: [32m'0xaE27021CEB45316f1efe69D8E362aC07ED3Bd7E4'[39m,
+    value: [33m0n[39m,
+    data: [32m'0x42b29c61e76945035b9326a9cc44a31c87fe5c17a47f81406382e89b0000000000000000705b487e53b2e1e2fe2f99ce9aa59d90fd8367fdf16ec3b9771480d8edbc958e'[39m,
+    nonce: [33m4[39m,
+    gas: [33m250000n[39m,
+    chainId: [33m31337[39m,
+    maxFeePerGas: [33m1747253584n[39m,
+    maxPriorityFeePerGas: [33m1000000000n[39m
+  }
+}
+
+[90mstdout[2m | src/consensus/integration.test.ts[2m > [22m[2mintegration[2m > [22m[2mkeygen and oracle signing flow
+[22m[39m[2026-04-27T12:02:58.380Z [32minfo[39m]: Sent action for sign_register_nonce_commitments transaction {
+  action: { id: [32m'sign_register_nonce_commitments'[39m },
+  tx: {
+    nonce: [33m4[39m,
+    hash: [32m'0x64a83c1a96b0f7a3abf850f6022bc96fcc2c62ee541c3146823c4c454ee4896b'[39m
+  }
+}
+
+[90mstdout[2m | src/consensus/integration.test.ts[2m > [22m[2mintegration[2m > [22m[2mkeygen and oracle signing flow
+[22m[39m[2026-04-27T12:02:58.481Z [34mdebug[39m]: Enqueue block_new at 6
+[2026-04-27T12:02:58.481Z [32minfo[39m]: Rollover to epoch 0
+[2026-04-27T12:02:58.481Z [32minfo[39m]: Trigger key gen for epoch 1
+[2026-04-27T12:02:58.483Z [32minfo[39m]: Triggered key gen for epoch 1 with 0x392b3437bfb0d02a805c496b05a10ef1250ad80e538804910000000000000000 {
+  participants: [
+    [32m'0x15d34AAf54267DB7D7c367839AAf71A00a2C6A65'[39m,
+    [32m'0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC'[39m,
+    [32m'0x70997970C51812dc3A010C7d01b50e0d17dc79C8'[39m,
+    [32m'0x90F79bf6EB2c4f870365E785982E1f101E93b906'[39m
+  ]
+}
+[2026-04-27T12:02:58.483Z [34mdebug[39m]: Marked 1 transactions as submitted at block 6
+[2026-04-27T12:02:58.483Z [32minfo[39m]: Enqueue key_gen_start {
+  action: {
+    id: [32m'key_gen_start'[39m,
+    participants: [32m'0x361dfe05b50639813bc042e5d35ad7704f7e8f6b5cba7cd2605548a66bf7226b'[39m,
+    count: [33m4[39m,
+    threshold: [33m3[39m,
+    context: [32m'0x00000000633bc37adf150719844854260cabec54920974350000000000000001'[39m,
+    encryptionPublicKey: Point {
+      X: [33m111088997966954743281857523869117094570247071128079018653491330292005403497073n[39m,
+      Y: [33m22005461633611352235990298497318086937901774427903288897584389957914607186041n[39m,
+      Z: [33m1n[39m
+    },
+    commitments: [ [36m[Point][39m, [36m[Point][39m, [36m[Point][39m ],
+    pok: {
+      r: [36m[Point][39m,
+      mu: [33m58451179008873876083320918923487353137669464195388634427439204339914809916110n[39m
+    },
+    poap: [
+      [32m'0x00000000000000000000000090f79bf6eb2c4f870365e785982e1f101e93b906'[39m,
+      [32m'0xd02289e77aa6d6e568e156b6eb5d8f5d7a3c804391d444b4845416a470487ef5'[39m
+    ]
+  }
+}
+
+[90mstdout[2m | src/consensus/integration.test.ts[2m > [22m[2mintegration[2m > [22m[2mkeygen and oracle signing flow
+[22m[39m[2026-04-27T12:02:58.491Z [34mdebug[39m]: Marked 1 transactions as executed up to nonce 4 on block 6
+
+[90mstdout[2m | src/consensus/integration.test.ts[2m > [22m[2mintegration[2m > [22m[2mkeygen and oracle signing flow
+[22m[39m[2026-04-27T12:02:58.493Z [34mdebug[39m]: Enqueue event_nonce_commitments_hash at 6
+[2026-04-27T12:02:58.493Z [34mdebug[39m]: Handle event event_nonce_commitments_hash {
+  transition: {
+    id: [32m'event_nonce_commitments_hash'[39m,
+    block: [33m6n[39m,
+    index: [33m0[39m,
+    gid: [32m'0xe76945035b9326a9cc44a31c87fe5c17a47f81406382e89b0000000000000000'[39m,
+    participant: [32m'0x90F79bf6EB2c4f870365E785982E1f101E93b906'[39m,
+    chunk: [33m0n[39m,
+    commitment: [32m'0xd748726630acfee73a754ced227cb43e839884d7439ed53ef76468dabddb0aba'[39m
+  }
+}
+[2026-04-27T12:02:58.493Z [32minfo[39m]: Link nonces for chunk 0
+[2026-04-27T12:02:58.493Z [34mdebug[39m]: Enqueue event_nonce_commitments_hash at 6
+[2026-04-27T12:02:58.493Z [34mdebug[39m]: Enqueue event_nonce_commitments_hash at 6
+[2026-04-27T12:02:58.493Z [34mdebug[39m]: Enqueue event_nonce_commitments_hash at 6
+
+[90mstdout[2m | src/consensus/integration.test.ts[2m > [22m[2mintegration[2m > [22m[2mkeygen and oracle signing flow
+[22m[39m[2026-04-27T12:02:58.493Z [34mdebug[39m]: Handle event event_nonce_commitments_hash {
+  transition: {
+    id: [32m'event_nonce_commitments_hash'[39m,
+    block: [33m6n[39m,
+    index: [33m1[39m,
+    gid: [32m'0xe76945035b9326a9cc44a31c87fe5c17a47f81406382e89b0000000000000000'[39m,
+    participant: [32m'0x70997970C51812dc3A010C7d01b50e0d17dc79C8'[39m,
+    chunk: [33m0n[39m,
+    commitment: [32m'0x705b487e53b2e1e2fe2f99ce9aa59d90fd8367fdf16ec3b9771480d8edbc958e'[39m
+  }
+}
+[2026-04-27T12:02:58.493Z [32minfo[39m]: Link nonces for chunk 0
+
+[90mstdout[2m | src/consensus/integration.test.ts[2m > [22m[2mintegration[2m > [22m[2mkeygen and oracle signing flow
+[22m[39m[2026-04-27T12:02:58.493Z [34mdebug[39m]: Handle event event_nonce_commitments_hash {
+  transition: {
+    id: [32m'event_nonce_commitments_hash'[39m,
+    block: [33m6n[39m,
+    index: [33m2[39m,
+    gid: [32m'0xe76945035b9326a9cc44a31c87fe5c17a47f81406382e89b0000000000000000'[39m,
+    participant: [32m'0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC'[39m,
+    chunk: [33m0n[39m,
+    commitment: [32m'0xec469322ead7fc924d1e0a118ac0a71e355c1ba57b46ae181ca8ec805ea6824c'[39m
+  }
+}
+[2026-04-27T12:02:58.493Z [32minfo[39m]: Link nonces for chunk 0
+
+[90mstdout[2m | src/consensus/integration.test.ts[2m > [22m[2mintegration[2m > [22m[2mkeygen and oracle signing flow
+[22m[39m[2026-04-27T12:02:58.493Z [34mdebug[39m]: Handle event event_nonce_commitments_hash {
+  transition: {
+    id: [32m'event_nonce_commitments_hash'[39m,
+    block: [33m6n[39m,
+    index: [33m3[39m,
+    gid: [32m'0xe76945035b9326a9cc44a31c87fe5c17a47f81406382e89b0000000000000000'[39m,
+    participant: [32m'0x15d34AAf54267DB7D7c367839AAf71A00a2C6A65'[39m,
+    chunk: [33m0n[39m,
+    commitment: [32m'0x0414e1b8d57d95f96375b207dc0226c42fc43790761771bba97275fc5f986df1'[39m
+  }
+}
+[2026-04-27T12:02:58.493Z [32minfo[39m]: Link nonces for chunk 0
+
+[90mstdout[2m | src/consensus/integration.test.ts[2m > [22m[2mintegration[2m > [22m[2mkeygen and oracle signing flow
+[22m[39m[2026-04-27T12:02:58.499Z [34mdebug[39m]: Submitting transaction for nonce 5! {
+  tx: {
+    hash: [32m'0xba5d687a2d2abe96614ec28a9e7180327f77b9f65977187c06a99caaff004aec'[39m,
+    to: [32m'0xaE27021CEB45316f1efe69D8E362aC07ED3Bd7E4'[39m,
+    value: [33m0n[39m,
+    data: [32m'0x38b54463361dfe05b50639813bc042e5d35ad7704f7e8f6b5cba7cd2605548a66bf7226b0000000000000000000000000000000000000000000000000000000000000004000000000000000000000000000000000000000000000000000000000000000300000000633bc37adf150719844854260cabec5492097435000000000000000100000000000000000000000000000000000000000000000000000000000000c00000000000000000000000000000000000000000000000000000000000000120000000000000000000000000000000000000000000000000000000000000000200000000000000000000000090f79bf6eb2c4f870365e785982e1f101e93b906d02289e77aa6d6e568e156b6eb5d8f5d7a3c804391d444b4845416a470487ef5f59a250953ca93cbe61beb919436c8ef0ee7c9b9d013065ab54834f60b26127130a6a66066acb83e8981fd7e8df6c9db484415983d49af8de677d2bf6443707900000000000000000000000000000000000000000000000000000000000000c009fa359518743c0558fc009950622ead9ff4399900da128ef84bbe78e0231565c5b0f0641b15dc8827684baaa5facdafa9c601cdaa7636cb92d991ab01ab00e9813a31e6f24b83c03af4aca3e6c318bef2e5d393742a365049baf4df5f09bace0000000000000000000000000000000000000000000000000000000000000003e3843d3491b33e4533770a16550a6b8c5036a05c7b06bec4fced80987946df3fcf5defe829b981e68805c00fdea0101a2a8f10b7601d176363a5cf8e9d69242318b885194a591c26027b6de1c52a1f88e747b4d18261c8363a62460c224d1b673592e3dfc3032185731d0c1ca7954544790906563118cd8b7c0f719f10fa03cbfb48ac647d13cf0be3cd9e98920787587d941806e83d4522898a1aa763207d287fcddc438840f07620b5624318056874a566d79a8f46eb43637947fca2a9e44c'[39m,
+    nonce: [33m5[39m,
+    gas: [33m250000n[39m,
+    chainId: [33m31337[39m,
+    maxFeePerGas: [33m1654736249n[39m,
+    maxPriorityFeePerGas: [33m1000000000n[39m
+  }
+}
+
+[90mstdout[2m | src/consensus/integration.test.ts[2m > [22m[2mintegration[2m > [22m[2mkeygen and oracle signing flow
+[22m[39m[2026-04-27T12:02:58.500Z [32minfo[39m]: Sent action for key_gen_start transaction {
+  action: { id: [32m'key_gen_start'[39m },
+  tx: {
+    nonce: [33m5[39m,
+    hash: [32m'0xba5d687a2d2abe96614ec28a9e7180327f77b9f65977187c06a99caaff004aec'[39m
+  }
+}
+
+[90mstdout[2m | src/consensus/integration.test.ts[2m > [22m[2mintegration[2m > [22m[2mkeygen and oracle signing flow
+[22m[39m[2026-04-27T12:02:58.721Z [34mdebug[39m]: Enqueue block_new at 7
+[2026-04-27T12:02:58.721Z [34mdebug[39m]: Marked 1 transactions as submitted at block 7
+
+[90mstdout[2m | src/consensus/integration.test.ts[2m > [22m[2mintegration[2m > [22m[2mkeygen and oracle signing flow
+[22m[39m[2026-04-27T12:02:58.726Z [34mdebug[39m]: Marked 1 transactions as executed up to nonce 5 on block 7
+
+[90mstdout[2m | src/consensus/integration.test.ts[2m > [22m[2mintegration[2m > [22m[2mkeygen and oracle signing flow
+[22m[39m[2026-04-27T12:02:58.728Z [34mdebug[39m]: Enqueue event_key_gen at 7
+[2026-04-27T12:02:58.728Z [34mdebug[39m]: Handle event event_key_gen {
+  transition: {
+    id: [32m'event_key_gen'[39m,
+    block: [33m7n[39m,
+    index: [33m0[39m,
+    gid: [32m'0x392b3437bfb0d02a805c496b05a10ef1250ad80e538804910000000000000000'[39m,
+    participants: [32m'0x361dfe05b50639813bc042e5d35ad7704f7e8f6b5cba7cd2605548a66bf7226b'[39m,
+    count: [33m4[39m,
+    threshold: [33m3[39m,
+    context: [32m'0x00000000633bc37adf150719844854260cabec54920974350000000000000001'[39m
+  }
+}
+[2026-04-27T12:02:58.728Z [34mdebug[39m]: Enqueue event_key_gen_committed at 7
+[2026-04-27T12:02:58.728Z [34mdebug[39m]: Enqueue event_key_gen_committed at 7
+[2026-04-27T12:02:58.728Z [34mdebug[39m]: Enqueue event_key_gen_committed at 7
+[2026-04-27T12:02:58.728Z [34mdebug[39m]: Enqueue event_key_gen_committed at 7
+
+[90mstdout[2m | src/consensus/integration.test.ts[2m > [22m[2mintegration[2m > [22m[2mkeygen and oracle signing flow
+[22m[39m[2026-04-27T12:02:58.728Z [34mdebug[39m]: Handle event event_key_gen_committed {
+  transition: {
+    id: [32m'event_key_gen_committed'[39m,
+    block: [33m7n[39m,
+    index: [33m1[39m,
+    gid: [32m'0x392b3437bfb0d02a805c496b05a10ef1250ad80e538804910000000000000000'[39m,
+    participant: [32m'0x15d34AAf54267DB7D7c367839AAf71A00a2C6A65'[39m,
+    commitment: {
+      q: [36m[Point][39m,
+      c: [36m[Array][39m,
+      r: [36m[Point][39m,
+      mu: [33m4584776565233659347132994054693263430937010484080748569497562633446939457645n[39m
+    },
+    committed: [33mfalse[39m
+  }
+}
+[2026-04-27T12:02:58.730Z [32minfo[39m]: Registered key gen commitment for participant 0x15d34AAf54267DB7D7c367839AAf71A00a2C6A65
+
+[90mstdout[2m | src/consensus/integration.test.ts[2m > [22m[2mintegration[2m > [22m[2mkeygen and oracle signing flow
+[22m[39m[2026-04-27T12:02:58.730Z [34mdebug[39m]: Handle event event_key_gen_committed {
+  transition: {
+    id: [32m'event_key_gen_committed'[39m,
+    block: [33m7n[39m,
+    index: [33m2[39m,
+    gid: [32m'0x392b3437bfb0d02a805c496b05a10ef1250ad80e538804910000000000000000'[39m,
+    participant: [32m'0x90F79bf6EB2c4f870365E785982E1f101E93b906'[39m,
+    commitment: {
+      q: [36m[Point][39m,
+      c: [36m[Array][39m,
+      r: [36m[Point][39m,
+      mu: [33m98245379566410031810734856858114521928638716178986994557131314470161798276420n[39m
+    },
+    committed: [33mfalse[39m
+  }
+}
+[2026-04-27T12:02:58.732Z [32minfo[39m]: Registered key gen commitment for participant 0x90F79bf6EB2c4f870365E785982E1f101E93b906
+
+[90mstdout[2m | src/consensus/integration.test.ts[2m > [22m[2mintegration[2m > [22m[2mkeygen and oracle signing flow
+[22m[39m[2026-04-27T12:02:58.732Z [34mdebug[39m]: Handle event event_key_gen_committed {
+  transition: {
+    id: [32m'event_key_gen_committed'[39m,
+    block: [33m7n[39m,
+    index: [33m3[39m,
+    gid: [32m'0x392b3437bfb0d02a805c496b05a10ef1250ad80e538804910000000000000000'[39m,
+    participant: [32m'0x70997970C51812dc3A010C7d01b50e0d17dc79C8'[39m,
+    commitment: {
+      q: [36m[Point][39m,
+      c: [36m[Array][39m,
+      r: [36m[Point][39m,
+      mu: [33m58451179008873876083320918923487353137669464195388634427439204339914809916110n[39m
+    },
+    committed: [33mfalse[39m
+  }
+}
+[2026-04-27T12:02:58.736Z [32minfo[39m]: Registered key gen commitment for participant 0x70997970C51812dc3A010C7d01b50e0d17dc79C8
+
+[90mstdout[2m | src/consensus/integration.test.ts[2m > [22m[2mintegration[2m > [22m[2mkeygen and oracle signing flow
+[22m[39m[2026-04-27T12:02:58.737Z [34mdebug[39m]: Handle event event_key_gen_committed {
+  transition: {
+    id: [32m'event_key_gen_committed'[39m,
+    block: [33m7n[39m,
+    index: [33m4[39m,
+    gid: [32m'0x392b3437bfb0d02a805c496b05a10ef1250ad80e538804910000000000000000'[39m,
+    participant: [32m'0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC'[39m,
+    commitment: {
+      q: [36m[Point][39m,
+      c: [36m[Array][39m,
+      r: [36m[Point][39m,
+      mu: [33m6303043397806410939119105448366836627952649353728216742892365329548464750763n[39m
+    },
+    committed: [33mtrue[39m
+  }
+}
+[2026-04-27T12:02:58.738Z [32minfo[39m]: Registered key gen commitment for participant 0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC
+
+[90mstdout[2m | src/consensus/integration.test.ts[2m > [22m[2mintegration[2m > [22m[2mkeygen and oracle signing flow
+[22m[39m[2026-04-27T12:02:58.758Z [32minfo[39m]: Enqueue key_gen_publish_secret_shares {
+  action: {
+    id: [32m'key_gen_publish_secret_shares'[39m,
+    groupId: [32m'0x392b3437bfb0d02a805c496b05a10ef1250ad80e538804910000000000000000'[39m,
+    verificationShare: Point {
+      X: [33m466750146052766030959301315019287573421149348485119853983315195458988404306n[39m,
+      Y: [33m25021786483877186720326585783400398325179995983857537937845727890688535659240n[39m,
+      Z: [33m43395850031156928668966297272159966850469016296936619227475350098582584004541n[39m
+    },
+    shares: [
+      [33m47315762953202178987539254558023116320805629929324667547974579774686888095433n[39m,
+      [33m109063180747965026775276109133575820802078482776409850368304816966801878575710n[39m,
+      [33m16545790090771168719196271078292888729932343482137516519415922287708921097759n[39m
+    ]
+  }
+}
+
+[90mstdout[2m | src/consensus/integration.test.ts[2m > [22m[2mintegration[2m > [22m[2mkeygen and oracle signing flow
+[22m[39m[2026-04-27T12:02:58.860Z [34mdebug[39m]: Submitting transaction for nonce 6! {
+  tx: {
+    hash: [32m'0x62db7ff37f49b6c49011f4dfcc8b6ffd68ecfd8d613e19a55ef9d9fa23c958bb'[39m,
+    to: [32m'0xaE27021CEB45316f1efe69D8E362aC07ED3Bd7E4'[39m,
+    value: [33m0n[39m,
+    data: [32m'0x7d10c04b392b3437bfb0d02a805c496b05a10ef1250ad80e5388049100000000000000000000000000000000000000000000000000000000000000000000000000000040c24db47d356a0c1ea1ad5ba8d35ad5e741dbd1a1e2c289e4877786c974ff3d3f418fafd18a35faf9d23b5a83c4d18abfeef13e56d148ee8a26f723d4f28939ef00000000000000000000000000000000000000000000000000000000000000600000000000000000000000000000000000000000000000000000000000000003689bc5d5b47169478369c62616184b6cd9665a9ee56319725cf87b7f6f126ec9f11f92a070590631aac7bdf226ee180e5ec7e0eda5db9f2b881d3dd65a026a5e249495d7ba09eef5221b9a5352dd1ad950563ac77a8e9bdc1a2c7eeec46f6e1f'[39m,
+    nonce: [33m6[39m,
+    gas: [33m325000n[39m,
+    chainId: [33m31337[39m,
+    maxFeePerGas: [33m1574494524n[39m,
+    maxPriorityFeePerGas: [33m1000000000n[39m
+  }
+}
+
+[90mstdout[2m | src/consensus/integration.test.ts[2m > [22m[2mintegration[2m > [22m[2mkeygen and oracle signing flow
+[22m[39m[2026-04-27T12:02:58.864Z [32minfo[39m]: Sent action for key_gen_publish_secret_shares transaction {
+  action: { id: [32m'key_gen_publish_secret_shares'[39m },
+  tx: {
+    nonce: [33m6[39m,
+    hash: [32m'0x62db7ff37f49b6c49011f4dfcc8b6ffd68ecfd8d613e19a55ef9d9fa23c958bb'[39m
+  }
+}
+
+[90mstdout[2m | src/consensus/integration.test.ts[2m > [22m[2mintegration[2m > [22m[2mkeygen and oracle signing flow
+[22m[39m[2026-04-27T12:02:58.967Z [34mdebug[39m]: Enqueue block_new at 8
+[2026-04-27T12:02:58.967Z [34mdebug[39m]: Marked 1 transactions as submitted at block 8
+
+[90mstdout[2m | src/consensus/integration.test.ts[2m > [22m[2mintegration[2m > [22m[2mkeygen and oracle signing flow
+[22m[39m[2026-04-27T12:02:58.971Z [34mdebug[39m]: Marked 1 transactions as executed up to nonce 6 on block 8
+
+[90mstdout[2m | src/consensus/integration.test.ts[2m > [22m[2mintegration[2m > [22m[2mkeygen and oracle signing flow
+[22m[39m[2026-04-27T12:02:58.972Z [34mdebug[39m]: Enqueue event_key_gen_secret_shared at 8
+[2026-04-27T12:02:58.972Z [34mdebug[39m]: Handle event event_key_gen_secret_shared {
+  transition: {
+    id: [32m'event_key_gen_secret_shared'[39m,
+    block: [33m8n[39m,
+    index: [33m0[39m,
+    gid: [32m'0x392b3437bfb0d02a805c496b05a10ef1250ad80e538804910000000000000000'[39m,
+    participant: [32m'0x70997970C51812dc3A010C7d01b50e0d17dc79C8'[39m,
+    share: { y: [36m[Point][39m, f: [36m[Array][39m },
+    shared: [33mfalse[39m
+  }
+}
+[2026-04-27T12:02:58.972Z [34mdebug[39m]: Register own shares
+[2026-04-27T12:02:58.973Z [34mdebug[39m]: Enqueue event_key_gen_secret_shared at 8
+[2026-04-27T12:02:58.973Z [34mdebug[39m]: Enqueue event_key_gen_secret_shared at 8
+[2026-04-27T12:02:58.973Z [34mdebug[39m]: Enqueue event_key_gen_secret_shared at 8
+[2026-04-27T12:02:58.973Z [32minfo[39m]: Group 0x392b3437bfb0d02a805c496b05a10ef1250ad80e538804910000000000000000 secret shares not completed yet
+
+[90mstdout[2m | src/consensus/integration.test.ts[2m > [22m[2mintegration[2m > [22m[2mkeygen and oracle signing flow
+[22m[39m[2026-04-27T12:02:58.973Z [34mdebug[39m]: Handle event event_key_gen_secret_shared {
+  transition: {
+    id: [32m'event_key_gen_secret_shared'[39m,
+    block: [33m8n[39m,
+    index: [33m1[39m,
+    gid: [32m'0x392b3437bfb0d02a805c496b05a10ef1250ad80e538804910000000000000000'[39m,
+    participant: [32m'0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC'[39m,
+    share: { y: [36m[Point][39m, f: [36m[Array][39m },
+    shared: [33mfalse[39m
+  }
+}
+
+[90mstdout[2m | src/consensus/integration.test.ts[2m > [22m[2mintegration[2m > [22m[2mkeygen and oracle signing flow
+[22m[39m[2026-04-27T12:02:58.979Z [32minfo[39m]: Group 0x392b3437bfb0d02a805c496b05a10ef1250ad80e538804910000000000000000 secret shares not completed yet
+
+[90mstdout[2m | src/consensus/integration.test.ts[2m > [22m[2mintegration[2m > [22m[2mkeygen and oracle signing flow
+[22m[39m[2026-04-27T12:02:58.979Z [34mdebug[39m]: Handle event event_key_gen_secret_shared {
+  transition: {
+    id: [32m'event_key_gen_secret_shared'[39m,
+    block: [33m8n[39m,
+    index: [33m2[39m,
+    gid: [32m'0x392b3437bfb0d02a805c496b05a10ef1250ad80e538804910000000000000000'[39m,
+    participant: [32m'0x90F79bf6EB2c4f870365E785982E1f101E93b906'[39m,
+    share: { y: [36m[Point][39m, f: [36m[Array][39m },
+    shared: [33mfalse[39m
+  }
+}
+
+[90mstdout[2m | src/consensus/integration.test.ts[2m > [22m[2mintegration[2m > [22m[2mkeygen and oracle signing flow
+[22m[39m[2026-04-27T12:02:58.984Z [32minfo[39m]: Group 0x392b3437bfb0d02a805c496b05a10ef1250ad80e538804910000000000000000 secret shares not completed yet
+
+[90mstdout[2m | src/consensus/integration.test.ts[2m > [22m[2mintegration[2m > [22m[2mkeygen and oracle signing flow
+[22m[39m[2026-04-27T12:02:58.984Z [34mdebug[39m]: Handle event event_key_gen_secret_shared {
+  transition: {
+    id: [32m'event_key_gen_secret_shared'[39m,
+    block: [33m8n[39m,
+    index: [33m3[39m,
+    gid: [32m'0x392b3437bfb0d02a805c496b05a10ef1250ad80e538804910000000000000000'[39m,
+    participant: [32m'0x15d34AAf54267DB7D7c367839AAf71A00a2C6A65'[39m,
+    share: { y: [36m[Point][39m, f: [36m[Array][39m },
+    shared: [33mtrue[39m
+  }
+}
+
+[90mstdout[2m | src/consensus/integration.test.ts[2m > [22m[2mintegration[2m > [22m[2mkeygen and oracle signing flow
+[22m[39m[2026-04-27T12:02:58.991Z [32minfo[39m]: Group 0x392b3437bfb0d02a805c496b05a10ef1250ad80e538804910000000000000000 secret shares completed, triggering confirmation
+
+[90mstdout[2m | src/consensus/integration.test.ts[2m > [22m[2mintegration[2m > [22m[2mkeygen and oracle signing flow
+[22m[39m[2026-04-27T12:02:58.991Z [32minfo[39m]: Enqueue key_gen_confirm {
+  action: {
+    id: [32m'key_gen_confirm'[39m,
+    groupId: [32m'0x392b3437bfb0d02a805c496b05a10ef1250ad80e538804910000000000000000'[39m,
+    callbackContext: [32m'0x00000000000000000000000000000000000000000000000000000000000000010000000000000000000000000000000000000000000000000000000000000014'[39m
+  }
+}
+
+[90mstdout[2m | src/consensus/integration.test.ts[2m > [22m[2mintegration[2m > [22m[2mkeygen and oracle signing flow
+[22m[39m[2026-04-27T12:02:59.055Z [34mdebug[39m]: Submitting transaction for nonce 7! {
+  tx: {
+    hash: [32m'0x2d41c5b4bed41e2a34c39ec61b8d51a5b205ca4678c4d8d426d2a401521b7e6b'[39m,
+    to: [32m'0xaE27021CEB45316f1efe69D8E362aC07ED3Bd7E4'[39m,
+    value: [33m0n[39m,
+    data: [32m'0x1896ae36392b3437bfb0d02a805c496b05a10ef1250ad80e5388049100000000000000000000000000000000000000000000000000000000000000000000000000000040000000000000000000000000633bc37adf150719844854260cabec54920974350000000000000000000000000000000000000000000000000000000000000040000000000000000000000000000000000000000000000000000000000000004000000000000000000000000000000000000000000000000000000000000000010000000000000000000000000000000000000000000000000000000000000014'[39m,
+    nonce: [33m7[39m,
+    gas: [33m300000n[39m,
+    chainId: [33m31337[39m,
+    maxFeePerGas: [33m1504606040n[39m,
+    maxPriorityFeePerGas: [33m1000000000n[39m
+  }
+}
+
+[90mstdout[2m | src/consensus/integration.test.ts[2m > [22m[2mintegration[2m > [22m[2mkeygen and oracle signing flow
+[22m[39m[2026-04-27T12:02:59.057Z [32minfo[39m]: Sent action for key_gen_confirm transaction {
+  action: { id: [32m'key_gen_confirm'[39m },
+  tx: {
+    nonce: [33m7[39m,
+    hash: [32m'0x2d41c5b4bed41e2a34c39ec61b8d51a5b205ca4678c4d8d426d2a401521b7e6b'[39m
+  }
+}
+
+[90mstdout[2m | src/consensus/integration.test.ts[2m > [22m[2mintegration[2m > [22m[2mkeygen and oracle signing flow
+[22m[39m[2026-04-27T12:02:59.224Z [34mdebug[39m]: Enqueue block_new at 9
+[2026-04-27T12:02:59.224Z [34mdebug[39m]: Marked 1 transactions as submitted at block 9
+
+[90mstdout[2m | src/consensus/integration.test.ts[2m > [22m[2mintegration[2m > [22m[2mkeygen and oracle signing flow
+[22m[39m[2026-04-27T12:02:59.228Z [34mdebug[39m]: Marked 1 transactions as executed up to nonce 7 on block 9
+
+[90mstdout[2m | src/consensus/integration.test.ts[2m > [22m[2mintegration[2m > [22m[2mkeygen and oracle signing flow
+[22m[39m[2026-04-27T12:02:59.229Z [34mdebug[39m]: Enqueue event_key_gen_confirmed at 9
+[2026-04-27T12:02:59.229Z [34mdebug[39m]: Handle event event_key_gen_confirmed {
+  transition: {
+    id: [32m'event_key_gen_confirmed'[39m,
+    block: [33m9n[39m,
+    index: [33m0[39m,
+    gid: [32m'0x392b3437bfb0d02a805c496b05a10ef1250ad80e538804910000000000000000'[39m,
+    participant: [32m'0x70997970C51812dc3A010C7d01b50e0d17dc79C8'[39m,
+    confirmed: [33mfalse[39m
+  }
+}
+[2026-04-27T12:02:59.229Z [32minfo[39m]: Group 0x392b3437bfb0d02a805c496b05a10ef1250ad80e538804910000000000000000 confirmation from 0x70997970C51812dc3A010C7d01b50e0d17dc79C8 (1/4)
+[2026-04-27T12:02:59.230Z [34mdebug[39m]: Enqueue event_key_gen_confirmed at 9
+[2026-04-27T12:02:59.230Z [34mdebug[39m]: Enqueue event_key_gen_confirmed at 9
+[2026-04-27T12:02:59.230Z [34mdebug[39m]: Enqueue event_key_gen_confirmed at 9
+[2026-04-27T12:02:59.230Z [34mdebug[39m]: Enqueue event_epoch_proposed at 9
+[2026-04-27T12:02:59.230Z [34mdebug[39m]: Enqueue event_sign_request at 9
+
+[90mstdout[2m | src/consensus/integration.test.ts[2m > [22m[2mintegration[2m > [22m[2mkeygen and oracle signing flow
+[22m[39m[2026-04-27T12:02:59.230Z [34mdebug[39m]: Handle event event_key_gen_confirmed {
+  transition: {
+    id: [32m'event_key_gen_confirmed'[39m,
+    block: [33m9n[39m,
+    index: [33m1[39m,
+    gid: [32m'0x392b3437bfb0d02a805c496b05a10ef1250ad80e538804910000000000000000'[39m,
+    participant: [32m'0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC'[39m,
+    confirmed: [33mfalse[39m
+  }
+}
+[2026-04-27T12:02:59.230Z [32minfo[39m]: Group 0x392b3437bfb0d02a805c496b05a10ef1250ad80e538804910000000000000000 confirmation from 0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC (2/4)
+
+[90mstdout[2m | src/consensus/integration.test.ts[2m > [22m[2mintegration[2m > [22m[2mkeygen and oracle signing flow
+[22m[39m[2026-04-27T12:02:59.230Z [34mdebug[39m]: Handle event event_key_gen_confirmed {
+  transition: {
+    id: [32m'event_key_gen_confirmed'[39m,
+    block: [33m9n[39m,
+    index: [33m2[39m,
+    gid: [32m'0x392b3437bfb0d02a805c496b05a10ef1250ad80e538804910000000000000000'[39m,
+    participant: [32m'0x90F79bf6EB2c4f870365E785982E1f101E93b906'[39m,
+    confirmed: [33mfalse[39m
+  }
+}
+[2026-04-27T12:02:59.230Z [32minfo[39m]: Group 0x392b3437bfb0d02a805c496b05a10ef1250ad80e538804910000000000000000 confirmation from 0x90F79bf6EB2c4f870365E785982E1f101E93b906 (3/4)
+
+[90mstdout[2m | src/consensus/integration.test.ts[2m > [22m[2mintegration[2m > [22m[2mkeygen and oracle signing flow
+[22m[39m[2026-04-27T12:02:59.230Z [34mdebug[39m]: Handle event event_key_gen_confirmed {
+  transition: {
+    id: [32m'event_key_gen_confirmed'[39m,
+    block: [33m9n[39m,
+    index: [33m3[39m,
+    gid: [32m'0x392b3437bfb0d02a805c496b05a10ef1250ad80e538804910000000000000000'[39m,
+    participant: [32m'0x15d34AAf54267DB7D7c367839AAf71A00a2C6A65'[39m,
+    confirmed: [33mtrue[39m
+  }
+}
+[2026-04-27T12:02:59.230Z [32minfo[39m]: Group 0x392b3437bfb0d02a805c496b05a10ef1250ad80e538804910000000000000000 confirmation from 0x15d34AAf54267DB7D7c367839AAf71A00a2C6A65 (4/4)
+[2026-04-27T12:02:59.230Z [32minfo[39m]: Group 0x392b3437bfb0d02a805c496b05a10ef1250ad80e538804910000000000000000 all participants confirmed, computing epoch rollover message
+
+[90mstdout[2m | src/consensus/integration.test.ts[2m > [22m[2mintegration[2m > [22m[2mkeygen and oracle signing flow
+[22m[39m[2026-04-27T12:02:59.231Z [32minfo[39m]: Computed epoch rollover message 0x02e51aabe6ccbfde792ad2aac0fc912d9a3750255e00f62a70307d46a3a975c7
+
+[90mstdout[2m | src/consensus/integration.test.ts[2m > [22m[2mintegration[2m > [22m[2mkeygen and oracle signing flow
+[22m[39m[2026-04-27T12:02:59.232Z [34mdebug[39m]: Handle event event_epoch_proposed {
+  transition: {
+    id: [32m'event_epoch_proposed'[39m,
+    block: [33m9n[39m,
+    index: [33m4[39m,
+    activeEpoch: [33m0n[39m,
+    proposedEpoch: [33m1n[39m,
+    rolloverBlock: [33m20n[39m,
+    groupId: [32m'0x392b3437bfb0d02a805c496b05a10ef1250ad80e538804910000000000000000'[39m,
+    groupKey: Point {
+      X: [33m58656435384673704531785486971088851720322753305249011638617899643446699162069n[39m,
+      Y: [33m91427625631875746349274996825359782633381532865349076523965889319117101185884n[39m,
+      Z: [33m1n[39m
+    }
+  }
+}
+
+[90mstdout[2m | src/consensus/integration.test.ts[2m > [22m[2mintegration[2m > [22m[2mkeygen and oracle signing flow
+[22m[39m[2026-04-27T12:02:59.232Z [34mdebug[39m]: Handle event event_sign_request {
+  transition: {
+    id: [32m'event_sign_request'[39m,
+    block: [33m9n[39m,
+    index: [33m5[39m,
+    initiator: [32m'0x633Bc37aDF150719844854260CAbEC5492097435'[39m,
+    gid: [32m'0xe76945035b9326a9cc44a31c87fe5c17a47f81406382e89b0000000000000000'[39m,
+    message: [32m'0x02e51aabe6ccbfde792ad2aac0fc912d9a3750255e00f62a70307d46a3a975c7'[39m,
+    sid: [32m'0xe76945035b9326a9cc44a31c87fe5c17a47f81406382e89b0000000000000001'[39m,
+    sequence: [33m0n[39m
+  }
+}
+
+[90mstdout[2m | src/consensus/integration.test.ts[2m > [22m[2mintegration[2m > [22m[2mkeygen and oracle signing flow
+[22m[39m[2026-04-27T12:02:59.370Z [32minfo[39m]: Enqueue sign_reveal_nonce_commitments {
+  action: {
+    id: [32m'sign_reveal_nonce_commitments'[39m,
+    signatureId: [32m'0xe76945035b9326a9cc44a31c87fe5c17a47f81406382e89b0000000000000001'[39m,
+    nonceCommitments: {
+      hidingNonce: [33m50924814059887716207061777051972527223291062752791024800597422390171796324641n[39m,
+      hidingNonceCommitment: [36m[Point][39m,
+      bindingNonce: [33m63802929129489845410650280649364073511259785754317341172475340068935569245978n[39m,
+      bindingNonceCommitment: [36m[Point][39m
+    },
+    nonceProof: [
+      [32m'0x01665835dc3a08bdf060688959fd9b4bc2d0b2a408750142e037c34ba74c18d9'[39m,
+      [32m'0xe30615eed20b650b6ca3d58667a9d87bae6c90d9976bbcd1238403b4a0f9f84b'[39m,
+      [32m'0xe95cbb4e4013ae3e98fde3154f880d6d3256977bf5db588a65486ddd1f040018'[39m,
+      [32m'0x9c2f36d006762543c15d0451f7691f12e93e91ced227df1df8252c730723a303'[39m,
+      [32m'0x85b3349c0cf943f0f3aaabf30ad6f61643c54dc21aad36f87d649b4071584014'[39m,
+      [32m'0x8a056236fbec68c5acf300d4faaed3663755c5f8da2ce6e313257bdad1b48dda'[39m,
+      [32m'0x9dcbb0a0d8ae03666a03cedf0080adabc9f4e5a54ab6af497910d532c2743e3a'[39m,
+      [32m'0x09ea09141548c31b076585f752a402171bcb4413c377cf8ac4630cb4adf664ad'[39m,
+      [32m'0xc00fc6800c64c26867b6eecd4ffbf23809b599b27cb0b33bdc2e4305c706d601'[39m,
+      [32m'0x0c79bd4f880b88a97a9e4239b8ca5774e542474364bde6ad60d51241eeb8ff6d'[39m
+    ]
+  }
+}
+
+[90mstdout[2m | src/consensus/integration.test.ts[2m > [22m[2mintegration[2m > [22m[2mkeygen and oracle signing flow
+[22m[39m[2026-04-27T12:02:59.752Z [34mdebug[39m]: Submitting transaction for nonce 8! {
+  tx: {
+    hash: [32m'0x094c0da3785ebf72c2218f5175e09443acafa6dc86d96eca62c0f30fe3880503'[39m,
+    to: [32m'0xaE27021CEB45316f1efe69D8E362aC07ED3Bd7E4'[39m,
+    value: [33m0n[39m,
+    data: [32m'0x527bdde9e76945035b9326a9cc44a31c87fe5c17a47f81406382e89b0000000000000001f5517e69ccf51562c14fd29693b861199a0c505cb1fab9353867ec23144b381d2528df881e7b03307d100943e801761bdf5dffb1fe03e56916f673375697a2acce72045c41090b7e5fadd8440fe3132b1e550f340c829e433c991062aca47c441ccc5f56016d1e9f057e65589192ee22059d6e6dfc0b5b0fe4f956b7a6404c7c00000000000000000000000000000000000000000000000000000000000000c0000000000000000000000000000000000000000000000000000000000000000a01665835dc3a08bdf060688959fd9b4bc2d0b2a408750142e037c34ba74c18d9e30615eed20b650b6ca3d58667a9d87bae6c90d9976bbcd1238403b4a0f9f84be95cbb4e4013ae3e98fde3154f880d6d3256977bf5db588a65486ddd1f0400189c2f36d006762543c15d0451f7691f12e93e91ced227df1df8252c730723a30385b3349c0cf943f0f3aaabf30ad6f61643c54dc21aad36f87d649b40715840148a056236fbec68c5acf300d4faaed3663755c5f8da2ce6e313257bdad1b48dda9dcbb0a0d8ae03666a03cedf0080adabc9f4e5a54ab6af497910d532c2743e3a09ea09141548c31b076585f752a402171bcb4413c377cf8ac4630cb4adf664adc00fc6800c64c26867b6eecd4ffbf23809b599b27cb0b33bdc2e4305c706d6010c79bd4f880b88a97a9e4239b8ca5774e542474364bde6ad60d51241eeb8ff6d'[39m,
+    nonce: [33m8[39m,
+    gas: [33m200000n[39m,
+    chainId: [33m31337[39m,
+    maxFeePerGas: [33m1442917082n[39m,
+    maxPriorityFeePerGas: [33m1000000000n[39m
+  }
+}
+
+[90mstdout[2m | src/consensus/integration.test.ts[2m > [22m[2mintegration[2m > [22m[2mkeygen and oracle signing flow
+[22m[39m[2026-04-27T12:02:59.754Z [32minfo[39m]: Sent action for sign_reveal_nonce_commitments transaction {
+  action: { id: [32m'sign_reveal_nonce_commitments'[39m },
+  tx: {
+    nonce: [33m8[39m,
+    hash: [32m'0x094c0da3785ebf72c2218f5175e09443acafa6dc86d96eca62c0f30fe3880503'[39m
+  }
+}
+
+[90mstdout[2m | src/consensus/integration.test.ts[2m > [22m[2mintegration[2m > [22m[2mkeygen and oracle signing flow
+[22m[39m[2026-04-27T12:02:59.777Z [34mdebug[39m]: Enqueue block_new at 10
+[2026-04-27T12:02:59.777Z [34mdebug[39m]: Marked 1 transactions as submitted at block 10
+
+[90mstdout[2m | src/consensus/integration.test.ts[2m > [22m[2mintegration[2m > [22m[2mkeygen and oracle signing flow
+[22m[39m[2026-04-27T12:03:00.164Z [34mdebug[39m]: Enqueue block_new at 11
+
+[90mstdout[2m | src/consensus/integration.test.ts[2m > [22m[2mintegration[2m > [22m[2mkeygen and oracle signing flow
+[22m[39m[2026-04-27T12:03:00.292Z [34mdebug[39m]: Marked 1 transactions as executed up to nonce 8 on block 11
+
+[90mstdout[2m | src/consensus/integration.test.ts[2m > [22m[2mintegration[2m > [22m[2mkeygen and oracle signing flow
+[22m[39m[2026-04-27T12:03:00.293Z [34mdebug[39m]: Enqueue event_nonce_commitments at 11
+[2026-04-27T12:03:00.293Z [34mdebug[39m]: Handle event event_nonce_commitments {
+  transition: {
+    id: [32m'event_nonce_commitments'[39m,
+    block: [33m11n[39m,
+    index: [33m0[39m,
+    sid: [32m'0xe76945035b9326a9cc44a31c87fe5c17a47f81406382e89b0000000000000001'[39m,
+    participant: [32m'0x70997970C51812dc3A010C7d01b50e0d17dc79C8'[39m,
+    nonces: { d: [36m[Point][39m, e: [36m[Point][39m }
+  }
+}
+[2026-04-27T12:03:00.293Z [34mdebug[39m]: Enqueue event_nonce_commitments at 11
+[2026-04-27T12:03:00.293Z [34mdebug[39m]: Enqueue event_nonce_commitments at 11
+[2026-04-27T12:03:00.293Z [34mdebug[39m]: Enqueue event_nonce_commitments at 11
+
+[90mstdout[2m | src/consensus/integration.test.ts[2m > [22m[2mintegration[2m > [22m[2mkeygen and oracle signing flow
+[22m[39m[2026-04-27T12:03:00.294Z [34mdebug[39m]: Handle event event_nonce_commitments {
+  transition: {
+    id: [32m'event_nonce_commitments'[39m,
+    block: [33m11n[39m,
+    index: [33m1[39m,
+    sid: [32m'0xe76945035b9326a9cc44a31c87fe5c17a47f81406382e89b0000000000000001'[39m,
+    participant: [32m'0x15d34AAf54267DB7D7c367839AAf71A00a2C6A65'[39m,
+    nonces: { d: [36m[Point][39m, e: [36m[Point][39m }
+  }
+}
+
+[90mstdout[2m | src/consensus/integration.test.ts[2m > [22m[2mintegration[2m > [22m[2mkeygen and oracle signing flow
+[22m[39m[2026-04-27T12:03:00.294Z [34mdebug[39m]: Handle event event_nonce_commitments {
+  transition: {
+    id: [32m'event_nonce_commitments'[39m,
+    block: [33m11n[39m,
+    index: [33m2[39m,
+    sid: [32m'0xe76945035b9326a9cc44a31c87fe5c17a47f81406382e89b0000000000000001'[39m,
+    participant: [32m'0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC'[39m,
+    nonces: { d: [36m[Point][39m, e: [36m[Point][39m }
+  }
+}
+
+[90mstdout[2m | src/consensus/integration.test.ts[2m > [22m[2mintegration[2m > [22m[2mkeygen and oracle signing flow
+[22m[39m[2026-04-27T12:03:00.294Z [34mdebug[39m]: Handle event event_nonce_commitments {
+  transition: {
+    id: [32m'event_nonce_commitments'[39m,
+    block: [33m11n[39m,
+    index: [33m3[39m,
+    sid: [32m'0xe76945035b9326a9cc44a31c87fe5c17a47f81406382e89b0000000000000001'[39m,
+    participant: [32m'0x90F79bf6EB2c4f870365E785982E1f101E93b906'[39m,
+    nonces: { d: [36m[Point][39m, e: [36m[Point][39m }
+  }
+}
+
+[90mstdout[2m | src/consensus/integration.test.ts[2m > [22m[2mintegration[2m > [22m[2mkeygen and oracle signing flow
+[22m[39m[2026-04-27T12:03:00.414Z [32minfo[39m]: Enqueue sign_publish_signature_share {
+  action: {
+    id: [32m'sign_publish_signature_share'[39m,
+    signatureId: [32m'0xe76945035b9326a9cc44a31c87fe5c17a47f81406382e89b0000000000000001'[39m,
+    signersRoot: [32m'0x6d056c52aac4c4ed9e3dc23a7c8c52b8e7dac187b7bab9e125b08302c31aae1f'[39m,
+    signersProof: [
+      [32m'0x4da59395e03ab3d8143f8cc8a1827cb02775595d9eadbe67cc97710420a0792a'[39m,
+      [32m'0xc6fb08c2148192540cfe7382b27e0a5e646ca646c0a7887082df47fe4750aec3'[39m
+    ],
+    groupCommitment: Point {
+      X: [33m3001810969697089824966590655206903397352043710396690256533964062444101868921n[39m,
+      Y: [33m47233025453095163853744772985011316981241748737687589864023510638213062200319n[39m,
+      Z: [33m56859596054169949003951833781440658788199155773777980502586477394422921490584n[39m
+    },
+    commitmentShare: Point {
+      X: [33m51213287888942690722633808771023593378778992376365816735091175618478081604831n[39m,
+      Y: [33m108013631733811378410055198937852288807200881087878975043397482131432837204740n[39m,
+      Z: [33m88822683050680908875614950527929778305954181023551443060900688484674701070023n[39m
+    },
+    signatureShare: [33m38317724391281416635333656048374019835034338836786315919543930216069269031944n[39m,
+    lagrangeCoefficient: [33m76021318209538984528768588792504453710194102433250802849330691754489094088276n[39m,
+    callbackContext: [32m'0xea5eeafa00000000000000000000000000000000000000000000000000000000000000010000000000000000000000000000000000000000000000000000000000000014392b3437bfb0d02a805c496b05a10ef1250ad80e5388049100000000000000000000000000000000000000000000000000000000000000000000000000000000'[39m
+  }
+}
+
+[90mstdout[2m | src/consensus/integration.test.ts[2m > [22m[2mintegration[2m > [22m[2mkeygen and oracle signing flow
+[22m[39m[2026-04-27T12:03:00.543Z [34mdebug[39m]: Enqueue block_new at 12
+
+[90mstdout[2m | src/consensus/integration.test.ts[2m > [22m[2mintegration[2m > [22m[2mkeygen and oracle signing flow
+[22m[39m[2026-04-27T12:03:00.547Z [34mdebug[39m]: Enqueue block_new at 13
+[2026-04-27T12:03:00.547Z [34mdebug[39m]: Marked 1 transactions as submitted at block 13
+
+[90mstdout[2m | src/consensus/integration.test.ts[2m > [22m[2mintegration[2m > [22m[2mkeygen and oracle signing flow
+[22m[39m[2026-04-27T12:03:00.550Z [34mdebug[39m]: Submitting transaction for nonce 9! {
+  tx: {
+    hash: [32m'0xd97a949a658b2009a1bc170f5ffd6300c168c09cbb7af20c667987608b0d2aad'[39m,
+    to: [32m'0xaE27021CEB45316f1efe69D8E362aC07ED3Bd7E4'[39m,
+    value: [33m0n[39m,
+    data: [32m'0x95b57d9de76945035b9326a9cc44a31c87fe5c17a47f81406382e89b0000000000000001882feaefedccc76bb42606c793a23cb487f72b1943cc0a58c9a699f44a7bb49e047602da6b78fe28926e7d374c14d5e154025e9bb580a7799ae186fccaed11416d056c52aac4c4ed9e3dc23a7c8c52b8e7dac187b7bab9e125b08302c31aae1f547db7c9ee63f9c19cc4cce0a4e27d4e1417b07aabea6015fa671f4c631789426645bda4c040d60aadae2db850e161afe4a764140c608b2ef4d33144d749618154b7103decc3ed314190ef8d14acc10426891bbbd5fb28602d941a2acda00c08a8128a92dca3f38f271039694a337a5f462c6ec4f9f43b59787a3c173bc42654000000000000000000000000000000000000000000000000000000000000014000000000000000000000000000000000000000000000000000000000000001a000000000000000000000000000000000000000000000000000000000000000024da59395e03ab3d8143f8cc8a1827cb02775595d9eadbe67cc97710420a0792ac6fb08c2148192540cfe7382b27e0a5e646ca646c0a7887082df47fe4750aec3000000000000000000000000633bc37adf150719844854260cabec549209743500000000000000000000000000000000000000000000000000000000000000400000000000000000000000000000000000000000000000000000000000000084ea5eeafa00000000000000000000000000000000000000000000000000000000000000010000000000000000000000000000000000000000000000000000000000000014392b3437bfb0d02a805c496b05a10ef1250ad80e538804910000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000'[39m,
+    nonce: [33m9[39m,
+    gas: [33m400000n[39m,
+    chainId: [33m31337[39m,
+    maxFeePerGas: [33m1260522704n[39m,
+    maxPriorityFeePerGas: [33m1000000000n[39m
+  }
+}
+
+[90mstdout[2m | src/consensus/integration.test.ts[2m > [22m[2mintegration[2m > [22m[2mkeygen and oracle signing flow
+[22m[39m[2026-04-27T12:03:00.552Z [32minfo[39m]: Sent action for sign_publish_signature_share transaction {
+  action: { id: [32m'sign_publish_signature_share'[39m },
+  tx: {
+    nonce: [33m9[39m,
+    hash: [32m'0xd97a949a658b2009a1bc170f5ffd6300c168c09cbb7af20c667987608b0d2aad'[39m
+  }
+}
+
+[90mstdout[2m | src/consensus/integration.test.ts[2m > [22m[2mintegration[2m > [22m[2mkeygen and oracle signing flow
+[22m[39m[2026-04-27T12:03:00.828Z [34mdebug[39m]: Enqueue block_new at 14
+[2026-04-27T12:03:00.829Z [34mdebug[39m]: Marked 1 transactions as submitted at block 14
+
+[90mstdout[2m | src/consensus/integration.test.ts[2m > [22m[2mintegration[2m > [22m[2mkeygen and oracle signing flow
+[22m[39m[2026-04-27T12:03:00.923Z [34mdebug[39m]: Marked 1 transactions as executed up to nonce 9 on block 14
+
+[90mstdout[2m | src/consensus/integration.test.ts[2m > [22m[2mintegration[2m > [22m[2mkeygen and oracle signing flow
+[22m[39m[2026-04-27T12:03:00.925Z [34mdebug[39m]: Enqueue event_signature_share at 14
+[2026-04-27T12:03:00.925Z [34mdebug[39m]: Handle event event_signature_share {
+  transition: {
+    id: [32m'event_signature_share'[39m,
+    block: [33m14n[39m,
+    index: [33m0[39m,
+    sid: [32m'0xe76945035b9326a9cc44a31c87fe5c17a47f81406382e89b0000000000000001'[39m,
+    selectionRoot: [32m'0x6d056c52aac4c4ed9e3dc23a7c8c52b8e7dac187b7bab9e125b08302c31aae1f'[39m,
+    participant: [32m'0x15d34AAf54267DB7D7c367839AAf71A00a2C6A65'[39m,
+    z: [33m96756924119931051617176977931746990251275867364889497017886517828684418472542n[39m
+  }
+}
+[2026-04-27T12:03:00.925Z [34mdebug[39m]: Enqueue event_signature_share at 14
+[2026-04-27T12:03:00.925Z [34mdebug[39m]: Enqueue event_signature_share at 14
+[2026-04-27T12:03:00.925Z [34mdebug[39m]: Enqueue event_signature_share at 14
+[2026-04-27T12:03:00.925Z [34mdebug[39m]: Enqueue event_signed at 14
+[2026-04-27T12:03:00.925Z [34mdebug[39m]: Enqueue event_epoch_staged at 14
+
+[90mstdout[2m | src/consensus/integration.test.ts[2m > [22m[2mintegration[2m > [22m[2mkeygen and oracle signing flow
+[22m[39m[2026-04-27T12:03:00.925Z [34mdebug[39m]: Handle event event_signature_share {
+  transition: {
+    id: [32m'event_signature_share'[39m,
+    block: [33m14n[39m,
+    index: [33m1[39m,
+    sid: [32m'0xe76945035b9326a9cc44a31c87fe5c17a47f81406382e89b0000000000000001'[39m,
+    selectionRoot: [32m'0x6d056c52aac4c4ed9e3dc23a7c8c52b8e7dac187b7bab9e125b08302c31aae1f'[39m,
+    participant: [32m'0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC'[39m,
+    z: [33m88677120989460617994522257890482032776636918483718103390637163651812660188202n[39m
+  }
+}
+
+[90mstdout[2m | src/consensus/integration.test.ts[2m > [22m[2mintegration[2m > [22m[2mkeygen and oracle signing flow
+[22m[39m[2026-04-27T12:03:00.926Z [34mdebug[39m]: Handle event event_signature_share {
+  transition: {
+    id: [32m'event_signature_share'[39m,
+    block: [33m14n[39m,
+    index: [33m2[39m,
+    sid: [32m'0xe76945035b9326a9cc44a31c87fe5c17a47f81406382e89b0000000000000001'[39m,
+    selectionRoot: [32m'0x6d056c52aac4c4ed9e3dc23a7c8c52b8e7dac187b7bab9e125b08302c31aae1f'[39m,
+    participant: [32m'0x70997970C51812dc3A010C7d01b50e0d17dc79C8'[39m,
+    z: [33m38317724391281416635333656048374019835034338836786315919543930216069269031944n[39m
+  }
+}
+
+[90mstdout[2m | src/consensus/integration.test.ts[2m > [22m[2mintegration[2m > [22m[2mkeygen and oracle signing flow
+[22m[39m[2026-04-27T12:03:00.926Z [34mdebug[39m]: Handle event event_signature_share {
+  transition: {
+    id: [32m'event_signature_share'[39m,
+    block: [33m14n[39m,
+    index: [33m3[39m,
+    sid: [32m'0xe76945035b9326a9cc44a31c87fe5c17a47f81406382e89b0000000000000001'[39m,
+    selectionRoot: [32m'0x6d056c52aac4c4ed9e3dc23a7c8c52b8e7dac187b7bab9e125b08302c31aae1f'[39m,
+    participant: [32m'0x90F79bf6EB2c4f870365E785982E1f101E93b906'[39m,
+    z: [33m82327661785709905649221935430271601803273171304846829124958625313414602272941n[39m
+  }
+}
+
+[90mstdout[2m | src/consensus/integration.test.ts[2m > [22m[2mintegration[2m > [22m[2mkeygen and oracle signing flow
+[22m[39m[2026-04-27T12:03:00.926Z [34mdebug[39m]: Handle event event_signed {
+  transition: {
+    id: [32m'event_signed'[39m,
+    block: [33m14n[39m,
+    index: [33m4[39m,
+    sid: [32m'0xe76945035b9326a9cc44a31c87fe5c17a47f81406382e89b0000000000000001'[39m,
+    selectionRoot: [32m'0x6d056c52aac4c4ed9e3dc23a7c8c52b8e7dac187b7bab9e125b08302c31aae1f'[39m,
+    signature: {
+      z: [33m74495252811750601049112857283498828960545167432090936687815910726944626976955n[39m,
+      r: [36m[Point][39m
+    }
+  }
+}
+
+[90mstdout[2m | src/consensus/integration.test.ts[2m > [22m[2mintegration[2m > [22m[2mkeygen and oracle signing flow
+[22m[39m[2026-04-27T12:03:00.926Z [34mdebug[39m]: Handle event event_epoch_staged {
+  transition: {
+    id: [32m'event_epoch_staged'[39m,
+    block: [33m14n[39m,
+    index: [33m5[39m,
+    activeEpoch: [33m0n[39m,
+    proposedEpoch: [33m1n[39m,
+    rolloverBlock: [33m20n[39m,
+    groupId: [32m'0x392b3437bfb0d02a805c496b05a10ef1250ad80e538804910000000000000000'[39m,
+    groupKey: Point {
+      X: [33m58656435384673704531785486971088851720322753305249011638617899643446699162069n[39m,
+      Y: [33m91427625631875746349274996825359782633381532865349076523965889319117101185884n[39m,
+      Z: [33m1n[39m
+    },
+    signatureId: [32m'0xe76945035b9326a9cc44a31c87fe5c17a47f81406382e89b0000000000000001'[39m,
+    attestation: {
+      z: [33m74495252811750601049112857283498828960545167432090936687815910726944626976955n[39m,
+      r: [36m[Point][39m
+    }
+  }
+}
+[2026-04-27T12:03:00.926Z [36mnotice[39m]: Staged epoch 1 with group 0x392b3437bfb0d02a805c496b05a10ef1250ad80e538804910000000000000000
+
+[90mstdout[2m | src/consensus/integration.test.ts[2m > [22m[2mintegration[2m > [22m[2mkeygen and oracle signing flow
+[22m[39m[2026-04-27T12:03:00.952Z [32minfo[39m]: Enqueue sign_register_nonce_commitments {
+  action: {
+    id: [32m'sign_register_nonce_commitments'[39m,
+    groupId: [32m'0x392b3437bfb0d02a805c496b05a10ef1250ad80e538804910000000000000000'[39m,
+    nonceCommitmentsHash: [32m'0xd902e26e4bb11c6c9cde07afae71902b7aedc675d2c57ba54c3e5e894b379330'[39m
+  }
+}
+
+[90mstdout[2m | src/consensus/integration.test.ts[2m > [22m[2mintegration[2m > [22m[2mkeygen and oracle signing flow
+[22m[39m[2026-04-27T12:03:00.958Z [34mdebug[39m]: Submitting transaction for nonce 10! {
+  tx: {
+    hash: [32m'0xf1ac0fdafa2b74285f5f72d5b3536a4d2e05861797d78d7340631a67beb8ed5e'[39m,
+    to: [32m'0xaE27021CEB45316f1efe69D8E362aC07ED3Bd7E4'[39m,
+    value: [33m0n[39m,
+    data: [32m'0x42b29c61392b3437bfb0d02a805c496b05a10ef1250ad80e538804910000000000000000d902e26e4bb11c6c9cde07afae71902b7aedc675d2c57ba54c3e5e894b379330'[39m,
+    nonce: [33m10[39m,
+    gas: [33m250000n[39m,
+    chainId: [33m31337[39m,
+    maxFeePerGas: [33m1227957367n[39m,
+    maxPriorityFeePerGas: [33m1000000000n[39m
+  }
+}
+
+[90mstdout[2m | src/consensus/integration.test.ts[2m > [22m[2mintegration[2m > [22m[2mkeygen and oracle signing flow
+[22m[39m[2026-04-27T12:03:00.961Z [32minfo[39m]: Sent action for sign_register_nonce_commitments transaction {
+  action: { id: [32m'sign_register_nonce_commitments'[39m },
+  tx: {
+    nonce: [33m10[39m,
+    hash: [32m'0xf1ac0fdafa2b74285f5f72d5b3536a4d2e05861797d78d7340631a67beb8ed5e'[39m
+  }
+}
+
+[90mstdout[2m | src/consensus/integration.test.ts[2m > [22m[2mintegration[2m > [22m[2mkeygen and oracle signing flow
+[22m[39m[2026-04-27T12:03:01.049Z [34mdebug[39m]: Enqueue block_new at 15
+[2026-04-27T12:03:01.050Z [34mdebug[39m]: Marked 1 transactions as submitted at block 15
+
+[90mstdout[2m | src/consensus/integration.test.ts[2m > [22m[2mintegration[2m > [22m[2mkeygen and oracle signing flow
+[22m[39m[2026-04-27T12:03:01.063Z [34mdebug[39m]: Marked 1 transactions as executed up to nonce 10 on block 15
+
+[90mstdout[2m | src/consensus/integration.test.ts[2m > [22m[2mintegration[2m > [22m[2mkeygen and oracle signing flow
+[22m[39m[2026-04-27T12:03:01.064Z [34mdebug[39m]: Enqueue event_nonce_commitments_hash at 15
+[2026-04-27T12:03:01.064Z [34mdebug[39m]: Handle event event_nonce_commitments_hash {
+  transition: {
+    id: [32m'event_nonce_commitments_hash'[39m,
+    block: [33m15n[39m,
+    index: [33m0[39m,
+    gid: [32m'0x392b3437bfb0d02a805c496b05a10ef1250ad80e538804910000000000000000'[39m,
+    participant: [32m'0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC'[39m,
+    chunk: [33m0n[39m,
+    commitment: [32m'0x5c45ba7963a3b14b6c42b52d47b2f196b4b50353648cdba67c9f1f12ed3ab2d8'[39m
+  }
+}
+[2026-04-27T12:03:01.064Z [32minfo[39m]: Link nonces for chunk 0
+[2026-04-27T12:03:01.064Z [34mdebug[39m]: Enqueue event_nonce_commitments_hash at 15
+[2026-04-27T12:03:01.064Z [34mdebug[39m]: Enqueue event_nonce_commitments_hash at 15
+[2026-04-27T12:03:01.064Z [34mdebug[39m]: Enqueue event_nonce_commitments_hash at 15
+
+[90mstdout[2m | src/consensus/integration.test.ts[2m > [22m[2mintegration[2m > [22m[2mkeygen and oracle signing flow
+[22m[39m[2026-04-27T12:03:01.065Z [34mdebug[39m]: Handle event event_nonce_commitments_hash {
+  transition: {
+    id: [32m'event_nonce_commitments_hash'[39m,
+    block: [33m15n[39m,
+    index: [33m1[39m,
+    gid: [32m'0x392b3437bfb0d02a805c496b05a10ef1250ad80e538804910000000000000000'[39m,
+    participant: [32m'0x90F79bf6EB2c4f870365E785982E1f101E93b906'[39m,
+    chunk: [33m0n[39m,
+    commitment: [32m'0x0f2c6d3f6e4f81a25b64c803c7263ae7d587bcf58f20664fb5b12e45d035b39f'[39m
+  }
+}
+[2026-04-27T12:03:01.065Z [32minfo[39m]: Link nonces for chunk 0
+
+[90mstdout[2m | src/consensus/integration.test.ts[2m > [22m[2mintegration[2m > [22m[2mkeygen and oracle signing flow
+[22m[39m[2026-04-27T12:03:01.065Z [34mdebug[39m]: Handle event event_nonce_commitments_hash {
+  transition: {
+    id: [32m'event_nonce_commitments_hash'[39m,
+    block: [33m15n[39m,
+    index: [33m2[39m,
+    gid: [32m'0x392b3437bfb0d02a805c496b05a10ef1250ad80e538804910000000000000000'[39m,
+    participant: [32m'0x15d34AAf54267DB7D7c367839AAf71A00a2C6A65'[39m,
+    chunk: [33m0n[39m,
+    commitment: [32m'0x6b97068953aa7bdfa61183c4ab5ad7a30cfd9a28045178fccf7853005a1b27ec'[39m
+  }
+}
+[2026-04-27T12:03:01.065Z [32minfo[39m]: Link nonces for chunk 0
+
+[90mstdout[2m | src/consensus/integration.test.ts[2m > [22m[2mintegration[2m > [22m[2mkeygen and oracle signing flow
+[22m[39m[2026-04-27T12:03:01.065Z [34mdebug[39m]: Handle event event_nonce_commitments_hash {
+  transition: {
+    id: [32m'event_nonce_commitments_hash'[39m,
+    block: [33m15n[39m,
+    index: [33m3[39m,
+    gid: [32m'0x392b3437bfb0d02a805c496b05a10ef1250ad80e538804910000000000000000'[39m,
+    participant: [32m'0x70997970C51812dc3A010C7d01b50e0d17dc79C8'[39m,
+    chunk: [33m0n[39m,
+    commitment: [32m'0xd902e26e4bb11c6c9cde07afae71902b7aedc675d2c57ba54c3e5e894b379330'[39m
+  }
+}
+[2026-04-27T12:03:01.065Z [32minfo[39m]: Link nonces for chunk 0
+
+[90mstdout[2m | src/consensus/integration.test.ts[2m > [22m[2mintegration[2m > [22m[2mkeygen and oracle signing flow
+[22m[39m[2026-04-27T12:03:01.325Z [36mnotice[39m]: Propose oracle transaction {
+  chainId: [33m1n[39m,
+  safe: [32m'0xb3D9cf8E163bbc840195a97E81F8A34E295B8f39'[39m,
+  to: [32m'0x74F665BE90ffcd9ce9dcA68cB5875570B711CEca'[39m,
+  value: [33m0n[39m,
+  data: [32m'0x'[39m,
+  operation: [33m0[39m,
+  safeTxGas: [33m0n[39m,
+  baseGas: [33m0n[39m,
+  gasPrice: [33m0n[39m,
+  gasToken: [32m'0x0000000000000000000000000000000000000000'[39m,
+  refundReceiver: [32m'0x0000000000000000000000000000000000000000'[39m,
+  nonce: [33m0n[39m
+}
+
+[90mstdout[2m | src/consensus/integration.test.ts[2m > [22m[2mintegration[2m > [22m[2mkeygen and oracle signing flow
+[22m[39m[2026-04-27T12:03:01.341Z [34mdebug[39m]: Enqueue block_new at 16
+
+[90mstdout[2m | src/consensus/integration.test.ts[2m > [22m[2mintegration[2m > [22m[2mkeygen and oracle signing flow
+[22m[39m[2026-04-27T12:03:01.571Z [34mdebug[39m]: Enqueue block_new at 17
+
+[90mstdout[2m | src/consensus/integration.test.ts[2m > [22m[2mintegration[2m > [22m[2mkeygen and oracle signing flow
+[22m[39m[2026-04-27T12:03:02.043Z [34mdebug[39m]: Enqueue event_oracle_transaction_proposed at 17
+[2026-04-27T12:03:02.043Z [34mdebug[39m]: Handle event event_oracle_transaction_proposed {
+  transition: {
+    id: [32m'event_oracle_transaction_proposed'[39m,
+    block: [33m17n[39m,
+    index: [33m0[39m,
+    safeTxHash: [32m'0x8070f6023c504b6f6534bc5482364cf54bfebf8b210d757a1e101b7707b3784b'[39m,
+    chainId: [33m1n[39m,
+    safe: [32m'0xb3D9cf8E163bbc840195a97E81F8A34E295B8f39'[39m,
+    epoch: [33m0n[39m,
+    oracle: [32m'0x9fE46736679d2D9a65F0992F2272dE9f3c7fa6e0'[39m,
+    transaction: {
+      chainId: [33m1n[39m,
+      safe: [32m'0xb3D9cf8E163bbc840195a97E81F8A34E295B8f39'[39m,
+      to: [32m'0x74F665BE90ffcd9ce9dcA68cB5875570B711CEca'[39m,
+      value: [33m0n[39m,
+      data: [32m'0x'[39m,
+      operation: [33m0[39m,
+      safeTxGas: [33m0n[39m,
+      baseGas: [33m0n[39m,
+      gasPrice: [33m0n[39m,
+      gasToken: [32m'0x0000000000000000000000000000000000000000'[39m,
+      refundReceiver: [32m'0x0000000000000000000000000000000000000000'[39m,
+      nonce: [33m0n[39m
+    }
+  }
+}
+[2026-04-27T12:03:02.043Z [34mdebug[39m]: Enqueue event_sign_request at 17
+[2026-04-27T12:03:02.043Z [34mdebug[39m]: Enqueue event_oracle_result at 17
+
+[90mstdout[2m | src/consensus/integration.test.ts[2m > [22m[2mintegration[2m > [22m[2mkeygen and oracle signing flow
+[22m[39m[2026-04-27T12:03:02.043Z [32minfo[39m]: Verified oracle transaction packet: 0x79f663c32cb4ebb3c1de5cda5370db9484ad2bf039b866368219b194c0231edb {
+  epoch: [33m0n[39m,
+  safeTxHash: [32m'0x8070f6023c504b6f6534bc5482364cf54bfebf8b210d757a1e101b7707b3784b'[39m,
+  oracle: [32m'0x9fE46736679d2D9a65F0992F2272dE9f3c7fa6e0'[39m
+}
+
+[90mstdout[2m | src/consensus/integration.test.ts[2m > [22m[2mintegration[2m > [22m[2mkeygen and oracle signing flow
+[22m[39m[2026-04-27T12:03:02.044Z [34mdebug[39m]: Handle event event_sign_request {
+  transition: {
+    id: [32m'event_sign_request'[39m,
+    block: [33m17n[39m,
+    index: [33m1[39m,
+    initiator: [32m'0x633Bc37aDF150719844854260CAbEC5492097435'[39m,
+    gid: [32m'0xe76945035b9326a9cc44a31c87fe5c17a47f81406382e89b0000000000000000'[39m,
+    message: [32m'0x79f663c32cb4ebb3c1de5cda5370db9484ad2bf039b866368219b194c0231edb'[39m,
+    sid: [32m'0xe76945035b9326a9cc44a31c87fe5c17a47f81406382e89b0000000000000002'[39m,
+    sequence: [33m1n[39m
+  }
+}
+
+[90mstdout[2m | src/consensus/integration.test.ts[2m > [22m[2mintegration[2m > [22m[2mkeygen and oracle signing flow
+[22m[39m[2026-04-27T12:03:02.151Z [34mdebug[39m]: Handle event event_oracle_result {
+  transition: {
+    id: [32m'event_oracle_result'[39m,
+    block: [33m17n[39m,
+    index: [33m2[39m,
+    oracle: [32m'0x9fE46736679d2D9a65F0992F2272dE9f3c7fa6e0'[39m,
+    requestId: [32m'0x79f663c32cb4ebb3c1de5cda5370db9484ad2bf039b866368219b194c0231edb'[39m,
+    proposer: [32m'0x633Bc37aDF150719844854260CAbEC5492097435'[39m,
+    result: [32m'0x'[39m,
+    approved: [33mtrue[39m
+  }
+}
+[2026-04-27T12:03:02.151Z [32minfo[39m]: Oracle approved transaction, participating in signing {
+  requestId: [32m'0x79f663c32cb4ebb3c1de5cda5370db9484ad2bf039b866368219b194c0231edb'[39m
+}
+
+[90mstdout[2m | src/consensus/integration.test.ts[2m > [22m[2mintegration[2m > [22m[2mkeygen and oracle signing flow
+[22m[39m[2026-04-27T12:03:02.268Z [32minfo[39m]: Enqueue sign_reveal_nonce_commitments {
+  action: {
+    id: [32m'sign_reveal_nonce_commitments'[39m,
+    signatureId: [32m'0xe76945035b9326a9cc44a31c87fe5c17a47f81406382e89b0000000000000002'[39m,
+    nonceCommitments: {
+      hidingNonce: [33m50924814059887716207061777051972527223291062752791024800597422390171796324641n[39m,
+      hidingNonceCommitment: [36m[Point][39m,
+      bindingNonce: [33m63802929129489845410650280649364073511259785754317341172475340068935569245978n[39m,
+      bindingNonceCommitment: [36m[Point][39m
+    },
+    nonceProof: [
+      [32m'0x8b96981c1c757ebd4acd90a63585b68babfa960eb2755375d3de7518810e62d4'[39m,
+      [32m'0xe30615eed20b650b6ca3d58667a9d87bae6c90d9976bbcd1238403b4a0f9f84b'[39m,
+      [32m'0xe95cbb4e4013ae3e98fde3154f880d6d3256977bf5db588a65486ddd1f040018'[39m,
+      [32m'0x9c2f36d006762543c15d0451f7691f12e93e91ced227df1df8252c730723a303'[39m,
+      [32m'0x85b3349c0cf943f0f3aaabf30ad6f61643c54dc21aad36f87d649b4071584014'[39m,
+      [32m'0x8a056236fbec68c5acf300d4faaed3663755c5f8da2ce6e313257bdad1b48dda'[39m,
+      [32m'0x9dcbb0a0d8ae03666a03cedf0080adabc9f4e5a54ab6af497910d532c2743e3a'[39m,
+      [32m'0x09ea09141548c31b076585f752a402171bcb4413c377cf8ac4630cb4adf664ad'[39m,
+      [32m'0xc00fc6800c64c26867b6eecd4ffbf23809b599b27cb0b33bdc2e4305c706d601'[39m,
+      [32m'0x0c79bd4f880b88a97a9e4239b8ca5774e542474364bde6ad60d51241eeb8ff6d'[39m
+    ]
+  }
+}
+
+[90mstdout[2m | src/consensus/integration.test.ts[2m > [22m[2mintegration[2m > [22m[2mkeygen and oracle signing flow
+[22m[39m[2026-04-27T12:03:02.503Z [34mdebug[39m]: Enqueue block_new at 18
+
+[90mstdout[2m | src/consensus/integration.test.ts[2m > [22m[2mintegration[2m > [22m[2mkeygen and oracle signing flow
+[22m[39m[2026-04-27T12:03:02.512Z [34mdebug[39m]: Submitting transaction for nonce 11! {
+  tx: {
+    hash: [32m'0xfe200a2a97a9ff035045d9f417f65bfdce1d84830f4628f52aa898bdaf55d93d'[39m,
+    to: [32m'0xaE27021CEB45316f1efe69D8E362aC07ED3Bd7E4'[39m,
+    value: [33m0n[39m,
+    data: [32m'0x527bdde9e76945035b9326a9cc44a31c87fe5c17a47f81406382e89b0000000000000002f5517e69ccf51562c14fd29693b861199a0c505cb1fab9353867ec23144b381d2528df881e7b03307d100943e801761bdf5dffb1fe03e56916f673375697a2acce72045c41090b7e5fadd8440fe3132b1e550f340c829e433c991062aca47c441ccc5f56016d1e9f057e65589192ee22059d6e6dfc0b5b0fe4f956b7a6404c7c00000000000000000000000000000000000000000000000000000000000000c0000000000000000000000000000000000000000000000000000000000000000a8b96981c1c757ebd4acd90a63585b68babfa960eb2755375d3de7518810e62d4e30615eed20b650b6ca3d58667a9d87bae6c90d9976bbcd1238403b4a0f9f84be95cbb4e4013ae3e98fde3154f880d6d3256977bf5db588a65486ddd1f0400189c2f36d006762543c15d0451f7691f12e93e91ced227df1df8252c730723a30385b3349c0cf943f0f3aaabf30ad6f61643c54dc21aad36f87d649b40715840148a056236fbec68c5acf300d4faaed3663755c5f8da2ce6e313257bdad1b48dda9dcbb0a0d8ae03666a03cedf0080adabc9f4e5a54ab6af497910d532c2743e3a09ea09141548c31b076585f752a402171bcb4413c377cf8ac4630cb4adf664adc00fc6800c64c26867b6eecd4ffbf23809b599b27cb0b33bdc2e4305c706d6010c79bd4f880b88a97a9e4239b8ca5774e542474364bde6ad60d51241eeb8ff6d'[39m,
+    nonce: [33m11[39m,
+    gas: [33m200000n[39m,
+    chainId: [33m31337[39m,
+    maxFeePerGas: [33m1134780001n[39m,
+    maxPriorityFeePerGas: [33m1000000000n[39m
+  }
+}
+
+[90mstdout[2m | src/consensus/integration.test.ts[2m > [22m[2mintegration[2m > [22m[2mkeygen and oracle signing flow
+[22m[39m[2026-04-27T12:03:02.513Z [32minfo[39m]: Sent action for sign_reveal_nonce_commitments transaction {
+  action: { id: [32m'sign_reveal_nonce_commitments'[39m },
+  tx: {
+    nonce: [33m11[39m,
+    hash: [32m'0xfe200a2a97a9ff035045d9f417f65bfdce1d84830f4628f52aa898bdaf55d93d'[39m
+  }
+}
+
+[90mstdout[2m | src/consensus/integration.test.ts[2m > [22m[2mintegration[2m > [22m[2mkeygen and oracle signing flow
+[22m[39m[2026-04-27T12:03:02.521Z [34mdebug[39m]: Enqueue block_new at 19
+[2026-04-27T12:03:02.522Z [34mdebug[39m]: Marked 1 transactions as submitted at block 19
+
+[90mstdout[2m | src/consensus/integration.test.ts[2m > [22m[2mintegration[2m > [22m[2mkeygen and oracle signing flow
+[22m[39m[2026-04-27T12:03:02.922Z [34mdebug[39m]: Enqueue block_new at 20
+[2026-04-27T12:03:02.922Z [32minfo[39m]: Rollover to epoch 1
+[2026-04-27T12:03:02.922Z [32minfo[39m]: Trigger key gen for epoch 2
+[2026-04-27T12:03:02.924Z [32minfo[39m]: Triggered key gen for epoch 2 with 0x1f599f9e85885268056b206bb17d589fe6b9ca21972cd2650000000000000000 {
+  participants: [
+    [32m'0x15d34AAf54267DB7D7c367839AAf71A00a2C6A65'[39m,
+    [32m'0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC'[39m,
+    [32m'0x70997970C51812dc3A010C7d01b50e0d17dc79C8'[39m,
+    [32m'0x90F79bf6EB2c4f870365E785982E1f101E93b906'[39m,
+    [32m'0x9965507D1a55bcC2695C58ba16FB37d819B0A4dc'[39m
+  ]
+}
+
+[90mstdout[2m | src/consensus/integration.test.ts[2m > [22m[2mintegration[2m > [22m[2mkeygen and oracle signing flow
+[22m[39m[2026-04-27T12:03:02.924Z [32minfo[39m]: Enqueue key_gen_start {
+  action: {
+    id: [32m'key_gen_start'[39m,
+    participants: [32m'0x1af8a3028cdf3a33a3d237b59a8ca80728b07028134889528d739d2903d0173e'[39m,
+    count: [33m5[39m,
+    threshold: [33m3[39m,
+    context: [32m'0x00000000633bc37adf150719844854260cabec54920974350000000000000002'[39m,
+    encryptionPublicKey: Point {
+      X: [33m4197169346854563895812213659904960748428728531132570734942208353944168947398n[39m,
+      Y: [33m33664195158170250358219295719925286610350282096511962584208326345406434697920n[39m,
+      Z: [33m1n[39m
+    },
+    commitments: [ [36m[Point][39m, [36m[Point][39m, [36m[Point][39m ],
+    pok: {
+      r: [36m[Point][39m,
+      mu: [33m25759197245434959040961940739369806222531872617544319086602907939722195304457n[39m
+    },
+    poap: [
+      [32m'0x00000000000000000000000090f79bf6eb2c4f870365e785982e1f101e93b906'[39m,
+      [32m'0xd02289e77aa6d6e568e156b6eb5d8f5d7a3c804391d444b4845416a470487ef5'[39m,
+      [32m'0xde9698b2ea77804ce3fd4d78d64e2044edd75474d352626548d0bbc52f08b217'[39m
+    ]
+  }
+}
+
+[90mstdout[2m | src/consensus/integration.test.ts[2m > [22m[2mintegration[2m > [22m[2mkeygen and oracle signing flow
+[22m[39m[2026-04-27T12:03:03.173Z [34mdebug[39m]: Marked 1 transactions as executed up to nonce 11 on block 20
+
+[90mstdout[2m | src/consensus/integration.test.ts[2m > [22m[2mintegration[2m > [22m[2mkeygen and oracle signing flow
+[22m[39m[2026-04-27T12:03:03.175Z [34mdebug[39m]: Enqueue event_nonce_commitments at 20
+[2026-04-27T12:03:03.175Z [34mdebug[39m]: Handle event event_nonce_commitments {
+  transition: {
+    id: [32m'event_nonce_commitments'[39m,
+    block: [33m20n[39m,
+    index: [33m0[39m,
+    sid: [32m'0xe76945035b9326a9cc44a31c87fe5c17a47f81406382e89b0000000000000002'[39m,
+    participant: [32m'0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC'[39m,
+    nonces: { d: [36m[Point][39m, e: [36m[Point][39m }
+  }
+}
+[2026-04-27T12:03:03.175Z [34mdebug[39m]: Enqueue event_nonce_commitments at 20
+[2026-04-27T12:03:03.175Z [34mdebug[39m]: Enqueue event_nonce_commitments at 20
+[2026-04-27T12:03:03.175Z [34mdebug[39m]: Enqueue event_nonce_commitments at 20
+
+[90mstdout[2m | src/consensus/integration.test.ts[2m > [22m[2mintegration[2m > [22m[2mkeygen and oracle signing flow
+[22m[39m[2026-04-27T12:03:03.176Z [34mdebug[39m]: Handle event event_nonce_commitments {
+  transition: {
+    id: [32m'event_nonce_commitments'[39m,
+    block: [33m20n[39m,
+    index: [33m1[39m,
+    sid: [32m'0xe76945035b9326a9cc44a31c87fe5c17a47f81406382e89b0000000000000002'[39m,
+    participant: [32m'0x15d34AAf54267DB7D7c367839AAf71A00a2C6A65'[39m,
+    nonces: { d: [36m[Point][39m, e: [36m[Point][39m }
+  }
+}
+
+[90mstdout[2m | src/consensus/integration.test.ts[2m > [22m[2mintegration[2m > [22m[2mkeygen and oracle signing flow
+[22m[39m[2026-04-27T12:03:03.176Z [34mdebug[39m]: Handle event event_nonce_commitments {
+  transition: {
+    id: [32m'event_nonce_commitments'[39m,
+    block: [33m20n[39m,
+    index: [33m2[39m,
+    sid: [32m'0xe76945035b9326a9cc44a31c87fe5c17a47f81406382e89b0000000000000002'[39m,
+    participant: [32m'0x70997970C51812dc3A010C7d01b50e0d17dc79C8'[39m,
+    nonces: { d: [36m[Point][39m, e: [36m[Point][39m }
+  }
+}
+
+[90mstdout[2m | src/consensus/integration.test.ts[2m > [22m[2mintegration[2m > [22m[2mkeygen and oracle signing flow
+[22m[39m[2026-04-27T12:03:03.176Z [34mdebug[39m]: Handle event event_nonce_commitments {
+  transition: {
+    id: [32m'event_nonce_commitments'[39m,
+    block: [33m20n[39m,
+    index: [33m3[39m,
+    sid: [32m'0xe76945035b9326a9cc44a31c87fe5c17a47f81406382e89b0000000000000002'[39m,
+    participant: [32m'0x90F79bf6EB2c4f870365E785982E1f101E93b906'[39m,
+    nonces: { d: [36m[Point][39m, e: [36m[Point][39m }
+  }
+}
+
+[90mstdout[2m | src/consensus/integration.test.ts[2m > [22m[2mintegration[2m > [22m[2mkeygen and oracle signing flow
+[22m[39m[2026-04-27T12:03:03.313Z [32minfo[39m]: Enqueue sign_publish_signature_share {
+  action: {
+    id: [32m'sign_publish_signature_share'[39m,
+    signatureId: [32m'0xe76945035b9326a9cc44a31c87fe5c17a47f81406382e89b0000000000000002'[39m,
+    signersRoot: [32m'0x5bf59a80c03947ddbc4b21ca26e895ac49dd2fe8d043151958f0b566c816340d'[39m,
+    signersProof: [
+      [32m'0x6f1fecc5360916f61d243182439def98a25413469f8d5cd9ac9843deb24941e6'[39m,
+      [32m'0x1578e8c377eeb1bf6855d4ae07b8b8ab6c9bc527dadad72ef89eb9bd201323d6'[39m
+    ],
+    groupCommitment: Point {
+      X: [33m34958940227444620436905773961755740875608991423881488153506567448154210860466n[39m,
+      Y: [33m65107114592895515997863219953301949268827325106862545341587332133865322908576n[39m,
+      Z: [33m50012761831547444685220635393595625869938504039397746219852526292067915498893n[39m
+    },
+    commitmentShare: Point {
+      X: [33m72142446997090434119972276180128621310911474741852085071091932107402214065525n[39m,
+      Y: [33m91432908348592738078318626811569147977234644428927953516901071076818290068408n[39m,
+      Z: [33m22962753424800335339350403921259143994293335732332089327937361953738404216137n[39m
+    },
+    signatureShare: [33m44239001766101121581749212485237555580085266819674964312405334547457612596501n[39m,
+    lagrangeCoefficient: [33m76021318209538984528768588792504453710194102433250802849330691754489094088276n[39m,
+    callbackContext: [32m'0x09ee820400000000000000000000000000000000000000000000000000000000000000000000000000000000000000009fe46736679d2d9a65f0992f2272de9f3c7fa6e00000000000000000000000000000000000000000000000000000000000000001000000000000000000000000b3d9cf8e163bbc840195a97e81f8a34e295b8f3955dba9448f4afeeead6e7c0eeef042b2e408c94a1fcdeede06a21e5bc0cf7dc30000000000000000000000000000000000000000000000000000000000000000'[39m
+  }
+}
+
+[90mstdout[2m | src/consensus/integration.test.ts[2m > [22m[2mintegration[2m > [22m[2mkeygen and oracle signing flow
+[22m[39m[2026-04-27T12:03:03.320Z [34mdebug[39m]: Enqueue block_new at 21
+[2026-04-27T12:03:03.320Z [34mdebug[39m]: Marked 1 transactions as submitted at block 21
+
+[90mstdout[2m | src/consensus/integration.test.ts[2m > [22m[2mintegration[2m > [22m[2mkeygen and oracle signing flow
+[22m[39m[2026-04-27T12:03:03.325Z [34mdebug[39m]: Submitting transaction for nonce 12! {
+  tx: {
+    hash: [32m'0x90aaa3d7f59d7204a5c657ec76dc24cf062efb43fb2a504c07d432804945d8f7'[39m,
+    to: [32m'0xaE27021CEB45316f1efe69D8E362aC07ED3Bd7E4'[39m,
+    value: [33m0n[39m,
+    data: [32m'0x38b544631af8a3028cdf3a33a3d237b59a8ca80728b07028134889528d739d2903d0173e0000000000000000000000000000000000000000000000000000000000000005000000000000000000000000000000000000000000000000000000000000000300000000633bc37adf150719844854260cabec5492097435000000000000000200000000000000000000000000000000000000000000000000000000000000c00000000000000000000000000000000000000000000000000000000000000140000000000000000000000000000000000000000000000000000000000000000300000000000000000000000090f79bf6eb2c4f870365e785982e1f101e93b906d02289e77aa6d6e568e156b6eb5d8f5d7a3c804391d444b4845416a470487ef5de9698b2ea77804ce3fd4d78d64e2044edd75474d352626548d0bbc52f08b2170947837f917be20f4ab2076548aa5f89f9ab6d947b63b5a6019d35c80875dec64a6d425d62e2762ef4f2a1820fead0ee8e456d2a9fcbc9c50961430d00dee2c000000000000000000000000000000000000000000000000000000000000000c030682a7d4885e7acf20693011daaabc87c977b6d6dc70eb460918bb159bff353d25d5f7119b54ebaabebcb236db738fb042e99e0ec498aa976f067543eb464a038f33060986ab6c56fc9aad6ae32ede2fc18a753b2402b85fc6473ab34d300090000000000000000000000000000000000000000000000000000000000000003f667530abcbfab3bd09c60a8f89d682897339ad96c0a38040c00b92adb6d0b66d0c0c877a5980877116c03c828e84ff9cc0d2dfef0cfd8d382a6f287c6a0f96aaa4a1ee01f4b0fd490d9facd06d0872ba22fec378fba3c84387593d434e96d0968e3817873f05c2d9d47ce03e823baa6573e0399a4c125ab33b19d1d16a08dbcd7879c3f371a44b507ee2dbb20d0fdfec8c343b05ee0e6a990a6f2079edc99569cc1f13d45a094437141589bcb78d8b64d8c3c07c647d135d19bb7db4657a42d'[39m,
+    nonce: [33m12[39m,
+    gas: [33m250000n[39m,
+    chainId: [33m31337[39m,
+    maxFeePerGas: [33m1090432507n[39m,
+    maxPriorityFeePerGas: [33m1000000000n[39m
+  }
+}
+
+[90mstdout[2m | src/consensus/integration.test.ts[2m > [22m[2mintegration[2m > [22m[2mkeygen and oracle signing flow
+[22m[39m[2026-04-27T12:03:03.327Z [32minfo[39m]: Sent action for key_gen_start transaction {
+  action: { id: [32m'key_gen_start'[39m },
+  tx: {
+    nonce: [33m12[39m,
+    hash: [32m'0x90aaa3d7f59d7204a5c657ec76dc24cf062efb43fb2a504c07d432804945d8f7'[39m
+  }
+}
+
+[90mstdout[2m | src/consensus/integration.test.ts[2m > [22m[2mintegration[2m > [22m[2mkeygen and oracle signing flow
+[22m[39m[2026-04-27T12:03:03.334Z [34mdebug[39m]: Submitting transaction for nonce 13! {
+  tx: {
+    hash: [32m'0x5ac303484a4251045ad730a230e63072544f6e271db3a5a75b1b893951d59c52'[39m,
+    to: [32m'0xaE27021CEB45316f1efe69D8E362aC07ED3Bd7E4'[39m,
+    value: [33m0n[39m,
+    data: [32m'0x95b57d9de76945035b9326a9cc44a31c87fe5c17a47f81406382e89b00000000000000025d9987333f303344a7d4f6813398740de7d759e328ab9c39ae8fe0900b7560997ff88696b00543754fb79cfe019f221698b7fe7b59f6d7ffd49944bc4e119ded5bf59a80c03947ddbc4b21ca26e895ac49dd2fe8d043151958f0b566c816340d632dc83bc91f773a701a8ecd10258d305b63678a29508eaaeffbbdc3c6a597f6f4f4e7dd10a7f41be031be51c4731d81ae65789732df9196357c817260a96ca461ce633e82ccf2fbbb505e06602037b8df01cc8044a34e30b544a2cedbb64515a8128a92dca3f38f271039694a337a5f462c6ec4f9f43b59787a3c173bc42654000000000000000000000000000000000000000000000000000000000000014000000000000000000000000000000000000000000000000000000000000001a000000000000000000000000000000000000000000000000000000000000000026f1fecc5360916f61d243182439def98a25413469f8d5cd9ac9843deb24941e61578e8c377eeb1bf6855d4ae07b8b8ab6c9bc527dadad72ef89eb9bd201323d6000000000000000000000000633bc37adf150719844854260cabec5492097435000000000000000000000000000000000000000000000000000000000000004000000000000000000000000000000000000000000000000000000000000000c409ee820400000000000000000000000000000000000000000000000000000000000000000000000000000000000000009fe46736679d2d9a65f0992f2272de9f3c7fa6e00000000000000000000000000000000000000000000000000000000000000001000000000000000000000000b3d9cf8e163bbc840195a97e81f8a34e295b8f3955dba9448f4afeeead6e7c0eeef042b2e408c94a1fcdeede06a21e5bc0cf7dc3000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000'[39m,
+    nonce: [33m13[39m,
+    gas: [33m400000n[39m,
+    chainId: [33m31337[39m,
+    maxFeePerGas: [33m1090432507n[39m,
+    maxPriorityFeePerGas: [33m1000000000n[39m
+  }
+}
+
+[90mstdout[2m | src/consensus/integration.test.ts[2m > [22m[2mintegration[2m > [22m[2mkeygen and oracle signing flow
+[22m[39m[2026-04-27T12:03:03.334Z [32minfo[39m]: Sent action for sign_publish_signature_share transaction {
+  action: { id: [32m'sign_publish_signature_share'[39m },
+  tx: {
+    nonce: [33m13[39m,
+    hash: [32m'0x5ac303484a4251045ad730a230e63072544f6e271db3a5a75b1b893951d59c52'[39m
+  }
+}
+
+[90mstdout[2m | src/consensus/integration.test.ts[2m > [22m[2mintegration[2m > [22m[2mkeygen and oracle signing flow
+[22m[39m[2026-04-27T12:03:03.428Z [34mdebug[39m]: Enqueue block_new at 22
+[2026-04-27T12:03:03.429Z [34mdebug[39m]: Marked 2 transactions as submitted at block 22
+
+[90mstdout[2m | src/consensus/integration.test.ts[2m > [22m[2mintegration[2m > [22m[2mkeygen and oracle signing flow
+[22m[39m[2026-04-27T12:03:03.429Z [34mdebug[39m]: Marked 2 transactions as executed up to nonce 13 on block 22
+
+[90mstdout[2m | src/consensus/integration.test.ts[2m > [22m[2mintegration[2m > [22m[2mkeygen and oracle signing flow
+[22m[39m[2026-04-27T12:03:03.432Z [34mdebug[39m]: Enqueue event_key_gen at 22
+[2026-04-27T12:03:03.432Z [34mdebug[39m]: Handle event event_key_gen {
+  transition: {
+    id: [32m'event_key_gen'[39m,
+    block: [33m22n[39m,
+    index: [33m0[39m,
+    gid: [32m'0x1f599f9e85885268056b206bb17d589fe6b9ca21972cd2650000000000000000'[39m,
+    participants: [32m'0x1af8a3028cdf3a33a3d237b59a8ca80728b07028134889528d739d2903d0173e'[39m,
+    count: [33m5[39m,
+    threshold: [33m3[39m,
+    context: [32m'0x00000000633bc37adf150719844854260cabec54920974350000000000000002'[39m
+  }
+}
+[2026-04-27T12:03:03.433Z [34mdebug[39m]: Enqueue event_key_gen_committed at 22
+[2026-04-27T12:03:03.433Z [34mdebug[39m]: Enqueue event_key_gen_committed at 22
+[2026-04-27T12:03:03.433Z [34mdebug[39m]: Enqueue event_key_gen_committed at 22
+[2026-04-27T12:03:03.433Z [34mdebug[39m]: Enqueue event_signature_share at 22
+[2026-04-27T12:03:03.433Z [34mdebug[39m]: Enqueue event_key_gen_committed at 22
+[2026-04-27T12:03:03.433Z [34mdebug[39m]: Enqueue event_key_gen_committed at 22
+[2026-04-27T12:03:03.433Z [34mdebug[39m]: Enqueue event_signature_share at 22
+[2026-04-27T12:03:03.433Z [34mdebug[39m]: Enqueue event_signature_share at 22
+[2026-04-27T12:03:03.433Z [34mdebug[39m]: Enqueue event_signature_share at 22
+[2026-04-27T12:03:03.433Z [34mdebug[39m]: Enqueue event_signed at 22
+[2026-04-27T12:03:03.433Z [34mdebug[39m]: Enqueue event_oracle_transaction_attested at 22
+
+[90mstdout[2m | src/consensus/integration.test.ts[2m > [22m[2mintegration[2m > [22m[2mkeygen and oracle signing flow
+[22m[39m[2026-04-27T12:03:03.433Z [34mdebug[39m]: Handle event event_key_gen_committed {
+  transition: {
+    id: [32m'event_key_gen_committed'[39m,
+    block: [33m22n[39m,
+    index: [33m1[39m,
+    gid: [32m'0x1f599f9e85885268056b206bb17d589fe6b9ca21972cd2650000000000000000'[39m,
+    participant: [32m'0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC'[39m,
+    commitment: {
+      q: [36m[Point][39m,
+      c: [36m[Array][39m,
+      r: [36m[Point][39m,
+      mu: [33m64876942404005661910211104738203600699635961963078282342982752860488499122300n[39m
+    },
+    committed: [33mfalse[39m
+  }
+}
+[2026-04-27T12:03:03.435Z [32minfo[39m]: Registered key gen commitment for participant 0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC
+
+[90mstdout[2m | src/consensus/integration.test.ts[2m > [22m[2mintegration[2m > [22m[2mkeygen and oracle signing flow
+[22m[39m[2026-04-27T12:03:03.435Z [34mdebug[39m]: Handle event event_key_gen_committed {
+  transition: {
+    id: [32m'event_key_gen_committed'[39m,
+    block: [33m22n[39m,
+    index: [33m2[39m,
+    gid: [32m'0x1f599f9e85885268056b206bb17d589fe6b9ca21972cd2650000000000000000'[39m,
+    participant: [32m'0x9965507D1a55bcC2695C58ba16FB37d819B0A4dc'[39m,
+    commitment: {
+      q: [36m[Point][39m,
+      c: [36m[Array][39m,
+      r: [36m[Point][39m,
+      mu: [33m115539031410922421956730835183414729671522516605560158797507979587811521340077n[39m
+    },
+    committed: [33mfalse[39m
+  }
+}
+[2026-04-27T12:03:03.437Z [32minfo[39m]: Registered key gen commitment for participant 0x9965507D1a55bcC2695C58ba16FB37d819B0A4dc
+
+[90mstdout[2m | src/consensus/integration.test.ts[2m > [22m[2mintegration[2m > [22m[2mkeygen and oracle signing flow
+[22m[39m[2026-04-27T12:03:03.438Z [34mdebug[39m]: Handle event event_key_gen_committed {
+  transition: {
+    id: [32m'event_key_gen_committed'[39m,
+    block: [33m22n[39m,
+    index: [33m3[39m,
+    gid: [32m'0x1f599f9e85885268056b206bb17d589fe6b9ca21972cd2650000000000000000'[39m,
+    participant: [32m'0x90F79bf6EB2c4f870365E785982E1f101E93b906'[39m,
+    commitment: {
+      q: [36m[Point][39m,
+      c: [36m[Array][39m,
+      r: [36m[Point][39m,
+      mu: [33m73761388781631281861722199472496221839066803567390510466357079011434118162440n[39m
+    },
+    committed: [33mfalse[39m
+  }
+}
+[2026-04-27T12:03:03.439Z [32minfo[39m]: Registered key gen commitment for participant 0x90F79bf6EB2c4f870365E785982E1f101E93b906
+
+[90mstdout[2m | src/consensus/integration.test.ts[2m > [22m[2mintegration[2m > [22m[2mkeygen and oracle signing flow
+[22m[39m[2026-04-27T12:03:03.439Z [34mdebug[39m]: Handle event event_signature_share {
+  transition: {
+    id: [32m'event_signature_share'[39m,
+    block: [33m22n[39m,
+    index: [33m4[39m,
+    sid: [32m'0xe76945035b9326a9cc44a31c87fe5c17a47f81406382e89b0000000000000002'[39m,
+    selectionRoot: [32m'0x5bf59a80c03947ddbc4b21ca26e895ac49dd2fe8d043151958f0b566c816340d'[39m,
+    participant: [32m'0x90F79bf6EB2c4f870365E785982E1f101E93b906'[39m,
+    z: [33m72744654153434460493011042543933451545250949683673102804081255586071816751986n[39m
+  }
+}
+
+[90mstdout[2m | src/consensus/integration.test.ts[2m > [22m[2mintegration[2m > [22m[2mkeygen and oracle signing flow
+[22m[39m[2026-04-27T12:03:03.440Z [34mdebug[39m]: Handle event event_key_gen_committed {
+  transition: {
+    id: [32m'event_key_gen_committed'[39m,
+    block: [33m22n[39m,
+    index: [33m5[39m,
+    gid: [32m'0x1f599f9e85885268056b206bb17d589fe6b9ca21972cd2650000000000000000'[39m,
+    participant: [32m'0x15d34AAf54267DB7D7c367839AAf71A00a2C6A65'[39m,
+    commitment: {
+      q: [36m[Point][39m,
+      c: [36m[Array][39m,
+      r: [36m[Point][39m,
+      mu: [33m103000333797113312270242583589757573838040543092999393080561113740653533704770n[39m
+    },
+    committed: [33mfalse[39m
+  }
+}
+[2026-04-27T12:03:03.441Z [32minfo[39m]: Registered key gen commitment for participant 0x15d34AAf54267DB7D7c367839AAf71A00a2C6A65
+
+[90mstdout[2m | src/consensus/integration.test.ts[2m > [22m[2mintegration[2m > [22m[2mkeygen and oracle signing flow
+[22m[39m[2026-04-27T12:03:03.441Z [34mdebug[39m]: Handle event event_key_gen_committed {
+  transition: {
+    id: [32m'event_key_gen_committed'[39m,
+    block: [33m22n[39m,
+    index: [33m6[39m,
+    gid: [32m'0x1f599f9e85885268056b206bb17d589fe6b9ca21972cd2650000000000000000'[39m,
+    participant: [32m'0x70997970C51812dc3A010C7d01b50e0d17dc79C8'[39m,
+    commitment: {
+      q: [36m[Point][39m,
+      c: [36m[Array][39m,
+      r: [36m[Point][39m,
+      mu: [33m25759197245434959040961940739369806222531872617544319086602907939722195304457n[39m
+    },
+    committed: [33mtrue[39m
+  }
+}
+[2026-04-27T12:03:03.443Z [32minfo[39m]: Registered key gen commitment for participant 0x70997970C51812dc3A010C7d01b50e0d17dc79C8
+
+[90mstdout[2m | src/consensus/integration.test.ts[2m > [22m[2mintegration[2m > [22m[2mkeygen and oracle signing flow
+[22m[39m[2026-04-27T12:03:03.471Z [32minfo[39m]: Enqueue key_gen_publish_secret_shares {
+  action: {
+    id: [32m'key_gen_publish_secret_shares'[39m,
+    groupId: [32m'0x1f599f9e85885268056b206bb17d589fe6b9ca21972cd2650000000000000000'[39m,
+    verificationShare: Point {
+      X: [33m66554900286319022927672173339692554536943519790642639124981937133777778227211n[39m,
+      Y: [33m114548894744964301154041034464612811929550832778418898520726729932185467021039n[39m,
+      Z: [33m49794963644271620288205340744818515543570765265744210447847752099282718027783n[39m
+    },
+    shares: [
+      [33m51517627908376296589644599442057505987757821667784241025102837987874566659768n[39m,
+      [33m22626770733954610233343065300159093802060668746572026874782256250513487733191n[39m,
+      [33m28741422197136224742939770463647499433277246677849909847870517922022155221916n[39m,
+      [33m102771193042629684387156395566122746344897103650385105500225974581032036381861n[39m
+    ]
+  }
+}
+
+[90mstdout[2m | src/consensus/integration.test.ts[2m > [22m[2mintegration[2m > [22m[2mkeygen and oracle signing flow
+[22m[39m[2026-04-27T12:03:03.472Z [34mdebug[39m]: Handle event event_signature_share {
+  transition: {
+    id: [32m'event_signature_share'[39m,
+    block: [33m22n[39m,
+    index: [33m7[39m,
+    sid: [32m'0xe76945035b9326a9cc44a31c87fe5c17a47f81406382e89b0000000000000002'[39m,
+    selectionRoot: [32m'0x5bf59a80c03947ddbc4b21ca26e895ac49dd2fe8d043151958f0b566c816340d'[39m,
+    participant: [32m'0x15d34AAf54267DB7D7c367839AAf71A00a2C6A65'[39m,
+    z: [33m33439023128400498345583164093269334392349895372220045706286047305254544925829n[39m
+  }
+}
+
+[90mstdout[2m | src/consensus/integration.test.ts[2m > [22m[2mintegration[2m > [22m[2mkeygen and oracle signing flow
+[22m[39m[2026-04-27T12:03:03.472Z [34mdebug[39m]: Handle event event_signature_share {
+  transition: {
+    id: [32m'event_signature_share'[39m,
+    block: [33m22n[39m,
+    index: [33m8[39m,
+    sid: [32m'0xe76945035b9326a9cc44a31c87fe5c17a47f81406382e89b0000000000000002'[39m,
+    selectionRoot: [32m'0x5bf59a80c03947ddbc4b21ca26e895ac49dd2fe8d043151958f0b566c816340d'[39m,
+    participant: [32m'0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC'[39m,
+    z: [33m96350885138034936640036948749832902348079298935378296754061312046603860131308n[39m
+  }
+}
+
+[90mstdout[2m | src/consensus/integration.test.ts[2m > [22m[2mintegration[2m > [22m[2mkeygen and oracle signing flow
+[22m[39m[2026-04-27T12:03:03.472Z [34mdebug[39m]: Handle event event_signature_share {
+  transition: {
+    id: [32m'event_signature_share'[39m,
+    block: [33m22n[39m,
+    index: [33m9[39m,
+    sid: [32m'0xe76945035b9326a9cc44a31c87fe5c17a47f81406382e89b0000000000000002'[39m,
+    selectionRoot: [32m'0x5bf59a80c03947ddbc4b21ca26e895ac49dd2fe8d043151958f0b566c816340d'[39m,
+    participant: [32m'0x70997970C51812dc3A010C7d01b50e0d17dc79C8'[39m,
+    z: [33m44239001766101121581749212485237555580085266819674964312405334547457612596501n[39m
+  }
+}
+
+[90mstdout[2m | src/consensus/integration.test.ts[2m > [22m[2mintegration[2m > [22m[2mkeygen and oracle signing flow
+[22m[39m[2026-04-27T12:03:03.472Z [34mdebug[39m]: Handle event event_signed {
+  transition: {
+    id: [32m'event_signed'[39m,
+    block: [33m22n[39m,
+    index: [33m10[39m,
+    sid: [32m'0xe76945035b9326a9cc44a31c87fe5c17a47f81406382e89b0000000000000002'[39m,
+    selectionRoot: [32m'0x5bf59a80c03947ddbc4b21ca26e895ac49dd2fe8d043151958f0b566c816340d'[39m,
+    signature: {
+      z: [33m15189385711338626213238397854897428160090282252796600811623623202351511416950n[39m,
+      r: [36m[Point][39m
+    }
+  }
+}
+
+[90mstdout[2m | src/consensus/integration.test.ts[2m > [22m[2mintegration[2m > [22m[2mkeygen and oracle signing flow
+[22m[39m[2026-04-27T12:03:03.472Z [34mdebug[39m]: Handle event event_oracle_transaction_attested {
+  transition: {
+    id: [32m'event_oracle_transaction_attested'[39m,
+    block: [33m22n[39m,
+    index: [33m11[39m,
+    safeTxHash: [32m'0x8070f6023c504b6f6534bc5482364cf54bfebf8b210d757a1e101b7707b3784b'[39m,
+    chainId: [33m1n[39m,
+    safe: [32m'0xb3D9cf8E163bbc840195a97E81F8A34E295B8f39'[39m,
+    epoch: [33m0n[39m,
+    oracle: [32m'0x9fE46736679d2D9a65F0992F2272dE9f3c7fa6e0'[39m,
+    signatureId: [32m'0xe76945035b9326a9cc44a31c87fe5c17a47f81406382e89b0000000000000002'[39m,
+    attestation: {
+      z: [33m15189385711338626213238397854897428160090282252796600811623623202351511416950n[39m,
+      r: [36m[Point][39m
+    }
+  }
+}
+[2026-04-27T12:03:03.473Z [36mnotice[39m]: Attested oracle transaction with hash 0x8070f6023c504b6f6534bc5482364cf54bfebf8b210d757a1e101b7707b3784b
+
+[90mstdout[2m | src/consensus/integration.test.ts[2m > [22m[2mintegration[2m > [22m[2mkeygen and oracle signing flow
+[22m[39m[2026-04-27T12:03:03.640Z [34mdebug[39m]: Submitting transaction for nonce 14! {
+  tx: {
+    hash: [32m'0x6bd3c042438f00180b7758a2b424d91cf4d4d297d3eae4750bd34ab901bd5625'[39m,
+    to: [32m'0xaE27021CEB45316f1efe69D8E362aC07ED3Bd7E4'[39m,
+    value: [33m0n[39m,
+    data: [32m'0x7d10c04b1f599f9e85885268056b206bb17d589fe6b9ca21972cd26500000000000000000000000000000000000000000000000000000000000000000000000000000040eed573473fdf343cc5a8f8ada4876ccbb1e996a04dec8160fe1e98cba655caafad8492ec367856d5d8cf72bd0c359a9fbffe5466906829766bf1214d3583ee350000000000000000000000000000000000000000000000000000000000000060000000000000000000000000000000000000000000000000000000000000000471e5f1af10d532cc781533ba6ee5cd3e6b4cea5266409cab57c0a1e176195eb832064c63c40a89cef122d81ac8f04ff93e30bf24e6412a58cc5d6c7e99aaa1c73f8b1187ee6436f5cfbb33ad6aa65ccde303c31c242873659c83b0358e21fb9ce3366f1578d927e1b6996101851e4f7fbaa5de335ebe273f60463c925bc0b4a5'[39m,
+    nonce: [33m14[39m,
+    gas: [33m350000n[39m,
+    chainId: [33m31337[39m,
+    maxFeePerGas: [33m1079128445n[39m,
+    maxPriorityFeePerGas: [33m1000000000n[39m
+  }
+}
+
+[90mstdout[2m | src/consensus/integration.test.ts[2m > [22m[2mintegration[2m > [22m[2mkeygen and oracle signing flow
+[22m[39m[2026-04-27T12:03:03.642Z [32minfo[39m]: Sent action for key_gen_publish_secret_shares transaction {
+  action: { id: [32m'key_gen_publish_secret_shares'[39m },
+  tx: {
+    nonce: [33m14[39m,
+    hash: [32m'0x6bd3c042438f00180b7758a2b424d91cf4d4d297d3eae4750bd34ab901bd5625'[39m
+  }
+}
+
+[90mstdout[2m | src/consensus/integration.test.ts[2m > [22m[2mintegration[2m > [22m[2mkeygen and oracle signing flow
+[22m[39m[2026-04-27T12:03:03.735Z [34mdebug[39m]: Enqueue block_new at 23
+[2026-04-27T12:03:03.736Z [34mdebug[39m]: Marked 1 transactions as submitted at block 23
+
+[90mstdout[2m | src/consensus/integration.test.ts[2m > [22m[2mintegration[2m > [22m[2mkeygen and oracle signing flow
+[22m[39m[2026-04-27T12:03:03.763Z [34mdebug[39m]: Marked 1 transactions as executed up to nonce 14 on block 23
+
+[90mstdout[2m | src/consensus/integration.test.ts[2m > [22m[2mintegration[2m > [22m[2mkeygen and oracle signing flow
+[22m[39m[2026-04-27T12:03:03.765Z [34mdebug[39m]: Enqueue event_key_gen_secret_shared at 23
+[2026-04-27T12:03:03.765Z [34mdebug[39m]: Handle event event_key_gen_secret_shared {
+  transition: {
+    id: [32m'event_key_gen_secret_shared'[39m,
+    block: [33m23n[39m,
+    index: [33m0[39m,
+    gid: [32m'0x1f599f9e85885268056b206bb17d589fe6b9ca21972cd2650000000000000000'[39m,
+    participant: [32m'0x70997970C51812dc3A010C7d01b50e0d17dc79C8'[39m,
+    share: { y: [36m[Point][39m, f: [36m[Array][39m },
+    shared: [33mfalse[39m
+  }
+}
+[2026-04-27T12:03:03.765Z [34mdebug[39m]: Register own shares
+[2026-04-27T12:03:03.765Z [34mdebug[39m]: Enqueue event_key_gen_secret_shared at 23
+[2026-04-27T12:03:03.765Z [34mdebug[39m]: Enqueue event_key_gen_secret_shared at 23
+[2026-04-27T12:03:03.765Z [34mdebug[39m]: Enqueue event_key_gen_secret_shared at 23
+[2026-04-27T12:03:03.765Z [34mdebug[39m]: Enqueue event_key_gen_secret_shared at 23
+[2026-04-27T12:03:03.765Z [32minfo[39m]: Group 0x1f599f9e85885268056b206bb17d589fe6b9ca21972cd2650000000000000000 secret shares not completed yet
+
+[90mstdout[2m | src/consensus/integration.test.ts[2m > [22m[2mintegration[2m > [22m[2mkeygen and oracle signing flow
+[22m[39m[2026-04-27T12:03:03.766Z [34mdebug[39m]: Handle event event_key_gen_secret_shared {
+  transition: {
+    id: [32m'event_key_gen_secret_shared'[39m,
+    block: [33m23n[39m,
+    index: [33m1[39m,
+    gid: [32m'0x1f599f9e85885268056b206bb17d589fe6b9ca21972cd2650000000000000000'[39m,
+    participant: [32m'0x9965507D1a55bcC2695C58ba16FB37d819B0A4dc'[39m,
+    share: { y: [36m[Point][39m, f: [36m[Array][39m },
+    shared: [33mfalse[39m
+  }
+}
+
+[90mstdout[2m | src/consensus/integration.test.ts[2m > [22m[2mintegration[2m > [22m[2mkeygen and oracle signing flow
+[22m[39m[2026-04-27T12:03:03.771Z [32minfo[39m]: Group 0x1f599f9e85885268056b206bb17d589fe6b9ca21972cd2650000000000000000 secret shares not completed yet
+
+[90mstdout[2m | src/consensus/integration.test.ts[2m > [22m[2mintegration[2m > [22m[2mkeygen and oracle signing flow
+[22m[39m[2026-04-27T12:03:03.771Z [34mdebug[39m]: Handle event event_key_gen_secret_shared {
+  transition: {
+    id: [32m'event_key_gen_secret_shared'[39m,
+    block: [33m23n[39m,
+    index: [33m2[39m,
+    gid: [32m'0x1f599f9e85885268056b206bb17d589fe6b9ca21972cd2650000000000000000'[39m,
+    participant: [32m'0x90F79bf6EB2c4f870365E785982E1f101E93b906'[39m,
+    share: { y: [36m[Point][39m, f: [36m[Array][39m },
+    shared: [33mfalse[39m
+  }
+}
+
+[90mstdout[2m | src/consensus/integration.test.ts[2m > [22m[2mintegration[2m > [22m[2mkeygen and oracle signing flow
+[22m[39m[2026-04-27T12:03:03.776Z [32minfo[39m]: Group 0x1f599f9e85885268056b206bb17d589fe6b9ca21972cd2650000000000000000 secret shares not completed yet
+
+[90mstdout[2m | src/consensus/integration.test.ts[2m > [22m[2mintegration[2m > [22m[2mkeygen and oracle signing flow
+[22m[39m[2026-04-27T12:03:03.776Z [34mdebug[39m]: Handle event event_key_gen_secret_shared {
+  transition: {
+    id: [32m'event_key_gen_secret_shared'[39m,
+    block: [33m23n[39m,
+    index: [33m3[39m,
+    gid: [32m'0x1f599f9e85885268056b206bb17d589fe6b9ca21972cd2650000000000000000'[39m,
+    participant: [32m'0x15d34AAf54267DB7D7c367839AAf71A00a2C6A65'[39m,
+    share: { y: [36m[Point][39m, f: [36m[Array][39m },
+    shared: [33mfalse[39m
+  }
+}
+
+[90mstdout[2m | src/consensus/integration.test.ts[2m > [22m[2mintegration[2m > [22m[2mkeygen and oracle signing flow
+[22m[39m[2026-04-27T12:03:03.782Z [32minfo[39m]: Group 0x1f599f9e85885268056b206bb17d589fe6b9ca21972cd2650000000000000000 secret shares not completed yet
+
+[90mstdout[2m | src/consensus/integration.test.ts[2m > [22m[2mintegration[2m > [22m[2mkeygen and oracle signing flow
+[22m[39m[2026-04-27T12:03:03.782Z [34mdebug[39m]: Handle event event_key_gen_secret_shared {
+  transition: {
+    id: [32m'event_key_gen_secret_shared'[39m,
+    block: [33m23n[39m,
+    index: [33m4[39m,
+    gid: [32m'0x1f599f9e85885268056b206bb17d589fe6b9ca21972cd2650000000000000000'[39m,
+    participant: [32m'0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC'[39m,
+    share: { y: [36m[Point][39m, f: [36m[Array][39m },
+    shared: [33mtrue[39m
+  }
+}
+
+[90mstdout[2m | src/consensus/integration.test.ts[2m > [22m[2mintegration[2m > [22m[2mkeygen and oracle signing flow
+[22m[39m[2026-04-27T12:03:03.788Z [32minfo[39m]: Group 0x1f599f9e85885268056b206bb17d589fe6b9ca21972cd2650000000000000000 secret shares completed, triggering confirmation
+
+[90mstdout[2m | src/consensus/integration.test.ts[2m > [22m[2mintegration[2m > [22m[2mkeygen and oracle signing flow
+[22m[39m[2026-04-27T12:03:03.788Z [32minfo[39m]: Enqueue key_gen_confirm {
+  action: {
+    id: [32m'key_gen_confirm'[39m,
+    groupId: [32m'0x1f599f9e85885268056b206bb17d589fe6b9ca21972cd2650000000000000000'[39m,
+    callbackContext: [32m'0x00000000000000000000000000000000000000000000000000000000000000020000000000000000000000000000000000000000000000000000000000000028'[39m
+  }
+}
+
+[90mstdout[2m | src/consensus/integration.test.ts[2m > [22m[2mintegration[2m > [22m[2mkeygen and oracle signing flow
+[22m[39m[2026-04-27T12:03:03.823Z [34mdebug[39m]: Submitting transaction for nonce 15! {
+  tx: {
+    hash: [32m'0xbabb94799151e76283dd0e25ad9eafb2a7a1a431bce5c0a21780b5ea88c09f30'[39m,
+    to: [32m'0xaE27021CEB45316f1efe69D8E362aC07ED3Bd7E4'[39m,
+    value: [33m0n[39m,
+    data: [32m'0x1896ae361f599f9e85885268056b206bb17d589fe6b9ca21972cd26500000000000000000000000000000000000000000000000000000000000000000000000000000040000000000000000000000000633bc37adf150719844854260cabec54920974350000000000000000000000000000000000000000000000000000000000000040000000000000000000000000000000000000000000000000000000000000004000000000000000000000000000000000000000000000000000000000000000020000000000000000000000000000000000000000000000000000000000000028'[39m,
+    nonce: [33m15[39m,
+    gas: [33m300000n[39m,
+    chainId: [33m31337[39m,
+    maxFeePerGas: [33m1069876926n[39m,
+    maxPriorityFeePerGas: [33m1000000000n[39m
+  }
+}
+
+[90mstdout[2m | src/consensus/integration.test.ts[2m > [22m[2mintegration[2m > [22m[2mkeygen and oracle signing flow
+[22m[39m[2026-04-27T12:03:03.824Z [32minfo[39m]: Sent action for key_gen_confirm transaction {
+  action: { id: [32m'key_gen_confirm'[39m },
+  tx: {
+    nonce: [33m15[39m,
+    hash: [32m'0xbabb94799151e76283dd0e25ad9eafb2a7a1a431bce5c0a21780b5ea88c09f30'[39m
+  }
+}
+
+[90mstdout[2m | src/consensus/integration.test.ts[2m > [22m[2mintegration[2m > [22m[2mkeygen and oracle signing flow
+[22m[39m[2026-04-27T12:03:04.223Z [34mdebug[39m]: Enqueue block_new at 24
+[2026-04-27T12:03:04.223Z [34mdebug[39m]: Marked 1 transactions as submitted at block 24
+
+[90mstdout[2m | src/consensus/integration.test.ts[2m > [22m[2mintegration[2m > [22m[2mkeygen and oracle signing flow
+[22m[39m[2026-04-27T12:03:04.739Z [34mdebug[39m]: Marked 1 transactions as executed up to nonce 15 on block 24
+
+[90mstdout[2m | src/consensus/integration.test.ts[2m > [22m[2mintegration[2m > [22m[2mkeygen and oracle signing flow
+[22m[39m[2026-04-27T12:03:04.741Z [34mdebug[39m]: Enqueue event_key_gen_confirmed at 24
+[2026-04-27T12:03:04.741Z [34mdebug[39m]: Handle event event_key_gen_confirmed {
+  transition: {
+    id: [32m'event_key_gen_confirmed'[39m,
+    block: [33m24n[39m,
+    index: [33m0[39m,
+    gid: [32m'0x1f599f9e85885268056b206bb17d589fe6b9ca21972cd2650000000000000000'[39m,
+    participant: [32m'0x9965507D1a55bcC2695C58ba16FB37d819B0A4dc'[39m,
+    confirmed: [33mfalse[39m
+  }
+}
+[2026-04-27T12:03:04.741Z [32minfo[39m]: Group 0x1f599f9e85885268056b206bb17d589fe6b9ca21972cd2650000000000000000 confirmation from 0x9965507D1a55bcC2695C58ba16FB37d819B0A4dc (1/5)
+[2026-04-27T12:03:04.741Z [34mdebug[39m]: Enqueue event_key_gen_confirmed at 24
+[2026-04-27T12:03:04.741Z [34mdebug[39m]: Enqueue event_key_gen_confirmed at 24
+[2026-04-27T12:03:04.741Z [34mdebug[39m]: Enqueue event_key_gen_confirmed at 24
+[2026-04-27T12:03:04.741Z [34mdebug[39m]: Enqueue event_key_gen_confirmed at 24
+[2026-04-27T12:03:04.741Z [34mdebug[39m]: Enqueue event_epoch_proposed at 24
+[2026-04-27T12:03:04.741Z [34mdebug[39m]: Enqueue event_sign_request at 24
+
+[90mstdout[2m | src/consensus/integration.test.ts[2m > [22m[2mintegration[2m > [22m[2mkeygen and oracle signing flow
+[22m[39m[2026-04-27T12:03:04.742Z [34mdebug[39m]: Handle event event_key_gen_confirmed {
+  transition: {
+    id: [32m'event_key_gen_confirmed'[39m,
+    block: [33m24n[39m,
+    index: [33m1[39m,
+    gid: [32m'0x1f599f9e85885268056b206bb17d589fe6b9ca21972cd2650000000000000000'[39m,
+    participant: [32m'0x90F79bf6EB2c4f870365E785982E1f101E93b906'[39m,
+    confirmed: [33mfalse[39m
+  }
+}
+[2026-04-27T12:03:04.742Z [32minfo[39m]: Group 0x1f599f9e85885268056b206bb17d589fe6b9ca21972cd2650000000000000000 confirmation from 0x90F79bf6EB2c4f870365E785982E1f101E93b906 (2/5)
+
+[90mstdout[2m | src/consensus/integration.test.ts[2m > [22m[2mintegration[2m > [22m[2mkeygen and oracle signing flow
+[22m[39m[2026-04-27T12:03:04.742Z [34mdebug[39m]: Handle event event_key_gen_confirmed {
+  transition: {
+    id: [32m'event_key_gen_confirmed'[39m,
+    block: [33m24n[39m,
+    index: [33m2[39m,
+    gid: [32m'0x1f599f9e85885268056b206bb17d589fe6b9ca21972cd2650000000000000000'[39m,
+    participant: [32m'0x15d34AAf54267DB7D7c367839AAf71A00a2C6A65'[39m,
+    confirmed: [33mfalse[39m
+  }
+}
+[2026-04-27T12:03:04.742Z [32minfo[39m]: Group 0x1f599f9e85885268056b206bb17d589fe6b9ca21972cd2650000000000000000 confirmation from 0x15d34AAf54267DB7D7c367839AAf71A00a2C6A65 (3/5)
+
+[90mstdout[2m | src/consensus/integration.test.ts[2m > [22m[2mintegration[2m > [22m[2mkeygen and oracle signing flow
+[22m[39m[2026-04-27T12:03:04.742Z [34mdebug[39m]: Handle event event_key_gen_confirmed {
+  transition: {
+    id: [32m'event_key_gen_confirmed'[39m,
+    block: [33m24n[39m,
+    index: [33m3[39m,
+    gid: [32m'0x1f599f9e85885268056b206bb17d589fe6b9ca21972cd2650000000000000000'[39m,
+    participant: [32m'0x70997970C51812dc3A010C7d01b50e0d17dc79C8'[39m,
+    confirmed: [33mfalse[39m
+  }
+}
+[2026-04-27T12:03:04.742Z [32minfo[39m]: Group 0x1f599f9e85885268056b206bb17d589fe6b9ca21972cd2650000000000000000 confirmation from 0x70997970C51812dc3A010C7d01b50e0d17dc79C8 (4/5)
+
+[90mstdout[2m | src/consensus/integration.test.ts[2m > [22m[2mintegration[2m > [22m[2mkeygen and oracle signing flow
+[22m[39m[2026-04-27T12:03:04.742Z [34mdebug[39m]: Handle event event_key_gen_confirmed {
+  transition: {
+    id: [32m'event_key_gen_confirmed'[39m,
+    block: [33m24n[39m,
+    index: [33m4[39m,
+    gid: [32m'0x1f599f9e85885268056b206bb17d589fe6b9ca21972cd2650000000000000000'[39m,
+    participant: [32m'0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC'[39m,
+    confirmed: [33mtrue[39m
+  }
+}
+[2026-04-27T12:03:04.742Z [32minfo[39m]: Group 0x1f599f9e85885268056b206bb17d589fe6b9ca21972cd2650000000000000000 confirmation from 0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC (5/5)
+[2026-04-27T12:03:04.742Z [32minfo[39m]: Group 0x1f599f9e85885268056b206bb17d589fe6b9ca21972cd2650000000000000000 all participants confirmed, computing epoch rollover message
+
+[90mstdout[2m | src/consensus/integration.test.ts[2m > [22m[2mintegration[2m > [22m[2mkeygen and oracle signing flow
+[22m[39m[2026-04-27T12:03:04.743Z [32minfo[39m]: Computed epoch rollover message 0xdd608c52f5a8f48caa56aca3f3ce11d6382c189f676cd5735e0a70e21b79aa89
+
+[90mstdout[2m | src/consensus/integration.test.ts[2m > [22m[2mintegration[2m > [22m[2mkeygen and oracle signing flow
+[22m[39m[2026-04-27T12:03:04.743Z [34mdebug[39m]: Handle event event_epoch_proposed {
+  transition: {
+    id: [32m'event_epoch_proposed'[39m,
+    block: [33m24n[39m,
+    index: [33m6[39m,
+    activeEpoch: [33m1n[39m,
+    proposedEpoch: [33m2n[39m,
+    rolloverBlock: [33m40n[39m,
+    groupId: [32m'0x1f599f9e85885268056b206bb17d589fe6b9ca21972cd2650000000000000000'[39m,
+    groupKey: Point {
+      X: [33m26365529051590858209516038236260559926465653628406039891981429914078550216911n[39m,
+      Y: [33m20078968475190748062924086474902609145286267549376164719477715259983440526798n[39m,
+      Z: [33m1n[39m
+    }
+  }
+}
+
+[90mstdout[2m | src/consensus/integration.test.ts[2m > [22m[2mintegration[2m > [22m[2mkeygen and oracle signing flow
+[22m[39m[2026-04-27T12:03:04.743Z [34mdebug[39m]: Handle event event_sign_request {
+  transition: {
+    id: [32m'event_sign_request'[39m,
+    block: [33m24n[39m,
+    index: [33m7[39m,
+    initiator: [32m'0x633Bc37aDF150719844854260CAbEC5492097435'[39m,
+    gid: [32m'0x392b3437bfb0d02a805c496b05a10ef1250ad80e538804910000000000000000'[39m,
+    message: [32m'0xdd608c52f5a8f48caa56aca3f3ce11d6382c189f676cd5735e0a70e21b79aa89'[39m,
+    sid: [32m'0x392b3437bfb0d02a805c496b05a10ef1250ad80e538804910000000000000001'[39m,
+    sequence: [33m0n[39m
+  }
+}
+
+[90mstdout[2m | src/consensus/integration.test.ts[2m > [22m[2mintegration[2m > [22m[2mkeygen and oracle signing flow
+[22m[39m[2026-04-27T12:03:04.998Z [32minfo[39m]: Enqueue sign_reveal_nonce_commitments {
+  action: {
+    id: [32m'sign_reveal_nonce_commitments'[39m,
+    signatureId: [32m'0x392b3437bfb0d02a805c496b05a10ef1250ad80e538804910000000000000001'[39m,
+    nonceCommitments: {
+      hidingNonce: [33m8719746500120569157977653893049107219800109292080972553038864511911098096510n[39m,
+      hidingNonceCommitment: [36m[Point][39m,
+      bindingNonce: [33m48607377342933495215852398321540282674559774496451790101322155705648035391507n[39m,
+      bindingNonceCommitment: [36m[Point][39m
+    },
+    nonceProof: [
+      [32m'0x220432873720a20835729eef80a4e4d7d3a9d4910ff4acd3535f554d160ce6c7'[39m,
+      [32m'0x66c612ff4fb98aed6a303c6f40655b0a4ba4e7dde543edc0c27eff146842fbf5'[39m,
+      [32m'0x40590c6947696b578530ef5b965aae5c40eb64a1dc72a13a0eca0a2fe0a83dcf'[39m,
+      [32m'0xb841e4e96a6bbbd29c0b997bbe97aaf15b5f0014075532639de567a1134a87eb'[39m,
+      [32m'0xba56b012aa9dc776dc02fad2807b86cba90a842d39b1186b1b96582344a76376'[39m,
+      [32m'0x978583472058e018f7be3b3d747f5628098e8e74bfd1847070207bfa1f3c51ae'[39m,
+      [32m'0xa6cd36fd9d385d12be17b90983c01f0f9feb236b7049590e6e71fbb0c4f57b52'[39m,
+      [32m'0x00befb8e797b7b8796a4b088936c8bc7e1926a7fe72aa4654287d14408b34921'[39m,
+      [32m'0x4d4a700a80c87fee9eaa8aa1ca0c9fa9ee713793740d39f4e55a14e1fac5aa3f'[39m,
+      [32m'0x2d4fea2bdfb3f23b1d7f1ed89aea1e0653a15c4fab9d21a36f83a8658a07f655'[39m
+    ]
+  }
+}
+
+[90mstdout[2m | src/consensus/integration.test.ts[2m > [22m[2mintegration[2m > [22m[2mkeygen and oracle signing flow
+[22m[39m[2026-04-27T12:03:05.004Z [34mdebug[39m]: Enqueue block_new at 25
+
+[90mstdout[2m | src/consensus/integration.test.ts[2m > [22m[2mintegration[2m > [22m[2mkeygen and oracle signing flow
+[22m[39m[2026-04-27T12:03:05.009Z [34mdebug[39m]: Enqueue block_new at 26
+[2026-04-27T12:03:05.009Z [34mdebug[39m]: Marked 1 transactions as submitted at block 26
+
+[90mstdout[2m | src/consensus/integration.test.ts[2m > [22m[2mintegration[2m > [22m[2mkeygen and oracle signing flow
+[22m[39m[2026-04-27T12:03:05.013Z [34mdebug[39m]: Submitting transaction for nonce 16! {
+  tx: {
+    hash: [32m'0x399846ed0b3a71d691e9570ab75e4f4bb89d8f95c0ad9f47a6c79a5ea4a6d404'[39m,
+    to: [32m'0xaE27021CEB45316f1efe69D8E362aC07ED3Bd7E4'[39m,
+    value: [33m0n[39m,
+    data: [32m'0x527bdde9392b3437bfb0d02a805c496b05a10ef1250ad80e5388049100000000000000012aa2a8ce5199d69dae6d119354fa378bdb905077c423a46955397fb0ccaf57bc9cf5759e52f369399a8bb00edf51bdaa9dc9bd0ddda13b1e5b541d98540e79ee70e77ee8d183edc63e7e172033c7c78ab72bcaaf052976d8247dad18a98cfaafcb9b0ff697ad483d466b8afc952fb163f5ece3fac4bf78b0179a20222263b50b00000000000000000000000000000000000000000000000000000000000000c0000000000000000000000000000000000000000000000000000000000000000a220432873720a20835729eef80a4e4d7d3a9d4910ff4acd3535f554d160ce6c766c612ff4fb98aed6a303c6f40655b0a4ba4e7dde543edc0c27eff146842fbf540590c6947696b578530ef5b965aae5c40eb64a1dc72a13a0eca0a2fe0a83dcfb841e4e96a6bbbd29c0b997bbe97aaf15b5f0014075532639de567a1134a87ebba56b012aa9dc776dc02fad2807b86cba90a842d39b1186b1b96582344a76376978583472058e018f7be3b3d747f5628098e8e74bfd1847070207bfa1f3c51aea6cd36fd9d385d12be17b90983c01f0f9feb236b7049590e6e71fbb0c4f57b5200befb8e797b7b8796a4b088936c8bc7e1926a7fe72aa4654287d14408b349214d4a700a80c87fee9eaa8aa1ca0c9fa9ee713793740d39f4e55a14e1fac5aa3f2d4fea2bdfb3f23b1d7f1ed89aea1e0653a15c4fab9d21a36f83a8658a07f655'[39m,
+    nonce: [33m16[39m,
+    gas: [33m200000n[39m,
+    chainId: [33m31337[39m,
+    maxFeePerGas: [33m1047104441n[39m,
+    maxPriorityFeePerGas: [33m1000000000n[39m
+  }
+}
+
+[90mstdout[2m | src/consensus/integration.test.ts[2m > [22m[2mintegration[2m > [22m[2mkeygen and oracle signing flow
+[22m[39m[2026-04-27T12:03:05.014Z [32minfo[39m]: Sent action for sign_reveal_nonce_commitments transaction {
+  action: { id: [32m'sign_reveal_nonce_commitments'[39m },
+  tx: {
+    nonce: [33m16[39m,
+    hash: [32m'0x399846ed0b3a71d691e9570ab75e4f4bb89d8f95c0ad9f47a6c79a5ea4a6d404'[39m
+  }
+}
+
+[90mstdout[2m | src/consensus/integration.test.ts[2m > [22m[2mintegration[2m > [22m[2mkeygen and oracle signing flow
+[22m[39m[2026-04-27T12:03:05.426Z [34mdebug[39m]: Enqueue block_new at 27
+[2026-04-27T12:03:05.426Z [34mdebug[39m]: Marked 1 transactions as submitted at block 27
+
+[90mstdout[2m | src/consensus/integration.test.ts[2m > [22m[2mintegration[2m > [22m[2mkeygen and oracle signing flow
+[22m[39m[2026-04-27T12:03:05.690Z [34mdebug[39m]: Marked 1 transactions as executed up to nonce 16 on block 27
+
+[90mstdout[2m | src/consensus/integration.test.ts[2m > [22m[2mintegration[2m > [22m[2mkeygen and oracle signing flow
+[22m[39m[2026-04-27T12:03:05.691Z [34mdebug[39m]: Enqueue event_nonce_commitments at 27
+[2026-04-27T12:03:05.691Z [34mdebug[39m]: Handle event event_nonce_commitments {
+  transition: {
+    id: [32m'event_nonce_commitments'[39m,
+    block: [33m27n[39m,
+    index: [33m0[39m,
+    sid: [32m'0x392b3437bfb0d02a805c496b05a10ef1250ad80e538804910000000000000001'[39m,
+    participant: [32m'0x90F79bf6EB2c4f870365E785982E1f101E93b906'[39m,
+    nonces: { d: [36m[Point][39m, e: [36m[Point][39m }
+  }
+}
+[2026-04-27T12:03:05.691Z [34mdebug[39m]: Enqueue event_nonce_commitments at 27
+[2026-04-27T12:03:05.691Z [34mdebug[39m]: Enqueue event_nonce_commitments at 27
+[2026-04-27T12:03:05.691Z [34mdebug[39m]: Enqueue event_nonce_commitments at 27
+
+[90mstdout[2m | src/consensus/integration.test.ts[2m > [22m[2mintegration[2m > [22m[2mkeygen and oracle signing flow
+[22m[39m[2026-04-27T12:03:05.692Z [34mdebug[39m]: Handle event event_nonce_commitments {
+  transition: {
+    id: [32m'event_nonce_commitments'[39m,
+    block: [33m27n[39m,
+    index: [33m1[39m,
+    sid: [32m'0x392b3437bfb0d02a805c496b05a10ef1250ad80e538804910000000000000001'[39m,
+    participant: [32m'0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC'[39m,
+    nonces: { d: [36m[Point][39m, e: [36m[Point][39m }
+  }
+}
+
+[90mstdout[2m | src/consensus/integration.test.ts[2m > [22m[2mintegration[2m > [22m[2mkeygen and oracle signing flow
+[22m[39m[2026-04-27T12:03:05.692Z [34mdebug[39m]: Handle event event_nonce_commitments {
+  transition: {
+    id: [32m'event_nonce_commitments'[39m,
+    block: [33m27n[39m,
+    index: [33m2[39m,
+    sid: [32m'0x392b3437bfb0d02a805c496b05a10ef1250ad80e538804910000000000000001'[39m,
+    participant: [32m'0x15d34AAf54267DB7D7c367839AAf71A00a2C6A65'[39m,
+    nonces: { d: [36m[Point][39m, e: [36m[Point][39m }
+  }
+}
+
+[90mstdout[2m | src/consensus/integration.test.ts[2m > [22m[2mintegration[2m > [22m[2mkeygen and oracle signing flow
+[22m[39m[2026-04-27T12:03:05.692Z [34mdebug[39m]: Handle event event_nonce_commitments {
+  transition: {
+    id: [32m'event_nonce_commitments'[39m,
+    block: [33m27n[39m,
+    index: [33m3[39m,
+    sid: [32m'0x392b3437bfb0d02a805c496b05a10ef1250ad80e538804910000000000000001'[39m,
+    participant: [32m'0x70997970C51812dc3A010C7d01b50e0d17dc79C8'[39m,
+    nonces: { d: [36m[Point][39m, e: [36m[Point][39m }
+  }
+}
+
+[90mstdout[2m | src/consensus/integration.test.ts[2m > [22m[2mintegration[2m > [22m[2mkeygen and oracle signing flow
+[22m[39m[2026-04-27T12:03:05.815Z [32minfo[39m]: Enqueue sign_publish_signature_share {
+  action: {
+    id: [32m'sign_publish_signature_share'[39m,
+    signatureId: [32m'0x392b3437bfb0d02a805c496b05a10ef1250ad80e538804910000000000000001'[39m,
+    signersRoot: [32m'0x57c380d8a128eb02430b248f0be31fe18090fa18434c2ea631983eb7505dea2f'[39m,
+    signersProof: [
+      [32m'0x7d2504bc9f990da333068245f3caa9e3c011ab82679e7436c599de3e79463d2c'[39m,
+      [32m'0x20691af9c04a313f51a766f3d1e2efefe913312bda86d6015c7bce13bb171c7d'[39m
+    ],
+    groupCommitment: Point {
+      X: [33m4946434734579867308770908481537774188608425547437729388673707785709804040336n[39m,
+      Y: [33m76121143316295272352604757556545510198320204111928335333374289949130416463355n[39m,
+      Z: [33m86406026473585749330249643575448416395799264926243427339953824012255070350127n[39m
+    },
+    commitmentShare: Point {
+      X: [33m70606919141343002131142655374565709452557744419039885128565264198911198389051n[39m,
+      Y: [33m79305944282027281855223044001577326358485232363018545699952919006913004380050n[39m,
+      Z: [33m22369077033918392101992408748894245257325786677333023883251301906488317369314n[39m
+    },
+    signatureShare: [33m43971060197267828698694719002970956060958718696395298104005957626319859956863n[39m,
+    lagrangeCoefficient: [33m76021318209538984528768588792504453710194102433250802849330691754489094088276n[39m,
+    callbackContext: [32m'0xea5eeafa000000000000000000000000000000000000000000000000000000000000000200000000000000000000000000000000000000000000000000000000000000281f599f9e85885268056b206bb17d589fe6b9ca21972cd26500000000000000000000000000000000000000000000000000000000000000000000000000000000'[39m
+  }
+}
+
+[90mstdout[2m | src/consensus/integration.test.ts[2m > [22m[2mintegration[2m > [22m[2mkeygen and oracle signing flow
+[22m[39m[2026-04-27T12:03:05.819Z [34mdebug[39m]: Enqueue block_new at 28
+
+[90mstdout[2m | src/consensus/integration.test.ts[2m > [22m[2mintegration[2m > [22m[2mkeygen and oracle signing flow
+[22m[39m[2026-04-27T12:03:05.827Z [34mdebug[39m]: Submitting transaction for nonce 17! {
+  tx: {
+    hash: [32m'0x0507f6beab06d6d5a902a3b2a851c959901e6c6ffde5865915631e540b8936a7'[39m,
+    to: [32m'0xaE27021CEB45316f1efe69D8E362aC07ED3Bd7E4'[39m,
+    value: [33m0n[39m,
+    data: [32m'0x95b57d9d392b3437bfb0d02a805c496b05a10ef1250ad80e538804910000000000000001bfa37b61b71224f8c0ed5c76ff73904c70435441eb5f9dd32c46e79610961ca9ad353f580b6a14fb1c98e4eccf235698d249cda615d6fa64c7ee598586392be357c380d8a128eb02430b248f0be31fe18090fa18434c2ea631983eb7505dea2ffa9739709f85503611a31b8ee3e4a57e00727fe09fc08d0dc207ea93562b97c851406f7279f077a867265ba2812f33b7bb925367a56e6bf7b850e1cdb1da98c96136bcf55c09f48cb150405f9918b7a9825060c58e4b26b0447a1f5686c53c7fa8128a92dca3f38f271039694a337a5f462c6ec4f9f43b59787a3c173bc42654000000000000000000000000000000000000000000000000000000000000014000000000000000000000000000000000000000000000000000000000000001a000000000000000000000000000000000000000000000000000000000000000027d2504bc9f990da333068245f3caa9e3c011ab82679e7436c599de3e79463d2c20691af9c04a313f51a766f3d1e2efefe913312bda86d6015c7bce13bb171c7d000000000000000000000000633bc37adf150719844854260cabec549209743500000000000000000000000000000000000000000000000000000000000000400000000000000000000000000000000000000000000000000000000000000084ea5eeafa000000000000000000000000000000000000000000000000000000000000000200000000000000000000000000000000000000000000000000000000000000281f599f9e85885268056b206bb17d589fe6b9ca21972cd2650000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000'[39m,
+    nonce: [33m17[39m,
+    gas: [33m400000n[39m,
+    chainId: [33m31337[39m,
+    maxFeePerGas: [33m1036120400n[39m,
+    maxPriorityFeePerGas: [33m1000000000n[39m
+  }
+}
+
+[90mstdout[2m | src/consensus/integration.test.ts[2m > [22m[2mintegration[2m > [22m[2mkeygen and oracle signing flow
+[22m[39m[2026-04-27T12:03:05.828Z [32minfo[39m]: Sent action for sign_publish_signature_share transaction {
+  action: { id: [32m'sign_publish_signature_share'[39m },
+  tx: {
+    nonce: [33m17[39m,
+    hash: [32m'0x0507f6beab06d6d5a902a3b2a851c959901e6c6ffde5865915631e540b8936a7'[39m
+  }
+}
+
+[90mstdout[2m | src/consensus/integration.test.ts[2m > [22m[2mintegration[2m > [22m[2mkeygen and oracle signing flow
+[22m[39m[2026-04-27T12:03:05.969Z [34mdebug[39m]: Enqueue block_new at 29
+[2026-04-27T12:03:05.969Z [34mdebug[39m]: Marked 1 transactions as submitted at block 29
+
+[90mstdout[2m | src/consensus/integration.test.ts[2m > [22m[2mintegration[2m > [22m[2mkeygen and oracle signing flow
+[22m[39m[2026-04-27T12:03:06.038Z [34mdebug[39m]: Marked 1 transactions as executed up to nonce 17 on block 29
+
+[90mstdout[2m | src/consensus/integration.test.ts[2m > [22m[2mintegration[2m > [22m[2mkeygen and oracle signing flow
+[22m[39m[2026-04-27T12:03:06.040Z [34mdebug[39m]: Enqueue event_signature_share at 29
+[2026-04-27T12:03:06.040Z [34mdebug[39m]: Handle event event_signature_share {
+  transition: {
+    id: [32m'event_signature_share'[39m,
+    block: [33m29n[39m,
+    index: [33m0[39m,
+    sid: [32m'0x392b3437bfb0d02a805c496b05a10ef1250ad80e538804910000000000000001'[39m,
+    selectionRoot: [32m'0x57c380d8a128eb02430b248f0be31fe18090fa18434c2ea631983eb7505dea2f'[39m,
+    participant: [32m'0x15d34AAf54267DB7D7c367839AAf71A00a2C6A65'[39m,
+    z: [33m7933379541691694187795369806549070239013073426844461767972643089202310515554n[39m
+  }
+}
+[2026-04-27T12:03:06.040Z [34mdebug[39m]: Enqueue event_signature_share at 29
+[2026-04-27T12:03:06.040Z [34mdebug[39m]: Enqueue event_signature_share at 29
+[2026-04-27T12:03:06.040Z [34mdebug[39m]: Enqueue event_signature_share at 29
+[2026-04-27T12:03:06.040Z [34mdebug[39m]: Enqueue event_signed at 29
+[2026-04-27T12:03:06.040Z [34mdebug[39m]: Enqueue event_epoch_staged at 29
+
+[90mstdout[2m | src/consensus/integration.test.ts[2m > [22m[2mintegration[2m > [22m[2mkeygen and oracle signing flow
+[22m[39m[2026-04-27T12:03:06.040Z [34mdebug[39m]: Handle event event_signature_share {
+  transition: {
+    id: [32m'event_signature_share'[39m,
+    block: [33m29n[39m,
+    index: [33m1[39m,
+    sid: [32m'0x392b3437bfb0d02a805c496b05a10ef1250ad80e538804910000000000000001'[39m,
+    selectionRoot: [32m'0x57c380d8a128eb02430b248f0be31fe18090fa18434c2ea631983eb7505dea2f'[39m,
+    participant: [32m'0x90F79bf6EB2c4f870365E785982E1f101E93b906'[39m,
+    z: [33m100360066052242991288697166765035163868924441924927328172628064284396626786885n[39m
+  }
+}
+
+[90mstdout[2m | src/consensus/integration.test.ts[2m > [22m[2mintegration[2m > [22m[2mkeygen and oracle signing flow
+[22m[39m[2026-04-27T12:03:06.041Z [34mdebug[39m]: Handle event event_signature_share {
+  transition: {
+    id: [32m'event_signature_share'[39m,
+    block: [33m29n[39m,
+    index: [33m2[39m,
+    sid: [32m'0x392b3437bfb0d02a805c496b05a10ef1250ad80e538804910000000000000001'[39m,
+    selectionRoot: [32m'0x57c380d8a128eb02430b248f0be31fe18090fa18434c2ea631983eb7505dea2f'[39m,
+    participant: [32m'0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC'[39m,
+    z: [33m98627509471393345061306122269227539973304942849189563798100118287214771414824n[39m
+  }
+}
+
+[90mstdout[2m | src/consensus/integration.test.ts[2m > [22m[2mintegration[2m > [22m[2mkeygen and oracle signing flow
+[22m[39m[2026-04-27T12:03:06.041Z [34mdebug[39m]: Handle event event_signature_share {
+  transition: {
+    id: [32m'event_signature_share'[39m,
+    block: [33m29n[39m,
+    index: [33m3[39m,
+    sid: [32m'0x392b3437bfb0d02a805c496b05a10ef1250ad80e538804910000000000000001'[39m,
+    selectionRoot: [32m'0x57c380d8a128eb02430b248f0be31fe18090fa18434c2ea631983eb7505dea2f'[39m,
+    participant: [32m'0x70997970C51812dc3A010C7d01b50e0d17dc79C8'[39m,
+    z: [33m43971060197267828698694719002970956060958718696395298104005957626319859956863n[39m
+  }
+}
+
+[90mstdout[2m | src/consensus/integration.test.ts[2m > [22m[2mintegration[2m > [22m[2mkeygen and oracle signing flow
+[22m[39m[2026-04-27T12:03:06.041Z [34mdebug[39m]: Handle event event_signed {
+  transition: {
+    id: [32m'event_signed'[39m,
+    block: [33m29n[39m,
+    index: [33m4[39m,
+    sid: [32m'0x392b3437bfb0d02a805c496b05a10ef1250ad80e538804910000000000000001'[39m,
+    selectionRoot: [32m'0x57c380d8a128eb02430b248f0be31fe18090fa18434c2ea631983eb7505dea2f'[39m,
+    signature: {
+      z: [33m19307836787963468389351407826406914436526048339206843077496457004097245685452n[39m,
+      r: [36m[Point][39m
+    }
+  }
+}
+
+[90mstdout[2m | src/consensus/integration.test.ts[2m > [22m[2mintegration[2m > [22m[2mkeygen and oracle signing flow
+[22m[39m[2026-04-27T12:03:06.041Z [34mdebug[39m]: Handle event event_epoch_staged {
+  transition: {
+    id: [32m'event_epoch_staged'[39m,
+    block: [33m29n[39m,
+    index: [33m5[39m,
+    activeEpoch: [33m1n[39m,
+    proposedEpoch: [33m2n[39m,
+    rolloverBlock: [33m40n[39m,
+    groupId: [32m'0x1f599f9e85885268056b206bb17d589fe6b9ca21972cd2650000000000000000'[39m,
+    groupKey: Point {
+      X: [33m26365529051590858209516038236260559926465653628406039891981429914078550216911n[39m,
+      Y: [33m20078968475190748062924086474902609145286267549376164719477715259983440526798n[39m,
+      Z: [33m1n[39m
+    },
+    signatureId: [32m'0x392b3437bfb0d02a805c496b05a10ef1250ad80e538804910000000000000001'[39m,
+    attestation: {
+      z: [33m19307836787963468389351407826406914436526048339206843077496457004097245685452n[39m,
+      r: [36m[Point][39m
+    }
+  }
+}
+[2026-04-27T12:03:06.041Z [36mnotice[39m]: Staged epoch 2 with group 0x1f599f9e85885268056b206bb17d589fe6b9ca21972cd2650000000000000000
+
+[90mstdout[2m | src/consensus/integration.test.ts[2m > [22m[2mintegration[2m > [22m[2mkeygen and oracle signing flow
+[22m[39m[2026-04-27T12:03:06.068Z [32minfo[39m]: Enqueue sign_register_nonce_commitments {
+  action: {
+    id: [32m'sign_register_nonce_commitments'[39m,
+    groupId: [32m'0x1f599f9e85885268056b206bb17d589fe6b9ca21972cd2650000000000000000'[39m,
+    nonceCommitmentsHash: [32m'0xcd50557ac8418c27ff29cc2242a84a062ff79f9316fbebf23d13d848c659b24e'[39m
+  }
+}
+
+[90mstdout[2m | src/consensus/integration.test.ts[2m > [22m[2mintegration[2m > [22m[2mkeygen and oracle signing flow
+[22m[39m[2026-04-27T12:03:06.137Z [34mdebug[39m]: Submitting transaction for nonce 18! {
+  tx: {
+    hash: [32m'0xa36afc462b71817f90f8f365f518c0a825ee93a714ea43aeb22bea985f1d561b'[39m,
+    to: [32m'0xaE27021CEB45316f1efe69D8E362aC07ED3Bd7E4'[39m,
+    value: [33m0n[39m,
+    data: [32m'0x42b29c611f599f9e85885268056b206bb17d589fe6b9ca21972cd2650000000000000000cd50557ac8418c27ff29cc2242a84a062ff79f9316fbebf23d13d848c659b24e'[39m,
+    nonce: [33m18[39m,
+    gas: [33m250000n[39m,
+    chainId: [33m31337[39m,
+    maxFeePerGas: [33m1031605351n[39m,
+    maxPriorityFeePerGas: [33m1000000000n[39m
+  }
+}
+
+[90mstdout[2m | src/consensus/integration.test.ts[2m > [22m[2mintegration[2m > [22m[2mkeygen and oracle signing flow
+[22m[39m[2026-04-27T12:03:06.139Z [32minfo[39m]: Sent action for sign_register_nonce_commitments transaction {
+  action: { id: [32m'sign_register_nonce_commitments'[39m },
+  tx: {
+    nonce: [33m18[39m,
+    hash: [32m'0xa36afc462b71817f90f8f365f518c0a825ee93a714ea43aeb22bea985f1d561b'[39m
+  }
+}
+
+[90mstdout[2m | src/consensus/integration.test.ts[2m > [22m[2mintegration[2m > [22m[2mkeygen and oracle signing flow
+[22m[39m[2026-04-27T12:03:06.225Z [34mdebug[39m]: Enqueue block_new at 30
+[2026-04-27T12:03:06.225Z [34mdebug[39m]: Marked 1 transactions as submitted at block 30
+
+[90mstdout[2m | src/consensus/integration.test.ts[2m > [22m[2mintegration[2m > [22m[2mkeygen and oracle signing flow
+[22m[39m[2026-04-27T12:03:06.231Z [34mdebug[39m]: Marked 1 transactions as executed up to nonce 18 on block 30
+
+[90mstdout[2m | src/consensus/integration.test.ts[2m > [22m[2mintegration[2m > [22m[2mkeygen and oracle signing flow
+[22m[39m[2026-04-27T12:03:06.233Z [34mdebug[39m]: Enqueue event_nonce_commitments_hash at 30
+[2026-04-27T12:03:06.233Z [34mdebug[39m]: Handle event event_nonce_commitments_hash {
+  transition: {
+    id: [32m'event_nonce_commitments_hash'[39m,
+    block: [33m30n[39m,
+    index: [33m0[39m,
+    gid: [32m'0x1f599f9e85885268056b206bb17d589fe6b9ca21972cd2650000000000000000'[39m,
+    participant: [32m'0x9965507D1a55bcC2695C58ba16FB37d819B0A4dc'[39m,
+    chunk: [33m0n[39m,
+    commitment: [32m'0x4221f48107f4b7141c5ace5a4b67aae1ecab13d410996f276d7269b6797a04cc'[39m
+  }
+}
+[2026-04-27T12:03:06.233Z [32minfo[39m]: Link nonces for chunk 0
+[2026-04-27T12:03:06.233Z [34mdebug[39m]: Enqueue event_nonce_commitments_hash at 30
+[2026-04-27T12:03:06.233Z [34mdebug[39m]: Enqueue event_nonce_commitments_hash at 30
+[2026-04-27T12:03:06.233Z [34mdebug[39m]: Enqueue event_nonce_commitments_hash at 30
+[2026-04-27T12:03:06.233Z [34mdebug[39m]: Enqueue event_nonce_commitments_hash at 30
+
+[90mstdout[2m | src/consensus/integration.test.ts[2m > [22m[2mintegration[2m > [22m[2mkeygen and oracle signing flow
+[22m[39m[2026-04-27T12:03:06.233Z [34mdebug[39m]: Handle event event_nonce_commitments_hash {
+  transition: {
+    id: [32m'event_nonce_commitments_hash'[39m,
+    block: [33m30n[39m,
+    index: [33m1[39m,
+    gid: [32m'0x1f599f9e85885268056b206bb17d589fe6b9ca21972cd2650000000000000000'[39m,
+    participant: [32m'0x15d34AAf54267DB7D7c367839AAf71A00a2C6A65'[39m,
+    chunk: [33m0n[39m,
+    commitment: [32m'0xd77518f39027d5b2a10478042bae05be722c79cd52df06879565068dddfa7b5a'[39m
+  }
+}
+[2026-04-27T12:03:06.233Z [32minfo[39m]: Link nonces for chunk 0
+
+[90mstdout[2m | src/consensus/integration.test.ts[2m > [22m[2mintegration[2m > [22m[2mkeygen and oracle signing flow
+[22m[39m[2026-04-27T12:03:06.233Z [34mdebug[39m]: Handle event event_nonce_commitments_hash {
+  transition: {
+    id: [32m'event_nonce_commitments_hash'[39m,
+    block: [33m30n[39m,
+    index: [33m2[39m,
+    gid: [32m'0x1f599f9e85885268056b206bb17d589fe6b9ca21972cd2650000000000000000'[39m,
+    participant: [32m'0x70997970C51812dc3A010C7d01b50e0d17dc79C8'[39m,
+    chunk: [33m0n[39m,
+    commitment: [32m'0xcd50557ac8418c27ff29cc2242a84a062ff79f9316fbebf23d13d848c659b24e'[39m
+  }
+}
+[2026-04-27T12:03:06.233Z [32minfo[39m]: Link nonces for chunk 0
+
+[90mstdout[2m | src/consensus/integration.test.ts[2m > [22m[2mintegration[2m > [22m[2mkeygen and oracle signing flow
+[22m[39m[2026-04-27T12:03:06.233Z [34mdebug[39m]: Handle event event_nonce_commitments_hash {
+  transition: {
+    id: [32m'event_nonce_commitments_hash'[39m,
+    block: [33m30n[39m,
+    index: [33m3[39m,
+    gid: [32m'0x1f599f9e85885268056b206bb17d589fe6b9ca21972cd2650000000000000000'[39m,
+    participant: [32m'0x90F79bf6EB2c4f870365E785982E1f101E93b906'[39m,
+    chunk: [33m0n[39m,
+    commitment: [32m'0x57607ae2ec4381d19c945366621ab9765998883dae65a46da7c4fd2e52fdc6d0'[39m
+  }
+}
+[2026-04-27T12:03:06.233Z [32minfo[39m]: Link nonces for chunk 0
+
+[90mstdout[2m | src/consensus/integration.test.ts[2m > [22m[2mintegration[2m > [22m[2mkeygen and oracle signing flow
+[22m[39m[2026-04-27T12:03:06.233Z [34mdebug[39m]: Handle event event_nonce_commitments_hash {
+  transition: {
+    id: [32m'event_nonce_commitments_hash'[39m,
+    block: [33m30n[39m,
+    index: [33m4[39m,
+    gid: [32m'0x1f599f9e85885268056b206bb17d589fe6b9ca21972cd2650000000000000000'[39m,
+    participant: [32m'0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC'[39m,
+    chunk: [33m0n[39m,
+    commitment: [32m'0x27e22296356b4415f68bd41ddfc2edcf55530d09c23d93a141bb00a669241a00'[39m
+  }
+}
+[2026-04-27T12:03:06.234Z [32minfo[39m]: Link nonces for chunk 0
+
+[90mstdout[2m | src/consensus/integration.test.ts[2m > [22m[2mintegration[2m > [22m[2mkeygen and oracle signing flow
+[22m[39m[2026-04-27T12:03:06.457Z [34mdebug[39m]: Enqueue block_new at 31
+
+[90mstdout[2m | src/consensus/integration.test.ts[2m > [22m[2mintegration[2m > [22m[2mkeygen and oracle signing flow
+[22m[39m[2026-04-27T12:03:06.743Z [34mdebug[39m]: Enqueue block_new at 32
+
+[90mstdout[2m | src/consensus/integration.test.ts[2m > [22m[2mintegration[2m > [22m[2mkeygen and oracle signing flow
+[22m[39m[2026-04-27T12:03:06.948Z [34mdebug[39m]: Enqueue block_new at 33
+
+[90mstdout[2m | src/consensus/integration.test.ts[2m > [22m[2mintegration[2m > [22m[2mkeygen and oracle signing flow
+[22m[39m[2026-04-27T12:03:07.226Z [34mdebug[39m]: Enqueue block_new at 34
+
+[90mstdout[2m | src/consensus/integration.test.ts[2m > [22m[2mintegration[2m > [22m[2mkeygen and oracle signing flow
+[22m[39m[2026-04-27T12:03:07.450Z [34mdebug[39m]: Enqueue block_new at 35
+
+[90mstdout[2m | src/consensus/integration.test.ts[2m > [22m[2mintegration[2m > [22m[2mkeygen and oracle signing flow
+[22m[39m[2026-04-27T12:03:07.729Z [34mdebug[39m]: Enqueue block_new at 36
+
+[90mstdout[2m | src/consensus/integration.test.ts[2m > [22m[2mintegration[2m > [22m[2mkeygen and oracle signing flow
+[22m[39m[2026-04-27T12:03:07.955Z [34mdebug[39m]: Enqueue block_new at 37
+
+[90mstdout[2m | src/consensus/integration.test.ts[2m > [22m[2mintegration[2m > [22m[2mkeygen and oracle signing flow
+[22m[39m[2026-04-27T12:03:08.235Z [34mdebug[39m]: Enqueue block_new at 38
+
+[90mstdout[2m | src/consensus/integration.test.ts[2m > [22m[2mintegration[2m > [22m[2mkeygen and oracle signing flow
+[22m[39m[2026-04-27T12:03:08.460Z [34mdebug[39m]: Enqueue block_new at 39
+
+ [31m❯[39m src/consensus/integration.test.ts [2m([22m[2m4 tests[22m[2m | [22m[31m1 failed[39m[2m | [22m[33m3 skipped[39m[2m)[22m[33m 11777[2mms[22m[39m
+     [2m[90m↓[39m[22m keygen timeout
+     [2m[90m↓[39m[22m keygen abort
+     [2m[90m↓[39m[22m keygen and signing flow
+[31m     [31m×[31m keygen and oracle signing flow[39m[33m 11766[2mms[22m[39m
+
+[2m Test Files [22m [1m[31m1 failed[39m[22m[90m (1)[39m
+[2m      Tests [22m [1m[31m1 failed[39m[22m[2m | [22m[33m3 skipped[39m[90m (4)[39m
+[2m   Start at [22m 12:02:56
+[2m   Duration [22m 12.64s[2m (transform 451ms, setup 0ms, import 795ms, tests 11.78s, environment 0ms)[22m
+
+Stopping Anvil (PID 280699)...
