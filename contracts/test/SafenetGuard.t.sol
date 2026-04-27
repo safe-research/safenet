@@ -11,7 +11,7 @@ import {ISafe} from "@safe/interfaces/ISafe.sol";
 import {IGuardManager} from "@safe/interfaces/IGuardManager.sol";
 import {Safe} from "@safe/Safe.sol";
 import {SafeProxyFactory} from "@safe/proxies/SafeProxyFactory.sol";
-import {SafenetGuard} from "@/SafenetGuard.sol";
+import {SafenetGuard} from "@/guard/SafenetGuardA.sol";
 import {ForgeSecp256k1} from "@test/util/ForgeSecp256k1.sol";
 import {MockERC1271} from "@test/util/MockERC1271.sol";
 

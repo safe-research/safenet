@@ -10,7 +10,7 @@ additional_compiler_profiles = [
 compilation_restrictions = [
   { paths = "src/Consensus.sol", via_ir = true },
   { paths = "src/FROSTCoordinator.sol", via_ir = true },
-  { paths = "src/SafenetGuard.sol", via_ir = true },
+  { paths = "src/guard/SafenetGuardA.sol", via_ir = true },
 ]
 
 remappings = [
