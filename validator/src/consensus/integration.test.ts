@@ -94,16 +94,14 @@ describe("integration", () => {
 		timeout,
 		blockTimeMs,
 		rotateOutEpoch,
-		allowedOracles,
 		oracleTimeout,
 	}: {
 		blocksPerEpoch?: bigint;
 		timeout?: bigint;
 		blockTimeMs?: number;
 		rotateOutEpoch?: bigint;
-		allowedOracles?: Address[];
 		oracleTimeout?: bigint;
-	}) => {
+	} = {}) => {
 		// Check deployment information is available
 		const deploymentInfoFile = path.join(
 			process.cwd(),
@@ -138,6 +136,7 @@ describe("integration", () => {
 		}
 
 		const deploymentInfo = JSON.parse(fs.readFileSync(deploymentInfoFile, "utf-8"));
+		const oracleAddress = deploymentInfo.returns.alwaysApproveOracle?.value as Address | undefined;
 		const coordinator = {
 			address: deploymentInfo.returns.coordinator.value as Address,
 			abi: parseAbi([
@@ -183,7 +182,7 @@ describe("integration", () => {
 				blocksPerEpoch: blocksPerEpoch ?? BLOCKS_PER_EPOCH,
 				keyGenTimeout: timeout,
 				signingTimeout: timeout,
-				allowedOracles,
+				allowedOracles: oracleAddress ? [oracleAddress] : undefined,
 				oracleTimeout,
 			};
 			const blockRetryCounts =
@@ -247,6 +246,7 @@ describe("integration", () => {
 			participants,
 			coordinator,
 			consensus,
+			oracleAddress,
 			deploymentInfoFile,
 			triggerKeyGen,
 		};
@@ -552,16 +552,14 @@ describe("integration", () => {
 	});
 
 	it("keygen and oracle signing flow", { timeout: TEST_RUNTIME_IN_SECONDS * 1000 * 5 }, async ({ skip }) => {
-		// The oracle address is deployed by the integration test script (run_integration_test.sh)
-		// and passed via the ORACLE_ADDRESS environment variable.
-		const rawOracleEnv = process.env.ORACLE_ADDRESS;
-		const oracleAddress = rawOracleEnv?.startsWith("0x") ? (rawOracleEnv as Address) : undefined;
-		const setupInfo = await setup({ allowedOracles: oracleAddress ? [oracleAddress] : undefined, oracleTimeout: 20n });
-		if (setupInfo === undefined || oracleAddress === undefined) {
+		// AlwaysApproveOracle is deployed as part of cmd:deploy and its address is read from
+		// the broadcast deployment info.
+		const setupInfo = await setup({ oracleTimeout: 20n });
+		if (setupInfo === undefined || setupInfo.oracleAddress === undefined) {
 			skip();
 			return;
 		}
-		const { coordinator, consensus, triggerKeyGen } = setupInfo;
+		const { coordinator, consensus, triggerKeyGen, oracleAddress } = setupInfo;
 		testLogger.notice(`Using AlwaysApproveOracle at ${oracleAddress}`);
 		await triggerKeyGen();
 
