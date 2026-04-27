@@ -12,7 +12,10 @@ import {Genesis} from "@script/util/Genesis.sol";
 contract DeployScript is Script {
     using DeterministicDeployment for DeterministicDeployment.Factory;
 
-    function run() public returns (FROSTCoordinator coordinator, Consensus consensus, AlwaysApproveOracle alwaysApproveOracle) {
+    function run()
+        public
+        returns (FROSTCoordinator coordinator, Consensus consensus, AlwaysApproveOracle alwaysApproveOracle)
+    {
         // Required script arguments:
         address[] memory participants = vm.envAddress("PARTICIPANTS", ",");
 
