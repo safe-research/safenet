@@ -13,6 +13,7 @@ import {Safe} from "@safe/Safe.sol";
 import {SafeProxyFactory} from "@safe/proxies/SafeProxyFactory.sol";
 import {SafenetGuard} from "@/SafenetGuard.sol";
 import {ForgeSecp256k1} from "@test/util/ForgeSecp256k1.sol";
+import {MockERC1271} from "@test/util/MockERC1271.sol";
 
 contract SafenetGuardTest is Test {
     using ForgeSecp256k1 for ForgeSecp256k1.P;
@@ -58,6 +59,8 @@ contract SafenetGuardTest is Test {
     // SAFE DEPLOYMENT
     // ============================================================
 
+    Safe public singleton;
+    SafeProxyFactory public factory;
     ISafe public safe;
     uint256 public ownerKey;
 
@@ -66,8 +69,8 @@ contract SafenetGuardTest is Test {
         ownerKey = 0xA11CE;
 
         // Deploy Safe infrastructure
-        Safe singleton = new Safe();
-        SafeProxyFactory factory = new SafeProxyFactory();
+        singleton = new Safe();
+        factory = new SafeProxyFactory();
 
         address[] memory owners = new address[](1);
         owners[0] = vm.addr(ownerKey);
@@ -175,6 +178,15 @@ contract SafenetGuardTest is Test {
     {
         bytes32 txHash = _safeTxHash(to, value, data, op, nonce);
         safe.execTransaction(to, value, data, op, 0, 0, 0, address(0), payable(address(0)), _signSafeTx(txHash));
+    }
+
+    /// @dev Builds a packed 130-byte signature (two 65-byte ECDSA blocks) sorted in ascending
+    ///      address order, which Safe requires when verifying multi-owner signatures.
+    function _sign2of3(bytes32 txHash, uint256 keyA, uint256 keyB) internal pure returns (bytes memory) {
+        if (vm.addr(keyA) > vm.addr(keyB)) (keyA, keyB) = (keyB, keyA);
+        (uint8 v1, bytes32 r1, bytes32 s1) = vm.sign(keyA, txHash);
+        (uint8 v2, bytes32 r2, bytes32 s2) = vm.sign(keyB, txHash);
+        return abi.encodePacked(r1, s1, v1, r2, s2, v2);
     }
 
     /// @dev Registers a time-delayed allowance via a real Safe execTransaction.
@@ -568,5 +580,173 @@ contract SafenetGuardTest is Test {
         uint256 nonce2 = safe.nonce();
         vm.expectRevert(SafenetGuard.AttestationNotFound.selector);
         _execSafeTxWithNonce(TX_TO, TX_VALUE, TX_DATA, TX_OP, nonce2);
+    }
+
+    // ============================================================
+    // MULTISIG AND SIGNATURE ENCODING
+    // ============================================================
+
+    function test_checkTransaction_twoOfThreePassesWithAttestation() public {
+        // ---- Deploy a 2-of-3 Safe with the guard ----
+        // Keys ordered by derived address ascending (Safe requires this):
+        //   0xB2 → 0x4a35A802Dbd623561040dD50f6293842d0901731
+        //   0xC3 → 0x691Cb1645a4f21D879973b3A3B98A714fC1970D6
+        //   0xA1 → 0xd2431CA38735C2fd438e2cAa23F094191D89675b
+        uint256 keyA = 0xB2;
+        uint256 keyB = 0xC3;
+        uint256 keyC = 0xA1;
+
+        address[] memory owners = new address[](3);
+        owners[0] = vm.addr(keyA);
+        owners[1] = vm.addr(keyB);
+        owners[2] = vm.addr(keyC);
+
+        bytes memory initializer = abi.encodeCall(
+            Safe.setup, (owners, 2, address(0), bytes(""), address(0), address(0), 0, payable(address(0)))
+        );
+        ISafe safe2 = ISafe(payable(address(factory.createProxyWithNonce(address(singleton), initializer, 1))));
+
+        // Install guard using two owners (no guard active yet — direct execution)
+        bytes memory guardData = abi.encodeCall(IGuardManager.setGuard, (address(guard)));
+        bytes32 setupHash = SafeTransaction.hash(
+            SafeTransaction.T({
+                chainId: block.chainid,
+                safe: address(safe2),
+                to: address(safe2),
+                value: 0,
+                data: guardData,
+                operation: SafeTransaction.Operation(uint8(Enum.Operation.Call)),
+                safeTxGas: 0,
+                baseGas: 0,
+                gasPrice: 0,
+                gasToken: address(0),
+                refundReceiver: address(0),
+                nonce: 0
+            })
+        );
+        safe2.execTransaction(
+            address(safe2),
+            0,
+            guardData,
+            Enum.Operation.Call,
+            0,
+            0,
+            0,
+            address(0),
+            payable(address(0)),
+            _sign2of3(setupHash, keyA, keyB)
+        );
+
+        // ---- Execute an attested transaction through the 2-of-3 Safe ----
+        bytes32 txHash = SafeTransaction.hash(
+            SafeTransaction.T({
+                chainId: block.chainid,
+                safe: address(safe2),
+                to: TX_TO,
+                value: TX_VALUE,
+                data: TX_DATA,
+                operation: SafeTransaction.Operation(uint8(TX_OP)),
+                safeTxGas: 0,
+                baseGas: 0,
+                gasPrice: 0,
+                gasToken: address(0),
+                refundReceiver: address(0),
+                nonce: safe2.nonce()
+            })
+        );
+        bytes memory combined = bytes.concat(
+            _sign2of3(txHash, keyA, keyB), _buildInlineAttestation(txHash, INITIAL_EPOCH, GROUP_SK, GROUP_NK)
+        );
+        safe2.execTransaction(TX_TO, TX_VALUE, TX_DATA, TX_OP, 0, 0, 0, address(0), payable(address(0)), combined);
+    }
+
+    function test_decodeAttestation_zeroLengthTrailerIsIgnored() public {
+        // signatures = [ecdsa:65B][bytes32(0)]  →  end=65, length=0  →  empty attestation
+        uint256 nonce = safe.nonce();
+        bytes32 txHash = _safeTxHash(TX_TO, TX_VALUE, TX_DATA, TX_OP, nonce);
+        bytes memory combined = abi.encodePacked(_signSafeTx(txHash), bytes32(0));
+        vm.expectRevert(SafenetGuard.AttestationNotFound.selector);
+        safe.execTransaction(TX_TO, TX_VALUE, TX_DATA, TX_OP, 0, 0, 0, address(0), payable(address(0)), combined);
+    }
+
+    function test_decodeAttestation_oversizedLengthIsIgnored() public {
+        // signatures = [ecdsa:65B][bytes32(66)]  →  end=65, length=66 > end  →  empty attestation
+        uint256 nonce = safe.nonce();
+        bytes32 txHash = _safeTxHash(TX_TO, TX_VALUE, TX_DATA, TX_OP, nonce);
+        bytes memory combined = abi.encodePacked(_signSafeTx(txHash), bytes32(uint256(66)));
+        vm.expectRevert(SafenetGuard.AttestationNotFound.selector);
+        safe.execTransaction(TX_TO, TX_VALUE, TX_DATA, TX_OP, 0, 0, 0, address(0), payable(address(0)), combined);
+    }
+
+    function test_decodeAttestation_lengthEqualsEndRevertsOnDecode() public {
+        // signatures = [ecdsa:65B][bytes32(65)]  →  end=65, length=65  →  signatures[0:65] treated as
+        // attestation  →  abi.decode on 65 ECDSA bytes fails (too short for (uint64, FROST.Signature))
+        uint256 nonce = safe.nonce();
+        bytes32 txHash = _safeTxHash(TX_TO, TX_VALUE, TX_DATA, TX_OP, nonce);
+        bytes memory combined = abi.encodePacked(_signSafeTx(txHash), bytes32(uint256(65)));
+        vm.expectRevert();
+        safe.execTransaction(TX_TO, TX_VALUE, TX_DATA, TX_OP, 0, 0, 0, address(0), payable(address(0)), combined);
+    }
+
+    function test_checkTransaction_approvedHashPassesWithAttestation() public {
+        uint256 nonce = safe.nonce();
+        bytes32 txHash = _safeTxHash(TX_TO, TX_VALUE, TX_DATA, TX_OP, nonce);
+
+        // v=1 approved-hash encoding: r=owner address, s=0, v=1 (no ECDSA material).
+        // Safe accepts it when executor == owner, so we prank as the owner.
+        bytes memory v1sig = abi.encodePacked(bytes32(uint256(uint160(vm.addr(ownerKey)))), bytes32(0), uint8(1));
+        bytes memory combined = bytes.concat(v1sig, _buildInlineAttestation(txHash, INITIAL_EPOCH, GROUP_SK, GROUP_NK));
+        vm.prank(vm.addr(ownerKey));
+        safe.execTransaction(TX_TO, TX_VALUE, TX_DATA, TX_OP, 0, 0, 0, address(0), payable(address(0)), combined);
+    }
+
+    function test_checkTransaction_contractSignaturePassesWithAttestation() public {
+        // ---- Deploy a 1-of-1 Safe whose sole owner is a MockERC1271 contract ----
+        MockERC1271 mock = new MockERC1271();
+        address[] memory owners = new address[](1);
+        owners[0] = address(mock);
+
+        bytes memory initializer = abi.encodeCall(
+            Safe.setup, (owners, 1, address(0), bytes(""), address(0), address(0), 0, payable(address(0)))
+        );
+        ISafe safe2 = ISafe(payable(address(factory.createProxyWithNonce(address(singleton), initializer, 1))));
+
+        // v=0 contract signature layout (97 bytes):
+        //   [0..31]  r = mock address (owner)
+        //   [32..63] s = 65 (byte offset of the dynamic ERC-1271 section)
+        //   [64]     v = 0
+        //   [65..96] contractSignatureLen = 0  (zero-length ERC-1271 payload)
+        bytes memory contractSig =
+            abi.encodePacked(bytes32(uint256(uint160(address(mock)))), bytes32(uint256(65)), uint8(0), bytes32(0));
+
+        // Install guard (no guard active yet)
+        bytes memory guardData = abi.encodeCall(IGuardManager.setGuard, (address(guard)));
+        // contractSig is valid for any hash (mock always returns the magic value)
+        safe2.execTransaction(
+            address(safe2), 0, guardData, Enum.Operation.Call, 0, 0, 0, address(0), payable(address(0)), contractSig
+        );
+
+        // ---- Execute an attested transaction ----
+        // signatures layout: [contractSig:97B][attestation bytes][attestation_len:32B]
+        // _decodeAttestation reads from the end: length=attestation.length, slice=signatures[97:97+len]
+        bytes32 txHash = SafeTransaction.hash(
+            SafeTransaction.T({
+                chainId: block.chainid,
+                safe: address(safe2),
+                to: TX_TO,
+                value: TX_VALUE,
+                data: TX_DATA,
+                operation: SafeTransaction.Operation(uint8(TX_OP)),
+                safeTxGas: 0,
+                baseGas: 0,
+                gasPrice: 0,
+                gasToken: address(0),
+                refundReceiver: address(0),
+                nonce: safe2.nonce()
+            })
+        );
+        bytes memory combined =
+            bytes.concat(contractSig, _buildInlineAttestation(txHash, INITIAL_EPOCH, GROUP_SK, GROUP_NK));
+        safe2.execTransaction(TX_TO, TX_VALUE, TX_DATA, TX_OP, 0, 0, 0, address(0), payable(address(0)), combined);
     }
 }
