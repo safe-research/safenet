@@ -43,6 +43,9 @@ impl Driver {
 
     pub async fn run(config: ValidatorConfig) -> Result<()> {
         let mut driver = Driver::new(&config).await?;
+        // TODO: before subscribing to new blocks, fetch and replay all blocks from
+        // `driver.state.last_seen_block + 1` up to the current chain head. This ensures
+        // we catch up on any events emitted while the validator was offline.
         watcher::run(&config, |update| driver.on_update(update)).await
     }
 

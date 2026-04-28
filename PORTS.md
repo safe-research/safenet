@@ -12,15 +12,16 @@ The Rust port aims to reach consensus "happy path" compatibility with the TypeSc
 
 Implemented modules in `validator-rust/src/`:
 
-| Module            | File          | Status  | Notes                                                                                                     |
-| ----------------- | ------------- | ------- | --------------------------------------------------------------------------------------------------------- |
-| CLI & startup     | `main.rs`     | Done    | `argh` CLI, tracing init, TOML config load, watcher invocation                                            |
-| Config            | `config.rs`   | Done    | `serde` + `toml` deserialization, optional fields, `#[serde(deny_unknown_fields)]`                        |
-| Contract bindings | `bindings.rs` | Partial | All consensus + coordinator events with `Debug`; `getCoordinator()` call                                  |
-| Actions           | `actions.rs`  | Partial | `Action` enum (empty); `Handler` struct that processes actions produced by state transitions              |
-| State             | `state.rs`    | Partial | Tracks `last_seen_block`; handles events and returns `Vec<Action>`; logs received events                  |
-| Driver            | `driver.rs`   | Partial | Orchestrates `State` and `Handler`: receives watcher events, feeds state, dispatches produced actions     |
-| Watcher           | `watcher.rs`  | Partial | Block + log subscription; decodes logs via `SolEventInterface`; dispatches to `Driver`; no reorg handling |
+| Module            | File                   | Status  | Notes                                                                                                                                          |
+| ----------------- | ---------------------- | ------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| CLI & startup     | `main.rs`              | Done    | `argh` CLI, tracing init, TOML config load, driver invocation                                                                                  |
+| Config            | `config.rs`            | Done    | `serde` + `toml` deserialization, optional fields, `#[serde(deny_unknown_fields)]`; uses `PathBuf` and `NonZeroU64` for strong types           |
+| Contract bindings | `bindings.rs`          | Partial | All consensus + coordinator events with `Debug`; `getCoordinator()` and `getActiveEpoch()` calls; keygen tx functions not yet added            |
+| Actions           | `actions.rs`           | Partial | `Action` enum (empty); `Handler` struct that processes actions produced by state transitions                                                   |
+| State             | `state/mod.rs`         | Partial | `Phase` enum (`WaitingForGenesis` / `WaitingForRollover`); `ValidatorState` with serde derives; handles events and returns `Vec<Action>`       |
+| State storage     | `state/storage.rs`     | Done    | SQLite-backed JSON persistence; `open`/`save`/`load_latest`; keeps last `state_history` entries by block number; defaults to `:memory:`        |
+| Driver            | `driver.rs`            | Partial | Async init: opens storage, restores state or queries `getActiveEpoch()` for cold start; persists state after each block; dispatches actions    |
+| Watcher           | `watcher.rs`           | Partial | Block + log subscription; decodes logs via `SolEventInterface`; block monotonicity check; log sort by index; dispatches to `Driver`; no reorg  |
 
 Not yet ported (TypeScript → Rust):
 
@@ -35,7 +36,7 @@ Not yet ported (TypeScript → Rust):
 | Signing state machine        | `validator/src/machine/signing/`                       | Not started |
 | Consensus state machine      | `validator/src/machine/consensus/`                     | Not started |
 | Transition watcher           | `validator/src/machine/transitions/`                   | Not started |
-| SQLite storage               | `validator/src/consensus/storage/`, `machine/storage/` | Not started |
+| SQLite storage               | `validator/src/consensus/storage/`, `machine/storage/` | Done (simplified) |
 | Safe transaction checks      | `validator/src/service/checks.ts`                      | Not started |
 | Participant utilities        | `validator/src/utils/participants.ts`                  | Not started |
 
@@ -50,7 +51,7 @@ The Rust port does not need to preserve the TypeScript validator's configuration
 - Address checksum enforcement is intentionally not custom-config behavior. Use Alloy's default `Address` deserialization.
 - `rpc_url` is `url::Url`, not `String`.
 - Metrics config was intentionally omitted. Do not port metrics just to match TypeScript.
-- SQLite schema, storage layout, and operational plumbing may differ from TypeScript if the Rust design is cleaner.
+- SQLite schema, storage layout, and operational plumbing may differ from TypeScript if the Rust design is cleaner. The Rust storage uses a single `validator_state` table with `block_number` as the primary key and the entire `ValidatorState` serialized as a JSON column. The last `state_history` entries are retained; older rows are pruned on each write. This differs from the TypeScript design (separate tables per state type) but is simpler and sufficient for evaluation.
 - Error conditions (timeouts, complaint flows, RPC retries) can be handled with less robustness than TypeScript — the watcher, for example, handles far fewer edge cases; this is acceptable.
 - Do not try to architect complex and robust solutions. Prefer "do only what is needed" for evaluation purposes.
 - Alloy has two distinct `Log` types that are **not** interchangeable and cause confusing type errors:
@@ -111,7 +112,11 @@ staker_address = "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266"
 genesis_salt = "0x0000000000000000000000000000000000000000000000000000000000000000"
 blocks_per_epoch = 1440
 block_time_override = 5
+state_history = 5
 ```
+
+- `storage_file` deserializes as `PathBuf`; defaults to `:memory:` (in-process SQLite, no file) when omitted.
+- `state_history` is a `NonZeroU64`; defaults to `5` when omitted.
 
 ## TypeScript Source Map
 
@@ -253,8 +258,8 @@ function keyGenConfirm(bytes32 gid) external
 2. **ECDH share encryption** (`src/frost/secret.rs`) — `encrypt(msg, sender_sk, receiver_pk)` and `decrypt` using `(receiver_pk^{sender_sk}).x` as the one-time pad. Port directly from `validator/src/frost/secret.ts`.
 3. **Merkle tree** (`src/frost/merkle.rs`) — leaf hashing, tree construction, proof generation. Port with test vectors from `validator/src/consensus/merkle.ts`.
 4. **Participant utilities** (`src/frost/participants.rs`) — derive participant ID via `frost-secp256k1` hash-to-scalar, sort by ID, compute group ID.
-5. **Keygen state machine** (`src/state.rs`) — add keygen phases to `ValidatorState`, store `frost-secp256k1` DKG round state in memory (no SQLite needed for happy path).
-6. **Contract bindings** — add the four keygen functions to `bindings.rs`.
+5. **Contract bindings** — add the four keygen functions to `bindings.rs`.
+6. **Keygen state machine** (`src/state/mod.rs`) — extend `Phase` with keygen sub-phases; store `frost-secp256k1` DKG round state in `ValidatorState` (in-memory; persisted automatically by the existing storage layer).
 7. **Actions** — add `Action` variants for each on-chain submission; implement `Handler::handle` to submit them via the provider.
 
 ## Suggested Next Steps
@@ -263,9 +268,10 @@ function keyGenConfirm(bytes32 gid) external
 2. Implement ABI marshalling helpers and test against known values.
 3. Implement ECDH share encryption (`src/frost/secret.rs`) following `validator/src/frost/secret.ts`.
 4. Implement Merkle tree (`src/frost/merkle.rs`) with test vectors from the TypeScript implementation.
-5. Add keygen contract function bindings to `bindings.rs`.
-6. Extend `ValidatorState` with keygen phase tracking driven by the events already piped in from the watcher.
-7. Add `Action` variants for on-chain keygen submissions and implement the handler.
+5. Implement participant utilities (`src/frost/participants.rs`): participant ID derivation, address sorting, group ID computation.
+6. Add the four keygen contract function bindings to `bindings.rs`.
+7. Extend `ValidatorState` with keygen phase tracking; DKG round state is stored in-memory and will be persisted automatically by the existing storage layer on each block.
+8. Add `Action` variants for on-chain keygen submissions and implement the handler.
 
 ## Verification Commands
 
