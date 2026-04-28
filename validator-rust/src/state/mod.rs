@@ -1,17 +1,22 @@
+pub mod storage;
+
+pub use self::storage::Storage;
 use crate::{
     actions::Action,
     bindings::{Consensus, Coordinator},
 };
+use serde::{Deserialize, Serialize};
 
-enum Phase {
+#[derive(Serialize, Deserialize)]
+pub enum Phase {
     WaitingForGenesis,
     WaitingForRollover,
 }
 
+#[derive(Serialize, Deserialize)]
 pub struct ValidatorState {
-    last_seen_block: Option<u64>,
-    #[allow(dead_code)]
-    phase: Phase,
+    pub last_seen_block: Option<u64>,
+    pub phase: Phase,
 }
 
 impl ValidatorState {

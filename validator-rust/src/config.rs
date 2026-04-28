@@ -1,3 +1,6 @@
+use std::num::NonZeroU64;
+use std::path::PathBuf;
+
 use alloy::primitives::{Address, B256};
 use serde::Deserialize;
 use url::Url;
@@ -11,7 +14,7 @@ pub struct Participant {
 #[derive(Debug, Clone, PartialEq, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct ValidatorConfig {
-    pub storage_file: Option<String>,
+    pub storage_file: Option<PathBuf>,
     pub rpc_url: Url,
     pub private_key: B256,
     pub staker_address: Option<Address>,
@@ -20,6 +23,7 @@ pub struct ValidatorConfig {
     pub genesis_salt: Option<B256>,
     pub blocks_per_epoch: Option<u64>,
     pub block_time_override: Option<u64>,
+    pub state_history: Option<NonZeroU64>,
 }
 
 impl ValidatorConfig {

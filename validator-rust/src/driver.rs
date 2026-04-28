@@ -2,29 +2,43 @@ use alloy::providers::ProviderBuilder;
 use anyhow::Result;
 
 use crate::{
-    actions, bindings::Consensus, config::ValidatorConfig, state::ValidatorState, watcher,
+    actions,
+    bindings::Consensus,
+    config::ValidatorConfig,
+    state::{self, ValidatorState},
+    watcher,
 };
 
 pub struct Driver {
     state: ValidatorState,
     actions: actions::Handler,
+    storage: state::Storage,
 }
 
 impl Driver {
     async fn new(config: &ValidatorConfig) -> Result<Self> {
-        let provider = ProviderBuilder::new()
-            .connect(config.rpc_url.as_str())
-            .await?;
-        let active_epoch = Consensus::new(config.consensus_address, &provider)
-            .getActiveEpoch()
-            .call()
-            .await?
-            .epoch;
+        let storage = state::Storage::open(config.storage_file.as_deref(), config.state_history)?;
 
-        let state = ValidatorState::new(active_epoch);
-        let actions = actions::Handler;
+        let state = if let Some(saved) = storage.load_latest()? {
+            tracing::info!("restored validator state from storage");
+            saved
+        } else {
+            let provider = ProviderBuilder::new()
+                .connect(config.rpc_url.as_str())
+                .await?;
+            let active_epoch = Consensus::new(config.consensus_address, &provider)
+                .getActiveEpoch()
+                .call()
+                .await?
+                .epoch;
+            ValidatorState::new(active_epoch)
+        };
 
-        Ok(Self { state, actions })
+        Ok(Self {
+            state,
+            actions: actions::Handler,
+            storage,
+        })
     }
 
     pub async fn run(config: ValidatorConfig) -> Result<()> {
@@ -42,5 +56,9 @@ impl Driver {
             actions.extend(new_actions);
         }
         self.actions.handle(actions);
+
+        if let Err(err) = self.storage.save(update.block_number, &self.state) {
+            tracing::warn!(%err, block = %update.block_number, "failed to persist validator state");
+        }
     }
 }
