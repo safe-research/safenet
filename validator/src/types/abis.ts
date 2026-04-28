@@ -16,6 +16,12 @@ export const CONSENSUS_ORACLE_TRANSACTION_ATTESTED_EVENT = parseAbiItem(
 	"event OracleTransactionAttested(bytes32 indexed safeTxHash, uint256 indexed chainId, address indexed safe, uint64 epoch, address oracle, bytes32 signatureId, ((uint256 x, uint256 y) r, uint256 z) attestation)",
 );
 
+export const ORACLE_RESULT_EVENT = parseAbiItem(
+	"event OracleResult(bytes32 indexed requestId, address indexed proposer, bytes result, bool approved)",
+);
+
+export const ORACLE_EVENTS = [ORACLE_RESULT_EVENT] as const;
+
 export const CONSENSUS_OTHER_EVENTS = parseAbi([
 	"event EpochProposed(uint64 indexed activeEpoch, uint64 indexed proposedEpoch, uint64 rolloverBlock, bytes32 groupId, (uint256 x, uint256 y) groupKey)",
 	"event TransactionAttested(bytes32 indexed safeTxHash, uint256 indexed chainId, address indexed safe, uint64 epoch, bytes32 signatureId, ((uint256 x, uint256 y) r, uint256 z) attestation)",
@@ -55,7 +61,7 @@ export const COORDINATOR_EVENTS = [
 	...COORDINATOR_OTHER_EVENTS,
 ] as const;
 
-export const ALL_EVENTS = [...CONSENSUS_EVENTS, ...COORDINATOR_EVENTS] as const;
+export const ALL_EVENTS = [...CONSENSUS_EVENTS, ...COORDINATOR_EVENTS, ...ORACLE_EVENTS] as const;
 
 export const COORDINATOR_FUNCTIONS = parseAbi([
 	"error AlreadyRegistered()",
@@ -88,6 +94,7 @@ export const CONSENSUS_FUNCTIONS = parseAbi([
 	"function proposeEpoch(uint64 proposedEpoch, uint64 rolloverBlock, bytes32 groupId) external",
 	"function stageEpoch(uint64 proposedEpoch, uint64 rolloverBlock, bytes32 groupId, bytes32 signatureId) external",
 	"function attestTransaction(uint64 epoch, uint256 chainId, address safe, bytes32 safeTxStructHash, bytes32 signatureId) external",
+	"function attestOracleTransaction(uint64 epoch, address oracle, uint256 chainId, address safe, bytes32 safeTxStructHash, bytes32 signatureId) external",
 	"function setValidatorStaker(address staker) external",
 	"function getValidatorStaker(address validator) external view returns (address staker)",
 ]);

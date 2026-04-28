@@ -5,13 +5,17 @@ import {Script, console} from "@forge-std/Script.sol";
 import {FROSTGroupId} from "@/libraries/FROSTGroupId.sol";
 import {FROSTCoordinator} from "@/FROSTCoordinator.sol";
 import {Consensus} from "@/Consensus.sol";
+import {AlwaysApproveOracle} from "@/AlwaysApproveOracle.sol";
 import {DeterministicDeployment} from "@script/util/DeterministicDeployment.sol";
 import {Genesis} from "@script/util/Genesis.sol";
 
 contract DeployScript is Script {
     using DeterministicDeployment for DeterministicDeployment.Factory;
 
-    function run() public returns (FROSTCoordinator coordinator, Consensus consensus) {
+    function run()
+        public
+        returns (FROSTCoordinator coordinator, Consensus consensus, AlwaysApproveOracle alwaysApproveOracle)
+    {
         // Required script arguments:
         address[] memory participants = vm.envAddress("PARTICIPANTS", ",");
 
@@ -34,6 +38,8 @@ contract DeployScript is Script {
                 .deployWithArgs(consensusSalt, type(Consensus).creationCode, abi.encode(coordinator, groupId))
         );
 
+        alwaysApproveOracle = new AlwaysApproveOracle();
+
         vm.stopBroadcast();
 
         console.log("Genesis Group ID:", vm.toString(FROSTGroupId.T.unwrap(groupId)));
@@ -43,5 +49,6 @@ contract DeployScript is Script {
         console.log("Genesis Group Context:", vm.toString(context));
         console.log("FROSTCoordinator:", address(coordinator));
         console.log("Consensus:", address(consensus));
+        console.log("AlwaysApproveOracle:", address(alwaysApproveOracle));
     }
 }

@@ -4,6 +4,7 @@ import type { ProtocolAction, SafenetProtocol } from "../consensus/protocol/type
 import type { SigningClient } from "../consensus/signing/client.js";
 import type { VerificationEngine } from "../consensus/verify/engine.js";
 import { handleEpochStaged } from "../machine/consensus/epochStaged.js";
+import { handleOracleResult } from "../machine/consensus/oracleResult.js";
 import { handleOracleTransactionAttested } from "../machine/consensus/oracleTransactionAttested.js";
 import { handleOracleTransactionProposed } from "../machine/consensus/oracleTransactionProposed.js";
 import { checkEpochRollover } from "../machine/consensus/rollover.js";
@@ -383,6 +384,15 @@ export class SafenetStateMachine {
 			}
 			case "event_oracle_transaction_attested": {
 				return await handleOracleTransactionAttested(this.#protocol, machineStates, transition, this.#logger);
+			}
+			case "event_oracle_result": {
+				return await handleOracleResult(
+					this.#machineConfig,
+					this.#signingClient,
+					machineStates,
+					transition,
+					this.#logger,
+				);
 			}
 		}
 	}

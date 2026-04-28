@@ -1,9 +1,12 @@
-import { ethAddress, zeroAddress } from "viem";
+import { encodeFunctionData, ethAddress, zeroAddress, zeroHash } from "viem";
 import { describe, expect, it, vi } from "vitest";
 import { makeMachineConfig } from "../../__tests__/data/machine.js";
 import type { SigningClient } from "../../consensus/signing/client.js";
+import type { OracleTransactionPacket } from "../../consensus/verify/oracleTx/schemas.js";
+import { safeTxStructHash } from "../../consensus/verify/safeTx/hashing.js";
 import type { SafeTransactionPacket } from "../../consensus/verify/safeTx/schemas.js";
 import { toPoint } from "../../frost/math.js";
+import { CONSENSUS_FUNCTIONS } from "../../types/abis.js";
 import type { NonceCommitmentsEvent } from "../transitions/types.js";
 import type { ConsensusState, MachineStates, SigningState } from "../types.js";
 import { handleRevealedNonces } from "./nonces.js";
@@ -285,6 +288,93 @@ describe("nonces revealed", () => {
 				id: "sign_publish_signature_share",
 				signatureId: "0x000000000000000000000000000000000000000000000000000000005af35af3",
 				callbackContext,
+				...signatureShareData,
+			},
+		]);
+	});
+
+	it("should transition to collect signing shares when completed (oracle transaction)", async () => {
+		// Set package for an oracle transaction attestation
+		const packet: OracleTransactionPacket = {
+			type: "oracle_transaction_packet",
+			domain: {
+				chain: 1n,
+				consensus: "0x89bEf0f3a116cf717e51F74C271A0a7aF527511D",
+			},
+			proposal: {
+				epoch: 22n,
+				oracle: "0x89bEf0f3a116cf717e51F74C271A0a7aF527511D",
+				transaction: {
+					chainId: 0n,
+					safe: "0x89bEf0f3a116cf717e51F74C271A0a7aF527511D",
+					to: "0x89bEf0f3a116cf717e51F74C271A0a7aF527511D",
+					value: 0n,
+					data: "0x",
+					operation: 0,
+					safeTxGas: 0n,
+					baseGas: 0n,
+					gasPrice: 0n,
+					gasToken: zeroAddress,
+					refundReceiver: zeroAddress,
+					nonce: 0n,
+				},
+			},
+		};
+		const signingState: SigningState = {
+			...SIGNING_STATE,
+			packet,
+		};
+		// Set the rollover state to a different message from this signing event
+		const machineStates: MachineStates = {
+			rollover: {
+				id: "sign_rollover",
+				groupId: "0x0000000000000000000000007fa9385be102ac3eac297483dd6233d62b3e1496",
+				message: "0x5afe5af3",
+				nextEpoch: 3n,
+			},
+			signing: {
+				"0x5afe5afe": signingState,
+			},
+		};
+		const signatureShareData = {
+			signersRoot: "0xf00baa23",
+			signersProof: ["0xf00baa01"],
+			groupCommitment: { x: 1n, y: 2n },
+			commitmentShare: { x: 1n, y: 2n },
+			signatureShare: 0x5afen,
+			lagrangeCoefficient: 5n,
+		};
+		const handleNonceCommitments = vi.fn();
+		handleNonceCommitments.mockReturnValueOnce(true);
+		const createSignatureShare = vi.fn();
+		createSignatureShare.mockReturnValueOnce(signatureShareData);
+		const signingClient = {
+			handleNonceCommitments,
+			createSignatureShare,
+		} as unknown as SigningClient;
+		const diff = await handleRevealedNonces(MACHINE_CONFIG, signingClient, CONSENSUS_STATE, machineStates, EVENT);
+
+		expect(diff.signing).toStrictEqual([
+			"0x5afe5afe",
+			{
+				...signingState,
+				id: "collect_signing_shares",
+				sharesFrom: [],
+				deadline: 22n,
+				lastSigner: "0x0000000000000000000000000000000000005aFE",
+			},
+		]);
+		const { chainId, safe, ...transactionData } = packet.proposal.transaction;
+		const expectedCallbackContext = encodeFunctionData({
+			abi: CONSENSUS_FUNCTIONS,
+			functionName: "attestOracleTransaction",
+			args: [packet.proposal.epoch, packet.proposal.oracle, chainId, safe, safeTxStructHash(transactionData), zeroHash],
+		});
+		expect(diff.actions).toStrictEqual([
+			{
+				id: "sign_publish_signature_share",
+				signatureId: "0x000000000000000000000000000000000000000000000000000000005af35af3",
+				callbackContext: expectedCallbackContext,
 				...signatureShareData,
 			},
 		]);

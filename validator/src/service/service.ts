@@ -108,6 +108,8 @@ export class ValidatorService {
 			verificationEngine,
 			keyGenTimeout: config.keyGenTimeout,
 			signingTimeout: config.signingTimeout,
+			allowedOracles: config.allowedOracles,
+			oracleTimeout: config.oracleTimeout,
 		});
 		this.#watcher = new OnchainTransitionWatcher({
 			publicClient: this.#publicClient,

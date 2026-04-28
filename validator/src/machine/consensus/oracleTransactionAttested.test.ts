@@ -48,6 +48,9 @@ const MESSAGE = oracleTxPacketHash(PACKET);
 const INVALID_SIGNING_STATE: SigningState = {
 	id: "waiting_for_oracle",
 	oracle: ORACLE_ADDRESS,
+	gid: "0x0000000000000000000000007fa9385be102ac3eac297483dd6233d62b3e1496",
+	signatureId: "0x5af35af300000000000000000000000000000000000000000000000000000000",
+	sequence: 0n,
 	packet: PACKET,
 	signers: [zeroAddress],
 	deadline: 100n,
