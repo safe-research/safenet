@@ -1,16 +1,35 @@
+use alloy::providers::ProviderBuilder;
 use anyhow::Result;
 
-use crate::{actions, config::ValidatorConfig, state::ValidatorState, watcher};
+use crate::{
+    actions, bindings::Consensus, config::ValidatorConfig, state::ValidatorState, watcher,
+};
 
-#[derive(Default)]
 pub struct Driver {
     state: ValidatorState,
     actions: actions::Handler,
 }
 
 impl Driver {
-    pub async fn run(&mut self, config: &ValidatorConfig) -> Result<()> {
-        watcher::run(config, |update| self.on_update(update)).await
+    async fn new(config: &ValidatorConfig) -> Result<Self> {
+        let provider = ProviderBuilder::new()
+            .connect(config.rpc_url.as_str())
+            .await?;
+        let active_epoch = Consensus::new(config.consensus_address, &provider)
+            .getActiveEpoch()
+            .call()
+            .await?
+            .epoch;
+
+        let state = ValidatorState::new(active_epoch);
+        let actions = actions::Handler;
+
+        Ok(Self { state, actions })
+    }
+
+    pub async fn run(config: ValidatorConfig) -> Result<()> {
+        let mut driver = Driver::new(&config).await?;
+        watcher::run(&config, |update| driver.on_update(update)).await
     }
 
     fn on_update(&mut self, update: watcher::Update) {

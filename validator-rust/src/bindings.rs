@@ -53,6 +53,7 @@ sol! {
     #[derive(Debug)]
     contract Consensus {
         function getCoordinator() public view returns (address);
+        function getActiveEpoch() external view returns (uint64 epoch, bytes32 groupId);
 
         event EpochStaged(
             uint64 indexed activeEpoch,

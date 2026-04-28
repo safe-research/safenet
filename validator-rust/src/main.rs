@@ -38,6 +38,5 @@ async fn main() -> Result<()> {
     let config = ValidatorConfig::from_toml(&config_toml)?;
 
     info!("validator configuration loaded");
-    let mut driver = Driver::default();
-    driver.run(&config).await
+    Driver::run(config).await
 }

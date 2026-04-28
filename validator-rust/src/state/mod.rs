@@ -3,12 +3,29 @@ use crate::{
     bindings::{Consensus, Coordinator},
 };
 
-#[derive(Default)]
+enum Phase {
+    WaitingForGenesis,
+    WaitingForRollover,
+}
+
 pub struct ValidatorState {
-    pub last_seen_block: Option<u64>,
+    last_seen_block: Option<u64>,
+    #[allow(dead_code)]
+    phase: Phase,
 }
 
 impl ValidatorState {
+    pub fn new(active_epoch: u64) -> Self {
+        Self {
+            last_seen_block: None,
+            phase: if active_epoch == 0 {
+                Phase::WaitingForGenesis
+            } else {
+                Phase::WaitingForRollover
+            },
+        }
+    }
+
     pub fn on_block(&mut self, block_number: u64) -> Vec<Action> {
         self.last_seen_block = Some(block_number);
         vec![]
