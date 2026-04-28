@@ -1,33 +1,27 @@
 use anyhow::Result;
 
-use crate::{
-    actions::Handler,
-    bindings::{Consensus, Coordinator},
-    config::ValidatorConfig,
-    state::State,
-    watcher,
-};
+use crate::{actions, config::ValidatorConfig, state::ValidatorState, watcher};
 
 #[derive(Default)]
 pub struct Driver {
-    state: State,
-    actions: Handler,
+    state: ValidatorState,
+    actions: actions::Handler,
 }
 
 impl Driver {
     pub async fn run(&mut self, config: &ValidatorConfig) -> Result<()> {
-        watcher::run(config, self).await
+        watcher::run(config, |update| self.on_update(update)).await
     }
 
-    pub fn on_block(&mut self, block_number: u64) {
-        self.actions.handle(self.state.on_block(block_number));
-    }
-
-    pub fn on_consensus_event(&mut self, event: Consensus::ConsensusEvents) {
-        self.actions.handle(self.state.on_consensus_event(event));
-    }
-
-    pub fn on_coordinator_event(&mut self, event: Coordinator::CoordinatorEvents) {
-        self.actions.handle(self.state.on_coordinator_event(event));
+    fn on_update(&mut self, update: watcher::Update) {
+        let mut actions = self.state.on_block(update.block_number);
+        for event in update.events {
+            let new_actions = match event {
+                watcher::Event::Consensus(e) => self.state.on_consensus_event(e),
+                watcher::Event::Coordinator(e) => self.state.on_coordinator_event(e),
+            };
+            actions.extend(new_actions);
+        }
+        self.actions.handle(actions);
     }
 }

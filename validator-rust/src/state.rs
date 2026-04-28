@@ -4,11 +4,11 @@ use crate::{
 };
 
 #[derive(Default)]
-pub struct State {
+pub struct ValidatorState {
     pub last_seen_block: Option<u64>,
 }
 
-impl State {
+impl ValidatorState {
     pub fn on_block(&mut self, block_number: u64) -> Vec<Action> {
         self.last_seen_block = Some(block_number);
         vec![]

@@ -9,10 +9,19 @@ use tokio_stream::StreamExt as _;
 use crate::{
     bindings::{Consensus, Coordinator},
     config::ValidatorConfig,
-    driver::Driver,
 };
 
-pub async fn run(config: &ValidatorConfig, driver: &mut Driver) -> Result<()> {
+pub struct Update {
+    pub block_number: u64,
+    pub events: Vec<Event>,
+}
+
+pub enum Event {
+    Consensus(Consensus::ConsensusEvents),
+    Coordinator(Coordinator::CoordinatorEvents),
+}
+
+pub async fn run(config: &ValidatorConfig, mut on_update: impl FnMut(Update)) -> Result<()> {
     let provider = ProviderBuilder::new()
         .connect(config.rpc_url.as_str())
         .await?;
@@ -36,20 +45,21 @@ pub async fn run(config: &ValidatorConfig, driver: &mut Driver) -> Result<()> {
                 for block_hash in blocks.context("block subscription ended")? {
                     let block = provider.get_block_by_hash(block_hash).await?.context("missing block")?;
                     tracing::trace!(?block, "new block");
-                    driver.on_block(block.header.number);
 
                     let filter = filter.clone().at_block_hash(block_hash);
                     let logs = provider.get_logs(&filter).await?;
+
+                    let mut events = Vec::with_capacity(logs.len());
                     for log in logs {
                         tracing::trace!(?log, "new log");
                         if log.address() == config.consensus_address {
-                            let event = decode_consensus_log(log)?;
-                            driver.on_consensus_event(event);
+                            events.push(Event::Consensus(decode_consensus_log(log)?));
                         } else if log.address() == coordinator_address {
-                            let event = decode_coordinator_log(log)?;
-                            driver.on_coordinator_event(event);
+                            events.push(Event::Coordinator(decode_coordinator_log(log)?));
                         }
                     }
+
+                    on_update(Update { block_number: block.header.number, events });
                 }
             }
             signal = tokio::signal::ctrl_c() => {
