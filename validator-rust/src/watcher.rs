@@ -9,10 +9,10 @@ use tokio_stream::StreamExt as _;
 use crate::{
     bindings::{Consensus, Coordinator},
     config::ValidatorConfig,
-    state::ValidatorState,
+    driver::Driver,
 };
 
-pub async fn run(config: &ValidatorConfig, state: &mut ValidatorState) -> Result<()> {
+pub async fn run(config: &ValidatorConfig, driver: &mut Driver) -> Result<()> {
     let provider = ProviderBuilder::new()
         .connect(config.rpc_url.as_str())
         .await?;
@@ -36,7 +36,7 @@ pub async fn run(config: &ValidatorConfig, state: &mut ValidatorState) -> Result
                 for block_hash in blocks.context("block subscription ended")? {
                     let block = provider.get_block_by_hash(block_hash).await?.context("missing block")?;
                     tracing::trace!(?block, "new block");
-                    state.on_block(block.header.number);
+                    driver.on_block(block.header.number);
 
                     let filter = filter.clone().at_block_hash(block_hash);
                     let logs = provider.get_logs(&filter).await?;
@@ -44,10 +44,10 @@ pub async fn run(config: &ValidatorConfig, state: &mut ValidatorState) -> Result
                         tracing::trace!(?log, "new log");
                         if log.address() == config.consensus_address {
                             let event = decode_consensus_log(log)?;
-                            state.on_consensus_event(event);
+                            driver.on_consensus_event(event);
                         } else if log.address() == coordinator_address {
                             let event = decode_coordinator_log(log)?;
-                            state.on_coordinator_event(event);
+                            driver.on_coordinator_event(event);
                         }
                     }
                 }

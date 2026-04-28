@@ -16,9 +16,11 @@ Implemented modules in `validator-rust/src/`:
 | ----------------- | ------------- | ------- | ---------------------------------------------------------------------------------- |
 | CLI & startup     | `main.rs`     | Done    | `argh` CLI, tracing init, TOML config load, watcher invocation                                     |
 | Config            | `config.rs`   | Done    | `serde` + `toml` deserialization, optional fields, `#[serde(deny_unknown_fields)]`                 |
-| Contract bindings | `bindings.rs` | Partial | All consensus + coordinator events with `Debug`; `getCoordinator()` call                            |
-| Validator state   | `state.rs`    | Partial | Tracks `last_seen_block`; receives and logs typed event enums                                       |
-| Watcher           | `watcher.rs`  | Partial | Block + log subscription; decodes logs via `SolEventInterface`; dispatches to state; no reorg handling |
+| Contract bindings | `bindings.rs` | Partial | All consensus + coordinator events with `Debug`; `getCoordinator()` call                                   |
+| Actions           | `actions.rs`  | Partial | `Action` enum (empty); `Handler` struct that processes actions produced by state transitions               |
+| State             | `state.rs`    | Partial | Tracks `last_seen_block`; handles events and returns `Vec<Action>`; logs received events                   |
+| Driver            | `driver.rs`   | Partial | Orchestrates `State` and `Handler`: receives watcher events, feeds state, dispatches produced actions      |
+| Watcher           | `watcher.rs`  | Partial | Block + log subscription; decodes logs via `SolEventInterface`; dispatches to `Driver`; no reorg handling  |
 
 Not yet ported (TypeScript → Rust):
 
