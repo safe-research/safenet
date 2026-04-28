@@ -5,6 +5,7 @@ mod driver;
 mod state;
 mod watcher;
 
+use anyhow::Result;
 use argh::FromArgs;
 use config::ValidatorConfig;
 use driver::Driver;
@@ -25,7 +26,7 @@ struct Cli {
 }
 
 #[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
+async fn main() -> Result<()> {
     let cli: Cli = argh::from_env();
 
     tracing_subscriber::fmt()
@@ -37,6 +38,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let config = ValidatorConfig::from_toml(&config_toml)?;
 
     info!("validator configuration loaded");
-    Driver::default().run(&config).await?;
-    Ok(())
+    let mut driver = Driver::default();
+    driver.run(&config).await
 }
