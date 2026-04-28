@@ -37,6 +37,7 @@ pub async fn run(config: &ValidatorConfig, mut on_update: impl FnMut(Update)) ->
         "watching for new blocks and contract logs",
     );
 
+    let mut last_block: Option<u64> = None;
     let mut blocks = provider.watch_blocks().await?.into_stream();
     let filter = Filter::new().address(vec![config.consensus_address, coordinator_address]);
     loop {
@@ -46,8 +47,19 @@ pub async fn run(config: &ValidatorConfig, mut on_update: impl FnMut(Update)) ->
                     let block = provider.get_block_by_hash(block_hash).await?.context("missing block")?;
                     tracing::trace!(?block, "new block");
 
+                    if let Some(last) = last_block {
+                        anyhow::ensure!(
+                            block.header.number == last + 1,
+                            "non-monotonic block number: expected {}, got {}",
+                            last + 1,
+                            block.header.number,
+                        );
+                    }
+                    last_block = Some(block.header.number);
+
                     let filter = filter.clone().at_block_hash(block_hash);
-                    let logs = provider.get_logs(&filter).await?;
+                    let mut logs = provider.get_logs(&filter).await?;
+                    logs.sort_unstable_by_key(|log| log.log_index);
 
                     let mut events = Vec::with_capacity(logs.len());
                     for log in logs {
