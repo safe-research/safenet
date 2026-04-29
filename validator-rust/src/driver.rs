@@ -43,7 +43,9 @@ impl Driver {
             let consensus_config = ConsensusConfig {
                 participants,
                 genesis_salt: config.genesis_salt,
-                blocks_per_epoch: config.blocks_per_epoch.unwrap_or_else(|| chain.blocks_per_epoch()),
+                blocks_per_epoch: config
+                    .blocks_per_epoch
+                    .unwrap_or_else(|| chain.blocks_per_epoch()),
             };
             ValidatorState::new(active_epoch, consensus_config)
         };

@@ -32,8 +32,10 @@ pub struct ValidatorState {
 
 impl ValidatorState {
     pub fn new(active_epoch: u64, consensus_config: ConsensusConfig) -> Self {
-        let genesis_group_id =
-            calc_genesis_group_id(&consensus_config.participants, consensus_config.genesis_salt);
+        let genesis_group_id = calc_genesis_group_id(
+            &consensus_config.participants,
+            consensus_config.genesis_salt,
+        );
         Self {
             last_seen_block: None,
             phase: if active_epoch == 0 {
