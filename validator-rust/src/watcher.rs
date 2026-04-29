@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use alloy::{
     providers::{Provider as _, ProviderBuilder},
     rpc::types::{Filter, Log},
@@ -21,7 +23,11 @@ pub enum Event {
     Coordinator(Coordinator::CoordinatorEvents),
 }
 
-pub async fn run(config: &ValidatorConfig, mut on_update: impl FnMut(Update)) -> Result<()> {
+pub async fn run(
+    config: &ValidatorConfig,
+    start_block: Option<u64>,
+    mut on_update: impl FnMut(Update),
+) -> Result<()> {
     let provider = ProviderBuilder::new()
         .connect(config.rpc_url.as_str())
         .await?;
@@ -40,6 +46,48 @@ pub async fn run(config: &ValidatorConfig, mut on_update: impl FnMut(Update)) ->
     let mut last_block: Option<u64> = None;
     let mut blocks = provider.watch_blocks().await?.into_stream();
     let filter = Filter::new().address(vec![config.consensus_address, coordinator_address]);
+
+    if let Some(from) = start_block {
+        let block_hashes = blocks.next().await.context("block subscription ended")?;
+
+        let mut to = 0u64;
+        for block_hash in &block_hashes {
+            let block = provider
+                .get_block_by_hash(*block_hash)
+                .await?
+                .context("missing block")?;
+            to = to.max(block.header.number);
+        }
+
+        let range_filter = filter.clone().from_block(from).to_block(to);
+        let mut logs = provider.get_logs(&range_filter).await?;
+        logs.sort_unstable_by_key(|log| (log.block_number, log.log_index));
+
+        let mut block_events = HashMap::<u64, Vec<Event>>::new();
+        for log in logs {
+            if let Some(block_number) = log.block_number {
+                block_events
+                    .entry(block_number)
+                    .or_default()
+                    .extend(decode_log(
+                        log,
+                        config.consensus_address,
+                        coordinator_address,
+                    )?);
+            }
+        }
+
+        for block_number in from..=to {
+            let events = block_events.remove(&block_number).unwrap_or_default();
+            on_update(Update {
+                block_number,
+                events,
+            });
+        }
+
+        last_block = Some(to);
+    }
+
     loop {
         tokio::select! {
             blocks = blocks.next() => {
@@ -64,11 +112,7 @@ pub async fn run(config: &ValidatorConfig, mut on_update: impl FnMut(Update)) ->
                     let mut events = Vec::with_capacity(logs.len());
                     for log in logs {
                         tracing::trace!(?log, "new log");
-                        if log.address() == config.consensus_address {
-                            events.push(Event::Consensus(decode_consensus_log(log)?));
-                        } else if log.address() == coordinator_address {
-                            events.push(Event::Coordinator(decode_coordinator_log(log)?));
-                        }
+                        events.extend(decode_log(log, config.consensus_address, coordinator_address)?);
                     }
 
                     on_update(Update { block_number: block.header.number, events });
@@ -83,16 +127,24 @@ pub async fn run(config: &ValidatorConfig, mut on_update: impl FnMut(Update)) ->
     }
 }
 
-fn decode_consensus_log(log: Log) -> Result<Consensus::ConsensusEvents> {
-    Ok(Consensus::ConsensusEvents::decode_log(&log.into_inner())
-        .context("failed to decode consensus log")?
-        .data)
-}
-
-fn decode_coordinator_log(log: Log) -> Result<Coordinator::CoordinatorEvents> {
-    Ok(
-        Coordinator::CoordinatorEvents::decode_log(&log.into_inner())
-            .context("failed to decode coordinator log")?
-            .data,
-    )
+fn decode_log(
+    log: Log,
+    consensus_address: alloy::primitives::Address,
+    coordinator_address: alloy::primitives::Address,
+) -> Result<Option<Event>> {
+    if log.address() == consensus_address {
+        Ok(Some(Event::Consensus(
+            Consensus::ConsensusEvents::decode_log(&log.into_inner())
+                .context("failed to decode consensus log")?
+                .data,
+        )))
+    } else if log.address() == coordinator_address {
+        Ok(Some(Event::Coordinator(
+            Coordinator::CoordinatorEvents::decode_log(&log.into_inner())
+                .context("failed to decode coordinator log")?
+                .data,
+        )))
+    } else {
+        Ok(None)
+    }
 }

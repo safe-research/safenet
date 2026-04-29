@@ -1,5 +1,5 @@
 use alloy::providers::ProviderBuilder;
-use anyhow::Result;
+use anyhow::{Context as _, Result};
 
 use crate::{
     actions,
@@ -43,10 +43,12 @@ impl Driver {
 
     pub async fn run(config: ValidatorConfig) -> Result<()> {
         let mut driver = Driver::new(&config).await?;
-        // TODO: before subscribing to new blocks, fetch and replay all blocks from
-        // `driver.state.last_seen_block + 1` up to the current chain head. This ensures
-        // we catch up on any events emitted while the validator was offline.
-        watcher::run(&config, |update| driver.on_update(update)).await
+        let start_block = driver
+            .state
+            .last_seen_block
+            .map(|b| b.checked_add(1).context("start block overflow"))
+            .transpose()?;
+        watcher::run(&config, start_block, |update| driver.on_update(update)).await
     }
 
     fn on_update(&mut self, update: watcher::Update) {
