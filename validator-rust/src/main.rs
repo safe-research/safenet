@@ -2,6 +2,7 @@ mod actions;
 mod bindings;
 mod config;
 mod driver;
+mod frost;
 mod state;
 mod watcher;
 

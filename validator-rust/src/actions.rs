@@ -1,4 +1,8 @@
-pub enum Action {}
+use alloy::primitives::B256;
+
+pub enum Action {
+    KeyGenAndCommit { gid: B256 },
+}
 
 #[derive(Default)]
 pub struct Handler;

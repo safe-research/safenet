@@ -4,13 +4,16 @@ pub use self::storage::Storage;
 use crate::{
     actions::Action,
     bindings::{Consensus, Coordinator},
+    frost::participants::calc_genesis_group_id,
 };
+use alloy::primitives::{Address, B256};
 use serde::{Deserialize, Serialize};
 
 #[derive(Serialize, Deserialize)]
 pub enum Phase {
-    WaitingForGenesis,
+    WaitingForGenesis { genesis_group_id: B256 },
     WaitingForRollover,
+    CollectingCommitments { gid: B256 },
 }
 
 #[derive(Serialize, Deserialize)]
@@ -20,11 +23,12 @@ pub struct ValidatorState {
 }
 
 impl ValidatorState {
-    pub fn new(active_epoch: u64) -> Self {
+    pub fn new(active_epoch: u64, participants: &[Address], genesis_salt: Option<B256>) -> Self {
+        let genesis_group_id = calc_genesis_group_id(participants, genesis_salt);
         Self {
             last_seen_block: None,
             phase: if active_epoch == 0 {
-                Phase::WaitingForGenesis
+                Phase::WaitingForGenesis { genesis_group_id }
             } else {
                 Phase::WaitingForRollover
             },
@@ -43,6 +47,22 @@ impl ValidatorState {
 
     pub fn on_coordinator_event(&mut self, event: Coordinator::CoordinatorEvents) -> Vec<Action> {
         tracing::info!(?event, "coordinator event");
-        vec![]
+        match event {
+            Coordinator::CoordinatorEvents::KeyGen(e) => self.on_keygen(e),
+            _ => vec![],
+        }
+    }
+
+    fn on_keygen(&mut self, event: Coordinator::KeyGen) -> Vec<Action> {
+        let Phase::WaitingForGenesis { genesis_group_id } = &self.phase else {
+            return vec![];
+        };
+        if event.gid != *genesis_group_id {
+            return vec![];
+        }
+        let gid = event.gid;
+        tracing::info!(%gid, "genesis key generation started, generating commitment");
+        self.phase = Phase::CollectingCommitments { gid };
+        vec![Action::KeyGenAndCommit { gid }]
     }
 }

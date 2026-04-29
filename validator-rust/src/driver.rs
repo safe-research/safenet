@@ -31,7 +31,14 @@ impl Driver {
                 .call()
                 .await?
                 .epoch;
-            ValidatorState::new(active_epoch)
+            let participants: Vec<_> = config
+                .participants
+                .iter()
+                .map(|p| p.address)
+                .collect::<std::collections::BTreeSet<_>>()
+                .into_iter()
+                .collect();
+            ValidatorState::new(active_epoch, &participants, config.genesis_salt)
         };
 
         Ok(Self {
