@@ -24,11 +24,20 @@ struct Cli {
     /// path to the validator TOML configuration file.
     #[argh(option, default = "PathBuf::from(\"validator.toml\")")]
     config_file: PathBuf,
+
+    /// print version information.
+    #[argh(switch)]
+    version: bool,
 }
 
 #[tokio::main]
 async fn main() -> Result<()> {
     let cli: Cli = argh::from_env();
+
+    if cli.version {
+        println!("{}", env!("CARGO_PKG_VERSION"));
+        return Ok(());
+    }
 
     tracing_subscriber::fmt()
         .with_env_filter(EnvFilter::try_new(&cli.log_level)?)
