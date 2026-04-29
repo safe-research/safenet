@@ -1,5 +1,15 @@
 use alloy::primitives::{Address, B256, keccak256};
 
+/// Generates a Merkle inclusion proof for `own_address` in the participant set.
+///
+/// The returned proof is a sequence of sibling hashes from the leaf up to (but not including)
+/// the root, matching the format expected by the FROSTCoordinator `poap` parameter.
+///
+/// Port of `generateParticipantProof` in `validator/src/consensus/merkle.ts`.
+pub fn generate_participant_proof(participants: &[Address], own_address: Address) -> Vec<B256> {
+    todo!("generate Merkle sibling-hash proof for own_address inclusion in participants")
+}
+
 /// Computes the Merkle root of a participant address set.
 ///
 /// Leaves are the participant addresses left-padded to 32 bytes (matching `pad(address)` in viem).

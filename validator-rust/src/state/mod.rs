@@ -4,13 +4,15 @@ pub use self::storage::Storage;
 use crate::{
     actions::Action,
     bindings::{Consensus, Coordinator},
-    frost::participants::calc_genesis_group_id,
+    frost::{keygen, participants},
 };
 use alloy::primitives::{Address, B256};
+use frost_secp256k1::keys::dkg::round1;
 use serde::{Deserialize, Serialize};
 
 #[derive(Serialize, Deserialize)]
 pub struct ConsensusConfig {
+    pub own_address: Address,
     pub participants: Vec<Address>,
     pub genesis_salt: Option<B256>,
     pub blocks_per_epoch: u64,
@@ -18,9 +20,14 @@ pub struct ConsensusConfig {
 
 #[derive(Serialize, Deserialize)]
 pub enum Phase {
-    WaitingForGenesis { genesis_group_id: B256 },
+    WaitingForGenesis {
+        genesis_group_id: B256,
+    },
     WaitingForRollover,
-    CollectingCommitments { gid: B256 },
+    CollectingCommitments {
+        gid: B256,
+        secret_package: round1::SecretPackage,
+    },
 }
 
 #[derive(Serialize, Deserialize)]
@@ -32,7 +39,7 @@ pub struct ValidatorState {
 
 impl ValidatorState {
     pub fn new(active_epoch: u64, consensus_config: ConsensusConfig) -> Self {
-        let genesis_group_id = calc_genesis_group_id(
+        let genesis_group_id = participants::calc_genesis_group_id(
             &consensus_config.participants,
             consensus_config.genesis_salt,
         );
@@ -72,9 +79,43 @@ impl ValidatorState {
         if event.gid != *genesis_group_id {
             return vec![];
         }
+
         let gid = event.gid;
-        tracing::info!(%gid, "genesis key generation started, generating commitment");
-        self.phase = Phase::CollectingCommitments { gid };
-        vec![Action::KeyGenAndCommit { gid }]
+        let config = &self.consensus_config;
+
+        if !config.participants.contains(&config.own_address) {
+            tracing::info!(%gid, "not a participant in genesis keygen");
+            self.phase = Phase::WaitingForRollover;
+            return vec![];
+        }
+
+        let identifier = keygen::identifier_from_address(config.own_address);
+        let (secret_package, commitment) =
+            match keygen::generate_round1(identifier, event.count, event.threshold) {
+                Ok(result) => result,
+                Err(err) => {
+                    tracing::error!(%err, "DKG round 1 failed");
+                    return vec![];
+                }
+            };
+
+        let poap =
+            participants::generate_participant_proof(&config.participants, config.own_address);
+
+        tracing::info!(%gid, "genesis keygen triggered, publishing commitment");
+        self.phase = Phase::CollectingCommitments {
+            gid,
+            secret_package,
+        };
+
+        vec![Action::KeyGenAndCommit {
+            gid,
+            participants_root: event.participants,
+            count: event.count,
+            threshold: event.threshold,
+            context: event.context,
+            poap,
+            commitment,
+        }]
     }
 }

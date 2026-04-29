@@ -1,4 +1,7 @@
-use alloy::providers::{Provider as _, ProviderBuilder};
+use alloy::{
+    providers::{Provider as _, ProviderBuilder},
+    signers::local::PrivateKeySigner,
+};
 use anyhow::{Context as _, Result};
 
 use crate::{
@@ -33,6 +36,7 @@ impl Driver {
                 .await?
                 .epoch;
             let chain = Chain::new(provider.get_chain_id().await?)?;
+            let own_address = PrivateKeySigner::from_bytes(&config.private_key)?.address();
             let participants = config
                 .participants
                 .iter()
@@ -41,6 +45,7 @@ impl Driver {
                 .into_iter()
                 .collect();
             let consensus_config = ConsensusConfig {
+                own_address,
                 participants,
                 genesis_salt: config.genesis_salt,
                 blocks_per_epoch: config

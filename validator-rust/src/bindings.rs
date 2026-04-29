@@ -91,8 +91,18 @@ sol! {
         );
     }
 
+    #[sol(rpc)]
     #[derive(Debug)]
     contract Coordinator {
+        function keyGenAndCommit(
+            bytes32 participants,
+            uint16 count,
+            uint16 threshold,
+            bytes32 context,
+            bytes32[] poap,
+            KeyGenCommitment commitment
+        ) external;
+
 
         event Sign(
             address indexed initiator,

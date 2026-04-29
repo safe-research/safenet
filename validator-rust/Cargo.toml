@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-alloy = "2"
+alloy = { version = "2", features = ["signer-local"] }
 anyhow = "1"
 argh = "0.1"
 frost-secp256k1 = "3"
