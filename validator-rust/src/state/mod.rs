@@ -10,6 +10,13 @@ use alloy::primitives::{Address, B256};
 use serde::{Deserialize, Serialize};
 
 #[derive(Serialize, Deserialize)]
+pub struct ConsensusConfig {
+    pub participants: Vec<Address>,
+    pub genesis_salt: Option<B256>,
+    pub blocks_per_epoch: u64,
+}
+
+#[derive(Serialize, Deserialize)]
 pub enum Phase {
     WaitingForGenesis { genesis_group_id: B256 },
     WaitingForRollover,
@@ -20,11 +27,13 @@ pub enum Phase {
 pub struct ValidatorState {
     pub last_seen_block: Option<u64>,
     pub phase: Phase,
+    pub consensus_config: ConsensusConfig,
 }
 
 impl ValidatorState {
-    pub fn new(active_epoch: u64, participants: &[Address], genesis_salt: Option<B256>) -> Self {
-        let genesis_group_id = calc_genesis_group_id(participants, genesis_salt);
+    pub fn new(active_epoch: u64, consensus_config: ConsensusConfig) -> Self {
+        let genesis_group_id =
+            calc_genesis_group_id(&consensus_config.participants, consensus_config.genesis_salt);
         Self {
             last_seen_block: None,
             phase: if active_epoch == 0 {
@@ -32,6 +41,7 @@ impl ValidatorState {
             } else {
                 Phase::WaitingForRollover
             },
+            consensus_config,
         }
     }
 

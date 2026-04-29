@@ -1,5 +1,6 @@
 mod actions;
 mod bindings;
+mod chain;
 mod config;
 mod driver;
 mod frost;

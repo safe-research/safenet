@@ -1,11 +1,12 @@
-use alloy::providers::ProviderBuilder;
+use alloy::providers::{Provider as _, ProviderBuilder};
 use anyhow::{Context as _, Result};
 
 use crate::{
     actions,
     bindings::Consensus,
+    chain::Chain,
     config::ValidatorConfig,
-    state::{self, ValidatorState},
+    state::{self, ConsensusConfig, ValidatorState},
     watcher,
 };
 
@@ -31,14 +32,20 @@ impl Driver {
                 .call()
                 .await?
                 .epoch;
-            let participants: Vec<_> = config
+            let chain = Chain::new(provider.get_chain_id().await?)?;
+            let participants = config
                 .participants
                 .iter()
                 .map(|p| p.address)
                 .collect::<std::collections::BTreeSet<_>>()
                 .into_iter()
                 .collect();
-            ValidatorState::new(active_epoch, &participants, config.genesis_salt)
+            let consensus_config = ConsensusConfig {
+                participants,
+                genesis_salt: config.genesis_salt,
+                blocks_per_epoch: config.blocks_per_epoch.unwrap_or_else(|| chain.blocks_per_epoch()),
+            };
+            ValidatorState::new(active_epoch, consensus_config)
         };
 
         Ok(Self {
