@@ -58,7 +58,8 @@ contract SafenetGuardB is BaseGuard {
 
     /**
      * @notice Per-`(safe, module, tx-params)` execution sequence counter.
-     * @dev The key is `keccak256(abi.encode(safe, module, to, value, data, operation))`.
+     * @dev The key is `keccak256(abi.encode(safe, module, to, value, keccak256(data), operation))`.
+     *      `data` is pre-hashed to avoid a large memory copy on every call site.
      *      The key intentionally includes the full tx-param tuple rather than just `(safe, module)`.
      *      A per-module counter would serialise all operations from a module onto a single sequence:
      *      if two different tx-param combinations are attested at consecutive nonces (e.g. TxA at
@@ -213,7 +214,7 @@ contract SafenetGuardB is BaseGuard {
         FROST.Signature calldata signature
     ) external {
         // forge-lint: disable-next-line(asm-keccak256)
-        bytes32 moduleNonceKey = keccak256(abi.encode(safe, module, to, value, data, operation));
+        bytes32 moduleNonceKey = keccak256(abi.encode(safe, module, to, value, keccak256(data), operation));
         uint64 nonce = $moduleNonces[moduleNonceKey];
         bytes32 moduleTxHash = _moduleTransactionHash(safe, to, value, data, operation, _packedModuleNonce(nonce, module));
         require($attestations[moduleTxHash] == bytes32(0), AttestationAlreadySubmitted());
@@ -253,7 +254,7 @@ contract SafenetGuardB is BaseGuard {
         Enum.Operation operation
     ) external {
         // forge-lint: disable-next-line(asm-keccak256)
-        bytes32 moduleNonceKey = keccak256(abi.encode(msg.sender, module, to, value, data, operation));
+        bytes32 moduleNonceKey = keccak256(abi.encode(msg.sender, module, to, value, keccak256(data), operation));
         uint64 nonce = $moduleNonces[moduleNonceKey];
         bytes32 moduleTxHash = _moduleTransactionHash(msg.sender, to, value, data, operation, _packedModuleNonce(nonce, module));
         bytes32 sigId = $attestations[moduleTxHash];
@@ -368,7 +369,7 @@ contract SafenetGuardB is BaseGuard {
         if (_isAutoAllowed(to, value, data, operation)) return bytes32(0);
 
         // forge-lint: disable-next-line(asm-keccak256)
-        bytes32 moduleNonceKey = keccak256(abi.encode(msg.sender, module, to, value, data, operation));
+        bytes32 moduleNonceKey = keccak256(abi.encode(msg.sender, module, to, value, keccak256(data), operation));
         uint64 nonce = $moduleNonces[moduleNonceKey];
         moduleTxHash = _moduleTransactionHash(msg.sender, to, value, data, operation, _packedModuleNonce(nonce, module));
 
@@ -433,7 +434,7 @@ contract SafenetGuardB is BaseGuard {
         Enum.Operation operation
     ) external view returns (uint64 nonce) {
         // forge-lint: disable-next-line(asm-keccak256)
-        return $moduleNonces[keccak256(abi.encode(safe, module, to, value, data, operation))];
+        return $moduleNonces[keccak256(abi.encode(safe, module, to, value, keccak256(data), operation))];
     }
 
     function getAllowedTxTimestamp(address safe, bytes32 safeTxHash) external view returns (uint256 executableAt) {
