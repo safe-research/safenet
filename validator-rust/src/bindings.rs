@@ -1,7 +1,7 @@
 use alloy::sol;
 
 sol! {
-    #[derive(Debug)]
+    #[derive(Debug, Default)]
     struct Point {
         uint256 x;
         uint256 y;

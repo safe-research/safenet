@@ -2429,6 +2429,7 @@ dependencies = [
  "once_cell",
  "serdect",
  "sha2",
+ "signature",
 ]
 
 [[package]]
@@ -4310,6 +4311,7 @@ dependencies = [
  "anyhow",
  "argh",
  "frost-secp256k1",
+ "k256",
  "rusqlite",
  "serde",
  "serde_json",

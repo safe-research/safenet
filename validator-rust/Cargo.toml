@@ -8,6 +8,7 @@ alloy = { version = "2", features = ["signer-local"] }
 anyhow = "1"
 argh = "0.1"
 frost-secp256k1 = "3"
+k256 = "0.13"
 rusqlite = { version = "0.39.0", features = ["bundled"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"

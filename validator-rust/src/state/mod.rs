@@ -83,13 +83,15 @@ impl ValidatorState {
         let gid = event.gid;
         let config = &self.consensus_config;
 
-        if !config.participants.contains(&config.own_address) {
+        let Some(poap) =
+            participants::generate_participant_proof(&config.participants, config.own_address)
+        else {
             tracing::info!(%gid, "not a participant in genesis keygen");
             self.phase = Phase::WaitingForRollover;
             return vec![];
-        }
+        };
 
-        let identifier = keygen::identifier_from_address(config.own_address);
+        let identifier = participants::identifier(config.own_address);
         let (secret_package, commitment) =
             match keygen::generate_round1(identifier, event.count, event.threshold) {
                 Ok(result) => result,
@@ -98,9 +100,6 @@ impl ValidatorState {
                     return vec![];
                 }
             };
-
-        let poap =
-            participants::generate_participant_proof(&config.participants, config.own_address);
 
         tracing::info!(%gid, "genesis keygen triggered, publishing commitment");
         self.phase = Phase::CollectingCommitments {
