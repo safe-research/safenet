@@ -47,7 +47,7 @@ pub fn calc_genesis_group_id(participants: &[Address], genesis_salt: Option<B256
         let mut packed = [0u8; 39];
         packed[..7].copy_from_slice(b"genesis");
         packed[7..].copy_from_slice(genesis_salt.as_slice());
-        keccak256(&packed).into()
+        keccak256(packed.as_slice())
     };
 
     let root = calc_participants_root(participants);
@@ -62,7 +62,7 @@ pub fn calc_genesis_group_id(participants: &[Address], genesis_salt: Option<B256
     buf[96..128].copy_from_slice(context.as_slice());
 
     // Mask the last 8 bytes to zero (matching the & 0xfff...fff0000000000000000 in the TS source).
-    let mut gid: [u8; 32] = *keccak256(&buf);
+    let mut gid: [u8; 32] = keccak256(buf.as_slice()).into();
     gid[24..].fill(0);
     B256::from(gid)
 }
@@ -79,7 +79,7 @@ fn sorted_participant_leaves(participants: &[Address]) -> Vec<B256> {
 fn merkle_root(leaves: Vec<B256>) -> B256 {
     build_merkle_tree(leaves)
         .last()
-        .and_then(|r| r.get(0))
+        .and_then(|r| r.first())
         .copied()
         .unwrap_or_default()
 }
@@ -101,7 +101,7 @@ fn build_merkle_tree(leaves: Vec<B256>) -> Vec<Vec<B256>> {
     let mut tree = vec![leaves.to_vec()];
     while tree.last().unwrap().len() > 1 {
         let level = tree.last().unwrap();
-        let pairs = (level.len() + 1) / 2;
+        let pairs = level.len().div_ceil(2);
         let mut next = Vec::with_capacity(pairs);
         for i in 0..pairs {
             let a = level.get(i * 2).copied().unwrap_or(B256::ZERO);
@@ -110,7 +110,7 @@ fn build_merkle_tree(leaves: Vec<B256>) -> Vec<Vec<B256>> {
             let mut data = [0u8; 64];
             data[..32].copy_from_slice(left.as_slice());
             data[32..].copy_from_slice(right.as_slice());
-            next.push(keccak256(&data).into());
+            next.push(keccak256(data.as_slice()));
         }
         tree.push(next);
     }
@@ -121,7 +121,6 @@ fn build_merkle_tree(leaves: Vec<B256>) -> Vec<Vec<B256>> {
 mod tests {
     use super::*;
     use alloy::primitives::address;
-    use std::str::FromStr;
 
     #[test]
     fn can_derive_frost_identifier() {

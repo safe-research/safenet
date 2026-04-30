@@ -1,17 +1,16 @@
 use std::collections::HashMap;
 
+use crate::{
+    bindings::{Consensus, Coordinator},
+    config::{addresses::Addresses, provider::Provider},
+};
 use alloy::{
-    providers::{Provider as _, ProviderBuilder},
+    providers::Provider as _,
     rpc::types::{Filter, Log},
     sol_types::SolEventInterface,
 };
 use anyhow::{Context as _, Result};
 use tokio_stream::StreamExt as _;
-
-use crate::{
-    bindings::{Consensus, Coordinator},
-    config::ValidatorConfig,
-};
 
 pub struct Update {
     pub block_number: u64,
@@ -24,28 +23,20 @@ pub enum Event {
 }
 
 pub async fn run(
-    config: &ValidatorConfig,
+    provider: Provider,
+    addresses: Addresses,
     start_block: Option<u64>,
     mut on_update: impl FnMut(Update),
 ) -> Result<()> {
-    let provider = ProviderBuilder::new()
-        .connect(config.rpc_url.as_str())
-        .await?;
-    let coordinator_address = Consensus::new(config.consensus_address, &provider)
-        .getCoordinator()
-        .call()
-        .await?;
-
     tracing::info!(
-        rpc_url = %config.rpc_url,
-        consensus = %config.consensus_address,
-        coordinator = %coordinator_address,
+        consensus = %addresses.consensus,
+        coordinator = %addresses.coordinator,
         "watching for new blocks and contract logs",
     );
 
     let mut last_block: Option<u64> = None;
     let mut blocks = provider.watch_blocks().await?.into_stream();
-    let filter = Filter::new().address(vec![config.consensus_address, coordinator_address]);
+    let filter = Filter::new().address(vec![addresses.consensus, addresses.coordinator]);
 
     if let Some(from) = start_block {
         let block_hashes = blocks.next().await.context("block subscription ended")?;
@@ -69,11 +60,7 @@ pub async fn run(
                 block_events
                     .entry(block_number)
                     .or_default()
-                    .extend(decode_log(
-                        log,
-                        config.consensus_address,
-                        coordinator_address,
-                    )?);
+                    .extend(decode_log(&addresses, log)?);
             }
         }
 
@@ -112,7 +99,7 @@ pub async fn run(
                     let mut events = Vec::with_capacity(logs.len());
                     for log in logs {
                         tracing::trace!(?log, "new log");
-                        events.extend(decode_log(log, config.consensus_address, coordinator_address)?);
+                        events.extend(decode_log(&addresses, log)?);
                     }
 
                     on_update(Update { block_number: block.header.number, events });
@@ -127,18 +114,14 @@ pub async fn run(
     }
 }
 
-fn decode_log(
-    log: Log,
-    consensus_address: alloy::primitives::Address,
-    coordinator_address: alloy::primitives::Address,
-) -> Result<Option<Event>> {
-    if log.address() == consensus_address {
+fn decode_log(addresses: &Addresses, log: Log) -> Result<Option<Event>> {
+    if log.address() == addresses.consensus {
         Ok(Some(Event::Consensus(
             Consensus::ConsensusEvents::decode_log(&log.into_inner())
                 .context("failed to decode consensus log")?
                 .data,
         )))
-    } else if log.address() == coordinator_address {
+    } else if log.address() == addresses.coordinator {
         Ok(Some(Event::Coordinator(
             Coordinator::CoordinatorEvents::decode_log(&log.into_inner())
                 .context("failed to decode coordinator log")?

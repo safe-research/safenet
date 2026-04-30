@@ -1,16 +1,14 @@
 mod actions;
 mod bindings;
-mod chain;
 mod config;
 mod driver;
 mod frost;
 mod state;
 mod watcher;
 
+use self::config::ValidatorConfig;
 use anyhow::Result;
 use argh::FromArgs;
-use config::ValidatorConfig;
-use driver::Driver;
 use std::path::PathBuf;
 use tracing::{debug, info};
 use tracing_subscriber::EnvFilter;
@@ -49,5 +47,5 @@ async fn main() -> Result<()> {
     let config = ValidatorConfig::from_toml(&config_toml)?;
 
     info!("validator configuration loaded");
-    Driver::run(config).await
+    driver::run(config).await
 }

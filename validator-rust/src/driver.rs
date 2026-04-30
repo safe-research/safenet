@@ -1,14 +1,10 @@
-use alloy::{
-    providers::{Provider as _, ProviderBuilder},
-    signers::local::PrivateKeySigner,
-};
+use alloy::signers::local::PrivateKeySigner;
 use anyhow::{Context as _, Result};
 
 use crate::{
     actions,
     bindings::Consensus,
-    chain::Chain,
-    config::ValidatorConfig,
+    config::{ValidatorConfig, addresses::Addresses, chain::Chain, provider},
     state::{self, ConsensusConfig, ValidatorState},
     watcher,
 };
@@ -20,58 +16,6 @@ pub struct Driver {
 }
 
 impl Driver {
-    async fn new(config: &ValidatorConfig) -> Result<Self> {
-        let storage = state::Storage::open(config.storage_file.as_deref(), config.state_history)?;
-
-        let state = if let Some(saved) = storage.load_latest()? {
-            tracing::info!("restored validator state from storage");
-            saved
-        } else {
-            let provider = ProviderBuilder::new()
-                .connect(config.rpc_url.as_str())
-                .await?;
-            let active_epoch = Consensus::new(config.consensus_address, &provider)
-                .getActiveEpoch()
-                .call()
-                .await?
-                .epoch;
-            let chain = Chain::new(provider.get_chain_id().await?)?;
-            let own_address = PrivateKeySigner::from_bytes(&config.private_key)?.address();
-            let participants = config
-                .participants
-                .iter()
-                .map(|p| p.address)
-                .collect::<std::collections::BTreeSet<_>>()
-                .into_iter()
-                .collect();
-            let consensus_config = ConsensusConfig {
-                own_address,
-                participants,
-                genesis_salt: config.genesis_salt,
-                blocks_per_epoch: config
-                    .blocks_per_epoch
-                    .unwrap_or_else(|| chain.blocks_per_epoch()),
-            };
-            ValidatorState::new(active_epoch, consensus_config)
-        };
-
-        Ok(Self {
-            state,
-            actions: actions::Handler,
-            storage,
-        })
-    }
-
-    pub async fn run(config: ValidatorConfig) -> Result<()> {
-        let mut driver = Driver::new(&config).await?;
-        let start_block = driver
-            .state
-            .last_seen_block
-            .map(|b| b.checked_add(1).context("start block overflow"))
-            .transpose()?;
-        watcher::run(&config, start_block, |update| driver.on_update(update)).await
-    }
-
     fn on_update(&mut self, update: watcher::Update) {
         let mut actions = self.state.on_block(update.block_number);
         for event in update.events {
@@ -87,4 +31,49 @@ impl Driver {
             tracing::warn!(%err, block = %update.block_number, "failed to persist validator state");
         }
     }
+}
+
+pub async fn run(config: ValidatorConfig) -> Result<()> {
+    let provider = provider::create(config.rpc_url);
+    let signer = PrivateKeySigner::from_bytes(&config.private_key)?;
+    let chain = Chain::load(&provider).await?;
+    let addresses = Addresses::load(&provider, config.consensus_address).await?;
+
+    let storage = state::Storage::open(config.storage_file.as_deref(), config.state_history)?;
+    let state = if let Some(saved) = storage.load_latest()? {
+        tracing::info!("restored validator state from storage");
+        saved
+    } else {
+        let active_epoch = Consensus::new(config.consensus_address, &provider)
+            .getActiveEpoch()
+            .call()
+            .await?
+            .epoch;
+        let participants = config.participants.iter().map(|p| p.address).collect();
+        let consensus_config = ConsensusConfig {
+            participants,
+            own_address: signer.address(),
+            genesis_salt: config.genesis_salt,
+            blocks_per_epoch: config
+                .blocks_per_epoch
+                .unwrap_or_else(|| chain.blocks_per_epoch()),
+        };
+        ValidatorState::new(active_epoch, consensus_config)
+    };
+    let actions = actions::Handler::new(provider.clone(), signer, chain, addresses);
+    let mut driver = Driver {
+        state,
+        actions,
+        storage,
+    };
+
+    let start_block = driver
+        .state
+        .last_seen_block
+        .map(|b| b.checked_add(1).context("start block overflow"))
+        .transpose()?;
+    watcher::run(provider, addresses, start_block, |update| {
+        driver.on_update(update)
+    })
+    .await
 }

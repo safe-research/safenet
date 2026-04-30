@@ -1,8 +1,11 @@
-use std::num::NonZeroU64;
-use std::path::PathBuf;
+pub mod addresses;
+pub mod chain;
+pub mod provider;
 
 use alloy::primitives::{Address, B256};
 use serde::Deserialize;
+use std::num::NonZeroU64;
+use std::path::PathBuf;
 use url::Url;
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]

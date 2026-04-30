@@ -108,8 +108,7 @@ impl ValidatorState {
         };
 
         vec![Action::KeyGenAndCommit {
-            gid,
-            participants_root: event.participants,
+            participants: event.participants,
             count: event.count,
             threshold: event.threshold,
             context: event.context,
