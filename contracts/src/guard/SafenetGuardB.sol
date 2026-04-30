@@ -216,7 +216,8 @@ contract SafenetGuardB is BaseGuard {
         // forge-lint: disable-next-line(asm-keccak256)
         bytes32 moduleNonceKey = keccak256(abi.encode(safe, module, to, value, keccak256(data), operation));
         uint64 nonce = $moduleNonces[moduleNonceKey];
-        bytes32 moduleTxHash = _moduleTransactionHash(safe, to, value, data, operation, _packedModuleNonce(nonce, module));
+        bytes32 moduleTxHash =
+            _moduleTransactionHash(safe, to, value, data, operation, _packedModuleNonce(nonce, module));
         require($attestations[moduleTxHash] == bytes32(0), AttestationAlreadySubmitted());
         // forge-lint: disable-next-line(asm-keccak256)
         bytes32 sigId = keccak256(abi.encode(signature.r.x, signature.r.y, signature.z));
@@ -256,7 +257,8 @@ contract SafenetGuardB is BaseGuard {
         // forge-lint: disable-next-line(asm-keccak256)
         bytes32 moduleNonceKey = keccak256(abi.encode(msg.sender, module, to, value, keccak256(data), operation));
         uint64 nonce = $moduleNonces[moduleNonceKey];
-        bytes32 moduleTxHash = _moduleTransactionHash(msg.sender, to, value, data, operation, _packedModuleNonce(nonce, module));
+        bytes32 moduleTxHash =
+            _moduleTransactionHash(msg.sender, to, value, data, operation, _packedModuleNonce(nonce, module));
         bytes32 sigId = $attestations[moduleTxHash];
         require(sigId != bytes32(0), NoModuleAttestationPending());
         delete $attestations[moduleTxHash];
