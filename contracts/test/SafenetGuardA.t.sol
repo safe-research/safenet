@@ -11,14 +11,14 @@ import {ISafe} from "@safe/interfaces/ISafe.sol";
 import {IGuardManager} from "@safe/interfaces/IGuardManager.sol";
 import {Safe} from "@safe/Safe.sol";
 import {SafeProxyFactory} from "@safe/proxies/SafeProxyFactory.sol";
-import {SafenetGuard} from "@/guard/SafenetGuardA.sol";
+import {SafenetGuardA} from "@/guard/SafenetGuardA.sol";
 import {ForgeSecp256k1} from "@test/util/ForgeSecp256k1.sol";
 import {MockERC1271} from "@test/util/MockERC1271.sol";
 
 contract SafenetGuardTest is Test {
     using ForgeSecp256k1 for ForgeSecp256k1.P;
 
-    SafenetGuard public guard;
+    SafenetGuardA public guard;
 
     // ============================================================
     // CONSTANTS — DEPLOYMENT
@@ -81,7 +81,7 @@ contract SafenetGuardTest is Test {
 
         // Deploy guard
         Secp256k1.Point memory groupKey = ForgeSecp256k1.g(GROUP_SK).toPoint();
-        guard = new SafenetGuard(CONSENSUS_CHAIN_ID, CONSENSUS_ADDR, INITIAL_EPOCH, groupKey, ALLOW_TX_DELAY_SECONDS);
+        guard = new SafenetGuardA(CONSENSUS_CHAIN_ID, CONSENSUS_ADDR, INITIAL_EPOCH, groupKey, ALLOW_TX_DELAY_SECONDS);
 
         // Install transaction guard (no guard active yet — executes directly)
         _execSafeTx(
@@ -194,7 +194,7 @@ contract SafenetGuardTest is Test {
     ///      Callers that need to reference the subsequent tx hash should compute it at nonce + 1.
     function _allowTransaction(bytes32 safeTxHash) internal {
         uint256 nonce = safe.nonce();
-        bytes memory data = abi.encodeCall(SafenetGuard.allowTransaction, (safeTxHash));
+        bytes memory data = abi.encodeCall(SafenetGuardA.allowTransaction, (safeTxHash));
         _execSafeTxWithNonce(address(guard), 0, data, Enum.Operation.Call, nonce);
     }
 
@@ -204,21 +204,21 @@ contract SafenetGuardTest is Test {
 
     function test_constructor_revertsOnZeroConsensusAddress() public {
         Secp256k1.Point memory key = ForgeSecp256k1.g(GROUP_SK).toPoint();
-        vm.expectRevert(SafenetGuard.InvalidAddress.selector);
-        new SafenetGuard(CONSENSUS_CHAIN_ID, address(0), INITIAL_EPOCH, key, ALLOW_TX_DELAY_SECONDS);
+        vm.expectRevert(SafenetGuardA.InvalidAddress.selector);
+        new SafenetGuardA(CONSENSUS_CHAIN_ID, address(0), INITIAL_EPOCH, key, ALLOW_TX_DELAY_SECONDS);
     }
 
     function test_constructor_revertsOnInvalidGroupKey() public {
         vm.expectRevert(Secp256k1.NotOnCurve.selector);
-        new SafenetGuard(
+        new SafenetGuardA(
             CONSENSUS_CHAIN_ID, CONSENSUS_ADDR, INITIAL_EPOCH, Secp256k1.Point({x: 0, y: 0}), ALLOW_TX_DELAY_SECONDS
         );
     }
 
     function test_constructor_revertsOnZeroAllowTxDelay() public {
         Secp256k1.Point memory key = ForgeSecp256k1.g(GROUP_SK).toPoint();
-        vm.expectRevert(SafenetGuard.InvalidParameter.selector);
-        new SafenetGuard(CONSENSUS_CHAIN_ID, CONSENSUS_ADDR, INITIAL_EPOCH, key, 0);
+        vm.expectRevert(SafenetGuardA.InvalidParameter.selector);
+        new SafenetGuardA(CONSENSUS_CHAIN_ID, CONSENSUS_ADDR, INITIAL_EPOCH, key, 0);
     }
 
     function test_constructor_setsState() public view {
@@ -232,8 +232,8 @@ contract SafenetGuardTest is Test {
     function test_constructor_emitsEpochUpdated() public {
         Secp256k1.Point memory key = ForgeSecp256k1.g(GROUP_SK).toPoint();
         vm.expectEmit(true, true, false, true);
-        emit SafenetGuard.EpochUpdated(0, INITIAL_EPOCH, key);
-        new SafenetGuard(CONSENSUS_CHAIN_ID, CONSENSUS_ADDR, INITIAL_EPOCH, key, ALLOW_TX_DELAY_SECONDS);
+        emit SafenetGuardA.EpochUpdated(0, INITIAL_EPOCH, key);
+        new SafenetGuardA(CONSENSUS_CHAIN_ID, CONSENSUS_ADDR, INITIAL_EPOCH, key, ALLOW_TX_DELAY_SECONDS);
     }
 
     // ============================================================
@@ -258,7 +258,7 @@ contract SafenetGuardTest is Test {
 
     function test_checkTransaction_revertsWhenNoAttestation() public {
         uint256 nonce = safe.nonce();
-        vm.expectRevert(SafenetGuard.AttestationNotFound.selector);
+        vm.expectRevert(SafenetGuardA.AttestationNotFound.selector);
         _execSafeTxWithNonce(TX_TO, TX_VALUE, TX_DATA, TX_OP, nonce);
     }
 
@@ -274,7 +274,7 @@ contract SafenetGuardTest is Test {
         bytes memory attestation = abi.encode(uint64(99), sig);
         bytes memory combined =
             bytes.concat(_signSafeTx(txHash), abi.encodePacked(attestation, bytes32(attestation.length)));
-        vm.expectRevert(SafenetGuard.InvalidEpoch.selector);
+        vm.expectRevert(SafenetGuardA.InvalidEpoch.selector);
         safe.execTransaction(TX_TO, TX_VALUE, TX_DATA, TX_OP, 0, 0, 0, address(0), payable(address(0)), combined);
     }
 
@@ -282,7 +282,7 @@ contract SafenetGuardTest is Test {
         // to=guard, value=0, data=allowTransaction(hash), op=Call — no attestation needed
         bytes32 anyHash = keccak256("any");
         assertEq(guard.getAllowedTxTimestamp(address(safe), anyHash), 0);
-        bytes memory data = abi.encodeCall(SafenetGuard.allowTransaction, (anyHash));
+        bytes memory data = abi.encodeCall(SafenetGuardA.allowTransaction, (anyHash));
         _execSafeTx(address(guard), 0, data, Enum.Operation.Call, ExecMode.Direct); // auto-allowed
         // The allowTransaction body ran with msg.sender == safe — allowance must be registered
         assertGt(guard.getAllowedTxTimestamp(address(safe), anyHash), 0);
@@ -292,36 +292,36 @@ contract SafenetGuardTest is Test {
         // Pre-register an allowance so cancelAllowTransaction's inner call succeeds
         bytes32 anyHash = keccak256("any");
         _allowTransaction(anyHash);
-        bytes memory data = abi.encodeCall(SafenetGuard.cancelAllowTransaction, (anyHash));
+        bytes memory data = abi.encodeCall(SafenetGuardA.cancelAllowTransaction, (anyHash));
         _execSafeTx(address(guard), 0, data, Enum.Operation.Call, ExecMode.Direct); // auto-allowed
     }
 
     function test_checkTransaction_doesNotAutoAllowDelegatecall() public {
         bytes32 anyHash = keccak256("any");
-        bytes memory data = abi.encodeCall(SafenetGuard.allowTransaction, (anyHash));
+        bytes memory data = abi.encodeCall(SafenetGuardA.allowTransaction, (anyHash));
         uint256 nonce = safe.nonce();
-        vm.expectRevert(SafenetGuard.AttestationNotFound.selector);
+        vm.expectRevert(SafenetGuardA.AttestationNotFound.selector);
         _execSafeTxWithNonce(address(guard), 0, data, Enum.Operation.DelegateCall, nonce);
     }
 
     function test_checkTransaction_doesNotAutoAllowNonZeroValue() public {
-        bytes memory data = abi.encodeCall(SafenetGuard.allowTransaction, (keccak256("any")));
+        bytes memory data = abi.encodeCall(SafenetGuardA.allowTransaction, (keccak256("any")));
         uint256 nonce = safe.nonce();
-        vm.expectRevert(SafenetGuard.AttestationNotFound.selector);
+        vm.expectRevert(SafenetGuardA.AttestationNotFound.selector);
         _execSafeTxWithNonce(address(guard), 1, data, Enum.Operation.Call, nonce);
     }
 
     function test_checkTransaction_doesNotAutoAllowShortData() public {
         uint256 nonce = safe.nonce();
-        vm.expectRevert(SafenetGuard.AttestationNotFound.selector);
+        vm.expectRevert(SafenetGuardA.AttestationNotFound.selector);
         _execSafeTxWithNonce(address(guard), 0, hex"aabbcc", Enum.Operation.Call, nonce); // 3 bytes < 4
     }
 
     function test_checkTransaction_doesNotAutoAllowOtherSelectors() public {
         // updateEpoch selector is not auto-allowed
-        bytes memory data = abi.encodeWithSelector(SafenetGuard.updateEpoch.selector, uint64(0), uint64(0));
+        bytes memory data = abi.encodeWithSelector(SafenetGuardA.updateEpoch.selector, uint64(0), uint64(0));
         uint256 nonce = safe.nonce();
-        vm.expectRevert(SafenetGuard.AttestationNotFound.selector);
+        vm.expectRevert(SafenetGuardA.AttestationNotFound.selector);
         _execSafeTxWithNonce(address(guard), 0, data, Enum.Operation.Call, nonce);
     }
 
@@ -337,7 +337,7 @@ contract SafenetGuardTest is Test {
         bytes32 safeTxHash = _safeTxHash(TX_TO, TX_VALUE, TX_DATA, TX_OP, nonce);
         _allowTransaction(safeTxHash);
         vm.warp(block.timestamp + ALLOW_TX_DELAY_SECONDS - 1);
-        vm.expectRevert(SafenetGuard.AttestationNotFound.selector);
+        vm.expectRevert(SafenetGuardA.AttestationNotFound.selector);
         _execSafeTxWithNonce(TX_TO, TX_VALUE, TX_DATA, TX_OP, nonce);
     }
 
@@ -355,7 +355,7 @@ contract SafenetGuardTest is Test {
         _allowTransaction(safeTxHash);
         vm.warp(block.timestamp + ALLOW_TX_DELAY_SECONDS);
         vm.expectEmit(true, true, false, false);
-        emit SafenetGuard.TransactionExecutedViaAllowance(address(safe), safeTxHash);
+        emit SafenetGuardA.TransactionExecutedViaAllowance(address(safe), safeTxHash);
         _execSafeTx(TX_TO, TX_VALUE, TX_DATA, TX_OP, ExecMode.Direct);
     }
 
@@ -374,8 +374,8 @@ contract SafenetGuardTest is Test {
         bytes32 safeTxHash = keccak256("tx");
         _allowTransaction(safeTxHash);
         uint256 nonce = safe.nonce();
-        bytes memory data = abi.encodeCall(SafenetGuard.allowTransaction, (safeTxHash));
-        vm.expectRevert(SafenetGuard.TransactionAlreadyAllowed.selector);
+        bytes memory data = abi.encodeCall(SafenetGuardA.allowTransaction, (safeTxHash));
+        vm.expectRevert(SafenetGuardA.TransactionAlreadyAllowed.selector);
         _execSafeTxWithNonce(address(guard), 0, data, Enum.Operation.Call, nonce);
     }
 
@@ -383,7 +383,7 @@ contract SafenetGuardTest is Test {
         bytes32 safeTxHash = keccak256("tx");
         uint256 expectedAt = block.timestamp + ALLOW_TX_DELAY_SECONDS;
         vm.expectEmit(true, true, false, true);
-        emit SafenetGuard.TransactionAllowed(address(safe), safeTxHash, expectedAt);
+        emit SafenetGuardA.TransactionAllowed(address(safe), safeTxHash, expectedAt);
         _allowTransaction(safeTxHash);
     }
 
@@ -394,7 +394,7 @@ contract SafenetGuardTest is Test {
     function test_cancelAllowTransaction_differentCallerCannotCancel() public {
         bytes32 safeTxHash = keccak256("tx");
         _allowTransaction(safeTxHash); // registers under address(safe)
-        vm.expectRevert(SafenetGuard.AllowanceNotFound.selector);
+        vm.expectRevert(SafenetGuardA.AllowanceNotFound.selector);
         vm.prank(other);
         guard.cancelAllowTransaction(safeTxHash);
         // Safe's allowance is unchanged
@@ -411,7 +411,7 @@ contract SafenetGuardTest is Test {
 
     function test_cancelAllowTransaction_revertsIfNotPending() public {
         bytes32 safeTxHash = keccak256("tx");
-        vm.expectRevert(SafenetGuard.AllowanceNotFound.selector);
+        vm.expectRevert(SafenetGuardA.AllowanceNotFound.selector);
         vm.prank(address(safe));
         guard.cancelAllowTransaction(safeTxHash);
     }
@@ -420,7 +420,7 @@ contract SafenetGuardTest is Test {
         bytes32 safeTxHash = keccak256("tx");
         _allowTransaction(safeTxHash);
         vm.expectEmit(true, true, false, false);
-        emit SafenetGuard.AllowanceCancelled(address(safe), safeTxHash);
+        emit SafenetGuardA.AllowanceCancelled(address(safe), safeTxHash);
         vm.prank(address(safe));
         guard.cancelAllowTransaction(safeTxHash);
     }
@@ -435,7 +435,7 @@ contract SafenetGuardTest is Test {
             guard.consensusDomainSeparator(), INITIAL_EPOCH, INITIAL_EPOCH, 100, newKey
         );
         FROST.Signature memory sig = _frostSign(GROUP_SK, GROUP_NK, message);
-        vm.expectRevert(SafenetGuard.EpochNotAdvancing.selector);
+        vm.expectRevert(SafenetGuardA.EpochNotAdvancing.selector);
         guard.updateEpoch(INITIAL_EPOCH, 100, newKey, sig);
     }
 
@@ -495,7 +495,7 @@ contract SafenetGuardTest is Test {
         bytes memory attestation = abi.encode(uint64(INITIAL_EPOCH + 1), sig);
         bytes memory combined =
             bytes.concat(_signSafeTx(txHash), abi.encodePacked(attestation, bytes32(attestation.length)));
-        vm.expectRevert(SafenetGuard.InvalidEpoch.selector);
+        vm.expectRevert(SafenetGuardA.InvalidEpoch.selector);
         safe.execTransaction(TX_TO, TX_VALUE, TX_DATA, TX_OP, 0, 0, 0, address(0), payable(address(0)), combined);
     }
 
@@ -507,7 +507,7 @@ contract SafenetGuardTest is Test {
         FROST.Signature memory sig = _frostSign(GROUP_SK, GROUP_NK, message);
 
         vm.expectEmit(true, true, false, true);
-        emit SafenetGuard.EpochUpdated(INITIAL_EPOCH, newEpoch, newKey);
+        emit SafenetGuardA.EpochUpdated(INITIAL_EPOCH, newEpoch, newKey);
         guard.updateEpoch(newEpoch, 100, newKey, sig);
     }
 
@@ -568,7 +568,7 @@ contract SafenetGuardTest is Test {
         _allowTransaction(safeTxHash);
 
         // Before delay: guard reverts → Safe propagates revert, nonce unchanged
-        vm.expectRevert(SafenetGuard.AttestationNotFound.selector);
+        vm.expectRevert(SafenetGuardA.AttestationNotFound.selector);
         _execSafeTxWithNonce(TX_TO, TX_VALUE, TX_DATA, TX_OP, nonce);
 
         // After delay: passes and consumes allowance, nonce increments
@@ -578,7 +578,7 @@ contract SafenetGuardTest is Test {
 
         // Second call: allowance gone, nonce has incremented → different hash → fails
         uint256 nonce2 = safe.nonce();
-        vm.expectRevert(SafenetGuard.AttestationNotFound.selector);
+        vm.expectRevert(SafenetGuardA.AttestationNotFound.selector);
         _execSafeTxWithNonce(TX_TO, TX_VALUE, TX_DATA, TX_OP, nonce2);
     }
 
@@ -665,7 +665,7 @@ contract SafenetGuardTest is Test {
         uint256 nonce = safe.nonce();
         bytes32 txHash = _safeTxHash(TX_TO, TX_VALUE, TX_DATA, TX_OP, nonce);
         bytes memory combined = abi.encodePacked(_signSafeTx(txHash), bytes32(0));
-        vm.expectRevert(SafenetGuard.AttestationNotFound.selector);
+        vm.expectRevert(SafenetGuardA.AttestationNotFound.selector);
         safe.execTransaction(TX_TO, TX_VALUE, TX_DATA, TX_OP, 0, 0, 0, address(0), payable(address(0)), combined);
     }
 
@@ -674,7 +674,7 @@ contract SafenetGuardTest is Test {
         uint256 nonce = safe.nonce();
         bytes32 txHash = _safeTxHash(TX_TO, TX_VALUE, TX_DATA, TX_OP, nonce);
         bytes memory combined = abi.encodePacked(_signSafeTx(txHash), bytes32(uint256(66)));
-        vm.expectRevert(SafenetGuard.AttestationNotFound.selector);
+        vm.expectRevert(SafenetGuardA.AttestationNotFound.selector);
         safe.execTransaction(TX_TO, TX_VALUE, TX_DATA, TX_OP, 0, 0, 0, address(0), payable(address(0)), combined);
     }
 

@@ -10,7 +10,7 @@ import {BaseTransactionGuard} from "@safe/base/GuardManager.sol";
 import {ISafe} from "@safe/interfaces/ISafe.sol";
 
 /**
- * @title SafenetGuard
+ * @title SafenetGuardA
  * @notice Safe Transaction Guard that gates every Safe transaction behind Safenet
  *         threshold-signature attestation.
  *
@@ -19,9 +19,9 @@ import {ISafe} from "@safe/interfaces/ISafe.sol";
  *      The Safenet Consensus contract lives exclusively on Gnosis Chain. Because cross-chain
  *      calls are not feasible, this guard maintains its own local consensus state.
  *
- *      **Epoch history.** Group keys are stored in `_epochGroupKeys`, a mapping from epoch number
+ *      **Epoch history.** Group keys are stored in `$epochGroupKeys`, a mapping from epoch number
  *      to FROST group public key. Each `updateEpoch` call adds the new epoch's key to the mapping,
- *      so all historic keys remain available for signature verification. `_activeEpoch` tracks the
+ *      so all historic keys remain available for signature verification. `$activeEpoch` tracks the
  *      current epoch number; keys for all past epochs remain resolvable via `_resolveGroupKey`.
  *
  *      **Inline attestation.** FROST attestations are passed as a trailer appended to Safe's
@@ -36,7 +36,7 @@ import {ISafe} from "@safe/interfaces/ISafe.sol";
  *      rather than a Safenet attestation. `DELEGATECALL` to the guard is never auto-allowed:
  *      it would execute guard functions in the Safe's storage context.
  */
-contract SafenetGuard is BaseTransactionGuard {
+contract SafenetGuardA is BaseTransactionGuard {
     // ============================================================
     // STORAGE VARIABLES
     // ============================================================
@@ -61,7 +61,8 @@ contract SafenetGuard is BaseTransactionGuard {
      * @notice The currently active epoch number.
      * @dev Set at construction and advanced on every `updateEpoch` call.
      */
-    uint64 private _activeEpoch;
+    // forge-lint: disable-next-line(mixed-case-variable)
+    uint64 private $activeEpoch;
 
     /**
      * @notice Maps each epoch number to its FROST group public key.
@@ -72,7 +73,8 @@ contract SafenetGuard is BaseTransactionGuard {
      *      All stored keys are guaranteed non-zero because both the constructor and `updateEpoch`
      *      call `Secp256k1.requireNonZero` before writing.
      */
-    mapping(uint64 epoch => Secp256k1.Point groupKey) private _epochGroupKeys;
+    // forge-lint: disable-next-line(mixed-case-variable)
+    mapping(uint64 epoch => Secp256k1.Point groupKey) private $epochGroupKeys;
 
     /**
      * @notice Time-delayed execution allowances for the escape hatch, keyed by Safe address.
@@ -81,7 +83,8 @@ contract SafenetGuard is BaseTransactionGuard {
      *      deleted on use by `checkTransaction`, and deleted early by `cancelAllowTransaction`.
      *      Keying by `msg.sender` (the Safe) ensures no Safe can interfere with another's allowances.
      */
-    mapping(address safe => mapping(bytes32 safeTxHash => uint256 executableAt)) private _allowedTransactions;
+    // forge-lint: disable-next-line(mixed-case-variable)
+    mapping(address safe => mapping(bytes32 safeTxHash => uint256 executableAt)) private $allowedTransactions;
 
     // ============================================================
     // EVENTS
@@ -129,7 +132,7 @@ contract SafenetGuard is BaseTransactionGuard {
 
     /**
      * @notice Thrown by `_resolveGroupKey` when the requested epoch has no group key stored in
-     *         `_epochGroupKeys` — i.e., the epoch was never activated via `updateEpoch` or set
+     *         `$epochGroupKeys` — i.e., the epoch was never activated via `updateEpoch` or set
      *         as the initial epoch in the constructor.
      */
     error InvalidEpoch();
@@ -198,8 +201,8 @@ contract SafenetGuard is BaseTransactionGuard {
         Secp256k1.requireNonZero(initialGroupKey);
         _CONSENSUS_DOMAIN_SEPARATOR = ConsensusMessages.domain(consensusChainId, consensusAddress);
         _ALLOW_TX_DELAY = allowTransactionDelay;
-        _activeEpoch = initialEpoch;
-        _epochGroupKeys[initialEpoch] = initialGroupKey;
+        $activeEpoch = initialEpoch;
+        $epochGroupKeys[initialEpoch] = initialGroupKey;
         emit EpochUpdated(0, initialEpoch, initialGroupKey);
     }
 
@@ -217,8 +220,8 @@ contract SafenetGuard is BaseTransactionGuard {
      *      MultiSendCallOnly.
      *      `rolloverBlock` is a Gnosis Chain block number embedded in the signed message; no check
      *      against `block.number` is performed because the local chain's block number is unrelated.
-     *      The new epoch's group key is written to `_epochGroupKeys[proposedEpoch]` and
-     *      `_activeEpoch` is advanced. All previously stored keys remain in the mapping.
+     *      The new epoch's group key is written to `$epochGroupKeys[proposedEpoch]` and
+     *      `$activeEpoch` is advanced. All previously stored keys remain in the mapping.
      * @param proposedEpoch  New epoch number. Must be strictly greater than the active epoch;
      *                       equal or lower values revert with `EpochNotAdvancing`.
      * @param rolloverBlock  Gnosis Chain block number from the epoch rollover message. Required
@@ -234,15 +237,15 @@ contract SafenetGuard is BaseTransactionGuard {
         Secp256k1.Point calldata newGroupKey,
         FROST.Signature calldata signature
     ) external {
-        require(proposedEpoch > _activeEpoch, EpochNotAdvancing());
+        require(proposedEpoch > $activeEpoch, EpochNotAdvancing());
         Secp256k1.requireNonZero(newGroupKey);
         bytes32 message = ConsensusMessages.epochRollover(
-            _CONSENSUS_DOMAIN_SEPARATOR, _activeEpoch, proposedEpoch, rolloverBlock, newGroupKey
+            _CONSENSUS_DOMAIN_SEPARATOR, $activeEpoch, proposedEpoch, rolloverBlock, newGroupKey
         );
-        FROST.verify(_epochGroupKeys[_activeEpoch], signature, message);
-        uint64 prevEpoch = _activeEpoch;
-        _activeEpoch = proposedEpoch;
-        _epochGroupKeys[proposedEpoch] = newGroupKey;
+        FROST.verify($epochGroupKeys[$activeEpoch], signature, message);
+        uint64 prevEpoch = $activeEpoch;
+        $activeEpoch = proposedEpoch;
+        $epochGroupKeys[proposedEpoch] = newGroupKey;
         emit EpochUpdated(prevEpoch, proposedEpoch, newGroupKey);
     }
 
@@ -261,9 +264,9 @@ contract SafenetGuard is BaseTransactionGuard {
      *                   if an allowance is already pending for this Safe and hash.
      */
     function allowTransaction(bytes32 safeTxHash) external {
-        require(_allowedTransactions[msg.sender][safeTxHash] == 0, TransactionAlreadyAllowed());
+        require($allowedTransactions[msg.sender][safeTxHash] == 0, TransactionAlreadyAllowed());
         uint256 executableAt = block.timestamp + _ALLOW_TX_DELAY;
-        _allowedTransactions[msg.sender][safeTxHash] = executableAt;
+        $allowedTransactions[msg.sender][safeTxHash] = executableAt;
         emit TransactionAllowed(msg.sender, safeTxHash, executableAt);
     }
 
@@ -276,8 +279,8 @@ contract SafenetGuard is BaseTransactionGuard {
      *                   no allowance exists for this Safe and hash.
      */
     function cancelAllowTransaction(bytes32 safeTxHash) external {
-        require(_allowedTransactions[msg.sender][safeTxHash] != 0, AllowanceNotFound());
-        delete _allowedTransactions[msg.sender][safeTxHash];
+        require($allowedTransactions[msg.sender][safeTxHash] != 0, AllowanceNotFound());
+        delete $allowedTransactions[msg.sender][safeTxHash];
         emit AllowanceCancelled(msg.sender, safeTxHash);
     }
 
@@ -342,9 +345,9 @@ contract SafenetGuard is BaseTransactionGuard {
             return;
         }
 
-        uint256 executableAt = _allowedTransactions[msg.sender][safeTxHash];
+        uint256 executableAt = $allowedTransactions[msg.sender][safeTxHash];
         if (executableAt != 0 && block.timestamp >= executableAt) {
-            delete _allowedTransactions[msg.sender][safeTxHash];
+            delete $allowedTransactions[msg.sender][safeTxHash];
             emit TransactionExecutedViaAllowance(msg.sender, safeTxHash);
             return;
         }
@@ -390,7 +393,7 @@ contract SafenetGuard is BaseTransactionGuard {
      * @notice Returns the epoch number of the current active epoch.
      */
     function activeEpoch() external view returns (uint64) {
-        return _activeEpoch;
+        return $activeEpoch;
     }
 
     /**
@@ -412,7 +415,7 @@ contract SafenetGuard is BaseTransactionGuard {
      *         or zero if no allowance exists for the given Safe and hash.
      */
     function getAllowedTxTimestamp(address safe, bytes32 safeTxHash) external view returns (uint256 executableAt) {
-        return _allowedTransactions[safe][safeTxHash];
+        return $allowedTransactions[safe][safeTxHash];
     }
 
     // ============================================================
@@ -420,13 +423,13 @@ contract SafenetGuard is BaseTransactionGuard {
     // ============================================================
 
     /**
-     * @dev Returns the group key for `epoch` from `_epochGroupKeys`.
+     * @dev Returns the group key for `epoch` from `$epochGroupKeys`.
      *      Reverts `InvalidEpoch` if no key was ever stored for this epoch.
      *      A zero point is treated as "not stored" — guaranteed safe because the constructor
      *      and `updateEpoch` both call `Secp256k1.requireNonZero` before writing.
      */
     function _resolveGroupKey(uint64 epoch) private view returns (Secp256k1.Point memory key) {
-        key = _epochGroupKeys[epoch];
+        key = $epochGroupKeys[epoch];
         if (key.x == 0 && key.y == 0) revert InvalidEpoch();
     }
 
@@ -448,8 +451,7 @@ contract SafenetGuard is BaseTransactionGuard {
         if (operation != Enum.Operation.Call) return false;
         // forge-lint: disable-next-line(unsafe-typecast)
         bytes4 selector = bytes4(data);
-        return
-            selector == SafenetGuard.allowTransaction.selector
-                || selector == SafenetGuard.cancelAllowTransaction.selector;
+        return selector == SafenetGuardA.allowTransaction.selector
+            || selector == SafenetGuardA.cancelAllowTransaction.selector;
     }
 }
