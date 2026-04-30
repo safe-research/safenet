@@ -59,13 +59,19 @@ contract SafenetGuardB is BaseGuard {
     /**
      * @notice Per-`(safe, module, tx-params)` execution sequence counter.
      * @dev The key is `keccak256(abi.encode(safe, module, to, value, data, operation))`.
-     *      The counter value is embedded in the module tx hash as its `nonce` field and is
-     *      incremented on both successful execution and cancellation. Distinct tx-param
-     *      combinations have independent counters, allowing different operations from the same
-     *      module to execute in any order without blocking each other.
+     *      The key intentionally includes the full tx-param tuple rather than just `(safe, module)`.
+     *      A per-module counter would serialise all operations from a module onto a single sequence:
+     *      if two different tx-param combinations are attested at consecutive nonces (e.g. TxA at
+     *      nonce=0, TxB at nonce=1) but TxB is executed first, the guard reconstructs the wrong hash
+     *      and rejects it — TxB is blocked until TxA executes, creating a deadlock. With per-tx-param
+     *      counters each combination has an independent track and operations may execute in any order.
+     *      The counter is packed with the module address as `(uint256(uint160(module)) << 96) | counter`
+     *      and used as the `nonce` field in the module tx hash via `_packedModuleNonce`. The packing
+     *      ensures two different modules on the same Safe cannot collide at the same counter value.
+     *      The counter increments on both successful execution and cancellation.
      */
     // forge-lint: disable-next-line(mixed-case-variable)
-    mapping(bytes32 moduleNonceKey => uint256 nonce) private $moduleNonces;
+    mapping(bytes32 moduleNonceKey => uint64 nonce) private $moduleNonces;
 
     // forge-lint: disable-next-line(mixed-case-variable)
     mapping(address safe => mapping(bytes32 safeTxHash => uint256 executableAt)) private $allowedTransactions;
@@ -82,14 +88,14 @@ contract SafenetGuardB is BaseGuard {
         address indexed safe,
         address indexed module,
         bytes32 indexed moduleTxHash,
-        uint256 nonce,
+        uint64 nonce,
         uint64 epoch,
         bytes32 sigId
     );
 
-    event ModuleAttestationConsumed(bytes32 indexed moduleTxHash, uint256 nonce, bytes32 indexed sigId);
+    event ModuleAttestationConsumed(bytes32 indexed moduleTxHash, uint64 nonce, bytes32 indexed sigId);
 
-    event ModuleAttestationCancelled(bytes32 indexed moduleTxHash, uint256 nonce, bytes32 indexed sigId);
+    event ModuleAttestationCancelled(bytes32 indexed moduleTxHash, uint64 nonce, bytes32 indexed sigId);
 
     event TransactionAllowed(address indexed safe, bytes32 indexed safeTxHash, uint256 executableAt);
 
@@ -208,8 +214,8 @@ contract SafenetGuardB is BaseGuard {
     ) external {
         // forge-lint: disable-next-line(asm-keccak256)
         bytes32 moduleNonceKey = keccak256(abi.encode(safe, module, to, value, data, operation));
-        uint256 nonce = $moduleNonces[moduleNonceKey];
-        bytes32 moduleTxHash = _moduleTransactionHash(safe, to, value, data, operation, nonce);
+        uint64 nonce = $moduleNonces[moduleNonceKey];
+        bytes32 moduleTxHash = _moduleTransactionHash(safe, to, value, data, operation, _packedModuleNonce(nonce, module));
         require($attestations[moduleTxHash] == bytes32(0), AttestationAlreadySubmitted());
         // forge-lint: disable-next-line(asm-keccak256)
         bytes32 sigId = keccak256(abi.encode(signature.r.x, signature.r.y, signature.z));
@@ -248,8 +254,8 @@ contract SafenetGuardB is BaseGuard {
     ) external {
         // forge-lint: disable-next-line(asm-keccak256)
         bytes32 moduleNonceKey = keccak256(abi.encode(msg.sender, module, to, value, data, operation));
-        uint256 nonce = $moduleNonces[moduleNonceKey];
-        bytes32 moduleTxHash = _moduleTransactionHash(msg.sender, to, value, data, operation, nonce);
+        uint64 nonce = $moduleNonces[moduleNonceKey];
+        bytes32 moduleTxHash = _moduleTransactionHash(msg.sender, to, value, data, operation, _packedModuleNonce(nonce, module));
         bytes32 sigId = $attestations[moduleTxHash];
         require(sigId != bytes32(0), NoModuleAttestationPending());
         delete $attestations[moduleTxHash];
@@ -363,8 +369,8 @@ contract SafenetGuardB is BaseGuard {
 
         // forge-lint: disable-next-line(asm-keccak256)
         bytes32 moduleNonceKey = keccak256(abi.encode(msg.sender, module, to, value, data, operation));
-        uint256 nonce = $moduleNonces[moduleNonceKey];
-        moduleTxHash = _moduleTransactionHash(msg.sender, to, value, data, operation, nonce);
+        uint64 nonce = $moduleNonces[moduleNonceKey];
+        moduleTxHash = _moduleTransactionHash(msg.sender, to, value, data, operation, _packedModuleNonce(nonce, module));
 
         bytes32 sigId = $attestations[moduleTxHash];
         if (sigId != bytes32(0)) {
@@ -425,7 +431,7 @@ contract SafenetGuardB is BaseGuard {
         uint256 value,
         bytes calldata data,
         Enum.Operation operation
-    ) external view returns (uint256 nonce) {
+    ) external view returns (uint64 nonce) {
         // forge-lint: disable-next-line(asm-keccak256)
         return $moduleNonces[keccak256(abi.encode(safe, module, to, value, data, operation))];
     }
@@ -450,8 +456,17 @@ contract SafenetGuardB is BaseGuard {
     }
 
     /**
-     * @dev Computes the EIP-712 hash for a module transaction with all gas fields zeroed and
-     *      the supplied `nonce` as the sequence position.
+     * @dev Returns `(uint256(uint160(module)) << 96) | nonce`. The result is always >= 2^96,
+     *      which cannot collide with a regular Safe transaction nonce (a sequential integer
+     *      starting from 0 that will never reach 2^96 in practice).
+     */
+    function _packedModuleNonce(uint64 nonce, address module) private pure returns (uint256) {
+        return (uint256(uint160(module)) << 96) | uint256(nonce);
+    }
+
+    /**
+     * @dev Computes the EIP-712 hash for a module transaction with all gas fields zeroed.
+     *      `nonce` must be the packed value from `_packedModuleNonce`.
      */
     function _moduleTransactionHash(
         address safe,
