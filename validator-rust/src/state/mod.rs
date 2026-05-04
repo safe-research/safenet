@@ -1,13 +1,15 @@
 pub mod storage;
 
+use std::collections::BTreeMap;
+
 pub use self::storage::Storage;
 use crate::{
     actions::Action,
-    bindings::{Consensus, Coordinator},
-    frost::{keygen, participants},
+    bindings::{self, Coordinator},
+    frost::{keygen, participants, secret::EncryptionKey},
 };
 use alloy::primitives::{Address, B256};
-use frost_secp256k1::keys::dkg::round1;
+use frost_secp256k1::{Identifier, keys::dkg};
 use serde::{Deserialize, Serialize};
 
 #[derive(Serialize, Deserialize)]
@@ -26,15 +28,21 @@ pub enum Phase {
     WaitingForRollover,
     CollectingCommitments {
         gid: B256,
-        secret_package: round1::SecretPackage,
+        encryption_key: EncryptionKey,
+        secret_package: dkg::round1::SecretPackage,
+        commitments: BTreeMap<Identifier, bindings::KeyGenCommitment>,
+    },
+    CollectingShares {
+        gid: B256,
+        secret_package: dkg::round2::SecretPackage,
     },
 }
 
 #[derive(Serialize, Deserialize)]
 pub struct ValidatorState {
+    pub consensus_config: ConsensusConfig,
     pub last_seen_block: Option<u64>,
     pub phase: Phase,
-    pub consensus_config: ConsensusConfig,
 }
 
 impl ValidatorState {
@@ -44,13 +52,13 @@ impl ValidatorState {
             consensus_config.genesis_salt,
         );
         Self {
+            consensus_config,
             last_seen_block: None,
             phase: if active_epoch == 0 {
                 Phase::WaitingForGenesis { genesis_group_id }
             } else {
                 Phase::WaitingForRollover
             },
-            consensus_config,
         }
     }
 
@@ -59,7 +67,10 @@ impl ValidatorState {
         vec![]
     }
 
-    pub fn on_consensus_event(&mut self, event: Consensus::ConsensusEvents) -> Vec<Action> {
+    pub fn on_consensus_event(
+        &mut self,
+        event: crate::bindings::Consensus::ConsensusEvents,
+    ) -> Vec<Action> {
         tracing::info!(?event, "consensus event");
         vec![]
     }
@@ -68,6 +79,7 @@ impl ValidatorState {
         tracing::info!(?event, "coordinator event");
         match event {
             Coordinator::CoordinatorEvents::KeyGen(e) => self.on_keygen(e),
+            Coordinator::CoordinatorEvents::KeyGenCommitted(e) => self.on_keygen_committed(e),
             _ => vec![],
         }
     }
@@ -92,28 +104,72 @@ impl ValidatorState {
         };
 
         let identifier = participants::identifier(config.own_address);
-        let (secret_package, commitment) =
-            match keygen::generate_round1(identifier, event.count, event.threshold) {
-                Ok(result) => result,
-                Err(err) => {
-                    tracing::error!(%err, "DKG round 1 failed");
-                    return vec![];
-                }
-            };
+        let round1 = match keygen::generate_round1(identifier, event.count, event.threshold) {
+            Ok(result) => result,
+            Err(err) => {
+                tracing::error!(%err, "DKG round 1 failed");
+                return vec![];
+            }
+        };
 
         tracing::info!(%gid, "genesis keygen triggered, publishing commitment");
         self.phase = Phase::CollectingCommitments {
             gid,
-            secret_package,
+            encryption_key: round1.encryption_key,
+            secret_package: round1.secret_package,
+            commitments: BTreeMap::new(),
         };
-
         vec![Action::KeyGenAndCommit {
             participants: event.participants,
             count: event.count,
             threshold: event.threshold,
             context: event.context,
             poap,
-            commitment,
+            commitment: round1.commitment,
+        }]
+    }
+
+    fn on_keygen_committed(&mut self, event: Coordinator::KeyGenCommitted) -> Vec<Action> {
+        let (gid, encryption_key, secret_package, commitments) = match &mut self.phase {
+            Phase::CollectingCommitments {
+                gid,
+                encryption_key,
+                secret_package,
+                commitments,
+            } => (gid, encryption_key, secret_package, commitments),
+            _ => return vec![],
+        };
+
+        if event.gid != *gid {
+            return vec![];
+        }
+
+        let identifier = participants::identifier(event.participant);
+        commitments.insert(identifier, event.commitment);
+
+        if commitments.len() < self.consensus_config.participants.len() {
+            return vec![];
+        }
+
+        // TODO(nlordell): we should modify this code to move out the old fields
+        // from the `phase` instead of cloning them.
+        tracing::info!("all participants committed, transitioning to collecting shares");
+
+        let round2 = match keygen::generate_round2(encryption_key, secret_package, commitments) {
+            Ok(round2) => round2,
+            Err(err) => {
+                tracing::error!(%err, "DKG round 2 failed");
+                return vec![];
+            }
+        };
+
+        self.phase = Phase::CollectingShares {
+            gid: event.gid,
+            secret_package: round2.secret_package,
+        };
+        vec![Action::KeyGenSecretShare {
+            gid: event.gid,
+            share: round2.share,
         }]
     }
 }

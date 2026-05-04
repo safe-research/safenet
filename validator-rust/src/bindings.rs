@@ -1,19 +1,20 @@
 use alloy::sol;
+use serde::{Deserialize, Serialize};
 
 sol! {
-    #[derive(Debug, Default)]
+    #[derive(Debug, Default, Deserialize, Serialize)]
     struct Point {
         uint256 x;
         uint256 y;
     }
 
-    #[derive(Debug)]
+    #[derive(Debug, Deserialize, Serialize)]
     struct Attestation {
         Point r;
         uint256 z;
     }
 
-    #[derive(Debug)]
+    #[derive(Debug, Deserialize, Serialize)]
     struct KeyGenCommitment {
         Point q;
         Point[] c;
@@ -21,14 +22,14 @@ sol! {
         uint256 mu;
     }
 
-    #[derive(Debug)]
-    struct SecretShare {
+    #[derive(Debug, Deserialize, Serialize)]
+    struct KeyGenSecretShare {
         Point y;
         uint256[] f;
     }
 
-    #[derive(Debug)]
-    struct NoncePair {
+    #[derive(Debug, Deserialize, Serialize)]
+    struct SignNonces {
         Point d;
         Point e;
     }
@@ -103,6 +104,9 @@ sol! {
             KeyGenCommitment commitment
         ) external;
 
+        function keyGenSecretShare(bytes32 gid, KeyGenSecretShare share) external returns (bool shared);
+
+        function keyGenConfirm(bytes32 gid) external returns (bool confirmed);
 
         event Sign(
             address indexed initiator,
@@ -140,7 +144,7 @@ sol! {
         event KeyGenSecretShared(
             bytes32 indexed gid,
             address participant,
-            SecretShare share,
+            KeyGenSecretShare share,
             bool shared
         );
 
@@ -179,7 +183,7 @@ sol! {
         event SignRevealedNonces(
             bytes32 indexed sid,
             address participant,
-            NoncePair nonces
+            SignNonces nonces
         );
 
 

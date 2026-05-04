@@ -1,5 +1,5 @@
 use crate::{
-    bindings::{Coordinator, KeyGenCommitment},
+    bindings::{Coordinator, KeyGenCommitment, KeyGenSecretShare},
     config::{addresses::Addresses, chain::Chain, provider::Provider},
 };
 use alloy::{
@@ -22,6 +22,10 @@ pub enum Action {
         context: B256,
         poap: Vec<B256>,
         commitment: KeyGenCommitment,
+    },
+    KeyGenSecretShare {
+        gid: B256,
+        share: KeyGenSecretShare,
     },
 }
 
@@ -53,6 +57,11 @@ impl Action {
                 }
                 .abi_encode(),
                 gas_limit: 250_000,
+            },
+            Self::KeyGenSecretShare { gid, share } => EncodedAction {
+                to: addresses.coordinator,
+                data: Coordinator::keyGenSecretShareCall { gid, share }.abi_encode(),
+                gas_limit: 500_000,
             },
         }
     }

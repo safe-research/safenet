@@ -3,7 +3,40 @@
 //! Port of `validator/src/frost/secret.ts`.
 
 use anyhow::{Result, ensure};
-use k256::{AffinePoint, ProjectivePoint, Scalar, elliptic_curve::point::AffineCoordinates as _};
+use k256::{
+    ProjectivePoint, Scalar,
+    elliptic_curve::{
+        hash2curve::{self, ExpandMsgXmd},
+        point::AffineCoordinates as _,
+    },
+    sha2::Sha256,
+};
+use rand::{CryptoRng, RngCore};
+use serde::{Deserialize, Serialize};
+
+/// Encryption key used for ECDH-encrypted secret shares.
+#[derive(Clone, Copy, Deserialize, Serialize)]
+pub struct EncryptionKey(Scalar);
+
+impl EncryptionKey {
+    pub fn generate<R>(mut rng: R) -> Self
+    where
+        R: CryptoRng + RngCore,
+    {
+        let mut entropy = [0; 32];
+        rng.fill_bytes(&mut entropy);
+        let secret_key = hash_to_scalar(b"enc", &entropy);
+        Self(secret_key)
+    }
+
+    pub fn public_key(&self) -> ProjectivePoint {
+        ProjectivePoint::GENERATOR * self.0
+    }
+
+    pub fn encrypt(&self, public_key: &ProjectivePoint, msg: [u8; 32]) -> Result<[u8; 32]> {
+        ecdh(&self.0, public_key, msg)
+    }
+}
 
 /// Encrypts or decrypts `msg` using ECDH between `sender_privkey` and `receiver_pubkey`.
 ///
@@ -14,21 +47,21 @@ use k256::{AffinePoint, ProjectivePoint, Scalar, elliptic_curve::point::AffineCo
 /// The `sender_privkey` must be non-zero.
 ///
 /// `msg` is interpreted as a 256-bit scalar (the domain of secret shares).
-pub fn ecdh(
-    msg: [u8; 32],
+fn ecdh(
     sender_privkey: &Scalar,
-    receiver_pubkey: &AffinePoint,
+    receiver_pubkey: &ProjectivePoint,
+    msg: [u8; 32],
 ) -> Result<[u8; 32]> {
     ensure!(
         *sender_privkey != Scalar::ZERO,
         "private key must not be zero"
     );
     ensure!(
-        *receiver_pubkey != AffinePoint::IDENTITY,
+        *receiver_pubkey != ProjectivePoint::IDENTITY,
         "public key must not be the identity"
     );
 
-    let shared_secret = ProjectivePoint::from(*receiver_pubkey) * sender_privkey;
+    let shared_secret = receiver_pubkey * sender_privkey;
     let shared_secret = shared_secret.to_affine().x();
 
     let mut result = msg;
@@ -38,12 +71,23 @@ pub fn ecdh(
     Ok(result)
 }
 
+fn hash_to_scalar(domain: &[u8], msg: &[u8]) -> Scalar {
+    let mut u = [Scalar::ZERO];
+    hash2curve::hash_to_field::<ExpandMsgXmd<Sha256>, Scalar>(
+        &[msg],
+        &[b"FROST-secp256k1-SHA256-v1", domain],
+        &mut u,
+    )
+    .expect("unexpected hash to scalar failure");
+    u[0]
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    fn g(scalar: u64) -> AffinePoint {
-        (ProjectivePoint::GENERATOR * Scalar::from(scalar)).to_affine()
+    fn g(scalar: u64) -> ProjectivePoint {
+        ProjectivePoint::GENERATOR * Scalar::from(scalar)
     }
 
     #[test]
@@ -57,8 +101,8 @@ mod tests {
             0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
         ];
 
-        let encrypted = ecdh(msg, &alice_priv, &bob_pub).unwrap();
-        let decrypted = ecdh(encrypted, &bob_priv, &alice_pub).unwrap();
+        let encrypted = ecdh(&alice_priv, &bob_pub, msg).unwrap();
+        let decrypted = ecdh(&bob_priv, &alice_pub, encrypted).unwrap();
         assert_eq!(decrypted, msg);
     }
 
@@ -70,8 +114,8 @@ mod tests {
         let bob_pub = g(3);
         let msg = [0x42; 32];
 
-        let encrypted_a = ecdh(msg, &alice_priv, &bob_pub).unwrap();
-        let encrypted_b = ecdh(msg, &bob_priv, &alice_pub).unwrap();
+        let encrypted_a = ecdh(&alice_priv, &bob_pub, msg).unwrap();
+        let encrypted_b = ecdh(&bob_priv, &alice_pub, msg).unwrap();
         assert_eq!(encrypted_a, encrypted_b);
     }
 
@@ -83,8 +127,8 @@ mod tests {
         let msg = [0x42; 32];
 
         assert_ne!(
-            ecdh(msg, &alice_priv, &bob_pub).unwrap(),
-            ecdh(msg, &alice_priv, &carol_pub).unwrap(),
+            ecdh(&alice_priv, &bob_pub, msg).unwrap(),
+            ecdh(&alice_priv, &carol_pub, msg).unwrap(),
         );
     }
 }

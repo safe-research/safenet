@@ -19,12 +19,18 @@ Implemented modules in `validator-rust/src/`:
 | Chain                    | `chain.rs`                  | Done    | `Chain` enum (Gnosis/Sepolia/Anvil); `Chain::new(chain_id)?` fails for unknown chains; `blocks_per_epoch()` returns 1440/600/60 respectively                                                                   |
 | Contract bindings        | `bindings.rs`               | Partial | All consensus + coordinator events with `Debug`; `getCoordinator()`, `getActiveEpoch()`, `keyGenAndCommit()` calls; `keyGenSecretShare` and `keyGenConfirm` not yet added                                      |
 | Actions                  | `actions.rs`                | Partial | `Action::KeyGenAndCommit` carries all args for the on-chain call; `Handler::handle` is a stub (does not yet submit transactions)                                                                               |
-| State                    | `state/mod.rs`              | Partial | `ConsensusConfig` holds consensus-relevant config (own/coordinator address, participants, salt, blocks_per_epoch); `Phase` has `WaitingForGenesis`, `CollectingCommitments` (stores serialized secret package), `WaitingForRollover`; Phase 0 keygen trigger fully implemented; Phases 1–3 not started |
+| State                    | `state/mod.rs`              | Partial | `ConsensusConfig` holds consensus-relevant config (own/coordinator address, participants, salt, blocks_per_epoch); `Phase` has `WaitingForGenesis`, `CollectingCommitments` (stores serialized secret package + commitment tracking), `CollectingShares`, `WaitingForRollover`; Phase 0 keygen trigger + Phase 1 commitment tracking implemented; Phases 2–3 not started |
 | State storage            | `state/storage.rs`          | Done    | SQLite-backed JSON persistence; `open`/`save`/`load_latest`; keeps last `state_history` entries by block number; defaults to `:memory:`                                                                        |
 | Driver                   | `driver.rs`                 | Partial | Async init: opens storage, restores state or cold-starts (queries epoch, coordinator address, chain ID, derives own address); builds `ConsensusConfig`; persists state after each block; dispatches actions    |
 | Watcher                  | `watcher.rs`                | Partial | Block + log subscription; history replay via `start_block` (`eth_getLogs` range then monotonic updates); block monotonicity check; log sort by index; dispatches to `Driver`; no reorg handling               |
 | Participant utilities    | `frost/participants.rs`     | Done    | `calc_participants_root` (Merkle root of left-padded addresses, tested); `calc_genesis_group_id` (ABI-encoded keccak + mask, tested); `generate_participant_proof` implemented                        |
-| DKG round 1              | `frost/keygen.rs`           | Done    | `generate_round1` calls `dkg::part1` and serializes `SecretPackage` to bytes; `identifier_from_address` and `package_to_commitment` implemented                            |
+| DKG round 1              | `frost/keygen.rs`           | Done    | `generate_round1` with external coefficients, ECDH encryption keypair, proof of knowledge via HDKG; `create_secret_package` for FROST signing (future use)               |
+| VSS math utilities       | `frost/math.rs`             | Done    | `g()`, `eval_poly()`, `eval_commitment()`, `create_verification_share()`, `ecdh()`, `create_signing_share()`, `verify_key()`, `point_to_abi()`                              |
+| ECDH encryption          | `frost/secret.rs`           | Done    | `ecdh(msg, sender_privkey, receiver_pubkey)` using k256 point multiplication + U256 XOR; 4 tests matching TypeScript spec                              |
+| ABI marshalling          | `frost/marshal.rs`          | Done    | `solidity_point()`, `solidity_scalar()`, `solidity_signature()`, `abi_point_to_affine()`, `abi_point_to_projective()`                                                     |
+| Contract bindings        | `bindings.rs`               | Done    | All events; `KeyGenCommitment` includes encryption pubkey `q`; `SecretShare` struct; `keyGenSecretShare` and `keyGenConfirm` function signatures                  |
+| Actions                  | `actions.rs`                | Partial | `Action::KeyGenAndCommit`, `Action::KeyGenSecretShare`; `Handler::handle` is a stub (does not yet submit transactions)                                               |
+| State                    | `state/mod.rs`              | Partial | `Phase::CollectingCommitments` and `CollectingShares` store coefficients inline (not serialized); `create_secret_shares` implemented — computes verification share, encrypts per-peer shares with ECDH, emits action |
 
 Not yet ported (TypeScript → Rust):
 
@@ -211,16 +217,16 @@ Participants are sorted ascending by address (numerical order). TS source: `vali
 
 ### Phase 1 — Commitment
 
-**Status: Not started.** On receiving all `KeyGenCommitted` events:
+**Status: Partial.** State machine for tracking `KeyGenCommitted` events is implemented in `on_keygen_committed`. Commits are stored per participant and when all participants have confirmed, transitions to `CollectingShares` and calls `create_secret_shares`.
 
+Completed:
+- ECDH encryption keypair generated in `generate_round1` and included in `KeyGenCommitment.q`.
+- `create_secret_shares` fully implemented: computes verification share via `create_verification_share`, evaluates polynomial per peer via `eval_poly`, encrypts with ECDH, emits `Action::KeyGenSecretShare`.
+
+Still needs:
 - Verify each peer's proof-of-knowledge: `R == g^μ - g^{a₀}^c` where `c` is recomputed locally.
 - Compute group public key: `Y = Σ g^{a₀_k}` (sum of first commitments from all participants).
-- Compute own verification share: `y_i = Σₖ evalCommitment(Cₖ, i)`.
-- Evaluate polynomial for each peer `j`: `f_i(j) = evalPoly([a₀,…,a_{t-1}], j)`.
-- Encrypt each share: `enc_j = f_i(j) XOR ecdh(pk_enc_j, sk_enc_i)` where `ecdh = (pk_enc_j^{sk_enc_i}).x`.
-- Submit `keyGenSecretShare` on-chain with `(y_i, [enc_j, …])`.
-
-Also needs ECDH encryption keypair generation (`sk_enc`/`pk_enc`), which must be included in the `keyGenAndCommit` call. This was omitted from the Phase 0 stub — `KeyGenCommitment` does not currently include the encryption public key `q`. The TypeScript uses `q` for the encryption public key (distinct from `a₀`). Revisit the `KeyGenCommitment` ABI struct when implementing this phase.
+- Implement `Handler::handle` to submit the `KeyGenSecretShare` transaction on-chain.
 
 TS source: `validator/src/machine/keygen/trigger.ts`, `committed.ts`, `validator/src/consensus/keyGen/client.ts`.
 
@@ -248,17 +254,16 @@ Skip invalid shares / complaint logic entirely for the happy path. TS source: `v
 Use `frost-secp256k1` directly — do not reimplement hashes, polynomial math, VSS, or proof-of-knowledge. The crate's DKG module (`frost_secp256k1::keys::dkg`) covers the full keygen ceremony. The hash functions (`hid`, `hdkg`, `hpok`, `h2`) are internal to the crate and invoked automatically through its API.
 
 The only custom code needed is:
-- **ABI marshalling** — converting between `frost-secp256k1` points and the ABI `Point { uint256 x; uint256 y }` (see Deliberate Porting Decisions). **Done in `frost::keygen::package_to_commitment`.**
-- **ECDH share encryption** — encrypting/decrypting secret shares with `f_k(i) XOR (peer_pk^{our_sk}).x`. Uses the `k256` crate directly for point multiplication; port of `validator/src/frost/secret.ts`. **Done** in `src/frost/secret.rs`.
+- **ABI marshalling** — converting between `frost-secp256k1` points and the ABI `Point { uint256 x; uint256 y }` (see Deliberate Porting Decisions). **Done in `frost::marshal::solidity_point`, `abi_point_to_affine`, etc.**
+- **ECDH share encryption** — encrypting/decrypting secret shares with `f_k(i) XOR (peer_pk^{our_sk}).x`. Uses the `k256` crate directly for point multiplication; port of `validator/src/frost/secret.ts`. **Done** in `src/frost/secret.rs` and `frost::math::ecdh`.
+- **VSS math** — polynomial evaluation, commitment evaluation, verification share creation. **Done** in `frost::math.rs`.
 - **Merkle proof generation** — the proof (`poap`) is passed to the contract. Root computation is done; proof path generation is **done in `frost::participants::generate_participant_proof`**. TS source: `validator/src/consensus/merkle.ts`.
 
-### Contract Calls to Add to `bindings.rs`
+### Contract Calls in `bindings.rs`
 
 ```solidity
-// Added:
+// Done:
 function keyGenAndCommit(bytes32 participants, uint16 count, uint16 threshold, bytes32 context, bytes32[] poap, ((uint256 x, uint256 y) q, (uint256 x, uint256 y)[] c, (uint256 x, uint256 y) r, uint256 mu) commitment) external
-
-// Still needed:
 function keyGenSecretShare(bytes32 gid, ((uint256 x, uint256 y) y, uint256[] f) share) external
 function keyGenConfirm(bytes32 gid) external
 ```
@@ -267,12 +272,10 @@ function keyGenConfirm(bytes32 gid) external
 
 ## Suggested Next Steps
 
-1. Add the ECDH encryption keypair to the commitment flow (needed before Phase 1); update `KeyGenCommitment` to include the encryption public key `q`.
-2. Implement `Handler::handle` in `actions.rs` to actually submit transactions via the provider.
-3. Implement Phase 1: handle `KeyGenCommitted` events, compute group key, encrypt and submit secret shares.
-4. Add `keyGenSecretShare` and `keyGenConfirm` to `bindings.rs`.
-5. Implement Phase 2: handle `KeyGenSecretShared` events, decrypt/verify shares, submit confirm.
-6. Implement Phase 3: handle `KeyGenConfirmed` events, detect completion.
+1. Implement `Handler::handle` in `actions.rs` to submit `KeyGenSecretShare` transaction via the provider.
+2. Verify PoK from peers and compute group public key in `on_keygen_committed` (optional for happy path).
+3. Implement Phase 2: handle `KeyGenSecretShared` events, decrypt/verify shares, submit confirm.
+4. Implement Phase 3: handle `KeyGenConfirmed` events, detect completion.
 
 ## Verification Commands
 
