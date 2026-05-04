@@ -9,7 +9,7 @@ use crate::{
     frost::{keygen, participants, secret::EncryptionKey},
 };
 use alloy::primitives::{Address, B256};
-use frost_secp256k1::{Identifier, keys::dkg};
+use frost_secp256k1::keys::dkg;
 use serde::{Deserialize, Serialize};
 
 #[derive(Serialize, Deserialize)]
@@ -30,11 +30,14 @@ pub enum Phase {
         gid: B256,
         encryption_key: EncryptionKey,
         secret_package: dkg::round1::SecretPackage,
-        commitments: BTreeMap<Identifier, bindings::KeyGenCommitment>,
+        commitments: BTreeMap<Address, bindings::KeyGenCommitment>,
     },
     CollectingShares {
         gid: B256,
+        encryption_key: EncryptionKey,
         secret_package: dkg::round2::SecretPackage,
+        commitments: BTreeMap<Address, bindings::KeyGenCommitment>,
+        shares: BTreeMap<Address, bindings::KeyGenSecretShare>,
     },
 }
 
@@ -80,6 +83,9 @@ impl ValidatorState {
         match event {
             Coordinator::CoordinatorEvents::KeyGen(e) => self.on_keygen(e),
             Coordinator::CoordinatorEvents::KeyGenCommitted(e) => self.on_keygen_committed(e),
+            Coordinator::CoordinatorEvents::KeyGenSecretShared(e) => {
+                self.on_keygen_secret_shared(e)
+            }
             _ => vec![],
         }
     }
@@ -103,8 +109,9 @@ impl ValidatorState {
             return vec![];
         };
 
-        let identifier = participants::identifier(config.own_address);
-        let round1 = match keygen::generate_round1(identifier, event.count, event.threshold) {
+        tracing::info!(%gid, "genesis keygen triggered, publishing commitment");
+        let round1 = match keygen::generate_round1(config.own_address, event.count, event.threshold)
+        {
             Ok(result) => result,
             Err(err) => {
                 tracing::error!(%err, "DKG round 1 failed");
@@ -112,7 +119,6 @@ impl ValidatorState {
             }
         };
 
-        tracing::info!(%gid, "genesis keygen triggered, publishing commitment");
         self.phase = Phase::CollectingCommitments {
             gid,
             encryption_key: round1.encryption_key,
@@ -130,22 +136,21 @@ impl ValidatorState {
     }
 
     fn on_keygen_committed(&mut self, event: Coordinator::KeyGenCommitted) -> Vec<Action> {
-        let (gid, encryption_key, secret_package, commitments) = match &mut self.phase {
-            Phase::CollectingCommitments {
-                gid,
-                encryption_key,
-                secret_package,
-                commitments,
-            } => (gid, encryption_key, secret_package, commitments),
-            _ => return vec![],
+        let Phase::CollectingCommitments {
+            gid,
+            encryption_key,
+            secret_package,
+            commitments,
+        } = &mut self.phase
+        else {
+            return vec![];
         };
 
         if event.gid != *gid {
             return vec![];
         }
 
-        let identifier = participants::identifier(event.participant);
-        commitments.insert(identifier, event.commitment);
+        commitments.insert(event.participant, event.commitment);
 
         if commitments.len() < self.consensus_config.participants.len() {
             return vec![];
@@ -154,7 +159,6 @@ impl ValidatorState {
         // TODO(nlordell): we should modify this code to move out the old fields
         // from the `phase` instead of cloning them.
         tracing::info!("all participants committed, transitioning to collecting shares");
-
         let round2 = match keygen::generate_round2(encryption_key, secret_package, commitments) {
             Ok(round2) => round2,
             Err(err) => {
@@ -165,11 +169,47 @@ impl ValidatorState {
 
         self.phase = Phase::CollectingShares {
             gid: event.gid,
+            encryption_key: encryption_key.clone(),
             secret_package: round2.secret_package,
+            commitments: commitments.clone(),
+            shares: BTreeMap::new(),
         };
         vec![Action::KeyGenSecretShare {
             gid: event.gid,
             share: round2.share,
         }]
+    }
+
+    fn on_keygen_secret_shared(&mut self, event: Coordinator::KeyGenSecretShared) -> Vec<Action> {
+        let Phase::CollectingShares {
+            gid,
+            encryption_key,
+            secret_package,
+            commitments,
+            shares,
+        } = &mut self.phase
+        else {
+            return vec![];
+        };
+
+        if event.gid != *gid || !event.shared {
+            return vec![];
+        }
+
+        shares.insert(event.participant, event.share);
+
+        if shares.len() < self.consensus_config.participants.len() {
+            return vec![];
+        }
+
+        tracing::info!("all secret shares received");
+        let round3 =
+            match keygen::generate_round3(encryption_key, secret_package, commitments, shares) {
+                Ok(round2) => round2,
+                Err(err) => {
+                    tracing::error!(%err, "DKG round 2 failed");
+                    return vec![];
+                }
+            };
     }
 }

@@ -33,7 +33,7 @@ impl EncryptionKey {
         ProjectivePoint::GENERATOR * self.0
     }
 
-    pub fn encrypt(&self, public_key: &ProjectivePoint, msg: [u8; 32]) -> Result<[u8; 32]> {
+    pub fn ecdh(&self, public_key: &ProjectivePoint, msg: [u8; 32]) -> Result<[u8; 32]> {
         ecdh(&self.0, public_key, msg)
     }
 }
