@@ -1,3 +1,4 @@
+import { getAddress } from "viem";
 import type { ALL_EVENTS } from "../../types/abis.js";
 import type { Log } from "../../watcher/events.js";
 import {
@@ -11,6 +12,9 @@ import {
 	keyGenSecretSharedEventSchema,
 	nonceCommitmentsEventSchema,
 	nonceCommitmentsHashEventSchema,
+	oracleResultEventSchema,
+	oracleTransactionAttestedEventSchema,
+	oracleTransactionProposedEventSchema,
 	signatureShareEventSchema,
 	signedEventSchema,
 	signRequestEventSchema,
@@ -19,13 +23,14 @@ import {
 } from "./schemas.js";
 import type { EventTransition } from "./types.js";
 
-export type ProtocolLog = Pick<Log<typeof ALL_EVENTS>, "blockNumber" | "logIndex" | "eventName" | "args">;
+export type ProtocolLog = Pick<Log<typeof ALL_EVENTS>, "blockNumber" | "logIndex" | "eventName" | "args" | "address">;
 
 export const logToTransition = ({
 	blockNumber: block,
 	logIndex: index,
 	eventName,
 	args: eventArgs,
+	address,
 }: ProtocolLog): EventTransition => {
 	switch (eventName) {
 		case "KeyGenCommitted": {
@@ -160,6 +165,34 @@ export const logToTransition = ({
 				id: "event_epoch_proposed",
 				block,
 				index,
+				...args,
+			};
+		}
+		case "OracleTransactionProposed": {
+			const args = oracleTransactionProposedEventSchema.parse(eventArgs);
+			return {
+				id: "event_oracle_transaction_proposed",
+				block,
+				index,
+				...args,
+			};
+		}
+		case "OracleTransactionAttested": {
+			const args = oracleTransactionAttestedEventSchema.parse(eventArgs);
+			return {
+				id: "event_oracle_transaction_attested",
+				block,
+				index,
+				...args,
+			};
+		}
+		case "OracleResult": {
+			const args = oracleResultEventSchema.parse(eventArgs);
+			return {
+				id: "event_oracle_result",
+				block,
+				index,
+				oracle: getAddress(address),
 				...args,
 			};
 		}

@@ -4,6 +4,7 @@ import type { VerificationEngine } from "../../consensus/verify/engine.js";
 import type { Logger } from "../../utils/logging.js";
 import type { SignRequestEvent } from "../transitions/types.js";
 import type { ConsensusState, MachineConfig, MachineStates, StateDiff } from "../types.js";
+import { buildNonceCommitmentsDiff } from "./commitments.js";
 
 const NONCE_THRESHOLD = 100n;
 
@@ -40,40 +41,39 @@ export const handleSign = async (
 		return diff;
 	}
 
-	const consensus = {
-		...diff.consensus,
-	};
-	consensus.signatureIdToMessage = [event.sid, event.message];
+	// Oracle packet: wait for oracle approval before participating in signing
+	if (status.packet.type === "oracle_transaction_packet") {
+		return {
+			...diff,
+			signing: [
+				event.message,
+				{
+					id: "waiting_for_oracle",
+					oracle: status.packet.proposal.oracle,
+					gid: event.gid,
+					signatureId: event.sid,
+					sequence: event.sequence,
+					signers: status.signers,
+					deadline: event.block + machineConfig.oracleTimeout,
+					packet: status.packet,
+				},
+			],
+		};
+	}
 
-	const { nonceCommitments, nonceProof } = signingClient.createNonceCommitments(
-		event.gid,
-		machineConfig.account,
-		event.sid,
-		event.message,
-		event.sequence,
-		status.signers,
-	);
-
-	const actions = diff.actions ?? [];
-	actions.push({
-		id: "sign_reveal_nonce_commitments",
+	const ncDiff = buildNonceCommitmentsDiff(machineConfig, signingClient, {
+		gid: event.gid,
 		signatureId: event.sid,
-		nonceCommitments,
-		nonceProof,
+		message: event.message,
+		sequence: event.sequence,
+		signers: status.signers,
+		block: event.block,
+		packet: status.packet,
 	});
 	return {
-		consensus,
-		signing: [
-			event.message,
-			{
-				id: "collect_nonce_commitments",
-				signatureId: event.sid,
-				deadline: event.block + machineConfig.signingTimeout,
-				lastSigner: undefined,
-				packet: status.packet,
-			},
-		],
-		actions,
+		...ncDiff,
+		consensus: { ...diff.consensus, ...ncDiff.consensus },
+		actions: [...(diff.actions ?? []), ...(ncDiff.actions ?? [])],
 	};
 };
 

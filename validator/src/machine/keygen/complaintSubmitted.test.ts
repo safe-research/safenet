@@ -1,4 +1,4 @@
-import { ethAddress, zeroHash } from "viem";
+import { ethAddress } from "viem";
 import {
 	entryPoint06Address,
 	entryPoint07Address,
@@ -6,11 +6,11 @@ import {
 	entryPoint09Address,
 } from "viem/account-abstraction";
 import { describe, expect, it, vi } from "vitest";
-import { makeGroupSetup, makeKeyGenSetup } from "../../__tests__/data/machine.js";
+import { makeGroupSetup, makeKeyGenSetup, makeMachineConfig } from "../../__tests__/data/machine.js";
 import type { KeyGenClient } from "../../consensus/keyGen/client.js";
 import type { SafenetProtocol } from "../../consensus/protocol/types.js";
 import type { KeyGenComplaintSubmittedEvent } from "../transitions/types.js";
-import type { MachineConfig, MachineStates } from "../types.js";
+import type { MachineStates } from "../types.js";
 import { handleComplaintSubmitted } from "./complaintSubmitted.js";
 import { calcGroupContext } from "./group.js";
 
@@ -24,18 +24,17 @@ const EVENT: KeyGenComplaintSubmittedEvent = {
 	accused: entryPoint07Address,
 	compromised: false,
 };
-const MACHINE_CONFIG: MachineConfig = {
+const MACHINE_CONFIG = makeMachineConfig({
 	account: entryPoint06Address,
 	participantsInfo: [
 		{ address: entryPoint06Address, activeFrom: 0n },
 		{ address: entryPoint07Address, activeFrom: 0n },
 		{ address: entryPoint08Address, activeFrom: 0n },
 	],
-	genesisSalt: zeroHash,
 	keyGenTimeout: 10n,
 	signingTimeout: 20n,
 	blocksPerEpoch: 10n,
-};
+});
 
 const makeProtocol = (): SafenetProtocol =>
 	({ consensus: vi.fn().mockReturnValue(ethAddress) }) as unknown as SafenetProtocol;

@@ -1,5 +1,6 @@
 import type { Address, Hex } from "viem";
 import type { ProtocolAction } from "../consensus/protocol/types.js";
+import type { OracleTransactionPacket } from "../consensus/verify/oracleTx/schemas.js";
 import type { EpochRolloverPacket } from "../consensus/verify/rollover/schemas.js";
 import type { SafeTransactionPacket } from "../consensus/verify/safeTx/schemas.js";
 import type { GroupId, SignatureId } from "../frost/types.js";
@@ -63,7 +64,7 @@ export type RolloverState = Readonly<
 >;
 
 export type BaseSigningState = {
-	packet: SafeTransactionPacket | EpochRolloverPacket;
+	packet: SafeTransactionPacket | EpochRolloverPacket | OracleTransactionPacket;
 };
 
 export type SigningState = Readonly<
@@ -92,6 +93,15 @@ export type SigningState = Readonly<
 					id: "waiting_for_attestation";
 					signatureId: SignatureId;
 					responsible?: Address;
+					deadline: bigint;
+			  }
+			| {
+					id: "waiting_for_oracle";
+					oracle: Address;
+					gid: GroupId;
+					signatureId: SignatureId;
+					sequence: bigint;
+					signers: readonly Address[];
 					deadline: bigint;
 			  }
 		)
@@ -146,4 +156,6 @@ export type MachineConfig = {
 	keyGenTimeout: bigint;
 	signingTimeout: bigint;
 	blocksPerEpoch: bigint;
+	allowedOracles: readonly Address[];
+	oracleTimeout: bigint;
 };

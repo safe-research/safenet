@@ -18,6 +18,8 @@ export interface ProtocolConfig {
 	keyGenTimeout?: bigint;
 	signingTimeout?: bigint;
 	blocksBeforeResubmit?: bigint;
+	allowedOracles?: readonly Address[];
+	oracleTimeout?: bigint;
 }
 
 export type AbiPoint = { x: bigint; y: bigint };

@@ -29,3 +29,8 @@ export type ProofOfAttestationParticipation = Hex[];
 export type GroupId = Hex;
 
 export type SignatureId = Hex;
+
+export type FrostSignature = {
+	z: bigint;
+	r: FrostPoint;
+};

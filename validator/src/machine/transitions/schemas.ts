@@ -160,6 +160,32 @@ export const transactionAttestedEventSchema = z.object({
 	attestation: signatureSchema,
 });
 
+export const oracleTransactionProposedEventSchema = z.object({
+	safeTxHash: hexBytes32Schema,
+	chainId: eventBigIntSchema,
+	safe: checkedAddressSchema,
+	epoch: eventBigIntSchema,
+	oracle: checkedAddressSchema,
+	transaction: transactionSchema,
+});
+
+export const oracleTransactionAttestedEventSchema = z.object({
+	safeTxHash: hexBytes32Schema,
+	chainId: eventBigIntSchema,
+	safe: checkedAddressSchema,
+	epoch: eventBigIntSchema,
+	oracle: checkedAddressSchema,
+	signatureId: hexBytes32Schema,
+	attestation: signatureSchema,
+});
+
+export const oracleResultEventSchema = z.object({
+	requestId: hexBytes32Schema,
+	proposer: checkedAddressSchema,
+	result: hexDataSchema,
+	approved: z.boolean(),
+});
+
 const baseEventTransitionParamsSchema = z.object({
 	block: eventBigIntSchema,
 	index: z.number(),
@@ -247,6 +273,23 @@ const transactionAttestedEventTransitionSchema = baseEventTransitionParamsSchema
 		id: z.literal("event_transaction_attested"),
 	});
 
+const oracleTransactionProposedEventTransitionSchema = baseEventTransitionParamsSchema
+	.extend(oracleTransactionProposedEventSchema.shape)
+	.extend({
+		id: z.literal("event_oracle_transaction_proposed"),
+	});
+
+const oracleTransactionAttestedEventTransitionSchema = baseEventTransitionParamsSchema
+	.extend(oracleTransactionAttestedEventSchema.shape)
+	.extend({
+		id: z.literal("event_oracle_transaction_attested"),
+	});
+
+const oracleResultEventTransitionSchema = baseEventTransitionParamsSchema.extend(oracleResultEventSchema.shape).extend({
+	id: z.literal("event_oracle_result"),
+	oracle: checkedAddressSchema,
+});
+
 const newBlockTransition = z.object({
 	id: z.literal("block_new"),
 	block: eventBigIntSchema,
@@ -271,6 +314,9 @@ export const stateTransitionSchema = z.discriminatedUnion("id", [
 	epochStagedEventTransitionSchema,
 	transactionProposedEventTransitionSchema,
 	transactionAttestedEventTransitionSchema,
+	oracleTransactionProposedEventTransitionSchema,
+	oracleTransactionAttestedEventTransitionSchema,
+	oracleResultEventTransitionSchema,
 	// Consensus Clock
 	newBlockTransition,
 ]);

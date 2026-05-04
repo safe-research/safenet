@@ -4,6 +4,9 @@ import type { ProtocolAction, SafenetProtocol } from "../consensus/protocol/type
 import type { SigningClient } from "../consensus/signing/client.js";
 import type { VerificationEngine } from "../consensus/verify/engine.js";
 import { handleEpochStaged } from "../machine/consensus/epochStaged.js";
+import { handleOracleResult } from "../machine/consensus/oracleResult.js";
+import { handleOracleTransactionAttested } from "../machine/consensus/oracleTransactionAttested.js";
+import { handleOracleTransactionProposed } from "../machine/consensus/oracleTransactionProposed.js";
 import { checkEpochRollover } from "../machine/consensus/rollover.js";
 import { handleTransactionAttested } from "../machine/consensus/transactionAttested.js";
 import { handleTransactionProposed } from "../machine/consensus/transactionProposed.js";
@@ -64,6 +67,8 @@ export class SafenetStateMachine {
 		blocksPerEpoch,
 		keyGenTimeout,
 		signingTimeout,
+		allowedOracles,
+		oracleTimeout,
 		storage,
 	}: {
 		account: Address;
@@ -78,6 +83,8 @@ export class SafenetStateMachine {
 		blocksPerEpoch?: bigint;
 		keyGenTimeout?: bigint;
 		signingTimeout?: bigint;
+		allowedOracles?: readonly Address[];
+		oracleTimeout?: bigint;
 		storage: StateStorage;
 	}) {
 		this.#machineConfig = {
@@ -87,6 +94,8 @@ export class SafenetStateMachine {
 			blocksPerEpoch: blocksPerEpoch ?? BLOCKS_PER_EPOCH,
 			keyGenTimeout: keyGenTimeout ?? DEFAULT_TIMEOUT,
 			signingTimeout: signingTimeout ?? DEFAULT_TIMEOUT,
+			allowedOracles: allowedOracles ?? [],
+			oracleTimeout: oracleTimeout ?? DEFAULT_TIMEOUT,
 		};
 		this.#protocol = protocol;
 		this.#keyGenClient = keyGenClient;
@@ -361,6 +370,29 @@ export class SafenetStateMachine {
 			}
 			case "event_transaction_attested": {
 				return await handleTransactionAttested(this.#protocol, machineStates, transition, this.#logger);
+			}
+			case "event_oracle_transaction_proposed": {
+				return await handleOracleTransactionProposed(
+					this.#machineConfig,
+					this.#protocol,
+					this.#verificationEngine,
+					this.#signingClient,
+					consensusState,
+					transition,
+					this.#logger,
+				);
+			}
+			case "event_oracle_transaction_attested": {
+				return await handleOracleTransactionAttested(this.#protocol, machineStates, transition, this.#logger);
+			}
+			case "event_oracle_result": {
+				return await handleOracleResult(
+					this.#machineConfig,
+					this.#signingClient,
+					machineStates,
+					transition,
+					this.#logger,
+				);
 			}
 		}
 	}

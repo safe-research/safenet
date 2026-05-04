@@ -1,8 +1,9 @@
-import { ethAddress, zeroHash } from "viem";
+import { zeroHash } from "viem";
 import { describe, expect, it } from "vitest";
+import { makeMachineConfig } from "../../__tests__/data/machine.js";
 import { toPoint } from "../../frost/math.js";
 import type { SignedEvent } from "../transitions/types.js";
-import type { ConsensusState, MachineConfig, MachineStates, SigningState } from "../types.js";
+import type { ConsensusState, MachineStates, SigningState } from "../types.js";
 import { handleSigningCompleted } from "./completed.js";
 
 // --- Test Data ---
@@ -46,14 +47,7 @@ const CONSENSUS_STATE: ConsensusState = {
 	},
 };
 
-const MACHINE_CONFIG: MachineConfig = {
-	account: ethAddress,
-	participantsInfo: [],
-	genesisSalt: zeroHash,
-	keyGenTimeout: 0n,
-	signingTimeout: 20n,
-	blocksPerEpoch: 0n,
-};
+const MACHINE_CONFIG = makeMachineConfig({ participantsInfo: [], signingTimeout: 20n });
 
 const EVENT: SignedEvent = {
 	id: "event_signed",

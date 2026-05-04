@@ -17,7 +17,7 @@ export const transitionWatcherStateSchema = z
 	})
 	.optional();
 
-export type Config = Pick<ProtocolConfig, "coordinator" | "consensus">;
+export type Config = Pick<ProtocolConfig, "coordinator" | "consensus" | "allowedOracles">;
 export type WatcherConfig = Prettify<
 	{ blockTimeOverride?: number } & Pick<
 		WatchParams<[]>,
@@ -124,7 +124,10 @@ export class OnchainTransitionWatcher {
 			...this.#watcherConfig,
 			lastIndexedBlock,
 			blockTime,
-			address: [this.#config.consensus, this.#config.coordinator],
+			// Note: allowedOracles must only emit OracleResult events and must never emit events
+			// from the coordinator or consensus ABIs, as those event handlers do not filter by
+			// emitting contract address.
+			address: [this.#config.consensus, this.#config.coordinator, ...(this.#config.allowedOracles ?? [])],
 			events: ALL_EVENTS,
 			fallibleEvents: ["TransactionProposed"],
 			handler: (update) => {

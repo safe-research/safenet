@@ -4,11 +4,13 @@ import { makeMachineConfig } from "../../__tests__/data/machine.js";
 import type { SafenetProtocol } from "../../consensus/protocol/types.js";
 import type { SigningClient } from "../../consensus/signing/client.js";
 import type { VerificationEngine } from "../../consensus/verify/engine.js";
-import type { TransactionProposedEvent } from "../transitions/types.js";
+import type { OracleTransactionProposedEvent } from "../transitions/types.js";
 import type { ConsensusState } from "../types.js";
-import { handleTransactionProposed } from "./transactionProposed.js";
+import { handleOracleTransactionProposed } from "./oracleTransactionProposed.js";
 
 // --- Test Data ---
+const ORACLE_ADDRESS = "0x4838B106FCe9647Bdf1E7877BF73cE8B0BAD5f97";
+
 const CONSENSUS_STATE: ConsensusState = {
 	activeEpoch: 0n,
 	groupPendingNonces: {},
@@ -18,16 +20,17 @@ const CONSENSUS_STATE: ConsensusState = {
 	signatureIdToMessage: {},
 };
 
-const MACHINE_CONFIG = makeMachineConfig({ signingTimeout: 20n });
+const MACHINE_CONFIG = makeMachineConfig({ signingTimeout: 20n, allowedOracles: [ORACLE_ADDRESS], oracleTimeout: 30n });
 
-const EVENT: TransactionProposedEvent = {
-	id: "event_transaction_proposed",
+const EVENT: OracleTransactionProposedEvent = {
+	id: "event_oracle_transaction_proposed",
 	block: 2n,
 	index: 0,
 	safeTxHash: "0x5af35af3",
 	chainId: 1n,
 	safe: "0x5afe5afe",
 	epoch: 10n,
+	oracle: ORACLE_ADDRESS,
 	transaction: {
 		chainId: 1n,
 		safe: "0x5afe5afe",
@@ -45,7 +48,7 @@ const EVENT: TransactionProposedEvent = {
 };
 
 // --- Tests ---
-describe("transaction proposed", () => {
+describe("oracle transaction proposed", () => {
 	it("should not handle proposed event if not part of signing group", async () => {
 		const protocol: SafenetProtocol = {} as unknown as SafenetProtocol;
 		const verificationEngine: VerificationEngine = {} as unknown as VerificationEngine;
@@ -53,7 +56,7 @@ describe("transaction proposed", () => {
 		const signingClient: SigningClient = {
 			hasParticipant,
 		} as unknown as SigningClient;
-		const diff = await handleTransactionProposed(
+		const diff = await handleOracleTransactionProposed(
 			MACHINE_CONFIG,
 			protocol,
 			verificationEngine,
@@ -64,6 +67,7 @@ describe("transaction proposed", () => {
 
 		expect(diff).toStrictEqual({});
 	});
+
 	it("should not handle proposed event if epoch group is unknown", async () => {
 		const protocol: SafenetProtocol = {} as unknown as SafenetProtocol;
 		const verificationEngine: VerificationEngine = {} as unknown as VerificationEngine;
@@ -75,7 +79,7 @@ describe("transaction proposed", () => {
 			...CONSENSUS_STATE,
 			epochGroups: {},
 		};
-		const diff = await handleTransactionProposed(
+		const diff = await handleOracleTransactionProposed(
 			MACHINE_CONFIG,
 			protocol,
 			verificationEngine,
@@ -104,7 +108,7 @@ describe("transaction proposed", () => {
 		const signingClient: SigningClient = {
 			hasParticipant,
 		} as unknown as SigningClient;
-		const diff = await handleTransactionProposed(
+		const diff = await handleOracleTransactionProposed(
 			MACHINE_CONFIG,
 			protocol,
 			verificationEngine,
@@ -115,19 +119,20 @@ describe("transaction proposed", () => {
 		expect(diff).toStrictEqual({});
 		expect(verify).toBeCalledTimes(1);
 		expect(verify).toBeCalledWith({
-			type: "safe_transaction_packet",
+			type: "oracle_transaction_packet",
 			domain: {
 				chain: 23n,
 				consensus: zeroAddress,
 			},
 			proposal: {
 				epoch: EVENT.epoch,
+				oracle: EVENT.oracle,
 				transaction: EVENT.transaction,
 			},
 		});
 	});
 
-	it("should transition to waiting for request after verifying transaction", async () => {
+	it("should transition to waiting_for_request after verifying oracle transaction", async () => {
 		const protocol: SafenetProtocol = {
 			chainId: () => 23n,
 			consensus: () => zeroAddress,
@@ -142,13 +147,12 @@ describe("transaction proposed", () => {
 		} as unknown as VerificationEngine;
 		const hasParticipant = vi.fn().mockReturnValueOnce(true);
 		const participants = vi.fn();
-		// Only use a partial set of the default participants
 		participants.mockReturnValue([3n, 7n]);
 		const signingClient: SigningClient = {
 			hasParticipant,
 			participants,
 		} as unknown as SigningClient;
-		const diff = await handleTransactionProposed(
+		const diff = await handleOracleTransactionProposed(
 			MACHINE_CONFIG,
 			protocol,
 			verificationEngine,
@@ -157,13 +161,14 @@ describe("transaction proposed", () => {
 			EVENT,
 		);
 		const packet = {
-			type: "safe_transaction_packet",
+			type: "oracle_transaction_packet",
 			domain: {
 				chain: 23n,
 				consensus: zeroAddress,
 			},
 			proposal: {
 				epoch: EVENT.epoch,
+				oracle: EVENT.oracle,
 				transaction: EVENT.transaction,
 			},
 		};
@@ -174,10 +179,9 @@ describe("transaction proposed", () => {
 			"0x5af35afe",
 			{
 				id: "waiting_for_request",
-				responsible: undefined,
 				packet,
 				signers: [3n, 7n],
-				deadline: 22n,
+				deadline: 22n, // block(2) + signingTimeout(20)
 			},
 		]);
 		expect(verify).toBeCalledTimes(1);

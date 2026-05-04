@@ -6,10 +6,10 @@ import {
 	entryPoint09Address,
 } from "viem/account-abstraction";
 import { describe, expect, it, vi } from "vitest";
-import { TEST_POINT } from "../../__tests__/data/machine.js";
+import { makeMachineConfig, TEST_POINT } from "../../__tests__/data/machine.js";
 import type { KeyGenClient } from "../../consensus/keyGen/client.js";
 import type { KeyGenEvent } from "../transitions/types.js";
-import type { ConsensusState, MachineConfig, MachineStates } from "../types.js";
+import type { ConsensusState, MachineStates } from "../types.js";
 import { handleGenesisKeyGen } from "./genesis.js";
 
 // --- Test Data ---
@@ -50,14 +50,13 @@ const PARTICIPANTS_INFO = [
 
 const PARTICIPANTS = PARTICIPANTS_INFO.map((i) => i.address);
 
-const MACHINE_CONFIG: MachineConfig = {
+const MACHINE_CONFIG = makeMachineConfig({
 	account: entryPoint06Address,
 	participantsInfo: PARTICIPANTS_INFO,
-	genesisSalt: zeroHash,
 	keyGenTimeout: 25n,
 	signingTimeout: 20n,
 	blocksPerEpoch: 1n,
-};
+});
 
 const EVENT: KeyGenEvent = {
 	id: "event_key_gen",

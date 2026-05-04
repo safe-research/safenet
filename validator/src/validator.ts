@@ -43,6 +43,8 @@ const config: ProtocolConfig = {
 	blocksBeforeResubmit: validatorConfig.BLOCKS_BEFORE_RESUBMIT,
 	keyGenTimeout: validatorConfig.KEY_GEN_TIMEOUT,
 	signingTimeout: validatorConfig.SIGNING_TIMEOUT,
+	allowedOracles: validatorConfig.ALLOWED_ORACLES,
+	oracleTimeout: validatorConfig.ORACLE_TIMEOUT_BLOCKS,
 };
 const watcherConfig: WatcherConfig = {
 	blockTimeOverride: validatorConfig.BLOCK_TIME_OVERRIDE,
