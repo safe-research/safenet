@@ -17,6 +17,7 @@ export type Logger = Pick<WinstonLogger, LogLevel>;
 export type LoggingOptions = {
 	level?: LogLevel | "silent";
 	pretty?: boolean;
+	commit?: string;
 };
 
 const SPLAT = Symbol.for("splat");
@@ -51,10 +52,12 @@ export const createLogger = (options: LoggingOptions): Logger => {
 		options.pretty === true
 			? winston.format.combine(winston.format.timestamp(), winston.format.colorize(), prettyFormat)
 			: winston.format.json({ replacer: jsonReplacer });
+	const defaultMeta = options.commit !== undefined ? { commit: options.commit } : undefined;
 	return winston.createLogger({
 		...level,
 		levels: LEVELS,
 		format,
+		defaultMeta,
 		transports: [new winston.transports.Console()],
 	});
 };

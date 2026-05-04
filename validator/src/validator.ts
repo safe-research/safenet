@@ -22,9 +22,12 @@ if (!result.success) {
 
 const validatorConfig = result.data;
 
+const commit = process.env.COMMIT_SHA ?? "unknown";
+
 const logger = createLogger({
 	level: validatorConfig.LOG_LEVEL,
 	pretty: process.stdout.isTTY,
+	commit,
 });
 
 const account = privateKeyToAccount(validatorConfig.PRIVATE_KEY, {
@@ -67,6 +70,7 @@ const metrics = createMetricsService({
 	logger,
 	host: validatorConfig.METRICS_HOST,
 	port: validatorConfig.METRICS_PORT,
+	commit,
 });
 const service = createValidatorService({
 	account,

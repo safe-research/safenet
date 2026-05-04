@@ -22,6 +22,9 @@ RUN npm run build --workspace=validator
 # This stage creates the final, lean image for running the application.
 FROM base AS runner
 
+ARG COMMIT_SHA=unknown
+ENV COMMIT_SHA=${COMMIT_SHA}
+
 # Copy package.json and install *only* production dependencies.
 # This avoids including devDependencies in the final image, keeping it small.
 COPY --from=builder /usr/src/app/package.json /usr/src/app/package-lock.json ./

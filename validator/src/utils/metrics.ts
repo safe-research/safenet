@@ -16,6 +16,7 @@ export type MetricsServiceOptions = {
 	logger: Logger;
 	host?: string;
 	port?: number;
+	commit?: string;
 };
 
 export class MetricsService {
@@ -25,9 +26,19 @@ export class MetricsService {
 	#server: Server;
 	#listenOptions: { host: string; port: number };
 
-	constructor({ logger, host, port }: MetricsServiceOptions) {
+	constructor({ logger, host, port, commit }: MetricsServiceOptions) {
 		this.#logger = logger;
 		this.#register = new Registry();
+
+		if (commit !== undefined) {
+			new Gauge({
+				name: "validator_build_info",
+				help: "Build information for the validator",
+				labelNames: ["commit"],
+				registers: [this.#register],
+			}).set({ commit }, 1);
+		}
+
 		this.#metrics = {
 			blockNumber: new Gauge({
 				name: "validator_block_number",
