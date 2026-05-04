@@ -1,4 +1,4 @@
-use std::collections::BTreeMap;
+use std::{collections::BTreeMap, iter};
 
 use crate::{
     bindings,
@@ -57,6 +57,10 @@ pub fn generate_round2(
         let mut encryption_public_keys = BTreeMap::new();
         let mut packages = BTreeMap::new();
         for (&identifier, commitment) in commitments {
+            if identifier == *secret_package.identifier() {
+                continue;
+            }
+
             let (encryption_public_key, package) = marshal::frost_commitment(commitment)?;
             encryption_public_keys.insert(identifier, encryption_public_key);
             packages.insert(identifier, package);
@@ -68,6 +72,10 @@ pub fn generate_round2(
         &packages
             .iter()
             .map(|(&identifier, package)| (identifier, package.commitment()))
+            .chain(iter::once((
+                *secret_package.identifier(),
+                secret_package.commitment(),
+            )))
             .collect(),
     )?;
     let verifying_share = public_key_package
