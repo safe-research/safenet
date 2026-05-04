@@ -41,7 +41,7 @@ pub async fn run(config: ValidatorConfig) -> Result<()> {
 
     let storage = state::Storage::open(config.storage_file.as_deref(), config.state_history)?;
     let state = if let Some(saved) = storage.load_latest()? {
-        tracing::info!("restored validator state from storage");
+        tracing::debug!("restored validator state from storage");
         saved
     } else {
         let active_epoch = Consensus::new(config.consensus_address, &provider)

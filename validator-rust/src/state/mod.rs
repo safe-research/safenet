@@ -77,12 +77,12 @@ impl ValidatorState {
         &mut self,
         event: crate::bindings::Consensus::ConsensusEvents,
     ) -> Vec<Action> {
-        tracing::info!(?event, "consensus event");
+        tracing::debug!(?event, "consensus event");
         vec![]
     }
 
     pub fn on_coordinator_event(&mut self, event: Coordinator::CoordinatorEvents) -> Vec<Action> {
-        tracing::info!(?event, "coordinator event");
+        tracing::debug!(?event, "coordinator event");
         match event {
             Coordinator::CoordinatorEvents::KeyGen(e) => self.on_keygen(e),
             Coordinator::CoordinatorEvents::KeyGenCommitted(e) => self.on_keygen_committed(e),
@@ -107,12 +107,12 @@ impl ValidatorState {
         let Some(poap) =
             participants::generate_participant_proof(&config.participants, config.own_address)
         else {
-            tracing::info!(%gid, "not a participant in genesis keygen");
+            tracing::debug!(%gid, "not a participant in genesis keygen");
             self.phase = Phase::WaitingForRollover;
             return vec![];
         };
 
-        tracing::info!(%gid, "genesis keygen triggered, publishing commitment");
+        tracing::debug!(%gid, "genesis keygen triggered, publishing commitment");
         let round1 = match keygen::generate_round1(config.own_address, event.count, event.threshold)
         {
             Ok(result) => result,
@@ -161,7 +161,7 @@ impl ValidatorState {
 
         // TODO(nlordell): we should modify this code to move out the old fields
         // from the `phase` instead of cloning them.
-        tracing::info!("all participants committed, transitioning to collecting shares");
+        tracing::debug!("all participants committed, transitioning to collecting shares");
         let round2 = match keygen::generate_round2(encryption_key, secret_package, commitments) {
             Ok(round2) => round2,
             Err(err) => {
@@ -195,7 +195,7 @@ impl ValidatorState {
             return vec![];
         };
 
-        if event.gid != *gid || !event.shared {
+        if event.gid != *gid {
             return vec![];
         }
 
@@ -205,7 +205,7 @@ impl ValidatorState {
             return vec![];
         }
 
-        tracing::info!("all secret shares received");
+        tracing::debug!("all secret shares received");
         let round3 =
             match keygen::generate_round3(encryption_key, secret_package, commitments, shares) {
                 Ok(round3) => round3,
@@ -215,6 +215,7 @@ impl ValidatorState {
                 }
             };
 
+        tracing::info!("MISSION ACCOMPLISHED!");
         self.phase = Phase::GenesisComplete {
             key_package: round3.key_package,
         };

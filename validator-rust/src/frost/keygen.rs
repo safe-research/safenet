@@ -167,9 +167,9 @@ fn round2_encrypted_shares(
     for (participant, share) in shares {
         let identifier = participants::identifier(*participant);
         let index = match identifier.cmp(own_identifier) {
-            Ordering::Less => index,
+            Ordering::Less => index - 1,
             Ordering::Equal => continue,
-            Ordering::Greater => index - 1,
+            Ordering::Greater => index,
         };
         let encrypted_secret_share = share.f.get(index).context("missing secret share")?;
         encrypted_secret_shares.insert(identifier, encrypted_secret_share.to_be_bytes());

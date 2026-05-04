@@ -28,7 +28,7 @@ pub async fn run(
     start_block: Option<u64>,
     mut on_update: impl FnMut(Update),
 ) -> Result<()> {
-    tracing::info!(
+    tracing::debug!(
         consensus = %addresses.consensus,
         coordinator = %addresses.coordinator,
         "watching for new blocks and contract logs",
@@ -107,7 +107,7 @@ pub async fn run(
             }
             signal = tokio::signal::ctrl_c() => {
                 signal?;
-                tracing::info!("shutdown signal received");
+                tracing::debug!("shutdown signal received");
                 return Ok(());
             }
         }
