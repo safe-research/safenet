@@ -23,19 +23,19 @@ Implemented modules in `validator-rust/src/`:
 | State storage            | `state/storage.rs`          | Done    | SQLite-backed JSON persistence; `open`/`save`/`load_latest`; keeps last `state_history` entries by block number; defaults to `:memory:`                                                                        |
 | Driver                   | `driver.rs`                 | Partial | Async init: opens storage, restores state or cold-starts (queries epoch, coordinator address, chain ID, derives own address); builds `ConsensusConfig`; persists state after each block; dispatches actions    |
 | Watcher                  | `watcher.rs`                | Partial | Block + log subscription; history replay via `start_block` (`eth_getLogs` range then monotonic updates); block monotonicity check; log sort by index; dispatches to `Driver`; no reorg handling               |
-| Participant utilities    | `frost/participants.rs`     | Partial | `calc_participants_root` (Merkle root of left-padded addresses, tested); `calc_genesis_group_id` (ABI-encoded keccak + mask, tested); `generate_participant_proof` stubbed (`todo!()`)                        |
-| DKG round 1              | `frost/keygen.rs`           | Partial | `generate_round1` calls `dkg::part1` and serializes `SecretPackage` to bytes; `identifier_from_address` and `package_to_commitment` stubbed (`todo!()`)                                                       |
+| Participant utilities    | `frost/participants.rs`     | Done    | `calc_participants_root` (Merkle root of left-padded addresses, tested); `calc_genesis_group_id` (ABI-encoded keccak + mask, tested); `generate_participant_proof` implemented                        |
+| DKG round 1              | `frost/keygen.rs`           | Done    | `generate_round1` calls `dkg::part1` and serializes `SecretPackage` to bytes; `identifier_from_address` and `package_to_commitment` implemented                            |
 
 Not yet ported (TypeScript → Rust):
 
 | TypeScript Domain            | TS Path                                                | Status            |
 | ---------------------------- | ------------------------------------------------------ | ----------------- |
 | ABI point marshalling        | (new — no TS equivalent)                               | Not started       |
-| ECDH share encryption        | `validator/src/frost/secret.ts`                        | Not started       |
+| ECDH share encryption        | `validator/src/frost/secret.ts`                        | Done              |
 | Consensus protocol clients   | `validator/src/consensus/protocol/`                    | Not started       |
 | On-chain action queue        | `validator/src/consensus/protocol/onchain.ts`          | Not started       |
 | Packet verification engine   | `validator/src/consensus/verify/`                      | Not started       |
-| Key generation state machine | `validator/src/machine/keygen/`                        | Partial (Phase 0) |
+| Key generation state machine | `validator/src/machine/keygen/`                        | Partial (Phases 1–3) |
 | Signing state machine        | `validator/src/machine/signing/`                       | Not started       |
 | Consensus state machine      | `validator/src/machine/consensus/`                     | Not started       |
 | Transition watcher           | `validator/src/machine/transitions/`                   | Not started       |
@@ -202,10 +202,10 @@ context = keccak256("genesis" || genesisSalt)   // or zeroHash if no salt
 
 The group ID is stored in `Phase::WaitingForGenesis { genesis_group_id }` at startup. On receiving a `KeyGen` coordinator event, `on_keygen` compares `event.gid` against the stored ID and — if matched and we are a participant — calls `frost::keygen::generate_round1` to produce the DKG round 1 output, transitions to `Phase::CollectingCommitments`, and emits `Action::KeyGenAndCommit`.
 
-Two stubs block end-to-end execution:
-- `frost::keygen::identifier_from_address` — derive a FROST `Identifier` from an Ethereum address using the `hid` hash-to-scalar. TS source: `validator/src/frost/identifier.ts`.
-- `frost::keygen::package_to_commitment` — convert `round1::Package` (commitment vector + proof-of-knowledge) to the ABI `KeyGenCommitment { q, c[], r, mu }`. See Deliberate Porting Decisions for the point marshalling recipe.
-- `frost::participants::generate_participant_proof` — generate the Merkle sibling-hash proof (`poap`) for own inclusion in the participant set. TS source: `validator/src/consensus/merkle.ts` (`generateParticipantProof`).
+All stubs have been filled:
+- `frost::keygen::identifier_from_address` — uses `frost_secp256k1`'s `hid` hash-to-scalar on address bytes. TS source: `validator/src/frost/identifier.ts`.
+- `frost::keygen::package_to_commitment` — marshals `round1::Package` fields to ABI `KeyGenCommitment` using the point conversion recipe in Deliberate Porting Decisions.
+- `frost::participants::generate_participant_proof` — ports `generateMerkleProof` from `validator/src/consensus/merkle.ts`.
 
 Participants are sorted ascending by address (numerical order). TS source: `validator/src/machine/keygen/group.ts`, `validator/src/utils/participants.ts`.
 
@@ -248,10 +248,9 @@ Skip invalid shares / complaint logic entirely for the happy path. TS source: `v
 Use `frost-secp256k1` directly — do not reimplement hashes, polynomial math, VSS, or proof-of-knowledge. The crate's DKG module (`frost_secp256k1::keys::dkg`) covers the full keygen ceremony. The hash functions (`hid`, `hdkg`, `hpok`, `h2`) are internal to the crate and invoked automatically through its API.
 
 The only custom code needed is:
-
-- **ABI marshalling** — converting between `frost-secp256k1` points and the ABI `Point { uint256 x; uint256 y }` (see Deliberate Porting Decisions). **Stubbed in `frost::keygen::package_to_commitment`.**
-- **ECDH share encryption** — encrypting/decrypting secret shares with `f_k(i) XOR (peer_pk^{our_sk}).x`. This uses point multiplication available via the re-exported `k256` types, but is not crypto we invented — it directly follows the TypeScript in `validator/src/frost/secret.ts`. **Not yet started.**
-- **Merkle proof generation** — the proof (`poap`) is passed to the contract. Root computation is done; proof path generation is **stubbed in `frost::participants::generate_participant_proof`**. TS source: `validator/src/consensus/merkle.ts`.
+- **ABI marshalling** — converting between `frost-secp256k1` points and the ABI `Point { uint256 x; uint256 y }` (see Deliberate Porting Decisions). **Done in `frost::keygen::package_to_commitment`.**
+- **ECDH share encryption** — encrypting/decrypting secret shares with `f_k(i) XOR (peer_pk^{our_sk}).x`. Uses the `k256` crate directly for point multiplication; port of `validator/src/frost/secret.ts`. **Done** in `src/frost/secret.rs`.
+- **Merkle proof generation** — the proof (`poap`) is passed to the contract. Root computation is done; proof path generation is **done in `frost::participants::generate_participant_proof`**. TS source: `validator/src/consensus/merkle.ts`.
 
 ### Contract Calls to Add to `bindings.rs`
 
@@ -268,16 +267,12 @@ function keyGenConfirm(bytes32 gid) external
 
 ## Suggested Next Steps
 
-1. Fill the three `todo!()` stubs that block Phase 0 end-to-end:
-   - `frost::keygen::identifier_from_address` — use `frost_secp256k1`'s `hid` hash-to-scalar on the address bytes.
-   - `frost::keygen::package_to_commitment` — marshal `round1::Package` fields to ABI `KeyGenCommitment` using the point conversion recipe in Deliberate Porting Decisions.
-   - `frost::participants::generate_participant_proof` — port `generateMerkleProof` from `validator/src/consensus/merkle.ts`.
-2. Add the ECDH encryption keypair to the commitment flow (needed before Phase 1); port `validator/src/frost/secret.ts` to `src/frost/secret.rs`.
-3. Implement `Handler::handle` in `actions.rs` to actually submit transactions via the provider.
-4. Implement Phase 1: handle `KeyGenCommitted` events, compute group key, encrypt and submit secret shares.
-5. Add `keyGenSecretShare` and `keyGenConfirm` to `bindings.rs`.
-6. Implement Phase 2: handle `KeyGenSecretShared` events, decrypt/verify shares, submit confirm.
-7. Implement Phase 3: handle `KeyGenConfirmed` events, detect completion.
+1. Add the ECDH encryption keypair to the commitment flow (needed before Phase 1); update `KeyGenCommitment` to include the encryption public key `q`.
+2. Implement `Handler::handle` in `actions.rs` to actually submit transactions via the provider.
+3. Implement Phase 1: handle `KeyGenCommitted` events, compute group key, encrypt and submit secret shares.
+4. Add `keyGenSecretShare` and `keyGenConfirm` to `bindings.rs`.
+5. Implement Phase 2: handle `KeyGenSecretShared` events, decrypt/verify shares, submit confirm.
+6. Implement Phase 3: handle `KeyGenConfirmed` events, detect completion.
 
 ## Verification Commands
 

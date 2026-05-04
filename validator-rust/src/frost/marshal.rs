@@ -38,7 +38,7 @@ pub fn solidity_point(point: &k256::ProjectivePoint) -> bindings::Point {
     bindings::Point { x, y }
 }
 
-/// Converts a secp256k1 scalar to a big-endian `U256`.
+/// Converts a secp256k1 scalar to a `U256`.
 pub fn solidity_scalar(scalar: &k256::Scalar) -> U256 {
     U256::from_be_bytes(scalar.to_bytes().into())
 }

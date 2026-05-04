@@ -153,7 +153,7 @@ mod tests {
         let mut data = [0u8; 64];
         data[..32].copy_from_slice(a.as_slice());
         data[32..].copy_from_slice(b.as_slice());
-        let expected = keccak256(&data);
+        let expected = keccak256(data);
         assert_eq!(merkle_root(vec![a, b]), expected);
     }
 
@@ -168,7 +168,7 @@ mod tests {
             let mut data = [0u8; 64];
             data[..32].copy_from_slice(left.as_slice());
             data[32..].copy_from_slice(right.as_slice());
-            node = keccak256(&data).into();
+            node = keccak256(data);
         }
         node == root
     }
@@ -260,7 +260,7 @@ mod tests {
         let mut data = [0u8; 64];
         data[..32].copy_from_slice(left.as_slice());
         data[32..].copy_from_slice(right.as_slice());
-        let expected_root: B256 = keccak256(&data).into();
+        let expected_root: B256 = keccak256(data);
 
         assert_eq!(calc_participants_root(&participants), expected_root);
     }
