@@ -9,7 +9,7 @@ use crate::{
     frost::{keygen, participants, secret::EncryptionKey},
 };
 use alloy::primitives::{Address, B256};
-use frost_secp256k1::keys::dkg;
+use frost_secp256k1::keys::{self, dkg};
 use serde::{Deserialize, Serialize};
 
 #[derive(Serialize, Deserialize)]
@@ -38,6 +38,9 @@ pub enum Phase {
         secret_package: dkg::round2::SecretPackage,
         commitments: BTreeMap<Address, bindings::KeyGenCommitment>,
         shares: BTreeMap<Address, bindings::KeyGenSecretShare>,
+    },
+    GenesisComplete {
+        key_package: keys::KeyPackage,
     },
 }
 
@@ -169,7 +172,7 @@ impl ValidatorState {
 
         self.phase = Phase::CollectingShares {
             gid: event.gid,
-            encryption_key: encryption_key.clone(),
+            encryption_key: *encryption_key,
             secret_package: round2.secret_package,
             commitments: commitments.clone(),
             shares: BTreeMap::new(),
@@ -205,11 +208,16 @@ impl ValidatorState {
         tracing::info!("all secret shares received");
         let round3 =
             match keygen::generate_round3(encryption_key, secret_package, commitments, shares) {
-                Ok(round2) => round2,
+                Ok(round3) => round3,
                 Err(err) => {
-                    tracing::error!(%err, "DKG round 2 failed");
+                    tracing::error!(%err, "DKG round 3 failed");
                     return vec![];
                 }
             };
+
+        self.phase = Phase::GenesisComplete {
+            key_package: round3.key_package,
+        };
+        vec![Action::KeyGenConfirm { gid: event.gid }]
     }
 }

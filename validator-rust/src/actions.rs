@@ -13,6 +13,7 @@ use alloy::{
 use anyhow::Result;
 use tokio::{sync::mpsc, task::JoinHandle};
 
+#[allow(clippy::enum_variant_names)]
 #[derive(Clone)]
 pub enum Action {
     KeyGenAndCommit {
@@ -26,6 +27,9 @@ pub enum Action {
     KeyGenSecretShare {
         gid: B256,
         share: KeyGenSecretShare,
+    },
+    KeyGenConfirm {
+        gid: B256,
     },
 }
 
@@ -62,6 +66,11 @@ impl Action {
                 to: addresses.coordinator,
                 data: Coordinator::keyGenSecretShareCall { gid, share }.abi_encode(),
                 gas_limit: 500_000,
+            },
+            Self::KeyGenConfirm { gid } => EncodedAction {
+                to: addresses.coordinator,
+                data: Coordinator::keyGenConfirmCall { gid }.abi_encode(),
+                gas_limit: 300_000,
             },
         }
     }
