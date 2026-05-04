@@ -22,7 +22,7 @@ if (!result.success) {
 
 const validatorConfig = result.data;
 
-const commit = process.env.COMMIT_SHA ?? "unknown";
+const commit = validatorConfig.COMMIT_SHA ?? "unknown";
 
 const logger = createLogger({
 	level: validatorConfig.LOG_LEVEL,
