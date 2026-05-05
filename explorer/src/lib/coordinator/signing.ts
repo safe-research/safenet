@@ -222,10 +222,10 @@ export const loadLatestAttestationStatus = async ({
 	if (!isValid) {
 		// Log and then remove invalid signature
 		console.error(`Detected invalid signature ${signature} for ${attestationStatus.sid}`);
-		return { ...attestationStatus, status: "completed", signature: formatSignatureHex(signature) };
+		return { ...attestationStatus, status: "error" };
 	}
 
-	return { ...attestationStatus, status: "error" };
+	return { ...attestationStatus, status: "completed", signature: formatSignatureHex(signature) };
 };
 
 const verifyAttestationSignature = (groupKey: Point, signature: Signature, message: Hex): boolean => {
