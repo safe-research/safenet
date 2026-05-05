@@ -4,7 +4,9 @@ import {
 	COORDINATOR_SIGNING_INITIATED_EVENT,
 	COORDINATOR_SIGNING_PROGRESS_EVENTS,
 	COORDINATOR_SIGNING_PROGRESS_SELECTORS,
+	GROUP_KEY_ABI,
 } from "@/lib/coordinator/abi";
+import type { FrostPoint } from "@/lib/frost/math";
 import { toPoint } from "@/lib/frost/math";
 import { verifySignature } from "@/lib/frost/verify";
 import { safeTxProposalHash } from "@/lib/packets";
@@ -41,10 +43,7 @@ export type AttestationParticipation = {
 };
 
 export type Signature = {
-	r: {
-		x: bigint;
-		y: bigint;
-	};
+	r: FrostPoint;
 	z: bigint;
 };
 
@@ -57,10 +56,7 @@ export type AttestationStatus = {
 	signed: AttestationParticipation[];
 	completed: boolean;
 	signature?: Signature;
-	groupPublicKey?: {
-		x: bigint;
-		y: bigint;
-	};
+	groupPublicKey?: FrostPoint;
 };
 
 export const loadLatestAttestationStatus = async ({
@@ -133,8 +129,8 @@ export const loadLatestAttestationStatus = async ({
 
 	const aggregate = eventLogs.reduce(
 		(agg, log) => {
-			const status = agg[log.args.sid] ?? { committed: [], signedBySelection: {}, lastUpdate: 0n };
-			if (status.lastUpdate < log.blockNumber) {
+			const status = agg[log.args.sid] ?? { committed: [], signedBySelection: {} };
+			if (status.lastUpdate === undefined || status.lastUpdate < log.blockNumber) {
 				status.lastUpdate = log.blockNumber;
 			}
 			switch (log.eventName) {
@@ -156,7 +152,10 @@ export const loadLatestAttestationStatus = async ({
 				}
 				case "SignCompleted": {
 					status.selectionRoot = log.args.selectionRoot;
-					status.signature = log.args.signature;
+					status.signature = {
+						r: toPoint(log.args.signature.r),
+						z: log.args.signature.z,
+					};
 					break;
 				}
 			}
@@ -208,32 +207,13 @@ export const loadLatestAttestationStatus = async ({
 };
 
 type StatusAggregation = {
-	lastUpdate: bigint;
+	lastUpdate?: bigint;
 	selectionRoot?: Hex;
 	committed: AttestationParticipation[];
 	signedBySelection: Record<string, AttestationParticipation[]>;
 	signature?: Signature;
-	groupPublicKey?: { x: bigint; y: bigint };
+	groupPublicKey?: FrostPoint;
 };
-
-const GROUP_KEY_ABI = [
-	{
-		type: "function",
-		name: "groupKey",
-		inputs: [{ name: "gid", type: "bytes32" }],
-		outputs: [
-			{
-				name: "key",
-				type: "tuple",
-				components: [
-					{ name: "x", type: "uint256" },
-					{ name: "y", type: "uint256" },
-				],
-			},
-		],
-		stateMutability: "external",
-	},
-] as const;
 
 export const formatSignatureHex = (signature: Signature): Hex => {
 	return `0x${[signature.r.x, signature.r.y, signature.z].map((v) => v.toString(16).padStart(64, "0")).join("")}`;
@@ -243,17 +223,15 @@ export const loadGroupPublicKey = async (
 	provider: PublicClient,
 	coordinator: Address,
 	groupId: Hex,
-): Promise<{ x: bigint; y: bigint } | undefined> => {
+): Promise<FrostPoint | undefined> => {
 	try {
-		const result = await provider.readContract({
+		const result = (await provider.readContract({
 			address: coordinator,
 			abi: GROUP_KEY_ABI,
 			functionName: "groupKey",
 			args: [groupId],
-		});
-		// Decode the result - it's a tuple (x, y)
-		const [x, y] = result as [bigint, bigint];
-		return { x, y };
+		})) as { x: bigint; y: bigint };
+		return toPoint(result);
 	} catch (_error) {
 		// Group might not exist or key generation might not be complete
 		return undefined;
@@ -279,14 +257,9 @@ export const verifyAttestationSignature = async (
 	// We pass the messageHash as a parameter since it's not stored in AttestationStatus
 
 	const { r, z } = attestationStatus.signature;
-	const { x: groupPublicKeyX, y: groupPublicKeyY } = attestationStatus.groupPublicKey;
 
-	// Use toPoint to convert coordinates to FrostPoint
-	const groupCommitment = toPoint({ x: r.x, y: r.y });
-	const groupPublicKey = toPoint({ x: groupPublicKeyX, y: groupPublicKeyY });
-
-	// Use the verifySignature function from the frost module
-	return verifySignature(groupCommitment, z, groupPublicKey, messageHash);
+	// Use the verifySignature function from the frost module with FrostPoint types
+	return verifySignature(r, z, attestationStatus.groupPublicKey, messageHash);
 };
 
 const getSigned = (status: StatusAggregation | undefined): AttestationParticipation[] => {
