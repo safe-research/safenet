@@ -36,7 +36,7 @@ Consensus ──postRequest()──▶ CheckerOracle
 
 #### Asymmetric Bond Thresholds
 
-- `approveBondTarget` — dynamic, set per request by the user as a multiple of the fee (e.g. `2x fee`). Represents the total aggregate "Approve" bond required.
+- `approveBondTarget` — computed at request time as `fee × bondMultiplier`. `bondMultiplier` is a governance parameter (e.g. `50`) updateable by the `ARBITRATOR` with a time delay. Represents the total aggregate "Approve" bond required.
 - `denyCeiling` — global, fixed low cap (e.g. `$50` denominated in the fee token). A single "Deny" commitment at or below this ceiling counts as a valid alarm.
 
 This asymmetry ensures that a whistleblower can never be priced out of flagging a poisoned transaction, at the cost of cheap griefing potential (mitigated off-chain in V1 — see §Grief-and-Sweep below).
@@ -103,7 +103,7 @@ After the voting window closes (or once `approveBondTarget` is fully met):
 struct Request {
     address proposer;             // Consensus contract address
     uint256 fee;                  // locked user fee
-    uint256 approveBondTarget;    // aggregate Approve bond required
+    uint256 approveBondTarget;    // fee * bondMultiplier, locked at postRequest time
     uint256 deadline;             // block.number + VOTING_WINDOW
     State   state;                // PENDING | FROZEN | RESOLVED
     uint256 totalApproveBond;     // running sum of Approve bonds; compared against approveBondTarget
@@ -120,6 +120,12 @@ struct Commitment {
     bool    claimed;
 }
 
+// Governance parameters (time-delayed updates via GOVERNANCE_DELAY)
+uint256 bondMultiplier;                // current multiplier; approveBondTarget = fee * bondMultiplier
+uint256 pendingBondMultiplier;         // staged new multiplier
+uint256 bondMultiplierActiveAt;        // block at which pendingBondMultiplier becomes active (0 = none pending)
+
+mapping(address => uint256) checkerActiveAt;  // 0 = not a checker; >0 = active once block.number >= value
 mapping(bytes32 requestId => Request) requests;
 mapping(bytes32 requestId => mapping(address checker => Commitment)) commitments;
 mapping(bytes32 requestId => address[]) checkerOrder; // ordered arrival list
@@ -129,11 +135,11 @@ mapping(bytes32 requestId => address[]) checkerOrder; // ordered arrival list
 
 | Name | Description |
 |---|---|
-| `VOTING_WINDOW` | Duration in blocks for the voting window (e.g. 12 blocks ≈ 1 minute on Gnosis Chain) |
+| `VOTING_WINDOW` | Duration in blocks for the voting window (12 blocks ≈ 1 minute on Gnosis Chain) |
 | `DENY_BOND_CEILING` | Maximum "Deny" bond (e.g. 50 USDC equivalent) |
-| `CHECKER_ADD_DELAY` | Time delay in blocks before a newly added checker becomes active (prevents immediate front-running of pending requests) |
+| `GOVERNANCE_DELAY` | Time delay in blocks applied to all governance changes: adding checkers and updating `bondMultiplier` |
 | `FEE_TOKEN` | ERC-20 token for bonds and fees |
-| `ARBITRATOR` | Foundation address authorised to manage checkers (`addChecker` / `removeChecker`), call `triggerArbitration` / `resolveDispute`, and recipient of slashed remainder |
+| `ARBITRATOR` | Foundation address authorised to manage checkers, update `bondMultiplier`, call `triggerArbitration` / `resolveDispute`, and recipient of slashed remainder |
 
 #### Events
 
@@ -141,8 +147,9 @@ mapping(bytes32 requestId => address[]) checkerOrder; // ordered arrival list
 event OracleResult(bytes32 indexed requestId, address indexed proposer, bytes result, bool approved); // IOracle compliance
 event NewRequest(bytes32 indexed requestId, address indexed proposer, uint256 fee, uint256 approveBondTarget, uint256 deadline);
 event CheckerScheduled(address indexed checker, uint256 activeAtBlock);
-event CheckerAdded(address indexed checker);
 event CheckerRemoved(address indexed checker);
+event BondMultiplierScheduled(uint256 newMultiplier, uint256 activeAtBlock);
+event BondMultiplierApplied(uint256 newMultiplier);
 event Committed(bytes32 indexed requestId, address indexed checker, bool approved, uint256 bondAmount, uint256 position);
 event Resolved(bytes32 indexed requestId, bool approved, ResolveReason reason);
 event ArbitrationTriggered(bytes32 indexed requestId);
@@ -165,8 +172,10 @@ enum ResolveReason { UNANIMOUS_APPROVE, UNANIMOUS_DENY, TIMEOUT, ARBITRATION }
 | `claim(requestId)` | Checker | Returns bond + proportional fee reward |
 | `triggerArbitration(requestId)` | `ARBITRATOR` | Freezes conflicted request |
 | `resolveDispute(requestId, winner, loser)` | `ARBITRATOR` | Slashes loser, waterfall distribution |
-| `addChecker(checker)` | `ARBITRATOR` | Schedules a checker to become active after `CHECKER_ADD_DELAY` blocks |
+| `addChecker(checker)` | `ARBITRATOR` | Schedules a checker to become active after `GOVERNANCE_DELAY` blocks |
 | `removeChecker(checker)` | `ARBITRATOR` | Immediately removes a checker from the active set |
+| `scheduleBondMultiplier(newValue)` | `ARBITRATOR` | Stages a new bond multiplier, active after `GOVERNANCE_DELAY` blocks |
+| `applyBondMultiplier()` | Anyone | Commits the staged multiplier once its activation block is reached |
 
 #### Fee Distribution Math
 
@@ -186,7 +195,7 @@ Payout_i   = totalFee × (Score_i / TotalScore)
 
 The permissioned checker set is tracked directly inside `CheckerOracle` — no separate registry contract is needed. The `ARBITRATOR` manages the set via `addChecker` / `removeChecker`.
 
-- **Adding** a checker is time-delayed by `CHECKER_ADD_DELAY` blocks to prevent an arbitrator from front-running pending requests with a newly enrolled checker.
+- **Adding** a checker is time-delayed by `GOVERNANCE_DELAY` blocks to prevent an arbitrator from front-running pending requests with a newly enrolled checker.
 - **Removing** a checker is immediate, allowing the arbitrator to react instantly to misbehaving nodes.
 - There is no on-chain master deposit. The recommended minimum balance a checker should hold is off-chain guidance only.
 
@@ -260,13 +269,13 @@ Flows covered: event subscription, address-poisoning detection, bond submission,
 
 2. ~~**Fee escrow mechanism**~~ **Decided**: Option (a) — user pre-approves `CheckerOracle` for the fee amount; `Consensus` calls `postRequest` which pulls the fee via `transferFrom` at request time. Same pull pattern applies to checker bonds on `commitApprove` / `commitDeny`.
 
-3. **`approveBondTarget` parameterization**: Who sets the Approve bond target per request — the user, a governance parameter, or a formula (e.g. `2x fee`)? A fixed formula reduces griefing surface but may not suit all transaction sizes.
+3. ~~**`approveBondTarget` parameterization**~~ **Decided**: `approveBondTarget = fee × bondMultiplier`. `bondMultiplier` defaults to `50` and is updateable by `ARBITRATOR` with a `GOVERNANCE_DELAY` block time delay via `scheduleBondMultiplier` / `applyBondMultiplier`.
 
 4. ~~**Registry vs. Staking extension**~~ **Decided**: Checker set is managed directly inside `CheckerOracle` with no separate registry contract and no on-chain master deposit. `ARBITRATOR` manages additions (time-delayed by `CHECKER_ADD_DELAY`) and removals (immediate).
 
-5. **`VOTING_WINDOW` value**: What is the acceptable latency for a user waiting for a transaction check? The window is measured in blocks (e.g. 12 blocks ≈ 1 minute on Gnosis Chain is used as a placeholder). This has direct UX impact and should be confirmed with product.
+5. ~~**`VOTING_WINDOW` value**~~ **Decided**: 12 blocks (≈ 1 minute on Gnosis Chain).
 
-6. **Slashing deficit**: If the loser's bond (`DENY_BOND_CEILING` = $50) is less than the user's fee, the user cannot be fully refunded from the slashed bond alone. The spec assumes the treasury absorbs the deficit in V1. Is this acceptable, or should the foundation top up the refund?
+6. ~~**Slashing deficit**~~ **Accepted for V1**: Treasury absorbs any deficit when the slashed Deny bond is smaller than the user's fee. A future alternative is to set the effective Deny bond floor to `max(DENY_BOND_CEILING, fee)`, so the bond always covers the fee regardless of transaction size.
 
 7. **Partial Deny threshold**: Currently, a single valid "Deny" commitment triggers a conflict. Should there be a minimum "Deny" bond aggregate before conflict is declared, to reduce cheap-griefing surface even within V1?
 
