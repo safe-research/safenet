@@ -131,15 +131,18 @@ mapping(bytes32 requestId => address[]) checkerOrder; // ordered arrival list
 |---|---|
 | `VOTING_WINDOW` | Duration in blocks for the voting window (e.g. 12 blocks ≈ 1 minute on Gnosis Chain) |
 | `DENY_BOND_CEILING` | Maximum "Deny" bond (e.g. 50 USDC equivalent) |
-| `REGISTRY` | Address of the permissioned checker registry |
+| `CHECKER_ADD_DELAY` | Time delay in blocks before a newly added checker becomes active (prevents immediate front-running of pending requests) |
 | `FEE_TOKEN` | ERC-20 token for bonds and fees |
-| `ARBITRATOR` | Foundation address authorised to call `triggerArbitration` / `resolveDispute` and recipient of slashed remainder |
+| `ARBITRATOR` | Foundation address authorised to manage checkers (`addChecker` / `removeChecker`), call `triggerArbitration` / `resolveDispute`, and recipient of slashed remainder |
 
 #### Events
 
 ```solidity
 event OracleResult(bytes32 indexed requestId, address indexed proposer, bytes result, bool approved); // IOracle compliance
 event NewRequest(bytes32 indexed requestId, address indexed proposer, uint256 fee, uint256 approveBondTarget, uint256 deadline);
+event CheckerScheduled(address indexed checker, uint256 activeAtBlock);
+event CheckerAdded(address indexed checker);
+event CheckerRemoved(address indexed checker);
 event Committed(bytes32 indexed requestId, address indexed checker, bool approved, uint256 bondAmount, uint256 position);
 event Resolved(bytes32 indexed requestId, bool approved, ResolveReason reason);
 event ArbitrationTriggered(bytes32 indexed requestId);
@@ -156,12 +159,14 @@ enum ResolveReason { UNANIMOUS_APPROVE, UNANIMOUS_DENY, TIMEOUT, ARBITRATION }
 | Function | Access | Description |
 |---|---|---|
 | `postRequest(requestId)` | `Consensus` | Opens request, locks fee, emits `NewRequest` |
-| `commitApprove(requestId)` | Permissioned checker | Posts Approve bond |
-| `commitDeny(requestId)` | Permissioned checker | Posts Deny bond (capped at `DENY_BOND_CEILING`) |
+| `commitApprove(requestId)` | Active checker | Posts Approve bond |
+| `commitDeny(requestId)` | Active checker | Posts Deny bond (capped at `DENY_BOND_CEILING`) |
 | `finalize(requestId)` | Anyone | Resolves request after deadline or on full Approve threshold |
 | `claim(requestId)` | Checker | Returns bond + proportional fee reward |
-| `triggerArbitration(requestId)` | Foundation | Freezes conflicted request |
-| `resolveDispute(requestId, winner, loser)` | Foundation | Slashes loser, waterfall distribution |
+| `triggerArbitration(requestId)` | `ARBITRATOR` | Freezes conflicted request |
+| `resolveDispute(requestId, winner, loser)` | `ARBITRATOR` | Slashes loser, waterfall distribution |
+| `addChecker(checker)` | `ARBITRATOR` | Schedules a checker to become active after `CHECKER_ADD_DELAY` blocks |
+| `removeChecker(checker)` | `ARBITRATOR` | Immediately removes a checker from the active set |
 
 #### Fee Distribution Math
 
@@ -177,11 +182,13 @@ TotalScore = Σ Score_i  (cached in Request.totalScore during finalize())
 Payout_i   = totalFee × (Score_i / TotalScore)
 ```
 
-### Checker Registry
+### Checker Management
 
-A lightweight `CheckerRegistry.sol` (or extension to `Staking.sol`) that tracks the permissioned checker set and their master deposits. The foundation can `ban(checker)` and slash the master deposit.
+The permissioned checker set is tracked directly inside `CheckerOracle` — no separate registry contract is needed. The `ARBITRATOR` manages the set via `addChecker` / `removeChecker`.
 
-> **Open question**: Should checkers be registered in a separate `CheckerRegistry` or reuse/extend the existing `Staking.sol`? (see §Open Questions)
+- **Adding** a checker is time-delayed by `CHECKER_ADD_DELAY` blocks to prevent an arbitrator from front-running pending requests with a newly enrolled checker.
+- **Removing** a checker is immediate, allowing the arbitrator to react instantly to misbehaving nodes.
+- There is no on-chain master deposit. The recommended minimum balance a checker should hold is off-chain guidance only.
 
 ### Validator Service Changes (Phase 3)
 
@@ -217,13 +224,12 @@ A new `checker` sub-service in `validator/src/`:
 **Goal:** Request lifecycle through unanimous resolution and timeout.
 
 Files touched:
-- `contracts/src/CheckerOracle.sol` — new contract
-- `contracts/src/CheckerRegistry.sol` — new minimal registry (or extend `Staking.sol`)
+- `contracts/src/CheckerOracle.sol` — new contract (includes checker set management)
 - `contracts/src/interfaces/ICheckerOracle.sol` — new interface
 - `contracts/test/CheckerOracle.t.sol` — unit tests for Phase 1 flows
 - `contracts/script/DeployCheckerOracle.s.sol` — deployment script
 
-Flows covered: `postRequest`, `commitApprove`, `commitDeny`, `finalize`, `claim`, timeout default.
+Flows covered: `postRequest`, `commitApprove`, `commitDeny`, `finalize`, `claim`, `addChecker`, `removeChecker`, timeout default.
 
 ### Phase 2 — Arbitration (PR 2, depends on Phase 1)
 
@@ -256,7 +262,7 @@ Flows covered: event subscription, address-poisoning detection, bond submission,
 
 3. **`approveBondTarget` parameterization**: Who sets the Approve bond target per request — the user, a governance parameter, or a formula (e.g. `2x fee`)? A fixed formula reduces griefing surface but may not suit all transaction sizes.
 
-4. **Registry vs. Staking extension**: Should the permissioned checker set and master deposits live in a new `CheckerRegistry.sol` or extend the existing `Staking.sol`? Reusing `Staking.sol` reduces contract count but may conflate validator and checker economics.
+4. ~~**Registry vs. Staking extension**~~ **Decided**: Checker set is managed directly inside `CheckerOracle` with no separate registry contract and no on-chain master deposit. `ARBITRATOR` manages additions (time-delayed by `CHECKER_ADD_DELAY`) and removals (immediate).
 
 5. **`VOTING_WINDOW` value**: What is the acceptable latency for a user waiting for a transaction check? The window is measured in blocks (e.g. 12 blocks ≈ 1 minute on Gnosis Chain is used as a placeholder). This has direct UX impact and should be confirmed with product.
 
@@ -264,7 +270,7 @@ Flows covered: event subscription, address-poisoning detection, bond submission,
 
 7. **Partial Deny threshold**: Currently, a single valid "Deny" commitment triggers a conflict. Should there be a minimum "Deny" bond aggregate before conflict is declared, to reduce cheap-griefing surface even within V1?
 
-8. **Checker banning on-chain vs. off-chain**: The grief-and-sweep mitigation relies on the foundation manually banning checkers. Should `CheckerRegistry` support an on-chain `ban(address)` callable by the foundation multisig, or is off-chain tracking sufficient for V1?
+8. ~~**Checker banning on-chain vs. off-chain**~~ **Decided**: `ARBITRATOR` can call `removeChecker(address)` immediately on-chain. The grief-and-sweep mitigation relies on the arbitrator monitoring for the pattern and invoking this function.
 
 9. **Interaction with existing `AlwaysApproveOracle`**: Is there a migration or dual-oracle path needed, or will `CheckerOracle` be a clean replacement for `SimpleOracle` in new deployments only?
 
