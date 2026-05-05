@@ -41,12 +41,6 @@ function ProposalInfoButton({ proposal }: { proposal: TransactionProposal }) {
 	);
 	if (status.data === null) return null;
 
-	// Format signature as hex if available
-	const signatureHex =
-		status.data.completed && status.data.signature
-			? `0x${status.data.signature.r.x.toString(16).padStart(64, "0")}${status.data.signature.r.y.toString(16).padStart(64, "0")}${status.data.signature.z.toString(16).padStart(64, "0")}`
-			: undefined;
-
 	return (
 		<InfoPopover trigger={<InformationCircleIcon className="h-4 w-4 text-muted" />}>
 			<div className="grid grid-cols-[max-content_auto] items-center gap-x-2 gap-y-1">
@@ -64,8 +58,12 @@ function ProposalInfoButton({ proposal }: { proposal: TransactionProposal }) {
 					<>
 						<span className="text-muted">Signature:</span>
 						<div className="flex items-center gap-1 whitespace-nowrap">
-							<InlineHash hash={signatureHex} />
-							<CopyButton value={signatureHex} />
+							<InlineHash
+								hash={`0x${status.data.signature.r.x.toString(16).padStart(64, "0")}${status.data.signature.r.y.toString(16).padStart(64, "0")}${status.data.signature.z.toString(16).padStart(64, "0")}`}
+							/>
+							<CopyButton
+								value={`0x${status.data.signature.r.x.toString(16).padStart(64, "0")}${status.data.signature.r.y.toString(16).padStart(64, "0")}${status.data.signature.z.toString(16).padStart(64, "0")}`}
+							/>
 						</div>
 					</>
 				)}
