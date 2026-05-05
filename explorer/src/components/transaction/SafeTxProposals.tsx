@@ -11,6 +11,7 @@ import { useAttestationStatus } from "@/hooks/useSigningProgress";
 import { useSubmitProposal } from "@/hooks/useSubmitProposal";
 import { SAFE_SERVICE_CHAINS } from "@/lib/chains";
 import type { SafeTransaction, TransactionProposal, TransactionProposalWithStatus } from "@/lib/consensus";
+import { formatSignatureHex } from "@/lib/coordinator/signing";
 import { InlineBlockInfo, InlineExplorerTxLink } from "../common/Info";
 import { SafeTxAttestationStatus } from "./SafeTxAttestationStatus";
 
@@ -41,6 +42,27 @@ function ProposalInfoButton({ proposal }: { proposal: TransactionProposal }) {
 	);
 	if (status.data === null) return null;
 
+	if (!status.data.completed || !status.data.signature) {
+		return (
+			<InfoPopover trigger={<InformationCircleIcon className="h-4 w-4 text-muted" />}>
+				<div className="grid grid-cols-[max-content_auto] items-center gap-x-2 gap-y-1">
+					<span className="text-muted">Signature ID:</span>
+					<div className="flex items-center gap-1 whitespace-nowrap">
+						<InlineHash hash={status.data.sid} />
+						<CopyButton value={status.data.sid} />
+					</div>
+					<span className="text-muted">Group ID:</span>
+					<div className="flex items-center gap-1 whitespace-nowrap">
+						<InlineHash hash={status.data.groupId} />
+						<CopyButton value={status.data.groupId} />
+					</div>
+				</div>
+			</InfoPopover>
+		);
+	}
+
+	const signatureHex = formatSignatureHex(status.data.signature);
+
 	return (
 		<InfoPopover trigger={<InformationCircleIcon className="h-4 w-4 text-muted" />}>
 			<div className="grid grid-cols-[max-content_auto] items-center gap-x-2 gap-y-1">
@@ -54,19 +76,11 @@ function ProposalInfoButton({ proposal }: { proposal: TransactionProposal }) {
 					<InlineHash hash={status.data.groupId} />
 					<CopyButton value={status.data.groupId} />
 				</div>
-				{status.data.completed && status.data.signature && (
-					<>
-						<span className="text-muted">Signature:</span>
-						<div className="flex items-center gap-1 whitespace-nowrap">
-							<InlineHash
-								hash={`0x${status.data.signature.r.x.toString(16).padStart(64, "0")}${status.data.signature.r.y.toString(16).padStart(64, "0")}${status.data.signature.z.toString(16).padStart(64, "0")}`}
-							/>
-							<CopyButton
-								value={`0x${status.data.signature.r.x.toString(16).padStart(64, "0")}${status.data.signature.r.y.toString(16).padStart(64, "0")}${status.data.signature.z.toString(16).padStart(64, "0")}`}
-							/>
-						</div>
-					</>
-				)}
+				<span className="text-muted">Signature:</span>
+				<div className="flex items-center gap-1 whitespace-nowrap">
+					<InlineHash hash={signatureHex} />
+					<CopyButton value={signatureHex} />
+				</div>
 			</div>
 		</InfoPopover>
 	);

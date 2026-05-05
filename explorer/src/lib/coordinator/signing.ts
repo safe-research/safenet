@@ -150,13 +150,7 @@ export const loadLatestAttestationStatus = async ({
 				}
 				case "SignCompleted": {
 					status.selectionRoot = log.args.selectionRoot;
-					status.signature = {
-						r: {
-							x: log.args.signature.r.x,
-							y: log.args.signature.r.y,
-						},
-						z: log.args.signature.z,
-					};
+					status.signature = log.args.signature;
 					break;
 				}
 			}
@@ -175,14 +169,14 @@ export const loadLatestAttestationStatus = async ({
 			const committed = status?.committed ?? [];
 			const signed = getSigned(status);
 			return {
-				lastUpdate: status.lastUpdate ?? signingEvent.blockNumber,
+				lastUpdate: status?.lastUpdate ?? signingEvent.blockNumber,
 				sid,
 				groupId,
 				sequence,
 				committed,
 				signed,
-				completed: status.selectionRoot !== undefined,
-				signature: status.signature,
+				completed: status?.selectionRoot !== undefined,
+				signature: status?.signature,
 			};
 		})
 		.sort((left, right) => {
@@ -200,6 +194,10 @@ type StatusAggregation = {
 	committed: AttestationParticipation[];
 	signedBySelection: Record<string, AttestationParticipation[]>;
 	signature?: Signature;
+};
+
+export const formatSignatureHex = (signature: Signature): Hex => {
+	return `0x${[signature.r.x, signature.r.y, signature.z].map((v) => v.toString(16).padStart(64, "0")).join("")}`;
 };
 
 const getSigned = (status: StatusAggregation | undefined): AttestationParticipation[] => {
