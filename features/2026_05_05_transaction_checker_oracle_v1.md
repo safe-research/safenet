@@ -285,7 +285,7 @@ Flows covered: event subscription, address-poisoning detection, bond submission,
 
 8. ~~**Checker banning on-chain vs. off-chain**~~ **Decided**: `ARBITRATOR` can call `removeChecker(address)` immediately on-chain. The grief-and-sweep mitigation relies on the arbitrator monitoring for the pattern and invoking this function.
 
-9. **Interaction with existing `AlwaysApproveOracle`**: Is there a migration or dual-oracle path needed, or will `CheckerOracle` be a clean replacement for `SimpleOracle` in new deployments only?
+9. ~~**Interaction with existing oracles**~~ **Resolved**: Oracle selection is managed in the validator code. Multiple oracles can be active in parallel as long as validators mark them as valid. No migration from `SimpleOracle` / `AlwaysApproveOracle` is required; `CheckerOracle` is an additive deployment.
 
 10. **Deny-vote incentive**: With Unanimous Deny now refunding the fee to the user (checkers earn no reward), what motivates permissioned checkers to vote "Deny"? In V1 this relies on honest checker operators fulfilling their role by protocol agreement, not financial reward. Is this acceptable, or should a separate "alarm reward" mechanism (funded by the foundation) be added to compensate checkers who correctly flag poisoned transactions?
 
