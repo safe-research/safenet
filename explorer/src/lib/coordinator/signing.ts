@@ -1,4 +1,4 @@
-import { type Address, formatLog, type Hex, numberToHex, type PublicClient, parseEventLogs } from "viem";
+import { type Address, encodePacked, formatLog, type Hex, numberToHex, type PublicClient, parseEventLogs } from "viem";
 import { consensusAbi } from "@/lib/consensus";
 import {
 	COORDINATOR_ABI,
@@ -54,14 +54,31 @@ export type Signature = {
 	z: bigint;
 };
 
-export type AttestationStatus = {
+type AttestationInfo = {
 	sid: Hex;
 	groupId: Hex;
 	sequence: bigint;
 	lastUpdate: bigint;
 	committed: AttestationParticipation[];
 	signed: AttestationParticipation[];
-	completed: boolean;
+};
+
+export type AttestationStatus = AttestationInfo &
+	(
+		| {
+				status: "completed";
+				signature: Hex;
+		  }
+		| {
+				status: "pending" | "error";
+		  }
+	);
+
+type StatusAggregation = {
+	lastUpdate: bigint;
+	committed: AttestationParticipation[];
+	signedBySelection: Record<string, AttestationParticipation[]>;
+	selectionRoot?: Hex;
 	signature?: Signature;
 };
 
@@ -168,65 +185,61 @@ export const loadLatestAttestationStatus = async ({
 		{} as Record<string, StatusAggregation>,
 	);
 	// There is always at least one entry, due to the check on signingEvents before
-	const attestationStatus = signingEvents
-		.map((signingEvent) => {
+	const [attestationStatus, signature] = signingEvents
+		.map((signingEvent): [AttestationInfo, Signature | undefined] => {
 			const sid = signingEvent.args.sid;
 			const status = aggregate[sid];
 			const groupId = signingEvent.args.gid;
 			const sequence = signingEvent.args.sequence;
 			const committed = status?.committed ?? [];
 			const signed = getSigned(status);
-			return {
-				lastUpdate: status.lastUpdate ?? signingEvent.blockNumber,
-				sid,
-				groupId,
-				sequence,
-				committed,
-				signed,
-				completed: status.selectionRoot !== undefined,
-				signature: status.signature,
-			};
+			return [
+				{
+					lastUpdate: status.lastUpdate ?? signingEvent.blockNumber,
+					sid,
+					groupId,
+					sequence,
+					committed,
+					signed,
+				},
+				status.signature,
+			];
 		})
 		.sort((left, right) => {
 			// Completed signing status always has priority
-			if (left.completed && !right.completed) return -1;
-			if (!left.completed && right.completed) return 1;
+			if (left[1] !== undefined && right[1] === undefined) return -1;
+			if (left[1] === undefined && right[1] !== undefined) return 1;
 			// If both or none are completed return the recentrly updated one
-			return left.lastUpdate < right.lastUpdate ? 1 : -1;
+			return left[0].lastUpdate < right[0].lastUpdate ? 1 : -1;
 		})[0];
 
-	if (!attestationStatus.completed || !attestationStatus.signature) return attestationStatus;
+	if (!signature) return { ...attestationStatus, status: "pending" };
 
 	const groupKey = await loadGroupPublicKey(provider, coordinator, attestationStatus.groupId);
-	if (groupKey === undefined) return attestationStatus;
+	if (groupKey === undefined) return { ...attestationStatus, status: "error" };
 
-	const signature = attestationStatus.signature;
-	try {
-		const isValid = verifySignature(toPoint(signature.r), signature.z, toPoint(groupKey), message);
-		if (!isValid) {
-			// Log and then remove invalid signature
-			console.error(`Detected invalid signature ${signature} for ${attestationStatus.sid}`);
-			attestationStatus.signature = undefined;
-		}
-	} catch (error) {
+	const isValid = verifyAttestationSignature(groupKey, signature, message);
+	if (!isValid) {
 		// Log and then remove invalid signature
-		console.error("Could not verify signature", error);
-		attestationStatus.signature = undefined;
+		console.error(`Detected invalid signature ${signature} for ${attestationStatus.sid}`);
+		return { ...attestationStatus, status: "completed", signature: formatSignatureHex(signature) };
 	}
 
-	return attestationStatus;
+	return { ...attestationStatus, status: "error" };
 };
 
-type StatusAggregation = {
-	lastUpdate: bigint;
-	selectionRoot?: Hex;
-	committed: AttestationParticipation[];
-	signedBySelection: Record<string, AttestationParticipation[]>;
-	signature?: Signature;
+const verifyAttestationSignature = (groupKey: Point, signature: Signature, message: Hex): boolean => {
+	try {
+		return verifySignature(toPoint(signature.r), signature.z, toPoint(groupKey), message);
+	} catch (error) {
+		// Log invalid signature
+		console.error("Could not verify signature", error);
+		return false;
+	}
 };
 
 export const formatSignatureHex = (signature: Signature): Hex => {
-	return `0x${[signature.r.x, signature.r.y, signature.z].map((v) => v.toString(16).padStart(64, "0")).join("")}`;
+	return encodePacked(["uint256", "uint256", "uint256"], [signature.r.x, signature.r.y, signature.z]);
 };
 
 export const loadGroupPublicKey = async (

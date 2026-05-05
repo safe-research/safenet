@@ -11,7 +11,6 @@ import { useAttestationStatus } from "@/hooks/useSigningProgress";
 import { useSubmitProposal } from "@/hooks/useSubmitProposal";
 import { SAFE_SERVICE_CHAINS } from "@/lib/chains";
 import type { SafeTransaction, TransactionProposal, TransactionProposalWithStatus } from "@/lib/consensus";
-import { formatSignatureHex } from "@/lib/coordinator/signing";
 import { InlineBlockInfo, InlineExplorerTxLink } from "../common/Info";
 import { SafeTxAttestationStatus } from "./SafeTxAttestationStatus";
 
@@ -42,11 +41,6 @@ function ProposalInfoButton({ proposal }: { proposal: TransactionProposal }) {
 	);
 	if (status.data === null) return null;
 
-	const signatureHex =
-		status.data.completed && status.data.signature !== undefined
-			? formatSignatureHex(status.data.signature)
-			: undefined;
-
 	return (
 		<InfoPopover trigger={<InformationCircleIcon className="h-4 w-4 text-muted" />}>
 			<div className="grid grid-cols-[max-content_auto] items-center gap-x-2 gap-y-1">
@@ -60,12 +54,12 @@ function ProposalInfoButton({ proposal }: { proposal: TransactionProposal }) {
 					<InlineHash hash={status.data.groupId} />
 					<CopyButton value={status.data.groupId} />
 				</div>
-				{signatureHex && (
+				{status.data.status === "completed" && (
 					<>
 						<span className="text-muted">Signature:</span>
 						<div className="flex items-center gap-1 whitespace-nowrap">
-							<InlineHash hash={signatureHex} />
-							<CopyButton value={signatureHex} />
+							<InlineHash hash={status.data.signature} />
+							<CopyButton value={status.data.signature} />
 						</div>
 					</>
 				)}
