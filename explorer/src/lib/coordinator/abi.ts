@@ -59,6 +59,6 @@ export const COORDINATOR_SIGNING_PROGRESS_SELECTORS = [
 	),
 );
 
-export const GROUP_KEY_ABI = parseAbi([
+export const COORDINATOR_ABI = parseAbi([
 	"function groupKey(bytes32 gid) external view returns ((uint256 x, uint256 y) key)",
 ]);

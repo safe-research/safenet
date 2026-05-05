@@ -1,12 +1,11 @@
 import { type Address, formatLog, type Hex, numberToHex, type PublicClient, parseEventLogs } from "viem";
 import { consensusAbi } from "@/lib/consensus";
 import {
+	COORDINATOR_ABI,
 	COORDINATOR_SIGNING_INITIATED_EVENT,
 	COORDINATOR_SIGNING_PROGRESS_EVENTS,
 	COORDINATOR_SIGNING_PROGRESS_SELECTORS,
-	GROUP_KEY_ABI,
 } from "@/lib/coordinator/abi";
-import type { FrostPoint } from "@/lib/frost/math";
 import { toPoint } from "@/lib/frost/math";
 import { verifySignature } from "@/lib/frost/verify";
 import { safeTxProposalHash } from "@/lib/packets";
@@ -20,7 +19,7 @@ let cachedAddresses:
 	| undefined;
 
 // Cache for group keys per groupId
-const groupKeyCache = new Map<string, FrostPoint>();
+const groupKeyCache = new Map<string, Point>();
 
 const fetchCoordinator = (provider: PublicClient, consensus: Address): Promise<Address> => {
 	return provider.readContract({ address: consensus, abi: consensusAbi, functionName: "getCoordinator" });
@@ -45,8 +44,13 @@ export type AttestationParticipation = {
 	block: bigint;
 };
 
+export type Point = {
+	x: bigint;
+	y: bigint;
+};
+
 export type Signature = {
-	r: FrostPoint;
+	r: Point;
 	z: bigint;
 };
 
@@ -154,10 +158,7 @@ export const loadLatestAttestationStatus = async ({
 				}
 				case "SignCompleted": {
 					status.selectionRoot = log.args.selectionRoot;
-					status.signature = {
-						r: toPoint(log.args.signature.r),
-						z: log.args.signature.z,
-					};
+					status.signature = log.args.signature;
 					break;
 				}
 			}
@@ -194,17 +195,27 @@ export const loadLatestAttestationStatus = async ({
 			return left.lastUpdate < right.lastUpdate ? 1 : -1;
 		})[0];
 
+	console.log({ attestationStatus });
 	if (!attestationStatus.completed || !attestationStatus.signature) return attestationStatus;
 
 	const groupKey = await loadGroupPublicKey(provider, coordinator, attestationStatus.groupId);
+	console.log({ groupKey });
 
 	if (groupKey === undefined) return attestationStatus;
+	console.log("Check signature");
 
 	const signature = attestationStatus.signature;
-	const isValid = verifySignature(signature.r, signature.z, groupKey, message);
-	if (!isValid) {
+	try {
+		const isValid = verifySignature(toPoint(signature.r), signature.z, toPoint(groupKey), message);
+		console.log({ isValid });
+		if (!isValid) {
+			// Log and then remove invalid signature
+			console.error(`Detected invalid signature ${signature} for ${attestationStatus.sid}`);
+			attestationStatus.signature = undefined;
+		}
+	} catch (error) {
 		// Log and then remove invalid signature
-		console.error(`Detected invalid signature ${signature} for ${attestationStatus.sid}`);
+		console.error("Could not verify signature", error);
 		attestationStatus.signature = undefined;
 	}
 
@@ -227,7 +238,7 @@ export const loadGroupPublicKey = async (
 	provider: PublicClient,
 	coordinator: Address,
 	groupId: Hex,
-): Promise<FrostPoint | undefined> => {
+): Promise<Point | undefined> => {
 	const cacheKey = `${coordinator}:${groupId}`;
 	const cached = groupKeyCache.get(cacheKey);
 	if (cached) {
@@ -237,13 +248,12 @@ export const loadGroupPublicKey = async (
 	try {
 		const result = (await provider.readContract({
 			address: coordinator,
-			abi: GROUP_KEY_ABI,
+			abi: COORDINATOR_ABI,
 			functionName: "groupKey",
 			args: [groupId],
-		})) as { x: bigint; y: bigint };
-		const publicKey = toPoint(result);
-		groupKeyCache.set(cacheKey, publicKey);
-		return publicKey;
+		})) as Point;
+		groupKeyCache.set(cacheKey, result);
+		return result;
 	} catch (_error) {
 		// Group might not exist or key generation might not be complete
 		return undefined;

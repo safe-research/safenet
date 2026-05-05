@@ -43,7 +43,9 @@ function ProposalInfoButton({ proposal }: { proposal: TransactionProposal }) {
 	if (status.data === null) return null;
 
 	const signatureHex =
-		status.data.completed && status.data.signature ? formatSignatureHex(status.data.signature) : undefined;
+		status.data.completed && status.data.signature !== undefined
+			? formatSignatureHex(status.data.signature)
+			: undefined;
 
 	return (
 		<InfoPopover trigger={<InformationCircleIcon className="h-4 w-4 text-muted" />}>
