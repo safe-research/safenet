@@ -9,6 +9,7 @@ import { useChainInfo } from "@/hooks/useChainInfo";
 import type { ChainInfo } from "@/lib/chains";
 import type { SafeTransaction } from "@/lib/consensus";
 import { safeWalletSafeUrl, safeWalletTxUrl } from "@/lib/safe/wallet";
+import { SafeTxHashInfo } from "./SafeTxHashInfo";
 
 function SafeWalletLink({ href }: { href: string }) {
 	return (
@@ -51,6 +52,7 @@ export const SafeTxHeader = ({
 				<span className="text-sm font-medium">SafeTxHash:</span>
 				<InlineHash hash={safeTxHash} />
 				<CopyButton value={safeTxHash} />
+				<SafeTxHashInfo transaction={transaction} />
 				{fromSafeApi && chainInfo !== undefined && (
 					<SafeWalletTxLink chainInfo={chainInfo} safe={transaction.safe} safeTxHash={safeTxHash} />
 				)}
