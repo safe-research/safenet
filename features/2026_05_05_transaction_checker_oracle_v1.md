@@ -74,14 +74,14 @@ Because the "No" bond ceiling is set to cover arbitration costs, this keeps manu
 
 ### Request Submission (via Consensus)
 
-The user submits a Safe transaction proposal through `Consensus.proposeTransaction()`. If a `CheckerOracle` is configured, `Consensus` calls `checkOracle.postRequest(requestId)` which emits `NewRequest` and locks the user's fee in escrow (fee must be approved/transferred before calling, or pulled from a user deposit — see §Open Questions).
+The user submits a Safe transaction proposal through `Consensus.proposeTransaction()`. Before calling, the user must approve `CheckerOracle` to pull the fee amount in the ERC-20 fee token. `Consensus` then calls `checkOracle.postRequest(requestId)`, which pulls the fee via `transferFrom`, locks it in escrow, and emits `NewRequest`.
 
 ### Checker Node Vote
 
 Each permissioned checker node:
 1. Observes `NewRequest(requestId, ...)` on-chain.
 2. Evaluates the transaction payload (e.g. detects address poisoning).
-3. Calls `commitYes(requestId)` with `yesBondPerChecker` ETH/tokens attached, or `commitNo(requestId)` with up to `noBondCeiling` attached.
+3. Approves `CheckerOracle` to pull the bond amount from the checker's ERC-20 balance, then calls `commitYes(requestId)` or `commitNo(requestId)`. The contract pulls the bond via `transferFrom` at call time.
 
 ### Finalization
 
@@ -250,9 +250,9 @@ Flows covered: event subscription, address-poisoning detection, bond submission,
 
 ## Open Questions / Assumptions
 
-1. **Fee token**: Should the fee and bonds be denominated in native ETH or an ERC-20 (e.g. USDC)? ETH is simpler operationally; a stablecoin makes the $50 `NO_BOND_CEILING` economically stable. Decision needed before Phase 1 implementation.
+1. ~~**Fee token**~~ **Decided**: ERC-20 token. Both user fees and checker bonds are denominated in an ERC-20 token, using the standard approve + `transferFrom` pull pattern.
 
-2. **Fee escrow mechanism**: How does the user's fee reach the contract? Options: (a) user pre-approves an ERC-20 transfer called by `Consensus` when posting the request; (b) user maintains a deposit balance in `CheckerOracle`. Option (a) is simpler but requires Consensus changes; option (b) adds UX complexity.
+2. ~~**Fee escrow mechanism**~~ **Decided**: Option (a) — user pre-approves `CheckerOracle` for the fee amount; `Consensus` calls `postRequest` which pulls the fee via `transferFrom` at request time. Same pull pattern applies to checker bonds on `commitYes` / `commitNo`.
 
 3. **`yesBondTarget` parameterization**: Who sets the Yes bond target per request — the user, a governance parameter, or a formula (e.g. `2x fee`)? A fixed formula reduces griefing surface but may not suit all transaction sizes.
 
