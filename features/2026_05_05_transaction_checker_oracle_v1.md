@@ -87,7 +87,7 @@ Each permissioned checker node:
 
 After the voting window closes (or once `yesBondTarget` is fully met):
 - **Unanimous Yes**: `OracleResult` emitted with `approved=true`. Fee distributed proportionally (capital-weighted speed score). Bonds returned.
-- **Unanimous No**: `OracleResult` emitted with `approved=false`. Fee distributed proportionally. Bonds returned.
+- **Unanimous No**: `OracleResult` emitted with `approved=false`. Fee refunded to user. Bonds returned. Checkers earn no fee reward on No outcomes to prevent collusion (see §Open Questions #10).
 - **Conflict**: State frozen. Foundation triggers arbitration (Phase 2).
 - **Timeout / undercapitalized**: `OracleResult` emitted with `approved=false`. Fee refunded to user. Bonds returned.
 
@@ -109,6 +109,7 @@ struct Request {
     uint256 totalYesBond;
     uint256 totalNoBond;
     uint256 checkerCount;      // total eligible commitments
+    uint256 totalScore;        // cached at finalize() to avoid recomputation per claim
     bool    arbitrated;
 }
 
@@ -137,6 +138,7 @@ mapping(bytes32 requestId => address[]) checkerOrder; // ordered arrival list
 #### Events
 
 ```solidity
+event OracleResult(bytes32 indexed requestId, address indexed proposer, bytes result, bool approved); // IOracle compliance
 event NewRequest(bytes32 indexed requestId, address indexed proposer, uint256 fee, uint256 yesBondTarget, uint256 deadline);
 event Committed(bytes32 indexed requestId, address indexed checker, bool isYes, uint256 bondAmount, uint256 position);
 event Resolved(bytes32 indexed requestId, bool approved, ResolveReason reason);
@@ -166,10 +168,11 @@ enum ResolveReason { UNANIMOUS_YES, UNANIMOUS_NO, TIMEOUT, ARBITRATION }
 Only commitments recorded before `yesBondTarget` is fully met are eligible. If a commitment overshoots the remaining gap, only the gap-filling portion is counted; the excess is immediately returnable.
 
 ```
-Score_i   = effectiveBond_i × positionMultiplier_i
-            where positionMultiplier_i = (N + 1 - position_i)
+Score_i    = effectiveBond_i × positionMultiplier_i
+             where positionMultiplier_i = (checkerCount + 1 - position_i)
+             and   checkerCount = total eligible commitments recorded before yesBondTarget was met
 
-TotalScore = Σ Score_i
+TotalScore = Σ Score_i  (cached in Request.totalScore during finalize())
 
 Payout_i   = totalFee × (Score_i / TotalScore)
 ```
@@ -264,6 +267,8 @@ Flows covered: event subscription, address-poisoning detection, bond submission,
 8. **Checker banning on-chain vs. off-chain**: The grief-and-sweep mitigation relies on the foundation manually banning checkers. Should `CheckerRegistry` support an on-chain `ban(address)` callable by the foundation multisig, or is off-chain tracking sufficient for V1?
 
 9. **Interaction with existing `AlwaysApproveOracle`**: Is there a migration or dual-oracle path needed, or will `CheckerOracle` be a clean replacement for `SimpleOracle` in new deployments only?
+
+10. **No-vote incentive**: With Unanimous No now refunding the fee to the user (checkers earn no reward), what motivates permissioned checkers to vote "No"? In V1 this relies on honest checker operators fulfilling their role by protocol agreement, not financial reward. Is this acceptable, or should a separate "alarm reward" mechanism (funded by the foundation) be added to compensate checkers who correctly flag poisoned transactions?
 
 **Assumptions:**
 - The permissioned checker set is small (≤ 20 nodes) and operated by vetted foundation partners in V1.
