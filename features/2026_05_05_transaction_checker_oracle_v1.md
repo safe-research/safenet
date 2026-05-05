@@ -37,7 +37,11 @@ Consensus ──postRequest()──▶ CheckerOracle
 #### Asymmetric Bond Thresholds
 
 - `approveBondTarget` — computed at request time as `fee × bondMultiplier`. `bondMultiplier` is a governance parameter (e.g. `50`) updateable by the `ARBITRATOR` with a time delay. Represents the total aggregate "Approve" bond required.
-- `denyCeiling` — global, fixed low cap (e.g. `$50` denominated in the fee token). A single "Deny" commitment at or below this ceiling counts as a valid alarm.
+- `denyBond` — computed per request using the same multiplier, capped so that raising the fee never prices out a whistleblower:
+  ```
+  denyBond = min(fee × bondMultiplier, max(DENY_BOND_CEILING, fee))
+  ```
+  When `fee ≤ DENY_BOND_CEILING`, the cap is `DENY_BOND_CEILING` (cheap alarm preserved). When `fee > DENY_BOND_CEILING`, the cap is `fee` itself (ensures the slashed bond always covers a full fee refund to the user).
 
 This asymmetry ensures that a whistleblower can never be priced out of flagging a poisoned transaction, at the cost of cheap griefing potential (mitigated off-chain in V1 — see §Grief-and-Sweep below).
 
@@ -136,7 +140,7 @@ mapping(bytes32 requestId => address[]) checkerOrder; // ordered arrival list
 | Name | Description |
 |---|---|
 | `VOTING_WINDOW` | Duration in blocks for the voting window (12 blocks ≈ 1 minute on Gnosis Chain) |
-| `DENY_BOND_CEILING` | Maximum "Deny" bond (e.g. 50 USDC equivalent) |
+| `DENY_BOND_CEILING` | Baseline cap on the Deny bond for low-fee transactions (e.g. 50 USDC equivalent); for high-fee transactions the cap rises to `fee` — see §Asymmetric Bond Thresholds |
 | `GOVERNANCE_DELAY` | Time delay in blocks applied to all governance changes: adding checkers and updating `bondMultiplier` |
 | `FEE_TOKEN` | ERC-20 token for bonds and fees |
 | `ARBITRATOR` | Foundation address authorised to manage checkers, update `bondMultiplier`, call `triggerArbitration` / `resolveDispute`, and recipient of slashed remainder |
@@ -167,7 +171,7 @@ enum ResolveReason { UNANIMOUS_APPROVE, UNANIMOUS_DENY, TIMEOUT, ARBITRATION }
 |---|---|---|
 | `postRequest(requestId)` | `Consensus` | Opens request, locks fee, emits `NewRequest` |
 | `commitApprove(requestId)` | Active checker | Posts Approve bond |
-| `commitDeny(requestId)` | Active checker | Posts Deny bond (capped at `DENY_BOND_CEILING`) |
+| `commitDeny(requestId)` | Active checker | Posts Deny bond (amount = `min(fee × bondMultiplier, max(DENY_BOND_CEILING, fee))`) |
 | `finalize(requestId)` | Anyone | Resolves request after deadline or on full Approve threshold |
 | `claim(requestId)` | Checker | Returns bond + proportional fee reward |
 | `triggerArbitration(requestId)` | `ARBITRATOR` | Freezes conflicted request |
@@ -275,7 +279,7 @@ Flows covered: event subscription, address-poisoning detection, bond submission,
 
 5. ~~**`VOTING_WINDOW` value**~~ **Decided**: 12 blocks (≈ 1 minute on Gnosis Chain).
 
-6. ~~**Slashing deficit**~~ **Accepted for V1**: Treasury absorbs any deficit when the slashed Deny bond is smaller than the user's fee. A future alternative is to set the effective Deny bond floor to `max(DENY_BOND_CEILING, fee)`, so the bond always covers the fee regardless of transaction size.
+6. ~~**Slashing deficit**~~ **Resolved**: The `denyBond` formula (`min(fee × bondMultiplier, max(DENY_BOND_CEILING, fee))`) ensures that when `fee > DENY_BOND_CEILING` the Deny bond equals `fee`, so the slashed bond always fully covers the user fee refund. For `fee ≤ DENY_BOND_CEILING` the bond is at most `DENY_BOND_CEILING`, and the treasury absorbs any remaining deficit (accepted for V1).
 
 7. **Partial Deny threshold**: Currently, a single valid "Deny" commitment triggers a conflict. Should there be a minimum "Deny" bond aggregate before conflict is declared, to reduce cheap-griefing surface even within V1?
 
