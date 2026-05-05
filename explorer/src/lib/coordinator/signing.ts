@@ -59,7 +59,6 @@ export type AttestationStatus = {
 	signed: AttestationParticipation[];
 	completed: boolean;
 	signature?: Signature;
-	groupPublicKey?: FrostPoint;
 };
 
 export const loadLatestAttestationStatus = async ({
@@ -132,8 +131,8 @@ export const loadLatestAttestationStatus = async ({
 
 	const aggregate = eventLogs.reduce(
 		(agg, log) => {
-			const status = agg[log.args.sid] ?? { committed: [], signedBySelection: {} };
-			if (status.lastUpdate === undefined || status.lastUpdate < log.blockNumber) {
+			const status = agg[log.args.sid] ?? { committed: [], signedBySelection: {}, lastUpdate: 0n };
+			if (status.lastUpdate < log.blockNumber) {
 				status.lastUpdate = log.blockNumber;
 			}
 			switch (log.eventName) {
@@ -168,7 +167,7 @@ export const loadLatestAttestationStatus = async ({
 		{} as Record<string, StatusAggregation>,
 	);
 	// There is always at least one entry, due to the check on signingEvents before
-	const rawAttestationStatus = signingEvents
+	const attestationStatus = signingEvents
 		.map((signingEvent) => {
 			const sid = signingEvent.args.sid;
 			const status = aggregate[sid];
@@ -177,14 +176,14 @@ export const loadLatestAttestationStatus = async ({
 			const committed = status?.committed ?? [];
 			const signed = getSigned(status);
 			return {
-				lastUpdate: status?.lastUpdate ?? signingEvent.blockNumber,
+				lastUpdate: status.lastUpdate ?? signingEvent.blockNumber,
 				sid,
 				groupId,
 				sequence,
 				committed,
 				signed,
-				completed: status?.selectionRoot !== undefined,
-				signature: status?.signature,
+				completed: status.selectionRoot !== undefined,
+				signature: status.signature,
 			};
 		})
 		.sort((left, right) => {
@@ -195,41 +194,29 @@ export const loadLatestAttestationStatus = async ({
 			return left.lastUpdate < right.lastUpdate ? 1 : -1;
 		})[0];
 
-	// If we have a completed signing, fetch the group public key for verification
-	const attestationStatus: AttestationStatus | null = rawAttestationStatus
-		? {
-				...rawAttestationStatus,
-				groupPublicKey:
-					rawAttestationStatus.completed && rawAttestationStatus.signature
-						? await loadGroupPublicKey(provider, coordinator, rawAttestationStatus.groupId)
-						: undefined,
-			}
-		: null;
+	if (!attestationStatus.completed || !attestationStatus.signature) return attestationStatus;
 
-	// Verify the signature if we have a completed signing with signature and group public key
-	if (attestationStatus?.completed && attestationStatus.signature && attestationStatus.groupPublicKey) {
-		// Verify the signature against the message hash
-		const isValid = await verifyAttestationSignature(attestationStatus, message);
-		if (!isValid) {
-			// If signature is invalid, don't return the signature data
-			return {
-				...attestationStatus,
-				signature: undefined,
-				groupPublicKey: undefined,
-			};
-		}
+	const groupKey = await loadGroupPublicKey(provider, coordinator, attestationStatus.groupId);
+
+	if (groupKey === undefined) return attestationStatus;
+
+	const signature = attestationStatus.signature;
+	const isValid = verifySignature(signature.r, signature.z, groupKey, message);
+	if (!isValid) {
+		// Log and then remove invalid signature
+		console.error(`Detected invalid signature ${signature} for ${attestationStatus.sid}`);
+		attestationStatus.signature = undefined;
 	}
 
 	return attestationStatus;
 };
 
 type StatusAggregation = {
-	lastUpdate?: bigint;
+	lastUpdate: bigint;
 	selectionRoot?: Hex;
 	committed: AttestationParticipation[];
 	signedBySelection: Record<string, AttestationParticipation[]>;
 	signature?: Signature;
-	groupPublicKey?: FrostPoint;
 };
 
 export const formatSignatureHex = (signature: Signature): Hex => {
@@ -254,51 +241,13 @@ export const loadGroupPublicKey = async (
 			functionName: "groupKey",
 			args: [groupId],
 		})) as { x: bigint; y: bigint };
-		const frostPoint = toPoint(result);
-		groupKeyCache.set(cacheKey, frostPoint);
-		return frostPoint;
+		const publicKey = toPoint(result);
+		groupKeyCache.set(cacheKey, publicKey);
+		return publicKey;
 	} catch (_error) {
 		// Group might not exist or key generation might not be complete
 		return undefined;
 	}
-};
-
-export const clearGroupKeyCache = (groupId?: Hex): void => {
-	if (groupId) {
-		const cacheKey = `:${groupId}`;
-		const keysToRemove = Array.from(groupKeyCache.keys()).filter((key) => key.endsWith(cacheKey));
-		keysToRemove.forEach((key) => groupKeyCache.delete(key));
-	} else {
-		groupKeyCache.clear();
-	}
-};
-
-export const clearAllGroupKeyCache = (): void => {
-	groupKeyCache.clear();
-};
-
-export const verifyAttestationSignature = async (
-	attestationStatus: AttestationStatus,
-	messageHash: Hex,
-): Promise<boolean> => {
-	if (!attestationStatus.completed || !attestationStatus.signature || !attestationStatus.groupPublicKey) {
-		return false;
-	}
-
-	// For FROST signature verification, we need:
-	// - groupCommitment: the r point from the signature
-	// - combinedSignatureShares: the z value from the signature
-	// - groupPublicKey: the group's public key
-	// - msg: the message hash that was signed
-
-	// The signature verification requires the message hash, which should be
-	// the same as the one used in the signing process.
-	// We pass the messageHash as a parameter since it's not stored in AttestationStatus
-
-	const { r, z } = attestationStatus.signature;
-
-	// Use the verifySignature function from the frost module with FrostPoint types
-	return verifySignature(r, z, attestationStatus.groupPublicKey, messageHash);
 };
 
 const getSigned = (status: StatusAggregation | undefined): AttestationParticipation[] => {
