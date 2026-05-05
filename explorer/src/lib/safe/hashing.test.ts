@@ -1,9 +1,10 @@
 import { zeroAddress } from "viem";
 import { describe, expect, it } from "vitest";
+import type { SafeTransaction } from "../consensus";
 import { calculateDomainHash, calculateMessageHash, calculateSafeTxHash } from "./hashing";
 
 describe("hashing", () => {
-	const transaction = {
+	const transaction: SafeTransaction = {
 		chainId: 100n,
 		safe: "0x779720809250AF7931935a192FCD007479C41299",
 		to: "0x2dC63c83040669F0aDBa5F832F713152bA862c97",
