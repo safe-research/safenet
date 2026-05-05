@@ -104,7 +104,7 @@ struct Request {
     address proposer;          // Consensus contract address
     uint256 fee;               // locked user fee
     uint256 yesBondTarget;     // aggregate Yes bond required
-    uint256 deadline;          // block.timestamp + VOTING_WINDOW
+    uint256 deadline;          // block.number + VOTING_WINDOW
     State   state;             // PENDING | FROZEN | RESOLVED
     uint256 totalYesBond;      // running sum of Yes bonds; compared against yesBondTarget
     uint256 totalNoBond;       // running sum of No bonds; used to detect conflict (>0 with Yes votes present) and to refund bonds on Unanimous No
@@ -129,7 +129,7 @@ mapping(bytes32 requestId => address[]) checkerOrder; // ordered arrival list
 
 | Name | Description |
 |---|---|
-| `VOTING_WINDOW` | Duration in seconds for the voting window (e.g. 5 minutes) |
+| `VOTING_WINDOW` | Duration in blocks for the voting window (e.g. 12 blocks ≈ 1 minute on Gnosis Chain) |
 | `NO_BOND_CEILING` | Maximum "No" bond (e.g. 50 USDC equivalent) |
 | `REGISTRY` | Address of the permissioned checker registry |
 | `FEE_TOKEN` | ERC-20 token (or `address(0)` for native ETH) for bonds and fees |
@@ -258,7 +258,7 @@ Flows covered: event subscription, address-poisoning detection, bond submission,
 
 4. **Registry vs. Staking extension**: Should the permissioned checker set and master deposits live in a new `CheckerRegistry.sol` or extend the existing `Staking.sol`? Reusing `Staking.sol` reduces contract count but may conflate validator and checker economics.
 
-5. **`VOTING_WINDOW` value**: What is the acceptable latency for a user waiting for a transaction check? 5 minutes is used as a placeholder. This has direct UX impact and should be confirmed with product.
+5. **`VOTING_WINDOW` value**: What is the acceptable latency for a user waiting for a transaction check? The window is measured in blocks (e.g. 12 blocks ≈ 1 minute on Gnosis Chain is used as a placeholder). This has direct UX impact and should be confirmed with product.
 
 6. **Slashing deficit**: If the loser's bond (`NO_BOND_CEILING` = $50) is less than the user's fee, the user cannot be fully refunded from the slashed bond alone. The spec assumes the treasury absorbs the deficit in V1. Is this acceptable, or should the foundation top up the refund?
 
