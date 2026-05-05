@@ -95,8 +95,8 @@ Each permissioned checker node:
 ### Finalization
 
 After the voting window closes:
-- **Unanimous Approve** (Approve threshold reached, Deny threshold not reached): `OracleResult` emitted with `approved=true`. Fee distributed proportionally (capital-weighted speed score). Bonds returned. Any sub-threshold Deny contributions are returned without effect.
-- **Unanimous Deny** (Deny threshold reached, Approve threshold not reached): `OracleResult` emitted with `approved=false`. Fee transferred to `ARBITRATOR`. Bonds returned to checkers. The checking service was correctly performed; the user's fee is the cost of that service.
+- **Unanimous Approve** (Approve threshold reached, Deny threshold not reached): `OracleResult` emitted with `approved=true`. Fee distributed proportionally to Approve checkers (capital-weighted speed score). Bonds returned. Any sub-threshold Deny contributions are returned without effect.
+- **Unanimous Deny** (Deny threshold reached, Approve threshold not reached): `OracleResult` emitted with `approved=false`. Fee distributed proportionally to Deny checkers (same capital-weighted speed score formula). Bonds returned. Any sub-threshold Approve contributions are returned without effect.
 - **Conflict** (both Approve and Deny thresholds fully reached): State frozen. `ARBITRATOR` triggers arbitration (Phase 2). User fee refunded from the losing side's slashed bonds.
 - **Timeout / undercapitalized** (neither threshold reached by deadline): `OracleResult` emitted with `approved=false`. Fee refunded to user. Bonds returned.
 
@@ -292,7 +292,7 @@ Flows covered: event subscription, address-poisoning detection, bond submission,
 
 9. ~~**Interaction with existing oracles**~~ **Resolved**: Oracle selection is managed in the validator code. Multiple oracles can be active in parallel as long as validators mark them as valid. No migration from `SimpleOracle` / `AlwaysApproveOracle` is required; `CheckerOracle` is an additive deployment.
 
-10. **Deny-vote incentive**: On Unanimous Deny the fee goes to `ARBITRATOR`, not to the checkers who flagged the transaction. Checkers therefore earn no direct financial reward for a correct Deny vote. In V1 this relies on honest operators fulfilling their role by protocol agreement. Is this acceptable, or should a portion of the fee be routed to Deny voters as a correct-alarm reward?
+10. ~~**Deny-vote incentive**~~ **Resolved**: On Unanimous Deny the fee is distributed proportionally to Deny checkers (same formula as Approve). This provides a financial incentive to correctly flag poisoned transactions. The earlier collusion concern (cheap Deny bonds + fee reward) no longer applies because the Deny aggregate threshold is now `fee × bondMultiplier` — a colluding group must post the same total capital as the Approve side, making griefing economically unattractive.
 
 **Assumptions:**
 - The permissioned checker set is small (≤ 20 nodes) and operated by vetted foundation partners in V1.
