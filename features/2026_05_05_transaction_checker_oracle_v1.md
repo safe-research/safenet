@@ -36,12 +36,17 @@ Consensus ──postRequest()──▶ CheckerOracle
 
 #### Asymmetric Bond Thresholds
 
-- `approveBondTarget` — computed at request time as `fee × bondMultiplier`. `bondMultiplier` is a governance parameter (e.g. `50`) updateable by the `ARBITRATOR` with a time delay. Represents the total aggregate "Approve" bond required.
-- `denyBond` — computed per request using the same multiplier, capped so that raising the fee never prices out a whistleblower:
+Both Approve and Deny sides share the same aggregate bond target (`fee × bondMultiplier`). The distinction is a **per-checker cap** on individual Deny contributions:
+
+- **Approve bond target**: `fee × bondMultiplier` aggregate across all Approve checkers.
+- **Deny bond target**: `fee × bondMultiplier` aggregate across all Deny checkers (same total, multiple checkers contribute).
+- **Per-checker Deny cap**: each individual Deny commitment is capped to prevent a single wealthy actor from monopolising the Deny side:
   ```
-  denyBond = min(fee × bondMultiplier, max(DENY_BOND_CEILING, fee))
+  perCheckerDenyCap = min(fee × bondMultiplier, max(DENY_BOND_CEILING, fee))
   ```
-  When `fee ≤ DENY_BOND_CEILING`, the cap is `DENY_BOND_CEILING` (cheap alarm preserved). When `fee > DENY_BOND_CEILING`, the cap is `fee` itself (ensures the slashed bond always covers a full fee refund to the user).
+  When `fee ≤ DENY_BOND_CEILING` the cap is `DENY_BOND_CEILING`. When `fee > DENY_BOND_CEILING` the cap equals `fee`, ensuring the slashed bond always covers a full user refund in arbitration.
+
+A bond threshold is **reached** when the aggregate for that side equals `fee × bondMultiplier`. Over-contributions beyond the threshold are excess and returned to the contributor immediately.
 
 This asymmetry ensures that a whistleblower can never be priced out of flagging a poisoned transaction, at the cost of cheap griefing potential (mitigated off-chain in V1 — see §Grief-and-Sweep below).
 
@@ -51,11 +56,11 @@ Bond thresholds being met does **not** automatically distribute funds. An explic
 
 #### Timeout Default: Reject
 
-If the voting window expires and neither the "Approve" aggregate threshold nor at least one valid "Deny" bond has been posted, the request resolves as **rejected** (defensive fail-safe). The user's fee is refunded. This sacrifices liveness in exchange for a strict defensive posture.
+If the voting window expires and neither the Approve nor the Deny aggregate threshold has been fully met, the request resolves as **rejected** (defensive fail-safe). The user's fee is refunded. This sacrifices liveness in exchange for a strict defensive posture.
 
 #### Grief-and-Sweep Attack
 
-The contract is intentionally left mathematically vulnerable: a malicious node can post the cheap "Deny" bond to stall a transaction, lose arbitration, and immediately vote "Approve" on the retry to sweep the fee. In V1 this is mitigated entirely off-chain: the foundation monitors this pattern and invokes a ban + master-deposit slash on the offending checker. A dedicated contract mechanism is out of scope for V1.
+The contract is intentionally left mathematically vulnerable: a malicious node can post Deny bonds to stall a transaction, lose arbitration, and immediately vote "Approve" on the retry to sweep the fee. In V1 this is mitigated entirely off-chain: the foundation monitors this pattern and invokes a ban on the offending checker. A dedicated contract mechanism is out of scope for V1.
 
 #### Arbitration (Phase 2)
 
@@ -89,11 +94,11 @@ Each permissioned checker node:
 
 ### Finalization
 
-After the voting window closes (or once `approveBondTarget` is fully met):
-- **Unanimous Approve**: `OracleResult` emitted with `approved=true`. Fee distributed proportionally (capital-weighted speed score). Bonds returned.
-- **Unanimous Deny**: `OracleResult` emitted with `approved=false`. Fee transferred to `ARBITRATOR`. Bonds returned to checkers. The checking service was correctly performed; the user's fee is the cost of that service.
-- **Conflict**: State frozen. Foundation triggers arbitration (Phase 2). User fee refunded from the losing checker's slashed bond.
-- **Timeout / undercapitalized**: `OracleResult` emitted with `approved=false`. Fee refunded to user. Bonds returned.
+After the voting window closes:
+- **Unanimous Approve** (Approve threshold reached, Deny threshold not reached): `OracleResult` emitted with `approved=true`. Fee distributed proportionally (capital-weighted speed score). Bonds returned. Any sub-threshold Deny contributions are returned without effect.
+- **Unanimous Deny** (Deny threshold reached, Approve threshold not reached): `OracleResult` emitted with `approved=false`. Fee transferred to `ARBITRATOR`. Bonds returned to checkers. The checking service was correctly performed; the user's fee is the cost of that service.
+- **Conflict** (both Approve and Deny thresholds fully reached): State frozen. `ARBITRATOR` triggers arbitration (Phase 2). User fee refunded from the losing side's slashed bonds.
+- **Timeout / undercapitalized** (neither threshold reached by deadline): `OracleResult` emitted with `approved=false`. Fee refunded to user. Bonds returned.
 
 ---
 
@@ -110,8 +115,8 @@ struct Request {
     uint256 approveBondTarget;    // fee * bondMultiplier, locked at postRequest time
     uint256 deadline;             // block.number + VOTING_WINDOW
     State   state;                // PENDING | FROZEN | RESOLVED
-    uint256 totalApproveBond;     // running sum of Approve bonds; compared against approveBondTarget
-    uint256 totalDenyBond;        // running sum of Deny bonds; used to detect conflict (>0 with Approve votes present) and to refund bonds on Unanimous Deny
+    uint256 totalApproveBond;     // running sum of Approve bonds; threshold reached when == approveBondTarget
+    uint256 totalDenyBond;        // running sum of Deny bonds; threshold reached when == approveBondTarget; conflict when both sides reach threshold
     uint256 checkerCount;         // number of Approve voters eligible for fee distribution (committed before approveBondTarget was met)
     uint256 totalScore;           // cached at finalize() to avoid recomputation per claim
     bool    arbitrated;
@@ -171,7 +176,7 @@ enum ResolveReason { UNANIMOUS_APPROVE, UNANIMOUS_DENY, TIMEOUT, ARBITRATION }
 |---|---|---|
 | `postRequest(requestId)` | `Consensus` | Opens request, locks fee, emits `NewRequest` |
 | `commitApprove(requestId)` | Active checker | Posts Approve bond |
-| `commitDeny(requestId)` | Active checker | Posts Deny bond (amount = `min(fee × bondMultiplier, max(DENY_BOND_CEILING, fee))`) |
+| `commitDeny(requestId)` | Active checker | Posts Deny bond; per-checker amount capped at `min(fee × bondMultiplier, max(DENY_BOND_CEILING, fee))`; aggregate target = `fee × bondMultiplier` |
 | `finalize(requestId)` | Anyone | Resolves request after deadline or on full Approve threshold |
 | `claim(requestId)` | Checker | Returns bond + proportional fee reward |
 | `triggerArbitration(requestId)` | `ARBITRATOR` | Freezes conflicted request |
@@ -281,7 +286,7 @@ Flows covered: event subscription, address-poisoning detection, bond submission,
 
 6. ~~**Slashing deficit**~~ **Resolved**: The `denyBond` formula (`min(fee × bondMultiplier, max(DENY_BOND_CEILING, fee))`) ensures that when `fee > DENY_BOND_CEILING` the Deny bond equals `fee`, so the slashed bond always fully covers the user fee refund. For `fee ≤ DENY_BOND_CEILING` the bond is at most `DENY_BOND_CEILING`, and the treasury absorbs any remaining deficit (accepted for V1).
 
-7. **Partial Deny threshold**: Currently, a single valid "Deny" commitment triggers a conflict. Should there be a minimum "Deny" bond aggregate before conflict is declared, to reduce cheap-griefing surface even within V1?
+7. ~~**Partial Deny threshold**~~ **Decided**: Conflict requires the full Deny bond target (`fee × bondMultiplier`) to be reached, identical to the Approve side. Sub-threshold Deny votes have no effect and bonds are returned. Over-achievement on either side is not rewarded (excess returned).
 
 8. ~~**Checker banning on-chain vs. off-chain**~~ **Decided**: `ARBITRATOR` can call `removeChecker(address)` immediately on-chain. The grief-and-sweep mitigation relies on the arbitrator monitoring for the pattern and invoking this function.
 
