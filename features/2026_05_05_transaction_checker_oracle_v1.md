@@ -5,12 +5,12 @@ Component: `contracts`, `validator`
 
 ## Overview
 
-This feature introduces a competitive transaction checker oracle as a new `IOracle` implementation. Rather than a single designated approver (as in `SimpleOracle`), a permissioned set of *checker nodes* races to post bonded votes ("Yes" = safe, "No" = poisoned) against a transaction within a time-boxed window. The contract escrows the user's fee, collects bonds, and resolves the outcome once the window closes or bond thresholds are met. Checker nodes running alongside the validator service monitor the `NewRequest` event and submit their assessments on-chain.
+This feature introduces a competitive transaction checker oracle as a new `IOracle` implementation. Rather than a single designated approver (as in `SimpleOracle`), a permissioned set of *checker nodes* races to post bonded votes ("Approve" = safe, "Deny" = poisoned) against a transaction within a time-boxed window. The contract escrows the user's fee, collects bonds, and resolves the outcome once the window closes or bond thresholds are met. Checker nodes running alongside the validator service monitor the `NewRequest` event and submit their assessments on-chain.
 
 **Phases (separate PRs):**
 1. **Phase 1 — Core contract** (`CheckerOracle.sol`): request lifecycle, bonding, unanimous resolution, fee distribution, and timeout-default-reject logic.
 2. **Phase 2 — Arbitration** (`CheckerOracle.sol` extension): conflict detection, `triggerArbitration`, `resolveDispute`, slashing, and user fee refund.
-3. **Phase 3 — Checker node service** (`validator/`): off-chain checker daemon that listens for `NewRequest` events and posts bonds with Yes/No votes.
+3. **Phase 3 — Checker node service** (`validator/`): off-chain checker daemon that listens for `NewRequest` events and posts bonds with Approve/Deny votes.
 
 ---
 
@@ -28,16 +28,16 @@ Consensus ──postRequest()──▶ CheckerOracle
                     ┌─────────────┴──────────────┐
                     │                            │
               Checker Nodes                 Foundation
-           (commitYes / commitNo)      (triggerArbitration /
-                                         resolveDispute)
+           (commitApprove / commitDeny)  (triggerArbitration /
+                                           resolveDispute)
 ```
 
 ### Key Design Decisions
 
 #### Asymmetric Bond Thresholds
 
-- `yesBondTarget` — dynamic, set per request by the user as a multiple of the fee (e.g. `2x fee`). Represents the total aggregate "Yes" bond required.
-- `noBondCeiling` — global, fixed low cap (e.g. `$50` denominated in the fee token). A single "No" commitment at or below this ceiling counts as a valid alarm.
+- `approveBondTarget` — dynamic, set per request by the user as a multiple of the fee (e.g. `2x fee`). Represents the total aggregate "Approve" bond required.
+- `denyCeiling` — global, fixed low cap (e.g. `$50` denominated in the fee token). A single "Deny" commitment at or below this ceiling counts as a valid alarm.
 
 This asymmetry ensures that a whistleblower can never be priced out of flagging a poisoned transaction, at the cost of cheap griefing potential (mitigated off-chain in V1 — see §Grief-and-Sweep below).
 
@@ -47,19 +47,19 @@ Bond thresholds being met does **not** automatically distribute funds. An explic
 
 #### Timeout Default: Reject
 
-If the voting window expires and neither the "Yes" aggregate threshold nor at least one valid "No" bond has been posted, the request resolves as **rejected** (defensive fail-safe). The user's fee is refunded. This sacrifices liveness in exchange for a strict defensive posture.
+If the voting window expires and neither the "Approve" aggregate threshold nor at least one valid "Deny" bond has been posted, the request resolves as **rejected** (defensive fail-safe). The user's fee is refunded. This sacrifices liveness in exchange for a strict defensive posture.
 
 #### Grief-and-Sweep Attack
 
-The contract is intentionally left mathematically vulnerable: a malicious node can post the cheap "No" bond to stall a transaction, lose arbitration, and immediately vote "Yes" on the retry to sweep the fee. In V1 this is mitigated entirely off-chain: the foundation monitors this pattern and invokes a ban + master-deposit slash on the offending checker. A dedicated contract mechanism is out of scope for V1.
+The contract is intentionally left mathematically vulnerable: a malicious node can post the cheap "Deny" bond to stall a transaction, lose arbitration, and immediately vote "Approve" on the retry to sweep the fee. In V1 this is mitigated entirely off-chain: the foundation monitors this pattern and invokes a ban + master-deposit slash on the offending checker. A dedicated contract mechanism is out of scope for V1.
 
 #### Arbitration (Phase 2)
 
-Conflict (at least one "Yes" and one "No" commitment) freezes the request. The foundation calls `triggerArbitration(requestId)` and, after off-chain review, `resolveDispute(requestId, winner, loser)`. The loser's bond is slashed in a two-step waterfall:
+Conflict (at least one "Approve" and one "Deny" commitment) freezes the request. The foundation calls `triggerArbitration(requestId)` and, after off-chain review, `resolveDispute(requestId, winner, loser)`. The loser's bond is slashed in a two-step waterfall:
 1. Full user fee refund from slashed bond.
-2. Remainder to Foundation Treasury.
+2. Remainder to `ARBITRATOR`.
 
-Because the "No" bond ceiling is set to cover arbitration costs, this keeps manual review financially self-sustaining. In V1, if the slashed bond is insufficient to cover the full fee refund, the remainder is absorbed by the treasury (deficit accepted).
+Because the "Deny" bond ceiling is set to cover arbitration costs, this keeps manual review financially self-sustaining. In V1, if the slashed bond is insufficient to cover the full fee refund, the remainder is absorbed by the treasury (deficit accepted).
 
 ### Alternatives Considered
 
@@ -81,13 +81,13 @@ The user submits a Safe transaction proposal through `Consensus.proposeTransacti
 Each permissioned checker node:
 1. Observes `NewRequest(requestId, ...)` on-chain.
 2. Evaluates the transaction payload (e.g. detects address poisoning).
-3. Approves `CheckerOracle` to pull the bond amount from the checker's ERC-20 balance, then calls `commitYes(requestId)` or `commitNo(requestId)`. The contract pulls the bond via `transferFrom` at call time.
+3. Approves `CheckerOracle` to pull the bond amount from the checker's ERC-20 balance, then calls `commitApprove(requestId)` or `commitDeny(requestId)`. The contract pulls the bond via `transferFrom` at call time.
 
 ### Finalization
 
-After the voting window closes (or once `yesBondTarget` is fully met):
-- **Unanimous Yes**: `OracleResult` emitted with `approved=true`. Fee distributed proportionally (capital-weighted speed score). Bonds returned.
-- **Unanimous No**: `OracleResult` emitted with `approved=false`. Fee refunded to user. Bonds returned. Checkers earn no fee reward on No outcomes to prevent collusion (see §Open Questions #10).
+After the voting window closes (or once `approveBondTarget` is fully met):
+- **Unanimous Approve**: `OracleResult` emitted with `approved=true`. Fee distributed proportionally (capital-weighted speed score). Bonds returned.
+- **Unanimous Deny**: `OracleResult` emitted with `approved=false`. Fee refunded to user. Bonds returned. Checkers earn no fee reward on Deny outcomes to prevent collusion (see §Open Questions #10).
 - **Conflict**: State frozen. Foundation triggers arbitration (Phase 2).
 - **Timeout / undercapitalized**: `OracleResult` emitted with `approved=false`. Fee refunded to user. Bonds returned.
 
@@ -101,20 +101,20 @@ After the voting window closes (or once `yesBondTarget` is fully met):
 
 ```solidity
 struct Request {
-    address proposer;          // Consensus contract address
-    uint256 fee;               // locked user fee
-    uint256 yesBondTarget;     // aggregate Yes bond required
-    uint256 deadline;          // block.number + VOTING_WINDOW
-    State   state;             // PENDING | FROZEN | RESOLVED
-    uint256 totalYesBond;      // running sum of Yes bonds; compared against yesBondTarget
-    uint256 totalNoBond;       // running sum of No bonds; used to detect conflict (>0 with Yes votes present) and to refund bonds on Unanimous No
-    uint256 checkerCount;      // number of Yes voters eligible for fee distribution (committed before yesBondTarget was met)
-    uint256 totalScore;        // cached at finalize() to avoid recomputation per claim
+    address proposer;             // Consensus contract address
+    uint256 fee;                  // locked user fee
+    uint256 approveBondTarget;    // aggregate Approve bond required
+    uint256 deadline;             // block.number + VOTING_WINDOW
+    State   state;                // PENDING | FROZEN | RESOLVED
+    uint256 totalApproveBond;     // running sum of Approve bonds; compared against approveBondTarget
+    uint256 totalDenyBond;        // running sum of Deny bonds; used to detect conflict (>0 with Approve votes present) and to refund bonds on Unanimous Deny
+    uint256 checkerCount;         // number of Approve voters eligible for fee distribution (committed before approveBondTarget was met)
+    uint256 totalScore;           // cached at finalize() to avoid recomputation per claim
     bool    arbitrated;
 }
 
 struct Commitment {
-    bool    approved;          // true = Yes vote, false = No vote
+    bool    approved;          // true = Approve vote, false = Deny vote
     uint256 bondAmount;        // effective (capped) bond
     uint256 position;          // arrival order (1-indexed)
     bool    claimed;
@@ -130,16 +130,16 @@ mapping(bytes32 requestId => address[]) checkerOrder; // ordered arrival list
 | Name | Description |
 |---|---|
 | `VOTING_WINDOW` | Duration in blocks for the voting window (e.g. 12 blocks ≈ 1 minute on Gnosis Chain) |
-| `NO_BOND_CEILING` | Maximum "No" bond (e.g. 50 USDC equivalent) |
+| `DENY_BOND_CEILING` | Maximum "Deny" bond (e.g. 50 USDC equivalent) |
 | `REGISTRY` | Address of the permissioned checker registry |
-| `FEE_TOKEN` | ERC-20 token (or `address(0)` for native ETH) for bonds and fees |
-| `FOUNDATION_TREASURY` | Recipient of slashed remainder |
+| `FEE_TOKEN` | ERC-20 token for bonds and fees |
+| `ARBITRATOR` | Foundation address authorised to call `triggerArbitration` / `resolveDispute` and recipient of slashed remainder |
 
 #### Events
 
 ```solidity
 event OracleResult(bytes32 indexed requestId, address indexed proposer, bytes result, bool approved); // IOracle compliance
-event NewRequest(bytes32 indexed requestId, address indexed proposer, uint256 fee, uint256 yesBondTarget, uint256 deadline);
+event NewRequest(bytes32 indexed requestId, address indexed proposer, uint256 fee, uint256 approveBondTarget, uint256 deadline);
 event Committed(bytes32 indexed requestId, address indexed checker, bool approved, uint256 bondAmount, uint256 position);
 event Resolved(bytes32 indexed requestId, bool approved, ResolveReason reason);
 event ArbitrationTriggered(bytes32 indexed requestId);
@@ -148,7 +148,7 @@ event Claimed(bytes32 indexed requestId, address indexed checker, uint256 bondRe
 ```
 
 ```solidity
-enum ResolveReason { UNANIMOUS_YES, UNANIMOUS_NO, TIMEOUT, ARBITRATION }
+enum ResolveReason { UNANIMOUS_APPROVE, UNANIMOUS_DENY, TIMEOUT, ARBITRATION }
 ```
 
 #### Key Functions
@@ -156,21 +156,21 @@ enum ResolveReason { UNANIMOUS_YES, UNANIMOUS_NO, TIMEOUT, ARBITRATION }
 | Function | Access | Description |
 |---|---|---|
 | `postRequest(requestId)` | `Consensus` | Opens request, locks fee, emits `NewRequest` |
-| `commitYes(requestId)` | Permissioned checker | Posts Yes bond |
-| `commitNo(requestId)` | Permissioned checker | Posts No bond (capped at `NO_BOND_CEILING`) |
-| `finalize(requestId)` | Anyone | Resolves request after deadline or on full Yes threshold |
+| `commitApprove(requestId)` | Permissioned checker | Posts Approve bond |
+| `commitDeny(requestId)` | Permissioned checker | Posts Deny bond (capped at `DENY_BOND_CEILING`) |
+| `finalize(requestId)` | Anyone | Resolves request after deadline or on full Approve threshold |
 | `claim(requestId)` | Checker | Returns bond + proportional fee reward |
 | `triggerArbitration(requestId)` | Foundation | Freezes conflicted request |
 | `resolveDispute(requestId, winner, loser)` | Foundation | Slashes loser, waterfall distribution |
 
 #### Fee Distribution Math
 
-Only commitments recorded before `yesBondTarget` is fully met are eligible. If a commitment overshoots the remaining gap, only the gap-filling portion is counted; the excess is immediately returnable.
+Only commitments recorded before `approveBondTarget` is fully met are eligible. If a commitment overshoots the remaining gap, only the gap-filling portion is counted; the excess is immediately returnable.
 
 ```
 Score_i    = effectiveBond_i × positionMultiplier_i
              where positionMultiplier_i = (checkerCount + 1 - position_i)
-             and   checkerCount = total eligible commitments recorded before yesBondTarget was met
+             and   checkerCount = total eligible Approve voters recorded before approveBondTarget was met
 
 TotalScore = Σ Score_i  (cached in Request.totalScore during finalize())
 
@@ -188,20 +188,20 @@ A lightweight `CheckerRegistry.sol` (or extension to `Staking.sol`) that tracks 
 A new `checker` sub-service in `validator/src/`:
 - Subscribes to `NewRequest` events from `CheckerOracle`.
 - Runs address-poisoning detection logic against the transaction payload.
-- Signs and submits `commitYes` / `commitNo` via an injected wallet.
+- Signs and submits `commitApprove` / `commitDeny` via an injected wallet.
 - Monitors `Resolved` and `ArbitrationTriggered` events to trigger `claim`.
 
 ### Test Cases
 
 **Unit tests (Solidity / Forge):**
-- `testUnanymousYes_fullBond` — all checkers vote Yes, full threshold met; fee distributed correctly.
-- `testUnanimousYes_timeout` — window expires with partial Yes bond above threshold; resolves Yes.
-- `testUnanimousNo` — all checkers vote No; fee refunded, bonds returned, `approved=false`.
-- `testTimeout_undercapitalized` — window expires, Yes threshold not met, no No votes; defaults to reject.
+- `testUnanimousApprove_fullBond` — all checkers vote Approve, full threshold met; fee distributed correctly.
+- `testUnanimousApprove_timeout` — window expires with Approve bond above threshold; resolves Approve.
+- `testUnanimousDeny` — all checkers vote Deny; fee refunded, bonds returned, `approved=false`.
+- `testTimeout_undercapitalized` — window expires, Approve threshold not met, no Deny votes; defaults to reject.
 - `testConflict_arbitration` — mixed votes; `triggerArbitration` freezes; `resolveDispute` slashes loser.
 - `testFeeDistribution_positionMultiplier` — three checkers with different bonds and positions; verify payout math.
 - `testExcessBond_capped` — commitment that would overshoot threshold; verify only gap-filling portion counted.
-- `testNoBond_ceilingEnforced` — `commitNo` with amount > `NO_BOND_CEILING` reverts or is capped.
+- `testDenyBond_ceilingEnforced` — `commitDeny` with amount > `DENY_BOND_CEILING` reverts or is capped.
 - `testClaimIdempotency` — double-claim reverts.
 - `testUnpermissionedChecker_reverts` — non-registry address cannot commit.
 
@@ -223,7 +223,7 @@ Files touched:
 - `contracts/test/CheckerOracle.t.sol` — unit tests for Phase 1 flows
 - `contracts/script/DeployCheckerOracle.s.sol` — deployment script
 
-Flows covered: `postRequest`, `commitYes`, `commitNo`, `finalize`, `claim`, timeout default.
+Flows covered: `postRequest`, `commitApprove`, `commitDeny`, `finalize`, `claim`, timeout default.
 
 ### Phase 2 — Arbitration (PR 2, depends on Phase 1)
 
@@ -252,23 +252,23 @@ Flows covered: event subscription, address-poisoning detection, bond submission,
 
 1. ~~**Fee token**~~ **Decided**: ERC-20 token. Both user fees and checker bonds are denominated in an ERC-20 token, using the standard approve + `transferFrom` pull pattern.
 
-2. ~~**Fee escrow mechanism**~~ **Decided**: Option (a) — user pre-approves `CheckerOracle` for the fee amount; `Consensus` calls `postRequest` which pulls the fee via `transferFrom` at request time. Same pull pattern applies to checker bonds on `commitYes` / `commitNo`.
+2. ~~**Fee escrow mechanism**~~ **Decided**: Option (a) — user pre-approves `CheckerOracle` for the fee amount; `Consensus` calls `postRequest` which pulls the fee via `transferFrom` at request time. Same pull pattern applies to checker bonds on `commitApprove` / `commitDeny`.
 
-3. **`yesBondTarget` parameterization**: Who sets the Yes bond target per request — the user, a governance parameter, or a formula (e.g. `2x fee`)? A fixed formula reduces griefing surface but may not suit all transaction sizes.
+3. **`approveBondTarget` parameterization**: Who sets the Approve bond target per request — the user, a governance parameter, or a formula (e.g. `2x fee`)? A fixed formula reduces griefing surface but may not suit all transaction sizes.
 
 4. **Registry vs. Staking extension**: Should the permissioned checker set and master deposits live in a new `CheckerRegistry.sol` or extend the existing `Staking.sol`? Reusing `Staking.sol` reduces contract count but may conflate validator and checker economics.
 
 5. **`VOTING_WINDOW` value**: What is the acceptable latency for a user waiting for a transaction check? The window is measured in blocks (e.g. 12 blocks ≈ 1 minute on Gnosis Chain is used as a placeholder). This has direct UX impact and should be confirmed with product.
 
-6. **Slashing deficit**: If the loser's bond (`NO_BOND_CEILING` = $50) is less than the user's fee, the user cannot be fully refunded from the slashed bond alone. The spec assumes the treasury absorbs the deficit in V1. Is this acceptable, or should the foundation top up the refund?
+6. **Slashing deficit**: If the loser's bond (`DENY_BOND_CEILING` = $50) is less than the user's fee, the user cannot be fully refunded from the slashed bond alone. The spec assumes the treasury absorbs the deficit in V1. Is this acceptable, or should the foundation top up the refund?
 
-7. **Partial No threshold**: Currently, a single valid "No" commitment triggers a conflict. Should there be a minimum "No" bond aggregate before conflict is declared, to reduce cheap-griefing surface even within V1?
+7. **Partial Deny threshold**: Currently, a single valid "Deny" commitment triggers a conflict. Should there be a minimum "Deny" bond aggregate before conflict is declared, to reduce cheap-griefing surface even within V1?
 
 8. **Checker banning on-chain vs. off-chain**: The grief-and-sweep mitigation relies on the foundation manually banning checkers. Should `CheckerRegistry` support an on-chain `ban(address)` callable by the foundation multisig, or is off-chain tracking sufficient for V1?
 
 9. **Interaction with existing `AlwaysApproveOracle`**: Is there a migration or dual-oracle path needed, or will `CheckerOracle` be a clean replacement for `SimpleOracle` in new deployments only?
 
-10. **No-vote incentive**: With Unanimous No now refunding the fee to the user (checkers earn no reward), what motivates permissioned checkers to vote "No"? In V1 this relies on honest checker operators fulfilling their role by protocol agreement, not financial reward. Is this acceptable, or should a separate "alarm reward" mechanism (funded by the foundation) be added to compensate checkers who correctly flag poisoned transactions?
+10. **Deny-vote incentive**: With Unanimous Deny now refunding the fee to the user (checkers earn no reward), what motivates permissioned checkers to vote "Deny"? In V1 this relies on honest checker operators fulfilling their role by protocol agreement, not financial reward. Is this acceptable, or should a separate "alarm reward" mechanism (funded by the foundation) be added to compensate checkers who correctly flag poisoned transactions?
 
 **Assumptions:**
 - The permissioned checker set is small (≤ 20 nodes) and operated by vetted foundation partners in V1.
