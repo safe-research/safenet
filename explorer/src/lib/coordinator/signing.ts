@@ -195,19 +195,14 @@ export const loadLatestAttestationStatus = async ({
 			return left.lastUpdate < right.lastUpdate ? 1 : -1;
 		})[0];
 
-	console.log({ attestationStatus });
 	if (!attestationStatus.completed || !attestationStatus.signature) return attestationStatus;
 
 	const groupKey = await loadGroupPublicKey(provider, coordinator, attestationStatus.groupId);
-	console.log({ groupKey });
-
 	if (groupKey === undefined) return attestationStatus;
-	console.log("Check signature");
 
 	const signature = attestationStatus.signature;
 	try {
 		const isValid = verifySignature(toPoint(signature.r), signature.z, toPoint(groupKey), message);
-		console.log({ isValid });
 		if (!isValid) {
 			// Log and then remove invalid signature
 			console.error(`Detected invalid signature ${signature} for ${attestationStatus.sid}`);
