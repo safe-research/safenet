@@ -38,6 +38,14 @@ export type AttestationParticipation = {
 	block: bigint;
 };
 
+export type Signature = {
+	r: {
+		x: bigint;
+		y: bigint;
+	};
+	z: bigint;
+};
+
 export type AttestationStatus = {
 	sid: Hex;
 	groupId: Hex;
@@ -46,13 +54,7 @@ export type AttestationStatus = {
 	committed: AttestationParticipation[];
 	signed: AttestationParticipation[];
 	completed: boolean;
-	signature?: {
-		r: {
-			x: bigint;
-			y: bigint;
-		};
-		z: bigint;
-	};
+	signature?: Signature;
 };
 
 export const loadLatestAttestationStatus = async ({
@@ -197,13 +199,7 @@ type StatusAggregation = {
 	selectionRoot?: Hex;
 	committed: AttestationParticipation[];
 	signedBySelection: Record<string, AttestationParticipation[]>;
-	signature?: {
-		r: {
-			x: bigint;
-			y: bigint;
-		};
-		z: bigint;
-	};
+	signature?: Signature;
 };
 
 const getSigned = (status: StatusAggregation | undefined): AttestationParticipation[] => {
