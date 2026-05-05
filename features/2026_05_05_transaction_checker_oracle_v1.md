@@ -91,8 +91,8 @@ Each permissioned checker node:
 
 After the voting window closes (or once `approveBondTarget` is fully met):
 - **Unanimous Approve**: `OracleResult` emitted with `approved=true`. Fee distributed proportionally (capital-weighted speed score). Bonds returned.
-- **Unanimous Deny**: `OracleResult` emitted with `approved=false`. Fee refunded to user. Bonds returned. Checkers earn no fee reward on Deny outcomes to prevent collusion (see §Open Questions #10).
-- **Conflict**: State frozen. Foundation triggers arbitration (Phase 2).
+- **Unanimous Deny**: `OracleResult` emitted with `approved=false`. Fee transferred to `ARBITRATOR`. Bonds returned to checkers. The checking service was correctly performed; the user's fee is the cost of that service.
+- **Conflict**: State frozen. Foundation triggers arbitration (Phase 2). User fee refunded from the losing checker's slashed bond.
 - **Timeout / undercapitalized**: `OracleResult` emitted with `approved=false`. Fee refunded to user. Bonds returned.
 
 ---
@@ -275,7 +275,7 @@ Flows covered: event subscription, address-poisoning detection, bond submission,
 
 3. ~~**`approveBondTarget` parameterization**~~ **Decided**: `approveBondTarget = fee × bondMultiplier`. `bondMultiplier` defaults to `50` and is updateable by `ARBITRATOR` with a `GOVERNANCE_DELAY` block time delay via `scheduleBondMultiplier` / `applyBondMultiplier`.
 
-4. ~~**Registry vs. Staking extension**~~ **Decided**: Checker set is managed directly inside `CheckerOracle` with no separate registry contract and no on-chain master deposit. `ARBITRATOR` manages additions (time-delayed by `CHECKER_ADD_DELAY`) and removals (immediate).
+4. ~~**Registry vs. Staking extension**~~ **Decided**: Checker set is managed directly inside `CheckerOracle` with no separate registry contract and no on-chain master deposit. `ARBITRATOR` manages additions (time-delayed by `GOVERNANCE_DELAY`) and removals (immediate).
 
 5. ~~**`VOTING_WINDOW` value**~~ **Decided**: 12 blocks (≈ 1 minute on Gnosis Chain).
 
@@ -287,7 +287,7 @@ Flows covered: event subscription, address-poisoning detection, bond submission,
 
 9. ~~**Interaction with existing oracles**~~ **Resolved**: Oracle selection is managed in the validator code. Multiple oracles can be active in parallel as long as validators mark them as valid. No migration from `SimpleOracle` / `AlwaysApproveOracle` is required; `CheckerOracle` is an additive deployment.
 
-10. **Deny-vote incentive**: With Unanimous Deny now refunding the fee to the user (checkers earn no reward), what motivates permissioned checkers to vote "Deny"? In V1 this relies on honest checker operators fulfilling their role by protocol agreement, not financial reward. Is this acceptable, or should a separate "alarm reward" mechanism (funded by the foundation) be added to compensate checkers who correctly flag poisoned transactions?
+10. **Deny-vote incentive**: On Unanimous Deny the fee goes to `ARBITRATOR`, not to the checkers who flagged the transaction. Checkers therefore earn no direct financial reward for a correct Deny vote. In V1 this relies on honest operators fulfilling their role by protocol agreement. Is this acceptable, or should a portion of the fee be routed to Deny voters as a correct-alarm reward?
 
 **Assumptions:**
 - The permissioned checker set is small (≤ 20 nodes) and operated by vetted foundation partners in V1.
