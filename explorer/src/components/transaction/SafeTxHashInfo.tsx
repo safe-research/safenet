@@ -1,5 +1,5 @@
-import { useMemo } from "react";
 import { InformationCircleIcon } from "@heroicons/react/24/outline";
+import { useMemo } from "react";
 import { CopyButton } from "@/components/common/CopyButton";
 import { InfoPopover } from "@/components/common/InfoPopover";
 import { InlineHash } from "@/components/common/InlineHash";
