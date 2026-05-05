@@ -106,15 +106,15 @@ struct Request {
     uint256 yesBondTarget;     // aggregate Yes bond required
     uint256 deadline;          // block.timestamp + VOTING_WINDOW
     State   state;             // PENDING | FROZEN | RESOLVED
-    uint256 totalYesBond;
-    uint256 totalNoBond;
-    uint256 checkerCount;      // total eligible commitments
+    uint256 totalYesBond;      // running sum of Yes bonds; compared against yesBondTarget
+    uint256 totalNoBond;       // running sum of No bonds; used to detect conflict (>0 with Yes votes present) and to refund bonds on Unanimous No
+    uint256 checkerCount;      // number of Yes voters eligible for fee distribution (committed before yesBondTarget was met)
     uint256 totalScore;        // cached at finalize() to avoid recomputation per claim
     bool    arbitrated;
 }
 
 struct Commitment {
-    bool    isYes;
+    bool    approved;          // true = Yes vote, false = No vote
     uint256 bondAmount;        // effective (capped) bond
     uint256 position;          // arrival order (1-indexed)
     bool    claimed;
@@ -140,7 +140,7 @@ mapping(bytes32 requestId => address[]) checkerOrder; // ordered arrival list
 ```solidity
 event OracleResult(bytes32 indexed requestId, address indexed proposer, bytes result, bool approved); // IOracle compliance
 event NewRequest(bytes32 indexed requestId, address indexed proposer, uint256 fee, uint256 yesBondTarget, uint256 deadline);
-event Committed(bytes32 indexed requestId, address indexed checker, bool isYes, uint256 bondAmount, uint256 position);
+event Committed(bytes32 indexed requestId, address indexed checker, bool approved, uint256 bondAmount, uint256 position);
 event Resolved(bytes32 indexed requestId, bool approved, ResolveReason reason);
 event ArbitrationTriggered(bytes32 indexed requestId);
 event DisputeResolved(bytes32 indexed requestId, address winner, address loser, uint256 slashed);
