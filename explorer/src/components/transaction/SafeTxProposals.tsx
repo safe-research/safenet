@@ -1,4 +1,4 @@
-import { InformationCircleIcon } from "@heroicons/react/24/outline";
+import { CheckCircleIcon, InformationCircleIcon, XCircleIcon } from "@heroicons/react/24/outline";
 import type { Hex } from "viem";
 import { CopyButton } from "@/components/common/CopyButton";
 import { InfoPopover } from "@/components/common/InfoPopover";
@@ -45,6 +45,9 @@ function ProposalInfoButton({ proposal }: { proposal: TransactionProposal }) {
 	const signatureHex =
 		status.data.completed && status.data.signature ? formatSignatureHex(status.data.signature) : undefined;
 
+	// Display verification status if signature is present
+	const showVerificationStatus = signatureHex && status.data.groupPublicKey;
+
 	return (
 		<InfoPopover trigger={<InformationCircleIcon className="h-4 w-4 text-muted" />}>
 			<div className="grid grid-cols-[max-content_auto] items-center gap-x-2 gap-y-1">
@@ -64,6 +67,24 @@ function ProposalInfoButton({ proposal }: { proposal: TransactionProposal }) {
 						<div className="flex items-center gap-1 whitespace-nowrap">
 							<InlineHash hash={signatureHex} />
 							<CopyButton value={signatureHex} />
+						</div>
+					</>
+				)}
+				{showVerificationStatus && (
+					<>
+						<span className="text-muted">Verified:</span>
+						<div className="flex items-center gap-1 whitespace-nowrap">
+							{status.data.signature && status.data.groupPublicKey ? (
+								<>
+									<CheckCircleIcon className="h-4 w-4 text-success" />
+									<span className="text-success">Yes</span>
+								</>
+							) : (
+								<>
+									<XCircleIcon className="h-4 w-4 text-error" />
+									<span className="text-error">No</span>
+								</>
+							)}
 						</div>
 					</>
 				)}

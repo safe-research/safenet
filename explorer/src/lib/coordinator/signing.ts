@@ -19,6 +19,9 @@ let cachedAddresses:
 	  }
 	| undefined;
 
+// Cache for group keys per groupId
+const groupKeyCache = new Map<string, FrostPoint>();
+
 const fetchCoordinator = (provider: PublicClient, consensus: Address): Promise<Address> => {
 	return provider.readContract({ address: consensus, abi: consensusAbi, functionName: "getCoordinator" });
 };
@@ -203,6 +206,20 @@ export const loadLatestAttestationStatus = async ({
 			}
 		: null;
 
+	// Verify the signature if we have a completed signing with signature and group public key
+	if (attestationStatus?.completed && attestationStatus.signature && attestationStatus.groupPublicKey) {
+		// Verify the signature against the message hash
+		const isValid = await verifyAttestationSignature(attestationStatus, message);
+		if (!isValid) {
+			// If signature is invalid, don't return the signature data
+			return {
+				...attestationStatus,
+				signature: undefined,
+				groupPublicKey: undefined,
+			};
+		}
+	}
+
 	return attestationStatus;
 };
 
@@ -224,6 +241,12 @@ export const loadGroupPublicKey = async (
 	coordinator: Address,
 	groupId: Hex,
 ): Promise<FrostPoint | undefined> => {
+	const cacheKey = `${coordinator}:${groupId}`;
+	const cached = groupKeyCache.get(cacheKey);
+	if (cached) {
+		return cached;
+	}
+
 	try {
 		const result = (await provider.readContract({
 			address: coordinator,
@@ -231,11 +254,27 @@ export const loadGroupPublicKey = async (
 			functionName: "groupKey",
 			args: [groupId],
 		})) as { x: bigint; y: bigint };
-		return toPoint(result);
+		const frostPoint = toPoint(result);
+		groupKeyCache.set(cacheKey, frostPoint);
+		return frostPoint;
 	} catch (_error) {
 		// Group might not exist or key generation might not be complete
 		return undefined;
 	}
+};
+
+export const clearGroupKeyCache = (groupId?: Hex): void => {
+	if (groupId) {
+		const cacheKey = `:${groupId}`;
+		const keysToRemove = Array.from(groupKeyCache.keys()).filter((key) => key.endsWith(cacheKey));
+		keysToRemove.forEach((key) => groupKeyCache.delete(key));
+	} else {
+		groupKeyCache.clear();
+	}
+};
+
+export const clearAllGroupKeyCache = (): void => {
+	groupKeyCache.clear();
 };
 
 export const verifyAttestationSignature = async (
