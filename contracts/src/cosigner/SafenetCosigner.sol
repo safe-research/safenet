@@ -54,19 +54,11 @@ contract SafenetCosigner is ISignatureValidator {
     EpochState private $currentEpoch;
 
     /**
-     * @dev Only valid when `$hasPreviousEpoch` is true (after the first `updateEpoch` call).
+     * @dev Only valid after the first `updateEpoch` call. Callers must validate the returned key
+     *      with `Secp256k1.requireNonZero` before use.
      */
     // forge-lint: disable-next-line(mixed-case-variable)
     EpochState private $previousEpoch;
-
-    /**
-     * @notice True once the first `updateEpoch` call has populated `$previousEpoch`.
-     * @dev Guards `_resolveGroupKey` against treating the zero-initialised `$previousEpoch`
-     *      slot as a valid epoch entry before any rollover has occurred. Without this flag,
-     *      `_resolveGroupKey(0)` would return a zero group key — trivially forgeable via FROST.
-     */
-    // forge-lint: disable-next-line(mixed-case-variable)
-    bool private $hasPreviousEpoch;
 
     // forge-lint: disable-next-line(mixed-case-variable)
     mapping(address safe => mapping(bytes32 safeTxHash => uint256 executableAt)) private $allowedTransactions;
@@ -84,8 +76,6 @@ contract SafenetCosigner is ISignatureValidator {
     // ============================================================
     // ERRORS
     // ============================================================
-
-    error AttestationNotFound();
 
     error InvalidEpoch();
 
@@ -141,7 +131,6 @@ contract SafenetCosigner is ISignatureValidator {
         FROST.verify($currentEpoch.groupKey, signature, message);
         uint64 prevEpoch = $currentEpoch.epoch;
         $previousEpoch = $currentEpoch;
-        $hasPreviousEpoch = true;
         $currentEpoch = EpochState({epoch: proposedEpoch, groupKey: newGroupKey});
         emit EpochUpdated(prevEpoch, proposedEpoch, newGroupKey);
     }
@@ -161,16 +150,19 @@ contract SafenetCosigner is ISignatureValidator {
      */
     function isValidSignature(bytes32 _hash, bytes memory _signature) external view override returns (bytes4) {
         if (_signature.length > 0) {
+            if (_signature.length != 128) return bytes4(0);
             (uint64 epoch, FROST.Signature memory sig) = abi.decode(_signature, (uint64, FROST.Signature));
             bytes32 message = ConsensusMessages.transactionProposal(_CONSENSUS_DOMAIN_SEPARATOR, epoch, _hash);
-            FROST.verify(_resolveGroupKey(epoch), sig, message);
+            Secp256k1.Point memory groupKey = _resolveGroupKey(epoch);
+            Secp256k1.requireNonZero(groupKey);
+            FROST.verify(groupKey, sig, message);
             return EIP1271_MAGIC_VALUE;
         }
 
         uint256 executableAt = $allowedTransactions[msg.sender][_hash];
         if (executableAt != 0 && block.timestamp >= executableAt) return EIP1271_MAGIC_VALUE;
 
-        revert AttestationNotFound();
+        return bytes4(0);
     }
 
     // ============================================================
@@ -211,7 +203,7 @@ contract SafenetCosigner is ISignatureValidator {
     }
 
     function previousEpoch() external view returns (uint64) {
-        if (!$hasPreviousEpoch) revert InvalidEpoch();
+        if ($previousEpoch.groupKey.x | $previousEpoch.groupKey.y == 0) revert InvalidEpoch();
         return $previousEpoch.epoch;
     }
 
@@ -233,7 +225,7 @@ contract SafenetCosigner is ISignatureValidator {
 
     function _resolveGroupKey(uint64 epoch) private view returns (Secp256k1.Point memory) {
         if ($currentEpoch.epoch == epoch) return $currentEpoch.groupKey;
-        if ($hasPreviousEpoch && $previousEpoch.epoch == epoch) return $previousEpoch.groupKey;
+        if ($previousEpoch.epoch == epoch) return $previousEpoch.groupKey;
         revert InvalidEpoch();
     }
 }
