@@ -10,6 +10,7 @@ import { validatorConfigSchema } from "./types/schemas.js";
 import { formatError } from "./utils/errors.js";
 import { createLogger } from "./utils/logging.js";
 import { createMetricsService } from "./utils/metrics.js";
+import { COMMIT_SHA } from "./version.js";
 
 dotenv.config({ quiet: true });
 
@@ -22,12 +23,9 @@ if (!result.success) {
 
 const validatorConfig = result.data;
 
-const commit = validatorConfig.COMMIT_SHA ?? "unknown";
-
 const logger = createLogger({
 	level: validatorConfig.LOG_LEVEL,
 	pretty: process.stdout.isTTY,
-	commit,
 });
 
 const account = privateKeyToAccount(validatorConfig.PRIVATE_KEY, {
@@ -70,7 +68,7 @@ const metrics = createMetricsService({
 	logger,
 	host: validatorConfig.METRICS_HOST,
 	port: validatorConfig.METRICS_PORT,
-	commit,
+	commit: COMMIT_SHA,
 });
 const service = createValidatorService({
 	account,

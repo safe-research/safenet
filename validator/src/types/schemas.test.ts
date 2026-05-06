@@ -95,7 +95,6 @@ describe("validatorConfigSchema", () => {
 			GENESIS_SALT: MOCK_GENESIS_SALT,
 			BLOCKS_PER_EPOCH: 17280n,
 			ALLOWED_ORACLES: [],
-			COMMIT_SHA: "unknown",
 		});
 	});
 
@@ -125,7 +124,6 @@ describe("validatorConfigSchema", () => {
 			GENESIS_SALT: MOCK_GENESIS_SALT,
 			BLOCKS_PER_EPOCH: 17280n,
 			ALLOWED_ORACLES: [],
-			COMMIT_SHA: "unknown",
 		});
 	});
 
@@ -155,7 +153,6 @@ describe("validatorConfigSchema", () => {
 			BLOCKS_PER_EPOCH: 100n,
 			BLOCKS_BEFORE_RESUBMIT: 200n,
 			ALLOWED_ORACLES: [],
-			COMMIT_SHA: "unknown",
 		});
 	});
 
@@ -184,7 +181,6 @@ describe("validatorConfigSchema", () => {
 			GENESIS_SALT: MOCK_GENESIS_SALT,
 			BLOCKS_PER_EPOCH: 17280n,
 			ALLOWED_ORACLES: [],
-			COMMIT_SHA: "unknown",
 		});
 	});
 
@@ -215,7 +211,6 @@ describe("validatorConfigSchema", () => {
 			KEY_GEN_TIMEOUT: 1000n,
 			SIGNING_TIMEOUT: 253n,
 			ALLOWED_ORACLES: [],
-			COMMIT_SHA: "unknown",
 		});
 	});
 
@@ -244,7 +239,6 @@ describe("validatorConfigSchema", () => {
 			GENESIS_SALT: MOCK_GENESIS_SALT,
 			BLOCKS_PER_EPOCH: 17280n,
 			ALLOWED_ORACLES: [],
-			COMMIT_SHA: "unknown",
 		});
 	});
 
@@ -275,7 +269,6 @@ describe("validatorConfigSchema", () => {
 			BASE_FEE_MULTIPLIER: 2.4,
 			PRIORITY_FEE_PER_GAS: 100000000n,
 			ALLOWED_ORACLES: [],
-			COMMIT_SHA: "unknown",
 		});
 	});
 
@@ -324,7 +317,6 @@ describe("validatorConfigSchema", () => {
 			GENESIS_SALT: MOCK_GENESIS_SALT,
 			BLOCKS_PER_EPOCH: 17280n,
 			ALLOWED_ORACLES: [],
-			COMMIT_SHA: "unknown",
 		};
 
 		expect(

@@ -92,7 +92,6 @@ export const validatorConfigSchema = z.object({
 	ALLOWED_ORACLES: emptyToDefault(jsonStringToValue(z.array(checkedAddressSchema)).optional(), []),
 	MAX_LOGS_PER_QUERY: emptyToDefault(z.coerce.number().int().optional()),
 	SKIP_GENESIS: emptyToDefault(strictBoolSchema.optional()),
-	COMMIT_SHA: emptyToDefault(z.string().optional(), "unknown"),
 });
 
 export const chunked = <T>(sz: number, transform: (b: Buffer) => T): ((b: Buffer) => T[]) => {
