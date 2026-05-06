@@ -94,3 +94,57 @@ All consensus and coordinator events with debug support. Calls: `getCoordinator(
 - Epoch rollover not implemented.
 - Safe transaction checks not implemented.
 - Consensus packet verification not implemented.
+
+## Go Port Plan
+
+The Go port (`validator-go/`) targets the same scope as the Rust port: genesis keygen happy path, ending in a usable FROST signing share. The plan is structured as a dependency graph of small, independently-reviewable PRs. Phases A and F are sequential; B/C/D/E can overlap once A is done.
+
+### Phase A — Foundation (sequential)
+
+**A1. Module skeleton + config loading.** `validator-go/` Go module, CLI entry point that takes a config file path, TOML config parsing with required + optional fields. Address fields parsed via go-ethereum's `common.Address`. No business logic; running the binary loads and validates a config.
+
+**A2. Chain detection + addresses.** Chain type with Gnosis/Sepolia/Anvil and their `BlocksPerEpoch`. Connect to RPC, query `eth_chainId`, resolve to chain. Query the consensus contract for the coordinator address. Bundle both into an addresses struct.
+
+**A3. Contract bindings.** Generate Go bindings (e.g. via `abigen`) for the `Consensus` and `FROSTCoordinator` contracts. Verify event decoding and the read calls used by the watcher and actions: `getCoordinator`, `getActiveEpoch`, plus the three keygen calls.
+
+### Phase B — Crypto primitives (parallelizable after A3)
+
+Each B step is self-contained with unit tests against fixed vectors (port the Rust/TS tests where they exist).
+
+**B1. Participant utilities.** `IdentifierFromAddress` (FROST `hid` hash-to-scalar), `CalcParticipantsRoot`, `CalcGenesisGroupId`, `GenerateParticipantProof`.
+
+**B2. ECDH encryption.** Keypair generation, encrypt/decrypt of 32-byte shares via secp256k1 point multiplication + XOR. Round-trip tests and cross-implementation vectors.
+
+**B3. ABI Point marshalling.** Convert between the contract `Point { uint256 x; uint256 y }` ABI shape and SEC1 curve points. Round-trip tests.
+
+**B4. FROST math helpers.** `EvalPoly`, `EvalCommitment`, `CreateVerificationShare`, `CreateSigningShare`, `VerifyKey`. Tests against TS vectors.
+
+### Phase C — DKG rounds (sequential, depends on B)
+
+Each C step uses the chosen Go FROST library (or a vendored implementation) plus the B primitives.
+
+**C1. DKG round 1.** `GenerateRound1`: create ECDH keypair, run FROST DKG part 1, build the on-chain `KeyGenCommitment` payload (incl. encryption pubkey `q`).
+
+**C2. DKG round 2.** `GenerateRound2`: run FROST DKG part 2, derive verifying shares from collected commitments, ECDH-encrypt per-participant signing shares into `KeyGenSecretShare` payloads.
+
+**C3. DKG round 3.** `GenerateRound3`: ECDH-decrypt peers' shares, run FROST DKG part 3, return a `KeyPackage`.
+
+### Phase D — State & storage (parallelizable after A1)
+
+**D1. State types.** Phase sum type covering `WaitingForGenesis`, `CollectingCommitments`, `CollectingShares`, `GenesisComplete`, `WaitingForRollover`. `ConsensusConfig` struct holding `OwnAddress`, `CoordinatorAddress`, `Participants`, `GenesisSalt`, `BlocksPerEpoch`. JSON serialization round-trip tests for every variant.
+
+**D2. SQLite storage.** `validator_state` table keyed by `block_number` with a JSON state column. `Open`, `Save`, `LoadLatest`. Pruning to keep the last `state_history` rows. Default to in-memory database. Tests covering save → load and pruning behaviour.
+
+### Phase E — I/O (parallelizable after A3)
+
+**E1. Watcher.** Block + consensus-log subscription, history replay through `eth_getLogs` from a given start block, log sort by index, block monotonicity enforcement. Emits one update per block to a callback. Subscription is established before history replay so no blocks are missed.
+
+**E2. Action handler with broadcast.** Builds, signs, **and broadcasts** EIP-1559 transactions for `KeyGenAndCommit`, `KeyGenSecretShare`, `KeyGenConfirm`. Closes the gap left in the Rust port (`send_raw_transaction` is wired up here from the start).
+
+### Phase F — Integration (sequential)
+
+**F1. State machine handlers.** Pure functions taking `(state, event)` and returning `(new state, actions)`. One handler per event the keygen flow consumes: `KeyGen`, `KeyGenCommitted`, `KeyGenSecretShared`. Unit-tested with synthetic event sequences and assertions on emitted actions and resulting phase. Depends on C3 + D1 + B1.
+
+**F2. Driver wiring.** Cold-start path: derive `OwnAddress` from the private key, load addresses (A2), build `ConsensusConfig`, initialise or restore state via storage (D2), spawn the action-handler worker (E2), and start the watcher (E1) feeding into the state machine handlers (F1).
+
+**F3. Integration verification.** Run the Go validator against `scripts/run_integration_test.sh` (or an equivalent harness) and confirm the genesis ceremony completes with `Phase = GenesisComplete` for every participant. No new code beyond test harness adjustments; the goal is to validate end-to-end behaviour matches the TS and Rust validators.
