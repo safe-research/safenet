@@ -16,6 +16,10 @@ RUN npm ci --workspace=validator
 # Then, copy over the rest of the validator source code and build the project.
 # The .dockerignore file will prevent node_modules on the host from being copied.
 COPY validator/ validator/
+
+# Bake the commit SHA into the compiled output so it can't be overridden at runtime.
+ARG COMMIT_SHA=dev
+RUN printf 'export const COMMIT_SHA = "%s";\n' "${COMMIT_SHA}" > validator/src/version.ts
 RUN npm run build --workspace=validator
 
 # ---- Production Stage ----

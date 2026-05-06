@@ -10,6 +10,7 @@ import { validatorConfigSchema } from "./types/schemas.js";
 import { formatError } from "./utils/errors.js";
 import { createLogger } from "./utils/logging.js";
 import { createMetricsService } from "./utils/metrics.js";
+import { COMMIT_SHA } from "./version.js";
 
 dotenv.config({ quiet: true });
 
@@ -67,6 +68,7 @@ const metrics = createMetricsService({
 	logger,
 	host: validatorConfig.METRICS_HOST,
 	port: validatorConfig.METRICS_PORT,
+	commit: COMMIT_SHA,
 });
 const service = createValidatorService({
 	account,
