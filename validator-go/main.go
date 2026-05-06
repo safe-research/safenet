@@ -1,12 +1,12 @@
 package main
 
 import (
+	"context"
 	"flag"
-	"fmt"
 	"log"
-	"os"
 
 	"github.com/safe-research/safenet/validator-go/config"
+	"github.com/safe-research/safenet/validator-go/network"
 )
 
 func main() {
@@ -14,8 +14,7 @@ func main() {
 	flag.Parse()
 
 	if *configPath == "" {
-		fmt.Fprintln(os.Stderr, "usage: validator-go -config <path>")
-		os.Exit(1)
+		log.Fatal("usage: validator-go -config <path>")
 	}
 
 	cfg, err := config.Load(*configPath)
@@ -23,6 +22,12 @@ func main() {
 		log.Fatalf("failed to load config: %v", err)
 	}
 
-	fmt.Printf("config loaded: rpc_url=%s consensus_address=%s participants=%d\n",
-		cfg.RPCURL, cfg.ConsensusAddress.Hex(), len(cfg.Participants))
+	addrs, err := network.Resolve(context.Background(), cfg.RPCURL, cfg.ConsensusAddress, cfg.BlocksPerEpoch)
+	if err != nil {
+		log.Fatalf("failed to resolve addresses: %v", err)
+	}
+
+	log.Printf("chain=%s blocks_per_epoch=%d consensus=%s coordinator=%s",
+		addrs.Chain, addrs.BlocksPerEpoch,
+		addrs.ConsensusAddress.Hex(), addrs.CoordinatorAddress.Hex())
 }

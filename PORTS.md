@@ -103,7 +103,7 @@ The Go port (`validator-go/`) targets the same scope as the Rust port: genesis k
 
 **A1. Module skeleton + config loading.** ✅ `validator-go/` Go module, CLI entry point that takes a config file path, TOML config parsing with required + optional fields. Address fields parsed via go-ethereum's `common.Address`. No business logic; running the binary loads and validates a config.
 
-**A2. Chain detection + addresses.** Chain type with Gnosis/Sepolia/Anvil and their `BlocksPerEpoch`. Connect to RPC, query `eth_chainId`, resolve to chain. Query the consensus contract for the coordinator address. Bundle both into an addresses struct.
+**A2. Chain detection + addresses.** ✅ Chain type with Gnosis/Sepolia/Anvil and their `BlocksPerEpoch`. Connect to RPC, query `eth_chainId`, resolve to chain. Query the consensus contract for the coordinator address. Bundle both into an addresses struct.
 
 **A3. Contract bindings.** Generate Go bindings (e.g. via `abigen`) for the `Consensus` and `FROSTCoordinator` contracts. Verify event decoding and the read calls used by the watcher and actions: `getCoordinator`, `getActiveEpoch`, plus the three keygen calls.
 
