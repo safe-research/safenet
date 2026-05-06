@@ -27,7 +27,9 @@ export function useAttestationStatus(safeTxHash: Hex, epoch: bigint, proposedAt:
 			}),
 		initialData: null,
 		refetchInterval: (query) => {
-			return !query.state.data?.completed && settings.refetchInterval > 0 ? settings.refetchInterval : false;
+			return query.state.data?.status !== "completed" && settings.refetchInterval > 0
+				? settings.refetchInterval
+				: false;
 		},
 	});
 }

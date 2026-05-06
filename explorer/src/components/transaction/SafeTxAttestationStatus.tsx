@@ -20,7 +20,7 @@ export function SafeTxAttestationStatus({ proposal }: { proposal: TransactionPro
 			{status.data !== null && (
 				<div key={status.data.sid}>
 					<p>Validators:</p>
-					{!status.data.completed && (
+					{status.data.status !== "completed" && (
 						<div className={"md:flex md:justify-between"}>
 							<p className={"ml-4"}>Committed:</p>
 							<p>
@@ -28,7 +28,7 @@ export function SafeTxAttestationStatus({ proposal }: { proposal: TransactionPro
 									all={allValidatorIds}
 									active={status.data.committed.map((s) => s.address)}
 									mapInfo={mapInfo}
-									completed={status.data.completed}
+									completed={true}
 								/>
 							</p>
 						</div>
@@ -40,7 +40,7 @@ export function SafeTxAttestationStatus({ proposal }: { proposal: TransactionPro
 								all={allValidatorIds}
 								active={status.data.signed.map((s) => s.address)}
 								mapInfo={mapInfo}
-								completed={status.data.completed}
+								completed={status.data.status === "completed"}
 							/>
 						</p>
 					</div>
