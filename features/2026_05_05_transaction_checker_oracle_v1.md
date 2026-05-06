@@ -218,20 +218,15 @@ A new `checker` sub-service in `validator/src/`:
 
 ### Test Cases
 
-**Unit tests (Solidity / Forge):**
-- `testUnanimousApprove_fullBond` — all checkers vote Approve, full threshold met; fee distributed correctly.
-- `testUnanimousApprove_timeout` — window expires with Approve bond above threshold; resolves Approve.
-- `testUnanimousDeny` — all checkers vote Deny; fee refunded, bonds returned, `approved=false`.
-- `testTimeout_undercapitalized` — window expires, Approve threshold not met, no Deny votes; defaults to reject.
-- `testConflict_arbitration` — mixed votes; `triggerArbitration` freezes; `resolveDispute` slashes loser.
-- `testFeeDistribution_positionMultiplier` — three checkers with different bonds and positions; verify payout math.
-- `testExcessBond_capped` — commitment that would overshoot threshold; verify only gap-filling portion counted.
-- `testDenyBond_ceilingEnforced` — `commitDeny` with amount > `DENY_BOND_CEILING` reverts or is capped.
-- `testClaimIdempotency` — double-claim reverts.
-- `testUnpermissionedChecker_reverts` — non-registry address cannot commit.
+Focus on behavioral end-to-end scenarios that exercise complete flows rather than internal logic. Fewer well-chosen tests are preferable to exhaustive coverage of implementation details.
 
-**Integration tests:**
-- End-to-end with Anvil: deploy `CheckerOracle`, run two checker nodes, verify unanimous resolution flow.
+**Key scenarios (Solidity / Forge + Anvil):**
+- **Unanimous Approve flow** — checkers collectively reach the Approve threshold; fee is distributed proportionally and bonds are returned; `OracleResult` is emitted with `approved=true`.
+- **Unanimous Deny flow** — checkers collectively reach the Deny threshold; fee is distributed to Deny checkers; `OracleResult` is emitted with `approved=false`.
+- **Timeout / undercapitalized** — voting window expires with neither threshold met; fee is refunded to user; request resolves rejected.
+- **Conflict and arbitration** — both thresholds are reached; request is frozen; `ARBITRATOR` resolves the dispute; loser is slashed and user is refunded.
+- **Checker management** — `ARBITRATOR` adds a checker (with delay) and removes one; only active checkers can commit bonds.
+- **Bond multiplier update** — `ARBITRATOR` schedules a new `bondMultiplier`; it is not applied until after `GOVERNANCE_DELAY` blocks.
 
 ---
 
