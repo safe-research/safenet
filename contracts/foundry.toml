@@ -11,6 +11,7 @@ compilation_restrictions = [
   { paths = "src/Consensus.sol", via_ir = true },
   { paths = "src/FROSTCoordinator.sol", via_ir = true },
   { paths = "src/guard/SafenetGuardA.sol", via_ir = true },
+  { paths = "src/guard/SafenetGuardB.sol", via_ir = true },
 ]
 
 remappings = [
