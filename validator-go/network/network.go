@@ -5,10 +5,10 @@ import (
 	"fmt"
 	"math/big"
 
-	"github.com/ethereum/go-ethereum"
+	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/ethclient"
+	"github.com/safe-research/safenet/validator-go/contracts/consensus"
 )
 
 // Chain represents a supported EVM network.
@@ -106,19 +106,10 @@ func Resolve(ctx context.Context, rpcURL string, consensusAddr common.Address, b
 	}, nil
 }
 
-// getCoordinatorSelector is the 4-byte ABI selector for getCoordinator().
-var getCoordinatorSelector = crypto.Keccak256([]byte("getCoordinator()"))[:4]
-
-func callGetCoordinator(ctx context.Context, client *ethclient.Client, consensus common.Address) (common.Address, error) {
-	result, err := client.CallContract(ctx, ethereum.CallMsg{
-		To:   &consensus,
-		Data: getCoordinatorSelector,
-	}, nil)
+func callGetCoordinator(ctx context.Context, client *ethclient.Client, consensusAddr common.Address) (common.Address, error) {
+	caller, err := consensus.NewConsensusCaller(consensusAddr, client)
 	if err != nil {
 		return common.Address{}, err
 	}
-	if len(result) < 32 {
-		return common.Address{}, fmt.Errorf("result too short (%d bytes)", len(result))
-	}
-	return common.BytesToAddress(result[12:32]), nil
+	return caller.GetCoordinator(&bind.CallOpts{Context: ctx})
 }
