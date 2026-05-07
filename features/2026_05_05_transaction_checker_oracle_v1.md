@@ -66,10 +66,10 @@ Because both sides post the same total bond (`fee × bondMultiplier`), the slash
 
 ### Alternatives Considered
 
-- **Symmetric bonds**: Chosen for V1. Per-checker Deny caps to protect whistleblowers on high-fee transactions are deferred to a later version.
+- **Asymmetric bonds**: Deferred due to complexity and because the initial version assumes low bond values.
 - **Automatic push on threshold**: Rejected — reentrancy risk and unbounded gas cost for voting transactions.
 - **On-chain conflict resolution without human arbitration**: Deferred to a future version. V1 assumes a permissioned checker set where conflict is rare and human oversight is practical.
-- **Fee token = native ETH vs. ERC-20**: Open question (see §Open Questions). The spec is written token-agnostic; the implementation will parameterize the fee token.
+- **Native ETH as fee token**: Rejected — implementation is ERC-20 only. Native ETH can be supported by wrapping it (e.g. WETH) before interacting with the contract.
 
 ---
 
