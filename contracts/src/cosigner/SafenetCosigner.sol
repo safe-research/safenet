@@ -95,7 +95,9 @@ contract SafenetCosigner is ISignatureValidator {
 
     uint256 private immutable _ALLOW_TX_DELAY;
 
-    bytes32 private immutable _DOMAIN_SEPARATOR;
+    bytes32 private immutable _CACHED_DOMAIN_SEPARATOR;
+
+    uint256 private immutable _CACHED_CHAIN_ID;
 
     // forge-lint: disable-next-line(mixed-case-variable)
     EpochState private $currentEpoch;
@@ -154,8 +156,9 @@ contract SafenetCosigner is ISignatureValidator {
         Secp256k1.requireNonZero(initialGroupKey);
         _CONSENSUS_DOMAIN_SEPARATOR = ConsensusMessages.domain(consensusChainId, consensusAddress);
         _ALLOW_TX_DELAY = allowTransactionDelay;
+        _CACHED_CHAIN_ID = block.chainid;
         // forge-lint: disable-next-item(asm-keccak256)
-        _DOMAIN_SEPARATOR = keccak256(
+        _CACHED_DOMAIN_SEPARATOR = keccak256(
             abi.encode(
                 keccak256("EIP712Domain(uint256 chainId,address verifyingContract)"), block.chainid, address(this)
             )
@@ -262,7 +265,7 @@ contract SafenetCosigner is ISignatureValidator {
             )
         );
         // forge-lint: disable-next-item(asm-keccak256)
-        bytes32 messageHash = keccak256(abi.encodePacked("\x19\x01", _DOMAIN_SEPARATOR, structHash));
+        bytes32 messageHash = keccak256(abi.encodePacked("\x19\x01", _domainSeparator(), structHash));
         ISafe(payable(request.safe)).checkNSignatures(address(0), messageHash, signature, 1);
         _registerEscapeHatch(request);
     }
@@ -324,6 +327,16 @@ contract SafenetCosigner is ISignatureValidator {
                 refundReceiver: request.refundReceiver,
                 nonce: request.nonce
             })
+        );
+    }
+
+    function _domainSeparator() private view returns (bytes32) {
+        if (block.chainid == _CACHED_CHAIN_ID) return _CACHED_DOMAIN_SEPARATOR;
+        // forge-lint: disable-next-item(asm-keccak256)
+        return keccak256(
+            abi.encode(
+                keccak256("EIP712Domain(uint256 chainId,address verifyingContract)"), block.chainid, address(this)
+            )
         );
     }
 
