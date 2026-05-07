@@ -154,9 +154,7 @@ contract SafenetCosigner is ISignatureValidator {
         // forge-lint: disable-next-item(asm-keccak256)
         _DOMAIN_SEPARATOR = keccak256(
             abi.encode(
-                keccak256("EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)"),
-                keccak256("SafenetCosigner"),
-                keccak256("1"),
+                keccak256("EIP712Domain(uint256 chainId,address verifyingContract)"),
                 block.chainid,
                 address(this)
             )
