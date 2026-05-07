@@ -300,9 +300,7 @@ contract SafenetCosigner is ISignatureValidator {
         ISafe safeContract = ISafe(payable(request.safe));
         require(request.nonce == safeContract.nonce(), InvalidNonce());
         uint256 currentThreshold = safeContract.getThreshold();
-        require(
-            request.threshold == currentThreshold || request.threshold == currentThreshold - 1, InvalidThreshold()
-        );
+        require(request.threshold == currentThreshold || request.threshold == currentThreshold - 1, InvalidThreshold());
         bytes32 safeTxHash = _escapeHatchTxHash(request);
         require($allowedTransactions[request.safe][safeTxHash] == 0, TransactionAlreadyAllowed());
         uint256 executableAt = block.timestamp + _ALLOW_TX_DELAY;
