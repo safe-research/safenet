@@ -113,7 +113,7 @@ Each B step is self-contained with unit tests against fixed vectors (port the Ru
 
 **B1. Participant utilities.** ✅ `IdentifierFromAddress` (FROST `hid` hash-to-scalar), `CalcParticipantsRoot`, `CalcGenesisGroupId`, `GenerateParticipantProof`.
 
-**B2. ECDH encryption.** Keypair generation, encrypt/decrypt of 32-byte shares via secp256k1 point multiplication + XOR. Round-trip tests and cross-implementation vectors.
+**B2. ECDH encryption.** ✅ Keypair generation, encrypt/decrypt of 32-byte shares via secp256k1 point multiplication + XOR. Round-trip tests and cross-implementation vectors.
 
 **B3. ABI Point marshalling.** Convert between the contract `Point { uint256 x; uint256 y }` ABI shape and SEC1 curve points. Round-trip tests.
 
