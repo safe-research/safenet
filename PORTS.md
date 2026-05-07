@@ -111,7 +111,7 @@ The Go port (`validator-go/`) targets the same scope as the Rust port: genesis k
 
 Each B step is self-contained with unit tests against fixed vectors (port the Rust/TS tests where they exist).
 
-**B1. Participant utilities.** `IdentifierFromAddress` (FROST `hid` hash-to-scalar), `CalcParticipantsRoot`, `CalcGenesisGroupId`, `GenerateParticipantProof`.
+**B1. Participant utilities.** ✅ `IdentifierFromAddress` (FROST `hid` hash-to-scalar), `CalcParticipantsRoot`, `CalcGenesisGroupId`, `GenerateParticipantProof`.
 
 **B2. ECDH encryption.** Keypair generation, encrypt/decrypt of 32-byte shares via secp256k1 point multiplication + XOR. Round-trip tests and cross-implementation vectors.
 
