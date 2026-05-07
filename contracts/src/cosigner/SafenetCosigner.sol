@@ -303,9 +303,7 @@ contract SafenetCosigner is ISignatureValidator {
     function _registerEscapeHatch(EscapeHatchRequest calldata request) private {
         ISafe safeContract = ISafe(payable(request.safe));
         uint256 currentThreshold = safeContract.getThreshold();
-        require(
-            request.threshold == currentThreshold || request.threshold == currentThreshold - 1, InvalidThreshold()
-        );
+        require(request.threshold == currentThreshold || request.threshold == currentThreshold - 1, InvalidThreshold());
         bytes32 safeTxHash = _escapeHatchTxHash(safeContract, request);
         require($allowedTransactions[request.safe][safeTxHash] == 0, TransactionAlreadyAllowed());
         uint256 executableAt = block.timestamp + _ALLOW_TX_DELAY;
