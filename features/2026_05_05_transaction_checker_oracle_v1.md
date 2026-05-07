@@ -34,21 +34,15 @@ Consensus ──postRequest()──▶ CheckerOracle
 
 ### Key Design Decisions
 
-#### Asymmetric Bond Thresholds
+#### Symmetric Bond Thresholds
 
-Both Approve and Deny sides share the same aggregate bond target (`fee × bondMultiplier`). The distinction is a **per-checker cap** on individual Deny contributions:
+Both Approve and Deny sides use identical bond mechanics:
 
-- **Approve bond target**: `fee × bondMultiplier` aggregate across all Approve checkers.
-- **Deny bond target**: `fee × bondMultiplier` aggregate across all Deny checkers (same total, multiple checkers contribute).
-- **Per-checker Deny cap**: each individual Deny commitment is capped to prevent a single wealthy actor from monopolising the Deny side:
-  ```
-  perCheckerDenyCap = min(fee × bondMultiplier, max(DENY_BOND_CEILING, fee))
-  ```
-  When `fee ≤ DENY_BOND_CEILING` the cap is `DENY_BOND_CEILING`. When `fee > DENY_BOND_CEILING` the cap equals `fee`, ensuring the slashed bond always covers a full user refund in arbitration.
+- **Bond target**: `fee × bondMultiplier` aggregate, applied equally to both sides.
+- A bond threshold is **reached** when the aggregate for that side equals `fee × bondMultiplier`.
+- Over-contributions beyond the threshold are excess and returned to the contributor immediately.
 
-A bond threshold is **reached** when the aggregate for that side equals `fee × bondMultiplier`. Over-contributions beyond the threshold are excess and returned to the contributor immediately.
-
-This asymmetry ensures that a whistleblower can never be priced out of flagging a poisoned transaction, at the cost of cheap griefing potential (mitigated off-chain in V1 — see §Grief-and-Sweep below).
+Per-checker Deny caps and asymmetric ceilings are deferred to a later implementation.
 
 #### Explicit Finalization ("Pull over Push")
 
@@ -68,11 +62,11 @@ Conflict (at least one "Approve" and one "Deny" commitment) freezes the request.
 1. Full user fee refund from slashed bond.
 2. Remainder to `ARBITRATOR`.
 
-Because the "Deny" bond ceiling is set to cover arbitration costs, this keeps manual review financially self-sustaining. In V1, if the slashed bond is insufficient to cover the full fee refund, the remainder is absorbed by the treasury (deficit accepted).
+Because both sides post the same total bond (`fee × bondMultiplier`), the slashed bond always equals the full fee, ensuring the user refund is covered without a deficit.
 
 ### Alternatives Considered
 
-- **Symmetric bonds**: Rejected — would price out honest whistleblowers when facing high-fee transactions.
+- **Symmetric bonds**: Chosen for V1. Per-checker Deny caps to protect whistleblowers on high-fee transactions are deferred to a later version.
 - **Automatic push on threshold**: Rejected — reentrancy risk and unbounded gas cost for voting transactions.
 - **On-chain conflict resolution without human arbitration**: Deferred to a future version. V1 assumes a permissioned checker set where conflict is rare and human oversight is practical.
 - **Fee token = native ETH vs. ERC-20**: Open question (see §Open Questions). The spec is written token-agnostic; the implementation will parameterize the fee token.
@@ -117,14 +111,14 @@ struct Request {
     State   state;                // PENDING | FROZEN | RESOLVED
     uint256 totalApproveBond;     // running sum of Approve bonds; threshold reached when == approveBondTarget
     uint256 totalDenyBond;        // running sum of Deny bonds; threshold reached when == approveBondTarget; conflict when both sides reach threshold
-    uint256 checkerCount;         // number of Approve voters eligible for fee distribution (committed before approveBondTarget was met)
+    uint256 checkerCount;         // number of winning-side voters eligible for fee distribution (committed before bondTarget was met)
     uint256 totalScore;           // cached at finalize() to avoid recomputation per claim
     bool    arbitrated;
 }
 
 struct Commitment {
     bool    approved;          // true = Approve vote, false = Deny vote
-    uint256 bondAmount;        // effective (capped) bond
+    uint256 bondAmount;        // bond amount committed
     uint256 position;          // arrival order (1-indexed)
     bool    claimed;
 }
@@ -145,7 +139,6 @@ mapping(bytes32 requestId => address[]) checkerOrder; // ordered arrival list
 | Name | Description |
 |---|---|
 | `VOTING_WINDOW` | Duration in blocks for the voting window (12 blocks ≈ 1 minute on Gnosis Chain) |
-| `DENY_BOND_CEILING` | Baseline cap on the Deny bond for low-fee transactions (e.g. 50 USDC equivalent); for high-fee transactions the cap rises to `fee` — see §Asymmetric Bond Thresholds |
 | `GOVERNANCE_DELAY` | Time delay in blocks applied to all governance changes: adding checkers and updating `bondMultiplier` |
 | `FEE_TOKEN` | ERC-20 token for bonds and fees |
 | `ARBITRATOR` | Foundation address authorised to manage checkers, update `bondMultiplier`, call `triggerArbitration` / `resolveDispute`, and recipient of slashed remainder |
@@ -176,7 +169,7 @@ enum ResolveReason { UNANIMOUS_APPROVE, UNANIMOUS_DENY, TIMEOUT, ARBITRATION }
 |---|---|---|
 | `postRequest(requestId)` | `Consensus` | Opens request, locks fee, emits `NewRequest` |
 | `commitApprove(requestId)` | Active checker | Posts Approve bond |
-| `commitDeny(requestId)` | Active checker | Posts Deny bond; per-checker amount capped at `min(fee × bondMultiplier, max(DENY_BOND_CEILING, fee))`; aggregate target = `fee × bondMultiplier` |
+| `commitDeny(requestId)` | Active checker | Posts Deny bond; aggregate target = `fee × bondMultiplier` (same as Approve) |
 | `finalize(requestId)` | Anyone | Resolves request after deadline or on full Approve threshold |
 | `claim(requestId)` | Checker | Returns bond + proportional fee reward |
 | `triggerArbitration(requestId)` | `ARBITRATOR` | Freezes conflicted request |
@@ -192,13 +185,15 @@ Only commitments recorded before `approveBondTarget` is fully met are eligible. 
 
 ```
 Score_i    = effectiveBond_i × positionMultiplier_i
-             where positionMultiplier_i = (checkerCount + 1 - position_i)
-             and   checkerCount = total eligible Approve voters recorded before approveBondTarget was met
+             where positionMultiplier_i = (winnerCount + 1 - position_i)
+             and   winnerCount = total eligible voters on the winning side recorded before bondTarget was met
 
 TotalScore = Σ Score_i  (cached in Request.totalScore during finalize())
 
 Payout_i   = totalFee × (Score_i / TotalScore)
 ```
+
+The same formula is applied to whichever side wins (Approve or Deny).
 
 ### Checker Management
 
@@ -279,7 +274,7 @@ Flows covered: event subscription, address-poisoning detection, bond submission,
 
 5. ~~**`VOTING_WINDOW` value**~~ **Decided**: 12 blocks (≈ 1 minute on Gnosis Chain).
 
-6. ~~**Slashing deficit**~~ **Resolved**: The `denyBond` formula (`min(fee × bondMultiplier, max(DENY_BOND_CEILING, fee))`) ensures that when `fee > DENY_BOND_CEILING` the Deny bond equals `fee`, so the slashed bond always fully covers the user fee refund. For `fee ≤ DENY_BOND_CEILING` the bond is at most `DENY_BOND_CEILING`, and the treasury absorbs any remaining deficit (accepted for V1).
+6. ~~**Slashing deficit**~~ **Resolved**: With symmetric bonds both sides post `fee × bondMultiplier` in aggregate. The slashed bond always covers the full user fee refund with no deficit.
 
 7. ~~**Partial Deny threshold**~~ **Decided**: Conflict requires the full Deny bond target (`fee × bondMultiplier`) to be reached, identical to the Approve side. Sub-threshold Deny votes have no effect and bonds are returned. Over-achievement on either side is not rewarded (excess returned).
 
