@@ -7,7 +7,6 @@ import {SafeTransaction} from "@/libraries/SafeTransaction.sol";
 import {Secp256k1} from "@/libraries/Secp256k1.sol";
 import {ISafe, IOwnerManager} from "@safe/interfaces/ISafe.sol";
 import {ISignatureValidator} from "@safe/interfaces/ISignatureValidator.sol";
-import {IERC1271} from "@oz/interfaces/IERC1271.sol";
 
 /**
  * @title SafenetCosigner
@@ -139,8 +138,6 @@ contract SafenetCosigner is ISignatureValidator {
 
     error InvalidNonce();
 
-    error InvalidSignature();
-
     // ============================================================
     // CONSTRUCTOR
     // ============================================================
@@ -242,17 +239,13 @@ contract SafenetCosigner is ISignatureValidator {
     }
 
     /**
-     * @dev Relay-compatible variant of `allowEscapeHatch`. Accepts an EIP-712 signature from
-     *      `signer` over `EscapeHatchRequest(address safe,address prevOwner,uint256 threshold,
-     *      uint256 safeTxGas,uint256 baseGas,uint256 gasPrice,address gasToken,address refundReceiver)`,
-     *      allowing submission via a relay service where `msg.sender` is not the Safe owner.
-     *      Supports both ECDSA (EOA) and EIP-1271 (contract) owners. The signature must be
-     *      produced with `eth_signTypedData` over this contract's EIP-712 domain.
+     * @dev Relay-compatible variant of `allowEscapeHatch`. Accepts a Safe-compatible signature
+     *      (packed ECDSA, EIP-1271 contract signature, or pre-approved hash) from a Safe owner
+     *      over the EIP-712 hash of the `EscapeHatchRequest`, allowing submission via a relay
+     *      service where `msg.sender` is not the Safe owner. Signature verification and owner
+     *      membership check are both delegated to `ISafe.checkNSignatures`.
      */
-    function allowEscapeHatchWithSig(EscapeHatchRequest calldata request, address signer, bytes calldata signature)
-        external
-    {
-        require(ISafe(payable(request.safe)).isOwner(signer), NotSafeOwner());
+    function allowEscapeHatchWithSig(EscapeHatchRequest calldata request, bytes calldata signature) external {
         // forge-lint: disable-next-item(asm-keccak256)
         bytes32 structHash = keccak256(
             abi.encode(
@@ -270,7 +263,7 @@ contract SafenetCosigner is ISignatureValidator {
         );
         // forge-lint: disable-next-item(asm-keccak256)
         bytes32 messageHash = keccak256(abi.encodePacked("\x19\x01", _DOMAIN_SEPARATOR, structHash));
-        _verifySignature(signer, messageHash, signature);
+        ISafe(payable(request.safe)).checkNSignatures(address(0), messageHash, signature, 1);
         _registerEscapeHatch(request);
     }
 
@@ -334,24 +327,6 @@ contract SafenetCosigner is ISignatureValidator {
                 nonce: request.nonce
             })
         );
-    }
-
-    function _verifySignature(address signer, bytes32 hash, bytes calldata signature) private view {
-        if (signer.code.length > 0) {
-            require(IERC1271(signer).isValidSignature(hash, signature) == EIP1271_MAGIC_VALUE, InvalidSignature());
-        } else {
-            require(signature.length == 65, InvalidSignature());
-            bytes32 r;
-            bytes32 s;
-            uint8 v;
-            bytes memory sig = signature;
-            assembly ("memory-safe") {
-                r := mload(add(sig, 0x20))
-                s := mload(add(sig, 0x40))
-                v := byte(0, mload(add(sig, 0x60)))
-            }
-            require(ecrecover(hash, v, r, s) == signer, InvalidSignature());
-        }
     }
 
     function _resolveGroupKey(uint64 epoch) private view returns (Secp256k1.Point memory) {

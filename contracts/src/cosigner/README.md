@@ -47,7 +47,7 @@ The registered hash is nonce-bound to the Safe's nonce at registration time. If 
 - `updateEpoch` is permissionless, improving liveness during validator set changes.
 - Fully self-contained: no cross-chain calls at execution time.
 - Escape hatch can be registered by any single Safe owner without Safenet availability, providing a liveness guarantee if Safenet is unavailable.
-- Relay-compatible escape hatch registration via EIP-712 (`allowEscapeHatchWithSig`), supporting both EOA and contract owners.
+- Relay-compatible escape hatch registration via `allowEscapeHatchWithSig`, using Safe's own `checkNSignatures` for signature verification — supports ECDSA, EIP-1271 contract signatures, and pre-approved hashes without any custom signature logic.
 
 ### Cons
 
