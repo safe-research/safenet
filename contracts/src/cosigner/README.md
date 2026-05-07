@@ -33,7 +33,11 @@ To use the escape hatch instead, set the dynamic data to an empty byte sequence 
 
 **Epoch state.** Only the two most recent epochs are retained: `$currentEpoch` and `$previousEpoch`. On each `updateEpoch` call the current epoch shifts to previous and the new epoch becomes current. The sliding window allows in-flight transactions to complete across epoch boundaries while preventing unbounded storage growth. `updateEpoch` is permissionless — any party holding the FROST-signed rollover message can advance the epoch.
 
-**Escape hatch.** Owners can register a specific transaction for time-delayed execution via `allowTransaction`. The call must go through the Safe's own `execTransaction`, so the Safe's owner-signature threshold is required to register an allowance — including the cosigner's approval if the human owners alone cannot reach it. After a configurable delay, passing empty bytes as the dynamic contract signature data causes the cosigner to approve via the matured allowance. Allowances are not deleted on use because `isValidSignature` is `view`; replay is prevented by Safe's nonce advancing after execution.
+**Escape hatch.** Any single Safe owner can register a time-delayed `removeOwner` call that removes the cosigner from the Safe by calling `allowEscapeHatch` directly, or `allowEscapeHatchWithSig` when submitting via a relay service. Registration does not require a Safenet attestation, making it available even when the Safenet network is unavailable. Both functions accept an `EscapeHatchRequest` struct that captures the target Safe address (`safe`), the `removeOwner` parameters (`prevOwner`, `threshold`), and the Safe transaction gas parameters (`safeTxGas`, `baseGas`, `gasPrice`, `gasToken`, `refundReceiver`).
+
+After the configured delay, the Safe owners execute the pre-registered `removeOwner` transaction by passing empty bytes as the cosigner's dynamic signature data; the cosigner approves it via the empty-signature path in `isValidSignature`. Registrations are not deleted on use because `isValidSignature` is `view`; replay is prevented by Safe's nonce advancing after execution.
+
+The registered hash is nonce-bound to the Safe's nonce at registration time. If other transactions advance the nonce before execution, the registration becomes stale and must be repeated. To invalidate a pending registration, `threshold` owners can execute a dummy transaction to advance the Safe nonce.
 
 ### Pros
 
@@ -42,11 +46,12 @@ To use the escape hatch instead, set the dynamic data to an empty byte sequence 
 - Only two epoch keys are retained, bounding storage growth regardless of how many rollovers occur.
 - `updateEpoch` is permissionless, improving liveness during validator set changes.
 - Fully self-contained: no cross-chain calls at execution time.
-- Escape hatch provides a liveness guarantee if Safenet is unavailable.
+- Escape hatch can be registered by any single Safe owner without Safenet availability, providing a liveness guarantee if Safenet is unavailable.
+- Relay-compatible escape hatch registration via EIP-712 (`allowEscapeHatchWithSig`), supporting both EOA and contract owners.
 
 ### Cons
 
 - Only the two most recent epoch keys are valid. An in-flight transaction attested under an older epoch will be rejected once two subsequent rollovers have occurred.
-- Registering an escape-hatch allowance requires the cosigner's approval at registration time, so it must be done proactively while Safenet is still available.
-- Cancelling an allowance goes through `execTransaction` and requires the Safe's owner-signature threshold. If the remaining human owners can reach that threshold without the cosigner, cancellation is still possible even when Safenet is unavailable.
-- Escape-hatch UX requires owners to proactively register a transaction hash and wait out the full delay, which may be operationally burdensome in time-sensitive situations.
+- Escape-hatch UX requires owners to proactively register the `removeOwner` hash and wait out the full delay, which may be operationally burdensome in time-sensitive situations.
+- The registered hash is nonce-bound; if the Safe nonce advances before execution (e.g. due to another transaction), the registration must be repeated. Though, this is by design.
+- Invalidating a pending escape-hatch registration requires `threshold` owners to execute a dummy transaction without the cosigner's approval, which is only possible if the human owners can independently reach the Safe threshold.
