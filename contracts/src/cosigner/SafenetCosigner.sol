@@ -154,9 +154,7 @@ contract SafenetCosigner is ISignatureValidator {
         // forge-lint: disable-next-item(asm-keccak256)
         _DOMAIN_SEPARATOR = keccak256(
             abi.encode(
-                keccak256("EIP712Domain(uint256 chainId,address verifyingContract)"),
-                block.chainid,
-                address(this)
+                keccak256("EIP712Domain(uint256 chainId,address verifyingContract)"), block.chainid, address(this)
             )
         );
         $currentEpoch = EpochState({epoch: initialEpoch, groupKey: initialGroupKey});
