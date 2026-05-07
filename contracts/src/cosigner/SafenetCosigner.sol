@@ -64,6 +64,9 @@ contract SafenetCosigner is ISignatureValidator {
      * @custom:param gasPrice Gas price used for the refund calculation.
      * @custom:param gasToken Token used for gas payment; `address(0)` for the native token.
      * @custom:param refundReceiver Recipient of the gas refund; `address(0)` for `tx.origin`.
+     * @custom:param nonce The Safe's current nonce at registration time. Binds the registration to a
+     *              specific Safe nonce, preventing replay of a signed `EscapeHatchRequest` across
+     *              future nonce values.
      */
     struct EscapeHatchRequest {
         address safe;
@@ -74,6 +77,7 @@ contract SafenetCosigner is ISignatureValidator {
         uint256 gasPrice;
         address gasToken;
         address refundReceiver;
+        uint256 nonce;
     }
 
     // ============================================================
@@ -81,7 +85,7 @@ contract SafenetCosigner is ISignatureValidator {
     // ============================================================
 
     bytes32 private constant _ESCAPE_HATCH_TYPEHASH = keccak256(
-        "EscapeHatchRequest(address safe,address prevOwner,uint256 threshold,uint256 safeTxGas,uint256 baseGas,uint256 gasPrice,address gasToken,address refundReceiver)"
+        "EscapeHatchRequest(address safe,address prevOwner,uint256 threshold,uint256 safeTxGas,uint256 baseGas,uint256 gasPrice,address gasToken,address refundReceiver,uint256 nonce)"
     );
 
     // ============================================================
@@ -132,6 +136,8 @@ contract SafenetCosigner is ISignatureValidator {
     error NotSafeOwner();
 
     error InvalidThreshold();
+
+    error InvalidNonce();
 
     error InvalidSignature();
 
@@ -258,7 +264,8 @@ contract SafenetCosigner is ISignatureValidator {
                 request.baseGas,
                 request.gasPrice,
                 request.gasToken,
-                request.refundReceiver
+                request.refundReceiver,
+                request.nonce
             )
         );
         // forge-lint: disable-next-item(asm-keccak256)
@@ -298,20 +305,19 @@ contract SafenetCosigner is ISignatureValidator {
 
     function _registerEscapeHatch(EscapeHatchRequest calldata request) private {
         ISafe safeContract = ISafe(payable(request.safe));
+        require(request.nonce == safeContract.nonce(), InvalidNonce());
         uint256 currentThreshold = safeContract.getThreshold();
-        require(request.threshold == currentThreshold || request.threshold == currentThreshold - 1, InvalidThreshold());
-        bytes32 safeTxHash = _escapeHatchTxHash(safeContract, request);
+        require(
+            request.threshold == currentThreshold || request.threshold == currentThreshold - 1, InvalidThreshold()
+        );
+        bytes32 safeTxHash = _escapeHatchTxHash(request);
         require($allowedTransactions[request.safe][safeTxHash] == 0, TransactionAlreadyAllowed());
         uint256 executableAt = block.timestamp + _ALLOW_TX_DELAY;
         $allowedTransactions[request.safe][safeTxHash] = executableAt;
         emit TransactionAllowed(request.safe, safeTxHash, executableAt);
     }
 
-    function _escapeHatchTxHash(ISafe safeContract, EscapeHatchRequest calldata request)
-        private
-        view
-        returns (bytes32)
-    {
+    function _escapeHatchTxHash(EscapeHatchRequest calldata request) private view returns (bytes32) {
         return SafeTransaction.hash(
             SafeTransaction.T({
                 chainId: block.chainid,
@@ -325,7 +331,7 @@ contract SafenetCosigner is ISignatureValidator {
                 gasPrice: request.gasPrice,
                 gasToken: request.gasToken,
                 refundReceiver: request.refundReceiver,
-                nonce: safeContract.nonce()
+                nonce: request.nonce
             })
         );
     }
