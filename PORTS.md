@@ -127,7 +127,7 @@ Each C step uses the chosen Go FROST library (or a vendored implementation) plus
 
 **C2. DKG round 2.** ✅ `GenerateRound2`: run FROST DKG part 2, derive verifying shares from collected commitments, ECDH-encrypt per-participant signing shares into `KeyGenSecretShare` payloads.
 
-**C3. DKG round 3.** `GenerateRound3`: ECDH-decrypt peers' shares, run FROST DKG part 3, return a `KeyPackage`.
+**C3. DKG round 3.** ✅ `GenerateRound3`: ECDH-decrypt peers' shares, run FROST DKG part 3, return a `KeyPackage`.
 
 ### Phase D — State & storage (parallelizable after A1)
 

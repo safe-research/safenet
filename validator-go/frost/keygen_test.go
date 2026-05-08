@@ -174,6 +174,92 @@ func TestGenerateRound2RejectsEmptyCommitments(t *testing.T) {
 	}
 }
 
+func TestGenerateRound3BuildsKeyPackage(t *testing.T) {
+	addresses := []common.Address{
+		common.HexToAddress("0x1111111111111111111111111111111111111111"),
+		common.HexToAddress("0x2222222222222222222222222222222222222222"),
+		common.HexToAddress("0x3333333333333333333333333333333333333333"),
+	}
+	round1 := generateRound1Set(t, addresses)
+	commitments := commitmentMap(addresses, round1)
+	round2 := generateRound2Set(t, addresses, round1, commitments)
+	shares := shareMap(addresses, round2)
+
+	for i, address := range addresses {
+		got, err := GenerateRound3(round1[i].EncryptionKey, round2[i].SecretPackage, commitments, shares)
+		if err != nil {
+			t.Fatalf("GenerateRound3[%d]: %v", i, err)
+		}
+		keyPackage := got.KeyPackage
+		if keyPackage == nil {
+			t.Fatalf("KeyPackage[%d] is nil", i)
+		}
+		if !keyPackage.Identifier.Equals(round1[i].SecretPackage.Identifier) {
+			t.Fatalf("identifier[%d] mismatch", i)
+		}
+		if !VerifyKey(keyPackage.VerifyingShare, keyPackage.SigningShare) {
+			t.Fatalf("signing share[%d] does not verify", i)
+		}
+
+		wantSigningShare := expectedSigningShare(t, round1, round1[i].SecretPackage.Identifier)
+		if !keyPackage.SigningShare.Equals(wantSigningShare) {
+			t.Fatalf("signing share[%d] mismatch", i)
+		}
+		wantVerifyingShare, err := CreateVerificationShare(allCommitments(round1), round1[i].SecretPackage.Identifier)
+		if err != nil {
+			t.Fatalf("CreateVerificationShare[%d]: %v", i, err)
+		}
+		if !keyPackage.VerifyingShare.IsEqual(wantVerifyingShare) {
+			t.Fatalf("verifying share[%d] mismatch", i)
+		}
+		wantGroupKey := expectedGroupPublicKey(t, round1)
+		if !keyPackage.GroupPublicKey.IsEqual(wantGroupKey) {
+			t.Fatalf("group key[%d] mismatch for %s", i, address)
+		}
+		if len(keyPackage.ParticipantVerifyingKeys) != len(addresses) {
+			t.Fatalf("participant verifying key count = %d, want %d", len(keyPackage.ParticipantVerifyingKeys), len(addresses))
+		}
+	}
+}
+
+func TestGenerateRound3RejectsTamperedEncryptedShare(t *testing.T) {
+	addresses := []common.Address{
+		common.HexToAddress("0x1111111111111111111111111111111111111111"),
+		common.HexToAddress("0x2222222222222222222222222222222222222222"),
+		common.HexToAddress("0x3333333333333333333333333333333333333333"),
+	}
+	round1 := generateRound1Set(t, addresses)
+	commitments := commitmentMap(addresses, round1)
+	round2 := generateRound2Set(t, addresses, round1, commitments)
+	shares := shareMap(addresses, round2)
+
+	tampered := shares[addresses[1]]
+	tampered.F = append([]*big.Int(nil), tampered.F...)
+	tampered.F[0] = new(big.Int).Xor(tampered.F[0], big.NewInt(1))
+	shares[addresses[1]] = tampered
+
+	if _, err := GenerateRound3(round1[0].EncryptionKey, round2[0].SecretPackage, commitments, shares); err == nil {
+		t.Fatal("expected tampered share error")
+	}
+}
+
+func TestGenerateRound3RejectsMissingShare(t *testing.T) {
+	addresses := []common.Address{
+		common.HexToAddress("0x1111111111111111111111111111111111111111"),
+		common.HexToAddress("0x2222222222222222222222222222222222222222"),
+		common.HexToAddress("0x3333333333333333333333333333333333333333"),
+	}
+	round1 := generateRound1Set(t, addresses)
+	commitments := commitmentMap(addresses, round1)
+	round2 := generateRound2Set(t, addresses, round1, commitments)
+	shares := shareMap(addresses, round2)
+	delete(shares, addresses[2])
+
+	if _, err := GenerateRound3(round1[0].EncryptionKey, round2[0].SecretPackage, commitments, shares); err == nil {
+		t.Fatal("expected missing share error")
+	}
+}
+
 func assertSamePoint(t *testing.T, label string, abi coordinator.Secp256k1Point, pub *secp256k1.PublicKey) {
 	t.Helper()
 	got, err := point.FromABI(abi.X, abi.Y)
@@ -211,6 +297,73 @@ func commitmentMap(addresses []common.Address, round1 []*Round1) map[common.Addr
 		out[address] = round1[i].Commitment
 	}
 	return out
+}
+
+func generateRound2Set(
+	t *testing.T,
+	addresses []common.Address,
+	round1 []*Round1,
+	commitments map[common.Address]coordinator.FROSTCoordinatorKeyGenCommitment,
+) []*Round2 {
+	t.Helper()
+	out := make([]*Round2, len(addresses))
+	for i := range addresses {
+		round, err := GenerateRound2(round1[i].EncryptionKey, round1[i].SecretPackage, commitments)
+		if err != nil {
+			t.Fatalf("GenerateRound2[%d]: %v", i, err)
+		}
+		out[i] = round
+	}
+	return out
+}
+
+func shareMap(addresses []common.Address, round2 []*Round2) map[common.Address]coordinator.FROSTCoordinatorKeyGenSecretShare {
+	out := make(map[common.Address]coordinator.FROSTCoordinatorKeyGenSecretShare, len(addresses))
+	for i, address := range addresses {
+		out[address] = round2[i].Share
+	}
+	return out
+}
+
+func allCommitments(round1 []*Round1) [][]*secp256k1.PublicKey {
+	out := make([][]*secp256k1.PublicKey, 0, len(round1))
+	for _, r := range round1 {
+		out = append(out, r.SecretPackage.Commitments)
+	}
+	return out
+}
+
+func expectedSigningShare(t *testing.T, round1 []*Round1, identifier *secp256k1.ModNScalar) *secp256k1.ModNScalar {
+	t.Helper()
+	shares := make([]*secp256k1.ModNScalar, 0, len(round1))
+	for _, r := range round1 {
+		share, err := EvalPoly(r.SecretPackage.Coefficients, identifier)
+		if err != nil {
+			t.Fatalf("EvalPoly: %v", err)
+		}
+		shares = append(shares, share)
+	}
+	out, err := CreateSigningShare(shares)
+	if err != nil {
+		t.Fatalf("CreateSigningShare: %v", err)
+	}
+	return out
+}
+
+func expectedGroupPublicKey(t *testing.T, round1 []*Round1) *secp256k1.PublicKey {
+	t.Helper()
+	participants := make([]round1Commitment, 0, len(round1))
+	for i, r := range round1 {
+		participants = append(participants, round1Commitment{
+			Address:     common.BigToAddress(big.NewInt(int64(i + 1))),
+			Commitments: r.SecretPackage.Commitments,
+		})
+	}
+	groupKey, err := groupPublicKey(participants)
+	if err != nil {
+		t.Fatalf("groupPublicKey: %v", err)
+	}
+	return groupKey
 }
 
 func sortedRecipients(t *testing.T, addresses []common.Address, own *secp256k1.ModNScalar) []round2Recipient {

@@ -47,6 +47,20 @@ type Round2SecretPackage struct {
 	OwnSigningShare *secp256k1.ModNScalar
 }
 
+// Round3 contains the completed DKG output.
+type Round3 struct {
+	KeyPackage *KeyPackage
+}
+
+// KeyPackage is the FROST signing key material produced by genesis DKG.
+type KeyPackage struct {
+	Identifier               *secp256k1.ModNScalar
+	SigningShare             *secp256k1.ModNScalar
+	VerifyingShare           *secp256k1.PublicKey
+	GroupPublicKey           *secp256k1.PublicKey
+	ParticipantVerifyingKeys map[common.Address]*secp256k1.PublicKey
+}
+
 // GenerateRound1 creates the FROST DKG round-1 state for participant and returns
 // the KeyGenCommitment payload expected by FROSTCoordinator.
 func GenerateRound1(participant common.Address, maxSigners, minSigners uint16, r io.Reader) (*Round1, error) {
@@ -185,6 +199,122 @@ func GenerateRound2(
 	}, nil
 }
 
+// GenerateRound3 decrypts all peer shares, verifies them against the sender
+// commitments, and combines them with the local share into a final KeyPackage.
+func GenerateRound3(
+	encryptionKey *secret.EncryptionKey,
+	secretPackage *Round2SecretPackage,
+	commitments map[common.Address]coordinator.FROSTCoordinatorKeyGenCommitment,
+	shares map[common.Address]coordinator.FROSTCoordinatorKeyGenSecretShare,
+) (*Round3, error) {
+	if encryptionKey == nil {
+		return nil, errors.New("encryptionKey is nil")
+	}
+	if secretPackage == nil {
+		return nil, errors.New("secretPackage is nil")
+	}
+	if secretPackage.Identifier == nil {
+		return nil, errors.New("secretPackage identifier is nil")
+	}
+	if secretPackage.OwnSigningShare == nil {
+		return nil, errors.New("secretPackage own signing share is nil")
+	}
+	if len(commitments) == 0 {
+		return nil, errors.New("commitments must not be empty")
+	}
+	if len(shares) == 0 {
+		return nil, errors.New("shares must not be empty")
+	}
+
+	participants, allCommitments, err := parseRound1Commitments(commitments)
+	if err != nil {
+		return nil, err
+	}
+	selfIndex := participantIndex(participants, secretPackage.Identifier)
+	if selfIndex < 0 {
+		return nil, errors.New("commitments missing self")
+	}
+	if len(shares) != len(participants) {
+		return nil, fmt.Errorf("got %d secret shares, want %d", len(shares), len(participants))
+	}
+	if _, ok := shares[participants[selfIndex].Address]; !ok {
+		return nil, errors.New("shares missing self")
+	}
+
+	signingShares := []*secp256k1.ModNScalar{new(secp256k1.ModNScalar).Set(secretPackage.OwnSigningShare)}
+	for senderIndex, sender := range participants {
+		if senderIndex == selfIndex {
+			continue
+		}
+		sharePayload, ok := shares[sender.Address]
+		if !ok {
+			return nil, fmt.Errorf("missing secret share from %s", sender.Address)
+		}
+		encrypted, err := encryptedShareForReceiver(participants, senderIndex, selfIndex, sharePayload)
+		if err != nil {
+			return nil, fmt.Errorf("secret share from %s: %w", sender.Address, err)
+		}
+		decrypted, err := encryptionKey.ECDH(sender.EncryptionPublicKey, encrypted)
+		if err != nil {
+			return nil, fmt.Errorf("decrypt share from %s: %w", sender.Address, err)
+		}
+		signingShare, err := scalarFromBytes(decrypted)
+		if err != nil {
+			return nil, fmt.Errorf("decrypted share from %s: %w", sender.Address, err)
+		}
+		expected, err := EvalCommitment(sender.Commitments, secretPackage.Identifier)
+		if err != nil {
+			return nil, fmt.Errorf("expected share from %s: %w", sender.Address, err)
+		}
+		if !VerifyKey(expected, signingShare) {
+			return nil, fmt.Errorf("invalid secret share from %s", sender.Address)
+		}
+		signingShares = append(signingShares, signingShare)
+	}
+
+	signingShare, err := CreateSigningShare(signingShares)
+	if err != nil {
+		return nil, fmt.Errorf("create signing share: %w", err)
+	}
+	verifyingShare, err := CreateVerificationShare(allCommitments, secretPackage.Identifier)
+	if err != nil {
+		return nil, fmt.Errorf("verification share: %w", err)
+	}
+	if !VerifyKey(verifyingShare, signingShare) {
+		return nil, errors.New("combined signing share does not match verification share")
+	}
+
+	participantVerifyingKeys := make(map[common.Address]*secp256k1.PublicKey, len(participants))
+	for _, participant := range participants {
+		verifyingKey, err := CreateVerificationShare(allCommitments, participant.Identifier)
+		if err != nil {
+			return nil, fmt.Errorf("participant verification share for %s: %w", participant.Address, err)
+		}
+		sharePayload, ok := shares[participant.Address]
+		if !ok {
+			return nil, fmt.Errorf("missing secret share from %s", participant.Address)
+		}
+		if err := verifyPayloadVerifyingShare(participant.Address, sharePayload, verifyingKey); err != nil {
+			return nil, err
+		}
+		participantVerifyingKeys[participant.Address] = verifyingKey
+	}
+	groupPublicKey, err := groupPublicKey(participants)
+	if err != nil {
+		return nil, fmt.Errorf("group public key: %w", err)
+	}
+
+	return &Round3{
+		KeyPackage: &KeyPackage{
+			Identifier:               new(secp256k1.ModNScalar).Set(secretPackage.Identifier),
+			SigningShare:             signingShare,
+			VerifyingShare:           verifyingShare,
+			GroupPublicKey:           groupPublicKey,
+			ParticipantVerifyingKeys: participantVerifyingKeys,
+		},
+	}, nil
+}
+
 // KeyGenChallenge computes the DKG proof-of-knowledge challenge used by the
 // coordinator contract: HDKG(identifier || phi_compressed || r_compressed).
 func KeyGenChallenge(participant common.Address, phi, proofR *secp256k1.PublicKey) *secp256k1.ModNScalar {
@@ -278,6 +408,83 @@ func parseRound1Commitments(
 	return participants, allCommitments, nil
 }
 
+func verifyPayloadVerifyingShare(
+	address common.Address,
+	share coordinator.FROSTCoordinatorKeyGenSecretShare,
+	want *secp256k1.PublicKey,
+) error {
+	got, err := point.FromABI(share.Y.X, share.Y.Y)
+	if err != nil {
+		return fmt.Errorf("secret share verifying key for %s: %w", address, err)
+	}
+	if !got.IsEqual(want) {
+		return fmt.Errorf("invalid secret share verifying key for %s", address)
+	}
+	return nil
+}
+
+func participantIndex(participants []round1Commitment, identifier *secp256k1.ModNScalar) int {
+	for i, participant := range participants {
+		if participant.Identifier.Equals(identifier) {
+			return i
+		}
+	}
+	return -1
+}
+
+func encryptedShareForReceiver(
+	participants []round1Commitment,
+	senderIndex, receiverIndex int,
+	share coordinator.FROSTCoordinatorKeyGenSecretShare,
+) ([32]byte, error) {
+	shareIndex := -1
+	for i := range participants {
+		if i == senderIndex {
+			continue
+		}
+		if i == receiverIndex {
+			shareIndex = i
+			if senderIndex < receiverIndex {
+				shareIndex--
+			}
+			break
+		}
+	}
+	if shareIndex < 0 {
+		return [32]byte{}, errors.New("receiver not found in sender share list")
+	}
+	if shareIndex >= len(share.F) {
+		return [32]byte{}, fmt.Errorf("missing encrypted share at index %d", shareIndex)
+	}
+	if share.F[shareIndex] == nil {
+		return [32]byte{}, fmt.Errorf("encrypted share at index %d is nil", shareIndex)
+	}
+	var out [32]byte
+	share.F[shareIndex].FillBytes(out[:])
+	return out, nil
+}
+
+func groupPublicKey(participants []round1Commitment) (*secp256k1.PublicKey, error) {
+	if len(participants) == 0 {
+		return nil, errors.New("participants must not be empty")
+	}
+	var acc secp256k1.JacobianPoint
+	for i, participant := range participants {
+		if len(participant.Commitments) == 0 {
+			return nil, fmt.Errorf("participant %s has no commitments", participant.Address)
+		}
+		var pt secp256k1.JacobianPoint
+		participant.Commitments[0].AsJacobian(&pt)
+		if i == 0 {
+			acc = pt
+		} else {
+			secp256k1.AddNonConst(&acc, &pt, &acc)
+		}
+	}
+	acc.ToAffine()
+	return secp256k1.NewPublicKey(&acc.X, &acc.Y), nil
+}
+
 func parseCoefficientCommitments(points []coordinator.Secp256k1Point) ([]*secp256k1.PublicKey, error) {
 	if len(points) == 0 {
 		return nil, errors.New("empty coefficient commitments")
@@ -353,6 +560,11 @@ func scalarFromBig(n *big.Int) (*secp256k1.ModNScalar, error) {
 	s := new(secp256k1.ModNScalar)
 	s.SetBytes(&b)
 	return s, nil
+}
+
+func scalarFromBytes(b [32]byte) (*secp256k1.ModNScalar, error) {
+	n := new(big.Int).SetBytes(b[:])
+	return scalarFromBig(n)
 }
 
 // secp256k1 curve order N (scalar field modulus).
