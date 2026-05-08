@@ -2,11 +2,15 @@ package main
 
 import (
 	"context"
+	"errors"
 	"flag"
 	"log"
+	"os"
+	"os/signal"
+	"syscall"
 
 	"github.com/safe-research/safenet/validator-go/config"
-	"github.com/safe-research/safenet/validator-go/network"
+	"github.com/safe-research/safenet/validator-go/driver"
 )
 
 func main() {
@@ -22,12 +26,11 @@ func main() {
 		log.Fatalf("failed to load config: %v", err)
 	}
 
-	addrs, err := network.Resolve(context.Background(), cfg.RPCURL, cfg.ConsensusAddress, cfg.BlocksPerEpoch)
-	if err != nil {
-		log.Fatalf("failed to resolve addresses: %v", err)
-	}
+	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer cancel()
 
-	log.Printf("chain=%s blocks_per_epoch=%d consensus=%s coordinator=%s",
-		addrs.Chain, addrs.BlocksPerEpoch,
-		addrs.ConsensusAddress.Hex(), addrs.CoordinatorAddress.Hex())
+	if err := driver.Run(ctx, cfg); err != nil && !errors.Is(err, context.Canceled) {
+		log.Fatalf("validator stopped: %v", err)
+	}
+	log.Println("validator stopped")
 }

@@ -77,7 +77,12 @@ func Resolve(ctx context.Context, rpcURL string, consensusAddr common.Address, b
 		return nil, fmt.Errorf("dial %s: %w", rpcURL, err)
 	}
 	defer client.Close()
+	return ResolveWithClient(ctx, client, consensusAddr, blocksPerEpochOverride)
+}
 
+// ResolveWithClient uses an already-dialed client to detect the chain and query
+// the consensus contract for the coordinator address. The client is not closed.
+func ResolveWithClient(ctx context.Context, client *ethclient.Client, consensusAddr common.Address, blocksPerEpochOverride *uint64) (*Addresses, error) {
 	chainID, err := client.ChainID(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("eth_chainId: %w", err)

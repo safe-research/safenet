@@ -143,8 +143,8 @@ Each C step uses the chosen Go FROST library (or a vendored implementation) plus
 
 ### Phase F — Integration (sequential)
 
-**F1. State machine handlers.** Pure functions taking `(state, event)` and returning `(new state, actions)`. One handler per event the keygen flow consumes: `KeyGen`, `KeyGenCommitted`, `KeyGenSecretShared`. Unit-tested with synthetic event sequences and assertions on emitted actions and resulting phase. Depends on C3 + D1 + B1.
+**F1. State machine handlers.** ✅ Pure functions taking `(state, event)` and returning `(new state, actions)`. One handler per event the keygen flow consumes: `KeyGen`, `KeyGenCommitted`, `KeyGenSecretShared`. Unit-tested with synthetic event sequences and assertions on emitted actions and resulting phase. Depends on C3 + D1 + B1.
 
-**F2. Driver wiring.** Cold-start path: derive `OwnAddress` from the private key, load addresses (A2), build `ConsensusConfig`, initialise or restore state via storage (D2), spawn the action-handler worker (E2), and start the watcher (E1) feeding into the state machine handlers (F1).
+**F2. Driver wiring.** ✅ Cold-start path: derive `OwnAddress` from the private key, load addresses (A2), build `ConsensusConfig`, initialise or restore state via storage (D2), spawn the action-handler worker (E2), and start the watcher (E1) feeding into the state machine handlers (F1).
 
-**F3. Integration verification.** Run the Go validator against `scripts/run_integration_test.sh` (or an equivalent harness) and confirm the genesis ceremony completes with `Phase = GenesisComplete` for every participant. No new code beyond test harness adjustments; the goal is to validate end-to-end behaviour matches the TS and Rust validators.
+**F3. Integration verification.** ✅ `scripts/run_go_integration_test.sh`: starts Anvil, deploys contracts, runs four Go validator processes, triggers genesis KeyGen via the Genesis forge script, and polls for `KeyGenConfirmed` events until all four participants confirm or a 90-second timeout is reached.
