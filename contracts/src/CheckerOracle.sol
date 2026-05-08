@@ -115,6 +115,9 @@ contract CheckerOracle is IOracle, ICheckerOracle {
 
     // forge-lint: disable-start(unwrapped-modifier-logic)
 
+    /**
+     * @notice Restricts functions to be callable only by the arbitrator.
+     */
     modifier onlyArbitrator() {
         require(msg.sender == ARBITRATOR, NotArbitrator());
         _;
@@ -272,11 +275,12 @@ contract CheckerOracle is IOracle, ICheckerOracle {
         require(!c.claimed, AlreadyClaimed());
         c.claimed = true;
 
-        bool unanimousOutcome = req.checkerCount > 0;
+        // checkerCount is set only on unanimous outcomes; zero means the request timed out.
+        bool isTimeout = req.checkerCount == 0;
 
-        // In unanimous outcomes, losing-side checkers forfeit their bond.
-        // In timeout (checkerCount == 0), all bonds are returned since no side was definitively wrong.
-        if (unanimousOutcome && c.approved != req.approvedOutcome) {
+        // On timeout all bonds are returned (no side was definitively wrong).
+        // On a unanimous outcome the losing side forfeits their bond.
+        if (!isTimeout && c.approved != req.approvedOutcome) {
             emit Claimed(requestId, msg.sender, 0, 0);
             return;
         }
@@ -284,7 +288,7 @@ contract CheckerOracle is IOracle, ICheckerOracle {
         uint256 bondReturn = c.bondAmount;
         uint256 feeReward = 0;
 
-        if (unanimousOutcome) {
+        if (!isTimeout) {
             uint256 score = c.bondAmount * (req.checkerCount + 1 - c.position);
             feeReward = req.fee * score / req.totalScore;
         }

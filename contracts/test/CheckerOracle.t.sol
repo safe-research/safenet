@@ -48,12 +48,7 @@ contract CheckerOracleTest is Test {
 
         token = new MockERC20("Fee Token", "FEE");
         oracle = new CheckerOracle(
-            arbitrator,
-            address(token),
-            REQUEST_FEE,
-            VOTING_WINDOW,
-            GOVERNANCE_DELAY,
-            BOND_MULTIPLIER
+            arbitrator, address(token), REQUEST_FEE, VOTING_WINDOW, GOVERNANCE_DELAY, BOND_MULTIPLIER
         );
 
         // Fund accounts
@@ -271,10 +266,7 @@ contract CheckerOracleTest is Test {
         emit ICheckerOracle.Resolved(REQUEST_ID, true, ICheckerOracle.ResolveReason.UNANIMOUS_APPROVE);
         vm.expectEmit(true, true, false, true);
         emit IOracle.OracleResult(
-            REQUEST_ID,
-            proposer,
-            abi.encode(ICheckerOracle.ResolveReason.UNANIMOUS_APPROVE),
-            true
+            REQUEST_ID, proposer, abi.encode(ICheckerOracle.ResolveReason.UNANIMOUS_APPROVE), true
         );
 
         oracle.finalize(REQUEST_ID);
@@ -364,9 +356,7 @@ contract CheckerOracleTest is Test {
         // Single deny checker: score = BOND_TARGET × (1+1-1) = BOND_TARGET × 1 = BOND_TARGET
         // TotalScore = BOND_TARGET → reward = REQUEST_FEE × BOND_TARGET / BOND_TARGET = REQUEST_FEE
         assertEq(
-            token.balanceOf(checker1),
-            balBefore + BOND_TARGET + REQUEST_FEE,
-            "deny checker should receive full fee"
+            token.balanceOf(checker1), balBefore + BOND_TARGET + REQUEST_FEE, "deny checker should receive full fee"
         );
     }
 
