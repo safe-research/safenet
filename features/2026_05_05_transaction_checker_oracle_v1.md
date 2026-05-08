@@ -112,7 +112,7 @@ struct Request {
     uint256 totalApproveBond;     // running sum of Approve bonds; threshold reached when == approveBondTarget
     uint256 totalDenyBond;        // running sum of Deny bonds; threshold reached when == approveBondTarget; conflict when both sides reach threshold
     uint256 checkerCount;         // number of winning-side voters eligible for fee distribution (committed before bondTarget was met)
-    uint256 totalScore;           // cached at finalize() to avoid recomputation per claim
+    uint256 totalScore;           // running sum of checker scores, updated on each commit; avoids recomputation at claim time
     bool    arbitrated;
 }
 
@@ -181,19 +181,23 @@ enum ResolveReason { UNANIMOUS_APPROVE, UNANIMOUS_DENY, TIMEOUT, ARBITRATION }
 
 #### Fee Distribution Math
 
-Only commitments recorded before `approveBondTarget` is fully met are eligible. If a commitment overshoots the remaining gap, only the gap-filling portion is counted; the excess is immediately returnable.
+Only commitments recorded before the bond target is fully met are eligible. If a commitment overshoots the remaining gap, only the gap-filling portion counts toward the score; the excess is returned immediately.
+
+Each checker's score rewards both early arrival and capital risked:
 
 ```
-Score_i    = effectiveBond_i × positionMultiplier_i
-             where positionMultiplier_i = (winnerCount + 1 - position_i)
-             and   winnerCount = total eligible voters on the winning side recorded before bondTarget was met
+Score_i    = bond_i / position_i
+             (earlier arrivals receive a larger score for the same bond amount)
 
-TotalScore = Σ Score_i  (cached in Request.totalScore during finalize())
+TotalScore = Σ Score_i
+             (updated incrementally on every eligible commit; stored in Request.totalScore)
 
-Payout_i   = totalFee × (Score_i / TotalScore)
+Payout_i   = fee × (Score_i / TotalScore)
 ```
 
 The same formula is applied to whichever side wins (Approve or Deny).
+
+> **Solidity decimal note**: integer division truncates, so `bond / position` loses precision for small bonds or large position numbers. The implementation must scale the numerator before dividing (e.g. compute `Score_i = bond_i * PRECISION / position_i` with a constant such as `PRECISION = 1e18`) and account for the same scale factor when computing payouts.
 
 ### Checker Management
 
