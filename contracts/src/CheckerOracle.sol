@@ -67,7 +67,7 @@ contract CheckerOracle is IOracle, ICheckerOracle {
     /**
      * @notice Block number at which pendingBondMultiplier becomes active (0 when none pending).
      */
-    uint256 public bondMultiplierActiveAt;
+    uint256 public pendingBondMultiplierActiveAt;
 
     // forge-lint: disable-next-line(mixed-case-variable)
     mapping(address checker => uint256 activeAt) private $checkerActiveAt;
@@ -150,11 +150,9 @@ contract CheckerOracle is IOracle, ICheckerOracle {
      * @dev Pulls REQUEST_FEE from msg.sender (the Consensus contract). The proposer must have
      *      pre-approved this contract for at least REQUEST_FEE of FEE_TOKEN before Consensus
      *      calls proposeOracleTransaction.
-     *
-     * TODO: Evaluate fee payment model. Currently this contract pulls from the Consensus contract
-     *       (msg.sender), which is not the actual fee payer. Refunds and rewards are also pushed
-     *       back to the Consensus contract address. A pull model (where the actual fee payer
-     *       interacts directly) may be preferable.
+     * @dev Currently this contract pulls from and pushes refunds back to the Consensus contract
+     *      address; the actual fee payer is the Safe owner interacting with Consensus. A future
+     *      iteration may adopt a pull model where the fee payer interacts directly with this contract.
      */
     function postRequest(bytes32 requestId) external override(IOracle) {
         require($requests[requestId].proposer == address(0), RequestAlreadyExists());
@@ -261,11 +259,19 @@ contract CheckerOracle is IOracle, ICheckerOracle {
         require(!c.claimed, AlreadyClaimed());
         c.claimed = true;
 
+        bool unanimousOutcome = req.checkerCount > 0;
+
+        // In unanimous outcomes, losing-side checkers forfeit their bond.
+        // In timeout (checkerCount == 0), all bonds are returned since no side was definitively wrong.
+        if (unanimousOutcome && c.approved != req.approvedOutcome) {
+            emit Claimed(requestId, msg.sender, 0, 0);
+            return;
+        }
+
         uint256 bondReturn = c.bondAmount;
         uint256 feeReward = 0;
 
-        // Winning-side checkers receive a proportional share of the request fee.
-        if (req.checkerCount > 0 && c.approved == req.approvedOutcome) {
+        if (unanimousOutcome) {
             uint256 score = c.bondAmount * (req.checkerCount + 1 - c.position);
             feeReward = req.fee * score / req.totalScore;
         }
@@ -315,7 +321,7 @@ contract CheckerOracle is IOracle, ICheckerOracle {
 
         uint256 activeAt = block.number + GOVERNANCE_DELAY;
         pendingBondMultiplier = newValue;
-        bondMultiplierActiveAt = activeAt;
+        pendingBondMultiplierActiveAt = activeAt;
         emit BondMultiplierScheduled(newValue, activeAt);
     }
 
@@ -323,13 +329,13 @@ contract CheckerOracle is IOracle, ICheckerOracle {
      * @inheritdoc ICheckerOracle
      */
     function applyBondMultiplier() external override(ICheckerOracle) {
-        require(bondMultiplierActiveAt != 0, NoPendingMultiplier());
-        require(block.number >= bondMultiplierActiveAt, MultiplierNotReady());
+        require(pendingBondMultiplierActiveAt != 0, NoPendingMultiplier());
+        require(block.number >= pendingBondMultiplierActiveAt, MultiplierNotReady());
 
         uint256 newValue = pendingBondMultiplier;
         bondMultiplier = newValue;
         pendingBondMultiplier = 0;
-        bondMultiplierActiveAt = 0;
+        pendingBondMultiplierActiveAt = 0;
         emit BondMultiplierApplied(newValue);
     }
 

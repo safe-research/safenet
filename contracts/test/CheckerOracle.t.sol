@@ -310,7 +310,7 @@ contract CheckerOracleTest is Test {
         assertEq(token.balanceOf(checker2), checker2BalBefore + 500e18 + checker2Reward, "checker2 claim incorrect");
     }
 
-    function test_UnanimousApprove_DenyCheckerGetsBondBackNoReward() public {
+    function test_UnanimousApprove_DenyCheckerBondSlashed() public {
         _postRequest();
 
         vm.prank(checker1);
@@ -322,11 +322,15 @@ contract CheckerOracleTest is Test {
         oracle.finalize(REQUEST_ID);
 
         uint256 balBefore = token.balanceOf(checker1);
+
+        vm.expectEmit(true, true, false, true);
+        emit ICheckerOracle.Claimed(REQUEST_ID, checker1, 0, 0);
+
         vm.prank(checker1);
         oracle.claim(REQUEST_ID);
 
-        // Deny checker only gets bond back, no fee reward
-        assertEq(token.balanceOf(checker1), balBefore + 300e18, "deny checker should only get bond back");
+        // Losing-side checker's bond is slashed — nothing returned.
+        assertEq(token.balanceOf(checker1), balBefore, "losing checker bond should be slashed");
     }
 
     // ============================================================
@@ -626,7 +630,7 @@ contract CheckerOracleTest is Test {
 
         assertEq(oracle.bondMultiplier(), BOND_MULTIPLIER, "multiplier should not change immediately");
         assertEq(oracle.pendingBondMultiplier(), newMultiplier);
-        assertEq(oracle.bondMultiplierActiveAt(), expectedActiveAt);
+        assertEq(oracle.pendingBondMultiplierActiveAt(), expectedActiveAt);
     }
 
     function test_ApplyBondMultiplier_BeforeDelayReverts() public {
@@ -651,7 +655,7 @@ contract CheckerOracleTest is Test {
 
         assertEq(oracle.bondMultiplier(), newMultiplier, "multiplier should be updated");
         assertEq(oracle.pendingBondMultiplier(), 0, "pending multiplier should be cleared");
-        assertEq(oracle.bondMultiplierActiveAt(), 0, "active-at should be cleared");
+        assertEq(oracle.pendingBondMultiplierActiveAt(), 0, "active-at should be cleared");
     }
 
     function test_ApplyBondMultiplier_NoPendingReverts() public {
