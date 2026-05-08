@@ -117,7 +117,7 @@ Each B step is self-contained with unit tests against fixed vectors (port the Ru
 
 **B3. ABI Point marshalling.** ✅ Convert between the contract `Point { uint256 x; uint256 y }` ABI shape and SEC1 curve points. Round-trip tests.
 
-**B4. FROST math helpers.** `EvalPoly`, `EvalCommitment`, `CreateVerificationShare`, `CreateSigningShare`, `VerifyKey`. Tests against TS vectors.
+**B4. FROST math helpers.** ✅ `EvalPoly`, `EvalCommitment`, `CreateVerificationShare`, `CreateSigningShare`, `VerifyKey`. Tests against TS vectors.
 
 ### Phase C — DKG rounds (sequential, depends on B)
 
