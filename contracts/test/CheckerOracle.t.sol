@@ -47,8 +47,9 @@ contract CheckerOracleTest is Test {
         stranger = vm.createWallet("stranger").addr;
 
         token = new MockERC20("Fee Token", "FEE");
-        oracle =
-            new CheckerOracle(arbitrator, address(token), REQUEST_FEE, VOTING_WINDOW, GOVERNANCE_DELAY, BOND_MULTIPLIER);
+        oracle = new CheckerOracle(
+            arbitrator, address(token), REQUEST_FEE, VOTING_WINDOW, GOVERNANCE_DELAY, BOND_MULTIPLIER
+        );
 
         // Fund accounts
         token.mint(proposer, 10_000e18);
