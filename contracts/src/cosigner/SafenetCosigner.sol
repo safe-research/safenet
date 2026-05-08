@@ -88,6 +88,9 @@ contract SafenetCosigner is ISignatureValidator {
         "EscapeHatchRequest(address safe,address prevOwner,uint256 threshold,uint256 safeTxGas,uint256 baseGas,uint256 gasPrice,address gasToken,address refundReceiver,uint256 nonce)"
     );
 
+    bytes32 private constant _EIP712_DOMAIN_TYPEHASH =
+        keccak256("EIP712Domain(uint256 chainId,address verifyingContract)");
+
     // ============================================================
     // STORAGE VARIABLES
     // ============================================================
@@ -157,11 +160,7 @@ contract SafenetCosigner is ISignatureValidator {
         _ALLOW_TX_DELAY = allowTransactionDelay;
         _CACHED_CHAIN_ID = block.chainid;
         // forge-lint: disable-next-item(asm-keccak256)
-        _CACHED_DOMAIN_SEPARATOR = keccak256(
-            abi.encode(
-                keccak256("EIP712Domain(uint256 chainId,address verifyingContract)"), block.chainid, address(this)
-            )
-        );
+        _CACHED_DOMAIN_SEPARATOR = keccak256(abi.encode(_EIP712_DOMAIN_TYPEHASH, block.chainid, address(this)));
         $currentEpoch = EpochState({epoch: initialEpoch, groupKey: initialGroupKey});
         emit EpochUpdated(0, initialEpoch, initialGroupKey);
     }
@@ -320,11 +319,7 @@ contract SafenetCosigner is ISignatureValidator {
     function _domainSeparator() private view returns (bytes32) {
         if (block.chainid == _CACHED_CHAIN_ID) return _CACHED_DOMAIN_SEPARATOR;
         // forge-lint: disable-next-item(asm-keccak256)
-        return keccak256(
-            abi.encode(
-                keccak256("EIP712Domain(uint256 chainId,address verifyingContract)"), block.chainid, address(this)
-            )
-        );
+        return keccak256(abi.encode(_EIP712_DOMAIN_TYPEHASH, block.chainid, address(this)));
     }
 
     function _resolveGroupKey(uint64 epoch) private view returns (Secp256k1.Point memory) {
