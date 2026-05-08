@@ -150,6 +150,11 @@ contract CheckerOracle is IOracle, ICheckerOracle {
      * @dev Pulls REQUEST_FEE from msg.sender (the Consensus contract). The proposer must have
      *      pre-approved this contract for at least REQUEST_FEE of FEE_TOKEN before Consensus
      *      calls proposeOracleTransaction.
+     *
+     * TODO: Evaluate fee payment model. Currently this contract pulls from the Consensus contract
+     *       (msg.sender), which is not the actual fee payer. Refunds and rewards are also pushed
+     *       back to the Consensus contract address. A pull model (where the actual fee payer
+     *       interacts directly) may be preferable.
      */
     function postRequest(bytes32 requestId) external override(IOracle) {
         require($requests[requestId].proposer == address(0), RequestAlreadyExists());

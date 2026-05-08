@@ -353,7 +353,11 @@ contract CheckerOracleTest is Test {
 
         // Single deny checker: score = BOND_TARGET × (1+1-1) = BOND_TARGET × 1 = BOND_TARGET
         // TotalScore = BOND_TARGET → reward = REQUEST_FEE × BOND_TARGET / BOND_TARGET = REQUEST_FEE
-        assertEq(token.balanceOf(checker1), balBefore + BOND_TARGET + REQUEST_FEE, "deny checker should receive full fee");
+        assertEq(
+            token.balanceOf(checker1),
+            balBefore + BOND_TARGET + REQUEST_FEE,
+            "deny checker should receive full fee"
+        );
     }
 
     // ============================================================
