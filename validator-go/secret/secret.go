@@ -74,6 +74,24 @@ func newKey(secret *secp256k1.ModNScalar) *EncryptionKey {
 	}
 }
 
+// Bytes returns the private scalar bytes for serialization and storage.
+func (k *EncryptionKey) Bytes() [32]byte {
+	return k.secret.Bytes()
+}
+
+// EncryptionKeyFromBytes reconstructs an EncryptionKey from private scalar bytes.
+// Returns an error if the bytes are zero or exceed the curve order.
+func EncryptionKeyFromBytes(b [32]byte) (*EncryptionKey, error) {
+	s := new(secp256k1.ModNScalar)
+	if s.SetBytes(&b) != 0 {
+		return nil, errors.New("encryption key overflows curve order")
+	}
+	if s.IsZero() {
+		return nil, errors.New("encryption key is zero")
+	}
+	return newKey(s), nil
+}
+
 // secp256k1 curve order N (scalar field modulus).
 var curveN, _ = new(big.Int).SetString("FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141", 16)
 

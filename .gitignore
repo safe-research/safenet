@@ -10,6 +10,8 @@ node_modules/
 target/
 validator*.toml
 
+validator-go/validator-go
+
 # Coverage related files
 coverage/
 lcov.info
