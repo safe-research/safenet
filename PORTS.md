@@ -123,7 +123,7 @@ Each B step is self-contained with unit tests against fixed vectors (port the Ru
 
 Each C step uses the chosen Go FROST library (or a vendored implementation) plus the B primitives.
 
-**C1. DKG round 1.** `GenerateRound1`: create ECDH keypair, run FROST DKG part 1, build the on-chain `KeyGenCommitment` payload (incl. encryption pubkey `q`).
+**C1. DKG round 1.** ✅ `GenerateRound1`: create ECDH keypair, run FROST DKG part 1, build the on-chain `KeyGenCommitment` payload (incl. encryption pubkey `q`).
 
 **C2. DKG round 2.** `GenerateRound2`: run FROST DKG part 2, derive verifying shares from collected commitments, ECDH-encrypt per-participant signing shares into `KeyGenSecretShare` payloads.
 
