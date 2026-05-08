@@ -419,12 +419,8 @@ contract CheckerOracle is IOracle, ICheckerOracle {
             req.totalDenyBond += effectiveBond;
         }
 
-        $commitments[requestId][msg.sender] = Commitment({
-            approved: approve,
-            bondAmount: effectiveBond,
-            position: position,
-            claimed: false
-        });
+        $commitments[requestId][msg.sender] =
+            Commitment({approved: approve, bondAmount: effectiveBond, position: position, claimed: false});
         $checkerOrder[requestId].push(msg.sender);
 
         FEE_TOKEN.safeTransferFrom(msg.sender, address(this), effectiveBond);

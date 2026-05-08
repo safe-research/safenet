@@ -29,9 +29,8 @@ contract DeployCheckerOracleScript is Script {
 
         vm.startBroadcast();
 
-        checkerOracle = new CheckerOracle(
-            arbitrator, feeToken, requestFee, votingWindow, governanceDelay, bondMultiplier
-        );
+        checkerOracle =
+            new CheckerOracle(arbitrator, feeToken, requestFee, votingWindow, governanceDelay, bondMultiplier);
 
         vm.stopBroadcast();
 
