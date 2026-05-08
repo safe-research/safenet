@@ -110,6 +110,19 @@ contract CheckerOracle is IOracle, ICheckerOracle {
     error AlreadyClaimed();
 
     // ============================================================
+    // MODIFIERS
+    // ============================================================
+
+    // forge-lint: disable-start(unwrapped-modifier-logic)
+
+    modifier onlyArbitrator() {
+        require(msg.sender == ARBITRATOR, NotArbitrator());
+        _;
+    }
+
+    // forge-lint: disable-end(unwrapped-modifier-logic)
+
+    // ============================================================
     // CONSTRUCTOR
     // ============================================================
 
@@ -287,8 +300,7 @@ contract CheckerOracle is IOracle, ICheckerOracle {
     /**
      * @inheritdoc ICheckerOracle
      */
-    function addChecker(address checker) external override(ICheckerOracle) {
-        require(msg.sender == ARBITRATOR, NotArbitrator());
+    function addChecker(address checker) external override(ICheckerOracle) onlyArbitrator {
         require(checker != address(0), InvalidAddress());
         require($checkerActiveAt[checker] == 0, CheckerAlreadyScheduled());
 
@@ -300,8 +312,7 @@ contract CheckerOracle is IOracle, ICheckerOracle {
     /**
      * @inheritdoc ICheckerOracle
      */
-    function removeChecker(address checker) external override(ICheckerOracle) {
-        require(msg.sender == ARBITRATOR, NotArbitrator());
+    function removeChecker(address checker) external override(ICheckerOracle) onlyArbitrator {
         require($checkerActiveAt[checker] != 0, CheckerNotScheduled());
 
         delete $checkerActiveAt[checker];
@@ -315,8 +326,7 @@ contract CheckerOracle is IOracle, ICheckerOracle {
     /**
      * @inheritdoc ICheckerOracle
      */
-    function scheduleBondMultiplier(uint256 newValue) external override(ICheckerOracle) {
-        require(msg.sender == ARBITRATOR, NotArbitrator());
+    function scheduleBondMultiplier(uint256 newValue) external override(ICheckerOracle) onlyArbitrator {
         require(newValue > 0, InvalidMultiplier());
 
         uint256 activeAt = block.number + GOVERNANCE_DELAY;
