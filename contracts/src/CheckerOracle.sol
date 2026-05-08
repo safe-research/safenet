@@ -78,12 +78,6 @@ contract CheckerOracle is IOracle, ICheckerOracle {
     // forge-lint: disable-next-line(mixed-case-variable)
     mapping(bytes32 requestId => mapping(address checker => Commitment)) private $commitments;
 
-    /**
-     * @notice Ordered list of all checkers who committed bonds for a request (both sides).
-     */
-    // forge-lint: disable-next-line(mixed-case-variable)
-    mapping(bytes32 requestId => address[]) private $checkerOrder;
-
     // ============================================================
     // ERRORS
     // ============================================================
@@ -187,8 +181,8 @@ contract CheckerOracle is IOracle, ICheckerOracle {
             totalDenyBond: 0,
             approveCheckerCount: 0,
             denyCheckerCount: 0,
-            checkerCount: 0,
-            totalScore: 0,
+            approveTotalScore: 0,
+            denyTotalScore: 0,
             approvedOutcome: false,
             arbitrated: false
         });
@@ -242,14 +236,10 @@ contract CheckerOracle is IOracle, ICheckerOracle {
 
         if (approveMet) {
             req.approvedOutcome = true;
-            req.checkerCount = req.approveCheckerCount;
-            req.totalScore = _computeTotalScore(requestId, true, req.approveCheckerCount);
             emit Resolved(requestId, true, ResolveReason.UNANIMOUS_APPROVE);
             emit OracleResult(requestId, req.proposer, abi.encode(ResolveReason.UNANIMOUS_APPROVE), true);
         } else if (denyMet) {
             req.approvedOutcome = false;
-            req.checkerCount = req.denyCheckerCount;
-            req.totalScore = _computeTotalScore(requestId, false, req.denyCheckerCount);
             emit Resolved(requestId, false, ResolveReason.UNANIMOUS_DENY);
             emit OracleResult(requestId, req.proposer, abi.encode(ResolveReason.UNANIMOUS_DENY), false);
         } else {
@@ -275,8 +265,8 @@ contract CheckerOracle is IOracle, ICheckerOracle {
         require(!c.claimed, AlreadyClaimed());
         c.claimed = true;
 
-        // checkerCount is set only on unanimous outcomes; zero means the request timed out.
-        bool isTimeout = req.checkerCount == 0;
+        // On timeout the fee is refunded to the proposer at finalization and req.fee is zeroed.
+        bool isTimeout = req.fee == 0;
 
         // On timeout all bonds are returned (no side was definitively wrong).
         // On a unanimous outcome the losing side forfeits their bond.
@@ -289,8 +279,9 @@ contract CheckerOracle is IOracle, ICheckerOracle {
         uint256 feeReward = 0;
 
         if (!isTimeout) {
-            uint256 score = c.bondAmount * (req.checkerCount + 1 - c.position);
-            feeReward = req.fee * score / req.totalScore;
+            uint256 score = c.bondAmount / c.position;
+            uint256 totalScore = req.approvedOutcome ? req.approveTotalScore : req.denyTotalScore;
+            feeReward = req.fee * score / totalScore;
         }
 
         FEE_TOKEN.safeTransfer(msg.sender, bondReturn + feeReward);
@@ -413,15 +404,16 @@ contract CheckerOracle is IOracle, ICheckerOracle {
             req.approveCheckerCount += 1;
             position = req.approveCheckerCount;
             req.totalApproveBond += effectiveBond;
+            req.approveTotalScore += effectiveBond / position;
         } else {
             req.denyCheckerCount += 1;
             position = req.denyCheckerCount;
             req.totalDenyBond += effectiveBond;
+            req.denyTotalScore += effectiveBond / position;
         }
 
         $commitments[requestId][msg.sender] =
             Commitment({approved: approve, bondAmount: effectiveBond, position: position, claimed: false});
-        $checkerOrder[requestId].push(msg.sender);
 
         FEE_TOKEN.safeTransferFrom(msg.sender, address(this), effectiveBond);
 
@@ -435,27 +427,5 @@ contract CheckerOracle is IOracle, ICheckerOracle {
     function _isActiveChecker(address checker) internal view returns (bool) {
         uint256 activeAt = $checkerActiveAt[checker];
         return activeAt != 0 && block.number >= activeAt;
-    }
-
-    /**
-     * @dev Iterates over all commitments for the request and computes the total score for
-     *      the given side. Used once during finalize() to cache Request.totalScore.
-     *
-     *      Score_i    = effectiveBond_i × (winnerCount + 1 - position_i)
-     *      TotalScore = Σ Score_i
-     */
-    function _computeTotalScore(bytes32 requestId, bool approve, uint256 winnerCount)
-        internal
-        view
-        returns (uint256 totalScore)
-    {
-        address[] storage order = $checkerOrder[requestId];
-        uint256 len = order.length;
-        for (uint256 i = 0; i < len; i++) {
-            Commitment storage c = $commitments[requestId][order[i]];
-            if (c.approved == approve) {
-                totalScore += c.bondAmount * (winnerCount + 1 - c.position);
-            }
-        }
     }
 }

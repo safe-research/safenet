@@ -38,19 +38,20 @@ interface ICheckerOracle {
 
     /**
      * @notice On-chain record for a single oracle request.
-     * @custom:param proposer         Address that called postRequest (typically the Consensus contract).
-     * @custom:param fee              Fee locked at request time; disbursed or refunded at resolution.
-     * @custom:param approveBondTarget Aggregate bond target for each side: fee × bondMultiplier.
-     * @custom:param deadline         Block number after which the voting window is closed.
-     * @custom:param state            Current lifecycle state.
-     * @custom:param totalApproveBond Running aggregate of Approve bonds collected so far.
-     * @custom:param totalDenyBond    Running aggregate of Deny bonds collected so far.
-     * @custom:param approveCheckerCount Number of Approve-side commitments recorded before threshold was met.
-     * @custom:param denyCheckerCount    Number of Deny-side commitments recorded before threshold was met.
-     * @custom:param checkerCount     Winning-side eligible voter count; set at finalisation.
-     * @custom:param totalScore       Cached winning-side total score; set at finalisation.
-     * @custom:param approvedOutcome  True if the winning resolution is Approve; set at finalisation.
-     * @custom:param arbitrated       True once dispute resolution has been triggered (Phase 2).
+     * @custom:param proposer           Address that called postRequest (typically the Consensus contract).
+     * @custom:param fee                Fee locked at request time; disbursed or refunded at resolution.
+     *                                  Set to zero at finalisation when the request times out.
+     * @custom:param approveBondTarget  Aggregate bond target for each side: fee × bondMultiplier.
+     * @custom:param deadline           Block number after which the voting window is closed.
+     * @custom:param state              Current lifecycle state.
+     * @custom:param totalApproveBond   Running aggregate of Approve bonds collected so far.
+     * @custom:param totalDenyBond      Running aggregate of Deny bonds collected so far.
+     * @custom:param approveCheckerCount Number of Approve-side commitments recorded.
+     * @custom:param denyCheckerCount    Number of Deny-side commitments recorded.
+     * @custom:param approveTotalScore  Running sum of Approve-side scores (bond / position); updated on commit.
+     * @custom:param denyTotalScore     Running sum of Deny-side scores (bond / position); updated on commit.
+     * @custom:param approvedOutcome    True if the winning resolution is Approve; set at finalisation.
+     * @custom:param arbitrated         True once dispute resolution has been triggered (Phase 2).
      */
     struct Request {
         address proposer;
@@ -62,8 +63,8 @@ interface ICheckerOracle {
         uint256 totalDenyBond;
         uint256 approveCheckerCount;
         uint256 denyCheckerCount;
-        uint256 checkerCount;
-        uint256 totalScore;
+        uint256 approveTotalScore;
+        uint256 denyTotalScore;
         bool approvedOutcome;
         bool arbitrated;
     }

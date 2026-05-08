@@ -277,13 +277,12 @@ contract CheckerOracleTest is Test {
         ICheckerOracle.Request memory req = oracle.getRequest(REQUEST_ID);
         assertEq(uint256(req.state), uint256(ICheckerOracle.State.RESOLVED));
         assertTrue(req.approvedOutcome);
-        assertEq(req.checkerCount, 2);
 
-        // Score_1 = 1500 × (2+1-1) = 1500×2 = 3000
-        // Score_2 = 500  × (2+1-2) = 500×1  = 500
-        // TotalScore = 3500
-        uint256 expectedTotalScore = 1500e18 * 2 + 500e18 * 1;
-        assertEq(req.totalScore, expectedTotalScore);
+        // Score_1 = 1500e18 / 1 = 1500e18
+        // Score_2 = 500e18  / 2 = 250e18
+        // approveTotalScore = 1750e18
+        uint256 expectedTotalScore = 1500e18 / 1 + 500e18 / 2;
+        assertEq(req.approveTotalScore, expectedTotalScore);
 
         uint256 checker1BalBefore = token.balanceOf(checker1);
         uint256 checker2BalBefore = token.balanceOf(checker2);
@@ -293,12 +292,12 @@ contract CheckerOracleTest is Test {
         vm.prank(checker2);
         oracle.claim(REQUEST_ID);
 
-        // checker1: bond=1500 returned + fee share = REQUEST_FEE × 3000/3500
-        uint256 checker1Reward = REQUEST_FEE * 3000e18 / expectedTotalScore;
+        // checker1: bond=1500 returned + fee share = REQUEST_FEE × 1500e18/1750e18
+        uint256 checker1Reward = REQUEST_FEE * (1500e18 / 1) / expectedTotalScore;
         assertEq(token.balanceOf(checker1), checker1BalBefore + 1500e18 + checker1Reward, "checker1 claim incorrect");
 
-        // checker2: bond=500 returned + fee share = REQUEST_FEE × 500/3500
-        uint256 checker2Reward = REQUEST_FEE * 500e18 / expectedTotalScore;
+        // checker2: bond=500 returned + fee share = REQUEST_FEE × 250e18/1750e18
+        uint256 checker2Reward = REQUEST_FEE * (500e18 / 2) / expectedTotalScore;
         assertEq(token.balanceOf(checker2), checker2BalBefore + 500e18 + checker2Reward, "checker2 claim incorrect");
     }
 
@@ -347,7 +346,6 @@ contract CheckerOracleTest is Test {
         ICheckerOracle.Request memory req = oracle.getRequest(REQUEST_ID);
         assertEq(uint256(req.state), uint256(ICheckerOracle.State.RESOLVED));
         assertFalse(req.approvedOutcome);
-        assertEq(req.checkerCount, 1);
 
         uint256 balBefore = token.balanceOf(checker1);
         vm.prank(checker1);
