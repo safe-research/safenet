@@ -131,15 +131,15 @@ Each C step uses the chosen Go FROST library (or a vendored implementation) plus
 
 ### Phase D — State & storage (parallelizable after A1)
 
-**D1. State types.** Phase sum type covering `WaitingForGenesis`, `CollectingCommitments`, `CollectingShares`, `GenesisComplete`, `WaitingForRollover`. `ConsensusConfig` struct holding `OwnAddress`, `CoordinatorAddress`, `Participants`, `GenesisSalt`, `BlocksPerEpoch`. JSON serialization round-trip tests for every variant.
+**D1. State types.** ✅ Phase sum type covering `WaitingForGenesis`, `CollectingCommitments`, `CollectingShares`, `GenesisComplete`, `WaitingForRollover`. `ConsensusConfig` struct holding `OwnAddress`, `CoordinatorAddress`, `Participants`, `GenesisSalt`, `BlocksPerEpoch`. JSON serialization round-trip tests for every variant.
 
-**D2. SQLite storage.** `validator_state` table keyed by `block_number` with a JSON state column. `Open`, `Save`, `LoadLatest`. Pruning to keep the last `state_history` rows. Default to in-memory database. Tests covering save → load and pruning behaviour.
+**D2. SQLite storage.** ✅ `validator_state` table keyed by `block_number` with a JSON state column. `Open`, `Save`, `LoadLatest`. Pruning to keep the last `state_history` rows. Default to in-memory database. Tests covering save → load and pruning behaviour.
 
 ### Phase E — I/O (parallelizable after A3)
 
-**E1. Watcher.** Block + consensus-log subscription, history replay through `eth_getLogs` from a given start block, log sort by index, block monotonicity enforcement. Emits one update per block to a callback. Subscription is established before history replay so no blocks are missed.
+**E1. Watcher.** ✅ Block + consensus-log subscription, history replay through `eth_getLogs` from a given start block, log sort by index, block monotonicity enforcement. Emits one update per block to a callback. Subscription is established before history replay so no blocks are missed.
 
-**E2. Action handler with broadcast.** Builds, signs, **and broadcasts** EIP-1559 transactions for `KeyGenAndCommit`, `KeyGenSecretShare`, `KeyGenConfirm`. Closes the gap left in the Rust port (`send_raw_transaction` is wired up here from the start).
+**E2. Action handler with broadcast.** ✅ Builds, signs, **and broadcasts** EIP-1559 transactions for `KeyGenAndCommit`, `KeyGenSecretShare`, `KeyGenConfirm`. Closes the gap left in the Rust port (`send_raw_transaction` is wired up here from the start).
 
 ### Phase F — Integration (sequential)
 
