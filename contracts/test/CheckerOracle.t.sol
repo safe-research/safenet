@@ -48,7 +48,12 @@ contract CheckerOracleTest is Test {
 
         token = new MockERC20("Fee Token", "FEE");
         oracle = new CheckerOracle(
-            arbitrator, address(token), REQUEST_FEE, VOTING_WINDOW, GOVERNANCE_DELAY, BOND_MULTIPLIER
+            arbitrator,
+            address(token),
+            REQUEST_FEE,
+            VOTING_WINDOW,
+            GOVERNANCE_DELAY,
+            BOND_MULTIPLIER
         );
 
         // Fund accounts
@@ -266,7 +271,10 @@ contract CheckerOracleTest is Test {
         emit ICheckerOracle.Resolved(REQUEST_ID, true, ICheckerOracle.ResolveReason.UNANIMOUS_APPROVE);
         vm.expectEmit(true, true, false, true);
         emit IOracle.OracleResult(
-            REQUEST_ID, proposer, abi.encode(ICheckerOracle.ResolveReason.UNANIMOUS_APPROVE), true
+            REQUEST_ID,
+            proposer,
+            abi.encode(ICheckerOracle.ResolveReason.UNANIMOUS_APPROVE),
+            true
         );
 
         oracle.finalize(REQUEST_ID);
@@ -336,9 +344,7 @@ contract CheckerOracleTest is Test {
         vm.expectEmit(true, false, false, true);
         emit ICheckerOracle.Resolved(REQUEST_ID, false, ICheckerOracle.ResolveReason.UNANIMOUS_DENY);
         vm.expectEmit(true, true, false, true);
-        emit IOracle.OracleResult(
-            REQUEST_ID, proposer, abi.encode(ICheckerOracle.ResolveReason.UNANIMOUS_DENY), false
-        );
+        emit IOracle.OracleResult(REQUEST_ID, proposer, abi.encode(ICheckerOracle.ResolveReason.UNANIMOUS_DENY), false);
 
         oracle.finalize(REQUEST_ID);
 
