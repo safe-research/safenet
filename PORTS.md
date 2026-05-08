@@ -147,4 +147,4 @@ Each C step uses the chosen Go FROST library (or a vendored implementation) plus
 
 **F2. Driver wiring.** ✅ Cold-start path: derive `OwnAddress` from the private key, load addresses (A2), build `ConsensusConfig`, initialise or restore state via storage (D2), spawn the action-handler worker (E2), and start the watcher (E1) feeding into the state machine handlers (F1).
 
-**F3. Integration verification.** ✅ `scripts/run_go_integration_test.sh`: starts Anvil, deploys contracts, runs four Go validator processes, triggers genesis KeyGen via the Genesis forge script, and polls for `KeyGenConfirmed` events until all four participants confirm or a 90-second timeout is reached.
+**F3. Integration verification.** ✅ `scripts/run_port_integration_test.sh`: starts Anvil, deploys contracts, builds and runs one validator of each implementation (TypeScript + Rust + Go) as the three genesis participants, triggers genesis KeyGen via the Genesis forge script, and polls for `KeyGenConfirmed` events until all three participants confirm or a 120-second timeout is reached.

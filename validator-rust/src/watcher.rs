@@ -60,7 +60,7 @@ pub async fn run(
                 block_events
                     .entry(block_number)
                     .or_default()
-                    .extend(decode_log(&addresses, log)?);
+                    .extend(decode_log(&addresses, log));
             }
         }
 
@@ -99,7 +99,7 @@ pub async fn run(
                     let mut events = Vec::with_capacity(logs.len());
                     for log in logs {
                         tracing::trace!(?log, "new log");
-                        events.extend(decode_log(&addresses, log)?);
+                        events.extend(decode_log(&addresses, log));
                     }
 
                     on_update(Update { block_number: block.header.number, events });
@@ -114,20 +114,23 @@ pub async fn run(
     }
 }
 
-fn decode_log(addresses: &Addresses, log: Log) -> Result<Option<Event>> {
-    if log.address() == addresses.consensus {
-        Ok(Some(Event::Consensus(
-            Consensus::ConsensusEvents::decode_log(&log.into_inner())
-                .context("failed to decode consensus log")?
-                .data,
-        )))
+fn decode_log(addresses: &Addresses, log: Log) -> Option<Event> {
+    let result = if log.address() == addresses.consensus {
+        Consensus::ConsensusEvents::decode_log(&log.into_inner())
+            .context("failed to decode consensus log")
+            .map(|log| Some(Event::Consensus(log.data)))
     } else if log.address() == addresses.coordinator {
-        Ok(Some(Event::Coordinator(
-            Coordinator::CoordinatorEvents::decode_log(&log.into_inner())
-                .context("failed to decode coordinator log")?
-                .data,
-        )))
+        Coordinator::CoordinatorEvents::decode_log(&log.into_inner())
+            .context("failed to decode coordinator log")
+            .map(|log| Some(Event::Coordinator(log.data)))
     } else {
         Ok(None)
+    };
+    match result {
+        Ok(log) => log,
+        Err(err) => {
+            tracing::warn!(%err, "skipping unknown event");
+            None
+        }
     }
 }

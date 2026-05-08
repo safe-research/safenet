@@ -4,12 +4,12 @@ use crate::{
 };
 use alloy::{
     consensus::{SignableTransaction as _, TxEip1559},
+    eips::Encodable2718 as _,
     network::TxSignerSync as _,
     primitives::{Address, B256, TxKind},
     providers::Provider as _,
     signers::local::PrivateKeySigner,
     sol_types::SolCall as _,
-    eips::Encodable2718 as _,
 };
 use anyhow::Result;
 use tokio::{sync::mpsc, task::JoinHandle};
@@ -148,7 +148,12 @@ impl Worker {
         };
         let signature = self.signer.sign_transaction_sync(&mut tx)?;
         let raw_tx = tx.into_signed(signature).encoded_2718();
-        let tx_hash = self.provider.send_raw_transaction(&raw_tx).await?.watch().await?;
+        let tx_hash = self
+            .provider
+            .send_raw_transaction(&raw_tx)
+            .await?
+            .watch()
+            .await?;
         tracing::debug!(%tx_hash, "executed action transaction");
         Ok(())
     }
