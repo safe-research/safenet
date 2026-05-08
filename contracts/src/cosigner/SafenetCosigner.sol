@@ -5,7 +5,7 @@ import {ConsensusMessages} from "@/libraries/ConsensusMessages.sol";
 import {FROST} from "@/libraries/FROST.sol";
 import {SafeTransaction} from "@/libraries/SafeTransaction.sol";
 import {Secp256k1} from "@/libraries/Secp256k1.sol";
-import {ISafe, IOwnerManager} from "@safe/interfaces/ISafe.sol";
+import {ISafe} from "@safe/interfaces/ISafe.sol";
 import {ISignatureValidator} from "@safe/interfaces/ISignatureValidator.sol";
 
 /**
@@ -28,17 +28,19 @@ import {ISignatureValidator} from "@safe/interfaces/ISignatureValidator.sol";
  *        abi.encode(uint64, FROST.Signature) : epoch and FROST signature
  *
  *      Safe calls `isValidSignature(safeTxHash, abi.encode(epoch, sig))` on this contract.
- *      To use the escape hatch instead, set the dynamic data to an empty byte sequence
- *      (length = 0, no following bytes) and ensure a matured escape hatch registration exists.
+ *      To use the pre-approved transaction path instead, set the dynamic data to an empty byte
+ *      sequence (length = 0, no following bytes) and ensure a matured `allowTransaction`
+ *      registration exists.
  *
- *      **Escape hatch.**
- *      Safe owners can register a time-delayed `removeOwner` call targeting the cosigner
- *      itself by calling `allowEscapeHatch`. Registration requires signatures from
- *      `max(threshold - 1, 1)` Safe owners and does not require a Safenet attestation,
- *      making the escape hatch available even when Safenet is unavailable.
- *      After `_ALLOW_TX_DELAY` seconds, the Safe owners can execute the pre-registered
- *      `removeOwner` transaction by passing empty bytes as the cosigner's dynamic signature
- *      data; the cosigner approves it via the empty-signature path in `isValidSignature`.
+ *      **Pre-approved transactions.**
+ *      Safe owners can register any Safe transaction for time-delayed execution by calling
+ *      `allowTransaction`. Registration requires signatures from `max(threshold - 1, 1)` Safe
+ *      owners over `SafeTransaction.hash` — the same hash Safe owners sign for normal
+ *      `execTransaction` — and does not require a Safenet attestation, making it available even
+ *      when Safenet is unavailable.
+ *      After `_ALLOW_TX_DELAY` seconds, the Safe owners can execute the pre-registered transaction
+ *      by passing empty bytes as the cosigner's dynamic signature data; the cosigner approves it
+ *      via the empty-signature path in `isValidSignature`.
  *      The registered hash is nonce-bound: if other transactions advance the Safe nonce before
  *      execution, the registration becomes stale and must be repeated. To invalidate a pending
  *      registration, `threshold` owners can execute a dummy transaction to advance the Safe nonce.
@@ -53,44 +55,6 @@ contract SafenetCosigner is ISignatureValidator {
         Secp256k1.Point groupKey;
     }
 
-    /**
-     * @notice Parameters for an escape-hatch registration.
-     * @custom:param safe The Safe account from which this cosigner should be removed.
-     * @custom:param prevOwner Owner address preceding this cosigner in the Safe's owner linked list.
-     * @custom:param threshold Threshold to set after removal; must equal the Safe's current threshold
-     *              or current threshold minus one.
-     * @custom:param safeTxGas Gas forwarded to the Safe transaction's inner call.
-     * @custom:param baseGas Base gas cost charged to the Safe for the transaction.
-     * @custom:param gasPrice Gas price used for the refund calculation.
-     * @custom:param gasToken Token used for gas payment; `address(0)` for the native token.
-     * @custom:param refundReceiver Recipient of the gas refund; `address(0)` for `tx.origin`.
-     * @custom:param nonce The Safe's current nonce at registration time. Binds the registration to a
-     *              specific Safe nonce, preventing replay of a signed `EscapeHatchRequest` across
-     *              future nonce values.
-     */
-    struct EscapeHatchRequest {
-        address safe;
-        address prevOwner;
-        uint256 threshold;
-        uint256 safeTxGas;
-        uint256 baseGas;
-        uint256 gasPrice;
-        address gasToken;
-        address refundReceiver;
-        uint256 nonce;
-    }
-
-    // ============================================================
-    // CONSTANTS
-    // ============================================================
-
-    bytes32 private constant _ESCAPE_HATCH_TYPEHASH = keccak256(
-        "EscapeHatchRequest(address safe,address prevOwner,uint256 threshold,uint256 safeTxGas,uint256 baseGas,uint256 gasPrice,address gasToken,address refundReceiver,uint256 nonce)"
-    );
-
-    bytes32 private constant _EIP712_DOMAIN_TYPEHASH =
-        keccak256("EIP712Domain(uint256 chainId,address verifyingContract)");
-
     // ============================================================
     // STORAGE VARIABLES
     // ============================================================
@@ -98,10 +62,6 @@ contract SafenetCosigner is ISignatureValidator {
     bytes32 private immutable _CONSENSUS_DOMAIN_SEPARATOR;
 
     uint256 private immutable _ALLOW_TX_DELAY;
-
-    bytes32 private immutable _CACHED_DOMAIN_SEPARATOR;
-
-    uint256 private immutable _CACHED_CHAIN_ID;
 
     // forge-lint: disable-next-line(mixed-case-variable)
     EpochState private $currentEpoch;
@@ -138,8 +98,6 @@ contract SafenetCosigner is ISignatureValidator {
 
     error InvalidParameter();
 
-    error InvalidThreshold();
-
     error InvalidNonce();
 
     // ============================================================
@@ -158,9 +116,6 @@ contract SafenetCosigner is ISignatureValidator {
         Secp256k1.requireNonZero(initialGroupKey);
         _CONSENSUS_DOMAIN_SEPARATOR = ConsensusMessages.domain(consensusChainId, consensusAddress);
         _ALLOW_TX_DELAY = allowTransactionDelay;
-        _CACHED_CHAIN_ID = block.chainid;
-        // forge-lint: disable-next-item(asm-keccak256)
-        _CACHED_DOMAIN_SEPARATOR = keccak256(abi.encode(_EIP712_DOMAIN_TYPEHASH, block.chainid, address(this)));
         $currentEpoch = EpochState({epoch: initialEpoch, groupKey: initialGroupKey});
         emit EpochUpdated(0, initialEpoch, initialGroupKey);
     }
@@ -200,9 +155,10 @@ contract SafenetCosigner is ISignatureValidator {
      *      Two execution paths:
      *      1. FROST attestation: `_signature` = `abi.encode(uint64 epoch, FROST.Signature sig)`.
      *         Verifies the FROST sig against `_hash` under the resolved group key.
-     *      2. Escape hatch: `_signature` is empty. Approves if a matured escape hatch registration
-     *         exists for `(msg.sender, _hash)`. Registrations are not deleted on use because this
-     *         function is `view` — replay is prevented by Safe's own nonce advancing after execution.
+     *      2. Pre-approved transaction: `_signature` is empty. Approves if a matured `allowTransaction`
+     *         registration exists for `(msg.sender, _hash)`. Registrations are not deleted on use
+     *         because this function is `view` — replay is prevented by Safe's own nonce advancing
+     *         after execution.
      */
     function isValidSignature(bytes32 _hash, bytes memory _signature) external view override returns (bytes4) {
         if (_signature.length > 0) {
@@ -222,50 +178,33 @@ contract SafenetCosigner is ISignatureValidator {
     }
 
     // ============================================================
-    // ESCAPE HATCH
+    // TRANSACTION ALLOWLIST
     // ============================================================
 
     /**
-     * @dev Registers a time-delayed `removeOwner` call that removes this cosigner from `request.safe`.
-     *      Requires signatures from `max(threshold - 1, 1)` Safe owners over the EIP-712 hash of
-     *      the `EscapeHatchRequest`. Accepts any Safe-compatible signature format (packed ECDSA,
+     * @dev Registers any Safe transaction for time-delayed execution without Safenet attestation.
+     *      Requires signatures from `max(threshold - 1, 1)` Safe owners over
+     *      `SafeTransaction.hash(safeTx)` — the same hash Safe owners sign for normal
+     *      `execTransaction`. Accepts any Safe-compatible signature format (packed ECDSA,
      *      EIP-1271 contract signature, or pre-approved hash); verification is delegated to
-     *      `ISafe.checkNSignatures`. No Safenet attestation is required, making the escape hatch
-     *      available even when Safenet is unavailable.
-     *      `request.threshold` must equal the Safe's current threshold or current threshold minus one.
-     *      The registered hash is nonce-bound to the Safe's current nonce at registration time;
-     *      if other transactions advance the nonce before execution, re-registration is required.
+     *      `ISafe.checkNSignatures`. No Safenet attestation is required, making this available
+     *      even when Safenet is unavailable.
+     *      `safeTx.nonce` must equal the Safe's current nonce at registration time; if other
+     *      transactions advance the nonce before execution, re-registration is required.
      *      To invalidate a pending registration, advance the Safe nonce with a dummy transaction.
      */
-    function allowEscapeHatch(EscapeHatchRequest calldata request, bytes calldata signature) external {
-        ISafe safeContract = ISafe(payable(request.safe));
-        require(request.nonce == safeContract.nonce(), InvalidNonce());
+    function allowTransaction(SafeTransaction.T calldata safeTx, bytes calldata signature) external {
+        require(safeTx.chainId == block.chainid, InvalidParameter());
+        ISafe safeContract = ISafe(payable(safeTx.safe));
+        require(safeTx.nonce == safeContract.nonce(), InvalidNonce());
         uint256 currentThreshold = safeContract.getThreshold();
-        require(request.threshold == currentThreshold || request.threshold == currentThreshold - 1, InvalidThreshold());
         uint256 requiredSignatures = currentThreshold > 1 ? currentThreshold - 1 : 1;
-        // forge-lint: disable-next-item(asm-keccak256)
-        bytes32 structHash = keccak256(
-            abi.encode(
-                _ESCAPE_HATCH_TYPEHASH,
-                request.safe,
-                request.prevOwner,
-                request.threshold,
-                request.safeTxGas,
-                request.baseGas,
-                request.gasPrice,
-                request.gasToken,
-                request.refundReceiver,
-                request.nonce
-            )
-        );
-        // forge-lint: disable-next-item(asm-keccak256)
-        bytes32 messageHash = keccak256(abi.encodePacked("\x19\x01", _domainSeparator(), structHash));
-        safeContract.checkNSignatures(address(0), messageHash, signature, requiredSignatures);
-        bytes32 safeTxHash = _escapeHatchTxHash(request);
-        require($allowedTransactions[request.safe][safeTxHash] == 0, TransactionAlreadyAllowed());
+        bytes32 safeTxHash = SafeTransaction.hash(safeTx);
+        safeContract.checkNSignatures(address(0), safeTxHash, signature, requiredSignatures);
+        require($allowedTransactions[safeTx.safe][safeTxHash] == 0, TransactionAlreadyAllowed());
         uint256 executableAt = block.timestamp + _ALLOW_TX_DELAY;
-        $allowedTransactions[request.safe][safeTxHash] = executableAt;
-        emit TransactionAllowed(request.safe, safeTxHash, executableAt);
+        $allowedTransactions[safeTx.safe][safeTxHash] = executableAt;
+        emit TransactionAllowed(safeTx.safe, safeTxHash, executableAt);
     }
 
     // ============================================================
@@ -296,31 +235,6 @@ contract SafenetCosigner is ISignatureValidator {
     // ============================================================
     // PRIVATE HELPERS
     // ============================================================
-
-    function _escapeHatchTxHash(EscapeHatchRequest calldata request) private view returns (bytes32) {
-        return SafeTransaction.hash(
-            SafeTransaction.T({
-                chainId: block.chainid,
-                safe: request.safe,
-                to: request.safe,
-                value: 0,
-                data: abi.encodeCall(IOwnerManager.removeOwner, (request.prevOwner, address(this), request.threshold)),
-                operation: SafeTransaction.Operation.CALL,
-                safeTxGas: request.safeTxGas,
-                baseGas: request.baseGas,
-                gasPrice: request.gasPrice,
-                gasToken: request.gasToken,
-                refundReceiver: request.refundReceiver,
-                nonce: request.nonce
-            })
-        );
-    }
-
-    function _domainSeparator() private view returns (bytes32) {
-        if (block.chainid == _CACHED_CHAIN_ID) return _CACHED_DOMAIN_SEPARATOR;
-        // forge-lint: disable-next-item(asm-keccak256)
-        return keccak256(abi.encode(_EIP712_DOMAIN_TYPEHASH, block.chainid, address(this)));
-    }
 
     function _resolveGroupKey(uint64 epoch) private view returns (Secp256k1.Point memory) {
         if ($currentEpoch.epoch == epoch) return $currentEpoch.groupKey;
