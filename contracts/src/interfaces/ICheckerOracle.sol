@@ -21,11 +21,7 @@ interface ICheckerOracle is IOracle {
      * @param deadline The block number when the voting window closes.
      */
     event NewRequest(
-        bytes32 indexed requestId,
-        address indexed proposer,
-        uint256 fee,
-        uint256 approveBondTarget,
-        uint256 deadline
+        bytes32 indexed requestId, address indexed proposer, uint256 fee, uint256 approveBondTarget, uint256 deadline
     );
 
     /**
@@ -37,11 +33,7 @@ interface ICheckerOracle is IOracle {
      * @param position The arrival position (1-indexed) among voters on this side.
      */
     event Committed(
-        bytes32 indexed requestId,
-        address indexed checker,
-        bool approved,
-        uint256 bondAmount,
-        uint256 position
+        bytes32 indexed requestId, address indexed checker, bool approved, uint256 bondAmount, uint256 position
     );
 
     /**

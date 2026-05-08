@@ -199,12 +199,7 @@ contract CheckerOracle is ICheckerOracle {
      * @param votingWindow The voting window duration in blocks.
      * @param governanceDelay The time delay for governance changes.
      */
-    constructor(
-        address feeToken,
-        address arb,
-        uint256 votingWindow,
-        uint256 governanceDelay
-    ) {
+    constructor(address feeToken, address arb, uint256 votingWindow, uint256 governanceDelay) {
         FEE_TOKEN = IERC20(feeToken);
         ARBITRATOR = arb;
         VOTING_WINDOW = votingWindow;
@@ -225,21 +220,21 @@ contract CheckerOracle is ICheckerOracle {
     function postRequest(bytes32 requestId) external {
         // Check if request already exists
         require(requests[requestId].proposer == address(0), "RequestAlreadyPending");
-        
+
         // Get proposer (should be Consensus contract)
         address proposer = msg.sender;
-        
+
         // The fee should already be escrowed before this call
         // We just need to verify it exists
         uint256 fee = FEE_TOKEN.balanceOf(address(this));
         require(fee > 0, "FeeNotEscrowed");
-        
+
         // Calculate bond target
         uint256 approveBondTarget = fee * bondMultiplier;
-        
+
         // Calculate deadline
         uint256 deadline = block.number + VOTING_WINDOW;
-        
+
         // Create request
         requests[requestId] = Request({
             proposer: proposer,
@@ -253,7 +248,7 @@ contract CheckerOracle is ICheckerOracle {
             totalScore: 0,
             arbitrated: false
         });
-        
+
         // Emit events
         emit NewRequest(requestId, proposer, fee, approveBondTarget, deadline);
         emit OracleResult(requestId, proposer, "", false); // Will be updated on resolution
@@ -269,19 +264,19 @@ contract CheckerOracle is ICheckerOracle {
     function postRequestWithFee(bytes32 requestId, uint256 fee) external {
         // Pull fee from msg.sender (for tests)
         FEE_TOKEN.safeTransferFrom(msg.sender, address(this), fee);
-        
+
         // Check if request already exists (same as postRequest)
         require(requests[requestId].proposer == address(0), "RequestAlreadyPending");
-        
+
         // Get proposer
         address proposer = msg.sender;
-        
+
         // Calculate bond target
         uint256 approveBondTarget = fee * bondMultiplier;
-        
+
         // Calculate deadline
         uint256 deadline = block.number + VOTING_WINDOW;
-        
+
         // Create request (same as postRequest)
         requests[requestId] = Request({
             proposer: proposer,
@@ -295,7 +290,7 @@ contract CheckerOracle is ICheckerOracle {
             totalScore: 0,
             arbitrated: false
         });
-        
+
         // Emit events (same as postRequest)
         emit NewRequest(requestId, proposer, fee, approveBondTarget, deadline);
         emit OracleResult(requestId, proposer, "", false);
@@ -328,28 +323,28 @@ contract CheckerOracle is ICheckerOracle {
      */
     function _commitVote(bytes32 requestId, bool approved) internal {
         Request storage req = requests[requestId];
-        
+
         // Verify request exists
         require(req.proposer != address(0), "RequestNotPending");
-        
+
         // Verify not resolved
         require(req.state != State.RESOLVED, "RequestAlreadyResolved");
-        
+
         // Verify not frozen (Phase 2)
         require(req.state != State.FROZEN, "RequestFrozen");
-        
+
         // Verify checker is active
         require(_isActiveChecker(msg.sender), "CheckerNotActive");
-        
+
         // Calculate bond amount based on current multiplier
         uint256 bondAmount = req.fee * bondMultiplier;
-        
+
         // Pull bond from checker
         FEE_TOKEN.safeTransferFrom(msg.sender, address(this), bondAmount);
-        
+
         // Calculate effective bond (handle overpayment)
         uint256 effectiveBond;
-        
+
         if (approved) {
             // Approve side
             uint256 remainingGap = req.approveBondTarget - req.totalApproveBond;
@@ -362,7 +357,7 @@ contract CheckerOracle is ICheckerOracle {
             } else {
                 effectiveBond = bondAmount;
             }
-            
+
             req.totalApproveBond += effectiveBond;
         } else {
             // Deny side
@@ -376,25 +371,21 @@ contract CheckerOracle is ICheckerOracle {
             } else {
                 effectiveBond = bondAmount;
             }
-            
+
             req.totalDenyBond += effectiveBond;
         }
-        
+
         // Calculate position (1-indexed among all checkers)
         uint256 position = req.checkerCount + 1;
         req.checkerCount++;
-        
+
         // Record commitment
-        commitments[requestId][msg.sender] = Commitment({
-            approved: approved,
-            bondAmount: effectiveBond,
-            position: position,
-            claimed: false
-        });
-        
+        commitments[requestId][msg.sender] =
+            Commitment({approved: approved, bondAmount: effectiveBond, position: position, claimed: false});
+
         // Track checker order
         checkerOrder[requestId].push(msg.sender);
-        
+
         // Emit events
         emit Committed(requestId, msg.sender, approved, bondAmount, position);
     }
@@ -409,18 +400,18 @@ contract CheckerOracle is ICheckerOracle {
      */
     function finalize(bytes32 requestId) external {
         Request storage req = requests[requestId];
-        
+
         require(req.proposer != address(0), "RequestNotPending");
         require(req.state != State.RESOLVED, "RequestAlreadyResolved");
         require(req.state != State.FROZEN, "RequestFrozen");
-        
+
         // Check if Approve threshold reached
         bool approveThresholdReached = req.totalApproveBond >= req.approveBondTarget;
         bool denyThresholdReached = req.totalDenyBond >= req.approveBondTarget;
-        
+
         // Check if voting window expired
         bool votingWindowExpired = block.number >= req.deadline;
-        
+
         // Resolve based on conditions
         if (approveThresholdReached && !denyThresholdReached) {
             // Unanimous Approve
@@ -437,14 +428,14 @@ contract CheckerOracle is ICheckerOracle {
             req.state = State.RESOLVED;
             req.totalScore = 0;
             emit Resolved(requestId, false, ResolveReason.TIMEOUT);
-            
+
             // Refund user's fee
             FEE_TOKEN.safeTransfer(req.proposer, req.fee);
         } else {
             // Still pending, voting window not expired and threshold not reached
             revert("NotReadyForFinalization");
         }
-        
+
         // Emit OracleResult if not already emitted
         // (it was emitted with false in postRequest)
         if (req.state == State.RESOLVED) {
@@ -465,21 +456,21 @@ contract CheckerOracle is ICheckerOracle {
      */
     function claim(bytes32 requestId) external {
         Request storage req = requests[requestId];
-        
+
         require(req.proposer != address(0), "RequestNotPending");
         require(req.state == State.RESOLVED, "RequestNotResolved");
-        
+
         Commitment storage commitment = commitments[requestId][msg.sender];
         require(!commitment.claimed, "AlreadyClaimed");
-        
+
         // Determine winning side
         bool approveThresholdReached = req.totalApproveBond >= req.approveBondTarget;
         bool denyThresholdReached = req.totalDenyBond >= req.approveBondTarget;
-        
+
         // Calculate rewards based on winning side
         uint256 bondReturn;
         uint256 feeReward;
-        
+
         if (approveThresholdReached) {
             // Approve side won
             bondReturn = commitment.bondAmount;
@@ -493,10 +484,10 @@ contract CheckerOracle is ICheckerOracle {
             bondReturn = commitment.bondAmount;
             feeReward = 0;
         }
-        
+
         // Mark as claimed
         commitment.claimed = true;
-        
+
         // Transfer rewards
         if (bondReturn > 0) {
             FEE_TOKEN.safeTransfer(msg.sender, bondReturn);
@@ -504,7 +495,7 @@ contract CheckerOracle is ICheckerOracle {
         if (feeReward > 0) {
             FEE_TOKEN.safeTransfer(msg.sender, feeReward);
         }
-        
+
         emit Claimed(requestId, msg.sender, bondReturn, feeReward);
     }
 
@@ -518,10 +509,10 @@ contract CheckerOracle is ICheckerOracle {
      */
     function addChecker(address checker) external {
         require(msg.sender == ARBITRATOR, "Unauthorized");
-        
+
         uint256 activeAt = block.number + GOVERNANCE_DELAY;
         checkerActiveAt[checker] = activeAt;
-        
+
         emit CheckerScheduled(checker, activeAt);
     }
 
@@ -531,9 +522,9 @@ contract CheckerOracle is ICheckerOracle {
      */
     function removeChecker(address checker) external {
         require(msg.sender == ARBITRATOR, "Unauthorized");
-        
+
         checkerActiveAt[checker] = 0;
-        
+
         emit CheckerRemoved(checker);
     }
 
@@ -543,10 +534,10 @@ contract CheckerOracle is ICheckerOracle {
      */
     function scheduleBondMultiplier(uint256 newValue) external {
         require(msg.sender == ARBITRATOR, "Unauthorized");
-        
+
         stagedBondMultiplier = newValue;
         bondMultiplierActiveAt = block.number + GOVERNANCE_DELAY;
-        
+
         emit BondMultiplierScheduled(newValue, bondMultiplierActiveAt);
     }
 
@@ -555,9 +546,9 @@ contract CheckerOracle is ICheckerOracle {
      */
     function applyBondMultiplier() external {
         require(block.number >= bondMultiplierActiveAt, "BondMultiplierNotActive");
-        
+
         bondMultiplier = stagedBondMultiplier;
-        
+
         emit BondMultiplierApplied(bondMultiplier);
     }
 
@@ -606,7 +597,7 @@ contract CheckerOracle is ICheckerOracle {
         address[] storage checkers = checkerOrder[requestId];
         uint256 totalScore = 0;
         uint256 winnerCount = 0;
-        
+
         // First pass: count winners on the specified side
         for (uint256 i = 0; i < checkers.length; i++) {
             Commitment memory commitment = commitments[requestId][checkers[i]];
@@ -614,7 +605,7 @@ contract CheckerOracle is ICheckerOracle {
                 winnerCount++;
             }
         }
-        
+
         // Second pass: calculate score for each winner
         for (uint256 i = 0; i < checkers.length; i++) {
             Commitment memory commitment = commitments[requestId][checkers[i]];
@@ -624,7 +615,7 @@ contract CheckerOracle is ICheckerOracle {
                 totalScore += score;
             }
         }
-        
+
         return totalScore;
     }
 
@@ -637,16 +628,16 @@ contract CheckerOracle is ICheckerOracle {
      */
     function _calculateFeeReward(bytes32 requestId, bool approved, address checker) internal view returns (uint256) {
         Request storage req = requests[requestId];
-        
+
         if (req.totalScore == 0) {
             return 0;
         }
-        
+
         Commitment memory commitment = commitments[requestId][checker];
         if (commitment.bondAmount == 0 || commitment.claimed) {
             return 0;
         }
-        
+
         // Calculate position multiplier based on winner count
         uint256 winnerCount = 0;
         address[] storage checkers = checkerOrder[requestId];
@@ -656,9 +647,9 @@ contract CheckerOracle is ICheckerOracle {
                 winnerCount++;
             }
         }
-        
+
         uint256 checkerScore = commitment.bondAmount * (winnerCount + 1 - commitment.position);
-        
+
         return (req.fee * checkerScore) / req.totalScore;
     }
 }

@@ -15,9 +15,9 @@ contract ConsensusMessagesTest is Test {
                 1,
                 0xbaddad42,
                 Secp256k1.Point({
-                    x: 0x8318535b54105d4a7aae60c08fc45f9687181b4fdfc625bd1a753fa7397fed75,
-                    y: 0x3547f11ca8696646f2f3acb08e31016afac23e630c5d11f59f61fef57b0d2aa5
-                })
+                x: 0x8318535b54105d4a7aae60c08fc45f9687181b4fdfc625bd1a753fa7397fed75,
+                y: 0x3547f11ca8696646f2f3acb08e31016afac23e630c5d11f59f61fef57b0d2aa5
+            })
             );
 
         assertEq(message, hex"c1e4d484d6c376741c904290cc043f4afb4618f9d567dcdd0edcbf22abae57f7");
