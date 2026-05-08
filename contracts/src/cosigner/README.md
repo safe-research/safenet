@@ -33,7 +33,7 @@ To use the escape hatch instead, set the dynamic data to an empty byte sequence 
 
 **Epoch state.** Only the two most recent epochs are retained: `$currentEpoch` and `$previousEpoch`. On each `updateEpoch` call the current epoch shifts to previous and the new epoch becomes current. The sliding window allows in-flight transactions to complete across epoch boundaries while preventing unbounded storage growth. `updateEpoch` is permissionless — any party holding the FROST-signed rollover message can advance the epoch.
 
-**Escape hatch.** Any single Safe owner can register a time-delayed `removeOwner` call that removes the cosigner from the Safe by calling `allowEscapeHatch` directly, or `allowEscapeHatchWithSig` when submitting via a relay service. Registration does not require a Safenet attestation, making it available even when the Safenet network is unavailable. Both functions accept an `EscapeHatchRequest` struct that captures the target Safe address (`safe`), the `removeOwner` parameters (`prevOwner`, `threshold`), and the Safe transaction gas parameters (`safeTxGas`, `baseGas`, `gasPrice`, `gasToken`, `refundReceiver`).
+**Escape hatch.** Safe owners can register a time-delayed `removeOwner` call that removes the cosigner from the Safe by calling `allowEscapeHatch`. Registration requires signatures from `max(threshold - 1, 1)` Safe owners over the EIP-712 hash of the `EscapeHatchRequest` — no Safenet attestation is required, making it available even when the Safenet network is unavailable. The function accepts any Safe-compatible signature format (packed ECDSA, EIP-1271 contract signature, or pre-approved hash) via `ISafe.checkNSignatures`, and is relay-compatible so `msg.sender` need not be a Safe owner. `allowEscapeHatch` accepts an `EscapeHatchRequest` struct that captures the target Safe address (`safe`), the `removeOwner` parameters (`prevOwner`, `threshold`), the Safe transaction gas parameters (`safeTxGas`, `baseGas`, `gasPrice`, `gasToken`, `refundReceiver`), and the Safe's current nonce at registration time (`nonce`).
 
 After the configured delay, the Safe owners execute the pre-registered `removeOwner` transaction by passing empty bytes as the cosigner's dynamic signature data; the cosigner approves it via the empty-signature path in `isValidSignature`. Registrations are not deleted on use because `isValidSignature` is `view`; replay is prevented by Safe's nonce advancing after execution.
 
@@ -46,8 +46,9 @@ The registered hash is nonce-bound to the Safe's nonce at registration time. If 
 - Only two epoch keys are retained, bounding storage growth regardless of how many rollovers occur.
 - `updateEpoch` is permissionless, improving liveness during validator set changes.
 - Fully self-contained: no cross-chain calls at execution time.
-- Escape hatch can be registered by any single Safe owner without Safenet availability, providing a liveness guarantee if Safenet is unavailable.
-- Relay-compatible escape hatch registration via `allowEscapeHatchWithSig`, using Safe's own `checkNSignatures` for signature verification — supports ECDSA, EIP-1271 contract signatures, and pre-approved hashes without any custom signature logic.
+- Escape hatch requires no Safenet attestation, providing a liveness guarantee if Safenet is unavailable.
+- Relay-compatible escape hatch registration via `allowEscapeHatch`, using Safe's own `checkNSignatures` for signature verification — supports ECDSA, EIP-1271 contract signatures, and pre-approved hashes without any custom signature logic.
+- Registration requires `max(threshold - 1, 1)` owner signatures, matching the number of human signatures needed to execute the escape hatch, preventing unilateral removal by a single owner.
 
 ### Cons
 

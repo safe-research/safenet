@@ -32,9 +32,10 @@ import {ISignatureValidator} from "@safe/interfaces/ISignatureValidator.sol";
  *      (length = 0, no following bytes) and ensure a matured escape hatch registration exists.
  *
  *      **Escape hatch.**
- *      Any Safe owner can register a time-delayed `removeOwner` call targeting the cosigner
- *      itself by calling `allowEscapeHatch` directly, or `allowEscapeHatchWithSig` when
- *      submitting via a relay service. Registration does not require a Safenet attestation.
+ *      Safe owners can register a time-delayed `removeOwner` call targeting the cosigner
+ *      itself by calling `allowEscapeHatch`. Registration requires signatures from
+ *      `max(threshold - 1, 1)` Safe owners and does not require a Safenet attestation,
+ *      making the escape hatch available even when Safenet is unavailable.
  *      After `_ALLOW_TX_DELAY` seconds, the Safe owners can execute the pre-registered
  *      `removeOwner` transaction by passing empty bytes as the cosigner's dynamic signature
  *      data; the cosigner approves it via the empty-signature path in `isValidSignature`.
@@ -134,8 +135,6 @@ contract SafenetCosigner is ISignatureValidator {
 
     error InvalidParameter();
 
-    error NotSafeOwner();
-
     error InvalidThreshold();
 
     error InvalidNonce();
@@ -229,26 +228,22 @@ contract SafenetCosigner is ISignatureValidator {
 
     /**
      * @dev Registers a time-delayed `removeOwner` call that removes this cosigner from `request.safe`.
-     *      Any single Safe owner may call this directly — no Safenet attestation is required,
-     *      making the escape hatch available even when Safenet is unavailable.
+     *      Requires signatures from `max(threshold - 1, 1)` Safe owners over the EIP-712 hash of
+     *      the `EscapeHatchRequest`. Accepts any Safe-compatible signature format (packed ECDSA,
+     *      EIP-1271 contract signature, or pre-approved hash); verification is delegated to
+     *      `ISafe.checkNSignatures`. No Safenet attestation is required, making the escape hatch
+     *      available even when Safenet is unavailable.
      *      `request.threshold` must equal the Safe's current threshold or current threshold minus one.
      *      The registered hash is nonce-bound to the Safe's current nonce at registration time;
      *      if other transactions advance the nonce before execution, re-registration is required.
      *      To invalidate a pending registration, advance the Safe nonce with a dummy transaction.
      */
-    function allowEscapeHatch(EscapeHatchRequest calldata request) external {
-        require(ISafe(payable(request.safe)).isOwner(msg.sender), NotSafeOwner());
-        _registerEscapeHatch(request);
-    }
-
-    /**
-     * @dev Relay-compatible variant of `allowEscapeHatch`. Accepts a Safe-compatible signature
-     *      (packed ECDSA, EIP-1271 contract signature, or pre-approved hash) from a Safe owner
-     *      over the EIP-712 hash of the `EscapeHatchRequest`, allowing submission via a relay
-     *      service where `msg.sender` is not the Safe owner. Signature verification and owner
-     *      membership check are both delegated to `ISafe.checkNSignatures`.
-     */
-    function allowEscapeHatchWithSig(EscapeHatchRequest calldata request, bytes calldata signature) external {
+    function allowEscapeHatch(EscapeHatchRequest calldata request, bytes calldata signature) external {
+        ISafe safeContract = ISafe(payable(request.safe));
+        require(request.nonce == safeContract.nonce(), InvalidNonce());
+        uint256 currentThreshold = safeContract.getThreshold();
+        require(request.threshold == currentThreshold || request.threshold == currentThreshold - 1, InvalidThreshold());
+        uint256 requiredSignatures = currentThreshold > 1 ? currentThreshold - 1 : 1;
         // forge-lint: disable-next-item(asm-keccak256)
         bytes32 structHash = keccak256(
             abi.encode(
@@ -266,8 +261,12 @@ contract SafenetCosigner is ISignatureValidator {
         );
         // forge-lint: disable-next-item(asm-keccak256)
         bytes32 messageHash = keccak256(abi.encodePacked("\x19\x01", _domainSeparator(), structHash));
-        ISafe(payable(request.safe)).checkNSignatures(address(0), messageHash, signature, 1);
-        _registerEscapeHatch(request);
+        safeContract.checkNSignatures(address(0), messageHash, signature, requiredSignatures);
+        bytes32 safeTxHash = _escapeHatchTxHash(request);
+        require($allowedTransactions[request.safe][safeTxHash] == 0, TransactionAlreadyAllowed());
+        uint256 executableAt = block.timestamp + _ALLOW_TX_DELAY;
+        $allowedTransactions[request.safe][safeTxHash] = executableAt;
+        emit TransactionAllowed(request.safe, safeTxHash, executableAt);
     }
 
     // ============================================================
@@ -298,18 +297,6 @@ contract SafenetCosigner is ISignatureValidator {
     // ============================================================
     // PRIVATE HELPERS
     // ============================================================
-
-    function _registerEscapeHatch(EscapeHatchRequest calldata request) private {
-        ISafe safeContract = ISafe(payable(request.safe));
-        require(request.nonce == safeContract.nonce(), InvalidNonce());
-        uint256 currentThreshold = safeContract.getThreshold();
-        require(request.threshold == currentThreshold || request.threshold == currentThreshold - 1, InvalidThreshold());
-        bytes32 safeTxHash = _escapeHatchTxHash(request);
-        require($allowedTransactions[request.safe][safeTxHash] == 0, TransactionAlreadyAllowed());
-        uint256 executableAt = block.timestamp + _ALLOW_TX_DELAY;
-        $allowedTransactions[request.safe][safeTxHash] = executableAt;
-        emit TransactionAllowed(request.safe, safeTxHash, executableAt);
-    }
 
     function _escapeHatchTxHash(EscapeHatchRequest calldata request) private view returns (bytes32) {
         return SafeTransaction.hash(
