@@ -33,7 +33,21 @@ To use the pre-approved transaction path instead, set the dynamic data to an emp
 
 **Epoch state.** Only the two most recent epochs are retained: `$currentEpoch` and `$previousEpoch`. On each `updateEpoch` call the current epoch shifts to previous and the new epoch becomes current. The sliding window allows in-flight transactions to complete across epoch boundaries while preventing unbounded storage growth. `updateEpoch` is permissionless — any party holding the FROST-signed rollover message can advance the epoch.
 
-**Pre-approved transactions.** Safe owners can register any Safe transaction for time-delayed execution by calling `allowTransaction`. Registration requires signatures from `max(threshold - 1, 1)` Safe owners over `SafeTransaction.hash` — the same hash Safe owners sign for normal `execTransaction` — and does not require a Safenet attestation, making it available even when Safenet is unavailable. `allowTransaction` accepts a `SafeTransaction.T` struct covering all Safe transaction parameters (`safe`, `to`, `value`, `data`, `operation`, `safeTxGas`, `baseGas`, `gasPrice`, `gasToken`, `refundReceiver`, `nonce`) along with a `chainId` used to domain-separate the hash.
+**Pre-approved transactions.** Safe owners can register any Safe transaction for time-delayed execution by calling `allowTransaction(safe, safeTxHash, signatures)`. The caller supplies the Safe address, the precomputed `safeTxHash`, and `max(threshold - 1, 1)` owner signatures over the EIP-712 typed message `AllowTransaction(bytes32 safeTxHash)` under the cosigner's own domain. No Safenet attestation is required, making this available even when Safenet is unavailable.
+
+The EIP-712 domain used for `allowTransaction` signatures is:
+```
+EIP712Domain(uint256 chainId, address verifyingContract)
+  chainId           = deployment chain id
+  verifyingContract = address(cosigner)
+```
+
+The struct type is:
+```
+AllowTransaction(bytes32 safeTxHash)
+```
+
+Owners compute `safeTxHash` off-chain using `SafeTransaction.hash(safeTx)` — the same hash they sign for normal `execTransaction` — and sign the `AllowTransaction` EIP-712 message over it. The cosigner's `allowTransactionDomainSeparator()` view function returns the domain separator for off-chain message construction.
 
 After the configured delay, the Safe owners execute the pre-registered transaction by passing empty bytes as the cosigner's dynamic signature data; the cosigner approves it via the empty-signature path in `isValidSignature`. Registrations are not deleted on use because `isValidSignature` is `view`; replay is prevented by Safe's nonce advancing after execution.
 
@@ -47,7 +61,7 @@ The registered hash is nonce-bound to the Safe's nonce at registration time. If 
 - `updateEpoch` is permissionless, improving liveness during validator set changes.
 - Fully self-contained: no cross-chain calls at execution time.
 - Pre-approved transactions require no Safenet attestation, providing a liveness guarantee if Safenet is unavailable.
-- `allowTransaction` uses `SafeTransaction.hash` — the same hash owners sign for normal execution — so no additional signing infrastructure is needed on the client side.
+- `allowTransaction` signatures use a dedicated EIP-712 typed message (`AllowTransaction`), domain-separated by the cosigner contract address — preventing cross-contract replay.
 - Registration requires `max(threshold - 1, 1)` owner signatures, matching the number of human signatures needed to execute the transaction, preventing unilateral registration by a single owner.
 - Any Safe transaction can be pre-approved, not just cosigner removal — `removeOwner` is the typical escape hatch but the mechanism is general.
 
