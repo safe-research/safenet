@@ -205,6 +205,11 @@ contract SafenetCosigner is ISignatureValidator {
      *      `safeTxHash` must embed the Safe's current nonce; if other transactions advance the
      *      nonce before execution, re-registration is required.
      *      To invalidate a pending registration, advance the Safe nonce with a dummy transaction.
+     *      The `max(threshold - 1, 1)` requirement rests on the assumption that Safenet will never
+     *      sign a `TransactionProposal` for a `safeTxHash` that has an `AllowTransaction` preimage.
+     *      Such a signature could satisfy the cosigner's own EIP-1271 check within `checkNSignatures`,
+     *      reducing the effective human-owner signature requirement from `threshold - 1` to
+     *      `threshold - 2`.
      */
     function allowTransaction(address safe, bytes32 safeTxHash, bytes calldata signature) external {
         ISafe safeContract = ISafe(payable(safe));
