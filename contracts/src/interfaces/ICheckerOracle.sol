@@ -19,7 +19,9 @@ interface ICheckerOracle {
     enum State {
         PENDING,
         FROZEN,
-        RESOLVED
+        RESOLVED_APPROVED,
+        RESOLVED_DENIED,
+        TIMED_OUT
     }
 
     /**
@@ -50,7 +52,6 @@ interface ICheckerOracle {
      * @custom:param denyCheckerCount    Number of Deny-side commitments recorded.
      * @custom:param approveTotalScore  Running sum of Approve-side scores (bond / position); updated on commit.
      * @custom:param denyTotalScore     Running sum of Deny-side scores (bond / position); updated on commit.
-     * @custom:param approvedOutcome    True if the winning resolution is Approve; set at finalisation.
      * @custom:param arbitrated         True once dispute resolution has been triggered (Phase 2).
      */
     struct Request {
@@ -65,7 +66,6 @@ interface ICheckerOracle {
         uint256 denyCheckerCount;
         uint256 approveTotalScore;
         uint256 denyTotalScore;
-        bool approvedOutcome;
         bool arbitrated;
     }
 

@@ -183,7 +183,6 @@ contract CheckerOracle is IOracle, ICheckerOracle {
             denyCheckerCount: 0,
             approveTotalScore: 0,
             denyTotalScore: 0,
-            approvedOutcome: false,
             arbitrated: false
         });
 
@@ -232,19 +231,17 @@ contract CheckerOracle is IOracle, ICheckerOracle {
             return;
         }
 
-        req.state = State.RESOLVED;
-
         if (approveMet) {
-            req.approvedOutcome = true;
+            req.state = State.RESOLVED_APPROVED;
             emit Resolved(requestId, true, ResolveReason.UNANIMOUS_APPROVE);
             emit OracleResult(requestId, req.proposer, abi.encode(ResolveReason.UNANIMOUS_APPROVE), true);
         } else if (denyMet) {
-            req.approvedOutcome = false;
+            req.state = State.RESOLVED_DENIED;
             emit Resolved(requestId, false, ResolveReason.UNANIMOUS_DENY);
             emit OracleResult(requestId, req.proposer, abi.encode(ResolveReason.UNANIMOUS_DENY), false);
         } else {
             // Timeout / undercapitalised — refund fee to proposer, reject by default.
-            req.approvedOutcome = false;
+            req.state = State.TIMED_OUT;
             uint256 fee = req.fee;
             req.fee = 0;
             FEE_TOKEN.safeTransfer(req.proposer, fee);
@@ -258,19 +255,22 @@ contract CheckerOracle is IOracle, ICheckerOracle {
      */
     function claim(bytes32 requestId) external override(ICheckerOracle) {
         Request storage req = $requests[requestId];
-        require(req.state == State.RESOLVED, RequestNotResolved());
+        State state = req.state;
+        require(
+            state == State.RESOLVED_APPROVED || state == State.RESOLVED_DENIED || state == State.TIMED_OUT,
+            RequestNotResolved()
+        );
 
         Commitment storage c = $commitments[requestId][msg.sender];
         require(c.bondAmount > 0, NothingToClaim());
         require(!c.claimed, AlreadyClaimed());
         c.claimed = true;
 
-        // On timeout the fee is refunded to the proposer at finalization and req.fee is zeroed.
-        bool isTimeout = req.fee == 0;
+        bool isTimeout = state == State.TIMED_OUT;
 
         // On timeout all bonds are returned (no side was definitively wrong).
         // On a unanimous outcome the losing side forfeits their bond.
-        if (!isTimeout && c.approved != req.approvedOutcome) {
+        if (!isTimeout && c.approved != (state == State.RESOLVED_APPROVED)) {
             emit Claimed(requestId, msg.sender, 0, 0);
             return;
         }
@@ -280,7 +280,7 @@ contract CheckerOracle is IOracle, ICheckerOracle {
 
         if (!isTimeout) {
             uint256 score = c.bondAmount / c.position;
-            uint256 totalScore = req.approvedOutcome ? req.approveTotalScore : req.denyTotalScore;
+            uint256 totalScore = state == State.RESOLVED_APPROVED ? req.approveTotalScore : req.denyTotalScore;
             feeReward = req.fee * score / totalScore;
         }
 

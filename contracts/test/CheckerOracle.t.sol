@@ -275,8 +275,7 @@ contract CheckerOracleTest is Test {
         assertEq(token.balanceOf(proposer), proposerBalBefore, "proposer should not receive fee on approve");
 
         ICheckerOracle.Request memory req = oracle.getRequest(REQUEST_ID);
-        assertEq(uint256(req.state), uint256(ICheckerOracle.State.RESOLVED));
-        assertTrue(req.approvedOutcome);
+        assertEq(uint256(req.state), uint256(ICheckerOracle.State.RESOLVED_APPROVED));
 
         // Score_1 = 1500e18 / 1 = 1500e18
         // Score_2 = 500e18  / 2 = 250e18
@@ -344,8 +343,7 @@ contract CheckerOracleTest is Test {
         oracle.finalize(REQUEST_ID);
 
         ICheckerOracle.Request memory req = oracle.getRequest(REQUEST_ID);
-        assertEq(uint256(req.state), uint256(ICheckerOracle.State.RESOLVED));
-        assertFalse(req.approvedOutcome);
+        assertEq(uint256(req.state), uint256(ICheckerOracle.State.RESOLVED_DENIED));
 
         uint256 balBefore = token.balanceOf(checker1);
         vm.prank(checker1);
