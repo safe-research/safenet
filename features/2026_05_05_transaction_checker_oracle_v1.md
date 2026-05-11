@@ -54,7 +54,7 @@ If the voting window expires and neither the Approve nor the Deny aggregate thre
 
 #### Grief-and-Sweep Attack
 
-The contract is intentionally left mathematically vulnerable: a malicious node can post Deny bonds to stall a transaction, lose arbitration, and immediately vote "Approve" on the retry to sweep the fee. In V1 this is mitigated entirely off-chain: the foundation monitors this pattern and invokes a ban on the offending checker. A dedicated contract mechanism is out of scope for V1.
+With symmetric bonds the attack is no longer cheap: reaching the Deny threshold requires the same total capital (`fee × bondMultiplier`) as the Approve side. A losing Deny side has that bond slashed, and sweeping the fee on the Approve retry only recovers at most `fee` — a net loss of `fee × (bondMultiplier - 1)`. The foundation monitoring and on-chain `removeChecker` remain as an additional deterrent.
 
 #### Arbitration (Phase 2)
 
