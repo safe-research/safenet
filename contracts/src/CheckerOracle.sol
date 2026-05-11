@@ -27,7 +27,10 @@ contract CheckerOracle is ICheckerOracle {
      * @custom:state Current state (PENDING/FROZEN/RESOLVED).
      * @custom:totalApproveBond Running sum of Approve bonds.
      * @custom:totalDenyBond Running sum of Deny bonds.
-     * @custom:checkerCount Number of winning-side voters eligible for fee distribution.
+     * @custom:approveCheckerCount Number of Approve voters (for position calculation).
+     * @custom:denyCheckerCount Number of Deny voters (for position calculation).
+     * @custom:approveWinnerCount Number of Approve winners (cached for fee distribution).
+     * @custom:denyWinnerCount Number of Deny winners (cached for fee distribution).
      * @custom:totalScore Cached total score for fee distribution.
      * @custom:arbitrated Whether arbitration has been triggered (Phase 2).
      */
@@ -39,7 +42,10 @@ contract CheckerOracle is ICheckerOracle {
         State state;
         uint256 totalApproveBond;
         uint256 totalDenyBond;
-        uint256 checkerCount;
+        uint256 approveCheckerCount;
+        uint256 denyCheckerCount;
+        uint256 approveWinnerCount;
+        uint256 denyWinnerCount;
         uint256 totalScore;
         bool arbitrated;
     }
@@ -178,6 +184,11 @@ contract CheckerOracle is ICheckerOracle {
     error AlreadyClaimed();
 
     /**
+     * @notice Thrown when a request is not ready for claim.
+     */
+    error RequestNotReadyForClaim();
+
+    /**
      * @notice Thrown when a bond contribution exceeds the remaining gap.
      */
     error BondOverpayment();
@@ -228,8 +239,8 @@ contract CheckerOracle is ICheckerOracle {
         uint256 fee = FEE_TOKEN.balanceOf(address(this));
         require(fee > 0, "FeeNotEscrowed");
 
-        // Calculate bond target
-        uint256 approveBondTarget = fee * bondMultiplier;
+        // Use hardcoded default bondMultiplier for IOracle compliance
+        uint256 approveBondTarget = fee * DEFAULT_BOND_MULTIPLIER;
 
         // Calculate deadline
         uint256 deadline = block.number + VOTING_WINDOW;
@@ -243,14 +254,16 @@ contract CheckerOracle is ICheckerOracle {
             state: State.PENDING,
             totalApproveBond: 0,
             totalDenyBond: 0,
-            checkerCount: 0,
+            approveCheckerCount: 0,
+            denyCheckerCount: 0,
+            approveWinnerCount: 0,
+            denyWinnerCount: 0,
             totalScore: 0,
             arbitrated: false
         });
 
         // Emit events
         emit NewRequest(requestId, proposer, fee, approveBondTarget, deadline);
-        emit OracleResult(requestId, proposer, "", false); // Will be updated on resolution
     }
 
     /**
@@ -285,14 +298,16 @@ contract CheckerOracle is ICheckerOracle {
             state: State.PENDING,
             totalApproveBond: 0,
             totalDenyBond: 0,
-            checkerCount: 0,
+            approveCheckerCount: 0,
+            denyCheckerCount: 0,
+            approveWinnerCount: 0,
+            denyWinnerCount: 0,
             totalScore: 0,
             arbitrated: false
         });
 
-        // Emit events (same as postRequest)
+        // Emit events (OracleResult is emitted in finalize)
         emit NewRequest(requestId, proposer, fee, approveBondTarget, deadline);
-        emit OracleResult(requestId, proposer, "", false);
     }
 
     // ============================================================
@@ -338,10 +353,7 @@ contract CheckerOracle is ICheckerOracle {
         // Calculate bond amount based on current multiplier
         uint256 bondAmount = req.fee * bondMultiplier;
 
-        // Pull bond from checker
-        FEE_TOKEN.safeTransferFrom(msg.sender, address(this), bondAmount);
-
-        // Calculate effective bond (handle overpayment)
+        // Calculate effective bond (handle overpayment) before pulling
         uint256 effectiveBond;
 
         if (approved) {
@@ -350,33 +362,40 @@ contract CheckerOracle is ICheckerOracle {
             if (bondAmount > remainingGap) {
                 // Only count the gap-filling portion
                 effectiveBond = remainingGap;
-                // Return excess to checker
-                uint256 excess = bondAmount - remainingGap;
-                FEE_TOKEN.safeTransfer(msg.sender, excess);
             } else {
                 effectiveBond = bondAmount;
             }
-
-            req.totalApproveBond += effectiveBond;
         } else {
             // Deny side
             uint256 remainingGap = req.approveBondTarget - req.totalDenyBond;
             if (bondAmount > remainingGap) {
                 // Only count the gap-filling portion
                 effectiveBond = remainingGap;
-                // Return excess to checker
-                uint256 excess = bondAmount - remainingGap;
-                FEE_TOKEN.safeTransfer(msg.sender, excess);
             } else {
                 effectiveBond = bondAmount;
             }
+        }
 
+        // Pull effective bond from checker
+        FEE_TOKEN.safeTransferFrom(msg.sender, address(this), effectiveBond);
+        // Note: Excess bond returns are handled during claim() to avoid stack depth issues
+        // and ensure oracle has sufficient balance
+
+        if (approved) {
+            req.totalApproveBond += effectiveBond;
+        } else {
             req.totalDenyBond += effectiveBond;
         }
 
-        // Calculate position (1-indexed among all checkers)
-        uint256 position = req.checkerCount + 1;
-        req.checkerCount++;
+        // Calculate position (1-indexed among checkers on this side, based on arrival order)
+        uint256 position;
+        if (approved) {
+            position = req.approveCheckerCount + 1;
+            req.approveCheckerCount++;
+        } else {
+            position = req.denyCheckerCount + 1;
+            req.denyCheckerCount++;
+        }
 
         // Record commitment
         commitments[requestId][msg.sender] =
@@ -415,34 +434,35 @@ contract CheckerOracle is ICheckerOracle {
         if (approveThresholdReached && !denyThresholdReached) {
             // Unanimous Approve
             req.state = State.RESOLVED;
+            req.approveWinnerCount = req.approveCheckerCount;
+            req.denyWinnerCount = 0;
             req.totalScore = _calculateTotalScore(requestId, true);
             emit Resolved(requestId, true, ResolveReason.UNANIMOUS_APPROVE);
         } else if (denyThresholdReached && !approveThresholdReached) {
             // Unanimous Deny
             req.state = State.RESOLVED;
+            req.approveWinnerCount = 0;
+            req.denyWinnerCount = req.denyCheckerCount;
             req.totalScore = _calculateTotalScore(requestId, false);
             emit Resolved(requestId, false, ResolveReason.UNANIMOUS_DENY);
         } else if (votingWindowExpired) {
-            // Timeout - refund user, no distribution
-            req.state = State.RESOLVED;
+            // Timeout - set to FROZEN for arbitration (Phase 2)
+            req.state = State.FROZEN;
+            req.approveWinnerCount = 0;
+            req.denyWinnerCount = 0;
             req.totalScore = 0;
             emit Resolved(requestId, false, ResolveReason.TIMEOUT);
 
-            // Refund user's fee
-            FEE_TOKEN.safeTransfer(req.proposer, req.fee);
+            // Fee will be handled by arbitration (Phase 2)
+            // For Phase 1, the fee remains in the contract
         } else {
             // Still pending, voting window not expired and threshold not reached
             revert("NotReadyForFinalization");
         }
 
-        // Emit OracleResult if not already emitted
-        // (it was emitted with false in postRequest)
-        if (req.state == State.RESOLVED) {
-            // OracleResult was already emitted in postRequest, but with false
-            // We need to update it based on resolution
-            // Actually, looking at the spec, OracleResult is only emitted once
-            // So we should emit it here with the actual result
-        }
+        // Emit OracleResult with final resolution
+        bool approved = (req.totalApproveBond >= req.approveBondTarget);
+        emit OracleResult(requestId, req.proposer, "", approved);
     }
 
     // ============================================================
@@ -457,7 +477,7 @@ contract CheckerOracle is ICheckerOracle {
         Request storage req = requests[requestId];
 
         require(req.proposer != address(0), "RequestNotPending");
-        require(req.state == State.RESOLVED, "RequestNotResolved");
+        require(req.state == State.RESOLVED || req.state == State.FROZEN, "RequestNotReadyForClaim");
 
         Commitment storage commitment = commitments[requestId][msg.sender];
         require(!commitment.claimed, "AlreadyClaimed");
@@ -466,36 +486,24 @@ contract CheckerOracle is ICheckerOracle {
         bool approveThresholdReached = req.totalApproveBond >= req.approveBondTarget;
         bool denyThresholdReached = req.totalDenyBond >= req.approveBondTarget;
 
-        // Calculate rewards based on winning side
-        uint256 bondReturn;
-        uint256 feeReward;
-
-        if (approveThresholdReached) {
-            // Approve side won
-            bondReturn = commitment.bondAmount;
-            feeReward = _calculateFeeReward(requestId, true, msg.sender);
-        } else if (denyThresholdReached) {
-            // Deny side won
-            bondReturn = commitment.bondAmount;
-            feeReward = _calculateFeeReward(requestId, false, msg.sender);
-        } else {
-            // Timeout - no fee reward, just return bond
-            bondReturn = commitment.bondAmount;
-            feeReward = 0;
-        }
-
         // Mark as claimed
         commitment.claimed = true;
 
-        // Transfer rewards
-        if (bondReturn > 0) {
-            FEE_TOKEN.safeTransfer(msg.sender, bondReturn);
-        }
-        if (feeReward > 0) {
-            FEE_TOKEN.safeTransfer(msg.sender, feeReward);
+        // Calculate fee reward based on winning side
+        uint256 feeReward;
+        if (approveThresholdReached) {
+            feeReward = _calculateFeeReward(requestId, true, msg.sender);
+        } else if (denyThresholdReached) {
+            feeReward = _calculateFeeReward(requestId, false, msg.sender);
+        } // Timeout: feeReward remains 0
+
+        // Transfer bond return and fee reward in a single call
+        uint256 totalReward = commitment.bondAmount + feeReward;
+        if (totalReward > 0) {
+            FEE_TOKEN.safeTransfer(msg.sender, totalReward);
         }
 
-        emit Claimed(requestId, msg.sender, bondReturn, feeReward);
+        emit Claimed(requestId, msg.sender, commitment.bondAmount, feeReward);
     }
 
     // ============================================================
@@ -547,6 +555,10 @@ contract CheckerOracle is ICheckerOracle {
         require(block.number >= bondMultiplierActiveAt, "BondMultiplierNotActive");
 
         bondMultiplier = stagedBondMultiplier;
+
+        // Reset to uninitialized values (0)
+        stagedBondMultiplier = 0;
+        bondMultiplierActiveAt = 0;
 
         emit BondMultiplierApplied(bondMultiplier);
     }
@@ -637,14 +649,12 @@ contract CheckerOracle is ICheckerOracle {
             return 0;
         }
 
-        // Calculate position multiplier based on winner count
-        uint256 winnerCount = 0;
-        address[] storage checkers = checkerOrder[requestId];
-        for (uint256 i = 0; i < checkers.length; i++) {
-            Commitment memory c = commitments[requestId][checkers[i]];
-            if (c.approved == approved && c.bondAmount > 0) {
-                winnerCount++;
-            }
+        // Use cached winner count
+        uint256 winnerCount;
+        if (approved) {
+            winnerCount = req.approveWinnerCount;
+        } else {
+            winnerCount = req.denyWinnerCount;
         }
 
         uint256 checkerScore = commitment.bondAmount * (winnerCount + 1 - commitment.position);

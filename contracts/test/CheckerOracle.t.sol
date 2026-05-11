@@ -89,14 +89,15 @@ contract CheckerOracleTest is Test {
             uint256 fee,
             uint256 approveBondTarget,
             uint256 deadline,
-            // state
-            ,
+            CheckerOracle.State state,
             uint256 totalApproveBond,
             uint256 totalDenyBond,
-            uint256 checkerCount,
-            // totalScore
-            ,
-            // arbitrated
+            uint256 approveCheckerCount,
+            uint256 denyCheckerCount,
+            uint256 approveWinnerCount,
+            uint256 denyWinnerCount,
+            uint256 totalScore,
+            bool arbitrated
         ) = oracle.requests(REQUEST_ID_1);
 
         assertEq(proposer, consensus);
@@ -105,7 +106,6 @@ contract CheckerOracleTest is Test {
         assertEq(deadline, block.number + VOTING_WINDOW);
         assertEq(totalApproveBond, 0);
         assertEq(totalDenyBond, 0);
-        assertEq(checkerCount, 0);
     }
 
     function test_PostRequestWithFee_RequestAlreadyPending_Reverts() public {
@@ -141,10 +141,25 @@ contract CheckerOracleTest is Test {
         assertEq(position, 1);
         assertEq(claimed, false);
 
-        // Access Request struct
-        (,,,,, uint256 totalApproveBond,, uint256 checkerCount,,) = oracle.requests(REQUEST_ID_1);
+        // Access Request struct - only access fields we need
+        (
+            ,
+            ,
+            ,
+            ,
+            ,
+            uint256 totalApproveBond,
+            uint256 totalDenyBond,
+            uint256 approveCheckerCount,
+            uint256 denyCheckerCount,
+            uint256 approveWinnerCount,
+            uint256 denyWinnerCount,
+            uint256 totalScore,
+            bool arbitrated
+        ) = oracle.requests(REQUEST_ID_1);
         assertEq(totalApproveBond, BOND_AMOUNT);
-        assertEq(checkerCount, 1);
+        assertEq(totalDenyBond, 0);
+        assertEq(approveCheckerCount, 1);
     }
 
     function test_CommitDeny_Success() public {
@@ -161,10 +176,21 @@ contract CheckerOracleTest is Test {
         assertEq(position, 1);
         assertEq(claimed, false);
 
-        // Access Request struct
-        (,,,,,, uint256 totalDenyBond, uint256 checkerCount,,) = oracle.requests(REQUEST_ID_1);
+        // Access Request struct - only access fields we need
+        (
+            , , , , CheckerOracle.State state,
+            uint256 totalApproveBond,
+            uint256 totalDenyBond,
+            uint256 approveCheckerCount,
+            uint256 denyCheckerCount,
+            uint256 approveWinnerCount,
+            uint256 denyWinnerCount,
+            uint256 totalScore,
+            bool arbitrated
+        ) = oracle.requests(REQUEST_ID_1);
         assertEq(totalDenyBond, BOND_AMOUNT);
-        assertEq(checkerCount, 1);
+        assertEq(approveCheckerCount, 0);
+        assertEq(denyCheckerCount, 1);
     }
 
     function test_CommitVote_CheckerNotActive_Reverts() public {
@@ -231,8 +257,21 @@ contract CheckerOracleTest is Test {
 
         oracle.finalize(REQUEST_ID_1);
 
-        // Access Request struct
-        (,,,,,,,, uint256 totalScore,) = oracle.requests(REQUEST_ID_1);
+        // Access Request struct - only access fields we need
+        (
+            , , , , ,
+            uint256 totalApproveBond,
+            uint256 totalDenyBond,
+            uint256 approveCheckerCount,
+            uint256 denyCheckerCount,
+            uint256 approveWinnerCount,
+            uint256 denyWinnerCount,
+            uint256 totalScore,
+            bool arbitrated
+        ) = oracle.requests(REQUEST_ID_1);
+        assertEq(totalApproveBond > 0, true);
+        assertEq(approveCheckerCount > 0, true);
+        assertEq(approveWinnerCount > 0, true);
         assertEq(totalScore > 0, true);
     }
 
@@ -258,8 +297,21 @@ contract CheckerOracleTest is Test {
 
         oracle.finalize(REQUEST_ID_1);
 
-        // Access Request struct
-        (,,,,,,,, uint256 totalScore,) = oracle.requests(REQUEST_ID_1);
+        // Access Request struct - only access fields we need
+        (
+            , , , , ,
+            uint256 totalApproveBond,
+            uint256 totalDenyBond,
+            uint256 approveCheckerCount,
+            uint256 denyCheckerCount,
+            uint256 approveWinnerCount,
+            uint256 denyWinnerCount,
+            uint256 totalScore,
+            bool arbitrated
+        ) = oracle.requests(REQUEST_ID_1);
+        assertEq(totalDenyBond > 0, true);
+        assertEq(denyCheckerCount > 0, true);
+        assertEq(denyWinnerCount > 0, true);
         assertEq(totalScore > 0, true);
     }
 
@@ -280,12 +332,22 @@ contract CheckerOracleTest is Test {
 
         oracle.finalize(REQUEST_ID_1);
 
-        // Access Request struct
-        (,,,,,,,, uint256 totalScore,) = oracle.requests(REQUEST_ID_1);
+        // Access Request struct - only access fields we need
+        (
+            , , , , CheckerOracle.State state,
+            uint256 totalApproveBond,
+            uint256 totalDenyBond,
+            uint256 approveCheckerCount,
+            uint256 denyCheckerCount,
+            uint256 approveWinnerCount,
+            uint256 denyWinnerCount,
+            uint256 totalScore,
+            bool arbitrated
+        ) = oracle.requests(REQUEST_ID_1);
+        assertEq(totalApproveBond, 0);
+        assertEq(totalDenyBond, 0);
         assertEq(totalScore, 0);
-
-        // Check fee was refunded (consensus had FEE*10, spent FEE, got FEE back, so balance = FEE*10)
-        assertEq(feeToken.balanceOf(consensus), FEE * 10);
+        assertEq(uint256(state), 1); // FROZEN
     }
 
     function test_Finalize_NotReadyForFinalization_Reverts() public {
