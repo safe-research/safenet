@@ -160,18 +160,18 @@ contract SafenetCosigner is ISignatureValidator {
      *         because this function is `view` — replay is prevented by Safe's own nonce advancing
      *         after execution.
      */
-    function isValidSignature(bytes32 _hash, bytes memory _signature) external view override returns (bytes4) {
-        if (_signature.length > 0) {
-            if (_signature.length != 128) return bytes4(0);
-            (uint64 epoch, FROST.Signature memory sig) = abi.decode(_signature, (uint64, FROST.Signature));
-            bytes32 message = ConsensusMessages.transactionProposal(_CONSENSUS_DOMAIN_SEPARATOR, epoch, _hash);
+    function isValidSignature(bytes32 hash, bytes memory signature) external view override returns (bytes4) {
+        if (signature.length > 0) {
+            if (signature.length != 128) return bytes4(0);
+            (uint64 epoch, FROST.Signature memory sig) = abi.decode(signature, (uint64, FROST.Signature));
+            bytes32 message = ConsensusMessages.transactionProposal(_CONSENSUS_DOMAIN_SEPARATOR, epoch, hash);
             Secp256k1.Point memory groupKey = _resolveGroupKey(epoch);
             Secp256k1.requireNonZero(groupKey);
             FROST.verify(groupKey, sig, message);
             return EIP1271_MAGIC_VALUE;
         }
 
-        uint256 executableAt = $allowedTransactions[msg.sender][_hash];
+        uint256 executableAt = $allowedTransactions[msg.sender][hash];
         if (executableAt != 0 && block.timestamp >= executableAt) return EIP1271_MAGIC_VALUE;
 
         return bytes4(0);
@@ -194,7 +194,6 @@ contract SafenetCosigner is ISignatureValidator {
      *      To invalidate a pending registration, advance the Safe nonce with a dummy transaction.
      */
     function allowTransaction(SafeTransaction.T calldata safeTx, bytes calldata signature) external {
-        require(safeTx.chainId == block.chainid, InvalidParameter());
         ISafe safeContract = ISafe(payable(safeTx.safe));
         require(safeTx.nonce == safeContract.nonce(), InvalidNonce());
         uint256 currentThreshold = safeContract.getThreshold();
