@@ -1,0 +1,31 @@
+name: PR
+
+on:
+  pull_request:
+    types:
+      - opened
+      - edited
+      - reopened
+      - synchronize
+      - ready_for_review
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  markdown:
+    name: markdown
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check PR markdown has no comments
+        run: |
+          body=$(jq -r '.pull_request.body // ""' "${{ github.event_path }}")
+
+          if [[ "$body" != *"<!--"* ]]; then
+            exit 0
+          fi
+
+          echo "PR markdown must not contain HTML comments. Remove template guidance before marking the PR ready for review." >&2
+          exit 1
