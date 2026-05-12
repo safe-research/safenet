@@ -210,6 +210,10 @@ contract SafenetCosigner is ISignatureValidator {
      *      Such a signature could satisfy the cosigner's own EIP-1271 check within `checkNSignatures`,
      *      reducing the effective human-owner signature requirement from `threshold - 1` to
      *      `threshold - 2`.
+     *      Currently, this is not directly supported by the Safe Transaction Service for the owners,
+     *      but currently it is acceptable under the assumption that Safenet allows to disable Safenet
+     *      (so the escape hatch is really only required if Safenet is down).
+     * 
      */
     function allowTransaction(address safe, bytes32 safeTxHash, bytes calldata signature) external {
         ISafe safeContract = ISafe(payable(safe));
