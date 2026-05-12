@@ -213,7 +213,7 @@ contract SafenetCosigner is ISignatureValidator {
      *      Currently, this is not directly supported by the Safe Transaction Service for the owners,
      *      but currently it is acceptable under the assumption that Safenet allows to disable Safenet
      *      (so the escape hatch is really only required if Safenet is down).
-     * 
+     *
      */
     function allowTransaction(address safe, bytes32 safeTxHash, bytes calldata signature) external {
         ISafe safeContract = ISafe(payable(safe));
