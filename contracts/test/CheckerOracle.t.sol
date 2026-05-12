@@ -279,8 +279,7 @@ contract CheckerOracleTest is Test {
         // Score_1 = 15_000 / 1 = 15_000
         // Score_2 = 5_000  / 2 = 2_500
         // approveTotalScore = 17_500
-        uint256 expectedTotalScore = 15_000 / 1 + 5_000 / 2;
-        assertEq(req.approveTotalScore, expectedTotalScore);
+        assertEq(req.approveTotalScore, 17_500);
 
         uint256 checker1BalBefore = token.balanceOf(checker1);
         uint256 checker2BalBefore = token.balanceOf(checker2);
@@ -290,13 +289,11 @@ contract CheckerOracleTest is Test {
         vm.prank(checker2);
         oracle.claim(REQUEST_ID);
 
-        // checker1: bond=15_000 returned + fee share = REQUEST_FEE × 15_000/17_500
-        uint256 checker1Reward = REQUEST_FEE * (15_000 / 1) / expectedTotalScore;
-        assertEq(token.balanceOf(checker1), checker1BalBefore + 15_000 + checker1Reward, "checker1 claim incorrect");
+        // checker1: bond=15_000 returned + fee share = 10_000 × 15_000/17_500 = 8_571
+        assertEq(token.balanceOf(checker1), checker1BalBefore + 15_000 + 8_571, "checker1 claim incorrect");
 
-        // checker2: bond=5_000 returned + fee share = REQUEST_FEE × 2_500/17_500
-        uint256 checker2Reward = REQUEST_FEE * (5_000 / 2) / expectedTotalScore;
-        assertEq(token.balanceOf(checker2), checker2BalBefore + 5_000 + checker2Reward, "checker2 claim incorrect");
+        // checker2: bond=5_000 returned + fee share = 10_000 × 2_500/17_500 = 1_428
+        assertEq(token.balanceOf(checker2), checker2BalBefore + 5_000 + 1_428, "checker2 claim incorrect");
     }
 
     function test_UnanimousApprove_DenyCheckerBondSlashed() public {
