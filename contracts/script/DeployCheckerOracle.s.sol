@@ -5,7 +5,7 @@ import {Script, console} from "@forge-std/Script.sol";
 import {CheckerOracle} from "@/CheckerOracle.sol";
 
 /**
- * @notice Deploys a CheckerOracle (WardensGame) instance.
+ * @notice Deploys a CheckerOracle (SentinelsGame) instance.
  *
  * Required environment variables:
  *   ARBITRATOR   — Foundation address for governance and arbitration.

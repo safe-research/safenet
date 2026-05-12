@@ -3,7 +3,7 @@ pragma solidity ^0.8.30;
 
 /**
  * @title Checker Oracle Interface
- * @notice Interface for the WardensGame competitive transaction checker oracle.
+ * @notice Interface for the SentinelsGame competitive transaction checker oracle.
  * @dev Checker nodes race to post bonded Approve/Deny votes within a time-boxed window.
  *      The contract escrows the proposer's fee and distributes it to the winning side
  *      proportionally by a capital-weighted speed score after finalisation.

@@ -7,7 +7,7 @@ import {IOracle} from "@/interfaces/IOracle.sol";
 import {ICheckerOracle} from "@/interfaces/ICheckerOracle.sol";
 
 /**
- * @title Checker Oracle (WardensGame)
+ * @title Checker Oracle (SentinelsGame)
  * @notice Competitive bonded transaction checker oracle. A permissioned set of checker nodes
  *         races to post Approve or Deny bonds within a time-boxed voting window. The winning
  *         side's checkers share the request fee proportionally by a capital-weighted speed score.

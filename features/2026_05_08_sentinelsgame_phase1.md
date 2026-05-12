@@ -1,11 +1,11 @@
-# Feature Proposal: WardensGame — Competitive Transaction Checker Oracle (Phase 1)
+# Feature Proposal: SentinelsGame — Competitive Transaction Checker Oracle (Phase 1)
 Component: `contracts`
 
 ---
 
 ## Overview
 
-WardensGame introduces a competitive transaction checker oracle as a new `IOracle` implementation (`CheckerOracle`). Rather than a single designated approver (as in `SimpleOracle`), a permissioned set of *checker nodes* races to post bonded votes ("Approve" or "Deny") against a transaction within a time-boxed window. The contract escrows the user's fee, collects bonds, and resolves the outcome once the window closes.
+SentinelsGame introduces a competitive transaction checker oracle as a new `IOracle` implementation (`CheckerOracle`). Rather than a single designated approver (as in `SimpleOracle`), a permissioned set of *checker nodes* races to post bonded votes ("Approve" or "Deny") against a transaction within a time-boxed window. The contract escrows the user's fee, collects bonds, and resolves the outcome once the window closes.
 
 **Phase 1** implements the core contract covering the request lifecycle, bonding, unanimous resolution, fee distribution, and timeout-default-reject logic.
 
