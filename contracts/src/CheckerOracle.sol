@@ -5,10 +5,11 @@ import {IERC20} from "@oz/token/ERC20/IERC20.sol";
 import {SafeERC20} from "@oz/token/ERC20/utils/SafeERC20.sol";
 import {IOracle} from "@/interfaces/IOracle.sol";
 import {BondMultiplierGovernance} from "@/libraries/BondMultiplierGovernance.sol";
-import {SentinelManager} from "@/SentinelManager.sol";
+import {SentinelManager} from "@/libraries/SentinelManager.sol";
 
-contract CheckerOracle is IOracle, SentinelManager {
+contract CheckerOracle is IOracle {
     using BondMultiplierGovernance for BondMultiplierGovernance.T;
+    using SentinelManager for SentinelManager.T;
     using SafeERC20 for IERC20;
 
     // ============================================================
@@ -78,6 +79,7 @@ contract CheckerOracle is IOracle, SentinelManager {
     IERC20 public immutable FEE_TOKEN;
     uint256 public immutable REQUEST_FEE;
     uint256 public immutable VOTING_WINDOW;
+    uint256 public immutable GOVERNANCE_DELAY;
 
     // ============================================================
     // STORAGE
@@ -85,6 +87,9 @@ contract CheckerOracle is IOracle, SentinelManager {
 
     // forge-lint: disable-next-line(mixed-case-variable)
     BondMultiplierGovernance.T private $bondMultiplier;
+
+    // forge-lint: disable-next-line(mixed-case-variable)
+    SentinelManager.T private $sentinels;
 
     // forge-lint: disable-next-line(mixed-case-variable)
     mapping(bytes32 requestId => Request) private $requests;
@@ -97,6 +102,7 @@ contract CheckerOracle is IOracle, SentinelManager {
     // ============================================================
 
     error NotArbitrator();
+    error InvalidAddress();
     error ZeroFee();
     error RequestAlreadyExists();
     error RequestNotFound();
@@ -107,6 +113,7 @@ contract CheckerOracle is IOracle, SentinelManager {
     error AlreadyCommitted();
     error ThresholdAlreadyReached();
     error ZeroBond();
+    error SentinelNotActive();
     error NothingToClaim();
     error AlreadyClaimed();
 
@@ -134,7 +141,7 @@ contract CheckerOracle is IOracle, SentinelManager {
         uint256 votingWindow,
         uint256 governanceDelay,
         uint256 initialMultiplier
-    ) SentinelManager(governanceDelay) {
+    ) {
         require(arbitrator != address(0), InvalidAddress());
         require(feeToken != address(0), InvalidAddress());
         require(requestFee > 0, ZeroFee());
@@ -142,6 +149,7 @@ contract CheckerOracle is IOracle, SentinelManager {
         FEE_TOKEN = IERC20(feeToken);
         REQUEST_FEE = requestFee;
         VOTING_WINDOW = votingWindow;
+        GOVERNANCE_DELAY = governanceDelay;
         $bondMultiplier.init(initialMultiplier);
     }
 
@@ -258,11 +266,11 @@ contract CheckerOracle is IOracle, SentinelManager {
     // ============================================================
 
     function addSentinel(address sentinel) external onlyArbitrator {
-        _addSentinel(sentinel);
+        $sentinels.add(sentinel, GOVERNANCE_DELAY);
     }
 
     function removeSentinel(address sentinel) external onlyArbitrator {
-        _removeSentinel(sentinel);
+        $sentinels.remove(sentinel);
     }
 
     function scheduleBondMultiplier(uint256 newValue) external onlyArbitrator {
@@ -276,6 +284,10 @@ contract CheckerOracle is IOracle, SentinelManager {
     // ============================================================
     // VIEW FUNCTIONS
     // ============================================================
+
+    function sentinelActiveAt(address sentinel) external view returns (uint256) {
+        return $sentinels.getActiveAt(sentinel);
+    }
 
     function bondMultiplier() external view returns (uint256) {
         return $bondMultiplier.bondMultiplier;
@@ -303,7 +315,7 @@ contract CheckerOracle is IOracle, SentinelManager {
 
     function _commit(bytes32 requestId, bool approve, uint256 bondAmount) internal {
         require(bondAmount > 0, ZeroBond());
-        require(_isActiveSentinel(msg.sender), SentinelNotActive());
+        require($sentinels.isActive(msg.sender), SentinelNotActive());
 
         Request storage req = $requests[requestId];
         require(req.proposer != address(0), RequestNotFound());
