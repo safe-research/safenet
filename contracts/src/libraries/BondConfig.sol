@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 pragma solidity ^0.8.30;
 
-library BondMultiplierGovernance {
+library BondConfig {
     // ============================================================
     // STRUCTS
     // ============================================================
@@ -45,7 +45,7 @@ library BondMultiplierGovernance {
         emit BondMultiplierScheduled(newValue, activeAt);
     }
 
-    function applyMultiplier(T storage self) internal {
+    function applyPending(T storage self) internal {
         require(self.pendingBondMultiplierActiveAt != 0, NoPendingMultiplier());
         require(block.number >= self.pendingBondMultiplierActiveAt, MultiplierNotReady());
 

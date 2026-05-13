@@ -3,10 +3,11 @@ pragma solidity ^0.8.30;
 
 import {Test} from "@forge-std/Test.sol";
 import {IOracle} from "@/interfaces/IOracle.sol";
-import {CheckerOracle} from "@/CheckerOracle.sol";
+import {SentinelOracle} from "@/SentinelOracle.sol";
+import {SentinelOracleRequest} from "@/libraries/SentinelOracleRequest.sol";
 import {MockERC20} from "@test/util/MockERC20.sol";
 
-contract CheckerOracleTest is Test {
+contract SentinelOracleTest is Test {
     // ============================================================
     // CONSTANTS
     // ============================================================
@@ -23,7 +24,7 @@ contract CheckerOracleTest is Test {
     // STATE
     // ============================================================
 
-    CheckerOracle public oracle;
+    SentinelOracle public oracle;
     MockERC20 public token;
 
     address public arbitrator;
@@ -44,7 +45,7 @@ contract CheckerOracleTest is Test {
         sentinel3 = vm.createWallet("sentinel3").addr;
 
         token = new MockERC20("Fee Token", "FEE");
-        oracle = new CheckerOracle(
+        oracle = new SentinelOracle(
             arbitrator, address(token), REQUEST_FEE, VOTING_WINDOW, GOVERNANCE_DELAY, BOND_MULTIPLIER
         );
 
@@ -106,15 +107,17 @@ contract CheckerOracleTest is Test {
         uint256 proposerBalBefore = token.balanceOf(proposer);
 
         vm.expectEmit(true, true, false, true);
-        emit IOracle.OracleResult(REQUEST_ID, proposer, abi.encode(CheckerOracle.ResolveReason.UNANIMOUS_APPROVE), true);
+        emit IOracle.OracleResult(
+            REQUEST_ID, proposer, abi.encode(SentinelOracleRequest.ResolveReason.UNANIMOUS_APPROVE), true
+        );
 
         oracle.finalize(REQUEST_ID);
 
         // Proposer's fee was NOT refunded (it's distributed to sentinels).
         assertEq(token.balanceOf(proposer), proposerBalBefore, "proposer should not receive fee on approve");
 
-        CheckerOracle.Request memory req = oracle.getRequest(REQUEST_ID);
-        assertEq(uint256(req.state), uint256(CheckerOracle.State.RESOLVED_APPROVED));
+        SentinelOracleRequest.Request memory req = oracle.getRequest(REQUEST_ID);
+        assertEq(uint256(req.state), uint256(SentinelOracleRequest.State.RESOLVED_APPROVED));
 
         // Score_1 = 15_000 / 1 = 15_000
         // Score_2 = 5_000  / 2 = 2_500
@@ -150,7 +153,7 @@ contract CheckerOracleTest is Test {
         uint256 balBefore = token.balanceOf(sentinel1);
 
         vm.expectEmit(true, true, false, true);
-        emit CheckerOracle.Claimed(REQUEST_ID, sentinel1, 3_000, 0);
+        emit SentinelOracle.Claimed(REQUEST_ID, sentinel1, 3_000, 0);
 
         vm.prank(sentinel1);
         oracle.claim(REQUEST_ID);
@@ -172,12 +175,14 @@ contract CheckerOracleTest is Test {
         _advancePastDeadline();
 
         vm.expectEmit(true, true, false, true);
-        emit IOracle.OracleResult(REQUEST_ID, proposer, abi.encode(CheckerOracle.ResolveReason.UNANIMOUS_DENY), false);
+        emit IOracle.OracleResult(
+            REQUEST_ID, proposer, abi.encode(SentinelOracleRequest.ResolveReason.UNANIMOUS_DENY), false
+        );
 
         oracle.finalize(REQUEST_ID);
 
-        CheckerOracle.Request memory req = oracle.getRequest(REQUEST_ID);
-        assertEq(uint256(req.state), uint256(CheckerOracle.State.RESOLVED_DENIED));
+        SentinelOracleRequest.Request memory req = oracle.getRequest(REQUEST_ID);
+        assertEq(uint256(req.state), uint256(SentinelOracleRequest.State.RESOLVED_DENIED));
 
         uint256 balBefore = token.balanceOf(sentinel1);
         vm.prank(sentinel1);
@@ -207,7 +212,7 @@ contract CheckerOracleTest is Test {
         uint256 proposerBalBefore = token.balanceOf(proposer);
 
         vm.expectEmit(true, true, false, true);
-        emit IOracle.OracleResult(REQUEST_ID, proposer, abi.encode(CheckerOracle.ResolveReason.TIMEOUT), false);
+        emit IOracle.OracleResult(REQUEST_ID, proposer, abi.encode(SentinelOracleRequest.ResolveReason.TIMEOUT), false);
 
         oracle.finalize(REQUEST_ID);
 
@@ -255,7 +260,7 @@ contract CheckerOracleTest is Test {
         _advancePastDeadline();
         oracle.finalize(REQUEST_ID);
 
-        CheckerOracle.Request memory req = oracle.getRequest(REQUEST_ID);
-        assertEq(uint256(req.state), uint256(CheckerOracle.State.FROZEN), "conflicted request should be frozen");
+        SentinelOracleRequest.Request memory req = oracle.getRequest(REQUEST_ID);
+        assertEq(uint256(req.state), uint256(SentinelOracleRequest.State.FROZEN), "conflicted request should be frozen");
     }
 }
