@@ -4,10 +4,11 @@ pragma solidity ^0.8.30;
 import {IERC20} from "@oz/token/ERC20/IERC20.sol";
 import {SafeERC20} from "@oz/token/ERC20/utils/SafeERC20.sol";
 import {IOracle} from "@/interfaces/IOracle.sol";
-import {BondMultiplierGovernance} from "@/BondMultiplierGovernance.sol";
+import {BondMultiplierGovernance} from "@/libraries/BondMultiplierGovernance.sol";
 import {SentinelManager} from "@/SentinelManager.sol";
 
-contract CheckerOracle is IOracle, SentinelManager, BondMultiplierGovernance {
+contract CheckerOracle is IOracle, SentinelManager {
+    using BondMultiplierGovernance for BondMultiplierGovernance.T;
     using SafeERC20 for IERC20;
 
     // ============================================================
@@ -83,6 +84,9 @@ contract CheckerOracle is IOracle, SentinelManager, BondMultiplierGovernance {
     // ============================================================
 
     // forge-lint: disable-next-line(mixed-case-variable)
+    BondMultiplierGovernance.T private $bondMultiplier;
+
+    // forge-lint: disable-next-line(mixed-case-variable)
     mapping(bytes32 requestId => Request) private $requests;
 
     // forge-lint: disable-next-line(mixed-case-variable)
@@ -130,7 +134,7 @@ contract CheckerOracle is IOracle, SentinelManager, BondMultiplierGovernance {
         uint256 votingWindow,
         uint256 governanceDelay,
         uint256 initialMultiplier
-    ) SentinelManager(governanceDelay) BondMultiplierGovernance(initialMultiplier) {
+    ) SentinelManager(governanceDelay) {
         require(arbitrator != address(0), InvalidAddress());
         require(feeToken != address(0), InvalidAddress());
         require(requestFee > 0, ZeroFee());
@@ -138,6 +142,7 @@ contract CheckerOracle is IOracle, SentinelManager, BondMultiplierGovernance {
         FEE_TOKEN = IERC20(feeToken);
         REQUEST_FEE = requestFee;
         VOTING_WINDOW = votingWindow;
+        $bondMultiplier.init(initialMultiplier);
     }
 
     // ============================================================
@@ -148,7 +153,7 @@ contract CheckerOracle is IOracle, SentinelManager, BondMultiplierGovernance {
         require($requests[requestId].proposer == address(0), RequestAlreadyExists());
 
         uint256 fee = REQUEST_FEE;
-        uint256 bondTarget = fee * bondMultiplier;
+        uint256 bondTarget = fee * $bondMultiplier.bondMultiplier;
         uint256 deadline = block.number + VOTING_WINDOW;
 
         $requests[requestId] = Request({
@@ -261,12 +266,28 @@ contract CheckerOracle is IOracle, SentinelManager, BondMultiplierGovernance {
     }
 
     function scheduleBondMultiplier(uint256 newValue) external onlyArbitrator {
-        _scheduleBondMultiplier(newValue, GOVERNANCE_DELAY);
+        $bondMultiplier.schedule(newValue, GOVERNANCE_DELAY);
+    }
+
+    function applyBondMultiplier() external {
+        $bondMultiplier.applyMultiplier();
     }
 
     // ============================================================
     // VIEW FUNCTIONS
     // ============================================================
+
+    function bondMultiplier() external view returns (uint256) {
+        return $bondMultiplier.bondMultiplier;
+    }
+
+    function pendingBondMultiplier() external view returns (uint256) {
+        return $bondMultiplier.pendingBondMultiplier;
+    }
+
+    function pendingBondMultiplierActiveAt() external view returns (uint256) {
+        return $bondMultiplier.pendingBondMultiplierActiveAt;
+    }
 
     function getRequest(bytes32 requestId) external view returns (Request memory) {
         return $requests[requestId];
