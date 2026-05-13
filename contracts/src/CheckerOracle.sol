@@ -5,8 +5,9 @@ import {IERC20} from "@oz/token/ERC20/IERC20.sol";
 import {SafeERC20} from "@oz/token/ERC20/utils/SafeERC20.sol";
 import {IOracle} from "@/interfaces/IOracle.sol";
 import {BondMultiplierGovernance} from "@/BondMultiplierGovernance.sol";
+import {SentinelManager} from "@/SentinelManager.sol";
 
-contract CheckerOracle is IOracle, BondMultiplierGovernance {
+contract CheckerOracle is IOracle, SentinelManager, BondMultiplierGovernance {
     using SafeERC20 for IERC20;
 
     // ============================================================
@@ -129,7 +130,7 @@ contract CheckerOracle is IOracle, BondMultiplierGovernance {
         uint256 votingWindow,
         uint256 governanceDelay,
         uint256 initialMultiplier
-    ) BondMultiplierGovernance(governanceDelay, initialMultiplier) {
+    ) SentinelManager(governanceDelay) BondMultiplierGovernance(initialMultiplier) {
         require(arbitrator != address(0), InvalidAddress());
         require(feeToken != address(0), InvalidAddress());
         require(requestFee > 0, ZeroFee());
@@ -260,7 +261,7 @@ contract CheckerOracle is IOracle, BondMultiplierGovernance {
     }
 
     function scheduleBondMultiplier(uint256 newValue) external onlyArbitrator {
-        _scheduleBondMultiplier(newValue);
+        _scheduleBondMultiplier(newValue, GOVERNANCE_DELAY);
     }
 
     // ============================================================

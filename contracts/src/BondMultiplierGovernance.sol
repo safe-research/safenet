@@ -1,9 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 pragma solidity ^0.8.30;
 
-import {SentinelManager} from "@/SentinelManager.sol";
-
-abstract contract BondMultiplierGovernance is SentinelManager {
+abstract contract BondMultiplierGovernance {
     // ============================================================
     // EVENTS
     // ============================================================
@@ -31,7 +29,7 @@ abstract contract BondMultiplierGovernance is SentinelManager {
     // CONSTRUCTOR
     // ============================================================
 
-    constructor(uint256 governanceDelay, uint256 initialMultiplier) SentinelManager(governanceDelay) {
+    constructor(uint256 initialMultiplier) {
         require(initialMultiplier > 0, InvalidMultiplier());
         bondMultiplier = initialMultiplier;
     }
@@ -55,10 +53,10 @@ abstract contract BondMultiplierGovernance is SentinelManager {
     // INTERNAL HELPERS
     // ============================================================
 
-    function _scheduleBondMultiplier(uint256 newValue) internal {
+    function _scheduleBondMultiplier(uint256 newValue, uint256 governanceDelay) internal {
         require(newValue > 0, InvalidMultiplier());
 
-        uint256 activeAt = block.number + GOVERNANCE_DELAY;
+        uint256 activeAt = block.number + governanceDelay;
         pendingBondMultiplier = newValue;
         pendingBondMultiplierActiveAt = activeAt;
         emit BondMultiplierScheduled(newValue, activeAt);
