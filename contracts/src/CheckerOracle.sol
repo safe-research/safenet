@@ -6,18 +6,6 @@ import {SafeERC20} from "@oz/token/ERC20/utils/SafeERC20.sol";
 import {IOracle} from "@/interfaces/IOracle.sol";
 import {SentinelManager} from "@/SentinelManager.sol";
 
-/**
- * @title Checker Oracle (SentinelsGame)
- * @notice Competitive bonded transaction sentinel oracle. A permissioned set of sentinel nodes
- *         races to post Approve or Deny bonds within a time-boxed voting window. The winning
- *         side's sentinels share the request fee proportionally by a capital-weighted speed score.
- * @dev Implements IOracle so it can be used as a drop-in replacement for SimpleOracle with
- *      Consensus. No changes to Consensus or FROSTCoordinator are required.
- *
- *      Phase 1 covers: postRequest, commitApprove, commitDeny, finalize, claim, sentinel
- *      management (addSentinel / removeSentinel), and bond multiplier governance.
- *      Phase 2 will add: triggerArbitration, resolveDispute, slashing waterfall.
- */
 contract CheckerOracle is IOracle, SentinelManager {
     using SafeERC20 for IERC20;
 
@@ -25,9 +13,6 @@ contract CheckerOracle is IOracle, SentinelManager {
     // ENUMS
     // ============================================================
 
-    /**
-     * @notice Lifecycle state of a request.
-     */
     enum State {
         PENDING,
         FROZEN,
@@ -36,9 +21,6 @@ contract CheckerOracle is IOracle, SentinelManager {
         TIMED_OUT
     }
 
-    /**
-     * @notice Reason a request was resolved.
-     */
     enum ResolveReason {
         UNANIMOUS_APPROVE,
         UNANIMOUS_DENY,
@@ -50,9 +32,6 @@ contract CheckerOracle is IOracle, SentinelManager {
     // STRUCTS
     // ============================================================
 
-    /**
-     * @notice On-chain record for a single oracle request.
-     */
     struct Request {
         address proposer;
         uint256 fee;
@@ -68,9 +47,6 @@ contract CheckerOracle is IOracle, SentinelManager {
         bool arbitrated;
     }
 
-    /**
-     * @notice Bond commitment made by a sentinel for a specific request.
-     */
     struct Commitment {
         bool approved;
         uint256 bondAmount;
@@ -99,38 +75,16 @@ contract CheckerOracle is IOracle, SentinelManager {
     // IMMUTABLES
     // ============================================================
 
-    /**
-     * @notice ERC-20 token used for both request fees and sentinel bonds.
-     */
     IERC20 public immutable FEE_TOKEN;
-
-    /**
-     * @notice Fixed fee pulled from the proposer on every postRequest call.
-     */
     uint256 public immutable REQUEST_FEE;
-
-    /**
-     * @notice Duration of the voting window in blocks (~1 minute on Gnosis Chain at 5 s/block).
-     */
     uint256 public immutable VOTING_WINDOW;
 
     // ============================================================
     // STORAGE
     // ============================================================
 
-    /**
-     * @notice Current bond multiplier. approveBondTarget = REQUEST_FEE × bondMultiplier.
-     */
     uint256 public bondMultiplier;
-
-    /**
-     * @notice Staged bond multiplier awaiting activation (0 when none pending).
-     */
     uint256 public pendingBondMultiplier;
-
-    /**
-     * @notice Block number at which pendingBondMultiplier becomes active (0 when none pending).
-     */
     uint256 public pendingBondMultiplierActiveAt;
 
     // forge-lint: disable-next-line(mixed-case-variable)
@@ -163,14 +117,6 @@ contract CheckerOracle is IOracle, SentinelManager {
     // CONSTRUCTOR
     // ============================================================
 
-    /**
-     * @param arbitrator        Foundation address authorised to manage sentinels and governance.
-     * @param feeToken          ERC-20 token for fees and bonds.
-     * @param requestFee        Fixed fee pulled from the proposer per request.
-     * @param votingWindow      Voting window duration in blocks.
-     * @param governanceDelay   Block delay applied to governance changes.
-     * @param initialMultiplier Initial bond multiplier (approveBondTarget = requestFee × multiplier).
-     */
     constructor(
         address arbitrator,
         address feeToken,
@@ -192,15 +138,6 @@ contract CheckerOracle is IOracle, SentinelManager {
     // IOracle IMPLEMENTATION
     // ============================================================
 
-    /**
-     * @inheritdoc IOracle
-     * @dev Pulls REQUEST_FEE from msg.sender (the Consensus contract). The proposer must have
-     *      pre-approved this contract for at least REQUEST_FEE of FEE_TOKEN before Consensus
-     *      calls proposeOracleTransaction.
-     * @dev Currently this contract pulls from and pushes refunds back to the Consensus contract
-     *      address; the actual fee payer is the Safe owner interacting with Consensus. A future
-     *      iteration may adopt a pull model where the fee payer interacts directly with this contract.
-     */
     function postRequest(bytes32 requestId) external override(IOracle) {
         require($requests[requestId].proposer == address(0), RequestAlreadyExists());
 
@@ -232,16 +169,10 @@ contract CheckerOracle is IOracle, SentinelManager {
     // VOTING
     // ============================================================
 
-    /**
-     * @notice Post a bond committing to Approve the request.
-     */
     function commitApprove(bytes32 requestId, uint256 bondAmount) external {
         _commit(requestId, true, bondAmount);
     }
 
-    /**
-     * @notice Post a bond committing to Deny the request.
-     */
     function commitDeny(bytes32 requestId, uint256 bondAmount) external {
         _commit(requestId, false, bondAmount);
     }
@@ -250,11 +181,6 @@ contract CheckerOracle is IOracle, SentinelManager {
     // FINALISATION
     // ============================================================
 
-    /**
-     * @notice Resolve the request after the voting window has closed.
-     * @dev Callable by anyone. If both thresholds are met (conflict), sets state to FROZEN for
-     *      Phase 2 arbitration. Otherwise emits OracleResult with the unanimous outcome.
-     */
     function finalize(bytes32 requestId) external {
         Request storage req = $requests[requestId];
         require(req.proposer != address(0), RequestNotFound());
@@ -289,9 +215,6 @@ contract CheckerOracle is IOracle, SentinelManager {
         }
     }
 
-    /**
-     * @notice Claim bond return and proportional fee reward after resolution.
-     */
     function claim(bytes32 requestId) external {
         Request storage req = $requests[requestId];
         State state = req.state;
@@ -326,9 +249,6 @@ contract CheckerOracle is IOracle, SentinelManager {
     // BOND MULTIPLIER GOVERNANCE
     // ============================================================
 
-    /**
-     * @notice Stage a new bond multiplier, to take effect after GOVERNANCE_DELAY blocks.
-     */
     function scheduleBondMultiplier(uint256 newValue) external onlyArbitrator {
         require(newValue > 0, InvalidMultiplier());
 
@@ -338,9 +258,6 @@ contract CheckerOracle is IOracle, SentinelManager {
         emit BondMultiplierScheduled(newValue, activeAt);
     }
 
-    /**
-     * @notice Apply the staged bond multiplier once its activation block has been reached.
-     */
     function applyBondMultiplier() external {
         require(pendingBondMultiplierActiveAt != 0, NoPendingMultiplier());
         require(block.number >= pendingBondMultiplierActiveAt, MultiplierNotReady());
@@ -356,16 +273,10 @@ contract CheckerOracle is IOracle, SentinelManager {
     // VIEW FUNCTIONS
     // ============================================================
 
-    /**
-     * @notice Returns the full Request record for a given requestId.
-     */
     function getRequest(bytes32 requestId) external view returns (Request memory) {
         return $requests[requestId];
     }
 
-    /**
-     * @notice Returns the Commitment record for a given requestId and sentinel address.
-     */
     function getCommitment(bytes32 requestId, address sentinel) external view returns (Commitment memory) {
         return $commitments[requestId][sentinel];
     }
@@ -374,11 +285,6 @@ contract CheckerOracle is IOracle, SentinelManager {
     // INTERNAL HELPERS
     // ============================================================
 
-    /**
-     * @dev Core commitment logic shared by commitApprove and commitDeny.
-     *      Pulls the effective bond (min of bondAmount and the remaining threshold gap)
-     *      from the caller and records the commitment.
-     */
     function _commit(bytes32 requestId, bool approve, uint256 bondAmount) internal {
         require(bondAmount > 0, ZeroBond());
         require(_isActiveSentinel(msg.sender), SentinelNotActive());
