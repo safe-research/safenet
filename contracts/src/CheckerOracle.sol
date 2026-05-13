@@ -4,9 +4,9 @@ pragma solidity ^0.8.30;
 import {IERC20} from "@oz/token/ERC20/IERC20.sol";
 import {SafeERC20} from "@oz/token/ERC20/utils/SafeERC20.sol";
 import {IOracle} from "@/interfaces/IOracle.sol";
-import {SentinelManager} from "@/SentinelManager.sol";
+import {BondMultiplierGovernance} from "@/BondMultiplierGovernance.sol";
 
-contract CheckerOracle is IOracle, SentinelManager {
+contract CheckerOracle is IOracle, BondMultiplierGovernance {
     using SafeERC20 for IERC20;
 
     // ============================================================
@@ -61,8 +61,6 @@ contract CheckerOracle is IOracle, SentinelManager {
     event NewRequest(
         bytes32 indexed requestId, address indexed proposer, uint256 fee, uint256 approveBondTarget, uint256 deadline
     );
-    event BondMultiplierScheduled(uint256 newMultiplier, uint256 activeAtBlock);
-    event BondMultiplierApplied(uint256 newMultiplier);
     event Committed(
         bytes32 indexed requestId, address indexed sentinel, bool approved, uint256 bondAmount, uint256 position
     );
@@ -83,10 +81,6 @@ contract CheckerOracle is IOracle, SentinelManager {
     // STORAGE
     // ============================================================
 
-    uint256 public bondMultiplier;
-    uint256 public pendingBondMultiplier;
-    uint256 public pendingBondMultiplierActiveAt;
-
     // forge-lint: disable-next-line(mixed-case-variable)
     mapping(bytes32 requestId => Request) private $requests;
 
@@ -98,7 +92,6 @@ contract CheckerOracle is IOracle, SentinelManager {
     // ============================================================
 
     error ZeroFee();
-    error InvalidMultiplier();
     error RequestAlreadyExists();
     error RequestNotFound();
     error RequestNotPending();
@@ -108,8 +101,6 @@ contract CheckerOracle is IOracle, SentinelManager {
     error AlreadyCommitted();
     error ThresholdAlreadyReached();
     error ZeroBond();
-    error NoPendingMultiplier();
-    error MultiplierNotReady();
     error NothingToClaim();
     error AlreadyClaimed();
 
@@ -124,14 +115,12 @@ contract CheckerOracle is IOracle, SentinelManager {
         uint256 votingWindow,
         uint256 governanceDelay,
         uint256 initialMultiplier
-    ) SentinelManager(arbitrator, governanceDelay) {
+    ) BondMultiplierGovernance(arbitrator, governanceDelay, initialMultiplier) {
         require(feeToken != address(0), InvalidAddress());
         require(requestFee > 0, ZeroFee());
-        require(initialMultiplier > 0, InvalidMultiplier());
         FEE_TOKEN = IERC20(feeToken);
         REQUEST_FEE = requestFee;
         VOTING_WINDOW = votingWindow;
-        bondMultiplier = initialMultiplier;
     }
 
     // ============================================================
@@ -243,30 +232,6 @@ contract CheckerOracle is IOracle, SentinelManager {
 
         FEE_TOKEN.safeTransfer(msg.sender, bondReturn + feeReward);
         emit Claimed(requestId, msg.sender, bondReturn, feeReward);
-    }
-
-    // ============================================================
-    // BOND MULTIPLIER GOVERNANCE
-    // ============================================================
-
-    function scheduleBondMultiplier(uint256 newValue) external onlyArbitrator {
-        require(newValue > 0, InvalidMultiplier());
-
-        uint256 activeAt = block.number + GOVERNANCE_DELAY;
-        pendingBondMultiplier = newValue;
-        pendingBondMultiplierActiveAt = activeAt;
-        emit BondMultiplierScheduled(newValue, activeAt);
-    }
-
-    function applyBondMultiplier() external {
-        require(pendingBondMultiplierActiveAt != 0, NoPendingMultiplier());
-        require(block.number >= pendingBondMultiplierActiveAt, MultiplierNotReady());
-
-        uint256 newValue = pendingBondMultiplier;
-        bondMultiplier = newValue;
-        pendingBondMultiplier = 0;
-        pendingBondMultiplierActiveAt = 0;
-        emit BondMultiplierApplied(newValue);
     }
 
     // ============================================================
