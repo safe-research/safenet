@@ -296,7 +296,7 @@ contract CheckerOracleTest is Test {
         assertEq(token.balanceOf(checker2), checker2BalBefore + 5_000 + 1_428, "checker2 claim incorrect");
     }
 
-    function test_UnanimousApprove_DenyCheckerBondSlashed() public {
+    function test_UnanimousApprove_DenyCheckerBondReturned() public {
         _postRequest();
 
         vm.prank(checker1);
@@ -310,14 +310,13 @@ contract CheckerOracleTest is Test {
         uint256 balBefore = token.balanceOf(checker1);
 
         vm.expectEmit(true, true, false, true);
-        emit ICheckerOracle.Claimed(REQUEST_ID, checker1, 0, 0);
+        emit ICheckerOracle.Claimed(REQUEST_ID, checker1, 3_000, 0);
 
         vm.prank(checker1);
         oracle.claim(REQUEST_ID);
 
-        // Losing-side checker's bond is slashed — nothing returned.
-        // TODO: reconsider whether bonds should be slashed without arbitration having taken place.
-        assertEq(token.balanceOf(checker1), balBefore, "losing checker bond should be slashed");
+        // Losing-side bond is returned without penalty — slashing only happens via Phase 2 arbitration.
+        assertEq(token.balanceOf(checker1), balBefore + 3_000, "losing checker bond should be returned");
     }
 
     // ============================================================

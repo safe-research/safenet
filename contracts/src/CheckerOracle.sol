@@ -268,17 +268,12 @@ contract CheckerOracle is IOracle, ICheckerOracle {
 
         bool isTimeout = state == State.TIMED_OUT;
 
-        // On timeout all bonds are returned (no side was definitively wrong).
-        // On a unanimous outcome the losing side forfeits their bond.
-        if (!isTimeout && c.approved != (state == State.RESOLVED_APPROVED)) {
-            emit Claimed(requestId, msg.sender, 0, 0);
-            return;
-        }
-
+        // Bonds are only slashed through Phase 2 arbitration; losers simply earn no fee reward.
         uint256 bondReturn = c.bondAmount;
         uint256 feeReward = 0;
 
-        if (!isTimeout) {
+        bool isWinner = !isTimeout && c.approved == (state == State.RESOLVED_APPROVED);
+        if (isWinner) {
             uint256 score = c.bondAmount / c.position;
             uint256 totalScore = state == State.RESOLVED_APPROVED ? req.approveTotalScore : req.denyTotalScore;
             feeReward = req.fee * score / totalScore;
