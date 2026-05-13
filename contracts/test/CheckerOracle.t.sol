@@ -3,7 +3,6 @@ pragma solidity ^0.8.30;
 
 import {Test} from "@forge-std/Test.sol";
 import {IOracle} from "@/interfaces/IOracle.sol";
-import {ICheckerOracle} from "@/interfaces/ICheckerOracle.sol";
 import {CheckerOracle} from "@/CheckerOracle.sol";
 import {MockERC20} from "@test/util/MockERC20.sol";
 
@@ -98,18 +97,18 @@ contract CheckerOracleTest is Test {
         uint256 balanceBefore = token.balanceOf(proposer);
 
         vm.expectEmit(true, true, false, true);
-        emit ICheckerOracle.NewRequest(REQUEST_ID, proposer, REQUEST_FEE, BOND_TARGET, block.number + VOTING_WINDOW);
+        emit CheckerOracle.NewRequest(REQUEST_ID, proposer, REQUEST_FEE, BOND_TARGET, block.number + VOTING_WINDOW);
 
         _postRequest();
 
         assertEq(token.balanceOf(proposer), balanceBefore - REQUEST_FEE, "fee not pulled");
         assertEq(token.balanceOf(address(oracle)), REQUEST_FEE, "fee not escrowed");
 
-        ICheckerOracle.Request memory req = oracle.getRequest(REQUEST_ID);
+        CheckerOracle.Request memory req = oracle.getRequest(REQUEST_ID);
         assertEq(req.proposer, proposer);
         assertEq(req.fee, REQUEST_FEE);
         assertEq(req.approveBondTarget, BOND_TARGET);
-        assertEq(uint256(req.state), uint256(ICheckerOracle.State.PENDING));
+        assertEq(uint256(req.state), uint256(CheckerOracle.State.PENDING));
     }
 
     function test_PostRequest_DuplicateReverts() public {
@@ -129,20 +128,20 @@ contract CheckerOracleTest is Test {
         uint256 balanceBefore = token.balanceOf(checker1);
 
         vm.expectEmit(true, true, false, true);
-        emit ICheckerOracle.Committed(REQUEST_ID, checker1, true, bond, 1);
+        emit CheckerOracle.Committed(REQUEST_ID, checker1, true, bond, 1);
 
         vm.prank(checker1);
         oracle.commitApprove(REQUEST_ID, bond);
 
         assertEq(token.balanceOf(checker1), balanceBefore - bond, "bond not pulled");
 
-        ICheckerOracle.Commitment memory c = oracle.getCommitment(REQUEST_ID, checker1);
+        CheckerOracle.Commitment memory c = oracle.getCommitment(REQUEST_ID, checker1);
         assertTrue(c.approved);
         assertEq(c.bondAmount, bond);
         assertEq(c.position, 1);
         assertFalse(c.claimed);
 
-        ICheckerOracle.Request memory req = oracle.getRequest(REQUEST_ID);
+        CheckerOracle.Request memory req = oracle.getRequest(REQUEST_ID);
         assertEq(req.totalApproveBond, bond);
         assertEq(req.approveCheckerCount, 1);
     }
@@ -154,7 +153,7 @@ contract CheckerOracleTest is Test {
         vm.prank(checker1);
         oracle.commitDeny(REQUEST_ID, bond);
 
-        ICheckerOracle.Commitment memory c = oracle.getCommitment(REQUEST_ID, checker1);
+        CheckerOracle.Commitment memory c = oracle.getCommitment(REQUEST_ID, checker1);
         assertFalse(c.approved);
         assertEq(c.bondAmount, bond);
         assertEq(c.position, 1);
@@ -172,7 +171,7 @@ contract CheckerOracleTest is Test {
         vm.prank(checker1);
         oracle.commitApprove(REQUEST_ID, oversizedBond);
 
-        ICheckerOracle.Commitment memory c = oracle.getCommitment(REQUEST_ID, checker1);
+        CheckerOracle.Commitment memory c = oracle.getCommitment(REQUEST_ID, checker1);
         assertEq(c.bondAmount, BOND_TARGET, "effective bond should be capped at target");
         assertEq(token.balanceOf(checker1), balanceBefore - BOND_TARGET, "only gap amount pulled");
     }
@@ -262,19 +261,17 @@ contract CheckerOracleTest is Test {
         uint256 proposerBalBefore = token.balanceOf(proposer);
 
         vm.expectEmit(true, false, false, true);
-        emit ICheckerOracle.Resolved(REQUEST_ID, true, ICheckerOracle.ResolveReason.UNANIMOUS_APPROVE);
+        emit CheckerOracle.Resolved(REQUEST_ID, true, CheckerOracle.ResolveReason.UNANIMOUS_APPROVE);
         vm.expectEmit(true, true, false, true);
-        emit IOracle.OracleResult(
-            REQUEST_ID, proposer, abi.encode(ICheckerOracle.ResolveReason.UNANIMOUS_APPROVE), true
-        );
+        emit IOracle.OracleResult(REQUEST_ID, proposer, abi.encode(CheckerOracle.ResolveReason.UNANIMOUS_APPROVE), true);
 
         oracle.finalize(REQUEST_ID);
 
         // Proposer's fee was NOT refunded (it's distributed to checkers).
         assertEq(token.balanceOf(proposer), proposerBalBefore, "proposer should not receive fee on approve");
 
-        ICheckerOracle.Request memory req = oracle.getRequest(REQUEST_ID);
-        assertEq(uint256(req.state), uint256(ICheckerOracle.State.RESOLVED_APPROVED));
+        CheckerOracle.Request memory req = oracle.getRequest(REQUEST_ID);
+        assertEq(uint256(req.state), uint256(CheckerOracle.State.RESOLVED_APPROVED));
 
         // Score_1 = 15_000 / 1 = 15_000
         // Score_2 = 5_000  / 2 = 2_500
@@ -310,7 +307,7 @@ contract CheckerOracleTest is Test {
         uint256 balBefore = token.balanceOf(checker1);
 
         vm.expectEmit(true, true, false, true);
-        emit ICheckerOracle.Claimed(REQUEST_ID, checker1, 3_000, 0);
+        emit CheckerOracle.Claimed(REQUEST_ID, checker1, 3_000, 0);
 
         vm.prank(checker1);
         oracle.claim(REQUEST_ID);
@@ -332,14 +329,14 @@ contract CheckerOracleTest is Test {
         _advancePastDeadline();
 
         vm.expectEmit(true, false, false, true);
-        emit ICheckerOracle.Resolved(REQUEST_ID, false, ICheckerOracle.ResolveReason.UNANIMOUS_DENY);
+        emit CheckerOracle.Resolved(REQUEST_ID, false, CheckerOracle.ResolveReason.UNANIMOUS_DENY);
         vm.expectEmit(true, true, false, true);
-        emit IOracle.OracleResult(REQUEST_ID, proposer, abi.encode(ICheckerOracle.ResolveReason.UNANIMOUS_DENY), false);
+        emit IOracle.OracleResult(REQUEST_ID, proposer, abi.encode(CheckerOracle.ResolveReason.UNANIMOUS_DENY), false);
 
         oracle.finalize(REQUEST_ID);
 
-        ICheckerOracle.Request memory req = oracle.getRequest(REQUEST_ID);
-        assertEq(uint256(req.state), uint256(ICheckerOracle.State.RESOLVED_DENIED));
+        CheckerOracle.Request memory req = oracle.getRequest(REQUEST_ID);
+        assertEq(uint256(req.state), uint256(CheckerOracle.State.RESOLVED_DENIED));
 
         uint256 balBefore = token.balanceOf(checker1);
         vm.prank(checker1);
@@ -369,9 +366,9 @@ contract CheckerOracleTest is Test {
         uint256 proposerBalBefore = token.balanceOf(proposer);
 
         vm.expectEmit(true, false, false, true);
-        emit ICheckerOracle.Resolved(REQUEST_ID, false, ICheckerOracle.ResolveReason.TIMEOUT);
+        emit CheckerOracle.Resolved(REQUEST_ID, false, CheckerOracle.ResolveReason.TIMEOUT);
         vm.expectEmit(true, true, false, true);
-        emit IOracle.OracleResult(REQUEST_ID, proposer, abi.encode(ICheckerOracle.ResolveReason.TIMEOUT), false);
+        emit IOracle.OracleResult(REQUEST_ID, proposer, abi.encode(CheckerOracle.ResolveReason.TIMEOUT), false);
 
         oracle.finalize(REQUEST_ID);
 
@@ -419,8 +416,8 @@ contract CheckerOracleTest is Test {
         _advancePastDeadline();
         oracle.finalize(REQUEST_ID);
 
-        ICheckerOracle.Request memory req = oracle.getRequest(REQUEST_ID);
-        assertEq(uint256(req.state), uint256(ICheckerOracle.State.FROZEN), "conflicted request should be frozen");
+        CheckerOracle.Request memory req = oracle.getRequest(REQUEST_ID);
+        assertEq(uint256(req.state), uint256(CheckerOracle.State.FROZEN), "conflicted request should be frozen");
     }
 
     // ============================================================
@@ -495,7 +492,7 @@ contract CheckerOracleTest is Test {
         uint256 expectedActiveAt = block.number + GOVERNANCE_DELAY;
 
         vm.expectEmit(true, false, false, true);
-        emit ICheckerOracle.CheckerScheduled(newChecker, expectedActiveAt);
+        emit CheckerOracle.CheckerScheduled(newChecker, expectedActiveAt);
 
         vm.prank(arbitrator);
         oracle.addChecker(newChecker);
@@ -565,7 +562,7 @@ contract CheckerOracleTest is Test {
 
     function test_RemoveChecker_EmitsEvent() public {
         vm.expectEmit(true, false, false, false);
-        emit ICheckerOracle.CheckerRemoved(checker1);
+        emit CheckerOracle.CheckerRemoved(checker1);
 
         vm.prank(arbitrator);
         oracle.removeChecker(checker1);
@@ -604,7 +601,7 @@ contract CheckerOracleTest is Test {
         uint256 expectedActiveAt = block.number + GOVERNANCE_DELAY;
 
         vm.expectEmit(false, false, false, true);
-        emit ICheckerOracle.BondMultiplierScheduled(newMultiplier, expectedActiveAt);
+        emit CheckerOracle.BondMultiplierScheduled(newMultiplier, expectedActiveAt);
 
         vm.prank(arbitrator);
         oracle.scheduleBondMultiplier(newMultiplier);
@@ -630,7 +627,7 @@ contract CheckerOracleTest is Test {
         vm.roll(block.number + GOVERNANCE_DELAY);
 
         vm.expectEmit(false, false, false, true);
-        emit ICheckerOracle.BondMultiplierApplied(newMultiplier);
+        emit CheckerOracle.BondMultiplierApplied(newMultiplier);
 
         oracle.applyBondMultiplier();
 
@@ -654,7 +651,7 @@ contract CheckerOracleTest is Test {
         vm.prank(proposer);
         oracle.postRequest(REQUEST_ID);
 
-        ICheckerOracle.Request memory req = oracle.getRequest(REQUEST_ID);
+        CheckerOracle.Request memory req = oracle.getRequest(REQUEST_ID);
         assertEq(req.approveBondTarget, REQUEST_FEE * newMultiplier, "new multiplier should apply to new requests");
     }
 

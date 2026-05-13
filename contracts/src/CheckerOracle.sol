@@ -4,7 +4,6 @@ pragma solidity ^0.8.30;
 import {IERC20} from "@oz/token/ERC20/IERC20.sol";
 import {SafeERC20} from "@oz/token/ERC20/utils/SafeERC20.sol";
 import {IOracle} from "@/interfaces/IOracle.sol";
-import {ICheckerOracle} from "@/interfaces/ICheckerOracle.sol";
 
 /**
  * @title Checker Oracle (SentinelsGame)
@@ -18,8 +17,84 @@ import {ICheckerOracle} from "@/interfaces/ICheckerOracle.sol";
  *      management (addChecker / removeChecker), and bond multiplier governance.
  *      Phase 2 will add: triggerArbitration, resolveDispute, slashing waterfall.
  */
-contract CheckerOracle is IOracle, ICheckerOracle {
+contract CheckerOracle is IOracle {
     using SafeERC20 for IERC20;
+
+    // ============================================================
+    // ENUMS
+    // ============================================================
+
+    /**
+     * @notice Lifecycle state of a request.
+     */
+    enum State {
+        PENDING,
+        FROZEN,
+        RESOLVED_APPROVED,
+        RESOLVED_DENIED,
+        TIMED_OUT
+    }
+
+    /**
+     * @notice Reason a request was resolved.
+     */
+    enum ResolveReason {
+        UNANIMOUS_APPROVE,
+        UNANIMOUS_DENY,
+        TIMEOUT,
+        ARBITRATION
+    }
+
+    // ============================================================
+    // STRUCTS
+    // ============================================================
+
+    /**
+     * @notice On-chain record for a single oracle request.
+     */
+    struct Request {
+        address proposer;
+        uint256 fee;
+        uint256 approveBondTarget;
+        uint256 deadline;
+        State state;
+        uint256 totalApproveBond;
+        uint256 totalDenyBond;
+        uint256 approveCheckerCount;
+        uint256 denyCheckerCount;
+        uint256 approveTotalScore;
+        uint256 denyTotalScore;
+        bool arbitrated;
+    }
+
+    /**
+     * @notice Bond commitment made by a checker for a specific request.
+     */
+    struct Commitment {
+        bool approved;
+        uint256 bondAmount;
+        uint256 position;
+        bool claimed;
+    }
+
+    // ============================================================
+    // EVENTS
+    // ============================================================
+
+    event NewRequest(
+        bytes32 indexed requestId, address indexed proposer, uint256 fee, uint256 approveBondTarget, uint256 deadline
+    );
+    event CheckerScheduled(address indexed checker, uint256 activeAtBlock);
+    event CheckerRemoved(address indexed checker);
+    event BondMultiplierScheduled(uint256 newMultiplier, uint256 activeAtBlock);
+    event BondMultiplierApplied(uint256 newMultiplier);
+    event Committed(
+        bytes32 indexed requestId, address indexed checker, bool approved, uint256 bondAmount, uint256 position
+    );
+    event Resolved(bytes32 indexed requestId, bool approved, ResolveReason reason);
+    event ArbitrationTriggered(bytes32 indexed requestId);
+    event DisputeResolved(bytes32 indexed requestId, address winner, address loser, uint256 slashed);
+    event Claimed(bytes32 indexed requestId, address indexed checker, uint256 bondReturn, uint256 feeReward);
 
     // ============================================================
     // IMMUTABLES
@@ -192,31 +267,33 @@ contract CheckerOracle is IOracle, ICheckerOracle {
     }
 
     // ============================================================
-    // ICheckerOracle IMPLEMENTATION — VOTING
+    // VOTING
     // ============================================================
 
     /**
-     * @inheritdoc ICheckerOracle
+     * @notice Post a bond committing to Approve the request.
      */
-    function commitApprove(bytes32 requestId, uint256 bondAmount) external override(ICheckerOracle) {
+    function commitApprove(bytes32 requestId, uint256 bondAmount) external {
         _commit(requestId, true, bondAmount);
     }
 
     /**
-     * @inheritdoc ICheckerOracle
+     * @notice Post a bond committing to Deny the request.
      */
-    function commitDeny(bytes32 requestId, uint256 bondAmount) external override(ICheckerOracle) {
+    function commitDeny(bytes32 requestId, uint256 bondAmount) external {
         _commit(requestId, false, bondAmount);
     }
 
     // ============================================================
-    // ICheckerOracle IMPLEMENTATION — FINALISATION
+    // FINALISATION
     // ============================================================
 
     /**
-     * @inheritdoc ICheckerOracle
+     * @notice Resolve the request after the voting window has closed.
+     * @dev Callable by anyone. If both thresholds are met (conflict), sets state to FROZEN for
+     *      Phase 2 arbitration. Otherwise emits OracleResult with the unanimous outcome.
      */
-    function finalize(bytes32 requestId) external override(ICheckerOracle) {
+    function finalize(bytes32 requestId) external {
         Request storage req = $requests[requestId];
         require(req.proposer != address(0), RequestNotFound());
         require(req.state == State.PENDING, RequestNotPending());
@@ -251,9 +328,9 @@ contract CheckerOracle is IOracle, ICheckerOracle {
     }
 
     /**
-     * @inheritdoc ICheckerOracle
+     * @notice Claim bond return and proportional fee reward after resolution.
      */
-    function claim(bytes32 requestId) external override(ICheckerOracle) {
+    function claim(bytes32 requestId) external {
         Request storage req = $requests[requestId];
         State state = req.state;
         require(
@@ -284,13 +361,13 @@ contract CheckerOracle is IOracle, ICheckerOracle {
     }
 
     // ============================================================
-    // ICheckerOracle IMPLEMENTATION — CHECKER MANAGEMENT
+    // CHECKER MANAGEMENT
     // ============================================================
 
     /**
-     * @inheritdoc ICheckerOracle
+     * @notice Schedule a new checker to become active after GOVERNANCE_DELAY blocks.
      */
-    function addChecker(address checker) external override(ICheckerOracle) onlyArbitrator {
+    function addChecker(address checker) external onlyArbitrator {
         require(checker != address(0), InvalidAddress());
         require($checkerActiveAt[checker] == 0, CheckerAlreadyScheduled());
 
@@ -300,9 +377,9 @@ contract CheckerOracle is IOracle, ICheckerOracle {
     }
 
     /**
-     * @inheritdoc ICheckerOracle
+     * @notice Immediately remove a checker from the active set.
      */
-    function removeChecker(address checker) external override(ICheckerOracle) onlyArbitrator {
+    function removeChecker(address checker) external onlyArbitrator {
         require($checkerActiveAt[checker] != 0, CheckerNotScheduled());
 
         delete $checkerActiveAt[checker];
@@ -310,13 +387,13 @@ contract CheckerOracle is IOracle, ICheckerOracle {
     }
 
     // ============================================================
-    // ICheckerOracle IMPLEMENTATION — BOND MULTIPLIER GOVERNANCE
+    // BOND MULTIPLIER GOVERNANCE
     // ============================================================
 
     /**
-     * @inheritdoc ICheckerOracle
+     * @notice Stage a new bond multiplier, to take effect after GOVERNANCE_DELAY blocks.
      */
-    function scheduleBondMultiplier(uint256 newValue) external override(ICheckerOracle) onlyArbitrator {
+    function scheduleBondMultiplier(uint256 newValue) external onlyArbitrator {
         require(newValue > 0, InvalidMultiplier());
 
         uint256 activeAt = block.number + GOVERNANCE_DELAY;
@@ -326,9 +403,9 @@ contract CheckerOracle is IOracle, ICheckerOracle {
     }
 
     /**
-     * @inheritdoc ICheckerOracle
+     * @notice Apply the staged bond multiplier once its activation block has been reached.
      */
-    function applyBondMultiplier() external override(ICheckerOracle) {
+    function applyBondMultiplier() external {
         require(pendingBondMultiplierActiveAt != 0, NoPendingMultiplier());
         require(block.number >= pendingBondMultiplierActiveAt, MultiplierNotReady());
 
@@ -340,32 +417,27 @@ contract CheckerOracle is IOracle, ICheckerOracle {
     }
 
     // ============================================================
-    // ICheckerOracle IMPLEMENTATION — VIEW FUNCTIONS
+    // VIEW FUNCTIONS
     // ============================================================
 
     /**
-     * @inheritdoc ICheckerOracle
+     * @notice Returns the block number from which a checker is considered active, or 0 if not scheduled.
      */
-    function checkerActiveAt(address checker) external view override(ICheckerOracle) returns (uint256) {
+    function checkerActiveAt(address checker) external view returns (uint256) {
         return $checkerActiveAt[checker];
     }
 
     /**
-     * @inheritdoc ICheckerOracle
+     * @notice Returns the full Request record for a given requestId.
      */
-    function getRequest(bytes32 requestId) external view override(ICheckerOracle) returns (Request memory) {
+    function getRequest(bytes32 requestId) external view returns (Request memory) {
         return $requests[requestId];
     }
 
     /**
-     * @inheritdoc ICheckerOracle
+     * @notice Returns the Commitment record for a given requestId and checker address.
      */
-    function getCommitment(bytes32 requestId, address checker)
-        external
-        view
-        override(ICheckerOracle)
-        returns (Commitment memory)
-    {
+    function getCommitment(bytes32 requestId, address checker) external view returns (Commitment memory) {
         return $commitments[requestId][checker];
     }
 
