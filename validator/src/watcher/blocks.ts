@@ -305,7 +305,8 @@ export class BlockWatcher {
 			return null;
 		}
 
-		// We remove all blocks that are no longer canonical.
+		// We remove all blocks that are no longer canonical, that is the last block
+		// and all of its children.
 		this.#blocks.length = lastBlockIndex;
 		// Update the pending block to be the one that was just uncled, which is
 		// the last block we had previously seen.

@@ -355,7 +355,7 @@ describe("BlockWatcher", () => {
 			expect(await blocks.next()).toEqual(newBlockUpdate({ number: 999n }));
 
 			// Revalidate block 999, as the block 1000 is still queued from startup.
-			mocks.getBlock.mockResolvedValueOnce(block({ number: 1000n, hash: keccak256(toHex("new999")) }));
+			mocks.getBlock.mockResolvedValueOnce(block({ number: 999n, hash: keccak256(toHex("new999")) }));
 			const uncle = await blocks.revalidateLastBlock();
 			expect(uncle).not.toBeNull();
 
