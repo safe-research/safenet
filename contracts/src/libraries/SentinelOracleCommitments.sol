@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 pragma solidity ^0.8.30;
 
-library SentinelOracleCommitments {
+library SentinelOracleCommitment {
     // ============================================================
     // STRUCTS
     // ============================================================
@@ -13,8 +13,33 @@ library SentinelOracleCommitments {
         bool claimed;
     }
 
+    // ============================================================
+    // ERRORS
+    // ============================================================
+
+    error NothingToClaim();
+    error AlreadyClaimed();
+
+    // ============================================================
+    // INTERNAL FUNCTIONS
+    // ============================================================
+
+    function markClaimed(Commitment storage self) internal returns (Commitment memory) {
+        require(self.bondAmount > 0, NothingToClaim());
+        require(!self.claimed, AlreadyClaimed());
+        self.claimed = true;
+        Commitment memory snapshot = self;
+        return snapshot;
+    }
+}
+
+library SentinelOracleCommitmentMap {
+    // ============================================================
+    // STRUCTS
+    // ============================================================
+
     struct T {
-        mapping(bytes32 requestId => mapping(address sentinel => Commitment)) commitments;
+        mapping(bytes32 requestId => mapping(address sentinel => SentinelOracleCommitment.Commitment)) commitments;
     }
 
     // ============================================================
@@ -30,8 +55,6 @@ library SentinelOracleCommitments {
     // ============================================================
 
     error AlreadyCommitted();
-    error NothingToClaim();
-    error AlreadyClaimed();
 
     // ============================================================
     // INTERNAL FUNCTIONS
@@ -49,20 +72,17 @@ library SentinelOracleCommitments {
         uint256 bondAmount,
         uint256 position
     ) internal {
-        self.commitments[requestId][sentinel] =
-            Commitment({approved: approve, bondAmount: bondAmount, position: position, claimed: false});
+        self.commitments[requestId][sentinel] = SentinelOracleCommitment.Commitment({
+            approved: approve, bondAmount: bondAmount, position: position, claimed: false
+        });
         emit Committed(requestId, sentinel, approve, bondAmount, position);
     }
 
-    function get(T storage self, bytes32 requestId, address sentinel) internal view returns (Commitment storage) {
+    function get(T storage self, bytes32 requestId, address sentinel)
+        internal
+        view
+        returns (SentinelOracleCommitment.Commitment storage)
+    {
         return self.commitments[requestId][sentinel];
-    }
-
-    function markClaimed(T storage self, bytes32 requestId, address sentinel) internal returns (Commitment memory) {
-        Commitment storage c = self.commitments[requestId][sentinel];
-        require(c.bondAmount > 0, NothingToClaim());
-        require(!c.claimed, AlreadyClaimed());
-        c.claimed = true;
-        return c;
     }
 }

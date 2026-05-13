@@ -6,14 +6,16 @@ import {SafeERC20} from "@oz/token/ERC20/utils/SafeERC20.sol";
 import {IOracle} from "@/interfaces/IOracle.sol";
 import {BondConfig} from "@/libraries/BondConfig.sol";
 import {SentinelMap} from "@/libraries/SentinelMap.sol";
-import {SentinelOracleCommitments} from "@/libraries/SentinelOracleCommitments.sol";
-import {SentinelOracleRequest} from "@/libraries/SentinelOracleRequest.sol";
+import {SentinelOracleCommitment, SentinelOracleCommitmentMap} from "@/libraries/SentinelOracleCommitments.sol";
+import {SentinelOracleRequest, SentinelOracleRequestMap} from "@/libraries/SentinelOracleRequest.sol";
 
 contract SentinelOracle is IOracle {
     using BondConfig for BondConfig.T;
     using SentinelMap for SentinelMap.T;
-    using SentinelOracleCommitments for SentinelOracleCommitments.T;
-    using SentinelOracleRequest for SentinelOracleRequest.T;
+    using SentinelOracleCommitment for SentinelOracleCommitment.Commitment;
+    using SentinelOracleCommitmentMap for SentinelOracleCommitmentMap.T;
+    using SentinelOracleRequest for SentinelOracleRequest.Request;
+    using SentinelOracleRequestMap for SentinelOracleRequestMap.T;
     using SafeERC20 for IERC20;
 
     // ============================================================
@@ -45,10 +47,10 @@ contract SentinelOracle is IOracle {
     SentinelMap.T private $sentinelMap;
 
     // forge-lint: disable-next-line(mixed-case-variable)
-    SentinelOracleRequest.T private $requests;
+    SentinelOracleRequestMap.T private $requests;
 
     // forge-lint: disable-next-line(mixed-case-variable)
-    SentinelOracleCommitments.T private $commitments;
+    SentinelOracleCommitmentMap.T private $commitments;
 
     // ============================================================
     // ERRORS
@@ -125,7 +127,9 @@ contract SentinelOracle is IOracle {
     // ============================================================
 
     function finalize(bytes32 requestId) external {
-        (SentinelOracleRequest.State newState, address proposer, uint256 refundFee) = $requests.finalize(requestId);
+        SentinelOracleRequest.Request storage req = $requests.get(requestId);
+        address proposer = req.proposer;
+        (SentinelOracleRequest.State newState, uint256 refundFee) = req.finalize();
 
         if (newState == SentinelOracleRequest.State.FROZEN) return;
 
@@ -144,9 +148,10 @@ contract SentinelOracle is IOracle {
     }
 
     function claim(bytes32 requestId) external {
-        SentinelOracleRequest.State state = $requests.requireResolved(requestId);
-        SentinelOracleCommitments.Commitment memory c = $commitments.markClaimed(requestId, msg.sender);
-        uint256 feeReward = $requests.calcFeeReward(requestId, c.approved, c.bondAmount, c.position, state);
+        SentinelOracleRequest.Request storage req = $requests.get(requestId);
+        SentinelOracleRequest.State state = req.requireResolved();
+        SentinelOracleCommitment.Commitment memory c = $commitments.get(requestId, msg.sender).markClaimed();
+        uint256 feeReward = req.calcFeeReward(c.approved, c.bondAmount, c.position, state);
         FEE_TOKEN.safeTransfer(msg.sender, c.bondAmount + feeReward);
         emit Claimed(requestId, msg.sender, c.bondAmount, feeReward);
     }
@@ -198,7 +203,7 @@ contract SentinelOracle is IOracle {
     function getCommitment(bytes32 requestId, address sentinel)
         external
         view
-        returns (SentinelOracleCommitments.Commitment memory)
+        returns (SentinelOracleCommitment.Commitment memory)
     {
         return $commitments.commitments[requestId][sentinel];
     }
@@ -211,7 +216,8 @@ contract SentinelOracle is IOracle {
         require(bondAmount > 0, ZeroBond());
         require($sentinelMap.isActive(msg.sender), SentinelNotActive());
         $commitments.checkNotCommitted(requestId, msg.sender);
-        (uint256 effectiveBond, uint256 position) = $requests.applyCommit(requestId, approve, bondAmount);
+        SentinelOracleRequest.Request storage req = $requests.get(requestId);
+        (uint256 effectiveBond, uint256 position) = req.applyCommit(approve, bondAmount);
         $commitments.add(requestId, msg.sender, approve, effectiveBond, position);
         FEE_TOKEN.safeTransferFrom(msg.sender, address(this), effectiveBond);
     }

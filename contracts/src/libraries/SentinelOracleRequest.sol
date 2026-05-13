@@ -40,8 +40,101 @@ library SentinelOracleRequest {
         bool arbitrated;
     }
 
+    // ============================================================
+    // ERRORS
+    // ============================================================
+
+    error RequestNotPending();
+    error RequestNotResolved();
+    error VotingWindowOpen();
+    error VotingWindowClosed();
+    error ThresholdAlreadyReached();
+
+    // ============================================================
+    // INTERNAL FUNCTIONS
+    // ============================================================
+
+    function applyCommit(Request storage self, bool approve, uint256 bondAmount)
+        internal
+        returns (uint256 effectiveBond, uint256 position)
+    {
+        require(self.state == State.PENDING, RequestNotPending());
+        require(block.number <= self.deadline, VotingWindowClosed());
+
+        uint256 totalBond = approve ? self.totalApproveBond : self.totalDenyBond;
+        require(totalBond < self.approveBondTarget, ThresholdAlreadyReached());
+
+        uint256 remaining = self.approveBondTarget - totalBond;
+        effectiveBond = bondAmount < remaining ? bondAmount : remaining;
+
+        if (approve) {
+            self.approveSentinelCount += 1;
+            position = self.approveSentinelCount;
+            self.totalApproveBond += effectiveBond;
+            self.approveTotalScore += effectiveBond / position;
+        } else {
+            self.denySentinelCount += 1;
+            position = self.denySentinelCount;
+            self.totalDenyBond += effectiveBond;
+            self.denyTotalScore += effectiveBond / position;
+        }
+    }
+
+    function finalize(Request storage self) internal returns (State newState, uint256 refundFee) {
+        require(self.state == State.PENDING, RequestNotPending());
+        require(block.number > self.deadline, VotingWindowOpen());
+
+        bool approveMet = self.totalApproveBond >= self.approveBondTarget;
+        bool denyMet = self.totalDenyBond >= self.approveBondTarget;
+
+        if (approveMet && denyMet) {
+            self.state = State.FROZEN;
+            return (State.FROZEN, 0);
+        }
+        if (approveMet) {
+            self.state = State.RESOLVED_APPROVED;
+            return (State.RESOLVED_APPROVED, 0);
+        }
+        if (denyMet) {
+            self.state = State.RESOLVED_DENIED;
+            return (State.RESOLVED_DENIED, 0);
+        }
+        self.state = State.TIMED_OUT;
+        refundFee = self.fee;
+        self.fee = 0;
+        return (State.TIMED_OUT, refundFee);
+    }
+
+    function requireResolved(Request storage self) internal view returns (State) {
+        State state = self.state;
+        require(
+            state == State.RESOLVED_APPROVED || state == State.RESOLVED_DENIED || state == State.TIMED_OUT,
+            RequestNotResolved()
+        );
+        return state;
+    }
+
+    function calcFeeReward(Request storage self, bool approved, uint256 bondAmount, uint256 position, State state)
+        internal
+        view
+        returns (uint256)
+    {
+        if (state == State.TIMED_OUT) return 0;
+        bool isWinner = approved == (state == State.RESOLVED_APPROVED);
+        if (!isWinner) return 0;
+        uint256 score = bondAmount / position;
+        uint256 totalScore = state == State.RESOLVED_APPROVED ? self.approveTotalScore : self.denyTotalScore;
+        return self.fee * score / totalScore;
+    }
+}
+
+library SentinelOracleRequestMap {
+    // ============================================================
+    // STRUCTS
+    // ============================================================
+
     struct T {
-        mapping(bytes32 requestId => Request) requests;
+        mapping(bytes32 requestId => SentinelOracleRequest.Request) requests;
     }
 
     // ============================================================
@@ -58,11 +151,6 @@ library SentinelOracleRequest {
 
     error RequestAlreadyExists();
     error RequestNotFound();
-    error RequestNotPending();
-    error RequestNotResolved();
-    error VotingWindowOpen();
-    error VotingWindowClosed();
-    error ThresholdAlreadyReached();
 
     // ============================================================
     // INTERNAL FUNCTIONS
@@ -78,12 +166,12 @@ library SentinelOracleRequest {
     ) internal {
         require(self.requests[requestId].proposer == address(0), RequestAlreadyExists());
 
-        self.requests[requestId] = Request({
+        self.requests[requestId] = SentinelOracleRequest.Request({
             proposer: proposer,
             fee: fee,
             approveBondTarget: bondTarget,
             deadline: deadline,
-            state: State.PENDING,
+            state: SentinelOracleRequest.State.PENDING,
             totalApproveBond: 0,
             totalDenyBond: 0,
             approveSentinelCount: 0,
@@ -96,91 +184,8 @@ library SentinelOracleRequest {
         emit NewRequest(requestId, proposer, fee, bondTarget, deadline);
     }
 
-    function applyCommit(T storage self, bytes32 requestId, bool approve, uint256 bondAmount)
-        internal
-        returns (uint256 effectiveBond, uint256 position)
-    {
-        Request storage req = self.requests[requestId];
-        require(req.proposer != address(0), RequestNotFound());
-        require(req.state == State.PENDING, RequestNotPending());
-        require(block.number <= req.deadline, VotingWindowClosed());
-
-        uint256 totalBond = approve ? req.totalApproveBond : req.totalDenyBond;
-        require(totalBond < req.approveBondTarget, ThresholdAlreadyReached());
-
-        uint256 remaining = req.approveBondTarget - totalBond;
-        effectiveBond = bondAmount < remaining ? bondAmount : remaining;
-
-        if (approve) {
-            req.approveSentinelCount += 1;
-            position = req.approveSentinelCount;
-            req.totalApproveBond += effectiveBond;
-            req.approveTotalScore += effectiveBond / position;
-        } else {
-            req.denySentinelCount += 1;
-            position = req.denySentinelCount;
-            req.totalDenyBond += effectiveBond;
-            req.denyTotalScore += effectiveBond / position;
-        }
-    }
-
-    function finalize(T storage self, bytes32 requestId)
-        internal
-        returns (State newState, address proposer, uint256 refundFee)
-    {
-        Request storage req = self.requests[requestId];
-        require(req.proposer != address(0), RequestNotFound());
-        require(req.state == State.PENDING, RequestNotPending());
-        require(block.number > req.deadline, VotingWindowOpen());
-
-        proposer = req.proposer;
-        bool approveMet = req.totalApproveBond >= req.approveBondTarget;
-        bool denyMet = req.totalDenyBond >= req.approveBondTarget;
-
-        if (approveMet && denyMet) {
-            req.state = State.FROZEN;
-            return (State.FROZEN, proposer, 0);
-        }
-
-        if (approveMet) {
-            req.state = State.RESOLVED_APPROVED;
-            return (State.RESOLVED_APPROVED, proposer, 0);
-        }
-
-        if (denyMet) {
-            req.state = State.RESOLVED_DENIED;
-            return (State.RESOLVED_DENIED, proposer, 0);
-        }
-
-        req.state = State.TIMED_OUT;
-        refundFee = req.fee;
-        req.fee = 0;
-        return (State.TIMED_OUT, proposer, refundFee);
-    }
-
-    function requireResolved(T storage self, bytes32 requestId) internal view returns (State) {
-        State state = self.requests[requestId].state;
-        require(
-            state == State.RESOLVED_APPROVED || state == State.RESOLVED_DENIED || state == State.TIMED_OUT,
-            RequestNotResolved()
-        );
-        return state;
-    }
-
-    function calcFeeReward(
-        T storage self,
-        bytes32 requestId,
-        bool approved,
-        uint256 bondAmount,
-        uint256 position,
-        State state
-    ) internal view returns (uint256) {
-        if (state == State.TIMED_OUT) return 0;
-        bool isWinner = approved == (state == State.RESOLVED_APPROVED);
-        if (!isWinner) return 0;
-        Request storage req = self.requests[requestId];
-        uint256 score = bondAmount / position;
-        uint256 totalScore = state == State.RESOLVED_APPROVED ? req.approveTotalScore : req.denyTotalScore;
-        return req.fee * score / totalScore;
+    function get(T storage self, bytes32 requestId) internal returns (SentinelOracleRequest.Request storage) {
+        require(self.requests[requestId].proposer != address(0), RequestNotFound());
+        return self.requests[requestId];
     }
 }
