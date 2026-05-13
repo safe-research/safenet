@@ -3,7 +3,8 @@
 	"private": true,
 	"scripts": {
 		"build": "forge build --force",
-		"check": "forge fmt --check && forge lint --deny notes",
+		"check": "npm run check:foundry && forge fmt --check && forge lint --deny notes",
+		"check:foundry": "test \"$(forge --version | head -1)\" = \"forge Version: 1.5.1-v1.5.1\"",
 		"cmd:deploy": "forge script DeployScript",
 		"cmd:genesis": "forge script GenesisScript",
 		"cmd:propose": "forge script ProposeScript",

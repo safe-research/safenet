@@ -10,6 +10,18 @@ This is a work-in-progress. Don't use it yet!
 
 ## Developing
 
+### Requirements
+
+Developing on the project requires a few tools:
+
+- NodeJS v24 (LTS)
+- NPM v11
+- Foundry v1.5.1
+
+### Foundry Setup
+
+Stable Foundry has a known [formatting bug](https://github.com/foundry-rs/foundry/issues/13362) that affects this repository. With `foundryup` installed, the correct Foundry version can be set up with `npm run foundryup`.
+
 ### Project Setup
 
 Clone the repository and all its submodules with:
