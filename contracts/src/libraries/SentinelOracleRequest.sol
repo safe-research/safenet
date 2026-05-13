@@ -184,7 +184,7 @@ library SentinelOracleRequestMap {
         emit NewRequest(requestId, proposer, fee, bondTarget, deadline);
     }
 
-    function get(T storage self, bytes32 requestId) internal returns (SentinelOracleRequest.Request storage) {
+    function get(T storage self, bytes32 requestId) internal view returns (SentinelOracleRequest.Request storage) {
         require(self.requests[requestId].proposer != address(0), RequestNotFound());
         return self.requests[requestId];
     }
