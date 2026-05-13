@@ -105,8 +105,6 @@ contract CheckerOracleTest is Test {
 
         uint256 proposerBalBefore = token.balanceOf(proposer);
 
-        vm.expectEmit(true, false, false, true);
-        emit CheckerOracle.Resolved(REQUEST_ID, true, CheckerOracle.ResolveReason.UNANIMOUS_APPROVE);
         vm.expectEmit(true, true, false, true);
         emit IOracle.OracleResult(REQUEST_ID, proposer, abi.encode(CheckerOracle.ResolveReason.UNANIMOUS_APPROVE), true);
 
@@ -173,8 +171,6 @@ contract CheckerOracleTest is Test {
 
         _advancePastDeadline();
 
-        vm.expectEmit(true, false, false, true);
-        emit CheckerOracle.Resolved(REQUEST_ID, false, CheckerOracle.ResolveReason.UNANIMOUS_DENY);
         vm.expectEmit(true, true, false, true);
         emit IOracle.OracleResult(REQUEST_ID, proposer, abi.encode(CheckerOracle.ResolveReason.UNANIMOUS_DENY), false);
 
@@ -210,8 +206,6 @@ contract CheckerOracleTest is Test {
 
         uint256 proposerBalBefore = token.balanceOf(proposer);
 
-        vm.expectEmit(true, false, false, true);
-        emit CheckerOracle.Resolved(REQUEST_ID, false, CheckerOracle.ResolveReason.TIMEOUT);
         vm.expectEmit(true, true, false, true);
         emit IOracle.OracleResult(REQUEST_ID, proposer, abi.encode(CheckerOracle.ResolveReason.TIMEOUT), false);
 

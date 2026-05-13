@@ -64,7 +64,6 @@ contract CheckerOracle is IOracle, BondMultiplierGovernance {
     event Committed(
         bytes32 indexed requestId, address indexed sentinel, bool approved, uint256 bondAmount, uint256 position
     );
-    event Resolved(bytes32 indexed requestId, bool approved, ResolveReason reason);
     event ArbitrationTriggered(bytes32 indexed requestId);
     event DisputeResolved(bytes32 indexed requestId, address winner, address loser, uint256 slashed);
     event Claimed(bytes32 indexed requestId, address indexed sentinel, uint256 bondReturn, uint256 feeReward);
@@ -204,11 +203,9 @@ contract CheckerOracle is IOracle, BondMultiplierGovernance {
 
         if (approveMet) {
             req.state = State.RESOLVED_APPROVED;
-            emit Resolved(requestId, true, ResolveReason.UNANIMOUS_APPROVE);
             emit OracleResult(requestId, req.proposer, abi.encode(ResolveReason.UNANIMOUS_APPROVE), true);
         } else if (denyMet) {
             req.state = State.RESOLVED_DENIED;
-            emit Resolved(requestId, false, ResolveReason.UNANIMOUS_DENY);
             emit OracleResult(requestId, req.proposer, abi.encode(ResolveReason.UNANIMOUS_DENY), false);
         } else {
             // Timeout / undercapitalised — refund fee to proposer, reject by default.
@@ -216,7 +213,6 @@ contract CheckerOracle is IOracle, BondMultiplierGovernance {
             uint256 fee = req.fee;
             req.fee = 0;
             FEE_TOKEN.safeTransfer(req.proposer, fee);
-            emit Resolved(requestId, false, ResolveReason.TIMEOUT);
             emit OracleResult(requestId, req.proposer, abi.encode(ResolveReason.TIMEOUT), false);
         }
     }
