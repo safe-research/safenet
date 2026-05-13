@@ -52,7 +52,7 @@ export type BlockUpdate =
 	| { type: "watcher_update_new_block"; blockNumber: bigint; blockHash: Hex; logsBloom: Hex };
 
 /**
- * A Block that was removed from the cannonical chain on revalidation.
+ * A Block that was removed from the canonical chain on revalidation.
  */
 export type InvalidatedBlockUpdate = Extract<BlockUpdate, { type: "watcher_update_uncle_block" }> & { blockHash: Hex };
 
