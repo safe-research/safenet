@@ -31,9 +31,7 @@ abstract contract BondMultiplierGovernance is SentinelManager {
     // CONSTRUCTOR
     // ============================================================
 
-    constructor(address arbitrator, uint256 governanceDelay, uint256 initialMultiplier)
-        SentinelManager(arbitrator, governanceDelay)
-    {
+    constructor(uint256 governanceDelay, uint256 initialMultiplier) SentinelManager(governanceDelay) {
         require(initialMultiplier > 0, InvalidMultiplier());
         bondMultiplier = initialMultiplier;
     }
@@ -41,15 +39,6 @@ abstract contract BondMultiplierGovernance is SentinelManager {
     // ============================================================
     // BOND MULTIPLIER GOVERNANCE
     // ============================================================
-
-    function scheduleBondMultiplier(uint256 newValue) external onlyArbitrator {
-        require(newValue > 0, InvalidMultiplier());
-
-        uint256 activeAt = block.number + GOVERNANCE_DELAY;
-        pendingBondMultiplier = newValue;
-        pendingBondMultiplierActiveAt = activeAt;
-        emit BondMultiplierScheduled(newValue, activeAt);
-    }
 
     function applyBondMultiplier() external {
         require(pendingBondMultiplierActiveAt != 0, NoPendingMultiplier());
@@ -60,5 +49,18 @@ abstract contract BondMultiplierGovernance is SentinelManager {
         pendingBondMultiplier = 0;
         pendingBondMultiplierActiveAt = 0;
         emit BondMultiplierApplied(newValue);
+    }
+
+    // ============================================================
+    // INTERNAL HELPERS
+    // ============================================================
+
+    function _scheduleBondMultiplier(uint256 newValue) internal {
+        require(newValue > 0, InvalidMultiplier());
+
+        uint256 activeAt = block.number + GOVERNANCE_DELAY;
+        pendingBondMultiplier = newValue;
+        pendingBondMultiplierActiveAt = activeAt;
+        emit BondMultiplierScheduled(newValue, activeAt);
     }
 }

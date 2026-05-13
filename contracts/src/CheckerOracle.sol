@@ -73,6 +73,7 @@ contract CheckerOracle is IOracle, BondMultiplierGovernance {
     // IMMUTABLES
     // ============================================================
 
+    address public immutable ARBITRATOR;
     IERC20 public immutable FEE_TOKEN;
     uint256 public immutable REQUEST_FEE;
     uint256 public immutable VOTING_WINDOW;
@@ -91,6 +92,7 @@ contract CheckerOracle is IOracle, BondMultiplierGovernance {
     // ERRORS
     // ============================================================
 
+    error NotArbitrator();
     error ZeroFee();
     error RequestAlreadyExists();
     error RequestNotFound();
@@ -105,6 +107,19 @@ contract CheckerOracle is IOracle, BondMultiplierGovernance {
     error AlreadyClaimed();
 
     // ============================================================
+    // MODIFIERS
+    // ============================================================
+
+    // forge-lint: disable-start(unwrapped-modifier-logic)
+
+    modifier onlyArbitrator() {
+        require(msg.sender == ARBITRATOR, NotArbitrator());
+        _;
+    }
+
+    // forge-lint: disable-end(unwrapped-modifier-logic)
+
+    // ============================================================
     // CONSTRUCTOR
     // ============================================================
 
@@ -115,9 +130,11 @@ contract CheckerOracle is IOracle, BondMultiplierGovernance {
         uint256 votingWindow,
         uint256 governanceDelay,
         uint256 initialMultiplier
-    ) BondMultiplierGovernance(arbitrator, governanceDelay, initialMultiplier) {
+    ) BondMultiplierGovernance(governanceDelay, initialMultiplier) {
+        require(arbitrator != address(0), InvalidAddress());
         require(feeToken != address(0), InvalidAddress());
         require(requestFee > 0, ZeroFee());
+        ARBITRATOR = arbitrator;
         FEE_TOKEN = IERC20(feeToken);
         REQUEST_FEE = requestFee;
         VOTING_WINDOW = votingWindow;
@@ -232,6 +249,22 @@ contract CheckerOracle is IOracle, BondMultiplierGovernance {
 
         FEE_TOKEN.safeTransfer(msg.sender, bondReturn + feeReward);
         emit Claimed(requestId, msg.sender, bondReturn, feeReward);
+    }
+
+    // ============================================================
+    // GOVERNANCE
+    // ============================================================
+
+    function addSentinel(address sentinel) external onlyArbitrator {
+        _addSentinel(sentinel);
+    }
+
+    function removeSentinel(address sentinel) external onlyArbitrator {
+        _removeSentinel(sentinel);
+    }
+
+    function scheduleBondMultiplier(uint256 newValue) external onlyArbitrator {
+        _scheduleBondMultiplier(newValue);
     }
 
     // ============================================================

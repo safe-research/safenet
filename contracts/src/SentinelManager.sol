@@ -13,7 +13,6 @@ abstract contract SentinelManager {
     // IMMUTABLES
     // ============================================================
 
-    address public immutable ARBITRATOR;
     uint256 public immutable GOVERNANCE_DELAY;
 
     // ============================================================
@@ -27,54 +26,22 @@ abstract contract SentinelManager {
     // ERRORS
     // ============================================================
 
-    error NotArbitrator();
     error InvalidAddress();
     error SentinelNotActive();
     error SentinelAlreadyScheduled();
     error SentinelNotScheduled();
 
     // ============================================================
-    // MODIFIERS
-    // ============================================================
-
-    // forge-lint: disable-start(unwrapped-modifier-logic)
-
-    modifier onlyArbitrator() {
-        require(msg.sender == ARBITRATOR, NotArbitrator());
-        _;
-    }
-
-    // forge-lint: disable-end(unwrapped-modifier-logic)
-
-    // ============================================================
     // CONSTRUCTOR
     // ============================================================
 
-    constructor(address arbitrator, uint256 governanceDelay) {
-        require(arbitrator != address(0), InvalidAddress());
-        ARBITRATOR = arbitrator;
+    constructor(uint256 governanceDelay) {
         GOVERNANCE_DELAY = governanceDelay;
     }
 
     // ============================================================
-    // SENTINEL MANAGEMENT
+    // VIEW FUNCTIONS
     // ============================================================
-
-    function addSentinel(address sentinel) external onlyArbitrator {
-        require(sentinel != address(0), InvalidAddress());
-        require($sentinelActiveAt[sentinel] == 0, SentinelAlreadyScheduled());
-
-        uint256 activeAt = block.number + GOVERNANCE_DELAY;
-        $sentinelActiveAt[sentinel] = activeAt;
-        emit SentinelScheduled(sentinel, activeAt);
-    }
-
-    function removeSentinel(address sentinel) external onlyArbitrator {
-        require($sentinelActiveAt[sentinel] != 0, SentinelNotScheduled());
-
-        delete $sentinelActiveAt[sentinel];
-        emit SentinelRemoved(sentinel);
-    }
 
     function sentinelActiveAt(address sentinel) external view returns (uint256) {
         return $sentinelActiveAt[sentinel];
@@ -83,6 +50,22 @@ abstract contract SentinelManager {
     // ============================================================
     // INTERNAL HELPERS
     // ============================================================
+
+    function _addSentinel(address sentinel) internal {
+        require(sentinel != address(0), InvalidAddress());
+        require($sentinelActiveAt[sentinel] == 0, SentinelAlreadyScheduled());
+
+        uint256 activeAt = block.number + GOVERNANCE_DELAY;
+        $sentinelActiveAt[sentinel] = activeAt;
+        emit SentinelScheduled(sentinel, activeAt);
+    }
+
+    function _removeSentinel(address sentinel) internal {
+        require($sentinelActiveAt[sentinel] != 0, SentinelNotScheduled());
+
+        delete $sentinelActiveAt[sentinel];
+        emit SentinelRemoved(sentinel);
+    }
 
     function _isActiveSentinel(address sentinel) internal view returns (bool) {
         uint256 activeAt = $sentinelActiveAt[sentinel];
