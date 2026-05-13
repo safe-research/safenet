@@ -42,6 +42,8 @@ The steps for project setup are documented in the root [README.md](./README.md#p
 
 Always use `npm ci` instead of `npm install` / `npm i`. `npm ci` installs exactly what is in `package-lock.json` and never modifies it, keeping the lock file stable.
 
+Make sure you have the correct tool versions (NodeJS 24, NPM 11, Foundry 1.5.1). Use `npm run foundryup` to set up the correct Foundry version.
+
 ### Commands
 
 All commands are specified in the root [package.json](./package.json). Workspace specific commands can be found in the `package.json` of each corresponding workspace.
