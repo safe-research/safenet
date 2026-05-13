@@ -76,6 +76,7 @@ const setupNext = async (config: { latestBlock: bigint; startTime: number; maxRe
 	});
 
 	return {
+		blocks,
 		next() {
 			return blocks.next();
 		},
@@ -282,6 +283,83 @@ describe("BlockWatcher", () => {
 				newBlockUpdate({ number: 998n, hash: keccak256(toHex("reorg998")) }),
 				newBlockUpdate({ number: 999n, hash: keccak256(toHex("reorg999")) }),
 			]);
+		});
+	});
+
+	describe("revalidate", () => {
+		it("returns null when the block is still canonical", async () => {
+			const { blocks, mocks } = await setupNext({ latestBlock: 1000n, startTime: 2000100 });
+
+			mocks.getBlock.mockResolvedValueOnce(block({ number: 1000n }));
+
+			const uncle = await blocks.revalidateLastBlock();
+
+			expect(uncle).toBe(null);
+			expect(mocks.getBlock.mock.calls).toEqual([[{ blockNumber: 1000n }]]);
+		});
+
+		it("returns a uncle update when the block was reorged out", async () => {
+			const { blocks, next, mocks } = await setupNext({ latestBlock: 1000n, startTime: 2000100 });
+
+			// The RPC now reports a different hash at block 1000 — the block we tracked has
+			// been reorged out from under us.
+			mocks.getBlock.mockResolvedValueOnce(block({ number: 1000n, hash: keccak256(toHex("new1000")) }));
+
+			const uncle = await blocks.revalidateLastBlock();
+
+			expect(uncle).toEqual({
+				type: "watcher_update_uncle_block",
+				blockNumber: 1000n,
+				blockHash: numberToHex(1000n, { size: 32 }),
+			});
+			expect(mocks.getBlock.mock.calls).toEqual([[{ blockNumber: 1000n }]]);
+
+			// After the revalidation, the next `next()` call should return the same
+			// pending uncle block update. It does make additional queries.
+			mocks.getBlock.mockClear();
+			const update = await next();
+			expect(mocks.getBlock.mock.calls).toEqual([]);
+			expect(update).toEqual({ type: "watcher_update_uncle_block", blockNumber: 1000n });
+		});
+
+		it("returns true when the block is no longer available on the RPC", async () => {
+			const { blocks, mocks } = await setupNext({ latestBlock: 1000n, startTime: 2000100 });
+
+			mocks.getBlock.mockRejectedValueOnce(new BlockNotFoundError({ blockNumber: 1000n }));
+
+			const reorged = await blocks.revalidateLastBlock();
+
+			expect(reorged).not.toBeNull();
+		});
+
+		it("propagates non-`BlockNotFoundError` errors", async () => {
+			const { blocks, mocks } = await setupNext({ latestBlock: 1000n, startTime: 2000100 });
+
+			mocks.getBlock.mockRejectedValueOnce(new Error("rpc unavailable"));
+
+			await expect(blocks.revalidateLastBlock()).rejects.toThrow("rpc unavailable");
+		});
+
+		it("purges queued descendant updates when an older tracked block is reorged", async () => {
+			// Initialize with `maxReorgDepth: 3` and three tracked blocks (998..1000). Their
+			// `new_block` updates remain queued from initialization — we don't drain them so we
+			// can observe that `revalidate` removes the descendants of the reorged block.
+			const { create, mocks } = setupCreate({ lastIndexedBlock: null, maxReorgDepth: 3 });
+
+			mocks.getBlock.mockResolvedValueOnce(block({ number: 1000n }));
+			mocks.getBlock.mockResolvedValueOnce(block({ number: 998n }));
+			mocks.getBlock.mockResolvedValueOnce(block({ number: 999n }));
+
+			const blocks = await create();
+			expect(await blocks.next()).toEqual(newBlockUpdate({ number: 998n }));
+			expect(await blocks.next()).toEqual(newBlockUpdate({ number: 999n }));
+
+			// Revalidate block 999, as the block 1000 is still queued from startup.
+			mocks.getBlock.mockResolvedValueOnce(block({ number: 1000n, hash: keccak256(toHex("new999")) }));
+			const uncle = await blocks.revalidateLastBlock();
+			expect(uncle).not.toBeNull();
+
+			expect(blocks.queued()).toStrictEqual([{ type: "watcher_update_uncle_block", blockNumber: 999n }]);
 		});
 	});
 });

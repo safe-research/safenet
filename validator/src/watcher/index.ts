@@ -2,7 +2,7 @@
  * Watching for blocks and on-chain events.
  */
 
-import type { Prettify } from "viem";
+import { type Prettify, ResourceNotFoundRpcError } from "viem";
 import { formatError } from "../utils/errors.js";
 import type { Logger } from "../utils/logging.js";
 import { Backoff, type Config as BackoffConfig } from "./backoff.js";
@@ -57,9 +57,28 @@ export class Watcher<E extends Events> {
 		this.#running = false;
 	}
 
+	async #nextLogs() {
+		try {
+			return await this.#events.next();
+		} catch (error) {
+			if (error instanceof ResourceNotFoundRpcError) {
+				// Some RPC nodes will see an uncled block but not support querying logs
+				// for it (for example, Reth). Ask the `BlockWatcher` to revalidate the
+				// last block it produced and make sure it is still canonical.
+				const uncle = await this.#blocks.revalidateLastBlock();
+				if (uncle !== null) {
+					this.#events.onBlockInvalidated(uncle);
+					return null;
+				}
+			}
+
+			throw error;
+		}
+	}
+
 	async #next() {
 		while (true /* logs !== null */) {
-			const logs = await this.#events.next();
+			const logs = await this.#nextLogs();
 			if (logs === null) {
 				break;
 			}
