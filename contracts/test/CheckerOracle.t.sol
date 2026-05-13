@@ -4,6 +4,7 @@ pragma solidity ^0.8.30;
 import {Test} from "@forge-std/Test.sol";
 import {IOracle} from "@/interfaces/IOracle.sol";
 import {CheckerOracle} from "@/CheckerOracle.sol";
+import {SentinelManager} from "@/SentinelManager.sol";
 import {MockERC20} from "@test/util/MockERC20.sol";
 
 contract CheckerOracleTest is Test {
@@ -28,9 +29,9 @@ contract CheckerOracleTest is Test {
 
     address public arbitrator;
     address public proposer;
-    address public checker1;
-    address public checker2;
-    address public checker3;
+    address public sentinel1;
+    address public sentinel2;
+    address public sentinel3;
     address public stranger;
 
     // ============================================================
@@ -40,9 +41,9 @@ contract CheckerOracleTest is Test {
     function setUp() public {
         arbitrator = vm.createWallet("arbitrator").addr;
         proposer = vm.createWallet("proposer").addr;
-        checker1 = vm.createWallet("checker1").addr;
-        checker2 = vm.createWallet("checker2").addr;
-        checker3 = vm.createWallet("checker3").addr;
+        sentinel1 = vm.createWallet("sentinel1").addr;
+        sentinel2 = vm.createWallet("sentinel2").addr;
+        sentinel3 = vm.createWallet("sentinel3").addr;
         stranger = vm.createWallet("stranger").addr;
 
         token = new MockERC20("Fee Token", "FEE");
@@ -52,25 +53,25 @@ contract CheckerOracleTest is Test {
 
         // Fund accounts
         token.mint(proposer, 100_000);
-        token.mint(checker1, 100_000);
-        token.mint(checker2, 100_000);
-        token.mint(checker3, 100_000);
+        token.mint(sentinel1, 100_000);
+        token.mint(sentinel2, 100_000);
+        token.mint(sentinel3, 100_000);
 
         // Approve oracle for fee pulls
         vm.prank(proposer);
         token.approve(address(oracle), type(uint256).max);
-        vm.prank(checker1);
+        vm.prank(sentinel1);
         token.approve(address(oracle), type(uint256).max);
-        vm.prank(checker2);
+        vm.prank(sentinel2);
         token.approve(address(oracle), type(uint256).max);
-        vm.prank(checker3);
+        vm.prank(sentinel3);
         token.approve(address(oracle), type(uint256).max);
 
-        // Register checkers (active immediately by rolling past GOVERNANCE_DELAY)
+        // Register sentinels (active immediately by rolling past GOVERNANCE_DELAY)
         vm.startPrank(arbitrator);
-        oracle.addChecker(checker1);
-        oracle.addChecker(checker2);
-        oracle.addChecker(checker3);
+        oracle.addSentinel(sentinel1);
+        oracle.addSentinel(sentinel2);
+        oracle.addSentinel(sentinel3);
         vm.stopPrank();
 
         vm.roll(block.number + GOVERNANCE_DELAY);
@@ -125,17 +126,17 @@ contract CheckerOracleTest is Test {
         _postRequest();
 
         uint256 bond = 5_000;
-        uint256 balanceBefore = token.balanceOf(checker1);
+        uint256 balanceBefore = token.balanceOf(sentinel1);
 
         vm.expectEmit(true, true, false, true);
-        emit CheckerOracle.Committed(REQUEST_ID, checker1, true, bond, 1);
+        emit CheckerOracle.Committed(REQUEST_ID, sentinel1, true, bond, 1);
 
-        vm.prank(checker1);
+        vm.prank(sentinel1);
         oracle.commitApprove(REQUEST_ID, bond);
 
-        assertEq(token.balanceOf(checker1), balanceBefore - bond, "bond not pulled");
+        assertEq(token.balanceOf(sentinel1), balanceBefore - bond, "bond not pulled");
 
-        CheckerOracle.Commitment memory c = oracle.getCommitment(REQUEST_ID, checker1);
+        CheckerOracle.Commitment memory c = oracle.getCommitment(REQUEST_ID, sentinel1);
         assertTrue(c.approved);
         assertEq(c.bondAmount, bond);
         assertEq(c.position, 1);
@@ -143,17 +144,17 @@ contract CheckerOracleTest is Test {
 
         CheckerOracle.Request memory req = oracle.getRequest(REQUEST_ID);
         assertEq(req.totalApproveBond, bond);
-        assertEq(req.approveCheckerCount, 1);
+        assertEq(req.approveSentinelCount, 1);
     }
 
     function test_CommitDeny_RecordsCommitmentAndPullsBond() public {
         _postRequest();
 
         uint256 bond = 6_000;
-        vm.prank(checker1);
+        vm.prank(sentinel1);
         oracle.commitDeny(REQUEST_ID, bond);
 
-        CheckerOracle.Commitment memory c = oracle.getCommitment(REQUEST_ID, checker1);
+        CheckerOracle.Commitment memory c = oracle.getCommitment(REQUEST_ID, sentinel1);
         assertFalse(c.approved);
         assertEq(c.bondAmount, bond);
         assertEq(c.position, 1);
@@ -166,34 +167,34 @@ contract CheckerOracleTest is Test {
 
         // BOND_TARGET is 20_000; commit more than the target — only the gap should be pulled.
         uint256 oversizedBond = BOND_TARGET + 5_000;
-        uint256 balanceBefore = token.balanceOf(checker1);
+        uint256 balanceBefore = token.balanceOf(sentinel1);
 
-        vm.prank(checker1);
+        vm.prank(sentinel1);
         oracle.commitApprove(REQUEST_ID, oversizedBond);
 
-        CheckerOracle.Commitment memory c = oracle.getCommitment(REQUEST_ID, checker1);
+        CheckerOracle.Commitment memory c = oracle.getCommitment(REQUEST_ID, sentinel1);
         assertEq(c.bondAmount, BOND_TARGET, "effective bond should be capped at target");
-        assertEq(token.balanceOf(checker1), balanceBefore - BOND_TARGET, "only gap amount pulled");
+        assertEq(token.balanceOf(sentinel1), balanceBefore - BOND_TARGET, "only gap amount pulled");
     }
 
     function test_Commit_PositionsIncrementPerSideIndependently() public {
         _postRequest();
 
-        vm.prank(checker1);
+        vm.prank(sentinel1);
         oracle.commitApprove(REQUEST_ID, 5_000);
-        vm.prank(checker2);
+        vm.prank(sentinel2);
         oracle.commitDeny(REQUEST_ID, 5_000);
-        vm.prank(checker3);
+        vm.prank(sentinel3);
         oracle.commitApprove(REQUEST_ID, 5_000);
 
-        assertEq(oracle.getCommitment(REQUEST_ID, checker1).position, 1, "checker1 approve position");
-        assertEq(oracle.getCommitment(REQUEST_ID, checker2).position, 1, "checker2 deny position");
-        assertEq(oracle.getCommitment(REQUEST_ID, checker3).position, 2, "checker3 approve position");
+        assertEq(oracle.getCommitment(REQUEST_ID, sentinel1).position, 1, "sentinel1 approve position");
+        assertEq(oracle.getCommitment(REQUEST_ID, sentinel2).position, 1, "sentinel2 deny position");
+        assertEq(oracle.getCommitment(REQUEST_ID, sentinel3).position, 2, "sentinel3 approve position");
     }
 
-    function test_Commit_InactiveCheckerReverts() public {
+    function test_Commit_InactiveSentinelReverts() public {
         _postRequest();
-        vm.expectRevert(CheckerOracle.CheckerNotActive.selector);
+        vm.expectRevert(SentinelManager.SentinelNotActive.selector);
         vm.prank(stranger);
         oracle.commitApprove(REQUEST_ID, 5_000);
     }
@@ -202,43 +203,43 @@ contract CheckerOracleTest is Test {
         _postRequest();
         _advancePastDeadline();
         vm.expectRevert(CheckerOracle.VotingWindowClosed.selector);
-        vm.prank(checker1);
+        vm.prank(sentinel1);
         oracle.commitApprove(REQUEST_ID, 5_000);
     }
 
     function test_Commit_DuplicateReverts() public {
         _postRequest();
-        vm.prank(checker1);
+        vm.prank(sentinel1);
         oracle.commitApprove(REQUEST_ID, 5_000);
 
         vm.expectRevert(CheckerOracle.AlreadyCommitted.selector);
-        vm.prank(checker1);
+        vm.prank(sentinel1);
         oracle.commitApprove(REQUEST_ID, 5_000);
     }
 
     function test_Commit_ThresholdReachedReverts() public {
         _postRequest();
 
-        // checker1 fills the entire Approve threshold
-        vm.prank(checker1);
+        // sentinel1 fills the entire Approve threshold
+        vm.prank(sentinel1);
         oracle.commitApprove(REQUEST_ID, BOND_TARGET);
 
-        // checker2 tries to also commit Approve — threshold already met
+        // sentinel2 tries to also commit Approve — threshold already met
         vm.expectRevert(CheckerOracle.ThresholdAlreadyReached.selector);
-        vm.prank(checker2);
+        vm.prank(sentinel2);
         oracle.commitApprove(REQUEST_ID, 1);
     }
 
     function test_Commit_ZeroBondReverts() public {
         _postRequest();
         vm.expectRevert(CheckerOracle.ZeroBond.selector);
-        vm.prank(checker1);
+        vm.prank(sentinel1);
         oracle.commitApprove(REQUEST_ID, 0);
     }
 
     function test_Commit_NonExistentRequestReverts() public {
         vm.expectRevert(CheckerOracle.RequestNotFound.selector);
-        vm.prank(checker1);
+        vm.prank(sentinel1);
         oracle.commitApprove(keccak256("nonexistent"), 5_000);
     }
 
@@ -249,11 +250,11 @@ contract CheckerOracleTest is Test {
     function test_UnanimousApprove_FeeDistributedAndBondsReturned() public {
         _postRequest();
 
-        // checker1 and checker2 together reach the Approve threshold.
-        // BOND_TARGET = 20_000; checker1 = 15_000, checker2 = 5_000 (fills the gap).
-        vm.prank(checker1);
+        // sentinel1 and sentinel2 together reach the Approve threshold.
+        // BOND_TARGET = 20_000; sentinel1 = 15_000, sentinel2 = 5_000 (fills the gap).
+        vm.prank(sentinel1);
         oracle.commitApprove(REQUEST_ID, 15_000); // position 1
-        vm.prank(checker2);
+        vm.prank(sentinel2);
         oracle.commitApprove(REQUEST_ID, 5_000); // position 2
 
         _advancePastDeadline();
@@ -267,7 +268,7 @@ contract CheckerOracleTest is Test {
 
         oracle.finalize(REQUEST_ID);
 
-        // Proposer's fee was NOT refunded (it's distributed to checkers).
+        // Proposer's fee was NOT refunded (it's distributed to sentinels).
         assertEq(token.balanceOf(proposer), proposerBalBefore, "proposer should not receive fee on approve");
 
         CheckerOracle.Request memory req = oracle.getRequest(REQUEST_ID);
@@ -278,53 +279,53 @@ contract CheckerOracleTest is Test {
         // approveTotalScore = 17_500
         assertEq(req.approveTotalScore, 17_500);
 
-        uint256 checker1BalBefore = token.balanceOf(checker1);
-        uint256 checker2BalBefore = token.balanceOf(checker2);
+        uint256 sentinel1BalBefore = token.balanceOf(sentinel1);
+        uint256 sentinel2BalBefore = token.balanceOf(sentinel2);
 
-        vm.prank(checker1);
+        vm.prank(sentinel1);
         oracle.claim(REQUEST_ID);
-        vm.prank(checker2);
+        vm.prank(sentinel2);
         oracle.claim(REQUEST_ID);
 
-        // checker1: bond=15_000 returned + fee share = 10_000 × 15_000/17_500 = 8_571
-        assertEq(token.balanceOf(checker1), checker1BalBefore + 15_000 + 8_571, "checker1 claim incorrect");
+        // sentinel1: bond=15_000 returned + fee share = 10_000 × 15_000/17_500 = 8_571
+        assertEq(token.balanceOf(sentinel1), sentinel1BalBefore + 15_000 + 8_571, "sentinel1 claim incorrect");
 
-        // checker2: bond=5_000 returned + fee share = 10_000 × 2_500/17_500 = 1_428
-        assertEq(token.balanceOf(checker2), checker2BalBefore + 5_000 + 1_428, "checker2 claim incorrect");
+        // sentinel2: bond=5_000 returned + fee share = 10_000 × 2_500/17_500 = 1_428
+        assertEq(token.balanceOf(sentinel2), sentinel2BalBefore + 5_000 + 1_428, "sentinel2 claim incorrect");
     }
 
-    function test_UnanimousApprove_DenyCheckerBondReturned() public {
+    function test_UnanimousApprove_DenySentinelBondReturned() public {
         _postRequest();
 
-        vm.prank(checker1);
+        vm.prank(sentinel1);
         oracle.commitDeny(REQUEST_ID, 3_000); // sub-threshold deny
-        vm.prank(checker2);
+        vm.prank(sentinel2);
         oracle.commitApprove(REQUEST_ID, BOND_TARGET); // full approve threshold
 
         _advancePastDeadline();
         oracle.finalize(REQUEST_ID);
 
-        uint256 balBefore = token.balanceOf(checker1);
+        uint256 balBefore = token.balanceOf(sentinel1);
 
         vm.expectEmit(true, true, false, true);
-        emit CheckerOracle.Claimed(REQUEST_ID, checker1, 3_000, 0);
+        emit CheckerOracle.Claimed(REQUEST_ID, sentinel1, 3_000, 0);
 
-        vm.prank(checker1);
+        vm.prank(sentinel1);
         oracle.claim(REQUEST_ID);
 
         // Losing-side bond is returned without penalty — slashing only happens via Phase 2 arbitration.
-        assertEq(token.balanceOf(checker1), balBefore + 3_000, "losing checker bond should be returned");
+        assertEq(token.balanceOf(sentinel1), balBefore + 3_000, "losing sentinel bond should be returned");
     }
 
     // ============================================================
     // UNANIMOUS DENY FLOW
     // ============================================================
 
-    function test_UnanimousDeny_FeeDistributedToDenyCheckers() public {
+    function test_UnanimousDeny_FeeDistributedToDenySentinels() public {
         _postRequest();
 
-        vm.prank(checker1);
-        oracle.commitDeny(REQUEST_ID, BOND_TARGET); // position 1, single checker fills threshold
+        vm.prank(sentinel1);
+        oracle.commitDeny(REQUEST_ID, BOND_TARGET); // position 1, single sentinel fills threshold
 
         _advancePastDeadline();
 
@@ -338,13 +339,13 @@ contract CheckerOracleTest is Test {
         CheckerOracle.Request memory req = oracle.getRequest(REQUEST_ID);
         assertEq(uint256(req.state), uint256(CheckerOracle.State.RESOLVED_DENIED));
 
-        uint256 balBefore = token.balanceOf(checker1);
-        vm.prank(checker1);
+        uint256 balBefore = token.balanceOf(sentinel1);
+        vm.prank(sentinel1);
         oracle.claim(REQUEST_ID);
 
         // score = BOND_TARGET / 1 = BOND_TARGET; TotalScore = BOND_TARGET → reward = REQUEST_FEE
         assertEq(
-            token.balanceOf(checker1), balBefore + BOND_TARGET + REQUEST_FEE, "deny checker should receive full fee"
+            token.balanceOf(sentinel1), balBefore + BOND_TARGET + REQUEST_FEE, "deny sentinel should receive full fee"
         );
     }
 
@@ -356,9 +357,9 @@ contract CheckerOracleTest is Test {
         _postRequest();
 
         // Post partial bonds on both sides — neither threshold reached
-        vm.prank(checker1);
+        vm.prank(sentinel1);
         oracle.commitApprove(REQUEST_ID, 1_000);
-        vm.prank(checker2);
+        vm.prank(sentinel2);
         oracle.commitDeny(REQUEST_ID, 2_000);
 
         _advancePastDeadline();
@@ -374,20 +375,20 @@ contract CheckerOracleTest is Test {
 
         assertEq(token.balanceOf(proposer), proposerBalBefore + REQUEST_FEE, "fee should be refunded to proposer");
 
-        // checkers get bonds back
-        uint256 c1Before = token.balanceOf(checker1);
-        uint256 c2Before = token.balanceOf(checker2);
+        // sentinels get bonds back
+        uint256 s1Before = token.balanceOf(sentinel1);
+        uint256 s2Before = token.balanceOf(sentinel2);
 
-        vm.prank(checker1);
+        vm.prank(sentinel1);
         oracle.claim(REQUEST_ID);
-        vm.prank(checker2);
+        vm.prank(sentinel2);
         oracle.claim(REQUEST_ID);
 
-        assertEq(token.balanceOf(checker1), c1Before + 1_000, "checker1 bond refund");
-        assertEq(token.balanceOf(checker2), c2Before + 2_000, "checker2 bond refund");
+        assertEq(token.balanceOf(sentinel1), s1Before + 1_000, "sentinel1 bond refund");
+        assertEq(token.balanceOf(sentinel2), s2Before + 2_000, "sentinel2 bond refund");
     }
 
-    function test_Timeout_NoBonds_FeeRefundedNoCheckers() public {
+    function test_Timeout_NoBonds_FeeRefundedNoSentinels() public {
         _postRequest();
         _advancePastDeadline();
 
@@ -404,13 +405,13 @@ contract CheckerOracleTest is Test {
         _postRequest();
 
         // Fill Approve threshold
-        vm.prank(checker1);
+        vm.prank(sentinel1);
         oracle.commitApprove(REQUEST_ID, BOND_TARGET);
 
-        // checker2 and checker3 together fill Deny threshold
-        vm.prank(checker2);
+        // sentinel2 and sentinel3 together fill Deny threshold
+        vm.prank(sentinel2);
         oracle.commitDeny(REQUEST_ID, BOND_TARGET / 2);
-        vm.prank(checker3);
+        vm.prank(sentinel3);
         oracle.commitDeny(REQUEST_ID, BOND_TARGET / 2);
 
         _advancePastDeadline();
@@ -450,11 +451,11 @@ contract CheckerOracleTest is Test {
 
     function test_Claim_BeforeResolveReverts() public {
         _postRequest();
-        vm.prank(checker1);
+        vm.prank(sentinel1);
         oracle.commitApprove(REQUEST_ID, 5_000);
 
         vm.expectRevert(CheckerOracle.RequestNotResolved.selector);
-        vm.prank(checker1);
+        vm.prank(sentinel1);
         oracle.claim(REQUEST_ID);
     }
 
@@ -464,132 +465,132 @@ contract CheckerOracleTest is Test {
         oracle.finalize(REQUEST_ID);
 
         vm.expectRevert(CheckerOracle.NothingToClaim.selector);
-        vm.prank(checker1);
+        vm.prank(sentinel1);
         oracle.claim(REQUEST_ID);
     }
 
     function test_Claim_DoubleClaimReverts() public {
         _postRequest();
-        vm.prank(checker1);
+        vm.prank(sentinel1);
         oracle.commitApprove(REQUEST_ID, BOND_TARGET);
         _advancePastDeadline();
         oracle.finalize(REQUEST_ID);
 
-        vm.prank(checker1);
+        vm.prank(sentinel1);
         oracle.claim(REQUEST_ID);
 
         vm.expectRevert(CheckerOracle.AlreadyClaimed.selector);
-        vm.prank(checker1);
+        vm.prank(sentinel1);
         oracle.claim(REQUEST_ID);
     }
 
     // ============================================================
-    // CHECKER MANAGEMENT
+    // SENTINEL MANAGEMENT
     // ============================================================
 
-    function test_AddChecker_SchedulesWithGovernanceDelay() public {
-        address newChecker = vm.createWallet("newChecker").addr;
+    function test_AddSentinel_SchedulesWithGovernanceDelay() public {
+        address newSentinel = vm.createWallet("newSentinel").addr;
         uint256 expectedActiveAt = block.number + GOVERNANCE_DELAY;
 
         vm.expectEmit(true, false, false, true);
-        emit CheckerOracle.CheckerScheduled(newChecker, expectedActiveAt);
+        emit SentinelManager.SentinelScheduled(newSentinel, expectedActiveAt);
 
         vm.prank(arbitrator);
-        oracle.addChecker(newChecker);
+        oracle.addSentinel(newSentinel);
 
-        assertEq(oracle.checkerActiveAt(newChecker), expectedActiveAt);
+        assertEq(oracle.sentinelActiveAt(newSentinel), expectedActiveAt);
     }
 
-    function test_AddChecker_NotActiveBeforeDelay() public {
-        address newChecker = vm.createWallet("newChecker").addr;
-        token.mint(newChecker, 100_000);
-        vm.prank(newChecker);
+    function test_AddSentinel_NotActiveBeforeDelay() public {
+        address newSentinel = vm.createWallet("newSentinel").addr;
+        token.mint(newSentinel, 100_000);
+        vm.prank(newSentinel);
         token.approve(address(oracle), type(uint256).max);
 
         vm.prank(arbitrator);
-        oracle.addChecker(newChecker);
+        oracle.addSentinel(newSentinel);
 
         _postRequest();
 
-        // Still within delay window — checker should not be active
-        vm.expectRevert(CheckerOracle.CheckerNotActive.selector);
-        vm.prank(newChecker);
+        // Still within delay window — sentinel should not be active
+        vm.expectRevert(SentinelManager.SentinelNotActive.selector);
+        vm.prank(newSentinel);
         oracle.commitApprove(REQUEST_ID, 1_000);
     }
 
-    function test_AddChecker_ActiveAfterDelay() public {
-        address newChecker = vm.createWallet("newChecker").addr;
-        token.mint(newChecker, 100_000);
-        vm.prank(newChecker);
+    function test_AddSentinel_ActiveAfterDelay() public {
+        address newSentinel = vm.createWallet("newSentinel").addr;
+        token.mint(newSentinel, 100_000);
+        vm.prank(newSentinel);
         token.approve(address(oracle), type(uint256).max);
 
         vm.prank(arbitrator);
-        oracle.addChecker(newChecker);
+        oracle.addSentinel(newSentinel);
         vm.roll(block.number + GOVERNANCE_DELAY);
 
         _postRequest();
 
         // Should succeed now
-        vm.prank(newChecker);
+        vm.prank(newSentinel);
         oracle.commitApprove(REQUEST_ID, 1_000);
-        assertEq(oracle.getCommitment(REQUEST_ID, newChecker).bondAmount, 1_000);
+        assertEq(oracle.getCommitment(REQUEST_ID, newSentinel).bondAmount, 1_000);
     }
 
-    function test_AddChecker_DuplicateReverts() public {
-        vm.expectRevert(CheckerOracle.CheckerAlreadyScheduled.selector);
+    function test_AddSentinel_DuplicateReverts() public {
+        vm.expectRevert(SentinelManager.SentinelAlreadyScheduled.selector);
         vm.prank(arbitrator);
-        oracle.addChecker(checker1); // already added in setUp
+        oracle.addSentinel(sentinel1); // already added in setUp
     }
 
-    function test_AddChecker_NotArbitratorReverts() public {
-        vm.expectRevert(CheckerOracle.NotArbitrator.selector);
+    function test_AddSentinel_NotArbitratorReverts() public {
+        vm.expectRevert(SentinelManager.NotArbitrator.selector);
         vm.prank(stranger);
-        oracle.addChecker(vm.createWallet("x").addr);
+        oracle.addSentinel(vm.createWallet("x").addr);
     }
 
-    function test_RemoveChecker_ImmediatelyPreventsCommits() public {
+    function test_RemoveSentinel_ImmediatelyPreventsCommits() public {
         vm.prank(arbitrator);
-        oracle.removeChecker(checker1);
+        oracle.removeSentinel(sentinel1);
 
-        assertEq(oracle.checkerActiveAt(checker1), 0, "checker should have activeAt=0 after removal");
+        assertEq(oracle.sentinelActiveAt(sentinel1), 0, "sentinel should have activeAt=0 after removal");
 
         _postRequest();
 
-        vm.expectRevert(CheckerOracle.CheckerNotActive.selector);
-        vm.prank(checker1);
+        vm.expectRevert(SentinelManager.SentinelNotActive.selector);
+        vm.prank(sentinel1);
         oracle.commitApprove(REQUEST_ID, 1_000);
     }
 
-    function test_RemoveChecker_EmitsEvent() public {
+    function test_RemoveSentinel_EmitsEvent() public {
         vm.expectEmit(true, false, false, false);
-        emit CheckerOracle.CheckerRemoved(checker1);
+        emit SentinelManager.SentinelRemoved(sentinel1);
 
         vm.prank(arbitrator);
-        oracle.removeChecker(checker1);
+        oracle.removeSentinel(sentinel1);
     }
 
-    function test_RemoveChecker_NotScheduledReverts() public {
-        address notAChecker = vm.createWallet("notAChecker").addr;
-        vm.expectRevert(CheckerOracle.CheckerNotScheduled.selector);
+    function test_RemoveSentinel_NotScheduledReverts() public {
+        address notASentinel = vm.createWallet("notASentinel").addr;
+        vm.expectRevert(SentinelManager.SentinelNotScheduled.selector);
         vm.prank(arbitrator);
-        oracle.removeChecker(notAChecker);
+        oracle.removeSentinel(notASentinel);
     }
 
-    function test_RemoveChecker_CanReAddAfterRemoval() public {
+    function test_RemoveSentinel_CanReAddAfterRemoval() public {
         vm.prank(arbitrator);
-        oracle.removeChecker(checker1);
+        oracle.removeSentinel(sentinel1);
 
         // Re-add should succeed since activeAt is 0
         vm.prank(arbitrator);
-        oracle.addChecker(checker1);
+        oracle.addSentinel(sentinel1);
 
-        assertGt(oracle.checkerActiveAt(checker1), 0, "checker should be re-scheduled");
+        assertGt(oracle.sentinelActiveAt(sentinel1), 0, "sentinel should be re-scheduled");
     }
 
-    function test_RemoveChecker_NotArbitratorReverts() public {
-        vm.expectRevert(CheckerOracle.NotArbitrator.selector);
+    function test_RemoveSentinel_NotArbitratorReverts() public {
+        vm.expectRevert(SentinelManager.NotArbitrator.selector);
         vm.prank(stranger);
-        oracle.removeChecker(checker1);
+        oracle.removeSentinel(sentinel1);
     }
 
     // ============================================================
@@ -662,7 +663,7 @@ contract CheckerOracleTest is Test {
     }
 
     function test_ScheduleBondMultiplier_NotArbitratorReverts() public {
-        vm.expectRevert(CheckerOracle.NotArbitrator.selector);
+        vm.expectRevert(SentinelManager.NotArbitrator.selector);
         vm.prank(stranger);
         oracle.scheduleBondMultiplier(5);
     }
