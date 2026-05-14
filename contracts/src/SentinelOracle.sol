@@ -7,7 +7,7 @@ import {IOracle} from "@/interfaces/IOracle.sol";
 import {BondConfig} from "@/libraries/BondConfig.sol";
 import {SentinelMap} from "@/libraries/SentinelMap.sol";
 import {SentinelOracleCommitment, SentinelOracleCommitmentMap} from "@/libraries/SentinelOracleCommitments.sol";
-import {SentinelOracleRequest, SentinelOracleRequestMap} from "@/libraries/SentinelOracleRequest.sol";
+import {SentinelOracleRequest, SentinelOracleRequestMap} from "@/libraries/SentinelOracleRequests.sol";
 
 contract SentinelOracle is IOracle {
     using BondConfig for BondConfig.T;

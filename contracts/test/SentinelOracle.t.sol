@@ -4,7 +4,7 @@ pragma solidity ^0.8.30;
 import {Test} from "@forge-std/Test.sol";
 import {IOracle} from "@/interfaces/IOracle.sol";
 import {SentinelOracle} from "@/SentinelOracle.sol";
-import {SentinelOracleRequest} from "@/libraries/SentinelOracleRequest.sol";
+import {SentinelOracleRequest} from "@/libraries/SentinelOracleRequests.sol";
 import {MockERC20} from "@test/util/MockERC20.sol";
 
 contract SentinelOracleTest is Test {
