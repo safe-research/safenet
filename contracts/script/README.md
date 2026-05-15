@@ -176,3 +176,9 @@ npm run cmd:initiateWithdraw -w @safenet/contracts -- --rpc-url http://127.0.0.1
 ```
 npm run cmd:claimWithdraw -w @safenet/contracts -- --rpc-url http://127.0.0.1:8545 --broadcast --sender 0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266 --account sender-keystore-account
 ```
+
+---
+
+## Sepolia Integration Test: Safenet Cosigner + Hypernative Guard
+
+> Full setup and usage guide: [scripts/README.md](../../scripts/README.md)

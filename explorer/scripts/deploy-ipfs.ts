@@ -17,7 +17,7 @@
  * The upload is always named with a snapshot timestamp, e.g. "safenet-explorer-2026-03-18T14:30:00.000Z".
  */
 
-import { execSync, type ExecSyncOptions } from "node:child_process";
+import { type ExecSyncOptions, execSync } from "node:child_process";
 import { existsSync, globSync, readFileSync } from "node:fs";
 import { join, relative, resolve } from "node:path";
 import { PinataSDK } from "pinata";

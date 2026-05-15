@@ -7,3 +7,6 @@
 [submodule "contracts/lib/safe-smart-account"]
 	path = contracts/lib/safe-smart-account
 	url = https://github.com/safe-fndn/safe-smart-account
+[submodule "contracts/lib/hypernative-guard"]
+	path = contracts/lib/hypernative-guard
+	url = https://github.com/Hypernative-Labs/hypernative-guard
