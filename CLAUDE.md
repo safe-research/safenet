@@ -114,4 +114,4 @@ Always use a name that makes the purpose of the branch immediately clear to anyo
 
 #### Use Libraries over inheritance 
 
-To make it eas to review code it should be split into functional pieces. For this Solidity libraries contracts should be used. This should be prefered over inheritance. Libraries should define a state struct `T` and expose methods that alter this struct. An example for this can be found in [FROSTParticipantMap](./contracts/src/libraries/FROSTParticipantMap.sol). 
+To simplify reviews, code should be split into functional pieces. Solidity libraries should be used for this purpose and preferred over inheritance. Libraries should define a state struct named T and expose methods that alter this struct. An example of this pattern can be found in [FROSTParticipantMap](./contracts/src/libraries/FROSTParticipantMap.sol).
