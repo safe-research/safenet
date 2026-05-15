@@ -162,6 +162,54 @@ describe("EventWatcher", () => {
 		});
 	});
 
+	describe("onBlockInvalidated", () => {
+		it("returns to idle when invalidating the in-progress block", async () => {
+			const { events, mocks } = setup();
+
+			events.onBlockUpdate({
+				type: "watcher_update_new_block",
+				blockNumber: 1337n,
+				blockHash: keccak256(toHex("1337")),
+				logsBloom: BLOOM_ALL,
+			});
+
+			// Drive at least one failed log fetch so the event watcher is mid-block when the
+			// invalidation arrives — this matches the scenario the watcher loop creates after a
+			// `ResourceNotFoundRpcError` is escalated through `revalidateLastBlock`.
+			mocks.getLogs.mockRejectedValueOnce(new Error("logs unavailable"));
+			await expect(events.next()).rejects.toThrow();
+
+			events.onBlockInvalidated({ blockHash: keccak256(toHex("1337")) });
+
+			// After invalidation, the event watcher must be idle and not attempt any more
+			// log queries for the abandoned block hash.
+			mocks.getLogs.mockClear();
+			await expect(events.next()).resolves.toBeNull();
+			expect(mocks.getLogs).toBeCalledTimes(0);
+		});
+
+		it("throws when not in a block step", () => {
+			const { events } = setup();
+			expect(() => events.onBlockInvalidated({ blockHash: keccak256(toHex("1337")) })).toThrow();
+
+			events.onBlockUpdate({ type: "watcher_update_warp_to_block", fromBlock: 123n, toBlock: 130n });
+			expect(() => events.onBlockInvalidated({ blockHash: keccak256(toHex("1337")) })).toThrow();
+		});
+
+		it("throws when the block hash does not match the in-progress block", () => {
+			const { events } = setup();
+
+			events.onBlockUpdate({
+				type: "watcher_update_new_block",
+				blockNumber: 1337n,
+				blockHash: keccak256(toHex("1337")),
+				logsBloom: BLOOM_ALL,
+			});
+
+			expect(() => events.onBlockInvalidated({ blockHash: keccak256(toHex("other")) })).toThrow();
+		});
+	});
+
 	describe("warping", () => {
 		it("should fetch logs in pages", async () => {
 			const { events, mocks } = setup();

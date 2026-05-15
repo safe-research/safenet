@@ -18,7 +18,7 @@ import { computeLogsBloom, isInBloom } from "../utils/bloom.js";
 import { withDefaults } from "../utils/config.js";
 import type { Logger } from "../utils/logging.js";
 import { BackoffError } from "./backoff.js";
-import type { BlockUpdate } from "./blocks.js";
+import type { BlockUpdate, InvalidatedBlockUpdate } from "./blocks.js";
 
 export type Client = Pick<PublicClient, "getLogs">;
 export type Events = readonly AbiEvent[];
@@ -305,6 +305,16 @@ export class EventWatcher<E extends Events> {
 		// ensures all possible values for `type` are handled. If we would forget to handle a case,
 		// we would get a compiler error that `step` is possibly uninitialized.
 		this.#step = step;
+	}
+
+	onBlockInvalidated({ blockHash }: Pick<InvalidatedBlockUpdate, "blockHash">) {
+		if (this.#step.type !== "block" || this.#step.blockHash !== blockHash) {
+			throw new Error("unexpected block invalidation");
+		}
+
+		// The block we were trying to get logs for is no longer in the canonical
+		// chain. Go back to to `idle`.
+		this.#step = { type: "idle" };
 	}
 
 	async next(): Promise<Log<E>[] | null> {

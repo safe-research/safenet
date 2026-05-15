@@ -2,10 +2,10 @@
  * Watching for blocks and on-chain events.
  */
 
-import type { Prettify } from "viem";
+import { type Prettify, ResourceNotFoundRpcError } from "viem";
 import { formatError } from "../utils/errors.js";
 import type { Logger } from "../utils/logging.js";
-import { Backoff, type Config as BackoffConfig } from "./backoff.js";
+import { Backoff, type Config as BackoffConfig, BackoffError } from "./backoff.js";
 import {
 	type Client as BlockClient,
 	type BlockUpdate,
@@ -57,9 +57,34 @@ export class Watcher<E extends Events> {
 		this.#running = false;
 	}
 
+	async #nextLogs() {
+		try {
+			return await this.#events.next();
+		} catch (error) {
+			if (error instanceof ResourceNotFoundRpcError) {
+				// Some RPC nodes will see an uncled block but not support querying logs
+				// for it (for example, Reth). Ask the `BlockWatcher` to revalidate the
+				// last block it produced and make sure it is still canonical.
+				const uncle = await this.#blocks.revalidateLastBlock();
+				if (uncle === null) {
+					// The block is still canonical, but the logs for it are still not
+					// available to the node. Lets backoff to wait for syncing.
+					throw new BackoffError("Missing logs for latest block");
+				}
+
+				// The block we were fetching logs for was uncled. Let the event fetcher
+				// know and return that there are no more logs to fetch.
+				this.#events.onBlockInvalidated(uncle);
+				return null;
+			}
+
+			throw error;
+		}
+	}
+
 	async #next() {
 		while (true /* logs !== null */) {
-			const logs = await this.#events.next();
+			const logs = await this.#nextLogs();
 			if (logs === null) {
 				break;
 			}

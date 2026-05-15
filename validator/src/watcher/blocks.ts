@@ -51,6 +51,11 @@ export type BlockUpdate =
 	| { type: "watcher_update_uncle_block"; blockNumber: bigint }
 	| { type: "watcher_update_new_block"; blockNumber: bigint; blockHash: Hex; logsBloom: Hex };
 
+/**
+ * A Block that was removed from the canonical chain on revalidation.
+ */
+export type InvalidatedBlockUpdate = Extract<BlockUpdate, { type: "watcher_update_uncle_block" }> & { blockHash: Hex };
+
 type Config = Settings & Options;
 type Block = ViemBlock<bigint, false, "latest">;
 type PendingBlock = {
@@ -252,6 +257,69 @@ export class BlockWatcher {
 			blockHash: block.hash,
 			logsBloom: block.logsBloom,
 		};
+	}
+
+	/**
+	 * Revalidate that the last seen block is still canonical on the connected RPC
+	 * node. If the block is no longer canonical (either the node now reports a
+	 * different hash at the same height, or it cannot find the block at all)
+	 * invalidate the watcher's pending state so the following `next()` calls
+	 * re-fetch the canonical replacement.
+	 *
+	 * This is used to recover from RPC nodes that briefly observe a block, expose
+	 * its hash, and then lose the ability to serve logs for that hash (most
+	 * notably Reth around uncled blocks).
+	 */
+	public async revalidateLastBlock(): Promise<InvalidatedBlockUpdate | null> {
+		const nextQueued = this.#queue.at(0);
+		if (nextQueued !== undefined && nextQueued.type !== "watcher_update_new_block") {
+			// Revalidating a block while warping is not possible, as it is beyond
+			// the max reorg depth for the watcher.
+			return null;
+		}
+
+		// Get the last block that block that was emitted as a block update. This
+		// ensures that calls to `revalidate` work in the unlikely case of a reorg
+		// on startup.
+		const lastBlockIndex = this.#blocks.findLastIndex(
+			(block) => nextQueued === undefined || block.number < nextQueued.blockNumber,
+		);
+		if (lastBlockIndex < 0) {
+			// We are trying to re-canonicalize past the max reorg depth, so there is
+			// nothing to do.
+			return null;
+		}
+		const lastBlock = this.#blocks[lastBlockIndex];
+
+		let block: Block | null;
+		try {
+			block = await this.#client.getBlock({ blockNumber: lastBlock.number });
+		} catch (err) {
+			if (!(err instanceof BlockNotFoundError)) {
+				throw err;
+			}
+			block = null;
+		}
+
+		if (lastBlock.hash === block?.hash) {
+			return null;
+		}
+
+		// We remove all blocks that are no longer canonical, that is the last block
+		// and all of its children.
+		this.#blocks.length = lastBlockIndex;
+		// Update the pending block to be the one that was just uncled, which is
+		// the last block we had previously seen.
+		this.#pending = {
+			number: lastBlock.number,
+			timestampMs: lastBlock.timestamp * 1000n,
+		};
+
+		// Clear the update queue and insert the uncle block update.
+		const uncle = { type: "watcher_update_uncle_block", blockNumber: lastBlock.number } as const;
+		this.#queue.splice(0, this.#queue.length, uncle);
+
+		return { ...uncle, blockHash: lastBlock.hash };
 	}
 
 	/**
