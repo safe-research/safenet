@@ -58,7 +58,7 @@ contract SafenetCosigner is ISignatureValidator {
     // CONSTANTS
     // ============================================================
 
-    bytes4 private constant LEGACY_EIP1271_MAGIC_VALUE = bytes4(0x20c13b0b);
+    bytes4 private constant _LEGACY_EIP1271_MAGIC_VALUE = bytes4(0x20c13b0b);
 
     // forge-lint: disable-next-item(asm-keccak256)
     bytes32 private constant _EIP712_DOMAIN_TYPEHASH =
@@ -189,7 +189,7 @@ contract SafenetCosigner is ISignatureValidator {
      *      128-byte FROST attestation accepted by the modern interface.
      */
     function isValidSignature(bytes calldata _data, bytes calldata _signature) external view returns (bytes4) {
-        if (_isVerified(keccak256(_data), _signature)) return LEGACY_EIP1271_MAGIC_VALUE;
+        if (_isVerified(keccak256(_data), _signature)) return _LEGACY_EIP1271_MAGIC_VALUE;
         return bytes4(0);
     }
 
