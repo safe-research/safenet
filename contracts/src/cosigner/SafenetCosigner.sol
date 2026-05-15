@@ -58,6 +58,8 @@ contract SafenetCosigner is ISignatureValidator {
     // CONSTANTS
     // ============================================================
 
+    bytes4 private constant _LEGACY_EIP1271_MAGIC_VALUE = bytes4(0x20c13b0b);
+
     // forge-lint: disable-next-item(asm-keccak256)
     bytes32 private constant _EIP712_DOMAIN_TYPEHASH =
         keccak256("EIP712Domain(uint256 chainId,address verifyingContract)");
@@ -175,19 +177,19 @@ contract SafenetCosigner is ISignatureValidator {
      *         after execution.
      */
     function isValidSignature(bytes32 hash, bytes memory signature) external view override returns (bytes4) {
-        if (signature.length > 0) {
-            if (signature.length != 128) return bytes4(0);
-            (uint64 epoch, FROST.Signature memory sig) = abi.decode(signature, (uint64, FROST.Signature));
-            bytes32 message = ConsensusMessages.transactionProposal(_CONSENSUS_DOMAIN_SEPARATOR, epoch, hash);
-            Secp256k1.Point memory groupKey = _resolveGroupKey(epoch);
-            Secp256k1.requireNonZero(groupKey);
-            FROST.verify(groupKey, sig, message);
-            return EIP1271_MAGIC_VALUE;
-        }
+        if (_isVerified(hash, signature)) return EIP1271_MAGIC_VALUE;
+        return bytes4(0);
+    }
 
-        uint256 executableAt = $allowedTransactions[msg.sender][hash];
-        if (executableAt != 0 && block.timestamp >= executableAt) return EIP1271_MAGIC_VALUE;
-
+    /**
+     * @dev Legacy EIP-1271 callback for Safe versions compiled with the old `ISignatureValidator`
+     *      interface (selector `0x20c13b0b`). Called by Safe 1.4.1 during `execTransaction`.
+     *      `_data` is the raw EIP-712 encoding `\x19\x01 || domainSeparator || structHash`
+     *      (66 bytes); its keccak256 equals the `safeTxHash`. `_signature` is the same
+     *      128-byte FROST attestation accepted by the modern interface.
+     */
+    function isValidSignature(bytes calldata _data, bytes calldata _signature) external view returns (bytes4) {
+        if (_isVerified(keccak256(_data), _signature)) return _LEGACY_EIP1271_MAGIC_VALUE;
         return bytes4(0);
     }
 
@@ -262,6 +264,20 @@ contract SafenetCosigner is ISignatureValidator {
     // ============================================================
     // PRIVATE HELPERS
     // ============================================================
+
+    function _isVerified(bytes32 hash, bytes memory signature) private view returns (bool) {
+        if (signature.length > 0) {
+            if (signature.length != 128) return false;
+            (uint64 epoch, FROST.Signature memory sig) = abi.decode(signature, (uint64, FROST.Signature));
+            bytes32 message = ConsensusMessages.transactionProposal(_CONSENSUS_DOMAIN_SEPARATOR, epoch, hash);
+            Secp256k1.Point memory groupKey = _resolveGroupKey(epoch);
+            Secp256k1.requireNonZero(groupKey);
+            FROST.verify(groupKey, sig, message);
+            return true;
+        }
+        uint256 executableAt = $allowedTransactions[msg.sender][hash];
+        return executableAt != 0 && block.timestamp >= executableAt;
+    }
 
     function _resolveGroupKey(uint64 epoch) private view returns (Secp256k1.Point memory) {
         if ($currentEpoch.epoch == epoch) return $currentEpoch.groupKey;
