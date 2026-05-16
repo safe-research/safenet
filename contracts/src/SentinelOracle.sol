@@ -131,7 +131,10 @@ contract SentinelOracle is IOracle {
         address proposer = req.proposer;
         (SentinelOracleRequest.State newState, uint256 refundFee) = req.finalize();
 
-        if (newState == SentinelOracleRequest.State.FROZEN) return;
+        if (newState == SentinelOracleRequest.State.FROZEN) {
+            emit ArbitrationTriggered(requestId);
+            return;
+        }
 
         if (newState == SentinelOracleRequest.State.RESOLVED_APPROVED) {
             emit OracleResult(

@@ -28,7 +28,7 @@ library SentinelOracleRequest {
     struct Request {
         address proposer;
         uint256 fee;
-        uint256 approveBondTarget;
+        uint256 bondTarget;
         uint256 deadline;
         State state;
         uint256 totalApproveBond;
@@ -62,21 +62,21 @@ library SentinelOracleRequest {
         require(block.number <= self.deadline, VotingWindowClosed());
 
         uint256 totalBond = approve ? self.totalApproveBond : self.totalDenyBond;
-        require(totalBond < self.approveBondTarget, ThresholdAlreadyReached());
+        require(totalBond < self.bondTarget, ThresholdAlreadyReached());
 
-        uint256 remaining = self.approveBondTarget - totalBond;
+        uint256 remaining = self.bondTarget - totalBond;
         effectiveBond = bondAmount < remaining ? bondAmount : remaining;
 
         if (approve) {
             self.approveSentinelCount += 1;
             position = self.approveSentinelCount;
             self.totalApproveBond += effectiveBond;
-            self.approveTotalScore += effectiveBond / position;
+            self.approveTotalScore += (effectiveBond * 1e18) / position;
         } else {
             self.denySentinelCount += 1;
             position = self.denySentinelCount;
             self.totalDenyBond += effectiveBond;
-            self.denyTotalScore += effectiveBond / position;
+            self.denyTotalScore += (effectiveBond * 1e18) / position;
         }
     }
 
@@ -84,8 +84,8 @@ library SentinelOracleRequest {
         require(self.state == State.PENDING, RequestNotPending());
         require(block.number > self.deadline, VotingWindowOpen());
 
-        bool approveMet = self.totalApproveBond >= self.approveBondTarget;
-        bool denyMet = self.totalDenyBond >= self.approveBondTarget;
+        bool approveMet = self.totalApproveBond >= self.bondTarget;
+        bool denyMet = self.totalDenyBond >= self.bondTarget;
 
         if (approveMet && denyMet) {
             self.state = State.FROZEN;
@@ -122,7 +122,7 @@ library SentinelOracleRequest {
         if (state == State.TIMED_OUT) return 0;
         bool isWinner = approved == (state == State.RESOLVED_APPROVED);
         if (!isWinner) return 0;
-        uint256 score = bondAmount / position;
+        uint256 score = (bondAmount * 1e18) / position;
         uint256 totalScore = state == State.RESOLVED_APPROVED ? self.approveTotalScore : self.denyTotalScore;
         return self.fee * score / totalScore;
     }
@@ -142,7 +142,7 @@ library SentinelOracleRequestMap {
     // ============================================================
 
     event NewRequest(
-        bytes32 indexed requestId, address indexed proposer, uint256 fee, uint256 approveBondTarget, uint256 deadline
+        bytes32 indexed requestId, address indexed proposer, uint256 fee, uint256 bondTarget, uint256 deadline
     );
 
     // ============================================================
@@ -169,7 +169,7 @@ library SentinelOracleRequestMap {
         self.requests[requestId] = SentinelOracleRequest.Request({
             proposer: proposer,
             fee: fee,
-            approveBondTarget: bondTarget,
+            bondTarget: bondTarget,
             deadline: deadline,
             state: SentinelOracleRequest.State.PENDING,
             totalApproveBond: 0,
