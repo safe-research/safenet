@@ -22,7 +22,6 @@ contract SentinelOracle is IOracle {
     // EVENTS
     // ============================================================
 
-    event ArbitrationTriggered(bytes32 indexed requestId);
     event DisputeResolved(bytes32 indexed requestId, address winner, address loser, uint256 slashed);
     event Claimed(bytes32 indexed requestId, address indexed sentinel, uint256 bondReturn, uint256 feeReward);
 
@@ -132,7 +131,6 @@ contract SentinelOracle is IOracle {
         (SentinelOracleRequest.State newState, uint256 refundFee) = req.finalize();
 
         if (newState == SentinelOracleRequest.State.FROZEN) {
-            emit ArbitrationTriggered(requestId);
             return;
         }
 
