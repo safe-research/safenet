@@ -176,3 +176,25 @@ npm run cmd:initiateWithdraw -w @safenet/contracts -- --rpc-url http://127.0.0.1
 ```
 npm run cmd:claimWithdraw -w @safenet/contracts -- --rpc-url http://127.0.0.1:8545 --broadcast --sender 0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266 --account sender-keystore-account
 ```
+
+## SafenetCosigner
+
+Deploys a `SafenetCosigner` contract bound to a specific Consensus contract and epoch. The cosigner is deployed deterministically via CREATE2, so the address is fixed given the same constructor arguments and salt.
+
+Note: Make sure you have filled the `.env` file with the correct values. SafenetCosigner deployment requires:
+- `CONSENSUS_CHAIN_ID` — chain ID of the Consensus contract (e.g. `100` for Gnosis Chain)
+- `CONSENSUS_ADDRESS` — address of the Consensus contract on the consensus chain
+- `INITIAL_EPOCH` — epoch number to initialise the cosigner with (obtain via `activeEpoch()` on the Consensus contract)
+- `INITIAL_GROUP_KEY_X`, `INITIAL_GROUP_KEY_Y` — coordinates of the FROST group public key for that epoch
+
+Optional:
+- `ALLOW_TX_DELAY` — delay in seconds before a pre-approved transaction can be executed (default: `60`)
+- `FACTORY` — `1` for Safe Singleton Factory (default), `2` for Canonical Factory
+
+### Command
+
+```
+npm run cmd:deploy:cosigner -w @safenet/contracts -- --rpc-url http://127.0.0.1:8545 --broadcast --sender 0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266 --account sender-keystore-account
+```
+
+---
