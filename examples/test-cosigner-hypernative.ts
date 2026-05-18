@@ -87,7 +87,7 @@ const safenetTx = (hash: Hex): string =>
 	`https://explorer.safenet-beta.eth.limo/#/safeTx?chainId=${sepolia.id}&safeTxHash=${hash}`;
 
 // HypernativeGuard creation bytecode, compiled from:
-//   https://github.com/Hypernative-Labs/hypernative-guard (commit pinned via submodule)
+//   https://github.com/Hypernative-Labs/hypernative-guard
 //   solc 0.8.28, optimizer enabled, optimizer_runs=1000000000 (upstream build settings)
 //
 // Inlined here rather than read from a Foundry artifact because integrating
@@ -101,7 +101,8 @@ const safenetTx = (hash: Hex): string =>
 // is the simplest, zero-build-dependency solution.
 //
 // To regenerate and verify this bytecode:
-//   cd contracts/lib/hypernative-guard                                          # work inside the submodule so its own foundry.toml is used
+//   git clone https://github.com/Hypernative-Labs/hypernative-guard /tmp/hypernative-guard
+//   cd /tmp/hypernative-guard
 //   git submodule update --init lib/safe-smart-account lib/openzeppelin-contracts  # pull nested deps (safe-smart-account provides Enum.sol)
 //   forge build --skip '*/script/*' --skip '*/test/*'                          # compile only src/; skips files that pull in forge-std Console.sol
 //   jq -r '"0x" + .bytecode.object' out/HypernativeGuard.sol/HypernativeGuard.json  # extract creation bytecode from the artifact
