@@ -181,4 +181,4 @@ npm run cmd:claimWithdraw -w @safenet/contracts -- --rpc-url http://127.0.0.1:85
 
 ## Sepolia Integration Test: Safenet Cosigner + Hypernative Guard
 
-> Full setup and usage guide: [scripts/README.md](../../scripts/README.md)
+> Full setup and usage guide: [examples/README.md](../../examples/README.md)

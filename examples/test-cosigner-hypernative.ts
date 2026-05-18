@@ -18,8 +18,8 @@
  *   assembles the full 387-byte signatures blob, and executes on-chain.
  *
  * Environment setup:
- *   Copy scripts/.env.sample to scripts/.env and fill in the values.
- *   The script is loaded via `tsx --env-file=scripts/.env` (see package.json).
+ *   Copy examples/.env.sample to examples/.env and fill in the values.
+ *   The script is loaded via `tsx --env-file=examples/.env` (see package.json).
  *
  * Required env vars:
  *   SEPOLIA_RPC_URL, GNOSIS_RPC_URL, CONSENSUS_ADDRESS

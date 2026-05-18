@@ -1,6 +1,6 @@
-# Scripts
+# Examples
 
-Integration test scripts for the Safenet protocol on public testnets.
+Integration test examples for the Safenet protocol on public testnets.
 
 ## Sepolia Integration Test: Safenet Cosigner + Hypernative Guard
 
@@ -89,11 +89,11 @@ address with a small amount of xDAI:
 
 ### Environment Configuration
 
-Copy `scripts/.env.sample` to `scripts/.env` and fill in the required values:
+Copy `examples/.env.sample` to `examples/.env` and fill in the required values:
 
 ```sh
-cp scripts/.env.sample scripts/.env
-# edit scripts/.env
+cp examples/.env.sample examples/.env
+# edit examples/.env
 ```
 
 Key variable groups:
@@ -113,7 +113,7 @@ Key variable groups:
 npm run test:integration:cosigner
 ```
 
-This runs `scripts/test-cosigner-hypernative.ts` which handles both deployment
+This runs `examples/test-cosigner-hypernative.ts` which handles both deployment
 setup (Phase 0) and the integration test (Phase 1) in a single command. All setup
 steps are **idempotent** — they check whether each component is already deployed
 or configured and skip any step that is already complete. It is safe to re-run
@@ -170,7 +170,7 @@ proposed and executed transaction.
 
 **`HypernativeGuard: keeper signature invalid`**
 The keeper signed the wrong hash, or `KEEPER_ADDRESS` does not match the address
-passed to the HypernativeGuard constructor. Verify both in `scripts/.env`.
+passed to the HypernativeGuard constructor. Verify both in `examples/.env`.
 
 **`Could not read artifact at .../SafenetCosigner.json`**
 The SafenetCosigner build artifact is missing. Run `npm run build -w @safenet/contracts`
