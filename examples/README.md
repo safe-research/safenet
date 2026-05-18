@@ -154,6 +154,13 @@ guard:     HypernativeGuard (enforcement active)
 | 10 | Broadcast `execTransaction` via `cast send` | On-chain execution; `SafenetCosigner.isValidSignature` validates the FROST attestation, `HypernativeGuard.checkTransaction` validates the keeper signature |
 | 11 | Assert nonce +1 and receipt status = success | Confirms the transaction executed successfully; nonce increase proves `execTransaction` did not revert silently |
 
+### Example test run
+
+A live run against Sepolia:
+
+- [Safe UI transaction](https://app.safe.global/transactions/tx?safe=sep:0xB8b82B231b0a7Da9B571b9b92ab8B137fD8c320c&id=multisig_0xB8b82B231b0a7Da9B571b9b92ab8B137fD8c320c_0xbc568ac1fcbfbccc20cfe0b899dea60f52318b504109426e390709838825d706)
+- [Safenet attestation](https://explorer.safenet-beta.eth.limo/#/safeTx?chainId=11155111&safeTxHash=0xbc568ac1fcbfbccc20cfe0b899dea60f52318b504109426e390709838825d706)
+
 ### Troubleshooting
 
 **`Attestation timeout after 120s`**
