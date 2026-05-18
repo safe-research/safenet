@@ -19,7 +19,7 @@
  *
  * Environment setup:
  *   Copy examples/.env.sample to examples/.env and fill in the values.
- *   The script is loaded via `tsx --env-file=examples/.env` (see package.json).
+ *   The script loads examples/.env automatically via dotenv.
  *
  * Required env vars:
  *   SEPOLIA_RPC_URL, GNOSIS_RPC_URL, CONSENSUS_ADDRESS
@@ -39,6 +39,7 @@
 import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
+import dotenv from "dotenv";
 import {
 	type Address,
 	concat,
@@ -59,6 +60,8 @@ import {
 } from "viem";
 import { gnosis, sepolia } from "viem/chains";
 import { HYPERNATIVE_GUARD_CREATION_CODE } from "./hypernative-guard-bytecode.js";
+
+dotenv.config({ path: resolve(import.meta.dirname, ".env"), quiet: true });
 
 // ---------------------------------------------------------------------------
 // Constants

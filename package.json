@@ -18,7 +18,7 @@
 		"foundryup": "foundryup --install v1.5.1",
 		"test": "npm run test --workspaces",
 		"test:integration": "./scripts/run_integration_test.sh",
-		"test:integration:cosigner": "tsx --env-file=examples/.env examples/test-cosigner-hypernative.ts",
+		"test:integration:cosigner": "tsx examples/test-cosigner-hypernative.ts",
 		"coverage": "npm run coverage --workspaces"
 	},
 	"devDependencies": {
