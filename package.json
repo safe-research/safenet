@@ -18,6 +18,7 @@
 		"foundryup": "foundryup --install v1.5.1",
 		"test": "npm run test --workspaces",
 		"test:integration": "./scripts/run_integration_test.sh",
+		"examples:attest-safe-tx": "tsx examples/attest-safe-tx.ts",
 		"coverage": "npm run coverage --workspaces"
 	},
 	"devDependencies": {
