@@ -5,7 +5,7 @@
 		"includes": [
 			"**/src/**/*.ts",
 			"**/src/**/*.tsx",
-			"scripts/*.ts",
+			"examples/*.ts",
 			"**/package.json",
 			"**/tsconfig.json",
 			"**/tsconfig.*.json",

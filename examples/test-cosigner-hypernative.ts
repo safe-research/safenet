@@ -90,10 +90,8 @@ const safeUiLink = (addr: Address): string => `https://app.safe.global/home?safe
 const safenetTx = (hash: Hex): string =>
 	`https://explorer.safenet-beta.eth.limo/#/safeTx?chainId=${sepolia.id}&safeTxHash=${hash}`;
 
-
 // ---------------------------------------------------------------------------
 // ---------------------------------------------------------------------------
-
 
 // ---------------------------------------------------------------------------
 // Helpers
