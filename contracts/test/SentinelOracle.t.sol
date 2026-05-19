@@ -28,7 +28,7 @@ contract SentinelOracleTest is Test {
     MockERC20 public token;
 
     address public arbitrator;
-    address public proposer;
+    address public consensus;
     address public sentinel1;
     address public sentinel2;
     address public sentinel3;
@@ -39,24 +39,24 @@ contract SentinelOracleTest is Test {
 
     function setUp() public {
         arbitrator = vm.createWallet("arbitrator").addr;
-        proposer = vm.createWallet("proposer").addr;
+        consensus = vm.createWallet("consensus").addr;
         sentinel1 = vm.createWallet("sentinel1").addr;
         sentinel2 = vm.createWallet("sentinel2").addr;
         sentinel3 = vm.createWallet("sentinel3").addr;
 
         token = new MockERC20("Fee Token", "FEE");
         oracle = new SentinelOracle(
-            arbitrator, address(token), REQUEST_FEE, VOTING_WINDOW, GOVERNANCE_DELAY, BOND_MULTIPLIER
+            arbitrator, consensus, address(token), REQUEST_FEE, VOTING_WINDOW, GOVERNANCE_DELAY, BOND_MULTIPLIER
         );
 
         // Fund accounts
-        token.mint(proposer, 100_000);
+        token.mint(consensus, 100_000);
         token.mint(sentinel1, 100_000);
         token.mint(sentinel2, 100_000);
         token.mint(sentinel3, 100_000);
 
         // Approve oracle for fee pulls
-        vm.prank(proposer);
+        vm.prank(consensus);
         token.approve(address(oracle), type(uint256).max);
         vm.prank(sentinel1);
         token.approve(address(oracle), type(uint256).max);
@@ -80,7 +80,7 @@ contract SentinelOracleTest is Test {
     // ============================================================
 
     function _postRequest() internal {
-        vm.prank(proposer);
+        vm.prank(consensus);
         oracle.postRequest(REQUEST_ID);
     }
 
@@ -104,17 +104,17 @@ contract SentinelOracleTest is Test {
 
         _advancePastDeadline();
 
-        uint256 proposerBalBefore = token.balanceOf(proposer);
+        uint256 consensusBalBefore = token.balanceOf(consensus);
 
         vm.expectEmit(true, true, false, true);
         emit IOracle.OracleResult(
-            REQUEST_ID, proposer, abi.encode(SentinelOracleRequest.ResolveReason.UNANIMOUS_APPROVE), true
+            REQUEST_ID, consensus, abi.encode(SentinelOracleRequest.ResolveReason.UNANIMOUS_APPROVE), true
         );
 
         oracle.finalize(REQUEST_ID);
 
-        // Proposer's fee was NOT refunded (it's distributed to sentinels).
-        assertEq(token.balanceOf(proposer), proposerBalBefore, "proposer should not receive fee on approve");
+        // Consensus's fee was NOT refunded (it's distributed to sentinels).
+        assertEq(token.balanceOf(consensus), consensusBalBefore, "consensus should not receive fee on approve");
 
         SentinelOracleRequest.Request memory req = oracle.getRequest(REQUEST_ID);
         assertEq(uint256(req.state), uint256(SentinelOracleRequest.State.RESOLVED_APPROVED));
@@ -176,7 +176,7 @@ contract SentinelOracleTest is Test {
 
         vm.expectEmit(true, true, false, true);
         emit IOracle.OracleResult(
-            REQUEST_ID, proposer, abi.encode(SentinelOracleRequest.ResolveReason.UNANIMOUS_DENY), false
+            REQUEST_ID, consensus, abi.encode(SentinelOracleRequest.ResolveReason.UNANIMOUS_DENY), false
         );
 
         oracle.finalize(REQUEST_ID);
@@ -209,14 +209,16 @@ contract SentinelOracleTest is Test {
 
         _advancePastDeadline();
 
-        uint256 proposerBalBefore = token.balanceOf(proposer);
+        uint256 consensusBalBefore = token.balanceOf(consensus);
 
         vm.expectEmit(true, true, false, true);
-        emit IOracle.OracleResult(REQUEST_ID, proposer, abi.encode(SentinelOracleRequest.ResolveReason.TIMEOUT), false);
+        emit IOracle.OracleResult(
+            REQUEST_ID, consensus, abi.encode(SentinelOracleRequest.ResolveReason.TIMEOUT), false
+        );
 
         oracle.finalize(REQUEST_ID);
 
-        assertEq(token.balanceOf(proposer), proposerBalBefore + REQUEST_FEE, "fee should be refunded to proposer");
+        assertEq(token.balanceOf(consensus), consensusBalBefore + REQUEST_FEE, "fee should be refunded to consensus");
 
         // sentinels get bonds back
         uint256 s1Before = token.balanceOf(sentinel1);
@@ -235,9 +237,9 @@ contract SentinelOracleTest is Test {
         _postRequest();
         _advancePastDeadline();
 
-        uint256 proposerBalBefore = token.balanceOf(proposer);
+        uint256 consensusBalBefore = token.balanceOf(consensus);
         oracle.finalize(REQUEST_ID);
-        assertEq(token.balanceOf(proposer), proposerBalBefore + REQUEST_FEE);
+        assertEq(token.balanceOf(consensus), consensusBalBefore + REQUEST_FEE);
     }
 
     // ============================================================

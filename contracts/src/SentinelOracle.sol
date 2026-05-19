@@ -30,6 +30,7 @@ contract SentinelOracle is IOracle {
     // ============================================================
 
     address public immutable ARBITRATOR;
+    address public immutable CONSENSUS;
     IERC20 public immutable FEE_TOKEN;
     uint256 public immutable REQUEST_FEE;
     uint256 public immutable VOTING_WINDOW;
@@ -56,8 +57,11 @@ contract SentinelOracle is IOracle {
     // ============================================================
 
     error NotArbitrator();
+    error NotConsensus();
     error InvalidAddress();
     error ZeroFee();
+    error InvalidVotingWindow();
+    error InvalidGovernanceDelay();
     error SentinelNotActive();
     error ZeroBond();
 
@@ -80,6 +84,7 @@ contract SentinelOracle is IOracle {
 
     constructor(
         address arbitrator,
+        address consensus,
         address feeToken,
         uint256 requestFee,
         uint256 votingWindow,
@@ -87,9 +92,13 @@ contract SentinelOracle is IOracle {
         uint256 initialMultiplier
     ) {
         require(arbitrator != address(0), InvalidAddress());
+        require(consensus != address(0), InvalidAddress());
         require(feeToken != address(0), InvalidAddress());
         require(requestFee > 0, ZeroFee());
+        require(votingWindow > 0, InvalidVotingWindow());
+        require(governanceDelay > 0, InvalidGovernanceDelay());
         ARBITRATOR = arbitrator;
+        CONSENSUS = consensus;
         FEE_TOKEN = IERC20(feeToken);
         REQUEST_FEE = requestFee;
         VOTING_WINDOW = votingWindow;
@@ -102,6 +111,7 @@ contract SentinelOracle is IOracle {
     // ============================================================
 
     function postRequest(bytes32 requestId) external override(IOracle) {
+        require(msg.sender == CONSENSUS, NotConsensus());
         uint256 fee = REQUEST_FEE;
         uint256 bondTarget = fee * $bondConfig.bondMultiplier;
         uint256 deadline = block.number + VOTING_WINDOW;
