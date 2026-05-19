@@ -14,7 +14,10 @@ contract DeployCosignerScript is Script {
         // Required script arguments:
         uint256 consensusChainId = vm.envUint("CONSENSUS_CHAIN_ID");
         address consensusAddress = vm.envAddress("CONSENSUS_ADDRESS");
-        uint64 initialEpoch = uint64(vm.envUint("INITIAL_EPOCH"));
+        uint256 rawEpoch = vm.envUint("INITIAL_EPOCH");
+        require(rawEpoch <= type(uint64).max, "INITIAL_EPOCH overflow: value exceeds uint64");
+        // forge-lint: disable-next-line(unsafe-typecast)
+        uint64 initialEpoch = uint64(rawEpoch);
         uint256 groupKeyX = vm.envUint("INITIAL_GROUP_KEY_X");
         uint256 groupKeyY = vm.envUint("INITIAL_GROUP_KEY_Y");
 

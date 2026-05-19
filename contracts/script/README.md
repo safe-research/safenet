@@ -184,8 +184,8 @@ Deploys a `SafenetCosigner` contract bound to a specific Consensus contract and 
 Note: Make sure you have filled the `.env` file with the correct values. SafenetCosigner deployment requires:
 - `CONSENSUS_CHAIN_ID` — chain ID of the Consensus contract (e.g. `100` for Gnosis Chain)
 - `CONSENSUS_ADDRESS` — address of the Consensus contract on the consensus chain
-- `INITIAL_EPOCH` — epoch number to initialise the cosigner with (obtain via `activeEpoch()` on the Consensus contract)
-- `INITIAL_GROUP_KEY_X`, `INITIAL_GROUP_KEY_Y` — coordinates of the FROST group public key for that epoch
+- `INITIAL_EPOCH` — epoch number to initialise the cosigner with (obtain via `getActiveEpoch()` on the Consensus contract)
+- `INITIAL_GROUP_KEY_X`, `INITIAL_GROUP_KEY_Y` — x and y coordinates of the FROST group public key for that epoch (call `getCoordinator()` on the Consensus contract to get the `FROSTCoordinator` address, then call `groupKey(groupId)` with the group ID returned by `getActiveEpoch()`)
 
 Optional:
 - `ALLOW_TX_DELAY` — delay in seconds before a pre-approved transaction can be executed (default: `60`)
