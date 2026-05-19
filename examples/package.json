@@ -3,7 +3,8 @@
 	"private": true,
 	"type": "module",
 	"scripts": {
-		"check": "tsc"
+		"check": "tsc",
+		"coverage": "echo \"No coverage for examples\""
 	},
 	"dependencies": {
 		"dotenv": "^17.2.1",
