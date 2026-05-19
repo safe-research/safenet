@@ -90,6 +90,8 @@ export const sentinelConfigSchema = z.object({
 	SENTINEL_ORACLE_ADDRESS: checkedAddressSchema,
 	SENTINEL_BOND_AMOUNT: z.coerce.bigint().positive(),
 	SENTINEL_BLOCKLIST: emptyToDefault(jsonStringToValue(z.array(checkedAddressSchema)).optional(), []),
+	// Voting window in blocks. Controls the TTL for the preparing state and when finalize becomes eligible.
+	SENTINEL_VOTING_WINDOW: emptyToDefault(z.coerce.bigint().positive(), 12n),
 	STORAGE_FILE: emptyToDefault(z.string().optional()),
 });
 
