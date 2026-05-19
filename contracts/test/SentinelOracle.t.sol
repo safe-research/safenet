@@ -46,7 +46,13 @@ contract SentinelOracleTest is Test {
 
         token = new MockERC20("Fee Token", "FEE");
         oracle = new SentinelOracle(
-            arbitrator, consensus, address(token), REQUEST_FEE, VOTING_WINDOW, GOVERNANCE_DELAY, BOND_MULTIPLIER
+            arbitrator,
+            consensus,
+            address(token),
+            REQUEST_FEE,
+            VOTING_WINDOW,
+            GOVERNANCE_DELAY,
+            BOND_MULTIPLIER
         );
 
         // Fund accounts
