@@ -45,10 +45,13 @@ library SentinelOracleRequest {
     // ============================================================
 
     error RequestNotPending();
+    error RequestNotFrozen();
     error RequestNotResolved();
     error VotingWindowOpen();
     error VotingWindowClosed();
     error ThresholdAlreadyReached();
+    error ArbitrationAlreadyTriggered();
+    error ArbitrationNotTriggered();
 
     // ============================================================
     // INTERNAL FUNCTIONS
@@ -114,17 +117,39 @@ library SentinelOracleRequest {
         return state;
     }
 
-    function calcFeeReward(Request storage self, bool approved, uint256 bondAmount, uint256 position, State state)
+    function calcFeeReward(Request storage self, bool approved, uint256 bondAmount, uint256 position)
         internal
         view
         returns (uint256)
     {
-        if (state == State.TIMED_OUT) return 0;
-        bool isWinner = approved == (state == State.RESOLVED_APPROVED);
+        if (self.state == State.TIMED_OUT) return 0;
+        bool isWinner = approved == (self.state == State.RESOLVED_APPROVED);
         if (!isWinner) return 0;
         uint256 score = (bondAmount * 1e18) / position;
-        uint256 totalScore = state == State.RESOLVED_APPROVED ? self.approveTotalScore : self.denyTotalScore;
+        uint256 totalScore = self.state == State.RESOLVED_APPROVED ? self.approveTotalScore : self.denyTotalScore;
         return self.fee * score / totalScore;
+    }
+
+    function isBondSlashed(Request storage self, bool approved) internal view returns (bool) {
+        State state = requireResolved(self);
+        if (!self.arbitrated) return false;
+        if (state == State.TIMED_OUT) return false;
+        return approved != (state == State.RESOLVED_APPROVED);
+    }
+
+    function triggerArbitration(Request storage self) internal {
+        require(self.state == State.FROZEN, RequestNotFrozen());
+        require(!self.arbitrated, ArbitrationAlreadyTriggered());
+        self.arbitrated = true;
+    }
+
+    function resolveDispute(Request storage self, bool approveWins) internal returns (uint256 slashed, uint256 fee) {
+        require(self.state == State.FROZEN, RequestNotFrozen());
+        require(self.arbitrated, ArbitrationNotTriggered());
+        slashed = approveWins ? self.totalDenyBond : self.totalApproveBond;
+        self.state = approveWins ? State.RESOLVED_APPROVED : State.RESOLVED_DENIED;
+        fee = self.fee;
+        return (slashed, fee);
     }
 }
 
