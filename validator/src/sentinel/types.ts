@@ -45,6 +45,7 @@ export type TransactionPayload = { to: Address; value: bigint; data: Hex };
 export type SentinelConfig = {
 	readonly account: Address;
 	readonly consensus: Address;
+	readonly feeToken: Address;
 	readonly oracle: Address;
 	readonly chainId: bigint;
 	// Voting window in blocks, used as TTL for the preparing state cleanup.
