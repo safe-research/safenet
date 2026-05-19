@@ -8,9 +8,10 @@ Component: `contracts`, `validator`
 This feature introduces a competitive transaction checker oracle as a new `IOracle` implementation. Rather than a single designated approver (as in `SimpleOracle`), a permissioned set of *checker nodes* races to post bonded votes ("Approve" = safe, "Deny" = poisoned) against a transaction within a time-boxed window. The contract escrows the user's fee, collects bonds, and resolves the outcome once the window closes or bond thresholds are met. Checker nodes running alongside the validator service monitor the `NewRequest` event and submit their assessments on-chain.
 
 **Phases (separate PRs):**
-1. **Phase 1 — Core contract** (`CheckerOracle.sol`): request lifecycle, bonding, unanimous resolution, fee distribution, and timeout-default-reject logic.
-2. **Phase 2 — Arbitration** (`CheckerOracle.sol` extension): conflict detection, `triggerArbitration`, `resolveDispute`, slashing, and user fee refund.
-3. **Phase 3 — Checker node service** (`validator/`): off-chain checker daemon that listens for `NewRequest` events and posts bonds with Approve/Deny votes.
+1. **Phase 1 — Core contract** (`SentinelOracle.sol`): request lifecycle, bonding, unanimous resolution, fee distribution, and timeout-default-reject logic.
+2. **Phase 2 — Arbitration** (`SentinelOracle.sol` extension): conflict detection, `triggerArbitration`, `resolveDispute`, slashing, and user fee refund.
+3. **Phase 3 — Sentinel node service** (`validator/`): off-chain sentinel daemon that listens for `NewRequest` events and posts bonds with Approve/Deny votes.
+4. **Phase 4 — Deployment script**: Forge deployment script for `SentinelOracle`.
 
 ---
 
@@ -236,33 +237,39 @@ Focus on behavioral end-to-end scenarios that exercise complete flows rather tha
 **Goal:** Request lifecycle through unanimous resolution and timeout.
 
 Files touched:
-- `contracts/src/CheckerOracle.sol` — new contract (includes checker set management)
-- `contracts/src/interfaces/ICheckerOracle.sol` — new interface
-- `contracts/test/CheckerOracle.t.sol` — unit tests for Phase 1 flows
-- `contracts/script/DeployCheckerOracle.s.sol` — deployment script
+- `contracts/src/SentinelOracle.sol` — new contract (includes sentinel set management)
+- `contracts/src/interfaces/ISentinelOracle.sol` — new interface
+- `contracts/test/SentinelOracle.t.sol` — unit tests for Phase 1 flows
 
-Flows covered: `postRequest`, `commitApprove`, `commitDeny`, `finalize`, `claim`, `addChecker`, `removeChecker`, timeout default.
+Flows covered: `postRequest`, `commitApprove`, `commitDeny`, `finalize`, `claim`, `addSentinel`, `removeSentinel`, timeout default.
 
 ### Phase 2 — Arbitration (PR 2, depends on Phase 1)
 
 **Goal:** Conflict detection, arbitration trigger, dispute resolution, slashing waterfall.
 
 Files touched:
-- `contracts/src/CheckerOracle.sol` — `triggerArbitration`, `resolveDispute`, slashing logic
-- `contracts/test/CheckerOracle.t.sol` — arbitration unit tests
+- `contracts/src/SentinelOracle.sol` — `triggerArbitration`, `resolveDispute`, slashing logic
+- `contracts/test/SentinelOracle.t.sol` — arbitration unit tests
 
 Flows covered: conflict freeze, foundation arbitration, loser slash, user fee refund, treasury transfer.
 
-### Phase 3 — Checker Node Service (PR 3, can be parallelized with Phase 2)
+### Phase 3 — Sentinel Node Service (PR 3, can be parallelized with Phase 2)
 
-**Goal:** Off-chain checker daemon integrated into the validator service.
+**Goal:** Off-chain sentinel daemon integrated into the validator service.
 
 Files touched:
-- `validator/src/checker/` — new directory: `checker.ts`, `detector.ts`, `wallet.ts`
-- `validator/src/index.ts` — wire up checker sub-service
-- `validator/test/checker/` — unit tests for detector logic
+- `validator/src/sentinel/` — new directory: `sentinel.ts`, `detector.ts`, `wallet.ts`
+- `validator/src/index.ts` — wire up sentinel sub-service
+- `validator/test/sentinel/` — unit tests for detector logic
 
 Flows covered: event subscription, address-poisoning detection, bond submission, claim trigger.
+
+### Phase 4 — Deployment Script (PR 4, depends on Phase 1)
+
+**Goal:** Forge deployment script for `SentinelOracle`.
+
+Files touched:
+- `contracts/script/DeploySentinelOracle.s.sol` — deployment script reading constructor params from env vars
 
 ---
 
