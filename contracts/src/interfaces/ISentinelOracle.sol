@@ -45,6 +45,8 @@ interface ISentinelOracle is IOracle {
     // VIEW FUNCTIONS
     // ============================================================
 
+    function CONSENSUS() external view returns (address);
+
     function sentinelActiveAt(address sentinel) external view returns (uint256);
 
     function bondMultiplier() external view returns (uint256);
