@@ -123,8 +123,8 @@ library SentinelOracleRequest {
         returns (uint256)
     {
         if (self.state == State.TIMED_OUT) return 0;
-        bool isWinner = approved == (self.state == State.RESOLVED_APPROVED);
-        if (!isWinner) return 0;
+        bool isEligibleForFee = approved == (self.state == State.RESOLVED_APPROVED);
+        if (!isEligibleForFee) return 0;
         uint256 score = (bondAmount * 1e18) / position;
         uint256 totalScore = self.state == State.RESOLVED_APPROVED ? self.approveTotalScore : self.denyTotalScore;
         return self.fee * score / totalScore;
