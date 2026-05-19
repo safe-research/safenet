@@ -263,6 +263,8 @@ contract SentinelOracleTest is Test {
         oracle.finalize(REQUEST_ID);
 
         SentinelOracleRequest.Request memory req = oracle.getRequest(REQUEST_ID);
-        assertEq(uint256(req.state), uint256(SentinelOracleRequest.State.FROZEN), "conflicted request should be frozen");
+        assertEq(
+            uint256(req.state), uint256(SentinelOracleRequest.State.FROZEN), "conflicted request should be frozen"
+        );
     }
 }

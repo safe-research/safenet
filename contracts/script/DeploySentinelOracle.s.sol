@@ -16,7 +16,9 @@ contract DeploySentinelOracleScript is Script {
 
         vm.startBroadcast();
 
-        oracle = new SentinelOracle(arbitrator, consensus, feeToken, requestFee, votingWindow, governanceDelay, initialMultiplier);
+        oracle = new SentinelOracle(
+            arbitrator, consensus, feeToken, requestFee, votingWindow, governanceDelay, initialMultiplier
+        );
 
         vm.stopBroadcast();
 
