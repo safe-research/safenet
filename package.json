@@ -22,6 +22,7 @@
 		"coverage": "npm run coverage --workspaces"
 	},
 	"devDependencies": {
-		"@biomejs/biome": "2.0.6"
+		"@biomejs/biome": "2.0.6",
+		"tsx": "^4.21.0"
 	}
 }

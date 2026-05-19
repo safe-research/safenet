@@ -10,12 +10,27 @@
  *
  * Environment:
  *   Copy examples/.env.sample to examples/.env and fill in the values.
- *   Required: CONSENSUS_ADDRESS, GNOSIS_RPC_URL, SAFE_TX_SERVICE_URL, SAFE_TX_SERVICE_API_KEY
+ *   Required: CONSENSUS_ADDRESS, RPC_URL, SAFE_TX_SERVICE_URL, SAFE_TX_SERVICE_API_KEY
  */
 
 import { resolve } from "node:path";
 import dotenv from "dotenv";
-import { createPublicClient, encodeAbiParameters, getAddress, http, parseAbi, type Address, type Hex } from "viem";
+import z from "zod";
+import {
+    concat,
+    createPublicClient,
+    encodeAbiParameters,
+    getAddress,
+    http,
+    isAddress,
+    isHex,
+    numberToHex,
+    pad,
+    parseAbi,
+    size,
+    type Address,
+    type Hex,
+} from "viem";
 import { gnosis } from "viem/chains";
 
 dotenv.config({ path: resolve(import.meta.dirname, ".env"), quiet: true });
@@ -31,27 +46,46 @@ function usage(): never {
 
 const args = process.argv.slice(2);
 if (args.length !== 2) usage();
-const [rawHash, rawCosigner] = args as [string, string];
-if (!rawHash.startsWith("0x")) usage();
+const rawHash = args[0] ?? "";
+const rawCosigner = args[1] ?? "";
+if (!isHex(rawHash) || size(rawHash) !== 32) usage();
+if (!isAddress(rawCosigner)) usage();
 
-const safeTxHash = rawHash as Hex;
-const cosignerAddress = getAddress(rawCosigner) as Address;
+const safeTxHash: Hex = rawHash;
+const cosignerAddress: Address = getAddress(rawCosigner);
 
 // ---------------------------------------------------------------------------
 // Environment
 // ---------------------------------------------------------------------------
 
-function requireEnv(name: string): string {
-    const value = process.env[name];
-    if (!value) throw new Error(`Missing required env var: ${name}`);
-    return value;
+const envSchema = z.object({
+    CONSENSUS_ADDRESS: z
+        .string()
+        .refine((a) => isAddress(a, { strict: false }), "Invalid address format")
+        .transform((a) => getAddress(a)),
+    RPC_URL: z.url(),
+    SAFE_TX_SERVICE_URL: z.url().transform((url) => url.replace(/\/$/, "")),
+    SAFE_TX_SERVICE_API_KEY: z.string().min(1),
+    ATTESTATION_TIMEOUT_SECONDS: z
+        .string()
+        .optional()
+        .transform((v) => Number.parseInt(v ?? "120"))
+        .pipe(z.number().int().positive()),
+});
+
+const envParseResult = envSchema.safeParse(process.env);
+if (!envParseResult.success) {
+    console.error("Configuration error:", envParseResult.error.message);
+    process.exit(1);
 }
 
-const consensusAddress = getAddress(requireEnv("CONSENSUS_ADDRESS")) as Address;
-const gnosisRpc = requireEnv("GNOSIS_RPC_URL");
-const safeTxServiceUrl = requireEnv("SAFE_TX_SERVICE_URL").replace(/\/$/, "");
-const safeTxServiceApiKey = requireEnv("SAFE_TX_SERVICE_API_KEY");
-const attestationTimeout = Number(process.env["ATTESTATION_TIMEOUT_SECONDS"] ?? "120");
+const {
+    CONSENSUS_ADDRESS: consensusAddress,
+    RPC_URL: rpc,
+    SAFE_TX_SERVICE_URL: safeTxServiceUrl,
+    SAFE_TX_SERVICE_API_KEY: safeTxServiceApiKey,
+    ATTESTATION_TIMEOUT_SECONDS: attestationTimeout,
+} = envParseResult.data;
 
 const authHeaders = { Authorization: `Bearer ${safeTxServiceApiKey}` };
 
@@ -65,6 +99,27 @@ const CONSENSUS_ABI = parseAbi([
 ]);
 
 // ---------------------------------------------------------------------------
+// Safe TX Service response schema
+// ---------------------------------------------------------------------------
+
+const txSchema = z.object({
+    safe: z
+        .string()
+        .refine((a) => isAddress(a, { strict: false }), "Invalid address")
+        .transform((a) => getAddress(a)),
+    to: z.string(),
+    value: z.string(),
+    data: z.string().nullable(),
+    operation: z.coerce.number().int(),
+    safeTxGas: z.string(),
+    baseGas: z.string(),
+    gasPrice: z.string(),
+    gasToken: z.string(),
+    refundReceiver: z.string(),
+    nonce: z.coerce.number().int(),
+});
+
+// ---------------------------------------------------------------------------
 // Main
 // ---------------------------------------------------------------------------
 
@@ -72,7 +127,7 @@ async function main() {
     // Step 1: Poll for attestation from Gnosis Chain
     console.log(`[1] Polling for attestation (timeout: ${attestationTimeout}s)...`);
 
-    const gnosisClient = createPublicClient({ chain: gnosis, transport: http(gnosisRpc) });
+    const gnosisClient = createPublicClient({ chain: gnosis, transport: http(rpc) });
 
     type FrostSig = { r: { x: bigint; y: bigint }; z: bigint };
     let attestedEpoch = 0n;
@@ -111,20 +166,9 @@ async function main() {
         const text = await txResponse.text();
         throw new Error(`Safe TX Service GET failed (${txResponse.status}): ${text}`);
     }
-    const tx = (await txResponse.json()) as {
-        safe: string;
-        to: string;
-        value: string;
-        data: string | null;
-        operation: number;
-        safeTxGas: string;
-        baseGas: string;
-        gasPrice: string;
-        gasToken: string;
-        refundReceiver: string;
-        nonce: number;
-    };
-    const safeAddress = getAddress(tx.safe) as Address;
+
+    const tx = txSchema.parse(await txResponse.json());
+    const safeAddress = tx.safe;
     console.log(`   Safe:  ${safeAddress}`);
     console.log(`   Nonce: ${tx.nonce}`);
 
@@ -157,14 +201,15 @@ async function main() {
             },
         ],
         [attestedEpoch, { r: { x: attestedSig.r.x, y: attestedSig.r.y }, z: attestedSig.z }],
-    ) as Hex;
+    );
 
-    const staticSlot =
-        cosignerAddress.toLowerCase().slice(2).padStart(64, "0") +
-        (65).toString(16).padStart(64, "0") +
-        "00";
-    const dynamicData = (128).toString(16).padStart(64, "0") + attestation.slice(2);
-    const contractSignature = `0x${staticSlot}${dynamicData}` as Hex;
+    const contractSignature: Hex = concat([
+        pad(cosignerAddress, { size: 32 }), // r: 20-byte address left-padded to 32 bytes
+        numberToHex(65, { size: 32 }), // s: 65 (byte offset to dynamic data)
+        numberToHex(0, { size: 1 }), // v: 0x00 (EIP-1271 contract signature marker)
+        numberToHex(128, { size: 32 }), // dynamic data length
+        attestation, // 128 bytes: abi.encode(epoch, FROST.Signature)
+    ]);
 
     // Step 4: POST cosigner signature to Safe TX Service
     console.log(`\n[3] Posting cosigner signature to Safe TX Service...`);

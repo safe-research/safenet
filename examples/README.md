@@ -30,7 +30,7 @@ cp examples/.env.sample examples/.env
 | Variable | Description |
 |----------|-------------|
 | `CONSENSUS_ADDRESS` | Address of the Safenet Consensus contract on Gnosis Chain |
-| `GNOSIS_RPC_URL` | RPC endpoint for Gnosis Chain (to read attestation) |
+| `RPC_URL` | RPC endpoint for the consensus chain (to read attestation) |
 | `SAFE_TX_SERVICE_URL` | Safe Transaction Service base URL (e.g. `https://api.safe.global/tx-service/sep`) |
 | `SAFE_TX_SERVICE_API_KEY` | API key for the Safe Transaction Service |
 
