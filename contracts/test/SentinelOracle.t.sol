@@ -46,13 +46,7 @@ contract SentinelOracleTest is Test {
 
         token = new MockERC20("Fee Token", "FEE");
         oracle = new SentinelOracle(
-            arbitrator,
-            consensus,
-            address(token),
-            REQUEST_FEE,
-            VOTING_WINDOW,
-            GOVERNANCE_DELAY,
-            BOND_MULTIPLIER
+            arbitrator, consensus, address(token), REQUEST_FEE, VOTING_WINDOW, GOVERNANCE_DELAY, BOND_MULTIPLIER
         );
 
         // Fund accounts
@@ -218,9 +212,7 @@ contract SentinelOracleTest is Test {
         uint256 consensusBalBefore = token.balanceOf(consensus);
 
         vm.expectEmit(true, true, false, true);
-        emit IOracle.OracleResult(
-            REQUEST_ID, consensus, abi.encode(SentinelOracleRequest.ResolveReason.TIMEOUT), false
-        );
+        emit IOracle.OracleResult(REQUEST_ID, consensus, abi.encode(SentinelOracleRequest.ResolveReason.TIMEOUT), false);
 
         oracle.finalize(REQUEST_ID);
 
@@ -269,8 +261,6 @@ contract SentinelOracleTest is Test {
         oracle.finalize(REQUEST_ID);
 
         SentinelOracleRequest.Request memory req = oracle.getRequest(REQUEST_ID);
-        assertEq(
-            uint256(req.state), uint256(SentinelOracleRequest.State.FROZEN), "conflicted request should be frozen"
-        );
+        assertEq(uint256(req.state), uint256(SentinelOracleRequest.State.FROZEN), "conflicted request should be frozen");
     }
 }
