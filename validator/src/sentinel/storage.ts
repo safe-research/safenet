@@ -1,0 +1,71 @@
+import type { Database } from "better-sqlite3";
+import type { Hex } from "viem";
+import { z } from "zod";
+import { hexBytes32Schema } from "../types/schemas.js";
+import { jsonReplacer } from "../utils/json.js";
+import type { SentinelAction, SentinelRequestState, SentinelStateDiff } from "./types.js";
+
+const requestQueryResultSchema = z.array(
+	z.object({
+		id: hexBytes32Schema,
+		stateJson: z.string(),
+	}),
+);
+
+const sentinelRequestStateSchema = z.object({
+	deadline: z.coerce.bigint().nonnegative(),
+	status: z.enum(["preparing", "pending", "committed", "finalized"]),
+	approve: z.boolean().optional(),
+});
+
+export class SentinelStateStorage {
+	#db: Database;
+	#requests: Map<Hex, SentinelRequestState>;
+
+	constructor(database: Database) {
+		this.#db = database;
+		this.#db.exec(`
+			CREATE TABLE IF NOT EXISTS sentinel_requests (
+				id TEXT PRIMARY KEY,
+				stateJson TEXT NOT NULL
+			);
+		`);
+		this.#requests = this.#load();
+	}
+
+	#load(): Map<Hex, SentinelRequestState> {
+		const rows = requestQueryResultSchema.parse(this.#db.prepare("SELECT id, stateJson FROM sentinel_requests").all());
+		const map = new Map<Hex, SentinelRequestState>();
+		for (const row of rows) {
+			const data = JSON.parse(row.stateJson);
+			map.set(row.id, sentinelRequestStateSchema.parse(data));
+		}
+		return map;
+	}
+
+	requests(): ReadonlyMap<Hex, SentinelRequestState> {
+		return this.#requests;
+	}
+
+	applyDiff(diff: SentinelStateDiff): SentinelAction[] {
+		if (diff.request) {
+			const [id, state] = diff.request;
+			if (state === undefined) {
+				this.#db.prepare("DELETE FROM sentinel_requests WHERE id = ?").run(id);
+				this.#requests.delete(id);
+			} else {
+				const stateJson = JSON.stringify(state, jsonReplacer);
+				this.#db
+					.prepare(`
+						INSERT INTO sentinel_requests (id, stateJson)
+						VALUES (?, ?)
+						ON CONFLICT(id) DO UPDATE SET
+							stateJson = excluded.stateJson
+					`)
+					.run(id, stateJson);
+				this.#requests.set(id, state);
+			}
+		}
+		return diff.actions ?? [];
+	}
+}
