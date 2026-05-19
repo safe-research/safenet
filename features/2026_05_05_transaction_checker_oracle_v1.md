@@ -264,9 +264,11 @@ Files touched:
 
 Flows covered: event subscription, address-poisoning detection, bond submission, claim trigger.
 
-### Phase 4 — Deployment Script (PR 4, depends on Phase 1)
+### Phase 4 — Final cleanup (PR 4, depends on previous phases)
 
-**Goal:** Forge deployment script for `SentinelOracle`.
+**Goal:** Final adjustments and wiring
+- Forge deployment script for `SentinelOracle`.
+- Change refund fee to pull instead of push model (currently gets pushed to conensus contract).
 
 Files touched:
 - `contracts/script/DeploySentinelOracle.s.sol` — deployment script reading constructor params from env vars
