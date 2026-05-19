@@ -46,13 +46,12 @@ function usage(): never {
 
 const args = process.argv.slice(2);
 if (args.length !== 2) usage();
-const rawHash = args[0] ?? "";
-const rawCosigner = args[1] ?? "";
+const [rawHash = "", rawCosigner = ""] = args;
 if (!isHex(rawHash) || size(rawHash) !== 32) usage();
 if (!isAddress(rawCosigner)) usage();
 
 const safeTxHash: Hex = rawHash;
-const cosignerAddress: Address = getAddress(rawCosigner);
+const cosignerAddress: Address = rawCosigner;
 
 // ---------------------------------------------------------------------------
 // Environment
@@ -130,8 +129,7 @@ async function main() {
     const gnosisClient = createPublicClient({ chain: gnosis, transport: http(rpc) });
 
     type FrostSig = { r: { x: bigint; y: bigint }; z: bigint };
-    let attestedEpoch = 0n;
-    let attestedSig: FrostSig | null = null;
+    let attested: { epoch: bigint; sig: FrostSig } | null = null;
     const deadline = Date.now() + attestationTimeout * 1000;
 
     while (Date.now() < deadline) {
@@ -143,8 +141,7 @@ async function main() {
                 args: [safeTxHash],
             });
             if (sig.r.x !== 0n || sig.r.y !== 0n || sig.z !== 0n) {
-                attestedEpoch = epoch;
-                attestedSig = sig;
+                attested = { epoch, sig };
                 console.log(`\n   Attestation received! epoch=${epoch}`);
                 break;
             }
@@ -154,7 +151,7 @@ async function main() {
         process.stdout.write(".");
         await new Promise((r) => setTimeout(r, 5000));
     }
-    if (attestedSig === null) throw new Error(`Attestation timeout after ${attestationTimeout}s`);
+    if (attested === null) throw new Error(`Attestation timeout after ${attestationTimeout}s`);
 
     // Step 2: Fetch multisig transaction details from Safe TX Service
     console.log(`\n[2] Fetching transaction details from Safe TX Service...`);
@@ -200,7 +197,7 @@ async function main() {
                 ],
             },
         ],
-        [attestedEpoch, { r: { x: attestedSig.r.x, y: attestedSig.r.y }, z: attestedSig.z }],
+        [attested.epoch, { r: { x: attested.sig.r.x, y: attested.sig.r.y }, z: attested.sig.z }],
     );
 
     const contractSignature: Hex = concat([
