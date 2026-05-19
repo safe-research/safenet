@@ -37,7 +37,7 @@ cp examples/.env.sample examples/.env
 ### Usage
 
 ```sh
-npm run examples:attest-safe-tx -- <safeTxHash> <cosignerAddress>
+npm run attest-safe-tx -w @safenet/examples -- <safeTxHash> <cosignerAddress>
 ```
 
 | Argument | Description |
