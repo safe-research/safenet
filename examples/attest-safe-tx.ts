@@ -87,6 +87,7 @@ const {
 } = envParseResult.data;
 
 const authHeaders = { Authorization: `Bearer ${safeTxServiceApiKey}` };
+const gnosisClient = createPublicClient({ chain: gnosis, transport: http(rpc) });
 
 // ---------------------------------------------------------------------------
 // ABI
@@ -125,8 +126,6 @@ const txSchema = z.object({
 async function main() {
     // Step 1: Poll for attestation from Gnosis Chain
     console.log(`[1] Polling for attestation (timeout: ${attestationTimeout}s)...`);
-
-    const gnosisClient = createPublicClient({ chain: gnosis, transport: http(rpc) });
 
     type FrostSig = { r: { x: bigint; y: bigint }; z: bigint };
     let attested: { epoch: bigint; sig: FrostSig } | null = null;

@@ -3,6 +3,7 @@
 	"private": true,
 	"workspaces": [
 		"contracts",
+		"examples",
 		"explorer",
 		"validator"
 	],
@@ -22,7 +23,6 @@
 		"coverage": "npm run coverage --workspaces"
 	},
 	"devDependencies": {
-		"@biomejs/biome": "2.0.6",
-		"tsx": "^4.21.0"
+		"@biomejs/biome": "2.0.6"
 	}
 }
