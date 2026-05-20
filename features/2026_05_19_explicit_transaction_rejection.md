@@ -11,10 +11,10 @@ This feature adds an explicit **decline** to the signing ceremony: a validator t
 
 **Phases (separate PRs):**
 1. **FROSTCoordinator** — Add `signDecline`, threshold stopping logic, and `SignDeclined`/`SignRejected` events. No callback yet.
-2. **Consensus callback** — Add `signDeclineWithCallback` to `FROSTCoordinator`, add `onSignRejected` to `IFROSTCoordinatorCallback`, implement on `Consensus`, emit `TransactionRejected`/`OracleTransactionRejected`. Completes the on-chain rejection story.
-3. **Validator** — Add `"waiting_to_decline"` state and `sign_decline_with_callback` action. Can be developed in parallel with Phase 2, requires it before merging.
-4. **Explorer: rejection status** — Add `REJECTED` to `ProposalStatus`, derive from `TransactionRejected` events on Consensus.
-5. **Explorer: declined breakdown** — Add `declined` to `AttestationStatus`, query `SignDeclined` events on coordinator, add "Declined" row to UI. Can be developed in parallel with Phase 4, can start after Phase 1.
+2. **Consensus callback** — Add `signDeclineWithCallback` to `FROSTCoordinator`, add `onSignRejected` to `IFROSTCoordinatorCallback`, implement on `Consensus`, emit `TransactionRejected`/`OracleTransactionRejected`.
+3. **Validator** — Add `"waiting_to_decline"` state and `sign_decline_with_callback` action. Can be developed and merged in parallel with Phase 2; both depend only on Phase 1.
+4. **Explorer: rejection status** — Add `REJECTED` to `ProposalStatus`, derive from `TransactionRejected` events on Consensus. Requires Phase 2.
+5. **Explorer: declined breakdown** — Add `declined` to `AttestationStatus`, query `SignDeclined` events on coordinator, add "Declined" row to UI. Can be developed in parallel with Phases 2–4, can start after Phase 1.
 
 ---
 
@@ -599,9 +599,9 @@ Files:
 - `contracts/test/` — Tests for the full rejection callback chain (`signDeclineWithCallback` → `onSignRejected` → `rejectTransaction` → event emitted).
 
 ### Phase 3 — Validator (PR 3)
-**Can start after Phase 1 is merged; requires Phase 2 before merging (for the Consensus ABI entries used in the callback context).**
+**Can start and merge after Phase 1 is merged. Independent of Phase 2.**
 
-Can be developed in parallel with Phase 2 using local ABI drafts.
+Develop using local ABI drafts for `signDeclineWithCallback` (coordinator, Phase 2) and `rejectTransaction`/`rejectOracleTransaction` (Consensus, Phase 2); update to the real ABI before merging.
 
 Files:
 - `validator/src/machine/types.ts` — Add `"waiting_to_decline"` to `SigningState`.
@@ -645,17 +645,11 @@ Files:
 
 ### Dependency graph
 
-```
-PR 1 (FROSTCoordinator)
-  │
-  ├──▶ PR 2 (Consensus Callback)
-  │         │
-  │         ├──▶ PR 3 (Validator)  ──▶ (merge after PR 2)
-  │         │
-  │         └──▶ PR 4 (Explorer: Rejection Status)
-  │                   │
-  └──▶ PR 5 (Explorer: Declined Breakdown)  ──▶ (merge after PR 4)
-```
+- **PR 1** — no dependencies
+- **PR 2** — depends on PR 1
+- **PR 3** — depends on PR 1 (independent of PR 2)
+- **PR 4** — depends on PR 2
+- **PR 5** — depends on PR 1; merge after PR 4 for UX coherence
 
 ### Merge sequence
 
@@ -663,13 +657,13 @@ PR 1 (FROSTCoordinator)
 |----|-------------|-------------------|
 | PR 1 | — | immediately |
 | PR 2 | PR 1 | PR 1 |
-| PR 3 | PR 2 | PR 1 (use local ABI drafts for PR 2's Consensus additions) |
+| PR 3 | PR 1 | PR 1 (use local ABI drafts for PR 2's `signDeclineWithCallback` and Consensus additions) |
 | PR 4 | PR 2 | PR 2 |
 | PR 5 | PR 4 | PR 1 (use local ABI drafts; merge after PR 4 for UX) |
 
-**Parallel tracks**: PRs 2 and 3 can be developed in parallel. PRs 4 and 5 can be developed in parallel with each other and with PR 3.
+**Parallel tracks**: PRs 2 and 3 are fully independent of each other — both branch from PR 1. PRs 4 and 5 can be developed in parallel with each other and with PR 3.
 
-**Note on local ABI drafts**: PR 3 needs `signDeclineWithCallback` (coordinator, PR 1) and `rejectTransaction`/`rejectOracleTransaction` (Consensus, PR 2) for the callback context encoding. PR 5 needs `SignDeclined` (coordinator, PR 1). When developing ahead of the upstream PR being merged, stub the relevant ABI entries locally and update to the real ABI before merging.
+**Note on local ABI drafts**: PR 3 needs `signDeclineWithCallback` (added to coordinator in PR 2) and `rejectTransaction`/`rejectOracleTransaction` (Consensus, PR 2) for the callback context encoding. PR 5 needs `SignDeclined` (coordinator, PR 1). When developing ahead of the upstream PR, stub the relevant ABI entries locally and update to the real ABI before merging.
 
 ---
 
