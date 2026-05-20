@@ -20,7 +20,7 @@ contract SimpleOracleTest is Test {
 
     function test_PostRequest_RecordsRequester() public {
         vm.prank(requester);
-        oracle.postRequest(REQUEST_ID);
+        oracle.postRequest(REQUEST_ID, address(0));
 
         // Verify by successfully approving — would revert with RequestNotPending if not recorded.
         vm.prank(approver);
@@ -29,16 +29,16 @@ contract SimpleOracleTest is Test {
 
     function test_PostRequest_AlreadyPending_Reverts() public {
         vm.prank(requester);
-        oracle.postRequest(REQUEST_ID);
+        oracle.postRequest(REQUEST_ID, address(0));
 
         vm.expectRevert(SimpleOracle.RequestAlreadyPending.selector);
         vm.prank(requester);
-        oracle.postRequest(REQUEST_ID);
+        oracle.postRequest(REQUEST_ID, address(0));
     }
 
     function test_Approve_EmitsOracleResult_True() public {
         vm.prank(requester);
-        oracle.postRequest(REQUEST_ID);
+        oracle.postRequest(REQUEST_ID, address(0));
 
         vm.expectEmit(true, true, false, true);
         emit IOracle.OracleResult(REQUEST_ID, requester, "", true);
@@ -49,7 +49,7 @@ contract SimpleOracleTest is Test {
 
     function test_Reject_EmitsOracleResult_False() public {
         vm.prank(requester);
-        oracle.postRequest(REQUEST_ID);
+        oracle.postRequest(REQUEST_ID, address(0));
 
         vm.expectEmit(true, true, false, true);
         emit IOracle.OracleResult(REQUEST_ID, requester, "", false);
@@ -60,7 +60,7 @@ contract SimpleOracleTest is Test {
 
     function test_Approve_NotApprover_Reverts() public {
         vm.prank(requester);
-        oracle.postRequest(REQUEST_ID);
+        oracle.postRequest(REQUEST_ID, address(0));
 
         vm.expectRevert(SimpleOracle.NotApprover.selector);
         oracle.approve(REQUEST_ID);
@@ -68,7 +68,7 @@ contract SimpleOracleTest is Test {
 
     function test_Reject_NotApprover_Reverts() public {
         vm.prank(requester);
-        oracle.postRequest(REQUEST_ID);
+        oracle.postRequest(REQUEST_ID, address(0));
 
         vm.expectRevert(SimpleOracle.NotApprover.selector);
         oracle.reject(REQUEST_ID);
@@ -88,7 +88,7 @@ contract SimpleOracleTest is Test {
 
     function test_Approve_ClearsRequest() public {
         vm.prank(requester);
-        oracle.postRequest(REQUEST_ID);
+        oracle.postRequest(REQUEST_ID, address(0));
 
         vm.prank(approver);
         oracle.approve(REQUEST_ID);
@@ -101,7 +101,7 @@ contract SimpleOracleTest is Test {
 
     function test_Reject_ClearsRequest() public {
         vm.prank(requester);
-        oracle.postRequest(REQUEST_ID);
+        oracle.postRequest(REQUEST_ID, address(0));
 
         vm.prank(approver);
         oracle.reject(REQUEST_ID);

@@ -81,7 +81,7 @@ contract SentinelOracleTest is Test {
 
     function _postRequest() internal {
         vm.prank(consensus);
-        oracle.postRequest(REQUEST_ID);
+        oracle.postRequest(REQUEST_ID, consensus);
     }
 
     function _advancePastDeadline() internal {
@@ -285,11 +285,7 @@ contract SentinelOracleTest is Test {
 
         // Fee stays in contract for winners; ARBITRATOR receives slashed bonds minus the fee.
         assertEq(token.balanceOf(consensus), consensusBalBefore, "consensus balance unchanged");
-        assertEq(
-            token.balanceOf(arbitrator),
-            arbitratorBalBefore + BOND_TARGET - REQUEST_FEE,
-            "deny bonds (minus fee) slashed to arbitrator"
-        );
+        assertEq(token.balanceOf(arbitrator), arbitratorBalBefore + BOND_TARGET, "deny bonds slashed to arbitrator");
 
         // Winning approve sentinel (sentinel1) gets bond back plus full fee reward (sole winner).
         uint256 s1Before = token.balanceOf(sentinel1);

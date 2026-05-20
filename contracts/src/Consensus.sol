@@ -356,7 +356,7 @@ contract Consensus is IConsensus, IERC165, IFROSTCoordinatorCallback {
             safeTxHash, transaction.chainId, transaction.safe, epochs.active, oracle, transaction
         );
         _COORDINATOR.sign($groups[epochs.active], message);
-        IOracle(oracle).postRequest(message);
+        IOracle(oracle).postRequest(message, msg.sender);
     }
 
     /**

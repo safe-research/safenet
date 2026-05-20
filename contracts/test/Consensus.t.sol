@@ -10,7 +10,7 @@ import {FROSTSignatureId} from "@/libraries/FROSTSignatureId.sol";
 import {SafeTransaction} from "@/libraries/SafeTransaction.sol";
 
 contract MockOracle {
-    function postRequest(bytes32) external {}
+    function postRequest(bytes32, address) external {}
 }
 
 contract ConsensusTest is Test {

@@ -143,13 +143,11 @@ library SentinelOracleRequest {
         self.arbitrated = true;
     }
 
-    function resolveDispute(Request storage self, bool approveWins) internal returns (uint256 slashed, uint256 fee) {
+    function resolveDispute(Request storage self, bool approveWins) internal returns (uint256 slashed) {
         require(self.state == State.FROZEN, RequestNotFrozen());
         require(self.arbitrated, ArbitrationNotTriggered());
         slashed = approveWins ? self.totalDenyBond : self.totalApproveBond;
         self.state = approveWins ? State.RESOLVED_APPROVED : State.RESOLVED_DENIED;
-        fee = self.fee;
-        return (slashed, fee);
     }
 }
 

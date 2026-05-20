@@ -22,6 +22,7 @@ contract SentinelOracle is IOracle {
     // EVENTS
     // ============================================================
 
+    event ArbitrationTriggered(bytes32 indexed requestId);
     event DisputeResolved(bytes32 indexed requestId, SentinelOracleRequest.State outcome, uint256 slashed);
     event Claimed(bytes32 indexed requestId, address indexed sentinel, uint256 bondReturn, uint256 feeReward);
 
@@ -106,13 +107,13 @@ contract SentinelOracle is IOracle {
     // IOracle IMPLEMENTATION
     // ============================================================
 
-    function postRequest(bytes32 requestId) external override(IOracle) {
+    function postRequest(bytes32 requestId, address feePayer) external override(IOracle) {
         require(msg.sender == CONSENSUS, NotConsensus());
         uint256 fee = REQUEST_FEE;
         uint256 bondTarget = fee * $bondConfig.bondMultiplier;
         uint256 deadline = block.number + VOTING_WINDOW;
         $requests.create(requestId, msg.sender, fee, bondTarget, deadline);
-        FEE_TOKEN.safeTransferFrom(msg.sender, address(this), fee);
+        FEE_TOKEN.safeTransferFrom(feePayer, address(this), fee);
     }
 
     // ============================================================
@@ -169,16 +170,16 @@ contract SentinelOracle is IOracle {
     // ============================================================
 
     function triggerArbitration(bytes32 requestId) external onlyArbitrator {
-        SentinelOracleRequest.Request storage req = $requests.get(requestId);
-        req.triggerArbitration();
+        $requests.get(requestId).triggerArbitration();
+        emit ArbitrationTriggered(requestId);
     }
 
     function resolveDispute(bytes32 requestId, bool approveWins) external onlyArbitrator {
         SentinelOracleRequest.Request storage req = $requests.get(requestId);
         address proposer = req.proposer;
-        (uint256 slashed, uint256 fee) = req.resolveDispute(approveWins);
+        uint256 slashed = req.resolveDispute(approveWins);
         SentinelOracleRequest.State outcome = req.state;
-        FEE_TOKEN.safeTransfer(ARBITRATOR, slashed - fee);
+        FEE_TOKEN.safeTransfer(ARBITRATOR, slashed);
         emit DisputeResolved(requestId, outcome, slashed);
         emit OracleResult(requestId, proposer, abi.encode(SentinelOracleRequest.ResolveReason.ARBITRATION), approveWins);
     }
