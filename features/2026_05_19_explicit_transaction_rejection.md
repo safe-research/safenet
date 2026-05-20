@@ -200,7 +200,7 @@ Both return `(address(0), RejectionReason.NotRejected)` when not rejected.
 
 #### Test cases
 
-- Valid tx: can be attested; can also be rejected after attestation — second call reverts with `AlreadyAttested`.
+- Valid tx: can be attested; attempting to reject it after attestation reverts with `AlreadyAttested`.
 - Invalid tx: can be rejected; attestation can still proceed after rejection (advisory).
 - Double rejection: second call reverts with `AlreadyRejected`.
 - Non-participant rejection: reverts with `InvalidParticipant` (from coordinator).
@@ -282,7 +282,7 @@ The oracle transaction handler (`handleOracleTransactionProposed`) is updated an
 
 Implement both methods by calling the corresponding contract functions.
 
-#### `AlreadyRejected` handling (Issues 3 & 6)
+#### `AlreadyRejected` handling
 
 When `rejectTransaction` reverts with `AlreadyRejected`, it means another validator submitted the rejection first — the goal is already achieved. The validator must:
 - **Not retry**: detect the `AlreadyRejected` error in `onchain.ts` and return a successful `SubmittedAction` (or throw a dedicated terminal error that `BaseProtocol` recognises as non-retryable).
