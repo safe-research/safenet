@@ -7,12 +7,12 @@ Component: `all`
 
 Currently, when a validator determines a transaction is invalid, it silently drops it. The FROST signing ceremony times out with no on-chain record. From the user's and operator's perspective, "rejected" and "error/timeout" are indistinguishable.
 
-This feature adds an explicit on-chain rejection mechanism: a validator that determines a transaction is invalid submits a `rejectTransaction` (or `rejectOracleTransaction`) call to `Consensus.sol`, storing the rejection reason on-chain. The explorer surfaces this as a distinct "Rejected" status with the specific reason code.
+This feature adds an explicit on-chain rejection mechanism: a validator that determines a transaction is invalid submits a `rejectTransaction` (or `rejectOracleTransaction`) call to `Consensus.sol`. Each validator's rejection is recorded individually. The explorer surfaces this as a distinct "Rejected" status.
 
 **Phases (separate PRs):**
-1. **Contracts** — Add `rejectTransaction`, `rejectOracleTransaction`, `getTransactionRejection`, `getOracleTransactionRejection`, `TransactionRejected`, `OracleTransactionRejected` events, and `RejectionReason` enum.
+1. **Contracts** — Add `rejectTransaction`, `rejectOracleTransaction`, `getTransactionRejection`, `getOracleTransactionRejection`, `TransactionRejected`, and `OracleTransactionRejected` events.
 2. **Validator** — Emit `consensus_reject_transaction` / `consensus_reject_oracle_transaction` action on invalid transactions instead of silently returning.
-3. **Explorer** — Query `TransactionRejected` / `OracleTransactionRejected` events and display rejection status with reason.
+3. **Explorer** — Query `TransactionRejected` / `OracleTransactionRejected` events and display rejection status.
 
 Phases 2 and 3 can be developed in parallel once Phase 1 is merged.
 
@@ -30,19 +30,24 @@ A rejection event provides fast feedback and observability, but **does not preve
 
 **Why**: The allowed-modules, allowed-guards, and allowed-fallback-handler lists are hardcoded per validator binary version (see `checks/config/modules.ts`, `guards.ts`, `fallback.ts`). During a rolling upgrade where some validators run a newer version with an expanded allowlist, a validator on the old version could reject a transaction that the majority considers valid. Making rejection block attestation would give a single outdated validator the power to permanently deny any transaction in that epoch, with no override mechanism. Keeping rejection advisory eliminates this DoS vector entirely.
 
-### First validator wins (race-to-reject)
+### Per-validator tracking
 
-The first validator to call `rejectTransaction` establishes the on-chain record; subsequent calls revert with `AlreadyRejected`. This keeps storage and gas costs to a single slot and a single tx per proposal.
+Each validator's rejection is stored as an individual flag. This means:
+- Multiple `TransactionRejected` events can be emitted for the same proposal, one per rejecting validator.
+- Rejection and attestation coexist naturally — no "first wins" special-casing needed.
+- The explorer can show which validators rejected, providing richer observability.
 
-`rejectTransaction` still guards against rejecting an already-attested proposal (`require($attestations[message].isZero(), AlreadyAttested())`) to avoid emitting misleading rejection events after a successful attestation.
+### Rejection stored on `Consensus`, not `FROSTCoordinator`
+
+Rejection is a consensus-layer concern (is this Safe transaction valid per the network's rules?) and belongs alongside attestation in `Consensus.sol`. The `FROSTCoordinator` manages low-level FROST signing mechanics and has no knowledge of Safe transactions or validator validity rules. Placing rejection there would introduce a semantic mismatch and couple the signing infrastructure to application-layer policy. Keeping both attestation and rejection in `Consensus` also maintains a consistent and complete picture of a proposal's lifecycle in one contract.
+
+### Rejection is a flag — no reason code
+
+Only a boolean flag per (message, validator) is stored. A reason code would improve user-facing messages but requires maintaining a `RejectionReason` enum in sync across the contract and validator, and adds a contract upgrade path when new checks are introduced. The flag alone is sufficient for the primary goals of fast feedback and observability.
 
 ### Access control: FROST group participants only
 
 `rejectTransaction` calls `_COORDINATOR.participantKey($groups[epoch], msg.sender)`, which reverts with `InvalidParticipant` (from `FROSTParticipantMap.getKey`) if the caller is not a member of the epoch's signing group. This revert propagates and serves as the access control guard. No return-value check is needed.
-
-### Error codes as a `uint8` enum
-
-Rejection reasons are stored on-chain as a `uint8` enum (`RejectionReason`), matching the current set of `TransactionCheckErrorCode` values in the validator. Adding new codes requires a contract upgrade.
 
 ### Oracle transaction parity
 
@@ -56,7 +61,7 @@ Rejection reasons are stored on-chain as a `uint8` enum (`RejectionReason`), mat
 
 **Mutual exclusivity (rejection blocks attestation)**: Initially considered for a cleaner state machine. Rejected because the hardcoded allowlists mean validators on different versions can disagree. A single old-version validator could permanently block a valid transaction in an epoch with no recovery path. See "Rejection is advisory" above.
 
-**bytes32 string instead of enum**: Stores the human-readable reason code (e.g. `"no_delegatecall"`) directly. More flexible for adding new codes without an upgrade but costs slightly more gas and has weaker type safety.
+**Reason codes**: Storing a `RejectionReason` enum alongside the flag would improve user-facing messages. Dropped in favour of the simpler flag to avoid keeping TS and Solidity enums in sync and to avoid contract upgrades when new checks are added.
 
 ---
 
@@ -74,13 +79,11 @@ Transaction Proposals
   │ Status:    [ REJECTED ]                         │
   │ Proposed:  Block 12345  (Explorer Tx)           │
   │ Rejected:  Block 12347  (Explorer Tx)           │
-  │ Reason:    No delegatecall                      │
+  │            Block 12348  (Explorer Tx)           │
   └─────────────────────────────────────────────────┘
 ```
 
-The "Reason" field displays a human-readable label for the `RejectionReason` enum value. The rejection block and tx link provide auditability.
-
-If a proposal has both a rejection and an attestation, `ATTESTED` is displayed (attestation takes precedence). This state indicates a validator version mismatch during the rejection and is an operational signal, not an error.
+Each rejection event is shown as a separate row. If a proposal has both rejections and an attestation, `ATTESTED` is displayed (attestation takes precedence). This state indicates a validator version mismatch during the rejection and is an operational signal, not an error.
 
 ---
 
@@ -88,33 +91,10 @@ If a proposal has both a rejection and an attestation, `ATTESTED` is displayed (
 
 ### Contracts
 
-#### New: `RejectionReason` enum (in `IConsensus.sol`)
-
-```solidity
-enum RejectionReason {
-    NotRejected,                // 0 — default storage value; returned by view functions when no rejection exists
-    Unknown,                    // 1
-    NoDelegatecall,             // 2
-    UnsupportedModule,          // 3
-    UnsupportedModuleGuard,     // 4
-    UnsupportedGuard,           // 5
-    UnsupportedFallbackHandler, // 6
-    InvalidSelfCall,            // 7
-    InvalidMultisend,           // 8
-    InvalidMigration,           // 9
-    InvalidSignMessage,         // 10
-    InvalidCreateCall           // 11
-}
-```
-
 #### New storage in `Consensus.sol`
 
 ```solidity
-struct RejectionInfo {
-    address validator;       // 20 bytes — non-zero acts as "is rejected" sentinel
-    RejectionReason reason;  // 1 byte
-}
-mapping(bytes32 message => RejectionInfo) private $rejections;
+mapping(bytes32 message => mapping(address validator => bool)) private $rejections;
 ```
 
 #### New events in `IConsensus.sol`
@@ -125,8 +105,7 @@ event TransactionRejected(
     uint256 indexed chainId,
     address indexed safe,
     uint64 epoch,
-    address validator,
-    RejectionReason reason
+    address validator
 );
 
 event OracleTransactionRejected(
@@ -135,8 +114,7 @@ event OracleTransactionRejected(
     address indexed safe,
     uint64 epoch,
     address oracle,
-    address validator,
-    RejectionReason reason
+    address validator
 );
 ```
 
@@ -153,8 +131,7 @@ function rejectTransaction(
     uint64 epoch,
     uint256 chainId,
     address safe,
-    bytes32 safeTxStructHash,
-    RejectionReason reason
+    bytes32 safeTxStructHash
 ) external;
 ```
 
@@ -163,9 +140,9 @@ Implementation:
 2. Reconstruct `message` via `domainSeparator().transactionProposal(epoch, safeTxHash)`.
 3. Call `_COORDINATOR.participantKey($groups[epoch], msg.sender)` — reverts with `InvalidParticipant` for non-members, acting as access control.
 4. `require($attestations[message].isZero(), AlreadyAttested())` — don't reject what's already attested.
-5. `require($rejections[message].validator == address(0), AlreadyRejected())` — first validator wins.
-6. Store `$rejections[message] = RejectionInfo(msg.sender, reason)`.
-7. Emit `TransactionRejected(safeTxHash, chainId, safe, epoch, msg.sender, reason)`.
+5. `require(!$rejections[message][msg.sender], AlreadyRejected())` — prevent double rejection by the same validator.
+6. Set `$rejections[message][msg.sender] = true`.
+7. Emit `TransactionRejected(safeTxHash, chainId, safe, epoch, msg.sender)`.
 
 #### New function `rejectOracleTransaction` in `IConsensus.sol` / `Consensus.sol`
 
@@ -175,24 +152,21 @@ function rejectOracleTransaction(
     address oracle,
     uint256 chainId,
     address safe,
-    bytes32 safeTxStructHash,
-    RejectionReason reason
+    bytes32 safeTxStructHash
 ) external;
 ```
 
-Implementation mirrors `rejectTransaction` but uses `domainSeparator().oracleTransactionProposal(epoch, oracle, safeTxHash)` as the message key and checks `$attestations` via the oracle message key.
+Implementation mirrors `rejectTransaction` but uses `domainSeparator().oracleTransactionProposal(epoch, oracle, safeTxHash)` as the message key.
 
 #### New view functions in `IConsensus.sol` / `Consensus.sol`
 
 ```solidity
-function getTransactionRejection(uint64 epoch, bytes32 safeTxHash)
-    external view returns (address validator, RejectionReason reason);
+function getTransactionRejection(uint64 epoch, bytes32 safeTxHash, address validator)
+    external view returns (bool rejected);
 
-function getOracleTransactionRejection(uint64 epoch, address oracle, bytes32 safeTxHash)
-    external view returns (address validator, RejectionReason reason);
+function getOracleTransactionRejection(uint64 epoch, address oracle, bytes32 safeTxHash, address validator)
+    external view returns (bool rejected);
 ```
-
-Both return `(address(0), RejectionReason.NotRejected)` when not rejected.
 
 #### `attestTransaction` — no change
 
@@ -201,10 +175,10 @@ Both return `(address(0), RejectionReason.NotRejected)` when not rejected.
 #### Test cases
 
 - Valid tx: can be attested; attempting to reject it after attestation reverts with `AlreadyAttested`.
-- Invalid tx: can be rejected; attestation can still proceed after rejection (advisory).
-- Double rejection: second call reverts with `AlreadyRejected`.
+- Invalid tx: can be rejected by multiple validators independently; attestation can still proceed after rejection (advisory).
+- Double rejection by the same validator: second call reverts with `AlreadyRejected`.
+- Two different validators rejecting the same proposal: both succeed, two events emitted.
 - Non-participant rejection: reverts with `InvalidParticipant` (from coordinator).
-- All `RejectionReason` values round-trip through event and view.
 - Oracle variants: same cases for `rejectOracleTransaction`.
 
 ---
@@ -220,7 +194,6 @@ export type RejectTransaction = {
     chainId: bigint;
     safe: Address;
     safeTxStructHash: Hex;
-    reason: TransactionCheckErrorCode;
 };
 
 export type RejectOracleTransaction = {
@@ -230,29 +203,10 @@ export type RejectOracleTransaction = {
     chainId: bigint;
     safe: Address;
     safeTxStructHash: Hex;
-    reason: TransactionCheckErrorCode;
 };
 ```
 
 Add both to the `ConsensusAction` union.
-
-#### Mapping `TransactionCheckErrorCode` → `RejectionReason` (new helper)
-
-```typescript
-const REJECTION_REASON: Record<TransactionCheckErrorCode, number> = {
-    unknown: 1,
-    no_delegatecall: 2,
-    unsupported_module: 3,
-    unsupported_module_guard: 4,
-    unsupported_guard: 5,
-    unsupported_fallback_handler: 6,
-    invalid_self_call: 7,
-    invalid_multisend: 8,
-    invalid_migration: 9,
-    invalid_sign_message: 10,
-    invalid_create_call: 11,
-};
-```
 
 #### Updated `handleTransactionProposed` (`transactionProposed.ts`)
 
@@ -266,7 +220,6 @@ return {
         chainId: protocol.chainId(),
         safe: event.transaction.safe,
         safeTxStructHash: event.transaction.structHash,
-        reason: result.error.code,
     }],
 };
 ```
@@ -284,19 +237,14 @@ Implement both methods by calling the corresponding contract functions.
 
 #### `AlreadyRejected` handling
 
-When `rejectTransaction` reverts with `AlreadyRejected`, it means another validator submitted the rejection first — the goal is already achieved. The validator must:
-- **Not retry**: detect the `AlreadyRejected` error in `onchain.ts` and return a successful `SubmittedAction` (or throw a dedicated terminal error that `BaseProtocol` recognises as non-retryable).
-- **Log at `info` level**, not `warn` — this is an expected race outcome, not a failure.
-
-The same handling applies to `AlreadyAttested` reverts from `rejectTransaction` (the tx was attested before rejection was submitted — also a terminal, non-error outcome).
+When `rejectTransaction` reverts with `AlreadyRejected`, the same validator somehow submitted the rejection twice — treat it as a terminal, non-retryable outcome. When it reverts with `AlreadyAttested`, the tx was attested before rejection was submitted — also terminal. Both are caught in `onchain.ts`, resolved as completed actions, and logged at `info` rather than `warn`.
 
 #### Test cases
 
-- Invalid tx produces a `consensus_reject_transaction` action with correct reason code.
-- `AlreadyRejected` revert is treated as success (no retry, info log).
-- `AlreadyAttested` revert from `rejectTransaction` is treated as success (no retry, info log).
-- All error codes map to the correct `RejectionReason` uint8.
-- Oracle variants of the above.
+- Invalid tx produces a `consensus_reject_transaction` action.
+- `AlreadyRejected` revert resolves without retry and logs at info level.
+- `AlreadyAttested` revert from `rejectTransaction` resolves without retry.
+- Oracle transaction variants of the above.
 
 ---
 
@@ -313,22 +261,21 @@ Status precedence (highest wins): `ATTESTED` > `REJECTED` > `TIMED_OUT` > `PROPO
 #### Updated `TransactionProposal` type
 
 ```typescript
-export type RejectionInfo = {
+export type RejectionEvent = {
     validator: Address;
-    reason: string;  // human-readable label
     block: bigint;
     tx: Hex;
 };
 
 export type TransactionProposal = {
     // ...existing fields...
-    rejectedAt: RejectionInfo | null;
+    rejections: RejectionEvent[];  // one entry per rejecting validator
 };
 ```
 
 #### Updated `loadTransactionProposals` (`transactions.ts`)
 
-Include `TransactionRejected` (and `OracleTransactionRejected` for oracle proposals) in the `eth_getLogs` topic filter alongside `TransactionProposed` and `TransactionAttested`. Build a `rejections` map keyed by `safeTxHash:epoch` and apply precedence: if both `rejectedAt` and `attestedAt` are present, status is `ATTESTED`.
+Include `TransactionRejected` (and `OracleTransactionRejected` for oracle proposals) in the `eth_getLogs` topic filter alongside `TransactionProposed` and `TransactionAttested`. Collect all rejection events per `safeTxHash:epoch` into the `rejections` array. Status is `REJECTED` if `rejections` is non-empty and no attestation exists.
 
 #### Updated ABI (`abi.ts`)
 
@@ -336,33 +283,14 @@ Add `TransactionRejected` and `OracleTransactionRejected` events to `consensusAb
 
 #### Updated `SafeTxProposals.tsx`
 
-- Show `rejectedAt` block + tx link (similar to `attestedAt`).
-- Show "Reason: \<human-readable label\>" when rejected.
-- `StatusBadge` gets a red/error color for `"REJECTED"`.
-
-#### Human-readable reason labels
-
-```typescript
-const REJECTION_REASON_LABELS: Record<number, string> = {
-    1: "Unknown",
-    2: "No delegatecall",
-    3: "Unsupported module",
-    4: "Unsupported module guard",
-    5: "Unsupported guard",
-    6: "Unsupported fallback handler",
-    7: "Invalid self call",
-    8: "Invalid multisend",
-    9: "Invalid migration",
-    10: "Invalid sign message",
-    11: "Invalid create call",
-};
-```
+- Show each entry in `rejections` as a row with block number and tx link (similar to `attestedAt`).
+- `StatusBadge` gets a red/error colour for `"REJECTED"`.
 
 #### Test cases
 
-- Proposal with `TransactionRejected` event: `status: "REJECTED"` with correct `rejectedAt`.
-- Proposal with both `TransactionRejected` and `TransactionAttested`: `status: "ATTESTED"` (attestation wins).
-- Proposal with attestation only: `status: "ATTESTED"`.
+- Proposal with one `TransactionRejected` event: `status: "REJECTED"`, one entry in `rejections`.
+- Proposal with multiple `TransactionRejected` events: `status: "REJECTED"`, multiple entries in `rejections`.
+- Proposal with both rejections and attestation: `status: "ATTESTED"` (attestation wins), `rejections` still populated.
 - Proposal past timeout with no rejection: `status: "TIMED_OUT"`.
 - Oracle proposal variants of the above.
 
@@ -374,8 +302,8 @@ const REJECTION_REASON_LABELS: Record<number, string> = {
 **Can start immediately.**
 
 Files:
-- `contracts/src/interfaces/IConsensus.sol` — `RejectionReason` enum, `TransactionRejected` and `OracleTransactionRejected` events, `AlreadyRejected` error, `rejectTransaction`, `rejectOracleTransaction`, `getTransactionRejection`, `getOracleTransactionRejection` signatures.
-- `contracts/src/Consensus.sol` — `RejectionInfo` struct, `$rejections` storage, all four function implementations. No change to `attestTransaction` or `attestOracleTransaction`.
+- `contracts/src/interfaces/IConsensus.sol` — `TransactionRejected` and `OracleTransactionRejected` events, `AlreadyRejected` error, `rejectTransaction`, `rejectOracleTransaction`, `getTransactionRejection`, `getOracleTransactionRejection` signatures.
+- `contracts/src/Consensus.sol` — `$rejections` storage, all four function implementations. No change to `attestTransaction` or `attestOracleTransaction`.
 - `contracts/test/` — Unit tests for rejection flow (regular and oracle variants).
 
 ### Phase 2a — Validator (PR 2)
@@ -394,9 +322,9 @@ Files:
 
 Files:
 - `explorer/src/lib/consensus/abi.ts` — Add `TransactionRejected`, `OracleTransactionRejected` events + selectors.
-- `explorer/src/lib/consensus/transactions.ts` — `RejectionInfo` type, updated `TransactionProposal`, updated `loadTransactionProposals` with precedence logic.
-- `explorer/src/components/transaction/SafeTxProposals.tsx` — Show rejection info.
-- `explorer/src/components/common/StatusBadge.tsx` — Add `REJECTED` color.
+- `explorer/src/lib/consensus/transactions.ts` — `RejectionEvent` type, updated `TransactionProposal`, updated `loadTransactionProposals` with precedence logic.
+- `explorer/src/components/transaction/SafeTxProposals.tsx` — Show rejection rows.
+- `explorer/src/components/common/StatusBadge.tsx` — Add `REJECTED` colour.
 - `explorer/src/lib/consensus/transactions.test.ts` — Tests.
 
 ---
@@ -405,5 +333,5 @@ Files:
 
 - **`safeTxStructHash` availability**: The validator must compute the EIP-712 struct hash from `event.transaction` when constructing the reject action. This follows the same pattern used for `attestTransaction`.
 - **`participantKey` access control**: `FROSTParticipantMap.getKey` reverts with `InvalidParticipant` for non-members (confirmed by reading the implementation). The key is only set after DKG completes, so only participants in a fully-formed group can call `rejectTransaction`. This is the desired behaviour.
-- **Rejection + attestation coexistence**: Because rejection is advisory, it is theoretically possible for both `TransactionRejected` and `TransactionAttested` to exist for the same proposal. This indicates a validator version mismatch at the time of rejection. The explorer shows `ATTESTED` in this case and the co-existence of both events is an operational signal for the team.
+- **Rejection + attestation coexistence**: Because rejection is advisory, it is possible for both `TransactionRejected` and `TransactionAttested` to exist for the same proposal. This indicates a validator version mismatch at the time of rejection. The explorer shows `ATTESTED` in this case; the rejection events remain visible for auditability.
 - **Devnet deployment**: After all three phases are merged, a devnet redeployment is required to pick up the new contract interface.
