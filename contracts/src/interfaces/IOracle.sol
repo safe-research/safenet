@@ -31,5 +31,5 @@ interface IOracle {
      *      Transaction data is not passed here; the oracle is expected to fetch it independently
      *      from the OracleTransactionProposed event.
      */
-    function postRequest(bytes32 requestId, address feePayer) external;
+    function postRequest(bytes32 requestId) external;
 }

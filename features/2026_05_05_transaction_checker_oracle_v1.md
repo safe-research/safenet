@@ -271,6 +271,8 @@ Flows covered: event subscription, address-poisoning detection, bond submission,
 Files touched:
 - `contracts/script/DeploySentinelOracle.s.sol` — deployment script reading constructor params from env vars
 
+**Note:** Phase 4 should also resolve the fee-pull issue introduced by the `CONSENSUS` gating in Phase 1. Currently `postRequest` calls `safeTransferFrom(msg.sender, ...)` where `msg.sender` is the `Consensus` contract, which holds no ERC-20 balance. The fix requires updating `IOracle.postRequest` to accept a `feePayer` address and updating `Consensus.proposeOracleTransaction` to pass `msg.sender` as the fee payer — changes that touch the `Consensus` contract and therefore belong in a dedicated PR.
+
 ---
 
 ## Open Questions / Assumptions

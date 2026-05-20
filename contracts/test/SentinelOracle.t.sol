@@ -81,7 +81,7 @@ contract SentinelOracleTest is Test {
 
     function _postRequest() internal {
         vm.prank(consensus);
-        oracle.postRequest(REQUEST_ID, consensus);
+        oracle.postRequest(REQUEST_ID);
     }
 
     function _advancePastDeadline() internal {

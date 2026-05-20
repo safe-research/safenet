@@ -107,13 +107,13 @@ contract SentinelOracle is IOracle {
     // IOracle IMPLEMENTATION
     // ============================================================
 
-    function postRequest(bytes32 requestId, address feePayer) external override(IOracle) {
+    function postRequest(bytes32 requestId) external override(IOracle) {
         require(msg.sender == CONSENSUS, NotConsensus());
         uint256 fee = REQUEST_FEE;
         uint256 bondTarget = fee * $bondConfig.bondMultiplier;
         uint256 deadline = block.number + VOTING_WINDOW;
         $requests.create(requestId, msg.sender, fee, bondTarget, deadline);
-        FEE_TOKEN.safeTransferFrom(feePayer, address(this), fee);
+        FEE_TOKEN.safeTransferFrom(msg.sender, address(this), fee);
     }
 
     // ============================================================
