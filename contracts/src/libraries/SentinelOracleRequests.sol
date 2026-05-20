@@ -37,7 +37,6 @@ library SentinelOracleRequest {
         uint256 denySentinelCount;
         uint256 approveTotalScore;
         uint256 denyTotalScore;
-        bool arbitrated;
     }
 
     // ============================================================
@@ -50,8 +49,6 @@ library SentinelOracleRequest {
     error VotingWindowOpen();
     error VotingWindowClosed();
     error ThresholdAlreadyReached();
-    error ArbitrationAlreadyTriggered();
-    error ArbitrationNotTriggered();
 
     // ============================================================
     // INTERNAL FUNCTIONS
@@ -132,20 +129,14 @@ library SentinelOracleRequest {
 
     function isBondSlashed(Request storage self, bool approved) internal view returns (bool) {
         State state = requireResolved(self);
-        if (!self.arbitrated) return false;
         if (state == State.TIMED_OUT) return false;
+        // Slashing only applies to requests resolved via arbitration (both thresholds were met).
+        if (self.totalApproveBond < self.bondTarget || self.totalDenyBond < self.bondTarget) return false;
         return approved != (state == State.RESOLVED_APPROVED);
-    }
-
-    function triggerArbitration(Request storage self) internal {
-        require(self.state == State.FROZEN, RequestNotFrozen());
-        require(!self.arbitrated, ArbitrationAlreadyTriggered());
-        self.arbitrated = true;
     }
 
     function resolveDispute(Request storage self, bool approveWins) internal returns (uint256 slashed) {
         require(self.state == State.FROZEN, RequestNotFrozen());
-        require(self.arbitrated, ArbitrationNotTriggered());
         slashed = approveWins ? self.totalDenyBond : self.totalApproveBond;
         self.state = approveWins ? State.RESOLVED_APPROVED : State.RESOLVED_DENIED;
     }
@@ -200,8 +191,7 @@ library SentinelOracleRequestMap {
             approveSentinelCount: 0,
             denySentinelCount: 0,
             approveTotalScore: 0,
-            denyTotalScore: 0,
-            arbitrated: false
+            denyTotalScore: 0
         });
 
         emit NewRequest(requestId, proposer, fee, bondTarget, deadline);

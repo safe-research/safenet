@@ -22,7 +22,6 @@ contract SentinelOracle is IOracle {
     // EVENTS
     // ============================================================
 
-    event ArbitrationTriggered(bytes32 indexed requestId);
     event DisputeResolved(bytes32 indexed requestId, SentinelOracleRequest.State outcome, uint256 slashed);
     event Claimed(bytes32 indexed requestId, address indexed sentinel, uint256 bondReturn, uint256 feeReward);
 
@@ -168,11 +167,6 @@ contract SentinelOracle is IOracle {
     // ============================================================
     // ARBITRATION
     // ============================================================
-
-    function triggerArbitration(bytes32 requestId) external onlyArbitrator {
-        $requests.get(requestId).triggerArbitration();
-        emit ArbitrationTriggered(requestId);
-    }
 
     function resolveDispute(bytes32 requestId, bool approveWins) external onlyArbitrator {
         SentinelOracleRequest.Request storage req = $requests.get(requestId);

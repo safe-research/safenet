@@ -265,10 +265,6 @@ contract SentinelOracleTest is Test {
 
         // ---- Phase 2: arbitration ----
 
-        // Arbitrator triggers arbitration.
-        vm.prank(arbitrator);
-        oracle.triggerArbitration(REQUEST_ID);
-
         // Arbitrator resolves: approve wins.
         uint256 consensusBalBefore = token.balanceOf(consensus);
         uint256 arbitratorBalBefore = token.balanceOf(arbitrator);
@@ -283,7 +279,7 @@ contract SentinelOracleTest is Test {
         vm.prank(arbitrator);
         oracle.resolveDispute(REQUEST_ID, true);
 
-        // Fee stays in contract for winners; ARBITRATOR receives slashed bonds minus the fee.
+        // Fee stays in contract for winners; ARBITRATOR receives all slashed bonds.
         assertEq(token.balanceOf(consensus), consensusBalBefore, "consensus balance unchanged");
         assertEq(token.balanceOf(arbitrator), arbitratorBalBefore + BOND_TARGET, "deny bonds slashed to arbitrator");
 
