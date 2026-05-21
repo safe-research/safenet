@@ -86,7 +86,7 @@ export default defineConfig(({ mode }) => {
 			__IMPRINT_URL__: JSON.stringify(env.VITE_IMPRINT_URL || "#imprint"),
 			// Default explorer settings — configurable per deployment, users can still override in the UI
 			__DEFAULT_CONSENSUS__: JSON.stringify(env.VITE_DEFAULT_CONSENSUS || "0x223624cBF099e5a8f8cD5aF22aFa424a1d1acEE9"),
-			__DEFAULT_RPC__: JSON.stringify(env.VITE_DEFAULT_RPC || "https://1rpc.io/gnosis"),
+			__DEFAULT_RPC__: JSON.stringify(env.VITE_DEFAULT_RPC || "https://rpc.gnosischain.com/"),
 			__DEFAULT_DECODER__: JSON.stringify(
 				env.VITE_DEFAULT_DECODER || "https://calldata.swiss-knife.xyz/decoder?calldata=",
 			),
