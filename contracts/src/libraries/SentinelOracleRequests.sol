@@ -37,7 +37,6 @@ library SentinelOracleRequest {
         uint256 denySentinelCount;
         uint256 approveTotalScore;
         uint256 denyTotalScore;
-        bool arbitrated;
     }
 
     // ============================================================
@@ -45,6 +44,7 @@ library SentinelOracleRequest {
     // ============================================================
 
     error RequestNotPending();
+    error RequestNotFrozen();
     error RequestNotResolved();
     error VotingWindowOpen();
     error VotingWindowClosed();
@@ -114,17 +114,31 @@ library SentinelOracleRequest {
         return state;
     }
 
-    function calcFeeReward(Request storage self, bool approved, uint256 bondAmount, uint256 position, State state)
+    function calcFeeReward(Request storage self, bool approved, uint256 bondAmount, uint256 position)
         internal
         view
         returns (uint256)
     {
-        if (state == State.TIMED_OUT) return 0;
-        bool isWinner = approved == (state == State.RESOLVED_APPROVED);
-        if (!isWinner) return 0;
+        if (self.state == State.TIMED_OUT) return 0;
+        bool isEligibleForFee = approved == (self.state == State.RESOLVED_APPROVED);
+        if (!isEligibleForFee) return 0;
         uint256 score = (bondAmount * 1e18) / position;
-        uint256 totalScore = state == State.RESOLVED_APPROVED ? self.approveTotalScore : self.denyTotalScore;
+        uint256 totalScore = self.state == State.RESOLVED_APPROVED ? self.approveTotalScore : self.denyTotalScore;
         return self.fee * score / totalScore;
+    }
+
+    function isBondSlashed(Request storage self, bool approved) internal view returns (bool) {
+        State state = requireResolved(self);
+        if (state == State.TIMED_OUT) return false;
+        // Slashing only applies to requests resolved via arbitration (both thresholds were met).
+        if (self.totalApproveBond < self.bondTarget || self.totalDenyBond < self.bondTarget) return false;
+        return approved != (state == State.RESOLVED_APPROVED);
+    }
+
+    function resolveDispute(Request storage self, bool approveWins) internal returns (uint256 slashed) {
+        require(self.state == State.FROZEN, RequestNotFrozen());
+        slashed = approveWins ? self.totalDenyBond : self.totalApproveBond;
+        self.state = approveWins ? State.RESOLVED_APPROVED : State.RESOLVED_DENIED;
     }
 }
 
@@ -177,8 +191,7 @@ library SentinelOracleRequestMap {
             approveSentinelCount: 0,
             denySentinelCount: 0,
             approveTotalScore: 0,
-            denyTotalScore: 0,
-            arbitrated: false
+            denyTotalScore: 0
         });
 
         emit NewRequest(requestId, proposer, fee, bondTarget, deadline);

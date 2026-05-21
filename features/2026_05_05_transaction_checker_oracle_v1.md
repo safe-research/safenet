@@ -214,7 +214,7 @@ A new `checker` sub-service in `validator/src/`:
 - Subscribes to `NewRequest` events from `CheckerOracle`.
 - Runs address-poisoning detection logic against the transaction payload.
 - Signs and submits `commitApprove` / `commitDeny` via an injected wallet.
-- Monitors `Resolved` and `ArbitrationTriggered` events to trigger `claim`.
+- Monitors `OracleResult` events (emitted after unanimous resolution or after `resolveDispute`) to trigger `claim`. `ArbitrationTriggered` does **not** signal that a dispute is resolved; `claim` must not be triggered until `resolveDispute` has been called and the request is in a resolved state.
 
 ### Test Cases
 
@@ -262,7 +262,7 @@ Files touched:
 - `validator/src/index.ts` — wire up sentinel sub-service
 - `validator/test/sentinel/` — unit tests for detector logic
 
-Flows covered: event subscription, address-poisoning detection, bond submission, claim trigger.
+Flows covered: event subscription, address-poisoning detection, bond submission, claim trigger (only after dispute resolution, not on `ArbitrationTriggered`).
 
 ### Phase 4 — Final cleanup (PR 4, depends on previous phases)
 
@@ -272,6 +272,8 @@ Flows covered: event subscription, address-poisoning detection, bond submission,
 
 Files touched:
 - `contracts/script/DeploySentinelOracle.s.sol` — deployment script reading constructor params from env vars
+
+**Note:** Phase 4 should also resolve the fee-pull issue introduced by the `CONSENSUS` gating in Phase 1. Currently `postRequest` calls `safeTransferFrom(msg.sender, ...)` where `msg.sender` is the `Consensus` contract, which holds no ERC-20 balance. The fix requires updating `IOracle.postRequest` to accept a `feePayer` address and updating `Consensus.proposeOracleTransaction` to pass `msg.sender` as the fee payer — changes that touch the `Consensus` contract and therefore belong in a dedicated PR.
 
 ---
 

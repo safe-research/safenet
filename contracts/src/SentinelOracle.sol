@@ -22,7 +22,7 @@ contract SentinelOracle is IOracle {
     // EVENTS
     // ============================================================
 
-    event DisputeResolved(bytes32 indexed requestId, address winner, address loser, uint256 slashed);
+    event DisputeResolved(bytes32 indexed requestId, SentinelOracleRequest.State outcome, uint256 slashed);
     event Claimed(bytes32 indexed requestId, address indexed sentinel, uint256 bondReturn, uint256 feeReward);
 
     // ============================================================
@@ -156,11 +156,26 @@ contract SentinelOracle is IOracle {
 
     function claim(bytes32 requestId) external {
         SentinelOracleRequest.Request storage req = $requests.get(requestId);
-        SentinelOracleRequest.State state = req.requireResolved();
+        req.requireResolved();
         SentinelOracleCommitment.Commitment memory c = $commitments.get(requestId, msg.sender).markClaimed();
-        uint256 feeReward = req.calcFeeReward(c.approved, c.bondAmount, c.position, state);
-        FEE_TOKEN.safeTransfer(msg.sender, c.bondAmount + feeReward);
-        emit Claimed(requestId, msg.sender, c.bondAmount, feeReward);
+        uint256 feeReward = req.calcFeeReward(c.approved, c.bondAmount, c.position);
+        uint256 bondReturn = req.isBondSlashed(c.approved) ? 0 : c.bondAmount;
+        FEE_TOKEN.safeTransfer(msg.sender, bondReturn + feeReward);
+        emit Claimed(requestId, msg.sender, bondReturn, feeReward);
+    }
+
+    // ============================================================
+    // ARBITRATION
+    // ============================================================
+
+    function resolveDispute(bytes32 requestId, bool approveWins) external onlyArbitrator {
+        SentinelOracleRequest.Request storage req = $requests.get(requestId);
+        address proposer = req.proposer;
+        uint256 slashed = req.resolveDispute(approveWins);
+        SentinelOracleRequest.State outcome = req.state;
+        FEE_TOKEN.safeTransfer(ARBITRATOR, slashed);
+        emit DisputeResolved(requestId, outcome, slashed);
+        emit OracleResult(requestId, proposer, abi.encode(SentinelOracleRequest.ResolveReason.ARBITRATION), approveWins);
     }
 
     // ============================================================

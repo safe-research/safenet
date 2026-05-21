@@ -262,5 +262,41 @@ contract SentinelOracleTest is Test {
 
         SentinelOracleRequest.Request memory req = oracle.getRequest(REQUEST_ID);
         assertEq(uint256(req.state), uint256(SentinelOracleRequest.State.FROZEN), "conflicted request should be frozen");
+
+        // ---- Phase 2: arbitration ----
+
+        // Arbitrator resolves: approve wins.
+        uint256 consensusBalBefore = token.balanceOf(consensus);
+        uint256 arbitratorBalBefore = token.balanceOf(arbitrator);
+
+        vm.expectEmit(true, false, false, true);
+        emit SentinelOracle.DisputeResolved(REQUEST_ID, SentinelOracleRequest.State.RESOLVED_APPROVED, BOND_TARGET);
+        vm.expectEmit(true, true, false, true);
+        emit IOracle.OracleResult(
+            REQUEST_ID, consensus, abi.encode(SentinelOracleRequest.ResolveReason.ARBITRATION), true
+        );
+
+        vm.prank(arbitrator);
+        oracle.resolveDispute(REQUEST_ID, true);
+
+        // Fee stays in contract for winners; ARBITRATOR receives all slashed bonds.
+        assertEq(token.balanceOf(consensus), consensusBalBefore, "consensus balance unchanged");
+        assertEq(token.balanceOf(arbitrator), arbitratorBalBefore + BOND_TARGET, "deny bonds slashed to arbitrator");
+
+        // Winning approve sentinel (sentinel1) gets bond back plus full fee reward (sole winner).
+        uint256 s1Before = token.balanceOf(sentinel1);
+        vm.prank(sentinel1);
+        oracle.claim(REQUEST_ID);
+        assertEq(token.balanceOf(sentinel1), s1Before + BOND_TARGET + REQUEST_FEE, "sentinel1 bond and fee returned");
+
+        // Losing deny sentinels (sentinel2, sentinel3) get nothing - bonds already slashed.
+        uint256 s2Before = token.balanceOf(sentinel2);
+        uint256 s3Before = token.balanceOf(sentinel3);
+        vm.prank(sentinel2);
+        oracle.claim(REQUEST_ID);
+        vm.prank(sentinel3);
+        oracle.claim(REQUEST_ID);
+        assertEq(token.balanceOf(sentinel2), s2Before, "sentinel2 bond slashed");
+        assertEq(token.balanceOf(sentinel3), s3Before, "sentinel3 bond slashed");
     }
 }
