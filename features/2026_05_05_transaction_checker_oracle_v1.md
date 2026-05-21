@@ -263,7 +263,7 @@ Flows covered: conflict freeze, foundation arbitration, loser slash, user fee re
 **Design decisions:**
 
 *`IOracle` interface:*
-- A new view function `getFee()` is added to `IOracle`. It takes no parameters (the full fee mechanism is not yet designed) and returns the current fee amount in `FEE_TOKEN` that a caller must have approved before calling `postRequest`. All oracle implementations (`SentinelOracle`, `SimpleOracle`, `AlwaysApproveOracle`) must implement this function.
+- A new view function `getFee()` is added to `IOracle`. It takes no parameters (the full fee mechanism is not yet designed) and returns the fee token address and the current fee amount as a tuple `(address token, uint256 amount)`. This gives callers everything needed to perform the `transferFrom` and `approve` without any out-of-band knowledge of the token. All oracle implementations (`SentinelOracle`, `SimpleOracle`, `AlwaysApproveOracle`) must implement this function.
 
 *`SentinelOracle`:*
 - `postRequest(requestId)` is unchanged — it continues to pull the fee from `msg.sender` (i.e., `Consensus`). No `feePayer` parameter is added.
@@ -272,32 +272,32 @@ Flows covered: conflict freeze, foundation arbitration, loser slash, user fee re
 
 *`Consensus`:*
 - `proposeOracleTransaction` is updated to:
-  1. Query the fee: `uint256 fee = oracle.getFee()`.
-  2. Pull the fee from the caller: `FEE_TOKEN.transferFrom(msg.sender, address(this), fee)`.
-  3. Approve the oracle for that amount: `FEE_TOKEN.approve(address(oracle), fee)`.
+  1. Query the fee: `(address token, uint256 amount) = oracle.getFee()`.
+  2. Pull the fee from the caller: `IERC20(token).transferFrom(msg.sender, address(this), amount)`.
+  3. Approve the oracle for that amount: `IERC20(token).approve(address(oracle), amount)`.
   4. Call `oracle.postRequest(requestId)` as before.
   5. Record the caller: `requestProposers[requestId] = msg.sender`.
 - New storage: `mapping(bytes32 => address) requestProposers`.
 - New function: `claimOracleRefund(bytes32 requestId)` — callable by anyone, invokes `oracle.claimRefund(requestId)` (which sends tokens to `Consensus`), then forwards the actual received amount (measured via balance delta to handle fee-on-transfer tokens) to `requestProposers[requestId]`. Reverts if `requestProposers[requestId]` is `address(0)` (i.e. the request was never registered through `Consensus`).
 
 **Updated user flow:**
-1. User calls `oracle.getFee()` (or reads it off-chain) to learn the required fee amount.
-2. User approves `Consensus` for that fee amount in `FEE_TOKEN`.
+1. User calls `oracle.getFee()` (or reads it off-chain) to learn the required fee token and amount.
+2. User approves `Consensus` for that fee amount in the returned token.
 3. User calls `Consensus.proposeOracleTransaction(...)`.
 4. Consensus queries `getFee()`, pulls that amount from the user, approves the oracle, calls `oracle.postRequest(requestId)`, and records the user as the proposer for that request.
 5. If the request results in a fee refund (timeout or arbitration win): anyone calls `Consensus.claimOracleRefund(requestId)`, which pulls the refund from the oracle and forwards it to the recorded user.
 
 Files touched:
-- `contracts/src/interfaces/IOracle.sol` — add `getFee() external view returns (uint256)` to the interface
+- `contracts/src/interfaces/IOracle.sol` — add `getFee() external view returns (address token, uint256 amount)` to the interface
 - `contracts/src/SentinelOracle.sol` — implement `getFee()`; add `pendingRefund` to `Request` struct; populate it on timeout/arbitration resolution instead of pushing; add `claimRefund(requestId)` (only callable by `Request.proposer`)
-- `contracts/src/SimpleOracle.sol` — add stub `getFee()` returning `0`
-- `contracts/src/AlwaysApproveOracle.sol` — add stub `getFee()` returning `0`
+- `contracts/src/SimpleOracle.sol` — add stub `getFee()` returning `(address(0), 0)`
+- `contracts/src/AlwaysApproveOracle.sol` — add stub `getFee()` returning `(address(0), 0)`
 - `contracts/src/Consensus.sol` — update `proposeOracleTransaction` to query fee, pull from user, approve oracle; add `requestProposers` mapping; add `claimOracleRefund`
 - `contracts/test/SentinelOracle.t.sol` — update refund tests for pull model; test `claimRefund` access control
 - `contracts/test/Consensus.t.sol` — end-to-end tests: fee pulled from user via `getFee`, oracle funded, refund routed to correct user
 
 Test cases:
-- `getFee()` returns the expected fee amount.
+- `getFee()` returns the expected fee token address and amount.
 - Fee is successfully pulled from user through `Consensus` and into `SentinelOracle`.
 - `claimOracleRefund` routes a timeout refund to the correct user address.
 - `claimOracleRefund` routes an arbitration refund to the correct user address.
