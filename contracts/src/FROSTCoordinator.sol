@@ -326,7 +326,8 @@ contract FROSTCoordinator {
     error WrongSignature();
 
     /**
-     * @notice Thrown when a participant attempts to decline a ceremony they already declined.
+     * @notice Thrown when a participant attempts to decline a ceremony they already declined,
+     *         or when a previously-declined participant attempts to submit a signature share.
      */
     error AlreadyDeclined();
 
