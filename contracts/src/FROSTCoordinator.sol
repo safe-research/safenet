@@ -331,6 +331,11 @@ contract FROSTCoordinator {
     error AlreadyDeclined();
 
     /**
+     * @notice Thrown when a participant attempts to decline a ceremony they already shared a signature for.
+     */
+    error AlreadyShared();
+
+    /**
      * @notice Thrown when a participant attempts to decline a ceremony that has already been signed.
      */
     error SigningComplete();
@@ -366,6 +371,12 @@ contract FROSTCoordinator {
      */
     // forge-lint: disable-next-line(mixed-case-variable)
     mapping(FROSTSignatureId.T sid => mapping(address participant => bool)) private $declined;
+
+    /**
+     * @notice Mapping from signature ID and participant to whether that participant has shared.
+     */
+    // forge-lint: disable-next-line(mixed-case-variable)
+    mapping(FROSTSignatureId.T sid => mapping(address participant => bool)) private $shared;
 
     // ============================================================
     // EXTERNAL AND PUBLIC FUNCTIONS - KEY GENERATION
@@ -617,9 +628,11 @@ contract FROSTCoordinator {
     ) public returns (bool signed) {
         (Group storage group, bytes32 message) = _signatureGroupAndMessage(sid);
         require(!$signatures[sid].rejected, CeremonyRejected());
+        require(!$declined[sid][msg.sender], AlreadyDeclined());
         Secp256k1.Point memory key = group.key;
         FROST.verifyShare(key, selection.r, group.participants.getKey(msg.sender), share, message);
         Signature storage signature = $signatures[sid];
+        $shared[sid][msg.sender] = true;
         FROST.Signature memory accumulator =
             signature.shares.register(msg.sender, share, selection.r, selection.root, proof);
         emit SignShared(sid, selection.root, msg.sender, share.z);
@@ -651,6 +664,7 @@ contract FROSTCoordinator {
         require(signature.message != bytes32(0), NotSigning());
         require(signature.signed == bytes32(0), SigningComplete());
         require(!$declined[sid][msg.sender], AlreadyDeclined());
+        require(!$shared[sid][msg.sender], AlreadyShared());
         $declined[sid][msg.sender] = true;
         signature.declineCount++;
         emit SignDeclined(sid, msg.sender);
@@ -782,6 +796,16 @@ contract FROSTCoordinator {
      */
     function isSignDeclined(FROSTSignatureId.T sid, address participant) external view returns (bool) {
         return $declined[sid][participant];
+    }
+
+    /**
+     * @notice Returns whether a participant has shared for a specific signing ceremony.
+     * @param sid The signature ID.
+     * @param participant The participant address.
+     * @return True if the participant has shared.
+     */
+    function isSignShared(FROSTSignatureId.T sid, address participant) external view returns (bool) {
+        return $shared[sid][participant];
     }
 
     /**

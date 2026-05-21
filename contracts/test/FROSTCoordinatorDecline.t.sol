@@ -236,6 +236,127 @@ contract FROSTCoordinatorDeclineTest is Test {
         coordinator.signDecline(sid);
     }
 
+    function test_SignShare_AfterDecline_Reverts() public {
+        (FROSTGroupId.T gid,,) = _trustedKeyGen(bytes32(0));
+        bytes32 message = keccak256("decline then share");
+        FROSTSignatureId.T sid = coordinator.sign(gid, message);
+
+        address participant = participants.addr(0);
+        vm.prank(participant);
+        coordinator.signDecline(sid);
+
+        FROSTCoordinator.SignSelection memory selection;
+        FROST.SignatureShare memory share;
+        bytes32[] memory proof;
+        vm.expectRevert(FROSTCoordinator.AlreadyDeclined.selector);
+        vm.prank(participant);
+        coordinator.signShare(sid, selection, share, proof);
+    }
+
+    function test_SignDecline_AfterShare_Reverts() public {
+        (FROSTGroupId.T gid, uint256[] memory s,) = _trustedKeyGen(bytes32(0));
+        bytes32 message = keccak256("share then decline");
+
+        bytes32[] memory nonceProof = new bytes32[](10);
+        Nonces[] memory nonces = new Nonces[](COUNT);
+        {
+            bytes32[] memory commitments = new bytes32[](COUNT);
+            for (uint256 i = 0; i < COUNT; i++) {
+                Nonces memory n = nonces[i];
+                uint256 d = FROST.nonce(bytes32(vm.randomUint()), s[i]);
+                n.d = ForgeSecp256k1.g(d);
+                uint256 e = FROST.nonce(bytes32(vm.randomUint()), s[i]);
+                n.e = ForgeSecp256k1.g(e);
+                // forge-lint: disable-next-line(asm-keccak256)
+                bytes32 leaf = keccak256(abi.encode(0, n.d.x(), n.d.y(), n.e.x(), n.e.y()));
+                commitments[i] = MerkleProof.processProof(nonceProof, leaf);
+            }
+            for (uint256 i = 0; i < COUNT; i++) {
+                vm.prank(participants.addr(i));
+                coordinator.preprocess(gid, commitments[i]);
+            }
+        }
+
+        uint256[] memory honestParticipants = new uint256[](COUNT);
+        for (uint256 i = 0; i < COUNT; i++) honestParticipants[i] = i;
+
+        FROSTSignatureId.T sid = coordinator.sign(gid, message);
+
+        for (uint256 i = 0; i < COUNT; i++) {
+            uint256 h = honestParticipants[i];
+            Nonces memory n = nonces[h];
+            FROSTCoordinator.SignNonces memory nn = FROSTCoordinator.SignNonces({d: n.d.toPoint(), e: n.e.toPoint()});
+            vm.prank(participants.addr(h));
+            coordinator.signRevealNonces(sid, nn, nonceProof);
+        }
+
+        _sortByParticipantId(honestParticipants);
+
+        Secp256k1.Point memory groupKey = coordinator.groupKey(gid);
+        FROSTCoordinator.SignSelection memory selection;
+        FROST.SignatureShare[] memory shares = new FROST.SignatureShare[](COUNT);
+        {
+            uint256[] memory bindingFactors;
+            {
+                FROST.Commitment[] memory coms = new FROST.Commitment[](COUNT);
+                for (uint256 i = 0; i < COUNT; i++) {
+                    uint256 h = honestParticipants[i];
+                    Nonces memory n = nonces[h];
+                    coms[i] = FROST.Commitment({participant: participants.addr(h), d: n.d.toPoint(), e: n.e.toPoint()});
+                }
+                bindingFactors = FROST.bindingFactors(groupKey, coms, message);
+            }
+            ForgeSecp256k1.P memory groupCommitment;
+            for (uint256 i = 0; i < COUNT; i++) {
+                uint256 h = honestParticipants[i];
+                Nonces memory n = nonces[h];
+                ForgeSecp256k1.P memory r = ForgeSecp256k1.add(n.d, ForgeSecp256k1.mul(bindingFactors[i], n.e));
+                shares[i].r = r.toPoint();
+                shares[i].l = _lagrangeCoefficient(honestParticipants, h);
+                groupCommitment = ForgeSecp256k1.add(groupCommitment, r);
+            }
+            selection.r = groupCommitment.toPoint();
+            uint256 challenge = FROST.challenge(selection.r, groupKey, message);
+            for (uint256 i = 0; i < COUNT; i++) {
+                uint256 h = honestParticipants[i];
+                uint256 sk = s[h];
+                Nonces memory n = nonces[h];
+                shares[i].z = addmod(
+                    n.d.w.privateKey,
+                    addmod(
+                        mulmod(n.e.w.privateKey, bindingFactors[i], Secp256k1.N),
+                        mulmod(mulmod(challenge, shares[i].l, Secp256k1.N), sk, Secp256k1.N),
+                        Secp256k1.N
+                    ),
+                    Secp256k1.N
+                );
+            }
+        }
+
+        CommitmentShareMerkleTree commitmentShares;
+        {
+            CommitmentShareMerkleTree.S[] memory cs = new CommitmentShareMerkleTree.S[](COUNT);
+            for (uint256 i = 0; i < COUNT; i++) {
+                uint256 h = honestParticipants[i];
+                cs[i] = CommitmentShareMerkleTree.S({participant: participants.addr(h), r: shares[i].r, l: shares[i].l});
+            }
+            commitmentShares = new CommitmentShareMerkleTree(selection.r, cs);
+            selection.root = commitmentShares.root();
+        }
+
+        // Submit only participant[honestParticipants[0]]'s share — ceremony won't complete with 1 of COUNT
+        uint256 firstHonest = honestParticipants[0];
+        address sharer = participants.addr(firstHonest);
+        bytes32[] memory proof = commitmentShares.proof(0);
+        vm.prank(sharer);
+        coordinator.signShare(sid, selection, shares[0], proof);
+
+        // The participant already shared, so decline must revert with AlreadyShared
+        vm.expectRevert(FROSTCoordinator.AlreadyShared.selector);
+        vm.prank(sharer);
+        coordinator.signDecline(sid);
+    }
+
     // ============================================================
     // SIGSHARE AFTER REJECTION
     // ============================================================
