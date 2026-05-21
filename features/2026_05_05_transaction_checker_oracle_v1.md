@@ -10,8 +10,9 @@ This feature introduces a competitive transaction checker oracle as a new `IOrac
 **Phases (separate PRs):**
 1. **Phase 1 — Core contract** (`SentinelOracle.sol`): request lifecycle, bonding, unanimous resolution, fee distribution, and timeout-default-reject logic.
 2. **Phase 2 — Arbitration** (`SentinelOracle.sol` extension): conflict detection, `triggerArbitration`, `resolveDispute`, slashing, and user fee refund.
-3. **Phase 3 — Sentinel node service** (`validator/`): off-chain sentinel daemon that listens for `NewRequest` events and posts bonds with Approve/Deny votes.
-4. **Phase 4 — Deployment script**: Forge deployment script for `SentinelOracle`.
+3. **Phase 2.5 — Fee payment fix** (`SentinelOracle.sol` + `Consensus.sol`): correct the fee pull flow so `Consensus` collects the fee from the user and approves the oracle, and add proposer tracking with a user-facing refund claim method on `Consensus`.
+4. **Phase 3 — Sentinel node service** (`validator/`): off-chain sentinel daemon that listens for `NewRequest` events and posts bonds with Approve/Deny votes.
+5. **Phase 4 — Deployment script**: Forge deployment script for `SentinelOracle`.
 
 ---
 
@@ -78,7 +79,7 @@ Because both sides post the same total bond (`fee × bondMultiplier`), the slash
 
 ### Request Submission (via Consensus)
 
-The user submits a Safe transaction proposal through `Consensus.proposeTransaction()`. Before calling, the user must approve `CheckerOracle` to pull the fee amount in the ERC-20 fee token. `Consensus` then calls `checkOracle.postRequest(requestId)`, which pulls the fee via `transferFrom`, locks it in escrow, and emits `NewRequest`.
+The user submits a Safe transaction proposal through `Consensus.proposeOracleTransaction()`. Before calling, the user must approve `Consensus` to pull the fee amount in the ERC-20 fee token. `Consensus` pulls the fee from the user, approves `SentinelOracle` for that amount, and calls `oracle.postRequest(requestId)`, which pulls the fee from `Consensus` via `transferFrom`, locks it in escrow, and emits `NewRequest`. `Consensus` records the caller as the proposer for the request so that any future fee refund can be routed back to them.
 
 ### Checker Node Vote
 
@@ -253,6 +254,48 @@ Files touched:
 
 Flows covered: conflict freeze, foundation arbitration, loser slash, user fee refund, treasury transfer.
 
+### Phase 2.5 — Fee Payment Fix (PR 2.5, depends on Phase 1)
+
+**Goal:** Correct the fee payment flow so that `SentinelOracle` can successfully pull the fee from the `Consensus` contract, and users can reclaim fee refunds through `Consensus`.
+
+**Context:** In Phase 1, `SentinelOracle.postRequest` calls `FEE_TOKEN.transferFrom(msg.sender, address(this), fee)` where `msg.sender` is the `Consensus` contract. `Consensus` holds no ERC-20 balance and sets no allowance, so this call always reverts. This phase fixes that gap with a minimal approach and adds proposer tracking in `Consensus` for refund routing. This is an initial implementation — further refinements are deferred to later phases.
+
+**Design decisions:**
+
+*`SentinelOracle`:*
+- `postRequest(requestId)` is unchanged — it continues to pull the fee from `msg.sender` (i.e., `Consensus`). No `feePayer` parameter is added to `IOracle`.
+- The oracle always treats `msg.sender` as the fee provider: the caller must have already set an allowance before calling `postRequest`.
+- On resolution, instead of pushing the fee refund to `Request.proposer`, the refund amount is stored in the `Request` struct (`pendingRefund`). A new function `claimRefund(requestId)` allows only `Request.proposer` (i.e., `Consensus`) to pull the refund tokens at any time after resolution.
+
+*`Consensus`:*
+- `proposeOracleTransaction` is updated to:
+  1. Pull the fee from the caller: `FEE_TOKEN.transferFrom(msg.sender, address(this), fee)`.
+  2. Approve the oracle for that amount: `FEE_TOKEN.approve(address(oracle), fee)`.
+  3. Call `oracle.postRequest(requestId)` as before.
+  4. Record the caller: `requestProposers[requestId] = msg.sender`.
+- New storage: `mapping(bytes32 => address) requestProposers`.
+- New function: `claimOracleRefund(bytes32 requestId)` — callable by anyone, invokes `oracle.claimRefund(requestId)` (which sends tokens to `Consensus`), then forwards the full received amount to `requestProposers[requestId]`.
+
+**Updated user flow:**
+1. User approves `Consensus` for the fee amount in `FEE_TOKEN`.
+2. User calls `Consensus.proposeOracleTransaction(...)`.
+3. Consensus pulls the fee from the user, approves the oracle, calls `oracle.postRequest(requestId)`, and records the user as the proposer for that request.
+4. If the request results in a fee refund (timeout or arbitration win): anyone calls `Consensus.claimOracleRefund(requestId)`, which pulls the refund from the oracle and forwards it to the recorded user.
+
+Files touched:
+- `contracts/src/SentinelOracle.sol` — add `pendingRefund` to `Request` struct; populate it on timeout/arbitration resolution instead of pushing; add `claimRefund(requestId)` (only callable by `Request.proposer`)
+- `contracts/src/Consensus.sol` — update `proposeOracleTransaction` to pull fee from user and approve oracle; add `requestProposers` mapping; add `claimOracleRefund`
+- `contracts/test/SentinelOracle.t.sol` — update refund tests for pull model; test `claimRefund` access control
+- `contracts/test/Consensus.t.sol` — end-to-end tests: fee pulled from user, oracle funded, refund routed to correct user
+
+Test cases:
+- Fee is successfully pulled from user through `Consensus` and into `SentinelOracle`.
+- `claimOracleRefund` routes a timeout refund to the correct user address.
+- `claimOracleRefund` routes an arbitration refund to the correct user address.
+- Tokens always land at `requestProposers[requestId]` regardless of who triggers the claim.
+- `claimRefund` on the oracle reverts when called by any address other than `Request.proposer`.
+- Calling `claimOracleRefund` when no refund is pending reverts or is a no-op.
+
 ### Phase 3 — Sentinel Node Service (PR 3, can be parallelized with Phase 2)
 
 **Goal:** Off-chain sentinel daemon integrated into the validator service.
@@ -266,14 +309,10 @@ Flows covered: event subscription, address-poisoning detection, bond submission,
 
 ### Phase 4 — Final cleanup (PR 4, depends on previous phases)
 
-**Goal:** Final adjustments and wiring
-- Forge deployment script for `SentinelOracle`.
-- Change refund fee to pull instead of push model (currently gets pushed to Consensus contract).
+**Goal:** Final adjustments and wiring — Forge deployment script for `SentinelOracle`.
 
 Files touched:
 - `contracts/script/DeploySentinelOracle.s.sol` — deployment script reading constructor params from env vars
-
-**Note:** Phase 4 should also resolve the fee-pull issue introduced by the `CONSENSUS` gating in Phase 1. Currently `postRequest` calls `safeTransferFrom(msg.sender, ...)` where `msg.sender` is the `Consensus` contract, which holds no ERC-20 balance. The fix requires updating `IOracle.postRequest` to accept a `feePayer` address and updating `Consensus.proposeOracleTransaction` to pass `msg.sender` as the fee payer — changes that touch the `Consensus` contract and therefore belong in a dedicated PR.
 
 ---
 
@@ -302,5 +341,5 @@ Files touched:
 **Assumptions:**
 - The permissioned checker set is small (≤ 20 nodes) and operated by vetted foundation partners in V1.
 - Conflicts are rare; arbitration is expected to be an exceptional path.
-- The `Consensus` contract interface (`postRequest`) remains unchanged.
+- The `IOracle.postRequest` interface signature remains unchanged; the fee payment fix in Phase 2.5 is contained entirely in `Consensus` and the oracle's internal refund accounting.
 - The chain has low gas fees and no deep reorgs (consistent with existing Safenet deployment assumptions).
