@@ -2,14 +2,16 @@ import { useQuery } from "@tanstack/react-query";
 import { useMemo } from "react";
 import { type Block, createPublicClient, http, type PublicClient } from "viem";
 import { useSettings } from "@/hooks/useSettings";
+import { getRpcUrlParam } from "@/lib/settings";
 
 export function useProvider(): PublicClient {
 	const [settings] = useSettings();
+	const rpc = getRpcUrlParam() ?? settings.rpc;
 	const provider = useMemo(() => {
 		return createPublicClient({
-			transport: http(settings.rpc),
+			transport: http(rpc),
 		});
-	}, [settings.rpc]);
+	}, [rpc]);
 	return provider;
 }
 

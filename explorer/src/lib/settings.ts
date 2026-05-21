@@ -3,6 +3,15 @@ import { z } from "zod";
 import { checkedAddressSchema } from "@/lib/schemas";
 
 const STORAGE_KEY_SETTINGS = "localStorage.settings.object.v1";
+
+// DAppSpec (ds-rpc-{chainId}) — Gnosis Chain only
+const GNOSIS_CHAIN_ID = 100;
+
+export function getRpcUrlParam(): string | null {
+	const raw = new URLSearchParams(window.location.search).get(`ds-rpc-${GNOSIS_CHAIN_ID}`);
+	return raw && URL.canParse(raw) ? raw : null;
+}
+
 const STORAGE_KEY_SAFE_API_SETTINGS = "localStorage.safe_api_settings.object.v1";
 const STORAGE_KEY_SAFE_UI_SETTINGS = "localStorage.safe_ui_settings.object.v1";
 

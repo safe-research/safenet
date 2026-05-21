@@ -5,7 +5,7 @@ import { z } from "zod";
 import { ErrorItem, FormItem, SubmitItem } from "@/components/Forms";
 import { useSettings } from "@/hooks/useSettings";
 import { checkedAddressSchema, emptyToUndefined } from "@/lib/schemas";
-import { type Settings, updateSettings } from "@/lib/settings";
+import { getRpcUrlParam, type Settings, updateSettings } from "@/lib/settings";
 
 const numberOrStringAsNumber = z
 	.union([z.string(), z.number()])
@@ -27,6 +27,7 @@ type SettingsFormInput = z.input<typeof settingsFormSchema>;
 
 function ConsensusSettingsForm({ onSubmitted }: { onSubmitted?: () => void }) {
 	const [settings] = useSettings();
+	const rpcUrlParam = getRpcUrlParam();
 	const [isSubmitting, setIsSubmitting] = useState(false);
 	const [error, setError] = useState<string>();
 	const {
@@ -57,7 +58,14 @@ function ConsensusSettingsForm({ onSubmitted }: { onSubmitted?: () => void }) {
 
 	return (
 		<form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
-			<FormItem id="rpc" register={register} error={errors.rpc} label="RPC Url" />
+			<div>
+				<FormItem id="rpc" register={register} error={errors.rpc} label="RPC Url" />
+				{rpcUrlParam && (
+					<p className="mt-1 text-sm text-warning font-medium">
+						Ignored — RPC provided via URL param: <span className="font-mono break-all">{rpcUrlParam}</span>
+					</p>
+				)}
+			</div>
 			<FormItem id="maxBlockRange" register={register} error={errors.maxBlockRange} label="Max Block Range" />
 			<FormItem id="decoder" register={register} error={errors.decoder} label="Decoder Url" />
 			<FormItem id="relayer" register={register} error={errors.relayer} label="Relayer Url" />
