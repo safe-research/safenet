@@ -11,6 +11,7 @@ import {ParticipantMerkleTree} from "@test/util/ParticipantMerkleTree.sol";
 import {FROSTCoordinator} from "@/FROSTCoordinator.sol";
 import {FROST} from "@/libraries/FROST.sol";
 import {FROSTGroupId} from "@/libraries/FROSTGroupId.sol";
+import {FROSTParticipantMap} from "@/libraries/FROSTParticipantMap.sol";
 import {FROSTSignatureId} from "@/libraries/FROSTSignatureId.sol";
 import {Secp256k1} from "@/libraries/Secp256k1.sol";
 
@@ -72,6 +73,23 @@ contract FROSTCoordinatorDeclineTest is Test {
         coordinator.signDecline(sid);
 
         assertFalse(coordinator.isSignDeclined(sid, participants.addr(1)));
+    }
+
+    function test_SignShare_IsSignShared_ReturnsTrue() public {
+        (FROSTGroupId.T gid, uint256[] memory s,) = _trustedKeyGen(bytes32(0));
+        FROSTSignatureId.T sid = _trustedSign(gid, s, keccak256("msg"));
+
+        for (uint256 i = 0; i < COUNT; i++) {
+            assertTrue(coordinator.isSignShared(sid, participants.addr(i)));
+        }
+    }
+
+    function test_SignShare_IsSignShared_OtherParticipant_ReturnsFalse() public {
+        (FROSTGroupId.T gid,,) = _trustedKeyGen(bytes32(0));
+        FROSTSignatureId.T sid = coordinator.sign(gid, keccak256("msg"));
+
+        // No participant has shared yet — all return false.
+        assertFalse(coordinator.isSignShared(sid, participants.addr(0)));
     }
 
     function test_SignDecline_BelowThreshold_IsSignRejected_ReturnsFalse() public {
@@ -197,7 +215,7 @@ contract FROSTCoordinatorDeclineTest is Test {
         FROSTSignatureId.T sid = coordinator.sign(gid, keccak256("msg"));
 
         address nonParticipant = vm.randomAddress();
-        vm.expectRevert();
+        vm.expectRevert(FROSTParticipantMap.InvalidParticipant.selector);
         vm.prank(nonParticipant);
         coordinator.signDecline(sid);
     }
@@ -420,19 +438,116 @@ contract FROSTCoordinatorDeclineTest is Test {
 
     function test_SignDecline_BelowThreshold_CeremonyStillCompletable() public {
         (FROSTGroupId.T gid, uint256[] memory s,) = _trustedKeyGen(bytes32(0));
+        bytes32 message = keccak256("next ceremony");
 
-        // Complete a full ceremony (sequence 0) — demonstrates the group can sign.
-        FROSTSignatureId.T completedSid = _trustedSign(gid, s, keccak256("complete before decline"));
-        assertFalse(coordinator.isSignRejected(completedSid));
+        // Preprocess nonces for all participants before knowing who will decline.
+        bytes32[] memory nonceProof = new bytes32[](10);
+        Nonces[] memory nonces = new Nonces[](COUNT);
+        {
+            bytes32[] memory commitments = new bytes32[](COUNT);
+            for (uint256 i = 0; i < COUNT; i++) {
+                Nonces memory n = nonces[i];
+                uint256 d = FROST.nonce(bytes32(vm.randomUint()), s[i]);
+                n.d = ForgeSecp256k1.g(d);
+                uint256 e = FROST.nonce(bytes32(vm.randomUint()), s[i]);
+                n.e = ForgeSecp256k1.g(e);
+                // forge-lint: disable-next-line(asm-keccak256)
+                bytes32 leaf = keccak256(abi.encode(0, n.d.x(), n.d.y(), n.e.x(), n.e.y()));
+                commitments[i] = MerkleProof.processProof(nonceProof, leaf);
+            }
+            for (uint256 i = 0; i < COUNT; i++) {
+                vm.prank(participants.addr(i));
+                coordinator.preprocess(gid, commitments[i]);
+            }
+        }
 
-        // Start a new ceremony (sequence 1) and have fewer than DECLINE_THRESHOLD participants decline;
-        // the ceremony must remain non-rejected.
-        FROSTSignatureId.T nextSid = coordinator.sign(gid, keccak256("next ceremony"));
+        FROSTSignatureId.T sid = coordinator.sign(gid, message);
+
+        // DECLINE_THRESHOLD - 1 participants decline — below threshold, ceremony remains active.
         for (uint256 i = 0; i < DECLINE_THRESHOLD - 1; i++) {
             vm.prank(participants.addr(i));
-            coordinator.signDecline(nextSid);
+            coordinator.signDecline(sid);
         }
-        assertFalse(coordinator.isSignRejected(nextSid));
+        assertFalse(coordinator.isSignRejected(sid));
+
+        // Remaining COUNT - (DECLINE_THRESHOLD - 1) = THRESHOLD participants prove the ceremony is completable.
+        uint256 signerCount = COUNT - (DECLINE_THRESHOLD - 1);
+        uint256[] memory signers = new uint256[](signerCount);
+        for (uint256 i = 0; i < signerCount; i++) {
+            signers[i] = DECLINE_THRESHOLD - 1 + i;
+        }
+
+        for (uint256 i = 0; i < signerCount; i++) {
+            uint256 h = signers[i];
+            Nonces memory n = nonces[h];
+            FROSTCoordinator.SignNonces memory nn = FROSTCoordinator.SignNonces({d: n.d.toPoint(), e: n.e.toPoint()});
+            vm.prank(participants.addr(h));
+            coordinator.signRevealNonces(sid, nn, nonceProof);
+        }
+
+        _sortByParticipantId(signers);
+
+        Secp256k1.Point memory groupKey = coordinator.groupKey(gid);
+        FROSTCoordinator.SignSelection memory selection;
+        FROST.SignatureShare[] memory shares = new FROST.SignatureShare[](signerCount);
+        {
+            uint256[] memory bindingFactors;
+            {
+                FROST.Commitment[] memory coms = new FROST.Commitment[](signerCount);
+                for (uint256 i = 0; i < signerCount; i++) {
+                    uint256 h = signers[i];
+                    Nonces memory n = nonces[h];
+                    coms[i] = FROST.Commitment({participant: participants.addr(h), d: n.d.toPoint(), e: n.e.toPoint()});
+                }
+                bindingFactors = FROST.bindingFactors(groupKey, coms, message);
+            }
+            ForgeSecp256k1.P memory groupCommitment;
+            for (uint256 i = 0; i < signerCount; i++) {
+                uint256 h = signers[i];
+                Nonces memory n = nonces[h];
+                ForgeSecp256k1.P memory r = ForgeSecp256k1.add(n.d, ForgeSecp256k1.mul(bindingFactors[i], n.e));
+                shares[i].r = r.toPoint();
+                shares[i].l = _lagrangeCoefficient(signers, h);
+                groupCommitment = ForgeSecp256k1.add(groupCommitment, r);
+            }
+            selection.r = groupCommitment.toPoint();
+            uint256 challenge = FROST.challenge(selection.r, groupKey, message);
+            for (uint256 i = 0; i < signerCount; i++) {
+                uint256 h = signers[i];
+                uint256 sk = s[h];
+                Nonces memory n = nonces[h];
+                shares[i].z = addmod(
+                    n.d.w.privateKey,
+                    addmod(
+                        mulmod(n.e.w.privateKey, bindingFactors[i], Secp256k1.N),
+                        mulmod(mulmod(challenge, shares[i].l, Secp256k1.N), sk, Secp256k1.N),
+                        Secp256k1.N
+                    ),
+                    Secp256k1.N
+                );
+            }
+        }
+
+        CommitmentShareMerkleTree commitmentShares;
+        {
+            CommitmentShareMerkleTree.S[] memory cs = new CommitmentShareMerkleTree.S[](signerCount);
+            for (uint256 i = 0; i < signerCount; i++) {
+                uint256 h = signers[i];
+                cs[i] = CommitmentShareMerkleTree.S({participant: participants.addr(h), r: shares[i].r, l: shares[i].l});
+            }
+            commitmentShares = new CommitmentShareMerkleTree(selection.r, cs);
+            selection.root = commitmentShares.root();
+        }
+
+        bool signed;
+        for (uint256 i = 0; i < signerCount; i++) {
+            bytes32[] memory proof = commitmentShares.proof(i);
+            uint256 h = signers[i];
+            vm.prank(participants.addr(h));
+            signed = coordinator.signShare(sid, selection, shares[i], proof);
+        }
+        assertTrue(signed);
+        assertFalse(coordinator.isSignRejected(sid));
     }
 
     function test_SignatureMessage_ReturnsMessage() public {
@@ -650,5 +765,151 @@ contract FROSTCoordinatorDeclineTest is Test {
             denominator = mulmod(denominator, addmod(x, minusId, Secp256k1.N), Secp256k1.N);
         }
         return mulmod(numerator, Math.invModPrime(denominator, Secp256k1.N), Secp256k1.N);
+    }
+}
+
+// ============================================================
+// THRESHOLD FORMULA EDGE CASES
+// ============================================================
+
+/// @dev count == threshold (3-of-3): DECLINE_THRESHOLD = 1, so a single decline immediately rejects.
+contract FROSTCoordinatorDeclineCountEqThresholdTest is Test {
+    using Arrays for address[];
+    using ForgeSecp256k1 for ForgeSecp256k1.P;
+
+    uint16 constant COUNT = 3;
+    uint16 constant THRESHOLD = 3;
+
+    FROSTCoordinator coordinator;
+    ParticipantMerkleTree participants;
+    FROSTGroupId.T gid;
+
+    function setUp() public {
+        coordinator = new FROSTCoordinator();
+        address[] memory addrs = new address[](COUNT);
+        for (uint256 i = 0; i < COUNT; i++) {
+            addrs[i] = vm.randomAddress();
+        }
+        addrs.sort();
+        participants = new ParticipantMerkleTree(addrs);
+        gid = _keyGen();
+    }
+
+    function _keyGen() private returns (FROSTGroupId.T g) {
+        bytes32 root = participants.root();
+        FROSTCoordinator.KeyGenCommitment memory commitment;
+        commitment.q = ForgeSecp256k1.g(1).toPoint();
+        commitment.c = new Secp256k1.Point[](THRESHOLD);
+        for (uint256 j = 0; j < THRESHOLD; j++) {
+            commitment.c[j] = ForgeSecp256k1.g(j + 1).toPoint();
+        }
+        for (uint256 i = 0; i < COUNT; i++) {
+            (address addr, bytes32[] memory poap) = participants.proof(i);
+            vm.prank(addr);
+            (g,) = coordinator.keyGenAndCommit(root, COUNT, THRESHOLD, bytes32(0), poap, commitment);
+        }
+        FROSTCoordinator.KeyGenSecretShare memory share;
+        share.f = new uint256[](COUNT - 1);
+        for (uint256 i = 0; i < COUNT; i++) {
+            share.y = ForgeSecp256k1.g(i + 1).toPoint();
+            vm.prank(participants.addr(i));
+            coordinator.keyGenSecretShare(g, share);
+        }
+        for (uint256 i = 0; i < COUNT; i++) {
+            vm.prank(participants.addr(i));
+            coordinator.keyGenConfirm(g);
+        }
+    }
+
+    function test_CountEqThreshold_SingleDeclineRejects() public {
+        FROSTSignatureId.T sid = coordinator.sign(gid, keccak256("msg"));
+
+        vm.expectEmit();
+        emit FROSTCoordinator.SignRejected(sid);
+        vm.prank(participants.addr(0));
+        bool rejected = coordinator.signDecline(sid);
+
+        assertTrue(rejected);
+        assertTrue(coordinator.isSignRejected(sid));
+    }
+}
+
+/// @dev threshold == 2 (4-of-2): DECLINE_THRESHOLD = 3 — need count-threshold+1 = 3 declines to reject.
+contract FROSTCoordinatorDeclineMinThresholdTest is Test {
+    using Arrays for address[];
+    using ForgeSecp256k1 for ForgeSecp256k1.P;
+
+    uint16 constant COUNT = 4;
+    uint16 constant THRESHOLD = 2;
+    // DECLINE_THRESHOLD = COUNT - THRESHOLD + 1 = 3
+
+    FROSTCoordinator coordinator;
+    ParticipantMerkleTree participants;
+    FROSTGroupId.T gid;
+
+    function setUp() public {
+        coordinator = new FROSTCoordinator();
+        address[] memory addrs = new address[](COUNT);
+        for (uint256 i = 0; i < COUNT; i++) {
+            addrs[i] = vm.randomAddress();
+        }
+        addrs.sort();
+        participants = new ParticipantMerkleTree(addrs);
+        gid = _keyGen();
+    }
+
+    function _keyGen() private returns (FROSTGroupId.T g) {
+        bytes32 root = participants.root();
+        FROSTCoordinator.KeyGenCommitment memory commitment;
+        commitment.q = ForgeSecp256k1.g(1).toPoint();
+        commitment.c = new Secp256k1.Point[](THRESHOLD);
+        for (uint256 j = 0; j < THRESHOLD; j++) {
+            commitment.c[j] = ForgeSecp256k1.g(j + 1).toPoint();
+        }
+        for (uint256 i = 0; i < COUNT; i++) {
+            (address addr, bytes32[] memory poap) = participants.proof(i);
+            vm.prank(addr);
+            (g,) = coordinator.keyGenAndCommit(root, COUNT, THRESHOLD, bytes32(0), poap, commitment);
+        }
+        FROSTCoordinator.KeyGenSecretShare memory share;
+        share.f = new uint256[](COUNT - 1);
+        for (uint256 i = 0; i < COUNT; i++) {
+            share.y = ForgeSecp256k1.g(i + 1).toPoint();
+            vm.prank(participants.addr(i));
+            coordinator.keyGenSecretShare(g, share);
+        }
+        for (uint256 i = 0; i < COUNT; i++) {
+            vm.prank(participants.addr(i));
+            coordinator.keyGenConfirm(g);
+        }
+    }
+
+    function test_MinThreshold_TwoDeclinesDontReject() public {
+        FROSTSignatureId.T sid = coordinator.sign(gid, keccak256("msg"));
+
+        // DECLINE_THRESHOLD - 1 = 2 declines — not enough
+        for (uint256 i = 0; i < 2; i++) {
+            vm.prank(participants.addr(i));
+            bool rejected = coordinator.signDecline(sid);
+            assertFalse(rejected);
+        }
+        assertFalse(coordinator.isSignRejected(sid));
+    }
+
+    function test_MinThreshold_ThreeDeclinesTriggerRejection() public {
+        FROSTSignatureId.T sid = coordinator.sign(gid, keccak256("msg"));
+
+        for (uint256 i = 0; i < 2; i++) {
+            vm.prank(participants.addr(i));
+            coordinator.signDecline(sid);
+        }
+
+        vm.expectEmit();
+        emit FROSTCoordinator.SignRejected(sid);
+        vm.prank(participants.addr(2));
+        bool rejected = coordinator.signDecline(sid);
+
+        assertTrue(rejected);
+        assertTrue(coordinator.isSignRejected(sid));
     }
 }

@@ -627,12 +627,12 @@ contract FROSTCoordinator {
         bytes32[] calldata proof
     ) public returns (bool signed) {
         (Group storage group, bytes32 message) = _signatureGroupAndMessage(sid);
-        require(!$signatures[sid].rejected, CeremonyRejected());
+        Signature storage signature = $signatures[sid];
+        require(!signature.rejected, CeremonyRejected());
         require(!$declined[sid][msg.sender], AlreadyDeclined());
         Secp256k1.Point memory key = group.key;
         FROST.verifyShare(key, selection.r, group.participants.getKey(msg.sender), share, message);
-        Signature storage signature = $signatures[sid];
-        $shared[sid][msg.sender] = true;
+        $shared[sid][msg.sender] = true; // guards signDecline: prevents share-then-decline
         FROST.Signature memory accumulator =
             signature.shares.register(msg.sender, share, selection.r, selection.root, proof);
         emit SignShared(sid, selection.root, msg.sender, share.z);
@@ -819,8 +819,10 @@ contract FROSTCoordinator {
 
     /**
      * @notice Returns the message associated with a signing ceremony.
+     * @dev Returns `bytes32(0)` if no ceremony has been started for this `sid`. Unlike most other query functions,
+     *      this does NOT revert for an unknown `sid`. Callers must treat a zero return as "not found."
      * @param sid The signature ID.
-     * @return The message being signed, or zero if the ceremony does not exist.
+     * @return The message being signed, or `bytes32(0)` if the ceremony does not exist.
      */
     function signatureMessage(FROSTSignatureId.T sid) external view returns (bytes32) {
         return $signatures[sid].message;
