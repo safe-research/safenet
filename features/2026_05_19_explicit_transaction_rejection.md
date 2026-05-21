@@ -111,7 +111,10 @@ struct Signature {
 
 ```solidity
 mapping(FROSTSignatureId.T sid => mapping(address participant => bool)) private $declined;
+mapping(FROSTSignatureId.T sid => mapping(address participant => bool)) private $shared;
 ```
+
+`$declined` records which participants have explicitly declined a ceremony. `$shared` records which participants have successfully submitted a signature share. Both are needed to enforce mutual exclusion (see Updated `signShare` and `signDecline` below).
 
 The decline count per ceremony is tracked in `$signatures[sid].declineCount` (above).
 
@@ -126,12 +129,15 @@ event SignRejected(FROSTSignatureId.T indexed sid);
 
 ```solidity
 error AlreadyDeclined();
+error AlreadyShared();
 error SigningComplete();
 error CeremonyRejected();
 error SignatureRejected();
 ```
 
-`SigningComplete` — decline called after ceremony is already signed. Confirm during implementation whether an equivalent error already exists in `FROSTCoordinator`; if so, reuse it.
+`AlreadyShared` — thrown by `signDecline` when the caller has already submitted a valid signature share for this ceremony. A participant cannot both share and decline the same ceremony.
+
+`SigningComplete` — decline called after ceremony is already signed.
 
 #### New function `signDecline`
 
@@ -147,15 +153,16 @@ Implementation:
 5. `require(signature.message != bytes32(0), NotSigning())` — ceremony must exist.
 6. `require(signature.signed == bytes32(0), SigningComplete())` — ceremony must not be completed.
 7. `require(!$declined[sid][msg.sender], AlreadyDeclined())` — prevent double decline.
-8. `$declined[sid][msg.sender] = true`.
-9. `signature.declineCount++`.
-10. Emit `SignDeclined(sid, msg.sender)`.
-11. `GroupState memory state = group.state`.
-12. If `signature.declineCount >= state.count - state.threshold + 1` and `!signature.rejected`:
+8. `require(!$shared[sid][msg.sender], AlreadyShared())` — prevent decline after sharing.
+9. `$declined[sid][msg.sender] = true`.
+10. `signature.declineCount++`.
+11. Emit `SignDeclined(sid, msg.sender)`.
+12. `GroupState memory state = group.state`.
+13. If `signature.declineCount >= state.count - state.threshold + 1` and `!signature.rejected`:
     - `signature.rejected = true`.
     - Emit `SignRejected(sid)`.
     - Return `true`.
-13. Return `false`.
+14. Return `false`.
 
 Note: the guard `!signature.rejected` in step 12 ensures the event fires exactly once. If additional validators decline after the threshold is already crossed, their `SignDeclined` is still recorded (useful for observability in the explorer) but `SignRejected` is not re-emitted.
 
@@ -165,6 +172,9 @@ Note: the guard `!signature.rejected` in step 12 ensures the event fires exactly
 function isSignDeclined(FROSTSignatureId.T sid, address participant)
     external view returns (bool);
 
+function isSignShared(FROSTSignatureId.T sid, address participant)
+    external view returns (bool);
+
 function isSignRejected(FROSTSignatureId.T sid)
     external view returns (bool);
 
@@ -172,19 +182,26 @@ function signatureMessage(FROSTSignatureId.T sid)
     external view returns (bytes32);
 ```
 
-`isSignRejected` returns `$signatures[sid].rejected`. `signatureMessage` returns `$signatures[sid].message` — used by `Consensus.rejectTransaction` in Phase 2 to validate the SID corresponds to the ceremony for that message.
+`isSignDeclined` returns `$declined[sid][participant]`. `isSignShared` returns `$shared[sid][participant]` — exposes the mutual-exclusion state for off-chain observability. `isSignRejected` returns `$signatures[sid].rejected`. `signatureMessage` returns `$signatures[sid].message` — used by `Consensus.rejectTransaction` in Phase 2 to validate the SID corresponds to the ceremony for that message.
 
 #### Updated `signShare`
 
-Add a rejection guard after `_signatureGroupAndMessage`:
+Add a rejection guard and a declined guard after `_signatureGroupAndMessage`, and record a successful share in `$shared`:
 
 ```solidity
 function signShare(...) public returns (bool signed) {
     (Group storage group, bytes32 message) = _signatureGroupAndMessage(sid);
-    require(!$signatures[sid].rejected, CeremonyRejected());  // new
+    require(!$signatures[sid].rejected, CeremonyRejected());       // new
+    require(!$declined[sid][msg.sender], AlreadyDeclined());       // new
+    Secp256k1.Point memory key = group.key;
+    FROST.verifyShare(key, selection.r, group.participants.getKey(msg.sender), share, message);
+    Signature storage signature = $signatures[sid];
+    $shared[sid][msg.sender] = true;                               // new — set after crypto verification
     // ... rest of existing implementation unchanged
 }
 ```
+
+The `AlreadyDeclined` guard fires before the crypto verification so a declined participant cannot attempt to share even with garbage values. `$shared` is set after successful crypto verification so it is only marked true when the share is cryptographically valid.
 
 #### Updated `signatureVerify` and `signatureValue`
 
@@ -222,6 +239,8 @@ function signatureValue(FROSTSignatureId.T sid) external view returns (FROST.Sig
 - Declines reach `count - threshold + 1`: `SignRejected` emitted exactly once, `isSignRejected` returns true.
 - Additional declines after threshold crossed: `SignDeclined` emitted, `SignRejected` not re-emitted.
 - `signShare` after rejection: reverts with `CeremonyRejected`.
+- `signShare` after decline (same participant): reverts with `AlreadyDeclined`.
+- `signDecline` after share (same participant): reverts with `AlreadyShared`.
 - `signatureVerify`/`signatureValue` for rejected SID: reverts with `SignatureRejected`.
 - `signDecline` returns `true` only when the rejection threshold is first crossed, `false` otherwise.
 - Ceremony completes (signs) before rejection threshold: succeeds, no `CeremonyRejected`.
@@ -583,8 +602,8 @@ Add a "Declined" row displaying validator addresses from `status.declined`, foll
 Completes the coordinator side of the feature in isolation: decline tracking and threshold-based stopping. `signDeclineWithCallback` is intentionally excluded — it requires `IFROSTCoordinatorCallback.onSignRejected` which does not exist until Phase 2.
 
 Files:
-- `contracts/src/FROSTCoordinator.sol` — `Signature` struct update (`rejected`, `declineCount`), `$declined` storage, `SignDeclined`/`SignRejected` events, new errors, `signDecline`/`isSignDeclined`/`isSignRejected`/`signatureMessage`, guards on `signShare`/`signatureVerify`/`signatureValue`.
-- `contracts/test/` — Unit tests for the full decline flow, including threshold logic.
+- `contracts/src/FROSTCoordinator.sol` — `Signature` struct update (`rejected`, `declineCount`), `$declined`/`$shared` storage, `SignDeclined`/`SignRejected` events, new errors (`AlreadyDeclined`, `AlreadyShared`, `SigningComplete`, `CeremonyRejected`, `SignatureRejected`), `signDecline`/`isSignDeclined`/`isSignShared`/`isSignRejected`/`signatureMessage`, mutual-exclusion cross-guards and `$shared` tracking in `signShare`, rejection guards on `signatureVerify`/`signatureValue`.
+- `contracts/test/` — Unit tests for the full decline flow, including threshold logic and mutual-exclusion guards.
 
 ### Phase 2 — Consensus Callback (PR 2)
 **Can start after Phase 1 is merged.**
@@ -793,7 +812,7 @@ Files:
 
 ## Open Questions / Assumptions
 
-- **`SigningComplete` error**: Confirm during Phase 1 implementation whether an equivalent error already exists in `FROSTCoordinator` (e.g., `NotSigning` covers the ceremony-not-started case, but there's no guard for ceremony-already-signed). If an equivalent exists, reuse it.
+- **`SigningComplete` error**: Resolved. No equivalent existed in `FROSTCoordinator` for the ceremony-already-signed case, so `SigningComplete` was added as a new error.
 - **`Signature` struct storage layout**: Adding `bool rejected` and `uint16 declineCount` to `Signature` packs them into a new slot alongside existing fields. Verify packing does not break any assembly or low-level access patterns in `FROSTSignatureShares`.
 - **Oracle handler name**: The spec refers to `handleOracleTransactionProposed` in `oracleTransactionProposed.ts` — confirmed from the codebase.
 - **Devnet deployment**: After all phases are merged, a devnet redeployment is required to pick up the new coordinator and consensus interfaces.
