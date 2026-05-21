@@ -22,4 +22,11 @@ interface IFROSTCoordinatorCallback {
      * @param context The context data associated with the signature.
      */
     function onSignCompleted(FROSTSignatureId.T sid, bytes calldata context) external;
+
+    /**
+     * @notice A signature ceremony was definitively rejected.
+     * @param sid The signature ID of the rejected signing ceremony.
+     * @param context The context data associated with the signature.
+     */
+    function onSignRejected(FROSTSignatureId.T sid, bytes calldata context) external;
 }

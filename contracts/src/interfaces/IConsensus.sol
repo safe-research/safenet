@@ -136,6 +136,36 @@ interface IConsensus {
         FROST.Signature attestation
     );
 
+    /**
+     * @notice Emitted when a transaction is definitively rejected by the validator set.
+     * @param safeTxHash The hash of the rejected Safe transaction.
+     * @param chainId The chain ID of the Safe account.
+     * @param safe The address of the Safe account.
+     * @param epoch The epoch in which the rejected transaction was proposed.
+     * @param signatureId The FROST signature identifier of the rejected ceremony.
+     */
+    event TransactionRejected(
+        bytes32 indexed safeTxHash, uint256 chainId, address indexed safe, uint64 epoch, FROSTSignatureId.T signatureId
+    );
+
+    /**
+     * @notice Emitted when an oracle-checked transaction is definitively rejected by the validator set.
+     * @param safeTxHash The hash of the rejected Safe transaction.
+     * @param chainId The chain ID of the Safe account.
+     * @param safe The address of the Safe account.
+     * @param epoch The epoch in which the rejected transaction was proposed.
+     * @param oracle The address of the oracle contract used for evaluation.
+     * @param signatureId The FROST signature identifier of the rejected ceremony.
+     */
+    event OracleTransactionRejected(
+        bytes32 indexed safeTxHash,
+        uint256 chainId,
+        address indexed safe,
+        uint64 epoch,
+        address oracle,
+        FROSTSignatureId.T signatureId
+    );
+
     // ============================================================
     // CONFIGURATION
     // ============================================================
@@ -338,4 +368,40 @@ interface IConsensus {
         external
         view
         returns (FROST.Signature memory signature);
+
+    /**
+     * @notice Records the rejection of a transaction.
+     * @param epoch The epoch in which the transaction was proposed.
+     * @param chainId The chain ID of the Safe account.
+     * @param safe The address of the Safe account.
+     * @param safeTxStructHash The EIP-712 struct hash of the Safe transaction data.
+     * @param signatureId The FROST signature identifier of the rejected ceremony.
+     * @dev Guards against direct calls via coordinator rejection check. Normally called via the onSignRejected callback.
+     */
+    function rejectTransaction(
+        uint64 epoch,
+        uint256 chainId,
+        address safe,
+        bytes32 safeTxStructHash,
+        FROSTSignatureId.T signatureId
+    ) external;
+
+    /**
+     * @notice Records the rejection of an oracle-checked transaction.
+     * @param epoch The epoch in which the transaction was proposed.
+     * @param oracle The address of the oracle contract used for evaluation.
+     * @param chainId The chain ID of the Safe account.
+     * @param safe The address of the Safe account.
+     * @param safeTxStructHash The EIP-712 struct hash of the Safe transaction data.
+     * @param signatureId The FROST signature identifier of the rejected ceremony.
+     * @dev Guards against direct calls via coordinator rejection check. Normally called via the onSignRejected callback.
+     */
+    function rejectOracleTransaction(
+        uint64 epoch,
+        address oracle,
+        uint256 chainId,
+        address safe,
+        bytes32 safeTxStructHash,
+        FROSTSignatureId.T signatureId
+    ) external;
 }
