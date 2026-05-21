@@ -268,7 +268,7 @@ Flows covered: conflict freeze, foundation arbitration, loser slash, user fee re
 *`SentinelOracle`:*
 - `postRequest(requestId)` is unchanged — it continues to pull the fee from `msg.sender` (i.e., `Consensus`). No `feePayer` parameter is added.
 - The oracle always treats `msg.sender` as the fee provider: the caller must have already set an allowance for the amount returned by `getFee()` before calling `postRequest`.
-- On resolution, instead of pushing the fee refund to `Request.proposer`, the refund amount is stored in the `Request` struct (`pendingRefund`). A new function `claimRefund(requestId)` allows only `Request.proposer` (i.e., `Consensus`) to pull the refund tokens at any time after resolution.
+- On resolution, instead of pushing the fee refund to `Request.proposer`, the refund amount is stored in the `Request` struct (`pendingRefund`). A new function `claimRefund(requestId)` allows only the recorded `Request.proposer` to pull the refund tokens at any time after resolution.
 
 *`Consensus`:*
 - `proposeOracleTransaction` is updated to:
@@ -278,7 +278,7 @@ Flows covered: conflict freeze, foundation arbitration, loser slash, user fee re
   4. Call `oracle.postRequest(requestId)` as before.
   5. Record the caller: `requestProposers[requestId] = msg.sender`.
 - New storage: `mapping(bytes32 => address) requestProposers`.
-- New function: `claimOracleRefund(bytes32 requestId)` — callable by anyone, invokes `oracle.claimRefund(requestId)` (which sends tokens to `Consensus`), then forwards the full received amount to `requestProposers[requestId]`.
+- New function: `claimOracleRefund(bytes32 requestId)` — callable by anyone, invokes `oracle.claimRefund(requestId)` (which sends tokens to `Consensus`), then forwards the actual received amount (measured via balance delta to handle fee-on-transfer tokens) to `requestProposers[requestId]`. Reverts if `requestProposers[requestId]` is `address(0)` (i.e. the request was never registered through `Consensus`).
 
 **Updated user flow:**
 1. User calls `oracle.getFee()` (or reads it off-chain) to learn the required fee amount.
