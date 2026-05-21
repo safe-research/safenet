@@ -42,7 +42,7 @@ contract FROSTCoordinatorDeclineTest is Test {
     // ============================================================
 
     function test_SignDecline_EmitsSignDeclined() public {
-        (FROSTGroupId.T gid, uint256[] memory s,) = _trustedKeyGen(bytes32(0)); // solhint-disable-line no-unused-vars
+        (FROSTGroupId.T gid,,) = _trustedKeyGen(bytes32(0));
         bytes32 message = keccak256("test message");
         FROSTSignatureId.T sid = coordinator.sign(gid, message);
 
@@ -54,7 +54,7 @@ contract FROSTCoordinatorDeclineTest is Test {
     }
 
     function test_SignDecline_IsSignDeclined_ReturnsTrue() public {
-        (FROSTGroupId.T gid, uint256[] memory s,) = _trustedKeyGen(bytes32(0)); // solhint-disable-line no-unused-vars
+        (FROSTGroupId.T gid,,) = _trustedKeyGen(bytes32(0));
         FROSTSignatureId.T sid = coordinator.sign(gid, keccak256("msg"));
 
         address participant = participants.addr(0);
@@ -65,7 +65,7 @@ contract FROSTCoordinatorDeclineTest is Test {
     }
 
     function test_SignDecline_IsSignDeclined_OtherParticipant_ReturnsFalse() public {
-        (FROSTGroupId.T gid, uint256[] memory s,) = _trustedKeyGen(bytes32(0)); // solhint-disable-line no-unused-vars
+        (FROSTGroupId.T gid,,) = _trustedKeyGen(bytes32(0));
         FROSTSignatureId.T sid = coordinator.sign(gid, keccak256("msg"));
 
         vm.prank(participants.addr(0));
@@ -75,7 +75,7 @@ contract FROSTCoordinatorDeclineTest is Test {
     }
 
     function test_SignDecline_BelowThreshold_IsSignRejected_ReturnsFalse() public {
-        (FROSTGroupId.T gid, uint256[] memory s,) = _trustedKeyGen(bytes32(0)); // solhint-disable-line no-unused-vars
+        (FROSTGroupId.T gid,,) = _trustedKeyGen(bytes32(0));
         FROSTSignatureId.T sid = coordinator.sign(gid, keccak256("msg"));
 
         // Decline with DECLINE_THRESHOLD - 1 participants
@@ -89,7 +89,7 @@ contract FROSTCoordinatorDeclineTest is Test {
     }
 
     function test_SignDecline_AtThreshold_EmitsSignRejected() public {
-        (FROSTGroupId.T gid, uint256[] memory s,) = _trustedKeyGen(bytes32(0)); // solhint-disable-line no-unused-vars
+        (FROSTGroupId.T gid,,) = _trustedKeyGen(bytes32(0));
         FROSTSignatureId.T sid = coordinator.sign(gid, keccak256("msg"));
 
         // First DECLINE_THRESHOLD - 1 declines should not emit SignRejected
@@ -107,7 +107,7 @@ contract FROSTCoordinatorDeclineTest is Test {
     }
 
     function test_SignDecline_AtThreshold_IsSignRejected_ReturnsTrue() public {
-        (FROSTGroupId.T gid, uint256[] memory s,) = _trustedKeyGen(bytes32(0)); // solhint-disable-line no-unused-vars
+        (FROSTGroupId.T gid,,) = _trustedKeyGen(bytes32(0));
         FROSTSignatureId.T sid = coordinator.sign(gid, keccak256("msg"));
 
         for (uint256 i = 0; i < DECLINE_THRESHOLD; i++) {
@@ -119,7 +119,7 @@ contract FROSTCoordinatorDeclineTest is Test {
     }
 
     function test_SignDecline_ReturnsFalse_BelowThreshold() public {
-        (FROSTGroupId.T gid, uint256[] memory s,) = _trustedKeyGen(bytes32(0)); // solhint-disable-line no-unused-vars
+        (FROSTGroupId.T gid,,) = _trustedKeyGen(bytes32(0));
         FROSTSignatureId.T sid = coordinator.sign(gid, keccak256("msg"));
 
         vm.prank(participants.addr(0));
@@ -128,7 +128,7 @@ contract FROSTCoordinatorDeclineTest is Test {
     }
 
     function test_SignDecline_ReturnsTrue_AtThreshold() public {
-        (FROSTGroupId.T gid, uint256[] memory s,) = _trustedKeyGen(bytes32(0)); // solhint-disable-line no-unused-vars
+        (FROSTGroupId.T gid,,) = _trustedKeyGen(bytes32(0));
         FROSTSignatureId.T sid = coordinator.sign(gid, keccak256("msg"));
 
         for (uint256 i = 0; i < DECLINE_THRESHOLD - 1; i++) {
@@ -146,7 +146,7 @@ contract FROSTCoordinatorDeclineTest is Test {
     // ============================================================
 
     function test_SignDecline_AfterThreshold_SignDeclinedEmitted_SignRejectedNotReEmitted() public {
-        (FROSTGroupId.T gid, uint256[] memory s,) = _trustedKeyGen(bytes32(0)); // solhint-disable-line no-unused-vars
+        (FROSTGroupId.T gid,,) = _trustedKeyGen(bytes32(0));
         FROSTSignatureId.T sid = coordinator.sign(gid, keccak256("msg"));
 
         // Reach threshold
@@ -174,7 +174,7 @@ contract FROSTCoordinatorDeclineTest is Test {
     }
 
     function test_SignDecline_AfterThreshold_StillRecorded() public {
-        (FROSTGroupId.T gid, uint256[] memory s,) = _trustedKeyGen(bytes32(0)); // solhint-disable-line no-unused-vars
+        (FROSTGroupId.T gid,,) = _trustedKeyGen(bytes32(0));
         FROSTSignatureId.T sid = coordinator.sign(gid, keccak256("msg"));
 
         for (uint256 i = 0; i < DECLINE_THRESHOLD; i++) {
@@ -193,7 +193,7 @@ contract FROSTCoordinatorDeclineTest is Test {
     // ============================================================
 
     function test_SignDecline_NonParticipant_Reverts() public {
-        (FROSTGroupId.T gid, uint256[] memory s,) = _trustedKeyGen(bytes32(0)); // solhint-disable-line no-unused-vars
+        (FROSTGroupId.T gid,,) = _trustedKeyGen(bytes32(0));
         FROSTSignatureId.T sid = coordinator.sign(gid, keccak256("msg"));
 
         address nonParticipant = vm.randomAddress();
@@ -203,7 +203,7 @@ contract FROSTCoordinatorDeclineTest is Test {
     }
 
     function test_SignDecline_DoubleDecline_Reverts() public {
-        (FROSTGroupId.T gid, uint256[] memory s,) = _trustedKeyGen(bytes32(0)); // solhint-disable-line no-unused-vars
+        (FROSTGroupId.T gid,,) = _trustedKeyGen(bytes32(0));
         FROSTSignatureId.T sid = coordinator.sign(gid, keccak256("msg"));
 
         address participant = participants.addr(0);
@@ -216,7 +216,7 @@ contract FROSTCoordinatorDeclineTest is Test {
     }
 
     function test_SignDecline_CeremonyNotStarted_Reverts() public {
-        (FROSTGroupId.T gid, uint256[] memory s,) = _trustedKeyGen(bytes32(0)); // solhint-disable-line no-unused-vars
+        (FROSTGroupId.T gid,,) = _trustedKeyGen(bytes32(0));
         // Create a SID without starting a ceremony
         FROSTSignatureId.T fakeSid = FROSTSignatureId.create(gid, 99);
 
@@ -241,7 +241,7 @@ contract FROSTCoordinatorDeclineTest is Test {
     // ============================================================
 
     function test_SignShare_AfterRejection_Reverts() public {
-        (FROSTGroupId.T gid, uint256[] memory s,) = _trustedKeyGen(bytes32(0));
+        (FROSTGroupId.T gid,,) = _trustedKeyGen(bytes32(0));
         bytes32 message = keccak256("decline then sign");
         FROSTSignatureId.T sid = coordinator.sign(gid, message);
 
@@ -265,7 +265,7 @@ contract FROSTCoordinatorDeclineTest is Test {
     // ============================================================
 
     function test_SignatureValue_AfterRejection_Reverts() public {
-        (FROSTGroupId.T gid, uint256[] memory s,) = _trustedKeyGen(bytes32(0)); // solhint-disable-line no-unused-vars
+        (FROSTGroupId.T gid,,) = _trustedKeyGen(bytes32(0));
         FROSTSignatureId.T sid = coordinator.sign(gid, keccak256("msg"));
 
         for (uint256 i = 0; i < DECLINE_THRESHOLD; i++) {
@@ -278,7 +278,7 @@ contract FROSTCoordinatorDeclineTest is Test {
     }
 
     function test_SignatureVerify_AfterRejection_Reverts() public {
-        (FROSTGroupId.T gid, uint256[] memory s,) = _trustedKeyGen(bytes32(0)); // solhint-disable-line no-unused-vars
+        (FROSTGroupId.T gid,,) = _trustedKeyGen(bytes32(0));
         bytes32 message = keccak256("msg");
         FROSTSignatureId.T sid = coordinator.sign(gid, message);
 
@@ -313,7 +313,7 @@ contract FROSTCoordinatorDeclineTest is Test {
     }
 
     function test_SignatureMessage_ReturnsMessage() public {
-        (FROSTGroupId.T gid, uint256[] memory s,) = _trustedKeyGen(bytes32(0)); // solhint-disable-line no-unused-vars
+        (FROSTGroupId.T gid,,) = _trustedKeyGen(bytes32(0));
         bytes32 message = keccak256("check message");
         FROSTSignatureId.T sid = coordinator.sign(gid, message);
 
@@ -321,7 +321,7 @@ contract FROSTCoordinatorDeclineTest is Test {
     }
 
     function test_SignatureMessage_NotStarted_ReturnsZero() public {
-        (FROSTGroupId.T gid, uint256[] memory s,) = _trustedKeyGen(bytes32(0)); // solhint-disable-line no-unused-vars
+        (FROSTGroupId.T gid,,) = _trustedKeyGen(bytes32(0));
         FROSTSignatureId.T fakeSid = FROSTSignatureId.create(gid, 99);
         assertEq(coordinator.signatureMessage(fakeSid), bytes32(0));
     }
