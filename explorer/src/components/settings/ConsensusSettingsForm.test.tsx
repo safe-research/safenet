@@ -119,5 +119,4 @@ describe("ConsensusSettingsForm", () => {
 			expect(screen.getByText(/too small/i)).toBeTruthy();
 		});
 	});
-
 });
