@@ -3,7 +3,6 @@ import { formatError } from "../../utils/errors.js";
 import type { Logger } from "../../utils/logging.js";
 import type { Queue } from "../../utils/queue.js";
 import type {
-	ActionWithTimeout,
 	AttestTransaction,
 	Complain,
 	ComplaintResponse,
@@ -29,22 +28,18 @@ export type SubmittedAction = {
 	hash: Hex | null;
 };
 
-export abstract class BaseProtocol implements SafenetProtocol {
-	#actionQueue: Queue<ActionWithTimeout>;
-	#currentAction?: ActionWithTimeout;
+export abstract class BaseActionQueue<T extends { id: string }> {
+	#actionQueue: Queue<T & { validUntil: number }>;
+	#currentAction?: T & { validUntil: number };
 	#retryDelay?: number;
 	#logger: Logger;
 
-	abstract chainId(): bigint;
-	abstract consensus(): Address;
-	abstract coordinator(): Address;
-
-	constructor(queue: Queue<ActionWithTimeout>, logger: Logger) {
+	constructor(queue: Queue<T & { validUntil: number }>, logger: Logger) {
 		this.#actionQueue = queue;
 		this.#logger = logger;
 	}
 
-	process(action: ProtocolAction, timeout: number = ACTION_TIMEOUT): void {
+	process(action: T, timeout: number = ACTION_TIMEOUT): void {
 		this.#logger.info(`Enqueue ${action.id}`, { action });
 		this.#actionQueue.enqueue({
 			...action,
@@ -54,6 +49,10 @@ export abstract class BaseProtocol implements SafenetProtocol {
 		if (this.#retryDelay === undefined) {
 			this.checkNextAction();
 		}
+	}
+
+	drain(): void {
+		this.checkNextAction();
 	}
 
 	private checkNextAction() {
@@ -77,7 +76,10 @@ export abstract class BaseProtocol implements SafenetProtocol {
 		this.performAction(action)
 			.then((submitted) => {
 				// If action was successfully sent to the node, remove it from queue
-				this.#logger.info(`Sent action for ${action.id} transaction`, { ...actionSpan, tx: submitted });
+				this.#logger.info(`Sent action for ${action.id} transaction`, {
+					...actionSpan,
+					tx: submitted,
+				});
 				this.#actionQueue.dequeue();
 				this.#currentAction = undefined;
 				this.checkNextAction();
@@ -96,7 +98,15 @@ export abstract class BaseProtocol implements SafenetProtocol {
 			});
 	}
 
-	private async performAction(action: ProtocolAction): Promise<SubmittedAction> {
+	protected abstract performAction(action: T): Promise<SubmittedAction>;
+}
+
+export abstract class BaseProtocol extends BaseActionQueue<ProtocolAction> implements SafenetProtocol {
+	abstract chainId(): bigint;
+	abstract consensus(): Address;
+	abstract coordinator(): Address;
+
+	protected async performAction(action: ProtocolAction): Promise<SubmittedAction> {
 		switch (action.id) {
 			case "key_gen_start":
 				return await this.startKeyGen(action);
@@ -124,6 +134,7 @@ export abstract class BaseProtocol implements SafenetProtocol {
 				return await this.setValidatorStaker(action);
 		}
 	}
+
 	protected abstract startKeyGen(args: StartKeyGen): Promise<SubmittedAction>;
 
 	protected abstract publishKeygenSecretShares(args: PublishSecretShares): Promise<SubmittedAction>;
