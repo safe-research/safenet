@@ -7,9 +7,13 @@ const STORAGE_KEY_SETTINGS = "localStorage.settings.object.v1";
 // DAppSpec (ds-rpc-{chainId}) — Gnosis Chain only
 const GNOSIS_CHAIN_ID = 100;
 
-export function getRpcUrlParam(): string | null {
+const _rpcUrlParam = (() => {
 	const raw = new URLSearchParams(window.location.search).get(`ds-rpc-${GNOSIS_CHAIN_ID}`);
 	return raw && URL.canParse(raw) ? raw : null;
+})();
+
+export function getRpcUrlParam(): string | null {
+	return _rpcUrlParam;
 }
 
 const STORAGE_KEY_SAFE_API_SETTINGS = "localStorage.safe_api_settings.object.v1";

@@ -18,7 +18,7 @@ Both changes ship in a single PR.
 
 The `ds-rpc-100` value is read from `window.location.search` (the real query string, before the hash) using a new `getRpcUrlParam()` utility in `src/lib/settings.ts`. This is the correct location because the app uses hash-based routing (`createHashHistory`), so TanStack Router search params live inside the hash and cannot carry the DAppSpec params.
 
-The URL param takes priority over the stored settings RPC in `useProvider`. The settings form disables the RPC field and shows an inline note when a URL param is active, so users are not confused by their saved value being silently ignored.
+The URL param takes priority over the stored settings RPC in `useProvider`. The settings form shows a prominent warning note when a URL param is active so users are not confused by their saved value being silently ignored. The field remains editable — the param only affects the current page load, and users may still want to update their saved value.
 
 A phishing-risk warning modal is shown on app load whenever `ds-rpc-100` is detected, as recommended by the DAppSpec. The user must acknowledge it before continuing.
 
@@ -36,7 +36,7 @@ A phishing-risk warning modal is shown on app load whenever `ds-rpc-100` is dete
 1. User opens `https://explorer.example.com/?ds-rpc-100=https://my-rpc.example.com/#/`
 2. Warning modal appears: explains a custom RPC was provided via URL and warns about phishing risk.
 3. User clicks "I understand, continue" — modal closes, custom RPC is used.
-4. On the Settings page the RPC field is greyed out with a note: _"Ignored — RPC provided via URL param: https://my-rpc.example.com/"_
+4. On the Settings page a warning note is shown: _"Ignored — RPC provided via URL param: https://my-rpc.example.com/"_. The field remains editable.
 
 ### No URL param
 
