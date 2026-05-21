@@ -18,7 +18,6 @@ const DEFAULT_SETTINGS: Settings = {
 };
 
 const mockUpdateSettings = vi.hoisted(() => vi.fn());
-const mockGetRpcUrlParam = vi.hoisted(() => vi.fn(() => null as string | null));
 
 vi.mock("@/hooks/useSettings", () => ({
 	useSettings: vi.fn(() => [DEFAULT_SETTINGS]),
@@ -26,13 +25,11 @@ vi.mock("@/hooks/useSettings", () => ({
 
 vi.mock("@/lib/settings", () => ({
 	updateSettings: mockUpdateSettings,
-	getRpcUrlParam: mockGetRpcUrlParam,
 }));
 
 afterEach(cleanup);
 beforeEach(() => {
 	mockUpdateSettings.mockClear();
-	mockGetRpcUrlParam.mockReturnValue(null);
 });
 
 describe("ConsensusSettingsForm", () => {
@@ -123,22 +120,4 @@ describe("ConsensusSettingsForm", () => {
 		});
 	});
 
-	it("shows a warning note with the URL param RPC when present", () => {
-		mockGetRpcUrlParam.mockReturnValue("https://rpc.ankr.com/gnosis");
-		render(<ConsensusSettingsForm />);
-		expect(screen.getByText(/ignored — rpc provided via url param/i)).toBeTruthy();
-		expect(screen.getByText("https://rpc.ankr.com/gnosis")).toBeTruthy();
-	});
-
-	it("RPC field remains editable when a URL param RPC is present", () => {
-		mockGetRpcUrlParam.mockReturnValue("https://rpc.ankr.com/gnosis");
-		render(<ConsensusSettingsForm />);
-		const input = screen.getByLabelText("RPC Url") as HTMLInputElement;
-		expect(input.disabled).toBe(false);
-	});
-
-	it("does not show the URL param note when no URL param RPC is present", () => {
-		render(<ConsensusSettingsForm />);
-		expect(screen.queryByText(/ignored — rpc provided via url param/i)).toBeNull();
-	});
 });

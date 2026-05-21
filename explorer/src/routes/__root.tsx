@@ -1,7 +1,6 @@
 import type { QueryClient } from "@tanstack/react-query";
 import { createRootRouteWithContext, Outlet } from "@tanstack/react-router";
 import Analytics from "@/components/Analytics";
-import { RpcUrlParamWarning } from "@/components/common/RpcUrlParamWarning";
 import Footer from "@/components/Footer";
 import Header from "@/components/Header";
 import ReactQueryDevtoolsSetup from "@/integrations/tanstack-query/layout";
@@ -23,7 +22,6 @@ export const Route = createRootRouteWithContext<MyRouterContext>()({
 	component: () => (
 		<>
 			<Analytics />
-			<RpcUrlParamWarning />
 			<Header />
 			<Outlet />
 			<Footer />
