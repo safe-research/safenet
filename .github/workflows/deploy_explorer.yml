@@ -32,7 +32,7 @@ jobs:
         run: npm ci
 
       - name: Build explorer
-        run: VITE_BASE_PATH=/safenet/ npm run build --workspace explorer
+        run: VITE_BASE_PATH=/safenet/ VITE_APP_URL=${{ vars.EXPLORER_APP_URL }} npm run build --workspace explorer
 
       - name: Create 404 for GH pages
         run: cp explorer/dist/index.html explorer/dist/404.html
