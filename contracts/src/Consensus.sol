@@ -77,6 +77,12 @@ contract Consensus is IConsensus, IERC165, IFROSTCoordinatorCallback {
     mapping(bytes32 message => FROSTSignatureId.T) private $attestations;
 
     /**
+     * @notice Mapping message hash to rejection FROST signature ID.
+     */
+    // forge-lint: disable-next-line(mixed-case-variable)
+    mapping(bytes32 message => FROSTSignatureId.T) private $rejections;
+
+    /**
      * @notice Mapping from validator address to its staker address.
      */
     // forge-lint: disable-next-line(mixed-case-variable)
@@ -105,6 +111,21 @@ contract Consensus is IConsensus, IERC165, IFROSTCoordinatorCallback {
      * @notice Thrown when a caller is not the configured coordinator.
      */
     error NotCoordinator();
+
+    /**
+     * @notice Thrown when attempting to reject an already-rejected transaction.
+     */
+    error AlreadyRejected();
+
+    /**
+     * @notice Thrown when rejectTransaction is called with a signatureId not marked rejected by the coordinator.
+     */
+    error NotRejected();
+
+    /**
+     * @notice Thrown when a signature does not match the expected message.
+     */
+    error WrongSignature();
 
     // ============================================================
     // CONSTRUCTOR
@@ -414,6 +435,45 @@ contract Consensus is IConsensus, IERC165, IFROSTCoordinatorCallback {
         return _COORDINATOR.signatureValue($attestations[message]);
     }
 
+    /**
+     * @inheritdoc IConsensus
+     */
+    function rejectTransaction(
+        uint64 epoch,
+        uint256 chainId,
+        address safe,
+        bytes32 safeTxStructHash,
+        FROSTSignatureId.T signatureId
+    ) public {
+        bytes32 safeTxHash = SafeTransaction.partialHash(chainId, safe, safeTxStructHash);
+        bytes32 message = domainSeparator().transactionProposal(epoch, safeTxHash);
+        require($rejections[message].isZero(), AlreadyRejected());
+        require(_COORDINATOR.isSignRejected(signatureId), NotRejected());
+        require(_COORDINATOR.signatureMessage(signatureId) == message, WrongSignature());
+        $rejections[message] = signatureId;
+        emit TransactionRejected(safeTxHash, chainId, safe, epoch, signatureId);
+    }
+
+    /**
+     * @inheritdoc IConsensus
+     */
+    function rejectOracleTransaction(
+        uint64 epoch,
+        address oracle,
+        uint256 chainId,
+        address safe,
+        bytes32 safeTxStructHash,
+        FROSTSignatureId.T signatureId
+    ) public {
+        bytes32 safeTxHash = SafeTransaction.partialHash(chainId, safe, safeTxStructHash);
+        bytes32 message = domainSeparator().oracleTransactionProposal(epoch, oracle, safeTxHash);
+        require($rejections[message].isZero(), AlreadyRejected());
+        require(_COORDINATOR.isSignRejected(signatureId), NotRejected());
+        require(_COORDINATOR.signatureMessage(signatureId) == message, WrongSignature());
+        $rejections[message] = signatureId;
+        emit OracleTransactionRejected(safeTxHash, chainId, safe, epoch, oracle, signatureId);
+    }
+
     // ============================================================
     // IERC165 IMPLEMENTATION
     // ============================================================
@@ -456,6 +516,25 @@ contract Consensus is IConsensus, IERC165, IFROSTCoordinatorCallback {
             (uint64 epoch, address oracle, uint256 chainId, address safe, bytes32 safeTxStructHash) =
                 abi.decode(context[4:], (uint64, address, uint256, address, bytes32));
             attestOracleTransaction(epoch, oracle, chainId, safe, safeTxStructHash, signatureId);
+        } else {
+            revert UnknownSignatureSelector();
+        }
+    }
+
+    /**
+     * @inheritdoc IFROSTCoordinatorCallback
+     */
+    function onSignRejected(FROSTSignatureId.T signatureId, bytes calldata context) external onlyCoordinator {
+        // forge-lint: disable-next-line(unsafe-typecast)
+        bytes4 selector = bytes4(context);
+        if (selector == this.rejectTransaction.selector) {
+            (uint64 epoch, uint256 chainId, address safe, bytes32 safeTxStructHash) =
+                abi.decode(context[4:], (uint64, uint256, address, bytes32));
+            rejectTransaction(epoch, chainId, safe, safeTxStructHash, signatureId);
+        } else if (selector == this.rejectOracleTransaction.selector) {
+            (uint64 epoch, address oracle, uint256 chainId, address safe, bytes32 safeTxStructHash) =
+                abi.decode(context[4:], (uint64, address, uint256, address, bytes32));
+            rejectOracleTransaction(epoch, oracle, chainId, safe, safeTxStructHash, signatureId);
         } else {
             revert UnknownSignatureSelector();
         }
