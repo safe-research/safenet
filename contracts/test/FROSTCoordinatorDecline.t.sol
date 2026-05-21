@@ -278,7 +278,9 @@ contract FROSTCoordinatorDeclineTest is Test {
         }
 
         uint256[] memory honestParticipants = new uint256[](COUNT);
-        for (uint256 i = 0; i < COUNT; i++) honestParticipants[i] = i;
+        for (uint256 i = 0; i < COUNT; i++) {
+            honestParticipants[i] = i;
+        }
 
         FROSTSignatureId.T sid = coordinator.sign(gid, message);
 
