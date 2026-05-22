@@ -6,7 +6,7 @@ import type { GroupId, SignatureId } from "../../frost/types.js";
 import { checkedAddressSchema, hexBytes32Schema, hexDataSchema } from "../../types/schemas.js";
 import { jsonReplacer } from "../../utils/json.js";
 import { SqliteQueue } from "../../utils/queue.js";
-import type { EthTransactionData, EthTransactionDetails, FeeValues, TransactionStorage } from "./onchain.js";
+import type { EthTransactionData, EthTransactionDetails, FeeValues, TransactionStorage } from "./transaction.js";
 import type { ActionWithTimeout } from "./types.js";
 
 const groupIdSchema = hexBytes32Schema.transform((v) => v as GroupId);
