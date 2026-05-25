@@ -106,6 +106,9 @@ abstract contract FROSTCoordinatorTestBase is Test {
         Nonces[] memory nonces = new Nonces[](COUNT);
 
         {
+            // The leaf offset is the low bits of the group's current sign count.
+            // Matches FROSTNonceCommitmentSet._CHUNKSZ = 10: offset = sequence & 0x3ff.
+            uint256 offset = coordinator.groupSignCount(gid) & 0x3ff;
             bytes32[] memory commitments = new bytes32[](COUNT);
             for (uint256 i = 0; i < COUNT; i++) {
                 Nonces memory n = nonces[i];
@@ -114,7 +117,7 @@ abstract contract FROSTCoordinatorTestBase is Test {
                 uint256 e = FROST.nonce(bytes32(vm.randomUint()), s[i]);
                 n.e = ForgeSecp256k1.g(e);
                 // forge-lint: disable-next-line(asm-keccak256)
-                bytes32 leaf = keccak256(abi.encode(0, n.d.x(), n.d.y(), n.e.x(), n.e.y()));
+                bytes32 leaf = keccak256(abi.encode(offset, n.d.x(), n.d.y(), n.e.x(), n.e.y()));
                 commitments[i] = MerkleProof.processProof(nonceProof, leaf);
             }
             for (uint256 i = 0; i < COUNT; i++) {
