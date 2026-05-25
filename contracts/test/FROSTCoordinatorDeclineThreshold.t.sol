@@ -7,9 +7,6 @@ import {FROSTGroupId} from "@/libraries/FROSTGroupId.sol";
 import {FROSTSignatureId} from "@/libraries/FROSTSignatureId.sol";
 
 contract FROSTCoordinatorDeclineThresholdTest is FROSTCoordinatorTestBase {
-    // count - threshold + 1 = 5 - 3 + 1 = 3
-    uint16 public constant DECLINE_THRESHOLD = COUNT - THRESHOLD + 1;
-
     function test_SignDecline_BelowThreshold_DoesNotReject() public {
         (FROSTGroupId.T gid,,) = _trustedKeyGen(bytes32(0));
         FROSTSignatureId.T sid = coordinator.sign(gid, keccak256("msg"));
