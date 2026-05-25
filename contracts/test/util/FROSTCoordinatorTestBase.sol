@@ -41,7 +41,9 @@ abstract contract FROSTCoordinatorTestBase is Test {
         s = new uint256[](COUNT);
 
         uint256[] memory a = new uint256[](THRESHOLD);
-        for (uint256 j = 0; j < THRESHOLD; j++) {
+        // a[0] is the group private key; exclude 0 to avoid the point at infinity.
+        a[0] = vm.randomUint(1, Secp256k1.N - 1);
+        for (uint256 j = 1; j < THRESHOLD; j++) {
             a[j] = vm.randomUint(0, Secp256k1.N - 1);
         }
 
