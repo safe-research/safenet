@@ -12,14 +12,15 @@ contract FROSTCoordinatorDeclineMutualExclusionTest is FROSTCoordinatorTestBase 
         (FROSTGroupId.T gid,,) = _trustedKeyGen(bytes32(0));
         FROSTSignatureId.T sid = coordinator.sign(gid, keccak256("msg"));
 
-        vm.prank(participants.addr(0));
+        address participant = participants.addr(0);
+        vm.prank(participant);
         coordinator.signDecline(sid);
 
         // AlreadyDeclined is checked before cryptographic verification, so dummy data suffices.
         FROSTCoordinator.SignSelection memory selection;
         FROST.SignatureShare memory share;
         vm.expectRevert(FROSTCoordinator.AlreadyDeclined.selector);
-        vm.prank(participants.addr(0));
+        vm.prank(participant);
         coordinator.signShare(sid, selection, share, new bytes32[](0));
     }
 
@@ -34,13 +35,13 @@ contract FROSTCoordinatorDeclineMutualExclusionTest is FROSTCoordinatorTestBase 
         }
         SignCeremonySetup memory setup = _signCeremonySetup(gid, s, keccak256("msg"), signers);
 
-        uint256 h = setup.signers[0];
+        address signer = participants.addr(setup.signers[0]);
         bytes32[] memory proof = setup.tree.proof(0);
-        vm.prank(participants.addr(h));
+        vm.prank(signer);
         coordinator.signShare(setup.sid, setup.selection, setup.shares[0], proof);
 
         vm.expectRevert(FROSTCoordinator.AlreadyShared.selector);
-        vm.prank(participants.addr(h));
+        vm.prank(signer);
         coordinator.signDecline(setup.sid);
     }
 }
