@@ -8,27 +8,25 @@ import {FROSTGroupId} from "@/libraries/FROSTGroupId.sol";
 import {FROSTSignatureId} from "@/libraries/FROSTSignatureId.sol";
 
 contract FROSTCoordinatorDeclinePostBehaviorTest is FROSTCoordinatorTestBase {
-    // count - threshold + 1 = 5 - 3 + 1 = 3
-    uint16 public constant DECLINE_THRESHOLD = COUNT - THRESHOLD + 1;
-
     function test_SignDecline_PartialDeclines_CeremonyCompletes() public {
         (FROSTGroupId.T gid, uint256[] memory s,) = _trustedKeyGen(bytes32(0));
         bytes32 message = keccak256("msg");
 
         // Select only the last THRESHOLD participants as signers so the
-        // non-selected participants (0 and 1) can freely decline without
-        // their nonce commitment being part of selection.r.
+        // non-selected participants (0..COUNT-THRESHOLD-1) can freely decline
+        // without their nonce commitment being part of selection.r.
         uint256[] memory signers = new uint256[](THRESHOLD);
         for (uint256 i = 0; i < THRESHOLD; i++) {
             signers[i] = COUNT - THRESHOLD + i;
         }
         SignCeremonySetup memory setup = _signCeremonySetup(gid, s, message, signers);
 
-        // Non-selected participants decline — below DECLINE_THRESHOLD (3), so no rejection.
-        vm.prank(participants.addr(0));
-        assertFalse(coordinator.signDecline(setup.sid));
-        vm.prank(participants.addr(1));
-        assertFalse(coordinator.signDecline(setup.sid));
+        // Non-selected participants decline — COUNT-THRESHOLD = 2, which is below
+        // DECLINE_THRESHOLD (3), so the ceremony is not rejected.
+        for (uint256 i = 0; i < COUNT - THRESHOLD; i++) {
+            vm.prank(participants.addr(i));
+            assertFalse(coordinator.signDecline(setup.sid));
+        }
 
         // Selected signers submit their shares; the last one should complete the ceremony.
         bool signed;
@@ -54,9 +52,10 @@ contract FROSTCoordinatorDeclinePostBehaviorTest is FROSTCoordinatorTestBase {
         }
         FROSTSignatureId.T sid = _trustedSign(gid, s, keccak256("msg"), signers);
 
-        // A non-signing participant tries to decline after the ceremony completed.
+        // SigningComplete is checked before AlreadyShared, so any valid participant works.
+        address participant = participants.addr(0);
         vm.expectRevert(FROSTCoordinator.SigningComplete.selector);
-        vm.prank(participants.addr(THRESHOLD));
+        vm.prank(participant);
         coordinator.signDecline(sid);
     }
 }
