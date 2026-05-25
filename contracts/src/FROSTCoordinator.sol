@@ -113,6 +113,7 @@ contract FROSTCoordinator {
      * @custom:param signed The Merkle root of the signature shares.
      * @custom:param rejected True if the ceremony has been rejected by threshold declines.
      * @custom:param declineCount The number of participants that have declined this ceremony.
+     * @custom:param declined Per-participant decline flags.
      * @custom:param shares The accumulated signature shares.
      */
     struct Signature {
@@ -120,6 +121,7 @@ contract FROSTCoordinator {
         bytes32 signed;
         bool rejected;
         uint16 declineCount;
+        mapping(address participant => bool) declined;
         FROSTSignatureShares.T shares;
     }
 
@@ -342,11 +344,6 @@ contract FROSTCoordinator {
     error SigningComplete();
 
     /**
-     * @notice Thrown when attempting to sign a ceremony that has been rejected.
-     */
-    error CeremonyRejected();
-
-    /**
      * @notice Thrown when querying a signature for a ceremony that was rejected.
      */
     error SignatureRejected();
@@ -366,18 +363,6 @@ contract FROSTCoordinator {
      */
     // forge-lint: disable-next-line(mixed-case-variable)
     mapping(FROSTSignatureId.T => Signature) private $signatures;
-
-    /**
-     * @notice Mapping from signature ID and participant to whether that participant has declined.
-     */
-    // forge-lint: disable-next-line(mixed-case-variable)
-    mapping(FROSTSignatureId.T sid => mapping(address participant => bool)) private $declined;
-
-    /**
-     * @notice Mapping from signature ID and participant to whether that participant has shared.
-     */
-    // forge-lint: disable-next-line(mixed-case-variable)
-    mapping(FROSTSignatureId.T sid => mapping(address participant => bool)) private $shared;
 
     // ============================================================
     // EXTERNAL AND PUBLIC FUNCTIONS - KEY GENERATION
@@ -629,11 +614,9 @@ contract FROSTCoordinator {
     ) public returns (bool signed) {
         (Group storage group, bytes32 message) = _signatureGroupAndMessage(sid);
         Signature storage signature = $signatures[sid];
-        require(!signature.rejected, CeremonyRejected());
-        require(!$declined[sid][msg.sender], AlreadyDeclined());
+        require(!signature.declined[msg.sender], AlreadyDeclined());
         Secp256k1.Point memory key = group.key;
         FROST.verifyShare(key, selection.r, group.participants.getKey(msg.sender), share, message);
-        $shared[sid][msg.sender] = true; // guards signDecline: prevents share-then-decline
         FROST.Signature memory accumulator =
             signature.shares.register(msg.sender, share, selection.r, selection.root, proof);
         emit SignShared(sid, selection.root, msg.sender, share.z);
@@ -653,20 +636,17 @@ contract FROSTCoordinator {
      * @param sid The signature ID.
      * @return rejected True if the decline threshold has been crossed for the first time.
      * @dev Once `count - threshold + 1` participants have declined, the ceremony is definitively
-     *      rejected: `signShare` will revert with `CeremonyRejected` and signature queries will
-     *      revert with `SignatureRejected`. Additional declines past the threshold are still
-     *      recorded (for observability) but `SignRejected` is not re-emitted.
+     *      rejected: signature queries revert with `SignatureRejected`. Additional declines past
+     *      the threshold are still recorded (for observability) but `SignRejected` is not re-emitted.
      */
     function signDecline(FROSTSignatureId.T sid) public returns (bool rejected) {
-        FROSTGroupId.T gid = sid.group();
-        Group storage group = $groups[gid];
+        (Group storage group,) = _signatureGroupAndMessage(sid);
         group.participants.getKey(msg.sender); // reverts InvalidParticipant for non-members
         Signature storage signature = $signatures[sid];
-        require(signature.message != bytes32(0), NotSigning());
         require(signature.signed == bytes32(0), SigningComplete());
-        require(!$declined[sid][msg.sender], AlreadyDeclined());
-        require(!$shared[sid][msg.sender], AlreadyShared());
-        $declined[sid][msg.sender] = true;
+        require(!signature.declined[msg.sender], AlreadyDeclined());
+        require(!signature.shares.isShared(msg.sender), AlreadyShared());
+        signature.declined[msg.sender] = true;
         signature.declineCount++;
         emit SignDeclined(sid, msg.sender);
         GroupState memory state = group.state;
@@ -787,46 +767,6 @@ contract FROSTCoordinator {
         bytes32 signed = signature.signed;
         require(signed != bytes32(0), NotSigned());
         return $signatures[sid].shares.groupSignature(signed);
-    }
-
-    /**
-     * @notice Returns whether a participant has declined a specific signing ceremony.
-     * @param sid The signature ID.
-     * @param participant The participant address.
-     * @return True if the participant has declined.
-     */
-    function isSignDeclined(FROSTSignatureId.T sid, address participant) external view returns (bool) {
-        return $declined[sid][participant];
-    }
-
-    /**
-     * @notice Returns whether a participant has shared for a specific signing ceremony.
-     * @param sid The signature ID.
-     * @param participant The participant address.
-     * @return True if the participant has shared.
-     */
-    function isSignShared(FROSTSignatureId.T sid, address participant) external view returns (bool) {
-        return $shared[sid][participant];
-    }
-
-    /**
-     * @notice Returns whether a signing ceremony has been rejected.
-     * @param sid The signature ID.
-     * @return True if the ceremony has been rejected.
-     */
-    function isSignRejected(FROSTSignatureId.T sid) external view returns (bool) {
-        return $signatures[sid].rejected;
-    }
-
-    /**
-     * @notice Returns the message associated with a signing ceremony.
-     * @dev Returns `bytes32(0)` if no ceremony has been started for this `sid`. Unlike most other query functions,
-     *      this does NOT revert for an unknown `sid`. Callers must treat a zero return as "not found."
-     * @param sid The signature ID.
-     * @return The message being signed, or `bytes32(0)` if the ceremony does not exist.
-     */
-    function signatureMessage(FROSTSignatureId.T sid) external view returns (bytes32) {
-        return $signatures[sid].message;
     }
 
     // ============================================================

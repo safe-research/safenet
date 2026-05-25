@@ -18,11 +18,14 @@ library FROSTSignatureShares {
      * @notice The main storage struct for tracking aggregated signature shares.
      * @custom:param aggregates Mapping from the Merkle root of a signing participant set to their aggregate signature
      *               data.
+     * @custom:param anyShared Mapping tracking whether a participant has submitted a share for any selection root in
+     *               this ceremony. Used to enforce mutual exclusion with `signDecline`.
      * @dev This library's state is organized by the Merkle root of the signing participant set.
      *      Each `root` corresponds to a unique signing ceremony instance.
      */
     struct T {
         mapping(bytes32 root => Aggregate) aggregates;
+        mapping(address participant => bool) anyShared;
     }
 
     /**
@@ -89,6 +92,7 @@ library FROSTSignatureShares {
         bytes32 leaf = _hash(participant, share, r);
         require(MerkleProof.verifyCalldata(proof, root, leaf), NotIncluded());
         aggregate.participants[participant] = leaf;
+        self.anyShared[participant] = true;
         signature.r = Secp256k1.add(aggregate.signature.r, share.r);
         signature.z = addmod(aggregate.signature.z, share.z, Secp256k1.N);
         aggregate.signature = signature;
@@ -102,6 +106,16 @@ library FROSTSignatureShares {
      */
     function groupSignature(T storage self, bytes32 root) internal view returns (FROST.Signature memory signature) {
         return self.aggregates[root].signature;
+    }
+
+    /**
+     * @notice Returns whether a participant has submitted a share for any selection root in this ceremony.
+     * @param self The storage struct.
+     * @param participant The participant address.
+     * @return True if the participant has shared.
+     */
+    function isShared(T storage self, address participant) internal view returns (bool) {
+        return self.anyShared[participant];
     }
 
     // ============================================================
