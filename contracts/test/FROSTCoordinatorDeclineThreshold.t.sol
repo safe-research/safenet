@@ -3,7 +3,6 @@ pragma solidity ^0.8.30;
 
 import {Vm} from "@forge-std/Test.sol";
 import {FROSTCoordinatorTestBase} from "@test/util/FROSTCoordinatorTestBase.sol";
-import {FROSTCoordinator} from "@/FROSTCoordinator.sol";
 import {FROSTGroupId} from "@/libraries/FROSTGroupId.sol";
 import {FROSTSignatureId} from "@/libraries/FROSTSignatureId.sol";
 
