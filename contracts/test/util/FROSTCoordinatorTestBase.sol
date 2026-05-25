@@ -24,6 +24,16 @@ abstract contract FROSTCoordinatorTestBase is Test {
         ForgeSecp256k1.P e;
     }
 
+    /// @dev Returned by `_signCeremonySetup`. Holds everything needed to call
+    /// `signShare` for individual participants without completing the ceremony.
+    struct SignCeremonySetup {
+        FROSTSignatureId.T sid;
+        uint256[] signers;
+        FROSTCoordinator.SignSelection selection;
+        FROST.SignatureShare[] shares;
+        CommitmentShareMerkleTree tree;
+    }
+
     uint16 public constant COUNT = 5;
     uint16 public constant THRESHOLD = 3;
 
@@ -97,12 +107,13 @@ abstract contract FROSTCoordinatorTestBase is Test {
         );
     }
 
-    /// @dev Runs a complete FROST signing ceremony for `signers` (indices into
-    /// `participants`). Preprocesses for all COUNT participants, then has only
-    /// `signers` reveal nonces and submit shares.
-    function _trustedSign(FROSTGroupId.T gid, uint256[] memory s, bytes32 message, uint256[] memory signers)
+    /// @dev Sets up a complete FROST signing ceremony for `signers` — preprocesses
+    /// nonces, calls `sign`, reveals nonces, computes all shares and builds the
+    /// CommitmentShareMerkleTree — but does NOT call `signShare`. The caller
+    /// decides which participants submit their share, enabling partial-signing scenarios.
+    function _signCeremonySetup(FROSTGroupId.T gid, uint256[] memory s, bytes32 message, uint256[] memory signers)
         internal
-        returns (FROSTSignatureId.T sid)
+        returns (SignCeremonySetup memory setup)
     {
         bytes32[] memory nonceProof = new bytes32[](10);
         Nonces[] memory nonces = new Nonces[](COUNT);
@@ -128,21 +139,21 @@ abstract contract FROSTCoordinatorTestBase is Test {
             }
         }
 
-        sid = coordinator.sign(gid, message);
+        setup.sid = coordinator.sign(gid, message);
 
         _sortByParticipantId(signers);
+        setup.signers = signers;
 
         for (uint256 i = 0; i < signers.length; i++) {
             uint256 h = signers[i];
             Nonces memory n = nonces[h];
             FROSTCoordinator.SignNonces memory nn = FROSTCoordinator.SignNonces({d: n.d.toPoint(), e: n.e.toPoint()});
             vm.prank(participants.addr(h));
-            coordinator.signRevealNonces(sid, nn, nonceProof);
+            coordinator.signRevealNonces(setup.sid, nn, nonceProof);
         }
 
         Secp256k1.Point memory groupKey = coordinator.groupKey(gid);
-        FROSTCoordinator.SignSelection memory selection;
-        FROST.SignatureShare[] memory shares = new FROST.SignatureShare[](signers.length);
+        setup.shares = new FROST.SignatureShare[](signers.length);
 
         {
             uint256[] memory bindingFactors;
@@ -162,22 +173,21 @@ abstract contract FROSTCoordinatorTestBase is Test {
                 Nonces memory n = nonces[h];
                 uint256 bindingFactor = bindingFactors[i];
                 ForgeSecp256k1.P memory r = ForgeSecp256k1.add(n.d, ForgeSecp256k1.mul(bindingFactor, n.e));
-                shares[i].r = r.toPoint();
-                shares[i].l = _lagrangeCoefficient(signers, h);
+                setup.shares[i].r = r.toPoint();
+                setup.shares[i].l = _lagrangeCoefficient(signers, h);
                 groupCommitment = ForgeSecp256k1.add(groupCommitment, r);
             }
-            selection.r = groupCommitment.toPoint();
+            setup.selection.r = groupCommitment.toPoint();
 
-            uint256 challenge = FROST.challenge(selection.r, groupKey, message);
+            uint256 challenge = FROST.challenge(setup.selection.r, groupKey, message);
             for (uint256 i = 0; i < signers.length; i++) {
                 uint256 h = signers[i];
-                uint256 sk = s[h];
                 Nonces memory n = nonces[h];
-                shares[i].z = addmod(
+                setup.shares[i].z = addmod(
                     n.d.w.privateKey,
                     addmod(
                         mulmod(n.e.w.privateKey, bindingFactors[i], Secp256k1.N),
-                        mulmod(mulmod(challenge, shares[i].l, Secp256k1.N), sk, Secp256k1.N),
+                        mulmod(mulmod(challenge, setup.shares[i].l, Secp256k1.N), s[h], Secp256k1.N),
                         Secp256k1.N
                     ),
                     Secp256k1.N
@@ -185,22 +195,33 @@ abstract contract FROSTCoordinatorTestBase is Test {
             }
         }
 
-        CommitmentShareMerkleTree commitmentShares;
         {
             CommitmentShareMerkleTree.S[] memory cs = new CommitmentShareMerkleTree.S[](signers.length);
             for (uint256 i = 0; i < signers.length; i++) {
                 uint256 h = signers[i];
-                cs[i] = CommitmentShareMerkleTree.S({participant: participants.addr(h), r: shares[i].r, l: shares[i].l});
+                cs[i] = CommitmentShareMerkleTree.S({
+                    participant: participants.addr(h), r: setup.shares[i].r, l: setup.shares[i].l
+                });
             }
-            commitmentShares = new CommitmentShareMerkleTree(selection.r, cs);
-            selection.root = commitmentShares.root();
+            setup.tree = new CommitmentShareMerkleTree(setup.selection.r, cs);
+            setup.selection.root = setup.tree.root();
         }
+    }
 
-        for (uint256 i = 0; i < signers.length; i++) {
-            uint256 h = signers[i];
-            bytes32[] memory proof = commitmentShares.proof(i);
+    /// @dev Runs a complete FROST signing ceremony for `signers` (indices into
+    /// `participants`). Preprocesses for all COUNT participants, then has only
+    /// `signers` reveal nonces and submit shares.
+    function _trustedSign(FROSTGroupId.T gid, uint256[] memory s, bytes32 message, uint256[] memory signers)
+        internal
+        returns (FROSTSignatureId.T sid)
+    {
+        SignCeremonySetup memory setup = _signCeremonySetup(gid, s, message, signers);
+        sid = setup.sid;
+        for (uint256 i = 0; i < setup.signers.length; i++) {
+            uint256 h = setup.signers[i];
+            bytes32[] memory proof = setup.tree.proof(i);
             vm.prank(participants.addr(h));
-            coordinator.signShare(sid, selection, shares[i], proof);
+            coordinator.signShare(sid, setup.selection, setup.shares[i], proof);
         }
     }
 
