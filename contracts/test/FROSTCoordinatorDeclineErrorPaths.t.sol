@@ -8,9 +8,6 @@ import {FROSTParticipantMap} from "@/libraries/FROSTParticipantMap.sol";
 import {FROSTSignatureId} from "@/libraries/FROSTSignatureId.sol";
 
 contract FROSTCoordinatorDeclineErrorPathsTest is FROSTCoordinatorTestBase {
-    // count - threshold + 1 = 5 - 3 + 1 = 3
-    uint16 public constant DECLINE_THRESHOLD = COUNT - THRESHOLD + 1;
-
     function test_SignDecline_NonParticipant_Reverts() public {
         (FROSTGroupId.T gid,,) = _trustedKeyGen(bytes32(0));
         FROSTSignatureId.T sid = coordinator.sign(gid, keccak256("msg"));
@@ -24,21 +21,44 @@ contract FROSTCoordinatorDeclineErrorPathsTest is FROSTCoordinatorTestBase {
         (FROSTGroupId.T gid,,) = _trustedKeyGen(bytes32(0));
         FROSTSignatureId.T sid = coordinator.sign(gid, keccak256("msg"));
 
-        vm.prank(participants.addr(0));
+        address participant = participants.addr(0);
+        vm.prank(participant);
         coordinator.signDecline(sid);
 
         vm.expectRevert(FROSTCoordinator.AlreadyDeclined.selector);
-        vm.prank(participants.addr(0));
+        vm.prank(participant);
         coordinator.signDecline(sid);
     }
 
     function test_SignDecline_NotSigning_Reverts() public {
         // A SID that was never created maps to message == bytes32(0).
+        address participant = participants.addr(0);
         FROSTSignatureId.T fakeSid = FROSTSignatureId.T.wrap(bytes32(uint256(1)));
 
         vm.expectRevert(FROSTCoordinator.NotSigning.selector);
-        vm.prank(participants.addr(0));
+        vm.prank(participant);
         coordinator.signDecline(fakeSid);
+    }
+
+    function test_SignDecline_AlreadyShared_Reverts() public {
+        (FROSTGroupId.T gid, uint256[] memory s,) = _trustedKeyGen(bytes32(0));
+
+        // Select exactly THRESHOLD signers so a single share does not complete the ceremony:
+        // accumulator.r = R_0 != R_0 + R_1 + R_2 = selection.r.
+        uint256[] memory signers = new uint256[](THRESHOLD);
+        for (uint256 i = 0; i < THRESHOLD; i++) {
+            signers[i] = i;
+        }
+        SignCeremonySetup memory setup = _signCeremonySetup(gid, s, keccak256("msg"), signers);
+
+        address signer = participants.addr(setup.signers[0]);
+        bytes32[] memory proof = setup.tree.proof(0);
+        vm.prank(signer);
+        coordinator.signShare(setup.sid, setup.selection, setup.shares[0], proof);
+
+        vm.expectRevert(FROSTCoordinator.AlreadyShared.selector);
+        vm.prank(signer);
+        coordinator.signDecline(setup.sid);
     }
 
     function test_SignatureVerify_AfterRejection_Reverts_SignatureRejected() public {
