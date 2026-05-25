@@ -7,7 +7,7 @@ Component: `all`
 
 Currently, when a validator determines a transaction is invalid, it silently drops it. The FROST signing ceremony times out with no on-chain record. From the user's and operator's perspective, "rejected" and "error/timeout" are indistinguishable.
 
-This feature adds an explicit **decline** to the signing ceremony: a validator that determines a transaction is invalid calls `signDeclineWithCallback` on `FROSTCoordinator`. Once enough validators decline (threshold: `count - threshold + 1`), the ceremony is definitively marked rejected on-chain — further `signShare` calls revert, and a callback triggers `onSignRejected` on `Consensus`, which emits a `TransactionRejected` event. The explorer surfaces this as a distinct "Rejected" status.
+This feature adds an explicit **decline** to the signing ceremony: a validator that determines a transaction is invalid calls `signDeclineWithCallback` on `FROSTCoordinator`. Once enough validators decline (threshold: `count - threshold + 1`), the ceremony is definitively marked rejected on-chain — the ceremony becomes mathematically uncompletable, a callback triggers `onSignRejected` on `Consensus`, which emits a `TransactionRejected` event, and signature queries revert with `SignatureRejected`. The explorer surfaces this as a distinct "Rejected" status.
 
 **Phases (separate PRs):**
 1. **FROSTCoordinator** — Add `signDecline`, threshold stopping logic, and `SignDeclined`/`SignRejected` events. No callback yet.
@@ -34,7 +34,7 @@ Only a per-participant boolean is stored: "did this participant decline this cer
 
 Two distinct behaviors:
 
-**At signing threshold**: When `decline_count >= count - threshold + 1`, enough validators have declined that the ceremony can no longer reach threshold regardless of who is left. At this point, the ceremony is definitively marked rejected. Further `signShare` calls revert with `CeremonyRejected`, and `signatureVerify`/`signatureValue` revert with `SignatureRejected` (giving a clearer error than `NotSigned`). The coordinator fires `onSignRejected` on Consensus, which emits `TransactionRejected`.
+**At signing threshold**: When `decline_count >= count - threshold + 1`, enough validators have declined that the ceremony can no longer reach threshold regardless of who is left. At this point, the ceremony is definitively marked rejected. `signatureVerify`/`signatureValue` revert with `SignatureRejected` (giving a clearer error than `NotSigned`). The coordinator fires `onSignRejected` on Consensus, which emits `TransactionRejected`. `signShare` is **not** blocked after rejection — this is symmetric with `signDecline` being callable past the threshold for observability — but the ceremony can never complete because the remaining non-declined participants are fewer than `threshold`.
 
 **Attestation is never blocked before threshold**: If threshold participants sign before enough declines accumulate, the ceremony completes and the transaction is attested. `ATTESTED` always takes precedence over `REJECTED` in the explorer.
 
@@ -95,7 +95,7 @@ No changes to `IFROSTCoordinatorCallback.sol` or `Consensus.sol` in this phase. 
 
 #### Updated `Signature` struct
 
-Add `rejected` and `declineCount` fields. Both are packed into the same storage slot:
+Add `rejected`, `declineCount`, `declined`, and `shares` fields. `rejected` and `declineCount` pack into the same storage slot as the existing `bool`/`uint16` fields:
 
 ```solidity
 struct Signature {
@@ -103,20 +103,14 @@ struct Signature {
     bytes32 signed;
     bool rejected;
     uint16 declineCount;
+    mapping(address participant => bool) declined;
     FROSTSignatureShares.T shares;
 }
 ```
 
-#### New storage
+Per-participant decline flags (`declined`) live directly in the `Signature` struct, keeping all per-ceremony state co-located in `$signatures[sid]`. No top-level mappings are added for decline or share tracking.
 
-```solidity
-mapping(FROSTSignatureId.T sid => mapping(address participant => bool)) private $declined;
-mapping(FROSTSignatureId.T sid => mapping(address participant => bool)) private $shared;
-```
-
-`$declined` records which participants have explicitly declined a ceremony. `$shared` records which participants have successfully submitted a signature share. Both are needed to enforce mutual exclusion (see Updated `signShare` and `signDecline` below).
-
-The decline count per ceremony is tracked in `$signatures[sid].declineCount` (above).
+Shared tracking (`anyShared`) is added to `FROSTSignatureShares.T` rather than as a separate top-level mapping, since shares are logically owned by that library. See the `FROSTSignatureShares` section below.
 
 #### New events
 
@@ -131,13 +125,14 @@ event SignRejected(FROSTSignatureId.T indexed sid);
 error AlreadyDeclined();
 error AlreadyShared();
 error SigningComplete();
-error CeremonyRejected();
 error SignatureRejected();
 ```
 
 `AlreadyShared` — thrown by `signDecline` when the caller has already submitted a valid signature share for this ceremony. A participant cannot both share and decline the same ceremony.
 
 `SigningComplete` — decline called after ceremony is already signed.
+
+`CeremonyRejected` is intentionally **not** added. After the rejection threshold is crossed, the ceremony can no longer complete mathematically (the remaining non-declined participants are fewer than `threshold`), so blocking `signShare` via a new error would be redundant. It is also asymmetric with `signDecline` being callable past threshold for observability. The rejection state only gates `signatureVerify`/`signatureValue` via `SignatureRejected`.
 
 #### New function `signDecline`
 
@@ -146,62 +141,63 @@ function signDecline(FROSTSignatureId.T sid) public returns (bool rejected);
 ```
 
 Implementation:
-1. `FROSTGroupId.T gid = sid.group()`.
-2. `Group storage group = $groups[gid]`.
-3. `group.participants.getKey(msg.sender)` — reverts with `InvalidParticipant` for non-members, acting as access control.
-4. `Signature storage signature = $signatures[sid]`.
-5. `require(signature.message != bytes32(0), NotSigning())` — ceremony must exist.
-6. `require(signature.signed == bytes32(0), SigningComplete())` — ceremony must not be completed.
-7. `require(!$declined[sid][msg.sender], AlreadyDeclined())` — prevent double decline.
-8. `require(!$shared[sid][msg.sender], AlreadyShared())` — prevent decline after sharing.
-9. `$declined[sid][msg.sender] = true`.
-10. `signature.declineCount++`.
-11. Emit `SignDeclined(sid, msg.sender)`.
-12. `GroupState memory state = group.state`.
-13. If `signature.declineCount >= state.count - state.threshold + 1` and `!signature.rejected`:
+1. `(Group storage group,) = _signatureGroupAndMessage(sid)` — validates ceremony exists, reverts `NotSigning` if not.
+2. `group.participants.getKey(msg.sender)` — reverts with `InvalidParticipant` for non-members, acting as access control.
+3. `Signature storage signature = $signatures[sid]`.
+4. `require(signature.signed == bytes32(0), SigningComplete())` — ceremony must not be completed.
+5. `require(!signature.declined[msg.sender], AlreadyDeclined())` — prevent double decline.
+6. `require(!signature.shares.isShared(msg.sender), AlreadyShared())` — prevent decline after sharing.
+7. `signature.declined[msg.sender] = true`.
+8. `signature.declineCount++`.
+9. Emit `SignDeclined(sid, msg.sender)`.
+10. `GroupState memory state = group.state`.
+11. If `signature.declineCount >= state.count - state.threshold + 1` and `!signature.rejected`:
     - `signature.rejected = true`.
     - Emit `SignRejected(sid)`.
     - Return `true`.
-14. Return `false`.
+12. Return `false`.
 
 Note: the guard `!signature.rejected` in step 12 ensures the event fires exactly once. If additional validators decline after the threshold is already crossed, their `SignDeclined` is still recorded (useful for observability in the explorer) but `SignRejected` is not re-emitted.
 
-#### New view functions
+#### View functions — not added in Phase 1
+
+`isSignDeclined`, `isSignShared`, `isSignRejected`, and `signatureMessage` are intentionally **not** added in Phase 1. They are only needed by `Consensus.rejectTransaction` (Phase 2), which calls `isSignRejected` to validate the SID and `signatureMessage` to bind the SID to the correct ceremony. Adding them before their caller exists would introduce dead external API surface. They are added in Phase 2 alongside `signDeclineWithCallback` and `IFROSTCoordinatorCallback.onSignRejected`.
+
+#### Updated `FROSTSignatureShares`
+
+`FROSTSignatureShares.T` gains an `anyShared` mapping to support the mutual-exclusion check in `signDecline`:
 
 ```solidity
-function isSignDeclined(FROSTSignatureId.T sid, address participant)
-    external view returns (bool);
-
-function isSignShared(FROSTSignatureId.T sid, address participant)
-    external view returns (bool);
-
-function isSignRejected(FROSTSignatureId.T sid)
-    external view returns (bool);
-
-function signatureMessage(FROSTSignatureId.T sid)
-    external view returns (bytes32);
+struct T {
+    mapping(bytes32 root => Aggregate) aggregates;
+    mapping(address participant => bool) anyShared;
+}
 ```
 
-`isSignDeclined` returns `$declined[sid][participant]`. `isSignShared` returns `$shared[sid][participant]` — exposes the mutual-exclusion state for off-chain observability. `isSignRejected` returns `$signatures[sid].rejected`. `signatureMessage` returns `$signatures[sid].message` — used by `Consensus.rejectTransaction` in Phase 2 to validate the SID corresponds to the ceremony for that message.
+`register()` sets `self.anyShared[participant] = true` after recording the share. A new `isShared` view returns `self.anyShared[participant]`. This is consumed by `signDecline`'s `AlreadyShared` guard via `signature.shares.isShared(msg.sender)`.
+
+The `anyShared` field lives in the library struct (co-located with share state) rather than as a separate top-level mapping in `FROSTCoordinator`, keeping the library self-contained and the coordinator free of cross-cutting storage.
 
 #### Updated `signShare`
 
-Add a rejection guard and a declined guard after `_signatureGroupAndMessage`, and record a successful share in `$shared`:
+Add a declined guard after `_signatureGroupAndMessage`. Share registration (`signature.shares.register`) now automatically sets `anyShared` on `FROSTSignatureShares.T` as a side-effect:
 
 ```solidity
 function signShare(...) public returns (bool signed) {
     (Group storage group, bytes32 message) = _signatureGroupAndMessage(sid);
-    require(!$signatures[sid].rejected, CeremonyRejected());       // new
-    require(!$declined[sid][msg.sender], AlreadyDeclined());       // new
+    Signature storage signature = $signatures[sid];
+    require(!signature.declined[msg.sender], AlreadyDeclined());   // new
     Secp256k1.Point memory key = group.key;
     FROST.verifyShare(key, selection.r, group.participants.getKey(msg.sender), share, message);
-    Signature storage signature = $signatures[sid];
-    $shared[sid][msg.sender] = true;                               // new — set after crypto verification
+    FROST.Signature memory accumulator =
+        signature.shares.register(msg.sender, share, selection.r, selection.root, proof);
     // ... rest of existing implementation unchanged
 }
 ```
 
-The `AlreadyDeclined` guard fires before the crypto verification so a declined participant cannot attempt to share even with garbage values. `$shared` is set after successful crypto verification so it is only marked true when the share is cryptographically valid.
+The `AlreadyDeclined` guard fires before the crypto verification so a declined participant cannot attempt to share even with garbage values. `anyShared` is set inside `FROSTSignatureShares.register()` after successful crypto verification, so it is only marked true when the share is cryptographically valid.
+
+`CeremonyRejected` is **not** added to `signShare`. After the rejection threshold is crossed, the ceremony can no longer complete mathematically — the remaining non-declined participants are fewer than `threshold` — so the guard would never trigger a false positive, but it would also be redundant. Omitting it is symmetric with `signDecline` being callable past the threshold for observability.
 
 #### Updated `signatureVerify` and `signatureValue`
 
@@ -229,25 +225,27 @@ function signatureValue(FROSTSignatureId.T sid) external view returns (FROST.Sig
 
 #### Test cases (Phase 1)
 
-- Participant declines: `SignDeclined` emitted, `isSignDeclined` returns true.
-- Non-participant decline: reverts with `InvalidParticipant`.
-- Double decline by same participant: reverts with `AlreadyDeclined`.
-- Decline when ceremony not started (message is zero): reverts with `NotSigning`.
-- Decline after ceremony signed: reverts with `SigningComplete`.
-- Different participants can each decline the same ceremony independently.
-- Declines below threshold: `SignRejected` not emitted, `isSignRejected` returns false, ceremony still signable.
-- Declines reach `count - threshold + 1`: `SignRejected` emitted exactly once, `isSignRejected` returns true.
-- Additional declines after threshold crossed: `SignDeclined` emitted, `SignRejected` not re-emitted.
-- `signShare` after rejection: reverts with `CeremonyRejected`.
-- `signShare` after decline (same participant): reverts with `AlreadyDeclined`.
-- `signDecline` after share (same participant): reverts with `AlreadyShared`.
-- `signatureVerify`/`signatureValue` for rejected SID: reverts with `SignatureRejected`.
-- `signDecline` returns `true` only when the rejection threshold is first crossed, `false` otherwise.
-- Ceremony completes (signs) before rejection threshold: succeeds, no `CeremonyRejected`.
+Phase 1 ships with one focused test (`test_SignDecline_ThresholdReached_EmitsSignRejected`) covering the happy path: threshold number of participants declining emits `SignRejected` and the final call returns `true`. Full coverage is added in four stacked PRs targeting this branch (all unblocked after Phase 1 merges):
+
+- **Branch A (threshold boundary)**: declines below threshold (no `SignRejected`), exactly at threshold (`SignRejected` emitted once, returns `true`), above threshold (returns `false`, no re-emit).
+- **Branch B (mutual exclusion)**: `signShare` after decline reverts `AlreadyDeclined`; `signDecline` after share reverts `AlreadyShared`; they are mutually exclusive per participant.
+- **Branch C (error paths)**: non-participant reverts `InvalidParticipant`; double decline reverts `AlreadyDeclined`; decline after signing complete reverts `SigningComplete`; decline of non-existent ceremony reverts `NotSigning`; `signatureVerify`/`signatureValue` for rejected SID reverts `SignatureRejected`.
+- **Branch D (post-rejection / post-completion)**: additional declines after threshold are recorded (`SignDeclined` emitted) but `SignRejected` not re-emitted; ceremony completing before rejection threshold succeeds normally.
 
 ---
 
 ### Phase 2 — Consensus Callback (`FROSTCoordinator.sol`, `IFROSTCoordinatorCallback.sol`, `Consensus.sol`)
+
+#### New view functions (`FROSTCoordinator.sol`)
+
+Added here alongside `signDeclineWithCallback` because `rejectTransaction` (below) needs them to validate the SID:
+
+```solidity
+function isSignRejected(FROSTSignatureId.T sid) external view returns (bool);
+function signatureMessage(FROSTSignatureId.T sid) external view returns (bytes32);
+```
+
+`isSignRejected` returns `$signatures[sid].rejected`. `signatureMessage` returns `$signatures[sid].message` — used by `rejectTransaction` to verify the SID corresponds to the ceremony for the given message (preventing a caller from submitting a legitimately-rejected SID from a different ceremony to emit a spurious `TransactionRejected` event).
 
 #### New function `signDeclineWithCallback` (`FROSTCoordinator.sol`)
 
@@ -602,8 +600,9 @@ Add a "Declined" row displaying validator addresses from `status.declined`, foll
 Completes the coordinator side of the feature in isolation: decline tracking and threshold-based stopping. `signDeclineWithCallback` is intentionally excluded — it requires `IFROSTCoordinatorCallback.onSignRejected` which does not exist until Phase 2.
 
 Files:
-- `contracts/src/FROSTCoordinator.sol` — `Signature` struct update (`rejected`, `declineCount`), `$declined`/`$shared` storage, `SignDeclined`/`SignRejected` events, new errors (`AlreadyDeclined`, `AlreadyShared`, `SigningComplete`, `CeremonyRejected`, `SignatureRejected`), `signDecline`/`isSignDeclined`/`isSignShared`/`isSignRejected`/`signatureMessage`, mutual-exclusion cross-guards and `$shared` tracking in `signShare`, rejection guards on `signatureVerify`/`signatureValue`.
-- `contracts/test/` — Unit tests for the full decline flow, including threshold logic and mutual-exclusion guards.
+- `contracts/src/FROSTCoordinator.sol` — `Signature` struct update (`rejected`, `declineCount`, `declined` mapping, `shares` field), `SignDeclined`/`SignRejected` events, new errors (`AlreadyDeclined`, `AlreadyShared`, `SigningComplete`, `SignatureRejected`), `signDecline`, `AlreadyDeclined` guard in `signShare`, rejection guards on `signatureVerify`/`signatureValue`.
+- `contracts/src/libraries/FROSTSignatureShares.sol` — `anyShared` field in `T`, `isShared` view, set `anyShared` in `register()`.
+- `contracts/test/FROSTCoordinatorDecline.t.sol` — Happy-path test: threshold reached emits `SignRejected`. Full coverage in stacked PRs.
 
 ### Phase 2 — Consensus Callback (PR 2)
 **Can start after Phase 1 is merged.**
@@ -709,7 +708,8 @@ Files:
 
 #### Testing
 
-- Unit tests covering: participant decline, non-participant reverts (`InvalidParticipant`), double-decline reverts (`AlreadyDeclined`), decline of non-existent ceremony (`NotSigning`), decline after signing complete (`SigningComplete`), threshold formula correctness, `SignRejected` emitted exactly once, `signShare` reverts with `CeremonyRejected` after rejection, `signatureVerify`/`signatureValue` revert with `SignatureRejected` after rejection.
+- PR 1 ships one focused test: `test_SignDecline_ThresholdReached_EmitsSignRejected` — `count - threshold + 1` participants declining emits `SignRejected` and the final call returns `true`.
+- Full coverage follows in four stacked PRs (threshold boundary, mutual exclusion, error paths, post-rejection/post-completion behaviour). See "Test cases (Phase 1)" above.
 
 ---
 
@@ -778,7 +778,7 @@ Files:
 #### Decisions and Tradeoffs
 
 - **Single-source status derivation**: an earlier design would have required cross-referencing `SignDeclined` events from the coordinator with the proposal's SID. By placing `TransactionRejected` on `Consensus`, the explorer needs only one contract for all proposal status logic.
-- **`ATTESTED` takes precedence over `REJECTED`**: if a ceremony somehow completes after partial declines, `ATTESTED` is shown. In practice, `signShare` reverts after the rejection threshold is crossed, so both events cannot coexist for the same message.
+- **`ATTESTED` takes precedence over `REJECTED`**: if a ceremony somehow completes after partial declines, `ATTESTED` is shown. In practice this cannot happen — after the rejection threshold is crossed, the remaining non-declined participants are fewer than `threshold`, so the ceremony can never accumulate enough shares to complete.
 
 #### Testing
 
