@@ -6,7 +6,6 @@ import {FROSTCoordinator} from "@/FROSTCoordinator.sol";
 import {FROST} from "@/libraries/FROST.sol";
 import {FROSTGroupId} from "@/libraries/FROSTGroupId.sol";
 import {FROSTSignatureId} from "@/libraries/FROSTSignatureId.sol";
-import {Secp256k1} from "@/libraries/Secp256k1.sol";
 
 contract FROSTCoordinatorDeclineMutualExclusionTest is FROSTCoordinatorTestBase {
     function test_SignShare_AfterSignDecline_Reverts_AlreadyDeclined() public {
