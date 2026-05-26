@@ -24,7 +24,7 @@ const sentinelActionSchema = z.discriminatedUnion("id", [
 	}),
 	z.object({ id: z.literal("sentinel_finalize"), requestId: hexDataSchema }),
 	z.object({ id: z.literal("sentinel_claim"), requestId: hexDataSchema }),
-	z.object({ id: z.literal("sentinel_approve_token"), bondTarget: coercedBigIntSchema }),
+	z.object({ id: z.literal("sentinel_approve_token"), bondAmount: coercedBigIntSchema }),
 ]);
 
 const sentinelActionWithTimeoutSchema = z.intersection(sentinelActionSchema, z.object({ validUntil: z.number() }));
@@ -61,7 +61,7 @@ export class SentinelProtocol extends BaseActionQueue<SentinelAction> {
 					data: encodeFunctionData({
 						abi: ERC20_FUNCTIONS,
 						functionName: "approve",
-						args: [this.#sentinelOracle, action.bondTarget],
+						args: [this.#sentinelOracle, action.bondAmount],
 					}),
 					value: 0n,
 				});

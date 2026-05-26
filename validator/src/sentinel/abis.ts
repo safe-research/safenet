@@ -1,11 +1,8 @@
 import { parseAbi, parseAbiItem } from "viem";
+import { ORACLE_RESULT_EVENT } from "../types/abis.js";
 
 export const SENTINEL_NEW_REQUEST_EVENT = parseAbiItem(
 	"event NewRequest(bytes32 indexed requestId, address indexed proposer, uint256 fee, uint256 bondTarget, uint256 deadline)",
-);
-
-export const SENTINEL_ORACLE_RESULT_EVENT = parseAbiItem(
-	"event OracleResult(bytes32 indexed requestId, address indexed proposer, bytes result, bool approved)",
 );
 
 export const SENTINEL_DISPUTE_RESOLVED_EVENT = parseAbiItem(
@@ -22,7 +19,7 @@ export const SENTINEL_COMMITTED_EVENT = parseAbiItem(
 
 export const SENTINEL_EVENTS = [
 	SENTINEL_NEW_REQUEST_EVENT,
-	SENTINEL_ORACLE_RESULT_EVENT,
+	ORACLE_RESULT_EVENT,
 	SENTINEL_DISPUTE_RESOLVED_EVENT,
 	SENTINEL_COMMITTED_EVENT,
 	SENTINEL_CLAIMED_EVENT,

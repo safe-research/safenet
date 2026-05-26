@@ -24,7 +24,7 @@ export type SentinelClaim = {
 
 export type SentinelApproveToken = {
 	id: "sentinel_approve_token";
-	bondTarget: bigint;
+	bondAmount: bigint;
 };
 
 export type SentinelAction = CommitApprove | CommitDeny | SentinelFinalize | SentinelClaim | SentinelApproveToken;
