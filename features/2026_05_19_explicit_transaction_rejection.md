@@ -7,7 +7,7 @@ Component: `all`
 
 Currently, when a validator determines a transaction is invalid, it silently drops it. The FROST signing ceremony times out with no on-chain record. From the user's and operator's perspective, "rejected" and "error/timeout" are indistinguishable.
 
-This feature adds an explicit **decline** to the signing ceremony: a validator that determines a transaction is invalid calls `signDeclineWithCallback` on `FROSTCoordinator`. Once enough validators decline (threshold: `count - threshold + 1`), the ceremony is definitively marked rejected on-chain — further `signShare` calls revert, and a callback triggers `onSignRejected` on `Consensus`, which emits a `TransactionRejected` event. The explorer surfaces this as a distinct "Rejected" status.
+This feature adds an explicit **decline** to the signing ceremony: a validator that determines a transaction is invalid calls `signDeclineWithCallback` on `FROSTCoordinator`. Once enough validators decline (threshold: `count - threshold + 1`), the ceremony is definitively marked rejected on-chain — the ceremony becomes mathematically uncompletable, a callback triggers `onSignRejected` on `Consensus`, which emits a `TransactionRejected` event, and signature queries revert with `SignatureRejected`. The explorer surfaces this as a distinct "Rejected" status.
 
 **Phases (separate PRs):**
 1. **FROSTCoordinator** — Add `signDecline`, threshold stopping logic, and `SignDeclined`/`SignRejected` events. No callback yet.
@@ -30,11 +30,19 @@ A rejection is semantically "I am not participating in this signing ceremony." T
 
 Only a per-participant boolean is stored: "did this participant decline this ceremony?" A reason code would improve user-facing messages but requires maintaining an enum in sync across the contract and validator, and adds a contract upgrade path when new checks are introduced. The flag alone is sufficient for the goals of fast feedback and observability.
 
+### Decline tracking lives in `FROSTNonceCommitmentSet`, not `Signature`
+
+Originally, per-participant ceremony state was split across two boolean mappings: `declined` (in the `Signature` struct in `FROSTCoordinator`) and `anyShared` (in `FROSTSignatureShares.T`). These were mutually exclusive by invariant but not by type, creating hidden coupling between two different structs with no compile-time enforcement.
+
+The refactored design uses a single `SequenceStatus` enum (`None`, `Revealed`, `Burned`) stored in `FROSTNonceCommitmentSet.Commitments` per `(participant, sequence)`. Since nonces are already keyed by sequence — the same key space as ceremonies — it is the natural home for this state. `signRevealNonces` transitions the slot to `Revealed`; `signDecline` calls `burn()` which transitions `None → Burned` (atomic check-and-set, reverts with `NoncesAlreadyRevealed` if already `Revealed` or `NoncesAlreadyBurned` if already `Burned`). This gives a single source of truth for "what did this participant do in this ceremony?" with the state machine enforced by the library itself.
+
+The on-chain invariant is now: per signing sequence, a participant either times out, reveals their nonces exactly once (and subsequently shares), or declines exactly once.
+
 ### Decline stops signing at threshold — but never blocks attestation
 
 Two distinct behaviors:
 
-**At signing threshold**: When `decline_count >= count - threshold + 1`, enough validators have declined that the ceremony can no longer reach threshold regardless of who is left. At this point, the ceremony is definitively marked rejected. Further `signShare` calls revert with `CeremonyRejected`, and `signatureVerify`/`signatureValue` revert with `SignatureRejected` (giving a clearer error than `NotSigned`). The coordinator fires `onSignRejected` on Consensus, which emits `TransactionRejected`.
+**At signing threshold**: When `decline_count >= count - threshold + 1`, enough validators have declined that the ceremony can no longer reach threshold regardless of who is left. At this point, the ceremony is definitively marked rejected. `signatureVerify`/`signatureValue` revert with `SignatureRejected` (giving a clearer error than `NotSigned`). The coordinator fires `onSignRejected` on Consensus, which emits `TransactionRejected`. `signShare` is **not** blocked after rejection — this is symmetric with `signDecline` being callable past the threshold for observability — but the ceremony can never complete because the remaining non-declined participants are fewer than `threshold`.
 
 **Attestation is never blocked before threshold**: If threshold participants sign before enough declines accumulate, the ceremony completes and the transaction is attested. `ATTESTED` always takes precedence over `REJECTED` in the explorer.
 
@@ -95,7 +103,7 @@ No changes to `IFROSTCoordinatorCallback.sol` or `Consensus.sol` in this phase. 
 
 #### Updated `Signature` struct
 
-Add `rejected` and `declineCount` fields. Both are packed into the same storage slot:
+Add `rejected`, `declineCount`, and `shares` fields. `rejected` and `declineCount` pack into the same storage slot as the existing `bool`/`uint16` fields:
 
 ```solidity
 struct Signature {
@@ -107,13 +115,7 @@ struct Signature {
 }
 ```
 
-#### New storage
-
-```solidity
-mapping(FROSTSignatureId.T sid => mapping(address participant => bool)) private $declined;
-```
-
-The decline count per ceremony is tracked in `$signatures[sid].declineCount` (above).
+Per-participant decline and reveal state is tracked in `FROSTNonceCommitmentSet` via the `SequenceStatus` enum (see Architecture Decision above). No per-participant mappings are added to `Signature` or `FROSTSignatureShares.T`.
 
 #### New events
 
@@ -126,12 +128,18 @@ event SignRejected(FROSTSignatureId.T indexed sid);
 
 ```solidity
 error AlreadyDeclined();
+error NoncesNotRevealed();
 error SigningComplete();
-error CeremonyRejected();
 error SignatureRejected();
 ```
 
-`SigningComplete` — decline called after ceremony is already signed. Confirm during implementation whether an equivalent error already exists in `FROSTCoordinator`; if so, reuse it.
+`AlreadyDeclined` — thrown by `signShare` when the caller has already declined this ceremony (i.e. their nonce slot is `Burned` in `FROSTNonceCommitmentSet`).
+
+`NoncesNotRevealed` — thrown by `signShare` when the caller has not yet called `signRevealNonces` for this sequence. Enforces the ordering invariant: reveal before share.
+
+`SigningComplete` — decline called after ceremony is already signed.
+
+`CeremonyRejected` is intentionally **not** added. After the rejection threshold is crossed, the ceremony can no longer complete mathematically (the remaining non-declined participants are fewer than `threshold`), so blocking `signShare` via a new error would be redundant. It is also asymmetric with `signDecline` being callable past threshold for observability. The rejection state only gates `signatureVerify`/`signatureValue` via `SignatureRejected`.
 
 #### New function `signDecline`
 
@@ -140,51 +148,59 @@ function signDecline(FROSTSignatureId.T sid) public returns (bool rejected);
 ```
 
 Implementation:
-1. `FROSTGroupId.T gid = sid.group()`.
-2. `Group storage group = $groups[gid]`.
-3. `group.participants.getKey(msg.sender)` — reverts with `InvalidParticipant` for non-members, acting as access control.
-4. `Signature storage signature = $signatures[sid]`.
-5. `require(signature.message != bytes32(0), NotSigning())` — ceremony must exist.
-6. `require(signature.signed == bytes32(0), SigningComplete())` — ceremony must not be completed.
-7. `require(!$declined[sid][msg.sender], AlreadyDeclined())` — prevent double decline.
-8. `$declined[sid][msg.sender] = true`.
-9. `signature.declineCount++`.
-10. Emit `SignDeclined(sid, msg.sender)`.
-11. `GroupState memory state = group.state`.
-12. If `signature.declineCount >= state.count - state.threshold + 1` and `!signature.rejected`:
+1. `(Group storage group,) = _signatureGroupAndMessage(sid)` — validates ceremony exists, reverts `NotSigning` if not.
+2. `group.participants.getKey(msg.sender)` — reverts with `InvalidParticipant` for non-members, acting as access control.
+3. `Signature storage signature = $signatures[sid]`.
+4. `require(signature.signed == bytes32(0), SigningComplete())` — ceremony must not be completed.
+5. `group.nonces.burn(msg.sender, sid.sequence())` — atomically enforces mutual exclusion: reverts `NoncesAlreadyRevealed` if the participant already called `signRevealNonces`, or `NoncesAlreadyBurned` if they already called `signDecline`. Sets the nonce slot to `Burned` on success.
+6. `signature.declineCount++`.
+7. Emit `SignDeclined(sid, msg.sender)`.
+8. `GroupState memory state = group.state`.
+9. If `signature.declineCount >= state.count - state.threshold + 1` and `!signature.rejected`:
     - `signature.rejected = true`.
     - Emit `SignRejected(sid)`.
     - Return `true`.
-13. Return `false`.
+10. Return `false`.
 
 Note: the guard `!signature.rejected` in step 12 ensures the event fires exactly once. If additional validators decline after the threshold is already crossed, their `SignDeclined` is still recorded (useful for observability in the explorer) but `SignRejected` is not re-emitted.
 
-#### New view functions
+#### View functions — not added in Phase 1
+
+`isSignDeclined`, `isSignShared`, `isSignRejected`, and `signatureMessage` are intentionally **not** added in Phase 1. They are only needed by `Consensus.rejectTransaction` (Phase 2), which calls `isSignRejected` to validate the SID and `signatureMessage` to bind the SID to the correct ceremony. Adding them before their caller exists would introduce dead external API surface. They are added in Phase 2 alongside `signDeclineWithCallback` and `IFROSTCoordinatorCallback.onSignRejected`.
+
+#### Updated `FROSTSignatureShares`
+
+`FROSTSignatureShares.T` is unchanged from its pre-Phase-1 definition:
 
 ```solidity
-function isSignDeclined(FROSTSignatureId.T sid, address participant)
-    external view returns (bool);
-
-function isSignRejected(FROSTSignatureId.T sid)
-    external view returns (bool);
-
-function signatureMessage(FROSTSignatureId.T sid)
-    external view returns (bytes32);
+struct T {
+    mapping(bytes32 root => Aggregate) aggregates;
+}
 ```
 
-`isSignRejected` returns `$signatures[sid].rejected`. `signatureMessage` returns `$signatures[sid].message` — used by `Consensus.rejectTransaction` in Phase 2 to validate the SID corresponds to the ceremony for that message.
+Mutual exclusion between sharing and declining is enforced by `FROSTNonceCommitmentSet.SequenceStatus` (see Architecture Decision above), not by a field in this library.
 
 #### Updated `signShare`
 
-Add a rejection guard after `_signatureGroupAndMessage`:
+Add two nonce-based guards after `_signatureGroupAndMessage`:
 
 ```solidity
 function signShare(...) public returns (bool signed) {
     (Group storage group, bytes32 message) = _signatureGroupAndMessage(sid);
-    require(!$signatures[sid].rejected, CeremonyRejected());  // new
+    Signature storage signature = $signatures[sid];
+    require(!group.nonces.isBurned(msg.sender, sid.sequence()), AlreadyDeclined());   // new
+    require(group.nonces.isRevealed(msg.sender, sid.sequence()), NoncesNotRevealed()); // new
+    Secp256k1.Point memory key = group.key;
+    FROST.verifyShare(key, selection.r, group.participants.getKey(msg.sender), share, message);
+    FROST.Signature memory accumulator =
+        signature.shares.register(msg.sender, share, selection.r, selection.root, proof);
     // ... rest of existing implementation unchanged
 }
 ```
+
+The `AlreadyDeclined` guard fires before crypto verification so a declined participant cannot attempt to share even with garbage values. The `NoncesNotRevealed` guard enforces that `signRevealNonces` was called for this sequence before any share is submitted.
+
+`CeremonyRejected` is **not** added to `signShare`. After the rejection threshold is crossed, the ceremony can no longer complete mathematically — the remaining non-declined participants are fewer than `threshold` — so the guard would never trigger a false positive, but it would also be redundant. Omitting it is symmetric with `signDecline` being callable past the threshold for observability.
 
 #### Updated `signatureVerify` and `signatureValue`
 
@@ -212,23 +228,27 @@ function signatureValue(FROSTSignatureId.T sid) external view returns (FROST.Sig
 
 #### Test cases (Phase 1)
 
-- Participant declines: `SignDeclined` emitted, `isSignDeclined` returns true.
-- Non-participant decline: reverts with `InvalidParticipant`.
-- Double decline by same participant: reverts with `AlreadyDeclined`.
-- Decline when ceremony not started (message is zero): reverts with `NotSigning`.
-- Decline after ceremony signed: reverts with `SigningComplete`.
-- Different participants can each decline the same ceremony independently.
-- Declines below threshold: `SignRejected` not emitted, `isSignRejected` returns false, ceremony still signable.
-- Declines reach `count - threshold + 1`: `SignRejected` emitted exactly once, `isSignRejected` returns true.
-- Additional declines after threshold crossed: `SignDeclined` emitted, `SignRejected` not re-emitted.
-- `signShare` after rejection: reverts with `CeremonyRejected`.
-- `signatureVerify`/`signatureValue` for rejected SID: reverts with `SignatureRejected`.
-- `signDecline` returns `true` only when the rejection threshold is first crossed, `false` otherwise.
-- Ceremony completes (signs) before rejection threshold: succeeds, no `CeremonyRejected`.
+Phase 1 ships with one focused test (`test_SignDecline_ThresholdReached_EmitsSignRejected`) covering the happy path: threshold number of participants declining emits `SignRejected` and the final call returns `true`. Full coverage is added in four stacked PRs targeting this branch (all unblocked after Phase 1 merges):
+
+- **Branch A (threshold boundary)**: declines below threshold (no `SignRejected`), exactly at threshold (`SignRejected` emitted once, returns `true`), above threshold (returns `false`, no re-emit).
+- **Branch B (mutual exclusion)**: `signShare` after decline reverts `AlreadyDeclined`; `signDecline` after reveal (calling `signRevealNonces` first) reverts `NoncesAlreadyRevealed`; they are mutually exclusive per participant per sequence.
+- **Branch C (error paths)**: non-participant reverts `InvalidParticipant`; double decline reverts `NoncesAlreadyBurned`; `signShare` without prior `signRevealNonces` reverts `NoncesNotRevealed`; decline after signing complete reverts `SigningComplete`; decline of non-existent ceremony reverts `NotSigning`; `signatureVerify`/`signatureValue` for rejected SID reverts `SignatureRejected`.
+- **Branch D (post-rejection / post-completion)**: additional declines after threshold are recorded (`SignDeclined` emitted) but `SignRejected` not re-emitted; ceremony completing before rejection threshold succeeds normally.
 
 ---
 
 ### Phase 2 — Consensus Callback (`FROSTCoordinator.sol`, `IFROSTCoordinatorCallback.sol`, `Consensus.sol`)
+
+#### New view functions (`FROSTCoordinator.sol`)
+
+Added here alongside `signDeclineWithCallback` because `rejectTransaction` (below) needs them to validate the SID:
+
+```solidity
+function isSignRejected(FROSTSignatureId.T sid) external view returns (bool);
+function signatureMessage(FROSTSignatureId.T sid) external view returns (bytes32);
+```
+
+`isSignRejected` returns `$signatures[sid].rejected`. `signatureMessage` returns `$signatures[sid].message` — used by `rejectTransaction` to verify the SID corresponds to the ceremony for the given message (preventing a caller from submitting a legitimately-rejected SID from a different ceremony to emit a spurious `TransactionRejected` event).
 
 #### New function `signDeclineWithCallback` (`FROSTCoordinator.sol`)
 
@@ -583,8 +603,9 @@ Add a "Declined" row displaying validator addresses from `status.declined`, foll
 Completes the coordinator side of the feature in isolation: decline tracking and threshold-based stopping. `signDeclineWithCallback` is intentionally excluded — it requires `IFROSTCoordinatorCallback.onSignRejected` which does not exist until Phase 2.
 
 Files:
-- `contracts/src/FROSTCoordinator.sol` — `Signature` struct update (`rejected`, `declineCount`), `$declined` storage, `SignDeclined`/`SignRejected` events, new errors, `signDecline`/`isSignDeclined`/`isSignRejected`/`signatureMessage`, guards on `signShare`/`signatureVerify`/`signatureValue`.
-- `contracts/test/` — Unit tests for the full decline flow, including threshold logic.
+- `contracts/src/FROSTCoordinator.sol` — `Signature` struct update (`rejected`, `declineCount`, `shares` field), `SignDeclined`/`SignRejected` events, new errors (`AlreadyDeclined`, `NoncesNotRevealed`, `SigningComplete`, `SignatureRejected`), `signDecline` (using `FROSTNonceCommitmentSet.burn`), `AlreadyDeclined` and `NoncesNotRevealed` guards in `signShare`, rejection guards on `signatureVerify`/`signatureValue`.
+- `contracts/src/libraries/FROSTNonceCommitmentSet.sol` — `SequenceStatus` enum, `nonces` mapping in `Commitments`, `verify()` made non-view (sets `Revealed`), `burn()`, `isRevealed()`, `isBurned()`.
+- `contracts/test/FROSTCoordinatorDecline.t.sol` — Happy-path test: threshold reached emits `SignRejected`. Full coverage in stacked PRs.
 
 ### Phase 2 — Consensus Callback (PR 2)
 **Can start after Phase 1 is merged.**
@@ -682,7 +703,8 @@ Files:
 #### Decisions and Tradeoffs
 
 - **Decline is a flag, no reason code**: avoids maintaining a Solidity/TypeScript enum in sync and avoids a contract upgrade path every time a new validation check is added.
-- **`rejected` and `declineCount` live in the `Signature` struct**: keeps all per-ceremony state together; both fields pack into a single new storage slot alongside the existing fields.
+- **`rejected` and `declineCount` live in the `Signature` struct**: keeps ceremony-level aggregate state together; both fields pack into a single new storage slot alongside the existing fields.
+- **Per-participant state lives in `FROSTNonceCommitmentSet`**: a `SequenceStatus` enum (`None`, `Revealed`, `Burned`) per `(participant, sequence)` consolidates the former `declined` mapping and `anyShared` flag into a single source of truth. The nonce set is the natural home because it is already keyed by sequence, the same key space as ceremonies.
 - **Threshold formula `count - threshold + 1`**: this is the exact minimum number of declines that makes the ceremony mathematically uncompletable regardless of who is left. Blocking signing only at this point ensures the guard is never a false positive.
 - **Advisory before threshold**: the ceremony can still complete if threshold participants sign before enough declines accumulate. This preserves liveness during rolling validator upgrades where older-version validators may decline transactions the majority considers valid.
 - **Additional declines after threshold are accepted**: subsequent `signDecline` calls still record `SignDeclined` events (useful for the explorer's per-validator breakdown) but `SignRejected` is not re-emitted and no callback is fired (guarded by `!signature.rejected` in `signDecline`).
@@ -690,7 +712,8 @@ Files:
 
 #### Testing
 
-- Unit tests covering: participant decline, non-participant reverts (`InvalidParticipant`), double-decline reverts (`AlreadyDeclined`), decline of non-existent ceremony (`NotSigning`), decline after signing complete (`SigningComplete`), threshold formula correctness, `SignRejected` emitted exactly once, `signShare` reverts with `CeremonyRejected` after rejection, `signatureVerify`/`signatureValue` revert with `SignatureRejected` after rejection.
+- PR 1 ships one focused test: `test_SignDecline_ThresholdReached_EmitsSignRejected` — `count - threshold + 1` participants declining emits `SignRejected` and the final call returns `true`.
+- Full coverage follows in four stacked PRs (threshold boundary, mutual exclusion, error paths, post-rejection/post-completion behaviour). See "Test cases (Phase 1)" above.
 
 ---
 
@@ -759,7 +782,7 @@ Files:
 #### Decisions and Tradeoffs
 
 - **Single-source status derivation**: an earlier design would have required cross-referencing `SignDeclined` events from the coordinator with the proposal's SID. By placing `TransactionRejected` on `Consensus`, the explorer needs only one contract for all proposal status logic.
-- **`ATTESTED` takes precedence over `REJECTED`**: if a ceremony somehow completes after partial declines, `ATTESTED` is shown. In practice, `signShare` reverts after the rejection threshold is crossed, so both events cannot coexist for the same message.
+- **`ATTESTED` takes precedence over `REJECTED`**: if a ceremony somehow completes after partial declines, `ATTESTED` is shown. In practice this cannot happen — after the rejection threshold is crossed, the remaining non-declined participants are fewer than `threshold`, so the ceremony can never accumulate enough shares to complete.
 
 #### Testing
 
@@ -793,11 +816,11 @@ Files:
 
 ## Open Questions / Assumptions
 
-- **`SigningComplete` error**: Confirm during Phase 1 implementation whether an equivalent error already exists in `FROSTCoordinator` (e.g., `NotSigning` covers the ceremony-not-started case, but there's no guard for ceremony-already-signed). If an equivalent exists, reuse it.
+- **`SigningComplete` error**: Resolved. No equivalent existed in `FROSTCoordinator` for the ceremony-already-signed case, so `SigningComplete` was added as a new error.
 - **`Signature` struct storage layout**: Adding `bool rejected` and `uint16 declineCount` to `Signature` packs them into a new slot alongside existing fields. Verify packing does not break any assembly or low-level access patterns in `FROSTSignatureShares`.
 - **Oracle handler name**: The spec refers to `handleOracleTransactionProposed` in `oracleTransactionProposed.ts` — confirmed from the codebase.
 - **Devnet deployment**: After all phases are merged, a devnet redeployment is required to pick up the new coordinator and consensus interfaces.
 - **Decline before `Sign` event**: Validators cannot decline before the `Sign` event because they need the SID. The `"waiting_to_decline"` state ensures the decline is submitted as soon as the `Sign` event is observed (emitted in the same transaction as `proposeTransaction`). This is by design and requires no special handling.
-- **`signRevealNonces` after rejection**: No `CeremonyRejected` guard is added to `signRevealNonces`. A validator that reveals nonces before the rejection threshold is crossed can do nothing with those nonces — `signShare` will revert. This is harmless (nonce reveals don't advance the ceremony toward completion) and not worth the additional guard.
-- **Validator that already called `signRevealNonces` can still call `signDecline`**: Nonce revelation is non-binding. A validator can partially start the signing flow and then opt out. The decline is recorded normally; the revealed nonces are unused.
+- **`signRevealNonces` after rejection**: No `CeremonyRejected` guard is added to `signRevealNonces`. A validator that reveals nonces before the rejection threshold is crossed can do nothing with those nonces — `signShare` will revert with `NoncesAlreadyBurned` (if the ceremony is fully rejected and the participant later calls `signDecline`) or succeed but not advance the ceremony past the mathematical impossibility. This is harmless.
+- **Validator that already called `signRevealNonces` cannot then call `signDecline`**: With the `SequenceStatus` design, `burn()` reverts with `NoncesAlreadyRevealed` if the slot is already `Revealed`. This is intentional — nonce revelation signals intent to participate; the validator is committed to the ceremony for that sequence once they reveal. If they want to not participate, they should decline *before* revealing nonces.
 - **Gas estimate for `declineSignature`**: `200_000n` gas is set in the spec. The call chain `signDeclineWithCallback` → `onSignRejected` → `rejectTransaction` involves two cross-contract calls plus an `isSignRejected` view call and storage writes on both contracts. Verify this estimate against the actual implementation before finalising; increase if necessary (compare with `signShare`'s `400_000n` as an upper bound).

@@ -111,11 +111,18 @@ contract FROSTCoordinator {
      * @notice Tracks a signing ceremony state.
      * @custom:param message The message being signed.
      * @custom:param signed The Merkle root of the signature shares.
+     * @custom:param rejected True if the ceremony has been rejected by threshold declines.
+     * @custom:param declineCount The number of participants that have declined this ceremony.
      * @custom:param shares The accumulated signature shares.
+     * @dev Per-participant decline and reveal state is tracked in `FROSTNonceCommitmentSet` via the
+     *      `SequenceStatus` enum, which enforces that each participant either reveals nonces exactly
+     *      once or declines exactly once for a given sequence.
      */
     struct Signature {
         bytes32 message;
         bytes32 signed;
+        bool rejected;
+        uint16 declineCount;
         FROSTSignatureShares.T shares;
     }
 
@@ -259,6 +266,19 @@ contract FROSTCoordinator {
      */
     event SignCompleted(FROSTSignatureId.T indexed sid, bytes32 indexed selectionRoot, FROST.Signature signature);
 
+    /**
+     * @notice Emitted when a participant declines a signing ceremony.
+     * @param sid The signature ID.
+     * @param participant The participant address that declined.
+     */
+    event SignDeclined(FROSTSignatureId.T indexed sid, address indexed participant);
+
+    /**
+     * @notice Emitted when enough participants have declined to make the ceremony uncompletable.
+     * @param sid The signature ID.
+     */
+    event SignRejected(FROSTSignatureId.T indexed sid);
+
     // ============================================================
     // ERRORS
     // ============================================================
@@ -307,6 +327,27 @@ contract FROSTCoordinator {
      * @notice Thrown when a signature does not match the expected group or message.
      */
     error WrongSignature();
+
+    /**
+     * @notice Thrown when a previously-declined participant attempts to submit a signature share.
+     */
+    error AlreadyDeclined();
+
+    /**
+     * @notice Thrown when a participant attempts to submit a signature share without first revealing
+     *         their nonces via `signRevealNonces`.
+     */
+    error NoncesNotRevealed();
+
+    /**
+     * @notice Thrown when a participant attempts to decline a ceremony that has already been signed.
+     */
+    error SigningComplete();
+
+    /**
+     * @notice Thrown when querying a signature for a ceremony that was rejected.
+     */
+    error SignatureRejected();
 
     // ============================================================
     // STORAGE VARIABLES
@@ -563,8 +604,13 @@ contract FROSTCoordinator {
      * @dev Each participant computes their signature share `z_i` and provides their Lagrange coefficient `l_i`. The
      *      Lagrange coefficient is a public value that depends on the set of participating signers. It is used to
      *      correctly reconstruct the group signature from a threshold number of shares. For a participant `i` in a
-     *      signing set `S`, the coefficient is `l_i = ∏_{j∈S, j≠i} j / (j-i)`. The contract verifies the submitted
+     *      signing set `S`, the coefficient is `l_i = ∙_{j∈S, j≠i} j / (j-i)`. The contract verifies the submitted
      *      share using this coefficient.
+     * @dev There is no guard against `signature.rejected` here. Once the rejection threshold is crossed,
+     *      `count - threshold + 1` participants have declined, leaving at most `threshold - 1` available sharers.
+     *      `FROST.verify` requires at least `threshold` valid shares, so a rejected ceremony can never accumulate
+     *      enough shares to complete. This is symmetric with `signDecline` being callable past the threshold for
+     *      observability — neither path needs to gate on the other's terminal state.
      */
     function signShare(
         FROSTSignatureId.T sid,
@@ -573,9 +619,11 @@ contract FROSTCoordinator {
         bytes32[] calldata proof
     ) public returns (bool signed) {
         (Group storage group, bytes32 message) = _signatureGroupAndMessage(sid);
+        Signature storage signature = $signatures[sid];
+        require(!group.nonces.isBurned(msg.sender, sid.sequence()), AlreadyDeclined());
+        require(group.nonces.isRevealed(msg.sender, sid.sequence()), NoncesNotRevealed());
         Secp256k1.Point memory key = group.key;
         FROST.verifyShare(key, selection.r, group.participants.getKey(msg.sender), share, message);
-        Signature storage signature = $signatures[sid];
         FROST.Signature memory accumulator =
             signature.shares.register(msg.sender, share, selection.r, selection.root, proof);
         emit SignShared(sid, selection.root, msg.sender, share.z);
@@ -586,6 +634,31 @@ contract FROSTCoordinator {
                 emit SignCompleted(sid, selection.root, accumulator);
                 return true;
             }
+        }
+        return false;
+    }
+
+    /**
+     * @notice Records an explicit decline by the sender for a signing ceremony.
+     * @param sid The signature ID.
+     * @return rejected True if the decline threshold has been crossed for the first time.
+     * @dev Once `count - threshold + 1` participants have declined, the ceremony is definitively
+     *      rejected: signature queries revert with `SignatureRejected`. Additional declines past
+     *      the threshold are still recorded (for observability) but `SignRejected` is not re-emitted.
+     */
+    function signDecline(FROSTSignatureId.T sid) public returns (bool rejected) {
+        (Group storage group,) = _signatureGroupAndMessage(sid);
+        group.participants.getKey(msg.sender); // reverts InvalidParticipant for non-members
+        Signature storage signature = $signatures[sid];
+        require(signature.signed == bytes32(0), SigningComplete());
+        group.nonces.burn(msg.sender, sid.sequence());
+        signature.declineCount++;
+        emit SignDeclined(sid, msg.sender);
+        GroupState memory state = group.state;
+        if (signature.declineCount >= state.count - state.threshold + 1 && !signature.rejected) {
+            signature.rejected = true;
+            emit SignRejected(sid);
+            return true;
         }
         return false;
     }
@@ -681,6 +754,7 @@ contract FROSTCoordinator {
         returns (FROST.Signature memory result)
     {
         Signature storage signature = $signatures[sid];
+        require(!signature.rejected, SignatureRejected());
         bytes32 signed = signature.signed;
         require(signed != bytes32(0), NotSigned());
         require(gid.eq(sid.group()) && message == signature.message, WrongSignature());
@@ -694,6 +768,7 @@ contract FROSTCoordinator {
      */
     function signatureValue(FROSTSignatureId.T sid) external view returns (FROST.Signature memory result) {
         Signature storage signature = $signatures[sid];
+        require(!signature.rejected, SignatureRejected());
         bytes32 signed = signature.signed;
         require(signed != bytes32(0), NotSigned());
         return $signatures[sid].shares.groupSignature(signed);
