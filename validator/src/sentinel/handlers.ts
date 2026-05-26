@@ -1,12 +1,11 @@
 import type { Hex } from "viem";
-import { isAddressEqual } from "viem";
+import { decodeAbiParameters, isAddressEqual } from "viem";
 import { oracleTxProposalHash } from "../consensus/verify/oracleTx/hashing.js";
 import type { OracleTransactionProposedEvent } from "../machine/transitions/types.js";
 import type { Logger } from "../utils/logging.js";
 import type { Detector } from "./detector.js";
 import type {
 	SentinelCommittedTransition,
-	SentinelDisputeResolvedTransition,
 	SentinelNewRequestTransition,
 	SentinelOracleResultTransition,
 } from "./transitions.js";
@@ -37,17 +36,17 @@ export function handleNewRequest(
 	logger: Logger,
 ): SentinelStateDiff {
 	const existing = requests.get(transition.requestId);
-	if (existing !== undefined && existing.status !== "preparing") return {};
-	const approve = existing?.approve ?? true;
+	if (existing === undefined || existing.status !== "preparing") return {};
+	const approve = existing.approve;
 	logger.info("SentinelService: committing vote", {
 		requestId: transition.requestId,
 		approve,
 		hasTxPayload: existing !== undefined,
 	});
 	return {
-		request: [transition.requestId, { deadline: transition.deadline, status: "pending" }],
+		request: [transition.requestId, { deadline: transition.deadline, status: "pending", approve }],
 		actions: [
-			{ id: "sentinel_approve_token", bondTarget: transition.bondTarget },
+			{ id: "sentinel_approve_token", bondAmount: transition.bondTarget },
 			approve
 				? { id: "sentinel_commit_approve", requestId: transition.requestId, bondAmount: config.bondAmount }
 				: { id: "sentinel_commit_deny", requestId: transition.requestId, bondAmount: config.bondAmount },
@@ -64,39 +63,50 @@ export function handleCommitted(
 	const existing = requests.get(transition.requestId);
 	if (existing === undefined || existing.status !== "pending") return {};
 	return {
-		request: [transition.requestId, { deadline: existing.deadline, status: "committed" }],
+		request: [transition.requestId, { deadline: existing.deadline, status: "committed", approve: existing.approve }],
 	};
 }
 
 export function handleResolved(
 	requests: ReadonlyMap<Hex, SentinelRequestState>,
-	transition: SentinelOracleResultTransition | SentinelDisputeResolvedTransition,
+	transition: SentinelOracleResultTransition,
 ): SentinelStateDiff {
-	if (!requests.has(transition.requestId)) return {};
+	const existing = requests.get(transition.requestId);
+	if (existing === undefined) return {};
+	// Only claim if we committed on-chain; drop silently otherwise (e.g. commit tx never confirmed).
+	if (existing.status !== "committed" && existing.status !== "finalized") {
+		return { request: [transition.requestId, undefined] };
+	}
+	// result encodes SentinelOracleRequest.ResolveReason (uint8): TIMEOUT = 2.
+	// On timeout every participant gets their bond back regardless of how they voted.
+	const [reason] = decodeAbiParameters([{ type: "uint8" }], transition.result);
+	const voteWon = reason === 2 || transition.approved === existing.approve;
 	return {
 		request: [transition.requestId, undefined],
-		actions: [{ id: "sentinel_claim", requestId: transition.requestId }],
+		actions: voteWon ? [{ id: "sentinel_claim", requestId: transition.requestId }] : undefined,
 	};
 }
 
 export function handleBlockAdvance(
 	requests: ReadonlyMap<Hex, SentinelRequestState>,
 	blockNumber: bigint,
+	config: SentinelConfig,
 ): SentinelStateDiff[] {
 	const diffs: SentinelStateDiff[] = [];
-	for (const [requestId, { deadline, status }] of requests) {
-		if (blockNumber <= deadline) continue;
-		if (status === "committed") {
-			// Transition to finalized + queue the finalize action (emitted at most once)
+	for (const [requestId, state] of requests) {
+		if (blockNumber <= state.deadline) continue;
+		if (state.status === "committed") {
+			// Transition to finalized; deadline is reset to give time for OracleResult
 			diffs.push({
-				request: [requestId, { deadline, status: "finalized" }],
+				request: [
+					requestId,
+					{ status: "finalized", deadline: blockNumber + config.votingWindow, approve: state.approve },
+				],
 				actions: [{ id: "sentinel_finalize", requestId }],
 			});
-		} else if (status === "pending" || status === "preparing") {
-			// Drop requests where the voting window passed or no matching NewRequest arrived
+		} else if (state.status === "pending" || state.status === "preparing" || state.status === "finalized") {
 			diffs.push({ request: [requestId, undefined] });
 		}
-		// "finalized" status: waiting for OracleResult — no action needed
 	}
 	return diffs;
 }

@@ -34,12 +34,6 @@ const oracleResultArgsSchema = z.object({
 	approved: z.boolean(),
 });
 
-const disputeResolvedArgsSchema = z.object({
-	requestId: hexBytes32Schema,
-	outcome: z.number(),
-	slashed: eventBigIntSchema,
-});
-
 export type SentinelNewRequestTransition = {
 	id: "sentinel_event_new_request";
 	requestId: Hex;
@@ -66,18 +60,10 @@ export type SentinelOracleResultTransition = {
 	approved: boolean;
 };
 
-export type SentinelDisputeResolvedTransition = {
-	id: "sentinel_event_dispute_resolved";
-	requestId: Hex;
-	outcome: number;
-	slashed: bigint;
-};
-
 export type SentinelOracleTransition =
 	| SentinelNewRequestTransition
 	| SentinelCommittedTransition
 	| SentinelOracleResultTransition
-	| SentinelDisputeResolvedTransition
 	| OracleTransactionProposedEvent;
 
 export type SentinelLog = Log<typeof SENTINEL_ALL_EVENTS>;
@@ -100,10 +86,6 @@ export const logToTransition = ({
 		case "OracleResult": {
 			const args = oracleResultArgsSchema.parse(eventArgs);
 			return { id: "sentinel_event_oracle_result", ...args };
-		}
-		case "DisputeResolved": {
-			const args = disputeResolvedArgsSchema.parse(eventArgs);
-			return { id: "sentinel_event_dispute_resolved", ...args };
 		}
 		case "OracleTransactionProposed": {
 			const args = oracleTransactionProposedEventSchema.parse(eventArgs);

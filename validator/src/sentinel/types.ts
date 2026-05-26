@@ -31,13 +31,14 @@ export type SentinelAction = CommitApprove | CommitDeny | SentinelFinalize | Sen
 
 export type SentinelActionWithTimeout = SentinelAction & { validUntil: number };
 
-export type SentinelRequestStatus = "preparing" | "pending" | "committed" | "finalized";
+type RequestBase = { deadline: bigint; approve: boolean };
 
-export type SentinelRequestState = {
-	deadline: bigint;
-	status: SentinelRequestStatus;
-	approve?: boolean;
-};
+export type PreparingRequest = RequestBase & { status: "preparing" };
+export type PendingRequest = RequestBase & { status: "pending" };
+export type CommittedRequest = RequestBase & { status: "committed" };
+export type FinalizedRequest = RequestBase & { status: "finalized" };
+
+export type SentinelRequestState = PreparingRequest | PendingRequest | CommittedRequest | FinalizedRequest;
 
 export type TransactionPayload = { to: Address; value: bigint; data: Hex };
 

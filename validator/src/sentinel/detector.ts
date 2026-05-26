@@ -1,6 +1,6 @@
-import { type Address, type Hex, isAddressEqual } from "viem";
+import { type Address, isAddressEqual } from "viem";
+import type { TransactionPayload } from "./types.js";
 
-export type TransactionPayload = { to: Address; value: bigint; data: Hex };
 export type Detector = (payload: TransactionPayload) => boolean;
 
 export function createDetector(blocklist: readonly Address[] = []): Detector {
