@@ -113,15 +113,16 @@ contract FROSTCoordinator {
      * @custom:param signed The Merkle root of the signature shares.
      * @custom:param rejected True if the ceremony has been rejected by threshold declines.
      * @custom:param declineCount The number of participants that have declined this ceremony.
-     * @custom:param declined Per-participant decline flags.
      * @custom:param shares The accumulated signature shares.
+     * @dev Per-participant decline and reveal state is tracked in `FROSTNonceCommitmentSet` via the
+     *      `SequenceStatus` enum, which enforces that each participant either reveals nonces exactly
+     *      once or declines exactly once for a given sequence.
      */
     struct Signature {
         bytes32 message;
         bytes32 signed;
         bool rejected;
         uint16 declineCount;
-        mapping(address participant => bool) declined;
         FROSTSignatureShares.T shares;
     }
 
@@ -328,15 +329,15 @@ contract FROSTCoordinator {
     error WrongSignature();
 
     /**
-     * @notice Thrown when a participant attempts to decline a ceremony they already declined,
-     *         or when a previously-declined participant attempts to submit a signature share.
+     * @notice Thrown when a previously-declined participant attempts to submit a signature share.
      */
     error AlreadyDeclined();
 
     /**
-     * @notice Thrown when a participant attempts to decline a ceremony they already shared a signature for.
+     * @notice Thrown when a participant attempts to submit a signature share without first revealing
+     *         their nonces via `signRevealNonces`.
      */
-    error AlreadyShared();
+    error NoncesNotRevealed();
 
     /**
      * @notice Thrown when a participant attempts to decline a ceremony that has already been signed.
@@ -619,7 +620,8 @@ contract FROSTCoordinator {
     ) public returns (bool signed) {
         (Group storage group, bytes32 message) = _signatureGroupAndMessage(sid);
         Signature storage signature = $signatures[sid];
-        require(!signature.declined[msg.sender], AlreadyDeclined());
+        require(!group.nonces.isBurned(msg.sender, sid.sequence()), AlreadyDeclined());
+        require(group.nonces.isRevealed(msg.sender, sid.sequence()), NoncesNotRevealed());
         Secp256k1.Point memory key = group.key;
         FROST.verifyShare(key, selection.r, group.participants.getKey(msg.sender), share, message);
         FROST.Signature memory accumulator =
@@ -649,9 +651,7 @@ contract FROSTCoordinator {
         group.participants.getKey(msg.sender); // reverts InvalidParticipant for non-members
         Signature storage signature = $signatures[sid];
         require(signature.signed == bytes32(0), SigningComplete());
-        require(!signature.declined[msg.sender], AlreadyDeclined());
-        require(!signature.shares.isShared(msg.sender), AlreadyShared());
-        signature.declined[msg.sender] = true;
+        group.nonces.burn(msg.sender, sid.sequence());
         signature.declineCount++;
         emit SignDeclined(sid, msg.sender);
         GroupState memory state = group.state;
