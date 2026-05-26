@@ -20,7 +20,7 @@ This feature introduces a competitive transaction checker oracle as a new `IOrac
 
 ### New Contract: `CheckerOracle`
 
-`CheckerOracle` implements `IOracle` and replaces `SimpleOracle` for deployments that require competitive bonding. The `Consensus` contract calls `postRequest(requestId)` as it does today — no changes to `Consensus` or `FROSTCoordinator`.
+`CheckerOracle` implements `IOracle` and replaces `SimpleOracle` for deployments that require competitive bonding. The `Consensus` contract calls `postRequest` on the oracle, passing the original transaction proposer and the reward offer (token and amount) so the oracle can pull funds and issue refunds directly without `Consensus` acting as a token intermediary.
 
 The contract owns an internal escrow: the user's fee is locked at request time and disbursed (or refunded) at finalization. Checker bonds are locked at vote time and returned with rewards (or slashed) at resolution.
 
@@ -79,7 +79,7 @@ Because both sides post the same total bond (`fee × bondMultiplier`), the slash
 
 ### Request Submission (via Consensus)
 
-The user submits a Safe transaction proposal through `Consensus.proposeOracleTransaction()`. Before calling, the user must approve `Consensus` to pull the fee amount in the ERC-20 fee token. `Consensus` pulls the fee from the user, approves `SentinelOracle` for that amount, and calls `oracle.postRequest(requestId)`, which pulls the fee from `Consensus` via `transferFrom`, locks it in escrow, and emits `NewRequest`. `Consensus` records the caller as the proposer for the request so that any future fee refund can be routed back to them.
+The user submits a Safe transaction proposal through `Consensus.proposeOracleTransaction(rewardToken, rewardAmount, ...)`. Before calling, the user must approve `SentinelOracle` to pull `rewardAmount` of `rewardToken` (obtained by calling `oracle.getFee()` off-chain or on-chain). `Consensus` calls `oracle.postRequest(requestId, msg.sender, rewardToken, rewardAmount)`, passing the caller as the proposer. The oracle validates that `rewardToken` and `rewardAmount` match its accepted values, pulls the fee directly from the proposer via `transferFrom`, locks it in escrow, and emits `NewRequest`. Fee refunds (on timeout or arbitration) are sent by the oracle directly back to the proposer — `Consensus` is not involved in token flows at all.
 
 ### Checker Node Vote
 
@@ -256,54 +256,50 @@ Flows covered: conflict freeze, foundation arbitration, loser slash, user fee re
 
 ### Phase 2.5 — Fee Payment Fix (PR 2.5, depends on Phase 1)
 
-**Goal:** Correct the fee payment flow so that `SentinelOracle` can successfully pull the fee from the `Consensus` contract, and users can reclaim fee refunds through `Consensus`.
+**Goal:** Correct the fee payment flow so the oracle pulls the fee directly from the original transaction proposer, and handles all refund logic back to that proposer without `Consensus` acting as a token intermediary.
 
-**Context:** In Phase 1, `SentinelOracle.postRequest` calls `FEE_TOKEN.transferFrom(msg.sender, address(this), fee)` where `msg.sender` is the `Consensus` contract. `Consensus` holds no ERC-20 balance and sets no allowance, so this call always reverts. This phase fixes that gap with a minimal approach and adds proposer tracking in `Consensus` for refund routing. This is an initial implementation — further refinements are deferred to later phases.
+**Context:** In Phase 1, `SentinelOracle.postRequest` calls `FEE_TOKEN.transferFrom(msg.sender, address(this), fee)` where `msg.sender` is the `Consensus` contract. `Consensus` holds no ERC-20 balance and sets no allowance, so this call always reverts. This phase fixes that by extending `IOracle.postRequest` to accept the proposer address and the reward offer, so the oracle can pull funds from and refund to the end user directly. This is an initial implementation — further refinements to fee mechanics are deferred to later phases.
 
 **Design decisions:**
 
 *`IOracle` interface:*
-- A new view function `getFee()` is added to `IOracle`. It takes no parameters (the full fee mechanism is not yet designed) and returns the fee token address and the current fee amount as a tuple `(address token, uint256 amount)`. This gives callers everything needed to perform the `transferFrom` and `approve` without any out-of-band knowledge of the token. All oracle implementations (`SentinelOracle`, `SimpleOracle`, `AlwaysApproveOracle`) must implement this function.
+- `postRequest` signature is extended to `postRequest(bytes32 requestId, address proposer, address rewardToken, uint256 rewardAmount)`. `proposer` is the address that offered the reward and to whom any refund is owed. `rewardToken` and `rewardAmount` describe the offered fee.
+- A new view function `getFee() returns (address token, uint256 amount)` is added to allow off-chain callers (frontends, scripts) to discover the currently accepted token and required amount before constructing a call. All oracle implementations must implement both additions.
 
 *`SentinelOracle`:*
-- `postRequest(requestId)` is unchanged — it continues to pull the fee from `msg.sender` (i.e., `Consensus`). No `feePayer` parameter is added.
-- The oracle always treats `msg.sender` as the fee provider: the caller must have already set an allowance for the amount returned by `getFee()` before calling `postRequest`.
-- On resolution, instead of pushing the fee refund to `Request.proposer`, the refund amount is stored in the `Request` struct (`pendingRefund`). A new function `claimRefund(requestId)` allows only the recorded `Request.proposer` to pull the refund tokens at any time after resolution.
+- `postRequest` stores `proposer` from the parameter (not `msg.sender`) in `Request.proposer`. This replaces the previous use of `msg.sender` (the `Consensus` address) as the proposer.
+- On receiving a `postRequest` call, the oracle validates that `rewardToken == FEE_TOKEN` and `rewardAmount == fee` (exact match), reverting otherwise. It then pulls the fee directly from `proposer` via `IERC20(FEE_TOKEN).transferFrom(proposer, address(this), fee)`.
+- On resolution, fee refunds (timeout, arbitration win) are transferred directly to `Request.proposer`. No `pendingRefund` field or `claimRefund` function is needed — the oracle pushes the refund in the resolution transaction.
 
 *`Consensus`:*
-- `proposeOracleTransaction` is updated to:
-  1. Query the fee: `(address token, uint256 amount) = oracle.getFee()`.
-  2. Pull the fee from the caller: `IERC20(token).transferFrom(msg.sender, address(this), amount)`.
-  3. Approve the oracle for that amount: `IERC20(token).approve(address(oracle), amount)`.
-  4. Call `oracle.postRequest(requestId)` as before.
-  5. Record the caller: `requestProposers[requestId] = msg.sender`.
-- New storage: `mapping(bytes32 => address) requestProposers`.
-- New function: `claimOracleRefund(bytes32 requestId)` — callable by anyone, invokes `oracle.claimRefund(requestId)` (which sends tokens to `Consensus`), then forwards the actual received amount (measured via balance delta to handle fee-on-transfer tokens) to `requestProposers[requestId]`. Reverts if `requestProposers[requestId]` is `address(0)` (i.e. the request was never registered through `Consensus`).
+- `proposeOracleTransaction` is updated to accept `rewardToken` and `rewardAmount` as parameters from the caller and pass them through to the oracle along with `msg.sender` as the proposer: `oracle.postRequest(requestId, msg.sender, rewardToken, rewardAmount)`.
+- No token handling in `Consensus` — no `transferFrom`, no `approve`, no balance tracking.
+- No `requestProposers` mapping and no `claimOracleRefund` function — refund routing is entirely the oracle's responsibility.
 
 **Updated user flow:**
 1. User calls `oracle.getFee()` (or reads it off-chain) to learn the required fee token and amount.
-2. User approves `Consensus` for that fee amount in the returned token.
-3. User calls `Consensus.proposeOracleTransaction(...)`.
-4. Consensus queries `getFee()`, pulls that amount from the user, approves the oracle, calls `oracle.postRequest(requestId)`, and records the user as the proposer for that request.
-5. If the request results in a fee refund (timeout or arbitration win): anyone calls `Consensus.claimOracleRefund(requestId)`, which pulls the refund from the oracle and forwards it to the recorded user.
+2. User approves `SentinelOracle` directly for that fee amount in the returned token.
+3. User calls `Consensus.proposeOracleTransaction(rewardToken, rewardAmount, ...)`.
+4. Consensus calls `oracle.postRequest(requestId, msg.sender, rewardToken, rewardAmount)`. The oracle validates the reward, pulls the fee from the user, and emits `NewRequest`.
+5. If the request results in a fee refund (timeout or arbitration win): the oracle transfers the refund directly to the proposer (the user) as part of the resolution transaction — no further user action required.
 
 Files touched:
-- `contracts/src/interfaces/IOracle.sol` — add `getFee() external view returns (address token, uint256 amount)` to the interface
-- `contracts/src/SentinelOracle.sol` — implement `getFee()`; add `pendingRefund` to `Request` struct; populate it on timeout/arbitration resolution instead of pushing; add `claimRefund(requestId)` (only callable by `Request.proposer`)
-- `contracts/src/SimpleOracle.sol` — add stub `getFee()` returning `(address(0), 0)`
-- `contracts/src/AlwaysApproveOracle.sol` — add stub `getFee()` returning `(address(0), 0)`
-- `contracts/src/Consensus.sol` — update `proposeOracleTransaction` to query fee, pull from user, approve oracle; add `requestProposers` mapping; add `claimOracleRefund`
-- `contracts/test/SentinelOracle.t.sol` — update refund tests for pull model; test `claimRefund` access control
-- `contracts/test/Consensus.t.sol` — end-to-end tests: fee pulled from user via `getFee`, oracle funded, refund routed to correct user
+- `contracts/src/interfaces/IOracle.sol` — extend `postRequest` to `postRequest(bytes32, address proposer, address rewardToken, uint256 rewardAmount)`; add `getFee() external view returns (address token, uint256 amount)`
+- `contracts/src/SentinelOracle.sol` — update `postRequest` to accept and store proposer, validate reward, pull from proposer; push refunds to proposer on resolution; implement `getFee()`
+- `contracts/src/SimpleOracle.sol` — update `postRequest` signature; add stub `getFee()` returning `(address(0), 0)`
+- `contracts/src/AlwaysApproveOracle.sol` — update `postRequest` signature; add stub `getFee()` returning `(address(0), 0)`
+- `contracts/src/Consensus.sol` — update `proposeOracleTransaction` to accept `rewardToken` and `rewardAmount` and pass them with `msg.sender` to `postRequest`
+- `contracts/test/SentinelOracle.t.sol` — update all `postRequest` call sites; test reward validation, direct proposer pull, and direct refund push
+- `contracts/test/Consensus.t.sol` — end-to-end test: user approves oracle, calls Consensus, fee lands in oracle, refund returns to user
 
 Test cases:
 - `getFee()` returns the expected fee token address and amount.
-- Fee is successfully pulled from user through `Consensus` and into `SentinelOracle`.
-- `claimOracleRefund` routes a timeout refund to the correct user address.
-- `claimOracleRefund` routes an arbitration refund to the correct user address.
-- Tokens always land at `requestProposers[requestId]` regardless of who triggers the claim.
-- `claimRefund` on the oracle reverts when called by any address other than `Request.proposer`.
-- Calling `claimOracleRefund` when no refund is pending reverts or is a no-op.
+- Oracle pulls the fee directly from the proposer (not from Consensus).
+- `postRequest` reverts if `rewardToken` does not match `FEE_TOKEN`.
+- `postRequest` reverts if `rewardAmount` does not match the expected fee.
+- Timeout refund is pushed directly to the proposer by the oracle.
+- Arbitration refund is pushed directly to the proposer by the oracle.
+- `Consensus` holds no token balance before or after a successful `proposeOracleTransaction` call.
 
 ### Phase 3 — Sentinel Node Service (PR 3, can be parallelized with Phase 2)
 
@@ -350,7 +346,7 @@ Files touched:
 **Assumptions:**
 - The permissioned checker set is small (≤ 20 nodes) and operated by vetted foundation partners in V1.
 - Conflicts are rare; arbitration is expected to be an exceptional path.
-- `IOracle` gains a `getFee()` view in Phase 2.5; `postRequest` signature is otherwise unchanged. The full fee mechanism (dynamic pricing, per-request parameters) is deferred to a later phase.
+- `IOracle.postRequest` gains `proposer`, `rewardToken`, and `rewardAmount` parameters in Phase 2.5; `getFee()` is added as a view for off-chain discovery. The full fee mechanism (dynamic pricing, variable tokens) is deferred to a later phase.
 - The chain has low gas fees and no deep reorgs (consistent with existing Safenet deployment assumptions).
 
 ---
@@ -361,9 +357,9 @@ Files touched:
 
 The core challenge is that `Consensus` must know the fee amount before it can pull tokens from the user, but the oracle owns the fee definition. Four approaches were evaluated.
 
-**Option 1 — Oracle exposes `getFee()` view; Consensus queries first** *(chosen)*
+**Option 1 — Oracle exposes `getFee()` view; Consensus queries first**
 
-`Consensus` calls `oracle.getFee()` before pulling from the user, then approves exactly that amount. The oracle retains full ownership of its pricing. The only IOracle change is a single view function. The minor TOCTOU risk (fee changing between query and `postRequest`) is negligible given governance delays on parameter changes. Chosen because it is the simplest correct approach given that the full fee mechanism is not yet designed.
+`Consensus` calls `oracle.getFee()` before pulling from the user, then approves exactly that amount. The oracle retains full ownership of its pricing. The only IOracle change is a single view function. The minor TOCTOU risk (fee changing between query and `postRequest`) is negligible given governance delays on parameter changes. `getFee()` is retained in the chosen design as a convenience view for off-chain callers, but is not called on-chain by `Consensus`.
 
 **Option 2 — Fee hardcoded or configured in Consensus**
 
@@ -373,9 +369,9 @@ The core challenge is that `Consensus` must know the fee amount before it can pu
 
 `proposeOracleTransaction(uint256 maxFee, ...)` — Consensus pulls `maxFee` from user and approves the oracle for it. The oracle charges the actual fee and stores the excess as a per-request refundable balance. Gives the user an explicit on-chain ceiling but adds oracle state for excess tracking, almost always produces a two-step UX (propose + claim-excess), and doesn't eliminate the need for the user to know the oracle's pricing anyway (deferred to off-chain).
 
-**Option 3a — Proposed fee as a caller-supplied reward; oracle validates and returns amount taken**
+**Option 3a — Proposed fee as a caller-supplied reward; oracle validates and returns amount taken** *(chosen)*
 
-A variant of Option 3 where the fee is reframed as a *reward* offered by the caller rather than a ceiling on what the oracle charges. `postRequest(requestId, address token, uint256 amount)` — the caller (Consensus) passes the token and amount it is willing to pay. The oracle checks that `token` and `amount` exactly match its hardcoded accepted values and reverts if they differ, so there is no ambiguity about what was agreed. The oracle then pulls the fee and returns the actual amount taken, allowing Consensus to either revert on any discrepancy or refund the excess to the user. This keeps the oracle's fee definition authoritative while giving the caller an explicit, auditable signal of what it is committing to. The trade-off versus Option 1 is that `IOracle.postRequest` gains two parameters, and every call site must be updated; the benefit is that there is no separate `getFee()` round-trip and the token/amount agreement is encoded directly in the call.
+A variant of Option 3 where the fee is reframed as a *reward* offered by the caller rather than a ceiling on what the oracle charges. `postRequest(requestId, address proposer, address rewardToken, uint256 rewardAmount)` — `Consensus` passes the proposer (the end user, `msg.sender`) along with the token and amount they are willing to pay. The oracle checks that `rewardToken` and `rewardAmount` exactly match its accepted values and reverts if they differ, so there is no ambiguity about what was agreed. The oracle pulls the fee directly from `proposer` and handles all refund logic back to `proposer`, keeping `Consensus` entirely out of the token flow. The trade-off versus Option 1 is that `IOracle.postRequest` gains three parameters and all call sites must be updated; the benefit is that `Consensus` never touches ERC-20 tokens, the reward commitment is explicit and auditable in the call, and refund routing requires no additional Consensus state.
 
 **Option 4 — Consensus passes `msg.sender` as `feePayer`; oracle pulls directly from user**
 
