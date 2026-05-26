@@ -605,6 +605,11 @@ contract FROSTCoordinator {
      *      correctly reconstruct the group signature from a threshold number of shares. For a participant `i` in a
      *      signing set `S`, the coefficient is `l_i = ∏_{j∈S, j≠i} j / (j-i)`. The contract verifies the submitted
      *      share using this coefficient.
+     * @dev There is no guard against `signature.rejected` here. Once the rejection threshold is crossed,
+     *      `count - threshold + 1` participants have declined, leaving at most `threshold - 1` available sharers.
+     *      `FROST.verify` requires at least `threshold` valid shares, so a rejected ceremony can never accumulate
+     *      enough shares to complete. This is symmetric with `signDecline` being callable past the threshold for
+     *      observability — neither path needs to gate on the other's terminal state.
      */
     function signShare(
         FROSTSignatureId.T sid,

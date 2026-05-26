@@ -73,11 +73,13 @@ library FROSTSignatureShares {
      * @param root The Merkle root of the set of signing set for this signing ceremony.
      * @param proof The Merkle proof demonstrating the participant's inclusion in the signing set.
      * @return signature The updated, accumulated group signature after incorporating the new share.
-     * @dev This function performs two key actions:
+     * @dev This function performs three key actions:
      *      1. Authorization: It verifies using a Merkle `proof` that the `participant` is part of the set of signers
      *         with the specified share commitment and coefficient defined by the `root`.
      *      2. Aggregation: It adds the participant's share to the collective group signature. The final group
      *         signature is `(R, z)` where `R = ∑ R_i` and `z = ∑ z_i`.
+     *      3. Share tracking: Sets `anyShared[participant] = true` to enforce mutual exclusion with `signDecline` —
+     *         a participant who has shared cannot subsequently decline the ceremony.
      */
     function register(
         T storage self,
