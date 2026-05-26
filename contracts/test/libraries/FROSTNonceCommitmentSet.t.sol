@@ -63,7 +63,7 @@ contract FROSTNonceCommitmentSetTest is Test {
         Secp256k1.Point memory e,
         uint64 sequence,
         bytes32[] calldata proof
-    ) external view {
+    ) external {
         nonces.verify(participant, d, e, sequence, proof);
     }
 }
