@@ -1081,12 +1081,10 @@ describe("GasFeeEstimator", () => {
 		const publicClient = {
 			estimateFeesPerGas,
 		} as unknown as PublicClient;
-		estimateFeesPerGas.mockReturnValue(
-			new Promise(() => ({
-				maxFeePerGas: 1n,
-				maxPriorityFeePerGas: 0n,
-			})),
-		);
+		estimateFeesPerGas.mockResolvedValue({
+			maxFeePerGas: 1n,
+			maxPriorityFeePerGas: 0n,
+		});
 		const estimator = new GasFeeEstimator(publicClient);
 		const original = estimator.estimateFees();
 		expect(original).toBe(estimator.estimateFees());

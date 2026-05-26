@@ -81,12 +81,15 @@ export class GasFeeEstimator {
 			return fees;
 		}
 
-		// Solve for newP such that newP / newF = capPercent / 100,
+		// Solve for newP such that newP / newF = capPercent / 100.
+		// Note that we need to do math in the bigint space, so we scale our percentage amount to allow
+		// for up to 6 digits of precision in the `#priorityFeeCapPercent` parameter.
 		const PRECISION = 1_000_000n;
 		const scaledPercent = BigInt(Math.round((this.#priorityFeeCapPercent / 100) * Number(PRECISION)));
 		if (scaledPercent >= PRECISION) {
 			return fees;
 		}
+
 		const baseFeeComponent = fees.maxFeePerGas - fees.maxPriorityFeePerGas;
 		const cappedPriority = (baseFeeComponent * scaledPercent) / (PRECISION - scaledPercent);
 		const maxPriorityFeePerGas = minBigInt(fees.maxPriorityFeePerGas, cappedPriority);
