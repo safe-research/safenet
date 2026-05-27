@@ -66,6 +66,14 @@ export default defineConfig(({ mode }) => {
 			}),
 			viteReact(),
 			tailwindcss(),
+			{
+				// %VITE_APP_URL% is not substituted by Vite when the var is unset;
+				// this ensures it always resolves (empty string = tag ignored by crawlers).
+				// Falls back to CF_PAGES_URL so Cloudflare Pages preview deployments work automatically.
+				name: "inject-app-url",
+				transformIndexHtml: (html) =>
+					html.replace(/%VITE_APP_URL%/g, env.VITE_APP_URL || process.env.CF_PAGES_URL || ""),
+			},
 		],
 		test: {
 			globals: true,
