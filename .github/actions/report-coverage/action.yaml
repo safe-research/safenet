@@ -122,12 +122,16 @@ runs:
 
     - name: Post Coverage Comment
       uses: actions/github-script@v6
+      env:
+        TOTAL_STATS: ${{ steps.process_coverage.outputs.TOTAL_STATS }}
+        SUMMARY: ${{ steps.process_coverage.outputs.SUMMARY }}
+        DETAILS: ${{ steps.process_coverage.outputs.DETAILS }}
       with:
         github-token: ${{ inputs.github-token }}
         script: |
-          const totalStats = '${{ steps.process_coverage.outputs.TOTAL_STATS }}';
-          const summary = `${{ steps.process_coverage.outputs.SUMMARY }}`;
-          const details = `${{ steps.process_coverage.outputs.DETAILS }}`;
+          const totalStats = process.env.TOTAL_STATS;
+          const summary = process.env.SUMMARY;
+          const details = process.env.DETAILS;
           
           const title = "### 🛡️ Test Coverage Report"
           const formattedBody = `
