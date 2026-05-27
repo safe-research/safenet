@@ -49,6 +49,7 @@ export class ValidatorService {
 		metrics,
 		database,
 		skipGenesis = false,
+		priorityFeeCapPercentage,
 	}: {
 		account: ValidatorAccount;
 		transport: Transport;
@@ -59,6 +60,7 @@ export class ValidatorService {
 		metrics: Metrics;
 		database: Database;
 		skipGenesis?: boolean;
+		priorityFeeCapPercentage?: number;
 	}) {
 		this.#logger = logger;
 		this.#publicClient = createPublicClient({ chain, transport });
@@ -72,7 +74,7 @@ export class ValidatorService {
 		const verificationEngine = new VerificationEngine(verificationHandlers);
 		const actionStorage = new SqliteActionQueue(database);
 		const txStorage = new SqliteTxStorage(database);
-		const gasFeeEstimator = new GasFeeEstimator(this.#publicClient);
+		const gasFeeEstimator = new GasFeeEstimator(this.#publicClient, priorityFeeCapPercentage);
 		const protocol = new OnchainProtocol({
 			publicClient: this.#publicClient,
 			account,
@@ -163,6 +165,7 @@ export const createValidatorService = ({
 	metrics,
 	fees,
 	skipGenesis,
+	priorityFeeCapPercentage,
 }: {
 	account: ValidatorAccount;
 	rpcUrl: string;
@@ -173,6 +176,7 @@ export const createValidatorService = ({
 	metrics: Metrics;
 	fees?: ChainFees;
 	skipGenesis?: boolean;
+	priorityFeeCapPercentage?: number;
 }): ValidatorService => {
 	const transport = withTracing(rpcUrl.startsWith("wss") ? webSocket(rpcUrl) : http(rpcUrl), { logger, metrics });
 	const chain: Chain = {
@@ -193,5 +197,6 @@ export const createValidatorService = ({
 		metrics,
 		database,
 		skipGenesis,
+		priorityFeeCapPercentage,
 	});
 };

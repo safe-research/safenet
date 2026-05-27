@@ -81,6 +81,7 @@ export const validatorConfigSchema = z.object({
 	BLOCKS_BEFORE_RESUBMIT: emptyToDefault(z.coerce.bigint().optional()),
 	BASE_FEE_MULTIPLIER: emptyToDefault(z.coerce.number().optional()),
 	PRIORITY_FEE_PER_GAS: emptyToDefault(z.coerce.bigint().optional()),
+	PRIORITY_FEE_CAP_PERCENTAGE: emptyToDefault(z.coerce.number().optional()),
 	BLOCK_TIME_OVERRIDE: emptyToDefault(z.coerce.number().int().optional()),
 	MAX_REORG_DEPTH: emptyToDefault(z.coerce.number().int().optional()),
 	BLOCK_PAGE_SIZE: emptyToDefault(z.coerce.number().int().optional()),
