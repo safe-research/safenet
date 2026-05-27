@@ -74,7 +74,7 @@ export class Watcher<E extends Events> {
 
 				// The block we were fetching logs for was uncled. Let the event fetcher
 				// know and return that there are no more logs to fetch.
-				this.#logger.debug("Unable fetch logs for uncled block, skipping.", { uncledBlockHash: uncle.blockHash });
+				this.#logger.debug("Unable to fetch logs for uncled block, skipping.", { uncledBlockHash: uncle.blockHash });
 				this.#events.onBlockInvalidated(uncle);
 				return null;
 			}
