@@ -13,16 +13,16 @@ jobs:
   check:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
         with:
           submodules: recursive
 
-      - uses: actions/setup-node@v6
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
         with:
-          node-version: "lts/*"
+          node-version-file: 'package.json'
           cache: "npm"
 
-      - uses: foundry-rs/foundry-toolchain@v1
+      - uses: foundry-rs/foundry-toolchain@c7450ba673e133f5ee30098b3b54f444d3a2ca2d # v1
         with:
           # We fix the foundry version because of a formatting bug introduced
           # in version 1.7.0.
@@ -35,6 +35,6 @@ jobs:
       
       - name: Post Coverage Report
         if: github.event_name == 'pull_request'
-        uses: ./.github/actions/report-coverage 
+        uses: ./.github/actions/report-coverage
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }} 
