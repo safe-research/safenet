@@ -20,7 +20,7 @@ const sentinelRequestStateSchema = z.object({
 
 export class SentinelStateStorage {
 	#db: Database;
-	#requests: Map<Hex, SentinelRequestState>;
+	#requests: Record<Hex, SentinelRequestState>;
 	#insertStmt: Statement;
 	#deleteStmt: Statement;
 
@@ -42,17 +42,17 @@ export class SentinelStateStorage {
 		this.#requests = this.#load();
 	}
 
-	#load(): Map<Hex, SentinelRequestState> {
+	#load(): Record<Hex, SentinelRequestState> {
 		const rows = requestQueryResultSchema.parse(this.#db.prepare("SELECT id, stateJson FROM sentinel_requests").all());
-		const map = new Map<Hex, SentinelRequestState>();
+		const requests: Record<Hex, SentinelRequestState> = {};
 		for (const row of rows) {
 			const data = JSON.parse(row.stateJson);
-			map.set(row.id, sentinelRequestStateSchema.parse(data));
+			requests[row.id] = sentinelRequestStateSchema.parse(data);
 		}
-		return map;
+		return requests;
 	}
 
-	requests(): ReadonlyMap<Hex, SentinelRequestState> {
+	requests(): Readonly<Record<Hex, SentinelRequestState>> {
 		return this.#requests;
 	}
 
@@ -61,11 +61,11 @@ export class SentinelStateStorage {
 			const [id, state] = diff.request;
 			if (state === undefined) {
 				this.#deleteStmt.run(id);
-				this.#requests.delete(id);
+				delete this.#requests[id];
 			} else {
 				const stateJson = JSON.stringify(state, jsonReplacer);
 				this.#insertStmt.run(id, stateJson);
-				this.#requests.set(id, state);
+				this.#requests[id] = state;
 			}
 		}
 		return diff.actions ?? [];
