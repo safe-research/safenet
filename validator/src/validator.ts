@@ -76,6 +76,7 @@ const service = createValidatorService({
 	metrics: metrics.metrics,
 	fees,
 	skipGenesis: validatorConfig.SKIP_GENESIS,
+	priorityFeeCapPercentage: validatorConfig.PRIORITY_FEE_CAP_PERCENTAGE,
 });
 
 // Handle graceful shutdown, for both `SIGINT` (i.e. Ctrl-C) and `SIGTERM` which
