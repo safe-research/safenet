@@ -226,7 +226,7 @@ describe("validatorConfigSchema", () => {
 			GENESIS_SALT: MOCK_GENESIS_SALT,
 			BASE_FEE_MULTIPLIER: "",
 			PRIORITY_FEE_PER_GAS: "",
-			PRIORITY_FEE_CAP_MULTIPLIER: "",
+			PRIORITY_FEE_CAP_PERCENTAGE: "",
 		};
 
 		const result = validatorConfigSchema.parse(validConfig);
@@ -255,7 +255,7 @@ describe("validatorConfigSchema", () => {
 			GENESIS_SALT: MOCK_GENESIS_SALT,
 			BASE_FEE_MULTIPLIER: "2.4",
 			PRIORITY_FEE_PER_GAS: parseGwei("0.1"),
-			PRIORITY_FEE_CAP_MULTIPLIER: "1.5",
+			PRIORITY_FEE_CAP_PERCENTAGE: "1.5",
 		};
 
 		const result = validatorConfigSchema.parse(validConfig);
@@ -270,7 +270,7 @@ describe("validatorConfigSchema", () => {
 			BLOCKS_PER_EPOCH: 17280n,
 			BASE_FEE_MULTIPLIER: 2.4,
 			PRIORITY_FEE_PER_GAS: 100000000n,
-			PRIORITY_FEE_CAP_MULTIPLIER: 1.5,
+			PRIORITY_FEE_CAP_PERCENTAGE: 1.5,
 			ALLOWED_ORACLES: [],
 		});
 	});
@@ -503,7 +503,7 @@ describe("validatorConfigSchema", () => {
 			"BLOCKS_BEFORE_RESUBMIT",
 			"BASE_FEE_MULTIPLIER",
 			"PRIORITY_FEE_PER_GAS",
-			"PRIORITY_FEE_CAP_MULTIPLIER",
+			"PRIORITY_FEE_CAP_PERCENTAGE",
 			"BLOCK_TIME_OVERRIDE",
 			"MAX_REORG_DEPTH",
 			"BLOCK_PAGE_SIZE",

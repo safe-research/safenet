@@ -55,11 +55,11 @@ export interface TransactionStorage {
 export class GasFeeEstimator {
 	#cachedPrices: Promise<FeeValues> | null = null;
 	#client: PublicClient;
-	#priorityFeeCapPercent: number | undefined;
+	#priorityFeeCapPercentage: number | undefined;
 
-	constructor(client: PublicClient, priorityFeeCapPercent?: number) {
+	constructor(client: PublicClient, priorityFeeCapPercentage?: number) {
 		this.#client = client;
-		this.#priorityFeeCapPercent = priorityFeeCapPercent;
+		this.#priorityFeeCapPercentage = priorityFeeCapPercentage;
 	}
 
 	invalidate() {
@@ -77,15 +77,15 @@ export class GasFeeEstimator {
 	}
 
 	#capPriorityFee(fees: FeeValues): FeeValues {
-		if (this.#priorityFeeCapPercent === undefined) {
+		if (this.#priorityFeeCapPercentage === undefined) {
 			return fees;
 		}
 
 		// Solve for newP such that newP / newF = capPercent / 100.
 		// Note that we need to do math in the bigint space, so we scale our percentage amount to allow
-		// for up to 6 digits of precision in the `#priorityFeeCapPercent` parameter.
+		// for up to 6 digits of precision in the `#priorityFeeCapPercentage` parameter.
 		const PRECISION = 1_000_000n;
-		const scaledPercent = BigInt(Math.round((this.#priorityFeeCapPercent / 100) * Number(PRECISION)));
+		const scaledPercent = BigInt(Math.round((this.#priorityFeeCapPercentage / 100) * Number(PRECISION)));
 		if (scaledPercent >= PRECISION) {
 			return fees;
 		}

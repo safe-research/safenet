@@ -1096,10 +1096,10 @@ describe("GasFeeEstimator", () => {
 	});
 
 	describe("priority fee cap", () => {
-		function createEstimator(priorityFeeCapPercent?: number) {
+		function createEstimator(priorityFeeCapPercentage?: number) {
 			const estimateFeesPerGas = vi.fn();
 			const publicClient = { estimateFeesPerGas } as unknown as PublicClient;
-			return { estimator: new GasFeeEstimator(publicClient, priorityFeeCapPercent), estimateFeesPerGas };
+			return { estimator: new GasFeeEstimator(publicClient, priorityFeeCapPercentage), estimateFeesPerGas };
 		}
 
 		it("should cap priority fee so that it equals the given percentage of the final maxFeePerGas", async () => {
@@ -1125,7 +1125,7 @@ describe("GasFeeEstimator", () => {
 			expect(await estimator.estimateFees()).toStrictEqual({ maxFeePerGas: 800n, maxPriorityFeePerGas: 100n });
 		});
 
-		it("should not cap when priorityFeeCapPercent is not set", async () => {
+		it("should not cap when priorityFeeCapPercentage is not set", async () => {
 			const { estimator, estimateFeesPerGas } = createEstimator(undefined);
 			estimateFeesPerGas.mockResolvedValueOnce({ maxFeePerGas: 400n, maxPriorityFeePerGas: 300n });
 			expect(await estimator.estimateFees()).toStrictEqual({ maxFeePerGas: 400n, maxPriorityFeePerGas: 300n });
