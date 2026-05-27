@@ -1,4 +1,4 @@
-import type { Database } from "better-sqlite3";
+import type { Database, Statement } from "better-sqlite3";
 import type { Hex } from "viem";
 import { z } from "zod";
 import { hexBytes32Schema } from "../types/schemas.js";
@@ -15,12 +15,14 @@ const requestQueryResultSchema = z.array(
 const sentinelRequestStateSchema = z.object({
 	deadline: z.coerce.bigint().nonnegative(),
 	status: z.enum(["preparing", "pending", "committed", "finalized"]),
-	approve: z.boolean().optional(),
+	approve: z.boolean(),
 });
 
 export class SentinelStateStorage {
 	#db: Database;
 	#requests: Map<Hex, SentinelRequestState>;
+	#insertStmt: Statement;
+	#deleteStmt: Statement;
 
 	constructor(database: Database) {
 		this.#db = database;
@@ -30,6 +32,13 @@ export class SentinelStateStorage {
 				stateJson TEXT NOT NULL
 			);
 		`);
+		this.#insertStmt = this.#db.prepare(`
+			INSERT INTO sentinel_requests (id, stateJson)
+			VALUES (?, ?)
+			ON CONFLICT(id) DO UPDATE SET
+				stateJson = excluded.stateJson
+		`);
+		this.#deleteStmt = this.#db.prepare("DELETE FROM sentinel_requests WHERE id = ?");
 		this.#requests = this.#load();
 	}
 
@@ -51,18 +60,11 @@ export class SentinelStateStorage {
 		if (diff.request) {
 			const [id, state] = diff.request;
 			if (state === undefined) {
-				this.#db.prepare("DELETE FROM sentinel_requests WHERE id = ?").run(id);
+				this.#deleteStmt.run(id);
 				this.#requests.delete(id);
 			} else {
 				const stateJson = JSON.stringify(state, jsonReplacer);
-				this.#db
-					.prepare(`
-						INSERT INTO sentinel_requests (id, stateJson)
-						VALUES (?, ?)
-						ON CONFLICT(id) DO UPDATE SET
-							stateJson = excluded.stateJson
-					`)
-					.run(id, stateJson);
+				this.#insertStmt.run(id, stateJson);
 				this.#requests.set(id, state);
 			}
 		}
