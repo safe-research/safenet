@@ -36,15 +36,16 @@ Consensus ──postRequest()──▶ CheckerOracle
 
 ### Key Design Decisions
 
-#### Symmetric Bond Thresholds
+#### Fixed Per-Sentinel Bond
 
-Both Approve and Deny sides use identical bond mechanics:
+Each sentinel commits exactly `bondTarget = fee × bondMultiplier` tokens per request — no partial or excess amounts:
 
-- **Bond target**: `fee × bondMultiplier` aggregate, applied equally to both sides.
-- A bond threshold is **reached** when the aggregate for that side equals `fee × bondMultiplier`.
-- Over-contributions beyond the threshold are excess and returned to the contributor immediately.
+- **Fee-dependent fixed bond**: `bondTarget` is computed in `postRequest` as `fee × bondMultiplier` and stored in the request. Every `commitApprove` / `commitDeny` call must supply exactly `bondTarget`; the contract reverts on any mismatch.
+- **Governance**: `bondMultiplier` can be updated by the `ARBITRATOR` via `scheduleBondMultiplier`. The new value only takes effect after `GOVERNANCE_DELAY` blocks (applied lazily at the next `postRequest`), preventing front-running of pending requests.
+- **No aggregate cap**: any number of sentinels may commit on either side without restriction.
+- A side is considered to have **voted** once `totalBond > 0` (i.e. at least one sentinel committed).
 
-Per-checker Deny caps and asymmetric ceilings are deferred to a later implementation.
+> **Frontrunning note**: because votes are public on-chain, a sentinel who observes an existing vote can immediately submit an opposing vote to force a conflict and trigger arbitration. This is an accepted risk in V1. A planned future iteration will replace the direct-commitment scheme with a commit/reveal scheme, keeping votes secret during the voting window and eliminating this attack surface.
 
 #### Explicit Finalization ("Pull over Push")
 
@@ -56,7 +57,7 @@ If the voting window expires and neither the Approve nor the Deny aggregate thre
 
 #### Grief-and-Sweep Attack
 
-With symmetric bonds the attack is no longer cheap: reaching the Deny threshold requires the same total capital (`fee × bondMultiplier`) as the Approve side. A losing Deny side has that bond slashed, and sweeping the fee on the Approve retry only recovers at most `fee` — a net loss of `fee × (bondMultiplier - 1)`. The foundation monitoring and on-chain `removeChecker` remain as an additional deterrent.
+With fixed bonds and slashing on the losing side of a dispute, the attack is not cheap: a sentinel who votes to deny a legitimate transaction risks losing `BOND_AMOUNT` if the arbitrator resolves in favour of approve. The foundation monitoring and on-chain `removeSentinel` remain as an additional deterrent.
 
 #### Arbitration (Phase 2)
 
@@ -86,15 +87,15 @@ The user submits a Safe transaction proposal through `Consensus.proposeOracleTra
 Each permissioned checker node:
 1. Observes `NewRequest(requestId, ...)` on-chain.
 2. Evaluates the transaction payload (e.g. detects address poisoning).
-3. Approves `CheckerOracle` to pull the bond amount from the checker's ERC-20 balance, then calls `commitApprove(requestId)` or `commitDeny(requestId)`. The contract pulls the bond via `transferFrom` at call time.
+3. Approves `CheckerOracle` to pull exactly `BOND_AMOUNT` from the checker's ERC-20 balance, then calls `commitApprove(requestId, BOND_AMOUNT)` or `commitDeny(requestId, BOND_AMOUNT)`. The contract validates the amount and pulls it via `transferFrom`.
 
 ### Finalization
 
 After the voting window closes:
-- **Unanimous Approve** (Approve threshold reached, Deny threshold not reached): `OracleResult` emitted with `approved=true`. Fee distributed proportionally to Approve checkers (capital-weighted speed score). Bonds returned. Any sub-threshold Deny contributions are returned without effect.
-- **Unanimous Deny** (Deny threshold reached, Approve threshold not reached): `OracleResult` emitted with `approved=false`. Fee distributed proportionally to Deny checkers (same capital-weighted speed score formula). Bonds returned. Any sub-threshold Approve contributions are returned without effect.
-- **Conflict** (both Approve and Deny thresholds fully reached): State frozen. `ARBITRATOR` triggers arbitration (Phase 2). User fee refunded from the losing side's slashed bonds.
-- **Timeout / undercapitalized** (neither threshold reached by deadline): `OracleResult` emitted with `approved=false`. Fee refunded to user. Bonds returned.
+- **Unanimous Approve** (only Approve votes cast): `OracleResult` emitted with `approved=true`. Fee distributed proportionally to Approve checkers (position-weighted score). Bonds returned.
+- **Unanimous Deny** (only Deny votes cast): `OracleResult` emitted with `approved=false`. Fee distributed proportionally to Deny checkers. Bonds returned.
+- **Conflict** (at least one Approve and one Deny vote): State frozen. `ARBITRATOR` triggers arbitration (Phase 2). Losing side's bonds are slashed.
+- **Timeout** (no votes cast by deadline): `OracleResult` emitted with `approved=false`. Fee refunded to user. No bonds to return.
 
 ---
 
@@ -108,32 +109,25 @@ After the voting window closes:
 struct Request {
     address proposer;             // Consensus contract address
     uint256 fee;                  // locked user fee
-    uint256 approveBondTarget;    // fee * bondMultiplier, locked at postRequest time
+    uint256 bondTarget;           // fee × bondMultiplier; each sentinel must commit exactly this
     uint256 deadline;             // block.number + VOTING_WINDOW
     State   state;                // PENDING | FROZEN | RESOLVED
-    uint256 totalApproveBond;     // running sum of Approve bonds; threshold reached when == approveBondTarget
-    uint256 totalDenyBond;        // running sum of Deny bonds; threshold reached when == approveBondTarget; conflict when both sides reach threshold
-    uint256 checkerCount;         // number of winning-side voters eligible for fee distribution (committed before bondTarget was met)
-    uint256 totalScore;           // running sum of checker scores, updated on each commit; avoids recomputation at claim time
-    bool    arbitrated;
+    uint256 totalApproveBond;     // running sum of Approve bonds; voted when > 0
+    uint256 totalDenyBond;        // running sum of Deny bonds; conflict when both sides > 0
+    uint256 approveTotalScore;    // running sum of approve-side scores for fee distribution
+    uint256 denyTotalScore;       // running sum of deny-side scores for fee distribution
 }
 
 struct Commitment {
     bool    approved;          // true = Approve vote, false = Deny vote
-    uint256 bondAmount;        // bond amount committed
-    uint256 position;          // arrival order (1-indexed)
+    uint256 bondAmount;        // always BOND_AMOUNT
+    uint256 position;          // arrival order within the side (1-indexed)
     bool    claimed;
 }
 
-// Governance parameters (time-delayed updates via GOVERNANCE_DELAY)
-uint256 bondMultiplier;                // current multiplier; approveBondTarget = fee * bondMultiplier
-uint256 pendingBondMultiplier;         // staged new multiplier
-uint256 bondMultiplierActiveAt;        // block at which pendingBondMultiplier becomes active (0 = none pending)
-
-mapping(address => uint256) checkerActiveAt;  // 0 = not a checker; >0 = active once block.number >= value
+mapping(address => uint256) sentinelActiveAt;  // 0 = not a sentinel; >0 = active once block.number >= value
 mapping(bytes32 requestId => Request) requests;
-mapping(bytes32 requestId => mapping(address checker => Commitment)) commitments;
-mapping(bytes32 requestId => address[]) checkerOrder; // ordered arrival list
+mapping(bytes32 requestId => mapping(address sentinel => Commitment)) commitments;
 ```
 
 #### Constants / Immutables
@@ -141,15 +135,16 @@ mapping(bytes32 requestId => address[]) checkerOrder; // ordered arrival list
 | Name | Description |
 |---|---|
 | `VOTING_WINDOW` | Duration in blocks for the voting window (12 blocks ≈ 1 minute on Gnosis Chain) |
-| `GOVERNANCE_DELAY` | Time delay in blocks applied to all governance changes: adding checkers and updating `bondMultiplier` |
+| `GOVERNANCE_DELAY` | Time delay in blocks applied to sentinel additions and bond multiplier updates |
 | `FEE_TOKEN` | ERC-20 token for bonds and fees |
-| `ARBITRATOR` | Foundation address authorised to manage checkers, update `bondMultiplier`, call `triggerArbitration` / `resolveDispute`, and recipient of slashed remainder |
+| `bondMultiplier` | Governance-controlled multiplier; per-sentinel bond = `fee × bondMultiplier` (time-delayed updates via `scheduleBondMultiplier`) |
+| `ARBITRATOR` | Foundation address authorised to manage sentinels, call `resolveDispute`, and recipient of slashed bonds |
 
 #### Events
 
 ```solidity
 event OracleResult(bytes32 indexed requestId, address indexed proposer, bytes result, bool approved); // IOracle compliance
-event NewRequest(bytes32 indexed requestId, address indexed proposer, uint256 fee, uint256 approveBondTarget, uint256 deadline);
+event NewRequest(bytes32 indexed requestId, address indexed proposer, uint256 fee, uint256 bondTarget, uint256 deadline);
 event CheckerScheduled(address indexed checker, uint256 activeAtBlock);
 event CheckerRemoved(address indexed checker);
 event BondMultiplierScheduled(uint256 newMultiplier, uint256 activeAtBlock);
@@ -170,36 +165,31 @@ enum ResolveReason { UNANIMOUS_APPROVE, UNANIMOUS_DENY, TIMEOUT, ARBITRATION }
 | Function | Access | Description |
 |---|---|---|
 | `postRequest(requestId)` | `Consensus` | Opens request, locks fee, emits `NewRequest` |
-| `commitApprove(requestId)` | Active checker | Posts Approve bond |
-| `commitDeny(requestId)` | Active checker | Posts Deny bond; aggregate target = `fee × bondMultiplier` (same as Approve) |
-| `finalize(requestId)` | Anyone | Resolves request after deadline or on full Approve threshold |
-| `claim(requestId)` | Checker | Returns bond + proportional fee reward |
-| `triggerArbitration(requestId)` | `ARBITRATOR` | Freezes conflicted request |
-| `resolveDispute(requestId, winner, loser)` | `ARBITRATOR` | Slashes loser, waterfall distribution |
-| `addChecker(checker)` | `ARBITRATOR` | Schedules a checker to become active after `GOVERNANCE_DELAY` blocks |
-| `removeChecker(checker)` | `ARBITRATOR` | Immediately removes a checker from the active set |
-| `scheduleBondMultiplier(newValue)` | `ARBITRATOR` | Stages a new bond multiplier, active after `GOVERNANCE_DELAY` blocks |
-| `applyBondMultiplier()` | Anyone | Commits the staged multiplier once its activation block is reached |
+| `commitApprove(requestId, bondAmount)` | Active sentinel | Posts Approve bond; `bondAmount` must equal `BOND_AMOUNT` |
+| `commitDeny(requestId, bondAmount)` | Active sentinel | Posts Deny bond; `bondAmount` must equal `BOND_AMOUNT` |
+| `finalize(requestId)` | Anyone | Resolves request after deadline |
+| `claim(requestId)` | Sentinel | Returns bond + proportional fee reward |
+| `resolveDispute(requestId, approveWins)` | `ARBITRATOR` | Resolves conflict; slashes losing side |
+| `addSentinel(sentinel)` | `ARBITRATOR` | Schedules a sentinel to become active after `GOVERNANCE_DELAY` blocks |
+| `removeSentinel(sentinel)` | `ARBITRATOR` | Immediately removes a sentinel from the active set |
+| `scheduleBondMultiplier(newMultiplier)` | `ARBITRATOR` | Schedules a bond multiplier update; takes effect after `GOVERNANCE_DELAY` blocks |
 
 #### Fee Distribution Math
 
-Only commitments recorded before the bond target is fully met are eligible. If a commitment overshoots the remaining gap, only the gap-filling portion counts toward the score; the excess is returned immediately.
-
-Each checker's score rewards both early arrival and capital risked:
+All sentinels commit the same `BOND_AMOUNT`, so the fee distribution is purely position-based: earlier commits earn a larger share.
 
 ```
-Score_i    = bond_i / position_i
-             (earlier arrivals receive a larger score for the same bond amount)
+Score_i    = BOND_AMOUNT / position_i
+             (earlier arrival on the winning side earns a larger share)
 
-TotalScore = Σ Score_i
-             (updated incrementally on every eligible commit; stored in Request.totalScore)
+TotalScore = Σ Score_i  (over all winning-side commitments)
 
 Payout_i   = fee × (Score_i / TotalScore)
 ```
 
 The same formula is applied to whichever side wins (Approve or Deny).
 
-> **Solidity decimal note**: integer division truncates, so `bond / position` loses precision for small bonds or large position numbers. The implementation must scale the numerator before dividing (e.g. compute `Score_i = bond_i * PRECISION / position_i` with a constant such as `PRECISION = 1e18`) and account for the same scale factor when computing payouts.
+> **Solidity decimal note**: integer division truncates. The implementation scales the numerator before dividing (`Score_i = BOND_AMOUNT * 1e18 / position_i`) and applies the same scale factor when computing payouts.
 
 ### Checker Management
 
@@ -327,21 +317,21 @@ Files touched:
 
 2. ~~**Fee escrow mechanism**~~ **Decided**: Option (a) — user pre-approves `CheckerOracle` for the fee amount; `Consensus` calls `postRequest` which pulls the fee via `transferFrom` at request time. Same pull pattern applies to checker bonds on `commitApprove` / `commitDeny`.
 
-3. ~~**`approveBondTarget` parameterization**~~ **Decided**: `approveBondTarget = fee × bondMultiplier`. `bondMultiplier` defaults to `50` and is updateable by `ARBITRATOR` with a `GOVERNANCE_DELAY` block time delay via `scheduleBondMultiplier` / `applyBondMultiplier`.
+3. ~~**Bond parameterization**~~ **Decided**: Fixed `BOND_AMOUNT` immutable per sentinel per request. No aggregate cap. No multiplier governance.
 
 4. ~~**Registry vs. Staking extension**~~ **Decided**: Checker set is managed directly inside `CheckerOracle` with no separate registry contract and no on-chain master deposit. `ARBITRATOR` manages additions (time-delayed by `GOVERNANCE_DELAY`) and removals (immediate).
 
 5. ~~**`VOTING_WINDOW` value**~~ **Decided**: 12 blocks (≈ 1 minute on Gnosis Chain).
 
-6. ~~**Slashing deficit**~~ **Resolved**: With symmetric bonds both sides post `fee × bondMultiplier` in aggregate. The slashed bond always covers the full user fee refund with no deficit.
+6. ~~**Slashing deficit**~~ **Resolved**: Slashing only applies in the arbitration path (both sides committed). The arbitrator transfers the losing side's total bond to themselves; there is no user refund deficit since fee refunds are handled separately.
 
-7. ~~**Partial Deny threshold**~~ **Decided**: Conflict requires the full Deny bond target (`fee × bondMultiplier`) to be reached, identical to the Approve side. Sub-threshold Deny votes have no effect and bonds are returned. Over-achievement on either side is not rewarded (excess returned).
+7. ~~**Partial Deny threshold**~~ **Decided**: Any deny vote triggers conflict (both sides > 0). There is no sub-threshold or partial-vote concept with fixed bonds.
 
 8. ~~**Checker banning on-chain vs. off-chain**~~ **Decided**: `ARBITRATOR` can call `removeChecker(address)` immediately on-chain. The grief-and-sweep mitigation relies on the arbitrator monitoring for the pattern and invoking this function.
 
 9. ~~**Interaction with existing oracles**~~ **Resolved**: Oracle selection is managed in the validator code. Multiple oracles can be active in parallel as long as validators mark them as valid. No migration from `SimpleOracle` / `AlwaysApproveOracle` is required; `CheckerOracle` is an additive deployment.
 
-10. ~~**Deny-vote incentive**~~ **Resolved**: On Unanimous Deny the fee is distributed proportionally to Deny checkers (same formula as Approve). This provides a financial incentive to correctly flag poisoned transactions. The earlier collusion concern (cheap Deny bonds + fee reward) no longer applies because the Deny aggregate threshold is now `fee × bondMultiplier` — a colluding group must post the same total capital as the Approve side, making griefing economically unattractive.
+10. ~~**Deny-vote incentive**~~ **Resolved**: On Unanimous Deny the fee is distributed proportionally to Deny sentinels (same formula as Approve). This provides a financial incentive to correctly flag poisoned transactions. Griefing via false Deny votes risks losing `BOND_AMOUNT` if the arbitrator resolves in favour of Approve.
 
 **Assumptions:**
 - The permissioned checker set is small (≤ 20 nodes) and operated by vetted foundation partners in V1.

@@ -61,7 +61,6 @@ contract SentinelOracle is IOracle {
     error InvalidAddress();
     error ZeroFee();
     error SentinelNotActive();
-    error ZeroBond();
 
     // ============================================================
     // MODIFIERS
@@ -235,12 +234,11 @@ contract SentinelOracle is IOracle {
     // ============================================================
 
     function _commit(bytes32 requestId, bool approve, uint256 bondAmount) internal {
-        require(bondAmount > 0, ZeroBond());
         require($sentinelMap.isActive(msg.sender), SentinelNotActive());
         $commitments.checkNotCommitted(requestId, msg.sender);
         SentinelOracleRequest.Request storage req = $requests.get(requestId);
-        (uint256 effectiveBond, uint256 position) = req.applyCommit(approve, bondAmount);
-        $commitments.add(requestId, msg.sender, approve, effectiveBond, position);
-        FEE_TOKEN.safeTransferFrom(msg.sender, address(this), effectiveBond);
+        uint256 position = req.applyCommit(approve, bondAmount);
+        $commitments.add(requestId, msg.sender, approve, bondAmount, position);
+        FEE_TOKEN.safeTransferFrom(msg.sender, address(this), bondAmount);
     }
 }

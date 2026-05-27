@@ -44,7 +44,6 @@ export type TransactionPayload = { to: Address; value: bigint; data: Hex };
 
 export type SentinelConfig = {
 	readonly account: Address;
-	readonly bondAmount: bigint;
 	readonly consensus: Address;
 	readonly oracle: Address;
 	readonly chainId: bigint;

@@ -48,35 +48,27 @@ library SentinelOracleRequest {
     error RequestNotResolved();
     error VotingWindowOpen();
     error VotingWindowClosed();
-    error ThresholdAlreadyReached();
+    error InvalidBondAmount();
 
     // ============================================================
     // INTERNAL FUNCTIONS
     // ============================================================
 
-    function applyCommit(Request storage self, bool approve, uint256 bondAmount)
-        internal
-        returns (uint256 effectiveBond, uint256 position)
-    {
+    function applyCommit(Request storage self, bool approve, uint256 bondAmount) internal returns (uint256 position) {
         require(self.state == State.PENDING, RequestNotPending());
         require(block.number <= self.deadline, VotingWindowClosed());
-
-        uint256 totalBond = approve ? self.totalApproveBond : self.totalDenyBond;
-        require(totalBond < self.bondTarget, ThresholdAlreadyReached());
-
-        uint256 remaining = self.bondTarget - totalBond;
-        effectiveBond = bondAmount < remaining ? bondAmount : remaining;
+        require(bondAmount == self.bondTarget, InvalidBondAmount());
 
         if (approve) {
             self.approveSentinelCount += 1;
             position = self.approveSentinelCount;
-            self.totalApproveBond += effectiveBond;
-            self.approveTotalScore += (effectiveBond * 1e18) / position;
+            self.totalApproveBond += bondAmount;
+            self.approveTotalScore += (bondAmount * 1e18) / position;
         } else {
             self.denySentinelCount += 1;
             position = self.denySentinelCount;
-            self.totalDenyBond += effectiveBond;
-            self.denyTotalScore += (effectiveBond * 1e18) / position;
+            self.totalDenyBond += bondAmount;
+            self.denyTotalScore += (bondAmount * 1e18) / position;
         }
     }
 
@@ -84,8 +76,8 @@ library SentinelOracleRequest {
         require(self.state == State.PENDING, RequestNotPending());
         require(block.number > self.deadline, VotingWindowOpen());
 
-        bool approveMet = self.totalApproveBond >= self.bondTarget;
-        bool denyMet = self.totalDenyBond >= self.bondTarget;
+        bool approveMet = self.totalApproveBond > 0;
+        bool denyMet = self.totalDenyBond > 0;
 
         if (approveMet && denyMet) {
             self.state = State.FROZEN;
@@ -130,8 +122,8 @@ library SentinelOracleRequest {
     function isBondSlashed(Request storage self, bool approved) internal view returns (bool) {
         State state = requireResolved(self);
         if (state == State.TIMED_OUT) return false;
-        // Slashing only applies to requests resolved via arbitration (both thresholds were met).
-        if (self.totalApproveBond < self.bondTarget || self.totalDenyBond < self.bondTarget) return false;
+        // Slashing only applies to requests resolved via arbitration (both sides had votes).
+        if (self.totalApproveBond == 0 || self.totalDenyBond == 0) return false;
         return approved != (state == State.RESOLVED_APPROVED);
     }
 
