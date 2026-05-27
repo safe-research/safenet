@@ -138,8 +138,8 @@ library FROSTNonceCommitmentSet {
      * @param sequence The signature sequence.
      * @param proof The Merkle proof for inclusion.
      * @dev Transitions the nonce slot for `(participant, sequence)` from `None` to `Revealed`. Reverts
-     *      with `NoncesAlreadyBurned` if the participant has already called `signDecline` for this
-     *      sequence (i.e. the slot is `Burned`).
+     *      with `NoncesAlreadyRevealed` if the participant has already revealed nonces for this sequence,
+     *      or with `NoncesAlreadyBurned` if the participant has already called `signDecline`.
      */
     function verify(
         T storage self,
@@ -149,7 +149,9 @@ library FROSTNonceCommitmentSet {
         uint64 sequence,
         bytes32[] calldata proof
     ) internal {
-        require(self.commitments[participant].nonces[sequence] != SequenceStatus.Burned, NoncesAlreadyBurned());
+        SequenceStatus status = self.commitments[participant].nonces[sequence];
+        require(status != SequenceStatus.Revealed, NoncesAlreadyRevealed());
+        require(status != SequenceStatus.Burned, NoncesAlreadyBurned());
 
         d.requireNonZero();
         e.requireNonZero();

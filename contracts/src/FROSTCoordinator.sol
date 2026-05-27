@@ -115,8 +115,9 @@ contract FROSTCoordinator {
      * @custom:param declineCount The number of participants that have declined this ceremony.
      * @custom:param shares The accumulated signature shares.
      * @dev Per-participant decline and reveal state is tracked in `FROSTNonceCommitmentSet` via the
-     *      `SequenceStatus` enum, which enforces that each participant either reveals nonces exactly
-     *      once or declines exactly once for a given sequence.
+     *      `SequenceStatus` enum, which enforces that each participant either reveals nonces (at most
+     *      once) or declines (at most once) for a given sequence — the two transitions are mutually
+     *      exclusive.
      */
     struct Signature {
         bytes32 message;
@@ -620,10 +621,11 @@ contract FROSTCoordinator {
     ) public returns (bool signed) {
         (Group storage group, bytes32 message) = _signatureGroupAndMessage(sid);
         Signature storage signature = $signatures[sid];
+        Secp256k1.Point memory participantKey = group.participants.getKey(msg.sender);
         require(!group.nonces.isBurned(msg.sender, sid.sequence()), AlreadyDeclined());
         require(group.nonces.isRevealed(msg.sender, sid.sequence()), NoncesNotRevealed());
         Secp256k1.Point memory key = group.key;
-        FROST.verifyShare(key, selection.r, group.participants.getKey(msg.sender), share, message);
+        FROST.verifyShare(key, selection.r, participantKey, share, message);
         FROST.Signature memory accumulator =
             signature.shares.register(msg.sender, share, selection.r, selection.root, proof);
         emit SignShared(sid, selection.root, msg.sender, share.z);
