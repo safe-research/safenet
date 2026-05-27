@@ -621,11 +621,11 @@ contract FROSTCoordinator {
     ) public returns (bool signed) {
         (Group storage group, bytes32 message) = _signatureGroupAndMessage(sid);
         Signature storage signature = $signatures[sid];
-        Secp256k1.Point memory participantKey = group.participants.getKey(msg.sender);
+        Secp256k1.Point memory senderKey = group.participants.getKey(msg.sender);
         require(!group.nonces.isBurned(msg.sender, sid.sequence()), AlreadyDeclined());
         require(group.nonces.isRevealed(msg.sender, sid.sequence()), NoncesNotRevealed());
         Secp256k1.Point memory key = group.key;
-        FROST.verifyShare(key, selection.r, participantKey, share, message);
+        FROST.verifyShare(key, selection.r, senderKey, share, message);
         FROST.Signature memory accumulator =
             signature.shares.register(msg.sender, share, selection.r, selection.root, proof);
         emit SignShared(sid, selection.root, msg.sender, share.z);
