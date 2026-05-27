@@ -1,4 +1,4 @@
-import type { Hex } from "viem";
+import type { Address, Hex } from "viem";
 
 export type CommitApprove = {
 	id: "sentinel_commit_approve";
@@ -31,11 +31,25 @@ export type SentinelAction = CommitApprove | CommitDeny | SentinelFinalize | Sen
 
 export type SentinelActionWithTimeout = SentinelAction & { validUntil: number };
 
-export type SentinelRequestStatus = "pending" | "committed" | "finalized";
+type RequestBase = { deadline: bigint; approve: boolean };
 
-export type SentinelRequestState = {
-	deadline: bigint;
-	status: SentinelRequestStatus;
+export type PreparingRequest = RequestBase & { status: "preparing" };
+export type PendingRequest = RequestBase & { status: "pending" };
+export type CommittedRequest = RequestBase & { status: "committed" };
+export type FinalizedRequest = RequestBase & { status: "finalized" };
+
+export type SentinelRequestState = PreparingRequest | PendingRequest | CommittedRequest | FinalizedRequest;
+
+export type TransactionPayload = { to: Address; value: bigint; data: Hex };
+
+export type SentinelConfig = {
+	readonly account: Address;
+	readonly bondAmount: bigint;
+	readonly consensus: Address;
+	readonly oracle: Address;
+	readonly chainId: bigint;
+	// Voting window in blocks, used as TTL for the preparing state cleanup.
+	readonly votingWindow: bigint;
 };
 
 export type SentinelStateDiff = {
