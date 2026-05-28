@@ -79,7 +79,7 @@ export class ValidatorService {
 		const verificationEngine = new VerificationEngine(verificationHandlers);
 		const actionStorage = new SqliteActionQueue(database);
 		const txStorage = new SqliteTxStorage(database);
-		const gasFeeEstimator = new GasFeeEstimator(this.#publicClient, priorityFeeCapPercentage);
+		const gasFeeEstimator = new GasFeeEstimator(this.#publicClient, priorityFeeCapPercentage, this.#logger);
 		const protocol = new OnchainProtocol({
 			publicClient: this.#publicClient,
 			account,
