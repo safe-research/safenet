@@ -27,12 +27,14 @@ library FROSTNonceCommitmentSet {
      * @notice Commitments storage for a single participant.
      * @custom:param next The next chunk index to use.
      * @custom:param chunks Mapping from chunk index to commitment root.
-     * @custom:param nonces Mapping from sequence number to the status of the nonce for that sequence.
+     * @custom:param revealed Mapping from sequence number to whether the nonce has been revealed.
+     * @custom:param burned Mapping from sequence number to whether the nonce has been burned (declined).
      */
     struct Commitments {
         uint64 next;
         mapping(uint64 chunk => Root) chunks;
-        mapping(uint64 sequence => SequenceStatus) nonces;
+        mapping(uint64 sequence => bool) revealed;
+        mapping(uint64 sequence => bool) burned;
     }
 
     // ============================================================
@@ -40,19 +42,6 @@ library FROSTNonceCommitmentSet {
     // ============================================================
 
     type Root is bytes32;
-
-    /**
-     * @notice Tracks the lifecycle state of a participant's nonce for a given signing sequence.
-     * @dev A nonce slot starts as `None`, transitions to `Revealed` when the participant calls
-     *      `signRevealNonces`, or to `Burned` when the participant calls `signDecline`. These
-     *      transitions are mutually exclusive: a revealed nonce cannot be burned and a burned slot
-     *      cannot be revealed.
-     */
-    enum SequenceStatus {
-        None,
-        Revealed,
-        Burned
-    }
 
     // ============================================================
     // ERRORS
@@ -64,14 +53,9 @@ library FROSTNonceCommitmentSet {
     error NotIncluded();
 
     /**
-     * @notice Thrown when attempting to burn a nonce slot that has already been revealed.
+     * @notice Thrown when attempting to use a nonce slot that has already been revealed or burned.
      */
-    error NoncesAlreadyRevealed();
-
-    /**
-     * @notice Thrown when attempting to reveal or burn a nonce slot that has already been burned.
-     */
-    error NoncesAlreadyBurned();
+    error NoncesAlreadyUsed();
 
     // ============================================================
     // CONSTANTS
@@ -137,9 +121,9 @@ library FROSTNonceCommitmentSet {
      * @param e The second nonce commitment point.
      * @param sequence The signature sequence.
      * @param proof The Merkle proof for inclusion.
-     * @dev Transitions the nonce slot for `(participant, sequence)` from `None` to `Revealed`. Reverts
-     *      with `NoncesAlreadyRevealed` if the participant has already revealed nonces for this sequence,
-     *      or with `NoncesAlreadyBurned` if the participant has already called `signDecline`.
+     * @dev Transitions the nonce slot for `(participant, sequence)` from unused to revealed. Reverts
+     *      with `NoncesAlreadyUsed` if the participant has already revealed nonces for this sequence
+     *      or has already called `signDecline`.
      */
     function verify(
         T storage self,
@@ -149,22 +133,22 @@ library FROSTNonceCommitmentSet {
         uint64 sequence,
         bytes32[] calldata proof
     ) internal {
-        SequenceStatus status = self.commitments[participant].nonces[sequence];
-        require(status != SequenceStatus.Revealed, NoncesAlreadyRevealed());
-        require(status != SequenceStatus.Burned, NoncesAlreadyBurned());
+        Commitments storage commitments = self.commitments[participant];
+        require(!commitments.revealed[sequence], NoncesAlreadyUsed());
+        require(!commitments.burned[sequence], NoncesAlreadyUsed());
 
         d.requireNonZero();
         e.requireNonZero();
 
         (uint64 chunk, uint256 offset) = _sequence(sequence);
-        (bytes32 commitment, uint256 startOffset) = _root(self.commitments[participant].chunks[chunk]);
+        (bytes32 commitment, uint256 startOffset) = _root(commitments.chunks[chunk]);
         require(offset >= startOffset, NotIncluded());
 
         require(proof.length == _CHUNKSZ, NotIncluded());
         bytes32 digest = MerkleProof.processProofCalldata(proof, _hash(offset, d, e));
         require(digest & _ROOTMASK == commitment, NotIncluded());
 
-        self.commitments[participant].nonces[sequence] = SequenceStatus.Revealed;
+        commitments.revealed[sequence] = true;
     }
 
     /**
@@ -172,15 +156,13 @@ library FROSTNonceCommitmentSet {
      * @param self The storage struct.
      * @param participant The participant's address.
      * @param sequence The signature sequence.
-     * @dev Transitions the nonce slot from `None` to `Burned`. Reverts with `NoncesAlreadyRevealed`
-     *      if nonces were already revealed (participant already called `signRevealNonces`), or with
-     *      `NoncesAlreadyBurned` if they already declined.
+     * @dev Reverts with `NoncesAlreadyUsed` if the nonce slot was already revealed or burned.
      */
     function burn(T storage self, address participant, uint64 sequence) internal {
-        SequenceStatus status = self.commitments[participant].nonces[sequence];
-        require(status != SequenceStatus.Revealed, NoncesAlreadyRevealed());
-        require(status != SequenceStatus.Burned, NoncesAlreadyBurned());
-        self.commitments[participant].nonces[sequence] = SequenceStatus.Burned;
+        Commitments storage commitments = self.commitments[participant];
+        require(!commitments.revealed[sequence], NoncesAlreadyUsed());
+        require(!commitments.burned[sequence], NoncesAlreadyUsed());
+        commitments.burned[sequence] = true;
     }
 
     /**
@@ -191,7 +173,7 @@ library FROSTNonceCommitmentSet {
      * @return True if the nonce has been revealed.
      */
     function isRevealed(T storage self, address participant, uint64 sequence) internal view returns (bool) {
-        return self.commitments[participant].nonces[sequence] == SequenceStatus.Revealed;
+        return self.commitments[participant].revealed[sequence];
     }
 
     /**
@@ -202,7 +184,7 @@ library FROSTNonceCommitmentSet {
      * @return True if the nonce has been burned.
      */
     function isBurned(T storage self, address participant, uint64 sequence) internal view returns (bool) {
-        return self.commitments[participant].nonces[sequence] == SequenceStatus.Burned;
+        return self.commitments[participant].burned[sequence];
     }
 
     // ============================================================
