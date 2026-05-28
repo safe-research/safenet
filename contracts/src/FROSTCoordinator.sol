@@ -111,7 +111,6 @@ contract FROSTCoordinator {
      * @notice Tracks a signing ceremony state.
      * @custom:param message The message being signed.
      * @custom:param signed The Merkle root of the signature shares.
-     * @custom:param declineCount The number of participants that have declined this ceremony.
      * @custom:param shares The accumulated signature shares.
      */
     struct Signature {
