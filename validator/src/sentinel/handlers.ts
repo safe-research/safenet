@@ -30,11 +30,11 @@ export function handleOracleTransactionProposed(
 }
 
 export function handleNewRequest(
-	requests: ReadonlyMap<Hex, SentinelRequestState>,
+	requests: Readonly<Record<Hex, SentinelRequestState>>,
 	transition: SentinelNewRequestTransition,
 	logger: Logger,
 ): SentinelStateDiff {
-	const existing = requests.get(transition.requestId);
+	const existing = requests[transition.requestId];
 	if (existing === undefined || existing.status !== "preparing") return {};
 	const approve = existing.approve;
 	logger.info("SentinelService: committing vote", {
@@ -54,12 +54,12 @@ export function handleNewRequest(
 }
 
 export function handleCommitted(
-	requests: ReadonlyMap<Hex, SentinelRequestState>,
+	requests: Readonly<Record<Hex, SentinelRequestState>>,
 	transition: SentinelCommittedTransition,
 	config: SentinelConfig,
 ): SentinelStateDiff {
 	if (!isAddressEqual(config.account, transition.sentinel)) return {};
-	const existing = requests.get(transition.requestId);
+	const existing = requests[transition.requestId];
 	if (existing === undefined || existing.status !== "pending") return {};
 	return {
 		request: [transition.requestId, { deadline: existing.deadline, status: "committed", approve: existing.approve }],
@@ -67,10 +67,10 @@ export function handleCommitted(
 }
 
 export function handleResolved(
-	requests: ReadonlyMap<Hex, SentinelRequestState>,
+	requests: Readonly<Record<Hex, SentinelRequestState>>,
 	transition: SentinelOracleResultTransition,
 ): SentinelStateDiff {
-	const existing = requests.get(transition.requestId);
+	const existing = requests[transition.requestId];
 	if (existing === undefined) return {};
 	// Only claim if we committed on-chain; drop silently otherwise (e.g. commit tx never confirmed).
 	if (existing.status !== "committed" && existing.status !== "finalized") {
@@ -87,12 +87,12 @@ export function handleResolved(
 }
 
 export function handleBlockAdvance(
-	requests: ReadonlyMap<Hex, SentinelRequestState>,
+	requests: Readonly<Record<Hex, SentinelRequestState>>,
 	blockNumber: bigint,
 	config: SentinelConfig,
 ): SentinelStateDiff[] {
 	const diffs: SentinelStateDiff[] = [];
-	for (const [requestId, state] of requests) {
+	for (const [requestId, state] of Object.entries(requests) as [Hex, SentinelRequestState][]) {
 		if (blockNumber <= state.deadline) continue;
 		if (state.status === "committed") {
 			// Transition to finalized; deadline is reset to give time for OracleResult
