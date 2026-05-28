@@ -177,6 +177,11 @@ const checkSigningRequestTimeout = (
 				signing: [message, undefined],
 			};
 		}
+		case "waiting_to_decline": {
+			return {
+				signing: [message, undefined],
+			};
+		}
 		case "collect_nonce_commitments":
 		case "collect_signing_shares": {
 			// Remove pending request

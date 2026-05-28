@@ -8,6 +8,7 @@ import type {
 	Complain,
 	ComplaintResponse,
 	ConfirmKeyGen,
+	DeclineSignature,
 	ProtocolAction,
 	PublishSecretShares,
 	PublishSignatureShare,
@@ -116,6 +117,8 @@ export abstract class BaseProtocol implements SafenetProtocol {
 				return await this.revealNonceCommitments(action);
 			case "sign_publish_signature_share":
 				return await this.publishSignatureShare(action);
+			case "sign_decline":
+				return await this.declineSignature(action);
 			case "consensus_attest_transaction":
 				return await this.attestTransaction(action);
 			case "consensus_stage_epoch":
@@ -141,6 +144,8 @@ export abstract class BaseProtocol implements SafenetProtocol {
 	protected abstract revealNonceCommitments(args: RevealNonceCommitments): Promise<SubmittedAction>;
 
 	protected abstract publishSignatureShare(args: PublishSignatureShare): Promise<SubmittedAction>;
+
+	protected abstract declineSignature(args: DeclineSignature): Promise<SubmittedAction>;
 
 	protected abstract attestTransaction(args: AttestTransaction): Promise<SubmittedAction>;
 
