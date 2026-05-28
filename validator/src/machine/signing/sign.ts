@@ -21,6 +21,13 @@ export const handleSign = async (
 		logger?.debug?.(`Not part of signing group ${event.gid}!`);
 		return {};
 	}
+	const status = machineStates.signing[event.message];
+	if (status?.id === "waiting_to_decline") {
+		return {
+			signing: [event.message, undefined],
+			actions: [{ id: "sign_decline", signatureId: event.sid }],
+		};
+	}
 	const diff = checkAvailableNonces(
 		machineConfig,
 		signingClient,
@@ -29,7 +36,6 @@ export const handleSign = async (
 		event.sequence,
 		logger,
 	);
-	const status = machineStates.signing[event.message];
 	// Check that there is no state or it is the retry flow
 	if (status?.id !== "waiting_for_request") {
 		logger?.debug?.(`Unexpected signing request for ${event.message}!`);

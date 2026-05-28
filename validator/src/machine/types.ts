@@ -104,6 +104,10 @@ export type SigningState = Readonly<
 					signers: readonly Address[];
 					deadline: bigint;
 			  }
+			| {
+					id: "waiting_to_decline";
+					deadline: bigint;
+			  }
 		)
 >;
 

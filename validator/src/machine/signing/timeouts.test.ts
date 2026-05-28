@@ -1368,3 +1368,24 @@ describe("signing timeouts - collect signing shares", () => {
 		expect(threshold).toBeCalledWith("0x5afe");
 	});
 });
+
+describe("waiting_to_decline timeout", () => {
+	it("should clear state with no actions when deadline is exceeded", () => {
+		const signingClient = {} as unknown as SigningClient;
+		const decliningState: SigningState = {
+			id: "waiting_to_decline",
+			packet: TX_ATTESTATION_PACKET,
+			deadline: 5n,
+		};
+		const machineStates: MachineStates = {
+			...MACHINE_STATES,
+			signing: { "0x5afe5afe": decliningState },
+		};
+
+		const diffs = checkSigningTimeouts(MACHINE_CONFIG, signingClient, CONSENSUS_STATE, machineStates, 10n);
+
+		expect(diffs).toHaveLength(1);
+		expect(diffs[0].signing).toStrictEqual(["0x5afe5afe", undefined]);
+		expect(diffs[0].actions).toBeUndefined();
+	});
+});

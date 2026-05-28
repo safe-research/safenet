@@ -1,6 +1,7 @@
 import type { SafenetProtocol } from "../../consensus/protocol/types.js";
 import type { SigningClient } from "../../consensus/signing/client.js";
 import type { VerificationEngine } from "../../consensus/verify/engine.js";
+import { safeTxPacketHash } from "../../consensus/verify/safeTx/hashing.js";
 import type { SafeTransactionPacket } from "../../consensus/verify/safeTx/schemas.js";
 import type { Logger } from "../../utils/logging.js";
 import type { TransactionProposedEvent } from "../transitions/types.js";
@@ -38,9 +39,18 @@ export const handleTransactionProposed = async (
 	const result = await verificationEngine.verify(packet);
 	const span = { epoch: event.epoch, safeTxHash: event.safeTxHash };
 	if (result.status === "invalid") {
-		// Invalid packet, don't update state
+		const message = safeTxPacketHash(packet);
 		logger?.info?.(`Invalid transaction packet: ${result.error.message}`, span);
-		return {};
+		return {
+			signing: [
+				message,
+				{
+					id: "waiting_to_decline",
+					packet,
+					deadline: event.block + machineConfig.signingTimeout,
+				},
+			],
+		};
 	}
 	const message = result.packetId;
 	logger?.info?.(`Verified transaction packet: ${message}`, span);
