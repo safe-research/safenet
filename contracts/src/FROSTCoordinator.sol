@@ -580,11 +580,6 @@ contract FROSTCoordinator {
      *      correctly reconstruct the group signature from a threshold number of shares. For a participant `i` in a
      *      signing set `S`, the coefficient is `l_i = ∏_{j∈S, j≠i} j / (j-i)`. The contract verifies the submitted
      *      share using this coefficient.
-     * @dev Once the rejection threshold is crossed, `count - threshold + 1` participants have declined,
-     *      leaving at most `threshold - 1` available sharers. `FROST.verify` requires at least `threshold`
-     *      valid shares, so a rejected ceremony can never accumulate enough shares to complete. The
-     *      `selectionRoot` Merkle commitment enforces that only participants who have revealed their nonces
-     *      can appear in a valid signing selection, so no additional nonce guards are needed here.
      */
     function signShare(
         FROSTSignatureId.T sid,
@@ -593,10 +588,9 @@ contract FROSTCoordinator {
         bytes32[] calldata proof
     ) public returns (bool signed) {
         (Group storage group, bytes32 message) = _signatureGroupAndMessage(sid);
-        Signature storage signature = $signatures[sid];
-        Secp256k1.Point memory senderKey = group.participants.getKey(msg.sender);
         Secp256k1.Point memory key = group.key;
-        FROST.verifyShare(key, selection.r, senderKey, share, message);
+        FROST.verifyShare(key, selection.r, group.participants.getKey(msg.sender), share, message);
+        Signature storage signature = $signatures[sid];
         FROST.Signature memory accumulator =
             signature.shares.register(msg.sender, share, selection.r, selection.root, proof);
         emit SignShared(sid, selection.root, msg.sender, share.z);
@@ -626,10 +620,10 @@ contract FROSTCoordinator {
         group.participants.getKey(msg.sender); // reverts InvalidParticipant for non-members
         Signature storage signature = $signatures[sid];
         group.nonces.burn(msg.sender, sid.sequence());
-        signature.declineCount++;
+        uint16 declineCount = ++signature.declineCount;
         emit SignDeclined(sid, msg.sender);
         GroupState memory state = group.state;
-        if (signature.declineCount == state.count - state.threshold + 1) {
+        if (declineCount == state.count - state.threshold + 1) {
             emit SignRejected(sid);
             return true;
         }
@@ -739,7 +733,8 @@ contract FROSTCoordinator {
      * @return result The FROST signature.
      */
     function signatureValue(FROSTSignatureId.T sid) external view returns (FROST.Signature memory result) {
-        bytes32 signed = $signatures[sid].signed;
+        Signature storage signature = $signatures[sid];
+        bytes32 signed = signature.signed;
         require(signed != bytes32(0), NotSigned());
         return $signatures[sid].shares.groupSignature(signed);
     }
