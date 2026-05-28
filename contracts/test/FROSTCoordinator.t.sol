@@ -356,6 +356,16 @@ contract FROSTCoordinatorTest is Test {
         FROST.verify(groupKey, signature, message);
     }
 
+    function test_SignDecline_EmitsSignDeclined() public {
+        (FROSTGroupId.T gid,,) = _trustedKeyGen(bytes32(0));
+        FROSTSignatureId.T sid = coordinator.sign(gid, keccak256("msg"));
+
+        vm.expectEmit();
+        emit FROSTCoordinator.SignDeclined(sid, participants.addr(0));
+        vm.prank(participants.addr(0));
+        coordinator.signDecline(sid);
+    }
+
     function _randomSortedAddresses(uint16 count) private view returns (address[] memory result) {
         result = new address[](count);
         for (uint256 i = 0; i < result.length; i++) {

@@ -243,6 +243,13 @@ contract FROSTCoordinator {
     event SignRevealedNonces(FROSTSignatureId.T indexed sid, address participant, SignNonces nonces);
 
     /**
+     * @notice Emitted when a participant declines a signing ceremony.
+     * @param sid The signature ID.
+     * @param participant The participant address that declined.
+     */
+    event SignDeclined(FROSTSignatureId.T indexed sid, address indexed participant);
+
+    /**
      * @notice Emitted when a participant submits a signature share.
      * @param sid The signature ID.
      * @param participant The participant address.
@@ -588,6 +595,18 @@ contract FROSTCoordinator {
             }
         }
         return false;
+    }
+
+    /**
+     * @notice Records an explicit decline by the sender for a signing ceremony.
+     * @param sid The signature ID.
+     * @dev This is only for decline indication, does not enforce using cryptography.
+     */
+    function signDecline(FROSTSignatureId.T sid) public {
+        require($signatures[sid].message != bytes32(0), NotSigning());
+        Group storage group = $groups[sid.group()];
+        group.participants.getKey(msg.sender); // reverts InvalidParticipant for non-members
+        emit SignDeclined(sid, msg.sender);
     }
 
     /**
