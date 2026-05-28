@@ -113,11 +113,6 @@ contract FROSTCoordinator {
      * @custom:param signed The Merkle root of the signature shares.
      * @custom:param declineCount The number of participants that have declined this ceremony.
      * @custom:param shares The accumulated signature shares.
-     * @dev Per-participant decline and reveal state is tracked in `FROSTNonceCommitmentSet` via a single
-     *      `used` boolean per sequence. The first call to either `signRevealNonces` or `signDecline`
-     *      consumes the slot; any subsequent call reverts with `NoncesAlreadyUsed`.
-     * @dev A ceremony is considered rejected when `declineCount > group.count - group.threshold`,
-     *      which is computable from `declineCount` and the group parameters without additional storage.
      */
     struct Signature {
         bytes32 message;
