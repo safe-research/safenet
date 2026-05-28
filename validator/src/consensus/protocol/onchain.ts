@@ -56,10 +56,12 @@ export class GasFeeEstimator {
 	#cachedPrices: Promise<FeeValues> | null = null;
 	#client: PublicClient;
 	#priorityFeeCapPercentage: number | undefined;
+	#logger: Logger | undefined;
 
-	constructor(client: PublicClient, priorityFeeCapPercentage?: number) {
+	constructor(client: PublicClient, priorityFeeCapPercentage?: number, logger?: Logger) {
 		this.#client = client;
 		this.#priorityFeeCapPercentage = priorityFeeCapPercentage;
+		this.#logger = logger;
 	}
 
 	invalidate() {
@@ -93,6 +95,12 @@ export class GasFeeEstimator {
 		const baseFeeComponent = fees.maxFeePerGas - fees.maxPriorityFeePerGas;
 		const cappedPriority = (baseFeeComponent * scaledPercent) / (PRECISION - scaledPercent);
 		const maxPriorityFeePerGas = minBigInt(fees.maxPriorityFeePerGas, cappedPriority);
+		if (maxPriorityFeePerGas < fees.maxPriorityFeePerGas) {
+			this.#logger?.debug("Priority fee cap applied.", {
+				originalMaxPriorityFeePerGas: fees.maxPriorityFeePerGas,
+				cappedMaxPriorityFeePerGas: maxPriorityFeePerGas,
+			});
+		}
 		return {
 			maxPriorityFeePerGas,
 			maxFeePerGas: baseFeeComponent + maxPriorityFeePerGas,
