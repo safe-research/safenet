@@ -24,7 +24,6 @@ library BondConfig {
     // ============================================================
 
     error InvalidMultiplier();
-    error NoPendingMultiplier();
     error MultiplierNotReady();
 
     // ============================================================
@@ -38,6 +37,7 @@ library BondConfig {
 
     function schedule(T storage self, uint256 newValue, uint256 governanceDelay) internal {
         require(newValue > 0, InvalidMultiplier());
+        applyPending(self);
 
         uint256 activeAt = block.number + governanceDelay;
         self.pendingBondMultiplier = newValue;
@@ -46,7 +46,7 @@ library BondConfig {
     }
 
     function applyPending(T storage self) internal {
-        require(self.pendingBondMultiplierActiveAt != 0, NoPendingMultiplier());
+        if (self.pendingBondMultiplierActiveAt == 0) return;
         require(block.number >= self.pendingBondMultiplierActiveAt, MultiplierNotReady());
 
         uint256 newValue = self.pendingBondMultiplier;
@@ -54,5 +54,12 @@ library BondConfig {
         self.pendingBondMultiplier = 0;
         self.pendingBondMultiplierActiveAt = 0;
         emit BondMultiplierApplied(newValue);
+    }
+
+    function currentMultiplier(T storage self) internal view returns (uint256) {
+        if (self.pendingBondMultiplierActiveAt != 0 && block.number >= self.pendingBondMultiplierActiveAt) {
+            return self.pendingBondMultiplier;
+        }
+        return self.bondMultiplier;
     }
 }

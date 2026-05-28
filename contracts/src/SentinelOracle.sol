@@ -61,7 +61,6 @@ contract SentinelOracle is IOracle {
     error InvalidAddress();
     error ZeroFee();
     error SentinelNotActive();
-    error ZeroBond();
 
     // ============================================================
     // MODIFIERS
@@ -109,7 +108,7 @@ contract SentinelOracle is IOracle {
     function postRequest(bytes32 requestId) external override(IOracle) {
         require(msg.sender == CONSENSUS, NotConsensus());
         uint256 fee = REQUEST_FEE;
-        uint256 bondTarget = fee * $bondConfig.bondMultiplier;
+        uint256 bondTarget = fee * $bondConfig.currentMultiplier();
         uint256 deadline = block.number + VOTING_WINDOW;
         $requests.create(requestId, msg.sender, fee, bondTarget, deadline);
         FEE_TOKEN.safeTransferFrom(msg.sender, address(this), fee);
@@ -119,12 +118,12 @@ contract SentinelOracle is IOracle {
     // VOTING
     // ============================================================
 
-    function commitApprove(bytes32 requestId, uint256 bondAmount) external {
-        _commit(requestId, true, bondAmount);
+    function commitApprove(bytes32 requestId) external {
+        _commit(requestId, true);
     }
 
-    function commitDeny(bytes32 requestId, uint256 bondAmount) external {
-        _commit(requestId, false, bondAmount);
+    function commitDeny(bytes32 requestId) external {
+        _commit(requestId, false);
     }
 
     // ============================================================
@@ -207,7 +206,7 @@ contract SentinelOracle is IOracle {
     }
 
     function bondMultiplier() external view returns (uint256) {
-        return $bondConfig.bondMultiplier;
+        return $bondConfig.currentMultiplier();
     }
 
     function pendingBondMultiplier() external view returns (uint256) {
@@ -234,13 +233,12 @@ contract SentinelOracle is IOracle {
     // INTERNAL HELPERS
     // ============================================================
 
-    function _commit(bytes32 requestId, bool approve, uint256 bondAmount) internal {
-        require(bondAmount > 0, ZeroBond());
+    function _commit(bytes32 requestId, bool approve) internal {
         require($sentinelMap.isActive(msg.sender), SentinelNotActive());
         $commitments.checkNotCommitted(requestId, msg.sender);
         SentinelOracleRequest.Request storage req = $requests.get(requestId);
-        (uint256 effectiveBond, uint256 position) = req.applyCommit(approve, bondAmount);
-        $commitments.add(requestId, msg.sender, approve, effectiveBond, position);
-        FEE_TOKEN.safeTransferFrom(msg.sender, address(this), effectiveBond);
+        (uint256 position, uint256 bondAmount) = req.applyCommit(approve);
+        $commitments.add(requestId, msg.sender, approve, bondAmount, position);
+        FEE_TOKEN.safeTransferFrom(msg.sender, address(this), bondAmount);
     }
 }

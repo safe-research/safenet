@@ -95,12 +95,11 @@ contract SentinelOracleTest is Test {
     function test_UnanimousApprove_FeeDistributedAndBondsReturned() public {
         _postRequest();
 
-        // sentinel1 and sentinel2 together reach the Approve threshold.
-        // BOND_TARGET = 20_000; sentinel1 = 15_000, sentinel2 = 5_000 (fills the gap).
+        // sentinel1 and sentinel2 each commit exactly BOND_TARGET.
         vm.prank(sentinel1);
-        oracle.commitApprove(REQUEST_ID, 15_000); // position 1
+        oracle.commitApprove(REQUEST_ID); // position 1
         vm.prank(sentinel2);
-        oracle.commitApprove(REQUEST_ID, 5_000); // position 2
+        oracle.commitApprove(REQUEST_ID); // position 2
 
         _advancePastDeadline();
 
@@ -119,10 +118,10 @@ contract SentinelOracleTest is Test {
         SentinelOracleRequest.Request memory req = oracle.getRequest(REQUEST_ID);
         assertEq(uint256(req.state), uint256(SentinelOracleRequest.State.RESOLVED_APPROVED));
 
-        // Score_1 = 15_000 * 1e18 / 1 = 15_000e18
-        // Score_2 = 5_000  * 1e18 / 2 = 2_500e18
-        // approveTotalScore = 17_500e18
-        assertEq(req.approveTotalScore, 17_500e18);
+        // Score_1 = 20_000 * 1e18 / 1 = 20_000e18
+        // Score_2 = 20_000 * 1e18 / 2 = 10_000e18
+        // approveTotalScore = 30_000e18
+        assertEq(req.approveTotalScore, 30_000e18);
 
         uint256 sentinel1BalBefore = token.balanceOf(sentinel1);
         uint256 sentinel2BalBefore = token.balanceOf(sentinel2);
@@ -132,34 +131,11 @@ contract SentinelOracleTest is Test {
         vm.prank(sentinel2);
         oracle.claim(REQUEST_ID);
 
-        // sentinel1: bond=15_000 returned + fee share = 10_000 x 15_000/17_500 = 8_571
-        assertEq(token.balanceOf(sentinel1), sentinel1BalBefore + 15_000 + 8_571, "sentinel1 claim incorrect");
+        // sentinel1: bond=20_000 returned + fee share = 10_000 * 20_000 / 30_000 = 6_666 (truncated)
+        assertEq(token.balanceOf(sentinel1), sentinel1BalBefore + BOND_TARGET + 6_666, "sentinel1 claim incorrect");
 
-        // sentinel2: bond=5_000 returned + fee share = 10_000 x 2_500/17_500 = 1_428
-        assertEq(token.balanceOf(sentinel2), sentinel2BalBefore + 5_000 + 1_428, "sentinel2 claim incorrect");
-    }
-
-    function test_UnanimousApprove_DenySentinelBondReturned() public {
-        _postRequest();
-
-        vm.prank(sentinel1);
-        oracle.commitDeny(REQUEST_ID, 3_000); // sub-threshold deny
-        vm.prank(sentinel2);
-        oracle.commitApprove(REQUEST_ID, BOND_TARGET); // full approve threshold
-
-        _advancePastDeadline();
-        oracle.finalize(REQUEST_ID);
-
-        uint256 balBefore = token.balanceOf(sentinel1);
-
-        vm.expectEmit(true, true, false, true);
-        emit SentinelOracle.Claimed(REQUEST_ID, sentinel1, 3_000, 0);
-
-        vm.prank(sentinel1);
-        oracle.claim(REQUEST_ID);
-
-        // Losing-side bond is returned without penalty - slashing only happens via Phase 2 arbitration.
-        assertEq(token.balanceOf(sentinel1), balBefore + 3_000, "losing sentinel bond should be returned");
+        // sentinel2: bond=20_000 returned + fee share = 10_000 * 10_000 / 30_000 = 3_333 (truncated)
+        assertEq(token.balanceOf(sentinel2), sentinel2BalBefore + BOND_TARGET + 3_333, "sentinel2 claim incorrect");
     }
 
     // ============================================================
@@ -170,7 +146,7 @@ contract SentinelOracleTest is Test {
         _postRequest();
 
         vm.prank(sentinel1);
-        oracle.commitDeny(REQUEST_ID, BOND_TARGET); // position 1, single sentinel fills threshold
+        oracle.commitDeny(REQUEST_ID); // position 1, single sentinel
 
         _advancePastDeadline();
 
@@ -183,6 +159,7 @@ contract SentinelOracleTest is Test {
 
         SentinelOracleRequest.Request memory req = oracle.getRequest(REQUEST_ID);
         assertEq(uint256(req.state), uint256(SentinelOracleRequest.State.RESOLVED_DENIED));
+        assertEq(req.denyTotalScore, BOND_TARGET * 1e18);
 
         uint256 balBefore = token.balanceOf(sentinel1);
         vm.prank(sentinel1);
@@ -195,43 +172,10 @@ contract SentinelOracleTest is Test {
     }
 
     // ============================================================
-    // TIMEOUT FLOW
+    // NO COMMITMENTS FLOW
     // ============================================================
 
-    function test_Timeout_FeeRefundedAndBondsReturned() public {
-        _postRequest();
-
-        // Post partial bonds on both sides - neither threshold reached
-        vm.prank(sentinel1);
-        oracle.commitApprove(REQUEST_ID, 1_000);
-        vm.prank(sentinel2);
-        oracle.commitDeny(REQUEST_ID, 2_000);
-
-        _advancePastDeadline();
-
-        uint256 consensusBalBefore = token.balanceOf(consensus);
-
-        vm.expectEmit(true, true, false, true);
-        emit IOracle.OracleResult(REQUEST_ID, consensus, abi.encode(SentinelOracleRequest.ResolveReason.TIMEOUT), false);
-
-        oracle.finalize(REQUEST_ID);
-
-        assertEq(token.balanceOf(consensus), consensusBalBefore + REQUEST_FEE, "fee should be refunded to consensus");
-
-        // sentinels get bonds back
-        uint256 s1Before = token.balanceOf(sentinel1);
-        uint256 s2Before = token.balanceOf(sentinel2);
-
-        vm.prank(sentinel1);
-        oracle.claim(REQUEST_ID);
-        vm.prank(sentinel2);
-        oracle.claim(REQUEST_ID);
-
-        assertEq(token.balanceOf(sentinel1), s1Before + 1_000, "sentinel1 bond refund");
-        assertEq(token.balanceOf(sentinel2), s2Before + 2_000, "sentinel2 bond refund");
-    }
-
-    function test_Timeout_NoBonds_FeeRefunded() public {
+    function test_NoCommitments_FeeRefunded() public {
         _postRequest();
         _advancePastDeadline();
 
@@ -247,15 +191,12 @@ contract SentinelOracleTest is Test {
     function test_Conflict_SetsStateFrozen() public {
         _postRequest();
 
-        // Fill Approve threshold
+        // sentinel1 approves, sentinel2 denies — both sides have votes → conflict
         vm.prank(sentinel1);
-        oracle.commitApprove(REQUEST_ID, BOND_TARGET);
+        oracle.commitApprove(REQUEST_ID);
 
-        // sentinel2 and sentinel3 together fill Deny threshold
         vm.prank(sentinel2);
-        oracle.commitDeny(REQUEST_ID, BOND_TARGET / 2);
-        vm.prank(sentinel3);
-        oracle.commitDeny(REQUEST_ID, BOND_TARGET / 2);
+        oracle.commitDeny(REQUEST_ID);
 
         _advancePastDeadline();
         oracle.finalize(REQUEST_ID);
@@ -289,14 +230,10 @@ contract SentinelOracleTest is Test {
         oracle.claim(REQUEST_ID);
         assertEq(token.balanceOf(sentinel1), s1Before + BOND_TARGET + REQUEST_FEE, "sentinel1 bond and fee returned");
 
-        // Losing deny sentinels (sentinel2, sentinel3) get nothing - bonds already slashed.
+        // Losing deny sentinel (sentinel2) gets nothing - bond already slashed.
         uint256 s2Before = token.balanceOf(sentinel2);
-        uint256 s3Before = token.balanceOf(sentinel3);
         vm.prank(sentinel2);
         oracle.claim(REQUEST_ID);
-        vm.prank(sentinel3);
-        oracle.claim(REQUEST_ID);
         assertEq(token.balanceOf(sentinel2), s2Before, "sentinel2 bond slashed");
-        assertEq(token.balanceOf(sentinel3), s3Before, "sentinel3 bond slashed");
     }
 }

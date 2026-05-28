@@ -32,7 +32,6 @@ export function handleOracleTransactionProposed(
 export function handleNewRequest(
 	requests: ReadonlyMap<Hex, SentinelRequestState>,
 	transition: SentinelNewRequestTransition,
-	config: SentinelConfig,
 	logger: Logger,
 ): SentinelStateDiff {
 	const existing = requests.get(transition.requestId);
@@ -48,8 +47,8 @@ export function handleNewRequest(
 		actions: [
 			{ id: "sentinel_approve_token", bondAmount: transition.bondTarget },
 			approve
-				? { id: "sentinel_commit_approve", requestId: transition.requestId, bondAmount: config.bondAmount }
-				: { id: "sentinel_commit_deny", requestId: transition.requestId, bondAmount: config.bondAmount },
+				? { id: "sentinel_commit_approve", requestId: transition.requestId, bondAmount: transition.bondTarget }
+				: { id: "sentinel_commit_deny", requestId: transition.requestId, bondAmount: transition.bondTarget },
 		],
 	};
 }
