@@ -44,6 +44,19 @@ export function SafeTxAttestationStatus({ proposal }: { proposal: TransactionPro
 							/>
 						</p>
 					</div>
+					{status.data.declined.length > 0 && (
+						<div className={"md:flex md:justify-between"}>
+							<p className={"ml-4"}>Declined:</p>
+							<p>
+								<ValidatorList
+									all={allValidatorIds}
+									active={status.data.declined.map((s) => s.address)}
+									mapInfo={mapInfo}
+									completed={false}
+								/>
+							</p>
+						</div>
+					)}
 				</div>
 			)}
 		</>

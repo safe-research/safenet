@@ -61,6 +61,7 @@ type AttestationInfo = {
 	lastUpdate: bigint;
 	committed: AttestationParticipation[];
 	signed: AttestationParticipation[];
+	declined: AttestationParticipation[];
 };
 
 export type AttestationStatus = AttestationInfo &
@@ -78,6 +79,7 @@ type StatusAggregation = {
 	lastUpdate: bigint;
 	committed: AttestationParticipation[];
 	signedBySelection: Record<string, AttestationParticipation[]>;
+	declined: AttestationParticipation[];
 	selectionRoot?: Hex;
 	signature?: Signature;
 };
@@ -152,11 +154,18 @@ export const loadLatestAttestationStatus = async ({
 
 	const aggregate = eventLogs.reduce(
 		(agg, log) => {
-			const status = agg[log.args.sid] ?? { committed: [], signedBySelection: {}, lastUpdate: 0n };
+			const status = agg[log.args.sid] ?? { committed: [], signedBySelection: {}, declined: [], lastUpdate: 0n };
 			if (status.lastUpdate < log.blockNumber) {
 				status.lastUpdate = log.blockNumber;
 			}
 			switch (log.eventName) {
+				case "SignDeclined": {
+					status.declined.push({
+						address: log.args.participant,
+						block: log.blockNumber,
+					});
+					break;
+				}
 				case "SignRevealedNonces": {
 					status.committed.push({
 						address: log.args.participant,
@@ -193,6 +202,7 @@ export const loadLatestAttestationStatus = async ({
 			const sequence = signingEvent.args.sequence;
 			const committed = status?.committed ?? [];
 			const signed = getSigned(status);
+			const declined = getDeclined(status);
 			return [
 				{
 					lastUpdate: status.lastUpdate ?? signingEvent.blockNumber,
@@ -201,6 +211,7 @@ export const loadLatestAttestationStatus = async ({
 					sequence,
 					committed,
 					signed,
+					declined,
 				},
 				status.signature,
 			];
@@ -266,6 +277,24 @@ export const loadGroupPublicKey = async (
 		// Group might not exist or key generation might not be complete
 		return undefined;
 	}
+};
+
+const getDeclined = (status: StatusAggregation | undefined): AttestationParticipation[] => {
+	if (status === undefined || status.declined.length === 0) return [];
+	// Participants who signed (any selection) take priority over decline events
+	const signedAddresses = new Set([
+		...Object.values(status.signedBySelection)
+			.flat()
+			.map((p) => p.address),
+	]);
+	// Deduplicate: keep only the first decline per participant
+	const seen = new Set<Address>();
+	return status.declined.filter((p) => {
+		if (signedAddresses.has(p.address)) return false;
+		if (seen.has(p.address)) return false;
+		seen.add(p.address);
+		return true;
+	});
 };
 
 const getSigned = (status: StatusAggregation | undefined): AttestationParticipation[] => {
