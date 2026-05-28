@@ -1,12 +1,12 @@
 import type { Database } from "better-sqlite3";
 import type { Address, Prettify, PublicClient } from "viem";
 import z from "zod";
-import { formatError } from "../../utils/errors.js";
-import type { Logger } from "../../utils/logging.js";
-import type { Metrics } from "../../utils/metrics.js";
-import type { Events, Log } from "../../watcher/events.js";
-import { type Stop, type Update, type WatchParams, watchBlocksAndEvents } from "../../watcher/index.js";
-import type { NewBlock } from "./types.js";
+import { formatError } from "../utils/errors.js";
+import type { Logger } from "../utils/logging.js";
+import type { Metrics } from "../utils/metrics.js";
+import type { Events, Log } from "../watcher/events.js";
+import { type Stop, type Update, type WatchParams, watchBlocksAndEvents } from "../watcher/index.js";
+import type { NewBlock } from "../machine/transitions/types.js";
 
 const watcherStateSchema = z
 	.object({
