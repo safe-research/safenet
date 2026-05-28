@@ -117,7 +117,6 @@ contract FROSTCoordinator {
     struct Signature {
         bytes32 message;
         bytes32 signed;
-        uint16 declineCount;
         FROSTSignatureShares.T shares;
     }
 
@@ -267,12 +266,6 @@ contract FROSTCoordinator {
      * @param signature The FROST signature.
      */
     event SignCompleted(FROSTSignatureId.T indexed sid, bytes32 indexed selectionRoot, FROST.Signature signature);
-
-    /**
-     * @notice Emitted when enough participants have declined to make the ceremony uncompletable.
-     * @param sid The signature ID.
-     */
-    event SignRejected(FROSTSignatureId.T indexed sid);
 
     // ============================================================
     // ERRORS
@@ -608,26 +601,13 @@ contract FROSTCoordinator {
     /**
      * @notice Records an explicit decline by the sender for a signing ceremony.
      * @param sid The signature ID.
-     * @return rejected True if the decline threshold has been crossed for the first time.
-     * @dev Once `count - threshold + 1` participants have declined, the ceremony is definitively
-     *      rejected. Additional declines past the threshold are still accepted (for observability)
-     *      but `SignRejected` is not re-emitted. Late declines after signing completes are also
-     *      accepted — they cannot affect the outcome.
+     * @dev This is only for decline indication, does not enforce using cryptography.
      */
-    function signDecline(FROSTSignatureId.T sid) public returns (bool rejected) {
+    function signDecline(FROSTSignatureId.T sid) public {
         require($signatures[sid].message != bytes32(0), NotSigning());
         Group storage group = $groups[sid.group()];
         group.participants.getKey(msg.sender); // reverts InvalidParticipant for non-members
-        Signature storage signature = $signatures[sid];
-        group.nonces.burn(msg.sender, sid.sequence());
         emit SignDeclined(sid, msg.sender);
-        uint16 declineCount = ++signature.declineCount;
-        GroupState memory state = group.state;
-        if (declineCount == state.count - state.threshold + 1) {
-            emit SignRejected(sid);
-            return true;
-        }
-        return false;
     }
 
     /**

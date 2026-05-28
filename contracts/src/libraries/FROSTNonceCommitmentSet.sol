@@ -27,12 +27,10 @@ library FROSTNonceCommitmentSet {
      * @notice Commitments storage for a single participant.
      * @custom:param next The next chunk index to use.
      * @custom:param chunks Mapping from chunk index to commitment root.
-     * @custom:param used Mapping from sequence number to whether the nonce slot has been consumed (revealed or burned).
      */
     struct Commitments {
         uint64 next;
         mapping(uint64 chunk => Root) chunks;
-        mapping(uint64 sequence => bool) used;
     }
 
     // ============================================================
@@ -49,11 +47,6 @@ library FROSTNonceCommitmentSet {
      * @notice Thrown when a commitment is not included in the set.
      */
     error NotIncluded();
-
-    /**
-     * @notice Thrown when attempting to use a nonce slot that has already been revealed or burned.
-     */
-    error NoncesAlreadyUsed();
 
     // ============================================================
     // CONSTANTS
@@ -112,15 +105,13 @@ library FROSTNonceCommitmentSet {
     }
 
     /**
-     * @notice Verifies that the specified commitment is part of the set and marks the nonce slot as used.
+     * @notice Verifies that the specified commitment is part of the set.
      * @param self The storage struct.
      * @param participant The participant's address.
      * @param d The first nonce commitment point.
      * @param e The second nonce commitment point.
      * @param sequence The signature sequence.
      * @param proof The Merkle proof for inclusion.
-     * @dev Consumes the nonce slot for `(participant, sequence)`. Reverts with `NoncesAlreadyUsed` if
-     *      the slot has already been consumed (either by a prior reveal or by `signDecline`).
      */
     function verify(
         T storage self,
@@ -129,35 +120,17 @@ library FROSTNonceCommitmentSet {
         Secp256k1.Point memory e,
         uint64 sequence,
         bytes32[] calldata proof
-    ) internal {
-        Commitments storage commitments = self.commitments[participant];
-        require(!commitments.used[sequence], NoncesAlreadyUsed());
-
+    ) internal view {
         d.requireNonZero();
         e.requireNonZero();
 
         (uint64 chunk, uint256 offset) = _sequence(sequence);
-        (bytes32 commitment, uint256 startOffset) = _root(commitments.chunks[chunk]);
+        (bytes32 commitment, uint256 startOffset) = _root(self.commitments[participant].chunks[chunk]);
         require(offset >= startOffset, NotIncluded());
 
         require(proof.length == _CHUNKSZ, NotIncluded());
         bytes32 digest = MerkleProof.processProofCalldata(proof, _hash(offset, d, e));
         require(digest & _ROOTMASK == commitment, NotIncluded());
-
-        commitments.used[sequence] = true;
-    }
-
-    /**
-     * @notice Burns a nonce slot for a participant, marking it as consumed for this sequence.
-     * @param self The storage struct.
-     * @param participant The participant's address.
-     * @param sequence The signature sequence.
-     * @dev Reverts with `NoncesAlreadyUsed` if the nonce slot was already consumed (revealed or burned).
-     */
-    function burn(T storage self, address participant, uint64 sequence) internal {
-        Commitments storage commitments = self.commitments[participant];
-        require(!commitments.used[sequence], NoncesAlreadyUsed());
-        commitments.used[sequence] = true;
     }
 
     // ============================================================
