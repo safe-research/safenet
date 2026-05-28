@@ -48,17 +48,15 @@ library SentinelOracleRequest {
     error RequestNotResolved();
     error VotingWindowOpen();
     error VotingWindowClosed();
-    error InvalidBondAmount();
-
     // ============================================================
     // INTERNAL FUNCTIONS
     // ============================================================
 
-    function applyCommit(Request storage self, bool approve, uint256 bondAmount) internal returns (uint256 position) {
+    function applyCommit(Request storage self, bool approve) internal returns (uint256 position, uint256 bondAmount) {
         require(self.state == State.PENDING, RequestNotPending());
         require(block.number <= self.deadline, VotingWindowClosed());
-        require(bondAmount == self.bondTarget, InvalidBondAmount());
 
+        bondAmount = self.bondTarget;
         if (approve) {
             self.approveSentinelCount += 1;
             position = self.approveSentinelCount;

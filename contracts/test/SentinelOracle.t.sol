@@ -97,9 +97,9 @@ contract SentinelOracleTest is Test {
 
         // sentinel1 and sentinel2 each commit exactly BOND_TARGET.
         vm.prank(sentinel1);
-        oracle.commitApprove(REQUEST_ID, BOND_TARGET); // position 1
+        oracle.commitApprove(REQUEST_ID); // position 1
         vm.prank(sentinel2);
-        oracle.commitApprove(REQUEST_ID, BOND_TARGET); // position 2
+        oracle.commitApprove(REQUEST_ID); // position 2
 
         _advancePastDeadline();
 
@@ -138,14 +138,6 @@ contract SentinelOracleTest is Test {
         assertEq(token.balanceOf(sentinel2), sentinel2BalBefore + BOND_TARGET + 3_333, "sentinel2 claim incorrect");
     }
 
-    function test_Commit_RevertsOnInvalidBondAmount() public {
-        _postRequest();
-
-        vm.prank(sentinel1);
-        vm.expectRevert(SentinelOracleRequest.InvalidBondAmount.selector);
-        oracle.commitApprove(REQUEST_ID, BOND_TARGET + 1);
-    }
-
     // ============================================================
     // UNANIMOUS DENY FLOW
     // ============================================================
@@ -154,7 +146,7 @@ contract SentinelOracleTest is Test {
         _postRequest();
 
         vm.prank(sentinel1);
-        oracle.commitDeny(REQUEST_ID, BOND_TARGET); // position 1, single sentinel
+        oracle.commitDeny(REQUEST_ID); // position 1, single sentinel
 
         _advancePastDeadline();
 
@@ -201,10 +193,10 @@ contract SentinelOracleTest is Test {
 
         // sentinel1 approves, sentinel2 denies — both sides have votes → conflict
         vm.prank(sentinel1);
-        oracle.commitApprove(REQUEST_ID, BOND_TARGET);
+        oracle.commitApprove(REQUEST_ID);
 
         vm.prank(sentinel2);
-        oracle.commitDeny(REQUEST_ID, BOND_TARGET);
+        oracle.commitDeny(REQUEST_ID);
 
         _advancePastDeadline();
         oracle.finalize(REQUEST_ID);
