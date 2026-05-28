@@ -11,6 +11,7 @@ import {ParticipantMerkleTree} from "@test/util/ParticipantMerkleTree.sol";
 import {FROSTCoordinator} from "@/FROSTCoordinator.sol";
 import {FROST} from "@/libraries/FROST.sol";
 import {FROSTGroupId} from "@/libraries/FROSTGroupId.sol";
+import {FROSTParticipantMap} from "@/libraries/FROSTParticipantMap.sol";
 import {FROSTSignatureId} from "@/libraries/FROSTSignatureId.sol";
 import {Secp256k1} from "@/libraries/Secp256k1.sol";
 
@@ -285,7 +286,7 @@ contract FROSTCoordinatorTest is Test {
         // The `sign` algorithm from RFC-9591. Note that the algorithms assume a
         // sorted list of participants. Note that at this point, all commitment
         // nonces are available from event data (assuming a block limit for
-        // participants to submit nonces before being declared "dishonest").
+        // participants to reveal their nonces before being declared "dishonest").
         // <https://datatracker.ietf.org/doc/html/rfc9591#section-5.2>
         _sortByParticipantId(honestParticipants);
         Secp256k1.Point memory groupKey = coordinator.groupKey(gid);
@@ -359,6 +360,64 @@ contract FROSTCoordinatorTest is Test {
     function test_SignDecline_EmitsSignDeclined() public {
         (FROSTGroupId.T gid,,) = _trustedKeyGen(bytes32(0));
         FROSTSignatureId.T sid = coordinator.sign(gid, keccak256("msg"));
+
+        vm.expectEmit();
+        emit FROSTCoordinator.SignDeclined(sid, participants.addr(0));
+        vm.prank(participants.addr(0));
+        coordinator.signDecline(sid);
+    }
+
+    function test_SignDecline_Reverts_NotSigning() public {
+        (FROSTGroupId.T gid,,) = _trustedKeyGen(bytes32(0));
+        FROSTSignatureId.T sid = FROSTSignatureId.create(gid, 0);
+
+        vm.expectRevert(FROSTCoordinator.NotSigning.selector);
+        coordinator.signDecline(sid);
+    }
+
+    function test_SignDecline_Reverts_InvalidParticipant() public {
+        (FROSTGroupId.T gid,,) = _trustedKeyGen(bytes32(0));
+        FROSTSignatureId.T sid = coordinator.sign(gid, keccak256("msg"));
+
+        vm.expectRevert(FROSTParticipantMap.InvalidParticipant.selector);
+        vm.prank(makeAddr("outsider"));
+        coordinator.signDecline(sid);
+    }
+
+    function test_SignDecline_AllowsRepeatDecline() public {
+        (FROSTGroupId.T gid,,) = _trustedKeyGen(bytes32(0));
+        FROSTSignatureId.T sid = coordinator.sign(gid, keccak256("msg"));
+
+        vm.expectEmit();
+        emit FROSTCoordinator.SignDeclined(sid, participants.addr(0));
+        vm.prank(participants.addr(0));
+        coordinator.signDecline(sid);
+
+        vm.expectEmit();
+        emit FROSTCoordinator.SignDeclined(sid, participants.addr(0));
+        vm.prank(participants.addr(0));
+        coordinator.signDecline(sid);
+    }
+
+    function test_SignDecline_AllowsAfterRevealNonces() public {
+        (FROSTGroupId.T gid, uint256[] memory s,) = _trustedKeyGen(bytes32(0));
+
+        bytes32[] memory nonceProof = new bytes32[](10);
+        uint256 d = FROST.nonce(bytes32(vm.randomUint()), s[0]);
+        uint256 e = FROST.nonce(bytes32(vm.randomUint()), s[0]);
+        ForgeSecp256k1.P memory pd = ForgeSecp256k1.g(d);
+        ForgeSecp256k1.P memory pe = ForgeSecp256k1.g(e);
+        bytes32 leaf = keccak256(abi.encode(0, pd.x(), pd.y(), pe.x(), pe.y()));
+        vm.prank(participants.addr(0));
+        coordinator.preprocess(gid, MerkleProof.processProof(nonceProof, leaf));
+
+        FROSTSignatureId.T sid = coordinator.sign(gid, keccak256("msg"));
+
+        FROSTCoordinator.SignNonces memory nonces = FROSTCoordinator.SignNonces({d: pd.toPoint(), e: pe.toPoint()});
+        vm.expectEmit();
+        emit FROSTCoordinator.SignRevealedNonces(sid, participants.addr(0), nonces);
+        vm.prank(participants.addr(0));
+        coordinator.signRevealNonces(sid, nonces, nonceProof);
 
         vm.expectEmit();
         emit FROSTCoordinator.SignDeclined(sid, participants.addr(0));
