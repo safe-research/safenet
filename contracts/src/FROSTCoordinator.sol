@@ -620,8 +620,8 @@ contract FROSTCoordinator {
         group.participants.getKey(msg.sender); // reverts InvalidParticipant for non-members
         Signature storage signature = $signatures[sid];
         group.nonces.burn(msg.sender, sid.sequence());
-        uint16 declineCount = ++signature.declineCount;
         emit SignDeclined(sid, msg.sender);
+        uint16 declineCount = ++signature.declineCount;
         GroupState memory state = group.state;
         if (declineCount == state.count - state.threshold + 1) {
             emit SignRejected(sid);
