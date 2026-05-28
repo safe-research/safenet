@@ -49,10 +49,10 @@ export function SafeTxAttestationStatus({ proposal }: { proposal: TransactionPro
 							<p className={"ml-4"}>Declined:</p>
 							<p>
 								<ValidatorList
-									all={allValidatorIds}
+									all={status.data.declined.map((s) => s.address)}
 									active={status.data.declined.map((s) => s.address)}
-									mapInfo={mapInfo}
-									completed={false}
+									mapInfo={(suffix) => mapInfo(suffix === "✅" ? "❌" : suffix)}
+									completed={true}
 								/>
 							</p>
 						</div>
