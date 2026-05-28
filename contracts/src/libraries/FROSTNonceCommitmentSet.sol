@@ -27,14 +27,12 @@ library FROSTNonceCommitmentSet {
      * @notice Commitments storage for a single participant.
      * @custom:param next The next chunk index to use.
      * @custom:param chunks Mapping from chunk index to commitment root.
-     * @custom:param revealed Mapping from sequence number to whether the nonce has been revealed.
-     * @custom:param burned Mapping from sequence number to whether the nonce has been burned (declined).
+     * @custom:param used Mapping from sequence number to whether the nonce slot has been consumed (revealed or burned).
      */
     struct Commitments {
         uint64 next;
         mapping(uint64 chunk => Root) chunks;
-        mapping(uint64 sequence => bool) revealed;
-        mapping(uint64 sequence => bool) burned;
+        mapping(uint64 sequence => bool) used;
     }
 
     // ============================================================
@@ -114,16 +112,15 @@ library FROSTNonceCommitmentSet {
     }
 
     /**
-     * @notice Verifies that the specified commitment is part of the set and marks the nonce as revealed.
+     * @notice Verifies that the specified commitment is part of the set and marks the nonce slot as used.
      * @param self The storage struct.
      * @param participant The participant's address.
      * @param d The first nonce commitment point.
      * @param e The second nonce commitment point.
      * @param sequence The signature sequence.
      * @param proof The Merkle proof for inclusion.
-     * @dev Transitions the nonce slot for `(participant, sequence)` from unused to revealed. Reverts
-     *      with `NoncesAlreadyUsed` if the participant has already revealed nonces for this sequence
-     *      or has already called `signDecline`.
+     * @dev Consumes the nonce slot for `(participant, sequence)`. Reverts with `NoncesAlreadyUsed` if
+     *      the slot has already been consumed (either by a prior reveal or by `signDecline`).
      */
     function verify(
         T storage self,
@@ -134,8 +131,7 @@ library FROSTNonceCommitmentSet {
         bytes32[] calldata proof
     ) internal {
         Commitments storage commitments = self.commitments[participant];
-        require(!commitments.revealed[sequence], NoncesAlreadyUsed());
-        require(!commitments.burned[sequence], NoncesAlreadyUsed());
+        require(!commitments.used[sequence], NoncesAlreadyUsed());
 
         d.requireNonZero();
         e.requireNonZero();
@@ -148,43 +144,20 @@ library FROSTNonceCommitmentSet {
         bytes32 digest = MerkleProof.processProofCalldata(proof, _hash(offset, d, e));
         require(digest & _ROOTMASK == commitment, NotIncluded());
 
-        commitments.revealed[sequence] = true;
+        commitments.used[sequence] = true;
     }
 
     /**
-     * @notice Burns a nonce slot for a participant, marking it as declined for this sequence.
+     * @notice Burns a nonce slot for a participant, marking it as consumed for this sequence.
      * @param self The storage struct.
      * @param participant The participant's address.
      * @param sequence The signature sequence.
-     * @dev Reverts with `NoncesAlreadyUsed` if the nonce slot was already revealed or burned.
+     * @dev Reverts with `NoncesAlreadyUsed` if the nonce slot was already consumed (revealed or burned).
      */
     function burn(T storage self, address participant, uint64 sequence) internal {
         Commitments storage commitments = self.commitments[participant];
-        require(!commitments.revealed[sequence], NoncesAlreadyUsed());
-        require(!commitments.burned[sequence], NoncesAlreadyUsed());
-        commitments.burned[sequence] = true;
-    }
-
-    /**
-     * @notice Returns whether a participant has revealed their nonce for a given sequence.
-     * @param self The storage struct.
-     * @param participant The participant's address.
-     * @param sequence The signature sequence.
-     * @return True if the nonce has been revealed.
-     */
-    function isRevealed(T storage self, address participant, uint64 sequence) internal view returns (bool) {
-        return self.commitments[participant].revealed[sequence];
-    }
-
-    /**
-     * @notice Returns whether a participant has burned (declined) their nonce for a given sequence.
-     * @param self The storage struct.
-     * @param participant The participant's address.
-     * @param sequence The signature sequence.
-     * @return True if the nonce has been burned.
-     */
-    function isBurned(T storage self, address participant, uint64 sequence) internal view returns (bool) {
-        return self.commitments[participant].burned[sequence];
+        require(!commitments.used[sequence], NoncesAlreadyUsed());
+        commitments.used[sequence] = true;
     }
 
     // ============================================================
