@@ -21,7 +21,6 @@ export const handleSign = async (
 		logger?.debug?.(`Not part of signing group ${event.gid}!`);
 		return {};
 	}
-	const status = machineStates.signing[event.message];
 	const diff = checkAvailableNonces(
 		machineConfig,
 		signingClient,
@@ -30,6 +29,7 @@ export const handleSign = async (
 		event.sequence,
 		logger,
 	);
+	const status = machineStates.signing[event.message];
 	if (status?.id === "waiting_to_decline") {
 		return {
 			...diff,
