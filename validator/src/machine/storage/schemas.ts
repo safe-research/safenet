@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { oracleTransactionPacketSchema } from "../../consensus/verify/oracleTx/schemas.js";
 import { epochRolloverPacketSchema } from "../../consensus/verify/rollover/schemas.js";
 import { safeTransactionPacketSchema } from "../../consensus/verify/safeTx/schemas.js";
 import type { GroupId, SignatureId } from "../../frost/types.js";
@@ -40,7 +41,28 @@ const dbEpochRolloverPacketSchema = epochRolloverPacketSchema.extend({
 	}),
 });
 
-const packetSchema = z.union([dbSafeTransactionPacketSchema, dbEpochRolloverPacketSchema]);
+const dbOracleTransactionPacketSchema = oracleTransactionPacketSchema.extend({
+	domain: oracleTransactionPacketSchema.shape.domain.extend({
+		chain: coercedBigIntSchema,
+	}),
+	proposal: oracleTransactionPacketSchema.shape.proposal.extend({
+		epoch: coercedBigIntSchema,
+		transaction: oracleTransactionPacketSchema.shape.proposal.shape.transaction.extend({
+			chainId: coercedBigIntSchema,
+			value: coercedBigIntSchema,
+			safeTxGas: coercedBigIntSchema,
+			baseGas: coercedBigIntSchema,
+			gasPrice: coercedBigIntSchema,
+			nonce: coercedBigIntSchema,
+		}),
+	}),
+});
+
+const packetSchema = z.union([
+	dbSafeTransactionPacketSchema,
+	dbEpochRolloverPacketSchema,
+	dbOracleTransactionPacketSchema,
+]);
 
 // --- SQLite Base Query Schemas ---
 
@@ -172,6 +194,16 @@ const waitingToDeclineSchema = z.object({
 	deadline: coercedBigIntSchema,
 });
 
+const waitingForOracleSchema = z.object({
+	id: z.literal("waiting_for_oracle"),
+	oracle: checkedAddressSchema,
+	gid: groupIdSchema,
+	signatureId: signatureIdSchema,
+	sequence: coercedBigIntSchema,
+	signers: z.array(checkedAddressSchema),
+	deadline: coercedBigIntSchema,
+});
+
 export const signingStateSchema = z.intersection(
 	baseSigningStateSchema,
 	z.discriminatedUnion("id", [
@@ -180,6 +212,7 @@ export const signingStateSchema = z.intersection(
 		collectSigningSharesSchema,
 		waitingForAttestationSchema,
 		waitingToDeclineSchema,
+		waitingForOracleSchema,
 	]),
 );
 

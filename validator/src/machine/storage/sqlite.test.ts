@@ -1,6 +1,7 @@
 import Sqlite3 from "better-sqlite3";
 import { type Hex, keccak256, zeroAddress } from "viem";
 import { beforeEach, describe, expect, it } from "vitest";
+import type { OracleTransactionPacket } from "../../consensus/verify/oracleTx/schemas.js";
 import type { EpochRolloverPacket } from "../../consensus/verify/rollover/schemas.js";
 import type { SafeTransactionPacket } from "../../consensus/verify/safeTx/schemas.js";
 import type { RolloverState, SigningState } from "../types.js";
@@ -27,6 +28,32 @@ const TX_ATTESTATION_PACKET: SafeTransactionPacket = {
 			gasToken: zeroAddress,
 			refundReceiver: zeroAddress,
 			nonce: 0n,
+		},
+	},
+};
+
+const ORACLE_TRANSACTION_PACKET: OracleTransactionPacket = {
+	type: "oracle_transaction_packet",
+	domain: {
+		chain: 1n,
+		consensus: "0x89bEf0f3a116cf717e51F74C271A0a7aF527511D",
+	},
+	proposal: {
+		epoch: 5n,
+		oracle: "0x0000000000000000000000000000000000000042",
+		transaction: {
+			chainId: 1n,
+			safe: "0x89bEf0f3a116cf717e51F74C271A0a7aF527511D",
+			to: "0x89bEf0f3a116cf717e51F74C271A0a7aF527511D",
+			value: 0n,
+			data: "0x",
+			operation: 0,
+			safeTxGas: 0n,
+			baseGas: 0n,
+			gasPrice: 0n,
+			gasToken: zeroAddress,
+			refundReceiver: zeroAddress,
+			nonce: 1n,
 		},
 	},
 };
@@ -309,6 +336,21 @@ describe("SqliteStateStorage", () => {
 				},
 			],
 		});
+		originalStorage.applyDiff({
+			signing: [
+				"0x5afe5a0000000000000000000000000000000000000000000000000000000000",
+				{
+					id: "waiting_for_oracle",
+					packet: ORACLE_TRANSACTION_PACKET,
+					oracle: "0x0000000000000000000000000000000000000042",
+					gid: "0x9a4e000000000000000000000000000000000000000000000000000000000000",
+					signatureId: "0x5af3010000000000000000000000000000000000000000000000000000000000",
+					sequence: 7n,
+					signers: ["0x0000000000000000000000000000000000000001", "0x0000000000000000000000000000000000000002"],
+					deadline: 20n,
+				},
+			],
+		});
 		const expectedSigningState: Record<Hex, SigningState> = {
 			"0x5afe1a0000000000000000000000000000000000000000000000000000000000": {
 				id: "collect_nonce_commitments",
@@ -368,6 +410,16 @@ describe("SqliteStateStorage", () => {
 				responsible: "0x0000000000000000000000000000000000000001",
 				deadline: 10n,
 			},
+			"0x5afe5a0000000000000000000000000000000000000000000000000000000000": {
+				id: "waiting_for_oracle",
+				packet: ORACLE_TRANSACTION_PACKET,
+				oracle: "0x0000000000000000000000000000000000000042",
+				gid: "0x9a4e000000000000000000000000000000000000000000000000000000000000",
+				signatureId: "0x5af3010000000000000000000000000000000000000000000000000000000000",
+				sequence: 7n,
+				signers: ["0x0000000000000000000000000000000000000001", "0x0000000000000000000000000000000000000002"],
+				deadline: 20n,
+			},
 		};
 		expect(originalStorage.machineStates().signing).toStrictEqual(expectedSigningState);
 		const recoveredStorage = new SqliteStateStorage(testDb, { id: "waiting_for_genesis" });
@@ -377,11 +429,13 @@ describe("SqliteStateStorage", () => {
 		recoveredStorage.applyDiff({ signing: ["0x5afe2b0000000000000000000000000000000000000000000000000000000000"] });
 		recoveredStorage.applyDiff({ signing: ["0x5afe3b0000000000000000000000000000000000000000000000000000000000"] });
 		recoveredStorage.applyDiff({ signing: ["0x5afe4a0000000000000000000000000000000000000000000000000000000000"] });
+		recoveredStorage.applyDiff({ signing: ["0x5afe5a0000000000000000000000000000000000000000000000000000000000"] });
 		const cleanedStorage = new SqliteStateStorage(testDb, { id: "waiting_for_genesis" });
 		delete expectedSigningState["0x5afe1a0000000000000000000000000000000000000000000000000000000000"];
 		delete expectedSigningState["0x5afe2b0000000000000000000000000000000000000000000000000000000000"];
 		delete expectedSigningState["0x5afe3b0000000000000000000000000000000000000000000000000000000000"];
 		delete expectedSigningState["0x5afe4a0000000000000000000000000000000000000000000000000000000000"];
+		delete expectedSigningState["0x5afe5a0000000000000000000000000000000000000000000000000000000000"];
 		expect(cleanedStorage.machineStates().signing).toStrictEqual(expectedSigningState);
 	});
 });
