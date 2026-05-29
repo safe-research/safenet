@@ -18,26 +18,24 @@ const validPacket: EpochRolloverPacket = {
 };
 
 describe("epoch rollover handler", () => {
-	it("should throw on invalid packet", async () => {
+	it("should throw on invalid packet", () => {
 		const handler = new EpochRolloverHandler();
-		await expect(
-			handler.hashAndVerify({
+		expect(() =>
+			handler.hash({
 				type: "invalid packet",
 			} as unknown as EpochRolloverPacket),
-		).rejects.toThrow();
+		).toThrow();
 	});
 
-	it("should return correct hash", async () => {
+	it("should return correct hash", () => {
 		const handler = new EpochRolloverHandler();
-		await expect(handler.hashAndVerify(validPacket)).resolves.toBe(
-			"0xc1e4d484d6c376741c904290cc043f4afb4618f9d567dcdd0edcbf22abae57f7",
-		);
+		expect(handler.hash(validPacket)).toBe("0xc1e4d484d6c376741c904290cc043f4afb4618f9d567dcdd0edcbf22abae57f7");
 	});
 
 	it("should allow proposedEpoch greater than activeEpoch + 1 (skipped epochs)", async () => {
 		const handler = new EpochRolloverHandler();
 		await expect(
-			handler.hashAndVerify({
+			handler.verify({
 				...validPacket,
 				rollover: {
 					...validPacket.rollover,
@@ -45,13 +43,13 @@ describe("epoch rollover handler", () => {
 					proposedEpoch: 7n,
 				},
 			}),
-		).resolves.toBeDefined();
+		).resolves.toBeUndefined();
 	});
 
 	it("should throw when proposedEpoch equals activeEpoch", async () => {
 		const handler = new EpochRolloverHandler();
 		await expect(
-			handler.hashAndVerify({
+			handler.verify({
 				...validPacket,
 				rollover: {
 					...validPacket.rollover,
@@ -65,7 +63,7 @@ describe("epoch rollover handler", () => {
 	it("should throw when proposedEpoch is less than activeEpoch", async () => {
 		const handler = new EpochRolloverHandler();
 		await expect(
-			handler.hashAndVerify({
+			handler.verify({
 				...validPacket,
 				rollover: {
 					...validPacket.rollover,
@@ -79,7 +77,7 @@ describe("epoch rollover handler", () => {
 	it("should call the check function when provided", async () => {
 		const check = vi.fn();
 		const handler = new EpochRolloverHandler(check);
-		await handler.hashAndVerify(validPacket);
+		await handler.verify(validPacket);
 		expect(check).toBeCalledTimes(1);
 		expect(check).toBeCalledWith(validPacket.rollover);
 	});
@@ -89,6 +87,6 @@ describe("epoch rollover handler", () => {
 			throw new Error("Epoch mismatch");
 		});
 		const handler = new EpochRolloverHandler(check);
-		await expect(handler.hashAndVerify(validPacket)).rejects.toThrow("Epoch mismatch");
+		await expect(handler.verify(validPacket)).rejects.toThrow("Epoch mismatch");
 	});
 });

@@ -84,6 +84,7 @@ export const watcherConfigSchema = z.object({
 export const submissionConfigSchema = z.object({
 	BASE_FEE_MULTIPLIER: emptyToDefault(z.coerce.number().optional()),
 	PRIORITY_FEE_PER_GAS: emptyToDefault(z.coerce.bigint().optional()),
+	PRIORITY_FEE_CAP_PERCENTAGE: emptyToDefault(z.coerce.number().optional()),
 });
 
 export const sentinelConfigSchema = z.object({

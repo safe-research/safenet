@@ -19,6 +19,7 @@ import type {
 	Complain,
 	ComplaintResponse,
 	ConfirmKeyGen,
+	DeclineSignature,
 	PublishSecretShares,
 	PublishSignatureShare,
 	RegisterNonceCommitments,
@@ -242,6 +243,19 @@ export class OnchainProtocol extends BaseProtocol {
 			}),
 			value: 0n,
 			gas: 200_000n,
+		});
+	}
+
+	protected declineSignature({ signatureId }: DeclineSignature): Promise<SubmittedAction> {
+		return this.#txManager.submitAction({
+			to: this.#coordinator,
+			data: encodeFunctionData({
+				abi: COORDINATOR_FUNCTIONS,
+				functionName: "signDecline",
+				args: [signatureId],
+			}),
+			value: 0n,
+			gas: 80_000n,
 		});
 	}
 

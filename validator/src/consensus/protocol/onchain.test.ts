@@ -1081,7 +1081,10 @@ describe("GasFeeEstimator", () => {
 		const publicClient = {
 			estimateFeesPerGas,
 		} as unknown as PublicClient;
-		estimateFeesPerGas.mockReturnValueOnce(new Promise(() => {}));
+		estimateFeesPerGas.mockResolvedValue({
+			maxFeePerGas: 1n,
+			maxPriorityFeePerGas: 0n,
+		});
 		const estimator = new GasFeeEstimator(publicClient);
 		const original = estimator.estimateFees();
 		expect(original).toBe(estimator.estimateFees());
@@ -1090,5 +1093,42 @@ describe("GasFeeEstimator", () => {
 		const next = estimator.estimateFees();
 		expect(original).not.toBe(next);
 		expect(estimateFeesPerGas).toHaveBeenCalledTimes(2);
+	});
+
+	describe("priority fee cap", () => {
+		function createEstimator(priorityFeeCapPercentage?: number) {
+			const estimateFeesPerGas = vi.fn();
+			const publicClient = { estimateFeesPerGas } as unknown as PublicClient;
+			return { estimator: new GasFeeEstimator(publicClient, priorityFeeCapPercentage), estimateFeesPerGas };
+		}
+
+		it("should cap priority fee so that it equals the given percentage of the final maxFeePerGas", async () => {
+			const { estimator, estimateFeesPerGas } = createEstimator(50);
+			// baseFeeComponent = 400 - 300 = 100; cappedPriority = 100 * 0.5 / 0.5 = 100
+			// newF = 100 + 100 = 200; newP/newF = 100/200 = 50% ✓
+			estimateFeesPerGas.mockResolvedValueOnce({ maxFeePerGas: 400n, maxPriorityFeePerGas: 300n });
+			expect(await estimator.estimateFees()).toStrictEqual({ maxFeePerGas: 200n, maxPriorityFeePerGas: 100n });
+		});
+
+		it("should not cap when priority fee is already below the percentage", async () => {
+			const { estimator, estimateFeesPerGas } = createEstimator(50);
+			// baseFeeComponent = 400 - 100 = 300; cappedPriority = 300 * 0.5 / 0.5 = 300; 100 < 300, no cap
+			estimateFeesPerGas.mockResolvedValueOnce({ maxFeePerGas: 400n, maxPriorityFeePerGas: 100n });
+			expect(await estimator.estimateFees()).toStrictEqual({ maxFeePerGas: 400n, maxPriorityFeePerGas: 100n });
+		});
+
+		it("should support decimal percentages", async () => {
+			const { estimator, estimateFeesPerGas } = createEstimator(12.5);
+			// baseFeeComponent = 900 - 200 = 700; cappedPriority = 700 * 0.125 / 0.875 = 100
+			// newF = 700 + 100 = 800; newP/newF = 100/800 = 12.5% ✓
+			estimateFeesPerGas.mockResolvedValueOnce({ maxFeePerGas: 900n, maxPriorityFeePerGas: 200n });
+			expect(await estimator.estimateFees()).toStrictEqual({ maxFeePerGas: 800n, maxPriorityFeePerGas: 100n });
+		});
+
+		it("should not cap when priorityFeeCapPercentage is not set", async () => {
+			const { estimator, estimateFeesPerGas } = createEstimator(undefined);
+			estimateFeesPerGas.mockResolvedValueOnce({ maxFeePerGas: 400n, maxPriorityFeePerGas: 300n });
+			expect(await estimator.estimateFees()).toStrictEqual({ maxFeePerGas: 400n, maxPriorityFeePerGas: 300n });
+		});
 	});
 });

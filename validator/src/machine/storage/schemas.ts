@@ -167,6 +167,11 @@ const waitingForAttestationSchema = z.object({
 	deadline: coercedBigIntSchema,
 });
 
+const waitingToDeclineSchema = z.object({
+	id: z.literal("waiting_to_decline"),
+	deadline: coercedBigIntSchema,
+});
+
 export const signingStateSchema = z.intersection(
 	baseSigningStateSchema,
 	z.discriminatedUnion("id", [
@@ -174,6 +179,7 @@ export const signingStateSchema = z.intersection(
 		collectNonceCommitmentsSchema,
 		collectSigningSharesSchema,
 		waitingForAttestationSchema,
+		waitingToDeclineSchema,
 	]),
 );
 

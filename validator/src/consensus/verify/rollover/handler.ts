@@ -8,7 +8,12 @@ export type EpochCheck = (rollover: EpochRolloverPacket["rollover"]) => void;
 export class EpochRolloverHandler implements PacketHandler<EpochRolloverPacket> {
 	constructor(private check?: EpochCheck) {}
 
-	async hashAndVerify(uncheckedPacket: EpochRolloverPacket): Promise<Hex> {
+	hash(uncheckedPacket: EpochRolloverPacket): Hex {
+		const packet = epochRolloverPacketSchema.parse(uncheckedPacket);
+		return epochRolloverHash(packet);
+	}
+
+	async verify(uncheckedPacket: EpochRolloverPacket): Promise<void> {
 		const packet = epochRolloverPacketSchema.parse(uncheckedPacket);
 
 		if (packet.rollover.proposedEpoch <= packet.rollover.activeEpoch) {
@@ -18,7 +23,5 @@ export class EpochRolloverHandler implements PacketHandler<EpochRolloverPacket> 
 		}
 
 		this.check?.(packet.rollover);
-
-		return epochRolloverHash(packet);
 	}
 }

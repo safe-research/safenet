@@ -11,7 +11,8 @@
 			"**/vite.config.js",
 			"**/vitest.config.ts",
 			"!**/src/*.gen.ts",
-			"!contracts/lib"
+			"!contracts/lib",
+			"examples/*.ts"
 		],
 		"maxSize": 2000000
 	},

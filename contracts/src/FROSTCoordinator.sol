@@ -12,7 +12,15 @@ import {Secp256k1} from "@/libraries/Secp256k1.sol";
 
 /**
  * @title FROST Coordinator
- * @notice An onchain coordinator for FROST key generation and signing.
+ * @notice An onchain coordination message bus for FROST key generation and signing.
+ * @dev This contract sequences and authenticates validator actions but does not decide ceremony
+ *      outcomes. The primary source of truth is the FROST cryptographic math: a signing ceremony
+ *      succeeds if and only if a valid threshold Schnorr signature is assembled and verifiable
+ *      onchain. On-chain events are coordination signals, not authoritative decisions.
+ *
+ *      A direct consequence of this design is that functions recording validator intent
+ *      (e.g. `signDecline`) make no state changes — emitting an event is sufficient, and keeping
+ *      the coordinator as a pure message bus avoids liveness issues under chain reorgs.
  */
 contract FROSTCoordinator {
     using FROSTGroupId for FROSTGroupId.T;
@@ -241,6 +249,16 @@ contract FROSTCoordinator {
      * @param nonces The revealed nonces.
      */
     event SignRevealedNonces(FROSTSignatureId.T indexed sid, address participant, SignNonces nonces);
+
+    /**
+     * @notice Emitted when a participant signals intent to decline a signing ceremony.
+     * @param sid The signature ID.
+     * @param participant The participant address that declined.
+     * @dev This event is purely informational. If the same participant also emits `SignShared`
+     *      for the same ceremony, the signature share takes precedence and the decline is
+     *      disregarded. Clients must apply this precedence rule when consuming these events.
+     */
+    event SignDeclined(FROSTSignatureId.T indexed sid, address indexed participant);
 
     /**
      * @notice Emitted when a participant submits a signature share.
@@ -588,6 +606,24 @@ contract FROSTCoordinator {
             }
         }
         return false;
+    }
+
+    /**
+     * @notice Signals intent to decline a signing ceremony. Purely indicative — no state changes.
+     * @param sid The signature ID.
+     * @dev Emits `SignDeclined` and returns. No state is written; the function only validates that
+     *      the ceremony exists and the caller is a registered participant. Multiple calls by the
+     *      same participant are accepted — each emits a `SignDeclined` event.
+     *
+     *      If the caller also submits a signature share (`signShare`) for the same ceremony,
+     *      the signature share takes precedence. Clients must treat `SignShared` as overriding
+     *      any prior `SignDeclined` from the same address for the same ceremony.
+     */
+    function signDecline(FROSTSignatureId.T sid) public {
+        require($signatures[sid].message != bytes32(0), NotSigning());
+        Group storage group = $groups[sid.group()];
+        group.participants.getKey(msg.sender); // reverts InvalidParticipant for non-members
+        emit SignDeclined(sid, msg.sender);
     }
 
     /**

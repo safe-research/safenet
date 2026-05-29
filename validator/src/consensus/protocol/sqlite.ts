@@ -65,11 +65,17 @@ const publishSignatureShareSchema = z.object({
 	callbackContext: hexDataSchema.optional(),
 });
 
+const declineSignatureSchema = z.object({
+	id: z.literal("sign_decline"),
+	signatureId: signatureIdSchema,
+});
+
 const signingActionSchema = z.discriminatedUnion("id", [
 	requestSignatureSchema,
 	registerNonceCommitmentsSchema,
 	revealNonceCommitmentsSchema,
 	publishSignatureShareSchema,
+	declineSignatureSchema,
 ]);
 
 // --- KeyGen Actions ---

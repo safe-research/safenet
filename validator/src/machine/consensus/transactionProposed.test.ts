@@ -4,6 +4,7 @@ import { makeMachineConfig } from "../../__tests__/data/machine.js";
 import type { SafenetProtocol } from "../../consensus/protocol/types.js";
 import type { SigningClient } from "../../consensus/signing/client.js";
 import type { VerificationEngine } from "../../consensus/verify/engine.js";
+import { safeTxPacketHash } from "../../consensus/verify/safeTx/hashing.js";
 import type { TransactionProposedEvent } from "../transitions/types.js";
 import type { ConsensusState } from "../types.js";
 import { handleTransactionProposed } from "./transactionProposed.js";
@@ -87,14 +88,26 @@ describe("transaction proposed", () => {
 		expect(diff).toStrictEqual({});
 	});
 
-	it("should not update state if message cannot be verified", async () => {
+	it("should transition to waiting_to_decline if message cannot be verified", async () => {
 		const protocol: SafenetProtocol = {
 			chainId: () => 23n,
 			consensus: () => zeroAddress,
 		} as unknown as SafenetProtocol;
+		// Use valid addresses so safeTxPacketHash can compute the EIP-712 hash
+		const invalidEvent = {
+			...EVENT,
+			safe: zeroAddress,
+			transaction: { ...EVENT.transaction, safe: zeroAddress, to: zeroAddress },
+		};
+		const packet = {
+			type: "safe_transaction_packet" as const,
+			domain: { chain: 23n, consensus: zeroAddress },
+			proposal: { epoch: invalidEvent.epoch, transaction: invalidEvent.transaction },
+		};
 		const verify = vi.fn();
 		verify.mockResolvedValueOnce({
 			status: "invalid",
+			packetId: safeTxPacketHash(packet),
 			error: new Error("Test Verification Error"),
 		});
 		const verificationEngine: VerificationEngine = {
@@ -110,21 +123,21 @@ describe("transaction proposed", () => {
 			verificationEngine,
 			signingClient,
 			CONSENSUS_STATE,
-			EVENT,
+			invalidEvent,
 		);
-		expect(diff).toStrictEqual({});
+		expect(diff.actions).toBeUndefined();
+		expect(diff.rollover).toBeUndefined();
+		expect(diff.consensus).toBeUndefined();
+		expect(diff.signing).toStrictEqual([
+			safeTxPacketHash(packet),
+			{
+				id: "waiting_to_decline",
+				packet,
+				deadline: 22n,
+			},
+		]);
 		expect(verify).toBeCalledTimes(1);
-		expect(verify).toBeCalledWith({
-			type: "safe_transaction_packet",
-			domain: {
-				chain: 23n,
-				consensus: zeroAddress,
-			},
-			proposal: {
-				epoch: EVENT.epoch,
-				transaction: EVENT.transaction,
-			},
-		});
+		expect(verify).toBeCalledWith(packet);
 	});
 
 	it("should transition to waiting for request after verifying transaction", async () => {
