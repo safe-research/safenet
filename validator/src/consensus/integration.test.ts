@@ -16,7 +16,7 @@ import { type Account, type PrivateKeyAccount, privateKeyToAccount } from "viem/
 import { anvil } from "viem/chains";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { silentLogger, testLogger, testMetrics } from "../__tests__/config.js";
-import { waitForBlock, waitForBlocks } from "../__tests__/utils.js";
+import { waitForBlock, waitForBlocks, waitForLogs } from "../__tests__/utils.js";
 import { hashNonceCommitments, type NonceTree } from "../consensus/signing/nonces.js";
 import { toPoint } from "../frost/math.js";
 import { calcGenesisGroup, calcGroupContext, calcThreshold } from "../machine/keygen/group.js";
@@ -294,13 +294,16 @@ describe("integration", () => {
 		// Wait for end of epoch
 		await waitForBlock(testClient, 40n);
 		// Check number of staged epochs
-		const stagedEpochs = await testClient.getLogs({
-			address: consensus.address,
-			event: CONSENSUS_EPOCH_STAGED_EVENT,
-			fromBlock: "earliest",
-			strict: true,
-		});
-		expect(stagedEpochs.length).toBe(1);
+		const stagedEpochs = await waitForLogs(
+			testClient,
+			{
+				address: consensus.address,
+				event: CONSENSUS_EPOCH_STAGED_EVENT,
+				fromBlock: "earliest",
+				strict: true,
+			},
+			1,
+		);
 		// Calculate group id for reduced group
 		const expectedGroup = calcGroupId(
 			calculateParticipantsRoot([participants[3].address, participants[1].address, participants[0].address]),
@@ -443,14 +446,17 @@ describe("integration", () => {
 		// Wait until the end of the epoch
 		await waitForBlock(testClient, 40n);
 		const endEpoch = (await testClient.getBlockNumber({ cacheTime: 0 })) / BLOCKS_PER_EPOCH;
-		// Check number of staged epochs
-		const stagedEpochs = await testClient.getLogs({
-			address: consensus.address,
-			event: CONSENSUS_EPOCH_STAGED_EVENT,
-			fromBlock: "earliest",
-		});
 		// For the start epoch there is no staged event, but for the epoch after the end epoch is an additional one
-		expect(stagedEpochs.length).toBe(Number(endEpoch - startEpoch));
+		// Poll until the validator has staged all epochs on-chain before asserting
+		const stagedEpochs = await waitForLogs(
+			testClient,
+			{
+				address: consensus.address,
+				event: CONSENSUS_EPOCH_STAGED_EVENT,
+				fromBlock: "earliest",
+			},
+			Number(endEpoch - startEpoch),
+		);
 
 		// Check if signature request worked
 		// Calculate transaction hash
