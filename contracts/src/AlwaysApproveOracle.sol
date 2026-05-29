@@ -13,7 +13,8 @@ contract AlwaysApproveOracle is IOracle {
     /**
      * @inheritdoc IOracle
      */
-    function postRequest(bytes32 requestId) external {
-        emit OracleResult(requestId, msg.sender, "", true);
+    function postRequest(bytes32 requestId, address proposer, address, uint256) external {
+        emit OracleResult(requestId, proposer, "", true);
     }
+
 }

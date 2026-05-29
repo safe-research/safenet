@@ -301,12 +301,18 @@ interface IConsensus {
     /**
      * @notice Proposes a transaction for oracle-checked validator approval.
      * @param oracle Address of the oracle contract to use for evaluation.
+     * @param rewardToken The ERC-20 token used for the oracle fee. The caller must have approved
+     *                    the oracle contract to spend this amount before calling.
+     * @param rewardAmount The fee amount to transfer to the oracle from msg.sender.
      * @param transaction The Safe transaction to propose.
      * @return safeTxHash The Safe transaction hash.
      */
-    function proposeOracleTransaction(address oracle, SafeTransaction.T memory transaction)
-        external
-        returns (bytes32 safeTxHash);
+    function proposeOracleTransaction(
+        address oracle,
+        address rewardToken,
+        uint256 rewardAmount,
+        SafeTransaction.T memory transaction
+    ) external returns (bytes32 safeTxHash);
 
     /**
      * @notice Attests to an oracle-checked transaction.

@@ -26,10 +26,13 @@ interface IOracle {
     /**
      * @notice Post a signing request to the oracle for evaluation.
      * @param requestId The EIP-712 hash of the OracleTransactionProposal message.
-     * @dev The oracle records msg.sender as the proposer in OracleResult, allowing oracles to
-     *      differentiate requests from the Consensus contract versus other callers.
-     *      Transaction data is not passed here; the oracle is expected to fetch it independently
-     *      from the OracleTransactionProposed event.
+     * @param proposer The address that offered the reward and to whom any refund is owed.
+     * @param rewardToken The ERC-20 token used for the reward offer.
+     * @param rewardAmount The amount of rewardToken offered as the fee.
+     * @dev Transaction data is not passed here; the oracle is expected to fetch it independently
+     *      from the OracleTransactionProposed event. The oracle pulls the fee directly from
+     *      proposer and refunds to proposer on resolution when applicable.
      */
-    function postRequest(bytes32 requestId) external;
+    function postRequest(bytes32 requestId, address proposer, address rewardToken, uint256 rewardAmount) external;
+
 }
