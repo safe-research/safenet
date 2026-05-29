@@ -30,16 +30,23 @@ library FROSTMath {
         }
     }
 
+    error SignerNotFound();
+
     function lagrangeCoefficient(address[] memory signers, address signer) internal view returns (uint256 lambda) {
         uint256 numerator = 1;
         uint256 denominator = 1;
         uint256 minusId = Secp256k1.N - FROST.identifier(signer);
+        bool found = false;
         for (uint256 j = 0; j < signers.length; j++) {
-            if (signers[j] == signer) continue;
+            if (signers[j] == signer) {
+                found = true;
+                continue;
+            }
             uint256 x = FROST.identifier(signers[j]);
             numerator = mulmod(numerator, x, Secp256k1.N);
             denominator = mulmod(denominator, addmod(x, minusId, Secp256k1.N), Secp256k1.N);
         }
+        if (!found) revert SignerNotFound();
         return mulmod(numerator, Math.invModPrime(denominator, Secp256k1.N), Secp256k1.N);
     }
 
