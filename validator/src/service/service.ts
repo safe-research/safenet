@@ -20,8 +20,9 @@ import { OracleTransactionHandler } from "../consensus/verify/oracleTx/handler.j
 import { EpochRolloverHandler } from "../consensus/verify/rollover/handler.js";
 import { SafeTransactionHandler } from "../consensus/verify/safeTx/handler.js";
 import { SqliteStateStorage } from "../machine/storage/sqlite.js";
-import { OnchainTransitionWatcher, type WatcherConfig } from "../machine/transitions/watcher.js";
+import { OnchainTransitionWatcher } from "../machine/transitions/watcher.js";
 import type { RolloverState } from "../machine/types.js";
+import type { WatcherConfig } from "../shared/watcher.js";
 import { CONSENSUS_FUNCTIONS } from "../types/abis.js";
 import type { ValidatorAccount } from "../types/account.js";
 import { supportedChains } from "../types/chains.js";

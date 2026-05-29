@@ -20,8 +20,8 @@ import { waitForBlock, waitForBlocks } from "../__tests__/utils.js";
 import { hashNonceCommitments, type NonceTree } from "../consensus/signing/nonces.js";
 import { toPoint } from "../frost/math.js";
 import { calcGenesisGroup, calcGroupContext, calcThreshold } from "../machine/keygen/group.js";
-import type { WatcherConfig } from "../machine/transitions/watcher.js";
 import { createValidatorService, type ValidatorService } from "../service/service.js";
+import type { WatcherConfig } from "../shared/watcher.js";
 import {
 	CONSENSUS_EPOCH_STAGED_EVENT,
 	CONSENSUS_ORACLE_TRANSACTION_PROPOSED_EVENT,

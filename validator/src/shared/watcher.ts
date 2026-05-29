@@ -29,7 +29,7 @@ export type WatcherConfig = Prettify<
 	>
 >;
 
-export abstract class BlockchainWatcher<E extends Events, L> {
+export abstract class BlockchainWatcher<E extends Events, T> {
 	#logger: Logger;
 	#metrics: Metrics;
 	#watcherConfig: WatcherConfig;
@@ -37,8 +37,8 @@ export abstract class BlockchainWatcher<E extends Events, L> {
 	#publicClient: PublicClient;
 	#tableName: string;
 	#filter: { address: Address[]; events: E; fallibleEvents: string[] };
-	#logToTransition: (log: Log<E>) => L;
-	#onTransition: (transition: NewBlock | L) => void;
+	#logToTransition: (log: Log<E>) => T;
+	#onTransition: (transition: NewBlock | T) => void;
 	#stop: Stop | null = null;
 
 	constructor({
@@ -63,8 +63,8 @@ export abstract class BlockchainWatcher<E extends Events, L> {
 		address: Address[];
 		events: E;
 		fallibleEvents: string[];
-		logToTransition: (log: Log<E>) => L;
-		onTransition: (transition: NewBlock | L) => void;
+		logToTransition: (log: Log<E>) => T;
+		onTransition: (transition: NewBlock | T) => void;
 	}) {
 		this.#db = database;
 		this.#watcherConfig = watcherConfig;
@@ -104,7 +104,7 @@ export abstract class BlockchainWatcher<E extends Events, L> {
 		return info.changes > 0;
 	}
 
-	#handleTransition(t: NewBlock | L, block: bigint): void {
+	#handleTransition(t: NewBlock | T, block: bigint): void {
 		try {
 			if (!this.#updateLastIndexedBlock(block)) {
 				this.#logger.warn("Received an out-of-order transition.", { transition: t });

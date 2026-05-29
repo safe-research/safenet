@@ -8,7 +8,6 @@ import type { Metrics } from "../../utils/metrics.js";
 import { logToTransition } from "./onchain.js";
 import type { EventTransition, StateTransition } from "./types.js";
 
-export type { WatcherConfig } from "../../shared/watcher.js";
 export type Config = Pick<ProtocolConfig, "coordinator" | "consensus" | "allowedOracles">;
 
 export class OnchainTransitionWatcher extends BlockchainWatcher<typeof ALL_EVENTS, EventTransition> {
