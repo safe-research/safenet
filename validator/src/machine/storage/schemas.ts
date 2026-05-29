@@ -58,7 +58,7 @@ const dbOracleTransactionPacketSchema = oracleTransactionPacketSchema.extend({
 	}),
 });
 
-const packetSchema = z.union([
+const packetSchema = z.discriminatedUnion("type", [
 	dbSafeTransactionPacketSchema,
 	dbEpochRolloverPacketSchema,
 	dbOracleTransactionPacketSchema,
