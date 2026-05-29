@@ -2,11 +2,11 @@ import type { Database } from "better-sqlite3";
 import type { Chain, PublicClient, Transport } from "viem";
 import { SqliteTxStorage } from "../consensus/protocol/sqlite.js";
 import { GasFeeEstimator, TransactionManager } from "../consensus/protocol/transaction.js";
-import type { WatcherConfig } from "../machine/transitions/watcher.js";
+import type { WatcherConfig } from "../shared/watcher.js";
 import type { ValidatorAccount } from "../types/account.js";
 import { formatError } from "../utils/errors.js";
 import type { Logger } from "../utils/logging.js";
-import { type Stop, watchBlocksAndEvents } from "../watcher/index.js";
+import type { Metrics } from "../utils/metrics.js";
 import type { Detector } from "./detector.js";
 import {
 	handleBlockAdvance,
@@ -17,20 +17,18 @@ import {
 } from "./handlers.js";
 import { SentinelActionQueue, SentinelProtocol } from "./protocol.js";
 import { SentinelStateStorage } from "./storage.js";
-import { logToTransition, SENTINEL_ALL_EVENTS, type SentinelOracleTransition } from "./transitions.js";
+import type { SentinelOracleTransition } from "./transitions.js";
 import type { SentinelConfig, SentinelStateDiff } from "./types.js";
+import { SentinelTransitionWatcher } from "./watcher.js";
 
 export class SentinelService {
 	#logger: Logger;
-	#publicClient: PublicClient<Transport, Chain>;
-	#account: ValidatorAccount;
 	#config: SentinelConfig;
 	#detector: Detector;
-	#watcherConfig: WatcherConfig;
-	#db: Database;
 	#storage: SentinelStateStorage;
-	#actionQueue: SentinelActionQueue;
-	#stop: Stop | null = null;
+	#protocol: SentinelProtocol;
+	#watcher: SentinelTransitionWatcher;
+	#handlerChain: Promise<unknown> = Promise.resolve();
 
 	constructor({
 		account,
@@ -38,6 +36,7 @@ export class SentinelService {
 		config,
 		detector,
 		logger,
+		metrics,
 		watcherConfig,
 		database,
 	}: {
@@ -46,96 +45,74 @@ export class SentinelService {
 		config: SentinelConfig;
 		detector: Detector;
 		logger: Logger;
+		metrics: Metrics;
 		watcherConfig: WatcherConfig;
 		database: Database;
 	}) {
-		this.#account = account;
-		this.#publicClient = publicClient;
+		this.#logger = logger;
 		this.#config = config;
 		this.#detector = detector;
-		this.#logger = logger;
-		this.#watcherConfig = watcherConfig;
-		this.#db = database;
-		this.#storage = new SentinelStateStorage(this.#db);
-		this.#actionQueue = new SentinelActionQueue(this.#db);
-	}
+		this.#storage = new SentinelStateStorage(database);
 
-	async start(): Promise<void> {
-		if (this.#stop !== null) {
-			throw new Error("SentinelService already started");
-		}
-		const txStorage = new SqliteTxStorage(this.#db);
-		const gasFeeEstimator = new GasFeeEstimator(this.#publicClient);
+		const actionQueue = new SentinelActionQueue(database);
+		const txStorage = new SqliteTxStorage(database);
+		const gasFeeEstimator = new GasFeeEstimator(publicClient);
 		const txManager = new TransactionManager({
-			publicClient: this.#publicClient,
-			account: this.#account,
+			publicClient,
+			account,
 			gasFeeEstimator,
 			txStorage,
-			logger: this.#logger,
+			logger,
 		});
-		const protocol = new SentinelProtocol(
-			this.#config.oracle,
-			this.#config.feeToken,
-			this.#actionQueue,
-			txManager,
-			this.#logger,
-		);
-		protocol.drain();
+		this.#protocol = new SentinelProtocol(config.oracle, config.feeToken, actionQueue, txManager, logger);
 
-		const blockTime = this.#watcherConfig.blockTimeOverride ?? this.#publicClient.chain?.blockTime;
-		if (blockTime === undefined) {
-			throw new Error("SentinelService: chain missing block time configuration");
-		}
-
-		let handlerChain: Promise<unknown> = Promise.resolve();
-		this.#stop = await watchBlocksAndEvents({
-			logger: this.#logger,
-			client: this.#publicClient,
-			...this.#watcherConfig,
-			lastIndexedBlock: null,
-			blockTime,
-			address: [this.#config.oracle, this.#config.consensus],
-			events: SENTINEL_ALL_EVENTS,
-			handler: (update) => {
-				if (update.type === "watcher_update_new_logs") {
-					for (const log of update.logs) {
-						handlerChain = handlerChain
-							.then(() => this.#processLog(protocol, logToTransition(log)))
-							.catch((err) => this.#logger.error("SentinelService: error processing log", { error: formatError(err) }));
-					}
-				} else if (update.type === "watcher_update_new_block") {
-					txManager.triggerPendingCheck(update.blockNumber);
-					handlerChain = handlerChain
-						.then(() => this.#processBlock(protocol, update.blockNumber))
+		this.#watcher = new SentinelTransitionWatcher({
+			database,
+			publicClient,
+			config,
+			watcherConfig,
+			logger,
+			metrics,
+			onTransition: (transition) => {
+				if (transition.id === "block_new") {
+					gasFeeEstimator.invalidate();
+					txManager.triggerPendingCheck(transition.block);
+					this.#handlerChain = this.#handlerChain
+						.then(() => this.#processBlock(transition.block))
 						.catch((err) => this.#logger.error("SentinelService: error processing block", { error: formatError(err) }));
+				} else {
+					this.#handlerChain = this.#handlerChain
+						.then(() => this.#processLog(transition))
+						.catch((err) => this.#logger.error("SentinelService: error processing log", { error: formatError(err) }));
 				}
 			},
 		});
+	}
+
+	async start(): Promise<void> {
+		this.#protocol.drain();
+		await this.#watcher.start();
 		this.#logger.notice("SentinelService started", { sentinelOracle: this.#config.oracle });
 	}
 
 	async stop(): Promise<void> {
-		if (this.#stop === null) {
-			throw new Error("SentinelService not started");
-		}
-		await this.#stop();
-		this.#stop = null;
+		await this.#watcher.stop();
 		this.#logger.notice("SentinelService stopped");
 	}
 
-	#processLog(protocol: SentinelProtocol, transition: SentinelOracleTransition): void {
-		this.#applyDiffs(protocol, this.#handleLog(transition));
+	#processLog(transition: SentinelOracleTransition): void {
+		this.#applyDiffs(this.#handleLog(transition));
 	}
 
-	async #processBlock(protocol: SentinelProtocol, blockNumber: bigint): Promise<void> {
+	async #processBlock(blockNumber: bigint): Promise<void> {
 		const diffs = handleBlockAdvance(this.#storage.requests(), blockNumber, this.#config);
-		this.#applyDiffs(protocol, diffs);
+		this.#applyDiffs(diffs);
 	}
 
-	#applyDiffs(protocol: SentinelProtocol, diffs: SentinelStateDiff[]): void {
+	#applyDiffs(diffs: SentinelStateDiff[]): void {
 		for (const diff of diffs) {
 			const actions = this.#storage.applyDiff(diff);
-			for (const action of actions) protocol.process(action);
+			for (const action of actions) this.#protocol.process(action);
 		}
 	}
 
