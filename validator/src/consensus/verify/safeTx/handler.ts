@@ -13,7 +13,12 @@ export class SafeTransactionHandler implements PacketHandler<SafeTransactionPack
 		private metrics?: Pick<Metrics, "transactionChecks">,
 	) {}
 
-	async hashAndVerify(uncheckedPacket: SafeTransactionPacket): Promise<Hex> {
+	hash(uncheckedPacket: SafeTransactionPacket): Hex {
+		const packet = safeTransactionPacketSchema.parse(uncheckedPacket);
+		return safeTxPacketHash(packet);
+	}
+
+	async verify(uncheckedPacket: SafeTransactionPacket): Promise<void> {
 		const packet = safeTransactionPacketSchema.parse(uncheckedPacket);
 		try {
 			this.check(packet.proposal.transaction);
@@ -23,6 +28,5 @@ export class SafeTransactionHandler implements PacketHandler<SafeTransactionPack
 			this.metrics?.transactionChecks.labels({ result: label }).inc();
 			throw error;
 		}
-		return safeTxPacketHash(packet);
 	}
 }

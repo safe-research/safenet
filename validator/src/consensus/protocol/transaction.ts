@@ -12,7 +12,7 @@ import {
 import type { ValidatorAccount } from "../../types/account.js";
 import { formatError } from "../../utils/errors.js";
 import type { Logger } from "../../utils/logging.js";
-import { maxBigInt } from "../../utils/math.js";
+import { maxBigInt, minBigInt } from "../../utils/math.js";
 import type { SubmittedAction } from "./base.js";
 
 export type FeeValues = Pick<FeeValuesEIP1559, "maxFeePerGas" | "maxPriorityFeePerGas">;
@@ -35,9 +35,13 @@ export interface TransactionStorage {
 export class GasFeeEstimator {
 	#cachedPrices: Promise<FeeValues> | null = null;
 	#client: PublicClient;
+	#priorityFeeCapPercentage: number | undefined;
+	#logger: Logger | undefined;
 
-	constructor(client: PublicClient) {
+	constructor(client: PublicClient, priorityFeeCapPercentage?: number, logger?: Logger) {
 		this.#client = client;
+		this.#priorityFeeCapPercentage = priorityFeeCapPercentage;
+		this.#logger = logger;
 	}
 
 	invalidate() {
@@ -49,9 +53,38 @@ export class GasFeeEstimator {
 			return this.#cachedPrices;
 		}
 		// Also cache errors, to prevent that on error too many request are fired
-		const pricePromise = this.#client.estimateFeesPerGas();
+		const pricePromise = this.#client.estimateFeesPerGas().then((fees) => this.#capPriorityFee(fees));
 		this.#cachedPrices = pricePromise;
 		return pricePromise;
+	}
+
+	#capPriorityFee(fees: FeeValues): FeeValues {
+		if (this.#priorityFeeCapPercentage === undefined) {
+			return fees;
+		}
+
+		// Solve for newP such that newP / newF = capPercent / 100.
+		// Note that we need to do math in the bigint space, so we scale our percentage amount to allow
+		// for up to 6 digits of precision in the `#priorityFeeCapPercentage` parameter.
+		const PRECISION = 1_000_000n;
+		const scaledPercent = BigInt(Math.round((this.#priorityFeeCapPercentage / 100) * Number(PRECISION)));
+		if (scaledPercent >= PRECISION) {
+			return fees;
+		}
+
+		const baseFeeComponent = fees.maxFeePerGas - fees.maxPriorityFeePerGas;
+		const cappedPriority = (baseFeeComponent * scaledPercent) / (PRECISION - scaledPercent);
+		const maxPriorityFeePerGas = minBigInt(fees.maxPriorityFeePerGas, cappedPriority);
+		if (maxPriorityFeePerGas < fees.maxPriorityFeePerGas) {
+			this.#logger?.debug("Priority fee cap applied.", {
+				originalMaxPriorityFeePerGas: fees.maxPriorityFeePerGas,
+				cappedMaxPriorityFeePerGas: maxPriorityFeePerGas,
+			});
+		}
+		return {
+			maxPriorityFeePerGas,
+			maxFeePerGas: baseFeeComponent + maxPriorityFeePerGas,
+		};
 	}
 }
 

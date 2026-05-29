@@ -46,11 +46,17 @@ export type PublishSignatureShare = {
 	callbackContext?: Hex;
 };
 
+export type DeclineSignature = {
+	id: "sign_decline";
+	signatureId: SignatureId;
+};
+
 export type SigningAction =
 	| RequestSignature
 	| RegisterNonceCommitments
 	| RevealNonceCommitments
-	| PublishSignatureShare;
+	| PublishSignatureShare
+	| DeclineSignature;
 
 export type StartKeyGen = {
 	id: "key_gen_start";

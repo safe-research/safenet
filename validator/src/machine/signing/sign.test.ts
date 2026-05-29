@@ -351,4 +351,33 @@ describe("collecting shares", () => {
 			},
 		]);
 	});
+
+	it("should emit sign_decline and clear state when in waiting_to_decline", async () => {
+		const verificationEngine = {} as unknown as VerificationEngine;
+		const hasParticipant = vi.fn().mockReturnValueOnce(true);
+		const signingClient = { hasParticipant } as unknown as SigningClient;
+		const decliningState: SigningState = {
+			id: "waiting_to_decline",
+			packet: SIGNING_STATE.packet,
+			deadline: 23n,
+		};
+		const machineStates: MachineStates = {
+			...MACHINE_STATES,
+			signing: { "0x5afe5afe": decliningState },
+		};
+
+		const diff = await handleSign(
+			MACHINE_CONFIG,
+			verificationEngine,
+			signingClient,
+			CONSENSUS_STATE,
+			machineStates,
+			EVENT,
+		);
+
+		expect(diff.rollover).toBeUndefined();
+		expect(diff.consensus).toBeUndefined();
+		expect(diff.signing).toStrictEqual(["0x5afe5afe", undefined]);
+		expect(diff.actions).toStrictEqual([{ id: "sign_decline", signatureId: EVENT.sid }]);
+	});
 });

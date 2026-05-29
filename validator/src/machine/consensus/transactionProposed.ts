@@ -38,9 +38,18 @@ export const handleTransactionProposed = async (
 	const result = await verificationEngine.verify(packet);
 	const span = { epoch: event.epoch, safeTxHash: event.safeTxHash };
 	if (result.status === "invalid") {
-		// Invalid packet, don't update state
+		const message = result.packetId;
 		logger?.info?.(`Invalid transaction packet: ${result.error.message}`, span);
-		return {};
+		return {
+			signing: [
+				message,
+				{
+					id: "waiting_to_decline",
+					packet,
+					deadline: event.block + machineConfig.signingTimeout,
+				},
+			],
+		};
 	}
 	const message = result.packetId;
 	logger?.info?.(`Verified transaction packet: ${message}`, span);

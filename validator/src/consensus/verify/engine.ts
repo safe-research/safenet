@@ -5,7 +5,8 @@ export type Typed = {
 };
 
 export interface PacketHandler<T extends Typed> {
-	hashAndVerify(packet: T): Promise<Hex>;
+	hash(packet: T): Hex;
+	verify(packet: T): Promise<void>;
 }
 
 export type PacketVerificationResult =
@@ -13,7 +14,7 @@ export type PacketVerificationResult =
 			status: "valid";
 			packetId: Hex;
 	  }
-	| { status: "invalid"; error: Error };
+	| { status: "invalid"; packetId: Hex; error: Error };
 
 export class VerificationEngine {
 	#typeHandlers: Map<string, PacketHandler<Typed>>;
@@ -28,9 +29,9 @@ export class VerificationEngine {
 		if (handler === undefined) {
 			throw new Error(`No handler registered for type ${packet.type}`);
 		}
+		const packetId = handler.hash(packet);
 		try {
-			// Throws if packet is invalid
-			const packetId = await handler.hashAndVerify(packet);
+			await handler.verify(packet);
 			this.#verifiedMessages.add(packetId);
 			return {
 				status: "valid",
@@ -40,6 +41,7 @@ export class VerificationEngine {
 			const error = err instanceof Error ? err : new Error(`unknown error: ${err}`);
 			return {
 				status: "invalid",
+				packetId,
 				error,
 			};
 		}

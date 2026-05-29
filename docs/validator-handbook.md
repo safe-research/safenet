@@ -58,6 +58,9 @@ The exact amount varies by chain, but you can expect the account to consume roug
 
 Safenet Beta’s onchain components are planned for deployment on Gnosis Chain. Over the past six months (Aug 25, 2025 – Feb 25, 2026), the average base fee per gas was approximately 0.042 Gwei, translating to just under $0.05 per day in gas costs. However, daily average base fee per gas reached as high as 3.4 Gwei. Based on these figures, validators should expect to need roughly $10 in tokens to cover gas costs over the six-month Beta period. It is recommended to overfund the validator to account for base gas fee variability.
 
+> [!TIP]
+> On Gnosis Chain, the base fee is very low relative to the priority fee, so the priority fee makes up the bulk of gas costs. If your RPC occasionally returns an inflated `eth_maxPriorityFeePerGas` estimate, you can cap how much of the total fee cap can be a tip. For example, setting `PRIORITY_FEE_CAP_PERCENTAGE=95` ensures the tip never exceeds 95% of `maxFeePerGas`, protecting against runaway estimates while still allowing normal inclusion.
+
 #### Consensus Secrets
 
 While participating in consensus, validators generate short-term secrets required to attest Safe transactions and participate correctly. Specifically, it generates:

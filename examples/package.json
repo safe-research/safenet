@@ -1,0 +1,21 @@
+{
+	"name": "@safenet/examples",
+	"private": true,
+	"type": "module",
+	"scripts": {
+		"attest-safe-tx": "tsx attest-safe-tx.ts",
+		"check": "tsc",
+		"coverage": "echo \"No coverage for examples\"",
+		"fix": "biome check --write"
+	},
+	"dependencies": {
+		"dotenv": "^17.2.1",
+		"viem": "^2.38.5",
+		"zod": "^4.1.12"
+	},
+	"devDependencies": {
+		"@types/node": "^24.1.0",
+		"tsx": "^4.20.3",
+		"typescript": "^5.8.3"
+	}
+}

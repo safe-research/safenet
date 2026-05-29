@@ -35,6 +35,9 @@ The consensus contract is responsible for tracking the current epoch, as well as
 
 The coordinator contract is responsible for coordinating and verifying the various cryptographic protocols required by the Safenet consensus contract.
 
+> [!NOTE]
+> `FROSTCoordinator` acts as a **coordination message bus**, not a decision-making system. On-chain events sequence validator actions and provide a globally ordered communication log, but they do not constitute ceremony outcomes. The authoritative result of any signing ceremony is the FROST Schnorr signature itself — a cryptographic proof independently verifiable by anyone with the group public key and the signed message. This design keeps the coordinator as a pure message bus and avoids liveness issues that would arise from state-changing coordination signals under chain reorgs.
+
 ## FROST
 
 The Flexible Round-Optimized Schnorr Threshold (FROST for short)[^rfc9591] protocol is at the core of the cryptographic guarantees provided by Safenet. FROST is a threshold signature scheme where a set of _participants_ share a _group key_, and a _selection_ of at least a _threshold_ of the participants can come together in a _signing ceremony_ to generate a signature for that group key.

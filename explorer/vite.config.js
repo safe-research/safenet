@@ -66,6 +66,14 @@ export default defineConfig(({ mode }) => {
 			}),
 			viteReact(),
 			tailwindcss(),
+			{
+				// %VITE_APP_URL% is not substituted by Vite when the var is unset;
+				// this ensures it always resolves (empty string = tag ignored by crawlers).
+				// Falls back to CF_PAGES_URL so Cloudflare Pages preview deployments work automatically.
+				name: "inject-app-url",
+				transformIndexHtml: (html) =>
+					html.replace(/%VITE_APP_URL%/g, env.VITE_APP_URL || process.env.CF_PAGES_URL || ""),
+			},
 		],
 		test: {
 			globals: true,
@@ -86,7 +94,7 @@ export default defineConfig(({ mode }) => {
 			__IMPRINT_URL__: JSON.stringify(env.VITE_IMPRINT_URL || "#imprint"),
 			// Default explorer settings — configurable per deployment, users can still override in the UI
 			__DEFAULT_CONSENSUS__: JSON.stringify(env.VITE_DEFAULT_CONSENSUS || "0x223624cBF099e5a8f8cD5aF22aFa424a1d1acEE9"),
-			__DEFAULT_RPC__: JSON.stringify(env.VITE_DEFAULT_RPC || "https://1rpc.io/gnosis"),
+			__DEFAULT_RPC__: JSON.stringify(env.VITE_DEFAULT_RPC || "https://rpc.gnosischain.com/"),
 			__DEFAULT_DECODER__: JSON.stringify(
 				env.VITE_DEFAULT_DECODER || "https://calldata.swiss-knife.xyz/decoder?calldata=",
 			),
