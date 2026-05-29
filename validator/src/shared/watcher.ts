@@ -36,9 +36,7 @@ export abstract class BlockchainWatcher<E extends Events, L> {
 	#db: Database;
 	#publicClient: PublicClient;
 	#tableName: string;
-	#address: Address[];
-	#events: E;
-	#fallibleEvents: string[];
+	#filter: { address: Address[]; events: E; fallibleEvents: string[] };
 	#logToTransition: (log: Log<E>) => L;
 	#onTransition: (transition: NewBlock | L) => void;
 	#stop: Stop | null = null;
@@ -74,9 +72,7 @@ export abstract class BlockchainWatcher<E extends Events, L> {
 		this.#metrics = metrics;
 		this.#publicClient = publicClient;
 		this.#tableName = tableName;
-		this.#address = address;
-		this.#events = events;
-		this.#fallibleEvents = fallibleEvents;
+		this.#filter = { address, events, fallibleEvents };
 		this.#logToTransition = logToTransition;
 		this.#onTransition = onTransition;
 
@@ -88,14 +84,14 @@ export abstract class BlockchainWatcher<E extends Events, L> {
 		`);
 	}
 
-	private async getLastIndexedBlock(): Promise<bigint | undefined> {
+	async #getLastIndexedBlock(): Promise<bigint | undefined> {
 		const clientChainId = this.#publicClient.chain?.id ?? 0n;
 		const stmt = this.#db.prepare(`SELECT chainId, lastIndexedBlock FROM ${this.#tableName} WHERE chainId = ?`);
 		const result = watcherStateSchema.parse(stmt.get(clientChainId));
 		return result?.lastIndexedBlock;
 	}
 
-	updateLastIndexedBlock(block: bigint): boolean {
+	#updateLastIndexedBlock(block: bigint): boolean {
 		const stmt = this.#db.prepare(`
 			INSERT INTO ${this.#tableName} (chainId, lastIndexedBlock)
 			VALUES (@chainId, @block)
@@ -108,9 +104,9 @@ export abstract class BlockchainWatcher<E extends Events, L> {
 		return info.changes > 0;
 	}
 
-	private handleTransition(t: NewBlock | L, block: bigint): void {
+	#handleTransition(t: NewBlock | L, block: bigint): void {
 		try {
-			if (!this.updateLastIndexedBlock(block)) {
+			if (!this.#updateLastIndexedBlock(block)) {
 				this.#logger.warn("Received an out-of-order transition.", { transition: t });
 				return;
 			}
@@ -120,12 +116,12 @@ export abstract class BlockchainWatcher<E extends Events, L> {
 		}
 	}
 
-	private handleUpdate(update: Update<E>): void {
+	#handleUpdate(update: Update<E>): void {
 		switch (update.type) {
 			case "watcher_update_warp_to_block": {
 				this.#metrics.blockNumber.labels({ status: "seen" }).set(Number(update.toBlock));
 				this.#metrics.eventIndex.labels({ status: "seen" }).set(-1);
-				// Note that we don't explicitely handle warping in our state machine,
+				// Note that we don't explicitly handle warping in our state machine,
 				// instead if any events are found in the log range, the state machine is
 				// updated to the correct block accordingly.
 				this.#logger.debug(`warping to block ${update.toBlock}`);
@@ -139,13 +135,13 @@ export abstract class BlockchainWatcher<E extends Events, L> {
 			case "watcher_update_new_block": {
 				this.#metrics.blockNumber.labels({ status: "seen" }).set(Number(update.blockNumber));
 				this.#metrics.eventIndex.labels({ status: "seen" }).set(-1);
-				this.handleTransition({ id: "block_new", block: update.blockNumber }, update.blockNumber);
+				this.#handleTransition({ id: "block_new", block: update.blockNumber }, update.blockNumber);
 				break;
 			}
 			case "watcher_update_new_logs": {
 				this.#metrics.eventIndex.labels({ status: "seen" }).set(update.logs.at(-1)?.logIndex ?? -1);
 				for (const log of update.logs) {
-					this.handleTransition(this.#logToTransition(log), log.blockNumber);
+					this.#handleTransition(this.#logToTransition(log), log.blockNumber);
 				}
 				break;
 			}
@@ -162,17 +158,15 @@ export abstract class BlockchainWatcher<E extends Events, L> {
 			throw new Error("chain missing block time configuration");
 		}
 
-		const lastIndexedBlock = (await this.getLastIndexedBlock()) ?? null;
+		const lastIndexedBlock = (await this.#getLastIndexedBlock()) ?? null;
 		this.#stop = await watchBlocksAndEvents({
 			logger: this.#logger,
 			client: this.#publicClient,
 			...this.#watcherConfig,
 			lastIndexedBlock,
 			blockTime,
-			address: this.#address,
-			events: this.#events,
-			fallibleEvents: this.#fallibleEvents,
-			handler: (update) => this.handleUpdate(update),
+			...this.#filter,
+			handler: (update) => this.#handleUpdate(update),
 		});
 	}
 
