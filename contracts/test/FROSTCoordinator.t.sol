@@ -4,8 +4,8 @@ pragma solidity ^0.8.30;
 import {Test, Vm} from "@forge-std/Test.sol";
 import {Arrays} from "@oz/utils/Arrays.sol";
 import {MerkleProof} from "@oz/utils/cryptography/MerkleProof.sol";
-import {Math} from "@oz/utils/math/Math.sol";
 import {CommitmentShareMerkleTree} from "@test/util/CommitmentShareMerkleTree.sol";
+import {FROSTMath} from "@test/util/FROSTMath.sol";
 import {ForgeSecp256k1} from "@test/util/ForgeSecp256k1.sol";
 import {ParticipantMerkleTree} from "@test/util/ParticipantMerkleTree.sol";
 import {FROSTCoordinator} from "@/FROSTCoordinator.sol";
@@ -128,7 +128,8 @@ contract FROSTCoordinatorTest is Test {
             FROSTCoordinator.KeyGenSecretShare memory share = shares[i];
 
             for (uint256 j = 0; j < COUNT; j++) {
-                share.y = Secp256k1.add(share.y, _fc(cc[j], i).toPoint());
+                share.y =
+                    Secp256k1.add(share.y, FROSTMath.evalCommitmentPolynomial(cc[j], participants.addr(i)).toPoint());
             }
 
             share.f = new uint256[](COUNT - 1);
@@ -138,7 +139,7 @@ contract FROSTCoordinatorTest is Test {
                     continue;
                 }
 
-                uint256 fi = _f(a[i], l);
+                uint256 fi = FROSTMath.evalPolynomial(a[i], participants.addr(l));
 
                 // EXTENSION: We apply ECDH to encrypt the `f_i(l)` evaluation
                 // for the target participant. This allows us to use the same
@@ -146,7 +147,7 @@ contract FROSTCoordinatorTest is Test {
                 // additional secret channel. This also implies that we only
                 // completely delete `f` in 2.3, as we need `a_0` to recover the
                 // secret shares sent by other participants.
-                fi = _ecdh(fi, q[i], qq[l]);
+                fi = FROSTMath.ecdh(fi, q[i], qq[l]);
 
                 share.f[k++] = fi;
             }
@@ -176,14 +177,14 @@ contract FROSTCoordinatorTest is Test {
 
                 // EXTENSION: We need to reverse the ECDH we applied in the
                 // previous step.
-                f[i][l] = _ecdh(f[i][l], q[i], qq[l]);
+                f[i][l] = FROSTMath.ecdh(f[i][l], q[i], qq[l]);
 
                 Secp256k1.Point memory gf = ForgeSecp256k1.g(f[i][l]).toPoint();
-                Secp256k1.Point memory fc = _fc(cc[l], i).toPoint();
+                Secp256k1.Point memory fc = FROSTMath.evalCommitmentPolynomial(cc[l], participants.addr(i)).toPoint();
                 assertEq(gf.x, fc.x);
                 assertEq(gf.y, fc.y);
             }
-            f[i][i] = _f(a[i], i);
+            f[i][i] = FROSTMath.evalPolynomial(a[i], participants.addr(i));
         }
 
         // Round 2.3
@@ -288,6 +289,10 @@ contract FROSTCoordinatorTest is Test {
         // participants to submit nonces before being declared "dishonest").
         // <https://datatracker.ietf.org/doc/html/rfc9591#section-5.2>
         _sortByParticipantId(honestParticipants);
+        address[] memory honestAddrs = new address[](honestParticipants.length);
+        for (uint256 i = 0; i < honestParticipants.length; i++) {
+            honestAddrs[i] = participants.addr(honestParticipants[i]);
+        }
         Secp256k1.Point memory groupKey = coordinator.groupKey(gid);
         FROSTCoordinator.SignSelection memory selection;
         FROST.SignatureShare[] memory shares = new FROST.SignatureShare[](honestParticipants.length);
@@ -310,7 +315,7 @@ contract FROSTCoordinatorTest is Test {
                 uint256 bindingFactor = bindingFactors[i];
                 ForgeSecp256k1.P memory r = ForgeSecp256k1.add(n.d, ForgeSecp256k1.mul(bindingFactor, n.e));
                 shares[i].r = r.toPoint();
-                shares[i].l = _lagrangeCoefficient(honestParticipants, h);
+                shares[i].l = FROSTMath.lagrangeCoefficient(honestAddrs, participants.addr(h));
                 groupCommitment = ForgeSecp256k1.add(groupCommitment, r);
             }
             selection.r = groupCommitment.toPoint();
@@ -401,7 +406,7 @@ contract FROSTCoordinatorTest is Test {
         FROSTCoordinator.KeyGenSecretShare memory share;
         share.f = new uint256[](COUNT - 1);
         for (uint256 i = 0; i < COUNT; i++) {
-            s[i] = _f(a, i);
+            s[i] = FROSTMath.evalPolynomial(a, participants.addr(i));
             share.y = ForgeSecp256k1.g(s[i]).toPoint();
             vm.prank(participants.addr(i));
             coordinator.keyGenSecretShare(gid, share);
@@ -420,30 +425,6 @@ contract FROSTCoordinatorTest is Test {
         assertEq(
             keccak256(abi.encode(coordinator.groupKey(gid))), keccak256(abi.encode(ForgeSecp256k1.g(gs).toPoint()))
         );
-    }
-
-    function _f(uint256[] memory a, uint256 i) private view returns (uint256 r) {
-        r = a[0];
-        uint256 x = FROST.identifier(participants.addr(i));
-        uint256 xx = 1;
-        for (uint256 j = 1; j < a.length; j++) {
-            xx = mulmod(xx, x, Secp256k1.N);
-            r = addmod(r, mulmod(a[j], xx, Secp256k1.N), Secp256k1.N);
-        }
-    }
-
-    function _fc(ForgeSecp256k1.P[] memory c, uint256 i) private returns (ForgeSecp256k1.P memory r) {
-        r = c[0];
-        uint256 x = FROST.identifier(participants.addr(i));
-        uint256 xx = 1;
-        for (uint256 j = 1; j < c.length; j++) {
-            xx = mulmod(xx, x, Secp256k1.N);
-            r = ForgeSecp256k1.add(r, ForgeSecp256k1.mul(xx, c[j]));
-        }
-    }
-
-    function _ecdh(uint256 x, uint256 k, ForgeSecp256k1.P memory q) private returns (uint256 encX) {
-        return x ^ ForgeSecp256k1.mul(k, q).toPoint().x;
     }
 
     function _honestParticipants() private returns (uint256[] memory result) {
@@ -473,21 +454,5 @@ contract FROSTCoordinatorTest is Test {
                 }
             }
         }
-    }
-
-    function _lagrangeCoefficient(uint256[] memory l, uint256 i) private view returns (uint256 lambda) {
-        uint256 numerator = 1;
-        uint256 denominator = 1;
-        uint256 minusId = Secp256k1.N - FROST.identifier(participants.addr(i));
-        for (uint256 j = 0; j < l.length; j++) {
-            uint256 jj = l.unsafeMemoryAccess(j);
-            if (i == jj) {
-                continue;
-            }
-            uint256 x = FROST.identifier(participants.addr(jj));
-            numerator = mulmod(numerator, x, Secp256k1.N);
-            denominator = mulmod(denominator, addmod(x, minusId, Secp256k1.N), Secp256k1.N);
-        }
-        return mulmod(numerator, Math.invModPrime(denominator, Secp256k1.N), Secp256k1.N);
     }
 }
