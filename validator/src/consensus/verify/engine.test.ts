@@ -14,7 +14,8 @@ describe("verify engine", () => {
 	it("should throw if different handler is present", async () => {
 		const handlers = new Map<string, PacketHandler<Typed>>();
 		handlers.set("test", {
-			hashAndVerify: async (_packet: Typed) => {
+			hash: (_packet: Typed) => "0xbaddad42",
+			verify: async (_packet: Typed) => {
 				throw new Error("not implemented");
 			},
 		});
@@ -29,7 +30,8 @@ describe("verify engine", () => {
 	it("should return valid verification result from handler on successful check", async () => {
 		const handlers = new Map<string, PacketHandler<Typed>>();
 		handlers.set("test", {
-			hashAndVerify: async (_packet: Typed) => "0xbaddad42",
+			hash: (_packet: Typed) => "0xbaddad42",
+			verify: async (_packet: Typed) => {},
 		});
 		const engine = new VerificationEngine(handlers);
 		await expect(
@@ -46,7 +48,8 @@ describe("verify engine", () => {
 		const handlers = new Map<string, PacketHandler<Typed>>();
 		const error = new Error("Verification Error");
 		handlers.set("test", {
-			hashAndVerify: async (_packet: Typed) => {
+			hash: (_packet: Typed) => "0xbaddad42",
+			verify: async (_packet: Typed) => {
 				throw error;
 			},
 		});
@@ -57,6 +60,7 @@ describe("verify engine", () => {
 			}),
 		).resolves.toStrictEqual({
 			status: "invalid",
+			packetId: "0xbaddad42",
 			error,
 		});
 	});
@@ -69,7 +73,8 @@ describe("verify engine", () => {
 	it("should return true if message is verified", async () => {
 		const handlers = new Map<string, PacketHandler<Typed>>();
 		handlers.set("test", {
-			hashAndVerify: async (_packet: Typed) => "0xbaddad42",
+			hash: (_packet: Typed) => "0xbaddad42",
+			verify: async (_packet: Typed) => {},
 		});
 		const engine = new VerificationEngine(handlers);
 		await engine.verify({ type: "test" });

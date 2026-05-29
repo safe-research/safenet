@@ -25,6 +25,7 @@ import type {
 	Complain,
 	ComplaintResponse,
 	ConfirmKeyGen,
+	DeclineSignature,
 	PublishSecretShares,
 	PublishSignatureShare,
 	RegisterNonceCommitments,
@@ -454,6 +455,16 @@ export class OnchainProtocol extends BaseProtocol {
 				nonceProof,
 			],
 			gas: 200_000n,
+		});
+	}
+
+	protected declineSignature({ signatureId }: DeclineSignature): Promise<SubmittedAction> {
+		return this.submitAction({
+			address: this.#coordinator,
+			abi: COORDINATOR_FUNCTIONS,
+			functionName: "signDecline",
+			args: [signatureId],
+			gas: 80_000n,
 		});
 	}
 
