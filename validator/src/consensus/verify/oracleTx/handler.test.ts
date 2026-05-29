@@ -33,10 +33,10 @@ const VALID_PACKET: OracleTransactionPacket = {
 };
 
 describe("oracle transaction handler", () => {
-	it("should throw on invalid packet (bad oracle address)", async () => {
+	it("should throw on invalid packet (bad oracle address)", () => {
 		const handler = new OracleTransactionHandler([ORACLE_ADDRESS]);
-		await expect(
-			handler.hashAndVerify({
+		expect(() =>
+			handler.hash({
 				type: "oracle_transaction_packet",
 				domain: { chain: 23n, consensus: "0x22Cb221caE98D6097082C80158B1472C45FEd729" },
 				proposal: {
@@ -45,19 +45,16 @@ describe("oracle transaction handler", () => {
 					transaction: VALID_PACKET.proposal.transaction,
 				},
 			} as unknown as OracleTransactionPacket),
-		).rejects.toThrow();
+		).toThrow();
 	});
 
 	it("should throw if oracle is not in the allowlist", async () => {
 		const handler = new OracleTransactionHandler([]);
-		await expect(handler.hashAndVerify(VALID_PACKET)).rejects.toThrow(
-			`Oracle ${ORACLE_ADDRESS} is not in the allowlist`,
-		);
+		await expect(handler.verify(VALID_PACKET)).rejects.toThrow(`Oracle ${ORACLE_ADDRESS} is not in the allowlist`);
 	});
 
-	it("should return correct EIP-712 hash when oracle is in the allowlist", async () => {
+	it("should return correct EIP-712 hash when oracle is in the allowlist", () => {
 		const handler = new OracleTransactionHandler([ORACLE_ADDRESS]);
-		const hash = await handler.hashAndVerify(VALID_PACKET);
-		expect(hash).toBe(oracleTxPacketHash(VALID_PACKET));
+		expect(handler.hash(VALID_PACKET)).toBe(oracleTxPacketHash(VALID_PACKET));
 	});
 });

@@ -93,9 +93,21 @@ describe("transaction proposed", () => {
 			chainId: () => 23n,
 			consensus: () => zeroAddress,
 		} as unknown as SafenetProtocol;
+		// Use valid addresses so safeTxPacketHash can compute the EIP-712 hash
+		const invalidEvent = {
+			...EVENT,
+			safe: zeroAddress,
+			transaction: { ...EVENT.transaction, safe: zeroAddress, to: zeroAddress },
+		};
+		const packet = {
+			type: "safe_transaction_packet" as const,
+			domain: { chain: 23n, consensus: zeroAddress },
+			proposal: { epoch: invalidEvent.epoch, transaction: invalidEvent.transaction },
+		};
 		const verify = vi.fn();
 		verify.mockResolvedValueOnce({
 			status: "invalid",
+			packetId: safeTxPacketHash(packet),
 			error: new Error("Test Verification Error"),
 		});
 		const verificationEngine: VerificationEngine = {
@@ -105,12 +117,6 @@ describe("transaction proposed", () => {
 		const signingClient: SigningClient = {
 			hasParticipant,
 		} as unknown as SigningClient;
-		// Use valid addresses so safeTxPacketHash can compute the EIP-712 hash
-		const invalidEvent = {
-			...EVENT,
-			safe: zeroAddress,
-			transaction: { ...EVENT.transaction, safe: zeroAddress, to: zeroAddress },
-		};
 		const diff = await handleTransactionProposed(
 			MACHINE_CONFIG,
 			protocol,
@@ -119,17 +125,6 @@ describe("transaction proposed", () => {
 			CONSENSUS_STATE,
 			invalidEvent,
 		);
-		const packet = {
-			type: "safe_transaction_packet" as const,
-			domain: {
-				chain: 23n,
-				consensus: zeroAddress,
-			},
-			proposal: {
-				epoch: invalidEvent.epoch,
-				transaction: invalidEvent.transaction,
-			},
-		};
 		expect(diff.actions).toBeUndefined();
 		expect(diff.rollover).toBeUndefined();
 		expect(diff.consensus).toBeUndefined();

@@ -10,13 +10,17 @@ export class OracleTransactionHandler implements PacketHandler<OracleTransaction
 		private metrics?: Pick<Metrics, "transactionChecks">,
 	) {}
 
-	async hashAndVerify(uncheckedPacket: OracleTransactionPacket): Promise<Hex> {
+	hash(uncheckedPacket: OracleTransactionPacket): Hex {
+		const packet = oracleTransactionPacketSchema.parse(uncheckedPacket);
+		return oracleTxPacketHash(packet);
+	}
+
+	async verify(uncheckedPacket: OracleTransactionPacket): Promise<void> {
 		const packet = oracleTransactionPacketSchema.parse(uncheckedPacket);
 		if (!this.allowedOracles.some((o) => isAddressEqual(o, packet.proposal.oracle))) {
 			this.metrics?.transactionChecks.labels({ result: "oracle_not_allowed" }).inc();
 			throw new Error(`Oracle ${packet.proposal.oracle} is not in the allowlist`);
 		}
 		this.metrics?.transactionChecks.labels({ result: "success" }).inc();
-		return oracleTxPacketHash(packet);
 	}
 }
