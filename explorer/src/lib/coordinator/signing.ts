@@ -80,6 +80,7 @@ type StatusAggregation = {
 	committed: AttestationParticipation[];
 	signedBySelection: Record<string, AttestationParticipation[]>;
 	declined: AttestationParticipation[];
+	priorityAddresses: Set<Address>;
 	selectionRoot?: Hex;
 	signature?: Signature;
 };
@@ -154,7 +155,13 @@ export const loadLatestAttestationStatus = async ({
 
 	const aggregate = eventLogs.reduce(
 		(agg, log) => {
-			const status = agg[log.args.sid] ?? { committed: [], signedBySelection: {}, declined: [], lastUpdate: 0n };
+			const status = agg[log.args.sid] ?? {
+				committed: [],
+				signedBySelection: {},
+				declined: [],
+				priorityAddresses: new Set<Address>(),
+				lastUpdate: 0n,
+			};
 			if (status.lastUpdate < log.blockNumber) {
 				status.lastUpdate = log.blockNumber;
 			}
@@ -167,6 +174,7 @@ export const loadLatestAttestationStatus = async ({
 					break;
 				}
 				case "SignRevealedNonces": {
+					status.priorityAddresses.add(log.args.participant);
 					status.committed.push({
 						address: log.args.participant,
 						block: log.blockNumber,
@@ -174,6 +182,7 @@ export const loadLatestAttestationStatus = async ({
 					break;
 				}
 				case "SignShared": {
+					status.priorityAddresses.add(log.args.participant);
 					const shares = status.signedBySelection[log.args.selectionRoot] ?? [];
 					shares.push({
 						address: log.args.participant,
@@ -281,16 +290,10 @@ export const loadGroupPublicKey = async (
 
 const getDeclined = (status: StatusAggregation | undefined): AttestationParticipation[] => {
 	if (status === undefined || status.declined.length === 0) return [];
-	// Participants who signed (any selection) take priority over decline events
-	const signedAddresses = new Set([
-		...Object.values(status.signedBySelection)
-			.flat()
-			.map((p) => p.address),
-	]);
-	// Deduplicate: keep only the first decline per participant
+	// Participants who committed or signed take priority — deduplicate per participant
 	const seen = new Set<Address>();
 	return status.declined.filter((p) => {
-		if (signedAddresses.has(p.address)) return false;
+		if (status.priorityAddresses.has(p.address)) return false;
 		if (seen.has(p.address)) return false;
 		seen.add(p.address);
 		return true;

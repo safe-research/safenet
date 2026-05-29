@@ -9,11 +9,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 //
 // Each test resets the module so the module-level address cache is cleared.
 
-const CONSENSUS = "0x1111111111111111111111111111111111111111" as Address;
-const COORDINATOR_FROM_GETTER = "0xAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA" as Address;
+const CONSENSUS: Address = "0x1111111111111111111111111111111111111111";
+const COORDINATOR_FROM_GETTER: Address = "0xAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
 
 // Valid 32-byte hex (required by safeTxProposalHash's hashTypedData)
-const SAFE_TX_HASH = `0x${"ab".repeat(32)}` as `0x${string}`;
+const SAFE_TX_HASH: `0x${string}` = `0x${"ab".repeat(32)}`;
 
 type LoadLatestAttestationStatus = typeof import("./signing").loadLatestAttestationStatus;
 
@@ -28,14 +28,19 @@ const loadModule = async () => {
 // the coordinator address is resolved.
 const makeProvider = ({
 	readContractImpl,
+	getLogsImpl,
+	requestImpl,
 }: {
 	readContractImpl?: (args: { functionName: string }) => unknown;
-}): PublicClient =>
+	getLogsImpl?: (args: unknown) => unknown;
+	requestImpl?: (args: unknown) => unknown;
+} = {}): PublicClient =>
 	({
 		getBlockNumber: vi.fn().mockResolvedValue(10000n),
 		getChainId: vi.fn().mockResolvedValue(1),
-		getLogs: vi.fn().mockResolvedValue([]),
+		getLogs: getLogsImpl ? vi.fn(getLogsImpl) : vi.fn().mockResolvedValue([]),
 		readContract: readContractImpl ? vi.fn(readContractImpl) : vi.fn(),
+		request: requestImpl ? vi.fn(requestImpl) : vi.fn().mockResolvedValue([]),
 	}) as unknown as PublicClient;
 
 const baseArgs = {
@@ -116,70 +121,70 @@ describe("loadCoordinator (via loadLatestAttestationStatus)", () => {
 // Selectors for coordinator signing progress events
 const SIGN_SELECTOR = "0xb48d242879f9f3df555c800db966f65cba128c7213198748fa202ed54e092691";
 const SIGN_DECLINED_SELECTOR = "0xe6d872ab6c2f6512d506498a50ba8ba1bbc2bb3c19439ad7c6ff3d74465277d7";
+const SIGN_REVEALED_NONCES_SELECTOR = "0xa8415ae8824ba92b55156b0447b9b9bbc3ba63988b076fb0c8d8e180893d1a46";
 const SIGN_SHARED_SELECTOR = "0x25a4d6e8d11a9fdc20ffdd826473485ae4cdd453271726c072a16836c1882e7c";
 
-const SID = `0x${"aa".repeat(32)}` as `0x${string}`;
-const SID_PADDED = SID; // bytes32 is already padded
-const SELECTION_ROOT = `0x${"bb".repeat(32)}` as `0x${string}`;
-const PARTICIPANT_A = "0xaAaAaAaaAaAaAaaAaAAAAAAAAaaaAaAaAaaAaaAa" as Address;
-const PARTICIPANT_B = "0xbBbBBBBbbBBBbbbBbbBbbbbBBbBbbbbBbBbbBBbB" as Address;
+const SID: `0x${string}` = `0x${"aa".repeat(32)}`;
+const SELECTION_ROOT: `0x${string}` = `0x${"bb".repeat(32)}`;
+const PARTICIPANT_A: Address = "0xaAaAaAaaAaAaAaaAaAAAAAAAAaaaAaAaAaaAaaAa";
+const PARTICIPANT_B: Address = "0xbBbBBBBbbBBBbbbBbbBbbbbBBbBbbbbBbBbbBBbB";
 // Address padded to 32 bytes (for use as topic)
 const padAddress = (addr: string) => `0x${"00".repeat(12)}${addr.slice(2).toLowerCase()}`;
 
-// Builds a Sign-initiated raw log
-const makeSignLog = (_sid: string) => ({
+// Base raw log — shared fields for all coordinator progress events
+const makeLog = (topics: string[], data: string, blockNumber = "0x0") => ({
 	address: COORDINATOR_FROM_GETTER,
 	blockHash: `0x${"cc".repeat(32)}`,
-	blockNumber: "0x1",
-	data: `0x${"00".repeat(32)}${"00".repeat(8)}`, // sid (bytes32) + sequence (uint64)
+	blockNumber,
+	data,
 	logIndex: "0x0",
 	removed: false,
-	topics: [
-		SIGN_SELECTOR,
-		padAddress(zeroAddress), // initiator
-		`0x${"00".repeat(32)}`, // gid
-		SAFE_TX_HASH, // message
-	],
+	topics,
 	transactionHash: `0x${"dd".repeat(32)}`,
 	transactionIndex: "0x0",
+});
+
+// Builds a Sign-initiated raw log
+const makeSignLog = (_sid: string) => ({
+	...makeLog(
+		[SIGN_SELECTOR, padAddress(zeroAddress), `0x${"00".repeat(32)}`, SAFE_TX_HASH],
+		`0x${"00".repeat(40)}`, // sid (bytes32) + sequence (uint64)
+		"0x1",
+	),
 });
 
 // Builds a SignDeclined raw log
 const makeDeclinedLog = (sid: string, participant: Address, blockNumber = "0x2") => ({
-	address: COORDINATOR_FROM_GETTER,
-	blockHash: `0x${"cc".repeat(32)}`,
-	blockNumber,
-	data: "0x",
+	...makeLog([SIGN_DECLINED_SELECTOR, sid, padAddress(participant)], "0x", blockNumber),
 	logIndex: "0x1",
-	removed: false,
-	topics: [SIGN_DECLINED_SELECTOR, sid, padAddress(participant)],
-	transactionHash: `0x${"dd".repeat(32)}`,
-	transactionIndex: "0x0",
+});
+
+// Builds a SignRevealedNonces raw log
+const makeRevealedNoncesLog = (sid: string, participant: Address, blockNumber = "0x2") => ({
+	...makeLog(
+		[SIGN_REVEALED_NONCES_SELECTOR, sid],
+		// participant (address, 32 bytes) + nonces struct (4 × uint256 = 128 bytes)
+		`0x${"00".repeat(12)}${participant.slice(2).toLowerCase()}${"00".repeat(128)}`,
+		blockNumber,
+	),
+	logIndex: "0x4",
 });
 
 // Builds a SignShared raw log
+// participant is non-indexed and encoded as the first 32 bytes of data alongside z (uint256)
 const makeSharedLog = (sid: string, _participant: Address, blockNumber = "0x3") => ({
-	address: COORDINATOR_FROM_GETTER,
-	blockHash: `0x${"cc".repeat(32)}`,
-	blockNumber,
-	data: `0x${"00".repeat(32)}`, // z (uint256)
+	...makeLog([SIGN_SHARED_SELECTOR, sid, SELECTION_ROOT], `0x${"00".repeat(32)}`, blockNumber),
 	logIndex: "0x2",
-	removed: false,
-	topics: [SIGN_SHARED_SELECTOR, sid, SELECTION_ROOT],
-	// participant is non-indexed, encoded in data alongside z — but viem's parseEventLogs
-	// reads from data, so we pack participant (padded to 32) + z (uint256 = 0)
-	transactionHash: `0x${"dd".repeat(32)}`,
-	transactionIndex: "0x0",
 });
 
-// Full mock provider for declined-behavior tests (Sign event present)
+// Full mock provider for declined-behaviour tests (Sign event present).
+// The production code calls provider.request({ method: "eth_getLogs" }) directly for
+// fine-grained topic filtering, so we mock request to return the progress logs.
 const makeFullProvider = ({ progressLogs = [] }: { progressLogs?: unknown[] }): PublicClient => {
 	const signLog = makeSignLog(SID);
-	return {
-		getBlockNumber: vi.fn().mockResolvedValue(10000n),
-		getChainId: vi.fn().mockResolvedValue(1),
-		// getLogs returns the Sign-initiated event
-		getLogs: vi.fn().mockResolvedValue([
+	return makeProvider({
+		readContractImpl: async () => COORDINATOR_FROM_GETTER,
+		getLogsImpl: async () => [
 			{
 				...signLog,
 				blockNumber: 1n,
@@ -193,11 +198,9 @@ const makeFullProvider = ({ progressLogs = [] }: { progressLogs?: unknown[] }): 
 				eventName: "Sign",
 				logIndex: 0,
 			},
-		]),
-		// provider.request handles eth_getLogs for progress events
-		request: vi.fn().mockResolvedValue(progressLogs),
-		readContract: vi.fn().mockResolvedValue(COORDINATOR_FROM_GETTER),
-	} as unknown as PublicClient;
+		],
+		requestImpl: async () => progressLogs,
+	});
 };
 
 describe("loadLatestAttestationStatus — declined field", () => {
@@ -210,7 +213,7 @@ describe("loadLatestAttestationStatus — declined field", () => {
 	});
 
 	it("populates declined when a SignDeclined event is present", async () => {
-		const declinedLog = makeDeclinedLog(SID_PADDED, PARTICIPANT_A);
+		const declinedLog = makeDeclinedLog(SID, PARTICIPANT_A);
 		const provider = makeFullProvider({ progressLogs: [declinedLog] });
 		const load = await loadModule();
 
@@ -223,11 +226,11 @@ describe("loadLatestAttestationStatus — declined field", () => {
 
 	it("excludes a participant from declined when they also have a SignShared event", async () => {
 		// Participant A declines first, then signs
-		const declinedLog = makeDeclinedLog(SID_PADDED, PARTICIPANT_A, "0x2");
+		const declinedLog = makeDeclinedLog(SID, PARTICIPANT_A, "0x2");
 		// SignShared has participant encoded as non-indexed data: address (32 bytes) + z (32 bytes)
 		const sharedData = `0x${"00".repeat(12)}${PARTICIPANT_A.slice(2).toLowerCase()}${"00".repeat(32)}`;
 		const sharedLog = {
-			...makeSharedLog(SID_PADDED, PARTICIPANT_A, "0x3"),
+			...makeSharedLog(SID, PARTICIPANT_A, "0x3"),
 			data: sharedData,
 		};
 		const provider = makeFullProvider({ progressLogs: [declinedLog, sharedLog] });
@@ -242,8 +245,8 @@ describe("loadLatestAttestationStatus — declined field", () => {
 	});
 
 	it("deduplicates repeated SignDeclined events from the same participant", async () => {
-		const log1 = makeDeclinedLog(SID_PADDED, PARTICIPANT_A, "0x2");
-		const log2 = { ...makeDeclinedLog(SID_PADDED, PARTICIPANT_A, "0x3"), logIndex: "0x3" };
+		const log1 = makeDeclinedLog(SID, PARTICIPANT_A, "0x2");
+		const log2 = { ...makeDeclinedLog(SID, PARTICIPANT_A, "0x3"), logIndex: "0x3" };
 		const provider = makeFullProvider({ progressLogs: [log1, log2] });
 		const load = await loadModule();
 
@@ -255,8 +258,8 @@ describe("loadLatestAttestationStatus — declined field", () => {
 	});
 
 	it("keeps participants from different addresses in declined independently", async () => {
-		const logA = makeDeclinedLog(SID_PADDED, PARTICIPANT_A, "0x2");
-		const logB = { ...makeDeclinedLog(SID_PADDED, PARTICIPANT_B, "0x3"), logIndex: "0x3" };
+		const logA = makeDeclinedLog(SID, PARTICIPANT_A, "0x2");
+		const logB = { ...makeDeclinedLog(SID, PARTICIPANT_B, "0x3"), logIndex: "0x3" };
 		const provider = makeFullProvider({ progressLogs: [logA, logB] });
 		const load = await loadModule();
 
@@ -266,5 +269,18 @@ describe("loadLatestAttestationStatus — declined field", () => {
 		expect(result?.declined).toHaveLength(2);
 		expect(result?.declined.map((d) => d.address)).toContain(PARTICIPANT_A);
 		expect(result?.declined.map((d) => d.address)).toContain(PARTICIPANT_B);
+	});
+
+	it("excludes a participant from declined when they also have a SignRevealedNonces event", async () => {
+		const committedLog = makeRevealedNoncesLog(SID, PARTICIPANT_A, "0x2");
+		const declinedLog = { ...makeDeclinedLog(SID, PARTICIPANT_A, "0x3"), logIndex: "0x3" };
+		const provider = makeFullProvider({ progressLogs: [committedLog, declinedLog] });
+		const load = await loadModule();
+
+		const result = await load({ provider, ...baseArgs });
+
+		expect(result).not.toBeNull();
+		expect(result?.declined).toEqual([]);
+		expect(result?.committed.map((c) => c.address)).toContain(PARTICIPANT_A);
 	});
 });
