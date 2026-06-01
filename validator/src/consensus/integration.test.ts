@@ -96,12 +96,12 @@ describe("integration", () => {
 		rotateOutEpoch,
 		oracleTimeout,
 	}: {
-			blocksPerEpoch?: bigint;
-			timeout?: bigint;
-			blockTimeMs?: number;
-			rotateOutEpoch?: bigint;
-			oracleTimeout?: bigint;
-		} = {}) => {
+		blocksPerEpoch?: bigint;
+		timeout?: bigint;
+		blockTimeMs?: number;
+		rotateOutEpoch?: bigint;
+		oracleTimeout?: bigint;
+	} = {}) => {
 		// Check deployment information is available
 		const deploymentInfoFile = path.join(
 			process.cwd(),
@@ -703,3 +703,4 @@ describe("integration", () => {
 			verifySignature(toPoint(attestation.r), attestation.z, toPoint(groupKey), request.args.message),
 		).toBeTruthy();
 	});
+});
