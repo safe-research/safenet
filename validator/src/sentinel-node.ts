@@ -4,19 +4,12 @@ import { type ChainFees, createPublicClient, extractChain, http, webSocket } fro
 import { createNonceManager, privateKeyToAccount } from "viem/accounts";
 import { jsonRpc } from "viem/nonce";
 import { z } from "zod";
-import type { WatcherConfig } from "./machine/transitions/watcher.js";
 import { createDetector } from "./sentinel/detector.js";
 import { SentinelService } from "./sentinel/service.js";
+import type { SentinelConfig } from "./sentinel/types.js";
+import type { WatcherConfig } from "./shared/watcher.js";
 import { supportedChains } from "./types/chains.js";
-import {
-	checkedAddressSchema,
-	hexBytes32Schema,
-	metricsConfigSchema,
-	sentinelConfigSchema,
-	submissionConfigSchema,
-	supportedChainsSchema,
-	watcherConfigSchema,
-} from "./types/schemas.js";
+import { sentinelConfigSchema } from "./types/schemas.js";
 import { formatError } from "./utils/errors.js";
 import { createLogger } from "./utils/logging.js";
 import { createMetricsService } from "./utils/metrics.js";
@@ -25,18 +18,7 @@ import { COMMIT_SHA } from "./version.js";
 
 dotenv.config({ quiet: true });
 
-const sentinelNodeConfigSchema = z.object({
-	...metricsConfigSchema.shape,
-	...watcherConfigSchema.shape,
-	...submissionConfigSchema.shape,
-	...sentinelConfigSchema.shape,
-	RPC_URL: z.url(),
-	CHAIN_ID: supportedChainsSchema,
-	PRIVATE_KEY: hexBytes32Schema,
-	CONSENSUS_ADDRESS: checkedAddressSchema,
-});
-
-const result = sentinelNodeConfigSchema.safeParse(process.env);
+const result = sentinelConfigSchema.safeParse(process.env);
 if (!result.success) {
 	console.error("Invalid environment variable configuration:", z.treeifyError(result.error));
 	process.exit(1);
@@ -89,15 +71,14 @@ const watcherConfig: WatcherConfig = {
 
 const db = new Sqlite3(cfg.STORAGE_FILE ?? ":memory:");
 
-const sentinelConfig = {
+const sentinelConfig: SentinelConfig = {
 	account: account.address,
 	oracle: cfg.SENTINEL_ORACLE_ADDRESS,
-	feeToken: cfg.SENTINEL_FEE_TOKEN,
+	feeToken: cfg.SENTINEL_ORACLE_FEE_TOKEN,
 	consensus: cfg.CONSENSUS_ADDRESS,
-	bondAmount: cfg.SENTINEL_BOND_AMOUNT,
 	chainId: BigInt(cfg.CHAIN_ID),
 	votingWindow: cfg.SENTINEL_VOTING_WINDOW,
-} as const;
+};
 
 const service = new SentinelService({
 	account,
@@ -107,6 +88,7 @@ const service = new SentinelService({
 	logger,
 	watcherConfig,
 	database: db,
+	metrics: metrics.metrics,
 });
 
 const shutdown = async () => {
