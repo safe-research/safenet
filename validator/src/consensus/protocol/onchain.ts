@@ -5,14 +5,7 @@ import type { ValidatorAccount } from "../../types/account.js";
 import type { Logger } from "../../utils/logging.js";
 import type { Queue } from "../../utils/queue.js";
 import { BaseProtocol, type SubmittedAction } from "./base.js";
-import {
-	type EthTransactionData,
-	type EthTransactionDetails,
-	type FeeValues,
-	GasFeeEstimator,
-	TransactionManager,
-	type TransactionStorage,
-} from "./transaction.js";
+import { type GasFeeEstimator, TransactionManager, type TransactionStorage } from "./transaction.js";
 import type {
 	ActionWithTimeout,
 	AttestTransaction,
@@ -29,9 +22,6 @@ import type {
 	StageEpoch,
 	StartKeyGen,
 } from "./types.js";
-
-export type { EthTransactionData, EthTransactionDetails, FeeValues, TransactionStorage };
-export { GasFeeEstimator };
 
 export class OnchainProtocol extends BaseProtocol {
 	#publicClient: PublicClient<Transport, Chain>;

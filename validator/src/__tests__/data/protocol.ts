@@ -1,7 +1,7 @@
 import { type Address, ethAddress, type Hex, zeroAddress } from "viem";
 import { entryPoint06Address, entryPoint07Address } from "viem/account-abstraction";
 import { BaseProtocol, type SubmittedAction } from "../../consensus/protocol/base.js";
-import type { EthTransactionData } from "../../consensus/protocol/onchain.js";
+import type { EthTransactionData } from "../../consensus/protocol/transaction.js";
 import type {
 	AttestTransaction,
 	Complain,

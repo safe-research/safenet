@@ -16,7 +16,8 @@ import { testLogger } from "../../__tests__/config.js";
 import { TEST_ACTIONS, TEST_CONSENSUS, TEST_COORDINATOR } from "../../__tests__/data/protocol.js";
 import { createActionQueue } from "../../__tests__/utils.js";
 import type { ValidatorAccount } from "../../types/account.js";
-import { GasFeeEstimator, OnchainProtocol, type TransactionStorage } from "./onchain.js";
+import { OnchainProtocol } from "./onchain.js";
+import { GasFeeEstimator, type TransactionStorage } from "./transaction.js";
 
 describe("OnchainProtocol", () => {
 	beforeEach(() => {

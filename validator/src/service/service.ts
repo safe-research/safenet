@@ -11,8 +11,9 @@ import {
 	webSocket,
 } from "viem";
 import { KeyGenClient } from "../consensus/keyGen/client.js";
-import { GasFeeEstimator, OnchainProtocol } from "../consensus/protocol/onchain.js";
+import { OnchainProtocol } from "../consensus/protocol/onchain.js";
 import { SqliteActionQueue, SqliteTxStorage } from "../consensus/protocol/sqlite.js";
+import { GasFeeEstimator } from "../consensus/protocol/transaction.js";
 import { SigningClient } from "../consensus/signing/client.js";
 import { SqliteClientStorage } from "../consensus/storage/sqlite.js";
 import { type PacketHandler, type Typed, VerificationEngine } from "../consensus/verify/engine.js";
