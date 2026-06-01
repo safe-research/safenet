@@ -22,20 +22,6 @@ export const waitForBlocks = async (client: PublicActions, amount: bigint) => {
 	return waitForBlock(client, target);
 };
 
-export const waitForLogs = (
-	client: PublicActions,
-	filter: Parameters<PublicActions["getLogs"]>[0],
-	minCount: number,
-) =>
-	vi.waitFor(
-		async () => {
-			const logs = await client.getLogs(filter);
-			if (logs.length < minCount) throw new Error("Wait!");
-			return logs;
-		},
-		{ timeout: 20000 },
-	);
-
 export const createActionQueue = (): Queue<ActionWithTimeout> => {
 	return new SqliteActionQueue(new Sqlite3(":memory:"));
 };
