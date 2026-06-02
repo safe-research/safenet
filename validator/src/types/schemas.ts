@@ -88,11 +88,19 @@ export const submissionConfigSchema = z.object({
 });
 
 export const sentinelConfigSchema = z.object({
+	...metricsConfigSchema.shape,
+	...watcherConfigSchema.shape,
+	...submissionConfigSchema.shape,
 	SENTINEL_ORACLE_ADDRESS: checkedAddressSchema,
+	SENTINEL_ORACLE_FEE_TOKEN: checkedAddressSchema,
 	SENTINEL_BLOCKLIST: emptyToDefault(jsonStringToValue(z.array(checkedAddressSchema)).optional(), []),
 	// Voting window in blocks. Controls the TTL for the preparing state and when finalize becomes eligible.
 	SENTINEL_VOTING_WINDOW: emptyToDefault(z.coerce.bigint().positive(), 12n),
 	STORAGE_FILE: emptyToDefault(z.string().optional()),
+	RPC_URL: z.url(),
+	PRIVATE_KEY: hexBytes32Schema,
+	CONSENSUS_ADDRESS: checkedAddressSchema,
+	CHAIN_ID: supportedChainsSchema,
 });
 
 export const validatorConfigSchema = z.object({

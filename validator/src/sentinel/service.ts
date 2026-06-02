@@ -4,7 +4,6 @@ import { SqliteTxStorage } from "../consensus/protocol/sqlite.js";
 import { GasFeeEstimator, TransactionManager } from "../consensus/protocol/transaction.js";
 import type { WatcherConfig } from "../shared/watcher.js";
 import type { ValidatorAccount } from "../types/account.js";
-import { formatError } from "../utils/errors.js";
 import type { Logger } from "../utils/logging.js";
 import type { Metrics } from "../utils/metrics.js";
 import type { Detector } from "./detector.js";
@@ -28,7 +27,6 @@ export class SentinelService {
 	#storage: SentinelStateStorage;
 	#protocol: SentinelProtocol;
 	#watcher: SentinelTransitionWatcher;
-	#handlerChain: Promise<unknown> = Promise.resolve();
 
 	constructor({
 		account,
@@ -77,13 +75,9 @@ export class SentinelService {
 				if (transition.id === "block_new") {
 					gasFeeEstimator.invalidate();
 					txManager.triggerPendingCheck(transition.block);
-					this.#handlerChain = this.#handlerChain
-						.then(() => this.#processBlock(transition.block))
-						.catch((err) => this.#logger.error("SentinelService: error processing block", { error: formatError(err) }));
+					this.#processBlock(transition.block);
 				} else {
-					this.#handlerChain = this.#handlerChain
-						.then(() => this.#processLog(transition))
-						.catch((err) => this.#logger.error("SentinelService: error processing log", { error: formatError(err) }));
+					this.#processLog(transition);
 				}
 			},
 		});
