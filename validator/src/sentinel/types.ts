@@ -3,13 +3,11 @@ import type { Address, Hex } from "viem";
 export type CommitApprove = {
 	id: "sentinel_commit_approve";
 	requestId: Hex;
-	bondAmount: bigint;
 };
 
 export type CommitDeny = {
 	id: "sentinel_commit_deny";
 	requestId: Hex;
-	bondAmount: bigint;
 };
 
 export type SentinelFinalize = {

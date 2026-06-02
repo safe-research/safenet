@@ -16,8 +16,8 @@ export const SENTINEL_COMMITTED_EVENT = parseAbiItem(
 export const SENTINEL_EVENTS = [SENTINEL_NEW_REQUEST_EVENT, ORACLE_RESULT_EVENT, SENTINEL_COMMITTED_EVENT] as const;
 
 export const SENTINEL_ORACLE_FUNCTIONS = parseAbi([
-	"function commitApprove(bytes32 requestId, uint256 bondAmount) external",
-	"function commitDeny(bytes32 requestId, uint256 bondAmount) external",
+	"function commitApprove(bytes32 requestId) external",
+	"function commitDeny(bytes32 requestId) external",
 	"function finalize(bytes32 requestId) external",
 	"function claim(bytes32 requestId) external",
 	"function FEE_TOKEN() external view returns (address)",
