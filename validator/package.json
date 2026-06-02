@@ -6,7 +6,7 @@
 		"build": "rimraf dist && tsc --project tsconfig.dist.json",
 		"check": "biome check && tsc",
 		"dev": "tsx src/validator.ts",
-		"dev:sentinel": "tsx src/sentinel-node.ts",
+		"dev:sentinel": "tsx src/sentinel.ts",
 		"cmd:derive-genesis": "tsx src/cmd/derive-genesis.ts",
 		"cmd:logs-reliability": "tsx src/cmd/logs-reliability.ts",
 		"cmd:trigger-genesis": "tsx src/cmd/trigger-genesis.ts",

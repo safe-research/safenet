@@ -4,5 +4,5 @@
 		"noEmit": false,
 		"outDir": "./dist"
 	},
-	"include": ["src/validator.ts"]
+	"include": ["src/validator.ts", "src/sentinel.ts"]
 }

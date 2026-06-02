@@ -91,9 +91,17 @@ const service = new SentinelService({
 	metrics: metrics.metrics,
 });
 
+let shuttingDown = false;
 const shutdown = async () => {
+	if (shuttingDown) return;
+	shuttingDown = true;
 	logger.notice("Shutting down sentinel service...");
-	await Promise.all([service.stop(), metrics.stop()]);
+	try {
+		await Promise.all([service.stop(), metrics.stop()]);
+		db.close();
+	} catch (error: unknown) {
+		logger.error("Error during shutdown.", { error: formatError(error) });
+	}
 	process.exit(0);
 };
 process.on("SIGINT", shutdown);
