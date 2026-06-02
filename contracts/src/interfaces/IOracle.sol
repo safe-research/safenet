@@ -34,5 +34,4 @@ interface IOracle {
      *      proposer and refunds to proposer on resolution when applicable.
      */
     function postRequest(bytes32 requestId, address proposer, address rewardToken, uint256 rewardAmount) external;
-
 }

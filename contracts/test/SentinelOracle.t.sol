@@ -225,7 +225,9 @@ contract SentinelOracleTest is Test {
         // Fee is refunded to proposer from slashed amount; arbitrator receives the remainder.
         assertEq(token.balanceOf(proposer), proposerBalBefore, "proposer balance fully restored");
         assertEq(
-            token.balanceOf(arbitrator), arbitratorBalBefore + BOND_TARGET - REQUEST_FEE, "deny bonds slashed to arbitrator"
+            token.balanceOf(arbitrator),
+            arbitratorBalBefore + BOND_TARGET - REQUEST_FEE,
+            "deny bonds slashed to arbitrator"
         );
 
         // Winning approve sentinel (sentinel1) gets bond back; fee was refunded to proposer so no fee reward.

@@ -13,7 +13,6 @@ contract MockOracle {
     function postRequest(bytes32, address, address, uint256) external {}
 }
 
-
 contract ConsensusTest is Test {
     using FROSTGroupId for FROSTGroupId.T;
     using SafeTransaction for SafeTransaction.T;

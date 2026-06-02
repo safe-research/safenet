@@ -16,5 +16,4 @@ contract AlwaysApproveOracle is IOracle {
     function postRequest(bytes32 requestId, address proposer, address, uint256) external {
         emit OracleResult(requestId, proposer, "", true);
     }
-
 }
