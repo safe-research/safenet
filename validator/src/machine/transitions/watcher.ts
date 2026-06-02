@@ -19,7 +19,12 @@ export const transitionWatcherStateSchema = z
 
 export type Config = Pick<ProtocolConfig, "coordinator" | "consensus" | "allowedOracles">;
 export type WatcherConfig = Prettify<
-	{ blockTimeOverride?: number } & Pick<
+	{
+		blockTimeOverride?: number;
+		// Block to start indexing from when there is no persisted indexing state (e.g. for genesis
+		// or recovery from a misconfiguration). Ignored once `lastIndexedBlock` has been persisted.
+		startFromBlock?: bigint;
+	} & Pick<
 		WatchParams<[]>,
 		| "maxReorgDepth"
 		| "blockPageSize"
@@ -117,7 +122,9 @@ export class OnchainTransitionWatcher {
 			throw new Error("chain missing block time configuration");
 		}
 
-		const lastIndexedBlock = (await this.getLastIndexedBlock()) ?? null;
+		// Persisted indexing state always takes precedence; the configured start block is only used
+		// for a fresh start, so a restart never rewinds or replays history.
+		const lastIndexedBlock = (await this.getLastIndexedBlock()) ?? this.#watcherConfig.startFromBlock ?? null;
 		this.#stop = await watchBlocksAndEvents({
 			logger: this.#logger,
 			client: this.#publicClient,
