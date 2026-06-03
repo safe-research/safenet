@@ -150,7 +150,7 @@ describe("integration", () => {
 			address: deploymentInfo.returns.consensus.value as Address,
 			abi: parseAbi([
 				"function proposeTransaction((uint256 chainId, address safe, address to, uint256 value, bytes data, uint8 operation, uint256 safeTxGas, uint256 baseGas, uint256 gasPrice, address gasToken, address refundReceiver, uint256 nonce) transaction) external returns (bytes32 safeTxHash)",
-				"function proposeOracleTransaction(address oracle, address rewardToken, uint256 rewardAmount, (uint256 chainId, address safe, address to, uint256 value, bytes data, uint8 operation, uint256 safeTxGas, uint256 baseGas, uint256 gasPrice, address gasToken, address refundReceiver, uint256 nonce) transaction) external returns (bytes32 safeTxHash)",
+				"function proposeOracleTransaction(address oracle, bytes oracleData, (uint256 chainId, address safe, address to, uint256 value, bytes data, uint8 operation, uint256 safeTxGas, uint256 baseGas, uint256 gasPrice, address gasToken, address refundReceiver, uint256 nonce) transaction) external returns (bytes32 safeTxHash)",
 				"function getTransactionAttestation(uint64 epoch, (uint256 chainId, address safe, address to, uint256 value, bytes data, uint8 operation, uint256 safeTxGas, uint256 baseGas, uint256 gasPrice, address gasToken, address refundReceiver, uint256 nonce) transaction) external view returns (((uint256 x, uint256 y) r, uint256 z) signature)",
 				"function getOracleTransactionAttestationByHash(uint64 epoch, address oracle, bytes32 safeTxHash) external view returns (((uint256 x, uint256 y) r, uint256 z) signature)",
 				"function getActiveEpoch() external view returns (uint64 epoch, bytes32 group)",
@@ -584,7 +584,7 @@ describe("integration", () => {
 		await testClient.writeContract({
 			...consensus,
 			functionName: "proposeOracleTransaction",
-			args: [oracleAddress, zeroAddress, 0n, transaction],
+			args: [oracleAddress, "0x", transaction],
 		});
 
 		// Wait until the end of the epoch

@@ -344,12 +344,10 @@ contract Consensus is IConsensus, IERC165, IFROSTCoordinatorCallback {
     /**
      * @inheritdoc IConsensus
      */
-    function proposeOracleTransaction(
-        address oracle,
-        address rewardToken,
-        uint256 rewardAmount,
-        SafeTransaction.T memory transaction
-    ) public returns (bytes32 safeTxHash) {
+    function proposeOracleTransaction(address oracle, bytes calldata oracleData, SafeTransaction.T memory transaction)
+        public
+        returns (bytes32 safeTxHash)
+    {
         Epochs memory epochs = _processRollover();
         safeTxHash = transaction.hash();
         bytes32 message = domainSeparator().oracleTransactionProposal(epochs.active, oracle, safeTxHash);
@@ -358,7 +356,7 @@ contract Consensus is IConsensus, IERC165, IFROSTCoordinatorCallback {
             safeTxHash, transaction.chainId, transaction.safe, epochs.active, oracle, transaction
         );
         _COORDINATOR.sign($groups[epochs.active], message);
-        IOracle(oracle).postRequest(message, msg.sender, rewardToken, rewardAmount);
+        IOracle(oracle).postRequest(message, msg.sender, oracleData);
     }
 
     /**

@@ -10,7 +10,7 @@ import {FROSTSignatureId} from "@/libraries/FROSTSignatureId.sol";
 import {SafeTransaction} from "@/libraries/SafeTransaction.sol";
 
 contract MockOracle {
-    function postRequest(bytes32, address, address, uint256) external {}
+    function postRequest(bytes32, address, bytes calldata) external {}
 }
 
 contract ConsensusTest is Test {
@@ -150,7 +150,7 @@ contract ConsensusTest is Test {
         vm.expectEmit(true, true, true, true);
         emit IConsensus.OracleTransactionProposed(safeTxHash, block.chainid, SAFE, 0, address(oracle), transaction);
 
-        consensus.proposeOracleTransaction(address(oracle), address(0), 0, transaction);
+        consensus.proposeOracleTransaction(address(oracle), "", transaction);
     }
 
     function test_ProposeOracleTransaction_AlreadyAttested_Reverts() public {
@@ -164,7 +164,7 @@ contract ConsensusTest is Test {
 
         // Proposing the same (oracle, transaction) should now revert since it is already attested.
         vm.expectRevert(Consensus.AlreadyAttested.selector);
-        consensus.proposeOracleTransaction(address(oracle), address(0), 0, transaction);
+        consensus.proposeOracleTransaction(address(oracle), "", transaction);
     }
 
     function test_AttestOracleTransaction_StoresAndEmits() public {

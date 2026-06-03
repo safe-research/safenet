@@ -65,7 +65,7 @@ contract SimpleOracle is IOracle {
     /**
      * @inheritdoc IOracle
      */
-    function postRequest(bytes32 requestId, address, address, uint256) external {
+    function postRequest(bytes32 requestId, address, bytes calldata) external {
         require($proposers[requestId] == address(0), RequestAlreadyPending());
         $proposers[requestId] = msg.sender;
     }

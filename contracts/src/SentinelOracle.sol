@@ -61,8 +61,6 @@ contract SentinelOracle is IOracle {
     error InvalidAddress();
     error ZeroFee();
     error SentinelNotActive();
-    error InvalidRewardToken();
-    error InvalidRewardAmount();
 
     // ============================================================
     // MODIFIERS
@@ -107,13 +105,8 @@ contract SentinelOracle is IOracle {
     // IOracle IMPLEMENTATION
     // ============================================================
 
-    function postRequest(bytes32 requestId, address proposer, address rewardToken, uint256 rewardAmount)
-        external
-        override(IOracle)
-    {
+    function postRequest(bytes32 requestId, address proposer, bytes calldata) external override(IOracle) {
         require(msg.sender == CONSENSUS, NotConsensus());
-        require(rewardToken == address(FEE_TOKEN), InvalidRewardToken());
-        require(rewardAmount == REQUEST_FEE, InvalidRewardAmount());
         uint256 fee = REQUEST_FEE;
         uint256 bondTarget = fee * $bondConfig.currentMultiplier();
         uint256 deadline = block.number + VOTING_WINDOW;

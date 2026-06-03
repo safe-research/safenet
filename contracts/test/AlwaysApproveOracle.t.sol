@@ -21,14 +21,14 @@ contract AlwaysApproveOracleTest is Test {
         emit IOracle.OracleResult(REQUEST_ID, requester, "", true);
 
         vm.prank(requester);
-        oracle.postRequest(REQUEST_ID, requester, address(0), 0);
+        oracle.postRequest(REQUEST_ID, requester, "");
     }
 
     function test_PostRequest_EmitsApprovedTrue() public {
         vm.recordLogs();
 
         vm.prank(requester);
-        oracle.postRequest(REQUEST_ID, requester, address(0), 0);
+        oracle.postRequest(REQUEST_ID, requester, "");
 
         Vm.Log[] memory logs = vm.getRecordedLogs();
         assertEq(logs.length, 1);
@@ -50,6 +50,6 @@ contract AlwaysApproveOracleTest is Test {
         emit IOracle.OracleResult(REQUEST_ID, proposer, "", true);
 
         vm.prank(caller);
-        oracle.postRequest(REQUEST_ID, proposer, address(0), 0);
+        oracle.postRequest(REQUEST_ID, proposer, "");
     }
 }
