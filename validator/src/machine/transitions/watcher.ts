@@ -117,18 +117,22 @@ export class OnchainTransitionWatcher {
 			throw new Error("already started");
 		}
 
-		const blockTime = this.#watcherConfig.blockTimeOverride ?? this.#publicClient.chain?.blockTime;
+		// `blockTimeOverride` and `startFromBlock` are local-only config keys consumed here; the rest
+		// are forwarded to the watcher, so we destructure them out to avoid leaking unused options.
+		const { blockTimeOverride, startFromBlock, ...watchParams } = this.#watcherConfig;
+
+		const blockTime = blockTimeOverride ?? this.#publicClient.chain?.blockTime;
 		if (blockTime === undefined) {
 			throw new Error("chain missing block time configuration");
 		}
 
 		// Persisted indexing state always takes precedence; the configured start block is only used
 		// for a fresh start, so a restart never rewinds or replays history.
-		const lastIndexedBlock = (await this.getLastIndexedBlock()) ?? this.#watcherConfig.startFromBlock ?? null;
+		const lastIndexedBlock = (await this.getLastIndexedBlock()) ?? startFromBlock ?? null;
 		this.#stop = await watchBlocksAndEvents({
 			logger: this.#logger,
 			client: this.#publicClient,
-			...this.#watcherConfig,
+			...watchParams,
 			lastIndexedBlock,
 			blockTime,
 			// Note: allowedOracles must only emit OracleResult events and must never emit events
