@@ -2,9 +2,13 @@
 pragma solidity ^0.8.30;
 
 import {Script, console} from "@forge-std/Script.sol";
+import {DeterministicDeployment} from "@script/util/DeterministicDeployment.sol";
+import {getFactory} from "@script/util/GetFactory.sol";
 import {SentinelOracle} from "@/SentinelOracle.sol";
 
 contract DeploySentinelOracleScript is Script {
+    using DeterministicDeployment for DeterministicDeployment.Factory;
+
     function run() public returns (address sentinelOracle) {
         address arbitrator = vm.envAddress("SENTINEL_ARBITRATOR");
         address consensus = vm.envAddress("SENTINEL_CONSENSUS");
@@ -14,12 +18,14 @@ contract DeploySentinelOracleScript is Script {
         uint256 governanceDelay = vm.envUint("SENTINEL_GOVERNANCE_DELAY");
         uint256 bondMultiplier = vm.envUint("SENTINEL_BOND_MULTIPLIER");
 
+        DeterministicDeployment.Factory factory = getFactory(vm);
+
         vm.startBroadcast();
 
-        sentinelOracle = address(
-            new SentinelOracle(
-                arbitrator, consensus, feeToken, requestFee, votingWindow, governanceDelay, bondMultiplier
-            )
+        sentinelOracle = factory.deployWithArgs(
+            bytes32(0),
+            type(SentinelOracle).creationCode,
+            abi.encode(arbitrator, consensus, feeToken, requestFee, votingWindow, governanceDelay, bondMultiplier)
         );
 
         vm.stopBroadcast();
