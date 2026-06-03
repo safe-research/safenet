@@ -151,17 +151,21 @@ export class BlockWatcher {
 			}
 		}
 
-		// Queue block updates for the recent blocks.
+		// Queue block updates for the recent blocks. When starting from a configured block, only
+		// emit updates for blocks at or after it; earlier blocks (which can occur when `startBlock`
+		// falls within the reorg window) are still retained in `#blocks` for reorg detection.
 		this.#queue.push(
-			...this.#blocks.map(
-				(block) =>
-					({
-						type: "watcher_update_new_block",
-						blockNumber: block.number,
-						blockHash: block.hash,
-						logsBloom: block.logsBloom,
-					}) as const,
-			),
+			...this.#blocks
+				.filter((block) => startBlock === null || block.number >= startBlock)
+				.map(
+					(block) =>
+						({
+							type: "watcher_update_new_block",
+							blockNumber: block.number,
+							blockHash: block.hash,
+							logsBloom: block.logsBloom,
+						}) as const,
+				),
 		);
 	}
 

@@ -185,6 +185,18 @@ describe("BlockWatcher", () => {
 			expect(blocks.queued()).toStrictEqual([newBlockUpdate({ number: 999n }), newBlockUpdate({ number: 1000n })]);
 		});
 
+		it("only emits blocks at or after the start block within the reorg window", async () => {
+			const { create, mocks } = setupCreate({ lastIndexedBlock: null, startBlock: 1000n });
+
+			mocks.getBlock.mockReturnValueOnce(block({ number: 1000n }));
+			mocks.getBlock.mockReturnValueOnce(block({ number: 999n }));
+
+			const blocks = await create();
+
+			// Block 999 is retained for reorg detection but not emitted; only 1000 (>= startBlock) is.
+			expect(blocks.queued()).toStrictEqual([newBlockUpdate({ number: 1000n })]);
+		});
+
 		it("should support no reorg protection", async () => {
 			const { create, mocks } = setupCreate({ lastIndexedBlock: 900n, maxReorgDepth: 0 });
 
