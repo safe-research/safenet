@@ -15,12 +15,10 @@ const sentinelActionSchema = z.discriminatedUnion("id", [
 	z.object({
 		id: z.literal("sentinel_commit_approve"),
 		requestId: hexDataSchema,
-		bondAmount: coercedBigIntSchema,
 	}),
 	z.object({
 		id: z.literal("sentinel_commit_deny"),
 		requestId: hexDataSchema,
-		bondAmount: coercedBigIntSchema,
 	}),
 	z.object({ id: z.literal("sentinel_finalize"), requestId: hexDataSchema }),
 	z.object({ id: z.literal("sentinel_claim"), requestId: hexDataSchema }),
@@ -71,7 +69,7 @@ export class SentinelProtocol extends BaseActionQueue<SentinelAction> {
 					data: encodeFunctionData({
 						abi: SENTINEL_ORACLE_FUNCTIONS,
 						functionName: "commitApprove",
-						args: [action.requestId, action.bondAmount],
+						args: [action.requestId],
 					}),
 					value: 0n,
 				});
@@ -81,7 +79,7 @@ export class SentinelProtocol extends BaseActionQueue<SentinelAction> {
 					data: encodeFunctionData({
 						abi: SENTINEL_ORACLE_FUNCTIONS,
 						functionName: "commitDeny",
-						args: [action.requestId, action.bondAmount],
+						args: [action.requestId],
 					}),
 					value: 0n,
 				});

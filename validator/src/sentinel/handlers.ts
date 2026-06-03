@@ -47,8 +47,8 @@ export function handleNewRequest(
 		actions: [
 			{ id: "sentinel_approve_token", bondAmount: transition.bondTarget },
 			approve
-				? { id: "sentinel_commit_approve", requestId: transition.requestId, bondAmount: transition.bondTarget }
-				: { id: "sentinel_commit_deny", requestId: transition.requestId, bondAmount: transition.bondTarget },
+				? { id: "sentinel_commit_approve", requestId: transition.requestId }
+				: { id: "sentinel_commit_deny", requestId: transition.requestId },
 		],
 	};
 }
