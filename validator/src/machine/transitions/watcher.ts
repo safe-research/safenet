@@ -126,14 +126,16 @@ export class OnchainTransitionWatcher {
 			throw new Error("chain missing block time configuration");
 		}
 
-		// Persisted indexing state always takes precedence; the configured start block is only used
-		// for a fresh start, so a restart never rewinds or replays history.
-		const lastIndexedBlock = (await this.getLastIndexedBlock()) ?? startFromBlock ?? null;
+		// The configured start block only applies on a fresh start (no persisted indexing state):
+		// persisted state always takes precedence, so a restart never rewinds or replays history.
+		const lastIndexedBlock = (await this.getLastIndexedBlock()) ?? null;
+		const startBlock = lastIndexedBlock === null ? (startFromBlock ?? null) : null;
 		this.#stop = await watchBlocksAndEvents({
 			logger: this.#logger,
 			client: this.#publicClient,
 			...watchParams,
 			lastIndexedBlock,
+			startBlock,
 			blockTime,
 			// Note: allowedOracles must only emit OracleResult events and must never emit events
 			// from the coordinator or consensus ABIs, as those event handlers do not filter by

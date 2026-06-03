@@ -39,6 +39,9 @@ export type CreateParams = Prettify<
 	{
 		client: Client;
 		lastIndexedBlock: bigint | null;
+		// Block to begin a fresh index from when there is no `lastIndexedBlock`. Unlike resuming,
+		// this back-fills history via a warp without emitting a (fake) reorg.
+		startBlock?: bigint | null;
 	} & Settings &
 		Partial<Options>
 >;
@@ -89,7 +92,7 @@ export class BlockWatcher {
 		this.#queue = [];
 	}
 
-	async #initialize(lastIndexedBlock: bigint | null): Promise<void> {
+	async #initialize(lastIndexedBlock: bigint | null, startBlock: bigint | null): Promise<void> {
 		const latest = await this.#client.getBlock({ blockTag: "latest" });
 		const safe = maxBigInt(latest.number - BigInt(this.#config.maxReorgDepth), 0n);
 
@@ -112,6 +115,12 @@ export class BlockWatcher {
 			if (uncle <= safe) {
 				this.#queue.push({ type: "watcher_update_warp_to_block", fromBlock: uncle, toBlock: safe });
 			}
+		} else if (startBlock !== null && startBlock <= safe) {
+			// Fresh start from a configured block: warp to the reorg-safe block to back-fill history.
+			// Unlike resuming, there is no previously indexed state, so we must NOT emit a (fake)
+			// reorg here. If `startBlock` falls within the reorg window (i.e. `> safe`), the
+			// recent-blocks loop below already covers it.
+			this.#queue.push({ type: "watcher_update_warp_to_block", fromBlock: startBlock, toBlock: safe });
 		}
 
 		// Now query recent blocks, we only need to keep up to `maxReorgDepth` of them for reorg
@@ -325,9 +334,9 @@ export class BlockWatcher {
 	/**
 	 * Create a new block watcher with the specified paramters.
 	 */
-	static async create({ client, lastIndexedBlock, ...config }: CreateParams) {
+	static async create({ client, lastIndexedBlock, startBlock = null, ...config }: CreateParams) {
 		const self = new BlockWatcher(client, withDefaults(config, DEFAULT_OPTIONS));
-		await self.#initialize(lastIndexedBlock);
+		await self.#initialize(lastIndexedBlock, startBlock);
 		return self;
 	}
 }

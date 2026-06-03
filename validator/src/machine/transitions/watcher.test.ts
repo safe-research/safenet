@@ -33,29 +33,34 @@ const createWatcher = (watcherConfig: WatcherConfig) => {
 // `blockTimeOverride` avoids needing a chain block time on the stubbed client.
 const baseConfig: WatcherConfig = { maxReorgDepth: 5, blockTimeOverride: 5000 };
 
-const startedWithBlock = () => mockWatch.mock.calls.at(-1)?.[0].lastIndexedBlock;
+const startedWith = () => {
+	const params = mockWatch.mock.calls.at(-1)?.[0];
+	return { lastIndexedBlock: params?.lastIndexedBlock, startBlock: params?.startBlock };
+};
 
 describe("OnchainTransitionWatcher initial block resolution", () => {
 	beforeEach(() => {
 		mockWatch.mockClear();
 	});
 
-	it("uses the configured start block when there is no persisted state", async () => {
+	it("forwards the configured start block when there is no persisted state", async () => {
 		const watcher = createWatcher({ ...baseConfig, startFromBlock: 456n });
 		await watcher.start();
-		expect(startedWithBlock()).toBe(456n);
+		// The start block is passed separately (not as `lastIndexedBlock`) so the watcher back-fills
+		// via a warp instead of emitting a spurious reorg.
+		expect(startedWith()).toEqual({ lastIndexedBlock: null, startBlock: 456n });
 	});
 
 	it("prefers persisted indexing state over the configured start block", async () => {
 		const watcher = createWatcher({ ...baseConfig, startFromBlock: 456n });
 		watcher.updateLastIndexedBlock(123n);
 		await watcher.start();
-		expect(startedWithBlock()).toBe(123n);
+		expect(startedWith()).toEqual({ lastIndexedBlock: 123n, startBlock: null });
 	});
 
 	it("defaults to null when neither persisted state nor a start block is set", async () => {
 		const watcher = createWatcher(baseConfig);
 		await watcher.start();
-		expect(startedWithBlock()).toBeNull();
+		expect(startedWith()).toEqual({ lastIndexedBlock: null, startBlock: null });
 	});
 });

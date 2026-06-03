@@ -10,7 +10,11 @@ const CONFIG = {
 	blockRetryDelays: [200, 100, 50],
 };
 
-const setupCreate = (config: { lastIndexedBlock: bigint | null; maxReorgDepth?: number }) => {
+const setupCreate = (config: {
+	lastIndexedBlock: bigint | null;
+	startBlock?: bigint | null;
+	maxReorgDepth?: number;
+}) => {
 	const getBlock = vi.fn();
 	const now = vi.fn();
 	const sleep = vi.fn();
@@ -145,6 +149,40 @@ describe("BlockWatcher", () => {
 				newBlockUpdate({ number: 999n }),
 				newBlockUpdate({ number: 1000n }),
 			]);
+		});
+
+		it("should support starting from a configured block without a fake reorg", async () => {
+			const { create, mocks } = setupCreate({ lastIndexedBlock: null, startBlock: 900n });
+
+			mocks.getBlock.mockReturnValueOnce(block({ number: 1000n }));
+			mocks.getBlock.mockReturnValueOnce(block({ number: 999n }));
+
+			const blocks = await create();
+			expect(mocks.getBlock.mock.calls).toEqual([[{ blockTag: "latest" }], [{ blockNumber: 999n }]]);
+
+			// Back-fills from the start block via a warp, with no uncle (reorg) update.
+			expect(blocks.queued()).toStrictEqual([
+				{
+					type: "watcher_update_warp_to_block",
+					fromBlock: 900n,
+					toBlock: 998n,
+				},
+				newBlockUpdate({ number: 999n }),
+				newBlockUpdate({ number: 1000n }),
+			]);
+		});
+
+		it("should not warp when the start block is within the reorg window", async () => {
+			const { create, mocks } = setupCreate({ lastIndexedBlock: null, startBlock: 999n });
+
+			mocks.getBlock.mockReturnValueOnce(block({ number: 1000n }));
+			mocks.getBlock.mockReturnValueOnce(block({ number: 999n }));
+
+			const blocks = await create();
+
+			// The start block (999) is beyond the reorg-safe block (998), so the recent-blocks loop
+			// already covers it and no warp is queued.
+			expect(blocks.queued()).toStrictEqual([newBlockUpdate({ number: 999n }), newBlockUpdate({ number: 1000n })]);
 		});
 
 		it("should support no reorg protection", async () => {
