@@ -105,13 +105,13 @@ contract SentinelOracle is IOracle {
     // IOracle IMPLEMENTATION
     // ============================================================
 
-    function postRequest(bytes32 requestId) external override(IOracle) {
+    function postRequest(bytes32 requestId, address proposer, bytes calldata) external override(IOracle) {
         require(msg.sender == CONSENSUS, NotConsensus());
         uint256 fee = REQUEST_FEE;
         uint256 bondTarget = fee * $bondConfig.currentMultiplier();
         uint256 deadline = block.number + VOTING_WINDOW;
-        $requests.create(requestId, msg.sender, fee, bondTarget, deadline);
-        FEE_TOKEN.safeTransferFrom(msg.sender, address(this), fee);
+        $requests.create(requestId, proposer, fee, bondTarget, deadline);
+        FEE_TOKEN.safeTransferFrom(proposer, address(this), fee);
     }
 
     // ============================================================
@@ -172,7 +172,10 @@ contract SentinelOracle is IOracle {
         address proposer = req.proposer;
         uint256 slashed = req.resolveDispute(approveWins);
         SentinelOracleRequest.State outcome = req.state;
-        FEE_TOKEN.safeTransfer(ARBITRATOR, slashed);
+        uint256 refundFee = req.fee;
+        req.fee = 0;
+        FEE_TOKEN.safeTransfer(proposer, refundFee);
+        FEE_TOKEN.safeTransfer(ARBITRATOR, slashed - refundFee);
         emit DisputeResolved(requestId, outcome, slashed);
         emit OracleResult(requestId, proposer, abi.encode(SentinelOracleRequest.ResolveReason.ARBITRATION), approveWins);
     }

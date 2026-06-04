@@ -29,6 +29,7 @@ contract SentinelOracleTest is Test {
 
     address public arbitrator;
     address public consensus;
+    address public proposer;
     address public sentinel1;
     address public sentinel2;
     address public sentinel3;
@@ -40,6 +41,7 @@ contract SentinelOracleTest is Test {
     function setUp() public {
         arbitrator = vm.createWallet("arbitrator").addr;
         consensus = vm.createWallet("consensus").addr;
+        proposer = vm.createWallet("proposer").addr;
         sentinel1 = vm.createWallet("sentinel1").addr;
         sentinel2 = vm.createWallet("sentinel2").addr;
         sentinel3 = vm.createWallet("sentinel3").addr;
@@ -50,13 +52,13 @@ contract SentinelOracleTest is Test {
         );
 
         // Fund accounts
-        token.mint(consensus, 100_000);
+        token.mint(proposer, 100_000);
         token.mint(sentinel1, 100_000);
         token.mint(sentinel2, 100_000);
         token.mint(sentinel3, 100_000);
 
         // Approve oracle for fee pulls
-        vm.prank(consensus);
+        vm.prank(proposer);
         token.approve(address(oracle), type(uint256).max);
         vm.prank(sentinel1);
         token.approve(address(oracle), type(uint256).max);
@@ -81,7 +83,7 @@ contract SentinelOracleTest is Test {
 
     function _postRequest() internal {
         vm.prank(consensus);
-        oracle.postRequest(REQUEST_ID);
+        oracle.postRequest(REQUEST_ID, proposer, "");
     }
 
     function _advancePastDeadline() internal {
@@ -103,17 +105,17 @@ contract SentinelOracleTest is Test {
 
         _advancePastDeadline();
 
-        uint256 consensusBalBefore = token.balanceOf(consensus);
+        uint256 proposerBalBefore = token.balanceOf(proposer);
 
         vm.expectEmit(true, true, false, true);
         emit IOracle.OracleResult(
-            REQUEST_ID, consensus, abi.encode(SentinelOracleRequest.ResolveReason.UNANIMOUS_APPROVE), true
+            REQUEST_ID, proposer, abi.encode(SentinelOracleRequest.ResolveReason.UNANIMOUS_APPROVE), true
         );
 
         oracle.finalize(REQUEST_ID);
 
-        // Consensus's fee was NOT refunded (it's distributed to sentinels).
-        assertEq(token.balanceOf(consensus), consensusBalBefore, "consensus should not receive fee on approve");
+        // Proposer's fee was NOT refunded (it's distributed to sentinels).
+        assertEq(token.balanceOf(proposer), proposerBalBefore, "proposer should not receive fee on approve");
 
         SentinelOracleRequest.Request memory req = oracle.getRequest(REQUEST_ID);
         assertEq(uint256(req.state), uint256(SentinelOracleRequest.State.RESOLVED_APPROVED));
@@ -152,7 +154,7 @@ contract SentinelOracleTest is Test {
 
         vm.expectEmit(true, true, false, true);
         emit IOracle.OracleResult(
-            REQUEST_ID, consensus, abi.encode(SentinelOracleRequest.ResolveReason.UNANIMOUS_DENY), false
+            REQUEST_ID, proposer, abi.encode(SentinelOracleRequest.ResolveReason.UNANIMOUS_DENY), false
         );
 
         oracle.finalize(REQUEST_ID);
@@ -176,12 +178,12 @@ contract SentinelOracleTest is Test {
     // ============================================================
 
     function test_NoCommitments_FeeRefunded() public {
+        uint256 proposerBalBefore = token.balanceOf(proposer);
         _postRequest();
         _advancePastDeadline();
 
-        uint256 consensusBalBefore = token.balanceOf(consensus);
         oracle.finalize(REQUEST_ID);
-        assertEq(token.balanceOf(consensus), consensusBalBefore + REQUEST_FEE);
+        assertEq(token.balanceOf(proposer), proposerBalBefore);
     }
 
     // ============================================================
@@ -189,6 +191,7 @@ contract SentinelOracleTest is Test {
     // ============================================================
 
     function test_Conflict_SetsStateFrozen() public {
+        uint256 proposerBalBefore = token.balanceOf(proposer);
         _postRequest();
 
         // sentinel1 approves, sentinel2 denies — both sides have votes → conflict
@@ -207,28 +210,31 @@ contract SentinelOracleTest is Test {
         // ---- Phase 2: arbitration ----
 
         // Arbitrator resolves: approve wins.
-        uint256 consensusBalBefore = token.balanceOf(consensus);
         uint256 arbitratorBalBefore = token.balanceOf(arbitrator);
 
         vm.expectEmit(true, false, false, true);
         emit SentinelOracle.DisputeResolved(REQUEST_ID, SentinelOracleRequest.State.RESOLVED_APPROVED, BOND_TARGET);
         vm.expectEmit(true, true, false, true);
         emit IOracle.OracleResult(
-            REQUEST_ID, consensus, abi.encode(SentinelOracleRequest.ResolveReason.ARBITRATION), true
+            REQUEST_ID, proposer, abi.encode(SentinelOracleRequest.ResolveReason.ARBITRATION), true
         );
 
         vm.prank(arbitrator);
         oracle.resolveDispute(REQUEST_ID, true);
 
-        // Fee stays in contract for winners; ARBITRATOR receives all slashed bonds.
-        assertEq(token.balanceOf(consensus), consensusBalBefore, "consensus balance unchanged");
-        assertEq(token.balanceOf(arbitrator), arbitratorBalBefore + BOND_TARGET, "deny bonds slashed to arbitrator");
+        // Fee is refunded to proposer from slashed amount; arbitrator receives the remainder.
+        assertEq(token.balanceOf(proposer), proposerBalBefore, "proposer balance fully restored");
+        assertEq(
+            token.balanceOf(arbitrator),
+            arbitratorBalBefore + BOND_TARGET - REQUEST_FEE,
+            "deny bonds slashed to arbitrator"
+        );
 
-        // Winning approve sentinel (sentinel1) gets bond back plus full fee reward (sole winner).
+        // Winning approve sentinel (sentinel1) gets bond back; fee was refunded to proposer so no fee reward.
         uint256 s1Before = token.balanceOf(sentinel1);
         vm.prank(sentinel1);
         oracle.claim(REQUEST_ID);
-        assertEq(token.balanceOf(sentinel1), s1Before + BOND_TARGET + REQUEST_FEE, "sentinel1 bond and fee returned");
+        assertEq(token.balanceOf(sentinel1), s1Before + BOND_TARGET, "sentinel1 bond returned");
 
         // Losing deny sentinel (sentinel2) gets nothing - bond already slashed.
         uint256 s2Before = token.balanceOf(sentinel2);

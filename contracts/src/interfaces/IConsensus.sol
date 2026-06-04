@@ -301,10 +301,11 @@ interface IConsensus {
     /**
      * @notice Proposes a transaction for oracle-checked validator approval.
      * @param oracle Address of the oracle contract to use for evaluation.
+     * @param oracleData Arbitrary oracle-specific data passed to the oracle; not part of the signed message hash.
      * @param transaction The Safe transaction to propose.
      * @return safeTxHash The Safe transaction hash.
      */
-    function proposeOracleTransaction(address oracle, SafeTransaction.T memory transaction)
+    function proposeOracleTransaction(address oracle, bytes calldata oracleData, SafeTransaction.T memory transaction)
         external
         returns (bytes32 safeTxHash);
 
