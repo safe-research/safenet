@@ -25,7 +25,7 @@ interface IOracle {
 
     /**
      * @notice Post a signing request to the oracle for evaluation.
-     * @param requestId The EIP-712 hash of the OracleTransactionProposal message.
+     * @param requestId A unique id that allows fetching additional information related to the request.
      * @param proposer The address that offered the reward and to whom any refund is owed.
      * @param oracleData Arbitrary oracle-specific data passed by the proposer; not part of the
      *                   signed message hash. The oracle may decode this however it sees fit.
