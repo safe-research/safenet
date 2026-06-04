@@ -160,7 +160,9 @@ export class ValidatorService {
 	}
 
 	async stop() {
+		this.#logger.debug("Stopping validator service ...");
 		await this.#watcher.stop();
+		this.#logger.notice("Validator service stopped");
 	}
 }
 
