@@ -63,7 +63,6 @@ export class SentinelService {
 			logger,
 		});
 		this.#protocol = new SentinelProtocol(config.oracle, config.feeToken, actionQueue, txManager, logger);
-
 		this.#watcher = new SentinelTransitionWatcher({
 			database,
 			publicClient,
@@ -111,6 +110,7 @@ export class SentinelService {
 	}
 
 	#handleLog(transition: SentinelOracleTransition): SentinelStateDiff[] {
+		this.#logger.debug(`Handle event ${transition.id}`, { transition });
 		switch (transition.id) {
 			case "event_oracle_transaction_proposed": {
 				return [handleOracleTransactionProposed(transition, this.#config, this.#detector)];

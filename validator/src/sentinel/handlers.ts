@@ -21,11 +21,22 @@ export function handleOracleTransactionProposed(
 
 	const requestId = oracleTxProposalHash({
 		domain: { chain: config.chainId, consensus: config.consensus },
-		proposal: { epoch: transition.epoch, oracle: transition.oracle, safeTxHash: transition.safeTxHash },
+		proposal: {
+			epoch: transition.epoch,
+			oracle: transition.oracle,
+			safeTxHash: transition.safeTxHash,
+		},
 	});
 	const approve = detector(transition.transaction);
 	return {
-		request: [requestId, { deadline: transition.block + config.votingWindow, status: "preparing", approve }],
+		request: [
+			requestId,
+			{
+				deadline: transition.block + config.votingWindow,
+				status: "preparing",
+				approve,
+			},
+		],
 	};
 }
 
