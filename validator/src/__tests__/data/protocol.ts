@@ -1,7 +1,7 @@
 import { type Address, ethAddress, type Hex, zeroAddress } from "viem";
 import { entryPoint06Address, entryPoint07Address } from "viem/account-abstraction";
 import { BaseProtocol, type SubmittedAction } from "../../consensus/protocol/base.js";
-import type { EthTransactionData } from "../../consensus/protocol/onchain.js";
+import type { EthTransactionData } from "../../consensus/protocol/transaction.js";
 import type {
 	AttestTransaction,
 	Complain,
@@ -240,7 +240,7 @@ export const TEST_ACTIONS: [ProtocolAction, keyof TestProtocol, EthTransactionDa
 		{
 			to: TEST_COORDINATOR,
 			value: 0n,
-			data: "0x0b2b35375afe0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000001",
+			data: "0x2f559b6d5afe0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000001",
 			gas: 300_000n,
 		},
 	],
@@ -255,7 +255,7 @@ export const TEST_ACTIONS: [ProtocolAction, keyof TestProtocol, EthTransactionDa
 		{
 			to: TEST_COORDINATOR,
 			value: 0n,
-			data: "0x01b443335afe000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000200000000000000000000000000000000000000000000000000005afe5afe5afe",
+			data: "0x53a8081a5afe000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000200000000000000000000000000000000000000000000000000005afe5afe5afe",
 			gas: 300_000n,
 		},
 	],

@@ -29,7 +29,9 @@ export const hexDataSchema = z
 
 export const hexBytes32Schema = hexDataSchema.refine((bytes) => size(bytes) === 32, "Value is not 32 bytes long");
 
-const supportedChainsSchema = z.coerce.number().pipe(z.union(supportedChains.map((chain) => z.literal(chain.id))));
+export const supportedChainsSchema = z.coerce
+	.number()
+	.pipe(z.union(supportedChains.map((chain) => z.literal(chain.id))));
 
 const jsonStringToValue = <V extends z.ZodTypeAny>(valueSchema: V) =>
 	z.preprocess((val) => (typeof val === "string" ? JSON.parse(val) : val), valueSchema);
@@ -64,10 +66,48 @@ const emptyToDefault = <T>(schema: ZodType<T>, defaultVal?: unknown): ZodType<T>
 		return val;
 	}, schema);
 
-export const validatorConfigSchema = z.object({
+export const metricsConfigSchema = z.object({
 	LOG_LEVEL: logLevelSchema.optional(),
 	METRICS_HOST: emptyToDefault(z.string().optional()),
 	METRICS_PORT: portSchema,
+});
+
+export const watcherConfigSchema = z.object({
+	BLOCK_TIME_OVERRIDE: emptyToDefault(z.coerce.number().int().optional()),
+	MAX_REORG_DEPTH: emptyToDefault(z.coerce.number().int().optional()),
+	START_FROM_BLOCK: emptyToDefault(z.coerce.bigint().gte(0n).optional()),
+	BLOCK_PAGE_SIZE: emptyToDefault(z.coerce.number().int().optional()),
+	BLOCK_ALL_LOGS_QUERY_RETRY_COUNT: emptyToDefault(z.coerce.number().int().optional()),
+	BLOCK_SINGLE_QUERY_RETRY_COUNT: emptyToDefault(z.coerce.number().int().optional()),
+	MAX_LOGS_PER_QUERY: emptyToDefault(z.coerce.number().int().optional()),
+});
+
+export const submissionConfigSchema = z.object({
+	BASE_FEE_MULTIPLIER: emptyToDefault(z.coerce.number().optional()),
+	PRIORITY_FEE_PER_GAS: emptyToDefault(z.coerce.bigint().optional()),
+	PRIORITY_FEE_CAP_PERCENTAGE: emptyToDefault(z.coerce.number().optional()),
+});
+
+export const sentinelConfigSchema = z.object({
+	...metricsConfigSchema.shape,
+	...watcherConfigSchema.shape,
+	...submissionConfigSchema.shape,
+	SENTINEL_ORACLE_ADDRESS: checkedAddressSchema,
+	SENTINEL_ORACLE_FEE_TOKEN: checkedAddressSchema,
+	SENTINEL_BLOCKLIST: emptyToDefault(jsonStringToValue(z.array(checkedAddressSchema)).optional(), []),
+	// Voting window in blocks. Controls the TTL for the preparing state and when finalize becomes eligible.
+	SENTINEL_VOTING_WINDOW: emptyToDefault(z.coerce.bigint().positive(), 12n),
+	STORAGE_FILE: emptyToDefault(z.string().optional()),
+	RPC_URL: z.url(),
+	PRIVATE_KEY: hexBytes32Schema,
+	CONSENSUS_ADDRESS: checkedAddressSchema,
+	CHAIN_ID: supportedChainsSchema,
+});
+
+export const validatorConfigSchema = z.object({
+	...metricsConfigSchema.shape,
+	...watcherConfigSchema.shape,
+	...submissionConfigSchema.shape,
 	STORAGE_FILE: emptyToDefault(z.string().optional()),
 	RPC_URL: z.url(),
 	PRIVATE_KEY: hexBytes32Schema,
@@ -79,20 +119,10 @@ export const validatorConfigSchema = z.object({
 	GENESIS_SALT: genesisSaltSchema,
 	BLOCKS_PER_EPOCH: emptyToDefault(z.coerce.bigint(), BLOCKS_PER_EPOCH),
 	BLOCKS_BEFORE_RESUBMIT: emptyToDefault(z.coerce.bigint().optional()),
-	BASE_FEE_MULTIPLIER: emptyToDefault(z.coerce.number().optional()),
-	PRIORITY_FEE_PER_GAS: emptyToDefault(z.coerce.bigint().optional()),
-	PRIORITY_FEE_CAP_PERCENTAGE: emptyToDefault(z.coerce.number().optional()),
-	BLOCK_TIME_OVERRIDE: emptyToDefault(z.coerce.number().int().optional()),
-	MAX_REORG_DEPTH: emptyToDefault(z.coerce.number().int().optional()),
-	START_FROM_BLOCK: emptyToDefault(z.coerce.bigint().gte(0n).optional()),
-	BLOCK_PAGE_SIZE: emptyToDefault(z.coerce.number().int().optional()),
-	BLOCK_ALL_LOGS_QUERY_RETRY_COUNT: emptyToDefault(z.coerce.number().int().optional()),
-	BLOCK_SINGLE_QUERY_RETRY_COUNT: emptyToDefault(z.coerce.number().int().optional()),
 	KEY_GEN_TIMEOUT: emptyToDefault(z.coerce.bigint().optional()),
 	SIGNING_TIMEOUT: emptyToDefault(z.coerce.bigint().optional()),
 	ORACLE_TIMEOUT_BLOCKS: emptyToDefault(z.coerce.bigint().optional()),
 	ALLOWED_ORACLES: emptyToDefault(jsonStringToValue(z.array(checkedAddressSchema)).optional(), []),
-	MAX_LOGS_PER_QUERY: emptyToDefault(z.coerce.number().int().optional()),
 	SKIP_GENESIS: emptyToDefault(strictBoolSchema.optional()),
 });
 

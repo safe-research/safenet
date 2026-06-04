@@ -12,7 +12,7 @@ interface IOracle {
 
     /**
      * @notice Emitted when an oracle produces a result for a request.
-     * @param requestId The EIP-712 hash of the OracleTransactionProposal message.
+     * @param requestId A unique id that allows fetching additional information related to the request.
      * @param proposer The address that posted the request (typically the Consensus contract).
      * @param result Arbitrary result data (oracle-specific encoding).
      * @param approved Whether the oracle approves the transaction.
@@ -25,11 +25,13 @@ interface IOracle {
 
     /**
      * @notice Post a signing request to the oracle for evaluation.
-     * @param requestId The EIP-712 hash of the OracleTransactionProposal message.
-     * @dev The oracle records msg.sender as the proposer in OracleResult, allowing oracles to
-     *      differentiate requests from the Consensus contract versus other callers.
-     *      Transaction data is not passed here; the oracle is expected to fetch it independently
-     *      from the OracleTransactionProposed event.
+     * @param requestId A unique id that allows fetching additional information related to the request.
+     * @param proposer The address that offered the reward and to whom any refund is owed.
+     * @param oracleData Arbitrary oracle-specific data passed by the proposer; not part of the
+     *                   signed message hash. The oracle may decode this however it sees fit.
+     * @dev Transaction data is not passed here; the oracle is expected to fetch it independently
+     *      from the OracleTransactionProposed event. The oracle pulls the fee directly from
+     *      proposer and refunds to proposer on resolution when applicable.
      */
-    function postRequest(bytes32 requestId) external;
+    function postRequest(bytes32 requestId, address proposer, bytes calldata oracleData) external;
 }

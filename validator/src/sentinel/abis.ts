@@ -1,0 +1,29 @@
+import { parseAbi, parseAbiItem } from "viem";
+import { ORACLE_RESULT_EVENT } from "../types/abis.js";
+
+export const SENTINEL_NEW_REQUEST_EVENT = parseAbiItem(
+	"event NewRequest(bytes32 indexed requestId, address indexed proposer, uint256 fee, uint256 bondTarget, uint256 deadline)",
+);
+
+export const SENTINEL_CLAIMED_EVENT = parseAbiItem(
+	"event Claimed(bytes32 indexed requestId, address indexed sentinel, uint256 bondReturn, uint256 feeReward)",
+);
+
+export const SENTINEL_COMMITTED_EVENT = parseAbiItem(
+	"event Committed(bytes32 indexed requestId, address indexed sentinel, bool approved, uint256 bondAmount, uint256 position)",
+);
+
+export const SENTINEL_EVENTS = [SENTINEL_NEW_REQUEST_EVENT, ORACLE_RESULT_EVENT, SENTINEL_COMMITTED_EVENT] as const;
+
+export const SENTINEL_ORACLE_FUNCTIONS = parseAbi([
+	"function commitApprove(bytes32 requestId) external",
+	"function commitDeny(bytes32 requestId) external",
+	"function finalize(bytes32 requestId) external",
+	"function claim(bytes32 requestId) external",
+	"function FEE_TOKEN() external view returns (address)",
+]);
+
+export const ERC20_FUNCTIONS = parseAbi([
+	"function approve(address spender, uint256 amount) external returns (bool)",
+	"function allowance(address owner, address spender) external view returns (uint256)",
+]);

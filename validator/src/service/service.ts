@@ -11,8 +11,9 @@ import {
 	webSocket,
 } from "viem";
 import { KeyGenClient } from "../consensus/keyGen/client.js";
-import { GasFeeEstimator, OnchainProtocol } from "../consensus/protocol/onchain.js";
+import { OnchainProtocol } from "../consensus/protocol/onchain.js";
 import { SqliteActionQueue, SqliteTxStorage } from "../consensus/protocol/sqlite.js";
+import { GasFeeEstimator } from "../consensus/protocol/transaction.js";
 import { SigningClient } from "../consensus/signing/client.js";
 import { SqliteClientStorage } from "../consensus/storage/sqlite.js";
 import { type PacketHandler, type Typed, VerificationEngine } from "../consensus/verify/engine.js";
@@ -20,8 +21,9 @@ import { OracleTransactionHandler } from "../consensus/verify/oracleTx/handler.j
 import { EpochRolloverHandler } from "../consensus/verify/rollover/handler.js";
 import { SafeTransactionHandler } from "../consensus/verify/safeTx/handler.js";
 import { SqliteStateStorage } from "../machine/storage/sqlite.js";
-import { OnchainTransitionWatcher, type WatcherConfig } from "../machine/transitions/watcher.js";
+import { OnchainTransitionWatcher } from "../machine/transitions/watcher.js";
 import type { RolloverState } from "../machine/types.js";
+import type { WatcherConfig } from "../shared/watcher.js";
 import { CONSENSUS_FUNCTIONS } from "../types/abis.js";
 import type { ValidatorAccount } from "../types/account.js";
 import { supportedChains } from "../types/chains.js";
@@ -158,7 +160,9 @@ export class ValidatorService {
 	}
 
 	async stop() {
+		this.#logger.debug("Stopping validator service ...");
 		await this.#watcher.stop();
+		this.#logger.notice("Validator service stopped");
 	}
 }
 

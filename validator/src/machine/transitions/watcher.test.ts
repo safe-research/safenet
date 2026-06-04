@@ -1,10 +1,11 @@
 import Sqlite3 from "better-sqlite3";
 import type { PublicClient } from "viem";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import type { WatcherConfig } from "../../shared/watcher.js";
 import type { Logger } from "../../utils/logging.js";
 import type { Metrics } from "../../utils/metrics.js";
 import { watchBlocksAndEvents } from "../../watcher/index.js";
-import { OnchainTransitionWatcher, type WatcherConfig } from "./watcher.js";
+import { OnchainTransitionWatcher } from "./watcher.js";
 
 vi.mock("../../watcher/index.js", () => ({
 	watchBlocksAndEvents: vi.fn(async () => async () => {}),
@@ -27,7 +28,7 @@ const createWatcher = (watcherConfig: WatcherConfig) => {
 		metrics: {} as unknown as Metrics,
 		onTransition: () => {},
 	});
-	return watcher;
+	return { watcher, database };
 };
 
 // `blockTimeOverride` avoids needing a chain block time on the stubbed client.
@@ -44,7 +45,7 @@ describe("OnchainTransitionWatcher initial block resolution", () => {
 	});
 
 	it("forwards the configured start block when there is no persisted state", async () => {
-		const watcher = createWatcher({ ...baseConfig, startFromBlock: 456n });
+		const { watcher } = createWatcher({ ...baseConfig, startFromBlock: 456n });
 		await watcher.start();
 		// The start block is passed separately (not as `lastIndexedBlock`) so the watcher back-fills
 		// via a warp instead of emitting a spurious reorg.
@@ -52,14 +53,21 @@ describe("OnchainTransitionWatcher initial block resolution", () => {
 	});
 
 	it("prefers persisted indexing state over the configured start block", async () => {
-		const watcher = createWatcher({ ...baseConfig, startFromBlock: 456n });
-		watcher.updateLastIndexedBlock(123n);
+		const { watcher, database } = createWatcher({ ...baseConfig, startFromBlock: 456n });
+		// Set the last indexed block in the database
+		const stmt = database.prepare(`
+			INSERT INTO transition_watcher (chainId, lastIndexedBlock)
+			VALUES (@chainId, @block)
+			ON CONFLICT(chainId) DO UPDATE
+			SET lastIndexedBlock = excluded.lastIndexedBlock
+		`);
+		stmt.run({ chainId: 100, block: 123 });
 		await watcher.start();
 		expect(startedWith()).toEqual({ lastIndexedBlock: 123n, startBlock: null });
 	});
 
 	it("defaults to null when neither persisted state nor a start block is set", async () => {
-		const watcher = createWatcher(baseConfig);
+		const { watcher } = createWatcher(baseConfig);
 		await watcher.start();
 		expect(startedWith()).toEqual({ lastIndexedBlock: null, startBlock: null });
 	});

@@ -1,52 +1,16 @@
 import type { Database } from "better-sqlite3";
-import type { Prettify, PublicClient } from "viem";
-import z from "zod";
+import type { PublicClient } from "viem";
+import { BlockchainWatcher, type WatcherConfig } from "../../shared/watcher.js";
 import { ALL_EVENTS } from "../../types/abis.js";
 import type { ProtocolConfig } from "../../types/interfaces.js";
-import { formatError } from "../../utils/errors.js";
 import type { Logger } from "../../utils/logging.js";
 import type { Metrics } from "../../utils/metrics.js";
-import { type Stop, type WatchParams, watchBlocksAndEvents } from "../../watcher/index.js";
 import { logToTransition } from "./onchain.js";
-import type { StateTransition } from "./types.js";
-
-export const transitionWatcherStateSchema = z
-	.object({
-		chainId: z.coerce.bigint(),
-		lastIndexedBlock: z.coerce.bigint(),
-	})
-	.optional();
+import type { EventTransition, StateTransition } from "./types.js";
 
 export type Config = Pick<ProtocolConfig, "coordinator" | "consensus" | "allowedOracles">;
-export type WatcherConfig = Prettify<
-	{
-		blockTimeOverride?: number;
-		// Block to start indexing from when there is no persisted indexing state (e.g. for genesis
-		// or recovery from a misconfiguration). Ignored once `lastIndexedBlock` has been persisted.
-		startFromBlock?: bigint;
-	} & Pick<
-		WatchParams<[]>,
-		| "maxReorgDepth"
-		| "blockPageSize"
-		| "blockPropagationDelay"
-		| "blockRetryDelays"
-		| "blockAllLogsQueryRetryCount"
-		| "blockSingleQueryRetryCount"
-		| "maxLogsPerQuery"
-		| "backoffDelays"
-	>
->;
 
-export class OnchainTransitionWatcher {
-	#logger: Logger;
-	#metrics: Metrics;
-	#config: Config;
-	#watcherConfig: WatcherConfig;
-	#db: Database;
-	#publicClient: PublicClient;
-	#onTransition: (transition: StateTransition) => void;
-	#stop: Stop | null = null;
-
+export class OnchainTransitionWatcher extends BlockchainWatcher<typeof ALL_EVENTS, EventTransition> {
 	constructor({
 		database,
 		publicClient,
@@ -64,126 +28,18 @@ export class OnchainTransitionWatcher {
 		logger: Logger;
 		metrics: Metrics;
 	}) {
-		this.#db = database;
-		this.#config = config;
-		this.#watcherConfig = watcherConfig;
-		this.#logger = logger;
-		this.#metrics = metrics;
-		this.#publicClient = publicClient;
-		this.#onTransition = onTransition;
-
-		this.#db.exec(`
-			CREATE TABLE IF NOT EXISTS transition_watcher (
-				chainId INTEGER PRIMARY KEY,
-				lastIndexedBlock INTEGER NOT NULL
-			);
-		`);
-	}
-
-	private async getLastIndexedBlock(): Promise<bigint | undefined> {
-		const clientChainId = this.#publicClient.chain?.id ?? 0n;
-		const stmt = this.#db.prepare("SELECT chainId, lastIndexedBlock FROM transition_watcher WHERE chainId = ?");
-		const result = transitionWatcherStateSchema.parse(stmt.get(clientChainId));
-		return result?.lastIndexedBlock;
-	}
-
-	updateLastIndexedBlock(block: bigint): boolean {
-		const stmt = this.#db.prepare(`
-			INSERT INTO transition_watcher (chainId, lastIndexedBlock)
-			VALUES (@chainId, @block)
-			ON CONFLICT(chainId) DO UPDATE
-			SET lastIndexedBlock = excluded.lastIndexedBlock
-			WHERE excluded.lastIndexedBlock >= transition_watcher.lastIndexedBlock
-		`);
-		const chainId = this.#publicClient.chain?.id ?? 0n;
-		const info = stmt.run({ chainId, block });
-		return info.changes > 0;
-	}
-
-	handleTransition(transition: StateTransition) {
-		try {
-			if (!this.updateLastIndexedBlock(transition.block)) {
-				this.#logger.warn("Received an out-of-order transition.", { transition });
-				return;
-			}
-			this.#onTransition(transition);
-		} catch (error) {
-			this.#logger.error("An error occurred handling a state transition.", { error: formatError(error) });
-		}
-	}
-
-	async start() {
-		if (this.#stop !== null) {
-			throw new Error("already started");
-		}
-
-		// `blockTimeOverride` and `startFromBlock` are local-only config keys consumed here; the rest
-		// are forwarded to the watcher, so we destructure them out to avoid leaking unused options.
-		const { blockTimeOverride, startFromBlock, ...watchParams } = this.#watcherConfig;
-
-		const blockTime = blockTimeOverride ?? this.#publicClient.chain?.blockTime;
-		if (blockTime === undefined) {
-			throw new Error("chain missing block time configuration");
-		}
-
-		// The configured start block only applies on a fresh start (no persisted indexing state):
-		// persisted state always takes precedence, so a restart never rewinds or replays history.
-		const lastIndexedBlock = (await this.getLastIndexedBlock()) ?? null;
-		const startBlock = lastIndexedBlock === null ? (startFromBlock ?? null) : null;
-		this.#stop = await watchBlocksAndEvents({
-			logger: this.#logger,
-			client: this.#publicClient,
-			...watchParams,
-			lastIndexedBlock,
-			startBlock,
-			blockTime,
-			// Note: allowedOracles must only emit OracleResult events and must never emit events
-			// from the coordinator or consensus ABIs, as those event handlers do not filter by
-			// emitting contract address.
-			address: [this.#config.consensus, this.#config.coordinator, ...(this.#config.allowedOracles ?? [])],
+		super({
+			database,
+			publicClient,
+			watcherConfig,
+			logger,
+			metrics,
+			tableName: "transition_watcher",
+			address: [config.consensus, config.coordinator, ...(config.allowedOracles ?? [])],
 			events: ALL_EVENTS,
 			fallibleEvents: ["TransactionProposed"],
-			handler: (update) => {
-				switch (update.type) {
-					case "watcher_update_warp_to_block": {
-						this.#metrics.blockNumber.labels({ status: "seen" }).set(Number(update.toBlock));
-						this.#metrics.eventIndex.labels({ status: "seen" }).set(-1);
-						// Note that we don't explicitely handle warping in our state machine,
-						// instead if any events are found in the log range, the state machine is
-						// updated to the correct block accordingly.
-						this.#logger.debug(`warping to block ${update.toBlock}`);
-						break;
-					}
-					case "watcher_update_uncle_block": {
-						this.#metrics.reorgs.inc();
-						this.#logger.warn("Reorg detected, but currently not supported.", { update });
-						break;
-					}
-					case "watcher_update_new_block": {
-						this.#metrics.blockNumber.labels({ status: "seen" }).set(Number(update.blockNumber));
-						this.#metrics.eventIndex.labels({ status: "seen" }).set(-1);
-						this.handleTransition({ id: "block_new", block: update.blockNumber });
-						break;
-					}
-					case "watcher_update_new_logs": {
-						this.#metrics.eventIndex.labels({ status: "seen" }).set(update.logs.at(-1)?.logIndex ?? -1);
-						for (const log of update.logs) {
-							this.handleTransition(logToTransition(log));
-						}
-						break;
-					}
-				}
-			},
+			logToTransition,
+			onTransition,
 		});
-	}
-
-	async stop() {
-		if (this.#stop === null) {
-			throw new Error("already stopped");
-		}
-
-		const stop = this.#stop;
-		this.#stop = null;
-		await stop();
 	}
 }
