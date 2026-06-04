@@ -55,6 +55,7 @@ echo "Fee token deployed at $FEE_TOKEN"
 # --- 5. Deploy Sentinel Oracle ---
 echo "Deploying Sentinel Oracle..."
 env \
+    SENTINEL_ARBITRATOR=$DEPLOYER \
     SENTINEL_CONSENSUS=$CONSENSUS \
     SENTINEL_FEE_TOKEN=$FEE_TOKEN \
     SENTINEL_REQUEST_FEE=1000 \
