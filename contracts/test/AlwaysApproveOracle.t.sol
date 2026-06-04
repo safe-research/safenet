@@ -20,14 +20,12 @@ contract AlwaysApproveOracleTest is Test {
         vm.expectEmit(true, true, false, true);
         emit IOracle.OracleResult(REQUEST_ID, requester, "", true);
 
-        vm.prank(requester);
         oracle.postRequest(REQUEST_ID, requester, "");
     }
 
     function test_PostRequest_EmitsApprovedTrue() public {
         vm.recordLogs();
 
-        vm.prank(requester);
         oracle.postRequest(REQUEST_ID, requester, "");
 
         Vm.Log[] memory logs = vm.getRecordedLogs();

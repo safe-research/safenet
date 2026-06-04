@@ -12,7 +12,7 @@ interface IOracle {
 
     /**
      * @notice Emitted when an oracle produces a result for a request.
-     * @param requestId The EIP-712 hash of the OracleTransactionProposal message.
+     * @param requestId A unique id that allows fetching additional information related to the request.
      * @param proposer The address that posted the request (typically the Consensus contract).
      * @param result Arbitrary result data (oracle-specific encoding).
      * @param approved Whether the oracle approves the transaction.
