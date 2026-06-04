@@ -1,7 +1,7 @@
 #!/bin/bash
 set -eo pipefail
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
 # --- Configuration ---
 ANVIL_RPC_URL="http://127.0.0.1:8545"
@@ -36,7 +36,7 @@ npm run -w contracts cmd:deploy -- \
     --broadcast
 
 CONSENSUS=$(jq -r '.returns.consensus.value' \
-    "$SCRIPT_DIR/../contracts/build/broadcast/Deploy.s.sol/31337/run-latest.json")
+    "$ROOT/contracts/build/broadcast/Deploy.s.sol/31337/run-latest.json")
 echo "Consensus deployed at $CONSENSUS"
 
 # --- 4. Deploy Fee Token ---
@@ -49,7 +49,7 @@ npm run -w contracts cmd:deploy:testing-erc20 -- \
     --broadcast
 
 FEE_TOKEN=$(jq -r '.returns.erc20.value' \
-    "$SCRIPT_DIR/../contracts/build/broadcast/DeployERC20.s.sol/31337/run-latest.json")
+    "$ROOT/contracts/build/broadcast/DeployERC20.s.sol/31337/run-latest.json")
 echo "Fee token deployed at $FEE_TOKEN"
 
 # --- 5. Deploy Sentinel Oracle ---
