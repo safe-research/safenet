@@ -16,7 +16,12 @@ const watcherStateSchema = z
 	.optional();
 
 export type WatcherConfig = Prettify<
-	{ blockTimeOverride?: number } & Pick<
+	{
+		blockTimeOverride?: number;
+		// Block to start indexing from when there is no persisted indexing state (e.g. for genesis
+		// or recovery from a misconfiguration). Ignored once `lastIndexedBlock` has been persisted.
+		startFromBlock?: bigint;
+	} & Pick<
 		WatchParams<[]>,
 		| "maxReorgDepth"
 		| "blockPageSize"
@@ -153,17 +158,25 @@ export abstract class BlockchainWatcher<E extends Events, T> {
 			throw new Error("already started");
 		}
 
-		const blockTime = this.#watcherConfig.blockTimeOverride ?? this.#publicClient.chain?.blockTime;
+		// `blockTimeOverride` and `startFromBlock` are local-only config keys consumed here; the rest
+		// are forwarded to the watcher, so we destructure them out to avoid leaking unused options.
+		const { blockTimeOverride, startFromBlock, ...watchParams } = this.#watcherConfig;
+
+		const blockTime = blockTimeOverride ?? this.#publicClient.chain?.blockTime;
 		if (blockTime === undefined) {
 			throw new Error("chain missing block time configuration");
 		}
 
+		// The configured start block only applies on a fresh start (no persisted indexing state):
+		// persisted state always takes precedence, so a restart never rewinds or replays history.
 		const lastIndexedBlock = (await this.#getLastIndexedBlock()) ?? null;
+		const startBlock = lastIndexedBlock === null ? (startFromBlock ?? null) : null;
 		this.#stop = await watchBlocksAndEvents({
 			logger: this.#logger,
 			client: this.#publicClient,
-			...this.#watcherConfig,
+			...watchParams,
 			lastIndexedBlock,
+			startBlock,
 			blockTime,
 			...this.#filter,
 			handler: (update) => this.#handleUpdate(update),

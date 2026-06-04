@@ -513,6 +513,7 @@ describe("validatorConfigSchema", () => {
 			"SIGNING_TIMEOUT",
 			"MAX_LOGS_PER_QUERY",
 			"SKIP_GENESIS",
+			"START_FROM_BLOCK",
 		] as const;
 
 		for (const settings of [{}, Object.fromEntries(optionals.map((key) => [key, ""]))]) {
@@ -520,6 +521,28 @@ describe("validatorConfigSchema", () => {
 			for (const optional of optionals) {
 				expect(parsed[optional]).toBeUndefined();
 			}
+		}
+	});
+
+	const baseConfig = () => ({
+		RPC_URL: MOCK_VALID_URL,
+		CONSENSUS_ADDRESS: MOCK_CHECKSUMMED_ADDRESS,
+		COORDINATOR_ADDRESS: MOCK_CHECKSUMMED_ADDRESS,
+		CHAIN_ID: 100,
+		PRIVATE_KEY: generatePrivateKey(),
+		PARTICIPANTS: VALID_PARTICIPANTS_INPUT,
+	});
+
+	it("should parse START_FROM_BLOCK as a bigint", () => {
+		const result = validatorConfigSchema.parse({ ...baseConfig(), START_FROM_BLOCK: "12345" });
+		expect(result.START_FROM_BLOCK).toBe(12345n);
+	});
+
+	it("should reject a negative START_FROM_BLOCK", () => {
+		const result = validatorConfigSchema.safeParse({ ...baseConfig(), START_FROM_BLOCK: "-1" });
+		expect(result.success).toBe(false);
+		if (!result.success) {
+			expect(result.error.issues.find((issue) => issue.path[0] === "START_FROM_BLOCK")).toBeDefined();
 		}
 	});
 });

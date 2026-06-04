@@ -75,6 +75,7 @@ export const metricsConfigSchema = z.object({
 export const watcherConfigSchema = z.object({
 	BLOCK_TIME_OVERRIDE: emptyToDefault(z.coerce.number().int().optional()),
 	MAX_REORG_DEPTH: emptyToDefault(z.coerce.number().int().optional()),
+	START_FROM_BLOCK: emptyToDefault(z.coerce.bigint().gte(0n).optional()),
 	BLOCK_PAGE_SIZE: emptyToDefault(z.coerce.number().int().optional()),
 	BLOCK_ALL_LOGS_QUERY_RETRY_COUNT: emptyToDefault(z.coerce.number().int().optional()),
 	BLOCK_SINGLE_QUERY_RETRY_COUNT: emptyToDefault(z.coerce.number().int().optional()),

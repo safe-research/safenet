@@ -9,7 +9,6 @@ import {
 	hashTypedData,
 	http,
 	parseAbi,
-	parseEther,
 	publicActions,
 	walletActions,
 	zeroAddress,
