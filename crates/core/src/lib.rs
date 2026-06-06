@@ -1,6 +1,6 @@
 //! # Safenet Core
 //!
-//! The Safenet core crates contains shared components used across various
+//! The Safenet core crate contains shared components used across various
 //! Safenet services. It provides shared logic for:
 //!
 //! - Logging, metrics and observability.
