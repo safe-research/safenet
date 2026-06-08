@@ -1,14 +1,12 @@
-_build/
-dist/
-node_modules/
-build/
 .DS_Store
+.certora_internal
 .env
 anvil_logs.txt
-integration_logs.txt
-foundry.lock
-.certora_internal
-
-# Coverage related files
+build/
 coverage/
+dist/
+foundry.lock
+integration_logs.txt
 lcov.info
+node_modules/
+target/

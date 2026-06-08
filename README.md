@@ -18,6 +18,8 @@ Developing on the project requires a few tools:
 - NPM v11
 - Foundry v1.5.1
 
+For the ongoing Rust port, the `stable` channel of the Rust compiler and Cargo package manager are required.
+
 ### Foundry Setup
 
 Stable Foundry has a known [formatting bug](https://github.com/foundry-rs/foundry/issues/13362) that affects this repository. With `foundryup` installed, the correct Foundry version can be set up with `npm run foundryup`.
@@ -57,3 +59,14 @@ npm run test:integration
 ```
 
 Verbose logging for tests can be enabled by setting `SAFENET_TEST_VERBOSE=1`.
+
+### Rust Port
+
+Currently, the offchain services of the Safenet protocol are being ported to Rust. Use the standard Cargo commands to build/test/lint/format/etc. the Rust port:
+
+```sh
+cargo build
+cargo test
+cargo clippy
+cargo fmt
+```
