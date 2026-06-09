@@ -5,6 +5,7 @@ This is a work-in-progress. Don't use it yet!
 ## Project Organisation
 
 - [Contracts](./contracts) Safenet contracts (Solidity & Foundry)
+- [Examples](./esamples) Interact with Safenet on test networks (Typescript & npm)
 - [Explorer](./explorer) Explorer web interface (Typescript & npm)
 - [Validator](./validator) Validator service (Typescript & npm)
 - [Services core crate](./crates/core) Shared logic between the offchain Safenet services (Rust)

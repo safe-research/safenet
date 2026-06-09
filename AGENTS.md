@@ -6,10 +6,11 @@ Safenet is a decentralized Safe transaction security network that uses FROST (Fl
 
 The repository is a hybrid monorepo with:
 
-- Three NPM workspaces:
+- NPM workspaces:
   - `contracts/` — Solidity 0.8.30 smart contracts built with Foundry. Core contracts: `FROSTCoordinator.sol`, `Consensus.sol`, `Staking.sol`.
+  - `examples/` — Scripts for interacting with the Safenet protocol on public testnets.
   - `explorer/` — React 19 + TypeScript + Vite frontend for inspecting network state.
-  - `validator/` — Node.js + TypeScript validator service that participates in FROST signing rounds.
+  - `validator/` — Node.js + TypeScript validator that participates in FROST signing rounds and sentinel puts up bonds in support of transaction correctness.
 - Rust crates:
   - `crates/core/` — Shared code used by all Safenet offchain services
 
@@ -21,7 +22,7 @@ For detailed architecture and technical documentation, refer to the local [docs]
 
 ## Coding Guidelines
 
-Code SHOULD focus on security and maintainability. Existing code and components SHOULD be reused. New components SHOULD be written in a way that they can be reused. If in doubt, refer to existing code to determine coding style and which implementation to choose. Do not re-invent the wheel and follow existing paradigms.
+Code SHOULD focus on security and maintainability. Existing code and components SHOULD be reused. New components SHOULD be written in a way that they can be reused. Refer to existing code to determine coding style and which implementation to choose. Do not re-invent the wheel and follow existing paradigms.
 
 You MUST format, lint and test before committing.
 
@@ -60,7 +61,7 @@ The script (`./scripts/run_integration_test.sh`) requires:
 
 - **Anvil** — part of the Foundry toolchain (`foundryup` to install)
 - **Forge** — for contract deployment
-- **Node.js** — validator service
+- **Node.js** — validator and sentinel service
 
 ### Local devnet
 
