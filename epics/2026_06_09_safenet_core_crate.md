@@ -31,6 +31,17 @@ The crate is a **library** consumed by future Rust offchain services. It is **no
 the existing TypeScript validator (no FFI); the TS validator remains the reference
 implementation during the port.
 
+A partially-implemented, experimental Rust port already exists on the `project/ports` branch
+(crate `validator-rust/`). It is catalogued in the companion
+[code index](./2026_06_09_rust_validator_port_index.md), which extracts reusable snippets — most
+notably the `sol!` typed-event indexer (see the Architecture Decision below) — and lists the
+divergences to apply when porting.
+
+**This plan is the source of truth.** `project/ports` is a place to pull snippets from **when in
+doubt**, not a guide to follow. It is experimental, hacky and incomplete; do **not** mirror its
+structure or copy its implementation wholesale. Where the spike and this plan disagree, **follow
+this plan**.
+
 The work is delivered across six phases (A–F). Phase A is foundational scaffolding that
 everything else depends on. Phases B (observability), C (indexing), D (state) and E (transaction
 submission) are largely independent of one another and can proceed in parallel after A. Phase F
@@ -44,16 +55,16 @@ The crate targets an `async` (tokio) runtime and is built on the following stack
 the idiomatic Rust analogs of the TypeScript dependencies and to **reuse existing,
 well-maintained code rather than re-implementing primitives** (per `AGENTS.md` coding guidelines):
 
-| Concern | TypeScript today | Rust choice | Notes |
-| --- | --- | --- | --- |
-| RPC client, primitives, signing | `viem` | **`alloy`** | `Provider`, `Address`/`B256`/`U256`/`Bytes`, `Bloom`, `Log`, EIP-1559 tx types, `PrivateKeySigner`, typed events via `sol!`. De-facto standard. |
-| RPC rate-limit backoff | custom `backoff.ts` | **`alloy` transport layers** | `RetryBackoffLayer` (+ `RateLimitRetryPolicy`), optionally `FallbackLayer` / `ThrottleLayer`. No hand-rolled backoff. |
-| Fee estimation | custom `GasFeeEstimator` | **`alloy` built-in** | `Provider::estimate_eip1559_fees` / recommended fillers (`GasFiller`). |
-| SQLite | `better-sqlite3` (sync) | **`sqlx`** (async, `sqlite`) | Connection pool, async queries, embedded migrations. |
-| Logging | `winston` | **`tracing` + `tracing-subscriber`** | Explicit requirement. |
-| Metrics | `prom-client` | **`metrics` + `metrics-exporter-prometheus`** | Prometheus exporter over HTTP. |
-| Config validation | `zod` | (consumer concern) | Out of scope; each component takes a plain config struct. |
-| Errors | viem `BaseError` chain | **`thiserror`** | Typed error enums per module. |
+| Concern                         | TypeScript today         | Rust choice                                   | Notes                                                                                                                                           |
+| ------------------------------- | ------------------------ | --------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
+| RPC client, primitives, signing | `viem`                   | **`alloy`**                                   | `Provider`, `Address`/`B256`/`U256`/`Bytes`, `Bloom`, `Log`, EIP-1559 tx types, `PrivateKeySigner`, typed events via `sol!`. De-facto standard. |
+| RPC rate-limit backoff          | custom `backoff.ts`      | **`alloy` transport layers**                  | `RetryBackoffLayer` (+ `RateLimitRetryPolicy`), optionally `FallbackLayer` / `ThrottleLayer`. No hand-rolled backoff.                           |
+| Fee estimation                  | custom `GasFeeEstimator` | **`alloy` built-in**                          | `Provider::estimate_eip1559_fees` / recommended fillers (`GasFiller`).                                                                          |
+| SQLite                          | `better-sqlite3` (sync)  | **`sqlx`** (async, `sqlite`)                  | Connection pool, async queries, embedded migrations.                                                                                            |
+| Logging                         | `winston`                | **`tracing` + `tracing-subscriber`**          | Explicit requirement.                                                                                                                           |
+| Metrics                         | `prom-client`            | **`metrics` + `metrics-exporter-prometheus`** | Prometheus exporter over HTTP.                                                                                                                  |
+| Config validation               | `zod`                    | (consumer concern)                            | Out of scope; each component takes a plain config struct.                                                                                       |
+| Errors                          | viem `BaseError` chain   | **`thiserror`**                               | Typed error enums per module.                                                                                                                   |
 
 Key architectural decisions:
 
@@ -82,7 +93,11 @@ Key architectural decisions:
   `ContractEvents`). It derives the watched event `topic0` set from that type, fetches logs, and
   emits **decoded, typed** events in strict `(block_number, log_index)` order. This is the typed
   analog of the TS `Watcher<E>` (generic over an `AbiEvent[]` runtime list) and gives consumers
-  compile-time-checked event handling.
+  compile-time-checked event handling. The proven resolution to the `sol!` generics — the type
+  bridge `rpc_log.into_inner()` → `SolEventInterface::decode_log`, and per-contract `*Events` enums
+  dispatched by `log.address()` rather than one merged generic — is captured in the
+  [code index](./2026_06_09_rust_validator_port_index.md) from the `project/ports` spike; the crate
+  exposes it behind a small `DecodeLog` trait that consumers implement once.
 
 - **Reorg-aware state store = full per-block snapshots.** The generic state store is parameterised
   over a serializable state value `S`. On each indexed block the store persists `S` keyed by block
@@ -190,12 +205,15 @@ crates/core/
 - **`bloom.rs`** ← `utils/bloom.ts`. Thin helpers on `alloy_primitives::Bloom`: "can this block
   bloom possibly contain a watched (address, topic0)?" (topic0s derived from the typed event set)
   and "compute bloom from a log set" (for the all-logs integrity check).
-- **`events.rs`** ← `events.ts`, **typed**. `EventWatcher<E>` is generic over an `alloy` `sol!`
-  event set (`E: SolEventInterface`). State machine (`Idle` / `Warping` / `Block`) with the
+- **`events.rs`** ← `events.ts`, **typed**. `EventWatcher<E>` is generic over `E: DecodeLog` — a
+  thin crate trait whose canonical impl is the `project/ports` `decode_log` (dispatch by
+  `log.address()`, decode via `<Contract>::<Contract>Events::decode_log(&log.into_inner())`, take
+  `.data`). A single `E: SolEventInterface` form also works for a one-contract watcher. State machine (`Idle` / `Warping` / `Block`) with the
   progressive log-fetch fallback (all-logs+bloom-check → one-query-all-events →
   one-query-per-event), page-size halving on error, `fallible_events`, `max_logs_per_query`
   truncation guard, and `on_block_update` / `on_block_invalidated` / `next`. Decodes each `Log`
-  into a typed `E` via `SolEventInterface::decode_log`, surfacing decode failures (except for
+  into a typed `E` via `E::decode_log` (see the
+  [code index](./2026_06_09_rust_validator_port_index.md)), surfacing decode failures (except for
   `fallible_events`). Mirrors `events.test.ts`.
 - **`index/mod.rs`** ← `index.ts`. `Watcher<E>` orchestration: drains logs before advancing blocks
   (guaranteeing in-order logs), `next_logs()` recovery via `revalidate_last_block` on
@@ -213,6 +231,9 @@ crates/core/
   - `rollback_to(block_number) -> S` — delete snapshots `> block_number`, return the restored tip.
   - `prune(finalized_below)` — delete snapshots at/below `tip − maxReorgDepth`.
   - all multi-statement operations wrapped in a single transaction for atomicity.
+  - the `project/ports` spike already provides `commit`/`current`/`prune` equivalents
+    (`validator_state(block_number, state_json)`, default history 5); `rollback_to` and storing
+    `block_hash` are the net-new additions. JSON `TEXT` (debuggable) is preferred over a `BLOB`.
 
 ### Transaction submission (port of `transaction.ts` + `sqlite.ts`)
 
@@ -221,7 +242,7 @@ crates/core/
   wraps an `alloy` `PrivateKeySigner`.
 - **`storage.rs`** ← `SqliteTxStorage`. Table
   `transaction_storage(nonce INTEGER PRIMARY KEY, transaction_json TEXT NOT NULL,
-  transaction_hash TEXT, created_at, submitted_at INTEGER, fees_json TEXT)` and the full method set:
+transaction_hash TEXT, created_at, submitted_at INTEGER, fees_json TEXT)` and the full method set:
   `register` (atomic `INSERT ... SELECT MAX(...) RETURNING nonce`), `count_pending`, `delete`,
   `set_pending`, `set_fees`, `set_hash`, `set_executed_up_to`, `set_submitted_for_pending`,
   `max_nonce`, `submitted_up_to`. The implicit QUEUED/PENDING/EXECUTED state machine is preserved.
@@ -260,10 +281,10 @@ ordering; everything else may proceed in parallel.
 ### Phase A — Foundation (blocks all other phases)
 
 - **A1 — Crate scaffolding & dependencies.** Add the dependency set (alloy, sqlx, tokio, tracing,
-  tracing-subscriber, metrics, metrics-exporter-prometheus, serde, serde_json, thiserror) to
+  tracing-subscriber, metrics, metrics-exporter-prometheus, serde, serde*json, thiserror) to
   `crates/core/Cargo.toml`; commit `Cargo.lock`; declare the (empty) modules in `lib.rs`; add
-  `error.rs` (crate error enum) and `types.rs` (`BlockRef` + alloy re-exports). _Single purpose:
-  set up the crate._
+  `error.rs` (crate error enum) and `types.rs` (`BlockRef` + alloy re-exports). \_Single purpose:
+  set up the crate.*
 - **A2 — RPC provider builder.** `rpc.rs`: helper that builds an `alloy` `Provider` wired with
   `RetryBackoffLayer` (+ optional `FallbackLayer`/`ThrottleLayer`). Depends on A1. Small; this is
   the embodiment of the "delegate backoff to alloy" decision and is shared by C and E.
@@ -333,18 +354,22 @@ A1 (and A2 for the provider consumers), phases B, C, D and E proceed concurrentl
    Handled in F1.
 2. **`RetryBackoffLayer` parameters.** Defaults for max retries, initial backoff, and
    compute-units-per-second, and whether a custom `RetryPolicy` is needed beyond
-   `RateLimitRetryPolicy`.
+   `RateLimitRetryPolicy`. (The `project/ports` spike uses `RetryBackoffLayer::new(10, 500, 500)`.)
 3. **sqlx query verification mode.** Plan assumes runtime-checked queries (no live DB at build
    time). If compile-time `query!` macros are preferred, we'd commit `.sqlx` offline metadata and
    add a CI step.
 4. **Metric set & names.** Which of the validator's metrics belong in the shared crate vs. remain
    service-specific, and the default namespace/prefix.
-5. **`maxReorgDepth` / snapshot retention default** for the snapshot store (TS default is 5).
+5. **`maxReorgDepth` / snapshot retention default** for the snapshot store (TS default is 5; the
+   `project/ports` spike defaults `state_history` to 5).
 6. **Provider ownership.** Whether the crate exposes the `rpc.rs` provider-builder helper as the
    blessed path, or leaves provider construction entirely to consumers.
 
 **Assumptions**
 
+- **This plan takes precedence over the `project/ports` spike.** The spike is a snippet source to
+  consult when in doubt (via the [code index](./2026_06_09_rust_validator_port_index.md)), never a
+  guide to follow; where the two disagree, follow this plan.
 - The crate is greenfield for **future Rust services** and is **not** integrated into the existing
   TypeScript validator (no FFI). The TS validator stays as the reference implementation.
 - `alloy` is the RPC/primitives/signing library; RPC backoff and fee estimation are delegated to
