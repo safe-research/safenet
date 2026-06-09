@@ -7,6 +7,7 @@ This is a work-in-progress. Don't use it yet!
 - [Contracts](./contracts) Safenet contracts (Solidity & Foundry)
 - [Explorer](./explorer) Explorer web interface (Typescript & npm)
 - [Validator](./validator) Validator service (Typescript & npm)
+- [Services shared crate](./crates/shared) Shared logic between the offchain Safenet services (Rust)
 
 ## Developing
 
