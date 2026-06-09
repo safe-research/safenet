@@ -17,7 +17,7 @@ Additionally, formal verification specs live in `certora/`. Integration and devn
 
 ## Documentation
 
-For detailed architecture and technical documentation, refer to the local [docs](./docs/) folder. Additional documentation on the Safe smart account, is available on the [Safe Foundation docs](https://docs.safefoundation.org). The MCP server related to this documentation can be found at <https://docs.safefoundation.org/mcp>.
+For detailed architecture and technical documentation, refer to the local [docs](./docs/) folder. Additional documentation on the Safe smart account is available on the [Safe Foundation docs](https://docs.safefoundation.org). The MCP server related to this documentation can be found at <https://docs.safefoundation.org/mcp>.
 
 ## Coding Guidelines
 
