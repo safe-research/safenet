@@ -5,8 +5,10 @@ This is a work-in-progress. Don't use it yet!
 ## Project Organisation
 
 - [Contracts](./contracts) Safenet contracts (Solidity & Foundry)
+- [Examples](./examples) Interact with Safenet on test networks (Typescript & npm)
 - [Explorer](./explorer) Explorer web interface (Typescript & npm)
 - [Validator](./validator) Validator service (Typescript & npm)
+- [Services core crate](./crates/core) Shared logic between the offchain Safenet services (Rust)
 
 ## Developing
 
@@ -70,3 +72,7 @@ cargo test
 cargo clippy
 cargo fmt
 ```
+
+## Planning Epics
+
+When developing larger epics spanning over multiple PRs with an agent (for example a complex feature or big refactor), generate a plan to help guide the agent by outlining the separate phases in the development. It is recommended to use the `/plan-epic` feature from <https://github.com/safe-research/agents> for this.
