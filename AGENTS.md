@@ -11,7 +11,7 @@ The repository is a hybrid monorepo with:
   - `explorer/` — React 19 + TypeScript + Vite frontend for inspecting network state.
   - `validator/` — Node.js + TypeScript validator service that participates in FROST signing rounds.
 - Rust crates:
-  - `crates/shared/` — Shared code used by all Safenet offchain services
+  - `crates/core/` — Shared code used by all Safenet offchain services
 
 Additionally, formal verification specs live in `certora/`. Integration and devnet scripts are in `scripts/`.
 
