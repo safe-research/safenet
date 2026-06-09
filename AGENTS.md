@@ -19,6 +19,19 @@ Additionally, formal verification specs live in `certora/`. Integration and devn
 
 For detailed architecture and technical documentation, refer to the local [docs](./docs/) folder. Additional documentation on the Safe smart account, is available on the [Safe Foundation docs](https://docs.safefoundation.org). The MCP server related to this documentation can be found at <https://docs.safefoundation.org/mcp>.
 
+## Coding Guidelines
+
+Code SHOULD focus on security and maintainability. Existing code and components SHOULD be reused. New components SHOULD be written in a way that they can be reused. If in doubt, refer to existing code to determine coding style and which implementation to choose. Do not re-invent the wheel and follow existing paradigms.
+
+You MUST format, lint and test before committing.
+
+- For JavaScript/Typescript code, run `npm run fix --workspace <package>`, `npm run check --workspace <package>`, and `npm test --workspace <package>` respectively
+- For Rust code, run `cargo fmt --all`, `cargo clippy --package <package>`, and `cargo test --package <package>` respectively
+
+## Testing Guidelines
+
+New code SHOULD generally be tested. Design tests that do not require a high amount of churn with refactors (such as testing general behaviours and not implementation details). Your goal is not 100% test coverage (except for Solidity code). When modifying code the equivalent test MUST also be updated as required.
+
 ## Development Commands
 
 ### Project Setup
