@@ -1,0 +1,511 @@
+//! Bloom-filter helpers over [`alloy::primitives::Bloom`] for the indexer.
+//!
+//! Every Ethereum block header carries a `logs_bloom` accumulated over the
+//! address and topics of all logs in the block. Membership tests have false
+//! positives but never false negatives, so a negative result lets the indexer
+//! skip fetching a block's logs entirely.
+
+use alloy::primitives::{Address, B256, Bloom, BloomInput};
+
+/// Returns whether a block with the given `logs_bloom` may contain a log the
+/// indexer cares about: one emitted by any of the watched `addresses` whose
+/// first topic (topic0) is any of the watched `topics`.
+///
+/// Because bloom membership has no false negatives, a `false` result guarantees
+/// the block holds no matching log and its logs need not be fetched. A `true`
+/// result is only a maybe, since bloom false positives are possible. Note that
+/// the address and topic checks are independent: a block where one log supplies
+/// a watched address and a different log supplies a watched topic still returns
+/// `true`, matching the conservative behaviour of the reference implementation.
+pub fn may_contain_log(bloom: &Bloom, addresses: &[Address], topics: &[B256]) -> bool {
+    let contains_address = addresses
+        .iter()
+        .any(|address| bloom.contains_input(BloomInput::Raw(address.as_slice())));
+    let contains_topics = topics
+        .iter()
+        .any(|topic| bloom.contains_input(BloomInput::Raw(topic.as_slice())));
+    contains_address && contains_topics
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use alloy::{
+        hex,
+        primitives::{address, b256},
+    };
+
+    #[test]
+    fn checks_inclusion() {
+        let bloom = Bloom(
+            hex!(
+                "0000000000000000000000000000000000000000100000000000000000000000
+                 0000000000000000000000000000000000000000000000000000000000000000
+                 0000000000000000000000000000000000000000000000000000000000000000
+                 0000000202000000000000000000000000000000000000000000000800000000
+                 1000000000000000000000000000000000000000000000000000001000000000
+                 0000000000000000000000000000000000000000000000000000000000000000
+                 0000000000000000000000000000000000000000000000000000000000000000
+                 0000000000000000000000000000000000000000000000000000000000000000"
+            )
+            .into(),
+        );
+        let address = address!("0xef2d6d194084c2de36e0dabfce45d046b37d1106");
+        let topic = b256!("0x02c69be41d0b7e40352fc85be1cd65eb03d40ef8427a0ca4596b1ead9a00e9fc");
+
+        assert!(!may_contain_log(&Bloom::ZERO, &[address], &[topic]));
+        assert!(may_contain_log(&bloom, &[address], &[topic]));
+    }
+
+    #[test]
+    fn example_block_bloom_filter() {
+        // Test data from Gnosis Chain block 45195961:
+        // <https://gnosisscan.io/block/45195961>
+        let logs = vec![
+            (
+                address!("0x37de961d6bb5865867add416be07189d2dd960e6"),
+                vec![
+                    b256!("0x5103f5b0e5aea35d6e1af42289c0dca99a396726160b3cbdd87111f85b592511"),
+                    b256!("0x0000000000000000000000006d22ae126eb2c37f67a1391b37ff4f2863e61389"),
+                ],
+            ),
+            (
+                address!("0x37de961d6bb5865867add416be07189d2dd960e6"),
+                vec![
+                    b256!("0x5103f5b0e5aea35d6e1af42289c0dca99a396726160b3cbdd87111f85b592511"),
+                    b256!("0x000000000000000000000000f82d88217c249297c6037ba77ce34b3d8a90ab43"),
+                ],
+            ),
+            (
+                address!("0x43ab521302ff36039be6b425ddaea5ec30a0f8b5"),
+                vec![
+                    b256!("0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef"),
+                    b256!("0x000000000000000000000000e6014bf87feb3579a0aa1b1bf7240ac5552f4eb1"),
+                    b256!("0x00000000000000000000000010497611ee6524d75fc45e3739f472f83e282ad5"),
+                ],
+            ),
+            (
+                address!("0x543eb06a961f042a7189e24ec8ab2db9cd313fc6"),
+                vec![
+                    b256!("0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef"),
+                    b256!("0x000000000000000000000000e6014bf87feb3579a0aa1b1bf7240ac5552f4eb1"),
+                    b256!("0x00000000000000000000000010497611ee6524d75fc45e3739f472f83e282ad5"),
+                ],
+            ),
+            (
+                address!("0x7318c373695f8f3c8987a158d41d65eed4badb25"),
+                vec![
+                    b256!("0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef"),
+                    b256!("0x000000000000000000000000e6014bf87feb3579a0aa1b1bf7240ac5552f4eb1"),
+                    b256!("0x00000000000000000000000010497611ee6524d75fc45e3739f472f83e282ad5"),
+                ],
+            ),
+            (
+                address!("0x7facb63afb928ac5a4650acc6eab701d7a8becb5"),
+                vec![
+                    b256!("0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef"),
+                    b256!("0x000000000000000000000000e6014bf87feb3579a0aa1b1bf7240ac5552f4eb1"),
+                    b256!("0x00000000000000000000000010497611ee6524d75fc45e3739f472f83e282ad5"),
+                ],
+            ),
+            (
+                address!("0x88f37cee57b669cc1557d4f353dc11c113873f0b"),
+                vec![
+                    b256!("0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef"),
+                    b256!("0x000000000000000000000000e6014bf87feb3579a0aa1b1bf7240ac5552f4eb1"),
+                    b256!("0x00000000000000000000000010497611ee6524d75fc45e3739f472f83e282ad5"),
+                ],
+            ),
+            (
+                address!("0xa984e4c759bea433bef9239736d5f9a9af0e7389"),
+                vec![
+                    b256!("0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef"),
+                    b256!("0x000000000000000000000000e6014bf87feb3579a0aa1b1bf7240ac5552f4eb1"),
+                    b256!("0x00000000000000000000000010497611ee6524d75fc45e3739f472f83e282ad5"),
+                ],
+            ),
+            (
+                address!("0xb5fb9e224a5cc76e61928ea7985d251520a5579c"),
+                vec![
+                    b256!("0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef"),
+                    b256!("0x000000000000000000000000e6014bf87feb3579a0aa1b1bf7240ac5552f4eb1"),
+                    b256!("0x00000000000000000000000010497611ee6524d75fc45e3739f472f83e282ad5"),
+                ],
+            ),
+            (
+                address!("0xf549b95362e6062999bdfe6c61e75e4547b8116d"),
+                vec![
+                    b256!("0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef"),
+                    b256!("0x000000000000000000000000e6014bf87feb3579a0aa1b1bf7240ac5552f4eb1"),
+                    b256!("0x00000000000000000000000010497611ee6524d75fc45e3739f472f83e282ad5"),
+                ],
+            ),
+            (
+                address!("0xd3dff217818b4f33eb38a243158fbed2bbb029d3"),
+                vec![
+                    b256!("0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef"),
+                    b256!("0x0000000000000000000000000000000000000000000000000000000000000000"),
+                    b256!("0x00000000000000000000000010497611ee6524d75fc45e3739f472f83e282ad5"),
+                ],
+            ),
+            (
+                address!("0xd3dff217818b4f33eb38a243158fbed2bbb029d3"),
+                vec![
+                    b256!("0xab8530f87dc9b59234c4623bf917212bb2536d647574c8e7e5da92c2ede0c9f8"),
+                    b256!("0x000000000000000000000000e6014bf87feb3579a0aa1b1bf7240ac5552f4eb1"),
+                    b256!("0x00000000000000000000000010497611ee6524d75fc45e3739f472f83e282ad5"),
+                    b256!("0x0000000000000000000000000000000000000000000000078c57da465d640000"),
+                ],
+            ),
+            (
+                address!("0xfb9b496519fca8473fba1af0850b6b8f476bfdb3"),
+                vec![
+                    b256!("0x804c9b842b2748a22bb64b345453a3de7ca54a6ca45ce00d415894979e22897a"),
+                    b256!("0x000000000000000000000000d3dff217818b4f33eb38a243158fbed2bbb029d3"),
+                ],
+            ),
+            (
+                address!("0xd3dff217818b4f33eb38a243158fbed2bbb029d3"),
+                vec![
+                    b256!("0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef"),
+                    b256!("0x00000000000000000000000010497611ee6524d75fc45e3739f472f83e282ad5"),
+                    b256!("0x000000000000000000000000f3220cd8f66aeb86fc2a82502977eab4bfd2f647"),
+                ],
+            ),
+            (
+                address!("0xf3220cd8f66aeb86fc2a82502977eab4bfd2f647"),
+                vec![
+                    b256!("0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef"),
+                    b256!("0x0000000000000000000000000000000000000000000000000000000000000000"),
+                    b256!("0x000000000000000000000000e6014bf87feb3579a0aa1b1bf7240ac5552f4eb1"),
+                ],
+            ),
+            (
+                address!("0xf3220cd8f66aeb86fc2a82502977eab4bfd2f647"),
+                vec![
+                    b256!("0x458f5fa412d0f69b08dd84872b0215675cc67bc1d5b6fd93300a1c3878b86196"),
+                    b256!("0x00000000000000000000000010497611ee6524d75fc45e3739f472f83e282ad5"),
+                    b256!("0x000000000000000000000000e6014bf87feb3579a0aa1b1bf7240ac5552f4eb1"),
+                ],
+            ),
+            (
+                address!("0xfb9b496519fca8473fba1af0850b6b8f476bfdb3"),
+                vec![
+                    b256!("0x2b627736bca15cd5381dcf80b0bf11fd197d01a037c52b927a881a10fb73ba61"),
+                    b256!("0x000000000000000000000000d3dff217818b4f33eb38a243158fbed2bbb029d3"),
+                    b256!("0x000000000000000000000000e6014bf87feb3579a0aa1b1bf7240ac5552f4eb1"),
+                    b256!("0x0000000000000000000000000000000000000000000000000000000000000000"),
+                ],
+            ),
+            (
+                address!("0x10497611ee6524d75fc45e3739f472f83e282ad5"),
+                vec![
+                    b256!("0x5ecba6377a1785e6a6ae4afc88bd02dfdaf8c5ca2b120c2c5e776137f519d080"),
+                    b256!("0x000000000000000000000000e6014bf87feb3579a0aa1b1bf7240ac5552f4eb1"),
+                    b256!("0x000000000000000000000000e6014bf87feb3579a0aa1b1bf7240ac5552f4eb1"),
+                ],
+            ),
+            (
+                address!("0x10497611ee6524d75fc45e3739f472f83e282ad5"),
+                vec![
+                    b256!("0x811a6e772f77bc3dc8ea24e9341fe5126442a16a991ab6319c3e58a191b47ae8"),
+                    b256!("0x000000000000000000000000e6014bf87feb3579a0aa1b1bf7240ac5552f4eb1"),
+                ],
+            ),
+            (
+                address!("0xcff260bfbc199dc82717494299b1acade25f549b"),
+                vec![b256!(
+                    "0x8c8e19e7e8e193118a05465d7676e82215052d3cb150628fbf598105dc2bb6ab"
+                )],
+            ),
+            (
+                address!("0x896a695d5ccdd21f9e3bb18307a558befccb8428"),
+                vec![b256!(
+                    "0xb648d3644f584ed1c2232d53c46d87e693586486ad0d1175f8656013110b714e"
+                )],
+            ),
+            (
+                address!("0xfe74a522768547be33a3ad40b999381d57f238a0"),
+                vec![
+                    b256!("0x7421973e31248bda00bf2f04b80b46b34fc9e23ab57848234aed6cc5d437b6a8"),
+                    b256!("0x00000000000000000000000072e10605f583390e798c328c125aaf1a04c60e01"),
+                    b256!("0x0000000000000000000000004822521e6135cd2599199c83ea35179229a172ee"),
+                ],
+            ),
+            (
+                address!("0x420ca0f9b9b604ce0fd9c18ef134c705e5fa3430"),
+                vec![
+                    b256!("0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef"),
+                    b256!("0x00000000000000000000000072e10605f583390e798c328c125aaf1a04c60e01"),
+                    b256!("0x0000000000000000000000004822521e6135cd2599199c83ea35179229a172ee"),
+                ],
+            ),
+            (
+                address!("0xcb444e90d8198415266c6a2724b7900fb12fc56e"),
+                vec![
+                    b256!("0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef"),
+                    b256!("0x00000000000000000000000072e10605f583390e798c328c125aaf1a04c60e01"),
+                    b256!("0x0000000000000000000000004822521e6135cd2599199c83ea35179229a172ee"),
+                ],
+            ),
+            (
+                address!("0x72e10605f583390e798c328c125aaf1a04c60e01"),
+                vec![
+                    b256!("0x6895c13664aa4f67288b25d7a21d7aaa34916e355fb9b6fae0a139a9085becb8"),
+                    b256!("0x00000000000000000000000083876a09940bb28d7b07bdf8759b2421768d328d"),
+                ],
+            ),
+            (
+                address!("0x83876a09940bb28d7b07bdf8759b2421768d328d"),
+                vec![b256!(
+                    "0x90355d540c2980efb4c360996dfc5405ee87e812e4f3db843857547cbdb5af65"
+                )],
+            ),
+            (
+                address!("0x896a695d5ccdd21f9e3bb18307a558befccb8428"),
+                vec![
+                    b256!("0x6895c13664aa4f67288b25d7a21d7aaa34916e355fb9b6fae0a139a9085becb8"),
+                    b256!("0x000000000000000000000000cff260bfbc199dc82717494299b1acade25f549b"),
+                ],
+            ),
+            (
+                address!("0xcff260bfbc199dc82717494299b1acade25f549b"),
+                vec![b256!(
+                    "0xca8fbb9bda99848f447971eae62ad0ad2bc7caf9afcc0d8e4e8ffcf7e06bc28f"
+                )],
+            ),
+            (
+                address!("0x0a06c8354a6cc1a07549a38701eac205942e3ac6"),
+                vec![
+                    b256!("0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef"),
+                    b256!("0x00000000000000000000000046bc8dd5cc125be6319cfef041c45219310b59b9"),
+                    b256!("0x000000000000000000000000a44466f19818fca7ed0e2abcb4cb70fcf6324cff"),
+                ],
+            ),
+            (
+                address!("0x0a06c8354a6cc1a07549a38701eac205942e3ac6"),
+                vec![
+                    b256!("0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef"),
+                    b256!("0x000000000000000000000000a44466f19818fca7ed0e2abcb4cb70fcf6324cff"),
+                    b256!("0x0000000000000000000000000000000000000000000000000000000000000000"),
+                ],
+            ),
+            (
+                address!("0x0a06c8354a6cc1a07549a38701eac205942e3ac6"),
+                vec![
+                    b256!("0xcc16f5dbb4873280815c1ee09dbd06736cffcc184412cf7a71a0fdb75d397ca5"),
+                    b256!("0x000000000000000000000000a44466f19818fca7ed0e2abcb4cb70fcf6324cff"),
+                ],
+            ),
+            (
+                address!("0xa44466f19818fca7ed0e2abcb4cb70fcf6324cff"),
+                vec![
+                    b256!("0x92f5af670a8f6927ce06a7546794b17b5a67499bc224e74b7ae8c1bdf9a8f60e"),
+                    b256!("0x00000000000000000000000046bc8dd5cc125be6319cfef041c45219310b59b9"),
+                ],
+            ),
+            (
+                address!("0x4e3e48ba826b15214fde72a50bfd17ab286b584e"),
+                vec![
+                    b256!("0x3df02d68ad731eb0c4caab8f9424137610f574d333c6a00ce3e0ef6b6d032ba4"),
+                    b256!("0x00000000000000000000000091425e13cc451cb221a9d6c3beeb5b60306e65f5"),
+                    b256!("0x0000000000000000000000006d05801de772f77d52ebe90de11207b73a0877b4"),
+                ],
+            ),
+            (
+                address!("0x6d05801de772f77d52ebe90de11207b73a0877b4"),
+                vec![
+                    b256!("0x4bda649efe6b98b0f9c1d5e859c29e20910f45c66dabfe6fad4a4881f7faf9cc"),
+                    b256!("0x00000000000000000000000091425e13cc451cb221a9d6c3beeb5b60306e65f5"),
+                ],
+            ),
+            (
+                address!("0x4554fe75c1f5576c1d7f765b2a036c199adae329"),
+                vec![
+                    b256!("0x4827c9fc8074fe94dd4939d4228739ff43d7072a6504a6f413ffa4967c120175"),
+                    b256!("0x00000000000000000000000091425e13cc451cb221a9d6c3beeb5b60306e65f5"),
+                    b256!("0x0000000000000000000000006d05801de772f77d52ebe90de11207b73a0877b4"),
+                ],
+            ),
+            (
+                address!("0x91425e13cc451cb221a9d6c3beeb5b60306e65f5"),
+                vec![b256!(
+                    "0x442e715f626346e8c54381002da614f62bee8d27386535b2521ec8540898556e"
+                )],
+            ),
+            (
+                address!("0x91425e13cc451cb221a9d6c3beeb5b60306e65f5"),
+                vec![
+                    b256!("0x6895c13664aa4f67288b25d7a21d7aaa34916e355fb9b6fae0a139a9085becb8"),
+                    b256!("0x000000000000000000000000bd645cf2d4f04a1c12b97fe2a8b4a09ef50f1896"),
+                ],
+            ),
+            (
+                address!("0x77af31de935740567cf4ff1986d04b2c964a786a"),
+                vec![
+                    b256!("0x4bda649efe6b98b0f9c1d5e859c29e20910f45c66dabfe6fad4a4881f7faf9cc"),
+                    b256!("0x0000000000000000000000005d3f8b1c6f388b86903518ec089a3f768e5f9caa"),
+                ],
+            ),
+            (
+                address!("0x5d3f8b1c6f388b86903518ec089a3f768e5f9caa"),
+                vec![b256!(
+                    "0x442e715f626346e8c54381002da614f62bee8d27386535b2521ec8540898556e"
+                )],
+            ),
+            (
+                address!("0x5d3f8b1c6f388b86903518ec089a3f768e5f9caa"),
+                vec![
+                    b256!("0x6895c13664aa4f67288b25d7a21d7aaa34916e355fb9b6fae0a139a9085becb8"),
+                    b256!("0x000000000000000000000000bd645cf2d4f04a1c12b97fe2a8b4a09ef50f1896"),
+                ],
+            ),
+            (
+                address!("0x7aa55b39ebb3dafa06548d2c8fdac3ba42ba77e2"),
+                vec![
+                    b256!("0xb3b10f23809cbdcdb7d4ff0d2cb4e573182d7704ca17ccf8321788a097a35ee7"),
+                    b256!("0xec33476cbf23322f65d6fc8d9676de0814a7f4aae2c47bd50000000000000000"),
+                    b256!("0x0000000021c2b6c8473051fb6ded83fe6f0609e53747cbb40000000000007a9b"),
+                ],
+            ),
+            (
+                address!("0x7aa55b39ebb3dafa06548d2c8fdac3ba42ba77e2"),
+                vec![
+                    b256!("0x0070280cc511b50af569112a8d3fb2c711e5c858ce8d13e4f827275259733f3d"),
+                    b256!("0xec33476cbf23322f65d6fc8d9676de0814a7f4aae2c47bd50000000000000000"),
+                ],
+            ),
+            (
+                address!("0x7aa55b39ebb3dafa06548d2c8fdac3ba42ba77e2"),
+                vec![
+                    b256!("0x0070280cc511b50af569112a8d3fb2c711e5c858ce8d13e4f827275259733f3d"),
+                    b256!("0xec33476cbf23322f65d6fc8d9676de0814a7f4aae2c47bd50000000000000000"),
+                ],
+            ),
+            (
+                address!("0x7aa55b39ebb3dafa06548d2c8fdac3ba42ba77e2"),
+                vec![
+                    b256!("0x0070280cc511b50af569112a8d3fb2c711e5c858ce8d13e4f827275259733f3d"),
+                    b256!("0xec33476cbf23322f65d6fc8d9676de0814a7f4aae2c47bd50000000000000000"),
+                ],
+            ),
+            (
+                address!("0x7aa55b39ebb3dafa06548d2c8fdac3ba42ba77e2"),
+                vec![
+                    b256!("0x0070280cc511b50af569112a8d3fb2c711e5c858ce8d13e4f827275259733f3d"),
+                    b256!("0xec33476cbf23322f65d6fc8d9676de0814a7f4aae2c47bd50000000000000000"),
+                ],
+            ),
+            (
+                address!("0x7aa55b39ebb3dafa06548d2c8fdac3ba42ba77e2"),
+                vec![
+                    b256!("0x25a4d6e8d11a9fdc20ffdd826473485ae4cdd453271726c072a16836c1882e7c"),
+                    b256!("0xaf96ebd2e3a710a9ef9c6d848c4c14270b38aeb3a41b2b5d000000000000001d"),
+                    b256!("0x8997226a8e30890f539f54ad2a397a00c322f67a33e4489e71a310f1cd72d9d3"),
+                ],
+            ),
+            (
+                address!("0x7aa55b39ebb3dafa06548d2c8fdac3ba42ba77e2"),
+                vec![
+                    b256!("0x25a4d6e8d11a9fdc20ffdd826473485ae4cdd453271726c072a16836c1882e7c"),
+                    b256!("0xaf96ebd2e3a710a9ef9c6d848c4c14270b38aeb3a41b2b5d000000000000001d"),
+                    b256!("0x8997226a8e30890f539f54ad2a397a00c322f67a33e4489e71a310f1cd72d9d3"),
+                ],
+            ),
+            (
+                address!("0x7aa55b39ebb3dafa06548d2c8fdac3ba42ba77e2"),
+                vec![
+                    b256!("0x7f1641fa8e46c311f05dc0cb9f69f0ac0f27dd12388a5587c7983de9e99a028d"),
+                    b256!("0xaf96ebd2e3a710a9ef9c6d848c4c14270b38aeb3a41b2b5d000000000000001d"),
+                    b256!("0x8997226a8e30890f539f54ad2a397a00c322f67a33e4489e71a310f1cd72d9d3"),
+                ],
+            ),
+            (
+                address!("0x21c2b6c8473051fb6ded83fe6f0609e53747cbb4"),
+                vec![
+                    b256!("0x72272729e643703db011cc155474c30d652f1a68712d921cc263a881efd7bce6"),
+                    b256!("0x64bcf472e0488772975436242b40652b092b1799bac01afdd9275036cb8b7b16"),
+                    b256!("0x0000000000000000000000000000000000000000000000000000000000000001"),
+                    b256!("0x000000000000000000000000e688e1825c116cb9efabca840b764e09c9849be3"),
+                ],
+            ),
+            (
+                address!("0x7aa55b39ebb3dafa06548d2c8fdac3ba42ba77e2"),
+                vec![
+                    b256!("0x25a4d6e8d11a9fdc20ffdd826473485ae4cdd453271726c072a16836c1882e7c"),
+                    b256!("0xaf96ebd2e3a710a9ef9c6d848c4c14270b38aeb3a41b2b5d000000000000001e"),
+                    b256!("0x95b4b0d7be475ded18024a8780013dd8e4d6fec0c3e5439d9b2857efd826cd71"),
+                ],
+            ),
+            (
+                address!("0x7aa55b39ebb3dafa06548d2c8fdac3ba42ba77e2"),
+                vec![
+                    b256!("0x25a4d6e8d11a9fdc20ffdd826473485ae4cdd453271726c072a16836c1882e7c"),
+                    b256!("0xaf96ebd2e3a710a9ef9c6d848c4c14270b38aeb3a41b2b5d000000000000001e"),
+                    b256!("0x95b4b0d7be475ded18024a8780013dd8e4d6fec0c3e5439d9b2857efd826cd71"),
+                ],
+            ),
+            (
+                address!("0x7aa55b39ebb3dafa06548d2c8fdac3ba42ba77e2"),
+                vec![
+                    b256!("0x7f1641fa8e46c311f05dc0cb9f69f0ac0f27dd12388a5587c7983de9e99a028d"),
+                    b256!("0xaf96ebd2e3a710a9ef9c6d848c4c14270b38aeb3a41b2b5d000000000000001e"),
+                    b256!("0x95b4b0d7be475ded18024a8780013dd8e4d6fec0c3e5439d9b2857efd826cd71"),
+                ],
+            ),
+            (
+                address!("0x21c2b6c8473051fb6ded83fe6f0609e53747cbb4"),
+                vec![
+                    b256!("0x72272729e643703db011cc155474c30d652f1a68712d921cc263a881efd7bce6"),
+                    b256!("0xaebe2863b6a5d5b7286db345a850bdf832120db44a1e28879c2c96fd165fa6d1"),
+                    b256!("0x0000000000000000000000000000000000000000000000000000000000000001"),
+                    b256!("0x000000000000000000000000bbe0de9757f93e3306adbfebe906ab285edd13da"),
+                ],
+            ),
+            (
+                address!("0x21c2b6c8473051fb6ded83fe6f0609e53747cbb4"),
+                vec![
+                    b256!("0xe7427c304b80147290ec649ec1d8881f5fa455e85ba79ecb7dbfc58a56ea0906"),
+                    b256!("0x011ce108992e91a6db2ed7b14d657857e570ebe050537be063304136454567e7"),
+                    b256!("0x0000000000000000000000000000000000000000000000000000000000000001"),
+                    b256!("0x000000000000000000000000faae5204befb5111712524461c3127b29d7ceac1"),
+                ],
+            ),
+            (
+                address!("0x7aa55b39ebb3dafa06548d2c8fdac3ba42ba77e2"),
+                vec![
+                    b256!("0xb48d242879f9f3df555c800db966f65cba128c7213198748fa202ed54e092691"),
+                    b256!("0x00000000000000000000000021c2b6c8473051fb6ded83fe6f0609e53747cbb4"),
+                    b256!("0xaf96ebd2e3a710a9ef9c6d848c4c14270b38aeb3a41b2b5d0000000000000000"),
+                    b256!("0x6f9099051388a45c9381585757ab84a240fbf9bdb6d210a7186ad8ca255ffbfd"),
+                ],
+            ),
+        ];
+
+        let mut bloom = Bloom::ZERO;
+        for (address, topics) in &logs {
+            bloom.accrue_raw_log(*address, topics);
+        }
+        assert_eq!(
+            bloom,
+            Bloom(
+                hex!(
+                    "080140414261300100000600008000062400000080a0503000000d000c100004
+                     00001000470180801040001002249b0001001000000000408002010802040200
+                     080002b0800000402026000b0000400310088800002420830000640420020081
+                     c032080002124041000080048030180049800000824080020840001000008020
+                     1010400020108800102110040000060220000104800480000000000000240110
+                     10002000001080884102c000202004220f000002000050000000404486000582
+                     0281011200023000000120216020000800400000002022000042000810026818
+                     02000080008020200000b0240400042648000000001862000101480080012080"
+                )
+                .into()
+            )
+        );
+
+        // Every log in the block is, by construction, present in the block bloom.
+        for (address, topics) in &logs {
+            assert!(may_contain_log(&bloom, &[*address], topics));
+        }
+    }
+}
