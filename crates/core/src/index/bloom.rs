@@ -18,13 +18,17 @@ use alloy::primitives::{Address, B256, Bloom, BloomInput};
 /// a watched address and a different log supplies a watched topic still returns
 /// `true`, matching the conservative behaviour of the reference implementation.
 pub fn may_contain_log(bloom: &Bloom, addresses: &[Address], topics: &[B256]) -> bool {
-    let contains_address = addresses
-        .iter()
-        .any(|address| bloom.contains_input(BloomInput::Raw(address.as_slice())));
-    let contains_topics = topics
-        .iter()
-        .any(|topic| bloom.contains_input(BloomInput::Raw(topic.as_slice())));
-    contains_address && contains_topics
+    let contains_at_least_one_address = || {
+        addresses
+            .iter()
+            .any(|address| bloom.contains_input(BloomInput::Raw(address.as_slice())))
+    };
+    let contains_at_least_one_topic = || {
+        topics
+            .iter()
+            .any(|topic| bloom.contains_input(BloomInput::Raw(topic.as_slice())))
+    };
+    contains_at_least_one_address() && contains_at_least_one_topic()
 }
 
 #[cfg(test)]
