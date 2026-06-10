@@ -126,6 +126,18 @@ Key architectural decisions:
 - **Configurable metric prefix.** TS metrics are hard-prefixed `validator_`. Because multiple Rust
   services share this crate, the metrics module takes the prefix/namespace as a parameter.
 
+- **Per-module `Config` structs at the module root.** Each high-level module (`observability`,
+  `index`, `state`, `tx`) exposes a `Config` type at its root (e.g. `observability::Config`) that
+  gathers everything a consumer must supply to use that module, composing the configs of its
+  submodules where applicable (e.g. `observability::Config` carries the logging filter and the
+  metrics listen address). Consumers build and pass one `Config` per module rather than threading
+  many loose parameters. Each `Config` derives `serde::Deserialize` so it can be read straight from
+  a configuration file, and provides sensible defaults (via `#[serde(default)]` / `Default`) for as
+  many fields as reasonably possible, so a consumer only specifies what it needs to override.
+  Sourcing the file/values (which file, env overlay, CLI flags) remains a consumer concern per the
+  `zod`-is-out-of-scope decision; the `Config` is a declarative, deserializable struct, not an
+  argument parser.
+
 ### Alternatives Considered
 
 - **Hand-rolling RPC backoff (porting `backoff.ts`).** **Rejected** — `alloy`'s `RetryBackoffLayer`
@@ -269,6 +281,14 @@ transaction_hash TEXT, created_at, submitted_at INTEGER, fees_json TEXT)` and th
 - Per `AGENTS.md`: `cargo fmt --all`, `cargo clippy --package safenet-core`,
   `cargo test --package safenet-core`.
 - `Cargo.lock` is committed; dependency versions are pinned in PR A1.
+- **Dependency features stay permissive during implementation.** PR A1 enables broad feature sets
+  (e.g. `full` on `tokio` and `alloy`) rather than tracking the exact per-PR feature deltas, to
+  avoid `Cargo.toml`/`Cargo.lock` churn across the phase PRs. A wrap-up PR (F3) narrows every
+  dependency to only the features actually used once the crate is complete.
+- **Modules are introduced only when used.** No empty stub modules and no `mod` declarations ahead
+  of the code that needs them. Each module (`error.rs`, `types.rs`, `rpc.rs`, the `observability`,
+  `index`, `state` and `tx` modules, etc.) is created and declared in `lib.rs` by the PR that first
+  implements/consumes it, not optimistically up front.
 
 ---
 
@@ -281,10 +301,11 @@ ordering; everything else may proceed in parallel.
 ### Phase A — Foundation (blocks all other phases)
 
 - **A1 — Crate scaffolding & dependencies.** Add the dependency set (alloy, sqlx, tokio, tracing,
-  tracing-subscriber, metrics, metrics-exporter-prometheus, serde, serde*json, thiserror) to
-  `crates/core/Cargo.toml`; commit `Cargo.lock`; declare the (empty) modules in `lib.rs`; add
-  `error.rs` (crate error enum) and `types.rs` (`BlockRef` + alloy re-exports). \_Single purpose:
-  set up the crate.*
+  tracing-subscriber, metrics, metrics-exporter-prometheus, serde, serde_json, thiserror) to
+  `crates/core/Cargo.toml` and commit `Cargo.lock`. Per the modules-when-used convention (see
+  Tooling), A1 does **not** pre-create empty module files or declare modules in `lib.rs` ahead of
+  their use: `error.rs`, `types.rs` (`BlockRef` + alloy re-exports), and every other module land in
+  the PR that first consumes them, not here. _Single purpose: pull in the crate's dependencies._
 - **A2 — RPC provider builder.** `rpc.rs`: helper that builds an `alloy` `Provider` wired with
   `RetryBackoffLayer` (+ optional `FallbackLayer`/`ThrottleLayer`). Depends on A1. Small; this is
   the embodiment of the "delegate backoff to alloy" decision and is shared by C and E.
@@ -333,6 +354,10 @@ ordering; everything else may proceed in parallel.
 - **F2 — (Optional) end-to-end example/integration test.** A small example or integration test
   wiring provider → watcher → snapshot store → transaction manager against an Anvil devnet.
   Depends on C4, D2, E3.
+- **F3 — Restrict dependency features (separate PR).** Now that the full feature usage is known,
+  narrow every dependency in `Cargo.toml` (notably `tokio` and `alloy`, temporarily on `full`) to
+  only the features actually used, and refresh `Cargo.lock`. Depends on all implementation phases.
+  _Single purpose: minimize the dependency/feature surface._
 - **Cleanup.** Per the planning convention, **remove this epic file**
   (`epics/2026_06_09_safenet_core_crate.md`) once the epic is complete.
 
