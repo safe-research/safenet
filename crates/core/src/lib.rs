@@ -10,4 +10,5 @@
 //!   restarts and roll back in case of reorgs.
 //! - Reliable transaction submission with all its complexities.
 
+pub mod index;
 pub mod observability;
