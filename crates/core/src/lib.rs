@@ -9,3 +9,5 @@
 //! - Utilities for managing service state that needs to be preserved across
 //!   restarts and roll back in case of reorgs.
 //! - Reliable transaction submission with all its complexities.
+
+pub mod observability;
