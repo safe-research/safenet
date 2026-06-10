@@ -206,14 +206,17 @@ crates/core/
 
 ### Indexing (port of `validator/src/watcher/`, typed)
 
-- **`blocks.rs`** ← `blocks.ts`. `BlockWatcher` following the head: `BlockUpdate` enum
-  (`WarpToBlock { from, to }`, `UncleBlock { number }`, `NewBlock { number, hash, logs_bloom }`),
-  settings (`block_time`, `max_reorg_depth`), options (`block_propagation_delay`,
-  `block_retry_delays`, injectable timer), a recent-block ring buffer for parent-hash reorg
-  detection, `next()`, and `revalidate_last_block()` (handles RPC nodes that report a block but
-  not its logs). Includes the resume/fresh-start/warp init logic. The `block_retry_delays` poll
-  ("the next block isn't available yet") stays here; it is distinct from RPC rate-limit backoff,
-  which the provider's `RetryBackoffLayer` owns. Mirrors `blocks.test.ts`.
+- **`blocks.rs`** ← `blocks.ts`. `BlockWatcher` following the head, generic over an alloy
+  `Provider` and working with full alloy block types directly (rather than a TS-style minimal
+  block-source/`Block` projection). `BlockUpdate` enum (`WarpToBlock { from, to }`,
+  `UncleBlock { number }`, `NewBlock { number, hash, logs_bloom }`), a `Config`
+  (`block_time`, `max_reorg_depth`, `block_propagation_delay`, `block_retry_delays`, `start_block`),
+  a recent-block ring buffer for parent-hash reorg detection, `next()`, and
+  `revalidate_last_block()` (handles RPC nodes that report a block but not its logs). Includes the
+  resume/fresh-start/warp init logic; `start_block` comes from `Config` while the runtime resume
+  point (`last_indexed_block`) is a `create` parameter. The `block_retry_delays` poll ("the next
+  block isn't available yet") stays here; it is distinct from RPC rate-limit backoff, which the
+  provider's `RetryBackoffLayer` owns. Mirrors `blocks.test.ts`.
 - **`bloom.rs`** ← `utils/bloom.ts`. Thin helpers on `alloy_primitives::Bloom`: "can this block
   bloom possibly contain a watched (address, topic0)?" (topic0s derived from the typed event set)
   and "compute bloom from a log set" (for the all-logs integrity check).
@@ -322,9 +325,21 @@ ordering; everything else may proceed in parallel.
 
 - **C1 — Bloom helpers.** `index/bloom.rs` over `alloy_primitives::Bloom` + tests. Depends on A1.
   _(∥ C2)_
-- **C2 — BlockWatcher.** `index/blocks.rs` + tests. Depends on A1, A2. _(∥ C1)_ — if it exceeds the
-  size budget, split into C2a (types + chain-follow + reorg detection) and C2b (init/resume/warp +
-  `revalidate_last_block`).
+- **C2 — BlockWatcher.** `index/blocks.rs`. Depends on A1, A2. _(∥ C1)_ The watcher works directly
+  over an alloy `Provider` and full alloy block types (no bespoke block-source/`Block` projection
+  trait), and takes its `start_block` from `Config` rather than as a constructor parameter
+  (`last_indexed_block`, a runtime resume value, stays a parameter). Split into four PRs, since the
+  whole thing is well over the size budget:
+  - **C2a — Initialization.** Types (`Config`, `BlockUpdate`, `Error`), the `BlockWatcher` struct,
+    and `create`/init (latest fetch, resume "fake" reorg, fresh-start warp, recent-block fetch with
+    mid-init reorg restart).
+  - **C2b — Background task.** `next()` (pending-block wait/poll with `block_retry_delays` +
+    skipped-slot handling, reorg detection) and `revalidate_last_block()`.
+  - **C2c — Test mocking facilities.** Helpers for driving the watcher deterministically, built on
+    alloy's built-in mock provider (`ProviderBuilder::connect_mocked_client` + `Asserter`) rather
+    than a hand-rolled mock, paired with controllable time (`tokio::time` pause/advance).
+  - **C2d — Tests.** Port `blocks.test.ts` (init variants, retry/skip-slot timing, deep reorgs,
+    revalidate cases) onto the C2c facilities.
 - **C3 — EventWatcher (typed).** `index/events.rs` + tests; generic over a `sol!` event set via
   `SolEventInterface`. Depends on C1 — split into C3a (state machine + warp) and C3b (single-block
   fallback strategies + decoding) if needed.
