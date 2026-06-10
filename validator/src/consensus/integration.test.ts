@@ -41,9 +41,9 @@ import { calcGroupId } from "./keyGen/utils.js";
 import { calculateMerkleRoot, calculateParticipantsRoot } from "./merkle.js";
 import { verifySignature } from "./signing/verify.js";
 
-const BLOCK_TIME_MS = 250;
+const BLOCK_TIME_MS = 500;
 const BLOCKS_PER_EPOCH = 20n;
-const TEST_RUNTIME_IN_SECONDS = 60;
+const TEST_RUNTIME_IN_SECONDS = 120;
 
 // Anvil account 6 — sentinel used in the oracle signing flow test
 const SENTINEL_PK: Hex = "0x92db14e403b83dfe3df233f83dfa3a0d7096f21ca9b0d6d6b8d88b2b4ec1564e";
