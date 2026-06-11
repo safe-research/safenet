@@ -3,6 +3,7 @@
 //! Reliably produces a stream of block updates while following the chain head,
 //! and keeps a bounded history of recent blocks so chain reorgs can be detected.
 
+use super::clock::Clock;
 use alloy::{
     eips::BlockId,
     primitives::{B256, Bloom},
@@ -10,7 +11,7 @@ use alloy::{
     rpc::types::Block,
     transports::TransportError,
 };
-use std::collections::VecDeque;
+use std::{collections::VecDeque, time::Duration};
 
 /// Block watcher configuration.
 #[derive(Clone, Debug)]
@@ -19,6 +20,13 @@ pub struct Config {
     pub block_time: u64,
     /// How many blocks deep a reorg can be before it is considered final.
     pub max_reorg_depth: u64,
+    /// Extra delay after a block's expected mining time before polling for it,
+    /// in milliseconds, to allow for propagation.
+    pub block_propagation_delay: u64,
+    /// Successive delays, in milliseconds, between retries while waiting for an
+    /// expected block to become available. Once exhausted, the watcher waits a
+    /// whole `block_time` before trying again (to handle skipped slots).
+    pub block_retry_delays: Vec<u64>,
     /// Block to begin a fresh index from when there is no resume point. Unlike
     /// resuming, this back-fills history via a warp without emitting a (fake)
     /// reorg.
@@ -57,6 +65,14 @@ pub enum Error {
     MissingBlock(BlockId),
 }
 
+/// A block that was found to be no longer canonical on revalidation. Carries the
+/// (now uncled) block hash in addition to the [`BlockUpdate::Uncle`] number.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct InvalidatedBlock {
+    pub number: u64,
+    pub hash: B256,
+}
+
 /// The next block the watcher expects to fetch, and the earliest time it is
 /// worth trying to (its expected mining time, in milliseconds).
 #[derive(Clone, Debug)]
@@ -70,6 +86,7 @@ pub struct BlockWatcher<P> {
     provider: P,
     config: Config,
     pending: PendingBlock,
+    clock: Clock,
     /// The most recent blocks (up to `max_reorg_depth`), kept for reorg
     /// detection. Ordered oldest-first.
     recent: VecDeque<Block>,
@@ -99,6 +116,7 @@ where
                 number: 0,
                 timestamp_ms: 0,
             },
+            clock: Clock::start(),
             recent: VecDeque::new(),
             queue: VecDeque::new(),
         };
@@ -209,11 +227,147 @@ where
         Ok(())
     }
 
+    /// Retrieves the next block update from the watcher. This will block and
+    /// wait for a new block to be produced if there is no update available.
+    pub async fn next(&mut self) -> Result<BlockUpdate, Error> {
+        // Return a queued update immediately if one is available.
+        if let Some(update) = self.queue.pop_front() {
+            return Ok(update);
+        }
+
+        // Wait for and retrieve the pending block.
+        let mut retry_count = 0;
+        let block = loop {
+            self.wait_for_pending_block().await;
+            let pending = self
+                .provider
+                .get_block(BlockId::number(self.pending.number));
+            if let Some(block) = pending.hashes().await? {
+                break block;
+            }
+
+            // While we wait around the expected block time, the block is likely
+            // available now or shortly after, so retry with the decreasing
+            // `block_retry_delays`. But on low-activity chains slots are commonly
+            // skipped, so once the retries are exhausted, wait a whole block time
+            // rather than hammering the node.
+            let index = retry_count % (self.config.block_retry_delays.len() + 1);
+            retry_count += 1;
+            if let Some(delay) = self.config.block_retry_delays.get(index).copied() {
+                tokio::time::sleep(Duration::from_millis(delay)).await;
+            } else {
+                self.pending.timestamp_ms += self.config.block_time;
+            }
+        };
+
+        // Detect reorgs: if the new block does not build on our last seen block,
+        // uncle the last block and re-fetch its replacement on the next call.
+        if let Some(last) = self
+            .recent
+            .pop_back_if(|last| last.header.hash != block.header.parent_hash)
+        {
+            self.pending = PendingBlock {
+                number: last.header.number,
+                timestamp_ms: last.header.timestamp * 1000,
+            };
+            return Ok(BlockUpdate::Uncle {
+                number: last.header.number,
+            });
+        }
+
+        // Record the new block, keeping at most `max_reorg_depth` recent blocks,
+        // and advance the pending block.
+        let update = BlockUpdate::New {
+            number: block.header.number,
+            hash: block.header.hash,
+            logs_bloom: block.header.logs_bloom,
+        };
+        self.update_next_pending_block(block.header.number, block.header.timestamp);
+        self.recent.push_back(block);
+
+        // TODO: This should be replaced by `VecDeque::truncate_front` once the
+        // API stabilizes.
+        while self.recent.len() as u64 > self.config.max_reorg_depth {
+            self.recent.pop_front();
+        }
+
+        Ok(update)
+    }
+
+    /// Revalidates that the last seen block is still canonical on the connected
+    /// node. If it is not (the node reports a different hash at that height, or
+    /// cannot find the block at all), the watcher's state is invalidated so the
+    /// following `next()` calls re-fetch the canonical replacement, and the uncled
+    /// block is returned.
+    ///
+    /// This recovers from nodes that briefly observe a block, expose its hash,
+    /// and then lose the ability to serve logs for it (notably Reth around uncled
+    /// blocks).
+    pub async fn revalidate_last_block(&mut self) -> Result<Option<InvalidatedBlock>, Error> {
+        // Revalidating while warping is not possible, as it is beyond the max
+        // reorg depth.
+        let next_number = match self.queue.front() {
+            Some(BlockUpdate::New { number, .. }) => Some(*number),
+            Some(_) => return Ok(None),
+            None => None,
+        };
+
+        // Find the last block that was emitted as a block update. This keeps
+        // `revalidate` working in the unlikely event of a reorg on startup.
+        let last_index = self
+            .recent
+            .iter()
+            .rposition(|block| next_number.is_none_or(|number| block.header.number < number));
+        let Some(last_index) = last_index else {
+            // We are past the max reorg depth, so there is nothing to do.
+            return Ok(None);
+        };
+        let last = &self.recent[last_index];
+
+        let current = self
+            .provider
+            .get_block(BlockId::number(last.header.number))
+            .hashes()
+            .await?;
+        if current.map(|block| block.header.hash) == Some(last.header.hash) {
+            return Ok(None);
+        }
+
+        // Drop the no-longer-canonical block and all of its children, and rewind
+        // the pending block to the one that was just uncled.
+        let invalidated = InvalidatedBlock {
+            number: last.header.number,
+            hash: last.header.hash,
+        };
+        let timestamp = last.header.timestamp;
+        self.recent.truncate(last_index);
+        self.pending = PendingBlock {
+            number: invalidated.number,
+            timestamp_ms: timestamp * 1000,
+        };
+
+        // Clear the queue and insert the uncle update.
+        self.queue.clear();
+        self.queue.push_back(BlockUpdate::Uncle {
+            number: invalidated.number,
+        });
+
+        Ok(Some(invalidated))
+    }
+
     /// Updates the pending block to follow the given latest block.
     fn update_next_pending_block(&mut self, number: u64, timestamp: u64) {
         self.pending = PendingBlock {
             number: number + 1,
             timestamp_ms: timestamp * 1000 + self.config.block_time,
         };
+    }
+
+    /// Sleeps until the pending block is suspected to be ready. When the watcher
+    /// is behind the head, the pending block's expected time is in the past, so
+    /// this returns immediately and the watcher catches up as fast as it can.
+    async fn wait_for_pending_block(&self) {
+        let target = self.pending.timestamp_ms + self.config.block_propagation_delay;
+        self.clock.sleep_until(target).await;
     }
 }
