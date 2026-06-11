@@ -125,13 +125,13 @@ where
 
         self.update_next_pending_block(latest.header.number, latest.header.timestamp);
 
-        if let Some(last_indexed) = last_indexed_block {
+        if let Some(last_indexed_block) = last_indexed_block {
             // To guard against a reorg of a block right as the service restarted,
             // we always create a "fake" reorg `max_reorg_depth` deep to re-index
             // the last blocks before shutdown. Queue an uncle for the block right
             // after the last reorg-safe indexed block.
-            let uncle = (last_indexed + 1).saturating_sub(self.config.max_reorg_depth);
-            if uncle <= last_indexed {
+            let uncle = (last_indexed_block + 1).saturating_sub(self.config.max_reorg_depth);
+            if uncle <= last_indexed_block {
                 self.queue.push_back(BlockUpdate::Uncle { number: uncle });
             }
 
@@ -144,16 +144,16 @@ where
                     to: safe,
                 });
             }
-        } else if let Some(start) = self.config.start_block {
+        } else if let Some(start_block) = self.config.start_block
+            && start_block <= safe
+        {
             // Fresh start from a configured block: if possible back-fill via a
             // warp. Unlike resuming, there is no prior state, so do not emit a
             // fake reorg like we do when resuming.
-            if start <= safe {
-                self.queue.push_back(BlockUpdate::Warp {
-                    from: start,
-                    to: safe,
-                });
-            }
+            self.queue.push_back(BlockUpdate::Warp {
+                from: start_block,
+                to: safe,
+            });
         }
 
         // Query the recent blocks (those within the reorg window) so we can
@@ -197,7 +197,7 @@ where
         for block in self.recent.iter().filter(|block| {
             self.config
                 .start_block
-                .is_none_or(|start| block.header.number >= start)
+                .is_none_or(|start_block| block.header.number >= start_block)
         }) {
             self.queue.push_back(BlockUpdate::New {
                 number: block.header.number,
