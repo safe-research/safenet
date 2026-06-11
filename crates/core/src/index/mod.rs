@@ -6,3 +6,5 @@ mod blocks;
 #[allow(dead_code)]
 mod bloom;
 mod clock;
+#[allow(dead_code)]
+mod events;
