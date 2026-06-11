@@ -1,8 +1,6 @@
 //! A wall clock implementation that produces Unix epoch timestamps and is
 //! compatible with `tokio::time::{advance, pause}` in tests.
 
-#![allow(dead_code)]
-
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 /// Estimates the current wall-clock time from elapsed monotonic time.
