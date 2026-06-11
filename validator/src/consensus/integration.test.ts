@@ -42,7 +42,7 @@ import { calculateMerkleRoot, calculateParticipantsRoot } from "./merkle.js";
 import { verifySignature } from "./signing/verify.js";
 
 const BLOCK_TIME_MS = 250;
-const BLOCKS_PER_EPOCH = 20n;
+const BLOCKS_PER_EPOCH = 30n;
 const TEST_RUNTIME_IN_SECONDS = 60;
 
 // Anvil account 6 — sentinel used in the oracle signing flow test
@@ -319,7 +319,8 @@ describe("integration", () => {
 	});
 
 	it("keygen timeout", { timeout: TEST_RUNTIME_IN_SECONDS * 1000 * 5 }, async ({ skip }) => {
-		const setupInfo = await setup({ timeout: 5n, blocksPerEpoch: 40n, rotateOutEpoch: 2n });
+		const blocksPerEpoch = 40n;
+		const setupInfo = await setup({ timeout: 5n, blocksPerEpoch, rotateOutEpoch: 2n });
 		if (setupInfo === undefined) {
 			skip();
 			// Don't run the test code
@@ -342,7 +343,7 @@ describe("integration", () => {
 			},
 		});
 		// Wait for end of epoch
-		await waitForBlock(testClient, 40n);
+		await waitForBlock(testClient, blocksPerEpoch);
 		// Check number of staged epochs
 		const stagedEpochs = await testClient.getLogs({
 			address: consensus.address,
@@ -369,8 +370,9 @@ describe("integration", () => {
 		// Restart client and calculate next group
 		clients[2].service.start();
 
-		// Wait for end of epoch
-		await waitForBlock(testClient, 60n);
+		// Wait a few blocks after the epoch, after which the group key will have
+		// been calculated.
+		await waitForBlock(testClient, blocksPerEpoch + blocksPerEpoch / 2n);
 
 		const expectedGroupEpoch2 = calcGroupId(
 			calculateParticipantsRoot([
@@ -468,7 +470,7 @@ describe("integration", () => {
 		const startEpoch = (await testClient.getBlockNumber({ cacheTime: 0 })) / BLOCKS_PER_EPOCH;
 		await triggerKeyGen();
 
-		await waitForBlocks(testClient, 15n);
+		await waitForBlocks(testClient, BLOCKS_PER_EPOCH / 2n);
 		// Setup done ... SchildNetz läuft ... lets send some signature requests
 		const transaction = {
 			chainId: 1n,
@@ -491,7 +493,7 @@ describe("integration", () => {
 			args: [transaction],
 		});
 		// Wait until the end of the epoch
-		await waitForBlock(testClient, 40n);
+		await waitForBlock(testClient, BLOCKS_PER_EPOCH * 2n);
 		const endEpoch = (await testClient.getBlockNumber({ cacheTime: 0 })) / BLOCKS_PER_EPOCH;
 		// Check number of staged epochs
 		const stagedEpochs = await testClient.getLogs({
@@ -697,7 +699,7 @@ describe("integration", () => {
 		await sentinelService.start();
 
 		await triggerKeyGen();
-		await waitForBlocks(testClient, 15n);
+		await waitForBlocks(testClient, BLOCKS_PER_EPOCH / 2n);
 
 		// Propose an oracle-checked transaction — Consensus calls postRequest on SentinelOracle
 		testLogger.notice(
