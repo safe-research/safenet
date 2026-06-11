@@ -13,10 +13,14 @@ pub struct Clock {
 impl Clock {
     /// Anchors "now" to the current system time.
     pub fn start() -> Self {
-        let base_ms = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap_or_default()
-            .as_millis() as u64;
+        let base_ms = if cfg!(test) {
+            TEST_SYSTEM_TIME_EPOCH_SECONDS * 1_000
+        } else {
+            SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_millis() as u64
+        };
         Self {
             base_ms,
             anchor: tokio::time::Instant::now(),
@@ -38,6 +42,9 @@ impl Clock {
         }
     }
 }
+
+/// The reference system time used when testing.
+pub const TEST_SYSTEM_TIME_EPOCH_SECONDS: u64 = 1337;
 
 #[cfg(test)]
 mod tests {

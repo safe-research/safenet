@@ -18,8 +18,6 @@ use std::{collections::VecDeque, time::Duration};
 pub struct Config {
     /// Expected time between blocks, in milliseconds.
     pub block_time: u64,
-    /// How many blocks deep a reorg can be before it is considered final.
-    pub max_reorg_depth: u64,
     /// Extra delay after a block's expected mining time before polling for it,
     /// in milliseconds, to allow for propagation.
     pub block_propagation_delay: u64,
@@ -27,6 +25,8 @@ pub struct Config {
     /// expected block to become available. Once exhausted, the watcher waits a
     /// whole `block_time` before trying again (to handle skipped slots).
     pub block_retry_delays: Vec<u64>,
+    /// How many blocks deep a reorg can be before it is considered final.
+    pub max_reorg_depth: u64,
     /// Block to begin a fresh index from when there is no resume point. Unlike
     /// resuming, this back-fills history via a warp without emitting a (fake)
     /// reorg.
@@ -227,6 +227,11 @@ where
         Ok(())
     }
 
+    /// Retrieves all ready updates without blocking.
+    pub fn ready(&mut self) -> impl Iterator<Item = BlockUpdate> + '_ {
+        self.queue.drain(..)
+    }
+
     /// Retrieves the next block update from the watcher. This will block and
     /// wait for a new block to be produced if there is no update available.
     pub async fn next(&mut self) -> Result<BlockUpdate, Error> {
@@ -294,7 +299,7 @@ where
         Ok(update)
     }
 
-    /// Revalidates that the last seen block is still canonical on the connected
+    /// Re-validates that the last seen block is still canonical on the connected
     /// node. If it is not (the node reports a different hash at that height, or
     /// cannot find the block at all), the watcher's state is invalidated so the
     /// following `next()` calls re-fetch the canonical replacement, and the uncled
@@ -304,7 +309,7 @@ where
     /// and then lose the ability to serve logs for it (notably Reth around uncled
     /// blocks).
     pub async fn revalidate_last_block(&mut self) -> Result<Option<InvalidatedBlock>, Error> {
-        // Revalidating while warping is not possible, as it is beyond the max
+        // Re-validating while warping is not possible, as it is beyond the max
         // reorg depth.
         let next_number = match self.queue.front() {
             Some(BlockUpdate::New { number, .. }) => Some(*number),
@@ -369,5 +374,489 @@ where
     async fn wait_for_pending_block(&self) {
         let target = self.pending.timestamp_ms + self.config.block_propagation_delay;
         self.clock.sleep_until(target).await;
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::index::clock;
+
+    use super::*;
+    use alloy::{
+        primitives::keccak256,
+        providers::{ProviderBuilder, RootProvider},
+        rpc::types::Header,
+        transports::mock::Asserter,
+    };
+    use std::time::Duration;
+    use tokio::time::Instant;
+
+    fn config() -> Config {
+        Config {
+            block_time: 2_000,
+            block_propagation_delay: 500,
+            block_retry_delays: vec![200, 100, 50],
+            max_reorg_depth: 2,
+            start_block: None,
+        }
+    }
+
+    fn mock_provider(asserter: &Asserter) -> RootProvider {
+        ProviderBuilder::default().connect_mocked_client(asserter.clone())
+    }
+
+    async fn initialized_watcher_skip_ready(
+        asserter: &Asserter,
+        config: Config,
+    ) -> BlockWatcher<RootProvider> {
+        let mut latest = block(1000);
+        latest.header.timestamp = clock::TEST_SYSTEM_TIME_EPOCH_SECONDS;
+        asserter.push_success(&latest);
+        for number in (1000 - config.max_reorg_depth + 1)..1000 {
+            asserter.push_success(&block(number));
+        }
+        let mut blocks = BlockWatcher::create(mock_provider(asserter), config, None)
+            .await
+            .unwrap();
+        let _ = blocks.ready();
+        blocks
+    }
+
+    #[tokio::test]
+    async fn initializes_a_watcher() {
+        let asserter = Asserter::new();
+        asserter.push_success(&block(1000));
+        asserter.push_success(&block(999));
+
+        let mut blocks = BlockWatcher::create(mock_provider(&asserter), config(), None)
+            .await
+            .unwrap();
+
+        assert_eq!(
+            blocks.ready().collect::<Vec<_>>(),
+            [
+                new_block_update(&block(999)),
+                new_block_update(&block(1000))
+            ]
+        );
+        assert!(asserter.read_q().is_empty());
+    }
+
+    #[tokio::test]
+    async fn initializes_from_last_indexed_block() {
+        let asserter = Asserter::new();
+        asserter.push_success(&block(1000));
+        asserter.push_success(&block(999));
+
+        let mut blocks = BlockWatcher::create(mock_provider(&asserter), config(), Some(900))
+            .await
+            .unwrap();
+
+        assert_eq!(
+            blocks.ready().collect::<Vec<_>>(),
+            [
+                BlockUpdate::Uncle { number: 899 },
+                BlockUpdate::Warp { from: 899, to: 998 },
+                new_block_update(&block(999)),
+                new_block_update(&block(1000)),
+            ]
+        );
+        assert!(asserter.read_q().is_empty());
+    }
+
+    #[tokio::test]
+    async fn starts_from_configured_block_without_fake_reorg() {
+        let asserter = Asserter::new();
+        asserter.push_success(&block(1000));
+        asserter.push_success(&block(999));
+
+        let mut blocks = BlockWatcher::create(
+            mock_provider(&asserter),
+            Config {
+                start_block: Some(900),
+                ..config()
+            },
+            None,
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(
+            blocks.ready().collect::<Vec<_>>(),
+            [
+                BlockUpdate::Warp { from: 900, to: 998 },
+                new_block_update(&block(999)),
+                new_block_update(&block(1000)),
+            ]
+        );
+        assert!(asserter.read_q().is_empty());
+    }
+
+    #[tokio::test]
+    async fn does_not_warp_when_start_block_is_within_reorg_window() {
+        let asserter = Asserter::new();
+        asserter.push_success(&block(1000));
+        asserter.push_success(&block(999));
+
+        let mut blocks = BlockWatcher::create(
+            mock_provider(&asserter),
+            Config {
+                start_block: Some(999),
+                ..config()
+            },
+            None,
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(
+            blocks.ready().collect::<Vec<_>>(),
+            [
+                new_block_update(&block(999)),
+                new_block_update(&block(1000))
+            ]
+        );
+    }
+
+    #[tokio::test]
+    async fn only_emits_blocks_at_or_after_start_block_inside_reorg_window() {
+        let asserter = Asserter::new();
+        asserter.push_success(&block(1000));
+        asserter.push_success(&block(999));
+
+        let mut blocks = BlockWatcher::create(
+            mock_provider(&asserter),
+            Config {
+                start_block: Some(1000),
+                ..config()
+            },
+            None,
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(
+            blocks.ready().collect::<Vec<_>>(),
+            [new_block_update(&block(1000))]
+        );
+    }
+
+    #[tokio::test]
+    async fn supports_no_reorg_protection() {
+        let asserter = Asserter::new();
+        asserter.push_success(&block(1000));
+
+        let mut blocks = BlockWatcher::create(
+            mock_provider(&asserter),
+            Config {
+                max_reorg_depth: 0,
+                ..config()
+            },
+            Some(900),
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(
+            blocks.ready().collect::<Vec<_>>(),
+            [BlockUpdate::Warp {
+                from: 901,
+                to: 1000
+            }]
+        );
+    }
+
+    #[tokio::test]
+    async fn handles_reorgs_during_initialization() {
+        let asserter = Asserter::new();
+        asserter.push_success(&block_with(1000, |header| {
+            header.hash = keccak256("bad1000");
+            header.parent_hash = keccak256("bad999");
+        }));
+        asserter.push_success(&block(998));
+        asserter.push_success(&block_with(999, |header| {
+            header.hash = keccak256("bad999");
+            header.parent_hash = keccak256("uncle");
+        }));
+        asserter.push_success(&block(998));
+        asserter.push_success(&block(999));
+        asserter.push_success(&block(1000));
+
+        let mut blocks = BlockWatcher::create(
+            mock_provider(&asserter),
+            Config {
+                max_reorg_depth: 3,
+                ..config()
+            },
+            None,
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(
+            blocks.ready().collect::<Vec<_>>(),
+            [
+                new_block_update(&block(998)),
+                new_block_update(&block(999)),
+                new_block_update(&block(1000)),
+            ]
+        );
+        assert!(asserter.read_q().is_empty());
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn next_waits_for_pending_block_and_fetches_it() {
+        let start = Instant::now();
+        let asserter = Asserter::new();
+        let config = config();
+        let mut blocks = initialized_watcher_skip_ready(&asserter, config.clone()).await;
+
+        let next_block = block(1001);
+        asserter.push_success(&next_block.clone());
+
+        let update = blocks.next().await.unwrap();
+        assert_eq!(update, new_block_update(&next_block));
+        assert_eq!(
+            start.elapsed(),
+            Duration::from_millis(config.block_time + config.block_propagation_delay)
+        );
+        assert!(asserter.read_q().is_empty());
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn next_retries_if_block_is_not_ready_when_expected() {
+        let start = Instant::now();
+        let asserter = Asserter::new();
+        let config = config();
+        let mut blocks = initialized_watcher_skip_ready(&asserter, config.clone()).await;
+
+        asserter.push_success::<Option<Block>>(&None);
+        asserter.push_success::<Option<Block>>(&None);
+        asserter.push_success(&block(1001));
+
+        let update = blocks.next().await.unwrap();
+        assert_eq!(update, new_block_update(&block(1001)));
+        assert_eq!(
+            start.elapsed(),
+            Duration::from_millis(
+                config.block_time
+                    + config.block_propagation_delay
+                    + config.block_retry_delays[0]
+                    + config.block_retry_delays[1]
+            )
+        );
+        assert!(asserter.read_q().is_empty());
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn next_waits_for_the_next_slot_after_retries_are_exhausted() {
+        let start = Instant::now();
+        let asserter = Asserter::new();
+        let config = config();
+        let mut blocks = initialized_watcher_skip_ready(&asserter, config.clone()).await;
+
+        asserter.push_success::<Option<Block>>(&None);
+        asserter.push_success::<Option<Block>>(&None);
+        asserter.push_success::<Option<Block>>(&None);
+        asserter.push_success::<Option<Block>>(&None);
+        asserter.push_success(&block(1001));
+
+        let update = blocks.next().await.unwrap();
+        assert_eq!(update, new_block_update(&block(1001)));
+        assert_eq!(
+            start.elapsed(),
+            Duration::from_millis(
+                config.block_time
+                    + config.block_propagation_delay
+                    + config.block_retry_delays.iter().sum::<u64>()
+                    // At this point, we wait for the next slot which comes
+                    // `block_time` minus the retry delays we already waited.
+                    + (config.block_time - config.block_retry_delays.iter().sum::<u64>())
+            )
+        );
+        assert!(asserter.read_q().is_empty());
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn supports_deep_reorgs() {
+        let asserter = Asserter::new();
+        let mut blocks = initialized_watcher_skip_ready(
+            &asserter,
+            Config {
+                max_reorg_depth: 5,
+                ..config()
+            },
+        )
+        .await;
+
+        let reorg_1001 = block_with(1001, |header| {
+            header.hash = keccak256("reorg1001");
+            header.parent_hash = keccak256("reorg1000");
+        });
+        let reorg_1000 = block_with(1000, |header| {
+            header.hash = keccak256("reorg1000");
+            header.parent_hash = keccak256("reorg999");
+        });
+        let reorg_999 = block_with(999, |header| {
+            header.hash = keccak256("reorg999");
+            header.parent_hash = keccak256("reorg998");
+        });
+        let reorg_998 = block_with(998, |header| {
+            header.hash = keccak256("reorg998");
+        });
+        let canonical_999 = block_with(999, |header| {
+            header.hash = keccak256("reorg999");
+            header.parent_hash = keccak256("reorg998");
+        });
+
+        asserter.push_success(&reorg_1001);
+        asserter.push_success(&reorg_1000);
+        asserter.push_success(&reorg_999);
+        asserter.push_success(&reorg_998);
+        asserter.push_success(&canonical_999);
+
+        assert_eq!(
+            blocks.next().await.unwrap(),
+            BlockUpdate::Uncle { number: 1000 }
+        );
+        assert_eq!(
+            blocks.next().await.unwrap(),
+            BlockUpdate::Uncle { number: 999 }
+        );
+        assert_eq!(
+            blocks.next().await.unwrap(),
+            BlockUpdate::Uncle { number: 998 }
+        );
+        assert_eq!(blocks.next().await.unwrap(), new_block_update(&reorg_998));
+        assert_eq!(
+            blocks.next().await.unwrap(),
+            new_block_update(&canonical_999)
+        );
+        assert!(asserter.read_q().is_empty());
+    }
+
+    #[tokio::test]
+    async fn revalidate_returns_none_when_the_block_is_still_canonical() {
+        let asserter = Asserter::new();
+        let mut blocks = initialized_watcher_skip_ready(&asserter, config()).await;
+
+        asserter.push_success(&block(1000));
+
+        assert_eq!(blocks.revalidate_last_block().await.unwrap(), None);
+        assert!(asserter.read_q().is_empty());
+    }
+
+    #[tokio::test]
+    async fn revalidate_invalidates_a_reorged_block() {
+        let asserter = Asserter::new();
+        let mut blocks = initialized_watcher_skip_ready(&asserter, config()).await;
+
+        asserter.push_success(&block_with(1000, |header| {
+            header.hash = keccak256("new1000");
+        }));
+
+        assert_eq!(
+            blocks.revalidate_last_block().await.unwrap(),
+            Some(invalidated_block(&block(1000)))
+        );
+        assert_eq!(
+            blocks.next().await.unwrap(),
+            BlockUpdate::Uncle { number: 1000 }
+        );
+        assert!(asserter.read_q().is_empty());
+    }
+
+    #[tokio::test]
+    async fn revalidate_invalidates_a_block_missing_from_rpc() {
+        let asserter = Asserter::new();
+        let mut blocks = initialized_watcher_skip_ready(&asserter, config()).await;
+
+        asserter.push_success::<Option<Block>>(&None);
+
+        assert_eq!(
+            blocks.revalidate_last_block().await.unwrap(),
+            Some(invalidated_block(&block(1000)))
+        );
+    }
+
+    #[tokio::test]
+    async fn revalidate_purges_queued_descendants() {
+        let asserter = Asserter::new();
+        asserter.push_success(&block(1000));
+        asserter.push_success(&block(998));
+        asserter.push_success(&block(999));
+        let mut blocks = BlockWatcher::create(
+            mock_provider(&asserter),
+            Config {
+                max_reorg_depth: 3,
+                ..config()
+            },
+            None,
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(blocks.next().await.unwrap(), new_block_update(&block(998)));
+        assert_eq!(blocks.next().await.unwrap(), new_block_update(&block(999)));
+
+        asserter.push_success(&block_with(999, |header| {
+            header.hash = keccak256("new999");
+        }));
+
+        assert_eq!(
+            blocks.revalidate_last_block().await.unwrap(),
+            Some(invalidated_block(&block(999)))
+        );
+        assert_eq!(
+            blocks.ready().collect::<Vec<_>>(),
+            vec![BlockUpdate::Uncle { number: 999 }]
+        );
+    }
+
+    fn block_hash(number: u64) -> B256 {
+        let mut bytes = [0; 32];
+        bytes[24..].copy_from_slice(&number.to_be_bytes());
+        B256::from(bytes)
+    }
+
+    fn block_bloom(number: u64) -> Bloom {
+        let mut bytes = [0; 256];
+        bytes[248..].copy_from_slice(&number.to_be_bytes());
+        Bloom::from(bytes)
+    }
+
+    fn block(number: u64) -> Block {
+        block_with(number, |_| {})
+    }
+
+    fn block_with(number: u64, f: impl FnOnce(&mut Header)) -> Block {
+        let mut header = Header {
+            hash: block_hash(number),
+            inner: alloy::consensus::Header {
+                parent_hash: number.checked_sub(1).map(block_hash).unwrap_or_default(),
+                number,
+                timestamp: number * 2,
+                logs_bloom: block_bloom(number),
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+        f(&mut header);
+        Block::empty(header)
+    }
+
+    fn new_block_update(block: &Block) -> BlockUpdate {
+        BlockUpdate::New {
+            number: block.header.number,
+            hash: block.header.hash,
+            logs_bloom: block.header.logs_bloom,
+        }
+    }
+
+    fn invalidated_block(block: &Block) -> InvalidatedBlock {
+        InvalidatedBlock {
+            number: block.header.number,
+            hash: block.header.hash,
+        }
     }
 }
