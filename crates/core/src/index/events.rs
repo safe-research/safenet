@@ -12,6 +12,7 @@ use alloy::{
     rpc::types::{Filter, Log},
     transports::TransportError,
 };
+use serde::Deserialize;
 use std::{
     collections::BTreeSet,
     marker::PhantomData,
@@ -36,7 +37,8 @@ pub trait Events: Sized {
 }
 
 /// Event watcher configuration.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Eq)]
+#[serde(default)]
 pub struct Config {
     /// The number of blocks to query at once while warping over a reorg-safe
     /// range. Halved on query failure (never below one) and reset on success.

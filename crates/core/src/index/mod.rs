@@ -10,15 +10,19 @@ pub mod events;
 use alloy::{primitives::Address, providers::Provider, rpc::types::error::EthRpcErrorCode};
 use blocks::BlockWatcher;
 use events::{EventWatcher, Events};
+use serde::Deserialize;
 
 pub use blocks::BlockUpdate;
 
 /// Watcher configuration, aggregating the block and event watcher configs.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default, Deserialize, PartialEq, Eq)]
+#[serde(default)]
 pub struct Config {
     /// Block watcher configuration.
+    #[serde(flatten)]
     pub blocks: blocks::Config,
     /// Event watcher configuration.
+    #[serde(flatten)]
     pub events: events::Config,
 }
 
@@ -148,6 +152,72 @@ mod tests {
         transports::mock::Asserter,
     };
 
+    fn config() -> Config {
+        Config {
+            blocks: blocks::Config {
+                block_time: blocks::BlockTime::Millis(2_000),
+                block_propagation_delay: 500,
+                block_retry_delays: vec![],
+                max_reorg_depth: 3,
+                start_block: None,
+            },
+            events: Default::default(),
+        }
+    }
+
+    #[test]
+    fn deserializes_flattened_config_with_defaults() {
+        let config = serde_json::from_str::<Config>("{}").unwrap();
+        assert_eq!(config, Config::default());
+    }
+
+    #[test]
+    fn deserializes_auto_block_time() {
+        let config = serde_json::from_str::<Config>(r#"{"block_time":"auto"}"#).unwrap();
+        assert_eq!(config, Config::default());
+    }
+
+    #[test]
+    fn deserializes_flattened_config_overrides() {
+        let config = serde_json::from_str::<Config>(
+            r#"{
+                "block_time": 2000,
+                "block_propagation_delay": 250,
+                "block_retry_delays": [50, 75],
+                "max_reorg_depth": 3,
+                "start_block": 100,
+                "block_page_size": 50,
+                "block_single_query_retry_count": 4,
+                "use_client_filtering": true,
+                "max_logs_per_query": 1000
+            }"#,
+        )
+        .unwrap();
+
+        assert_eq!(
+            config,
+            Config {
+                blocks: blocks::Config {
+                    block_time: blocks::BlockTime::Millis(2_000),
+                    block_propagation_delay: 250,
+                    block_retry_delays: vec![50, 75],
+                    max_reorg_depth: 3,
+                    start_block: Some(100),
+                },
+                events: events::Config {
+                    block_page_size: std::num::NonZeroU64::new(50).expect("50 is nonzero"),
+                    block_single_query_retry_count: std::num::NonZeroU64::new(4)
+                        .expect("4 is nonzero"),
+                    use_client_filtering: true,
+                    max_logs_per_query: Some(
+                        std::num::NonZeroUsize::new(1000).expect("1000 is nonzero"),
+                    ),
+                    fallible_events: Default::default(),
+                },
+            },
+        );
+    }
+
     const WATCHED: Address = address!("0x1111111111111111111111111111111111111111");
 
     sol! {
@@ -158,19 +228,6 @@ mod tests {
     }
 
     watcher_events!(Weth::WethEvents);
-
-    fn config() -> Config {
-        Config {
-            blocks: blocks::Config {
-                block_time: 2_000,
-                block_propagation_delay: 500,
-                block_retry_delays: vec![],
-                max_reorg_depth: 3,
-                start_block: None,
-            },
-            events: Default::default(),
-        }
-    }
 
     async fn watcher(
         asserter: &Asserter,

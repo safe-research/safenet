@@ -11,13 +11,27 @@ use alloy::{
     rpc::types::Block,
     transports::TransportError,
 };
+use serde::Deserialize;
 use std::{collections::VecDeque, time::Duration};
 
+/// How the watcher determines the expected time between blocks.
+#[derive(Clone, Copy, Debug, Default, Deserialize, Eq, PartialEq)]
+pub enum BlockTime {
+    /// Detect the block time from the connected chain.
+    #[default]
+    #[serde(rename = "auto")]
+    Auto,
+    /// Use an explicit block time, in milliseconds.
+    #[serde(untagged)]
+    Millis(u64),
+}
+
 /// Block watcher configuration.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize)]
+#[serde(default)]
 pub struct Config {
-    /// Expected time between blocks, in milliseconds.
-    pub block_time: u64,
+    /// Expected time between blocks.
+    pub block_time: BlockTime,
     /// Extra delay after a block's expected mining time before polling for it,
     /// in milliseconds, to allow for propagation.
     pub block_propagation_delay: u64,
@@ -31,6 +45,18 @@ pub struct Config {
     /// resuming, this back-fills history via a warp without emitting a (fake)
     /// reorg.
     pub start_block: Option<u64>,
+}
+
+impl Default for Config {
+    fn default() -> Self {
+        Self {
+            block_time: BlockTime::Auto,
+            block_propagation_delay: 500,
+            block_retry_delays: vec![200, 100, 100],
+            max_reorg_depth: 5,
+            start_block: None,
+        }
+    }
 }
 
 /// A block update produced by the watcher.
@@ -59,6 +85,9 @@ pub enum Error {
     /// An RPC request failed.
     #[error(transparent)]
     Rpc(#[from] TransportError),
+    /// Automatic block time detection is not supported for the connected chain.
+    #[error("automatic block time detection is not supported for chain {chain_id}")]
+    UnknownBlockTime { chain_id: u64 },
     /// A block at or below the chain head was missing, indicating an
     /// inconsistent RPC node.
     #[error("block {0} is unexpectedly missing")]
@@ -85,6 +114,7 @@ struct PendingBlock {
 pub struct BlockWatcher<P> {
     provider: P,
     config: Config,
+    block_time: u64,
     pending: PendingBlock,
     clock: Clock,
     /// The most recent blocks (up to `max_reorg_depth`), kept for reorg
@@ -109,9 +139,11 @@ where
         config: Config,
         last_indexed_block: Option<u64>,
     ) -> Result<Self, Error> {
+        let block_time = resolve_block_time(&provider, config.block_time).await?;
         let mut watcher = Self {
             provider,
             config,
+            block_time,
             pending: PendingBlock {
                 number: 0,
                 timestamp_ms: 0,
@@ -261,7 +293,7 @@ where
             if let Some(delay) = self.config.block_retry_delays.get(index).copied() {
                 tokio::time::sleep(Duration::from_millis(delay)).await;
             } else {
-                self.pending.timestamp_ms += self.config.block_time;
+                self.pending.timestamp_ms += self.block_time;
             }
         };
 
@@ -364,7 +396,7 @@ where
     fn update_next_pending_block(&mut self, number: u64, timestamp: u64) {
         self.pending = PendingBlock {
             number: number + 1,
-            timestamp_ms: timestamp * 1000 + self.config.block_time,
+            timestamp_ms: timestamp * 1000 + self.block_time,
         };
     }
 
@@ -374,6 +406,20 @@ where
     async fn wait_for_pending_block(&self) {
         let target = self.pending.timestamp_ms + self.config.block_propagation_delay;
         self.clock.sleep_until(target).await;
+    }
+}
+
+async fn resolve_block_time<P>(provider: &P, block_time: BlockTime) -> Result<u64, Error>
+where
+    P: Provider,
+{
+    match block_time {
+        BlockTime::Millis(block_time) => Ok(block_time),
+        BlockTime::Auto => match provider.get_chain_id().await? {
+            100 => Ok(5_000),       // Gnosis Chain
+            11155111 => Ok(12_000), // Sepolia
+            chain_id => Err(Error::UnknownBlockTime { chain_id }),
+        },
     }
 }
 
@@ -393,7 +439,7 @@ mod tests {
 
     fn config() -> Config {
         Config {
-            block_time: 2_000,
+            block_time: BlockTime::Millis(2_000),
             block_propagation_delay: 500,
             block_retry_delays: vec![200, 100, 50],
             max_reorg_depth: 2,
@@ -403,6 +449,27 @@ mod tests {
 
     fn mock_provider(asserter: &Asserter) -> RootProvider {
         ProviderBuilder::default().connect_mocked_client(asserter.clone())
+    }
+
+    #[tokio::test]
+    async fn auto_block_time_uses_chain_id() {
+        let asserter = Asserter::new();
+        asserter.push_success(&100);
+        asserter.push_success(&block(1000));
+
+        let blocks = BlockWatcher::create(
+            mock_provider(&asserter),
+            Config {
+                max_reorg_depth: 0,
+                ..Default::default()
+            },
+            None,
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(blocks.block_time, 5000);
+        assert!(asserter.read_q().is_empty());
     }
 
     async fn initialized_watcher_skip_ready(
@@ -618,7 +685,7 @@ mod tests {
         assert_eq!(update, new_block_update(&next_block));
         assert_eq!(
             start.elapsed(),
-            Duration::from_millis(config.block_time + config.block_propagation_delay)
+            Duration::from_millis(blocks.block_time + config.block_propagation_delay)
         );
         assert!(asserter.read_q().is_empty());
     }
@@ -641,7 +708,7 @@ mod tests {
         assert_eq!(
             start.elapsed(),
             Duration::from_millis(
-                config.block_time
+                blocks.block_time
                     + config.block_propagation_delay
                     + config.block_retry_delays[0]
                     + config.block_retry_delays[1]
@@ -687,12 +754,12 @@ mod tests {
         assert_eq!(
             start.elapsed(),
             Duration::from_millis(
-                config.block_time
+                blocks.block_time
                     + config.block_propagation_delay
                     + config.block_retry_delays.iter().sum::<u64>()
                     // At this point, we wait for the next slot which comes
                     // `block_time` minus the retry delays we already waited.
-                    + (config.block_time - config.block_retry_delays.iter().sum::<u64>())
+                    + (blocks.block_time - config.block_retry_delays.iter().sum::<u64>())
             )
         );
         assert!(asserter.read_q().is_empty());
