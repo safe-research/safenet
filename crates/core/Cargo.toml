@@ -19,4 +19,5 @@ tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt", "json"]
 url = { version = "2", features = ["serde"] }
 
 [dev-dependencies]
+alloy = { version = "2", features = ["json-rpc"] }
 tokio = { version = "1", features = ["test-util"] }
