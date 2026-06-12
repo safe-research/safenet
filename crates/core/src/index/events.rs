@@ -91,6 +91,10 @@ pub enum Error {
     /// previous one.
     #[error("received a block update while not idle")]
     UnexpectedBlockUpdate,
+    /// A block invalidation arrived that does not match the block whose logs are
+    /// currently being fetched.
+    #[error("received a block invalidation that does not match the in-progress block")]
+    UnexpectedBlockInvalidation,
 }
 
 /// The blocks a log query is scoped to.
@@ -211,6 +215,24 @@ where
             },
         };
         Ok(())
+    }
+
+    /// Handles the new block whose logs are being fetched being uncled,
+    /// returning the watcher to idle so they are no longer fetched.
+    ///
+    /// Errors if the watcher is not fetching the logs of the invalidated block,
+    /// since only an in-progress new block can be invalidated.
+    pub fn on_block_invalidated(&mut self, block_hash: B256) -> Result<(), Error> {
+        match self.step {
+            Step::Block {
+                block_hash: current,
+                ..
+            } if current == block_hash => {
+                self.step = Step::Idle;
+                Ok(())
+            }
+            _ => Err(Error::UnexpectedBlockInvalidation),
+        }
     }
 
     /// Fetches the next batch of logs, advancing the state machine.
@@ -1234,5 +1256,72 @@ mod tests {
         );
         assert_eq!(events.next().await.unwrap(), None);
         assert!(asserter.read_q().is_empty());
+    }
+
+    #[tokio::test]
+    async fn block_invalidation_returns_to_idle() {
+        let asserter = Asserter::new();
+        let mut events = watcher(&asserter, Config::default());
+
+        let hash = B256::repeat_byte(0x13);
+        events
+            .on_block_update(BlockUpdate::New {
+                number: 1337,
+                hash,
+                logs_bloom: Bloom::ZERO,
+            })
+            .unwrap();
+
+        // Drive a failed fetch so the watcher is mid-block when the invalidation
+        // arrives, as the watcher loop's `revalidate` recovery does.
+        asserter.push_failure_msg("logs unavailable");
+        assert_matches!(events.next().await, Err(Error::Rpc(_)));
+
+        events.on_block_invalidated(hash).unwrap();
+
+        // The abandoned block is not queried again.
+        assert_eq!(events.next().await.unwrap(), None);
+        assert!(asserter.read_q().is_empty());
+    }
+
+    #[tokio::test]
+    async fn block_invalidation_errors_when_not_fetching_a_block() {
+        let asserter = Asserter::new();
+        let mut events = watcher(&asserter, Config::default());
+
+        // Idle: nothing is being fetched.
+        assert_matches!(
+            events.on_block_invalidated(B256::repeat_byte(0x13)),
+            Err(Error::UnexpectedBlockInvalidation)
+        );
+
+        // Warping: a range, not a single block, is being fetched.
+        events
+            .on_block_update(BlockUpdate::Warp { from: 1, to: 10 })
+            .unwrap();
+        assert_matches!(
+            events.on_block_invalidated(B256::repeat_byte(0x13)),
+            Err(Error::UnexpectedBlockInvalidation)
+        );
+    }
+
+    #[tokio::test]
+    async fn block_invalidation_errors_on_hash_mismatch() {
+        let asserter = Asserter::new();
+        let mut events = watcher(&asserter, Config::default());
+
+        events
+            .on_block_update(BlockUpdate::New {
+                number: 1337,
+                hash: B256::repeat_byte(0x13),
+                logs_bloom: Bloom::ZERO,
+            })
+            .unwrap();
+
+        // A different block is being fetched than the one invalidated.
+        assert_matches!(
+            events.on_block_invalidated(B256::repeat_byte(0x37)),
+            Err(Error::UnexpectedBlockInvalidation)
+        );
     }
 }
