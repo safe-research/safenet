@@ -5,14 +5,18 @@
 //! macro over `alloy` `sol!`-generated `*Events` enums, yielding a type that
 //! implements [`Events`] which the watcher decodes raw logs into.
 
-use super::bloom;
+use super::{blocks::BlockUpdate, bloom};
 use alloy::{
     primitives::{Address, B256, Bloom},
     providers::Provider,
     rpc::types::{Filter, Log},
     transports::TransportError,
 };
-use std::{collections::BTreeSet, marker::PhantomData, num::NonZeroUsize};
+use std::{
+    collections::BTreeSet,
+    marker::PhantomData,
+    num::{NonZeroU64, NonZeroUsize},
+};
 
 /// A typed set of EVM events that raw logs can be decoded into.
 ///
@@ -32,8 +36,11 @@ pub trait Events: Sized {
 }
 
 /// Event watcher configuration.
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug)]
 pub struct Config {
+    /// The number of blocks to query at once while warping over a reorg-safe
+    /// range. Halved on query failure (never below one) and reset on success.
+    pub block_page_size: NonZeroU64,
     /// The maximum number of logs a single query is expected to return. A query
     /// returning at least this many is treated as potentially truncated by the
     /// node and raises an error. `None` disables the check.
@@ -41,6 +48,16 @@ pub struct Config {
     /// The topic0 of events that may be dropped on failure rather than
     /// propagating the error. Use this to mark events as noncritical.
     pub fallible_events: BTreeSet<B256>,
+}
+
+impl Default for Config {
+    fn default() -> Self {
+        Self {
+            block_page_size: NonZeroU64::new(100).expect("100 is nonzero"),
+            max_logs_per_query: None,
+            fallible_events: BTreeSet::new(),
+        }
+    }
 }
 
 /// Error produced by the event watcher.
@@ -60,6 +77,10 @@ pub enum Error {
     /// the node served an incomplete set.
     #[error("logs for block {block_hash:?} do not match the block bloom filter")]
     IncompleteLogs { block_hash: B256 },
+    /// A block update arrived while the watcher was still processing the
+    /// previous one.
+    #[error("received a block update while not idle")]
+    UnexpectedBlockUpdate,
 }
 
 /// The blocks a log query is scoped to.
@@ -101,12 +122,27 @@ enum Fetch {
     ClientFiltered { block_hash: B256, logs_bloom: Bloom },
 }
 
+/// The current state of the event watcher's log-fetching state machine.
+#[derive(Clone, Copy, Debug)]
+enum Step {
+    /// Nothing to do; waiting for the next block update.
+    Idle,
+    /// Warping over the reorg-safe range `from_block..=to_block` (inclusive) in
+    /// pages of `page_size` blocks.
+    Warping {
+        from_block: u64,
+        to_block: u64,
+        page_size: NonZeroU64,
+    },
+}
+
 /// Watches for the logs of the events `E` emitted by a set of addresses.
 pub struct EventWatcher<P, E> {
     provider: P,
     config: Config,
     addresses: Vec<Address>,
     topics: Vec<B256>,
+    step: Step,
     _events: PhantomData<fn() -> E>,
 }
 
@@ -122,7 +158,103 @@ where
             config,
             addresses,
             topics: E::topics(),
+            step: Step::Idle,
             _events: PhantomData,
+        }
+    }
+
+    /// Handles a block update from the [block watcher](super::blocks), moving
+    /// into the corresponding log-fetching state.
+    ///
+    /// Errors if the watcher is not idle: the previous update must be fully
+    /// drained (until [`EventWatcher::next`] returns `None`) first.
+    pub fn on_block_update(&mut self, update: BlockUpdate) -> Result<(), Error> {
+        if !matches!(self.step, Step::Idle) {
+            return Err(Error::UnexpectedBlockUpdate);
+        }
+
+        self.step = match update {
+            BlockUpdate::Warp { from, to } => Step::Warping {
+                from_block: from,
+                to_block: to,
+                page_size: self.config.block_page_size,
+            },
+            // Uncled blocks never had canonical logs, so there is nothing to do.
+            BlockUpdate::Uncle { .. } => Step::Idle,
+            // TODO: Fetching the logs of a new block (the `Block` step) is not
+            // implemented yet.
+            BlockUpdate::New { .. } => todo!(),
+        };
+        Ok(())
+    }
+
+    /// Fetches the next batch of logs, advancing the state machine.
+    ///
+    /// Returns `None` once the current work is complete and the watcher is idle,
+    /// or `Some(logs)` with the next batch of decoded logs in
+    /// `(block_number, log_index)` order (which may be empty).
+    pub async fn next(&mut self) -> Result<Option<Vec<E>>, Error> {
+        match self.step {
+            Step::Idle => Ok(None),
+            Step::Warping {
+                from_block,
+                to_block,
+                page_size,
+            } => self.warp(from_block, to_block, page_size).await.map(Some),
+        }
+    }
+
+    /// Fetches one page of a warp over `from_block..=to_block`, advancing to the
+    /// next page on success and narrowing the page size on failure.
+    async fn warp(
+        &mut self,
+        from_block: u64,
+        to_block: u64,
+        page_size: NonZeroU64,
+    ) -> Result<Vec<E>, Error> {
+        // Note that block query ranges are inclusive.
+        let query_to_block = to_block.min(from_block.saturating_add(page_size.get() - 1));
+
+        // A single-block page splits into one query per event to query as little
+        // data as possible; larger pages use a single query for all events.
+        let blocks = BlockFilter::Range {
+            from: from_block,
+            to: query_to_block,
+        };
+        let fetch = if page_size.get() > 1 {
+            Fetch::SingleQuery(blocks)
+        } else {
+            Fetch::MultipleQueries(blocks)
+        };
+
+        match self.fetch_logs(fetch).await {
+            Ok(logs) => {
+                self.step = if query_to_block == to_block {
+                    Step::Idle
+                } else {
+                    // Ranges are inclusive, so resume from the block right after
+                    // the queried range, resetting the page size on success.
+                    Step::Warping {
+                        from_block: query_to_block + 1,
+                        to_block,
+                        page_size: self.config.block_page_size,
+                    }
+                };
+                Ok(logs)
+            }
+            Err(err) => {
+                // Narrow the page size to query fewer logs on the next attempt.
+                // Rounding up keeps it from going below one, so single-block
+                // pages are retried indefinitely.
+                let page_size = NonZeroU64::new(page_size.get().div_ceil(2))
+                    .expect("halving a nonzero page size stays nonzero");
+                self.step = Step::Warping {
+                    from_block,
+                    to_block,
+                    page_size,
+                };
+                Err(err)
+            }
         }
     }
 
@@ -771,5 +903,124 @@ mod tests {
                 .await,
             Err(Error::IncompleteLogs { block_hash }) if block_hash == B256::repeat_byte(0x42)
         );
+    }
+
+    #[tokio::test]
+    async fn warps_through_a_range_in_pages() {
+        let asserter = Asserter::new();
+        let mut events = watcher(
+            &asserter,
+            Config {
+                block_page_size: NonZeroU64::new(5).unwrap(),
+                ..Default::default()
+            },
+        );
+        events
+            .on_block_update(BlockUpdate::Warp { from: 1, to: 10 })
+            .unwrap();
+
+        // The first page queries blocks 1..=5, the second 6..=10.
+        asserter.push_success(&vec![log(
+            (3, 0),
+            Erc20::Transfer {
+                amount: uint!(1_U256),
+                ..Default::default()
+            },
+        )]);
+        asserter.push_success(&Vec::<Log>::new());
+
+        assert_eq!(
+            events.next().await.unwrap(),
+            Some(vec![Erc20::Erc20Events::Transfer(Erc20::Transfer {
+                amount: uint!(1_U256),
+                ..Default::default()
+            })])
+        );
+        assert_eq!(events.next().await.unwrap(), Some(vec![]));
+        // The range is fully warped, so the watcher is idle again.
+        assert_eq!(events.next().await.unwrap(), None);
+        assert!(asserter.read_q().is_empty());
+    }
+
+    #[tokio::test]
+    async fn warp_narrows_the_page_on_failure_and_resets_on_success() {
+        let asserter = Asserter::new();
+        let mut events = watcher(
+            &asserter,
+            Config {
+                block_page_size: NonZeroU64::new(5).unwrap(),
+                ..Default::default()
+            },
+        );
+        events
+            .on_block_update(BlockUpdate::Warp { from: 1, to: 10 })
+            .unwrap();
+
+        // The first full-page query (1..=5) fails, halving the page size to 3.
+        asserter.push_failure_msg("range too large");
+        // The narrowed query (1..=3) then succeeds, which resets the page size
+        // back to 5, so the rest of the range is covered by just 4..=8 and
+        // 9..=10 -- three successful queries rather than four.
+        asserter.push_success(&Vec::<Log>::new());
+        asserter.push_success(&Vec::<Log>::new());
+        asserter.push_success(&Vec::<Log>::new());
+
+        assert_matches!(events.next().await, Err(Error::Rpc(_)));
+        assert_eq!(events.next().await.unwrap(), Some(vec![]));
+        assert_eq!(events.next().await.unwrap(), Some(vec![]));
+        assert_eq!(events.next().await.unwrap(), Some(vec![]));
+        assert_eq!(events.next().await.unwrap(), None);
+        assert!(asserter.read_q().is_empty());
+    }
+
+    #[tokio::test]
+    async fn warp_queries_each_event_for_single_block_pages() {
+        let asserter = Asserter::new();
+        let mut events = watcher(
+            &asserter,
+            Config {
+                block_page_size: NonZeroU64::new(2).unwrap(),
+                ..Default::default()
+            },
+        );
+        events
+            .on_block_update(BlockUpdate::Warp { from: 5, to: 5 })
+            .unwrap();
+
+        // The first query (page size two) fails, halving the page size to one,
+        // which then queries the single block one event at a time.
+        asserter.push_failure_msg("range too large");
+        // One response per watched event (two for `Erc20`).
+        asserter.push_success(&vec![log(
+            (5, 0),
+            Erc20::Transfer {
+                amount: uint!(1_U256),
+                ..Default::default()
+            },
+        )]);
+        asserter.push_success(&vec![log(
+            (5, 1),
+            Erc20::Approval {
+                amount: uint!(2_U256),
+                ..Default::default()
+            },
+        )]);
+
+        assert_matches!(events.next().await, Err(Error::Rpc(_)));
+        assert_eq!(
+            events.next().await.unwrap(),
+            Some(vec![
+                Erc20::Erc20Events::Transfer(Erc20::Transfer {
+                    amount: uint!(1_U256),
+                    ..Default::default()
+                }),
+                Erc20::Erc20Events::Approval(Erc20::Approval {
+                    amount: uint!(2_U256),
+                    ..Default::default()
+                }),
+            ])
+        );
+        assert_eq!(events.next().await.unwrap(), None);
+        assert!(asserter.read_q().is_empty());
     }
 }
