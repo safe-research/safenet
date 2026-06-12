@@ -5,6 +5,7 @@
 //! macro over `alloy` `sol!`-generated `*Events` enums, yielding a type that
 //! implements [`Events`] which the watcher decodes raw logs into.
 
+use super::bloom;
 use alloy::{
     primitives::{Address, B256, Bloom},
     providers::Provider,
@@ -168,7 +169,7 @@ where
 
                 // Verify the node served a complete set of logs for the block by
                 // recomputing the bloom filter over every returned log.
-                if compute_logs_bloom(&logs) != logs_bloom {
+                if bloom::compute_logs_bloom(&logs) != logs_bloom {
                     return Err(Error::IncompleteLogs { block_hash });
                 }
 
@@ -217,11 +218,6 @@ where
             })
         })
         .collect()
-}
-
-/// Computes the bloom filter for some logs.
-fn compute_logs_bloom(logs: &[Log]) -> Bloom {
-    alloy::primitives::logs_bloom(logs.iter().map(|log| &log.inner))
 }
 
 /// Defines an [`Events`] type that decodes logs for one or more `alloy`
@@ -591,7 +587,7 @@ mod tests {
         let logs = events
             .fetch_logs(Fetch::ClientFiltered {
                 block_hash: B256::repeat_byte(0x42),
-                logs_bloom: compute_logs_bloom(&logs),
+                logs_bloom: bloom::compute_logs_bloom(&logs),
             })
             .await
             .unwrap();

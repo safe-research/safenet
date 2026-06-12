@@ -5,7 +5,10 @@
 //! positives but never false negatives, so a negative result lets the indexer
 //! skip fetching a block's logs entirely.
 
-use alloy::primitives::{Address, B256, Bloom, BloomInput};
+use alloy::{
+    primitives::{Address, B256, Bloom, BloomInput},
+    rpc::types::Log,
+};
 
 /// Returns whether a block with the given `logs_bloom` may contain a log the
 /// indexer cares about: one emitted by any of the watched `addresses` whose
@@ -29,6 +32,11 @@ pub fn may_contain_log(bloom: &Bloom, addresses: &[Address], topics: &[B256]) ->
             .any(|topic| bloom.contains_input(BloomInput::Raw(topic.as_slice())))
     };
     contains_at_least_one_address() && contains_at_least_one_topic()
+}
+
+/// Computes the bloom filter for some logs.
+pub fn compute_logs_bloom(logs: &[Log]) -> Bloom {
+    alloy::primitives::logs_bloom(logs.iter().map(|log| &log.inner))
 }
 
 #[cfg(test)]
