@@ -227,35 +227,32 @@ where
             Fetch::MultipleQueries(blocks)
         };
 
-        match self.fetch_logs(fetch).await {
-            Ok(logs) => {
-                self.step = if query_to_block == to_block {
-                    Step::Idle
-                } else {
-                    // Ranges are inclusive, so resume from the block right after
-                    // the queried range, resetting the page size on success.
-                    Step::Warping {
-                        from_block: query_to_block + 1,
-                        to_block,
-                        page_size: self.config.block_page_size,
-                    }
-                };
-                Ok(logs)
-            }
-            Err(err) => {
-                // Narrow the page size to query fewer logs on the next attempt.
-                // Rounding up keeps it from going below one, so single-block
-                // pages are retried indefinitely.
-                let page_size = NonZeroU64::new(page_size.get().div_ceil(2))
-                    .expect("halving a nonzero page size stays nonzero");
-                self.step = Step::Warping {
-                    from_block,
+        let result = self.fetch_logs(fetch).await;
+        self.step = if result.is_ok() {
+            if query_to_block == to_block {
+                Step::Idle
+            } else {
+                // Ranges are inclusive, so resume from the block right after
+                // the queried range, resetting the page size on success.
+                Step::Warping {
+                    from_block: query_to_block + 1,
                     to_block,
-                    page_size,
-                };
-                Err(err)
+                    page_size: self.config.block_page_size,
+                }
             }
-        }
+        } else {
+            // Narrow the page size to query fewer logs on the next attempt.
+            // Rounding up keeps it from going below one, so single-block
+            // pages are retried indefinitely.
+            let page_size = NonZeroU64::new(page_size.get().div_ceil(2))
+                .expect("halving a nonzero page size stays nonzero");
+            Step::Warping {
+                from_block,
+                to_block,
+                page_size,
+            }
+        };
+        result
     }
 
     /// Fetches the watched logs for some blocks using the given strategy,
