@@ -6,6 +6,7 @@ publish = false
 
 [dependencies]
 alloy = { version = "2", features = ["full"] }
+futures = "0.3"
 metrics = "0.24"
 metrics-exporter-prometheus = "0.18"
 serde = { version = "1", features = ["derive"] }

@@ -3787,6 +3787,7 @@ name = "safenet-core"
 version = "0.2.0"
 dependencies = [
  "alloy",
+ "futures",
  "metrics",
  "metrics-exporter-prometheus",
  "serde",
