@@ -61,15 +61,14 @@ where
 {
     /// Creates and initializes a watcher for the events `E` emitted by
     /// `addresses`, resuming from `last_indexed_block` (see
-    /// [`BlockWatcher::create`]).
-    pub async fn create(
+    /// [`BlockWatcher::new`]).
+    pub async fn new(
         provider: P,
         config: Config,
         addresses: Vec<Address>,
         last_indexed_block: Option<u64>,
     ) -> Result<Self, Error> {
-        let blocks =
-            BlockWatcher::create(provider.clone(), config.blocks, last_indexed_block).await?;
+        let blocks = BlockWatcher::new(provider.clone(), config.blocks, last_indexed_block).await?;
         let events = EventWatcher::new(provider, config.events, addresses);
         Ok(Self { blocks, events })
     }
@@ -81,16 +80,17 @@ where
     pub async fn next(&mut self) -> Result<Update<E>, Error> {
         loop {
             let update = match self.next_logs().await? {
-                // The query produced nothing for us; keep draining.
-                Some(logs) if logs.is_empty() => continue,
-                Some(logs) => Update::Logs(logs),
+                // The event watcher is drained, so advance the chain head and
+                // hand the update to the event watcher to fetch its logs from.
                 None => {
-                    // The event watcher is drained, so advance the chain head and
-                    // hand the update to the event watcher to fetch its logs from.
                     let update = self.blocks.next().await?;
                     self.events.on_block_update(update.clone())?;
                     Update::Block(update)
                 }
+                // The query produced logs, return them as an update.
+                Some(logs) if !logs.is_empty() => Update::Logs(logs),
+                // The query produced nothing for us; keep draining.
+                _ => continue,
             };
             return Ok(update);
         }
@@ -178,7 +178,7 @@ mod tests {
         last_indexed_block: Option<u64>,
     ) -> Watcher<RootProvider, Weth::WethEvents> {
         let provider = ProviderBuilder::default().connect_mocked_client(asserter.clone());
-        Watcher::create(provider, config, vec![WATCHED], last_indexed_block)
+        Watcher::new(provider, config, vec![WATCHED], last_indexed_block)
             .await
             .unwrap()
     }

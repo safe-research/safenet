@@ -104,7 +104,7 @@ where
     /// reorg that happened while the service was down is re-indexed. Otherwise,
     /// when `Config::start_block` is set, it back-fills from there via a warp
     /// without a (fake) reorg.
-    pub async fn create(
+    pub async fn new(
         provider: P,
         config: Config,
         last_indexed_block: Option<u64>,
@@ -413,7 +413,7 @@ mod tests {
         for number in (1000 - config.max_reorg_depth + 1)..1000 {
             asserter.push_success(&block(number));
         }
-        let mut blocks = BlockWatcher::create(mock_provider(asserter), config, None)
+        let mut blocks = BlockWatcher::new(mock_provider(asserter), config, None)
             .await
             .unwrap();
         let _ = blocks.ready();
@@ -428,7 +428,7 @@ mod tests {
         // historic block fetched on startup for reorg detection
         asserter.push_success(&block(999));
 
-        let mut blocks = BlockWatcher::create(mock_provider(&asserter), config(), None)
+        let mut blocks = BlockWatcher::new(mock_provider(&asserter), config(), None)
             .await
             .unwrap();
 
@@ -448,7 +448,7 @@ mod tests {
         asserter.push_success(&block(1000));
         asserter.push_success(&block(999));
 
-        let mut blocks = BlockWatcher::create(mock_provider(&asserter), config(), Some(900))
+        let mut blocks = BlockWatcher::new(mock_provider(&asserter), config(), Some(900))
             .await
             .unwrap();
 
@@ -470,7 +470,7 @@ mod tests {
         asserter.push_success(&block(1000));
         asserter.push_success(&block(999));
 
-        let mut blocks = BlockWatcher::create(
+        let mut blocks = BlockWatcher::new(
             mock_provider(&asserter),
             Config {
                 start_block: Some(900),
@@ -498,7 +498,7 @@ mod tests {
         asserter.push_success(&block(1000));
         asserter.push_success(&block(999));
 
-        let mut blocks = BlockWatcher::create(
+        let mut blocks = BlockWatcher::new(
             mock_provider(&asserter),
             Config {
                 start_block: Some(999),
@@ -524,7 +524,7 @@ mod tests {
         asserter.push_success(&block(1000));
         asserter.push_success(&block(999));
 
-        let mut blocks = BlockWatcher::create(
+        let mut blocks = BlockWatcher::new(
             mock_provider(&asserter),
             Config {
                 start_block: Some(1000),
@@ -546,7 +546,7 @@ mod tests {
         let asserter = Asserter::new();
         asserter.push_success(&block(1000));
 
-        let mut blocks = BlockWatcher::create(
+        let mut blocks = BlockWatcher::new(
             mock_provider(&asserter),
             Config {
                 max_reorg_depth: 0,
@@ -582,7 +582,7 @@ mod tests {
         asserter.push_success(&block(999));
         asserter.push_success(&block(1000));
 
-        let mut blocks = BlockWatcher::create(
+        let mut blocks = BlockWatcher::new(
             mock_provider(&asserter),
             Config {
                 max_reorg_depth: 3,
@@ -806,7 +806,7 @@ mod tests {
         asserter.push_success(&block(1000));
         asserter.push_success(&block(998));
         asserter.push_success(&block(999));
-        let mut blocks = BlockWatcher::create(
+        let mut blocks = BlockWatcher::new(
             mock_provider(&asserter),
             Config {
                 max_reorg_depth: 3,
