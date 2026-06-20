@@ -1,35 +1,49 @@
-//! A wall clock implementation that produces Unix epoch timestamps and is
-//! compatible with `tokio::time::{advance, pause}` in tests.
+//! A wall clock that produces Unix epoch timestamps.
+//!
+//! In production it reads the system clock directly. In tests it is instead
+//! driven by `tokio`'s clock, anchored at [`TEST_SYSTEM_TIME_EPOCH_SECONDS`], so
+//! it stays compatible with `tokio::time::{advance, pause}`.
 
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::time::Duration;
+#[cfg(not(test))]
+use std::time::{SystemTime, UNIX_EPOCH};
+#[cfg(test)]
+use tokio::time::Instant;
 
-/// Estimates the current wall-clock time from elapsed monotonic time.
+/// A source of the current wall-clock time, in Unix epoch milliseconds.
 #[derive(Clone, Debug)]
 pub struct Clock {
-    base_ms: u64,
-    anchor: tokio::time::Instant,
+    /// The monotonic instant the clock was started at. "Now" is derived as the
+    /// time elapsed since this instant added to [`TEST_SYSTEM_TIME_EPOCH_SECONDS`].
+    #[cfg(test)]
+    anchor: Instant,
 }
 
 impl Clock {
-    /// Anchors "now" to the current system time.
+    /// Starts a new clock.
     pub fn start() -> Self {
-        let base_ms = if cfg!(test) {
-            TEST_SYSTEM_TIME_EPOCH_SECONDS * 1_000
-        } else {
-            SystemTime::now()
-                .duration_since(UNIX_EPOCH)
-                .unwrap_or_default()
-                .as_millis() as u64
-        };
         Self {
-            base_ms,
-            anchor: tokio::time::Instant::now(),
+            #[cfg(test)]
+            anchor: Instant::now(),
         }
     }
 
-    /// The estimated current wall-clock time, in milliseconds.
+    /// The current wall-clock time, in Unix epoch milliseconds.
+    #[cfg(not(test))]
     pub fn now_ms(&self) -> u64 {
-        self.base_ms + self.anchor.elapsed().as_millis() as u64
+        SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_millis() as u64
+    }
+
+    /// The current wall-clock time, in Unix epoch milliseconds.
+    ///
+    /// This is [`TEST_SYSTEM_TIME_EPOCH_SECONDS`] plus the `tokio` time elapsed
+    /// since the clock was started, so it advances with `tokio::time::advance`.
+    #[cfg(test)]
+    pub fn now_ms(&self) -> u64 {
+        TEST_SYSTEM_TIME_EPOCH_SECONDS * 1_000 + self.anchor.elapsed().as_millis() as u64
     }
 
     /// Sleeps until a target Unix epoch time, in milliseconds.
@@ -44,6 +58,7 @@ impl Clock {
 }
 
 /// The reference system time used when testing.
+#[cfg(test)]
 pub const TEST_SYSTEM_TIME_EPOCH_SECONDS: u64 = 1_337_420;
 
 #[cfg(test)]
