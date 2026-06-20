@@ -457,7 +457,7 @@ mod tests {
         asserter.push_success(&100);
         asserter.push_success(&block(1000));
 
-        let blocks = BlockWatcher::create(
+        let blocks = BlockWatcher::new(
             mock_provider(&asserter),
             Config {
                 max_reorg_depth: 0,
