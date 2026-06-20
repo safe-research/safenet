@@ -727,7 +727,7 @@ mod tests {
         assert_eq!(
             start.elapsed(),
             Duration::from_millis(
-                (2 * config.block_time)
+                (2 * blocks.block_time)
                     + config.block_propagation_delay
                     + config.block_retry_delays[0]
             ),
