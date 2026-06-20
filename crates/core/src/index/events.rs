@@ -41,6 +41,14 @@ pub struct Config {
     /// The number of blocks to query at once while warping over a reorg-safe
     /// range. Halved on query failure (never below one) and reset on success.
     pub block_page_size: NonZeroU64,
+    /// How many times to fetch a new block's logs with a single query before
+    /// falling back to one query per event.
+    pub block_single_query_retry_count: NonZeroU64,
+    /// Whether or not to use client-side when fetching logs for new blocks.
+    ///
+    /// Use this option for nodes that serve logs unreliably such as some older
+    /// versions of Nethermind.
+    pub use_client_filtering: bool,
     /// The maximum number of logs a single query is expected to return. A query
     /// returning at least this many is treated as potentially truncated by the
     /// node and raises an error. `None` disables the check.
@@ -54,6 +62,8 @@ impl Default for Config {
     fn default() -> Self {
         Self {
             block_page_size: NonZeroU64::new(100).expect("100 is nonzero"),
+            block_single_query_retry_count: NonZeroU64::new(3).expect("3 is nonzero"),
+            use_client_filtering: false,
             max_logs_per_query: None,
             fallible_events: BTreeSet::new(),
         }
@@ -124,6 +134,10 @@ enum Fetch {
 
 /// The current state of the event watcher's log-fetching state machine.
 #[derive(Clone, Copy, Debug)]
+// NOTE: The large enum variant warning is there because of the `logs_bloom`
+// field on the `Block` variant. Since fetching a new block is the common case,
+// boxing the value would not be beneficial.
+#[allow(clippy::large_enum_variant)]
 enum Step {
     /// Nothing to do; waiting for the next block update.
     Idle,
@@ -133,6 +147,13 @@ enum Step {
         from_block: u64,
         to_block: u64,
         page_size: NonZeroU64,
+    },
+    /// Fetching the logs of a single new block by hash, having already failed
+    /// `retries` times.
+    Block {
+        block_hash: B256,
+        logs_bloom: Bloom,
+        retries: u64,
     },
 }
 
@@ -181,9 +202,13 @@ where
             },
             // Uncled blocks never had canonical logs, so there is nothing to do.
             BlockUpdate::Uncle { .. } => Step::Idle,
-            // TODO: Fetching the logs of a new block (the `Block` step) is not
-            // implemented yet.
-            BlockUpdate::New { .. } => todo!(),
+            BlockUpdate::New {
+                hash, logs_bloom, ..
+            } => Step::Block {
+                block_hash: hash,
+                logs_bloom,
+                retries: 0,
+            },
         };
         Ok(())
     }
@@ -201,6 +226,11 @@ where
                 to_block,
                 page_size,
             } => self.warp(from_block, to_block, page_size).await.map(Some),
+            Step::Block {
+                block_hash,
+                logs_bloom,
+                retries,
+            } => self.block(block_hash, logs_bloom, retries).await.map(Some),
         }
     }
 
@@ -250,6 +280,44 @@ where
                 from_block,
                 to_block,
                 page_size,
+            }
+        };
+        result
+    }
+
+    /// Fetches the logs of a single new block, returning to idle on success and
+    /// staying on the block (with an incremented retry count) on failure.
+    ///
+    /// The first `block_single_query_retry_count` attempts use a single query
+    /// (node-filtered or, with `use_client_filtering`, client-filtered); once
+    /// those are exhausted it falls back to one query per event.
+    async fn block(
+        &mut self,
+        block_hash: B256,
+        logs_bloom: Bloom,
+        retries: u64,
+    ) -> Result<Vec<E>, Error> {
+        let fetch = if retries < self.config.block_single_query_retry_count.get() {
+            if self.config.use_client_filtering {
+                Fetch::ClientFiltered {
+                    block_hash,
+                    logs_bloom,
+                }
+            } else {
+                Fetch::SingleQuery(BlockFilter::Hash(block_hash))
+            }
+        } else {
+            Fetch::MultipleQueries(BlockFilter::Hash(block_hash))
+        };
+
+        let result = self.fetch_logs(fetch).await;
+        self.step = if result.is_ok() {
+            Step::Idle
+        } else {
+            Step::Block {
+                block_hash,
+                logs_bloom,
+                retries: retries + 1,
             }
         };
         result
@@ -1015,6 +1083,150 @@ mod tests {
                     amount: uint!(2_U256),
                     ..Default::default()
                 }),
+            ])
+        );
+        assert_eq!(events.next().await.unwrap(), None);
+        assert!(asserter.read_q().is_empty());
+    }
+
+    #[tokio::test]
+    async fn fetches_a_new_block_with_a_single_query() {
+        let asserter = Asserter::new();
+        let mut events = watcher(&asserter, Config::default());
+        events
+            .on_block_update(BlockUpdate::New {
+                number: 1337,
+                hash: B256::repeat_byte(0x13),
+                logs_bloom: Bloom::ZERO,
+            })
+            .unwrap();
+
+        asserter.push_success(&vec![log(
+            (1337, 0),
+            Erc20::Transfer {
+                amount: uint!(1_U256),
+                ..Default::default()
+            },
+        )]);
+
+        // A single query returns the block's logs, then the watcher is idle.
+        assert_eq!(
+            events.next().await.unwrap(),
+            Some(vec![Erc20::Erc20Events::Transfer(Erc20::Transfer {
+                amount: uint!(1_U256),
+                ..Default::default()
+            })])
+        );
+        assert_eq!(events.next().await.unwrap(), None);
+        assert!(asserter.read_q().is_empty());
+    }
+
+    #[tokio::test]
+    async fn fetches_a_new_block_with_client_filtering() {
+        let asserter = Asserter::new();
+        let mut events = watcher(
+            &asserter,
+            Config {
+                use_client_filtering: true,
+                ..Default::default()
+            },
+        );
+
+        // The query returns every log in the block; the watcher verifies them
+        // against the bloom and keeps only those from a watched address.
+        let block_logs = vec![
+            log(
+                (1337, 0),
+                Erc20::Transfer {
+                    amount: uint!(1_U256),
+                    ..Default::default()
+                },
+            ),
+            // A watched event, but from an unwatched address.
+            {
+                let mut log = log(
+                    (1337, 1),
+                    Erc20::Transfer {
+                        amount: uint!(2_U256),
+                        ..Default::default()
+                    },
+                );
+                log.inner.address = OTHER;
+                log
+            },
+        ];
+        events
+            .on_block_update(BlockUpdate::New {
+                number: 1337,
+                hash: B256::repeat_byte(0x13),
+                logs_bloom: bloom::compute_logs_bloom(&block_logs),
+            })
+            .unwrap();
+        asserter.push_success(&block_logs);
+
+        // Only the watched-address log is kept, by client-side filtering.
+        assert_eq!(
+            events.next().await.unwrap(),
+            Some(vec![Erc20::Erc20Events::Transfer(Erc20::Transfer {
+                amount: uint!(1_U256),
+                ..Default::default()
+            })])
+        );
+        assert_eq!(events.next().await.unwrap(), None);
+        assert!(asserter.read_q().is_empty());
+    }
+
+    #[tokio::test]
+    async fn new_block_falls_back_to_multiple_queries_after_retries() {
+        let asserter = Asserter::new();
+        let mut events = watcher(
+            &asserter,
+            Config {
+                block_single_query_retry_count: NonZeroU64::new(2).unwrap(),
+                ..Default::default()
+            },
+        );
+        events
+            .on_block_update(BlockUpdate::New {
+                number: 1337,
+                hash: B256::repeat_byte(0x13),
+                logs_bloom: Bloom::ZERO,
+            })
+            .unwrap();
+
+        // The first two attempts use a single query and both fail.
+        asserter.push_failure_msg("single query failed");
+        asserter.push_failure_msg("single query failed");
+        // The retries are exhausted, so the watcher falls back to one query per
+        // event (two for `Erc20`).
+        asserter.push_success(&vec![log(
+            (1337, 0),
+            Erc20::Transfer {
+                amount: uint!(1_U256),
+                ..Default::default()
+            },
+        )]);
+        asserter.push_success(&vec![log(
+            (1337, 1),
+            Erc20::Approval {
+                amount: uint!(2_U256),
+                ..Default::default()
+            },
+        )]);
+
+        assert_matches!(events.next().await, Err(Error::Rpc(_)));
+        assert_matches!(events.next().await, Err(Error::Rpc(_)));
+        assert_eq!(
+            events.next().await.unwrap(),
+            Some(vec![
+                Erc20::Erc20Events::Transfer(Erc20::Transfer {
+                    amount: uint!(1_U256),
+                    ..Default::default()
+                }),
+                Erc20::Erc20Events::Approval(Erc20::Approval {
+                    amount: uint!(2_U256),
+                    ..Default::default()
+                })
             ])
         );
         assert_eq!(events.next().await.unwrap(), None);
