@@ -67,12 +67,14 @@ where
     /// On startup this is the resume point: the block number is the indexer's
     /// last indexed block.
     pub async fn current(&self) -> Result<Option<(u64, S)>, Error> {
-        sqlx::query_as::<_, (u64, String)>(
+        sqlx::query_as::<_, (i64, String)>(
             "SELECT block_number, state FROM snapshots ORDER BY block_number DESC LIMIT 1",
         )
         .fetch_optional(&self.pool)
         .await?
-        .map(|(block_number, state)| Ok((block_number, serde_json::from_str(&state)?)))
+        .map(|(block_number, state)| {
+            Ok((u64::try_from(block_number)?, serde_json::from_str(&state)?))
+        })
         .transpose()
     }
 
@@ -84,7 +86,7 @@ where
             "INSERT INTO snapshots (block_number, state) VALUES (?, ?)
              ON CONFLICT (block_number) DO UPDATE SET state = excluded.state",
         )
-        .bind(block_number as i64)
+        .bind(i64::try_from(block_number)?)
         .bind(state)
         .execute(&self.pool)
         .await?;
@@ -123,7 +125,7 @@ where
     /// a reorg can still roll back to it.
     pub async fn prune(&self, safe_block: u64) -> Result<(), Error> {
         sqlx::query("DELETE FROM snapshots WHERE block_number < ?")
-            .bind(safe_block as i64)
+            .bind(i64::try_from(safe_block)?)
             .execute(&self.pool)
             .await?;
         Ok(())
