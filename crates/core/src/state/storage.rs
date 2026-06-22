@@ -36,7 +36,7 @@ pub enum Error {
 /// Generic over a serializable state value `S`, stored as JSON.
 pub struct SnapshotStore<S> {
     pool: SqlitePool,
-    _state: PhantomData<fn() -> S>,
+    _state: PhantomData<S>,
 }
 
 impl<S> SnapshotStore<S>
@@ -214,6 +214,8 @@ mod tests {
         ));
         // The failed rollback did not delete the snapshots above the target.
         assert_eq!(store.current().await.unwrap(), Some((3, state(30))));
+        // Block 2 is still in the store.
+        assert_eq!(store.reorg(3).await.unwrap(), (2, state(20)));
     }
 
     #[tokio::test]
