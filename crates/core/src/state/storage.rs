@@ -94,12 +94,12 @@ where
     }
 
     /// Rolls the store back, discarding `uncle` and every snapshot above it, and
-    /// returns the restored state at its parent.
+    /// returns the parent block number and its restored state.
     ///
     /// Used to recover from a reorg, where `uncle` was removed from the canonical
     /// chain. Errors with [`Error::MissingSnapshot`] if there is no snapshot at
     /// the parent of `uncle`, leaving the store unchanged.
-    pub async fn reorg(&self, uncle: u64) -> Result<S, Error> {
+    pub async fn reorg(&self, uncle: u64) -> Result<(u64, S), Error> {
         let parent = uncle.checked_sub(1).ok_or(Error::BlockNumberOverflow)?;
 
         // Only commit the deletion once we know the target snapshot exists and
@@ -117,7 +117,7 @@ where
                 .ok_or_else(|| Error::MissingSnapshot(parent))?;
         let state = serde_json::from_str(&state)?;
         tx.commit().await?;
-        Ok(state)
+        Ok((parent, state))
     }
 
     /// Removes snapshots below `safe_block`, which the indexer has determined can
@@ -194,7 +194,7 @@ mod tests {
         store.commit(3, &state(30)).await.unwrap();
 
         // A reorg uncles blocks 2 and 3; roll back to the common ancestor.
-        assert_eq!(store.reorg(2).await.unwrap(), state(10));
+        assert_eq!(store.reorg(2).await.unwrap(), (1, state(10)));
         assert_eq!(store.current().await.unwrap(), Some((1, state(10))));
 
         // Re-apply forward on the new canonical chain.
@@ -226,7 +226,7 @@ mod tests {
         store.prune(2).await.unwrap();
 
         // Block 1 is gone; the safe block and above remain.
-        assert_eq!(store.reorg(3).await.unwrap(), state(20));
+        assert_eq!(store.reorg(3).await.unwrap(), (2, state(20)));
         assert!(matches!(
             store.reorg(2).await,
             Err(Error::MissingSnapshot(1))
