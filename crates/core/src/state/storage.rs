@@ -5,7 +5,7 @@
 //! to an earlier block. [`SnapshotStore`] provides both by keeping a bounded
 //! history of per-block state snapshots in SQLite.
 //!
-//! Each indexed block's state is committed as a snapshot keyed by block number
+//! Each indexed block's state is committed as a snapshot keyed by block number.
 //! A rollback restores the snapshot at the reorg's common ancestor and discards
 //! everything above it. Snapshots below a `safe` block are pruned.
 
@@ -43,8 +43,8 @@ impl<S> SnapshotStore<S>
 where
     S: Serialize + DeserializeOwned,
 {
-    /// Opens the store described by `config`, creating the snapshot table if it
-    /// does not already exist.
+    /// Creates a store backed by `pool`, creating the snapshot table if it does
+    /// not already exist.
     pub async fn new(pool: SqlitePool) -> Result<Self, Error> {
         sqlx::query(
             "CREATE TABLE IF NOT EXISTS snapshots (
@@ -93,12 +93,12 @@ where
         Ok(())
     }
 
-    /// Rolls the store back, discarding `uncle` and every snapshot above it.
-    /// Returns the restored state.
+    /// Rolls the store back, discarding `uncle` and every snapshot above it, and
+    /// returns the restored state at its parent.
     ///
-    /// Used to recover from a reorg, where `block_number` was removed from the
-    /// canonical chain. Errors with [`Error::MissingSnapshot`] if there is no
-    /// snapshot before `block_number`, leaving the store unchanged.
+    /// Used to recover from a reorg, where `uncle` was removed from the canonical
+    /// chain. Errors with [`Error::MissingSnapshot`] if there is no snapshot at
+    /// the parent of `uncle`, leaving the store unchanged.
     pub async fn reorg(&self, uncle: u64) -> Result<S, Error> {
         let parent = uncle.checked_sub(1).ok_or(Error::BlockNumberOverflow)?;
 
@@ -155,6 +155,7 @@ mod tests {
 
     async fn store() -> SnapshotStore<State> {
         let pool = SqlitePoolOptions::new()
+            .max_connections(1)
             .connect_with("sqlite::memory:".parse().unwrap())
             .await
             .unwrap();
@@ -202,7 +203,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn rollback_to_a_missing_block_errors_and_leaves_the_store_unchanged() {
+    async fn reorg_with_a_missing_parent_errors_and_leaves_the_store_unchanged() {
         let store = store().await;
         store.commit(2, &state(20)).await.unwrap();
         store.commit(3, &state(30)).await.unwrap();
