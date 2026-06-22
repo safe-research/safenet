@@ -13,6 +13,7 @@ use events::{EventWatcher, Events};
 use serde::Deserialize;
 
 pub use blocks::BlockUpdate;
+pub use events::EventUpdate;
 
 /// Watcher configuration, aggregating the block and event watcher configs.
 #[derive(Clone, Debug, Default, Deserialize, PartialEq, Eq)]
@@ -46,9 +47,9 @@ pub enum Error {
 pub enum Update<E> {
     /// The chain head advanced, warped over a range, or reorged.
     Block(BlockUpdate),
-    /// A nonempty batch of decoded event logs, in `(block_number, log_index)`
-    /// order.
-    Logs(Vec<E>),
+    /// A batch of decoded event logs in `(block_number, log_index)` order, along
+    /// with the block range they were fetched for.
+    Logs(EventUpdate<E>),
 }
 
 /// Watches the chain head and the logs of the events `E`, producing an ordered
@@ -82,27 +83,22 @@ where
     /// Returns the next batch of logs or blocks and waits for a new block to
     /// be mined.
     pub async fn next(&mut self) -> Result<Update<E>, Error> {
-        loop {
-            let update = match self.next_logs().await? {
-                // The event watcher is drained, so advance the chain head and
-                // hand the update to the event watcher to fetch its logs from.
-                None => {
-                    let update = self.blocks.next().await?;
-                    self.events.on_block_update(update.clone())?;
-                    Update::Block(update)
-                }
-                // The query produced logs, return them as an update.
-                Some(logs) if !logs.is_empty() => Update::Logs(logs),
-                // The query produced nothing for us; keep draining.
-                _ => continue,
-            };
-            return Ok(update);
+        if let Some(events) = self.next_logs().await? {
+            // The query produced an update for the blocks it covers; return it,
+            // even when empty, so consumers can commit state across the range.
+            Ok(Update::Logs(events))
+        } else {
+            // The event watcher is drained, so advance the chain head and hand
+            // the update to the event watcher to fetch its logs from.
+            let update = self.blocks.next().await?;
+            self.events.on_block_update(update.clone())?;
+            Ok(Update::Block(update))
         }
     }
 
     /// Fetches the next batch of logs, recovering from a node that exposed a
     /// block it then cannot serve logs for by checking whether it was uncled.
-    async fn next_logs(&mut self) -> Result<Option<Vec<E>>, Error> {
+    async fn next_logs(&mut self) -> Result<Option<EventUpdate<E>>, Error> {
         match self.events.next().await {
             Ok(logs) => Ok(logs),
             Err(err) if is_resource_not_found(&err) => {
@@ -262,14 +258,14 @@ mod tests {
         asserter.push_success(&vec![log(weth_deposit(1))]);
         assert_eq!(
             watcher.next().await.unwrap(),
-            logs_update([weth_deposit(1)])
+            logs_update(848..=947, [weth_deposit(1)])
         );
 
         // Log query from range 948..=997
         asserter.push_success(&vec![log(weth_deposit(2))]);
         assert_eq!(
             watcher.next().await.unwrap(),
-            logs_update([weth_deposit(2)])
+            logs_update(948..=997, [weth_deposit(2)])
         );
 
         assert_eq!(watcher.next().await.unwrap(), new_block_update(998));
@@ -277,7 +273,7 @@ mod tests {
         asserter.push_success(&vec![log(weth_deposit(3))]);
         assert_eq!(
             watcher.next().await.unwrap(),
-            logs_update([weth_deposit(3)])
+            logs_update(998..=998, [weth_deposit(3)])
         );
 
         assert_eq!(watcher.next().await.unwrap(), new_block_update(999));
@@ -285,7 +281,7 @@ mod tests {
         asserter.push_success(&vec![log(weth_deposit(4))]);
         assert_eq!(
             watcher.next().await.unwrap(),
-            logs_update([weth_deposit(4)])
+            logs_update(999..=999, [weth_deposit(4)])
         );
 
         assert_eq!(watcher.next().await.unwrap(), new_block_update(1000));
@@ -293,7 +289,7 @@ mod tests {
         asserter.push_success(&vec![log(weth_deposit(5))]);
         assert_eq!(
             watcher.next().await.unwrap(),
-            logs_update([weth_deposit(5)])
+            logs_update(1000..=1000, [weth_deposit(5)])
         );
 
         // Fetch another block from the RPC node.
@@ -303,7 +299,7 @@ mod tests {
         asserter.push_success(&vec![log(weth_deposit(6))]);
         assert_eq!(
             watcher.next().await.unwrap(),
-            logs_update([weth_deposit(6)])
+            logs_update(1001..=1001, [weth_deposit(6)])
         );
 
         assert!(asserter.read_q().is_empty());
@@ -407,7 +403,13 @@ mod tests {
         }
     }
 
-    fn logs_update(logs: impl IntoIterator<Item = Weth::Deposit>) -> Update<Weth::WethEvents> {
-        Update::Logs(logs.into_iter().map(Weth::WethEvents::Deposit).collect())
+    fn logs_update(
+        blocks: std::ops::RangeInclusive<u64>,
+        logs: impl IntoIterator<Item = Weth::Deposit>,
+    ) -> Update<Weth::WethEvents> {
+        Update::Logs(EventUpdate {
+            blocks: blocks.into(),
+            logs: logs.into_iter().map(Weth::WethEvents::Deposit).collect(),
+        })
     }
 }
