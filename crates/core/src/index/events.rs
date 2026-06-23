@@ -17,6 +17,7 @@ use std::{
     collections::BTreeSet,
     marker::PhantomData,
     num::{NonZeroU64, NonZeroUsize},
+    range::RangeInclusive,
 };
 
 /// A typed set of EVM events that raw logs can be decoded into.
@@ -34,6 +35,21 @@ pub trait Events: Sized {
     /// Decodes a raw log, given its `topics` and `data`, into the event set;
     /// returns `None` when the log is not one of the events in the set.
     fn decode_log(topics: &[B256], data: &[u8]) -> Option<Self>;
+}
+
+/// A batch of decoded event logs together with the inclusive range of blocks
+/// `from..=to` they were fetched for.
+///
+/// The range lets a consumer commit the resulting state against the blocks it
+/// covers (`to` being the latest processed block) and detect events arriving out
+/// of order, for example after a reorg whose rollback could not be applied.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct EventUpdate<E> {
+    /// The block range for the events.
+    pub blocks: RangeInclusive<u64>,
+    /// The decoded logs in `(block_number, log_index)` order. May be empty when
+    /// no watched events occurred in the range.
+    pub logs: Vec<E>,
 }
 
 /// Event watcher configuration.
@@ -157,6 +173,7 @@ enum Step {
     /// Fetching the logs of a single new block by hash, having already failed
     /// `retries` times.
     Block {
+        block_number: u64,
         block_hash: B256,
         logs_bloom: Bloom,
         retries: u64,
@@ -209,8 +226,12 @@ where
             // Uncled blocks never had canonical logs, so there is nothing to do.
             BlockUpdate::Uncle { .. } => Step::Idle,
             BlockUpdate::New {
-                hash, logs_bloom, ..
+                number,
+                hash,
+                logs_bloom,
+                ..
             } => Step::Block {
+                block_number: number,
                 block_hash: hash,
                 logs_bloom,
                 retries: 0,
@@ -240,9 +261,10 @@ where
     /// Fetches the next batch of logs, advancing the state machine.
     ///
     /// Returns `None` once the current work is complete and the watcher is idle,
-    /// or `Some(logs)` with the next batch of decoded logs in
-    /// `(block_number, log_index)` order (which may be empty).
-    pub async fn next(&mut self) -> Result<Option<Vec<E>>, Error> {
+    /// or `Some(update)` with the next [`EventUpdate`]: the decoded logs in
+    /// `(block_number, log_index)` order (which may be empty) and the block range
+    /// they were fetched for.
+    pub async fn next(&mut self) -> Result<Option<EventUpdate<E>>, Error> {
         match self.step {
             Step::Idle => Ok(None),
             Step::Warping {
@@ -251,10 +273,14 @@ where
                 page_size,
             } => self.warp(from_block, to_block, page_size).await.map(Some),
             Step::Block {
+                block_number,
                 block_hash,
                 logs_bloom,
                 retries,
-            } => self.block(block_hash, logs_bloom, retries).await.map(Some),
+            } => self
+                .block(block_number, block_hash, logs_bloom, retries)
+                .await
+                .map(Some),
         }
     }
 
@@ -265,7 +291,7 @@ where
         from_block: u64,
         to_block: u64,
         page_size: NonZeroU64,
-    ) -> Result<Vec<E>, Error> {
+    ) -> Result<EventUpdate<E>, Error> {
         // Note that block query ranges are inclusive.
         let query_to_block = to_block.min(from_block.saturating_add(page_size.get() - 1));
 
@@ -306,7 +332,11 @@ where
                 page_size,
             }
         };
-        result
+
+        result.map(|logs| EventUpdate {
+            blocks: range(from_block..=query_to_block),
+            logs,
+        })
     }
 
     /// Fetches the logs of a single new block, returning to idle on success and
@@ -317,10 +347,11 @@ where
     /// those are exhausted it falls back to one query per event.
     async fn block(
         &mut self,
+        block_number: u64,
         block_hash: B256,
         logs_bloom: Bloom,
         retries: u64,
-    ) -> Result<Vec<E>, Error> {
+    ) -> Result<EventUpdate<E>, Error> {
         let fetch = if retries < self.config.block_single_query_retry_count.get() {
             if self.config.use_client_filtering {
                 Fetch::ClientFiltered {
@@ -339,12 +370,17 @@ where
             Step::Idle
         } else {
             Step::Block {
+                block_number,
                 block_hash,
                 logs_bloom,
                 retries: retries + 1,
             }
         };
-        result
+
+        result.map(|logs| EventUpdate {
+            blocks: range(block_number..=block_number),
+            logs,
+        })
     }
 
     /// Fetches the watched logs for some blocks using the given strategy,
@@ -441,6 +477,15 @@ where
         .collect()
 }
 
+/// Utility to convert between a `std::ops::RangeInclusive` and the more modern
+/// `std::range::RangeInclusive`.
+///
+/// See [RFC 3550](https://rust-lang.github.io/rfcs/3550-new-range.html) for
+/// more information.
+fn range(legacy: std::ops::RangeInclusive<u64>) -> RangeInclusive<u64> {
+    legacy.into()
+}
+
 /// Defines an [`Events`] type that decodes logs for one or more `alloy`
 /// `sol!`-generated `*Events` enums.
 ///
@@ -522,6 +567,7 @@ mod tests {
 
     const WATCHED: Address = address!("0x1111111111111111111111111111111111111111");
     const OTHER: Address = address!("0x2222222222222222222222222222222222222222");
+    const UNUSED: u64 = u64::MAX;
 
     sol! {
         #[derive(Debug, Default, Eq, PartialEq)]
@@ -1020,12 +1066,21 @@ mod tests {
 
         assert_eq!(
             events.next().await.unwrap(),
-            Some(vec![Erc20::Erc20Events::Transfer(Erc20::Transfer {
-                amount: uint!(1_U256),
-                ..Default::default()
-            })])
+            Some(EventUpdate {
+                blocks: range(1..=5),
+                logs: vec![Erc20::Erc20Events::Transfer(Erc20::Transfer {
+                    amount: uint!(1_U256),
+                    ..Default::default()
+                })],
+            })
         );
-        assert_eq!(events.next().await.unwrap(), Some(vec![]));
+        assert_eq!(
+            events.next().await.unwrap(),
+            Some(EventUpdate {
+                blocks: range(6..=10),
+                logs: vec![],
+            })
+        );
         // The range is fully warped, so the watcher is idle again.
         assert_eq!(events.next().await.unwrap(), None);
         assert!(asserter.read_q().is_empty());
@@ -1055,9 +1110,27 @@ mod tests {
         asserter.push_success(&Vec::<Log>::new());
 
         assert_matches!(events.next().await, Err(Error::Rpc(_)));
-        assert_eq!(events.next().await.unwrap(), Some(vec![]));
-        assert_eq!(events.next().await.unwrap(), Some(vec![]));
-        assert_eq!(events.next().await.unwrap(), Some(vec![]));
+        assert_eq!(
+            events.next().await.unwrap(),
+            Some(EventUpdate {
+                blocks: range(1..=3),
+                logs: vec![],
+            })
+        );
+        assert_eq!(
+            events.next().await.unwrap(),
+            Some(EventUpdate {
+                blocks: range(4..=8),
+                logs: vec![],
+            })
+        );
+        assert_eq!(
+            events.next().await.unwrap(),
+            Some(EventUpdate {
+                blocks: range(9..=10),
+                logs: vec![],
+            })
+        );
         assert_eq!(events.next().await.unwrap(), None);
         assert!(asserter.read_q().is_empty());
     }
@@ -1098,16 +1171,19 @@ mod tests {
         assert_matches!(events.next().await, Err(Error::Rpc(_)));
         assert_eq!(
             events.next().await.unwrap(),
-            Some(vec![
-                Erc20::Erc20Events::Transfer(Erc20::Transfer {
-                    amount: uint!(1_U256),
-                    ..Default::default()
-                }),
-                Erc20::Erc20Events::Approval(Erc20::Approval {
-                    amount: uint!(2_U256),
-                    ..Default::default()
-                }),
-            ])
+            Some(EventUpdate {
+                blocks: range(5..=5),
+                logs: vec![
+                    Erc20::Erc20Events::Transfer(Erc20::Transfer {
+                        amount: uint!(1_U256),
+                        ..Default::default()
+                    }),
+                    Erc20::Erc20Events::Approval(Erc20::Approval {
+                        amount: uint!(2_U256),
+                        ..Default::default()
+                    }),
+                ],
+            })
         );
         assert_eq!(events.next().await.unwrap(), None);
         assert!(asserter.read_q().is_empty());
@@ -1122,6 +1198,7 @@ mod tests {
                 number: 1337,
                 hash: B256::repeat_byte(0x13),
                 logs_bloom: Bloom::ZERO,
+                safe: UNUSED,
             })
             .unwrap();
 
@@ -1136,10 +1213,13 @@ mod tests {
         // A single query returns the block's logs, then the watcher is idle.
         assert_eq!(
             events.next().await.unwrap(),
-            Some(vec![Erc20::Erc20Events::Transfer(Erc20::Transfer {
-                amount: uint!(1_U256),
-                ..Default::default()
-            })])
+            Some(EventUpdate {
+                blocks: range(1337..=1337),
+                logs: vec![Erc20::Erc20Events::Transfer(Erc20::Transfer {
+                    amount: uint!(1_U256),
+                    ..Default::default()
+                })],
+            })
         );
         assert_eq!(events.next().await.unwrap(), None);
         assert!(asserter.read_q().is_empty());
@@ -1184,6 +1264,7 @@ mod tests {
                 number: 1337,
                 hash: B256::repeat_byte(0x13),
                 logs_bloom: bloom::compute_logs_bloom(&block_logs),
+                safe: UNUSED,
             })
             .unwrap();
         asserter.push_success(&block_logs);
@@ -1191,10 +1272,13 @@ mod tests {
         // Only the watched-address log is kept, by client-side filtering.
         assert_eq!(
             events.next().await.unwrap(),
-            Some(vec![Erc20::Erc20Events::Transfer(Erc20::Transfer {
-                amount: uint!(1_U256),
-                ..Default::default()
-            })])
+            Some(EventUpdate {
+                blocks: range(1337..=1337),
+                logs: vec![Erc20::Erc20Events::Transfer(Erc20::Transfer {
+                    amount: uint!(1_U256),
+                    ..Default::default()
+                })],
+            })
         );
         assert_eq!(events.next().await.unwrap(), None);
         assert!(asserter.read_q().is_empty());
@@ -1215,6 +1299,7 @@ mod tests {
                 number: 1337,
                 hash: B256::repeat_byte(0x13),
                 logs_bloom: Bloom::ZERO,
+                safe: UNUSED,
             })
             .unwrap();
 
@@ -1242,16 +1327,19 @@ mod tests {
         assert_matches!(events.next().await, Err(Error::Rpc(_)));
         assert_eq!(
             events.next().await.unwrap(),
-            Some(vec![
-                Erc20::Erc20Events::Transfer(Erc20::Transfer {
-                    amount: uint!(1_U256),
-                    ..Default::default()
-                }),
-                Erc20::Erc20Events::Approval(Erc20::Approval {
-                    amount: uint!(2_U256),
-                    ..Default::default()
-                })
-            ])
+            Some(EventUpdate {
+                blocks: range(1337..=1337),
+                logs: vec![
+                    Erc20::Erc20Events::Transfer(Erc20::Transfer {
+                        amount: uint!(1_U256),
+                        ..Default::default()
+                    }),
+                    Erc20::Erc20Events::Approval(Erc20::Approval {
+                        amount: uint!(2_U256),
+                        ..Default::default()
+                    })
+                ],
+            })
         );
         assert_eq!(events.next().await.unwrap(), None);
         assert!(asserter.read_q().is_empty());
@@ -1268,6 +1356,7 @@ mod tests {
                 number: 1337,
                 hash,
                 logs_bloom: Bloom::ZERO,
+                safe: UNUSED,
             })
             .unwrap();
 
@@ -1314,6 +1403,7 @@ mod tests {
                 number: 1337,
                 hash: B256::repeat_byte(0x13),
                 logs_bloom: Bloom::ZERO,
+                safe: UNUSED,
             })
             .unwrap();
 
