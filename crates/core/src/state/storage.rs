@@ -123,11 +123,18 @@ where
     /// Removes snapshots below `safe_block`, which the indexer has determined can
     /// no longer be reorged. Snapshots from `safe_block` upward are retained, so
     /// a reorg can still roll back to it.
+    ///
+    /// The latest snapshot is never removed, even when it is below `safe_block`,
+    /// so the store always keeps its resume point (see [`SnapshotStore::current`]).
     pub async fn prune(&self, safe_block: u64) -> Result<(), Error> {
-        sqlx::query("DELETE FROM snapshots WHERE block_number < ?")
-            .bind(i64::try_from(safe_block)?)
-            .execute(&self.pool)
-            .await?;
+        sqlx::query(
+            "DELETE FROM snapshots
+             WHERE block_number < ?
+               AND block_number < (SELECT MAX(block_number) FROM snapshots)",
+        )
+        .bind(i64::try_from(safe_block)?)
+        .execute(&self.pool)
+        .await?;
         Ok(())
     }
 }
@@ -229,6 +236,25 @@ mod tests {
 
         // Block 1 is gone; the safe block and above remain.
         assert_eq!(store.reorg(3).await.unwrap(), (2, state(20)));
+        assert!(matches!(
+            store.reorg(2).await,
+            Err(Error::MissingSnapshot(1))
+        ));
+    }
+
+    #[tokio::test]
+    async fn prune_retains_the_latest_snapshot() {
+        let store = store().await;
+        store.commit(1, &state(10)).await.unwrap();
+        store.commit(2, &state(20)).await.unwrap();
+
+        // A safe block above the tip must not empty the store; the latest
+        // snapshot is kept as the resume point.
+        store.prune(5).await.unwrap();
+
+        assert_eq!(store.current().await.unwrap(), Some((2, state(20))));
+
+        // Block 1 is gone, so trying to reorg block 2 would result in an error.
         assert!(matches!(
             store.reorg(2).await,
             Err(Error::MissingSnapshot(1))
