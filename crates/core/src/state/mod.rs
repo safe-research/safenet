@@ -1,7 +1,7 @@
 //! Reorg-aware state management with persistent storage.
 //!
 //! This module provides helpers for managing service state in a way that
-//! supports pure state transitions with filesystem backed storage with roll
+//! supports pure state transitions with persistent snapshot storage and roll
 //! backs in case of reorgs.
 
 pub mod storage;
@@ -25,6 +25,10 @@ pub enum Error {
     /// Received an unexpected out-of-order update.
     #[error("out-of-order update")]
     OutOfOrderUpdate,
+    /// The state machine has reached the end of the block chain. This happens
+    /// once the last block ([`u64::MAX`]) has been applied.
+    #[error("end of chain")]
+    EndOfChain,
 }
 
 /// Describes the state transition function for the state machine.
@@ -38,7 +42,10 @@ where
     type Event;
     type Action;
 
-    /// Perform the state transition for when a new block is observed.
+    /// Perform the state transition for entering a new block.
+    ///
+    /// For live indexing this may run optimistically after the previous block's
+    /// events are processed, before the new block update is observed.
     fn new_block(&mut self, state: S, block: u64) -> impl Future<Output = (S, Vec<Self::Action>)>;
 
     /// Perform the state transition when a new event is observed.
@@ -57,9 +64,21 @@ pub struct StateMachine<S, T> {
 }
 
 struct Inner<S> {
-    block: u64,
     state: S,
-    warping: bool,
+    status: Status,
+}
+
+#[derive(Clone, Copy, Eq, PartialEq)]
+enum Status {
+    /// Waiting for the next block update.
+    ///
+    /// `applied` tracks whether the pending block transition already ran
+    /// optimistically after the previous block's events.
+    BlockPending { pending: u64, applied: bool },
+    /// Fetching one or more event pages for a historic, reorg-safe range.
+    WarpEvents { range: RangeInclusive<u64> },
+    /// Fetching events for a single live block.
+    BlockEvents { number: u64 },
 }
 
 impl<S, T, E> StateMachine<S, T>
@@ -83,11 +102,11 @@ where
         init: impl FnOnce() -> S,
     ) -> Result<Self, Error> {
         let (block, state) = snapshots.current().await?.unwrap_or_else(|| (0, init()));
-        let inner = Mutex::new(Some(Inner {
-            block,
-            state,
-            warping: false,
-        }));
+        let status = Status::BlockPending {
+            pending: block.checked_add(1).ok_or(Error::EndOfChain)?,
+            applied: false,
+        };
+        let inner = Mutex::new(Some(Inner { state, status }));
 
         Ok(Self {
             inner,
@@ -103,49 +122,98 @@ where
     pub async fn handle_update(&mut self, update: Update<E>) -> Result<Vec<T::Action>, Error> {
         let mut lock = self.inner.lock().await;
         let mut inner = mem::take(&mut *lock).ok_or(Error::Poisoned)?;
-        let actions = match update {
-            Update::Block(BlockUpdate::Warp { from, to })
-                if Some(from) == inner.block.checked_add(1) && to >= from =>
-            {
-                inner.block = to;
-                inner.warping = true;
-                vec![]
-            }
-            Update::Block(BlockUpdate::Uncle { number })
-                if number <= inner.block && !inner.warping =>
-            {
-                let (parent, snapshot) = self.snapshots.reorg(number).await?;
-                inner.block = parent;
-                inner.state = snapshot;
-                vec![]
-            }
-            Update::Block(BlockUpdate::New { number, .. })
-                if Some(number) == inner.block.checked_add(1) =>
-            {
-                let (state, actions) = self.transition.new_block(inner.state, number).await;
-                inner = Inner {
-                    block: number,
-                    state,
-                    warping: false,
+        let actions = match (inner.status, update) {
+            (
+                Status::BlockPending { pending, applied },
+                Update::Block(BlockUpdate::Warp { from, to }),
+            ) if pending == from && to >= from => {
+                // Historic warp ranges skip per-block transitions. If the
+                // pending block transition already ran optimistically, rebuild
+                // from the latest committed snapshot before applying events.
+                if applied {
+                    let (block, state) = self
+                        .snapshots
+                        .current()
+                        .await?
+                        .ok_or(storage::Error::MissingSnapshot(pending.saturating_sub(1)))?;
+                    debug_assert_eq!(block + 1, pending);
+                    inner.state = state;
+                }
+                inner.status = Status::WarpEvents {
+                    range: (from..=to).into(),
                 };
+                vec![]
+            }
+            (
+                Status::BlockPending { pending, .. },
+                Update::Block(BlockUpdate::Uncle { number }),
+            ) if number < pending => {
+                Self::handle_reorg(&mut self.snapshots, &mut inner, number).await?
+            }
+            (
+                Status::BlockEvents { number: latest, .. },
+                Update::Block(BlockUpdate::Uncle { number }),
+            ) if number <= latest => {
+                Self::handle_reorg(&mut self.snapshots, &mut inner, number).await?
+            }
+            (
+                Status::BlockPending { pending, applied },
+                Update::Block(BlockUpdate::New { number, safe, .. }),
+            ) if number == pending => {
+                inner.status = Status::BlockEvents { number };
+                self.snapshots.prune(safe).await?;
+                // Pending block transitions may have run optimistically after
+                // the previous block's events. Only apply the transition when
+                // this block has not already been applied.
+                if !applied {
+                    let (state, actions) = self.transition.new_block(inner.state, number).await;
+                    inner.state = state;
+                    actions
+                } else {
+                    vec![]
+                }
+            }
+            (Status::WarpEvents { range }, Update::Logs(EventUpdate { blocks, logs }))
+                if blocks.start == range.start && range.contains(&blocks.last) =>
+            {
+                let (state, actions) =
+                    accumulate_event_transitions(&mut self.transition, inner.state, logs).await;
+                let pending = blocks.last.checked_add(1).ok_or(Error::EndOfChain)?;
+                let range = pending..=range.last;
+                let status = if range.is_empty() {
+                    Status::BlockPending {
+                        pending,
+                        applied: false,
+                    }
+                } else {
+                    Status::WarpEvents {
+                        range: range.into(),
+                    }
+                };
+                self.snapshots.commit(blocks.last, &state).await?;
+                self.snapshots.prune(blocks.last).await?;
+                inner.state = state;
+                inner.status = status;
                 actions
             }
-            Update::Logs(EventUpdate { blocks, logs })
-                if !blocks.is_empty()
-                    && (inner.is_latest_block(blocks) || inner.is_historic_range(blocks)) =>
+            (Status::BlockEvents { number }, Update::Logs(EventUpdate { blocks, logs }))
+                if blocks.start == number && blocks.last == number =>
             {
-                let mut actions = vec![];
-                for log in logs {
-                    let (new_state, new_actions) = self.transition.event(inner.state, log).await;
-                    inner.state = new_state;
-                    actions.extend(new_actions);
-                }
-                self.snapshots.commit(blocks.last, &inner.state).await?;
-                // In case we are warping, we can prune intermediate state from
-                // storage for the event pages.
-                if inner.warping {
-                    self.snapshots.prune(blocks.last).await?;
-                }
+                let (state, mut actions) =
+                    accumulate_event_transitions(&mut self.transition, inner.state, logs).await;
+                self.snapshots.commit(blocks.last, &state).await?;
+
+                // The latest block's events are complete, so the next block
+                // transition can run immediately. The resulting state stays
+                // in-memory until that next block's events are committed.
+                let pending = number.checked_add(1).ok_or(Error::EndOfChain)?;
+                let (state, block_actions) = self.transition.new_block(state, pending).await;
+                inner.state = state;
+                inner.status = Status::BlockPending {
+                    pending,
+                    applied: true,
+                };
+                actions.extend(block_actions);
 
                 actions
             }
@@ -154,16 +222,38 @@ where
         *lock = Some(inner);
         Ok(actions)
     }
+
+    async fn handle_reorg(
+        snapshots: &mut SnapshotStore<S>,
+        inner: &mut Inner<S>,
+        number: u64,
+    ) -> Result<Vec<T::Action>, Error> {
+        let (parent, snapshot) = snapshots.reorg(number).await?;
+        debug_assert_eq!(parent + 1, number);
+        inner.state = snapshot;
+        inner.status = Status::BlockPending {
+            pending: number,
+            applied: false,
+        };
+        Ok(vec![])
+    }
 }
 
-impl<S> Inner<S> {
-    fn is_latest_block(&self, blocks: RangeInclusive<u64>) -> bool {
-        self.block == blocks.start && self.block == blocks.last && !self.warping
+async fn accumulate_event_transitions<T, S>(
+    transition: &mut T,
+    mut state: S,
+    events: Vec<T::Event>,
+) -> (S, Vec<T::Action>)
+where
+    T: StateTransition<S>,
+{
+    let mut actions = vec![];
+    for event in events {
+        let (new_state, new_actions) = transition.event(state, event).await;
+        state = new_state;
+        actions.extend(new_actions);
     }
-
-    fn is_historic_range(&self, blocks: RangeInclusive<u64>) -> bool {
-        self.block >= blocks.start && self.block >= blocks.last && self.warping
-    }
+    (state, actions)
 }
 
 #[cfg(test)]
@@ -274,23 +364,57 @@ mod tests {
         let pool = pool().await;
         let mut machine = new_machine(&pool).await;
 
-        // A new block runs the block transition; its events are applied and the
-        // resulting state is committed at the last block of the range.
+        // A new block runs the block transition; its events are applied, the
+        // resulting state is committed at the last block of the range, and the
+        // pending block transition runs early.
         assert_eq!(
             machine.handle_update(new_block(1)).await.unwrap(),
             vec![Action::Block(1)]
         );
         assert_eq!(
             machine.handle_update(logs(1..=1, [10, 20])).await.unwrap(),
-            vec![Action::Event(10), Action::Event(20)]
+            vec![Action::Event(10), Action::Event(20), Action::Block(2)]
         );
 
+        // The early block transition is not persisted until that block's logs
+        // are processed.
         assert_eq!(
             committed(&pool).await,
             Some((
                 1,
                 TestState {
                     blocks: vec![1],
+                    events: vec![10, 20],
+                },
+            ))
+        );
+    }
+
+    #[tokio::test]
+    async fn confirms_early_block_transitions_without_duplicate_actions() {
+        let pool = pool().await;
+        let mut machine = new_machine(&pool).await;
+
+        machine.handle_update(new_block(1)).await.unwrap();
+        assert_eq!(
+            machine.handle_update(logs(1..=1, [10])).await.unwrap(),
+            vec![Action::Event(10), Action::Block(2)]
+        );
+
+        // Block 2's transition already ran on block 1's logs, so observing
+        // block 2 only confirms it.
+        assert_eq!(machine.handle_update(new_block(2)).await.unwrap(), vec![]);
+        assert_eq!(
+            machine.handle_update(logs(2..=2, [20])).await.unwrap(),
+            vec![Action::Event(20), Action::Block(3)]
+        );
+
+        assert_eq!(
+            committed(&pool).await,
+            Some((
+                2,
+                TestState {
+                    blocks: vec![1, 2],
                     events: vec![10, 20],
                 },
             ))
@@ -309,8 +433,14 @@ mod tests {
         // A fresh machine over the same store resumes at block 1, so it accepts
         // block 2 and carries the restored state forward.
         let mut machine = new_machine(&pool).await;
-        machine.handle_update(new_block(2)).await.unwrap();
-        machine.handle_update(logs(2..=2, [20])).await.unwrap();
+        assert_eq!(
+            machine.handle_update(new_block(2)).await.unwrap(),
+            vec![Action::Block(2)]
+        );
+        assert_eq!(
+            machine.handle_update(logs(2..=2, [20])).await.unwrap(),
+            vec![Action::Event(20), Action::Block(3)]
+        );
 
         assert_eq!(
             committed(&pool).await,
@@ -341,8 +471,14 @@ mod tests {
         assert_eq!(machine.handle_update(uncle(2)).await.unwrap(), vec![]);
 
         // Re-apply forward on the new canonical chain.
-        machine.handle_update(new_block(2)).await.unwrap();
-        machine.handle_update(logs(2..=2, [21])).await.unwrap();
+        assert_eq!(
+            machine.handle_update(new_block(2)).await.unwrap(),
+            vec![Action::Block(2)]
+        );
+        assert_eq!(
+            machine.handle_update(logs(2..=2, [21])).await.unwrap(),
+            vec![Action::Event(21), Action::Block(3)]
+        );
 
         assert_eq!(
             committed(&pool).await,
@@ -389,6 +525,78 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn warp_after_early_block_transition_restarts_from_committed_snapshot() {
+        let pool = pool().await;
+        let mut machine = new_machine(&pool).await;
+
+        machine.handle_update(new_block(1)).await.unwrap();
+        assert_eq!(
+            machine.handle_update(logs(1..=1, [10])).await.unwrap(),
+            vec![Action::Event(10), Action::Block(2)]
+        );
+
+        // Block 2's transition ran early, but a warp over block 2 must discard
+        // it because historic warp ranges only apply events.
+        assert_eq!(machine.handle_update(warp(2, 4)).await.unwrap(), vec![]);
+        assert_eq!(
+            machine.handle_update(logs(2..=4, [20, 40])).await.unwrap(),
+            vec![Action::Event(20), Action::Event(40)]
+        );
+
+        assert_eq!(
+            committed(&pool).await,
+            Some((
+                4,
+                TestState {
+                    blocks: vec![1],
+                    events: vec![10, 20, 40],
+                },
+            ))
+        );
+    }
+
+    #[tokio::test]
+    async fn live_block_after_warp_is_committed_only_after_events() {
+        let pool = pool().await;
+        let mut machine = new_machine(&pool).await;
+
+        machine.handle_update(warp(1, 6)).await.unwrap();
+        machine.handle_update(logs(1..=6, [10, 40])).await.unwrap();
+
+        // The first live block after a warp runs the block transition, but does
+        // not commit it before the block's events.
+        assert_eq!(
+            machine.handle_update(new_block(7)).await.unwrap(),
+            vec![Action::Block(7)]
+        );
+        assert_eq!(
+            committed(&pool).await,
+            Some((
+                6,
+                TestState {
+                    blocks: vec![],
+                    events: vec![10, 40],
+                },
+            ))
+        );
+
+        assert_eq!(
+            machine.handle_update(logs(7..=7, [70])).await.unwrap(),
+            vec![Action::Event(70), Action::Block(8)]
+        );
+        assert_eq!(
+            committed(&pool).await,
+            Some((
+                7,
+                TestState {
+                    blocks: vec![7],
+                    events: vec![10, 40, 70],
+                },
+            ))
+        );
+    }
+
+    #[tokio::test]
     async fn out_of_order_update_errors_and_poisons() {
         let pool = pool().await;
         let mut machine = new_machine(&pool).await;
@@ -414,7 +622,7 @@ mod tests {
 
         machine.handle_update(new_block(1)).await.unwrap();
 
-        // While not warping, events must start at the current block.
+        // After a live block update, events must be for that same block.
         assert!(matches!(
             machine.handle_update(logs(2..=2, [20])).await,
             Err(Error::OutOfOrderUpdate)
