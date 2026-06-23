@@ -268,7 +268,7 @@ mod tests {
             logs_update(948..=997, [weth_deposit(2)])
         );
 
-        assert_eq!(watcher.next().await.unwrap(), new_block_update(998));
+        assert_eq!(watcher.next().await.unwrap(), new_block_update(998, 997));
 
         asserter.push_success(&vec![log(weth_deposit(3))]);
         assert_eq!(
@@ -276,7 +276,7 @@ mod tests {
             logs_update(998..=998, [weth_deposit(3)])
         );
 
-        assert_eq!(watcher.next().await.unwrap(), new_block_update(999));
+        assert_eq!(watcher.next().await.unwrap(), new_block_update(999, 997));
 
         asserter.push_success(&vec![log(weth_deposit(4))]);
         assert_eq!(
@@ -284,7 +284,7 @@ mod tests {
             logs_update(999..=999, [weth_deposit(4)])
         );
 
-        assert_eq!(watcher.next().await.unwrap(), new_block_update(1000));
+        assert_eq!(watcher.next().await.unwrap(), new_block_update(1000, 997));
 
         asserter.push_success(&vec![log(weth_deposit(5))]);
         assert_eq!(
@@ -294,7 +294,7 @@ mod tests {
 
         // Fetch another block from the RPC node.
         asserter.push_success(&block(1001));
-        assert_eq!(watcher.next().await.unwrap(), new_block_update(1001));
+        assert_eq!(watcher.next().await.unwrap(), new_block_update(1001, 998));
 
         asserter.push_success(&vec![log(weth_deposit(6))]);
         assert_eq!(
@@ -328,6 +328,7 @@ mod tests {
                 number: 1000,
                 hash: block_hash(1000),
                 logs_bloom: block_bloom(1000),
+                safe: 999,
             })
         );
 
@@ -378,11 +379,12 @@ mod tests {
         Bloom::from(bytes)
     }
 
-    fn new_block_update<E>(number: u64) -> Update<E> {
+    fn new_block_update<E>(number: u64, safe: u64) -> Update<E> {
         Update::Block(BlockUpdate::New {
             number,
             hash: block_hash(number),
             logs_bloom: block_bloom(number),
+            safe,
         })
     }
 
