@@ -135,7 +135,7 @@ where
                         .snapshots
                         .current()
                         .await?
-                        .expect("applied block state implies a storage snapshot");
+                        .ok_or(storage::Error::MissingSnapshot(pending.saturating_sub(1)))?;
                     debug_assert_eq!(block + 1, pending);
                     inner.state = state;
                 }
@@ -148,14 +148,13 @@ where
                 Status::BlockPending { pending, .. },
                 Update::Block(BlockUpdate::Uncle { number }),
             ) if number < pending => {
-                let (parent, snapshot) = self.snapshots.reorg(number).await?;
-                debug_assert_eq!(parent + 1, number);
-                inner.state = snapshot;
-                inner.status = Status::BlockPending {
-                    pending: number,
-                    applied: false,
-                };
-                vec![]
+                Self::handle_reorg(&mut self.snapshots, &mut inner, number).await?
+            }
+            (
+                Status::BlockEvents { number: latest, .. },
+                Update::Block(BlockUpdate::Uncle { number }),
+            ) if number <= latest => {
+                Self::handle_reorg(&mut self.snapshots, &mut inner, number).await?
             }
             (
                 Status::BlockPending { pending, applied },
@@ -222,6 +221,21 @@ where
         };
         *lock = Some(inner);
         Ok(actions)
+    }
+
+    async fn handle_reorg(
+        snapshots: &mut SnapshotStore<S>,
+        inner: &mut Inner<S>,
+        number: u64,
+    ) -> Result<Vec<T::Action>, Error> {
+        let (parent, snapshot) = snapshots.reorg(number).await?;
+        debug_assert_eq!(parent + 1, number);
+        inner.state = snapshot;
+        inner.status = Status::BlockPending {
+            pending: number,
+            applied: false,
+        };
+        Ok(vec![])
     }
 }
 
