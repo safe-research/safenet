@@ -16,21 +16,17 @@ library EpochRollover {
     // ============================================================
 
     struct State {
-        mapping(bytes32 entryId => bool known) entries;
+        mapping(uint256 groupKeyX => mapping(uint256 groupKeyY => mapping(uint64 epoch => bool known))) entries;
     }
 
     // ============================================================
     // EVENTS
     // ============================================================
 
-    event EpochInitialized(bytes32 indexed entryId, uint64 indexed epoch, Secp256k1.Point groupKey);
+    event EpochInitialized(uint64 indexed epoch, Secp256k1.Point groupKey);
 
     event EpochRolledOver(
-        bytes32 indexed parentEntryId,
-        bytes32 indexed entryId,
-        uint64 indexed epoch,
-        uint64 parentEpoch,
-        Secp256k1.Point groupKey
+        uint64 indexed parentEpoch, uint64 indexed epoch, Secp256k1.Point parentKey, Secp256k1.Point groupKey
     );
 
     // ============================================================
@@ -48,9 +44,8 @@ library EpochRollover {
     // Seeds the genesis entry; call exactly once (e.g. in the consumer's constructor).
     function initialize(State storage self, uint64 genesisEpoch, Secp256k1.Point memory genesisKey) internal {
         Secp256k1.requireNonZero(genesisKey);
-        bytes32 entryId = _entryId(genesisKey, genesisEpoch);
-        self.entries[entryId] = true;
-        emit EpochInitialized(entryId, genesisEpoch, genesisKey);
+        self.entries[genesisKey.x][genesisKey.y][genesisEpoch] = true;
+        emit EpochInitialized(genesisEpoch, genesisKey);
     }
 
     function rollover(
@@ -62,9 +57,8 @@ library EpochRollover {
         uint64 rolloverBlock,
         Secp256k1.Point calldata newGroupKey,
         FROST.Signature calldata signature
-    ) internal returns (bytes32 entryId) {
-        bytes32 parentEntryId = _entryId(parentKey, parentEpoch);
-        require(self.entries[parentEntryId], UnknownParent());
+    ) internal {
+        require(self.entries[parentKey.x][parentKey.y][parentEpoch], UnknownParent());
         require(proposedEpoch > parentEpoch, EpochNotAdvancing());
         Secp256k1.requireNonZero(newGroupKey);
 
@@ -72,23 +66,13 @@ library EpochRollover {
             ConsensusMessages.epochRollover(domainSeparator, parentEpoch, proposedEpoch, rolloverBlock, newGroupKey);
         FROST.verify(parentKey, signature, message);
 
-        entryId = _entryId(newGroupKey, proposedEpoch);
-        if (!self.entries[entryId]) {
-            self.entries[entryId] = true;
-            emit EpochRolledOver(parentEntryId, entryId, proposedEpoch, parentEpoch, newGroupKey);
+        if (!self.entries[newGroupKey.x][newGroupKey.y][proposedEpoch]) {
+            self.entries[newGroupKey.x][newGroupKey.y][proposedEpoch] = true;
+            emit EpochRolledOver(parentEpoch, proposedEpoch, parentKey, newGroupKey);
         }
     }
 
     function isKnown(State storage self, Secp256k1.Point memory groupKey, uint64 epoch) internal view returns (bool) {
-        return self.entries[_entryId(groupKey, epoch)];
-    }
-
-    // ============================================================
-    // PRIVATE FUNCTIONS
-    // ============================================================
-
-    function _entryId(Secp256k1.Point memory groupKey, uint64 epoch) private pure returns (bytes32) {
-        // forge-lint: disable-next-line(asm-keccak256)
-        return keccak256(abi.encode(groupKey.x, groupKey.y, epoch));
+        return self.entries[groupKey.x][groupKey.y][epoch];
     }
 }
