@@ -9,7 +9,7 @@ pub mod storage;
 use self::storage::SnapshotStore;
 use crate::index::{BlockUpdate, EventUpdate, Update};
 use serde::{Serialize, de::DeserializeOwned};
-use std::{mem, range::RangeInclusive};
+use std::mem;
 use tokio::sync::Mutex;
 
 /// Error produced by the [`StateMachine`].
@@ -22,9 +22,6 @@ pub enum Error {
     /// transition failed in a non-recoverable way.
     #[error("poisoned state machine")]
     Poisoned,
-    /// Received an unexpected out-of-order update.
-    #[error("out-of-order update")]
-    OutOfOrderUpdate,
 }
 
 /// Describes the state transition function for the state machine.
@@ -104,36 +101,26 @@ where
         let mut lock = self.inner.lock().await;
         let mut inner = mem::take(&mut *lock).ok_or(Error::Poisoned)?;
         let actions = match update {
-            Update::Block(BlockUpdate::Warp { from, to })
-                if Some(from) == inner.block.checked_add(1) && to >= from =>
-            {
-                inner.block = to;
+            Update::Block(BlockUpdate::Warp { from, .. }) => {
+                inner.block = from;
                 inner.warping = true;
                 vec![]
             }
-            Update::Block(BlockUpdate::Uncle { number })
-                if number <= inner.block && !inner.warping =>
-            {
+            Update::Block(BlockUpdate::Uncle { number }) => {
                 let (parent, snapshot) = self.snapshots.reorg(number).await?;
                 inner.block = parent;
                 inner.state = snapshot;
                 vec![]
             }
-            Update::Block(BlockUpdate::New { number, .. })
-                if Some(number) == inner.block.checked_add(1) =>
-            {
+            Update::Block(BlockUpdate::New { number, safe, .. }) => {
                 let (state, actions) = self.transition.new_block(inner.state, number).await;
-                inner = Inner {
-                    block: number,
-                    state,
-                    warping: false,
-                };
+                self.snapshots.prune(safe).await?;
+                inner.block = number;
+                inner.state = state;
+                inner.warping = false;
                 actions
             }
-            Update::Logs(EventUpdate { blocks, logs })
-                if !blocks.is_empty()
-                    && (inner.is_latest_block(blocks) || inner.is_historic_range(blocks)) =>
-            {
+            Update::Logs(EventUpdate { blocks, logs }) => {
                 let mut actions = vec![];
                 for log in logs {
                     let (new_state, new_actions) = self.transition.event(inner.state, log).await;
@@ -147,22 +134,12 @@ where
                     self.snapshots.prune(blocks.last).await?;
                 }
 
+                inner.block = blocks.last;
                 actions
             }
-            _ => return Err(Error::OutOfOrderUpdate),
         };
         *lock = Some(inner);
         Ok(actions)
-    }
-}
-
-impl<S> Inner<S> {
-    fn is_latest_block(&self, blocks: RangeInclusive<u64>) -> bool {
-        self.block == blocks.start && self.block == blocks.last && !self.warping
-    }
-
-    fn is_historic_range(&self, blocks: RangeInclusive<u64>) -> bool {
-        self.block >= blocks.start && self.block >= blocks.last && self.warping
     }
 }
 
@@ -386,52 +363,5 @@ mod tests {
         );
         // Only the latest snapshot survives the prune.
         assert_eq!(snapshot_count(&pool).await, 1);
-    }
-
-    #[tokio::test]
-    async fn out_of_order_update_errors_and_poisons() {
-        let pool = pool().await;
-        let mut machine = new_machine(&pool).await;
-
-        machine.handle_update(warp(1, 5)).await.unwrap();
-
-        // A block that does not advance the head is out of order.
-        assert!(matches!(
-            machine.handle_update(new_block(3)).await,
-            Err(Error::OutOfOrderUpdate)
-        ));
-        // The failed transition leaves the machine poisoned.
-        assert!(matches!(
-            machine.handle_update(new_block(6)).await,
-            Err(Error::Poisoned)
-        ));
-    }
-
-    #[tokio::test]
-    async fn events_for_the_wrong_block_are_out_of_order() {
-        let pool = pool().await;
-        let mut machine = new_machine(&pool).await;
-
-        machine.handle_update(new_block(1)).await.unwrap();
-
-        // While not warping, events must start at the current block.
-        assert!(matches!(
-            machine.handle_update(logs(2..=2, [20])).await,
-            Err(Error::OutOfOrderUpdate)
-        ));
-    }
-
-    #[tokio::test]
-    async fn uncle_while_warping_is_out_of_order() {
-        let pool = pool().await;
-        let mut machine = new_machine(&pool).await;
-
-        machine.handle_update(warp(1, 5)).await.unwrap();
-
-        // Warped ranges are reorg-safe, so an uncle during a warp is unexpected.
-        assert!(matches!(
-            machine.handle_update(uncle(3)).await,
-            Err(Error::OutOfOrderUpdate)
-        ));
     }
 }
