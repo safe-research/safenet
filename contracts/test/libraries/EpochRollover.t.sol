@@ -146,6 +146,7 @@ contract EpochRolloverTest is Test {
         assertTrue(state.isKnown(_key(6), 2));
     }
 
+    // This is never expected to happen and included for completeness only.
     function test_rollover_sameKeyTwoEpochs() public {
         _seedGenesis();
         // Same key (5) recorded at two different epochs via two branches.
