@@ -33,7 +33,8 @@ contract EpochRolloverTest is Test {
     // HELPERS
     // ============================================================
 
-    /// @dev External wrapper so `rollover`'s calldata parameters are sourced from a real call.
+    /// @dev External wrapper so a reverting `rollover` reverts at a lower call depth than the cheatcode.
+    ///      Only the revert tests need this; the rest call `state.rollover` directly.
     function callRollover(
         bytes32 domainSeparator,
         Secp256k1.Point calldata parentKey,
@@ -81,7 +82,7 @@ contract EpochRolloverTest is Test {
         Secp256k1.Point memory newKey = _key(newSk);
         bytes32 message = ConsensusMessages.epochRollover(domainSep, parentEpoch, proposedEpoch, rolloverBlock, newKey);
         FROST.Signature memory sig = _sign(parentSk, parentNk, message);
-        this.callRollover(domainSep, parentKey, parentEpoch, proposedEpoch, rolloverBlock, newKey, sig);
+        state.rollover(domainSep, parentKey, parentEpoch, proposedEpoch, rolloverBlock, newKey, sig);
     }
 
     function _dummySig() internal returns (FROST.Signature memory) {
@@ -120,7 +121,7 @@ contract EpochRolloverTest is Test {
 
         vm.expectEmit(true, true, false, true);
         emit EpochRollover.EpochRolledOver(GENESIS_EPOCH, proposedEpoch, parentKey, newKey);
-        this.callRollover(domainSep, parentKey, GENESIS_EPOCH, proposedEpoch, 100, newKey, sig);
+        state.rollover(domainSep, parentKey, GENESIS_EPOCH, proposedEpoch, 100, newKey, sig);
 
         assertTrue(state.isKnown(newKey, proposedEpoch));
     }
@@ -209,12 +210,12 @@ contract EpochRolloverTest is Test {
         bytes32 message = ConsensusMessages.epochRollover(domainSep, GENESIS_EPOCH, 2, 100, newKey);
         FROST.Signature memory sig = _sign(GENESIS_SK, GENESIS_NK, message);
 
-        this.callRollover(domainSep, parentKey, GENESIS_EPOCH, 2, 100, newKey, sig);
+        state.rollover(domainSep, parentKey, GENESIS_EPOCH, 2, 100, newKey, sig);
         assertTrue(state.isKnown(newKey, 2));
 
         // Re-submitting the identical rollover is a no-op: no revert, no event, state unchanged.
         vm.recordLogs();
-        this.callRollover(domainSep, parentKey, GENESIS_EPOCH, 2, 100, newKey, sig);
+        state.rollover(domainSep, parentKey, GENESIS_EPOCH, 2, 100, newKey, sig);
         Vm.Log[] memory logs = vm.getRecordedLogs();
 
         assertEq(logs.length, 0);
