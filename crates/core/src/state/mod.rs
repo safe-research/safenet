@@ -9,7 +9,7 @@ pub mod storage;
 use self::storage::SnapshotStore;
 use crate::index::{BlockUpdate, EventUpdate, Update};
 use serde::{Serialize, de::DeserializeOwned};
-use std::mem;
+use std::{mem, range::RangeInclusive};
 use tokio::sync::Mutex;
 
 /// Error produced by the [`StateMachine`].
@@ -18,6 +18,13 @@ pub enum Error {
     /// A snapshot storage error.
     #[error(transparent)]
     Storage(#[from] storage::Error),
+    /// We have reached the end of the block chain and cannot continue handling
+    /// updates.
+    #[error("end of chain")]
+    EndOfChain,
+    /// Received an update that is either out-of-order or has unexpected data.
+    #[error("out-of-order update")]
+    BadUpdate,
     /// The state machine is in a poisoned state, where a previous state
     /// transition failed in a non-recoverable way.
     #[error("poisoned state machine")]
@@ -54,9 +61,15 @@ pub struct StateMachine<S, T> {
 }
 
 struct Inner<S> {
-    block: u64,
     state: S,
-    warping: bool,
+    status: Status,
+}
+
+enum Status {
+    Initialized,
+    BlockPending { pending: u64 },
+    BlockEvents { latest: u64 },
+    WarpEvents { range: RangeInclusive<u64> },
 }
 
 impl<S, T, E> StateMachine<S, T>
@@ -79,12 +92,16 @@ where
         snapshots: SnapshotStore<S>,
         init: impl FnOnce() -> S,
     ) -> Result<Self, Error> {
-        let (block, state) = snapshots.current().await?.unwrap_or_else(|| (0, init()));
-        let inner = Mutex::new(Some(Inner {
-            block,
-            state,
-            warping: false,
-        }));
+        let (state, status) = snapshots
+            .current()
+            .await?
+            .map(|(latest, state)| -> Result<_, Error> {
+                let pending = latest.checked_add(1).ok_or(Error::EndOfChain)?;
+                Ok((state, Status::BlockPending { pending }))
+            })
+            .transpose()?
+            .unwrap_or_else(|| (init(), Status::Initialized));
+        let inner = Mutex::new(Some(Inner { state, status }));
 
         Ok(Self {
             inner,
@@ -99,48 +116,87 @@ where
     /// correctly progress.
     pub async fn handle_update(&mut self, update: Update<E>) -> Result<Vec<T::Action>, Error> {
         let mut lock = self.inner.lock().await;
-        let mut inner = mem::take(&mut *lock).ok_or(Error::Poisoned)?;
-        let actions = match update {
-            Update::Block(BlockUpdate::Warp { from, .. }) => {
-                inner.block = from;
-                inner.warping = true;
-                vec![]
+        let Inner { state, status } = mem::take(&mut *lock).ok_or(Error::Poisoned)?;
+        let (state, status, actions) = match update {
+            Update::Block(BlockUpdate::Warp { from, to })
+                if matches!(status, Status::Initialized)
+                    || matches!(status, Status::BlockPending { pending } if pending == from) =>
+            {
+                let status = Status::WarpEvents {
+                    range: block_range(from, to)?,
+                };
+                (state, status, vec![])
             }
-            Update::Block(BlockUpdate::Uncle { number }) => {
-                let (parent, snapshot) = self.snapshots.reorg(number).await?;
-                inner.block = parent;
-                inner.state = snapshot;
-                vec![]
+            Update::Block(BlockUpdate::Uncle { number })
+                if matches!(status, Status::BlockPending { pending } if number < pending)
+                    || matches!(status, Status::BlockEvents { latest } if number <= latest) =>
+            {
+                let (_, snapshot) = self.snapshots.reorg(number).await?;
+                let status = Status::BlockPending { pending: number };
+                (snapshot, status, vec![])
             }
-            Update::Block(BlockUpdate::New { number, safe, .. }) => {
-                let (state, actions) = self.transition.new_block(inner.state, number).await;
+            Update::Block(BlockUpdate::New { number, safe, .. })
+                if matches!(status, Status::Initialized)
+                    || matches!(status, Status::BlockPending { pending } if pending == number) =>
+            {
+                let (state, actions) = self.transition.new_block(state, number).await;
+                let status = Status::BlockEvents { latest: number };
                 self.snapshots.prune(safe).await?;
-                inner.block = number;
-                inner.state = state;
-                inner.warping = false;
-                actions
+                (state, status, actions)
             }
-            Update::Logs(EventUpdate { blocks, logs }) => {
+            Update::Logs(EventUpdate { blocks, logs })
+                if matches!(status, Status::BlockEvents { latest } if is_next_in_range(latest..=latest, blocks))
+                    || matches!(status, Status::WarpEvents { range } if is_next_in_range(range, blocks)) =>
+            {
+                let mut state = state;
                 let mut actions = vec![];
                 for log in logs {
-                    let (new_state, new_actions) = self.transition.event(inner.state, log).await;
-                    inner.state = new_state;
+                    let (new_state, new_actions) = self.transition.event(state, log).await;
+                    state = new_state;
                     actions.extend(new_actions);
                 }
-                self.snapshots.commit(blocks.last, &inner.state).await?;
                 // In case we are warping, we can prune intermediate state from
                 // storage for the event pages.
-                if inner.warping {
+                let should_prune = matches!(status, Status::WarpEvents { .. });
+                let status = match status {
+                    Status::WarpEvents { range } if blocks.last < range.last => {
+                        let range = block_range(next_block(blocks.last)?, range.last)?;
+                        Status::WarpEvents { range }
+                    }
+                    _ => {
+                        let pending = next_block(blocks.last)?;
+                        Status::BlockPending { pending }
+                    }
+                };
+
+                self.snapshots.commit(blocks.last, &state).await?;
+                if should_prune {
                     self.snapshots.prune(blocks.last).await?;
                 }
 
-                inner.block = blocks.last;
-                actions
+                (state, status, actions)
             }
+            _ => return Err(Error::BadUpdate),
         };
-        *lock = Some(inner);
+        *lock = Some(Inner { state, status });
         Ok(actions)
     }
+}
+
+fn next_block(number: u64) -> Result<u64, Error> {
+    number.checked_add(1).ok_or(Error::EndOfChain)
+}
+
+fn block_range(from: u64, to: u64) -> Result<RangeInclusive<u64>, Error> {
+    (from <= to)
+        .then_some(from..=to)
+        .map(RangeInclusive::from)
+        .ok_or(Error::BadUpdate)
+}
+
+fn is_next_in_range(range: impl Into<RangeInclusive<u64>>, sub: RangeInclusive<u64>) -> bool {
+    let range = range.into();
+    range.start == sub.start && range.contains(&sub.last)
 }
 
 #[cfg(test)]
