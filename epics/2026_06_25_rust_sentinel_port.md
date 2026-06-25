@@ -219,10 +219,19 @@ Modules are introduced only when first used (no empty stubs), per the core epic'
 - `sol!` blocks for `SentinelOracle` (events `NewRequest`, `Committed`, `OracleResult`, `Claimed`,
   `DisputeResolved`; calls `commitApprove`, `commitDeny`, `finalize`, `claim`), `Consensus`
   (event `OracleTransactionProposed`), and an `ERC20` (`approve`, `allowance`).
-- `SafeTx`, `TransactionProposal`, `OracleTransactionProposal` declared as `sol!` EIP-712 structs
-  matching `safeTx/hashing.ts` and `oracleTx/hashing.ts` field-for-field
-  (`SafeTx`: `to,value,data,operation,safeTxGas,baseGas,gasPrice,gasToken,refundReceiver,nonce`;
-  `OracleTransactionProposal`: `epoch (uint64), oracle (address), safeTxHash (bytes32)`).
+- `SafeTx`, `TransactionProposal`, `OracleTransactionProposal` declared as `sol!` EIP-712 structs.
+  **The field types must match the canonical onchain Solidity typehashes exactly.** The EIP-712 type
+  hash is sensitive to the precise type of every field, so any mismatch (e.g. declaring `epoch` as
+  `uint256` when it is `uint64`) yields a different `requestId` and silently breaks onchain
+  compatibility. The source of truth is the contracts' precomputed typehashes in
+  `contracts/src/libraries/ConsensusMessages.sol` —
+  `OracleTransactionProposal(uint64 epoch,address oracle,bytes32 safeTxHash)` and
+  `TransactionProposal(uint64 epoch,bytes32 safeTxHash)` (note `epoch` is **`uint64`**) — together
+  with the canonical Safe `SafeTx` type
+  (`to address, value uint256, data bytes, operation uint8, safeTxGas uint256, baseGas uint256,
+  gasPrice uint256, gasToken address, refundReceiver address, nonce uint256`). These line up with
+  the TS `oracleTx/hashing.ts` and `safeTx/hashing.ts` declarations; the parity tests below are the
+  guard against any drift.
 - `safe_tx_hash(tx)` uses domain `{chainId: tx.chainId, verifyingContract: tx.safe}`;
   `request_id(domain, proposal)` uses domain `{chainId, verifyingContract: consensus}`. Both via
   `SolStruct::eip712_signing_hash`.
@@ -243,9 +252,12 @@ Modules are introduced only when first used (no empty stubs), per the core epic'
   `SentinelOracleTransition` and ports `handleOracleTransactionProposed` (oracle-address gate,
   `request_id`, detector → `approve`, `deadline = block + votingWindow`), `handleNewRequest` (acts
   only on `preparing`; emits `ApproveToken` + commit), `handleCommitted` (own-address gate,
-  `pending → committed`), and `handleResolved` (decode `ResolveReason`;
-  `voteWon = reason == TIMEOUT(2) || approved == ours`; claim if won, else drop). All branches
-  return `(S, Vec<SentinelAction>)` and never error.
+  `pending → committed`), and `handleResolved` (drop the request unconditionally, but **only emit a
+  `Claim` when we actually committed onchain** — i.e. the existing status is `committed` or
+  `finalized`; for any other status drop silently, since our commit tx may never have confirmed.
+  When committed, decode `ResolveReason` and claim iff
+  `voteWon = reason == TIMEOUT(2) || approved == ours`). All branches return
+  `(S, Vec<SentinelAction>)` and never error.
 - `detector.rs`: `approve` unless `payload.to` ∈ blocklist (address-equality).
 
 ### Transition decoding & watcher (`transitions.rs`, `watcher.rs`)
