@@ -1,6 +1,6 @@
 //! EIP-1559 fee calculations for reliable transaction submission.
 
-use alloy::{eips::eip1559::Eip1559Estimation, primitives::U256, uint};
+use alloy::eips::eip1559::Eip1559Estimation;
 
 /// Caps the priority fee of `fees` so it is at most `cap_percentage` percent of
 /// the total max fee per gas, leaving the base-fee component unchanged.
@@ -51,11 +51,7 @@ pub fn bump(fresh: Eip1559Estimation, previous: Option<Eip1559Estimation>) -> Ei
 
 /// Returns `fresh`, raised to at least 10% above `previous`.
 fn bump_fee(fresh: u128, previous: u128) -> u128 {
-    let bumped = U256::from(previous)
-        .wrapping_mul(uint!(110_U256))
-        .div_ceil(uint!(100_U256))
-        .try_into()
-        .unwrap_or(u128::MAX);
+    let bumped = previous.saturating_add(previous.div_ceil(10));
     fresh.max(bumped)
 }
 
