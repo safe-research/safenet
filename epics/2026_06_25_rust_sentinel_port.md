@@ -49,16 +49,6 @@ Question 1.
 The TS sentinel remains the reference implementation throughout the port; there is no FFI and the
 two are independent processes.
 
-> **Revision note (rebased onto `main`, 2026-06-25).** Since this plan was first drafted, the
-> `safenet-core` `state` module landed (`SnapshotStore` + a generic reorg-aware `StateMachine`
-> driving pure `StateTransition`s; PRs #466/#469/#470). This is exactly the block/event → state →
-> actions shape the sentinel needs, so the plan now **reuses** it instead of hand-rolling a request
-> table and manual diff routing. This resolves the old reorg open question (the sentinel is now
-> reorg-aware for free) and narrows the remaining core dependency to the `tx` module. The
-> indexer's `Update`/`EventUpdate`/`BlockUpdate` types also gained a `safe` block field used for
-> snapshot pruning. The other new `main` commits (epoch-rollover library/tests, the EIP-7702
-> validator account contract) are Solidity and out of scope for this offchain port.
-
 ---
 
 ## How the TypeScript sentinel works (port surface)
@@ -399,11 +389,6 @@ reviewable. "Depends on" lists hard ordering; everything else may proceed in par
    attach `ChainFees` (`baseFeeMultiplier`, `maxPriorityFeePerGas`). Confirm the equivalent fee
    configuration to pass through to `alloy`/core's tx manager, since alloy handles chain fees
    differently.
-
-> *Resolved since the first draft:* reorg handling for request state — the sentinel now uses core's
-> reorg-aware `StateMachine`/`SnapshotStore`, so request state rolls back on reorg automatically
-> (an improvement over the TS no-rollback behavior). DB compatibility is not required, so this
-> divergence is acceptable.
 
 **Assumptions**
 
