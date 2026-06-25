@@ -5,6 +5,11 @@ pragma solidity ^0.8.30;
  * @title Validator 7702 Account
  * @notice A minimal EIP-7702 account implementation that lets the validator EOA batch multiple calls into a
  *         single transaction.
+ * @custom:warning NOT a general-purpose smart account; do not reuse it as one. It is purpose-built solely as
+ *                 the EIP-7702 delegation target for the Safenet validator EOA. It authorizes only the EOA
+ *                 itself (no ERC-1271 / ERC-4337 signature validation, no relayed or sponsored execution),
+ *                 executes batches best-effort (failures are swallowed and only logged via {CallFailed}), and
+ *                 relies on the EOA transaction nonce for replay protection.
  * @dev This contract is intended to be set as the EIP-7702 delegation target of the validator's EOA. Once the
  *      EOA has delegated to this implementation, the validator can submit a single transaction to its own
  *      address that invokes {execute}, performing multiple calls (for example to the Safenet Consensus and
