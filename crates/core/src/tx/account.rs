@@ -5,8 +5,7 @@ use alloy::{
     eips::Encodable2718 as _,
     network::TxSignerSync as _,
     primitives::{Address, B256, keccak256},
-    signers::k256,
-    signers::local::PrivateKeySigner,
+    signers::{k256, local::PrivateKeySigner},
 };
 
 /// An error ECDSA signing a transaction.
