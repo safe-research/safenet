@@ -29,9 +29,11 @@ pub enum Error {
 
 /// Submission information for a transaction.
 pub struct Submission {
-    /// The block head at the time of submission. The transaction can be
-    /// included earliest `block + 1`.
-    pub block: u64,
+    /// The block head at the time of submission, or `None` if the submission
+    /// failed, indicating it should be retried.
+    ///
+    /// The transaction can be included earliest `block + 1`.
+    pub block: Option<u64>,
     /// The nonce of the submitted transaction.
     pub nonce: u64,
     /// The fees used for the submitted transaction. These need to be tracked in
@@ -102,7 +104,7 @@ impl TransactionStorage {
     /// The nonce is the first free nonce at or above `status.nonce` (the
     /// account's current onchain transaction count, passed in so nonces
     /// consumed by transactions submitted outside the queue are respected),
-    /// accounting for the nonces of other in-flight transactions. Selecting th
+    /// accounting for the nonces of other in-flight transactions. Selecting the
     /// nonce and reserving it for the transaction happen atomically.
     pub async fn next_transaction(
         &self,
@@ -149,7 +151,7 @@ impl TransactionStorage {
                  )
              WHERE nonce = ?",
         )
-        .bind(i64::try_from(block)?)
+        .bind(block.map(i64::try_from).transpose()?)
         .bind(format!("0x{:x}", fees.max_fee_per_gas))
         .bind(format!("0x{:x}", fees.max_priority_fee_per_gas))
         .bind(i64::try_from(nonce)?)
@@ -391,7 +393,7 @@ mod tests {
 
         storage
             .record_submission(Submission {
-                block: 42,
+                block: Some(42),
                 nonce: submitted.nonce,
                 fees: fees(100, 10),
             })
@@ -423,7 +425,7 @@ mod tests {
         assert!(matches!(
             storage
                 .record_submission(Submission {
-                    block: 42,
+                    block: Some(42),
                     nonce: 9,
                     fees: fees(1, 1),
                 })
@@ -543,7 +545,7 @@ mod tests {
             .unwrap();
         storage
             .record_submission(Submission {
-                block: 5,
+                block: Some(5),
                 nonce: submitted.nonce,
                 fees: fees(100, 10),
             })

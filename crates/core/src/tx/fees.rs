@@ -1,13 +1,13 @@
 //! EIP-1559 fee calculations for reliable transaction submission.
 
-use alloy::eips::eip1559::Eip1559Estimation;
+use alloy::{eips::eip1559::Eip1559Estimation, primitives::U256, uint};
 
 /// Caps the priority fee of `fees` so it is at most `cap_percentage` percent of
 /// the total max fee per gas, leaving the base-fee component unchanged.
 ///
 /// Mirrors the validator's gas fee estimator: it solves for the largest priority
 /// fee `p` with `p / (base_fee + p) <= cap_percentage / 100`, then lowers the
-/// priority fee to it (never raising it). A cap of of 0% or negative disables
+/// priority fee to it (never raising it). A cap of 0% or negative disables
 /// priority fees, and a cap of 100% or more is a no-op.
 pub fn cap_priority_fee(fees: Eip1559Estimation, cap_percentage: f64) -> Eip1559Estimation {
     // Scale the percentage into integer space for the fee math, allowing up to
@@ -34,6 +34,8 @@ pub fn cap_priority_fee(fees: Eip1559Estimation, cap_percentage: f64) -> Eip1559
 /// above the matching `previous` fee, when a previous submission exists, so a
 /// resubmitted transaction replaces rather than duplicates the pending one;
 /// nodes reject a replacement that does not raise the fee enough.
+///
+/// Note that fee bumps can cause priority fee caps to not be observed.
 pub fn bump(fresh: Eip1559Estimation, previous: Option<Eip1559Estimation>) -> Eip1559Estimation {
     let Some(previous) = previous else {
         return fresh;
@@ -49,7 +51,12 @@ pub fn bump(fresh: Eip1559Estimation, previous: Option<Eip1559Estimation>) -> Ei
 
 /// Returns `fresh`, raised to at least 10% above `previous`.
 fn bump_fee(fresh: u128, previous: u128) -> u128 {
-    fresh.max(previous.saturating_mul(110).div_ceil(100))
+    let bumped = U256::from(previous)
+        .wrapping_mul(uint!(110_U256))
+        .div_ceil(uint!(100_U256))
+        .try_into()
+        .unwrap_or(u128::MAX);
+    fresh.max(bumped)
 }
 
 #[cfg(test)]

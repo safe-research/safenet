@@ -20,6 +20,7 @@ pub use self::{signer::Signer, types::Transaction};
 use crate::{index::BlockUpdate, tx::types::TransactionWithNonce};
 use alloy::{
     eips::{BlockId, eip1559::Eip1559Estimation},
+    primitives::U256,
     providers::Provider,
     transports::TransportError,
 };
@@ -84,10 +85,11 @@ pub struct TransactionQueue<P> {
     block: Block,
     nonce_cache: Option<u64>,
     fee_cache: Option<Eip1559Estimation>,
+    balance_cache: Option<U256>,
 }
 
 enum Block {
-    Initalized,
+    Initialized,
     Latest { block: u64 },
     Warping { to: u64 },
 }
@@ -113,9 +115,10 @@ where
             signer,
             storage,
             config,
-            block: Block::Initalized,
+            block: Block::Initialized,
             nonce_cache: None,
             fee_cache: None,
+            balance_cache: None,
         })
     }
 
@@ -134,6 +137,7 @@ where
     pub async fn handle_block_update(&mut self, update: BlockUpdate) -> Result<(), Error> {
         self.nonce_cache = None;
         self.fee_cache = None;
+        self.balance_cache = None;
         match update {
             BlockUpdate::New { number, safe, .. } => {
                 if self.next_block()?.is_some_and(|next| next != number) || safe > number {
@@ -247,24 +251,51 @@ where
         let fees = self.fees().await?;
         let transaction = transaction.build(self.chain_id, fees);
         let submission = Submission {
-            block,
+            block: Some(block),
             nonce: transaction.nonce,
             fees: Eip1559Estimation {
                 max_fee_per_gas: transaction.max_fee_per_gas,
                 max_priority_fee_per_gas: transaction.max_priority_fee_per_gas,
             },
         };
+        let max_cost = transaction.value.saturating_add(
+            U256::from(transaction.gas_limit) * U256::from(transaction.max_fee_per_gas),
+        );
 
         let signed = self.signer.sign_transaction(transaction)?;
-        // Record the submission regardless of whether the RPC request succeeds:
-        // on error we cannot be sure the transaction did not reach the mempool.
-        self.storage.record_submission(submission).await?;
-        let _ = self.provider.send_raw_transaction(signed.as_raw()).await;
+        match self.provider.send_raw_transaction(signed.as_raw()).await {
+            Ok(_) => self.storage.record_submission(submission).await?,
+            // If the transaction is rejected because of insufficient balance,
+            // then do not record the submission because we do not want to bump
+            // fees for a transaction that is not allowed to be in the mempool.
+            // Otherwise, we can get into unbounded fee grown if a signer runs
+            // out of funds. Note that this is a best effort - we will still
+            // potentially fee bump in cases where we do have insufficient
+            // balance when including in-flight transactions for previous
+            // nonces. This approximation is fine for now (we want to err on the
+            // side of caution and fee bump to prevent transactions submission
+            // getting stuck, and we still have an upper bound on the current
+            // balance for the signer, so we are protected from unbounded fee
+            // increases).
+            Err(_) if self.balance().await.is_ok_and(|balance| balance < max_cost) => {}
+            // Otherwise, record the used gas parameters even if the RPC request
+            // failed: for general errors we cannot be sure the transaction did
+            // not reach the mempool. We record the submission without a block
+            // so that it is retried immediately on the next block.
+            _ => {
+                self.storage
+                    .record_submission(Submission {
+                        block: None,
+                        ..submission
+                    })
+                    .await?
+            }
+        }
         Ok(())
     }
 
-    /// Returns the latest block received from block updates, or `None` if none
-    /// have been received or during warping.
+    /// Returns the latest block received from block updates, or `None` if no
+    /// updates have been received or during warping.
     fn latest_block(&self) -> Option<u64> {
         match self.block {
             Block::Latest { block } => Some(block),
@@ -272,8 +303,8 @@ where
         }
     }
 
-    /// Returns the expected next block for block updates, or `None` if none
-    /// no block updates have been received.
+    /// Returns the expected next block for block updates, or `None` if no block
+    /// updates have been received.
     fn next_block(&self) -> Result<Option<u64>, Error> {
         match self.block {
             Block::Latest { block } | Block::Warping { to: block } => {
@@ -322,13 +353,26 @@ where
             }
         }
     }
+
+    /// Returns the cached account balance, used to detect whether or not a
+    /// submitted transaction was rejected because of insufficient fees.
+    async fn balance(&mut self) -> Result<U256, Error> {
+        match self.balance_cache {
+            Some(balance) => Ok(balance),
+            None => {
+                let balance = self.provider.get_balance(self.signer.address()).await?;
+                self.balance_cache = Some(balance);
+                Ok(balance)
+            }
+        }
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use alloy::{
-        primitives::{Address, B256, Bloom, U64, address, keccak256},
+        primitives::{Address, B256, Bloom, U64, U256, address, keccak256},
         providers::{ProviderBuilder, RootProvider},
         rpc::types::FeeHistory,
         signers::k256::ecdsa::SigningKey,
@@ -511,6 +555,53 @@ mod tests {
         // now queue a block update, the transaction is not submitted as it is
         // expired and was never submitted to an RPC node.
         queue.handle_block_update(new_block(1001)).await.unwrap();
+        assert!(asserter.read_q().is_empty());
+    }
+
+    #[tokio::test]
+    async fn retries_failed_submissions_on_the_next_block() {
+        let asserter = Asserter::new();
+        let mut queue = queue(&asserter).await;
+
+        // Queue two transactions that will both fail to submit. The first is
+        // cheap enough for the signer to afford, so its failure is treated as a
+        // general error; the second has a high gas limit the signer cannot
+        // afford, so its failure is treated as the node rejecting it.
+        queue.queue(transaction("0x01"), 1000).await.unwrap();
+        queue
+            .queue(
+                Transaction {
+                    gas: 1_000_000,
+                    ..transaction("0x02")
+                },
+                1000,
+            )
+            .await
+            .unwrap();
+
+        // At block 10 both submissions fail. The signer balance (100M) covers
+        // the cheap transaction (21000 gas * 210 max fee = ~4.4M) but not the
+        // expensive one (1M gas * 210 max fee = 210M). Only the cheap one is
+        // recorded as submitted (without a block, so it retries immediately);
+        // the expensive one is left unrecorded so its fees are not bumped.
+        asserter.push_success(&U64::from(0)); // signer transaction count
+        asserter.push_success(&fee_history()); // fee estimate
+        asserter.push_failure_msg("no connection"); // cheap submission fails
+        asserter.push_success(&U256::from(100_000_000)); // signer balance
+        asserter.push_failure_msg("insufficient funds"); // expensive submission fails
+        queue.handle_block_update(new_block(10)).await.unwrap();
+        assert!(asserter.read_q().is_empty());
+
+        // At block 11 neither transaction executed (the nonce is unchanged), so
+        // both are resubmitted regardless of how they failed: the recorded one
+        // because its submission block is unset, and the unrecorded one because
+        // its reserved nonce was never submitted. The balance is not queried as
+        // both resubmissions succeed.
+        asserter.push_success(&U64::from(0)); // signer transaction count
+        asserter.push_success(&fee_history()); // fee estimate
+        asserter.push_success(&B256::ZERO); // cheap resubmission
+        asserter.push_success(&B256::ZERO); // expensive resubmission
+        queue.handle_block_update(new_block(11)).await.unwrap();
         assert!(asserter.read_q().is_empty());
     }
 }
