@@ -7,12 +7,13 @@ use alloy::eips::eip1559::Eip1559Estimation;
 ///
 /// Mirrors the validator's gas fee estimator: it solves for the largest priority
 /// fee `p` with `p / (base_fee + p) <= cap_percentage / 100`, then lowers the
-/// priority fee to it (never raising it). A cap of 100% or more is a no-op.
+/// priority fee to it (never raising it). A cap of of 0% or negative disables
+/// priority fees, and a cap of 100% or more is a no-op.
 pub fn cap_priority_fee(fees: Eip1559Estimation, cap_percentage: f64) -> Eip1559Estimation {
     // Scale the percentage into integer space for the fee math, allowing up to
     // six digits of precision in `cap_percentage`.
     const PRECISION: u128 = 1_000_000;
-    let scaled_percent = ((cap_percentage / 100.0) * PRECISION as f64).round() as u128;
+    let scaled_percent = ((cap_percentage.max(0.0) / 100.0) * PRECISION as f64).round() as u128;
     if scaled_percent >= PRECISION {
         return fees;
     }
@@ -48,7 +49,7 @@ pub fn bump(fresh: Eip1559Estimation, previous: Option<Eip1559Estimation>) -> Ei
 
 /// Returns `fresh`, raised to at least 10% above `previous`.
 fn bump_fee(fresh: u128, previous: u128) -> u128 {
-    fresh.max(previous.saturating_mul(110) / 100)
+    fresh.max(previous.saturating_mul(110).div_ceil(100))
 }
 
 #[cfg(test)]

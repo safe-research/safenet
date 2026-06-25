@@ -18,9 +18,9 @@ use serde::{Deserialize, Serialize};
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Transaction {
-    /// The destination of the transaction; `None` deploys a contract.
+    /// The destination of the transaction.
     pub to: Address,
-    /// The destination of the transaction; `None` deploys a contract.
+    /// The transaction value.
     pub value: U256,
     /// The transaction calldata.
     pub input: Bytes,

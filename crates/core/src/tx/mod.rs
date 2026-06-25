@@ -18,7 +18,11 @@ use self::{
 };
 pub use self::{signer::Signer, types::Transaction};
 use crate::{index::BlockUpdate, tx::types::TransactionWithNonce};
-use alloy::{eips::eip1559::Eip1559Estimation, providers::Provider, transports::TransportError};
+use alloy::{
+    eips::{BlockId, eip1559::Eip1559Estimation},
+    providers::Provider,
+    transports::TransportError,
+};
 use serde::Deserialize;
 use sqlx::sqlite::SqlitePool;
 
@@ -34,6 +38,10 @@ pub enum Error {
     /// A transaction could not be signed.
     #[error(transparent)]
     Signing(#[from] SigningError),
+    /// We have reached the end of the block chain and cannot continue handling
+    /// updates.
+    #[error("end of chain")]
+    EndOfChain,
     /// A block update arrived out of order or has unexpected or invalid data.
     #[error("bad block update")]
     BadUpdate,
@@ -73,13 +81,15 @@ pub struct TransactionQueue<P> {
     signer: Signer,
     storage: TransactionStorage,
     config: Config,
-    /// The latest block the queue has observed, used to stamp submissions and
-    /// drive expiry. `None` until the first block update.
-    block: Option<u64>,
-    /// The signer nonce, cached until the next block update.
+    block: Block,
     nonce_cache: Option<u64>,
-    /// The fee estimate, cached until the next block update.
     fee_cache: Option<Eip1559Estimation>,
+}
+
+enum Block {
+    Initalized,
+    Latest { block: u64 },
+    Warping { to: u64 },
 }
 
 impl<P> TransactionQueue<P>
@@ -103,7 +113,7 @@ where
             signer,
             storage,
             config,
-            block: None,
+            block: Block::Initalized,
             nonce_cache: None,
             fee_cache: None,
         })
@@ -126,50 +136,57 @@ where
         self.fee_cache = None;
         match update {
             BlockUpdate::New { number, safe, .. } => {
-                if self
-                    .block
-                    .is_some_and(|latest| latest.checked_add(1) != Some(number))
-                    || safe > number
-                {
+                if self.next_block()?.is_some_and(|next| next != number) || safe > number {
                     return Err(Error::BadUpdate);
                 }
-                self.progress_block(number, safe).await?;
+                self.block = Block::Latest { block: number };
+
+                // The signer nonce is an RPC round-trip needed only to mark executed
+                // transactions and to assign nonces to queued ones; both are moot unless
+                // a transaction is still outstanding, so skip it (and the work that
+                // needs it) otherwise. Pruning needs no nonce and always runs, before
+                // submission so expired transactions are dropped rather than broadcast.
+                let outstanding = self.storage.count_outstanding(number).await? > 0;
+                if outstanding {
+                    let nonce = self.nonce().await?;
+                    self.storage
+                        .mark_executed(Status {
+                            block: number,
+                            nonce,
+                        })
+                        .await?;
+                }
+
+                self.storage.prune(safe).await?;
+                if outstanding {
+                    self.resubmit_stale(number).await?;
+                    self.submit_pending().await?;
+                }
             }
             BlockUpdate::Uncle { number } => {
-                if self.block.is_some_and(|latest| latest < number) {
+                if self.latest_block().is_some_and(|latest| latest < number) {
                     return Err(Error::BadUpdate);
                 }
-                self.block = Some(number.saturating_sub(1));
+                self.block = Block::Latest {
+                    block: number.checked_sub(1).ok_or(Error::BadUpdate)?,
+                };
                 self.storage.unmark_executed(number).await?;
             }
-            BlockUpdate::Warp { to, .. } => {
-                if self.block.is_some_and(|latest| latest >= to) {
+            BlockUpdate::Warp { from, to } => {
+                if self.next_block()?.is_some_and(|next| next != from) || to < from {
                     return Err(Error::BadUpdate);
                 }
-                self.progress_block(to, to).await?;
+
+                // We do not handle warping (it gets weird with transaction
+                // submission and getting transaction counts). It is not worth
+                // it either as warping is historic and most transactions are
+                // too far in the past to execute anyway. Put us into the state
+                // where we are waiting for the next new block update, so queued
+                // transactions do not execute right away. This ensures that
+                // transactions that are queued already expired while warping do
+                // execute.
+                self.block = Block::Warping { to };
             }
-        }
-        Ok(())
-    }
-
-    /// Progresses to a new latest `block`, finalizing state at or below `safe`.
-    async fn progress_block(&mut self, block: u64, safe: u64) -> Result<(), Error> {
-        self.block = Some(block);
-
-        // The signer nonce is an RPC round-trip needed only to mark executed
-        // transactions and to assign nonces to queued ones; both are moot unless
-        // a transaction is still outstanding, so skip it (and the work that
-        // needs it) otherwise. Pruning needs no nonce and always runs, before
-        // submission so expired transactions are dropped rather than broadcast.
-        let outstanding = self.storage.count_outstanding(block).await? > 0;
-        if outstanding {
-            let nonce = self.nonce().await?;
-            self.storage.mark_executed(Status { block, nonce }).await?;
-        }
-        self.storage.prune(safe).await?;
-        if outstanding {
-            self.resubmit_stale(block).await?;
-            self.submit_pending().await?;
         }
         Ok(())
     }
@@ -180,7 +197,7 @@ where
     /// Does nothing until the first block update is observed, since a submission
     /// is stamped with the current block.
     async fn submit_pending(&mut self) -> Result<(), Error> {
-        let Some(block) = self.block else {
+        let Some(block) = self.latest_block() else {
             return Ok(());
         };
 
@@ -246,6 +263,27 @@ where
         Ok(())
     }
 
+    /// Returns the latest block received from block updates, or `None` if none
+    /// have been received or during warping.
+    fn latest_block(&self) -> Option<u64> {
+        match self.block {
+            Block::Latest { block } => Some(block),
+            _ => None,
+        }
+    }
+
+    /// Returns the expected next block for block updates, or `None` if none
+    /// no block updates have been received.
+    fn next_block(&self) -> Result<Option<u64>, Error> {
+        match self.block {
+            Block::Latest { block } | Block::Warping { to: block } => {
+                let next = block.checked_add(1).ok_or(Error::EndOfChain)?;
+                Ok(Some(next))
+            }
+            _ => Ok(None),
+        }
+    }
+
     /// Returns the signer's onchain nonce (its transaction count), fetched from
     /// the chain on a cache miss and cached until the next block update.
     async fn nonce(&mut self) -> Result<u64, Error> {
@@ -255,6 +293,11 @@ where
                 let nonce = self
                     .provider
                     .get_transaction_count(self.signer.address())
+                    .block_id(
+                        self.latest_block()
+                            .map(BlockId::from)
+                            .unwrap_or_else(BlockId::latest),
+                    )
                     .await?;
                 self.nonce_cache = Some(nonce);
                 Ok(nonce)
@@ -447,6 +490,27 @@ mod tests {
         // At block 14, there are no outstanding transactions and therefore no
         // RPC requests are made.
         queue.handle_block_update(new_block(14)).await.unwrap();
+        assert!(asserter.read_q().is_empty());
+    }
+
+    #[tokio::test]
+    async fn expired_transactions_while_warping_are_ignored() {
+        let asserter = Asserter::new();
+        let mut queue = queue(&asserter).await;
+
+        // Observe a warp update.
+        queue
+            .handle_block_update(BlockUpdate::Warp { from: 0, to: 1000 })
+            .await
+            .unwrap();
+        assert!(asserter.read_q().is_empty());
+
+        // queue a transaction long expired.
+        queue.queue(transaction("0x01"), 42).await.unwrap();
+
+        // now queue a block update, the transaction is not submitted as it is
+        // expired and was never submitted to an RPC node.
+        queue.handle_block_update(new_block(1001)).await.unwrap();
         assert!(asserter.read_q().is_empty());
     }
 }
