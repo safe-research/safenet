@@ -15,9 +15,10 @@ use self::{
     fees::cap_priority_fee,
     signer::SigningError,
     storage::{Status, Submission, TransactionStorage},
+    types::TransactionWithNonce,
 };
 pub use self::{signer::Signer, types::Transaction};
-use crate::{index::BlockUpdate, tx::types::TransactionWithNonce};
+use crate::index::BlockUpdate;
 use alloy::{
     eips::{BlockId, eip1559::Eip1559Estimation},
     primitives::U256,
@@ -145,11 +146,12 @@ where
                 }
                 self.block = Block::Latest { block: number };
 
-                // The signer nonce is an RPC round-trip needed only to mark executed
-                // transactions and to assign nonces to queued ones; both are moot unless
-                // a transaction is still outstanding, so skip it (and the work that
-                // needs it) otherwise. Pruning needs no nonce and always runs, before
-                // submission so expired transactions are dropped rather than broadcast.
+                // The signer nonce is an RPC round-trip needed only to mark
+                // executed transactions and to assign nonces to queued ones;
+                // both are moot unless a transaction is still outstanding, so
+                // skip it (and the work that needs it) otherwise. Pruning needs
+                // no nonce and always runs, before submission so expired
+                // transactions are dropped rather than broadcast.
                 let outstanding = self.storage.count_outstanding(number).await? > 0;
                 if outstanding {
                     let nonce = self.nonce().await?;
@@ -225,10 +227,7 @@ where
     /// unexecuted for at least `config.blocks_before_resubmit` blocks, bumping
     /// their fees so they replace the previous submission.
     async fn resubmit_stale(&mut self, block: u64) -> Result<(), Error> {
-        let Some(submitted_before) = block.checked_sub(self.config.blocks_before_resubmit) else {
-            return Ok(());
-        };
-
+        let submitted_before = block.checked_sub(self.config.blocks_before_resubmit);
         let stale = self.storage.stale_submissions(submitted_before).await?;
         if stale.is_empty() {
             return Ok(());

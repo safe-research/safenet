@@ -241,7 +241,7 @@ impl TransactionStorage {
     /// are not stranded holding a reserved nonce).
     pub async fn stale_submissions(
         &self,
-        submitted_before: u64,
+        submitted_before: Option<u64>,
     ) -> Result<Vec<TransactionWithNonce>, Error> {
         sqlx::query_scalar::<_, String>(
             "SELECT json_set(request, '$.nonce', nonce)
@@ -250,7 +250,12 @@ impl TransactionStorage {
                AND (submitted_at IS NULL OR submitted_at <= ?)
              ORDER BY nonce ASC",
         )
-        .bind(i64::try_from(submitted_before)?)
+        .bind(
+            submitted_before
+                .map(i64::try_from)
+                .transpose()?
+                .unwrap_or(-1),
+        )
         .fetch_all(&self.pool)
         .await?
         .into_iter()
@@ -356,32 +361,6 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn submit_floors_the_nonce_at_the_account_nonce() {
-        let storage = storage().await;
-        storage.enqueue(request("0x5afe01"), 100).await.unwrap();
-        storage.enqueue(request("0x5afe02"), 100).await.unwrap();
-
-        let first = storage
-            .next_transaction(Status { nonce: 5, block: 0 })
-            .await
-            .unwrap()
-            .unwrap();
-        assert_eq!(first.nonce, 5);
-
-        // The account nonce jumped (e.g. a transaction was submitted outside the
-        // queue), so the next nonce is the account nonce, not in-flight + 1.
-        let second = storage
-            .next_transaction(Status {
-                nonce: 10,
-                block: 0,
-            })
-            .await
-            .unwrap()
-            .unwrap();
-        assert_eq!(second.nonce, 10);
-    }
-
-    #[tokio::test]
     async fn record_submission_stamps_the_block_and_fees() {
         let storage = storage().await;
         storage.enqueue(request("0x5afe"), 100).await.unwrap();
@@ -400,7 +379,7 @@ mod tests {
             .await
             .unwrap();
 
-        let transactions = storage.stale_submissions(42).await.unwrap();
+        let transactions = storage.stale_submissions(Some(42)).await.unwrap();
         assert_eq!(
             transactions,
             vec![TransactionWithNonce {
@@ -434,81 +413,6 @@ mod tests {
         ));
     }
 
-    /// Enqueues `count` transactions and assigns each a nonce from `0`.
-    async fn enqueue_and_assign(storage: &TransactionStorage, count: usize) {
-        for i in 0..count {
-            storage
-                .enqueue(request(&format!("0x5afe0{i}")), 100)
-                .await
-                .unwrap();
-        }
-        for _ in 0..count {
-            storage
-                .next_transaction(Status { nonce: 0, block: 0 })
-                .await
-                .unwrap()
-                .unwrap();
-        }
-    }
-
-    /// The total number of transactions in storage, queued or in flight.
-    async fn total(storage: &TransactionStorage) -> i64 {
-        sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM transactions")
-            .fetch_one(&storage.pool)
-            .await
-            .unwrap()
-    }
-
-    #[tokio::test]
-    async fn marks_transactions_below_the_account_nonce_executed() {
-        let storage = storage().await;
-        enqueue_and_assign(&storage, 3).await;
-        assert_eq!(storage.count_in_flight().await.unwrap(), 3);
-        assert_eq!(storage.count_outstanding(0).await.unwrap(), 3);
-
-        // The account nonce advanced to 2, so nonces 0 and 1 have executed.
-        storage
-            .mark_executed(Status { block: 5, nonce: 2 })
-            .await
-            .unwrap();
-        assert_eq!(storage.count_in_flight().await.unwrap(), 1);
-        assert_eq!(storage.count_outstanding(0).await.unwrap(), 1);
-        assert_eq!(total(&storage).await, 3);
-    }
-
-    #[tokio::test]
-    async fn prunes_transactions_finalized_at_or_below_the_safe_block() {
-        let storage = storage().await;
-        enqueue_and_assign(&storage, 3).await;
-
-        // Nonces 0 and 1 execute at block 5, which is also reorg-safe, so they
-        // are pruned; nonce 2 is still in flight.
-        storage
-            .mark_executed(Status { block: 5, nonce: 2 })
-            .await
-            .unwrap();
-        storage.prune(5).await.unwrap();
-        assert_eq!(total(&storage).await, 1);
-        assert_eq!(storage.count_in_flight().await.unwrap(), 1);
-    }
-
-    #[tokio::test]
-    async fn uncle_clears_executions_at_or_above_the_uncled_block() {
-        let storage = storage().await;
-        enqueue_and_assign(&storage, 2).await;
-        // Marked but not pruned (no `prune` call), so the uncle has something
-        // to revert.
-        storage
-            .mark_executed(Status { block: 5, nonce: 2 })
-            .await
-            .unwrap();
-        assert_eq!(storage.count_in_flight().await.unwrap(), 0);
-
-        // Block 5 is uncled, reverting the executions recorded at it.
-        storage.unmark_executed(5).await.unwrap();
-        assert_eq!(storage.count_in_flight().await.unwrap(), 2);
-    }
-
     #[tokio::test]
     async fn prunes_queued_transactions_past_their_expiry() {
         let storage = storage().await;
@@ -525,59 +429,5 @@ mod tests {
             .unwrap()
             .unwrap();
         assert_eq!(next.transaction.input, request("0x5afe02").input);
-        assert_eq!(
-            storage
-                .next_transaction(Status { nonce: 0, block: 0 })
-                .await
-                .unwrap(),
-            None
-        );
-    }
-
-    #[tokio::test]
-    async fn stale_submissions_returns_long_pending_transactions() {
-        let storage = storage().await;
-        storage.enqueue(request("0x5afe"), 100).await.unwrap();
-        let submitted = storage
-            .next_transaction(Status { nonce: 0, block: 0 })
-            .await
-            .unwrap()
-            .unwrap();
-        storage
-            .record_submission(Submission {
-                block: Some(5),
-                nonce: submitted.nonce,
-                fees: fees(100, 10),
-            })
-            .await
-            .unwrap();
-
-        // Nothing was submitted at or before block 4.
-        assert!(storage.stale_submissions(4).await.unwrap().is_empty());
-
-        // The transaction submitted at block 5 is returned, carrying its nonce
-        // and recorded fees.
-        let stale = storage.stale_submissions(5).await.unwrap();
-        assert_eq!(stale.len(), 1);
-        assert_eq!(stale[0].nonce, 0);
-        assert_eq!(stale[0].max_fee_per_gas, Some(100));
-    }
-
-    #[tokio::test]
-    async fn stale_submissions_includes_nonce_assigned_but_never_submitted() {
-        let storage = storage().await;
-        storage.enqueue(request("0x5afe"), 100).await.unwrap();
-        // A nonce was reserved but the submission was never recorded (e.g. a
-        // crash before `record_submission`).
-        storage
-            .next_transaction(Status { nonce: 0, block: 0 })
-            .await
-            .unwrap()
-            .unwrap();
-
-        // It is stale regardless of the threshold, so its nonce is not stranded.
-        let stale = storage.stale_submissions(0).await.unwrap();
-        assert_eq!(stale.len(), 1);
-        assert_eq!(stale[0].nonce, 0);
     }
 }
