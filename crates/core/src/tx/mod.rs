@@ -6,4 +6,6 @@
 //! local [`account`], and resubmitting with bumped fees when a transaction is
 //! stuck.
 
-pub mod account;
+pub mod signer;
+
+pub use self::signer::Signer;
