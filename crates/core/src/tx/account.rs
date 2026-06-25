@@ -8,7 +8,7 @@ use alloy::{
     signers::{k256, local::PrivateKeySigner},
 };
 
-/// An error ECDSA signing a transaction.
+/// An error from ECDSA signing a transaction.
 #[derive(Debug, thiserror::Error)]
 #[error("an error occurred signing an Ethereum transaction")]
 pub struct SigningError;
