@@ -14,6 +14,19 @@ use crate::{
 };
 use alloy::providers::Provider;
 use serde::{Serialize, de::DeserializeOwned};
+use std::{pin::Pin, time::Duration};
+
+/// How long to wait after a failed step before retrying, to avoid spinning on a
+/// persistent failure (such as an unreachable RPC node).
+const STEP_RETRY_DELAY: Duration = Duration::from_millis(100);
+
+/// Whether the [`Driver::run`] loop should keep processing updates or stop.
+enum Loop {
+    /// Continue with the next iteration.
+    Continue,
+    /// Stop the run loop, for example after a shutdown signal.
+    Break,
+}
 
 /// Error produced by the [`Driver`].
 #[derive(Debug, thiserror::Error)]
@@ -78,21 +91,51 @@ where
         }
     }
 
-    /// Runs the service, processing indexer updates forever.
+    /// Runs the service, processing indexer updates until a shutdown signal
+    /// (such as Ctrl-C) is received or an unrecoverable error occurs.
     ///
     /// A failed step is retried on the next iteration rather than stopping the
     /// service.
     pub async fn run(mut self) {
+        let shutdown = async {
+            if let Err(err) = tokio::signal::ctrl_c().await {
+                tracing::error!(?err, "signal handling error; shutting down");
+            }
+        };
+        tokio::pin!(shutdown);
+
         loop {
-            let _ = self.step().await;
+            match self.step(shutdown.as_mut()).await {
+                Ok(Loop::Continue) => {}
+                Ok(Loop::Break) => {
+                    tracing::info!("received shutdown signal; stopping service");
+                    break;
+                }
+                Err(Error::State(err)) => {
+                    tracing::error!(?err, "unrecoverable state transition error; exiting");
+                    break;
+                }
+                Err(err) => {
+                    tracing::warn!(?err, "service step failed; retrying after delay");
+                    tokio::time::sleep(STEP_RETRY_DELAY).await;
+                }
+            }
         }
     }
 
     /// Processes a single indexer update: feeding block updates to the
     /// transaction queue, advancing the state machine, and queuing the
     /// transactions its actions encode to.
-    async fn step(&mut self) -> Result<(), Error> {
-        let update = self.watcher.next().await?;
+    ///
+    /// Only the wait for the next update races `shutdown`; once an update
+    /// arrives it is processed to completion so its state transition and queued
+    /// transactions are committed before the loop can stop.
+    async fn step(&mut self, shutdown: Pin<&mut impl Future<Output = ()>>) -> Result<Loop, Error> {
+        let update = tokio::select! {
+            biased;
+            _ = shutdown => return Ok(Loop::Break),
+            update = self.watcher.next() => update?,
+        };
 
         // Block updates drive the transaction queue's per-block housekeeping
         // (marking executed transactions, pruning, resubmitting and submitting).
@@ -108,6 +151,6 @@ where
             self.transactions.queue(transactions).await?;
         }
 
-        Ok(())
+        Ok(Loop::Continue)
     }
 }
