@@ -175,6 +175,12 @@ where
             .header
             .number
             .saturating_sub(self.config.max_reorg_depth);
+        tracing::debug!(
+            latest = latest.header.number,
+            safe,
+            resume = ?last_indexed_block,
+            "initializing block watcher"
+        );
 
         self.update_next_pending_block(latest.header.number, latest.header.timestamp);
 
@@ -236,6 +242,10 @@ where
             } else {
                 // Reorg observed mid-init: discard and re-query the range. We
                 // will also need to re-fetch `latest`, as it may have been uncled.
+                tracing::debug!(
+                    number,
+                    "reorg observed during initialization, restarting range scan"
+                );
                 parent_hash = None;
                 canonical_latest = None;
                 self.recent.clear();
@@ -295,6 +305,11 @@ where
             let index = retry_count % (self.config.block_retry_delays.len() + 1);
             retry_count += 1;
             if let Some(delay) = self.config.block_retry_delays.get(index).copied() {
+                tracing::trace!(
+                    number = self.pending.number,
+                    delay_ms = delay,
+                    "pending block not ready, retrying"
+                );
                 tokio::time::sleep(Duration::from_millis(delay)).await;
             } else {
                 self.pending.timestamp_ms += self.block_time;
@@ -311,6 +326,7 @@ where
                 number: last.header.number,
                 timestamp_ms: last.header.timestamp * 1000,
             };
+            tracing::debug!(number = last.header.number, "reorg detected, uncling block");
             return Ok(BlockUpdate::Uncle {
                 number: last.header.number,
             });
@@ -338,6 +354,7 @@ where
             .unwrap_or(self.pending.number)
             .saturating_sub(1);
 
+        tracing::trace!(number, hash = %hash, safe, "new canonical block");
         Ok(BlockUpdate::New {
             number,
             hash,
@@ -391,6 +408,11 @@ where
             number: last.header.number,
             hash: last.header.hash,
         };
+        tracing::debug!(
+            number = invalidated.number,
+            hash = %invalidated.hash,
+            "last block no longer canonical, invalidating"
+        );
         let timestamp = last.header.timestamp;
         self.recent.truncate(last_index);
         self.pending = PendingBlock {

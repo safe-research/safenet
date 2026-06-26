@@ -234,6 +234,7 @@ where
         }
 
         for transaction in stale {
+            tracing::debug!(nonce = transaction.nonce, "resubmitting stale transaction");
             self.submit_transaction(transaction, block).await?;
         }
 
@@ -262,6 +263,12 @@ where
         );
 
         let signed = self.signer.sign_transaction(transaction)?;
+        tracing::debug!(
+            nonce = submission.nonce,
+            block,
+            hash = %signed.hash(),
+            "submitting transaction"
+        );
         match self.provider.send_raw_transaction(signed.as_raw()).await {
             Ok(_) => self.storage.record_submission(submission).await?,
             // If the transaction is rejected because of insufficient balance,
@@ -276,12 +283,23 @@ where
             // getting stuck, and we still have an upper bound on the current
             // balance for the signer, so we are protected from unbounded fee
             // increases).
-            Err(_) if self.balance().await.is_ok_and(|balance| balance < max_cost) => {}
+            Err(err) if self.balance().await.is_ok_and(|balance| balance < max_cost) => {
+                tracing::warn!(
+                    nonce = submission.nonce,
+                    ?err,
+                    "submission rejected, signer balance below transaction cost"
+                );
+            }
             // Otherwise, record the used gas parameters even if the RPC request
             // failed: for general errors we cannot be sure the transaction did
             // not reach the mempool. We record the submission without a block
             // so that it is retried immediately on the next block.
-            _ => {
+            Err(err) => {
+                tracing::warn!(
+                    nonce = submission.nonce,
+                    ?err,
+                    "submission failed, will retry next block"
+                );
                 self.storage
                     .record_submission(Submission {
                         block: None,
@@ -344,7 +362,17 @@ where
             None => {
                 let fees = self.provider.estimate_eip1559_fees().await?;
                 let fees = match self.config.priority_fee_cap_percentage {
-                    Some(cap) => cap_priority_fee(fees, cap),
+                    Some(cap) => {
+                        let capped = cap_priority_fee(fees, cap);
+                        if capped.max_priority_fee_per_gas < fees.max_priority_fee_per_gas {
+                            tracing::debug!(
+                                original = fees.max_priority_fee_per_gas,
+                                capped = capped.max_priority_fee_per_gas,
+                                "priority fee capped"
+                            );
+                        }
+                        capped
+                    }
                     None => fees,
                 };
                 self.fee_cache = Some(fees);
