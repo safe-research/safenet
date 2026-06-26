@@ -410,7 +410,14 @@ where
                     // A failed query for a non-critical event is dropped rather
                     // than failing the whole fetch.
                     match result {
-                        Err(_) if self.config.fallible_events.contains(topic) => Ok(Vec::new()),
+                        Err(err) if self.config.fallible_events.contains(topic) => {
+                            tracing::warn!(
+                                topic = %topic,
+                                ?err,
+                                "dropping logs for fallible event after query failure"
+                            );
+                            Ok(Vec::new())
+                        }
                         result => result,
                     }
                 }))
@@ -427,6 +434,10 @@ where
                 // Verify the node served a complete set of logs for the block by
                 // recomputing the bloom filter over every returned log.
                 if bloom::compute_logs_bloom(&logs) != logs_bloom {
+                    tracing::warn!(
+                        hash = %block_hash,
+                        "incomplete logs served for block, bloom filter mismatch"
+                    );
                     return Err(Error::IncompleteLogs { block_hash });
                 }
 
@@ -450,6 +461,11 @@ where
         if let Some(max) = self.config.max_logs_per_query
             && logs.len() >= max.get()
         {
+            tracing::warn!(
+                logs = logs.len(),
+                max = max.get(),
+                "query returned at least the maximum number of logs, assuming truncation"
+            );
             return Err(Error::TooManyLogs);
         }
         Ok(logs)
