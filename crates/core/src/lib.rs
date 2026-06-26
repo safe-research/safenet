@@ -10,7 +10,10 @@
 //!   restarts and roll back in case of reorgs.
 //! - Reliable transaction submission with all its complexities.
 
+pub mod driver;
 pub mod index;
 pub mod observability;
 pub mod state;
 pub mod tx;
+
+pub use self::driver::{Driver, Service};

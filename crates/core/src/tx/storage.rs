@@ -81,15 +81,23 @@ impl TransactionStorage {
         Ok(Self { pool })
     }
 
-    /// Stores `transaction` as a queued transaction that expires at block
-    /// `expires_at` if it has not been submitted by then.
-    pub async fn enqueue(&self, transaction: Transaction, expires_at: u64) -> Result<(), Error> {
-        let request = serde_json::to_string(&transaction)?;
-        sqlx::query("INSERT INTO transactions (request, expires_at) VALUES (?, ?)")
-            .bind(request)
-            .bind(i64::try_from(expires_at)?)
-            .execute(&self.pool)
-            .await?;
+    /// Stores `transactions` as queued transactions, each expiring at its
+    /// `expires_at` block if it has not been submitted by then. The whole batch
+    /// is inserted atomically.
+    pub async fn enqueue(
+        &self,
+        transactions: impl IntoIterator<Item = (Transaction, u64)>,
+    ) -> Result<(), Error> {
+        let mut tx = self.pool.begin().await?;
+        for (transaction, expires_at) in transactions {
+            let request = serde_json::to_string(&transaction)?;
+            sqlx::query("INSERT INTO transactions (request, expires_at) VALUES (?, ?)")
+                .bind(request)
+                .bind(i64::try_from(expires_at)?)
+                .execute(&mut *tx)
+                .await?;
+        }
+        tx.commit().await?;
         Ok(())
     }
 
@@ -348,7 +356,7 @@ mod tests {
     #[tokio::test]
     async fn submit_assigns_the_account_nonce_and_fees() {
         let storage = storage().await;
-        storage.enqueue(tx("0x5afe"), 100).await.unwrap();
+        storage.enqueue([(tx("0x5afe"), 100)]).await.unwrap();
 
         // There are no in flight transactions to begin with.
         assert_eq!(storage.count_in_flight().await.unwrap(), 0);
@@ -376,9 +384,9 @@ mod tests {
     #[tokio::test]
     async fn submit_assigns_sequential_nonces_in_queue_order() {
         let storage = storage().await;
-        storage.enqueue(tx("0x5afe01"), 100).await.unwrap();
-        storage.enqueue(tx("0x5afe02"), 100).await.unwrap();
-        storage.enqueue(tx("0x5afe03"), 100).await.unwrap();
+        storage.enqueue([(tx("0x5afe01"), 100)]).await.unwrap();
+        storage.enqueue([(tx("0x5afe02"), 100)]).await.unwrap();
+        storage.enqueue([(tx("0x5afe03"), 100)]).await.unwrap();
 
         // Each submission picks the next free nonce above the in-flight ones, in
         // FIFO order.
@@ -396,7 +404,7 @@ mod tests {
     #[tokio::test]
     async fn record_submission_stamps_the_block_and_fees() {
         let storage = storage().await;
-        storage.enqueue(tx("0x5afe"), 100).await.unwrap();
+        storage.enqueue([(tx("0x5afe"), 100)]).await.unwrap();
         let submitted = storage
             .next_transaction(Status { nonce: 5, block: 0 })
             .await
@@ -427,7 +435,7 @@ mod tests {
     #[tokio::test]
     async fn record_submission_errors_for_an_unknown_nonce() {
         let storage = storage().await;
-        storage.enqueue(tx("0x5afe"), 100).await.unwrap();
+        storage.enqueue([(tx("0x5afe"), 100)]).await.unwrap();
         storage
             .next_transaction(Status { nonce: 5, block: 0 })
             .await
@@ -449,8 +457,8 @@ mod tests {
     #[tokio::test]
     async fn prunes_queued_transactions_past_their_expiry() {
         let storage = storage().await;
-        storage.enqueue(tx("0x5afe01"), 10).await.unwrap();
-        storage.enqueue(tx("0x5afe02"), 20).await.unwrap();
+        storage.enqueue([(tx("0x5afe01"), 10)]).await.unwrap();
+        storage.enqueue([(tx("0x5afe02"), 20)]).await.unwrap();
 
         // Pruning at a safe block of 15 removes the first transaction (expiry
         // 10); the second (expiry 20) is not yet expired.
