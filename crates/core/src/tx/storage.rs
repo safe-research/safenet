@@ -4,7 +4,7 @@
 //! serialized [`Transaction`] alongside the bookkeeping the queue needs: when it
 //! expires, its allocated nonce, when it was submitted and executed.
 
-use crate::tx::types::{Transaction, TransactionWithNonce};
+use super::types::{AllocatedTransaction, Transaction};
 use alloy::eips::eip1559::Eip1559Estimation;
 use sqlx::sqlite::SqlitePool;
 use std::num::TryFromIntError;
@@ -58,6 +58,13 @@ impl TransactionStorage {
     /// Creates a store backed by `pool`, creating the transactions table if it
     /// does not already exist.
     pub async fn new(pool: SqlitePool) -> Result<Self, Error> {
+        // Note that we store the `nonce` in a separate column from the
+        // transaction request JSON data. This allows us to work more naturally
+        // with the `nonce` column (for things like `MAX` to determine the next
+        // nonce), which would be more verbose if it were part of the request
+        // data directly (as we would need JSON extractors to use the column
+        // and would have to potentially deal with hexadecimal encoding, to
+        // match other numerical values are serialized).
         sqlx::query(
             "CREATE TABLE IF NOT EXISTS transactions (
                  id           INTEGER PRIMARY KEY,
@@ -101,6 +108,11 @@ impl TransactionStorage {
     /// Selects the oldest queued transaction that has not expired and assigns
     /// it a nonce. Returns `None` when nothing is queued.
     ///
+    /// The `status.block` is used as the current latest block number in order
+    /// to determine whether or not a transaction is expired. This is needed
+    /// since we keep  expired transactions around until they are older than the
+    /// `safe` block in order to be robust to reorg edge cases.
+    ///
     /// The nonce is the first free nonce at or above `status.nonce` (the
     /// account's current onchain transaction count, passed in so nonces
     /// consumed by transactions submitted outside the queue are respected),
@@ -109,7 +121,16 @@ impl TransactionStorage {
     pub async fn next_transaction(
         &self,
         status: Status,
-    ) -> Result<Option<TransactionWithNonce>, Error> {
+    ) -> Result<Option<AllocatedTransaction>, Error> {
+        // Note that, instead of returning the `nonce` and `request` as
+        // separate columns, we instead return a JSON string with the nonce
+        // field already set (**without updating the `request` column**). This
+        // just makes the deserialization on the Rust side more natural (where
+        // we don't need to declare a type just for deserializing a
+        // `AllocatedTransaction` without a nonce and combine the two values
+        // afterwards). The `request` value is not affected by this query,
+        // `json_set(TEXT, ...) -> TEXT` is just a pure transformation on its
+        // inputs to an output JSON string value.
         let Some(request) = sqlx::query_scalar::<_, String>(
             "UPDATE transactions
              SET nonce = MAX(?, COALESCE(
@@ -132,7 +153,7 @@ impl TransactionStorage {
             return Ok(None);
         };
 
-        let transaction = serde_json::from_str::<TransactionWithNonce>(&request)?;
+        let transaction = serde_json::from_str::<AllocatedTransaction>(&request)?;
         Ok(Some(transaction))
     }
 
@@ -152,6 +173,11 @@ impl TransactionStorage {
              WHERE nonce = ?",
         )
         .bind(block.map(i64::try_from).transpose()?)
+        // Note that we encode the fee arguments in hexadecimal notation. This
+        // is because we use Ethereum-style QUANTITY encoding which expects
+        // big integers to be encoded as hex with no leading 0's; something
+        // which is also expected from the `AllocatedTransaction` serialization
+        // implementation.
         .bind(format!("0x{:x}", fees.max_fee_per_gas))
         .bind(format!("0x{:x}", fees.max_priority_fee_per_gas))
         .bind(i64::try_from(nonce)?)
@@ -242,7 +268,11 @@ impl TransactionStorage {
     pub async fn stale_submissions(
         &self,
         submitted_before: Option<u64>,
-    ) -> Result<Vec<TransactionWithNonce>, Error> {
+    ) -> Result<Vec<AllocatedTransaction>, Error> {
+        // Similar to `next_transaction`, transform the JSON value to include
+        // the nonce directly instead of returning separate columns for the
+        // nonce and an "AllocatedTransactionWithoutNonce". This simplifies
+        // deserialization logic in Rust.
         sqlx::query_scalar::<_, String>(
             "SELECT json_set(request, '$.nonce', nonce)
              FROM transactions
@@ -288,10 +318,10 @@ mod tests {
     }
 
     /// A queued transaction (no nonce or fees yet).
-    fn request(data: &str) -> Transaction {
+    fn tx(data: &str) -> Transaction {
         Transaction {
             to: ENTRY_POINT,
-            input: data.parse::<Bytes>().unwrap(),
+            data: data.parse::<Bytes>().unwrap(),
             ..Default::default()
         }
     }
@@ -318,7 +348,10 @@ mod tests {
     #[tokio::test]
     async fn submit_assigns_the_account_nonce_and_fees() {
         let storage = storage().await;
-        storage.enqueue(request("0x5afe"), 100).await.unwrap();
+        storage.enqueue(tx("0x5afe"), 100).await.unwrap();
+
+        // There are no in flight transactions to begin with.
+        assert_eq!(storage.count_in_flight().await.unwrap(), 0);
 
         let submitted = storage
             .next_transaction(Status { nonce: 5, block: 0 })
@@ -343,9 +376,9 @@ mod tests {
     #[tokio::test]
     async fn submit_assigns_sequential_nonces_in_queue_order() {
         let storage = storage().await;
-        storage.enqueue(request("0x5afe01"), 100).await.unwrap();
-        storage.enqueue(request("0x5afe02"), 100).await.unwrap();
-        storage.enqueue(request("0x5afe03"), 100).await.unwrap();
+        storage.enqueue(tx("0x5afe01"), 100).await.unwrap();
+        storage.enqueue(tx("0x5afe02"), 100).await.unwrap();
+        storage.enqueue(tx("0x5afe03"), 100).await.unwrap();
 
         // Each submission picks the next free nonce above the in-flight ones, in
         // FIFO order.
@@ -356,14 +389,14 @@ mod tests {
                 .unwrap()
                 .unwrap();
             assert_eq!(submitted.nonce, nonce);
-            assert_eq!(submitted.transaction.input, request(data).input);
+            assert_eq!(submitted.transaction.data, tx(data).data);
         }
     }
 
     #[tokio::test]
     async fn record_submission_stamps_the_block_and_fees() {
         let storage = storage().await;
-        storage.enqueue(request("0x5afe"), 100).await.unwrap();
+        storage.enqueue(tx("0x5afe"), 100).await.unwrap();
         let submitted = storage
             .next_transaction(Status { nonce: 5, block: 0 })
             .await
@@ -382,9 +415,9 @@ mod tests {
         let transactions = storage.stale_submissions(Some(42)).await.unwrap();
         assert_eq!(
             transactions,
-            vec![TransactionWithNonce {
+            vec![AllocatedTransaction {
                 nonce: 5,
-                transaction: request("0x5afe"),
+                transaction: tx("0x5afe"),
                 max_fee_per_gas: Some(100),
                 max_priority_fee_per_gas: Some(10),
             }]
@@ -394,7 +427,7 @@ mod tests {
     #[tokio::test]
     async fn record_submission_errors_for_an_unknown_nonce() {
         let storage = storage().await;
-        storage.enqueue(request("0x5afe"), 100).await.unwrap();
+        storage.enqueue(tx("0x5afe"), 100).await.unwrap();
         storage
             .next_transaction(Status { nonce: 5, block: 0 })
             .await
@@ -416,8 +449,8 @@ mod tests {
     #[tokio::test]
     async fn prunes_queued_transactions_past_their_expiry() {
         let storage = storage().await;
-        storage.enqueue(request("0x5afe01"), 10).await.unwrap();
-        storage.enqueue(request("0x5afe02"), 20).await.unwrap();
+        storage.enqueue(tx("0x5afe01"), 10).await.unwrap();
+        storage.enqueue(tx("0x5afe02"), 20).await.unwrap();
 
         // Pruning at a safe block of 15 removes the first transaction (expiry
         // 10); the second (expiry 20) is not yet expired.
@@ -428,6 +461,6 @@ mod tests {
             .await
             .unwrap()
             .unwrap();
-        assert_eq!(next.transaction.input, request("0x5afe02").input);
+        assert_eq!(next.transaction.data, tx("0x5afe02").data);
     }
 }
