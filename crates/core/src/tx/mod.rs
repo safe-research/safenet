@@ -6,6 +6,9 @@
 //! local [`account`], and resubmitting with bumped fees when a transaction is
 //! stuck.
 
+#![allow(dead_code)]
+
+mod fees;
 pub mod signer;
 
 pub use self::signer::Signer;
