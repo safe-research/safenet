@@ -22,7 +22,7 @@ pub enum Error {
     /// updates.
     #[error("end of chain")]
     EndOfChain,
-    /// Received an update that is either out-of-order or has unexpected data.
+    /// Received a bad update i.e. either out-of-order or has unexpected data.
     #[error("bad update")]
     BadUpdate,
     /// The state machine is in a poisoned state, where a previous state
