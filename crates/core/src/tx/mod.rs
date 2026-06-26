@@ -10,5 +10,6 @@
 
 mod fees;
 pub mod signer;
+pub mod types;
 
-pub use self::signer::Signer;
+pub use self::{signer::Signer, types::Transaction};
