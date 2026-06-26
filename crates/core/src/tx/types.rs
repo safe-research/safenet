@@ -23,7 +23,7 @@ pub struct Transaction {
     /// The transaction value.
     pub value: U256,
     /// The transaction calldata.
-    pub input: Bytes,
+    pub data: Bytes,
     /// The gas limit. Unlike alloy's transaction request, this is mandatory.
     pub gas: u64,
 }
@@ -33,18 +33,18 @@ impl Default for Transaction {
         Self {
             to: Address::ZERO,
             value: U256::ZERO,
-            input: Bytes::new(),
+            data: Bytes::new(),
             gas: 21_000,
         }
     }
 }
 
-/// A [`Transaction`] with a nonce that is ready for submission.
+/// A [`Transaction`] with a nonce allocated for submission.
 ///
 /// It may contain fees from a previous submission.
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct TransactionWithNonce {
+pub struct AllocatedTransaction {
     /// The nonce assigned to the transaction by the queue.
     pub nonce: u64,
     /// The transaction.
@@ -58,7 +58,7 @@ pub struct TransactionWithNonce {
     pub max_priority_fee_per_gas: Option<u128>,
 }
 
-impl TransactionWithNonce {
+impl AllocatedTransaction {
     /// Builds a concrete EIP-1559 transaction for signing, bumping `estimate`
     /// above any fees from a previous submission so that it replaces it.
     pub fn build(self, chain_id: u64, estimate: Eip1559Estimation) -> TxEip1559 {
@@ -72,7 +72,7 @@ impl TransactionWithNonce {
             to: TxKind::Call(self.transaction.to),
             value: self.transaction.value,
             access_list: AccessList::default(),
-            input: self.transaction.input,
+            input: self.transaction.data,
         }
     }
 
