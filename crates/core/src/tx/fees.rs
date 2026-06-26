@@ -81,6 +81,21 @@ mod tests {
     }
 
     #[test]
+    fn priority_fee_cap_saturates_at_its_bounds() {
+        // A cap of 0% disables the priority fee, leaving just the base fee of 40.
+        assert_eq!(cap_priority_fee(fees(100, 60), 0.0), fees(40, 0));
+
+        // A negative cap is clamped to 0% and behaves identically.
+        assert_eq!(cap_priority_fee(fees(100, 60), -25.0), fees(40, 0));
+
+        // A cap of exactly 100% is a no-op.
+        assert_eq!(cap_priority_fee(fees(100, 60), 100.0), fees(100, 60));
+
+        // A cap above 100% is also a no-op.
+        assert_eq!(cap_priority_fee(fees(100, 60), 150.0), fees(100, 60));
+    }
+
+    #[test]
     fn bumps_replacement_fees_by_at_least_ten_percent() {
         // A first submission (no previous fees) keeps the fresh estimate.
         assert_eq!(bump(fees(100, 10), None), fees(100, 10));
