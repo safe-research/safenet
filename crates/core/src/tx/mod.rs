@@ -397,11 +397,11 @@ mod tests {
             .unwrap()
     }
 
-    /// A transaction carrying `input` as its calldata.
-    fn transaction(input: &str) -> Transaction {
+    /// A transaction carrying `data` as its calldata.
+    fn tx(data: &str) -> Transaction {
         Transaction {
             to: ENTRY_POINT,
-            input: input.parse().unwrap(),
+            data: data.parse().unwrap(),
             ..Default::default()
         }
     }
@@ -430,7 +430,7 @@ mod tests {
     async fn submits_queued_transactions_with_reorg_awareness() {
         let asserter = Asserter::new();
         let mut queue = queue(&asserter).await;
-        queue.queue(transaction("0x01"), 1000).await.unwrap();
+        queue.queue(tx("0x01"), 1000).await.unwrap();
 
         asserter.push_success(&U64::from(0)); // signer transaction count
         asserter.push_success(&fee_history()); // fee estimate
@@ -487,17 +487,14 @@ mod tests {
         asserter.push_success(&U64::from(0)); // signer transaction count
         asserter.push_success(&fee_history()); // fee estimate
         for i in 0..queue.config.max_in_flight_transactions {
-            queue
-                .queue(transaction(&format!("0x{i:02x}")), 12)
-                .await
-                .unwrap();
+            queue.queue(tx(&format!("0x{i:02x}")), 12).await.unwrap();
             asserter.push_success(&B256::ZERO); // transaction hash from submission
         }
 
         // Add two more transactions that cannot be submitted because of the
         // in-flight limit.
-        queue.queue(transaction("0xf0"), 12).await.unwrap();
-        queue.queue(transaction("0xf1"), 12).await.unwrap();
+        queue.queue(tx("0xf0"), 12).await.unwrap();
+        queue.queue(tx("0xf1"), 12).await.unwrap();
 
         // Observe a block to submit some of the transactions.
         queue.handle_block_update(new_block(10)).await.unwrap();
@@ -549,7 +546,7 @@ mod tests {
         assert!(asserter.read_q().is_empty());
 
         // queue a transaction long expired.
-        queue.queue(transaction("0x01"), 42).await.unwrap();
+        queue.queue(tx("0x01"), 42).await.unwrap();
 
         // now queue a block update, the transaction is not submitted as it is
         // expired and was never submitted to an RPC node.
@@ -566,12 +563,12 @@ mod tests {
         // cheap enough for the signer to afford, so its failure is treated as a
         // general error; the second has a high gas limit the signer cannot
         // afford, so its failure is treated as the node rejecting it.
-        queue.queue(transaction("0x01"), 1000).await.unwrap();
+        queue.queue(tx("0x01"), 1000).await.unwrap();
         queue
             .queue(
                 Transaction {
                     gas: 1_000_000,
-                    ..transaction("0x02")
+                    ..tx("0x02")
                 },
                 1000,
             )
