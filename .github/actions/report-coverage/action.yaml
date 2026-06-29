@@ -1,9 +1,14 @@
 name: "Report Coverage"
-description: "Merges reports, and comments on PR"
+description: "Merges reports, and posts coverage as a PR comment or step summary"
 inputs:
   github-token:
-    description: "The GITHUB_TOKEN required to post comments"
-    required: true
+    description: "The GITHUB_TOKEN required to post comments (not needed when post-as-step-summary is true)"
+    required: false
+    default: ""
+  post-as-step-summary:
+    description: "Post the report as a workflow step summary instead of a PR comment (safe for fork PRs)"
+    required: false
+    default: "false"
 
 runs:
   using: "composite"
@@ -120,7 +125,32 @@ runs:
         echo "$FILE_LIST" >> $GITHUB_OUTPUT
         echo "EOF" >> $GITHUB_OUTPUT
 
+    - name: Post Coverage Step Summary
+      if: inputs.post-as-step-summary == 'true'
+      shell: bash
+      env:
+        TOTAL_STATS: ${{ steps.process_coverage.outputs.TOTAL_STATS }}
+        SUMMARY: ${{ steps.process_coverage.outputs.SUMMARY }}
+        DETAILS: ${{ steps.process_coverage.outputs.DETAILS }}
+      run: |
+        cat >> "$GITHUB_STEP_SUMMARY" <<EOF
+        ### 🛡️ Test Coverage Report
+
+        **Total Line Coverage:** ${TOTAL_STATS}
+
+        ${SUMMARY}
+
+        <details>
+        <summary><strong>📄 Click to view coverage for all files</strong></summary>
+
+        \`\`\`text
+        ${DETAILS}
+        \`\`\`
+        </details>
+        EOF
+
     - name: Post Coverage Comment
+      if: inputs.post-as-step-summary != 'true'
       uses: actions/github-script@v6
       env:
         TOTAL_STATS: ${{ steps.process_coverage.outputs.TOTAL_STATS }}
