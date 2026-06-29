@@ -108,6 +108,11 @@ where
                 match self.blocks.revalidate_last_block().await? {
                     // It was uncled; tell the event watcher to move on.
                     Some(invalidated) => {
+                        tracing::debug!(
+                            number = invalidated.number,
+                            hash = %invalidated.hash,
+                            "logs unavailable for uncled block, skipping"
+                        );
                         self.events.on_block_invalidated(invalidated.hash)?;
                         Ok(None)
                     }
