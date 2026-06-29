@@ -15,7 +15,7 @@ ports it to Rust.
 
 Motivation (from the task): TypeScript has caused paper cuts and the **nonce/hash computation
 performance is a problem**. Porting to Rust is expected to increase velocity and remove that hot
-spot (see Open Question 2 for which computation we benchmark).
+spot (see Open Question 1 for which computation we benchmark).
 
 **The single hard requirement is onchain compatibility with the TypeScript sentinel:** a Rust
 sentinel and a TS sentinel must be able to participate in the *same* `SentinelOracle` dispute and
@@ -38,13 +38,12 @@ Explicitly **not** required (per the deliverable): database backwards compatibil
 configuration backwards compatibility. This frees the port to choose its own SQLite schema and
 config format rather than mirroring `better-sqlite3` tables or the exact `zod`/env layout.
 
-This port **builds on the in-progress `safenet-core` crate** (`crates/core`,
-[epic](./2026_06_09_safenet_core_crate.md)) rather than re-implementing shared infrastructure, per
-the `AGENTS.md` "reuse, don't reinvent" guideline. As of this writing `safenet-core` already
-provides the typed event **indexer** (`index`), **observability** (`observability`), and a
-**reorg-aware state machine + snapshot storage** (`state`). Its **transaction submission** (`tx`)
-module is the only remaining dependency still being implemented (core epic Phase E). See Open
-Question 1.
+This port **builds on the `safenet-core` crate** (`crates/core`) rather than re-implementing shared
+infrastructure, per the `AGENTS.md` "reuse, don't reinvent" guideline. As of this writing the core
+crate is complete and provides everything the sentinel needs: the typed event **indexer**
+(`index`), **observability** (`observability`), a **reorg-aware state machine + snapshot storage**
+(`state`), and **reliable transaction submission** (`tx`: a `TransactionQueue` with a local
+`Signer`). There is no longer any pending core dependency.
 
 The TS sentinel remains the reference implementation throughout the port; there is no FFI and the
 two are independent processes.
@@ -63,7 +62,7 @@ A faithful port needs the whole data flow, so it is catalogued here. File refere
 | `sentinel/types.ts` | `SentinelAction` (5 variants), `SentinelRequestState` FSM (`preparing`→`pending`→`committed`→`finalized`), `SentinelConfig`. | `state.rs` |
 | `sentinel/handlers.ts` | **Pure** functions: `handleOracleTransactionProposed` (compute `requestId`, run detector), `handleNewRequest`, `handleCommitted`, `handleResolved` (decode `ResolveReason`, vote-won logic), `handleBlockAdvance` (deadline FSM + finalize/cleanup). | `transition.rs` (a `StateTransition` impl) |
 | `sentinel/transitions.ts` | Decode raw logs → `SentinelOracleTransition` (`zod`-validated args). | `transitions.rs` |
-| `sentinel/protocol.ts` | `SentinelActionQueue` (`SqliteQueue`) + `SentinelProtocol` (`BaseActionQueue`): action → ABI-encoded tx via `TransactionManager`. | `protocol.rs` (+ `queue.rs`) |
+| `sentinel/protocol.ts` | `SentinelActionQueue` (`SqliteQueue`) + `SentinelProtocol` (`BaseActionQueue`): action → ABI-encoded tx via `TransactionManager`. | `protocol.rs` (action → `tx::Transaction`, enqueued on `safenet-core::tx::TransactionQueue`) |
 | `sentinel/storage.ts` | `SentinelStateStorage`: plain SQLite key/value table of request states (**not** reorg-rolled-back). | superseded by `safenet-core::state::storage::SnapshotStore` |
 | `sentinel/watcher.ts` | `SentinelTransitionWatcher` over the shared `BlockchainWatcher`, address-filtered to `[oracle, consensus]`. | `watcher.rs` |
 | `sentinel/detector.ts` | Blocklist detector: approve unless `payload.to` is blocklisted. | `detector.rs` |
@@ -75,10 +74,10 @@ Shared dependencies the sentinel pulls in (and their Rust replacements):
 | --- | --- | --- |
 | `shared/watcher.ts` `BlockchainWatcher` | Block + event indexing, reorg detection | `safenet-core::index::Watcher` (**done**) |
 | (new) reorg-aware state | persist + roll back service state on reorg | `safenet-core::state::{StateMachine, storage::SnapshotStore}` (**done**) |
-| `consensus/protocol/transaction.ts` `TransactionManager`, `GasFeeEstimator` | Nonce mgmt, fee bump, resubmission, pending-check loop | `safenet-core::tx::manager` (**core epic Phase E — pending**) |
-| `consensus/protocol/sqlite.ts` `SqliteTxStorage` | Nonce/status persistence | `safenet-core::tx::storage` (**core epic Phase E — pending**) |
-| `consensus/protocol/base.ts` `BaseActionQueue` | Serialized action retry/timeout loop | ported into `queue.rs` (Open Question 3) |
-| `utils/queue.ts` `SqliteQueue` | Persistent FIFO action queue | ported into `queue.rs` |
+| `consensus/protocol/transaction.ts` `TransactionManager`, `GasFeeEstimator` | Nonce mgmt, fee bump, resubmission, pending-check loop | `safenet-core::tx::TransactionQueue` (**done**) |
+| `consensus/protocol/sqlite.ts` `SqliteTxStorage` | Nonce/status persistence | internal to `safenet-core::tx::TransactionQueue` (**done**) |
+| `consensus/protocol/base.ts` `BaseActionQueue` + `utils/queue.ts` `SqliteQueue` | Persistent FIFO action queue + serialized retry/timeout loop | subsumed by `safenet-core::tx::TransactionQueue` (durable queue with per-block resubmission and block-number expiry); no separate action queue needed |
+| account / signing | `viem` account | `safenet-core::tx::Signer` (**done**) |
 | `utils/logging.ts`, `utils/metrics.ts` | Logging + Prometheus | `safenet-core::observability` (**done**) |
 | `consensus/verify/oracleTx/hashing.ts`, `.../safeTx/hashing.ts` | `requestId` (EIP-712) | `hashing.rs` via `alloy` `sol!` + `SolStruct::eip712_signing_hash` |
 | `machine/transitions/types.ts` `OracleTransactionProposedEvent` | Consensus event shape | `bindings.rs` + `transitions.rs` |
@@ -96,12 +95,12 @@ choices already made for the core crate so the two compose cleanly.
 | RPC / primitives / signing / EIP-712 | `viem` | **`alloy`** | `Provider`, `Address`/`B256`/`U256`/`Bytes`, `PrivateKeySigner`, typed events & EIP-712 via `sol!`. |
 | Indexing | `shared/watcher.ts` | **`safenet-core::index`** | `Watcher<P, E>` over a typed event set; reuse, don't re-port. |
 | Service state + reorg rollback | `sentinel/storage.ts` (no rollback) | **`safenet-core::state`** | `StateMachine` drives pure `StateTransition`s and `SnapshotStore` rolls back on reorg. |
-| Transaction submission | `transaction.ts` | **`safenet-core::tx`** | `TransactionManager` (nonce store, resubmit, fee bump, pending-check). Core epic Phase E. |
-| SQLite | `better-sqlite3` (sync) | **`sqlx`** (async sqlite) | One shared `SqlitePool` across the snapshot store, action queue, and core's tx storage — matching the single-`Database` TS pattern. |
+| Transaction submission + queueing | `transaction.ts` + `SqliteQueue`/`BaseActionQueue` | **`safenet-core::tx::TransactionQueue`** | Durable queue with nonce mgmt, fee bump/resubmit, in-flight cap and block-number expiry; subsumes both the TS tx manager and the action queue. |
+| Signing | `viem` account | **`safenet-core::tx::Signer`** | Local `Signer` (k256) owned by the `TransactionQueue`. |
+| SQLite | `better-sqlite3` (sync) | **`sqlx`** (async sqlite) | One shared `SqlitePool` across the snapshot store and the tx queue's storage — matching the single-`Database` TS pattern. |
 | Logging / metrics | `winston` / `prom-client` | **`safenet-core::observability`** | `tracing` + Prometheus. |
 | `requestId` hashing | `viem hashTypedData` | **`alloy` `SolStruct::eip712_signing_hash`** | Onchain-identical *and* native-speed; the perf-sensitive hot path. |
-| Action queue + retry | `SqliteQueue` + `BaseActionQueue` | **ported** (`sqlx` FIFO + `tokio` retry loop) | Open Question 3 (sentinel-local vs promote to core). |
-| Config validation | `zod` | **`serde`** | Deserializable structs; file/env/CLI sourcing is owned by the binary (consumer concern, per core epic). |
+| Config validation | `zod` | **`serde`** | Deserializable structs; file/env/CLI sourcing is owned by the binary (consumer concern, as in the core crate). |
 | Errors | `viem` `BaseError` | **`thiserror`** | Typed error enums per module. |
 
 Key decisions:
@@ -141,38 +140,51 @@ Key decisions:
   The watcher emits `Update::Block(BlockUpdate)` / `Update::Logs(EventUpdate { blocks, logs })`,
   consumed directly by the `StateMachine`.
 
-- **Reuse the core transaction manager for submission and nonce management.** The TS sentinel uses
-  the same `TransactionManager` + `SqliteTxStorage` + `GasFeeEstimator` as the validator. The Rust
-  sentinel consumes `safenet-core::tx` identically; fresh fees come from `alloy`'s
-  `estimate_eip1559_fees` (the core epic drops the bespoke `GasFeeEstimator`, keeping only the
-  replacement-fee bump), so the TS `gasFeeEstimator.invalidate()` per-block call maps to nothing.
-  The service still peeks at each `BlockUpdate::New` to call `tx_manager.trigger_pending_check`
-  before handing the update to the state machine; the sentinel otherwise only maps each
-  `SentinelAction` to ABI-encoded calldata and calls `submit_action`.
+- **Reuse `safenet-core::tx::TransactionQueue` for submission, queueing and nonce management.** The
+  TS sentinel layered a `SqliteQueue`/`BaseActionQueue` (durable action queue + retry/timeout) on top
+  of a `TransactionManager` + `SqliteTxStorage` + `GasFeeEstimator`. The Rust `TransactionQueue`
+  collapses all of that into one component: it persists each queued transaction, assigns nonces,
+  submits, and on every block update marks executed/pruned/resubmits stale transactions with bumped
+  fees. So the sentinel needs **no separate action queue** — it maps each `SentinelAction` to a
+  `tx::Transaction { to, value, data, gas }` and calls `queue.queue(tx, expires_at)`. Fees come from
+  `alloy`'s `estimate_eip1559_fees` (with the queue's `priority_fee_cap_percentage`), so the TS
+  `gasFeeEstimator.invalidate()` maps to nothing. Two consequences to handle in `protocol.rs`:
+  (a) `tx::Transaction.gas` is **mandatory** — the queue does not estimate gas — so the protocol must
+  set a gas limit per action (estimate via `provider.estimate_gas`, or use per-action constants);
+  (b) `expires_at` is a **block number** (not the TS 10-minute wall-clock TTL), so it is derived from
+  the relevant request deadline / voting window.
+
+- **Per-block updates feed both the state machine and the tx queue.** The service hands each
+  `Update::Block(BlockUpdate)` to both `StateMachine::handle_update` (driving the request FSM, which
+  on a new block runs `handleBlockAdvance`) and `TransactionQueue::handle_block_update` (the per-block
+  housekeeping that replaces the TS `triggerPendingCheck`, and which also processes `Uncle`/`Warp`).
+  The latter must see every block update, not just `New`.
 
 - **Reorg behavior is now first-class but submission stays best-effort.** The `StateMachine` rolls
-  request state back to the reorg's common ancestor and re-applies forward; the nonce-keyed tx
-  storage is intentionally *not* rolled back (per the core epic). An action emitted from a
-  transition that is later reorged out cannot be un-sent — the same best-effort property the TS
-  sentinel has — but on re-application the transition can re-emit it, so the action mapping must be
-  idempotent against the tx manager's nonce store. This is an improvement over the TS sentinel,
-  which detects reorgs but does not roll back at all.
+  request state back to the reorg's common ancestor and re-applies forward; the `TransactionQueue` is
+  itself reorg-aware (it un-marks executed transactions on `Uncle`) but never "un-submits" a
+  broadcast transaction. An action emitted from a transition that is later reorged out cannot be
+  un-sent — the same best-effort property the TS sentinel has — but on re-application the transition
+  re-emits it, and the queue's nonce reuse means the resubmission replaces rather than duplicates.
+  This is an improvement over the TS sentinel, which detects reorgs but does not roll state back at
+  all.
 
 - **Pure transition, separated from I/O.** Keeping the FSM in the `StateTransition` impl (no async
   I/O inside `new_block`/`event`) keeps the onchain-semantics-critical logic trivially
   unit-testable for parity and isolated from the async plumbing.
 
-- **Config is `serde`-deserializable; sourcing is the binary's job.** Per the core epic's
-  `zod`-out-of-scope decision, each module exposes a plain `Config` struct; `main.rs` assembles them
+- **Config is `serde`-deserializable; sourcing is the binary's job.** Following the core crate's
+  convention (config validation is out of scope), each module exposes a plain `Config` struct that
+  deserializes from a file; `main.rs` assembles them
   from env/file. Since config compatibility is not required, env-var names can stay (`SENTINEL_*`,
-  for ops continuity) or move to a config file — Open Question 4.
+  for ops continuity) or move to a config file — Open Question 3.
 
 ### Alternatives Considered
 
 - **Re-implement indexing / state / tx submission inside the sentinel crate.** Rejected — duplicates
-  `safenet-core` and violates the reuse guideline. The cost is a build-ordering dependency on core's
-  `tx` module (Open Question 1), which is acceptable now that `index`, `observability`, and `state`
-  have landed.
+  `safenet-core` and violates the reuse guideline. Every module the sentinel needs (`index`,
+  `observability`, `state`, `tx`) has already landed in the core crate, so there is no build-ordering
+  cost to reusing them.
 - **A plain, non-reorg request table mirroring the TS `SentinelStateStorage`.** Rejected (this was
   the original draft's choice). Core's reorg-aware `StateMachine`/`SnapshotStore` is now available,
   is the blessed pattern, and is strictly more correct under reorgs. DB compatibility is not
@@ -195,7 +207,7 @@ Key decisions:
 ```
 crates/sentinel/
   Cargo.toml                 # deps: safenet-core, alloy, sqlx, tokio, serde, serde_json, thiserror, tracing
-  migrations/                # action queue table (sqlx); snapshot + tx tables come from safenet-core
+  # no migrations/ — the snapshot store and tx queue create/own their own tables in safenet-core
   src/
     main.rs                  # config load, observability init, provider/signer, build service, signals, run
     config.rs                # serde Config (observability + index + tx + sentinel fields) + env/file sourcing
@@ -207,12 +219,11 @@ crates/sentinel/
     transition.rs            # StateTransition impl (new_block = handleBlockAdvance; event = per-log handlers)
     transitions.rs           # watcher_events! set + log -> SentinelOracleTransition decoding
     watcher.rs               # SentinelTransitionWatcher over safenet-core::index::Watcher
-    queue.rs                 # sqlx FIFO queue + action retry/timeout loop (SqliteQueue + BaseActionQueue analog)
-    protocol.rs              # SentinelProtocol: action -> calldata -> safenet-core::tx::TransactionManager
-    service.rs               # SentinelService: Watcher -> StateMachine::handle_update -> protocol
+    protocol.rs              # action -> tx::Transaction (calldata + gas) -> safenet-core::tx::TransactionQueue::queue
+    service.rs               # SentinelService: Watcher -> StateMachine + TransactionQueue
 ```
 
-Modules are introduced only when first used (no empty stubs), per the core epic's convention.
+Modules are introduced only when first used (no empty stubs), matching the core crate's convention.
 
 ### Onchain bindings & hashing (`bindings.rs`, `hashing.rs`)
 
@@ -268,32 +279,37 @@ Modules are introduced only when first used (no empty stubs), per the core epic'
 - `SentinelTransitionWatcher` constructs `safenet-core::index::Watcher` with
   `addresses = [oracle, consensus]` and resumes from the snapshot store's `current()` block.
 
-### Action queue & protocol (`queue.rs`, `protocol.rs`)
+### Protocol — action submission (`protocol.rs`)
 
-- `queue.rs`: a `sqlx` FIFO queue (`SqliteQueue` analog) plus the serialized retry/timeout loop from
-  `BaseActionQueue` (10-min action TTL, 1s→5s backoff on failure), reimplemented with `tokio` timers.
-- `protocol.rs`: `SentinelProtocol` maps each action to ABI-encoded calldata
-  (`ERC20::approveCall`, `SentinelOracle::{commitApprove,commitDeny,finalize,claim}Call`) and submits
-  via `safenet-core::tx::TransactionManager::submit_action`.
+- Maps each `SentinelAction` to a `tx::Transaction { to, value, data, gas }`: the calldata is the
+  `sol!`-generated call (`ERC20::approveCall`, `SentinelOracle::{commitApprove,commitDeny,finalize,
+  claim}Call`), `value` is zero, and `gas` is set from a `provider.estimate_gas` (or a per-action
+  constant). It then calls `TransactionQueue::queue(transaction, expires_at)`, where `expires_at` is
+  the block by which the action is no longer useful (derived from the request deadline / voting
+  window). No dedicated action queue is needed — `TransactionQueue` is the durable queue and owns
+  retry, fee-bump resubmission, the in-flight cap and expiry.
+- Ordering: actions are queued in the order the state machine returns them (e.g. `ApproveToken`
+  before a commit), and the queue assigns nonces FIFO, preserving that order onchain.
 
 ### Service & binary (`service.rs`, `main.rs`, `config.rs`)
 
 - `SentinelService` owns the `StateMachine<S, SentinelTransition>` (built from a `SnapshotStore` on
-  the shared pool), the watcher, and the protocol queue. Its loop: pull the next `Update` from the
-  watcher; if it is `BlockUpdate::New`, call `tx_manager.trigger_pending_check(number)`; pass the
-  update to `state_machine.handle_update` and enqueue every returned `SentinelAction` into the
-  protocol. Exposes `run`/`shutdown`.
-- `main.rs`: load `Config`, `safenet_core::observability::init`, build the `alloy` provider/signer,
-  open the `SqlitePool` (snapshot + tx + queue tables), construct and run the service, handle
-  SIGINT/SIGTERM.
+  the shared pool), the watcher, and the `TransactionQueue`. Its loop: pull the next `Update` from
+  the watcher; when it is `Update::Block(b)`, hand `b` to `TransactionQueue::handle_block_update`
+  (the per-block housekeeping that replaces `triggerPendingCheck`); pass the `Update` to
+  `state_machine.handle_update`; and for each returned `SentinelAction`, map it via `protocol.rs` and
+  `TransactionQueue::queue` it. Exposes `run`/`shutdown`.
+- `main.rs`: load `Config`, `safenet_core::observability::init`, build the `alloy` provider and a
+  `tx::Signer` from the configured key, open the shared `SqlitePool`, construct the `Watcher`,
+  `StateMachine` and `TransactionQueue`, run the service, and handle SIGINT/SIGTERM.
 
 ### Testing
 
 - Unit tests mirror the TS test intent (behavior, not implementation): the `StateTransition`
   (FSM transitions, vote-won/timeout, deadline cleanup), `request_id` parity vectors, transition
-  decoding, and the action queue's retry/timeout behavior. Reorg rollback of request state is
-  already covered by core's `StateMachine` tests, but a sentinel-level test should assert a reorged
-  `NewRequest` is rolled back.
+  decoding, and the action → `tx::Transaction` mapping (calldata/gas/expiry). Reorg rollback of
+  request state and tx resubmission are already covered by core's `StateMachine`/`TransactionQueue`
+  tests, but a sentinel-level test should assert a reorged `NewRequest` is rolled back.
 - `sqlx` tests run against `sqlite::memory:` (matching the TS `:memory:` default).
 - An interop/integration test (Phase F) runs the Rust sentinel against a `SentinelOracle` on Anvil.
 
@@ -302,7 +318,7 @@ Modules are introduced only when first used (no empty stubs), per the core epic'
 - Per `AGENTS.md`: `cargo fmt --all`, `cargo clippy --package safenet-sentinel`,
   `cargo test --package safenet-sentinel`. `Cargo.lock` committed.
 - Dependency features stay permissive during implementation (e.g. `full` on `tokio`/`alloy`) and are
-  narrowed in a wrap-up PR (F2), matching the core epic's approach.
+  narrowed in a wrap-up PR (F2), matching the core crate's approach.
 
 ---
 
@@ -323,7 +339,7 @@ reviewable. "Depends on" lists hard ordering; everything else may proceed in par
   `eip712_signing_hash`, with tests asserting byte-identical output vs TS/contract vectors. Depends
   on A2. _The onchain-compatibility linchpin and the perf-sensitive hot path._
 
-### Phase B — Domain logic (depends on A; parallel with C & D)
+### Phase B — Domain logic (depends on A; parallel with C & D2)
 
 - **B1 — State types & detector.** `state.rs` (`SentinelRequestState`, `SentinelAction`, the
   snapshot state `S`, `SentinelConfig`) and `detector.rs` (blocklist) + tests. Depends on A1.
@@ -331,7 +347,7 @@ reviewable. "Depends on" lists hard ordering; everything else may proceed in par
   `event`), porting all five handlers, with unit tests for the FSM, vote-won/timeout, and deadline
   cleanup. Depends on A3 (`request_id`), B1.
 
-### Phase C — Indexing integration (depends on A; parallel with B & D)
+### Phase C — Indexing integration (depends on A; parallel with B & D2)
 
 - **C1 — Event set & transition decoding.** `transitions.rs`: `watcher_events!` over the two event
   enums and `log → SentinelOracleTransition`, with decoding tests. Depends on A2.
@@ -339,20 +355,21 @@ reviewable. "Depends on" lists hard ordering; everything else may proceed in par
   `[oracle, consensus]`, resuming from the snapshot store. Depends on C1 and `safenet-core::index`
   (done).
 
-### Phase D — Action queue & submission
+### Phase D — Action submission
 
-- **D1 — Action queue + retry loop.** `queue.rs`: `sqlx` FIFO queue and the `tokio` retry/timeout
-  loop + tests. Depends on A1 and the shared `SqlitePool` (no new core dependency).
-- **D2 — Sentinel protocol.** `protocol.rs`: action → calldata → `TransactionManager::submit_action`.
-  Depends on A2, D1, and `safenet-core::tx` (**core epic Phase E — pending**).
+- **D2 — Sentinel protocol.** `protocol.rs`: map each `SentinelAction` to a `tx::Transaction`
+  (`sol!` calldata + gas) and `TransactionQueue::queue(tx, expires_at)` it; tests for the mapping.
+  Depends on A2 and `safenet-core::tx` (done). _(There is no longer a D1 — the TS action queue is
+  subsumed by `TransactionQueue`.)_
 
 ### Phase E — Orchestration & binary
 
-- **E1 — SentinelService.** `service.rs`: build the `StateMachine` over a `SnapshotStore`, run the
-  watcher → `handle_update` → protocol loop, with the per-`BlockUpdate::New`
-  `trigger_pending_check`. Depends on B2, C2, D2.
+- **E1 — SentinelService.** `service.rs`: build the `StateMachine` over a `SnapshotStore` and the
+  `TransactionQueue` over the shared pool; run the watcher loop, feeding each `Update::Block` to both
+  the state machine and `TransactionQueue::handle_block_update`, and queueing the actions the state
+  machine returns. Depends on B2, C2, D2.
 - **E2 — Config & binary.** `config.rs` (`serde` config) + `main.rs` (env/file load, observability
-  init, provider/signer, migrations, signals, run). Depends on E1.
+  init, provider + `tx::Signer`, shared pool, signals, run). Depends on E1.
 
 ### Phase F — Validation & wrap-up
 
@@ -368,9 +385,9 @@ reviewable. "Depends on" lists hard ordering; everything else may proceed in par
 
 ### Critical path
 
-`A1 → A2 → A3 → B2 → E1 → E2 → F1`, additionally gated by the `safenet-core` `tx` module
-(core epic Phase E) for `D2`/`E1`. After A, phases B, C and D proceed concurrently;
-`index`, `observability` and `state` are already available.
+`A1 → A2 → A3 → B2 → E1 → E2 → F1`. After A, phases B, C and D2 proceed concurrently; every
+`safenet-core` module the sentinel consumes (`index`, `observability`, `state`, `tx`) is already
+available, so there is no external gating dependency.
 
 ---
 
@@ -378,29 +395,28 @@ reviewable. "Depends on" lists hard ordering; everything else may proceed in par
 
 **Open questions**
 
-1. **Dependency on `safenet-core` `tx` (core epic Phase E).** With `index`, `observability` and
-   `state` now landed, the only remaining core dependency is the `tx` module
-   (`TransactionManager`, `TransactionStorage`, `Account`). **Recommended:** sequence `D2`/`E1`
-   after — or co-develop alongside — Phase E and consume the module directly. If it slips, the
-   fallback is to port the minimal tx subset locally and migrate later (extra churn). Phases A, B, C
-   and `D1` have no such dependency and can start immediately.
-2. **Which "computation" is the performance problem?** The task cites "nonce computation." The
+1. **Which "computation" is the performance problem?** The task cites "nonce computation." The
    sentinel does no FROST nonce work; the plausible hot paths are (a) the per-`OracleTransactionProposed`
    EIP-712 `requestId` hashing (addressed natively by `alloy` `sol!` keccak) and (b) transaction
-   nonce management (addressed by core's `TransactionManager` + `alloy`). **Recommended:** confirm the
+   nonce management (now handled by `safenet-core::tx::TransactionQueue`). **Recommended:** confirm the
    target and add a throughput benchmark for it as an acceptance criterion (likely the `requestId`
    hashing in A3).
-3. **Where do the action queue + retry loop live?** `SqliteQueue`/`BaseActionQueue` are shared
-   between the validator and the sentinel in TS. **Recommended:** implement sentinel-local (`queue.rs`)
-   now, designed for later promotion to `safenet-core` when the validator is ported.
-4. **Config format & sourcing.** Keep the TS env-var names (`SENTINEL_ORACLE_ADDRESS`,
+2. **`expires_at` and gas for queued actions.** `TransactionQueue::queue` takes a block-number
+   expiry and `tx::Transaction.gas` is mandatory (the queue does not estimate gas). **Recommended:**
+   derive `expires_at` from the request deadline / voting window, and set `gas` from a
+   `provider.estimate_gas` per action (falling back to per-action constants if estimation is
+   undesirable). Confirm the exact expiry policy per action type.
+3. **Config format & sourcing.** Keep the TS env-var names (`SENTINEL_ORACLE_ADDRESS`,
    `SENTINEL_VOTING_WINDOW`, …) for operational continuity, or move to a TOML file like the
    `validator-rust` spike? Config compatibility is not required, so either is acceptable.
-5. **Crate name/location.** Proposed `crates/sentinel` / `safenet-sentinel`. Confirm.
-6. **Chain/fee configuration.** The TS entrypoint uses `viem extractChain` (gnosis/sepolia/anvil) to
-   attach `ChainFees` (`baseFeeMultiplier`, `maxPriorityFeePerGas`). Confirm the equivalent fee
-   configuration to pass through to `alloy`/core's tx manager, since alloy handles chain fees
-   differently.
+4. **Crate name/location.** Proposed `crates/sentinel` / `safenet-sentinel`. Confirm.
+5. **Fee configuration mapping.** The TS entrypoint attaches `ChainFees`
+   (`baseFeeMultiplier`, `maxPriorityFeePerGas`) via `viem extractChain`. The Rust
+   `tx::Config` exposes `priority_fee_cap_percentage`, `max_in_flight_transactions` and
+   `blocks_before_resubmit`, and `alloy`'s `estimate_eip1559_fees` handles base-fee headroom
+   internally. **Recommended:** map `PRIORITY_FEE_CAP_PERCENTAGE` → `priority_fee_cap_percentage` and
+   drop the bespoke base-fee multiplier / explicit priority fee unless a concrete need surfaces;
+   confirm.
 
 **Assumptions**
 
