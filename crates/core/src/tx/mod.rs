@@ -51,7 +51,7 @@ pub enum Error {
 
 /// Transaction queue configuration.
 #[derive(Clone, Debug, Deserialize, PartialEq)]
-#[serde(default)]
+#[serde(default, deny_unknown_fields)]
 pub struct Config {
     /// The maximum number of transactions that may be in flight (submitted
     /// onchain but not yet executed) at any one time. The queue only submits new

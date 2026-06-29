@@ -17,7 +17,7 @@ pub use events::EventUpdate;
 
 /// Watcher configuration, aggregating the block and event watcher configs.
 #[derive(Clone, Debug, Default, Deserialize, PartialEq, Eq)]
-#[serde(default)]
+#[serde(default, deny_unknown_fields)]
 pub struct Config {
     /// Block watcher configuration.
     #[serde(flatten)]

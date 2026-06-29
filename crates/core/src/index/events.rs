@@ -54,7 +54,7 @@ pub struct EventUpdate<E> {
 
 /// Event watcher configuration.
 #[derive(Clone, Debug, Deserialize, PartialEq, Eq)]
-#[serde(default)]
+#[serde(default, deny_unknown_fields)]
 pub struct Config {
     /// The number of blocks to query at once while warping over a reorg-safe
     /// range. Halved on query failure (never below one) and reset on success.

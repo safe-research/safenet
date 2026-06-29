@@ -15,7 +15,7 @@ pub enum Error {
 }
 
 #[derive(Debug, Default, Deserialize)]
-#[serde(default)]
+#[serde(default, deny_unknown_fields)]
 pub struct Config {
     pub observability: observability::Config,
 }
