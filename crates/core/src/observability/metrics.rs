@@ -1,7 +1,7 @@
 //! Prometheus metrics exporter for Safenet services.
 
 use metrics_exporter_prometheus::{BuildError, PrometheusBuilder};
-use std::net::SocketAddr;
+use std::net::{SocketAddr, TcpListener};
 
 /// Installs the global Prometheus recorder and starts an HTTP listener that
 /// scrapers can poll for metrics.
@@ -13,17 +13,45 @@ use std::net::SocketAddr;
 ///
 /// This installs a process-global recorder and so can only succeed once; later
 /// calls return a [`BuildError`].
-pub fn serve(addr: impl Into<SocketAddr>) -> Result<(), BuildError> {
-    PrometheusBuilder::new()
-        .with_http_listener(addr.into())
-        .install()
+pub fn serve(addr: impl Into<SocketAddr>) -> Result<SocketAddr, BuildError> {
+    let addr = addr.into();
+
+    // The prometheus builder does not expose enough information to read the
+    // socket address that was used for the HTTP listener. This matters in the
+    // case where we bind to `:0` (where the OS assigns a random port). To work
+    // around this, get assigned a random port by the OS and use that for the
+    // listener. There is a race condition where the port _may_ become
+    // unavailable after being initially assigned, so retry a few times (in
+    // practice, this should work the very first time).
+    if addr.port() == 0 {
+        let try_install = || {
+            let addr = TcpListener::bind(addr)
+                .and_then(|listener| listener.local_addr())
+                .map_err(|err| BuildError::FailedToCreateHTTPListener(err.to_string()))?;
+            PrometheusBuilder::new()
+                .with_http_listener(addr)
+                .install()?;
+            Ok(addr)
+        };
+        for _ in 0..2 {
+            if let Ok(addr) = try_install() {
+                return Ok(addr);
+            }
+        }
+        try_install()
+    } else {
+        PrometheusBuilder::new()
+            .with_http_listener(addr)
+            .install()?;
+        Ok(addr)
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use alloy::transports::http::reqwest::{self, StatusCode};
-    use std::net::TcpListener;
+    use std::net::Ipv4Addr;
 
     /// Issues a minimal HTTP/1.1 GET and returns the full raw response.
     async fn http_get(addr: SocketAddr, path: &str) -> (StatusCode, String) {
@@ -33,13 +61,7 @@ mod tests {
 
     #[tokio::test]
     async fn serves_metrics_and_health() {
-        // Reserve an ephemeral port, then hand it to the exporter. The listener
-        // binds eagerly during `serve`, so it is ready once `serve` returns.
-        let addr = TcpListener::bind("127.0.0.1:0")
-            .unwrap()
-            .local_addr()
-            .unwrap();
-        serve(addr).unwrap();
+        let addr = serve((Ipv4Addr::LOCALHOST, 0)).unwrap();
 
         metrics::counter!("safenet_core_test_total").increment(1);
 
