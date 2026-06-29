@@ -10,3 +10,4 @@ integration_logs.txt
 lcov.info
 node_modules/
 target/
+validator*.toml
