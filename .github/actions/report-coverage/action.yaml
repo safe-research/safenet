@@ -122,7 +122,7 @@ runs:
         echo "EOF" >> $GITHUB_OUTPUT
 
         # 7. Build report file
-        # Variables are used directly here (no ${{ }} interpolation) to avoid
+        # Variables are used directly here (no template interpolation) to avoid
         # URL-encoding of newlines and unintended shell expansion in heredocs.
         {
           echo "<!-- coverage-report -->"
