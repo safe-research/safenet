@@ -16,7 +16,7 @@ pub mod metrics;
 /// Deserializes from a configuration file and fills in defaults for any omitted
 /// field, so a consumer only specifies the values it needs to override.
 #[derive(Clone, Debug, Deserialize)]
-#[serde(default)]
+#[serde(default, deny_unknown_fields)]
 pub struct Config {
     /// The `tracing` env-filter directive controlling log verbosity (see
     /// [`logging::init`]). Defaults to `info`.

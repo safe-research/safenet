@@ -28,7 +28,7 @@ pub enum BlockTime {
 
 /// Block watcher configuration.
 #[derive(Clone, Debug, PartialEq, Eq, Deserialize)]
-#[serde(default)]
+#[serde(default, deny_unknown_fields)]
 pub struct Config {
     /// Expected time between blocks.
     pub block_time: BlockTime,
