@@ -126,7 +126,7 @@ runs:
         echo "EOF" >> $GITHUB_OUTPUT
 
     - name: Post Coverage Step Summary
-      if: inputs.post-as-step-summary == 'true'
+      if: ${{ inputs.post-as-step-summary == 'true' }}
       shell: bash
       env:
         TOTAL_STATS: ${{ steps.process_coverage.outputs.TOTAL_STATS }}
@@ -150,7 +150,7 @@ runs:
         EOF
 
     - name: Post Coverage Comment
-      if: inputs.post-as-step-summary != 'true'
+      if: ${{ inputs.post-as-step-summary != 'true' }}
       uses: actions/github-script@v6
       env:
         TOTAL_STATS: ${{ steps.process_coverage.outputs.TOTAL_STATS }}
