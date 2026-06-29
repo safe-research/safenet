@@ -110,45 +110,37 @@ runs:
         # Grep -v removes the "Reading tracefile" noise
         FILE_LIST=$(lcov --list lcov.info | grep -v "Reading tracefile")
 
-        # 6. Export Variables for JS Step
-
-        # Pass Total %
+        # 6. Export step outputs
         echo "TOTAL_STATS=$TOTAL_STATS" >> $GITHUB_OUTPUT
 
-        # Pass the summary
         echo "SUMMARY<<EOF" >> $GITHUB_OUTPUT
         echo -e "$REPORT_TABLE" >> $GITHUB_OUTPUT
         echo "EOF" >> $GITHUB_OUTPUT
 
-        # Pass the details
         echo "DETAILS<<EOF" >> $GITHUB_OUTPUT
         echo "$FILE_LIST" >> $GITHUB_OUTPUT
         echo "EOF" >> $GITHUB_OUTPUT
 
-    - name: Build Report
-      id: build_report
-      shell: bash
-      env:
-        TOTAL_STATS: ${{ steps.process_coverage.outputs.TOTAL_STATS }}
-        SUMMARY: ${{ steps.process_coverage.outputs.SUMMARY }}
-        DETAILS: ${{ steps.process_coverage.outputs.DETAILS }}
-      run: |
-        cat > coverage-report.md <<EOF
-        <!-- coverage-report -->
-        ### 🛡️ Test Coverage Report
-
-        **Total Line Coverage:** ${TOTAL_STATS}
-
-        ${SUMMARY}
-
-        <details>
-        <summary><strong>📄 Click to view coverage for all files</strong></summary>
-
-        \`\`\`text
-        ${DETAILS}
-        \`\`\`
-        </details>
-        EOF
+        # 7. Build report file
+        # Variables are used directly here (no ${{ }} interpolation) to avoid
+        # URL-encoding of newlines and unintended shell expansion in heredocs.
+        {
+          echo "<!-- coverage-report -->"
+          echo "### 🛡️ Test Coverage Report"
+          echo ""
+          echo "**Total Line Coverage:** ${TOTAL_STATS}"
+          echo ""
+          echo -e "$REPORT_TABLE"
+          echo ""
+          echo "<details>"
+          echo "<summary><strong>📄 Click to view coverage for all files</strong></summary>"
+          echo ""
+          echo '```text'
+          echo "${FILE_LIST}"
+          echo '```'
+          echo ""
+          echo "</details>"
+        } > coverage-report.md
 
     - name: Post Coverage Step Summary
       if: ${{ inputs.post-as-step-summary == 'true' }}
@@ -158,7 +150,13 @@ runs:
     - name: Prepare Coverage Artifact
       if: ${{ inputs.upload-artifact == 'true' }}
       shell: bash
-      run: jq -r '.pull_request.number' "$GITHUB_EVENT_PATH" > issue-number.txt
+      run: |
+        PR_NUMBER=$(jq -r '.pull_request.number' "$GITHUB_EVENT_PATH")
+        if [ "$PR_NUMBER" = "null" ] || [ -z "$PR_NUMBER" ]; then
+          echo "❌ upload-artifact requires a pull_request event context."
+          exit 1
+        fi
+        echo "$PR_NUMBER" > issue-number.txt
 
     - name: Upload Coverage Artifact
       if: ${{ inputs.upload-artifact == 'true' }}

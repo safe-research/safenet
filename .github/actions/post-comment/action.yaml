@@ -40,12 +40,18 @@ runs:
             ? require('fs').readFileSync(contentFile, 'utf8')
             : process.env.CONTENT;
 
+          if (!content) {
+            core.setFailed('post-comment: either content or content-file must be provided and non-empty.');
+            return;
+          }
+
           let existingComment;
           if (marker) {
-            const { data: comments } = await github.rest.issues.listComments({
+            const comments = await github.paginate(github.rest.issues.listComments, {
               owner: context.repo.owner,
               repo: context.repo.repo,
               issue_number: issueNumber,
+              per_page: 100,
             });
             existingComment = comments.find(c => c.body.includes(marker));
           }
