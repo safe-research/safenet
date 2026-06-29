@@ -1,6 +1,6 @@
 # Plan: Port the TypeScript sentinel to Rust
 
-Component: new crate `crates/sentinel` (Cargo crate `safenet-sentinel`), porting
+Component: new crate `crates/sentinel` (Cargo crate `sentinel`), porting
 `validator/src/sentinel/` + `validator/src/sentinel.ts`.
 
 ---
@@ -36,7 +36,10 @@ behave correctly together. Concretely, onchain compatibility means byte-identica
 
 Explicitly **not** required (per the deliverable): database backwards compatibility and
 configuration backwards compatibility. This frees the port to choose its own SQLite schema and
-config format rather than mirroring `better-sqlite3` tables or the exact `zod`/env layout.
+config format rather than mirroring `better-sqlite3` tables or the exact `zod`/env layout. The crate
+follows the conventions just established by the sibling `validator` crate (`crates/validator`,
+PR #489): a bare package name, workspace-inherited dependencies, an `argh` CLI, and a TOML
+configuration file.
 
 This port **builds on the `safenet-core` crate** (`crates/core`) rather than re-implementing shared
 infrastructure, per the `AGENTS.md` "reuse, don't reinvent" guideline. As of this writing the core
@@ -81,7 +84,7 @@ Shared dependencies the sentinel pulls in (and their Rust replacements):
 | `utils/logging.ts`, `utils/metrics.ts` | Logging + Prometheus | `safenet-core::observability` (**done**) |
 | `consensus/verify/oracleTx/hashing.ts`, `.../safeTx/hashing.ts` | `requestId` (EIP-712) | `hashing.rs` via `alloy` `sol!` + `SolStruct::eip712_signing_hash` |
 | `machine/transitions/types.ts` `OracleTransactionProposedEvent` | Consensus event shape | `bindings.rs` + `transitions.rs` |
-| `types/schemas.ts` `sentinelConfigSchema` (`zod`) | Env validation | `config.rs` (`serde`); sourcing is consumer-owned |
+| `types/schemas.ts` `sentinelConfigSchema` (`zod`) | Env validation | `config.rs` (`serde` + TOML via `argh`, like the `validator` crate) |
 
 ---
 
@@ -100,7 +103,7 @@ choices already made for the core crate so the two compose cleanly.
 | SQLite | `better-sqlite3` (sync) | **`sqlx`** (async sqlite) | One shared `SqlitePool` across the snapshot store and the tx queue's storage — matching the single-`Database` TS pattern. |
 | Logging / metrics | `winston` / `prom-client` | **`safenet-core::observability`** | `tracing` + Prometheus. |
 | `requestId` hashing | `viem hashTypedData` | **`alloy` `SolStruct::eip712_signing_hash`** | Onchain-identical *and* native-speed; the perf-sensitive hot path. |
-| Config validation | `zod` | **`serde`** | Deserializable structs; file/env/CLI sourcing is owned by the binary (consumer concern, as in the core crate). |
+| Config validation | `zod` | **`serde` + `toml` + `argh`** | TOML config file loaded via an `argh` CLI, mirroring the `validator` crate. |
 | Errors | `viem` `BaseError` | **`thiserror`** | Typed error enums per module. |
 
 Key decisions:
@@ -173,11 +176,21 @@ Key decisions:
   I/O inside `new_block`/`event`) keeps the onchain-semantics-critical logic trivially
   unit-testable for parity and isolated from the async plumbing.
 
-- **Config is `serde`-deserializable; sourcing is the binary's job.** Following the core crate's
-  convention (config validation is out of scope), each module exposes a plain `Config` struct that
-  deserializes from a file; `main.rs` assembles them
-  from env/file. Since config compatibility is not required, env-var names can stay (`SENTINEL_*`,
-  for ops continuity) or move to a config file — Open Question 3.
+- **TOML config + `argh` CLI, mirroring the `validator` crate.** The binary exposes an `argh`
+  `Options` (`--config-file`, default `sentinel.toml`; `--version`) and a `Config` struct that
+  deserializes from TOML with `#[serde(default)]` and an async `Config::load(&Path)`, exactly like
+  `crates/validator/src/{main,config}.rs`. The `Config` composes the core module configs it needs
+  (`observability::Config`, `index::Config`, `tx::Config`) plus the sentinel-specific fields (RPC URL,
+  signer key, chain id, oracle / consensus / fee-token addresses, voting window, blocklist). This
+  replaces the TS `zod`/env-var layout; config compatibility is not required, so the env-var scheme is
+  dropped in favour of the TOML file the rest of the Rust workspace uses.
+
+- **Workspace-inherited dependencies and a bare crate name.** Like `validator`, the crate is named
+  plainly (`sentinel`, `version = "0.2.0"`, `edition = "2024"`, `publish = false`) and pulls every
+  shared dependency from `[workspace.dependencies]` via `dep.workspace = true`
+  (`alloy`, `argh`, `serde`, `serde_json`, `sqlx`, `thiserror`, `tokio`, `toml`, `tracing`, and
+  `url`/`futures` as needed), with `safenet-core.path = "../core"`. No crate-local version pins, so
+  versions stay aligned across the workspace.
 
 ### Alternatives Considered
 
@@ -206,11 +219,11 @@ Key decisions:
 
 ```
 crates/sentinel/
-  Cargo.toml                 # deps: safenet-core, alloy, sqlx, tokio, serde, serde_json, thiserror, tracing
+  Cargo.toml                 # name = "sentinel"; workspace deps (dep.workspace = true) + safenet-core.path = "../core"
   # no migrations/ — the snapshot store and tx queue create/own their own tables in safenet-core
   src/
-    main.rs                  # config load, observability init, provider/signer, build service, signals, run
-    config.rs                # serde Config (observability + index + tx + sentinel fields) + env/file sourcing
+    main.rs                  # argh Options (--config-file/--version), Config::load, observability::init, build service, run
+    config.rs                # TOML Config (observability + index + tx + sentinel fields), #[serde(default)], async load()
     error.rs                 # crate error type (thiserror)
     bindings.rs              # sol!: SentinelOracle + Consensus events/calls, ERC20; SafeTx / *Proposal EIP-712 structs
     hashing.rs               # request_id(domain, proposal) + safe_tx_hash(tx) via eip712_signing_hash (+ parity vectors)
@@ -224,6 +237,32 @@ crates/sentinel/
 ```
 
 Modules are introduced only when first used (no empty stubs), matching the core crate's convention.
+
+### Cargo manifest
+
+Mirrors `crates/validator/Cargo.toml`: a bare package name and workspace-inherited dependencies, so
+no versions are pinned in the crate itself. Any new shared dependency is added to the root
+`[workspace.dependencies]` first, then referenced with `.workspace = true`.
+
+```toml
+[package]
+name = "sentinel"
+version = "0.2.0"
+edition = "2024"
+publish = false
+
+[dependencies]
+safenet-core.path = "../core"
+alloy.workspace = true        # primitives, sol!, EIP-712, provider, signer
+argh.workspace = true         # CLI
+serde.workspace = true
+serde_json.workspace = true   # snapshot/transition (de)serialization
+sqlx.workspace = true         # shared SqlitePool
+thiserror.workspace = true
+tokio.workspace = true
+toml.workspace = true         # config file
+tracing.workspace = true
+```
 
 ### Onchain bindings & hashing (`bindings.rs`, `hashing.rs`)
 
@@ -315,10 +354,11 @@ Modules are introduced only when first used (no empty stubs), matching the core 
 
 ### Tooling
 
-- Per `AGENTS.md`: `cargo fmt --all`, `cargo clippy --package safenet-sentinel`,
-  `cargo test --package safenet-sentinel`. `Cargo.lock` committed.
-- Dependency features stay permissive during implementation (e.g. `full` on `tokio`/`alloy`) and are
-  narrowed in a wrap-up PR (F2), matching the core crate's approach.
+- Per `AGENTS.md`: `cargo fmt --all`, `cargo clippy --package sentinel`,
+  `cargo test --package sentinel`. `Cargo.lock` committed.
+- Dependency features are inherited from `[workspace.dependencies]` (e.g. `tokio`/`alloy` are already
+  `full` there), so the crate pins no versions or features of its own; new shared deps go to the
+  workspace root.
 
 ---
 
@@ -329,9 +369,13 @@ reviewable. "Depends on" lists hard ordering; everything else may proceed in par
 
 ### Phase A — Foundation, bindings & EIP-712 (blocks all other phases)
 
-- **A1 — Crate scaffolding & dependencies.** New `crates/sentinel` binary crate, added to the
-  workspace; dependency set (`safenet-core`, `alloy`, `sqlx`, `tokio`, `serde`, `serde_json`,
-  `thiserror`, `tracing`); commit `Cargo.lock`. No empty module stubs. _Single purpose: dependencies._
+- **A1 — Crate scaffolding & dependencies.** New `crates/sentinel` binary crate (package `sentinel`),
+  picked up by the existing `members = ["crates/*"]` glob; dependencies inherited from
+  `[workspace.dependencies]` via `dep.workspace = true` plus `safenet-core.path = "../core"` (see the
+  Cargo manifest above), adding any missing shared dep to the workspace root first; commit
+  `Cargo.lock`. A minimal `argh` + `Config::load` + `observability::init` `main.rs` (like the
+  `validator` scaffold) is enough to get a runnable binary. No empty module stubs.
+  _Single purpose: scaffold the crate and its dependencies._
 - **A2 — Onchain bindings.** `bindings.rs`: `sol!` for SentinelOracle + Consensus events/calls and
   ERC-20, plus the `SafeTx`/`TransactionProposal`/`OracleTransactionProposal` EIP-712 structs.
   Depends on A1.
@@ -368,8 +412,9 @@ reviewable. "Depends on" lists hard ordering; everything else may proceed in par
   `TransactionQueue` over the shared pool; run the watcher loop, feeding each `Update::Block` to both
   the state machine and `TransactionQueue::handle_block_update`, and queueing the actions the state
   machine returns. Depends on B2, C2, D2.
-- **E2 — Config & binary.** `config.rs` (`serde` config) + `main.rs` (env/file load, observability
-  init, provider + `tx::Signer`, shared pool, signals, run). Depends on E1.
+- **E2 — Config & binary.** Flesh out `config.rs` (the composed TOML `Config`) and `main.rs` (the
+  `argh` `Options`, `Config::load`, `observability::init`, building the provider + `tx::Signer` +
+  shared pool, then running the service) — extending the A1 scaffold to the full wiring. Depends on E1.
 
 ### Phase F — Validation & wrap-up
 
@@ -377,9 +422,10 @@ reviewable. "Depends on" lists hard ordering; everything else may proceed in par
   (extend `scripts/`/integration tests), asserting it commits/finalizes/claims correctly and
   interoperates with the TS sentinel in a shared dispute — the deliverable's "work together onchain"
   acceptance check. Depends on E2.
-- **F2 — Docs, feature narrowing & cleanup.** Update `README.md`/`AGENTS.md` to list the new crate;
-  narrow `alloy`/`tokio` features to what is used; refresh `Cargo.lock`. Depends on all
-  implementation phases.
+- **F2 — Docs & cleanup.** Update `README.md`/`AGENTS.md` to list the new `sentinel` crate. No
+  per-crate feature narrowing is needed since dependency features are inherited from
+  `[workspace.dependencies]`; if any shared dependency's feature set was widened for the sentinel,
+  reconcile it at the workspace level here. Depends on all implementation phases.
 - **Cleanup.** Per the planning convention, **remove this epic file**
   (`epics/2026_06_25_rust_sentinel_port.md`) once the epic is complete.
 
@@ -406,11 +452,7 @@ available, so there is no external gating dependency.
    derive `expires_at` from the request deadline / voting window, and set `gas` from a
    `provider.estimate_gas` per action (falling back to per-action constants if estimation is
    undesirable). Confirm the exact expiry policy per action type.
-3. **Config format & sourcing.** Keep the TS env-var names (`SENTINEL_ORACLE_ADDRESS`,
-   `SENTINEL_VOTING_WINDOW`, …) for operational continuity, or move to a TOML file like the
-   `validator-rust` spike? Config compatibility is not required, so either is acceptable.
-4. **Crate name/location.** Proposed `crates/sentinel` / `safenet-sentinel`. Confirm.
-5. **Fee configuration mapping.** The TS entrypoint attaches `ChainFees`
+3. **Fee configuration mapping.** The TS entrypoint attaches `ChainFees`
    (`baseFeeMultiplier`, `maxPriorityFeePerGas`) via `viem extractChain`. The Rust
    `tx::Config` exposes `priority_fee_cap_percentage`, `max_in_flight_transactions` and
    `blocks_before_resubmit`, and `alloy`'s `estimate_eip1559_fees` handles base-fee headroom
@@ -425,6 +467,9 @@ available, so there is no external gating dependency.
   the deliverable).
 - The port **reuses `safenet-core`** for indexing, observability, reorg-aware state, transaction
   submission, and the SQLite foundation rather than re-implementing them.
+- The crate **follows the sibling `validator` crate's conventions**: package name `sentinel`,
+  workspace-inherited dependencies (`dep.workspace = true`), an `argh` CLI, and a TOML config file
+  (`sentinel.toml`). This settles the earlier crate-name and config-format questions.
 - It is a greenfield Rust **binary**; the TS sentinel remains the reference implementation during the
   port, with no FFI, and both can run against the same `SentinelOracle`.
 - `alloy` is the EVM library; EIP-712 hashing is done via `sol!` structs and
