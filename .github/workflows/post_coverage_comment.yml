@@ -1,0 +1,40 @@
+name: Post Coverage Comment
+
+on:
+  workflow_run:
+    workflows: ["ci"]
+    types:
+      - completed
+
+permissions:
+  contents: read
+  actions: read
+  pull-requests: write
+
+jobs:
+  post-comment:
+    runs-on: ubuntu-latest
+    if: github.event.workflow_run.event == 'pull_request'
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Download Coverage Artifact
+        id: download
+        uses: actions/download-artifact@v4
+        with:
+          name: coverage-comment
+          run-id: ${{ github.event.workflow_run.id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Read Issue Number
+        id: artifact
+        shell: bash
+        run: echo "issue-number=$(cat issue-number.txt)" >> $GITHUB_OUTPUT
+
+      - name: Post Coverage Comment
+        uses: ./.github/actions/post-comment
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          issue-number: ${{ steps.artifact.outputs.issue-number }}
+          content-file: coverage-report.md
+          marker: "<!-- coverage-report -->"
