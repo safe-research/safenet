@@ -57,7 +57,9 @@ pub enum InitError {
 /// It can only succeed once per process; a later call returns an [`InitError`].
 pub fn init(config: Config) -> Result<(), InitError> {
     logging::init(config.log_filter)?;
-    metrics::serve(config.metrics_address)?;
+    let metrics_addr = metrics::serve(config.metrics_address)?;
+
+    tracing::info!(%metrics_addr, "serving prometheus metrics and health endpoint");
     Ok(())
 }
 
