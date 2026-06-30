@@ -3,8 +3,17 @@
 /// Deserialization helper to use the [`std::str::FromStr`] implementation to
 /// deserialize from a string value.
 pub mod from_str {
-    use serde::{Deserialize as _, Deserializer, de};
+    use serde::{Deserialize as _, Deserializer, Serializer, de};
     use std::{borrow::Cow, fmt::Display, str::FromStr};
+
+    #[doc(hidden)]
+    pub fn serialize<S, T>(value: &T, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+        T: Display,
+    {
+        serializer.collect_str(value)
+    }
 
     #[doc(hidden)]
     pub fn deserialize<'de, D, T>(deserializer: D) -> Result<T, D::Error>
