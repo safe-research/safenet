@@ -15,7 +15,7 @@ use crate::{
 use alloy::{primitives::Address, providers::Provider};
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
 use sqlx::sqlite::SqlitePool;
-use std::{pin::Pin, time::Duration};
+use std::{fmt::Debug, pin::Pin, time::Duration};
 
 /// How long to wait after a failed step before retrying, to avoid spinning on a
 /// persistent failure (such as an unreachable RPC node).
@@ -86,7 +86,7 @@ impl<P, S> Driver<P, S>
 where
     P: Provider + Clone,
     S: Service,
-    S::Event: Events,
+    S::Event: Events + Debug,
 {
     /// Creates a driver that wires together the indexer, state machine and
     /// transaction queue for `service`.
@@ -172,6 +172,7 @@ where
             _ = shutdown => return Ok(Loop::Break),
             update = self.watcher.next() => update?,
         };
+        tracing::trace!(?update, "received watcher update");
 
         // Block updates drive the transaction queue's per-block housekeeping
         // (marking executed transactions, pruning, resubmitting and submitting).

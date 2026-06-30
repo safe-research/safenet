@@ -1,8 +1,11 @@
 mod config;
+mod service;
 
-use self::config::Config;
+use self::{config::Config, service::DummyService};
+use alloy::{primitives::Address, providers::ProviderBuilder};
 use argh::FromArgs;
-use safenet_core::observability;
+use safenet_core::{Driver, observability};
+use sqlx::sqlite::SqlitePool;
 use std::{error::Error, path::PathBuf};
 
 #[derive(Debug, FromArgs)]
@@ -27,7 +30,25 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     let config = Config::load(&options.config_file).await?;
     observability::init(config.observability)?;
-
     tracing::debug!(config_file = %options.config_file.display(), "validator configuration loaded");
+
+    let provider = ProviderBuilder::new().connect(config.rpc.as_str()).await?;
+    let pool = SqlitePool::connect_with(config.database).await?;
+
+    // The watched contract addresses and events are placeholders until the real
+    // validator service is implemented.
+    let driver = Driver::new(
+        DummyService,
+        provider,
+        config.signer,
+        pool,
+        vec![Address::ZERO],
+        config.driver,
+    )
+    .await?;
+
+    tracing::info!("starting validator service");
+    driver.run().await;
+
     Ok(())
 }
