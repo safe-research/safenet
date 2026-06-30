@@ -11,6 +11,7 @@ use alloy::{
     },
 };
 use serde::{Deserialize, Deserializer, de};
+use std::fmt::{self, Debug, Formatter};
 
 /// An error ECDSA signing a transaction.
 #[derive(Debug, thiserror::Error)]
@@ -19,9 +20,7 @@ pub struct SigningError;
 
 /// A local account that signs and submits transactions onchain on behalf of a
 /// service.
-pub struct Signer {
-    signer: PrivateKeySigner,
-}
+pub struct Signer(PrivateKeySigner);
 
 /// A raw signed transaction.
 pub struct SignedTransaction(Vec<u8>);
@@ -30,18 +29,18 @@ impl Signer {
     /// Creates an account for the given `private_key`.
     pub fn new(private_key: SigningKey) -> Self {
         let signer = PrivateKeySigner::from_signing_key(private_key);
-        Self { signer }
+        Self(signer)
     }
 
     /// The address of the local account.
     pub fn address(&self) -> Address {
-        self.signer.address()
+        self.0.address()
     }
 
     /// Signs a transaction.
     pub fn sign_transaction(&self, mut tx: TxEip1559) -> Result<SignedTransaction, SigningError> {
         let signature = self
-            .signer
+            .0
             .sign_transaction_sync(&mut tx)
             .map_err(|_| SigningError)?;
         let raw_tx = tx.into_signed(signature).encoded_2718();
@@ -75,6 +74,12 @@ impl<'de> Deserialize<'de> for Signer {
         let result = SigningKey::from_slice(raw.as_slice());
         raw.0.zeroize();
         result.map(Signer::new).map_err(de::Error::custom)
+    }
+}
+
+impl Debug for Signer {
+    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
+        f.debug_tuple("Signer").field(&self.address()).finish()
     }
 }
 
