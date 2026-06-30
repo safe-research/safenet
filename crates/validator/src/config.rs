@@ -48,6 +48,7 @@ impl Default for Config {
     fn default() -> Self {
         Self {
             rpc: "http://localhost:8545".parse().unwrap(),
+            // The default Anvil signer.
             signer: SigningKey::from_slice(
                 b"\xac\x09\x74\xbe\xc3\x9a\x17\xe3\x6b\xa4\xa6\xb4\xd2\x38\xff\x94\
                   \x4b\xac\xb4\x78\xcb\xed\x5e\xfc\xae\x78\x4d\x7b\xf4\xf2\xff\x80",
