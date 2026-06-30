@@ -149,7 +149,6 @@ impl From<TryFromIntError> for Error {
 mod tests {
     use super::*;
     use serde::Deserialize;
-    use sqlx::sqlite::SqlitePoolOptions;
 
     #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
     struct State {
@@ -161,11 +160,7 @@ mod tests {
     }
 
     async fn store() -> SnapshotStore<State> {
-        let pool = SqlitePoolOptions::new()
-            .max_connections(1)
-            .connect_with("sqlite::memory:".parse().unwrap())
-            .await
-            .unwrap();
+        let pool = SqlitePool::connect("sqlite::memory:").await.unwrap();
         SnapshotStore::new(pool).await.unwrap()
     }
 

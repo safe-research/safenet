@@ -10,15 +10,27 @@
 use crate::{
     index::{self, Update, Watcher, events::Events},
     state::{self, StateMachine, StateTransition},
-    tx::{self, Transaction, TransactionQueue},
+    tx::{self, Signer, Transaction, TransactionQueue},
 };
-use alloy::providers::Provider;
-use serde::{Serialize, de::DeserializeOwned};
+use alloy::{primitives::Address, providers::Provider};
+use serde::{Deserialize, Serialize, de::DeserializeOwned};
+use sqlx::sqlite::SqlitePool;
 use std::{pin::Pin, time::Duration};
 
 /// How long to wait after a failed step before retrying, to avoid spinning on a
 /// persistent failure (such as an unreachable RPC node).
 const STEP_RETRY_DELAY: Duration = Duration::from_millis(100);
+
+/// Driver configuration, aggregating the configuration of each component the
+/// driver wires together.
+#[derive(Clone, Debug, Default, Deserialize, PartialEq)]
+#[serde(default)]
+pub struct Config {
+    /// Indexer (block and event watcher) configuration.
+    pub index: index::Config,
+    /// Transaction queue configuration.
+    pub transactions: tx::Config,
+}
 
 /// Whether the [`Driver::run`] loop should keep processing updates or stop.
 enum Loop {
@@ -76,19 +88,43 @@ where
     S: Service,
     S::Event: Events,
 {
-    /// Creates a driver from the service and the components it coordinates.
-    pub fn new(
+    /// Creates a driver that wires together the indexer, state machine and
+    /// transaction queue for `service`.
+    ///
+    /// The indexer follows the events emitted by `addresses`, and the
+    /// transaction queue signs `chain_id` transactions with `signer`; both the
+    /// state snapshots and the transaction queue persist to `pool`. The indexer
+    /// resumes from the last committed state snapshot so it stays in lock-step
+    /// with the state machine.
+    pub async fn new(
         service: S,
-        watcher: Watcher<P, S::Event>,
-        state: StateMachine<S::State, S>,
-        transactions: TransactionQueue<P>,
-    ) -> Self {
-        Self {
+        provider: P,
+        signer: Signer,
+        pool: SqlitePool,
+        addresses: Vec<Address>,
+        config: Config,
+    ) -> Result<Self, Error>
+    where
+        S: Clone,
+        S::State: Default,
+    {
+        let state = StateMachine::new(service.clone(), pool.clone()).await?;
+        let watcher = Watcher::new(
+            provider.clone(),
+            config.index,
+            addresses,
+            state.last_block().await,
+        )
+        .await?;
+        let transactions =
+            TransactionQueue::new(provider, signer, pool, config.transactions).await?;
+
+        Ok(Self {
             service,
             watcher,
             state,
             transactions,
-        }
+        })
     }
 
     /// Runs the service, processing indexer updates until a shutdown signal

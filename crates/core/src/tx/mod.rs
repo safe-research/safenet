@@ -104,11 +104,11 @@ where
     /// persists its state in `pool`.
     pub async fn new(
         provider: P,
-        chain_id: u64,
         signer: Signer,
         pool: SqlitePool,
         config: Config,
     ) -> Result<Self, Error> {
+        let chain_id = provider.get_chain_id().await?;
         let storage = TransactionStorage::new(pool).await?;
         Ok(Self {
             provider,
@@ -408,7 +408,6 @@ mod tests {
         signers::k256::ecdsa::SigningKey,
         transports::mock::Asserter,
     };
-    use sqlx::sqlite::SqlitePoolOptions;
 
     const CHAIN_ID: u64 = 1;
     const ENTRY_POINT: Address = address!("0x5FF137D4b0FDCD49DcA30c7CF57E578a026d2789");
@@ -416,14 +415,11 @@ mod tests {
     /// A transaction queue backed by a mocked RPC client and an in-memory pool.
     async fn queue(asserter: &Asserter) -> TransactionQueue<RootProvider> {
         let provider = ProviderBuilder::default().connect_mocked_client(asserter.clone());
+        asserter.push_success(&U64::from(CHAIN_ID));
         let private_key = SigningKey::from_slice(keccak256("test signer").as_slice()).unwrap();
         let signer = Signer::new(private_key);
-        let pool = SqlitePoolOptions::new()
-            .max_connections(1)
-            .connect_with("sqlite::memory:".parse().unwrap())
-            .await
-            .unwrap();
-        TransactionQueue::new(provider, CHAIN_ID, signer, pool, Config::default())
+        let pool = SqlitePool::connect("sqlite://:memory:").await.unwrap();
+        TransactionQueue::new(provider, signer, pool, Config::default())
             .await
             .unwrap()
     }
