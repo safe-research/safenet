@@ -13,6 +13,7 @@
 pub mod driver;
 pub mod index;
 pub mod observability;
+pub mod serialization;
 pub mod state;
 pub mod tx;
 
