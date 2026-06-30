@@ -98,6 +98,8 @@ mod tests {
         // through the driver and indexer configs) is parsed into place.
         let config = toml::from_str::<Config>(
             r#"
+                rpc = "https://eth.llamarpc.com"
+                signer = "0x0000000000000000000000000000000000000000000000000000000000000001"
                 database = "sqlite:validator.db"
 
                 [observability]
@@ -112,6 +114,19 @@ mod tests {
         )
         .unwrap();
 
+        assert_eq!(config.rpc.as_str(), "https://eth.llamarpc.com/");
+        // Computed with:
+        //
+        // ```
+        // import { privateKeyToAddress } from "viem/accounts";
+        // console.log(privateKeyToAddress(
+        //     "0x0000000000000000000000000000000000000000000000000000000000000001",
+        // ));
+        // ```
+        assert_eq!(
+            config.signer.address(),
+            address!("0x7E5F4552091A69125d5DfCb7b8C2659029395Bdf")
+        );
         assert_eq!(config.database.get_filename(), "validator.db");
         assert_eq!(
             config.observability.log_filter.to_string(),
