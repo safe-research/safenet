@@ -6,7 +6,7 @@ publish = false
 
 [dependencies]
 argh.workspace = true
-safenet-core.path = "../core"
+safenet-core.workspace = true
 serde.workspace = true
 thiserror.workspace = true
 tokio.workspace = true
