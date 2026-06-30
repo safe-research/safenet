@@ -3,6 +3,7 @@
 .env
 anvil_logs.txt
 build/
+coverage-report.md
 coverage/
 dist/
 foundry.lock

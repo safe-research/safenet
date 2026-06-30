@@ -1,0 +1,38 @@
+name: "Install cargo-llvm-cov"
+description: "Installs a pinned cargo-llvm-cov release binary (x86_64 Linux) and the llvm-tools-preview component it requires"
+
+runs:
+  using: "composite"
+  steps:
+    # We install a prebuilt release binary directly from GitHub rather than
+    # building from source or relying on a third-party action. The archive
+    # checksum is verified against the value pinned below, which is taken from
+    # taiki-e/install-action's manifest:
+    # https://github.com/taiki-e/install-action/blob/main/manifests/cargo-llvm-cov.json
+    - name: Install cargo-llvm-cov
+      shell: bash
+      env:
+        VERSION: "0.8.7"
+        SHA256: "967b5cc996c29d8baa52bbb4595ef1f53af35255af8e2036ddbc6468d7b523c7"
+      run: |
+        set -euo pipefail
+
+        url="https://github.com/taiki-e/cargo-llvm-cov/releases/download/v${VERSION}/cargo-llvm-cov-x86_64-unknown-linux-musl.tar.gz"
+
+        echo "⬇️ Downloading cargo-llvm-cov v${VERSION}..."
+        curl --proto '=https' --tlsv1.2 -fsSL "$url" -o /tmp/cargo-llvm-cov.tar.gz
+
+        echo "🔒 Verifying SHA-256 checksum..."
+        echo "${SHA256}  /tmp/cargo-llvm-cov.tar.gz" | sha256sum --check -
+
+        # Extract the binary into the Cargo binary directory.
+        mkdir -p "$HOME/.cargo/bin"
+        tar -xzf /tmp/cargo-llvm-cov.tar.gz -C "$HOME/.cargo/bin"
+
+        cargo llvm-cov --version
+
+    # cargo-llvm-cov relies on the llvm-tools-preview component being installed
+    # for the active toolchain.
+    - name: Install llvm-tools-preview
+      shell: bash
+      run: rustup component add llvm-tools-preview

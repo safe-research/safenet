@@ -2,7 +2,7 @@ name: Post Coverage Comment
 
 on:
   workflow_run:
-    workflows: ["ci"]
+    workflows: ["coverage"]
     types:
       - completed
 
@@ -16,8 +16,6 @@ jobs:
     runs-on: ubuntu-latest
     if: github.event.workflow_run.event == 'pull_request' && github.event.workflow_run.conclusion == 'success'
     steps:
-      - uses: actions/checkout@v5
-
       - name: Download Coverage Artifact
         id: download
         uses: actions/download-artifact@v4
