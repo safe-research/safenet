@@ -9,6 +9,7 @@ pub mod storage;
 use self::storage::SnapshotStore;
 use crate::index::{BlockUpdate, EventUpdate, Update};
 use serde::{Serialize, de::DeserializeOwned};
+use sqlx::SqlitePool;
 use std::{mem, range::RangeInclusive};
 use tokio::sync::Mutex;
 
@@ -78,20 +79,21 @@ where
     S: Serialize + DeserializeOwned,
 {
     /// Creates a new state machine with the given state transition.
-    pub async fn new(transition: T, snapshots: SnapshotStore<S>) -> Result<Self, Error>
+    pub async fn new(transition: T, pool: SqlitePool) -> Result<Self, Error>
     where
         S: Default,
     {
-        Self::with_init(transition, snapshots, S::default).await
+        Self::with_init(transition, pool, S::default).await
     }
 
     /// Creates a new state machine with the given state transition and an
     /// initial value constructor.
     pub async fn with_init(
         transition: T,
-        snapshots: SnapshotStore<S>,
+        pool: SqlitePool,
         init: impl FnOnce() -> S,
     ) -> Result<Self, Error> {
+        let snapshots = SnapshotStore::new(pool).await?;
         let (state, status) = snapshots
             .current()
             .await?
@@ -108,6 +110,23 @@ where
             transition,
             snapshots,
         })
+    }
+
+    /// Returns the last block that was fully processed by the state machine.
+    /// Note that this only counts fully processed blocks.
+    pub async fn last_block(&self) -> Option<u64> {
+        match self.inner.lock().await.as_ref()?.status {
+            Status::Initialized => None,
+            Status::BlockPending { pending } => pending.checked_sub(1),
+            // This is a bit counter-intuitive, but if we observed the latest
+            // block `N` and are waiting for its events, then we have only
+            // completely processed block `N-1`. This should correspond to the
+            // block returned by `snapshots.current` without round-tripping to
+            // the database. Note that the `WarpEvents` status's starting block
+            // gets updated as event updates are processed.
+            Status::BlockEvents { latest } => latest.checked_sub(1),
+            Status::WarpEvents { range } => range.start.checked_sub(1),
+        }
     }
 
     /// Handle an indexer update.
@@ -204,7 +223,6 @@ mod tests {
     use super::*;
     use crate::index::{BlockUpdate, EventUpdate, Update};
     use serde::Deserialize;
-    use sqlx::sqlite::{SqlitePool, SqlitePoolOptions};
 
     /// State that records every block and event it was transitioned with, so
     /// transitions, rollbacks and resumes are all observable.
@@ -244,16 +262,13 @@ mod tests {
     }
 
     async fn pool() -> SqlitePool {
-        SqlitePoolOptions::new()
-            .max_connections(1)
-            .connect_with("sqlite::memory:".parse().unwrap())
-            .await
-            .unwrap()
+        SqlitePool::connect("sqlite::memory:").await.unwrap()
     }
 
     async fn new_machine(pool: &SqlitePool) -> StateMachine<TestState, TestTransition> {
-        let snapshots = SnapshotStore::new(pool.clone()).await.unwrap();
-        StateMachine::new(TestTransition, snapshots).await.unwrap()
+        StateMachine::new(TestTransition, pool.clone())
+            .await
+            .unwrap()
     }
 
     /// Reads back the committed tip snapshot through a separate store over the

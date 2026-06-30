@@ -312,16 +312,11 @@ impl From<TryFromIntError> for Error {
 mod tests {
     use super::*;
     use alloy::primitives::{Address, Bytes, address};
-    use sqlx::sqlite::SqlitePoolOptions;
 
     const ENTRY_POINT: Address = address!("0x5FF137D4b0FDCD49DcA30c7CF57E578a026d2789");
 
     async fn storage() -> TransactionStorage {
-        let pool = SqlitePoolOptions::new()
-            .max_connections(1)
-            .connect_with("sqlite::memory:".parse().unwrap())
-            .await
-            .unwrap();
+        let pool = SqlitePool::connect("sqlite://:memory:").await.unwrap();
         TransactionStorage::new(pool).await.unwrap()
     }
 
