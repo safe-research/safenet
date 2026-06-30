@@ -1,6 +1,8 @@
 mod bindings;
 mod config;
+mod detector;
 mod hashing;
+mod state;
 
 use self::config::Config;
 use argh::FromArgs;
