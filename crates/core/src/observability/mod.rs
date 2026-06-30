@@ -1,11 +1,9 @@
 //! Observability helpers shared across Safenet services: a default `tracing`
 //! logging setup and a Prometheus metrics exporter.
 
-use serde::{Deserialize, Deserializer, de};
-use std::{
-    borrow::Cow,
-    net::{Ipv4Addr, SocketAddr},
-};
+use crate::serialization;
+use serde::Deserialize;
+use std::net::{Ipv4Addr, SocketAddr};
 use tracing_subscriber::EnvFilter;
 
 pub mod logging;
@@ -20,7 +18,7 @@ pub mod metrics;
 pub struct Config {
     /// The `tracing` env-filter directive controlling log verbosity (see
     /// [`logging::init`]). Defaults to `info`.
-    #[serde(deserialize_with = "deserialize_log_filter")]
+    #[serde(with = "serialization::from_str")]
     pub log_filter: EnvFilter,
     /// The address the Prometheus metrics HTTP listener binds to (see
     /// [`metrics::serve`]). Defaults to `127.0.0.1:0`, which picks an ephemeral
@@ -61,13 +59,6 @@ pub fn init(config: Config) -> Result<(), InitError> {
 
     tracing::info!(%metrics_addr, "serving prometheus metrics and health endpoint");
     Ok(())
-}
-
-fn deserialize_log_filter<'de, D>(deserializer: D) -> Result<EnvFilter, D::Error>
-where
-    D: Deserializer<'de>,
-{
-    EnvFilter::try_new(Cow::deserialize(deserializer)?).map_err(de::Error::custom)
 }
 
 #[cfg(test)]
