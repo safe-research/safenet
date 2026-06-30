@@ -1,0 +1,73 @@
+name: "Post PR Comment"
+description: "Creates or updates a PR comment, identified by an optional marker string"
+inputs:
+  github-token:
+    description: "The GITHUB_TOKEN required to post comments"
+    required: true
+  issue-number:
+    description: "The PR/issue number to comment on"
+    required: true
+  content:
+    description: "The markdown content of the comment"
+    required: false
+    default: ""
+  content-file:
+    description: "Path to a file containing the comment body (takes precedence over content)"
+    required: false
+    default: ""
+  marker:
+    description: "A unique string within the comment body used to find and update an existing comment. If omitted, always creates a new comment."
+    required: false
+    default: ""
+
+runs:
+  using: "composite"
+  steps:
+    - name: Post or Update Comment
+      uses: actions/github-script@v6
+      env:
+        ISSUE_NUMBER: ${{ inputs.issue-number }}
+        CONTENT: ${{ inputs.content }}
+        CONTENT_FILE: ${{ inputs.content-file }}
+        MARKER: ${{ inputs.marker }}
+      with:
+        github-token: ${{ inputs.github-token }}
+        script: |
+          const issueNumber = parseInt(process.env.ISSUE_NUMBER);
+          const marker = process.env.MARKER;
+          const contentFile = process.env.CONTENT_FILE;
+          const content = contentFile
+            ? require('fs').readFileSync(contentFile, 'utf8')
+            : process.env.CONTENT;
+
+          if (!content) {
+            core.setFailed('post-comment: either content or content-file must be provided and non-empty.');
+            return;
+          }
+
+          let existingComment;
+          if (marker) {
+            const comments = await github.paginate(github.rest.issues.listComments, {
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: issueNumber,
+              per_page: 100,
+            });
+            existingComment = comments.find(c => c.body.includes(marker));
+          }
+
+          if (existingComment) {
+            await github.rest.issues.updateComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              comment_id: existingComment.id,
+              body: content,
+            });
+          } else {
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: issueNumber,
+              body: content,
+            });
+          }
