@@ -1,5 +1,6 @@
 mod bindings;
 mod config;
+mod hashing;
 
 use self::config::Config;
 use argh::FromArgs;
