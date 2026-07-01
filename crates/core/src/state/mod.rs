@@ -11,7 +11,7 @@ use crate::index::{BlockUpdate, EventLog, EventUpdate, Update};
 use serde::{Serialize, de::DeserializeOwned};
 use sqlx::SqlitePool;
 use std::{mem, range::RangeInclusive};
-use tokio::sync::Mutex;
+use tokio::sync::{Mutex, MutexGuard};
 
 /// Error produced by the [`StateMachine`].
 #[derive(Debug, thiserror::Error)]
@@ -35,21 +35,27 @@ pub enum Error {
 /// A state transition message.
 ///
 /// This describes any of the inputs that cause the state machine to progress.
-pub enum Message<Event, Continuation> {
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum Message<Event, Resume> {
     /// A new block.
     NewBlock(u64),
     /// A new event.
     Event(EventLog<Event>),
-    /// A continuation from an effect.
-    Continuation(Continuation),
+    /// Resume from an effect.
+    ///
+    /// Effects are returned from state transition functions and represent some
+    /// impure computation that needs to be performed, in which case a resume
+    /// transition will be applied to the state machine once completed. The
+    /// order in which effects resume is not well-defined and subject to change;
+    /// implementations MUST NOT rely on effect resume ordering.
+    Resume(Resume),
 }
 
 /// A state transition command.
 ///
 /// Commands are returned from state machine transitions and are either actions
-/// that need to be executed onchain, or represent some effect that needs to be
-/// performed, in which case a continuation transition will be applied to the
-/// state machine once completed.
+/// that need to be executed onchain, or represent some
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Command<Action, Effect> {
     /// An onchain action.
     Action(Action),
@@ -66,7 +72,7 @@ where
     S: Sized,
 {
     type Event;
-    type Continuation;
+    type Resume;
     type Action;
     type Effect;
 
@@ -74,11 +80,12 @@ where
     fn apply(
         &self,
         state: S,
-        message: Message<Self::Event, Self::Continuation>,
+        message: Message<Self::Event, Self::Resume>,
     ) -> (S, Commands<S, Self>);
 }
 
-type Commands<S, T> =
+/// A utility type for a vector of commands for some state and its transition.
+pub type Commands<S, T> =
     Vec<Command<<T as StateTransition<S>>::Action, <T as StateTransition<S>>::Effect>>;
 
 /// A service state machine.
@@ -160,7 +167,7 @@ where
     pub async fn handle_update(
         &mut self,
         update: Update<T::Event>,
-    ) -> Result<Commands<S, T>, Error> {
+    ) -> Result<(Continuation<'_, S, T>, Commands<S, T>), Error> {
         let mut lock = self.inner.lock().await;
         let (state, status) = mem::take(&mut *lock).ok_or(Error::Poisoned)?;
         let (state, status, commands) = match update {
@@ -237,15 +244,32 @@ where
         *lock = Some((state, status));
         Ok(commands)
     }
+}
 
+/// The continuation from a state machine update.
+///
+/// This continuation is used to resume results from effects from an update.
+/// This ensures that effects are applied atomically with the updates that
+/// performed them.
+pub struct Continuation<'a, S, T> {
+    lock: MutexGuard<'a, Option<(S, Status)>>,
+    transition: &'a T,
+    snapshots: Option<&'a mut SnapshotStore<S>>,
+}
+
+impl<'a, S, T> Continuation<'a, S, T>
+where
+    T: StateTransition<S>,
+    S: Serialize + DeserializeOwned,
+{
     /// Handle an effect continuation.
     pub async fn handle_continuation(
         &mut self,
-        cont: T::Continuation,
+        result: T::Resume,
     ) -> Result<Commands<S, T>, Error> {
         let mut lock = self.inner.lock().await;
         let (state, status) = mem::take(&mut *lock).ok_or(Error::Poisoned)?;
-        let (state, commands) = self.transition.apply(state, Message::Continuation(cont));
+        let (state, commands) = self.transition.apply(state, Message::Resume(result));
         *lock = Some((state, status));
         Ok(commands)
     }
@@ -272,6 +296,7 @@ mod tests {
     use super::*;
     use crate::index::{BlockUpdate, EventUpdate, Update};
     use serde::Deserialize;
+    use std::convert::Infallible;
 
     /// State that records every block and event it was transitioned with, so
     /// transitions, rollbacks and resumes are all observable.
@@ -293,24 +318,26 @@ mod tests {
 
     impl StateTransition<TestState> for TestTransition {
         type Event = u64;
+        type Resume = Infallible;
         type Action = Action;
+        type Effect = Infallible;
 
-        async fn new_block(
-            &mut self,
+        fn apply(
+            &self,
             mut state: TestState,
-            block: u64,
-        ) -> (TestState, Vec<Action>) {
-            state.blocks.push(block);
-            (state, vec![Action::Block(block)])
-        }
-
-        async fn event(
-            &mut self,
-            mut state: TestState,
-            event: EventLog<u64>,
-        ) -> (TestState, Vec<Action>) {
-            state.events.push(event.data);
-            (state, vec![Action::Event(event.data)])
+            message: Message<Self::Event, Self::Resume>,
+        ) -> (TestState, Commands<TestState, Self>) {
+            match message {
+                Message::NewBlock(block) => {
+                    state.blocks.push(block);
+                    (state, vec![Command::Action(Action::Block(block))])
+                }
+                Message::Event(event) => {
+                    state.events.push(event.data);
+                    (state, vec![Command::Action(Action::Event(event.data))])
+                }
+                Message::Resume(result) => match result {},
+            }
         }
     }
 
@@ -388,11 +415,14 @@ mod tests {
         // resulting state is committed at the last block of the range.
         assert_eq!(
             machine.handle_update(new_block(1)).await.unwrap(),
-            vec![Action::Block(1)]
+            vec![Command::Action(Action::Block(1))]
         );
         assert_eq!(
             machine.handle_update(logs(1..=1, [10, 20])).await.unwrap(),
-            vec![Action::Event(10), Action::Event(20)]
+            vec![
+                Command::Action(Action::Event(10)),
+                Command::Action(Action::Event(20)),
+            ]
         );
 
         assert_eq!(
@@ -477,11 +507,11 @@ mod tests {
         assert_eq!(machine.handle_update(warp(1, 6)).await.unwrap(), vec![]);
         assert_eq!(
             machine.handle_update(logs(1..=3, [10])).await.unwrap(),
-            vec![Action::Event(10)]
+            vec![Command::Action(Action::Event(10))]
         );
         assert_eq!(
             machine.handle_update(logs(4..=6, [40])).await.unwrap(),
-            vec![Action::Event(40)]
+            vec![Command::Action(Action::Event(40))]
         );
 
         assert_eq!(

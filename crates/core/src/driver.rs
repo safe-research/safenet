@@ -69,8 +69,13 @@ pub trait Service: StateTransition<Self::State> {
     /// has not yet been submitted.
     fn encode_action(&self, actions: Self::Action) -> (Transaction, u64);
 
-    /// Performs an effect and returns a continuation.
-    fn perform_effect(&mut self, effect: Self::Effect) -> impl Future<Output = Self::Continuation>;
+    /// Performs an effect and returns its result to be resumed in the state
+    /// machine.
+    ///
+    /// Note that `perform_effect` explicitly does not fail, and is expected to
+    /// return some result that indicates an error so the state machine can
+    /// handle the effect error internally.
+    fn perform_effect(&mut self, effect: Self::Effect) -> impl Future<Output = Self::Resume>;
 }
 
 /// Drives a [`Service`] by wiring its indexer, state machine and transaction
