@@ -1,0 +1,61 @@
+name: coverage
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+env:
+  FOUNDRY_PROFILE: ci
+
+jobs:
+  coverage:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          submodules: recursive
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "lts/*"
+          cache: "npm"
+
+      - uses: foundry-rs/foundry-toolchain@v1
+        with:
+          # We fix the foundry version because of a formatting bug introduced
+          # in version 1.7.0.
+          # See <https://github.com/foundry-rs/foundry/issues/13362>
+          version: v1.5.1
+
+      - uses: ./.github/actions/install-lcov
+      - uses: ./.github/actions/install-cargo-llvm-cov
+
+      - run: npm ci
+      - run: scripts/generate_coverage_report.sh
+
+      - name: Post Coverage Step Summary
+        run: cat coverage-report.md >> "$GITHUB_STEP_SUMMARY"
+
+      # In case coverage is run for a PR, upload the summary as an artifact
+      # so the privileged post_coverage_comment workflow can post it. This
+      # allows coverage reports to be produced even for fork-PRs.
+      - name: Prepare Coverage Artifact
+        if: github.event_name == 'pull_request'
+        run: |
+          PR_NUMBER=$(jq -r '.pull_request.number' "$GITHUB_EVENT_PATH")
+          if [ "$PR_NUMBER" = "null" ] || [ -z "$PR_NUMBER" ]; then
+            echo "❌ Coverage comment requires a pull_request event context."
+            exit 1
+          fi
+          echo "$PR_NUMBER" > issue-number.txt
+
+      - name: Upload Coverage Artifact
+        if: github.event_name == 'pull_request'
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-comment
+          path: |
+            coverage-report.md
+            issue-number.txt

@@ -1,0 +1,35 @@
+name: "Install LCOV"
+description: "Installs a pinned version of LCOV, caching the installed binaries so they are not rebuilt on every run"
+
+runs:
+  using: "composite"
+  steps:
+    - name: Cache LCOV
+      id: cache
+      uses: actions/cache@v4
+      with:
+        path: ~/.lcov
+        key: lcov-dfeb7505ef372f806ddb280b52a90f41cd8169cd
+
+    - name: Build LCOV
+      if: steps.cache.outputs.cache-hit != 'true'
+      shell: bash
+      run: |
+        # We clone the repository as the version available via apt-get is faulty.
+        echo "⬇️ Cloning LCOV repository..."
+        git clone https://github.com/linux-test-project/lcov.git /tmp/lcov
+
+        # Checkout the specific commit hash (1.16).
+        echo "📍 Checking out commit 1.16..."
+        git -C /tmp/lcov checkout dfeb7505ef372f806ddb280b52a90f41cd8169cd
+
+        # Install into a self-contained prefix that we can cache.
+        make -C /tmp/lcov install PREFIX="$HOME/.lcov"
+        rm -rf /tmp/lcov
+
+    - name: Install LCOV
+      shell: bash
+      run: |
+        # Put the cached binaries on PATH for subsequent steps and verify them.
+        echo "$HOME/.lcov/bin" >> "$GITHUB_PATH"
+        "$HOME/.lcov/bin/lcov" --version
