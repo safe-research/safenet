@@ -9,7 +9,7 @@
 
 use crate::{
     index::{self, Update, Watcher, events::Events},
-    state::{self, EffectProcessor, StateMachine, StateTransition},
+    state::{self, StateMachine, StateTransition},
     tx::{self, Signer, Transaction, TransactionQueue},
 };
 use alloy::{primitives::Address, providers::Provider};
@@ -57,16 +57,10 @@ pub enum Error {
 /// A Safenet service.
 ///
 /// Implementors describe how the service observes the chain (its [`Events`]) and
-/// reacts to it (its [`State`](Service::State) and [`StateTransition`]), and
-/// how the resulting [`Action`](Service::Action)s map onto onchain
-/// transactions.
-pub trait Service:
-    StateTransition<Self::State>
-    + EffectProcessor<
-        <Self as StateTransition<Self::State>>::Effect,
-        Message = <Self as StateTransition<Self::State>>::Message,
-    >
-{
+/// reacts to it (its [`State`](Service::State) and
+/// [`Transition`](Service::Transition)), and how the resulting
+/// [`Action`](Service::Action)s map onto onchain transactions.
+pub trait Service: StateTransition<Self::State> {
     /// The service state, persisted across restarts and rolled back on reorgs.
     type State: Serialize + DeserializeOwned;
 
@@ -188,7 +182,7 @@ where
             self.transactions.handle_block_update(block.clone()).await?;
         }
 
-        let actions = self.state.handle_update(update, &mut self.service).await?;
+        let actions = self.state.handle_update(update).await?;
         if !actions.is_empty() {
             let transactions = self.service.encode_actions(actions);
             self.transactions.queue(transactions).await?;
