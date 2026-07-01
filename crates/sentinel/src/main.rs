@@ -1,7 +1,9 @@
+mod action;
 mod bindings;
 mod config;
 mod detector;
 mod hashing;
+mod service;
 mod state;
 
 use self::config::Config;
