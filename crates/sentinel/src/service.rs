@@ -1,18 +1,21 @@
 use crate::{
     action::{SentinelAction, SentinelActionKind},
-    bindings::oracle::{ERC20, SentinelOracle},
+    bindings::{
+        SentinelEvents,
+        consensus::Consensus,
+        oracle::{ERC20, SentinelOracle},
+    },
+    state::State,
 };
 use alloy::{
     primitives::{Address, U256},
     sol_types::SolCall,
 };
-use safenet_core::tx::Transaction;
+use safenet_core::{Service, index::EventLog, state::StateTransition, tx::Transaction};
 
-/// The sentinel service: maps actions to encoded transactions.
-///
-/// Holds the oracle and fee-token addresses needed to route each action to
-/// the correct contract. Plugs into the `Driver` once it lands (PR #486) by
-/// also implementing `StateTransition` (B2) and `Service` (D1, here).
+/// The sentinel service: drives the request FSM (`preparing -> pending ->
+/// committed -> finalized`) from `SentinelOracle`/`Consensus` events and maps
+/// its actions to encoded transactions.
 pub struct SentinelService {
     oracle: Address,
     fee_token: Address,
@@ -24,17 +27,60 @@ impl SentinelService {
         Self { oracle, fee_token }
     }
 
-    /// Maps each action to a `(Transaction, expires_at)` pair for the queue.
-    ///
-    /// The `expires_at` is the request's voting deadline, forwarded from the
-    /// action so the `TransactionQueue` can drop it if it goes unsubmitted
-    /// past that block.
-    #[cfg_attr(not(test), expect(dead_code))]
-    pub fn encode_actions(&self, actions: Vec<SentinelAction>) -> Vec<(Transaction, u64)> {
-        actions
-            .into_iter()
-            .map(|SentinelAction { kind, expires_at }| (self.encode_action(kind), expires_at))
-            .collect()
+    /// Starts tracking a newly proposed oracle transaction, deciding whether
+    /// we vote to approve or deny it.
+    fn handle_oracle_transaction_proposed(
+        &self,
+        state: State,
+        _event: Consensus::OracleTransactionProposed,
+    ) -> (State, Vec<SentinelAction>) {
+        // TODO: gate on our oracle, derive the request id, run the detector
+        // and start tracking the request as `Preparing`.
+        (state, Vec::new())
+    }
+
+    /// Casts our vote once a tracked request is opened for voting onchain.
+    fn handle_new_request(
+        &self,
+        state: State,
+        _event: SentinelOracle::NewRequest,
+    ) -> (State, Vec<SentinelAction>) {
+        // TODO: only act on a `Preparing` request; emit `ApproveToken` and
+        // the vote, and move it to `Pending`.
+        (state, Vec::new())
+    }
+
+    /// Records that our vote has been committed onchain.
+    fn handle_committed(
+        &self,
+        state: State,
+        _event: SentinelOracle::Committed,
+    ) -> (State, Vec<SentinelAction>) {
+        // TODO: gate on our own account; only move a `Pending` request to
+        // `Committed`.
+        (state, Vec::new())
+    }
+
+    /// Claims the bond for a request we committed on, once its outcome is
+    /// known.
+    fn handle_resolved(
+        &self,
+        state: State,
+        _event: SentinelOracle::OracleResult,
+    ) -> (State, Vec<SentinelAction>) {
+        // TODO: drop the request unconditionally; only emit a `Claim` when
+        // we actually committed onchain (`Committed`/`Finalized`) and either
+        // the vote won or the request timed out.
+        (state, Vec::new())
+    }
+
+    /// Finalizes committed requests and cleans up stale ones once their
+    /// voting deadline has passed.
+    fn handle_block_advance(&self, state: State, _block: u64) -> (State, Vec<SentinelAction>) {
+        // TODO: move past-deadline `Committed` requests to `Finalized` with
+        // a `Finalize` action; drop stale `Preparing`/`Pending`/`Finalized`
+        // requests.
+        (state, Vec::new())
     }
 
     fn encode_action(&self, kind: SentinelActionKind) -> Transaction {
@@ -83,6 +129,52 @@ impl SentinelService {
                 gas: 100_000,
             },
         }
+    }
+}
+
+impl StateTransition<State> for SentinelService {
+    type Event = SentinelEvents;
+    type Action = SentinelAction;
+
+    async fn new_block(&mut self, state: State, block: u64) -> (State, Vec<Self::Action>) {
+        self.handle_block_advance(state, block)
+    }
+
+    async fn event(
+        &mut self,
+        state: State,
+        event: EventLog<Self::Event>,
+    ) -> (State, Vec<Self::Action>) {
+        match event.data {
+            SentinelEvents::Consensus(Consensus::ConsensusEvents::OracleTransactionProposed(
+                event,
+            )) => self.handle_oracle_transaction_proposed(state, event),
+            SentinelEvents::Oracle(SentinelOracle::SentinelOracleEvents::NewRequest(event)) => {
+                self.handle_new_request(state, event)
+            }
+            SentinelEvents::Oracle(SentinelOracle::SentinelOracleEvents::Committed(event)) => {
+                self.handle_committed(state, event)
+            }
+            SentinelEvents::Oracle(SentinelOracle::SentinelOracleEvents::OracleResult(event)) => {
+                self.handle_resolved(state, event)
+            }
+        }
+    }
+}
+
+impl Service for SentinelService {
+    type State = State;
+
+    /// Maps each action to a `(Transaction, expires_at)` pair for the queue.
+    ///
+    /// The `expires_at` is the request's voting deadline, forwarded from the
+    /// action so the `TransactionQueue` can drop it if it goes unsubmitted
+    /// past that block.
+    fn encode_actions(&self, actions: Vec<SentinelAction>) -> Vec<(Transaction, u64)> {
+        actions
+            .into_iter()
+            .map(|SentinelAction { kind, expires_at }| (self.encode_action(kind), expires_at))
+            .collect()
     }
 }
 

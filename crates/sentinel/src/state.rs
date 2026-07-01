@@ -26,7 +26,6 @@ pub struct SentinelRequestState {
 /// Serialized per block by the `StateMachine`; `B256` keys round-trip through
 /// serde_json as their hex representation.
 #[derive(Debug, Default, Clone, Serialize, Deserialize)]
-#[cfg_attr(not(test), expect(dead_code))]
 pub struct State(pub HashMap<B256, SentinelRequestState>);
 
 #[cfg(test)]
