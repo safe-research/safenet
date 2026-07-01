@@ -5,15 +5,6 @@ pub mod oracle {
 
     sol! {
         #[derive(Debug)]
-        enum SentinelOracleRequestState {
-            PENDING,
-            FROZEN,
-            RESOLVED_APPROVED,
-            RESOLVED_DENIED,
-            TIMED_OUT
-        }
-
-        #[derive(Debug)]
         contract SentinelOracle {
             event NewRequest(
                 bytes32 indexed requestId,
@@ -34,17 +25,6 @@ pub mod oracle {
                 address indexed proposer,
                 bytes result,
                 bool approved
-            );
-            event Claimed(
-                bytes32 indexed requestId,
-                address indexed sentinel,
-                uint256 bondReturn,
-                uint256 feeReward
-            );
-            event DisputeResolved(
-                bytes32 indexed requestId,
-                SentinelOracleRequestState outcome,
-                uint256 slashed
             );
 
             function commitApprove(bytes32 requestId) external;
