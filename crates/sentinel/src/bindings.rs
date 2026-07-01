@@ -4,6 +4,17 @@ pub mod oracle {
     use alloy::sol;
 
     sol! {
+        // Mirrors `SentinelOracleRequests.ResolveReason` in
+        // `contracts/src/libraries/SentinelOracleRequests.sol`; `OracleResult.result` is
+        // `abi.encode`d as this type.
+        #[derive(Debug, PartialEq, Eq)]
+        enum ResolveReason {
+            UNANIMOUS_APPROVE,
+            UNANIMOUS_DENY,
+            TIMEOUT,
+            ARBITRATION
+        }
+
         #[derive(Debug)]
         contract SentinelOracle {
             event NewRequest(
