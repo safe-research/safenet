@@ -2,7 +2,6 @@ use alloy::primitives::{B256, U256};
 
 /// An action emitted by the sentinel during a state transition.
 #[derive(Debug, Clone, PartialEq, Eq)]
-#[cfg_attr(not(test), expect(dead_code))]
 pub enum SentinelActionKind {
     /// Approve the fee token to be spent by the oracle (bond pre-authorisation).
     ApproveToken { bond: U256 },
