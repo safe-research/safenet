@@ -3,8 +3,12 @@
 
 use alloy::sol;
 use safenet_core::{
-    Service, index::EventLog, state::StateTransition, tx::Transaction, watcher_events,
+    Service,
+    state::{Commands, EffectHandler, Message, StateTransition},
+    tx::Transaction,
+    watcher_events,
 };
+use std::convert::Infallible;
 
 sol! {
     #[derive(Debug)]
@@ -22,21 +26,37 @@ pub struct DummyService;
 
 impl StateTransition<()> for DummyService {
     type Event = Dummy::DummyEvents;
-    type Action = ();
+    type Action = Infallible;
+    type Effect = Infallible;
+    type Resume = Infallible;
 
-    async fn new_block(&mut self, state: (), _block: u64) -> ((), Vec<Self::Action>) {
-        (state, Vec::new())
-    }
-
-    async fn event(&mut self, state: (), _event: EventLog<Self::Event>) -> ((), Vec<Self::Action>) {
-        (state, Vec::new())
+    fn apply_transition(
+        &self,
+        state: (),
+        message: Message<Self::Event, Self::Resume>,
+    ) -> ((), Commands<(), Self>) {
+        match message {
+            Message::NewBlock(_) | Message::Event(_) => (state, Vec::new()),
+            Message::Resume(result) => match result {},
+        }
     }
 }
 
 impl Service for DummyService {
     type State = ();
+    type Event = Dummy::DummyEvents;
 
-    fn encode_actions(&self, _actions: Vec<Self::Action>) -> Vec<(Transaction, u64)> {
-        Vec::new()
+    type Transition = Self;
+    type Effects = Self;
+    type Actions = Self;
+
+    fn encode_action(&self, action: Self::Action) -> (Transaction, u64) {
+        match action {}
+    }
+
+    fn components(&self) -> (Self::Transition, Self::Effects, Self::Actions) {
+        todo!()
     }
 }
+
+impl EffectHandler<Infallible, Infallible> for DummyService {}
