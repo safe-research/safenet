@@ -45,6 +45,37 @@ runs:
         # We use \n for newlines which we will interpret later
         REPORT_TABLE="| Package | Coverage |\n| :--- | :--- |"
 
+        # Process a single LCOV tracefile: optionally rewrite its source paths
+        # to be relative to the repository root, collect per-package stats, add
+        # a table row and queue it for the final merge.
+        # Usage: process_lcov <lcov-file> <display-name> [path-prefix]
+        process_lcov() {
+          local lcov_file="$1"
+          local display_name="$2"
+          local path_prefix="${3:-}"
+
+          # --- A. Fix Paths ---
+          # Some tools emit source paths relative to the package directory.
+          # Prepend the package path so they resolve from the repository root.
+          # Example: SF:src/utils.ts -> SF:validator/src/utils.ts
+          if [ -n "$path_prefix" ]; then
+            sed -i "s|^SF:|SF:$path_prefix/|g" "$lcov_file"
+          fi
+
+          # --- B. Get Individual Stats ---
+          # Run lcov summary on this specific file and extract the percentage
+          # (e.g. "85.4%").
+          local stats
+          stats=$(lcov --summary "$lcov_file" | grep "lines......" | cut -d ':' -f 2 | xargs)
+
+          echo "   📊 $display_name: $stats"
+          lcov --list "$lcov_file"
+
+          # Append row to table and add to the merge list.
+          REPORT_TABLE="${REPORT_TABLE}\n| **${display_name}** | ${stats} |"
+          MERGE_ARGS+=(--add-tracefile "$lcov_file")
+        }
+
         # 1. Get workspace patterns from package.json (e.g., "packages/*", "apps/web")
         # We use -r for raw output to remove quotes
         WORKSPACE_PATTERNS=$(jq -r '.workspaces[]' package.json)
@@ -65,27 +96,7 @@ runs:
 
               if [ -f "$LCOV_FILE" ]; then
                 echo "✅ Found coverage: $LCOV_FILE"
-
-                # --- A. Fix Paths ---
-                # We need to prepend the package path ($pkg) to the source files.
-                # Example: SF:src/utils.ts -> SF:validator/src/utils.ts
-                sed -i "s|^SF:|SF:$pkg/|g" "$LCOV_FILE"
-
-                # --- B. Get Individual Stats ---
-                # Run lcov summary on this specific file
-                # Extract the percentage (e.g., "85.4%")
-                PKG_STATS=$(lcov --summary "$LCOV_FILE" | grep "lines......" | cut -d ':' -f 2 | xargs)
-
-                PKG_NAME=$(basename "$pkg")
-
-                echo "   📊 $PKG_NAME: $PKG_STATS"
-                lcov --list "$LCOV_FILE"
-
-                # Append row to table
-                REPORT_TABLE="${REPORT_TABLE}\n| **${PKG_NAME}** | ${PKG_STATS} |"
-
-                # Add to merge list
-                MERGE_ARGS+=(--add-tracefile "$LCOV_FILE")
+                process_lcov "$LCOV_FILE" "$(basename "$pkg")" "$pkg"
               else
                 echo "⚪️ No coverage found for $pkg (Skipping)"
               fi
@@ -93,7 +104,27 @@ runs:
           done
         done
 
-        # 3. Merge
+        # 3. Scan Rust crates (crates/*)
+        # Unlike the JavaScript reports, the Rust LCOV files are generated with
+        # paths already relative to the repository root, so no prefix rewrite is
+        # needed. Crates are labelled by their Cargo package name.
+        echo "🔍 Scanning Rust crates in crates/*..."
+        for manifest in crates/*/Cargo.toml; do
+          [ -f "$manifest" ] || continue
+
+          crate=$(dirname "$manifest")
+          LCOV_FILE="$crate/coverage/lcov.info"
+
+          if [ -f "$LCOV_FILE" ]; then
+            echo "✅ Found coverage: $LCOV_FILE"
+            CRATE_NAME=$(grep -m1 '^name' "$manifest" | cut -d '"' -f 2)
+            process_lcov "$LCOV_FILE" "$CRATE_NAME"
+          else
+            echo "⚪️ No coverage found for $crate (Skipping)"
+          fi
+        done
+
+        # 4. Merge
         if [ -z "$MERGE_ARGS" ]; then
            echo "❌ No coverage files found in any workspace!"
            exit 1
@@ -102,15 +133,15 @@ runs:
         echo "🔗 Merging all reports..."
         lcov "${MERGE_ARGS[@]}" --output-file lcov.info
 
-        # 4. Get Total Summary
+        # 5. Get Total Summary
         OUTPUT=$(lcov --summary lcov.info)
         TOTAL_STATS=$(echo "$OUTPUT" | grep "lines......" | cut -d ':' -f 2 | xargs)
 
-        # 5. Get File List
+        # 6. Get File List
         # Grep -v removes the "Reading tracefile" noise
         FILE_LIST=$(lcov --list lcov.info | grep -v "Reading tracefile")
 
-        # 6. Export step outputs
+        # 7. Export step outputs
         echo "TOTAL_STATS=$TOTAL_STATS" >> $GITHUB_OUTPUT
 
         echo "SUMMARY<<EOF" >> $GITHUB_OUTPUT
@@ -121,7 +152,7 @@ runs:
         echo "$FILE_LIST" >> $GITHUB_OUTPUT
         echo "EOF" >> $GITHUB_OUTPUT
 
-        # 7. Build report file
+        # 8. Build report file
         # Variables are used directly here (no template interpolation) to avoid
         # URL-encoding of newlines and unintended shell expansion in heredocs.
         {
