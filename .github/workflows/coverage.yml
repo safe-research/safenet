@@ -35,13 +35,12 @@ jobs:
       - run: npm ci
       - run: scripts/generate_coverage_report.sh
 
-      # Post the report as a step summary (safe for fork PRs) and upload it as
-      # an artifact so the privileged post_coverage_comment workflow can post it
-      # as a PR comment.
       - name: Post Coverage Step Summary
-        if: github.event_name == 'pull_request'
         run: cat coverage-report.md >> "$GITHUB_STEP_SUMMARY"
 
+      # In case coverage is run for a PR, upload the summary as an artifact
+      # so the privileged post_coverage_comment workflow can post it. This
+      # allows coverage reports to be produced even for fork-PRs.
       - name: Prepare Coverage Artifact
         if: github.event_name == 'pull_request'
         run: |
