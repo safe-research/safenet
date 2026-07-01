@@ -65,11 +65,11 @@ pub mod consensus {
     use alloy::sol;
 
     sol! {
-        #[derive(Debug)]
-        enum Operation { CALL, DELEGATECALL }
+        #[derive(Debug, Default)]
+        enum Operation { #[default] CALL, DELEGATECALL }
 
         // Full transaction struct carried by OracleTransactionProposed; mirrors SafeTransaction.T.
-        #[derive(Debug)]
+        #[derive(Debug, Default)]
         struct SafeTransaction {
             uint256 chainId;
             address safe;
