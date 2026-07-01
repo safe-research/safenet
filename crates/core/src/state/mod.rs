@@ -10,8 +10,8 @@ use self::storage::SnapshotStore;
 use crate::index::{BlockUpdate, EventLog, EventUpdate, Update};
 use serde::{Serialize, de::DeserializeOwned};
 use sqlx::SqlitePool;
-use std::{collections::VecDeque, mem, range::RangeInclusive};
-use tokio::sync::{Mutex, MutexGuard};
+use std::{collections::VecDeque, convert::Infallible, mem, range::RangeInclusive};
+use tokio::sync::Mutex;
 
 /// Error produced by the [`StateMachine`].
 #[derive(Debug, thiserror::Error)]
@@ -72,36 +72,39 @@ where
     S: Sized,
 {
     type Event;
-    type Resume;
     type Action;
     type Effect;
+    type Resume;
 
-    /// Perform the state transition for the given message.
-    fn apply(
+    /// Apply the state transition for the given message.
+    fn apply_transition(
         &self,
         state: S,
         message: Message<Self::Event, Self::Resume>,
     ) -> (S, Commands<S, Self>);
 }
 
-/// An effect handler.
-///
-///     /// Performs an effect and returns its result to be resumed in the state
-/// machine.
-///
-/// Note that `perform_effect` explicitly does not fail, and is expected to
-/// return some result that indicates an error so the state machine can
-/// handle the effect error internally.
+/// An effect handler that can be used for handling effects for a state
+/// transition.
+pub trait EffectHandler<Effect, Resume> {
+    /// Performs an effect and returns its result to resume a state machine.
+    ///
+    /// Note that method explicitly does not fail, and is expected to return
+    /// some result that indicates an error so the state machine can handle the
+    /// effect error internally.
+    fn perform_effect(&mut self, effect: Effect) -> impl Future<Output = Resume>;
+}
 
 /// A utility type for a vector of commands for some state and its transition.
 pub type Commands<S, T> =
     Vec<Command<<T as StateTransition<S>>::Action, <T as StateTransition<S>>::Effect>>;
 
 /// A service state machine.
-pub struct StateMachine<S, T> {
+pub struct StateMachine<S, T, E> {
     inner: Mutex<Option<(S, Status)>>,
-    transition: T,
     snapshots: SnapshotStore<S>,
+    transition: T,
+    effects: E,
 }
 
 enum Status {
@@ -111,23 +114,25 @@ enum Status {
     WarpEvents { range: RangeInclusive<u64> },
 }
 
-impl<S, T> StateMachine<S, T>
+impl<S, T, E> StateMachine<S, T, E>
 where
-    T: StateTransition<S>,
     S: Serialize + DeserializeOwned,
+    T: StateTransition<S>,
+    E: EffectHandler<T::Effect, T::Resume>,
 {
     /// Creates a new state machine with the given state transition.
-    pub async fn new(transition: T, pool: SqlitePool) -> Result<Self, Error>
+    pub async fn new(transition: T, effects: E, pool: SqlitePool) -> Result<Self, Error>
     where
         S: Default,
     {
-        Self::with_init(transition, pool, S::default).await
+        Self::with_init(transition, effects, pool, S::default).await
     }
 
     /// Creates a new state machine with the given state transition and an
     /// initial value constructor.
     pub async fn with_init(
         transition: T,
+        effects: E,
         pool: SqlitePool,
         init: impl FnOnce() -> S,
     ) -> Result<Self, Error> {
@@ -145,8 +150,9 @@ where
 
         Ok(Self {
             inner,
-            transition,
             snapshots,
+            transition,
+            effects,
         })
     }
 
@@ -176,10 +182,10 @@ where
     pub async fn handle_update(
         &mut self,
         update: Update<T::Event>,
-    ) -> Result<Coroutine<'_, S, T>, Error> {
+    ) -> Result<Vec<T::Action>, Error> {
         let mut lock = self.inner.lock().await;
         let (state, status) = mem::take(&mut *lock).ok_or(Error::Poisoned)?;
-        match update {
+        let (state, status, actions) = match update {
             Update::Block(BlockUpdate::Warp { from, to })
                 if matches!(status, Status::Initialized)
                     || matches!(status, Status::BlockPending { pending } if pending == from) =>
@@ -187,9 +193,7 @@ where
                 let status = Status::WarpEvents {
                     range: block_range(from, to)?,
                 };
-
-                *lock = Some((state, status));
-                Coroutine::Completed(vec![])
+                (state, status, vec![])
             }
             Update::Block(BlockUpdate::Uncle { number })
                 if matches!(status, Status::BlockPending { pending } if number < pending)
@@ -197,23 +201,20 @@ where
             {
                 let (_, state) = self.snapshots.reorg(number).await?;
                 let status = Status::BlockPending { pending: number };
-
-                *lock = Some((state, status));
-                Coroutine::Completed(vec![])
+                (state, status, vec![])
             }
             Update::Block(BlockUpdate::New { number, safe, .. })
                 if matches!(status, Status::Initialized)
                     || matches!(status, Status::BlockPending { pending } if pending == number) =>
             {
-                self.snapshots.prune(safe).await?;
-                let (state, commands) = self.transition.apply(state, Message::NewBlock(number));
+                let (state, actions) =
+                    TransitionBatch::new(&self.transition, &mut self.effects, state)
+                        .apply(Message::NewBlock(number))
+                        .await
+                        .finish();
                 let status = Status::BlockEvents { latest: number };
-                Coroutine::new(
-                    lock,
-                    &self.transition,
-                    &mut self.snapshots,
-
-                )
+                self.snapshots.prune(safe).await?;
+                (state, status, actions)
             }
             Update::Logs(EventUpdate { blocks, logs })
                 if matches!(status, Status::BlockEvents { latest } if is_next_in_range(latest..=latest, blocks))
@@ -228,14 +229,12 @@ where
                     return Err(Error::BadUpdate);
                 }
 
-                let mut state = state;
-                let mut commands = vec![];
+                let mut batch = TransitionBatch::new(&self.transition, &mut self.effects, state);
                 for log in logs {
-                    let (new_state, new_commands) =
-                        self.transition.apply(state, Message::Event(log));
-                    state = new_state;
-                    commands.extend(new_commands);
+                    batch = batch.apply(Message::Event(log)).await;
                 }
+                let (state, actions) = batch.finish();
+
                 // In case we are warping, we can prune intermediate state from
                 // storage for the event pages.
                 let should_prune = matches!(status, Status::WarpEvents { .. });
@@ -255,52 +254,68 @@ where
                     self.snapshots.prune(blocks.last).await?;
                 }
 
-                (state, status, commands)
+                (state, status, actions)
             }
             _ => return Err(Error::BadUpdate),
         };
         *lock = Some((state, status));
-        Ok(commands)
+        Ok(actions)
     }
 }
 
-/// A state machine update coroutine.
-///
-/// The coroutine must be resumed to completion in order to commit a state
-/// machine update. Failure to do so will cause the state machine to become
-/// poisoned.
-/// A continuation from a state machine update.
-pub enum Coroutine<'a, S, T>
+struct TransitionBatch<'a, S, T, E>
 where
     T: StateTransition<S>,
 {
-    Completed(Vec<T::Action>),
-    Suspended(T::Effect, Continuation<'a, T, S>),
-}
-
-/// A state machine update continuation.
-pub struct Continuation<'a, S, T>
-where
-    T: StateTransition<S>,
-{
-    lock: MutexGuard<'a, Option<(S, Status)>>,
     transition: &'a T,
-    snapshots: &'a mut SnapshotStore<S>,
-    state: Option<S>,
-    status: Status,
-    messages: VecDeque<Message<T::Event, T::Resume>>,
+    effects: E,
+    state: S,
     actions: Vec<T::Action>,
 }
 
-impl<'a, S, T> Coroutine<'a, S, T>
+impl<'a, S, T, E> TransitionBatch<'a, S, T, E>
 where
     T: StateTransition<S>,
-    S: Serialize + DeserializeOwned,
+    E: EffectHandler<T::Effect, T::Resume>,
 {
-    /// Creates a new coroutine.
-    fn new(
-        lock:
-    )
+    fn new(transition: &'a T, effects: E, state: S) -> Self {
+        Self {
+            transition,
+            effects,
+            state,
+            actions: vec![],
+        }
+    }
+
+    async fn apply(mut self, message: Message<T::Event, T::Resume>) -> Self
+    where
+        T: StateTransition<S>,
+        E: EffectHandler<T::Effect, T::Resume>,
+    {
+        let (state, commands) = self.transition.apply_transition(self.state, message);
+        self.state = state;
+        self.actions.reserve(commands.len());
+
+        let mut commands = VecDeque::from(commands);
+        while let Some(command) = commands.pop_front() {
+            match command {
+                Command::Action(action) => self.actions.push(action),
+                Command::Effect(effect) => {
+                    let result = self.effects.perform_effect(effect).await;
+                    let (new_state, new_commands) = self
+                        .transition
+                        .apply_transition(self.state, Message::Resume(result));
+                    self.state = new_state;
+                    commands.extend(new_commands);
+                }
+            }
+        }
+        self
+    }
+
+    fn finish(self) -> (S, Vec<T::Action>) {
+        (self.state, self.actions)
+    }
 }
 
 fn next_block(number: u64) -> Result<u64, Error> {
@@ -317,6 +332,24 @@ fn block_range(from: u64, to: u64) -> Result<RangeInclusive<u64>, Error> {
 fn is_next_in_range(range: impl Into<RangeInclusive<u64>>, sub: RangeInclusive<u64>) -> bool {
     let range = range.into();
     range.start == sub.start && range.contains(&sub.last)
+}
+
+/// An effect handler for pure state machines without any side-effects.
+pub struct Pure;
+
+impl EffectHandler<Infallible, Infallible> for Pure {
+    async fn perform_effect(&mut self, effect: Infallible) -> Infallible {
+        match effect {}
+    }
+}
+
+impl<E, R, H> EffectHandler<E, R> for &mut H
+where
+    H: EffectHandler<E, R>,
+{
+    fn perform_effect(&mut self, effect: E) -> impl Future<Output = R> {
+        (*self).perform_effect(effect)
+    }
 }
 
 #[cfg(test)]
@@ -350,7 +383,7 @@ mod tests {
         type Action = Action;
         type Effect = Infallible;
 
-        fn apply(
+        fn apply_transition(
             &self,
             mut state: TestState,
             message: Message<Self::Event, Self::Resume>,
@@ -373,8 +406,8 @@ mod tests {
         SqlitePool::connect("sqlite::memory:").await.unwrap()
     }
 
-    async fn new_machine(pool: &SqlitePool) -> StateMachine<TestState, TestTransition> {
-        StateMachine::new(TestTransition, pool.clone())
+    async fn new_machine(pool: &SqlitePool) -> StateMachine<TestState, TestTransition, Pure> {
+        StateMachine::new(TestTransition, Pure, pool.clone())
             .await
             .unwrap()
     }
@@ -443,14 +476,11 @@ mod tests {
         // resulting state is committed at the last block of the range.
         assert_eq!(
             machine.handle_update(new_block(1)).await.unwrap(),
-            vec![Command::Action(Action::Block(1))]
+            vec![Action::Block(1)]
         );
         assert_eq!(
             machine.handle_update(logs(1..=1, [10, 20])).await.unwrap(),
-            vec![
-                Command::Action(Action::Event(10)),
-                Command::Action(Action::Event(20)),
-            ]
+            vec![Action::Event(10), Action::Event(20),]
         );
 
         assert_eq!(
@@ -535,11 +565,11 @@ mod tests {
         assert_eq!(machine.handle_update(warp(1, 6)).await.unwrap(), vec![]);
         assert_eq!(
             machine.handle_update(logs(1..=3, [10])).await.unwrap(),
-            vec![Command::Action(Action::Event(10))]
+            vec![Action::Event(10)]
         );
         assert_eq!(
             machine.handle_update(logs(4..=6, [40])).await.unwrap(),
-            vec![Command::Action(Action::Event(40))]
+            vec![Action::Event(40)]
         );
 
         assert_eq!(

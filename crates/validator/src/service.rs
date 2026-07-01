@@ -4,7 +4,7 @@
 use alloy::sol;
 use safenet_core::{
     Service,
-    state::{Commands, Message, StateTransition},
+    state::{Commands, EffectHandler, Message, StateTransition},
     tx::Transaction,
     watcher_events,
 };
@@ -26,11 +26,11 @@ pub struct DummyService;
 
 impl StateTransition<()> for DummyService {
     type Event = Dummy::DummyEvents;
-    type Resume = Infallible;
     type Action = Infallible;
     type Effect = Infallible;
+    type Resume = Infallible;
 
-    fn apply(
+    fn apply_transition(
         &self,
         state: (),
         message: Message<Self::Event, Self::Resume>,
@@ -44,12 +44,19 @@ impl StateTransition<()> for DummyService {
 
 impl Service for DummyService {
     type State = ();
+    type Event = Dummy::DummyEvents;
+
+    type Transition = Self;
+    type Effects = Self;
+    type Actions = Self;
 
     fn encode_action(&self, action: Self::Action) -> (Transaction, u64) {
         match action {}
     }
 
-    async fn perform_effect(&mut self, effect: Self::Effect) -> Self::Resume {
-        match effect {}
+    fn components(&self) -> (Self::Transition, Self::Effects, Self::Actions) {
+        todo!()
     }
 }
+
+impl EffectHandler<Infallible, Infallible> for DummyService {}

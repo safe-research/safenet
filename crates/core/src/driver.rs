@@ -9,13 +9,13 @@
 
 use crate::{
     index::{self, Update, Watcher, events::Events},
-    state::{self, Command, StateMachine, StateTransition},
+    state::{self, EffectHandler, StateMachine, StateTransition},
     tx::{self, Signer, Transaction, TransactionQueue},
 };
 use alloy::{primitives::Address, providers::Provider};
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
 use sqlx::sqlite::SqlitePool;
-use std::{collections::VecDeque, fmt::Debug, pin::Pin, time::Duration};
+use std::{fmt::Debug, pin::Pin, time::Duration};
 
 /// How long to wait after a failed step before retrying, to avoid spinning on a
 /// persistent failure (such as an unreachable RPC node).
@@ -54,28 +54,36 @@ pub enum Error {
     Transactions(#[from] tx::Error),
 }
 
-/// A Safenet service.
-///
-/// Implementors describe how the service observes the chain (its [`Events`]) and
-/// reacts to it (its [`State`](Service::State) and
-/// [`Transition`](Service::Transition)), and how the resulting
-/// [`Action`](Service::Action)s map onto onchain transactions.
-pub trait Service: StateTransition<Self::State> {
-    /// The service state, persisted across restarts and rolled back on reorgs.
-    type State: Serialize + DeserializeOwned;
-
+/// An action encoder.
+pub trait ActionEncoder<Action> {
     /// Encodes state transition `action` into a transaction to submit onchain,
     /// each paired with the block number after which it should be dropped if it
     /// has not yet been submitted.
-    fn encode_action(&self, actions: Self::Action) -> (Transaction, u64);
+    fn encode_action(&self, action: Action) -> (Transaction, u64);
+}
 
-    /// Performs an effect and returns its result to be resumed in the state
-    /// machine.
-    ///
-    /// Note that `perform_effect` explicitly does not fail, and is expected to
-    /// return some result that indicates an error so the state machine can
-    /// handle the effect error internally.
-    fn perform_effect(&mut self, effect: Self::Effect) -> impl Future<Output = Self::Resume>;
+/// A Safenet service definition.
+pub trait Service {
+    type State: DeserializeOwned + Serialize;
+    type Event: Events + Debug;
+
+    type Transition: StateTransition<Self::State, Event = Self::Event>;
+    type Effects: EffectHandler<
+            <Self::Transition as StateTransition<Self::State>>::Effect,
+            <Self::Transition as StateTransition<Self::State>>::Resume,
+        >;
+    type Actions: ActionEncoder<<Self::Transition as StateTransition<Self::State>>::Action>;
+
+    /// Initialize the service state.
+    fn initial_state(&self) -> Self::State
+    where
+        Self::State: Default,
+    {
+        Default::default()
+    }
+
+    /// Constructs the service components used by the driver.
+    fn components(&self) -> (Self::Transition, Self::Effects, Self::Actions);
 }
 
 /// Drives a [`Service`] by wiring its indexer, state machine and transaction
@@ -84,9 +92,9 @@ pub struct Driver<P, S>
 where
     S: Service,
 {
-    service: S,
     watcher: Watcher<P, S::Event>,
-    state: StateMachine<S::State, S>,
+    state: StateMachine<S::State, S::Transition, S::Effects>,
+    actions: S::Actions,
     transactions: TransactionQueue<P>,
 }
 
@@ -94,7 +102,6 @@ impl<P, S> Driver<P, S>
 where
     P: Provider + Clone,
     S: Service,
-    S::Event: Events + Debug,
 {
     /// Creates a driver that wires together the indexer, state machine and
     /// transaction queue for `service`.
@@ -116,7 +123,11 @@ where
         S: Clone,
         S::State: Default,
     {
-        let state = StateMachine::new(service.clone(), pool.clone()).await?;
+        let (transition, effects, actions) = service.components();
+        let state = StateMachine::with_init(transition, effects, pool.clone(), || {
+            service.initial_state()
+        })
+        .await?;
         let watcher = Watcher::new(
             provider.clone(),
             config.index,
@@ -128,9 +139,9 @@ where
             TransactionQueue::new(provider, signer, pool, config.transactions).await?;
 
         Ok(Self {
-            service,
             watcher,
             state,
+            actions,
             transactions,
         })
     }
@@ -191,34 +202,13 @@ where
         }
 
         // Perform a state transition for the next update.
-        let commands = self.state.handle_update(update).await?;
-
-        // Process the state transition commands. Note that we need to thread
-        // effects and continuations that cause additional state transitions and
-        // commands.
-        //
-        // TODO: For now, effects are expected to complete right away. In the
-        // future, we can consider making effects concurrent with onchain
-        //  updates (or provide a mechanism to "pump" continuations into a queue
-        // for processing at a later time).
-        let mut commands = VecDeque::from(commands);
-        let mut transactions = Vec::with_capacity(commands.len());
-        while let Some(command) = commands.pop_front() {
-            match command {
-                Command::Action(action) => {
-                    let transaction = self.service.encode_action(action);
-                    transactions.push(transaction);
-                }
-                Command::Effect(effect) => {
-                    let cont = self.service.perform_effect(effect).await;
-                    let new_commands = self.state.handle_continuation(cont).await?;
-                    commands.extend(new_commands);
-                }
-            }
-        }
+        let actions = self.state.handle_update(update).await?;
 
         // Submit transactions for execution onchain.
-        if !transactions.is_empty() {
+        if !actions.is_empty() {
+            let transactions = actions
+                .into_iter()
+                .map(|action| self.actions.encode_action(action));
             self.transactions.queue(transactions).await?;
         }
 
