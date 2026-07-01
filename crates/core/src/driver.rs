@@ -9,7 +9,7 @@
 
 use crate::{
     index::{self, Update, Watcher, events::Events},
-    state::{self, StateMachine, StateTransition},
+    state::{self, EffectHandler, StateMachine, StateTransition},
     tx::{self, Signer, Transaction, TransactionQueue},
 };
 use alloy::{primitives::Address, providers::Provider};
@@ -54,20 +54,28 @@ pub enum Error {
     Transactions(#[from] tx::Error),
 }
 
-/// A Safenet service.
-///
-/// Implementors describe how the service observes the chain (its [`Events`]) and
-/// reacts to it (its [`State`](Service::State) and
-/// [`Transition`](Service::Transition)), and how the resulting
-/// [`Action`](Service::Action)s map onto onchain transactions.
-pub trait Service: StateTransition<Self::State> {
-    /// The service state, persisted across restarts and rolled back on reorgs.
-    type State: Serialize + DeserializeOwned;
-
-    /// Encodes state transition `actions` into transactions to submit onchain,
+/// An action encoder.
+pub trait ActionEncoder<Action> {
+    /// Encodes state transition `action` into a transaction to submit onchain,
     /// each paired with the block number after which it should be dropped if it
     /// has not yet been submitted.
-    fn encode_actions(&self, actions: Vec<Self::Action>) -> Vec<(Transaction, u64)>;
+    fn encode_action(&self, action: Action) -> (Transaction, u64);
+}
+
+/// A Safenet service definition.
+pub trait Service {
+    type State: Default + DeserializeOwned + Serialize;
+    type Event: Debug + Events;
+
+    type Transition: StateTransition<Self::State, Event = Self::Event>;
+    type Effects: EffectHandler<
+            <Self::Transition as StateTransition<Self::State>>::Effect,
+            <Self::Transition as StateTransition<Self::State>>::Resume,
+        >;
+    type Actions: ActionEncoder<<Self::Transition as StateTransition<Self::State>>::Action>;
+
+    /// Constructs the service components used by the driver.
+    fn components(&self) -> (Self::Transition, Self::Effects, Self::Actions);
 }
 
 /// Drives a [`Service`] by wiring its indexer, state machine and transaction
@@ -76,9 +84,9 @@ pub struct Driver<P, S>
 where
     S: Service,
 {
-    service: S,
     watcher: Watcher<P, S::Event>,
-    state: StateMachine<S::State, S>,
+    state: StateMachine<S::State, S::Transition, S::Effects>,
+    actions: S::Actions,
     transactions: TransactionQueue<P>,
 }
 
@@ -86,7 +94,6 @@ impl<P, S> Driver<P, S>
 where
     P: Provider + Clone,
     S: Service,
-    S::Event: Events + Debug,
 {
     /// Creates a driver that wires together the indexer, state machine and
     /// transaction queue for `service`.
@@ -103,12 +110,9 @@ where
         pool: SqlitePool,
         addresses: Vec<Address>,
         config: Config,
-    ) -> Result<Self, Error>
-    where
-        S: Clone,
-        S::State: Default,
-    {
-        let state = StateMachine::new(service.clone(), pool.clone()).await?;
+    ) -> Result<Self, Error> {
+        let (transition, effects, actions) = service.components();
+        let state = StateMachine::new(transition, effects, pool.clone()).await?;
         let watcher = Watcher::new(
             provider.clone(),
             config.index,
@@ -120,9 +124,9 @@ where
             TransactionQueue::new(provider, signer, pool, config.transactions).await?;
 
         Ok(Self {
-            service,
             watcher,
             state,
+            actions,
             transactions,
         })
     }
@@ -182,9 +186,14 @@ where
             self.transactions.handle_block_update(block.clone()).await?;
         }
 
+        // Perform a state transition for the next update.
         let actions = self.state.handle_update(update).await?;
+
+        // Submit transactions for execution onchain.
         if !actions.is_empty() {
-            let transactions = self.service.encode_actions(actions);
+            let transactions = actions
+                .into_iter()
+                .map(|action| self.actions.encode_action(action));
             self.transactions.queue(transactions).await?;
         }
 

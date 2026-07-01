@@ -10,7 +10,7 @@ use self::storage::SnapshotStore;
 use crate::index::{BlockUpdate, EventLog, EventUpdate, Update};
 use serde::{Serialize, de::DeserializeOwned};
 use sqlx::SqlitePool;
-use std::{mem, range::RangeInclusive};
+use std::{collections::VecDeque, convert::Infallible, mem, range::RangeInclusive};
 use tokio::sync::Mutex;
 
 /// Error produced by the [`StateMachine`].
@@ -32,6 +32,46 @@ pub enum Error {
     Poisoned,
 }
 
+/// A state transition message.
+///
+/// This describes any of the inputs that cause the state machine to progress.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum Message<Event, Resume> {
+    /// A new block.
+    NewBlock(u64),
+    /// A new event.
+    Event(EventLog<Event>),
+    /// Resume from an effect.
+    ///
+    /// Effects are returned from state transition functions and represent some
+    /// impure computation that needs to be performed, in which case a resume
+    /// transition will be applied to the state machine once completed. The
+    /// order in which effects resume is not well-defined and subject to change;
+    /// implementations MUST NOT rely on effect resume ordering.
+    Resume(Resume),
+}
+
+/// A state transition command.
+///
+/// Commands are returned from state machine transitions and are either actions
+/// that need to be executed onchain, or effects that need to be performed and
+/// resumed back into the state machine.
+///
+/// Effects may be performed more than once for the same chain message, for
+/// example after a crash or reorg replay. Transitions that emit effects must be
+/// prepared for the replayed effect to resume with a different result.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum Command<Action, Effect> {
+    /// An onchain action.
+    Action(Action),
+    /// An effect to perform.
+    ///
+    /// Effects are external observations or operations. They are not part of
+    /// the pure transition function and may be replayed even when a previous
+    /// execution already changed external state.
+    Effect(Effect),
+}
+
 /// Describes the state transition function for the state machine.
 ///
 /// Note that **all state transitions are non-fallible**, this means that in
@@ -42,28 +82,43 @@ where
 {
     type Event;
     type Action;
+    type Effect;
+    type Resume;
 
-    /// Perform the state transition for when a new block is observed.
-    fn new_block(&mut self, state: S, block: u64) -> impl Future<Output = (S, Vec<Self::Action>)>;
-
-    /// Perform the state transition when a new event log is observed.
-    fn event(
-        &mut self,
+    /// Apply the state transition for the given message.
+    fn apply_transition(
+        &self,
         state: S,
-        event: EventLog<Self::Event>,
-    ) -> impl Future<Output = (S, Vec<Self::Action>)>;
+        message: Message<Self::Event, Self::Resume>,
+    ) -> (S, Commands<S, Self>);
 }
+
+/// An effect handler that can be used for handling effects for a state
+/// transition.
+pub trait EffectHandler<Effect, Resume> {
+    /// Performs an effect and returns its result to resume a state machine.
+    ///
+    /// Note that this method explicitly does not fail, and is expected to return
+    /// some result that indicates an error so the state machine can handle the
+    /// effect error internally.
+    ///
+    /// The same effect may be performed more than once for the same chain
+    /// message. For consumptive resources such as pre-committed nonces, handlers
+    /// should encode outcomes like "already used" in `Resume`; state transitions
+    /// remain pure because they consume only the resume value.
+    fn perform_effect(&mut self, effect: Effect) -> impl Future<Output = Resume>;
+}
+
+/// A utility type for a vector of commands for some state and its transition.
+pub type Commands<S, T> =
+    Vec<Command<<T as StateTransition<S>>::Action, <T as StateTransition<S>>::Effect>>;
 
 /// A service state machine.
-pub struct StateMachine<S, T> {
-    inner: Mutex<Option<Inner<S>>>,
-    transition: T,
+pub struct StateMachine<S, T, E> {
+    inner: Mutex<Option<(S, Status)>>,
     snapshots: SnapshotStore<S>,
-}
-
-struct Inner<S> {
-    state: S,
-    status: Status,
+    transition: T,
+    effects: E,
 }
 
 enum Status {
@@ -73,23 +128,25 @@ enum Status {
     WarpEvents { range: RangeInclusive<u64> },
 }
 
-impl<S, T, E> StateMachine<S, T>
+impl<S, T, E> StateMachine<S, T, E>
 where
-    T: StateTransition<S, Event = E>,
     S: Serialize + DeserializeOwned,
+    T: StateTransition<S>,
+    E: EffectHandler<T::Effect, T::Resume>,
 {
     /// Creates a new state machine with the given state transition.
-    pub async fn new(transition: T, pool: SqlitePool) -> Result<Self, Error>
+    pub async fn new(transition: T, effects: E, pool: SqlitePool) -> Result<Self, Error>
     where
         S: Default,
     {
-        Self::with_init(transition, pool, S::default).await
+        Self::with_init(transition, effects, pool, S::default).await
     }
 
     /// Creates a new state machine with the given state transition and an
     /// initial value constructor.
     pub async fn with_init(
         transition: T,
+        effects: E,
         pool: SqlitePool,
         init: impl FnOnce() -> S,
     ) -> Result<Self, Error> {
@@ -103,19 +160,22 @@ where
             })
             .transpose()?
             .unwrap_or_else(|| (init(), Status::Initialized));
-        let inner = Mutex::new(Some(Inner { state, status }));
+        let inner = Mutex::new(Some((state, status)));
 
         Ok(Self {
             inner,
-            transition,
             snapshots,
+            transition,
+            effects,
         })
     }
 
     /// Returns the last block that was fully processed by the state machine.
     /// Note that this only counts fully processed blocks.
     pub async fn last_block(&self) -> Option<u64> {
-        match self.inner.lock().await.as_ref()?.status {
+        let lock = self.inner.lock().await;
+        let (_, status) = lock.as_ref()?;
+        match status {
             Status::Initialized => None,
             Status::BlockPending { pending } => pending.checked_sub(1),
             // This is a bit counter-intuitive, but if we observed the latest
@@ -133,9 +193,12 @@ where
     ///
     /// The state machine halts if it returns an error, as it can no longer
     /// correctly progress.
-    pub async fn handle_update(&mut self, update: Update<E>) -> Result<Vec<T::Action>, Error> {
+    pub async fn handle_update(
+        &mut self,
+        update: Update<T::Event>,
+    ) -> Result<Vec<T::Action>, Error> {
         let mut lock = self.inner.lock().await;
-        let Inner { state, status } = mem::take(&mut *lock).ok_or(Error::Poisoned)?;
+        let (state, status) = mem::take(&mut *lock).ok_or(Error::Poisoned)?;
         let (state, status, actions) = match update {
             Update::Block(BlockUpdate::Warp { from, to })
                 if matches!(status, Status::Initialized)
@@ -150,15 +213,19 @@ where
                 if matches!(status, Status::BlockPending { pending } if number < pending)
                     || matches!(status, Status::BlockEvents { latest } if number <= latest) =>
             {
-                let (_, snapshot) = self.snapshots.reorg(number).await?;
+                let (_, state) = self.snapshots.reorg(number).await?;
                 let status = Status::BlockPending { pending: number };
-                (snapshot, status, vec![])
+                (state, status, vec![])
             }
             Update::Block(BlockUpdate::New { number, safe, .. })
                 if matches!(status, Status::Initialized)
                     || matches!(status, Status::BlockPending { pending } if pending == number) =>
             {
-                let (state, actions) = self.transition.new_block(state, number).await;
+                let (state, actions) =
+                    TransitionBatch::new(&self.transition, &mut self.effects, state)
+                        .apply(Message::NewBlock(number))
+                        .await
+                        .finish();
                 let status = Status::BlockEvents { latest: number };
                 self.snapshots.prune(safe).await?;
                 (state, status, actions)
@@ -176,13 +243,12 @@ where
                     return Err(Error::BadUpdate);
                 }
 
-                let mut state = state;
-                let mut actions = vec![];
+                let mut batch = TransitionBatch::new(&self.transition, &mut self.effects, state);
                 for log in logs {
-                    let (new_state, new_actions) = self.transition.event(state, log).await;
-                    state = new_state;
-                    actions.extend(new_actions);
+                    batch = batch.apply(Message::Event(log)).await;
                 }
+                let (state, actions) = batch.finish();
+
                 // In case we are warping, we can prune intermediate state from
                 // storage for the event pages.
                 let should_prune = matches!(status, Status::WarpEvents { .. });
@@ -206,8 +272,59 @@ where
             }
             _ => return Err(Error::BadUpdate),
         };
-        *lock = Some(Inner { state, status });
+        *lock = Some((state, status));
         Ok(actions)
+    }
+}
+
+struct TransitionBatch<'a, S, T, E>
+where
+    T: StateTransition<S>,
+{
+    transition: &'a T,
+    effects: E,
+    state: S,
+    actions: Vec<T::Action>,
+}
+
+impl<'a, S, T, E> TransitionBatch<'a, S, T, E>
+where
+    T: StateTransition<S>,
+    E: EffectHandler<T::Effect, T::Resume>,
+{
+    fn new(transition: &'a T, effects: E, state: S) -> Self {
+        Self {
+            transition,
+            effects,
+            state,
+            actions: vec![],
+        }
+    }
+
+    async fn apply(mut self, message: Message<T::Event, T::Resume>) -> Self {
+        let (state, commands) = self.transition.apply_transition(self.state, message);
+        self.state = state;
+        self.actions.reserve(commands.len());
+
+        let mut commands = VecDeque::from(commands);
+        while let Some(command) = commands.pop_front() {
+            match command {
+                Command::Action(action) => self.actions.push(action),
+                Command::Effect(effect) => {
+                    let result = self.effects.perform_effect(effect).await;
+                    let (new_state, new_commands) = self
+                        .transition
+                        .apply_transition(self.state, Message::Resume(result));
+                    self.state = new_state;
+                    commands.extend(new_commands);
+                }
+            }
+        }
+        self
+    }
+
+    fn finish(self) -> (S, Vec<T::Action>) {
+        (self.state, self.actions)
     }
 }
 
@@ -227,11 +344,30 @@ fn is_next_in_range(range: impl Into<RangeInclusive<u64>>, sub: RangeInclusive<u
     range.start == sub.start && range.contains(&sub.last)
 }
 
+/// An effect handler for pure state machines without any side-effects.
+pub struct Pure;
+
+impl<Resume> EffectHandler<Infallible, Resume> for Pure {
+    async fn perform_effect(&mut self, effect: Infallible) -> Resume {
+        match effect {}
+    }
+}
+
+impl<E, R, H> EffectHandler<E, R> for &mut H
+where
+    H: EffectHandler<E, R>,
+{
+    fn perform_effect(&mut self, effect: E) -> impl Future<Output = R> {
+        (*self).perform_effect(effect)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::index::{BlockUpdate, EventUpdate, Update};
     use serde::Deserialize;
+    use std::convert::Infallible;
 
     /// State that records every block and event it was transitioned with, so
     /// transitions, rollbacks and resumes are all observable.
@@ -253,24 +389,26 @@ mod tests {
 
     impl StateTransition<TestState> for TestTransition {
         type Event = u64;
+        type Resume = Infallible;
         type Action = Action;
+        type Effect = Infallible;
 
-        async fn new_block(
-            &mut self,
+        fn apply_transition(
+            &self,
             mut state: TestState,
-            block: u64,
-        ) -> (TestState, Vec<Action>) {
-            state.blocks.push(block);
-            (state, vec![Action::Block(block)])
-        }
-
-        async fn event(
-            &mut self,
-            mut state: TestState,
-            event: EventLog<u64>,
-        ) -> (TestState, Vec<Action>) {
-            state.events.push(event.data);
-            (state, vec![Action::Event(event.data)])
+            message: Message<Self::Event, Self::Resume>,
+        ) -> (TestState, Commands<TestState, Self>) {
+            match message {
+                Message::NewBlock(block) => {
+                    state.blocks.push(block);
+                    (state, vec![Command::Action(Action::Block(block))])
+                }
+                Message::Event(event) => {
+                    state.events.push(event.data);
+                    (state, vec![Command::Action(Action::Event(event.data))])
+                }
+                Message::Resume(result) => match result {},
+            }
         }
     }
 
@@ -278,8 +416,8 @@ mod tests {
         SqlitePool::connect("sqlite::memory:").await.unwrap()
     }
 
-    async fn new_machine(pool: &SqlitePool) -> StateMachine<TestState, TestTransition> {
-        StateMachine::new(TestTransition, pool.clone())
+    async fn new_machine(pool: &SqlitePool) -> StateMachine<TestState, TestTransition, Pure> {
+        StateMachine::new(TestTransition, Pure, pool.clone())
             .await
             .unwrap()
     }
