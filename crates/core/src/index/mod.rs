@@ -13,7 +13,7 @@ use events::{EventWatcher, Events};
 use serde::Deserialize;
 
 pub use blocks::BlockUpdate;
-pub use events::EventUpdate;
+pub use events::{EventLog, EventUpdate};
 
 /// Watcher configuration, aggregating the block and event watcher configs.
 #[derive(Clone, Debug, Default, Deserialize, PartialEq, Eq)]
@@ -260,14 +260,14 @@ mod tests {
         );
 
         // Log query from range 848..=947
-        asserter.push_success(&vec![log(weth_deposit(1))]);
+        asserter.push_success(&vec![log((848, 0), weth_deposit(1))]);
         assert_eq!(
             watcher.next().await.unwrap(),
             logs_update(848..=947, [weth_deposit(1)])
         );
 
         // Log query from range 948..=997
-        asserter.push_success(&vec![log(weth_deposit(2))]);
+        asserter.push_success(&vec![log((948, 0), weth_deposit(2))]);
         assert_eq!(
             watcher.next().await.unwrap(),
             logs_update(948..=997, [weth_deposit(2)])
@@ -275,7 +275,7 @@ mod tests {
 
         assert_eq!(watcher.next().await.unwrap(), new_block_update(998, 997));
 
-        asserter.push_success(&vec![log(weth_deposit(3))]);
+        asserter.push_success(&vec![log((998, 0), weth_deposit(3))]);
         assert_eq!(
             watcher.next().await.unwrap(),
             logs_update(998..=998, [weth_deposit(3)])
@@ -283,7 +283,7 @@ mod tests {
 
         assert_eq!(watcher.next().await.unwrap(), new_block_update(999, 997));
 
-        asserter.push_success(&vec![log(weth_deposit(4))]);
+        asserter.push_success(&vec![log((999, 0), weth_deposit(4))]);
         assert_eq!(
             watcher.next().await.unwrap(),
             logs_update(999..=999, [weth_deposit(4)])
@@ -291,7 +291,7 @@ mod tests {
 
         assert_eq!(watcher.next().await.unwrap(), new_block_update(1000, 997));
 
-        asserter.push_success(&vec![log(weth_deposit(5))]);
+        asserter.push_success(&vec![log((1000, 0), weth_deposit(5))]);
         assert_eq!(
             watcher.next().await.unwrap(),
             logs_update(1000..=1000, [weth_deposit(5)])
@@ -301,7 +301,7 @@ mod tests {
         asserter.push_success(&block(1001));
         assert_eq!(watcher.next().await.unwrap(), new_block_update(1001, 998));
 
-        asserter.push_success(&vec![log(weth_deposit(6))]);
+        asserter.push_success(&vec![log((1001, 0), weth_deposit(6))]);
         assert_eq!(
             watcher.next().await.unwrap(),
             logs_update(1001..=1001, [weth_deposit(6)])
@@ -393,12 +393,14 @@ mod tests {
         })
     }
 
-    fn log(event: impl SolEvent) -> Log {
+    fn log((block_number, log_index): (u64, u64), event: impl SolEvent) -> Log {
         Log {
             inner: alloy::primitives::Log {
                 address: WATCHED,
                 data: event.encode_log_data(),
             },
+            block_number: Some(block_number),
+            log_index: Some(log_index),
             ..Default::default()
         }
     }
@@ -414,9 +416,18 @@ mod tests {
         blocks: std::ops::RangeInclusive<u64>,
         logs: impl IntoIterator<Item = Weth::Deposit>,
     ) -> Update<Weth::WethEvents> {
+        let block = *blocks.start();
         Update::Logs(EventUpdate {
             blocks: blocks.into(),
-            logs: logs.into_iter().map(Weth::WethEvents::Deposit).collect(),
+            logs: logs
+                .into_iter()
+                .enumerate()
+                .map(|(index, data)| EventLog {
+                    block,
+                    index: index.try_into().expect("test log index fits in u64"),
+                    data: Weth::WethEvents::Deposit(data),
+                })
+                .collect(),
         })
     }
 }

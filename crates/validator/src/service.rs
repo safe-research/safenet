@@ -2,7 +2,9 @@
 //! validator service is implemented.
 
 use alloy::sol;
-use safenet_core::{Service, state::StateTransition, tx::Transaction, watcher_events};
+use safenet_core::{
+    Service, index::EventLog, state::StateTransition, tx::Transaction, watcher_events,
+};
 
 sol! {
     #[derive(Debug)]
@@ -26,7 +28,7 @@ impl StateTransition<()> for DummyService {
         (state, Vec::new())
     }
 
-    async fn event(&mut self, state: (), _event: Self::Event) -> ((), Vec<Self::Action>) {
+    async fn event(&mut self, state: (), _event: EventLog<Self::Event>) -> ((), Vec<Self::Action>) {
         (state, Vec::new())
     }
 }
