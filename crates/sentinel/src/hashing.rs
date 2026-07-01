@@ -34,7 +34,6 @@ pub fn safe_tx_hash(tx: &SafeTransaction) -> B256 {
 
 /// Computes the EIP-712 requestId (the proposal hash) for an oracle transaction proposal.
 #[must_use]
-#[cfg_attr(not(test), expect(dead_code))]
 pub fn oracle_tx_proposal_hash(
     chain_id: U256,
     consensus: Address,

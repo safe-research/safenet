@@ -5,7 +5,9 @@ use crate::{
         consensus::Consensus,
         oracle::{ERC20, SentinelOracle},
     },
-    state::State,
+    detector::Detector,
+    hashing::oracle_tx_proposal_hash,
+    state::{RequestStatus, SentinelRequestState, State},
 };
 use alloy::{
     primitives::{Address, U256},
@@ -19,35 +21,112 @@ use safenet_core::{Service, index::EventLog, state::StateTransition, tx::Transac
 pub struct SentinelService {
     oracle: Address,
     fee_token: Address,
+    /// The `Consensus` contract whose `OracleTransactionProposed` events are
+    /// hashed into request ids.
+    consensus: Address,
+    /// The chain id of the EIP-712 domain used to derive request ids.
+    chain_id: U256,
+    /// The number of blocks a `Preparing` request is kept alive for before
+    /// being cleaned up.
+    voting_window: u64,
+    detector: Detector,
 }
 
 impl SentinelService {
     #[cfg_attr(not(test), expect(dead_code))]
-    pub fn new(oracle: Address, fee_token: Address) -> Self {
-        Self { oracle, fee_token }
+    pub fn new(
+        oracle: Address,
+        fee_token: Address,
+        consensus: Address,
+        chain_id: U256,
+        voting_window: u64,
+        detector: Detector,
+    ) -> Self {
+        Self {
+            oracle,
+            fee_token,
+            consensus,
+            chain_id,
+            voting_window,
+            detector,
+        }
     }
 
     /// Starts tracking a newly proposed oracle transaction, deciding whether
     /// we vote to approve or deny it.
     fn handle_oracle_transaction_proposed(
         &self,
-        state: State,
-        _event: Consensus::OracleTransactionProposed,
+        mut state: State,
+        block: u64,
+        event: Consensus::OracleTransactionProposed,
     ) -> (State, Vec<SentinelAction>) {
-        // TODO: gate on our oracle, derive the request id, run the detector
-        // and start tracking the request as `Preparing`.
+        if event.oracle != self.oracle {
+            return (state, Vec::new());
+        }
+        let request_id = oracle_tx_proposal_hash(
+            self.chain_id,
+            self.consensus,
+            event.epoch,
+            event.oracle,
+            event.safeTxHash,
+        );
+        // A duplicate or re-delivered proposal for the same request must not
+        // reset an already-tracked request (e.g. back to `Preparing` after
+        // it has advanced to `Pending`/`Committed`/`Finalized`).
+        if state.0.contains_key(&request_id) {
+            return (state, Vec::new());
+        }
+        let approve = self.detector.approve(&event.transaction);
+        state.0.insert(
+            request_id,
+            SentinelRequestState {
+                deadline: block.saturating_add(self.voting_window),
+                approve,
+                status: RequestStatus::Preparing,
+            },
+        );
         (state, Vec::new())
     }
 
     /// Casts our vote once a tracked request is opened for voting onchain.
     fn handle_new_request(
         &self,
-        state: State,
-        _event: SentinelOracle::NewRequest,
+        mut state: State,
+        block: u64,
+        event: SentinelOracle::NewRequest,
     ) -> (State, Vec<SentinelAction>) {
-        // TODO: only act on a `Preparing` request; emit `ApproveToken` and
-        // the vote, and move it to `Pending`.
-        (state, Vec::new())
+        let Some(existing) = state.0.get_mut(&event.requestId) else {
+            return (state, Vec::new());
+        };
+        if existing.status != RequestStatus::Preparing {
+            return (state, Vec::new());
+        }
+        let approve = existing.approve;
+        let deadline = block.saturating_add(self.voting_window);
+        existing.deadline = deadline;
+        existing.status = RequestStatus::Pending;
+        let vote = if approve {
+            SentinelActionKind::CommitApprove {
+                id: event.requestId,
+            }
+        } else {
+            SentinelActionKind::CommitDeny {
+                id: event.requestId,
+            }
+        };
+        let actions = vec![
+            SentinelAction {
+                kind: SentinelActionKind::ApproveToken {
+                    bond: event.bondTarget,
+                },
+                expires_at: deadline,
+            },
+            SentinelAction {
+                kind: vote,
+                expires_at: deadline,
+            },
+        ];
+        (state, actions)
     }
 
     /// Records that our vote has been committed onchain.
@@ -145,12 +224,13 @@ impl StateTransition<State> for SentinelService {
         state: State,
         event: EventLog<Self::Event>,
     ) -> (State, Vec<Self::Action>) {
+        let block = event.block;
         match event.data {
             SentinelEvents::Consensus(Consensus::ConsensusEvents::OracleTransactionProposed(
                 event,
-            )) => self.handle_oracle_transaction_proposed(state, event),
+            )) => self.handle_oracle_transaction_proposed(state, block, event),
             SentinelEvents::Oracle(SentinelOracle::SentinelOracleEvents::NewRequest(event)) => {
-                self.handle_new_request(state, event)
+                self.handle_new_request(state, block, event)
             }
             SentinelEvents::Oracle(SentinelOracle::SentinelOracleEvents::Committed(event)) => {
                 self.handle_committed(state, event)
@@ -181,13 +261,241 @@ impl Service for SentinelService {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::bindings::consensus::{Operation, SafeTransaction};
     use alloy::primitives::{B256, address, uint};
 
     const ORACLE: Address = address!("1111111111111111111111111111111111111111");
     const FEE_TOKEN: Address = address!("2222222222222222222222222222222222222222");
+    const CONSENSUS: Address = address!("3333333333333333333333333333333333333333");
+    const SAFE: Address = address!("4444444444444444444444444444444444444444");
+    const TO: Address = address!("5555555555555555555555555555555555555555");
+    const CHAIN_ID: u64 = 1;
+    const VOTING_WINDOW: u64 = 10;
 
     fn service() -> SentinelService {
-        SentinelService::new(ORACLE, FEE_TOKEN)
+        service_with_blocklist(vec![])
+    }
+
+    fn service_with_blocklist(blocklist: Vec<Address>) -> SentinelService {
+        SentinelService::new(
+            ORACLE,
+            FEE_TOKEN,
+            CONSENSUS,
+            U256::from(CHAIN_ID),
+            VOTING_WINDOW,
+            Detector::new(blocklist),
+        )
+    }
+
+    fn safe_tx(to: Address) -> SafeTransaction {
+        SafeTransaction {
+            to,
+            operation: Operation::CALL,
+            ..Default::default()
+        }
+    }
+
+    fn proposed(oracle: Address, safe_tx_hash: B256) -> Consensus::OracleTransactionProposed {
+        Consensus::OracleTransactionProposed {
+            safeTxHash: safe_tx_hash,
+            chainId: U256::from(CHAIN_ID),
+            safe: SAFE,
+            epoch: 7,
+            oracle,
+            transaction: safe_tx(TO),
+        }
+    }
+
+    fn request_id(safe_tx_hash: B256, epoch: u64, oracle: Address) -> B256 {
+        oracle_tx_proposal_hash(U256::from(CHAIN_ID), CONSENSUS, epoch, oracle, safe_tx_hash)
+    }
+
+    fn preparing(deadline: u64, approve: bool) -> SentinelRequestState {
+        SentinelRequestState {
+            deadline,
+            approve,
+            status: RequestStatus::Preparing,
+        }
+    }
+
+    fn with_request(id: B256, request: SentinelRequestState) -> State {
+        let mut state = State::default();
+        state.0.insert(id, request);
+        state
+    }
+
+    fn log(block: u64, data: SentinelEvents) -> EventLog<SentinelEvents> {
+        EventLog {
+            block,
+            index: 0,
+            data,
+        }
+    }
+
+    #[tokio::test]
+    async fn oracle_transaction_proposed_tracks_a_preparing_request() {
+        let mut svc = service();
+        let safe_tx_hash = B256::repeat_byte(0x01);
+        let id = request_id(safe_tx_hash, 7, ORACLE);
+        let event = SentinelEvents::Consensus(
+            Consensus::ConsensusEvents::OracleTransactionProposed(proposed(ORACLE, safe_tx_hash)),
+        );
+
+        let (state, actions) = svc.event(State::default(), log(5, event)).await;
+
+        assert!(actions.is_empty());
+        let request = &state.0[&id];
+        assert_eq!(request.status, RequestStatus::Preparing);
+        assert!(request.approve);
+        assert_eq!(request.deadline, 5 + VOTING_WINDOW);
+    }
+
+    #[tokio::test]
+    async fn oracle_transaction_proposed_denies_blocklisted_destination() {
+        let mut svc = service_with_blocklist(vec![TO]);
+        let safe_tx_hash = B256::repeat_byte(0x02);
+        let id = request_id(safe_tx_hash, 7, ORACLE);
+        let event = SentinelEvents::Consensus(
+            Consensus::ConsensusEvents::OracleTransactionProposed(proposed(ORACLE, safe_tx_hash)),
+        );
+
+        let (state, _) = svc.event(State::default(), log(5, event)).await;
+
+        assert!(!state.0[&id].approve);
+    }
+
+    #[tokio::test]
+    async fn oracle_transaction_proposed_ignores_other_oracles() {
+        let mut svc = service();
+        let other_oracle = address!("6666666666666666666666666666666666666666");
+        let event =
+            SentinelEvents::Consensus(Consensus::ConsensusEvents::OracleTransactionProposed(
+                proposed(other_oracle, B256::repeat_byte(0x03)),
+            ));
+
+        let (state, actions) = svc.event(State::default(), log(5, event)).await;
+
+        assert!(state.0.is_empty());
+        assert!(actions.is_empty());
+    }
+
+    #[tokio::test]
+    async fn oracle_transaction_proposed_ignores_a_duplicate_for_an_existing_request() {
+        let mut svc = service();
+        let safe_tx_hash = B256::repeat_byte(0x0f);
+        let id = request_id(safe_tx_hash, 7, ORACLE);
+        let mut committed = preparing(50, true);
+        committed.status = RequestStatus::Committed;
+        let state = with_request(id, committed.clone());
+        let event = SentinelEvents::Consensus(
+            Consensus::ConsensusEvents::OracleTransactionProposed(proposed(ORACLE, safe_tx_hash)),
+        );
+
+        let (state, actions) = svc.event(state, log(5, event)).await;
+
+        assert_eq!(state.0[&id], committed);
+        assert!(actions.is_empty());
+    }
+
+    #[tokio::test]
+    async fn new_request_commits_approve_vote_for_a_preparing_request() {
+        let mut svc = service();
+        let id = B256::repeat_byte(0x04);
+        let state = with_request(id, preparing(1, true));
+        let event = SentinelEvents::Oracle(SentinelOracle::SentinelOracleEvents::NewRequest(
+            SentinelOracle::NewRequest {
+                requestId: id,
+                proposer: SAFE,
+                fee: U256::ZERO,
+                bondTarget: U256::from(1_000u64),
+                deadline: U256::ZERO,
+            },
+        ));
+
+        let (state, actions) = svc.event(state, log(40, event)).await;
+
+        let request = &state.0[&id];
+        assert_eq!(request.status, RequestStatus::Pending);
+        assert_eq!(request.deadline, 50);
+        assert_eq!(
+            actions,
+            vec![
+                SentinelAction {
+                    kind: SentinelActionKind::ApproveToken {
+                        bond: U256::from(1_000u64)
+                    },
+                    expires_at: 50,
+                },
+                SentinelAction {
+                    kind: SentinelActionKind::CommitApprove { id },
+                    expires_at: 50,
+                },
+            ]
+        );
+    }
+
+    #[tokio::test]
+    async fn new_request_commits_deny_vote_when_denied() {
+        let mut svc = service();
+        let id = B256::repeat_byte(0x05);
+        let state = with_request(id, preparing(1, false));
+        let event = SentinelEvents::Oracle(SentinelOracle::SentinelOracleEvents::NewRequest(
+            SentinelOracle::NewRequest {
+                requestId: id,
+                proposer: SAFE,
+                fee: U256::ZERO,
+                bondTarget: U256::from(1_000u64),
+                deadline: U256::ZERO,
+            },
+        ));
+
+        let (state, actions) = svc.event(state, log(40, event)).await;
+
+        let request = &state.0[&id];
+        assert_eq!(request.status, RequestStatus::Pending);
+        assert_eq!(request.deadline, 50);
+        assert_eq!(
+            actions,
+            vec![
+                SentinelAction {
+                    kind: SentinelActionKind::ApproveToken {
+                        bond: U256::from(1_000u64)
+                    },
+                    expires_at: 50,
+                },
+                SentinelAction {
+                    kind: SentinelActionKind::CommitDeny { id },
+                    expires_at: 50,
+                },
+            ]
+        );
+    }
+
+    #[tokio::test]
+    async fn new_request_ignores_unknown_or_non_preparing_requests() {
+        let mut svc = service();
+        let id = B256::repeat_byte(0x06);
+        let event = || {
+            SentinelEvents::Oracle(SentinelOracle::SentinelOracleEvents::NewRequest(
+                SentinelOracle::NewRequest {
+                    requestId: id,
+                    proposer: SAFE,
+                    fee: U256::ZERO,
+                    bondTarget: U256::from(1_000u64),
+                    deadline: U256::ZERO,
+                },
+            ))
+        };
+
+        let (state, actions) = svc.event(State::default(), log(1, event())).await;
+        assert!(state.0.is_empty());
+        assert!(actions.is_empty());
+
+        let mut pending = with_request(id, preparing(1, true));
+        pending.0.get_mut(&id).unwrap().status = RequestStatus::Pending;
+        let (state, actions) = svc.event(pending, log(1, event())).await;
+        assert_eq!(state.0[&id].status, RequestStatus::Pending);
+        assert!(actions.is_empty());
     }
 
     #[test]

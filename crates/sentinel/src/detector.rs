@@ -20,7 +20,6 @@ impl Detector {
         }
     }
 
-    #[cfg_attr(not(test), expect(dead_code))]
     pub fn approve(&self, tx: &SafeTransaction) -> bool {
         !self.blocklist.contains(&tx.to)
     }
