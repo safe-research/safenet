@@ -75,8 +75,11 @@ where
         &self,
         state: S,
         message: Message<Self::Event, Self::Continuation>,
-    ) -> (S, Vec<Command<Self::Action, Self::Effect>>);
+    ) -> (S, Commands<S, Self>);
 }
+
+type Commands<S, T> =
+    Vec<Command<<T as StateTransition<S>>::Action, <T as StateTransition<S>>::Effect>>;
 
 /// A service state machine.
 pub struct StateMachine<S, T> {
@@ -157,7 +160,7 @@ where
     pub async fn handle_update(
         &mut self,
         update: Update<T::Event>,
-    ) -> Result<Vec<Command<T::Action, T::Effect>>, Error> {
+    ) -> Result<Commands<S, T>, Error> {
         let mut lock = self.inner.lock().await;
         let (state, status) = mem::take(&mut *lock).ok_or(Error::Poisoned)?;
         let (state, status, commands) = match update {
@@ -239,7 +242,7 @@ where
     pub async fn handle_continuation(
         &mut self,
         cont: T::Continuation,
-    ) -> Result<Vec<Command<T::Action, T::Effect>>, Error> {
+    ) -> Result<Commands<S, T>, Error> {
         let mut lock = self.inner.lock().await;
         let (state, status) = mem::take(&mut *lock).ok_or(Error::Poisoned)?;
         let (state, commands) = self.transition.apply(state, Message::Continuation(cont));

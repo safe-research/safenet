@@ -9,13 +9,13 @@
 
 use crate::{
     index::{self, Update, Watcher, events::Events},
-    state::{self, StateMachine, StateTransition},
+    state::{self, Command, StateMachine, StateTransition},
     tx::{self, Signer, Transaction, TransactionQueue},
 };
 use alloy::{primitives::Address, providers::Provider};
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
 use sqlx::sqlite::SqlitePool;
-use std::{fmt::Debug, pin::Pin, time::Duration};
+use std::{collections::VecDeque, fmt::Debug, pin::Pin, time::Duration};
 
 /// How long to wait after a failed step before retrying, to avoid spinning on a
 /// persistent failure (such as an unreachable RPC node).
@@ -64,10 +64,13 @@ pub trait Service: StateTransition<Self::State> {
     /// The service state, persisted across restarts and rolled back on reorgs.
     type State: Serialize + DeserializeOwned;
 
-    /// Encodes state transition `actions` into transactions to submit onchain,
+    /// Encodes state transition `action` into a transaction to submit onchain,
     /// each paired with the block number after which it should be dropped if it
     /// has not yet been submitted.
-    fn encode_actions(&self, actions: Vec<Self::Action>) -> Vec<(Transaction, u64)>;
+    fn encode_action(&self, actions: Self::Action) -> (Transaction, u64);
+
+    /// Performs an effect and returns a continuation.
+    fn perform_effect(&mut self, effect: Self::Effect) -> impl Future<Output = Self::Continuation>;
 }
 
 /// Drives a [`Service`] by wiring its indexer, state machine and transaction
@@ -182,9 +185,35 @@ where
             self.transactions.handle_block_update(block.clone()).await?;
         }
 
-        let actions = self.state.handle_update(update).await?;
-        if !actions.is_empty() {
-            let transactions = self.service.encode_actions(actions);
+        // Perform a state transition for the next update.
+        let commands = self.state.handle_update(update).await?;
+
+        // Process the state transition commands. Note that we need to thread
+        // effects and continuations that cause additional state transitions and
+        // commands.
+        //
+        // TODO: For now, effects are expected to complete right away. In the
+        // future, we can consider making effects concurrent with onchain
+        //  updates (or provide a mechanism to "pump" continuations into a queue
+        // for processing at a later time).
+        let mut commands = VecDeque::from(commands);
+        let mut transactions = Vec::with_capacity(commands.len());
+        while let Some(command) = commands.pop_front() {
+            match command {
+                Command::Action(action) => {
+                    let transaction = self.service.encode_action(action);
+                    transactions.push(transaction);
+                }
+                Command::Effect(effect) => {
+                    let cont = self.service.perform_effect(effect).await;
+                    let new_commands = self.state.handle_continuation(cont).await?;
+                    commands.extend(new_commands);
+                }
+            }
+        }
+
+        // Submit transactions for execution onchain.
+        if !transactions.is_empty() {
             self.transactions.queue(transactions).await?;
         }
 
