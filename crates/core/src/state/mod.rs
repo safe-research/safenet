@@ -10,7 +10,7 @@ use self::storage::SnapshotStore;
 use crate::index::{BlockUpdate, EventLog, EventUpdate, Update};
 use serde::{Serialize, de::DeserializeOwned};
 use sqlx::SqlitePool;
-use std::{mem, range::RangeInclusive};
+use std::{collections::VecDeque, mem, range::RangeInclusive};
 use tokio::sync::Mutex;
 
 /// Error produced by the [`StateMachine`].
@@ -32,6 +32,17 @@ pub enum Error {
     Poisoned,
 }
 
+/// A state transition message.
+///
+/// This describes any of the inputs that cause the state machine to progress.
+pub enum Message<E, C> {
+    /// A new block.
+    NewBlock(u64),
+    /// A new event.
+    Event(EventLogE),
+    Continuation(C),
+}
+
 /// Describes the state transition function for the state machine.
 ///
 /// Note that **all state transitions are non-fallible**, this means that in
@@ -41,17 +52,59 @@ where
     S: Sized,
 {
     type Event;
+    type Message;
     type Action;
+    type Effect;
 
     /// Perform the state transition for when a new block is observed.
-    fn new_block(&mut self, state: S, block: u64) -> impl Future<Output = (S, Vec<Self::Action>)>;
+    fn new_block(&self, state: S, block: u64) -> TransitionResult<S, Self::Action, Self::Effect>;
 
     /// Perform the state transition when a new event log is observed.
     fn event(
-        &mut self,
+        &self,
         state: S,
-        event: EventLog<Self::Event>,
-    ) -> impl Future<Output = (S, Vec<Self::Action>)>;
+        event: Self::Event,
+    ) -> TransitionResult<S, Self::Action, Self::Effect>;
+
+    /// Perform the state transition when a message produced by an effect is
+    /// observed.
+    fn message(
+        &self,
+        state: S,
+        message: Self::Message,
+    ) -> TransitionResult<S, Self::Action, Self::Effect>;
+}
+
+/// Outputs produced by a pure state transition.
+pub type TransitionOutputs<A, E> = Vec<TransitionOutput<A, E>>;
+
+/// Result of applying a pure state transition.
+pub type TransitionResult<S, A, E> = (S, TransitionOutputs<A, E>);
+
+/// An output produced by a pure state transition.
+///
+/// Actions are returned to the service driver and encoded as transactions.
+/// Effects are processed outside of the pure state transition boundary and
+/// converted into messages that are fed back into the state machine.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum TransitionOutput<A, E> {
+    /// An action for the service to encode as a transaction.
+    Action(A),
+    /// An effect for the service to process.
+    Effect(E),
+}
+
+/// Processes side effects emitted by state transitions.
+///
+/// Effect processing is intentionally outside of [`StateTransition`]: it may
+/// mutate service-local resources, perform asynchronous I/O, and may produce
+/// different messages when the same chain transition is replayed after a reorg.
+pub trait EffectProcessor<E> {
+    type Message;
+
+    /// Processes an effect and returns messages to feed back into the state
+    /// machine.
+    fn process_effect(&mut self, effect: E) -> impl Future<Output = Vec<Self::Message>>;
 }
 
 /// A service state machine.
@@ -133,7 +186,14 @@ where
     ///
     /// The state machine halts if it returns an error, as it can no longer
     /// correctly progress.
-    pub async fn handle_update(&mut self, update: Update<E>) -> Result<Vec<T::Action>, Error> {
+    pub async fn handle_update<P>(
+        &mut self,
+        update: Update<E>,
+        effects: &mut P,
+    ) -> Result<Vec<T::Action>, Error>
+    where
+        P: EffectProcessor<T::Effect, Message = T::Message>,
+    {
         let mut lock = self.inner.lock().await;
         let Inner { state, status } = mem::take(&mut *lock).ok_or(Error::Poisoned)?;
         let (state, status, actions) = match update {
@@ -158,7 +218,9 @@ where
                 if matches!(status, Status::Initialized)
                     || matches!(status, Status::BlockPending { pending } if pending == number) =>
             {
-                let (state, actions) = self.transition.new_block(state, number).await;
+                let (state, outputs) = self.transition.new_block(state, number);
+                let (state, actions) =
+                    apply_outputs(&self.transition, state, outputs, effects).await;
                 let status = Status::BlockEvents { latest: number };
                 self.snapshots.prune(safe).await?;
                 (state, status, actions)
@@ -179,7 +241,9 @@ where
                 let mut state = state;
                 let mut actions = vec![];
                 for log in logs {
-                    let (new_state, new_actions) = self.transition.event(state, log).await;
+                    let (new_state, outputs) = self.transition.event(state, log);
+                    let (new_state, new_actions) =
+                        apply_outputs(&self.transition, new_state, outputs, effects).await;
                     state = new_state;
                     actions.extend(new_actions);
                 }
@@ -209,6 +273,51 @@ where
         *lock = Some(Inner { state, status });
         Ok(actions)
     }
+}
+
+async fn apply_outputs<S, T, P>(
+    transition: &T,
+    mut state: S,
+    outputs: TransitionOutputs<T::Action, T::Effect>,
+    effects: &mut P,
+) -> (S, Vec<T::Action>)
+where
+    T: StateTransition<S>,
+    P: EffectProcessor<T::Effect, Message = T::Message>,
+{
+    enum Pending<A, E, M> {
+        Output(TransitionOutput<A, E>),
+        Message(M),
+    }
+
+    let mut pending = outputs
+        .into_iter()
+        .map(Pending::Output)
+        .collect::<VecDeque<_>>();
+    let mut actions = vec![];
+
+    while let Some(pending_item) = pending.pop_front() {
+        match pending_item {
+            Pending::Message(message) => {
+                let (new_state, outputs) = transition.message(state, message);
+                state = new_state;
+                for output in outputs.into_iter().rev() {
+                    pending.push_front(Pending::Output(output));
+                }
+            }
+            Pending::Output(output) => match output {
+                TransitionOutput::Action(action) => actions.push(action),
+                TransitionOutput::Effect(effect) => {
+                    let messages = effects.process_effect(effect).await;
+                    for message in messages.into_iter().rev() {
+                        pending.push_front(Pending::Message(message));
+                    }
+                }
+            },
+        }
+    }
+
+    (state, actions)
 }
 
 fn next_block(number: u64) -> Result<u64, Error> {
@@ -253,24 +362,56 @@ mod tests {
 
     impl StateTransition<TestState> for TestTransition {
         type Event = u64;
+        type Message = u64;
         type Action = Action;
+        type Effect = u64;
 
-        async fn new_block(
-            &mut self,
+        fn new_block(
+            &self,
             mut state: TestState,
             block: u64,
-        ) -> (TestState, Vec<Action>) {
+        ) -> TransitionResult<TestState, Action, u64> {
             state.blocks.push(block);
-            (state, vec![Action::Block(block)])
+            (state, vec![TransitionOutput::Action(Action::Block(block))])
         }
 
-        async fn event(
-            &mut self,
+        fn event(
+            &self,
             mut state: TestState,
-            event: EventLog<u64>,
-        ) -> (TestState, Vec<Action>) {
-            state.events.push(event.data);
-            (state, vec![Action::Event(event.data)])
+            event: u64,
+        ) -> TransitionResult<TestState, Action, u64> {
+            if let Some(effect) = event.checked_sub(1000) {
+                return (state, vec![TransitionOutput::Effect(effect)]);
+            }
+
+            state.events.push(event);
+            (state, vec![TransitionOutput::Action(Action::Event(event))])
+        }
+
+        fn message(
+            &self,
+            mut state: TestState,
+            message: u64,
+        ) -> TransitionResult<TestState, Action, u64> {
+            state.events.push(message);
+            (
+                state,
+                vec![TransitionOutput::Action(Action::Event(message))],
+            )
+        }
+    }
+
+    #[derive(Default)]
+    struct TestEffects {
+        processed: Vec<u64>,
+    }
+
+    impl EffectProcessor<u64> for TestEffects {
+        type Message = u64;
+
+        async fn process_effect(&mut self, effect: u64) -> Vec<u64> {
+            self.processed.push(effect);
+            vec![effect]
         }
     }
 
@@ -343,15 +484,22 @@ mod tests {
     async fn applies_new_blocks_and_events() {
         let pool = pool().await;
         let mut machine = new_machine(&pool).await;
+        let mut effects = TestEffects::default();
 
         // A new block runs the block transition; its events are applied and the
         // resulting state is committed at the last block of the range.
         assert_eq!(
-            machine.handle_update(new_block(1)).await.unwrap(),
+            machine
+                .handle_update(new_block(1), &mut effects)
+                .await
+                .unwrap(),
             vec![Action::Block(1)]
         );
         assert_eq!(
-            machine.handle_update(logs(1..=1, [10, 20])).await.unwrap(),
+            machine
+                .handle_update(logs(1..=1, [10, 20]), &mut effects)
+                .await
+                .unwrap(),
             vec![Action::Event(10), Action::Event(20)]
         );
 
@@ -372,15 +520,28 @@ mod tests {
         let pool = pool().await;
 
         let mut machine = new_machine(&pool).await;
-        machine.handle_update(new_block(1)).await.unwrap();
-        machine.handle_update(logs(1..=1, [10])).await.unwrap();
+        let mut effects = TestEffects::default();
+        machine
+            .handle_update(new_block(1), &mut effects)
+            .await
+            .unwrap();
+        machine
+            .handle_update(logs(1..=1, [10]), &mut effects)
+            .await
+            .unwrap();
         drop(machine);
 
         // A fresh machine over the same store resumes at block 1, so it accepts
         // block 2 and carries the restored state forward.
         let mut machine = new_machine(&pool).await;
-        machine.handle_update(new_block(2)).await.unwrap();
-        machine.handle_update(logs(2..=2, [20])).await.unwrap();
+        machine
+            .handle_update(new_block(2), &mut effects)
+            .await
+            .unwrap();
+        machine
+            .handle_update(logs(2..=2, [20]), &mut effects)
+            .await
+            .unwrap();
 
         assert_eq!(
             committed(&pool).await,
@@ -398,21 +559,34 @@ mod tests {
     async fn reorg_rolls_back_to_the_common_ancestor() {
         let pool = pool().await;
         let mut machine = new_machine(&pool).await;
+        let mut effects = TestEffects::default();
 
         for (block, event) in [(1, 10), (2, 20), (3, 30)] {
-            machine.handle_update(new_block(block)).await.unwrap();
             machine
-                .handle_update(logs(block..=block, [event]))
+                .handle_update(new_block(block), &mut effects)
+                .await
+                .unwrap();
+            machine
+                .handle_update(logs(block..=block, [event]), &mut effects)
                 .await
                 .unwrap();
         }
 
         // Blocks 2 and 3 are uncled; roll back to block 1's snapshot.
-        assert_eq!(machine.handle_update(uncle(2)).await.unwrap(), vec![]);
+        assert_eq!(
+            machine.handle_update(uncle(2), &mut effects).await.unwrap(),
+            vec![]
+        );
 
         // Re-apply forward on the new canonical chain.
-        machine.handle_update(new_block(2)).await.unwrap();
-        machine.handle_update(logs(2..=2, [21])).await.unwrap();
+        machine
+            .handle_update(new_block(2), &mut effects)
+            .await
+            .unwrap();
+        machine
+            .handle_update(logs(2..=2, [21]), &mut effects)
+            .await
+            .unwrap();
 
         assert_eq!(
             committed(&pool).await,
@@ -430,17 +604,30 @@ mod tests {
     async fn warps_and_prunes_intermediate_snapshots() {
         let pool = pool().await;
         let mut machine = new_machine(&pool).await;
+        let mut effects = TestEffects::default();
 
         // Warp ahead, then apply the warped range's events. The block transition
         // does not run for warped blocks; the state is committed at the end of
         // the range and the older snapshots are pruned.
-        assert_eq!(machine.handle_update(warp(1, 6)).await.unwrap(), vec![]);
         assert_eq!(
-            machine.handle_update(logs(1..=3, [10])).await.unwrap(),
+            machine
+                .handle_update(warp(1, 6), &mut effects)
+                .await
+                .unwrap(),
+            vec![]
+        );
+        assert_eq!(
+            machine
+                .handle_update(logs(1..=3, [10]), &mut effects)
+                .await
+                .unwrap(),
             vec![Action::Event(10)]
         );
         assert_eq!(
-            machine.handle_update(logs(4..=6, [40])).await.unwrap(),
+            machine
+                .handle_update(logs(4..=6, [40]), &mut effects)
+                .await
+                .unwrap(),
             vec![Action::Event(40)]
         );
 
@@ -456,5 +643,36 @@ mod tests {
         );
         // Only the latest snapshot survives the prune.
         assert_eq!(snapshot_count(&pool).await, 1);
+    }
+
+    #[tokio::test]
+    async fn processes_effect_messages_before_committing() {
+        let pool = pool().await;
+        let mut machine = new_machine(&pool).await;
+        let mut effects = TestEffects::default();
+
+        machine
+            .handle_update(new_block(1), &mut effects)
+            .await
+            .unwrap();
+        assert_eq!(
+            machine
+                .handle_update(logs(1..=1, [1007]), &mut effects)
+                .await
+                .unwrap(),
+            vec![Action::Event(7)]
+        );
+
+        assert_eq!(effects.processed, vec![7]);
+        assert_eq!(
+            committed(&pool).await,
+            Some((
+                1,
+                TestState {
+                    blocks: vec![1],
+                    events: vec![7],
+                },
+            ))
+        );
     }
 }

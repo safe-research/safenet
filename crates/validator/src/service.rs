@@ -3,8 +3,12 @@
 
 use alloy::sol;
 use safenet_core::{
-    Service, index::EventLog, state::StateTransition, tx::Transaction, watcher_events,
+    Service,
+    state::{EffectProcessor, StateTransition, TransitionResult},
+    tx::Transaction,
+    watcher_events,
 };
+use std::convert::Infallible;
 
 sol! {
     #[derive(Debug)]
@@ -22,14 +26,40 @@ pub struct DummyService;
 
 impl StateTransition<()> for DummyService {
     type Event = Dummy::DummyEvents;
+    type Message = Infallible;
     type Action = ();
+    type Effect = Infallible;
 
-    async fn new_block(&mut self, state: (), _block: u64) -> ((), Vec<Self::Action>) {
+    fn new_block(
+        &self,
+        state: (),
+        _block: u64,
+    ) -> TransitionResult<(), Self::Action, Self::Effect> {
         (state, Vec::new())
     }
 
-    async fn event(&mut self, state: (), _event: EventLog<Self::Event>) -> ((), Vec<Self::Action>) {
+    fn event(
+        &self,
+        state: (),
+        _event: EventLog<Self::Event>,
+    ) -> TransitionResult<(), Self::Action, Self::Effect> {
         (state, Vec::new())
+    }
+
+    fn message(
+        &self,
+        _state: (),
+        message: Self::Message,
+    ) -> TransitionResult<(), Self::Action, Self::Effect> {
+        match message {}
+    }
+}
+
+impl EffectProcessor<Infallible> for DummyService {
+    type Message = Infallible;
+
+    async fn process_effect(&mut self, effect: Infallible) -> Vec<Infallible> {
+        match effect {}
     }
 }
 
