@@ -10,7 +10,7 @@ use self::storage::SnapshotStore;
 use crate::index::{BlockUpdate, EventLog, EventUpdate, Update};
 use serde::{Serialize, de::DeserializeOwned};
 use sqlx::SqlitePool;
-use std::{mem, range::RangeInclusive};
+use std::{collections::VecDeque, mem, range::RangeInclusive};
 use tokio::sync::{Mutex, MutexGuard};
 
 /// Error produced by the [`StateMachine`].
@@ -83,6 +83,15 @@ where
         message: Message<Self::Event, Self::Resume>,
     ) -> (S, Commands<S, Self>);
 }
+
+/// An effect handler.
+///
+///     /// Performs an effect and returns its result to be resumed in the state
+/// machine.
+///
+/// Note that `perform_effect` explicitly does not fail, and is expected to
+/// return some result that indicates an error so the state machine can
+/// handle the effect error internally.
 
 /// A utility type for a vector of commands for some state and its transition.
 pub type Commands<S, T> =
@@ -167,10 +176,10 @@ where
     pub async fn handle_update(
         &mut self,
         update: Update<T::Event>,
-    ) -> Result<(Continuation<'_, S, T>, Commands<S, T>), Error> {
+    ) -> Result<Coroutine<'_, S, T>, Error> {
         let mut lock = self.inner.lock().await;
         let (state, status) = mem::take(&mut *lock).ok_or(Error::Poisoned)?;
-        let (state, status, commands) = match update {
+        match update {
             Update::Block(BlockUpdate::Warp { from, to })
                 if matches!(status, Status::Initialized)
                     || matches!(status, Status::BlockPending { pending } if pending == from) =>
@@ -178,24 +187,33 @@ where
                 let status = Status::WarpEvents {
                     range: block_range(from, to)?,
                 };
-                (state, status, vec![])
+
+                *lock = Some((state, status));
+                Coroutine::Completed(vec![])
             }
             Update::Block(BlockUpdate::Uncle { number })
                 if matches!(status, Status::BlockPending { pending } if number < pending)
                     || matches!(status, Status::BlockEvents { latest } if number <= latest) =>
             {
-                let (_, snapshot) = self.snapshots.reorg(number).await?;
+                let (_, state) = self.snapshots.reorg(number).await?;
                 let status = Status::BlockPending { pending: number };
-                (snapshot, status, vec![])
+
+                *lock = Some((state, status));
+                Coroutine::Completed(vec![])
             }
             Update::Block(BlockUpdate::New { number, safe, .. })
                 if matches!(status, Status::Initialized)
                     || matches!(status, Status::BlockPending { pending } if pending == number) =>
             {
+                self.snapshots.prune(safe).await?;
                 let (state, commands) = self.transition.apply(state, Message::NewBlock(number));
                 let status = Status::BlockEvents { latest: number };
-                self.snapshots.prune(safe).await?;
-                (state, status, commands)
+                Coroutine::new(
+                    lock,
+                    &self.transition,
+                    &mut self.snapshots,
+
+                )
             }
             Update::Logs(EventUpdate { blocks, logs })
                 if matches!(status, Status::BlockEvents { latest } if is_next_in_range(latest..=latest, blocks))
@@ -246,33 +264,43 @@ where
     }
 }
 
-/// The continuation from a state machine update.
+/// A state machine update coroutine.
 ///
-/// This continuation is used to resume results from effects from an update.
-/// This ensures that effects are applied atomically with the updates that
-/// performed them.
-pub struct Continuation<'a, S, T> {
-    lock: MutexGuard<'a, Option<(S, Status)>>,
-    transition: &'a T,
-    snapshots: Option<&'a mut SnapshotStore<S>>,
+/// The coroutine must be resumed to completion in order to commit a state
+/// machine update. Failure to do so will cause the state machine to become
+/// poisoned.
+/// A continuation from a state machine update.
+pub enum Coroutine<'a, S, T>
+where
+    T: StateTransition<S>,
+{
+    Completed(Vec<T::Action>),
+    Suspended(T::Effect, Continuation<'a, T, S>),
 }
 
-impl<'a, S, T> Continuation<'a, S, T>
+/// A state machine update continuation.
+pub struct Continuation<'a, S, T>
+where
+    T: StateTransition<S>,
+{
+    lock: MutexGuard<'a, Option<(S, Status)>>,
+    transition: &'a T,
+    snapshots: &'a mut SnapshotStore<S>,
+    state: Option<S>,
+    status: Status,
+    messages: VecDeque<Message<T::Event, T::Resume>>,
+    actions: Vec<T::Action>,
+}
+
+impl<'a, S, T> Coroutine<'a, S, T>
 where
     T: StateTransition<S>,
     S: Serialize + DeserializeOwned,
 {
-    /// Handle an effect continuation.
-    pub async fn handle_continuation(
-        &mut self,
-        result: T::Resume,
-    ) -> Result<Commands<S, T>, Error> {
-        let mut lock = self.inner.lock().await;
-        let (state, status) = mem::take(&mut *lock).ok_or(Error::Poisoned)?;
-        let (state, commands) = self.transition.apply(state, Message::Resume(result));
-        *lock = Some((state, status));
-        Ok(commands)
-    }
+    /// Creates a new coroutine.
+    fn new(
+        lock:
+    )
 }
 
 fn next_block(number: u64) -> Result<u64, Error> {
