@@ -7,7 +7,7 @@
 pub mod storage;
 
 use self::storage::SnapshotStore;
-use crate::index::{BlockUpdate, EventUpdate, Update};
+use crate::index::{BlockUpdate, EventLog, EventUpdate, Update};
 use serde::{Serialize, de::DeserializeOwned};
 use sqlx::SqlitePool;
 use std::{mem, range::RangeInclusive};
@@ -46,11 +46,11 @@ where
     /// Perform the state transition for when a new block is observed.
     fn new_block(&mut self, state: S, block: u64) -> impl Future<Output = (S, Vec<Self::Action>)>;
 
-    /// Perform the state transition when a new event is observed.
+    /// Perform the state transition when a new event log is observed.
     fn event(
         &mut self,
         state: S,
-        event: Self::Event,
+        event: EventLog<Self::Event>,
     ) -> impl Future<Output = (S, Vec<Self::Action>)>;
 }
 
@@ -167,6 +167,15 @@ where
                 if matches!(status, Status::BlockEvents { latest } if is_next_in_range(latest..=latest, blocks))
                     || matches!(status, Status::WarpEvents { range } if is_next_in_range(range, blocks)) =>
             {
+                // We are extra defensive with the updates that we pass to the
+                // state machine, so ensure that the logs are in strictly sorted
+                // and in the update's block range.
+                if !logs.is_sorted_by(|a, b| (a.block, a.index) < (b.block, b.index))
+                    || logs.iter().any(|log| !blocks.contains(&log.block))
+                {
+                    return Err(Error::BadUpdate);
+                }
+
                 let mut state = state;
                 let mut actions = vec![];
                 for log in logs {
@@ -255,9 +264,13 @@ mod tests {
             (state, vec![Action::Block(block)])
         }
 
-        async fn event(&mut self, mut state: TestState, event: u64) -> (TestState, Vec<Action>) {
-            state.events.push(event);
-            (state, vec![Action::Event(event)])
+        async fn event(
+            &mut self,
+            mut state: TestState,
+            event: EventLog<u64>,
+        ) -> (TestState, Vec<Action>) {
+            state.events.push(event.data);
+            (state, vec![Action::Event(event.data)])
         }
     }
 
@@ -311,9 +324,18 @@ mod tests {
         blocks: std::ops::RangeInclusive<u64>,
         logs: impl IntoIterator<Item = u64>,
     ) -> Update<u64> {
+        let block = *blocks.start();
         Update::Logs(EventUpdate {
             blocks: blocks.into(),
-            logs: logs.into_iter().collect(),
+            logs: logs
+                .into_iter()
+                .enumerate()
+                .map(|(index, data)| EventLog {
+                    block,
+                    index: index.try_into().expect("test log index fits in u64"),
+                    data,
+                })
+                .collect(),
         })
     }
 

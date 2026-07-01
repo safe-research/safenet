@@ -37,6 +37,18 @@ pub trait Events: Sized {
     fn decode_log(topics: &[B256], data: &[u8]) -> Option<Self>;
 }
 
+/// An event log, adding additional log position information (block number and
+/// log index) to event data.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct EventLog<E> {
+    /// The block number the log is for.
+    pub block: u64,
+    /// The index of the log within the block.
+    pub index: u64,
+    /// The decoded event data.
+    pub data: E,
+}
+
 /// A batch of decoded event logs together with the inclusive range of blocks
 /// `from..=to` they were fetched for.
 ///
@@ -49,7 +61,7 @@ pub struct EventUpdate<E> {
     pub blocks: RangeInclusive<u64>,
     /// The decoded logs in `(block_number, log_index)` order. May be empty when
     /// no watched events occurred in the range.
-    pub logs: Vec<E>,
+    pub logs: Vec<EventLog<E>>,
 }
 
 /// Event watcher configuration.
@@ -385,7 +397,7 @@ where
 
     /// Fetches the watched logs for some blocks using the given strategy,
     /// returning them decoded and in `(block_number, log_index)` order.
-    async fn fetch_logs(&self, fetch: Fetch) -> Result<Vec<E>, Error> {
+    async fn fetch_logs(&self, fetch: Fetch) -> Result<Vec<EventLog<E>>, Error> {
         let logs = match fetch {
             Fetch::SingleQuery(blocks) => {
                 let filter = blocks
@@ -451,7 +463,7 @@ where
                     .collect()
             }
         };
-        decode_and_sort(logs)
+        decode_and_sort(&logs)
     }
 
     /// Guards against nodes that silently cap the number of returned logs: a
@@ -472,25 +484,35 @@ where
     }
 }
 
-/// Sorts logs into `(block_number, log_index)` order and decodes them into the
-/// typed event set, dropping any that are not part of the set.
-fn decode_and_sort<E>(mut logs: Vec<Log>) -> Result<Vec<E>, Error>
+/// Decodes logs into the typed event set and sorts them into
+/// `(block_number, log_index)` order.
+fn decode_and_sort<E>(logs: &[Log]) -> Result<Vec<EventLog<E>>, Error>
 where
     E: Events,
 {
-    logs.sort_unstable_by_key(|log| (log.block_number, log.log_index));
-    logs.iter()
+    let mut logs = logs
+        .iter()
         .map(|log| {
-            E::decode_log(log.topics(), &log.data().data).ok_or_else(|| Error::DecodeLog {
-                // This is an unfortunate typing quirk of `alloy`, but we
-                // should never have a log without a block hash or index set.
-                // If we do, its not the end of the world, and we would just
-                // report an error with weird data.
-                block_hash: log.block_hash.unwrap_or(B256::repeat_byte(0xff)),
-                log_index: log.log_index.unwrap_or(u64::MAX),
-            })
+            E::decode_log(log.topics(), &log.data().data)
+                .and_then(|data| {
+                    Some(EventLog {
+                        block: log.block_number?,
+                        index: log.log_index?,
+                        data,
+                    })
+                })
+                .ok_or_else(|| Error::DecodeLog {
+                    // This is an unfortunate typing quirk of `alloy`, but we
+                    // should never have a log without a block hash or index set.
+                    // If we do, it's not the end of the world, and we would just
+                    // report an error with weird data.
+                    block_hash: log.block_hash.unwrap_or(B256::repeat_byte(0xff)),
+                    log_index: log.log_index.unwrap_or(u64::MAX),
+                })
         })
-        .collect()
+        .collect::<Result<Vec<_>, _>>()?;
+    logs.sort_unstable_by_key(|log| (log.block, log.index));
+    Ok(logs)
 }
 
 /// Utility to convert between a `std::ops::RangeInclusive` and the more modern
@@ -629,6 +651,10 @@ mod tests {
         }
     }
 
+    fn event_log<E>((block, index): (u64, u64), data: E) -> EventLog<E> {
+        EventLog { block, index, data }
+    }
+
     fn watcher(
         asserter: &Asserter,
         config: Config,
@@ -639,7 +665,7 @@ mod tests {
 
     #[test]
     fn decodes_and_sorts_logs() {
-        let events = decode_and_sort::<Erc20::Erc20Events>(vec![
+        let events = decode_and_sort::<Erc20::Erc20Events>(&[
             log(
                 (2, 0),
                 Erc20::Transfer {
@@ -667,18 +693,27 @@ mod tests {
         assert_eq!(
             events,
             [
-                Erc20::Erc20Events::Transfer(Erc20::Transfer {
-                    amount: uint!(3_U256),
-                    ..Default::default()
-                }),
-                Erc20::Erc20Events::Transfer(Erc20::Transfer {
-                    amount: uint!(1_U256),
-                    ..Default::default()
-                }),
-                Erc20::Erc20Events::Approval(Erc20::Approval {
-                    amount: uint!(2_U256),
-                    ..Default::default()
-                }),
+                event_log(
+                    (1, 1),
+                    Erc20::Erc20Events::Transfer(Erc20::Transfer {
+                        amount: uint!(3_U256),
+                        ..Default::default()
+                    })
+                ),
+                event_log(
+                    (2, 0),
+                    Erc20::Erc20Events::Transfer(Erc20::Transfer {
+                        amount: uint!(1_U256),
+                        ..Default::default()
+                    })
+                ),
+                event_log(
+                    (2, 5),
+                    Erc20::Erc20Events::Approval(Erc20::Approval {
+                        amount: uint!(2_U256),
+                        ..Default::default()
+                    })
+                ),
             ]
         );
     }
@@ -710,26 +745,35 @@ mod tests {
         ];
 
         assert_matches!(
-            decode_and_sort::<Erc20::Erc20Events>(logs.clone()),
+            decode_and_sort::<Erc20::Erc20Events>(&logs),
             Err(Error::DecodeLog { log_index, .. }) if log_index == 1
         );
 
-        let events = decode_and_sort::<TokenEvents>(logs).unwrap();
+        let events = decode_and_sort::<TokenEvents>(&logs).unwrap();
         assert_eq!(
             events,
             [
-                TokenEvents::Erc721(Erc721::Erc721Events::Transfer(Erc721::Transfer {
-                    tokenId: uint!(3_U256),
-                    ..Default::default()
-                })),
-                TokenEvents::Erc20(Erc20::Erc20Events::Transfer(Erc20::Transfer {
-                    amount: uint!(1_U256),
-                    ..Default::default()
-                })),
-                TokenEvents::Erc20(Erc20::Erc20Events::Approval(Erc20::Approval {
-                    amount: uint!(2_U256),
-                    ..Default::default()
-                })),
+                event_log(
+                    (1, 1),
+                    TokenEvents::Erc721(Erc721::Erc721Events::Transfer(Erc721::Transfer {
+                        tokenId: uint!(3_U256),
+                        ..Default::default()
+                    }))
+                ),
+                event_log(
+                    (2, 0),
+                    TokenEvents::Erc20(Erc20::Erc20Events::Transfer(Erc20::Transfer {
+                        amount: uint!(1_U256),
+                        ..Default::default()
+                    }))
+                ),
+                event_log(
+                    (2, 5),
+                    TokenEvents::Erc20(Erc20::Erc20Events::Approval(Erc20::Approval {
+                        amount: uint!(2_U256),
+                        ..Default::default()
+                    }))
+                ),
             ]
         );
     }
@@ -764,14 +808,20 @@ mod tests {
         assert_eq!(
             logs,
             [
-                Erc20::Erc20Events::Approval(Erc20::Approval {
-                    amount: uint!(2_U256),
-                    ..Default::default()
-                }),
-                Erc20::Erc20Events::Transfer(Erc20::Transfer {
-                    amount: uint!(1_U256),
-                    ..Default::default()
-                }),
+                event_log(
+                    (1, 1),
+                    Erc20::Erc20Events::Approval(Erc20::Approval {
+                        amount: uint!(2_U256),
+                        ..Default::default()
+                    })
+                ),
+                event_log(
+                    (2, 0),
+                    Erc20::Erc20Events::Transfer(Erc20::Transfer {
+                        amount: uint!(1_U256),
+                        ..Default::default()
+                    })
+                ),
             ]
         );
         assert!(asserter.read_q().is_empty());
@@ -809,14 +859,20 @@ mod tests {
         assert_eq!(
             logs,
             [
-                Erc20::Erc20Events::Approval(Erc20::Approval {
-                    amount: uint!(2_U256),
-                    ..Default::default()
-                }),
-                Erc20::Erc20Events::Transfer(Erc20::Transfer {
-                    amount: uint!(1_U256),
-                    ..Default::default()
-                }),
+                event_log(
+                    (1, 1),
+                    Erc20::Erc20Events::Approval(Erc20::Approval {
+                        amount: uint!(2_U256),
+                        ..Default::default()
+                    })
+                ),
+                event_log(
+                    (2, 0),
+                    Erc20::Erc20Events::Transfer(Erc20::Transfer {
+                        amount: uint!(1_U256),
+                        ..Default::default()
+                    })
+                ),
             ]
         );
         assert!(asserter.read_q().is_empty());
@@ -878,14 +934,20 @@ mod tests {
         assert_eq!(
             logs,
             [
-                Erc20::Erc20Events::Transfer(Erc20::Transfer {
-                    amount: uint!(1_U256),
-                    ..Default::default()
-                }),
-                Erc20::Erc20Events::Approval(Erc20::Approval {
-                    amount: uint!(4_U256),
-                    ..Default::default()
-                }),
+                event_log(
+                    (1, 0),
+                    Erc20::Erc20Events::Transfer(Erc20::Transfer {
+                        amount: uint!(1_U256),
+                        ..Default::default()
+                    })
+                ),
+                event_log(
+                    (1, 3),
+                    Erc20::Erc20Events::Approval(Erc20::Approval {
+                        amount: uint!(4_U256),
+                        ..Default::default()
+                    })
+                ),
             ]
         );
         assert!(asserter.read_q().is_empty());
@@ -1024,10 +1086,13 @@ mod tests {
         // The failed `Transfer` query is dropped, leaving only the `Approval`.
         assert_eq!(
             logs,
-            [Erc20::Erc20Events::Approval(Erc20::Approval {
-                amount: uint!(7_U256),
-                ..Default::default()
-            })]
+            [event_log(
+                (1, 0),
+                Erc20::Erc20Events::Approval(Erc20::Approval {
+                    amount: uint!(7_U256),
+                    ..Default::default()
+                })
+            )]
         );
         assert!(asserter.read_q().is_empty());
     }
@@ -1084,10 +1149,13 @@ mod tests {
             events.next().await.unwrap(),
             Some(EventUpdate {
                 blocks: range(1..=5),
-                logs: vec![Erc20::Erc20Events::Transfer(Erc20::Transfer {
-                    amount: uint!(1_U256),
-                    ..Default::default()
-                })],
+                logs: vec![event_log(
+                    (3, 0),
+                    Erc20::Erc20Events::Transfer(Erc20::Transfer {
+                        amount: uint!(1_U256),
+                        ..Default::default()
+                    })
+                )],
             })
         );
         assert_eq!(
@@ -1190,14 +1258,20 @@ mod tests {
             Some(EventUpdate {
                 blocks: range(5..=5),
                 logs: vec![
-                    Erc20::Erc20Events::Transfer(Erc20::Transfer {
-                        amount: uint!(1_U256),
-                        ..Default::default()
-                    }),
-                    Erc20::Erc20Events::Approval(Erc20::Approval {
-                        amount: uint!(2_U256),
-                        ..Default::default()
-                    }),
+                    event_log(
+                        (5, 0),
+                        Erc20::Erc20Events::Transfer(Erc20::Transfer {
+                            amount: uint!(1_U256),
+                            ..Default::default()
+                        })
+                    ),
+                    event_log(
+                        (5, 1),
+                        Erc20::Erc20Events::Approval(Erc20::Approval {
+                            amount: uint!(2_U256),
+                            ..Default::default()
+                        })
+                    ),
                 ],
             })
         );
@@ -1231,10 +1305,13 @@ mod tests {
             events.next().await.unwrap(),
             Some(EventUpdate {
                 blocks: range(1337..=1337),
-                logs: vec![Erc20::Erc20Events::Transfer(Erc20::Transfer {
-                    amount: uint!(1_U256),
-                    ..Default::default()
-                })],
+                logs: vec![event_log(
+                    (1337, 0),
+                    Erc20::Erc20Events::Transfer(Erc20::Transfer {
+                        amount: uint!(1_U256),
+                        ..Default::default()
+                    })
+                )],
             })
         );
         assert_eq!(events.next().await.unwrap(), None);
@@ -1290,10 +1367,13 @@ mod tests {
             events.next().await.unwrap(),
             Some(EventUpdate {
                 blocks: range(1337..=1337),
-                logs: vec![Erc20::Erc20Events::Transfer(Erc20::Transfer {
-                    amount: uint!(1_U256),
-                    ..Default::default()
-                })],
+                logs: vec![event_log(
+                    (1337, 0),
+                    Erc20::Erc20Events::Transfer(Erc20::Transfer {
+                        amount: uint!(1_U256),
+                        ..Default::default()
+                    })
+                )],
             })
         );
         assert_eq!(events.next().await.unwrap(), None);
@@ -1346,14 +1426,20 @@ mod tests {
             Some(EventUpdate {
                 blocks: range(1337..=1337),
                 logs: vec![
-                    Erc20::Erc20Events::Transfer(Erc20::Transfer {
-                        amount: uint!(1_U256),
-                        ..Default::default()
-                    }),
-                    Erc20::Erc20Events::Approval(Erc20::Approval {
-                        amount: uint!(2_U256),
-                        ..Default::default()
-                    })
+                    event_log(
+                        (1337, 0),
+                        Erc20::Erc20Events::Transfer(Erc20::Transfer {
+                            amount: uint!(1_U256),
+                            ..Default::default()
+                        })
+                    ),
+                    event_log(
+                        (1337, 1),
+                        Erc20::Erc20Events::Approval(Erc20::Approval {
+                            amount: uint!(2_U256),
+                            ..Default::default()
+                        })
+                    )
                 ],
             })
         );
