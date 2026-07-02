@@ -282,7 +282,7 @@ where
     T: StateTransition<S>,
 {
     transition: &'a T,
-    effects: E,
+    effects: &'a mut E,
     state: S,
     actions: Vec<T::Action>,
 }
@@ -292,7 +292,7 @@ where
     T: StateTransition<S>,
     E: EffectHandler<T::Effect, T::Resume>,
 {
-    fn new(transition: &'a T, effects: E, state: S) -> Self {
+    fn new(transition: &'a T, effects: &'a mut E, state: S) -> Self {
         Self {
             transition,
             effects,
@@ -304,6 +304,12 @@ where
     async fn apply(mut self, message: Message<T::Event, T::Resume>) -> Self {
         let (state, commands) = self.transition.apply_transition(self.state, message);
         self.state = state;
+
+        // We assume that most commands are actions, and that effect transitions
+        // will generally produce a single command. This allows us to pre-
+        // allocate some space for the final actions. If we are off, then we
+        // either just reserved some additional extra space or need to grow the
+        // vector an additional time while handling new actions.
         self.actions.reserve(commands.len());
 
         let mut commands = VecDeque::from(commands);
@@ -350,15 +356,6 @@ pub struct Pure;
 impl<Resume> EffectHandler<Infallible, Resume> for Pure {
     async fn perform_effect(&mut self, effect: Infallible) -> Resume {
         match effect {}
-    }
-}
-
-impl<E, R, H> EffectHandler<E, R> for &mut H
-where
-    H: EffectHandler<E, R>,
-{
-    fn perform_effect(&mut self, effect: E) -> impl Future<Output = R> {
-        (*self).perform_effect(effect)
     }
 }
 
