@@ -17,4 +17,4 @@ pub mod serialization;
 pub mod state;
 pub mod tx;
 
-pub use self::driver::{Driver, Service};
+pub use self::driver::Driver;
