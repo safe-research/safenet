@@ -196,11 +196,33 @@ impl SentinelService {
 
     /// Finalizes committed requests and cleans up stale ones once their
     /// voting deadline has passed.
-    fn handle_block_advance(&self, state: State, _block: u64) -> (State, Vec<SentinelAction>) {
-        // TODO: move past-deadline `Committed` requests to `Finalized` with
-        // a `Finalize` action; drop stale `Preparing`/`Pending`/`Finalized`
-        // requests.
-        (state, Vec::new())
+    fn handle_block_advance(&self, mut state: State, block: u64) -> (State, Vec<SentinelAction>) {
+        let mut actions = Vec::new();
+        state.0.retain(|&id, request| {
+            if block <= request.deadline {
+                return true;
+            }
+            match request.status {
+                // Never opened for voting or never committed in time; drop
+                // rather than finalize onchain.
+                RequestStatus::Preparing | RequestStatus::Pending => false,
+                RequestStatus::Committed => {
+                    // Extend the deadline so the freshly `Finalized` request
+                    // survives long enough for its `OracleResult` to arrive
+                    // before we treat it as stale.
+                    request.status = RequestStatus::Finalized;
+                    request.deadline = block.saturating_add(self.voting_window);
+                    actions.push(SentinelAction {
+                        kind: SentinelActionKind::Finalize { id },
+                        expires_at: request.deadline,
+                    });
+                    true
+                }
+                // `OracleResult` never arrived to claim and remove it; give up.
+                RequestStatus::Finalized => false,
+            }
+        });
+        (state, actions)
     }
 
     fn encode_action(&self, kind: SentinelActionKind) -> Transaction {
@@ -725,6 +747,84 @@ mod tests {
         let (state, actions) = svc.event(state, log(10, event)).await;
 
         assert!(!state.0.contains_key(&id));
+        assert!(actions.is_empty());
+    }
+
+    #[tokio::test]
+    async fn block_advance_finalizes_a_past_deadline_committed_request() {
+        let mut svc = service();
+        let id = B256::repeat_byte(0x10);
+        let state = with_request(id, request_state(RequestStatus::Committed, 50, true));
+
+        let (state, actions) = svc.new_block(state, 51).await;
+
+        let request = &state.0[&id];
+        assert_eq!(request.status, RequestStatus::Finalized);
+        assert_eq!(request.deadline, 51 + VOTING_WINDOW);
+        assert_eq!(
+            actions,
+            vec![SentinelAction {
+                kind: SentinelActionKind::Finalize { id },
+                expires_at: 51 + VOTING_WINDOW,
+            }]
+        );
+    }
+
+    #[tokio::test]
+    async fn block_advance_drops_stale_requests() {
+        let mut svc = service();
+        let preparing_id = B256::repeat_byte(0x12);
+        let pending_id = B256::repeat_byte(0x13);
+        let finalized_id = B256::repeat_byte(0x16);
+        let mut state = with_request(
+            preparing_id,
+            request_state(RequestStatus::Preparing, 50, true),
+        );
+        state
+            .0
+            .insert(pending_id, request_state(RequestStatus::Pending, 50, true));
+        state.0.insert(
+            finalized_id,
+            request_state(RequestStatus::Finalized, 50, true),
+        );
+
+        let (state, actions) = svc.new_block(state, 51).await;
+
+        assert!(!state.0.contains_key(&preparing_id));
+        assert!(!state.0.contains_key(&pending_id));
+        assert!(!state.0.contains_key(&finalized_id));
+        assert!(actions.is_empty());
+    }
+
+    #[tokio::test]
+    async fn block_advance_keeps_requests_before_their_deadline() {
+        let mut svc = service();
+        let comitted_id = B256::repeat_byte(0x11);
+        let preparing_id = B256::repeat_byte(0x14);
+        let pending_id = B256::repeat_byte(0x15);
+        let finalized_id = B256::repeat_byte(0x16);
+        let mut state = with_request(
+            comitted_id,
+            request_state(RequestStatus::Committed, 50, true),
+        );
+        state.0.insert(
+            preparing_id,
+            request_state(RequestStatus::Preparing, 50, true),
+        );
+        state
+            .0
+            .insert(pending_id, request_state(RequestStatus::Pending, 50, true));
+        state.0.insert(
+            finalized_id,
+            request_state(RequestStatus::Finalized, 50, true),
+        );
+
+        let (state, actions) = svc.new_block(state, 50).await;
+
+        assert!(state.0.contains_key(&comitted_id));
+        assert!(state.0.contains_key(&preparing_id));
+        assert!(state.0.contains_key(&pending_id));
+        assert!(state.0.contains_key(&finalized_id));
         assert!(actions.is_empty());
     }
 
