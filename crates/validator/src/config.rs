@@ -1,8 +1,10 @@
-use alloy::signers::k256::ecdsa::SigningKey;
+#![cfg_attr(not(test), expect(dead_code))]
+
+use alloy::primitives::{Address, B256};
 use safenet_core::{driver, observability, tx::Signer};
 use serde::Deserialize;
 use sqlx::sqlite::SqliteConnectOptions;
-use std::path::Path;
+use std::{num::NonZeroU64, path::Path};
 use tokio::{fs, io};
 use url::Url;
 
@@ -18,7 +20,7 @@ pub enum Error {
 }
 
 #[derive(Debug, Deserialize)]
-#[serde(default, deny_unknown_fields)]
+#[serde(deny_unknown_fields)]
 pub struct Config {
     /// The RPC endpoint used to initialize the chain provider.
     pub rpc: Url,
@@ -27,11 +29,14 @@ pub struct Config {
     /// The database URL backing persistent state and transaction storage.
     #[serde(with = "safenet_core::serialization::from_str")]
     pub database: SqliteConnectOptions,
+    /// Configuration specific to the validator service and its consensus
+    /// participation.
+    pub validator: ValidatorConfig,
     /// Observability (logging and metrics) configuration.
     #[serde(default)]
     pub observability: observability::Config,
     /// Configuration for the service driver and its components.
-    #[serde(flatten)]
+    #[serde(default, flatten)]
     pub driver: driver::Config,
 }
 
@@ -44,35 +49,97 @@ impl Config {
     }
 }
 
-impl Default for Config {
-    fn default() -> Self {
-        Self {
-            rpc: "http://localhost:8545".parse().unwrap(),
-            // The default Anvil signer.
-            signer: SigningKey::from_slice(
-                b"\xac\x09\x74\xbe\xc3\x9a\x17\xe3\x6b\xa4\xa6\xb4\xd2\x38\xff\x94\
-                  \x4b\xac\xb4\x78\xcb\xed\x5e\xfc\xae\x78\x4d\x7b\xf4\xf2\xff\x80",
-            )
-            .map(Signer::new)
-            .unwrap(),
-            database: "sqlite::memory:".parse().unwrap(),
-            observability: observability::Config::default(),
-            driver: driver::Config::default(),
-        }
+/// Configuration for the validator service itself: the contract it follows, the
+/// consensus group it participates in, and the timeouts governing its state
+/// machine.
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ValidatorConfig {
+    /// The `Consensus` contract the validator proposes epochs and attests
+    /// transactions on.
+    pub consensus: Address,
+    /// The staker address to associate with this validator account onchain. It
+    /// is reconciled against the onchain value on startup.
+    pub staker: Option<Address>,
+    /// The validator set participating in key generation and signing, each with
+    /// the epoch window during which it is active.
+    #[serde(default)]
+    pub participants: Vec<Participant>,
+    /// The oracle contracts whose results the validator honors when signing
+    /// oracle transactions.
+    #[serde(default)]
+    pub oracles: Vec<Address>,
+    /// The salt mixed into the genesis group's key generation context.
+    pub genesis_salt: Option<B256>,
+    /// The number of blocks in an epoch, controlling epoch rollover timing.
+    #[serde(default = "ValidatorConfig::default_blocks_per_epoch")]
+    pub blocks_per_epoch: NonZeroU64,
+    /// The number of blocks a distributed key generation ceremony may run
+    /// before timing out.
+    #[serde(default = "ValidatorConfig::default_keygen_timeout")]
+    pub key_gen_timeout: NonZeroU64,
+    /// The number of blocks a signing ceremony may run before timing out.
+    #[serde(default = "ValidatorConfig::default_signing_timeout")]
+    pub signing_timeout: NonZeroU64,
+    /// The number of blocks to wait for an oracle result before timing out.
+    #[serde(default = "ValidatorConfig::default_oracle_timeout")]
+    pub oracle_timeout: NonZeroU64,
+}
+
+impl ValidatorConfig {
+    const fn default_blocks_per_epoch() -> NonZeroU64 {
+        NonZeroU64::new(1440).unwrap()
     }
+
+    const fn default_keygen_timeout() -> NonZeroU64 {
+        NonZeroU64::new(120).unwrap()
+    }
+
+    const fn default_signing_timeout() -> NonZeroU64 {
+        NonZeroU64::new(6).unwrap()
+    }
+
+    const fn default_oracle_timeout() -> NonZeroU64 {
+        NonZeroU64::new(12).unwrap()
+    }
+}
+
+/// A validator participating in the consensus group, along with the epoch
+/// window during which it takes part in key generation and signing.
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Participant {
+    /// The participant's account address.
+    pub address: Address,
+    /// The first epoch the participant is active from (inclusive).
+    #[serde(default)]
+    pub active_from: u64,
+    /// The epoch the participant becomes inactive before (exclusive), if it
+    /// ever leaves the set.
+    #[serde(default)]
+    pub active_before: Option<u64>,
 }
 
 #[cfg(test)]
 mod tests {
-    use alloy::primitives::address;
-
     use super::*;
+    use alloy::primitives::{address, b256};
 
     #[test]
-    fn deserializes_required_fields_and_flattened_driver_config() {
-        // Only the required fields are set; the driver config (flattened
-        // alongside them) and observability fall back to their defaults.
-        let config = toml::from_str::<Config>("").unwrap();
+    fn deserializes_required_fields() {
+        // Only the required fields are set; other settings fall back to their
+        // default values.
+        let config = toml::from_str::<Config>(
+            r#"
+                rpc = "http://localhost:8545"
+                signer = "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80"
+                database = "sqlite::memory:"
+
+                [validator]
+                consensus = "0x1111111111111111111111111111111111111111"
+            "#,
+        )
+        .unwrap();
 
         assert_eq!(config.rpc.as_str(), "http://localhost:8545/");
         assert_eq!(
@@ -84,6 +151,34 @@ mod tests {
         //
         // [1]: <https://github.com/transact-rs/sqlx/issues/4327>
         assert!(format!("{:?}", config.database).contains("in_memory: true"));
+
+        // The validator section falls back to its defaults.
+        assert_eq!(
+            config.validator.consensus,
+            address!("0x1111111111111111111111111111111111111111")
+        );
+        assert_eq!(config.validator.staker, None);
+        assert!(config.validator.participants.is_empty());
+        assert!(config.validator.oracles.is_empty());
+        assert_eq!(config.validator.genesis_salt, None);
+        assert_eq!(
+            config.validator.blocks_per_epoch,
+            ValidatorConfig::default_blocks_per_epoch()
+        );
+        assert_eq!(
+            config.validator.key_gen_timeout,
+            ValidatorConfig::default_keygen_timeout()
+        );
+        assert_eq!(
+            config.validator.signing_timeout,
+            ValidatorConfig::default_signing_timeout()
+        );
+        assert_eq!(
+            config.validator.oracle_timeout,
+            ValidatorConfig::default_oracle_timeout()
+        );
+
+        // The driver and observability sections fall back to their defaults.
         assert_eq!(
             config.observability.log_filter.to_string(),
             observability::Config::default().log_filter.to_string()
@@ -93,24 +188,102 @@ mod tests {
             observability::Config::default().metrics_address
         );
         assert_eq!(config.driver, driver::Config::default());
+    }
 
-        // A field of a doubly-flattened component (the block watcher, reached
-        // through the driver and indexer configs) is parsed into place.
+    #[test]
+    fn deserializes_validator_section() {
         let config = toml::from_str::<Config>(
             r#"
-                rpc = "https://eth.llamarpc.com"
-                signer = "0x0000000000000000000000000000000000000000000000000000000000000001"
-                database = "sqlite:validator.db"
+                rpc = "http://localhost:8545"
+                signer = "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80"
+                database = "sqlite::memory:"
 
-                [observability]
-                log_filter = "validator=debug,info"
+                [validator]
+                consensus = "0x1111111111111111111111111111111111111111"
+                staker = "0x3333333333333333333333333333333333333333"
+                genesis_salt = "0x00000000000000000000000000000000000000000000000000000000000000ab"
+                blocks_per_epoch = 100
+                key_gen_timeout = 20
+                signing_timeout = 30
+                oracle_timeout = 40
+                oracles = [
+                    "0x4444444444444444444444444444444444444444",
+                    "0x5555555555555555555555555555555555555555",
+                ]
 
-                [index]
-                max_reorg_depth = 12
+                [[validator.participants]]
+                address = "0x6666666666666666666666666666666666666666"
 
-                [transactions]
-                max_in_flight_transactions = 4
+                [[validator.participants]]
+                address = "0x7777777777777777777777777777777777777777"
+                active_from = 5
+                active_before = 9
             "#,
+        )
+        .unwrap();
+
+        let validator = &config.validator;
+        assert_eq!(
+            validator.consensus,
+            address!("0x1111111111111111111111111111111111111111")
+        );
+        assert_eq!(
+            validator.staker.unwrap(),
+            address!("0x3333333333333333333333333333333333333333")
+        );
+        assert_eq!(
+            validator.genesis_salt.unwrap(),
+            b256!("0x00000000000000000000000000000000000000000000000000000000000000ab")
+        );
+        assert_eq!(validator.blocks_per_epoch.get(), 100);
+        assert_eq!(validator.key_gen_timeout.get(), 20);
+        assert_eq!(validator.signing_timeout.get(), 30);
+        assert_eq!(validator.oracle_timeout.get(), 40);
+        assert_eq!(
+            validator.oracles,
+            [
+                address!("0x4444444444444444444444444444444444444444"),
+                address!("0x5555555555555555555555555555555555555555"),
+            ]
+        );
+
+        // The first participant omits its epoch window, defaulting to active
+        // from genesis with no end; the second sets an explicit window.
+        assert_eq!(validator.participants.len(), 2);
+        assert_eq!(
+            validator.participants[0].address,
+            address!("0x6666666666666666666666666666666666666666")
+        );
+        assert_eq!(validator.participants[0].active_from, 0);
+        assert_eq!(validator.participants[0].active_before, None);
+        assert_eq!(
+            validator.participants[1].address,
+            address!("0x7777777777777777777777777777777777777777")
+        );
+        assert_eq!(validator.participants[1].active_from, 5);
+        assert_eq!(validator.participants[1].active_before, Some(9));
+    }
+
+    #[test]
+    fn deserializes_with_optional_service_fields() {
+        let config = toml::from_str::<Config>(
+            r#"
+                    rpc = "https://eth.llamarpc.com"
+                    signer = "0x0000000000000000000000000000000000000000000000000000000000000001"
+                    database = "sqlite:validator.db"
+
+                    [validator]
+                    consensus = "0x0000000000000000000000000000000000000000"
+
+                    [observability]
+                    log_filter = "validator=debug,info"
+
+                    [index]
+                    max_reorg_depth = 12
+
+                    [transactions]
+                    max_in_flight_transactions = 4
+                "#,
         )
         .unwrap();
 
@@ -128,6 +301,7 @@ mod tests {
             address!("0x7E5F4552091A69125d5DfCb7b8C2659029395Bdf")
         );
         assert_eq!(config.database.get_filename(), "validator.db");
+        assert_eq!(config.validator.consensus, Address::ZERO);
         assert_eq!(
             config.observability.log_filter.to_string(),
             "validator=debug,info"
