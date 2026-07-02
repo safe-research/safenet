@@ -56,7 +56,7 @@ impl Service for DummyService {
     type Effects = Pure;
     type Actions = Self;
 
-    fn components(&self) -> (Self::Transition, Self::Effects, Self::Actions) {
+    fn components(self) -> (Self::Transition, Self::Effects, Self::Actions) {
         (Self, Pure, Self)
     }
 }

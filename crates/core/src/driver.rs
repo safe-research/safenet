@@ -75,7 +75,7 @@ pub trait Service {
     type Actions: ActionEncoder<<Self::Transition as StateTransition<Self::State>>::Action>;
 
     /// Constructs the service components used by the driver.
-    fn components(&self) -> (Self::Transition, Self::Effects, Self::Actions);
+    fn components(self) -> (Self::Transition, Self::Effects, Self::Actions);
 }
 
 /// Drives a [`Service`] by wiring its indexer, state machine and transaction
