@@ -59,25 +59,31 @@ This keeps the two timers decoupled per §5.1 (a congested reveal window doesn't
 commit window is unaffected, and vice versa) while avoiding a second onchain state transition to
 "open" the reveal phase — the deadlines alone determine which phase a block number falls into.
 
-### Reusing the existing unanimity + fixed-bond model
+### Reusing the existing unanimity + fixed-bond model, with equal-share rewards
 
 The bond a checker locks (`bondTarget = fee * bondMultiplier`) does not change and is identical
 regardless of vote, exactly as today. Locking it during `commit()` therefore leaks nothing about the
 vote — the "Capital Leak" problem in spec §6 requires `B_yes != B_no`, which this contract has never
-had. **Per-side score and reward math is unchanged**; it simply moves from being computed at
-commit-time (V1) to reveal-time (V2), since the side isn't known until reveal:
+had.
 
 - `commit(requestId, commitHash)` locks `bondTarget`, stores the hash, and increments a
   side-blind `committedCount`/`totalCommittedBond`.
-- `reveal(requestId, approve, salt)` verifies the hash, assigns the same per-side `position`
-  (`approveSentinelCount`/`denySentinelCount`) and `score` (`bondAmount * 1e18 / position`) V1
-  assigned at commit-time, and adds to `totalApproveBond`/`totalDenyBond`.
+- `reveal(requestId, approve, salt)` verifies the hash and adds the bond to whichever side's
+  `approveSentinelCount`/`totalApproveBond` or `denySentinelCount`/`totalDenyBond` it belongs to.
 - `finalize()` keeps V1's exact three-way unanimity check
   (`FROZEN` if both sides > 0, `RESOLVED_*` if only one side > 0, `TIMED_OUT` if neither), just
   fed from **revealed** totals instead of committed totals.
 
-This means `resolveDispute`, `calcFeeReward`, and `isBondSlashed` need **no logic changes** — only
-the two commitment libraries and `SentinelOracle`'s external functions change.
+**Reward math changes, and simplifies, on team decision: every revealer on the winning side receives
+an equal share of the fee (`fee / winningSideCount`), regardless of reveal order.** V1's
+position-weighted score (`bondAmount * 1e18 / position`, rewarding earlier voters more) is dropped
+for V2. It no longer made sense to preserve anyway — "earlier" only meant anything when votes were
+public and racing; under commit-reveal, reveal order carries no information about who did the
+underlying validation work first, so weighting by it wouldn't reward what it used to. Dropping it
+also removes `approveTotalScore`/`denyTotalScore` bookkeeping entirely, which is the priority for a
+first version. `resolveDispute` and `isBondSlashed` need no logic changes; `calcFeeReward` gets
+simpler (see Tech Specs); only the two commitment libraries and `SentinelOracle`'s external functions
+otherwise change.
 
 ### Commit hash binds `(approve, salt, sentinel, requestId)`
 
@@ -90,24 +96,35 @@ request. Binding `msg.sender` is defense-in-depth (each commitment is already ke
 address in storage, so it isn't load-bearing today, but it costs nothing and rules out any future
 refactor accidentally introducing a cross-account replay).
 
-### Deterministic salt derivation (no salt persisted offchain)
+### Deterministic salt derivation via RFC 6979 §3.2 (no salt persisted offchain, no new secret)
 
 The naive approach — generate a random salt per vote and persist it until reveal — creates a new
 failure mode: if the sentinel's local DB is lost or corrupted between commit and reveal, the salt is
 gone and the bond is unrecoverably slashed for "failure to reveal" even though the node did its job
-and voted. Instead, the Rust sentinel derives the salt deterministically:
+and voted. A separately-derived secret (e.g. `keccak256(reveal_secret || requestId)` for some new
+config value) avoids the persistence problem but adds a second secret to generate, configure, and
+protect alongside the signing key.
 
-```
-salt = keccak256(reveal_secret || requestId)
-```
+Instead, the salt **is** the deterministic per-message nonce `k` that
+[RFC 6979 §3.2](https://datatracker.ietf.org/doc/html/rfc6979#section-3.2) defines for deterministic
+ECDSA: an HMAC-DRBG construction seeded from the account's own ECDSA private key and a hash of the
+message. There is no new secret — the sentinel already holds the private key for its onchain account
+(`safenet-core::tx::Signer`), and `k` is a pure, deterministic function of that key plus `requestId`,
+so nothing needs to be persisted; it's recomputed on demand when `reveal()` is submitted, naturally
+robust to restarts, reorgs, and DB loss. This is exactly RFC 6979's design goal — a nonce that's
+indistinguishable from random to anyone without the private key, without needing an RNG or
+persistence — just repurposed as a per-request commit salt instead of a per-signature nonce.
 
-`reveal_secret` is a new 32-byte value in the sentinel's config (`sentinel.toml`), generated once per
-node and handled with the same care as the signing key. Because the salt is a pure function of a
-secret the node already has and the public `requestId`, it never needs to be written to the
-snapshot store — it's recomputed on demand when `reveal()` is submitted, which is naturally robust
-to restarts, reorgs, and DB loss. The secret must stay private: since only two vote values exist,
-anyone who learns `reveal_secret` can precompute both possible commit hashes for any request and
-break that node's blindness.
+**Domain separation is required for safety.** RFC 6979 §3.2 derives `k` from `H(m)`, the hash of the
+*message being signed*. The `k` this scheme produces must never be reusable as the nonce for an
+actual ECDSA signature the account produces elsewhere (e.g. a transaction hash), because a real
+signature `(r, s)` over the same message combined with an exposed `k` trivially recovers the private
+key (`x = (k·s − H(m)) · r⁻¹ mod n`). The message fed into the RFC 6979 procedure must therefore be a
+domain-separated hash — e.g. `H(m) = sha256("safenet-sentinel-reveal-salt" || requestId)` — so it can
+never collide with the hash of a real transaction the same key signs. `safenet-core::tx::Signer`
+gains a new method implementing this (keeping the raw private-key scalar encapsulated there rather
+than exposed to the sentinel crate, consistent with how it already owns all signing), reusing the
+`rfc6979` crate already pulled in transitively via `k256`'s ECDSA implementation.
 
 ### Non-reveal slashing: one uniform step in `finalize()`
 
@@ -165,7 +182,17 @@ land; Phase C fixes this by switching that script's sentinel leg to the Rust bin
   as a separate, self-contained change if the incentive design calls for it.
 - **Randomly-generated, persisted salt instead of deterministic derivation.** Rejected — it adds a
   DB-loss failure mode (an honest vote becomes an unrevealable, slashed one) for no benefit over a
-  secret-derived salt.
+  key-derived salt.
+- **Ad hoc `keccak256(reveal_secret || requestId)` derivation from a new config secret.** Rejected in
+  favor of RFC 6979 §3.2 keyed off the account's existing private key — it needs no new secret to
+  generate, configure, or protect, and reuses a standard, already-audited construction instead of a
+  bespoke one.
+- **Keep V1's position-weighted reward (`bondAmount * 1e18 / position`), just computed at
+  reveal-time instead of commit-time.** Rejected per the team's decision to prioritize simplicity for
+  this first version: every revealer on the winning side gets an equal share of the fee, dropping
+  `approveTotalScore`/`denyTotalScore` entirely. Weighting by reveal order also stopped meaning what
+  it used to (see [Architecture Decision](#reusing-the-existing-unanimity--fixed-bond-model-with-equal-share-rewards)),
+  so nothing valuable is lost by simplifying.
 - **Open the reveal phase with an explicit onchain transition/event instead of a precomputed
     `revealDeadline`.** Rejected — an extra state transition buys nothing here since both window
   lengths are fixed at request creation; the deadlines alone are enough to gate `commit`/`reveal`.
@@ -189,15 +216,16 @@ struct Commitment {
     uint256 bondAmount;
     bool revealed;
     bool approved;   // meaningful only when revealed == true
-    uint256 position;
     bool claimed;
 }
 ```
 
 - `add(requestId, sentinel, commitHash, bondAmount)` — replaces today's `add(..., approve, ...)`;
   emits `Committed(requestId, sentinel, bondAmount)` (no `approved` — that's not known yet).
-- New `reveal(requestId, sentinel, approve, position)` — sets `revealed = true`, `approved`,
-  `position`; emits `Revealed(requestId, sentinel, approved, bondAmount, position)`.
+- New `reveal(requestId, sentinel, approve)` — sets `revealed = true`, `approved`; emits
+  `Revealed(requestId, sentinel, approved, bondAmount)`. No `position` — reward is an equal split
+  among winning revealers (see Architecture Decision), so nothing needs to be assigned at reveal
+  time beyond which side the vote landed on.
 - `checkNotCommitted` unchanged in spirit, now checks `commitHash == 0`.
 - `markClaimed` gains `require(self.revealed, NotRevealed())` before its existing checks.
 
@@ -218,24 +246,28 @@ struct Request {
     uint256 totalDenyBond;
     uint256 approveSentinelCount;
     uint256 denySentinelCount;
-    uint256 approveTotalScore;
-    uint256 denyTotalScore;
 }
 ```
+
+`approveTotalScore`/`denyTotalScore` are dropped — reward is an equal split of `fee` among revealers
+on the winning side, so only the winning side's count is needed (see `calcFeeReward` below).
 
 - `applyCommit(self)` — commit-phase bookkeeping only (no `approve` param): requires
   `state == PENDING && block.number <= commitDeadline`, locks `bondTarget`, increments
   `committedCount`/`totalCommittedBond`. Returns `bondAmount` for the caller to pull.
 - `applyReveal(self, approve)` — requires `block.number > commitDeadline && block.number <=
-  revealDeadline`; increments `revealedCount` and the appropriate side's count/bond/score exactly as
-  V1's `applyCommit` did; returns `(position, bondAmount)`.
+  revealDeadline`; increments `revealedCount` and the appropriate side's `*SentinelCount`/
+  `total*Bond`. No return value — bond amount was already fixed and recorded at commit time.
 - `finalize(self)` — requires
   `state == PENDING && (block.number > revealDeadline || (committedCount > 0 && revealedCount ==
   committedCount) || committedCount == 0 && block.number > commitDeadline)`; computes
   `unrevealedBond = totalCommittedBond - totalApproveBond - totalDenyBond` and returns it alongside
   the existing `(newState, refundFee)` so the caller can transfer it to `ARBITRATOR`. The three-way
   unanimity check itself is unchanged from V1.
-- `resolveDispute`, `calcFeeReward`, `isBondSlashed` — unchanged.
+- `calcFeeReward(self, approved)` — simplified: returns `0` if `approved` lost or the request timed
+  out, else `fee / winningSideCount` (`approveSentinelCount` or `denySentinelCount`, whichever side
+  won). No longer takes `bondAmount`/`position`.
+- `resolveDispute`, `isBondSlashed` — unchanged.
 - New errors: `CommitWindowClosed`, `RevealWindowNotOpen`, `RevealWindowClosed`.
 
 ### `SentinelOracle.sol`
@@ -262,9 +294,14 @@ struct Request {
 - `bindings.rs`: regenerate `sol!` bindings for `commit`/`reveal`/`hashCommitment`, the new
   `Committed`/`Revealed` event shapes, and `NewRequest` carrying `commitDeadline`/`revealDeadline`.
 - `hashing.rs`: `commit_hash(sentinel, request_id, approve, salt)` mirroring the Solidity preimage
-  exactly, plus `reveal_salt(reveal_secret, request_id)`. Parity-tested against
-  `SentinelOracle.hashCommitment` (extends the existing parity-vector pattern used for `request_id`).
-- `config.rs`: add `reveal_secret: B256`, documented as sensitive.
+  exactly, plus `reveal_salt(signer, request_id)` — calls the new `Signer` method (see below) with a
+  domain-separated hash of `request_id` and returns its RFC 6979 `k` as the salt. Parity-tested
+  against `SentinelOracle.hashCommitment` (extends the existing parity-vector pattern used for
+  `request_id`) and against published RFC 6979 test vectors for the deterministic-nonce piece.
+- `safenet-core::tx::signer.rs`: new method (e.g. `deterministic_nonce(message: B256) -> B256`)
+  implementing RFC 6979 §3.2 over the wrapped `SigningKey`, using the `rfc6979` crate already in the
+  dependency tree transitively via `k256`. No new config field — the salt is derived from the
+  account's existing private key, not a separately configured secret.
 - `state.rs`: `RequestStatus` gains `Revealing` (commit confirmed, waiting for the reveal window to
   open) and `Revealed` (our reveal confirmed, waiting to finalize) between `Committed` and
   `Finalized`. `SentinelRequestState` tracks `commitDeadline`/`revealDeadline` instead of a single
@@ -297,8 +334,9 @@ struct Request {
   double-commit/double-reveal reverts, early `finalize` once all committers revealed, partial-reveal
   (some committed, fewer revealed) still resolves correctly, and a non-revealer's bond is slashed to
   `ARBITRATOR` while their own `claim()` reverts with `NotRevealed`.
-- `crates/sentinel`: unit tests for the new FSM transitions, `commit_hash`/`reveal_salt` derivation,
-  and `encode_actions` for `Commit`/`Reveal`.
+- `crates/sentinel`/`safenet-core`: unit tests for the new FSM transitions, the `Signer`'s RFC 6979
+  nonce derivation (including published RFC 6979 test vectors, not just self-consistency), the
+  resulting `commit_hash`/`reveal_salt`, and `encode_actions` for `Commit`/`Reveal`.
 - Integration: see Phase C.
 
 ---
@@ -314,11 +352,12 @@ the same small library set)
 - **A1 — Commitment library: blind commit + reveal.** Rewrite `SentinelOracleCommitments.sol`
   (struct, `add`, new `reveal`, `NotRevealed` guard in `markClaimed`) per Tech Specs. No caller
   changes yet (library-only PR).
-- **A2 — Request library: two-phase deadlines, reveal-time scoring, unrevealed-bond accounting.**
+- **A2 — Request library: two-phase deadlines, equal-share reward, unrevealed-bond accounting.**
   Rewrite `SentinelOracleRequests.sol` (`commitDeadline`/`revealDeadline`, `committedCount`/
-  `totalCommittedBond`/`revealedCount`, `applyCommit`/`applyReveal` split, updated `finalize`
-  signature/logic). Depends on A1 (shares the `Commitment` shape referenced by callers, though the
-  library itself doesn't import it — sequencing avoids two half-migrated libraries mid-review).
+  `totalCommittedBond`/`revealedCount`, `applyCommit`/`applyReveal` split, simplified
+  `calcFeeReward`, updated `finalize` signature/logic). Depends on A1 (shares the `Commitment` shape
+  referenced by callers, though the library itself doesn't import it — sequencing avoids two
+  half-migrated libraries mid-review).
 - **A3 — Wire `SentinelOracle.sol` + deploy script.** `commit`/`reveal`/`hashCommitment` external
   functions, updated constructor/immutables (`COMMIT_WINDOW`/`REVEAL_WINDOW`), `finalize()`'s
   unrevealed-bond transfer to `ARBITRATOR`, `DeploySentinelOracle.s.sol` env var rename. Depends on
@@ -329,16 +368,18 @@ the same small library set)
 ### Phase B — Rust sentinel (depends on Phase A merged; see the coordination note in Open Questions
 about sequencing against the in-flight rust-port epic)
 
+- **B0 — `safenet-core::tx::Signer`: RFC 6979 §3.2 deterministic nonce.** New method deriving a
+  domain-separated deterministic nonce from the wrapped `SigningKey` and a `B256` message, plus unit
+  tests against published RFC 6979 test vectors. No sentinel-specific code yet — this is a generic,
+  reusable primitive on the shared core crate. Can start immediately (no dependency on Phase A).
 - **B1 — Bindings & hashing.** `bindings.rs` regeneration + `hashing.rs` (`commit_hash`,
   `reveal_salt`) with parity tests against `hashCommitment`. Depends on Phase A (needs the final
-  ABI).
-- **B2 — Config.** Add `reveal_secret` to `config.rs` and `sentinel.toml` docs/examples. Can proceed
-  in parallel with B1.
-- **B3 — State & actions.** `state.rs` (`RequestStatus::{Revealing,Revealed}`, dual deadlines) and
+  ABI) and B0 (`reveal_salt` calls the new `Signer` method).
+- **B2 — State & actions.** `state.rs` (`RequestStatus::{Revealing,Revealed}`, dual deadlines) and
   `action.rs` (`Commit`, `Reveal`) per Tech Specs, with tests. Depends on B1 (uses `commit_hash`'s
   return type).
-- **B4 — Service FSM.** `service.rs`: the full commit → wait → reveal → wait → finalize → claim
-  transition rewrite, with unit tests for every new branch. Depends on B2, B3.
+- **B3 — Service FSM.** `service.rs`: the full commit → wait → reveal → wait → finalize → claim
+  transition rewrite, with unit tests for every new branch. Depends on B2.
 
 ### Phase C — Fix the integration suite & wrap up
 
@@ -352,8 +393,8 @@ about sequencing against the in-flight rust-port epic)
 
 ### Critical path
 
-`A1 → A2 → A3 → A4 → B1 → B4 → C1`. B2 can start as soon as this plan is approved (no code
-dependency). B3 needs B1's `commit_hash` signature but not its tests.
+`A1 → A2 → A3 → A4 → B1 → B3 → C1`. B0 can start as soon as this plan is approved (no dependency on
+Phase A) and just needs to land before B1.
 
 ---
 
@@ -375,6 +416,10 @@ dependency). B3 needs B1's `commit_hash` signature but not its tests.
 3. **`COMMIT_WINDOW`/`REVEAL_WINDOW` values.** Picking concrete block counts for each (and for the
    existing `bondMultiplier`) is a deployment/config decision, not a contract-shape decision — left
    to whoever configures the next deployment, same as `VOTING_WINDOW` is today.
+4. **Exact domain-separation tag for the RFC 6979 message.** B0 needs a concrete constant (e.g. a
+   fixed string or a `keccak256`-derived label) distinguishing the reveal-salt derivation from any
+   real transaction hash the same key might sign, so the two message spaces provably never collide.
+   The plan requires this property; the literal value is an implementation detail for that PR.
 
 **Assumptions**
 
@@ -384,7 +429,10 @@ dependency). B3 needs B1's `commit_hash` signature but not its tests.
   bond cap.
 - Non-reveal slashing always sends the full unrevealed pool to `ARBITRATOR`; the proposer's existing
   `TIMED_OUT` fee refund is unaffected and unrelated to that pool.
-- The Rust sentinel derives its reveal salt deterministically from a per-node secret and the
-  `requestId`; no salt is persisted in the snapshot store.
+- Reward for winning revealers is an equal split of `fee` (no position/bond weighting); this is a
+  deliberate behavior change from V1, chosen for simplicity in this first version.
+- The Rust sentinel derives its reveal salt deterministically via RFC 6979 §3.2 from the account's
+  existing signing key and a domain-separated hash of `requestId` — no new secret is generated or
+  configured, and no salt is persisted in the snapshot store.
 - Only `crates/sentinel` is ported to commit-reveal in this epic; `validator/src/sentinel/` is left
   as-is (and effectively retired) rather than ported.
