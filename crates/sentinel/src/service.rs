@@ -18,6 +18,7 @@ use safenet_core::{Service, index::EventLog, state::StateTransition, tx::Transac
 /// The sentinel service: drives the request FSM (`preparing -> pending ->
 /// committed -> finalized`) from `SentinelOracle`/`Consensus` events and maps
 /// its actions to encoded transactions.
+#[derive(Clone)]
 pub struct SentinelService {
     oracle: Address,
     fee_token: Address,
@@ -35,7 +36,6 @@ pub struct SentinelService {
 }
 
 impl SentinelService {
-    #[cfg_attr(not(test), expect(dead_code))]
     pub fn new(
         oracle: Address,
         fee_token: Address,
