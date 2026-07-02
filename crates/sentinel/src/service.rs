@@ -1,4 +1,4 @@
-use std::{convert::Infallible, sync::Arc};
+use std::convert::Infallible;
 
 use crate::{
     action::{SentinelAction, SentinelActionKind},
@@ -24,10 +24,20 @@ use safenet_core::{
 /// The sentinel service: drives the request FSM (`preparing -> pending ->
 /// committed -> finalized`) from `SentinelOracle`/`Consensus` events and maps
 /// its actions to encoded transactions.
-#[derive(Clone)]
 pub struct SentinelService {
     oracle: Address,
     fee_token: Address,
+    consensus: Address,
+    account: Address,
+    chain_id: U256,
+    voting_window: u64,
+    detector: Detector,
+}
+
+/// Advances the request FSM (`preparing -> pending -> committed -> finalized`)
+/// in response to `SentinelOracle`/`Consensus` events.
+pub struct SentinelTransition {
+    oracle: Address,
     /// The `Consensus` contract whose `OracleTransactionProposed` events are
     /// hashed into request ids.
     consensus: Address,
@@ -38,7 +48,17 @@ pub struct SentinelService {
     /// The number of blocks a `Preparing` request is kept alive for before
     /// being cleaned up.
     voting_window: u64,
-    detector: Arc<Detector>,
+    detector: Detector,
+}
+
+/// Encodes [`SentinelAction`]s into the transactions that vote on, finalize and
+/// claim oracle requests.
+pub struct SentinelEncoder {
+    /// The `SentinelOracle` contract that votes, finalizations and claims are
+    /// submitted to, and the spender approved to pull the bond.
+    oracle: Address,
+    /// The ERC-20 token that bonds are posted in.
+    fee_token: Address,
 }
 
 impl SentinelService {
@@ -58,10 +78,12 @@ impl SentinelService {
             account,
             chain_id,
             voting_window,
-            detector: Arc::new(detector),
+            detector,
         }
     }
+}
 
+impl SentinelTransition {
     /// Starts tracking a newly proposed oracle transaction, deciding whether
     /// we vote to approve or deny it.
     fn handle_oracle_transaction_proposed(
@@ -230,7 +252,9 @@ impl SentinelService {
         });
         (state, actions)
     }
+}
 
+impl SentinelEncoder {
     fn encode_action_kind(&self, kind: SentinelActionKind) -> Transaction {
         match kind {
             SentinelActionKind::ApproveToken { bond } => Transaction {
@@ -280,7 +304,7 @@ impl SentinelService {
     }
 }
 
-impl StateTransition<State> for SentinelService {
+impl StateTransition<State> for SentinelTransition {
     type Event = SentinelEvents;
     type Action = SentinelAction;
     type Effect = Infallible;
@@ -317,7 +341,7 @@ impl StateTransition<State> for SentinelService {
     }
 }
 
-impl ActionEncoder<SentinelAction> for SentinelService {
+impl ActionEncoder<SentinelAction> for SentinelEncoder {
     fn encode_action(&self, action: SentinelAction) -> (Transaction, u64) {
         (self.encode_action_kind(action.kind), action.expires_at)
     }
@@ -327,12 +351,32 @@ impl Service for SentinelService {
     type State = State;
     type Event = SentinelEvents;
 
-    type Transition = Self;
+    type Transition = SentinelTransition;
     type Effects = Pure;
-    type Actions = Self;
+    type Actions = SentinelEncoder;
 
     fn components(self) -> (Self::Transition, Self::Effects, Self::Actions) {
-        (self.clone(), Pure, self)
+        let SentinelService {
+            oracle,
+            fee_token,
+            consensus,
+            account,
+            chain_id,
+            voting_window,
+            detector,
+        } = self;
+        (
+            SentinelTransition {
+                oracle,
+                consensus,
+                account,
+                chain_id,
+                voting_window,
+                detector,
+            },
+            Pure,
+            SentinelEncoder { oracle, fee_token },
+        )
     }
 }
 
@@ -352,8 +396,16 @@ mod tests {
     const CHAIN_ID: u64 = 1;
     const VOTING_WINDOW: u64 = 10;
 
-    fn service() -> SentinelService {
-        service_with_blocklist(vec![])
+    fn transition() -> SentinelTransition {
+        transition_with_blocklist(vec![])
+    }
+
+    fn transition_with_blocklist(blocklist: Vec<Address>) -> SentinelTransition {
+        service_with_blocklist(blocklist).components().0
+    }
+
+    fn encoder() -> SentinelEncoder {
+        service_with_blocklist(vec![]).components().2
     }
 
     fn service_with_blocklist(blocklist: Vec<Address>) -> SentinelService {
@@ -438,7 +490,7 @@ mod tests {
 
     #[tokio::test]
     async fn oracle_transaction_proposed_tracks_a_preparing_request() {
-        let svc = service();
+        let svc = transition();
         let safe_tx_hash = B256::repeat_byte(0x01);
         let id = request_id(safe_tx_hash, 7, ORACLE);
         let event =
@@ -458,7 +510,7 @@ mod tests {
 
     #[tokio::test]
     async fn oracle_transaction_proposed_denies_blocklisted_destination() {
-        let svc = service_with_blocklist(vec![TO]);
+        let svc = transition_with_blocklist(vec![TO]);
         let safe_tx_hash = B256::repeat_byte(0x02);
         let id = request_id(safe_tx_hash, 7, ORACLE);
         let event =
@@ -473,7 +525,7 @@ mod tests {
 
     #[tokio::test]
     async fn oracle_transaction_proposed_ignores_other_oracles() {
-        let svc = service();
+        let svc = transition();
         let other_oracle = address!("6666666666666666666666666666666666666666");
         let event =
             SentinelEvents::Consensus(Consensus::ConsensusEvents::OracleTransactionProposed(
@@ -489,7 +541,7 @@ mod tests {
 
     #[tokio::test]
     async fn oracle_transaction_proposed_ignores_a_duplicate_for_an_existing_request() {
-        let svc = service();
+        let svc = transition();
         let safe_tx_hash = B256::repeat_byte(0x0f);
         let id = request_id(safe_tx_hash, 7, ORACLE);
         let mut committed = request_state(RequestStatus::Preparing, 50, true);
@@ -508,7 +560,7 @@ mod tests {
 
     #[tokio::test]
     async fn new_request_commits_approve_vote_for_a_preparing_request() {
-        let svc = service();
+        let svc = transition();
         let id = B256::repeat_byte(0x04);
         let state = with_request(id, request_state(RequestStatus::Preparing, 1, true));
         let event = SentinelEvents::Oracle(SentinelOracle::SentinelOracleEvents::NewRequest(
@@ -545,7 +597,7 @@ mod tests {
 
     #[tokio::test]
     async fn new_request_commits_deny_vote_when_denied() {
-        let svc = service();
+        let svc = transition();
         let id = B256::repeat_byte(0x05);
         let state = with_request(id, request_state(RequestStatus::Preparing, 1, false));
         let event = SentinelEvents::Oracle(SentinelOracle::SentinelOracleEvents::NewRequest(
@@ -582,7 +634,7 @@ mod tests {
 
     #[tokio::test]
     async fn new_request_ignores_unknown_or_non_preparing_requests() {
-        let svc = service();
+        let svc = transition();
         let id = B256::repeat_byte(0x06);
         let event = || {
             SentinelEvents::Oracle(SentinelOracle::SentinelOracleEvents::NewRequest(
@@ -610,7 +662,7 @@ mod tests {
 
     #[tokio::test]
     async fn committed_moves_a_pending_request_to_committed_for_our_account() {
-        let svc = service();
+        let svc = transition();
         let id = B256::repeat_byte(0x07);
         let state = with_request(id, request_state(RequestStatus::Pending, 50, true));
 
@@ -623,7 +675,7 @@ mod tests {
 
     #[tokio::test]
     async fn committed_ignores_other_sentinels() {
-        let svc = service();
+        let svc = transition();
         let id = B256::repeat_byte(0x08);
         let other = address!("8888888888888888888888888888888888888888");
         let state = with_request(id, request_state(RequestStatus::Pending, 50, true));
@@ -637,7 +689,7 @@ mod tests {
 
     #[tokio::test]
     async fn committed_ignores_unknown_or_non_pending_requests() {
-        let svc = service();
+        let svc = transition();
         let id = B256::repeat_byte(0x09);
 
         let (state, commands) = svc.apply_transition(
@@ -656,7 +708,7 @@ mod tests {
 
     #[tokio::test]
     async fn resolved_claims_and_drops_a_committed_request_when_our_vote_won() {
-        let svc = service();
+        let svc = transition();
         let id = B256::repeat_byte(0x0a);
         let state = with_request(id, request_state(RequestStatus::Committed, 50, true));
         let event = resolved_event(id, true, ResolveReason::UNANIMOUS_APPROVE);
@@ -675,7 +727,7 @@ mod tests {
 
     #[tokio::test]
     async fn resolved_claims_and_drops_a_finalized_request_when_our_vote_won() {
-        let svc = service();
+        let svc = transition();
         let id = B256::repeat_byte(0x0b);
         let state = with_request(id, request_state(RequestStatus::Finalized, 60, false));
         let event = resolved_event(id, false, ResolveReason::UNANIMOUS_DENY);
@@ -694,7 +746,7 @@ mod tests {
 
     #[tokio::test]
     async fn resolved_claims_on_timeout_even_when_our_vote_lost() {
-        let svc = service();
+        let svc = transition();
         let id = B256::repeat_byte(0x0c);
         let state = with_request(id, request_state(RequestStatus::Committed, 50, false));
         let event = resolved_event(id, true, ResolveReason::TIMEOUT);
@@ -713,7 +765,7 @@ mod tests {
 
     #[tokio::test]
     async fn resolved_drops_without_claiming_when_our_vote_lost() {
-        let svc = service();
+        let svc = transition();
         let id = B256::repeat_byte(0x0d);
         let state = with_request(id, request_state(RequestStatus::Committed, 50, true));
         let event = resolved_event(id, false, ResolveReason::UNANIMOUS_DENY);
@@ -726,7 +778,7 @@ mod tests {
 
     #[tokio::test]
     async fn resolved_drops_without_claiming_a_request_we_never_committed_onchain() {
-        let svc = service();
+        let svc = transition();
         let id = B256::repeat_byte(0x0e);
         let state = with_request(id, request_state(RequestStatus::Pending, 50, true));
         let event = resolved_event(id, true, ResolveReason::UNANIMOUS_APPROVE);
@@ -739,7 +791,7 @@ mod tests {
 
     #[tokio::test]
     async fn resolved_ignores_an_unknown_request() {
-        let svc = service();
+        let svc = transition();
         let id = B256::repeat_byte(0x0f);
         let event = resolved_event(id, true, ResolveReason::UNANIMOUS_APPROVE);
 
@@ -752,7 +804,7 @@ mod tests {
 
     #[tokio::test]
     async fn resolved_drops_without_panicking_on_a_malformed_result() {
-        let svc = service();
+        let svc = transition();
         let id = B256::repeat_byte(0x10);
         let state = with_request(id, request_state(RequestStatus::Committed, 50, true));
         let event = SentinelEvents::Oracle(SentinelOracle::SentinelOracleEvents::OracleResult(
@@ -772,7 +824,7 @@ mod tests {
 
     #[tokio::test]
     async fn block_advance_finalizes_a_past_deadline_committed_request() {
-        let svc = service();
+        let svc = transition();
         let id = B256::repeat_byte(0x10);
         let state = with_request(id, request_state(RequestStatus::Committed, 50, true));
 
@@ -792,7 +844,7 @@ mod tests {
 
     #[tokio::test]
     async fn block_advance_drops_stale_requests() {
-        let svc = service();
+        let svc = transition();
         let preparing_id = B256::repeat_byte(0x12);
         let pending_id = B256::repeat_byte(0x13);
         let finalized_id = B256::repeat_byte(0x16);
@@ -818,7 +870,7 @@ mod tests {
 
     #[tokio::test]
     async fn block_advance_keeps_requests_before_their_deadline() {
-        let svc = service();
+        let svc = transition();
         let comitted_id = B256::repeat_byte(0x11);
         let preparing_id = B256::repeat_byte(0x14);
         let pending_id = B256::repeat_byte(0x15);
@@ -851,7 +903,7 @@ mod tests {
     #[test]
     fn encodes_approve_token() {
         let bond = uint!(1_000_U256);
-        let tx = service().encode_action_kind(SentinelActionKind::ApproveToken { bond });
+        let tx = encoder().encode_action_kind(SentinelActionKind::ApproveToken { bond });
 
         assert_eq!(tx.to, FEE_TOKEN);
         assert_eq!(tx.value, U256::ZERO);
@@ -869,7 +921,7 @@ mod tests {
     #[test]
     fn encodes_commit_approve() {
         let id = B256::repeat_byte(0x01);
-        let tx = service().encode_action_kind(SentinelActionKind::CommitApprove { id });
+        let tx = encoder().encode_action_kind(SentinelActionKind::CommitApprove { id });
 
         assert_eq!(tx.to, ORACLE);
         assert_eq!(tx.value, U256::ZERO);
@@ -883,7 +935,7 @@ mod tests {
     #[test]
     fn encodes_commit_deny() {
         let id = B256::repeat_byte(0x02);
-        let tx = service().encode_action_kind(SentinelActionKind::CommitDeny { id });
+        let tx = encoder().encode_action_kind(SentinelActionKind::CommitDeny { id });
 
         assert_eq!(tx.to, ORACLE);
         assert_eq!(tx.value, U256::ZERO);
@@ -897,7 +949,7 @@ mod tests {
     #[test]
     fn encodes_finalize() {
         let id = B256::repeat_byte(0x03);
-        let tx = service().encode_action_kind(SentinelActionKind::Finalize { id });
+        let tx = encoder().encode_action_kind(SentinelActionKind::Finalize { id });
 
         assert_eq!(tx.to, ORACLE);
         assert_eq!(tx.value, U256::ZERO);
@@ -911,7 +963,7 @@ mod tests {
     #[test]
     fn encodes_claim() {
         let id = B256::repeat_byte(0x04);
-        let tx = service().encode_action_kind(SentinelActionKind::Claim { id });
+        let tx = encoder().encode_action_kind(SentinelActionKind::Claim { id });
 
         assert_eq!(tx.to, ORACLE);
         assert_eq!(tx.value, U256::ZERO);
@@ -937,7 +989,7 @@ mod tests {
                 expires_at: deadline,
             },
         ] {
-            let (_, encoded_deadline) = service().encode_action(action);
+            let (_, encoded_deadline) = encoder().encode_action(action);
             assert_eq!(encoded_deadline, deadline);
         }
     }
