@@ -1,4 +1,4 @@
-use std::collections::HashSet;
+use std::{collections::HashSet, sync::Arc};
 
 use alloy::primitives::Address;
 
@@ -8,15 +8,17 @@ use crate::bindings::consensus::SafeTransaction;
 ///
 /// Approves every transaction whose destination is not in the blocklist;
 /// mirrors `createDetector` from `sentinel/detector.ts`.
+#[derive(Clone)]
 pub struct Detector {
-    blocklist: HashSet<Address>,
+    // The blocklist never changes once the detector is created, so it is
+    // shared rather than duplicated across `SentinelService` clones.
+    blocklist: Arc<HashSet<Address>>,
 }
 
 impl Detector {
-    #[cfg_attr(not(test), expect(dead_code))]
     pub fn new(blocklist: impl IntoIterator<Item = Address>) -> Self {
         Self {
-            blocklist: blocklist.into_iter().collect(),
+            blocklist: Arc::new(blocklist.into_iter().collect()),
         }
     }
 
