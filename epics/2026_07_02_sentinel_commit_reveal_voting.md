@@ -413,8 +413,8 @@ the same small library set)
 - **A4 — Foundry tests.** Full rewrite/extension of `SentinelOracle.t.sol` per the Testing section.
   Depends on A3 (needs the finished external interface to exercise).
 
-### Phase B — Rust sentinel (depends on Phase A merged; see the coordination note in Open Questions
-about sequencing against the in-flight rust-port epic)
+### Phase B — Rust sentinel (depends on Phase A merged and on
+`epics/2026_06_25_rust_sentinel_port.md` having already landed — see Assumptions)
 
 - **B0 — `safenet-core::tx::Signer`: HMAC-SHA256 deterministic salt.** New method computing
   `HMAC-SHA256(private_key_bytes, message)` over the wrapped `SigningKey`, plus unit tests against
@@ -448,30 +448,29 @@ Phase A) and just needs to land before B1.
 
 ## Open Questions and Assumptions
 
-**Open questions**
-
-1. **Sequencing against `epics/2026_06_25_rust_sentinel_port.md`.** That epic's own Phase F (interop
-   test + docs/cleanup) is still open. If it lands first, Phase B here is a clean continuation. If
-   it's still in flight when Phase A merges, Phase B will conflict with it in `bindings.rs`/
-   `service.rs` — recommend landing the rust-port epic's Phase F first, or explicitly coordinating a
-   rebase. Either way, that epic's planned "TS/Rust interoperate in a shared dispute" interop test
-   should be narrowed to a Rust-only test once this epic lands, since TS can no longer participate
-   (see [Client scope](#client-scope-the-ts-sentinel-is-retired-not-ported)).
-2. **Fate of `validator/src/sentinel/`.** This epic leaves that code in the tree but non-functional
-   against the new contract (it still calls the removed `commitApprove`/`commitDeny`). Deleting it
-   outright is a natural follow-up but is left as a separate, focused cleanup PR rather than folded
-   into this epic, since it's unrelated to the commit-reveal mechanism itself.
-3. **`COMMIT_WINDOW`/`REVEAL_WINDOW` values.** Picking concrete block counts for each (and for the
-   existing `bondMultiplier`) is a deployment/config decision, not a contract-shape decision — left
-   to whoever configures the next deployment, same as `VOTING_WINDOW` is today.
-4. **Exact domain-separation prefix for the HMAC message.** B0 needs a concrete constant (e.g.
-   `"safenet-sentinel-reveal-salt"`) folded in alongside `requestId`. This is hygiene rather than a
-   hard security requirement — HMAC's security doesn't degrade under key reuse across messages the
-   way ECDSA nonce reuse does, unlike the RFC 6979 draft this superseded — but it costs nothing and
-   keeps this derivation's input space clearly separate from any other future use of the same key.
+No open questions remain — the sequencing and value-picking items from earlier drafts turned out to
+be decisions rather than open ones, and are folded into the assumptions below.
 
 **Assumptions**
 
+- `epics/2026_06_25_rust_sentinel_port.md` — including its own Phase F (interop test + docs cleanup)
+  — will be finished before this epic's Phase B starts. Phase B is therefore a clean continuation,
+  with no cross-epic conflict or rebase coordination needed in `bindings.rs`/`service.rs`. That
+  epic's planned "TS/Rust interoperate in a shared dispute" interop test should be narrowed to a
+  Rust-only test once this epic lands, since TS can no longer participate (see
+  [Client scope](#client-scope-the-ts-sentinel-is-retired-not-ported)).
+- `validator/src/sentinel/` is left in the tree, non-functional against the new contract, for the
+  duration of this epic (only `crates/sentinel` is ported to commit-reveal here). Removing the TS
+  sentinel is out of scope: it's deleted in a separate epic once the broader Rust validator port
+  (`epics/2026_07_01_rust_validator_port.md`) is complete and the whole TS validator is retired
+  together, not as a standalone cleanup tied to this one.
+- Concrete `COMMIT_WINDOW`/`REVEAL_WINDOW` values (and the existing `bondMultiplier`) are a
+  deployment/config decision, left to whoever configures the next deployment — same as `VOTING_WINDOW`
+  is today, not something this plan needs to pin down.
+- A domain-separation prefix (e.g. `"safenet-sentinel-reveal-salt"`) is folded into the HMAC message
+  alongside `requestId` in B0; the exact wording is an implementation detail, not a blocking decision
+  — it's hygiene rather than a hard security requirement, since HMAC's security doesn't degrade under
+  key reuse across messages the way ECDSA nonce reuse does.
 - No threshold-based early end of the commit phase is introduced; both windows are fixed-length,
   matching V1's fixed `VOTING_WINDOW`.
 - Bonds stay symmetric (`bondTarget = fee * bondMultiplier` for both sides); no new protocol-wide
@@ -483,5 +482,3 @@ Phase A) and just needs to land before B1.
 - The Rust sentinel derives its reveal salt deterministically via HMAC-SHA256 from the account's
   existing signing key and a domain-separated message containing `requestId` — no new secret is
   generated or configured, and no salt is persisted in the snapshot store.
-- Only `crates/sentinel` is ported to commit-reveal in this epic; `validator/src/sentinel/` is left
-  as-is (and effectively retired) rather than ported.
