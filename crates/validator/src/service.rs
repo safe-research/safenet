@@ -43,7 +43,7 @@ impl StateTransition<()> for DummyService {
 }
 
 impl ActionEncoder<Infallible> for DummyService {
-    fn encode_action(&self, action: Infallible) -> (Transaction, u64) {
+    fn encode_action(&self, action: Infallible) -> (Transaction, Option<u64>) {
         match action {}
     }
 }
