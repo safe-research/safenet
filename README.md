@@ -9,6 +9,7 @@ This is a work-in-progress. Don't use it yet!
 - [Explorer](./explorer) Explorer web interface (Typescript & npm)
 - [Validator](./validator) Validator service (Typescript & npm)
 - [Services core crate](./crates/core) Shared logic between the offchain Safenet services (Rust)
+- [Sentinel](./crates/sentinel) Sentinel service that watches and puts up bonds in support of transaction correctness (Rust)
 
 ## Developing
 

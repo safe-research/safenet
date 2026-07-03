@@ -13,6 +13,7 @@ The repository is a hybrid monorepo with:
   - `validator/` — Node.js + TypeScript validator that participates in FROST signing rounds and sentinel puts up bonds in support of transaction correctness.
 - Rust crates:
   - `crates/core/` — Shared code used by all Safenet offchain services
+  - `crates/sentinel/` — Rust port of the sentinel service that watches the `SentinelOracle` and `Consensus` contracts, decides whether to approve or deny proposed oracle transactions, and puts up bonds onchain
 
 Additionally, formal verification specs live in `certora/`. Integration and devnet scripts are in `scripts/`.
 
