@@ -62,6 +62,7 @@ export class SentinelProtocol extends BaseActionQueue<SentinelAction> {
 						args: [this.#sentinelOracle, action.bondAmount],
 					}),
 					value: 0n,
+					gas: 55_000n,
 				});
 			case "sentinel_commit_approve":
 				return this.#txManager.submitAction({
@@ -72,6 +73,12 @@ export class SentinelProtocol extends BaseActionQueue<SentinelAction> {
 						args: [action.requestId],
 					}),
 					value: 0n,
+					// Fixed rather than estimated: a dynamic estimate reflects
+					// whichever sentinel happens to be first to commit at
+					// estimation time, which can go stale (and undershoot) if a
+					// competing sentinel's commit lands first once the
+					// transaction is actually mined.
+					gas: 250_000n,
 				});
 			case "sentinel_commit_deny":
 				return this.#txManager.submitAction({
@@ -82,6 +89,7 @@ export class SentinelProtocol extends BaseActionQueue<SentinelAction> {
 						args: [action.requestId],
 					}),
 					value: 0n,
+					gas: 250_000n,
 				});
 			case "sentinel_finalize":
 				return this.#txManager.submitAction({
@@ -92,12 +100,14 @@ export class SentinelProtocol extends BaseActionQueue<SentinelAction> {
 						args: [action.requestId],
 					}),
 					value: 0n,
+					gas: 250_000n,
 				});
 			case "sentinel_claim":
 				return this.#txManager.submitAction({
 					to: this.#sentinelOracle,
 					data: encodeFunctionData({ abi: SENTINEL_ORACLE_FUNCTIONS, functionName: "claim", args: [action.requestId] }),
 					value: 0n,
+					gas: 250_000n,
 				});
 		}
 	}

@@ -2,6 +2,7 @@
 .certora_internal
 .env
 anvil_logs.txt
+anvil_sentinel_logs.txt
 build/
 coverage-report.md
 coverage/
@@ -10,5 +11,7 @@ foundry.lock
 integration_logs.txt
 lcov.info
 node_modules/
+rust_sentinel_logs.txt
 target/
+ts_sentinel_logs.txt
 validator*.toml

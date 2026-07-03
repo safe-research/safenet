@@ -268,13 +268,18 @@ impl SentinelEncoder {
                 .into(),
                 gas: 55_000,
             },
+            // Measured onchain at ~196k gas for a request's first commit (fresh
+            // storage slots for the request, the commitment and the ERC-20
+            // allowance spend); 100k undershot this and ran out of gas. 250k
+            // keeps headroom for `finalize`/`claim`'s own cold-storage writes
+            // and the fee-token transfer.
             SentinelActionKind::CommitApprove { id } => Transaction {
                 to: self.oracle,
                 value: U256::ZERO,
                 data: SentinelOracle::commitApproveCall { requestId: id }
                     .abi_encode()
                     .into(),
-                gas: 100_000,
+                gas: 250_000,
             },
             SentinelActionKind::CommitDeny { id } => Transaction {
                 to: self.oracle,
@@ -282,7 +287,7 @@ impl SentinelEncoder {
                 data: SentinelOracle::commitDenyCall { requestId: id }
                     .abi_encode()
                     .into(),
-                gas: 100_000,
+                gas: 250_000,
             },
             SentinelActionKind::Finalize { id } => Transaction {
                 to: self.oracle,
@@ -290,7 +295,7 @@ impl SentinelEncoder {
                 data: SentinelOracle::finalizeCall { requestId: id }
                     .abi_encode()
                     .into(),
-                gas: 100_000,
+                gas: 250_000,
             },
             SentinelActionKind::Claim { id } => Transaction {
                 to: self.oracle,
@@ -298,7 +303,7 @@ impl SentinelEncoder {
                 data: SentinelOracle::claimCall { requestId: id }
                     .abi_encode()
                     .into(),
-                gas: 100_000,
+                gas: 250_000,
             },
         }
     }
@@ -925,7 +930,7 @@ mod tests {
 
         assert_eq!(tx.to, ORACLE);
         assert_eq!(tx.value, U256::ZERO);
-        assert_eq!(tx.gas, 100_000);
+        assert_eq!(tx.gas, 250_000);
         assert_eq!(
             tx.data.as_ref(),
             SentinelOracle::commitApproveCall { requestId: id }.abi_encode(),
@@ -939,7 +944,7 @@ mod tests {
 
         assert_eq!(tx.to, ORACLE);
         assert_eq!(tx.value, U256::ZERO);
-        assert_eq!(tx.gas, 100_000);
+        assert_eq!(tx.gas, 250_000);
         assert_eq!(
             tx.data.as_ref(),
             SentinelOracle::commitDenyCall { requestId: id }.abi_encode(),
@@ -953,7 +958,7 @@ mod tests {
 
         assert_eq!(tx.to, ORACLE);
         assert_eq!(tx.value, U256::ZERO);
-        assert_eq!(tx.gas, 100_000);
+        assert_eq!(tx.gas, 250_000);
         assert_eq!(
             tx.data.as_ref(),
             SentinelOracle::finalizeCall { requestId: id }.abi_encode(),
@@ -967,7 +972,7 @@ mod tests {
 
         assert_eq!(tx.to, ORACLE);
         assert_eq!(tx.value, U256::ZERO);
-        assert_eq!(tx.gas, 100_000);
+        assert_eq!(tx.gas, 250_000);
         assert_eq!(
             tx.data.as_ref(),
             SentinelOracle::claimCall { requestId: id }.abi_encode(),

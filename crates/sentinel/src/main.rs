@@ -65,8 +65,6 @@ async fn main() -> Result<(), Box<dyn Error>> {
     )
     .await?;
 
-    // TODO(epic Phase F1): an interop/integration test running this binary
-    // against a `SentinelOracle` on Anvil alongside the TS sentinel.
     tracing::info!("starting sentinel service");
     driver.run().await;
 
