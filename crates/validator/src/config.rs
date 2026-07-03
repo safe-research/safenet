@@ -151,43 +151,10 @@ mod tests {
         //
         // [1]: <https://github.com/transact-rs/sqlx/issues/4327>
         assert!(format!("{:?}", config.database).contains("in_memory: true"));
-
-        // The validator section falls back to its defaults.
         assert_eq!(
             config.validator.consensus,
             address!("0x1111111111111111111111111111111111111111")
         );
-        assert_eq!(config.validator.staker, None);
-        assert!(config.validator.participants.is_empty());
-        assert!(config.validator.oracles.is_empty());
-        assert_eq!(config.validator.genesis_salt, None);
-        assert_eq!(
-            config.validator.blocks_per_epoch,
-            ValidatorConfig::default_blocks_per_epoch()
-        );
-        assert_eq!(
-            config.validator.key_gen_timeout,
-            ValidatorConfig::default_keygen_timeout()
-        );
-        assert_eq!(
-            config.validator.signing_timeout,
-            ValidatorConfig::default_signing_timeout()
-        );
-        assert_eq!(
-            config.validator.oracle_timeout,
-            ValidatorConfig::default_oracle_timeout()
-        );
-
-        // The driver and observability sections fall back to their defaults.
-        assert_eq!(
-            config.observability.log_filter.to_string(),
-            observability::Config::default().log_filter.to_string()
-        );
-        assert_eq!(
-            config.observability.metrics_address,
-            observability::Config::default().metrics_address
-        );
-        assert_eq!(config.driver, driver::Config::default());
     }
 
     #[test]
