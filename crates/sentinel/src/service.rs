@@ -151,11 +151,11 @@ impl SentinelTransition {
                 kind: SentinelActionKind::ApproveToken {
                     bond: event.bondTarget,
                 },
-                expires_at: deadline,
+                expires_at: Some(deadline),
             },
             SentinelAction {
                 kind: vote,
-                expires_at: deadline,
+                expires_at: Some(deadline),
             },
         ];
         (state, actions)
@@ -214,7 +214,7 @@ impl SentinelTransition {
                 },
                 // Claiming has no onchain deadline, so the action must never
                 // expire in the `TransactionQueue`.
-                expires_at: u64::MAX,
+                expires_at: None,
             }]
         } else {
             Vec::new()
@@ -242,7 +242,7 @@ impl SentinelTransition {
                     request.deadline = block.saturating_add(self.voting_window);
                     actions.push(SentinelAction {
                         kind: SentinelActionKind::Finalize { id },
-                        expires_at: request.deadline,
+                        expires_at: Some(request.deadline),
                     });
                     true
                 }
@@ -342,7 +342,7 @@ impl StateTransition<State> for SentinelTransition {
 }
 
 impl ActionEncoder<SentinelAction> for SentinelEncoder {
-    fn encode_action(&self, action: SentinelAction) -> (Transaction, u64) {
+    fn encode_action(&self, action: SentinelAction) -> (Transaction, Option<u64>) {
         (self.encode_action_kind(action.kind), action.expires_at)
     }
 }
@@ -585,11 +585,11 @@ mod tests {
                     kind: SentinelActionKind::ApproveToken {
                         bond: U256::from(1_000u64)
                     },
-                    expires_at: 50,
+                    expires_at: Some(50),
                 }),
                 Command::Action(SentinelAction {
                     kind: SentinelActionKind::CommitApprove { id },
-                    expires_at: 50,
+                    expires_at: Some(50),
                 }),
             ]
         );
@@ -622,11 +622,11 @@ mod tests {
                     kind: SentinelActionKind::ApproveToken {
                         bond: U256::from(1_000u64)
                     },
-                    expires_at: 50,
+                    expires_at: Some(50),
                 }),
                 Command::Action(SentinelAction {
                     kind: SentinelActionKind::CommitDeny { id },
-                    expires_at: 50,
+                    expires_at: Some(50),
                 }),
             ]
         );
@@ -720,7 +720,7 @@ mod tests {
             commands,
             vec![Command::Action(SentinelAction {
                 kind: SentinelActionKind::Claim { id },
-                expires_at: u64::MAX,
+                expires_at: None,
             })]
         );
     }
@@ -739,7 +739,7 @@ mod tests {
             commands,
             vec![Command::Action(SentinelAction {
                 kind: SentinelActionKind::Claim { id },
-                expires_at: u64::MAX,
+                expires_at: None,
             })]
         );
     }
@@ -758,7 +758,7 @@ mod tests {
             commands,
             vec![Command::Action(SentinelAction {
                 kind: SentinelActionKind::Claim { id },
-                expires_at: u64::MAX,
+                expires_at: None,
             })]
         );
     }
@@ -837,7 +837,7 @@ mod tests {
             commands,
             vec![Command::Action(SentinelAction {
                 kind: SentinelActionKind::Finalize { id },
-                expires_at: 51 + VOTING_WINDOW,
+                expires_at: Some(51 + VOTING_WINDOW),
             })]
         );
     }
@@ -982,15 +982,15 @@ mod tests {
         for action in [
             SentinelAction {
                 kind: SentinelActionKind::ApproveToken { bond },
-                expires_at: deadline,
+                expires_at: Some(deadline),
             },
             SentinelAction {
                 kind: SentinelActionKind::CommitApprove { id },
-                expires_at: deadline,
+                expires_at: Some(deadline),
             },
         ] {
             let (_, encoded_deadline) = encoder().encode_action(action);
-            assert_eq!(encoded_deadline, deadline);
+            assert_eq!(encoded_deadline, Some(deadline));
         }
     }
 }

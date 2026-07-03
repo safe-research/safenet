@@ -19,9 +19,10 @@ pub enum SentinelActionKind {
 /// no longer useful.
 ///
 /// The deadline is forwarded to the `TransactionQueue` as the per-tx expiry
-/// so the queue can drop it if it goes unsubmitted past that block.
+/// so the queue can drop it if it goes unsubmitted past that block. `None`
+/// means the action must never expire.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SentinelAction {
     pub kind: SentinelActionKind,
-    pub expires_at: u64,
+    pub expires_at: Option<u64>,
 }

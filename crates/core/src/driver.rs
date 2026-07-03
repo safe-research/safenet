@@ -58,8 +58,8 @@ pub enum Error {
 pub trait ActionEncoder<Action> {
     /// Encodes state transition `action` into a transaction to submit onchain,
     /// each paired with the block number after which it should be dropped if it
-    /// has not yet been submitted.
-    fn encode_action(&self, action: Action) -> (Transaction, u64);
+    /// has not yet been submitted, or `None` if it should never be dropped.
+    fn encode_action(&self, action: Action) -> (Transaction, Option<u64>);
 }
 
 /// A Safenet service definition.

@@ -69,7 +69,7 @@ impl TransactionStorage {
             "CREATE TABLE IF NOT EXISTS transactions (
                  id           INTEGER PRIMARY KEY,
                  request      TEXT    NOT NULL,
-                 expires_at   INTEGER NOT NULL,
+                 expires_at   INTEGER DEFAULT NULL,
                  nonce        INTEGER DEFAULT NULL,
                  submitted_at INTEGER DEFAULT NULL,
                  executed_at  INTEGER DEFAULT NULL
@@ -82,18 +82,19 @@ impl TransactionStorage {
     }
 
     /// Stores `transactions` as queued transactions, each expiring at its
-    /// `expires_at` block if it has not been submitted by then. The whole batch
-    /// is inserted atomically.
+    /// `expires_at` block if it has not been submitted by then, or never
+    /// expiring if `expires_at` is `None`. The whole batch is inserted
+    /// atomically.
     pub async fn enqueue(
         &self,
-        transactions: impl IntoIterator<Item = (Transaction, u64)>,
+        transactions: impl IntoIterator<Item = (Transaction, Option<u64>)>,
     ) -> Result<(), Error> {
         let mut tx = self.pool.begin().await?;
         for (transaction, expires_at) in transactions {
             let request = serde_json::to_string(&transaction)?;
             sqlx::query("INSERT INTO transactions (request, expires_at) VALUES (?, ?)")
                 .bind(request)
-                .bind(i64::try_from(expires_at)?)
+                .bind(expires_at.map(i64::try_from).transpose()?)
                 .execute(&mut *tx)
                 .await?;
         }
@@ -147,7 +148,7 @@ impl TransactionStorage {
                  ))
              WHERE id = (
                  SELECT id FROM transactions
-                 WHERE nonce IS NULL AND expires_at > ?
+                 WHERE nonce IS NULL AND (expires_at IS NULL OR expires_at > ?)
                  ORDER BY id ASC
                  LIMIT 1
              )
@@ -207,7 +208,8 @@ impl TransactionStorage {
     pub async fn count_outstanding(&self, block: u64) -> Result<usize, Error> {
         let count = sqlx::query_scalar::<_, i64>(
             "SELECT COUNT(*) FROM transactions
-             WHERE executed_at IS NULL AND (nonce IS NOT NULL OR expires_at > ?)",
+             WHERE executed_at IS NULL
+               AND (nonce IS NOT NULL OR expires_at IS NULL OR expires_at > ?)",
         )
         .bind(i64::try_from(block)?)
         .fetch_one(&self.pool)
@@ -249,11 +251,16 @@ impl TransactionStorage {
             .await?;
 
         // Remove queued (not-yet-submitted) transactions that expired at or
-        // before the reorg-safe block.
-        sqlx::query("DELETE FROM transactions WHERE nonce IS NULL AND expires_at <= ?")
-            .bind(safe)
-            .execute(&mut *tx)
-            .await?;
+        // before the reorg-safe block. Never-expiring transactions have a
+        // `NULL` `expires_at` and are excluded explicitly rather than relying
+        // on the fact that SQL comparisons against `NULL` are never true.
+        sqlx::query(
+            "DELETE FROM transactions
+             WHERE nonce IS NULL AND expires_at IS NOT NULL AND expires_at <= ?",
+        )
+        .bind(safe)
+        .execute(&mut *tx)
+        .await?;
 
         tx.commit().await?;
         Ok(())
@@ -351,7 +358,7 @@ mod tests {
     #[tokio::test]
     async fn submit_assigns_the_account_nonce_and_fees() {
         let storage = storage().await;
-        storage.enqueue([(tx("0x5afe"), 100)]).await.unwrap();
+        storage.enqueue([(tx("0x5afe"), Some(100))]).await.unwrap();
 
         // There are no in flight transactions to begin with.
         assert_eq!(storage.count_in_flight().await.unwrap(), 0);
@@ -379,9 +386,18 @@ mod tests {
     #[tokio::test]
     async fn submit_assigns_sequential_nonces_in_queue_order() {
         let storage = storage().await;
-        storage.enqueue([(tx("0x5afe01"), 100)]).await.unwrap();
-        storage.enqueue([(tx("0x5afe02"), 100)]).await.unwrap();
-        storage.enqueue([(tx("0x5afe03"), 100)]).await.unwrap();
+        storage
+            .enqueue([(tx("0x5afe01"), Some(100))])
+            .await
+            .unwrap();
+        storage
+            .enqueue([(tx("0x5afe02"), Some(100))])
+            .await
+            .unwrap();
+        storage
+            .enqueue([(tx("0x5afe03"), Some(100))])
+            .await
+            .unwrap();
 
         // Each submission picks the next free nonce above the in-flight ones, in
         // FIFO order.
@@ -399,7 +415,7 @@ mod tests {
     #[tokio::test]
     async fn record_submission_stamps_the_block_and_fees() {
         let storage = storage().await;
-        storage.enqueue([(tx("0x5afe"), 100)]).await.unwrap();
+        storage.enqueue([(tx("0x5afe"), Some(100))]).await.unwrap();
         let submitted = storage
             .next_transaction(Status { nonce: 5, block: 0 })
             .await
@@ -430,7 +446,7 @@ mod tests {
     #[tokio::test]
     async fn record_submission_errors_for_an_unknown_nonce() {
         let storage = storage().await;
-        storage.enqueue([(tx("0x5afe"), 100)]).await.unwrap();
+        storage.enqueue([(tx("0x5afe"), Some(100))]).await.unwrap();
         storage
             .next_transaction(Status { nonce: 5, block: 0 })
             .await
@@ -452,8 +468,8 @@ mod tests {
     #[tokio::test]
     async fn prunes_queued_transactions_past_their_expiry() {
         let storage = storage().await;
-        storage.enqueue([(tx("0x5afe01"), 10)]).await.unwrap();
-        storage.enqueue([(tx("0x5afe02"), 20)]).await.unwrap();
+        storage.enqueue([(tx("0x5afe01"), Some(10))]).await.unwrap();
+        storage.enqueue([(tx("0x5afe02"), Some(20))]).await.unwrap();
 
         // Pruning at a safe block of 15 removes the first transaction (expiry
         // 10); the second (expiry 20) is not yet expired.
@@ -465,5 +481,25 @@ mod tests {
             .unwrap()
             .unwrap();
         assert_eq!(next.transaction.data, tx("0x5afe02").data);
+    }
+
+    #[tokio::test]
+    async fn never_expiring_transactions_are_always_selectable_and_never_pruned() {
+        let storage = storage().await;
+        storage.enqueue([(tx("0x5afe"), None)]).await.unwrap();
+
+        // Pruning at any safe block does not remove a never-expiring queued
+        // transaction.
+        storage.prune(1_000_000).await.unwrap();
+
+        let next = storage
+            .next_transaction(Status {
+                nonce: 0,
+                block: 1_000_000,
+            })
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(next.transaction.data, tx("0x5afe").data);
     }
 }
