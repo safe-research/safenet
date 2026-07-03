@@ -10,4 +10,79 @@
 
 pub mod ecdh;
 pub mod error;
-pub mod marshal;
+pub mod keygen;
+mod marshal;
+mod participants;
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use alloy::primitives::address;
+    use std::collections::BTreeMap;
+
+    #[test]
+    fn ceremony() {
+        let mut rng = rand::thread_rng();
+        let participants = [
+            address!("f39Fd6e51aad88F6F4ce6aB8827279cffFb92266"),
+            address!("70997970C51812dc3A010C7d01b50e0d17dc79C8"),
+            address!("3C44CdDdB6a900fa2b585dd299e03d12FA4293BC"),
+        ];
+        let count = participants.len() as u16;
+        let threshold = 2;
+
+        let mut round1 = BTreeMap::new();
+        for participant in participants {
+            let r1 = keygen::generate_round1(&mut rng, participant, count, threshold).unwrap();
+            round1.insert(participant, r1);
+        }
+
+        let commitments = participants
+            .into_iter()
+            .map(|participant| (participant, round1[&participant].commitment.clone()))
+            .collect();
+
+        let mut round2 = BTreeMap::new();
+        for participant in participants {
+            let r1 = &round1[&participant];
+            let r2 = keygen::generate_round2(
+                participant,
+                &r1.encryption_key,
+                &r1.secret_package,
+                &commitments,
+            )
+            .unwrap();
+            round2.insert(participant, r2);
+        }
+
+        let shares = participants
+            .into_iter()
+            .map(|participant| (participant, round2[&participant].share.clone()))
+            .collect();
+
+        let mut round3 = BTreeMap::new();
+        for participant in participants {
+            let r1 = &round1[&participant];
+            let r2 = &round2[&participant];
+            let r3 = keygen::generate_round3(
+                participant,
+                &r1.encryption_key,
+                &r2.secret_package,
+                &commitments,
+                &shares,
+            )
+            .unwrap();
+            round3.insert(participant, r3);
+        }
+
+        let group_key = round3
+            .values()
+            .next()
+            .unwrap()
+            .public_key_package
+            .verifying_key();
+        for r3 in round3.values() {
+            assert_eq!(group_key, r3.public_key_package.verifying_key());
+        }
+    }
+}

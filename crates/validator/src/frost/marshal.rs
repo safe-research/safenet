@@ -3,6 +3,7 @@
 use super::error::Error;
 use crate::bindings;
 use alloy::primitives::U256;
+use frost_secp256k1::keys::{self, dkg};
 use k256::{
     Scalar,
     elliptic_curve::{
@@ -10,6 +11,48 @@ use k256::{
         sec1::{FromEncodedPoint as _, ToEncodedPoint as _},
     },
 };
+
+/// Converts a DKG round 1 [`Package`](dkg::round1::Package) and an encryption
+/// public key to the ABI [`KeyGenCommitment`](bindings::KeyGenCommitment):
+///
+/// - `q`  the encryption public key for ECDH-encrypted secret shares,
+/// - `c`  all coefficient commitments `[g^a₀, …, g^a_{t-1}]`,
+/// - `r`  the proof-of-knowledge nonce commitment `R`,
+/// - `mu` the proof-of-knowledge scalar `μ`.
+pub fn solidity_commitment(
+    encryption_public_key: &k256::ProjectivePoint,
+    package: &dkg::round1::Package,
+) -> bindings::KeyGenCommitment {
+    let q = solidity_point(encryption_public_key);
+    let c = package
+        .commitment()
+        .coefficients()
+        .iter()
+        .map(|coefficient| solidity_point(&coefficient.value()))
+        .collect();
+    let bindings::Signature { r, z } = solidity_signature(package.proof_of_knowledge());
+    bindings::KeyGenCommitment { q, c, r, mu: z }
+}
+
+/// Converts a verifying share and the peer-encrypted secret shares to the ABI
+/// [`KeyGenSecretShare`](bindings::KeyGenSecretShare).
+///
+/// `encrypted_secret_shares` must already be in the canonical publishing order
+/// (ascending participant address, excluding self), matching the TypeScript
+/// `KeyGenClient.createSecretShares`; the contract and peers index `f` by this
+/// order.
+pub fn solidity_secret_share(
+    verifying_share: &keys::VerifyingShare,
+    encrypted_secret_shares: &[[u8; 32]],
+) -> bindings::KeyGenSecretShare {
+    let y = solidity_point(&verifying_share.to_element());
+    let f = encrypted_secret_shares
+        .iter()
+        .copied()
+        .map(U256::from_be_bytes)
+        .collect();
+    bindings::KeyGenSecretShare { y, f }
+}
 
 /// Converts a secp256k1 point to the ABI `Point { uint256 x; uint256 y }`.
 pub fn solidity_point(point: &k256::ProjectivePoint) -> bindings::Point {
@@ -39,6 +82,27 @@ pub fn solidity_signature(signature: &frost_secp256k1::Signature) -> bindings::S
         r: solidity_point(signature.R()),
         z: solidity_scalar(signature.z()),
     }
+}
+
+/// Converts an ABI [`KeyGenCommitment`](bindings::KeyGenCommitment) back to the
+/// peer's encryption public key and DKG round 1 package.
+pub fn frost_commitment(
+    commitment: &bindings::KeyGenCommitment,
+) -> Result<(k256::ProjectivePoint, dkg::round1::Package), Error> {
+    let encryption_public_key = frost_point(&commitment.q)?;
+    let coefficients = keys::VerifiableSecretSharingCommitment::new(
+        commitment
+            .c
+            .iter()
+            .map(|coefficient| {
+                let coefficient = frost_point(coefficient)?;
+                Ok(frost_core::keys::CoefficientCommitment::new(coefficient))
+            })
+            .collect::<Result<_, Error>>()?,
+    );
+    let proof_of_knowledge = frost_signature(&commitment.r, &commitment.mu)?;
+    let package = dkg::round1::Package::new(coefficients, proof_of_knowledge);
+    Ok((encryption_public_key, package))
 }
 
 /// Converts a `U256` to a canonical secp256k1 scalar.
