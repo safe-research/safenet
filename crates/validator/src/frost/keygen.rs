@@ -2,7 +2,7 @@
 //! rounds with address-derived identifiers and ECDH-encrypted secret shares.
 
 use super::{ecdh::EncryptionKey, error::Error, marshal, participants};
-use crate::bindings;
+use crate::{bindings, frost::ecdh::EncryptionPublicKey};
 use alloy::primitives::Address;
 use frost_secp256k1::{
     Identifier,
@@ -11,7 +11,7 @@ use frost_secp256k1::{
         dkg::{self, round1, round2},
     },
 };
-use k256::{ProjectivePoint, elliptic_curve::PrimeField as _};
+use k256::elliptic_curve::PrimeField as _;
 use std::collections::BTreeMap;
 
 /// The output of DKG round 1: the secret polynomial (persisted to the secret
@@ -28,15 +28,15 @@ pub struct Round1 {
 pub fn generate_round1<R>(
     rng: &mut R,
     me: Address,
-    max_signers: u16,
-    min_signers: u16,
+    count: u16,
+    threshold: u16,
 ) -> Result<Round1, Error>
 where
     R: rand::RngCore + rand::CryptoRng,
 {
     let identifier = participants::identifier(me);
     let encryption_key = EncryptionKey::generate(&mut *rng);
-    let (secret_package, package) = dkg::part1(identifier, max_signers, min_signers, &mut *rng)?;
+    let (secret_package, package) = dkg::part1(identifier, count, threshold, &mut *rng)?;
     let commitment = marshal::solidity_commitment(&encryption_key.public_key(), &package);
     Ok(Round1 {
         encryption_key,
@@ -86,7 +86,7 @@ pub fn generate_round2(
                 .get(&participants::identifier(*peer))
                 .ok_or(frost_secp256k1::Error::UnknownIdentifier)?;
             let signing_share = package.signing_share().to_scalar().to_bytes().into();
-            encryption_key.ecdh(encryption_key_peer, signing_share)
+            Ok(encryption_key.ecdh(encryption_key_peer, signing_share))
         })
         .collect::<Result<Vec<_>, Error>>()?;
     let share = marshal::solidity_secret_share(verifying_share, &encrypted_shares);
@@ -130,7 +130,7 @@ pub fn generate_round3(
             let encryption_key_peer = encryption_keys
                 .get(publisher)
                 .ok_or(frost_secp256k1::Error::UnknownIdentifier)?;
-            let secret_share = encryption_key.ecdh(encryption_key_peer, encrypted.to_be_bytes())?;
+            let secret_share = encryption_key.ecdh(encryption_key_peer, encrypted.to_be_bytes());
             let signing_share = keys::SigningShare::new(
                 k256::Scalar::from_repr(secret_share.into())
                     .into_option()
@@ -152,7 +152,7 @@ pub fn generate_round3(
 }
 
 type PeerCommitments = (
-    BTreeMap<Address, ProjectivePoint>,
+    BTreeMap<Address, EncryptionPublicKey>,
     BTreeMap<Identifier, round1::Package>,
 );
 
