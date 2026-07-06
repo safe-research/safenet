@@ -1,5 +1,6 @@
 //! The local account used to sign transactions for submitting onchain.
 
+use crate::kdf;
 use alloy::{
     consensus::{SignableTransaction as _, TxEip1559},
     eips::Encodable2718 as _,
@@ -45,6 +46,22 @@ impl Signer {
             .map_err(|_| SigningError)?;
         let raw_tx = tx.into_signed(signature).encoded_2718();
         Ok(SignedTransaction(raw_tx))
+    }
+
+    /// Deterministically derives a 32-byte value from this account's private key using
+    /// HKDF-SHA256, bound to the caller-supplied `domain` and `message`.
+    ///
+    /// `domain` must be a non-empty, caller-chosen constant identifying the specific use case
+    /// (e.g. `"safenet-sentinel-reveal-salt"`), so that derivations for unrelated purposes over
+    /// the same private key can never collide. See [`kdf::derive_key`] for details.
+    ///
+    /// Since the output is keyed by the account's own private key, it is
+    /// reproducible without persisting anything beyond `domain` and `message`.
+    pub fn derive_key(&self, domain: &[u8], message: &[u8]) -> B256 {
+        let mut key = self.0.to_bytes();
+        let derived = kdf::derive_key(key.as_slice(), domain, &[message]);
+        key.0.zeroize();
+        derived
     }
 }
 
