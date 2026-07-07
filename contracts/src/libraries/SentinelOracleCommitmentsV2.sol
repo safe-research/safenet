@@ -89,6 +89,7 @@ library SentinelOracleCommitmentMap {
     }
 
     function add(T storage self, bytes32 requestId, address sentinel, bytes32 commitHash, uint256 bondAmount) internal {
+        checkNotCommitted(self, requestId, sentinel);
         self.commitments[requestId][sentinel] = SentinelOracleCommitment.Commitment({
             commitHash: commitHash, bondAmount: bondAmount, vote: SentinelOracleCommitment.Vote.PENDING, claimed: false
         });
