@@ -1,10 +1,7 @@
 //! ECDH-XOR encryption of FROST secret shares for the onchain publishing
 //! channel.
 
-use crate::bindings;
-
-use super::{error::Error, marshal};
-use alloy::primitives::B256;
+use super::error::Error;
 use k256::{
     NonZeroScalar, ProjectivePoint, Scalar,
     elliptic_curve::{
@@ -37,17 +34,19 @@ impl EncryptionKey {
     }
 
     /// The public key `q` published onchain for peers to encrypt shares to.
-    pub fn public_key(&self) -> bindings::Point {
-        let public_key = ProjectivePoint::GENERATOR * *self.0;
-        marshal::solidity_point(&public_key)
+    pub(super) fn public_key(&self) -> ProjectivePoint {
+        ProjectivePoint::GENERATOR * *self.0
     }
 
     /// Encrypts or decrypts a 32-byte secret-share `msg` against a peer's
     /// encryption public key. See [`ecdh`].
-    pub fn ecdh(&self, public_key: &bindings::Point, msg: B256) -> Result<B256, Error> {
-        let public_key = marshal::frost_point(public_key)?;
-        let encrypted = ecdh(&self.0, &public_key, msg.0)?;
-        Ok(encrypted.into())
+    pub(super) fn ecdh(
+        &self,
+        public_key: &ProjectivePoint,
+        msg: [u8; 32],
+    ) -> Result<[u8; 32], Error> {
+        let encrypted = ecdh(&self.0, public_key, msg)?;
+        Ok(encrypted)
     }
 }
 
@@ -99,16 +98,12 @@ mod tests {
         EncryptionKey(NonZeroScalar::new(Scalar::from(pk)).unwrap())
     }
 
-    fn m(msg: [u8; 32]) -> B256 {
-        msg.into()
-    }
-
     #[test]
     fn roundtrip_encrypt_decrypt() {
         let mut rng = rand::thread_rng();
         let key = EncryptionKey::generate(&mut rng);
         let peer = EncryptionKey::generate(&mut rng);
-        let msg = m([0x5a; 32]);
+        let msg = [0x5a; 32];
 
         let enc = key.ecdh(&peer.public_key(), msg).unwrap();
         let dec = peer.ecdh(&key.public_key(), enc).unwrap();
@@ -119,7 +114,7 @@ mod tests {
     fn ecdh_is_commutative() {
         let alice = key(2);
         let bob = key(3);
-        let msg = m([0x42; 32]);
+        let msg = [0x00; 32];
         assert_eq!(
             alice.ecdh(&bob.public_key(), msg).unwrap(),
             bob.ecdh(&alice.public_key(), msg).unwrap(),
@@ -131,7 +126,7 @@ mod tests {
         let alice = key(2);
         let bob = key(3);
         let charlie = key(4);
-        let msg = m([0x42; 32]);
+        let msg = [0xff; 32];
         assert_ne!(
             alice.ecdh(&bob.public_key(), msg).unwrap(),
             alice.ecdh(&charlie.public_key(), msg).unwrap(),
@@ -141,6 +136,6 @@ mod tests {
     #[test]
     fn ecdh_rejects_degenerate_inputs() {
         let alice = key(2);
-        assert!(alice.ecdh(&bindings::Point::default(), B256::ZERO).is_err());
+        assert!(alice.ecdh(&ProjectivePoint::IDENTITY, [0xff; 32]).is_err());
     }
 }
