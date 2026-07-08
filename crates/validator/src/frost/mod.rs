@@ -12,6 +12,7 @@ pub mod ecdh;
 pub mod error;
 pub mod keygen;
 mod marshal;
+pub mod nonces;
 mod participants;
 
 #[cfg(test)]
