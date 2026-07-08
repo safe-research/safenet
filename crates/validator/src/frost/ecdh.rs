@@ -1,18 +1,19 @@
 //! ECDH-XOR encryption of FROST secret shares for the onchain publishing
 //! channel.
 
-use super::error::Error;
 use k256::{
-    NonZeroScalar, ProjectivePoint, Scalar,
+    EncodedPoint, NonZeroScalar, ProjectivePoint, Scalar,
     elliptic_curve::{
+        Group,
         hash2curve::{self, ExpandMsgXmd},
         point::AffineCoordinates as _,
+        sec1::{FromEncodedPoint, ToEncodedPoint},
         zeroize::{Zeroize, ZeroizeOnDrop},
     },
     sha2::Sha256,
 };
 use rand::{CryptoRng, RngCore};
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize, Serializer, de};
 
 /// A locally-generated ECDH encryption key. The secret scalar is sampled by the
 /// effect handler and never leaves the secret store; only [`public_key`] is
@@ -34,19 +35,14 @@ impl EncryptionKey {
     }
 
     /// The public key `q` published onchain for peers to encrypt shares to.
-    pub(super) fn public_key(&self) -> ProjectivePoint {
-        ProjectivePoint::GENERATOR * *self.0
+    pub(super) fn public_key(&self) -> EncryptionPublicKey {
+        EncryptionPublicKey(ProjectivePoint::GENERATOR * *self.0)
     }
 
     /// Encrypts or decrypts a 32-byte secret-share `msg` against a peer's
     /// encryption public key. See [`ecdh`].
-    pub(super) fn ecdh(
-        &self,
-        public_key: &ProjectivePoint,
-        msg: [u8; 32],
-    ) -> Result<[u8; 32], Error> {
-        let encrypted = ecdh(&self.0, public_key, msg)?;
-        Ok(encrypted)
+    pub(super) fn ecdh(&self, public_key: &EncryptionPublicKey, msg: [u8; 32]) -> [u8; 32] {
+        ecdh(&self.0, public_key, msg)
     }
 }
 
@@ -58,25 +54,66 @@ impl Drop for EncryptionKey {
 
 impl ZeroizeOnDrop for EncryptionKey {}
 
+/// An encryption public key that can be serialized.
+#[derive(Clone)]
+pub struct EncryptionPublicKey(ProjectivePoint);
+
+impl EncryptionPublicKey {
+    /// Returns the public key as a point.
+    pub fn as_point(&self) -> &ProjectivePoint {
+        &self.0
+    }
+}
+
+impl TryFrom<ProjectivePoint> for EncryptionPublicKey {
+    type Error = frost_secp256k1::Error;
+
+    fn try_from(point: ProjectivePoint) -> Result<Self, Self::Error> {
+        if point.is_identity().into() {
+            return Err(frost_secp256k1::GroupError::InvalidIdentityElement.into());
+        }
+        Ok(Self(point))
+    }
+}
+
+impl<'de> Deserialize<'de> for EncryptionPublicKey {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let encoded = EncodedPoint::deserialize(deserializer)?;
+        ProjectivePoint::from_encoded_point(&encoded)
+            .into_option()
+            .ok_or_else(|| de::Error::custom("invalid encryption public key encoding"))?
+            .try_into()
+            .map_err(de::Error::custom)
+    }
+}
+
+impl Serialize for EncryptionPublicKey {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        self.0.to_encoded_point(true).serialize(serializer)
+    }
+}
+
 /// Encrypts or decrypts `msg` via ECDH: `msg XOR (receiver_pubkey * sender_privkey).x`.
 ///
 /// XOR is its own inverse, so this serves both directions. `receiver_pubkey`
 /// must be a valid non-identity point and `sender_privkey` must be non-zero.
 fn ecdh(
     sender_privkey: &NonZeroScalar,
-    receiver_pubkey: &ProjectivePoint,
+    receiver_pubkey: &EncryptionPublicKey,
     msg: [u8; 32],
-) -> Result<[u8; 32], Error> {
-    if *receiver_pubkey == ProjectivePoint::IDENTITY {
-        return Err(Error::malformed_element());
-    }
-
-    let shared_secret = (*receiver_pubkey * **sender_privkey).to_affine().x();
+) -> [u8; 32] {
+    let shared_secret = (receiver_pubkey.0 * **sender_privkey).to_affine().x();
     let mut result = msg;
     for (byte, secret) in result.iter_mut().zip(shared_secret) {
         *byte ^= secret;
     }
-    Ok(result)
+    result
 }
 
 fn hash_to_scalar(discriminant: &[u8], msg: &[u8]) -> NonZeroScalar {
@@ -105,8 +142,8 @@ mod tests {
         let peer = EncryptionKey::generate(&mut rng);
         let msg = [0x5a; 32];
 
-        let enc = key.ecdh(&peer.public_key(), msg).unwrap();
-        let dec = peer.ecdh(&key.public_key(), enc).unwrap();
+        let enc = key.ecdh(&peer.public_key(), msg);
+        let dec = peer.ecdh(&key.public_key(), enc);
         assert_eq!(dec, msg);
     }
 
@@ -116,8 +153,8 @@ mod tests {
         let bob = key(3);
         let msg = [0x00; 32];
         assert_eq!(
-            alice.ecdh(&bob.public_key(), msg).unwrap(),
-            bob.ecdh(&alice.public_key(), msg).unwrap(),
+            alice.ecdh(&bob.public_key(), msg),
+            bob.ecdh(&alice.public_key(), msg),
         );
     }
 
@@ -128,14 +165,13 @@ mod tests {
         let charlie = key(4);
         let msg = [0xff; 32];
         assert_ne!(
-            alice.ecdh(&bob.public_key(), msg).unwrap(),
-            alice.ecdh(&charlie.public_key(), msg).unwrap(),
+            alice.ecdh(&bob.public_key(), msg),
+            alice.ecdh(&charlie.public_key(), msg),
         );
     }
 
     #[test]
-    fn ecdh_rejects_degenerate_inputs() {
-        let alice = key(2);
-        assert!(alice.ecdh(&ProjectivePoint::IDENTITY, [0xff; 32]).is_err());
+    fn ecdh_rejects_degenerate_public_keys_at_infinity() {
+        assert!(EncryptionPublicKey::try_from(ProjectivePoint::IDENTITY).is_err());
     }
 }

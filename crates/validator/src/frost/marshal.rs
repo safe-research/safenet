@@ -1,7 +1,7 @@
 //! Marshalling between secp256k1 primitives and their Solidity types.
 
 use super::error::Error;
-use crate::bindings;
+use crate::{bindings, frost::ecdh::EncryptionPublicKey};
 use alloy::primitives::U256;
 use frost_secp256k1::keys::{self, dkg};
 use k256::{
@@ -20,10 +20,10 @@ use k256::{
 /// - `r`  the proof-of-knowledge nonce commitment `R`,
 /// - `mu` the proof-of-knowledge scalar `μ`.
 pub fn solidity_commitment(
-    encryption_public_key: &k256::ProjectivePoint,
+    encryption_public_key: &EncryptionPublicKey,
     package: &dkg::round1::Package,
 ) -> bindings::KeyGenCommitment {
-    let q = solidity_point(encryption_public_key);
+    let q = solidity_point(encryption_public_key.as_point());
     let c = package
         .commitment()
         .coefficients()
@@ -88,8 +88,8 @@ pub fn solidity_signature(signature: &frost_secp256k1::Signature) -> bindings::S
 /// peer's encryption public key and DKG round 1 package.
 pub fn frost_commitment(
     commitment: &bindings::KeyGenCommitment,
-) -> Result<(k256::ProjectivePoint, dkg::round1::Package), Error> {
-    let encryption_public_key = frost_point(&commitment.q)?;
+) -> Result<(EncryptionPublicKey, dkg::round1::Package), Error> {
+    let encryption_public_key = frost_point(&commitment.q)?.try_into()?;
     let coefficients = keys::VerifiableSecretSharingCommitment::new(
         commitment
             .c
