@@ -1,7 +1,11 @@
 //! Distributed key generation, driving the FROST `keys::dkg::part{1,2,3}`
 //! rounds with address-derived identifiers and ECDH-encrypted secret shares.
 
-use super::{ecdh::EncryptionKey, error::Error, marshal, participants};
+use super::{
+    ecdh::EncryptionKey,
+    error::{Culprit as _, Error},
+    marshal, participants,
+};
 use crate::{bindings, frost::ecdh::EncryptionPublicKey};
 use alloy::primitives::{Address, U256};
 use frost_secp256k1::{
@@ -36,7 +40,8 @@ where
 {
     let identifier = participants::identifier(me);
     let encryption_key = EncryptionKey::generate(&mut *rng);
-    let (secret_package, package) = dkg::part1(identifier, count, threshold, &mut *rng)?;
+    let (secret_package, package) =
+        dkg::part1(identifier, count, threshold, &mut *rng).err_unexpected()?;
     let commitment = marshal::solidity_commitment(&encryption_key.public_key(), &package);
     Ok(Round1 {
         encryption_key,
@@ -62,19 +67,22 @@ pub fn verify_round1_commitment(
     commitment: &bindings::KeyGenCommitment,
 ) -> Result<Round1Commitment, Error> {
     let identifier = participants::identifier(participant);
-    let (encryption_public_key, package) = marshal::frost_commitment(commitment)?;
-    if package.commitment().coefficients().len() as u16 != min_signers {
-        return Err(frost_secp256k1::Error::IncorrectNumberOfCommitments.into());
-    }
-    frost_core::keys::dkg::verify_proof_of_knowledge(
-        identifier,
-        package.commitment(),
-        package.proof_of_knowledge(),
-    )?;
-    Ok(Round1Commitment {
-        encryption_public_key,
-        package,
-    })
+    marshal::frost_commitment(commitment)
+        .and_then(|(encryption_public_key, package)| {
+            if package.commitment().coefficients().len() as u16 != min_signers {
+                return Err(frost_secp256k1::Error::IncorrectNumberOfCommitments);
+            }
+            frost_core::keys::dkg::verify_proof_of_knowledge(
+                identifier,
+                package.commitment(),
+                package.proof_of_knowledge(),
+            )?;
+            Ok(Round1Commitment {
+                encryption_public_key,
+                package,
+            })
+        })
+        .err_with_culprit(participant)
 }
 
 /// The output of DKG round 2: the secret package (persisted) and the onchain
@@ -98,47 +106,54 @@ pub fn generate_round2(
             commitment.package.clone()
         });
 
-    let (secret_package, round2_packages) =
-        dkg::part2(secret_package.clone(), &round1_peer_packages)?;
-
-    let round1_commitments = round1_peer_packages
-        .iter()
-        .map(|(identifier, package)| (*identifier, package.commitment()))
-        .chain(std::iter::once((
-            *secret_package.identifier(),
-            secret_package.commitment(),
-        )))
-        .collect();
-    let public_key_package = keys::PublicKeyPackage::from_dkg_commitments(&round1_commitments)?;
-    let verifying_share = public_key_package
-        .verifying_shares()
-        .get(secret_package.identifier())
-        .ok_or(frost_secp256k1::Error::UnknownIdentifier)?;
-
-    let encrypted_shares = commitments
-        .iter()
-        .map(|(participant, commitment)| {
-            (
-                participants::identifier(*participant),
-                &commitment.encryption_public_key,
-            )
-        })
-        .filter(|(participant, _)| participant != secret_package.identifier())
-        .map(|(peer, encryption_public_key)| {
-            let package = round2_packages
-                .get(&peer)
+    // By construction, the second round of DKG should have no participant
+    // culprits (as the `commitments` have already verified the length of the
+    // commitments and the proof of knowledge). The only way we encounter an
+    // error here is if the caller were to mix secrets and commitments from
+    // different DKG ceremonies.
+    dkg::part2(secret_package.clone(), &round1_peer_packages)
+        .and_then(|(secret_package, round2_packages)| {
+            let round1_commitments = round1_peer_packages
+                .iter()
+                .map(|(identifier, package)| (*identifier, package.commitment()))
+                .chain(std::iter::once((
+                    *secret_package.identifier(),
+                    secret_package.commitment(),
+                )))
+                .collect();
+            let public_key_package =
+                keys::PublicKeyPackage::from_dkg_commitments(&round1_commitments)?;
+            let verifying_share = public_key_package
+                .verifying_shares()
+                .get(secret_package.identifier())
                 .ok_or(frost_secp256k1::Error::UnknownIdentifier)?;
-            let signing_share = package.signing_share().to_scalar().to_bytes().into();
-            Ok(encryption_key.ecdh(encryption_public_key, signing_share))
-        })
-        .collect::<Result<Vec<_>, Error>>()?;
-    let share = marshal::solidity_secret_share(verifying_share, &encrypted_shares);
 
-    Ok(Round2 {
-        secret_package,
-        public_key_package,
-        share,
-    })
+            let encrypted_shares = commitments
+                .iter()
+                .map(|(participant, commitment)| {
+                    (
+                        participants::identifier(*participant),
+                        &commitment.encryption_public_key,
+                    )
+                })
+                .filter(|(participant, _)| participant != secret_package.identifier())
+                .map(|(peer, encryption_public_key)| {
+                    let package = round2_packages
+                        .get(&peer)
+                        .ok_or(frost_secp256k1::Error::UnknownIdentifier)?;
+                    let signing_share = package.signing_share().to_scalar().to_bytes().into();
+                    Ok(encryption_key.ecdh(encryption_public_key, signing_share))
+                })
+                .collect::<Result<Vec<_>, frost_secp256k1::Error>>()?;
+            let share = marshal::solidity_secret_share(verifying_share, &encrypted_shares);
+
+            Ok(Round2 {
+                secret_package,
+                public_key_package,
+                share,
+            })
+        })
+        .err_unexpected()
 }
 
 /// A validated round 2 signing share from a peer.
@@ -157,51 +172,63 @@ pub fn verify_round2_share(
     share: &bindings::KeyGenSecretShare,
 ) -> Result<Round2Share, Error> {
     if share.f.len() as u16 != secret_package.max_signers() - 1 {
-        return Err(frost_secp256k1::Error::IncorrectNumberOfShares.into());
+        return Err(frost_secp256k1::Error::IncorrectNumberOfShares).err_with_culprit(peer);
     }
 
     let identifier = participants::identifier(peer);
     if identifier == *secret_package.identifier() {
-        return Err(frost_secp256k1::Error::IncorrectPackage.into());
+        return Err(frost_secp256k1::Error::IncorrectPackage).err_unexpected();
     }
 
-    let round1 = &commitments
+    let (commitment, verifying_share, secret_share) = commitments
         .get(&peer)
-        .ok_or(frost_secp256k1::Error::UnknownIdentifier)?;
-    let encryption_public_key = &round1.encryption_public_key;
-    let commitment = round1.package.commitment().clone();
+        .ok_or(frost_secp256k1::Error::UnknownIdentifier)
+        .and_then(|round1| {
+            let encryption_public_key = &round1.encryption_public_key;
+            let commitment = round1.package.commitment().clone();
 
-    let verifying_share = public_key_package
-        .verifying_shares()
-        .get(&identifier)
-        .ok_or(frost_secp256k1::Error::UnknownIdentifier)?;
+            let verifying_share = public_key_package
+                .verifying_shares()
+                .get(&identifier)
+                .ok_or(frost_secp256k1::Error::UnknownIdentifier)?;
 
-    let index = commitments
-        .keys()
-        .filter(|address| **address != peer)
-        .position(|address| participants::identifier(*address) == *secret_package.identifier())
-        .ok_or(frost_secp256k1::Error::UnknownIdentifier)?;
-    let encrypted_share = share
-        .f
-        .get(index)
-        .ok_or(frost_core::Error::IncorrectNumberOfShares)?;
-    let secret_share = encryption_key.ecdh(encryption_public_key, encrypted_share.to_be_bytes());
+            let index = commitments
+                .keys()
+                .filter(|address| **address != peer)
+                .position(|address| {
+                    participants::identifier(*address) == *secret_package.identifier()
+                })
+                .ok_or(frost_secp256k1::Error::UnknownIdentifier)?;
+            let encrypted_share = share
+                .f
+                .get(index)
+                .ok_or(frost_secp256k1::Error::IncorrectNumberOfShares)?;
+            let secret_share =
+                encryption_key.ecdh(encryption_public_key, encrypted_share.to_be_bytes());
 
-    let y = marshal::frost_point(&share.y)?;
-    if y != verifying_share.to_element() {
-        return Err(frost_secp256k1::Error::MalformedVerifyingKey.into());
-    }
+            Ok((commitment, verifying_share, secret_share))
+        })
+        .err_unexpected()?;
 
-    let signing_share =
-        keys::SigningShare::new(marshal::frost_scalar(&U256::from_be_bytes(secret_share))?);
+    let package = marshal::frost_point(&share.y)
+        .and_then(|y| {
+            if y != verifying_share.to_element() {
+                return Err(frost_secp256k1::Error::MalformedVerifyingKey);
+            }
 
-    // Pre-verify the share to make sure it matches the commitment from
-    // the peer; this allows us to complain right away in case an
-    // invalid share was provided.
-    let _ =
-        keys::SecretShare::new(*secret_package.identifier(), signing_share, commitment).verify()?;
+            let signing_share =
+                keys::SigningShare::new(marshal::frost_scalar(&U256::from_be_bytes(secret_share))?);
 
-    let package = round2::Package::new(signing_share);
+            // Pre-verify the share to make sure it matches the commitment from
+            // the peer; this allows us to complain right away in case an
+            // invalid share was provided.
+            let _ = keys::SecretShare::new(*secret_package.identifier(), signing_share, commitment)
+                .verify()?;
+
+            Ok(round2::Package::new(signing_share))
+        })
+        .err_with_culprit(peer)?;
+
     Ok(Round2Share { package })
 }
 
@@ -227,8 +254,13 @@ pub fn generate_round3(
         share.package.clone()
     });
 
+    // By construction, the third round of DKG should have no participant
+    // culprits (as the `commitments` and `shares` have already been verified).
+    // The only way we encounter an error here is if the caller were to mix
+    // secrets and commitments and shares from different DKG ceremonies.
     let (key_package, public_key_package) =
-        dkg::part3(secret_package, &round1_peer_packages, &round2_peer_packages)?;
+        dkg::part3(secret_package, &round1_peer_packages, &round2_peer_packages)
+            .err_unexpected()?;
     Ok(Round3 {
         key_package,
         public_key_package,

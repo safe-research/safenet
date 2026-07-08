@@ -1,6 +1,6 @@
 //! Marshalling between secp256k1 primitives and their Solidity types.
 
-use super::error::Error;
+use super::error;
 use crate::{bindings, frost::ecdh::EncryptionPublicKey};
 use alloy::primitives::U256;
 use frost_secp256k1::keys::{self, dkg};
@@ -88,7 +88,7 @@ pub fn solidity_signature(signature: &frost_secp256k1::Signature) -> bindings::S
 /// peer's encryption public key and DKG round 1 package.
 pub fn frost_commitment(
     commitment: &bindings::KeyGenCommitment,
-) -> Result<(EncryptionPublicKey, dkg::round1::Package), Error> {
+) -> Result<(EncryptionPublicKey, dkg::round1::Package), frost_secp256k1::Error> {
     let encryption_public_key = frost_point(&commitment.q)?.try_into()?;
     let coefficients = keys::VerifiableSecretSharingCommitment::new(
         commitment
@@ -98,7 +98,7 @@ pub fn frost_commitment(
                 let coefficient = frost_point(coefficient)?;
                 Ok(frost_core::keys::CoefficientCommitment::new(coefficient))
             })
-            .collect::<Result<_, Error>>()?,
+            .collect::<Result<_, frost_secp256k1::Error>>()?,
     );
     let proof_of_knowledge = frost_signature(&commitment.r, &commitment.mu)?;
     let package = dkg::round1::Package::new(coefficients, proof_of_knowledge);
@@ -106,15 +106,17 @@ pub fn frost_commitment(
 }
 
 /// Converts a `U256` to a canonical secp256k1 scalar.
-pub fn frost_scalar(scalar: &U256) -> Result<k256::Scalar, Error> {
+pub fn frost_scalar(scalar: &U256) -> Result<k256::Scalar, frost_secp256k1::Error> {
     Scalar::from_repr(scalar.to_be_bytes().into())
         .into_option()
-        .ok_or_else(Error::malformed_element)
+        .ok_or_else(error::malformed_scalar)
 }
 
 /// Converts an ABI `Point { uint256 x; uint256 y }` to a secp256k1 point. The
 /// zero point decodes to the identity.
-pub fn frost_point(point: &bindings::Point) -> Result<k256::ProjectivePoint, Error> {
+pub fn frost_point(
+    point: &bindings::Point,
+) -> Result<k256::ProjectivePoint, frost_secp256k1::Error> {
     if point.x.is_zero() && point.y.is_zero() {
         return Ok(k256::ProjectivePoint::IDENTITY);
     }
@@ -123,14 +125,17 @@ pub fn frost_point(point: &bindings::Point) -> Result<k256::ProjectivePoint, Err
     buffer[0] = 0x04;
     buffer[1..33].copy_from_slice(&point.x.to_be_bytes::<32>());
     buffer[33..65].copy_from_slice(&point.y.to_be_bytes::<32>());
-    let encoded = k256::EncodedPoint::from_bytes(buffer).map_err(|_| Error::malformed_element())?;
+    let encoded = k256::EncodedPoint::from_bytes(buffer).map_err(|_| error::malformed_element())?;
     k256::ProjectivePoint::from_encoded_point(&encoded)
         .into_option()
-        .ok_or_else(Error::malformed_element)
+        .ok_or_else(error::malformed_element)
 }
 
 /// Converts an ABI Schnorr signature `(Point r, uint256 z)` to a FROST signature.
-pub fn frost_signature(r: &bindings::Point, z: &U256) -> Result<frost_secp256k1::Signature, Error> {
+pub fn frost_signature(
+    r: &bindings::Point,
+    z: &U256,
+) -> Result<frost_secp256k1::Signature, frost_secp256k1::Error> {
     Ok(frost_secp256k1::Signature::new(
         frost_point(r)?,
         frost_scalar(z)?,
