@@ -406,9 +406,9 @@ mod tests {
         primitives::{Address, B256, Bloom, U64, U256, address, keccak256},
         providers::{ProviderBuilder, RootProvider},
         rpc::types::FeeHistory,
-        signers::k256::ecdsa::SigningKey,
         transports::mock::Asserter,
     };
+    use k256::ecdsa::SigningKey;
 
     const CHAIN_ID: u64 = 1;
     const ENTRY_POINT: Address = address!("0x5FF137D4b0FDCD49DcA30c7CF57E578a026d2789");

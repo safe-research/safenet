@@ -6,11 +6,9 @@ use alloy::{
     eips::Encodable2718 as _,
     network::TxSignerSync as _,
     primitives::{Address, B256, TxHash, keccak256},
-    signers::{
-        k256::{ecdsa::SigningKey, elliptic_curve::zeroize::Zeroize},
-        local::PrivateKeySigner,
-    },
+    signers::local::PrivateKeySigner,
 };
+use k256::{ecdsa::SigningKey, elliptic_curve::zeroize::Zeroize};
 use serde::{Deserialize, Deserializer, de};
 use std::fmt::{self, Debug, Formatter};
 

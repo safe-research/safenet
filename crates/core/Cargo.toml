@@ -8,16 +8,17 @@ publish = false
 alloy.workspace = true
 futures.workspace = true
 hkdf = "0.13"
-metrics.workspace = true
+k256.workspace = true
 metrics-exporter-prometheus = "0.18"
+metrics.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 sha2 = "0.11"
 sqlx.workspace = true
 thiserror.workspace = true
 tokio.workspace = true
-tracing.workspace = true
 tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt", "json"] }
+tracing.workspace = true
 url.workspace = true
 
 [dev-dependencies]

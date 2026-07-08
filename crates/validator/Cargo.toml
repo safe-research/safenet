@@ -7,6 +7,10 @@ publish = false
 [dependencies]
 alloy.workspace = true
 argh.workspace = true
+frost-core = { version = "3", features = ["internals"] }
+frost-secp256k1 = "3"
+k256.workspace = true
+rand.workspace = true
 safenet-core.workspace = true
 serde.workspace = true
 sqlx.workspace = true
