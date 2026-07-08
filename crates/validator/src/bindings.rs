@@ -21,7 +21,7 @@ sol! {
     /// `r` and the scalar component `z`. Onchain attestations and completed
     /// signatures share this shape.
     #[derive(Debug, Default)]
-    struct Attestation {
+    struct Signature {
         Point r;
         uint256 z;
     }
@@ -119,7 +119,7 @@ sol! {
             bytes32 groupId,
             Point groupKey,
             bytes32 signatureId,
-            Attestation attestation
+            Signature attestation
         );
         event TransactionProposed(
             bytes32 indexed safeTxHash,
@@ -134,7 +134,7 @@ sol! {
             address indexed safe,
             uint64 epoch,
             bytes32 signatureId,
-            Attestation attestation
+            Signature attestation
         );
         event OracleTransactionProposed(
             bytes32 indexed safeTxHash,
@@ -151,7 +151,7 @@ sol! {
             uint64 epoch,
             address oracle,
             bytes32 signatureId,
-            Attestation attestation
+            Signature attestation
         );
         event ValidatorStakerSet(address indexed validator, address staker);
 
@@ -220,7 +220,7 @@ sol! {
         );
         event SignRevealedNonces(bytes32 indexed sid, address participant, SignNonces nonces);
         event SignShared(bytes32 indexed sid, bytes32 indexed selectionRoot, address participant, uint256 z);
-        event SignCompleted(bytes32 indexed sid, bytes32 indexed selectionRoot, Attestation signature);
+        event SignCompleted(bytes32 indexed sid, bytes32 indexed selectionRoot, Signature signature);
 
         function keyGenAndCommit(
             bytes32 participants,
