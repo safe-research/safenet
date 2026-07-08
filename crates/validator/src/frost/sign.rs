@@ -5,13 +5,13 @@
 
 use super::{
     error::{Culprit as _, Error},
-    marshal,
-    nonces::Nonces,
-    participants,
+    keygen::KeyShare,
+    marshal, participants,
+    preprocess::Nonces,
 };
-use crate::{bindings, frost::marshal::frost_signing_commitments, merkle::MerkleTree};
+use crate::{bindings, merkle::MerkleTree};
 use alloy::primitives::{Address, B256, U256, keccak256};
-use frost_secp256k1::{Secp256K1Sha256, SigningPackage, keys, round1, round2};
+use frost_secp256k1::{Secp256K1Sha256, SigningPackage, round1, round2};
 use k256::elliptic_curve::PrimeField as _;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
@@ -38,7 +38,7 @@ pub fn verify_revealed_nonces(
     participant: Address,
     nonces: &bindings::SignNonces,
 ) -> Result<RevealedNonces, Error> {
-    let commitments = frost_signing_commitments(nonces).err_with_culprit(participant)?;
+    let commitments = marshal::frost_signing_commitments(nonces).err_with_culprit(participant)?;
     Ok(RevealedNonces { commitments })
 }
 
@@ -58,11 +58,12 @@ pub struct SignatureShare {
 /// commitments then consumes the secret signing nonce to produce a signature
 /// share for the specified key package.
 pub fn signature_share(
-    key_package: &keys::KeyPackage,
-    nonces: &Nonces,
+    key_share: &KeyShare,
+    nonces: Nonces,
     revealed: &BTreeMap<Address, RevealedNonces>,
     message: &B256,
 ) -> Result<SignatureShare, Error> {
+    let key_package = key_share.as_key_package();
     let group_public_key = key_package.verifying_key();
 
     let commitments = revealed
@@ -120,7 +121,7 @@ pub fn signature_share(
             let tree = MerkleTree::build(leaves);
             let selection = bindings::SignSelection {
                 r: group_r,
-                root: tree.root().into(),
+                root: tree.root().0,
             };
 
             // Extract the signature share values that are needed onchain along

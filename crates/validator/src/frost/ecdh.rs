@@ -55,24 +55,21 @@ impl Drop for EncryptionKey {
 impl ZeroizeOnDrop for EncryptionKey {}
 
 /// An encryption public key that can be serialized.
-#[derive(Clone)]
+#[derive(Clone, Eq, PartialEq)]
 pub struct EncryptionPublicKey(ProjectivePoint);
 
 impl EncryptionPublicKey {
-    /// Returns the public key as a point.
-    pub fn as_point(&self) -> &ProjectivePoint {
-        &self.0
-    }
-}
-
-impl TryFrom<ProjectivePoint> for EncryptionPublicKey {
-    type Error = frost_secp256k1::Error;
-
-    fn try_from(point: ProjectivePoint) -> Result<Self, Self::Error> {
+    /// Tries to construct an encryption public key from a projective point.
+    pub(super) fn from_point(point: ProjectivePoint) -> Result<Self, frost_secp256k1::Error> {
         if point.is_identity().into() {
             return Err(frost_secp256k1::GroupError::InvalidIdentityElement.into());
         }
         Ok(Self(point))
+    }
+
+    /// Returns the public key as a point.
+    pub(super) fn as_point(&self) -> &ProjectivePoint {
+        &self.0
     }
 }
 
@@ -84,8 +81,8 @@ impl<'de> Deserialize<'de> for EncryptionPublicKey {
         let encoded = EncodedPoint::deserialize(deserializer)?;
         ProjectivePoint::from_encoded_point(&encoded)
             .into_option()
+            .map(EncryptionPublicKey::from_point)
             .ok_or_else(|| de::Error::custom("invalid encryption public key encoding"))?
-            .try_into()
             .map_err(de::Error::custom)
     }
 }
@@ -172,6 +169,6 @@ mod tests {
 
     #[test]
     fn ecdh_rejects_degenerate_public_keys_at_infinity() {
-        assert!(EncryptionPublicKey::try_from(ProjectivePoint::IDENTITY).is_err());
+        assert!(EncryptionPublicKey::from_point(ProjectivePoint::IDENTITY).is_err());
     }
 }

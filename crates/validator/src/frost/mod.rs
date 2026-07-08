@@ -4,7 +4,7 @@
 //!
 //! This module provides an interface that is compatible with the onchain
 //! FROST coordinator contract, internally managing the marshalling between
-//! [`frost-secp256k1`] values and their Solidity ABI representations.
+//! [`frost_secp256k1`] values and their Solidity ABI representations.
 
 #![cfg_attr(not(test), expect(dead_code))]
 
@@ -12,9 +12,9 @@ pub mod ecdh;
 pub mod error;
 pub mod keygen;
 mod marshal;
-pub mod nonces;
 mod participants;
-pub mod signing;
+pub mod preprocess;
+pub mod sign;
 
 #[cfg(test)]
 mod tests {
@@ -34,80 +34,81 @@ mod tests {
         let count = participants.len() as u16;
         let threshold = 2;
 
-        let mut round1 = BTreeMap::new();
+        // --- KEY GENERATION ---
+
+        // First do the key generation setup, which generates some random
+        // secrets that need to be persisted, as well as some public commitments
+        // that are submitted onchain.
+        let mut secrets = BTreeMap::new();
+        let mut commitments = BTreeMap::new();
         for participant in participants {
-            let r1 = keygen::generate_round1(&mut rng, participant, count, threshold).unwrap();
-            round1.insert(participant, r1);
+            let setup = keygen::setup(&mut rng, participant, count, threshold).unwrap();
+            secrets.insert(participant, setup.secrets);
+            commitments.insert(participant, setup.commitment);
         }
 
-        let commitments = participants
-            .into_iter()
-            .map(|participant| {
-                let commitment = keygen::verify_round1_commitment(
-                    threshold,
-                    participant,
-                    &round1[&participant].commitment,
-                )
-                .unwrap();
-                (participant, commitment)
-            })
-            .collect();
-
-        let mut round2 = BTreeMap::new();
-        for participant in participants {
-            let r1 = &round1[&participant];
-            let r2 = keygen::generate_round2(&r1.encryption_key, &r1.secret_package, &commitments)
-                .unwrap();
-            round2.insert(participant, r2);
-        }
-
-        let shares = participants
-            .into_iter()
-            .map(|me| {
-                let r1 = &round1[&me];
-                let r2 = &round2[&me];
-                let shares = participants
-                    .into_iter()
-                    .filter(|peer| *peer != me)
-                    .map(|peer| {
-                        let share = &round2[&peer].share;
-                        let share = keygen::verify_round2_share(
-                            &r1.encryption_key,
-                            &r2.secret_package,
-                            &r2.public_key_package,
-                            &commitments,
-                            peer,
-                            share,
-                        )
-                        .unwrap();
-                        (peer, share)
-                    })
-                    .collect();
-                (me, shares)
-            })
-            .collect::<BTreeMap<_, _>>();
-
-        let mut round3 = BTreeMap::new();
-        for participant in participants {
-            let r2 = &round2[&participant];
-            let r3 =
-                keygen::generate_round3(&r2.secret_package, &commitments, &shares[&participant])
+        // Each participant uses their random secrets to proceed to the next
+        // stage and generate encrypted secret shares that published onchain.
+        let mut sharing_states = BTreeMap::new();
+        let mut shares = BTreeMap::new();
+        for (participant, secrets) in secrets {
+            let verified_commitments = participants
+                .into_iter()
+                .map(|participant| {
+                    let commitment = keygen::verify_commitment(
+                        &secrets,
+                        participant,
+                        &commitments[&participant],
+                    )
                     .unwrap();
-            round3.insert(participant, r3);
+                    (participant, commitment)
+                })
+                .collect();
+            let share = keygen::generate_secret_shares(secrets, verified_commitments).unwrap();
+            sharing_states.insert(participant, share.sharing_state);
+            shares.insert(participant, share.share);
         }
 
-        let group_key = round3
+        // Once the secret sharing is complete, the key generation process can
+        // finalize, producing a key share for the group.
+        let mut key_shares = BTreeMap::new();
+        for (participant, sharing_state) in sharing_states {
+            let verified_shares = shares
+                .iter()
+                .map(|(peer, share)| {
+                    let verified_share =
+                        keygen::verify_secret_share(&sharing_state, *peer, share).unwrap();
+                    (*peer, verified_share)
+                })
+                .collect();
+            let key_share = keygen::finalize(sharing_state, verified_shares).unwrap();
+            key_shares.insert(participant, key_share);
+        }
+
+        // Here, all participants should share the same group verifying key.
+        // Additionally, the group key should equal to the sum of all the
+        // publicly posted commitments C_0.
+        let group_key = key_shares
             .values()
             .next()
             .unwrap()
-            .public_key_package
+            .as_key_package()
             .verifying_key();
-        for r3 in round3.values() {
-            assert_eq!(group_key, r3.public_key_package.verifying_key());
+        for key_share in key_shares.values() {
+            assert_eq!(group_key, key_share.as_key_package().verifying_key());
         }
+        assert_eq!(
+            group_key.to_element(),
+            commitments
+                .values()
+                .map(|commitments| marshal::frost_point(&commitments.c[0]).unwrap())
+                .sum::<k256::ProjectivePoint>()
+        );
 
-        // Signing ceremony: a threshold set of signers jointly signs a message,
-        // each contributing a signature share and the signer-set selection.
+        // --- SIGNING CEREMONY ---
+
+        // A threshold set of signers jointly signs a message, each contributing
+        // a signature share and the signer-set selection.
         let message = keccak256("Hello, Safenet!");
         let signers = [participants[0], participants[2]];
 
@@ -116,19 +117,18 @@ mod tests {
         let mut secret_nonces = BTreeMap::new();
         let mut revealed_nonces = BTreeMap::new();
         for signer in signers {
-            let key_package = &round3[&signer].key_package;
-            let chunk =
-                nonces::NonceChunk::with_size(1, key_package.signing_share(), &mut rng).unwrap();
+            let key_share = &key_shares[&signer];
+            let chunk = preprocess::NonceChunk::with_size(1, key_share, &mut rng).unwrap();
             let nonces = chunk.nonces.into_iter().next().unwrap();
             let (sign_nonces, proof) = nonces.reveal();
 
             // Verify the Merkle proof as is done on the smart contract. This
-            // is not expected to be enfoced by the clients, but added here for
+            // is not expected to be enforced by the clients, but added here for
             // testing.
             assert!(
                 chunk
                     .commitment
-                    .verify(nonces::nonces_leaf(0, &sign_nonces), proof)
+                    .verify(preprocess::nonces_leaf(0, &sign_nonces), proof)
             );
 
             secret_nonces.insert(signer, nonces);
@@ -136,26 +136,24 @@ mod tests {
         }
 
         // Each signer independently produces its signature share.
-        let revealed = revealed_nonces
-            .iter()
-            .map(|(participant, nonces)| {
-                let commitment = signing::verify_revealed_nonces(*participant, nonces).unwrap();
-                (*participant, commitment)
-            })
-            .collect();
-        let signatures = signers
-            .into_iter()
-            .map(|signer| {
-                let signature = signing::signature_share(
-                    &round3[&signer].key_package,
-                    &secret_nonces[&signer],
-                    &revealed,
-                    &message,
-                )
-                .unwrap();
-                (signer, signature)
-            })
-            .collect::<BTreeMap<_, _>>();
+        let mut signatures = BTreeMap::new();
+        for signer in signers {
+            let revealed = revealed_nonces
+                .iter()
+                .map(|(participant, nonces)| {
+                    let commitment = sign::verify_revealed_nonces(*participant, nonces).unwrap();
+                    (*participant, commitment)
+                })
+                .collect();
+            let signature = sign::signature_share(
+                &key_shares[&signer],
+                secret_nonces.remove(&signer).unwrap(),
+                &revealed,
+                &message,
+            )
+            .unwrap();
+            signatures.insert(signer, signature);
+        }
 
         // Every signer reconstructs the identical selection: the same group
         // commitment `r` and signer-set root.
@@ -168,8 +166,8 @@ mod tests {
             // Verify the Merkle proof as is done on the smart contract. This
             // is not expected to be enforced by the clients, but added here for
             // testing.
-            assert!(MerkleRoot::from(selection.root).verify(
-                signing::signer_leaf(
+            assert!(MerkleRoot(selection.root).verify(
+                sign::signer_leaf(
                     address,
                     &signature.share.r,
                     &signature.share.l,
@@ -205,12 +203,12 @@ mod tests {
                     )
                 })
                 .collect();
-            let verifying_shares = round3
+            let verifying_shares = key_shares
                 .iter()
-                .map(|(address, r3)| {
+                .map(|(address, key_share)| {
                     (
                         participants::identifier(*address),
-                        *r3.key_package.verifying_share(),
+                        *key_share.as_key_package().verifying_share(),
                     )
                 })
                 .collect();
