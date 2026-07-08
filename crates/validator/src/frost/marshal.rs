@@ -5,7 +5,7 @@ use crate::{bindings, frost::ecdh::EncryptionPublicKey};
 use alloy::primitives::U256;
 use frost_secp256k1::{
     keys::{self, dkg},
-    round1,
+    round1, round2,
 };
 use k256::{
     Scalar,
@@ -82,6 +82,11 @@ pub fn solidity_point(point: &k256::ProjectivePoint) -> bindings::Point {
     }
 }
 
+/// Converts a FROST signature share to a `U256`.
+pub fn solidity_signing_share(signature_share: &round2::SignatureShare) -> U256 {
+    U256::from_be_slice(&signature_share.serialize())
+}
+
 /// Converts a secp256k1 scalar to a `U256`.
 pub fn solidity_scalar(scalar: &k256::Scalar) -> U256 {
     U256::from_be_bytes(scalar.to_bytes().into())
@@ -150,5 +155,22 @@ pub fn frost_signature(
     Ok(frost_secp256k1::Signature::new(
         frost_point(r)?,
         frost_scalar(z)?,
+    ))
+}
+
+/// The marshaled hiding (`d`) and binding (`e`) commitment points for a
+/// signing nonce pair.
+pub fn frost_signing_commitments(
+    nonces: &bindings::SignNonces,
+) -> Result<round1::SigningCommitments, frost_secp256k1::Error> {
+    let hiding = frost_point(&nonces.d)?;
+    let binding = frost_point(&nonces.e)?;
+    if (hiding.is_identity() | binding.is_identity()).into() {
+        return Err(error::malformed_element());
+    }
+
+    Ok(round1::SigningCommitments::new(
+        round1::NonceCommitment::new(hiding),
+        round1::NonceCommitment::new(binding),
     ))
 }

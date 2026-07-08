@@ -83,6 +83,12 @@ impl PartialEq<B256> for MerkleRoot {
     }
 }
 
+impl From<MerkleRoot> for B256 {
+    fn from(root: MerkleRoot) -> Self {
+        root.0
+    }
+}
+
 /// Hashes a pair of nodes with canonical (ascending) ordering, matching
 /// OpenZeppelin's commutative `MerkleProof` hashing.
 fn hash_pair(a: B256, b: B256) -> B256 {
