@@ -83,6 +83,12 @@ impl PartialEq<B256> for MerkleRoot {
     }
 }
 
+impl From<B256> for MerkleRoot {
+    fn from(root: B256) -> Self {
+        Self(root)
+    }
+}
+
 impl From<MerkleRoot> for B256 {
     fn from(root: MerkleRoot) -> Self {
         root.0

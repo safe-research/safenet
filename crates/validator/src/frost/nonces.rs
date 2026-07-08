@@ -64,13 +64,27 @@ impl NonceChunk {
     where
         R: RngCore + CryptoRng,
     {
+        Self::with_size(SEQUENCE_CHUNK_SIZE, signing_share, rng)
+    }
+
+    /// Same as [`generate`] but with a user-specified size in chunks.
+    ///
+    /// This allows for smaller nonce chunks for testing.
+    pub fn with_size<R>(
+        size: u64,
+        signing_share: &SigningShare,
+        rng: &mut R,
+    ) -> Result<NonceChunk, rand::Error>
+    where
+        R: RngCore + CryptoRng,
+    {
         // Parallelize nonce generation to speed up the process. Note that this
         // requires us to seed one RNG per nonce pair, as the `R` passed in
         // cannot be shared across threads. The choice of [`ChaCha12Rng`] is
         // based on the fact that it is the standard RNG used by [`rand`] (both
         // the `ThreadRng` and `StdRng`), it is a cryptographically secure RNG,
         // and it allows unique random streams per nonce generation.
-        let rngs = (0..SEQUENCE_CHUNK_SIZE)
+        let rngs = (0..size)
             .map({
                 let seed = ChaCha12Rng::from_rng(&mut *rng)?;
                 move |offset| {
@@ -109,7 +123,7 @@ impl NonceChunk {
 
 /// The leaf hash for a nonce commitment at `offset` in the nonce tree. Defined
 /// as `keccak256(abi.encode(offset, d.x, d.y, e.x, e.y))`.
-fn nonces_leaf(offset: u64, nonces: &bindings::SignNonces) -> B256 {
+pub(super) fn nonces_leaf(offset: u64, nonces: &bindings::SignNonces) -> B256 {
     let mut buf = [0u8; 160];
     buf[24..32].copy_from_slice(&offset.to_be_bytes());
     buf[32..64].copy_from_slice(&nonces.d.x.to_be_bytes::<32>());
