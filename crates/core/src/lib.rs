@@ -12,6 +12,7 @@
 
 pub mod driver;
 pub mod index;
+pub mod kdf;
 pub mod observability;
 pub mod serialization;
 pub mod state;

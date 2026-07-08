@@ -7,10 +7,12 @@ publish = false
 [dependencies]
 alloy.workspace = true
 futures.workspace = true
+hkdf = "0.13"
 metrics.workspace = true
 metrics-exporter-prometheus = "0.18"
 serde.workspace = true
 serde_json.workspace = true
+sha2 = "0.11"
 sqlx.workspace = true
 thiserror.workspace = true
 tokio.workspace = true
