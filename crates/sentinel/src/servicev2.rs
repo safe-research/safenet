@@ -6,7 +6,8 @@ use crate::{
         oracle::{ERC20, SentinelOracleV2 as SentinelOracle},
     },
     detector::Detector,
-    state::StateV2 as State,
+    hashing::{RevealSalt as _, commit_hash, oracle_tx_proposal_hash},
+    state::{SentinelRequestStateV2 as RequestState, StateV2 as State},
 };
 use alloy::{
     primitives::{Address, U256},
@@ -35,7 +36,6 @@ pub struct SentinelService {
 
 /// Advances the request FSM in response to `SentinelOracle`/`Consensus`
 /// events.
-#[expect(dead_code)]
 pub struct SentinelTransition {
     oracle: Address,
     /// The `Consensus` contract whose `OracleTransactionProposed` events are
@@ -87,27 +87,83 @@ impl SentinelService {
 }
 
 impl SentinelTransition {
-    // TODO(sentinel commit-reveal, service FSM sub-task B3b): starts
-    // tracking a newly proposed oracle transaction, deciding whether we
-    // vote to approve or deny it.
+    /// Starts tracking a newly proposed oracle transaction, deciding whether
+    /// we vote to approve or deny it.
     fn handle_oracle_transaction_proposed(
         &self,
-        _state: State,
-        _block: u64,
-        _event: Consensus::OracleTransactionProposed,
+        mut state: State,
+        block: u64,
+        event: Consensus::OracleTransactionProposed,
     ) -> (State, Vec<SentinelAction>) {
-        todo!("service FSM sub-task B3b")
+        if event.oracle != self.oracle {
+            return (state, Vec::new());
+        }
+        let request_id = oracle_tx_proposal_hash(
+            self.chain_id,
+            self.consensus,
+            event.epoch,
+            event.oracle,
+            event.safeTxHash,
+        );
+        // A duplicate or re-delivered proposal for the same request must not
+        // reset an already-tracked request (e.g. back to `WaitingForRequest`
+        // after it has advanced further).
+        if state.0.contains_key(&request_id) {
+            return (state, Vec::new());
+        }
+        let approve = self.detector.approve(&event.transaction);
+        state.0.insert(
+            request_id,
+            RequestState::WaitingForRequest {
+                approve,
+                deadline: block.saturating_add(self.voting_window),
+            },
+        );
+        (state, Vec::new())
     }
 
-    // TODO(sentinel commit-reveal, service FSM sub-task B3b): locks a bond
-    // behind a blind commitment once a tracked request is opened for
-    // commits onchain.
+    /// Locks a bond behind a blind commitment once a tracked request is
+    /// opened for commits onchain.
     fn handle_new_request(
         &self,
-        _state: State,
-        _event: SentinelOracle::NewRequest,
+        mut state: State,
+        event: SentinelOracle::NewRequest,
     ) -> (State, Vec<SentinelAction>) {
-        todo!("service FSM sub-task B3b")
+        let Some(RequestState::WaitingForRequest { approve, .. }) = state.0.get(&event.requestId)
+        else {
+            return (state, Vec::new());
+        };
+        let approve = *approve;
+        let commit_deadline = event.commitDeadline.saturating_to::<u64>();
+        let reveal_deadline = event.revealDeadline.saturating_to::<u64>();
+        let salt = self.signer.reveal_salt(event.requestId);
+        let hash = commit_hash(self.signer.address(), event.requestId, approve, salt);
+        state.0.insert(
+            event.requestId,
+            RequestState::CollectingCommitments {
+                approve,
+                commit_deadline,
+                reveal_deadline,
+                committed_count: 0,
+                self_committed: false,
+            },
+        );
+        let actions = vec![
+            SentinelAction {
+                kind: SentinelActionKind::ApproveToken {
+                    bond: event.bondTarget,
+                },
+                expires_at: Some(commit_deadline),
+            },
+            SentinelAction {
+                kind: SentinelActionKind::Commit {
+                    id: event.requestId,
+                    hash,
+                },
+                expires_at: Some(commit_deadline),
+            },
+        ];
+        (state, actions)
     }
 
     // TODO(sentinel commit-reveal, service FSM sub-task B3c): tallies a

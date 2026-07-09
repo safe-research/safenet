@@ -19,7 +19,6 @@ const REVEAL_SALT_DOMAIN: &[u8] = b"safenet-sentinel-reveal-salt";
 /// `requestId` into the preimage (not just `approve`/`salt`) is load-bearing, not
 /// defense-in-depth — see the epic's Architecture Decision for why.
 #[must_use]
-#[cfg_attr(not(test), expect(dead_code))]
 pub fn commit_hash(sentinel: Address, request_id: B256, approve: bool, salt: B256) -> B256 {
     let mut preimage = [0u8; 85];
     preimage[0] = u8::from(approve);
@@ -31,7 +30,6 @@ pub fn commit_hash(sentinel: Address, request_id: B256, approve: bool, salt: B25
 
 /// Extends [`Signer`] with the sentinel game's reveal-salt derivation, so callers can write
 /// `signer.reveal_salt(request_id)` alongside its other account operations.
-#[cfg_attr(not(test), expect(dead_code))]
 pub trait RevealSalt {
     /// Deterministically derives this account's reveal salt for `request_id`, so nothing needs
     /// to be persisted between `commit` and `reveal` (see the epic's Architecture Decision:
