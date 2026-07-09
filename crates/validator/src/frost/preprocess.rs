@@ -15,6 +15,7 @@ use frost_secp256k1::round1;
 use rand::{CryptoRng, RngCore, SeedableRng as _};
 use rand_chacha::ChaCha12Rng;
 use rayon::iter::{IntoParallelIterator as _, ParallelIterator as _};
+use serde::{Deserialize, Serialize};
 
 /// The number of nonces committed to per `preprocess`, matching the onchain
 /// `FROSTNonceCommitmentSet` sequence chunk size.
@@ -23,6 +24,10 @@ pub const SEQUENCE_CHUNK_SIZE: u64 = 1024;
 /// A single preprocessing nonce pair and its precomputed inclusion proof in the
 /// chunk's merkle tree. Because the proof is stored with the nonce, a nonce can
 /// be revealed in isolation without the rest of the chunk.
+///
+/// The secret hiding/binding scalars live in [`SigningNonces`](round1::SigningNonces),
+/// so a persisted nonce is reorg-immune material that must never be un-burned.
+#[derive(Clone, Deserialize, Serialize)]
 pub struct Nonces {
     signing_nonces: round1::SigningNonces,
     proof: Vec<B256>,
@@ -138,19 +143,9 @@ pub(super) fn nonces_leaf(offset: u64, nonces: &bindings::SignNonces) -> B256 {
 mod tests {
     use super::*;
 
-    fn dummy_key_share() -> KeyShare {
-        KeyShare::from_key_package(frost_secp256k1::keys::KeyPackage::new(
-            frost_secp256k1::Identifier::try_from(1).unwrap(),
-            frost_secp256k1::keys::SigningShare::new(k256::Scalar::ONE),
-            frost_secp256k1::keys::VerifyingShare::new(k256::ProjectivePoint::GENERATOR),
-            frost_secp256k1::VerifyingKey::new(k256::ProjectivePoint::GENERATOR),
-            1,
-        ))
-    }
-
     #[test]
     fn nonces_commitment_inclusion_proofs() {
-        let chunk = NonceChunk::generate(&dummy_key_share(), &mut rand::thread_rng()).unwrap();
+        let chunk = NonceChunk::generate(&KeyShare::dummy(), &mut rand::thread_rng()).unwrap();
         assert_eq!(chunk.nonces.len(), SEQUENCE_CHUNK_SIZE as usize);
 
         for offset in [0, 1, 42, 777, (SEQUENCE_CHUNK_SIZE - 1) as usize] {

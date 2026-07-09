@@ -291,14 +291,21 @@ pub fn verify_secret_share(
 pub struct KeyShare(keys::KeyPackage);
 
 impl KeyShare {
-    /// Creates a key share from its underlying key package.
-    pub(super) fn from_key_package(key_package: keys::KeyPackage) -> KeyShare {
-        Self(key_package)
-    }
-
     /// The underlying FROST key package, used to produce signature shares.
     pub(super) fn as_key_package(&self) -> &keys::KeyPackage {
         &self.0
+    }
+
+    /// Creates a dummy key share, used for testing.
+    #[cfg(test)]
+    pub(crate) fn dummy() -> Self {
+        KeyShare(frost_secp256k1::keys::KeyPackage::new(
+            frost_secp256k1::Identifier::try_from(1).unwrap(),
+            frost_secp256k1::keys::SigningShare::new(k256::Scalar::ONE),
+            frost_secp256k1::keys::VerifyingShare::new(k256::ProjectivePoint::GENERATOR),
+            frost_secp256k1::VerifyingKey::new(k256::ProjectivePoint::GENERATOR),
+            1,
+        ))
     }
 }
 
@@ -337,7 +344,7 @@ pub fn finalize(
     )
     .err_unexpected()?;
 
-    Ok(KeyShare::from_key_package(key_package))
+    Ok(KeyShare(key_package))
 }
 
 fn peer_packages<T, P, F>(
