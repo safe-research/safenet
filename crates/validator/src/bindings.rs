@@ -6,12 +6,12 @@
 //! (`getValidatorStaker`); the mutating calls omit them.
 
 use alloy::sol;
-use safenet_core::watcher_events;
+use serde::{Deserialize, Serialize};
 
 sol! {
     /// A secp256k1 point in affine (uncompressed) coordinates, as encoded
     /// onchain (`Secp256k1.Point`).
-    #[derive(Debug, Default)]
+    #[derive(Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
     struct Point {
         uint256 x;
         uint256 y;
@@ -27,7 +27,7 @@ sol! {
     }
 
     /// Safe transaction operation type; mirrors `Enum.Operation` onchain.
-    #[derive(Debug, Default)]
+    #[derive(Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
     enum Operation {
         #[default]
         CALL,
@@ -36,7 +36,7 @@ sol! {
 
     /// A full Safe transaction as carried by the `(Oracle)TransactionProposed`
     /// events (the 12-field `SafeTransaction.T` tuple).
-    #[derive(Debug, Default)]
+    #[derive(Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
     struct SafeTransaction {
         uint256 chainId;
         address safe;
@@ -55,7 +55,7 @@ sol! {
     /// DKG commitment published in `keyGenAndCommit` / `keyGenCommit`: the
     /// public encryption key `q`, the commitment vector `c`, the proof-of-
     /// knowledge nonce `r` and its scalar `mu`.
-    #[derive(Debug, Default)]
+    #[derive(Debug, Default, PartialEq, Eq)]
     struct KeyGenCommitment {
         Point q;
         Point[] c;
@@ -65,14 +65,14 @@ sol! {
 
     /// DKG secret share published in `keyGenSecretShare`: the participant public
     /// key share `y` and the polynomial evaluations `f` encrypted for peers.
-    #[derive(Debug, Default)]
+    #[derive(Debug, Default, PartialEq, Eq)]
     struct KeyGenSecretShare {
         Point y;
         uint256[] f;
     }
 
     /// A revealed FROST nonce commitment pair (hiding `d`, binding `e`).
-    #[derive(Debug, Default)]
+    #[derive(Debug, Default, PartialEq, Eq)]
     struct SignNonces {
         Point d;
         Point e;
@@ -80,7 +80,7 @@ sol! {
 
     /// The signer-set selection accompanying a signature share: the group
     /// commitment point `r` and the merkle `root` of the selected participants.
-    #[derive(Debug, Default)]
+    #[derive(Debug, Default, PartialEq, Eq)]
     struct SignSelection {
         Point r;
         bytes32 root;
@@ -89,7 +89,7 @@ sol! {
     /// A single participant's FROST signature share (`FROST.SignatureShare`):
     /// the participant commitment `r`, the scalar share `z` and the Lagrange
     /// coefficient `l`.
-    #[derive(Debug, Default)]
+    #[derive(Debug, Default, PartialEq, Eq)]
     struct SignatureShare {
         Point r;
         uint256 z;
@@ -103,6 +103,7 @@ sol! {
         bytes context;
     }
 
+    #[sol(rpc)]
     #[derive(Debug)]
     contract Consensus {
         event EpochProposed(
@@ -179,8 +180,10 @@ sol! {
         ) external;
         function setValidatorStaker(address staker) external;
         function getValidatorStaker(address validator) external view returns (address staker);
+        function getCoordinator() external view returns (address coordinator);
     }
 
+    #[sol(rpc)]
     #[derive(Debug)]
     contract Coordinator {
         event KeyGen(
@@ -258,16 +261,5 @@ sol! {
     #[derive(Debug)]
     contract Oracle {
         event OracleResult(bytes32 indexed requestId, address indexed proposer, bytes result, bool approved);
-    }
-}
-
-watcher_events! {
-    /// The full event set the validator watches and dispatches on: the
-    /// `Consensus` and `Coordinator` contracts plus the oracle result event.
-    #[derive(Debug)]
-    pub enum ValidatorEvents {
-        Consensus(Consensus::ConsensusEvents),
-        Coordinator(Coordinator::CoordinatorEvents),
-        Oracle(Oracle::OracleEvents),
     }
 }
