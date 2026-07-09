@@ -31,9 +31,9 @@ pub struct SentinelAction {
 /// transition, replacing the public-vote `CommitApprove`/`CommitDeny` pair
 /// above with a blind `Commit` followed by a `Reveal`.
 ///
-/// TODO(sentinel commit-reveal): still unused outside tests until the
-/// service FSM (`service.rs`) is rewired onto commit-reveal, at which point
-/// `SentinelActionKind`/`SentinelAction` above should be deleted.
+/// TODO(sentinel commit-reveal, phase C2): `SentinelActionKind`/
+/// `SentinelAction` above are deleted once `servicev2.rs` replaces
+/// `service.rs`.
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[expect(dead_code)]
 pub enum SentinelActionKindV2 {
@@ -52,7 +52,6 @@ pub enum SentinelActionKindV2 {
 /// A V2 sentinel action tagged with the block by which it is no longer
 /// useful; see [`SentinelAction`]'s own docs for the expiry semantics.
 #[derive(Debug, Clone, PartialEq, Eq)]
-#[expect(dead_code)]
 pub struct SentinelActionV2 {
     pub kind: SentinelActionKindV2,
     pub expires_at: Option<u64>,

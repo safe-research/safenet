@@ -173,3 +173,13 @@ watcher_events! {
         Consensus(consensus::Consensus::ConsensusEvents),
     }
 }
+
+// The event set consumed by the Watcher and StateMachine: all events from
+// both the SentinelOracleV2 and Consensus contracts.
+watcher_events! {
+    #[derive(Debug)]
+    pub enum SentinelEventsV2 {
+        Oracle(oracle::SentinelOracleV2::SentinelOracleV2Events),
+        Consensus(consensus::Consensus::ConsensusEvents),
+    }
+}
