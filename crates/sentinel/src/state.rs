@@ -30,9 +30,9 @@ pub struct State(pub HashMap<B256, SentinelRequestState>);
 
 /// Per-request state tracked by the sentinel FSM.
 ///
-/// TODO(sentinel commit-reveal): still unused outside tests until the
-/// service FSM (`service.rs`) is rewired onto commit-reveal, at which point
-/// `RequestStatus`/`SentinelRequestState`/`State` above should be deleted.
+/// TODO(sentinel commit-reveal, phase C2): `RequestStatus`/
+/// `SentinelRequestState`/`State` above are deleted once `servicev2.rs`
+/// replaces `service.rs`.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum SentinelRequestStateV2 {
     /// Our vote intent is decided, but the oracle hasn't opened the request
@@ -72,7 +72,6 @@ pub enum SentinelRequestStateV2 {
 /// Snapshot state for the V2 (commit-reveal) sentinel FSM, keyed by request
 /// ID.
 #[derive(Debug, Default, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[cfg_attr(not(test), expect(dead_code))]
 pub struct StateV2(pub HashMap<B256, SentinelRequestStateV2>);
 
 #[cfg(test)]

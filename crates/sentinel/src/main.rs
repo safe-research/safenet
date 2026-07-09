@@ -4,6 +4,7 @@ mod config;
 mod detector;
 mod hashing;
 mod service;
+mod servicev2;
 mod state;
 
 use self::{config::Config, detector::Detector, service::SentinelService};

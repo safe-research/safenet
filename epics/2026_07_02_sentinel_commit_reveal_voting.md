@@ -513,6 +513,23 @@ the same small library set)
   claim transition rewrite (including the early-finalization and unconditional-non-reveal-finalize
   branches), with unit tests for every new branch. Depends on B2.
 
+  Landed as a `servicev2.rs` module kept **alongside** (not replacing) `service.rs`, mirroring B1/B2's
+  V1-plus-V2-coexisting convention — each sub-task PR stays independently reviewable without touching
+  the live V1 FSM that `main.rs` still runs. Further split into sub-tasks, landing in order:
+  - **B3a** (this PR) — the `SentinelService`/`SentinelTransition`/`SentinelEncoder` skeleton: struct
+    definitions, the full V2 action encoder, and the `apply_transition` event matcher dispatching to
+    handler stubs (`todo!()`). No handler logic and no tests yet — nothing to test until B3b starts
+    filling handler bodies in.
+  - **B3b** — `handle_oracle_transaction_proposed`/`handle_new_request` (blind `commit_hash` +
+    `Commit`, the `WaitingForRequest` → `CollectingCommitments` transition).
+  - **B3c** — `handle_committed`/`handle_revealed` (commit/reveal tallying, the shared finalize step,
+    and early finalization).
+  - **B3d** — `handle_block_advance` (the `WaitingForRequest` timeout, the `CollectingCommitments`
+    deadline branch emitting `Reveal`, and the `CollectingVotes` deadline branch running the finalize
+    step).
+  - **B3e** — `handle_resolved` for `WaitingForDisputeResolution`.
+  - **B3f** — Flow test. Instead of individual unit tests for each transition function, tests for complete flow (triggering multiple state transitions) will be implemented for the service.
+
 ### Phase C — Fix the integration suite & wrap up
 
 - **C1 — Point the integration test at the Rust sentinel.** `scripts/run_integration_test.sh`:
@@ -520,13 +537,25 @@ the same small library set)
   `npm test -w validator -- integration` (TS) to building/running the `crates/sentinel` binary
   against the deployed contract, since the TS sentinel can no longer complete a vote. Depends on
   Phase A (deploy script) and Phase B (a working Rust client).
+
+  Also wires `main.rs` onto `servicev2::SentinelService` (threading the config `Signer` into it,
+  replacing the `service::SentinelService` wiring) — the integration test can't exercise the V2 FSM
+  otherwise. Deliberately kept out of B3: `main.rs` must keep running the V1 FSM until there's a
+  working V2 client to switch to, so the integration suite (still V1-only until this phase) never
+  breaks mid-epic.
+- **C2 — Retire V1.** Once C1 is green, delete `service.rs`, the V1 `RequestStatus`/
+  `SentinelRequestState`/`State` in `state.rs`, the V1 `SentinelActionKind`/`SentinelAction` in
+  `action.rs`, and the V1 `SentinelOracle` contract/`SentinelEvents` in `bindings.rs`; rename the
+  `V2`-suffixed survivors (`SentinelRequestStateV2` → `SentinelRequestState`, `SentinelOracleV2` →
+  `SentinelOracle`, `servicev2.rs` → `service.rs`, etc.) to their canonical, unsuffixed names. Depends
+  on C1 (only delete V1 once V2 is proven wired and green in the integration suite).
 - **Cleanup.** Per the planning convention, **remove this epic file**
-  (`epics/2026_07_02_sentinel_commit_reveal_voting.md`) once C1 is merged and green.
+  (`epics/2026_07_02_sentinel_commit_reveal_voting.md`) once C2 is merged and green.
 
 ### Critical path
 
-`A1 → A2 → A3 → A4 → B1 → B3 → C1`. B0 can start as soon as this plan is approved (no dependency on
-Phase A) and just needs to land before B1.
+`A1 → A2 → A3 → A4 → B1 → B3 → C1 → C2`. B0 can start as soon as this plan is approved (no dependency
+on Phase A) and just needs to land before B1.
 
 ---
 
