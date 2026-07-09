@@ -172,6 +172,53 @@ reveal-window latency in the common case where every committer reveals promptly.
 commits can resolve as soon as `commitDeadline` passes, without waiting for `revealDeadline` at
 all, since there is nothing to reveal.
 
+### Client FSM: phases mirror the oracle's protocol states, not our own action lifecycle
+
+V1's Rust client FSM (`crates/sentinel/src/state.rs`) models its states around *our own* action
+lifecycle (`Preparing -> Pending -> Committed -> Finalized`, i.e. "have we submitted this action
+yet, has it confirmed"). A straightforward port of that shape to V2 would just insert one more
+submit/confirm pair for the reveal (`Committed -> Revealing -> Revealed`). V2 instead restructures
+the client's per-request state around the **oracle's own protocol phases** — `WaitingForRequest`,
+`CollectingCommitments`, `CollectingVotes`, `WaitingForDisputeResolution` — mirroring
+`SentinelOracleRequest.State` directly, with per-node bookkeeping (our vote intent, whether our own
+commit/reveal landed, running commit/reveal tallies) as plain fields on each phase rather than
+additional FSM states. This is the same rationale as the `Vote` enum replacing `bool revealed; bool
+approved` in the Solidity commitment struct: a phase's fields should only be representable when they
+make sense (e.g. `approve_count`/`deny_count` don't exist before there's anything to reveal), and a
+request's state should read as "where is this in the protocol," not "what has *this node* personally
+done about it."
+
+This restructuring changes client behavior in three ways beyond the state names:
+
+- **Early finalization is client-driven, not just contract-permitted.** `CollectingVotes` tracks
+  `revealed_count`/`committed_count` (and per-side `approve_count`/`deny_count`) from every
+  `Committed`/`Revealed` event, not just our own — the same tallies the oracle keeps onchain. The
+  moment `revealed_count == committed_count`, the client finalizes immediately rather than waiting
+  out `REVEAL_WINDOW`, taking full advantage of the early-finalization rule above instead of just
+  being compatible with it.
+- **The no-dispute happy path claims without waiting for `OracleResult`.** Because resolution is
+  unanimous, a sentinel with its own revealed vote counted knows the outcome the moment the other
+  side's tally is (and stays) zero: there is no `TIMED_OUT` case to consider (that requires zero
+  votes on *both* sides, impossible once our own vote is one of them), and if the other side has any
+  votes at all it's a dispute, not a loss. So `Finalize` and `Claim` are emitted together, from
+  locally computed data, and the request is dropped immediately — no round trip through our own
+  `OracleResult` event. This relies on the `TransactionQueue` preserving submission order for
+  same-account actions (already relied on for `ApproveToken` before `Commit`), so `Finalize` mines
+  before the dependent `Claim`.
+- **`Finalize` fires unconditionally when `CollectingVotes` is exited, even with no open vote of our
+  own** — including the all-committed-nobody-revealed case. A gate of "only finalize if I revealed"
+  would match V1's `Committed`-regardless-of-outcome unconditional finalize for the happy path, but
+  silently drops liveness for the case where every committer fails to reveal: no client in the fleet
+  would have an open vote to justify finalizing, yet `finalize()` performing the non-reveal slash
+  (see above) depends on someone actually calling it. `Claim` stays conditional on our own reveal
+  having landed (`self_revealed`), since a `claim()` without a matching revealed commitment reverts
+  with `NotRevealed`; only `Finalize` is unconditional.
+
+Only when the local tally shows both sides nonzero (`FROZEN`, i.e. a genuine dispute) does the client
+still need to wait for an external signal — `resolveDispute()`'s `OracleResult` (`ARBITRATION`
+reason) — since that outcome is decided by the arbitrator, not derivable from anything the client
+already knows.
+
 ### Client scope: the TS sentinel is retired, not ported
 
 `validator/src/sentinel/` calls `commitApprove`/`commitDeny`, both of which this epic removes from
@@ -229,6 +276,13 @@ land; Phase C fixes this by switching that script's sentinel leg to the Rust bin
   will land on). Flagged as an assumption, not a decision to revisit within this epic.
 - **Port the TS sentinel to commit-reveal alongside the Rust one.** Rejected — see
   [Client scope](#client-scope-the-ts-sentinel-is-retired-not-ported) above.
+- **Model the Rust client FSM around our own action lifecycle**, i.e. V1's shape carried straight
+  over to V2 (`Preparing → Pending → Committed → Revealing → Revealed → Finalized`, one submit/
+  confirm pair per action). Superseded by the phase-oriented model in
+  [Client FSM](#client-fsm-phases-mirror-the-oracles-protocol-states-not-our-own-action-lifecycle):
+  a pure action-lifecycle FSM only ever knows about our own actions, so it can't drive early
+  finalization or the immediate-claim happy path, and the all-committers-fail-to-reveal liveness gap
+  has to be patched on after the fact rather than falling out of the design.
 
 ---
 
@@ -342,35 +396,60 @@ on the winning side, so only the winning side's count is needed (see `calcFeeRew
   `HMAC-SHA256(private_key_bytes, message)` over the wrapped `SigningKey`'s raw key material, using
   the `hmac`/`sha2` crates already in the dependency tree. No new config field — the salt is derived
   from the account's existing private key, not a separately configured secret.
-- `state.rs`: `RequestStatus` gains two stages between `Committed` and `Finalized`: `Revealing` (our
-  `Reveal` action has been emitted, not yet confirmed onchain) and `Revealed` (our own `Revealed`
-  event confirmed it). These must be two distinct statuses, not one — `handle_block_advance` runs on
-  *every* new block, so if "waiting for the commit deadline to pass" and "reveal already submitted,
-  awaiting confirmation" shared a status, the FSM would have no way to tell it already emitted the
-  `Reveal` action and would re-emit a duplicate `Reveal` transaction on every subsequent block until
-  the confirming event round-trips (at least one block later). `SentinelRequestState` tracks
-  `commitDeadline`/`revealDeadline` instead of a single `deadline`; the salt is **not** stored (see
-  [Architecture Decision](#architecture-decision)). `SentinelActionKind::CommitApprove`/`CommitDeny`
-  collapse into `Commit { id, hash }`; new `Reveal { id, approve, salt }`.
+- `state.rs`: replace the single `RequestStatus` tag + flat `SentinelRequestState` with one enum,
+  `SentinelRequestState`, whose variants carry only the fields meaningful in that phase — mirroring
+  `SentinelOracleRequest.State` (see the new
+  [Client FSM](#client-fsm-phases-mirror-the-oracles-protocol-states-not-our-own-action-lifecycle)
+  Architecture Decision) instead of our own action-submit/confirm lifecycle:
+  - `WaitingForRequest { approve, deadline }` — `deadline` is our own guessed cutoff (the real
+    `commitDeadline` isn't known until `NewRequest` arrives), same role as V1's `Preparing`.
+  - `CollectingCommitments { approve, commit_deadline, reveal_deadline, committed_count,
+    self_committed }` — `committed_count` tallies every `Committed` event (any sentinel);
+    `self_committed` tracks whether *our own* commit was among them.
+  - `CollectingVotes { approve, reveal_deadline, committed_count, revealed_count, approve_count,
+    deny_count, self_revealed }` — `committed_count` is the snapshot carried over from the previous
+    phase (no more commits are possible once this phase is entered); the rest tally every `Revealed`
+    event the same way.
+  - `WaitingForDisputeResolution { approve }` — only our own vote needs to survive into this phase,
+    to compare against the eventual arbitration outcome.
+  The salt is still **not** stored anywhere (see
+  [Architecture Decision](#deterministic-salt-derivation-via-hmac-sha256-no-salt-persisted-offchain-no-new-secret)).
+- `action.rs`: `SentinelActionKind::CommitApprove`/`CommitDeny` collapse into `Commit { id, hash }`;
+  new `Reveal { id, approve, salt }`.
 - `service.rs`:
-  - `handle_new_request` computes `commit_hash` via `hashing::commit_hash` and emits a single
-    `Commit` action (status → `Pending`, same as today).
-  - `handle_committed` (our own `Committed` event) moves `Pending → Committed`, exactly as V1 — it
-    does **not** yet emit the `Reveal` action, since revealing before `commitDeadline` is invalid
-    onchain.
-  - `handle_block_advance` gains the phase transition V1 didn't need, and each branch moves the
-    request **out of** the status it matches on in the same step, so it cannot match again on a later
-    block and re-emit:
-    - `Committed` request, `block > commitDeadline` → emit `Reveal` (deriving the salt on the fly)
-      and move to `Revealing`. A `Revealing` request is otherwise left untouched by block advances —
-      it only progresses via `handle_revealed` below, never by re-matching this branch.
-    - `Revealed` request, `block > revealDeadline` → emit `Finalize` and move to `Finalized`, exactly
-      as V1 did from `Committed`.
-  - New `handle_revealed` (our own `Revealed` event) moves `Revealing → Revealed`.
-  - `handle_resolved` unchanged in intent: claim iff we reached `Revealed`/`Finalized` and either
-    timed out or our revealed vote matches the outcome.
+  - `handle_oracle_transaction_proposed` unchanged in spirit: seeds `WaitingForRequest`.
+  - `handle_new_request` (`WaitingForRequest` only) computes `commit_hash`, emits `Commit`, and moves
+    to `CollectingCommitments { committed_count: 0, self_committed: false, .. }`.
+  - `handle_committed` (`CollectingCommitments` only, any sentinel): increments `committed_count`;
+    additionally sets `self_committed = true` when `event.sentinel == self.account`.
+  - New `handle_revealed` (`CollectingVotes` only, any sentinel): increments `revealed_count` and the
+    matching `approve_count`/`deny_count`; sets `self_revealed = true` when
+    `event.sentinel == self.account`; then, if `revealed_count == committed_count`, immediately runs
+    the finalize step below (early finalization — see Architecture Decision) instead of waiting for
+    `handle_block_advance`.
+  - `handle_block_advance`:
+    - `WaitingForRequest`, `block > deadline`: drop (unchanged from V1's `Preparing` timeout).
+    - `CollectingCommitments`, `block > commit_deadline`: if `self_committed`, emit `Reveal` (salt
+      derived on the fly) and move to `CollectingVotes { revealed_count: 0, approve_count: 0,
+      deny_count: 0, self_revealed: false, committed_count, .. }`; otherwise drop the request (our
+      own commit never landed onchain, so revealing would just revert).
+    - `CollectingVotes`, `block > reveal_deadline`: run the finalize step below.
+  - Shared finalize step (reached from either the early-finalize check in `handle_revealed` or the
+    deadline branch in `handle_block_advance`, always leaving `CollectingVotes` in the same step so
+    it cannot run twice for one request): emit `Finalize` **unconditionally** — including when
+    `self_revealed` is `false` — so that a request where every committer fails to reveal still gets
+    finalized (and non-reveal-slashed) by *someone*; then:
+    - `self_revealed == false` → drop, no `Claim` (a `claim()` without our own revealed commitment
+      reverts with `NotRevealed`).
+    - `self_revealed == true`, `approve_count > 0 && deny_count > 0` (dispute) → move to
+      `WaitingForDisputeResolution { approve }`.
+    - `self_revealed == true`, otherwise → emit `Claim` (unanimity plus our own counted vote
+      guarantees we're on the sole, winning side; no `OracleResult` round trip needed) and drop.
+  - `handle_resolved` (our own `OracleResult`, `WaitingForDisputeResolution` only): decode the
+    `ResolveReason`, emit `Claim` iff `event.approved == approve`, and drop the request either way.
 - Unit tests mirror the existing style in `service.rs`/`state.rs`/`hashing.rs`/`action.rs` for every
-  new branch above.
+  new branch above, plus the early-finalization path and the unconditional-`Finalize`-without-
+  `self_revealed` liveness case.
 
 ### Testing
 
@@ -380,11 +459,14 @@ on the winning side, so only the winning side's count is needed (see `calcFeeRew
   double-commit/double-reveal reverts, early `finalize` once all committers revealed, partial-reveal
   (some committed, fewer revealed) still resolves correctly, and a non-revealer's bond is slashed to
   `ARBITRATOR` while their own `claim()` reverts with `NotRevealed`.
-- `crates/sentinel`/`safenet-core`: unit tests for the new FSM transitions (including that
-  `handle_block_advance` never emits a second `Reveal`/`Finalize` for a request already moved out of
-  the matching status), the `Signer`'s HMAC-SHA256 salt derivation (including RFC 4231 test vectors,
-  not just self-consistency), the resulting `commit_hash`/`reveal_salt`, and `encode_actions` for
-  `Commit`/`Reveal`.
+- `crates/sentinel`/`safenet-core`: unit tests for the new FSM transitions (including that a request
+  can only reach its finalize step once — via either the early-finalize check in `handle_revealed` or
+  the deadline branch in `handle_block_advance`, never both), the tally bookkeeping
+  (`committed_count`/`revealed_count`/`approve_count`/`deny_count` incrementing for *any* sentinel,
+  not just our own), the unconditional-`Finalize`-without-`self_revealed` liveness branch, the
+  dispute-vs-immediate-claim split out of `CollectingVotes`, the `Signer`'s HMAC-SHA256 salt
+  derivation (including RFC 4231 test vectors, not just self-consistency), the resulting
+  `commit_hash`/`reveal_salt`, and `encode_actions` for `Commit`/`Reveal`.
 - Integration: see Phase C.
 
 ---
@@ -423,11 +505,13 @@ the same small library set)
 - **B1 — Bindings & hashing.** `bindings.rs` regeneration + `hashing.rs` (`commit_hash`,
   `reveal_salt`) with parity tests against `hashCommitment`. Depends on Phase A (needs the final
   ABI) and B0 (`reveal_salt` calls the new `Signer` method).
-- **B2 — State & actions.** `state.rs` (`RequestStatus::{Revealing,Revealed}`, dual deadlines) and
+- **B2 — State & actions.** `state.rs` (the `SentinelRequestState` phase enum:
+  `WaitingForRequest`/`CollectingCommitments`/`CollectingVotes`/`WaitingForDisputeResolution`) and
   `action.rs` (`Commit`, `Reveal`) per Tech Specs, with tests. Depends on B1 (uses `commit_hash`'s
   return type).
-- **B3 — Service FSM.** `service.rs`: the full commit → wait → reveal → wait → finalize → claim
-  transition rewrite, with unit tests for every new branch. Depends on B2.
+- **B3 — Service FSM.** `service.rs`: the full propose → commit → wait → reveal → wait → finalize →
+  claim transition rewrite (including the early-finalization and unconditional-non-reveal-finalize
+  branches), with unit tests for every new branch. Depends on B2.
 
 ### Phase C — Fix the integration suite & wrap up
 
@@ -479,6 +563,13 @@ be decisions rather than open ones, and are folded into the assumptions below.
   `TIMED_OUT` fee refund is unaffected and unrelated to that pool.
 - Reward for winning revealers is an equal split of `fee` (no position/bond weighting); this is a
   deliberate behavior change from V1, chosen for simplicity in this first version.
+- The Rust client always calls `finalize()` once its local tally says doing so is valid (either
+  `revealed_count == committed_count` or past `revealDeadline`), even for a request where it never
+  itself revealed. This trades a small amount of wasted gas (calling `finalize()` on requests the
+  client gets nothing from) for guaranteed liveness in the case where every committer fails to
+  reveal — otherwise no client in the fleet would have a reason to call it, and the non-reveal slash
+  performed inside `finalize()` would never run. `Claim` stays conditional on the client's own reveal
+  having landed.
 - The Rust sentinel derives its reveal salt deterministically via HMAC-SHA256 from the account's
   existing signing key and a domain-separated message containing `requestId` — no new secret is
   generated or configured, and no salt is persisted in the snapshot store.
