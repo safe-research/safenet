@@ -70,7 +70,8 @@ pub struct ValidatorConfig {
     #[serde(default)]
     pub oracles: Vec<Address>,
     /// The salt mixed into the genesis group's key generation context.
-    pub genesis_salt: Option<B256>,
+    #[serde(default)]
+    pub genesis_salt: B256,
     /// The number of blocks in an epoch, controlling epoch rollover timing.
     #[serde(default = "ValidatorConfig::default_blocks_per_epoch")]
     pub blocks_per_epoch: NonZeroU64,
@@ -199,7 +200,7 @@ mod tests {
             address!("0x3333333333333333333333333333333333333333")
         );
         assert_eq!(
-            validator.genesis_salt.unwrap(),
+            validator.genesis_salt,
             b256!("0x00000000000000000000000000000000000000000000000000000000000000ab")
         );
         assert_eq!(validator.blocks_per_epoch.get(), 100);

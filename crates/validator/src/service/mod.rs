@@ -9,13 +9,56 @@ pub use self::{
 };
 use crate::{
     bindings::{Consensus, Coordinator, Oracle},
+    config::ValidatorConfig,
+    consensus::group::{self, Epoch, ParticipantSet},
+    secrets::{self, SecretStore},
     state::{self, State},
 };
+use alloy::primitives::Address;
 use safenet_core::{driver::Service, watcher_events};
+use sqlx::SqlitePool;
 
 /// The validator service bundle: the state transition, effect handler and
 /// action encoder that the driver runs.
-pub struct ValidatorService;
+pub struct ValidatorService {
+    /// The account of the running validator.
+    account: Address,
+    /// The secret store containing keygen coeffecients and signing nonces.
+    secrets: SecretStore,
+    /// The genesis participant set.
+    genesis: ParticipantSet,
+    /// The FROST coordinator contract to submit protocol actions to.
+    coordinator: Address,
+    /// The validator configuration.
+    config: ValidatorConfig,
+}
+
+impl ValidatorService {
+    /// Creates the validator service from its machine configuration.
+    pub async fn new(
+        account: Address,
+        pool: SqlitePool,
+        coordinator: Address,
+        config: ValidatorConfig,
+    ) -> Result<Self, Error> {
+        let secrets = SecretStore::new(pool).await?;
+        let genesis = group::participants_set(
+            &config.participants,
+            Epoch::Genesis {
+                salt: config.genesis_salt,
+            },
+        )
+        .ok_or(Error::InvalidValidators)?;
+
+        Ok(Self {
+            account,
+            secrets,
+            genesis,
+            coordinator,
+            config,
+        })
+    }
+}
 
 watcher_events! {
     /// The full event set the validator watches and dispatches on: the
@@ -37,6 +80,29 @@ impl Service for ValidatorService {
     type Actions = action::Encoder;
 
     fn components(self) -> (Self::Transition, Self::Effects, Self::Actions) {
-        (state::Transition, effect::Handler, action::Encoder)
+        let ValidatorService {
+            account,
+            genesis,
+            secrets,
+            coordinator,
+            config: ValidatorConfig { .. },
+        } = self;
+        (
+            state::Transition { account, genesis },
+            effect::Handler { account, secrets },
+            action::Encoder { coordinator },
+        )
     }
+}
+
+#[derive(Debug, thiserror::Error)]
+pub enum Error {
+    /// Storage error initializing the secret store.
+    #[error(transparent)]
+    Secrets(#[from] secrets::Error),
+    /// Invalid validator set.
+    ///
+    /// The configured validator set does not constitute a valid genesis group.
+    #[error("invalid validator set: unable to form a genesis group")]
+    InvalidValidators,
 }
