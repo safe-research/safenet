@@ -195,14 +195,17 @@ impl SentinelTransition {
         mut state: State,
         event: SentinelOracle::Revealed,
     ) -> (State, Vec<SentinelAction>) {
-        let Some(RequestState::CollectingVotes {
+        let Some(entry) = state.0.get_mut(&event.requestId) else {
+            return (state, Vec::new());
+        };
+        let RequestState::CollectingVotes {
             committed_count,
             revealed_count,
             approve_count,
             deny_count,
             self_revealed,
             ..
-        }) = state.0.get_mut(&event.requestId)
+        } = entry
         else {
             return (state, Vec::new());
         };
@@ -218,78 +221,81 @@ impl SentinelTransition {
         if *revealed_count < *committed_count {
             return (state, Vec::new());
         }
-        self.finalize(state, event.requestId)
-    }
-
-    /// Shared finalize step, reached from either the early-finalize check
-    /// in [`Self::handle_revealed`] or the reveal-deadline branch in
-    /// [`Self::handle_block_advance`]; always exits `CollectingVotes` in
-    /// this same step, so a request's finalize step can only ever run once.
-    ///
-    /// There are the following cases when the `Finalize` action is emitted:
-    /// - no one voted: a genuine timeout, where the bonds can be re-claimed
-    /// - unanimous vote: it is possible to claim the bond and reward
-    ///
-    /// In other cases it doesn't make sense to trigger the finalization for
-    /// this sentinel.
-    fn finalize(&self, mut state: State, request_id: B256) -> (State, Vec<SentinelAction>) {
-        let Some(RequestState::CollectingVotes {
-            approve,
-            revealed_count,
-            approve_count,
-            deny_count,
-            self_revealed,
-            ..
-        }) = state.0.get(&request_id)
-        else {
-            return (state, Vec::new());
-        };
-        let approve = *approve;
-        let dispute = *approve_count > 0 && *deny_count > 0;
-        let timed_out = *revealed_count == 0;
-        let self_revealed = *self_revealed;
-
-        // Neither action has an onchain deadline past which it stops being
-        // valid to submit, so both are kept alive indefinitely in the
-        // `TransactionQueue`.
-        let mut actions = vec![SentinelAction {
-            kind: SentinelActionKind::Finalize { id: request_id },
-            expires_at: None,
-        }];
-
-        if !self_revealed {
-            state.0.remove(&request_id);
-            if timed_out {
-                return (state, actions);
-            } else {
-                return (state, Vec::new());
-            };
+        let (update, actions) = self.finalize(entry, event.requestId);
+        match update {
+            None => {
+                state.0.remove(&event.requestId);
+            }
+            Some(entry) => {
+                state.0.insert(event.requestId, entry);
+            }
         }
-
-        if dispute {
-            state.0.insert(
-                request_id,
-                RequestState::WaitingForDisputeResolution { approve },
-            );
-            return (state, actions);
-        }
-
-        // Unanimity plus our own counted vote guarantees we're on the
-        // sole, winning side; no `OracleResult` round trip needed.
-        actions.push(SentinelAction {
-            kind: SentinelActionKind::Claim { id: request_id },
-            expires_at: None,
-        });
-        state.0.remove(&request_id);
         (state, actions)
     }
 
-    // TODO(sentinel commit-reveal, service FSM sub-task B3d): drops requests
-    // we never got to commit on in time, reveals (or drops) requests past
-    // their commit deadline, and finalizes requests past their reveal
-    // deadline.
-    fn handle_block_advance(&self, _state: State, _block: u64) -> (State, Vec<SentinelAction>) {
-        todo!("service FSM sub-task B3d")
+    /// Drops requests we never got to commit on in time, reveals (or drops)
+    /// requests past their commit deadline, and finalizes requests past
+    /// their reveal deadline.
+    fn handle_block_advance(&self, mut state: State, block: u64) -> (State, Vec<SentinelAction>) {
+        let mut actions = Vec::new();
+
+        state.0.retain(|id, entry| match *entry {
+            RequestState::WaitingForRequest { deadline, .. } => block <= deadline,
+            RequestState::CollectingCommitments {
+                approve,
+                commit_deadline,
+                reveal_deadline,
+                committed_count,
+                self_committed,
+            } => {
+                if block <= commit_deadline {
+                    return true;
+                }
+                // Our own commit never landed onchain, so revealing would
+                // just revert; drop the request instead.
+                if !self_committed {
+                    return false;
+                }
+                let salt = self.signer.reveal_salt(*id);
+                actions.push(SentinelAction {
+                    kind: SentinelActionKind::Reveal {
+                        id: *id,
+                        approve,
+                        salt,
+                    },
+                    expires_at: Some(reveal_deadline),
+                });
+                *entry = RequestState::CollectingVotes {
+                    approve,
+                    reveal_deadline,
+                    committed_count,
+                    revealed_count: 0,
+                    approve_count: 0,
+                    deny_count: 0,
+                    self_revealed: false,
+                };
+                true
+            }
+            RequestState::CollectingVotes {
+                reveal_deadline, ..
+            } => {
+                if block <= reveal_deadline {
+                    return true;
+                }
+                let (update, finalization) = self.finalize(entry, *id);
+                actions.extend(finalization);
+                match update {
+                    None => false,
+                    Some(new_state) => {
+                        *entry = new_state;
+                        true
+                    }
+                }
+            }
+            RequestState::WaitingForDisputeResolution { .. } => true,
+        });
+
+        (state, actions)
     }
 
     // TODO(sentinel commit-reveal, service FSM sub-task B3e): claims iff
@@ -301,6 +307,72 @@ impl SentinelTransition {
         _event: SentinelOracle::OracleResult,
     ) -> (State, Vec<SentinelAction>) {
         todo!("service FSM sub-task B3e")
+    }
+
+    /// Shared finalize step, reached from either the early-finalize check
+    /// in [`Self::handle_revealed`] or the reveal-deadline branch in
+    /// [`Self::handle_block_advance`]; always exits `CollectingVotes` in
+    /// this same step, so a request's finalize step can only ever run once.
+    ///
+    /// `Finalize` is emitted whenever we stand to gain from it -- a dispute
+    /// or claim we have a vote riding on -- plus one liveness exception:
+    /// when nobody revealed at all, no node has an open vote to trigger the
+    /// non-reveal slash either, so we finalize anyway even though we gain
+    /// nothing, since otherwise nobody ever would. Outside that exception,
+    /// a node with no stake in the outcome leaves finalizing to a node that
+    /// has one. `Claim` stays conditional on our own reveal having landed,
+    /// since a `claim()` without a matching revealed commitment reverts
+    /// with `NotRevealed`.
+    fn finalize(
+        &self,
+        state: &RequestState,
+        request_id: B256,
+    ) -> (Option<RequestState>, Vec<SentinelAction>) {
+        let RequestState::CollectingVotes {
+            approve,
+            revealed_count,
+            approve_count,
+            deny_count,
+            self_revealed,
+            ..
+        } = state
+        else {
+            return (None, Vec::new());
+        };
+        let approve = *approve;
+        let dispute = *approve_count > 0 && *deny_count > 0;
+        let timed_out = *revealed_count == 0;
+
+        if !*self_revealed && !timed_out {
+            return (None, Vec::new());
+        }
+
+        // Neither action has an onchain deadline past which it stops being
+        // valid to submit, so both are kept alive indefinitely in the
+        // `TransactionQueue`.
+        let mut actions = vec![SentinelAction {
+            kind: SentinelActionKind::Finalize { id: request_id },
+            expires_at: None,
+        }];
+
+        if !*self_revealed {
+            return (None, actions);
+        }
+
+        if dispute {
+            return (
+                Some(RequestState::WaitingForDisputeResolution { approve }),
+                actions,
+            );
+        }
+
+        // Unanimity plus our own counted vote guarantees we're on the
+        // sole, winning side; no `OracleResult` round trip needed.
+        actions.push(SentinelAction {
+            kind: SentinelActionKind::Claim { id: request_id },
+            expires_at: None,
+        });
+        (None, actions)
     }
 }
 

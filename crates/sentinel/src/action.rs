@@ -35,7 +35,6 @@ pub struct SentinelAction {
 /// `SentinelAction` above are deleted once `servicev2.rs` replaces
 /// `service.rs`.
 #[derive(Debug, Clone, PartialEq, Eq)]
-#[expect(dead_code)]
 pub enum SentinelActionKindV2 {
     /// Approve the fee token to be spent by the oracle (bond pre-authorisation).
     ApproveToken { bond: U256 },
