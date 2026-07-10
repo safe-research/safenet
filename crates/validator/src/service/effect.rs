@@ -1,6 +1,9 @@
 //! The validator effect system and its handler.
 
-use crate::{frost, merkle::MerkleRoot, secrets::SecretStore, service::Action};
+use crate::{
+    frost::{self, keygen::Secrets},
+    secrets::SecretStore,
+};
 use alloy::primitives::{Address, B256};
 use safenet_core::state::EffectHandler;
 use std::{
@@ -9,28 +12,29 @@ use std::{
 };
 
 /// An impure operation the state transition asks the handler to perform.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone)]
 pub enum Effect {
-    /// Build a key gen commitment action.
-    BuildKeyGenCommitment {
-        id: B256,
-        participants: MerkleRoot,
+    /// Set up key generation: sample the participant's secrets, persist them
+    /// to the secret store.
+    KeyGenSetup {
+        group_id: B256,
         count: u16,
         threshold: u16,
-        context: B256,
-        poap: Vec<B256>,
-        expires_at: Option<u64>,
     },
 }
 
 /// The result of performing an [`Effect`], resumed into the state machine.
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
+#[allow(clippy::large_enum_variant)]
+#[derive(Debug, Clone, Default)]
 pub enum Resume {
     /// An effect that does not require resuming.
     #[default]
     Noop,
-    /// Resume by forwarding a resolved action.
-    Action(Box<Action>),
+    /// Resume with the key gen commitment produced by a [`Effect::KeyGenSetup`].
+    Setup {
+        group_id: B256,
+        secrets: Box<Secrets>,
+    },
 }
 
 /// Performs the validator's [`Effect`]s, resuming with a [`Resume`].
@@ -44,35 +48,21 @@ pub struct Handler {
 impl Handler {
     async fn try_perform_effect(&mut self, effect: Effect) -> Result<Resume, InternalError> {
         match effect {
-            Effect::BuildKeyGenCommitment {
-                id,
-                participants,
+            Effect::KeyGenSetup {
+                group_id,
                 count,
                 threshold,
-                context,
-                poap,
-                expires_at,
             } => {
                 let mut rng = rand::thread_rng();
-                let setup = frost::keygen::setup(&mut rng, self.account, count, threshold)?;
+                let secrets = frost::keygen::setup(&mut rng, self.account, count, threshold)?;
                 let stored = self
                     .secrets
-                    .store_keygen_secrets(id, self.account, &setup.secrets)
+                    .store_keygen_secrets(group_id, self.account, secrets)
                     .await?;
-                if !stored {
-                    tracing::info!(group_id = %id, "not resubmitting already created keygen commitments");
-                    return Ok(Resume::Noop);
-                }
-
-                Ok(Resume::Action(Box::new(Action::KeyGenAndCommit {
-                    participants,
-                    count,
-                    threshold,
-                    context,
-                    poap,
-                    commitment: setup.commitment,
-                    expires_at,
-                })))
+                Ok(Resume::Setup {
+                    group_id,
+                    secrets: Box::new(stored),
+                })
             }
         }
     }

@@ -42,9 +42,10 @@ mod tests {
         let mut secrets = BTreeMap::new();
         let mut commitments = BTreeMap::new();
         for participant in participants {
-            let setup = keygen::setup(&mut rng, participant, count, threshold).unwrap();
-            secrets.insert(participant, setup.secrets);
-            commitments.insert(participant, setup.commitment);
+            let participant_secrets =
+                keygen::setup(&mut rng, participant, count, threshold).unwrap();
+            commitments.insert(participant, participant_secrets.commitment());
+            secrets.insert(participant, participant_secrets);
         }
 
         // Each participant uses their random secrets to proceed to the next

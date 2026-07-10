@@ -9,7 +9,7 @@ use super::{
 use crate::{bindings, frost::ecdh::EncryptionPublicKey};
 use alloy::primitives::{Address, U256};
 use frost_secp256k1::{
-    Identifier,
+    Identifier, Signature,
     keys::{
         self,
         dkg::{self, round1, round2},
@@ -21,27 +21,32 @@ use std::collections::BTreeMap;
 /// A participant's generated secrets created at [`setup`] and required by
 /// [`verify_commitment`] and [`generate_secret_shares`]. Persisted to the
 /// secret store between rounds.
-#[derive(Clone, Deserialize, Serialize)]
-pub struct Secrets {
-    encryption_key: EncryptionKey,
-    secret_package: round1::SecretPackage,
-}
-
-/// The result of [`setup`]: the secrets to persist across rounds and the
-/// onchain commitment to publish.
 ///
 /// Note that the secrets are generated with randomness, meaning that they must
 /// be persisted in a reorg-resistant way.
-pub struct Setup {
-    pub secrets: Secrets,
-    pub commitment: bindings::KeyGenCommitment,
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct Secrets {
+    encryption_key: EncryptionKey,
+    secret_package: round1::SecretPackage,
+    proof_of_knowledge: Signature,
+}
+
+impl Secrets {
+    /// Builds the onchain [`KeyGenCommitment`](bindings::KeyGenCommitment) to
+    /// publish for these secrets.
+    pub fn commitment(&self) -> bindings::KeyGenCommitment {
+        let round1_package = round1::Package::new(
+            self.secret_package.commitment().clone(),
+            self.proof_of_knowledge,
+        );
+        marshal::solidity_commitment(&self.encryption_key.public_key(), &round1_package)
+    }
 }
 
 /// Sets up key generation for `me`: samples the ECDH encryption key and the
-/// secret polynomial (to persist to the secret store) alongside the onchain
-/// [`KeyGenCommitment`](bindings::KeyGenCommitment) to publish. The `rng` is
-/// supplied by the caller.
-pub fn setup<R>(rng: &mut R, me: Address, count: u16, threshold: u16) -> Result<Setup, Error>
+/// secret polynomial to persist to the secret store. The `rng` is supplied by
+/// the caller.
+pub fn setup<R>(rng: &mut R, me: Address, count: u16, threshold: u16) -> Result<Secrets, Error>
 where
     R: rand::RngCore + rand::CryptoRng,
 {
@@ -49,14 +54,12 @@ where
     let encryption_key = EncryptionKey::generate(&mut *rng);
     let (secret_package, package) =
         dkg::part1(identifier, count, threshold, &mut *rng).err_unexpected()?;
-    let commitment = marshal::solidity_commitment(&encryption_key.public_key(), &package);
+    let proof_of_knowledge = *package.proof_of_knowledge();
 
-    Ok(Setup {
-        secrets: Secrets {
-            encryption_key,
-            secret_package,
-        },
-        commitment,
+    Ok(Secrets {
+        encryption_key,
+        secret_package,
+        proof_of_knowledge,
     })
 }
 
