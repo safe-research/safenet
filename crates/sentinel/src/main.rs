@@ -3,7 +3,6 @@ mod bindings;
 mod config;
 mod detector;
 mod hashing;
-mod service;
 mod servicev2;
 mod state;
 
