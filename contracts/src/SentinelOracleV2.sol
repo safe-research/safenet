@@ -184,15 +184,17 @@ contract SentinelOracleV2 is IOracle {
     function claim(bytes32 requestId) external {
         SentinelOracleRequest.Request storage req = $requests.get(requestId);
         SentinelOracleRequest.State state = req.requireResolved();
-        SentinelOracleCommitment.Commitment memory c = $commitments.get(requestId, msg.sender).markClaimed();
+        SentinelOracleCommitment.Commitment storage commitment = $commitments.get(requestId, msg.sender);
+        SentinelOracleCommitment.Vote vote = commitment.vote;
         // Only allow claiming of pending votes in case of a timeout
         require(
-            c.vote == SentinelOracleCommitment.Vote.APPROVED || c.vote == SentinelOracleCommitment.Vote.DENIED
+            vote == SentinelOracleCommitment.Vote.APPROVED || vote == SentinelOracleCommitment.Vote.DENIED
                 || state == SentinelOracleRequest.State.TIMED_OUT,
             NotRevealed()
         );
-        uint256 feeReward = req.calcFeeReward(c.vote);
-        uint256 bondReturn = req.isBondSlashed(c.vote) ? 0 : c.bondAmount;
+        commitment.markClaimed();
+        uint256 feeReward = req.calcFeeReward(vote);
+        uint256 bondReturn = req.isBondSlashed(vote) ? 0 : commitment.bondAmount;
         uint256 totalClaim = bondReturn + feeReward;
         if (totalClaim > 0) {
             FEE_TOKEN.safeTransfer(msg.sender, totalClaim);
