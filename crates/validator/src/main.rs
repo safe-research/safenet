@@ -51,8 +51,16 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let mut watched = vec![consensus, coordinator];
     watched.extend(config.validator.oracles.iter().copied());
 
+    let service = ValidatorService::new(
+        config.signer.address(),
+        pool.clone(),
+        coordinator,
+        config.validator,
+    )
+    .await?;
+
     let driver = Driver::new(
-        ValidatorService,
+        service,
         provider,
         config.signer,
         pool,
