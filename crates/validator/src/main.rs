@@ -2,6 +2,7 @@ mod bindings;
 mod config;
 mod frost;
 mod merkle;
+mod secrets;
 mod service;
 
 use self::{config::Config, service::DummyService};

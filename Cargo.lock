@@ -5248,6 +5248,7 @@ dependencies = [
  "rayon",
  "safenet-core",
  "serde",
+ "serde_json",
  "sqlx",
  "thiserror",
  "tokio",
