@@ -19,6 +19,7 @@ pub struct SigningError;
 
 /// A local account that signs and submits transactions onchain on behalf of a
 /// service.
+#[derive(Clone)]
 pub struct Signer(PrivateKeySigner);
 
 /// A raw signed transaction.

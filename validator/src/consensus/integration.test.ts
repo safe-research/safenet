@@ -1,9 +1,10 @@
+import { type ChildProcess, spawn } from "node:child_process";
+import { randomUUID } from "node:crypto";
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
-import Sqlite3 from "better-sqlite3";
 import {
 	type Address,
-	createPublicClient,
 	createTestClient,
 	type Hex,
 	hashTypedData,
@@ -22,8 +23,6 @@ import { waitForBlock, waitForBlocks } from "../__tests__/utils.js";
 import { hashNonceCommitments, type NonceTree } from "../consensus/signing/nonces.js";
 import { toPoint } from "../frost/math.js";
 import { calcGenesisGroup, calcGroupContext, calcThreshold } from "../machine/keygen/group.js";
-import { createDetector } from "../sentinel/detector.js";
-import { SentinelService } from "../sentinel/service.js";
 import { createValidatorService, type ValidatorService } from "../service/service.js";
 import type { WatcherConfig } from "../shared/watcher.js";
 import {
@@ -49,6 +48,11 @@ const TEST_RUNTIME_IN_SECONDS = 60;
 const SENTINEL_PK: Hex = "0x92db14e403b83dfe3df233f83dfa3a0d7096f21ca9b0d6d6b8d88b2b4ec1564e";
 // Anvil account 0 — deployer, MyToken owner, and SentinelOracle arbitrator
 const DEPLOYER: Address = "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266";
+// Built by scripts/run_integration_test.sh before Anvil even starts; the TS
+// sentinel can no longer complete a commit-reveal vote against
+// SentinelOracleV2 (see epics/2026_07_02_sentinel_commit_reveal_voting.md),
+// so the oracle signing flow test below drives this binary directly instead.
+const SENTINEL_BINARY_PATH = process.env.SENTINEL_BINARY_PATH;
 
 const ERC20_ABI = parseAbi([
 	"function mint(address to, uint256 amount) external",
@@ -60,7 +64,8 @@ const SENTINEL_ORACLE_ABI = parseAbi([
 	"function addSentinel(address sentinel) external",
 	"function FEE_TOKEN() external view returns (address)",
 	"function REQUEST_FEE() external view returns (uint256)",
-	"function VOTING_WINDOW() external view returns (uint256)",
+	"function COMMIT_WINDOW() external view returns (uint256)",
+	"function REVEAL_WINDOW() external view returns (uint256)",
 	"function bondMultiplier() external view returns (uint256)",
 ]);
 
@@ -112,7 +117,8 @@ describe("integration", () => {
 	let snapshotId: Hex | undefined;
 	let miner: NodeJS.Timeout | undefined;
 	let currentClients: { account: Account; service: ValidatorService }[] | undefined;
-	let sentinelService: SentinelService | undefined;
+	let sentinelProcess: ChildProcess | undefined;
+	let sentinelConfigFile: string | undefined;
 
 	beforeAll(async () => {
 		try {
@@ -145,7 +151,7 @@ describe("integration", () => {
 		if (!erc20Returns) {
 			return undefined;
 		}
-		const sentinelOracleReturns = loadScriptResults("DeploySentinelOracle.s.sol");
+		const sentinelOracleReturns = loadScriptResults("DeploySentinelOracleV2.s.sol");
 		if (!sentinelOracleReturns) {
 			return undefined;
 		}
@@ -295,12 +301,16 @@ describe("integration", () => {
 	};
 
 	afterEach(async () => {
-		// Cleanup sentinel service before validators to avoid log noise from pending actions
-		if (sentinelService !== undefined) {
+		// Cleanup the Rust sentinel process before validators to avoid log noise from pending actions
+		if (sentinelProcess !== undefined) {
+			sentinelProcess.kill();
+			sentinelProcess = undefined;
+		}
+		if (sentinelConfigFile !== undefined) {
 			try {
-				await sentinelService.stop();
+				fs.rmSync(sentinelConfigFile);
 			} catch (_e) {}
-			sentinelService = undefined;
+			sentinelConfigFile = undefined;
 		}
 		// Cleanup services
 		for (const { service } of currentClients ?? []) {
@@ -609,6 +619,13 @@ describe("integration", () => {
 			skip();
 			return;
 		}
+		// The TS sentinel can no longer complete a commit-reveal vote against
+		// SentinelOracleV2; this test drives the Rust sentinel binary
+		// (built by scripts/run_integration_test.sh) as a subprocess instead.
+		if (SENTINEL_BINARY_PATH === undefined) {
+			skip();
+			return;
+		}
 		const { coordinator, consensus, erc20, sentinelOracle, triggerKeyGen } = setupInfo;
 		testLogger.notice("Test configuration", {
 			erc20: erc20.address,
@@ -617,7 +634,7 @@ describe("integration", () => {
 		});
 
 		// Read oracle parameters from deployed contract
-		const [feeToken, requestFee, votingWindow, bondMultiplier] = await Promise.all([
+		const [feeToken, requestFee, commitWindow, revealWindow, bondMultiplier] = await Promise.all([
 			testClient.readContract({
 				...sentinelOracle,
 				functionName: "FEE_TOKEN",
@@ -628,7 +645,11 @@ describe("integration", () => {
 			}),
 			testClient.readContract({
 				...sentinelOracle,
-				functionName: "VOTING_WINDOW",
+				functionName: "COMMIT_WINDOW",
+			}),
+			testClient.readContract({
+				...sentinelOracle,
+				functionName: "REVEAL_WINDOW",
 			}),
 			testClient.readContract({
 				...sentinelOracle,
@@ -639,7 +660,8 @@ describe("integration", () => {
 		testLogger.notice("Oracle configuration", {
 			feeToken,
 			requestFee,
-			votingWindow,
+			commitWindow,
+			revealWindow,
 			bondMultiplier,
 		});
 		const sentinelAccount = privateKeyToAccount(SENTINEL_PK);
@@ -676,27 +698,33 @@ describe("integration", () => {
 			args: [sentinelOracle.address, requestFee],
 		});
 
-		// Start the sentinel service — watches Consensus for OracleTransactionProposed
-		// and SentinelOracle for NewRequest to commit bonds, finalize, and claim
-		const publicClient = createPublicClient({ chain: anvil, transport: http() });
-		sentinelService = new SentinelService({
-			account: sentinelAccount,
-			publicClient,
-			config: {
-				account: sentinelAccount.address,
-				oracle: sentinelOracle.address,
-				feeToken: erc20.address,
-				consensus: consensus.address,
-				chainId: BigInt(anvil.id),
-				votingWindow,
-			},
-			detector: createDetector(),
-			logger: testLogger,
-			watcherConfig: { maxReorgDepth: 1, blockTimeOverride: BLOCK_TIME_MS },
-			database: new Sqlite3(":memory:"),
-			metrics: testMetrics,
+		// Start the Rust sentinel — watches Consensus for OracleTransactionProposed
+		// and SentinelOracle for NewRequest to commit bonds, reveal, finalize, and claim
+		sentinelConfigFile = path.join(os.tmpdir(), `sentinel-${randomUUID()}.toml`);
+		fs.writeFileSync(
+			sentinelConfigFile,
+			[
+				'rpc = "http://127.0.0.1:8545"',
+				`signer = "${SENTINEL_PK}"`,
+				'database = "sqlite::memory:"',
+				`oracle = "${sentinelOracle.address}"`,
+				`consensus = "${consensus.address}"`,
+				"",
+				"[sentinel]",
+				`fee_token = "${erc20.address}"`,
+				// How long the client keeps a `WaitingForRequest` guess alive before
+				// giving up, not the oracle's own commit/reveal windows — generous
+				// since the request resolves well within this test's runtime.
+				"voting_window = 1000",
+				"blocklist = []",
+				"",
+				"[index]",
+				`block_time = ${BLOCK_TIME_MS}`,
+			].join("\n"),
+		);
+		sentinelProcess = spawn(SENTINEL_BINARY_PATH, ["--config-file", sentinelConfigFile], {
+			stdio: "ignore",
 		});
-		await sentinelService.start();
 
 		await triggerKeyGen();
 		await waitForBlocks(testClient, BLOCKS_PER_EPOCH / 2n);

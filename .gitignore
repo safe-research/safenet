@@ -11,7 +11,7 @@ foundry.lock
 integration_logs.txt
 lcov.info
 node_modules/
-rust_sentinel_logs.txt
+sentinel_a_logs.txt
+sentinel_b_logs.txt
 target/
-ts_sentinel_logs.txt
 validator*.toml

@@ -14,18 +14,27 @@ PARTICIPANTS=(
 # Anvil account 0 — used as deployer for all contracts
 DEPLOYER=0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266
 
-# --- 1. Start Anvil in the background ---
+# --- 1. Build the Rust sentinel ---
+# Built up front, before Anvil or anything else starts, so a compile error
+# fails fast. The TS sentinel can no longer complete a commit-reveal vote
+# against SentinelOracleV2, so the "keygen and oracle signing flow" test
+# drives this binary directly instead (see SENTINEL_BINARY_PATH below).
+echo "Building the Rust sentinel..."
+cargo build --package sentinel
+export SENTINEL_BINARY_PATH="$ROOT/target/debug/sentinel"
+
+# --- 2. Start Anvil in the background ---
 echo "Starting Anvil..."
 # Mute anvil logs
 anvil > ./anvil_logs.txt &
 ANVIL_PID=$!
 echo "Anvil started with PID $ANVIL_PID"
 
-# --- 2. Setup Cleanup ---
+# --- 3. Setup Cleanup ---
 trap 'echo "Stopping Anvil (PID $ANVIL_PID)..." && kill $ANVIL_PID' EXIT
 sleep 2
 
-# --- 3. Deploy Contracts ---
+# --- 4. Deploy Contracts ---
 echo "Deploying contracts..."
 env \
     PARTICIPANTS=$(IFS=, ; echo "${PARTICIPANTS[*]}") \
@@ -39,7 +48,7 @@ CONSENSUS=$(jq -r '.returns.consensus.value' \
     "$ROOT/contracts/build/broadcast/Deploy.s.sol/31337/run-latest.json")
 echo "Consensus deployed at $CONSENSUS"
 
-# --- 4. Deploy Fee Token ---
+# --- 5. Deploy Fee Token ---
 echo "Deploying fee token..."
 env FACTORY=2 \
 npm run -w contracts cmd:deploy:testing-erc20 -- \
@@ -52,7 +61,7 @@ FEE_TOKEN=$(jq -r '.returns.erc20.value' \
     "$ROOT/contracts/build/broadcast/DeployERC20.s.sol/31337/run-latest.json")
 echo "Fee token deployed at $FEE_TOKEN"
 
-# --- 5. Deploy Sentinel Oracle ---
+# --- 6. Deploy Sentinel Oracle ---
 echo "Deploying Sentinel Oracle..."
 env \
     FACTORY=2 \
@@ -60,7 +69,8 @@ env \
     SENTINEL_CONSENSUS=$CONSENSUS \
     SENTINEL_FEE_TOKEN=$FEE_TOKEN \
     SENTINEL_REQUEST_FEE=1000 \
-    SENTINEL_VOTING_WINDOW=10 \
+    SENTINEL_COMMIT_WINDOW=10 \
+    SENTINEL_REVEAL_WINDOW=10 \
     SENTINEL_GOVERNANCE_DELAY=0 \
     SENTINEL_BOND_MULTIPLIER=2 \
 npm run -w contracts cmd:deploy:sentinel-oracle -- \
@@ -69,7 +79,7 @@ npm run -w contracts cmd:deploy:sentinel-oracle -- \
     --sender $DEPLOYER \
     --broadcast
 
-# --- 6. Run Client Integration Tests ---
+# --- 7. Run Client Integration Tests ---
 echo "Running integration tests..."
 npm test -w validator -- integration
 

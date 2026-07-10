@@ -7,7 +7,7 @@ mod service;
 mod servicev2;
 mod state;
 
-use self::{config::Config, detector::Detector, service::SentinelService};
+use self::{config::Config, detector::Detector, servicev2::SentinelService};
 use alloy::{
     primitives::U256,
     providers::{Provider, ProviderBuilder},
@@ -43,14 +43,13 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     let provider = ProviderBuilder::new().connect(config.rpc.as_str()).await?;
     let pool = SqlitePool::connect_with(config.database).await?;
-    let account = config.signer.address();
     let chain_id = U256::from(provider.get_chain_id().await?);
 
     let service = SentinelService::new(
         config.oracle,
         config.sentinel.fee_token,
         config.consensus,
-        account,
+        config.signer.clone(),
         chain_id,
         config.sentinel.voting_window,
         Detector::new(config.sentinel.blocklist),
