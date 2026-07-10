@@ -74,7 +74,7 @@ A faithful port needs the whole data flow, so it is catalogued here. References 
 | `validator.ts`                                                           | Entrypoint: parse env config, build account/metrics, construct + `start()` the service.                                                       | `main.rs` + `config.rs` (already scaffolded)                                                                                                       |
 | `service/service.ts`                                                     | `ValidatorService`: wires storage + protocol + state machine + watcher; **`start()` reconciles the staker address**, then starts the watcher. | the loop is `safenet-core::driver::Driver`; the validator supplies the `Service` components; staker reconciliation becomes a `GetValidatorStaker` effect + `ValidatorStakerSet` handling (Phase D5) |
 | `service/machine.ts`                                                     | `SafenetStateMachine`: transition **queue**, block/event dispatch, applies `StateDiff`s, yields `ProtocolAction`s.                            | subsumed by `safenet-core::state::StateMachine`; the validator implements the pure `StateTransition` + an `EffectHandler`                          |
-| `machine/types.ts`, `machine/transitions/types.ts`                       | `RolloverState` / `SigningState` FSMs, `ConsensusState`, `StateDiff`, and the full typed event set.                                           | `state.rs` (the snapshot `State`) + the `sol!` event set in `bindings.rs`                                                                          |
+| `machine/types.ts`, `machine/transitions/types.ts`                       | `RolloverState` / `SigningState` FSMs, `ConsensusState`, `StateDiff`, and the full typed event set.                                           | `state/` (the snapshot `State` + `Transition`) + the `sol!` event set in `service/mod.rs`                                                          |
 | `consensus/rollover.ts`, `keygen/*`                                      | Epoch rollover, DKG rounds (genesis, commitments, shares, confirmations, complaints), timeouts.                                               | transition handlers (Phase D1/D2)                                                                                                                  |
 | `consensus/signing/*`                                                    | Nonce-tree preprocessing, nonce-commitment reveal, signature-share creation (+ **nonce burn**), completion.                                   | transition handlers + nonce effects (Phase D3) + the secret store (Phase C1)                                                                       |
 | `consensus/keyGen/client.ts`, `signing/client.ts`                        | Thin wrappers over `SqliteClientStorage` holding **all** crypto state.                                                                        | **removed**: deterministic crypto state moves into the snapshot `State`; random secrets move into the secret store behind the `EffectHandler` (see Architecture Decision) |
@@ -134,8 +134,8 @@ Key decisions:
   action queue.
 
 - **The `Service::Event` is the `sol!`-generated typed event set.** As in the sentinel, the state
-  machine's `Event` _is_ the watcher's event type. `bindings.rs` declares it with `watcher_events!`
-  over the generated `Consensus::ConsensusEvents` and `Coordinator::CoordinatorEvents` enums (plus the
+  machine's `Event` _is_ the watcher's event type. `service/mod.rs` declares it with `watcher_events!`
+  over the `bindings` `Consensus::ConsensusEvents` and `Coordinator::CoordinatorEvents` enums (plus the
   oracle result event), and the transition matches on it directly. This replaces
   `machine/transitions/types.ts` and the `zod` decoding in the TS watcher. The Rust event set
   additionally includes `Consensus::ValidatorStakerSet` (the TS validator does not watch it) to keep
@@ -288,7 +288,7 @@ crates/validator/
   src/
     main.rs                  # exists — Phase E2 swaps DummyService for the real service
     config.rs                # exists — Phase A2 adds validator fields
-    bindings.rs              # Phase A1: sol! Consensus + Coordinator; watcher_events! event set
+    bindings.rs              # Phase A1: sol! Consensus + Coordinator contracts (events + calls)
     frost/                   # thin Safenet-specific layer over frost-secp256k1 / frost-core
       mod.rs                 # re-exports
       keygen.rs              # DKG rounds via frost keys::dkg::part{1,2,3} (port of the spike)
@@ -300,19 +300,21 @@ crates/validator/
     merkle.rs                # keccak256 merkle: participants root/proof, signer set, nonce-tree proof
     secrets.rs               # Phase C1: separate reorg-immune SQLite store for local random secrets
                              #   (DKG coefficients + encryption key; nonce trees + burn) with pruning
-    state.rs                 # Phase C2: snapshot State (rollover + signing FSM + consensus + derived DKG)
-    action.rs                # Phase C2: the Action enum (mirrors the sentinel's action.rs)
-    effects.rs               # Phase D: Effect + Resume enums and the ValidatorEffects handler
-                             #   (secret store + provider + RNG); grows with D2/D3/D5
+    state/                   # Phase C2: the snapshot State and its pure Transition, grown through Phase D
+      mod.rs                 #   State (starts as just RolloverState::WaitingForGenesis) + the pure
+                             #   Transition (no-op skeleton in C2; rollover/signing/consensus/DKG in D)
     checks.rs                # Phase D4a: Safe-transaction policy checks (delegatecall/multisend/config)
-    service.rs               # exists (Dummy) — ValidatorService bundle + pure ValidatorTransition
-                             #   + ValidatorEncoder (Phases D/E)
+    service/                 # Phase C2: the ValidatorService bundle + the watched event set
+      mod.rs                 #   ValidatorService + the watcher_events! Event set (Consensus/Coordinator/Oracle)
+      action.rs              #   the (empty in C2) Action enum + its Encoder, one arm per Phase D action
+      effect.rs              #   Effect + Resume enums and their Handler (empty in C2; grows the
+                             #   secret store + provider + RNG through D2/D3/D5)
     hashing.rs               # EIP-712 message hashing (SafeTx / rollover / oracle proposal); reuse sentinel's where possible
 ```
 
-Modules are introduced only when first used (no empty stubs), matching the crate convention. If
-`service.rs` grows past the size budget, the transition handlers split into `keygen.rs` / `signing.rs`
-/ `rollover.rs` submodules (the phase breakdown already anticipates this).
+Modules are introduced only when first used (no empty stubs), matching the crate convention. If the
+`state` transition grows past the size budget, its handlers split into `keygen.rs` / `signing.rs` /
+`rollover.rs` submodules (the phase breakdown already anticipates this).
 
 ### Cargo manifest
 
@@ -354,10 +356,11 @@ hand-rolled hash/curve crate (`sha2` etc.) is needed — the ciphersuite is the 
   - The oracle `OracleResult` event (for `handleOracleResult`).
   - Shared `Point{uint256 x; uint256 y}`, `Attestation{Point r; uint256 z}` and the `SafeTransaction`
     tuple, modelled on `project/ports:validator-rust/src/bindings.rs`.
-- The watcher event set is declared with `watcher_events!` over the generated `*Events` enums (plus a
-  variant for the oracle event). **`alloy` types are an area LLMs get wrong** — expect to hand-hold
-  this PR against the compiler; the spike's `bindings.rs` is the working reference to copy the `sol!`
-  layout and the `.into_inner()` decode bridge from.
+- The watcher event set is declared (in `service/mod.rs`, alongside `ValidatorService`) with
+  `watcher_events!` over these generated `*Events` enums (plus a variant for the oracle event).
+  **`alloy` types are an area LLMs get wrong** — expect to hand-hold this PR against the compiler; the
+  spike's `bindings.rs` is the working reference to copy the `sol!` layout and the `.into_inner()`
+  decode bridge from.
 
 ### FROST cryptography (`frost/*`, `merkle.rs`) — a thin layer over the ZCash crates
 
@@ -397,9 +400,15 @@ end-to-end test asserting a Rust participant interoperates with a TS-produced gr
 DKG-and-sign round. A tiny TS dump script (alongside `cmd/derive-genesis.ts`) or committed JSON
 fixtures produce the vectors.
 
-### State & secret store (`state.rs`, `action.rs`, `secrets.rs`)
+### State & secret store (`state/`, `service/action.rs`, `secrets.rs`)
 
-- `state.rs` — the snapshot `State` (`Serialize + Deserialize + Default`), composing:
+The `state/` and `service/action.rs` shapes below are the **eventual** structure the state machine
+converges on, reached incrementally through Phase D (C2 only lands the `WaitingForGenesis`
+skeleton). They are documented here as the target, not as an up-front C2 deliverable — the FSM is
+grown against the transitions that use it.
+
+- `state/` — the snapshot `State` (`Serialize + Deserialize + Default`) alongside its `Transition`,
+  composing:
   - **consensus**: `active_epoch`, `genesis_group_id?`, `epoch_groups` (epoch→group id),
     `signature_id_to_message`, `group_pending_nonces` (port of `ConsensusState`), plus the known
     onchain `staker` and the pending-staker-request marker (Phase D5).
@@ -417,7 +426,7 @@ fixtures produce the vectors.
     is reorg-safe in the snapshot. The **locally-generated random secrets are excluded** — the group's
     `coefficients` and `encryption secret key`, and all nonces, live in the reorg-immune secret store
     below.
-- `action.rs` — the **`Action`** enum, porting `consensus/protocol/types.ts` `ProtocolAction`
+- `service/action.rs` — the **`Action`** enum, porting `consensus/protocol/types.ts` `ProtocolAction`
   (13 variants across keygen / signing / consensus, including `SetValidatorStaker`). Each variant
   carries the deadline the encoder derives `expires_at` from (the TS `ActionWithTimeout` shape).
 - `secrets.rs` — a `sqlx` store over the shared pool holding the locally-generated random secrets,
@@ -440,9 +449,9 @@ fixtures produce the vectors.
     DKG-secret reuse across a simulated reorg, that pruning removes resolved-group secrets, and that a
     second `use_nonce` for the same leaf yields `None` (→ the transition's graceful no-op).
 
-### Effects (`effects.rs`)
+### Effects (`service/effect.rs`)
 
-The `Effect` and `Resume` enums plus `ValidatorEffects` (the `EffectHandler`), which owns the secret
+The `Effect` and `Resume` enums plus the `Handler` (the `EffectHandler`), which owns the secret
 store, the RNG and a provider clone. Effect payloads carry the **public** inputs the handler needs
 (drawn from `State` by the transition); the handler contributes the stored secrets and randomness;
 derived results flow back into the snapshot `State` via the resume transition, so replays reproduce
@@ -462,9 +471,9 @@ identical state. Handlers never fail — errors are data in `Resume`. The catalo
 The exact effect granularity (one per DKG round, as listed) is confirmed during Phase D2 — see Open
 Questions.
 
-### State transitions (`service.rs` + submodules)
+### State transitions (`state/` + submodules)
 
-`ValidatorTransition` holds the machine config (account, staker, participants + info, `genesis_salt`,
+The state `Transition` holds the machine config (account, staker, participants + info, `genesis_salt`,
 `blocks_per_epoch`, `key_gen_timeout`, `signing_timeout`, `allowed_oracles`, `oracle_timeout`) and
 implements the pure `StateTransition<State>`, matching on the `Message`:
 
@@ -538,9 +547,10 @@ cross-crate ordering.
 ### Phase A — Bindings & config (validator; unblocks B2/C/D/E)
 
 - **A1 — Onchain bindings.** `bindings.rs`: `sol!` for `Consensus` + `Coordinator` (events + calls,
-  including `ValidatorStakerSet` / `getValidatorStaker`) and the oracle result event, the shared
-  `Point`/`Attestation`/`SafeTransaction` structs, and the `watcher_events!` event set. Modeled on the
-  spike's `bindings.rs`. _No behavior; the typed surface._
+  including `ValidatorStakerSet` / `getValidatorStaker` / `getCoordinator`) and the oracle result
+  event, and the shared `Point`/`Attestation`/`SafeTransaction` structs. Modeled on the spike's
+  `bindings.rs`. _No behavior; the typed surface._ (The `watcher_events!` event set over these enums
+  lives with the service in `service/mod.rs`, landed in C2.)
 - **A2 — Config fields.** Extend `config.rs` with the validator fields + tests (parses required fields;
   nested observability / flattened driver still default). Depends on nothing else; parallel with A1.
 
@@ -574,18 +584,33 @@ B1/B2 are the foundation; the rest fan out. All wrappers are pure — RNG is pas
   and burn idempotency. Depends on B1 (`EncryptionKey`), B3 (DKG `SecretPackage` types) and B4 (nonce
   types). _The store the effect handler fronts; it is what makes DKG coefficients and nonces
   reorg-immune._
-- **C2 — Snapshot `State` + `Action`.** `state.rs` + `action.rs`: the `State` type (consensus +
-  rollover + signing FSMs + the **deterministic** per-group DKG material; random secrets excluded),
-  `Serialize + Deserialize + Default`, plus the deadline-carrying `Action` enum. Depends on B1/B3
-  (identifier + DKG types) and A1 (event/id types). _Types only; transitions are Phase D._
+- **C2 — Minimal service skeleton.** `state/` + `service/` (`mod.rs` + empty `action.rs` /
+  `effect.rs`): stand up a real `ValidatorService` — a pure `state::Transition`, an `effect::Handler`
+  and an `action::Encoder` — that **replaces `DummyService`** but does nothing yet. The
+  snapshot `State` is just the starting `RolloverState::WaitingForGenesis`; the transition ignores
+  every block and event; the `Action`, `Effect` and `Resume` sets are empty (uninhabited) enums that
+  Phase D grows. It watches the `Consensus`/`Coordinator` (and oracle) event set — decoding but
+  ignoring the events — so the `Driver` runs end to end. The `Coordinator` address is read from the
+  `Consensus` contract (`getCoordinator`), not configured. Depends on A1.
+
+  **The `State`, `Action` and `Effect` types are deliberately _not_ fixed up front. They grow
+  organically in Phase D**, one transition at a time, so the FSM shape is decided against the actual
+  transition logic that uses it rather than guessed in advance. The "State & secret store" and
+  "State transitions" specs below describe the _eventual_ shape this converges on, not a C2
+  deliverable.
 
 ### Phase D — State transitions & effects (depends on A1, B, C)
+
+Each D PR **grows the snapshot `State` and the `Action` / `Effect` sets** with exactly the fields
+and variants its transitions need — the skeleton from C2 is fleshed out incrementally, so the FSM
+structure is chosen against real transition logic. The shapes catalogued in the "State & secret
+store", "Effects" and "Action encoding" specs are the target these converge on.
 
 - **D1 — Rollover, epoch & genesis + timeouts.** `Message::NewBlock` epoch-rollover / keygen-trigger /
   timeout checks; genesis + epoch-staged handlers. Timeouts that retire a keygen emit
   `PruneDkgSecrets`. Ports `consensus/rollover.ts`, `keygen/genesis.ts`. Depends on A1, B3, C2.
-- **D2 — KeyGen handlers & DKG effects.** Introduces `effects.rs` (`Effect`/`Resume` +
-  `ValidatorEffects` over the secret store): `KeyGen`/`KeyGenCommitted`/`KeyGenSecretShared`/
+- **D2 — KeyGen handlers & DKG effects.** Grows `service/effect.rs` (the `Effect`/`Resume` enums +
+  the `Handler` over the secret store): `KeyGen`/`KeyGenCommitted`/`KeyGenSecretShared`/
   `KeyGenConfirmed` + complaint submitted/responded, with the `DkgCommit`/`DkgShares`/`DkgFinalize`
   effects and their resume handlers. The commit effect **reuses any existing stored secrets** (the
   reorg-safety fix); confirmation/abort emits `PruneDkgSecrets`. Ports `keygen/*`. Depends on B3, C1,
@@ -609,9 +634,10 @@ B1/B2 are the foundation; the rest fan out. All wrappers are pure — RNG is pas
 
 - **E1 — `ValidatorEncoder`.** Implement `ActionEncoder<Action>`: map every `Action` →
   `(Transaction, expires_at)` (calldata + gas + deadline), with mapping tests. Depends on A1, C2.
-- **E2 — Wire the real service into `main.rs`.** `ValidatorService` implementing
-  `Service::components()` (transition + effects + encoder); replace `DummyService`; follow
-  `[consensus, coordinator, ...allowed_oracles]`; remove the dummy. Depends on all of D, E1.
+- **E2 — Finalize service assembly.** The `ValidatorService` bundle and its `main.rs` wiring already
+  exist from C2 (the dummy was replaced there); E2 confirms the assembled `Service::components()`
+  (transition + effects + encoder) is complete once all of D has landed, and that the watched event
+  set follows `[consensus, coordinator, ...allowed_oracles]`. Depends on all of D, E1.
 
 ### Phase F — Validation & wrap-up
 
@@ -627,9 +653,10 @@ B1/B2 are the foundation; the rest fan out. All wrappers are pure — RNG is pas
 ### Critical path
 
 `A1 → B1 → B4 → B5 → D3 → E1 → E2 → F1`. Phase B fans out from B1 (B2 also needs A1; B3 needs B1+B2;
-B4 needs B1; B5 needs B1+B2+B4). C follows B; D follows A/B/C; D4a needs only A1, and D5 only A1+C2,
-so both sit off the critical path. FROST (B) is a thin wrapper now, so the state machine (D) shares
-the critical path with it.
+B4 needs B1; B5 needs B1+B2+B4). C1 (secret store) follows B; C2 (the service skeleton) needs only
+A1 and can land early; D follows A/B/C and grows the state machine C2 stood up; D4a needs only A1,
+and D5 only A1+C2, so both sit off the critical path. FROST (B) is a thin wrapper now, so the state
+machine (D) shares the critical path with it.
 
 ---
 

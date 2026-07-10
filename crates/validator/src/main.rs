@@ -4,9 +4,10 @@ mod frost;
 mod merkle;
 mod secrets;
 mod service;
+mod state;
 
-use self::{config::Config, service::DummyService};
-use alloy::{primitives::Address, providers::ProviderBuilder};
+use self::{bindings::Consensus, config::Config, service::ValidatorService};
+use alloy::providers::ProviderBuilder;
 use argh::FromArgs;
 use safenet_core::{Driver, observability};
 use sqlx::sqlite::SqlitePool;
@@ -39,14 +40,22 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let provider = ProviderBuilder::new().connect(config.rpc.as_str()).await?;
     let pool = SqlitePool::connect_with(config.database).await?;
 
-    // The watched contract addresses and events are placeholders until the real
-    // validator service is implemented.
+    let consensus = config.validator.consensus;
+    let coordinator = Consensus::new(consensus, &provider)
+        .getCoordinator()
+        .call()
+        .await?;
+    tracing::debug!(%consensus, %coordinator, "resolved onchain contracts");
+
+    let mut watched = vec![consensus, coordinator];
+    watched.extend(config.validator.oracles.iter().copied());
+
     let driver = Driver::new(
-        DummyService,
+        ValidatorService,
         provider,
         config.signer,
         pool,
-        vec![Address::ZERO],
+        watched,
         config.driver,
     )
     .await?;
