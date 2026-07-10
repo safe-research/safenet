@@ -14,6 +14,7 @@ pub mod keygen;
 mod marshal;
 pub mod nonces;
 mod participants;
+pub mod signing;
 
 #[cfg(test)]
 mod tests {

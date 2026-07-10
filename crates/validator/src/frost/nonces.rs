@@ -37,6 +37,12 @@ impl Nonces {
             &self.proof,
         )
     }
+
+    /// The secret FROST signing nonce pair, consumed when producing a signature
+    /// share.
+    pub(super) fn signing_nonces(&self) -> &round1::SigningNonces {
+        &self.signing_nonces
+    }
 }
 
 /// A freshly generated chunk of preprocessing nonces: the per-offset secrets
