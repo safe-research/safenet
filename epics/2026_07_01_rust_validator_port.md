@@ -75,11 +75,11 @@ A faithful port needs the whole data flow, so it is catalogued here. References 
 | `service/service.ts`                                                     | `ValidatorService`: wires storage + protocol + state machine + watcher; **`start()` reconciles the staker address**, then starts the watcher. | the loop is `safenet-core::driver::Driver`; the validator supplies the `Service` components; staker reconciliation becomes a `GetValidatorStaker` effect + `ValidatorStakerSet` handling (Phase D5) |
 | `service/machine.ts`                                                     | `SafenetStateMachine`: transition **queue**, block/event dispatch, applies `StateDiff`s, yields `ProtocolAction`s.                            | subsumed by `safenet-core::state::StateMachine`; the validator implements the pure `StateTransition` + an `EffectHandler`                          |
 | `machine/types.ts`, `machine/transitions/types.ts`                       | `RolloverState` / `SigningState` FSMs, `ConsensusState`, `StateDiff`, and the full typed event set.                                           | `state/` (the snapshot `State` + `Transition`) + the `sol!` event set in `service/mod.rs`                                                          |
-| `consensus/rollover.ts`, `keygen/*`                                      | Epoch rollover, DKG rounds (genesis, commitments, shares, confirmations, complaints), timeouts.                                               | transition handlers (Phase D1/D2)                                                                                                                  |
+| `consensus/rollover.ts`, `keygen/*`                                      | Epoch rollover, DKG rounds (genesis, commitments, shares, confirmations, complaints), timeouts.                                               | transition handlers (genesis DKG Phase D1; rollover + timeouts Phase D4)                                                                            |
 | `consensus/signing/*`                                                    | Nonce-tree preprocessing, nonce-commitment reveal, signature-share creation (+ **nonce burn**), completion.                                   | transition handlers + nonce effects (Phase D3) + the secret store (Phase C1)                                                                       |
 | `consensus/keyGen/client.ts`, `signing/client.ts`                        | Thin wrappers over `SqliteClientStorage` holding **all** crypto state.                                                                        | **removed**: deterministic crypto state moves into the snapshot `State`; random secrets move into the secret store behind the `EffectHandler` (see Architecture Decision) |
 | `consensus/storage/sqlite.ts`                                            | 7-table SQLite store: groups, participants, secret shares, nonce links, nonces, signatures, commitments.                                      | **split**: non-secret crypto state → snapshot `State`; local random secrets → `secrets.rs` store (Phase C)                                         |
-| `consensus/verify/engine.ts`, `service/checks.ts`, `verify/*/hashing.ts` | Packet verification, Safe-transaction policy checks, EIP-712 message hashing.                                                                 | `checks.rs` + transition handlers (Phase D4); hashing via `alloy` `SolStruct::eip712_signing_hash`                                                 |
+| `consensus/verify/engine.ts`, `service/checks.ts`, `verify/*/hashing.ts` | Packet verification, Safe-transaction policy checks, EIP-712 message hashing.                                                                 | `checks.rs` + transition handlers (Phase D2); hashing via `alloy` `SolStruct::eip712_signing_hash`                                                 |
 | `consensus/protocol/{base,onchain,transaction}.ts`                       | Action queue + action→calldata encoding + tx submission/nonce/fee management.                                                                 | `ActionEncoder::encode_action` (Phase E1); the queue/fees/resubmit are `safenet-core::tx::TransactionQueue`                                        |
 | `consensus/protocol/sqlite.ts`                                           | Persistent action queue + tx nonce/fee store.                                                                                                 | subsumed by the `Driver` + `TransactionQueue` (no separate action queue)                                                                           |
 | `frost/*`, `consensus/merkle.ts`, `utils/participants.ts`                | FROST math, hashing, VSS, ECDH, nonces, signing, merkle trees.                                                                                | `frost/*` + `merkle.rs` (Phase B)                                                                                                                  |
@@ -303,12 +303,12 @@ crates/validator/
     state/                   # Phase C2: the snapshot State and its pure Transition, grown through Phase D
       mod.rs                 #   State (starts as just RolloverState::WaitingForGenesis) + the pure
                              #   Transition (no-op skeleton in C2; rollover/signing/consensus/DKG in D)
-    checks.rs                # Phase D4a: Safe-transaction policy checks (delegatecall/multisend/config)
+    checks.rs                # Phase D2i: Safe-transaction policy checks (delegatecall/multisend/config)
     service/                 # Phase C2: the ValidatorService bundle + the watched event set
       mod.rs                 #   ValidatorService + the watcher_events! Event set (Consensus/Coordinator/Oracle)
       action.rs              #   the (empty in C2) Action enum + its Encoder, one arm per Phase D action
       effect.rs              #   Effect + Resume enums and their Handler (empty in C2; grows the
-                             #   secret store + provider + RNG through D2/D3/D5)
+                             #   secret store + provider + RNG through D1/D3/D5)
     hashing.rs               # EIP-712 message hashing (SafeTx / rollover / oracle proposal); reuse sentinel's where possible
 ```
 
@@ -468,8 +468,8 @@ identical state. Handlers never fail — errors are data in `Resume`. The catalo
 | `UseNonce { group_id, signature_id, sequence }` | atomic fetch-and-burn via `use_nonce`                                                | the `SigningNonces`, or `AlreadyBurned`               |
 | `PruneGroupNonces { group_id }`                 | delete the retired group's nonce trees                                               | acknowledgment (no commands)                          |
 
-The exact effect granularity (one per DKG round, as listed) is confirmed during Phase D2 — see Open
-Questions.
+The exact effect granularity (one per DKG round, as listed) is confirmed as the D1 DKG slices land
+(D1iii–D1v) — see Open Questions.
 
 ### State transitions (`state/` + submodules)
 
@@ -601,34 +601,115 @@ B1/B2 are the foundation; the rest fan out. All wrappers are pure — RNG is pas
 
 ### Phase D — State transitions & effects (depends on A1, B, C)
 
-Each D PR **grows the snapshot `State` and the `Action` / `Effect` sets** with exactly the fields
-and variants its transitions need — the skeleton from C2 is fleshed out incrementally, so the FSM
-structure is chosen against real transition logic. The shapes catalogued in the "State & secret
-store", "Effects" and "Action encoding" specs are the target these converge on.
+Each D PR **grows the snapshot `State` and the `Action` / `Effect` sets** with exactly the fields and
+variants **one event (or one `NewBlock` check) needs** — the skeleton from C2 is fleshed out one
+handler at a time, so the FSM structure is chosen against real transition logic and every PR is an
+independently reviewable chunk. The shapes catalogued in the "State & secret store", "Effects" and
+"Action encoding" specs are the target these converge on. Roman-numeral slices land in order within a
+sub-phase; "Depends on" gives cross-slice ordering. `EpochProposed` is a deliberate no-op (its
+rollover message was already verified when `KeyGenConfirmed` was handled) and needs no slice.
 
-- **D1 — Rollover, epoch & genesis + timeouts.** `Message::NewBlock` epoch-rollover / keygen-trigger /
-  timeout checks; genesis + epoch-staged handlers. Timeouts that retire a keygen emit
-  `PruneDkgSecrets`. Ports `consensus/rollover.ts`, `keygen/genesis.ts`. Depends on A1, B3, C2.
-- **D2 — KeyGen handlers & DKG effects.** Grows `service/effect.rs` (the `Effect`/`Resume` enums +
-  the `Handler` over the secret store): `KeyGen`/`KeyGenCommitted`/`KeyGenSecretShared`/
-  `KeyGenConfirmed` + complaint submitted/responded, with the `DkgCommit`/`DkgShares`/`DkgFinalize`
-  effects and their resume handlers. The commit effect **reuses any existing stored secrets** (the
-  reorg-safety fix); confirmation/abort emits `PruneDkgSecrets`. Ports `keygen/*`. Depends on B3, C1,
-  C2.
-- **D3 — Signing handlers & nonce effects.** `Preprocess`/`Sign`/`SignRevealedNonces`/`SignShared`/
-  `SignCompleted`/decline; the `NonceTree` and `UseNonce` effects and their resumes — nonce-tree
-  generation, commitment reveal, signature-share creation **+ nonce burn**, incl. the **graceful no-op
-  on `AlreadyBurned`**. Ports `signing/*`. Depends on B4/B5, C1, C2. _The effectful heart of the
-  machine._
-- **D4a — Safe-transaction checks.** `checks.rs`: delegatecall/self/selector/multisend/config-call
-  policy checks. Ports `service/checks.ts`. Depends on A1.
-- **D4b — Transaction & oracle handlers.** `TransactionProposed`/`Attested`,
-  `OracleTransactionProposed`/`Attested`, `OracleResult`; EIP-712 message hashing (`hashing.rs`, reuse
-  sentinel structs where possible), verify→attest-or-decline→`sign_request`. Depends on D4a, B, C2.
-- **D5 — Staker reconciliation.** The `GetValidatorStaker` effect (handler holds the provider), the
-  `ValidatorStakerSet` event handler, the staker fields on `State`, and the `SetValidatorStaker`
-  action emission — a faithful, effect-based port of `service.ts`'s `#setStakerAddress` (replaces the
-  original plan's core `Service::initialize` hook). Depends on A1, C2.
+The sub-phases are ordered by dependency rather than by contract: the genesis group must go live
+before any signing can run, and signing must exist before a non-genesis epoch rollover — whose packet
+is itself signed — can complete. That cycle is broken by **splitting `KeyGenConfirmed`**: its
+self-contained genesis branch lands in D1, and its rollover-packet branch lands in D4 once signing
+exists. All `NewBlock`-driven checks (epoch rollover, keygen timeouts, signing timeouts) likewise
+depend on the full event-driven machine and so are grouped into D4.
+
+**D1 — Genesis DKG lifecycle.** Drive the genesis group through the rollover FSM
+(`CollectingCommitments → CollectingShares → CollectingConfirmations → EpochStaged`), growing
+`RolloverState` and the DKG effects/actions one `KeyGen*` event at a time. Ports `keygen/*`.
+
+- **D1i — Group & participant-set derivation.** ✅ Landed (#551). `consensus/{group,epoch}.rs`: the
+  pure group/threshold/context/root derivation the handlers build on.
+- **D1ii — Genesis `KeyGen`.** ✅ Landed (#553). `WaitingForGenesis → CollectingCommitments` + the
+  `BuildKeyGenCommitment` (`DkgCommit`) effect and `KeyGenAndCommit` action.
+- **D1iii — `KeyGenCommitted`.** Register peers' commitments in `State`; when all have committed,
+  `→ CollectingShares` and emit `DkgShares` → the `KeyGenSecretShare` action (ECDH-encrypted shares).
+  Ports `keygen/committed.ts`. Depends on B3, D1ii.
+- **D1iv — `KeyGenSecretShared`.** Collect/verify shares (invalid share → `KeyGenComplain` action);
+  when all shared, `→ CollectingConfirmations` and — if my share set completed — emit `DkgFinalize`
+  → the `KeyGenConfirm` action. Ports `keygen/secretShares.ts`. Depends on B3, D1iii.
+- **D1v — `KeyGenConfirmed` (genesis branch).** Collect confirmations; when the genesis group is fully
+  confirmed, `→ EpochStaged{epoch 0}`, record `epoch_groups[0]`, emit `NonceTree` →
+  `RegisterNonceCommitments`, and `PruneDkgSecrets`. _(The non-genesis rollover-packet branch lands in
+  D4iii, once signing exists.)_ Ports the genesis path of `keygen/confirmed.ts`. Depends on B3/B4, C1,
+  D1iv.
+- **D1vi — `KeyGenComplained`.** Complaint accounting; at threshold, restart the keygen via the shared
+  `trigger_keygen` helper (adjusted participants) + `PruneDkgSecrets`; if accused, emit the
+  `KeyGenComplaintResponse` action. Ports `keygen/complaintSubmitted.ts`. Depends on D1iv.
+- **D1vii — `KeyGenComplaintResponded`.** Register/verify the revealed share; invalid → restart;
+  share set completed → `KeyGenConfirm`. Ports `keygen/complaintResponse.ts`. Depends on D1vi.
+
+**D2 — Transaction & oracle intake.** Verify proposed transactions and open the signing sessions
+(the `WaitingForRequest` / `WaitingToDecline` / `WaitingForOracle` FSM entries). Pure verification and
+hashing — no secrets. Ports `service/checks.ts`, `verify/*` and the consensus proposed/attested
+handlers. Exercised end to end against a D1-established group, but each handler unit-tests against a
+hand-crafted `State`.
+
+- **D2i — Safe-transaction checks.** `checks.rs`: delegatecall / self / selector / multisend /
+  config-call policy. No event; pure helper. Ports `service/checks.ts`. Depends on A1.
+- **D2ii — EIP-712 hashing & packet verification.** `hashing.rs` + the packet→message-hash helper
+  (reuse the sentinel `SolStruct` structs where possible) the transaction/oracle/rollover handlers
+  share. No event; helper. Depends on A1, D2i.
+- **D2iii — `TransactionProposed`.** Verify → `WaitingForRequest` (valid) or `WaitingToDecline`
+  (invalid). Ports `consensus/transactionProposed.ts`. Depends on D2ii.
+- **D2iv — `TransactionAttested`.** Clear the `WaitingForAttestation` entry once the attestation
+  lands. Ports `consensus/transactionAttested.ts`. Depends on D2ii.
+- **D2v — `OracleTransactionProposed`.** Verify → `WaitingForRequest` (oracle packet). Ports
+  `consensus/oracleTransactionProposed.ts`. Depends on D2ii.
+- **D2vi — `OracleTransactionAttested`.** Clear the entry. Ports
+  `consensus/oracleTransactionAttested.ts`. Depends on D2ii.
+
+**D3 — Signing lifecycle.** The nonce effects and the signing FSM that consumes the sessions D2 opens
+— the effectful heart of the machine. The last signer's `SignShare` action carries the attestation
+`callbackContext` that submits the result on the happy path (Open Question #5); the standalone
+attest/stage actions are the timeout fallbacks in D4. Ports `signing/*` + `consensus/oracleResult.ts`.
+
+- **D3i — `Preprocess`.** Link committed nonces to their chunk (the nonce-store `link` effect) and
+  clear the group's pending-nonces marker. Ports `signing/preprocess.ts`. Depends on B4, C1.
+- **D3ii — `Sign`.** For a live request: top up nonces when low (`NonceTree`), then reveal
+  commitments (`RevealNonceCommitments` action, `→ CollectNonceCommitments`); oracle packet →
+  `WaitingForOracle`; declined packet → `SignDecline`. Ports `signing/sign.ts` + `commitments.ts`.
+  Depends on B4/B5, C1, D2iii/D2v.
+- **D3iii — `OracleResult`.** On approval, reveal nonce commitments (as D3ii); on rejection, drop the
+  session. Ports `consensus/oracleResult.ts`. Depends on D3ii, D2v.
+- **D3iv — `SignRevealedNonces`.** Create the signature share, **burning the nonce** via the atomic
+  `UseNonce` effect, with the **graceful no-op on `AlreadyBurned`**; `→ CollectSigningShares` + the
+  `SignShare` action (carrying the transaction/oracle attestation callback; the rollover `stageEpoch`
+  callback branch lands with D4iii). Ports `signing/nonces.ts` (`handleRevealedNonces`). Depends on
+  B5, C1, D3ii.
+- **D3v — `SignShared`.** Track collected signature shares. Ports `signing/shares.ts`. Depends on
+  D3iv.
+- **D3vi — `SignCompleted`.** `→ WaitingForAttestation`. Ports `signing/completed.ts`. Depends on
+  D3v. _(Completes the minimal genesis DKG + one-signing-round flow the F1 interop test drives.)_
+
+**D4 — Epoch rollover & timeouts.** The block-driven epoch machine, the non-genesis DKG trigger, and
+all `NewBlock` timeout checks — reusing the D3 signing FSM for the rollover packet. Ports
+`consensus/rollover.ts`, `keygen/trigger.ts`, `keygen/timeouts.ts`, `signing/timeouts.ts`, the
+rollover branch of `keygen/confirmed.ts`, and `consensus/epochStaged.ts`.
+
+- **D4i — `trigger_keygen` helper + `NewBlock` epoch rollover.** Extract the shared `trigger_keygen`
+  (participants/threshold/context → `CollectingCommitments` + `DkgCommit`, or `EpochSkipped`) that
+  D1vi/D1vii already call, then port `checkEpochRollover`: roll `active_epoch`, trigger the next
+  epoch's keygen, and clean up retired epoch groups (`PruneGroupNonces`). Ports `consensus/rollover.ts`
+  + `keygen/trigger.ts`. Depends on D1, C1.
+- **D4ii — Keygen timeouts (`NewBlock`).** Retire timed-out participants and restart via
+  `trigger_keygen`; retiring a keygen emits `PruneDkgSecrets`. Ports `keygen/timeouts.ts`. Depends on
+  D4i.
+- **D4iii — `KeyGenConfirmed` (rollover branch) + `EpochStaged`.** Non-genesis confirmation computes
+  the epoch-rollover packet, `→ SignRollover`, and opens its signing session; `EpochStaged` moves
+  `SignRollover → EpochStaged`, records `epoch_groups`, and preprocesses the new group (`NonceTree` →
+  `RegisterNonceCommitments`). Completes `keygen/confirmed.ts`; ports `consensus/epochStaged.ts`.
+  Depends on D1v, D2ii, D3.
+- **D4iv — Signing timeouts (`NewBlock`).** Per-session retry / decline / drop across the signing FSM,
+  emitting `SignRequest` on retry and the standalone `AttestTransaction` / `StageEpoch` fallback
+  actions. Ports `signing/timeouts.ts`. Depends on D3vi, D4iii.
+
+**D5 — Staker reconciliation.** The `GetValidatorStaker` effect (handler holds the provider), the
+`ValidatorStakerSet` event handler, the staker fields on `State`, the `NewBlock` staker check, and the
+`SetValidatorStaker` action emission — a faithful, effect-based port of `service.ts`'s
+`#setStakerAddress` (replaces the original plan's core `Service::initialize` hook). Depends on A1, C2.
 
 ### Phase E — Service assembly (depends on D)
 
@@ -652,11 +733,13 @@ store", "Effects" and "Action encoding" specs are the target these converge on.
 
 ### Critical path
 
-`A1 → B1 → B4 → B5 → D3 → E1 → E2 → F1`. Phase B fans out from B1 (B2 also needs A1; B3 needs B1+B2;
-B4 needs B1; B5 needs B1+B2+B4). C1 (secret store) follows B; C2 (the service skeleton) needs only
-A1 and can land early; D follows A/B/C and grows the state machine C2 stood up; D4a needs only A1,
-and D5 only A1+C2, so both sit off the critical path. FROST (B) is a thin wrapper now, so the state
-machine (D) shares the critical path with it.
+`A1 → B1 → B4 → B5 → D3 → D4iii → E1 → E2 → F1`. Phase B fans out from B1 (B2 also needs A1; B3 needs
+B1+B2; B4 needs B1; B5 needs B1+B2+B4). C1 (secret store) follows B; C2 (the service skeleton) needs
+only A1 and can land early. Phase D grows the state machine C2 stood up, one event per slice, in
+dependency order: D1 (genesis DKG) → D2 (intake) → D3 (signing) unblocks the F1 interop test's
+"genesis DKG + one signing round"; D4 (rollover + timeouts) then reuses D3's signing FSM. D2i
+(`checks.rs`) needs only A1, and D5 (staker) only A1+C2, so both sit off the critical path. FROST (B)
+is a thin wrapper now, so the state machine (D) shares the critical path with it.
 
 ---
 
@@ -680,14 +763,14 @@ machine (D) shares the critical path with it.
    `provider.estimate_gas` if they prove brittle.
 4. **Shared EIP-712 hashing with the sentinel.** The `SafeTx` / proposal `sol!` structs and hashing
    overlap the sentinel crate. **Recommended:** factor the shared structs into a small shared module
-   (in `safenet-core` or a shared crate) rather than duplicating; decide when D4b lands.
+   (in `safenet-core` or a shared crate) rather than duplicating; decide when D2ii lands.
 5. **`callback` variants (`keyGenConfirmWithCallback` / `signShareWithCallback`).** The TS actions carry
    an optional callback context. Confirm whether the Rust port must support callbacks in the initial
    port or can defer them.
 6. **DKG effect granularity.** The plan models one effect per DKG round (`DkgCommit` / `DkgShares` /
    `DkgFinalize`), keeping round outputs in the snapshot `State` and only the secrets in the store.
    **Recommended:** keep per-round effects (smallest impure surface); confirm against the actual
-   `frost` API shapes when D2 lands.
+   `frost` API shapes as the D1 DKG slices (D1iii–D1v) land.
 
 **Assumptions**
 
