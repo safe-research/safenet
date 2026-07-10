@@ -105,7 +105,7 @@ pub fn solidity_signature(signature: &frost_secp256k1::Signature) -> bindings::S
 pub fn frost_commitment(
     commitment: &bindings::KeyGenCommitment,
 ) -> Result<(EncryptionPublicKey, dkg::round1::Package), frost_secp256k1::Error> {
-    let encryption_public_key = frost_point(&commitment.q)?.try_into()?;
+    let encryption_public_key = EncryptionPublicKey::from_point(frost_point(&commitment.q)?)?;
     let coefficients = keys::VerifiableSecretSharingCommitment::new(
         commitment
             .c

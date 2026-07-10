@@ -64,7 +64,7 @@ impl MerkleTree {
 /// A Merkle root that can be used to verify a proof.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Deserialize, Serialize)]
 #[serde(transparent)]
-pub struct MerkleRoot(B256);
+pub struct MerkleRoot(pub B256);
 
 impl MerkleRoot {
     /// Verifies a Merkle proof for a leaf.
@@ -80,18 +80,6 @@ impl MerkleRoot {
 impl PartialEq<B256> for MerkleRoot {
     fn eq(&self, other: &B256) -> bool {
         self.0 == *other
-    }
-}
-
-impl From<B256> for MerkleRoot {
-    fn from(root: B256) -> Self {
-        Self(root)
-    }
-}
-
-impl From<MerkleRoot> for B256 {
-    fn from(root: MerkleRoot) -> Self {
-        root.0
     }
 }
 

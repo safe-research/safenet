@@ -5,13 +5,13 @@
 //! revealing a single nonce needs only that one entry rather than the whole
 //! chunk resident in memory.
 
-use super::marshal;
+use super::{keygen::KeyShare, marshal};
 use crate::{
     bindings,
     merkle::{MerkleRoot, MerkleTree},
 };
 use alloy::primitives::{B256, keccak256};
-use frost_secp256k1::{keys::SigningShare, round1};
+use frost_secp256k1::round1;
 use rand::{CryptoRng, RngCore, SeedableRng as _};
 use rand_chacha::ChaCha12Rng;
 use rayon::iter::{IntoParallelIterator as _, ParallelIterator as _};
@@ -29,7 +29,7 @@ pub struct Nonces {
 }
 
 impl Nonces {
-    /// Compute the signature nonces reveal parameters the FROST sining nonce
+    /// Compute the signature nonces reveal parameters the FROST signing nonce
     /// pair.
     pub fn reveal(&self) -> (bindings::SignNonces, &[B256]) {
         (
@@ -57,22 +57,22 @@ pub struct NonceChunk {
 }
 
 impl NonceChunk {
-    /// Generates a fresh chunk of `SEQUENCE_CHUNK_SIZE` nonces for
-    /// `signing_share`, the merkle root committing to them, and each nonce's
-    /// inclusion proof. The RNG is supplied by the caller.
-    pub fn generate<R>(signing_share: &SigningShare, rng: &mut R) -> Result<NonceChunk, rand::Error>
+    /// Generates a fresh chunk of `SEQUENCE_CHUNK_SIZE` nonces for `key_share`,
+    /// the merkle root committing to them, and each nonce's inclusion proof. The
+    /// RNG is supplied by the caller.
+    pub fn generate<R>(key_share: &KeyShare, rng: &mut R) -> Result<NonceChunk, rand::Error>
     where
         R: RngCore + CryptoRng,
     {
-        Self::with_size(SEQUENCE_CHUNK_SIZE, signing_share, rng)
+        Self::with_size(SEQUENCE_CHUNK_SIZE, key_share, rng)
     }
 
-    /// Same as [`generate`] but with a user-specified size in chunks.
+    /// Same as [`Self::generate`] but with a user-specified chunk size.
     ///
     /// This allows for smaller nonce chunks for testing.
     pub fn with_size<R>(
         size: u64,
-        signing_share: &SigningShare,
+        key_share: &KeyShare,
         rng: &mut R,
     ) -> Result<NonceChunk, rand::Error>
     where
@@ -94,6 +94,7 @@ impl NonceChunk {
                 }
             })
             .collect::<Result<Vec<_>, rand::Error>>()?;
+        let signing_share = key_share.as_key_package().signing_share();
         let (signing_nonces, leaves) = rngs
             .into_par_iter()
             .map(|(offset, mut rng)| {
@@ -137,10 +138,19 @@ pub(super) fn nonces_leaf(offset: u64, nonces: &bindings::SignNonces) -> B256 {
 mod tests {
     use super::*;
 
+    fn dummy_key_share() -> KeyShare {
+        KeyShare::from_key_package(frost_secp256k1::keys::KeyPackage::new(
+            frost_secp256k1::Identifier::try_from(1).unwrap(),
+            frost_secp256k1::keys::SigningShare::new(k256::Scalar::ONE),
+            frost_secp256k1::keys::VerifyingShare::new(k256::ProjectivePoint::GENERATOR),
+            frost_secp256k1::VerifyingKey::new(k256::ProjectivePoint::GENERATOR),
+            1,
+        ))
+    }
+
     #[test]
     fn nonces_commitment_inclusion_proofs() {
-        let signing_share = SigningShare::new(k256::Scalar::ONE);
-        let chunk = NonceChunk::generate(&signing_share, &mut rand::thread_rng()).unwrap();
+        let chunk = NonceChunk::generate(&dummy_key_share(), &mut rand::thread_rng()).unwrap();
         assert_eq!(chunk.nonces.len(), SEQUENCE_CHUNK_SIZE as usize);
 
         for offset in [0, 1, 42, 777, (SEQUENCE_CHUNK_SIZE - 1) as usize] {
