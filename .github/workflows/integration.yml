@@ -62,6 +62,6 @@ jobs:
           name: sentinel-integration-logs
           path: |
             anvil_sentinel_logs.txt
-            ts_sentinel_logs.txt
-            rust_sentinel_logs.txt
+            sentinel_a_logs.txt
+            sentinel_b_logs.txt
           if-no-files-found: ignore

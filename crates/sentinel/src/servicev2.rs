@@ -63,7 +63,6 @@ pub struct SentinelEncoder {
     fee_token: Address,
 }
 
-#[cfg_attr(not(test), expect(dead_code))]
 impl SentinelService {
     pub fn new(
         oracle: Address,

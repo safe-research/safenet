@@ -1,6 +1,11 @@
 use alloy::primitives::{B256, U256};
 
 /// An action emitted by the sentinel during a state transition.
+///
+/// TODO(sentinel commit-reveal, phase C2): dead outside `service.rs`'s own
+/// tests now that `main.rs` drives `servicev2::SentinelService` instead;
+/// deleted alongside `service.rs`.
+#[cfg_attr(not(test), allow(dead_code))]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum SentinelActionKind {
     /// Approve the fee token to be spent by the oracle (bond pre-authorisation).
@@ -21,6 +26,7 @@ pub enum SentinelActionKind {
 /// The deadline is forwarded to the `TransactionQueue` as the per-tx expiry
 /// so the queue can drop it if it goes unsubmitted past that block. `None`
 /// means the action must never expire.
+#[cfg_attr(not(test), allow(dead_code))]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SentinelAction {
     pub kind: SentinelActionKind,

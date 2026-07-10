@@ -24,6 +24,11 @@ use safenet_core::{
 /// The sentinel service: drives the request FSM (`preparing -> pending ->
 /// committed -> finalized`) from `SentinelOracle`/`Consensus` events and maps
 /// its actions to encoded transactions.
+///
+/// TODO(sentinel commit-reveal, phase C2): dead outside this module's own
+/// tests now that `main.rs` drives `servicev2::SentinelService` instead;
+/// deleted alongside the rest of this file.
+#[cfg_attr(not(test), allow(dead_code))]
 pub struct SentinelService {
     oracle: Address,
     fee_token: Address,
@@ -36,6 +41,7 @@ pub struct SentinelService {
 
 /// Advances the request FSM (`preparing -> pending -> committed -> finalized`)
 /// in response to `SentinelOracle`/`Consensus` events.
+#[cfg_attr(not(test), allow(dead_code))]
 pub struct SentinelTransition {
     oracle: Address,
     /// The `Consensus` contract whose `OracleTransactionProposed` events are
@@ -53,6 +59,7 @@ pub struct SentinelTransition {
 
 /// Encodes [`SentinelAction`]s into the transactions that vote on, finalize and
 /// claim oracle requests.
+#[cfg_attr(not(test), allow(dead_code))]
 pub struct SentinelEncoder {
     /// The `SentinelOracle` contract that votes, finalizations and claims are
     /// submitted to, and the spender approved to pull the bond.
@@ -61,6 +68,7 @@ pub struct SentinelEncoder {
     fee_token: Address,
 }
 
+#[cfg_attr(not(test), allow(dead_code))]
 impl SentinelService {
     pub fn new(
         oracle: Address,
@@ -83,6 +91,7 @@ impl SentinelService {
     }
 }
 
+#[cfg_attr(not(test), allow(dead_code))]
 impl SentinelTransition {
     /// Starts tracking a newly proposed oracle transaction, deciding whether
     /// we vote to approve or deny it.
@@ -254,6 +263,7 @@ impl SentinelTransition {
     }
 }
 
+#[cfg_attr(not(test), allow(dead_code))]
 impl SentinelEncoder {
     fn encode_action_kind(&self, kind: SentinelActionKind) -> Transaction {
         match kind {

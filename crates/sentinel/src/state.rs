@@ -3,6 +3,11 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
 /// The four stages a request moves through in the sentinel FSM.
+///
+/// TODO(sentinel commit-reveal, phase C2): dead outside `service.rs`'s own
+/// tests now that `main.rs` drives `servicev2::SentinelService` instead;
+/// deleted alongside `service.rs`.
+#[cfg_attr(not(test), allow(dead_code))]
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum RequestStatus {
     Preparing,
@@ -12,6 +17,7 @@ pub enum RequestStatus {
 }
 
 /// Per-request state tracked by the sentinel FSM.
+#[cfg_attr(not(test), allow(dead_code))]
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SentinelRequestState {
     /// Block at which the voting window expires.
@@ -25,6 +31,7 @@ pub struct SentinelRequestState {
 ///
 /// Serialized per block by the `StateMachine`; `B256` keys round-trip through
 /// serde_json as their hex representation.
+#[cfg_attr(not(test), allow(dead_code))]
 #[derive(Debug, Default, Clone, Serialize, Deserialize)]
 pub struct State(pub HashMap<B256, SentinelRequestState>);
 

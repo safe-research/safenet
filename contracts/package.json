@@ -10,7 +10,7 @@
 		"cmd:propose": "forge script ProposeScript",
 		"cmd:deploy:testing-erc20": "forge script DeployERC20Script",
 		"cmd:deploy:cosigner": "forge script DeployCosignerScript",
-		"cmd:deploy:sentinel-oracle": "forge script DeploySentinelOracleScript",
+		"cmd:deploy:sentinel-oracle": "forge script DeploySentinelOracleV2Script",
 		"cmd:deploy:test-consensus": "forge script DeployTestConsensusScript",
 		"cmd:propose:oracle": "forge script ProposeOracleTransactionScript",
 		"cmd:deploy:staking": "forge script DeployStakingScript",
