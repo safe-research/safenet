@@ -335,7 +335,7 @@ impl SentinelTransition {
     /// There are the following cases when the `Finalize` action is emitted:
     /// - no one voted: a genuine timeout, where the bonds can be re-claimed
     /// - unanimous vote: it is possible to claim the bond and reward
-    /// - a disbute: there is still a possibility to receive a reward
+    /// - a dispute: there is still a possibility to receive a reward
     ///
     /// In other cases it doesn't make sense to trigger the finalization for
     /// this sentinel.
@@ -370,8 +370,8 @@ impl SentinelTransition {
             expires_at: None,
         }];
 
-        // In case of a disbute it is not a timeout, so this sentinal participated.
-        // Finalize the request and wait for a disbute resolution by the arbitrator.
+        // In case of a dispute it is not a timeout, so this sentinel participated.
+        // Finalize the request and wait for a dispute resolution by the arbitrator.
         if dispute {
             return (
                 Some(RequestState::WaitingForDisputeResolution { approve }),
@@ -379,7 +379,7 @@ impl SentinelTransition {
             );
         }
 
-        // Unanimity plus our own counted vote guarantees this sentinal is on the
+        // Unanimity plus our own counted vote guarantees this sentinel is on the
         // sole, winning side; no `DisputeResolved` round trip needed.
         actions.push(SentinelAction {
             kind: SentinelActionKind::Claim { id: request_id },
