@@ -30,14 +30,12 @@ library SentinelOracleCommitment {
 
     error NothingToClaim();
     error AlreadyClaimed();
-    error NotRevealed();
 
     // ============================================================
     // INTERNAL FUNCTIONS
     // ============================================================
 
     function markClaimed(Commitment storage self) internal returns (Commitment memory) {
-        require(self.vote != Vote.PENDING, NotRevealed());
         require(self.bondAmount > 0, NothingToClaim());
         require(!self.claimed, AlreadyClaimed());
         self.claimed = true;

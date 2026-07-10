@@ -65,6 +65,7 @@ contract SentinelOracleV2 is IOracle {
     error ZeroFee();
     error ZeroWindow();
     error SentinelNotActive();
+    error NotRevealed();
 
     // ============================================================
     // MODIFIERS
@@ -182,11 +183,16 @@ contract SentinelOracleV2 is IOracle {
 
     function claim(bytes32 requestId) external {
         SentinelOracleRequest.Request storage req = $requests.get(requestId);
-        req.requireResolved();
+        SentinelOracleRequest.State state = req.requireResolved();
         SentinelOracleCommitment.Commitment memory c = $commitments.get(requestId, msg.sender).markClaimed();
-        bool approved = c.vote == SentinelOracleCommitment.Vote.APPROVED;
-        uint256 feeReward = req.calcFeeReward(approved);
-        uint256 bondReturn = req.isBondSlashed(approved) ? 0 : c.bondAmount;
+        // Only allow claiming of pending votes in case of a timeout
+        require(
+            c.vote == SentinelOracleCommitment.Vote.APPROVED || c.vote == SentinelOracleCommitment.Vote.DENIED
+                || state == SentinelOracleRequest.State.TIMED_OUT,
+            NotRevealed()
+        );
+        uint256 feeReward = req.calcFeeReward(c.vote);
+        uint256 bondReturn = req.isBondSlashed(c.vote) ? 0 : c.bondAmount;
         uint256 totalClaim = bondReturn + feeReward;
         if (totalClaim > 0) {
             FEE_TOKEN.safeTransfer(msg.sender, totalClaim);

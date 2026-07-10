@@ -314,15 +314,13 @@ impl SentinelTransition {
     /// [`Self::handle_block_advance`]; always exits `CollectingVotes` in
     /// this same step, so a request's finalize step can only ever run once.
     ///
-    /// `Finalize` is emitted whenever we stand to gain from it -- a dispute
-    /// or claim we have a vote riding on -- plus one liveness exception:
-    /// when nobody revealed at all, no node has an open vote to trigger the
-    /// non-reveal slash either, so we finalize anyway even though we gain
-    /// nothing, since otherwise nobody ever would. Outside that exception,
-    /// a node with no stake in the outcome leaves finalizing to a node that
-    /// has one. `Claim` stays conditional on our own reveal having landed,
-    /// since a `claim()` without a matching revealed commitment reverts
-    /// with `NotRevealed`.
+    /// There are the following cases when the `Finalize` action is emitted:
+    /// - no one voted: a genuine timeout, where the bonds can be re-claimed
+    /// - unanimous vote: it is possible to claim the bond and reward
+    /// - a disbute: there is still a possibility to receive a reward
+    ///
+    /// In other cases it doesn't make sense to trigger the finalization for
+    /// this sentinel.
     fn finalize(
         &self,
         state: &RequestState,
@@ -343,22 +341,19 @@ impl SentinelTransition {
         let dispute = *approve_count > 0 && *deny_count > 0;
         let timed_out = *revealed_count == 0;
 
+        // If this sentinel did not participate and it was not a timeout
+        // then no actions should be taken and the request should be dropped
         if !*self_revealed && !timed_out {
             return (None, Vec::new());
         }
 
-        // Neither action has an onchain deadline past which it stops being
-        // valid to submit, so both are kept alive indefinitely in the
-        // `TransactionQueue`.
         let mut actions = vec![SentinelAction {
             kind: SentinelActionKind::Finalize { id: request_id },
             expires_at: None,
         }];
 
-        if !*self_revealed {
-            return (None, actions);
-        }
-
+        // In case of a disbute it is not a timeout, so this sentinal participated.
+        // Finalize the request and wait for a disbute resolution by the arbitrator.
         if dispute {
             return (
                 Some(RequestState::WaitingForDisputeResolution { approve }),
@@ -366,7 +361,7 @@ impl SentinelTransition {
             );
         }
 
-        // Unanimity plus our own counted vote guarantees we're on the
+        // Unanimity plus our own counted vote guarantees this sentinal is on the
         // sole, winning side; no `OracleResult` round trip needed.
         actions.push(SentinelAction {
             kind: SentinelActionKind::Claim { id: request_id },

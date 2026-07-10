@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-only
 pragma solidity ^0.8.30;
 
+import {SentinelOracleCommitment} from "@/libraries/SentinelOracleCommitmentsV2.sol";
+
 library SentinelOracleRequest {
     // ============================================================
     // ENUMS
@@ -84,27 +86,31 @@ library SentinelOracleRequest {
         bool nothingToReveal = self.committedCount == 0 && block.number > self.commitDeadline;
         require(block.number > self.revealDeadline || everyoneRevealed || nothingToReveal, FinalizeTooEarly());
 
-        unrevealedBond = (self.committedCount - self.revealedCount) * self.bondTarget;
-
         bool approveMet = self.approveSentinelCount > 0;
         bool denyMet = self.denySentinelCount > 0;
 
-        if (approveMet && denyMet) {
-            self.state = State.FROZEN;
-            return (State.FROZEN, 0, unrevealedBond);
+        if (approveMet || denyMet) {
+            if (approveMet && denyMet) {
+                newState = State.FROZEN;
+            } else if (approveMet) {
+                newState = State.RESOLVED_APPROVED;
+            } else {
+                newState = State.RESOLVED_DENIED;
+            }
+            // An established side exists, so a non-revealer's silence can only be griefing (stalling
+            // a request whose outcome their own commit already contributed to) -- slash their bond to
+            // `ARBITRATOR`.
+            unrevealedBond = (self.committedCount - self.revealedCount) * self.bondTarget;
+        } else {
+            // Nobody revealed (or nobody even committed): there is no established side, so no
+            // misbehavior can be proven against any committer -- bonds are returned in full via
+            // `claim()` instead of slashed.
+            newState = State.TIMED_OUT;
+            refundFee = self.fee;
+            self.fee = 0;
         }
-        if (approveMet) {
-            self.state = State.RESOLVED_APPROVED;
-            return (State.RESOLVED_APPROVED, 0, unrevealedBond);
-        }
-        if (denyMet) {
-            self.state = State.RESOLVED_DENIED;
-            return (State.RESOLVED_DENIED, 0, unrevealedBond);
-        }
-        self.state = State.TIMED_OUT;
-        refundFee = self.fee;
-        self.fee = 0;
-        return (State.TIMED_OUT, refundFee, unrevealedBond);
+
+        self.state = newState;
     }
 
     function requireResolved(Request storage self) internal view returns (State) {
@@ -116,20 +122,28 @@ library SentinelOracleRequest {
         return state;
     }
 
-    function calcFeeReward(Request storage self, bool approved) internal view returns (uint256) {
+    function calcFeeReward(Request storage self, SentinelOracleCommitment.Vote vote) internal view returns (uint256) {
+        if (vote != SentinelOracleCommitment.Vote.APPROVED && vote != SentinelOracleCommitment.Vote.DENIED) return 0;
         State state = self.state;
         if (state != State.RESOLVED_APPROVED && state != State.RESOLVED_DENIED) return 0;
+        bool approved = vote == SentinelOracleCommitment.Vote.APPROVED;
         bool isEligibleForFee = approved == (state == State.RESOLVED_APPROVED);
         if (!isEligibleForFee) return 0;
         uint256 winningSideCount = state == State.RESOLVED_APPROVED ? self.approveSentinelCount : self.denySentinelCount;
         return self.fee / winningSideCount;
     }
 
-    function isBondSlashed(Request storage self, bool approved) internal view returns (bool) {
+    function isBondSlashed(Request storage self, SentinelOracleCommitment.Vote vote) internal view returns (bool) {
         State state = requireResolved(self);
         if (state == State.TIMED_OUT) return false;
+        // A pending (never revealed) vote in a resolved request is unrevealed griefing -- slash it
+        // regardless of which side won.
+        if (vote != SentinelOracleCommitment.Vote.APPROVED && vote != SentinelOracleCommitment.Vote.DENIED) {
+            return true;
+        }
         // Slashing only applies to requests resolved via arbitration (both sides had votes).
         if (self.approveSentinelCount == 0 || self.denySentinelCount == 0) return false;
+        bool approved = vote == SentinelOracleCommitment.Vote.APPROVED;
         return approved != (state == State.RESOLVED_APPROVED);
     }
 

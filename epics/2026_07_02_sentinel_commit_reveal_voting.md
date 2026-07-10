@@ -141,27 +141,33 @@ this derivation's input space clearly distinct from any other use of the same ke
 RFC 6979 draft it is not a hard safety requirement, since HMAC's security doesn't degrade under
 reuse the way ECDSA nonce reuse does (see [Open Questions](#open-questions-and-assumptions)).
 
-### Non-reveal slashing: one uniform step in `finalize()`
+### Non-reveal slashing: only when an established side exists to prove it against
 
-Per spec §5.2, a checker who commits but never reveals gets slashed (otherwise a griefer can hit the
-bond target and then withhold their reveal to stall the request indefinitely). The chosen mechanics:
+Per spec §5.2, a checker who commits but never reveals gets slashed **if doing so is provably
+griefing** — otherwise a griefer could hit the bond target and then withhold their reveal to stall
+the request indefinitely. Slashing requires an *established side* to grief against: if
+`approveSentinelCount > 0 || denySentinelCount > 0`, a committer who never revealed had a chance to
+help resolve the request (their own commit already contributed to the outcome) and chose not to —
+that's the griefing case. But if **nobody** reveals at all (`TIMED_OUT`), there is no established
+side and no way to distinguish an honest reveal-infrastructure failure from malice; slashing
+everyone's bond in that case punishes committers for something that isn't provably misbehavior. The
+chosen mechanics:
 
 - `finalize()` computes `unrevealedBond = totalCommittedBond - totalApproveBond - totalDenyBond`
-  once revealed totals are final (see the early-finalize rule below), **regardless of which of the
-  three outcomes follows**, and transfers it to `ARBITRATOR` — mirroring the existing
-  `resolveDispute()` pattern where the arbitration loser's slashed bond goes to `ARBITRATOR`. No new
-  distribution logic is introduced. This transfer must happen **before** V1's existing
-  `if (newState == State.FROZEN) { return; }` early exit in `SentinelOracle.finalize()` (see Tech
-  Specs) — a conflicted, disputed request can still have non-revealing committers on either side, and
-  that early return must not skip slashing them.
+  once revealed totals are final (see the early-finalize rule below), **for the `FROZEN`/
+  `RESOLVED_APPROVED`/`RESOLVED_DENIED` outcomes only**, and transfers it to `ARBITRATOR` —
+  mirroring the existing `resolveDispute()` pattern where the arbitration loser's slashed bond goes
+  to `ARBITRATOR`. No new distribution logic is introduced. This transfer must happen **before**
+  V1's existing `if (newState == State.FROZEN) { return; }` early exit in `SentinelOracle.finalize()`
+  (see Tech Specs) — a conflicted, disputed request can still have non-revealing committers on either
+  side, and that early return must not skip slashing them. On `TIMED_OUT`, `unrevealedBond` is zero:
+  nobody's bond is slashed, so every committer can reclaim it in full via `claim()`.
 - The proposer's fee refund is unaffected: it already only happens on `TIMED_OUT`, funded from the
   separate `fee` balance the proposer paid — not from checker bonds. There's nothing to "top up"
   from the slashed pool in the `RESOLVED_*` branches, since the fee there is paid out to the winning
   side exactly as in V1.
-- `claim()` must reject any commitment still at `Vote.PENDING` (new `NotRevealed` error). Without
-  this guard a non-revealer could still call `claim()` after their bond was already swept out by the
-  `finalize()` slash step above, incorrectly minting a second payout from the contract's remaining
-  balance.
+- `claim()` must require a resolved outcome. For every other resolved outcome, the fee and bonds to
+  return should be calculated. In case of a `TIMED_OUT` all funds return to the original parties.
 
 ### Early finalization when everyone has revealed
 
@@ -443,8 +449,10 @@ on the winning side, so only the winning side's count is needed (see `calcFeeRew
     deadline branch in `handle_block_advance`, always leaving `CollectingVotes` in the same step so
     it cannot run twice for one request):
     - `self_revealed == false`, `revealed_count == 0` (genuine timeout, no revealer's FSM exists to
-      finalize instead) → emit `Finalize`, drop, no `Claim` (a `claim()` without our own revealed
-      commitment reverts with `NotRevealed`).
+      finalize instead) → emit `Finalize` **and** `Claim` and drop. Unlike every other
+      `self_revealed == false` case, `claim()` succeeds here: a `TIMED_OUT` outcome never slashes
+      unrevealed bonds (see the Non-reveal slashing decision above), so our own still-`PENDING`
+      commitment is claimable for its full bond.
     - `self_revealed == false`, `revealed_count > 0` → drop without emitting anything; whichever
       sentinel did reveal finalizes from its own FSM instead.
     - `self_revealed == true`, `approve_count > 0 && deny_count > 0` (dispute) → emit `Finalize`,
@@ -455,8 +463,8 @@ on the winning side, so only the winning side's count is needed (see `calcFeeRew
   - `handle_resolved` (our own `OracleResult`, `WaitingForDisputeResolution` only): decode the
     `ResolveReason`, emit `Claim` iff `event.approved == approve`, and drop the request either way.
 - Unit tests mirror the existing style in `service.rs`/`state.rs`/`hashing.rs`/`action.rs` for every
-  new branch above, plus the early-finalization path and the unconditional-`Finalize`-without-
-  `self_revealed` liveness case.
+  new branch above, plus the early-finalization path and the timeout-only `Finalize`-plus-`Claim`
+  liveness case.
 
 ### Testing
 
@@ -464,14 +472,16 @@ on the winning side, so only the winning side's count is needed (see `calcFeeRew
   no-commitments timeout, conflict → dispute) to go through `commit`+`reveal`, and add: reveal before
   `commitDeadline` reverts, reveal after `revealDeadline` reverts, wrong hash/salt reverts,
   double-commit/double-reveal reverts, early `finalize` once all committers revealed, partial-reveal
-  (some committed, fewer revealed) still resolves correctly, and a non-revealer's bond is slashed to
-  `ARBITRATOR` while their own `claim()` reverts with `NotRevealed`.
+  (some committed, fewer revealed) still resolves correctly with a non-revealer's bond slashed to
+  `ARBITRATOR` while their own `claim()` reverts with `NotRevealed`, and a pure timeout (some or all
+  committed, nobody revealed) refunding every committer's bond in full via `claim()` (no slash, no
+  `NotRevealed`) alongside the proposer's fee refund.
 - `crates/sentinel`/`safenet-core`: unit tests for the new FSM transitions (including that a request
   can only reach its finalize step once — via either the early-finalize check in `handle_revealed` or
   the deadline branch in `handle_block_advance`, never both), the tally bookkeeping
   (`committed_count`/`revealed_count`/`approve_count`/`deny_count` incrementing for *any* sentinel,
-  not just our own), the timeout-only `Finalize`-without-`self_revealed` liveness branch (and that a
-  non-revealer emits nothing once someone else's reveal has landed), the
+  not just our own), the timeout-only `Finalize`-plus-`Claim` liveness branch (and that a non-revealer
+  emits nothing once someone else's reveal has landed), the
   dispute-vs-immediate-claim split out of `CollectingVotes`, the `Signer`'s HMAC-SHA256 salt
   derivation (including RFC 4231 test vectors, not just self-consistency), the resulting
   `commit_hash`/`reveal_salt`, and `encode_actions` for `Commit`/`Reveal`.
@@ -535,8 +545,9 @@ the same small library set)
   - **B3d** — `handle_block_advance` (the `WaitingForRequest` timeout, the `CollectingCommitments`
     deadline branch emitting `Reveal`, and the `CollectingVotes` deadline branch running the finalize
     step).
-  - **B3e** — `handle_resolved` for `WaitingForDisputeResolution`.
-  - **B3f** — Flow test. Instead of individual unit tests for each transition function, tests for complete flow (triggering multiple state transitions) will be implemented for the service.
+  - **B3e** — Fix Oracle behavior to return funds to all parties in case of a timeout.
+  - **B3f** — `handle_resolved` for `WaitingForDisputeResolution`.
+  - **B3g** — Flow test. Instead of individual unit tests for each transition function, tests for complete flow (triggering multiple state transitions) will be implemented for the service.
 
 ### Phase C — Fix the integration suite & wrap up
 
@@ -596,18 +607,22 @@ be decisions rather than open ones, and are folded into the assumptions below.
   matching V1's fixed `VOTING_WINDOW`.
 - Bonds stay symmetric (`bondTarget = fee * bondMultiplier` for both sides); no new protocol-wide
   bond cap.
-- Non-reveal slashing always sends the full unrevealed pool to `ARBITRATOR`; the proposer's existing
-  `TIMED_OUT` fee refund is unaffected and unrelated to that pool.
+- Non-reveal slashing only sends the unrevealed pool to `ARBITRATOR` when an established side exists
+  to grief against (`FROZEN`/`RESOLVED_*`); a pure `TIMED_OUT` (nobody revealed) can't distinguish
+  griefing from an honest reveal-infrastructure failure, so nothing is slashed and every committer
+  reclaims their bond in full via `claim()`. The proposer's existing `TIMED_OUT` fee refund is
+  unaffected and unrelated to that pool either way.
 - Reward for winning revealers is an equal split of `fee` (no position/bond weighting); this is a
   deliberate behavior change from V1, chosen for simplicity in this first version.
 - The Rust client calls `finalize()` once its local tally says doing so is valid (either
   `revealed_count == committed_count` or past `revealDeadline`), even for a request where it never
   itself revealed, but only when `revealed_count == 0` too (nobody revealed at all). That's the one
   case with no other sentinel's FSM to rely on for liveness — otherwise no client in the fleet would
-  ever call `finalize()`, and the non-reveal slash performed inside it would never run. If someone
-  else did reveal, their own FSM finalizes instead, so a non-revealer skips it rather than
-  redundantly spending gas on a call it gets nothing from. `Claim` stays conditional on the client's
-  own reveal having landed.
+  ever call `finalize()`. If someone else did reveal, their own FSM finalizes instead, so a
+  non-revealer skips it rather than redundantly spending gas on a call it gets nothing from. `Claim`
+  stays conditional on the client's own reveal having landed **or** the request having timed out —
+  a `TIMED_OUT` outcome never slashes unrevealed bonds (see the Non-reveal slashing decision), so a
+  still-`PENDING` commitment is claimable there, unlike every other outcome.
 - The Rust sentinel derives its reveal salt deterministically via HMAC-SHA256 from the account's
   existing signing key and a domain-separated message containing `requestId` — no new secret is
   generated or configured, and no salt is persisted in the snapshot store.
