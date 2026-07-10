@@ -205,14 +205,19 @@ This restructuring changes client behavior in three ways beyond the state names:
   `OracleResult` event. This relies on the `TransactionQueue` preserving submission order for
   same-account actions (already relied on for `ApproveToken` before `Commit`), so `Finalize` mines
   before the dependent `Claim`.
-- **`Finalize` fires unconditionally when `CollectingVotes` is exited, even with no open vote of our
-  own** — including the all-committed-nobody-revealed case. A gate of "only finalize if I revealed"
-  would match V1's `Committed`-regardless-of-outcome unconditional finalize for the happy path, but
-  silently drops liveness for the case where every committer fails to reveal: no client in the fleet
-  would have an open vote to justify finalizing, yet `finalize()` performing the non-reveal slash
-  (see above) depends on someone actually calling it. `Claim` stays conditional on our own reveal
-  having landed (`self_revealed`), since a `claim()` without a matching revealed commitment reverts
-  with `NotRevealed`; only `Finalize` is unconditional.
+- **`Finalize` fires without an open vote of our own only on a genuine timeout
+  (`revealed_count == 0`).** A gate of "only finalize if I revealed" would match V1's
+  `Committed`-regardless-of-outcome unconditional finalize for the happy path, but silently drops
+  liveness for the case where every committer fails to reveal: no client in the fleet would have an
+  open vote to justify finalizing, yet `finalize()` performing the non-reveal slash (see above)
+  depends on someone actually calling it. That liveness gap only exists when *nobody* revealed —
+  once at least one sentinel's reveal lands, that sentinel's own FSM reaches this same step with
+  `self_revealed == true` and finalizes; a sentinel that never revealed has nothing to claim and
+  would just be spending gas redundantly alongside it. So `Finalize` is emitted whenever
+  `self_revealed` is `true` (as before), and additionally when `self_revealed` is `false` but
+  `revealed_count == 0` — the case no revealer's FSM exists to cover. `Claim` stays conditional on
+  our own reveal having landed (`self_revealed`), since a `claim()` without a matching revealed
+  commitment reverts with `NotRevealed`.
 
 Only when the local tally shows both sides nonzero (`FROZEN`, i.e. a genuine dispute) does the client
 still need to wait for an external signal — `resolveDispute()`'s `OracleResult` (`ARBITRATION`
@@ -436,15 +441,17 @@ on the winning side, so only the winning side's count is needed (see `calcFeeRew
     - `CollectingVotes`, `block > reveal_deadline`: run the finalize step below.
   - Shared finalize step (reached from either the early-finalize check in `handle_revealed` or the
     deadline branch in `handle_block_advance`, always leaving `CollectingVotes` in the same step so
-    it cannot run twice for one request): emit `Finalize` **unconditionally** — including when
-    `self_revealed` is `false` — so that a request where every committer fails to reveal still gets
-    finalized (and non-reveal-slashed) by *someone*; then:
-    - `self_revealed == false` → drop, no `Claim` (a `claim()` without our own revealed commitment
-      reverts with `NotRevealed`).
-    - `self_revealed == true`, `approve_count > 0 && deny_count > 0` (dispute) → move to
-      `WaitingForDisputeResolution { approve }`.
-    - `self_revealed == true`, otherwise → emit `Claim` (unanimity plus our own counted vote
-      guarantees we're on the sole, winning side; no `OracleResult` round trip needed) and drop.
+    it cannot run twice for one request):
+    - `self_revealed == false`, `revealed_count == 0` (genuine timeout, no revealer's FSM exists to
+      finalize instead) → emit `Finalize`, drop, no `Claim` (a `claim()` without our own revealed
+      commitment reverts with `NotRevealed`).
+    - `self_revealed == false`, `revealed_count > 0` → drop without emitting anything; whichever
+      sentinel did reveal finalizes from its own FSM instead.
+    - `self_revealed == true`, `approve_count > 0 && deny_count > 0` (dispute) → emit `Finalize`,
+      move to `WaitingForDisputeResolution { approve }`.
+    - `self_revealed == true`, otherwise → emit `Finalize` and `Claim` (unanimity plus our own
+      counted vote guarantees we're on the sole, winning side; no `OracleResult` round trip needed)
+      and drop.
   - `handle_resolved` (our own `OracleResult`, `WaitingForDisputeResolution` only): decode the
     `ResolveReason`, emit `Claim` iff `event.approved == approve`, and drop the request either way.
 - Unit tests mirror the existing style in `service.rs`/`state.rs`/`hashing.rs`/`action.rs` for every
@@ -463,7 +470,8 @@ on the winning side, so only the winning side's count is needed (see `calcFeeRew
   can only reach its finalize step once — via either the early-finalize check in `handle_revealed` or
   the deadline branch in `handle_block_advance`, never both), the tally bookkeeping
   (`committed_count`/`revealed_count`/`approve_count`/`deny_count` incrementing for *any* sentinel,
-  not just our own), the unconditional-`Finalize`-without-`self_revealed` liveness branch, the
+  not just our own), the timeout-only `Finalize`-without-`self_revealed` liveness branch (and that a
+  non-revealer emits nothing once someone else's reveal has landed), the
   dispute-vs-immediate-claim split out of `CollectingVotes`, the `Signer`'s HMAC-SHA256 salt
   derivation (including RFC 4231 test vectors, not just self-consistency), the resulting
   `commit_hash`/`reveal_salt`, and `encode_actions` for `Commit`/`Reveal`.
@@ -592,13 +600,14 @@ be decisions rather than open ones, and are folded into the assumptions below.
   `TIMED_OUT` fee refund is unaffected and unrelated to that pool.
 - Reward for winning revealers is an equal split of `fee` (no position/bond weighting); this is a
   deliberate behavior change from V1, chosen for simplicity in this first version.
-- The Rust client always calls `finalize()` once its local tally says doing so is valid (either
+- The Rust client calls `finalize()` once its local tally says doing so is valid (either
   `revealed_count == committed_count` or past `revealDeadline`), even for a request where it never
-  itself revealed. This trades a small amount of wasted gas (calling `finalize()` on requests the
-  client gets nothing from) for guaranteed liveness in the case where every committer fails to
-  reveal — otherwise no client in the fleet would have a reason to call it, and the non-reveal slash
-  performed inside `finalize()` would never run. `Claim` stays conditional on the client's own reveal
-  having landed.
+  itself revealed, but only when `revealed_count == 0` too (nobody revealed at all). That's the one
+  case with no other sentinel's FSM to rely on for liveness — otherwise no client in the fleet would
+  ever call `finalize()`, and the non-reveal slash performed inside it would never run. If someone
+  else did reveal, their own FSM finalizes instead, so a non-revealer skips it rather than
+  redundantly spending gas on a call it gets nothing from. `Claim` stays conditional on the client's
+  own reveal having landed.
 - The Rust sentinel derives its reveal salt deterministically via HMAC-SHA256 from the account's
   existing signing key and a domain-separated message containing `requestId` — no new secret is
   generated or configured, and no salt is persisted in the snapshot store.
