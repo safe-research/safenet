@@ -35,12 +35,10 @@ library SentinelOracleCommitment {
     // INTERNAL FUNCTIONS
     // ============================================================
 
-    function markClaimed(Commitment storage self) internal returns (Commitment memory) {
+    function markClaimed(Commitment storage self) internal {
         require(self.bondAmount > 0, NothingToClaim());
         require(!self.claimed, AlreadyClaimed());
         self.claimed = true;
-        Commitment memory snapshot = self;
-        return snapshot;
     }
 
     function computeHash(address sentinel, bytes32 requestId, bool approve, bytes32 salt)

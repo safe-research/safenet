@@ -329,7 +329,6 @@ out the otherwise-representable, meaningless state of `approved` holding a stale
   No `position` — reward is an equal split among winning revealers (see Architecture Decision), so
   nothing needs to be assigned at reveal time beyond which side the vote landed on.
 - `checkNotCommitted` unchanged in spirit, now checks `commitHash == 0`.
-- `markClaimed` gains `require(self.vote != Vote.PENDING, NotRevealed())` before its existing checks.
 
 ### `SentinelOracleRequests.sol`
 

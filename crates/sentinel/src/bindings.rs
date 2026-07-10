@@ -44,6 +44,18 @@ pub mod oracle {
             function claim(bytes32 requestId) external;
         }
 
+        // Mirrors `SentinelOracleRequest.State` in
+        // `contracts/src/libraries/SentinelOracleRequestsV2.sol`; `DisputeResolved.outcome` is
+        // this type.
+        #[derive(Debug, PartialEq, Eq)]
+        enum RequestState {
+            PENDING,
+            FROZEN,
+            RESOLVED_APPROVED,
+            RESOLVED_DENIED,
+            TIMED_OUT
+        }
+
         #[derive(Debug)]
         contract SentinelOracleV2 {
             event NewRequest(
@@ -61,12 +73,7 @@ pub mod oracle {
                 bool approved,
                 uint256 bondAmount
             );
-            event OracleResult(
-                bytes32 indexed requestId,
-                address indexed proposer,
-                bytes result,
-                bool approved
-            );
+            event DisputeResolved(bytes32 indexed requestId, RequestState outcome, uint256 slashed);
 
             function commit(bytes32 requestId, bytes32 commitHash) external;
             function reveal(bytes32 requestId, bool approve, bytes32 salt) external;

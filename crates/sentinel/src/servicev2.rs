@@ -3,7 +3,7 @@ use crate::{
     bindings::{
         SentinelEventsV2 as SentinelEvents,
         consensus::Consensus,
-        oracle::{ERC20, SentinelOracleV2 as SentinelOracle},
+        oracle::{ERC20, RequestState as OnchainRequestState, SentinelOracleV2 as SentinelOracle},
     },
     detector::Detector,
     hashing::{RevealSalt as _, commit_hash, oracle_tx_proposal_hash},
@@ -298,15 +298,34 @@ impl SentinelTransition {
         (state, actions)
     }
 
-    // TODO(sentinel commit-reveal, service FSM sub-task B3e): claims iff
-    // our own revealed vote matches the oracle's outcome, dropping the
-    // request either way.
+    /// Resolves a genuine dispute — `DisputeResolved` is only ever emitted by
+    /// `resolveDispute`, i.e. only for a request that reached
+    /// `WaitingForDisputeResolution` — by claiming iff our own revealed vote
+    /// matches the arbitrator's outcome; drops the request either way.
     fn handle_resolved(
         &self,
-        _state: State,
-        _event: SentinelOracle::OracleResult,
+        mut state: State,
+        event: SentinelOracle::DisputeResolved,
     ) -> (State, Vec<SentinelAction>) {
-        todo!("service FSM sub-task B3e")
+        let Some(RequestState::WaitingForDisputeResolution { approve }) =
+            state.0.get(&event.requestId)
+        else {
+            return (state, Vec::new());
+        };
+        let approve = *approve;
+        state.0.remove(&event.requestId);
+        let approved = event.outcome == OnchainRequestState::RESOLVED_APPROVED;
+        let actions = if approved == approve {
+            vec![SentinelAction {
+                kind: SentinelActionKind::Claim {
+                    id: event.requestId,
+                },
+                expires_at: None,
+            }]
+        } else {
+            Vec::new()
+        };
+        (state, actions)
     }
 
     /// Shared finalize step, reached from either the early-finalize check
@@ -362,7 +381,7 @@ impl SentinelTransition {
         }
 
         // Unanimity plus our own counted vote guarantees this sentinal is on the
-        // sole, winning side; no `OracleResult` round trip needed.
+        // sole, winning side; no `DisputeResolved` round trip needed.
         actions.push(SentinelAction {
             kind: SentinelActionKind::Claim { id: request_id },
             expires_at: None,
@@ -462,7 +481,7 @@ impl StateTransition<State> for SentinelTransition {
                         event,
                     )) => self.handle_revealed(state, event),
                     SentinelEvents::Oracle(
-                        SentinelOracle::SentinelOracleV2Events::OracleResult(event),
+                        SentinelOracle::SentinelOracleV2Events::DisputeResolved(event),
                     ) => self.handle_resolved(state, event),
                 }
             }
