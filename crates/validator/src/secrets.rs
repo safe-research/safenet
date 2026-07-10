@@ -22,7 +22,13 @@
 
 #![cfg_attr(not(test), expect(dead_code))]
 
-use crate::frost::keygen::Secrets;
+use crate::{
+    bindings,
+    frost::{
+        keygen::Secrets,
+        preprocess::{NonceChunk, Nonces},
+    },
+};
 use alloy::{
     hex::ToHexExt,
     primitives::{Address, B256},
@@ -66,7 +72,26 @@ impl SecretStore {
                  address  TEXT NOT NULL,
                  secrets  TEXT NOT NULL,
                  PRIMARY KEY (group_id, address)
-             );",
+             );
+
+             CREATE TABLE IF NOT EXISTS nonces_chunks (
+                 root     TEXT    NOT NULL,
+                 group_id TEXT    NOT NULL,
+                 address  TEXT    NOT NULL,
+                 chunk    INTEGER DEFAULT NULL,
+                 PRIMARY KEY (root)
+             );
+
+             CREATE TABLE IF NOT EXISTS nonces (
+                 root  TEXT    NOT NULL,
+                 offs  INTEGER NOT NULL,
+                 nonce TEXT    NOT NULL,
+                 PRIMARY KEY (root, offs),
+                 FOREIGN KEY (root) REFERENCES nonces_chunks (root) ON DELETE CASCADE
+             );
+
+             CREATE UNIQUE INDEX IF NOT EXISTS idx_nonces_chunks_lookup
+                 ON nonces_chunks (group_id, address, chunk);",
         )
         .execute(&pool)
         .await?;
@@ -125,6 +150,172 @@ impl SecretStore {
             .await?;
         Ok(())
     }
+
+    /// Persists a freshly generated preprocessing `chunk` for `me` in `group`,
+    /// returning its merkle root (the onchain `preprocess` commitment). The
+    /// chunk is stored unlinked; [`link_nonces_chunk`](Self::link_nonces_chunk)
+    /// associates it with a sequence chunk once assigned onchain.
+    pub async fn register_nonces_chunk(
+        &self,
+        group: B256,
+        me: Address,
+        chunk: NonceChunk,
+    ) -> Result<B256, Error> {
+        let root = chunk.commitment.0;
+
+        let mut tx = self.pool.begin().await?;
+        sqlx::query("INSERT INTO nonces_chunks (root, group_id, address) VALUES (?, ?, ?)")
+            .bind(key(root))
+            .bind(key(group))
+            .bind(key(me))
+            .execute(&mut *tx)
+            .await?;
+        for (offset, nonce) in chunk.nonces.into_iter().enumerate() {
+            sqlx::query("INSERT INTO nonces (root, offs, nonce) VALUES (?, ?, ?)")
+                .bind(key(root))
+                .bind(i64::try_from(offset)?)
+                .bind(serde_json::to_string(&nonce)?)
+                .execute(&mut *tx)
+                .await?;
+        }
+        tx.commit().await?;
+
+        Ok(root)
+    }
+
+    /// Links a registered nonce tree (by `root`) to the onchain sequence
+    /// `chunk` for `me` in `group`. Errors if the root is unknown or already
+    /// linked.
+    pub async fn link_nonces_chunk(
+        &self,
+        group: B256,
+        me: Address,
+        chunk: u64,
+        root: B256,
+    ) -> Result<(), Error> {
+        let updated = sqlx::query(
+            "UPDATE nonces_chunks SET chunk = ?
+             WHERE root = ? AND group_id = ? AND address = ? AND chunk IS NULL",
+        )
+        .bind(i64::try_from(chunk)?)
+        .bind(key(root))
+        .bind(key(group))
+        .bind(key(me))
+        .execute(&self.pool)
+        .await?;
+
+        if updated.rows_affected() == 0 {
+            return Err(Error::Database(sqlx::Error::RowNotFound));
+        }
+        Ok(())
+    }
+
+    /// Returns the public reveal of the nonce at `offset` in the tree `me`
+    /// linked to sequence `chunk` in `group`, without removing it, or `None`
+    /// when no such nonce is stored (never generated, already taken, or
+    /// pruned).
+    ///
+    /// Only [`Nonces::reveal`] information (the onchain commitments and merkle
+    /// proof) is returned, never the secret nonce itself. Because this is a
+    /// non-consuming read of public data, a state transition may call it
+    /// repeatedly - for example to re-emit a nonce reveal after a reorg -
+    /// without risking nonce reuse.
+    pub async fn nonces_reveal(
+        &self,
+        group: B256,
+        me: Address,
+        chunk: u64,
+        offset: u64,
+    ) -> Result<Option<(bindings::SignNonces, Vec<B256>)>, Error> {
+        Ok(sqlx::query_scalar::<_, String>(
+            "SELECT nonce FROM nonces
+             WHERE root = (
+                 SELECT root FROM nonces_chunks
+                 WHERE group_id = ? AND address = ? AND chunk = ?
+             )
+             AND offs = ?",
+        )
+        .bind(key(group))
+        .bind(key(me))
+        .bind(i64::try_from(chunk)?)
+        .bind(i64::try_from(offset)?)
+        .fetch_optional(&self.pool)
+        .await?
+        .map(|nonce| serde_json::from_str::<Nonces>(&nonce))
+        .transpose()?
+        .map(|nonce| {
+            let (nonces, proof) = nonce.reveal();
+            (nonces, proof.to_vec())
+        }))
+    }
+
+    /// Removes and returns the nonce at `offset` in the tree `me` linked to
+    /// sequence `chunk` in `group`.
+    ///
+    /// The nonce is **deleted** from the store, so a subsequent call (for
+    /// example a replay after a reorg) returns `None` and the transition
+    /// gracefully no-ops instead of reusing the nonce. Deletion is permanent
+    /// and not undone by a reorg; the returned nonce lives on only in the
+    /// snapshot state, which a reorg is free to roll back.
+    pub async fn take_nonce(
+        &self,
+        group: B256,
+        me: Address,
+        chunk: u64,
+        offset: u64,
+    ) -> Result<Option<Nonces>, Error> {
+        sqlx::query_scalar::<_, String>(
+            "DELETE FROM nonces
+             WHERE root = (
+                 SELECT root FROM nonces_chunks
+                 WHERE group_id = ? AND address = ? AND chunk = ?
+             )
+             AND offs = ?
+             RETURNING nonce",
+        )
+        .bind(key(group))
+        .bind(key(me))
+        .bind(i64::try_from(chunk)?)
+        .bind(i64::try_from(offset)?)
+        .fetch_optional(&self.pool)
+        .await?
+        .map(|nonce| serde_json::from_str(&nonce))
+        .transpose()
+        .map_err(Error::from)
+    }
+
+    /// Returns the number of unused nonces in the tree `me` linked to sequence
+    /// `chunk` in `group`, or `0` when no such tree is linked.
+    pub async fn available_nonce_count(
+        &self,
+        group: B256,
+        me: Address,
+        chunk: u64,
+    ) -> Result<u64, Error> {
+        let count = sqlx::query_scalar::<_, i64>(
+            "SELECT COUNT(*) FROM nonces
+             WHERE root = (
+                 SELECT root FROM nonces_chunks
+                 WHERE group_id = ? AND address = ? AND chunk = ?
+             )",
+        )
+        .bind(key(group))
+        .bind(key(me))
+        .bind(i64::try_from(chunk)?)
+        .fetch_one(&self.pool)
+        .await?;
+        Ok(u64::try_from(count)?)
+    }
+
+    /// Deletes every nonce tree belonging to a retired `group` (cascading to its
+    /// nonces). Idempotent.
+    pub async fn prune_group_nonces(&self, group: B256) -> Result<(), Error> {
+        sqlx::query("DELETE FROM nonces_chunks WHERE group_id = ?")
+            .bind(key(group))
+            .execute(&self.pool)
+            .await?;
+        Ok(())
+    }
 }
 
 /// Encodes a fixed-byte value (group id, nonce root or address) as its
@@ -136,7 +327,7 @@ fn key(value: impl ToHexExt) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::frost::keygen;
+    use crate::frost::{keygen, preprocess::NonceChunk};
     use alloy::primitives::address;
 
     const GROUP: B256 = B256::repeat_byte(0xa1);
@@ -151,6 +342,10 @@ mod tests {
         keygen::setup(&mut rand::thread_rng(), ME, 3, 2)
             .unwrap()
             .secrets
+    }
+
+    fn nonce_chunk(size: u64) -> NonceChunk {
+        NonceChunk::with_size(size, &keygen::KeyShare::dummy(), &mut rand::thread_rng()).unwrap()
     }
 
     #[tokio::test]
@@ -206,5 +401,114 @@ mod tests {
         assert!(store.keygen_secrets(GROUP, ME).await.unwrap().is_none());
         // Pruning again is a no-op.
         store.prune_keygen_secrets(GROUP).await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn nonces_chunk_link_and_count() {
+        let store = store().await;
+        let root = store
+            .register_nonces_chunk(GROUP, ME, nonce_chunk(4))
+            .await
+            .unwrap();
+        let other = store
+            .register_nonces_chunk(GROUP, ME, nonce_chunk(4))
+            .await
+            .unwrap();
+
+        // Until linked to a sequence chunk, it is not addressable by chunk.
+        assert_eq!(store.available_nonce_count(GROUP, ME, 0).await.unwrap(), 0);
+        store.link_nonces_chunk(GROUP, ME, 0, root).await.unwrap();
+        assert_eq!(store.available_nonce_count(GROUP, ME, 0).await.unwrap(), 4);
+
+        // Re-linking the same root is rejected.
+        assert!(store.link_nonces_chunk(GROUP, ME, 0, root).await.is_err());
+
+        // Linking a different root to the same chunk is also rejected.
+        assert!(store.link_nonces_chunk(GROUP, ME, 0, other).await.is_err());
+    }
+
+    #[tokio::test]
+    async fn use_nonce_removes_it_permanently() {
+        let store = store().await;
+        let root = store
+            .register_nonces_chunk(GROUP, ME, nonce_chunk(4))
+            .await
+            .unwrap();
+        store.link_nonces_chunk(GROUP, ME, 0, root).await.unwrap();
+
+        // First use returns the nonce; a second use of the same offset yields
+        // `None` so the transition can gracefully no-op rather than reuse it.
+        assert!(store.take_nonce(GROUP, ME, 0, 2).await.unwrap().is_some());
+        assert!(store.take_nonce(GROUP, ME, 0, 2).await.unwrap().is_none());
+
+        // The used nonce is gone; the rest of the chunk is untouched.
+        assert_eq!(store.available_nonce_count(GROUP, ME, 0).await.unwrap(), 3);
+        assert!(store.take_nonce(GROUP, ME, 0, 0).await.unwrap().is_some());
+    }
+
+    #[tokio::test]
+    async fn nonces_reveal_is_non_consuming() {
+        let store = store().await;
+        let root = store
+            .register_nonces_chunk(GROUP, ME, nonce_chunk(4))
+            .await
+            .unwrap();
+        store.link_nonces_chunk(GROUP, ME, 0, root).await.unwrap();
+
+        // The reveal can be read repeatedly without consuming the nonce, so it
+        // survives to be taken afterwards.
+        assert!(
+            store
+                .nonces_reveal(GROUP, ME, 0, 1)
+                .await
+                .unwrap()
+                .is_some()
+        );
+        assert!(
+            store
+                .nonces_reveal(GROUP, ME, 0, 1)
+                .await
+                .unwrap()
+                .is_some()
+        );
+        assert_eq!(store.available_nonce_count(GROUP, ME, 0).await.unwrap(), 4);
+        assert!(store.take_nonce(GROUP, ME, 0, 1).await.unwrap().is_some());
+
+        // Once taken, there is no nonce left to reveal, nor is an out-of-range
+        // offset revealable.
+        assert!(
+            store
+                .nonces_reveal(GROUP, ME, 0, 1)
+                .await
+                .unwrap()
+                .is_none()
+        );
+        assert!(
+            store
+                .nonces_reveal(GROUP, ME, 0, 99)
+                .await
+                .unwrap()
+                .is_none()
+        );
+    }
+
+    #[tokio::test]
+    async fn use_nonce_missing_tree_is_none() {
+        let store = store().await;
+        assert!(store.take_nonce(GROUP, ME, 7, 0).await.unwrap().is_none());
+    }
+
+    #[tokio::test]
+    async fn prune_group_nonces_removes_trees_and_nonces() {
+        let store = store().await;
+        let root = store
+            .register_nonces_chunk(GROUP, ME, nonce_chunk(2))
+            .await
+            .unwrap();
+        store.link_nonces_chunk(GROUP, ME, 0, root).await.unwrap();
+
+        store.prune_group_nonces(GROUP).await.unwrap();
+        // The cascade removed the nonces, so a use now no-ops.
+        assert!(store.take_nonce(GROUP, ME, 0, 0).await.unwrap().is_none());
     }
 }
