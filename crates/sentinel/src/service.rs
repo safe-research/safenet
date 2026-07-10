@@ -1,13 +1,13 @@
 use crate::{
-    action::{SentinelActionKindV2 as SentinelActionKind, SentinelActionV2 as SentinelAction},
+    action::{SentinelAction, SentinelActionKind},
     bindings::{
-        SentinelEventsV2 as SentinelEvents,
+        SentinelEvents,
         consensus::Consensus,
-        oracle::{ERC20, RequestState as OnchainRequestState, SentinelOracleV2 as SentinelOracle},
+        oracle::{ERC20, RequestState as OnchainRequestState, SentinelOracle},
     },
     detector::Detector,
     hashing::{RevealSalt as _, commit_hash, oracle_tx_proposal_hash},
-    state::{SentinelRequestStateV2 as RequestState, StateV2 as State},
+    state::{SentinelRequestState as RequestState, State},
 };
 use alloy::{
     primitives::{Address, B256, U256},
@@ -470,17 +470,17 @@ impl StateTransition<State> for SentinelTransition {
                     SentinelEvents::Consensus(
                         Consensus::ConsensusEvents::OracleTransactionProposed(event),
                     ) => self.handle_oracle_transaction_proposed(state, block, event),
-                    SentinelEvents::Oracle(SentinelOracle::SentinelOracleV2Events::NewRequest(
+                    SentinelEvents::Oracle(SentinelOracle::SentinelOracleEvents::NewRequest(
                         event,
                     )) => self.handle_new_request(state, event),
-                    SentinelEvents::Oracle(SentinelOracle::SentinelOracleV2Events::Committed(
+                    SentinelEvents::Oracle(SentinelOracle::SentinelOracleEvents::Committed(
                         event,
                     )) => self.handle_committed(state, event),
-                    SentinelEvents::Oracle(SentinelOracle::SentinelOracleV2Events::Revealed(
+                    SentinelEvents::Oracle(SentinelOracle::SentinelOracleEvents::Revealed(
                         event,
                     )) => self.handle_revealed(state, event),
                     SentinelEvents::Oracle(
-                        SentinelOracle::SentinelOracleV2Events::DisputeResolved(event),
+                        SentinelOracle::SentinelOracleEvents::DisputeResolved(event),
                     ) => self.handle_resolved(state, event),
                 }
             }
@@ -555,9 +555,7 @@ mod tests {
     const VOTING_WINDOW: u64 = 10;
 
     fn self_signer() -> Signer {
-        Signer::new(
-            SigningKey::from_bytes(&keccak256("sentinel-v2-flow-test-key").0.into()).unwrap(),
-        )
+        Signer::new(SigningKey::from_bytes(&keccak256("sentinel-flow-test-key").0.into()).unwrap())
     }
 
     fn self_address() -> Address {
@@ -616,7 +614,7 @@ mod tests {
         commit_deadline: u64,
         reveal_deadline: u64,
     ) -> SentinelEvents {
-        SentinelEvents::Oracle(SentinelOracle::SentinelOracleV2Events::NewRequest(
+        SentinelEvents::Oracle(SentinelOracle::SentinelOracleEvents::NewRequest(
             SentinelOracle::NewRequest {
                 requestId: id,
                 proposer: SAFE,
@@ -629,7 +627,7 @@ mod tests {
     }
 
     fn committed_event(id: B256, sentinel: Address, bond: U256) -> SentinelEvents {
-        SentinelEvents::Oracle(SentinelOracle::SentinelOracleV2Events::Committed(
+        SentinelEvents::Oracle(SentinelOracle::SentinelOracleEvents::Committed(
             SentinelOracle::Committed {
                 requestId: id,
                 sentinel,
@@ -639,7 +637,7 @@ mod tests {
     }
 
     fn revealed_event(id: B256, sentinel: Address, approved: bool, bond: U256) -> SentinelEvents {
-        SentinelEvents::Oracle(SentinelOracle::SentinelOracleV2Events::Revealed(
+        SentinelEvents::Oracle(SentinelOracle::SentinelOracleEvents::Revealed(
             SentinelOracle::Revealed {
                 requestId: id,
                 sentinel,
@@ -654,7 +652,7 @@ mod tests {
         outcome: OnchainRequestState,
         slashed: U256,
     ) -> SentinelEvents {
-        SentinelEvents::Oracle(SentinelOracle::SentinelOracleV2Events::DisputeResolved(
+        SentinelEvents::Oracle(SentinelOracle::SentinelOracleEvents::DisputeResolved(
             SentinelOracle::DisputeResolved {
                 requestId: id,
                 outcome,

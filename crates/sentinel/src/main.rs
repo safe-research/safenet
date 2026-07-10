@@ -3,10 +3,10 @@ mod bindings;
 mod config;
 mod detector;
 mod hashing;
-mod servicev2;
+mod service;
 mod state;
 
-use self::{config::Config, detector::Detector, servicev2::SentinelService};
+use self::{config::Config, detector::Detector, service::SentinelService};
 use alloy::{
     primitives::U256,
     providers::{Provider, ProviderBuilder},
