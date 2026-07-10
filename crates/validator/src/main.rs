@@ -1,5 +1,6 @@
 mod bindings;
 mod config;
+mod consensus;
 mod frost;
 mod merkle;
 mod secrets;

@@ -117,7 +117,7 @@ pub struct Participant {
     /// The epoch the participant becomes inactive before (exclusive), if it
     /// ever leaves the set.
     #[serde(default)]
-    pub active_before: Option<u64>,
+    pub active_before: Option<NonZeroU64>,
 }
 
 #[cfg(test)]
@@ -228,7 +228,10 @@ mod tests {
             address!("0x7777777777777777777777777777777777777777")
         );
         assert_eq!(validator.participants[1].active_from, 5);
-        assert_eq!(validator.participants[1].active_before, Some(9));
+        assert_eq!(
+            validator.participants[1].active_before,
+            Some(NonZeroU64::new(9).unwrap())
+        );
     }
 
     #[test]
