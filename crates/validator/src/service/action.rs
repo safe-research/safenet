@@ -23,6 +23,12 @@ pub enum Action {
         commitment: bindings::KeyGenCommitment,
         expires_at: Option<u64>,
     },
+    /// An action to publish a key generation secret share onchain.
+    KeyGenSecretShare {
+        group_id: B256,
+        share: bindings::KeyGenSecretShare,
+        expires_at: Option<u64>,
+    },
 }
 
 /// Encodes [`Action`]s into the transactions the queue submits.
@@ -59,6 +65,27 @@ impl ActionEncoder<Action> for Encoder {
                 },
                 expires_at,
             ),
+            Action::KeyGenSecretShare {
+                group_id,
+                share,
+                expires_at,
+            } => {
+                let gas = 250_000 + 25_000 * share.f.len() as u64;
+                (
+                    Transaction {
+                        to: self.coordinator,
+                        value: U256::ZERO,
+                        data: Coordinator::keyGenSecretShareCall {
+                            gid: group_id,
+                            share,
+                        }
+                        .abi_encode()
+                        .into(),
+                        gas,
+                    },
+                    expires_at,
+                )
+            }
         }
     }
 }

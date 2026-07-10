@@ -14,12 +14,13 @@ use crate::{
         epoch::EpochId,
         group::{Group, ParticipantSet},
     },
-    frost::keygen::Secrets,
+    frost::keygen::{GroupKey, Secrets, SharingState, VerifiedCommitment, VerifiedShare},
     service::{Action, Effect, Event, Resume},
 };
 use alloy::primitives::{Address, B256};
 use safenet_core::state::{Commands, Message, StateTransition};
 use serde::{Deserialize, Serialize};
+use std::{collections::BTreeMap, num::NonZeroU64};
 
 /// The complete snapshotted validator state.
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
@@ -35,11 +36,16 @@ pub enum RolloverState {
     /// Idle before the genesis group's DKG has been triggered.
     #[default]
     WaitingForGenesis,
+    /// The rollover has halted in an unrecoverable way.
+    ///
+    /// This can either be an unrecoverable error during DKG or we have reached
+    /// the heat death of the universe and there are no more epochs.
+    Halted,
     /// The key generation for `next_epoch` was skipped because too few
     /// participants took part for the group to be safe.
     EpochSkipped {
         /// The epoch whose key generation was skipped.
-        next_epoch: EpochId,
+        next_epoch: NonZeroU64,
     },
     /// This validator is participating in the group's key generation and is
     /// waiting for the [`Effect::KeyGenSetup`] effect to complete before the
@@ -64,7 +70,28 @@ pub enum RolloverState {
         group: Group,
         /// Key generation secrets, or `None` if not participating.
         secrets: Option<Box<Secrets>>,
+        /// Verified commitments received from peers so far, keyed by
+        /// participant.
+        commitments: BTreeMap<Address, VerifiedCommitment>,
         /// The block by which the commitment round must complete. `None` to
+        /// indicate that there is no deadline.
+        deadline: Option<u64>,
+    },
+    /// Every participant has committed and the group's secret shares are
+    /// being collected onchain.
+    CollectingShares {
+        /// The epoch this group will serve.
+        next_epoch: EpochId,
+        /// The group being generated.
+        group: Group,
+        /// The public key derived from the participants' commitments.
+        group_key: GroupKey,
+        /// This validator's sharing state, or `None` if not participating.
+        sharing_state: Option<Box<SharingState>>,
+        /// Verified secret shares received from peers so far, keyed by
+        /// participant.
+        shares: BTreeMap<Address, VerifiedShare>,
+        /// The block by which the secret-share round must complete. `None` to
         /// indicate that there is no deadline.
         deadline: Option<u64>,
     },
@@ -80,6 +107,9 @@ pub struct Transition {
     pub account: Address,
     /// The genesis participant set.
     pub genesis: ParticipantSet,
+    /// The number of blocks a distributed key generation ceremony may run
+    /// before timing out.
+    pub key_gen_timeout: NonZeroU64,
 }
 
 impl StateTransition<State> for Transition {
@@ -97,6 +127,9 @@ impl StateTransition<State> for Transition {
             Message::Event(log) => match log.data {
                 Event::Coordinator(Coordinator::CoordinatorEvents::KeyGen(event)) => {
                     self.handle_genesis_key_gen(state, &event)
+                }
+                Event::Coordinator(Coordinator::CoordinatorEvents::KeyGenCommitted(event)) => {
+                    self.handle_key_gen_committed(state, log.block, &event)
                 }
                 // The remaining events are wired in as their handlers land.
                 _ => (state, Vec::new()),
