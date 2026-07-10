@@ -4,46 +4,6 @@ pub mod oracle {
     use alloy::sol;
 
     sol! {
-        // Mirrors `SentinelOracleRequests.ResolveReason` in
-        // `contracts/src/libraries/SentinelOracleRequests.sol`; `OracleResult.result` is
-        // `abi.encode`d as this type.
-        #[derive(Debug, PartialEq, Eq)]
-        enum ResolveReason {
-            UNANIMOUS_APPROVE,
-            UNANIMOUS_DENY,
-            TIMEOUT,
-            ARBITRATION
-        }
-
-        #[derive(Debug)]
-        contract SentinelOracle {
-            event NewRequest(
-                bytes32 indexed requestId,
-                address indexed proposer,
-                uint256 fee,
-                uint256 bondTarget,
-                uint256 deadline
-            );
-            event Committed(
-                bytes32 indexed requestId,
-                address indexed sentinel,
-                bool approved,
-                uint256 bondAmount,
-                uint256 position
-            );
-            event OracleResult(
-                bytes32 indexed requestId,
-                address indexed proposer,
-                bytes result,
-                bool approved
-            );
-
-            function commitApprove(bytes32 requestId) external;
-            function commitDeny(bytes32 requestId) external;
-            function finalize(bytes32 requestId) external;
-            function claim(bytes32 requestId) external;
-        }
-
         // Mirrors `SentinelOracleRequest.State` in
         // `contracts/src/libraries/SentinelOracleRequestsV2.sol`; `DisputeResolved.outcome` is
         // this type.
@@ -57,7 +17,7 @@ pub mod oracle {
         }
 
         #[derive(Debug)]
-        contract SentinelOracleV2 {
+        contract SentinelOracle {
             event NewRequest(
                 bytes32 indexed requestId,
                 address indexed proposer,
@@ -177,16 +137,6 @@ watcher_events! {
     #[derive(Debug)]
     pub enum SentinelEvents {
         Oracle(oracle::SentinelOracle::SentinelOracleEvents),
-        Consensus(consensus::Consensus::ConsensusEvents),
-    }
-}
-
-// The event set consumed by the Watcher and StateMachine: all events from
-// both the SentinelOracleV2 and Consensus contracts.
-watcher_events! {
-    #[derive(Debug)]
-    pub enum SentinelEventsV2 {
-        Oracle(oracle::SentinelOracleV2::SentinelOracleV2Events),
         Consensus(consensus::Consensus::ConsensusEvents),
     }
 }
