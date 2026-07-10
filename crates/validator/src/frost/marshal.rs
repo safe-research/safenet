@@ -3,7 +3,10 @@
 use super::error;
 use crate::{bindings, frost::ecdh::EncryptionPublicKey};
 use alloy::primitives::U256;
-use frost_secp256k1::keys::{self, dkg};
+use frost_secp256k1::{
+    keys::{self, dkg},
+    round1,
+};
 use k256::{
     Scalar,
     elliptic_curve::{
@@ -52,6 +55,14 @@ pub fn solidity_secret_share(
         .map(U256::from_be_bytes)
         .collect();
     bindings::KeyGenSecretShare { y, f }
+}
+
+/// The marshaled hiding (`d`) and binding (`e`) commitment points for a
+/// signing nonce pair.
+pub fn solidity_sign_nonces(commitments: &round1::SigningCommitments) -> bindings::SignNonces {
+    let d = solidity_point(&commitments.hiding().value());
+    let e = solidity_point(&commitments.binding().value());
+    bindings::SignNonces { d, e }
 }
 
 /// Converts a secp256k1 point to the ABI `Point { uint256 x; uint256 y }`.
