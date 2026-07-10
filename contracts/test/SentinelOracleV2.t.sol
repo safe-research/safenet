@@ -401,8 +401,67 @@ contract SentinelOracleV2Test is Test {
         assertEq(token.balanceOf(sentinel2), s2Before + BOND_TARGET + REQUEST_FEE / 2, "sentinel2 claim incorrect");
 
         // sentinel3 never revealed — its commitment is still PENDING, so claim must revert.
-        vm.expectRevert(SentinelOracleCommitment.NotRevealed.selector);
+        vm.expectRevert(SentinelOracleV2.NotRevealed.selector);
         vm.prank(sentinel3);
+        oracle.claim(REQUEST_ID);
+    }
+
+    // ============================================================
+    // PURE TIMEOUT (NOBODY REVEALS) — BONDS REFUNDED, NOT SLASHED
+    // ============================================================
+
+    function test_NoReveals_BondsAndFeeRefundedInFull() public {
+        uint256 proposerBalBefore = token.balanceOf(proposer);
+        _postRequest();
+
+        // Both commit, but neither ever reveals.
+        _commit(sentinel1, true, SALT_1);
+        _commit(sentinel2, false, SALT_2);
+
+        _advancePastCommitDeadline();
+
+        // Nobody revealed, so there's no early-finalize signal (revealedCount never reaches
+        // committedCount) — finalize must wait for the full reveal window.
+        vm.expectRevert(SentinelOracleRequest.FinalizeTooEarly.selector);
+        oracle.finalize(REQUEST_ID);
+
+        _advancePastRevealDeadline();
+
+        uint256 arbitratorBalBefore = token.balanceOf(arbitrator);
+        oracle.finalize(REQUEST_ID);
+
+        SentinelOracleRequest.Request memory req = oracle.getRequest(REQUEST_ID);
+        assertEq(uint256(req.state), uint256(SentinelOracleRequest.State.TIMED_OUT));
+        assertEq(token.balanceOf(proposer), proposerBalBefore, "proposer fee refunded");
+
+        // No established side exists, so no misbehavior can be proven against either committer —
+        // nothing is slashed to the arbitrator.
+        assertEq(token.balanceOf(arbitrator), arbitratorBalBefore, "no bonds slashed on a pure timeout");
+
+        // Both commitments are still `Vote.PENDING`, but `claim()` succeeds anyway on `TIMED_OUT`.
+        uint256 s1Before = token.balanceOf(sentinel1);
+        vm.prank(sentinel1);
+        oracle.claim(REQUEST_ID);
+        assertEq(token.balanceOf(sentinel1), s1Before + BOND_TARGET, "sentinel1 bond refunded in full");
+
+        uint256 s2Before = token.balanceOf(sentinel2);
+        vm.prank(sentinel2);
+        oracle.claim(REQUEST_ID);
+        assertEq(token.balanceOf(sentinel2), s2Before + BOND_TARGET, "sentinel2 bond refunded in full");
+    }
+
+    function test_NoReveals_DoubleClaimReverts() public {
+        _postRequest();
+        _commit(sentinel1, true, SALT_1);
+        _advancePastCommitDeadline();
+        _advancePastRevealDeadline();
+        oracle.finalize(REQUEST_ID);
+
+        vm.prank(sentinel1);
+        oracle.claim(REQUEST_ID);
+
+        vm.expectRevert(SentinelOracleCommitment.AlreadyClaimed.selector);
+        vm.prank(sentinel1);
         oracle.claim(REQUEST_ID);
     }
 }
