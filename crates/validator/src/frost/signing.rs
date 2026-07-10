@@ -161,7 +161,7 @@ fn binding_factor_to_scalar(
 /// The leaf hash for a participant in the signer-set selection tree. Defined as
 /// `keccak256(participant, r.x, r.y, l, group_r.x, group_r.y)`, matching
 /// `FROSTSignatureShares._hash` (the participant occupies a full 32-byte slot).
-fn signer_leaf(
+pub(super) fn signer_leaf(
     participant: &Address,
     r: &bindings::Point,
     l: &U256,
