@@ -9,7 +9,7 @@ use super::{
 use crate::{bindings, frost::ecdh::EncryptionPublicKey};
 use alloy::primitives::{Address, U256};
 use frost_secp256k1::{
-    Identifier, Signature,
+    Identifier, Signature, VerifyingKey,
     keys::{
         self,
         dkg::{self, round1, round2},
@@ -64,27 +64,26 @@ where
 }
 
 /// A validated public commitment from a participant.
-#[derive(Clone, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct VerifiedCommitment {
     encryption_public_key: EncryptionPublicKey,
     package: round1::Package,
 }
 
-/// Verifies a participant's public commitment.
+/// Verifies a participant's public commitment against the group's `threshold`.
 ///
 /// These are applied to _both_ `me`, the validator itself, and all peers that
-/// publish key generation commitments onchain.
+/// publish key generation commitments onchain; unlike [`generate_secret_shares`]
+/// this does not require `me` to be a participant in the key generation.
 pub fn verify_commitment(
-    secrets: &Secrets,
+    threshold: u16,
     participant: Address,
     commitment: &bindings::KeyGenCommitment,
 ) -> Result<VerifiedCommitment, Error> {
     let identifier = participants::identifier(participant);
     marshal::frost_commitment(commitment)
         .and_then(|(encryption_public_key, package)| {
-            if package.commitment().coefficients().len() as u16
-                != *secrets.secret_package.min_signers()
-            {
+            if package.commitment().coefficients().len() as u16 != threshold {
                 return Err(frost_secp256k1::Error::IncorrectNumberOfCommitments);
             }
             frost_core::keys::dkg::verify_proof_of_knowledge(
@@ -100,13 +99,33 @@ pub fn verify_commitment(
         .err_with_culprit(participant)
 }
 
+/// The public key for a generated FROST group.
+#[derive(Copy, Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(transparent)]
+pub struct GroupKey(VerifyingKey);
+
+impl GroupKey {
+    /// Returns the underlying FROST verifying key.
+    pub(super) fn as_verifying_key(&self) -> &VerifyingKey {
+        &self.0
+    }
+}
+
+/// Derives the group's public key from every participant's verified
+/// commitment.
+pub fn group_key(commitments: &BTreeMap<Address, VerifiedCommitment>) -> Result<GroupKey, Error> {
+    let commitment = group_commitment(commitments).err_unexpected()?;
+    let key = VerifyingKey::from_commitment(&commitment).err_unexpected()?;
+    Ok(GroupKey(key))
+}
+
 /// A participant's own secret key-generation state after sharing. Persisted to
 /// the secret store and consumed by [`finalize`].
 ///
 /// Unlike [`Secrets`], this can be reconstructed using the generated secrets
 /// from [`setup`] and onchain state, and therefore can be stored in the state
 /// machine (and does not require a reorg-resistant storage).
-#[derive(Clone, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct SharingState {
     encryption_key: EncryptionKey,
     secret_package: round2::SecretPackage,
@@ -149,12 +168,7 @@ pub fn generate_secret_shares(
 
             // Build the verifying share (i.e. the participant's "public key")
             // from the commitments.
-            let group_commitment = frost_core::keys::sum_commitments(
-                &commitments
-                    .values()
-                    .map(|verified| verified.package.commitment())
-                    .collect::<Vec<_>>(),
-            )?;
+            let group_commitment = group_commitment(&commitments)?;
             let verifying_share = keys::VerifyingShare::from_commitment(
                 *secrets.secret_package.identifier(),
                 &group_commitment,
@@ -196,8 +210,19 @@ pub fn generate_secret_shares(
         .err_unexpected()
 }
 
+fn group_commitment(
+    commitments: &BTreeMap<Address, VerifiedCommitment>,
+) -> Result<keys::VerifiableSecretSharingCommitment, frost_secp256k1::Error> {
+    frost_core::keys::sum_commitments(
+        &commitments
+            .values()
+            .map(|verified| verified.package.commitment())
+            .collect::<Vec<_>>(),
+    )
+}
+
 /// A validated signing share from a peer.
-#[derive(Clone, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct VerifiedShare {
     package: round2::Package,
 }

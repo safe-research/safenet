@@ -62,7 +62,7 @@ impl Drop for EncryptionKey {
 impl ZeroizeOnDrop for EncryptionKey {}
 
 /// An encryption public key that can be serialized.
-#[derive(Clone, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct EncryptionPublicKey(ProjectivePoint);
 
 impl EncryptionPublicKey {

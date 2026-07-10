@@ -85,10 +85,16 @@ impl Service for ValidatorService {
             genesis,
             secrets,
             coordinator,
-            config: ValidatorConfig { .. },
+            config: ValidatorConfig {
+                key_gen_timeout, ..
+            },
         } = self;
         (
-            state::Transition { account, genesis },
+            state::Transition {
+                account,
+                genesis,
+                key_gen_timeout,
+            },
             effect::Handler { account, secrets },
             action::Encoder { coordinator },
         )

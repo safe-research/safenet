@@ -48,24 +48,24 @@ mod tests {
             secrets.insert(participant, participant_secrets);
         }
 
+        // Each participant verifies the commitments they observe onchain.
+        let verified_commitments = participants
+            .into_iter()
+            .map(|participant| {
+                let commitment =
+                    keygen::verify_commitment(threshold, participant, &commitments[&participant])
+                        .unwrap();
+                (participant, commitment)
+            })
+            .collect::<BTreeMap<_, _>>();
+
         // Each participant uses their random secrets to proceed to the next
         // stage and generate encrypted secret shares that published onchain.
         let mut sharing_states = BTreeMap::new();
         let mut shares = BTreeMap::new();
         for (participant, secrets) in secrets {
-            let verified_commitments = participants
-                .into_iter()
-                .map(|participant| {
-                    let commitment = keygen::verify_commitment(
-                        &secrets,
-                        participant,
-                        &commitments[&participant],
-                    )
-                    .unwrap();
-                    (participant, commitment)
-                })
-                .collect();
-            let share = keygen::generate_secret_shares(secrets, verified_commitments).unwrap();
+            let share =
+                keygen::generate_secret_shares(secrets, verified_commitments.clone()).unwrap();
             sharing_states.insert(participant, share.sharing_state);
             shares.insert(participant, share.share);
         }
@@ -89,17 +89,15 @@ mod tests {
         // Here, all participants should share the same group verifying key.
         // Additionally, the group key should equal to the sum of all the
         // publicly posted commitments C_0.
-        let group_key = key_shares
-            .values()
-            .next()
-            .unwrap()
-            .as_key_package()
-            .verifying_key();
+        let group_key = keygen::group_key(&verified_commitments).unwrap();
         for key_share in key_shares.values() {
-            assert_eq!(group_key, key_share.as_key_package().verifying_key());
+            assert_eq!(
+                group_key.as_verifying_key(),
+                key_share.as_key_package().verifying_key()
+            );
         }
         assert_eq!(
-            group_key.to_element(),
+            group_key.as_verifying_key().to_element(),
             commitments
                 .values()
                 .map(|commitments| marshal::frost_point(&commitments.c[0]).unwrap())
@@ -215,7 +213,7 @@ mod tests {
                 .collect();
             let public_key_package = frost_secp256k1::keys::PublicKeyPackage::new(
                 verifying_shares,
-                *group_key,
+                *group_key.as_verifying_key(),
                 Some(threshold),
             );
 
