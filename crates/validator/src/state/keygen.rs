@@ -1,5 +1,11 @@
 use super::{RolloverState, State, Transition};
-use crate::{bindings::Coordinator, consensus::epoch::EpochId, service::Effect};
+use crate::{
+    bindings::Coordinator,
+    consensus::epoch::EpochId,
+    frost::keygen::Secrets,
+    service::{Action, Effect},
+};
+use alloy::primitives::B256;
 use safenet_core::state::{Command, Commands};
 
 impl Transition {
@@ -13,38 +19,93 @@ impl Transition {
     /// rotation is triggered on new blocks.
     pub(super) fn handle_genesis_key_gen(
         &self,
-        mut state: State,
+        state: State,
         event: &Coordinator::KeyGen,
     ) -> (State, Commands<State, Self>) {
         let genesis = self.genesis.group();
-        if state.rollover != RolloverState::WaitingForGenesis || event.gid != genesis.id() {
+        if !matches!(state.rollover, RolloverState::WaitingForGenesis) || event.gid != genesis.id()
+        {
             return (state, Vec::new());
         }
 
-        // The genesis group generation is not subject to a rollover deadline.
-        state.rollover = RolloverState::CollectingCommitments {
-            group_id: genesis.id(),
-            next_epoch: EpochId::Genesis,
-            deadline: None,
-        };
-
         // Only participate in the group generation if you are part of the
-        // genesis group.
-        let commands = (self.genesis.participate_as(self.account))
-            .map(|(group, poap)| {
-                let (participants, count, threshold, context) = group.parameters();
-                vec![Command::Effect(Effect::BuildKeyGenCommitment {
-                    id: group.id(),
-                    participants,
+        // genesis group; otherwise go straight to collecting the other
+        // participants' commitments. The genesis group generation is not
+        // subject to a rollover deadline.
+        if let Some((group, poap)) = self.genesis.participate_as(self.account) {
+            let group_id = group.id();
+            let (count, threshold) = group.size();
+            (
+                State {
+                    rollover: RolloverState::WaitingForSetup {
+                        next_epoch: EpochId::Genesis,
+                        group,
+                        poap,
+                        deadline: None,
+                    },
+                    ..state
+                },
+                vec![Command::Effect(Effect::KeyGenSetup {
+                    group_id,
                     count,
                     threshold,
-                    context,
-                    poap,
-                    expires_at: None,
-                })]
-            })
-            .unwrap_or_default();
+                })],
+            )
+        } else {
+            (
+                State {
+                    rollover: RolloverState::CollectingCommitments {
+                        next_epoch: EpochId::Genesis,
+                        group: self.genesis.group(),
+                        secrets: None,
+                        deadline: None,
+                    },
+                    ..state
+                },
+                Vec::new(),
+            )
+        }
+    }
 
-        (state, commands)
+    /// Publishes the key gen commitment once the [`Effect::KeyGenSetup`]
+    /// effect has produced it, moving the group into commitment collection.
+    pub fn handle_key_gen_setup(
+        &self,
+        state: State,
+        group_id: B256,
+        secrets: Box<Secrets>,
+    ) -> (State, Commands<State, Self>) {
+        match state.rollover {
+            RolloverState::WaitingForSetup {
+                next_epoch,
+                group,
+                poap,
+                deadline,
+            } if group_id == group.id() => {
+                let (participants, count, threshold, context) = group.parameters();
+                let commitment = secrets.commitment();
+                (
+                    State {
+                        rollover: RolloverState::CollectingCommitments {
+                            next_epoch,
+                            group,
+                            secrets: Some(secrets),
+                            deadline,
+                        },
+                        ..state
+                    },
+                    vec![Command::Action(Action::KeyGenAndCommit {
+                        participants,
+                        count,
+                        threshold,
+                        context,
+                        poap,
+                        commitment,
+                        expires_at: deadline,
+                    })],
+                )
+            }
+            _ => (state, Vec::new()),
+        }
     }
 }

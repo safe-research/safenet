@@ -14,6 +14,7 @@ use k256::{
 };
 use rand::{CryptoRng, RngCore};
 use serde::{Deserialize, Deserializer, Serialize, Serializer, de};
+use std::fmt::{self, Debug, Formatter};
 
 /// A locally-generated ECDH encryption key. The secret scalar is sampled by the
 /// effect handler and never leaves the secret store; only [`public_key`] is
@@ -43,6 +44,12 @@ impl EncryptionKey {
     /// encryption public key. See [`ecdh`].
     pub(super) fn ecdh(&self, public_key: &EncryptionPublicKey, msg: [u8; 32]) -> [u8; 32] {
         ecdh(&self.0, public_key, msg)
+    }
+}
+
+impl Debug for EncryptionKey {
+    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
+        f.debug_tuple("EncryptionKey").field(&"redacted").finish()
     }
 }
 

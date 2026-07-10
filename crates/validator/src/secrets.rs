@@ -115,9 +115,8 @@ impl SecretStore {
         .map_err(Error::from)
     }
 
-    /// Persists the DKG `secrets` `me` generated for `group`, returning whether
-    /// they were stored (`true`) or dropped because secrets already exist for
-    /// the key (`false`).
+    /// Persists the DKG `secrets` `me` generated for `group` and returns the
+    /// secrets stored for that key.
     ///
     /// Existing secrets are **never overwritten**: a keygen commit effect
     /// reuses the retained secrets rather than resampling them, so a
@@ -127,18 +126,21 @@ impl SecretStore {
         &self,
         group: B256,
         me: Address,
-        secrets: &Secrets,
-    ) -> Result<bool, Error> {
-        let inserted = sqlx::query(
+        secrets: Secrets,
+    ) -> Result<Secrets, Error> {
+        let stored = sqlx::query_scalar::<_, String>(
             "INSERT INTO keygen_secrets (group_id, address, secrets) VALUES (?, ?, ?)
-             ON CONFLICT (group_id, address) DO NOTHING",
+             ON CONFLICT (group_id, address) DO UPDATE
+                 SET secrets = keygen_secrets.secrets
+             RETURNING secrets",
         )
         .bind(key(group))
         .bind(key(me))
-        .bind(serde_json::to_string(secrets)?)
-        .execute(&self.pool)
+        .bind(serde_json::to_string(&secrets)?)
+        .fetch_one(&self.pool)
         .await?;
-        Ok(inserted.rows_affected() == 1)
+        let stored = serde_json::from_str(&stored)?;
+        Ok(stored)
     }
 
     /// Deletes `group`'s DKG secrets once its keygen resolves (successfully or
@@ -339,9 +341,7 @@ mod tests {
     }
 
     fn keygen_secrets() -> keygen::Secrets {
-        keygen::setup(&mut rand::thread_rng(), ME, 3, 2)
-            .unwrap()
-            .secrets
+        keygen::setup(&mut rand::thread_rng(), ME, 3, 2).unwrap()
     }
 
     fn nonce_chunk(size: u64) -> NonceChunk {
@@ -355,10 +355,15 @@ mod tests {
 
         let secrets = keygen_secrets();
         store
-            .store_keygen_secrets(GROUP, ME, &secrets)
+            .store_keygen_secrets(GROUP, ME, secrets.clone())
             .await
             .unwrap();
-        assert!(store.keygen_secrets(GROUP, ME).await.unwrap().is_some());
+
+        let read = store.keygen_secrets(GROUP, ME).await.unwrap().unwrap();
+        assert_eq!(
+            serde_json::to_string(&read).unwrap(),
+            serde_json::to_string(&secrets).unwrap(),
+        )
     }
 
     #[tokio::test]
@@ -366,26 +371,33 @@ mod tests {
         // A re-run of the commit effect (for example after a reorg re-includes
         // the commitment) must reuse the retained secrets, not resample them.
         let store = store().await;
+
         let first = keygen_secrets();
-        // The first store persists the secrets; the second is dropped.
-        assert!(store.store_keygen_secrets(GROUP, ME, &first).await.unwrap());
-
-        let second = keygen_secrets();
-        assert!(
-            !store
-                .store_keygen_secrets(GROUP, ME, &second)
-                .await
-                .unwrap()
-        );
-
-        let stored = store.keygen_secrets(GROUP, ME).await.unwrap().unwrap();
+        let stored = store
+            .store_keygen_secrets(GROUP, ME, first.clone())
+            .await
+            .unwrap();
         assert_eq!(
             serde_json::to_string(&stored).unwrap(),
             serde_json::to_string(&first).unwrap(),
         );
+
+        let second = keygen_secrets();
         assert_ne!(
             serde_json::to_string(&first).unwrap(),
             serde_json::to_string(&second).unwrap(),
+        );
+
+        let stored = store.store_keygen_secrets(GROUP, ME, second).await.unwrap();
+        assert_eq!(
+            serde_json::to_string(&stored).unwrap(),
+            serde_json::to_string(&first).unwrap(),
+        );
+
+        let read = store.keygen_secrets(GROUP, ME).await.unwrap().unwrap();
+        assert_eq!(
+            serde_json::to_string(&read).unwrap(),
+            serde_json::to_string(&first).unwrap(),
         );
     }
 
@@ -393,7 +405,7 @@ mod tests {
     async fn prune_removes_resolved_group_secrets() {
         let store = store().await;
         store
-            .store_keygen_secrets(GROUP, ME, &keygen_secrets())
+            .store_keygen_secrets(GROUP, ME, keygen_secrets())
             .await
             .unwrap();
 

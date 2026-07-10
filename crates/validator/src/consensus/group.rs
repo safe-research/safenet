@@ -44,9 +44,11 @@ use crate::{
     merkle::{MerkleRoot, MerkleTree},
 };
 use alloy::primitives::{Address, B256, keccak256};
+use serde::{Deserialize, Serialize};
 use std::{collections::BTreeSet, num::NonZeroU64};
 
 /// A key generation group.
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct Group {
     id: B256,
     participants: MerkleRoot,
@@ -67,6 +69,11 @@ impl Group {
     /// process onchain.
     pub fn parameters(&self) -> (MerkleRoot, u16, u16, B256) {
         (self.participants, self.count, self.threshold, self.context)
+    }
+
+    /// Return the group size: the count and threshold.
+    pub fn size(&self) -> (u16, u16) {
+        (self.count, self.threshold)
     }
 }
 
