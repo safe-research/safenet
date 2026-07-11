@@ -1,4 +1,4 @@
-use super::{RolloverState, State, Transition};
+use super::{Prune, RolloverState, State, Transition};
 use crate::{
     bindings::Coordinator,
     consensus::{
@@ -177,13 +177,7 @@ impl Transition {
                     Err(err) => {
                         // There was an issue with the verified commitments,
                         // which is an unexpected an unrecoverable error.
-                        return (
-                            State {
-                                rollover: rollover_failure(next_epoch, err),
-                                ..state
-                            },
-                            Vec::new(),
-                        );
+                        return fail_rollover!(state, block, next_epoch, group.id(), err);
                     }
                 };
 
@@ -340,13 +334,7 @@ impl Transition {
                             Err(err) => {
                                 // Finalization failures are unexpected, since
                                 // all secret shares were already verified.
-                                return (
-                                    State {
-                                        rollover: rollover_failure(next_epoch, err),
-                                        ..state
-                                    },
-                                    commands,
-                                );
+                                return fail_rollover!(state, block, next_epoch, group.id(), err);
                             }
                         }
                     }
@@ -378,6 +366,7 @@ impl Transition {
     pub(super) fn handle_key_gen_confirmed(
         &self,
         state: State,
+        block: u64,
         event: &Coordinator::KeyGenConfirmed,
     ) -> (State, Commands<State, Self>) {
         match state.rollover {
@@ -417,9 +406,10 @@ impl Transition {
                 match next_epoch {
                     // On genesis: the group is confirmed it is ready to go.
                     EpochId::Genesis => {
+                        let group_id = group.id();
                         let commands = if let KeyGenConfirmation::Confirmed(key_share) = status {
                             vec![Command::Effect(Effect::NonceTree {
-                                group_id: group.id(),
+                                group_id,
                                 key_share,
                             })]
                         } else {
@@ -430,7 +420,8 @@ impl Transition {
                             State {
                                 rollover: RolloverState::EpochStaged { next_epoch },
                                 ..state
-                            },
+                            }
+                            .and_prune(block, Prune::KeyGenSecrets { group_id }),
                             commands,
                         )
                     }
@@ -520,8 +511,15 @@ impl Transition {
                 "restarting key generation after too many complaints"
             );
 
+            let group_id = group.id();
             let excluded = group.also_exclude(iter::once(event.accused));
-            return self.restart_key_gen_excluding(state, next_epoch, excluded, restart_deadline);
+
+            return self.restart_key_gen_excluding(
+                state.and_prune(block, Prune::KeyGenSecrets { group_id }),
+                next_epoch,
+                excluded,
+                restart_deadline,
+            );
         }
 
         let mut commands = Vec::new();
@@ -640,12 +638,13 @@ impl Transition {
                     "invalid secret share revealed in response to a complaint"
                 );
 
+                let group_id = group.id();
                 let excluded = group.also_exclude(iter::once(event.accused));
                 let restart_deadline =
                     deadline.map(|_| block.saturating_add(self.config.key_gen_timeout.get()));
 
                 return self.restart_key_gen_excluding(
-                    state,
+                    state.and_prune(block, Prune::KeyGenSecrets { group_id }),
                     next_epoch,
                     excluded,
                     restart_deadline,
@@ -684,13 +683,7 @@ impl Transition {
                     Err(err) => {
                         // Finalization failures are unexpected, as all secret
                         // shares were already verified.
-                        return (
-                            State {
-                                rollover: rollover_failure(next_epoch, err),
-                                ..state
-                            },
-                            commands,
-                        );
+                        return fail_rollover!(state, block, next_epoch, group.id(), err);
                     }
                 }
             }
@@ -703,10 +696,6 @@ impl Transition {
     /// entering [`RolloverState::WaitingForSetup`] if this validator is part of
     /// the group, or heading straight to
     /// [`RolloverState::CollectingCommitments`] as an observer otherwise.
-    // Right now, since state has only a single field, this triggers a "unused
-    // variable" warning (since the `..state` splat is a no-op). Once `state`
-    // gets more fields, this will go away.
-    #[expect(unused_variables)]
     fn start_key_gen(
         &self,
         state: State,
@@ -826,3 +815,22 @@ fn rollover_failure(next_epoch: EpochId, err: impl Display) -> RolloverState {
         RolloverState::Halted
     }
 }
+
+// This is a macro instead of a function because keygen handlers partially move
+// `state.rollover` while matching its fields. The remaining `state` therefore
+// cannot be passed whole to a function, but a macro can reconstruct it at the
+// call site before scheduling the resolved group's secrets for pruning.
+macro_rules! fail_rollover {
+    ($state:ident, $block:expr, $next_epoch:expr, $group_id:expr, $err:expr) => {{
+        let (block, next_epoch, group_id, err) = ($block, $next_epoch, $group_id, $err);
+        (
+            State {
+                rollover: rollover_failure(next_epoch, err),
+                ..($state)
+            }
+            .and_prune(block, Prune::KeyGenSecrets { group_id }),
+            Vec::new(),
+        )
+    }};
+}
+use fail_rollover;

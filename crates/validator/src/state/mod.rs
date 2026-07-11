@@ -1,11 +1,5 @@
 //! The snapshotted validator state.
 
-// Right now, we only have a single field in our state but this is expected to
-// change. To avoid a large swath of changes when that happens, use `..state`
-// splat everywhere and silence the clippy lint. This will be removed once the
-// validator state gets new fields.
-#![expect(clippy::needless_update)]
-
 mod keygen;
 mod preprocess;
 
@@ -35,6 +29,29 @@ use std::{
 pub struct State {
     /// The epoch-rollover / DKG state machine.
     rollover: RolloverState,
+    /// Things queued up to be pruned, along with the block at which they were
+    /// queued. Pruning itself only happens once the entry is mature enough to
+    /// be reorg-safe.
+    to_prune: Vec<(u64, Prune)>,
+}
+
+impl State {
+    /// Queues `prune` to be pruned, recording the current `block` so its
+    /// maturity can later be determined.
+    fn and_prune(mut self, block: u64, prune: Prune) -> Self {
+        self.to_prune.push((block, prune));
+        self
+    }
+}
+
+/// Something queued up to be pruned once mature.
+#[derive(Clone, Debug, Deserialize, Serialize)]
+enum Prune {
+    /// A resolved group's keygen secrets.
+    KeyGenSecrets {
+        /// The resolved group.
+        group_id: B256,
+    },
 }
 
 /// The epoch-rollover / DKG state machine. Each active variant carries the
@@ -213,7 +230,7 @@ impl StateTransition<State> for Transition {
                     self.handle_key_gen_secret_shared(state, log.block, &event)
                 }
                 Event::Coordinator(Coordinator::CoordinatorEvents::KeyGenConfirmed(event)) => {
-                    self.handle_key_gen_confirmed(state, &event)
+                    self.handle_key_gen_confirmed(state, log.block, &event)
                 }
                 Event::Coordinator(Coordinator::CoordinatorEvents::KeyGenComplained(event)) => {
                     self.handle_key_gen_complained(state, log.block, &event)
