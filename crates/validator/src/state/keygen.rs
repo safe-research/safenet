@@ -12,12 +12,12 @@ use crate::{
     service::{Action, Effect},
     state::{ConfirmationDeadlines, KeyGenConfirmation, KeyGenParticipation},
 };
-use alloy::primitives::B256;
+use alloy::primitives::{Address, B256};
 use safenet_core::state::{Command, Commands};
 use std::{
     collections::{BTreeMap, BTreeSet},
     fmt::Display,
-    iter,
+    iter, mem,
 };
 
 impl Transition {
@@ -520,43 +520,8 @@ impl Transition {
                 "restarting key generation after too many complaints"
             );
 
-            let participants = match if let EpochId::Number { number } = next_epoch {
-                let excluded = group.excluded().chain(iter::once(event.accused)).collect();
-                group::participants_set(
-                    &self.config.participants,
-                    group::Epoch::Number {
-                        consensus: self.config.consensus,
-                        number,
-                        excluded,
-                    },
-                )
-            } else {
-                // In case we need to restart keygen during genesis - halt! The
-                // The genesis keygen is special in that it cannot be restart
-                // since the group ID has special authorization, and any restart
-                // would issue a new and different group ID.
-                None
-            } {
-                Some(participants) => participants,
-                None => {
-                    // We were not able to build a new participant set (either
-                    // we are in genesis, where restarts aren't allowed or there
-                    // are too few remaining participants). Error out.
-                    return (
-                        State {
-                            rollover: rollover_failure(
-                                next_epoch,
-                                "could not form new participant set following too many complaints",
-                            ),
-                            ..state
-                        },
-                        Vec::new(),
-                    );
-                }
-            };
-
-            // Restart the key generation with the new participant set.
-            return self.start_key_gen(state, next_epoch, &participants, restart_deadline);
+            let excluded = group.also_exclude(iter::once(event.accused));
+            return self.restart_key_gen_excluding(state, next_epoch, excluded, restart_deadline);
         }
 
         let mut commands = Vec::new();
@@ -578,6 +543,155 @@ impl Transition {
                         plaintiff = %event.plaintiff,
                         "failed to reveal secret share for complaint response"
                     );
+                }
+            }
+        }
+
+        (state, commands)
+    }
+
+    /// Registers a revealed secret share published in response to a complaint.
+    /// If this validator is the complaint's plaintiff, the revealed share is
+    /// registered as its own - finalizing and confirming the key share if that
+    /// was the last one missing; otherwise, the revealed share is simply
+    /// verified against the accused's public commitment. An invalid revealed
+    /// share restarts key generation excluding the accused.
+    pub(super) fn handle_key_gen_complaint_responded(
+        &self,
+        mut state: State,
+        block: u64,
+        event: &Coordinator::KeyGenComplaintResponded,
+    ) -> (State, Commands<State, Self>) {
+        let (next_epoch, group, participation, shares, complaints, deadline) =
+            match &mut state.rollover {
+                RolloverState::CollectingShares {
+                    next_epoch,
+                    group,
+                    participation,
+                    shares,
+                    complaints,
+                    deadline,
+                    ..
+                } if group.id() == event.gid => (
+                    *next_epoch,
+                    &*group,
+                    &*participation,
+                    Some(shares),
+                    complaints,
+                    *deadline,
+                ),
+                RolloverState::CollectingConfirmations {
+                    next_epoch,
+                    group,
+                    participation,
+                    status,
+                    complaints,
+                    deadlines,
+                    ..
+                } if group.id() == event.gid
+                    && deadlines
+                        .as_ref()
+                        .is_none_or(|deadlines| block <= deadlines.response) =>
+                {
+                    let shares = if let KeyGenConfirmation::Collecting(shares) = status {
+                        Some(shares)
+                    } else {
+                        None
+                    };
+                    let deadline = deadlines.as_ref().map(|deadlines| deadlines.response);
+
+                    (
+                        *next_epoch,
+                        &*group,
+                        &*participation,
+                        shares,
+                        complaints,
+                        deadline,
+                    )
+                }
+                _ => return (state, Vec::new()),
+            };
+
+        let Some(complaint) = complaints
+            .get_mut(&event.accused)
+            .filter(|complaint| complaint.unresponded > 0)
+        else {
+            return (state, Vec::new());
+        };
+
+        match frost::keygen::verify_revealed_secret_share(
+            participation.group_commitments(),
+            event.plaintiff,
+            event.accused,
+            event.secretShare,
+        ) {
+            Ok(share) => {
+                if let Some(shares) = shares
+                    && event.plaintiff == self.account
+                {
+                    shares.insert(event.accused, share);
+                }
+                complaint.unresponded -= 1;
+            }
+            Err(err) => {
+                tracing::warn!(
+                    %err,
+                    accused = %event.accused,
+                    "invalid secret share revealed in response to a complaint"
+                );
+
+                let excluded = group.also_exclude(iter::once(event.accused));
+                let restart_deadline =
+                    deadline.map(|_| block.saturating_add(self.config.key_gen_timeout.get()));
+
+                return self.restart_key_gen_excluding(
+                    state,
+                    next_epoch,
+                    excluded,
+                    restart_deadline,
+                );
+            }
+        }
+
+        // In case we are in the confirmation phase, collecting shares, and
+        // got the final share, we have to finalize the keygen process and emit
+        // a keygen confirmation action.
+        let mut commands = Vec::new();
+        if let RolloverState::CollectingConfirmations {
+            group,
+            participation,
+            status,
+            deadlines,
+            ..
+        } = &mut state.rollover
+        {
+            let (count, _) = group.size();
+            if let (
+                KeyGenParticipation::Participating(sharing_state),
+                KeyGenConfirmation::Collecting(shares),
+            ) = (&**participation, &mut *status)
+                && shares.len() as u16 == count
+            {
+                let sharing_state = sharing_state.clone();
+                match frost::keygen::finalize(sharing_state, mem::take(shares)) {
+                    Ok(key_share) => {
+                        commands.push(Command::Action(Action::KeyGenConfirm {
+                            group_id: group.id(),
+                            expires_at: deadlines.as_ref().map(|deadlines| deadlines.confirm),
+                        }));
+                        *status = KeyGenConfirmation::Confirmed(Box::new(key_share));
+                    }
+                    Err(err) => {
+                        // Finalization failures are unexpected, as all secret
+                        // shares were already verified.
+                        return (
+                            State {
+                                rollover: rollover_failure(next_epoch, err),
+                                ..state
+                            },
+                            commands,
+                        );
+                    }
                 }
             }
         }
@@ -636,6 +750,51 @@ impl Transition {
                 },
                 Vec::new(),
             )
+        }
+    }
+
+    /// Restarts key generation for `next_epoch` excluding `excluded`, or
+    /// halts/skips the epoch (via [`rollover_failure`], logging `reason`) if
+    /// too few participants would remain -- or if `next_epoch` is the genesis
+    /// epoch, which cannot be restarted since its group ID is externally
+    /// authorized onchain and any restart would produce a different,
+    /// unauthorized one.
+    fn restart_key_gen_excluding(
+        &self,
+        state: State,
+        next_epoch: EpochId,
+        excluded: BTreeSet<Address>,
+        deadline: Option<u64>,
+    ) -> (State, Commands<State, Self>) {
+        let participants = if let EpochId::Number { number } = next_epoch {
+            group::participants_set(
+                &self.config.participants,
+                group::Epoch::Number {
+                    consensus: self.config.consensus,
+                    number,
+                    excluded,
+                },
+            )
+        } else {
+            // In case we need to restart keygen during genesis - halt! The
+            // The genesis keygen is special in that it cannot be restart
+            // since the group ID has special authorization, and any restart
+            // would issue a new and different group ID
+            None
+        };
+
+        match participants {
+            Some(participants) => self.start_key_gen(state, next_epoch, &participants, deadline),
+            None => (
+                State {
+                    rollover: rollover_failure(
+                        next_epoch,
+                        "could not form new participant set to restart keygen",
+                    ),
+                    ..state
+                },
+                Vec::new(),
+            ),
         }
     }
 }

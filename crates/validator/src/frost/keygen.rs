@@ -298,6 +298,31 @@ pub struct VerifiedShare {
     package: round2::Package,
 }
 
+impl VerifiedShare {
+    /// Creates a new verified share from a plaintext secret share `secret_share`
+    /// from `peer` against `commitment`, registered to `me`.
+    fn new(
+        me: Identifier,
+        peer: Address,
+        commitment: keys::VerifiableSecretSharingCommitment,
+        secret_share: [u8; 32],
+    ) -> Result<VerifiedShare, Error> {
+        let package = marshal::frost_scalar(&U256::from_be_bytes(secret_share))
+            .and_then(|secret_share| {
+                // Pre-verify the share to make sure it matches the commitment from
+                // the peer; this allows us to complain right away in case an
+                // invalid share was provided.
+                let signing_share = keys::SigningShare::new(secret_share);
+                let _ = keys::SecretShare::new(me, signing_share, commitment).verify()?;
+
+                Ok(round2::Package::new(signing_share))
+            })
+            .err_with_culprit(peer)?;
+
+        Ok(VerifiedShare { package })
+    }
+}
+
 /// Decrypts this validator's encrypted share from a participant and verifies
 /// that it matches that participant's commitment.
 ///
@@ -354,24 +379,33 @@ pub fn verify_encrypted_secret_share(
             .err_unexpected()?
     };
 
-    let package = marshal::frost_scalar(&U256::from_be_bytes(secret_share))
-        .and_then(|secret_share| {
-            // Pre-verify the share to make sure it matches the commitment from
-            // the peer; this allows us to complain right away in case an
-            // invalid share was provided.
-            let signing_share = keys::SigningShare::new(secret_share);
-            let _ = keys::SecretShare::new(
-                *sharing_state.secret_package.identifier(),
-                signing_share,
-                commitment,
-            )
-            .verify()?;
+    let me = *sharing_state.secret_package.identifier();
+    VerifiedShare::new(me, participant, commitment, secret_share)
+}
 
-            Ok(round2::Package::new(signing_share))
-        })
-        .err_with_culprit(participant)?;
+/// Verifies a secret share publicly revealed by `accused`, in response to a
+/// complaint raised by `plaintiff`, against `accused`'s commitment.
+///
+/// Unlike [`verify_encrypted_secret_share`], this takes the plaintext scalar
+/// directly (as published onchain in response to a complaint) rather than
+/// this validator's own ECDH-encrypted broadcast.
+pub fn verify_revealed_secret_share(
+    group_commitments: &GroupCommitments,
+    plaintiff: Address,
+    accused: Address,
+    secret_share: U256,
+) -> Result<VerifiedShare, Error> {
+    let plaintiff = participants::identifier(plaintiff);
+    let commitment = group_commitments
+        .commitments
+        .get(&accused)
+        .ok_or(frost_secp256k1::Error::UnknownIdentifier)
+        .err_unexpected()?
+        .package
+        .commitment()
+        .clone();
 
-    Ok(VerifiedShare { package })
+    VerifiedShare::new(plaintiff, accused, commitment, secret_share.to_be_bytes())
 }
 
 /// Reveals this validator's own plaintext secret share computed for `peer`,
