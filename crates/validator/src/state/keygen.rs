@@ -398,6 +398,71 @@ impl Transition {
             _ => (state, Vec::new()),
         }
     }
+
+    /// Registers a peer's confirmation of a completed key generation.
+    pub(super) fn handle_key_gen_confirmed(
+        &self,
+        state: State,
+        event: &Coordinator::KeyGenConfirmed,
+    ) -> (State, Commands<State, Self>) {
+        match state.rollover {
+            RolloverState::CollectingConfirmations {
+                next_epoch,
+                group,
+                participation,
+                status,
+                mut confirmations,
+                deadlines,
+            } if group.id() == event.gid => {
+                let (count, _) = group.size();
+
+                confirmations.insert(event.participant);
+                if confirmations.len() as u16 != count {
+                    // We are still missing confirmations from some
+                    // participants, or this is a non-genesis confirmation
+                    // whose rollover-packet branch isn't wired in yet.
+                    return (
+                        State {
+                            rollover: RolloverState::CollectingConfirmations {
+                                next_epoch,
+                                group,
+                                participation,
+                                status,
+                                confirmations,
+                                deadlines,
+                            },
+                            ..state
+                        },
+                        Vec::new(),
+                    );
+                }
+
+                match next_epoch {
+                    // On genesis: the group is confirmed it is ready to go.
+                    EpochId::Genesis => {
+                        let commands = if let KeyGenConfirmation::Confirmed(key_share) = status {
+                            vec![Command::Effect(Effect::NonceTree {
+                                group_id: group.id(),
+                                key_share,
+                            })]
+                        } else {
+                            Vec::new()
+                        };
+
+                        (
+                            State {
+                                rollover: RolloverState::EpochStaged { next_epoch },
+                                ..state
+                            },
+                            commands,
+                        )
+                    }
+                    _ => todo!("only genesis is supported!"),
+                }
+            }
+            _ => (state, Vec::new()),
+        }
+    }
 }
 
 impl KeyGenParticipation {
