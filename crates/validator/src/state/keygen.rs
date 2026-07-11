@@ -2,15 +2,13 @@ use super::{RolloverState, State, Transition};
 use crate::{
     bindings::Coordinator,
     consensus::epoch::EpochId,
-    frost::{
-        self,
-        keygen::{SecretShares, Secrets},
-    },
+    frost::{self, keygen::Secrets},
     service::{Action, Effect},
+    state::KeyGenParticipation,
 };
 use alloy::primitives::B256;
 use safenet_core::state::{Command, Commands};
-use std::collections::BTreeMap;
+use std::{collections::BTreeMap, fmt::Display};
 
 impl Transition {
     /// Joins the genesis key generation once its group is created onchain.
@@ -74,7 +72,7 @@ impl Transition {
 
     /// Publishes the key gen commitment once the [`Effect::KeyGenSetup`]
     /// effect has produced it, moving the group into commitment collection.
-    pub fn handle_key_gen_setup(
+    pub(super) fn handle_key_gen_setup(
         &self,
         state: State,
         group_id: B256,
@@ -133,16 +131,21 @@ impl Transition {
                 mut commitments,
                 deadline,
             } if group.id() == event.gid => {
-                let (count, threshold) = group.size();
+                let (count, _) = group.size();
 
                 // Only consider valid commitments; invalid ones are ignored,
                 // the participant will be removed from the group on timeout.
-                if let Ok(commitment) = frost::keygen::verify_commitment(
-                    threshold,
-                    event.participant,
-                    &event.commitment,
-                ) {
-                    commitments.insert(event.participant, commitment);
+                match frost::keygen::verify_commitment(event.participant, &event.commitment) {
+                    Ok(commitment) => {
+                        commitments.insert(event.participant, commitment);
+                    }
+                    Err(err) => {
+                        tracing::warn!(
+                            %err,
+                            participant = %event.participant,
+                            "invalid key gen commitment"
+                        );
+                    }
                 };
 
                 if commitments.len() as u16 != count {
@@ -170,70 +173,79 @@ impl Transition {
                 // `None`.
                 let deadline = deadline.map(|_| block.saturating_add(self.key_gen_timeout.get()));
 
-                // Compute the group key from the commitments, and if part of
-                // the group, the secret shares to publish onchain.
-                match frost::keygen::group_key(&commitments).and_then(|group_key| {
-                    let secret_shares = secrets
-                        .map(|secrets| frost::keygen::generate_secret_shares(*secrets, commitments))
-                        .transpose()?;
-                    Ok((group_key, secret_shares))
-                }) {
-                    Ok((group_key, secret_shares)) => {
-                        let group_id = group.id();
-                        let (sharing_state, commands) = if let Some(SecretShares {
-                            sharing_state,
-                            share,
-                        }) = secret_shares
-                        {
-                            (
-                                Some(Box::new(sharing_state)),
-                                vec![Command::Action(Action::KeyGenSecretShare {
-                                    group_id,
-                                    share,
-                                    expires_at: deadline,
-                                })],
-                            )
-                        } else {
-                            // If we are just observing, the continue without
-                            // a secret sharing state or emitting any actions.
-                            (None, Vec::new())
-                        };
-
-                        (
+                // Compute the group participation state for the validator,
+                // depending on whether or not it is observing.
+                let (participation, commands) = match if let Some(secrets) = secrets {
+                    // We are participating, so compute the secret shares to
+                    // publish onchain and the sharing state.
+                    frost::keygen::generate_secret_shares(*secrets, commitments).map(
+                        |(sharing_state, share)| {
+                            let participation = KeyGenParticipation::Participating(sharing_state);
+                            let commands = vec![Command::Action(Action::KeyGenSecretShare {
+                                group_id: group.id(),
+                                share,
+                                expires_at: deadline,
+                            })];
+                            (participation, commands)
+                        },
+                    )
+                } else {
+                    // We are observing, just compute the group commitments that
+                    // are required to verify secret share public key shares and
+                    // complain responses.
+                    frost::keygen::group_commitments(commitments).map(|group_commitments| {
+                        let participation = KeyGenParticipation::Observing(group_commitments);
+                        (participation, Vec::new())
+                    })
+                } {
+                    Ok(result) => result,
+                    Err(err) => {
+                        // There was an issue with the verified commitments,
+                        // which is an unexpected an unrecoverable error.
+                        return (
                             State {
-                                rollover: RolloverState::CollectingShares {
-                                    next_epoch,
-                                    group,
-                                    group_key,
-                                    sharing_state,
-                                    shares: BTreeMap::new(),
-                                    deadline,
-                                },
+                                rollover: rollover_failure(next_epoch, err),
                                 ..state
                             },
-                            commands,
-                        )
+                            Vec::new(),
+                        );
                     }
-                    Err(err) => {
-                        let rollover = if let EpochId::Number { number: next_epoch } = next_epoch {
-                            tracing::warn!(
-                                %err,
-                                ?next_epoch,
-                                "failed to advance key generation, skipping to next epoch"
-                            );
-                            RolloverState::EpochSkipped { next_epoch }
-                        } else {
-                            tracing::error!(
-                                %err,
-                                "failed to advance genesis key generation, permanently halted"
-                            );
-                            RolloverState::Halted
-                        };
-                        (State { rollover, ..state }, Vec::new())
-                    }
-                }
+                };
+
+                (
+                    State {
+                        rollover: RolloverState::CollectingShares {
+                            next_epoch,
+                            group,
+                            participation: Box::new(participation),
+                            public_keys: BTreeMap::new(),
+                            shares: BTreeMap::new(),
+                            deadline,
+                        },
+                        ..state
+                    },
+                    commands,
+                )
             }
             _ => (state, Vec::new()),
         }
+    }
+}
+
+/// Handle a FROST error and return the next rollover state.
+fn rollover_failure(next_epoch: EpochId, err: impl Display) -> RolloverState {
+    if let EpochId::Number { number: next_epoch } = next_epoch {
+        tracing::warn!(
+            %err,
+            ?next_epoch,
+            "failed to advance key generation, skipping to next epoch"
+        );
+        RolloverState::EpochSkipped { next_epoch }
+    } else {
+        tracing::error!(
+            %err,
+            "failed to advance genesis key generation, permanently halted"
+        );
+        RolloverState::Halted
     }
 }
