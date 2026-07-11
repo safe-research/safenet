@@ -40,6 +40,14 @@ pub enum Action {
         group_id: B256,
         expires_at: Option<u64>,
     },
+    /// An action to reveal a unencrypted secret share, in response to a
+    /// complaint raised against the validator.
+    KeyGenComplaintResponse {
+        group_id: B256,
+        plaintiff: Address,
+        secret_share: U256,
+        expires_at: Option<u64>,
+    },
     /// An action to perform the preprocessing step and register a freshly
     /// sampled nonce tree's commitments.
     Preprocess {
@@ -132,6 +140,26 @@ impl ActionEncoder<Action> for Encoder {
                         .abi_encode()
                         .into(),
                     gas: 200_000,
+                },
+                expires_at,
+            ),
+            Action::KeyGenComplaintResponse {
+                group_id,
+                plaintiff,
+                secret_share,
+                expires_at,
+            } => (
+                Transaction {
+                    to: self.coordinator,
+                    value: U256::ZERO,
+                    data: Coordinator::keyGenComplaintResponseCall {
+                        gid: group_id,
+                        plaintiff,
+                        secretShare: secret_share,
+                    }
+                    .abi_encode()
+                    .into(),
+                    gas: 250_000,
                 },
                 expires_at,
             ),

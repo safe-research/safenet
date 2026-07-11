@@ -139,6 +139,7 @@ pub fn group_commitments(
 pub struct SharingState {
     encryption_key: EncryptionKey,
     secret_package: round2::SecretPackage,
+    peer_packages: BTreeMap<Identifier, round2::Package>,
     group_commitments: GroupCommitments,
 }
 
@@ -212,6 +213,7 @@ pub fn generate_secret_shares(
             let sharing_state = SharingState {
                 encryption_key: secrets.encryption_key,
                 secret_package,
+                peer_packages: round2_packages,
                 group_commitments: GroupCommitments {
                     commitments,
                     group_commitment,
@@ -370,6 +372,19 @@ pub fn verify_encrypted_secret_share(
         .err_with_culprit(participant)?;
 
     Ok(VerifiedShare { package })
+}
+
+/// Reveals this validator's own plaintext secret share computed for `peer`,
+/// published onchain in response to a complaint so that anyone can verify it
+/// against this validator's committed polynomial.
+pub fn reveal_secret_share(sharing_state: &SharingState, peer: Address) -> Result<U256, Error> {
+    let identifier = participants::identifier(peer);
+    sharing_state
+        .peer_packages
+        .get(&identifier)
+        .map(|package| marshal::solidity_scalar(&package.signing_share().to_scalar()))
+        .ok_or(frost_secp256k1::Error::UnknownIdentifier)
+        .err_unexpected()
 }
 
 /// A participant's share of the group signing key: its secret signing share,

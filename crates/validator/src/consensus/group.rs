@@ -52,6 +52,7 @@ use std::{collections::BTreeSet, num::NonZeroU64};
 pub struct Group {
     id: B256,
     participants: MerkleRoot,
+    excluded: BTreeSet<Address>,
     count: u16,
     threshold: u16,
     context: B256,
@@ -75,11 +76,17 @@ impl Group {
     pub fn size(&self) -> (u16, u16) {
         (self.count, self.threshold)
     }
+
+    /// Returns the set of excluded participants from the group.
+    pub fn excluded(&self) -> impl Iterator<Item = Address> + '_ {
+        self.excluded.iter().copied()
+    }
 }
 
 /// A participant set.
 pub struct ParticipantSet {
     addresses: BTreeSet<Address>,
+    excluded: BTreeSet<Address>,
     context: B256,
 }
 
@@ -123,6 +130,7 @@ impl ParticipantSet {
         let group = Group {
             id: group_id(participants.root(), count, threshold, context),
             participants: participants.root(),
+            excluded: self.excluded.clone(),
             count,
             threshold,
             context,
@@ -132,37 +140,36 @@ impl ParticipantSet {
 }
 
 /// The epoch details for computing a participant set.
-pub enum Epoch<'a> {
+pub enum Epoch {
     Genesis {
         salt: B256,
     },
     Number {
         consensus: Address,
         number: NonZeroU64,
-        exclude: &'a BTreeSet<Address>,
+        excluded: BTreeSet<Address>,
     },
 }
 
 /// The participant set active for `epoch`, returns `None` if the participant
 /// set is not valid (for example, if there are not enough participants).
 pub fn participants_set(participants: &[Participant], epoch: Epoch) -> Option<ParticipantSet> {
-    let (addresses, total, context) = match epoch {
+    let (mut addresses, excluded, context) = match epoch {
         Epoch::Genesis { salt } => {
             let addresses = participants
                 .iter()
                 .filter(|p| p.active_from == 0)
                 .map(|p| p.address)
                 .collect::<BTreeSet<_>>();
-            let total = addresses.len();
             let context = genesis_context(salt);
-            (addresses, total, context)
+            (addresses, BTreeSet::new(), context)
         }
         Epoch::Number {
             consensus,
             number,
-            exclude,
+            excluded,
         } => {
-            let mut addresses = participants
+            let addresses = participants
                 .iter()
                 .filter(|p| {
                     p.active_from <= number.get()
@@ -170,18 +177,22 @@ pub fn participants_set(participants: &[Participant], epoch: Epoch) -> Option<Pa
                 })
                 .map(|p| p.address)
                 .collect::<BTreeSet<_>>();
-            let total = addresses.len();
-            for address in exclude {
-                addresses.remove(address);
-            }
             let context = group_context(consensus, number.get());
-            (addresses, total, context)
+            (addresses, excluded, context)
         }
     };
 
-    let total = u16::try_from(total).ok()?;
+    let total = u16::try_from(addresses.len()).ok()?;
+    for address in &excluded {
+        addresses.remove(address);
+    }
+
     let count = u16::try_from(addresses.len()).ok()?;
-    (count >= min_participants(total)).then_some(ParticipantSet { addresses, context })
+    (count >= min_participants(total)).then_some(ParticipantSet {
+        addresses,
+        excluded,
+        context,
+    })
 }
 
 /// The FROST signing threshold for a group of `count` participants.
@@ -364,7 +375,7 @@ mod tests {
             Epoch::Number {
                 consensus: CONSENSUS,
                 number: NonZeroU64::new(32729).unwrap(),
-                exclude: &BTreeSet::new(),
+                excluded: BTreeSet::new(),
             },
         )
         .unwrap();
