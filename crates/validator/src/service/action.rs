@@ -11,6 +11,9 @@ use alloy::{
 use safenet_core::{driver::ActionEncoder, tx::Transaction};
 
 /// An onchain action the validator emits during a state transition.
+// The `KeyGen*` prefix mirrors the onchain function names; more variants
+// with other prefixes (`Sign*`, `Consensus*`, ...) land as their handlers do.
+#[expect(clippy::enum_variant_names)]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Action {
     /// An action to publish key generation commitments onchain.
@@ -27,6 +30,17 @@ pub enum Action {
     KeyGenSecretShare {
         group_id: B256,
         share: bindings::KeyGenSecretShare,
+        expires_at: Option<u64>,
+    },
+    /// An action to complain about an invalid key generation secret share.
+    KeyGenComplain {
+        group_id: B256,
+        accused: Address,
+        expires_at: Option<u64>,
+    },
+    /// An action to confirm participation in a completed key generation.
+    KeyGenConfirm {
+        group_id: B256,
         expires_at: Option<u64>,
     },
 }
@@ -86,6 +100,38 @@ impl ActionEncoder<Action> for Encoder {
                     expires_at,
                 )
             }
+            Action::KeyGenComplain {
+                group_id,
+                accused,
+                expires_at,
+            } => (
+                Transaction {
+                    to: self.coordinator,
+                    value: U256::ZERO,
+                    data: Coordinator::keyGenComplainCall {
+                        gid: group_id,
+                        accused,
+                    }
+                    .abi_encode()
+                    .into(),
+                    gas: 300_000,
+                },
+                expires_at,
+            ),
+            Action::KeyGenConfirm {
+                group_id,
+                expires_at,
+            } => (
+                Transaction {
+                    to: self.coordinator,
+                    value: U256::ZERO,
+                    data: Coordinator::keyGenConfirmCall { gid: group_id }
+                        .abi_encode()
+                        .into(),
+                    gas: 200_000,
+                },
+                expires_at,
+            ),
         }
     }
 }
