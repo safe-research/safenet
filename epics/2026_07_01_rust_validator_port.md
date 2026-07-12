@@ -679,11 +679,9 @@ attest/stage actions are the timeout fallbacks in D4. Ports `signing/*` + `conse
   `SignShare` action (carrying the transaction/oracle attestation callback; the rollover `stageEpoch`
   callback branch lands with D4iii). Ports `signing/nonces.ts` (`handleRevealedNonces`). Depends on
   B5, C1, D3ii.
-- **D3v — `SignShared`.** Track collected signature shares. Ports `signing/shares.ts`. Depends on
-  D3iv.
-- **D3vi — `SignCompleted`.** `→ WaitingForAttestation`. Ports `signing/completed.ts`. Depends on
-  D3v. _(Completes the minimal genesis DKG + one-signing-round flow the F1 interop test drives.)_
-- **D3vii.** Revisit nonce topup, it needs to be done in a wholistic way (we need to be able to
+- **D3v — `SignShared` + `SignCompleted`.** Track collected signature shares. Ports `signing/shares.ts`. Depends on
+  D3iv. Completed `→ WaitingForAttestation`. Ports `signing/completed.ts`.
+- **D3vi.** Revisit nonce topup, it needs to be done in a wholistic way (we need to be able to
   topup nonces for all participating groups, even for signing ceremonies for which we do not care
   for; I suspect the correct way is to use the secret store).
 

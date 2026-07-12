@@ -54,7 +54,19 @@ pub enum Effect {
         message: B256,
         sequence: u64,
     },
+    /// Check that at least [`NONCE_TOPUP_THRESHOLD`] nonces remain usable for
+    /// `key_share`'s group from `(chunk, offset)` onward, generating and
+    /// registering a fresh chunk if not.
+    TopupNonces {
+        group_id: B256,
+        key_share: Arc<KeyShare>,
+        sequence: u64,
+    },
 }
+
+/// The remaining usable nonce count, per participating group, below which a
+/// fresh nonce chunk is generated and registered.
+const NONCE_TOPUP_THRESHOLD: u64 = 100;
 
 /// The result of performing an [`Effect`], resumed into the state machine.
 #[allow(clippy::large_enum_variant)]
@@ -113,24 +125,7 @@ impl Handler {
             Effect::NonceTree {
                 group_id,
                 key_share,
-            } => {
-                let mut rng = rand::thread_rng();
-                let chunk = frost::preprocess::NonceChunk::generate(&key_share, &mut rng)?;
-                let result = self
-                    .secrets
-                    .register_nonces_chunk(group_id, self.account, chunk)
-                    .await?
-                    // In case registration worked, then resume with the nonce
-                    // chunk commitment hash so it may be recorded onchain.
-                    .map(|commitment| Resume::NonceTree {
-                        group_id,
-                        commitment,
-                    })
-                    // There is already a pending nonce chunk, and therefore we
-                    // do not want to register a new one.
-                    .unwrap_or(Resume::Noop);
-                Ok(result)
-            }
+            } => self.sample_nonces(group_id, &key_share).await,
             Effect::LinkNonceTree {
                 group_id,
                 chunk,
@@ -180,7 +175,43 @@ impl Handler {
                     .unwrap_or(Resume::Noop);
                 Ok(result)
             }
+            Effect::TopupNonces {
+                group_id,
+                key_share,
+                sequence,
+            } => {
+                let (chunk, offset) = frost::preprocess::decode_sequence(sequence);
+                let available = self
+                    .secrets
+                    .available_nonce_count(group_id, self.account, chunk, offset)
+                    .await?;
+                if available >= NONCE_TOPUP_THRESHOLD {
+                    return Ok(Resume::Noop);
+                }
+                return self.sample_nonces(group_id, &key_share).await;
+            }
         }
+    }
+
+    async fn sample_nonces(
+        &self,
+        group_id: B256,
+        key_share: &KeyShare,
+    ) -> Result<Resume, InternalError> {
+        let mut rng = rand::thread_rng();
+        let nonce_chunk = frost::preprocess::NonceChunk::generate(key_share, &mut rng)?;
+        let result = self
+            .secrets
+            .register_nonces_chunk(group_id, self.account, nonce_chunk)
+            .await?
+            .map(|commitment| Resume::NonceTree {
+                group_id,
+                commitment,
+            })
+            // There is already a pending nonce chunk from an earlier
+            // top-up; do not register a second one.
+            .unwrap_or(Resume::Noop);
+        Ok(result)
     }
 }
 

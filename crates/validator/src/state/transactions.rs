@@ -20,11 +20,11 @@ impl Transition {
         block: u64,
         event: &Consensus::TransactionProposed,
     ) -> (State, Commands<State, Self>) {
-        let Some(participating_epoch) = state.epochs.get(&event.epoch) else {
+        let epoch = EpochId::from_raw(event.epoch);
+        let Some(participating_epoch) = state.epochs.get(&epoch) else {
             return (state, Vec::new());
         };
 
-        let epoch = EpochId::from_raw(event.epoch);
         let message = self
             .consensus
             .transaction_packet_hash(epoch, &event.transaction);
@@ -118,15 +118,15 @@ impl Transition {
         block: u64,
         event: &Consensus::OracleTransactionProposed,
     ) -> (State, Commands<State, Self>) {
+        let epoch = EpochId::from_raw(event.epoch);
         let Some(participating_epoch) = state
             .epochs
-            .get(&event.epoch)
+            .get(&epoch)
             .filter(|_| self.config.oracles.contains(&event.oracle))
         else {
             return (state, Vec::new());
         };
 
-        let epoch = EpochId::from_raw(event.epoch);
         let message =
             self.consensus
                 .oracle_transaction_packet_hash(epoch, event.oracle, &event.transaction);
