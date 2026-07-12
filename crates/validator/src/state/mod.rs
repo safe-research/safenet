@@ -37,6 +37,9 @@ pub struct State {
     /// The signing sessions tracked so far, keyed by the message hash the
     /// group signature attests to.
     signing: BTreeMap<B256, SigningState>,
+    /// The message hash each pending signature id was requested over, so its
+    /// signing session can be found once the signature is submitted onchain.
+    signature_id_to_message: BTreeMap<B256, B256>,
     /// Things queued up to be pruned, along with the block at which they were
     /// queued. Pruning itself only happens once the entry is mature enough to
     /// be reorg-safe.
@@ -215,7 +218,10 @@ enum Packet {
 
 /// A signing session, keyed by the message hash the group signature attests
 /// to.
+// Every variant is a distinct wait state (for a request, an attestation, or
+// to decline); the shared prefix reflects that, not redundant naming.
 #[derive(Clone, Debug, Deserialize, Serialize)]
+#[allow(clippy::enum_variant_names)]
 enum SigningState {
     /// The packet was verified; waiting for this validator's own `Sign`
     /// action to open the nonce-commitment round.
@@ -227,6 +233,12 @@ enum SigningState {
         /// The block by which the signing round must complete. `None` to
         /// indicate that there is no deadline.
         deadline: Option<u64>,
+    },
+    /// A complete group signature was produced; waiting for the attestation
+    /// to be submitted onchain.
+    WaitingForAttestation {
+        /// The signature id the completed signing round produced.
+        signature_id: B256,
     },
     /// The packet failed verification; waiting to submit a decline.
     WaitingToDecline {
@@ -287,6 +299,9 @@ impl StateTransition<State> for Transition {
                 )) => self.handle_key_gen_complaint_responded(state, log.block, &event),
                 Event::Consensus(Consensus::ConsensusEvents::TransactionProposed(event)) => {
                     self.handle_transaction_proposed(state, log.block, &event)
+                }
+                Event::Consensus(Consensus::ConsensusEvents::TransactionAttested(event)) => {
+                    self.handle_transaction_attested(state, &event)
                 }
                 // The remaining events are wired in as their handlers land.
                 _ => (state, Vec::new()),
