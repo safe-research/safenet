@@ -683,6 +683,9 @@ attest/stage actions are the timeout fallbacks in D4. Ports `signing/*` + `conse
   D3iv.
 - **D3vi — `SignCompleted`.** `→ WaitingForAttestation`. Ports `signing/completed.ts`. Depends on
   D3v. _(Completes the minimal genesis DKG + one-signing-round flow the F1 interop test drives.)_
+- **D3vii.** Revisit nonce topup, it needs to be done in a wholistic way (we need to be able to
+  topup nonces for all participating groups, even for signing ceremonies for which we do not care
+  for; I suspect the correct way is to use the secret store).
 
 **D4 — Epoch rollover & timeouts.** The block-driven epoch machine, the non-genesis DKG trigger, and
 all `NewBlock` timeout checks — reusing the D3 signing FSM for the rollover packet. Ports

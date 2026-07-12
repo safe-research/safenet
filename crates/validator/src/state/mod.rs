@@ -288,8 +288,12 @@ enum SigningState {
     CollectNonceCommitments {
         /// The key share for participating in the signing ceremony.
         key_share: Arc<KeyShare>,
+        /// The group generating the signature.
+        group_id: B256,
         /// The signature id assigned to this signing round.
         signature_id: B256,
+        /// The nonce sequence number assigned to this signing round.
+        sequence: u64,
         /// Verified revealed nonce commitments received from peers so far.
         revealed: BTreeMap<Address, RevealedNonces>,
         /// The packet being signed.
@@ -298,6 +302,26 @@ enum SigningState {
         signers: BTreeSet<Address>,
         /// The block by which the commitment round must complete. `None` to
         /// indicate that there is no deadline.
+        deadline: Option<u64>,
+    },
+    /// Every signer's nonce commitment has been revealed and this
+    /// validator's own signature share is being produced; waiting for the
+    /// [`Effect::UseNonce`] effect to complete before it can be published.
+    CollectSigningShares {
+        /// The key share for participating in the signing ceremony.
+        key_share: Arc<KeyShare>,
+        /// The group generating the signature.
+        group_id: B256,
+        /// The signature id assigned to this signing round.
+        signature_id: B256,
+        /// Verified revealed nonce commitments received from peers so far.
+        revealed: BTreeMap<Address, RevealedNonces>,
+        /// The packet being signed.
+        packet: Packet,
+        /// The group members expected to take part in signing.
+        signers: BTreeSet<Address>,
+        /// The block by which the signature share round must complete.
+        /// `None` to indicate that there is no deadline.
         deadline: Option<u64>,
     },
     /// A complete group signature was produced; waiting for the attestation
@@ -371,6 +395,9 @@ impl StateTransition<State> for Transition {
                 Event::Coordinator(Coordinator::CoordinatorEvents::Sign(event)) => {
                     self.handle_sign(state, log.block, &event)
                 }
+                Event::Coordinator(Coordinator::CoordinatorEvents::SignRevealedNonces(event)) => {
+                    self.handle_sign_revealed_nonces(state, log.block, &event)
+                }
                 Event::Consensus(Consensus::ConsensusEvents::TransactionProposed(event)) => {
                     self.handle_transaction_proposed(state, log.block, &event)
                 }
@@ -406,6 +433,7 @@ impl StateTransition<State> for Transition {
                     nonces,
                     proof,
                 } => self.handle_nonce_commitments(state, signature_id, message, nonces, proof),
+                Resume::Nonce { message, nonces } => self.handle_nonces(state, message, nonces),
             },
         }
     }

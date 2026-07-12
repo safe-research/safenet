@@ -200,7 +200,8 @@ impl SigningState {
         match self {
             SigningState::WaitingForAttestation { signature_id, .. }
             | SigningState::WaitingForOracle { signature_id, .. }
-            | SigningState::CollectNonceCommitments { signature_id, .. } => Some(*signature_id),
+            | SigningState::CollectNonceCommitments { signature_id, .. }
+            | SigningState::CollectSigningShares { signature_id, .. } => Some(*signature_id),
             SigningState::WaitingForRequest { .. } | SigningState::WaitingToDecline { .. } => None,
         }
     }

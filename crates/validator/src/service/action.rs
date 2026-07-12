@@ -68,6 +68,16 @@ pub enum Action {
         signature_id: B256,
         expires_at: Option<u64>,
     },
+    /// An action to publish this validator's signature share, along with the
+    /// callback invoked once the group's signature completes.
+    SignShare {
+        signature_id: B256,
+        selection: bindings::SignSelection,
+        share: bindings::SignatureShare,
+        proof: Vec<B256>,
+        callback: bindings::Callback,
+        expires_at: Option<u64>,
+    },
 }
 
 /// Encodes [`Action`]s into the transactions the queue submits.
@@ -227,6 +237,30 @@ impl ActionEncoder<Action> for Encoder {
                         .abi_encode()
                         .into(),
                     gas: 150_000,
+                },
+                expires_at,
+            ),
+            Action::SignShare {
+                signature_id,
+                selection,
+                share,
+                proof,
+                callback,
+                expires_at,
+            } => (
+                Transaction {
+                    to: self.coordinator,
+                    value: U256::ZERO,
+                    data: Coordinator::signShareWithCallbackCall {
+                        sid: signature_id,
+                        selection,
+                        share,
+                        proof,
+                        callback,
+                    }
+                    .abi_encode()
+                    .into(),
+                    gas: 350_000,
                 },
                 expires_at,
             ),

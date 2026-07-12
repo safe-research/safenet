@@ -1,9 +1,14 @@
 use super::{Packet, SigningState, State, Transition};
 use crate::{
-    bindings::{Coordinator, Oracle, SignNonces},
+    bindings::{self, Consensus, Coordinator, Oracle, SignNonces},
+    consensus::hashing,
+    frost::{self, preprocess::Nonces},
     service::{Action, Effect},
 };
-use alloy::primitives::{Address, B256};
+use alloy::{
+    primitives::{Address, B256},
+    sol_types::SolCall as _,
+};
 use safenet_core::state::{Command, Commands};
 use std::collections::BTreeMap;
 
@@ -54,7 +59,9 @@ impl Transition {
                         event.message,
                         SigningState::CollectNonceCommitments {
                             key_share,
+                            group_id: event.gid,
                             signature_id: event.sid,
+                            sequence: event.sequence,
                             revealed: BTreeMap::new(),
                             packet,
                             signers,
@@ -152,7 +159,9 @@ impl Transition {
                     event.requestId,
                     SigningState::CollectNonceCommitments {
                         key_share,
+                        group_id,
                         signature_id,
+                        sequence,
                         revealed: BTreeMap::new(),
                         packet,
                         signers,
@@ -189,6 +198,200 @@ impl Transition {
                 (state, Vec::new())
             }
             None => (state, Vec::new()),
+        }
+    }
+
+    /// Tracks a peer's revealed nonce commitment. Once every expected signer
+    /// has revealed, enters [`SigningState::CollectSigningShares`] and
+    /// dispatches the [`Effect::UseNonce`] effect to burn this validator's own
+    /// nonce and produce a signature share from the now-complete set of
+    /// revealed commitments.
+    pub(super) fn handle_sign_revealed_nonces(
+        &self,
+        mut state: State,
+        block: u64,
+        event: &Coordinator::SignRevealedNonces,
+    ) -> (State, Commands<State, Self>) {
+        let Some(&message) = state.signature_id_to_message.get(&event.sid) else {
+            return (state, Vec::new());
+        };
+
+        match state.signing.remove(&message) {
+            Some(SigningState::CollectNonceCommitments {
+                key_share,
+                group_id,
+                signature_id,
+                sequence,
+                mut revealed,
+                packet,
+                signers,
+                deadline,
+            }) => {
+                match signers
+                    .contains(&event.participant)
+                    .then(|| frost::sign::verify_revealed_nonces(event.participant, &event.nonces))
+                {
+                    Some(Ok(nonces)) => {
+                        revealed.insert(event.participant, nonces);
+                    }
+                    Some(Err(err)) => {
+                        tracing::warn!(
+                            signature_id = %signature_id,
+                            participant = %event.participant,
+                            %err,
+                            "ignoring invalid revealed nonce commitment",
+                        );
+                    }
+                    None => {
+                        tracing::warn!(
+                            signature_id = %signature_id,
+                            participant = %event.participant,
+                            signing_selection = ?signers,
+                            "ignoring nonce commitment from participant not in signing selection",
+                        );
+                    }
+                }
+
+                if revealed.len() < signers.len() {
+                    state.signing.insert(
+                        message,
+                        SigningState::CollectNonceCommitments {
+                            key_share,
+                            group_id,
+                            signature_id,
+                            sequence,
+                            revealed,
+                            packet,
+                            signers,
+                            deadline,
+                        },
+                    );
+                    return (state, Vec::new());
+                }
+
+                let deadline = Some(block.saturating_add(self.config.signing_timeout.get()));
+                state.signing.insert(
+                    message,
+                    SigningState::CollectSigningShares {
+                        key_share,
+                        group_id,
+                        signature_id,
+                        revealed,
+                        packet,
+                        signers,
+                        deadline,
+                    },
+                );
+
+                (
+                    state,
+                    vec![Command::Effect(Effect::UseNonce {
+                        group_id,
+                        message,
+                        sequence,
+                    })],
+                )
+            }
+            Some(other) => {
+                state.signing.insert(message, other);
+                (state, Vec::new())
+            }
+            None => (state, Vec::new()),
+        }
+    }
+
+    /// Publishes this validator's signature share once the
+    /// [`Effect::UseNonce`] effect has produced it, attaching the packet's
+    /// completion callback (`attestTransaction`/`attestOracleTransaction`) so
+    /// the group's completed signature carries out its onchain effect
+    /// automatically.
+    pub(super) fn handle_nonces(
+        &self,
+        state: State,
+        message: B256,
+        nonces: Nonces,
+    ) -> (State, Commands<State, Self>) {
+        let Some(SigningState::CollectSigningShares {
+            key_share,
+            signature_id,
+            revealed,
+            packet,
+            deadline,
+            ..
+        }) = state.signing.get(&message)
+        else {
+            return (state, Vec::new());
+        };
+
+        let result = match frost::sign::signature_share(key_share, nonces, revealed, &message) {
+            Ok(result) => result,
+            Err(err) => {
+                tracing::warn!(
+                    %message,
+                    %signature_id,
+                    %err,
+                    "failed to compute signature shares for signing ceremony"
+                );
+                return (state, Vec::new());
+            }
+        };
+
+        let signature_id = *signature_id;
+        let callback = packet.attestation_callback(self.config.consensus);
+        let expires_at = *deadline;
+
+        (
+            state,
+            vec![Command::Action(Action::SignShare {
+                signature_id,
+                selection: result.selection,
+                share: result.share,
+                proof: result.proof,
+                callback,
+                expires_at,
+            })],
+        )
+    }
+}
+
+impl Packet {
+    /// Builds the callback invoked once this packet's group signature
+    /// completes: `attestTransaction`/`attestOracleTransaction` calldata
+    /// targeting the `Consensus` contract. The signature id argument is left
+    /// as a zero placeholder - the `Consensus` contract fills it in itself
+    /// when it invokes the callback from a completed `signShareWithCallback`.
+    fn attestation_callback(&self, consensus: Address) -> bindings::Callback {
+        let (epoch, oracle, transaction) = match self {
+            Packet::Transaction { epoch, transaction } => (*epoch, None, transaction),
+            Packet::OracleTransaction {
+                epoch,
+                oracle,
+                transaction,
+            } => (*epoch, Some(*oracle), transaction),
+        };
+        let safe_tx_struct_hash = hashing::safe_tx_hash(transaction);
+        let context = match oracle {
+            None => Consensus::attestTransactionCall {
+                epoch: epoch.raw_value(),
+                chainId: transaction.chainId,
+                safe: transaction.safe,
+                safeTxStructHash: safe_tx_struct_hash,
+                signatureId: B256::ZERO,
+            }
+            .abi_encode(),
+            Some(oracle) => Consensus::attestOracleTransactionCall {
+                epoch: epoch.raw_value(),
+                oracle,
+                chainId: transaction.chainId,
+                safe: transaction.safe,
+                safeTxStructHash: safe_tx_struct_hash,
+                signatureId: B256::ZERO,
+            }
+            .abi_encode(),
+        };
+        bindings::Callback {
+            target: consensus,
+            context: context.into(),
         }
     }
 }
