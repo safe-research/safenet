@@ -1,6 +1,7 @@
 //! The validator effect system and its handler.
 
 use crate::{
+    bindings,
     frost::{
         self,
         keygen::{KeyShare, Secrets},
@@ -12,6 +13,7 @@ use safenet_core::state::EffectHandler;
 use std::{
     error::Error,
     fmt::{self, Display, Formatter},
+    sync::Arc,
 };
 
 /// An impure operation the state transition asks the handler to perform.
@@ -27,7 +29,7 @@ pub enum Effect {
     /// Sample a fresh nonce tree for `key_share` and persist it.
     NonceTree {
         group_id: B256,
-        key_share: Box<KeyShare>,
+        key_share: Arc<KeyShare>,
     },
     /// Link a registered nonce tree (identified by its `root` commitment) to
     /// the onchain sequence `chunk` it was assigned.
@@ -35,6 +37,14 @@ pub enum Effect {
         group_id: B256,
         chunk: u64,
         root: B256,
+    },
+    /// Reveal this validator's nonce commitment for the signing round at
+    /// `sequence`.
+    RevealNonceCommitments {
+        group_id: B256,
+        signature_id: B256,
+        message: B256,
+        sequence: u64,
     },
 }
 
@@ -53,6 +63,14 @@ pub enum Resume {
     /// Resume with the nonce tree commitment produced by a
     /// [`Effect::NonceTree`].
     NonceTree { group_id: B256, commitment: B256 },
+    /// Resume with the nonce commitment revealed by a
+    /// [`Effect::RevealNonceCommitments`].
+    NonceCommitments {
+        signature_id: B256,
+        message: B256,
+        nonces: bindings::SignNonces,
+        proof: Vec<B256>,
+    },
 }
 
 /// Performs the validator's [`Effect`]s, resuming with a [`Resume`].
@@ -112,6 +130,28 @@ impl Handler {
                     .link_nonces_chunk(group_id, self.account, chunk, root)
                     .await?;
                 Ok(Resume::Noop)
+            }
+            Effect::RevealNonceCommitments {
+                group_id,
+                signature_id,
+                message,
+                sequence,
+            } => {
+                let (chunk, offset) = frost::preprocess::decode_sequence(sequence);
+                let result = self
+                    .secrets
+                    .nonces_reveal(group_id, self.account, chunk, offset)
+                    .await?
+                    .map(|(nonces, proof)| Resume::NonceCommitments {
+                        signature_id,
+                        message,
+                        nonces,
+                        proof,
+                    })
+                    // The nonce was not generated, used up, or the tree isn't
+                    // linked yet; nothing to reveal.
+                    .unwrap_or(Resume::Noop);
+                Ok(result)
             }
         }
     }

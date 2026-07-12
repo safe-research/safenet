@@ -2,6 +2,7 @@
 
 mod keygen;
 mod preprocess;
+mod sign;
 mod transactions;
 
 use crate::{
@@ -12,9 +13,12 @@ use crate::{
         group::{Group, ParticipantSet},
         hashing::ConsensusDomain,
     },
-    frost::keygen::{
-        GroupCommitments, KeyShare, PublicKeyShare, Secrets, SharingState, VerifiedCommitment,
-        VerifiedShare,
+    frost::{
+        keygen::{
+            GroupCommitments, KeyShare, PublicKeyShare, Secrets, SharingState, VerifiedCommitment,
+            VerifiedShare,
+        },
+        sign::RevealedNonces,
     },
     service::{Action, Effect, Event, Resume},
 };
@@ -24,6 +28,7 @@ use serde::{Deserialize, Serialize};
 use std::{
     collections::{BTreeMap, BTreeSet},
     num::NonZeroU64,
+    sync::Arc,
 };
 
 /// The complete snapshotted validator state.
@@ -31,9 +36,11 @@ use std::{
 pub struct State {
     /// The epoch-rollover / DKG state machine.
     rollover: RolloverState,
-    /// The resolved group for each epoch that has completed its key
-    /// generation.
-    epoch_groups: BTreeMap<u64, Group>,
+    /// The epochs that the validator is participating in and have completed
+    /// their key generation, keyed by epoch number and retained past
+    /// `EpochStaged` so later handlers can look up a resolved group and the
+    /// generated key share.
+    epochs: BTreeMap<u64, Epoch>,
     /// The signing sessions tracked so far, keyed by the message hash the
     /// group signature attests to.
     signing: BTreeMap<B256, SigningState>,
@@ -53,6 +60,16 @@ impl State {
         self.to_prune.push((block, prune));
         self
     }
+}
+
+/// A resolved epoch that the validator is participating in, retained past
+/// `EpochStaged` to access resolved group and epoch key material.
+#[derive(Clone, Debug, Deserialize, Serialize)]
+struct Epoch {
+    /// The resolved group.
+    group: Group,
+    /// This validator's key share.
+    key_share: Arc<KeyShare>,
 }
 
 /// Something queued up to be pruned once mature.
@@ -181,7 +198,7 @@ enum KeyGenConfirmation {
     Collecting(BTreeMap<Address, VerifiedShare>),
     /// All secret shares have been collected and a secret key share has been
     /// constructed.
-    Confirmed(Box<KeyShare>),
+    Confirmed(Arc<KeyShare>),
 }
 
 /// The complaints raised against a single accused participant.
@@ -235,6 +252,8 @@ enum SigningState {
     /// The packet was verified; waiting for this validator's own `Sign`
     /// action to open the nonce-commitment round.
     WaitingForRequest {
+        /// The key share for participating in the signing ceremony.
+        key_share: Arc<KeyShare>,
         /// The packet being signed.
         packet: Packet,
         /// The group members expected to take part in signing.
@@ -243,11 +262,51 @@ enum SigningState {
         /// indicate that there is no deadline.
         deadline: Option<u64>,
     },
+    /// An oracle-backed packet's signing round is on hold until the oracle's
+    /// result is attested.
+    WaitingForOracle {
+        /// The key share for participating in the signing ceremony.
+        key_share: Arc<KeyShare>,
+        /// The oracle whose result is awaited.
+        oracle: Address,
+        /// The group generating the signature.
+        group_id: B256,
+        /// The signature id assigned to this signing round.
+        signature_id: B256,
+        /// The nonce sequence number assigned to this signing round.
+        sequence: u64,
+        /// The packet being signed.
+        packet: Packet,
+        /// The group members expected to take part in signing.
+        signers: BTreeSet<Address>,
+        /// The block by which the oracle result must land. `None` to
+        /// indicate that there is no deadline.
+        deadline: Option<u64>,
+    },
+    /// This validator has revealed its nonce commitment and is waiting for
+    /// its peers to reveal theirs.
+    CollectNonceCommitments {
+        /// The key share for participating in the signing ceremony.
+        key_share: Arc<KeyShare>,
+        /// The signature id assigned to this signing round.
+        signature_id: B256,
+        /// Verified revealed nonce commitments received from peers so far.
+        revealed: BTreeMap<Address, RevealedNonces>,
+        /// The packet being signed.
+        packet: Packet,
+        /// The group members expected to take part in signing.
+        signers: BTreeSet<Address>,
+        /// The block by which the commitment round must complete. `None` to
+        /// indicate that there is no deadline.
+        deadline: Option<u64>,
+    },
     /// A complete group signature was produced; waiting for the attestation
     /// to be submitted onchain.
     WaitingForAttestation {
         /// The signature id the completed signing round produced.
         signature_id: B256,
+        /// The block by which the signing attestation must arrive.
+        deadline: Option<u64>,
     },
     /// The packet failed verification; waiting to submit a decline.
     WaitingToDecline {
@@ -309,6 +368,9 @@ impl StateTransition<State> for Transition {
                 Event::Coordinator(Coordinator::CoordinatorEvents::Preprocess(event)) => {
                     self.handle_preprocess(state, &event)
                 }
+                Event::Coordinator(Coordinator::CoordinatorEvents::Sign(event)) => {
+                    self.handle_sign(state, log.block, &event)
+                }
                 Event::Consensus(Consensus::ConsensusEvents::TransactionProposed(event)) => {
                     self.handle_transaction_proposed(state, log.block, &event)
                 }
@@ -335,6 +397,12 @@ impl StateTransition<State> for Transition {
                     group_id,
                     commitment,
                 } => self.handle_nonce_tree(state, group_id, commitment),
+                Resume::NonceCommitments {
+                    signature_id,
+                    message,
+                    nonces,
+                    proof,
+                } => self.handle_nonce_commitments(state, signature_id, message, nonces, proof),
             },
         }
     }

@@ -1,4 +1,4 @@
-use super::{Prune, RolloverState, State, Transition};
+use super::{Epoch, Prune, RolloverState, State, Transition};
 use crate::{
     bindings::Coordinator,
     consensus::{
@@ -18,6 +18,7 @@ use std::{
     collections::{BTreeMap, BTreeSet},
     fmt::Display,
     iter, mem,
+    sync::Arc,
 };
 
 impl Transition {
@@ -329,7 +330,7 @@ impl Transition {
                                         .as_ref()
                                         .map(|deadlines| deadlines.confirm),
                                 }));
-                                KeyGenConfirmation::Confirmed(Box::new(key_share))
+                                KeyGenConfirmation::Confirmed(Arc::new(key_share))
                             }
                             Err(err) => {
                                 // Finalization failures are unexpected, since
@@ -408,6 +409,13 @@ impl Transition {
                     EpochId::Genesis => {
                         let group_id = group.id();
                         let commands = if let KeyGenConfirmation::Confirmed(key_share) = status {
+                            state.epochs.insert(
+                                next_epoch.raw_value(),
+                                Epoch {
+                                    group,
+                                    key_share: key_share.clone(),
+                                },
+                            );
                             vec![Command::Effect(Effect::NonceTree {
                                 group_id,
                                 key_share,
@@ -415,8 +423,6 @@ impl Transition {
                         } else {
                             Vec::new()
                         };
-
-                        state.epoch_groups.insert(next_epoch.raw_value(), group);
 
                         (
                             State {
@@ -680,7 +686,7 @@ impl Transition {
                             group_id: group.id(),
                             expires_at: deadlines.as_ref().map(|deadlines| deadlines.confirm),
                         }));
-                        *status = KeyGenConfirmation::Confirmed(Box::new(key_share));
+                        *status = KeyGenConfirmation::Confirmed(Arc::new(key_share));
                     }
                     Err(err) => {
                         // Finalization failures are unexpected, as all secret
