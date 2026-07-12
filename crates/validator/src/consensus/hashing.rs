@@ -7,8 +7,6 @@
 //! contract lives on, and the contract's own address). The latter hash is
 //! the message a validator group's FROST signature actually attests to.
 
-#![cfg_attr(not(test), expect(dead_code))]
-
 use crate::{
     bindings::{Point, SafeTransaction},
     consensus::epoch::EpochId,

@@ -1,8 +1,11 @@
-use super::{Epoch, Prune, RolloverState, State, Transition};
+use super::{
+    ConfirmationDeadlines, Epoch, KeyGenConfirmation, KeyGenParticipation, Packet, Prune,
+    RolloverState, SigningState, State, Transition,
+};
 use crate::{
     bindings::Coordinator,
     consensus::{
-        epoch::EpochId,
+        epoch::{self, EpochId},
         group::{self, ParticipantSet},
     },
     frost::{
@@ -10,9 +13,11 @@ use crate::{
         keygen::{GroupCommitments, Secrets},
     },
     service::{Action, Effect},
-    state::{ConfirmationDeadlines, KeyGenConfirmation, KeyGenParticipation},
 };
-use alloy::primitives::{Address, B256};
+use alloy::{
+    primitives::{Address, B256},
+    sol_types::SolValue as _,
+};
 use safenet_core::state::{Command, Commands};
 use std::{
     collections::{BTreeMap, BTreeSet},
@@ -326,6 +331,7 @@ impl Transition {
                             Ok(key_share) => {
                                 commands.push(Command::Action(Action::KeyGenConfirm {
                                     group_id: group.id(),
+                                    callback: self.key_gen_confirmation_callback(next_epoch),
                                     expires_at: deadlines
                                         .as_ref()
                                         .map(|deadlines| deadlines.confirm),
@@ -405,10 +411,12 @@ impl Transition {
                 }
 
                 match next_epoch {
-                    // On genesis: the group is confirmed it is ready to go.
+                    // On genesis: retain the active key, start preprocessing,
+                    // and immediately begin key generation for the next epoch.
                     EpochId::Genesis => {
                         let group_id = group.id();
-                        let commands = if let KeyGenConfirmation::Confirmed(key_share) = status {
+                        let mut commands = if let KeyGenConfirmation::Confirmed(key_share) = status
+                        {
                             state.epochs.insert(
                                 next_epoch,
                                 Epoch {
@@ -424,16 +432,98 @@ impl Transition {
                             Vec::new()
                         };
 
+                        let next_epoch = epoch::next_number(block, self.config.blocks_per_epoch);
+                        let state = State {
+                            rollover: RolloverState::EpochSkipped { next_epoch },
+                            ..state
+                        }
+                        .and_prune(block, Prune::KeyGenSecrets { group_id });
+
+                        let Some(participants) = group::participants_set(
+                            &self.config.participants,
+                            group::Epoch::Number {
+                                consensus: self.config.consensus,
+                                number: next_epoch,
+                                excluded: BTreeSet::new(),
+                            },
+                        ) else {
+                            return (state, commands);
+                        };
+
+                        let deadline =
+                            Some(block.saturating_add(self.config.key_gen_timeout.get()));
+                        let (state, mut keygen_commands) = self.start_key_gen(
+                            state,
+                            EpochId::Number { number: next_epoch },
+                            &participants,
+                            deadline,
+                        );
+                        commands.append(&mut keygen_commands);
+
+                        (state, commands)
+                    }
+                    EpochId::Number {
+                        number: proposed_epoch,
+                    } => {
+                        let group_id = group.id();
+
+                        // Regardless of whether or not we are part of the
+                        // active epoch and will participate in the signing
+                        // ceremony to generate the rollover attestation,
+                        // register the newly created epoch and group.
+                        if let KeyGenConfirmation::Confirmed(key_share) = status {
+                            state.epochs.insert(next_epoch, Epoch { group, key_share });
+                        }
+
+                        // Compute the rollover package that needs to be
+                        // attested for the epoch to get staged.
+                        let active_epoch = state.active_epoch;
+                        let group_key = participation.group_commitments().group_key();
+                        let rollover_block = proposed_epoch
+                            .get()
+                            .saturating_mul(self.config.blocks_per_epoch.get());
+                        let message = self.consensus.epoch_rollover_hash(
+                            active_epoch,
+                            proposed_epoch,
+                            rollover_block,
+                            &group_key,
+                        );
+
+                        // If we are participating in the active epoch, then
+                        // also register the rollover packet for signing.
+                        if let Some(participating_epoch) = state.epochs.get(&active_epoch) {
+                            state.signing.insert(
+                                message,
+                                SigningState::WaitingForRequest {
+                                    key_share: participating_epoch.key_share.clone(),
+                                    packet: Packet::EpochRollover {
+                                        active_epoch,
+                                        proposed_epoch,
+                                        rollover_block,
+                                        group_id,
+                                        group_key,
+                                    },
+                                    signers: participating_epoch.group.participants().clone(),
+                                    deadline: Some(
+                                        block.saturating_add(self.config.signing_timeout.get()),
+                                    ),
+                                },
+                            );
+                        };
+
                         (
                             State {
-                                rollover: RolloverState::EpochStaged { next_epoch },
+                                rollover: RolloverState::SigningRollover {
+                                    next_epoch: proposed_epoch,
+                                    group_id,
+                                    message,
+                                },
                                 ..state
                             }
                             .and_prune(block, Prune::KeyGenSecrets { group_id }),
-                            commands,
+                            Vec::new(),
                         )
                     }
-                    _ => todo!("only genesis is supported!"),
                 }
             }
             _ => (state, Vec::new()),
@@ -684,6 +774,7 @@ impl Transition {
                     Ok(key_share) => {
                         commands.push(Command::Action(Action::KeyGenConfirm {
                             group_id: group.id(),
+                            callback: self.key_gen_confirmation_callback(next_epoch),
                             expires_at: deadlines.as_ref().map(|deadlines| deadlines.confirm),
                         }));
                         *status = KeyGenConfirmation::Confirmed(Arc::new(key_share));
@@ -748,6 +839,30 @@ impl Transition {
                 Vec::new(),
             )
         }
+    }
+
+    /// Builds the callback that proposes a regular epoch as soon as the final
+    /// participant confirms its generated key. Genesis is externally
+    /// bootstrapped and does not need a callback.
+    fn key_gen_confirmation_callback(
+        &self,
+        next_epoch: EpochId,
+    ) -> Option<crate::bindings::Callback> {
+        let EpochId::Number { number } = next_epoch else {
+            return None;
+        };
+
+        Some(crate::bindings::Callback {
+            target: self.config.consensus,
+            context: (
+                number.get(),
+                number
+                    .get()
+                    .saturating_mul(self.config.blocks_per_epoch.get()),
+            )
+                .abi_encode()
+                .into(),
+        })
     }
 
     /// Restarts key generation for `next_epoch` excluding `excluded`, or

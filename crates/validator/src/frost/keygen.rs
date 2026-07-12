@@ -112,6 +112,11 @@ impl GroupCommitments {
     pub(super) fn verifying_key(&self) -> &VerifyingKey {
         &self.verifying_key
     }
+
+    /// Returns the group public key in its onchain representation.
+    pub fn group_key(&self) -> bindings::Point {
+        marshal::solidity_point(&self.verifying_key.to_element())
+    }
 }
 
 /// Derives the group's public key from every participant's verified

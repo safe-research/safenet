@@ -38,6 +38,7 @@ pub enum Action {
     /// An action to confirm participation in a completed key generation.
     KeyGenConfirm {
         group_id: B256,
+        callback: Option<bindings::Callback>,
         expires_at: Option<u64>,
     },
     /// An action to reveal a unencrypted secret share, in response to a
@@ -155,18 +156,33 @@ impl ActionEncoder<Action> for Encoder {
             ),
             Action::KeyGenConfirm {
                 group_id,
+                callback,
                 expires_at,
-            } => (
-                Transaction {
-                    to: self.coordinator,
-                    value: U256::ZERO,
-                    data: Coordinator::keyGenConfirmCall { gid: group_id }
-                        .abi_encode()
-                        .into(),
-                    gas: 200_000,
-                },
-                expires_at,
-            ),
+            } => {
+                let (data, gas) = match callback {
+                    Some(callback) => (
+                        Coordinator::keyGenConfirmWithCallbackCall {
+                            gid: group_id,
+                            callback,
+                        }
+                        .abi_encode(),
+                        300_000,
+                    ),
+                    None => (
+                        Coordinator::keyGenConfirmCall { gid: group_id }.abi_encode(),
+                        200_000,
+                    ),
+                };
+                (
+                    Transaction {
+                        to: self.coordinator,
+                        value: U256::ZERO,
+                        data: data.into(),
+                        gas,
+                    },
+                    expires_at,
+                )
+            }
             Action::KeyGenComplaintResponse {
                 group_id,
                 plaintiff,
