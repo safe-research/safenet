@@ -495,7 +495,7 @@ impl Packet {
             }
         };
 
-        let safe_tx_struct_hash = hashing::safe_tx_hash(transaction);
+        let safe_tx_struct_hash = hashing::safe_tx_struct_hash(transaction);
         let context = match oracle {
             None => Consensus::attestTransactionCall {
                 epoch: epoch.raw_value(),
