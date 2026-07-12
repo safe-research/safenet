@@ -1,9 +1,9 @@
 use super::{Packet, SigningState, State, Transition};
 use crate::{
-    bindings::{Coordinator, SignNonces},
+    bindings::{Coordinator, Oracle, SignNonces},
     service::{Action, Effect},
 };
-use alloy::primitives::B256;
+use alloy::primitives::{Address, B256};
 use safenet_core::state::{Command, Commands};
 use std::collections::BTreeMap;
 
@@ -121,5 +121,74 @@ impl Transition {
                 expires_at: deadline,
             })],
         )
+    }
+
+    /// Resolves an oracle-backed signing round once its result lands:
+    /// approved, this validator reveals its nonce commitment (as in
+    /// [`handle_sign`](Self::handle_sign)'s live-request case); rejected, the
+    /// session is simply dropped. A result for anything other than a tracked
+    /// [`SigningState::WaitingForOracle`] round is ignored, as is one from an
+    /// oracle contract other than the one the packet named.
+    pub(super) fn handle_oracle_result(
+        &self,
+        mut state: State,
+        block: u64,
+        oracle: Address,
+        event: &Oracle::OracleResult,
+    ) -> (State, Commands<State, Self>) {
+        match state.signing.remove(&event.requestId) {
+            Some(SigningState::WaitingForOracle {
+                key_share,
+                oracle: expected,
+                signature_id,
+                packet,
+                signers,
+                group_id,
+                sequence,
+                ..
+            }) if expected == oracle && event.approved => {
+                let deadline = Some(block.saturating_add(self.config.signing_timeout.get()));
+                state.signing.insert(
+                    event.requestId,
+                    SigningState::CollectNonceCommitments {
+                        key_share,
+                        signature_id,
+                        revealed: BTreeMap::new(),
+                        packet,
+                        signers,
+                        deadline,
+                    },
+                );
+
+                (
+                    state,
+                    vec![Command::Effect(Effect::RevealNonceCommitments {
+                        group_id,
+                        signature_id,
+                        message: event.requestId,
+                        sequence,
+                    })],
+                )
+            }
+            Some(SigningState::WaitingForOracle {
+                signature_id,
+                oracle: expected,
+                ..
+            }) if expected == oracle && !event.approved => {
+                // Rejected: drop the session, along with the signature id
+                // index entry eagerly set when the round was opened.
+                state.signature_id_to_message.remove(&signature_id);
+                (state, Vec::new())
+            }
+            Some(other) => {
+                tracing::warn!(
+                    request_id = %event.requestId,
+                    "unexpected oracle result for request",
+                );
+                state.signing.insert(event.requestId, other);
+                (state, Vec::new())
+            }
+            None => (state, Vec::new()),
+        }
     }
 }

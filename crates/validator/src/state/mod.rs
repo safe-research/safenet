@@ -6,7 +6,7 @@ mod sign;
 mod transactions;
 
 use crate::{
-    bindings::{Consensus, Coordinator, SafeTransaction},
+    bindings::{Consensus, Coordinator, Oracle, SafeTransaction},
     config::ValidatorConfig,
     consensus::{
         epoch::EpochId,
@@ -382,6 +382,9 @@ impl StateTransition<State> for Transition {
                 }
                 Event::Consensus(Consensus::ConsensusEvents::OracleTransactionAttested(event)) => {
                     self.handle_oracle_transaction_attested(state, &event)
+                }
+                Event::Oracle(Oracle::OracleEvents::OracleResult(event)) => {
+                    self.handle_oracle_result(state, log.block, log.address, &event)
                 }
                 // The remaining events are wired in as their handlers land.
                 _ => (state, Vec::new()),
