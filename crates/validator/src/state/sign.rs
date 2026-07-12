@@ -3,6 +3,7 @@ use crate::{
     bindings::{self, Consensus, Coordinator, Oracle, SignNonces},
     consensus::hashing,
     frost::{self, preprocess::Nonces},
+    merkle::MerkleRoot,
     service::{Action, Effect},
 };
 use alloy::{
@@ -277,6 +278,7 @@ impl Transition {
                         group_id,
                         signature_id,
                         revealed,
+                        selections: BTreeMap::new(),
                         packet,
                         signers,
                         deadline,
@@ -351,6 +353,91 @@ impl Transition {
                 expires_at,
             })],
         )
+    }
+
+    /// Tracks a peer's published signature share against a tracked
+    /// [`SigningState::CollectSigningShares`] round. A share for anything else
+    /// (untracked, already completed, or a different round entirely) is
+    /// ignored.
+    pub(super) fn handle_sign_shared(
+        &self,
+        mut state: State,
+        event: &Coordinator::SignShared,
+    ) -> (State, Commands<State, Self>) {
+        let Some(&message) = state.signature_id_to_message.get(&event.sid) else {
+            return (state, Vec::new());
+        };
+
+        if let Some(SigningState::CollectSigningShares { selections, .. }) =
+            state.signing.get_mut(&message)
+        {
+            let selection_root = MerkleRoot(event.selectionRoot);
+            let selection = selections.entry(selection_root).or_default();
+
+            // Note that we do not verify whether or not `participant` is part
+            // of our `signers` list. The contract already verifies that they
+            // are part of the group, and it would not be possible for them to
+            // submit a share to the same selection root as we did (because of
+            // the Merkle inclusion proof that is verified onchain).
+            selection.shares_from.insert(event.participant);
+            selection.last_signer = Some(event.participant);
+        }
+
+        (state, Vec::new())
+    }
+
+    /// Completes a tracked [`SigningState::CollectSigningShares`] round,
+    /// entering [`SigningState::WaitingForAttestation`]. The participant
+    /// responsible for submitting the attestation is the last one to have
+    /// published a share against the completed selection root, or unknown
+    /// (in which case every participant is responsible) if this validator
+    /// never observed a share for that particular selection.
+    pub(super) fn handle_sign_completed(
+        &self,
+        mut state: State,
+        block: u64,
+        event: &Coordinator::SignCompleted,
+    ) -> (State, Commands<State, Self>) {
+        let Some(&message) = state.signature_id_to_message.get(&event.sid) else {
+            return (state, Vec::new());
+        };
+
+        match state.signing.remove(&message) {
+            Some(SigningState::CollectSigningShares {
+                signature_id,
+                selections,
+                packet,
+                ..
+            }) => {
+                let responsible = selections
+                    .get(&MerkleRoot(event.selectionRoot))
+                    .and_then(|selection| selection.last_signer);
+                if responsible.is_none() {
+                    tracing::warn!(
+                        %signature_id,
+                        selection_root = %event.selectionRoot,
+                        "signing ceremony completed under an unobserved selection",
+                    );
+                }
+
+                let deadline = Some(block.saturating_add(self.config.signing_timeout.get()));
+                state.signing.insert(
+                    message,
+                    SigningState::WaitingForAttestation {
+                        signature_id,
+                        responsible,
+                        packet,
+                        deadline,
+                    },
+                );
+                (state, Vec::new())
+            }
+            Some(other) => {
+                state.signing.insert(message, other);
+                (state, Vec::new())
+            }
+            None => (state, Vec::new()),
+        }
     }
 }
 
