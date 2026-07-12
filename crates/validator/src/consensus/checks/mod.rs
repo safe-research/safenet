@@ -1,5 +1,3 @@
-#![cfg_attr(not(test), expect(dead_code))]
-
 mod multi_send;
 
 use self::multi_send::{MultiSendVersion, decode_multi_send};

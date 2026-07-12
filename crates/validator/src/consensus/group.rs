@@ -51,7 +51,8 @@ use std::{collections::BTreeSet, num::NonZeroU64};
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct Group {
     id: B256,
-    participants: MerkleRoot,
+    root: MerkleRoot,
+    participants: BTreeSet<Address>,
     excluded: BTreeSet<Address>,
     count: u16,
     threshold: u16,
@@ -69,12 +70,17 @@ impl Group {
     /// These are all the required parameters for starting a key generation
     /// process onchain.
     pub fn parameters(&self) -> (MerkleRoot, u16, u16, B256) {
-        (self.participants, self.count, self.threshold, self.context)
+        (self.root, self.count, self.threshold, self.context)
     }
 
     /// Return the group size: the count and threshold.
     pub fn size(&self) -> (u16, u16) {
         (self.count, self.threshold)
+    }
+
+    /// Return the group's participant addresses.
+    pub fn participants(&self) -> &BTreeSet<Address> {
+        &self.participants
     }
 
     /// Returns a new set of excluded participants including the ones that were
@@ -119,7 +125,7 @@ impl ParticipantSet {
     }
 
     fn group_and_participants_tree(&self) -> (Group, MerkleTree) {
-        let participants = participants_tree(&self.addresses);
+        let tree = participants_tree(&self.addresses);
         let count = self
             .addresses
             .len()
@@ -129,14 +135,15 @@ impl ParticipantSet {
         let context = self.context;
 
         let group = Group {
-            id: group_id(participants.root(), count, threshold, context),
-            participants: participants.root(),
+            id: group_id(tree.root(), count, threshold, context),
+            root: tree.root(),
+            participants: self.addresses.clone(),
             excluded: self.excluded.clone(),
             count,
             threshold,
             context,
         };
-        (group, participants)
+        (group, tree)
     }
 }
 

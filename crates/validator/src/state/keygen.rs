@@ -365,7 +365,7 @@ impl Transition {
     /// Registers a peer's confirmation of a completed key generation.
     pub(super) fn handle_key_gen_confirmed(
         &self,
-        state: State,
+        mut state: State,
         block: u64,
         event: &Coordinator::KeyGenConfirmed,
     ) -> (State, Commands<State, Self>) {
@@ -415,6 +415,8 @@ impl Transition {
                         } else {
                             Vec::new()
                         };
+
+                        state.epoch_groups.insert(next_epoch.raw_value(), group);
 
                         (
                             State {

@@ -2,13 +2,15 @@
 
 mod keygen;
 mod preprocess;
+mod transactions;
 
 use crate::{
-    bindings::Coordinator,
+    bindings::{Consensus, Coordinator, SafeTransaction},
     config::ValidatorConfig,
     consensus::{
         epoch::EpochId,
         group::{Group, ParticipantSet},
+        hashing::ConsensusDomain,
     },
     frost::keygen::{
         GroupCommitments, KeyShare, PublicKeyShare, Secrets, SharingState, VerifiedCommitment,
@@ -29,6 +31,12 @@ use std::{
 pub struct State {
     /// The epoch-rollover / DKG state machine.
     rollover: RolloverState,
+    /// The resolved group for each epoch that has completed its key
+    /// generation.
+    epoch_groups: BTreeMap<u64, Group>,
+    /// The signing sessions tracked so far, keyed by the message hash the
+    /// group signature attests to.
+    signing: BTreeMap<B256, SigningState>,
     /// Things queued up to be pruned, along with the block at which they were
     /// queued. Pruning itself only happens once the entry is mature enough to
     /// be reorg-safe.
@@ -193,6 +201,43 @@ struct ConfirmationDeadlines {
     confirm: u64,
 }
 
+/// A packet a validator group signs an attestation over.
+#[derive(Clone, Debug, Deserialize, Serialize)]
+enum Packet {
+    /// A proposed Safe transaction.
+    Transaction {
+        /// The epoch whose group signs the attestation.
+        epoch: EpochId,
+        /// The proposed transaction.
+        transaction: SafeTransaction,
+    },
+}
+
+/// A signing session, keyed by the message hash the group signature attests
+/// to.
+#[derive(Clone, Debug, Deserialize, Serialize)]
+enum SigningState {
+    /// The packet was verified; waiting for this validator's own `Sign`
+    /// action to open the nonce-commitment round.
+    WaitingForRequest {
+        /// The packet being signed.
+        packet: Packet,
+        /// The group members expected to take part in signing.
+        signers: BTreeSet<Address>,
+        /// The block by which the signing round must complete. `None` to
+        /// indicate that there is no deadline.
+        deadline: Option<u64>,
+    },
+    /// The packet failed verification; waiting to submit a decline.
+    WaitingToDecline {
+        /// The packet that failed verification.
+        packet: Packet,
+        /// The block by which the decline must be submitted. `None` to
+        /// indicate that there is no deadline.
+        deadline: Option<u64>,
+    },
+}
+
 /// The pure validator state transition.
 ///
 /// Holds the machine configuration the transition is parameterized over; the
@@ -203,6 +248,8 @@ pub struct Transition {
     pub account: Address,
     /// The genesis participant set.
     pub genesis: ParticipantSet,
+    /// The consensus signing domain.
+    pub consensus: ConsensusDomain,
     /// The validator configuration.
     pub config: ValidatorConfig,
 }
@@ -238,6 +285,9 @@ impl StateTransition<State> for Transition {
                 Event::Coordinator(Coordinator::CoordinatorEvents::KeyGenComplaintResponded(
                     event,
                 )) => self.handle_key_gen_complaint_responded(state, log.block, &event),
+                Event::Consensus(Consensus::ConsensusEvents::TransactionProposed(event)) => {
+                    self.handle_transaction_proposed(state, log.block, &event)
+                }
                 // The remaining events are wired in as their handlers land.
                 _ => (state, Vec::new()),
             },
