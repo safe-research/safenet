@@ -7,6 +7,7 @@
 #![expect(clippy::needless_update)]
 
 mod keygen;
+mod preprocess;
 
 use crate::{
     bindings::Coordinator,
@@ -118,6 +119,11 @@ enum RolloverState {
         /// `None` to indicate that there is no deadline.
         deadlines: Option<ConfirmationDeadlines>,
     },
+    /// This group's key generation completed and the group is staged.
+    EpochStaged {
+        /// The epoch that was just staged.
+        next_epoch: EpochId,
+    },
 }
 
 /// The keygen participation status for the validator.
@@ -193,6 +199,9 @@ impl StateTransition<State> for Transition {
                 Event::Coordinator(Coordinator::CoordinatorEvents::KeyGenSecretShared(event)) => {
                     self.handle_key_gen_secret_shared(state, log.block, &event)
                 }
+                Event::Coordinator(Coordinator::CoordinatorEvents::KeyGenConfirmed(event)) => {
+                    self.handle_key_gen_confirmed(state, &event)
+                }
                 // The remaining events are wired in as their handlers land.
                 _ => (state, Vec::new()),
             },
@@ -203,6 +212,10 @@ impl StateTransition<State> for Transition {
                 Resume::Setup { group_id, secrets } => {
                     self.handle_key_gen_setup(state, group_id, secrets)
                 }
+                Resume::NonceTree {
+                    group_id,
+                    commitment,
+                } => self.handle_nonce_tree(state, group_id, commitment),
             },
         }
     }

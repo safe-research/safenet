@@ -1,7 +1,10 @@
 //! The validator effect system and its handler.
 
 use crate::{
-    frost::{self, keygen::Secrets},
+    frost::{
+        self,
+        keygen::{KeyShare, Secrets},
+    },
     secrets::SecretStore,
 };
 use alloy::primitives::{Address, B256};
@@ -21,6 +24,11 @@ pub enum Effect {
         count: u16,
         threshold: u16,
     },
+    /// Sample a fresh nonce tree for `key_share` and persist it.
+    NonceTree {
+        group_id: B256,
+        key_share: Box<KeyShare>,
+    },
 }
 
 /// The result of performing an [`Effect`], resumed into the state machine.
@@ -35,6 +43,9 @@ pub enum Resume {
         group_id: B256,
         secrets: Box<Secrets>,
     },
+    /// Resume with the nonce tree commitment produced by a
+    /// [`Effect::NonceTree`].
+    NonceTree { group_id: B256, commitment: B256 },
 }
 
 /// Performs the validator's [`Effect`]s, resuming with a [`Resume`].
@@ -62,6 +73,21 @@ impl Handler {
                 Ok(Resume::Setup {
                     group_id,
                     secrets: Box::new(stored),
+                })
+            }
+            Effect::NonceTree {
+                group_id,
+                key_share,
+            } => {
+                let mut rng = rand::thread_rng();
+                let chunk = frost::preprocess::NonceChunk::generate(&key_share, &mut rng)?;
+                let commitment = self
+                    .secrets
+                    .register_nonces_chunk(group_id, self.account, chunk)
+                    .await?;
+                Ok(Resume::NonceTree {
+                    group_id,
+                    commitment,
                 })
             }
         }

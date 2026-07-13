@@ -11,9 +11,6 @@ use alloy::{
 use safenet_core::{driver::ActionEncoder, tx::Transaction};
 
 /// An onchain action the validator emits during a state transition.
-// The `KeyGen*` prefix mirrors the onchain function names; more variants
-// with other prefixes (`Sign*`, `Consensus*`, ...) land as their handlers do.
-#[expect(clippy::enum_variant_names)]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Action {
     /// An action to publish key generation commitments onchain.
@@ -42,6 +39,12 @@ pub enum Action {
     KeyGenConfirm {
         group_id: B256,
         expires_at: Option<u64>,
+    },
+    /// An action to perform the preprocessing step and register a freshly
+    /// sampled nonce tree's commitments.
+    Preprocess {
+        group_id: B256,
+        nonces_commitment: B256,
     },
 }
 
@@ -131,6 +134,25 @@ impl ActionEncoder<Action> for Encoder {
                     gas: 200_000,
                 },
                 expires_at,
+            ),
+            Action::Preprocess {
+                group_id,
+                nonces_commitment,
+            } => (
+                Transaction {
+                    to: self.coordinator,
+                    value: U256::ZERO,
+                    data: Coordinator::preprocessCall {
+                        gid: group_id,
+                        commitment: nonces_commitment,
+                    }
+                    .abi_encode()
+                    .into(),
+                    gas: 250_000,
+                },
+                // Nonce registration doesn't carry an expiry - we cannot
+                // reliably know for how long it is valuable.
+                None,
             ),
         }
     }
