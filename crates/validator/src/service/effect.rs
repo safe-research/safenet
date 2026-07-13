@@ -29,6 +29,13 @@ pub enum Effect {
         group_id: B256,
         key_share: Box<KeyShare>,
     },
+    /// Link a registered nonce tree (identified by its `root` commitment) to
+    /// the onchain sequence `chunk` it was assigned.
+    LinkNonceTree {
+        group_id: B256,
+        chunk: u64,
+        root: B256,
+    },
 }
 
 /// The result of performing an [`Effect`], resumed into the state machine.
@@ -81,14 +88,30 @@ impl Handler {
             } => {
                 let mut rng = rand::thread_rng();
                 let chunk = frost::preprocess::NonceChunk::generate(&key_share, &mut rng)?;
-                let commitment = self
+                let result = self
                     .secrets
                     .register_nonces_chunk(group_id, self.account, chunk)
+                    .await?
+                    // In case registration worked, then resume with the nonce
+                    // chunk commitment hash so it may be recorded onchain.
+                    .map(|commitment| Resume::NonceTree {
+                        group_id,
+                        commitment,
+                    })
+                    // There is already a pending nonce chunk, and therefore we
+                    // do not want to register a new one.
+                    .unwrap_or(Resume::Noop);
+                Ok(result)
+            }
+            Effect::LinkNonceTree {
+                group_id,
+                chunk,
+                root,
+            } => {
+                self.secrets
+                    .link_nonces_chunk(group_id, self.account, chunk, root)
                     .await?;
-                Ok(Resume::NonceTree {
-                    group_id,
-                    commitment,
-                })
+                Ok(Resume::Noop)
             }
         }
     }

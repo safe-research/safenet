@@ -91,7 +91,11 @@ impl SecretStore {
              );
 
              CREATE UNIQUE INDEX IF NOT EXISTS idx_nonces_chunks_lookup
-                 ON nonces_chunks (group_id, address, chunk);",
+                 ON nonces_chunks (group_id, address, chunk);
+
+             CREATE UNIQUE INDEX IF NOT EXISTS idx_nonces_chunks_unlinked
+                 ON nonces_chunks (group_id, address)
+                 WHERE chunk IS NULL;",
         )
         .execute(&pool)
         .await?;
@@ -153,19 +157,36 @@ impl SecretStore {
         Ok(())
     }
 
-    /// Persists a freshly generated preprocessing `chunk` for `me` in `group`,
-    /// returning its merkle root (the onchain `preprocess` commitment). The
-    /// chunk is stored unlinked; [`link_nonces_chunk`](Self::link_nonces_chunk)
-    /// associates it with a sequence chunk once assigned onchain.
+    /// Persists the freshly generated preprocessing `chunk` for `me` in
+    /// `group` and returns its merkle root, or returns `None` when another
+    /// unlinked chunk is already pending. At most one unlinked chunk is
+    /// retained per participant and group; the existing root is deliberately
+    /// not returned so callers cannot submit it under a second onchain chunk.
+    /// [`link_nonces_chunk`](Self::link_nonces_chunk) associates the new root
+    /// with a sequence chunk once assigned onchain.
     pub async fn register_nonces_chunk(
         &self,
         group: B256,
         me: Address,
         chunk: NonceChunk,
-    ) -> Result<B256, Error> {
+    ) -> Result<Option<B256>, Error> {
         let root = chunk.commitment.0;
 
         let mut tx = self.pool.begin().await?;
+        let existing = sqlx::query_scalar::<_, i64>(
+            "SELECT 1 FROM nonces_chunks
+             WHERE group_id = ? AND address = ? AND chunk IS NULL",
+        )
+        .bind(key(group))
+        .bind(key(me))
+        .fetch_optional(&mut *tx)
+        .await?;
+
+        // We only allow a single pending
+        if existing.is_some() {
+            return Ok(None);
+        };
+
         sqlx::query("INSERT INTO nonces_chunks (root, group_id, address) VALUES (?, ?, ?)")
             .bind(key(root))
             .bind(key(group))
@@ -182,12 +203,13 @@ impl SecretStore {
         }
         tx.commit().await?;
 
-        Ok(root)
+        Ok(Some(root))
     }
 
     /// Links a registered nonce tree (by `root`) to the onchain sequence
-    /// `chunk` for `me` in `group`. Errors if the root is unknown or already
-    /// linked.
+    /// `chunk` for `me` in `group`. Replaces a previous chunk assignment, as
+    /// canonical replay after a reorg may assign the commitment a different
+    /// index. Errors if the root is unknown.
     pub async fn link_nonces_chunk(
         &self,
         group: B256,
@@ -195,20 +217,43 @@ impl SecretStore {
         chunk: u64,
         root: B256,
     ) -> Result<(), Error> {
-        let updated = sqlx::query(
-            "UPDATE nonces_chunks SET chunk = ?
-             WHERE root = ? AND group_id = ? AND address = ? AND chunk IS NULL",
+        let chunk = i64::try_from(chunk)?;
+
+        // A canonical replay can assign this root an index that is still
+        // occupied locally by a root linked on an orphaned chain. Because we
+        // may be moving a root linked to one chunk to another, we cannot simply
+        // mark the old root as pending either. To work around this, we give the
+        // root a negative unreachable chunk, until that one gets linked.
+        let mut tx = self.pool.begin().await?;
+
+        // First, make the old root inaccessible by giving it a negative chunk.
+        sqlx::query(
+            "UPDATE nonces_chunks SET chunk = -rowid
+             WHERE root != ? AND group_id = ? AND address = ? AND chunk = ?",
         )
-        .bind(i64::try_from(chunk)?)
         .bind(key(root))
         .bind(key(group))
         .bind(key(me))
-        .execute(&self.pool)
+        .bind(chunk)
+        .execute(&mut *tx)
         .await?;
 
-        if updated.rows_affected() == 0 {
+        // Update the linked nonce.
+        let update = sqlx::query(
+            "UPDATE nonces_chunks SET chunk = ?
+             WHERE root = ? AND group_id = ? AND address = ?",
+        )
+        .bind(chunk)
+        .bind(key(root))
+        .bind(key(group))
+        .bind(key(me))
+        .execute(&mut *tx)
+        .await?;
+        if update.rows_affected() == 0 {
             return Err(Error::Database(sqlx::Error::RowNotFound));
         }
+
+        tx.commit().await?;
         Ok(())
     }
 
@@ -419,24 +464,58 @@ mod tests {
     async fn nonces_chunk_link_and_count() {
         let store = store().await;
         let root = store
-            .register_nonces_chunk(GROUP, ME, nonce_chunk(4))
+            .register_nonces_chunk(GROUP, ME, nonce_chunk(11))
+            .await
+            .unwrap()
+            .unwrap();
+        let reused = store
+            .register_nonces_chunk(GROUP, ME, nonce_chunk(12))
             .await
             .unwrap();
-        let other = store
-            .register_nonces_chunk(GROUP, ME, nonce_chunk(4))
-            .await
-            .unwrap();
+        assert_eq!(reused, None);
 
         // Until linked to a sequence chunk, it is not addressable by chunk.
         assert_eq!(store.available_nonce_count(GROUP, ME, 0).await.unwrap(), 0);
         store.link_nonces_chunk(GROUP, ME, 0, root).await.unwrap();
-        assert_eq!(store.available_nonce_count(GROUP, ME, 0).await.unwrap(), 4);
+        assert_eq!(store.available_nonce_count(GROUP, ME, 0).await.unwrap(), 11);
 
-        // Re-linking the same root is rejected.
-        assert!(store.link_nonces_chunk(GROUP, ME, 0, root).await.is_err());
+        // Once linked, a fresh chunk can be registered.
+        let other = store
+            .register_nonces_chunk(GROUP, ME, nonce_chunk(13))
+            .await
+            .unwrap()
+            .unwrap();
+        assert_ne!(other, root);
 
-        // Linking a different root to the same chunk is also rejected.
-        assert!(store.link_nonces_chunk(GROUP, ME, 0, other).await.is_err());
+        // The newly registered chunk starts unlinked.
+        assert_eq!(store.available_nonce_count(GROUP, ME, 0).await.unwrap(), 11);
+        assert_eq!(store.available_nonce_count(GROUP, ME, 1).await.unwrap(), 0);
+
+        // It can be linked to a chunk.
+        store.link_nonces_chunk(GROUP, ME, 1, other).await.unwrap();
+        assert_eq!(store.available_nonce_count(GROUP, ME, 0).await.unwrap(), 11);
+        assert_eq!(store.available_nonce_count(GROUP, ME, 1).await.unwrap(), 13);
+        assert_eq!(store.available_nonce_count(GROUP, ME, 2).await.unwrap(), 0);
+
+        // Nonce assignment is idempotent.
+        store.link_nonces_chunk(GROUP, ME, 0, root).await.unwrap();
+        assert_eq!(store.available_nonce_count(GROUP, ME, 0).await.unwrap(), 11);
+        assert_eq!(store.available_nonce_count(GROUP, ME, 1).await.unwrap(), 13);
+        assert_eq!(store.available_nonce_count(GROUP, ME, 2).await.unwrap(), 0);
+
+        // Canonical replay can reassign a root after a reorg, displacing a
+        // stale assignment left by the orphaned chain.
+        store.link_nonces_chunk(GROUP, ME, 1, root).await.unwrap();
+        assert_eq!(store.available_nonce_count(GROUP, ME, 0).await.unwrap(), 0);
+        assert_eq!(store.available_nonce_count(GROUP, ME, 1).await.unwrap(), 11);
+        assert_eq!(store.available_nonce_count(GROUP, ME, 2).await.unwrap(), 0);
+
+        // The displaced root can itself be assigned by a later canonical
+        // event.
+        store.link_nonces_chunk(GROUP, ME, 2, other).await.unwrap();
+        assert_eq!(store.available_nonce_count(GROUP, ME, 0).await.unwrap(), 0);
+        assert_eq!(store.available_nonce_count(GROUP, ME, 1).await.unwrap(), 11);
+        assert_eq!(store.available_nonce_count(GROUP, ME, 2).await.unwrap(), 13);
     }
 
     #[tokio::test]
@@ -445,6 +524,7 @@ mod tests {
         let root = store
             .register_nonces_chunk(GROUP, ME, nonce_chunk(4))
             .await
+            .unwrap()
             .unwrap();
         store.link_nonces_chunk(GROUP, ME, 0, root).await.unwrap();
 
@@ -464,6 +544,7 @@ mod tests {
         let root = store
             .register_nonces_chunk(GROUP, ME, nonce_chunk(4))
             .await
+            .unwrap()
             .unwrap();
         store.link_nonces_chunk(GROUP, ME, 0, root).await.unwrap();
 
@@ -516,6 +597,7 @@ mod tests {
         let root = store
             .register_nonces_chunk(GROUP, ME, nonce_chunk(2))
             .await
+            .unwrap()
             .unwrap();
         store.link_nonces_chunk(GROUP, ME, 0, root).await.unwrap();
 

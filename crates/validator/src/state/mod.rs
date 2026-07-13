@@ -306,6 +306,9 @@ impl StateTransition<State> for Transition {
                 Event::Coordinator(Coordinator::CoordinatorEvents::KeyGenComplaintResponded(
                     event,
                 )) => self.handle_key_gen_complaint_responded(state, log.block, &event),
+                Event::Coordinator(Coordinator::CoordinatorEvents::Preprocess(event)) => {
+                    self.handle_preprocess(state, &event)
+                }
                 Event::Consensus(Consensus::ConsensusEvents::TransactionProposed(event)) => {
                     self.handle_transaction_proposed(state, log.block, &event)
                 }

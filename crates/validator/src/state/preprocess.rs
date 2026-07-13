@@ -1,5 +1,8 @@
 use super::{State, Transition};
-use crate::service::Action;
+use crate::{
+    bindings::Coordinator,
+    service::{Action, Effect},
+};
 use alloy::primitives::B256;
 use safenet_core::state::{Command, Commands};
 
@@ -17,6 +20,29 @@ impl Transition {
             vec![Command::Action(Action::Preprocess {
                 group_id,
                 nonces_commitment,
+            })],
+        )
+    }
+
+    /// Links a committed nonce tree to its assigned onchain chunk. This can
+    /// happen regardless of the current rollover/signing state. Only this
+    /// validator's own commitment is linked; other participants' commitments
+    /// are for their own local secret stores.
+    pub(super) fn handle_preprocess(
+        &self,
+        state: State,
+        event: &Coordinator::Preprocess,
+    ) -> (State, Commands<State, Self>) {
+        if event.participant != self.account {
+            return (state, Vec::new());
+        }
+
+        (
+            state,
+            vec![Command::Effect(Effect::LinkNonceTree {
+                group_id: event.gid,
+                chunk: event.chunk,
+                root: event.commitment,
             })],
         )
     }
