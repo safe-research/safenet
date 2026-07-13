@@ -9,12 +9,16 @@
 
 #![cfg_attr(not(test), expect(dead_code))]
 
-use crate::bindings::{Point, SafeTransaction};
+use crate::{
+    bindings::{Point, SafeTransaction},
+    consensus::epoch::EpochId,
+};
 use alloy::{
     primitives::{Address, B256, U256},
     sol,
     sol_types::{Eip712Domain, SolStruct},
 };
+use std::num::NonZeroU64;
 
 sol! {
     /// The classic Safe `SafeTx` EIP-712 struct.
@@ -87,11 +91,11 @@ pub struct ConsensusDomain(Eip712Domain);
 impl ConsensusDomain {
     /// Builds the domain a validator network's own consensus group attests
     /// over: the chain the `Consensus` contract lives on and its address.
-    pub const fn new(chain: U256, consensus: Address) -> Self {
+    pub const fn new(chain: u64, consensus: Address) -> Self {
         Self(Eip712Domain::new(
             None,
             None,
-            Some(chain),
+            Some(U256::from_limbs([chain, 0, 0, 0])),
             Some(consensus),
             None,
         ))
@@ -99,9 +103,9 @@ impl ConsensusDomain {
 
     /// The consensus-domain hash of a Safe transaction proposal, embedding the
     /// already-computed [`safe_tx_hash`] as its `safeTxHash` field.
-    pub fn transaction_proposal_hash(&self, epoch: u64, safe_tx_hash: B256) -> B256 {
+    pub fn transaction_proposal_hash(&self, epoch: EpochId, safe_tx_hash: B256) -> B256 {
         TransactionProposal {
-            epoch,
+            epoch: epoch.raw_value(),
             safeTxHash: safe_tx_hash,
         }
         .eip712_signing_hash(&self.0)
@@ -109,7 +113,7 @@ impl ConsensusDomain {
 
     /// The consensus-domain hash of a Safe transaction packet: shorthand for
     /// [`transaction_proposal_hash`] with [`safe_tx_hash`] computed from `tx`.
-    pub fn transaction_packet_hash(&self, epoch: u64, tx: &SafeTransaction) -> B256 {
+    pub fn transaction_packet_hash(&self, epoch: EpochId, tx: &SafeTransaction) -> B256 {
         self.transaction_proposal_hash(epoch, safe_tx_hash(tx))
     }
 
@@ -117,12 +121,12 @@ impl ConsensusDomain {
     /// embedding the already-computed [`safe_tx_hash`] as its `safeTxHash` field.
     pub fn oracle_transaction_proposal_hash(
         &self,
-        epoch: u64,
+        epoch: EpochId,
         oracle: Address,
         safe_tx_hash: B256,
     ) -> B256 {
         OracleTransactionProposal {
-            epoch,
+            epoch: epoch.raw_value(),
             oracle,
             safeTxHash: safe_tx_hash,
         }
@@ -134,7 +138,7 @@ impl ConsensusDomain {
     /// computed from `tx`.
     pub fn oracle_transaction_packet_hash(
         &self,
-        epoch: u64,
+        epoch: EpochId,
         oracle: Address,
         tx: &SafeTransaction,
     ) -> B256 {
@@ -144,14 +148,14 @@ impl ConsensusDomain {
     /// The consensus-domain hash of an epoch rollover proposal.
     pub fn epoch_rollover_hash(
         &self,
-        active_epoch: u64,
-        proposed_epoch: u64,
+        active_epoch: EpochId,
+        proposed_epoch: NonZeroU64,
         rollover_block: u64,
         group_key: &Point,
     ) -> B256 {
         EpochRollover {
-            activeEpoch: active_epoch,
-            proposedEpoch: proposed_epoch,
+            activeEpoch: active_epoch.raw_value(),
+            proposedEpoch: proposed_epoch.get(),
             rolloverBlock: rollover_block,
             groupKeyX: group_key.x,
             groupKeyY: group_key.y,
@@ -164,13 +168,11 @@ impl ConsensusDomain {
 mod tests {
     use super::*;
     use crate::bindings::Operation;
-    use alloy::{
-        primitives::{Bytes, address, b256},
-        uint,
-    };
+    use alloy::primitives::{Bytes, address, b256};
 
     const TEST_ADDRESS: Address = address!("d8dA6BF26964aF9D7eEd9e03E53415D37aA96045");
-    const TEST_DOMAIN: ConsensusDomain = ConsensusDomain::new(uint!(1_U256), TEST_ADDRESS);
+    const TEST_DOMAIN: ConsensusDomain = ConsensusDomain::new(1, TEST_ADDRESS);
+    const EPOCH_ONE: EpochId = EpochId::from_raw(1);
 
     fn safe_tx() -> SafeTransaction {
         SafeTransaction {
@@ -200,7 +202,7 @@ mod tests {
     #[test]
     fn reference_transaction_packet_hash() {
         assert_eq!(
-            TEST_DOMAIN.transaction_packet_hash(1, &safe_tx()),
+            TEST_DOMAIN.transaction_packet_hash(EPOCH_ONE, &safe_tx()),
             b256!("3ff98ecae85843603560e9509346df2f35c0ad1dd1ceda5dcbb145745dfc4e00")
         );
     }
@@ -208,7 +210,7 @@ mod tests {
     #[test]
     fn sample_oracle_transaction_packet_hash() {
         assert_eq!(
-            TEST_DOMAIN.oracle_transaction_packet_hash(1, TEST_ADDRESS, &safe_tx()),
+            TEST_DOMAIN.oracle_transaction_packet_hash(EPOCH_ONE, TEST_ADDRESS, &safe_tx()),
             b256!("b89cd5ddc8b9a71c6469b79711f8ce0000edd6fc3f47ad057a772302fcfa82af")
         );
     }
@@ -220,7 +222,7 @@ mod tests {
             y: U256::from(2u64),
         };
         assert_eq!(
-            TEST_DOMAIN.epoch_rollover_hash(0, 1, 1000, &group_key),
+            TEST_DOMAIN.epoch_rollover_hash(EpochId::Genesis, NonZeroU64::MIN, 1000, &group_key),
             b256!("75b33b36b42d249c4cccf1c86bce59897c0ebbaa829ab5d8926e1bff1cee4355")
         );
     }

@@ -10,7 +10,10 @@ pub use self::{
 use crate::{
     bindings::{Consensus, Coordinator, Oracle},
     config::ValidatorConfig,
-    consensus::group::{self, Epoch, ParticipantSet},
+    consensus::{
+        group::{self, Epoch, ParticipantSet},
+        hashing::ConsensusDomain,
+    },
     secrets::{self, SecretStore},
     state::{self, State},
 };
@@ -27,6 +30,8 @@ pub struct ValidatorService {
     secrets: SecretStore,
     /// The genesis participant set.
     genesis: ParticipantSet,
+    /// The consensus signing domain.
+    consensus: ConsensusDomain,
     /// The FROST coordinator contract to submit protocol actions to.
     coordinator: Address,
     /// The validator configuration.
@@ -36,6 +41,7 @@ pub struct ValidatorService {
 impl ValidatorService {
     /// Creates the validator service from its machine configuration.
     pub async fn new(
+        chain_id: u64,
         account: Address,
         pool: SqlitePool,
         coordinator: Address,
@@ -49,11 +55,13 @@ impl ValidatorService {
             },
         )
         .ok_or(Error::InvalidValidators)?;
+        let consensus = ConsensusDomain::new(chain_id, config.consensus);
 
         Ok(Self {
             account,
             secrets,
             genesis,
+            consensus,
             coordinator,
             config,
         })
@@ -84,6 +92,7 @@ impl Service for ValidatorService {
             account,
             genesis,
             secrets,
+            consensus,
             coordinator,
             config,
         } = self;
@@ -91,6 +100,7 @@ impl Service for ValidatorService {
             state::Transition {
                 account,
                 genesis,
+                consensus,
                 config,
             },
             effect::Handler { account, secrets },

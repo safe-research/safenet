@@ -12,9 +12,17 @@ pub enum EpochId {
 }
 
 impl EpochId {
+    /// Returns the epoch ID for a raw value.
+    pub const fn from_raw(value: u64) -> Self {
+        match NonZeroU64::new(value) {
+            Some(number) => Self::Number { number },
+            None => Self::Genesis,
+        }
+    }
+
     /// Returns the epoch ID as a raw numerical value. Genesis is represented
     /// by the value 0.
-    pub fn raw_value(self) -> u64 {
+    pub const fn raw_value(self) -> u64 {
         match self {
             EpochId::Genesis => 0,
             EpochId::Number { number } => number.get(),

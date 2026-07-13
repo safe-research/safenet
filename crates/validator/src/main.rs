@@ -8,7 +8,7 @@ mod service;
 mod state;
 
 use self::{bindings::Consensus, config::Config, service::ValidatorService};
-use alloy::providers::ProviderBuilder;
+use alloy::providers::{Provider, ProviderBuilder};
 use argh::FromArgs;
 use safenet_core::{Driver, observability};
 use sqlx::sqlite::SqlitePool;
@@ -46,12 +46,14 @@ async fn main() -> Result<(), Box<dyn Error>> {
         .getCoordinator()
         .call()
         .await?;
-    tracing::debug!(%consensus, %coordinator, "resolved onchain contracts");
+    let chain_id = provider.get_chain_id().await?;
+    tracing::debug!(chain_id, %consensus, %coordinator, "resolved onchain contracts");
 
     let mut watched = vec![consensus, coordinator];
     watched.extend(config.validator.oracles.iter().copied());
 
     let service = ValidatorService::new(
+        chain_id,
         config.signer.address(),
         pool.clone(),
         coordinator,
