@@ -5,6 +5,7 @@ use crate::{
     bindings::Consensus,
     consensus::{checks, epoch::EpochId},
 };
+use alloy::primitives::B256;
 use safenet_core::state::Commands;
 
 impl Transition {
@@ -63,5 +64,56 @@ impl Transition {
         }
 
         (state, Vec::new())
+    }
+
+    /// Clears a completed signing session once its attestation lands
+    /// onchain, keyed by the same proposal hash used to open it:
+    /// [`SigningState::WaitingForRequest`] verifies the full transaction,
+    /// while the attestation only carries its
+    /// [`safe_tx_hash`](crate::consensus::hashing::safe_tx_hash), so the
+    /// proposal is re-hashed directly from the event rather than the packet.
+    pub(super) fn handle_transaction_attested(
+        &self,
+        mut state: State,
+        event: &Consensus::TransactionAttested,
+    ) -> (State, Commands<State, Self>) {
+        let epoch = EpochId::from_raw(event.epoch);
+        let message = self
+            .consensus
+            .transaction_proposal_hash(epoch, event.safeTxHash);
+
+        // Always clean up signing states when we observe attestations onchain
+        // to prevent dangling signing references. This _should_ only happen in
+        // case other validators diverge and produce an attestation under a
+        // different signature ID, so this is purely defensive.
+        let signing = state.signing.remove(&message);
+        if let Some(signature_id) = signing.as_ref().and_then(|signing| signing.signature_id()) {
+            state.signature_id_to_message.remove(&signature_id);
+        }
+
+        // In case we weren't in an expected state (either waiting for an
+        // attestation or just observing but not participating in the signing
+        // ceremony), log a warning, since this should never happen.
+        match &signing {
+            Some(SigningState::WaitingForAttestation { .. }) | None => {}
+            Some(_) => tracing::warn!(
+                %message,
+                signature_id = %event.signatureId,
+                "received attestation on unexpected signing state"
+            ),
+        }
+
+        (state, Vec::new())
+    }
+}
+
+impl SigningState {
+    /// Returns the known signature ID for a signing state, or `None` if none
+    /// have been assigned yet.
+    fn signature_id(&self) -> Option<B256> {
+        match self {
+            SigningState::WaitingForAttestation { signature_id } => Some(*signature_id),
+            SigningState::WaitingForRequest { .. } | SigningState::WaitingToDecline { .. } => None,
+        }
     }
 }
