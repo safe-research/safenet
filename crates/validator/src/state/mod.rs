@@ -14,7 +14,9 @@ use crate::{
         epoch::EpochId,
         group::{Group, ParticipantSet},
     },
-    frost::keygen::{GroupKey, Secrets, SharingState, VerifiedCommitment, VerifiedShare},
+    frost::keygen::{
+        GroupCommitments, PublicKeyShare, Secrets, SharingState, VerifiedCommitment, VerifiedShare,
+    },
     service::{Action, Effect, Event, Resume},
 };
 use alloy::primitives::{Address, B256};
@@ -26,13 +28,13 @@ use std::{collections::BTreeMap, num::NonZeroU64};
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
 pub struct State {
     /// The epoch-rollover / DKG state machine.
-    pub rollover: RolloverState,
+    rollover: RolloverState,
 }
 
 /// The epoch-rollover / DKG state machine. Each active variant carries the
 /// group it is generating.
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
-pub enum RolloverState {
+enum RolloverState {
     /// Idle before the genesis group's DKG has been triggered.
     #[default]
     WaitingForGenesis,
@@ -84,10 +86,10 @@ pub enum RolloverState {
         next_epoch: EpochId,
         /// The group being generated.
         group: Group,
-        /// The public key derived from the participants' commitments.
-        group_key: GroupKey,
-        /// This validator's sharing state, or `None` if not participating.
-        sharing_state: Option<Box<SharingState>>,
+        /// This validator's participation.
+        participation: Box<KeyGenParticipation>,
+        /// Verified participant public key shares.
+        public_keys: BTreeMap<Address, PublicKeyShare>,
         /// Verified secret shares received from peers so far, keyed by
         /// participant.
         shares: BTreeMap<Address, VerifiedShare>,
@@ -95,6 +97,18 @@ pub enum RolloverState {
         /// indicate that there is no deadline.
         deadline: Option<u64>,
     },
+}
+
+/// The keygen participation status for the validator.
+#[derive(Clone, Debug, Deserialize, Serialize)]
+enum KeyGenParticipation {
+    /// The validator is an active participant that is part of the keygen
+    /// ceremony and holds its keygen sharing state.
+    Participating(SharingState),
+    /// The validator is an observer to the ceremony, and keeps track of the
+    /// public commitments needed to verify publicly revealed shares in case of
+    /// complaints as well as public participant public key shares.
+    Observing(GroupCommitments),
 }
 
 /// The pure validator state transition.

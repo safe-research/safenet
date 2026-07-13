@@ -63,29 +63,29 @@ where
     })
 }
 
-/// A validated public commitment from a participant.
+/// A verified public commitment from a participant.
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct VerifiedCommitment {
     encryption_public_key: EncryptionPublicKey,
     package: round1::Package,
 }
 
-/// Verifies a participant's public commitment against the group's `threshold`.
+/// Verifies a participant's public commitment by decoding its values and
+/// checking its proof of knowledge.
 ///
 /// These are applied to _both_ `me`, the validator itself, and all peers that
 /// publish key generation commitments onchain; unlike [`generate_secret_shares`]
 /// this does not require `me` to be a participant in the key generation.
 pub fn verify_commitment(
-    threshold: u16,
     participant: Address,
     commitment: &bindings::KeyGenCommitment,
 ) -> Result<VerifiedCommitment, Error> {
+    // Note that we do not check the length of the commitments, this is enforced
+    // by the smart contract and any issues will be caught later and produce an
+    // unexpected FROST error.
     let identifier = participants::identifier(participant);
     marshal::frost_commitment(commitment)
         .and_then(|(encryption_public_key, package)| {
-            if package.commitment().coefficients().len() as u16 != threshold {
-                return Err(frost_secp256k1::Error::IncorrectNumberOfCommitments);
-            }
             frost_core::keys::dkg::verify_proof_of_knowledge(
                 identifier,
                 package.commitment(),
@@ -99,24 +99,34 @@ pub fn verify_commitment(
         .err_with_culprit(participant)
 }
 
-/// The public key for a generated FROST group.
-#[derive(Copy, Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
-#[serde(transparent)]
-pub struct GroupKey(VerifyingKey);
+/// FROST group commitments.
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct GroupCommitments {
+    commitments: BTreeMap<Address, VerifiedCommitment>,
+    group_commitment: keys::VerifiableSecretSharingCommitment,
+    verifying_key: VerifyingKey,
+}
 
-impl GroupKey {
-    /// Returns the underlying FROST verifying key.
-    pub(super) fn as_verifying_key(&self) -> &VerifyingKey {
-        &self.0
+impl GroupCommitments {
+    /// Returns the underlying FROST group verifying key.
+    pub(super) fn verifying_key(&self) -> &VerifyingKey {
+        &self.verifying_key
     }
 }
 
 /// Derives the group's public key from every participant's verified
 /// commitment.
-pub fn group_key(commitments: &BTreeMap<Address, VerifiedCommitment>) -> Result<GroupKey, Error> {
-    let commitment = group_commitment(commitments).err_unexpected()?;
-    let key = VerifyingKey::from_commitment(&commitment).err_unexpected()?;
-    Ok(GroupKey(key))
+pub fn group_commitments(
+    commitments: BTreeMap<Address, VerifiedCommitment>,
+) -> Result<GroupCommitments, Error> {
+    let group_commitment = group_commitment(&commitments).err_unexpected()?;
+    let verifying_key = VerifyingKey::from_commitment(&group_commitment).err_unexpected()?;
+
+    Ok(GroupCommitments {
+        commitments,
+        group_commitment,
+        verifying_key,
+    })
 }
 
 /// A participant's own secret key-generation state after sharing. Persisted to
@@ -129,15 +139,14 @@ pub fn group_key(commitments: &BTreeMap<Address, VerifiedCommitment>) -> Result<
 pub struct SharingState {
     encryption_key: EncryptionKey,
     secret_package: round2::SecretPackage,
-    group_commitment: keys::VerifiableSecretSharingCommitment,
-    commitments: BTreeMap<Address, VerifiedCommitment>,
+    group_commitments: GroupCommitments,
 }
 
-/// The result of [`generate_secret_shares`]: the sharing state and the onchain
-/// secret share to publish.
-pub struct SecretShares {
-    pub sharing_state: SharingState,
-    pub share: bindings::KeyGenSecretShare,
+impl SharingState {
+    /// Returns the group key for the sharing state.
+    pub fn group_commitments(&self) -> &GroupCommitments {
+        &self.group_commitments
+    }
 }
 
 /// Given every participant's verified commitment, produces the sharing state
@@ -146,7 +155,7 @@ pub struct SecretShares {
 pub fn generate_secret_shares(
     secrets: Secrets,
     commitments: BTreeMap<Address, VerifiedCommitment>,
-) -> Result<SecretShares, Error> {
+) -> Result<(SharingState, bindings::KeyGenSecretShare), Error> {
     let (round1_peer_packages, round1_me_package) = peer_packages(
         secrets.secret_package.identifier(),
         &commitments,
@@ -154,10 +163,10 @@ pub fn generate_secret_shares(
     )?;
 
     // By construction, the second round of DKG should have no participant
-    // culprits (as the `commitments` have already verified the length of the
-    // commitments and the proof of knowledge). The only way we encounter an
-    // error here is if the caller were to mix secrets and commitments from
-    // different DKG ceremonies.
+    // culprits (the contract has checked coefficient lengths, and the
+    // commitments' proofs of knowledge have been verified). The only way we
+    // encounter an error here is if the caller were to mix secrets and
+    // commitments from different DKG ceremonies.
     dkg::part2(secrets.secret_package.clone(), &round1_peer_packages)
         .and_then(|(secret_package, round2_packages)| {
             // Ensure that the `me` commitment is also valid, the FROST library
@@ -173,6 +182,7 @@ pub fn generate_secret_shares(
                 *secrets.secret_package.identifier(),
                 &group_commitment,
             );
+            let verifying_key = VerifyingKey::from_commitment(&group_commitment)?;
 
             // Encrypt each of the other shares for the other participants,
             // using their publicly broadcasted public encryption keys.
@@ -197,15 +207,19 @@ pub fn generate_secret_shares(
                 .collect::<Result<Vec<_>, frost_secp256k1::Error>>()?;
             let share = marshal::solidity_secret_share(&verifying_share, &encrypted_shares);
 
-            Ok(SecretShares {
-                sharing_state: SharingState {
-                    encryption_key: secrets.encryption_key,
-                    secret_package,
-                    group_commitment,
+            // Build the sharing state that we will need to verify secret shares
+            // and finalize our key share.
+            let sharing_state = SharingState {
+                encryption_key: secrets.encryption_key,
+                secret_package,
+                group_commitments: GroupCommitments {
                     commitments,
+                    group_commitment,
+                    verifying_key,
                 },
-                share,
-            })
+            };
+
+            Ok((sharing_state, share))
         })
         .err_unexpected()
 }
@@ -221,25 +235,77 @@ fn group_commitment(
     )
 }
 
-/// A validated signing share from a peer.
+/// A verified public key share.
+///
+/// Public key shares are verified against the commitments made by the
+/// participant at the start of the keygen ceremony.
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct PublicKeyShare {
+    verifying_share: keys::VerifyingShare,
+}
+
+/// A participant's encrypted key shares, in canonical publishing order.
+pub struct EncryptedSecretShares {
+    shares: Vec<[u8; 32]>,
+}
+
+/// Verifies the public portion of a participant's secret-share broadcast by
+/// checking that its advertised public key share matches the group
+/// commitments, and decodes its encrypted shares for participant-specific
+/// verification.
+///
+/// These are applied to _both_ `me`, the validator itself, and all peers that
+/// publish key generation secret shares onchain.
+pub fn verify_secret_share(
+    group_commitments: &GroupCommitments,
+    participant: Address,
+    share: &bindings::KeyGenSecretShare,
+) -> Result<(PublicKeyShare, EncryptedSecretShares), Error> {
+    if !group_commitments.commitments.contains_key(&participant) {
+        return Err(frost_secp256k1::Error::UnknownIdentifier).err_unexpected();
+    }
+
+    let identifier = participants::identifier(participant);
+    let public_key = marshal::frost_point(&share.y)
+        .and_then(|y| {
+            let verifying_share = keys::VerifyingShare::from_commitment(
+                identifier,
+                &group_commitments.group_commitment,
+            );
+            if y != verifying_share.to_element() {
+                return Err(frost_secp256k1::Error::MalformedVerifyingKey);
+            }
+
+            Ok(PublicKeyShare { verifying_share })
+        })
+        .err_with_culprit(participant)?;
+
+    // Note that we explicitly do not check the length of the encrypted shares,
+    // as this is done by the contract. Any error in the length will trigger an
+    // unexpected FROST error at finalization.
+    let encrypted_shares = EncryptedSecretShares {
+        shares: share.f.iter().map(U256::to_be_bytes).collect(),
+    };
+
+    Ok((public_key, encrypted_shares))
+}
+
+/// A validated signing share from a participant.
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct VerifiedShare {
     package: round2::Package,
 }
 
-/// Verifies a participant's secret signing share.
+/// Decrypts this validator's encrypted share from a participant and verifies
+/// that it matches that participant's commitment.
 ///
 /// These are applied to _both_ `me`, the validator itself, and all peers that
 /// publish key generation secret shares onchain.
-pub fn verify_secret_share(
+pub fn verify_encrypted_secret_share(
     sharing_state: &SharingState,
     participant: Address,
-    share: &bindings::KeyGenSecretShare,
+    encrypted_shares: EncryptedSecretShares,
 ) -> Result<VerifiedShare, Error> {
-    if share.f.len() as u16 != sharing_state.secret_package.max_signers() - 1 {
-        return Err(frost_secp256k1::Error::IncorrectNumberOfShares).err_with_culprit(participant);
-    }
-
     let identifier = participants::identifier(participant);
     let (commitment, secret_share) = if identifier == *sharing_state.secret_package.identifier() {
         (
@@ -252,6 +318,7 @@ pub fn verify_secret_share(
         )
     } else {
         sharing_state
+            .group_commitments
             .commitments
             .get(&participant)
             .ok_or(frost_secp256k1::Error::UnknownIdentifier)
@@ -263,6 +330,7 @@ pub fn verify_secret_share(
                 // decrypt it so that we can verify it against the peer's
                 // commitments.
                 let index = sharing_state
+                    .group_commitments
                     .commitments
                     .keys()
                     .filter(|address| **address != participant)
@@ -271,32 +339,25 @@ pub fn verify_secret_share(
                             == *sharing_state.secret_package.identifier()
                     })
                     .ok_or(frost_secp256k1::Error::UnknownIdentifier)?;
-                let encrypted_share = share
-                    .f
+                let encrypted_share = encrypted_shares
+                    .shares
                     .get(index)
                     .ok_or(frost_core::Error::IncorrectNumberOfShares)?;
                 let secret_share = sharing_state
                     .encryption_key
-                    .ecdh(encryption_public_key, encrypted_share.to_be_bytes());
+                    .ecdh(encryption_public_key, *encrypted_share);
 
                 Ok((commitment, secret_share))
             })
             .err_unexpected()?
     };
 
-    let package = marshal::frost_point(&share.y)
-        .and_then(|y| {
-            let verifying_share =
-                keys::VerifyingShare::from_commitment(identifier, &sharing_state.group_commitment);
-            if y != verifying_share.to_element() {
-                return Err(frost_secp256k1::Error::MalformedVerifyingKey);
-            }
-
+    let package = marshal::frost_scalar(&U256::from_be_bytes(secret_share))
+        .and_then(|secret_share| {
             // Pre-verify the share to make sure it matches the commitment from
             // the peer; this allows us to complain right away in case an
             // invalid share was provided.
-            let signing_share =
-                keys::SigningShare::new(marshal::frost_scalar(&U256::from_be_bytes(secret_share))?);
+            let signing_share = keys::SigningShare::new(secret_share);
             let _ = keys::SecretShare::new(
                 *sharing_state.secret_package.identifier(),
                 signing_share,
@@ -314,7 +375,7 @@ pub fn verify_secret_share(
 /// A participant's share of the group signing key: its secret signing share,
 /// verifying share, and the group verifying key. The final result of DKG,
 /// persisted to the secret store and used to sign.
-#[derive(Clone, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(transparent)]
 pub struct KeyShare(keys::KeyPackage);
 
@@ -345,7 +406,7 @@ pub fn finalize(
 ) -> Result<KeyShare, Error> {
     let (round1_peer_packages, _) = peer_packages(
         sharing_state.secret_package.identifier(),
-        &sharing_state.commitments,
+        &sharing_state.group_commitments.commitments,
         |commitment| commitment.package.clone(),
     )?;
     let (round2_peer_packages, round2_me_package) = peer_packages(
