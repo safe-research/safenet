@@ -425,6 +425,7 @@ mod tests {
                 .map(|(index, data)| EventLog {
                     block,
                     index: index.try_into().expect("test log index fits in u64"),
+                    address: WATCHED,
                     data: Weth::WethEvents::Deposit(data),
                 })
                 .collect(),

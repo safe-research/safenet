@@ -45,6 +45,8 @@ pub struct EventLog<E> {
     pub block: u64,
     /// The index of the log within the block.
     pub index: u64,
+    /// The address that emitted the event.
+    pub address: Address,
     /// The decoded event data.
     pub data: E,
 }
@@ -498,6 +500,7 @@ where
                     Some(EventLog {
                         block: log.block_number?,
                         index: log.log_index?,
+                        address: log.inner.address,
                         data,
                     })
                 })
@@ -652,7 +655,12 @@ mod tests {
     }
 
     fn event_log<E>((block, index): (u64, u64), data: E) -> EventLog<E> {
-        EventLog { block, index, data }
+        EventLog {
+            block,
+            index,
+            address: WATCHED,
+            data,
+        }
     }
 
     fn watcher(

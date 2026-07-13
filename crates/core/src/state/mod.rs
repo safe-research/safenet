@@ -363,6 +363,7 @@ impl<Resume> EffectHandler<Infallible, Resume> for Pure {
 mod tests {
     use super::*;
     use crate::index::{BlockUpdate, EventUpdate, Update};
+    use alloy::primitives::Address;
     use serde::Deserialize;
     use std::convert::Infallible;
 
@@ -468,6 +469,7 @@ mod tests {
                 .map(|(index, data)| EventLog {
                     block,
                     index: index.try_into().expect("test log index fits in u64"),
+                    address: Address::ZERO,
                     data,
                 })
                 .collect(),

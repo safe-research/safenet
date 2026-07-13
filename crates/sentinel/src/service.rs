@@ -665,6 +665,7 @@ mod tests {
         EventLog {
             block,
             index: 0,
+            address: Address::ZERO,
             data,
         }
     }
