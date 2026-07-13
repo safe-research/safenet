@@ -14,7 +14,6 @@ use std::num::NonZeroU64;
 
 /// An onchain action the validator emits during a state transition.
 #[derive(Debug, Clone, PartialEq, Eq)]
-#[expect(dead_code)]
 pub enum Action {
     /// An action to publish key generation commitments onchain.
     KeyGenAndCommit {

@@ -477,8 +477,8 @@ impl Transition {
                                 message,
                                 SigningState::WaitingForRequest {
                                     key_share: participating_epoch.key_share.clone(),
-                                    group_id,
-                                    responsible: None,
+                                    group_id: participating_epoch.group.id(),
+                                    responsible: Some(event.participant),
                                     packet: Packet::EpochRollover {
                                         active_epoch,
                                         proposed_epoch,
