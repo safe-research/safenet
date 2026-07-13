@@ -20,8 +20,6 @@
 //!   re-included `preprocess` commitment can still be signed against, and are
 //!   pruned when the owning group retires.
 
-#![cfg_attr(not(test), expect(dead_code))]
-
 use crate::{
     bindings,
     frost::{
@@ -101,22 +99,6 @@ impl SecretStore {
         .await?;
 
         Ok(Self { pool })
-    }
-
-    /// Returns the DKG secrets `me` generated for `group`, or `None` if none
-    /// are stored (they were never generated, or were pruned when the keygen
-    /// resolved).
-    pub async fn keygen_secrets(&self, group: B256, me: Address) -> Result<Option<Secrets>, Error> {
-        sqlx::query_scalar::<_, String>(
-            "SELECT secrets FROM keygen_secrets WHERE group_id = ? AND address = ?",
-        )
-        .bind(key(group))
-        .bind(key(me))
-        .fetch_optional(&self.pool)
-        .await?
-        .map(|secrets| serde_json::from_str(&secrets))
-        .transpose()
-        .map_err(Error::from)
     }
 
     /// Persists the DKG `secrets` `me` generated for `group` and returns the
@@ -415,6 +397,20 @@ mod tests {
         NonceChunk::with_size(size, &keygen::KeyShare::dummy(), &mut rand::thread_rng()).unwrap()
     }
 
+    async fn get_keygen_secrets(store: &SecretStore) -> Option<Secrets> {
+        sqlx::query_scalar::<_, String>(
+            "SELECT secrets FROM keygen_secrets WHERE group_id = ? AND address = ?",
+        )
+        .bind(key(GROUP))
+        .bind(key(ME))
+        .fetch_optional(&store.pool)
+        .await
+        .unwrap()
+        .map(|secrets| serde_json::from_str(&secrets))
+        .transpose()
+        .unwrap()
+    }
+
     async fn count_chunk_nonces(store: &SecretStore, chunk: u64) -> u64 {
         let count = sqlx::query_scalar::<_, i64>(
             "SELECT COUNT(*) FROM nonces
@@ -435,7 +431,7 @@ mod tests {
     #[tokio::test]
     async fn keygen_secrets_roundtrip_and_missing() {
         let store = store().await;
-        assert!(store.keygen_secrets(GROUP, ME).await.unwrap().is_none());
+        assert!(get_keygen_secrets(&store).await.is_none());
 
         let secrets = keygen_secrets();
         store
@@ -443,7 +439,7 @@ mod tests {
             .await
             .unwrap();
 
-        let read = store.keygen_secrets(GROUP, ME).await.unwrap().unwrap();
+        let read = get_keygen_secrets(&store).await.unwrap();
         assert_eq!(
             serde_json::to_string(&read).unwrap(),
             serde_json::to_string(&secrets).unwrap(),
@@ -478,7 +474,7 @@ mod tests {
             serde_json::to_string(&first).unwrap(),
         );
 
-        let read = store.keygen_secrets(GROUP, ME).await.unwrap().unwrap();
+        let read = get_keygen_secrets(&store).await.unwrap();
         assert_eq!(
             serde_json::to_string(&read).unwrap(),
             serde_json::to_string(&first).unwrap(),
@@ -494,7 +490,7 @@ mod tests {
             .unwrap();
 
         store.prune_keygen_secrets(GROUP).await.unwrap();
-        assert!(store.keygen_secrets(GROUP, ME).await.unwrap().is_none());
+        assert!(get_keygen_secrets(&store).await.is_none());
         // Pruning again is a no-op.
         store.prune_keygen_secrets(GROUP).await.unwrap();
     }

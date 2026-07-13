@@ -6,8 +6,6 @@
 //! FROST coordinator contract, internally managing the marshalling between
 //! [`frost_secp256k1`] values and their Solidity ABI representations.
 
-#![cfg_attr(not(test), expect(dead_code))]
-
 pub mod ecdh;
 pub mod error;
 pub mod keygen;

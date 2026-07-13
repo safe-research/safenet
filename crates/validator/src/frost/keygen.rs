@@ -109,6 +109,7 @@ pub struct GroupCommitments {
 
 impl GroupCommitments {
     /// Returns the underlying FROST group verifying key.
+    #[cfg(test)]
     pub(super) fn verifying_key(&self) -> &VerifyingKey {
         &self.verifying_key
     }

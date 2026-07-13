@@ -37,8 +37,6 @@
 //! the subgroup must contain strictly more than two thirds of the default
 //! participant set.
 
-#![cfg_attr(not(test), expect(dead_code))]
-
 use crate::{
     config::Participant,
     merkle::{MerkleRoot, MerkleTree},
@@ -122,11 +120,6 @@ impl ParticipantSet {
     pub fn group(&self) -> Group {
         let (group, _) = self.group_and_participants_tree();
         group
-    }
-
-    /// Returns the addresses in the participant set.
-    pub fn addresses(&self) -> &BTreeSet<Address> {
-        &self.addresses
     }
 
     /// Participates in a group as the specified participant set.
@@ -353,7 +346,7 @@ mod tests {
         )
         .unwrap();
 
-        assert_eq!(to_vec(participants.addresses()), [EP07, EP08, EP09, EP06]);
+        assert_eq!(to_vec(&participants.addresses), [EP07, EP08, EP09, EP06]);
 
         let group = participants.group();
         assert_eq!(group.id(), GENESIS_ID);
@@ -409,7 +402,7 @@ mod tests {
         .unwrap();
 
         assert_eq!(
-            to_vec(participants.addresses()),
+            to_vec(&participants.addresses),
             [
                 address!("0x3D58a5475c1336b0A755c3aBd298CeB9b7BB9CDe"),
                 address!("0x7B0A8EFA45dE81F11F2846EC28259B62155a2b37"),
