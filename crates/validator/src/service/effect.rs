@@ -15,6 +15,7 @@ use std::{
     error::Error,
     fmt::{self, Display, Formatter},
     sync::Arc,
+    time::Instant,
 };
 
 /// An impure operation the state transition asks the handler to perform.
@@ -212,6 +213,7 @@ impl Handler {
         group_id: B256,
         key_share: &KeyShare,
     ) -> Result<Resume, InternalError> {
+        let started = Instant::now();
         let mut rng = rand::thread_rng();
         let nonce_chunk = frost::preprocess::NonceChunk::generate(key_share, &mut rng)?;
         let result = self
@@ -225,6 +227,11 @@ impl Handler {
             // There is already a pending nonce chunk from an earlier
             // top-up; do not register a second one.
             .unwrap_or(Resume::Noop);
+        tracing::trace!(
+            %group_id,
+            elapsed_ms = started.elapsed().as_millis(),
+            "completed nonce tree sampling effect"
+        );
         Ok(result)
     }
 }

@@ -37,6 +37,12 @@ impl Transition {
             return (state, Vec::new());
         }
 
+        tracing::debug!(
+            group_id = %event.gid,
+            chunk = event.chunk,
+            root = %event.commitment,
+            "linking nonce tree to onchain chunk"
+        );
         (
             state,
             vec![Command::Effect(Effect::LinkNonceTree {
