@@ -625,21 +625,21 @@ depend on the full event-driven machine and so are grouped into D4.
 - **D1ii — Genesis `KeyGen`.** ✅ Landed (#553). `WaitingForGenesis → CollectingCommitments` + the
   `BuildKeyGenCommitment` (`DkgCommit`) effect and `KeyGenAndCommit` action.
 - **D1iii — `KeyGenCommitted`.** Register peers' commitments in `State`; when all have committed,
-  `→ CollectingShares` and emit `DkgShares` → the `KeyGenSecretShare` action (ECDH-encrypted shares).
+  `→ CollectingShares` and emit `KeyGenSecretShare` action (ECDH-encrypted shares).
   Ports `keygen/committed.ts`. Depends on B3, D1ii.
 - **D1iv — `KeyGenSecretShared`.** Collect/verify shares (invalid share → `KeyGenComplain` action);
-  when all shared, `→ CollectingConfirmations` and — if my share set completed — emit `DkgFinalize`
-  → the `KeyGenConfirm` action. Ports `keygen/secretShares.ts`. Depends on B3, D1iii.
+  when all shared, `→ CollectingConfirmations` and — if my share set completed — emit the `KeyGenConfirm` action. Ports `keygen/secretShares.ts`. Depends on B3, D1iii.
 - **D1v — `KeyGenConfirmed` (genesis branch).** Collect confirmations; when the genesis group is fully
   confirmed, `→ EpochStaged{epoch 0}`, record `epoch_groups[0]`, emit `NonceTree` →
-  `RegisterNonceCommitments`, and `PruneDkgSecrets`. _(The non-genesis rollover-packet branch lands in
+  `RegisterNonceCommitments`. _(The non-genesis rollover-packet branch lands in
   D4iii, once signing exists.)_ Ports the genesis path of `keygen/confirmed.ts`. Depends on B3/B4, C1,
   D1iv.
-- **D1vi — `KeyGenComplained`.** Complaint accounting; at threshold, restart the keygen via the shared
-  `trigger_keygen` helper (adjusted participants) + `PruneDkgSecrets`; if accused, emit the
+- **D1vi — `KeyGenComplained`.** Complaint accounting; at threshold, restart the keygen; if accused, emit the
   `KeyGenComplaintResponse` action. Ports `keygen/complaintSubmitted.ts`. Depends on D1iv.
 - **D1vii — `KeyGenComplaintResponded`.** Register/verify the revealed share; invalid → restart;
   share set completed → `KeyGenConfirm`. Ports `keygen/complaintResponse.ts`. Depends on D1vi.
+- **D1viii** Secrets pruning, keep a `Vec` of `(u64 /* block */, Prune)` of things to prune. Later, in
+  
 
 **D2 — Transaction & oracle intake.** Verify proposed transactions and open the signing sessions
 (the `WaitingForRequest` / `WaitingToDecline` / `WaitingForOracle` FSM entries). Pure verification and
@@ -705,6 +705,8 @@ rollover branch of `keygen/confirmed.ts`, and `consensus/epochStaged.ts`.
 - **D4iv — Signing timeouts (`NewBlock`).** Per-session retry / decline / drop across the signing FSM,
   emitting `SignRequest` on retry and the standalone `AttestTransaction` / `StageEpoch` fallback
   actions. Ports `signing/timeouts.ts`. Depends on D3vi, D4iii.
+- **D4v — Pruning maturity** When a safe block is reached, trigger pruning effects for the things that
+  need to be pruned.
 
 **D5 — Staker reconciliation.** The `GetValidatorStaker` effect (handler holds the provider), the
 `ValidatorStakerSet` event handler, the staker fields on `State`, the `NewBlock` staker check, and the

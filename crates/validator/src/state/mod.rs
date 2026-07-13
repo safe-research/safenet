@@ -11,6 +11,7 @@ mod preprocess;
 
 use crate::{
     bindings::Coordinator,
+    config::ValidatorConfig,
     consensus::{
         epoch::EpochId,
         group::{Group, ParticipantSet},
@@ -98,6 +99,8 @@ enum RolloverState {
         /// Verified secret shares received from peers so far, keyed by
         /// participant.
         shares: BTreeMap<Address, VerifiedShare>,
+        /// Complaints raised so far, keyed by accused participant.
+        complaints: BTreeMap<Address, Complaint>,
         /// The block by which the secret-share round must complete. `None` to
         /// indicate that there is no deadline.
         deadline: Option<u64>,
@@ -115,6 +118,8 @@ enum RolloverState {
         status: KeyGenConfirmation,
         /// Participants that have confirmed so far.
         confirmations: BTreeSet<Address>,
+        /// Complaints raised so far, keyed by accused participant.
+        complaints: BTreeMap<Address, Complaint>,
         /// The confirmation deadlines for the confirmation collection phase.
         /// `None` to indicate that there is no deadline.
         deadlines: Option<ConfirmationDeadlines>,
@@ -151,6 +156,15 @@ enum KeyGenConfirmation {
     Confirmed(Box<KeyShare>),
 }
 
+/// The complaints raised against a single accused participant.
+#[derive(Clone, Debug, Default, Deserialize, Serialize)]
+struct Complaint {
+    /// The total number of complaints raised against the participant.
+    total: u16,
+    /// The number of complaints not yet responded to.
+    unresponded: u16,
+}
+
 /// The deadlines for collecting confirmations.
 #[derive(Clone, Debug, Deserialize, Serialize)]
 struct ConfirmationDeadlines {
@@ -172,9 +186,8 @@ pub struct Transition {
     pub account: Address,
     /// The genesis participant set.
     pub genesis: ParticipantSet,
-    /// The number of blocks a distributed key generation ceremony may run
-    /// before timing out.
-    pub key_gen_timeout: NonZeroU64,
+    /// The validator configuration.
+    pub config: ValidatorConfig,
 }
 
 impl StateTransition<State> for Transition {
@@ -201,6 +214,9 @@ impl StateTransition<State> for Transition {
                 }
                 Event::Coordinator(Coordinator::CoordinatorEvents::KeyGenConfirmed(event)) => {
                     self.handle_key_gen_confirmed(state, &event)
+                }
+                Event::Coordinator(Coordinator::CoordinatorEvents::KeyGenComplained(event)) => {
+                    self.handle_key_gen_complained(state, log.block, &event)
                 }
                 // The remaining events are wired in as their handlers land.
                 _ => (state, Vec::new()),
