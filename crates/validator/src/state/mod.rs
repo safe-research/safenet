@@ -83,6 +83,11 @@ enum Prune {
         /// The resolved group.
         group_id: B256,
     },
+    /// A retired epoch's registered nonce trees.
+    GroupNonces {
+        /// The retired group.
+        group_id: B256,
+    },
 }
 
 /// The epoch-rollover / DKG state machine. Each active variant carries the
@@ -97,6 +102,12 @@ enum RolloverState {
     /// This can either be an unrecoverable error during DKG or we have reached
     /// the heat death of the universe and there are no more epochs.
     Halted,
+    /// This group's key generation completed and the group is staged in the
+    /// consensus contract.
+    EpochStaged {
+        /// The epoch that was just staged.
+        next_epoch: NonZeroU64,
+    },
     /// The key generation for `next_epoch` was skipped because too few
     /// participants took part for the group to be safe.
     EpochSkipped {
@@ -181,11 +192,6 @@ enum RolloverState {
         group_id: B256,
         /// The rollover proposal's signing hash.
         message: B256,
-    },
-    /// This group's key generation completed and the group is staged.
-    EpochStaged {
-        /// The epoch that was just staged.
-        next_epoch: EpochId,
     },
 }
 
@@ -465,8 +471,7 @@ impl StateTransition<State> for Transition {
                 // The remaining events are wired in as their handlers land.
                 _ => (state, Vec::new()),
             },
-            // No block-driven or effectful transitions are wired in yet.
-            Message::NewBlock(_) => (state, Vec::new()),
+            Message::NewBlock(block) => self.handle_rollover_new_block(state, block),
             Message::Resume(result) => match result {
                 Resume::Noop => (state, Vec::new()),
                 Resume::Setup { group_id, secrets } => {

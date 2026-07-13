@@ -1,7 +1,7 @@
 use super::{Packet, SigningState, State, Transition};
 use crate::{
     bindings::{self, Consensus, Coordinator, Oracle, SignNonces},
-    consensus::hashing,
+    consensus::{epoch::EpochId, hashing},
     frost::{self, preprocess::Nonces},
     merkle::MerkleRoot,
     service::{Action, Effect},
@@ -461,7 +461,29 @@ impl Transition {
     }
 }
 
+impl SigningState {
+    /// The packet to sign for a particular signing state.
+    pub(super) fn packet(&self) -> &Packet {
+        match self {
+            SigningState::WaitingForRequest { packet, .. }
+            | SigningState::WaitingForOracle { packet, .. }
+            | SigningState::CollectNonceCommitments { packet, .. }
+            | SigningState::CollectSigningShares { packet, .. }
+            | SigningState::WaitingForAttestation { packet, .. }
+            | SigningState::WaitingToDecline { packet, .. } => packet,
+        }
+    }
+}
+
 impl Packet {
+    /// The epoch whose group this packet is signed by.
+    pub(super) fn epoch(&self) -> EpochId {
+        match self {
+            Packet::EpochRollover { active_epoch, .. } => *active_epoch,
+            Packet::Transaction { epoch, .. } | Packet::OracleTransaction { epoch, .. } => *epoch,
+        }
+    }
+
     /// Builds the callback invoked once this packet's group signature
     /// completes: `attestTransaction`/`attestOracleTransaction` calldata
     /// targeting the `Consensus` contract. The signature id argument is left
