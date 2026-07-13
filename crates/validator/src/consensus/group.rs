@@ -77,9 +77,10 @@ impl Group {
         (self.count, self.threshold)
     }
 
-    /// Returns the set of excluded participants from the group.
-    pub fn excluded(&self) -> impl Iterator<Item = Address> + '_ {
-        self.excluded.iter().copied()
+    /// Returns a new set of excluded participants including the ones that were
+    /// already excluded in this group along with `also_excluded`.
+    pub fn also_exclude(&self, also_excluded: impl Iterator<Item = Address>) -> BTreeSet<Address> {
+        self.excluded.iter().copied().chain(also_excluded).collect()
     }
 }
 

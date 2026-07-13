@@ -218,6 +218,9 @@ impl StateTransition<State> for Transition {
                 Event::Coordinator(Coordinator::CoordinatorEvents::KeyGenComplained(event)) => {
                     self.handle_key_gen_complained(state, log.block, &event)
                 }
+                Event::Coordinator(Coordinator::CoordinatorEvents::KeyGenComplaintResponded(
+                    event,
+                )) => self.handle_key_gen_complaint_responded(state, log.block, &event),
                 // The remaining events are wired in as their handlers land.
                 _ => (state, Vec::new()),
             },
