@@ -96,6 +96,7 @@ impl Service for ValidatorService {
             coordinator,
             config,
         } = self;
+        let consensus_address = config.consensus;
         (
             state::Transition {
                 account,
@@ -104,7 +105,10 @@ impl Service for ValidatorService {
                 config,
             },
             effect::Handler { account, secrets },
-            action::Encoder { coordinator },
+            action::Encoder {
+                coordinator,
+                consensus: consensus_address,
+            },
         )
     }
 }
