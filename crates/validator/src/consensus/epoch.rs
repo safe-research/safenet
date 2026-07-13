@@ -18,24 +18,6 @@ pub enum EpochId {
     Number { number: NonZeroU64 },
 }
 
-impl Serialize for EpochId {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: Serializer,
-    {
-        serializer.serialize_u64(self.raw_value())
-    }
-}
-
-impl<'de> Deserialize<'de> for EpochId {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        Ok(Self::from_raw(u64::deserialize(deserializer)?))
-    }
-}
-
 impl EpochId {
     /// Returns the epoch ID for a raw value.
     pub const fn from_raw(value: u64) -> Self {
@@ -53,6 +35,14 @@ impl EpochId {
             EpochId::Number { number } => number.get(),
         }
     }
+
+    /// Returns the epoch number for this ID for any non-genesis group.
+    pub const fn number(self) -> Option<NonZeroU64> {
+        match self {
+            EpochId::Genesis => None,
+            EpochId::Number { number } => Some(number),
+        }
+    }
 }
 
 impl PartialOrd for EpochId {
@@ -64,6 +54,24 @@ impl PartialOrd for EpochId {
 impl Ord for EpochId {
     fn cmp(&self, other: &Self) -> Ordering {
         u64::cmp(&self.raw_value(), &other.raw_value())
+    }
+}
+
+impl Serialize for EpochId {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        serializer.serialize_u64(self.raw_value())
+    }
+}
+
+impl<'de> Deserialize<'de> for EpochId {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        Ok(Self::from_raw(u64::deserialize(deserializer)?))
     }
 }
 

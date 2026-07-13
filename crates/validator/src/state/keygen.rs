@@ -791,6 +791,99 @@ impl Transition {
         (state, commands)
     }
 
+    /// Drives the epoch-rollover machine forward on the block clock: once
+    /// the block reaches the rollover state's target epoch, stages the
+    /// epoch (rolling `active_epoch` forward) if it was ready, then triggers
+    /// a fresh key generation for whichever epoch is actually due now -
+    /// abandoning (and queuing for pruning) whatever attempt was in flight for
+    /// a now-stale target.
+    ///
+    /// Genesis groups do not observe the rollover clock.
+    pub(super) fn handle_rollover_new_block(
+        &self,
+        mut state: State,
+        block: u64,
+    ) -> (State, Commands<State, Self>) {
+        let Some(target_epoch_number) =
+            state.rollover.next_epoch().and_then(|epoch| epoch.number())
+        else {
+            return (state, Vec::new());
+        };
+
+        let next_epoch_number = epoch::next_number(block, self.config.blocks_per_epoch);
+        if target_epoch_number >= next_epoch_number {
+            // Not due yet.
+            return (state, Vec::new());
+        }
+
+        // In case an epoch was staged, make it the new active epoch.
+        if let RolloverState::EpochStaged { .. } = state.rollover {
+            state.active_epoch = EpochId::Number {
+                number: target_epoch_number,
+            };
+        }
+
+        // Whatever key generation was in flight for the stale target is being
+        // abandoned in favor of the epoch actually due now. Make sure to prune
+        // the key gen secrets (in case they weren't already pruned).
+        if let Some(group_id) = state.rollover.group_id() {
+            state = state.and_prune(block, Prune::KeyGenSecrets { group_id });
+        }
+
+        // Reap any old participating epochs for which there are no more
+        // signing ceremonies. This runs linearly through the entire signing
+        // ceremonies, but since it happens only once per rollover, we are OK
+        // with the performance hit.
+        let oldest_epoch = state
+            .signing
+            .values()
+            .map(|signing| signing.packet().epoch())
+            .fold(state.active_epoch, EpochId::min);
+        let reaped_epochs = split_off_front(&mut state.epochs, &oldest_epoch);
+        let state = reaped_epochs.values().fold(state, |state, reaped| {
+            state.and_prune(
+                block,
+                Prune::GroupNonces {
+                    group_id: reaped.group.id(),
+                },
+            )
+        });
+
+        // Start a new keygen ceremony for the new next block, including
+        // everyone again.
+        let deadline = Some(block.saturating_add(self.config.key_gen_timeout.get()));
+        let next_epoch = EpochId::Number {
+            number: next_epoch_number,
+        };
+        let participants = group::participants_set(
+            &self.config.participants,
+            group::Epoch::Number {
+                consensus: self.config.consensus,
+                number: next_epoch_number,
+                excluded: BTreeSet::new(),
+            },
+        );
+
+        match participants {
+            Some(participants) => self.start_key_gen(state, next_epoch, &participants, deadline),
+            None => {
+                tracing::warn!(
+                    ?next_epoch,
+                    "could not establish a fresh participant set for a new epoch; skipping"
+                );
+                (
+                    State {
+                        rollover: RolloverState::EpochSkipped {
+                            next_epoch: next_epoch_number,
+                        },
+                        ..state
+                    },
+                    Vec::new(),
+                )
+            }
+        }
+    }
+
     /// Starts a key generation ceremony for `next_epoch` with `participants`,
     /// entering [`RolloverState::WaitingForSetup`] if this validator is part of
     /// the group, or heading straight to
@@ -841,30 +934,6 @@ impl Transition {
         }
     }
 
-    /// Builds the callback that proposes a regular epoch as soon as the final
-    /// participant confirms its generated key. Genesis is externally
-    /// bootstrapped and does not need a callback.
-    fn key_gen_confirmation_callback(
-        &self,
-        next_epoch: EpochId,
-    ) -> Option<crate::bindings::Callback> {
-        let EpochId::Number { number } = next_epoch else {
-            return None;
-        };
-
-        Some(crate::bindings::Callback {
-            target: self.config.consensus,
-            context: (
-                number.get(),
-                number
-                    .get()
-                    .saturating_mul(self.config.blocks_per_epoch.get()),
-            )
-                .abi_encode()
-                .into(),
-        })
-    }
-
     /// Restarts key generation for `next_epoch` excluding `excluded`, or
     /// halts/skips the epoch (via [`rollover_failure`], logging `reason`) if
     /// too few participants would remain -- or if `next_epoch` is the genesis
@@ -907,6 +976,66 @@ impl Transition {
                 },
                 Vec::new(),
             ),
+        }
+    }
+
+    /// Builds the callback that proposes a regular epoch as soon as the final
+    /// participant confirms its generated key. Genesis is externally
+    /// bootstrapped and does not need a callback.
+    fn key_gen_confirmation_callback(
+        &self,
+        next_epoch: EpochId,
+    ) -> Option<crate::bindings::Callback> {
+        let EpochId::Number { number } = next_epoch else {
+            return None;
+        };
+
+        Some(crate::bindings::Callback {
+            target: self.config.consensus,
+            context: (
+                number.get(),
+                number
+                    .get()
+                    .saturating_mul(self.config.blocks_per_epoch.get()),
+            )
+                .abi_encode()
+                .into(),
+        })
+    }
+}
+
+impl RolloverState {
+    /// The epoch this rollover state is working toward becoming active, or
+    /// `None` for the terminal [`Self::Halted`] state.
+    fn next_epoch(&self) -> Option<EpochId> {
+        match self {
+            RolloverState::WaitingForGenesis => Some(EpochId::Genesis),
+            RolloverState::EpochSkipped { next_epoch }
+            | RolloverState::SigningRollover { next_epoch, .. }
+            | RolloverState::EpochStaged { next_epoch, .. } => Some(EpochId::Number {
+                number: *next_epoch,
+            }),
+            RolloverState::WaitingForSetup { next_epoch, .. }
+            | RolloverState::CollectingCommitments { next_epoch, .. }
+            | RolloverState::CollectingShares { next_epoch, .. }
+            | RolloverState::CollectingConfirmations { next_epoch, .. } => Some(*next_epoch),
+            RolloverState::Halted => None,
+        }
+    }
+
+    /// The ID of the group actively being generated for [`Self::next_epoch`],
+    /// if one has been created yet.
+    fn group_id(&self) -> Option<B256> {
+        match self {
+            RolloverState::WaitingForGenesis
+            | RolloverState::Halted
+            | RolloverState::EpochStaged { .. }
+            | RolloverState::EpochSkipped { .. } => None,
+            RolloverState::WaitingForSetup { group, .. }
+            | RolloverState::CollectingCommitments { group, .. }
+            | RolloverState::CollectingShares { group, .. }
+            | RolloverState::CollectingConfirmations { group, .. } => Some(group.id()),
+            RolloverState::SigningRollover { group_id, .. } => Some(*group_id),
         }
     }
 }
@@ -957,3 +1086,31 @@ macro_rules! fail_rollover {
     }};
 }
 use fail_rollover;
+
+/// Splits off the front of a B-tree map up to (but not including) the provided
+/// key.
+fn split_off_front<K, V>(map: &mut BTreeMap<K, V>, key: &K) -> BTreeMap<K, V>
+where
+    K: Ord,
+{
+    // `BTreeMap` provides an API to split the back off of a B-tree, removing
+    // all items with key **greater than or equal to** the provided value. We
+    // can use this and just swap our mutable reference with the result.
+    let mut rest = map.split_off(key);
+    mem::swap(map, &mut rest);
+    rest
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn split_off_front_splits_strictly_below_key() {
+        let mut map = BTreeMap::from([(1, "a"), (2, "b"), (3, "c"), (4, "d"), (5, "e")]);
+        let front = split_off_front(&mut map, &3);
+
+        assert_eq!(front, BTreeMap::from([(1, "a"), (2, "b")]));
+        assert_eq!(map, BTreeMap::from([(3, "c"), (4, "d"), (5, "e")]));
+    }
+}
