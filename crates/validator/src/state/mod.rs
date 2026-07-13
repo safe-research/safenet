@@ -20,6 +20,7 @@ use crate::{
         },
         sign::RevealedNonces,
     },
+    merkle::MerkleRoot,
     service::{Action, Effect, Event, Resume},
 };
 use alloy::primitives::{Address, B256};
@@ -316,6 +317,8 @@ enum SigningState {
         signature_id: B256,
         /// Verified revealed nonce commitments received from peers so far.
         revealed: BTreeMap<Address, RevealedNonces>,
+        /// The signing selections.
+        selections: BTreeMap<MerkleRoot, SigningSelection>,
         /// The packet being signed.
         packet: Packet,
         /// The group members expected to take part in signing.
@@ -329,6 +332,11 @@ enum SigningState {
     WaitingForAttestation {
         /// The signature id the completed signing round produced.
         signature_id: B256,
+        /// The participant responsible for submitting the attestation, or
+        /// `None` if unknown, in which case every participant is responsible.
+        responsible: Option<Address>,
+        /// The packet being signed.
+        packet: Packet,
         /// The block by which the signing attestation must arrive.
         deadline: Option<u64>,
     },
@@ -340,6 +348,16 @@ enum SigningState {
         /// indicate that there is no deadline.
         deadline: Option<u64>,
     },
+}
+
+/// A Signing selection.
+#[derive(Clone, Debug, Default, Deserialize, Serialize)]
+struct SigningSelection {
+    /// The participants that have published their signature share to this
+    /// selection root.
+    shares_from: BTreeSet<Address>,
+    /// The last participant to publish a signature share, if any.
+    last_signer: Option<Address>,
 }
 
 /// The pure validator state transition.
@@ -397,6 +415,12 @@ impl StateTransition<State> for Transition {
                 }
                 Event::Coordinator(Coordinator::CoordinatorEvents::SignRevealedNonces(event)) => {
                     self.handle_sign_revealed_nonces(state, log.block, &event)
+                }
+                Event::Coordinator(Coordinator::CoordinatorEvents::SignShared(event)) => {
+                    self.handle_sign_shared(state, &event)
+                }
+                Event::Coordinator(Coordinator::CoordinatorEvents::SignCompleted(event)) => {
+                    self.handle_sign_completed(state, log.block, &event)
                 }
                 Event::Consensus(Consensus::ConsensusEvents::TransactionProposed(event)) => {
                     self.handle_transaction_proposed(state, log.block, &event)

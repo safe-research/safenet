@@ -62,7 +62,7 @@ impl MerkleTree {
 }
 
 /// A Merkle root that can be used to verify a proof.
-#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Deserialize, Serialize)]
+#[derive(Clone, Copy, Debug, Default, Eq, Ord, PartialEq, PartialOrd, Deserialize, Serialize)]
 #[serde(transparent)]
 pub struct MerkleRoot(pub B256);
 
