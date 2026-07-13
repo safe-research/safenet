@@ -638,7 +638,7 @@ depend on the full event-driven machine and so are grouped into D4.
   `KeyGenComplaintResponse` action. Ports `keygen/complaintSubmitted.ts`. Depends on D1iv.
 - **D1vii — `KeyGenComplaintResponded`.** Register/verify the revealed share; invalid → restart;
   share set completed → `KeyGenConfirm`. Ports `keygen/complaintResponse.ts`. Depends on D1vi.
-- **D1viii** Secrets pruning, keep a `Vec` of `(u64 /* block */, Prune)` of things to prune. Later, in
+- **D1viii** Secrets pruning, keep a `Vec` of `(u64 /* block */, Prune)` of things to prune. Later, in D4v the actual pruning will happen.
   
 
 **D2 — Transaction & oracle intake.** Verify proposed transactions and open the signing sessions
