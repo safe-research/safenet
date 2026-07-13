@@ -1,6 +1,13 @@
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::{cmp::Ordering, num::NonZeroU64};
 
+/// Returns the next epoch number for `block`, given the configured number of
+/// blocks per epoch.
+pub const fn next_number(block: u64, blocks_per_epoch: NonZeroU64) -> NonZeroU64 {
+    let number = block / blocks_per_epoch.get();
+    NonZeroU64::MIN.saturating_add(number)
+}
+
 /// An epoch ID.
 #[derive(Copy, Clone, Debug, Default, Eq, PartialEq)]
 pub enum EpochId {
@@ -57,5 +64,24 @@ impl PartialOrd for EpochId {
 impl Ord for EpochId {
     fn cmp(&self, other: &Self) -> Ordering {
         u64::cmp(&self.raw_value(), &other.raw_value())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn computes_next_epoch_number_from_block() {
+        let blocks_per_epoch = NonZeroU64::new(100).unwrap();
+
+        assert_eq!(next_number(0, blocks_per_epoch).get(), 1);
+        assert_eq!(next_number(99, blocks_per_epoch).get(), 1);
+        assert_eq!(next_number(100, blocks_per_epoch).get(), 2);
+        assert_eq!(next_number(199, blocks_per_epoch).get(), 2);
+        assert_eq!(
+            next_number(u64::MAX, blocks_per_epoch).get(),
+            u64::MAX / 100 + 1
+        );
     }
 }

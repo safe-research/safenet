@@ -74,7 +74,7 @@ impl Transition {
                         .signature_id_to_message
                         .insert(event.sid, event.message);
                 }
-                Packet::Transaction { .. } => {
+                Packet::Transaction { .. } | Packet::EpochRollover { .. } => {
                     let deadline = Some(block.saturating_add(self.config.signing_timeout.get()));
                     state.signing.insert(
                         event.message,
@@ -324,9 +324,9 @@ impl Transition {
 
     /// Publishes this validator's signature share once the
     /// [`Effect::UseNonce`] effect has produced it, attaching the packet's
-    /// completion callback (`attestTransaction`/`attestOracleTransaction`) so
-    /// the group's completed signature carries out its onchain effect
-    /// automatically.
+    /// completion callback (`stageEpoch`/`attestTransaction`/
+    /// `attestOracleTransaction`) so the group's completed signature carries
+    /// out its onchain effect automatically.
     pub(super) fn handle_nonces(
         &self,
         state: State,
@@ -475,7 +475,26 @@ impl Packet {
                 oracle,
                 transaction,
             } => (*epoch, Some(*oracle), transaction),
+            Packet::EpochRollover {
+                proposed_epoch,
+                rollover_block,
+                group_id,
+                ..
+            } => {
+                return bindings::Callback {
+                    target: consensus,
+                    context: Consensus::stageEpochCall {
+                        proposedEpoch: proposed_epoch.get(),
+                        rolloverBlock: *rollover_block,
+                        groupId: *group_id,
+                        signatureId: B256::ZERO,
+                    }
+                    .abi_encode()
+                    .into(),
+                };
+            }
         };
+
         let safe_tx_struct_hash = hashing::safe_tx_hash(transaction);
         let context = match oracle {
             None => Consensus::attestTransactionCall {

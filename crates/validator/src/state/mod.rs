@@ -6,7 +6,7 @@ mod sign;
 mod transactions;
 
 use crate::{
-    bindings::{Consensus, Coordinator, Oracle, SafeTransaction},
+    bindings::{Consensus, Coordinator, Oracle, Point, SafeTransaction},
     config::ValidatorConfig,
     consensus::{
         epoch::EpochId,
@@ -37,6 +37,8 @@ use std::{
 pub struct State {
     /// The epoch-rollover / DKG state machine.
     rollover: RolloverState,
+    /// The epoch whose group is currently active in consensus.
+    active_epoch: EpochId,
     /// The epochs that the validator is participating in and have completed
     /// their key generation, keyed by epoch number and retained past
     /// `EpochStaged` so later handlers can look up a resolved group and the
@@ -170,6 +172,16 @@ enum RolloverState {
         /// `None` to indicate that there is no deadline.
         deadlines: Option<ConfirmationDeadlines>,
     },
+    /// The next epoch's key generation completed and its rollover proposal is
+    /// being signed by the active epoch.
+    SigningRollover {
+        /// The epoch being staged.
+        next_epoch: NonZeroU64,
+        /// The generated group's ID.
+        group_id: B256,
+        /// The rollover proposal's signing hash.
+        message: B256,
+    },
     /// This group's key generation completed and the group is staged.
     EpochStaged {
         /// The epoch that was just staged.
@@ -225,6 +237,19 @@ struct ConfirmationDeadlines {
 /// A packet a validator group signs an attestation over.
 #[derive(Clone, Debug, Deserialize, Serialize)]
 enum Packet {
+    /// A proposal to stage a newly generated epoch.
+    EpochRollover {
+        /// The epoch whose group signs the rollover.
+        active_epoch: EpochId,
+        /// The epoch being staged.
+        proposed_epoch: NonZeroU64,
+        /// The block at which the staged epoch becomes active.
+        rollover_block: u64,
+        /// The newly generated group's ID.
+        group_id: B256,
+        /// The newly generated group's public key.
+        group_key: Point,
+    },
     /// A proposed Safe transaction.
     Transaction {
         /// The epoch whose group signs the attestation.
