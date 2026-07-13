@@ -97,7 +97,7 @@ sol! {
     }
 
     /// Callback target and context for the `*WithCallback` coordinator calls.
-    #[derive(Debug, Default)]
+    #[derive(Debug, Default, PartialEq, Eq)]
     struct Callback {
         address target;
         bytes context;

@@ -5,6 +5,8 @@
 //! revealing a single nonce needs only that one entry rather than the whole
 //! chunk resident in memory.
 
+use std::fmt::Debug;
+
 use super::{keygen::KeyShare, marshal};
 use crate::{
     bindings,
@@ -56,6 +58,15 @@ impl Nonces {
     /// share.
     pub(super) fn signing_nonces(&self) -> &round1::SigningNonces {
         &self.signing_nonces
+    }
+}
+
+impl Debug for Nonces {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Nonces")
+            .field("signing_nonces", &"<redacted>")
+            .field("proof", &self.proof)
+            .finish()
     }
 }
 

@@ -5,6 +5,7 @@ use crate::{
     frost::{
         self,
         keygen::{KeyShare, Secrets},
+        preprocess::Nonces,
     },
     secrets::SecretStore,
 };
@@ -46,6 +47,13 @@ pub enum Effect {
         message: B256,
         sequence: u64,
     },
+    /// Use this validator's own nonce for the signing round at `sequence`.
+    /// Once the nonce is taken, it is burned and can no longer be used.
+    UseNonce {
+        group_id: B256,
+        message: B256,
+        sequence: u64,
+    },
 }
 
 /// The result of performing an [`Effect`], resumed into the state machine.
@@ -71,6 +79,8 @@ pub enum Resume {
         nonces: bindings::SignNonces,
         proof: Vec<B256>,
     },
+    /// Resume with the nonce burned by [`Effect::UseNonce`].
+    Nonce { message: B256, nonces: Nonces },
 }
 
 /// Performs the validator's [`Effect`]s, resuming with a [`Resume`].
@@ -150,6 +160,23 @@ impl Handler {
                     })
                     // The nonce was not generated, used up, or the tree isn't
                     // linked yet; nothing to reveal.
+                    .unwrap_or(Resume::Noop);
+                Ok(result)
+            }
+            Effect::UseNonce {
+                group_id,
+                message,
+                sequence,
+            } => {
+                let (chunk, offset) = frost::preprocess::decode_sequence(sequence);
+                let result = self
+                    .secrets
+                    .take_nonce(group_id, self.account, chunk, offset)
+                    .await?
+                    .map(|nonces| Resume::Nonce { message, nonces })
+                    // The nonce was already burned, for example by a reorg
+                    // replaying this effect; gracefully no-op instead of
+                    // producing a duplicate signature share.
                     .unwrap_or(Resume::Noop);
                 Ok(result)
             }
