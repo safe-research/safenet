@@ -15,14 +15,18 @@ use crate::{
         group::{Group, ParticipantSet},
     },
     frost::keygen::{
-        GroupCommitments, PublicKeyShare, Secrets, SharingState, VerifiedCommitment, VerifiedShare,
+        GroupCommitments, KeyShare, PublicKeyShare, Secrets, SharingState, VerifiedCommitment,
+        VerifiedShare,
     },
     service::{Action, Effect, Event, Resume},
 };
 use alloy::primitives::{Address, B256};
 use safenet_core::state::{Commands, Message, StateTransition};
 use serde::{Deserialize, Serialize};
-use std::{collections::BTreeMap, num::NonZeroU64};
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    num::NonZeroU64,
+};
 
 /// The complete snapshotted validator state.
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
@@ -97,6 +101,23 @@ enum RolloverState {
         /// indicate that there is no deadline.
         deadline: Option<u64>,
     },
+    /// Every participant has submitted a secret share (valid or not) and the
+    /// group's confirmations are being collected onchain.
+    CollectingConfirmations {
+        /// The epoch this group will serve.
+        next_epoch: EpochId,
+        /// The group being generated.
+        group: Group,
+        /// This validator's participation.
+        participation: Box<KeyGenParticipation>,
+        /// The status of the confirmation for the current validator.
+        status: KeyGenConfirmation,
+        /// Participants that have confirmed so far.
+        confirmations: BTreeSet<Address>,
+        /// The confirmation deadlines for the confirmation collection phase.
+        /// `None` to indicate that there is no deadline.
+        deadlines: Option<ConfirmationDeadlines>,
+    },
 }
 
 /// The keygen participation status for the validator.
@@ -109,6 +130,30 @@ enum KeyGenParticipation {
     /// public commitments needed to verify publicly revealed shares in case of
     /// complaints as well as public participant public key shares.
     Observing(GroupCommitments),
+}
+
+/// The keygen secret share confirmation status.
+#[derive(Clone, Debug, Deserialize, Serialize)]
+enum KeyGenConfirmation {
+    /// Keygen confirmation is being observed.
+    Observing,
+    /// Secret shares are still being collected, as there were some shares that
+    /// could not be verified.
+    Collecting(BTreeMap<Address, VerifiedShare>),
+    /// All secret shares have been collected and a secret key share has been
+    /// constructed.
+    Confirmed(Box<KeyShare>),
+}
+
+/// The deadlines for collecting confirmations.
+#[derive(Clone, Debug, Deserialize, Serialize)]
+struct ConfirmationDeadlines {
+    /// The deadline to receive the last complaint.
+    complain: u64,
+    /// The deadline to receive the last complaint response.
+    response: u64,
+    /// The deadline to receive the last confirmation.
+    confirm: u64,
 }
 
 /// The pure validator state transition.
@@ -144,6 +189,9 @@ impl StateTransition<State> for Transition {
                 }
                 Event::Coordinator(Coordinator::CoordinatorEvents::KeyGenCommitted(event)) => {
                     self.handle_key_gen_committed(state, log.block, &event)
+                }
+                Event::Coordinator(Coordinator::CoordinatorEvents::KeyGenSecretShared(event)) => {
+                    self.handle_key_gen_secret_shared(state, log.block, &event)
                 }
                 // The remaining events are wired in as their handlers land.
                 _ => (state, Vec::new()),

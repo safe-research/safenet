@@ -2,13 +2,19 @@ use super::{RolloverState, State, Transition};
 use crate::{
     bindings::Coordinator,
     consensus::epoch::EpochId,
-    frost::{self, keygen::Secrets},
+    frost::{
+        self,
+        keygen::{GroupCommitments, Secrets},
+    },
     service::{Action, Effect},
-    state::KeyGenParticipation,
+    state::{ConfirmationDeadlines, KeyGenConfirmation, KeyGenParticipation},
 };
 use alloy::primitives::B256;
 use safenet_core::state::{Command, Commands};
-use std::{collections::BTreeMap, fmt::Display};
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    fmt::Display,
+};
 
 impl Transition {
     /// Joins the genesis key generation once its group is created onchain.
@@ -228,6 +234,178 @@ impl Transition {
                 )
             }
             _ => (state, Vec::new()),
+        }
+    }
+
+    /// Registers a peer's key generation secret share, verified against its
+    /// earlier commitment. An invalid share raises a [`Action::KeyGenComplain`]
+    /// against its sender; share collection still completes once every
+    /// participant has submitted one (valid or not), no different from a valid
+    /// share, as invalid shares are resolved through the complaint flow. Once
+    /// every share has been submitted, moves the group into confirmation
+    /// collection, finalizing this validator's key share and emitting
+    /// [`Action::KeyGenConfirm`] if every share it received was valid.
+    pub(super) fn handle_key_gen_secret_shared(
+        &self,
+        state: State,
+        block: u64,
+        event: &Coordinator::KeyGenSecretShared,
+    ) -> (State, Commands<State, Self>) {
+        match state.rollover {
+            RolloverState::CollectingShares {
+                next_epoch,
+                group,
+                participation,
+                mut public_keys,
+                mut shares,
+                deadline,
+            } if group.id() == event.gid => {
+                let (count, _) = group.size();
+                let mut commands = Vec::new();
+
+                // Only consider valid shared secrets (public key share that
+                // matches their commitments and correct number of secret
+                // shares); invalid ones are ignored, the participant will be
+                // removed from the group on timeout.
+                let encrypted_shares = match frost::keygen::verify_secret_share(
+                    participation.group_commitments(),
+                    event.participant,
+                    &event.share,
+                ) {
+                    Ok((public_key, encrypted_shares)) => {
+                        public_keys.insert(event.participant, public_key);
+                        Some(encrypted_shares)
+                    }
+                    Err(err) => {
+                        tracing::warn!(
+                            %err,
+                            participant = %event.participant,
+                            "invalid key gen secret share"
+                        );
+                        None
+                    }
+                };
+
+                // If we are participating, also verify the encrypted key shares
+                // against our sharing state, and emit a complaint if required.
+                if let (KeyGenParticipation::Participating(sharing_state), Some(encrypted_shares)) =
+                    (&*participation, encrypted_shares)
+                {
+                    match frost::keygen::verify_encrypted_secret_share(
+                        sharing_state,
+                        event.participant,
+                        encrypted_shares,
+                    ) {
+                        Ok(share) => {
+                            shares.insert(event.participant, share);
+                        }
+                        Err(err) => {
+                            tracing::warn!(
+                                %err,
+                                participant = %event.participant,
+                                "invalid key gen encrypted secret share"
+                            );
+
+                            // The complaint actions have a whole other key gen
+                            // timeout to arrive onchain.
+                            let expires_at =
+                                deadline.map(|_| block.saturating_add(self.key_gen_timeout.get()));
+
+                            commands.push(Command::Action(Action::KeyGenComplain {
+                                group_id: group.id(),
+                                accused: event.participant,
+                                expires_at,
+                            }));
+                        }
+                    }
+                }
+
+                if public_keys.len() as u16 != count {
+                    // We are still missing shares from some participants, so
+                    // stay in the same collecting state.
+                    return (
+                        State {
+                            rollover: RolloverState::CollectingShares {
+                                next_epoch,
+                                group,
+                                participation,
+                                public_keys,
+                                shares,
+                                deadline,
+                            },
+                            ..state
+                        },
+                        commands,
+                    );
+                }
+
+                // Every participant has submitted a share, so a fresh round
+                // starts: push the deadlines forward from the current block.
+                let deadlines = deadline.map(|_| ConfirmationDeadlines {
+                    complain: block.saturating_add(self.key_gen_timeout.get()),
+                    response: block.saturating_add(self.key_gen_timeout.get().saturating_mul(2)),
+                    confirm: block.saturating_add(self.key_gen_timeout.get().saturating_mul(3)),
+                });
+
+                // Finalize our key share only if every share we received was
+                // valid; otherwise wait for the complaint flow to resolve.
+                let status = match &*participation {
+                    KeyGenParticipation::Participating(sharing_state)
+                        if shares.len() as u16 == count =>
+                    {
+                        match frost::keygen::finalize(sharing_state.clone(), shares) {
+                            Ok(key_share) => {
+                                commands.push(Command::Action(Action::KeyGenConfirm {
+                                    group_id: group.id(),
+                                    expires_at: deadlines
+                                        .as_ref()
+                                        .map(|deadlines| deadlines.confirm),
+                                }));
+                                KeyGenConfirmation::Confirmed(Box::new(key_share))
+                            }
+                            Err(err) => {
+                                // Finalization failures are unexpected, since
+                                // all secret shares were already verified.
+                                return (
+                                    State {
+                                        rollover: rollover_failure(next_epoch, err),
+                                        ..state
+                                    },
+                                    commands,
+                                );
+                            }
+                        }
+                    }
+                    KeyGenParticipation::Participating(_) => KeyGenConfirmation::Collecting(shares),
+                    KeyGenParticipation::Observing(_) => KeyGenConfirmation::Observing,
+                };
+
+                (
+                    State {
+                        rollover: RolloverState::CollectingConfirmations {
+                            next_epoch,
+                            group,
+                            participation,
+                            status,
+                            confirmations: BTreeSet::new(),
+                            deadlines,
+                        },
+                        ..state
+                    },
+                    commands,
+                )
+            }
+            _ => (state, Vec::new()),
+        }
+    }
+}
+
+impl KeyGenParticipation {
+    /// Gets the group commitments for regardless of participation.
+    fn group_commitments(&self) -> &GroupCommitments {
+        match self {
+            KeyGenParticipation::Participating(sharing_state) => sharing_state.group_commitments(),
+            KeyGenParticipation::Observing(group_commitments) => group_commitments,
         }
     }
 }
