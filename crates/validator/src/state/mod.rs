@@ -214,6 +214,15 @@ enum Packet {
         /// The proposed transaction.
         transaction: SafeTransaction,
     },
+    /// A proposed oracle-backed Safe transaction.
+    OracleTransaction {
+        /// The epoch whose group signs the attestation.
+        epoch: EpochId,
+        /// The oracle vouching for the transaction.
+        oracle: Address,
+        /// The proposed transaction.
+        transaction: SafeTransaction,
+    },
 }
 
 /// A signing session, keyed by the message hash the group signature attests
@@ -302,6 +311,9 @@ impl StateTransition<State> for Transition {
                 }
                 Event::Consensus(Consensus::ConsensusEvents::TransactionAttested(event)) => {
                     self.handle_transaction_attested(state, &event)
+                }
+                Event::Consensus(Consensus::ConsensusEvents::OracleTransactionProposed(event)) => {
+                    self.handle_oracle_transaction_proposed(state, log.block, &event)
                 }
                 // The remaining events are wired in as their handlers land.
                 _ => (state, Vec::new()),

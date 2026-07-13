@@ -105,6 +105,57 @@ impl Transition {
 
         (state, Vec::new())
     }
+
+    /// Verifies a proposed oracle-backed Safe transaction against the
+    /// epoch's resolved group, opening a [`SigningState::WaitingForRequest`]
+    /// signing session for it. Unlike a plain [`Consensus::TransactionProposed`],
+    /// the transaction itself is not checked against Safenet policy here -
+    /// the oracle vouches for it, and its result is checked once attested -
+    /// only the oracle's own identity is verified against the configured
+    /// allow-list. A transaction proposed for an unknown or unresolved epoch,
+    /// one whose group this validator is not part of, or from a disallowed
+    /// oracle, is ignored.
+    pub(super) fn handle_oracle_transaction_proposed(
+        &self,
+        mut state: State,
+        block: u64,
+        event: &Consensus::OracleTransactionProposed,
+    ) -> (State, Commands<State, Self>) {
+        let Some(group) = state.epoch_groups.get(&event.epoch).filter(|group| {
+            group.participants().contains(&self.account)
+                && self.config.oracles.contains(&event.oracle)
+        }) else {
+            return (state, Vec::new());
+        };
+
+        let epoch = EpochId::from_raw(event.epoch);
+        let message =
+            self.consensus
+                .oracle_transaction_packet_hash(epoch, event.oracle, &event.transaction);
+
+        // Prevent duplicate ongoing transaction proposals. This is to prevent
+        // malicious parties from blocking transaction attestations from ever
+        // being produced by resetting the signing state of honest validators.
+        if let btree_map::Entry::Vacant(signing) = state.signing.entry(message) {
+            let packet = Packet::OracleTransaction {
+                epoch,
+                oracle: event.oracle,
+                transaction: event.transaction.clone(),
+            };
+            let signers = group.participants().clone();
+            let deadline = Some(block.saturating_add(self.config.signing_timeout.get()));
+
+            signing.insert(SigningState::WaitingForRequest {
+                packet,
+                signers,
+                deadline,
+            });
+        } else {
+            tracing::warn!(%message, "ignoring duplicate oracle transaction proposal");
+        }
+
+        (state, Vec::new())
+    }
 }
 
 impl SigningState {

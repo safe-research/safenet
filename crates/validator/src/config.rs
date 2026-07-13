@@ -4,7 +4,7 @@ use alloy::primitives::{Address, B256};
 use safenet_core::{driver, observability, tx::Signer};
 use serde::Deserialize;
 use sqlx::sqlite::SqliteConnectOptions;
-use std::{num::NonZeroU64, path::Path};
+use std::{collections::BTreeSet, num::NonZeroU64, path::Path};
 use tokio::{fs, io};
 use url::Url;
 
@@ -68,7 +68,7 @@ pub struct ValidatorConfig {
     /// The oracle contracts whose results the validator honors when signing
     /// oracle transactions.
     #[serde(default)]
-    pub oracles: Vec<Address>,
+    pub oracles: BTreeSet<Address>,
     /// The salt mixed into the genesis group's key generation context.
     #[serde(default)]
     pub genesis_salt: B256,
@@ -209,10 +209,10 @@ mod tests {
         assert_eq!(validator.oracle_timeout.get(), 40);
         assert_eq!(
             validator.oracles,
-            [
+            BTreeSet::from([
                 address!("0x4444444444444444444444444444444444444444"),
                 address!("0x5555555555555555555555555555555555555555"),
-            ]
+            ])
         );
 
         // The first participant omits its epoch window, defaulting to active
