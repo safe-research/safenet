@@ -315,6 +315,9 @@ impl StateTransition<State> for Transition {
                 Event::Consensus(Consensus::ConsensusEvents::OracleTransactionProposed(event)) => {
                     self.handle_oracle_transaction_proposed(state, log.block, &event)
                 }
+                Event::Consensus(Consensus::ConsensusEvents::OracleTransactionAttested(event)) => {
+                    self.handle_oracle_transaction_attested(state, &event)
+                }
                 // The remaining events are wired in as their handlers land.
                 _ => (state, Vec::new()),
             },
