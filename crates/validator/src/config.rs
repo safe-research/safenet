@@ -1,5 +1,3 @@
-#![cfg_attr(not(test), expect(dead_code))]
-
 use alloy::primitives::{Address, B256};
 use safenet_core::{driver, observability, tx::Signer};
 use serde::Deserialize;

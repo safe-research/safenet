@@ -7,7 +7,11 @@ mod secrets;
 mod service;
 mod state;
 
-use self::{bindings::Consensus, config::Config, service::ValidatorService};
+use self::{
+    bindings::Consensus,
+    config::Config,
+    service::{Action, ValidatorService},
+};
 use alloy::providers::{Provider, ProviderBuilder};
 use argh::FromArgs;
 use safenet_core::{Driver, observability};
@@ -52,24 +56,41 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let mut watched = vec![consensus, coordinator];
     watched.extend(config.validator.oracles.iter().copied());
 
+    let account = config.signer.address();
+    let staker = config.validator.staker;
+
     let service = ValidatorService::new(
         chain_id,
-        config.signer.address(),
+        account,
         pool.clone(),
         coordinator,
         config.validator,
     )
     .await?;
 
-    let driver = Driver::new(
+    let mut driver = Driver::new(
         service,
-        provider,
+        provider.clone(),
         config.signer,
         pool,
         watched,
         config.driver,
     )
     .await?;
+
+    // Reconcile the onchain staker association before starting the driver.
+    if let Some(staker) = staker {
+        let current_staker = Consensus::new(consensus, &provider)
+            .getValidatorStaker(account)
+            .call()
+            .await?;
+        if current_staker != staker {
+            tracing::info!(%account, %staker, "reconciling validator staker onchain");
+            driver
+                .queue_action(Action::SetValidatorStaker { staker })
+                .await?;
+        }
+    }
 
     tracing::info!("starting validator service");
     driver.run().await;
