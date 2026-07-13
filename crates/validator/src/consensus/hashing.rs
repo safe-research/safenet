@@ -76,6 +76,15 @@ impl From<&SafeTransaction> for SafeTx {
     }
 }
 
+/// The EIP-712 `SafeTx` struct hash, without the target Safe's domain.
+///
+/// This is the partial hash accepted by the consensus attestation callbacks,
+/// which reconstruct the complete Safe transaction hash from `chainId`,
+/// `safe`, and this value.
+pub fn safe_tx_struct_hash(tx: &SafeTransaction) -> B256 {
+    SafeTx::from(tx).eip712_hash_struct()
+}
+
 /// The classic Safe transaction hash: `tx`'s `SafeTx` struct hashed in
 /// the target Safe's own domain (`chainId`/`safe`).
 pub fn safe_tx_hash(tx: &SafeTransaction) -> B256 {

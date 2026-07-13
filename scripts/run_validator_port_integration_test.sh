@@ -1,9 +1,10 @@
 #!/bin/bash
-# Cross-implementation genesis key generation integration test.
+# Cross-implementation genesis and first-epoch rollover integration test.
 #
 # Starts Anvil, deploys the contracts, and runs the TypeScript and Rust
-# validators as members of the genesis group. The test succeeds once both
-# implementations have confirmed the generated key onchain.
+# validators as members of the genesis and epoch-1 groups. Once genesis is
+# ready, it also proposes a transaction for attestation. The test succeeds once
+# that transaction is attested and epoch 1 is attested by genesis and staged.
 #
 # Requirements: anvil, forge, cast, jq, cargo, node, and npm.
 set -euo pipefail
@@ -30,6 +31,13 @@ REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 TMPDIR="$(mktemp -d)"
 PIDS=()
 
+for command in anvil cast forge jq cargo node npm; do
+    command -v "$command" >/dev/null || {
+        echo "Missing required command: $command" >&2
+        exit 1
+    }
+done
+
 dump_validator_logs() {
     echo
     for name in ts rust; do
@@ -39,21 +47,16 @@ dump_validator_logs() {
     done
 }
 
+EXIT_MESSAGE="FAILURE: interrupted"
 cleanup() {
     for pid in "${PIDS[@]:-}"; do
         kill "$pid" 2>/dev/null || true
     done
     dump_validator_logs
+    echo "$EXIT_MESSAGE"
     rm -rf "$TMPDIR"
 }
 trap cleanup EXIT
-
-for command in anvil cast forge jq cargo node npm; do
-    command -v "$command" >/dev/null || {
-        echo "Missing required command: $command" >&2
-        exit 1
-    }
-done
 
 echo "==> Using temporary directory $TMPDIR"
 
@@ -97,6 +100,7 @@ env \
     PARTICIPANTS="$TS_PARTICIPANTS_JSON" \
     STORAGE_FILE="$TMPDIR/validator_ts.sqlite" \
     BLOCK_TIME_OVERRIDE=1000 \
+    BLOCKS_PER_EPOCH=60 \
     START_FROM_BLOCK=0 \
     LOG_LEVEL=debug \
     METRICS_PORT=0 \
@@ -113,6 +117,7 @@ RUST_CFG="$TMPDIR/validator_rust.toml"
     echo
     echo "[validator]"
     echo "consensus = \"$CONSENSUS_ADDR\""
+    echo "blocks_per_epoch = 60"
     for address in "${PARTICIPANTS[@]}"; do
         echo
         echo "[[validator.participants]]"
@@ -136,8 +141,7 @@ echo "    pid ${PIDS[-1]}"
 sleep 2
 for pid in "${PIDS[@]:1}"; do
     if ! kill -0 "$pid" 2>/dev/null; then
-        echo "A validator exited during startup." >&2
-        dump_validator_logs
+        EXIT_MESSAGE="FAILURE: A validator exited during startup."
         exit 1
     fi
 done
@@ -151,40 +155,87 @@ env PARTICIPANTS="$PARTICIPANTS_CSV" \
     --sender "$SENDER" \
     --broadcast 2>&1 | tee "$TMPDIR/genesis.log"
 
-EXPECTED="${#PARTICIPANTS[@]}"
 DEADLINE=$((SECONDS + TIMEOUT))
+EPOCH_ONE_WORD=0x0000000000000000000000000000000000000000000000000000000000000001
 TRUE_WORD=0000000000000000000000000000000000000000000000000000000000000001
 
-echo "==> Waiting for $EXPECTED KeyGenConfirmed events (timeout: ${TIMEOUT}s)..."
-COUNT=0
-COMPLETED=0
+echo "==> Waiting for a genesis transaction attestation and epoch 1 staging (timeout: ${TIMEOUT}s)..."
+GENESIS_CONFIRMATIONS=0
+EPOCH_ONE_CONFIRMATIONS=0
+TRANSACTION_PROPOSED=0
+TRANSACTION_HASH=""
+TRANSACTION_ATTESTED=0
+STAGED=0
 while [ "$SECONDS" -lt "$DEADLINE" ]; do
-    LOGS=$(cast logs --json \
+    CONFIRMATIONS=$(cast logs --json \
         --rpc-url "$ANVIL_RPC_URL" \
         --from-block 0 \
         --to-block latest \
         --address "$COORDINATOR_ADDR" \
         'KeyGenConfirmed(bytes32,address,bool)')
-    COUNT=$(jq 'length' <<< "$LOGS")
-    COMPLETED=$(jq --arg true_word "$TRUE_WORD" '[.[] | select(.data | endswith($true_word))] | length' <<< "$LOGS")
-    echo "    confirmations: $COUNT / $EXPECTED (ceremony completed: $([ "$COMPLETED" -gt 0 ] && echo yes || echo no))"
-    if [ "$COUNT" -ge "$EXPECTED" ] && [ "$COMPLETED" -gt 0 ]; then
-        echo
-        echo "SUCCESS: TypeScript and Rust validators confirmed the same genesis group key."
+    GENESIS_GROUP=$(jq -r '.[0].topics[1] // empty' <<< "$CONFIRMATIONS")
+    if [ -n "$GENESIS_GROUP" ]; then
+        GENESIS_CONFIRMATIONS=$(jq --arg gid "$GENESIS_GROUP" '[.[] | select(.topics[1] == $gid)] | length' <<< "$CONFIRMATIONS")
+        EPOCH_ONE_CONFIRMATIONS=$(jq --arg gid "$GENESIS_GROUP" '[.[] | select(.topics[1] != $gid)] | length' <<< "$CONFIRMATIONS")
+    fi
+
+    GENESIS_COMPLETED=$(jq --arg true_word "$TRUE_WORD" '[.[] | select(.data | endswith($true_word))] | length' <<< "$CONFIRMATIONS")
+    if [ "$TRANSACTION_PROPOSED" -eq 0 ] && [ "$GENESIS_COMPLETED" -gt 0 ]; then
+        echo "==> Proposing a transaction for genesis attestation..."
+        env \
+            CONSENSUS_ADDRESS="$CONSENSUS_ADDR" \
+            TX_CHAIN_ID="$CHAIN_ID" \
+            TX_SAFE="$SENDER" \
+            TX_TO="$SENDER" \
+            TX_NONCE=0 \
+            npm run --prefix "$REPO_ROOT" --workspace contracts cmd:propose -- \
+            --rpc-url "$ANVIL_RPC_URL" \
+            --unlocked \
+            --sender "$SENDER" \
+            --broadcast 2>&1 | tee "$TMPDIR/propose.log"
+
+        PROPOSALS=$(cast logs --json \
+            --rpc-url "$ANVIL_RPC_URL" \
+            --from-block 0 \
+            --to-block latest \
+            --address "$CONSENSUS_ADDR" \
+            'TransactionProposed(bytes32,uint256,address,uint64,(uint256,address,address,uint256,bytes,uint8,uint256,uint256,uint256,address,address,uint256))')
+        TRANSACTION_HASH=$(jq -er '.[-1].topics[1]' <<< "$PROPOSALS")
+        TRANSACTION_PROPOSED=1
+    fi
+
+    if [ "$TRANSACTION_PROPOSED" -gt 0 ]; then
+        ATTESTATIONS=$(cast logs --json \
+            --rpc-url "$ANVIL_RPC_URL" \
+            --from-block 0 \
+            --to-block latest \
+            --address "$CONSENSUS_ADDR" \
+            'TransactionAttested(bytes32,uint256,address,uint64,bytes32,((uint256,uint256),uint256))')
+        TRANSACTION_ATTESTED=$(jq --arg hash "$TRANSACTION_HASH" '[.[] | select(.topics[1] == $hash)] | length' <<< "$ATTESTATIONS")
+    fi
+
+    STAGED_LOGS=$(cast logs --json \
+        --rpc-url "$ANVIL_RPC_URL" \
+        --from-block 0 \
+        --to-block latest \
+        --address "$CONSENSUS_ADDR" \
+        'EpochStaged(uint64,uint64,uint64,bytes32,(uint256,uint256),bytes32,((uint256,uint256),uint256))')
+    STAGED=$(jq --arg epoch "$EPOCH_ONE_WORD" '[.[] | select(.topics[2] == $epoch)] | length' <<< "$STAGED_LOGS")
+
+    echo "    genesis confirmations: $GENESIS_CONFIRMATIONS; transaction: $([ "$TRANSACTION_PROPOSED" -gt 0 ] && echo proposed || echo pending)/$([ "$TRANSACTION_ATTESTED" -gt 0 ] && echo attested || echo pending); epoch 1 confirmations: $EPOCH_ONE_CONFIRMATIONS; staged: $([ "$STAGED" -gt 0 ] && echo yes || echo no)"
+    if [ "$TRANSACTION_ATTESTED" -gt 0 ] && [ "$STAGED" -gt 0 ]; then
+        EXIT_MESSAGE="SUCCESS: the genesis transaction was attested and epoch 1 was generated, attested, and staged."
         exit 0
     fi
 
     for pid in "${PIDS[@]:1}"; do
         if ! kill -0 "$pid" 2>/dev/null; then
-            echo "A validator exited before genesis key generation completed." >&2
-            dump_validator_logs
+            EXIT_MESSAGE="FAILURE: A validator exited before the transaction was attested and epoch 1 was staged." >&2
             exit 1
         fi
     done
     sleep 2
 done
 
-echo
-echo "TIMEOUT: received $COUNT / $EXPECTED confirmations; ceremony completed: $([ "$COMPLETED" -gt 0 ] && echo yes || echo no)." >&2
-dump_validator_logs
+EXIT_MESSAGE="TIMEOUT: genesis confirmations: $GENESIS_CONFIRMATIONS; transaction proposed: $TRANSACTION_PROPOSED; transaction attested: $TRANSACTION_ATTESTED; epoch 1 confirmations: $EPOCH_ONE_CONFIRMATIONS; staged: $STAGED." >&2
 exit 1

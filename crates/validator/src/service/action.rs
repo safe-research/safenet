@@ -199,7 +199,7 @@ impl ActionEncoder<Action> for Encoder {
                     }
                     .abi_encode()
                     .into(),
-                    gas: 250_000,
+                    gas: 300_000,
                 },
                 expires_at,
             ),
@@ -276,7 +276,7 @@ impl ActionEncoder<Action> for Encoder {
                     }
                     .abi_encode()
                     .into(),
-                    gas: 350_000,
+                    gas: 400_000,
                 },
                 expires_at,
             ),
