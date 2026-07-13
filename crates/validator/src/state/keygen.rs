@@ -410,7 +410,7 @@ impl Transition {
                         let group_id = group.id();
                         let commands = if let KeyGenConfirmation::Confirmed(key_share) = status {
                             state.epochs.insert(
-                                next_epoch.raw_value(),
+                                next_epoch,
                                 Epoch {
                                     group,
                                     key_share: key_share.clone(),

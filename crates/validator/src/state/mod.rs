@@ -41,7 +41,7 @@ pub struct State {
     /// their key generation, keyed by epoch number and retained past
     /// `EpochStaged` so later handlers can look up a resolved group and the
     /// generated key share.
-    epochs: BTreeMap<u64, Epoch>,
+    epochs: BTreeMap<EpochId, Epoch>,
     /// The signing sessions tracked so far, keyed by the message hash the
     /// group signature attests to.
     signing: BTreeMap<B256, SigningState>,

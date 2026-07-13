@@ -331,24 +331,46 @@ impl SecretStore {
         .map_err(Error::from)
     }
 
-    /// Returns the number of unused nonces in the tree `me` linked to sequence
-    /// `chunk` in `group`, or `0` when no such tree is linked.
+    /// Returns the number of unused nonces in `me`'s trees for `group` from
+    /// sequence `(chunk, offset)` onward (inclusive), summed across every
+    /// linked chunk from `chunk` on, plus any not-yet-linked pending chunk.
+    ///
+    /// A single chunk's count is not enough to answer "how many usable
+    /// nonces are left": the group's sequence counter is shared by every
+    /// participant and only ever advances, so once it moves past `chunk`,
+    /// this validator must draw from later chunks regardless of whatever is
+    /// still sitting unused in earlier ones. Summing forward from the given
+    /// position is what actually reflects the remaining usable supply.
+    /// Including the pending (registered but not yet onchain-linked) chunk,
+    /// if any, avoids sampling and registering a needless extra one while a
+    /// top-up is already in flight.
     pub async fn available_nonce_count(
         &self,
         group: B256,
         me: Address,
         chunk: u64,
+        offset: u64,
     ) -> Result<u64, Error> {
+        let chunk = i64::try_from(chunk)?;
+        let offset = i64::try_from(offset)?;
+
         let count = sqlx::query_scalar::<_, i64>(
-            "SELECT COUNT(*) FROM nonces
-             WHERE root = (
-                 SELECT root FROM nonces_chunks
-                 WHERE group_id = ? AND address = ? AND chunk = ?
-             )",
+            "SELECT COUNT(*)
+             FROM nonces AS nonce
+             JOIN nonces_chunks AS chunks ON chunks.root = nonce.root
+             WHERE chunks.group_id = ?
+               AND chunks.address = ?
+               AND (
+                   chunks.chunk IS NULL
+                   OR chunks.chunk > ?
+                   OR (chunks.chunk = ? AND nonce.offs >= ?)
+               )",
         )
         .bind(key(group))
         .bind(key(me))
-        .bind(i64::try_from(chunk)?)
+        .bind(chunk)
+        .bind(chunk)
+        .bind(offset)
         .fetch_one(&self.pool)
         .await?;
         Ok(u64::try_from(count)?)
@@ -391,6 +413,23 @@ mod tests {
 
     fn nonce_chunk(size: u64) -> NonceChunk {
         NonceChunk::with_size(size, &keygen::KeyShare::dummy(), &mut rand::thread_rng()).unwrap()
+    }
+
+    async fn count_chunk_nonces(store: &SecretStore, chunk: u64) -> u64 {
+        let count = sqlx::query_scalar::<_, i64>(
+            "SELECT COUNT(*) FROM nonces
+             WHERE root = (
+                 SELECT root FROM nonces_chunks
+                 WHERE group_id = ? AND address = ? AND chunk = ?
+             )",
+        )
+        .bind(key(GROUP))
+        .bind(key(ME))
+        .bind(i64::try_from(chunk).unwrap())
+        .fetch_one(&store.pool)
+        .await
+        .unwrap();
+        u64::try_from(count).unwrap()
     }
 
     #[tokio::test]
@@ -461,7 +500,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn nonces_chunk_link_and_count() {
+    async fn nonces_chunk_linking() {
         let store = store().await;
         let root = store
             .register_nonces_chunk(GROUP, ME, nonce_chunk(11))
@@ -475,9 +514,9 @@ mod tests {
         assert_eq!(reused, None);
 
         // Until linked to a sequence chunk, it is not addressable by chunk.
-        assert_eq!(store.available_nonce_count(GROUP, ME, 0).await.unwrap(), 0);
+        assert_eq!(count_chunk_nonces(&store, 0).await, 0);
         store.link_nonces_chunk(GROUP, ME, 0, root).await.unwrap();
-        assert_eq!(store.available_nonce_count(GROUP, ME, 0).await.unwrap(), 11);
+        assert_eq!(count_chunk_nonces(&store, 0).await, 11);
 
         // Once linked, a fresh chunk can be registered.
         let other = store
@@ -488,34 +527,98 @@ mod tests {
         assert_ne!(other, root);
 
         // The newly registered chunk starts unlinked.
-        assert_eq!(store.available_nonce_count(GROUP, ME, 0).await.unwrap(), 11);
-        assert_eq!(store.available_nonce_count(GROUP, ME, 1).await.unwrap(), 0);
+        assert_eq!(count_chunk_nonces(&store, 0).await, 11);
+        assert_eq!(count_chunk_nonces(&store, 1).await, 0);
 
         // It can be linked to a chunk.
         store.link_nonces_chunk(GROUP, ME, 1, other).await.unwrap();
-        assert_eq!(store.available_nonce_count(GROUP, ME, 0).await.unwrap(), 11);
-        assert_eq!(store.available_nonce_count(GROUP, ME, 1).await.unwrap(), 13);
-        assert_eq!(store.available_nonce_count(GROUP, ME, 2).await.unwrap(), 0);
+        assert_eq!(count_chunk_nonces(&store, 0).await, 11);
+        assert_eq!(count_chunk_nonces(&store, 1).await, 13);
+        assert_eq!(count_chunk_nonces(&store, 2).await, 0);
 
         // Nonce assignment is idempotent.
         store.link_nonces_chunk(GROUP, ME, 0, root).await.unwrap();
-        assert_eq!(store.available_nonce_count(GROUP, ME, 0).await.unwrap(), 11);
-        assert_eq!(store.available_nonce_count(GROUP, ME, 1).await.unwrap(), 13);
-        assert_eq!(store.available_nonce_count(GROUP, ME, 2).await.unwrap(), 0);
+        assert_eq!(count_chunk_nonces(&store, 0).await, 11);
+        assert_eq!(count_chunk_nonces(&store, 1).await, 13);
+        assert_eq!(count_chunk_nonces(&store, 2).await, 0);
 
         // Canonical replay can reassign a root after a reorg, displacing a
         // stale assignment left by the orphaned chain.
         store.link_nonces_chunk(GROUP, ME, 1, root).await.unwrap();
-        assert_eq!(store.available_nonce_count(GROUP, ME, 0).await.unwrap(), 0);
-        assert_eq!(store.available_nonce_count(GROUP, ME, 1).await.unwrap(), 11);
-        assert_eq!(store.available_nonce_count(GROUP, ME, 2).await.unwrap(), 0);
+        assert_eq!(count_chunk_nonces(&store, 0).await, 0);
+        assert_eq!(count_chunk_nonces(&store, 1).await, 11);
+        assert_eq!(count_chunk_nonces(&store, 2).await, 0);
 
         // The displaced root can itself be assigned by a later canonical
         // event.
         store.link_nonces_chunk(GROUP, ME, 2, other).await.unwrap();
-        assert_eq!(store.available_nonce_count(GROUP, ME, 0).await.unwrap(), 0);
-        assert_eq!(store.available_nonce_count(GROUP, ME, 1).await.unwrap(), 11);
-        assert_eq!(store.available_nonce_count(GROUP, ME, 2).await.unwrap(), 13);
+        assert_eq!(count_chunk_nonces(&store, 0).await, 0);
+        assert_eq!(count_chunk_nonces(&store, 1).await, 11);
+        assert_eq!(count_chunk_nonces(&store, 2).await, 13);
+    }
+
+    #[tokio::test]
+    async fn available_nonce_count_sums_forward_and_includes_pending() {
+        let store = store().await;
+        let root0 = store
+            .register_nonces_chunk(GROUP, ME, nonce_chunk(11))
+            .await
+            .unwrap()
+            .unwrap();
+        store.link_nonces_chunk(GROUP, ME, 0, root0).await.unwrap();
+        let root1 = store
+            .register_nonces_chunk(GROUP, ME, nonce_chunk(13))
+            .await
+            .unwrap()
+            .unwrap();
+        store.link_nonces_chunk(GROUP, ME, 1, root1).await.unwrap();
+
+        // Counting from chunk 0 sums every linked chunk from there on, not
+        // just chunk 0's own count.
+        assert_eq!(
+            store.available_nonce_count(GROUP, ME, 0, 0).await.unwrap(),
+            11 + 13
+        );
+        assert_eq!(
+            store.available_nonce_count(GROUP, ME, 1, 0).await.unwrap(),
+            13
+        );
+        assert_eq!(
+            store.available_nonce_count(GROUP, ME, 2, 0).await.unwrap(),
+            0
+        );
+
+        // An offset into the starting chunk deducts the nonces already
+        // behind it.
+        assert_eq!(
+            store.available_nonce_count(GROUP, ME, 0, 5).await.unwrap(),
+            (11 - 5) + 13
+        );
+
+        // A registered-but-not-yet-linked chunk counts too, regardless of
+        // position, so a top-up in flight is not needlessly duplicated.
+        store
+            .register_nonces_chunk(GROUP, ME, nonce_chunk(7))
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(
+            store.available_nonce_count(GROUP, ME, 0, 0).await.unwrap(),
+            11 + 13 + 7
+        );
+        assert_eq!(
+            store.available_nonce_count(GROUP, ME, 2, 0).await.unwrap(),
+            7
+        );
+
+        // A displaced (orphaned) chunk from a reorg drops out of the running
+        // count entirely: a validator only ever counts forward from its
+        // current position, and the orphan no longer occupies a slot there.
+        store.link_nonces_chunk(GROUP, ME, 1, root0).await.unwrap();
+        assert_eq!(
+            store.available_nonce_count(GROUP, ME, 0, 0).await.unwrap(),
+            11 + 7
+        );
     }
 
     #[tokio::test]
@@ -534,7 +637,7 @@ mod tests {
         assert!(store.take_nonce(GROUP, ME, 0, 2).await.unwrap().is_none());
 
         // The used nonce is gone; the rest of the chunk is untouched.
-        assert_eq!(store.available_nonce_count(GROUP, ME, 0).await.unwrap(), 3);
+        assert_eq!(count_chunk_nonces(&store, 0).await, 3);
         assert!(store.take_nonce(GROUP, ME, 0, 0).await.unwrap().is_some());
     }
 
@@ -564,7 +667,7 @@ mod tests {
                 .unwrap()
                 .is_some()
         );
-        assert_eq!(store.available_nonce_count(GROUP, ME, 0).await.unwrap(), 4);
+        assert_eq!(count_chunk_nonces(&store, 0).await, 4);
         assert!(store.take_nonce(GROUP, ME, 0, 1).await.unwrap().is_some());
 
         // Once taken, there is no nonce left to reveal, nor is an out-of-range

@@ -1,14 +1,32 @@
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::{cmp::Ordering, num::NonZeroU64};
 
 /// An epoch ID.
-#[derive(Copy, Clone, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
+#[derive(Copy, Clone, Debug, Default, Eq, PartialEq)]
 pub enum EpochId {
     /// The genesis epoch.
     #[default]
     Genesis,
     /// A regular epoch established after genesis.
     Number { number: NonZeroU64 },
+}
+
+impl Serialize for EpochId {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        serializer.serialize_u64(self.raw_value())
+    }
+}
+
+impl<'de> Deserialize<'de> for EpochId {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        Ok(Self::from_raw(u64::deserialize(deserializer)?))
+    }
 }
 
 impl EpochId {
