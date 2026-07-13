@@ -20,11 +20,7 @@ impl Transition {
         block: u64,
         event: &Consensus::TransactionProposed,
     ) -> (State, Commands<State, Self>) {
-        let Some(group) = state
-            .epoch_groups
-            .get(&event.epoch)
-            .filter(|group| group.participants().contains(&self.account))
-        else {
+        let Some(participating_epoch) = state.epochs.get(&event.epoch) else {
             return (state, Vec::new());
         };
 
@@ -42,11 +38,12 @@ impl Transition {
                 transaction: event.transaction.clone(),
             };
 
-            let signers = group.participants().clone();
+            let signers = participating_epoch.group.participants().clone();
             let deadline = Some(block.saturating_add(self.config.signing_timeout.get()));
 
             let signing_state = if checks::check_transaction(&event.transaction) {
                 SigningState::WaitingForRequest {
+                    key_share: participating_epoch.key_share.clone(),
                     packet,
                     signers,
                     deadline,
@@ -121,10 +118,11 @@ impl Transition {
         block: u64,
         event: &Consensus::OracleTransactionProposed,
     ) -> (State, Commands<State, Self>) {
-        let Some(group) = state.epoch_groups.get(&event.epoch).filter(|group| {
-            group.participants().contains(&self.account)
-                && self.config.oracles.contains(&event.oracle)
-        }) else {
+        let Some(participating_epoch) = state
+            .epochs
+            .get(&event.epoch)
+            .filter(|_| self.config.oracles.contains(&event.oracle))
+        else {
             return (state, Vec::new());
         };
 
@@ -142,10 +140,11 @@ impl Transition {
                 oracle: event.oracle,
                 transaction: event.transaction.clone(),
             };
-            let signers = group.participants().clone();
+            let signers = participating_epoch.group.participants().clone();
             let deadline = Some(block.saturating_add(self.config.signing_timeout.get()));
 
             signing.insert(SigningState::WaitingForRequest {
+                key_share: participating_epoch.key_share.clone(),
                 packet,
                 signers,
                 deadline,
@@ -199,7 +198,9 @@ impl SigningState {
     /// have been assigned yet.
     fn signature_id(&self) -> Option<B256> {
         match self {
-            SigningState::WaitingForAttestation { signature_id } => Some(*signature_id),
+            SigningState::WaitingForAttestation { signature_id, .. }
+            | SigningState::WaitingForOracle { signature_id, .. }
+            | SigningState::CollectNonceCommitments { signature_id, .. } => Some(*signature_id),
             SigningState::WaitingForRequest { .. } | SigningState::WaitingToDecline { .. } => None,
         }
     }

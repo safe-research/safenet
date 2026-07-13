@@ -22,7 +22,7 @@ use std::collections::BTreeMap;
 /// have already been merkle-checked against their preprocessing commitment;
 /// this additionally attributes malformed or identity point to a misbehaving
 /// participant.
-#[derive(Clone, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct RevealedNonces {
     commitments: round1::SigningCommitments,
 }

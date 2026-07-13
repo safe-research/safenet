@@ -21,6 +21,15 @@ use serde::{Deserialize, Serialize};
 /// `FROSTNonceCommitmentSet` sequence chunk size.
 pub const SEQUENCE_CHUNK_SIZE: u64 = 1024;
 
+/// Decodes a global nonce `sequence` number into its `(chunk, offset)`
+/// coordinates within that chunk.
+pub fn decode_sequence(sequence: u64) -> (u64, u64) {
+    (
+        sequence / SEQUENCE_CHUNK_SIZE,
+        sequence % SEQUENCE_CHUNK_SIZE,
+    )
+}
+
 /// A single preprocessing nonce pair and its precomputed inclusion proof in the
 /// chunk's merkle tree. Because the proof is stored with the nonce, a nonce can
 /// be revealed in isolation without the rest of the chunk.

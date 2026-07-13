@@ -54,6 +54,20 @@ pub enum Action {
         group_id: B256,
         nonces_commitment: B256,
     },
+    /// An action to reveal this validator's nonce commitment for a signing
+    /// round.
+    RevealNonceCommitments {
+        signature_id: B256,
+        nonces: bindings::SignNonces,
+        proof: Vec<B256>,
+        expires_at: Option<u64>,
+    },
+    /// An action to decline participation in a signing round for a packet
+    /// that failed verification.
+    SignDecline {
+        signature_id: B256,
+        expires_at: Option<u64>,
+    },
 }
 
 /// Encodes [`Action`]s into the transactions the queue submits.
@@ -181,6 +195,40 @@ impl ActionEncoder<Action> for Encoder {
                 // Nonce registration doesn't carry an expiry - we cannot
                 // reliably know for how long it is valuable.
                 None,
+            ),
+            Action::RevealNonceCommitments {
+                signature_id,
+                nonces,
+                proof,
+                expires_at,
+            } => (
+                Transaction {
+                    to: self.coordinator,
+                    value: U256::ZERO,
+                    data: Coordinator::signRevealNoncesCall {
+                        sid: signature_id,
+                        nonces,
+                        proof,
+                    }
+                    .abi_encode()
+                    .into(),
+                    gas: 250_000,
+                },
+                expires_at,
+            ),
+            Action::SignDecline {
+                signature_id,
+                expires_at,
+            } => (
+                Transaction {
+                    to: self.coordinator,
+                    value: U256::ZERO,
+                    data: Coordinator::signDeclineCall { sid: signature_id }
+                        .abi_encode()
+                        .into(),
+                    gas: 150_000,
+                },
+                expires_at,
             ),
         }
     }
