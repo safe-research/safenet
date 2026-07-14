@@ -3,14 +3,14 @@ use super::{
     RolloverState, SigningState, State, Transition,
 };
 use crate::{
-    bindings::Coordinator,
+    bindings::{Consensus, Coordinator},
     consensus::{
         epoch::{self, EpochId},
-        group::{self, ParticipantSet},
+        group::{self, Group, ParticipantSet},
     },
     frost::{
         self,
-        keygen::{GroupCommitments, Secrets},
+        keygen::{GroupCommitments, KeyShare, Secrets},
     },
     service::{Action, Effect},
 };
@@ -23,6 +23,7 @@ use std::{
     collections::{BTreeMap, BTreeSet},
     fmt::Display,
     iter, mem,
+    num::NonZeroU64,
     sync::Arc,
 };
 
@@ -414,31 +415,19 @@ impl Transition {
                     // On genesis: retain the active key, start preprocessing,
                     // and immediately begin key generation for the next epoch.
                     EpochId::Genesis => {
-                        let group_id = group.id();
-                        let mut commands = if let KeyGenConfirmation::Confirmed(key_share) = status
-                        {
-                            state.epochs.insert(
-                                next_epoch,
-                                Epoch {
-                                    group,
-                                    key_share: key_share.clone(),
-                                },
-                            );
-                            vec![Command::Effect(Effect::NonceTree {
-                                group_id,
-                                key_share,
-                            })]
-                        } else {
-                            Vec::new()
-                        };
-
                         let next_epoch = epoch::next_number(block, self.config.blocks_per_epoch);
-                        let state = State {
-                            rollover: RolloverState::EpochSkipped { next_epoch },
-                            ..state
-                        }
-                        .and_prune(block, Prune::KeyGenSecrets { group_id });
+                        let (state, finalize_commands) = self.finalize_key_gen(
+                            State {
+                                rollover: RolloverState::EpochSkipped { next_epoch },
+                                ..state
+                            },
+                            block,
+                            EpochId::Genesis,
+                            group,
+                            status.key_share(),
+                        );
 
+                        // Kick off the next keygen ceremony right away.
                         let Some(participants) = group::participants_set(
                             &self.config.participants,
                             group::Epoch::Number {
@@ -447,33 +436,25 @@ impl Transition {
                                 excluded: BTreeSet::new(),
                             },
                         ) else {
-                            return (state, commands);
+                            return (state, finalize_commands);
                         };
 
                         let deadline =
                             Some(block.saturating_add(self.config.key_gen_timeout.get()));
-                        let (state, mut keygen_commands) = self.start_key_gen(
+                        let (state, keygen_commands) = self.start_key_gen(
                             state,
                             EpochId::Number { number: next_epoch },
                             &participants,
                             deadline,
                         );
-                        commands.append(&mut keygen_commands);
 
-                        (state, commands)
+                        (state, [finalize_commands, keygen_commands].concat())
                     }
                     EpochId::Number {
                         number: proposed_epoch,
                     } => {
                         let group_id = group.id();
-
-                        // Regardless of whether or not we are part of the
-                        // active epoch and will participate in the signing
-                        // ceremony to generate the rollover attestation,
-                        // register the newly created epoch and group.
-                        if let KeyGenConfirmation::Confirmed(key_share) = status {
-                            state.epochs.insert(next_epoch, Epoch { group, key_share });
-                        }
+                        let key_share = status.key_share();
 
                         // Compute the rollover package that needs to be
                         // attested for the epoch to get staged.
@@ -515,18 +496,89 @@ impl Transition {
                             State {
                                 rollover: RolloverState::SigningRollover {
                                     next_epoch: proposed_epoch,
-                                    group_id,
+                                    group,
+                                    key_share,
                                     message,
                                 },
                                 ..state
-                            }
-                            .and_prune(block, Prune::KeyGenSecrets { group_id }),
+                            },
                             Vec::new(),
                         )
                     }
                 }
             }
             _ => (state, Vec::new()),
+        }
+    }
+
+    /// Finalizes a staged epoch once its rollover attestation lands onchain:
+    /// clears the rollover signing session and moves
+    /// [`RolloverState::SigningRollover`] to [`RolloverState::EpochStaged`],
+    /// via [`Self::finalize_key_gen`] recording the new epoch and group in
+    /// `state.epochs` (if this validator is participating) and preprocessing
+    /// it by sampling and registering its nonce tree. Ports
+    /// `consensus/epochStaged.ts`.
+    ///
+    /// `active_epoch` itself is not rolled forward here; that only happens
+    /// later, once the block clock reaches the rollover block (see
+    /// [`Self::handle_rollover_new_block`]).
+    pub(super) fn handle_epoch_staged(
+        &self,
+        state: State,
+        block: u64,
+        event: &Consensus::EpochStaged,
+    ) -> (State, Commands<State, Self>) {
+        match state.rollover {
+            RolloverState::SigningRollover {
+                next_epoch,
+                group,
+                key_share,
+                message,
+            } if group.id() == event.groupId => {
+                let epoch = EpochId::Number { number: next_epoch };
+                let (state, keygen_commands) = self.finalize_key_gen(
+                    State {
+                        rollover: RolloverState::EpochStaged { next_epoch },
+                        ..state
+                    },
+                    block,
+                    epoch,
+                    group,
+                    key_share,
+                );
+                let (state, attested_commands) =
+                    self.handle_sign_attested(state, event.signatureId, message);
+
+                (state, [keygen_commands, attested_commands].concat())
+            }
+            RolloverState::WaitingForGenesis => {
+                // We should have been waiting for genesis to start. In this,
+                // optimistically jump to skipping to the proposed epoch. This
+                // has the added benefit that if a validator joins partway
+                // through consensus, the will eventually recover and not get
+                // stuck forever waiting for genesis.
+                (
+                    State {
+                        rollover: NonZeroU64::new(event.proposedEpoch)
+                            .map(|next_epoch| RolloverState::EpochSkipped { next_epoch })
+                            // The contract should disallow proposing genesis
+                            // epochs, something is very wrong...
+                            .unwrap_or(RolloverState::Halted),
+                        ..state
+                    },
+                    Vec::new(),
+                )
+            }
+            _ => {
+                tracing::warn!(
+                    epoch = %event.proposedEpoch,
+                    "an unexpected epoch was staged; key generation may time out"
+                );
+
+                // We saw an epoch get staged when we were not expecting one.
+                // Either way, we should recover and clean up through timeouts.
+                (state, Vec::new())
+            }
         }
     }
 
@@ -1062,6 +1114,44 @@ impl Transition {
         }
     }
 
+    /// Finalizes keygen, pruning any remaining DKG secrets, and triggering
+    /// nonces preprocessing.
+    fn finalize_key_gen(
+        &self,
+        state: State,
+        block: u64,
+        epoch: EpochId,
+        group: Group,
+        key_share: Option<Arc<KeyShare>>,
+    ) -> (State, Commands<State, Self>) {
+        let group_id = group.id();
+
+        // Schedule pruning of the DKG secrets for the finalized group - we do
+        // not need them anymore.
+        let mut state = state.and_prune(block, Prune::KeyGenSecrets { group_id });
+
+        // If we are participating in the new group (in other words, we were
+        // part of the DKG ceremony and key share), register the epoch in our
+        // participating epochs map and generate a nonces chunk.
+        let commands = if let Some(key_share) = key_share {
+            state.epochs.insert(
+                epoch,
+                Epoch {
+                    group,
+                    key_share: key_share.clone(),
+                },
+            );
+            vec![Command::Effect(Effect::NonceTree {
+                group_id,
+                key_share,
+            })]
+        } else {
+            Vec::new()
+        };
+
+        (state, commands)
+    }
+
     /// Builds the callback that proposes a regular epoch as soon as the final
     /// participant confirms its generated key. Genesis is externally
     /// bootstrapped and does not need a callback.
@@ -1117,8 +1207,8 @@ impl RolloverState {
             RolloverState::WaitingForSetup { group, .. }
             | RolloverState::CollectingCommitments { group, .. }
             | RolloverState::CollectingShares { group, .. }
-            | RolloverState::CollectingConfirmations { group, .. } => Some(group.id()),
-            RolloverState::SigningRollover { group_id, .. } => Some(*group_id),
+            | RolloverState::CollectingConfirmations { group, .. }
+            | RolloverState::SigningRollover { group, .. } => Some(group.id()),
         }
     }
 }
@@ -1129,6 +1219,17 @@ impl KeyGenParticipation {
         match self {
             KeyGenParticipation::Participating(sharing_state) => sharing_state.group_commitments(),
             KeyGenParticipation::Observing(group_commitments) => group_commitments,
+        }
+    }
+}
+
+impl KeyGenConfirmation {
+    /// Returns the finalized key share, if this validator's confirmation
+    /// completed successfully.
+    fn key_share(&self) -> Option<Arc<KeyShare>> {
+        match self {
+            KeyGenConfirmation::Confirmed(key_share) => Some(key_share.clone()),
+            _ => None,
         }
     }
 }

@@ -459,9 +459,54 @@ impl Transition {
             None => (state, Vec::new()),
         }
     }
+
+    /// Handles a signature attestation, which can mean different things for
+    /// different packets. Called by the individual attestations handlers
+    /// (`EpochStaged`, `TransactionAttested`, `OracleTransactionAttested`).
+    pub(super) fn handle_sign_attested(
+        &self,
+        mut state: State,
+        signature_id: B256,
+        message: B256,
+    ) -> (State, Commands<State, Self>) {
+        // Always clean up signing states when we observe attestations onchain
+        // to prevent dangling signing references. This _should_ only happen in
+        // case other validators diverge and produce an attestation under a
+        // different signature ID, so this is purely defensive.
+        let signing = state.signing.remove(&message);
+        if let Some(signature_id) = signing.as_ref().and_then(|signing| signing.signature_id()) {
+            state.signature_id_to_message.remove(&signature_id);
+        }
+
+        // In case we weren't in an expected state (either waiting for an
+        // attestation or just observing but not participating in the signing
+        // ceremony), log a warning, since this should never happen.
+        match &signing {
+            Some(SigningState::WaitingForAttestation { .. }) | None => {}
+            Some(_) => tracing::warn!(
+                %message,
+                %signature_id,
+                "received attestation on unexpected signing state"
+            ),
+        }
+
+        (state, Vec::new())
+    }
 }
 
 impl SigningState {
+    /// Returns the known signature ID for a signing state, or `None` if none
+    /// have been assigned yet.
+    fn signature_id(&self) -> Option<B256> {
+        match self {
+            SigningState::WaitingForAttestation { signature_id, .. }
+            | SigningState::WaitingForOracle { signature_id, .. }
+            | SigningState::CollectNonceCommitments { signature_id, .. }
+            | SigningState::CollectSigningShares { signature_id, .. } => Some(*signature_id),
+            SigningState::WaitingForRequest { .. } | SigningState::WaitingToDecline { .. } => None,
+        }
+    }
+
     /// The packet to sign for a particular signing state.
     pub(super) fn packet(&self) -> &Packet {
         match self {

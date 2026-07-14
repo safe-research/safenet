@@ -188,8 +188,10 @@ enum RolloverState {
     SigningRollover {
         /// The epoch being staged.
         next_epoch: NonZeroU64,
-        /// The generated group's ID.
-        group_id: B256,
+        /// The group being generated.
+        group: Group,
+        /// This validator's key share if they were participating.
+        key_share: Option<Arc<KeyShare>>,
         /// The rollover proposal's signing hash.
         message: B256,
     },
@@ -452,6 +454,9 @@ impl StateTransition<State> for Transition {
                 }
                 Event::Coordinator(Coordinator::CoordinatorEvents::SignCompleted(event)) => {
                     self.handle_sign_completed(state, log.block, &event)
+                }
+                Event::Consensus(Consensus::ConsensusEvents::EpochStaged(event)) => {
+                    self.handle_epoch_staged(state, log.block, &event)
                 }
                 Event::Consensus(Consensus::ConsensusEvents::TransactionProposed(event)) => {
                     self.handle_transaction_proposed(state, log.block, &event)
