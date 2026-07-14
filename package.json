@@ -20,6 +20,7 @@
 		"test": "npm run test --workspaces",
 		"test:integration": "./scripts/run_integration_test.sh",
 		"test:integration:sentinel": "./scripts/run_sentinel_integration_test.sh",
+		"test:integration:validator": "./scripts/run_validator_port_integration_test.sh",
 		"coverage": "npm run coverage --workspaces"
 	},
 	"devDependencies": {

@@ -14,6 +14,7 @@ The repository is a hybrid monorepo with:
 - Rust crates:
   - `crates/core/` — Shared code used by all Safenet offchain services
   - `crates/sentinel/` — Rust port of the sentinel service that watches the `SentinelOracle` and `Consensus` contracts, decides whether to approve or deny proposed oracle transactions, and puts up bonds onchain
+  - `crates/validator/` — Rust port of the validator service that participates in FROST DKG and signing rounds and submits epoch rollovers, transaction attestations, and oracle transaction attestations onchain
 
 Additionally, formal verification specs live in `certora/`. Integration and devnet scripts are in `scripts/`.
 
@@ -52,17 +53,20 @@ To run a command in a specific workspace use `--workspace` or `-w`.
 
 ### Integration Tests
 
-Integration tests start a local Anvil chain, deploy contracts, and run the validator:
+Integration tests start a local Anvil chain, deploy contracts, and run the validator and/or sentinel
+services:
 
 ```sh
-npm run test:integration        # Run all integration tests
+npm run test:integration                     # ./scripts/run_integration_test.sh (TypeScript validator + sentinel)
+npm run test:integration:sentinel            # ./scripts/run_sentinel_integration_test.sh (Rust sentinel)
+npm run test:integration:validator           # ./scripts/run_validator_port_integration_test.sh (Rust validator, alongside the TypeScript one)
 ```
 
-The script (`./scripts/run_integration_test.sh`) requires:
+These scripts require:
 
-- **Anvil** — part of the Foundry toolchain (`foundryup` to install)
-- **Forge** — for contract deployment
-- **Node.js** — validator and sentinel service
+- **Anvil**, **Forge**, **cast** — part of the Foundry toolchain (`foundryup` to install)
+- **jq** — for parsing `cast`/deployment output
+- **Node.js** and **cargo** — the TypeScript and Rust services respectively
 
 ### Local devnet
 

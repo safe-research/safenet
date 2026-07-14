@@ -10,6 +10,7 @@ This is a work-in-progress. Don't use it yet!
 - [Validator](./validator) Validator service (Typescript & npm)
 - [Services core crate](./crates/core) Shared logic between the offchain Safenet services (Rust)
 - [Sentinel](./crates/sentinel) Sentinel service that watches and puts up bonds in support of transaction correctness (Rust)
+- [Validator (Rust port)](./crates/validator) Rust port of the validator service that participates in FROST signing rounds and epoch rollovers
 
 ## Developing
 
@@ -20,8 +21,7 @@ Developing on the project requires a few tools:
 - NodeJS v24 (LTS)
 - NPM v11
 - Foundry v1.5.1
-
-For the ongoing Rust port, the `stable` channel of the Rust compiler and Cargo package manager are required.
+- Rust + Cargo (Stable)
 
 ### Foundry Setup
 
@@ -72,6 +72,13 @@ cargo build
 cargo test
 cargo clippy
 cargo fmt
+```
+
+Integration tests:
+
+```sh
+npm run test:integration:sentinel
+npm run test:integration:validator
 ```
 
 ## Planning Epics
