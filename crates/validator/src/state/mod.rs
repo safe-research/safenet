@@ -250,10 +250,7 @@ enum Packet {
 
 /// A signing session, keyed by the message hash the group signature attests
 /// to.
-// Every variant is a distinct wait state (for a request, an attestation, or
-// to decline); the shared prefix reflects that, not redundant naming.
 #[derive(Clone, Debug, Deserialize, Serialize)]
-#[allow(clippy::enum_variant_names)]
 enum SigningState {
     /// The packet was verified; waiting for this validator's own `Sign`
     /// action to open the nonce-commitment round.

@@ -341,7 +341,7 @@ impl Transition {
         &self,
         state: State,
         message: B256,
-        nonces: Nonces,
+        nonces: Box<Nonces>,
     ) -> (State, Commands<State, Self>) {
         let Some(SigningState::CollectSigningShares {
             key_share,
@@ -355,7 +355,7 @@ impl Transition {
             return (state, Vec::new());
         };
 
-        let result = match frost::sign::signature_share(key_share, nonces, revealed, &message) {
+        let result = match frost::sign::signature_share(key_share, *nonces, revealed, &message) {
             Ok(result) => result,
             Err(err) => {
                 tracing::warn!(

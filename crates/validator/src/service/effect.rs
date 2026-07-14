@@ -73,7 +73,6 @@ pub enum Effect {
 const NONCE_TOPUP_THRESHOLD: u64 = 100;
 
 /// The result of performing an [`Effect`], resumed into the state machine.
-#[allow(clippy::large_enum_variant)]
 #[derive(Debug, Clone, Default)]
 pub enum Resume {
     /// An effect that does not require resuming.
@@ -96,7 +95,7 @@ pub enum Resume {
         proof: Vec<B256>,
     },
     /// Resume with the nonce burned by [`Effect::UseNonce`].
-    Nonce { message: B256, nonces: Nonces },
+    Nonce { message: B256, nonces: Box<Nonces> },
 }
 
 /// Performs the validator's [`Effect`]s, resuming with a [`Resume`].
@@ -172,7 +171,10 @@ impl Handler {
                     .secrets
                     .take_nonce(group_id, self.account, chunk, offset)
                     .await?
-                    .map(|nonces| Resume::Nonce { message, nonces })
+                    .map(|nonces| Resume::Nonce {
+                        message,
+                        nonces: Box::new(nonces),
+                    })
                     // The nonce was already burned, for example by a reorg
                     // replaying this effect; gracefully no-op instead of
                     // producing a duplicate signature share.

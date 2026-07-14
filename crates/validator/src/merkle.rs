@@ -1,7 +1,5 @@
 //! Sorted-pair Keccak-256 Merkle trees.
 
-#![cfg_attr(not(test), allow(dead_code))]
-
 use alloy::primitives::{B256, keccak256};
 use serde::{Deserialize, Serialize};
 
@@ -68,6 +66,7 @@ pub struct MerkleRoot(pub B256);
 
 impl MerkleRoot {
     /// Verifies a Merkle proof for a leaf.
+    #[cfg(test)]
     pub fn verify(&self, leaf: B256, proof: &[B256]) -> bool {
         let mut node = leaf;
         for &sibling in proof {
