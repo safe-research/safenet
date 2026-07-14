@@ -50,19 +50,6 @@ pub struct State {
     /// The message hash each pending signature id was requested over, so its
     /// signing session can be found once the signature is submitted onchain.
     signature_id_to_message: BTreeMap<B256, B256>,
-    /// Things queued up to be pruned, along with the block at which they were
-    /// queued. Pruning itself only happens once the entry is mature enough to
-    /// be reorg-safe.
-    to_prune: Vec<(u64, Prune)>,
-}
-
-impl State {
-    /// Queues `prune` to be pruned, recording the current `block` so its
-    /// maturity can later be determined.
-    fn and_prune(mut self, block: u64, prune: Prune) -> Self {
-        self.to_prune.push((block, prune));
-        self
-    }
 }
 
 /// A resolved epoch that the validator is participating in, retained past
@@ -73,21 +60,6 @@ struct Epoch {
     group: Group,
     /// This validator's key share.
     key_share: Arc<KeyShare>,
-}
-
-/// Something queued up to be pruned once mature.
-#[derive(Clone, Debug, Deserialize, Serialize)]
-enum Prune {
-    /// A resolved group's keygen secrets.
-    KeyGenSecrets {
-        /// The resolved group.
-        group_id: B256,
-    },
-    /// A retired epoch's registered nonce trees.
-    GroupNonces {
-        /// The retired group.
-        group_id: B256,
-    },
 }
 
 /// The epoch-rollover / DKG state machine. Each active variant carries the
@@ -460,7 +432,7 @@ impl StateTransition<State> for Transition {
                     self.handle_sign_completed(state, log.block, &event)
                 }
                 Event::Consensus(Consensus::ConsensusEvents::EpochStaged(event)) => {
-                    self.handle_epoch_staged(state, log.block, &event)
+                    self.handle_epoch_staged(state, &event)
                 }
                 Event::Consensus(Consensus::ConsensusEvents::TransactionProposed(event)) => {
                     self.handle_transaction_proposed(state, log.block, &event)

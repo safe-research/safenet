@@ -1,6 +1,6 @@
 use super::{
-    ConfirmationDeadlines, Epoch, KeyGenConfirmation, KeyGenParticipation, Packet, Prune,
-    RolloverState, SigningState, State, Transition,
+    ConfirmationDeadlines, Epoch, KeyGenConfirmation, KeyGenParticipation, Packet, RolloverState,
+    SigningState, State, Transition,
 };
 use crate::{
     bindings::{Consensus, Coordinator},
@@ -184,7 +184,7 @@ impl Transition {
                     Err(err) => {
                         // There was an issue with the verified commitments,
                         // which is an unexpected an unrecoverable error.
-                        return fail_rollover!(state, block, next_epoch, group.id(), err);
+                        return fail_rollover!(state, next_epoch, group.id(), err);
                     }
                 };
 
@@ -342,7 +342,7 @@ impl Transition {
                             Err(err) => {
                                 // Finalization failures are unexpected, since
                                 // all secret shares were already verified.
-                                return fail_rollover!(state, block, next_epoch, group.id(), err);
+                                return fail_rollover!(state, next_epoch, group.id(), err);
                             }
                         }
                     }
@@ -421,7 +421,6 @@ impl Transition {
                                 rollover: RolloverState::EpochSkipped { next_epoch },
                                 ..state
                             },
-                            block,
                             EpochId::Genesis,
                             group,
                             status.key_share(),
@@ -526,7 +525,6 @@ impl Transition {
     pub(super) fn handle_epoch_staged(
         &self,
         state: State,
-        block: u64,
         event: &Consensus::EpochStaged,
     ) -> (State, Commands<State, Self>) {
         match state.rollover {
@@ -542,7 +540,6 @@ impl Transition {
                         rollover: RolloverState::EpochStaged { next_epoch },
                         ..state
                     },
-                    block,
                     epoch,
                     group,
                     key_share,
@@ -662,12 +659,13 @@ impl Transition {
                 "restarting key generation after too many complaints"
             );
 
-            let group_id = group.id();
+            let old_group_id = group.id();
             let excluded = group.also_exclude(iter::once(event.accused));
 
             return self.restart_key_gen_excluding(
-                state.and_prune(block, Prune::KeyGenSecrets { group_id }),
+                state,
                 next_epoch,
+                old_group_id,
                 excluded,
                 restart_deadline,
             );
@@ -789,14 +787,15 @@ impl Transition {
                     "invalid secret share revealed in response to a complaint"
                 );
 
-                let group_id = group.id();
+                let old_group_id = group.id();
                 let excluded = group.also_exclude(iter::once(event.accused));
                 let restart_deadline =
                     deadline.map(|_| block.saturating_add(self.config.key_gen_timeout.get()));
 
                 return self.restart_key_gen_excluding(
-                    state.and_prune(block, Prune::KeyGenSecrets { group_id }),
+                    state,
                     next_epoch,
+                    old_group_id,
                     excluded,
                     restart_deadline,
                 );
@@ -835,7 +834,7 @@ impl Transition {
                     Err(err) => {
                         // Finalization failures are unexpected, as all secret
                         // shares were already verified.
-                        return fail_rollover!(state, block, next_epoch, group.id(), err);
+                        return fail_rollover!(state, next_epoch, group.id(), err);
                     }
                 }
             }
@@ -879,8 +878,9 @@ impl Transition {
         // Whatever key generation was in flight for the stale target is being
         // abandoned in favor of the epoch actually due now. Make sure to prune
         // the key gen secrets (in case they weren't already pruned).
+        let mut prune_commands = Vec::new();
         if let Some(group_id) = state.rollover.group_id() {
-            state = state.and_prune(block, Prune::KeyGenSecrets { group_id });
+            prune_commands.push(Command::Effect(Effect::PruneKeyGenSecrets { group_id }));
         }
 
         // Reap any old participating epochs for which there are no more
@@ -893,14 +893,11 @@ impl Transition {
             .map(|signing| signing.packet().epoch())
             .fold(state.active_epoch, EpochId::min);
         let reaped_epochs = split_off_front(&mut state.epochs, &oldest_epoch);
-        let state = reaped_epochs.values().fold(state, |state, reaped| {
-            state.and_prune(
-                block,
-                Prune::GroupNonces {
-                    group_id: reaped.group.id(),
-                },
-            )
-        });
+        prune_commands.extend(reaped_epochs.values().map(|reaped| {
+            Command::Effect(Effect::PruneGroupNonces {
+                group_id: reaped.group.id(),
+            })
+        }));
 
         // Start a new keygen ceremony for the new next block, including
         // everyone again.
@@ -917,7 +914,7 @@ impl Transition {
             },
         );
 
-        match participants {
+        let (state, keygen_commands) = match participants {
             Some(participants) => self.start_key_gen(state, next_epoch, &participants, deadline),
             None => {
                 tracing::warn!(
@@ -934,7 +931,9 @@ impl Transition {
                     Vec::new(),
                 )
             }
-        }
+        };
+
+        (state, [keygen_commands, prune_commands].concat())
     }
 
     /// Retires participants whose round of the current key generation has
@@ -951,7 +950,7 @@ impl Transition {
         state: State,
         block: u64,
     ) -> (State, Commands<State, Self>) {
-        let Some((next_epoch, excluded)) = (match &state.rollover {
+        let Some((next_epoch, old_group_id, excluded)) = (match &state.rollover {
             RolloverState::CollectingCommitments {
                 next_epoch,
                 group,
@@ -962,7 +961,7 @@ impl Transition {
                 // There are participants did did not commit, restart keygen
                 // without them.
                 let excluded = group.exclude_all_others(commitments.keys());
-                Some((*next_epoch, excluded))
+                Some((*next_epoch, group.id(), excluded))
             }
             RolloverState::CollectingShares {
                 next_epoch,
@@ -977,7 +976,7 @@ impl Transition {
                 // because `shares` contains verified shares, which may be
                 // added later through the complaint flow.
                 let excluded = group.exclude_all_others(public_keys.keys());
-                Some((*next_epoch, excluded))
+                Some((*next_epoch, group.id(), excluded))
             }
             RolloverState::CollectingConfirmations {
                 next_epoch,
@@ -992,18 +991,18 @@ impl Transition {
                     .filter(|(_, complaint)| complaint.unresponded > 0)
                     .map(|(address, _)| *address)
                     .collect::<BTreeSet<_>>();
-                if block >= deadlines.response && !unresponded.is_empty() {
+                let excluded = if block >= deadlines.response && !unresponded.is_empty() {
                     // There are unresponded complaints past the response deadline,
                     // exclude all participants that failed to respond.
-                    Some((*next_epoch, group.also_exclude(unresponded)))
+                    Some(group.also_exclude(unresponded))
                 } else if block >= deadlines.confirm {
                     // There are missing confirmations past the confirmation
                     // deadline, exclude participants that did not confirm.
-                    let excluded = group.exclude_all_others(confirmations);
-                    Some((*next_epoch, excluded))
+                    Some(group.exclude_all_others(confirmations))
                 } else {
                     None
-                }
+                };
+                excluded.map(|excluded| (*next_epoch, group.id(), excluded))
             }
             _ => None,
         }) else {
@@ -1017,7 +1016,7 @@ impl Transition {
             "key generation timed out, restarting excluding stalled participants",
         );
         let deadline = Some(block.saturating_add(self.config.key_gen_timeout.get()));
-        self.restart_key_gen_excluding(state, next_epoch, excluded, deadline)
+        self.restart_key_gen_excluding(state, next_epoch, old_group_id, excluded, deadline)
     }
 
     /// Starts a key generation ceremony for `next_epoch` with `participants`,
@@ -1080,6 +1079,7 @@ impl Transition {
         &self,
         state: State,
         next_epoch: EpochId,
+        old_group_id: B256,
         excluded: BTreeSet<Address>,
         deadline: Option<u64>,
     ) -> (State, Commands<State, Self>) {
@@ -1100,7 +1100,7 @@ impl Transition {
             None
         };
 
-        match participants {
+        let (state, mut commands) = match participants {
             Some(participants) => self.start_key_gen(state, next_epoch, &participants, deadline),
             None => (
                 State {
@@ -1112,15 +1112,21 @@ impl Transition {
                 },
                 Vec::new(),
             ),
-        }
+        };
+
+        // Make sure to prune the secrets related to the old group.
+        commands.push(Command::Effect(Effect::PruneKeyGenSecrets {
+            group_id: old_group_id,
+        }));
+
+        (state, commands)
     }
 
     /// Finalizes keygen, pruning any remaining DKG secrets, and triggering
     /// nonces preprocessing.
     fn finalize_key_gen(
         &self,
-        state: State,
-        block: u64,
+        mut state: State,
         epoch: EpochId,
         group: Group,
         key_share: Option<Arc<KeyShare>>,
@@ -1129,12 +1135,12 @@ impl Transition {
 
         // Schedule pruning of the DKG secrets for the finalized group - we do
         // not need them anymore.
-        let mut state = state.and_prune(block, Prune::KeyGenSecrets { group_id });
+        let mut commands = vec![Command::Effect(Effect::PruneKeyGenSecrets { group_id })];
 
         // If we are participating in the new group (in other words, we were
         // part of the DKG ceremony and key share), register the epoch in our
         // participating epochs map and generate a nonces chunk.
-        let commands = if let Some(key_share) = key_share {
+        if let Some(key_share) = key_share {
             state.epochs.insert(
                 epoch,
                 Epoch {
@@ -1142,13 +1148,11 @@ impl Transition {
                     key_share: key_share.clone(),
                 },
             );
-            vec![Command::Effect(Effect::NonceTree {
+            commands.push(Command::Effect(Effect::NonceTree {
                 group_id,
                 key_share,
-            })]
-        } else {
-            Vec::new()
-        };
+            }));
+        }
 
         (state, commands)
     }
@@ -1258,15 +1262,14 @@ fn rollover_failure(next_epoch: EpochId, err: impl Display) -> RolloverState {
 // cannot be passed whole to a function, but a macro can reconstruct it at the
 // call site before scheduling the resolved group's secrets for pruning.
 macro_rules! fail_rollover {
-    ($state:ident, $block:expr, $next_epoch:expr, $group_id:expr, $err:expr) => {{
-        let (block, next_epoch, group_id, err) = ($block, $next_epoch, $group_id, $err);
+    ($state:ident, $next_epoch:expr, $group_id:expr, $err:expr) => {{
+        let (next_epoch, group_id, err) = ($next_epoch, $group_id, $err);
         (
             State {
                 rollover: rollover_failure(next_epoch, err),
                 ..($state)
-            }
-            .and_prune(block, Prune::KeyGenSecrets { group_id }),
-            Vec::new(),
+            },
+            vec![Command::Effect(Effect::PruneKeyGenSecrets { group_id })],
         )
     }};
 }

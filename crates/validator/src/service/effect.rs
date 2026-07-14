@@ -62,6 +62,10 @@ pub enum Effect {
         key_share: Arc<KeyShare>,
         sequence: u64,
     },
+    /// Prune a resolved group's keygen secrets.
+    PruneKeyGenSecrets { group_id: B256 },
+    /// Prune a retired group's registered nonce trees.
+    PruneGroupNonces { group_id: B256 },
 }
 
 /// The remaining usable nonce count, per participating group, below which a
@@ -189,6 +193,14 @@ impl Handler {
                     return Ok(Resume::Noop);
                 }
                 return self.sample_nonces(group_id, &key_share).await;
+            }
+            Effect::PruneKeyGenSecrets { group_id } => {
+                self.secrets.prune_keygen_secrets(group_id).await?;
+                Ok(Resume::Noop)
+            }
+            Effect::PruneGroupNonces { group_id } => {
+                self.secrets.prune_group_nonces(group_id).await?;
+                Ok(Resume::Noop)
             }
         }
     }
