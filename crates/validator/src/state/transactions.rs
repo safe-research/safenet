@@ -21,6 +21,11 @@ impl Transition {
     ) -> (State, Commands<State, Self>) {
         let epoch = EpochId::from_raw(event.epoch);
         let Some(participating_epoch) = state.epochs.get(&epoch) else {
+            tracing::debug!(
+                ?epoch,
+                safe_tx_hash = %event.safeTxHash,
+                "ignoring transaction proposal for non-participating epoch"
+            );
             return (state, Vec::new());
         };
 
@@ -40,16 +45,23 @@ impl Transition {
             let signers = participating_epoch.group.participants().clone();
             let deadline = block.saturating_add(self.config.signing_timeout.get());
 
+            let group_id = participating_epoch.group.id();
             let signing_state = if checks::check_transaction(&event.transaction) {
                 SigningState::WaitingForRequest {
                     key_share: participating_epoch.key_share.clone(),
-                    group_id: participating_epoch.group.id(),
+                    group_id,
                     responsible: None,
                     packet,
                     signers,
                     deadline,
                 }
             } else {
+                tracing::info!(
+                    ?epoch,
+                    %message,
+                    safe_tx_hash = %event.safeTxHash,
+                    "transaction proposal failed local checks; will decline signing request"
+                );
                 SigningState::WaitingToDecline { packet, deadline }
             };
 
@@ -79,6 +91,12 @@ impl Transition {
         let message = self
             .consensus
             .transaction_proposal_hash(epoch, event.safeTxHash);
+        tracing::info!(
+            ?epoch,
+            safe_tx_hash = %event.safeTxHash,
+            signature_id = %event.signatureId,
+            "transaction attested"
+        );
         self.handle_sign_attested(state, event.signatureId, message)
     }
 
@@ -98,13 +116,24 @@ impl Transition {
         event: &Consensus::OracleTransactionProposed,
     ) -> (State, Commands<State, Self>) {
         let epoch = EpochId::from_raw(event.epoch);
-        let Some(participating_epoch) = state
-            .epochs
-            .get(&epoch)
-            .filter(|_| self.config.oracles.contains(&event.oracle))
-        else {
+        let Some(participating_epoch) = state.epochs.get(&epoch) else {
+            tracing::debug!(
+                ?epoch,
+                oracle = %event.oracle,
+                safe_tx_hash = %event.safeTxHash,
+                "ignoring oracle transaction proposal for non-participating epoch"
+            );
             return (state, Vec::new());
         };
+        if !self.config.oracles.contains(&event.oracle) {
+            tracing::debug!(
+                ?epoch,
+                oracle = %event.oracle,
+                safe_tx_hash = %event.safeTxHash,
+                "ignoring transaction proposal from unknown oracle"
+            );
+            return (state, Vec::new());
+        }
 
         let message =
             self.consensus
@@ -121,10 +150,11 @@ impl Transition {
             };
             let signers = participating_epoch.group.participants().clone();
             let deadline = block.saturating_add(self.config.signing_timeout.get());
+            let group_id = participating_epoch.group.id();
 
             signing.insert(SigningState::WaitingForRequest {
                 key_share: participating_epoch.key_share.clone(),
-                group_id: participating_epoch.group.id(),
+                group_id,
                 responsible: None,
                 packet,
                 signers,
@@ -148,6 +178,13 @@ impl Transition {
         let message =
             self.consensus
                 .oracle_transaction_proposal_hash(epoch, event.oracle, event.safeTxHash);
+        tracing::info!(
+            ?epoch,
+            safe_tx_hash = %event.safeTxHash,
+            oracle = %event.oracle,
+            signature_id = %event.signatureId,
+            "oracle transaction attested"
+        );
         self.handle_sign_attested(state, event.signatureId, message)
     }
 }

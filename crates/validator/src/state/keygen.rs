@@ -68,6 +68,12 @@ impl Transition {
             } if group_id == group.id() => {
                 let (participants, count, threshold, context) = group.parameters();
                 let commitment = secrets.commitment();
+                tracing::debug!(
+                    ?next_epoch,
+                    %group_id,
+                    ?deadline,
+                    "key generation setup completed; publishing commitment"
+                );
                 (
                     State {
                         rollover: RolloverState::CollectingCommitments {
@@ -119,6 +125,16 @@ impl Transition {
                 match frost::keygen::verify_commitment(event.participant, &event.commitment) {
                     Ok(commitment) => {
                         commitments.insert(event.participant, commitment);
+                        tracing::debug!(
+                            ?next_epoch,
+                            group_id = %event.gid,
+                            participant = %event.participant,
+                            received = commitments.len(),
+                            expected = count,
+                            block,
+                            ?deadline,
+                            "accepted key generation commitment"
+                        );
                     }
                     Err(err) => {
                         tracing::warn!(
@@ -468,7 +484,6 @@ impl Transition {
                             rollover_block,
                             &group_key,
                         );
-
                         // If we are participating in the active epoch, then
                         // also register the rollover packet for signing.
                         if let Some(participating_epoch) = state.epochs.get(&active_epoch) {
@@ -535,6 +550,12 @@ impl Transition {
                 message,
             } if group.id() == event.groupId => {
                 let epoch = EpochId::Number { number: next_epoch };
+                tracing::info!(
+                    %next_epoch,
+                    group_id = %event.groupId,
+                    signature_id = %event.signatureId,
+                    "epoch staged"
+                );
                 let (state, keygen_commands) = self.finalize_key_gen(
                     State {
                         rollover: RolloverState::EpochStaged { next_epoch },
@@ -555,6 +576,11 @@ impl Transition {
                 // has the added benefit that if a validator joins partway
                 // through consensus, the will eventually recover and not get
                 // stuck forever waiting for genesis.
+                tracing::warn!(
+                    proposed_epoch = event.proposedEpoch,
+                    group_id = %event.groupId,
+                    "observed staged epoch before genesis; recovering from staged epoch"
+                );
                 (
                     State {
                         rollover: NonZeroU64::new(event.proposedEpoch)
@@ -870,9 +896,21 @@ impl Transition {
 
         // In case an epoch was staged, make it the new active epoch.
         if let RolloverState::EpochStaged { .. } = state.rollover {
+            tracing::info!(
+                active_epoch = %target_epoch_number,
+                block,
+                "epoch rolled over"
+            );
             state.active_epoch = EpochId::Number {
                 number: target_epoch_number,
             };
+        } else {
+            tracing::warn!(
+                target_epoch = %target_epoch_number,
+                next_epoch = %next_epoch_number,
+                block,
+                "epoch key generation was not staged in time; abandoning stale attempt"
+            );
         }
 
         // Whatever key generation was in flight for the stale target is being
@@ -960,6 +998,14 @@ impl Transition {
             } if block >= *deadline => {
                 // There are participants did did not commit, restart keygen
                 // without them.
+                tracing::warn!(
+                    ?next_epoch,
+                    group_id = %group.id(),
+                    block,
+                    deadline,
+                    committed = ?commitments.keys().copied().collect::<BTreeSet<_>>(),
+                    "key generation commitment collection timed out"
+                );
                 let excluded = group.exclude_all_others(commitments.keys());
                 Some((*next_epoch, group.id(), excluded))
             }
@@ -975,6 +1021,14 @@ impl Transition {
                 // which participants are missing and not `shares`: this is
                 // because `shares` contains verified shares, which may be
                 // added later through the complaint flow.
+                tracing::warn!(
+                    ?next_epoch,
+                    group_id = %group.id(),
+                    block,
+                    deadline,
+                    shared = ?public_keys.keys().copied().collect::<BTreeSet<_>>(),
+                    "key generation share collection timed out"
+                );
                 let excluded = group.exclude_all_others(public_keys.keys());
                 Some((*next_epoch, group.id(), excluded))
             }
@@ -1036,6 +1090,13 @@ impl Transition {
         if let Some((group, poap)) = participants.participate_as(self.account) {
             let group_id = group.id();
             let (count, threshold) = group.size();
+            tracing::info!(
+                ?next_epoch,
+                %group_id,
+                count,
+                threshold,
+                "starting key generation"
+            );
             (
                 State {
                     rollover: RolloverState::WaitingForSetup {
@@ -1053,11 +1114,21 @@ impl Transition {
                 })],
             )
         } else {
+            let group = participants.group();
+            let group_id = group.id();
+            let (count, threshold) = group.size();
+            tracing::info!(
+                ?next_epoch,
+                %group_id,
+                count,
+                threshold,
+                "observing key generation"
+            );
             (
                 State {
                     rollover: RolloverState::CollectingCommitments {
                         next_epoch,
-                        group: participants.group(),
+                        group,
                         secrets: None,
                         commitments: BTreeMap::new(),
                         deadline,

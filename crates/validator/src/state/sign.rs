@@ -48,6 +48,11 @@ impl Transition {
 
         match state.signing.remove(&event.message) {
             Some(SigningState::WaitingToDecline { deadline, .. }) => {
+                tracing::info!(
+                    message = %event.message,
+                    signature_id = %event.sid,
+                    "declining signing request for rejected transaction"
+                );
                 commands.push(Command::Action(Action::SignDecline {
                     signature_id: event.sid,
                     expires_at: deadline,
@@ -62,6 +67,13 @@ impl Transition {
             }) if group_id == event.gid => match packet {
                 Packet::OracleTransaction { oracle, .. } => {
                     let deadline = block.saturating_add(self.config.oracle_timeout.get());
+                    tracing::info!(
+                        message = %event.message,
+                        signature_id = %event.sid,
+                        group_id = %event.gid,
+                        %oracle,
+                        "signing request waiting for oracle result"
+                    );
                     state.signing.insert(
                         event.message,
                         SigningState::WaitingForOracle {
@@ -81,6 +93,13 @@ impl Transition {
                 }
                 Packet::Transaction { .. } | Packet::EpochRollover { .. } => {
                     let deadline = block.saturating_add(self.config.signing_timeout.get());
+                    tracing::info!(
+                        message = %event.message,
+                        signature_id = %event.sid,
+                        group_id = %event.gid,
+                        sequence = event.sequence,
+                        "accepted signing request; revealing nonce commitment"
+                    );
                     state.signing.insert(
                         event.message,
                         SigningState::CollectNonceCommitments {
@@ -182,6 +201,12 @@ impl Transition {
                 ..
             }) if expected == oracle && event.approved => {
                 let deadline = block.saturating_add(self.config.signing_timeout.get());
+                tracing::info!(
+                    request_id = %event.requestId,
+                    signature_id = %signature_id,
+                    %oracle,
+                    "oracle approved transaction; revealing nonce commitment"
+                );
                 state.signing.insert(
                     event.requestId,
                     SigningState::CollectNonceCommitments {
@@ -214,12 +239,19 @@ impl Transition {
             }) if expected == oracle && !event.approved => {
                 // Rejected: drop the session, along with the signature id
                 // index entry eagerly set when the round was opened.
+                tracing::info!(
+                    request_id = %event.requestId,
+                    signature_id = %signature_id,
+                    %oracle,
+                    "oracle rejected transaction; dropping signing ceremony"
+                );
                 state.signature_id_to_message.remove(&signature_id);
                 (state, Vec::new())
             }
             Some(other) => {
                 tracing::warn!(
                     request_id = %event.requestId,
+                    %oracle,
                     "unexpected oracle result for request",
                 );
                 state.signing.insert(event.requestId, other);
@@ -371,7 +403,6 @@ impl Transition {
         let signature_id = *signature_id;
         let callback = packet.attestation_callback(self.config.consensus);
         let expires_at = *deadline;
-
         (
             state,
             vec![Command::Action(Action::SignShare {
@@ -543,6 +574,19 @@ impl Transition {
                 })
             };
 
+        for (message, signing) in &state.signing {
+            if signing.deadline() <= block {
+                tracing::warn!(
+                    %message,
+                    stage = signing.name(),
+                    signature_id = ?signing.signature_id(),
+                    deadline = signing.deadline(),
+                    block,
+                    "signing ceremony timed out"
+                );
+            }
+        }
+
         state.signing.retain(|message, signing| match signing {
             SigningState::WaitingForRequest {
                 key_share,
@@ -700,6 +744,30 @@ impl Transition {
 }
 
 impl SigningState {
+    /// Returns a compact state name for diagnostics.
+    fn name(&self) -> &'static str {
+        match self {
+            Self::WaitingForRequest { .. } => "waiting_for_request",
+            Self::WaitingForOracle { .. } => "waiting_for_oracle",
+            Self::CollectNonceCommitments { .. } => "collect_nonce_commitments",
+            Self::CollectSigningShares { .. } => "collect_signing_shares",
+            Self::WaitingForAttestation { .. } => "waiting_for_attestation",
+            Self::WaitingToDecline { .. } => "waiting_to_decline",
+        }
+    }
+
+    /// Returns the block deadline for the current state.
+    fn deadline(&self) -> u64 {
+        match self {
+            Self::WaitingForRequest { deadline, .. }
+            | Self::WaitingForOracle { deadline, .. }
+            | Self::CollectNonceCommitments { deadline, .. }
+            | Self::CollectSigningShares { deadline, .. }
+            | Self::WaitingForAttestation { deadline, .. }
+            | Self::WaitingToDecline { deadline, .. } => *deadline,
+        }
+    }
+
     /// Returns the known signature ID for a signing state, or `None` if none
     /// have been assigned yet.
     fn signature_id(&self) -> Option<B256> {
