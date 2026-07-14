@@ -56,7 +56,7 @@ impl Transition {
                 ..
             }) => match packet {
                 Packet::OracleTransaction { oracle, .. } => {
-                    let deadline = Some(block.saturating_add(self.config.oracle_timeout.get()));
+                    let deadline = block.saturating_add(self.config.oracle_timeout.get());
                     state.signing.insert(
                         event.message,
                         SigningState::WaitingForOracle {
@@ -75,7 +75,7 @@ impl Transition {
                         .insert(event.sid, event.message);
                 }
                 Packet::Transaction { .. } | Packet::EpochRollover { .. } => {
-                    let deadline = Some(block.saturating_add(self.config.signing_timeout.get()));
+                    let deadline = block.saturating_add(self.config.signing_timeout.get());
                     state.signing.insert(
                         event.message,
                         SigningState::CollectNonceCommitments {
@@ -84,6 +84,7 @@ impl Transition {
                             signature_id: event.sid,
                             sequence: event.sequence,
                             revealed: BTreeMap::new(),
+                            last_signer: None,
                             packet,
                             signers,
                             deadline,
@@ -175,7 +176,7 @@ impl Transition {
                 sequence,
                 ..
             }) if expected == oracle && event.approved => {
-                let deadline = Some(block.saturating_add(self.config.signing_timeout.get()));
+                let deadline = block.saturating_add(self.config.signing_timeout.get());
                 state.signing.insert(
                     event.requestId,
                     SigningState::CollectNonceCommitments {
@@ -184,6 +185,7 @@ impl Transition {
                         signature_id,
                         sequence,
                         revealed: BTreeMap::new(),
+                        last_signer: None,
                         packet,
                         signers,
                         deadline,
@@ -244,6 +246,7 @@ impl Transition {
                 signature_id,
                 sequence,
                 mut revealed,
+                mut last_signer,
                 packet,
                 signers,
                 deadline,
@@ -254,6 +257,7 @@ impl Transition {
                 {
                     Some(Ok(nonces)) => {
                         revealed.insert(event.participant, nonces);
+                        last_signer = Some(event.participant);
                     }
                     Some(Err(err)) => {
                         tracing::warn!(
@@ -282,6 +286,7 @@ impl Transition {
                             signature_id,
                             sequence,
                             revealed,
+                            last_signer,
                             packet,
                             signers,
                             deadline,
@@ -290,7 +295,7 @@ impl Transition {
                     return (state, Vec::new());
                 }
 
-                let deadline = Some(block.saturating_add(self.config.signing_timeout.get()));
+                let deadline = block.saturating_add(self.config.signing_timeout.get());
                 state.signing.insert(
                     message,
                     SigningState::CollectSigningShares {
@@ -440,7 +445,7 @@ impl Transition {
                     );
                 }
 
-                let deadline = Some(block.saturating_add(self.config.signing_timeout.get()));
+                let deadline = block.saturating_add(self.config.signing_timeout.get());
                 state.signing.insert(
                     message,
                     SigningState::WaitingForAttestation {
@@ -585,6 +590,48 @@ impl Packet {
         bindings::Callback {
             target: consensus,
             context: context.into(),
+        }
+    }
+
+    /// Builds the fallback action to directly submit a completed attestation,
+    /// for when the automatic `signShareWithCallback` submission did not land
+    /// in time.
+    #[expect(dead_code)]
+    fn attestation_action(&self, signature_id: B256, expires_at: u64) -> Action {
+        match self {
+            Packet::EpochRollover {
+                proposed_epoch,
+                rollover_block,
+                group_id,
+                ..
+            } => Action::StageEpoch {
+                proposed_epoch: *proposed_epoch,
+                rollover_block: *rollover_block,
+                group_id: *group_id,
+                signature_id,
+                expires_at,
+            },
+            Packet::Transaction { epoch, transaction } => Action::AttestTransaction {
+                epoch: *epoch,
+                chain_id: transaction.chainId,
+                safe: transaction.safe,
+                safe_tx_struct_hash: hashing::safe_tx_struct_hash(transaction),
+                signature_id,
+                expires_at,
+            },
+            Packet::OracleTransaction {
+                epoch,
+                oracle,
+                transaction,
+            } => Action::AttestOracleTransaction {
+                epoch: *epoch,
+                oracle: *oracle,
+                chain_id: transaction.chainId,
+                safe: transaction.safe,
+                safe_tx_struct_hash: hashing::safe_tx_struct_hash(transaction),
+                signature_id,
+                expires_at,
+            },
         }
     }
 }

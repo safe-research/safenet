@@ -1,7 +1,8 @@
 //! Validator actions and their encoding into transactions.
 
 use crate::{
-    bindings::{self, Coordinator},
+    bindings::{self, Consensus, Coordinator},
+    consensus::epoch::EpochId,
     merkle::MerkleRoot,
 };
 use alloy::{
@@ -9,9 +10,11 @@ use alloy::{
     sol_types::SolCall,
 };
 use safenet_core::{driver::ActionEncoder, tx::Transaction};
+use std::num::NonZeroU64;
 
 /// An onchain action the validator emits during a state transition.
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[expect(dead_code)]
 pub enum Action {
     /// An action to publish key generation commitments onchain.
     KeyGenAndCommit {
@@ -61,14 +64,11 @@ pub enum Action {
         signature_id: B256,
         nonces: bindings::SignNonces,
         proof: Vec<B256>,
-        expires_at: Option<u64>,
+        expires_at: u64,
     },
     /// An action to decline participation in a signing round for a packet
     /// that failed verification.
-    SignDecline {
-        signature_id: B256,
-        expires_at: Option<u64>,
-    },
+    SignDecline { signature_id: B256, expires_at: u64 },
     /// An action to publish this validator's signature share, along with the
     /// callback invoked once the group's signature completes.
     SignShare {
@@ -77,13 +77,54 @@ pub enum Action {
         share: bindings::SignatureShare,
         proof: Vec<B256>,
         callback: bindings::Callback,
-        expires_at: Option<u64>,
+        expires_at: u64,
+    },
+    /// An action to open a signing round for a verified packet, retried by
+    /// whichever participant is responsible after a timeout.
+    Sign {
+        group_id: B256,
+        message: B256,
+        expires_at: u64,
+    },
+    /// A fallback action to submit a completed transaction attestation
+    /// directly, when the automatic `signShareWithCallback` submission did
+    /// not land in time.
+    AttestTransaction {
+        epoch: EpochId,
+        chain_id: U256,
+        safe: Address,
+        safe_tx_struct_hash: B256,
+        signature_id: B256,
+        expires_at: u64,
+    },
+    /// A fallback action to submit a completed oracle-backed transaction
+    /// attestation directly, when the automatic `signShareWithCallback`
+    /// submission did not land in time.
+    AttestOracleTransaction {
+        epoch: EpochId,
+        oracle: Address,
+        chain_id: U256,
+        safe: Address,
+        safe_tx_struct_hash: B256,
+        signature_id: B256,
+        expires_at: u64,
+    },
+    /// A fallback action to stage a completed epoch rollover directly, when
+    /// the automatic `signShareWithCallback` submission did not land in
+    /// time.
+    StageEpoch {
+        proposed_epoch: NonZeroU64,
+        rollover_block: u64,
+        group_id: B256,
+        signature_id: B256,
+        expires_at: u64,
     },
 }
 
 /// Encodes [`Action`]s into the transactions the queue submits.
 pub struct Encoder {
     pub coordinator: Address,
+    pub consensus: Address,
 }
 
 impl ActionEncoder<Action> for Encoder {
@@ -240,7 +281,7 @@ impl ActionEncoder<Action> for Encoder {
                     .into(),
                     gas: 250_000,
                 },
-                expires_at,
+                Some(expires_at),
             ),
             Action::SignDecline {
                 signature_id,
@@ -254,7 +295,7 @@ impl ActionEncoder<Action> for Encoder {
                         .into(),
                     gas: 150_000,
                 },
-                expires_at,
+                Some(expires_at),
             ),
             Action::SignShare {
                 signature_id,
@@ -278,7 +319,97 @@ impl ActionEncoder<Action> for Encoder {
                     .into(),
                     gas: 400_000,
                 },
+                Some(expires_at),
+            ),
+            Action::Sign {
+                group_id,
+                message,
                 expires_at,
+            } => (
+                Transaction {
+                    to: self.coordinator,
+                    value: U256::ZERO,
+                    data: Coordinator::signCall {
+                        gid: group_id,
+                        message,
+                    }
+                    .abi_encode()
+                    .into(),
+                    gas: 150_000,
+                },
+                Some(expires_at),
+            ),
+            Action::AttestTransaction {
+                epoch,
+                chain_id,
+                safe,
+                safe_tx_struct_hash,
+                signature_id,
+                expires_at,
+            } => (
+                Transaction {
+                    to: self.consensus,
+                    value: U256::ZERO,
+                    data: Consensus::attestTransactionCall {
+                        epoch: epoch.raw_value(),
+                        chainId: chain_id,
+                        safe,
+                        safeTxStructHash: safe_tx_struct_hash,
+                        signatureId: signature_id,
+                    }
+                    .abi_encode()
+                    .into(),
+                    gas: 250_000,
+                },
+                Some(expires_at),
+            ),
+            Action::AttestOracleTransaction {
+                epoch,
+                oracle,
+                chain_id,
+                safe,
+                safe_tx_struct_hash,
+                signature_id,
+                expires_at,
+            } => (
+                Transaction {
+                    to: self.consensus,
+                    value: U256::ZERO,
+                    data: Consensus::attestOracleTransactionCall {
+                        epoch: epoch.raw_value(),
+                        oracle,
+                        chainId: chain_id,
+                        safe,
+                        safeTxStructHash: safe_tx_struct_hash,
+                        signatureId: signature_id,
+                    }
+                    .abi_encode()
+                    .into(),
+                    gas: 250_000,
+                },
+                Some(expires_at),
+            ),
+            Action::StageEpoch {
+                proposed_epoch,
+                rollover_block,
+                group_id,
+                signature_id,
+                expires_at,
+            } => (
+                Transaction {
+                    to: self.consensus,
+                    value: U256::ZERO,
+                    data: Consensus::stageEpochCall {
+                        proposedEpoch: proposed_epoch.get(),
+                        rolloverBlock: rollover_block,
+                        groupId: group_id,
+                        signatureId: signature_id,
+                    }
+                    .abi_encode()
+                    .into(),
+                    gas: 250_000,
+                },
+                Some(expires_at),
             ),
         }
     }

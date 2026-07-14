@@ -288,13 +288,17 @@ enum SigningState {
     WaitingForRequest {
         /// The key share for participating in the signing ceremony.
         key_share: Arc<KeyShare>,
+        /// The group generating the signature.
+        group_id: B256,
+        /// The participant responsible for submitting the `Sign` request, or
+        /// `None` if unknown, in which case every participant is responsible.
+        responsible: Option<Address>,
         /// The packet being signed.
         packet: Packet,
         /// The group members expected to take part in signing.
         signers: BTreeSet<Address>,
-        /// The block by which the signing round must complete. `None` to
-        /// indicate that there is no deadline.
-        deadline: Option<u64>,
+        /// The block by which the signing round must complete.
+        deadline: u64,
     },
     /// An oracle-backed packet's signing round is on hold until the oracle's
     /// result is attested.
@@ -313,9 +317,8 @@ enum SigningState {
         packet: Packet,
         /// The group members expected to take part in signing.
         signers: BTreeSet<Address>,
-        /// The block by which the oracle result must land. `None` to
-        /// indicate that there is no deadline.
-        deadline: Option<u64>,
+        /// The block by which the oracle result must land.
+        deadline: u64,
     },
     /// This validator has revealed its nonce commitment and is waiting for
     /// its peers to reveal theirs.
@@ -330,13 +333,14 @@ enum SigningState {
         sequence: u64,
         /// Verified revealed nonce commitments received from peers so far.
         revealed: BTreeMap<Address, RevealedNonces>,
+        /// The last participant to reveal a valid nonce commitment, if any.
+        last_signer: Option<Address>,
         /// The packet being signed.
         packet: Packet,
         /// The group members expected to take part in signing.
         signers: BTreeSet<Address>,
-        /// The block by which the commitment round must complete. `None` to
-        /// indicate that there is no deadline.
-        deadline: Option<u64>,
+        /// The block by which the commitment round must complete.
+        deadline: u64,
     },
     /// Every signer's nonce commitment has been revealed and this
     /// validator's own signature share is being produced; waiting for the
@@ -357,8 +361,7 @@ enum SigningState {
         /// The group members expected to take part in signing.
         signers: BTreeSet<Address>,
         /// The block by which the signature share round must complete.
-        /// `None` to indicate that there is no deadline.
-        deadline: Option<u64>,
+        deadline: u64,
     },
     /// A complete group signature was produced; waiting for the attestation
     /// to be submitted onchain.
@@ -371,15 +374,14 @@ enum SigningState {
         /// The packet being signed.
         packet: Packet,
         /// The block by which the signing attestation must arrive.
-        deadline: Option<u64>,
+        deadline: u64,
     },
     /// The packet failed verification; waiting to submit a decline.
     WaitingToDecline {
         /// The packet that failed verification.
         packet: Packet,
-        /// The block by which the decline must be submitted. `None` to
-        /// indicate that there is no deadline.
-        deadline: Option<u64>,
+        /// The block by which the decline must be submitted.
+        deadline: u64,
     },
 }
 

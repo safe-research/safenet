@@ -477,6 +477,8 @@ impl Transition {
                                 message,
                                 SigningState::WaitingForRequest {
                                     key_share: participating_epoch.key_share.clone(),
+                                    group_id,
+                                    responsible: None,
                                     packet: Packet::EpochRollover {
                                         active_epoch,
                                         proposed_epoch,
@@ -485,9 +487,8 @@ impl Transition {
                                         group_key,
                                     },
                                     signers: participating_epoch.group.participants().clone(),
-                                    deadline: Some(
-                                        block.saturating_add(self.config.signing_timeout.get()),
-                                    ),
+                                    deadline: block
+                                        .saturating_add(self.config.signing_timeout.get()),
                                 },
                             );
                         };

@@ -38,11 +38,13 @@ impl Transition {
             };
 
             let signers = participating_epoch.group.participants().clone();
-            let deadline = Some(block.saturating_add(self.config.signing_timeout.get()));
+            let deadline = block.saturating_add(self.config.signing_timeout.get());
 
             let signing_state = if checks::check_transaction(&event.transaction) {
                 SigningState::WaitingForRequest {
                     key_share: participating_epoch.key_share.clone(),
+                    group_id: participating_epoch.group.id(),
+                    responsible: None,
                     packet,
                     signers,
                     deadline,
@@ -118,10 +120,12 @@ impl Transition {
                 transaction: event.transaction.clone(),
             };
             let signers = participating_epoch.group.participants().clone();
-            let deadline = Some(block.saturating_add(self.config.signing_timeout.get()));
+            let deadline = block.saturating_add(self.config.signing_timeout.get());
 
             signing.insert(SigningState::WaitingForRequest {
                 key_share: participating_epoch.key_share.clone(),
+                group_id: participating_epoch.group.id(),
+                responsible: None,
                 packet,
                 signers,
                 deadline,
