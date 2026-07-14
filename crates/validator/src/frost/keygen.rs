@@ -450,6 +450,11 @@ impl KeyShare {
             1,
         ))
     }
+
+    /// Returns the signing threshold for the group.
+    pub fn group_threshold(&self) -> u16 {
+        *self.0.min_signers()
+    }
 }
 
 /// Finalizes key generation given all participant's verified secret shares

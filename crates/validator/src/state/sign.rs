@@ -2,7 +2,7 @@ use super::{Packet, SigningState, State, Transition};
 use crate::{
     bindings::{self, Consensus, Coordinator, Oracle, SignNonces},
     consensus::{epoch::EpochId, hashing},
-    frost::{self, preprocess::Nonces},
+    frost::{self, keygen::KeyShare, preprocess::Nonces},
     merkle::MerkleRoot,
     service::{Action, Effect},
 };
@@ -11,7 +11,11 @@ use alloy::{
     sol_types::SolCall as _,
 };
 use safenet_core::state::{Command, Commands};
-use std::collections::BTreeMap;
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    mem,
+    sync::Arc,
+};
 
 impl Transition {
     /// Handles a validator's own request to sign a packet.
@@ -51,10 +55,11 @@ impl Transition {
             }
             Some(SigningState::WaitingForRequest {
                 key_share,
+                group_id,
                 packet,
                 signers,
                 ..
-            }) => match packet {
+            }) if group_id == event.gid => match packet {
                 Packet::OracleTransaction { oracle, .. } => {
                     let deadline = block.saturating_add(self.config.oracle_timeout.get());
                     state.signing.insert(
@@ -62,7 +67,7 @@ impl Transition {
                         SigningState::WaitingForOracle {
                             key_share,
                             oracle,
-                            group_id: event.gid,
+                            group_id,
                             signature_id: event.sid,
                             sequence: event.sequence,
                             packet,
@@ -412,11 +417,10 @@ impl Transition {
     }
 
     /// Completes a tracked [`SigningState::CollectSigningShares`] round,
-    /// entering [`SigningState::WaitingForAttestation`]. The participant
-    /// responsible for submitting the attestation is the last one to have
-    /// published a share against the completed selection root, or unknown
-    /// (in which case every participant is responsible) if this validator
-    /// never observed a share for that particular selection.
+    /// entering [`SigningState::WaitingForAttestation`]. The signature share
+    /// that completed the ceremony should have submitted the attestation
+    /// atomically through its callback. If that attestation does not arrive by
+    /// the deadline, every validator submits the direct fallback instead.
     pub(super) fn handle_sign_completed(
         &self,
         mut state: State,
@@ -430,27 +434,14 @@ impl Transition {
         match state.signing.remove(&message) {
             Some(SigningState::CollectSigningShares {
                 signature_id,
-                selections,
                 packet,
                 ..
             }) => {
-                let responsible = selections
-                    .get(&MerkleRoot(event.selectionRoot))
-                    .and_then(|selection| selection.last_signer);
-                if responsible.is_none() {
-                    tracing::warn!(
-                        %signature_id,
-                        selection_root = %event.selectionRoot,
-                        "signing ceremony completed under an unobserved selection",
-                    );
-                }
-
                 let deadline = block.saturating_add(self.config.signing_timeout.get());
                 state.signing.insert(
                     message,
                     SigningState::WaitingForAttestation {
                         signature_id,
-                        responsible,
                         packet,
                         deadline,
                     },
@@ -496,6 +487,215 @@ impl Transition {
         }
 
         (state, Vec::new())
+    }
+
+    /// Retries, declines, or drops every signing ceremony that has stalled
+    /// past its deadline. Ports `signing/timeouts.ts`.
+    pub(super) fn handle_signing_timeouts(
+        &self,
+        mut state: State,
+        block: u64,
+    ) -> (State, Commands<State, Self>) {
+        let next_deadline = block.saturating_add(self.config.signing_timeout.get());
+        let mut commands = Vec::new();
+
+        // A helper for restarting a signing ceremony shared by timed out nonce
+        // collection and signing share broadcasting.
+        let restart_signing_ceremony =
+            |signature_id_to_message: &mut BTreeMap<B256, B256>,
+             commands: &mut Vec<Command<Action, Effect>>,
+             key_share: Arc<KeyShare>,
+             group_id: B256,
+             signature_id: B256,
+             signers: BTreeSet<Address>,
+             message: B256,
+             packet: Packet,
+             last_signer: Option<Address>| {
+                // The signature ID is no longer useful, unlink it.
+                signature_id_to_message.remove(&signature_id);
+
+                // Ensure that there are sufficient signers left (at least a
+                // group threshold of them) for restarting the ceremony. and
+                // that we are part of the signing selection.
+                if signers.len() < key_share.group_threshold() as usize
+                    || !signers.contains(&self.account)
+                {
+                    return None;
+                }
+
+                // We want to restart the signing process. By convention, the
+                // last signer to participate is responsible for kicking if off.
+                // If that is us, queue up an action for it.
+                if last_signer == Some(self.account) {
+                    commands.push(Command::Action(Action::Sign {
+                        group_id,
+                        message,
+                        expires_at: next_deadline,
+                    }));
+                }
+                Some(SigningState::WaitingForRequest {
+                    key_share,
+                    group_id,
+                    responsible: last_signer,
+                    packet,
+                    signers,
+                    deadline: next_deadline,
+                })
+            };
+
+        state.signing.retain(|message, signing| match signing {
+            SigningState::WaitingForRequest {
+                key_share,
+                group_id,
+                responsible,
+                signers,
+                deadline,
+                ..
+            } if *deadline <= block => {
+                let Some(previously_responsible) = responsible else {
+                    // There is no one responsible, or the whole signing
+                    // selection already tried to recover.
+                    return false;
+                };
+
+                // In case the responsible party is a signer, remove them from
+                // the signing selection. Make sure that we have sufficient
+                // signers to continue and that we are still included.
+                signers.remove(previously_responsible);
+                if signers.len() < key_share.group_threshold() as usize
+                    || !signers.contains(&self.account)
+                {
+                    return false;
+                }
+
+                // We need to restart the signing ceremony, make everyone
+                // responsible. This is a bit heavy handed, but otherwise there
+                // is no one that we can definitively say is responsible for
+                // doing this (the previously `responsible` party failed in
+                // their duties and are not part of the signing selection
+                // anymore with no incentive to execute the action).
+                *responsible = None;
+                *deadline = next_deadline;
+                commands.push(Command::Action(Action::Sign {
+                    group_id: *group_id,
+                    message: *message,
+                    expires_at: next_deadline,
+                }));
+                true
+            }
+            SigningState::WaitingForOracle {
+                key_share,
+                oracle,
+                group_id,
+                signature_id,
+                sequence,
+                packet,
+                signers,
+                deadline,
+            } if *deadline <= block => {
+                // The oracle did not respond in time, drop the signing.
+                state.signature_id_to_message.remove(signature_id);
+                false
+            }
+            SigningState::CollectNonceCommitments {
+                key_share,
+                group_id,
+                signature_id,
+                sequence,
+                revealed,
+                last_signer,
+                packet,
+                signers,
+                deadline,
+            } if *deadline <= block => {
+                // The remaining signers are all the ones that revealed nonces.
+                signers.retain(|signer| revealed.contains_key(signer));
+
+                if let Some(new_state) = restart_signing_ceremony(
+                    &mut state.signature_id_to_message,
+                    &mut commands,
+                    key_share.clone(),
+                    *group_id,
+                    *signature_id,
+                    mem::take(signers),
+                    *message,
+                    packet.clone(),
+                    *last_signer,
+                ) {
+                    *signing = new_state;
+                    true
+                } else {
+                    false
+                }
+            }
+            SigningState::CollectSigningShares {
+                key_share,
+                group_id,
+                signature_id,
+                revealed,
+                selections,
+                packet,
+                signers,
+                deadline,
+            } if *deadline <= block => {
+                // Select the largest section that is at least as large as the
+                // group threshold. This is necessarily unique because the
+                // threshold is strictly larger than half the group size. If
+                // none exist, then we do not have enough signers that agree to
+                // restart the ceremony anyway.
+                let canonical_selection = mem::take(selections)
+                    .into_values()
+                    .filter(|selection| {
+                        selection.shares_from.len() >= key_share.group_threshold() as usize
+                    })
+                    .max_by_key(|selection| selection.shares_from.len())
+                    .unwrap_or_default();
+
+                if let Some(new_state) = restart_signing_ceremony(
+                    &mut state.signature_id_to_message,
+                    &mut commands,
+                    key_share.clone(),
+                    *group_id,
+                    *signature_id,
+                    canonical_selection.shares_from,
+                    *message,
+                    packet.clone(),
+                    canonical_selection.last_signer,
+                ) {
+                    *signing = new_state;
+                    true
+                } else {
+                    false
+                }
+            }
+            SigningState::WaitingForAttestation {
+                signature_id,
+                packet,
+                deadline,
+            } if *deadline <= block => {
+                // Build the fallback action for the packet. Note that we make
+                // everyone responsible for getting this onchain, as the party
+                // that was theoretically responsible for it in the first place
+                // is clearly no interested.
+                commands.push(Command::Action(
+                    packet.attestation_action(*signature_id, next_deadline),
+                ));
+
+                // We will not retry to get the attestation onchain again, so if
+                // this fails, then there is something seriously wrong. In any
+                // case, we want to clean up.
+                state.signature_id_to_message.remove(signature_id);
+                false
+            }
+            SigningState::WaitingToDecline { packet, deadline } if *deadline <= block => {
+                // Declining is indicative anyway, its not a big deal if we did
+                // not do it. Just clean up the signing ceremony.
+                false
+            }
+            _ => true,
+        });
+
+        (state, commands)
     }
 }
 
@@ -596,7 +796,6 @@ impl Packet {
     /// Builds the fallback action to directly submit a completed attestation,
     /// for when the automatic `signShareWithCallback` submission did not land
     /// in time.
-    #[expect(dead_code)]
     fn attestation_action(&self, signature_id: B256, expires_at: u64) -> Action {
         match self {
             Packet::EpochRollover {

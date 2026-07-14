@@ -290,8 +290,13 @@ enum SigningState {
         key_share: Arc<KeyShare>,
         /// The group generating the signature.
         group_id: B256,
-        /// The participant responsible for submitting the `Sign` request, or
-        /// `None` if unknown, in which case every participant is responsible.
+        /// The account that was responsible for submitting the `Sign`
+        /// request, or `None` to indicate that it was everyone.
+        ///
+        /// Note that this account **is not necessarily** a signer (for example,
+        /// in case of keygen the last keygen participant to confirm is
+        /// responsible, but they are not necessarily a signer in the epoch
+        /// that is responsible for the rollover attestation).
         responsible: Option<Address>,
         /// The packet being signed.
         packet: Packet,
@@ -368,9 +373,6 @@ enum SigningState {
     WaitingForAttestation {
         /// The signature id the completed signing round produced.
         signature_id: B256,
-        /// The participant responsible for submitting the attestation, or
-        /// `None` if unknown, in which case every participant is responsible.
-        responsible: Option<Address>,
         /// The packet being signed.
         packet: Packet,
         /// The block by which the signing attestation must arrive.
@@ -481,7 +483,16 @@ impl StateTransition<State> for Transition {
             Message::NewBlock(block) => {
                 let (state, rollover_commands) = self.handle_rollover_new_block(state, block);
                 let (state, keygen_timeout_commands) = self.handle_key_gen_timeouts(state, block);
-                (state, [rollover_commands, keygen_timeout_commands].concat())
+                let (state, signing_timeout_commands) = self.handle_signing_timeouts(state, block);
+                (
+                    state,
+                    [
+                        rollover_commands,
+                        keygen_timeout_commands,
+                        signing_timeout_commands,
+                    ]
+                    .concat(),
+                )
             }
             Message::Resume(result) => match result {
                 Resume::Noop => (state, Vec::new()),
