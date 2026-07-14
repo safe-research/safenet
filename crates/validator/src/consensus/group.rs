@@ -45,7 +45,7 @@ use crate::{
 };
 use alloy::primitives::{Address, B256, keccak256};
 use serde::{Deserialize, Serialize};
-use std::{collections::BTreeSet, num::NonZeroU64};
+use std::{borrow::Borrow, collections::BTreeSet, num::NonZeroU64};
 
 /// A key generation group.
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -85,8 +85,28 @@ impl Group {
 
     /// Returns a new set of excluded participants including the ones that were
     /// already excluded in this group along with `also_excluded`.
-    pub fn also_exclude(&self, also_excluded: impl Iterator<Item = Address>) -> BTreeSet<Address> {
-        self.excluded.iter().copied().chain(also_excluded).collect()
+    pub fn also_exclude<A>(&self, also_excluded: impl IntoIterator<Item = A>) -> BTreeSet<Address>
+    where
+        A: Borrow<Address>,
+    {
+        let to_exclude = also_excluded.into_iter().map(|a| *a.borrow());
+        self.excluded.iter().copied().chain(to_exclude).collect()
+    }
+
+    /// Returns a new set of excluded participants containing all participants
+    /// that are not participating and in the included list.
+    pub fn exclude_all_others<A>(
+        &self,
+        include_only: impl IntoIterator<Item = A>,
+    ) -> BTreeSet<Address>
+    where
+        A: Borrow<Address>,
+    {
+        let mut to_exclude = self.participants.clone();
+        for include in include_only {
+            to_exclude.remove(include.borrow());
+        }
+        self.also_exclude(to_exclude)
     }
 }
 

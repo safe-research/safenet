@@ -471,7 +471,11 @@ impl StateTransition<State> for Transition {
                 // The remaining events are wired in as their handlers land.
                 _ => (state, Vec::new()),
             },
-            Message::NewBlock(block) => self.handle_rollover_new_block(state, block),
+            Message::NewBlock(block) => {
+                let (state, rollover_commands) = self.handle_rollover_new_block(state, block);
+                let (state, keygen_timeout_commands) = self.handle_key_gen_timeouts(state, block);
+                (state, [rollover_commands, keygen_timeout_commands].concat())
+            }
             Message::Resume(result) => match result {
                 Resume::Noop => (state, Vec::new()),
                 Resume::Setup { group_id, secrets } => {

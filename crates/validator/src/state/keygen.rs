@@ -884,6 +884,89 @@ impl Transition {
         }
     }
 
+    /// Retires participants whose round of the current key generation has
+    /// stalled past its deadline, restarting excluding them.
+    ///
+    /// Every "collecting" round is checked against its own deadline:
+    /// commitments/shares against participants who haven't yet submitted one,
+    /// confirmations first (once the response deadline passes) against
+    /// participants with an unanswered complaint, or (once the confirm
+    /// deadline passes) against everyone who hasn't confirmed. Genesis's key
+    /// generation has no deadline and is therefore never retried this way.
+    pub(super) fn handle_key_gen_timeouts(
+        &self,
+        state: State,
+        block: u64,
+    ) -> (State, Commands<State, Self>) {
+        let Some((next_epoch, excluded)) = (match &state.rollover {
+            RolloverState::CollectingCommitments {
+                next_epoch,
+                group,
+                commitments,
+                deadline: Some(deadline),
+                ..
+            } if block >= *deadline => {
+                // There are participants did did not commit, restart keygen
+                // without them.
+                let excluded = group.exclude_all_others(commitments.keys());
+                Some((*next_epoch, excluded))
+            }
+            RolloverState::CollectingShares {
+                next_epoch,
+                group,
+                public_keys,
+                deadline: Some(deadline),
+                ..
+            } if block >= *deadline => {
+                // There are participants that did not submit secret shares
+                // onchain. Note that we use the `public_keys` map to determine
+                // which participants are missing and not `shares`: this is
+                // because `shares` contains verified shares, which may be
+                // added later through the complaint flow.
+                let excluded = group.exclude_all_others(public_keys.keys());
+                Some((*next_epoch, excluded))
+            }
+            RolloverState::CollectingConfirmations {
+                next_epoch,
+                group,
+                complaints,
+                confirmations,
+                deadlines: Some(deadlines),
+                ..
+            } => {
+                let unresponded = complaints
+                    .iter()
+                    .filter(|(_, complaint)| complaint.unresponded > 0)
+                    .map(|(address, _)| *address)
+                    .collect::<BTreeSet<_>>();
+                if block >= deadlines.response && !unresponded.is_empty() {
+                    // There are unresponded complaints past the response deadline,
+                    // exclude all participants that failed to respond.
+                    Some((*next_epoch, group.also_exclude(unresponded)))
+                } else if block >= deadlines.confirm {
+                    // There are missing confirmations past the confirmation
+                    // deadline, exclude participants that did not confirm.
+                    let excluded = group.exclude_all_others(confirmations);
+                    Some((*next_epoch, excluded))
+                } else {
+                    None
+                }
+            }
+            _ => None,
+        }) else {
+            // No timeout occurred, continue on our merry way...
+            return (state, Vec::new());
+        };
+
+        tracing::warn!(
+            ?next_epoch,
+            ?excluded,
+            "key generation timed out, restarting excluding stalled participants",
+        );
+        let deadline = Some(block.saturating_add(self.config.key_gen_timeout.get()));
+        self.restart_key_gen_excluding(state, next_epoch, excluded, deadline)
+    }
+
     /// Starts a key generation ceremony for `next_epoch` with `participants`,
     /// entering [`RolloverState::WaitingForSetup`] if this validator is part of
     /// the group, or heading straight to
