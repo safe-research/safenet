@@ -131,6 +131,20 @@ where
         })
     }
 
+    /// Queues `action` for submission onchain, encoding it and pushing it
+    /// straight to the transaction queue.
+    ///
+    /// This is meant for queuing up initial startup actions that live outside
+    /// the state machine's semantics.
+    pub async fn queue_action(
+        &mut self,
+        action: <S::Transition as StateTransition<S::State>>::Action,
+    ) -> Result<(), Error> {
+        let transaction = self.actions.encode_action(action);
+        self.transactions.queue([transaction]).await?;
+        Ok(())
+    }
+
     /// Runs the service, processing indexer updates until a shutdown signal
     /// (such as Ctrl-C) is received or an unrecoverable error occurs.
     ///

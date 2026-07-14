@@ -118,6 +118,10 @@ pub enum Action {
         signature_id: B256,
         expires_at: u64,
     },
+    /// An action to associate this validator account with a staker address
+    /// onchain, submitted on startup when it does not match the configured
+    /// staker.
+    SetValidatorStaker { staker: Address },
 }
 
 /// Encodes [`Action`]s into the transactions the queue submits.
@@ -409,6 +413,17 @@ impl ActionEncoder<Action> for Encoder {
                     gas: 250_000,
                 },
                 Some(expires_at),
+            ),
+            Action::SetValidatorStaker { staker } => (
+                Transaction {
+                    to: self.consensus,
+                    value: U256::ZERO,
+                    data: Consensus::setValidatorStakerCall { staker }
+                        .abi_encode()
+                        .into(),
+                    gas: 100_000,
+                },
+                None,
             ),
         }
     }
