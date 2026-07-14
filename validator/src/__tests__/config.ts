@@ -3,9 +3,12 @@ import { createMetricsService } from "../utils/metrics.js";
 
 const { SAFENET_TEST_VERBOSE } = process.env;
 
+export const envFlag = (value: string | undefined) => value === "true" || value === "1";
+
+export const isVerbose = () => envFlag(SAFENET_TEST_VERBOSE);
 export const silentLogger = createLogger({ level: "silent" });
 export const testLogger = createLogger({
-	level: SAFENET_TEST_VERBOSE === "true" || SAFENET_TEST_VERBOSE === "1" ? "debug" : "silent",
+	level: isVerbose() ? "debug" : "silent",
 	pretty: true,
 });
 

@@ -1,5 +1,6 @@
 import { type ChildProcess, spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
+import { once } from "node:events";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -18,7 +19,7 @@ import {
 import { type Account, type PrivateKeyAccount, privateKeyToAccount } from "viem/accounts";
 import { anvil } from "viem/chains";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
-import { silentLogger, testLogger, testMetrics } from "../__tests__/config.js";
+import { envFlag, isVerbose, silentLogger, testLogger, testMetrics } from "../__tests__/config.js";
 import { waitForBlock, waitForBlocks } from "../__tests__/utils.js";
 import { hashNonceCommitments, type NonceTree } from "../consensus/signing/nonces.js";
 import { toPoint } from "../frost/math.js";
@@ -42,7 +43,15 @@ import { verifySignature } from "./signing/verify.js";
 
 const BLOCK_TIME_MS = 250;
 const BLOCKS_PER_EPOCH = 30n;
+const DEFAULT_TIMEOUT = 120n;
 const TEST_RUNTIME_IN_SECONDS = 60;
+
+const USE_RUST_VALIDATOR = envFlag(process.env.SAFENET_TEST_RUST_VALIDATOR);
+// The integration runner builds and exports this path when the Rust-validator
+// flag is enabled. The default also supports running the test directly after a
+// local `cargo build --package validator --release`.
+const VALIDATOR_BINARY_PATH =
+	process.env.VALIDATOR_BINARY_PATH ?? path.join(process.cwd(), "..", "target", "release", "validator");
 
 // Anvil account 6 — sentinel used in the oracle signing flow test
 const SENTINEL_PK: Hex = "0x92db14e403b83dfe3df233f83dfa3a0d7096f21ca9b0d6d6b8d88b2b4ec1564e";
@@ -70,6 +79,36 @@ const SENTINEL_ORACLE_ABI = parseAbi([
 ]);
 
 type BroadcastReturns = Record<string, { value: Address }>;
+type TestValidatorService = Pick<ValidatorService, "start" | "stop">;
+
+const createRustValidatorService = (configFile: string): TestValidatorService => {
+	let process: ChildProcess | undefined;
+
+	return {
+		async start() {
+			if (process !== undefined) return;
+
+			const child = spawn(VALIDATOR_BINARY_PATH, ["--config-file", configFile], {
+				stdio: isVerbose() ? "inherit" : "ignore",
+			});
+			process = child;
+			child.once("close", () => {
+				if (process === child) process = undefined;
+			});
+
+			await once(child, "spawn");
+		},
+
+		async stop() {
+			const child = process;
+			process = undefined;
+			if (child === undefined || child.exitCode !== null || child.signalCode !== null) return;
+
+			child.kill();
+			await once(child, "close");
+		},
+	};
+};
 
 const loadScriptResults = (script: string): BroadcastReturns | undefined => {
 	const file = path.join(process.cwd(), "..", "contracts", "build", "broadcast", script, "31337", "run-latest.json");
@@ -116,7 +155,8 @@ describe("integration", () => {
 		.extend(walletActions);
 	let snapshotId: Hex | undefined;
 	let miner: NodeJS.Timeout | undefined;
-	let currentClients: { account: Account; service: ValidatorService }[] | undefined;
+	let currentClients: { account: Account; service: TestValidatorService }[] | undefined;
+	let validatorTempDirectory: string | undefined;
 	let sentinelProcess: ChildProcess | undefined;
 	let sentinelConfigFile: string | undefined;
 
@@ -199,18 +239,35 @@ describe("integration", () => {
 		testLogger.notice(`Use sentinelOracle at ${sentinelOracle.address}`);
 
 		// Private keys from anvil testnet
-		const accounts: [PrivateKeyAccount, bigint, bigint | undefined][] = [
-			[privateKeyToAccount("0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d"), 0n, undefined],
-			[privateKeyToAccount("0x5de4111afa1a4b94908f83103eb1f1706367c2e68ca870fc3fb9a804cdab365a"), 0n, undefined],
-			[privateKeyToAccount("0x7c852118294e51e653712a81e05800f419141751be58f605c371e15141b007a6"), 0n, undefined],
-			[privateKeyToAccount("0x47e179ec197488593b187f80a00eb0da91f1b9d0b13f8733639f19c30a34926a"), 0n, rotateOutEpoch],
-			[privateKeyToAccount("0x8b3a350cf5c34c9194ca85829a2df0ec3153be0318b5e2d3348e872092edffba"), 2n, undefined],
+		const accountConfigs: [Hex, bigint, bigint | undefined][] = [
+			["0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d", 0n, undefined],
+			["0x5de4111afa1a4b94908f83103eb1f1706367c2e68ca870fc3fb9a804cdab365a", 0n, undefined],
+			["0x7c852118294e51e653712a81e05800f419141751be58f605c371e15141b007a6", 0n, undefined],
+			["0x47e179ec197488593b187f80a00eb0da91f1b9d0b13f8733639f19c30a34926a", 0n, rotateOutEpoch],
+			["0x8b3a350cf5c34c9194ca85829a2df0ec3153be0318b5e2d3348e872092edffba", 2n, undefined],
 		];
-		const participants = accounts.map(([a, activeFrom, activeBefore]) => {
+		const accounts: [PrivateKeyAccount, Hex, bigint, bigint | undefined][] = accountConfigs.map(
+			([privateKey, activeFrom, activeBefore]): [PrivateKeyAccount, Hex, bigint, bigint | undefined] => [
+				privateKeyToAccount(privateKey),
+				privateKey,
+				activeFrom,
+				activeBefore,
+			],
+		);
+		const participants = accounts.map(([a, , activeFrom, activeBefore]) => {
 			return { address: a.address, activeFrom, activeBefore };
 		});
 
-		const clients = accounts.map(([a, activeFrom], i) => {
+		if (USE_RUST_VALIDATOR) {
+			if (!fs.existsSync(VALIDATOR_BINARY_PATH)) {
+				throw new Error(
+					`Rust validator binary not found at ${VALIDATOR_BINARY_PATH}; run cargo build --package validator --release`,
+				);
+			}
+			validatorTempDirectory = fs.mkdtempSync(path.join(os.tmpdir(), "safenet-validator-integration-"));
+		}
+
+		const clients = accounts.map(([a, privateKey, activeFrom], i) => {
 			const logger = i === 0 ? testLogger : silentLogger;
 			const config: ProtocolConfig = {
 				chainId: 31_337,
@@ -240,15 +297,61 @@ describe("integration", () => {
 				blockRetryDelays: [Math.floor(blockTime / 20), Math.floor(blockTime / 10), Math.floor(blockTime / 5)],
 				...blockRetryCounts,
 			};
-			const service = createValidatorService({
-				account: a,
-				rpcUrl: "http://127.0.0.1:8545",
-				logger,
-				config,
-				watcherConfig,
-				metrics: testMetrics,
-				skipGenesis: activeFrom > 0n,
-			});
+			let service: TestValidatorService;
+			if (validatorTempDirectory !== undefined) {
+				const configFile = path.join(validatorTempDirectory, `validator-${i}.toml`);
+				const databaseFile = path.join(validatorTempDirectory, `validator-${i}.sqlite`);
+				fs.writeFileSync(
+					configFile,
+					[
+						'rpc = "http://127.0.0.1:8545"',
+						`signer = "${privateKey}"`,
+						`database = "sqlite://${databaseFile}?mode=rwc"`,
+						"",
+						"[validator]",
+						`consensus = "${consensus.address}"`,
+						`staker = "${a.address}"`,
+						`oracles = ["${sentinelOracle.address}"]`,
+						`genesis_salt = "${zeroHash}"`,
+						`blocks_per_epoch = ${blocksPerEpoch ?? BLOCKS_PER_EPOCH}`,
+						`key_gen_timeout = ${timeout ?? DEFAULT_TIMEOUT}`,
+						`signing_timeout = ${timeout ?? DEFAULT_TIMEOUT}`,
+						`oracle_timeout = ${oracleTimeout ?? DEFAULT_TIMEOUT}`,
+						...participants.flatMap(({ address, activeFrom, activeBefore }) => [
+							"",
+							"[[validator.participants]]",
+							`address = "${address}"`,
+							`active_from = ${activeFrom}`,
+							...(activeBefore === undefined ? [] : [`active_before = ${activeBefore}`]),
+						]),
+						"",
+						"[observability]",
+						`log_filter = "${isVerbose() && i === 0 ? "info,safenet_core=debug,validator=debug,validator::service::effect=trace" : "off"}"`,
+						"",
+						"[index]",
+						`block_time = ${blockTime}`,
+						`block_propagation_delay = ${Math.floor(blockTime / 5)}`,
+						`block_retry_delays = [${[
+							Math.floor(blockTime / 20),
+							Math.floor(blockTime / 10),
+							Math.floor(blockTime / 5),
+						].join(", ")}]`,
+						"max_reorg_depth = 1",
+						"start_block = 0",
+					].join("\n"),
+				);
+				service = createRustValidatorService(configFile);
+			} else {
+				service = createValidatorService({
+					account: a,
+					rpcUrl: "http://127.0.0.1:8545",
+					logger,
+					config,
+					watcherConfig,
+					metrics: testMetrics,
+					skipGenesis: activeFrom > 0n,
+				});
+			}
 			return {
 				account: a,
 				service,
@@ -317,7 +420,13 @@ describe("integration", () => {
 			try {
 				await service.stop();
 			} catch (_e) {}
-			currentClients = undefined;
+		}
+		currentClients = undefined;
+		if (validatorTempDirectory !== undefined) {
+			try {
+				fs.rmSync(validatorTempDirectory, { recursive: true });
+			} catch (_e) {}
+			validatorTempDirectory = undefined;
 		}
 		// Cleanup miner
 		if (miner !== undefined) {

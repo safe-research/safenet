@@ -124,7 +124,7 @@ pub struct StateMachine<S, T, E> {
 enum Status {
     Initialized,
     BlockPending { pending: u64 },
-    BlockEvents { latest: u64 },
+    BlockEvents { latest: u64, safe: u64 },
     WarpEvents { range: RangeInclusive<u64> },
 }
 
@@ -184,7 +184,7 @@ where
             // block returned by `snapshots.current` without round-tripping to
             // the database. Note that the `WarpEvents` status's starting block
             // gets updated as event updates are processed.
-            Status::BlockEvents { latest } => latest.checked_sub(1),
+            Status::BlockEvents { latest, .. } => latest.checked_sub(1),
             Status::WarpEvents { range } => range.start.checked_sub(1),
         }
     }
@@ -211,7 +211,7 @@ where
             }
             Update::Block(BlockUpdate::Uncle { number })
                 if matches!(status, Status::BlockPending { pending } if number < pending)
-                    || matches!(status, Status::BlockEvents { latest } if number <= latest) =>
+                    || matches!(status, Status::BlockEvents { latest, .. } if number <= latest) =>
             {
                 let (_, state) = self.snapshots.reorg(number).await?;
                 let status = Status::BlockPending { pending: number };
@@ -226,12 +226,14 @@ where
                         .apply(Message::NewBlock(number))
                         .await
                         .finish();
-                let status = Status::BlockEvents { latest: number };
-                self.snapshots.prune(safe).await?;
+                let status = Status::BlockEvents {
+                    latest: number,
+                    safe,
+                };
                 (state, status, actions)
             }
             Update::Logs(EventUpdate { blocks, logs })
-                if matches!(status, Status::BlockEvents { latest } if is_next_in_range(latest..=latest, blocks))
+                if matches!(status, Status::BlockEvents { latest, .. } if is_next_in_range(latest..=latest, blocks))
                     || matches!(status, Status::WarpEvents { range } if is_next_in_range(range, blocks)) =>
             {
                 // We are extra defensive with the updates that we pass to the
@@ -249,9 +251,16 @@ where
                 }
                 let (state, actions) = batch.finish();
 
-                // In case we are warping, we can prune intermediate state from
-                // storage for the event pages.
-                let should_prune = matches!(status, Status::WarpEvents { .. });
+                // Prune only after committing the state for the update. In
+                // particular, a new block's safe boundary must not be applied
+                // before its logs are committed: if the service stops between
+                // those updates, restart recovery still needs the parent of
+                // the last committed block for its synthetic reorg.
+                let prune = match &status {
+                    Status::BlockEvents { safe, .. } => Some(*safe),
+                    Status::WarpEvents { .. } => Some(blocks.last),
+                    _ => None,
+                };
                 let status = match status {
                     Status::WarpEvents { range } if blocks.last < range.last => {
                         let range = block_range(next_block(blocks.last)?, range.last)?;
@@ -264,8 +273,8 @@ where
                 };
 
                 self.snapshots.commit(blocks.last, &state).await?;
-                if should_prune {
-                    self.snapshots.prune(blocks.last).await?;
+                if let Some(safe) = prune {
+                    self.snapshots.prune(safe).await?;
                 }
 
                 (state, status, actions)
@@ -440,11 +449,15 @@ mod tests {
     }
 
     fn new_block(number: u64) -> Update<u64> {
+        new_block_with_safe(number, 0)
+    }
+
+    fn new_block_with_safe(number: u64, safe: u64) -> Update<u64> {
         Update::Block(BlockUpdate::New {
             number,
             hash: Default::default(),
             logs_bloom: Default::default(),
-            safe: 0,
+            safe,
         })
     }
 
@@ -527,6 +540,48 @@ mod tests {
                     blocks: vec![1, 2],
                     events: vec![10, 20],
                 },
+            ))
+        );
+    }
+
+    #[tokio::test]
+    async fn restart_can_reorg_after_observing_an_uncommitted_block() {
+        let pool = pool().await;
+        let mut machine = new_machine(&pool).await;
+
+        // Model a one-block reorg window through block 6. Processing block 6
+        // retains block 5 as the safe rollback snapshot.
+        for block in 1..=6 {
+            machine
+                .handle_update(new_block_with_safe(block, block.saturating_sub(1)))
+                .await
+                .unwrap();
+            machine
+                .handle_update(logs(block..=block, []))
+                .await
+                .unwrap();
+        }
+
+        // Observe block 7, but stop before its logs and snapshot are committed.
+        // Its newer safe boundary must not prune the rollback state needed by
+        // the watcher when it resumes from the last committed block (6).
+        machine
+            .handle_update(new_block_with_safe(7, 6))
+            .await
+            .unwrap();
+        assert_eq!(machine.last_block().await, Some(6));
+        drop(machine);
+
+        let mut machine = new_machine(&pool).await;
+        machine.handle_update(uncle(6)).await.unwrap();
+        assert_eq!(
+            committed(&pool).await,
+            Some((
+                5,
+                TestState {
+                    blocks: (1..=5).collect(),
+                    events: vec![],
+                }
             ))
         );
     }

@@ -23,6 +23,15 @@ echo "Building the Rust sentinel..."
 cargo build --package sentinel
 export SENTINEL_BINARY_PATH="$ROOT/target/debug/sentinel"
 
+# Set SAFENET_TEST_RUST_VALIDATOR=1 to run the validator integration suite
+# against Rust validator subprocesses instead of the in-process TypeScript
+# implementation.
+if [[ "${SAFENET_TEST_RUST_VALIDATOR:-}" == "1" || "${SAFENET_TEST_RUST_VALIDATOR:-}" == "true" ]]; then
+    echo "Building the Rust validator in release mode..."
+    cargo build --package validator --release
+    export VALIDATOR_BINARY_PATH="$ROOT/target/release/validator"
+fi
+
 # --- 2. Start Anvil in the background ---
 echo "Starting Anvil..."
 # Mute anvil logs
