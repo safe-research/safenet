@@ -2,15 +2,16 @@
 # Cross-implementation genesis and first-epoch rollover integration test.
 #
 # Starts Anvil, deploys the contracts, and runs the TypeScript and Rust
-# validators as members of the genesis and epoch-1 groups. Once genesis is
-# ready, it also proposes a transaction for attestation. The test succeeds once
-# that transaction is attested and epoch 1 is attested by genesis and staged.
+# validators as members of the genesis and epoch-1 groups. It proposes one
+# transaction for attestation by each group. The test succeeds once epoch 1 is
+# attested by genesis, staged, rolled over, and attests the second transaction.
 #
 # Requirements: anvil, forge, cast, jq, cargo, node, and npm.
 set -euo pipefail
 
 ANVIL_RPC_URL="${ANVIL_RPC_URL:-http://127.0.0.1:8545}"
 CHAIN_ID=31337
+BLOCKS_PER_EPOCH=60
 TIMEOUT="${TIMEOUT:-120}"
 
 # Anvil accounts 1 and 2 are the TypeScript and Rust validators respectively.
@@ -100,7 +101,7 @@ env \
     PARTICIPANTS="$TS_PARTICIPANTS_JSON" \
     STORAGE_FILE="$TMPDIR/validator_ts.sqlite" \
     BLOCK_TIME_OVERRIDE=1000 \
-    BLOCKS_PER_EPOCH=60 \
+    BLOCKS_PER_EPOCH="$BLOCKS_PER_EPOCH" \
     START_FROM_BLOCK=0 \
     LOG_LEVEL=debug \
     METRICS_PORT=0 \
@@ -117,7 +118,7 @@ RUST_CFG="$TMPDIR/validator_rust.toml"
     echo
     echo "[validator]"
     echo "consensus = \"$CONSENSUS_ADDR\""
-    echo "blocks_per_epoch = 60"
+    echo "blocks_per_epoch = $BLOCKS_PER_EPOCH"
     for address in "${PARTICIPANTS[@]}"; do
         echo
         echo "[[validator.participants]]"
@@ -159,13 +160,18 @@ DEADLINE=$((SECONDS + TIMEOUT))
 EPOCH_ONE_WORD=0x0000000000000000000000000000000000000000000000000000000000000001
 TRUE_WORD=0000000000000000000000000000000000000000000000000000000000000001
 
-echo "==> Waiting for a genesis transaction attestation and epoch 1 staging (timeout: ${TIMEOUT}s)..."
+echo "==> Waiting for transaction attestations and the epoch 1 rollover (timeout: ${TIMEOUT}s)..."
 GENESIS_CONFIRMATIONS=0
+EPOCH_ONE_GROUP=""
 EPOCH_ONE_CONFIRMATIONS=0
 TRANSACTION_PROPOSED=0
 TRANSACTION_HASH=""
 TRANSACTION_ATTESTED=0
 STAGED=0
+ROLLED_OVER=0
+EPOCH_ONE_TRANSACTION_PROPOSED=0
+EPOCH_ONE_TRANSACTION_HASH=""
+EPOCH_ONE_TRANSACTION_ATTESTED=0
 while [ "$SECONDS" -lt "$DEADLINE" ]; do
     CONFIRMATIONS=$(cast logs --json \
         --rpc-url "$ANVIL_RPC_URL" \
@@ -221,21 +227,81 @@ while [ "$SECONDS" -lt "$DEADLINE" ]; do
         --address "$CONSENSUS_ADDR" \
         'EpochStaged(uint64,uint64,uint64,bytes32,(uint256,uint256),bytes32,((uint256,uint256),uint256))')
     STAGED=$(jq --arg epoch "$EPOCH_ONE_WORD" '[.[] | select(.topics[2] == $epoch)] | length' <<< "$STAGED_LOGS")
+    if [ "$STAGED" -gt 0 ]; then
+        # The group ID is the second non-indexed word in EpochStaged, after
+        # rolloverBlock. Pin the confirmation count to this group because an
+        # epoch-2 key generation may begin after block 60.
+        EPOCH_ONE_GROUP=$(jq -er --arg epoch "$EPOCH_ONE_WORD" \
+            '[.[] | select(.topics[2] == $epoch)][-1].data | "0x" + .[66:130]' \
+            <<< "$STAGED_LOGS")
+        EPOCH_ONE_CONFIRMATIONS=$(jq --arg gid "$EPOCH_ONE_GROUP" \
+            '[.[] | select(.topics[1] == $gid)] | length' <<< "$CONFIRMATIONS")
+    fi
 
-    echo "    genesis confirmations: $GENESIS_CONFIRMATIONS; transaction: $([ "$TRANSACTION_PROPOSED" -gt 0 ] && echo proposed || echo pending)/$([ "$TRANSACTION_ATTESTED" -gt 0 ] && echo attested || echo pending); epoch 1 confirmations: $EPOCH_ONE_CONFIRMATIONS; staged: $([ "$STAGED" -gt 0 ] && echo yes || echo no)"
-    if [ "$TRANSACTION_ATTESTED" -gt 0 ] && [ "$STAGED" -gt 0 ]; then
-        EXIT_MESSAGE="SUCCESS: the genesis transaction was attested and epoch 1 was generated, attested, and staged."
+    if [ "$EPOCH_ONE_TRANSACTION_PROPOSED" -eq 0 ] && [ "$TRANSACTION_ATTESTED" -gt 0 ] && [ "$STAGED" -gt 0 ]; then
+        CURRENT_BLOCK=$(cast block-number --rpc-url "$ANVIL_RPC_URL")
+        if [ "$CURRENT_BLOCK" -ge "$BLOCKS_PER_EPOCH" ]; then
+            echo "==> Triggering epoch 1 rollover and proposing another transaction for attestation..."
+            # Consensus processes a due rollover lazily at the start of state-
+            # changing calls. This proposal first rolls over to epoch 1, then
+            # creates a signing request for the now-active epoch-1 group.
+            env \
+                CONSENSUS_ADDRESS="$CONSENSUS_ADDR" \
+                TX_CHAIN_ID="$CHAIN_ID" \
+                TX_SAFE="$SENDER" \
+                TX_TO="$SENDER" \
+                TX_NONCE=1 \
+                npm run --prefix "$REPO_ROOT" --workspace contracts cmd:propose -- \
+                --rpc-url "$ANVIL_RPC_URL" \
+                --unlocked \
+                --sender "$SENDER" \
+                --broadcast 2>&1 | tee "$TMPDIR/propose_epoch_one.log"
+
+            PROPOSALS=$(cast logs --json \
+                --rpc-url "$ANVIL_RPC_URL" \
+                --from-block 0 \
+                --to-block latest \
+                --address "$CONSENSUS_ADDR" \
+                'TransactionProposed(bytes32,uint256,address,uint64,(uint256,address,address,uint256,bytes,uint8,uint256,uint256,uint256,address,address,uint256))')
+            EPOCH_ONE_TRANSACTION_HASH=$(jq -er --arg epoch "$EPOCH_ONE_WORD" \
+                '[.[] | select(.data | startswith($epoch))][-1].topics[1]' <<< "$PROPOSALS")
+            EPOCH_ONE_TRANSACTION_PROPOSED=1
+        fi
+    fi
+
+    ROLLOVERS=$(cast logs --json \
+        --rpc-url "$ANVIL_RPC_URL" \
+        --from-block 0 \
+        --to-block latest \
+        --address "$CONSENSUS_ADDR" \
+        'EpochRolledOver(uint64)')
+    ROLLED_OVER=$(jq --arg epoch "$EPOCH_ONE_WORD" '[.[] | select(.topics[1] == $epoch)] | length' <<< "$ROLLOVERS")
+
+    if [ "$EPOCH_ONE_TRANSACTION_PROPOSED" -gt 0 ]; then
+        ATTESTATIONS=$(cast logs --json \
+            --rpc-url "$ANVIL_RPC_URL" \
+            --from-block 0 \
+            --to-block latest \
+            --address "$CONSENSUS_ADDR" \
+            'TransactionAttested(bytes32,uint256,address,uint64,bytes32,((uint256,uint256),uint256))')
+        EPOCH_ONE_TRANSACTION_ATTESTED=$(jq --arg hash "$EPOCH_ONE_TRANSACTION_HASH" --arg epoch "$EPOCH_ONE_WORD" \
+            '[.[] | select((.topics[1] == $hash) and (.data | startswith($epoch)))] | length' <<< "$ATTESTATIONS")
+    fi
+
+    echo "    genesis confirmations: $GENESIS_CONFIRMATIONS; genesis transaction: $([ "$TRANSACTION_PROPOSED" -gt 0 ] && echo proposed || echo pending)/$([ "$TRANSACTION_ATTESTED" -gt 0 ] && echo attested || echo pending); epoch 1 confirmations: $EPOCH_ONE_CONFIRMATIONS; staged: $([ "$STAGED" -gt 0 ] && echo yes || echo no); rolled over: $([ "$ROLLED_OVER" -gt 0 ] && echo yes || echo no); epoch 1 transaction: $([ "$EPOCH_ONE_TRANSACTION_PROPOSED" -gt 0 ] && echo proposed || echo pending)/$([ "$EPOCH_ONE_TRANSACTION_ATTESTED" -gt 0 ] && echo attested || echo pending)"
+    if [ "$TRANSACTION_ATTESTED" -gt 0 ] && [ "$STAGED" -gt 0 ] && [ "$ROLLED_OVER" -gt 0 ] && [ "$EPOCH_ONE_TRANSACTION_ATTESTED" -gt 0 ]; then
+        EXIT_MESSAGE="SUCCESS: genesis and epoch 1 each attested a transaction, and epoch 1 was generated, staged, and rolled over."
         exit 0
     fi
 
     for pid in "${PIDS[@]:1}"; do
         if ! kill -0 "$pid" 2>/dev/null; then
-            EXIT_MESSAGE="FAILURE: A validator exited before the transaction was attested and epoch 1 was staged." >&2
+            EXIT_MESSAGE="FAILURE: A validator exited before both transactions were attested and epoch 1 rolled over." >&2
             exit 1
         fi
     done
     sleep 2
 done
 
-EXIT_MESSAGE="TIMEOUT: genesis confirmations: $GENESIS_CONFIRMATIONS; transaction proposed: $TRANSACTION_PROPOSED; transaction attested: $TRANSACTION_ATTESTED; epoch 1 confirmations: $EPOCH_ONE_CONFIRMATIONS; staged: $STAGED." >&2
+EXIT_MESSAGE="TIMEOUT: genesis confirmations: $GENESIS_CONFIRMATIONS; genesis transaction proposed: $TRANSACTION_PROPOSED; genesis transaction attested: $TRANSACTION_ATTESTED; epoch 1 confirmations: $EPOCH_ONE_CONFIRMATIONS; staged: $STAGED; rolled over: $ROLLED_OVER; epoch 1 transaction proposed: $EPOCH_ONE_TRANSACTION_PROPOSED; epoch 1 transaction attested: $EPOCH_ONE_TRANSACTION_ATTESTED." >&2
 exit 1
