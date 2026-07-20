@@ -29,9 +29,10 @@ library AttestationTrailer {
     uint256 private constant _PAYLOAD_LENGTH = 192;
 
     /**
-     * @dev Total trailer overhead: 192-byte payload + 32-byte magic.
+     * @dev Total trailer overhead: the payload followed by the 32-byte magic word. Derived from
+     *      `_PAYLOAD_LENGTH` so the two constants cannot drift if the payload layout changes.
      */
-    uint256 private constant _TRAILER_LENGTH = 224;
+    uint256 private constant _TRAILER_LENGTH = _PAYLOAD_LENGTH + 32;
 
     // ============================================================
     // ERRORS
