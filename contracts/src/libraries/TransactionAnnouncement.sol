@@ -121,7 +121,7 @@ library TransactionAnnouncement {
     }
 
     /**
-     * @notice Cancels a pending announcement immediately.
+     * @notice Cancels an existing announcement immediately, whether it is pending, active, or expired.
      * @dev Reverts `AnnouncementNotFound` if none exists for the pair.
      * @param self The storage struct.
      * @param safe The Safe whose announcement is being cancelled.
