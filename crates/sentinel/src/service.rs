@@ -426,6 +426,7 @@ impl SentinelEncoder {
                     requestId: id,
                     approve,
                     salt,
+                    reason: String::new(),
                 }
                 .abi_encode()
                 .into(),
@@ -643,6 +644,7 @@ mod tests {
                 sentinel,
                 approved,
                 bondAmount: bond,
+                reason: String::new(),
             },
         ))
     }

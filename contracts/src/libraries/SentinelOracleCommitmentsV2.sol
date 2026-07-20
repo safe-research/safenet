@@ -41,13 +41,15 @@ library SentinelOracleCommitment {
         self.claimed = true;
     }
 
-    function computeHash(address sentinel, bytes32 requestId, bool approve, bytes32 salt)
+    function computeHash(address sentinel, bytes32 requestId, bool approve, bytes32 salt, string calldata reason)
         internal
         pure
         returns (bytes32)
     {
+        // `reason` is appended last since it's the only variable-length field in the packed
+        // encoding, keeping the preimage unambiguous.
         // forge-lint: disable-next-line(asm-keccak256)
-        return keccak256(abi.encodePacked(approve, salt, sentinel, requestId));
+        return keccak256(abi.encodePacked(approve, salt, sentinel, requestId, reason));
     }
 }
 
@@ -65,7 +67,11 @@ library SentinelOracleCommitmentMap {
     // ============================================================
 
     event Committed(bytes32 indexed requestId, address indexed sentinel, uint256 bondAmount);
-    event Revealed(bytes32 indexed requestId, address indexed sentinel, bool approved, uint256 bondAmount);
+    // `reason` is why this *sentinel* voted the way it did — unrelated to
+    // `SentinelOracleRequest.ResolveReason`, which is why a *request* resolved.
+    event Revealed(
+        bytes32 indexed requestId, address indexed sentinel, bool approved, uint256 bondAmount, string reason
+    );
 
     // ============================================================
     // ERRORS
@@ -92,15 +98,23 @@ library SentinelOracleCommitmentMap {
         emit Committed(requestId, sentinel, bondAmount);
     }
 
-    function reveal(T storage self, bytes32 requestId, address sentinel, bool approve, bytes32 salt) internal {
+    function reveal(
+        T storage self,
+        bytes32 requestId,
+        address sentinel,
+        bool approve,
+        bytes32 salt,
+        string calldata reason
+    ) internal {
         SentinelOracleCommitment.Commitment storage c = self.commitments[requestId][sentinel];
         require(c.vote != SentinelOracleCommitment.Vote.NONE, NotCommitted());
         require(c.vote == SentinelOracleCommitment.Vote.PENDING, AlreadyRevealed());
         require(
-            SentinelOracleCommitment.computeHash(sentinel, requestId, approve, salt) == c.commitHash, InvalidReveal()
+            SentinelOracleCommitment.computeHash(sentinel, requestId, approve, salt, reason) == c.commitHash,
+            InvalidReveal()
         );
         c.vote = approve ? SentinelOracleCommitment.Vote.APPROVED : SentinelOracleCommitment.Vote.DENIED;
-        emit Revealed(requestId, sentinel, approve, c.bondAmount);
+        emit Revealed(requestId, sentinel, approve, c.bondAmount, reason);
     }
 
     function get(T storage self, bytes32 requestId, address sentinel)

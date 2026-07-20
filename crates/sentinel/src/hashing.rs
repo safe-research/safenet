@@ -15,16 +15,21 @@ const REVEAL_SALT_DOMAIN: &[u8] = b"safenet-sentinel-reveal-salt";
 
 /// Computes the blind commit-hash preimage for the sentinel game's commit-reveal vote, mirroring
 /// `SentinelOracleCommitment.computeHash` (`contracts/src/libraries/SentinelOracleCommitmentsV2.sol`):
-/// `keccak256(abi.encodePacked(approve, salt, sentinel, requestId))`. Binding `sentinel` and
-/// `requestId` into the preimage (not just `approve`/`salt`) is load-bearing, not
-/// defense-in-depth — see the epic's Architecture Decision for why.
+/// `keccak256(abi.encodePacked(approve, salt, sentinel, requestId, reason))`. Binding `sentinel`
+/// and `requestId` into the preimage (not just `approve`/`salt`) is load-bearing, not
+/// defense-in-depth — see the epic's Architecture Decision for why. `reason` is hardcoded to
+/// empty here (Phase A); `abi.encodePacked` of an empty string contributes zero bytes, so this
+/// stays bit-identical to the pre-`reason` hash. Phase B threads a real `reason` through this
+/// function.
 #[must_use]
 pub fn commit_hash(sentinel: Address, request_id: B256, approve: bool, salt: B256) -> B256 {
-    let mut preimage = [0u8; 85];
-    preimage[0] = u8::from(approve);
-    preimage[1..33].copy_from_slice(salt.as_slice());
-    preimage[33..53].copy_from_slice(sentinel.as_slice());
-    preimage[53..85].copy_from_slice(request_id.as_slice());
+    const REASON: &[u8] = b"";
+    let mut preimage = Vec::with_capacity(85 + REASON.len());
+    preimage.push(u8::from(approve));
+    preimage.extend_from_slice(salt.as_slice());
+    preimage.extend_from_slice(sentinel.as_slice());
+    preimage.extend_from_slice(request_id.as_slice());
+    preimage.extend_from_slice(REASON);
     keccak256(preimage)
 }
 

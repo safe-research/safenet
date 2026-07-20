@@ -136,18 +136,18 @@ contract SentinelOracleV2 is IOracle {
         FEE_TOKEN.safeTransferFrom(msg.sender, address(this), bondAmount);
     }
 
-    function reveal(bytes32 requestId, bool approve, bytes32 salt) external {
+    function reveal(bytes32 requestId, bool approve, bytes32 salt, string calldata reason) external {
         SentinelOracleRequest.Request storage req = $requests.get(requestId);
-        $commitments.reveal(requestId, msg.sender, approve, salt);
+        $commitments.reveal(requestId, msg.sender, approve, salt, reason);
         req.applyReveal(approve);
     }
 
-    function hashCommitment(address sentinel, bytes32 requestId, bool approve, bytes32 salt)
+    function hashCommitment(address sentinel, bytes32 requestId, bool approve, bytes32 salt, string calldata reason)
         external
         pure
         returns (bytes32)
     {
-        return SentinelOracleCommitment.computeHash(sentinel, requestId, approve, salt);
+        return SentinelOracleCommitment.computeHash(sentinel, requestId, approve, salt, reason);
     }
 
     // ============================================================
