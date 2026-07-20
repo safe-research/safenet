@@ -9,9 +9,9 @@ import {TransactionAnnouncement} from "@/libraries/TransactionAnnouncement.sol";
  * @title SafenetGuard Interface
  * @notice External surface of the Safenet transaction guard: epoch management, the nonce-free escape
  *         hatch, and the associated views, events, and errors.
- * @dev The Safe guard hooks (`checkTransaction`, `checkAfterExecution`) are inherited from
- *      `ITransactionGuard`. Announcement events are emitted by the guard; epoch events are emitted by
- *      `EpochRollover` and mirrored here so this interface is a complete integration ABI. Library errors
+ * @dev The Safe guard hooks (`checkTransaction`, `checkAfterExecution`) are not declared here; the
+ *      implementing contract inherits them from `ITransactionGuard`. Announcement events are emitted by
+ *      the guard; epoch events are emitted by `EpochRollover` and mirrored here. Library errors
  *      (`AnnouncementAlreadyExists`, `AnnouncementNotFound`, `WindowOverflow`,
  *      `MalformedAttestationTrailer`) are not mirrored — import the relevant library to decode them.
  */
@@ -140,7 +140,7 @@ interface ISafenetGuard {
 
     /**
      * @notice Announces a transaction for nonce-free, time-windowed execution without an attestation.
-     * @dev Auto-allowed self-call. Executable only within `[now + getAllowTxDelay, + getAllowTxWindow]`, at any
+     * @dev Auto-allowed self-call. Executable only within `[now + delay, now + delay + window]`, at any
      *      nonce; single-use. Reverts `AnnouncementAlreadyExists` if a pending/active announcement exists
      *      for the derived hash (an expired one is renewed), or `WindowOverflow` on absurd durations.
      * @param announcement The transaction parameters to announce.
