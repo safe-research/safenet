@@ -110,14 +110,12 @@ impl SentinelTransition {
         if state.0.contains_key(&request_id) {
             return (state, Vec::new());
         }
-        // TODO(sentinel-vote-reason Phase B2): carry `decision.reason` through
-        // `WaitingForRequest`, `CollectingCommitments`, `commit_hash`, and the `Reveal`
-        // action instead of discarding it here.
-        let approve = self.detector.check(&event.transaction).approve;
+        let decision = self.detector.check(&event.transaction);
         state.0.insert(
             request_id,
             RequestState::WaitingForRequest {
-                approve,
+                approve: decision.approve,
+                reason: decision.reason.into_owned(),
                 deadline: block.saturating_add(self.voting_window),
             },
         );
@@ -131,19 +129,31 @@ impl SentinelTransition {
         mut state: State,
         event: SentinelOracle::NewRequest,
     ) -> (State, Vec<SentinelAction>) {
-        let Some(RequestState::WaitingForRequest { approve, .. }) = state.0.get(&event.requestId)
+        let Some(RequestState::WaitingForRequest {
+            approve, reason, ..
+        }) = state.0.get_mut(&event.requestId)
         else {
             return (state, Vec::new());
         };
         let approve = *approve;
+        // The entry for this request id is overwritten by `CollectingCommitments` below,
+        // so taking `reason` rather than cloning it is safe.
+        let reason = std::mem::take(reason);
         let commit_deadline = event.commitDeadline.saturating_to::<u64>();
         let reveal_deadline = event.revealDeadline.saturating_to::<u64>();
         let salt = self.signer.reveal_salt(event.requestId);
-        let hash = commit_hash(self.signer.address(), event.requestId, approve, salt);
+        let hash = commit_hash(
+            self.signer.address(),
+            event.requestId,
+            approve,
+            salt,
+            &reason,
+        );
         state.0.insert(
             event.requestId,
             RequestState::CollectingCommitments {
                 approve,
+                reason,
                 commit_deadline,
                 reveal_deadline,
                 committed_count: 0,
@@ -241,29 +251,37 @@ impl SentinelTransition {
     fn handle_block_advance(&self, mut state: State, block: u64) -> (State, Vec<SentinelAction>) {
         let mut actions = Vec::new();
 
-        state.0.retain(|id, entry| match *entry {
-            RequestState::WaitingForRequest { deadline, .. } => block <= deadline,
+        state.0.retain(|id, entry| match entry {
+            RequestState::WaitingForRequest { deadline, .. } => block <= *deadline,
             RequestState::CollectingCommitments {
                 approve,
+                reason,
                 commit_deadline,
                 reveal_deadline,
                 committed_count,
                 self_committed,
             } => {
-                if block <= commit_deadline {
+                if block <= *commit_deadline {
                     return true;
                 }
                 // Our own commit never landed onchain, so revealing would
                 // just revert; drop the request instead.
-                if !self_committed {
+                if !*self_committed {
                     return false;
                 }
+                let approve = *approve;
+                let reveal_deadline = *reveal_deadline;
+                let committed_count = *committed_count;
+                // `CollectingVotes` has no `reason` field of its own, so this is the
+                // last use of it — take it rather than cloning.
+                let reason = std::mem::take(reason);
                 let salt = self.signer.reveal_salt(*id);
                 actions.push(SentinelAction {
                     kind: SentinelActionKind::Reveal {
                         id: *id,
                         approve,
                         salt,
+                        reason,
                     },
                     expires_at: Some(reveal_deadline),
                 });
@@ -281,7 +299,7 @@ impl SentinelTransition {
             RequestState::CollectingVotes {
                 reveal_deadline, ..
             } => {
-                if block <= reveal_deadline {
+                if block <= *reveal_deadline {
                     return true;
                 }
                 let (update, finalization) = self.finalize(entry, *id);
@@ -422,14 +440,19 @@ impl SentinelEncoder {
                 .into(),
                 gas: 250_000,
             },
-            SentinelActionKind::Reveal { id, approve, salt } => Transaction {
+            SentinelActionKind::Reveal {
+                id,
+                approve,
+                salt,
+                reason,
+            } => Transaction {
                 to: self.oracle,
                 value: U256::ZERO,
                 data: SentinelOracle::revealCall {
                     requestId: id,
                     approve,
                     salt,
-                    reason: String::new(),
+                    reason,
                 }
                 .abi_encode()
                 .into(),
@@ -557,6 +580,9 @@ mod tests {
     const OTHER: Address = address!("8888888888888888888888888888888888888888");
     const CHAIN_ID: u64 = 1;
     const VOTING_WINDOW: u64 = 10;
+    /// `Detector::check`'s reason for an empty blocklist, as used by `transition()`/`svc`
+    /// throughout this module's tests.
+    const REASON: &str = "destination is not blocklisted";
 
     fn self_signer() -> Signer {
         Signer::new(SigningKey::from_bytes(&keccak256("sentinel-flow-test-key").0.into()).unwrap())
@@ -695,6 +721,7 @@ mod tests {
             state.0[&id],
             RequestState::WaitingForRequest {
                 approve: true,
+                reason: REASON.to_string(),
                 deadline: 1 + VOTING_WINDOW,
             },
         );
@@ -710,6 +737,7 @@ mod tests {
             state.0[&id],
             RequestState::WaitingForRequest {
                 approve: true,
+                reason: REASON.to_string(),
                 deadline: 1 + VOTING_WINDOW,
             },
         );
@@ -724,11 +752,12 @@ mod tests {
             )),
         );
         let salt = self_signer().reveal_salt(id);
-        let hash = commit_hash(self_address(), id, true, salt);
+        let hash = commit_hash(self_address(), id, true, salt, REASON);
         assert_eq!(
             state.0[&id],
             RequestState::CollectingCommitments {
                 approve: true,
+                reason: REASON.to_string(),
                 commit_deadline: 20,
                 reveal_deadline: 40,
                 committed_count: 0,
@@ -769,6 +798,7 @@ mod tests {
             state.0[&id],
             RequestState::CollectingCommitments {
                 approve: true,
+                reason: REASON.to_string(),
                 commit_deadline: 20,
                 reveal_deadline: 40,
                 committed_count: 2,
@@ -784,7 +814,8 @@ mod tests {
                 kind: SentinelActionKind::Reveal {
                     id,
                     approve: true,
-                    salt
+                    salt,
+                    reason: REASON.to_string(),
                 },
                 expires_at: Some(40),
             })],
@@ -976,7 +1007,8 @@ mod tests {
                 kind: SentinelActionKind::Reveal {
                     id,
                     approve: true,
-                    salt
+                    salt,
+                    reason: REASON.to_string(),
                 },
                 expires_at: Some(40),
             })],

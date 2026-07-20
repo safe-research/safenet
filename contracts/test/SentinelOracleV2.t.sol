@@ -363,6 +363,20 @@ contract SentinelOracleV2Test is Test {
         _reveal(sentinel1, true, SALT_1, "reason B");
     }
 
+    /// @notice Parity vector shared with `crates/sentinel/src/hashing.rs`'s `commit_hash_parity`
+    /// test — keep both in sync if either implementation or expected hash changes.
+    /// Inputs: sentinel=0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045, requestId=1, approve=true,
+    /// salt=keccak256("test-salt"), reason="destination is not blocklisted".
+    function test_HashCommitment_ParityWithRustImplementation() public view {
+        address sentinel = 0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045;
+        bytes32 requestId = bytes32(uint256(1));
+        bytes32 salt = 0x8bcfa1e0aed22543ed44d41a95e315383294a18f9fb6e67ee082afcd585a6ff1;
+
+        bytes32 hash = oracle.hashCommitment(sentinel, requestId, true, salt, "destination is not blocklisted");
+
+        assertEq(hash, bytes32(0x109cc7dede05c71271a7347e049111921bc1f9f5b8f43d724c24ffbf4b1bdb6c));
+    }
+
     function test_Reveal_WithoutCommit_Reverts() public {
         _postRequest();
         _advancePastCommitDeadline();
