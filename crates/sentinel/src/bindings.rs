@@ -31,16 +31,20 @@ pub mod oracle {
                 bytes32 indexed requestId,
                 address indexed sentinel,
                 bool approved,
-                uint256 bondAmount
+                uint256 bondAmount,
+                string reason
             );
             event DisputeResolved(bytes32 indexed requestId, RequestState outcome, uint256 slashed);
 
             function commit(bytes32 requestId, bytes32 commitHash) external;
-            function reveal(bytes32 requestId, bool approve, bytes32 salt) external;
-            function hashCommitment(address sentinel, bytes32 requestId, bool approve, bytes32 salt)
-                external
-                pure
-                returns (bytes32);
+            function reveal(bytes32 requestId, bool approve, bytes32 salt, string calldata reason) external;
+            function hashCommitment(
+                address sentinel,
+                bytes32 requestId,
+                bool approve,
+                bytes32 salt,
+                string calldata reason
+            ) external pure returns (bytes32);
             function finalize(bytes32 requestId) external;
             function claim(bytes32 requestId) external;
         }

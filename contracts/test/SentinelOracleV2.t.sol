@@ -100,14 +100,22 @@ contract SentinelOracleV2Test is Test {
     }
 
     function _commit(address sentinel, bool approve, bytes32 salt) internal {
-        bytes32 hash = oracle.hashCommitment(sentinel, REQUEST_ID, approve, salt);
+        _commit(sentinel, approve, salt, "");
+    }
+
+    function _commit(address sentinel, bool approve, bytes32 salt, string memory reason) internal {
+        bytes32 hash = oracle.hashCommitment(sentinel, REQUEST_ID, approve, salt, reason);
         vm.prank(sentinel);
         oracle.commit(REQUEST_ID, hash);
     }
 
     function _reveal(address sentinel, bool approve, bytes32 salt) internal {
+        _reveal(sentinel, approve, salt, "");
+    }
+
+    function _reveal(address sentinel, bool approve, bytes32 salt, string memory reason) internal {
         vm.prank(sentinel);
-        oracle.reveal(REQUEST_ID, approve, salt);
+        oracle.reveal(REQUEST_ID, approve, salt, reason);
     }
 
     function _advancePastCommitDeadline() internal {
@@ -132,7 +140,7 @@ contract SentinelOracleV2Test is Test {
         _advancePastCommitDeadline();
 
         vm.expectEmit(true, true, false, true);
-        emit SentinelOracleCommitmentMap.Revealed(REQUEST_ID, sentinel1, true, BOND_TARGET);
+        emit SentinelOracleCommitmentMap.Revealed(REQUEST_ID, sentinel1, true, BOND_TARGET, "");
         _reveal(sentinel1, true, SALT_1);
         _reveal(sentinel2, true, SALT_2);
 
@@ -327,6 +335,34 @@ contract SentinelOracleV2Test is Test {
         _reveal(sentinel1, false, SALT_1);
     }
 
+    function test_Reveal_ReasonEmittedVerbatim() public {
+        _postRequest();
+        string memory reason = "destination is blocklisted";
+        _commit(sentinel1, false, SALT_1, reason);
+        _advancePastCommitDeadline();
+
+        vm.expectEmit(true, true, false, true);
+        emit SentinelOracleCommitmentMap.Revealed(REQUEST_ID, sentinel1, false, BOND_TARGET, reason);
+        _reveal(sentinel1, false, SALT_1, reason);
+    }
+
+    function test_Reveal_EmptyReason_Accepted() public {
+        _postRequest();
+        _commit(sentinel1, true, SALT_1, "");
+        _advancePastCommitDeadline();
+
+        _reveal(sentinel1, true, SALT_1, "");
+    }
+
+    function test_Reveal_WrongReason_Reverts() public {
+        _postRequest();
+        _commit(sentinel1, true, SALT_1, "reason A");
+        _advancePastCommitDeadline();
+
+        vm.expectRevert(SentinelOracleCommitmentMap.InvalidReveal.selector);
+        _reveal(sentinel1, true, SALT_1, "reason B");
+    }
+
     function test_Reveal_WithoutCommit_Reverts() public {
         _postRequest();
         _advancePastCommitDeadline();
@@ -341,7 +377,7 @@ contract SentinelOracleV2Test is Test {
 
         // Precompute the hash before arming expectRevert — hashCommitment() is itself an external
         // call, and vm.expectRevert only intercepts the very next one.
-        bytes32 hash = oracle.hashCommitment(sentinel1, REQUEST_ID, true, SALT_1);
+        bytes32 hash = oracle.hashCommitment(sentinel1, REQUEST_ID, true, SALT_1, "");
         vm.expectRevert(SentinelOracleCommitmentMap.AlreadyCommitted.selector);
         vm.prank(sentinel1);
         oracle.commit(REQUEST_ID, hash);
