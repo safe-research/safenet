@@ -110,7 +110,10 @@ impl SentinelTransition {
         if state.0.contains_key(&request_id) {
             return (state, Vec::new());
         }
-        let approve = self.detector.approve(&event.transaction);
+        // TODO(sentinel-vote-reason Phase B2): carry `decision.reason` through
+        // `WaitingForRequest`, `CollectingCommitments`, `commit_hash`, and the `Reveal`
+        // action instead of discarding it here.
+        let approve = self.detector.check(&event.transaction).approve;
         state.0.insert(
             request_id,
             RequestState::WaitingForRequest {
