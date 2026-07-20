@@ -8,7 +8,7 @@ This directory contains a collection of Safe Guard implementations for Safenet. 
 
 **File:** `SafenetGuard.sol`
 
-SafenetGuard is a refinement of the SafenetGuardA design (inline attestation, transaction guard only), re-assembled from focused, independently-auditable libraries so that future changes to any one concern touch a single isolated audit surface. It implements Safe's `BaseTransactionGuard` and gates every owner-signed transaction behind a FROST threshold-signature attestation.
+SafenetGuard is a refinement of the SafenetGuardA design (inline attestation, transaction guard only), re-assembled from focused, independently-auditable libraries so that future changes to any one concern touch a single isolated audit surface. It implements Safe's `BaseTransactionGuard` and gates every owner-signed transaction behind a FROST threshold-signature attestation, except when a matured announcement authorises execution via the nonce-free escape hatch.
 
 **Scope.** This is a *transaction* guard: it gates only owner-signed `execTransaction` calls. Safe module executions do not invoke transaction-guard hooks, so an enabled module can move assets without an attestation or announcement. Deployments must prohibit modules or treat each enabled module as an explicit bypass of this guard's policy.
 

@@ -151,7 +151,7 @@ contract SafenetGuard is ISafenetGuard, BaseTransactionGuard {
         (uint256 activeFrom, uint256 activeUntil) =
             $announcements.announce(msg.sender, announcementHash, _ALLOW_TX_DELAY, _ALLOW_TX_WINDOW);
 
-        // Hash-only event on Ethereum mainnet (dear log data), full parameters elsewhere.
+        // Hash-only event on Ethereum mainnet (costly log data), full parameters elsewhere.
         if (block.chainid == _ETHEREUM_CHAIN_ID) {
             emit TransactionAnnounced(msg.sender, announcementHash, activeFrom, activeUntil);
         } else {
