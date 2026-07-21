@@ -3,7 +3,7 @@ use crate::bindings::{
     safe::{Operation as SafeOperation, SafeTx},
 };
 use alloy::{
-    primitives::{Address, B256, U256, keccak256},
+    primitives::{Address, B256, Keccak256, U256},
     sol_types::{Eip712Domain, SolStruct},
 };
 use safenet_core::tx::Signer;
@@ -17,20 +17,24 @@ const REVEAL_SALT_DOMAIN: &[u8] = b"safenet-sentinel-reveal-salt";
 /// `SentinelOracleCommitment.computeHash` (`contracts/src/libraries/SentinelOracleCommitmentsV2.sol`):
 /// `keccak256(abi.encodePacked(approve, salt, sentinel, requestId, reason))`. Binding `sentinel`
 /// and `requestId` into the preimage (not just `approve`/`salt`) is load-bearing, not
-/// defense-in-depth — see the epic's Architecture Decision for why. `reason` is hardcoded to
-/// empty here (Phase A); `abi.encodePacked` of an empty string contributes zero bytes, so this
-/// stays bit-identical to the pre-`reason` hash. Phase B threads a real `reason` through this
-/// function.
+/// defense-in-depth — without it, a commitment computed for one sentinel/request could be
+/// replayed to satisfy another. `reason` must be the exact same value later supplied to
+/// `reveal`, or the onchain hash check fails with `InvalidReveal()`.
 #[must_use]
-pub fn commit_hash(sentinel: Address, request_id: B256, approve: bool, salt: B256) -> B256 {
-    const REASON: &[u8] = b"";
-    let mut preimage = Vec::with_capacity(85 + REASON.len());
-    preimage.push(u8::from(approve));
-    preimage.extend_from_slice(salt.as_slice());
-    preimage.extend_from_slice(sentinel.as_slice());
-    preimage.extend_from_slice(request_id.as_slice());
-    preimage.extend_from_slice(REASON);
-    keccak256(preimage)
+pub fn commit_hash(
+    sentinel: Address,
+    request_id: B256,
+    approve: bool,
+    salt: B256,
+    reason: &str,
+) -> B256 {
+    let mut hasher = Keccak256::new();
+    hasher.update([u8::from(approve)]);
+    hasher.update(salt);
+    hasher.update(sentinel);
+    hasher.update(request_id);
+    hasher.update(reason);
+    hasher.finalize()
 }
 
 /// Extends [`Signer`] with the sentinel game's reveal-salt derivation, so callers can write
@@ -100,7 +104,7 @@ mod tests {
     use super::*;
     use crate::bindings::consensus::Operation;
     use alloy::{
-        primitives::{Bytes, address, b256},
+        primitives::{Bytes, address, b256, keccak256},
         signers::k256::ecdsa::SigningKey,
     };
 
@@ -153,9 +157,12 @@ mod tests {
 
     /// Parity vector: `SentinelOracleCommitment.computeHash` from
     /// `contracts/src/libraries/SentinelOracleCommitmentsV2.sol`, obtained by exercising that
-    /// library directly with `forge test`.
+    /// library directly with `forge test`. Mirrored on the Solidity side by
+    /// `test_HashCommitment_ParityWithRustImplementation` in
+    /// `contracts/test/SentinelOracleV2.t.sol` — keep both in sync if either implementation or
+    /// expected hash changes.
     /// Inputs: sentinel=0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045, requestId=1, approve=true,
-    /// salt=keccak256("test-salt").
+    /// salt=keccak256("test-salt"), reason="destination is not blocklisted".
     #[test]
     fn commit_hash_parity() {
         let sentinel = address!("d8dA6BF26964aF9D7eEd9e03E53415D37aA96045");
@@ -163,8 +170,14 @@ mod tests {
         let salt = b256!("8bcfa1e0aed22543ed44d41a95e315383294a18f9fb6e67ee082afcd585a6ff1");
 
         assert_eq!(
-            commit_hash(sentinel, request_id, true, salt),
-            b256!("9f44e900e6915367390f6c4cd429c13649a332a97f99330ae9d3770b0bcaab76"),
+            commit_hash(
+                sentinel,
+                request_id,
+                true,
+                salt,
+                "destination is not blocklisted"
+            ),
+            b256!("109cc7dede05c71271a7347e049111921bc1f9f5b8f43d724c24ffbf4b1bdb6c"),
         );
     }
 

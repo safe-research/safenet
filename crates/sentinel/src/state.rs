@@ -8,13 +8,21 @@ use std::collections::HashMap;
 pub enum SentinelRequestState {
     /// Our vote intent is decided, but the oracle hasn't opened the request
     /// for voting yet. `deadline` is our own guessed cutoff, since the real
-    /// `commitDeadline` isn't known until `NewRequest` arrives.
-    WaitingForRequest { approve: bool, deadline: u64 },
+    /// `commitDeadline` isn't known until `NewRequest` arrives. `reason` is
+    /// carried unchanged from `Detector::check` through to the `commit_hash`
+    /// call and the eventual `reveal` — it must never be re-derived.
+    WaitingForRequest {
+        approve: bool,
+        reason: String,
+        deadline: u64,
+    },
     /// The request exists onchain and commits are being collected.
     /// `committed_count` tallies every `Committed` event, from any
     /// sentinel; `self_committed` tracks whether ours landed among them.
+    /// `reason` is the same value carried from `WaitingForRequest`.
     CollectingCommitments {
         approve: bool,
+        reason: String,
         commit_deadline: u64,
         reveal_deadline: u64,
         committed_count: u64,
@@ -51,6 +59,7 @@ mod tests {
     fn collecting_commitments(commit_deadline: u64, reveal_deadline: u64) -> SentinelRequestState {
         SentinelRequestState::CollectingCommitments {
             approve: false,
+            reason: "destination is blocklisted".to_string(),
             commit_deadline,
             reveal_deadline,
             committed_count: 2,
@@ -79,6 +88,7 @@ mod tests {
             waiting_id,
             SentinelRequestState::WaitingForRequest {
                 approve: true,
+                reason: "destination is not blocklisted".to_string(),
                 deadline: 10,
             },
         );

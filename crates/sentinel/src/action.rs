@@ -9,8 +9,13 @@ pub enum SentinelActionKind {
     ApproveToken { bond: U256 },
     /// Lock a bond behind a blind commitment hash for the request with the given id.
     Commit { id: B256, hash: B256 },
-    /// Reveal a previously committed vote for the request with the given id.
-    Reveal { id: B256, approve: bool, salt: B256 },
+    /// Reveal a previously committed vote and reasoning for the request with the given id.
+    Reveal {
+        id: B256,
+        approve: bool,
+        salt: B256,
+        reason: String,
+    },
     /// Finalise the committed vote for the request with the given id.
     Finalize { id: B256 },
     /// Claim the bond and reward for the request with the given id.
