@@ -9,7 +9,7 @@ pub enum SentinelRequestState {
     /// Our vote intent is decided, but the oracle hasn't opened the request
     /// for voting yet. `deadline` is our own guessed cutoff, since the real
     /// `commitDeadline` isn't known until `NewRequest` arrives. `reason` is
-    /// carried unchanged from `Detector::check` through to the `commit_hash`
+    /// carried unchanged from `StaticChecker::check` through to the `commit_hash`
     /// call and the eventual `reveal` — it must never be re-derived.
     WaitingForRequest {
         approve: bool,

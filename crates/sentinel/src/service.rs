@@ -5,9 +5,11 @@ use crate::{
         consensus::Consensus,
         oracle::{ERC20, RequestState as OnchainRequestState, SentinelOracle},
     },
-    detector::Detector,
+    dynamic_checker::RemoteChecker,
+    effect,
     hashing::{RevealSalt as _, commit_hash, oracle_tx_proposal_hash},
     state::{SentinelRequestState as RequestState, State},
+    static_checker::StaticChecker,
 };
 use alloy::{
     primitives::{Address, B256, U256},
@@ -15,10 +17,9 @@ use alloy::{
 };
 use safenet_core::{
     driver::{ActionEncoder, Service},
-    state::{Command, Commands, Message, Pure, StateTransition},
+    state::{Command, Commands, Message, StateTransition},
     tx::{Signer, Transaction},
 };
-use std::convert::Infallible;
 
 /// The sentinel service: drives the request FSM (mirroring
 /// `SentinelOracleRequest.State`'s commit-reveal phases) from
@@ -31,7 +32,10 @@ pub struct SentinelService {
     signer: Signer,
     chain_id: U256,
     voting_window: u64,
-    detector: Detector,
+    static_checker: StaticChecker,
+    /// Backs the [`effect::Handler`] this service's [`Effects`](Service::Effects)
+    /// resolve [`effect::Effect::DynamicCheck`] against.
+    dynamic_checker: RemoteChecker,
 }
 
 /// Advances the request FSM in response to `SentinelOracle`/`Consensus`
@@ -49,7 +53,7 @@ pub struct SentinelTransition {
     /// The number of blocks a `WaitingForRequest` request is kept alive for
     /// before being cleaned up.
     voting_window: u64,
-    detector: Detector,
+    static_checker: StaticChecker,
 }
 
 /// Encodes [`SentinelAction`]s into the transactions that commit, reveal,
@@ -64,6 +68,7 @@ pub struct SentinelEncoder {
 }
 
 impl SentinelService {
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         oracle: Address,
         fee_token: Address,
@@ -71,7 +76,8 @@ impl SentinelService {
         signer: Signer,
         chain_id: U256,
         voting_window: u64,
-        detector: Detector,
+        static_checker: StaticChecker,
+        dynamic_checker: RemoteChecker,
     ) -> Self {
         Self {
             oracle,
@@ -80,7 +86,8 @@ impl SentinelService {
             signer,
             chain_id,
             voting_window,
-            detector,
+            static_checker,
+            dynamic_checker,
         }
     }
 }
@@ -110,7 +117,14 @@ impl SentinelTransition {
         if state.0.contains_key(&request_id) {
             return (state, Vec::new());
         }
-        let decision = self.detector.check(&event.transaction);
+        // TODO: a local `StaticChecker` denial should still decide immediately,
+        // but an approval here is only provisional — it must defer to
+        // `Command::Effect(effect::Effect::DynamicCheck { request_id, safe:
+        // event.safe, transaction: (&event.transaction).into() })`, moving
+        // into a `WaitingForDynamicCheck` state and finalizing the decision
+        // once `Message::Resume` lands below instead of trusting this call
+        // alone.
+        let decision = self.static_checker.check(&event.transaction);
         state.0.insert(
             request_id,
             RequestState::WaitingForRequest {
@@ -481,8 +495,8 @@ impl SentinelEncoder {
 impl StateTransition<State> for SentinelTransition {
     type Event = SentinelEvents;
     type Action = SentinelAction;
-    type Effect = Infallible;
-    type Resume = Infallible;
+    type Effect = effect::Effect;
+    type Resume = effect::Resume;
 
     fn apply_transition(
         &self,
@@ -511,7 +525,17 @@ impl StateTransition<State> for SentinelTransition {
                     ) => self.handle_resolved(state, event),
                 }
             }
-            Message::Resume(result) => match result {},
+            // TODO: once `handle_oracle_transaction_proposed` emits
+            // `effect::Effect::DynamicCheck` (see the `TODO` there), consume
+            // its `effect::Resume::DynamicCheckResult` here: look up the
+            // matching `WaitingForDynamicCheck` entry by `request_id`
+            // (a stale/replayed resume for an already-advanced or
+            // already-removed request is a no-op, per the replay-safety
+            // note on `Command::Effect`), and either finalize
+            // `WaitingForRequest` from the outcome's `RuleId` or, on
+            // `RemoteCheckOutcome::Failed`, drop the request unanswered
+            // rather than voting on it.
+            Message::Resume(effect::Resume::DynamicCheckResult { .. }) => (state, Vec::new()),
         };
         let commands = actions.into_iter().map(Command::Action).collect();
         (state, commands)
@@ -529,7 +553,7 @@ impl Service for SentinelService {
     type Event = SentinelEvents;
 
     type Transition = SentinelTransition;
-    type Effects = Pure;
+    type Effects = effect::Handler;
     type Actions = SentinelEncoder;
 
     fn components(self) -> (Self::Transition, Self::Effects, Self::Actions) {
@@ -540,7 +564,8 @@ impl Service for SentinelService {
             signer,
             chain_id,
             voting_window,
-            detector,
+            static_checker,
+            dynamic_checker,
         } = self;
         (
             SentinelTransition {
@@ -549,9 +574,9 @@ impl Service for SentinelService {
                 signer,
                 chain_id,
                 voting_window,
-                detector,
+                static_checker,
             },
-            Pure,
+            effect::Handler::new(dynamic_checker),
             SentinelEncoder { oracle, fee_token },
         )
     }
@@ -580,7 +605,7 @@ mod tests {
     const OTHER: Address = address!("8888888888888888888888888888888888888888");
     const CHAIN_ID: u64 = 1;
     const VOTING_WINDOW: u64 = 10;
-    /// `Detector::check`'s reason for an approved transaction, as used by
+    /// `StaticChecker::check`'s reason for an approved transaction, as used by
     /// `transition()`/`svc` throughout this module's tests.
     const REASON: &str = "";
 
@@ -600,7 +625,11 @@ mod tests {
             self_signer(),
             U256::from(CHAIN_ID),
             VOTING_WINDOW,
-            Detector::new(blocklist),
+            StaticChecker::new(blocklist),
+            // None of these flow tests drive a `Message::Resume`, so the
+            // remote checker is never actually called; unconfigured stands
+            // in for it.
+            RemoteChecker::new(None),
         )
     }
 
@@ -1032,5 +1061,25 @@ mod tests {
                 }),
             ],
         );
+    }
+
+    /// Nothing emits `effect::Effect::DynamicCheck` yet (see the `TODO`s in
+    /// `handle_oracle_transaction_proposed`/`apply_transition`), but a
+    /// `Message::Resume` carrying its result must already be a well-defined,
+    /// side-effect-free no-op rather than reaching an unmatched case.
+    #[test]
+    fn resume_from_dynamic_check_is_a_no_op() {
+        let svc = transition();
+
+        let (state, commands) = svc.apply_transition(
+            State::default(),
+            Message::Resume(effect::Resume::DynamicCheckResult {
+                request_id: B256::repeat_byte(0x09),
+                outcome: crate::dynamic_checker::RemoteCheckOutcome::Approved,
+            }),
+        );
+
+        assert_eq!(state, State::default());
+        assert!(commands.is_empty());
     }
 }
