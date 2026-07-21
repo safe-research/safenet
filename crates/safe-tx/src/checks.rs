@@ -1,4 +1,5 @@
 use crate::multi_send::{decode_multi_send, known_deployment};
+use crate::rule::RuleId;
 use crate::types::{Operation, SafeTransaction};
 use alloy::{
     primitives::{Address, address},
@@ -46,9 +47,40 @@ const SUPPORTED_MODULES: &[Address] = &[
 
 const SUPPORTED_MODULE_GUARDS: &[Address] = &[Address::ZERO];
 
-/// Returns `true` if a proposed Safe transaction is allowed by Safenet policy.
-pub fn check_transaction(tx: &SafeTransaction) -> bool {
-    check_calls(tx) || check_delegate_calls(tx) || check_multi_send(tx)
+/// Checks a proposed Safe transaction against the Article IV Part A base
+/// guarantees (settings-change blocking, delegatecall integrity). On denial,
+/// returns the specific rule violated.
+pub fn check_transaction(tx: &SafeTransaction) -> Result<(), RuleId> {
+    check_settings_change(tx)
+        .or_else(|| check_delegatecall_integrity(tx))
+        .unwrap_or(Err(RuleId::R4_1SettingsChange))
+}
+
+/// Article IV Part A settings-change guarantee. `None` if `tx` isn't a
+/// self-call at all — not this rule's concern.
+fn check_settings_change(tx: &SafeTransaction) -> Option<Result<(), RuleId>> {
+    if tx.operation != Operation::CALL {
+        return None;
+    }
+    Some(if check_calls(tx) {
+        Ok(())
+    } else {
+        Err(RuleId::R4_1SettingsChange)
+    })
+}
+
+/// Article IV Part A delegatecall-integrity guarantee. `None` if `tx` isn't
+/// a delegatecall at all — not this rule's concern. Allowed via either a
+/// known delegatecall target or a known MultiSend contract.
+fn check_delegatecall_integrity(tx: &SafeTransaction) -> Option<Result<(), RuleId>> {
+    if tx.operation != Operation::DELEGATECALL {
+        return None;
+    }
+    Some(if check_delegate_calls(tx) || check_multi_send(tx) {
+        Ok(())
+    } else {
+        Err(RuleId::R4_2DelegatecallIntegrity)
+    })
 }
 
 /// Calls to other contracts are freely allowed; self-calls are restricted to a
@@ -173,6 +205,14 @@ fn check_delegate_calls(tx: &SafeTransaction) -> bool {
 
 /// Delegate calls to known multi-send contracts are allowed when each packed
 /// sub-transaction passes the appropriate check.
+///
+/// TODO: a denial here always maps to `RuleId::R4_2DelegatecallIntegrity` at
+/// the `check_transaction` level, even when the actual failing sub-tx is a
+/// settings-change violation (`RuleId::R4_1SettingsChange`) rather than a
+/// delegatecall-integrity one. Correctly attributing the rule would mean
+/// this function returning the failing sub-tx's own rule instead of a flat
+/// `bool`, which is a bigger change than a MultiSend-only fix warrants
+/// right now.
 fn check_multi_send(tx: &SafeTransaction) -> bool {
     if tx.operation != Operation::DELEGATECALL {
         return false;
@@ -258,39 +298,46 @@ mod tests {
 
     #[test]
     fn allows_owner_change() {
-        assert!(check_transaction(&tx(
-            address!("F01888f0677547Ec07cd16c8680e699c96588E6B"),
-            address!("F01888f0677547Ec07cd16c8680e699c96588E6B"),
-            U256::ZERO,
-            hex("0xe318b52b\
+        assert!(
+            check_transaction(&tx(
+                address!("F01888f0677547Ec07cd16c8680e699c96588E6B"),
+                address!("F01888f0677547Ec07cd16c8680e699c96588E6B"),
+                U256::ZERO,
+                hex("0xe318b52b\
                    0000000000000000000000002dc63c83040669f0adba5f832f713152ba862c97\
                    000000000000000000000000e7f8c378df23ebb06d5fc5a33bd471ef510f8cc9\
                    000000000000000000000000baf055b4ae60b897649f654df8def87bb4f86299"),
-            Operation::CALL,
-        )));
+                Operation::CALL,
+            ))
+            .is_ok()
+        );
     }
 
     #[test]
     fn allows_self_call_with_nonzero_value() {
-        assert!(check_transaction(&tx(
-            address!("F01888f0677547Ec07cd16c8680e699c96588E6B"),
-            address!("F01888f0677547Ec07cd16c8680e699c96588E6B"),
-            U256::from(1u64),
-            hex("0xe318b52b\
+        assert!(
+            check_transaction(&tx(
+                address!("F01888f0677547Ec07cd16c8680e699c96588E6B"),
+                address!("F01888f0677547Ec07cd16c8680e699c96588E6B"),
+                U256::from(1u64),
+                hex("0xe318b52b\
                   0000000000000000000000002dc63c83040669f0adba5f832f713152ba862c97\
                   000000000000000000000000e7f8c378df23ebb06d5fc5a33bd471ef510f8cc9\
                   000000000000000000000000baf055b4ae60b897649f654df8def87bb4f86299"),
-            Operation::CALL,
-        )));
+                Operation::CALL,
+            ))
+            .is_ok()
+        );
     }
 
     #[test]
     fn allows_multisend_with_calls_to_other_contracts() {
-        assert!(check_transaction(&tx(
-            address!("F01888f0677547Ec07cd16c8680e699c96588E6B"),
-            address!("40A2aCCbd92BCA938b02010E17A5b8929b49130D"),
-            U256::ZERO,
-            hex("0x8d80ff0a\
+        assert!(
+            check_transaction(&tx(
+                address!("F01888f0677547Ec07cd16c8680e699c96588E6B"),
+                address!("40A2aCCbd92BCA938b02010E17A5b8929b49130D"),
+                U256::ZERO,
+                hex("0x8d80ff0a\
                    0000000000000000000000000000000000000000000000000000000000000020\
                    000000000000000000000000000000000000000000000000000000000000046b\
                    00469788fe6e9e9681c6ebf3bf78e7fd26fc0154460000000000000000000000\
@@ -329,28 +376,34 @@ mod tests {
                    4d31f5b1c71352252dcc93000000000000000000000000f01888f0677547ec07\
                    cd16c8680e699c96588e6b00000000000000000000000000000000ffffffffff\
                    ffffffffffffffffffffff000000000000000000000000000000000000000000"),
-            Operation::DELEGATECALL,
-        )));
+                Operation::DELEGATECALL,
+            ))
+            .is_ok()
+        );
     }
 
     #[test]
     fn allows_cancellation_transaction() {
-        assert!(check_transaction(&tx(
-            address!("F01888f0677547Ec07cd16c8680e699c96588E6B"),
-            address!("F01888f0677547Ec07cd16c8680e699c96588E6B"),
-            U256::ZERO,
-            Bytes::new(),
-            Operation::CALL,
-        )));
+        assert!(
+            check_transaction(&tx(
+                address!("F01888f0677547Ec07cd16c8680e699c96588E6B"),
+                address!("F01888f0677547Ec07cd16c8680e699c96588E6B"),
+                U256::ZERO,
+                Bytes::new(),
+                Operation::CALL,
+            ))
+            .is_ok()
+        );
     }
 
     #[test]
     fn allows_multisend_with_multiple_owner_changes() {
-        assert!(check_transaction(&tx(
-            address!("81a45AA50195f0A752159d5198780cDfb8e19732"),
-            address!("40A2aCCbd92BCA938b02010E17A5b8929b49130D"),
-            U256::ZERO,
-            hex("0x8d80ff0a\
+        assert!(
+            check_transaction(&tx(
+                address!("81a45AA50195f0A752159d5198780cDfb8e19732"),
+                address!("40A2aCCbd92BCA938b02010E17A5b8929b49130D"),
+                U256::ZERO,
+                hex("0x8d80ff0a\
                    0000000000000000000000000000000000000000000000000000000000000020\
                    000000000000000000000000000000000000000000000000000000000000022b\
                    0081a45aa50195f0a752159d5198780cdfb8e197320000000000000000000000\
@@ -371,71 +424,88 @@ mod tests {
                    7467372f9a41665820a14f000000000000000000000000c0ffeee8baafa7ba6a\
                    6af2329892b88796cf44cf000000000000000000000000000000000000000000\
                    0000000000000000000002000000000000000000000000000000000000000000"),
-            Operation::DELEGATECALL,
-        )));
+                Operation::DELEGATECALL,
+            ))
+            .is_ok()
+        );
     }
 
     #[test]
     fn allows_singleton_upgrade() {
-        assert!(check_transaction(&tx(
-            address!("81a45AA50195f0A752159d5198780cDfb8e19732"),
-            address!("526643F69b81B008F46d95CD5ced5eC0edFFDaC6"),
-            U256::ZERO,
-            hex("0xed007fc6"),
-            Operation::DELEGATECALL,
-        )));
+        assert!(
+            check_transaction(&tx(
+                address!("81a45AA50195f0A752159d5198780cDfb8e19732"),
+                address!("526643F69b81B008F46d95CD5ced5eC0edFFDaC6"),
+                U256::ZERO,
+                hex("0xed007fc6"),
+                Operation::DELEGATECALL,
+            ))
+            .is_ok()
+        );
     }
 
     #[test]
     fn allows_delegate_call_with_nonzero_value() {
-        assert!(check_transaction(&tx(
-            address!("81a45AA50195f0A752159d5198780cDfb8e19732"),
-            address!("526643F69b81B008F46d95CD5ced5eC0edFFDaC6"),
-            U256::from(1u64),
-            hex("0xed007fc6"),
-            Operation::DELEGATECALL,
-        )));
+        assert!(
+            check_transaction(&tx(
+                address!("81a45AA50195f0A752159d5198780cDfb8e19732"),
+                address!("526643F69b81B008F46d95CD5ced5eC0edFFDaC6"),
+                U256::from(1u64),
+                hex("0xed007fc6"),
+                Operation::DELEGATECALL,
+            ))
+            .is_ok()
+        );
     }
 
     #[test]
     fn denies_empty_self_delegatecall() {
-        assert!(!check_transaction(&tx(
-            address!("1db92e2EeBC8E0c075a02BeA49a2935BcD2dFCF4"),
-            address!("1db92e2EeBC8E0c075a02BeA49a2935BcD2dFCF4"),
-            U256::ZERO,
-            Bytes::new(),
-            Operation::DELEGATECALL,
-        )));
+        assert!(
+            check_transaction(&tx(
+                address!("1db92e2EeBC8E0c075a02BeA49a2935BcD2dFCF4"),
+                address!("1db92e2EeBC8E0c075a02BeA49a2935BcD2dFCF4"),
+                U256::ZERO,
+                Bytes::new(),
+                Operation::DELEGATECALL,
+            ))
+            .is_err()
+        );
     }
 
     #[test]
     fn denies_bybit_transaction() {
-        assert!(!check_transaction(&tx(
-            address!("1db92e2EeBC8E0c075a02BeA49a2935BcD2dFCF4"),
-            address!("96221423681A6d52E184D440a8eFCEbB105C7242"),
-            U256::ZERO,
-            hex("0xa9059cbb\
+        assert!(
+            check_transaction(&tx(
+                address!("1db92e2EeBC8E0c075a02BeA49a2935BcD2dFCF4"),
+                address!("96221423681A6d52E184D440a8eFCEbB105C7242"),
+                U256::ZERO,
+                hex("0xa9059cbb\
                    000000000000000000000000bdd077f651ebe7f7b3ce16fe5f2b025be2969516\
                    0000000000000000000000000000000000000000000000000000000000000000"),
-            Operation::DELEGATECALL,
-        )));
+                Operation::DELEGATECALL,
+            ))
+            .is_err()
+        );
     }
 
     #[test]
     fn denies_arbitrary_self_calls() {
-        assert!(!check_transaction(&tx(
-            address!("3850cd76006dc6CaCBCBB514995C47Ca8Ad0bb96"),
-            address!("A83c336B20401Af773B6219BA5027174338D1836"),
-            U256::ZERO,
-            hex("0x8d80ff0a0\
+        assert!(
+            check_transaction(&tx(
+                address!("3850cd76006dc6CaCBCBB514995C47Ca8Ad0bb96"),
+                address!("A83c336B20401Af773B6219BA5027174338D1836"),
+                U256::ZERO,
+                hex("0x8d80ff0a0\
                    0000000000000000000000000000000000000000000000000000000000000200\
                    0000000000000000000000000000000000000000000000000000000000000790\
                    0000000000000000000000000000000000000000000000000000000000000000\
                    0000000000000000000000000000000000000000000000000000000000000000\
                    00000000000000000000000000000000000000024610b5925000000000000000\
                    0000000005afe8f36504462aa6a7467372f9a41665820a14f00000000000000"),
-            Operation::DELEGATECALL,
-        )));
+                Operation::DELEGATECALL,
+            ))
+            .is_err()
+        );
     }
 
     #[test]
@@ -468,13 +538,16 @@ mod tests {
             ),
         ]);
 
-        assert!(check_transaction(&tx(
-            safe,
-            address!("218543288004CD07832472D464648173c77D7eB7"),
-            U256::ZERO,
-            data,
-            Operation::DELEGATECALL,
-        )));
+        assert!(
+            check_transaction(&tx(
+                safe,
+                address!("218543288004CD07832472D464648173c77D7eB7"),
+                U256::ZERO,
+                data,
+                Operation::DELEGATECALL,
+            ))
+            .is_ok()
+        );
     }
 
     #[test]
@@ -508,13 +581,16 @@ mod tests {
         ]);
 
         // Same data but to the call-only multisend — delegate calls not allowed.
-        assert!(!check_transaction(&tx(
-            safe,
-            address!("A83c336B20401Af773B6219BA5027174338D1836"),
-            U256::ZERO,
-            data,
-            Operation::DELEGATECALL,
-        )));
+        assert!(
+            check_transaction(&tx(
+                safe,
+                address!("A83c336B20401Af773B6219BA5027174338D1836"),
+                U256::ZERO,
+                data,
+                Operation::DELEGATECALL,
+            ))
+            .is_err()
+        );
     }
 
     #[test]
@@ -523,25 +599,31 @@ mod tests {
         let recipient = address!("C92E8bdf79f0507f65a392b0ab4667716BFE0110");
 
         let data = multisend(&[pack(Operation::CALL, recipient, U256::from(1u64), &[])]);
-        assert!(check_transaction(&tx(
-            safe,
-            address!("40A2aCCbd92BCA938b02010E17A5b8929b49130D"),
-            U256::ZERO,
-            data,
-            Operation::DELEGATECALL,
-        )));
+        assert!(
+            check_transaction(&tx(
+                safe,
+                address!("40A2aCCbd92BCA938b02010E17A5b8929b49130D"),
+                U256::ZERO,
+                data,
+                Operation::DELEGATECALL,
+            ))
+            .is_ok()
+        );
     }
 
     #[test]
     fn allows_empty_multisend() {
         let safe = address!("3850cd76006dc6CaCBCBB514995C47Ca8Ad0bb96");
-        assert!(check_transaction(&tx(
-            safe,
-            address!("40A2aCCbd92BCA938b02010E17A5b8929b49130D"),
-            U256::ZERO,
-            multisend(&[]),
-            Operation::DELEGATECALL,
-        )));
+        assert!(
+            check_transaction(&tx(
+                safe,
+                address!("40A2aCCbd92BCA938b02010E17A5b8929b49130D"),
+                U256::ZERO,
+                multisend(&[]),
+                Operation::DELEGATECALL,
+            ))
+            .is_ok()
+        );
     }
 
     #[test]
@@ -550,13 +632,16 @@ mod tests {
         let recipient = address!("C92E8bdf79f0507f65a392b0ab4667716BFE0110");
 
         let data = multisend(&[pack(Operation::CALL, recipient, U256::from(1u64), &[])]);
-        assert!(check_transaction(&tx(
-            safe,
-            address!("40A2aCCbd92BCA938b02010E17A5b8929b49130D"),
-            U256::from(1u64),
-            data,
-            Operation::DELEGATECALL,
-        )));
+        assert!(
+            check_transaction(&tx(
+                safe,
+                address!("40A2aCCbd92BCA938b02010E17A5b8929b49130D"),
+                U256::from(1u64),
+                data,
+                Operation::DELEGATECALL,
+            ))
+            .is_ok()
+        );
     }
 
     #[test]
@@ -581,13 +666,14 @@ mod tests {
             address!("998739BFdAAdde7C933B942a68053933098f9EDa"),
         ] {
             assert!(
-                !check_transaction(&tx(
+                check_transaction(&tx(
                     safe,
                     multisend_addr,
                     U256::ZERO,
                     data.clone(),
                     Operation::DELEGATECALL
-                )),
+                ))
+                .is_err(),
                 "multisend at {multisend_addr} should deny delegatecall to disallowed target",
             );
         }
@@ -617,7 +703,8 @@ mod tests {
                     U256::ZERO,
                     data,
                     Operation::DELEGATECALL
-                )),
+                ))
+                .is_ok(),
                 "should allow performCreate delegatecall to {create_call_addr}",
             );
 
@@ -636,7 +723,8 @@ mod tests {
                     U256::ZERO,
                     data,
                     Operation::DELEGATECALL
-                )),
+                ))
+                .is_ok(),
                 "should allow performCreate2 delegatecall to {create_call_addr}",
             );
         }

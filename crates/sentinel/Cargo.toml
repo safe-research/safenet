@@ -7,6 +7,7 @@ publish = false
 [dependencies]
 alloy.workspace = true
 argh.workspace = true
+safe-tx.workspace = true
 safenet-core.workspace = true
 serde.workspace = true
 serde_json.workspace = true
