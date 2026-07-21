@@ -1,6 +1,16 @@
 use crate::bindings::consensus::SafeTransaction;
 use alloy::primitives::Address;
-use std::collections::HashSet;
+use std::{borrow::Cow, collections::HashSet};
+
+/// The detector's verdict on a proposed oracle transaction: whether to
+/// approve it, and the justification to carry, verbatim, into the blind
+/// commit-reveal vote. `reason` is always a static string literal today, so
+/// `Cow` avoids allocating one on every `check` call.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Decision {
+    pub approve: bool,
+    pub reason: Cow<'static, str>,
+}
 
 /// Decides whether a proposed oracle transaction should be approved.
 ///
@@ -18,8 +28,17 @@ impl Detector {
         }
     }
 
-    pub fn approve(&self, tx: &SafeTransaction) -> bool {
-        !self.blocklist.contains(&tx.to)
+    pub fn check(&self, tx: &SafeTransaction) -> Decision {
+        let approve = !self.blocklist.contains(&tx.to);
+        let reason = if approve {
+            "destination is not blocklisted"
+        } else {
+            "destination is blocklisted"
+        };
+        Decision {
+            approve,
+            reason: reason.into(),
+        }
     }
 }
 
@@ -41,19 +60,23 @@ mod tests {
     #[test]
     fn denied_when_blocklisted() {
         let detector = Detector::new(vec![A1, A2]);
-        assert!(!detector.approve(&tx(A1)));
-        assert!(!detector.approve(&tx(A2)));
+        let decision = detector.check(&tx(A1));
+        assert!(!decision.approve);
+        assert_eq!(decision.reason, "destination is blocklisted");
+        assert!(!detector.check(&tx(A2)).approve);
     }
 
     #[test]
     fn approved_with_empty_blocklist() {
         let detector = Detector::new(vec![]);
-        assert!(detector.approve(&tx(A1)));
+        assert!(detector.check(&tx(A1)).approve);
     }
 
     #[test]
     fn approved_when_not_blocklisted() {
         let detector = Detector::new(vec![A1, A2]);
-        assert!(detector.approve(&tx(A3)));
+        let decision = detector.check(&tx(A3));
+        assert!(decision.approve);
+        assert_eq!(decision.reason, "destination is not blocklisted");
     }
 }

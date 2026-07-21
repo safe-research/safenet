@@ -8,10 +8,10 @@ Component: `contracts` (Solidity) and `crates/sentinel` (Rust).
 
 Sentinels currently reveal a bare `approve`/`deny` vote (plus the blind-commit `salt`) on `SentinelOracleV2`. There's no way to record *why* a sentinel voted the way it did, which makes disputes and post-hoc audits harder than they need to be (e.g. "why did this sentinel deny this request?" currently has no onchain answer). This epic adds a `reason` string to the reveal step, folded into the blind commit hash (so it's locked in at commit time, not writable after seeing others reveal), and surfaced in the `Revealed` event.
 
-Two PRs, sequential:
+Three PRs, sequential:
 
 - **Phase A** — Solidity: add `reason` to `reveal()`, `hashCommitment()`, `computeHash()` and the `Revealed` event. Includes the minimal Rust-side ABI mirror needed to keep `crates/sentinel` compiling and the `sentinel-integration` CI job (`.github/workflows/integration.yml`) green — hardcoded to an empty `reason` — since that job builds and runs the actual sentinel binary against the freshly deployed contract.
-- **Phase B** — Rust: extend `Detector` to produce a real reason and wire it through the FSM, replacing Phase A's hardcoded empty string.
+- **Phase B** — Rust: extend `Detector` to produce a real reason and wire it through the FSM, replacing Phase A's hardcoded empty string. Split into two sub-phases (own PR each) to keep the diff reviewable: **Phase B1** introduces `Detector::check` returning a `Decision { approve, reason }` without yet threading `reason` any further; **Phase B2** wires that `reason` through state, `commit_hash`, and the `reveal` transaction.
 
 The `validator/src/sentinel/` TypeScript implementation is legacy (superseded by `crates/sentinel`; last touched at #519, frozen since the "Sentinel Oxidation" rewrite landed) and is out of scope.
 
@@ -65,16 +65,19 @@ Rust (minimal — no new parameters or fields; `crates/sentinel` keeps compiling
 
 ### Phase B — Rust: wire the real reason through `Detector` and state
 
-- `src/detector.rs`: replace `Detector::approve(&self, tx: &SafeTransaction) -> bool` with `Detector::decide(&self, tx: &SafeTransaction) -> Decision`, where `Decision { approve: bool, reason: String }` (e.g. `"destination is blocklisted"` / `"destination is not blocklisted"`), called exactly once per request. Update the unit tests accordingly.
-- `src/state.rs`: `SentinelRequestState::WaitingForRequest` and `SentinelRequestState::CollectingCommitments` each gain `reason: String` (not `CollectingVotes`/`WaitingForDisputeResolution` — see Architecture Decision). This is load-bearing, not just informational: the exact same `reason` value must flow from `WaitingForRequest` through to both the `commit_hash` call in `handle_new_request` and the `Reveal` action built later in `handle_block_advance`. Existing serde-roundtrip tests need updating for the new field.
-- `src/hashing.rs`: `commit_hash` now gains the `reason: &str` parameter Phase A deliberately left out, replacing the hardcoded empty component. The `commit_hash_parity` test needs a new expected value for a non-empty test `reason`, regenerated against the Solidity library (via `forge test`).
-- `src/action.rs`: `SentinelActionKind::Reveal` gains `reason: String`.
-- `src/service.rs`:
-  - `handle_oracle_transaction_proposed`: call `detector.decide(...)` once, store both `approve` and `reason` in the new `WaitingForRequest` fields (replacing Phase A's implicit `""`).
-  - `handle_new_request`: carry `reason` from `WaitingForRequest` into `CollectingCommitments`, and pass the carried value (no longer a literal `""`) into `commit_hash(...)`.
-  - `handle_block_advance`: read the same `reason` off the `CollectingCommitments` entry when building the `Reveal` action (no longer `String::new()`), so it matches what was hashed at commit time.
-  - `SentinelEncoder`: read `reason` off the `Reveal` action instead of hardcoding `String::new()`.
-  - Update existing tests that construct `WaitingForRequest`/`CollectingCommitments`/`Reveal` actions or call `commit_hash` (all three shapes are changing) with a `reason` value.
+Split into two sub-phases, each its own PR, so the diff stays reviewable (see Implementation Phases below for the file-level breakdown and PR boundary):
+
+- **Phase B1** — introduce the reason-producing API: `src/detector.rs` replaces `Detector::approve(&self, tx: &SafeTransaction) -> bool` with `Detector::check(&self, tx: &SafeTransaction) -> Decision`, where `Decision { approve: bool, reason: String }` (e.g. `"destination is blocklisted"` / `"destination is not blocklisted"`), called exactly once per request. Update the unit tests accordingly. The single call site (`handle_oracle_transaction_proposed` in `src/service.rs`) switches to `detector.check(...).approve`, discarding `.reason` for now behind a `TODO(sentinel-vote-reason Phase B2)` comment — nothing else changes shape yet, so this is a small, self-contained, fully-compiling step.
+- **Phase B2** — thread `reason` end-to-end, replacing Phase B1's discarded value:
+  - `src/state.rs`: `SentinelRequestState::WaitingForRequest` and `SentinelRequestState::CollectingCommitments` each gain `reason: String` (not `CollectingVotes`/`WaitingForDisputeResolution` — see Architecture Decision). This is load-bearing, not just informational: the exact same `reason` value must flow from `WaitingForRequest` through to both the `commit_hash` call in `handle_new_request` and the `Reveal` action built later in `handle_block_advance`. Existing serde-roundtrip tests need updating for the new field.
+  - `src/hashing.rs`: `commit_hash` now gains the `reason: &str` parameter Phase A deliberately left out, replacing the hardcoded empty component. The `commit_hash_parity` test needs a new expected value for a non-empty test `reason`, regenerated against the Solidity library (via `forge test`).
+  - `src/action.rs`: `SentinelActionKind::Reveal` gains `reason: String`.
+  - `src/service.rs`:
+    - `handle_oracle_transaction_proposed`: store both `approve` and `reason` from the `Decision` (already computed since Phase B1) in the `WaitingForRequest` fields, removing the Phase B1 TODO.
+    - `handle_new_request`: carry `reason` from `WaitingForRequest` into `CollectingCommitments`, and pass the carried value (no longer a literal `""`) into `commit_hash(...)`.
+    - `handle_block_advance`: read the same `reason` off the `CollectingCommitments` entry when building the `Reveal` action (no longer `String::new()`), so it matches what was hashed at commit time.
+    - `SentinelEncoder`: read `reason` off the `Reveal` action instead of hardcoding `String::new()`.
+    - Update existing tests that construct `WaitingForRequest`/`CollectingCommitments`/`Reveal` actions or call `commit_hash` (all three shapes are changing) with a `reason` value.
 
 ---
 
@@ -84,13 +87,17 @@ Rust (minimal — no new parameters or fields; `crates/sentinel` keeps compiling
 
 Files: `contracts/src/SentinelOracleV2.sol`, `contracts/src/libraries/SentinelOracleCommitmentsV2.sol`, `contracts/test/SentinelOracleV2.t.sol`, `crates/sentinel/src/{bindings,hashing,service}.rs`. No new Rust parameters or struct fields — `bindings.rs` mirrors the new ABI (unavoidable), and the encoder/hashing internals encode/hash a literal empty `reason` so `crates/sentinel` keeps compiling and the `sentinel-integration` CI job stays green against the new contract.
 
-### Phase B: Wire the real reason through the Rust sentinel (own PR, depends on Phase A)
+### Phase B1: `Detector::check` returns a reason (own PR, depends on Phase A)
 
-Files: `crates/sentinel/src/{detector,state,hashing,action,service}.rs`. Depends on Phase A being merged. Adds the `reason` parameter/fields Phase A deliberately left out, sourced from `Detector::decide` and carried through state to the `commit_hash` call and the `reveal` transaction.
+Files: `crates/sentinel/src/{detector,service}.rs`. Depends on Phase A being merged. Replaces `Detector::approve` with `Detector::check` returning `Decision { approve, reason }`; the sole call site in `service.rs` takes `.approve` and leaves a `TODO(sentinel-vote-reason Phase B2)` marking where `.reason` still needs to be threaded through. Nothing else changes shape — a complete, correct step on its own, same spirit as Phase A's "always empty reason" being complete pending the next phase.
+
+### Phase B2: Wire the reason through state and the reveal transaction (own PR, depends on Phase B1)
+
+Files: `crates/sentinel/src/{state,hashing,action,service}.rs`. Depends on Phase B1 being merged. Adds the `reason` parameter/fields Phase A deliberately left out and Phase B1 discarded, carrying `Detector::check`'s `Decision.reason` through state to the `commit_hash` call and the `reveal` transaction, removing Phase B1's TODO.
 
 ### Phase C: Remove this plan
 
-Delete `epics/2026_07_20_sentinel_vote_reason.md` once Phase A and B are merged.
+Delete `epics/2026_07_20_sentinel_vote_reason.md` once Phase A, B1, and B2 are merged.
 
 ---
 
