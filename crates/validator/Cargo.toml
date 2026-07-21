@@ -13,6 +13,7 @@ k256.workspace = true
 rand.workspace = true
 rand_chacha.workspace = true
 rayon = "1"
+safe-tx.workspace = true
 safenet-core.workspace = true
 serde.workspace = true
 serde_json.workspace = true

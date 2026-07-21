@@ -1,6 +1,6 @@
 use std::mem;
 
-use crate::bindings::{Operation, SafeTransaction};
+use crate::types::{Operation, SafeTransaction};
 use alloy::primitives::{Address, Bytes, U256};
 
 #[derive(Clone, Copy)]

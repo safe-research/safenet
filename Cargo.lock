@@ -4006,6 +4006,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "safe-tx"
+version = "0.1.0"
+dependencies = [
+ "alloy",
+ "serde",
+]
+
+[[package]]
 name = "safenet-core"
 version = "0.2.0"
 dependencies = [
@@ -5246,6 +5254,7 @@ dependencies = [
  "rand 0.8.6",
  "rand_chacha 0.3.1",
  "rayon",
+ "safe-tx",
  "safenet-core",
  "serde",
  "serde_json",

@@ -1,10 +1,7 @@
 use std::collections::btree_map;
 
 use super::{Packet, SigningState, State, Transition};
-use crate::{
-    bindings::Consensus,
-    consensus::{checks, epoch::EpochId},
-};
+use crate::{bindings::Consensus, consensus::epoch::EpochId};
 use safenet_core::state::Commands;
 
 impl Transition {
@@ -29,24 +26,21 @@ impl Transition {
             return (state, Vec::new());
         };
 
-        let message = self
-            .consensus
-            .transaction_packet_hash(epoch, &event.transaction);
+        let transaction: safe_tx::types::SafeTransaction = (&event.transaction).into();
+        let message = self.consensus.transaction_packet_hash(epoch, &transaction);
 
         // Prevent duplicate ongoing transaction proposals. This is to prevent
         // malicious parties from blocking transaction attestations from ever
         // being produced by resetting the signing state of honest validators.
         if let btree_map::Entry::Vacant(signing) = state.signing.entry(message) {
-            let packet = Packet::Transaction {
-                epoch,
-                transaction: event.transaction.clone(),
-            };
+            let passed_checks = safe_tx::checks::check_transaction(&transaction);
+            let packet = Packet::Transaction { epoch, transaction };
 
             let signers = participating_epoch.group.participants().clone();
             let deadline = block.saturating_add(self.config.signing_timeout.get());
 
             let group_id = participating_epoch.group.id();
-            let signing_state = if checks::check_transaction(&event.transaction) {
+            let signing_state = if passed_checks {
                 SigningState::WaitingForRequest {
                     key_share: participating_epoch.key_share.clone(),
                     group_id,
@@ -135,9 +129,10 @@ impl Transition {
             return (state, Vec::new());
         }
 
+        let transaction: safe_tx::types::SafeTransaction = (&event.transaction).into();
         let message =
             self.consensus
-                .oracle_transaction_packet_hash(epoch, event.oracle, &event.transaction);
+                .oracle_transaction_packet_hash(epoch, event.oracle, &transaction);
 
         // Prevent duplicate ongoing transaction proposals. This is to prevent
         // malicious parties from blocking transaction attestations from ever
@@ -146,7 +141,7 @@ impl Transition {
             let packet = Packet::OracleTransaction {
                 epoch,
                 oracle: event.oracle,
-                transaction: event.transaction.clone(),
+                transaction,
             };
             let signers = participating_epoch.group.participants().clone();
             let deadline = block.saturating_add(self.config.signing_timeout.get());
