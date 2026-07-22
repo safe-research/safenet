@@ -5,7 +5,6 @@ import {AttestationTrailer} from "@/libraries/AttestationTrailer.sol";
 import {ConsensusMessages} from "@/libraries/ConsensusMessages.sol";
 import {EpochRollover} from "@/libraries/EpochRollover.sol";
 import {FROST} from "@/libraries/FROST.sol";
-import {GuardAutoAllow} from "@/libraries/GuardAutoAllow.sol";
 import {SafeTransaction} from "@/libraries/SafeTransaction.sol";
 import {Secp256k1} from "@/libraries/Secp256k1.sol";
 import {TransactionAnnouncement} from "@/libraries/TransactionAnnouncement.sol";
@@ -20,9 +19,9 @@ import {ISafe} from "@safe/interfaces/ISafe.sol";
  * @notice Safe transaction guard that gates every owner-signed `execTransaction` behind a Safenet FROST
  *         threshold-signature attestation, with a nonce-free time-windowed escape hatch for liveness.
  * @dev Composed from focused libraries: epoch state ([EpochRollover]), escape-hatch state and hashing
- *      ([TransactionAnnouncement]), attestation-trailer decode ([AttestationTrailer]), and the self-call
- *      gate ([GuardAutoAllow]). Design rationale and the accepted trust assumptions are documented in
- *      `guard/README.md`; the security-relevant points:
+ *      ([TransactionAnnouncement]), and attestation-trailer decode ([AttestationTrailer]). Design
+ *      rationale and the accepted trust assumptions are documented in `guard/README.md`; the
+ *      security-relevant points:
  *
  *      - **Scope:** transaction guard only. Safe module executions bypass it — deployments must forbid
  *        modules or treat each as an explicit bypass.
@@ -41,14 +40,8 @@ contract SafenetGuard is ISafenetGuard, BaseTransactionGuard {
     using TransactionAnnouncement for TransactionAnnouncement.T;
 
     // ============================================================
-    // CONSTANTS & IMMUTABLES
+    // IMMUTABLES
     // ============================================================
-
-    /**
-     * @dev Ethereum mainnet; announcements there emit the hash-only event (log data is costly, and the
-     *      parameters are recoverable from the announcement calldata).
-     */
-    uint256 private constant _ETHEREUM_CHAIN_ID = 1;
 
     /**
      * @dev EIP-712 domain separator used to reconstruct Consensus messages; exposed via
@@ -151,12 +144,9 @@ contract SafenetGuard is ISafenetGuard, BaseTransactionGuard {
         (uint256 activeFrom, uint256 activeUntil) =
             $announcements.announce(msg.sender, announcementHash, _ALLOW_TX_DELAY, _ALLOW_TX_WINDOW);
 
-        // Hash-only event on Ethereum mainnet (costly log data), full parameters elsewhere.
-        if (block.chainid == _ETHEREUM_CHAIN_ID) {
-            emit TransactionAnnounced(msg.sender, announcementHash, activeFrom, activeUntil);
-        } else {
-            emit TransactionAnnouncedWithParams(msg.sender, announcementHash, announcement, activeFrom, activeUntil);
-        }
+        // The announced parameters are recoverable from this call's calldata, so the event carries only
+        // the hash and window.
+        emit TransactionAnnounced(msg.sender, announcementHash, activeFrom, activeUntil);
     }
 
     /**
@@ -204,12 +194,15 @@ contract SafenetGuard is ISafenetGuard, BaseTransactionGuard {
         address payable refundReceiver,
         bytes calldata signatures,
         address /* msgSender */
-    ) external override {
+    ) external override(ITransactionGuard) {
         if (_isAutoAllowed(to, value, data, operation)) return;
 
         (bool present, uint64 epoch, Secp256k1.Point memory groupKey, FROST.Signature memory signature) =
             AttestationTrailer.decode(signatures);
         if (present) {
+            // Cheap forest-membership check first (also implies a non-zero key, enforced on record), so an
+            // untrusted key short-circuits before the more expensive Safe tx hash is computed.
+            require($epochs.isKnown(groupKey, epoch), UntrustedAttestationKey());
             uint256 nonce = ISafe(payable(msg.sender)).nonce() - 1;
             bytes32 safeTxHash = SafeTransaction.hash(
                 SafeTransaction.T({
@@ -227,8 +220,6 @@ contract SafenetGuard is ISafenetGuard, BaseTransactionGuard {
                     nonce: nonce
                 })
             );
-            // Forest membership implies a non-zero key (enforced on record), so no extra check is needed.
-            require($epochs.isKnown(groupKey, epoch), UntrustedAttestationKey());
             bytes32 message = ConsensusMessages.transactionProposal(_CONSENSUS_DOMAIN_SEPARATOR, epoch, safeTxHash);
             FROST.verify(groupKey, signature, message);
             return;
@@ -260,13 +251,18 @@ contract SafenetGuard is ISafenetGuard, BaseTransactionGuard {
      * @notice Post-execution hook. Intentionally empty — all authorisation happens in `checkTransaction`.
      * @dev Parameters are unnamed as they are unused; Safe passes the transaction hash and success flag.
      */
-    function checkAfterExecution(bytes32, bool) external pure override {}
+    function checkAfterExecution(bytes32, bool) external pure override(ITransactionGuard) {}
 
     /**
      * @inheritdoc IERC165
-     * @dev Advertises `ISafenetGuard` alongside `ITransactionGuard` and `IERC165`.
+     * @dev Advertises `ISafenetGuard`, `ITransactionGuard`, and `IERC165`.
      */
-    function supportsInterface(bytes4 interfaceId) external pure override returns (bool) {
+    function supportsInterface(bytes4 interfaceId)
+        external
+        pure
+        override(IERC165, BaseTransactionGuard)
+        returns (bool)
+    {
         return interfaceId == type(ISafenetGuard).interfaceId || interfaceId == type(ITransactionGuard).interfaceId
             || interfaceId == type(IERC165).interfaceId;
     }
@@ -330,8 +326,10 @@ contract SafenetGuard is ISafenetGuard, BaseTransactionGuard {
     // ============================================================
 
     /**
-     * @dev True if the call is a structurally valid self-call (see [GuardAutoAllow]) to an escape-hatch
-     *      selector — bypassing attestation.
+     * @dev True if the call is a structurally valid self-call to an escape-hatch selector, bypassing
+     *      attestation. A valid self-call targets the guard, carries no value, uses `CALL` (never
+     *      `DELEGATECALL`, which would run guard code in the Safe's storage context), and carries at least
+     *      a 4-byte selector matching one of the escape-hatch functions.
      * @param to The call target.
      * @param value The native value forwarded.
      * @param data The call data.
@@ -341,9 +339,13 @@ contract SafenetGuard is ISafenetGuard, BaseTransactionGuard {
     function _isAutoAllowed(address to, uint256 value, bytes memory data, Enum.Operation operation)
         private
         view
-        returns (bool)
+        returns (bool allowed)
     {
-        bytes4 selector = GuardAutoAllow.selfCallSelector(to, value, data, operation, address(this));
+        if (to != address(this) || value != 0 || operation != Enum.Operation.Call || data.length < 4) {
+            return false;
+        }
+        // forge-lint: disable-next-line(unsafe-typecast)
+        bytes4 selector = bytes4(data);
         return
             selector == SafenetGuard.announceTransaction.selector
                 || selector == SafenetGuard.cancelAnnouncement.selector;
