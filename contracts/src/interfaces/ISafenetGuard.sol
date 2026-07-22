@@ -4,18 +4,19 @@ pragma solidity ^0.8.30;
 import {FROST} from "@/libraries/FROST.sol";
 import {Secp256k1} from "@/libraries/Secp256k1.sol";
 import {TransactionAnnouncement} from "@/libraries/TransactionAnnouncement.sol";
+import {ITransactionGuard} from "@safe/base/GuardManager.sol";
 
 /**
  * @title SafenetGuard Interface
- * @notice External surface of the Safenet transaction guard: epoch management, the nonce-free escape
- *         hatch, and the associated views, events, and errors.
- * @dev The Safe guard hooks (`checkTransaction`, `checkAfterExecution`) are not declared here; the
- *      implementing contract inherits them from `ITransactionGuard`. Announcement events are emitted by
- *      the guard; epoch events are emitted by `EpochRollover` and mirrored here. Library errors
- *      (`AnnouncementAlreadyExists`, `AnnouncementNotFound`, `WindowOverflow`,
- *      `MalformedAttestationTrailer`) are not mirrored — import the relevant library to decode them.
+ * @notice External surface of the Safenet transaction guard: the Safe guard hooks, epoch management, the
+ *         nonce-free escape hatch, and the associated views, events, and errors.
+ * @dev Extends `ITransactionGuard`, so `checkTransaction` / `checkAfterExecution` are part of this ABI.
+ *      Announcement events are emitted by the guard; epoch events are emitted by `EpochRollover` and
+ *      mirrored here. Library errors (`AnnouncementAlreadyExists`, `AnnouncementNotFound`,
+ *      `WindowOverflow`, `MalformedAttestationTrailer`) are not mirrored — import the relevant library
+ *      to decode them.
  */
-interface ISafenetGuard {
+interface ISafenetGuard is ITransactionGuard {
     // ============================================================
     // EVENTS
     // ============================================================
@@ -39,9 +40,9 @@ interface ISafenetGuard {
     );
 
     /**
-     * @notice Emitted when a Safe announces a transaction (including renewal) on Ethereum mainnet.
-     * @dev Hash-only variant (`block.chainid == 1`), where log data is expensive and the parameters are
-     *      recoverable from the announcement calldata; other chains emit `TransactionAnnouncedWithParams`.
+     * @notice Emitted when a Safe announces a transaction (including renewal).
+     * @dev The announced parameters are recoverable from the `announceTransaction` calldata, so the event
+     *      itself carries only the hash and window.
      * @param safe The Safe that made the announcement.
      * @param announcementHash The nonce-free announcement hash.
      * @param activeFrom The earliest timestamp at which the announcement is executable.
@@ -49,22 +50,6 @@ interface ISafenetGuard {
      */
     event TransactionAnnounced(
         address indexed safe, bytes32 indexed announcementHash, uint256 activeFrom, uint256 activeUntil
-    );
-
-    /**
-     * @notice As `TransactionAnnounced`, but carries the full parameters (emitted off Ethereum mainnet).
-     * @param safe The Safe that made the announcement.
-     * @param announcementHash The nonce-free announcement hash.
-     * @param announcement The announced transaction parameters.
-     * @param activeFrom The earliest timestamp at which the announcement is executable.
-     * @param activeUntil The latest timestamp at which the announcement is executable.
-     */
-    event TransactionAnnouncedWithParams(
-        address indexed safe,
-        bytes32 indexed announcementHash,
-        TransactionAnnouncement.AnnouncedTransaction announcement,
-        uint256 activeFrom,
-        uint256 activeUntil
     );
 
     /**
