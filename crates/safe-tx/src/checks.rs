@@ -1,4 +1,4 @@
-use crate::multi_send::{MultiSendVersion, decode_multi_send};
+use crate::multi_send::{decode_multi_send, known_deployment};
 use crate::types::{Operation, SafeTransaction};
 use alloy::{
     primitives::{Address, address},
@@ -181,32 +181,8 @@ fn check_multi_send(tx: &SafeTransaction) -> bool {
         return false;
     };
 
-    let (allows_delegate_calls, version) = match tx.to {
-        a if a == address!("218543288004CD07832472D464648173c77D7eB7") => {
-            (true, MultiSendVersion::V150Plus)
-        }
-        a if a == address!("A83c336B20401Af773B6219BA5027174338D1836") => {
-            (false, MultiSendVersion::V150Plus)
-        }
-        a if a == address!("38869bf66a61cF6bDB996A6aE40D5853Fd43B526") => {
-            (true, MultiSendVersion::Legacy)
-        }
-        a if a == address!("9641d764fc13c8B624c04430C7356C1C7C8102e2") => {
-            (false, MultiSendVersion::Legacy)
-        }
-        a if a == address!("A238CBeb142c10Ef7Ad8442C6D1f9E89e07e7761") => {
-            (true, MultiSendVersion::Legacy)
-        }
-        a if a == address!("40A2aCCbd92BCA938b02010E17A5b8929b49130D") => {
-            (false, MultiSendVersion::Legacy)
-        }
-        a if a == address!("998739BFdAAdde7C933B942a68053933098f9EDa") => {
-            (true, MultiSendVersion::Legacy)
-        }
-        a if a == address!("A1dabEF33b3B82c7814B6D82A79e50F4AC44102B") => {
-            (false, MultiSendVersion::Legacy)
-        }
-        _ => return false,
+    let Some((version, allows_delegate_calls)) = known_deployment(tx.to) else {
+        return false;
     };
 
     let Some(sub_txs) = decode_multi_send(tx.safe, &call.transactions, version) else {

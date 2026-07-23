@@ -3,4 +3,5 @@
 
 pub mod checks;
 pub mod multi_send;
+pub mod target_effects;
 pub mod types;
