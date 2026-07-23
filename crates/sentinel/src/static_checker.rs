@@ -1,6 +1,7 @@
 use crate::bindings::consensus::SafeTransaction;
-use alloy::primitives::Address;
+use alloy::primitives::{Address, U256};
 use safe_tx::rule::RuleId;
+use safe_tx::target_effects::{EffectKind, decode_target_effects};
 use std::{borrow::Cow, collections::HashSet};
 
 /// A [`StaticChecker`]'s verdict on a proposed oracle transaction: whether to
@@ -68,6 +69,29 @@ impl Check for Blocklist {
     }
 }
 
+/// R-4.5: denies functionally unlimited approvals (§2.5's deterministic
+/// sub-case only — max `uint256` for ERC-20, "approval for all tokens" for
+/// ERC-721/1155 operator approvals). Recurses through MultiSend via
+/// `decode_target_effects`, so a batched unlimited approval is caught the
+/// same as a standalone one.
+struct ExcessiveApproval;
+
+impl Check for ExcessiveApproval {
+    fn evaluate(&self, tx: &safe_tx::types::SafeTransaction) -> Result<(), RuleId> {
+        for effect in decode_target_effects(tx) {
+            let unlimited = match effect.kind {
+                EffectKind::Erc20Approval { amount } => amount == U256::MAX,
+                EffectKind::OperatorApproval { approved } => approved,
+                _ => false,
+            };
+            if unlimited {
+                return Err(RuleId::R4_5ExcessiveApproval);
+            }
+        }
+        Ok(())
+    }
+}
+
 /// Decides whether a proposed oracle transaction should be approved by
 /// running deterministic, local, synchronous checks against its calldata —
 /// as opposed to [`crate::dynamic_checker`]'s externally-pluggable,
@@ -83,6 +107,7 @@ impl StaticChecker {
             checks: vec![
                 Box::new(BaseGuarantees),
                 Box::new(Blocklist(blocklist.into_iter().collect())),
+                Box::new(ExcessiveApproval),
             ],
         }
     }
@@ -102,6 +127,12 @@ impl StaticChecker {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use alloy::sol_types::SolCall as _;
+
+    alloy::sol! {
+        function approve(address spender, uint256 amount) external;
+        function setApprovalForAll(address operator, bool approved) external;
+    }
 
     const A1: Address = Address::new([1u8; 20]);
     const A2: Address = Address::new([2u8; 20]);
@@ -162,5 +193,71 @@ mod tests {
         });
         assert!(!decision.approve);
         assert_eq!(decision.reason, RuleId::R4_2DelegatecallIntegrity.code());
+    }
+
+    #[test]
+    fn denied_unlimited_erc20_approval() {
+        let checker = StaticChecker::new(vec![]);
+        let data = approveCall {
+            spender: A2,
+            amount: U256::MAX,
+        }
+        .abi_encode();
+        let decision = checker.check(&SafeTransaction {
+            to: A1,
+            data: data.into(),
+            ..Default::default()
+        });
+        assert!(!decision.approve);
+        assert_eq!(decision.reason, RuleId::R4_5ExcessiveApproval.code());
+    }
+
+    #[test]
+    fn approved_bounded_erc20_approval() {
+        let checker = StaticChecker::new(vec![]);
+        let data = approveCall {
+            spender: A2,
+            amount: U256::from(1_000u64),
+        }
+        .abi_encode();
+        let decision = checker.check(&SafeTransaction {
+            to: A1,
+            data: data.into(),
+            ..Default::default()
+        });
+        assert!(decision.approve);
+    }
+
+    #[test]
+    fn denied_operator_approval_for_all() {
+        let checker = StaticChecker::new(vec![]);
+        let data = setApprovalForAllCall {
+            operator: A2,
+            approved: true,
+        }
+        .abi_encode();
+        let decision = checker.check(&SafeTransaction {
+            to: A1,
+            data: data.into(),
+            ..Default::default()
+        });
+        assert!(!decision.approve);
+        assert_eq!(decision.reason, RuleId::R4_5ExcessiveApproval.code());
+    }
+
+    #[test]
+    fn approved_operator_approval_revocation() {
+        let checker = StaticChecker::new(vec![]);
+        let data = setApprovalForAllCall {
+            operator: A2,
+            approved: false,
+        }
+        .abi_encode();
+        let decision = checker.check(&SafeTransaction {
+            to: A1,
+            data: data.into(),
+            ..Default::default()
+        });
+        assert!(decision.approve);
     }
 }
