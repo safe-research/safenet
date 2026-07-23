@@ -1,0 +1,30 @@
+name: Gemini Code Review
+
+on:
+  pull_request:
+    types:
+      - opened
+      - reopened
+  workflow_dispatch:
+    inputs:
+      pr-number:
+        description: "The pull request number to review"
+        required: true
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          sparse-checkout: |
+            .github/actions/ai-review
+
+      - uses: ./.github/actions/ai-review
+        with:
+          api-key: ${{ secrets.GEMINI_API_KEY }}
+          pr-number: ${{ inputs.pr-number || github.event.pull_request.number }}

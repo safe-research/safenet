@@ -1,0 +1,48 @@
+name: "AI Code Review"
+description: "Reviews a pull request with an OpenAI-compatible chat completions API and posts the result as a PR review"
+inputs:
+  api-key:
+    description: "API key for the OpenAI-compatible endpoint"
+    required: true
+  endpoint:
+    description: "Base URL of an OpenAI-compatible API (chat completions endpoint is resolved relative to it)"
+    required: false
+    default: "https://generativelanguage.googleapis.com/v1beta/openai/"
+  model:
+    description: "Model name to use for the review"
+    required: false
+    default: "gemini-3.6-flash"
+  context-model:
+    description: "Model name to use for determining whether additional context files are needed"
+    required: false
+    default: "gemini-3.5-flash-lite"
+  fallback-model:
+    description: "Model name to retry with if the primary model errors (e.g. due to rate limiting)"
+    required: false
+    default: "gemini-3.5-flash-lite"
+  github-token:
+    description: "The GITHUB_TOKEN required to read the PR and post the review"
+    required: false
+    default: ${{ github.token }}
+  pr-number:
+    description: "The pull request number to review"
+    required: false
+    default: ${{ github.event.pull_request.number }}
+
+runs:
+  using: "composite"
+  steps:
+    - name: Review PR
+      uses: actions/github-script@v9
+      env:
+        API_KEY: ${{ inputs.api-key }}
+        API_ENDPOINT: ${{ inputs.endpoint }}
+        MODEL: ${{ inputs.model }}
+        CONTEXT_MODEL: ${{ inputs.context-model }}
+        FALLBACK_MODEL: ${{ inputs.fallback-model }}
+        PR_NUMBER: ${{ inputs.pr-number }}
+      with:
+        github-token: ${{ inputs.github-token }}
+        script: |
+          const review = require(`${process.env.GITHUB_ACTION_PATH}/review.js`);
+          await review({ github, context, core });
