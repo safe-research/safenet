@@ -22,6 +22,13 @@ pub enum RuleId {
     /// address. MVP note: currently backed only by a static operator
     /// blocklist, not source-attributed threat intel.
     R4_6KnownMaliciousTarget,
+    /// Article IV Part B, R-4.5: an authorization-target grant that is
+    /// functionally unlimited — max `uint256` for an ERC-20 `approve`, or an
+    /// ERC-721/ERC-1155 "approval for all tokens" (`setApprovalForAll`).
+    /// Per §2.5, this sub-case is always functionally unlimited and needs no
+    /// further analysis (unlike the rest of §2.5's amount-reasonableness
+    /// factors, which remain out of scope for this MVP).
+    R4_5ExcessiveApproval,
 }
 
 impl RuleId {
@@ -31,6 +38,7 @@ impl RuleId {
             Self::R4_1SettingsChange => "R-4.1",
             Self::R4_2DelegatecallIntegrity => "R-4.2",
             Self::R4_6KnownMaliciousTarget => "R-4.6",
+            Self::R4_5ExcessiveApproval => "R-4.5",
         }
     }
 
@@ -42,6 +50,7 @@ impl RuleId {
             Self::R4_1SettingsChange,
             Self::R4_2DelegatecallIntegrity,
             Self::R4_6KnownMaliciousTarget,
+            Self::R4_5ExcessiveApproval,
         ]
         .into_iter()
         .find(|rule| rule.code() == code)
@@ -58,6 +67,7 @@ mod tests {
             RuleId::R4_1SettingsChange,
             RuleId::R4_2DelegatecallIntegrity,
             RuleId::R4_6KnownMaliciousTarget,
+            RuleId::R4_5ExcessiveApproval,
         ] {
             assert_eq!(RuleId::from_code(rule.code()), Some(rule));
         }
