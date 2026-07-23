@@ -33,7 +33,7 @@ impl Transition {
         // malicious parties from blocking transaction attestations from ever
         // being produced by resetting the signing state of honest validators.
         if let btree_map::Entry::Vacant(signing) = state.signing.entry(message) {
-            let passed_checks = safe_tx::checks::check_transaction(&transaction);
+            let passed_checks = safe_tx::checks::check_transaction(&transaction).is_ok();
             let packet = Packet::Transaction { epoch, transaction };
 
             let signers = participating_epoch.group.participants().clone();

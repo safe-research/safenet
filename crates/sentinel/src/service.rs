@@ -580,9 +580,9 @@ mod tests {
     const OTHER: Address = address!("8888888888888888888888888888888888888888");
     const CHAIN_ID: u64 = 1;
     const VOTING_WINDOW: u64 = 10;
-    /// `Detector::check`'s reason for an empty blocklist, as used by `transition()`/`svc`
-    /// throughout this module's tests.
-    const REASON: &str = "destination is not blocklisted";
+    /// `Detector::check`'s reason for an approved transaction, as used by
+    /// `transition()`/`svc` throughout this module's tests.
+    const REASON: &str = "";
 
     fn self_signer() -> Signer {
         Signer::new(SigningKey::from_bytes(&keccak256("sentinel-flow-test-key").0.into()).unwrap())
