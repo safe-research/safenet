@@ -1,7 +1,5 @@
-mod multi_send;
-
-use self::multi_send::{MultiSendVersion, decode_multi_send};
-use crate::bindings::{Operation, SafeTransaction};
+use crate::multi_send::{MultiSendVersion, decode_multi_send};
+use crate::types::{Operation, SafeTransaction};
 use alloy::{
     primitives::{Address, address},
     sol_types::SolCall as _,

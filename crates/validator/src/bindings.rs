@@ -27,6 +27,13 @@ sol! {
     }
 
     /// Safe transaction operation type; mirrors `Enum.Operation` onchain.
+    ///
+    /// `sol!` requires custom types used as event/struct fields to be
+    /// declared in the same macro invocation, so this ABI-decoding copy
+    /// can't be replaced with a `use` of [`safe_tx::types::Operation`] --
+    /// [`From`] converts one into the other at the point an event is
+    /// consumed, so the rest of the validator only ever sees the shared
+    /// `safe-tx` type.
     #[derive(Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
     enum Operation {
         #[default]
@@ -35,7 +42,8 @@ sol! {
     }
 
     /// A full Safe transaction as carried by the `(Oracle)TransactionProposed`
-    /// events (the 12-field `SafeTransaction.T` tuple).
+    /// events (the 12-field `SafeTransaction.T` tuple). See [`Operation`] for
+    /// why this can't just be [`safe_tx::types::SafeTransaction`].
     #[derive(Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
     struct SafeTransaction {
         uint256 chainId;
@@ -261,5 +269,29 @@ sol! {
     #[derive(Debug)]
     contract Oracle {
         event OracleResult(bytes32 indexed requestId, address indexed proposer, bytes result, bool approved);
+    }
+}
+
+impl From<&SafeTransaction> for safe_tx::types::SafeTransaction {
+    fn from(tx: &SafeTransaction) -> Self {
+        let operation = match tx.operation {
+            Operation::CALL => safe_tx::types::Operation::CALL,
+            Operation::DELEGATECALL => safe_tx::types::Operation::DELEGATECALL,
+            Operation::__Invalid => safe_tx::types::Operation::__Invalid,
+        };
+        safe_tx::types::SafeTransaction {
+            chainId: tx.chainId,
+            safe: tx.safe,
+            to: tx.to,
+            value: tx.value,
+            data: tx.data.clone(),
+            operation,
+            safeTxGas: tx.safeTxGas,
+            baseGas: tx.baseGas,
+            gasPrice: tx.gasPrice,
+            gasToken: tx.gasToken,
+            refundReceiver: tx.refundReceiver,
+            nonce: tx.nonce,
+        }
     }
 }

@@ -7,15 +7,13 @@
 //! contract lives on, and the contract's own address). The latter hash is
 //! the message a validator group's FROST signature actually attests to.
 
-use crate::{
-    bindings::{Point, SafeTransaction},
-    consensus::epoch::EpochId,
-};
+use crate::{bindings::Point, consensus::epoch::EpochId};
 use alloy::{
     primitives::{Address, B256, U256},
     sol,
     sol_types::{Eip712Domain, SolStruct},
 };
+use safe_tx::types::SafeTransaction;
 use std::num::NonZeroU64;
 
 sol! {
@@ -174,8 +172,8 @@ impl ConsensusDomain {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::bindings::Operation;
     use alloy::primitives::{Bytes, address, b256};
+    use safe_tx::types::Operation;
 
     const TEST_ADDRESS: Address = address!("d8dA6BF26964aF9D7eEd9e03E53415D37aA96045");
     const TEST_DOMAIN: ConsensusDomain = ConsensusDomain::new(1, TEST_ADDRESS);
