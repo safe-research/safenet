@@ -1,12 +1,17 @@
 mod action;
 mod bindings;
 mod config;
-mod detector;
+mod dynamic_checker;
+mod effect;
 mod hashing;
 mod service;
 mod state;
+mod static_checker;
 
-use self::{config::Config, detector::Detector, service::SentinelService};
+use self::{
+    config::Config, dynamic_checker::RemoteChecker, service::SentinelService,
+    static_checker::StaticChecker,
+};
 use alloy::{
     primitives::U256,
     providers::{Provider, ProviderBuilder},
@@ -51,7 +56,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
         config.signer.clone(),
         chain_id,
         config.sentinel.voting_window,
-        Detector::new(config.sentinel.blocklist),
+        StaticChecker::new(config.sentinel.blocklist),
+        RemoteChecker::new(config.sentinel.remote_check_url),
     );
 
     let driver = Driver::new(

@@ -33,4 +33,38 @@ impl RuleId {
             Self::R4_6KnownMaliciousTarget => "R-4.6",
         }
     }
+
+    /// Parses a rule's canonical Charter citation back into a [`RuleId`],
+    /// e.g. for validating a code an external check service cites in its
+    /// response. `None` for anything not among the variants declared so far.
+    pub fn from_code(code: &str) -> Option<Self> {
+        [
+            Self::R4_1SettingsChange,
+            Self::R4_2DelegatecallIntegrity,
+            Self::R4_6KnownMaliciousTarget,
+        ]
+        .into_iter()
+        .find(|rule| rule.code() == code)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn from_code_round_trips_every_variant() {
+        for rule in [
+            RuleId::R4_1SettingsChange,
+            RuleId::R4_2DelegatecallIntegrity,
+            RuleId::R4_6KnownMaliciousTarget,
+        ] {
+            assert_eq!(RuleId::from_code(rule.code()), Some(rule));
+        }
+    }
+
+    #[test]
+    fn from_code_rejects_unknown_codes() {
+        assert_eq!(RuleId::from_code("R-4.99"), None);
+    }
 }

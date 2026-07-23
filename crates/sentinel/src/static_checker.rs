@@ -3,7 +3,7 @@ use alloy::primitives::Address;
 use safe_tx::rule::RuleId;
 use std::{borrow::Cow, collections::HashSet};
 
-/// The detector's verdict on a proposed oracle transaction: whether to
+/// A [`StaticChecker`]'s verdict on a proposed oracle transaction: whether to
 /// approve it, and the justification to carry, verbatim, into the blind
 /// commit-reveal vote. `reason` is always a static string literal today, so
 /// `Cow` avoids allocating one on every `check` call.
@@ -36,9 +36,9 @@ impl Decision {
 }
 
 /// A single policy check, evaluated against the shared `safe-tx` transaction
-/// type. `Detector::check` runs its checks in a fixed order and stops at the
-/// first denial. New checks (R-4.5, R-4.3/R-4.4, ...) plug in here as later
-/// phases of the epic ship them.
+/// type. `StaticChecker::check` runs its checks in a fixed order and stops at
+/// the first denial. New checks (R-4.5, R-4.3/R-4.4, ...) plug in here as
+/// later phases of the epic ship them.
 trait Check {
     fn evaluate(&self, tx: &safe_tx::types::SafeTransaction) -> Result<(), RuleId>;
 }
@@ -69,12 +69,15 @@ impl Check for Blocklist {
 }
 
 /// Decides whether a proposed oracle transaction should be approved by
-/// running its checks, in a fixed order, built once at construction.
-pub struct Detector {
+/// running deterministic, local, synchronous checks against its calldata —
+/// as opposed to [`crate::dynamic_checker`]'s externally-pluggable,
+/// potentially statistical/time-varying checks. Built once at construction,
+/// in a fixed evaluation order.
+pub struct StaticChecker {
     checks: Vec<Box<dyn Check>>,
 }
 
-impl Detector {
+impl StaticChecker {
     pub fn new(blocklist: impl IntoIterator<Item = Address>) -> Self {
         Self {
             checks: vec![
@@ -113,32 +116,32 @@ mod tests {
 
     #[test]
     fn denied_when_blocklisted() {
-        let detector = Detector::new(vec![A1, A2]);
-        let decision = detector.check(&tx(A1));
+        let checker = StaticChecker::new(vec![A1, A2]);
+        let decision = checker.check(&tx(A1));
         assert!(!decision.approve);
         assert_eq!(decision.reason, RuleId::R4_6KnownMaliciousTarget.code());
-        assert!(!detector.check(&tx(A2)).approve);
+        assert!(!checker.check(&tx(A2)).approve);
     }
 
     #[test]
     fn approved_with_empty_blocklist() {
-        let detector = Detector::new(vec![]);
-        assert!(detector.check(&tx(A1)).approve);
+        let checker = StaticChecker::new(vec![]);
+        assert!(checker.check(&tx(A1)).approve);
     }
 
     #[test]
     fn approved_when_not_blocklisted() {
-        let detector = Detector::new(vec![A1, A2]);
-        let decision = detector.check(&tx(A3));
+        let checker = StaticChecker::new(vec![A1, A2]);
+        let decision = checker.check(&tx(A3));
         assert!(decision.approve);
         assert_eq!(decision.reason, "");
     }
 
     #[test]
     fn denied_self_call_not_on_settings_allow_list() {
-        let detector = Detector::new(vec![]);
+        let checker = StaticChecker::new(vec![]);
         let safe = A1;
-        let decision = detector.check(&SafeTransaction {
+        let decision = checker.check(&SafeTransaction {
             safe,
             to: safe,
             data: vec![0xde, 0xad, 0xbe, 0xef].into(),
@@ -150,8 +153,8 @@ mod tests {
 
     #[test]
     fn denied_delegatecall_to_unknown_target() {
-        let detector = Detector::new(vec![]);
-        let decision = detector.check(&SafeTransaction {
+        let checker = StaticChecker::new(vec![]);
+        let decision = checker.check(&SafeTransaction {
             safe: A1,
             to: A2,
             operation: crate::bindings::consensus::Operation::DELEGATECALL,

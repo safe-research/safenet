@@ -56,6 +56,11 @@ pub struct SentinelConfig {
     pub voting_window: u64,
     /// Transaction destinations that are always denied.
     pub blocklist: Vec<Address>,
+    /// An operator-configured endpoint to defer checks to that aren't
+    /// implemented locally (see [`crate::dynamic_checker`]). No dynamic check
+    /// runs if this is unset.
+    #[serde(default)]
+    pub remote_check_url: Option<Url>,
 }
 
 impl Config {
@@ -110,6 +115,7 @@ mod tests {
             config.sentinel.blocklist,
             vec![address!("0x0404040404040404040404040404040404040404")]
         );
+        assert_eq!(config.sentinel.remote_check_url, None);
         assert_eq!(
             config.observability.log_filter.to_string(),
             observability::Config::default().log_filter.to_string()
