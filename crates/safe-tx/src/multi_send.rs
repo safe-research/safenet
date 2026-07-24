@@ -1,7 +1,10 @@
 use std::mem;
 
-use crate::types::{Operation, SafeTransaction};
-use alloy::primitives::{Address, Bytes, U256, address};
+use crate::types::{Operation, SafeTransaction, multi_send_bindings};
+use alloy::{
+    primitives::{Address, Bytes, U256, address},
+    sol_types::SolCall,
+};
 
 #[derive(Clone, Copy)]
 pub enum MultiSendVersion {
@@ -124,6 +127,23 @@ pub fn decode_multi_send(
     }
 
     Some(result)
+}
+
+/// Decodes `tx` as a whole MultiSend call: `None` unless `tx` is a
+/// delegatecall to a known MultiSend deployment carrying a valid
+/// `multiSend(bytes)` call whose packed `transactions` blob itself decodes
+/// cleanly. On success, returns the individual sub-transactions plus
+/// whether that deployment allows delegate calls among them — combining
+/// `known_deployment`, decoding the outer `multiSend(bytes)` call, and
+/// `decode_multi_send`, the three steps every caller needs together.
+pub fn decode_multi_send_call(tx: &SafeTransaction) -> Option<(Vec<SafeTransaction>, bool)> {
+    if tx.operation != Operation::DELEGATECALL {
+        return None;
+    }
+    let (version, allows_delegate_calls) = known_deployment(tx.to)?;
+    let call = multi_send_bindings::multiSendCall::abi_decode(&tx.data).ok()?;
+    let sub_txs = decode_multi_send(tx.safe, &call.transactions, version)?;
+    Some((sub_txs, allows_delegate_calls))
 }
 
 struct Cursor<'a>(&'a [u8]);

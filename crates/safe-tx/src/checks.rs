@@ -1,4 +1,4 @@
-use crate::multi_send::{decode_multi_send, known_deployment};
+use crate::multi_send::decode_multi_send_call;
 use crate::rule::RuleId;
 use crate::types::{Operation, SafeTransaction};
 use alloy::{
@@ -214,18 +214,7 @@ fn check_delegate_calls(tx: &SafeTransaction) -> bool {
 /// `bool`, which is a bigger change than a MultiSend-only fix warrants
 /// right now.
 fn check_multi_send(tx: &SafeTransaction) -> bool {
-    if tx.operation != Operation::DELEGATECALL {
-        return false;
-    }
-    let Ok(call) = bindings::multiSendCall::abi_decode(&tx.data) else {
-        return false;
-    };
-
-    let Some((version, allows_delegate_calls)) = known_deployment(tx.to) else {
-        return false;
-    };
-
-    let Some(sub_txs) = decode_multi_send(tx.safe, &call.transactions, version) else {
+    let Some((sub_txs, allows_delegate_calls)) = decode_multi_send_call(tx) else {
         return false;
     };
 
