@@ -1,4 +1,6 @@
+use crate::effect::Effect;
 use alloy::primitives::{B256, U256};
+use safenet_core::state::Command;
 
 /// An action emitted by the sentinel during a state transition, driving the
 /// commit-reveal FSM (blind `Commit` followed by `Reveal`) rather than a
@@ -32,4 +34,10 @@ pub enum SentinelActionKind {
 pub struct SentinelAction {
     pub kind: SentinelActionKind,
     pub expires_at: Option<u64>,
+}
+
+impl From<SentinelAction> for Command<SentinelAction, Effect> {
+    fn from(action: SentinelAction) -> Self {
+        Command::Action(action)
+    }
 }
