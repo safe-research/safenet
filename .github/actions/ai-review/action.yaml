@@ -28,6 +28,10 @@ inputs:
     description: "The pull request number to review"
     required: false
     default: ${{ github.event.pull_request.number }}
+  title:
+    description: "Title identifying this reviewer, prefixed to the posted review (useful when multiple ai-review workflows run against the same PR)"
+    required: false
+    default: "AI Code Review"
 
 runs:
   using: "composite"
@@ -41,6 +45,7 @@ runs:
         CONTEXT_MODEL: ${{ inputs.context-model }}
         FALLBACK_MODEL: ${{ inputs.fallback-model }}
         PR_NUMBER: ${{ inputs.pr-number }}
+        TITLE: ${{ inputs.title }}
       with:
         github-token: ${{ inputs.github-token }}
         script: |
