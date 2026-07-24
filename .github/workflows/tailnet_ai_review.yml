@@ -1,0 +1,44 @@
+name: Tailnet AI Code Review
+
+on:
+  pull_request:
+    types:
+      - opened
+      - reopened
+  workflow_dispatch:
+    inputs:
+      pr-number:
+        description: "The pull request number to review"
+        required: true
+
+permissions:
+  contents: read
+  pull-requests: write
+  id-token: write
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          sparse-checkout: |
+            .github/actions/ai-review
+
+      - name: Connect to Tailscale
+        uses: tailscale/github-action@780049a30b6ff5c378a9e7b389d15ece7a204888 # v4.1.3
+        with:
+          oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
+          audience: ${{ secrets.TS_AUDIENCE }}
+          tags: tag:ci
+          ping: ${{ secrets.TAILNET_AI_HOST }}
+
+      - uses: ./.github/actions/ai-review
+        with:
+          api-key: ${{ secrets.TAILNET_AI_API_KEY }}
+          endpoint: ${{ secrets.TAILNET_AI_ENDPOINT }}
+          model: ${{ vars.TAILNET_AI_MODEL }}
+          context-model: ${{ vars.TAILNET_AI_CONTEXT_MODEL }}
+          fallback-model: ${{ vars.TAILNET_AI_FALLBACK_MODEL }}
+          pr-number: ${{ inputs.pr-number || github.event.pull_request.number }}
+          title: "Tailnet AI Code Review"

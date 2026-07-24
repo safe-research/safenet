@@ -2,6 +2,12 @@ const MAX_ADDITIONAL_FILES = 15;
 
 const SYSTEM_PROMPT = `The current year is ${new Date().getFullYear()}. Newer versions of software, GitHub Actions, and model names than you're aware of from training may still be valid and correct. Do not flag version strings, action references (e.g. actions/checkout@vN), or model names as errors solely because they are unfamiliar to you.`;
 
+const REVIEW_INSTRUCTIONS = `Review this PR. Provide a concise overall summary and, where relevant, specific comments referencing a file path and line number from the diff (the line number in the new version of the file).
+
+- Only comment on lines actually changed in the diff.
+- Only leave a comment where the code should be changed, could be improved, or is questionable — do not comment on lines that are already fine just to praise or acknowledge them.
+- Every comment must be an actionable item.`;
+
 const FILES_SCHEMA = {
   type: "object",
   properties: {
@@ -83,6 +89,7 @@ module.exports = async ({ github, context, core }) => {
   const model = process.env.MODEL;
   const contextModel = process.env.CONTEXT_MODEL;
   const fallbackModel = process.env.FALLBACK_MODEL;
+  const title = process.env.TITLE || "AI Code Review";
   const prNumber = parseInt(process.env.PR_NUMBER);
   const { owner, repo } = context.repo;
 
@@ -140,7 +147,7 @@ module.exports = async ({ github, context, core }) => {
       `PR description:\n${description}`,
       `PR diff:\n${diff}`,
       additionalContext && `Additional file contents for context:\n${additionalContext}`,
-      "Review this PR. Provide a concise overall summary and, where relevant, specific comments referencing a file path and line number from the diff (the line number in the new version of the file). Only comment on lines actually changed in the diff.",
+      REVIEW_INSTRUCTIONS,
     ]
       .filter(Boolean)
       .join("\n\n"),
@@ -148,7 +155,7 @@ module.exports = async ({ github, context, core }) => {
     REVIEW_SCHEMA,
   );
 
-  const body = summary || "AI review";
+  const body = `## ${title}\n\n${summary || "AI review"}`;
   const inlineComments = (comments || []).map((c) => ({ path: c.path, line: c.line, body: c.body, side: "RIGHT" }));
 
   try {

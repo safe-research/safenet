@@ -28,3 +28,4 @@ jobs:
         with:
           api-key: ${{ secrets.GEMINI_API_KEY }}
           pr-number: ${{ inputs.pr-number || github.event.pull_request.number }}
+          title: "Gemini Code Review"
