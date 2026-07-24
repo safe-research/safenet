@@ -4,30 +4,15 @@
 //! a sentinel maintainer wants to run that doesn't belong in this crate.
 //! [`RemoteChecker`] is this initial cut's only implementation: a plain
 //! HTTPS POST issued inline, not a separate crate/service. Its
-//! [`RemoteChecker::check`] method is already the seam to split "trigger
-//! this endpoint, parse the response" along if that ever needs to move out
-//! on its own, or to extract a trait behind if a second implementation
-//! shows up.
+//! [`RemoteChecker`]'s [`Checker`] impl is already the seam to split
+//! "trigger this endpoint, parse the response" along if that ever needs to
+//! move out on its own.
 
+use crate::checker::{CheckOutcome, Checker};
 use alloy::primitives::Address;
 use safe_tx::{rule::RuleId, types::SafeTransaction};
 use serde::{Deserialize, Serialize};
 use url::Url;
-
-/// The outcome of a [`RemoteChecker::check`] call.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum RemoteCheckOutcome {
-    /// No configured remote check denied the transaction (or none is
-    /// configured at all).
-    Approved,
-    /// The remote check denied the transaction, citing this rule.
-    Denied(RuleId),
-    /// The endpoint couldn't be reached, or answered with something that
-    /// can't be trusted (a non-2xx status, a malformed body, or a `rule`
-    /// code this Sentinel doesn't recognize). Callers must not guess at
-    /// approve/deny for this outcome — see the caveat on [`RemoteChecker`].
-    Failed,
-}
 
 #[derive(Serialize)]
 struct Request<'a> {
@@ -55,8 +40,8 @@ pub struct RemoteChecker {
 
 impl RemoteChecker {
     /// `url: None` means no remote check is configured; every call then
-    /// resolves to [`RemoteCheckOutcome::Approved`] without a request, so
-    /// the reference Sentinel works with just its local checks until an
+    /// resolves to [`CheckOutcome::Approved`] without a request, so the
+    /// reference Sentinel works with just its local checks until an
     /// operator opts into a remote one.
     pub fn new(url: Option<Url>) -> Self {
         Self {
@@ -65,22 +50,12 @@ impl RemoteChecker {
         }
     }
 
-    pub async fn check(&self, safe: Address, transaction: &SafeTransaction) -> RemoteCheckOutcome {
-        let Some(url) = &self.url else {
-            return RemoteCheckOutcome::Approved;
-        };
-        self.request(url, safe, transaction).await.unwrap_or_else(|err| {
-            tracing::error!(%err, %safe, "remote check request failed; dropping the request unanswered");
-            RemoteCheckOutcome::Failed
-        })
-    }
-
     async fn request(
         &self,
         url: &Url,
         safe: Address,
         transaction: &SafeTransaction,
-    ) -> Result<RemoteCheckOutcome, reqwest::Error> {
+    ) -> Result<CheckOutcome, reqwest::Error> {
         let response: Response = self
             .client
             .post(url.clone())
@@ -95,14 +70,32 @@ impl RemoteChecker {
                 response.approve,
                 response.rule.as_deref().map(RuleId::from_code),
             ) {
-                (true, _) => RemoteCheckOutcome::Approved,
-                (false, Some(Some(rule))) => RemoteCheckOutcome::Denied(rule),
+                (true, _) => CheckOutcome::Approved,
+                (false, Some(Some(rule))) => CheckOutcome::Denied(rule),
                 (false, _) => {
                     tracing::error!(%safe, "remote check denied without a recognized rule code");
-                    RemoteCheckOutcome::Failed
+                    CheckOutcome::Unknown
                 }
             },
         )
+    }
+}
+
+#[async_trait::async_trait]
+impl Checker for RemoteChecker {
+    /// A failed request is *not* treated as approval or denial: an
+    /// unreachable or malfunctioning remote check isn't evidence about the
+    /// transaction either way, so it resolves to [`CheckOutcome::Unknown`],
+    /// deferring to whatever checker runs next (or, if this is the last one
+    /// in the chain, dropping the request rather than voting on it).
+    async fn check(&self, safe: Address, transaction: &SafeTransaction) -> CheckOutcome {
+        let Some(url) = &self.url else {
+            return CheckOutcome::Approved;
+        };
+        self.request(url, safe, transaction).await.unwrap_or_else(|err| {
+            tracing::error!(%err, %safe, "remote check request failed; dropping the request unanswered");
+            CheckOutcome::Unknown
+        })
     }
 }
 
@@ -140,7 +133,7 @@ mod tests {
         let checker = RemoteChecker::new(None);
         assert_eq!(
             checker.check(SAFE, &SafeTransaction::default()).await,
-            RemoteCheckOutcome::Approved
+            CheckOutcome::Approved
         );
     }
 
@@ -150,7 +143,7 @@ mod tests {
         let checker = RemoteChecker::new(Some(url));
         assert_eq!(
             checker.check(SAFE, &SafeTransaction::default()).await,
-            RemoteCheckOutcome::Approved
+            CheckOutcome::Approved
         );
     }
 
@@ -160,7 +153,7 @@ mod tests {
         let checker = RemoteChecker::new(Some(url));
         assert_eq!(
             checker.check(SAFE, &SafeTransaction::default()).await,
-            RemoteCheckOutcome::Denied(RuleId::R4_6KnownMaliciousTarget)
+            CheckOutcome::Denied(RuleId::R4_6KnownMaliciousTarget)
         );
     }
 
@@ -170,7 +163,7 @@ mod tests {
         let checker = RemoteChecker::new(Some(url));
         assert_eq!(
             checker.check(SAFE, &SafeTransaction::default()).await,
-            RemoteCheckOutcome::Failed
+            CheckOutcome::Unknown
         );
     }
 
@@ -183,7 +176,7 @@ mod tests {
         let checker = RemoteChecker::new(Some(url));
         assert_eq!(
             checker.check(SAFE, &SafeTransaction::default()).await,
-            RemoteCheckOutcome::Failed
+            CheckOutcome::Unknown
         );
     }
 }

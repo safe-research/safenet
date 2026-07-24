@@ -1,14 +1,11 @@
 //! The sentinel's single effect: deferring a proposed transaction's
-//! remaining approve/deny decision to
-//! [`crate::dynamic_checker::RemoteChecker`] once the local, synchronous
-//! checks in [`crate::static_checker::StaticChecker`] have passed. Emitted by
+//! remaining approve/deny decision to [`Handler`]'s checker chain once the
+//! local, synchronous checks in [`crate::static_checker::StaticChecker`]
+//! have passed. Emitted by
 //! `SentinelTransition::handle_oracle_transaction_proposed` and consumed by
 //! `SentinelTransition::apply_transition`'s `Message::Resume` arm.
 
-use crate::{
-    address_poisoning::{AddressPoisoningChecker, Verdict},
-    dynamic_checker::{RemoteCheckOutcome, RemoteChecker},
-};
+use crate::checker::{CheckOutcome, Checker};
 use alloy::primitives::{Address, B256};
 use safe_tx::types::SafeTransaction;
 use safenet_core::state::EffectHandler;
@@ -39,26 +36,26 @@ pub enum Resume {
     DynamicCheckResult {
         request_id: B256,
         deadline: u64,
-        outcome: RemoteCheckOutcome,
+        outcome: CheckOutcome,
     },
 }
 
-/// Performs the sentinel's [`Effect`]s against the configured dynamic check.
+/// Performs the sentinel's [`Effect`]s by running its [`Checker`] chain in
+/// order, stopping at the first non-[`CheckOutcome::Unknown`] result. If
+/// every checker resolves to `Unknown`, so does the whole effect — see
+/// `crate::checker` for why that's the right default rather than guessing.
+///
+/// This is an initial cut of the "array of checkers" shape (see
+/// `crate::checker`'s module docs); the fixed construction order below is
+/// what encodes today's precedence (the built-in CoW check ahead of
+/// address-poisoning, ahead of the operator-configured remote check).
 pub struct Handler {
-    /// The built-in address-poisoning check (see
-    /// [`crate::address_poisoning`]) — run first, before falling through to
-    /// `checker`, since it's a check this reference Sentinel always runs
-    /// itself rather than something an operator opts into.
-    address_poisoning: AddressPoisoningChecker,
-    checker: RemoteChecker,
+    checkers: Vec<Box<dyn Checker>>,
 }
 
 impl Handler {
-    pub fn new(address_poisoning: AddressPoisoningChecker, checker: RemoteChecker) -> Self {
-        Self {
-            address_poisoning,
-            checker,
-        }
+    pub fn new(checkers: Vec<Box<dyn Checker>>) -> Self {
+        Self { checkers }
     }
 }
 
@@ -71,10 +68,13 @@ impl EffectHandler<Effect, Resume> for Handler {
                 transaction,
                 deadline,
             } => {
-                let outcome = match self.address_poisoning.check(safe, &transaction).await {
-                    Verdict::Approved => RemoteCheckOutcome::Approved,
-                    Verdict::NoOpinion => self.checker.check(safe, &transaction).await,
-                };
+                let mut outcome = CheckOutcome::Unknown;
+                for checker in &self.checkers {
+                    outcome = checker.check(safe, &transaction).await;
+                    if outcome != CheckOutcome::Unknown {
+                        break;
+                    }
+                }
                 Resume::DynamicCheckResult {
                     request_id,
                     deadline,
@@ -88,6 +88,7 @@ impl EffectHandler<Effect, Resume> for Handler {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::{address_poisoning::AddressPoisoningChecker, dynamic_checker::RemoteChecker};
     use alloy::{
         providers::{Provider, ProviderBuilder},
         transports::mock::Asserter,
@@ -103,13 +104,17 @@ mod tests {
         AddressPoisoningChecker::new(provider, 1_000)
     }
 
+    fn handler(address_poisoning: AddressPoisoningChecker, remote: RemoteChecker) -> Handler {
+        Handler::new(vec![Box::new(address_poisoning), Box::new(remote)])
+    }
+
     #[tokio::test]
     async fn resumes_with_the_checker_s_outcome() {
         // An unconfigured `RemoteChecker` always approves, and a
         // `SafeTransaction::default()` has no ERC-20 calldata for the
-        // address-poisoning check to even look at — this only exercises the
+        // earlier checkers to even look at — this only exercises the
         // `Effect` -> `Resume` wiring itself.
-        let mut handler = Handler::new(address_poisoning(), RemoteChecker::new(None));
+        let mut handler = handler(address_poisoning(), RemoteChecker::new(None));
 
         let resume = handler
             .perform_effect(Effect::DynamicCheck {
@@ -125,8 +130,11 @@ mod tests {
             Resume::DynamicCheckResult {
                 request_id,
                 deadline: 42,
-                outcome: RemoteCheckOutcome::Approved,
+                outcome: CheckOutcome::Approved,
             } if request_id == REQUEST_ID
         ));
     }
+
+    // `cow_denial_overrides_an_address_poisoning_approval` deferred to Phase
+    // 8a, once `crate::cow::CowChecker` actually exists to exercise.
 }

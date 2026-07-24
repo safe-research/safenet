@@ -1,6 +1,7 @@
 mod action;
 mod address_poisoning;
 mod bindings;
+mod checker;
 mod config;
 mod dynamic_checker;
 mod effect;
