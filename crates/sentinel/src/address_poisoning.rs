@@ -29,13 +29,15 @@ use alloy::{
     sol,
     sol_types::{SolCall, SolEvent},
 };
-use safe_tx::{rule::RuleId, types::SafeTransaction};
+use safe_tx::{
+    rule::RuleId,
+    types::{
+        SafeTransaction,
+        erc20::{approveCall, transferCall, transferFromCall},
+    },
+};
 
 sol! {
-    function transfer(address to, uint256 amount);
-    function transferFrom(address from, address to, uint256 amount);
-    function approve(address spender, uint256 amount);
-
     event Transfer(address indexed from, address indexed to, uint256 amount);
     event Approval(address indexed owner, address indexed spender, uint256 amount);
 }
