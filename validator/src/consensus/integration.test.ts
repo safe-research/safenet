@@ -826,6 +826,7 @@ describe("integration", () => {
 				// since the request resolves well within this test's runtime.
 				"voting_window = 1000",
 				"blocklist = []",
+				"address_poisoning_lookback_blocks = 1000",
 				"",
 				"[index]",
 				`block_time = ${BLOCK_TIME_MS}`,

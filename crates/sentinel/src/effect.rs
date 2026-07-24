@@ -5,7 +5,10 @@
 //! `SentinelTransition::handle_oracle_transaction_proposed` and consumed by
 //! `SentinelTransition::apply_transition`'s `Message::Resume` arm.
 
-use crate::dynamic_checker::{RemoteCheckOutcome, RemoteChecker};
+use crate::{
+    address_poisoning::{AddressPoisoningChecker, Verdict},
+    dynamic_checker::{RemoteCheckOutcome, RemoteChecker},
+};
 use alloy::primitives::{Address, B256};
 use safe_tx::types::SafeTransaction;
 use safenet_core::state::EffectHandler;
@@ -42,12 +45,20 @@ pub enum Resume {
 
 /// Performs the sentinel's [`Effect`]s against the configured dynamic check.
 pub struct Handler {
+    /// The built-in address-poisoning check (see
+    /// [`crate::address_poisoning`]) — run first, before falling through to
+    /// `checker`, since it's a check this reference Sentinel always runs
+    /// itself rather than something an operator opts into.
+    address_poisoning: AddressPoisoningChecker,
     checker: RemoteChecker,
 }
 
 impl Handler {
-    pub fn new(checker: RemoteChecker) -> Self {
-        Self { checker }
+    pub fn new(address_poisoning: AddressPoisoningChecker, checker: RemoteChecker) -> Self {
+        Self {
+            address_poisoning,
+            checker,
+        }
     }
 }
 
@@ -59,11 +70,17 @@ impl EffectHandler<Effect, Resume> for Handler {
                 safe,
                 transaction,
                 deadline,
-            } => Resume::DynamicCheckResult {
-                request_id,
-                deadline,
-                outcome: self.checker.check(safe, &transaction).await,
-            },
+            } => {
+                let outcome = match self.address_poisoning.check(safe, &transaction).await {
+                    Verdict::Approved => RemoteCheckOutcome::Approved,
+                    Verdict::NoOpinion => self.checker.check(safe, &transaction).await,
+                };
+                Resume::DynamicCheckResult {
+                    request_id,
+                    deadline,
+                    outcome,
+                }
+            }
         }
     }
 }
@@ -71,15 +88,28 @@ impl EffectHandler<Effect, Resume> for Handler {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use alloy::{
+        providers::{Provider, ProviderBuilder},
+        transports::mock::Asserter,
+    };
 
     const SAFE: Address = Address::new([1u8; 20]);
     const REQUEST_ID: B256 = B256::repeat_byte(0x11);
 
+    fn address_poisoning() -> AddressPoisoningChecker {
+        let provider = ProviderBuilder::default()
+            .connect_mocked_client(Asserter::new())
+            .erased();
+        AddressPoisoningChecker::new(provider, 1_000)
+    }
+
     #[tokio::test]
     async fn resumes_with_the_checker_s_outcome() {
-        // An unconfigured `RemoteChecker` always approves; this only
-        // exercises the `Effect` -> `Resume` wiring itself.
-        let mut handler = Handler::new(RemoteChecker::new(None));
+        // An unconfigured `RemoteChecker` always approves, and a
+        // `SafeTransaction::default()` has no ERC-20 calldata for the
+        // address-poisoning check to even look at — this only exercises the
+        // `Effect` -> `Resume` wiring itself.
+        let mut handler = Handler::new(address_poisoning(), RemoteChecker::new(None));
 
         let resume = handler
             .perform_effect(Effect::DynamicCheck {
