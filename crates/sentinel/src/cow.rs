@@ -39,14 +39,26 @@
 //! a compromised relayer could drain the excess); an approval too small to
 //! fully fund the order is a trade-soundness concern, not a security one,
 //! and doesn't affect the verdict. Otherwise, the batch is approved
-//! outright. A batched swap (`setPreSignature`) still can't be checked this
-//! way — its order is signed off-chain and never appears in the Safe's own
-//! calldata — and is deferred to a follow-up PR (see
-//! [`CowChecker::check_presignature_batch`]).
+//! outright.
+//!
+//! **A batched presignature order is checked the same way**
+//! ([`CowChecker::check_presignature_batch`], epic Phase 8c): only an exact
+//! 2-call batch — one `approve`, one `setPreSignature`, in either order — is
+//! recognized. Unlike the TWAP order's own calldata, a presigned order's
+//! terms are signed off-chain, so this fetches the referenced order from
+//! CoW's public order-by-UID API and approves outright once its token/amount
+//! exactly match what's approved *and* its proceeds go back to the Safe
+//! itself. As with the TWAP check, a denial here splits by cause: a wrong
+//! receiver is [`RuleId::R4_4AuthorizationTarget`] (target manipulation,
+//! not an amount concern), while a token/amount mismatch is
+//! [`RuleId::R4_5ExcessiveApproval`] — unlike the TWAP check, though, a Safe
+//! `approve` sets an allowance rather than incrementing it, so both an
+//! under-approval and an over-approval are denied here. An unreachable or
+//! malformed API response is `Unknown`, not guessed at either way.
 
 use crate::checker::{CheckOutcome, Checker};
 use alloy::{
-    primitives::{Address, U256, address},
+    primitives::{Address, Bytes, U256, address},
     sol,
     sol_types::{SolCall, SolValue},
 };
@@ -55,6 +67,7 @@ use safe_tx::{
     rule::RuleId,
     types::{Operation, SafeTransaction, erc20::approveCall},
 };
+use serde::Deserialize;
 
 sol! {
     function setPreSignature(bytes orderUid, bool signed);
@@ -102,28 +115,161 @@ const TWAP_HANDLER: Address = address!("6cF1e9cA41f7611dEf408122793c358a3d11E5a5
 /// Gnosis Chain.
 const SUPPORTED_CHAIN_IDS: &[u64] = &[1, 42161, 100];
 
-/// The built-in CoW Swap check (see module docs). Holds no state — the
-/// registry above is entirely static — but is a struct (rather than a bare
-/// function) so it can implement [`Checker`] and slot into
-/// `crate::effect::Handler`'s checker chain like every other check.
-pub struct CowChecker;
+/// CoW's own public order-by-UID API host, one per network it's deployed on
+/// — the same three chains recognized above, used only by
+/// [`CowChecker::check_presignature_batch`] to resolve where to fetch an
+/// order's details from.
+fn order_api_base_url(chain_id: U256) -> Option<&'static str> {
+    if chain_id == U256::from(1u64) {
+        Some("https://api.cow.fi/mainnet")
+    } else if chain_id == U256::from(100u64) {
+        Some("https://api.cow.fi/xdai")
+    } else if chain_id == U256::from(42161u64) {
+        Some("https://api.cow.fi/arbitrum_one")
+    } else {
+        None
+    }
+}
+
+/// Fetches a CoW order's details by UID. A thin seam between
+/// [`CowChecker`]'s own logic and the actual HTTP call, so tests can supply
+/// a fake instead of standing up a real server (see `FakeOrderApi` in this
+/// module's tests).
+#[async_trait::async_trait]
+trait OrderApi: Send + Sync {
+    async fn fetch_order(
+        &self,
+        base_url: &str,
+        order_uid: &Bytes,
+    ) -> Result<Order, OrderLookupError>;
+}
+
+/// The real [`OrderApi`], backed by a `reqwest::Client`.
+struct ReqwestOrderApi {
+    client: reqwest::Client,
+}
+
+#[async_trait::async_trait]
+impl OrderApi for ReqwestOrderApi {
+    async fn fetch_order(
+        &self,
+        base_url: &str,
+        order_uid: &Bytes,
+    ) -> Result<Order, OrderLookupError> {
+        Ok(self
+            .client
+            .get(format!("{base_url}/api/v1/orders/{order_uid}"))
+            .send()
+            .await?
+            .error_for_status()?
+            .json()
+            .await?)
+    }
+}
+
+/// Why an order lookup failed, flattened to a message rather than kept as a
+/// `reqwest::Error` — that type has no public constructor, so a test fake
+/// couldn't otherwise return one without a real request to produce it from.
+#[derive(Debug, thiserror::Error)]
+#[error("{0}")]
+struct OrderLookupError(String);
+
+impl From<reqwest::Error> for OrderLookupError {
+    fn from(err: reqwest::Error) -> Self {
+        Self(err.to_string())
+    }
+}
+
+/// The built-in CoW Swap check (see module docs). Delegates the actual order
+/// lookup ([`CowChecker::check_presignature_batch`]'s own need) to an
+/// [`OrderApi`] — real HTTP via [`ReqwestOrderApi`] in production, a fake in
+/// tests.
+pub struct CowChecker {
+    order_api: Box<dyn OrderApi>,
+}
 
 impl CowChecker {
     pub fn new() -> Self {
-        Self {}
+        Self::with_client(reqwest::Client::new())
     }
 
-    async fn check_presignature_batch(&self, _calls: &[SafeTransaction]) -> CheckOutcome {
-        // Currently only placeholder, proper check has to be implemented in follow up PR:
-        // - check that batch size is 2 -> if not return unknown
-        // - check if one of them is an approval -> if not return unknown
-        // - check if other is pre signature call -> if not return unknown
-        // - fetch order from CoW API and parse token, amount and receiver
-        // - if receiver is different -> DENY
-        // - if token is different -> DENY
-        // - if token amount is different -> DENY
-        // - otherwise APPROVE
-        CheckOutcome::Unknown
+    /// Backed by `client` rather than a freshly-constructed one, so a caller
+    /// can share a single `reqwest::Client` across checkers.
+    pub fn with_client(client: reqwest::Client) -> Self {
+        Self {
+            order_api: Box::new(ReqwestOrderApi { client }),
+        }
+    }
+
+    #[cfg(test)]
+    fn with_order_api(order_api: impl OrderApi + 'static) -> Self {
+        Self {
+            order_api: Box::new(order_api),
+        }
+    }
+
+    /// Recognizes a presignature-flow batch — *exactly* one ERC-20 `approve`
+    /// to `GPv2VaultRelayer` paired with one presignature call for the same
+    /// order, nothing else, the only shape a genuine CoW Swap presignature
+    /// flow takes (a Safe `approve` sets an allowance rather than
+    /// incrementing it, so anything looser isn't the expected pattern) —
+    /// fetches that order from CoW's own API, and approves outright once its
+    /// token/amount exactly match what's approved *and* its proceeds go back
+    /// to the Safe itself: this narrow a match is confident enough evidence
+    /// of a genuine CoW Swap to decide the vote, not merely defer to the
+    /// next checker. If it denies, it denies under
+    /// [`RuleId::R4_4AuthorizationTarget`] when the order's receiver isn't
+    /// `safe` itself (an address-poisoning-style target-manipulation
+    /// concern, the same split [`CowChecker::check_twap_batch`] makes), or
+    /// under [`RuleId::R4_5ExcessiveApproval`] when the token/amount don't
+    /// match instead.
+    ///
+    /// Returns [`CheckOutcome::Unknown`] if `chain_id` isn't recognized, if
+    /// `calls` isn't that exact shape at all, or if the lookup fails or is
+    /// malformed: an unreachable/malformed API response is *not* treated as
+    /// approval or denial, consistent with this epic's established pattern
+    /// for external lookups.
+    async fn check_presignature_batch(
+        &self,
+        safe: Address,
+        chain_id: U256,
+        calls: &[SafeTransaction],
+    ) -> CheckOutcome {
+        let Some(base_url) = order_api_base_url(chain_id) else {
+            return CheckOutcome::Unknown;
+        };
+        let [first, second] = calls else {
+            return CheckOutcome::Unknown;
+        };
+        let Some((token, approved_amount, order_uid)) =
+            decode_approval_and_presignature(first, second)
+                .or_else(|| decode_approval_and_presignature(second, first))
+        else {
+            return CheckOutcome::Unknown;
+        };
+
+        match self.order_api.fetch_order(base_url, &order_uid).await {
+            // A wrong receiver is an address-poisoning-style
+            // target-manipulation concern (R-4.4), distinct from the
+            // excessive-approval-amount concern (R-4.5) the token/amount
+            // check below guards against — see `check_twap_batch` for the
+            // same split.
+            Ok(order) if order.receiver() != safe => {
+                CheckOutcome::Denied(RuleId::R4_4AuthorizationTarget)
+            }
+            Ok(order) if token == order.sell_token && approved_amount == order.sell_amount => {
+                CheckOutcome::Approved
+            }
+            Ok(_) => CheckOutcome::Denied(RuleId::R4_5ExcessiveApproval),
+            Err(err) => {
+                tracing::error!(
+                    %err,
+                    %order_uid,
+                    "CoW order lookup failed; no opinion on the batched approval"
+                );
+                CheckOutcome::Unknown
+            }
+        }
     }
 
     /// Deliberately narrow: recognizes only an exact 2-call batch, one
@@ -191,6 +337,12 @@ impl CowChecker {
     }
 }
 
+impl Default for CowChecker {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 #[async_trait::async_trait]
 impl Checker for CowChecker {
     /// Runs, in order, [`CowChecker::check_dangling_approval`],
@@ -211,7 +363,9 @@ impl Checker for CowChecker {
             return dangling_check;
         }
 
-        let presig_check = self.check_presignature_batch(&calls).await;
+        let presig_check = self
+            .check_presignature_batch(safe, transaction.chainId, &calls)
+            .await;
         if presig_check != CheckOutcome::Unknown {
             return presig_check;
         }
@@ -316,15 +470,121 @@ fn twap_order_terms(tx: &SafeTransaction) -> Option<(Address, Address, U256)> {
     Some((order.sellToken, order.receiver, total))
 }
 
+/// The referenced order's UID, if `tx` is a plain, valueless `CALL` to
+/// `GPv2Settlement` presigning it (`signed: true` — an *unset* presignature
+/// doesn't commit the Safe to the order). See [`approves_vault_relayer`] for
+/// why `DELEGATECALL` and nonzero `tx.value` are excluded even to a
+/// legitimate address.
+fn presignature_order_uid(tx: &SafeTransaction) -> Option<Bytes> {
+    if tx.operation != Operation::CALL || !tx.value.is_zero() || tx.to != GP_V2_SETTLEMENT {
+        return None;
+    }
+    setPreSignatureCall::abi_decode(&tx.data)
+        .ok()
+        .filter(|call| call.signed)
+        .map(|call| call.orderUid)
+}
+
+/// `approval`'s approved token/amount and `presignature`'s referenced order
+/// UID, if both decode as expected — `None` if either doesn't. Used to try
+/// both orderings of a two-call batch without repeating the pairing logic
+/// (see [`CowChecker::check_presignature_batch`]).
+fn decode_approval_and_presignature(
+    approval: &SafeTransaction,
+    presignature: &SafeTransaction,
+) -> Option<(Address, U256, Bytes)> {
+    let (token, approved_amount) = vault_relayer_approval_amount(approval)?;
+    let order_uid = presignature_order_uid(presignature)?;
+    Some((token, approved_amount, order_uid))
+}
+
+/// The order fields [`CowChecker::check_presignature_batch`] needs. `owner`
+/// is who placed the order — the Safe itself, for a genuine presignature
+/// order — and `receiver` is who the bought tokens go to, falling back to
+/// `owner` when unset (`null`), exactly as CoW's own API defines it.
+#[derive(Deserialize, Clone, Copy)]
+struct Order {
+    owner: Address,
+    receiver: Option<Address>,
+    #[serde(rename = "sellToken")]
+    sell_token: Address,
+    #[serde(rename = "sellAmount", deserialize_with = "deserialize_decimal_u256")]
+    sell_amount: U256,
+}
+
+impl Order {
+    /// The effective receiver of this order's proceeds. CoW treats *both*
+    /// `null` and the zero address as "same as `owner`" — orders are
+    /// commonly created with `receiver: 0x0` to mean exactly that, so
+    /// `Some(Address::ZERO)` must fall back to `owner` too, not be taken
+    /// literally as a real (zero) recipient.
+    fn receiver(&self) -> Address {
+        match self.receiver {
+            Some(receiver) if !receiver.is_zero() => receiver,
+            _ => self.owner,
+        }
+    }
+}
+
+/// CoW's API returns amounts as plain decimal strings, not the hex format
+/// alloy's own `U256` (de)serialization expects.
+fn deserialize_decimal_u256<'de, D: serde::Deserializer<'de>>(de: D) -> Result<U256, D::Error> {
+    String::deserialize(de)?
+        .parse()
+        .map_err(serde::de::Error::custom)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
-    use alloy::primitives::{B256, Bytes};
+    use alloy::primitives::B256;
     use safe_tx::types::multi_send_bindings;
 
     const SAFE: Address = Address::new([1u8; 20]);
     const TOKEN: Address = Address::new([2u8; 20]);
     const MULTI_SEND: Address = address!("218543288004CD07832472D464648173c77D7eB7");
+    const ORDER_UID: [u8; 56] = [0xab; 56];
+
+    /// A stand-in [`OrderApi`] returning a canned result, so these tests
+    /// don't need a real HTTP server.
+    enum FakeOrderApi {
+        Found(Order),
+        NotFound,
+    }
+
+    #[async_trait::async_trait]
+    impl OrderApi for FakeOrderApi {
+        async fn fetch_order(
+            &self,
+            _base_url: &str,
+            _order_uid: &Bytes,
+        ) -> Result<Order, OrderLookupError> {
+            match self {
+                Self::Found(order) => Ok(*order),
+                Self::NotFound => Err(OrderLookupError("order not found".into())),
+            }
+        }
+    }
+
+    fn order(sell_amount: u64) -> Order {
+        Order {
+            owner: SAFE,
+            receiver: None,
+            sell_token: TOKEN,
+            sell_amount: U256::from(sell_amount),
+        }
+    }
+
+    /// Runs the full [`Checker::check`] pipeline against `transaction`,
+    /// backed by an [`OrderApi`] fake that never resolves a real order —
+    /// exercising [`CowChecker::check_dangling_approval`]/
+    /// [`CowChecker::check_twap_batch`] never needs a real lookup, so this
+    /// keeps those tests network-free.
+    async fn check(transaction: &SafeTransaction) -> CheckOutcome {
+        CowChecker::with_order_api(FakeOrderApi::NotFound)
+            .check(SAFE, transaction)
+            .await
+    }
 
     fn tx(to: Address, data: Vec<u8>, operation: Operation) -> SafeTransaction {
         SafeTransaction {
@@ -338,11 +598,11 @@ mod tests {
     }
 
     fn approve_data(spender: Address) -> Vec<u8> {
-        approveCall {
-            spender,
-            amount: U256::from(1u64),
-        }
-        .abi_encode()
+        approve_data_with_amount(spender, U256::from(1u64))
+    }
+
+    fn approve_data_with_amount(spender: Address, amount: U256) -> Vec<u8> {
+        approveCall { spender, amount }.abi_encode()
     }
 
     fn approve_amount_data(spender: Address, amount: U256) -> Vec<u8> {
@@ -419,8 +679,20 @@ mod tests {
         )
     }
 
-    async fn check(transaction: &SafeTransaction) -> CheckOutcome {
-        CowChecker::new().check(SAFE, transaction).await
+    /// A batch approving `GPv2VaultRelayer` for `approved_amount`, co-batched
+    /// with a presignature call for `ORDER_UID`.
+    fn batched_presig_tx(approved_amount: U256) -> SafeTransaction {
+        let approve = approve_data_with_amount(GP_V2_VAULT_RELAYER, approved_amount);
+        let presig = setPreSignatureCall {
+            orderUid: Bytes::from(ORDER_UID.to_vec()),
+            signed: true,
+        }
+        .abi_encode();
+        let data = multisend(&[
+            pack(Operation::CALL, TOKEN, &approve),
+            pack(Operation::CALL, GP_V2_SETTLEMENT, &presig),
+        ]);
+        tx(MULTI_SEND, data.into(), Operation::DELEGATECALL)
     }
 
     #[tokio::test]
@@ -735,5 +1007,95 @@ mod tests {
             ..tx(TOKEN, data, Operation::CALL)
         };
         assert_eq!(check(&transaction).await, CheckOutcome::Unknown);
+    }
+
+    #[tokio::test]
+    async fn no_opinion_when_the_order_lookup_fails() {
+        let calls = sub_transactions(&batched_presig_tx(U256::from(100u64)));
+        assert_eq!(
+            CowChecker::with_order_api(FakeOrderApi::NotFound)
+                .check_presignature_batch(SAFE, U256::from(1u64), &calls)
+                .await,
+            CheckOutcome::Unknown
+        );
+    }
+
+    #[tokio::test]
+    async fn approves_when_the_batched_approval_matches_the_swap_order() {
+        let calls = sub_transactions(&batched_presig_tx(U256::from(100u64)));
+        assert_eq!(
+            CowChecker::with_order_api(FakeOrderApi::Found(order(100)))
+                .check_presignature_batch(SAFE, U256::from(1u64), &calls)
+                .await,
+            CheckOutcome::Approved
+        );
+    }
+
+    #[tokio::test]
+    async fn denies_when_the_batched_approval_does_not_match_the_swap_order_amount() {
+        let calls = sub_transactions(&batched_presig_tx(U256::from(1u64)));
+        assert_eq!(
+            CowChecker::with_order_api(FakeOrderApi::Found(order(1000)))
+                .check_presignature_batch(SAFE, U256::from(1u64), &calls)
+                .await,
+            CheckOutcome::Denied(RuleId::R4_5ExcessiveApproval)
+        );
+    }
+
+    #[tokio::test]
+    async fn denies_when_the_swap_order_receiver_is_not_the_safe() {
+        let calls = sub_transactions(&batched_presig_tx(U256::from(100u64)));
+        let order = Order {
+            receiver: Some(Address::new([9u8; 20])),
+            ..order(100)
+        };
+        assert_eq!(
+            CowChecker::with_order_api(FakeOrderApi::Found(order))
+                .check_presignature_batch(SAFE, U256::from(1u64), &calls)
+                .await,
+            CheckOutcome::Denied(RuleId::R4_4AuthorizationTarget)
+        );
+    }
+
+    #[tokio::test]
+    async fn approves_when_the_swap_order_receiver_is_the_zero_address() {
+        // CoW orders are commonly created with `receiver: 0x0` to mean
+        // "same as owner" — that must fall back to `owner` (the Safe) just
+        // like `receiver: null` does, not be taken as a literal (and
+        // therefore mismatching) recipient.
+        let calls = sub_transactions(&batched_presig_tx(U256::from(100u64)));
+        let order = Order {
+            receiver: Some(Address::ZERO),
+            ..order(100)
+        };
+        assert_eq!(
+            CowChecker::with_order_api(FakeOrderApi::Found(order))
+                .check_presignature_batch(SAFE, U256::from(1u64), &calls)
+                .await,
+            CheckOutcome::Approved
+        );
+    }
+
+    #[tokio::test]
+    async fn no_opinion_outside_the_recognized_presignature_shape() {
+        let checker = CowChecker::with_order_api(FakeOrderApi::NotFound);
+        let calls = sub_transactions(&batched_presig_tx(U256::from(100u64)));
+
+        // Unsupported chain.
+        assert_eq!(
+            checker
+                .check_presignature_batch(SAFE, U256::from(137u64), &calls)
+                .await,
+            CheckOutcome::Unknown
+        );
+
+        // Not a two-call batch.
+        let single = calls[..1].to_vec();
+        assert_eq!(
+            checker
+                .check_presignature_batch(SAFE, U256::from(1u64), &single)
+                .await,
+            CheckOutcome::Unknown
+        );
     }
 }

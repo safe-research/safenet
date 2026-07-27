@@ -173,6 +173,8 @@ Split into three sub-phases, each its own PR — the registry/shape-recognition 
 
 Delete `epics/2026_07_20_sentinel_reference_checks.md` once Phases 1–8c are merged.
 
+Clean up docs to not be overly verbose and remove all references to the epic file.
+
 ---
 
 ## Implementation Phases
@@ -190,7 +192,7 @@ Delete `epics/2026_07_20_sentinel_reference_checks.md` once Phases 1–8c are me
 | 7b | Refactor: `safe_tx::multi_send::decode_multi_send_call`, deduplicating `check_multi_send`/`decode_target_effects`'s repeated decode sequence | 1, 3 | |
 | 8a | Recognize CoW's approve+trigger batch shape (`GPv2VaultRelayer`/`GPv2Settlement`/TWAP registry); deny a standalone `approve` | 6, 7a, 7b | |
 | 8b | TWAP order amount-overlap check (onchain calldata decode) | 8a | |
-| 8c | Swap order amount-overlap check (CoW off-chain order API) | 8a | |
+| 8c | Swap order amount-overlap check (CoW off-chain order API) | 8a | ✅ |
 | 9 | Remove this plan | 8b, 8c | |
 
 Phase 3 has no dependency on Phase 2 beyond Phase 1, and can be built in parallel with it. Phase 7b has no dependency on Phase 7a and can be built in parallel with it.
