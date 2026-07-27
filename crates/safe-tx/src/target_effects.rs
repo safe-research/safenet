@@ -4,8 +4,8 @@
 //! here — see `crate::checks` for the existing base-guarantee policy, and
 //! future `Check`s (elsewhere) that will consume this output.
 
-use crate::multi_send::{decode_multi_send, known_deployment};
-use crate::types::{Operation, SafeTransaction, erc20, erc721, erc1155, multi_send_bindings};
+use crate::multi_send::decode_multi_send_call;
+use crate::types::{SafeTransaction, erc20, erc721, erc1155};
 use alloy::{
     primitives::{Address, U256},
     sol_types::SolCall as _,
@@ -43,15 +43,8 @@ pub enum EffectKind {
 /// Decodes the target effects of a Safe transaction, recursing through
 /// MultiSend so each batched sub-call is decoded individually.
 pub fn decode_target_effects(tx: &SafeTransaction) -> Vec<TargetEffect> {
-    if tx.operation == Operation::DELEGATECALL
-        && let Some((version, _)) = known_deployment(tx.to)
-        && let Ok(call) = multi_send_bindings::multiSendCall::abi_decode(&tx.data)
-    {
-        return decode_multi_send(tx.safe, &call.transactions, version)
-            .unwrap_or_default()
-            .iter()
-            .flat_map(decode_target_effects)
-            .collect();
+    if let Some((sub_txs, _)) = decode_multi_send_call(tx) {
+        return sub_txs.iter().flat_map(decode_target_effects).collect();
     }
 
     decode_call(tx)
@@ -140,6 +133,7 @@ fn decode_call(tx: &SafeTransaction) -> Vec<TargetEffect> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::types::{Operation, multi_send_bindings};
     use alloy::primitives::{Bytes, address};
 
     fn tx(
