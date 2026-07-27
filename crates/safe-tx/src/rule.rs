@@ -29,6 +29,19 @@ pub enum RuleId {
     /// further analysis (unlike the rest of §2.5's amount-reasonableness
     /// factors, which remain out of scope for this MVP).
     R4_5ExcessiveApproval,
+    /// Article IV Part B, R-4.3: an ERC-20 `transfer`/`transferFrom`
+    /// recipient that resembles the address-poisoning pattern §2.4 Notes
+    /// names as circumstantial evidence ("the recipient address resembles a
+    /// prior user address..."). MVP note: checked dynamically (see
+    /// `crate::address_poisoning` in `crates/sentinel`) by looking for a
+    /// prior genuine `Transfer` from the Safe to the exact same recipient,
+    /// within a bounded, recent block range — not a full history scan, and
+    /// not yet a real denial path (see that module's docs).
+    R4_3ValueTarget,
+    /// Article IV Part B, R-4.4: the same address-poisoning pattern as
+    /// [`Self::R4_3ValueTarget`], applied to an ERC-20 `approve` spender
+    /// (an authorization-target grant) rather than a value transfer.
+    R4_4AuthorizationTarget,
 }
 
 impl RuleId {
@@ -39,6 +52,8 @@ impl RuleId {
             Self::R4_2DelegatecallIntegrity => "R-4.2",
             Self::R4_6KnownMaliciousTarget => "R-4.6",
             Self::R4_5ExcessiveApproval => "R-4.5",
+            Self::R4_3ValueTarget => "R-4.3",
+            Self::R4_4AuthorizationTarget => "R-4.4",
         }
     }
 
@@ -51,6 +66,8 @@ impl RuleId {
             Self::R4_2DelegatecallIntegrity,
             Self::R4_6KnownMaliciousTarget,
             Self::R4_5ExcessiveApproval,
+            Self::R4_3ValueTarget,
+            Self::R4_4AuthorizationTarget,
         ]
         .into_iter()
         .find(|rule| rule.code() == code)
@@ -68,6 +85,8 @@ mod tests {
             RuleId::R4_2DelegatecallIntegrity,
             RuleId::R4_6KnownMaliciousTarget,
             RuleId::R4_5ExcessiveApproval,
+            RuleId::R4_3ValueTarget,
+            RuleId::R4_4AuthorizationTarget,
         ] {
             assert_eq!(RuleId::from_code(rule.code()), Some(rule));
         }

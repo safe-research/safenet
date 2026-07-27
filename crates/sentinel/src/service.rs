@@ -1,5 +1,6 @@
 use crate::{
     action::{SentinelAction, SentinelActionKind},
+    address_poisoning::AddressPoisoningChecker,
     bindings::{
         SentinelEvents,
         consensus::Consensus,
@@ -34,7 +35,11 @@ pub struct SentinelService {
     voting_window: u64,
     static_checker: StaticChecker,
     /// Backs the [`effect::Handler`] this service's [`Effects`](Service::Effects)
-    /// resolve [`effect::Effect::DynamicCheck`] against.
+    /// resolve [`effect::Effect::DynamicCheck`] against — checked first,
+    /// before `dynamic_checker`.
+    address_poisoning_checker: AddressPoisoningChecker,
+    /// Backs the same [`effect::Handler`], as the fallback once
+    /// `address_poisoning_checker` approves.
     dynamic_checker: RemoteChecker,
 }
 
@@ -77,6 +82,7 @@ impl SentinelService {
         chain_id: U256,
         voting_window: u64,
         static_checker: StaticChecker,
+        address_poisoning_checker: AddressPoisoningChecker,
         dynamic_checker: RemoteChecker,
     ) -> Self {
         Self {
@@ -87,6 +93,7 @@ impl SentinelService {
             chain_id,
             voting_window,
             static_checker,
+            address_poisoning_checker,
             dynamic_checker,
         }
     }
@@ -646,6 +653,7 @@ impl Service for SentinelService {
             chain_id,
             voting_window,
             static_checker,
+            address_poisoning_checker,
             dynamic_checker,
         } = self;
         (
@@ -657,7 +665,7 @@ impl Service for SentinelService {
                 voting_window,
                 static_checker,
             },
-            effect::Handler::new(dynamic_checker),
+            effect::Handler::new(address_poisoning_checker, dynamic_checker),
             SentinelEncoder { oracle, fee_token },
         )
     }
@@ -674,6 +682,7 @@ mod tests {
     use crate::bindings::consensus::{Operation, SafeTransaction};
     use alloy::{
         primitives::{address, keccak256},
+        providers::Provider as _,
         signers::k256::ecdsa::SigningKey,
     };
     use safe_tx::rule::RuleId;
@@ -700,6 +709,16 @@ mod tests {
     }
 
     fn service_with_blocklist(blocklist: Vec<Address>) -> SentinelService {
+        // These flow tests drive `Message::Resume` themselves (see
+        // `resolve_dynamic_check`) rather than through the `Handler`'s real
+        // `Effect::DynamicCheck` resolution, so neither checker below is ever
+        // actually invoked; both are unconfigured/mocked stand-ins.
+        let address_poisoning_checker = AddressPoisoningChecker::new(
+            alloy::providers::ProviderBuilder::default()
+                .connect_mocked_client(alloy::transports::mock::Asserter::new())
+                .erased(),
+            1_000,
+        );
         SentinelService::new(
             ORACLE,
             FEE_TOKEN,
@@ -708,10 +727,7 @@ mod tests {
             U256::from(CHAIN_ID),
             VOTING_WINDOW,
             StaticChecker::new(blocklist),
-            // These flow tests drive `Message::Resume` themselves (see
-            // `resolve_dynamic_check`) rather than through a real
-            // `RemoteChecker` HTTP round trip, so unconfigured stands in for
-            // it here.
+            address_poisoning_checker,
             RemoteChecker::new(None),
         )
     }

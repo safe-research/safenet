@@ -1,4 +1,5 @@
 mod action;
+mod address_poisoning;
 mod bindings;
 mod config;
 mod dynamic_checker;
@@ -9,8 +10,8 @@ mod state;
 mod static_checker;
 
 use self::{
-    config::Config, dynamic_checker::RemoteChecker, service::SentinelService,
-    static_checker::StaticChecker,
+    address_poisoning::AddressPoisoningChecker, config::Config, dynamic_checker::RemoteChecker,
+    service::SentinelService, static_checker::StaticChecker,
 };
 use alloy::{
     primitives::U256,
@@ -57,6 +58,10 @@ async fn main() -> Result<(), Box<dyn Error>> {
         chain_id,
         config.sentinel.voting_window,
         StaticChecker::new(config.sentinel.blocklist),
+        AddressPoisoningChecker::new(
+            provider.clone().erased(),
+            config.sentinel.address_poisoning_lookback_blocks,
+        ),
         RemoteChecker::new(config.sentinel.remote_check_url),
     );
 

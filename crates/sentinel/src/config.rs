@@ -61,6 +61,13 @@ pub struct SentinelConfig {
     /// runs if this is unset.
     #[serde(default)]
     pub remote_check_url: Option<Url>,
+    /// How many blocks of history the address-poisoning check
+    /// (see [`crate::address_poisoning`]) looks back over for a prior
+    /// genuine `Transfer`/`Approval` from the Safe to a candidate target.
+    /// Mandatory rather than defaulted: a sensible value is chain- and
+    /// RPC-specific (block time, and some providers cap query width), so
+    /// there's no one safe default to fall back to silently.
+    pub address_poisoning_lookback_blocks: u64,
 }
 
 impl Config {
@@ -87,6 +94,7 @@ mod tests {
         fee_token = "0x0303030303030303030303030303030303030303"
         voting_window = 100
         blocklist = ["0x0404040404040404040404040404040404040404"]
+        address_poisoning_lookback_blocks = 50000
     "#;
 
     #[test]
@@ -116,6 +124,7 @@ mod tests {
             vec![address!("0x0404040404040404040404040404040404040404")]
         );
         assert_eq!(config.sentinel.remote_check_url, None);
+        assert_eq!(config.sentinel.address_poisoning_lookback_blocks, 50000);
         assert_eq!(
             config.observability.log_filter.to_string(),
             observability::Config::default().log_filter.to_string()
