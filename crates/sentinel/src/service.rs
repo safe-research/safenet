@@ -6,7 +6,8 @@ use crate::{
         consensus::Consensus,
         oracle::{ERC20, RequestState as OnchainRequestState, SentinelOracle},
     },
-    dynamic_checker::{RemoteCheckOutcome, RemoteChecker},
+    checker::CheckOutcome,
+    dynamic_checker::RemoteChecker,
     effect,
     hashing::{RevealSalt as _, commit_hash, oracle_tx_proposal_hash},
     state::{SentinelRequestState as RequestState, State},
@@ -177,7 +178,7 @@ impl SentinelTransition {
         mut state: State,
         request_id: B256,
         deadline: u64,
-        outcome: RemoteCheckOutcome,
+        outcome: CheckOutcome,
     ) -> (State, Commands<State, Self>) {
         // Already tracked (e.g. a stale/replayed resume that lost a race to
         // another one for the same request, or one that arrived after the
@@ -186,7 +187,7 @@ impl SentinelTransition {
             return (state, Vec::new());
         }
         match outcome {
-            RemoteCheckOutcome::Approved => {
+            CheckOutcome::Approved => {
                 state.0.insert(
                     request_id,
                     RequestState::WaitingForRequest {
@@ -196,7 +197,7 @@ impl SentinelTransition {
                     },
                 );
             }
-            RemoteCheckOutcome::Denied(rule) => {
+            CheckOutcome::Denied(rule) => {
                 state.0.insert(
                     request_id,
                     RequestState::WaitingForRequest {
@@ -206,12 +207,12 @@ impl SentinelTransition {
                     },
                 );
             }
-            // The remote check couldn't be trusted either way; drop the
+            // No checker in the chain could be trusted either way; drop the
             // request rather than guessing at approve/deny (there's nothing
             // tracked to remove — this request was never inserted). Logged
-            // at `warn` (rather than the `error` `RemoteChecker` already logs
-            // for the underlying cause).
-            RemoteCheckOutcome::Failed => {
+            // at `warn` (rather than the `error` an underlying checker
+            // already logs for its own cause).
+            CheckOutcome::Unknown => {
                 tracing::warn!(%request_id, "dynamic check failed; dropping request unanswered");
             }
         }
@@ -665,7 +666,10 @@ impl Service for SentinelService {
                 voting_window,
                 static_checker,
             },
-            effect::Handler::new(address_poisoning_checker, dynamic_checker),
+            effect::Handler::new(vec![
+                Box::new(address_poisoning_checker),
+                Box::new(dynamic_checker),
+            ]),
             SentinelEncoder { oracle, fee_token },
         )
     }
@@ -791,7 +795,7 @@ mod tests {
         state: State,
         id: B256,
         deadline: u64,
-        outcome: RemoteCheckOutcome,
+        outcome: CheckOutcome,
     ) -> State {
         let (state, commands) = svc.apply_transition(
             state,
@@ -892,13 +896,8 @@ mod tests {
         assert!(!state.0.contains_key(&id));
 
         // The dynamic check approves; the provisional decision becomes final.
-        let state = resolve_dynamic_check(
-            &svc,
-            state,
-            id,
-            1 + VOTING_WINDOW,
-            RemoteCheckOutcome::Approved,
-        );
+        let state =
+            resolve_dynamic_check(&svc, state, id, 1 + VOTING_WINDOW, CheckOutcome::Approved);
         assert_eq!(
             state.0[&id],
             RequestState::WaitingForRequest {
@@ -1080,13 +1079,8 @@ mod tests {
             State::default(),
             Message::Event(log(1, proposed_event(ORACLE, safe_tx_hash, TO))),
         );
-        let state = resolve_dynamic_check(
-            &svc,
-            state,
-            id,
-            1 + VOTING_WINDOW,
-            RemoteCheckOutcome::Approved,
-        );
+        let state =
+            resolve_dynamic_check(&svc, state, id, 1 + VOTING_WINDOW, CheckOutcome::Approved);
         let (state, _) = svc.apply_transition(
             state,
             Message::Event(log(
@@ -1186,13 +1180,8 @@ mod tests {
             State::default(),
             Message::Event(log(1, proposed_event(ORACLE, safe_tx_hash, TO))),
         );
-        let state = resolve_dynamic_check(
-            &svc,
-            state,
-            id,
-            1 + VOTING_WINDOW,
-            RemoteCheckOutcome::Approved,
-        );
+        let state =
+            resolve_dynamic_check(&svc, state, id, 1 + VOTING_WINDOW, CheckOutcome::Approved);
         let (state, _) = svc.apply_transition(
             state,
             Message::Event(log(
@@ -1267,7 +1256,7 @@ mod tests {
             Message::Resume(effect::Resume::DynamicCheckResult {
                 request_id: id,
                 deadline: 42,
-                outcome: RemoteCheckOutcome::Approved,
+                outcome: CheckOutcome::Approved,
             }),
         );
 
@@ -1304,7 +1293,7 @@ mod tests {
             state,
             id,
             1 + VOTING_WINDOW,
-            RemoteCheckOutcome::Denied(RuleId::R4_6KnownMaliciousTarget),
+            CheckOutcome::Denied(RuleId::R4_6KnownMaliciousTarget),
         );
         assert_eq!(
             state.0[&id],
@@ -1330,13 +1319,8 @@ mod tests {
         );
         assert!(!state.0.contains_key(&id));
 
-        let state = resolve_dynamic_check(
-            &svc,
-            state,
-            id,
-            1 + VOTING_WINDOW,
-            RemoteCheckOutcome::Failed,
-        );
+        let state =
+            resolve_dynamic_check(&svc, state, id, 1 + VOTING_WINDOW, CheckOutcome::Unknown);
         assert!(!state.0.contains_key(&id));
     }
 
@@ -1353,13 +1337,8 @@ mod tests {
             State::default(),
             Message::Event(log(1, proposed_event(ORACLE, safe_tx_hash, TO))),
         );
-        let state = resolve_dynamic_check(
-            &svc,
-            state,
-            id,
-            1 + VOTING_WINDOW,
-            RemoteCheckOutcome::Approved,
-        );
+        let state =
+            resolve_dynamic_check(&svc, state, id, 1 + VOTING_WINDOW, CheckOutcome::Approved);
         let advanced = state.0[&id].clone();
 
         let state = resolve_dynamic_check(
@@ -1367,7 +1346,7 @@ mod tests {
             state,
             id,
             1 + VOTING_WINDOW,
-            RemoteCheckOutcome::Denied(RuleId::R4_6KnownMaliciousTarget),
+            CheckOutcome::Denied(RuleId::R4_6KnownMaliciousTarget),
         );
         assert_eq!(state.0[&id], advanced);
     }

@@ -5,6 +5,7 @@ members = ["crates/*"]
 [workspace.dependencies]
 alloy = { version = "2", features = ["full"] }
 argh = "0.1"
+async-trait = "0.1"
 futures = "0.3"
 k256 = { version = "0.13", features = ["hash2curve", "serde"] }
 metrics = "0.24"

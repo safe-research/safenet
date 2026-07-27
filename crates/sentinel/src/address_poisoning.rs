@@ -19,8 +19,9 @@
 //! on its own to deny a first-time-looking recipient (and the Charter's own
 //! §2.4 Notes caution against treating novelty alone as grounds for denial),
 //! so that case defers to whatever check runs next. See the `TODO` on
-//! [`AddressPoisoningChecker::check`].
+//! [`AddressPoisoningChecker`]'s [`Checker`] impl.
 
+use crate::checker::{CheckOutcome, Checker};
 use alloy::{
     primitives::Address,
     providers::{DynProvider, Provider},
@@ -82,17 +83,6 @@ fn decode_target(tx: &SafeTransaction) -> Option<(Address, TargetKind)> {
     None
 }
 
-/// [`AddressPoisoningChecker::check`]'s verdict.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Verdict {
-    /// A prior genuine interaction was found — approved, and no further
-    /// check needs to run.
-    Approved,
-    /// Nothing conclusive found (or there was no ERC-20 target to check in
-    /// the first place) — whatever check runs next decides.
-    NoOpinion,
-}
-
 /// Runs the R-4.3/R-4.4 address-poisoning check (see module docs for its
 /// current scope and limitations).
 pub struct AddressPoisoningChecker {
@@ -105,40 +95,6 @@ impl AddressPoisoningChecker {
         Self {
             provider,
             lookback_blocks,
-        }
-    }
-
-    /// Decodes `tx.data`'s ERC-20 target (if any) and looks up whether the
-    /// Safe already has a genuine prior interaction with it. A found
-    /// interaction approves outright; anything else (no ERC-20 target to
-    /// check, no prior interaction found, or the lookup itself failing) is
-    /// `NoOpinion`, deferring to whatever check runs next.
-    ///
-    /// TODO(epic Phase 6, follow-up): a `NoOpinion` verdict never becomes a
-    /// denial yet — richer recipient-quality signals (the candidate's own
-    /// fund/transaction history, whether it's an EOA or a contract, and if
-    /// so its deployment age) are needed before a first-time-looking
-    /// recipient can be safely denied.
-    pub async fn check(&self, safe: Address, tx: &SafeTransaction) -> Verdict {
-        let Some((candidate, kind)) = decode_target(tx) else {
-            return Verdict::NoOpinion;
-        };
-        match self
-            .has_prior_interaction(tx.to, safe, candidate, kind)
-            .await
-        {
-            Ok(found) => {
-                tracing::debug!(token = %tx.to, %candidate, found, rule = kind.rule().code(), "address-poisoning history lookup");
-                if found {
-                    Verdict::Approved
-                } else {
-                    Verdict::NoOpinion
-                }
-            }
-            Err(err) => {
-                tracing::warn!(%err, token = %tx.to, %candidate, rule = kind.rule().code(), "address-poisoning history lookup failed");
-                Verdict::NoOpinion
-            }
         }
     }
 
@@ -166,6 +122,43 @@ impl AddressPoisoningChecker {
             .from_block(from_block)
             .to_block(alloy::eips::BlockNumberOrTag::Latest);
         Ok(!self.provider.get_logs(&filter).await?.is_empty())
+    }
+}
+
+#[async_trait::async_trait]
+impl Checker for AddressPoisoningChecker {
+    /// Decodes `transaction.data`'s ERC-20 target (if any) and looks up
+    /// whether the Safe already has a genuine prior interaction with it. A
+    /// found interaction approves outright; anything else (no ERC-20 target
+    /// to check, no prior interaction found, or the lookup itself failing)
+    /// is `Unknown`, deferring to whatever checker runs next.
+    ///
+    /// TODO(epic Phase 6, follow-up): an `Unknown` verdict never becomes a
+    /// denial yet — richer recipient-quality signals (the candidate's own
+    /// fund/transaction history, whether it's an EOA or a contract, and if
+    /// so its deployment age) are needed before a first-time-looking
+    /// recipient can be safely denied.
+    async fn check(&self, safe: Address, transaction: &SafeTransaction) -> CheckOutcome {
+        let Some((candidate, kind)) = decode_target(transaction) else {
+            return CheckOutcome::Unknown;
+        };
+        match self
+            .has_prior_interaction(transaction.to, safe, candidate, kind)
+            .await
+        {
+            Ok(found) => {
+                tracing::debug!(token = %transaction.to, %candidate, found, rule = kind.rule().code(), "address-poisoning history lookup");
+                if found {
+                    CheckOutcome::Approved
+                } else {
+                    CheckOutcome::Unknown
+                }
+            }
+            Err(err) => {
+                tracing::warn!(%err, token = %transaction.to, %candidate, rule = kind.rule().code(), "address-poisoning history lookup failed");
+                CheckOutcome::Unknown
+            }
+        }
     }
 }
 
@@ -252,7 +245,7 @@ mod tests {
         }
         .abi_encode();
         let verdict = checker(&asserter).check(SAFE, &tx(TOKEN, data)).await;
-        assert_eq!(verdict, Verdict::NoOpinion);
+        assert_eq!(verdict, CheckOutcome::Unknown);
     }
 
     #[tokio::test]
@@ -268,7 +261,7 @@ mod tests {
         }
         .abi_encode();
         let verdict = checker(&asserter).check(SAFE, &tx(TOKEN, data)).await;
-        assert_eq!(verdict, Verdict::Approved);
+        assert_eq!(verdict, CheckOutcome::Approved);
     }
 
     #[tokio::test]
@@ -276,6 +269,6 @@ mod tests {
         // No RPC calls should even be issued when there's nothing to decode.
         let asserter = Asserter::new();
         let verdict = checker(&asserter).check(SAFE, &tx(TOKEN, vec![])).await;
-        assert_eq!(verdict, Verdict::NoOpinion);
+        assert_eq!(verdict, CheckOutcome::Unknown);
     }
 }
