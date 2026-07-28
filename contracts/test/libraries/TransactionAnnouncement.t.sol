@@ -74,12 +74,14 @@ contract TransactionAnnouncementTest is Test {
     }
 
     function test_consume_falseAfterExpiry() public {
+        uint256 t0 = block.timestamp;
         state.announce(SAFE, ID, DELAY, WINDOW);
         vm.warp(block.timestamp + DELAY + WINDOW + 1);
         assertFalse(state.consume(SAFE, ID));
-        // The stored entry is not auto-cleared on a failed consume.
-        (uint256 activeFrom,) = state.windowOf(SAFE, ID);
-        assertGt(activeFrom, 0);
+        // A failed consume leaves the stored window intact (not auto-cleared) — assert the exact bounds.
+        (uint256 activeFrom, uint256 activeUntil) = state.windowOf(SAFE, ID);
+        assertEq(activeFrom, t0 + DELAY);
+        assertEq(activeUntil, t0 + DELAY + WINDOW);
     }
 
     function test_cancel_deletes() public {
