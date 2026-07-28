@@ -169,9 +169,17 @@ Split into three sub-phases, each its own PR — the registry/shape-recognition 
 - Explicitly out of scope for this phase (and this epic): recognizing any protocol beyond CoW Swap — left to the follow-up epic that takes on general §2.4 reasoning (Assumptions).
 - Documentation: extend `RuleId::R4_5ExcessiveApproval`'s doc comment with the swap-order instance of this check.
 
+**Phase 8d — Verify the fetched order against the presigned `orderUid` (EIP-712 digest check).**
+- Split out of 8c to keep that PR's diff to its originally-scoped amount/token/receiver check, per direct feedback. CoW's order-by-UID API is unauthenticated: without this phase, 8c's checks trust the response at face value, so an unreachable-turned-compromised endpoint (or a MITM) could answer the right `orderUid` with an entirely different order's terms and have it approved.
+- Recomputes the order's own 56-byte `orderUid` (`orderDigest(32) ‖ owner(20) ‖ validTo(4)`) from the fetched fields, per `GPv2Order.sol`'s own EIP-712 scheme (`"Gnosis Protocol"`/`"v2"` domain, `GPv2Settlement` as `verifyingContract`), and rejects the response — falling through to `CheckOutcome::Unknown`, the same as any other untrustworthy external lookup, never a denial — if it doesn't match the `orderUid` the presignature itself references.
+- Needs the full `GPv2Order.Data` struct, not just the `sellToken`/`sellAmount`/`receiver` 8c itself needs: `buyToken`, `buyAmount`, `validTo`, `appData`, `feeAmount`, `kind`, `partiallyFillable`, `sellTokenBalance`, `buyTokenBalance` are all additionally fetched and fed into the digest.
+- Implemented via `alloy_sol_types`' `sol!`/`SolStruct` EIP-712 derive (a Solidity-side `Order` struct declared purely for its hash — distinct from, and not to be confused with, this crate's own `CowOrder` API-response type) rather than hand-rolled ABI encoding.
+- Documentation/verification: pinned against a real, independently-fetched mainnet order and its actual `orderUid` as a hardcoded test vector, not just round-tripped against itself — the EIP-712 struct name is itself part of the hash (`"Order(...)"` vs e.g. `"GPv2Order(...)"` hash differently), so a name mismatch would otherwise silently produce a check that always falls through to `Unknown` without ever failing a test.
+- Depends on 8c (extends its `CowOrder`/`OrderApi` plumbing).
+
 ### Phase 9 — Remove this plan
 
-Delete `epics/2026_07_20_sentinel_reference_checks.md` once Phases 1–8c are merged.
+Delete `epics/2026_07_20_sentinel_reference_checks.md` once Phases 1–8d are merged.
 
 Clean up docs to not be overly verbose and remove all references to the epic file.
 
@@ -193,7 +201,8 @@ Clean up docs to not be overly verbose and remove all references to the epic fil
 | 8a | Recognize CoW's approve+trigger batch shape (`GPv2VaultRelayer`/`GPv2Settlement`/TWAP registry); deny a standalone `approve` | 6, 7a, 7b | |
 | 8b | TWAP order amount-overlap check (onchain calldata decode) | 8a | |
 | 8c | Swap order amount-overlap check (CoW off-chain order API) | 8a | ✅ |
-| 9 | Remove this plan | 8b, 8c | |
+| 8d | Verify the fetched order against the presigned `orderUid` (EIP-712 digest check) | 8c | |
+| 9 | Remove this plan | 8b, 8d | |
 
 Phase 3 has no dependency on Phase 2 beyond Phase 1, and can be built in parallel with it. Phase 7b has no dependency on Phase 7a and can be built in parallel with it.
 
