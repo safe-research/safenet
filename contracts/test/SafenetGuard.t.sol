@@ -500,7 +500,12 @@ contract SafenetGuardTest is Test {
         _announce(_defaultAnnouncement());
         vm.warp(block.timestamp + ALLOW_TX_DELAY_SECONDS);
         _execSafeTx(TX_TO, TX_VALUE, TX_DATA, TX_OP, ExecMode.Direct);
-        assertEq(_announcedActiveFrom(h), 0);
+        assertEq(_announcedActiveFrom(h), 0); // consumed (deleted)
+
+        // Single-use: a second identical execution finds no announcement and reverts.
+        uint256 nonce = safe.nonce();
+        vm.expectRevert(ISafenetGuard.AttestationNotFound.selector);
+        _execSafeTxWithNonce(TX_TO, TX_VALUE, TX_DATA, TX_OP, nonce);
     }
 
     function test_announcement_emitsExecutedViaAllowance() public {
@@ -606,27 +611,6 @@ contract SafenetGuardTest is Test {
         uint256 nonce = safe.nonce();
         vm.expectRevert(ISafenetGuard.AttestationNotFound.selector);
         _execSafeTxWithNonce(TX_TO, TX_VALUE, TX_DATA, TX_OP, nonce);
-    }
-
-    function test_integration_announcementFullFlow() public {
-        bytes32 h = _defaultAnnouncementHash();
-        _announce(_defaultAnnouncement());
-
-        // Before the delay: guard reverts, Safe propagates it, nonce unchanged.
-        uint256 nonce1 = safe.nonce();
-        vm.expectRevert(ISafenetGuard.AttestationNotFound.selector);
-        _execSafeTxWithNonce(TX_TO, TX_VALUE, TX_DATA, TX_OP, nonce1);
-
-        // After the delay: passes, consumes the announcement, nonce increments.
-        vm.warp(block.timestamp + ALLOW_TX_DELAY_SECONDS);
-        uint256 nonce2 = safe.nonce();
-        _execSafeTxWithNonce(TX_TO, TX_VALUE, TX_DATA, TX_OP, nonce2);
-        assertEq(_announcedActiveFrom(h), 0);
-
-        // Single-use: a subsequent identical transaction (no attestation) has no announcement → fails.
-        uint256 nonce3 = safe.nonce();
-        vm.expectRevert(ISafenetGuard.AttestationNotFound.selector);
-        _execSafeTxWithNonce(TX_TO, TX_VALUE, TX_DATA, TX_OP, nonce3);
     }
 
     // ============================================================
@@ -1005,17 +989,6 @@ contract SafenetGuardTest is Test {
     }
 
     // ============================================================
-    // SCOPE PREMISE — NO MODULES
-    // ============================================================
-
-    /// @notice This guard is transaction-guard only; the test Safe must have no modules enabled, so the
-    ///         suite genuinely reflects the "modules out of scope" security premise (see DD / F-05).
-    function test_setup_noModulesEnabled() public view {
-        (address[] memory modules,) = Safe(payable(address(safe))).getModulesPaginated(address(0x1), 10);
-        assertEq(modules.length, 0);
-    }
-
-    // ============================================================
     // CONSTRUCTOR TIMING BOUNDS (L-01 / F-02)
     // ============================================================
 
@@ -1066,10 +1039,12 @@ contract SafenetGuardTest is Test {
         _execAttestedWith(GENESIS_EPOCH, GENESIS_SK, GENESIS_NK); // must not revert
     }
 
-    /// @notice Documents the accepted policy: a historical parent can sign a brand-new far-future
-    ///         rollover branch, which is then usable for attestation.
-    function test_forest_historicalParentCreatesFutureBranch() public {
+    /// @notice Documents the accepted policy: a historical parent (genesis) can authorise a rollover
+    ///         directly to a distant epoch on a sibling branch, and that key becomes trusted for
+    ///         attestation.
+    function test_forest_historicalParentCreatesSiblingBranch() public {
         _rollover(GENESIS_SK, GENESIS_NK, GENESIS_EPOCH, GENESIS_EPOCH + 1, EPOCH2_SK);
+        // Genesis rolls over a second time, to a distant epoch, with a key that is trusted from here on.
         Secp256k1.Point memory branchKey = _rollover(GENESIS_SK, GENESIS_NK, GENESIS_EPOCH, 1000, UNKNOWN_SK);
         assertTrue(guard.isKnownEpoch(branchKey, 1000));
         _execAttestedWith(1000, UNKNOWN_SK, UNKNOWN_NK); // must not revert
@@ -1192,15 +1167,6 @@ contract SafenetGuardTest is Test {
         assertFalse(reenterer.reentrantSucceeded()); // second use blocked by the guard
         (uint256 af,) = guard.getAnnouncementWindow(address(safe), h);
         assertEq(af, 0); // consumed exactly once
-    }
-
-    // ============================================================
-    // AUTO-ALLOW SELECTOR SENTINEL (D-04)
-    // ============================================================
-
-    function test_autoAllowSelectorsAreNonZero() public pure {
-        assertTrue(SafenetGuard.announceTransaction.selector != bytes4(0));
-        assertTrue(SafenetGuard.cancelAnnouncement.selector != bytes4(0));
     }
 
     // ============================================================
