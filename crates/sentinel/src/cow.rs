@@ -1,4 +1,4 @@
-//! R-4.4 worked example (epic Phase 7a): CoW Protocol's own expected
+//! R-4.4 worked example: CoW Protocol's own expected
 //! transaction shape. A genuine CoW Swap interaction is never a standalone
 //! ERC-20 `approve` — the Safe's own frontend always batches the `approve`
 //! (to CoW's canonical `GPv2VaultRelayer`) together with the call that
@@ -22,7 +22,7 @@
 //! `crate::effect::Handler`'s checker chain).
 //!
 //! **A batched TWAP order is checked against the order itself**
-//! ([`CowChecker::check_twap_batch`], epic Phase 8b), deliberately scoped
+//! ([`CowChecker::check_twap_batch`]), deliberately scoped
 //! narrow: only an exact 2-call batch — one `approve`, one TWAP `create`,
 //! in either order — is recognized at all; anything else (different batch
 //! size, two of the same kind) is `Unknown`. A TWAP order's sell token,
@@ -42,7 +42,7 @@
 //! outright.
 //!
 //! **A batched presignature order is checked the same way**
-//! ([`CowChecker::check_presignature_batch`], epic Phase 8c): only an exact
+//! ([`CowChecker::check_presignature_batch`]): only an exact
 //! 2-call batch — one `approve`, one `setPreSignature`, in either order — is
 //! recognized. Unlike the TWAP order's own calldata, a presigned order's
 //! terms are signed off-chain, so this fetches the referenced order from
@@ -304,8 +304,8 @@ impl CowChecker {
     /// `calls` isn't that exact shape at all, if the lookup fails or is
     /// malformed, or if the response's recomputed digest doesn't match the
     /// requested `orderUid`: none of these are treated as approval or
-    /// denial, consistent with this epic's established pattern for external
-    /// lookups.
+    /// denial, consistent with this codebase's established pattern for
+    /// external lookups.
     async fn check_presignature_batch(
         &self,
         safe: Address,
@@ -363,8 +363,8 @@ impl CowChecker {
     /// not guessed at. A TWAP order's sell token, receiver, and total sell
     /// amount (`partSellAmount * n`) are decodable directly from its
     /// `create` calldata — no RPC or offchain call needed, since the
-    /// order's terms are committed onchain at creation time (epic Phase
-    /// 8b). Once the pair is recognized, this check reaches a conclusive
+    /// order's terms are committed onchain at creation time. Once the pair
+    /// is recognized, this check reaches a conclusive
     /// verdict rather than falling through: it denies under
     /// [`RuleId::R4_4AuthorizationTarget`] if the order's `receiver` isn't
     /// `safe` itself (the same address-poisoning-style target-manipulation
@@ -382,8 +382,8 @@ impl CowChecker {
         };
 
         // Order terms undecodable (malformed `staticInput`) means no
-        // opinion, not a guessed denial — consistent with this epic's other
-        // external/undecodable-data lookups (e.g. `address_poisoning`'s
+        // opinion, not a guessed denial — consistent with this codebase's
+        // other external/undecodable-data lookups (e.g. `address_poisoning`'s
         // no-history case).
         let Some((approved_token, approved_amount, sell_token, receiver, total_sell_amount)) =
             decode_approval_and_twap(first, second)

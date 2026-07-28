@@ -38,8 +38,7 @@ impl Decision {
 
 /// A single policy check, evaluated against the shared `safe-tx` transaction
 /// type. `StaticChecker::check` runs its checks in a fixed order and stops at
-/// the first denial. New checks (R-4.5, R-4.3/R-4.4, ...) plug in here as
-/// later phases of the epic ship them.
+/// the first denial.
 trait Check {
     fn evaluate(&self, tx: &safe_tx::types::SafeTransaction) -> Result<(), RuleId>;
 }
