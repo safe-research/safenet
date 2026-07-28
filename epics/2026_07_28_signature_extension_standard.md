@@ -46,19 +46,23 @@ Introduce a generic `SignatureExtension` library defining a single envelope:
 
 Overhead is **64 bytes** (a 32-byte length + the 32-byte type hash), 32 more than v1's type-hash-only framing — the cost of self-description.
 
-`SignatureExtension` owns recognition, bounds-checking, and slicing; it is payload-agnostic. `AttestationTrailer` is rewritten as a thin wrapper: it recognises its own type hash, calls `SignatureExtension` to get the payload bytes, asserts the payload is its expected fixed size, and `abi.decode`s it into `(epoch, groupKey, signature)`. The guard is otherwise untouched.
+`SignatureExtension` owns recognition, bounds-checking, and slicing; it is payload-agnostic. `AttestationTrailer` is rewritten as a thin wrapper: it recognises its own type hash, calls `SignatureExtension.payload(signatures, typeHash)` to get the payload bytes, asserts the payload is its expected fixed size, and `abi.decode`s it into `(epoch, groupKey, signature)`. The guard is otherwise untouched.
 
 Proposed `SignatureExtension` surface (to be refined in Phase 1):
 
 ```solidity
-// True iff `signatures` ends with `typeHash`.
+// True iff `signatures` ends with `typeHash`. Non-reverting — the consumer uses this to decide
+// whether an extension of its type is present before committing to extract it.
 function has(bytes calldata signatures, bytes32 typeHash) internal pure returns (bool);
 
-// Given a signatures blob known to carry a `typeHash` extension, return its payload.
-// Reverts MalformedSignatureExtension if the blob is too short to hold [payloadLength][typeHash]
-// or if payloadLength runs past the front of the blob.
-function payload(bytes calldata signatures) internal pure returns (bytes calldata);
+// Extract the payload of a `typeHash` extension. Takes `typeHash` so it is self-verifying and safe
+// to call standalone: reverts MalformedSignatureExtension if the terminal word is not `typeHash`,
+// if the blob is too short to hold [payloadLength][typeHash], or if payloadLength runs past the
+// front of the blob.
+function payload(bytes calldata signatures, bytes32 typeHash) internal pure returns (bytes calldata);
 ```
+
+Passing `typeHash` to `payload` (rather than trusting the caller to have run `has` first) removes a footgun: a direct call that skipped the presence check can never read a length word from an unrelated extension type — it reverts instead.
 
 ---
 
@@ -83,7 +87,7 @@ There is no runtime cost to the split: under `via_ir` internal libraries are inl
 - **A — Keep fixed-length-per-type (status quo, extended).** Each type hash implies a documented, fixed layout; no length word. Smallest (32-byte overhead) and simplest, but every extension must be a compile-time-fixed size, and a generic parser cannot locate a variable-length payload. **Rejected:** it does not meet the "must support variable length" requirement that motivated the epic; a "standard" that only works for fixed sizes just re-states the guard-specific status quo.
 - **B — Length-prefixed terminal envelope `[payload][uint256 len][bytes32 typeHash]` (chosen).** Variable length, tail-anchored, O(1) parse, +32 bytes. Small, deterministic, and the length is a plain word so bounds-checking is trivial.
 - **C — Front/header-based framing** (`[typeHash][len][payload]` before or interleaved with owner sigs). **Rejected:** detection must happen from the *end* (Safe consumes owner signatures front-to-back and any prefix would corrupt that), so the discriminator has to be terminal. A front header cannot be found without first knowing the owner-signature length, which the guard does not have.
-- **D — Self-describing ABI envelope** (`abi.encode(bytes32 typeHash, bytes payload)` appended). **Rejected:** dynamic ABI encoding places the discriminator behind an offset word, so it is not at a fixed tail position — detection and slicing become offset arithmetic with more failure modes and higher decode gas than reading two fixed trailing words.
+- **D — Self-describing ABI envelope** (`abi.encode(bytes32 typeHash, bytes payload)` appended). **Rejected:** the discriminator is **not terminal** — the encoding is `[offset][typeHash][length][payload]`, so the type hash sits near the *front* of the blob, not the tail. Detection must happen from the end (Safe consumes owner signatures front-to-back), so a non-terminal discriminator can't be found without first knowing the extension's own length, and the dynamic `bytes` adds an offset word on top of the length word. Reading two fixed trailing words is simpler and strictly less overhead.
 
 The choice (B) keeps everything that already works about v1 (terminal discriminator, type-hash versioning, Safe-parser-safety) and adds exactly one word to remove the fixed-size limitation.
 
@@ -101,7 +105,7 @@ The choice (B) keeps everything that already works about v1 (terminal discrimina
 
 ## Not a breaking change
 
-`SafenetGuard` is **not yet deployed to production** and nothing consumes the current trailer format on-chain, so redefining the framing is **not a breaking change**. The format is finalized as the length-prefixed envelope *before any release*, so the type hash stays `SafenetGuard.AttestationTrailer.v1` — there is no version bump and no dual-support of the old fixed-length framing. Relayers, the example script, and tests move to the new framing in the same stack. The type-hash-registry convention still governs *future* changes: a genuinely post-release format change would bump to a new type hash, which older consumers read as "no extension".
+`SafenetGuard` is **not yet deployed to production** and nothing consumes the current trailer format on-chain, so redefining the framing is **not a breaking change**. The format is finalized as the length-prefixed envelope *before any release*, so the type hash stays `SafenetGuard.AttestationTrailer.v1` — there is no version bump and no dual-support of the old fixed-length framing. Relayers, the example script, and tests move to the new framing in the same stack. Because the guard is not yet deployed and no external tooling consumes the current trailer, this needs no migration tooling and no dual-format support. The type-hash-registry convention still governs *future* changes: a genuinely post-release format change would bump to a new type hash, which older consumers read as "no extension".
 
 ---
 
@@ -118,7 +122,7 @@ Each phase is its own PR, stacked linearly; disjoint file sets where possible.
 
 ## Open questions (to fine-tune before Phase 1)
 
-1. **Library scope.** Should `SignatureExtension` also expose the owner-signature boundary (`payloadStart`) for consumers that need to separate owner sigs from the extension, or stay payload-only (the guard does not need the boundary — Safe parses the front independently)? Leaning payload-only for minimalism.
+1. **Library scope.** Should `SignatureExtension` also expose the owner-signature boundary (`payloadStart`) for consumers that need to separate owner sigs from the extension, or stay payload-only (the guard does not need the boundary — Safe parses the front independently)? Leaning payload-only for minimalism; the boundary is trivially derivable as `signatures.length - payloadLength - 64`, which we would document rather than add a function for unless a third-party consumer needs it.
 2. **Multiple extensions.** Do we need to support *stacking* more than one extension on a single `signatures` blob (nested envelopes)? Not required by any current consumer; proposed to explicitly declare single-extension for now and leave nesting to a future version bump.
 3. **Spec home.** Dedicated `contracts/src/libraries/SignatureExtension` NatSpec as the canonical spec, a section in `DESIGN.md`, or a standalone `docs/signature-extension.md`? 
 4. **Naming.** `SignatureExtension` vs `SafeSignatureExtension` vs `SigExt`; `has`/`payload` vs `isPresent`/`extract`.
