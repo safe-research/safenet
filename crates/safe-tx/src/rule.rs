@@ -28,6 +28,19 @@ pub enum RuleId {
     /// Per §2.5, this sub-case is always functionally unlimited and needs no
     /// further analysis (unlike the rest of §2.5's amount-reasonableness
     /// factors, which remain out of scope for this MVP).
+    ///
+    /// Also covers a worked CoW Swap instance (`crates/sentinel::cow`): an
+    /// exact 2-call MultiSend batch — an ERC-20 `approve` to CoW's
+    /// `GPv2VaultRelayer` plus a TWAP order's `create` call — whose approved
+    /// token doesn't match the order's own sell token, or whose approved
+    /// amount exceeds the order's total sell amount (`partSellAmount * n`)
+    /// — both decoded straight from `create`'s calldata, no RPC needed,
+    /// since the order's terms are committed onchain at creation time. An
+    /// approval too small to fully fund the order is a trade-soundness
+    /// concern, not a security one, and isn't denied by this check. (An
+    /// order whose receiver isn't the Safe itself is instead
+    /// [`Self::R4_4AuthorizationTarget`] — a target-manipulation, not an
+    /// amount, concern.)
     R4_5ExcessiveApproval,
     /// Article IV Part B, R-4.3: an ERC-20 `transfer`/`transferFrom`
     /// recipient that resembles the address-poisoning pattern §2.4 Notes
@@ -41,6 +54,13 @@ pub enum RuleId {
     /// Article IV Part B, R-4.4: the same address-poisoning pattern as
     /// [`Self::R4_3ValueTarget`], applied to an ERC-20 `approve` spender
     /// (an authorization-target grant) rather than a value transfer.
+    ///
+    /// Also covers the CoW Swap TWAP worked example
+    /// (`crates/sentinel::cow`): an order whose `receiver` isn't the Safe
+    /// itself would route the order's proceeds to an unrelated address —
+    /// the same target-manipulation concern as a wrong `approve` spender,
+    /// distinct from [`Self::R4_5ExcessiveApproval`]'s amount-based checks
+    /// on that same TWAP batch.
     R4_4AuthorizationTarget,
 }
 

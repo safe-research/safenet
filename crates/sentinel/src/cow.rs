@@ -19,16 +19,36 @@
 //! approved the same target off a prior genuine interaction: this
 //! protocol-specific rule runs ahead of, and overrides, that general
 //! history-based bypass (`CowChecker` is ordered first in
-//! `crate::effect::Handler`'s checker chain). A properly batched `approve`
-//! is `Unknown` for now — checking that its amount actually matches the
-//! order it funds is deferred to a follow-up PR (see
-//! [`CowChecker::check_presignature_batch`]/[`CowChecker::check_twap_batch`]).
+//! `crate::effect::Handler`'s checker chain).
+//!
+//! **A batched TWAP order is checked against the order itself**
+//! ([`CowChecker::check_twap_batch`], epic Phase 8b), deliberately scoped
+//! narrow: only an exact 2-call batch — one `approve`, one TWAP `create`,
+//! in either order — is recognized at all; anything else (different batch
+//! size, two of the same kind) is `Unknown`. A TWAP order's sell token,
+//! receiver, and total sell amount (`partSellAmount * n`) are decodable
+//! directly from the `create` call's own `staticInput` — no RPC or offchain
+//! call needed, since the order's terms are committed onchain at creation
+//! time. Once recognized, the pair is denied under
+//! [`RuleId::R4_4AuthorizationTarget`] if the order's receiver isn't the
+//! Safe itself (the same address-poisoning-style target-manipulation
+//! concern as a wrong `approve` spender), or under
+//! [`RuleId::R4_5ExcessiveApproval`] if the approved token doesn't match the
+//! order's sell token, or the approved amount *exceeds* the order's total —
+//! the latter only guards against over-authorization (the security concern:
+//! a compromised relayer could drain the excess); an approval too small to
+//! fully fund the order is a trade-soundness concern, not a security one,
+//! and doesn't affect the verdict. Otherwise, the batch is approved
+//! outright. A batched swap (`setPreSignature`) still can't be checked this
+//! way — its order is signed off-chain and never appears in the Safe's own
+//! calldata — and is deferred to a follow-up PR (see
+//! [`CowChecker::check_presignature_batch`]).
 
 use crate::checker::{CheckOutcome, Checker};
 use alloy::{
     primitives::{Address, U256, address},
     sol,
-    sol_types::SolCall,
+    sol_types::{SolCall, SolValue},
 };
 use safe_tx::{
     multi_send::decode_multi_send_call,
@@ -45,6 +65,29 @@ sol! {
         bytes staticInput;
     }
     function create(ConditionalOrderParams params, bool dispatch);
+
+    /// ComposableCoW's TWAP handler's own order shape, ABI-encoded as
+    /// `create`'s `staticInput`. `sellToken` must match the token the
+    /// batched `approve` is actually for — an approval on an unrelated
+    /// token authorizes an allowance the order doesn't need at all, which is
+    /// itself excessive regardless of amount. `receiver` must be the Safe
+    /// itself (or the zero address, CoW's convention for "defaults to the
+    /// order owner") — anything else would route the order's proceeds to an
+    /// unrelated address. `partSellAmount * n` is the order's total sell
+    /// amount, the ceiling the approval must not exceed. The remaining
+    /// fields aren't needed by this check.
+    struct TwapData {
+        address sellToken;
+        address buyToken;
+        address receiver;
+        uint256 partSellAmount;
+        uint256 minPartLimit;
+        uint256 t0;
+        uint256 n;
+        uint256 t;
+        uint256 span;
+        bytes32 appData;
+    }
 }
 
 /// CoW Protocol's canonical contracts. Deployed at the same address on every
@@ -83,17 +126,51 @@ impl CowChecker {
         CheckOutcome::Unknown
     }
 
-    async fn check_twap_batch(&self, _calls: &[SafeTransaction]) -> CheckOutcome {
-        // Currently only placeholder, proper check has to be implemented in follow up PR:
-        // - check that batch size is 2 -> if not return unknown
-        // - check if one of them is an approval -> if not return unknown
-        // - check if other is twap call -> if not return unknown
-        // - decode TWAP order creation
-        // - if receiver is different -> DENY
-        // - if token is different -> DENY
-        // - calculate total amount. if different to approve amount -> DENY
-        // - otherwise APPROVE
-        CheckOutcome::Unknown
+    /// Deliberately narrow: recognizes only an exact 2-call batch, one
+    /// `approve` and one TWAP `create`, in either order — anything else
+    /// (different batch size, two of the same kind, neither) is `Unknown`,
+    /// not guessed at. A TWAP order's sell token, receiver, and total sell
+    /// amount (`partSellAmount * n`) are decodable directly from its
+    /// `create` calldata — no RPC or offchain call needed, since the
+    /// order's terms are committed onchain at creation time (epic Phase
+    /// 8b). Once the pair is recognized, this check reaches a conclusive
+    /// verdict rather than falling through: it denies under
+    /// [`RuleId::R4_4AuthorizationTarget`] if the order's `receiver` isn't
+    /// `safe` itself (the same address-poisoning-style target-manipulation
+    /// concern as a wrong `approve` spender — proceeds routed to an
+    /// unrelated address), or under [`RuleId::R4_5ExcessiveApproval`] if the
+    /// approved token doesn't match the order's `sellToken` (an allowance
+    /// the order doesn't need at all, itself excessive) or the approved
+    /// amount exceeds the order's total; otherwise it approves outright. An
+    /// approval *smaller* than that total is a trade-soundness concern (the
+    /// order may not fully fill), not a security one, so it doesn't affect
+    /// this verdict either way.
+    async fn check_twap_batch(&self, safe: Address, calls: &[SafeTransaction]) -> CheckOutcome {
+        let [first, second] = calls else {
+            return CheckOutcome::Unknown;
+        };
+
+        // Order terms undecodable (malformed `staticInput`) means no
+        // opinion, not a guessed denial — consistent with this epic's other
+        // external/undecodable-data lookups (e.g. `address_poisoning`'s
+        // no-history case).
+        let Some((approved_token, approved_amount, sell_token, receiver, total_sell_amount)) =
+            decode_approval_and_twap(first, second)
+                .or_else(|| decode_approval_and_twap(second, first))
+        else {
+            return CheckOutcome::Unknown;
+        };
+
+        // A wrong receiver is an address-poisoning-style target-manipulation
+        // concern (R-4.4), distinct from the excessive-approval-amount
+        // concern (R-4.5) the token/amount checks below guard against.
+        if receiver != safe && !receiver.is_zero() {
+            return CheckOutcome::Denied(RuleId::R4_4AuthorizationTarget);
+        }
+        if approved_token != sell_token || approved_amount > total_sell_amount {
+            return CheckOutcome::Denied(RuleId::R4_5ExcessiveApproval);
+        }
+        CheckOutcome::Approved
     }
 
     /// An `approve` to `GPv2VaultRelayer` with no co-batched presignature or
@@ -120,7 +197,7 @@ impl Checker for CowChecker {
     /// [`CowChecker::check_presignature_batch`] and
     /// [`CowChecker::check_twap_batch`] against `transaction`'s sub-calls,
     /// returning the first non-[`CheckOutcome::Unknown`] result.
-    async fn check(&self, _safe: Address, transaction: &SafeTransaction) -> CheckOutcome {
+    async fn check(&self, safe: Address, transaction: &SafeTransaction) -> CheckOutcome {
         if !SUPPORTED_CHAIN_IDS
             .iter()
             .any(|&id| transaction.chainId == U256::from(id))
@@ -139,7 +216,7 @@ impl Checker for CowChecker {
             return presig_check;
         }
 
-        let twap_check = self.check_twap_batch(&calls).await;
+        let twap_check = self.check_twap_batch(safe, &calls).await;
         if twap_check != CheckOutcome::Unknown {
             return twap_check;
         }
@@ -160,14 +237,26 @@ fn sub_transactions(tx: &SafeTransaction) -> Vec<SafeTransaction> {
 /// ERC-20 `approve`, so calldata that merely matches the selector must not
 /// be treated as one; and a genuine `approve` never carries native value, so
 /// a nonzero `tx.value` is itself a sign this isn't the expected call.
+/// Returns the approved token (`tx.to`, the contract `approve` is called
+/// on) and amount, needed by [`CowChecker::check_twap_batch`]'s
+/// amount-overlap check.
+fn vault_relayer_approval_amount(tx: &SafeTransaction) -> Option<(Address, U256)> {
+    if tx.operation != Operation::CALL || !tx.value.is_zero() {
+        return None;
+    }
+    let call = approveCall::abi_decode(&tx.data).ok()?;
+    (call.spender == GP_V2_VAULT_RELAYER).then_some((tx.to, call.amount))
+}
+
+/// Whether `tx` is an ERC-20 `approve` to `GPv2VaultRelayer`, for
+/// [`CowChecker::check_dangling_approval`] — see
+/// [`vault_relayer_approval_amount`] for the exact recognition rules.
 fn approves_vault_relayer(tx: &SafeTransaction) -> bool {
-    tx.operation == Operation::CALL
-        && tx.value.is_zero()
-        && approveCall::abi_decode(&tx.data).is_ok_and(|call| call.spender == GP_V2_VAULT_RELAYER)
+    vault_relayer_approval_amount(tx).is_some()
 }
 
 /// Only a plain, valueless `CALL` to `GPv2Settlement` is recognized — see
-/// [`approves_vault_relayer`] for why `DELEGATECALL` and nonzero `tx.value`
+/// [`vault_relayer_approval_amount`] for why `DELEGATECALL` and nonzero `tx.value`
 /// are excluded even to a legitimate address.
 fn is_presignature(tx: &SafeTransaction) -> bool {
     tx.operation == Operation::CALL
@@ -177,13 +266,54 @@ fn is_presignature(tx: &SafeTransaction) -> bool {
 }
 
 /// Only a plain, valueless `CALL` to `ComposableCoW` is recognized — see
-/// [`approves_vault_relayer`] for why `DELEGATECALL` and nonzero `tx.value`
+/// [`vault_relayer_approval_amount`] for why `DELEGATECALL` and nonzero `tx.value`
 /// are excluded even to a legitimate address.
 fn is_twap_create(tx: &SafeTransaction) -> bool {
     tx.operation == Operation::CALL
         && tx.value.is_zero()
         && tx.to == COMPOSABLE_COW
         && createCall::abi_decode(&tx.data).is_ok_and(|call| call.params.handler == TWAP_HANDLER)
+}
+
+/// Recognizes `approval_candidate` as a `GPv2VaultRelayer` approval and
+/// `twap_candidate` as a TWAP `create` call, returning the approved token,
+/// approved amount, and the TWAP order's own sell token, receiver, and total
+/// sell amount. `None` if either candidate doesn't match its expected role —
+/// including a matching pair given in the wrong order, which the caller
+/// (`CowChecker::check_twap_batch`) handles by trying both orderings.
+fn decode_approval_and_twap<'a>(
+    approval_candidate: &'a SafeTransaction,
+    twap_candidate: &'a SafeTransaction,
+) -> Option<(Address, U256, Address, Address, U256)> {
+    let (approved_token, approved_amount) = vault_relayer_approval_amount(approval_candidate)?;
+    let (sell_token, receiver, total_sell_amount) = twap_order_terms(twap_candidate)?;
+    Some((
+        approved_token,
+        approved_amount,
+        sell_token,
+        receiver,
+        total_sell_amount,
+    ))
+}
+
+/// Recognizes `tx` as a TWAP `create` call (same rules as [`is_twap_create`])
+/// and, if so, decodes its sell token, receiver, and total sell amount
+/// (`partSellAmount * n`) from `staticInput`. `None` if `tx` isn't a
+/// recognized TWAP `create` call, `staticInput` isn't shaped as expected, or
+/// the multiplication overflows (implausible in practice, but left
+/// unguessed rather than wrapping) — either way the caller treats that as
+/// inconclusive, not denied.
+fn twap_order_terms(tx: &SafeTransaction) -> Option<(Address, Address, U256)> {
+    if tx.operation != Operation::CALL || !tx.value.is_zero() || tx.to != COMPOSABLE_COW {
+        return None;
+    };
+    let create = createCall::abi_decode(&tx.data).ok()?;
+    if create.params.handler != TWAP_HANDLER {
+        return None;
+    };
+    let order = TwapData::abi_decode(&create.params.staticInput).ok()?;
+    let total = order.partSellAmount.checked_mul(order.n)?;
+    Some((order.sellToken, order.receiver, total))
 }
 
 #[cfg(test)]
@@ -211,6 +341,57 @@ mod tests {
         approveCall {
             spender,
             amount: U256::from(1u64),
+        }
+        .abi_encode()
+    }
+
+    fn approve_amount_data(spender: Address, amount: U256) -> Vec<u8> {
+        approveCall { spender, amount }.abi_encode()
+    }
+
+    fn twap_create_data(part_sell_amount: U256, n: U256) -> Vec<u8> {
+        twap_create_data_full(TOKEN, SAFE, part_sell_amount, n)
+    }
+
+    fn twap_create_data_for_token(sell_token: Address, part_sell_amount: U256, n: U256) -> Vec<u8> {
+        twap_create_data_full(sell_token, SAFE, part_sell_amount, n)
+    }
+
+    fn twap_create_data_for_receiver(
+        receiver: Address,
+        part_sell_amount: U256,
+        n: U256,
+    ) -> Vec<u8> {
+        twap_create_data_full(TOKEN, receiver, part_sell_amount, n)
+    }
+
+    fn twap_create_data_full(
+        sell_token: Address,
+        receiver: Address,
+        part_sell_amount: U256,
+        n: U256,
+    ) -> Vec<u8> {
+        createCall {
+            params: ConditionalOrderParams {
+                handler: TWAP_HANDLER,
+                salt: B256::ZERO,
+                staticInput: Bytes::from(
+                    TwapData {
+                        sellToken: sell_token,
+                        buyToken: Address::new([3u8; 20]),
+                        receiver,
+                        partSellAmount: part_sell_amount,
+                        minPartLimit: U256::ZERO,
+                        t0: U256::ZERO,
+                        n,
+                        t: U256::ZERO,
+                        span: U256::ZERO,
+                        appData: B256::ZERO,
+                    }
+                    .abi_encode(),
+                ),
+            },
+            dispatch: true,
         }
         .abi_encode()
     }
@@ -279,19 +460,130 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn no_opinion_when_approval_is_batched_with_a_twap_create_call() {
-        let approve = approve_data(GP_V2_VAULT_RELAYER);
-        let create = createCall {
-            params: ConditionalOrderParams {
-                handler: TWAP_HANDLER,
-                salt: B256::ZERO,
-                staticInput: Bytes::new(),
-            },
-            dispatch: true,
-        }
-        .abi_encode();
+    async fn approves_when_the_approval_exactly_covers_the_twap_order() {
+        let approve = approve_amount_data(GP_V2_VAULT_RELAYER, U256::from(30u64));
+        let create = twap_create_data(U256::from(10u64), U256::from(3u64));
         let data = multisend(&[
             pack(Operation::CALL, TOKEN, &approve),
+            pack(Operation::CALL, COMPOSABLE_COW, &create),
+        ]);
+        assert_eq!(
+            check(&tx(MULTI_SEND, data.into(), Operation::DELEGATECALL)).await,
+            CheckOutcome::Approved
+        );
+    }
+
+    #[tokio::test]
+    async fn denies_when_the_approval_exceeds_the_twap_order() {
+        let approve = approve_amount_data(GP_V2_VAULT_RELAYER, U256::from(1_000u64));
+        let create = twap_create_data(U256::from(10u64), U256::from(3u64));
+        let data = multisend(&[
+            pack(Operation::CALL, TOKEN, &approve),
+            pack(Operation::CALL, COMPOSABLE_COW, &create),
+        ]);
+        assert_eq!(
+            check(&tx(MULTI_SEND, data.into(), Operation::DELEGATECALL)).await,
+            CheckOutcome::Denied(RuleId::R4_5ExcessiveApproval)
+        );
+    }
+
+    #[tokio::test]
+    async fn denies_when_the_approval_is_for_a_different_token_than_the_twap_order_sells() {
+        // Amount alone is within the order's cap, but the approve is on a
+        // different token than the order's own `sellToken` — an allowance
+        // this order doesn't need at all, which is itself excessive.
+        let approve = approve_amount_data(GP_V2_VAULT_RELAYER, U256::from(30u64));
+        let create = twap_create_data_for_token(
+            Address::new([9u8; 20]),
+            U256::from(10u64),
+            U256::from(3u64),
+        );
+        let data = multisend(&[
+            pack(Operation::CALL, TOKEN, &approve),
+            pack(Operation::CALL, COMPOSABLE_COW, &create),
+        ]);
+        assert_eq!(
+            check(&tx(MULTI_SEND, data.into(), Operation::DELEGATECALL)).await,
+            CheckOutcome::Denied(RuleId::R4_5ExcessiveApproval)
+        );
+    }
+
+    #[tokio::test]
+    async fn approves_when_the_approval_is_smaller_than_the_twap_order() {
+        // Under-authorization is a trade-soundness concern (the order may
+        // not fully fill), not a security one — this check only guards
+        // against excessive authorization.
+        let approve = approve_amount_data(GP_V2_VAULT_RELAYER, U256::from(29u64));
+        let create = twap_create_data(U256::from(10u64), U256::from(3u64));
+        let data = multisend(&[
+            pack(Operation::CALL, TOKEN, &approve),
+            pack(Operation::CALL, COMPOSABLE_COW, &create),
+        ]);
+        assert_eq!(
+            check(&tx(MULTI_SEND, data.into(), Operation::DELEGATECALL)).await,
+            CheckOutcome::Approved
+        );
+    }
+
+    #[tokio::test]
+    async fn approves_when_the_twap_orders_receiver_is_zero_address() {
+        let approve = approve_amount_data(GP_V2_VAULT_RELAYER, U256::from(30u64));
+        let create = twap_create_data_for_receiver(
+            Address::new([0u8; 20]),
+            U256::from(10u64),
+            U256::from(3u64),
+        );
+        let data = multisend(&[
+            pack(Operation::CALL, TOKEN, &approve),
+            pack(Operation::CALL, COMPOSABLE_COW, &create),
+        ]);
+        assert_eq!(
+            check(&tx(MULTI_SEND, data.into(), Operation::DELEGATECALL)).await,
+            CheckOutcome::Approved
+        );
+    }
+
+    #[tokio::test]
+    async fn denies_when_the_twap_orders_receiver_is_not_the_safe() {
+        let approve = approve_amount_data(GP_V2_VAULT_RELAYER, U256::from(30u64));
+        let create = twap_create_data_for_receiver(
+            Address::new([9u8; 20]),
+            U256::from(10u64),
+            U256::from(3u64),
+        );
+        let data = multisend(&[
+            pack(Operation::CALL, TOKEN, &approve),
+            pack(Operation::CALL, COMPOSABLE_COW, &create),
+        ]);
+        assert_eq!(
+            check(&tx(MULTI_SEND, data.into(), Operation::DELEGATECALL)).await,
+            CheckOutcome::Denied(RuleId::R4_4AuthorizationTarget)
+        );
+    }
+
+    #[tokio::test]
+    async fn no_opinion_when_the_twap_batch_has_more_than_two_calls() {
+        // Deliberately narrow: only an exact 2-call batch is recognized.
+        let approve = approve_amount_data(GP_V2_VAULT_RELAYER, U256::from(30u64));
+        let create = twap_create_data(U256::from(10u64), U256::from(3u64));
+        let extra = approve_data(Address::new([9u8; 20]));
+        let data = multisend(&[
+            pack(Operation::CALL, TOKEN, &approve),
+            pack(Operation::CALL, COMPOSABLE_COW, &create),
+            pack(Operation::CALL, TOKEN, &extra),
+        ]);
+        assert_eq!(
+            check(&tx(MULTI_SEND, data.into(), Operation::DELEGATECALL)).await,
+            CheckOutcome::Unknown
+        );
+    }
+
+    #[tokio::test]
+    async fn no_opinion_when_the_batch_pairs_an_unrelated_approval_with_a_twap_create_call() {
+        let unrelated_approve = approve_data(Address::new([9u8; 20]));
+        let create = twap_create_data(U256::from(10u64), U256::from(3u64));
+        let data = multisend(&[
+            pack(Operation::CALL, TOKEN, &unrelated_approve),
             pack(Operation::CALL, COMPOSABLE_COW, &create),
         ]);
         assert_eq!(
