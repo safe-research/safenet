@@ -3,6 +3,7 @@ mod address_poisoning;
 mod bindings;
 mod checker;
 mod config;
+mod cow;
 mod dynamic_checker;
 mod effect;
 mod hashing;

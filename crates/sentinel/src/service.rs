@@ -7,6 +7,7 @@ use crate::{
         oracle::{ERC20, RequestState as OnchainRequestState, SentinelOracle},
     },
     checker::CheckOutcome,
+    cow::CowChecker,
     dynamic_checker::RemoteChecker,
     effect,
     hashing::{RevealSalt as _, commit_hash, oracle_tx_proposal_hash},
@@ -36,11 +37,12 @@ pub struct SentinelService {
     voting_window: u64,
     static_checker: StaticChecker,
     /// Backs the [`effect::Handler`] this service's [`Effects`](Service::Effects)
-    /// resolve [`effect::Effect::DynamicCheck`] against — checked first,
-    /// before `dynamic_checker`.
+    /// resolve [`effect::Effect::DynamicCheck`] against — checked after the
+    /// built-in CoW check, before `dynamic_checker`. See
+    /// [`Service::components`] for the fixed checker order.
     address_poisoning_checker: AddressPoisoningChecker,
-    /// Backs the same [`effect::Handler`], as the fallback once
-    /// `address_poisoning_checker` approves.
+    /// Backs the same [`effect::Handler`], as the fallback once every
+    /// built-in checker comes back with no opinion.
     dynamic_checker: RemoteChecker,
 }
 
@@ -157,7 +159,7 @@ impl SentinelTransition {
     /// Consumes a [`effect::Effect::DynamicCheck`]'s resolved outcome for
     /// `request_id`, inserting `WaitingForRequest` from it on
     /// `Approved`/`Denied`, or leaving the request untracked (dropped) on
-    /// `Failed`. `SentinelTransition` deliberately doesn't persist any
+    /// `Unknown`. `SentinelTransition` deliberately doesn't persist any
     /// intermediate "waiting on the dynamic check" state of its own: the
     /// driver (`TransitionBatch::apply` in `crates/core/src/state/mod.rs`)
     /// always fully resolves an emitted effect's resume before the next
@@ -210,8 +212,8 @@ impl SentinelTransition {
             // No checker in the chain could be trusted either way; drop the
             // request rather than guessing at approve/deny (there's nothing
             // tracked to remove — this request was never inserted). Logged
-            // at `warn` (rather than the `error` an underlying checker
-            // already logs for its own cause).
+            // at `warn` (rather than the `error` an underlying checker, e.g.
+            // `RemoteChecker`, already logs for its own failure cause).
             CheckOutcome::Unknown => {
                 tracing::warn!(%request_id, "dynamic check failed; dropping request unanswered");
             }
@@ -667,6 +669,7 @@ impl Service for SentinelService {
                 static_checker,
             },
             effect::Handler::new(vec![
+                Box::new(CowChecker::new()),
                 Box::new(address_poisoning_checker),
                 Box::new(dynamic_checker),
             ]),

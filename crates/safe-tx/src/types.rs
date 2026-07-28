@@ -36,7 +36,7 @@ sol! {
     }
 }
 
-pub(crate) mod erc20 {
+pub mod erc20 {
     alloy::sol! {
         function transfer(address to, uint256 amount);
         function transferFrom(address from, address to, uint256 amount);
@@ -62,7 +62,7 @@ pub(crate) mod erc1155 {
     }
 }
 
-pub(crate) mod multi_send_bindings {
+pub mod multi_send_bindings {
     alloy::sol! {
         function multiSend(bytes transactions);
     }
