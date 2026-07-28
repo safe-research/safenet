@@ -17,7 +17,7 @@ Deliberate choices with their rationale, recorded so reviewers and auditors can 
 
 - **Inline signature-extension trailer carrying `epoch + groupKey + signature` explicitly** (the forest has no epoch→key reverse lookup). The non-standard encoding (wallets must be Safenet-aware) and the larger trailer are accepted trade-offs.
 - **Type-hash trailer framing** (`keccak256("SafenetGuard.AttestationTrailer.v1")`, not length-only) so a valid Safe-signature suffix cannot be mis-parsed; a recognised trailer never falls through to the announcement path.
-- **Replay/ordering come from the Safe nonce** bound into the verified hash; there is no spent-signature registry.
+- **Replay/ordering come from the Safe nonce** bound into the FROST-verified attestation message (over the nonce-bound Safe tx hash); there is no spent-signature registry. The escape-hatch path is instead single-use and time-boxed.
 
 ## Escape hatch (announcements)
 
@@ -27,7 +27,7 @@ Deliberate choices with their rationale, recorded so reviewers and auditors can 
 - **Single-use; expired entries are renewable in place**; pending/active ones cannot be overwritten; `cancelAnnouncement` is immediate.
 - **Consumption tracks the authorization path, not execution success** (a caught inner-call failure with non-zero `safeTxGas`/`gasPrice` still consumes the announcement). A lock/finalize/restore state machine was considered and deferred.
 - **A relayer holding both a valid attestation and a matured announcement can choose the path**; the attestation path takes precedence and does not consume the announcement.
-- **A single `TransactionAnnounced` event** — the full parameters are recoverable from the announce calldata, so the event carries only the hash and window.
+- **A single `TransactionAnnounced` event** — the full parameters are recoverable from the `announceTransaction` calldata, so the event carries only the hash and window.
 
 ## Structure & scope
 
