@@ -1,10 +1,4 @@
-# Safenet Guards
-
-`SafenetGuard` is the canonical Safe Guard for Safenet.
-
----
-
-## SafenetGuard
+# SafenetGuard
 
 **File:** `SafenetGuard.sol`
 
@@ -12,7 +6,7 @@ SafenetGuard is a Safe *transaction* guard, assembled from focused, independentl
 
 **Scope.** This is a *transaction* guard: it gates only owner-signed `execTransaction` calls. Safe module executions do not invoke transaction-guard hooks, so an enabled module can move assets without an attestation or announcement. Deployments must prohibit modules or treat each enabled module as an explicit bypass of this guard's policy.
 
-### What it reuses
+## What it reuses
 
 - **`EpochRollover`** (`../libraries/EpochRollover.sol`) — the trusted epoch state and FROST-verified rollover, shared with the rest of Safenet rather than reimplemented in the guard.
 - **`TransactionAnnouncement`** (`../libraries/TransactionAnnouncement.sol`) — the escape-hatch announcement type and nonce-free hashing (`AnnouncedTransaction`, `hash`) plus the time-windowed state (`announce` / `cancel` / `consume`).
@@ -20,7 +14,7 @@ SafenetGuard is a Safe *transaction* guard, assembled from focused, independentl
 
 The structural self-call gate for the escape-hatch functions (target is the guard, zero value, `CALL` not `DELEGATECALL`, 4-byte selector) is kept inline in the guard for explicitness.
 
-### Design
+## Design
 
 **Epoch forest.** Epoch state is delegated to `EpochRollover`, which tracks a *forest* of trusted `(group key, epoch)` pairs: any trusted pair may sign a rollover to any strictly-greater epoch, an epoch may hold more than one key (reorg branches), and every pair is kept forever. There is no single "active" epoch — `updateEpoch` names the exact `(parentKey, parentEpoch)` to roll over from, and membership is queried with `isKnownEpoch(groupKey, epoch)`.
 
@@ -44,7 +38,7 @@ Anchoring the extension at the end leaves Safe's front-to-back signature parser 
 
 **Fixed delay and window.** Both the embargo delay (`allowTransactionDelay`) and the validity window (`allowTransactionWindow`) are fixed at construction (immutable).
 
-### Integration — attestation trailer format (v1)
+## Integration — attestation trailer format (v1)
 
 Relayers that append the inline attestation must build the exact trailer the guard recognises:
 
@@ -59,40 +53,6 @@ Relayers that append the inline attestation must build the exact trailer the gua
 
 Total trailer overhead is exactly **224 bytes** (192 payload + 32 type hash) appended after the Safe owner signatures. Decoding (`AttestationTrailer.decode`): a blob whose last 32 bytes are not `TYPE_HASH` is *no trailer* (falls through to the announcement path); the type hash on a blob shorter than 224 bytes reverts `MalformedAttestationTrailer`.
 
-### Design decisions
+## Design decisions
 
-Deliberate choices with their rationale, recorded so reviewers and auditors can distinguish "intended" from "oversight." They are not defects.
-
-**Epoch trust model**
-
-- **Forest of `(groupKey, epoch)` pairs, kept forever, never pruned.** There is no single "active" epoch; multiple keys per epoch (reorg branches) are allowed. *Rationale:* the FROST per-participant secret shares are destroyed/rotated after an epoch, so a historical group key can never be reconstituted; keeping old pairs valid indefinitely is therefore not a practical risk. Storage grows monotonically, but each added pair requires a valid FROST signature.
-- **A recorded historical key may attest future transactions and sign new rollover branches.** Accepted as a direct consequence of the above (shares no longer exist to abuse). It cannot replay past transactions, which the Safe nonce binds.
-- **`updateEpoch` is permissionless** — the FROST signature is the authorization; the caller names the explicit parent pair; re-submitting a known pair is a no-op.
-- **`rolloverBlock` is not checked against local `block.number`** — it is a Gnosis Chain block number, meaningless on the guard's chain, folded into the signed message only.
-
-**Consensus binding**
-
-- **Consensus is Gnosis-only (chain id 100); the guard keeps a local copy of the epoch forest** (cross-chain calls are infeasible). The EIP-712 domain separator is immutable from constructor args; misconfiguration is unrecoverable (redeploy).
-
-**Attestation (owner transactions)**
-
-- **Inline signature-extension trailer carrying `epoch + groupKey + signature` explicitly** (the forest has no epoch→key reverse lookup). The non-standard encoding (wallets must be Safenet-aware) and the larger trailer are accepted trade-offs.
-- **Type-hash trailer framing** (`keccak256("SafenetGuard.AttestationTrailer.v1")`, not length-only) so a valid Safe-signature suffix cannot be mis-parsed; a recognised trailer never falls through to the announcement path.
-- **Replay/ordering come from the Safe nonce** bound into the verified hash; there is no spent-signature registry.
-
-**Escape hatch (announcements)**
-
-- **`announceTransaction` takes the full parameter struct** (not a bare hash) — signers see what they authorize and the guard derives the hash on-chain (so it cannot diverge from `checkTransaction`).
-- **Nonce-free announcement hash** (excludes the Safe nonce and the Safe address; scoped by storage key) — keeps the hatch usable while unrelated transactions advance the Safe nonce.
-- **Bounded, inclusive `[activeFrom, activeUntil]` window**, both durations immutable; packed into one slot (two `uint128`), with `WindowOverflow`/constructor bounds preventing absurd values.
-- **Single-use; expired entries are renewable in place**; pending/active ones cannot be overwritten; `cancelAnnouncement` is immediate.
-- **Consumption tracks the authorization path, not execution success** (a caught inner-call failure with non-zero `safeTxGas`/`gasPrice` still consumes the announcement). A lock/finalize/restore state machine was considered and deferred.
-- **A relayer holding both a valid attestation and a matured announcement can choose the path**; the attestation path takes precedence and does not consume the announcement.
-- **A single `TransactionAnnounced` event** — the full parameters are recoverable from the announce calldata, so the event carries only the hash and window.
-
-**Structure & scope**
-
-- **Module-transaction guarding is intentionally not integrated** — deferred pending product requirements. Enabled Safe modules bypass this guard; deployers must prohibit modules or treat each as an explicit bypass.
-- **The structural self-call gate is inlined** in the guard for explicitness, rather than extracted into a separate library.
-- **Library-composed design** (`EpochRollover`, `TransactionAnnouncement`, `AttestationTrailer`): state/mechanism in libraries, FROST verification and domain events in the guard. `EpochRollover` epoch events are mirrored on `ISafenetGuard` for a single canonical integration ABI (they appear twice in the generated ABI; harmless — same topic).
-
+The accepted design decisions and their rationale are documented in [DESIGN.md](./DESIGN.md).
