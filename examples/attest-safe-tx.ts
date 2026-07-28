@@ -1,16 +1,26 @@
 /**
- * Attach a Safenet FROST attestation to an existing Safe transaction.
+ * Build a SafenetGuard attestation for an existing Safe transaction.
  *
- * Fetches the FROST attestation for a given Safe transaction hash from the
- * Safenet Consensus contract, then posts it as a cosigner EIP-1271 signature
- * to the Safe Transaction Service so the Safe UI shows it as confirmed.
+ * SafenetGuard verifies an inline attestation *trailer* appended to the Safe `signatures` at
+ * `execTransaction` time — it does not post anything to the Safe Transaction Service. This
+ * script therefore:
+ *
+ *   1. fetches the FROST attestation for a Safe tx hash from the Consensus contract (Gnosis),
+ *   2. resolves the attesting group key from the guard's own epoch events (Consensus exposes no
+ *      group-key getter — the key is only emitted in events),
+ *   3. fetches the Safe transaction and its collected owner confirmations from the Tx Service,
+ *   4. assembles `signatures = <sorted owner signatures> || <224-byte attestation trailer>`, and
+ *   5. prints that blob and the `execTransaction` parameters, ready for a relayer to submit.
+ *
+ * Both the attestation and the guard's epoch events are read over a single `RPC_URL`, so this example
+ * assumes the guard is deployed on Gnosis alongside Consensus. For a guard on another chain, read its
+ * epoch events from that chain's RPC.
  *
  * Usage:
- *   npm run examples:attest-safe-tx -- <safeTxHash> <cosignerAddress>
+ *   npm run attest-safe-tx -w @safenet/examples -- <safeTxHash> <guardAddress>
  *
- * Environment:
- *   Copy examples/.env.sample to examples/.env and fill in the values.
- *   Required: CONSENSUS_ADDRESS, RPC_URL, SAFE_TX_SERVICE_URL, SAFE_TX_SERVICE_API_KEY
+ * Environment (copy examples/.env.sample to examples/.env):
+ *   CONSENSUS_ADDRESS, RPC_URL, SAFE_TX_SERVICE_URL, SAFE_TX_SERVICE_API_KEY
  */
 
 import { resolve } from "node:path";
@@ -25,10 +35,10 @@ import {
 	http,
 	isAddress,
 	isHex,
-	numberToHex,
-	pad,
-	parseAbi,
+	keccak256,
+	parseAbiItem,
 	size,
+	toBytes,
 } from "viem";
 import { gnosis } from "viem/chains";
 import z from "zod";
@@ -36,22 +46,29 @@ import z from "zod";
 dotenv.config({ path: resolve(import.meta.dirname, ".env"), quiet: true });
 
 // ---------------------------------------------------------------------------
+// Constants
+// ---------------------------------------------------------------------------
+
+// Terminal marker of a v1 attestation trailer (AttestationTrailer.TYPE_HASH).
+const TYPE_HASH: Hex = keccak256(toBytes("SafenetGuard.AttestationTrailer.v1"));
+
+// ---------------------------------------------------------------------------
 // Arguments
 // ---------------------------------------------------------------------------
 
 function usage(): never {
-	console.error("Usage: npm run examples:attest-safe-tx -- <safeTxHash> <cosignerAddress>");
+	console.error("Usage: npm run attest-safe-tx -w @safenet/examples -- <safeTxHash> <guardAddress>");
 	process.exit(1);
 }
 
 const args = process.argv.slice(2);
 if (args.length !== 2) usage();
-const [rawHash = "", rawCosigner = ""] = args;
+const [rawHash = "", rawGuard = ""] = args;
 if (!isHex(rawHash) || size(rawHash) !== 32) usage();
-if (!isAddress(rawCosigner)) usage();
+if (!isAddress(rawGuard)) usage();
 
 const safeTxHash: Hex = rawHash;
-const cosignerAddress: Address = rawCosigner;
+const guardAddress: Address = getAddress(rawGuard);
 
 // ---------------------------------------------------------------------------
 // Environment
@@ -65,6 +82,10 @@ const envSchema = z.object({
 	RPC_URL: z.url(),
 	SAFE_TX_SERVICE_URL: z.url().transform((url) => url.replace(/\/$/, "")),
 	SAFE_TX_SERVICE_API_KEY: z.string().min(1),
+	GUARD_FROM_BLOCK: z
+		.string()
+		.optional()
+		.transform((v) => BigInt(v ?? "0")),
 	ATTESTATION_TIMEOUT_SECONDS: z
 		.string()
 		.optional()
@@ -83,6 +104,7 @@ const {
 	RPC_URL: rpc,
 	SAFE_TX_SERVICE_URL: safeTxServiceUrl,
 	SAFE_TX_SERVICE_API_KEY: safeTxServiceApiKey,
+	GUARD_FROM_BLOCK: guardFromBlock,
 	ATTESTATION_TIMEOUT_SECONDS: attestationTimeout,
 } = envParseResult.data;
 
@@ -90,13 +112,22 @@ const authHeaders = { Authorization: `Bearer ${safeTxServiceApiKey}` };
 const gnosisClient = createPublicClient({ chain: gnosis, transport: http(rpc) });
 
 // ---------------------------------------------------------------------------
-// ABI
+// ABIs
 // ---------------------------------------------------------------------------
 
-const CONSENSUS_ABI = parseAbi([
-	"function getRecentTransactionAttestationByHash(bytes32) external view returns (uint64 epoch, ((uint256 x, uint256 y) r, uint256 z) signature)",
-	"error NotSigned()",
-]);
+const GET_ATTESTATION = parseAbiItem(
+	"function getRecentTransactionAttestationByHash(bytes32) view returns (uint64 epoch, ((uint256 x, uint256 y) r, uint256 z) signature)",
+);
+
+// The getter reverts NotSigned() until the FROST round completes; declaring the error lets viem decode
+// it so the poll loop can tell "not signed yet" apart from a genuine failure.
+const NOT_SIGNED = parseAbiItem("error NotSigned()");
+
+// The guard mirrors EpochRollover events; the group key is only available from these logs.
+const EPOCH_INITIALIZED = parseAbiItem("event EpochInitialized(uint64 indexed epoch, (uint256 x, uint256 y) groupKey)");
+const EPOCH_ROLLED_OVER = parseAbiItem(
+	"event EpochRolledOver(uint64 indexed parentEpoch, uint64 indexed epoch, (uint256 x, uint256 y) parentKey, (uint256 x, uint256 y) groupKey)",
+);
 
 // ---------------------------------------------------------------------------
 // Safe TX Service response schema
@@ -117,32 +148,36 @@ const txSchema = z.object({
 	gasToken: z.string(),
 	refundReceiver: z.string(),
 	nonce: z.coerce.number().int(),
+	confirmations: z
+		.array(
+			z.object({
+				owner: z.string().refine((a) => isAddress(a, { strict: false }), "Invalid owner"),
+				signature: z.string().refine((s) => isHex(s), "Invalid signature"),
+			}),
+		)
+		.default([]),
 });
 
+type Point = { x: bigint; y: bigint };
+
 // ---------------------------------------------------------------------------
-// Main
+// Steps
 // ---------------------------------------------------------------------------
 
-async function main() {
-	// Step 1: Poll for attestation from Gnosis Chain
-	console.log(`[1] Polling for attestation (timeout: ${attestationTimeout}s)...`);
-
-	type FrostSig = { r: { x: bigint; y: bigint }; z: bigint };
-	let attested: { epoch: bigint; sig: FrostSig } | null = null;
+async function pollAttestation(): Promise<{ epoch: bigint; sig: { r: Point; z: bigint } }> {
+	console.log(`[1] Polling Consensus for attestation (timeout: ${attestationTimeout}s)...`);
 	const deadline = Date.now() + attestationTimeout * 1000;
-
 	while (Date.now() < deadline) {
 		try {
 			const [epoch, sig] = await gnosisClient.readContract({
 				address: consensusAddress,
-				abi: CONSENSUS_ABI,
+				abi: [GET_ATTESTATION, NOT_SIGNED],
 				functionName: "getRecentTransactionAttestationByHash",
 				args: [safeTxHash],
 			});
 			if (sig.r.x !== 0n || sig.r.y !== 0n || sig.z !== 0n) {
-				attested = { epoch, sig };
-				console.log(`\n   Attestation received! epoch=${epoch}`);
-				break;
+				console.log(`\n    attestation received (epoch=${epoch})`);
+				return { epoch, sig };
 			}
 		} catch (e: unknown) {
 			if (!(e instanceof Error && e.message.includes("NotSigned"))) throw e;
@@ -150,37 +185,70 @@ async function main() {
 		process.stdout.write(".");
 		await new Promise((r) => setTimeout(r, 5000));
 	}
-	if (attested === null) throw new Error(`Attestation timeout after ${attestationTimeout}s`);
+	throw new Error(`Attestation timeout after ${attestationTimeout}s`);
+}
 
-	// Step 2: Fetch multisig transaction details from Safe TX Service
-	console.log("\n[2] Fetching transaction details from Safe TX Service...");
+async function resolveGroupKey(epoch: bigint): Promise<Point> {
+	console.log(`[2] Resolving group key for epoch ${epoch} from the guard's epoch events...`);
+	const rolled = await gnosisClient.getLogs({
+		address: guardAddress,
+		event: EPOCH_ROLLED_OVER,
+		args: { epoch },
+		fromBlock: guardFromBlock,
+		toBlock: "latest",
+	});
+	const rolledKey = rolled[0]?.args.groupKey;
+	if (rolledKey) return rolledKey;
 
-	const txResponse = await fetch(`${safeTxServiceUrl}/api/v2/multisig-transactions/${safeTxHash}/`, {
+	const initialized = await gnosisClient.getLogs({
+		address: guardAddress,
+		event: EPOCH_INITIALIZED,
+		args: { epoch },
+		fromBlock: guardFromBlock,
+		toBlock: "latest",
+	});
+	const initKey = initialized[0]?.args.groupKey;
+	if (initKey) return initKey;
+
+	throw new Error(`No EpochInitialized/EpochRolledOver event for epoch ${epoch} on guard ${guardAddress}`);
+}
+
+async function fetchTransaction() {
+	console.log("[3] Fetching transaction + owner confirmations from the Safe TX Service...");
+	const res = await fetch(`${safeTxServiceUrl}/api/v2/multisig-transactions/${safeTxHash}/`, {
 		headers: authHeaders,
 	});
-	if (!txResponse.ok) {
-		const text = await txResponse.text();
-		throw new Error(`Safe TX Service GET failed (${txResponse.status}): ${text}`);
-	}
+	if (!res.ok) throw new Error(`Safe TX Service GET failed (${res.status}): ${await res.text()}`);
+	return txSchema.parse(await res.json());
+}
 
-	const tx = txSchema.parse(await txResponse.json());
-	const safeAddress = tx.safe;
-	console.log(`   Safe:  ${safeAddress}`);
-	console.log(`   Nonce: ${tx.nonce}`);
+// ---------------------------------------------------------------------------
+// Main
+// ---------------------------------------------------------------------------
 
-	// Step 3: Encode cosigner EIP-1271 contract signature
-	//
-	//   Static slot (65 bytes):
-	//     r (32 bytes) = cosigner address left-padded with zeros
-	//     s (32 bytes) = 65 — byte offset to dynamic data within this signature blob
-	//     v (1 byte)   = 0x00 — marks as EIP-1271 contract signature
-	//
-	//   Dynamic data (160 bytes):
-	//     length (32 bytes) = 128
-	//     data   (128 bytes) = abi.encode(uint64 epoch, FROST.Signature{r:{x,y}, z})
-	const attestation = encodeAbiParameters(
+async function main() {
+	const { epoch, sig } = await pollAttestation();
+	const groupKey = await resolveGroupKey(epoch);
+	const tx = await fetchTransaction();
+
+	// Owner signatures must be concatenated in ascending owner-address order (Safe requirement).
+	const ownerSignatures = concat(
+		[...tx.confirmations]
+			.sort((a, b) => (a.owner.toLowerCase() < b.owner.toLowerCase() ? -1 : 1))
+			.map((c) => c.signature as Hex),
+	);
+
+	// Trailer = abi.encode(uint64 epoch, Point groupKey, FROST.Signature sig) || TYPE_HASH.
+	const payload = encodeAbiParameters(
 		[
 			{ type: "uint64" },
+			{
+				type: "tuple",
+				components: [
+					{ type: "uint256", name: "x" },
+					{ type: "uint256", name: "y" },
+				],
+			},
 			{
 				type: "tuple",
 				components: [
@@ -196,46 +264,23 @@ async function main() {
 				],
 			},
 		],
-		[attested.epoch, { r: { x: attested.sig.r.x, y: attested.sig.r.y }, z: attested.sig.z }],
+		[epoch, groupKey, sig],
 	);
+	const trailer = concat([payload, TYPE_HASH]);
+	const signatures = concat([ownerSignatures, trailer]);
 
-	const contractSignature: Hex = concat([
-		pad(cosignerAddress, { size: 32 }), // r: 20-byte address left-padded to 32 bytes
-		numberToHex(65, { size: 32 }), // s: 65 (byte offset to dynamic data)
-		numberToHex(0, { size: 1 }), // v: 0x00 (EIP-1271 contract signature marker)
-		numberToHex(128, { size: 32 }), // dynamic data length
-		attestation, // 128 bytes: abi.encode(epoch, FROST.Signature)
-	]);
-
-	// Step 4: POST cosigner signature to Safe TX Service
-	console.log("\n[3] Posting cosigner signature to Safe TX Service...");
-
-	const postResponse = await fetch(`${safeTxServiceUrl}/api/v2/safes/${safeAddress}/multisig-transactions/`, {
-		method: "POST",
-		headers: { "Content-Type": "application/json", ...authHeaders },
-		body: JSON.stringify({
-			to: tx.to,
-			value: tx.value,
-			data: tx.data ?? "0x",
-			operation: tx.operation,
-			safeTxGas: tx.safeTxGas,
-			baseGas: tx.baseGas,
-			gasPrice: tx.gasPrice,
-			gasToken: tx.gasToken,
-			refundReceiver: tx.refundReceiver,
-			nonce: tx.nonce,
-			contractTransactionHash: safeTxHash,
-			sender: cosignerAddress,
-			signature: contractSignature,
-		}),
-	});
-	if (!postResponse.ok) {
-		const text = await postResponse.text();
-		throw new Error(`Safe TX Service POST failed (${postResponse.status}): ${text}`);
-	}
-
-	console.log("   Signature posted successfully.");
-	console.log(`\nSafenet attestation for ${safeTxHash} is now visible in the Safe UI.`);
+	console.log("\n[4] Attested signatures ready. Submit via execTransaction on the Safe's chain:");
+	console.log(`    safe:            ${tx.safe}`);
+	console.log(`    to:              ${tx.to}`);
+	console.log(`    value:           ${tx.value}`);
+	console.log(`    data:            ${tx.data ?? "0x"}`);
+	console.log(`    operation:       ${tx.operation}`);
+	console.log(`    safeTxGas:       ${tx.safeTxGas}`);
+	console.log(`    baseGas:         ${tx.baseGas}`);
+	console.log(`    gasPrice:        ${tx.gasPrice}`);
+	console.log(`    gasToken:        ${tx.gasToken}`);
+	console.log(`    refundReceiver:  ${tx.refundReceiver}`);
+	console.log(`    signatures:      ${signatures}`);
 }
 
 main().catch((e: unknown) => {

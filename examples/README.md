@@ -2,11 +2,11 @@
 
 Scripts for interacting with the Safenet protocol on public testnets.
 
-## Attach Safenet Attestation to a Safe Transaction
+## Build a SafenetGuard Attestation for a Safe Transaction
 
-`examples/attest-safe-tx.ts` fetches a completed FROST attestation from the Safenet
-network and posts it as a cosigner EIP-1271 signature to the Safe Transaction Service,
-making it visible as a confirmation in the Safe UI.
+`examples/attest-safe-tx.ts` fetches a completed FROST attestation from the Safenet network
+and assembles the `signatures` blob that satisfies `SafenetGuard` — the owner signatures
+followed by the inline attestation *trailer* — ready to submit via `execTransaction`.
 
 Use this after a Safe transaction has been proposed to Safenet (via `proposeBasicTransaction`
 on the Consensus contract) and the FROST signing round has completed.
@@ -30,29 +30,31 @@ cp examples/.env.sample examples/.env
 | Variable | Description |
 |----------|-------------|
 | `CONSENSUS_ADDRESS` | Address of the Safenet Consensus contract on Gnosis Chain |
-| `RPC_URL` | RPC endpoint for the consensus chain (to read attestation) |
+| `RPC_URL` | RPC endpoint for Gnosis (reads the attestation from Consensus and the guard's epoch events) |
 | `SAFE_TX_SERVICE_URL` | Safe Transaction Service base URL (e.g. `https://api.safe.global/tx-service/sep`) |
 | `SAFE_TX_SERVICE_API_KEY` | API key for the Safe Transaction Service |
+| `GUARD_FROM_BLOCK` | *(optional)* first block to scan for the guard's epoch events (default `0`) |
 
 ### Usage
 
 ```sh
-npm run attest-safe-tx -w @safenet/examples -- <safeTxHash> <cosignerAddress>
+npm run attest-safe-tx -w @safenet/examples -- <safeTxHash> <guardAddress>
 ```
 
 | Argument | Description |
 |----------|-------------|
-| `safeTxHash` | The Safe transaction hash (`bytes32`) to attach the attestation to |
-| `cosignerAddress` | The deployed `SafenetCosigner` contract address (must be an owner of the Safe) |
+| `safeTxHash` | The Safe transaction hash (`bytes32`) the attestation was produced for |
+| `guardAddress` | The deployed `SafenetGuard` set on the Safe (its epoch events supply the group key) |
 
 ### What it does
 
 1. Calls `getRecentTransactionAttestationByHash(safeTxHash)` on the Consensus contract on
    Gnosis Chain to fetch the epoch number and FROST signature.
-2. Fetches the multisig transaction parameters from the Safe TX Service
+2. Resolves the attesting group key by scanning the guard's `EpochInitialized` /
+   `EpochRolledOver` events for that epoch (Consensus exposes no group-key getter).
+3. Fetches the transaction and its collected owner confirmations from the Safe TX Service
    (`GET /api/v2/multisig-transactions/{safeTxHash}/`).
-3. Encodes the attestation as a full EIP-1271 contract signature:
-   - **Static slot** (65 bytes): `r` = cosigner address, `s` = 65 (offset to dynamic data), `v` = 0x00
-   - **Dynamic data** (160 bytes): length = 128, data = `abi.encode(uint64 epoch, FROST.Signature)`
-4. Posts the cosigner signature to the Safe TX Service
-   (`POST /api/v2/safes/{safe}/multisig-transactions/`).
+4. Builds the 224-byte trailer — `abi.encode(uint64 epoch, groupKey, FROST.Signature)` followed
+   by `keccak256("SafenetGuard.AttestationTrailer.v1")` — appends it to the address-sorted
+   owner signatures, and prints the combined `signatures` blob plus the `execTransaction`
+   parameters for a relayer to submit.
