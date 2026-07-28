@@ -1,4 +1,4 @@
-//! R-4.3/R-4.4 address-poisoning check (epic Phase 6, first step): whether an
+//! R-4.3/R-4.4 address-poisoning check (first step): whether an
 //! ERC-20 `transfer`/`transferFrom`/`approve` target has a prior genuine
 //! interaction with the Safe. Unlike [`crate::static_checker::StaticChecker`],
 //! this inherently needs onchain event history, so it runs as part of
@@ -135,7 +135,7 @@ impl Checker for AddressPoisoningChecker {
     /// to check, no prior interaction found, or the lookup itself failing)
     /// is `Unknown`, deferring to whatever checker runs next.
     ///
-    /// TODO(epic Phase 6, follow-up): an `Unknown` verdict never becomes a
+    /// TODO(follow-up): an `Unknown` verdict never becomes a
     /// denial yet — richer recipient-quality signals (the candidate's own
     /// fund/transaction history, whether it's an EOA or a contract, and if
     /// so its deployment age) are needed before a first-time-looking
