@@ -48,12 +48,21 @@ library AttestationTrailer {
     // ============================================================
 
     /**
-     * @notice Recognises and decodes an attestation trailer from a `signatures` blob.
-     * @dev Returns `present == false` when the last word is not `TYPE_HASH` (so the consumer falls through
-     *      to other authorisation paths). Reverts `MalformedAttestationTrailer` when the type hash is
-     *      present but the blob is shorter than a full trailer — a recognised trailer never silently
-     *      falls through.
-     * @return present True if a trailer was recognised and decoded.
+     * @notice Returns whether `signatures` carries an attestation trailer (ends with `TYPE_HASH`).
+     * @dev Non-reverting: a blob shorter than a word, or not ending in `TYPE_HASH`, is simply "no
+     *      trailer", so the consumer can fall through to other authorisation paths.
+     * @param signatures The Safe `signatures` blob, optionally suffixed with a trailer.
+     * @return present True if the blob ends with `TYPE_HASH`.
+     */
+    function hasTrailer(bytes calldata signatures) internal pure returns (bool present) {
+        return signatures.length >= 32 && bytes32(signatures[signatures.length - 32:]) == TYPE_HASH;
+    }
+
+    /**
+     * @notice Decodes the attestation payload from a trailer-bearing `signatures` blob.
+     * @dev Call only once {hasTrailer} is true. Reverts `MalformedAttestationTrailer` if the blob is too
+     *      short to hold a full v1 trailer, so a recognised trailer never yields partial data.
+     * @param signatures The Safe `signatures` blob ending in a v1 attestation trailer.
      * @return epoch The attested epoch.
      * @return groupKey The attesting FROST group key.
      * @return signature The FROST signature.
@@ -61,17 +70,12 @@ library AttestationTrailer {
     function decode(bytes calldata signatures)
         internal
         pure
-        returns (bool present, uint64 epoch, Secp256k1.Point memory groupKey, FROST.Signature memory signature)
+        returns (uint64 epoch, Secp256k1.Point memory groupKey, FROST.Signature memory signature)
     {
-        if (signatures.length < 32 || bytes32(signatures[signatures.length - 32:]) != TYPE_HASH) {
-            return (false, 0, groupKey, signature);
-        }
         require(signatures.length >= _TRAILER_LENGTH, MalformedAttestationTrailer());
-
         uint256 payloadStart = signatures.length - _TRAILER_LENGTH;
         (epoch, groupKey, signature) = abi.decode(
             signatures[payloadStart:payloadStart + _PAYLOAD_LENGTH], (uint64, Secp256k1.Point, FROST.Signature)
         );
-        present = true;
     }
 }

@@ -185,7 +185,7 @@ contract SafenetGuard is ISafenetGuard, BaseTransactionGuard {
     function checkTransaction(
         address to,
         uint256 value,
-        bytes memory data,
+        bytes calldata data,
         Enum.Operation operation,
         uint256 safeTxGas,
         uint256 baseGas,
@@ -197,9 +197,9 @@ contract SafenetGuard is ISafenetGuard, BaseTransactionGuard {
     ) external override(ITransactionGuard) {
         if (_isAutoAllowed(to, value, data, operation)) return;
 
-        (bool present, uint64 epoch, Secp256k1.Point memory groupKey, FROST.Signature memory signature) =
-            AttestationTrailer.decode(signatures);
-        if (present) {
+        if (AttestationTrailer.hasTrailer(signatures)) {
+            (uint64 epoch, Secp256k1.Point memory groupKey, FROST.Signature memory signature) =
+                AttestationTrailer.decode(signatures);
             // Cheap forest-membership check first (also implies a non-zero key, enforced on record), so an
             // untrusted key short-circuits before the more expensive Safe tx hash is computed.
             require($epochs.isKnown(groupKey, epoch), UntrustedAttestationKey());
@@ -336,7 +336,7 @@ contract SafenetGuard is ISafenetGuard, BaseTransactionGuard {
      * @param operation The Safe operation type.
      * @return allowed True if the call is an auto-allowed escape-hatch self-call.
      */
-    function _isAutoAllowed(address to, uint256 value, bytes memory data, Enum.Operation operation)
+    function _isAutoAllowed(address to, uint256 value, bytes calldata data, Enum.Operation operation)
         private
         view
         returns (bool allowed)
