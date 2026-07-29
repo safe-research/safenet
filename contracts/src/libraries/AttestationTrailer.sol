@@ -3,15 +3,17 @@ pragma solidity ^0.8.30;
 
 import {FROST} from "@/libraries/FROST.sol";
 import {Secp256k1} from "@/libraries/Secp256k1.sol";
+import {SignatureExtension} from "@/libraries/SignatureExtension.sol";
 
 /**
  * @title AttestationTrailer
- * @notice Recognises and decodes a Safenet attestation appended to Safe's `signatures` bytes.
- * @dev Layout: `[safe owner signatures][192-byte abi.encode(epoch, groupKey, signature)][32-byte TYPE_HASH]`.
- *      Anchoring at the end leaves Safe's front-to-back signature parser untouched, and the terminal type
- *      hash makes detection independent of signature suffixes — a blob not ending in `TYPE_HASH` is simply
- *      "no trailer". The type hash embeds the version, so a future format uses a different type hash (and
- *      this guard treats it as absent). The library owns recognition, sizing, and the typed decode.
+ * @notice Recognises and decodes a Safenet attestation carried as a {SignatureExtension} on Safe's
+ *         `signatures` bytes.
+ * @dev The attestation is a typed signature extension: its payload is the fixed 192-byte
+ *      `abi.encode(uint64 epoch, Secp256k1.Point groupKey, FROST.Signature signature)`, tagged by the
+ *      terminal `TYPE_HASH`. The envelope framing (length word + type hash, tail-anchored so Safe's
+ *      front-to-back signature parser is untouched) is owned by {SignatureExtension}; this library owns
+ *      only the guard-specific type hash and payload schema.
  */
 library AttestationTrailer {
     // ============================================================
@@ -19,7 +21,7 @@ library AttestationTrailer {
     // ============================================================
 
     /**
-     * @notice Type hash that must terminate a v1 attestation trailer; doubles as the version tag.
+     * @notice Type hash identifying an attestation trailer; the terminal word of the signature extension.
      */
     bytes32 internal constant TYPE_HASH = keccak256("SafenetGuard.AttestationTrailer.v1");
 
@@ -28,18 +30,12 @@ library AttestationTrailer {
      */
     uint256 private constant _PAYLOAD_LENGTH = 192;
 
-    /**
-     * @dev Total trailer overhead: the payload followed by the 32-byte type hash word. Derived from
-     *      `_PAYLOAD_LENGTH` so the two constants cannot drift if the payload layout changes.
-     */
-    uint256 private constant _TRAILER_LENGTH = _PAYLOAD_LENGTH + 32;
-
     // ============================================================
     // ERRORS
     // ============================================================
 
     /**
-     * @notice Thrown when the type hash is present but the blob is too short to hold a v1 trailer.
+     * @notice Thrown when a recognised trailer's payload is not the expected 192-byte attestation.
      */
     error MalformedAttestationTrailer();
 
@@ -49,20 +45,20 @@ library AttestationTrailer {
 
     /**
      * @notice Returns whether `signatures` carries an attestation trailer (ends with `TYPE_HASH`).
-     * @dev Non-reverting: a blob shorter than a word, or not ending in `TYPE_HASH`, is simply "no
-     *      trailer", so the consumer can fall through to other authorisation paths.
+     * @dev Non-reverting; the consumer falls through to other authorisation paths when absent.
      * @param signatures The Safe `signatures` blob, optionally suffixed with a trailer.
      * @return present True if the blob ends with `TYPE_HASH`.
      */
     function hasTrailer(bytes calldata signatures) internal pure returns (bool present) {
-        return signatures.length >= 32 && bytes32(signatures[signatures.length - 32:]) == TYPE_HASH;
+        return SignatureExtension.has(signatures, TYPE_HASH);
     }
 
     /**
-     * @notice Decodes the attestation payload from a trailer-bearing `signatures` blob.
-     * @dev Call only once {hasTrailer} is true. Reverts `MalformedAttestationTrailer` if the blob is too
-     *      short to hold a full v1 trailer, so a recognised trailer never yields partial data.
-     * @param signatures The Safe `signatures` blob ending in a v1 attestation trailer.
+     * @notice Decodes the attestation from a trailer-bearing `signatures` blob.
+     * @dev Self-verifying via {SignatureExtension.payload}: reverts `MalformedSignatureExtension` if the
+     *      envelope itself is malformed, and `MalformedAttestationTrailer` if the payload is not the fixed
+     *      192-byte attestation — a recognised trailer never yields partial or wrongly-sized data.
+     * @param signatures The Safe `signatures` blob ending in an attestation trailer.
      * @return epoch The attested epoch.
      * @return groupKey The attesting FROST group key.
      * @return signature The FROST signature.
@@ -72,10 +68,8 @@ library AttestationTrailer {
         pure
         returns (uint64 epoch, Secp256k1.Point memory groupKey, FROST.Signature memory signature)
     {
-        require(signatures.length >= _TRAILER_LENGTH, MalformedAttestationTrailer());
-        uint256 payloadStart = signatures.length - _TRAILER_LENGTH;
-        (epoch, groupKey, signature) = abi.decode(
-            signatures[payloadStart:payloadStart + _PAYLOAD_LENGTH], (uint64, Secp256k1.Point, FROST.Signature)
-        );
+        bytes calldata payloadData = SignatureExtension.payload(signatures, TYPE_HASH);
+        require(payloadData.length == _PAYLOAD_LENGTH, MalformedAttestationTrailer());
+        (epoch, groupKey, signature) = abi.decode(payloadData, (uint64, Secp256k1.Point, FROST.Signature));
     }
 }
