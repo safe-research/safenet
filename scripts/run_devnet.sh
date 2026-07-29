@@ -17,11 +17,16 @@ USAGE
 
 OPTIONS
     -h, --help                  Print this help message.
-    --build                     Build the contracts and validator Podman images.
+    --build                     Build the contracts and Rust validator Podman images.
     --port <PORT>               Specify an alternate host port for the Ethereum RPC.
     --block-time <SECS>         The block time in seconds for the devnet.
     --blocks-per-epoch <NUM>    The number of blocks per Safenet epoch.
     --no-genesis                Do not kick off genesis.
+    --clean-configs             Remove leftover validator config directories from
+                                 previous runs and exit. Only safe once their pods
+                                 have been torn down (e.g. \`podman pod rm -f safenet\`),
+                                 since a still-running pod has its config files
+                                 mounted from one of these directories.
 EOF
     exit 0
 }
@@ -36,6 +41,7 @@ port=8545
 block_time=5
 blocks_per_epoch=60
 genesis=yes
+clean_configs=no
 while [[ $# -gt 0 ]]; do
     case $1 in
         -h|--help)
@@ -50,11 +56,41 @@ while [[ $# -gt 0 ]]; do
             blocks_per_epoch="$2"; shift ;;
         --no-genesis)
             genesis=no ;;
+        --clean-configs)
+            clean_configs=yes ;;
         *)
             fail "unexpected argument '$1'" ;;
     esac
     shift
 done
+
+# Config directories created below are named `safenet-devnet.<random>` so
+# they can be identified and swept up here; each is left behind on exit (see
+# the comment below `config_dir`'s assignment).
+if [ $clean_configs == yes ]; then
+    shopt -s nullglob
+    stale=("${TMPDIR:-/tmp}"/safenet-devnet.*)
+    shopt -u nullglob
+    if [ ${#stale[@]} -eq 0 ]; then
+        echo "No leftover devnet config directories found."
+    else
+        echo "Removing leftover devnet config directories:"
+        printf '  %s\n' "${stale[@]}"
+        rm -rf "${stale[@]}"
+    fi
+    exit 0
+fi
+
+# Rust validators are configured entirely through a per-instance TOML file
+# (`--config-file`), rather than environment variables. Generate one file per
+# validator into a temporary directory that is bind-mounted into each
+# container. This script exits (once genesis is triggered) long before the
+# pod it started does, so `config_dir` must NOT be cleaned up here: doing so
+# on script exit would delete the mounted files out from under the still-
+# running containers. It is intentionally left behind (see `--clean-configs`
+# above), the same way the pod itself is left running for the caller to tear
+# down manually.
+config_dir="$(mktemp -d "${TMPDIR:-/tmp}/safenet-devnet.XXXXXXXX")"
 
 # For now, we require `podman`. We specifically make use of pods and
 # the `play` feature in order to bring up the devnet.
@@ -65,7 +101,7 @@ fi
 # Build the container images if requested.
 if [ $build == yes ]; then
     podman build -t localhost/safenet-contracts -f "$ROOT/contracts/Dockerfile" "$ROOT"
-    podman build -t localhost/safenet-validator -f "$ROOT/validator/Dockerfile" "$ROOT"
+    podman build -t localhost/safenet-validator -f "$ROOT/crates/validator/Dockerfile" "$ROOT"
 fi
 
 # Compute the participant set based on our configuration. We want to
@@ -75,19 +111,51 @@ for validator in "${VALIDATORS[@]}"; do
     parts=(${validator//:/ })
     participants+=(${parts[1]})
 done
-participants=$(IFS=, ; echo "${participants[*]}")
+participants_cs=$(IFS=, ; echo "${participants[*]}")
 
 # TODO: In the future, we should consider bundling the contract
 # bytecode with the `validator` binary, allowing it to compute default
 # contract addresses based on other inputs and using deterministic
 # deployments. For now, simulate a deployment with our `contracts`
 # image and parse out the contract addresses.
-deployment="$(podman run --rm -e PARTICIPANTS=$participants localhost/safenet-contracts 'forge script DeployScript')"
+deployment="$(podman run --rm -e PARTICIPANTS=$participants_cs localhost/safenet-contracts 'forge script DeployScript')"
 parse_deployment() {
     echo "$deployment" | grep "$1:" | grep -oE '0x[0-9a-fA-F]{40}'
 }
-coordinator="$(parse_deployment FROSTCoordinator)"
 consensus="$(parse_deployment Consensus)"
+
+# Write each validator's TOML config into `$config_dir`, following the shape
+# established by `run_validator_port_integration_test.sh`'s `$RUST_CFG`
+# heredoc.
+#
+# TODO(Phase 3): populate `[validator] oracles = [...]` once a SentinelOracle
+# is deployed by this script for the validators to honor attestations from.
+for validator in "${VALIDATORS[@]}"; do
+    parts=(${validator//:/ })
+    name=${parts[0]}
+    private_key=${parts[2]}
+
+    {
+        echo "rpc = \"http://localhost:8545\""
+        echo "signer = \"${private_key}\""
+        echo "database = \"sqlite::memory:\""
+        echo
+        echo "[validator]"
+        echo "consensus = \"${consensus}\""
+        echo "blocks_per_epoch = ${blocks_per_epoch}"
+        for address in "${participants[@]}"; do
+            echo
+            echo "[[validator.participants]]"
+            echo "address = \"${address}\""
+        done
+        echo
+        echo "[observability]"
+        echo 'log_filter = "debug"'
+        echo
+        echo "[index]"
+        echo "block_time = $((block_time * 1000))"
+    } > "$config_dir/${name}.toml"
+done
 
 safenet_spec() {
     cat <<EOF
@@ -111,32 +179,32 @@ EOF
     for validator in ${VALIDATORS[@]}; do
         parts=(${validator//:/ })
         name=${parts[0]}
-        private_key=${parts[2]}
 
         cat <<EOF
     - name: validator-${name}
       image: localhost/safenet-validator:latest
-      env:
-        - name: LOG_LEVEL
-          value: debug
-        - name: METRICS_PORT
-          value: 0
-        - name: RPC_URL
-          value: http://localhost:8545
-        - name: CHAIN_ID
-          value: 31337
-        - name: BLOCK_TIME_OVERRIDE
-          value: ${block_time}
-        - name: CONSENSUS_ADDRESS
-          value: ${consensus}
-        - name: COORDINATOR_ADDRESS
-          value: ${coordinator}
-        - name: PARTICIPANTS
-          value: ${participants}
-        - name: BLOCKS_PER_EPOCH
-          value: ${blocks_per_epoch}
-        - name: PRIVATE_KEY
-          value: ${private_key}
+      args:
+        - --config-file
+        - /config/validator.toml
+      volumeMounts:
+        - name: config-${name}
+          mountPath: /config/validator.toml
+EOF
+    done
+
+    cat <<EOF
+  volumes:
+EOF
+
+    for validator in ${VALIDATORS[@]}; do
+        parts=(${validator//:/ })
+        name=${parts[0]}
+
+        cat <<EOF
+    - name: config-${name}
+      hostPath:
+        path: ${config_dir}/${name}.toml
+        type: File
 EOF
     done
 }
@@ -148,7 +216,7 @@ safenet_spec | podman kube play -
 forge_script() {
     # We run the Forge scripts that are included in the `contracts`
     # container where the node is already running.
-    podman exec -e PARTICIPANTS=$participants safenet-node \
+    podman exec -e PARTICIPANTS=$participants_cs safenet-node \
         forge script $1 \
             --rpc-url http://localhost:8545 \
             --unlocked \
