@@ -3,10 +3,35 @@
 set -euo pipefail
 
 ROOT="$(dirname "$0")/.."
+# All addresses/private keys below are Anvil's standard test-mnemonic accounts
+# (i.e. what `anvil` derives with no custom `--mnemonic`/`--seed`), one per
+# role, none reused across roles:
+#   (0) deployer   0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266
+#   (1) alice      0x70997970C51812dc3A010C7d01b50e0d17dc79C8
+#   (2) bob        0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC
+#   (3) carol      0x90F79bf6EB2c4f870365E785982E1f101E93b906
+#   (4) dave       0x15d34AAf54267DB7D7c367839AAf71A00a2C6A65
+#   (5) arbitrator 0x9965507D1a55bcC2695C58ba16FB37d819B0A4dc
 VALIDATORS=(
     alice:0x70997970C51812dc3A010C7d01b50e0d17dc79C8:0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d
     bob:0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC:0x5de4111afa1a4b94908f83103eb1f1706367c2e68ca870fc3fb9a804cdab365a
 )
+SENTINELS=(
+    carol:0x90F79bf6EB2c4f870365E785982E1f101E93b906:0x7c852118294e51e653712a81e05800f419141751be58f605c371e15141b007a6
+    dave:0x15d34AAf54267DB7D7c367839AAf71A00a2C6A65:0x47e179ec197488593b187f80a00eb0da91f1b9d0b13f8733639f19c30a34926a
+)
+# Anvil account (5). Only ever used via `--unlocked` impersonation
+# (cast_send), so unlike the accounts above its private key is never
+# referenced by this script — recorded here anyway in case it's ever needed
+# for a manual `cast`/wallet import:
+# 0x8b3a350cf5c34c9194ca85829a2df0ec3153be0318b5e2d3348e872092edffba
+ARBITRATOR=0x9965507D1a55bcC2695C58ba16FB37d819B0A4dc
+# Anvil account (0), also used as the `--sender`/`--from` for every
+# broadcast/cast call below (all Anvil accounts are unlocked on the devnet).
+# Private key: 0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80
+DEPLOYER=0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266
+
+# ---- Utility functions ----
 
 usage() {
     cat <<EOF
@@ -35,6 +60,89 @@ fail() {
     echo "ERROR: $1." 1>&2
     exit 1
 }
+
+# Parses a `console.log("<label>:", address(...))` line out of a forge
+# script's output (e.g. "Consensus: 0x...", "ERC20 deployed at: 0x...").
+parse_address() {
+    echo "$1" | grep "$2:" | grep -oE '0x[0-9a-fA-F]{40}'
+}
+
+forge_script() {
+    # We run the Forge scripts that are included in the `contracts`
+    # container where the node is already running. Extra arguments (e.g.
+    # `-e SOME_VAR=value`) are forwarded to `podman exec`, for scripts that
+    # need additional environment variables beyond `PARTICIPANTS`.
+    local script=$1
+    shift
+    podman exec -e PARTICIPANTS=$participants_cs "$@" safenet-node \
+        forge script $script \
+            --rpc-url http://localhost:8545 \
+            --unlocked \
+            --sender $DEPLOYER \
+            --broadcast
+}
+
+cast_send() {
+    # First argument is the (unlocked, impersonated) sender address.
+    local from=$1
+    shift
+    podman exec safenet-node \
+        cast send --rpc-url http://localhost:8545 --unlocked --from "$from" "$@" >/dev/null
+}
+
+safenet_spec() {
+    cat <<EOF
+apiVersion: v1
+kind: Pod
+
+metadata:
+  name: safenet
+
+spec:
+  containers:
+    - name: node
+      image: localhost/safenet-contracts:latest
+      args:
+        - anvil --host=0.0.0.0 --block-time=${block_time}
+      ports:
+        - containerPort: 8545
+          hostPort: ${port}
+EOF
+
+    for validator in ${VALIDATORS[@]}; do
+        parts=(${validator//:/ })
+        name=${parts[0]}
+
+        cat <<EOF
+    - name: validator-${name}
+      image: localhost/safenet-validator:latest
+      args:
+        - --config-file
+        - /config/validator.toml
+      volumeMounts:
+        - name: config-${name}
+          mountPath: /config/validator.toml
+EOF
+    done
+
+    cat <<EOF
+  volumes:
+EOF
+
+    for validator in ${VALIDATORS[@]}; do
+        parts=(${validator//:/ })
+        name=${parts[0]}
+
+        cat <<EOF
+    - name: config-${name}
+      hostPath:
+        path: ${config_dir}/${name}.toml
+        type: File
+EOF
+    done
+}
+
+# ---- Main script ----
 
 build=no
 port=8545
@@ -117,19 +225,20 @@ participants_cs=$(IFS=, ; echo "${participants[*]}")
 # bytecode with the `validator` binary, allowing it to compute default
 # contract addresses based on other inputs and using deterministic
 # deployments. For now, simulate a deployment with our `contracts`
-# image and parse out the contract addresses.
+# image and parse out the contract addresses. This runs the image directly
+# (rather than `podman exec`-ing into the `safenet-node` container, as the
+# rest of this script does) because the `podman kube play` pod isn't up and
+# running yet at this point.
 deployment="$(podman run --rm -e PARTICIPANTS=$participants_cs localhost/safenet-contracts 'forge script DeployScript')"
-parse_deployment() {
-    echo "$deployment" | grep "$1:" | grep -oE '0x[0-9a-fA-F]{40}'
-}
-consensus="$(parse_deployment Consensus)"
+consensus="$(parse_address "$deployment" Consensus)"
 
 # Write each validator's TOML config into `$config_dir`, following the shape
 # established by `run_validator_port_integration_test.sh`'s `$RUST_CFG`
 # heredoc.
 #
-# TODO(Phase 3): populate `[validator] oracles = [...]` once a SentinelOracle
-# is deployed by this script for the validators to honor attestations from.
+# TODO(Phase 3.2): populate `[validator] oracles = ["$sentinel_oracle"]`, once
+# a SentinelOracleV2 is deployed further down in this script, so validators
+# honor its attestations.
 for validator in "${VALIDATORS[@]}"; do
     parts=(${validator//:/ })
     name=${parts[0]}
@@ -157,75 +266,43 @@ for validator in "${VALIDATORS[@]}"; do
     } > "$config_dir/${name}.toml"
 done
 
-safenet_spec() {
-    cat <<EOF
-apiVersion: v1
-kind: Pod
-
-metadata:
-  name: safenet
-
-spec:
-  containers:
-    - name: node
-      image: localhost/safenet-contracts:latest
-      args:
-        - anvil --host=0.0.0.0 --block-time=${block_time}
-      ports:
-        - containerPort: 8545
-          hostPort: ${port}
-EOF
-
-    for validator in ${VALIDATORS[@]}; do
-        parts=(${validator//:/ })
-        name=${parts[0]}
-
-        cat <<EOF
-    - name: validator-${name}
-      image: localhost/safenet-validator:latest
-      args:
-        - --config-file
-        - /config/validator.toml
-      volumeMounts:
-        - name: config-${name}
-          mountPath: /config/validator.toml
-EOF
-    done
-
-    cat <<EOF
-  volumes:
-EOF
-
-    for validator in ${VALIDATORS[@]}; do
-        parts=(${validator//:/ })
-        name=${parts[0]}
-
-        cat <<EOF
-    - name: config-${name}
-      hostPath:
-        path: ${config_dir}/${name}.toml
-        type: File
-EOF
-    done
-}
-
 # Create a pod with a fully functional Safenet development network
 # from our generated spec.
 safenet_spec | podman kube play -
 
-forge_script() {
-    # We run the Forge scripts that are included in the `contracts`
-    # container where the node is already running.
-    podman exec -e PARTICIPANTS=$participants_cs safenet-node \
-        forge script $1 \
-            --rpc-url http://localhost:8545 \
-            --unlocked \
-            --sender 0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266 \
-            --broadcast
-}
-
 # Deploy the Safenet contracts.
 forge_script DeployScript
+
+# Deploy the sentinel fee token and a SentinelOracleV2 arbitrated by
+# $ARBITRATOR, then register and fund each SENTINELS entry against it.
+fee_token="$(parse_address "$(forge_script DeployERC20Script)" 'ERC20 deployed at')"
+sentinel_oracle="$(parse_address "$(forge_script DeploySentinelOracleV2Script \
+    -e SENTINEL_ARBITRATOR="$ARBITRATOR" \
+    -e SENTINEL_CONSENSUS="$consensus" \
+    -e SENTINEL_FEE_TOKEN="$fee_token" \
+    -e SENTINEL_REQUEST_FEE=400000000000000000 \
+    -e SENTINEL_COMMIT_WINDOW=5 \
+    -e SENTINEL_REVEAL_WINDOW=5 \
+    -e SENTINEL_GOVERNANCE_DELAY=0 \
+    -e SENTINEL_BOND_MULTIPLIER=2000)" 'SentinelOracleV2 deployed at')"
+
+# TODO(Phase 3.2): generate a per-SENTINELS-entry TOML config, mirroring the
+# validator TOML above (`rpc`/`signer`/`database` plus a `[sentinel]` table
+# pointing at $sentinel_oracle/$fee_token) — see also the TODO(Phase 3.2) near
+# the validator TOML generation above, for populating `[validator] oracles`.
+# TODO(Phase 3.3): add a `sentinel-${name}` container per SENTINELS entry to
+# safenet_spec(), structurally identical to the validator containers (mounted
+# config, `localhost/safenet-sentinel:latest` image), and build that image
+# under `--build`.
+# TODO(Phase 3.4): update usage() and this script's top-of-file description to
+# describe the devnet as running validators and sentinels.
+for sentinel in "${SENTINELS[@]}"; do
+    parts=(${sentinel//:/ })
+    address=${parts[1]}
+
+    cast_send "$ARBITRATOR" "$sentinel_oracle" 'addSentinel(address)' "$address"
+    cast_send "$DEPLOYER" "$fee_token" 'transfer(address,uint256)' "$address" 10000000000000000000000
+done
 
 # Kick off genesis, if requested.
 if [ $genesis == yes ]; then
