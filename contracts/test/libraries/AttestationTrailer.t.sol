@@ -3,15 +3,17 @@ pragma solidity ^0.8.30;
 
 import {Test} from "@forge-std/Test.sol";
 import {AttestationTrailer} from "@/libraries/AttestationTrailer.sol";
+import {SignatureExtension} from "@/libraries/SignatureExtension.sol";
 import {FROST} from "@/libraries/FROST.sol";
 import {Secp256k1} from "@/libraries/Secp256k1.sol";
 
 /**
  * @title AttestationTrailerTest
- * @notice Unit tests for the `AttestationTrailer` wire-format library. `hasTrailer` is pure recognition;
- *         `decode` extracts the payload and reverts `MalformedAttestationTrailer` on a too-short blob.
- *         Both take `calldata`, so they are exercised through external `this.call*` wrappers (which also
- *         lets `vm.expectRevert` observe the internal revert at a lower call depth).
+ * @notice Unit tests for the typed attestation codec layered on `SignatureExtension`: recognition,
+ *         round-trip decode of the fixed 192-byte payload, and the two reverts — a well-formed envelope
+ *         whose payload is the wrong size (`MalformedAttestationTrailer`) and a malformed envelope
+ *         (`MalformedSignatureExtension`, surfaced from the transport layer). Both functions take
+ *         `calldata`, so they run through external `this.call*` wrappers.
  */
 contract AttestationTrailerTest is Test {
     uint64 internal constant EPOCH = 7;
@@ -28,37 +30,29 @@ contract AttestationTrailerTest is Test {
         return AttestationTrailer.decode(signatures);
     }
 
-    function _key() internal pure returns (Secp256k1.Point memory) {
-        return Secp256k1.Point({x: 111, y: 222});
+    function _attestationPayload() internal pure returns (bytes memory) {
+        // abi.encode(uint64, Secp256k1.Point, FROST.Signature) = 192 bytes.
+        return abi.encode(
+            EPOCH, Secp256k1.Point({x: 111, y: 222}), FROST.Signature({r: Secp256k1.Point({x: 333, y: 444}), z: 555})
+        );
     }
 
-    function _sig() internal pure returns (FROST.Signature memory) {
-        return FROST.Signature({r: Secp256k1.Point({x: 333, y: 444}), z: 555});
-    }
-
-    // A full, well-formed trailer: [owner sigs][192-byte payload][32-byte TYPE_HASH].
-    function _trailer(bytes memory ownerSigs) internal pure returns (bytes memory) {
-        bytes memory payload = abi.encode(EPOCH, _key(), _sig());
-        return bytes.concat(ownerSigs, payload, AttestationTrailer.TYPE_HASH);
+    /// @dev Well-formed trailer: [ownerSigs][payload][uint256 payload.length][TYPE_HASH].
+    function _trailer(bytes memory ownerSigs, bytes memory payload) internal pure returns (bytes memory) {
+        return bytes.concat(ownerSigs, payload, abi.encode(payload.length), AttestationTrailer.TYPE_HASH);
     }
 
     function test_hasTrailer_trueForWellFormed() public view {
-        assertTrue(this.callHasTrailer(_trailer(hex"aabbcc")));
+        assertTrue(this.callHasTrailer(_trailer(hex"aabbcc", _attestationPayload())));
     }
 
-    function test_hasTrailer_falseWhenNoTypeHash() public view {
-        // A plausible Safe signature blob ending in an unrelated word (even the number 192).
-        bytes memory sigs = bytes.concat(hex"aabbcc", bytes32(uint256(192)));
-        assertFalse(this.callHasTrailer(sigs));
-    }
-
-    function test_hasTrailer_falseWhenShorterThanWord() public view {
-        assertFalse(this.callHasTrailer(hex"deadbeef"));
-        assertFalse(this.callHasTrailer(""));
+    function test_hasTrailer_falseWhenAbsent() public view {
+        assertFalse(this.callHasTrailer(bytes.concat(hex"aabbcc", bytes32(uint256(192)))));
     }
 
     function test_decode_roundTrips() public view {
-        (uint64 epoch, Secp256k1.Point memory k, FROST.Signature memory s) = this.callDecode(_trailer(hex"aabbcc"));
+        (uint64 epoch, Secp256k1.Point memory k, FROST.Signature memory s) =
+            this.callDecode(_trailer(hex"aabbcc", _attestationPayload()));
         assertEq(epoch, EPOCH);
         assertEq(k.x, 111);
         assertEq(k.y, 222);
@@ -67,17 +61,15 @@ contract AttestationTrailerTest is Test {
         assertEq(s.z, 555);
     }
 
-    function test_decode_ignoresOwnerSignatureLength() public view {
-        // Payload is sliced from the tail, so any owner-signature prefix decodes to the same values.
-        (uint64 epoch,,) = this.callDecode(_trailer(hex""));
-        assertEq(epoch, EPOCH);
-        (uint64 epoch2,,) = this.callDecode(_trailer(hex"0102030405060708090a0b0c0d0e0f"));
-        assertEq(epoch2, EPOCH);
+    function test_decode_revertsOnWrongPayloadSize() public {
+        // A well-formed envelope whose payload is not the fixed 192-byte attestation.
+        vm.expectRevert(AttestationTrailer.MalformedAttestationTrailer.selector);
+        this.callDecode(_trailer(hex"aabb", hex"1122334455667788"));
     }
 
-    function test_decode_revertsWhenTooShort() public {
-        // Type hash present but the blob is shorter than a full 224-byte trailer.
-        vm.expectRevert(AttestationTrailer.MalformedAttestationTrailer.selector);
+    function test_decode_revertsOnMalformedEnvelope() public {
+        // Ends in TYPE_HASH but has no valid [payloadLength][typeHash] envelope behind it.
+        vm.expectRevert(SignatureExtension.MalformedSignatureExtension.selector);
         this.callDecode(bytes.concat(AttestationTrailer.TYPE_HASH));
     }
 }

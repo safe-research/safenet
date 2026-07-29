@@ -9,6 +9,7 @@ import {SafeTransaction} from "@/libraries/SafeTransaction.sol";
 import {Secp256k1} from "@/libraries/Secp256k1.sol";
 import {TransactionAnnouncement} from "@/libraries/TransactionAnnouncement.sol";
 import {AttestationTrailer} from "@/libraries/AttestationTrailer.sol";
+import {SignatureExtension} from "@/libraries/SignatureExtension.sol";
 import {ISafenetGuard} from "@/interfaces/ISafenetGuard.sol";
 import {Enum} from "@safe/interfaces/Enum.sol";
 import {ISafe} from "@safe/interfaces/ISafe.sol";
@@ -164,8 +165,8 @@ contract SafenetGuardTest is Test {
         return abi.encodePacked(r, s, v);
     }
 
-    /// @dev Builds an inline FROST attestation trailer in the version-1 framing:
-    ///      `[192-byte abi.encode(epoch, groupKey, signature)][32-byte TYPE_HASH (embeds the version)]`.
+    /// @dev Builds an inline FROST attestation as a signature extension:
+    ///      `[192-byte abi.encode(epoch, groupKey, signature)][uint256 payloadLength = 192][32-byte TYPE_HASH]`.
     ///      The group key is derived from `sk` so it matches the signing key.
     function _buildInlineAttestation(bytes32 txHash, uint64 epoch, uint256 sk, uint256 nk)
         internal
@@ -175,7 +176,7 @@ contract SafenetGuardTest is Test {
         bytes32 message = ConsensusMessages.transactionProposal(guard.getConsensusDomainSeparator(), epoch, txHash);
         FROST.Signature memory sig = _frostSign(sk, nk, message);
         bytes memory payload = abi.encode(epoch, groupKey, sig); // 192 bytes
-        return bytes.concat(payload, AttestationTrailer.TYPE_HASH);
+        return bytes.concat(payload, abi.encode(payload.length), AttestationTrailer.TYPE_HASH);
     }
 
     /// @dev Signs and executes a Safe transaction. `Attested` appends a genesis-epoch inline FROST
@@ -423,7 +424,8 @@ contract SafenetGuardTest is Test {
         FROST.Signature memory sig = _frostSign(GENESIS_SK, GENESIS_NK, message);
         sig.z = addmod(sig.z, 1, Secp256k1.N); // tamper
         bytes memory payload = abi.encode(GENESIS_EPOCH, ForgeSecp256k1.g(GENESIS_SK).toPoint(), sig);
-        bytes memory combined = bytes.concat(_signSafeTx(txHash), payload, AttestationTrailer.TYPE_HASH);
+        bytes memory combined =
+            bytes.concat(_signSafeTx(txHash), payload, abi.encode(payload.length), AttestationTrailer.TYPE_HASH);
         vm.expectRevert(Secp256k1.InvalidMulMulAddWitness.selector);
         safe.execTransaction(TX_TO, TX_VALUE, TX_DATA, TX_OP, 0, 0, 0, address(0), payable(address(0)), combined);
     }
@@ -812,13 +814,14 @@ contract SafenetGuardTest is Test {
         safe.execTransaction(TX_TO, TX_VALUE, TX_DATA, TX_OP, 0, 0, 0, address(0), payable(address(0)), combined);
     }
 
-    /// @notice A recognised v1 magic with a too-short blob reverts as malformed (no announcement fallback).
+    /// @notice A recognised type hash with no valid envelope behind it reverts as malformed — the guard
+    ///         fails closed rather than falling through to the announcement path.
     function test_trailer_malformedTruncatedReverts() public {
         uint256 nonce = safe.nonce();
         bytes32 txHash = _safeTxHash(TX_TO, TX_VALUE, TX_DATA, TX_OP, nonce);
-        // 65-byte owner sig + 32-byte v1 tag = 97 bytes < 224 required.
+        // Owner sig + bare type hash: ends in TYPE_HASH but has no valid [payloadLength][typeHash] envelope.
         bytes memory combined = bytes.concat(_signSafeTx(txHash), AttestationTrailer.TYPE_HASH);
-        vm.expectRevert(AttestationTrailer.MalformedAttestationTrailer.selector);
+        vm.expectRevert(SignatureExtension.MalformedSignatureExtension.selector);
         safe.execTransaction(TX_TO, TX_VALUE, TX_DATA, TX_OP, 0, 0, 0, address(0), payable(address(0)), combined);
     }
 
