@@ -141,7 +141,7 @@ spec:
           hostPort: ${port}
 EOF
 
-    for validator in ${VALIDATORS[@]}; do
+    for validator in "${VALIDATORS[@]}"; do
         parts=(${validator//:/ })
         name=${parts[0]}
 
@@ -157,12 +157,40 @@ EOF
 EOF
     done
 
+    for sentinel in "${SENTINELS[@]}"; do
+        parts=(${sentinel//:/ })
+        name=${parts[0]}
+
+        cat <<EOF
+    - name: sentinel-${name}
+      image: localhost/safenet-sentinel:latest
+      args:
+        - --config-file
+        - /config/sentinel.toml
+      volumeMounts:
+        - name: config-${name}
+          mountPath: /config/sentinel.toml
+EOF
+    done
+
     cat <<EOF
   volumes:
 EOF
 
-    for validator in ${VALIDATORS[@]}; do
+    for validator in "${VALIDATORS[@]}"; do
         parts=(${validator//:/ })
+        name=${parts[0]}
+
+        cat <<EOF
+    - name: config-${name}
+      hostPath:
+        path: ${config_dir}/${name}.toml
+        type: File
+EOF
+    done
+
+    for sentinel in "${SENTINELS[@]}"; do
+        parts=(${sentinel//:/ })
         name=${parts[0]}
 
         cat <<EOF
@@ -242,6 +270,7 @@ fi
 if [ $build == yes ]; then
     podman build -t localhost/safenet-contracts -f "$ROOT/contracts/Dockerfile" "$ROOT"
     podman build -t localhost/safenet-validator -f "$ROOT/crates/validator/Dockerfile" "$ROOT"
+    podman build -t localhost/safenet-sentinel -f "$ROOT/crates/sentinel/Dockerfile" "$ROOT"
 fi
 
 # Compute the participant set based on our configuration. We want to
@@ -311,11 +340,6 @@ done
 # Write each sentinel's TOML config into `$config_dir`, following the shape
 # established by `run_sentinel_integration_test.sh`'s `sentinel_config()`
 # heredoc.
-#
-# TODO(Phase 3.3): mount these into a `sentinel-${name}` container per
-# SENTINELS entry in safenet_spec(), structurally identical to the validator
-# containers (mounted config, `localhost/safenet-sentinel:latest` image), and
-# build that image under `--build`.
 for sentinel in "${SENTINELS[@]}"; do
     parts=(${sentinel//:/ })
     name=${parts[0]}
