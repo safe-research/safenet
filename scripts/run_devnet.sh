@@ -31,6 +31,20 @@ ARBITRATOR=0x9965507D1a55bcC2695C58ba16FB37d819B0A4dc
 # Private key: 0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80
 DEPLOYER=0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266
 
+# SentinelOracleV2 economics (see the epic's Architecture Decision): a
+# 40-cent request fee and a 2x bond multiplier, both read against MyToken's
+# 18-decimal default as a dollar-pegged, USDS-style stablecoin, so the bond
+# target per commitment (fee * multiplier, SentinelOracleV2.sol's
+# `bondTarget`) is 80 cents.
+SENTINEL_REQUEST_FEE=400000000000000000
+SENTINEL_COMMIT_WINDOW=5
+SENTINEL_REVEAL_WINDOW=5
+SENTINEL_GOVERNANCE_DELAY=0
+SENTINEL_BOND_MULTIPLIER=2
+# $10 of the fee token per sentinel: comfortably above the 80-cent bond
+# target across more than one request.
+SENTINEL_FUNDING_TOKEN=10000000000000000000
+
 # ---- Utility functions ----
 
 usage() {
@@ -80,6 +94,24 @@ forge_script() {
             --unlocked \
             --sender $DEPLOYER \
             --broadcast
+}
+
+simulate_forge_script() {
+    # Dry-runs a Forge script (no `--rpc-url`/`--broadcast`) to
+    # deterministically precompute its CREATE2 deployment address before the
+    # devnet's Anvil node exists yet — needed for the TOML configs generated
+    # below, which are mounted into containers that start reading them the
+    # moment the pod comes up. Every deployment this script cares about goes
+    # through `DeterministicDeployment`'s CREATE2 factory
+    # (`contracts/script/util/DeterministicDeployment.sol`), whose address
+    # only depends on the factory, salt and (for `MyToken`/`SentinelOracleV2`)
+    # sender-derived constructor arguments — so passing the same `$DEPLOYER`
+    # sender as the real, broadcast deployment further down below makes the
+    # simulated address always match the real one.
+    local script=$1
+    shift
+    podman run --rm -e PARTICIPANTS=$participants_cs "$@" localhost/safenet-contracts \
+        "forge script $script --sender $DEPLOYER"
 }
 
 cast_send() {
@@ -222,23 +254,32 @@ done
 participants_cs=$(IFS=, ; echo "${participants[*]}")
 
 # TODO: In the future, we should consider bundling the contract
-# bytecode with the `validator` binary, allowing it to compute default
-# contract addresses based on other inputs and using deterministic
-# deployments. For now, simulate a deployment with our `contracts`
-# image and parse out the contract addresses. This runs the image directly
-# (rather than `podman exec`-ing into the `safenet-node` container, as the
-# rest of this script does) because the `podman kube play` pod isn't up and
-# running yet at this point.
-deployment="$(podman run --rm -e PARTICIPANTS=$participants_cs localhost/safenet-contracts 'forge script DeployScript')"
+# bytecode with the `validator`/`sentinel` binaries, allowing them to compute
+# default contract addresses based on other inputs and using deterministic
+# deployments. For now, simulate the deployments with our `contracts` image
+# and parse out the resulting addresses (see `simulate_forge_script`). Both
+# `DeployERC20Script` and `DeploySentinelOracleV2Script` select the
+# `CANONICAL` CREATE2 factory (`FACTORY=2`, matching
+# `run_sentinel_integration_test.sh`): the `SAFE_SINGLETON_FACTORY` that
+# `getFactory()` otherwise defaults to isn't deployed on a bare Anvil node.
+deployment="$(simulate_forge_script DeployScript)"
 consensus="$(parse_address "$deployment" Consensus)"
+fee_token="$(parse_address "$(simulate_forge_script DeployERC20Script -e FACTORY=2)" 'ERC20 deployed at')"
+sentinel_oracle="$(parse_address "$(simulate_forge_script DeploySentinelOracleV2Script \
+    -e FACTORY=2 \
+    -e SENTINEL_ARBITRATOR="$ARBITRATOR" \
+    -e SENTINEL_CONSENSUS="$consensus" \
+    -e SENTINEL_FEE_TOKEN="$fee_token" \
+    -e SENTINEL_REQUEST_FEE="$SENTINEL_REQUEST_FEE" \
+    -e SENTINEL_COMMIT_WINDOW="$SENTINEL_COMMIT_WINDOW" \
+    -e SENTINEL_REVEAL_WINDOW="$SENTINEL_REVEAL_WINDOW" \
+    -e SENTINEL_GOVERNANCE_DELAY="$SENTINEL_GOVERNANCE_DELAY" \
+    -e SENTINEL_BOND_MULTIPLIER="$SENTINEL_BOND_MULTIPLIER")" 'SentinelOracleV2 deployed at')"
 
 # Write each validator's TOML config into `$config_dir`, following the shape
 # established by `run_validator_port_integration_test.sh`'s `$RUST_CFG`
-# heredoc.
-#
-# TODO(Phase 3.2): populate `[validator] oracles = ["$sentinel_oracle"]`, once
-# a SentinelOracleV2 is deployed further down in this script, so validators
-# honor its attestations.
+# heredoc. `oracles` points validators at the SentinelOracleV2 above, so they
+# honor its attestations on oracle-checked transactions.
 for validator in "${VALIDATORS[@]}"; do
     parts=(${validator//:/ })
     name=${parts[0]}
@@ -252,11 +293,46 @@ for validator in "${VALIDATORS[@]}"; do
         echo "[validator]"
         echo "consensus = \"${consensus}\""
         echo "blocks_per_epoch = ${blocks_per_epoch}"
+        echo "oracles = [\"${sentinel_oracle}\"]"
         for address in "${participants[@]}"; do
             echo
             echo "[[validator.participants]]"
             echo "address = \"${address}\""
         done
+        echo
+        echo "[observability]"
+        echo 'log_filter = "debug"'
+        echo
+        echo "[index]"
+        echo "block_time = $((block_time * 1000))"
+    } > "$config_dir/${name}.toml"
+done
+
+# Write each sentinel's TOML config into `$config_dir`, following the shape
+# established by `run_sentinel_integration_test.sh`'s `sentinel_config()`
+# heredoc.
+#
+# TODO(Phase 3.3): mount these into a `sentinel-${name}` container per
+# SENTINELS entry in safenet_spec(), structurally identical to the validator
+# containers (mounted config, `localhost/safenet-sentinel:latest` image), and
+# build that image under `--build`.
+for sentinel in "${SENTINELS[@]}"; do
+    parts=(${sentinel//:/ })
+    name=${parts[0]}
+    private_key=${parts[2]}
+
+    {
+        echo "rpc = \"http://localhost:8545\""
+        echo "signer = \"${private_key}\""
+        echo "database = \"sqlite::memory:\""
+        echo "oracle = \"${sentinel_oracle}\""
+        echo "consensus = \"${consensus}\""
+        echo
+        echo "[sentinel]"
+        echo "fee_token = \"${fee_token}\""
+        echo "voting_window = 1"
+        echo "blocklist = []"
+        echo "address_poisoning_lookback_blocks = 1000"
         echo
         echo "[observability]"
         echo 'log_filter = "debug"'
@@ -274,26 +350,21 @@ safenet_spec | podman kube play -
 forge_script DeployScript
 
 # Deploy the sentinel fee token and a SentinelOracleV2 arbitrated by
-# $ARBITRATOR, then register and fund each SENTINELS entry against it.
-fee_token="$(parse_address "$(forge_script DeployERC20Script)" 'ERC20 deployed at')"
-sentinel_oracle="$(parse_address "$(forge_script DeploySentinelOracleV2Script \
+# $ARBITRATOR, then register and fund each SENTINELS entry against it. These
+# reuse the exact same arguments as `simulate_forge_script` above, so the
+# addresses actually deployed here match `$fee_token`/`$sentinel_oracle`.
+forge_script DeployERC20Script -e FACTORY=2 >/dev/null
+forge_script DeploySentinelOracleV2Script \
+    -e FACTORY=2 \
     -e SENTINEL_ARBITRATOR="$ARBITRATOR" \
     -e SENTINEL_CONSENSUS="$consensus" \
     -e SENTINEL_FEE_TOKEN="$fee_token" \
-    -e SENTINEL_REQUEST_FEE=400000000000000000 \
-    -e SENTINEL_COMMIT_WINDOW=5 \
-    -e SENTINEL_REVEAL_WINDOW=5 \
-    -e SENTINEL_GOVERNANCE_DELAY=0 \
-    -e SENTINEL_BOND_MULTIPLIER=2000)" 'SentinelOracleV2 deployed at')"
+    -e SENTINEL_REQUEST_FEE="$SENTINEL_REQUEST_FEE" \
+    -e SENTINEL_COMMIT_WINDOW="$SENTINEL_COMMIT_WINDOW" \
+    -e SENTINEL_REVEAL_WINDOW="$SENTINEL_REVEAL_WINDOW" \
+    -e SENTINEL_GOVERNANCE_DELAY="$SENTINEL_GOVERNANCE_DELAY" \
+    -e SENTINEL_BOND_MULTIPLIER="$SENTINEL_BOND_MULTIPLIER" >/dev/null
 
-# TODO(Phase 3.2): generate a per-SENTINELS-entry TOML config, mirroring the
-# validator TOML above (`rpc`/`signer`/`database` plus a `[sentinel]` table
-# pointing at $sentinel_oracle/$fee_token) — see also the TODO(Phase 3.2) near
-# the validator TOML generation above, for populating `[validator] oracles`.
-# TODO(Phase 3.3): add a `sentinel-${name}` container per SENTINELS entry to
-# safenet_spec(), structurally identical to the validator containers (mounted
-# config, `localhost/safenet-sentinel:latest` image), and build that image
-# under `--build`.
 # TODO(Phase 3.4): update usage() and this script's top-of-file description to
 # describe the devnet as running validators and sentinels.
 for sentinel in "${SENTINELS[@]}"; do
@@ -301,7 +372,7 @@ for sentinel in "${SENTINELS[@]}"; do
     address=${parts[1]}
 
     cast_send "$ARBITRATOR" "$sentinel_oracle" 'addSentinel(address)' "$address"
-    cast_send "$DEPLOYER" "$fee_token" 'transfer(address,uint256)' "$address" 10000000000000000000000
+    cast_send "$DEPLOYER" "$fee_token" 'transfer(address,uint256)' "$address" "$SENTINEL_FUNDING_TOKEN"
 done
 
 # Kick off genesis, if requested.
