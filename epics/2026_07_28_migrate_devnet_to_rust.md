@@ -271,6 +271,19 @@ Depends on Phase 1.
 Depends on Phase 1 (sentinel `Dockerfile`) and Phase 2 (script already generates
 per-instance TOML/volumes, extended here).
 
+This phase is large enough to land as four sequential sub-phase PRs rather than one:
+
+- **Phase 3.1 — contract deployment and sentinel funding (✅ implemented):** the
+  `SENTINELS`/`ARBITRATOR` identities, the `DeployERC20Script`/`DeploySentinelOracleV2Script`
+  deployments, and the `addSentinel`/funding `cast send` calls below. No TOML/pod-spec
+  changes yet — those are deferred to 3.2/3.3, and are called out as `TODO(Phase 3.2)`/
+  `TODO(Phase 3.3)` comments in `run_devnet.sh` in the meantime.
+- **Phase 3.2 — TOML config generation:** each `SENTINELS` entry's generated TOML config,
+  and adding `[validator] oracles = [...]` to each `VALIDATORS` entry's config.
+- **Phase 3.3 — pod spec:** the `sentinel-${name}` containers in `safenet_spec()`, plus
+  building `localhost/safenet-sentinel` under `--build`.
+- **Phase 3.4 — docs:** the `usage()`/top-of-file doc comment update.
+
 - A `SENTINELS` array, parallel in shape to `VALIDATORS` (`name:address:private_key`),
   added near the top of the script alongside it, using the `carol`/`dave` identities
   from the Architecture Decision table. A hardcoded `ARBITRATOR` address (the `(5)`
@@ -345,8 +358,11 @@ Delete `epics/2026_07_28_migrate_devnet_to_rust.md` once Phases 1-4 are merged.
 |---|---|---|---|
 | 1 | Add `crates/validator/Dockerfile` and `crates/sentinel/Dockerfile` (+ `.dockerignore`s), production-shaped | — | ✅ (or split in two) |
 | 2 | Migrate `run_devnet.sh`'s validators from the TypeScript image/env-var config to the Rust image/TOML config | 1 | ✅ |
-| 3 | Extend `run_devnet.sh` to deploy a `SentinelOracleV2` + `MyToken` fee token and spin up two Rust sentinels (`carol`/`dave`) | 1, 2 | ✅ |
-| 4 | Update `AGENTS.md`/`README.md` devnet docs | 3 | ✅ |
+| 3.1 | Deploy `SentinelOracleV2` + `MyToken` fee token; register/fund `carol`/`dave` | 1, 2 | ✅ |
+| 3.2 | Generate per-sentinel TOML config; add `[validator] oracles = [...]` | 3.1 | ✅ |
+| 3.3 | Add `sentinel-${name}` containers to `safenet_spec()`; build sentinel image | 3.2 | ✅ |
+| 3.4 | Update `usage()`/doc comment to describe validators and sentinels | 3.3 | ✅ |
+| 4 | Update `AGENTS.md`/`README.md` devnet docs | 3.4 | ✅ |
 | 5 | Remove this plan | 4 | ✅ |
 
 ---
