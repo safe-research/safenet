@@ -18,15 +18,15 @@ The structural self-call gate for the escape-hatch functions (target is the guar
 
 **Epoch forest.** Epoch state is delegated to `EpochRollover`, which tracks a *forest* of trusted `(group key, epoch)` pairs: any trusted pair may sign a rollover to any strictly-greater epoch, an epoch may hold more than one key (reorg branches), and every pair is kept forever. There is no single "active" epoch — `updateEpoch` names the exact `(parentKey, parentEpoch)` to roll over from, and membership is queried with `isKnownEpoch(groupKey, epoch)`.
 
-**Attestation via signature extension.** Because the forest is keyed by key coordinates (there is no reverse "key for epoch N" lookup) and an epoch may hold several keys, the inline attestation carries the key explicitly. It is appended to Safe's `signatures` bytes as a *signature extension* — a fixed 192-byte payload followed by a 32-byte type hash:
+**Attestation via signature extension.** Because the forest is keyed by key coordinates (there is no reverse "key for epoch N" lookup) and an epoch may hold several keys, the inline attestation carries the key explicitly. It is appended to Safe's `signatures` bytes as a *signature extension* ([`SignatureExtension`](../libraries/SignatureExtension.sol)) — a 192-byte payload, a `uint256` payload-length word, and a terminal 32-byte type hash:
 
 ```
-[safe owner signatures] [192-byte abi.encode(epoch, Secp256k1.Point groupKey, FROST.Signature)] [32-byte TYPE_HASH]
+[safe owner signatures] [192-byte abi.encode(epoch, Secp256k1.Point groupKey, FROST.Signature)] [uint256 payloadLength] [32-byte TYPE_HASH]
 ```
 
 Anchoring the extension at the end leaves Safe's front-to-back signature parser untouched, and the terminal *signature type hash* — so called to distinguish it from the EIP-712 message type hashes used elsewhere in Safenet — makes detection independent of signature suffixes: only a blob whose last word equals `TYPE_HASH` is treated as an attestation, so a valid Safe signature ending in an unrelated value (even the number 192) is never mis-parsed. The signature type hash doubles as an extensible format tag: it embeds the version, so a future format uses a different one (which this guard reads as "no trailer"). This is the first canonical guard the Safe project publishes to use signature extension, and the type-hash separator is intended as a reusable convention for future extensions.
 
-`checkTransaction` outcomes: no signature type hash → falls through to the announcement path; a signature type hash on a too-short blob → reverts `MalformedAttestationTrailer`; a recognised trailer → the `(groupKey, epoch)` pair must be trusted (else `UntrustedAttestationKey`) and the FROST signature is verified. A recognised trailer never silently falls through. Forest membership already implies a non-zero key, so no separate non-zero check is needed.
+`checkTransaction` outcomes: no signature type hash → falls through to the announcement path; a signature type hash on a malformed envelope, or a payload that isn't the 192-byte attestation, reverts (fail-closed — `MalformedSignatureExtension` or `MalformedAttestationTrailer` respectively); a recognised trailer → the `(groupKey, epoch)` pair must be trusted (else `UntrustedAttestationKey`) and the FROST signature is verified. A recognised trailer never silently falls through. Forest membership already implies a non-zero key, so no separate non-zero check is needed.
 
 **Nonce-free escape hatch.** Announcements are keyed by a **nonce-free** hash covering every `execTransaction` parameter *except* the Safe nonce (`getAnnouncementHash`). Owners call `announceTransaction(AnnouncedTransaction)` with the **full transaction parameters** (not a bare hash), so signers see exactly what they authorise and the guard derives the announcement hash on-chain — guaranteeing it matches what `checkTransaction` reconstructs and removing a class of silent off-chain hash-mismatch bugs. Because the hash excludes the nonce, a queued announcement survives unrelated nonce advances: owners can keep transacting via attestation while an announcement matures, and after the fixed delay any matching transaction executes without an attestation at whatever nonce is current. Announcements are single-use (consumed on execution) and can be revoked immediately, with no delay, via `cancelAnnouncement(hash)`. Both `announceTransaction` and `cancelAnnouncement` are auto-allowed self-calls, so the escape hatch never requires Safenet. A normally-attested transaction whose parameters happen to match a pending announcement takes the attestation path and does not consume the announcement.
 
@@ -38,20 +38,21 @@ Anchoring the extension at the end leaves Safe's front-to-back signature parser 
 
 **Fixed delay and window.** Both the embargo delay (`allowTransactionDelay`) and the validity window (`allowTransactionWindow`) are fixed at construction (immutable).
 
-## Integration — attestation trailer format (v1)
+## Integration — attestation trailer format
 
-Relayers that append the inline attestation must build the exact trailer the guard recognises:
+The attestation is a [`SignatureExtension`](../libraries/SignatureExtension.sol) (the canonical envelope spec lives in that library's NatSpec). A relayer builds it as:
 
 ```
 [safe owner signatures]
 [192-byte payload]     = abi.encode(uint64 epoch, Secp256k1.Point groupKey, FROST.Signature signature)   // 6 × 32-byte words
+[uint256 payloadLength] = 192
 [32-byte TYPE_HASH]    = keccak256("SafenetGuard.AttestationTrailer.v1")
 ```
 
 - **TYPE_HASH** = `keccak256("SafenetGuard.AttestationTrailer.v1")`
   = `0x7574ada57823dfda76df60551fc6a8662abe3441dc7b19194fb2cc08b312e436`
 
-Total trailer overhead is exactly **224 bytes** (192 payload + 32 type hash) appended after the Safe owner signatures. Decoding (`AttestationTrailer.decode`): a blob whose last 32 bytes are not `TYPE_HASH` is *no trailer* (falls through to the announcement path); the type hash on a blob shorter than 224 bytes reverts `MalformedAttestationTrailer`.
+Total trailer overhead is exactly **256 bytes** (192 payload + 32 length + 32 type hash) appended after the Safe owner signatures. Decoding (`AttestationTrailer.decode`): a blob whose last 32 bytes are not `TYPE_HASH` is *no trailer* (falls through to the announcement path); a recognised type hash over a malformed envelope reverts `MalformedSignatureExtension`, and a payload that isn't 192 bytes reverts `MalformedAttestationTrailer`.
 
 ## Design decisions
 

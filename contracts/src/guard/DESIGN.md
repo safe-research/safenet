@@ -16,7 +16,7 @@ Deliberate choices with their rationale, recorded so reviewers and auditors can 
 ## Attestation (owner transactions)
 
 - **Inline signature-extension trailer carrying `epoch + groupKey + signature` explicitly** (the forest has no epoch→key reverse lookup). The non-standard encoding (wallets must be Safenet-aware) and the larger trailer are accepted trade-offs.
-- **Type-hash trailer framing** (`keccak256("SafenetGuard.AttestationTrailer.v1")`, not length-only) so a valid Safe-signature suffix cannot be mis-parsed; a recognised trailer never falls through to the announcement path.
+- **Carried as a `SignatureExtension`** — the reusable length-prefixed envelope `[payload][uint256 payloadLength][bytes32 TYPE_HASH]`. The terminal type hash (`keccak256("SafenetGuard.AttestationTrailer.v1")`) means a valid Safe-signature suffix cannot be mis-parsed, and a recognised trailer never falls through to the announcement path. `AttestationTrailer` is the typed codec over that transport (it asserts the fixed 192-byte attestation payload).
 - **Replay/ordering come from the Safe nonce** bound into the FROST-verified attestation message (over the nonce-bound Safe tx hash); there is no spent-signature registry. The escape-hatch path is instead single-use and time-boxed.
 
 ## Escape hatch (announcements)
