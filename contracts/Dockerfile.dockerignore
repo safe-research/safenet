@@ -2,4 +2,5 @@
 !/contracts/lib/**
 !/contracts/script/**
 !/contracts/src/**
+!/contracts/test/**
 !/contracts/foundry.toml
