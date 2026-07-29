@@ -9,7 +9,7 @@
  *   2. resolves the attesting group key from the guard's own epoch events (Consensus exposes no
  *      group-key getter — the key is only emitted in events),
  *   3. fetches the Safe transaction and its collected owner confirmations from the Tx Service,
- *   4. assembles `signatures = <sorted owner signatures> || <224-byte attestation trailer>`, and
+ *   4. assembles `signatures = <sorted owner signatures> || <payload || uint256(payloadLength) || TYPE_HASH>`, and
  *   5. prints that blob and the `execTransaction` parameters, ready for a relayer to submit.
  *
  * Both the attestation and the guard's epoch events are read over a single `RPC_URL`, so this example
@@ -36,6 +36,7 @@ import {
 	isAddress,
 	isHex,
 	keccak256,
+	numberToHex,
 	parseAbiItem,
 	size,
 	toBytes,
@@ -238,7 +239,8 @@ async function main() {
 			.map((c) => c.signature as Hex),
 	);
 
-	// Trailer = abi.encode(uint64 epoch, Point groupKey, FROST.Signature sig) || TYPE_HASH.
+	// Signature extension = payload || uint256(payloadLength) || TYPE_HASH,
+	// where payload = abi.encode(uint64 epoch, Point groupKey, FROST.Signature sig).
 	const payload = encodeAbiParameters(
 		[
 			{ type: "uint64" },
@@ -266,7 +268,7 @@ async function main() {
 		],
 		[epoch, groupKey, sig],
 	);
-	const trailer = concat([payload, TYPE_HASH]);
+	const trailer = concat([payload, numberToHex(size(payload), { size: 32 }), TYPE_HASH]);
 	const signatures = concat([ownerSignatures, trailer]);
 
 	console.log("\n[4] Attested signatures ready. Submit via execTransaction on the Safe's chain:");
