@@ -89,6 +89,7 @@ pub struct TransactionQueue<P> {
     balance_cache: Option<U256>,
 }
 
+#[derive(Clone, Copy, Debug)]
 enum Block {
     Initialized,
     Latest { block: u64 },
@@ -145,45 +146,58 @@ where
         self.balance_cache = None;
         match update {
             BlockUpdate::New { number, safe, .. } => {
-                if self.next_block()?.is_some_and(|next| next != number) || safe > number {
+                let next = self.next_block()?;
+                if next.is_some_and(|next| next != number) || safe > number {
+                    tracing::error!(
+                        block = ?self.block,
+                        number,
+                        safe,
+                        next = ?next,
+                        "rejecting New block update: does not follow the expected block sequence, or `safe` is ahead of `number`"
+                    );
                     return Err(Error::BadUpdate);
                 }
+                let previous_block = self.block;
                 self.block = Block::Latest { block: number };
-
-                // The signer nonce is an RPC round-trip needed only to mark
-                // executed transactions and to assign nonces to queued ones;
-                // both are moot unless a transaction is still outstanding, so
-                // skip it (and the work that needs it) otherwise. Pruning needs
-                // no nonce and always runs, before submission so expired
-                // transactions are dropped rather than broadcast.
-                let outstanding = self.storage.count_outstanding(number).await? > 0;
-                if outstanding {
-                    let nonce = self.nonce().await?;
-                    self.storage
-                        .mark_executed(Status {
-                            block: number,
-                            nonce,
-                        })
-                        .await?;
-                }
-
-                self.storage.prune(safe).await?;
-                if outstanding {
-                    self.resubmit_stale(number).await?;
-                    self.submit_pending().await?;
+                if let Err(err) = self.handle_new_block(number, safe).await {
+                    self.block = previous_block;
+                    return Err(err);
                 }
             }
             BlockUpdate::Uncle { number } => {
-                if self.latest_block().is_some_and(|latest| latest < number) {
+                let latest = self.latest_block();
+                if latest.is_some_and(|latest| latest < number) {
+                    tracing::warn!(
+                        block = ?self.block,
+                        number,
+                        latest = ?latest,
+                        "rejecting Uncle update: the uncled block is ahead of the last observed latest block"
+                    );
                     return Err(Error::BadUpdate);
                 }
-                self.block = Block::Latest {
-                    block: number.checked_sub(1).ok_or(Error::BadUpdate)?,
-                };
+                let block = number.checked_sub(1).ok_or_else(|| {
+                    tracing::warn!(
+                        number,
+                        "rejecting Uncle update: block 0 has no parent block to roll back to"
+                    );
+                    Error::BadUpdate
+                })?;
+                // Unlike `New` above, nothing here needs `self.block` updated
+                // ahead of time, so it's simplest (and safe to retry) to only
+                // commit it once the fallible work has actually succeeded.
                 self.storage.unmark_executed(number).await?;
+                self.block = Block::Latest { block };
             }
             BlockUpdate::Warp { from, to } => {
-                if self.next_block()?.is_some_and(|next| next != from) || to < from {
+                let next = self.next_block()?;
+                if next.is_some_and(|next| next != from) || to < from {
+                    tracing::warn!(
+                        block = ?self.block,
+                        from,
+                        to,
+                        next = ?next,
+                        "rejecting Warp update: `from` does not follow the expected block sequence, or `to` is before `from`"
+                    );
                     return Err(Error::BadUpdate);
                 }
 
@@ -198,6 +212,36 @@ where
                 self.block = Block::Warping { to };
             }
         }
+        Ok(())
+    }
+
+    /// Performs the per-block housekeeping for a `New` block update once
+    /// `self.block` already reflects it: marking executed transactions,
+    /// pruning finalized and expired ones, and resubmitting/submitting.
+    async fn handle_new_block(&mut self, number: u64, safe: u64) -> Result<(), Error> {
+        // The signer nonce is an RPC round-trip needed only to mark executed
+        // transactions and to assign nonces to queued ones; both are moot
+        // unless a transaction is still outstanding, so skip it (and the work
+        // that needs it) otherwise. Pruning needs no nonce and always runs,
+        // before submission so expired transactions are dropped rather than
+        // broadcast.
+        let outstanding = self.storage.count_outstanding(number).await? > 0;
+        if outstanding {
+            let nonce = self.nonce().await?;
+            self.storage
+                .mark_executed(Status {
+                    block: number,
+                    nonce,
+                })
+                .await?;
+        }
+
+        self.storage.prune(safe).await?;
+        if outstanding {
+            self.resubmit_stale(number).await?;
+            self.submit_pending().await?;
+        }
+
         Ok(())
     }
 
@@ -504,6 +548,32 @@ mod tests {
             queue.handle_block_update(new_block(block)).await.unwrap();
             assert!(asserter.read_q().is_empty());
         }
+    }
+
+    #[tokio::test]
+    async fn restores_the_latest_block_if_new_block_housekeeping_fails() {
+        let asserter = Asserter::new();
+        let mut queue = queue(&asserter).await;
+        queue.queue([(tx("0x01"), Some(1000))]).await.unwrap();
+
+        // No RPC response is queued for the nonce fetch this housekeeping
+        // needs (since the queued transaction is outstanding), so it fails.
+        assert!(queue.handle_block_update(new_block(10)).await.is_err());
+
+        // The failed attempt must not have left `self.block` advanced to 10:
+        // a caller retrying the identical update needs to see the same
+        // starting state it did on the first attempt, not one that already
+        // believes it advanced.
+        assert_eq!(queue.latest_block(), None);
+
+        // Retrying the identical update, this time with the RPC responses it
+        // needs, succeeds and correctly advances to block 10.
+        asserter.push_success(&U64::from(0)); // signer transaction count
+        asserter.push_success(&fee_history()); // fee estimate
+        asserter.push_success(&B256::ZERO); // transaction hash from submission
+        queue.handle_block_update(new_block(10)).await.unwrap();
+        assert_eq!(queue.latest_block(), Some(10));
+        assert!(asserter.read_q().is_empty());
     }
 
     #[tokio::test]

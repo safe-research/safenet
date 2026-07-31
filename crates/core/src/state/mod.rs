@@ -121,6 +121,7 @@ pub struct StateMachine<S, T, E> {
     effects: E,
 }
 
+#[derive(Debug)]
 enum Status {
     Initialized,
     BlockPending { pending: u64 },
@@ -193,10 +194,10 @@ where
     ///
     /// The state machine halts if it returns an error, as it can no longer
     /// correctly progress.
-    pub async fn handle_update(
-        &mut self,
-        update: Update<T::Event>,
-    ) -> Result<Vec<T::Action>, Error> {
+    pub async fn handle_update(&mut self, update: Update<T::Event>) -> Result<Vec<T::Action>, Error>
+    where
+        T::Event: std::fmt::Debug,
+    {
         let mut lock = self.inner.lock().await;
         let (state, status) = mem::take(&mut *lock).ok_or(Error::Poisoned)?;
         let (state, status, actions) = match update {
@@ -239,9 +240,17 @@ where
                 // We are extra defensive with the updates that we pass to the
                 // state machine, so ensure that the logs are in strictly sorted
                 // and in the update's block range.
-                if !logs.is_sorted_by(|a, b| (a.block, a.index) < (b.block, b.index))
-                    || logs.iter().any(|log| !blocks.contains(&log.block))
-                {
+                let sorted = logs.is_sorted_by(|a, b| (a.block, a.index) < (b.block, b.index));
+                let in_range = logs.iter().all(|log| blocks.contains(&log.block));
+                if !sorted || !in_range {
+                    tracing::error!(
+                        ?status,
+                        ?blocks,
+                        sorted,
+                        in_range,
+                        logs_len = logs.len(),
+                        "rejecting Logs update: entries must be strictly sorted by (block, index) and fall within the update's block range"
+                    );
                     return Err(Error::BadUpdate);
                 }
 
@@ -279,7 +288,14 @@ where
 
                 (state, status, actions)
             }
-            _ => return Err(Error::BadUpdate),
+            _ => {
+                tracing::error!(
+                    ?status,
+                    ?update,
+                    "rejecting update: it does not match any expected transition for the current status"
+                );
+                return Err(Error::BadUpdate);
+            }
         };
         *lock = Some((state, status));
         Ok(actions)
@@ -351,7 +367,14 @@ fn block_range(from: u64, to: u64) -> Result<RangeInclusive<u64>, Error> {
     (from <= to)
         .then_some(from..=to)
         .map(RangeInclusive::from)
-        .ok_or(Error::BadUpdate)
+        .ok_or_else(|| {
+            tracing::error!(
+                from,
+                to,
+                "rejecting update: block range's `from` is after `to`"
+            );
+            Error::BadUpdate
+        })
 }
 
 fn is_next_in_range(range: impl Into<RangeInclusive<u64>>, sub: RangeInclusive<u64>) -> bool {

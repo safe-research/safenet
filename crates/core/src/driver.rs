@@ -32,14 +32,6 @@ pub struct Config {
     pub transactions: tx::Config,
 }
 
-/// Whether the [`Driver::run`] loop should keep processing updates or stop.
-enum Loop {
-    /// Continue with the next iteration.
-    Continue,
-    /// Stop the run loop, for example after a shutdown signal.
-    Break,
-}
-
 /// Error produced by the [`Driver`].
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
@@ -65,7 +57,7 @@ pub trait ActionEncoder<Action> {
 /// A Safenet service definition.
 pub trait Service {
     type State: Default + DeserializeOwned + Serialize;
-    type Event: Debug + Events;
+    type Event: Clone + Debug + Events;
 
     type Transition: StateTransition<Self::State, Event = Self::Event>;
     type Effects: EffectHandler<
@@ -148,8 +140,12 @@ where
     /// Runs the service, processing indexer updates until a shutdown signal
     /// (such as Ctrl-C) is received or an unrecoverable error occurs.
     ///
-    /// A failed step is retried on the next iteration rather than stopping the
-    /// service.
+    /// Each iteration first obtains an update via [`Driver::next_update`] —
+    /// `self.pending`, if a previous [`Driver::step`] left one, otherwise a
+    /// new one from the watcher — then processes it. A failed step is retried
+    /// on the next iteration rather than stopping the service; if the update
+    /// it failed on can be safely retried as-is (see [`Driver::step`]), the
+    /// retry reuses it instead of fetching a new one from the watcher.
     pub async fn run(mut self) {
         let shutdown = async {
             if let Err(err) = tokio::signal::ctrl_c().await {
@@ -158,22 +154,57 @@ where
         };
         tokio::pin!(shutdown);
 
+        let mut pending: Option<Update<S::Event>> = None;
         loop {
-            match self.step(shutdown.as_mut()).await {
-                Ok(Loop::Continue) => {}
-                Ok(Loop::Break) => {
+            let update = match self.next_update(shutdown.as_mut(), pending.take()).await {
+                Ok(Some(update)) => update,
+                Ok(None) => {
                     tracing::info!("received shutdown signal; stopping service");
                     break;
                 }
+                Err(err) => {
+                    tracing::warn!(
+                        ?err,
+                        "failed to fetch the next update; retrying after delay"
+                    );
+                    tokio::time::sleep(STEP_RETRY_DELAY).await;
+                    continue;
+                }
+            };
+
+            // TODO: evaluate with nlordell if there is a better way that does not clone on each update
+            match self.step(update.clone()).await {
+                Ok(()) => {}
                 Err(Error::State(err)) => {
                     tracing::error!(?err, "unrecoverable state transition error; exiting");
                     break;
                 }
                 Err(err) => {
                     tracing::warn!(?err, "service step failed; retrying after delay");
+                    pending = Some(update);
                     tokio::time::sleep(STEP_RETRY_DELAY).await;
                 }
             }
+        }
+    }
+
+    /// Returns the next update for [`Driver::step`] to process: `self.pending`,
+    /// if a previous call to `step` left one (see its docs), otherwise the
+    /// next one from the watcher. Returns `Ok(None)` on a shutdown signal,
+    /// which only races fetching a *new* update — a pending update is always
+    /// returned immediately.
+    async fn next_update(
+        &mut self,
+        shutdown: Pin<&mut impl Future<Output = ()>>,
+        pending: Option<Update<S::Event>>,
+    ) -> Result<Option<Update<S::Event>>, Error> {
+        match pending {
+            Some(update) => Ok(Some(update)),
+            None => tokio::select! {
+                biased;
+                _ = shutdown => Ok(None),
+                update = self.watcher.next() => update.map(Some).map_err(Error::from),
+            },
         }
     }
 
@@ -181,15 +212,19 @@ where
     /// transaction queue, advancing the state machine, and queuing the
     /// transactions its actions encode to.
     ///
-    /// Only the wait for the next update races `shutdown`; once an update
-    /// arrives it is processed to completion so its state transition and queued
-    /// transactions are committed before the loop can stop.
-    async fn step(&mut self, shutdown: Pin<&mut impl Future<Output = ()>>) -> Result<Loop, Error> {
-        let update = tokio::select! {
-            biased;
-            _ = shutdown => return Ok(Loop::Break),
-            update = self.watcher.next() => update?,
-        };
+    /// On failure, `self.pending` is set to the update to retry, if any, for
+    /// [`Driver::next_update`] to hand back on the next call. A `Block` update
+    /// that fails the transaction queue's per-block housekeeping is stashed
+    /// there so the exact same update can be retried: the watcher's
+    /// event-fetching side has already (irreversibly) moved on to this
+    /// block's logs regardless of whether this call succeeds, so the state
+    /// machine — which has not yet seen this update — must eventually see
+    /// this exact one to stay in step with it, not a fresh one that skips it.
+    /// Once `self.state.handle_update` is reached, either it or the
+    /// subsequent action submission failing has nothing to retry: the state
+    /// machine has already committed (or would redundantly recommit) this
+    /// update, so `self.pending` is left as `None`.
+    async fn step(&mut self, update: Update<S::Event>) -> Result<(), Error> {
         tracing::trace!(?update, "received watcher update");
 
         // Block updates drive the transaction queue's per-block housekeeping
@@ -211,6 +246,6 @@ where
             self.transactions.queue(transactions).await?;
         }
 
-        Ok(Loop::Continue)
+        Ok(())
     }
 }

@@ -561,6 +561,7 @@ macro_rules! watcher_events {
         }
     ) => {
         $(#[$meta])*
+        #[derive(Clone)]
         $vis enum $name {
             $($variant($events)),*
         }
