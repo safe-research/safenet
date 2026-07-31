@@ -350,7 +350,7 @@ for validator in "${VALIDATORS[@]}"; do
         done
         echo
         echo "[observability]"
-        echo 'log_filter = "debug"'
+        echo 'log_filter = "trace"'
         echo
         echo "[index]"
         echo "block_time = $((block_time * 1000))"
@@ -379,7 +379,7 @@ for sentinel in "${SENTINELS[@]}"; do
         echo "address_poisoning_lookback_blocks = 1000"
         echo
         echo "[observability]"
-        echo 'log_filter = "debug"'
+        echo 'log_filter = "trace"'
         echo
         echo "[index]"
         echo "block_time = $((block_time * 1000))"
