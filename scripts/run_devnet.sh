@@ -45,27 +45,38 @@ SENTINEL_BOND_MULTIPLIER=2
 # target across more than one request.
 SENTINEL_FUNDING_TOKEN=10000000000000000000
 
+# Generous amounts for `--fund-account`: plenty of ETH for gas (an arbitrary
+# address, unlike Anvil's own dev accounts, starts out with none) and plenty
+# of the fee token to submit many oracle requests.
+FUND_ACCOUNT_ETH=10000000000000000000
+FUND_ACCOUNT_TOKEN=1000000000000000000000
+
 # ---- Utility functions ----
 
 usage() {
     cat <<EOF
-Run a local Safenet development network.
+Run a local Safenet development network, with Rust validators and sentinels
+voting on a SentinelOracleV2.
 
 USAGE
     run_devnet.sh [OPTIONS...]
 
 OPTIONS
     -h, --help                  Print this help message.
-    --build                     Build the contracts and Rust validator Podman images.
+    --build                     Build the contracts, validator and sentinel Podman images.
     --port <PORT>               Specify an alternate host port for the Ethereum RPC.
     --block-time <SECS>         The block time in seconds for the devnet.
     --blocks-per-epoch <NUM>    The number of blocks per Safenet epoch.
     --no-genesis                Do not kick off genesis.
+<<<<<<< HEAD
     --clean-configs             Remove leftover validator config directories from
                                  previous runs and exit. Only safe once their pods
                                  have been torn down (e.g. \`podman pod rm -f safenet\`),
                                  since a still-running pod has its config files
                                  mounted from one of these directories.
+=======
+    --fund-account <ADDRESS>    Fund an additional account with ETH and fee tokens.
+>>>>>>> d8ac04e ([Phase 3.4] Script Documentation)
 EOF
     exit 0
 }
@@ -209,7 +220,11 @@ port=8545
 block_time=5
 blocks_per_epoch=60
 genesis=yes
+<<<<<<< HEAD
 clean_configs=no
+=======
+fund_account=
+>>>>>>> d8ac04e ([Phase 3.4] Script Documentation)
 while [[ $# -gt 0 ]]; do
     case $1 in
         -h|--help)
@@ -224,8 +239,13 @@ while [[ $# -gt 0 ]]; do
             blocks_per_epoch="$2"; shift ;;
         --no-genesis)
             genesis=no ;;
+<<<<<<< HEAD
         --clean-configs)
             clean_configs=yes ;;
+=======
+        --fund-account)
+            fund_account="$2"; shift ;;
+>>>>>>> d8ac04e ([Phase 3.4] Script Documentation)
         *)
             fail "unexpected argument '$1'" ;;
     esac
@@ -389,8 +409,6 @@ forge_script DeploySentinelOracleV2Script \
     -e SENTINEL_GOVERNANCE_DELAY="$SENTINEL_GOVERNANCE_DELAY" \
     -e SENTINEL_BOND_MULTIPLIER="$SENTINEL_BOND_MULTIPLIER" >/dev/null
 
-# TODO(Phase 3.4): update usage() and this script's top-of-file description to
-# describe the devnet as running validators and sentinels.
 for sentinel in "${SENTINELS[@]}"; do
     parts=(${sentinel//:/ })
     address=${parts[1]}
@@ -398,6 +416,13 @@ for sentinel in "${SENTINELS[@]}"; do
     cast_send "$ARBITRATOR" "$sentinel_oracle" 'addSentinel(address)' "$address"
     cast_send "$DEPLOYER" "$fee_token" 'transfer(address,uint256)' "$address" "$SENTINEL_FUNDING_TOKEN"
 done
+
+# Fund an additional, caller-supplied account with ETH (gas) and plenty of
+# the fee token, if requested via `--fund-account`.
+if [ -n "$fund_account" ]; then
+    cast_send "$DEPLOYER" "$fund_account" --value "$FUND_ACCOUNT_ETH"
+    cast_send "$DEPLOYER" "$fee_token" 'transfer(address,uint256)' "$fund_account" "$FUND_ACCOUNT_TOKEN"
+fi
 
 # Kick off genesis, if requested.
 if [ $genesis == yes ]; then
