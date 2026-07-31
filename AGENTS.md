@@ -74,6 +74,16 @@ These scripts require:
 npm run devnet                  # ./scripts/run_devnet.sh (Podman required)
 ```
 
+Runs the Rust validator and sentinel services (`crates/validator`, `crates/sentinel`)
+against a local Anvil chain, not the TypeScript validator — two validators (`alice`,
+`bob`) and two sentinels (`carol`, `dave`) vote on a freshly deployed `SentinelOracleV2`.
+Each instance is configured via a generated TOML file (`--config-file`), not environment
+variables. `npm run devnet -- --build` builds the `crates/validator/Dockerfile` and
+`crates/sentinel/Dockerfile` images alongside the contracts image. This is separate from
+`npm run test:integration`/`test:integration:sentinel`/`test:integration:validator` above,
+which still exercise the TypeScript validator (and, for the latter two, the Rust
+validator/sentinel ports) directly rather than through Podman.
+
 ## Code Quality Tools
 
 Run `npm run check` before committing. Run `npm run fix` to auto-correct formatting issues.
