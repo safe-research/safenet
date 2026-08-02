@@ -17,6 +17,7 @@ export function useProposalsForTransaction(proposalTxHash: Hex) {
 			proposalTxHash,
 			settings.maxBlockRange,
 			settings.signingTimeout,
+			settings.oracles,
 		],
 		queryFn: () =>
 			getConsensusWorker().loadTransactionProposals({
@@ -25,6 +26,7 @@ export function useProposalsForTransaction(proposalTxHash: Hex) {
 				safeTxHash: proposalTxHash,
 				maxBlockRange: BigInt(settings.maxBlockRange),
 				signingTimeout: settings.signingTimeout,
+				oracles: settings.oracles,
 			}),
 		select: (data) => data.proposals,
 		initialData: { proposals: [], fromBlock: 0n, toBlock: 0n },
