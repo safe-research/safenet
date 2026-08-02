@@ -1,6 +1,7 @@
 import type { Address, Hex, PublicClient } from "viem";
-import { numberToHex } from "viem";
+import { encodeAbiParameters, encodeEventTopics, getAbiItem, numberToHex } from "viem";
 import { describe, expect, it, vi } from "vitest";
+import { consensusAbi } from "./abi";
 import { loadEpochRolloverHistory, loadEpochsState } from "./epochs";
 import { loadTransactionProposals } from "./transactions";
 
@@ -35,7 +36,7 @@ describe("loadTransactionProposals", () => {
 			expect((provider.request as ReturnType<typeof vi.fn>).mock.calls).toHaveLength(1);
 		});
 
-		it("passes both event selectors as an OR filter in topic[0]", async () => {
+		it("passes all four event selectors as an OR filter in topic[0]", async () => {
 			const provider = makeProvider();
 			await loadTransactionProposals({
 				provider,
@@ -44,7 +45,7 @@ describe("loadTransactionProposals", () => {
 				signingTimeout: SIGNING_TIMEOUT,
 			});
 			expect(Array.isArray(firstCall(provider).topics[0])).toBe(true);
-			expect(firstCall(provider).topics[0]).toHaveLength(2);
+			expect(firstCall(provider).topics[0]).toHaveLength(4);
 		});
 
 		it("uses null for topic[1] when safeTxHash is not provided", async () => {
@@ -134,6 +135,208 @@ describe("loadTransactionProposals", () => {
 			expect(result.toBlock).toBe(6000n);
 			expect(result.proposals).toEqual([]);
 		});
+	});
+});
+
+// biome-ignore lint/suspicious/noExplicitAny: viem's ABI input types don't always include the `indexed` property
+const nonIndexedInputs = (inputs: readonly any[]) => inputs.filter((i: any) => !i.indexed);
+
+const ORACLE_TX = {
+	chainId: 1n,
+	safe: SAFE_ADDRESS,
+	to: SAFE_ADDRESS,
+	value: 0n,
+	data: "0x" as Hex,
+	operation: 0,
+	safeTxGas: 0n,
+	baseGas: 0n,
+	gasPrice: 0n,
+	gasToken: "0x0000000000000000000000000000000000000000" as Address,
+	refundReceiver: "0x0000000000000000000000000000000000000000" as Address,
+	nonce: 0n,
+};
+
+const makeRawConsensusLog = ({
+	eventName,
+	indexedArgs,
+	nonIndexedValues,
+	blockNumber,
+	logIndex = 0,
+}: {
+	eventName: "TransactionProposed" | "TransactionAttested" | "OracleTransactionProposed" | "OracleTransactionAttested";
+	indexedArgs: Record<string, unknown>;
+	nonIndexedValues: unknown[];
+	blockNumber: bigint;
+	logIndex?: number;
+}) => {
+	const topics = encodeEventTopics({ abi: consensusAbi, eventName, args: indexedArgs });
+	const abiItem = getAbiItem({ abi: consensusAbi, name: eventName }) as { inputs: readonly unknown[] };
+	const data = encodeAbiParameters(nonIndexedInputs(abiItem.inputs), nonIndexedValues);
+	return {
+		address: CONSENSUS,
+		topics,
+		data,
+		blockNumber: numberToHex(blockNumber),
+		logIndex: numberToHex(logIndex),
+		transactionHash: `0x${"00".repeat(32)}`,
+		blockHash: `0x${"00".repeat(32)}`,
+		transactionIndex: "0x0",
+		removed: false,
+	};
+};
+
+const makeProposedLog = ({ safeTxHash, epoch, blockNumber }: { safeTxHash: Hex; epoch: bigint; blockNumber: bigint }) =>
+	makeRawConsensusLog({
+		eventName: "TransactionProposed",
+		indexedArgs: { safeTxHash, chainId: 1n, safe: SAFE_ADDRESS },
+		nonIndexedValues: [epoch, ORACLE_TX],
+		blockNumber,
+	});
+
+const makeOracleProposedLog = ({
+	safeTxHash,
+	epoch,
+	oracle,
+	blockNumber,
+}: {
+	safeTxHash: Hex;
+	epoch: bigint;
+	oracle: Address;
+	blockNumber: bigint;
+}) =>
+	makeRawConsensusLog({
+		eventName: "OracleTransactionProposed",
+		indexedArgs: { safeTxHash, chainId: 1n, safe: SAFE_ADDRESS },
+		nonIndexedValues: [epoch, oracle, ORACLE_TX],
+		blockNumber,
+	});
+
+const makeOracleAttestedLog = ({
+	safeTxHash,
+	epoch,
+	oracle,
+	blockNumber,
+	logIndex = 1,
+}: {
+	safeTxHash: Hex;
+	epoch: bigint;
+	oracle: Address;
+	blockNumber: bigint;
+	logIndex?: number;
+}) =>
+	makeRawConsensusLog({
+		eventName: "OracleTransactionAttested",
+		indexedArgs: { safeTxHash, chainId: 1n, safe: SAFE_ADDRESS },
+		nonIndexedValues: [epoch, oracle, `0x${"00".repeat(32)}`, { r: { x: 0n, y: 0n }, z: 0n }],
+		blockNumber,
+		logIndex,
+	});
+
+const makeProviderWithLogs = (logs: ReturnType<typeof makeRawConsensusLog>[]): PublicClient =>
+	({
+		getBlockNumber: vi.fn().mockResolvedValue(CURRENT_BLOCK),
+		request: vi.fn().mockResolvedValue(logs),
+	}) as unknown as PublicClient;
+
+describe("loadTransactionProposals oracle recognition", () => {
+	const ORACLE = "0x3333333333333333333333333333333333333333" as Address;
+	const OTHER_ORACLE = "0x4444444444444444444444444444444444444444" as Address;
+
+	it("discards an oracle proposal whose oracle is not in the allow-list", async () => {
+		const provider = makeProviderWithLogs([
+			makeOracleProposedLog({ safeTxHash: SAFE_TX_HASH, epoch: 1n, oracle: ORACLE, blockNumber: CURRENT_BLOCK }),
+		]);
+		const result = await loadTransactionProposals({
+			provider,
+			consensus: CONSENSUS,
+			maxBlockRange: MAX_BLOCK_RANGE,
+			signingTimeout: SIGNING_TIMEOUT,
+			oracles: [OTHER_ORACLE],
+		});
+		expect(result.proposals).toEqual([]);
+	});
+
+	it("keeps and tags an oracle proposal whose oracle is in the allow-list", async () => {
+		const provider = makeProviderWithLogs([
+			makeOracleProposedLog({ safeTxHash: SAFE_TX_HASH, epoch: 1n, oracle: ORACLE, blockNumber: CURRENT_BLOCK }),
+		]);
+		const result = await loadTransactionProposals({
+			provider,
+			consensus: CONSENSUS,
+			maxBlockRange: MAX_BLOCK_RANGE,
+			signingTimeout: SIGNING_TIMEOUT,
+			oracles: [ORACLE],
+		});
+		expect(result.proposals).toHaveLength(1);
+		expect(result.proposals[0].oracle).toBe(ORACLE);
+	});
+
+	it("drops an oracle proposal from an unattested, unlisted oracle when no allow-list is configured", async () => {
+		const provider = makeProviderWithLogs([
+			makeOracleProposedLog({ safeTxHash: SAFE_TX_HASH, epoch: 1n, oracle: ORACLE, blockNumber: CURRENT_BLOCK }),
+		]);
+		const result = await loadTransactionProposals({
+			provider,
+			consensus: CONSENSUS,
+			maxBlockRange: MAX_BLOCK_RANGE,
+			signingTimeout: SIGNING_TIMEOUT,
+		});
+		expect(result.proposals).toEqual([]);
+	});
+
+	it("derives trust from an OracleTransactionAttested log when no allow-list is configured", async () => {
+		const provider = makeProviderWithLogs([
+			makeOracleProposedLog({ safeTxHash: SAFE_TX_HASH, epoch: 1n, oracle: ORACLE, blockNumber: CURRENT_BLOCK }),
+			makeOracleAttestedLog({ safeTxHash: SAFE_TX_HASH, epoch: 1n, oracle: ORACLE, blockNumber: CURRENT_BLOCK }),
+		]);
+		const result = await loadTransactionProposals({
+			provider,
+			consensus: CONSENSUS,
+			maxBlockRange: MAX_BLOCK_RANGE,
+			signingTimeout: SIGNING_TIMEOUT,
+		});
+		expect(result.proposals).toHaveLength(1);
+		expect(result.proposals[0].oracle).toBe(ORACLE);
+		expect(result.proposals[0].status).toBe("ATTESTED");
+	});
+
+	it("does not cross-match a plain proposal's attestation with an oracle-checked one sharing the same safeTxHash and epoch", async () => {
+		const provider = makeProviderWithLogs([
+			makeProposedLog({ safeTxHash: SAFE_TX_HASH, epoch: 1n, blockNumber: CURRENT_BLOCK }),
+			makeOracleAttestedLog({ safeTxHash: SAFE_TX_HASH, epoch: 1n, oracle: ORACLE, blockNumber: CURRENT_BLOCK }),
+		]);
+		const result = await loadTransactionProposals({
+			provider,
+			consensus: CONSENSUS,
+			maxBlockRange: MAX_BLOCK_RANGE,
+			signingTimeout: SIGNING_TIMEOUT,
+			oracles: [ORACLE],
+		});
+		expect(result.proposals).toHaveLength(1);
+		expect(result.proposals[0].oracle).toBeNull();
+		expect(result.proposals[0].status).toBe("PROPOSED");
+	});
+
+	it("matches a lower-cased allow-list address against the checksummed address decoded from logs", async () => {
+		// Mixed-case (unlike ORACLE/OTHER_ORACLE above) so lower-casing actually changes it.
+		const CHECKSUMMED_ORACLE = "0xabCDEF1234567890ABcDEF1234567890aBCDeF12" as Address;
+		const provider = makeProviderWithLogs([
+			makeOracleProposedLog({
+				safeTxHash: SAFE_TX_HASH,
+				epoch: 1n,
+				oracle: CHECKSUMMED_ORACLE,
+				blockNumber: CURRENT_BLOCK,
+			}),
+		]);
+		const result = await loadTransactionProposals({
+			provider,
+			consensus: CONSENSUS,
+			maxBlockRange: MAX_BLOCK_RANGE,
+			signingTimeout: SIGNING_TIMEOUT,
+			oracles: [CHECKSUMMED_ORACLE.toLowerCase() as Address],
+		});
+		expect(result.proposals).toHaveLength(1);
+		expect(result.proposals[0].oracle).toBe(CHECKSUMMED_ORACLE);
 	});
 });
 

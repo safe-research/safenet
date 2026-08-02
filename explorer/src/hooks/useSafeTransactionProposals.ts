@@ -32,6 +32,7 @@ export function useSafeTransactionProposals({
 			settings.consensus,
 			settings.maxBlockRange,
 			settings.signingTimeout,
+			settings.oracles,
 		],
 		refetchInterval: autoRefresh ? settings.refetchInterval : false,
 		// pageParam is the toBlock for this window. undefined on the first page so
@@ -45,6 +46,7 @@ export function useSafeTransactionProposals({
 				toBlock,
 				maxBlockRange: BigInt(settings.maxBlockRange),
 				signingTimeout: settings.signingTimeout,
+				oracles: settings.oracles,
 			}),
 		initialPageParam: undefined,
 		// The next window ends one block before where the previous one started.
