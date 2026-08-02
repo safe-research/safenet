@@ -4,6 +4,8 @@ import { tanstackRouter } from "@tanstack/router-plugin/vite";
 import viteReact from "@vitejs/plugin-react";
 import { defineConfig, loadEnv } from "vite";
 
+const ETHEREUM_ADDRESS_REGEX = /^0x[0-9a-fA-F]{40}$/;
+
 // https://vitejs.dev/config/
 export default defineConfig(({ mode }) => {
 	// Load environment variables and set base path for nested routes
@@ -25,7 +27,7 @@ export default defineConfig(({ mode }) => {
 	}
 
 	// Validate VITE_DEFAULT_* overrides at build time (only when explicitly set)
-	if (env.VITE_DEFAULT_CONSENSUS && !/^0x[0-9a-fA-F]{40}$/.test(env.VITE_DEFAULT_CONSENSUS)) {
+	if (env.VITE_DEFAULT_CONSENSUS && !ETHEREUM_ADDRESS_REGEX.test(env.VITE_DEFAULT_CONSENSUS)) {
 		throw new Error(`VITE_DEFAULT_CONSENSUS is not a valid Ethereum address: ${env.VITE_DEFAULT_CONSENSUS}`);
 	}
 	for (const key of [
@@ -50,6 +52,15 @@ export default defineConfig(({ mode }) => {
 	]) {
 		if (env[key] && !Number.isInteger(Number(env[key]))) {
 			throw new Error(`${key} is not a valid integer: ${env[key]}`);
+		}
+	}
+	const defaultOracles = (env.VITE_DEFAULT_ORACLES || "")
+		.split(",")
+		.map((address) => address.trim())
+		.filter(Boolean);
+	for (const address of defaultOracles) {
+		if (!ETHEREUM_ADDRESS_REGEX.test(address)) {
+			throw new Error(`VITE_DEFAULT_ORACLES contains an invalid Ethereum address: ${address}`);
 		}
 	}
 
@@ -107,6 +118,7 @@ export default defineConfig(({ mode }) => {
 			__DEFAULT_REFETCH_INTERVAL__: Number(env.VITE_DEFAULT_REFETCH_INTERVAL) || 10000,
 			__DEFAULT_BLOCKS_PER_EPOCH__: Number(env.VITE_DEFAULT_BLOCKS_PER_EPOCH) || 1440,
 			__DEFAULT_SIGNING_TIMEOUT__: Number(env.VITE_DEFAULT_SIGNING_TIMEOUT) || 12,
+			__DEFAULT_ORACLES__: JSON.stringify(defaultOracles),
 		},
 	};
 });

@@ -19,6 +19,7 @@ export default defineConfig({
 		__DEFAULT_REFETCH_INTERVAL__: 10000,
 		__DEFAULT_BLOCKS_PER_EPOCH__: 1440,
 		__DEFAULT_SIGNING_TIMEOUT__: 12,
+		__DEFAULT_ORACLES__: JSON.stringify([]),
 	},
 	test: {
 		coverage: {

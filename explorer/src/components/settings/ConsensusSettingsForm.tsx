@@ -11,6 +11,21 @@ const numberOrStringAsNumber = z
 	.union([z.string(), z.number()])
 	.transform((val) => (val === "" ? undefined : Number(val)));
 
+// Accepts the already-parsed Address[] from Settings (used as react-hook-form's
+// defaultValues) or the raw comma-separated text the user edits it as. Validation
+// issues are reported on the field itself (not per-address) so FormItem can render them.
+const addressListOrStringAsAddressList = z.union([z.array(checkedAddressSchema), z.string()]).transform((val, ctx) => {
+	const addresses = (Array.isArray(val) ? val : val.split(","))
+		.map((address) => address.trim())
+		.filter((address) => address !== "");
+	const parsed = z.array(checkedAddressSchema).safeParse(addresses);
+	if (!parsed.success) {
+		ctx.addIssue({ code: "custom", message: parsed.error.issues[0]?.message ?? "Invalid oracle address" });
+		return z.NEVER;
+	}
+	return parsed.data;
+});
+
 const settingsFormSchema = z.object({
 	consensus: emptyToUndefined(checkedAddressSchema),
 	decoder: emptyToUndefined(z.url()),
@@ -21,6 +36,7 @@ const settingsFormSchema = z.object({
 	refetchInterval: numberOrStringAsNumber.pipe(z.number().int().nonnegative().optional()),
 	blocksPerEpoch: numberOrStringAsNumber.pipe(z.number().int().positive().optional()),
 	signingTimeout: numberOrStringAsNumber.pipe(z.number().int().positive().optional()),
+	oracles: addressListOrStringAsAddressList.optional(),
 });
 
 type SettingsFormInput = z.input<typeof settingsFormSchema>;
@@ -78,6 +94,14 @@ function ConsensusSettingsForm({ onSubmitted }: { onSubmitted?: () => void }) {
 				label="Signing Timeout (blocks)"
 			/>
 			<FormItem id="validatorInfo" register={register} error={errors.validatorInfo} label="Validator Info Url" />
+
+			<FormItem
+				id="oracles"
+				register={register}
+				error={errors.oracles}
+				label="Oracle Addresses (comma-separated)"
+				placeholder="0x…, 0x…"
+			/>
 
 			<FormItem
 				id="refetchInterval"

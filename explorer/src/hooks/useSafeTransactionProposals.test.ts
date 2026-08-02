@@ -23,6 +23,7 @@ const DEFAULT_SETTINGS: Settings = {
 	refetchInterval: 0,
 	blocksPerEpoch: 1440,
 	signingTimeout: 12,
+	oracles: [],
 };
 
 vi.mock("@/hooks/useSettings", () => ({

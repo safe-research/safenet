@@ -15,6 +15,7 @@ const DEFAULT_SETTINGS: Settings = {
 	refetchInterval: 10000,
 	blocksPerEpoch: 1440,
 	signingTimeout: 12,
+	oracles: [],
 };
 
 const mockUpdateSettings = vi.hoisted(() => vi.fn());
@@ -43,6 +44,7 @@ describe("ConsensusSettingsForm", () => {
 		expect(screen.getByLabelText("Validator Info Url")).toBeTruthy();
 		expect(screen.getByLabelText("Refetch Interval (0 to disable refetching)")).toBeTruthy();
 		expect(screen.getByLabelText("Signing Timeout (blocks)")).toBeTruthy();
+		expect(screen.getByLabelText("Oracle Addresses (comma-separated)")).toBeTruthy();
 	});
 
 	it("displays default values from settings", () => {
@@ -117,6 +119,38 @@ describe("ConsensusSettingsForm", () => {
 		fireEvent.submit(input.closest("form") as HTMLFormElement);
 		await waitFor(() => {
 			expect(screen.getByText(/too small/i)).toBeTruthy();
+		});
+	});
+
+	it("parses comma-separated oracle addresses into a list on submit", async () => {
+		const oracleA = "0x49Db717Adec0D22235A73C3a9c2ea57AB0bC2353";
+		const oracleB = "0x223624cBF099e5a8f8cD5aF22aFa424a1d1acEE9";
+		render(<ConsensusSettingsForm />);
+		const input = screen.getByLabelText("Oracle Addresses (comma-separated)") as HTMLInputElement;
+		fireEvent.change(input, { target: { value: `${oracleA}, ${oracleB}` } });
+		fireEvent.submit(input.closest("form") as HTMLFormElement);
+		await waitFor(() => {
+			expect(mockUpdateSettings).toHaveBeenCalledWith(expect.objectContaining({ oracles: [oracleA, oracleB] }));
+		});
+	});
+
+	it("treats an empty oracle addresses field as an empty list", async () => {
+		render(<ConsensusSettingsForm />);
+		const input = screen.getByLabelText("Oracle Addresses (comma-separated)") as HTMLInputElement;
+		fireEvent.change(input, { target: { value: "" } });
+		fireEvent.submit(input.closest("form") as HTMLFormElement);
+		await waitFor(() => {
+			expect(mockUpdateSettings).toHaveBeenCalledWith(expect.objectContaining({ oracles: [] }));
+		});
+	});
+
+	it("shows a validation error for an invalid oracle address", async () => {
+		render(<ConsensusSettingsForm />);
+		const input = screen.getByLabelText("Oracle Addresses (comma-separated)") as HTMLInputElement;
+		fireEvent.change(input, { target: { value: "not-an-address" } });
+		fireEvent.submit(input.closest("form") as HTMLFormElement);
+		await waitFor(() => {
+			expect(screen.getByText(/invalid address format or checksum/i)).toBeTruthy();
 		});
 	});
 });
