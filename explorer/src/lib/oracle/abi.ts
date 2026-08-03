@@ -1,4 +1,4 @@
-import { parseAbi } from "viem";
+import { getAbiItem, parseAbi, toEventSelector } from "viem";
 
 // Read-only surface of `SentinelOracleV2` (commit/reveal). V1 (`SentinelOracle`) is deprecated
 // and out of scope — there is no dual-version handling here.
@@ -7,6 +7,12 @@ export const sentinelOracleV2Abi = parseAbi([
 	"event Committed(bytes32 indexed requestId, address indexed sentinel, uint256 bondAmount)",
 	"event Revealed(bytes32 indexed requestId, address indexed sentinel, bool approved, uint256 bondAmount, string reason)",
 ]);
+
+// `Committed`/`Revealed` share the same indexed-topic layout (`requestId`, `sentinel`), so both
+// can be fetched with a single `eth_getLogs` call filtered by `requestId`.
+export const sentinelVoteEventSelectors = ["Committed" as const, "Revealed" as const].map((eventName) =>
+	toEventSelector(getAbiItem({ abi: sentinelOracleV2Abi, name: eventName })),
+);
 
 // `IOracle.OracleResult`, common to every oracle implementation (including non-Sentinel ones
 // like `AlwaysApproveOracle`) — the generic fallback when `getRequest` isn't `SentinelOracleV2`-shaped.
