@@ -1,5 +1,6 @@
 export * from "./abi";
 export * from "./hashing";
+export * from "./votes";
 export * from "./votingStatus";
 
 import { type Remote, wrap } from "comlink";

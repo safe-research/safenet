@@ -1,0 +1,64 @@
+import { type Address, formatLog, type Hex, numberToHex, type PublicClient, parseEventLogs } from "viem";
+import { getBlockRange } from "@/lib/utils";
+import { sentinelOracleV2Abi, sentinelVoteEventSelectors } from "./abi";
+
+export type SentinelVote =
+	| { sentinel: Address; state: "committed" }
+	| { sentinel: Address; state: "approved" | "denied"; reason: string };
+
+// Per-sentinel breakdown for a `SentinelOracleV2` request, discovered from indexed `Committed`/
+// `Revealed` logs rather than a configured roster — only sentinels who acted appear, ordered by
+// their `Committed` log position (first vote first). Callers should only invoke this once
+// `loadVotingStatus` has confirmed `kind === "sentinel"`; a generic `IOracle` has no such events.
+export const loadSentinelVotes = async ({
+	provider,
+	oracle,
+	requestId,
+	maxBlockRange,
+}: {
+	provider: PublicClient;
+	oracle: Address;
+	requestId: Hex;
+	maxBlockRange: bigint;
+}): Promise<SentinelVote[]> => {
+	const { fromBlock, toBlock } = await getBlockRange(provider, maxBlockRange);
+
+	// A single `eth_getLogs` here, in order to filter on the `requestId` topic while still
+	// matching either event — `getLogs`'s typed `events` option can't be combined with `args`.
+	const rawLogs = await provider.request({
+		method: "eth_getLogs",
+		params: [
+			{
+				address: oracle,
+				fromBlock: numberToHex(fromBlock),
+				toBlock: numberToHex(toBlock),
+				topics: [sentinelVoteEventSelectors, requestId],
+			},
+		],
+	});
+	const logs = parseEventLogs({
+		logs: rawLogs.map((log) => formatLog(log)),
+		abi: sentinelOracleV2Abi,
+		strict: true,
+	});
+
+	const revealedBySentinel = new Map(
+		logs.filter((log) => log.eventName === "Revealed").map((log) => [log.args.sentinel, log.args]),
+	);
+
+	return logs
+		.filter((log) => log.eventName === "Committed")
+		.sort((left, right) => {
+			if (left.blockNumber !== right.blockNumber) {
+				return left.blockNumber < right.blockNumber ? -1 : 1;
+			}
+			return left.logIndex - right.logIndex;
+		})
+		.map(({ args: { sentinel } }): SentinelVote => {
+			const revealed = revealedBySentinel.get(sentinel);
+			if (!revealed) {
+				return { sentinel, state: "committed" };
+			}
+			return { sentinel, state: revealed.approved ? "approved" : "denied", reason: revealed.reason };
+		});
+};
