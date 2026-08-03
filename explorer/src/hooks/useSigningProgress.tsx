@@ -1,9 +1,15 @@
 import { useQuery } from "@tanstack/react-query";
-import type { Hex } from "viem";
+import type { Address, Hex } from "viem";
 import { useSettings } from "@/hooks/useSettings";
 import { type AttestationStatus, getCoordinatorWorker } from "@/lib/coordinator";
 
-export function useAttestationStatus(safeTxHash: Hex, epoch: bigint, proposedAt: bigint, attestedAt: bigint | null) {
+export function useAttestationStatus(
+	safeTxHash: Hex,
+	epoch: bigint,
+	proposedAt: bigint,
+	attestedAt: bigint | null,
+	oracle: Address | null,
+) {
 	const [settings] = useSettings();
 	return useQuery<AttestationStatus | null, Error>({
 		queryKey: [
@@ -13,6 +19,7 @@ export function useAttestationStatus(safeTxHash: Hex, epoch: bigint, proposedAt:
 			epoch.toString(),
 			proposedAt.toString(),
 			attestedAt?.toString(),
+			oracle,
 			settings.maxBlockRange,
 		],
 		queryFn: () =>
@@ -21,6 +28,7 @@ export function useAttestationStatus(safeTxHash: Hex, epoch: bigint, proposedAt:
 				consensus: settings.consensus,
 				safeTxHash,
 				epoch,
+				oracle,
 				proposedAt,
 				attestedAt,
 				maxBlockRange: BigInt(settings.maxBlockRange),

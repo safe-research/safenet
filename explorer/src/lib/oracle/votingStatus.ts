@@ -1,6 +1,7 @@
 import { type Address, getAbiItem, type Hex, type PublicClient, zeroAddress } from "viem";
-import { getBlockRange, mostRecentFirst } from "@/lib/utils";
+import { getBlockRange, loadChainId, mostRecentFirst } from "@/lib/utils";
 import { oracleAbi, sentinelOracleV2Abi } from "./abi";
+import { oracleRequestId } from "./hashing";
 
 const sentinelRequestStates = ["PENDING", "FROZEN", "RESOLVED_APPROVED", "RESOLVED_DENIED", "TIMED_OUT"] as const;
 
@@ -14,14 +15,21 @@ export type VotingStatus =
 export const loadVotingStatus = async ({
 	provider,
 	oracle,
-	requestId,
+	consensus,
+	epoch,
+	safeTxHash,
 	maxBlockRange,
 }: {
 	provider: PublicClient;
 	oracle: Address;
-	requestId: Hex;
+	consensus: Address;
+	epoch: bigint;
+	safeTxHash: Hex;
 	maxBlockRange: bigint;
 }): Promise<VotingStatus> => {
+	const chainId = await loadChainId(provider);
+	const requestId = oracleRequestId({ chainId, consensus, epoch, oracle, safeTxHash });
+
 	// `getRequest` is a bare mapping read on `SentinelOracleV2` — it never reverts, even for an
 	// unknown requestId, instead returning a zero-initialized struct. The catch below only fires
 	// for oracles that don't implement `getRequest` at all (a plain `IOracle` like

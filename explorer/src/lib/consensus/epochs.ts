@@ -1,5 +1,5 @@
 import { type Address, getAbiItem, type Hex, type PublicClient } from "viem";
-import { getBlockRange, mostRecentFirst } from "@/lib/utils";
+import { getBlockRange, loadChainId, mostRecentFirst } from "@/lib/utils";
 import { consensusAbi } from "./abi";
 
 export type ConsensusState = {
@@ -7,18 +7,6 @@ export type ConsensusState = {
 	currentEpoch: bigint;
 	currentGroupId: Hex;
 	currentBlock: bigint;
-};
-
-let cachedChainId: { provider: PublicClient; chainId: Promise<number> } | undefined;
-
-const loadChainId = async (provider: PublicClient): Promise<number> => {
-	if (provider !== cachedChainId?.provider) {
-		cachedChainId = {
-			provider,
-			chainId: provider.getChainId(),
-		};
-	}
-	return cachedChainId.chainId;
 };
 
 export const loadConsensusState = async (provider: PublicClient, consensus: Address): Promise<ConsensusState> => {

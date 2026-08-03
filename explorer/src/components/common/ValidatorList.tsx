@@ -14,11 +14,13 @@ export function ValidatorList({
 	active,
 	mapInfo,
 	completed,
+	popoverContent,
 }: {
 	all: Address[];
 	active: Address[];
 	mapInfo: (suffix: string) => (address: Address) => string;
 	completed: boolean;
+	popoverContent?: (address: Address) => React.ReactNode;
 }) {
 	const activeSet = new Set(active);
 
@@ -42,6 +44,7 @@ export function ValidatorList({
 							<span className="font-mono text-xs">{item.address}</span>
 							<CopyButton value={item.address} />
 						</div>
+						{popoverContent?.(item.address)}
 					</InfoPopover>
 					{index < allItems.length - 1 && ", "}
 				</Fragment>

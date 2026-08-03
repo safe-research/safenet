@@ -13,6 +13,7 @@ const workerApi = {
 		consensus: Address;
 		safeTxHash: Hex;
 		epoch: bigint;
+		oracle?: Address | null;
 		proposedAt?: bigint;
 		attestedAt?: bigint | null;
 		maxBlockRange: bigint;
