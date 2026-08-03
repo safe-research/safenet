@@ -17,5 +17,6 @@ pub mod observability;
 pub mod serialization;
 pub mod state;
 pub mod tx;
+pub mod utils;
 
 pub use self::driver::Driver;

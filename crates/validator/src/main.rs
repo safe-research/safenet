@@ -14,8 +14,7 @@ use self::{
 };
 use alloy::providers::{Provider, ProviderBuilder};
 use argh::FromArgs;
-use safenet_core::{Driver, observability};
-use sqlx::sqlite::SqlitePool;
+use safenet_core::{Driver, observability, utils};
 use std::{error::Error, path::PathBuf};
 
 #[derive(Debug, FromArgs)]
@@ -43,7 +42,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     tracing::debug!(config_file = %options.config_file.display(), "validator configuration loaded");
 
     let provider = ProviderBuilder::new().connect(config.rpc.as_str()).await?;
-    let pool = SqlitePool::connect_with(config.database).await?;
+    let pool = utils::connect_sqlite(config.database).await?;
 
     let consensus = config.validator.consensus;
     let coordinator = Consensus::new(consensus, &provider)
