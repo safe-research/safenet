@@ -68,15 +68,12 @@ OPTIONS
     --block-time <SECS>         The block time in seconds for the devnet.
     --blocks-per-epoch <NUM>    The number of blocks per Safenet epoch.
     --no-genesis                Do not kick off genesis.
-<<<<<<< HEAD
     --clean-configs             Remove leftover validator config directories from
                                  previous runs and exit. Only safe once their pods
                                  have been torn down (e.g. \`podman pod rm -f safenet\`),
                                  since a still-running pod has its config files
                                  mounted from one of these directories.
-=======
     --fund-account <ADDRESS>    Fund an additional account with ETH and fee tokens.
->>>>>>> d8ac04e ([Phase 3.4] Script Documentation)
 EOF
     exit 0
 }
@@ -220,11 +217,8 @@ port=8545
 block_time=5
 blocks_per_epoch=60
 genesis=yes
-<<<<<<< HEAD
 clean_configs=no
-=======
 fund_account=
->>>>>>> d8ac04e ([Phase 3.4] Script Documentation)
 while [[ $# -gt 0 ]]; do
     case $1 in
         -h|--help)
@@ -239,13 +233,10 @@ while [[ $# -gt 0 ]]; do
             blocks_per_epoch="$2"; shift ;;
         --no-genesis)
             genesis=no ;;
-<<<<<<< HEAD
         --clean-configs)
             clean_configs=yes ;;
-=======
         --fund-account)
             fund_account="$2"; shift ;;
->>>>>>> d8ac04e ([Phase 3.4] Script Documentation)
         *)
             fail "unexpected argument '$1'" ;;
     esac
