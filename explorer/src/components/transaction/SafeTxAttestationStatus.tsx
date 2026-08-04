@@ -11,6 +11,7 @@ export function SafeTxAttestationStatus({ proposal }: { proposal: TransactionPro
 		proposal.epoch,
 		proposal.proposedAt.block,
 		proposal.attestedAt?.block ?? null,
+		proposal.oracle,
 	);
 	const mapInfo = createMapInfo(validatorInfo.data);
 	const allValidatorIds = Array.from(validatorInfo.data?.keys() ?? []);
@@ -23,38 +24,38 @@ export function SafeTxAttestationStatus({ proposal }: { proposal: TransactionPro
 					{status.data.status !== "completed" && (
 						<div className={"md:flex md:justify-between"}>
 							<p className={"ml-4"}>Committed:</p>
-							<p>
+							<div>
 								<ValidatorList
 									all={allValidatorIds}
 									active={status.data.committed.map((s) => s.address)}
 									mapInfo={mapInfo}
 									completed={true}
 								/>
-							</p>
+							</div>
 						</div>
 					)}
 					<div className={"md:flex md:justify-between"}>
 						<p className={"ml-4"}>Attested:</p>
-						<p>
+						<div>
 							<ValidatorList
 								all={allValidatorIds}
 								active={status.data.signed.map((s) => s.address)}
 								mapInfo={mapInfo}
 								completed={status.data.status === "completed"}
 							/>
-						</p>
+						</div>
 					</div>
 					{status.data.declined.length > 0 && (
 						<div className={"md:flex md:justify-between"}>
 							<p className={"ml-4"}>Declined:</p>
-							<p>
+							<div>
 								<ValidatorList
 									all={status.data.declined.map((s) => s.address)}
 									active={status.data.declined.map((s) => s.address)}
 									mapInfo={(suffix) => mapInfo(suffix === "✅" ? "❌" : suffix)}
 									completed={true}
 								/>
-							</p>
+							</div>
 						</div>
 					)}
 				</div>

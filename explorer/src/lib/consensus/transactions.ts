@@ -1,7 +1,6 @@
 import {
 	type Address,
 	formatLog,
-	getAbiItem,
 	getAddress,
 	type Hex,
 	numberToHex,
@@ -12,7 +11,7 @@ import {
 import z from "zod";
 import { bigIntSchema, checkedAddressSchema, hexDataSchema } from "@/lib/schemas";
 import { getBlockRange, jsonReplacer, mostRecentFirst } from "@/lib/utils";
-import { consensusAbi, transactionEventSelectors } from "./abi";
+import { consensusAbi, proposedEventSelectors, transactionEventSelectors } from "./abi";
 
 export const safeTransactionSchema = z.object({
 	chainId: bigIntSchema,
@@ -68,17 +67,24 @@ export const loadProposedSafeTransaction = async ({
 	maxBlockRange: bigint;
 }): Promise<SafeTransaction | null> => {
 	const { fromBlock, toBlock } = await getBlockRange(provider, maxBlockRange);
-	const logs = await provider.getLogs({
-		address: consensus,
-		event: getAbiItem({
-			abi: consensusAbi,
-			name: "TransactionProposed",
-		}),
-		args: {
-			safeTxHash,
-		},
-		fromBlock,
-		toBlock,
+	// A plain and an oracle-checked proposal both carry `transaction` in their args, so a raw
+	// `eth_getLogs` with both selectors in topic[0] is needed — `getLogs`'s typed `event` option
+	// only accepts one event, and `events` can't be combined with `args` topic filtering.
+	const rawLogs = await provider.request({
+		method: "eth_getLogs",
+		params: [
+			{
+				address: consensus,
+				fromBlock: numberToHex(fromBlock),
+				toBlock: numberToHex(toBlock),
+				topics: [proposedEventSelectors, safeTxHash],
+			},
+		],
+	});
+	const logs = parseEventLogs({
+		logs: rawLogs.map((log) => formatLog(log)),
+		abi: consensusAbi,
+		eventName: ["TransactionProposed", "OracleTransactionProposed"],
 		strict: true,
 	});
 	return safeTransactionSchema.safeParse(logs.at(0)?.args?.transaction).data ?? null;
