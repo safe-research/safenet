@@ -5,7 +5,19 @@ import { loadVotingStatus } from "./votingStatus";
 
 const ORACLE: Address = "0x1234567890123456789012345678901234567890";
 const PROPOSER: Address = "0x9999999999999999999999999999999999999999";
+const CONSENSUS: Address = "0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045";
+const EPOCH = 1n;
+const SAFE_TX_HASH: Hex = "0xfe8b85e8d090b16fe8f142d3c9292dc1fc77daf9eb4af8f7cf4a7707d95f4028";
 const REQUEST_ID: Hex = `0x${"ab".repeat(32)}`;
+const CHAIN_ID = 1;
+
+const commonParams = {
+	oracle: ORACLE,
+	consensus: CONSENSUS,
+	epoch: EPOCH,
+	safeTxHash: SAFE_TX_HASH,
+	maxBlockRange: 500n,
+};
 
 const makeSentinelProvider = (request: {
 	proposer?: Address;
@@ -30,6 +42,7 @@ const makeSentinelProvider = (request: {
 			revealedCount: 0n,
 			...request,
 		}),
+		getChainId: vi.fn().mockResolvedValue(CHAIN_ID),
 	}) as unknown as PublicClient;
 
 const makeGenericProvider = (logs: unknown[] = []): PublicClient =>
@@ -37,6 +50,7 @@ const makeGenericProvider = (logs: unknown[] = []): PublicClient =>
 		readContract: vi.fn().mockRejectedValue(new Error("function selector not recognized")),
 		getBlockNumber: vi.fn().mockResolvedValue(1000n),
 		getLogs: vi.fn().mockResolvedValue(logs),
+		getChainId: vi.fn().mockResolvedValue(CHAIN_ID),
 	}) as unknown as PublicClient;
 
 const makeOracleResultLog = (approved: boolean, blockNumber = 1n, logIndex = 0) => ({
@@ -55,7 +69,7 @@ describe("loadVotingStatus", () => {
 	] as const)("maps SentinelOracleRequest.State ordinal %i to %s", async (state, name) => {
 		const provider = makeSentinelProvider({ state, approveSentinelCount: 3n, denySentinelCount: 1n });
 
-		const result = await loadVotingStatus({ provider, oracle: ORACLE, requestId: REQUEST_ID, maxBlockRange: 500n });
+		const result = await loadVotingStatus({ provider, ...commonParams });
 
 		expect(result).toEqual({ kind: "sentinel", state: name, approveCount: 3n, denyCount: 1n });
 	});
@@ -68,7 +82,7 @@ describe("loadVotingStatus", () => {
 			denySentinelCount: 0n,
 		});
 
-		const result = await loadVotingStatus({ provider, oracle: ORACLE, requestId: REQUEST_ID, maxBlockRange: 500n });
+		const result = await loadVotingStatus({ provider, ...commonParams });
 
 		expect(result).toBeNull();
 	});
@@ -76,7 +90,7 @@ describe("loadVotingStatus", () => {
 	it("falls back to OracleResult logs when getRequest reverts", async () => {
 		const provider = makeGenericProvider([makeOracleResultLog(true)]);
 
-		const result = await loadVotingStatus({ provider, oracle: ORACLE, requestId: REQUEST_ID, maxBlockRange: 500n });
+		const result = await loadVotingStatus({ provider, ...commonParams });
 
 		expect(result).toEqual({ kind: "generic", approved: true });
 	});
@@ -84,7 +98,7 @@ describe("loadVotingStatus", () => {
 	it("returns null when getRequest reverts and no OracleResult log exists yet", async () => {
 		const provider = makeGenericProvider([]);
 
-		const result = await loadVotingStatus({ provider, oracle: ORACLE, requestId: REQUEST_ID, maxBlockRange: 500n });
+		const result = await loadVotingStatus({ provider, ...commonParams });
 
 		expect(result).toBeNull();
 	});

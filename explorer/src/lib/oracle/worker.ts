@@ -4,10 +4,19 @@ import { createRpcClient } from "@/lib/rpc";
 import { loadSentinelVotes } from "./votes";
 import { loadVotingStatus } from "./votingStatus";
 
+type LoadVotesParams = {
+	rpc: string;
+	oracle: Address;
+	consensus: Address;
+	epoch: bigint;
+	safeTxHash: Hex;
+	maxBlockRange: bigint;
+};
+
 const workerApi = {
-	loadVotingStatus: ({ rpc, ...params }: { rpc: string; oracle: Address; requestId: Hex; maxBlockRange: bigint }) =>
+	loadVotingStatus: ({ rpc, ...params }: LoadVotesParams) =>
 		loadVotingStatus({ ...params, provider: createRpcClient(rpc) }),
-	loadSentinelVotes: ({ rpc, ...params }: { rpc: string; oracle: Address; requestId: Hex; maxBlockRange: bigint }) =>
+	loadSentinelVotes: ({ rpc, ...params }: LoadVotesParams) =>
 		loadSentinelVotes({ ...params, provider: createRpcClient(rpc) }),
 };
 

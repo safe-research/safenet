@@ -9,12 +9,31 @@ import {
 } from "viem";
 import { describe, expect, it, vi } from "vitest";
 import { sentinelOracleV2Abi } from "./abi";
+import { oracleRequestId } from "./hashing";
 import { loadSentinelVotes } from "./votes";
 
 const ORACLE: Address = "0x1234567890123456789012345678901234567890";
-const REQUEST_ID: Hex = `0x${"ab".repeat(32)}`;
+const CONSENSUS: Address = "0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045";
+const EPOCH = 1n;
+const SAFE_TX_HASH: Hex = "0xfe8b85e8d090b16fe8f142d3c9292dc1fc77daf9eb4af8f7cf4a7707d95f4028";
+const CHAIN_ID = 1;
+const REQUEST_ID: Hex = oracleRequestId({
+	chainId: CHAIN_ID,
+	consensus: CONSENSUS,
+	epoch: EPOCH,
+	oracle: ORACLE,
+	safeTxHash: SAFE_TX_HASH,
+});
 const SENTINEL_A: Address = "0x1111111111111111111111111111111111111111";
 const SENTINEL_B: Address = "0x2222222222222222222222222222222222222222";
+
+const commonParams = {
+	oracle: ORACLE,
+	consensus: CONSENSUS,
+	epoch: EPOCH,
+	safeTxHash: SAFE_TX_HASH,
+	maxBlockRange: 500n,
+};
 
 // biome-ignore lint/suspicious/noExplicitAny: viem's ABI input types don't always include the `indexed` property
 const nonIndexedInputs = (inputs: readonly any[]) => inputs.filter((i: any) => !i.indexed);
@@ -70,13 +89,14 @@ const makeProvider = (logs: unknown[]): PublicClient =>
 	({
 		getBlockNumber: vi.fn().mockResolvedValue(1000n),
 		request: vi.fn().mockResolvedValue(logs),
+		getChainId: vi.fn().mockResolvedValue(CHAIN_ID),
 	}) as unknown as PublicClient;
 
 describe("loadSentinelVotes", () => {
-	it("makes a single eth_getLogs request filtered by requestId", async () => {
+	it("makes a single eth_getLogs request filtered by the derived requestId", async () => {
 		const provider = makeProvider([]);
 
-		await loadSentinelVotes({ provider, oracle: ORACLE, requestId: REQUEST_ID, maxBlockRange: 500n });
+		await loadSentinelVotes({ provider, ...commonParams });
 
 		const requestMock = provider.request as unknown as ReturnType<typeof vi.fn>;
 		expect(requestMock).toHaveBeenCalledTimes(1);
@@ -90,7 +110,7 @@ describe("loadSentinelVotes", () => {
 	it("returns an empty array when nobody has voted", async () => {
 		const provider = makeProvider([]);
 
-		const result = await loadSentinelVotes({ provider, oracle: ORACLE, requestId: REQUEST_ID, maxBlockRange: 500n });
+		const result = await loadSentinelVotes({ provider, ...commonParams });
 
 		expect(result).toEqual([]);
 	});
@@ -98,7 +118,7 @@ describe("loadSentinelVotes", () => {
 	it("marks a sentinel as committed when it hasn't revealed yet", async () => {
 		const provider = makeProvider([makeCommittedLog(SENTINEL_A, 1n)]);
 
-		const result = await loadSentinelVotes({ provider, oracle: ORACLE, requestId: REQUEST_ID, maxBlockRange: 500n });
+		const result = await loadSentinelVotes({ provider, ...commonParams });
 
 		expect(result).toEqual([{ sentinel: SENTINEL_A, state: "committed" }]);
 	});
@@ -109,7 +129,7 @@ describe("loadSentinelVotes", () => {
 			makeRevealedLog(SENTINEL_A, true, "looks good", 2n),
 		]);
 
-		const result = await loadSentinelVotes({ provider, oracle: ORACLE, requestId: REQUEST_ID, maxBlockRange: 500n });
+		const result = await loadSentinelVotes({ provider, ...commonParams });
 
 		expect(result).toEqual([{ sentinel: SENTINEL_A, state: "approved", reason: "looks good" }]);
 	});
@@ -120,7 +140,7 @@ describe("loadSentinelVotes", () => {
 			makeRevealedLog(SENTINEL_A, false, "suspicious payload", 2n),
 		]);
 
-		const result = await loadSentinelVotes({ provider, oracle: ORACLE, requestId: REQUEST_ID, maxBlockRange: 500n });
+		const result = await loadSentinelVotes({ provider, ...commonParams });
 
 		expect(result).toEqual([{ sentinel: SENTINEL_A, state: "denied", reason: "suspicious payload" }]);
 	});
@@ -133,7 +153,7 @@ describe("loadSentinelVotes", () => {
 			makeRevealedLog(SENTINEL_B, false, "no", 6n, 1),
 		]);
 
-		const result = await loadSentinelVotes({ provider, oracle: ORACLE, requestId: REQUEST_ID, maxBlockRange: 500n });
+		const result = await loadSentinelVotes({ provider, ...commonParams });
 
 		expect(result).toEqual([
 			{ sentinel: SENTINEL_A, state: "approved", reason: "ok" },

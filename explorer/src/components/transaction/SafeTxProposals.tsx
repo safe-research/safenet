@@ -1,5 +1,5 @@
 import { InformationCircleIcon } from "@heroicons/react/24/outline";
-import type { Hex } from "viem";
+import type { Address, Hex } from "viem";
 import { CopyButton } from "@/components/common/CopyButton";
 import { InfoPopover } from "@/components/common/InfoPopover";
 import { InlineHash } from "@/components/common/InlineHash";
@@ -7,12 +7,16 @@ import { StatusBadge } from "@/components/common/StatusBadge";
 import { Box, BoxTitle } from "@/components/Groups";
 import { Skeleton } from "@/components/Skeleton";
 import { useProposalsForTransaction } from "@/hooks/useProposalsForTransaction";
+import { useSentinelVotes } from "@/hooks/useSentinelVotes";
 import { useAttestationStatus } from "@/hooks/useSigningProgress";
 import { useSubmitProposal } from "@/hooks/useSubmitProposal";
+import { useVotingStatus } from "@/hooks/useVotingStatus";
 import { SAFE_SERVICE_CHAINS } from "@/lib/chains";
 import type { SafeTransaction, TransactionProposal, TransactionProposalWithStatus } from "@/lib/consensus";
 import { InlineBlockInfo, InlineExplorerTxLink } from "../common/Info";
 import { SafeTxAttestationStatus } from "./SafeTxAttestationStatus";
+import { SentinelVoteList } from "./SentinelVoteList";
+import { VotingStatusBadge } from "./VotingStatusBadge";
 
 export function SafeTxProposals({ safeTxHash, transaction }: { safeTxHash: Hex; transaction: SafeTransaction }) {
 	const proposals = useProposalsForTransaction(safeTxHash);
@@ -38,6 +42,7 @@ function ProposalInfoButton({ proposal }: { proposal: TransactionProposal }) {
 		proposal.epoch,
 		proposal.proposedAt.block,
 		proposal.attestedAt?.block ?? null,
+		proposal.oracle,
 	);
 	if (status.data === null) return null;
 
@@ -68,6 +73,30 @@ function ProposalInfoButton({ proposal }: { proposal: TransactionProposal }) {
 	);
 }
 
+function SafeTxProposalVoting({ oracle, proposal }: { oracle: Address; proposal: TransactionProposal }) {
+	const votingStatus = useVotingStatus(oracle, proposal.epoch, proposal.safeTxHash);
+	const isSentinel = votingStatus.data?.kind === "sentinel";
+	const sentinelVotes = useSentinelVotes(oracle, proposal.epoch, proposal.safeTxHash, isSentinel);
+	return (
+		<div className="space-y-2">
+			<div className="md:flex md:justify-between">
+				<div className="flex items-center gap-2">
+					<p className="font-semibold">Oracle</p>
+					<InfoPopover trigger={<InformationCircleIcon className="h-4 w-4 text-muted" />}>
+						<div className="flex items-center gap-1 whitespace-nowrap">
+							<InlineHash hash={oracle} />
+							<CopyButton value={oracle} />
+						</div>
+					</InfoPopover>
+					<p className="font-semibold">:</p>
+				</div>
+				<VotingStatusBadge status={votingStatus.data} />
+			</div>
+			{isSentinel && <SentinelVoteList votes={sentinelVotes.data} />}
+		</div>
+	);
+}
+
 function SafeTxProposal({ proposal, number }: { proposal: TransactionProposalWithStatus; number: number }) {
 	return (
 		<Box className="space-y-2">
@@ -79,6 +108,7 @@ function SafeTxProposal({ proposal, number }: { proposal: TransactionProposalWit
 				<p>Status:</p>
 				<StatusBadge status={proposal.status} />
 			</div>
+			{proposal.oracle != null && <SafeTxProposalVoting oracle={proposal.oracle} proposal={proposal} />}
 			<div className="md:flex md:justify-between">
 				<p className="mr-2">Proposed:</p>
 				<p>
