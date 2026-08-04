@@ -1,8 +1,9 @@
 import type { Address } from "viem";
-import { createMapInfo, ValidatorList } from "@/components/common/ValidatorList";
+import { AnnotatedAddressList } from "@/components/common/AnnotatedAddressList";
 import { Skeleton } from "@/components/Skeleton";
 import { useValidatorInfoMap } from "@/hooks/useValidatorInfo";
 import type { KeyGenStatus } from "@/lib/coordinator/keygen";
+import { createStatusMapInfo } from "@/lib/validators/info";
 
 function statusLabel(status: KeyGenStatus): string {
 	if (status.compromised) return "COMPROMISED";
@@ -26,11 +27,12 @@ export function KeyGenStatusItem({ status }: { status: KeyGenStatus | null }) {
 		return <Skeleton className="w-full h-10 bg-primary/10" />;
 	}
 
-	const mapInfo = createMapInfo(validatorInfo.data);
-
 	const terminal = status.finalized || status.compromised;
 	const label = statusLabel(status);
 	const allIds: Address[] = Array.from(validatorInfo.data?.keys() ?? []);
+	const committedIds = status.committed.map((p) => p.address);
+	const sharedIds = status.shared.map((p) => p.address);
+	const confirmedIds = status.confirmed.map((p) => p.address);
 
 	return (
 		<div className="bg-surface-0 border border-surface-outline rounded-card p-4 space-y-2 text-sm">
@@ -46,11 +48,10 @@ export function KeyGenStatusItem({ status }: { status: KeyGenStatus | null }) {
 				<div className="md:flex md:justify-between">
 					<p className="ml-4">Committed:</p>
 					<p>
-						<ValidatorList
-							all={allIds}
-							active={status.committed.map((p) => p.address)}
-							mapInfo={mapInfo}
-							completed={false}
+						<AnnotatedAddressList
+							accounts={allIds}
+							active={committedIds}
+							label={createStatusMapInfo(validatorInfo.data, false)}
 						/>
 					</p>
 				</div>
@@ -60,11 +61,10 @@ export function KeyGenStatusItem({ status }: { status: KeyGenStatus | null }) {
 				<div className="md:flex md:justify-between">
 					<p className="ml-4">Shared:</p>
 					<p>
-						<ValidatorList
-							all={allIds}
-							active={status.shared.map((p) => p.address)}
-							mapInfo={mapInfo}
-							completed={false}
+						<AnnotatedAddressList
+							accounts={allIds}
+							active={sharedIds}
+							label={createStatusMapInfo(validatorInfo.data, false)}
 						/>
 					</p>
 				</div>
@@ -73,11 +73,10 @@ export function KeyGenStatusItem({ status }: { status: KeyGenStatus | null }) {
 			<div className="md:flex md:justify-between">
 				<p className="ml-4">Confirmed:</p>
 				<p>
-					<ValidatorList
-						all={allIds}
-						active={status.confirmed.map((p) => p.address)}
-						mapInfo={mapInfo}
-						completed={terminal}
+					<AnnotatedAddressList
+						accounts={allIds}
+						active={confirmedIds}
+						label={createStatusMapInfo(validatorInfo.data, terminal)}
 					/>
 				</p>
 			</div>
