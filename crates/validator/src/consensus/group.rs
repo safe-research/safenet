@@ -225,7 +225,18 @@ fn group_threshold(count: u16) -> u16 {
 /// for the group to be viable: strictly more than two thirds of the epoch's
 /// default participant set, with a hard floor of two.
 fn min_participants(count: u16) -> u16 {
-    u16::max(2, count * 2 / 3 + 1)
+    // Compute the minimum number of participants in 32 bits to prevent the
+    // possibility of overflows for very large sets (even if this cannot happen
+    // in practice).
+    let count = count as u32;
+    let min = count * 2 / 3 + 1;
+
+    // Note that casting here is safe since `min <= count` (except when count is
+    // 0, in which case it is 1) which fits in a `u16` by definition.
+    debug_assert!(min <= u16::MAX as u32);
+    let min = min as u16;
+
+    u16::max(2, min)
 }
 
 /// The participants Merkle tree over the sorted `participants`, each hashed as
@@ -330,6 +341,11 @@ mod tests {
         assert_eq!(min_participants(3), 3);
         assert_eq!(min_participants(4), 3);
         assert_eq!(min_participants(6), 5);
+    }
+
+    #[test]
+    fn minimum_participation_does_not_overflow() {
+        assert_eq!(min_participants(60_000), 40_001);
     }
 
     #[test]
