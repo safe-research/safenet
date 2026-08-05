@@ -34,7 +34,7 @@ pub mod oracle {
                 uint256 bondAmount,
                 string reason
             );
-            event DisputeResolved(bytes32 indexed requestId, RequestState outcome, uint256 slashed);
+            event DisputeResolved(bytes32 indexed requestId, RequestState outcome, uint256 slashed, string context);
 
             function commit(bytes32 requestId, bytes32 commitHash) external;
             function reveal(bytes32 requestId, bool approve, bytes32 salt, string calldata reason) external;
