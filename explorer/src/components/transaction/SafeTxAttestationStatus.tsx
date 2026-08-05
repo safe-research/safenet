@@ -1,7 +1,8 @@
-import { createMapInfo, ValidatorList } from "@/components/common/ValidatorList";
+import { AnnotatedAddressList } from "@/components/common/AnnotatedAddressList";
 import { useAttestationStatus } from "@/hooks/useSigningProgress";
 import { useValidatorInfoMap } from "@/hooks/useValidatorInfo";
 import type { TransactionProposal } from "@/lib/consensus";
+import { createStatusMapInfo, mapInfo } from "@/lib/validators/info";
 import { Skeleton } from "../Skeleton";
 
 export function SafeTxAttestationStatus({ proposal }: { proposal: TransactionProposal }) {
@@ -13,8 +14,9 @@ export function SafeTxAttestationStatus({ proposal }: { proposal: TransactionPro
 		proposal.attestedAt?.block ?? null,
 		proposal.oracle,
 	);
-	const mapInfo = createMapInfo(validatorInfo.data);
 	const allValidatorIds = Array.from(validatorInfo.data?.keys() ?? []);
+	const committedIds = status.data?.committed.map((s) => s.address) ?? [];
+	const signedIds = status.data?.signed.map((s) => s.address) ?? [];
 	return (
 		<>
 			{status.isFetching && status.data === null && <Skeleton className="w-full h-10" />}
@@ -25,11 +27,10 @@ export function SafeTxAttestationStatus({ proposal }: { proposal: TransactionPro
 						<div className={"md:flex md:justify-between"}>
 							<p className={"ml-4"}>Committed:</p>
 							<div>
-								<ValidatorList
-									all={allValidatorIds}
-									active={status.data.committed.map((s) => s.address)}
-									mapInfo={mapInfo}
-									completed={true}
+								<AnnotatedAddressList
+									accounts={allValidatorIds}
+									active={committedIds}
+									label={createStatusMapInfo(validatorInfo.data, true)}
 								/>
 							</div>
 						</div>
@@ -37,11 +38,10 @@ export function SafeTxAttestationStatus({ proposal }: { proposal: TransactionPro
 					<div className={"md:flex md:justify-between"}>
 						<p className={"ml-4"}>Attested:</p>
 						<div>
-							<ValidatorList
-								all={allValidatorIds}
-								active={status.data.signed.map((s) => s.address)}
-								mapInfo={mapInfo}
-								completed={status.data.status === "completed"}
+							<AnnotatedAddressList
+								accounts={allValidatorIds}
+								active={signedIds}
+								label={createStatusMapInfo(validatorInfo.data, status.data.status === "completed")}
 							/>
 						</div>
 					</div>
@@ -49,11 +49,9 @@ export function SafeTxAttestationStatus({ proposal }: { proposal: TransactionPro
 						<div className={"md:flex md:justify-between"}>
 							<p className={"ml-4"}>Declined:</p>
 							<div>
-								<ValidatorList
-									all={status.data.declined.map((s) => s.address)}
-									active={status.data.declined.map((s) => s.address)}
-									mapInfo={(suffix) => mapInfo(suffix === "✅" ? "❌" : suffix)}
-									completed={true}
+								<AnnotatedAddressList
+									accounts={status.data.declined.map((s) => s.address)}
+									label={(address) => mapInfo(validatorInfo.data, "❌", address)}
 								/>
 							</div>
 						</div>
