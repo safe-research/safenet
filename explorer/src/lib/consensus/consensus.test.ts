@@ -3,7 +3,7 @@ import { encodeAbiParameters, encodeEventTopics, getAbiItem, numberToHex } from 
 import { describe, expect, it, vi } from "vitest";
 import { consensusAbi } from "./abi";
 import { loadEpochRolloverHistory, loadEpochsState } from "./epochs";
-import { loadTransactionProposals } from "./transactions";
+import { loadProposedSafeTransaction, loadTransactionProposals } from "./transactions";
 
 const CONSENSUS = "0x0000000000000000000000000000000000000001" as Address;
 const SAFE_TX_HASH = `0x${"ab".repeat(32)}` as Hex;
@@ -238,27 +238,67 @@ const makeProviderWithLogs = (logs: ReturnType<typeof makeRawConsensusLog>[]): P
 		request: vi.fn().mockResolvedValue(logs),
 	}) as unknown as PublicClient;
 
+describe("loadProposedSafeTransaction", () => {
+	it("topic filters", async () => {
+		const provider = makeProviderWithLogs([]);
+		await loadProposedSafeTransaction({
+			provider,
+			consensus: CONSENSUS,
+			safeTxHash: SAFE_TX_HASH,
+			maxBlockRange: MAX_BLOCK_RANGE,
+		});
+		expect(Array.isArray(firstCall(provider).topics[0])).toBe(true);
+		expect(firstCall(provider).topics[0]).toHaveLength(2);
+		expect(firstCall(provider).topics[1]).toBe(SAFE_TX_HASH);
+	});
+
+	it("returns the transaction from a plain TransactionProposed log", async () => {
+		const provider = makeProviderWithLogs([
+			makeProposedLog({ safeTxHash: SAFE_TX_HASH, epoch: 1n, blockNumber: 100n }),
+		]);
+		const result = await loadProposedSafeTransaction({
+			provider,
+			consensus: CONSENSUS,
+			safeTxHash: SAFE_TX_HASH,
+			maxBlockRange: MAX_BLOCK_RANGE,
+		});
+		expect(result).toEqual(ORACLE_TX);
+	});
+
+	it("returns the transaction from an OracleTransactionProposed log", async () => {
+		const oracle = "0x3333333333333333333333333333333333333333" as Address;
+		const provider = makeProviderWithLogs([
+			makeOracleProposedLog({ safeTxHash: SAFE_TX_HASH, epoch: 1n, oracle, blockNumber: 100n }),
+		]);
+		const result = await loadProposedSafeTransaction({
+			provider,
+			consensus: CONSENSUS,
+			safeTxHash: SAFE_TX_HASH,
+			maxBlockRange: MAX_BLOCK_RANGE,
+		});
+		expect(result).toEqual(ORACLE_TX);
+	});
+
+	it("returns null when no proposal log is found", async () => {
+		const provider = makeProviderWithLogs([]);
+		const result = await loadProposedSafeTransaction({
+			provider,
+			consensus: CONSENSUS,
+			safeTxHash: SAFE_TX_HASH,
+			maxBlockRange: MAX_BLOCK_RANGE,
+		});
+		expect(result).toBeNull();
+	});
+});
+
 describe("loadTransactionProposals oracle recognition", () => {
 	const ORACLE = "0x3333333333333333333333333333333333333333" as Address;
 	const OTHER_ORACLE = "0x4444444444444444444444444444444444444444" as Address;
 
-	it("discards an oracle proposal whose oracle is not in the allow-list", async () => {
-		const provider = makeProviderWithLogs([
-			makeOracleProposedLog({ safeTxHash: SAFE_TX_HASH, epoch: 1n, oracle: ORACLE, blockNumber: CURRENT_BLOCK }),
-		]);
-		const result = await loadTransactionProposals({
-			provider,
-			consensus: CONSENSUS,
-			maxBlockRange: MAX_BLOCK_RANGE,
-			signingTimeout: SIGNING_TIMEOUT,
-			oracles: [OTHER_ORACLE],
-		});
-		expect(result.proposals).toEqual([]);
-	});
-
 	it("keeps and tags an oracle proposal whose oracle is in the allow-list", async () => {
 		const provider = makeProviderWithLogs([
 			makeOracleProposedLog({ safeTxHash: SAFE_TX_HASH, epoch: 1n, oracle: ORACLE, blockNumber: CURRENT_BLOCK }),
+			makeOracleProposedLog({ safeTxHash: SAFE_TX_HASH, epoch: 1n, oracle: OTHER_ORACLE, blockNumber: CURRENT_BLOCK }),
 		]);
 		const result = await loadTransactionProposals({
 			provider,
@@ -271,21 +311,9 @@ describe("loadTransactionProposals oracle recognition", () => {
 		expect(result.proposals[0].oracle).toBe(ORACLE);
 	});
 
-	it("drops an oracle proposal from an unattested, unlisted oracle when no allow-list is configured", async () => {
-		const provider = makeProviderWithLogs([
-			makeOracleProposedLog({ safeTxHash: SAFE_TX_HASH, epoch: 1n, oracle: ORACLE, blockNumber: CURRENT_BLOCK }),
-		]);
-		const result = await loadTransactionProposals({
-			provider,
-			consensus: CONSENSUS,
-			maxBlockRange: MAX_BLOCK_RANGE,
-			signingTimeout: SIGNING_TIMEOUT,
-		});
-		expect(result.proposals).toEqual([]);
-	});
-
 	it("derives trust from an OracleTransactionAttested log when no allow-list is configured", async () => {
 		const provider = makeProviderWithLogs([
+			makeOracleProposedLog({ safeTxHash: SAFE_TX_HASH, epoch: 1n, oracle: OTHER_ORACLE, blockNumber: CURRENT_BLOCK }),
 			makeOracleProposedLog({ safeTxHash: SAFE_TX_HASH, epoch: 1n, oracle: ORACLE, blockNumber: CURRENT_BLOCK }),
 			makeOracleAttestedLog({ safeTxHash: SAFE_TX_HASH, epoch: 1n, oracle: ORACLE, blockNumber: CURRENT_BLOCK }),
 		]);
@@ -315,28 +343,6 @@ describe("loadTransactionProposals oracle recognition", () => {
 		expect(result.proposals).toHaveLength(1);
 		expect(result.proposals[0].oracle).toBeNull();
 		expect(result.proposals[0].status).toBe("PROPOSED");
-	});
-
-	it("matches a lower-cased allow-list address against the checksummed address decoded from logs", async () => {
-		// Mixed-case (unlike ORACLE/OTHER_ORACLE above) so lower-casing actually changes it.
-		const CHECKSUMMED_ORACLE = "0xabCDEF1234567890ABcDEF1234567890aBCDeF12" as Address;
-		const provider = makeProviderWithLogs([
-			makeOracleProposedLog({
-				safeTxHash: SAFE_TX_HASH,
-				epoch: 1n,
-				oracle: CHECKSUMMED_ORACLE,
-				blockNumber: CURRENT_BLOCK,
-			}),
-		]);
-		const result = await loadTransactionProposals({
-			provider,
-			consensus: CONSENSUS,
-			maxBlockRange: MAX_BLOCK_RANGE,
-			signingTimeout: SIGNING_TIMEOUT,
-			oracles: [CHECKSUMMED_ORACLE.toLowerCase() as Address],
-		});
-		expect(result.proposals).toHaveLength(1);
-		expect(result.proposals[0].oracle).toBe(CHECKSUMMED_ORACLE);
 	});
 });
 

@@ -21,3 +21,7 @@ export const transactionEventSelectors = [
 	"OracleTransactionProposed" as const,
 	"OracleTransactionAttested" as const,
 ].map((eventName) => toEventSelector(getAbiItem({ abi: consensusAbi, name: eventName })));
+
+export const proposedEventSelectors = ["TransactionProposed" as const, "OracleTransactionProposed" as const].map(
+	(eventName) => toEventSelector(getAbiItem({ abi: consensusAbi, name: eventName })),
+);
