@@ -16,6 +16,7 @@ const workerApi = {
 		toBlock?: bigint;
 		maxBlockRange: bigint;
 		signingTimeout: number;
+		oracles?: Address[];
 	}) => loadTransactionProposals({ ...params, provider: createRpcClient(rpc) }),
 
 	loadConsensusState: ({ rpc, consensus }: { rpc: string; consensus: Address }) =>

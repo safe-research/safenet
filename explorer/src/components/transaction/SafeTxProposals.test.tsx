@@ -56,6 +56,7 @@ const makeProposal = (overrides?: Partial<TransactionProposalWithStatus>): Trans
 	chainId: 8453n,
 	safeTxHash: SAFE_TX_HASH,
 	epoch: 1n,
+	oracle: null,
 	transaction: makeTransaction(),
 	proposedAt: { block: 100n, tx: "0xabc" as Hex },
 	attestedAt: null,

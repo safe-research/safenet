@@ -10,13 +10,20 @@ export function useRecentTransactionProposals(autoRefresh = true) {
 	const [settings] = useSettings();
 
 	return useQuery<LoadTransactionProposalsResult, Error, TransactionProposalWithStatus[]>({
-		queryKey: ["recentProposals", settings.consensus, settings.maxBlockRange, settings.signingTimeout],
+		queryKey: [
+			"recentProposals",
+			settings.consensus,
+			settings.maxBlockRange,
+			settings.signingTimeout,
+			settings.oracles,
+		],
 		queryFn: () =>
 			getConsensusWorker().loadTransactionProposals({
 				rpc: settings.rpc,
 				consensus: settings.consensus,
 				maxBlockRange: BigInt(settings.maxBlockRange),
 				signingTimeout: settings.signingTimeout,
+				oracles: settings.oracles,
 			}),
 		select: (data) => data.proposals,
 		refetchInterval: () => (autoRefresh && settings.refetchInterval > 0 ? settings.refetchInterval : false),
