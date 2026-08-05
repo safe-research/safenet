@@ -16,6 +16,7 @@ const DEFAULT_SETTINGS = {
 	blocksPerEpoch: __DEFAULT_BLOCKS_PER_EPOCH__,
 	signingTimeout: __DEFAULT_SIGNING_TIMEOUT__,
 	relayer: __DEFAULT_RELAYER__ || undefined,
+	oracles: __DEFAULT_ORACLES__ as Address[],
 };
 
 const settingsSchema = z.object({
@@ -28,6 +29,9 @@ const settingsSchema = z.object({
 	refetchInterval: z.number().int().nonnegative().default(DEFAULT_SETTINGS.refetchInterval),
 	blocksPerEpoch: z.number().int().positive().default(DEFAULT_SETTINGS.blocksPerEpoch),
 	signingTimeout: z.number().int().positive().default(DEFAULT_SETTINGS.signingTimeout),
+	// Oracle allow-list. Empty means trust falls back to on-chain attested oracles
+	// instead of hiding or blindly trusting every oracle-checked proposal.
+	oracles: z.array(checkedAddressSchema).default(DEFAULT_SETTINGS.oracles),
 });
 
 export type Settings = z.output<typeof settingsSchema>;

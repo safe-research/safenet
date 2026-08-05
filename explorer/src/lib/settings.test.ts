@@ -49,4 +49,22 @@ describe("loadSettings", () => {
 		expect(settings.signingTimeout).toBe(12);
 		expect(settings.blocksPerEpoch).toBe(1440);
 	});
+
+	it("oracles defaults to an empty array when nothing is stored", () => {
+		const settings = loadSettings();
+		expect(settings.oracles).toEqual([]);
+	});
+
+	it("oracles is read from stored settings", () => {
+		const oracle = "0x49Db717Adec0D22235A73C3a9c2ea57AB0bC2353";
+		localStorage.setItem(STORAGE_KEY, JSON.stringify({ oracles: [oracle] }));
+		const settings = loadSettings();
+		expect(settings.oracles).toEqual([oracle]);
+	});
+
+	it("falls back to defaults when a stored oracle address is invalid", () => {
+		localStorage.setItem(STORAGE_KEY, JSON.stringify({ oracles: ["not-an-address"] }));
+		const settings = loadSettings();
+		expect(settings.oracles).toEqual([]);
+	});
 });
