@@ -8,12 +8,24 @@ on:
     branches:
       - main
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   docker:
     runs-on: ubuntu-latest
     permissions:
       contents: read
       packages: write
+
+    strategy:
+      matrix:
+        include:
+          - image: validator
+            dockerfile: crates/validator/Dockerfile
+          - image: sentinel
+            dockerfile: crates/sentinel/Dockerfile
 
     steps:
       - uses: actions/checkout@v5
@@ -29,12 +41,7 @@ jobs:
       - id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ghcr.io/safe-research/safenet-validator
-          tags: |
-            type=ref,event=branch
-            type=ref,event=tag
-            # create beta tags on new releases
-            type=raw,value=beta,enable=${{ startsWith(github.ref, 'refs/tags/v') }}
+          images: ghcr.io/safe-research/safenet-${{ matrix.image }}
           flavor: |
             latest=false
 
@@ -44,8 +51,8 @@ jobs:
       - uses: docker/build-push-action@v6
         with:
           context: .
-          file: validator/Dockerfile
-          platforms: linux/amd64,linux/arm64
+          file: ${{ matrix.dockerfile }}
+          platforms: ${{ github.event_name == 'pull_request' && 'linux/amd64' || 'linux/amd64,linux/arm64' }}
           push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
