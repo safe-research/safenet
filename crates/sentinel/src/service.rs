@@ -863,6 +863,7 @@ mod tests {
                 requestId: id,
                 outcome,
                 slashed,
+                context: String::new(),
             },
         ))
     }

@@ -212,15 +212,19 @@ contract SentinelOracleTest is Test {
         // Arbitrator resolves: approve wins.
         uint256 arbitratorBalBefore = token.balanceOf(arbitrator);
 
+        string memory context = "sentinel1's evidence was conclusive";
+
         vm.expectEmit(true, false, false, true);
-        emit SentinelOracle.DisputeResolved(REQUEST_ID, SentinelOracleRequest.State.RESOLVED_APPROVED, BOND_TARGET);
+        emit SentinelOracle.DisputeResolved(
+            REQUEST_ID, SentinelOracleRequest.State.RESOLVED_APPROVED, BOND_TARGET, context
+        );
         vm.expectEmit(true, true, false, true);
         emit IOracle.OracleResult(
             REQUEST_ID, proposer, abi.encode(SentinelOracleRequest.ResolveReason.ARBITRATION), true
         );
 
         vm.prank(arbitrator);
-        oracle.resolveDispute(REQUEST_ID, true);
+        oracle.resolveDispute(REQUEST_ID, true, context);
 
         // Fee is refunded to proposer from slashed amount; arbitrator receives the remainder.
         assertEq(token.balanceOf(proposer), proposerBalBefore, "proposer balance fully restored");

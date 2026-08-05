@@ -259,16 +259,19 @@ contract SentinelOracleV2Test is Test {
         // ---- Phase 2: arbitration ----
 
         uint256 arbitratorBalBefore = token.balanceOf(arbitrator);
+        string memory context = "sentinel1's evidence was conclusive";
 
         vm.expectEmit(true, false, false, true);
-        emit SentinelOracleV2.DisputeResolved(REQUEST_ID, SentinelOracleRequest.State.RESOLVED_APPROVED, BOND_TARGET);
+        emit SentinelOracleV2.DisputeResolved(
+            REQUEST_ID, SentinelOracleRequest.State.RESOLVED_APPROVED, BOND_TARGET, context
+        );
         vm.expectEmit(true, true, false, true);
         emit IOracle.OracleResult(
             REQUEST_ID, proposer, abi.encode(SentinelOracleRequest.ResolveReason.ARBITRATION), true
         );
 
         vm.prank(arbitrator);
-        oracle.resolveDispute(REQUEST_ID, true);
+        oracle.resolveDispute(REQUEST_ID, true, context);
 
         assertEq(token.balanceOf(proposer), proposerBalBefore, "proposer balance fully restored");
         assertEq(
@@ -292,6 +295,19 @@ contract SentinelOracleV2Test is Test {
         vm.prank(sentinel2);
         oracle.claim(REQUEST_ID);
         assertEq(token.balanceOf(sentinel2), s2Before, "sentinel2 bond slashed");
+    }
+
+    function test_ResolveDispute_EmptyContext_Accepted() public {
+        _postRequest();
+        _commit(sentinel1, true, SALT_1);
+        _commit(sentinel2, false, SALT_2);
+        _advancePastCommitDeadline();
+        _reveal(sentinel1, true, SALT_1);
+        _reveal(sentinel2, false, SALT_2);
+        oracle.finalize(REQUEST_ID);
+
+        vm.prank(arbitrator);
+        oracle.resolveDispute(REQUEST_ID, true, "");
     }
 
     // ============================================================

@@ -24,7 +24,12 @@ contract SentinelOracleV2 is IOracle {
     // EVENTS
     // ============================================================
 
-    event DisputeResolved(bytes32 indexed requestId, SentinelOracleRequest.State outcome, uint256 slashed);
+    // `context` is the arbitrator's rationale for this ruling (free-form text, or e.g. an IPFS
+    // CID pointing to a longer writeup) -- unrelated to a sentinel's `reveal` vote `reason` and
+    // to `SentinelOracleRequest.ResolveReason`, which is why a *request* resolved.
+    event DisputeResolved(
+        bytes32 indexed requestId, SentinelOracleRequest.State outcome, uint256 slashed, string context
+    );
     event Claimed(bytes32 indexed requestId, address indexed sentinel, uint256 bondReturn, uint256 feeReward);
 
     // ============================================================
@@ -206,7 +211,7 @@ contract SentinelOracleV2 is IOracle {
     // ARBITRATION
     // ============================================================
 
-    function resolveDispute(bytes32 requestId, bool approveWins) external onlyArbitrator {
+    function resolveDispute(bytes32 requestId, bool approveWins, string calldata context) external onlyArbitrator {
         SentinelOracleRequest.Request storage req = $requests.get(requestId);
         address proposer = req.proposer;
         uint256 slashed = req.resolveDispute(approveWins);
@@ -214,7 +219,7 @@ contract SentinelOracleV2 is IOracle {
         uint256 refundFee = req.fee;
         FEE_TOKEN.safeTransfer(proposer, refundFee);
         FEE_TOKEN.safeTransfer(ARBITRATOR, slashed - refundFee);
-        emit DisputeResolved(requestId, outcome, slashed);
+        emit DisputeResolved(requestId, outcome, slashed, context);
         emit OracleResult(requestId, proposer, abi.encode(SentinelOracleRequest.ResolveReason.ARBITRATION), approveWins);
     }
 
