@@ -52,10 +52,17 @@ let cachedChainId: { provider: PublicClient; chainId: Promise<number> } | undefi
 
 export const loadChainId = async (provider: PublicClient): Promise<number> => {
 	if (provider !== cachedChainId?.provider) {
-		cachedChainId = {
+		const entry: { provider: PublicClient; chainId: Promise<number> } = {
 			provider,
-			chainId: provider.getChainId(),
+			chainId: provider.getChainId().catch((error) => {
+				// Don't cache errors
+				if (cachedChainId === entry) {
+					cachedChainId = undefined;
+				}
+				throw error;
+			}),
 		};
+		cachedChainId = entry;
 	}
 	return cachedChainId.chainId;
 };

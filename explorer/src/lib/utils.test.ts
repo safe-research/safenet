@@ -1,6 +1,6 @@
 import type { PublicClient } from "viem";
 import { describe, expect, it, vi } from "vitest";
-import { getBlockRange, mostRecentFirst } from "./utils";
+import { getBlockRange, loadChainId, mostRecentFirst } from "./utils";
 
 const CURRENT_BLOCK = 10000n;
 const MAX_BLOCK_RANGE = 1000n;
@@ -81,5 +81,41 @@ describe("mostRecentFirst", () => {
 			{ blockNumber: 100n, logIndex: 5 },
 			{ blockNumber: 100n, logIndex: 2 },
 		]);
+	});
+});
+
+describe("loadChainId", () => {
+	const makeChainProvider = (chainId = 1) =>
+		({ getChainId: vi.fn().mockResolvedValue(chainId) }) as unknown as PublicClient;
+
+	it("fetches and returns the chain id", async () => {
+		const provider = makeChainProvider(5);
+		await expect(loadChainId(provider)).resolves.toBe(5);
+	});
+
+	it("caches the result for the same provider instance", async () => {
+		const provider = makeChainProvider(5);
+		await loadChainId(provider);
+		await loadChainId(provider);
+		expect(provider.getChainId).toHaveBeenCalledOnce();
+	});
+
+	it("refetches when called with a different provider instance", async () => {
+		const providerA = makeChainProvider(1);
+		const providerB = makeChainProvider(2);
+		await expect(loadChainId(providerA)).resolves.toBe(1);
+		await expect(loadChainId(providerB)).resolves.toBe(2);
+		expect(providerA.getChainId).toHaveBeenCalledOnce();
+		expect(providerB.getChainId).toHaveBeenCalledOnce();
+	});
+
+	it("does not cache a rejected lookup, so a later call retries", async () => {
+		const provider = {
+			getChainId: vi.fn().mockRejectedValueOnce(new Error("network error")).mockResolvedValueOnce(7),
+		} as unknown as PublicClient;
+
+		await expect(loadChainId(provider)).rejects.toThrow("network error");
+		await expect(loadChainId(provider)).resolves.toBe(7);
+		expect(provider.getChainId).toHaveBeenCalledTimes(2);
 	});
 });
