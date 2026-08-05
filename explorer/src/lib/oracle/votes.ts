@@ -1,6 +1,7 @@
 import { type Address, formatLog, type Hex, numberToHex, type PublicClient, parseEventLogs } from "viem";
-import { getBlockRange } from "@/lib/utils";
+import { getBlockRange, loadChainId } from "@/lib/utils";
 import { sentinelOracleV2Abi, sentinelVoteEventSelectors } from "./abi";
+import { oracleRequestId } from "./hashing";
 
 export type SentinelVote =
 	| { sentinel: Address; state: "committed" }
@@ -13,14 +14,20 @@ export type SentinelVote =
 export const loadSentinelVotes = async ({
 	provider,
 	oracle,
-	requestId,
+	consensus,
+	epoch,
+	safeTxHash,
 	maxBlockRange,
 }: {
 	provider: PublicClient;
 	oracle: Address;
-	requestId: Hex;
+	consensus: Address;
+	epoch: bigint;
+	safeTxHash: Hex;
 	maxBlockRange: bigint;
 }): Promise<SentinelVote[]> => {
+	const chainId = await loadChainId(provider);
+	const requestId = oracleRequestId({ chainId, consensus, epoch, oracle, safeTxHash });
 	const { fromBlock, toBlock } = await getBlockRange(provider, maxBlockRange);
 
 	// A single `eth_getLogs` here, in order to filter on the `requestId` topic while still

@@ -3,17 +3,28 @@ import type { Address, Hex } from "viem";
 import { useSettings } from "@/hooks/useSettings";
 import { getOracleWorker, type VotingStatus } from "@/lib/oracle";
 
-export function useVotingStatus(oracle: Address, requestId: Hex) {
+export function useVotingStatus(oracle: Address, epoch: bigint, safeTxHash: Hex) {
 	const [settings] = useSettings();
 	return useQuery<VotingStatus, Error>({
-		queryKey: ["votingStatus", settings.rpc, oracle, requestId, settings.maxBlockRange],
+		queryKey: [
+			"votingStatus",
+			settings.rpc,
+			oracle,
+			settings.consensus,
+			epoch.toString(),
+			safeTxHash,
+			settings.maxBlockRange,
+		],
 		queryFn: () =>
 			getOracleWorker().loadVotingStatus({
 				rpc: settings.rpc,
 				oracle,
-				requestId,
+				consensus: settings.consensus,
+				epoch,
+				safeTxHash,
 				maxBlockRange: BigInt(settings.maxBlockRange),
 			}),
+		initialData: null,
 		refetchInterval: () => (settings.refetchInterval > 0 ? settings.refetchInterval : false),
 	});
 }

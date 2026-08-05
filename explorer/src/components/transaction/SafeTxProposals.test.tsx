@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import type { DefinedUseQueryResult } from "@tanstack/react-query";
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import type { Address, Hex } from "viem";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { SafeTransaction, TransactionProposalWithStatus } from "@/lib/consensus";
@@ -26,12 +26,22 @@ vi.mock("@/hooks/useSigningProgress", () => ({
 	useAttestationStatus: vi.fn(() => ({ data: null, isFetching: false })),
 }));
 
+vi.mock("@/hooks/useVotingStatus", () => ({
+	useVotingStatus: vi.fn(() => ({ data: null })),
+}));
+
+vi.mock("@/hooks/useSentinelVotes", () => ({
+	useSentinelVotes: vi.fn(() => ({ data: [] })),
+}));
+
 vi.mock("../common/Info", () => ({
 	InlineBlockInfo: ({ block }: { block: bigint }) => <span>{block.toString()}</span>,
 	InlineExplorerTxLink: ({ children }: { children: React.ReactNode }) => <span>{children}</span>,
 }));
 
 import { useProposalsForTransaction } from "@/hooks/useProposalsForTransaction";
+import { useSentinelVotes } from "@/hooks/useSentinelVotes";
+import { useVotingStatus } from "@/hooks/useVotingStatus";
 
 afterEach(cleanup);
 
@@ -104,5 +114,40 @@ describe("SafeTxProposals", () => {
 		vi.mocked(useProposalsForTransaction).mockReturnValue(mockQueryResult([]));
 		render(<SafeTxProposals safeTxHash={SAFE_TX_HASH} transaction={makeTransaction(99999n)} />);
 		expect(screen.getByText(/No proposals found for this SafeTxHash on chain 99999/)).toBeTruthy();
+	});
+
+	it("shows an Oracle row with the derived status for an oracle proposal", () => {
+		vi.mocked(useVotingStatus).mockReturnValue({ data: { kind: "generic", approved: true } } as never);
+		vi.mocked(useProposalsForTransaction).mockReturnValue(
+			mockQueryResult([makeProposal({ oracle: "0x0000000000000000000000000000000000000099" as Address })]),
+		);
+		render(<SafeTxProposals safeTxHash={SAFE_TX_HASH} transaction={makeTransaction()} />);
+		expect(screen.getByText("Oracle")).toBeTruthy();
+		expect(screen.getByText("APPROVED")).toBeTruthy();
+		expect(screen.queryByText("0x0000…0011 ⏳")).toBeNull();
+	});
+
+	it("shows the per-sentinel vote list for a sentinel oracle request", () => {
+		vi.mocked(useVotingStatus).mockReturnValue({
+			data: { kind: "sentinel", state: "PENDING", approveCount: 1n, denyCount: 0n },
+		} as never);
+		vi.mocked(useSentinelVotes).mockReturnValue({
+			data: [
+				{ sentinel: "0x0000000000000000000000000000000000000011" as Address, state: "committed" },
+				{
+					sentinel: "0x0000000000000000000000000000000000000022" as Address,
+					state: "approved",
+					reason: "looks fine",
+				},
+			],
+		} as never);
+		vi.mocked(useProposalsForTransaction).mockReturnValue(
+			mockQueryResult([makeProposal({ oracle: "0x0000000000000000000000000000000000000099" as Address })]),
+		);
+		render(<SafeTxProposals safeTxHash={SAFE_TX_HASH} transaction={makeTransaction()} />);
+		expect(screen.getByText("0x0000…0011 ⏳")).toBeTruthy();
+		expect(screen.getByText("0x0000…0022 ✅")).toBeTruthy();
+		fireEvent.click(screen.getByText("0x0000…0022 ✅"));
+		expect(screen.getByText("looks fine")).toBeTruthy();
 	});
 });
