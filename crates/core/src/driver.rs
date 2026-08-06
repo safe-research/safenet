@@ -148,8 +148,9 @@ where
     /// Runs the service, processing indexer updates until a shutdown signal
     /// (such as Ctrl-C) is received or an unrecoverable error occurs.
     ///
-    /// A failed step is retried on the next iteration rather than stopping the
-    /// service.
+    /// Failures while waiting for the next indexer update are retried after a
+    /// short delay. Errors encountered after an update has been received are
+    /// handled according to their component's recovery policy.
     pub async fn run(mut self) {
         let shutdown = async {
             if let Err(err) = tokio::signal::ctrl_c().await {
@@ -160,18 +161,14 @@ where
 
         loop {
             match self.step(shutdown.as_mut()).await {
-                Ok(Loop::Continue) => {}
+                Ok(Loop::Continue) => continue,
                 Ok(Loop::Break) => {
                     tracing::info!("received shutdown signal; stopping service");
                     break;
                 }
-                Err(Error::State(err)) => {
-                    tracing::error!(?err, "unrecoverable state transition error; exiting");
-                    break;
-                }
                 Err(err) => {
-                    tracing::warn!(?err, "service step failed; retrying after delay");
-                    tokio::time::sleep(STEP_RETRY_DELAY).await;
+                    tracing::error!(?err, "unrecoverable driver error; exiting");
+                    break;
                 }
             }
         }
@@ -184,20 +181,51 @@ where
     /// Only the wait for the next update races `shutdown`; once an update
     /// arrives it is processed to completion so its state transition and queued
     /// transactions are committed before the loop can stop.
-    async fn step(&mut self, shutdown: Pin<&mut impl Future<Output = ()>>) -> Result<Loop, Error> {
+    async fn step(
+        &mut self,
+        mut shutdown: Pin<&mut impl Future<Output = ()>>,
+    ) -> Result<Loop, Error> {
         let update = tokio::select! {
             biased;
-            _ = shutdown => return Ok(Loop::Break),
-            update = self.watcher.next() => update?,
+            _ = shutdown.as_mut() => return Ok(Loop::Break),
+            update = self.watcher.next() => update,
         };
-        tracing::trace!(?update, "received watcher update");
+
+        // Make sure that getting the next watcher update was successful. If not
+        // log and continue the loop after a short delay.
+        let update = match update {
+            Ok(update) => {
+                tracing::trace!(?update, "received watcher update");
+                update
+            }
+            Err(err) => {
+                tracing::warn!(
+                    ?err,
+                    "failed to get next blockchain update; retrying after delay"
+                );
+                return tokio::select! {
+                    biased;
+                    _ = shutdown.as_mut() => Ok(Loop::Break),
+                    _ = tokio::time::sleep(STEP_RETRY_DELAY) => Ok(Loop::Continue),
+                };
+            }
+        };
 
         // Block updates drive the transaction queue's per-block housekeeping
         // (marking executed transactions, pruning, resubmitting and submitting).
         // Do this before advancing the state machine so freshly queued
         // transactions are submitted against the current block.
         if let Update::Block(block) = &update {
-            self.transactions.handle_block_update(block.clone()).await?;
+            // If we encounter an intermittent error handling block updates in
+            // the transaction queue - log and continue; things will naturally
+            // get a chance to recover.
+            let result = self.transactions.handle_block_update(block.clone()).await;
+            if let Err(err) = tx::lift_intermittent_error(result)? {
+                tracing::warn!(
+                    ?err,
+                    "transaction queue failed to handle new block; will continue"
+                );
+            }
         }
 
         // Perform a state transition for the next update.
@@ -208,7 +236,14 @@ where
             let transactions = actions
                 .into_iter()
                 .map(|action| self.actions.encode_action(action));
-            self.transactions.queue(transactions).await?;
+            // Same for queued transactions.
+            let result = self.transactions.queue(transactions).await;
+            if let Err(err) = tx::lift_intermittent_error(result)? {
+                tracing::warn!(
+                    ?err,
+                    "transaction queue failed to queue transactions; will continue"
+                );
+            }
         }
 
         Ok(Loop::Continue)

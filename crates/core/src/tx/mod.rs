@@ -49,6 +49,30 @@ pub enum Error {
     BadUpdate,
 }
 
+impl Error {
+    /// Returns whether or not a transaction queue error is an intermittent
+    /// error that can be recovered from naturally.
+    fn is_intermittent(&self) -> bool {
+        // Note that we only consider RPC errors as transient - everything else
+        // including SQLite errors (which only happen if you are in a pretty
+        // borked FS situation or there is a bug in the SQL logic) and signing
+        // errors (which indicate some issue with the signer configuration) are
+        // considered more serious.
+        matches!(self, Self::Rpc(_))
+    }
+}
+
+/// Lifts an intermittent transaction queue error.
+pub(crate) fn lift_intermittent_error<T>(
+    result: Result<T, Error>,
+) -> Result<Result<T, Error>, Error> {
+    match result {
+        Ok(ok) => Ok(Ok(ok)),
+        Err(err) if err.is_intermittent() => Ok(Err(err)),
+        Err(err) => Err(err),
+    }
+}
+
 /// Transaction queue configuration.
 #[derive(Clone, Debug, Deserialize, PartialEq)]
 #[serde(default, deny_unknown_fields)]
