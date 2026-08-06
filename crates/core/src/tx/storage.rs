@@ -29,10 +29,11 @@ pub enum Error {
 
 /// Submission information for a transaction.
 pub struct Submission {
-    /// The block head at the time of submission, or `None` if the submission
-    /// failed, indicating it should be retried.
+    /// The block head at the time the transaction entered the mempool, or
+    /// `None` if it was rejected as underpriced and should be retried with
+    /// bumped fees.
     ///
-    /// The transaction can be included earliest `block + 1`.
+    /// When set, the transaction can be included earliest `block + 1`.
     pub block: Option<u64>,
     /// The nonce of the submitted transaction.
     pub nonce: u64,
@@ -166,9 +167,10 @@ impl TransactionStorage {
         Ok(Some(transaction))
     }
 
-    /// Marks the transaction with `submission.nonce` as submitted at
-    /// `submission.block`, recording the `submission.fees` it was submitted with
-    /// in the stored request. Errors if no transaction has that nonce.
+    /// Records the mempool block and fee floor for the transaction with
+    /// `submission.nonce`. A missing block keeps an underpriced transaction
+    /// immediately eligible for another attempt. Errors if no transaction has
+    /// that nonce.
     pub async fn record_submission(&self, submission: Submission) -> Result<(), Error> {
         let Submission { block, nonce, fees } = submission;
         let updated = sqlx::query(
