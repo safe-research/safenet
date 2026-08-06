@@ -181,10 +181,13 @@ where
     /// Only the wait for the next update races `shutdown`; once an update
     /// arrives it is processed to completion so its state transition and queued
     /// transactions are committed before the loop can stop.
-    async fn step(&mut self, shutdown: Pin<&mut impl Future<Output = ()>>) -> Result<Loop, Error> {
+    async fn step(
+        &mut self,
+        mut shutdown: Pin<&mut impl Future<Output = ()>>,
+    ) -> Result<Loop, Error> {
         let update = tokio::select! {
             biased;
-            _ = shutdown => return Ok(Loop::Break),
+            _ = shutdown.as_mut() => return Ok(Loop::Break),
             update = self.watcher.next() => update,
         };
 
@@ -200,8 +203,11 @@ where
                     ?err,
                     "failed to get next blockchain update; retrying after delay"
                 );
-                tokio::time::sleep(STEP_RETRY_DELAY).await;
-                return Ok(Loop::Continue);
+                return tokio::select! {
+                    biased;
+                    _ = shutdown.as_mut() => Ok(Loop::Break),
+                    _ = tokio::time::sleep(STEP_RETRY_DELAY) => Ok(Loop::Continue),
+                };
             }
         };
 
