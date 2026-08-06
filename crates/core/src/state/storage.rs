@@ -9,6 +9,7 @@
 //! A rollback restores the snapshot at the reorg's common ancestor and discards
 //! everything above it. Snapshots below a `safe` block are pruned.
 
+use crate::index::BlockStatus;
 use serde::{Serialize, de::DeserializeOwned};
 use sqlx::sqlite::SqlitePool;
 use std::{marker::PhantomData, num::TryFromIntError};
@@ -64,8 +65,7 @@ where
     /// Returns the tip snapshot (the one with the highest block number) and its
     /// block number, or `None` when the store is empty.
     ///
-    /// On startup this is the resume point: the block number is the indexer's
-    /// last indexed block.
+    /// On startup this is the state machine's resume point.
     pub async fn current(&self) -> Result<Option<(u64, S)>, Error> {
         sqlx::query_as::<_, (i64, String)>(
             "SELECT block_number, state FROM snapshots ORDER BY block_number DESC LIMIT 1",
@@ -76,6 +76,28 @@ where
             Ok((u64::try_from(block_number)?, serde_json::from_str(&state)?))
         })
         .transpose()
+    }
+
+    /// Returns the bounds of the currently retained snapshots, or `None` when
+    /// the store is empty.
+    ///
+    /// `latest` is the resume point and `safe` is the earliest snapshot that
+    /// can be used as a rollback anchor.
+    pub async fn status(&self) -> Result<Option<BlockStatus>, Error> {
+        let (safe, latest) = sqlx::query_as::<_, (Option<i64>, Option<i64>)>(
+            "SELECT MIN(block_number), MAX(block_number) FROM snapshots",
+        )
+        .fetch_one(&self.pool)
+        .await?;
+
+        safe.zip(latest)
+            .map(|(safe, latest)| {
+                Ok(BlockStatus {
+                    latest: u64::try_from(latest)?,
+                    safe: u64::try_from(safe)?,
+                })
+            })
+            .transpose()
     }
 
     /// Records `state` as the snapshot for `block_number`, replacing any existing
@@ -168,6 +190,7 @@ mod tests {
     async fn current_is_none_when_empty() {
         let store = store().await;
         assert_eq!(store.current().await.unwrap(), None);
+        assert_eq!(store.status().await.unwrap(), None);
     }
 
     #[tokio::test]
@@ -177,6 +200,10 @@ mod tests {
         store.commit(2, &state(20)).await.unwrap();
 
         assert_eq!(store.current().await.unwrap(), Some((2, state(20))));
+        assert_eq!(
+            store.status().await.unwrap(),
+            Some(BlockStatus { latest: 2, safe: 1 })
+        );
     }
 
     #[tokio::test]
@@ -229,6 +256,11 @@ mod tests {
 
         store.prune(2).await.unwrap();
 
+        assert_eq!(
+            store.status().await.unwrap(),
+            Some(BlockStatus { latest: 3, safe: 2 })
+        );
+
         // Block 1 is gone; the safe block and above remain.
         assert_eq!(store.reorg(3).await.unwrap(), (2, state(20)));
         assert!(matches!(
@@ -248,6 +280,10 @@ mod tests {
         store.prune(5).await.unwrap();
 
         assert_eq!(store.current().await.unwrap(), Some((2, state(20))));
+        assert_eq!(
+            store.status().await.unwrap(),
+            Some(BlockStatus { latest: 2, safe: 2 })
+        );
 
         // Block 1 is gone, so trying to reorg block 2 would result in an error.
         assert!(matches!(
