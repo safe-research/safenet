@@ -608,7 +608,6 @@ mod tests {
 
     const WATCHED: Address = address!("0x1111111111111111111111111111111111111111");
     const OTHER: Address = address!("0x2222222222222222222222222222222222222222");
-    const UNUSED: u64 = u64::MAX;
 
     sol! {
         #[derive(Debug, Default, Eq, PartialEq)]
@@ -1296,7 +1295,6 @@ mod tests {
                 number: 1337,
                 hash: B256::repeat_byte(0x13),
                 logs_bloom: Bloom::ZERO,
-                safe: UNUSED,
             })
             .unwrap();
 
@@ -1365,7 +1363,6 @@ mod tests {
                 number: 1337,
                 hash: B256::repeat_byte(0x13),
                 logs_bloom: bloom::compute_logs_bloom(&block_logs),
-                safe: UNUSED,
             })
             .unwrap();
         asserter.push_success(&block_logs);
@@ -1403,7 +1400,6 @@ mod tests {
                 number: 1337,
                 hash: B256::repeat_byte(0x13),
                 logs_bloom: Bloom::ZERO,
-                safe: UNUSED,
             })
             .unwrap();
 
@@ -1466,7 +1462,6 @@ mod tests {
                 number: 1337,
                 hash,
                 logs_bloom: Bloom::ZERO,
-                safe: UNUSED,
             })
             .unwrap();
 
@@ -1513,7 +1508,6 @@ mod tests {
                 number: 1337,
                 hash: B256::repeat_byte(0x13),
                 logs_bloom: Bloom::ZERO,
-                safe: UNUSED,
             })
             .unwrap();
 

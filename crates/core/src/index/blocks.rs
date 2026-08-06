@@ -76,10 +76,16 @@ pub enum BlockUpdate {
         number: u64,
         hash: B256,
         logs_bloom: Bloom,
-        /// The highest block that can no longer reorg. State at or below it is
-        /// final, so older snapshots may be pruned.
-        safe: u64,
     },
+}
+
+/// The block watcher's current view of the chain.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct BlockStatus {
+    /// The latest canonical block known to the watcher.
+    pub latest: u64,
+    /// The highest block outside the configured reorg window.
+    pub safe: u64,
 }
 
 /// Error produced by the block watcher.
@@ -266,7 +272,6 @@ where
                 number: block.header.number,
                 hash: block.header.hash,
                 logs_bloom: block.header.logs_bloom,
-                safe,
             });
         }
 
@@ -276,6 +281,19 @@ where
     /// Retrieves all ready updates without blocking.
     pub fn ready(&mut self) -> impl Iterator<Item = BlockUpdate> + '_ {
         self.queue.drain(..)
+    }
+
+    /// Returns the watcher's current view of the latest and reorg-safe blocks.
+    pub fn status(&self) -> BlockStatus {
+        BlockStatus {
+            latest: self.pending.number.saturating_sub(1),
+            safe: self
+                .recent
+                .front()
+                .map(|block| block.header.number)
+                .unwrap_or(self.pending.number)
+                .saturating_sub(1),
+        }
     }
 
     /// Retrieves the next block update from the watcher. This will block and
@@ -346,20 +364,11 @@ where
             self.recent.pop_front();
         }
 
-        // Compute the updated safe block
-        let safe = self
-            .recent
-            .front()
-            .map(|block| block.header.number)
-            .unwrap_or(self.pending.number)
-            .saturating_sub(1);
-
-        tracing::trace!(number, hash = %hash, safe, "new canonical block");
+        tracing::trace!(number, %hash, "new canonical block");
         Ok(BlockUpdate::New {
             number,
             hash,
             logs_bloom,
-            safe,
         })
     }
 
@@ -538,9 +547,16 @@ mod tests {
         assert_eq!(
             blocks.ready().collect::<Vec<_>>(),
             [
-                new_block_update(&block(999), 998),
-                new_block_update(&block(1000), 998)
+                new_block_update(&block(999)),
+                new_block_update(&block(1000))
             ]
+        );
+        assert_eq!(
+            blocks.status(),
+            BlockStatus {
+                latest: 1000,
+                safe: 998,
+            }
         );
         assert!(asserter.read_q().is_empty());
     }
@@ -560,8 +576,8 @@ mod tests {
             [
                 BlockUpdate::Uncle { number: 899 },
                 BlockUpdate::Warp { from: 899, to: 998 },
-                new_block_update(&block(999), 998),
-                new_block_update(&block(1000), 998),
+                new_block_update(&block(999)),
+                new_block_update(&block(1000)),
             ]
         );
         assert!(asserter.read_q().is_empty());
@@ -588,8 +604,8 @@ mod tests {
             blocks.ready().collect::<Vec<_>>(),
             [
                 BlockUpdate::Warp { from: 900, to: 998 },
-                new_block_update(&block(999), 998),
-                new_block_update(&block(1000), 998),
+                new_block_update(&block(999)),
+                new_block_update(&block(1000)),
             ]
         );
         assert!(asserter.read_q().is_empty());
@@ -615,8 +631,8 @@ mod tests {
         assert_eq!(
             blocks.ready().collect::<Vec<_>>(),
             [
-                new_block_update(&block(999), 998),
-                new_block_update(&block(1000), 998)
+                new_block_update(&block(999)),
+                new_block_update(&block(1000))
             ]
         );
     }
@@ -640,7 +656,7 @@ mod tests {
 
         assert_eq!(
             blocks.ready().collect::<Vec<_>>(),
-            [new_block_update(&block(1000), 998)]
+            [new_block_update(&block(1000))]
         );
     }
 
@@ -699,9 +715,9 @@ mod tests {
         assert_eq!(
             blocks.ready().collect::<Vec<_>>(),
             [
-                new_block_update(&block(998), 997),
-                new_block_update(&block(999), 997),
-                new_block_update(&block(1000), 997),
+                new_block_update(&block(998)),
+                new_block_update(&block(999)),
+                new_block_update(&block(1000)),
             ]
         );
         assert!(asserter.read_q().is_empty());
@@ -718,7 +734,7 @@ mod tests {
         asserter.push_success(&next_block.clone());
 
         let update = blocks.next().await.unwrap();
-        assert_eq!(update, new_block_update(&next_block, 999));
+        assert_eq!(update, new_block_update(&next_block));
         assert_eq!(
             start.elapsed(),
             Duration::from_millis(blocks.block_time + config.block_propagation_delay)
@@ -740,7 +756,7 @@ mod tests {
         asserter.push_success(&block(1002));
 
         let update = blocks.next().await.unwrap();
-        assert_eq!(update, new_block_update(&block(1001), 999));
+        assert_eq!(update, new_block_update(&block(1001)));
         assert_eq!(
             start.elapsed(),
             Duration::from_millis(
@@ -752,7 +768,7 @@ mod tests {
         );
 
         let update = blocks.next().await.unwrap();
-        assert_eq!(update, new_block_update(&block(1002), 1000));
+        assert_eq!(update, new_block_update(&block(1002)));
         // This is a bit counter-intuitive, but delays are relative to a
         // _target_ block time. This means that for the second block, since we
         // only needed to retry once, we will be at start plus two block times
@@ -786,7 +802,7 @@ mod tests {
         asserter.push_success(&block(1001));
 
         let update = blocks.next().await.unwrap();
-        assert_eq!(update, new_block_update(&block(1001), 999));
+        assert_eq!(update, new_block_update(&block(1001)));
         assert_eq!(
             start.elapsed(),
             Duration::from_millis(
@@ -851,13 +867,10 @@ mod tests {
             blocks.next().await.unwrap(),
             BlockUpdate::Uncle { number: 998 }
         );
+        assert_eq!(blocks.next().await.unwrap(), new_block_update(&reorg_998));
         assert_eq!(
             blocks.next().await.unwrap(),
-            new_block_update(&reorg_998, 995)
-        );
-        assert_eq!(
-            blocks.next().await.unwrap(),
-            new_block_update(&canonical_999, 995)
+            new_block_update(&canonical_999)
         );
         assert!(asserter.read_q().is_empty());
     }
@@ -923,14 +936,8 @@ mod tests {
         .await
         .unwrap();
 
-        assert_eq!(
-            blocks.next().await.unwrap(),
-            new_block_update(&block(998), 997)
-        );
-        assert_eq!(
-            blocks.next().await.unwrap(),
-            new_block_update(&block(999), 997)
-        );
+        assert_eq!(blocks.next().await.unwrap(), new_block_update(&block(998)));
+        assert_eq!(blocks.next().await.unwrap(), new_block_update(&block(999)));
 
         asserter.push_success(&block_with(999, |header| {
             header.hash = keccak256("new999");
@@ -963,9 +970,13 @@ mod tests {
 
         // With no reorg window, the latest block is final immediately.
         asserter.push_success(&block(1001));
+        assert_eq!(blocks.next().await.unwrap(), new_block_update(&block(1001)));
         assert_eq!(
-            blocks.next().await.unwrap(),
-            new_block_update(&block(1001), 1001)
+            blocks.status(),
+            BlockStatus {
+                latest: 1001,
+                safe: 1001,
+            }
         );
     }
 
@@ -1007,12 +1018,11 @@ mod tests {
         Block::empty(header)
     }
 
-    fn new_block_update(block: &Block, safe: u64) -> BlockUpdate {
+    fn new_block_update(block: &Block) -> BlockUpdate {
         BlockUpdate::New {
             number: block.header.number,
             hash: block.header.hash,
             logs_bloom: block.header.logs_bloom,
-            safe,
         }
     }
 
