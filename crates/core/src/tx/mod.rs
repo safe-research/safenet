@@ -21,7 +21,6 @@ pub use self::{signer::Signer, types::Transaction};
 use crate::index::BlockStatus;
 use alloy::{
     eips::{BlockId, eip1559::Eip1559Estimation},
-    primitives::U256,
     providers::Provider,
     transports::TransportError,
 };
@@ -103,7 +102,6 @@ pub struct TransactionQueue<P> {
     block_status: Option<BlockStatus>,
     nonce_cache: Option<u64>,
     fee_cache: Option<Eip1559Estimation>,
-    balance_cache: Option<U256>,
 }
 
 impl<P> TransactionQueue<P>
@@ -130,7 +128,6 @@ where
             block_status: None,
             nonce_cache: None,
             fee_cache: None,
-            balance_cache: None,
         })
     }
 
@@ -165,7 +162,6 @@ where
         if previous.is_none_or(|previous| previous.latest != status.latest) {
             self.nonce_cache = None;
             self.fee_cache = None;
-            self.balance_cache = None;
         }
 
         // Prune the transaction storage if necessary.
@@ -263,9 +259,6 @@ where
                 max_priority_fee_per_gas: transaction.max_priority_fee_per_gas,
             },
         };
-        let max_cost = transaction.value.saturating_add(
-            U256::from(transaction.gas_limit) * U256::from(transaction.max_fee_per_gas),
-        );
 
         let signed = self.signer.sign_transaction(transaction)?;
         tracing::debug!(
@@ -276,41 +269,32 @@ where
         );
         match self.provider.send_raw_transaction(signed.as_raw()).await {
             Ok(_) => self.storage.record_submission(submission).await?,
-            // If the transaction is rejected because of insufficient balance,
-            // then do not record the submission because we do not want to bump
-            // fees for a transaction that is not allowed to be in the mempool.
-            // Otherwise, we can get into unbounded fee grown if a signer runs
-            // out of funds. Note that this is a best effort - we will still
-            // potentially fee bump in cases where we do have insufficient
-            // balance when including in-flight transactions for previous
-            // nonces. This approximation is fine for now (we want to err on the
-            // side of caution and fee bump to prevent transactions submission
-            // getting stuck, and we still have an upper bound on the current
-            // balance for the signer, so we are protected from unbounded fee
-            // increases).
-            Err(err) if self.balance().await.is_ok_and(|balance| balance < max_cost) => {
+            // An underpriced rejection confirms that the attempted fees were
+            // insufficient. Record them as the new floor, but without a block
+            // so that the transaction is retried with bumped fees on the next
+            // block.
+            Err(err) if is_transaction_underpriced(&err) => {
                 tracing::warn!(
                     nonce = submission.nonce,
                     ?err,
-                    "submission rejected, signer balance below transaction cost"
-                );
-            }
-            // Otherwise, record the used gas parameters even if the RPC request
-            // failed: for general errors we cannot be sure the transaction did
-            // not reach the mempool. We record the submission without a block
-            // so that it is retried immediately on the next block.
-            Err(err) => {
-                tracing::warn!(
-                    nonce = submission.nonce,
-                    ?err,
-                    "submission failed, will retry next block"
+                    "transaction underpriced, will bump fees and retry next block"
                 );
                 self.storage
                     .record_submission(Submission {
                         block: None,
                         ..submission
                     })
-                    .await?
+                    .await?;
+            }
+            // Other failures do not establish that the transaction reached the
+            // mempool or that its fees were insufficient. Leave the last
+            // accepted fee floor unchanged and retry without increasing it.
+            Err(err) => {
+                tracing::warn!(
+                    nonce = submission.nonce,
+                    ?err,
+                    "submission failed, will retry without bumping fees"
+                );
             }
         }
         Ok(())
@@ -364,29 +348,37 @@ where
             }
         }
     }
+}
 
-    /// Returns the account balance cached until the block status changes, used
-    /// to detect whether a submission was rejected because of insufficient
-    /// funds.
-    async fn balance(&mut self) -> Result<U256, Error> {
-        match self.balance_cache {
-            Some(balance) => Ok(balance),
-            None => {
-                let balance = self.provider.get_balance(self.signer.address()).await?;
-                self.balance_cache = Some(balance);
-                Ok(balance)
-            }
-        }
-    }
+macro_rules! iregex {
+    ($re:literal) => {{
+        static INSTANCE: ::std::sync::LazyLock<::regex::Regex> = ::std::sync::LazyLock::new(|| {
+            ::regex::RegexBuilder::new($re)
+                .case_insensitive(true)
+                .build()
+                .expect("valid regex")
+        });
+        &*INSTANCE
+    }};
+}
+
+/// Whether `err` is a node rejection indicating that the transaction's fees
+/// are too low for the mempool.
+fn is_transaction_underpriced(err: &TransportError) -> bool {
+    err.as_error_resp().is_some_and(|payload| {
+        (iregex!("replacement transaction").is_match(&payload.message)
+            && iregex!("underpriced").is_match(&payload.message))
+            || iregex!("INTERNAL_ERROR: could not replace existing tx").is_match(&payload.message)
+    })
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use alloy::{
-        primitives::{Address, B256, U64, U256, address, keccak256},
+        primitives::{Address, B256, U64, address, keccak256},
         providers::{ProviderBuilder, RootProvider},
-        rpc::types::FeeHistory,
+        rpc::{json_rpc::ErrorPayload, types::FeeHistory},
         transports::mock::Asserter,
     };
     use k256::ecdsa::SigningKey;
@@ -426,6 +418,26 @@ mod tests {
             base_fee_per_gas: vec![100, 100],
             reward: Some(vec![vec![10]]),
             ..Default::default()
+        }
+    }
+
+    /// Returns the only in-flight transaction stored by `queue`.
+    async fn in_flight(queue: &TransactionQueue<RootProvider>) -> AllocatedTransaction {
+        let mut transactions = queue.storage.stale_submissions(Some(1_000)).await.unwrap();
+        assert_eq!(transactions.len(), 1);
+        transactions.pop().unwrap()
+    }
+
+    #[test]
+    fn identifies_transaction_underpriced_error_messages() {
+        for message in [
+            "replacement transaction is underpriced",
+            "rEpLaCeMeNt TrAnSaCtIoN uNdErPrIcEd",
+            "INTERNAL_ERROR: could not replace existing tx",
+        ] {
+            let err =
+                TransportError::err_resp(ErrorPayload::internal_error_message(message.into()));
+            assert!(is_transaction_underpriced(&err));
         }
     }
 
@@ -605,49 +617,110 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn retries_failed_submissions_on_the_next_block() {
+    async fn retries_failed_submissions_without_bumping_fees() {
         let asserter = Asserter::new();
         let mut queue = queue(&asserter).await;
 
-        // Queue two transactions that will both fail to submit. The first is
-        // cheap enough for the signer to afford, so its failure is treated as a
-        // general error; the second has a high gas limit the signer cannot
-        // afford, so its failure is treated as the node rejecting it.
         queue.queue([(tx("0x01"), Some(1000))]).await.unwrap();
-        queue
-            .queue([(
-                Transaction {
-                    gas: 1_000_000,
-                    ..tx("0x02")
-                },
-                Some(1000),
-            )])
-            .await
-            .unwrap();
 
-        // At block 10 both submissions fail. The signer balance (100M) covers
-        // the cheap transaction (21000 gas * 210 max fee = ~4.4M) but not the
-        // expensive one (1M gas * 210 max fee = 210M). Only the cheap one is
-        // recorded as submitted (without a block, so it retries immediately);
-        // the expensive one is left unrecorded so its fees are not bumped.
+        // The initial submission fails at the transport layer. It reserves a
+        // nonce, but does not establish a fee floor.
         asserter.push_success(&U64::from(0)); // signer transaction count
         asserter.push_success(&fee_history()); // fee estimate
-        asserter.push_failure_msg("no connection"); // cheap submission fails
-        asserter.push_success(&U256::from(100_000_000)); // signer balance
-        asserter.push_failure_msg("insufficient funds"); // expensive submission fails
+        asserter.push_failure_msg("no connection"); // submission fails
         queue.update_block_status(block_status(10)).await.unwrap();
         assert!(asserter.read_q().is_empty());
+        let transaction = in_flight(&queue).await;
+        assert_eq!(transaction.max_fee_per_gas, None);
+        assert_eq!(transaction.max_priority_fee_per_gas, None);
 
-        // At block 11 neither transaction executed (the nonce is unchanged), so
-        // both are resubmitted regardless of how they failed: the recorded one
-        // because its submission block is unset, and the unrecorded one because
-        // its reserved nonce was never submitted. The balance is not queried as
-        // both resubmissions succeed.
+        // It is retried on the next block with the fresh estimate, without a
+        // replacement bump caused by the failed attempt.
         asserter.push_success(&U64::from(0)); // signer transaction count
         asserter.push_success(&fee_history()); // fee estimate
-        asserter.push_success(&B256::ZERO); // cheap resubmission
-        asserter.push_success(&B256::ZERO); // expensive resubmission
+        asserter.push_success(&B256::ZERO); // transaction hash from submission
         queue.update_block_status(block_status(11)).await.unwrap();
         assert!(asserter.read_q().is_empty());
+        let transaction = in_flight(&queue).await;
+        assert_eq!(transaction.max_fee_per_gas, Some(210));
+        assert_eq!(transaction.max_priority_fee_per_gas, Some(10));
+    }
+
+    #[tokio::test]
+    async fn failed_replacements_do_not_advance_the_fee_floor() {
+        let asserter = Asserter::new();
+        let mut queue = queue(&asserter).await;
+        queue.queue([(tx("0x01"), None)]).await.unwrap();
+
+        // Establish a successfully submitted fee floor of 210 and 10.
+        asserter.push_success(&U64::from(0));
+        asserter.push_success(&fee_history());
+        asserter.push_success(&B256::ZERO);
+        queue.update_block_status(block_status(10)).await.unwrap();
+
+        // The transaction is not stale at block 11.
+        asserter.push_success(&U64::from(0));
+        queue.update_block_status(block_status(11)).await.unwrap();
+
+        // Its replacement at block 12 uses bumped fees, but fails for an
+        // unrelated RPC reason.
+        asserter.push_success(&U64::from(0));
+        asserter.push_success(&fee_history());
+        asserter.push_failure_msg("node unavailable");
+        queue.update_block_status(block_status(12)).await.unwrap();
+        assert!(asserter.read_q().is_empty());
+
+        // The failed attempt did not replace the last accepted fee floor.
+        let transaction = in_flight(&queue).await;
+        assert_eq!(transaction.max_fee_per_gas, Some(210));
+        assert_eq!(transaction.max_priority_fee_per_gas, Some(10));
+
+        // The next successful retry therefore records the same single bump,
+        // rather than another bump above the failed attempt.
+        asserter.push_success(&U64::from(0));
+        asserter.push_success(&fee_history());
+        asserter.push_success(&B256::ZERO);
+        queue.update_block_status(block_status(13)).await.unwrap();
+        assert!(asserter.read_q().is_empty());
+        let transaction = in_flight(&queue).await;
+        assert_eq!(transaction.max_fee_per_gas, Some(231));
+        assert_eq!(transaction.max_priority_fee_per_gas, Some(11));
+    }
+
+    #[tokio::test]
+    async fn underpriced_replacements_advance_the_fee_floor() {
+        let asserter = Asserter::new();
+        let mut queue = queue(&asserter).await;
+        queue.queue([(tx("0x01"), None)]).await.unwrap();
+
+        // Establish a successfully submitted fee floor of 210 and 10.
+        asserter.push_success(&U64::from(0));
+        asserter.push_success(&fee_history());
+        asserter.push_success(&B256::ZERO);
+        queue.update_block_status(block_status(10)).await.unwrap();
+
+        asserter.push_success(&U64::from(0));
+        queue.update_block_status(block_status(11)).await.unwrap();
+
+        // The replacement is rejected specifically because its bumped fees
+        // of 231 and 11 are still underpriced.
+        asserter.push_success(&U64::from(0));
+        asserter.push_success(&fee_history());
+        asserter.push_failure_msg("replacement transaction underpriced");
+        queue.update_block_status(block_status(12)).await.unwrap();
+        assert!(asserter.read_q().is_empty());
+        let transaction = in_flight(&queue).await;
+        assert_eq!(transaction.max_fee_per_gas, Some(231));
+        assert_eq!(transaction.max_priority_fee_per_gas, Some(11));
+
+        // The next retry bumps above the rejected fee floor.
+        asserter.push_success(&U64::from(0));
+        asserter.push_success(&fee_history());
+        asserter.push_success(&B256::ZERO);
+        queue.update_block_status(block_status(13)).await.unwrap();
+        assert!(asserter.read_q().is_empty());
+        let transaction = in_flight(&queue).await;
+        assert_eq!(transaction.max_fee_per_gas, Some(255));
+        assert_eq!(transaction.max_priority_fee_per_gas, Some(13));
     }
 }
