@@ -18,7 +18,7 @@ use self::{
     types::AllocatedTransaction,
 };
 pub use self::{signer::Signer, types::Transaction};
-use crate::index::BlockUpdate;
+use crate::index::BlockStatus;
 use alloy::{
     eips::{BlockId, eip1559::Eip1559Estimation},
     primitives::U256,
@@ -40,13 +40,6 @@ pub enum Error {
     /// A transaction could not be signed.
     #[error(transparent)]
     Signing(#[from] SigningError),
-    /// We have reached the end of the block chain and cannot continue handling
-    /// updates.
-    #[error("end of chain")]
-    EndOfChain,
-    /// A block update arrived out of order or has unexpected or invalid data.
-    #[error("bad block update")]
-    BadUpdate,
 }
 
 impl Error {
@@ -107,16 +100,10 @@ pub struct TransactionQueue<P> {
     signer: Signer,
     storage: TransactionStorage,
     config: Config,
-    block: Block,
+    block_status: Option<BlockStatus>,
     nonce_cache: Option<u64>,
     fee_cache: Option<Eip1559Estimation>,
     balance_cache: Option<U256>,
-}
-
-enum Block {
-    Initialized,
-    Latest { block: u64 },
-    Warping { to: u64 },
 }
 
 impl<P> TransactionQueue<P>
@@ -140,7 +127,7 @@ where
             signer,
             storage,
             config,
-            block: Block::Initialized,
+            block_status: None,
             nonce_cache: None,
             fee_cache: None,
             balance_cache: None,
@@ -156,85 +143,75 @@ where
         transactions: impl IntoIterator<Item = (Transaction, Option<u64>)>,
     ) -> Result<(), Error> {
         self.storage.enqueue(transactions).await?;
-        self.submit_pending().await
+        if let Some(status) = self.block_status {
+            self.submit_pending(status.latest).await?;
+        }
+        Ok(())
     }
 
-    /// Handles an indexer [`BlockUpdate`], performing the queue's per-block
-    /// housekeeping: invalidating cached chain state, marking executed
-    /// transactions, pruning finalized and expired ones, resubmitting stale
-    /// transactions and submitting newly queued ones.
-    pub async fn handle_block_update(&mut self, update: BlockUpdate) -> Result<(), Error> {
-        self.nonce_cache = None;
-        self.fee_cache = None;
-        self.balance_cache = None;
-        match update {
-            BlockUpdate::New { number, safe, .. } => {
-                if self.next_block()?.is_some_and(|next| next != number) || safe > number {
-                    return Err(Error::BadUpdate);
-                }
-                self.block = Block::Latest { block: number };
-
-                // The signer nonce is an RPC round-trip needed only to mark
-                // executed transactions and to assign nonces to queued ones;
-                // both are moot unless a transaction is still outstanding, so
-                // skip it (and the work that needs it) otherwise. Pruning needs
-                // no nonce and always runs, before submission so expired
-                // transactions are dropped rather than broadcast.
-                let outstanding = self.storage.count_outstanding(number).await? > 0;
-                if outstanding {
-                    let nonce = self.nonce().await?;
-                    self.storage
-                        .mark_executed(Status {
-                            block: number,
-                            nonce,
-                        })
-                        .await?;
-                }
-
-                self.storage.prune(safe).await?;
-                if outstanding {
-                    self.resubmit_stale(number).await?;
-                    self.submit_pending().await?;
-                }
-            }
-            BlockUpdate::Uncle { number } => {
-                if self.latest_block().is_some_and(|latest| latest < number) {
-                    return Err(Error::BadUpdate);
-                }
-                self.block = Block::Latest {
-                    block: number.checked_sub(1).ok_or(Error::BadUpdate)?,
-                };
-                self.storage.unmark_executed(number).await?;
-            }
-            BlockUpdate::Warp { from, to } => {
-                if self.next_block()?.is_some_and(|next| next != from) || to < from {
-                    return Err(Error::BadUpdate);
-                }
-
-                // We do not handle warping (it gets weird with transaction
-                // submission and getting transaction counts). It is not worth
-                // it either as warping is historic and most transactions are
-                // too far in the past to execute anyway. Put us into the state
-                // where we are waiting for the next new block update, so queued
-                // transactions do not execute right away. This ensures that
-                // transactions that are queued already expired while warping do
-                // execute.
-                self.block = Block::Warping { to };
-            }
+    /// Updates the queue's view of the chain, reconciling executed transactions
+    /// and performing submission housekeeping when the latest block advances.
+    pub async fn update_block_status(&mut self, status: BlockStatus) -> Result<(), Error> {
+        let previous = self.block_status;
+        if previous == Some(status) {
+            return Ok(());
         }
+
+        // Update the block status immediately, so the last observed block
+        // status is stored even in case of an intermittent error.
+        self.block_status = Some(status);
+
+        // Invalidate our caches if necessary.
+        if previous.is_none_or(|previous| previous.latest != status.latest) {
+            self.nonce_cache = None;
+            self.fee_cache = None;
+            self.balance_cache = None;
+        }
+
+        // Prune the transaction storage if necessary.
+        if previous.is_none_or(|previous| previous.safe != status.safe) {
+            self.storage.prune(status.safe).await?;
+        }
+
+        // Invalidate execution markers for transactions as necessary.
+        if let Some(block) = match previous {
+            // On startup, conservatively invalidate all transactions executed
+            // past the `safe` block, as there may have been reorgs.
+            None => status.safe.checked_add(1),
+            // In case of a reorg (where the status has a latest block before
+            // the last status we've seen) indicates a reorg to `latest`, so
+            // invalidate markers accordingly.
+            Some(previous) if previous.latest > status.latest => status.latest.checked_add(1),
+            // In all other cases, there are no markers to invalidate.
+            _ => None,
+        } {
+            self.storage.unmark_executed(block).await?;
+        }
+
+        // The signer nonce is an RPC round-trip needed both to mark executed
+        // transactions and to assign nonces to queued ones. Skip it and the
+        // remaining work when there is no new inclusion possibilities (either
+        // there is no new latest block, or there are no outstanding txs).
+        if previous.is_none_or(|previous| previous.latest < status.latest)
+            && self.storage.count_outstanding(status.latest).await? > 0
+        {
+            let nonce = self.nonce().await?;
+            self.storage
+                .mark_executed(Status {
+                    block: status.latest,
+                    nonce,
+                })
+                .await?;
+            self.resubmit_stale(status.latest).await?;
+            self.submit_pending(status.latest).await?;
+        }
+
         Ok(())
     }
 
     /// Submits queued transactions while fewer than
     /// `config.max_in_flight_transactions` are in flight.
-    ///
-    /// Does nothing until the first block update is observed, since a submission
-    /// is stamped with the current block.
-    async fn submit_pending(&mut self) -> Result<(), Error> {
-        let Some(block) = self.latest_block() else {
-            return Ok(());
-        };
-
+    async fn submit_pending(&mut self, block: u64) -> Result<(), Error> {
         let in_flight = self.storage.count_in_flight().await?;
         for _ in in_flight..self.config.max_in_flight_transactions {
             let nonce = self.nonce().await?;
@@ -339,41 +316,20 @@ where
         Ok(())
     }
 
-    /// Returns the latest block received from block updates, or `None` if no
-    /// updates have been received or during warping.
-    fn latest_block(&self) -> Option<u64> {
-        match self.block {
-            Block::Latest { block } => Some(block),
-            _ => None,
-        }
-    }
-
-    /// Returns the expected next block for block updates, or `None` if no block
-    /// updates have been received.
-    fn next_block(&self) -> Result<Option<u64>, Error> {
-        match self.block {
-            Block::Latest { block } | Block::Warping { to: block } => {
-                let next = block.checked_add(1).ok_or(Error::EndOfChain)?;
-                Ok(Some(next))
-            }
-            _ => Ok(None),
-        }
-    }
-
-    /// Returns the signer's onchain nonce (its transaction count), fetched from
-    /// the chain on a cache miss and cached until the next block update.
+    /// Returns the signer's onchain nonce at the latest block, fetched from
+    /// the chain on a cache miss and cached until the block status changes.
     async fn nonce(&mut self) -> Result<u64, Error> {
         match self.nonce_cache {
             Some(nonce) => Ok(nonce),
             None => {
+                let block_id = self
+                    .block_status
+                    .map(|block_status| BlockId::from(block_status.latest))
+                    .unwrap_or_else(BlockId::latest);
                 let nonce = self
                     .provider
                     .get_transaction_count(self.signer.address())
-                    .block_id(
-                        self.latest_block()
-                            .map(BlockId::from)
-                            .unwrap_or_else(BlockId::latest),
-                    )
+                    .block_id(block_id)
                     .await?;
                 self.nonce_cache = Some(nonce);
                 Ok(nonce)
@@ -383,7 +339,7 @@ where
 
     /// Returns the current EIP-1559 fee estimate, with the configured priority
     /// fee cap applied, fetched from the chain on a cache miss and cached until
-    /// the next block update.
+    /// the block status changes.
     async fn fees(&mut self) -> Result<Eip1559Estimation, Error> {
         match self.fee_cache {
             Some(fees) => Ok(fees),
@@ -409,8 +365,9 @@ where
         }
     }
 
-    /// Returns the cached account balance, used to detect whether or not a
-    /// submitted transaction was rejected because of insufficient fees.
+    /// Returns the account balance cached until the block status changes, used
+    /// to detect whether a submission was rejected because of insufficient
+    /// funds.
     async fn balance(&mut self) -> Result<U256, Error> {
         match self.balance_cache {
             Some(balance) => Ok(balance),
@@ -427,7 +384,7 @@ where
 mod tests {
     use super::*;
     use alloy::{
-        primitives::{Address, B256, Bloom, U64, U256, address, keccak256},
+        primitives::{Address, B256, U64, U256, address, keccak256},
         providers::{ProviderBuilder, RootProvider},
         rpc::types::FeeHistory,
         transports::mock::Asserter,
@@ -458,14 +415,8 @@ mod tests {
         }
     }
 
-    /// A new-block update at `number`, finalizing state up to `safe`.
-    fn new_block(number: u64) -> BlockUpdate {
-        BlockUpdate::New {
-            number,
-            hash: B256::ZERO,
-            logs_bloom: Bloom::ZERO,
-            safe: 0,
-        }
+    fn block_status(latest: u64) -> BlockStatus {
+        BlockStatus { latest, safe: 0 }
     }
 
     /// A fee-history response yielding an estimate of a 210 max fee and 10
@@ -479,6 +430,58 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn processes_each_block_status_once() {
+        let asserter = Asserter::new();
+        let mut queue = queue(&asserter).await;
+        queue.queue([(tx("0x01"), None)]).await.unwrap();
+
+        // The initial status submits the queued transaction against the block
+        // watcher's already-known head.
+        asserter.push_success(&U64::from(0)); // signer transaction count
+        asserter.push_success(&fee_history()); // fee estimate
+        asserter.push_success(&B256::ZERO); // transaction hash from submission
+        queue.update_block_status(block_status(10)).await.unwrap();
+
+        // Replayed watcher updates carry the same status and do not repeat any
+        // transaction RPC requests.
+        queue.update_block_status(block_status(10)).await.unwrap();
+        queue.update_block_status(block_status(10)).await.unwrap();
+        assert!(asserter.read_q().is_empty());
+    }
+
+    #[tokio::test]
+    async fn initial_status_reconciles_executions_in_the_reorg_window() {
+        let asserter = Asserter::new();
+        let mut queue = queue(&asserter).await;
+        queue.queue([(tx("0x01"), None)]).await.unwrap();
+
+        // Submit at block 10, then observe the nonce advance at block 11 and
+        // mark the transaction executed there.
+        asserter.push_success(&U64::from(0));
+        asserter.push_success(&fee_history());
+        asserter.push_success(&B256::ZERO);
+        queue.update_block_status(block_status(10)).await.unwrap();
+        asserter.push_success(&U64::from(1));
+        queue.update_block_status(block_status(11)).await.unwrap();
+        assert_eq!(queue.storage.count_in_flight().await.unwrap(), 0);
+
+        // Simulate restarting after an offline reorg of block 11. The initial
+        // status invalidates execution markers above the safe block and then
+        // reconciles them against the latest canonical nonce.
+        queue.block_status = None;
+        asserter.push_success(&U64::from(0));
+        queue
+            .update_block_status(BlockStatus {
+                latest: 11,
+                safe: 10,
+            })
+            .await
+            .unwrap();
+        assert_eq!(queue.storage.count_in_flight().await.unwrap(), 1);
+        assert!(asserter.read_q().is_empty());
+    }
+
+    #[tokio::test]
     async fn submits_queued_transactions_with_reorg_awareness() {
         let asserter = Asserter::new();
         let mut queue = queue(&asserter).await;
@@ -487,45 +490,44 @@ mod tests {
         asserter.push_success(&U64::from(0)); // signer transaction count
         asserter.push_success(&fee_history()); // fee estimate
         asserter.push_success(&B256::ZERO); // transaction hash from submission
-        queue.handle_block_update(new_block(10)).await.unwrap();
+        queue.update_block_status(block_status(10)).await.unwrap();
 
         // At block 11 the signer nonce has advanced to 1, so nonce 0 executed.
-        // The safe block (5) is below the execution, so it is marked but not
-        // pruned. No transaction is broadcast, so only the nonce is fetched.
+        // No transaction is broadcast, so only the nonce is fetched.
         asserter.push_success(&U64::from(1));
-        queue.handle_block_update(new_block(11)).await.unwrap();
+        queue.update_block_status(block_status(11)).await.unwrap();
         assert!(asserter.read_q().is_empty());
 
         // Block 11 is uncled, reverting the execution: the transaction is in
         // flight again.
-        queue
-            .handle_block_update(BlockUpdate::Uncle { number: 11 })
-            .await
-            .unwrap();
+        queue.update_block_status(block_status(10)).await.unwrap();
         assert!(asserter.read_q().is_empty());
 
         // We update up to block 12, where the nonce stays the same. This means
         // that it is not submitted and gets resubmitted (since it did not get
         // executed on the new canonical chain since the reorg).
         asserter.push_success(&U64::from(0)); // signer transaction count
-        queue.handle_block_update(new_block(11)).await.unwrap();
+        queue.update_block_status(block_status(11)).await.unwrap();
         assert!(asserter.read_q().is_empty());
 
         asserter.push_success(&U64::from(0)); // signer transaction count
         asserter.push_success(&fee_history()); // fee estimate
         asserter.push_success(&B256::ZERO); // transaction hash from submission
-        queue.handle_block_update(new_block(12)).await.unwrap();
+        queue.update_block_status(block_status(12)).await.unwrap();
         assert!(asserter.read_q().is_empty());
 
         // Now the transaction gets picked up, and since there are no remaining
         // outstanding transactions we avoid any additional RPC requests on
         // future blocks.
         asserter.push_success(&U64::from(1)); // signer transaction count
-        queue.handle_block_update(new_block(13)).await.unwrap();
+        queue.update_block_status(block_status(13)).await.unwrap();
         assert!(asserter.read_q().is_empty());
 
         for block in 14..=20 {
-            queue.handle_block_update(new_block(block)).await.unwrap();
+            queue
+                .update_block_status(block_status(block))
+                .await
+                .unwrap();
             assert!(asserter.read_q().is_empty());
         }
     }
@@ -552,7 +554,7 @@ mod tests {
         queue.queue([(tx("0xf1"), Some(12))]).await.unwrap();
 
         // Observe a block to submit some of the transactions.
-        queue.handle_block_update(new_block(10)).await.unwrap();
+        queue.update_block_status(block_status(10)).await.unwrap();
         assert!(asserter.read_q().is_empty());
 
         // At block 11, the nonce advances by 1, opening up one more transaction
@@ -560,7 +562,7 @@ mod tests {
         asserter.push_success(&U64::from(1)); // signer transaction count
         asserter.push_success(&fee_history()); // fee estimate
         asserter.push_success(&B256::ZERO); // transaction hash from submission
-        queue.handle_block_update(new_block(11)).await.unwrap();
+        queue.update_block_status(block_status(11)).await.unwrap();
         assert!(asserter.read_q().is_empty());
 
         // At block 12, another transaction gets mined, but the outstanding
@@ -573,39 +575,32 @@ mod tests {
         for _ in 2..queue.config.max_in_flight_transactions {
             asserter.push_success(&B256::ZERO); // transaction hash from submission
         }
-        queue.handle_block_update(new_block(12)).await.unwrap();
+        queue.update_block_status(block_status(12)).await.unwrap();
         assert!(asserter.read_q().is_empty());
 
         // At block 13, all the remaining transactions get mined, the second
         // transaction was already expired and does not resubmit.
         asserter.push_success(&U64::from(queue.config.max_in_flight_transactions + 1)); // signer transaction count
-        queue.handle_block_update(new_block(13)).await.unwrap();
+        queue.update_block_status(block_status(13)).await.unwrap();
         assert!(asserter.read_q().is_empty());
 
         // At block 14, there are no outstanding transactions and therefore no
         // RPC requests are made.
-        queue.handle_block_update(new_block(14)).await.unwrap();
+        queue.update_block_status(block_status(14)).await.unwrap();
         assert!(asserter.read_q().is_empty());
     }
 
     #[tokio::test]
-    async fn expired_transactions_while_warping_are_ignored() {
+    async fn transactions_expired_before_the_initial_status_are_ignored() {
         let asserter = Asserter::new();
         let mut queue = queue(&asserter).await;
 
-        // Observe a warp update.
-        queue
-            .handle_block_update(BlockUpdate::Warp { from: 0, to: 1000 })
-            .await
-            .unwrap();
-        assert!(asserter.read_q().is_empty());
-
-        // queue a transaction long expired.
+        // Queue a transaction before the block watcher provides its status.
         queue.queue([(tx("0x01"), Some(42))]).await.unwrap();
 
-        // now queue a block update, the transaction is not submitted as it is
-        // expired and was never submitted to an RPC node.
-        queue.handle_block_update(new_block(1001)).await.unwrap();
+        // Once the status is available, the transaction is already expired and
+        // is never submitted to the RPC node.
+        queue.update_block_status(block_status(1001)).await.unwrap();
         assert!(asserter.read_q().is_empty());
     }
 
@@ -640,7 +635,7 @@ mod tests {
         asserter.push_failure_msg("no connection"); // cheap submission fails
         asserter.push_success(&U256::from(100_000_000)); // signer balance
         asserter.push_failure_msg("insufficient funds"); // expensive submission fails
-        queue.handle_block_update(new_block(10)).await.unwrap();
+        queue.update_block_status(block_status(10)).await.unwrap();
         assert!(asserter.read_q().is_empty());
 
         // At block 11 neither transaction executed (the nonce is unchanged), so
@@ -652,7 +647,7 @@ mod tests {
         asserter.push_success(&fee_history()); // fee estimate
         asserter.push_success(&B256::ZERO); // cheap resubmission
         asserter.push_success(&B256::ZERO); // expensive resubmission
-        queue.handle_block_update(new_block(11)).await.unwrap();
+        queue.update_block_status(block_status(11)).await.unwrap();
         assert!(asserter.read_q().is_empty());
     }
 }

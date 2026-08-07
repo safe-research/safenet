@@ -8,7 +8,7 @@
 //! for submission.
 
 use crate::{
-    index::{self, Update, Watcher, events::Events},
+    index::{self, Watcher, events::Events},
     state::{self, EffectHandler, StateMachine, StateTransition},
     tx::{self, Signer, Transaction, TransactionQueue},
 };
@@ -210,26 +210,24 @@ where
                 };
             }
         };
+        let block_status = self.watcher.block_status();
 
-        // Block updates drive the transaction queue's per-block housekeeping
-        // (marking executed transactions, pruning, resubmitting and submitting).
-        // Do this before advancing the state machine so freshly queued
-        // transactions are submitted against the current block.
-        if let Update::Block(block) = &update {
-            // If we encounter an intermittent error handling block updates in
-            // the transaction queue - log and continue; things will naturally
-            // get a chance to recover.
-            let result = self.transactions.handle_block_update(block.clone()).await;
-            if let Err(err) = tx::lift_intermittent_error(result)? {
-                tracing::warn!(
-                    ?err,
-                    "transaction queue failed to handle new block; will continue"
-                );
-            }
+        // Reconcile the transaction queue against the block watcher's current
+        // chain view before advancing the state machine, so freshly queued
+        // transactions are submitted against the latest known block. If we
+        // encounter an intermittent error - log and continue; things will
+        // naturally get a chance to recover.
+        let result = self.transactions.update_block_status(block_status).await;
+        if let Err(err) = tx::lift_intermittent_error(result)? {
+            tracing::warn!(
+                ?err,
+                "transaction queue failed to handle new block; will continue"
+            );
         }
 
         // Perform a state transition for the next update.
         let actions = self.state.handle_update(update).await?;
+        self.state.prune(block_status.safe).await?;
 
         // Submit transactions for execution onchain.
         if !actions.is_empty() {
