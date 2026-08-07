@@ -7,10 +7,13 @@
 pub mod storage;
 
 use self::storage::SnapshotStore;
-use crate::index::{BlockStatus, BlockUpdate, EventLog, EventUpdate, Update};
+use crate::{
+    effects::EffectHandler,
+    index::{BlockStatus, BlockUpdate, EventLog, EventUpdate, Update},
+};
 use serde::{Serialize, de::DeserializeOwned};
 use sqlx::SqlitePool;
-use std::{collections::VecDeque, convert::Infallible, mem, range::RangeInclusive};
+use std::{collections::VecDeque, mem, range::RangeInclusive};
 use tokio::sync::Mutex;
 
 /// Error produced by the [`StateMachine`].
@@ -91,22 +94,6 @@ where
         state: S,
         message: Message<Self::Event, Self::Resume>,
     ) -> (S, Commands<S, Self>);
-}
-
-/// An effect handler that can be used for handling effects for a state
-/// transition.
-pub trait EffectHandler<Effect, Resume> {
-    /// Performs an effect and returns its result to resume a state machine.
-    ///
-    /// Note that this method explicitly does not fail, and is expected to return
-    /// some result that indicates an error so the state machine can handle the
-    /// effect error internally.
-    ///
-    /// The same effect may be performed more than once for the same chain
-    /// message. For consumptive resources such as pre-committed nonces, handlers
-    /// should encode outcomes like "already used" in `Resume`; state transitions
-    /// remain pure because they consume only the resume value.
-    fn perform_effect(&mut self, effect: Effect) -> impl Future<Output = Resume>;
 }
 
 /// A utility type for a vector of commands for some state and its transition.
@@ -339,19 +326,13 @@ fn is_next_in_range(range: impl Into<RangeInclusive<u64>>, sub: RangeInclusive<u
     range.start == sub.start && range.contains(&sub.last)
 }
 
-/// An effect handler for pure state machines without any side-effects.
-pub struct Pure;
-
-impl<Resume> EffectHandler<Infallible, Resume> for Pure {
-    async fn perform_effect(&mut self, effect: Infallible) -> Resume {
-        match effect {}
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::index::{BlockUpdate, EventUpdate, Update};
+    use crate::{
+        effects::Pure,
+        index::{BlockUpdate, EventUpdate, Update},
+    };
     use alloy::primitives::Address;
     use serde::Deserialize;
     use std::convert::Infallible;
