@@ -15,6 +15,15 @@ impl Transition {
         group_id: B256,
         nonces_commitment: B256,
     ) -> (State, Commands<State, Self>) {
+        if !state
+            .epochs
+            .values()
+            .any(|epoch| epoch.group.id() == group_id)
+        {
+            tracing::debug!(%group_id, "ignoring nonce tree resume for an untracked group");
+            return (state, Vec::new());
+        }
+
         (
             state,
             vec![Command::Action(Action::Preprocess {

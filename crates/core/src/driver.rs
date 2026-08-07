@@ -3,20 +3,20 @@
 //! Ties the core building blocks together into a running service: it follows
 //! the chain with an [`indexer`](crate::index), feeds block updates to the
 //! [`transaction queue`](crate::tx) for its per-block housekeeping, and feeds
-//! every update to the [`state machine`](crate::state). The actions produced by
-//! the state machine are encoded into transactions by the [`Service`] and queued
-//! for submission.
+//! every update and completed effect to the [`state machine`](crate::state).
+//! Effects produced by the state machine run concurrently, while actions are
+//! encoded into transactions by the [`Service`] and queued for submission.
 
 use crate::{
-    effects::EffectHandler,
-    index::{self, Watcher, events::Events},
+    effects::{EffectHandler, EffectManager},
+    index::{self, Update, Watcher, events::Events},
     state::{self, StateMachine, StateTransition},
     tx::{self, Signer, Transaction, TransactionQueue},
 };
 use alloy::{primitives::Address, providers::Provider};
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
 use sqlx::sqlite::SqlitePool;
-use std::{fmt::Debug, pin::Pin, time::Duration};
+use std::{fmt::Debug, time::Duration};
 
 /// How long to wait after a failed step before retrying, to avoid spinning on a
 /// persistent failure (such as an unreachable RPC node).
@@ -33,12 +33,15 @@ pub struct Config {
     pub transactions: tx::Config,
 }
 
-/// Whether the [`Driver::run`] loop should keep processing updates or stop.
-enum Loop {
-    /// Continue with the next iteration.
-    Continue,
-    /// Stop the run loop, for example after a shutdown signal.
-    Break,
+/// A state machine input.
+// The watcher update is the common variant and inputs are consumed immediately,
+// so boxing it would add an allocation without reducing retained driver state.
+#[allow(clippy::large_enum_variant)]
+enum Input<Event, Resume> {
+    /// An indexer update.
+    Update(Update<Event>),
+    /// Resume an effect.
+    Resume(Resume),
 }
 
 /// Error produced by the [`Driver`].
@@ -66,14 +69,21 @@ pub trait ActionEncoder<Action> {
 /// A Safenet service definition.
 pub trait Service {
     type State: Default + DeserializeOwned + Serialize;
-    type Event: Debug + Events;
 
-    type Transition: StateTransition<Self::State, Event = Self::Event>;
-    type Effects: EffectHandler<
-            <Self::Transition as StateTransition<Self::State>>::Effect,
-            <Self::Transition as StateTransition<Self::State>>::Resume,
+    type Event: Debug + Events;
+    type Action;
+    type Effect: Send + 'static;
+    type Resume: Send + 'static;
+
+    type Transition: StateTransition<
+            Self::State,
+            Event = Self::Event,
+            Action = Self::Action,
+            Effect = Self::Effect,
+            Resume = Self::Resume,
         >;
-    type Actions: ActionEncoder<<Self::Transition as StateTransition<Self::State>>::Action>;
+    type Effects: EffectHandler<Self::Effect, Self::Resume>;
+    type Actions: ActionEncoder<Self::Action>;
 
     /// Constructs the service components used by the driver.
     fn components(self) -> (Self::Transition, Self::Effects, Self::Actions);
@@ -86,7 +96,8 @@ where
     S: Service,
 {
     watcher: Watcher<P, S::Event>,
-    state: StateMachine<S::State, S::Transition, S::Effects>,
+    state: StateMachine<S::State, S::Transition>,
+    effects: EffectManager<S::Effects, S::Effect, S::Resume>,
     actions: S::Actions,
     transactions: TransactionQueue<P>,
 }
@@ -113,7 +124,8 @@ where
         config: Config,
     ) -> Result<Self, Error> {
         let (transition, effects, actions) = service.components();
-        let state = StateMachine::new(transition, effects, pool.clone()).await?;
+        let state = StateMachine::new(transition, pool.clone()).await?;
+        let effects = EffectManager::new(effects);
         let watcher = Watcher::new(
             provider.clone(),
             config.index,
@@ -127,6 +139,7 @@ where
         Ok(Self {
             watcher,
             state,
+            effects,
             actions,
             transactions,
         })
@@ -137,17 +150,15 @@ where
     ///
     /// This is meant for queuing up initial startup actions that live outside
     /// the state machine's semantics.
-    pub async fn queue_action(
-        &mut self,
-        action: <S::Transition as StateTransition<S::State>>::Action,
-    ) -> Result<(), Error> {
+    pub async fn queue_action(&mut self, action: S::Action) -> Result<(), Error> {
         let transaction = self.actions.encode_action(action);
         self.transactions.queue([transaction]).await?;
         Ok(())
     }
 
-    /// Runs the service, processing indexer updates until a shutdown signal
-    /// (such as Ctrl-C) is received or an unrecoverable error occurs.
+    /// Runs the service, processing watcher updates and completed effects until
+    /// a shutdown signal (such as Ctrl-C) is received or an unrecoverable error
+    /// occurs.
     ///
     /// Failures while waiting for the next indexer update are retried after a
     /// short delay. Errors encountered after an update has been received are
@@ -161,81 +172,89 @@ where
         tokio::pin!(shutdown);
 
         loop {
-            match self.step(shutdown.as_mut()).await {
-                Ok(Loop::Continue) => continue,
-                Ok(Loop::Break) => {
+            let input = tokio::select! {
+                biased;
+                _ = shutdown.as_mut() => {
                     tracing::info!("received shutdown signal; stopping service");
                     break;
-                }
-                Err(err) => {
-                    tracing::error!(?err, "unrecoverable driver error; exiting");
-                    break;
-                }
+                },
+                input = self.next_input() => input,
+            };
+
+            // Once selected, an input is processed to completion before the run
+            // loop can stop; this prevents partial state applies.
+            if let Err(err) = self.update(input).await {
+                tracing::error!(?err, "unrecoverable driver error; exiting");
+                break;
             }
         }
     }
 
-    /// Processes a single indexer update: feeding block updates to the
-    /// transaction queue, advancing the state machine, and queuing the
-    /// transactions its actions encode to.
+    /// Reads the next state machine input to process.
     ///
-    /// Only the wait for the next update races `shutdown`; once an update
-    /// arrives it is processed to completion so its state transition and queued
-    /// transactions are committed before the loop can stop.
-    async fn step(
-        &mut self,
-        mut shutdown: Pin<&mut impl Future<Output = ()>>,
-    ) -> Result<Loop, Error> {
-        let update = tokio::select! {
-            biased;
-            _ = shutdown.as_mut() => return Ok(Loop::Break),
-            update = self.watcher.next() => update,
-        };
-
-        // Make sure that getting the next watcher update was successful. If not
-        // log and continue the loop after a short delay.
-        let update = match update {
-            Ok(update) => {
-                tracing::trace!(?update, "received watcher update");
-                update
-            }
-            Err(err) => {
-                tracing::warn!(
-                    ?err,
-                    "failed to get next blockchain update; retrying after delay"
-                );
-                return tokio::select! {
-                    biased;
-                    _ = shutdown.as_mut() => Ok(Loop::Break),
-                    _ = tokio::time::sleep(STEP_RETRY_DELAY) => Ok(Loop::Continue),
-                };
+    /// Watcher failures are retried after a short delay while completed effects
+    /// remain eligible for selection.
+    async fn next_input(&mut self) -> Input<S::Event, S::Resume> {
+        let update = async {
+            loop {
+                match self.watcher.next().await {
+                    Ok(update) => return update,
+                    Err(err) => {
+                        tracing::warn!(
+                            ?err,
+                            "failed to get next blockchain update; retrying after delay"
+                        );
+                        tokio::time::sleep(STEP_RETRY_DELAY).await;
+                    }
+                }
             }
         };
-        let block_status = self.watcher.block_status();
 
-        // Reconcile the transaction queue against the block watcher's current
-        // chain view before advancing the state machine, so freshly queued
-        // transactions are submitted against the latest known block. If we
-        // encounter an intermittent error - log and continue; things will
-        // naturally get a chance to recover.
-        let result = self.transactions.update_block_status(block_status).await;
-        if let Err(err) = tx::lift_intermittent_error(result)? {
-            tracing::warn!(
-                ?err,
-                "transaction queue failed to handle new block; will continue"
-            );
+        let input = tokio::select! {
+            update = update => Input::Update(update),
+            resume = self.effects.next() => Input::Resume(resume)
+        };
+        input
+    }
+
+    /// Processes a single watcher update or completed effect, advancing the
+    /// state machine and dispatching the commands it returns.
+    async fn update(&mut self, input: Input<S::Event, S::Resume>) -> Result<(), Error> {
+        let commands = match input {
+            Input::Update(update) => {
+                let block_status = self.watcher.block_status();
+
+                // Reconcile the transaction queue against the block watcher's
+                // current chain view before advancing the state machine, so
+                // freshly queued transactions are submitted against the latest
+                // known block. If we encounter an intermittent error, log and
+                // continue; things will naturally get a chance to recover.
+                let result = self.transactions.update_block_status(block_status).await;
+                if let Err(err) = tx::lift_intermittent_error(result)? {
+                    tracing::warn!(
+                        ?err,
+                        "transaction queue failed to handle new block; will continue"
+                    );
+                }
+
+                let commands = self.state.handle_update(update).await?;
+                self.state.prune(block_status.safe).await?;
+                commands
+            }
+            Input::Resume(resume) => self.state.handle_resume(resume).await?,
+        };
+
+        let mut transactions = Vec::with_capacity(commands.len());
+        for command in commands {
+            match command {
+                state::Command::Action(action) => {
+                    transactions.push(self.actions.encode_action(action));
+                }
+                state::Command::Effect(effect) => self.effects.spawn(effect),
+            }
         }
 
-        // Perform a state transition for the next update.
-        let actions = self.state.handle_update(update).await?;
-        self.state.prune(block_status.safe).await?;
-
-        // Submit transactions for execution onchain.
-        if !actions.is_empty() {
-            let transactions = actions
-                .into_iter()
-                .map(|action| self.actions.encode_action(action));
-            // Same for queued transactions.
+        if !transactions.is_empty() {
             let result = self.transactions.queue(transactions).await;
             if let Err(err) = tx::lift_intermittent_error(result)? {
                 tracing::warn!(
@@ -245,6 +264,6 @@ where
             }
         }
 
-        Ok(Loop::Continue)
+        Ok(())
     }
 }
