@@ -6,7 +6,7 @@
 //! `SentinelTransition::apply_transition`'s `Message::Resume` arm.
 
 use crate::checker::{CheckOutcome, Checker};
-use alloy::primitives::{Address, B256};
+use alloy::primitives::B256;
 use safe_tx::types::SafeTransaction;
 use safenet_core::effects::EffectHandler;
 
@@ -15,27 +15,19 @@ use safenet_core::effects::EffectHandler;
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Effect {
     /// Defer the approve/deny decision for `request_id` (a proposed
-    /// `transaction` on `safe`) to the configured dynamic check. `deadline`
-    /// is carried through unchanged to the resulting [`Resume`] — the
-    /// [`Handler`] never reads it, it's just along for the ride so
-    /// `SentinelTransition` doesn't need to persist any intermediate state
-    /// of its own while this effect is outstanding.
+    /// `transaction` on `safe`) to the configured dynamic check.
     DynamicCheck {
         request_id: B256,
-        safe: Address,
         transaction: SafeTransaction,
-        deadline: u64,
     },
 }
 
 /// The result of performing an [`Effect`], resumed into the state machine.
 #[derive(Debug, Clone)]
 pub enum Resume {
-    /// Resume with [`Effect::DynamicCheck`]'s outcome for `request_id`,
-    /// carrying its `deadline` back unchanged.
+    /// Resume with [`Effect::DynamicCheck`]'s outcome for `request_id`.
     DynamicCheckResult {
         request_id: B256,
-        deadline: u64,
         outcome: CheckOutcome,
     },
 }
@@ -64,20 +56,17 @@ impl EffectHandler<Effect, Resume> for Handler {
         match effect {
             Effect::DynamicCheck {
                 request_id,
-                safe,
                 transaction,
-                deadline,
             } => {
                 let mut outcome = CheckOutcome::Unknown;
                 for checker in &self.checkers {
-                    outcome = checker.check(safe, &transaction).await;
+                    outcome = checker.check(transaction.safe, &transaction).await;
                     if outcome != CheckOutcome::Unknown {
                         break;
                     }
                 }
                 Resume::DynamicCheckResult {
                     request_id,
-                    deadline,
                     outcome,
                 }
             }
@@ -90,6 +79,7 @@ mod tests {
     use super::*;
     use crate::{address_poisoning::AddressPoisoningChecker, dynamic_checker::RemoteChecker};
     use alloy::{
+        primitives::Address,
         providers::{Provider, ProviderBuilder},
         transports::mock::Asserter,
     };
@@ -111,17 +101,18 @@ mod tests {
     #[tokio::test]
     async fn resumes_with_the_checker_s_outcome() {
         // An unconfigured `RemoteChecker` always approves, and a
-        // `SafeTransaction::default()` has no ERC-20 calldata for the
-        // earlier checkers to even look at — this only exercises the
-        // `Effect` -> `Resume` wiring itself.
+        // transaction with only its Safe set has no ERC-20 calldata for the
+        // earlier checkers to inspect — this only exercises the `Effect` ->
+        // `Resume` wiring itself.
         let handler = handler(address_poisoning(), RemoteChecker::new(None));
 
         let resume = handler
             .perform_effect(Effect::DynamicCheck {
                 request_id: REQUEST_ID,
-                safe: SAFE,
-                transaction: SafeTransaction::default(),
-                deadline: 42,
+                transaction: SafeTransaction {
+                    safe: SAFE,
+                    ..Default::default()
+                },
             })
             .await;
 
@@ -129,7 +120,6 @@ mod tests {
             resume,
             Resume::DynamicCheckResult {
                 request_id,
-                deadline: 42,
                 outcome: CheckOutcome::Approved,
             } if request_id == REQUEST_ID
         ));

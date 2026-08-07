@@ -11,7 +11,7 @@ use crate::{
     dynamic_checker::RemoteChecker,
     effect,
     hashing::{RevealSalt as _, commit_hash, oracle_tx_proposal_hash},
-    state::{SentinelRequestState as RequestState, State},
+    state::{Request, SentinelRequestState as RequestState, State},
     static_checker::StaticChecker,
 };
 use alloy::{
@@ -58,8 +58,8 @@ pub struct SentinelTransition {
     signer: Signer,
     /// The chain id of the EIP-712 domain used to derive request ids.
     chain_id: U256,
-    /// The number of blocks a `WaitingForRequest` request is kept alive for
-    /// before being cleaned up.
+    /// The number of blocks a request without an onchain commit deadline is
+    /// kept alive for before being cleaned up.
     voting_window: u64,
     static_checker: StaticChecker,
 }
@@ -107,9 +107,7 @@ impl SentinelTransition {
     /// `StaticChecker` denial decides immediately; otherwise the decision is
     /// only provisional, and is deferred to the configured dynamic check via
     /// [`effect::Effect::DynamicCheck`] (resolved in
-    /// [`Self::handle_dynamic_check_result`]). Deliberately does not track any
-    /// state of its own while the effect is outstanding — see
-    /// [`Self::handle_dynamic_check_result`] for why.
+    /// [`Self::handle_dynamic_check_result`]).
     fn handle_oracle_transaction_proposed(
         &self,
         mut state: State,
@@ -145,111 +143,86 @@ impl SentinelTransition {
             );
             return (state, Vec::new());
         }
+        state.0.insert(
+            request_id,
+            RequestState::WaitingForDynamicCheck {
+                deadline,
+                request: None,
+            },
+        );
         (
             state,
             vec![Command::Effect(effect::Effect::DynamicCheck {
                 request_id,
-                safe: event.safe,
                 transaction: (&event.transaction).into(),
-                deadline,
             })],
         )
     }
 
     /// Consumes a [`effect::Effect::DynamicCheck`]'s resolved outcome for
-    /// `request_id`, inserting `WaitingForRequest` from it on
-    /// `Approved`/`Denied`, or leaving the request untracked (dropped) on
-    /// `Unknown`. `SentinelTransition` deliberately doesn't persist any
-    /// intermediate "waiting on the dynamic check" state of its own: the
-    /// driver (`TransitionBatch::apply` in `crates/core/src/state/mod.rs`)
-    /// always fully resolves an emitted effect's resume before the next
-    /// message is applied, so between this effect being emitted and this
-    /// handler running, nothing else could have raced to populate
-    /// `request_id`'s entry.
-    ///
-    /// This does mean a request untracked for `request_id` is trusted as
-    /// "this resume's originating proposal", rather than checked against an
-    /// explicit marker the way `crates/validator/src/state/sign.rs` checks
-    /// its own effect resumes — a deliberate tradeoff for one less variant
-    /// in `SentinelRequestState`, accepted because emitting this effect and
-    /// consuming its resume is the *only* way a `request_id`'s entry ever
-    /// goes from absent to present, so nothing else can produce a
-    /// same-message-window false positive here.
+    /// `request_id`. If the onchain request is already open, voting begins
+    /// immediately; otherwise the resolved decision waits for `NewRequest`.
     fn handle_dynamic_check_result(
         &self,
         mut state: State,
         request_id: B256,
-        deadline: u64,
         outcome: CheckOutcome,
     ) -> (State, Commands<State, Self>) {
-        // Already tracked (e.g. a stale/replayed resume that lost a race to
-        // another one for the same request, or one that arrived after the
-        // request was otherwise dropped and re-tracked): leave it untouched.
-        if state.0.contains_key(&request_id) {
-            return (state, Vec::new());
-        }
-        match outcome {
-            CheckOutcome::Approved => {
-                state.0.insert(
-                    request_id,
-                    RequestState::WaitingForRequest {
-                        approve: true,
-                        reason: String::new(),
-                        deadline,
-                    },
-                );
+        let (deadline, request) = match state.0.remove(&request_id) {
+            Some(RequestState::WaitingForDynamicCheck { deadline, request }) => (deadline, request),
+            Some(entry) => {
+                tracing::warn!(%request_id, "ignoring unexpected dynamic check result");
+                state.0.insert(request_id, entry);
+                return (state, Vec::new());
             }
-            CheckOutcome::Denied(rule) => {
-                state.0.insert(
-                    request_id,
-                    RequestState::WaitingForRequest {
-                        approve: false,
-                        reason: rule.code().to_string(),
-                        deadline,
-                    },
-                );
+            None => {
+                tracing::warn!(%request_id, "ignoring stale dynamic check result");
+                return (state, Vec::new());
             }
-            // No checker in the chain could be trusted either way; drop the
-            // request rather than guessing at approve/deny (there's nothing
-            // tracked to remove — this request was never inserted). Logged
-            // at `warn` (rather than the `error` an underlying checker, e.g.
-            // `RemoteChecker`, already logs for its own failure cause).
+        };
+
+        let (approve, reason) = match outcome {
+            CheckOutcome::Approved => (true, String::new()),
+            CheckOutcome::Denied(rule) => (false, rule.code().to_string()),
             CheckOutcome::Unknown => {
                 tracing::warn!(%request_id, "dynamic check failed; dropping request unanswered");
+                return (state, Vec::new());
             }
+        };
+        if let Some(request) = request {
+            return self.commit_vote(state, request_id, approve, reason, request);
         }
+
+        state.0.insert(
+            request_id,
+            RequestState::WaitingForRequest {
+                approve,
+                reason,
+                deadline,
+            },
+        );
         (state, Vec::new())
     }
 
-    /// Locks a bond behind a blind commitment once a tracked request is
-    /// opened for commits onchain.
-    fn handle_new_request(
+    /// Starts voting on an open request by locking a bond behind a blind
+    /// commitment.
+    fn commit_vote(
         &self,
         mut state: State,
-        event: SentinelOracle::NewRequest,
+        request_id: B256,
+        approve: bool,
+        reason: String,
+        request: Request,
     ) -> (State, Commands<State, Self>) {
-        let Some(RequestState::WaitingForRequest {
-            approve, reason, ..
-        }) = state.0.get_mut(&event.requestId)
-        else {
-            return (state, Vec::new());
-        };
-        let approve = *approve;
-        // The entry for this request id is overwritten by `CollectingCommitments` below,
-        // so taking `reason` rather than cloning it is safe.
-        let reason = std::mem::take(reason);
-        let commit_deadline = event.commitDeadline.saturating_to::<u64>();
-        let reveal_deadline = event.revealDeadline.saturating_to::<u64>();
-        let salt = self.signer.reveal_salt(event.requestId);
-        let hash = commit_hash(
-            self.signer.address(),
-            event.requestId,
-            approve,
-            salt,
-            &reason,
-        );
+        let Request {
+            bond_target,
+            commit_deadline,
+            reveal_deadline,
+        } = request;
+        let salt = self.signer.reveal_salt(request_id);
+        let hash = commit_hash(self.signer.address(), request_id, approve, salt, &reason);
         state.0.insert(
-            event.requestId,
+            request_id,
             RequestState::CollectingCommitments {
                 approve,
                 reason,
@@ -261,15 +234,13 @@ impl SentinelTransition {
         );
         let actions = vec![
             SentinelAction {
-                kind: SentinelActionKind::ApproveToken {
-                    bond: event.bondTarget,
-                },
+                kind: SentinelActionKind::ApproveToken { bond: bond_target },
                 expires_at: Some(commit_deadline),
             }
             .into(),
             SentinelAction {
                 kind: SentinelActionKind::Commit {
-                    id: event.requestId,
+                    id: request_id,
                     hash,
                 },
                 expires_at: Some(commit_deadline),
@@ -277,6 +248,44 @@ impl SentinelTransition {
             .into(),
         ];
         (state, actions)
+    }
+
+    /// Retains a newly opened request while its dynamic check is outstanding,
+    /// or begins voting immediately if the decision is already available.
+    fn handle_new_request(
+        &self,
+        mut state: State,
+        event: SentinelOracle::NewRequest,
+    ) -> (State, Commands<State, Self>) {
+        let request_id = event.requestId;
+        let request = Request {
+            bond_target: event.bondTarget,
+            commit_deadline: event.commitDeadline.saturating_to::<u64>(),
+            reveal_deadline: event.revealDeadline.saturating_to::<u64>(),
+        };
+        match state.0.remove(&request_id) {
+            Some(RequestState::WaitingForRequest {
+                approve, reason, ..
+            }) => self.commit_vote(state, request_id, approve, reason, request),
+            Some(RequestState::WaitingForDynamicCheck {
+                deadline,
+                request: None,
+            }) => {
+                state.0.insert(
+                    request_id,
+                    RequestState::WaitingForDynamicCheck {
+                        deadline,
+                        request: Some(request),
+                    },
+                );
+                (state, Vec::new())
+            }
+            Some(entry) => {
+                state.0.insert(request_id, entry);
+                (state, Vec::new())
+            }
+            None => (state, Vec::new()),
+        }
     }
 
     /// Tallies a commitment landing onchain, from any sentinel, for a
@@ -353,6 +362,12 @@ impl SentinelTransition {
         let mut actions = Vec::new();
 
         state.0.retain(|id, entry| match entry {
+            RequestState::WaitingForDynamicCheck { deadline, request } => {
+                block
+                    <= request
+                        .as_ref()
+                        .map_or(*deadline, |request| request.commit_deadline)
+            }
             RequestState::WaitingForRequest { deadline, .. } => block <= *deadline,
             RequestState::CollectingCommitments {
                 approve,
@@ -626,9 +641,8 @@ impl StateTransition<State> for SentinelTransition {
             }
             Message::Resume(effect::Resume::DynamicCheckResult {
                 request_id,
-                deadline,
                 outcome,
-            }) => self.handle_dynamic_check_result(state, request_id, deadline, outcome),
+            }) => self.handle_dynamic_check_result(state, request_id, outcome),
         }
     }
 }
@@ -749,6 +763,7 @@ mod tests {
 
     fn safe_tx(to: Address) -> SafeTransaction {
         SafeTransaction {
+            safe: SAFE,
             to,
             operation: Operation::CALL,
             ..Default::default()
@@ -775,16 +790,10 @@ mod tests {
     /// The `Command::Effect` `handle_oracle_transaction_proposed` emits once
     /// its local `StaticChecker` pass approves a proposal for `(id, to)`,
     /// deferring the final decision to the dynamic check.
-    fn dynamic_check_effect(
-        id: B256,
-        to: Address,
-        deadline: u64,
-    ) -> Command<SentinelAction, effect::Effect> {
+    fn dynamic_check_effect(id: B256, to: Address) -> Command<SentinelAction, effect::Effect> {
         Command::Effect(effect::Effect::DynamicCheck {
             request_id: id,
-            safe: SAFE,
             transaction: (&safe_tx(to)).into(),
-            deadline,
         })
     }
 
@@ -797,19 +806,15 @@ mod tests {
         svc: &SentinelTransition,
         state: State,
         id: B256,
-        deadline: u64,
         outcome: CheckOutcome,
-    ) -> State {
-        let (state, commands) = svc.apply_transition(
+    ) -> (State, Commands<State, SentinelTransition>) {
+        svc.apply_transition(
             state,
             Message::Resume(effect::Resume::DynamicCheckResult {
                 request_id: id,
-                deadline,
                 outcome,
             }),
-        );
-        assert!(commands.is_empty());
-        state
+        )
     }
 
     fn new_request_event(
@@ -877,6 +882,78 @@ mod tests {
         }
     }
 
+    fn assert_new_request_before_dynamic_check(
+        safe_tx_hash: B256,
+        outcome: CheckOutcome,
+        approve: bool,
+        reason: &str,
+    ) {
+        let svc = transition();
+        let id = request_id(safe_tx_hash, 7, ORACLE);
+        let bond_target = U256::from(500u64);
+
+        let (state, commands) = svc.apply_transition(
+            State::default(),
+            Message::Event(log(1, proposed_event(ORACLE, safe_tx_hash, TO))),
+        );
+        assert_eq!(commands, vec![dynamic_check_effect(id, TO)]);
+
+        let (state, commands) = svc.apply_transition(
+            state,
+            Message::Event(log(
+                2,
+                new_request_event(id, U256::from(1_000u64), bond_target, 20, 40),
+            )),
+        );
+        assert!(commands.is_empty());
+        assert_eq!(
+            state.0[&id],
+            RequestState::WaitingForDynamicCheck {
+                deadline: 1 + VOTING_WINDOW,
+                request: Some(Request {
+                    bond_target,
+                    commit_deadline: 20,
+                    reveal_deadline: 40,
+                }),
+            },
+        );
+
+        let (state, commands) = resolve_dynamic_check(&svc, state, id, outcome);
+        assert_eq!(
+            state.0[&id],
+            RequestState::CollectingCommitments {
+                approve,
+                reason: reason.to_string(),
+                commit_deadline: 20,
+                reveal_deadline: 40,
+                committed_count: 0,
+                self_committed: false,
+            },
+        );
+        let hash = commit_hash(
+            self_address(),
+            id,
+            approve,
+            self_signer().reveal_salt(id),
+            reason,
+        );
+        assert_eq!(
+            commands,
+            vec![
+                SentinelAction {
+                    kind: SentinelActionKind::ApproveToken { bond: bond_target },
+                    expires_at: Some(20),
+                }
+                .into(),
+                SentinelAction {
+                    kind: SentinelActionKind::Commit { id, hash },
+                    expires_at: Some(20),
+                }
+                .into(),
+            ],
+        );
+    }
+
     /// Full happy path: propose, commit (from two sentinels), reveal (from
     /// two sentinels) — unanimously in favor — and finalize/claim as soon as
     /// the last reveal lands, without waiting out the reveal window.
@@ -888,20 +965,22 @@ mod tests {
 
         // The transaction is proposed onchain; the local `StaticChecker`
         // pass doesn't deny it outright, so the decision is deferred to the
-        // dynamic check — nothing is tracked for it yet.
+        // dynamic check and its outstanding state is tracked explicitly.
         let (state, commands) = svc.apply_transition(
             State::default(),
             Message::Event(log(1, proposed_event(ORACLE, safe_tx_hash, TO))),
         );
+        assert_eq!(commands, vec![dynamic_check_effect(id, TO)]);
         assert_eq!(
-            commands,
-            vec![dynamic_check_effect(id, TO, 1 + VOTING_WINDOW)]
+            state.0[&id],
+            RequestState::WaitingForDynamicCheck {
+                deadline: 1 + VOTING_WINDOW,
+                request: None,
+            },
         );
-        assert!(!state.0.contains_key(&id));
 
         // The dynamic check approves; the provisional decision becomes final.
-        let state =
-            resolve_dynamic_check(&svc, state, id, 1 + VOTING_WINDOW, CheckOutcome::Approved);
+        let (state, commands) = resolve_dynamic_check(&svc, state, id, CheckOutcome::Approved);
         assert_eq!(
             state.0[&id],
             RequestState::WaitingForRequest {
@@ -910,6 +989,7 @@ mod tests {
                 deadline: 1 + VOTING_WINDOW,
             },
         );
+        assert_eq!(commands, []);
 
         // A duplicate/re-delivered proposal for the same request must not
         // reset progress.
@@ -1083,8 +1163,7 @@ mod tests {
             State::default(),
             Message::Event(log(1, proposed_event(ORACLE, safe_tx_hash, TO))),
         );
-        let state =
-            resolve_dynamic_check(&svc, state, id, 1 + VOTING_WINDOW, CheckOutcome::Approved);
+        let (state, _) = resolve_dynamic_check(&svc, state, id, CheckOutcome::Approved);
         let (state, _) = svc.apply_transition(
             state,
             Message::Event(log(
@@ -1184,8 +1263,7 @@ mod tests {
             State::default(),
             Message::Event(log(1, proposed_event(ORACLE, safe_tx_hash, TO))),
         );
-        let state =
-            resolve_dynamic_check(&svc, state, id, 1 + VOTING_WINDOW, CheckOutcome::Approved);
+        let (state, _) = resolve_dynamic_check(&svc, state, id, CheckOutcome::Approved);
         let (state, _) = svc.apply_transition(
             state,
             Message::Event(log(
@@ -1241,38 +1319,19 @@ mod tests {
         );
     }
 
-    /// `SentinelTransition` doesn't persist any marker while a dynamic check
-    /// is outstanding (see `handle_dynamic_check_result`'s doc comment for
-    /// the tradeoff), so a resume for a `request_id` with no tracked entry
-    /// at all is trusted and inserted exactly as if its originating proposal
-    /// had emitted the effect moments ago. That's only safe because emitting
-    /// this effect and consuming its resume is the sole way an entry ever
-    /// goes from absent to present, so nothing else can produce a false
-    /// positive here in practice — this test documents the tradeoff rather
-    /// than a scenario the driver could actually produce.
+    /// A resume without a matching outstanding dynamic check can arrive after
+    /// a reorg restored a snapshot from before its proposal. It must not create
+    /// state for the orphaned request.
     #[test]
-    fn resume_for_a_never_tracked_request_id_is_still_trusted() {
+    fn stale_dynamic_check_resume_after_reorg_is_ignored() {
         let svc = transition();
         let id = B256::repeat_byte(0x09);
 
-        let (state, commands) = svc.apply_transition(
-            State::default(),
-            Message::Resume(effect::Resume::DynamicCheckResult {
-                request_id: id,
-                deadline: 42,
-                outcome: CheckOutcome::Approved,
-            }),
-        );
+        let (state, commands) =
+            resolve_dynamic_check(&svc, State::default(), id, CheckOutcome::Approved);
 
         assert!(commands.is_empty());
-        assert_eq!(
-            state.0[&id],
-            RequestState::WaitingForRequest {
-                approve: true,
-                reason: String::new(),
-                deadline: 42,
-            },
-        );
+        assert!(!state.0.contains_key(&id));
     }
 
     /// A denying dynamic check finalizes the provisional request into
@@ -1287,16 +1346,12 @@ mod tests {
             State::default(),
             Message::Event(log(1, proposed_event(ORACLE, safe_tx_hash, TO))),
         );
-        assert_eq!(
-            commands,
-            vec![dynamic_check_effect(id, TO, 1 + VOTING_WINDOW)]
-        );
+        assert_eq!(commands, vec![dynamic_check_effect(id, TO)]);
 
-        let state = resolve_dynamic_check(
+        let (state, commands) = resolve_dynamic_check(
             &svc,
             state,
             id,
-            1 + VOTING_WINDOW,
             CheckOutcome::Denied(RuleId::R4_6KnownMaliciousTarget),
         );
         assert_eq!(
@@ -1306,6 +1361,72 @@ mod tests {
                 reason: RuleId::R4_6KnownMaliciousTarget.code().to_string(),
                 deadline: 1 + VOTING_WINDOW,
             },
+        );
+        assert_eq!(commands, []);
+
+        let (state, commands) = svc.apply_transition(
+            state,
+            Message::Event(log(
+                5,
+                new_request_event(id, U256::from(1_000u64), U256::from(500u64), 20, 40),
+            )),
+        );
+        let reason = RuleId::R4_6KnownMaliciousTarget.code();
+        assert_eq!(
+            state.0[&id],
+            RequestState::CollectingCommitments {
+                approve: false,
+                reason: reason.to_string(),
+                commit_deadline: 20,
+                reveal_deadline: 40,
+                committed_count: 0,
+                self_committed: false,
+            },
+        );
+        let hash = commit_hash(
+            self_address(),
+            id,
+            false,
+            self_signer().reveal_salt(id),
+            reason,
+        );
+        assert_eq!(
+            commands,
+            vec![
+                SentinelAction {
+                    kind: SentinelActionKind::ApproveToken {
+                        bond: U256::from(500u64),
+                    },
+                    expires_at: Some(20),
+                }
+                .into(),
+                SentinelAction {
+                    kind: SentinelActionKind::Commit { id, hash },
+                    expires_at: Some(20),
+                }
+                .into(),
+            ],
+        );
+    }
+
+    #[test]
+    fn new_request_before_dynamic_check_approval_starts_voting_on_resume() {
+        assert_new_request_before_dynamic_check(
+            B256::repeat_byte(0x0a),
+            CheckOutcome::Approved,
+            true,
+            REASON,
+        );
+    }
+
+    #[test]
+    fn new_request_before_dynamic_check_denial_starts_voting_on_resume() {
+        let rule = RuleId::R4_6KnownMaliciousTarget;
+        assert_new_request_before_dynamic_check(
+            B256::repeat_byte(0x0b),
+            CheckOutcome::Denied(rule),
+            false,
+            rule.code(),
         );
     }
 
@@ -1321,16 +1442,86 @@ mod tests {
             State::default(),
             Message::Event(log(1, proposed_event(ORACLE, safe_tx_hash, TO))),
         );
-        assert!(!state.0.contains_key(&id));
+        assert_eq!(
+            state.0[&id],
+            RequestState::WaitingForDynamicCheck {
+                deadline: 1 + VOTING_WINDOW,
+                request: None,
+            },
+        );
 
-        let state =
-            resolve_dynamic_check(&svc, state, id, 1 + VOTING_WINDOW, CheckOutcome::Unknown);
+        let (state, _) = resolve_dynamic_check(&svc, state, id, CheckOutcome::Unknown);
         assert!(!state.0.contains_key(&id));
     }
 
-    /// A replayed resume for a request that already advanced past its
-    /// dynamic check (e.g. the effect ran twice after a crash) is a no-op:
-    /// only the first resume to observe an untracked request may consume it.
+    #[test]
+    fn dynamic_check_failure_drops_a_stored_onchain_request() {
+        let svc = transition();
+        let safe_tx_hash = B256::repeat_byte(0x0c);
+        let id = request_id(safe_tx_hash, 7, ORACLE);
+
+        let (state, _) = svc.apply_transition(
+            State::default(),
+            Message::Event(log(1, proposed_event(ORACLE, safe_tx_hash, TO))),
+        );
+        let (state, commands) = svc.apply_transition(
+            state,
+            Message::Event(log(
+                2,
+                new_request_event(id, U256::from(1_000u64), U256::from(500u64), 20, 40),
+            )),
+        );
+        assert!(commands.is_empty());
+
+        let (state, commands) = resolve_dynamic_check(&svc, state, id, CheckOutcome::Unknown);
+
+        assert!(commands.is_empty());
+        assert!(!state.0.contains_key(&id));
+    }
+
+    #[test]
+    fn waiting_dynamic_checks_expire_using_the_available_deadline() {
+        let svc = transition();
+        let proposed_only = B256::repeat_byte(0x0d);
+        let request_open = B256::repeat_byte(0x0e);
+        let mut state = State::default();
+        state.0.insert(
+            proposed_only,
+            RequestState::WaitingForDynamicCheck {
+                deadline: 10,
+                request: None,
+            },
+        );
+        state.0.insert(
+            request_open,
+            RequestState::WaitingForDynamicCheck {
+                deadline: 10,
+                request: Some(Request {
+                    bond_target: U256::from(500u64),
+                    commit_deadline: 20,
+                    reveal_deadline: 40,
+                }),
+            },
+        );
+
+        let (state, commands) = svc.apply_transition(state, Message::NewBlock(11));
+        assert!(commands.is_empty());
+        assert!(!state.0.contains_key(&proposed_only));
+        assert!(state.0.contains_key(&request_open));
+
+        let (state, commands) = svc.apply_transition(state, Message::NewBlock(21));
+        assert!(commands.is_empty());
+        assert!(!state.0.contains_key(&request_open));
+
+        let (state, commands) =
+            resolve_dynamic_check(&svc, state, request_open, CheckOutcome::Approved);
+        assert!(commands.is_empty());
+        assert!(!state.0.contains_key(&request_open));
+    }
+
+    /// A replayed resume for a request that already advanced past its dynamic
+    /// check (e.g. the effect ran twice after a crash) is a no-op because it no
+    /// longer has a matching `WaitingForDynamicCheck` marker.
     #[test]
     fn stale_dynamic_check_resume_does_not_disturb_an_already_advanced_request() {
         let svc = transition();
@@ -1341,15 +1532,13 @@ mod tests {
             State::default(),
             Message::Event(log(1, proposed_event(ORACLE, safe_tx_hash, TO))),
         );
-        let state =
-            resolve_dynamic_check(&svc, state, id, 1 + VOTING_WINDOW, CheckOutcome::Approved);
+        let (state, _) = resolve_dynamic_check(&svc, state, id, CheckOutcome::Approved);
         let advanced = state.0[&id].clone();
 
-        let state = resolve_dynamic_check(
+        let (state, _) = resolve_dynamic_check(
             &svc,
             state,
             id,
-            1 + VOTING_WINDOW,
             CheckOutcome::Denied(RuleId::R4_6KnownMaliciousTarget),
         );
         assert_eq!(state.0[&id], advanced);
