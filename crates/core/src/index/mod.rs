@@ -65,15 +65,15 @@ where
     E: Events,
 {
     /// Creates and initializes a watcher for the events `E` emitted by
-    /// `addresses`, resuming from `last_indexed_block` (see
+    /// `addresses`, resuming from the persisted snapshot range (see
     /// [`BlockWatcher::new`]).
     pub async fn new(
         provider: P,
         config: Config,
         addresses: Vec<Address>,
-        last_indexed_block: Option<u64>,
+        indexed: Option<BlockStatus>,
     ) -> Result<Self, Error> {
-        let blocks = BlockWatcher::new(provider.clone(), config.blocks, last_indexed_block).await?;
+        let blocks = BlockWatcher::new(provider.clone(), config.blocks, indexed).await?;
         let events = EventWatcher::new(provider, config.events, addresses);
         Ok(Self { blocks, events })
     }
@@ -238,10 +238,10 @@ mod tests {
     async fn watcher(
         asserter: &Asserter,
         config: Config,
-        last_indexed_block: Option<u64>,
+        indexed: Option<BlockStatus>,
     ) -> Watcher<RootProvider, Weth::WethEvents> {
         let provider = ProviderBuilder::default().connect_mocked_client(asserter.clone());
-        Watcher::new(provider, config, vec![WATCHED], last_indexed_block)
+        Watcher::new(provider, config, vec![WATCHED], indexed)
             .await
             .unwrap()
     }
@@ -253,7 +253,15 @@ mod tests {
         asserter.push_success(&block(1000));
         asserter.push_success(&block(998));
         asserter.push_success(&block(999));
-        let mut watcher = watcher(&asserter, config(), Some(850)).await;
+        let mut watcher = watcher(
+            &asserter,
+            config(),
+            Some(BlockStatus {
+                latest: 850,
+                safe: 847,
+            }),
+        )
+        .await;
 
         assert_eq!(
             watcher.next().await.unwrap(),

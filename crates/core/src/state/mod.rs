@@ -7,7 +7,7 @@
 pub mod storage;
 
 use self::storage::SnapshotStore;
-use crate::index::{BlockUpdate, EventLog, EventUpdate, Update};
+use crate::index::{BlockStatus, BlockUpdate, EventLog, EventUpdate, Update};
 use serde::{Serialize, de::DeserializeOwned};
 use sqlx::SqlitePool;
 use std::{collections::VecDeque, convert::Infallible, mem, range::RangeInclusive};
@@ -170,23 +170,13 @@ where
         })
     }
 
-    /// Returns the last block that was fully processed by the state machine.
-    /// Note that this only counts fully processed blocks.
-    pub async fn last_block(&self) -> Option<u64> {
-        let lock = self.inner.lock().await;
-        let (_, status) = lock.as_ref()?;
-        match status {
-            Status::Initialized => None,
-            Status::BlockPending { pending } => pending.checked_sub(1),
-            // This is a bit counter-intuitive, but if we observed the latest
-            // block `N` and are waiting for its events, then we have only
-            // completely processed block `N-1`. This should correspond to the
-            // block returned by `snapshots.current` without round-tripping to
-            // the database. Note that the `WarpEvents` status's starting block
-            // gets updated as event updates are processed.
-            Status::BlockEvents { latest } => latest.checked_sub(1),
-            Status::WarpEvents { range } => range.start.checked_sub(1),
-        }
+    /// Returns the bounds of the snapshots currently persisted by the state
+    /// machine.
+    ///
+    /// The latest snapshot is the indexer's resume point, while the safe
+    /// snapshot is the earliest rollback anchor retained in storage.
+    pub async fn block_status(&self) -> Result<Option<BlockStatus>, Error> {
+        Ok(self.snapshots.status().await?)
     }
 
     /// Handle an indexer update.
@@ -549,7 +539,10 @@ mod tests {
         // Its newer safe boundary must not prune the rollback state needed by
         // the watcher when it resumes from the last committed block (6).
         machine.handle_update(new_block(7)).await.unwrap();
-        assert_eq!(machine.last_block().await, Some(6));
+        assert_eq!(
+            machine.block_status().await.unwrap(),
+            Some(BlockStatus { latest: 6, safe: 5 })
+        );
         drop(machine);
 
         let mut machine = new_machine(&pool).await;
@@ -623,6 +616,17 @@ mod tests {
             ))
         );
         assert_eq!(snapshot_count(&pool).await, 1);
+        assert_eq!(
+            machine.block_status().await.unwrap(),
+            Some(BlockStatus { latest: 3, safe: 3 })
+        );
+
+        // Restarting in the middle of the warp resumes after the only retained
+        // snapshot. In particular, it does not require a synthetic uncle whose
+        // parent snapshot was pruned with the previous page.
+        drop(machine);
+        let mut machine = new_machine(&pool).await;
+        assert_eq!(machine.handle_update(warp(4, 6)).await.unwrap(), vec![]);
 
         // Continue with the next chunk of events from the warp.
         assert_eq!(
@@ -641,5 +645,9 @@ mod tests {
             ))
         );
         assert_eq!(snapshot_count(&pool).await, 1);
+        assert_eq!(
+            machine.block_status().await.unwrap(),
+            Some(BlockStatus { latest: 6, safe: 6 })
+        );
     }
 }

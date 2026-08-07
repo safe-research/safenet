@@ -117,7 +117,7 @@ where
             provider.clone(),
             config.index,
             addresses,
-            state.last_block().await,
+            state.block_status().await?,
         )
         .await?;
         let transactions =

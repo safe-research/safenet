@@ -138,15 +138,14 @@ where
 {
     /// Creates and initializes a block watcher.
     ///
-    /// When `last_indexed_block` is set, the watcher resumes from it, replaying
-    /// the last `max_reorg_depth` blocks via a deliberate "fake" reorg so any
-    /// reorg that happened while the service was down is re-indexed. Otherwise,
-    /// when `Config::start_block` is set, it back-fills from there via a warp
-    /// without a (fake) reorg.
+    /// When `indexed` is set, the watcher resumes from the persisted snapshot
+    /// range, replaying everything after its safe rollback anchor via a
+    /// synthetic reorg. Otherwise, when `Config::start_block` is set, it
+    /// back-fills from there via a warp without a fake reorg.
     pub async fn new(
         provider: P,
         config: Config,
-        last_indexed_block: Option<u64>,
+        indexed: Option<BlockStatus>,
     ) -> Result<Self, Error> {
         let block_time = resolve_block_time(&provider, config.block_time).await?;
         let mut watcher = Self {
@@ -161,7 +160,7 @@ where
             recent: VecDeque::new(),
             queue: VecDeque::new(),
         };
-        watcher.initialize(last_indexed_block).await?;
+        watcher.initialize(indexed).await?;
         Ok(watcher)
     }
 
@@ -175,7 +174,7 @@ where
             .ok_or(Error::MissingBlock(id))
     }
 
-    async fn initialize(&mut self, last_indexed_block: Option<u64>) -> Result<(), Error> {
+    async fn initialize(&mut self, indexed: Option<BlockStatus>) -> Result<(), Error> {
         let latest = self.require_block(BlockId::latest()).await?;
         let safe = latest
             .header
@@ -184,26 +183,31 @@ where
         tracing::debug!(
             latest = latest.header.number,
             safe,
-            resume = ?last_indexed_block,
+            resume = ?indexed,
             "initializing block watcher"
         );
 
         self.update_next_pending_block(latest.header.number, latest.header.timestamp);
 
-        if let Some(last_indexed_block) = last_indexed_block {
-            // To guard against a reorg of a block right as the service restarted,
-            // we always create a "fake" reorg `max_reorg_depth` deep to re-index
-            // the last blocks before shutdown. Queue an uncle for the block right
-            // after the last reorg-safe indexed block.
-            let uncle = (last_indexed_block + 1).saturating_sub(self.config.max_reorg_depth);
-            if uncle <= last_indexed_block {
+        if let Some(indexed) = indexed {
+            // The earliest retained snapshot is the rollback anchor. Replay
+            // everything after it, but only emit an uncle when there are newer
+            // snapshots to discard. A pruned warp may retain only its latest
+            // snapshot, in which case we can continue directly from the next
+            // block without a synthetic reorg.
+            let uncle = indexed.safe.checked_add(1);
+            if let Some(uncle) = uncle
+                && uncle <= indexed.latest
+            {
                 self.queue.push_back(BlockUpdate::Uncle { number: uncle });
             }
 
             // If possible, warp up to the reorg-safe block to allow bulk log
             // queries. We cannot warp to the latest block, as a range query
             // could then return data for a block that later gets uncled.
-            if uncle <= safe {
+            if let Some(uncle) = uncle
+                && uncle <= safe
+            {
                 self.queue.push_back(BlockUpdate::Warp {
                     from: uncle,
                     to: safe,
@@ -259,14 +263,24 @@ where
             }
         }
 
-        // Queue new-block updates for the recent blocks. When starting from a
-        // configured block, only emit those at or after it; earlier blocks (which
-        // occur when `start_block` is within the reorg window) are still retained
-        // for reorg detection.
+        // Queue new-block updates for the recent blocks. Earlier blocks are
+        // still retained for reorg detection, but updates before the persisted
+        // rollback boundary (or configured start block on a fresh start) have
+        // already been processed and must not be emitted.
         for block in self.recent.iter().filter(|block| {
-            self.config
-                .start_block
-                .is_none_or(|start_block| block.header.number >= start_block)
+            indexed.map_or_else(
+                || {
+                    self.config
+                        .start_block
+                        .is_none_or(|start_block| block.header.number >= start_block)
+                },
+                |indexed| {
+                    indexed
+                        .safe
+                        .checked_add(1)
+                        .is_some_and(|from| block.header.number >= from)
+                },
+            )
         }) {
             self.queue.push_back(BlockUpdate::New {
                 number: block.header.number,
@@ -562,14 +576,21 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn initializes_from_last_indexed_block() {
+    async fn initializes_from_persisted_snapshot_range() {
         let asserter = Asserter::new();
         asserter.push_success(&block(1000));
         asserter.push_success(&block(999));
 
-        let mut blocks = BlockWatcher::new(mock_provider(&asserter), config(), Some(900))
-            .await
-            .unwrap();
+        let mut blocks = BlockWatcher::new(
+            mock_provider(&asserter),
+            config(),
+            Some(BlockStatus {
+                latest: 900,
+                safe: 898,
+            }),
+        )
+        .await
+        .unwrap();
 
         assert_eq!(
             blocks.ready().collect::<Vec<_>>(),
@@ -580,6 +601,55 @@ mod tests {
                 new_block_update(&block(1000)),
             ]
         );
+        assert!(asserter.read_q().is_empty());
+    }
+
+    #[tokio::test]
+    async fn resumes_after_a_single_pruned_snapshot_without_a_fake_reorg() {
+        let asserter = Asserter::new();
+        asserter.push_success(&block(1000));
+        asserter.push_success(&block(999));
+
+        let mut blocks = BlockWatcher::new(
+            mock_provider(&asserter),
+            config(),
+            Some(BlockStatus {
+                latest: 900,
+                safe: 900,
+            }),
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(
+            blocks.ready().collect::<Vec<_>>(),
+            [
+                BlockUpdate::Warp { from: 901, to: 998 },
+                new_block_update(&block(999)),
+                new_block_update(&block(1000)),
+            ]
+        );
+        assert!(asserter.read_q().is_empty());
+    }
+
+    #[tokio::test]
+    async fn does_not_reemit_recent_blocks_at_or_before_the_persisted_snapshot() {
+        let asserter = Asserter::new();
+        asserter.push_success(&block(1000));
+        asserter.push_success(&block(999));
+
+        let mut blocks = BlockWatcher::new(
+            mock_provider(&asserter),
+            config(),
+            Some(BlockStatus {
+                latest: 1000,
+                safe: 1000,
+            }),
+        )
+        .await
+        .unwrap();
+
+        assert!(blocks.ready().next().is_none());
         assert!(asserter.read_q().is_empty());
     }
 
@@ -671,7 +741,10 @@ mod tests {
                 max_reorg_depth: 0,
                 ..config()
             },
-            Some(900),
+            Some(BlockStatus {
+                latest: 900,
+                safe: 900,
+            }),
         )
         .await
         .unwrap();
