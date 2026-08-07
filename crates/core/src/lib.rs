@@ -11,6 +11,7 @@
 //! - Reliable transaction submission with all its complexities.
 
 pub mod driver;
+pub mod effects;
 pub mod index;
 pub mod kdf;
 pub mod observability;

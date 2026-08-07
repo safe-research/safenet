@@ -8,8 +8,9 @@
 //! for submission.
 
 use crate::{
+    effects::EffectHandler,
     index::{self, Watcher, events::Events},
-    state::{self, EffectHandler, StateMachine, StateTransition},
+    state::{self, StateMachine, StateTransition},
     tx::{self, Signer, Transaction, TransactionQueue},
 };
 use alloy::{primitives::Address, providers::Provider};
