@@ -656,6 +656,9 @@ impl ActionEncoder<SentinelAction> for SentinelEncoder {
 impl Service for SentinelService {
     type State = State;
     type Event = SentinelEvents;
+    type Action = SentinelAction;
+    type Effect = effect::Effect;
+    type Resume = effect::Resume;
 
     type Transition = SentinelTransition;
     type Effects = effect::Handler;
