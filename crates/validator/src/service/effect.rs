@@ -10,7 +10,7 @@ use crate::{
     secrets::SecretStore,
 };
 use alloy::primitives::{Address, B256};
-use safenet_core::state::EffectHandler;
+use safenet_core::effects::EffectHandler;
 use std::{
     error::Error,
     fmt::{self, Display, Formatter},
@@ -108,15 +108,17 @@ pub struct Handler {
 }
 
 impl Handler {
-    async fn try_perform_effect(&mut self, effect: Effect) -> Result<Resume, InternalError> {
+    async fn try_perform_effect(&self, effect: Effect) -> Result<Resume, InternalError> {
         match effect {
             Effect::KeyGenSetup {
                 group_id,
                 count,
                 threshold,
             } => {
-                let mut rng = rand::thread_rng();
-                let secrets = frost::keygen::setup(&mut rng, self.account, count, threshold)?;
+                let secrets = {
+                    let mut rng = rand::thread_rng();
+                    frost::keygen::setup(&mut rng, self.account, count, threshold)?
+                };
                 let stored = self
                     .secrets
                     .store_keygen_secrets(group_id, self.account, secrets)
@@ -214,8 +216,10 @@ impl Handler {
         key_share: &KeyShare,
     ) -> Result<Resume, InternalError> {
         let started = Instant::now();
-        let mut rng = rand::thread_rng();
-        let nonce_chunk = frost::preprocess::NonceChunk::generate(key_share, &mut rng)?;
+        let nonce_chunk = {
+            let mut rng = rand::thread_rng();
+            frost::preprocess::NonceChunk::generate(key_share, &mut rng)?
+        };
         let result = self
             .secrets
             .register_nonces_chunk(group_id, self.account, nonce_chunk)
@@ -237,7 +241,7 @@ impl Handler {
 }
 
 impl EffectHandler<Effect, Resume> for Handler {
-    async fn perform_effect(&mut self, effect: Effect) -> Resume {
+    async fn perform_effect(&self, effect: Effect) -> Resume {
         match self.try_perform_effect(effect.clone()).await {
             Ok(resume) => resume,
             Err(err) => {
