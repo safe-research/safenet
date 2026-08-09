@@ -33,7 +33,8 @@ Documentation (`docs/configuration.md`, `docs/validator-handbook.md`) currently 
 
 ### Alternatives Considered
 
-- **Keep `SentinelOracleV2` named as-is and just delete v1.** Rejected: leaves "V2" as the permanent name of the only version that exists, which is exactly the confusing state the repo's own `TODO(A4)` comments flag for cleanup. Renaming costs one mostly-mechanical PR (Tech Specs Phase 2) and removes a permanent footgun for every future reader who has to remember "there is no v1, V2 is current."
+- **Keep `SentinelOracleV2` named as-is and just delete v1.** Rejected: leaves "V2" as the permanent name of the only version that exists, which is exactly the confusing state the repo's own `TODO(A4)` comments flag for cleanup. Renaming costs two mostly-mechanical PRs (Tech Specs Phases 3a-3b) and removes a permanent footgun for every future reader who has to remember "there is no v1, V2 is current."
+- **Do the v1 deletion, the v2 file rename, and the v2 identifier rename in one PR (the original single Phase 3).** Rejected in favor of splitting into 3a (pure `git mv`/deletion, no identifier changes) and 3b (identifier rename + inbound-reference fixes): a combined diff mixes file moves with content edits, so a reviewer can't lean on git's rename detection to skip re-reading unchanged file bodies — they have to line-by-line diff moved-and-edited files just like any other change. Splitting means 3a's diff is (nearly) 100% renames/deletions a reviewer can skim, and 3b's diff is ordinary text changes with no moves to untangle from them.
 - **Merge the non-oracle-packet removal (Solidity + Rust + explorer) into a single PR since it's conceptually one change.** Rejected: none of the three are compile-coupled to each other (see Architecture Decision), the explorer piece is materially riskier (real UI feature loss) than the other two, and the combined diff would be large and heterogeneous (Solidity, Rust, TypeScript/React, tests in three languages) — harder to review than three same-language, single-purpose PRs, even though the repo's phase-size waiver ("ok if phases make more than 300 line changes if primarily removing code") would technically permit merging them.
 - **Consolidate the sentinel and validator bash integration tests into one script/CI job.** Rejected: `scripts/run_sentinel_integration_test.sh` already passes today, is CI-wired, and tests a different subsystem (oracle dispute/commit-reveal) than the validator happy path (DKG/epoch rollover/attestation). Keeping them as two scripts/two CI jobs (mirroring each other's structure) keeps failures attributable to the right subsystem, the same way `sentinel-integration` and (the new) `validator-integration` would each fail independently rather than one undifferentiated job.
 - **Leave `scripts/run_validator_port_integration_test.sh`'s name as-is.** Rejected: the filename's `_port_` specifically signals "compares the TS port against the Rust port," which stops being true once the TS side is replaced with a second Rust instance; keeping the name would mislabel what the script does going forward. Renamed to `scripts/run_validator_integration_test.sh` (Tech Specs Phase 2), matching the existing `run_sentinel_integration_test.sh` naming pattern.
@@ -57,7 +58,7 @@ Documentation (`docs/configuration.md`, `docs/validator-handbook.md`) currently 
 
 ### Phase 2 — Fix the validator CI gap: Rust-only happy-path integration test, wired into CI
 
-Depends on Phase 1 (removes the TS process this script currently spawns). Otherwise independent of every other phase — `proposeOracleTransaction`/`AlwaysApproveOracle` already exist today and are untouched by Phases 3-6.
+Depends on Phase 1 (removes the TS process this script currently spawns). Otherwise independent of every other phase — `proposeOracleTransaction`/`AlwaysApproveOracle` already exist today and are untouched by Phases 3a, 3b, 4, 5, 6.
 
 - Rename `scripts/run_validator_port_integration_test.sh` → `scripts/run_validator_integration_test.sh` (drop `_port_`, matching `run_sentinel_integration_test.sh`'s naming).
 - Replace the TypeScript validator process (`npm run --prefix "$REPO_ROOT" --workspace validator dev`, old line 108) with a second Rust validator instance, built once (`cargo build --package validator`, already done at old line 65) and run twice with distinct TOML configs/participant indices — mirroring `run_sentinel_integration_test.sh`'s two-`cargo run`-instances pattern (`scripts/run_sentinel_integration_test.sh:154,158`) and `run_devnet.sh`'s per-instance TOML generation (`scripts/run_devnet.sh:319-348`) as the template for building each config.
@@ -68,30 +69,38 @@ Depends on Phase 1 (removes the TS process this script currently spawns). Otherw
 - `README.md`/`AGENTS.md`: update the `test:integration:validator` description (no longer "Rust validator, alongside the TypeScript one" — now "two Rust validator instances, against an `AlwaysApproveOracle`-backed happy path, running in CI").
 - **Acceptance bar for this phase**: `validator-integration` passes green in CI on the PR itself (workflow triggers on `pull_request`, `.github/workflows/integration.yml:2-3`), and `sentinel-integration` remains unaffected. This closes the epic's CI deliverable.
 
-### Phase 3 — Remove v1 `SentinelOracle`; rename v2 to canonical
+### Phase 3a — Delete v1 `SentinelOracle`; move v2 files to canonical paths (pure rename, no identifier changes)
 
-Independent of Phases 1-2 and 4-5; can run in parallel with any of them.
+Independent of Phases 1-2 and 4-5; can run in parallel with any of them. Split from Phase 3b specifically so this phase's diff is a clean file rename/deletion for the reviewer — no Solidity identifier inside any moved file changes here, only file paths and the import-path string literals that have to track them.
 
-- Delete: `contracts/src/SentinelOracle.sol`, `contracts/src/libraries/SentinelOracleCommitments.sol`, `contracts/src/libraries/SentinelOracleRequests.sol`, `contracts/script/DeploySentinelOracle.s.sol`, `contracts/test/SentinelOracle.t.sol`. Confirmed exhaustively: none of these five files are referenced anywhere outside each other and this list.
-- Rename (file + primary contract/library identifier):
-  - `contracts/src/SentinelOracleV2.sol` → `contracts/src/SentinelOracle.sol`; `contract SentinelOracleV2` → `SentinelOracle` (drop the `TODO(A4)` comment at lines 12-13, it's now done).
+- Delete outright: `contracts/src/SentinelOracle.sol`, `contracts/src/libraries/SentinelOracleCommitments.sol`, `contracts/src/libraries/SentinelOracleRequests.sol`, `contracts/script/DeploySentinelOracle.s.sol`, `contracts/test/SentinelOracle.t.sol`. Confirmed exhaustively: none of these five files are referenced anywhere outside each other and this list.
+- `git mv` the v2 files to their canonical paths, with **no other edit** except updating the import-path string literals inside them that point at sibling files also being moved here (so the moved files keep compiling — this is a path-string change, not an identifier rename; every Solidity `contract`/`library` name stays exactly as it is today, still `*V2*`, until Phase 3b):
+  - `contracts/src/SentinelOracleV2.sol` → `contracts/src/SentinelOracle.sol` (update its two `import ... from "@/libraries/*V2.sol"` lines to the new library paths below).
   - `contracts/src/libraries/SentinelOracleCommitmentsV2.sol` → `contracts/src/libraries/SentinelOracleCommitments.sol`.
-  - `contracts/src/libraries/SentinelOracleRequestsV2.sol` → `contracts/src/libraries/SentinelOracleRequests.sol`.
-  - `contracts/script/DeploySentinelOracleV2.s.sol` → `contracts/script/DeploySentinelOracle.s.sol`; `contract DeploySentinelOracleV2Script` → `DeploySentinelOracleScript` (drop its `TODO(A4)` at line 9).
-  - `contracts/test/SentinelOracleV2.t.sol` → `contracts/test/SentinelOracle.t.sol`; `contract SentinelOracleV2Test` → `SentinelOracleTest` (drop its `TODO(A4)` at line 11).
-- Fix every inbound reference to the renamed identifiers/paths:
+  - `contracts/src/libraries/SentinelOracleRequestsV2.sol` → `contracts/src/libraries/SentinelOracleRequests.sol` (update its own import of `SentinelOracleCommitmentsV2.sol`).
+  - `contracts/script/DeploySentinelOracleV2.s.sol` → `contracts/script/DeploySentinelOracle.s.sol` (update its `import {SentinelOracleV2} from "@/SentinelOracleV2.sol"` path).
+  - `contracts/test/SentinelOracleV2.t.sol` → `contracts/test/SentinelOracle.t.sol` (update its three import paths).
+- Fix every reference to the moved *file paths* (not identifiers, those are Phase 3b) — these break the moment the files move, regardless of any identifier rename:
+  - `scripts/run_sentinel_integration_test.sh:84` — broadcast artifact path (`build/broadcast/DeploySentinelOracleV2.s.sol/...` → `.../DeploySentinelOracle.s.sol/...`, since forge keys broadcast output by script *file name*).
+  - `docs/devnet.md:317` — same broadcast path example.
+  - `crates/sentinel/src/bindings.rs:8` and `crates/sentinel/src/hashing.rs:17,159,162` — doc-comment citations of the old `contracts/src/libraries/*V2.sol`/`contracts/test/SentinelOracleV2.t.sol` paths.
+- Leave every Solidity/script/test contract identifier, the `TODO(A4)` comments, `contracts/package.json:12`'s `DeploySentinelOracleV2Script` string, `scripts/run_devnet.sh:301,308,392`'s script-name references, prose "V2" mentions, and the explorer's `sentinelOracleV2Abi` identifier untouched — all fixed in Phase 3b.
+
+### Phase 3b — Rename v2 identifiers to canonical; fix remaining inbound references
+
+Depends on Phase 3a (edits the files it just moved). Otherwise independent of Phases 1-2 and 4-5.
+
+- Rename the Solidity identifiers inside the files Phase 3a moved: `contract SentinelOracleV2` → `SentinelOracle` (`contracts/src/SentinelOracle.sol`), `contract DeploySentinelOracleV2Script` → `DeploySentinelOracleScript` (`contracts/script/DeploySentinelOracle.s.sol`), `contract SentinelOracleV2Test` → `SentinelOracleTest` (`contracts/test/SentinelOracle.t.sol`); drop the three now-resolved `TODO(A4)` comments at each site.
+- Fix every reference to the *old identifiers* (not file paths, already fixed in Phase 3a):
   - `contracts/package.json:12` — `cmd:deploy:sentinel-oracle` script string (`DeploySentinelOracleV2Script` → `DeploySentinelOracleScript`).
-  - `scripts/run_devnet.sh:301,308,392` — script-name references.
-  - `scripts/run_sentinel_integration_test.sh:84` — broadcast artifact path (`build/broadcast/DeploySentinelOracleV2.s.sol/...` → `.../DeploySentinelOracle.s.sol/...`).
-  - `docs/devnet.md:317` (and prose mentions at lines 42, 93, 125, 152, 218, 234, 303) — broadcast path and prose.
-  - `crates/sentinel/src/bindings.rs:8` and `crates/sentinel/src/hashing.rs:17,159,162` — doc-comment cross-references to the old `*V2.sol`/`SentinelOracleV2.t.sol` paths (no code change needed in `crates/sentinel` beyond these comments — its `sol!` bindings and identifiers were already canonical, matching only v2's ABI, per direct inspection).
-  - `explorer/src/lib/oracle/abi.ts` — rename `sentinelOracleV2Abi` → `sentinelOracleAbi` (plus its "V1 is deprecated" comment, now stale/removable), propagate the rename through `explorer/src/lib/oracle/votes.ts`, `explorer/src/lib/oracle/votingStatus.ts`, `explorer/src/lib/oracle/votes.test.ts`, and update the `SentinelOracleV2`-mentioning comments in `explorer/src/hooks/useSentinelVotes.tsx`.
-- No `contracts/test/Consensus.t.sol` or other test-file changes needed beyond the rename above — nothing else references either oracle version.
-- `AGENTS.md:79` prose mention of `SentinelOracleV2`: reword to drop "V2".
+  - `scripts/run_devnet.sh:301,308,392` — script-identifier references.
+- `explorer/src/lib/oracle/abi.ts` — rename `sentinelOracleV2Abi` → `sentinelOracleAbi` (plus its "V1 is deprecated" comment, now stale/removable), propagate the rename through `explorer/src/lib/oracle/votes.ts`, `explorer/src/lib/oracle/votingStatus.ts`, `explorer/src/lib/oracle/votes.test.ts`, and update the `SentinelOracleV2`-mentioning comments in `explorer/src/hooks/useSentinelVotes.tsx`.
+- Reword remaining prose-only "V2" mentions: `AGENTS.md:79`, `docs/devnet.md:42,93,125,152,218,234,303`.
+- No `contracts/test/Consensus.t.sol` or other test-file changes needed — nothing else references either oracle version.
 
 ### Phase 4 — Remove the non-oracle `Transaction` packet path: Solidity
 
-Independent of Phases 1-3 and 5; can run in parallel with any of them.
+Independent of Phases 1-2, 3a-3b, and 5; can run in parallel with any of them.
 
 - `contracts/src/Consensus.sol`: delete `proposeTransaction` (307-314), `proposeBasicTransaction` (319-342), `attestTransaction` (365-384), `getTransactionAttestation` (252-258), `getTransactionAttestationByHash` (263-270), `getRecentTransactionAttestation` (275-281), `getRecentTransactionAttestationByHash` (286-302), and the `attestTransaction`-selector branch of the `onSignCompleted` dispatch (451-454) — leave the surrounding if/else chain and every oracle/epoch function untouched.
 - `contracts/src/interfaces/IConsensus.sol`: delete the matching declarations — `event TransactionProposed` (75-81), `event TransactionAttested` (92-99), `getTransactionAttestation` (216-219), `getTransactionAttestationByHash` (227-230), `getRecentTransactionAttestation` (241-244), `getRecentTransactionAttestationByHash` (252-255), `proposeTransaction` (262), `proposeBasicTransaction` (275-282), `attestTransaction` (293-299).
@@ -121,7 +130,7 @@ Independent of Phases 1-4 and 6; can run in parallel with any of them (the `sol!
 
 ### Phase 6 — Remove the non-oracle `Transaction` packet path: explorer frontend
 
-Depends on Phase 4 landing first (removes the UI for onchain functions that no longer exist), independent of Phases 1-3, 5.
+Depends on Phase 4 landing first (removes the UI for onchain functions that no longer exist), independent of Phases 1, 2, 3a, 3b, 5.
 
 This is a real, currently-reachable UI feature removal (a user can submit and track a plain, non-oracle transaction proposal today), not mechanical dead-code deletion, so it gets its own focused review pass:
 
@@ -134,11 +143,11 @@ This is a real, currently-reachable UI feature removal (a user can submit and tr
 
 ### Phase 7 — Documentation pass: Rust validator configuration
 
-Depends on Phases 1-6 (documents the final state).
+Depends on Phases 1, 2, 3a, 3b, 4, 5, 6 (documents the final state).
 
 - `docs/configuration.md`: replace the "Environment Variables" section (38-56, and its link to the now-deleted `../validator/.env.sample`) with the Rust validator's actual TOML schema — `crates/validator/src/config.rs`'s `Config`/`ValidatorConfig`/`Participant` structs (`rpc`, `signer`, `database`, `validator.{consensus, staker, participants, oracles, genesis_salt, blocks_per_epoch, key_gen_timeout, signing_timeout, oracle_timeout}`, `observability`, `driver`), using `scripts/run_devnet.sh:319-348`'s generated-TOML shape as a concrete worked example.
 - `docs/validator-handbook.md`: replace the `cp validator/.env.sample validator/.env` / `docker run --env-file validator/.env ...` instructions (lines 82-92) with the actual `--config-file`-based invocation matching `crates/validator/Dockerfile`'s `ENTRYPOINT ["./validator"]` and its documented `args: [--config-file=...]` override (`crates/validator/Dockerfile:35`).
-- Sweep `README.md`/`AGENTS.md` for any remaining stale mentions introduced or missed by Phases 1-6 (e.g. confirm the "Rust Port" section of `README.md` still accurately lists all three `npm run test:integration*` commands post-rename).
+- Sweep `README.md`/`AGENTS.md` for any remaining stale mentions introduced or missed by Phases 1, 2, 3a, 3b, 4, 5, 6 (e.g. confirm the "Rust Port" section of `README.md` still accurately lists all three `npm run test:integration*` commands post-rename).
 - Leave `docs/overview.md:205`'s SHA-pinned historic permalink alone (see Assumptions).
 
 ### Phase 8 — Remove this plan
@@ -153,14 +162,15 @@ Delete `epics/2026_08_09_remove_legacy_typescript_and_v1_oracle.md` once Phases 
 |---|---|---|---|
 | 1 | Delete `validator/` TS workspace, `scripts/run_integration_test.sh`, the `integration` CI job; update `package.json`/lockfile/README/AGENTS.md | — | ✅ |
 | 2 | Rewrite `run_validator_port_integration_test.sh` → `run_validator_integration_test.sh` (two Rust instances, oracle-backed propose via `AlwaysApproveOracle`); add `validator-integration` CI job | 1 | ✅ |
-| 3 | Delete v1 `SentinelOracle`/libraries/script/test; rename v2 → canonical everywhere (contracts, scripts, docs, explorer identifiers, Rust doc comments) | — (parallel with 1, 2, 4, 5) | ✅ |
-| 4 | Remove non-oracle `Transaction` packet path: Solidity (`Consensus.sol`, `IConsensus.sol`, `ConsensusMessages.sol`, `Propose.s.sol`, docs, examples) | — (parallel with 1, 2, 3, 5) | ✅ |
-| 5 | Remove non-oracle `Transaction` packet path: Rust validator crate (`bindings.rs`, `hashing.rs`, `state/mod.rs`, `state/transactions.rs`, `service/action.rs`, `state/sign.rs`) | — (parallel with 1, 2, 3, 4) | ✅ |
+| 3a | Delete v1 `SentinelOracle`/libraries/script/test; `git mv` v2 files to canonical paths (pure rename, no identifier changes) | — (parallel with 1, 2, 4, 5) | ✅ |
+| 3b | Rename v2 Solidity identifiers to canonical; fix remaining inbound identifier references (scripts, explorer, docs prose) | 3a | ✅ |
+| 4 | Remove non-oracle `Transaction` packet path: Solidity (`Consensus.sol`, `IConsensus.sol`, `ConsensusMessages.sol`, `Propose.s.sol`, docs, examples) | — (parallel with 1, 2, 3a-3b, 5) | ✅ |
+| 5 | Remove non-oracle `Transaction` packet path: Rust validator crate (`bindings.rs`, `hashing.rs`, `state/mod.rs`, `state/transactions.rs`, `service/action.rs`, `state/sign.rs`) | — (parallel with 1, 2, 3a-3b, 4) | ✅ |
 | 6 | Remove non-oracle `Transaction` packet path: explorer frontend (real UI feature removal) | 4 | ✅ |
-| 7 | Rewrite `docs/configuration.md`/`docs/validator-handbook.md` for the Rust validator's TOML config; final README/AGENTS.md sweep | 1, 2, 3, 4, 5, 6 | ✅ |
+| 7 | Rewrite `docs/configuration.md`/`docs/validator-handbook.md` for the Rust validator's TOML config; final README/AGENTS.md sweep | 1, 2, 3a, 3b, 4, 5, 6 | ✅ |
 | 8 | Remove this plan | 7 | ✅ |
 
-Phases 1, 3, 4, 5 have no dependency on each other and can be implemented and reviewed in parallel; Phase 2 only needs Phase 1; Phase 6 only needs Phase 4; Phase 7 is a documentation-only pass that should land last so it describes the epic's end state; Phase 8 closes it out.
+Phases 1, 3a, 4, 5 have no dependency on each other and can be implemented and reviewed in parallel; Phase 2 only needs Phase 1; Phase 3b only needs Phase 3a; Phase 6 only needs Phase 4; Phase 7 is a documentation-only pass that should land last so it describes the epic's end state; Phase 8 closes it out.
 
 ---
 
