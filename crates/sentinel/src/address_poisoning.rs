@@ -30,11 +30,9 @@ use alloy::{
     sol_types::{SolCall, SolEvent},
 };
 use safe_tx::{
+    bindings::erc20::{approveCall, transferCall, transferFromCall},
     rule::RuleId,
-    types::{
-        SafeTransaction,
-        erc20::{approveCall, transferCall, transferFromCall},
-    },
+    types::SafeTransaction,
 };
 
 sol! {

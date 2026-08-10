@@ -117,6 +117,17 @@ impl SentinelTransition {
         if event.oracle != self.oracle {
             return (state, Vec::new());
         }
+        let transaction = match safe_tx::types::SafeTransaction::try_from(&event.transaction) {
+            Ok(transaction) => transaction,
+            Err(err) => {
+                tracing::warn!(
+                    safe_tx_hash = %event.safeTxHash,
+                    %err,
+                    "ignoring oracle transaction proposal that no Safe could execute"
+                );
+                return (state, Vec::new());
+            }
+        };
         let request_id = oracle_tx_proposal_hash(
             self.chain_id,
             self.consensus,
@@ -131,7 +142,7 @@ impl SentinelTransition {
             return (state, Vec::new());
         }
         let deadline = block.saturating_add(self.voting_window);
-        let decision = self.static_checker.check(&event.transaction);
+        let decision = self.static_checker.check(&transaction);
         if !decision.approve {
             state.0.insert(
                 request_id,
@@ -154,7 +165,7 @@ impl SentinelTransition {
             state,
             vec![Command::Effect(effect::Effect::DynamicCheck {
                 request_id,
-                transaction: (&event.transaction).into(),
+                transaction,
             })],
         )
     }
@@ -796,7 +807,7 @@ mod tests {
     fn dynamic_check_effect(id: B256, to: Address) -> Command<SentinelAction, effect::Effect> {
         Command::Effect(effect::Effect::DynamicCheck {
             request_id: id,
-            transaction: (&safe_tx(to)).into(),
+            transaction: (&safe_tx(to)).try_into().unwrap(),
         })
     }
 

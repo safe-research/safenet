@@ -839,7 +839,7 @@ impl Packet {
         let context = match oracle {
             None => Consensus::attestTransactionCall {
                 epoch: epoch.raw_value(),
-                chainId: transaction.chainId,
+                chainId: transaction.chain_id,
                 safe: transaction.safe,
                 safeTxStructHash: safe_tx_struct_hash,
                 signatureId: B256::ZERO,
@@ -848,7 +848,7 @@ impl Packet {
             Some(oracle) => Consensus::attestOracleTransactionCall {
                 epoch: epoch.raw_value(),
                 oracle,
-                chainId: transaction.chainId,
+                chainId: transaction.chain_id,
                 safe: transaction.safe,
                 safeTxStructHash: safe_tx_struct_hash,
                 signatureId: B256::ZERO,
@@ -880,7 +880,7 @@ impl Packet {
             },
             Packet::Transaction { epoch, transaction } => Action::AttestTransaction {
                 epoch: *epoch,
-                chain_id: transaction.chainId,
+                chain_id: transaction.chain_id,
                 safe: transaction.safe,
                 safe_tx_struct_hash: hashing::safe_tx_struct_hash(transaction),
                 signature_id,
@@ -893,7 +893,7 @@ impl Packet {
             } => Action::AttestOracleTransaction {
                 epoch: *epoch,
                 oracle: *oracle,
-                chain_id: transaction.chainId,
+                chain_id: transaction.chain_id,
                 safe: transaction.safe,
                 safe_tx_struct_hash: hashing::safe_tx_struct_hash(transaction),
                 signature_id,

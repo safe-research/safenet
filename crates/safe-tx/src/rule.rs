@@ -7,6 +7,8 @@
 //! implements the check giving it meaning, not declared upfront as an
 //! unused placeholder.
 
+use serde::{Deserialize, Deserializer, Serialize, Serializer, de};
+
 /// A specific Safenet Arbitration Charter rule that a check denial maps to.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum RuleId {
@@ -103,6 +105,39 @@ impl RuleId {
     }
 }
 
+/// The Charter citation is the canonical wire form, so serde goes through
+/// [`RuleId::code`] and [`RuleId::from_code`] rather than a derive naming the
+/// Rust variants.
+impl Serialize for RuleId {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        serializer.serialize_str(self.code())
+    }
+}
+
+/// The Charter's rule set is open -- it grows as the Charter does -- but any
+/// given build's is closed, and this is where the difference shows up: a
+/// citation this version implements no check for is a deserialization failure.
+/// A caller that cannot name the rule a verdict cites has no basis to act on
+/// that verdict, so refusing to parse it is better than carrying it around as
+/// a string nobody can interpret.
+impl<'de> Deserialize<'de> for RuleId {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let code = String::deserialize(deserializer)?;
+        Self::from_code(&code).ok_or_else(|| {
+            de::Error::custom(format!(
+                "{code:?} is not a Safenet Arbitration Charter rule citation this version \
+                 implements a check for"
+            ))
+        })
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -124,5 +159,29 @@ mod tests {
     #[test]
     fn from_code_rejects_unknown_codes() {
         assert_eq!(RuleId::from_code("R-4.99"), None);
+    }
+
+    #[test]
+    fn json_round_trips_every_variant() {
+        for rule in [
+            RuleId::R4_1SettingsChange,
+            RuleId::R4_2DelegatecallIntegrity,
+            RuleId::R4_6KnownMaliciousTarget,
+            RuleId::R4_5ExcessiveApproval,
+            RuleId::R4_3ValueTarget,
+            RuleId::R4_4AuthorizationTarget,
+        ] {
+            let json = serde_json::to_string(&rule).unwrap();
+            assert_eq!(json, format!("\"{}\"", rule.code()));
+            assert_eq!(serde_json::from_str::<RuleId>(&json).unwrap(), rule);
+        }
+    }
+
+    /// A citation the Charter may well have but this version has no check for
+    /// is a deserialization failure, not a `RuleId` nobody can interpret.
+    #[test]
+    fn json_rejects_an_unimplemented_citation() {
+        let err = serde_json::from_str::<RuleId>(r#""R-4.99""#).unwrap_err();
+        assert!(err.to_string().contains("R-4.99"), "{err}");
     }
 }

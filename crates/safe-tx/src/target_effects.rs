@@ -4,8 +4,11 @@
 //! here — see `crate::checks` for the existing base-guarantee policy, and
 //! future `Check`s (elsewhere) that will consume this output.
 
-use crate::multi_send::decode_multi_send_call;
-use crate::types::{SafeTransaction, erc20, erc721, erc1155};
+use crate::{
+    bindings::{erc20, erc721, erc1155},
+    multi_send::decode_multi_send_call,
+    types::SafeTransaction,
+};
 use alloy::{
     primitives::{Address, U256},
     sol_types::SolCall as _,
@@ -133,7 +136,7 @@ fn decode_call(tx: &SafeTransaction) -> Vec<TargetEffect> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::types::{Operation, multi_send_bindings};
+    use crate::{bindings::multi_send, types::Operation};
     use alloy::primitives::{Bytes, address};
 
     fn tx(
@@ -164,7 +167,7 @@ mod tests {
     fn multisend(sub_txs: &[Vec<u8>]) -> Bytes {
         let transactions: Vec<u8> = sub_txs.iter().flatten().cloned().collect();
         Bytes::from(
-            multi_send_bindings::multiSendCall {
+            multi_send::multiSendCall {
                 transactions: Bytes::from(transactions),
             }
             .abi_encode(),
@@ -180,7 +183,7 @@ mod tests {
             RECIPIENT,
             U256::from(5u64),
             Bytes::new(),
-            Operation::CALL,
+            Operation::Call,
         ));
         assert_eq!(
             effects,
@@ -196,7 +199,7 @@ mod tests {
     #[test]
     fn no_effect_for_zero_value_empty_call() {
         assert_eq!(
-            decode_target_effects(&tx(RECIPIENT, U256::ZERO, Bytes::new(), Operation::CALL)),
+            decode_target_effects(&tx(RECIPIENT, U256::ZERO, Bytes::new(), Operation::Call)),
             vec![]
         );
     }
@@ -205,7 +208,7 @@ mod tests {
     fn no_effect_for_unrecognized_calldata() {
         let data = Bytes::from(vec![0xde, 0xad, 0xbe, 0xef, 0x01]);
         assert_eq!(
-            decode_target_effects(&tx(TOKEN, U256::ZERO, data, Operation::CALL)),
+            decode_target_effects(&tx(TOKEN, U256::ZERO, data, Operation::Call)),
             vec![]
         );
     }
@@ -213,7 +216,7 @@ mod tests {
     #[test]
     fn decodes_native_value_alongside_unrecognized_calldata() {
         let data = Bytes::from(vec![0xde, 0xad, 0xbe, 0xef, 0x01]);
-        let effects = decode_target_effects(&tx(TOKEN, U256::from(9u64), data, Operation::CALL));
+        let effects = decode_target_effects(&tx(TOKEN, U256::from(9u64), data, Operation::Call));
         assert_eq!(
             effects,
             vec![TargetEffect {
@@ -232,7 +235,7 @@ mod tests {
             amount: U256::from(3u64),
         }
         .abi_encode();
-        let effects = decode_target_effects(&tx(TOKEN, U256::from(9u64), data, Operation::CALL));
+        let effects = decode_target_effects(&tx(TOKEN, U256::from(9u64), data, Operation::Call));
         assert_eq!(
             effects,
             vec![
@@ -259,7 +262,7 @@ mod tests {
             amount: U256::from(1_000u64),
         }
         .abi_encode();
-        let effects = decode_target_effects(&tx(TOKEN, U256::ZERO, data, Operation::CALL));
+        let effects = decode_target_effects(&tx(TOKEN, U256::ZERO, data, Operation::Call));
         assert_eq!(
             effects,
             vec![TargetEffect {
@@ -279,7 +282,7 @@ mod tests {
             amount: U256::from(7u64),
         }
         .abi_encode();
-        let effects = decode_target_effects(&tx(TOKEN, U256::ZERO, data, Operation::CALL));
+        let effects = decode_target_effects(&tx(TOKEN, U256::ZERO, data, Operation::Call));
         assert_eq!(
             effects,
             vec![TargetEffect {
@@ -298,7 +301,7 @@ mod tests {
             amount: U256::MAX,
         }
         .abi_encode();
-        let effects = decode_target_effects(&tx(TOKEN, U256::ZERO, data, Operation::CALL));
+        let effects = decode_target_effects(&tx(TOKEN, U256::ZERO, data, Operation::Call));
         assert_eq!(
             effects,
             vec![TargetEffect {
@@ -315,7 +318,7 @@ mod tests {
             approved: true,
         }
         .abi_encode();
-        let effects = decode_target_effects(&tx(TOKEN, U256::ZERO, data, Operation::CALL));
+        let effects = decode_target_effects(&tx(TOKEN, U256::ZERO, data, Operation::Call));
         assert_eq!(
             effects,
             vec![TargetEffect {
@@ -334,7 +337,7 @@ mod tests {
             tokenId: U256::from(42u64),
         }
         .abi_encode();
-        let effects = decode_target_effects(&tx(TOKEN, U256::ZERO, data, Operation::CALL));
+        let effects = decode_target_effects(&tx(TOKEN, U256::ZERO, data, Operation::Call));
         assert_eq!(
             effects,
             vec![TargetEffect {
@@ -356,7 +359,7 @@ mod tests {
             data: Bytes::from(vec![0x01]),
         }
         .abi_encode();
-        let effects = decode_target_effects(&tx(TOKEN, U256::ZERO, data, Operation::CALL));
+        let effects = decode_target_effects(&tx(TOKEN, U256::ZERO, data, Operation::Call));
         assert_eq!(
             effects,
             vec![TargetEffect {
@@ -379,7 +382,7 @@ mod tests {
             data: Bytes::new(),
         }
         .abi_encode();
-        let effects = decode_target_effects(&tx(TOKEN, U256::ZERO, data, Operation::CALL));
+        let effects = decode_target_effects(&tx(TOKEN, U256::ZERO, data, Operation::Call));
         assert_eq!(
             effects,
             vec![TargetEffect {
@@ -405,7 +408,7 @@ mod tests {
             data: Bytes::new(),
         }
         .abi_encode();
-        let effects = decode_target_effects(&tx(TOKEN, U256::ZERO, data, Operation::CALL));
+        let effects = decode_target_effects(&tx(TOKEN, U256::ZERO, data, Operation::Call));
         assert_eq!(
             effects,
             vec![TargetEffect {
@@ -423,15 +426,15 @@ mod tests {
         }
         .abi_encode();
         let data = multisend(&[
-            pack(Operation::CALL, RECIPIENT, U256::from(2u64), &[]),
-            pack(Operation::CALL, TOKEN, U256::ZERO, &approve_data),
+            pack(Operation::Call, RECIPIENT, U256::from(2u64), &[]),
+            pack(Operation::Call, TOKEN, U256::ZERO, &approve_data),
         ]);
 
         let effects = decode_target_effects(&tx(
             address!("218543288004CD07832472D464648173c77D7eB7"),
             U256::ZERO,
             data,
-            Operation::DELEGATECALL,
+            Operation::DelegateCall,
         ));
 
         assert_eq!(

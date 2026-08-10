@@ -1,7 +1,9 @@
-use crate::bindings::consensus::SafeTransaction;
 use alloy::primitives::{Address, U256};
-use safe_tx::rule::RuleId;
-use safe_tx::target_effects::{EffectKind, decode_target_effects};
+use safe_tx::{
+    rule::RuleId,
+    target_effects::{EffectKind, decode_target_effects},
+    types::SafeTransaction,
+};
 use std::{borrow::Cow, collections::HashSet};
 
 /// A [`StaticChecker`]'s verdict on a proposed oracle transaction: whether to
@@ -112,10 +114,8 @@ impl StaticChecker {
     }
 
     pub fn check(&self, tx: &SafeTransaction) -> Decision {
-        let shared_tx: safe_tx::types::SafeTransaction = tx.into();
-
         for check in &self.checks {
-            if let Err(rule) = check.evaluate(&shared_tx) {
+            if let Err(rule) = check.evaluate(tx) {
                 return Decision::denied(rule);
             }
         }
@@ -187,7 +187,7 @@ mod tests {
         let decision = checker.check(&SafeTransaction {
             safe: A1,
             to: A2,
-            operation: crate::bindings::consensus::Operation::DELEGATECALL,
+            operation: safe_tx::types::Operation::DelegateCall,
             ..Default::default()
         });
         assert!(!decision.approve);

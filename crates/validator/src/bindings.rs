@@ -31,7 +31,7 @@ sol! {
     /// `sol!` requires custom types used as event/struct fields to be
     /// declared in the same macro invocation, so this ABI-decoding copy
     /// can't be replaced with a `use` of [`safe_tx::types::Operation`] --
-    /// [`From`] converts one into the other at the point an event is
+    /// [`TryFrom`] converts one into the other at the point an event is
     /// consumed, so the rest of the validator only ever sees the shared
     /// `safe-tx` type.
     #[derive(Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -272,26 +272,26 @@ sol! {
     }
 }
 
-impl From<&SafeTransaction> for safe_tx::types::SafeTransaction {
-    fn from(tx: &SafeTransaction) -> Self {
-        let operation = match tx.operation {
-            Operation::CALL => safe_tx::types::Operation::CALL,
-            Operation::DELEGATECALL => safe_tx::types::Operation::DELEGATECALL,
-            Operation::__Invalid => safe_tx::types::Operation::__Invalid,
-        };
-        safe_tx::types::SafeTransaction {
-            chainId: tx.chainId,
+/// Fallible because `sol!` decodes an out-of-range `Enum.Operation` byte into
+/// its hidden `__Invalid` variant instead of erroring, and
+/// [`safe_tx::types::Operation`] deliberately has nowhere to put it.
+impl TryFrom<&SafeTransaction> for safe_tx::types::SafeTransaction {
+    type Error = safe_tx::types::InvalidOperation;
+
+    fn try_from(tx: &SafeTransaction) -> Result<Self, Self::Error> {
+        Ok(safe_tx::types::SafeTransaction {
+            chain_id: tx.chainId,
             safe: tx.safe,
             to: tx.to,
             value: tx.value,
             data: tx.data.clone(),
-            operation,
-            safeTxGas: tx.safeTxGas,
-            baseGas: tx.baseGas,
-            gasPrice: tx.gasPrice,
-            gasToken: tx.gasToken,
-            refundReceiver: tx.refundReceiver,
+            operation: u8::from(tx.operation).try_into()?,
+            safe_tx_gas: tx.safeTxGas,
+            base_gas: tx.baseGas,
+            gas_price: tx.gasPrice,
+            gas_token: tx.gasToken,
+            refund_receiver: tx.refundReceiver,
             nonce: tx.nonce,
-        }
+        })
     }
 }

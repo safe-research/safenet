@@ -63,12 +63,12 @@ impl From<&SafeTransaction> for SafeTx {
             to: tx.to,
             value: tx.value,
             data: tx.data.clone(),
-            operation: tx.operation as u8,
-            safeTxGas: tx.safeTxGas,
-            baseGas: tx.baseGas,
-            gasPrice: tx.gasPrice,
-            gasToken: tx.gasToken,
-            refundReceiver: tx.refundReceiver,
+            operation: tx.operation.into(),
+            safeTxGas: tx.safe_tx_gas,
+            baseGas: tx.base_gas,
+            gasPrice: tx.gas_price,
+            gasToken: tx.gas_token,
+            refundReceiver: tx.refund_receiver,
             nonce: tx.nonce,
         }
     }
@@ -86,7 +86,7 @@ pub fn safe_tx_struct_hash(tx: &SafeTransaction) -> B256 {
 /// The classic Safe transaction hash: `tx`'s `SafeTx` struct hashed in
 /// the target Safe's own domain (`chainId`/`safe`).
 pub fn safe_tx_hash(tx: &SafeTransaction) -> B256 {
-    let domain = Eip712Domain::new(None, None, Some(tx.chainId), Some(tx.safe), None);
+    let domain = Eip712Domain::new(None, None, Some(tx.chain_id), Some(tx.safe), None);
     SafeTx::from(tx).eip712_signing_hash(&domain)
 }
 
@@ -181,17 +181,17 @@ mod tests {
 
     fn safe_tx() -> SafeTransaction {
         SafeTransaction {
-            chainId: U256::from(1u64),
+            chain_id: U256::from(1u64),
             safe: TEST_ADDRESS,
             to: TEST_ADDRESS,
             value: U256::ZERO,
             data: Bytes::new(),
-            operation: Operation::CALL,
-            safeTxGas: U256::ZERO,
-            baseGas: U256::ZERO,
-            gasPrice: U256::ZERO,
-            gasToken: Address::ZERO,
-            refundReceiver: Address::ZERO,
+            operation: Operation::Call,
+            safe_tx_gas: U256::ZERO,
+            base_gas: U256::ZERO,
+            gas_price: U256::ZERO,
+            gas_token: Address::ZERO,
+            refund_receiver: Address::ZERO,
             nonce: U256::ZERO,
         }
     }

@@ -26,7 +26,18 @@ impl Transition {
             return (state, Vec::new());
         };
 
-        let transaction: safe_tx::types::SafeTransaction = (&event.transaction).into();
+        let transaction = match safe_tx::types::SafeTransaction::try_from(&event.transaction) {
+            Ok(transaction) => transaction,
+            Err(err) => {
+                tracing::warn!(
+                    ?epoch,
+                    safe_tx_hash = %event.safeTxHash,
+                    %err,
+                    "ignoring transaction proposal that no Safe could execute"
+                );
+                return (state, Vec::new());
+            }
+        };
         let message = self.consensus.transaction_packet_hash(epoch, &transaction);
 
         // Prevent duplicate ongoing transaction proposals. This is to prevent
@@ -129,7 +140,19 @@ impl Transition {
             return (state, Vec::new());
         }
 
-        let transaction: safe_tx::types::SafeTransaction = (&event.transaction).into();
+        let transaction = match safe_tx::types::SafeTransaction::try_from(&event.transaction) {
+            Ok(transaction) => transaction,
+            Err(err) => {
+                tracing::warn!(
+                    ?epoch,
+                    oracle = %event.oracle,
+                    safe_tx_hash = %event.safeTxHash,
+                    %err,
+                    "ignoring oracle transaction proposal that no Safe could execute"
+                );
+                return (state, Vec::new());
+            }
+        };
         let message =
             self.consensus
                 .oracle_transaction_packet_hash(epoch, event.oracle, &transaction);

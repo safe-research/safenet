@@ -63,9 +63,10 @@ use alloy::{
     sol_types::{Eip712Domain, SolCall, SolStruct, SolValue, eip712_domain},
 };
 use safe_tx::{
+    bindings::erc20::approveCall,
     multi_send::decode_multi_send_call,
     rule::RuleId,
-    types::{Operation, SafeTransaction, erc20::approveCall},
+    types::{Operation, SafeTransaction},
 };
 use serde::Deserialize;
 
@@ -437,7 +438,7 @@ impl Checker for CowChecker {
     async fn check(&self, transaction: &SafeTransaction) -> CheckOutcome {
         if !SUPPORTED_CHAIN_IDS
             .iter()
-            .any(|&id| transaction.chainId == U256::from(id))
+            .any(|&id| transaction.chain_id == U256::from(id))
         {
             return CheckOutcome::Unknown;
         }
@@ -449,7 +450,7 @@ impl Checker for CowChecker {
         }
 
         let presig_check = self
-            .check_presignature_batch(transaction.safe, transaction.chainId, &calls)
+            .check_presignature_batch(transaction.safe, transaction.chain_id, &calls)
             .await;
         if presig_check != CheckOutcome::Unknown {
             return presig_check;
@@ -480,7 +481,7 @@ fn sub_transactions(tx: &SafeTransaction) -> Vec<SafeTransaction> {
 /// on) and amount, needed by [`CowChecker::check_twap_batch`]'s
 /// amount-overlap check.
 fn vault_relayer_approval_amount(tx: &SafeTransaction) -> Option<(Address, U256)> {
-    if tx.operation != Operation::CALL || !tx.value.is_zero() {
+    if tx.operation != Operation::Call || !tx.value.is_zero() {
         return None;
     }
     let call = approveCall::abi_decode(&tx.data).ok()?;
@@ -498,7 +499,7 @@ fn approves_vault_relayer(tx: &SafeTransaction) -> bool {
 /// [`vault_relayer_approval_amount`] for why `DELEGATECALL` and nonzero `tx.value`
 /// are excluded even to a legitimate address.
 fn is_presignature(tx: &SafeTransaction) -> bool {
-    tx.operation == Operation::CALL
+    tx.operation == Operation::Call
         && tx.value.is_zero()
         && tx.to == GP_V2_SETTLEMENT
         && setPreSignatureCall::abi_decode(&tx.data).is_ok()
@@ -508,7 +509,7 @@ fn is_presignature(tx: &SafeTransaction) -> bool {
 /// [`vault_relayer_approval_amount`] for why `DELEGATECALL` and nonzero `tx.value`
 /// are excluded even to a legitimate address.
 fn is_twap_create(tx: &SafeTransaction) -> bool {
-    tx.operation == Operation::CALL
+    tx.operation == Operation::Call
         && tx.value.is_zero()
         && tx.to == COMPOSABLE_COW
         && createCall::abi_decode(&tx.data).is_ok_and(|call| call.params.handler == TWAP_HANDLER)
@@ -543,7 +544,7 @@ fn decode_approval_and_twap<'a>(
 /// unguessed rather than wrapping) — either way the caller treats that as
 /// inconclusive, not denied.
 fn twap_order_terms(tx: &SafeTransaction) -> Option<(Address, Address, U256)> {
-    if tx.operation != Operation::CALL || !tx.value.is_zero() || tx.to != COMPOSABLE_COW {
+    if tx.operation != Operation::Call || !tx.value.is_zero() || tx.to != COMPOSABLE_COW {
         return None;
     };
     let create = createCall::abi_decode(&tx.data).ok()?;
@@ -561,7 +562,7 @@ fn twap_order_terms(tx: &SafeTransaction) -> Option<(Address, Address, U256)> {
 /// why `DELEGATECALL` and nonzero `tx.value` are excluded even to a
 /// legitimate address.
 fn presignature_order_uid(tx: &SafeTransaction) -> Option<Bytes> {
-    if tx.operation != Operation::CALL || !tx.value.is_zero() || tx.to != GP_V2_SETTLEMENT {
+    if tx.operation != Operation::Call || !tx.value.is_zero() || tx.to != GP_V2_SETTLEMENT {
         return None;
     }
     setPreSignatureCall::abi_decode(&tx.data)
@@ -642,7 +643,7 @@ fn deserialize_decimal_u256<'de, D: serde::Deserializer<'de>>(de: D) -> Result<U
 #[cfg(test)]
 mod tests {
     use super::*;
-    use safe_tx::types::multi_send_bindings;
+    use safe_tx::bindings::multi_send;
 
     const SAFE: Address = Address::new([1u8; 20]);
     const TOKEN: Address = Address::new([2u8; 20]);
@@ -712,7 +713,7 @@ mod tests {
 
     fn tx(to: Address, data: Vec<u8>, operation: Operation) -> SafeTransaction {
         SafeTransaction {
-            chainId: U256::from(1u64),
+            chain_id: U256::from(1u64),
             safe: SAFE,
             to,
             data: data.into(),
@@ -796,7 +797,7 @@ mod tests {
     fn multisend(sub_txs: &[Vec<u8>]) -> Bytes {
         let transactions: Vec<u8> = sub_txs.iter().flatten().cloned().collect();
         Bytes::from(
-            multi_send_bindings::multiSendCall {
+            multi_send::multiSendCall {
                 transactions: Bytes::from(transactions),
             }
             .abi_encode(),
@@ -813,17 +814,17 @@ mod tests {
         }
         .abi_encode();
         let data = multisend(&[
-            pack(Operation::CALL, TOKEN, &approve),
-            pack(Operation::CALL, GP_V2_SETTLEMENT, &presig),
+            pack(Operation::Call, TOKEN, &approve),
+            pack(Operation::Call, GP_V2_SETTLEMENT, &presig),
         ]);
-        tx(MULTI_SEND, data.into(), Operation::DELEGATECALL)
+        tx(MULTI_SEND, data.into(), Operation::DelegateCall)
     }
 
     #[tokio::test]
     async fn no_opinion_when_no_relayer_approval_is_present() {
         let data = approve_data(Address::new([9u8; 20]));
         assert_eq!(
-            check(&tx(TOKEN, data, Operation::CALL)).await,
+            check(&tx(TOKEN, data, Operation::Call)).await,
             CheckOutcome::Unknown
         );
     }
@@ -832,7 +833,7 @@ mod tests {
     async fn denies_a_standalone_approval_to_the_relayer() {
         let data = approve_data(GP_V2_VAULT_RELAYER);
         assert_eq!(
-            check(&tx(TOKEN, data, Operation::CALL)).await,
+            check(&tx(TOKEN, data, Operation::Call)).await,
             CheckOutcome::Denied(RuleId::R4_4AuthorizationTarget)
         );
     }
@@ -846,11 +847,11 @@ mod tests {
         }
         .abi_encode();
         let data = multisend(&[
-            pack(Operation::CALL, TOKEN, &approve),
-            pack(Operation::CALL, GP_V2_SETTLEMENT, &presig),
+            pack(Operation::Call, TOKEN, &approve),
+            pack(Operation::Call, GP_V2_SETTLEMENT, &presig),
         ]);
         assert_eq!(
-            check(&tx(MULTI_SEND, data.into(), Operation::DELEGATECALL)).await,
+            check(&tx(MULTI_SEND, data.into(), Operation::DelegateCall)).await,
             CheckOutcome::Unknown
         );
     }
@@ -860,11 +861,11 @@ mod tests {
         let approve = approve_amount_data(GP_V2_VAULT_RELAYER, U256::from(30u64));
         let create = twap_create_data(U256::from(10u64), U256::from(3u64));
         let data = multisend(&[
-            pack(Operation::CALL, TOKEN, &approve),
-            pack(Operation::CALL, COMPOSABLE_COW, &create),
+            pack(Operation::Call, TOKEN, &approve),
+            pack(Operation::Call, COMPOSABLE_COW, &create),
         ]);
         assert_eq!(
-            check(&tx(MULTI_SEND, data.into(), Operation::DELEGATECALL)).await,
+            check(&tx(MULTI_SEND, data.into(), Operation::DelegateCall)).await,
             CheckOutcome::Approved
         );
     }
@@ -874,11 +875,11 @@ mod tests {
         let approve = approve_amount_data(GP_V2_VAULT_RELAYER, U256::from(1_000u64));
         let create = twap_create_data(U256::from(10u64), U256::from(3u64));
         let data = multisend(&[
-            pack(Operation::CALL, TOKEN, &approve),
-            pack(Operation::CALL, COMPOSABLE_COW, &create),
+            pack(Operation::Call, TOKEN, &approve),
+            pack(Operation::Call, COMPOSABLE_COW, &create),
         ]);
         assert_eq!(
-            check(&tx(MULTI_SEND, data.into(), Operation::DELEGATECALL)).await,
+            check(&tx(MULTI_SEND, data.into(), Operation::DelegateCall)).await,
             CheckOutcome::Denied(RuleId::R4_5ExcessiveApproval)
         );
     }
@@ -895,11 +896,11 @@ mod tests {
             U256::from(3u64),
         );
         let data = multisend(&[
-            pack(Operation::CALL, TOKEN, &approve),
-            pack(Operation::CALL, COMPOSABLE_COW, &create),
+            pack(Operation::Call, TOKEN, &approve),
+            pack(Operation::Call, COMPOSABLE_COW, &create),
         ]);
         assert_eq!(
-            check(&tx(MULTI_SEND, data.into(), Operation::DELEGATECALL)).await,
+            check(&tx(MULTI_SEND, data.into(), Operation::DelegateCall)).await,
             CheckOutcome::Denied(RuleId::R4_5ExcessiveApproval)
         );
     }
@@ -912,11 +913,11 @@ mod tests {
         let approve = approve_amount_data(GP_V2_VAULT_RELAYER, U256::from(29u64));
         let create = twap_create_data(U256::from(10u64), U256::from(3u64));
         let data = multisend(&[
-            pack(Operation::CALL, TOKEN, &approve),
-            pack(Operation::CALL, COMPOSABLE_COW, &create),
+            pack(Operation::Call, TOKEN, &approve),
+            pack(Operation::Call, COMPOSABLE_COW, &create),
         ]);
         assert_eq!(
-            check(&tx(MULTI_SEND, data.into(), Operation::DELEGATECALL)).await,
+            check(&tx(MULTI_SEND, data.into(), Operation::DelegateCall)).await,
             CheckOutcome::Approved
         );
     }
@@ -930,11 +931,11 @@ mod tests {
             U256::from(3u64),
         );
         let data = multisend(&[
-            pack(Operation::CALL, TOKEN, &approve),
-            pack(Operation::CALL, COMPOSABLE_COW, &create),
+            pack(Operation::Call, TOKEN, &approve),
+            pack(Operation::Call, COMPOSABLE_COW, &create),
         ]);
         assert_eq!(
-            check(&tx(MULTI_SEND, data.into(), Operation::DELEGATECALL)).await,
+            check(&tx(MULTI_SEND, data.into(), Operation::DelegateCall)).await,
             CheckOutcome::Approved
         );
     }
@@ -948,11 +949,11 @@ mod tests {
             U256::from(3u64),
         );
         let data = multisend(&[
-            pack(Operation::CALL, TOKEN, &approve),
-            pack(Operation::CALL, COMPOSABLE_COW, &create),
+            pack(Operation::Call, TOKEN, &approve),
+            pack(Operation::Call, COMPOSABLE_COW, &create),
         ]);
         assert_eq!(
-            check(&tx(MULTI_SEND, data.into(), Operation::DELEGATECALL)).await,
+            check(&tx(MULTI_SEND, data.into(), Operation::DelegateCall)).await,
             CheckOutcome::Denied(RuleId::R4_4AuthorizationTarget)
         );
     }
@@ -964,12 +965,12 @@ mod tests {
         let create = twap_create_data(U256::from(10u64), U256::from(3u64));
         let extra = approve_data(Address::new([9u8; 20]));
         let data = multisend(&[
-            pack(Operation::CALL, TOKEN, &approve),
-            pack(Operation::CALL, COMPOSABLE_COW, &create),
-            pack(Operation::CALL, TOKEN, &extra),
+            pack(Operation::Call, TOKEN, &approve),
+            pack(Operation::Call, COMPOSABLE_COW, &create),
+            pack(Operation::Call, TOKEN, &extra),
         ]);
         assert_eq!(
-            check(&tx(MULTI_SEND, data.into(), Operation::DELEGATECALL)).await,
+            check(&tx(MULTI_SEND, data.into(), Operation::DelegateCall)).await,
             CheckOutcome::Unknown
         );
     }
@@ -979,11 +980,11 @@ mod tests {
         let unrelated_approve = approve_data(Address::new([9u8; 20]));
         let create = twap_create_data(U256::from(10u64), U256::from(3u64));
         let data = multisend(&[
-            pack(Operation::CALL, TOKEN, &unrelated_approve),
-            pack(Operation::CALL, COMPOSABLE_COW, &create),
+            pack(Operation::Call, TOKEN, &unrelated_approve),
+            pack(Operation::Call, COMPOSABLE_COW, &create),
         ]);
         assert_eq!(
-            check(&tx(MULTI_SEND, data.into(), Operation::DELEGATECALL)).await,
+            check(&tx(MULTI_SEND, data.into(), Operation::DelegateCall)).await,
             CheckOutcome::Unknown
         );
     }
@@ -991,9 +992,9 @@ mod tests {
     #[tokio::test]
     async fn denies_a_batched_approval_without_a_recognized_trigger() {
         let approve = approve_data(GP_V2_VAULT_RELAYER);
-        let data = multisend(&[pack(Operation::CALL, TOKEN, &approve)]);
+        let data = multisend(&[pack(Operation::Call, TOKEN, &approve)]);
         assert_eq!(
-            check(&tx(MULTI_SEND, data.into(), Operation::DELEGATECALL)).await,
+            check(&tx(MULTI_SEND, data.into(), Operation::DelegateCall)).await,
             CheckOutcome::Denied(RuleId::R4_4AuthorizationTarget)
         );
     }
@@ -1011,11 +1012,11 @@ mod tests {
         }
         .abi_encode();
         let data = multisend(&[
-            pack(Operation::CALL, TOKEN, &approve),
-            pack(Operation::CALL, COMPOSABLE_COW, &create),
+            pack(Operation::Call, TOKEN, &approve),
+            pack(Operation::Call, COMPOSABLE_COW, &create),
         ]);
         assert_eq!(
-            check(&tx(MULTI_SEND, data.into(), Operation::DELEGATECALL)).await,
+            check(&tx(MULTI_SEND, data.into(), Operation::DelegateCall)).await,
             CheckOutcome::Denied(RuleId::R4_4AuthorizationTarget)
         );
     }
@@ -1027,7 +1028,7 @@ mod tests {
     async fn no_opinion_when_the_approval_itself_is_a_delegatecall() {
         let data = approve_data(GP_V2_VAULT_RELAYER);
         assert_eq!(
-            check(&tx(TOKEN, data, Operation::DELEGATECALL)).await,
+            check(&tx(TOKEN, data, Operation::DelegateCall)).await,
             CheckOutcome::Unknown
         );
     }
@@ -1041,11 +1042,11 @@ mod tests {
         }
         .abi_encode();
         let data = multisend(&[
-            pack(Operation::CALL, TOKEN, &approve),
-            pack(Operation::DELEGATECALL, GP_V2_SETTLEMENT, &presig),
+            pack(Operation::Call, TOKEN, &approve),
+            pack(Operation::DelegateCall, GP_V2_SETTLEMENT, &presig),
         ]);
         assert_eq!(
-            check(&tx(MULTI_SEND, data.into(), Operation::DELEGATECALL)).await,
+            check(&tx(MULTI_SEND, data.into(), Operation::DelegateCall)).await,
             CheckOutcome::Denied(RuleId::R4_4AuthorizationTarget)
         );
     }
@@ -1063,11 +1064,11 @@ mod tests {
         }
         .abi_encode();
         let data = multisend(&[
-            pack(Operation::CALL, TOKEN, &approve),
-            pack(Operation::DELEGATECALL, COMPOSABLE_COW, &create),
+            pack(Operation::Call, TOKEN, &approve),
+            pack(Operation::DelegateCall, COMPOSABLE_COW, &create),
         ]);
         assert_eq!(
-            check(&tx(MULTI_SEND, data.into(), Operation::DELEGATECALL)).await,
+            check(&tx(MULTI_SEND, data.into(), Operation::DelegateCall)).await,
             CheckOutcome::Denied(RuleId::R4_4AuthorizationTarget)
         );
     }
@@ -1078,7 +1079,7 @@ mod tests {
         let data = approve_data(GP_V2_VAULT_RELAYER);
         let transaction = SafeTransaction {
             value: U256::from(1u64),
-            ..tx(TOKEN, data, Operation::CALL)
+            ..tx(TOKEN, data, Operation::Call)
         };
         assert_eq!(check(&transaction).await, CheckOutcome::Unknown);
     }
@@ -1092,11 +1093,11 @@ mod tests {
         }
         .abi_encode();
         let data = multisend(&[
-            pack(Operation::CALL, TOKEN, &approve),
-            pack_with_value(Operation::CALL, GP_V2_SETTLEMENT, U256::from(1u64), &presig),
+            pack(Operation::Call, TOKEN, &approve),
+            pack_with_value(Operation::Call, GP_V2_SETTLEMENT, U256::from(1u64), &presig),
         ]);
         assert_eq!(
-            check(&tx(MULTI_SEND, data.into(), Operation::DELEGATECALL)).await,
+            check(&tx(MULTI_SEND, data.into(), Operation::DelegateCall)).await,
             CheckOutcome::Denied(RuleId::R4_4AuthorizationTarget)
         );
     }
@@ -1114,11 +1115,11 @@ mod tests {
         }
         .abi_encode();
         let data = multisend(&[
-            pack(Operation::CALL, TOKEN, &approve),
-            pack_with_value(Operation::CALL, COMPOSABLE_COW, U256::from(1u64), &create),
+            pack(Operation::Call, TOKEN, &approve),
+            pack_with_value(Operation::Call, COMPOSABLE_COW, U256::from(1u64), &create),
         ]);
         assert_eq!(
-            check(&tx(MULTI_SEND, data.into(), Operation::DELEGATECALL)).await,
+            check(&tx(MULTI_SEND, data.into(), Operation::DelegateCall)).await,
             CheckOutcome::Denied(RuleId::R4_4AuthorizationTarget)
         );
     }
@@ -1127,8 +1128,8 @@ mod tests {
     async fn no_opinion_on_an_unsupported_chain() {
         let data = approve_data(GP_V2_VAULT_RELAYER);
         let transaction = SafeTransaction {
-            chainId: U256::from(137u64),
-            ..tx(TOKEN, data, Operation::CALL)
+            chain_id: U256::from(137u64),
+            ..tx(TOKEN, data, Operation::Call)
         };
         assert_eq!(check(&transaction).await, CheckOutcome::Unknown);
     }
