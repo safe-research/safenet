@@ -140,12 +140,12 @@ impl Checker for AddressPoisoningChecker {
     /// fund/transaction history, whether it's an EOA or a contract, and if
     /// so its deployment age) are needed before a first-time-looking
     /// recipient can be safely denied.
-    async fn check(&self, safe: Address, transaction: &SafeTransaction) -> CheckOutcome {
+    async fn check(&self, transaction: &SafeTransaction) -> CheckOutcome {
         let Some((candidate, kind)) = decode_target(transaction) else {
             return CheckOutcome::Unknown;
         };
         match self
-            .has_prior_interaction(transaction.to, safe, candidate, kind)
+            .has_prior_interaction(transaction.to, transaction.safe, candidate, kind)
             .await
         {
             Ok(found) => {
@@ -246,7 +246,7 @@ mod tests {
             amount: U256::from(1u64),
         }
         .abi_encode();
-        let verdict = checker(&asserter).check(SAFE, &tx(TOKEN, data)).await;
+        let verdict = checker(&asserter).check(&tx(TOKEN, data)).await;
         assert_eq!(verdict, CheckOutcome::Unknown);
     }
 
@@ -262,7 +262,7 @@ mod tests {
             amount: U256::from(1u64),
         }
         .abi_encode();
-        let verdict = checker(&asserter).check(SAFE, &tx(TOKEN, data)).await;
+        let verdict = checker(&asserter).check(&tx(TOKEN, data)).await;
         assert_eq!(verdict, CheckOutcome::Approved);
     }
 
@@ -270,7 +270,7 @@ mod tests {
     async fn no_opinion_when_calldata_is_out_of_scope() {
         // No RPC calls should even be issued when there's nothing to decode.
         let asserter = Asserter::new();
-        let verdict = checker(&asserter).check(SAFE, &tx(TOKEN, vec![])).await;
+        let verdict = checker(&asserter).check(&tx(TOKEN, vec![])).await;
         assert_eq!(verdict, CheckOutcome::Unknown);
     }
 }
