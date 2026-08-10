@@ -265,21 +265,16 @@ sol! {
 }
 
 impl TryFrom<SafeTransaction> for safe_tx::SafeTransaction {
-    type Error = Operation;
+    type Error = safe_tx::InvalidOperation;
 
     fn try_from(tx: SafeTransaction) -> Result<Self, Self::Error> {
-        let operation = match tx.operation {
-            Operation::CALL => safe_tx::Operation::CALL,
-            Operation::DELEGATECALL => safe_tx::Operation::DELEGATECALL,
-            Operation::__Invalid => return Err(Operation::__Invalid),
-        };
         Ok(safe_tx::SafeTransaction {
             chainId: tx.chainId,
             safe: tx.safe,
             to: tx.to,
             value: tx.value,
             data: tx.data,
-            operation,
+            operation: (tx.operation as u8).try_into()?,
             safeTxGas: tx.safeTxGas,
             baseGas: tx.baseGas,
             gasPrice: tx.gasPrice,

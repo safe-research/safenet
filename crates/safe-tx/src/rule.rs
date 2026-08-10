@@ -7,6 +7,9 @@
 //! implements the check giving it meaning, not declared upfront as an
 //! unused placeholder.
 
+use serde::{Deserialize, Deserializer, Serialize, Serializer, de};
+use std::borrow::Cow;
+
 /// A specific Safenet Arbitration Charter rule that a check denial maps to.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum RuleId {
@@ -73,6 +76,26 @@ pub enum RuleId {
     R4_4AuthorizationTarget,
 }
 
+impl Serialize for RuleId {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        serializer.serialize_str(self.code())
+    }
+}
+
+impl<'de> Deserialize<'de> for RuleId {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let code = Cow::<'de, str>::deserialize(deserializer)?;
+        Self::from_code(&code)
+            .ok_or_else(|| de::Error::custom(format_args!("unrecognized rule code `{code}`")))
+    }
+}
+
 impl RuleId {
     /// The rule's canonical Charter citation, e.g. `"R-4.1"`.
     pub const fn code(self) -> &'static str {
@@ -118,11 +141,20 @@ mod tests {
             RuleId::R4_4AuthorizationTarget,
         ] {
             assert_eq!(RuleId::from_code(rule.code()), Some(rule));
+            let json = serde_json::to_string(&rule).unwrap();
+            assert_eq!(json, format!("\"{}\"", rule.code()));
+            assert_eq!(serde_json::from_str::<RuleId>(&json).unwrap(), rule);
         }
     }
 
     #[test]
     fn from_code_rejects_unknown_codes() {
         assert_eq!(RuleId::from_code("R-4.99"), None);
+        let error = serde_json::from_str::<RuleId>(r#""R-4.99""#).unwrap_err();
+        assert!(
+            error
+                .to_string()
+                .contains("unrecognized rule code `R-4.99`")
+        );
     }
 }
