@@ -687,7 +687,7 @@ contract SafenetGuardTest is Test {
     function test_cancelAnnouncement_worksAfterExpiry() public {
         bytes32 h = _defaultAnnouncementHash();
         _announce(_defaultAnnouncement());
-        vm.warp(block.timestamp + ALLOW_TX_DELAY_SECONDS + ALLOW_TX_WINDOW_SECONDS + 1); // expired but present
+        vm.warp(block.timestamp + guard.getAllowTxDelay() + guard.getAllowTxWindow() + 1); // expired but present
         assertGt(_announcedActiveFrom(h), 0);
 
         _cancelAnnouncement(h);
