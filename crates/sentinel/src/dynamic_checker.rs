@@ -53,13 +53,15 @@ impl RemoteChecker {
     async fn request(
         &self,
         url: &Url,
-        safe: Address,
         transaction: &SafeTransaction,
     ) -> Result<CheckOutcome, reqwest::Error> {
         let response: Response = self
             .client
             .post(url.clone())
-            .json(&Request { safe, transaction })
+            .json(&Request {
+                safe: transaction.safe,
+                transaction,
+            })
             .send()
             .await?
             .error_for_status()?
@@ -73,7 +75,7 @@ impl RemoteChecker {
                 (true, _) => CheckOutcome::Approved,
                 (false, Some(Some(rule))) => CheckOutcome::Denied(rule),
                 (false, _) => {
-                    tracing::error!(%safe, "remote check denied without a recognized rule code");
+                    tracing::error!(safe = %transaction.safe, "remote check denied without a recognized rule code");
                     CheckOutcome::Unknown
                 }
             },
@@ -88,12 +90,12 @@ impl Checker for RemoteChecker {
     /// transaction either way, so it resolves to [`CheckOutcome::Unknown`],
     /// deferring to whatever checker runs next (or, if this is the last one
     /// in the chain, dropping the request rather than voting on it).
-    async fn check(&self, safe: Address, transaction: &SafeTransaction) -> CheckOutcome {
+    async fn check(&self, transaction: &SafeTransaction) -> CheckOutcome {
         let Some(url) = &self.url else {
             return CheckOutcome::Approved;
         };
-        self.request(url, safe, transaction).await.unwrap_or_else(|err| {
-            tracing::error!(%err, %safe, "remote check request failed; dropping the request unanswered");
+        self.request(url, transaction).await.unwrap_or_else(|err| {
+            tracing::error!(%err, safe = %transaction.safe, "remote check request failed; dropping the request unanswered");
             CheckOutcome::Unknown
         })
     }
@@ -102,13 +104,10 @@ impl Checker for RemoteChecker {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use alloy::primitives::address;
     use tokio::{
         io::{AsyncReadExt, AsyncWriteExt},
         net::TcpListener,
     };
-
-    const SAFE: Address = address!("1111111111111111111111111111111111111111");
 
     /// Serves `body` (with `status`, e.g. `"200 OK"`) to the single request
     /// a test sends, on a one-shot localhost listener.
@@ -132,7 +131,7 @@ mod tests {
     async fn approves_without_a_request_when_unconfigured() {
         let checker = RemoteChecker::new(None);
         assert_eq!(
-            checker.check(SAFE, &SafeTransaction::default()).await,
+            checker.check(&SafeTransaction::default()).await,
             CheckOutcome::Approved
         );
     }
@@ -142,7 +141,7 @@ mod tests {
         let url = respond_once("200 OK", r#"{"approve":true,"rule":null}"#).await;
         let checker = RemoteChecker::new(Some(url));
         assert_eq!(
-            checker.check(SAFE, &SafeTransaction::default()).await,
+            checker.check(&SafeTransaction::default()).await,
             CheckOutcome::Approved
         );
     }
@@ -152,7 +151,7 @@ mod tests {
         let url = respond_once("200 OK", r#"{"approve":false,"rule":"R-4.6"}"#).await;
         let checker = RemoteChecker::new(Some(url));
         assert_eq!(
-            checker.check(SAFE, &SafeTransaction::default()).await,
+            checker.check(&SafeTransaction::default()).await,
             CheckOutcome::Denied(RuleId::R4_6KnownMaliciousTarget)
         );
     }
@@ -162,7 +161,7 @@ mod tests {
         let url = respond_once("200 OK", r#"{"approve":false,"rule":"not-a-real-rule"}"#).await;
         let checker = RemoteChecker::new(Some(url));
         assert_eq!(
-            checker.check(SAFE, &SafeTransaction::default()).await,
+            checker.check(&SafeTransaction::default()).await,
             CheckOutcome::Unknown
         );
     }
@@ -175,7 +174,7 @@ mod tests {
 
         let checker = RemoteChecker::new(Some(url));
         assert_eq!(
-            checker.check(SAFE, &SafeTransaction::default()).await,
+            checker.check(&SafeTransaction::default()).await,
             CheckOutcome::Unknown
         );
     }

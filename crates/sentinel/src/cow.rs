@@ -434,7 +434,7 @@ impl Checker for CowChecker {
     /// [`CowChecker::check_presignature_batch`] and
     /// [`CowChecker::check_twap_batch`] against `transaction`'s sub-calls,
     /// returning the first non-[`CheckOutcome::Unknown`] result.
-    async fn check(&self, safe: Address, transaction: &SafeTransaction) -> CheckOutcome {
+    async fn check(&self, transaction: &SafeTransaction) -> CheckOutcome {
         if !SUPPORTED_CHAIN_IDS
             .iter()
             .any(|&id| transaction.chainId == U256::from(id))
@@ -449,13 +449,13 @@ impl Checker for CowChecker {
         }
 
         let presig_check = self
-            .check_presignature_batch(safe, transaction.chainId, &calls)
+            .check_presignature_batch(transaction.safe, transaction.chainId, &calls)
             .await;
         if presig_check != CheckOutcome::Unknown {
             return presig_check;
         }
 
-        let twap_check = self.check_twap_batch(safe, &calls).await;
+        let twap_check = self.check_twap_batch(transaction.safe, &calls).await;
         if twap_check != CheckOutcome::Unknown {
             return twap_check;
         }
@@ -706,7 +706,7 @@ mod tests {
     /// keeps those tests network-free.
     async fn check(transaction: &SafeTransaction) -> CheckOutcome {
         CowChecker::with_order_api(FakeOrderApi::NotFound)
-            .check(SAFE, transaction)
+            .check(transaction)
             .await
     }
 

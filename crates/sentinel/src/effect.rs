@@ -60,7 +60,7 @@ impl EffectHandler<Effect, Resume> for Handler {
             } => {
                 let mut outcome = CheckOutcome::Unknown;
                 for checker in &self.checkers {
-                    outcome = checker.check(transaction.safe, &transaction).await;
+                    outcome = checker.check(&transaction).await;
                     if outcome != CheckOutcome::Unknown {
                         break;
                     }

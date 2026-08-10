@@ -15,7 +15,6 @@
 //! one's outcome beyond stop-on-first-answer) and is expected to be
 //! iterated on.
 
-use alloy::primitives::Address;
 use safe_tx::{rule::RuleId, types::SafeTransaction};
 
 /// The result of running one checker in [`crate::effect::Handler`]'s chain.
@@ -36,5 +35,5 @@ pub enum CheckOutcome {
 /// One check in [`crate::effect::Handler`]'s dynamic-check chain.
 #[async_trait::async_trait]
 pub trait Checker: Send + Sync {
-    async fn check(&self, safe: Address, transaction: &SafeTransaction) -> CheckOutcome;
+    async fn check(&self, transaction: &SafeTransaction) -> CheckOutcome;
 }
