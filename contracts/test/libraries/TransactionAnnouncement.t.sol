@@ -3,6 +3,7 @@ pragma solidity ^0.8.30;
 
 import {Test} from "@forge-std/Test.sol";
 import {TransactionAnnouncement} from "@/libraries/TransactionAnnouncement.sol";
+import {Enum} from "@safe/interfaces/Enum.sol";
 
 /**
  * @title TransactionAnnouncementTest
@@ -29,6 +30,37 @@ contract TransactionAnnouncementTest is Test {
 
     function callCancel(address safe, bytes32 id) external {
         state.cancel(safe, id);
+    }
+
+    /// @dev Golden vector: pins the whole `hash` encoding (all nine fields, their order, and the
+    ///      pre-hashing of `data`) against an independently reconstructed preimage. A dropped or reordered
+    ///      field changes the result and fails this test.
+    function test_hash_pinsFieldLayout() public pure {
+        TransactionAnnouncement.AnnouncedTransaction memory t = TransactionAnnouncement.AnnouncedTransaction({
+            to: address(0xBEEF),
+            value: 1 ether,
+            data: hex"deadbeef",
+            operation: Enum.Operation.Call,
+            safeTxGas: 111,
+            baseGas: 222,
+            gasPrice: 333,
+            gasToken: address(0x6A5),
+            refundReceiver: address(0xFEE)
+        });
+        bytes32 expected = keccak256(
+            abi.encode(
+                t.to,
+                t.value,
+                keccak256(t.data),
+                t.operation,
+                t.safeTxGas,
+                t.baseGas,
+                t.gasPrice,
+                t.gasToken,
+                t.refundReceiver
+            )
+        );
+        assertEq(TransactionAnnouncement.hash(t), expected, "hash must encode all nine fields with data pre-hashed");
     }
 
     function test_announce_setsWindow() public {

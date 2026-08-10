@@ -9,6 +9,12 @@ import {ForgeSecp256k1} from "@test/util/ForgeSecp256k1.sol";
 contract FROSTTest is Test {
     using ForgeSecp256k1 for ForgeSecp256k1.P;
 
+    /// @dev External wrapper so `vm.expectRevert` can catch a revert from the internal `FROST.verify`
+    ///      (an inlined internal call reverts in the test's own frame, which the cheatcode cannot match).
+    function callVerify(Secp256k1.Point memory y, FROST.Signature memory signature, bytes32 message) external view {
+        FROST.verify(y, signature, message);
+    }
+
     function test_Identifier() public view {
         address participant = 0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045;
         uint256 id = FROST.identifier(participant);
@@ -80,6 +86,23 @@ contract FROSTTest is Test {
         bytes32 message = keccak256("hello");
 
         FROST.verify(y, FROST.Signature(r, z), message);
+    }
+
+    /// @dev A non-canonical scalar `z >= N` must be rejected by the range check (before any curve
+    ///      arithmetic). Uses the boundary value `z == N`, the smallest non-canonical scalar.
+    function test_Verify_revertsOnNonCanonicalScalar() public {
+        Secp256k1.Point memory y = Secp256k1.Point({
+            x: 0x8318535b54105d4a7aae60c08fc45f9687181b4fdfc625bd1a753fa7397fed75,
+            y: 0x3547f11ca8696646f2f3acb08e31016afac23e630c5d11f59f61fef57b0d2aa5
+        });
+        Secp256k1.Point memory r = Secp256k1.Point({
+            x: 0x8a3802114b5b6369ae8ba7822bdb029dee0d53fc416225d9198959b83f73215b,
+            y: 0x3020f80cae8f515d58686d5c6e4f1d027a1671348b6402f4e43ce525bda00fbc
+        });
+        bytes32 message = keccak256("hello");
+
+        vm.expectRevert(FROST.InvalidScalar.selector);
+        this.callVerify(y, FROST.Signature(r, Secp256k1.N), message);
     }
 
     function test_KeyGenChallenge() public view {

@@ -350,6 +350,17 @@ contract SafenetGuardTest is Test {
         );
     }
 
+    /// @notice The consensus domain separator is derived from the configured Consensus deployment. Every
+    ///         other test reads it back from the guard, so this is the check that would catch a mis-wired
+    ///         constructor (wrong chain id or Consensus address).
+    function test_constructor_derivesConsensusDomainSeparator() public view {
+        assertEq(
+            guard.getConsensusDomainSeparator(),
+            ConsensusMessages.domain(CONSENSUS_CHAIN_ID, CONSENSUS_ADDR),
+            "domain separator must be derived from the configured Consensus deployment"
+        );
+    }
+
     // ============================================================
     // CHECK TRANSACTION — ATTESTATION
     // ============================================================
@@ -517,6 +528,18 @@ contract SafenetGuardTest is Test {
         _execSafeTxWithNonce(TX_TO, TX_VALUE, TX_DATA, TX_OP, nonce);
     }
 
+    /// @notice A CALL announcement must not authorise a DELEGATECALL with otherwise-identical parameters:
+    ///         the announcement hash separates `operation`, so no matured announcement matches and
+    ///         execution is refused (a privilege-escalation-class guard).
+    function test_announcement_callCannotAuthorizeDelegatecall() public {
+        _announce(_defaultAnnouncement()); // operation == CALL
+        vm.warp(block.timestamp + ALLOW_TX_DELAY_SECONDS);
+
+        uint256 nonce = safe.nonce();
+        vm.expectRevert(ISafenetGuard.AttestationNotFound.selector);
+        _execSafeTxWithNonce(TX_TO, TX_VALUE, TX_DATA, Enum.Operation.DelegateCall, nonce);
+    }
+
     function test_announcement_emitsExecutedViaAllowance() public {
         bytes32 h = _defaultAnnouncementHash();
         _announce(_defaultAnnouncement());
@@ -657,6 +680,18 @@ contract SafenetGuardTest is Test {
         uint256 nonce = safe.nonce();
         vm.expectRevert(ISafenetGuard.AttestationNotFound.selector);
         _execSafeTxWithNonce(TX_TO, TX_VALUE, TX_DATA, TX_OP, nonce);
+    }
+
+    /// @notice An expired announcement can still be cancelled (a pending, active, or expired entry can all
+    ///         be removed), so an owner can retract a stale queued transaction.
+    function test_cancelAnnouncement_worksAfterExpiry() public {
+        bytes32 h = _defaultAnnouncementHash();
+        _announce(_defaultAnnouncement());
+        vm.warp(block.timestamp + ALLOW_TX_DELAY_SECONDS + ALLOW_TX_WINDOW_SECONDS + 1); // expired but present
+        assertGt(_announcedActiveFrom(h), 0);
+
+        _cancelAnnouncement(h);
+        assertEq(_announcedActiveFrom(h), 0);
     }
 
     /// @notice D-02: an expired announcement is renewable in place — re-announcing overwrites it with
