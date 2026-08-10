@@ -59,7 +59,7 @@ pub fn check_transaction(tx: &SafeTransaction) -> Result<(), RuleId> {
 /// Article IV Part A settings-change guarantee. `None` if `tx` isn't a
 /// self-call at all — not this rule's concern.
 fn check_settings_change(tx: &SafeTransaction) -> Option<Result<(), RuleId>> {
-    if tx.operation != Operation::CALL {
+    if tx.operation != Operation::Call {
         return None;
     }
     Some(if check_calls(tx) {
@@ -73,7 +73,7 @@ fn check_settings_change(tx: &SafeTransaction) -> Option<Result<(), RuleId>> {
 /// a delegatecall at all — not this rule's concern. Allowed via either a
 /// known delegatecall target or a known MultiSend contract.
 fn check_delegatecall_integrity(tx: &SafeTransaction) -> Option<Result<(), RuleId>> {
-    if tx.operation != Operation::DELEGATECALL {
+    if tx.operation != Operation::DelegateCall {
         return None;
     }
     Some(if check_delegate_calls(tx) || check_multi_send(tx) {
@@ -86,7 +86,7 @@ fn check_delegatecall_integrity(tx: &SafeTransaction) -> Option<Result<(), RuleI
 /// Calls to other contracts are freely allowed; self-calls are restricted to a
 /// whitelist of Safe management functions.
 fn check_calls(tx: &SafeTransaction) -> bool {
-    if tx.operation != Operation::CALL {
+    if tx.operation != Operation::Call {
         return false;
     }
     if tx.safe != tx.to {
@@ -156,7 +156,7 @@ fn check_self_calls(tx: &SafeTransaction) -> bool {
 /// Delegate calls are restricted to known Safe migration and signing-library
 /// contracts, each with a fixed set of allowed function selectors.
 fn check_delegate_calls(tx: &SafeTransaction) -> bool {
-    if tx.operation != Operation::DELEGATECALL {
+    if tx.operation != Operation::DelegateCall {
         return false;
     }
 
@@ -243,17 +243,17 @@ mod tests {
         operation: Operation,
     ) -> SafeTransaction {
         SafeTransaction {
-            chainId: U256::ZERO,
+            chain_id: U256::ZERO,
             safe,
             to,
             value,
             data: data.into(),
             operation,
-            safeTxGas: U256::ZERO,
-            baseGas: U256::ZERO,
-            gasPrice: U256::ZERO,
-            gasToken: Address::ZERO,
-            refundReceiver: Address::ZERO,
+            safe_tx_gas: U256::ZERO,
+            base_gas: U256::ZERO,
+            gas_price: U256::ZERO,
+            gas_token: Address::ZERO,
+            refund_receiver: Address::ZERO,
             nonce: U256::ZERO,
         }
     }
@@ -296,7 +296,7 @@ mod tests {
                    0000000000000000000000002dc63c83040669f0adba5f832f713152ba862c97\
                    000000000000000000000000e7f8c378df23ebb06d5fc5a33bd471ef510f8cc9\
                    000000000000000000000000baf055b4ae60b897649f654df8def87bb4f86299"),
-                Operation::CALL,
+                Operation::Call,
             ))
             .is_ok()
         );
@@ -313,7 +313,7 @@ mod tests {
                   0000000000000000000000002dc63c83040669f0adba5f832f713152ba862c97\
                   000000000000000000000000e7f8c378df23ebb06d5fc5a33bd471ef510f8cc9\
                   000000000000000000000000baf055b4ae60b897649f654df8def87bb4f86299"),
-                Operation::CALL,
+                Operation::Call,
             ))
             .is_ok()
         );
@@ -365,7 +365,7 @@ mod tests {
                    4d31f5b1c71352252dcc93000000000000000000000000f01888f0677547ec07\
                    cd16c8680e699c96588e6b00000000000000000000000000000000ffffffffff\
                    ffffffffffffffffffffff000000000000000000000000000000000000000000"),
-                Operation::DELEGATECALL,
+                Operation::DelegateCall,
             ))
             .is_ok()
         );
@@ -379,7 +379,7 @@ mod tests {
                 address!("F01888f0677547Ec07cd16c8680e699c96588E6B"),
                 U256::ZERO,
                 Bytes::new(),
-                Operation::CALL,
+                Operation::Call,
             ))
             .is_ok()
         );
@@ -413,7 +413,7 @@ mod tests {
                    7467372f9a41665820a14f000000000000000000000000c0ffeee8baafa7ba6a\
                    6af2329892b88796cf44cf000000000000000000000000000000000000000000\
                    0000000000000000000002000000000000000000000000000000000000000000"),
-                Operation::DELEGATECALL,
+                Operation::DelegateCall,
             ))
             .is_ok()
         );
@@ -427,7 +427,7 @@ mod tests {
                 address!("526643F69b81B008F46d95CD5ced5eC0edFFDaC6"),
                 U256::ZERO,
                 hex("0xed007fc6"),
-                Operation::DELEGATECALL,
+                Operation::DelegateCall,
             ))
             .is_ok()
         );
@@ -441,7 +441,7 @@ mod tests {
                 address!("526643F69b81B008F46d95CD5ced5eC0edFFDaC6"),
                 U256::from(1u64),
                 hex("0xed007fc6"),
-                Operation::DELEGATECALL,
+                Operation::DelegateCall,
             ))
             .is_ok()
         );
@@ -455,7 +455,7 @@ mod tests {
                 address!("1db92e2EeBC8E0c075a02BeA49a2935BcD2dFCF4"),
                 U256::ZERO,
                 Bytes::new(),
-                Operation::DELEGATECALL,
+                Operation::DelegateCall,
             ))
             .is_err()
         );
@@ -471,7 +471,7 @@ mod tests {
                 hex("0xa9059cbb\
                    000000000000000000000000bdd077f651ebe7f7b3ce16fe5f2b025be2969516\
                    0000000000000000000000000000000000000000000000000000000000000000"),
-                Operation::DELEGATECALL,
+                Operation::DelegateCall,
             ))
             .is_err()
         );
@@ -491,7 +491,7 @@ mod tests {
                    0000000000000000000000000000000000000000000000000000000000000000\
                    00000000000000000000000000000000000000024610b5925000000000000000\
                    0000000005afe8f36504462aa6a7467372f9a41665820a14f00000000000000"),
-                Operation::DELEGATECALL,
+                Operation::DelegateCall,
             ))
             .is_err()
         );
@@ -514,13 +514,13 @@ mod tests {
 
         let data = multisend(&[
             pack(
-                Operation::DELEGATECALL,
+                Operation::DelegateCall,
                 address!("4FfeF8222648872B3dE295Ba1e49110E61f5b5aa"),
                 U256::ZERO,
                 &sign_msg_data,
             ),
             pack(
-                Operation::CALL,
+                Operation::Call,
                 address!("9C58BAcC331c9aa871AFD802DB6379a98e80CEdb"),
                 U256::ZERO,
                 &approve_data,
@@ -533,7 +533,7 @@ mod tests {
                 address!("218543288004CD07832472D464648173c77D7eB7"),
                 U256::ZERO,
                 data,
-                Operation::DELEGATECALL,
+                Operation::DelegateCall,
             ))
             .is_ok()
         );
@@ -556,13 +556,13 @@ mod tests {
 
         let data = multisend(&[
             pack(
-                Operation::DELEGATECALL,
+                Operation::DelegateCall,
                 address!("4FfeF8222648872B3dE295Ba1e49110E61f5b5aa"),
                 U256::ZERO,
                 &sign_msg_data,
             ),
             pack(
-                Operation::CALL,
+                Operation::Call,
                 address!("9C58BAcC331c9aa871AFD802DB6379a98e80CEdb"),
                 U256::ZERO,
                 &approve_data,
@@ -576,7 +576,7 @@ mod tests {
                 address!("A83c336B20401Af773B6219BA5027174338D1836"),
                 U256::ZERO,
                 data,
-                Operation::DELEGATECALL,
+                Operation::DelegateCall,
             ))
             .is_err()
         );
@@ -587,14 +587,14 @@ mod tests {
         let safe = address!("3850cd76006dc6CaCBCBB514995C47Ca8Ad0bb96");
         let recipient = address!("C92E8bdf79f0507f65a392b0ab4667716BFE0110");
 
-        let data = multisend(&[pack(Operation::CALL, recipient, U256::from(1u64), &[])]);
+        let data = multisend(&[pack(Operation::Call, recipient, U256::from(1u64), &[])]);
         assert!(
             check_transaction(&tx(
                 safe,
                 address!("40A2aCCbd92BCA938b02010E17A5b8929b49130D"),
                 U256::ZERO,
                 data,
-                Operation::DELEGATECALL,
+                Operation::DelegateCall,
             ))
             .is_ok()
         );
@@ -609,7 +609,7 @@ mod tests {
                 address!("40A2aCCbd92BCA938b02010E17A5b8929b49130D"),
                 U256::ZERO,
                 multisend(&[]),
-                Operation::DELEGATECALL,
+                Operation::DelegateCall,
             ))
             .is_ok()
         );
@@ -620,14 +620,14 @@ mod tests {
         let safe = address!("3850cd76006dc6CaCBCBB514995C47Ca8Ad0bb96");
         let recipient = address!("C92E8bdf79f0507f65a392b0ab4667716BFE0110");
 
-        let data = multisend(&[pack(Operation::CALL, recipient, U256::from(1u64), &[])]);
+        let data = multisend(&[pack(Operation::Call, recipient, U256::from(1u64), &[])]);
         assert!(
             check_transaction(&tx(
                 safe,
                 address!("40A2aCCbd92BCA938b02010E17A5b8929b49130D"),
                 U256::from(1u64),
                 data,
-                Operation::DELEGATECALL,
+                Operation::DelegateCall,
             ))
             .is_ok()
         );
@@ -660,7 +660,7 @@ mod tests {
                     multisend_addr,
                     U256::ZERO,
                     data.clone(),
-                    Operation::DELEGATECALL
+                    Operation::DelegateCall
                 ))
                 .is_err(),
                 "multisend at {multisend_addr} should deny delegatecall to disallowed target",
@@ -691,7 +691,7 @@ mod tests {
                     create_call_addr,
                     U256::ZERO,
                     data,
-                    Operation::DELEGATECALL
+                    Operation::DelegateCall
                 ))
                 .is_ok(),
                 "should allow performCreate delegatecall to {create_call_addr}",
@@ -711,7 +711,7 @@ mod tests {
                     create_call_addr,
                     U256::ZERO,
                     data,
-                    Operation::DELEGATECALL
+                    Operation::DelegateCall
                 ))
                 .is_ok(),
                 "should allow performCreate2 delegatecall to {create_call_addr}",

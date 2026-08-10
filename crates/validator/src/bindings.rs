@@ -269,22 +269,22 @@ impl TryFrom<SafeTransaction> for safe_tx::SafeTransaction {
 
     fn try_from(tx: SafeTransaction) -> Result<Self, Self::Error> {
         let operation = match tx.operation {
-            Operation::CALL => safe_tx::Operation::CALL,
-            Operation::DELEGATECALL => safe_tx::Operation::DELEGATECALL,
+            Operation::CALL => safe_tx::Operation::Call,
+            Operation::DELEGATECALL => safe_tx::Operation::DelegateCall,
             Operation::__Invalid => return Err(Operation::__Invalid),
         };
         Ok(safe_tx::SafeTransaction {
-            chainId: tx.chainId,
+            chain_id: tx.chainId,
             safe: tx.safe,
             to: tx.to,
             value: tx.value,
             data: tx.data,
             operation,
-            safeTxGas: tx.safeTxGas,
-            baseGas: tx.baseGas,
-            gasPrice: tx.gasPrice,
-            gasToken: tx.gasToken,
-            refundReceiver: tx.refundReceiver,
+            safe_tx_gas: tx.safeTxGas,
+            base_gas: tx.baseGas,
+            gas_price: tx.gasPrice,
+            gas_token: tx.gasToken,
+            refund_receiver: tx.refundReceiver,
             nonce: tx.nonce,
         })
     }

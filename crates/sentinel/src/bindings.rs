@@ -122,22 +122,22 @@ pub mod consensus {
 
         fn try_from(tx: SafeTransaction) -> Result<Self, Self::Error> {
             let operation = match tx.operation {
-                Operation::CALL => safe_tx::Operation::CALL,
-                Operation::DELEGATECALL => safe_tx::Operation::DELEGATECALL,
+                Operation::CALL => safe_tx::Operation::Call,
+                Operation::DELEGATECALL => safe_tx::Operation::DelegateCall,
                 Operation::__Invalid => return Err(Operation::__Invalid),
             };
             Ok(safe_tx::SafeTransaction {
-                chainId: tx.chainId,
+                chain_id: tx.chainId,
                 safe: tx.safe,
                 to: tx.to,
                 value: tx.value,
                 data: tx.data,
                 operation,
-                safeTxGas: tx.safeTxGas,
-                baseGas: tx.baseGas,
-                gasPrice: tx.gasPrice,
-                gasToken: tx.gasToken,
-                refundReceiver: tx.refundReceiver,
+                safe_tx_gas: tx.safeTxGas,
+                base_gas: tx.baseGas,
+                gas_price: tx.gasPrice,
+                gas_token: tx.gasToken,
+                refund_receiver: tx.refundReceiver,
                 nonce: tx.nonce,
             })
         }
@@ -146,21 +146,21 @@ pub mod consensus {
     impl From<safe_tx::SafeTransaction> for SafeTransaction {
         fn from(tx: safe_tx::SafeTransaction) -> Self {
             let operation = match tx.operation {
-                safe_tx::Operation::CALL => Operation::CALL,
-                safe_tx::Operation::DELEGATECALL => Operation::DELEGATECALL,
+                safe_tx::Operation::Call => Operation::CALL,
+                safe_tx::Operation::DelegateCall => Operation::DELEGATECALL,
             };
             Self {
-                chainId: tx.chainId,
+                chainId: tx.chain_id,
                 safe: tx.safe,
                 to: tx.to,
                 value: tx.value,
                 data: tx.data,
                 operation,
-                safeTxGas: tx.safeTxGas,
-                baseGas: tx.baseGas,
-                gasPrice: tx.gasPrice,
-                gasToken: tx.gasToken,
-                refundReceiver: tx.refundReceiver,
+                safeTxGas: tx.safe_tx_gas,
+                baseGas: tx.base_gas,
+                gasPrice: tx.gas_price,
+                gasToken: tx.gas_token,
+                refundReceiver: tx.refund_receiver,
                 nonce: tx.nonce,
             }
         }
