@@ -6,7 +6,7 @@ mod sign;
 mod transactions;
 
 use crate::{
-    bindings::{Consensus, Coordinator, Oracle, Point},
+    bindings::{Consensus, Coordinator, Oracle, Point, SafeTransaction},
     config::ValidatorConfig,
     consensus::{
         epoch::EpochId,
@@ -24,7 +24,6 @@ use crate::{
     service::{Action, Effect, Event, Resume},
 };
 use alloy::primitives::{Address, B256};
-use safe_tx::types::SafeTransaction;
 use safenet_core::state::{Commands, Message, StateTransition};
 use serde::{Deserialize, Serialize};
 use std::{

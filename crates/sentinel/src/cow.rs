@@ -56,17 +56,16 @@
 //! under-approval and an over-approval are denied here. An unreachable or
 //! malformed API response is `Unknown`, not guessed at either way.
 
-use crate::checker::{CheckOutcome, Checker};
+use crate::{
+    bindings::consensus::{Operation, SafeTransaction},
+    checker::{CheckOutcome, Checker},
+};
 use alloy::{
     primitives::{Address, B256, Bytes, U256, address},
     sol,
     sol_types::{Eip712Domain, SolCall, SolStruct, SolValue, eip712_domain},
 };
-use safe_tx::{
-    multi_send::decode_multi_send_call,
-    rule::RuleId,
-    types::{Operation, SafeTransaction, erc20::approveCall},
-};
+use safe_tx::{multi_send::decode_multi_send_call, rule::RuleId, types::erc20::approveCall};
 use serde::Deserialize;
 
 sol! {
@@ -466,9 +465,10 @@ impl Checker for CowChecker {
 
 /// `tx` itself, or, if it's a MultiSend batch, each of its sub-calls.
 fn sub_transactions(tx: &SafeTransaction) -> Vec<SafeTransaction> {
-    decode_multi_send_call(tx)
-        .map(|(sub_txs, _)| sub_txs)
-        .unwrap_or_else(|| vec![tx.clone()])
+    let tx = tx.clone().into();
+    decode_multi_send_call(&tx)
+        .map(|(sub_txs, _)| sub_txs.into_iter().map(|sub_tx| sub_tx.into()).collect())
+        .unwrap_or_else(|| vec![tx.into()])
 }
 
 /// Only a plain, valueless `CALL` is recognized — a `DELEGATECALL` executes

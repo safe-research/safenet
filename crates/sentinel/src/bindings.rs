@@ -59,13 +59,14 @@ pub mod oracle {
 
 pub mod consensus {
     use alloy::sol;
+    use serde::Serialize;
 
     sol! {
-        #[derive(Debug, Default)]
+        #[derive(Debug, Default, PartialEq, Eq, Serialize)]
         enum Operation { #[default] CALL, DELEGATECALL }
 
         // Full transaction struct carried by OracleTransactionProposed; mirrors SafeTransaction.T.
-        #[derive(Debug, Default)]
+        #[derive(Debug, Default, PartialEq, Eq, Serialize)]
         struct SafeTransaction {
             uint256 chainId;
             address safe;
@@ -115,8 +116,8 @@ pub mod consensus {
     // near-verbatim in `crates/validator/src/bindings.rs`. Consider moving
     // the ABI/event definitions into a shared crate so both consumers
     // declare the `sol!` types (and this conversion) exactly once.
-    impl From<&SafeTransaction> for safe_tx::types::SafeTransaction {
-        fn from(tx: &SafeTransaction) -> Self {
+    impl From<SafeTransaction> for safe_tx::types::SafeTransaction {
+        fn from(tx: SafeTransaction) -> Self {
             let operation = match tx.operation {
                 Operation::CALL => safe_tx::types::Operation::CALL,
                 Operation::DELEGATECALL => safe_tx::types::Operation::DELEGATECALL,
@@ -127,7 +128,31 @@ pub mod consensus {
                 safe: tx.safe,
                 to: tx.to,
                 value: tx.value,
-                data: tx.data.clone(),
+                data: tx.data,
+                operation,
+                safeTxGas: tx.safeTxGas,
+                baseGas: tx.baseGas,
+                gasPrice: tx.gasPrice,
+                gasToken: tx.gasToken,
+                refundReceiver: tx.refundReceiver,
+                nonce: tx.nonce,
+            }
+        }
+    }
+
+    impl From<safe_tx::types::SafeTransaction> for SafeTransaction {
+        fn from(tx: safe_tx::types::SafeTransaction) -> SafeTransaction {
+            let operation = match tx.operation {
+                safe_tx::types::Operation::CALL => Operation::CALL,
+                safe_tx::types::Operation::DELEGATECALL => Operation::DELEGATECALL,
+                safe_tx::types::Operation::__Invalid => Operation::__Invalid,
+            };
+            SafeTransaction {
+                chainId: tx.chainId,
+                safe: tx.safe,
+                to: tx.to,
+                value: tx.value,
+                data: tx.data,
                 operation,
                 safeTxGas: tx.safeTxGas,
                 baseGas: tx.baseGas,
