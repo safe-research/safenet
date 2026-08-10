@@ -21,7 +21,10 @@
 //! so that case defers to whatever check runs next. See the `TODO` on
 //! [`AddressPoisoningChecker`]'s [`Checker`] impl.
 
-use crate::checker::{CheckOutcome, Checker};
+use crate::{
+    bindings::consensus::SafeTransaction,
+    checker::{CheckOutcome, Checker},
+};
 use alloy::{
     primitives::Address,
     providers::{DynProvider, Provider},
@@ -31,10 +34,7 @@ use alloy::{
 };
 use safe_tx::{
     rule::RuleId,
-    types::{
-        SafeTransaction,
-        erc20::{approveCall, transferCall, transferFromCall},
-    },
+    types::erc20::{approveCall, transferCall, transferFromCall},
 };
 
 sol! {
