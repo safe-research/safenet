@@ -42,7 +42,8 @@ Documentation (`docs/configuration.md`, `docs/validator-handbook.md`) currently 
 ### Alternatives Considered
 
 - **Keep `SentinelOracleV2` named as-is and just delete v1.** Rejected: leaves "V2" as the permanent name of the only version that exists, which is exactly the confusing state the repo's own `TODO(A4)` comments flag for cleanup. Renaming costs two mostly-mechanical PRs (Tech Specs Phases 3a-3b) and removes a permanent footgun for every future reader who has to remember "there is no v1, V2 is current."
-- **Do the v1 deletion, the v2 file rename, and the v2 identifier rename in one PR (the original single Phase 3).** Rejected in favor of splitting into 3a (pure `git mv`/deletion, no identifier changes) and 3b (identifier rename + inbound-reference fixes): a combined diff mixes file moves with content edits, so a reviewer can't lean on git's rename detection to skip re-reading unchanged file bodies — they have to line-by-line diff moved-and-edited files just like any other change. Splitting means 3a's diff is (nearly) 100% renames/deletions a reviewer can skim, and 3b's diff is ordinary text changes with no moves to untangle from them.
+- **Do the v1 deletion, the v2 file rename, and the v2 identifier rename in one PR (the original single Phase 3).** Rejected in favor of splitting into 3a (delete v1 outright, touching nothing else) and 3b (`git mv` the v2 files onto the now-free canonical paths, rename their identifiers, and fix every inbound file-path/identifier reference): a combined diff mixes deletions with renames and content edits, so a reviewer can't lean on git's rename detection at all — deleted files read as noise alongside genuine renames, and moved-and-edited files still have to be read line-by-line like any other change. Splitting means 3a's diff is 100% deletions a reviewer can skim, and — critically — 3b's `git mv` only registers as a clean rename in git's diff if 3a's deletion has already landed on the branch 3b is based on, freeing the canonical paths before 3b's move claims them (see Phase 3a's note on this).
+- **Split 3b further, into "move + rename identifiers" and "fix inbound references" as separate PRs.** Considered (an earlier iteration of this plan drew the 3a/3b line here instead — pure `git mv` with only import-path edits in 3a, identifier renames and inbound-reference fixes in 3b), but rejected: unlike the v1-deletion/v2-rename split above, there's no git-diff-detection reason to keep the move and the identifier rename apart — both land on the same already-freed paths in the same PR, so a reviewer reads one clean rename diff either way. Splitting further would just add PR-review overhead (another round of CI, another approval) without buying back any of the "skip the unchanged body" benefit the 3a/3b split itself is for.
 - **Merge the non-oracle-packet removal (Solidity + Rust + explorer) into a single PR since it's conceptually one change.** Rejected: none of the three are compile-coupled to each other (see Architecture Decision), the explorer piece is materially riskier (real UI feature loss) than the other two, and the combined diff would be large and heterogeneous (Solidity, Rust, TypeScript/React, tests in three languages) — harder to review than three same-language, single-purpose PRs, even though the repo's phase-size waiver ("ok if phases make more than 300 line changes if primarily removing code") would technically permit merging them.
 - **Consolidate the sentinel and validator bash integration tests into one script/CI job.** Rejected: `scripts/run_sentinel_integration_test.sh` already passes today, is CI-wired, and tests a different subsystem (oracle dispute/commit-reveal) than the validator happy path (DKG/epoch rollover/attestation). Keeping them as two scripts/two CI jobs (mirroring each other's structure) keeps failures attributable to the right subsystem, the same way `sentinel-integration` and (the new) `validator-integration` would each fail independently rather than one undifferentiated job.
 - **Leave `scripts/run_validator_port_integration_test.sh`'s name as-is.** Rejected: the filename's `_port_` specifically signals "compares the TS port against the Rust port," which stops being true once the TS side is replaced with a second Rust instance; keeping the name would mislabel what the script does going forward. Renamed to `scripts/run_validator_integration_test.sh` (Tech Specs Phase 2), matching the existing `run_sentinel_integration_test.sh` naming pattern.
@@ -80,29 +81,33 @@ Depends on Phase 1 (removes the TS process this script currently spawns). Otherw
 - `README.md`/`AGENTS.md`: update the `test:integration:validator` description (no longer "Rust validator, alongside the TypeScript one" — now "two Rust validator instances, against an `AlwaysApproveOracle`-backed happy path, running in CI").
 - **Acceptance bar for this phase**: `validator-integration` passes green in CI on the PR itself (workflow triggers on `pull_request`, `.github/workflows/integration.yml:2-3`), and `sentinel-integration` remains unaffected. This closes the epic's CI deliverable.
 
-### Phase 3a — Delete v1 `SentinelOracle`; move v2 files to canonical paths (pure rename, no identifier changes)
+### Phase 3a — Delete v1 `SentinelOracle` outright (pure removal, nothing else)
 
-Independent of Phases 1-2 and 4-5; can run in parallel with any of them. Split from Phase 3b specifically so this phase's diff is a clean file rename/deletion for the reviewer — no Solidity identifier inside any moved file changes here, only file paths and the import-path string literals that have to track them.
+Independent of Phases 1-2 and 4-5; can run in parallel with any of them. Scoped to a pure-deletion diff: no `*V2*` file, identifier, or reference is touched here, so a reviewer sees only removed files/lines, nothing else to cross-check.
 
 - Delete outright: `contracts/src/SentinelOracle.sol`, `contracts/src/libraries/SentinelOracleCommitments.sol`, `contracts/src/libraries/SentinelOracleRequests.sol`, `contracts/script/DeploySentinelOracle.s.sol`, `contracts/test/SentinelOracle.t.sol`. Confirmed exhaustively: none of these five files are referenced anywhere outside each other and this list.
-- `git mv` the v2 files to their canonical paths, with **no other edit** except updating the import-path string literals inside them that point at sibling files also being moved here (so the moved files keep compiling — this is a path-string change, not an identifier rename; every Solidity `contract`/`library` name stays exactly as it is today, still `*V2*`, until Phase 3b):
-  - `contracts/src/SentinelOracleV2.sol` → `contracts/src/SentinelOracle.sol` (update its two `import ... from "@/libraries/*V2.sol"` lines to the new library paths below).
-  - `contracts/src/libraries/SentinelOracleCommitmentsV2.sol` → `contracts/src/libraries/SentinelOracleCommitments.sol`.
-  - `contracts/src/libraries/SentinelOracleRequestsV2.sol` → `contracts/src/libraries/SentinelOracleRequests.sol` (update its own import of `SentinelOracleCommitmentsV2.sol`).
-  - `contracts/script/DeploySentinelOracleV2.s.sol` → `contracts/script/DeploySentinelOracle.s.sol` (update its `import {SentinelOracleV2} from "@/SentinelOracleV2.sol"` path).
-  - `contracts/test/SentinelOracleV2.t.sol` → `contracts/test/SentinelOracle.t.sol` (update its three import paths).
-- Fix every reference to the moved *file paths* (not identifiers, those are Phase 3b) — these break the moment the files move, regardless of any identifier rename:
+- No other edit in this phase. Leave every `*V2*` file, identifier, `TODO(A4)` comment, and cross-reference (scripts, docs, `crates/sentinel` doc comments, `contracts/package.json`, explorer) exactly as-is — all of it is handled in Phase 3b, once this phase's deletion has actually landed on the target branch and freed the canonical paths Phase 3b's `git mv` claims.
+- **This phase must be merged (not just opened as a PR) before Phase 3b's `git mv` step is run.** Git only pairs a deleted path with an added path as a rename when the destination path doesn't already exist elsewhere in the same diff; if Phase 3b's `git mv SentinelOracleV2.sol SentinelOracle.sol` runs before this phase's deletion is committed to the branch Phase 3b is based on, `SentinelOracle.sol` reads as "modified" (v1 content diffed against v2 content) rather than a clean rename, defeating the entire point of splitting these into two phases.
+
+### Phase 3b — Move v2 files to canonical paths, rename v2 identifiers to canonical, and fix every inbound reference
+
+Depends on Phase 3a being merged first (see Phase 3a's last bullet — this is a hard prerequisite for a clean rename diff, not just a logical ordering preference). Otherwise independent of Phases 1-2 and 4-5.
+
+This phase does the move, the identifier rename, and every reference fix in one PR — unlike the 3a/3b split itself, splitting *this* further buys no reviewer benefit: a rename-plus-identifier-rename diff is no harder to line-by-line review than either alone, since git's rename detection already lets the reviewer skip the unchanged parts of each file body once the paths are free.
+
+- `git mv` the v2 files to their canonical paths:
+  - `contracts/src/SentinelOracleV2.sol` → `contracts/src/SentinelOracle.sol`
+  - `contracts/src/libraries/SentinelOracleCommitmentsV2.sol` → `contracts/src/libraries/SentinelOracleCommitments.sol`
+  - `contracts/src/libraries/SentinelOracleRequestsV2.sol` → `contracts/src/libraries/SentinelOracleRequests.sol`
+  - `contracts/script/DeploySentinelOracleV2.s.sol` → `contracts/script/DeploySentinelOracle.s.sol`
+  - `contracts/test/SentinelOracleV2.t.sol` → `contracts/test/SentinelOracle.t.sol`
+- Update the import-path string literals inside the moved files that point at sibling files also being moved here (so the moved files keep compiling): `SentinelOracle.sol`'s two `import ... from "@/libraries/*V2.sol"` lines, `SentinelOracleRequests.sol`'s import of `SentinelOracleCommitmentsV2.sol`, `DeploySentinelOracle.s.sol`'s `import {SentinelOracleV2} from "@/SentinelOracleV2.sol"`, and `SentinelOracle.t.sol`'s three import paths.
+- Rename the Solidity identifiers inside the moved files: `contract SentinelOracleV2` → `SentinelOracle` (`contracts/src/SentinelOracle.sol`), `contract DeploySentinelOracleV2Script` → `DeploySentinelOracleScript` (`contracts/script/DeploySentinelOracle.s.sol`), `contract SentinelOracleV2Test` → `SentinelOracleTest` (`contracts/test/SentinelOracle.t.sol`); drop the three now-resolved `TODO(A4)` comments at each site.
+- Fix every reference to the moved *file paths* — these break the moment the files move, regardless of any identifier rename:
   - `scripts/run_sentinel_integration_test.sh:84` — broadcast artifact path (`build/broadcast/DeploySentinelOracleV2.s.sol/...` → `.../DeploySentinelOracle.s.sol/...`, since forge keys broadcast output by script *file name*).
   - `docs/devnet.md:317` — same broadcast path example.
   - `crates/sentinel/src/bindings.rs:8` and `crates/sentinel/src/hashing.rs:17,159,162` — doc-comment citations of the old `contracts/src/libraries/*V2.sol`/`contracts/test/SentinelOracleV2.t.sol` paths.
-- Leave every Solidity/script/test contract identifier, the `TODO(A4)` comments, `contracts/package.json:12`'s `DeploySentinelOracleV2Script` string, `scripts/run_devnet.sh:301,308,392`'s script-name references, prose "V2" mentions, and the explorer's `sentinelOracleV2Abi` identifier untouched — all fixed in Phase 3b.
-
-### Phase 3b — Rename v2 identifiers to canonical; fix remaining inbound references
-
-Depends on Phase 3a (edits the files it just moved). Otherwise independent of Phases 1-2 and 4-5.
-
-- Rename the Solidity identifiers inside the files Phase 3a moved: `contract SentinelOracleV2` → `SentinelOracle` (`contracts/src/SentinelOracle.sol`), `contract DeploySentinelOracleV2Script` → `DeploySentinelOracleScript` (`contracts/script/DeploySentinelOracle.s.sol`), `contract SentinelOracleV2Test` → `SentinelOracleTest` (`contracts/test/SentinelOracle.t.sol`); drop the three now-resolved `TODO(A4)` comments at each site.
-- Fix every reference to the *old identifiers* (not file paths, already fixed in Phase 3a):
+- Fix every reference to the *old identifiers*:
   - `contracts/package.json:12` — `cmd:deploy:sentinel-oracle` script string (`DeploySentinelOracleV2Script` → `DeploySentinelOracleScript`).
   - `scripts/run_devnet.sh:301,308,392` — script-identifier references.
 - `explorer/src/lib/oracle/abi.ts` — rename `sentinelOracleV2Abi` → `sentinelOracleAbi` (plus its "V1 is deprecated" comment, now stale/removable), propagate the rename through `explorer/src/lib/oracle/votes.ts`, `explorer/src/lib/oracle/votingStatus.ts`, `explorer/src/lib/oracle/votes.test.ts`, and update the `SentinelOracleV2`-mentioning comments in `explorer/src/hooks/useSentinelVotes.tsx`.
@@ -214,8 +219,8 @@ Delete `epics/2026_08_09_remove_legacy_typescript_and_v1_oracle.md` once Phases 
 |---|---|---|---|
 | 1 | Delete `validator/` TS workspace, `scripts/run_integration_test.sh`, the `integration` CI job; update `package.json`/lockfile/README/AGENTS.md | — | ✅ |
 | 2 | Rewrite `run_validator_port_integration_test.sh` → `run_validator_integration_test.sh` (two Rust instances, oracle-backed propose via `AlwaysApproveOracle`); add `validator-integration` CI job | 1 | ✅ |
-| 3a | Delete v1 `SentinelOracle`/libraries/script/test; `git mv` v2 files to canonical paths (pure rename, no identifier changes) | — (parallel with 1, 2, 4, 5) | ✅ |
-| 3b | Rename v2 Solidity identifiers to canonical; fix remaining inbound identifier references (scripts, explorer, docs prose) | 3a | ✅ |
+| 3a | Delete v1 `SentinelOracle`/libraries/script/test outright (pure removal, nothing else) | — (parallel with 1, 2, 4, 5) | ✅ |
+| 3b | `git mv` v2 files to canonical paths; rename v2 Solidity identifiers to canonical; fix every inbound file-path/identifier reference (scripts, explorer, docs prose) | 3a merged | ✅ |
 | 4 | Remove non-oracle `Transaction` packet path: Solidity (`Consensus.sol`, `IConsensus.sol`, `ConsensusMessages.sol`, `Propose.s.sol`, docs, examples) | — (parallel with 1, 2, 3a-3b, 5) | ✅ |
 | 5 | Remove non-oracle `Transaction` packet path: Rust validator crate (`bindings.rs`, `hashing.rs`, `state/mod.rs`, `state/transactions.rs`, `service/action.rs`, `state/sign.rs`) | — (parallel with 1, 2, 3a-3b, 4) | ✅ |
 | 6 | Remove non-oracle `Transaction` packet path: explorer frontend (real UI feature removal) | 4 | ✅ |
@@ -225,7 +230,7 @@ Delete `epics/2026_08_09_remove_legacy_typescript_and_v1_oracle.md` once Phases 
 | 9 | Rewrite `docs/configuration.md`/`docs/validator-handbook.md` for the Rust validator's TOML config; final README/AGENTS.md sweep | 1, 2, 3a, 3b, 4, 5, 6, 7a, 7b, 8 | ✅ |
 | 10 | Remove this plan | 9 | ✅ |
 
-Phases 1, 3a, 4, 5 have no dependency on each other and can be implemented and reviewed in parallel; Phase 2 only needs Phase 1; Phase 3b only needs Phase 3a; Phase 6 only needs Phase 4; Phase 7a only needs Phase 4 (parallel with 1, 2, 3a, 3b, 5, 6); Phase 7b needs 5 and 6 (sequenced after 7a); Phase 8 rewrites the invocation surface every prior phase touched, so it lands only once all of them are in; Phase 9 is a documentation-only pass that should land last of the code-adjacent phases so it describes the epic's end state; Phase 10 closes it out.
+Phases 1, 3a, 4, 5 have no dependency on each other and can be implemented and reviewed in parallel; Phase 2 only needs Phase 1; Phase 3b needs Phase 3a *merged* (not just opened) before its `git mv` step, or the file moves won't register as clean renames in git's diff — see Phase 3a's and 3b's own notes; Phase 6 only needs Phase 4; Phase 7a only needs Phase 4 (parallel with 1, 2, 3a, 3b, 5, 6); Phase 7b needs 5 and 6 (sequenced after 7a); Phase 8 rewrites the invocation surface every prior phase touched, so it lands only once all of them are in; Phase 9 is a documentation-only pass that should land last of the code-adjacent phases so it describes the epic's end state; Phase 10 closes it out.
 
 ---
 
