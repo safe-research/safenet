@@ -108,22 +108,25 @@ pub mod consensus {
 
     // `sol!` requires custom types used as event fields to be declared in
     // the same macro invocation, so this ABI-decoding copy can't be replaced
-    // with a `use` of `safe_tx::types::{SafeTransaction, Operation}` --
-    // `From` converts one into the other at the point an event is consumed,
-    // so the rest of the sentinel only ever sees the shared `safe-tx` type.
+    // with the plain `safe_tx::{SafeTransaction, Operation}` types.
+    // `TryFrom` converts it at the point an event is consumed, because the
+    // generated operation enum has an `__Invalid` value the policy type
+    // deliberately cannot represent.
     //
-    // TODO: this same event-binding + `From` conversion is duplicated
+    // TODO: this same event-binding + `TryFrom` conversion is duplicated
     // near-verbatim in `crates/validator/src/bindings.rs`. Consider moving
     // the ABI/event definitions into a shared crate so both consumers
     // declare the `sol!` types (and this conversion) exactly once.
-    impl From<SafeTransaction> for safe_tx::types::SafeTransaction {
-        fn from(tx: SafeTransaction) -> Self {
+    impl TryFrom<SafeTransaction> for safe_tx::SafeTransaction {
+        type Error = Operation;
+
+        fn try_from(tx: SafeTransaction) -> Result<Self, Self::Error> {
             let operation = match tx.operation {
-                Operation::CALL => safe_tx::types::Operation::CALL,
-                Operation::DELEGATECALL => safe_tx::types::Operation::DELEGATECALL,
-                Operation::__Invalid => safe_tx::types::Operation::__Invalid,
+                Operation::CALL => safe_tx::Operation::CALL,
+                Operation::DELEGATECALL => safe_tx::Operation::DELEGATECALL,
+                Operation::__Invalid => return Err(Operation::__Invalid),
             };
-            safe_tx::types::SafeTransaction {
+            Ok(safe_tx::SafeTransaction {
                 chainId: tx.chainId,
                 safe: tx.safe,
                 to: tx.to,
@@ -136,18 +139,17 @@ pub mod consensus {
                 gasToken: tx.gasToken,
                 refundReceiver: tx.refundReceiver,
                 nonce: tx.nonce,
-            }
+            })
         }
     }
 
-    impl From<safe_tx::types::SafeTransaction> for SafeTransaction {
-        fn from(tx: safe_tx::types::SafeTransaction) -> SafeTransaction {
+    impl From<safe_tx::SafeTransaction> for SafeTransaction {
+        fn from(tx: safe_tx::SafeTransaction) -> Self {
             let operation = match tx.operation {
-                safe_tx::types::Operation::CALL => Operation::CALL,
-                safe_tx::types::Operation::DELEGATECALL => Operation::DELEGATECALL,
-                safe_tx::types::Operation::__Invalid => Operation::__Invalid,
+                safe_tx::Operation::CALL => Operation::CALL,
+                safe_tx::Operation::DELEGATECALL => Operation::DELEGATECALL,
             };
-            SafeTransaction {
+            Self {
                 chainId: tx.chainId,
                 safe: tx.safe,
                 to: tx.to,

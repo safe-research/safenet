@@ -1,6 +1,6 @@
 use std::mem;
 
-use crate::types::{Operation, SafeTransaction, multi_send_bindings};
+use crate::{Operation, SafeTransaction, bindings::multi_send};
 use alloy::{
     primitives::{Address, Bytes, U256, address},
     sol_types::SolCall,
@@ -141,7 +141,7 @@ pub fn decode_multi_send_call(tx: &SafeTransaction) -> Option<(Vec<SafeTransacti
         return None;
     }
     let (version, allows_delegate_calls) = known_deployment(tx.to)?;
-    let call = multi_send_bindings::multiSendCall::abi_decode(&tx.data).ok()?;
+    let call = multi_send::multiSendCall::abi_decode(&tx.data).ok()?;
     let sub_txs = decode_multi_send(tx.safe, &call.transactions, version)?;
     Some((sub_txs, allows_delegate_calls))
 }
