@@ -24,14 +24,14 @@ impl Check for BaseGuarantees {
 }
 
 /// The static destination blocklist, reclassified as R-4.6 (see
-/// [`RuleId::R4_6KnownMaliciousTarget`] for the MVP caveat). Never changes
+/// [`RuleId::KNOWN_MALICIOUS_TARGET`] for the MVP caveat). Never changes
 /// once the check is created.
 struct Blocklist(HashSet<Address>);
 
 impl Check for Blocklist {
     fn evaluate(&self, tx: &safe_tx::SafeTransaction) -> Result<(), RuleId> {
         if self.0.contains(&tx.to) {
-            Err(RuleId::R4_6KnownMaliciousTarget)
+            Err(RuleId::KNOWN_MALICIOUS_TARGET)
         } else {
             Ok(())
         }
@@ -54,7 +54,7 @@ impl Check for ExcessiveApproval {
                 _ => false,
             };
             if unlimited {
-                return Err(RuleId::R4_5ExcessiveApproval);
+                return Err(RuleId::EXCESSIVE_APPROVAL);
             }
         }
         Ok(())
@@ -124,7 +124,7 @@ mod tests {
             let decision = checker.check(&tx(address));
             assert_eq!(
                 decision,
-                CheckOutcome::Denied(RuleId::R4_6KnownMaliciousTarget)
+                CheckOutcome::Denied(RuleId::KNOWN_MALICIOUS_TARGET)
             );
         }
     }
@@ -151,7 +151,7 @@ mod tests {
             data: vec![0xde, 0xad, 0xbe, 0xef].into(),
             ..Default::default()
         });
-        assert_eq!(decision, CheckOutcome::Denied(RuleId::R4_1SettingsChange));
+        assert_eq!(decision, CheckOutcome::Denied(RuleId::SETTINGS_CHANGE));
     }
 
     #[test]
@@ -165,7 +165,7 @@ mod tests {
         });
         assert_eq!(
             decision,
-            CheckOutcome::Denied(RuleId::R4_2DelegatecallIntegrity)
+            CheckOutcome::Denied(RuleId::DELEGATECALL_INTEGRITY)
         );
     }
 
@@ -182,10 +182,7 @@ mod tests {
             data: data.into(),
             ..Default::default()
         });
-        assert_eq!(
-            decision,
-            CheckOutcome::Denied(RuleId::R4_5ExcessiveApproval)
-        );
+        assert_eq!(decision, CheckOutcome::Denied(RuleId::EXCESSIVE_APPROVAL));
     }
 
     #[test]
@@ -217,10 +214,7 @@ mod tests {
             data: data.into(),
             ..Default::default()
         });
-        assert_eq!(
-            decision,
-            CheckOutcome::Denied(RuleId::R4_5ExcessiveApproval)
-        );
+        assert_eq!(decision, CheckOutcome::Denied(RuleId::EXCESSIVE_APPROVAL));
     }
 
     #[test]

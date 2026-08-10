@@ -146,7 +146,7 @@ impl SentinelTransition {
             CheckOutcome::Denied(rule) => (
                 RequestState::WaitingForRequest {
                     approve: false,
-                    reason: rule.code().to_string(),
+                    reason: rule.to_string(),
                     deadline,
                 },
                 Vec::new(),
@@ -184,7 +184,7 @@ impl SentinelTransition {
 
         let (approve, reason) = match outcome {
             CheckOutcome::Approved => (true, String::new()),
-            CheckOutcome::Denied(rule) => (false, rule.code().to_string()),
+            CheckOutcome::Denied(rule) => (false, rule.to_string()),
             CheckOutcome::Unknown => {
                 tracing::warn!(%request_id, "dynamic check failed; dropping request unanswered");
                 return (state, Vec::new());
@@ -1356,13 +1356,13 @@ mod tests {
             &svc,
             state,
             id,
-            CheckOutcome::Denied(RuleId::R4_6KnownMaliciousTarget),
+            CheckOutcome::Denied(RuleId::KNOWN_MALICIOUS_TARGET),
         );
         assert_eq!(
             state.0[&id],
             RequestState::WaitingForRequest {
                 approve: false,
-                reason: RuleId::R4_6KnownMaliciousTarget.code().to_string(),
+                reason: RuleId::KNOWN_MALICIOUS_TARGET.to_string(),
                 deadline: 1 + VOTING_WINDOW,
             },
         );
@@ -1375,12 +1375,12 @@ mod tests {
                 new_request_event(id, U256::from(1_000u64), U256::from(500u64), 20, 40),
             )),
         );
-        let reason = RuleId::R4_6KnownMaliciousTarget.code();
+        let reason = RuleId::KNOWN_MALICIOUS_TARGET.to_string();
         assert_eq!(
             state.0[&id],
             RequestState::CollectingCommitments {
                 approve: false,
-                reason: reason.to_string(),
+                reason: reason.clone(),
                 commit_deadline: 20,
                 reveal_deadline: 40,
                 committed_count: 0,
@@ -1392,7 +1392,7 @@ mod tests {
             id,
             false,
             self_signer().reveal_salt(id),
-            reason,
+            &reason,
         );
         assert_eq!(
             commands,
@@ -1425,12 +1425,13 @@ mod tests {
 
     #[test]
     fn new_request_before_dynamic_check_denial_starts_voting_on_resume() {
-        let rule = RuleId::R4_6KnownMaliciousTarget;
+        let rule = RuleId::KNOWN_MALICIOUS_TARGET;
+        let reason = rule.to_string();
         assert_new_request_before_dynamic_check(
             B256::repeat_byte(0x0b),
             CheckOutcome::Denied(rule),
             false,
-            rule.code(),
+            &reason,
         );
     }
 
@@ -1543,7 +1544,7 @@ mod tests {
             &svc,
             state,
             id,
-            CheckOutcome::Denied(RuleId::R4_6KnownMaliciousTarget),
+            CheckOutcome::Denied(RuleId::KNOWN_MALICIOUS_TARGET),
         );
         assert_eq!(state.0[&id], advanced);
     }

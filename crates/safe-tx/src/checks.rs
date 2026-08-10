@@ -53,7 +53,7 @@ const SUPPORTED_MODULE_GUARDS: &[Address] = &[Address::ZERO];
 pub fn check_transaction(tx: &SafeTransaction) -> Result<(), RuleId> {
     check_settings_change(tx)
         .or_else(|| check_delegatecall_integrity(tx))
-        .unwrap_or(Err(RuleId::R4_1SettingsChange))
+        .unwrap_or(Err(RuleId::SETTINGS_CHANGE))
 }
 
 /// Article IV Part A settings-change guarantee. `None` if `tx` isn't a
@@ -65,7 +65,7 @@ fn check_settings_change(tx: &SafeTransaction) -> Option<Result<(), RuleId>> {
     Some(if check_calls(tx) {
         Ok(())
     } else {
-        Err(RuleId::R4_1SettingsChange)
+        Err(RuleId::SETTINGS_CHANGE)
     })
 }
 
@@ -79,7 +79,7 @@ fn check_delegatecall_integrity(tx: &SafeTransaction) -> Option<Result<(), RuleI
     Some(if check_delegate_calls(tx) || check_multi_send(tx) {
         Ok(())
     } else {
-        Err(RuleId::R4_2DelegatecallIntegrity)
+        Err(RuleId::DELEGATECALL_INTEGRITY)
     })
 }
 
@@ -206,9 +206,9 @@ fn check_delegate_calls(tx: &SafeTransaction) -> bool {
 /// Delegate calls to known multi-send contracts are allowed when each packed
 /// sub-transaction passes the appropriate check.
 ///
-/// TODO: a denial here always maps to `RuleId::R4_2DelegatecallIntegrity` at
+/// TODO: a denial here always maps to `RuleId::DELEGATECALL_INTEGRITY` at
 /// the `check_transaction` level, even when the actual failing sub-tx is a
-/// settings-change violation (`RuleId::R4_1SettingsChange`) rather than a
+/// settings-change violation (`RuleId::SETTINGS_CHANGE`) rather than a
 /// delegatecall-integrity one. Correctly attributing the rule would mean
 /// this function returning the failing sub-tx's own rule instead of a flat
 /// `bool`, which is a bigger change than a MultiSend-only fix warrants

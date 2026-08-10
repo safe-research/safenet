@@ -73,10 +73,13 @@ impl RemoteChecker {
         Ok(
             match (
                 response.approve,
-                response.rule.as_deref().map(RuleId::from_code),
+                response
+                    .rule
+                    .as_deref()
+                    .and_then(|rule| rule.parse::<RuleId>().ok()),
             ) {
                 (true, _) => CheckOutcome::Approved,
-                (false, Some(Some(rule))) => CheckOutcome::Denied(rule),
+                (false, Some(rule)) => CheckOutcome::Denied(rule),
                 (false, _) => {
                     tracing::error!(safe = %transaction.safe, "remote check denied without a recognized rule code");
                     CheckOutcome::Unknown
@@ -155,12 +158,22 @@ mod tests {
         let checker = RemoteChecker::new(Some(url));
         assert_eq!(
             checker.check(&SafeTransaction::default()).await,
-            CheckOutcome::Denied(RuleId::R4_6KnownMaliciousTarget)
+            CheckOutcome::Denied(RuleId::KNOWN_MALICIOUS_TARGET)
         );
     }
 
     #[tokio::test]
-    async fn fails_on_an_unrecognized_rule_code() {
+    async fn denies_with_an_unknown_well_formed_rule_code() {
+        let url = respond_once("200 OK", r#"{"approve":false,"rule":"R-9.9"}"#).await;
+        let checker = RemoteChecker::new(Some(url));
+        assert_eq!(
+            checker.check(&SafeTransaction::default()).await,
+            CheckOutcome::Denied(RuleId::new(9, 9))
+        );
+    }
+
+    #[tokio::test]
+    async fn fails_on_a_malformed_rule_code() {
         let url = respond_once("200 OK", r#"{"approve":false,"rule":"not-a-real-rule"}"#).await;
         let checker = RemoteChecker::new(Some(url));
         assert_eq!(

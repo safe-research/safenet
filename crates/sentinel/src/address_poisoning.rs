@@ -46,17 +46,17 @@ sol! {
 /// to.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum TargetKind {
-    /// `transfer`/`transferFrom` — maps to [`RuleId::R4_3ValueTarget`].
+    /// `transfer`/`transferFrom` — maps to [`RuleId::VALUE_TARGET`].
     Transfer,
-    /// `approve` — maps to [`RuleId::R4_4AuthorizationTarget`].
+    /// `approve` — maps to [`RuleId::AUTHORIZATION_TARGET`].
     Approval,
 }
 
 impl TargetKind {
     fn rule(self) -> RuleId {
         match self {
-            Self::Transfer => RuleId::R4_3ValueTarget,
-            Self::Approval => RuleId::R4_4AuthorizationTarget,
+            Self::Transfer => RuleId::VALUE_TARGET,
+            Self::Approval => RuleId::AUTHORIZATION_TARGET,
         }
     }
 
@@ -149,7 +149,7 @@ impl Checker for AddressPoisoningChecker {
             .await
         {
             Ok(found) => {
-                tracing::debug!(token = %transaction.to, %candidate, found, rule = kind.rule().code(), "address-poisoning history lookup");
+                tracing::debug!(token = %transaction.to, %candidate, found, rule = %kind.rule(), "address-poisoning history lookup");
                 if found {
                     CheckOutcome::Approved
                 } else {
@@ -157,7 +157,7 @@ impl Checker for AddressPoisoningChecker {
                 }
             }
             Err(err) => {
-                tracing::warn!(%err, token = %transaction.to, %candidate, rule = kind.rule().code(), "address-poisoning history lookup failed");
+                tracing::warn!(%err, token = %transaction.to, %candidate, rule = %kind.rule(), "address-poisoning history lookup failed");
                 CheckOutcome::Unknown
             }
         }

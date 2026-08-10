@@ -14,7 +14,7 @@
 //!
 //! **Denies, rather than exempts.** A standalone `approve` to
 //! `GPv2VaultRelayer` — not co-batched with a recognized trigger call — is
-//! denied under [`RuleId::R4_4AuthorizationTarget`], including when
+//! denied under [`RuleId::AUTHORIZATION_TARGET`], including when
 //! [`crate::address_poisoning::AddressPoisoningChecker`] would otherwise have
 //! approved the same target off a prior genuine interaction: this
 //! protocol-specific rule runs ahead of, and overrides, that general
@@ -30,10 +30,10 @@
 //! directly from the `create` call's own `staticInput` — no RPC or offchain
 //! call needed, since the order's terms are committed onchain at creation
 //! time. Once recognized, the pair is denied under
-//! [`RuleId::R4_4AuthorizationTarget`] if the order's receiver isn't the
+//! [`RuleId::AUTHORIZATION_TARGET`] if the order's receiver isn't the
 //! Safe itself (the same address-poisoning-style target-manipulation
 //! concern as a wrong `approve` spender), or under
-//! [`RuleId::R4_5ExcessiveApproval`] if the approved token doesn't match the
+//! [`RuleId::EXCESSIVE_APPROVAL`] if the approved token doesn't match the
 //! order's sell token, or the approved amount *exceeds* the order's total —
 //! the latter only guards against over-authorization (the security concern:
 //! a compromised relayer could drain the excess); an approval too small to
@@ -49,9 +49,9 @@
 //! CoW's public order-by-UID API and approves outright once its token/amount
 //! exactly match what's approved *and* its proceeds go back to the Safe
 //! itself. As with the TWAP check, a denial here splits by cause: a wrong
-//! receiver is [`RuleId::R4_4AuthorizationTarget`] (target manipulation,
+//! receiver is [`RuleId::AUTHORIZATION_TARGET`] (target manipulation,
 //! not an amount concern), while a token/amount mismatch is
-//! [`RuleId::R4_5ExcessiveApproval`] — unlike the TWAP check, though, a Safe
+//! [`RuleId::EXCESSIVE_APPROVAL`] — unlike the TWAP check, though, a Safe
 //! `approve` sets an allowance rather than incrementing it, so both an
 //! under-approval and an over-approval are denied here. An unreachable or
 //! malformed API response is `Unknown`, not guessed at either way.
@@ -287,10 +287,10 @@ impl CowChecker {
     /// to the Safe itself: this narrow a match is confident enough evidence
     /// of a genuine CoW Swap to decide the vote, not merely defer to the
     /// next checker. If it denies, it denies under
-    /// [`RuleId::R4_4AuthorizationTarget`] when the order's receiver isn't
+    /// [`RuleId::AUTHORIZATION_TARGET`] when the order's receiver isn't
     /// `safe` itself (an address-poisoning-style target-manipulation
     /// concern, the same split [`CowChecker::check_twap_batch`] makes), or
-    /// under [`RuleId::R4_5ExcessiveApproval`] when the token/amount don't
+    /// under [`RuleId::EXCESSIVE_APPROVAL`] when the token/amount don't
     /// match instead.
     ///
     /// CoW's API isn't authenticated, so its response is never trusted at
@@ -339,12 +339,12 @@ impl CowChecker {
             // check below guards against — see `check_twap_batch` for the
             // same split.
             Ok(order) if order.receiver() != safe => {
-                CheckOutcome::Denied(RuleId::R4_4AuthorizationTarget)
+                CheckOutcome::Denied(RuleId::AUTHORIZATION_TARGET)
             }
             Ok(order) if token == order.sell_token && approved_amount == order.sell_amount => {
                 CheckOutcome::Approved
             }
-            Ok(_) => CheckOutcome::Denied(RuleId::R4_5ExcessiveApproval),
+            Ok(_) => CheckOutcome::Denied(RuleId::EXCESSIVE_APPROVAL),
             Err(err) => {
                 tracing::error!(
                     %err,
@@ -365,10 +365,10 @@ impl CowChecker {
     /// order's terms are committed onchain at creation time. Once the pair
     /// is recognized, this check reaches a conclusive
     /// verdict rather than falling through: it denies under
-    /// [`RuleId::R4_4AuthorizationTarget`] if the order's `receiver` isn't
+    /// [`RuleId::AUTHORIZATION_TARGET`] if the order's `receiver` isn't
     /// `safe` itself (the same address-poisoning-style target-manipulation
     /// concern as a wrong `approve` spender — proceeds routed to an
-    /// unrelated address), or under [`RuleId::R4_5ExcessiveApproval`] if the
+    /// unrelated address), or under [`RuleId::EXCESSIVE_APPROVAL`] if the
     /// approved token doesn't match the order's `sellToken` (an allowance
     /// the order doesn't need at all, itself excessive) or the approved
     /// amount exceeds the order's total; otherwise it approves outright. An
@@ -395,10 +395,10 @@ impl CowChecker {
         // concern (R-4.4), distinct from the excessive-approval-amount
         // concern (R-4.5) the token/amount checks below guard against.
         if receiver != safe && !receiver.is_zero() {
-            return CheckOutcome::Denied(RuleId::R4_4AuthorizationTarget);
+            return CheckOutcome::Denied(RuleId::AUTHORIZATION_TARGET);
         }
         if approved_token != sell_token || approved_amount > total_sell_amount {
-            return CheckOutcome::Denied(RuleId::R4_5ExcessiveApproval);
+            return CheckOutcome::Denied(RuleId::EXCESSIVE_APPROVAL);
         }
         CheckOutcome::Approved
     }
@@ -416,7 +416,7 @@ impl CowChecker {
         {
             CheckOutcome::Unknown
         } else {
-            CheckOutcome::Denied(RuleId::R4_4AuthorizationTarget)
+            CheckOutcome::Denied(RuleId::AUTHORIZATION_TARGET)
         }
     }
 }
@@ -839,7 +839,7 @@ mod tests {
         let data = approve_data(GP_V2_VAULT_RELAYER);
         assert_eq!(
             check(&tx(TOKEN, data, Operation::CALL)).await,
-            CheckOutcome::Denied(RuleId::R4_4AuthorizationTarget)
+            CheckOutcome::Denied(RuleId::AUTHORIZATION_TARGET)
         );
     }
 
@@ -885,7 +885,7 @@ mod tests {
         ]);
         assert_eq!(
             check(&tx(MULTI_SEND, data.into(), Operation::DELEGATECALL)).await,
-            CheckOutcome::Denied(RuleId::R4_5ExcessiveApproval)
+            CheckOutcome::Denied(RuleId::EXCESSIVE_APPROVAL)
         );
     }
 
@@ -906,7 +906,7 @@ mod tests {
         ]);
         assert_eq!(
             check(&tx(MULTI_SEND, data.into(), Operation::DELEGATECALL)).await,
-            CheckOutcome::Denied(RuleId::R4_5ExcessiveApproval)
+            CheckOutcome::Denied(RuleId::EXCESSIVE_APPROVAL)
         );
     }
 
@@ -959,7 +959,7 @@ mod tests {
         ]);
         assert_eq!(
             check(&tx(MULTI_SEND, data.into(), Operation::DELEGATECALL)).await,
-            CheckOutcome::Denied(RuleId::R4_4AuthorizationTarget)
+            CheckOutcome::Denied(RuleId::AUTHORIZATION_TARGET)
         );
     }
 
@@ -1000,7 +1000,7 @@ mod tests {
         let data = multisend(&[pack(Operation::CALL, TOKEN, &approve)]);
         assert_eq!(
             check(&tx(MULTI_SEND, data.into(), Operation::DELEGATECALL)).await,
-            CheckOutcome::Denied(RuleId::R4_4AuthorizationTarget)
+            CheckOutcome::Denied(RuleId::AUTHORIZATION_TARGET)
         );
     }
 
@@ -1022,7 +1022,7 @@ mod tests {
         ]);
         assert_eq!(
             check(&tx(MULTI_SEND, data.into(), Operation::DELEGATECALL)).await,
-            CheckOutcome::Denied(RuleId::R4_4AuthorizationTarget)
+            CheckOutcome::Denied(RuleId::AUTHORIZATION_TARGET)
         );
     }
 
@@ -1052,7 +1052,7 @@ mod tests {
         ]);
         assert_eq!(
             check(&tx(MULTI_SEND, data.into(), Operation::DELEGATECALL)).await,
-            CheckOutcome::Denied(RuleId::R4_4AuthorizationTarget)
+            CheckOutcome::Denied(RuleId::AUTHORIZATION_TARGET)
         );
     }
 
@@ -1074,7 +1074,7 @@ mod tests {
         ]);
         assert_eq!(
             check(&tx(MULTI_SEND, data.into(), Operation::DELEGATECALL)).await,
-            CheckOutcome::Denied(RuleId::R4_4AuthorizationTarget)
+            CheckOutcome::Denied(RuleId::AUTHORIZATION_TARGET)
         );
     }
 
@@ -1103,7 +1103,7 @@ mod tests {
         ]);
         assert_eq!(
             check(&tx(MULTI_SEND, data.into(), Operation::DELEGATECALL)).await,
-            CheckOutcome::Denied(RuleId::R4_4AuthorizationTarget)
+            CheckOutcome::Denied(RuleId::AUTHORIZATION_TARGET)
         );
     }
 
@@ -1125,7 +1125,7 @@ mod tests {
         ]);
         assert_eq!(
             check(&tx(MULTI_SEND, data.into(), Operation::DELEGATECALL)).await,
-            CheckOutcome::Denied(RuleId::R4_4AuthorizationTarget)
+            CheckOutcome::Denied(RuleId::AUTHORIZATION_TARGET)
         );
     }
 
@@ -1179,7 +1179,7 @@ mod tests {
             CowChecker::with_order_api(FakeOrderApi::Found(order))
                 .check_presignature_batch(SAFE, U256::from(1u64), &calls)
                 .await,
-            CheckOutcome::Denied(RuleId::R4_5ExcessiveApproval)
+            CheckOutcome::Denied(RuleId::EXCESSIVE_APPROVAL)
         );
     }
 
@@ -1198,7 +1198,7 @@ mod tests {
             CowChecker::with_order_api(FakeOrderApi::Found(order))
                 .check_presignature_batch(SAFE, U256::from(1u64), &calls)
                 .await,
-            CheckOutcome::Denied(RuleId::R4_4AuthorizationTarget)
+            CheckOutcome::Denied(RuleId::AUTHORIZATION_TARGET)
         );
     }
 
