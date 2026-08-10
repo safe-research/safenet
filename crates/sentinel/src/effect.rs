@@ -8,7 +8,7 @@
 use crate::checker::{CheckOutcome, Checker};
 use alloy::primitives::{Address, B256};
 use safe_tx::types::SafeTransaction;
-use safenet_core::state::EffectHandler;
+use safenet_core::effects::EffectHandler;
 
 /// An impure operation the sentinel's state transition asks the [`Handler`]
 /// to perform.
@@ -60,7 +60,7 @@ impl Handler {
 }
 
 impl EffectHandler<Effect, Resume> for Handler {
-    async fn perform_effect(&mut self, effect: Effect) -> Resume {
+    async fn perform_effect(&self, effect: Effect) -> Resume {
         match effect {
             Effect::DynamicCheck {
                 request_id,
@@ -114,7 +114,7 @@ mod tests {
         // `SafeTransaction::default()` has no ERC-20 calldata for the
         // earlier checkers to even look at — this only exercises the
         // `Effect` -> `Resume` wiring itself.
-        let mut handler = handler(address_poisoning(), RemoteChecker::new(None));
+        let handler = handler(address_poisoning(), RemoteChecker::new(None));
 
         let resume = handler
             .perform_effect(Effect::DynamicCheck {
