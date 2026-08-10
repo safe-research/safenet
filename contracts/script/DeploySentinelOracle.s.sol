@@ -4,10 +4,9 @@ pragma solidity ^0.8.30;
 import {Script, console} from "@forge-std/Script.sol";
 import {DeterministicDeployment} from "@script/util/DeterministicDeployment.sol";
 import {getFactory} from "@script/util/GetFactory.sol";
-import {SentinelOracleV2} from "@/SentinelOracleV2.sol";
+import {SentinelOracle} from "@/SentinelOracle.sol";
 
-// TODO(A4): rename to DeploySentinelOracle.s.sol once the V1 contract/script are removed.
-contract DeploySentinelOracleV2Script is Script {
+contract DeploySentinelOracleScript is Script {
     using DeterministicDeployment for DeterministicDeployment.Factory;
 
     function run() public returns (address sentinelOracle) {
@@ -26,7 +25,7 @@ contract DeploySentinelOracleV2Script is Script {
 
         sentinelOracle = factory.deployWithArgs(
             bytes32(0),
-            type(SentinelOracleV2).creationCode,
+            type(SentinelOracle).creationCode,
             abi.encode(
                 arbitrator, consensus, feeToken, requestFee, commitWindow, revealWindow, governanceDelay, bondMultiplier
             )
@@ -34,6 +33,6 @@ contract DeploySentinelOracleV2Script is Script {
 
         vm.stopBroadcast();
 
-        console.log("SentinelOracleV2 deployed at:", sentinelOracle);
+        console.log("SentinelOracle deployed at:", sentinelOracle);
     }
 }

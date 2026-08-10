@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 pragma solidity ^0.8.30;
 
-import {SentinelOracleCommitment} from "@/libraries/SentinelOracleCommitmentsV2.sol";
+import {SentinelOracleCommitment} from "@/libraries/SentinelOracleCommitments.sol";
 
 library SentinelOracleRequest {
     // ============================================================

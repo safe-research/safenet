@@ -5,7 +5,7 @@ pub mod oracle {
 
     sol! {
         // Mirrors `SentinelOracleRequest.State` in
-        // `contracts/src/libraries/SentinelOracleRequestsV2.sol`; `DisputeResolved.outcome` is
+        // `contracts/src/libraries/SentinelOracleRequests.sol`; `DisputeResolved.outcome` is
         // this type.
         #[derive(Debug, PartialEq, Eq)]
         enum RequestState {

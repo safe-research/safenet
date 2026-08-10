@@ -3,13 +3,12 @@ pragma solidity ^0.8.30;
 
 import {Test} from "@forge-std/Test.sol";
 import {IOracle} from "@/interfaces/IOracle.sol";
-import {SentinelOracleV2} from "@/SentinelOracleV2.sol";
-import {SentinelOracleRequest} from "@/libraries/SentinelOracleRequestsV2.sol";
-import {SentinelOracleCommitment, SentinelOracleCommitmentMap} from "@/libraries/SentinelOracleCommitmentsV2.sol";
+import {SentinelOracle} from "@/SentinelOracle.sol";
+import {SentinelOracleRequest} from "@/libraries/SentinelOracleRequests.sol";
+import {SentinelOracleCommitment, SentinelOracleCommitmentMap} from "@/libraries/SentinelOracleCommitments.sol";
 import {MockERC20} from "@test/util/MockERC20.sol";
 
-// TODO(A4): rename to SentinelOracle.t.sol once the V1 contract/libraries are removed.
-contract SentinelOracleV2Test is Test {
+contract SentinelOracleTest is Test {
     // ============================================================
     // CONSTANTS
     // ============================================================
@@ -30,7 +29,7 @@ contract SentinelOracleV2Test is Test {
     // STATE
     // ============================================================
 
-    SentinelOracleV2 public oracle;
+    SentinelOracle public oracle;
     MockERC20 public token;
 
     address public arbitrator;
@@ -53,7 +52,7 @@ contract SentinelOracleV2Test is Test {
         sentinel3 = vm.createWallet("sentinel3").addr;
 
         token = new MockERC20("Fee Token", "FEE");
-        oracle = new SentinelOracleV2(
+        oracle = new SentinelOracle(
             arbitrator,
             consensus,
             address(token),
@@ -262,7 +261,7 @@ contract SentinelOracleV2Test is Test {
         string memory context = "sentinel1's evidence was conclusive";
 
         vm.expectEmit(true, false, false, true);
-        emit SentinelOracleV2.DisputeResolved(
+        emit SentinelOracle.DisputeResolved(
             REQUEST_ID, SentinelOracleRequest.State.RESOLVED_APPROVED, BOND_TARGET, context
         );
         vm.expectEmit(true, true, false, true);
@@ -467,7 +466,7 @@ contract SentinelOracleV2Test is Test {
         assertEq(token.balanceOf(sentinel2), s2Before + BOND_TARGET + REQUEST_FEE / 2, "sentinel2 claim incorrect");
 
         // sentinel3 never revealed — its commitment is still PENDING, so claim must revert.
-        vm.expectRevert(SentinelOracleV2.NotRevealed.selector);
+        vm.expectRevert(SentinelOracle.NotRevealed.selector);
         vm.prank(sentinel3);
         oracle.claim(REQUEST_ID);
     }

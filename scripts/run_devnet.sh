@@ -31,10 +31,10 @@ ARBITRATOR=0x9965507D1a55bcC2695C58ba16FB37d819B0A4dc
 # Private key: 0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80
 DEPLOYER=0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266
 
-# SentinelOracleV2 economics (see the epic's Architecture Decision): a
+# SentinelOracle economics (see the epic's Architecture Decision): a
 # 40-cent request fee and a 2x bond multiplier, both read against MyToken's
 # 18-decimal default as a dollar-pegged, USDS-style stablecoin, so the bond
-# target per commitment (fee * multiplier, SentinelOracleV2.sol's
+# target per commitment (fee * multiplier, SentinelOracle.sol's
 # `bondTarget`) is 80 cents.
 SENTINEL_REQUEST_FEE=400000000000000000
 SENTINEL_COMMIT_WINDOW=5
@@ -56,7 +56,7 @@ FUND_ACCOUNT_TOKEN=1000000000000000000000
 usage() {
     cat <<EOF
 Run a local Safenet development network, with Rust validators and sentinels
-voting on a SentinelOracleV2.
+voting on a SentinelOracle.
 
 USAGE
     run_devnet.sh [OPTIONS...]
@@ -112,7 +112,7 @@ simulate_forge_script() {
     # moment the pod comes up. Every deployment this script cares about goes
     # through `DeterministicDeployment`'s CREATE2 factory
     # (`contracts/script/util/DeterministicDeployment.sol`), whose address
-    # only depends on the factory, salt and (for `MyToken`/`SentinelOracleV2`)
+    # only depends on the factory, salt and (for `MyToken`/`SentinelOracle`)
     # sender-derived constructor arguments — so passing the same `$DEPLOYER`
     # sender as the real, broadcast deployment further down below makes the
     # simulated address always match the real one.
@@ -298,14 +298,14 @@ participants_cs=$(IFS=, ; echo "${participants[*]}")
 # default contract addresses based on other inputs and using deterministic
 # deployments. For now, simulate the deployments with our `contracts` image
 # and parse out the resulting addresses (see `simulate_forge_script`). Both
-# `DeployERC20Script` and `DeploySentinelOracleV2Script` select the
+# `DeployERC20Script` and `DeploySentinelOracleScript` select the
 # `CANONICAL` CREATE2 factory (`FACTORY=2`, matching
 # `run_sentinel_integration_test.sh`): the `SAFE_SINGLETON_FACTORY` that
 # `getFactory()` otherwise defaults to isn't deployed on a bare Anvil node.
 deployment="$(simulate_forge_script DeployScript)"
 consensus="$(parse_address "$deployment" Consensus)"
 fee_token="$(parse_address "$(simulate_forge_script DeployERC20Script -e FACTORY=2)" 'ERC20 deployed at')"
-sentinel_oracle="$(parse_address "$(simulate_forge_script DeploySentinelOracleV2Script \
+sentinel_oracle="$(parse_address "$(simulate_forge_script DeploySentinelOracleScript \
     -e FACTORY=2 \
     -e SENTINEL_ARBITRATOR="$ARBITRATOR" \
     -e SENTINEL_CONSENSUS="$consensus" \
@@ -314,11 +314,11 @@ sentinel_oracle="$(parse_address "$(simulate_forge_script DeploySentinelOracleV2
     -e SENTINEL_COMMIT_WINDOW="$SENTINEL_COMMIT_WINDOW" \
     -e SENTINEL_REVEAL_WINDOW="$SENTINEL_REVEAL_WINDOW" \
     -e SENTINEL_GOVERNANCE_DELAY="$SENTINEL_GOVERNANCE_DELAY" \
-    -e SENTINEL_BOND_MULTIPLIER="$SENTINEL_BOND_MULTIPLIER")" 'SentinelOracleV2 deployed at')"
+    -e SENTINEL_BOND_MULTIPLIER="$SENTINEL_BOND_MULTIPLIER")" 'SentinelOracle deployed at')"
 
 # Write each validator's TOML config into `$config_dir`, following the shape
 # established by `run_validator_integration_test.sh`'s `validator_config()`
-# heredoc. `oracles` points validators at the SentinelOracleV2 above, so they
+# heredoc. `oracles` points validators at the SentinelOracle above, so they
 # honor its attestations on oracle-checked transactions.
 for validator in "${VALIDATORS[@]}"; do
     parts=(${validator//:/ })
@@ -384,12 +384,12 @@ safenet_spec | podman kube play -
 # Deploy the Safenet contracts.
 forge_script DeployScript
 
-# Deploy the sentinel fee token and a SentinelOracleV2 arbitrated by
+# Deploy the sentinel fee token and a SentinelOracle arbitrated by
 # $ARBITRATOR, then register and fund each SENTINELS entry against it. These
 # reuse the exact same arguments as `simulate_forge_script` above, so the
 # addresses actually deployed here match `$fee_token`/`$sentinel_oracle`.
 forge_script DeployERC20Script -e FACTORY=2 >/dev/null
-forge_script DeploySentinelOracleV2Script \
+forge_script DeploySentinelOracleScript \
     -e FACTORY=2 \
     -e SENTINEL_ARBITRATOR="$ARBITRATOR" \
     -e SENTINEL_CONSENSUS="$consensus" \
