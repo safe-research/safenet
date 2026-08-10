@@ -49,7 +49,14 @@ contract TransactionAnnouncementTest is Test {
         });
         bytes32 expected = keccak256(
             abi.encode(
-                t.to, t.value, keccak256(t.data), t.operation, t.safeTxGas, t.baseGas, t.gasPrice, t.gasToken,
+                t.to,
+                t.value,
+                keccak256(t.data),
+                t.operation,
+                t.safeTxGas,
+                t.baseGas,
+                t.gasPrice,
+                t.gasToken,
                 t.refundReceiver
             )
         );

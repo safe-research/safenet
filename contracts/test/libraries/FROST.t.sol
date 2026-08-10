@@ -11,10 +11,7 @@ contract FROSTTest is Test {
 
     /// @dev External wrapper so `vm.expectRevert` can catch a revert from the internal `FROST.verify`
     ///      (an inlined internal call reverts in the test's own frame, which the cheatcode cannot match).
-    function callVerify(Secp256k1.Point memory y, FROST.Signature memory signature, bytes32 message)
-        external
-        view
-    {
+    function callVerify(Secp256k1.Point memory y, FROST.Signature memory signature, bytes32 message) external view {
         FROST.verify(y, signature, message);
     }
 
