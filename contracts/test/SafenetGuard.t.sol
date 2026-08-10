@@ -75,6 +75,9 @@ contract SafenetGuardTest is Test {
     bytes public constant TX_DATA = hex"deadbeef";
     Enum.Operation public constant TX_OP = Enum.Operation.Call;
 
+    // Oracle the attestation is gated by (carried in the trailer, per the oracle-based attestation model).
+    address public constant ORACLE_ADDR = address(0x0AC1E);
+
     // ============================================================
     // SAFE DEPLOYMENT
     // ============================================================
@@ -166,16 +169,19 @@ contract SafenetGuardTest is Test {
     }
 
     /// @dev Builds an inline FROST attestation as a signature extension:
-    ///      `[192-byte abi.encode(epoch, groupKey, signature)][uint256 payloadLength = 192][32-byte TYPE_HASH]`.
-    ///      The group key is derived from `sk` so it matches the signing key.
+    ///      `[224-byte abi.encode(epoch, oracle, groupKey, signature)][uint256 payloadLength = 224][32-byte TYPE_HASH]`.
+    ///      The FROST signature is over the oracle-transaction-proposal message; the group key is derived
+    ///      from `sk` so it matches the signing key. Uses `ORACLE_ADDR` as the gating oracle.
     function _buildInlineAttestation(bytes32 txHash, uint64 epoch, uint256 sk, uint256 nk)
         internal
         returns (bytes memory)
     {
         Secp256k1.Point memory groupKey = ForgeSecp256k1.g(sk).toPoint();
-        bytes32 message = ConsensusMessages.transactionProposal(guard.getConsensusDomainSeparator(), epoch, txHash);
+        bytes32 message = ConsensusMessages.oracleTransactionProposal(
+            guard.getConsensusDomainSeparator(), epoch, ORACLE_ADDR, txHash
+        );
         FROST.Signature memory sig = _frostSign(sk, nk, message);
-        bytes memory payload = abi.encode(epoch, groupKey, sig); // 192 bytes
+        bytes memory payload = abi.encode(epoch, ORACLE_ADDR, groupKey, sig); // 224 bytes
         return bytes.concat(payload, abi.encode(payload.length), AttestationTrailer.TYPE_HASH);
     }
 
@@ -419,11 +425,12 @@ contract SafenetGuardTest is Test {
     function test_integration_inlineAttestation_revertsWithTamperedSignature() public {
         uint256 nonce = safe.nonce();
         bytes32 txHash = _safeTxHash(TX_TO, TX_VALUE, TX_DATA, TX_OP, nonce);
-        bytes32 message =
-            ConsensusMessages.transactionProposal(guard.getConsensusDomainSeparator(), GENESIS_EPOCH, txHash);
+        bytes32 message = ConsensusMessages.oracleTransactionProposal(
+            guard.getConsensusDomainSeparator(), GENESIS_EPOCH, ORACLE_ADDR, txHash
+        );
         FROST.Signature memory sig = _frostSign(GENESIS_SK, GENESIS_NK, message);
         sig.z = addmod(sig.z, 1, Secp256k1.N); // tamper
-        bytes memory payload = abi.encode(GENESIS_EPOCH, ForgeSecp256k1.g(GENESIS_SK).toPoint(), sig);
+        bytes memory payload = abi.encode(GENESIS_EPOCH, ORACLE_ADDR, ForgeSecp256k1.g(GENESIS_SK).toPoint(), sig);
         bytes memory combined =
             bytes.concat(_signSafeTx(txHash), payload, abi.encode(payload.length), AttestationTrailer.TYPE_HASH);
         vm.expectRevert(Secp256k1.InvalidMulMulAddWitness.selector);
@@ -804,12 +811,12 @@ contract SafenetGuardTest is Test {
         safe.execTransaction(TX_TO, TX_VALUE, TX_DATA, TX_OP, 0, 0, 0, address(0), payable(address(0)), combined);
     }
 
-    /// @notice A valid signature blob whose final word merely equals 192 (the old length framing) is
-    ///         not mistaken for a trailer under magic framing.
-    function test_trailer_signatureEndingIn192TreatedAsAbsent() public {
+    /// @notice A valid signature blob whose final word merely equals the payload-length framing (224) is
+    ///         not mistaken for a trailer — recognition keys on the terminal `TYPE_HASH`, not the length.
+    function test_trailer_signatureEndingInPayloadLengthTreatedAsAbsent() public {
         uint256 nonce = safe.nonce();
         bytes32 txHash = _safeTxHash(TX_TO, TX_VALUE, TX_DATA, TX_OP, nonce);
-        bytes memory combined = bytes.concat(_signSafeTx(txHash), bytes32(uint256(192)));
+        bytes memory combined = bytes.concat(_signSafeTx(txHash), bytes32(uint256(224)));
         vm.expectRevert(ISafenetGuard.AttestationNotFound.selector);
         safe.execTransaction(TX_TO, TX_VALUE, TX_DATA, TX_OP, 0, 0, 0, address(0), payable(address(0)), combined);
     }
@@ -822,6 +829,20 @@ contract SafenetGuardTest is Test {
         // Owner sig + bare type hash: ends in TYPE_HASH but has no valid [payloadLength][typeHash] envelope.
         bytes memory combined = bytes.concat(_signSafeTx(txHash), AttestationTrailer.TYPE_HASH);
         vm.expectRevert(SignatureExtension.MalformedSignatureExtension.selector);
+        safe.execTransaction(TX_TO, TX_VALUE, TX_DATA, TX_OP, 0, 0, 0, address(0), payable(address(0)), combined);
+    }
+
+    /// @notice A well-formed signature-extension envelope whose payload is not the 224-byte attestation
+    ///         fails closed at the guard level with `MalformedAttestationTrailer` — the `payloadLength != 224`
+    ///         shape, exercised end-to-end through `execTransaction`.
+    function test_trailer_wrongPayloadSizeReverts() public {
+        uint256 nonce = safe.nonce();
+        bytes32 txHash = _safeTxHash(TX_TO, TX_VALUE, TX_DATA, TX_OP, nonce);
+        // Valid envelope: [ownerSig][payload][uint256 payload.length][TYPE_HASH], but payload is 32 bytes.
+        bytes memory payload = new bytes(32);
+        bytes memory combined =
+            bytes.concat(_signSafeTx(txHash), payload, abi.encode(payload.length), AttestationTrailer.TYPE_HASH);
+        vm.expectRevert(AttestationTrailer.MalformedAttestationTrailer.selector);
         safe.execTransaction(TX_TO, TX_VALUE, TX_DATA, TX_OP, 0, 0, 0, address(0), payable(address(0)), combined);
     }
 
