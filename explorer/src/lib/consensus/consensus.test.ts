@@ -346,6 +346,79 @@ describe("loadTransactionProposals oracle recognition", () => {
 	});
 });
 
+describe("loadTransactionProposals timestamp targeting", () => {
+	const ORACLE = "0x5555555555555555555555555555555555555555" as Address;
+	const GENESIS_TS = 1_600_000_000;
+	const tsAt = (block: number) => GENESIS_TS + block * 5;
+
+	const makeTargetingProvider = (
+		logsByFromBlock: Record<string, ReturnType<typeof makeRawConsensusLog>[]> = {},
+	): PublicClient =>
+		({
+			getBlockNumber: vi.fn().mockResolvedValue(CURRENT_BLOCK),
+			getBlock: vi.fn(({ blockNumber }: { blockNumber: bigint }) =>
+				Promise.resolve({ number: blockNumber, timestamp: BigInt(tsAt(Number(blockNumber))) }),
+			),
+			request: vi.fn(({ params }: { params: [{ fromBlock: string }] }) =>
+				Promise.resolve(logsByFromBlock[params[0].fromBlock] ?? []),
+			),
+		}) as unknown as PublicClient;
+
+	it("reads a second window aimed at an old timestamp alongside the head window", async () => {
+		const provider = makeTargetingProvider();
+		await loadTransactionProposals({
+			provider,
+			consensus: CONSENSUS,
+			safeTxHash: SAFE_TX_HASH,
+			maxBlockRange: MAX_BLOCK_RANGE,
+			signingTimeout: SIGNING_TIMEOUT,
+			timestampSeconds: tsAt(2000),
+		});
+		const calls = (provider.request as ReturnType<typeof vi.fn>).mock.calls;
+		expect(calls).toHaveLength(2);
+		expect(calls[0][0].params[0]).toMatchObject({ fromBlock: numberToHex(1000n), toBlock: numberToHex(2000n) });
+		expect(calls[1][0].params[0]).toMatchObject({ fromBlock: numberToHex(9000n), toBlock: numberToHex(10000n) });
+	});
+
+	it("surfaces an old attested proposal found only in the targeted window", async () => {
+		const provider = makeTargetingProvider({
+			[numberToHex(1000n)]: [
+				makeOracleProposedLog({ safeTxHash: SAFE_TX_HASH, epoch: 1n, oracle: ORACLE, blockNumber: 1500n }),
+				makeOracleAttestedLog({ safeTxHash: SAFE_TX_HASH, epoch: 1n, oracle: ORACLE, blockNumber: 1600n }),
+			],
+		});
+		const result = await loadTransactionProposals({
+			provider,
+			consensus: CONSENSUS,
+			safeTxHash: SAFE_TX_HASH,
+			maxBlockRange: MAX_BLOCK_RANGE,
+			signingTimeout: SIGNING_TIMEOUT,
+			timestampSeconds: tsAt(2000),
+		});
+		expect(result.proposals).toHaveLength(1);
+		expect(result.proposals[0].status).toBe("ATTESTED");
+		expect(result.proposals[0].proposedAt.block).toBe(1500n);
+		expect(result.fromBlock).toBe(1000n);
+		expect(result.toBlock).toBe(CURRENT_BLOCK);
+	});
+
+	it("falls back to the single head window when block probes fail", async () => {
+		const provider = makeTargetingProvider();
+		(provider.getBlock as ReturnType<typeof vi.fn>).mockRejectedValue(new Error("pruned"));
+		await loadTransactionProposals({
+			provider,
+			consensus: CONSENSUS,
+			safeTxHash: SAFE_TX_HASH,
+			maxBlockRange: MAX_BLOCK_RANGE,
+			signingTimeout: SIGNING_TIMEOUT,
+			timestampSeconds: tsAt(2000),
+		});
+		const calls = (provider.request as ReturnType<typeof vi.fn>).mock.calls;
+		expect(calls).toHaveLength(1);
+		expect(calls[0][0].params[0]).toMatchObject({ fromBlock: numberToHex(9000n), toBlock: numberToHex(10000n) });
+	});
+});
+
 const makeStagedLog = ({
 	activeEpoch,
 	proposedEpoch,

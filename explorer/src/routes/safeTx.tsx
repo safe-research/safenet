@@ -37,7 +37,11 @@ export function SafeTransaction() {
 						<SafeTxSummary transaction={details.data} />
 					</Box>
 					<Box>
-						<SafeTxProposals safeTxHash={safeTxHash} transaction={details.data} />
+						<SafeTxProposals
+							safeTxHash={safeTxHash}
+							transaction={details.data}
+							submittedAtSeconds={details.submittedAtSeconds}
+						/>
 					</Box>
 				</>
 			)}

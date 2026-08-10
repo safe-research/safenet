@@ -18,8 +18,16 @@ import { SafeTxAttestationStatus } from "./SafeTxAttestationStatus";
 import { SentinelVoteList } from "./SentinelVoteList";
 import { VotingStatusBadge } from "./VotingStatusBadge";
 
-export function SafeTxProposals({ safeTxHash, transaction }: { safeTxHash: Hex; transaction: SafeTransaction }) {
-	const proposals = useProposalsForTransaction(safeTxHash);
+export function SafeTxProposals({
+	safeTxHash,
+	transaction,
+	submittedAtSeconds,
+}: {
+	safeTxHash: Hex;
+	transaction: SafeTransaction;
+	submittedAtSeconds?: number | null;
+}) {
+	const proposals = useProposalsForTransaction(safeTxHash, submittedAtSeconds ?? undefined);
 
 	return (
 		<div className={"space-y-4"}>

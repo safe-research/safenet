@@ -1,6 +1,6 @@
 import type { PublicClient } from "viem";
 import { describe, expect, it, vi } from "vitest";
-import { getBlockRange, loadChainId, mostRecentFirst } from "./utils";
+import { estimateBlockAt, getBlockRange, getTargetedBlockRange, loadChainId, mostRecentFirst } from "./utils";
 
 const CURRENT_BLOCK = 10000n;
 const MAX_BLOCK_RANGE = 1000n;
@@ -117,5 +117,109 @@ describe("loadChainId", () => {
 		await expect(loadChainId(provider)).rejects.toThrow("network error");
 		await expect(loadChainId(provider)).resolves.toBe(7);
 		expect(provider.getChainId).toHaveBeenCalledTimes(2);
+	});
+});
+
+const GENESIS_TS = 1_600_000_000;
+
+/** Chain whose block timestamps follow `tsAt`; getBlock resolves any probed number. */
+const makeTimestampProvider = (tsAt: (block: number) => number): PublicClient =>
+	({
+		getBlock: vi.fn(({ blockNumber }: { blockNumber: bigint }) =>
+			Promise.resolve({ number: blockNumber, timestamp: BigInt(tsAt(Number(blockNumber))) }),
+		),
+	}) as unknown as PublicClient;
+
+describe("estimateBlockAt", () => {
+	const HEAD = 1_000_000n;
+
+	it("converges on a uniform chain matching the nominal seed", async () => {
+		const tsAt = (block: number) => GENESIS_TS + block * 5;
+		const provider = makeTimestampProvider(tsAt);
+		const { block, driftSeconds } = await estimateBlockAt(provider, tsAt(400_000), {
+			number: HEAD,
+			timestamp: tsAt(1_000_000),
+		});
+		expect(block).toBe(400_000n);
+		expect(Math.abs(driftSeconds)).toBeLessThanOrEqual(600);
+	});
+
+	it("converges when the real cadence is far from the seed", async () => {
+		const tsAt = (block: number) => GENESIS_TS + block * 12;
+		const provider = makeTimestampProvider(tsAt);
+		const { block, driftSeconds } = await estimateBlockAt(provider, tsAt(400_000), {
+			number: HEAD,
+			timestamp: tsAt(1_000_000),
+		});
+		expect(Math.abs(driftSeconds)).toBeLessThanOrEqual(600);
+		expect(Math.abs(Number(block) - 400_000)).toBeLessThanOrEqual(600 / 12);
+	});
+
+	it("converges across a cadence shift for a target in the old regime", async () => {
+		// 12s blocks before 500k, 5s after — the target sits in the slow regime.
+		const tsAt = (block: number) =>
+			block < 500_000 ? GENESIS_TS + block * 12 : GENESIS_TS + 500_000 * 12 + (block - 500_000) * 5;
+		const provider = makeTimestampProvider(tsAt);
+		const { driftSeconds } = await estimateBlockAt(provider, tsAt(100_000), {
+			number: HEAD,
+			timestamp: tsAt(1_000_000),
+		});
+		expect(Math.abs(driftSeconds)).toBeLessThanOrEqual(600);
+	});
+
+	it("returns Infinity drift when every probe fails", async () => {
+		const provider = { getBlock: vi.fn().mockRejectedValue(new Error("pruned")) } as unknown as PublicClient;
+		const { driftSeconds } = await estimateBlockAt(provider, GENESIS_TS, {
+			number: HEAD,
+			timestamp: GENESIS_TS + 5_000_000,
+		});
+		expect(driftSeconds).toBe(Number.POSITIVE_INFINITY);
+	});
+
+	it("pins a future timestamp to the head", async () => {
+		const tsAt = (block: number) => GENESIS_TS + block * 5;
+		const provider = makeTimestampProvider(tsAt);
+		const { block } = await estimateBlockAt(provider, tsAt(1_000_000) + 100_000, {
+			number: HEAD,
+			timestamp: tsAt(1_000_000),
+		});
+		expect(block).toBe(HEAD);
+	});
+});
+
+describe("getTargetedBlockRange", () => {
+	const HEAD_RANGE = { fromBlock: 990_000n, toBlock: 1_000_000n };
+	const RANGE = 10_000n;
+	const tsAt = (block: number) => GENESIS_TS + block * 5;
+
+	it("aims a window at an old timestamp, disjoint from the head window", async () => {
+		const provider = makeTimestampProvider(tsAt);
+		const range = await getTargetedBlockRange(provider, RANGE, tsAt(400_000), HEAD_RANGE);
+		expect(range).toEqual({ fromBlock: 399_000n, toBlock: 409_000n });
+	});
+
+	it("clamps the window just below the head window", async () => {
+		const provider = makeTimestampProvider(tsAt);
+		const range = await getTargetedBlockRange(provider, RANGE, tsAt(985_000), HEAD_RANGE);
+		expect(range).toEqual({ fromBlock: 984_000n, toBlock: 989_999n });
+	});
+
+	it("returns null for a recent timestamp already inside the head window", async () => {
+		const provider = makeTimestampProvider(tsAt);
+		const range = await getTargetedBlockRange(provider, RANGE, tsAt(995_000), HEAD_RANGE);
+		expect(range).toBeNull();
+	});
+
+	it("returns null when the head window already reaches genesis", async () => {
+		const provider = makeTimestampProvider(tsAt);
+		const range = await getTargetedBlockRange(provider, RANGE, tsAt(1_000), { fromBlock: 0n, toBlock: 5_000n });
+		expect(range).toBeNull();
+		expect(provider.getBlock).not.toHaveBeenCalled();
+	});
+
+	it("returns null when block probes fail, keeping the caller on the head window", async () => {
+		const provider = { getBlock: vi.fn().mockRejectedValue(new Error("pruned")) } as unknown as PublicClient;
+		const range = await getTargetedBlockRange(provider, RANGE, tsAt(400_000), HEAD_RANGE);
+		expect(range).toBeNull();
 	});
 });

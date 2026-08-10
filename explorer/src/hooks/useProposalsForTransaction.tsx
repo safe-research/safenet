@@ -7,7 +7,7 @@ import {
 	type TransactionProposalWithStatus,
 } from "@/lib/consensus";
 
-export function useProposalsForTransaction(proposalTxHash: Hex) {
+export function useProposalsForTransaction(proposalTxHash: Hex, timestampSeconds?: number) {
 	const [settings] = useSettings();
 
 	return useQuery<LoadTransactionProposalsResult, Error, TransactionProposalWithStatus[]>({
@@ -18,6 +18,7 @@ export function useProposalsForTransaction(proposalTxHash: Hex) {
 			settings.maxBlockRange,
 			settings.signingTimeout,
 			settings.oracles,
+			timestampSeconds,
 		],
 		queryFn: () =>
 			getConsensusWorker().loadTransactionProposals({
@@ -27,6 +28,7 @@ export function useProposalsForTransaction(proposalTxHash: Hex) {
 				maxBlockRange: BigInt(settings.maxBlockRange),
 				signingTimeout: settings.signingTimeout,
 				oracles: settings.oracles,
+				timestampSeconds,
 			}),
 		select: (data) => data.proposals,
 		initialData: { proposals: [], fromBlock: 0n, toBlock: 0n },

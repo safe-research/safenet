@@ -10,7 +10,7 @@ import {
 } from "viem";
 import z from "zod";
 import { bigIntSchema, checkedAddressSchema, hexDataSchema } from "@/lib/schemas";
-import { getBlockRange, jsonReplacer, mostRecentFirst } from "@/lib/utils";
+import { getBlockRange, getTargetedBlockRange, jsonReplacer, mostRecentFirst } from "@/lib/utils";
 import { consensusAbi, proposedEventSelectors, transactionEventSelectors } from "./abi";
 
 export const safeTransactionSchema = z.object({
@@ -99,6 +99,7 @@ export const loadTransactionProposals = async ({
 	maxBlockRange,
 	signingTimeout,
 	oracles = [],
+	timestampSeconds,
 }: {
 	provider: PublicClient;
 	consensus: Address;
@@ -108,23 +109,40 @@ export const loadTransactionProposals = async ({
 	maxBlockRange: bigint;
 	signingTimeout: number;
 	oracles?: Address[];
+	timestampSeconds?: number;
 }): Promise<LoadTransactionProposalsResult> => {
-	const { fromBlock, toBlock } = await getBlockRange(provider, maxBlockRange, referenceBlock);
-	const blockRange = { fromBlock: numberToHex(fromBlock), toBlock: numberToHex(toBlock) };
+	const headRange = await getBlockRange(provider, maxBlockRange, referenceBlock);
+	// Proposals older than the head-relative window would otherwise read as "not found".
+	// When the caller knows roughly when the transaction was submitted, a second disjoint
+	// window is aimed there via a block-at-timestamp estimate.
+	const targeted =
+		timestampSeconds !== undefined
+			? await getTargetedBlockRange(provider, maxBlockRange, timestampSeconds, headRange)
+			: null;
+	const ranges = targeted !== null ? [targeted, headRange] : [headRange];
+	const { toBlock } = headRange;
+	const fromBlock = targeted?.fromBlock ?? headRange.fromBlock;
 
 	// We use an `eth_getLogs` here directly, in order to filter on the `safeTxHash` topic.
 	// When `safe` is set, topic[3] silently drops `TransactionAttested` (only 1 indexed topic);
 	// those proposals will have attestedAt: null until contract events are updated.
-	const rawLogs = await provider.request({
-		method: "eth_getLogs",
-		params: [
-			{
-				address: consensus,
-				...blockRange,
-				topics: [transactionEventSelectors, safeTxHash ?? null, null, safe ? pad(safe) : null],
-			},
-		],
-	});
+	const rawLogs = (
+		await Promise.all(
+			ranges.map((range) =>
+				provider.request({
+					method: "eth_getLogs",
+					params: [
+						{
+							address: consensus,
+							fromBlock: numberToHex(range.fromBlock),
+							toBlock: numberToHex(range.toBlock),
+							topics: [transactionEventSelectors, safeTxHash ?? null, null, safe ? pad(safe) : null],
+						},
+					],
+				}),
+			),
+		)
+	).flat();
 	const allEventLogs = mostRecentFirst(
 		parseEventLogs({
 			// <https://github.com/wevm/viem/issues/4340>

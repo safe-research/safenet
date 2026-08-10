@@ -19,12 +19,23 @@ const safeTransactionSchema = z.object({
 	gasToken: checkedAddressSchema,
 	refundReceiver: checkedAddressSchema,
 	nonce: bigIntSchema,
+	// ISO timestamp from the tx-service; used to aim on-chain log windows at old proposals.
+	submissionDate: z.string().optional(),
 });
 
 const buildSafeTxDetailsEndpoint = (base: string, shortName: string, safeTxHash: Hex) =>
 	`${base}/tx-service/${shortName}/api/v2/multisig-transactions/${safeTxHash}/`;
 
-export const loadSafeTransactionDetails = async (chainId: bigint, safeTxHash: Hex): Promise<SafeTransaction | null> => {
+export type SafeTransactionDetails = {
+	transaction: SafeTransaction;
+	/** Unix seconds the transaction was submitted, when the tx-service reports it. */
+	submittedAtSeconds: number | null;
+};
+
+export const loadSafeTransactionDetails = async (
+	chainId: bigint,
+	safeTxHash: Hex,
+): Promise<SafeTransactionDetails | null> => {
 	const { url } = loadSafeApiSettings();
 	const chainInfo = SAFE_SERVICE_CHAINS[chainId.toString()];
 	if (chainInfo === undefined) return null;
@@ -32,9 +43,12 @@ export const loadSafeTransactionDetails = async (chainId: bigint, safeTxHash: He
 	if (!response.ok) return null;
 	const parsed = safeTransactionSchema.safeParse(await response.json());
 	if (!parsed.success) return null;
+	const { submissionDate, ...fields } = parsed.data;
 	const transaction = {
 		chainId,
-		...parsed.data,
+		...fields,
 	};
-	return calculateSafeTxHash(transaction) === safeTxHash ? transaction : null;
+	if (calculateSafeTxHash(transaction) !== safeTxHash) return null;
+	const submittedAtMs = submissionDate !== undefined ? Date.parse(submissionDate) : Number.NaN;
+	return { transaction, submittedAtSeconds: Number.isFinite(submittedAtMs) ? Math.floor(submittedAtMs / 1000) : null };
 };
