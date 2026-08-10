@@ -1,40 +1,10 @@
-use crate::bindings::consensus::SafeTransaction;
+use crate::{bindings::consensus::SafeTransaction, checker::CheckOutcome};
 use alloy::primitives::{Address, U256};
-use safe_tx::rule::RuleId;
-use safe_tx::target_effects::{EffectKind, decode_target_effects};
-use std::{borrow::Cow, collections::HashSet};
-
-/// A [`StaticChecker`]'s verdict on a proposed oracle transaction: whether to
-/// approve it, and the justification to carry, verbatim, into the blind
-/// commit-reveal vote. `reason` is always a static string literal today, so
-/// `Cow` avoids allocating one on every `check` call.
-///
-/// Deliberately does not carry a `RuleId` — that's an evaluation-time
-/// concept, known only while a check runs, not part of the onchain-facing
-/// protocol `Decision` feeds into. A denial's `reason` is rendered from
-/// `RuleId::code()` (see `safe_tx::rule`), so it's still structurally tied
-/// to the cited rule, but `RuleId` itself never leaves the check layer.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Decision {
-    pub approve: bool,
-    pub reason: Cow<'static, str>,
-}
-
-impl Decision {
-    fn approved() -> Self {
-        Self {
-            approve: true,
-            reason: Cow::Borrowed(""),
-        }
-    }
-
-    fn denied(rule: RuleId) -> Self {
-        Self {
-            approve: false,
-            reason: Cow::Borrowed(rule.code()),
-        }
-    }
-}
+use safe_tx::{
+    rule::RuleId,
+    target_effects::{EffectKind, decode_target_effects},
+};
+use std::collections::HashSet;
 
 /// A single policy check, evaluated against a proposed transaction.
 /// `StaticChecker::check` runs its checks in a fixed order and stops at the
@@ -113,13 +83,13 @@ impl StaticChecker {
         }
     }
 
-    pub fn check(&self, tx: &SafeTransaction) -> Decision {
+    pub fn check(&self, tx: &SafeTransaction) -> CheckOutcome {
         for check in &self.checks {
             if let Err(rule) = check.evaluate(tx) {
-                return Decision::denied(rule);
+                return CheckOutcome::Denied(rule);
             }
         }
-        Decision::approved()
+        CheckOutcome::Approved
     }
 }
 
@@ -147,24 +117,25 @@ mod tests {
     #[test]
     fn denied_when_blocklisted() {
         let checker = StaticChecker::new(vec![A1, A2]);
-        let decision = checker.check(&tx(A1));
-        assert!(!decision.approve);
-        assert_eq!(decision.reason, RuleId::R4_6KnownMaliciousTarget.code());
-        assert!(!checker.check(&tx(A2)).approve);
+        for address in [A1, A2] {
+            let decision = checker.check(&tx(address));
+            assert_eq!(
+                decision,
+                CheckOutcome::Denied(RuleId::R4_6KnownMaliciousTarget)
+            );
+        }
     }
 
     #[test]
     fn approved_with_empty_blocklist() {
         let checker = StaticChecker::new(vec![]);
-        assert!(checker.check(&tx(A1)).approve);
+        assert_eq!(checker.check(&tx(A1)), CheckOutcome::Approved);
     }
 
     #[test]
     fn approved_when_not_blocklisted() {
         let checker = StaticChecker::new(vec![A1, A2]);
-        let decision = checker.check(&tx(A3));
-        assert!(decision.approve);
-        assert_eq!(decision.reason, "");
+        assert_eq!(checker.check(&tx(A3)), CheckOutcome::Approved);
     }
 
     #[test]
@@ -177,8 +148,7 @@ mod tests {
             data: vec![0xde, 0xad, 0xbe, 0xef].into(),
             ..Default::default()
         });
-        assert!(!decision.approve);
-        assert_eq!(decision.reason, RuleId::R4_1SettingsChange.code());
+        assert_eq!(decision, CheckOutcome::Denied(RuleId::R4_1SettingsChange));
     }
 
     #[test]
@@ -190,8 +160,10 @@ mod tests {
             operation: crate::bindings::consensus::Operation::DELEGATECALL,
             ..Default::default()
         });
-        assert!(!decision.approve);
-        assert_eq!(decision.reason, RuleId::R4_2DelegatecallIntegrity.code());
+        assert_eq!(
+            decision,
+            CheckOutcome::Denied(RuleId::R4_2DelegatecallIntegrity)
+        );
     }
 
     #[test]
@@ -207,8 +179,10 @@ mod tests {
             data: data.into(),
             ..Default::default()
         });
-        assert!(!decision.approve);
-        assert_eq!(decision.reason, RuleId::R4_5ExcessiveApproval.code());
+        assert_eq!(
+            decision,
+            CheckOutcome::Denied(RuleId::R4_5ExcessiveApproval)
+        );
     }
 
     #[test]
@@ -224,7 +198,7 @@ mod tests {
             data: data.into(),
             ..Default::default()
         });
-        assert!(decision.approve);
+        assert_eq!(decision, CheckOutcome::Approved);
     }
 
     #[test]
@@ -240,8 +214,10 @@ mod tests {
             data: data.into(),
             ..Default::default()
         });
-        assert!(!decision.approve);
-        assert_eq!(decision.reason, RuleId::R4_5ExcessiveApproval.code());
+        assert_eq!(
+            decision,
+            CheckOutcome::Denied(RuleId::R4_5ExcessiveApproval)
+        );
     }
 
     #[test]
@@ -257,6 +233,6 @@ mod tests {
             data: data.into(),
             ..Default::default()
         });
-        assert!(decision.approve);
+        assert_eq!(decision, CheckOutcome::Approved);
     }
 }
