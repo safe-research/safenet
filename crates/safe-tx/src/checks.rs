@@ -1,6 +1,6 @@
 use crate::multi_send::decode_multi_send_call;
 use crate::rule::RuleId;
-use crate::types::{Operation, SafeTransaction};
+use crate::{Operation, SafeTransaction};
 use alloy::{
     primitives::{Address, address},
     sol_types::SolCall as _,

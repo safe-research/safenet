@@ -65,7 +65,7 @@ use alloy::{
     sol,
     sol_types::{Eip712Domain, SolCall, SolStruct, SolValue, eip712_domain},
 };
-use safe_tx::{multi_send::decode_multi_send_call, rule::RuleId, types::erc20::approveCall};
+use safe_tx::{bindings::erc20::approveCall, multi_send::decode_multi_send_call, rule::RuleId};
 use serde::Deserialize;
 
 sol! {
@@ -440,7 +440,11 @@ impl Checker for CowChecker {
         {
             return CheckOutcome::Unknown;
         }
-        let calls = sub_transactions(transaction);
+
+        let Some(calls) = sub_transactions(transaction) else {
+            tracing::error!(?transaction, "invalid Safe transaction value");
+            return CheckOutcome::Unknown;
+        };
 
         let dangling_check = self.check_dangling_approval(&calls).await;
         if dangling_check != CheckOutcome::Unknown {
@@ -464,11 +468,13 @@ impl Checker for CowChecker {
 }
 
 /// `tx` itself, or, if it's a MultiSend batch, each of its sub-calls.
-fn sub_transactions(tx: &SafeTransaction) -> Vec<SafeTransaction> {
-    let tx = tx.clone().into();
-    decode_multi_send_call(&tx)
-        .map(|(sub_txs, _)| sub_txs.into_iter().map(|sub_tx| sub_tx.into()).collect())
-        .unwrap_or_else(|| vec![tx.into()])
+fn sub_transactions(tx: &SafeTransaction) -> Option<Vec<SafeTransaction>> {
+    let tx = tx.clone().try_into().ok()?;
+    Some(
+        decode_multi_send_call(&tx)
+            .map(|(sub_txs, _)| sub_txs.into_iter().map(Into::into).collect())
+            .unwrap_or_else(|| vec![tx.into()]),
+    )
 }
 
 /// Only a plain, valueless `CALL` is recognized — a `DELEGATECALL` executes
@@ -642,7 +648,7 @@ fn deserialize_decimal_u256<'de, D: serde::Deserializer<'de>>(de: D) -> Result<U
 #[cfg(test)]
 mod tests {
     use super::*;
-    use safe_tx::types::multi_send_bindings;
+    use safe_tx::bindings::multi_send;
 
     const SAFE: Address = Address::new([1u8; 20]);
     const TOKEN: Address = Address::new([2u8; 20]);
@@ -796,7 +802,7 @@ mod tests {
     fn multisend(sub_txs: &[Vec<u8>]) -> Bytes {
         let transactions: Vec<u8> = sub_txs.iter().flatten().cloned().collect();
         Bytes::from(
-            multi_send_bindings::multiSendCall {
+            multi_send::multiSendCall {
                 transactions: Bytes::from(transactions),
             }
             .abi_encode(),
@@ -1138,7 +1144,8 @@ mod tests {
         let calls = sub_transactions(&batched_presig_tx(
             U256::from(100u64),
             ORDER_UID.to_vec().into(),
-        ));
+        ))
+        .unwrap();
         assert_eq!(
             CowChecker::with_order_api(FakeOrderApi::NotFound)
                 .check_presignature_batch(SAFE, U256::from(1u64), &calls)
@@ -1153,7 +1160,8 @@ mod tests {
         let calls = sub_transactions(&batched_presig_tx(
             U256::from(100u64),
             order_uid_for(&order),
-        ));
+        ))
+        .unwrap();
         assert_eq!(
             CowChecker::with_order_api(FakeOrderApi::Found(order))
                 .check_presignature_batch(SAFE, U256::from(1u64), &calls)
@@ -1165,7 +1173,8 @@ mod tests {
     #[tokio::test]
     async fn denies_when_the_batched_approval_does_not_match_the_swap_order_amount() {
         let order = order(1000);
-        let calls = sub_transactions(&batched_presig_tx(U256::from(1u64), order_uid_for(&order)));
+        let calls =
+            sub_transactions(&batched_presig_tx(U256::from(1u64), order_uid_for(&order))).unwrap();
         assert_eq!(
             CowChecker::with_order_api(FakeOrderApi::Found(order))
                 .check_presignature_batch(SAFE, U256::from(1u64), &calls)
@@ -1183,7 +1192,8 @@ mod tests {
         let calls = sub_transactions(&batched_presig_tx(
             U256::from(100u64),
             order_uid_for(&order),
-        ));
+        ))
+        .unwrap();
         assert_eq!(
             CowChecker::with_order_api(FakeOrderApi::Found(order))
                 .check_presignature_batch(SAFE, U256::from(1u64), &calls)
@@ -1205,7 +1215,8 @@ mod tests {
         let calls = sub_transactions(&batched_presig_tx(
             U256::from(100u64),
             order_uid_for(&order),
-        ));
+        ))
+        .unwrap();
         assert_eq!(
             CowChecker::with_order_api(FakeOrderApi::Found(order))
                 .check_presignature_batch(SAFE, U256::from(1u64), &calls)
@@ -1226,7 +1237,8 @@ mod tests {
         let calls = sub_transactions(&batched_presig_tx(
             U256::from(100u64),
             ORDER_UID.to_vec().into(),
-        ));
+        ))
+        .unwrap();
         assert_eq!(
             CowChecker::with_order_api(FakeOrderApi::Found(order))
                 .check_presignature_batch(SAFE, U256::from(1u64), &calls)
@@ -1241,7 +1253,8 @@ mod tests {
         let calls = sub_transactions(&batched_presig_tx(
             U256::from(100u64),
             ORDER_UID.to_vec().into(),
-        ));
+        ))
+        .unwrap();
 
         // Unsupported chain.
         assert_eq!(

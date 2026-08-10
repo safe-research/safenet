@@ -5,7 +5,10 @@
 //! future `Check`s (elsewhere) that will consume this output.
 
 use crate::multi_send::decode_multi_send_call;
-use crate::types::{SafeTransaction, erc20, erc721, erc1155};
+use crate::{
+    SafeTransaction,
+    bindings::{erc20, erc721, erc1155},
+};
 use alloy::{
     primitives::{Address, U256},
     sol_types::SolCall as _,
@@ -133,7 +136,7 @@ fn decode_call(tx: &SafeTransaction) -> Vec<TargetEffect> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::types::{Operation, multi_send_bindings};
+    use crate::{Operation, bindings::multi_send};
     use alloy::primitives::{Bytes, address};
 
     fn tx(
@@ -164,7 +167,7 @@ mod tests {
     fn multisend(sub_txs: &[Vec<u8>]) -> Bytes {
         let transactions: Vec<u8> = sub_txs.iter().flatten().cloned().collect();
         Bytes::from(
-            multi_send_bindings::multiSendCall {
+            multi_send::multiSendCall {
                 transactions: Bytes::from(transactions),
             }
             .abi_encode(),
