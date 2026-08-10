@@ -127,7 +127,12 @@ impl SentinelTransition {
         // A duplicate or re-delivered proposal for the same request must not
         // reset an already-tracked request (e.g. back to `WaitingForRequest`
         // after it has advanced further).
-        if state.0.contains_key(&request_id) {
+        if let Some(entry) = state.0.get(&request_id) {
+            tracing::warn!(
+                %request_id,
+                state = entry.name(),
+                "ignoring duplicate oracle transaction proposal"
+            );
             return (state, Vec::new());
         }
         let deadline = block.saturating_add(self.voting_window);
@@ -171,7 +176,11 @@ impl SentinelTransition {
         let (deadline, request) = match state.0.remove(&request_id) {
             Some(RequestState::WaitingForDynamicCheck { deadline, request }) => (deadline, request),
             Some(entry) => {
-                tracing::warn!(%request_id, "ignoring unexpected dynamic check result");
+                tracing::warn!(
+                    %request_id,
+                    state = entry.name(),
+                    "ignoring unexpected dynamic check result"
+                );
                 state.0.insert(request_id, entry);
                 return (state, Vec::new());
             }
@@ -281,10 +290,18 @@ impl SentinelTransition {
                 (state, Vec::new())
             }
             Some(entry) => {
+                tracing::warn!(
+                    %request_id,
+                    state = entry.name(),
+                    "ignoring unexpected new request"
+                );
                 state.0.insert(request_id, entry);
                 (state, Vec::new())
             }
-            None => (state, Vec::new()),
+            None => {
+                tracing::debug!(%request_id, "ignoring new request for an untracked proposal");
+                (state, Vec::new())
+            }
         }
     }
 
@@ -295,12 +312,24 @@ impl SentinelTransition {
         mut state: State,
         event: SentinelOracle::Committed,
     ) -> (State, Commands<State, Self>) {
-        let Some(RequestState::CollectingCommitments {
+        let Some(entry) = state.0.get_mut(&event.requestId) else {
+            tracing::debug!(
+                request_id = %event.requestId,
+                "ignoring commitment for an untracked request"
+            );
+            return (state, Vec::new());
+        };
+        let RequestState::CollectingCommitments {
             committed_count,
             self_committed,
             ..
-        }) = state.0.get_mut(&event.requestId)
+        } = entry
         else {
+            tracing::warn!(
+                request_id = %event.requestId,
+                state = entry.name(),
+                "ignoring unexpected commitment"
+            );
             return (state, Vec::new());
         };
         *committed_count += 1;
@@ -318,6 +347,10 @@ impl SentinelTransition {
         event: SentinelOracle::Revealed,
     ) -> (State, Commands<State, Self>) {
         let Some(entry) = state.0.get_mut(&event.requestId) else {
+            tracing::debug!(
+                request_id = %event.requestId,
+                "ignoring reveal for an untracked request"
+            );
             return (state, Vec::new());
         };
         let RequestState::CollectingVotes {
@@ -329,6 +362,11 @@ impl SentinelTransition {
             ..
         } = entry
         else {
+            tracing::warn!(
+                request_id = %event.requestId,
+                state = entry.name(),
+                "ignoring unexpected reveal"
+            );
             return (state, Vec::new());
         };
         *revealed_count += 1;
@@ -446,13 +484,25 @@ impl SentinelTransition {
         mut state: State,
         event: SentinelOracle::DisputeResolved,
     ) -> (State, Commands<State, Self>) {
-        let Some(RequestState::WaitingForDisputeResolution { approve }) =
-            state.0.get(&event.requestId)
-        else {
-            return (state, Vec::new());
+        let approve = match state.0.remove(&event.requestId) {
+            Some(RequestState::WaitingForDisputeResolution { approve }) => approve,
+            Some(entry) => {
+                tracing::warn!(
+                    request_id = %event.requestId,
+                    state = entry.name(),
+                    "ignoring unexpected dispute resolution"
+                );
+                state.0.insert(event.requestId, entry);
+                return (state, Vec::new());
+            }
+            None => {
+                tracing::debug!(
+                    request_id = %event.requestId,
+                    "ignoring dispute resolution for an untracked request"
+                );
+                return (state, Vec::new());
+            }
         };
-        let approve = *approve;
-        state.0.remove(&event.requestId);
         let approved = event.outcome == OnchainRequestState::RESOLVED_APPROVED;
         let actions = if approved == approve {
             vec![

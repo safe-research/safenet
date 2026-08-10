@@ -66,6 +66,19 @@ pub enum SentinelRequestState {
     WaitingForDisputeResolution { approve: bool },
 }
 
+impl SentinelRequestState {
+    /// Returns a compact state name for diagnostics.
+    pub(crate) fn name(&self) -> &'static str {
+        match self {
+            Self::WaitingForDynamicCheck { .. } => "waiting_for_dynamic_check",
+            Self::WaitingForRequest { .. } => "waiting_for_request",
+            Self::CollectingCommitments { .. } => "collecting_commitments",
+            Self::CollectingVotes { .. } => "collecting_votes",
+            Self::WaitingForDisputeResolution { .. } => "waiting_for_dispute_resolution",
+        }
+    }
+}
+
 /// Snapshot state: every in-flight request, keyed by request ID.
 #[derive(Debug, Default, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct State(pub HashMap<B256, SentinelRequestState>);
