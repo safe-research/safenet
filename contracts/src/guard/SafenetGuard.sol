@@ -220,9 +220,10 @@ contract SafenetGuard is ISafenetGuard, BaseTransactionGuard {
                     nonce: nonce
                 })
             );
-            // The attestation binds the oracle it was gated by; the guard trusts the group key and rebuilds
-            // the exact message the network signed. Which oracle is acceptable is a Validator-side policy
-            // (they only attest on results from an oracle they honour), not enforced here.
+            // The attestation binds the oracle it was gated by. Having verified the (groupKey, epoch) is a
+            // known forest member (above), the guard rebuilds the exact message the network signed. Which
+            // oracle is acceptable is a Validator-side policy (they only attest on results from an oracle
+            // they honour), not enforced here.
             bytes32 message =
                 ConsensusMessages.oracleTransactionProposal(_CONSENSUS_DOMAIN_SEPARATOR, epoch, oracle, safeTxHash);
             FROST.verify(groupKey, signature, message);
