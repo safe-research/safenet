@@ -82,6 +82,9 @@ watcher_events! {
 impl Service for ValidatorService {
     type State = State;
     type Event = Event;
+    type Action = Action;
+    type Effect = Effect;
+    type Resume = Resume;
 
     type Transition = state::Transition;
     type Effects = effect::Handler;
