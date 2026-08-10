@@ -58,7 +58,7 @@ services:
 
 ```sh
 npm run test:integration:sentinel            # ./scripts/run_sentinel_integration_test.sh (Rust sentinel)
-npm run test:integration:validator           # ./scripts/run_validator_port_integration_test.sh (Rust validator)
+npm run test:integration:validator           # ./scripts/run_validator_integration_test.sh (two Rust validator instances, against an AlwaysApproveOracle-backed happy path, running in CI)
 ```
 
 These scripts require:

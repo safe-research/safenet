@@ -40,3 +40,37 @@ jobs:
             sentinel_a_logs.txt
             sentinel_b_logs.txt
           if-no-files-found: ignore
+
+  validator-integration:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          submodules: recursive
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "lts/*"
+          cache: "npm"
+
+      - uses: foundry-rs/foundry-toolchain@v1
+        with:
+          # We fix the foundry version because of a formatting bug introduced
+          # in version 1.7.0.
+          # See <https://github.com/foundry-rs/foundry/issues/13362>
+          version: v1.5.1
+
+      - run: npm ci
+      - run: npm run test:integration:validator
+
+      - name: Upload validator logs
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: validator-integration-logs
+          path: |
+            anvil_validator_logs.txt
+            validator_a_logs.txt
+            validator_b_logs.txt
+          if-no-files-found: ignore
