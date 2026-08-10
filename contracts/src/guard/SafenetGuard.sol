@@ -28,8 +28,8 @@ import {ISafe} from "@safe/interfaces/ISafe.sol";
  *      - **Epochs:** a forest of trusted `(group key, epoch)` pairs kept forever (Consensus lives only on
  *        Gnosis Chain; the guard holds a local copy). Any recorded pair may attest; a compromised
  *        historical key can attest future transactions (but not replay past ones — the Safe nonce binds).
- *      - **Attestation:** an inline trailer on `signatures` carrying `(epoch, groupKey, signature)`,
- *        verified against the full nonce-bound Safe tx hash.
+ *      - **Attestation:** an inline trailer on `signatures` carrying `(epoch, oracle, groupKey, signature)`,
+ *        verified against the oracle-transaction-proposal message over the full nonce-bound Safe tx hash.
  *      - **Escape hatch:** `announceTransaction` queues a transaction by its parameters (nonce excluded);
  *        after `getAllowTxDelay` it executes without attestation within `getAllowTxWindow`, at any nonce.
  *        Single-use; consumed in the pre-execution hook (so it reflects the authorisation path taken, not
@@ -198,7 +198,7 @@ contract SafenetGuard is ISafenetGuard, BaseTransactionGuard {
         if (_isAutoAllowed(to, value, data, operation)) return;
 
         if (AttestationTrailer.hasTrailer(signatures)) {
-            (uint64 epoch, Secp256k1.Point memory groupKey, FROST.Signature memory signature) =
+            (uint64 epoch, address oracle, Secp256k1.Point memory groupKey, FROST.Signature memory signature) =
                 AttestationTrailer.decode(signatures);
             // Cheap forest-membership check first (also implies a non-zero key, enforced on record), so an
             // untrusted key short-circuits before the more expensive Safe tx hash is computed.
@@ -220,7 +220,11 @@ contract SafenetGuard is ISafenetGuard, BaseTransactionGuard {
                     nonce: nonce
                 })
             );
-            bytes32 message = ConsensusMessages.transactionProposal(_CONSENSUS_DOMAIN_SEPARATOR, epoch, safeTxHash);
+            // The attestation binds the oracle it was gated by; the guard trusts the group key and rebuilds
+            // the exact message the network signed. Which oracle is acceptable is a Validator-side policy
+            // (they only attest on results from an oracle they honour), not enforced here.
+            bytes32 message =
+                ConsensusMessages.oracleTransactionProposal(_CONSENSUS_DOMAIN_SEPARATOR, epoch, oracle, safeTxHash);
             FROST.verify(groupKey, signature, message);
             return;
         }
