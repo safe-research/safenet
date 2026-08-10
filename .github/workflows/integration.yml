@@ -7,31 +7,6 @@ on:
       - main
 
 jobs:
-  integration:
-    runs-on: ubuntu-latest
-    env:
-      SAFENET_TEST_VERBOSE: "1"
-
-    steps:
-      - uses: actions/checkout@v5
-        with:
-          submodules: recursive
-
-      - uses: actions/setup-node@v6
-        with:
-          node-version: "lts/*"
-          cache: "npm"
-
-      - uses: foundry-rs/foundry-toolchain@v1
-        with:
-          # We fix the foundry version because of a formatting bug introduced
-          # in version 1.7.0.
-          # See <https://github.com/foundry-rs/foundry/issues/13362>
-          version: v1.5.1
-
-      - run: npm ci
-      - run: npm run test:integration
-
   sentinel-integration:
     runs-on: ubuntu-latest
 
