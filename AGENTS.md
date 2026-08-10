@@ -14,6 +14,7 @@ The repository is a hybrid monorepo with:
 - Rust crates:
   - `crates/core/` — Shared code used by all Safenet offchain services
   - `crates/sentinel/` — Rust port of the sentinel service that watches the `SentinelOracle` and `Consensus` contracts, decides whether to approve or deny proposed oracle transactions, and puts up bonds onchain
+  - `crates/sentinel-engine/` — Transaction verification service the sentinel defers its checks to.
   - `crates/validator/` — Rust port of the validator service that participates in FROST DKG and signing rounds and submits epoch rollovers, transaction attestations, and oracle transaction attestations onchain
 
 Additionally, formal verification specs live in `certora/`. Integration and devnet scripts are in `scripts/`.

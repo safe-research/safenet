@@ -10,6 +10,7 @@ This is a work-in-progress. Don't use it yet!
 - [Validator](./validator) Validator service (Typescript & npm)
 - [Services core crate](./crates/core) Shared logic between the offchain Safenet services (Rust)
 - [Sentinel](./crates/sentinel) Sentinel service that watches and puts up bonds in support of transaction correctness (Rust)
+- [Sentinel engine](./crates/sentinel-engine) Transaction verification service that the sentinel defers its checks to
 - [Validator (Rust port)](./crates/validator) Rust port of the validator service that participates in FROST signing rounds and epoch rollovers
 
 ## Developing
