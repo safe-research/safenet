@@ -33,13 +33,6 @@ sol! {
         uint256 nonce;
     }
 
-    /// The consensus-domain packet proposing a Safe transaction for
-    /// attestation.
-    struct TransactionProposal {
-        uint64 epoch;
-        bytes32 safeTxHash;
-    }
-
     /// The consensus-domain packet proposing an oracle-backed Safe
     /// transaction for attestation.
     struct OracleTransactionProposal {
@@ -106,22 +99,6 @@ impl ConsensusDomain {
             Some(consensus),
             None,
         ))
-    }
-
-    /// The consensus-domain hash of a Safe transaction proposal, embedding the
-    /// already-computed [`safe_tx_hash`] as its `safeTxHash` field.
-    pub fn transaction_proposal_hash(&self, epoch: EpochId, safe_tx_hash: B256) -> B256 {
-        TransactionProposal {
-            epoch: epoch.raw_value(),
-            safeTxHash: safe_tx_hash,
-        }
-        .eip712_signing_hash(&self.0)
-    }
-
-    /// The consensus-domain hash of a Safe transaction packet: shorthand for
-    /// [`transaction_proposal_hash`] with [`safe_tx_hash`] computed from `tx`.
-    pub fn transaction_packet_hash(&self, epoch: EpochId, tx: &SafeTransaction) -> B256 {
-        self.transaction_proposal_hash(epoch, safe_tx_hash(tx))
     }
 
     /// The consensus-domain hash of an oracle-backed Safe transaction proposal,
@@ -203,14 +180,6 @@ mod tests {
         assert_eq!(
             safe_tx_hash(&safe_tx()),
             b256!("fe8b85e8d090b16fe8f142d3c9292dc1fc77daf9eb4af8f7cf4a7707d95f4028")
-        );
-    }
-
-    #[test]
-    fn reference_transaction_packet_hash() {
-        assert_eq!(
-            TEST_DOMAIN.transaction_packet_hash(EPOCH_ONE, &safe_tx()),
-            b256!("3ff98ecae85843603560e9509346df2f35c0ad1dd1ceda5dcbb145745dfc4e00")
         );
     }
 

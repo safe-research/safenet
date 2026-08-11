@@ -91,7 +91,7 @@ impl Transition {
                         .signature_id_to_message
                         .insert(event.sid, event.message);
                 }
-                Packet::Transaction { .. } | Packet::EpochRollover { .. } => {
+                Packet::EpochRollover { .. } => {
                     let deadline = block.saturating_add(self.config.signing_timeout.get());
                     tracing::info!(
                         message = %event.message,
@@ -366,9 +366,9 @@ impl Transition {
 
     /// Publishes this validator's signature share once the
     /// [`Effect::UseNonce`] effect has produced it, attaching the packet's
-    /// completion callback (`stageEpoch`/`attestTransaction`/
-    /// `attestOracleTransaction`) so the group's completed signature carries
-    /// out its onchain effect automatically.
+    /// completion callback (`stageEpoch`/`attestOracleTransaction`) so the
+    /// group's completed signature carries out its onchain effect
+    /// automatically.
     pub(super) fn handle_nonces(
         &self,
         state: State,
@@ -489,7 +489,7 @@ impl Transition {
 
     /// Handles a signature attestation, which can mean different things for
     /// different packets. Called by the individual attestations handlers
-    /// (`EpochStaged`, `TransactionAttested`, `OracleTransactionAttested`).
+    /// (`EpochStaged`, `OracleTransactionAttested`).
     pub(super) fn handle_sign_attested(
         &self,
         mut state: State,
@@ -798,23 +798,22 @@ impl Packet {
     pub(super) fn epoch(&self) -> EpochId {
         match self {
             Packet::EpochRollover { active_epoch, .. } => *active_epoch,
-            Packet::Transaction { epoch, .. } | Packet::OracleTransaction { epoch, .. } => *epoch,
+            Packet::OracleTransaction { epoch, .. } => *epoch,
         }
     }
 
     /// Builds the callback invoked once this packet's group signature
-    /// completes: `attestTransaction`/`attestOracleTransaction` calldata
-    /// targeting the `Consensus` contract. The signature id argument is left
-    /// as a zero placeholder - the `Consensus` contract fills it in itself
-    /// when it invokes the callback from a completed `signShareWithCallback`.
+    /// completes: `stageEpoch`/`attestOracleTransaction` calldata targeting
+    /// the `Consensus` contract. The signature id argument is left as a zero
+    /// placeholder - the `Consensus` contract fills it in itself when it
+    /// invokes the callback from a completed `signShareWithCallback`.
     fn attestation_callback(&self, consensus: Address) -> bindings::Callback {
         let (epoch, oracle, transaction) = match self {
-            Packet::Transaction { epoch, transaction } => (*epoch, None, transaction),
             Packet::OracleTransaction {
                 epoch,
                 oracle,
                 transaction,
-            } => (*epoch, Some(*oracle), transaction),
+            } => (*epoch, *oracle, transaction),
             Packet::EpochRollover {
                 proposed_epoch,
                 rollover_block,
@@ -836,25 +835,15 @@ impl Packet {
         };
 
         let safe_tx_struct_hash = hashing::safe_tx_struct_hash(transaction);
-        let context = match oracle {
-            None => Consensus::attestTransactionCall {
-                epoch: epoch.raw_value(),
-                chainId: transaction.chainId,
-                safe: transaction.safe,
-                safeTxStructHash: safe_tx_struct_hash,
-                signatureId: B256::ZERO,
-            }
-            .abi_encode(),
-            Some(oracle) => Consensus::attestOracleTransactionCall {
-                epoch: epoch.raw_value(),
-                oracle,
-                chainId: transaction.chainId,
-                safe: transaction.safe,
-                safeTxStructHash: safe_tx_struct_hash,
-                signatureId: B256::ZERO,
-            }
-            .abi_encode(),
-        };
+        let context = Consensus::attestOracleTransactionCall {
+            epoch: epoch.raw_value(),
+            oracle,
+            chainId: transaction.chainId,
+            safe: transaction.safe,
+            safeTxStructHash: safe_tx_struct_hash,
+            signatureId: B256::ZERO,
+        }
+        .abi_encode();
         bindings::Callback {
             target: consensus,
             context: context.into(),
@@ -875,14 +864,6 @@ impl Packet {
                 proposed_epoch: *proposed_epoch,
                 rollover_block: *rollover_block,
                 group_id: *group_id,
-                signature_id,
-                expires_at,
-            },
-            Packet::Transaction { epoch, transaction } => Action::AttestTransaction {
-                epoch: *epoch,
-                chain_id: transaction.chainId,
-                safe: transaction.safe,
-                safe_tx_struct_hash: hashing::safe_tx_struct_hash(transaction),
                 signature_id,
                 expires_at,
             },

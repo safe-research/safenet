@@ -122,21 +122,6 @@ sol! {
             bytes32 signatureId,
             Signature attestation
         );
-        event TransactionProposed(
-            bytes32 indexed safeTxHash,
-            uint256 indexed chainId,
-            address indexed safe,
-            uint64 epoch,
-            SafeTransaction transaction
-        );
-        event TransactionAttested(
-            bytes32 indexed safeTxHash,
-            uint256 indexed chainId,
-            address indexed safe,
-            uint64 epoch,
-            bytes32 signatureId,
-            Signature attestation
-        );
         event OracleTransactionProposed(
             bytes32 indexed safeTxHash,
             uint256 indexed chainId,
@@ -161,13 +146,6 @@ sol! {
             uint64 proposedEpoch,
             uint64 rolloverBlock,
             bytes32 groupId,
-            bytes32 signatureId
-        ) external;
-        function attestTransaction(
-            uint64 epoch,
-            uint256 chainId,
-            address safe,
-            bytes32 safeTxStructHash,
             bytes32 signatureId
         ) external;
         function attestOracleTransaction(

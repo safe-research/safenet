@@ -230,13 +230,6 @@ enum Packet {
         /// The newly generated group's public key.
         group_key: Point,
     },
-    /// A proposed Safe transaction.
-    Transaction {
-        /// The epoch whose group signs the attestation.
-        epoch: EpochId,
-        /// The proposed transaction.
-        transaction: SafeTransaction,
-    },
     /// A proposed oracle-backed Safe transaction.
     OracleTransaction {
         /// The epoch whose group signs the attestation.
@@ -244,7 +237,7 @@ enum Packet {
         /// The oracle vouching for the transaction.
         oracle: Address,
         /// The proposed transaction.
-        transaction: SafeTransaction,
+        transaction: Box<SafeTransaction>,
     },
 }
 
@@ -430,12 +423,6 @@ impl StateTransition<State> for Transition {
                 }
                 Event::Consensus(Consensus::ConsensusEvents::EpochStaged(event)) => {
                     self.handle_epoch_staged(state, &event)
-                }
-                Event::Consensus(Consensus::ConsensusEvents::TransactionProposed(event)) => {
-                    self.handle_transaction_proposed(state, log.block, &event)
-                }
-                Event::Consensus(Consensus::ConsensusEvents::TransactionAttested(event)) => {
-                    self.handle_transaction_attested(state, &event)
                 }
                 Event::Consensus(Consensus::ConsensusEvents::OracleTransactionProposed(event)) => {
                     self.handle_oracle_transaction_proposed(state, log.block, &event)
