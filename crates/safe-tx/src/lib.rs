@@ -11,13 +11,12 @@ use alloy::primitives::{Address, Bytes, U256};
 use serde::{Deserialize, Deserializer, Serialize, Serializer, de};
 
 /// The Safe call type; mirrors `Enum.Operation` onchain.
-#[allow(nonstandard_style)]
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 #[repr(u8)]
 pub enum Operation {
     #[default]
-    CALL = 0,
-    DELEGATECALL = 1,
+    Call = 0,
+    DelegateCall = 1,
 }
 
 /// An operation byte that is not a Safe [`Operation`].
@@ -30,8 +29,8 @@ impl TryFrom<u8> for Operation {
 
     fn try_from(byte: u8) -> Result<Self, Self::Error> {
         match byte {
-            0 => Ok(Self::CALL),
-            1 => Ok(Self::DELEGATECALL),
+            0 => Ok(Self::Call),
+            1 => Ok(Self::DelegateCall),
             byte => Err(InvalidOperation(byte)),
         }
     }
@@ -60,12 +59,11 @@ impl<'de> Deserialize<'de> for Operation {
 /// A full Safe transaction as carried by the `(Oracle)TransactionProposed`
 /// events (the 12-field `SafeTransaction.T` tuple), and the input every
 /// check in this crate is written against.
-#[allow(nonstandard_style)]
 #[derive(Clone, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields, rename_all = "camelCase")]
 pub struct SafeTransaction {
     /// The chain the transaction is to execute on.
-    pub chainId: U256,
+    pub chain_id: U256,
     /// The Safe executing the transaction.
     #[serde(serialize_with = "checksummed_address::serialize")]
     pub safe: Address,
@@ -74,13 +72,13 @@ pub struct SafeTransaction {
     pub value: U256,
     pub data: Bytes,
     pub operation: Operation,
-    pub safeTxGas: U256,
-    pub baseGas: U256,
-    pub gasPrice: U256,
+    pub safe_tx_gas: U256,
+    pub base_gas: U256,
+    pub gas_price: U256,
     #[serde(serialize_with = "checksummed_address::serialize")]
-    pub gasToken: Address,
+    pub gas_token: Address,
     #[serde(serialize_with = "checksummed_address::serialize")]
-    pub refundReceiver: Address,
+    pub refund_receiver: Address,
     pub nonce: U256,
 }
 
@@ -108,17 +106,17 @@ mod tests {
     #[test]
     fn json_roundtrip() {
         let transaction = SafeTransaction {
-            chainId: U256::from(1u64),
+            chain_id: U256::from(1u64),
             safe: address!("0x5aFE3855358E112B5647B952709E6165e1c1eEEe"),
             to: address!("0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2"),
             value: U256::from(0x1234u64),
             data: bytes!("0xd0e30db0"),
-            operation: Operation::DELEGATECALL,
-            safeTxGas: U256::from(100_000u64),
-            baseGas: U256::from(21_000u64),
-            gasPrice: U256::from(1u64),
-            gasToken: address!("0x6B175474E89094C44Da98b954EedeAC495271d0F"),
-            refundReceiver: address!("0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045"),
+            operation: Operation::DelegateCall,
+            safe_tx_gas: U256::from(100_000u64),
+            base_gas: U256::from(21_000u64),
+            gas_price: U256::from(1u64),
+            gas_token: address!("0x6B175474E89094C44Da98b954EedeAC495271d0F"),
+            refund_receiver: address!("0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045"),
             nonce: U256::ZERO,
         };
         let json = serde_json::json!({

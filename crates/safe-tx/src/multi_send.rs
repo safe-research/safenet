@@ -95,8 +95,8 @@ pub fn decode_multi_send(
     let mut cursor = Cursor(data);
     while let Some(operation) = cursor.next() {
         let operation = match operation {
-            0 => Operation::CALL,
-            1 => Operation::DELEGATECALL,
+            0 => Operation::Call,
+            1 => Operation::DelegateCall,
             _ => return None,
         };
 
@@ -111,17 +111,17 @@ pub fn decode_multi_send(
         };
 
         result.push(SafeTransaction {
-            chainId: U256::ZERO,
+            chain_id: U256::ZERO,
             safe,
             to,
             value,
             data,
             operation,
-            safeTxGas: U256::ZERO,
-            baseGas: U256::ZERO,
-            gasPrice: U256::ZERO,
-            gasToken: Address::ZERO,
-            refundReceiver: Address::ZERO,
+            safe_tx_gas: U256::ZERO,
+            base_gas: U256::ZERO,
+            gas_price: U256::ZERO,
+            gas_token: Address::ZERO,
+            refund_receiver: Address::ZERO,
             nonce: U256::ZERO,
         });
     }
@@ -137,7 +137,7 @@ pub fn decode_multi_send(
 /// `known_deployment`, decoding the outer `multiSend(bytes)` call, and
 /// `decode_multi_send`, the three steps every caller needs together.
 pub fn decode_multi_send_call(tx: &SafeTransaction) -> Option<(Vec<SafeTransaction>, bool)> {
-    if tx.operation != Operation::DELEGATECALL {
+    if tx.operation != Operation::DelegateCall {
         return None;
     }
     let (version, allows_delegate_calls) = known_deployment(tx.to)?;
