@@ -346,6 +346,7 @@ impl Transition {
                     {
                         match frost::keygen::finalize(sharing_state.clone(), shares) {
                             Ok(key_share) => {
+                                let key_share = Arc::new(key_share);
                                 commands.push(Command::Action(Action::KeyGenConfirm {
                                     group_id: group.id(),
                                     callback: self.key_gen_confirmation_callback(next_epoch),
@@ -353,7 +354,11 @@ impl Transition {
                                         .as_ref()
                                         .map(|deadlines| deadlines.confirm),
                                 }));
-                                KeyGenConfirmation::Confirmed(Arc::new(key_share))
+                                commands.push(Command::Effect(Effect::StartNonceGeneration {
+                                    group_id: group.id(),
+                                    key_share: key_share.clone(),
+                                }));
+                                KeyGenConfirmation::Confirmed(key_share)
                             }
                             Err(err) => {
                                 // Finalization failures are unexpected, since
@@ -850,12 +855,17 @@ impl Transition {
                 let sharing_state = sharing_state.clone();
                 match frost::keygen::finalize(sharing_state, mem::take(shares)) {
                     Ok(key_share) => {
+                        let key_share = Arc::new(key_share);
                         commands.push(Command::Action(Action::KeyGenConfirm {
                             group_id: group.id(),
                             callback: self.key_gen_confirmation_callback(next_epoch),
                             expires_at: deadlines.as_ref().map(|deadlines| deadlines.confirm),
                         }));
-                        *status = KeyGenConfirmation::Confirmed(Arc::new(key_share));
+                        commands.push(Command::Effect(Effect::StartNonceGeneration {
+                            group_id: group.id(),
+                            key_share: key_share.clone(),
+                        }));
+                        *status = KeyGenConfirmation::Confirmed(key_share);
                     }
                     Err(err) => {
                         // Finalization failures are unexpected, as all secret
@@ -1210,7 +1220,8 @@ impl Transition {
 
         // If we are participating in the new group (in other words, we were
         // part of the DKG ceremony and key share), register the epoch in our
-        // participating epochs map and generate a nonces chunk.
+        // participating epochs map and request the chunk that its nonce
+        // generator started preparing when the key share was computed.
         if let Some(key_share) = key_share {
             let mut nonces = NonceState::default();
             let chunk = nonces
@@ -1221,14 +1232,11 @@ impl Transition {
                 epoch,
                 Epoch {
                     group,
-                    key_share: key_share.clone(),
+                    key_share,
                     nonces,
                 },
             );
-            commands.push(Command::Effect(Effect::NonceTree {
-                group_id,
-                key_share,
-            }));
+            commands.push(Command::Effect(Effect::NonceTree { group_id }));
         }
 
         (state, commands)

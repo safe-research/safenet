@@ -41,7 +41,6 @@ impl Transition {
             if epoch.nonces.reserve_chunk().is_some() {
                 commands.push(Command::Effect(Effect::NonceTree {
                     group_id: event.gid,
-                    key_share: epoch.key_share.clone(),
                 }));
             }
             nonce

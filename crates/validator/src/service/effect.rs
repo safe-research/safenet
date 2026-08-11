@@ -8,15 +8,14 @@ use crate::{
         preprocess::Nonces,
     },
     secrets::SecretStore,
+    service::nonce_generator::NonceGenerator,
 };
 use alloy::primitives::{Address, B256};
 use safenet_core::effects::EffectHandler;
 use std::{
-    collections::BTreeSet,
     error::Error,
     fmt::{self, Display, Formatter},
-    sync::{Arc, Mutex, MutexGuard},
-    time::Instant,
+    sync::Arc,
 };
 
 /// An impure operation the state transition asks the handler to perform.
@@ -29,11 +28,14 @@ pub enum Effect {
         count: u16,
         threshold: u16,
     },
-    /// Sample a fresh nonce tree for `key_share` and persist it.
-    NonceTree {
+    /// Start eagerly generating nonce chunks for a group. Idempotent within a
+    /// process.
+    StartNonceGeneration {
         group_id: B256,
         key_share: Arc<KeyShare>,
     },
+    /// Take the next nonce tree from a group's generator stream and persist it.
+    NonceTree { group_id: B256 },
     /// Reveal this validator's nonce commitment at `(root, offset)`.
     RevealNonceCommitments {
         signature_id: B256,
@@ -86,18 +88,17 @@ pub struct Handler {
     pub account: Address,
     /// The secret store containing randomly generated secrets.
     pub secrets: SecretStore,
-    /// Groups whose expensive nonce generation effect is currently running.
-    nonce_generations: Mutex<BTreeSet<B256>>,
+    /// Process-local streams that eagerly generate nonce chunks by group.
+    nonce_generator: NonceGenerator,
 }
 
 impl Handler {
-    /// Creates an effect handler with an empty process-local generation
-    /// registry.
+    /// Creates an effect handler with no active nonce generator streams.
     pub fn new(account: Address, secrets: SecretStore) -> Self {
         Self {
             account,
             secrets,
-            nonce_generations: Mutex::new(BTreeSet::new()),
+            nonce_generator: NonceGenerator::new(),
         }
     }
 
@@ -121,15 +122,27 @@ impl Handler {
                     secrets: Box::new(stored),
                 })
             }
-            Effect::NonceTree {
+            Effect::StartNonceGeneration {
                 group_id,
                 key_share,
             } => {
-                let Some(_generation) = self.begin_nonce_generation(group_id) else {
-                    tracing::debug!(%group_id, "nonce generation already running; ignoring duplicate effect");
+                self.nonce_generator.start(group_id, key_share)?;
+                Ok(Resume::Noop)
+            }
+            Effect::NonceTree { group_id } => {
+                let Some(generated) = self.nonce_generator.next(group_id).await? else {
+                    tracing::debug!(%group_id, "nonce chunk request already running; ignoring duplicate effect");
                     return Ok(Resume::Noop);
                 };
-                self.sample_nonces(group_id, &key_share).await
+                let (nonce_chunk, _request) = generated.into_parts();
+                let commitment = self
+                    .secrets
+                    .register_nonces_chunk(group_id, nonce_chunk)
+                    .await?;
+                Ok(Resume::NonceTree {
+                    group_id,
+                    commitment,
+                })
             }
             Effect::RevealNonceCommitments {
                 signature_id,
@@ -176,70 +189,12 @@ impl Handler {
                 Ok(Resume::Noop)
             }
             Effect::PruneGroupNonces { group_id } => {
+                self.nonce_generator.stop(group_id).await;
                 self.secrets.prune_group_nonces(group_id).await?;
                 Ok(Resume::Noop)
             }
         }
     }
-
-    async fn sample_nonces(
-        &self,
-        group_id: B256,
-        key_share: &KeyShare,
-    ) -> Result<Resume, InternalError> {
-        let started = Instant::now();
-        let nonce_chunk = {
-            let mut rng = rand::thread_rng();
-            frost::preprocess::NonceChunk::generate(key_share, &mut rng)?
-        };
-        let commitment = self
-            .secrets
-            .register_nonces_chunk(group_id, nonce_chunk)
-            .await?;
-        let result = Resume::NonceTree {
-            group_id,
-            commitment,
-        };
-        tracing::trace!(
-            %group_id,
-            elapsed_ms = started.elapsed().as_millis(),
-            "completed nonce tree sampling effect"
-        );
-        Ok(result)
-    }
-
-    /// Claims the process-local generation slot for `group_id`.
-    fn begin_nonce_generation(&self, group_id: B256) -> Option<GenerationGuard<'_>> {
-        let inserted = lock(&self.nonce_generations).insert(group_id);
-        if inserted {
-            Some(GenerationGuard {
-                group_id,
-                generations: &self.nonce_generations,
-            })
-        } else {
-            None
-        }
-    }
-}
-
-/// Releases a group's nonce generation slot on success, error, or cancellation.
-struct GenerationGuard<'a> {
-    group_id: B256,
-    generations: &'a Mutex<BTreeSet<B256>>,
-}
-
-impl Drop for GenerationGuard<'_> {
-    fn drop(&mut self) {
-        lock(self.generations).remove(&self.group_id);
-    }
-}
-
-/// Acquires a generation-registry lock, recovering the inner set if another
-/// task panicked while holding it.
-fn lock<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
-    mutex
-        .lock()
-        .unwrap_or_else(|poisoned| poisoned.into_inner())
 }
 
 impl EffectHandler<Effect, Resume> for Handler {
