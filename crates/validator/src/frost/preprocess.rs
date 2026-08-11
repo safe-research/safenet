@@ -147,6 +147,18 @@ impl NonceChunk {
     }
 }
 
+impl Debug for NonceChunk {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("NonceChunk")
+            .field(
+                "nonces",
+                &format_args!("[<redacted>; {}]", self.nonces.len()),
+            )
+            .field("commitment", &self.commitment)
+            .finish()
+    }
+}
+
 /// The leaf hash for a nonce commitment at `offset` in the nonce tree. Defined
 /// as `keccak256(abi.encode(offset, d.x, d.y, e.x, e.y))`.
 pub(super) fn nonces_leaf(offset: u64, nonces: &bindings::SignNonces) -> B256 {

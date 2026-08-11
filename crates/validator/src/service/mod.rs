@@ -120,7 +120,7 @@ impl Service for ValidatorService {
 pub enum Error {
     /// Storage error initializing the secret store.
     #[error(transparent)]
-    Secrets(#[from] secrets::Error),
+    Secrets(#[from] secrets::store::Error),
     /// Invalid validator set.
     ///
     /// The configured validator set does not constitute a valid genesis group.
