@@ -131,32 +131,36 @@ impl SentinelTransition {
             return (state, Vec::new());
         }
         let deadline = block.saturating_add(self.voting_window);
-        let decision = self.static_checker.check(&event.transaction);
-        if !decision.approve {
-            state.0.insert(
-                request_id,
+        let outcome = self.static_checker.check(&event.transaction);
+        let (request, commands) = match outcome {
+            CheckOutcome::Approved => (
+                RequestState::WaitingForDynamicCheck {
+                    deadline,
+                    request: None,
+                },
+                vec![Command::Effect(effect::Effect::DynamicCheck {
+                    request_id,
+                    transaction: event.transaction,
+                })],
+            ),
+            CheckOutcome::Denied(rule) => (
                 RequestState::WaitingForRequest {
                     approve: false,
-                    reason: decision.reason.into_owned(),
+                    reason: rule.code().to_string(),
                     deadline,
                 },
-            );
-            return (state, Vec::new());
-        }
-        state.0.insert(
-            request_id,
-            RequestState::WaitingForDynamicCheck {
-                deadline,
-                request: None,
-            },
-        );
-        (
-            state,
-            vec![Command::Effect(effect::Effect::DynamicCheck {
-                request_id,
-                transaction: event.transaction,
-            })],
-        )
+                Vec::new(),
+            ),
+            CheckOutcome::Unknown => {
+                tracing::warn!(
+                    %request_id,
+                    "unexpected static checker failure; dropping request unanswered"
+                );
+                return (state, Vec::new());
+            }
+        };
+        state.0.insert(request_id, request);
+        (state, commands)
     }
 
     /// Consumes a [`effect::Effect::DynamicCheck`]'s resolved outcome for
