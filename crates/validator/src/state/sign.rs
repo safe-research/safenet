@@ -65,7 +65,7 @@ impl Transition {
                 signers,
                 ..
             }) if group_id == event.gid => match packet {
-                Packet::OracleTransaction { oracle, .. } => {
+                Packet::Transaction { oracle, .. } => {
                     let deadline = block.saturating_add(self.config.oracle_timeout.get());
                     tracing::info!(
                         message = %event.message,
@@ -798,7 +798,7 @@ impl Packet {
     pub(super) fn epoch(&self) -> EpochId {
         match self {
             Packet::EpochRollover { active_epoch, .. } => *active_epoch,
-            Packet::OracleTransaction { epoch, .. } => *epoch,
+            Packet::Transaction { epoch, .. } => *epoch,
         }
     }
 
@@ -809,7 +809,7 @@ impl Packet {
     /// invokes the callback from a completed `signShareWithCallback`.
     fn attestation_callback(&self, consensus: Address) -> bindings::Callback {
         let (epoch, oracle, transaction) = match self {
-            Packet::OracleTransaction {
+            Packet::Transaction {
                 epoch,
                 oracle,
                 transaction,
@@ -867,11 +867,11 @@ impl Packet {
                 signature_id,
                 expires_at,
             },
-            Packet::OracleTransaction {
+            Packet::Transaction {
                 epoch,
                 oracle,
                 transaction,
-            } => Action::AttestOracleTransaction {
+            } => Action::AttestTransaction {
                 epoch: *epoch,
                 oracle: *oracle,
                 chain_id: transaction.chainId,

@@ -88,7 +88,7 @@ pub enum Action {
     /// A fallback action to submit a completed oracle-backed transaction
     /// attestation directly, when the automatic `signShareWithCallback`
     /// submission did not land in time.
-    AttestOracleTransaction {
+    AttestTransaction {
         epoch: EpochId,
         oracle: Address,
         chain_id: U256,
@@ -331,7 +331,7 @@ impl ActionEncoder<Action> for Encoder {
                 },
                 Some(expires_at),
             ),
-            Action::AttestOracleTransaction {
+            Action::AttestTransaction {
                 epoch,
                 oracle,
                 chain_id,

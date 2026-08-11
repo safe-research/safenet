@@ -81,7 +81,7 @@ export const loadProposedSafeTransaction = async ({
 	const logs = parseEventLogs({
 		logs: rawLogs.map((log) => formatLog(log)),
 		abi: consensusAbi,
-		eventName: "OracleTransactionProposed",
+		eventName: "TransactionProposed",
 		strict: true,
 	});
 	return safeTransactionSchema.safeParse(logs.at(0)?.args?.transaction).data ?? null;
@@ -110,7 +110,7 @@ export const loadTransactionProposals = async ({
 	const blockRange = { fromBlock: numberToHex(fromBlock), toBlock: numberToHex(toBlock) };
 
 	// We use an `eth_getLogs` here directly, in order to filter on the `safeTxHash` topic.
-	// When `safe` is set, topic[3] silently drops `OracleTransactionAttested` (only 1 indexed topic);
+	// When `safe` is set, topic[3] silently drops `TransactionAttested` (only 1 indexed topic);
 	// those proposals will have attestedAt: null until contract events are updated.
 	const rawLogs = await provider.request({
 		method: "eth_getLogs",
@@ -127,20 +127,20 @@ export const loadTransactionProposals = async ({
 			// <https://github.com/wevm/viem/issues/4340>
 			logs: rawLogs.map((log) => formatLog(log)),
 			abi: consensusAbi,
-			eventName: ["OracleTransactionProposed", "OracleTransactionAttested"],
+			eventName: ["TransactionProposed", "TransactionAttested"],
 			strict: true,
 		}),
 	);
 
 	// `oracle` isn't an indexed topic on either oracle event, so it can't be filtered via
 	// eth_getLogs topics; trust is resolved here, after decoding. With no explicit allow-list,
-	// an oracle is trusted once it has an `OracleTransactionAttested` log in this same batch.
+	// an oracle is trusted once it has a `TransactionAttested` log in this same batch.
 	// Addresses are compared via their checksummed form: `oracles` comes from user settings and
 	// may not be checksummed, while addresses decoded from logs by viem always are.
 	const trustedOracles = new Set(
 		(oracles.length > 0
 			? oracles
-			: allEventLogs.filter((log) => log.eventName === "OracleTransactionAttested").map((log) => log.args.oracle)
+			: allEventLogs.filter((log) => log.eventName === "TransactionAttested").map((log) => log.args.oracle)
 		).map((oracle) => getAddress(oracle)),
 	);
 	const eventLogs = allEventLogs.filter((log) => trustedOracles.has(getAddress(log.args.oracle)));
@@ -149,12 +149,12 @@ export const loadTransactionProposals = async ({
 		`${log.args.safeTxHash}:${log.args.epoch}:${getAddress(log.args.oracle)}`;
 	const attestations = new Map(
 		eventLogs
-			.filter((log) => log.eventName === "OracleTransactionAttested")
+			.filter((log) => log.eventName === "TransactionAttested")
 			.map((log) => [attestationKey(log), { block: log.blockNumber, tx: log.transactionHash }] as const),
 	);
 	const proposals = eventLogs
 		.map((log) => {
-			if (log.eventName !== "OracleTransactionProposed") {
+			if (log.eventName !== "TransactionProposed") {
 				return undefined;
 			}
 

@@ -103,7 +103,7 @@ impl ConsensusDomain {
 
     /// The consensus-domain hash of an oracle-backed Safe transaction proposal,
     /// embedding the already-computed [`safe_tx_hash`] as its `safeTxHash` field.
-    pub fn oracle_transaction_proposal_hash(
+    pub fn transaction_proposal_hash(
         &self,
         epoch: EpochId,
         oracle: Address,
@@ -118,15 +118,15 @@ impl ConsensusDomain {
     }
 
     /// The consensus-domain hash of an oracle-backed Safe transaction packet:
-    /// shorthand for [`oracle_transaction_proposal_hash`] with [`safe_tx_hash`]
+    /// shorthand for [`transaction_proposal_hash`] with [`safe_tx_hash`]
     /// computed from `tx`.
-    pub fn oracle_transaction_packet_hash(
+    pub fn transaction_packet_hash(
         &self,
         epoch: EpochId,
         oracle: Address,
         tx: &SafeTransaction,
     ) -> B256 {
-        self.oracle_transaction_proposal_hash(epoch, oracle, safe_tx_hash(tx))
+        self.transaction_proposal_hash(epoch, oracle, safe_tx_hash(tx))
     }
 
     /// The consensus-domain hash of an epoch rollover proposal.
@@ -184,9 +184,9 @@ mod tests {
     }
 
     #[test]
-    fn sample_oracle_transaction_packet_hash() {
+    fn sample_transaction_packet_hash() {
         assert_eq!(
-            TEST_DOMAIN.oracle_transaction_packet_hash(EPOCH_ONE, TEST_ADDRESS, &safe_tx()),
+            TEST_DOMAIN.transaction_packet_hash(EPOCH_ONE, TEST_ADDRESS, &safe_tx()),
             b256!("44151ab85018beace71ef3255d90480c7b41a3c42b2cf892c155a304875abc9e")
         );
     }
