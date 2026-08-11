@@ -15,7 +15,7 @@ on the Consensus contract) and the FROST signing round has completed.
 
 ```sh
 # Node.js dependencies (from repo root)
-npm ci
+npm ci --prefix examples
 ```
 
 ### Environment
@@ -39,7 +39,7 @@ cp examples/.env.sample examples/.env
 ### Usage
 
 ```sh
-npm run attest-safe-tx -w @safenet/examples -- <safeTxHash> <guardAddress>
+just examples-attest-safe-tx <safeTxHash> <guardAddress>
 ```
 
 | Argument | Description |

@@ -21,6 +21,9 @@ jobs:
         with:
           node-version: "lts/*"
           cache: "npm"
+          cache-dependency-path: |
+            examples/package-lock.json
+            explorer/package-lock.json
 
       - uses: foundry-rs/foundry-toolchain@v1
         with:
@@ -29,10 +32,14 @@ jobs:
           # See <https://github.com/foundry-rs/foundry/issues/13362>
           version: v1.5.1
 
+      - name: Install just
+        run: sudo apt-get update && sudo apt-get install -y just
+
       - uses: ./.github/actions/install-lcov
       - uses: ./.github/actions/install-cargo-llvm-cov
 
-      - run: npm ci
+      - run: npm ci --prefix examples
+      - run: npm ci --prefix explorer
       - run: scripts/generate_coverage_report.sh
 
       - name: Post Coverage Step Summary

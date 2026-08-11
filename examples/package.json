@@ -4,7 +4,7 @@
 	"type": "module",
 	"scripts": {
 		"attest-safe-tx": "tsx attest-safe-tx.ts",
-		"check": "tsc",
+		"check": "biome check && tsc",
 		"coverage": "echo \"No coverage for examples\"",
 		"fix": "biome check --write"
 	},
@@ -14,6 +14,7 @@
 		"zod": "^4.1.12"
 	},
 	"devDependencies": {
+		"@biomejs/biome": "2.0.6",
 		"@types/node": "^24.1.0",
 		"tsx": "^4.20.3",
 		"typescript": "^5.8.3"

@@ -32,7 +32,7 @@ export default defineConfig({
 	resolve: {
 		alias: {
 			"@": resolve(__dirname, "./src"),
-			"@plausible-analytics/tracker": resolve(__dirname, "../node_modules/@plausible-analytics/tracker/plausible.js"),
+			"@plausible-analytics/tracker": resolve(__dirname, "./node_modules/@plausible-analytics/tracker/plausible.js"),
 		},
 	},
 });

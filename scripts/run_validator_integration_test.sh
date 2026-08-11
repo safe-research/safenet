@@ -8,7 +8,7 @@
 # succeeds once epoch 1 is attested by genesis, staged, rolled over, and
 # attests the second transaction.
 #
-# Requirements: anvil, forge, cast, jq, cargo, and npm.
+# Requirements: anvil, forge, cast, jq, and cargo.
 set -euo pipefail
 
 ANVIL_RPC_URL="${ANVIL_RPC_URL:-http://127.0.0.1:8545}"
@@ -35,7 +35,7 @@ REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 TMPDIR="$(mktemp -d)"
 PIDS=()
 
-for command in anvil cast forge jq cargo npm; do
+for command in anvil cast forge jq cargo; do
     command -v "$command" >/dev/null || {
         echo "Missing required command: $command" >&2
         exit 1
@@ -70,7 +70,7 @@ cast block-number --rpc-url "$ANVIL_RPC_URL" >/dev/null
 echo "==> Deploying contracts..."
 PARTICIPANTS_CSV=$(IFS=,; echo "${PARTICIPANTS[*]}")
 env PARTICIPANTS="$PARTICIPANTS_CSV" \
-    npm run --prefix "$REPO_ROOT" --workspace contracts cmd:deploy -- \
+    forge script --root "$REPO_ROOT/contracts" DeployScript \
     --rpc-url "$ANVIL_RPC_URL" \
     --unlocked \
     --sender "$SENDER" \
@@ -136,7 +136,7 @@ done
 echo "==> Triggering genesis KeyGen..."
 env PARTICIPANTS="$PARTICIPANTS_CSV" \
     COORDINATOR_ADDRESS="$COORDINATOR_ADDR" \
-    npm run --prefix "$REPO_ROOT" --workspace contracts cmd:genesis -- \
+    forge script --root "$REPO_ROOT/contracts" GenesisScript \
     --rpc-url "$ANVIL_RPC_URL" \
     --unlocked \
     --sender "$SENDER" \
@@ -201,7 +201,7 @@ while [ "$SECONDS" -lt "$DEADLINE" ]; do
             TX_SAFE="$SENDER" \
             TX_TO="$SENDER" \
             TX_NONCE=1 \
-            npm run --prefix "$REPO_ROOT" --workspace contracts cmd:propose -- \
+            forge script --root "$REPO_ROOT/contracts" ProposeTransactionScript \
             --rpc-url "$ANVIL_RPC_URL" \
             --unlocked \
             --sender "$SENDER" \

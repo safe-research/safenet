@@ -4,7 +4,7 @@
 # JavaScript/TypeScript, Solidity and Rust packages in the repository.
 #
 # It assumes that all required tools are already available on PATH: node/npm,
-# foundry (forge), lcov, jq and cargo-llvm-cov (with the llvm-tools-preview
+# just, foundry (forge), lcov, jq and cargo-llvm-cov (with the llvm-tools-preview
 # component). See the install-lcov and install-cargo-llvm-cov actions for how
 # CI provisions these.
 
@@ -15,10 +15,10 @@ cd "$ROOT"
 
 # --- 1. Generate coverage data --------------------------------------------
 
-# JavaScript/TypeScript and Solidity coverage, emitted per workspace as
-# {workspace}/coverage/lcov.info.
+# JavaScript/TypeScript and Solidity coverage, emitted per package as
+# {package}/coverage/lcov.info.
 echo "🧪 Generating JavaScript and Solidity coverage..."
-npm run coverage
+just coverage
 
 # Rust coverage. We collect coverage data for the whole workspace in a single
 # test run.
@@ -48,16 +48,16 @@ process_lcov() {
     REPORT_TABLE+=("| **${display_name}** | ${stats} |")
 }
 
-# Scan NPM workspaces ("*/package.json").
-echo "🔍 Scanning NPM workspace packages..."
+# Scan NPM packages ("*/package.json").
+echo "🔍 Scanning NPM packages..."
 for manifest in */package.json; do
     [ -f "$manifest" ] || continue
 
     pkg="$(dirname "$manifest")"
     lcov_file="$pkg/coverage/lcov.info"
 
-    # Filter out packages with no LCOV data, since not all workspace packages
-    # generate them (notably `example`).
+    # Filter out packages with no LCOV data, since not all packages generate
+    # them (notably `example`).
     [ -f "$lcov_file" ] || continue
 
     # NPM tools emit source paths relative to the package directory. Prepend

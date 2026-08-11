@@ -60,12 +60,12 @@ sleep 2
 # --- 3. Deploy contracts ---
 echo "Deploying fee token..."
 env FACTORY=2 \
-	npm run -w contracts cmd:deploy:testing-erc20 -- --rpc-url "$RPC_URL" --private-key "$DEPLOYER_PK" --broadcast
+	forge script --root "$ROOT/contracts" DeployERC20Script --rpc-url "$RPC_URL" --private-key "$DEPLOYER_PK" --broadcast
 FEE_TOKEN=$(jq -r '.returns.erc20.value' "$ROOT/contracts/build/broadcast/DeployERC20.s.sol/$CHAIN_ID/run-latest.json")
 echo "Fee token deployed at $FEE_TOKEN"
 
 echo "Deploying test consensus..."
-npm run -w contracts cmd:deploy:test-consensus -- --rpc-url "$RPC_URL" --private-key "$DEPLOYER_PK" --broadcast
+forge script --root "$ROOT/contracts" DeployTestConsensusScript --rpc-url "$RPC_URL" --private-key "$DEPLOYER_PK" --broadcast
 CONSENSUS=$(jq -r '.returns.consensus.value' "$ROOT/contracts/build/broadcast/DeployTestConsensus.s.sol/$CHAIN_ID/run-latest.json")
 echo "Test consensus deployed at $CONSENSUS"
 
@@ -80,7 +80,7 @@ env \
 	SENTINEL_REVEAL_WINDOW="$REVEAL_WINDOW" \
 	SENTINEL_GOVERNANCE_DELAY="$GOVERNANCE_DELAY" \
 	SENTINEL_BOND_MULTIPLIER="$BOND_MULTIPLIER" \
-	npm run -w contracts cmd:deploy:sentinel-oracle -- --rpc-url "$RPC_URL" --private-key "$DEPLOYER_PK" --broadcast
+	forge script --root "$ROOT/contracts" DeploySentinelOracleScript --rpc-url "$RPC_URL" --private-key "$DEPLOYER_PK" --broadcast
 ORACLE=$(jq -r '.returns.sentinelOracle.value' "$ROOT/contracts/build/broadcast/DeploySentinelOracle.s.sol/$CHAIN_ID/run-latest.json")
 echo "Sentinel oracle deployed at $ORACLE"
 
@@ -172,7 +172,7 @@ env \
 	TX_SAFE=0x1111111111111111111111111111111111111111 \
 	TX_TO=0x2222222222222222222222222222222222222222 \
 	TX_NONCE=0 \
-	npm run -w contracts cmd:propose -- --rpc-url "$RPC_URL" --private-key "$PROPOSER_PK" --broadcast
+	forge script --root "$ROOT/contracts" ProposeTransactionScript --rpc-url "$RPC_URL" --private-key "$PROPOSER_PK" --broadcast
 
 REQUEST_ID=$(cast logs --rpc-url "$RPC_URL" --json --from-block 0 --address "$ORACLE" \
 	'NewRequest(bytes32,address,uint256,uint256,uint256,uint256)' | jq -r '.[0].topics[1]')

@@ -22,10 +22,11 @@ Developing on the project requires a few tools:
 - NPM v11
 - Foundry v1.5.1
 - Rust + Cargo (Stable)
+- [Just](https://github.com/casey/just), the command runner used to invoke every command below
 
 ### Foundry Setup
 
-Stable Foundry has a known [formatting bug](https://github.com/foundry-rs/foundry/issues/13362) that affects this repository. With `foundryup` installed, the correct Foundry version can be set up with `npm run foundryup`.
+Stable Foundry has a known [formatting bug](https://github.com/foundry-rs/foundry/issues/13362) that affects this repository. With `foundryup` installed, the correct Foundry version can be set up with `just foundryup`.
 
 ### Project Setup
 
@@ -41,25 +42,33 @@ In order to update the submodules, or fetch them if the repository was cloned wi
 git submodule update --init --recursive
 ```
 
-Safenet repository is currently an NPM workspace project. Install dependencies with:
+`contracts/` has no JavaScript of its own (see the [Justfile](./Justfile)), but `examples/` and
+`explorer/` are each an independent NPM package with its own lockfile. Install their dependencies
+with:
 
 ```sh
-npm ci
+npm ci --prefix examples
+npm ci --prefix explorer
 ```
+
+Each of `examples/`/`explorer/` also has its own [Biome](https://biomejs.dev/) devDependency and
+`biome.json` (extending the shared rules in the root [`biome.json`](./biome.json), but scoped to
+that package's own files only) — `just check`/`just fix` run it once per directory, so both
+`npm ci` commands above are needed before either recipe works.
 
 ### Run tests
 
 Unit tests for all projects:
 
 ```
-npm test
+just test
 ```
 
 Integration tests:
 
 ```sh
-npm run test:integration:sentinel
-npm run test:integration:validator
+just test-integration-sentinel
+just test-integration-validator
 ```
 
 Verbose logging for tests can be enabled by setting `SAFENET_TEST_VERBOSE=1`.

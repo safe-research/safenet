@@ -21,6 +21,9 @@ jobs:
         with:
           node-version: "lts/*"
           cache: "npm"
+          cache-dependency-path: |
+            examples/package-lock.json
+            explorer/package-lock.json
 
       - uses: foundry-rs/foundry-toolchain@v1
         with:
@@ -29,9 +32,10 @@ jobs:
           # See <https://github.com/foundry-rs/foundry/issues/13362>
           version: v1.5.1
 
-      - run: npm ci
-      - run: npm run check
-      - run: |
-          cargo fmt --all -- --check
-          cargo clippy --workspace --all-targets --locked -- -D warnings
-          cargo test --workspace
+      - name: Install just
+        run: sudo apt-get update && sudo apt-get install -y just
+
+      - run: npm ci --prefix examples
+      - run: npm ci --prefix explorer
+      - run: just check
+      - run: just test

@@ -8,9 +8,10 @@ for a short summary).
 
 ## Prerequisites
 
-- Full [project setup](../README.md#project-setup) (submodules, `npm ci`, `npm run foundryup`) —
-  required even if you only plan to run `npm run devnet` without touching the contracts/validator/
-  sentinel code yourself, since `npm run devnet -- --build` builds their Podman images from this
+- Full [project setup](../README.md#project-setup) (submodules, `npm ci --prefix examples`,
+  `npm ci --prefix explorer`, `just foundryup`) — required even if you only plan to run
+  `just devnet` without touching the contracts/validator/sentinel code yourself, since
+  `just devnet --build` builds their Podman images from this
   checkout and will fail if submodules aren't initialized or Foundry isn't set up.
 - [Podman](https://podman.io/docs/installation) — the devnet is orchestrated with `podman kube play`,
   not `docker-compose`, and there is currently no Docker equivalent.
@@ -20,14 +21,14 @@ for a short summary).
 ## Starting the devnet
 
 ```sh
-npm run devnet                  # ./scripts/run_devnet.sh
+just devnet                     # ./scripts/run_devnet.sh
 ```
 
 The first run (or after contract/validator/sentinel code changes) needs `--build`, to build the
 three Podman images the devnet depends on:
 
 ```sh
-npm run devnet -- --build       # builds localhost/safenet-{contracts,validator,sentinel}
+just devnet --build          # builds localhost/safenet-{contracts,validator,sentinel}
 ```
 
 This brings up a single Podman pod named `safenet` containing:
@@ -59,7 +60,7 @@ done, so leave the terminal open (or run it in the background) while you interac
 For example, to run a faster-ticking devnet on an alternate port and fund your own wallet:
 
 ```sh
-npm run devnet -- --port 9545 --block-time 1 --fund-account 0xYourAddress
+just devnet --port 9545 --block-time 1 --fund-account 0xYourAddress
 ```
 
 ## Network details
@@ -108,7 +109,7 @@ This reads the same mounted config `safenet-sentinel-carol` was started with, th
 works in more detail, and alternative ways to get at the same values). The rest of this document
 uses `$CONSENSUS_ADDRESS`, `$ORACLE_ADDRESS`, and `$FEE_TOKEN_ADDRESS` directly — since these are
 `export`ed (or, on fish, `set -gx`'d), every command run in the same shell picks them up
-automatically, with no need to restate them. Re-run this after every `npm run devnet` restart, since
+automatically, with no need to restate them. Re-run this after every `just devnet` restart, since
 addresses are freshly deployed each time.
 
 ## Interacting with the devnet
@@ -159,7 +160,7 @@ TX_TO=<TO_ADDRESS> \
 TX_NONCE=0 \
 TX_DATA=<CALLDATA> \
 TX_OPERATION=0 \
-npm run cmd:propose -w @safenet/contracts -- \
+just contracts-propose \
     --rpc-url http://127.0.0.1:8545 --unlocked --sender 0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266 --broadcast
 ```
 
@@ -223,7 +224,7 @@ epochs, validator/sentinel status — rather than being a generic chain explorer
 point it at the devnet:
 
 ```sh
-npm run dev -w explorer        # http://localhost:3000
+just explorer-dev              # http://localhost:3000
 ```
 
 By default it opens with an empty RPC/Consensus configuration and a **Settings** panel in the UI
@@ -263,7 +264,7 @@ from the [accounts table](#accounts) above.
 The [environment variable step](#setting-up-environment-variables) above already covers the common
 case. A few other ways to get at the same values:
 
-`DeployScript` prints its output to the terminal running `npm run devnet`, so the following are
+`DeployScript` prints its output to the terminal running `just devnet`, so the following are
 visible directly in that output:
 
 ```

@@ -1,0 +1,9 @@
+{
+	"$schema": "https://biomejs.dev/schemas/2.0.6/schema.json",
+	"extends": ["../biome.json"],
+	"files": {
+		"ignoreUnknown": false,
+		"includes": ["*.ts", "package.json", "tsconfig.json", "tsconfig.*.json"],
+		"maxSize": 2000000
+	}
+}
