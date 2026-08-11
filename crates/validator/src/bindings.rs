@@ -264,14 +264,16 @@ sol! {
     }
 }
 
-impl From<SafeTransaction> for safe_tx::types::SafeTransaction {
-    fn from(tx: SafeTransaction) -> Self {
+impl TryFrom<SafeTransaction> for safe_tx::SafeTransaction {
+    type Error = Operation;
+
+    fn try_from(tx: SafeTransaction) -> Result<Self, Self::Error> {
         let operation = match tx.operation {
-            Operation::CALL => safe_tx::types::Operation::CALL,
-            Operation::DELEGATECALL => safe_tx::types::Operation::DELEGATECALL,
-            Operation::__Invalid => safe_tx::types::Operation::__Invalid,
+            Operation::CALL => safe_tx::Operation::CALL,
+            Operation::DELEGATECALL => safe_tx::Operation::DELEGATECALL,
+            Operation::__Invalid => return Err(Operation::__Invalid),
         };
-        safe_tx::types::SafeTransaction {
+        Ok(safe_tx::SafeTransaction {
             chainId: tx.chainId,
             safe: tx.safe,
             to: tx.to,
@@ -284,6 +286,6 @@ impl From<SafeTransaction> for safe_tx::types::SafeTransaction {
             gasToken: tx.gasToken,
             refundReceiver: tx.refundReceiver,
             nonce: tx.nonce,
-        }
+        })
     }
 }

@@ -193,8 +193,13 @@ impl Transition {
 fn check_transaction(transaction: &SafeTransaction) -> bool {
     // `sol!` requires custom types used as event/struct fields to be declared
     // in the same macro invocation, so this ABI-decoding copy can't be replaced
-    // with a `use` of [`safe_tx::types::*`] in our bindings. Do the conversion
-    // to the `safe_tx` transaction type when it is needed.
-    let transaction = transaction.clone().into();
+    // with the plain [`safe_tx::SafeTransaction`] in our bindings. Convert at
+    // the policy boundary, rejecting the generated enum's `__Invalid` escape
+    // hatch just like any other transaction that fails local checks.
+    let Ok(transaction) = transaction.clone().try_into() else {
+        tracing::error!(?transaction, "invalid Safe transaction value");
+        return false;
+    };
+
     safe_tx::checks::check_transaction(&transaction).is_ok()
 }
