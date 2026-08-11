@@ -182,7 +182,7 @@ stateDiagram-v2
 	share --> attest : SignCompleted()
 	share --> failure : timeout
 
-	attest --> success : EpochStaged()<br>TransactionAttested()
+	attest --> success : EpochStaged()<br>OracleTransactionAttested()
 	attest --> failure : timeout
 
 	failure --> request : len(remaining_selection) >= threshold

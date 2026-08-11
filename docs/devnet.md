@@ -134,22 +134,9 @@ cast call $ORACLE_ADDRESS "bondMultiplier()(uint256)" --rpc-url http://localhost
 ### Proposing a Safe transaction
 
 Use the same Forge scripts documented in [`contracts/script/README.md`](../contracts/script/README.md),
-pointed at the devnet's RPC and one of the accounts above, e.g. to propose a plain Safe transaction
-(`CONSENSUS_ADDRESS` is already exported from [above](#setting-up-environment-variables), so it
-doesn't need to be restated here):
-
-```sh
-TX_CHAIN_ID=31337 \
-TX_SAFE=<SAFE_ADDRESS> \
-TX_TO=<TO_ADDRESS> \
-TX_NONCE=0 \
-TX_DATA=<CALLDATA> \
-TX_OPERATION=0 \
-npm run cmd:propose -w @safenet/contracts -- \
-    --rpc-url http://127.0.0.1:8545 --unlocked --sender 0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266 --broadcast
-```
-
-Or, to propose a transaction that requires sentinel oracle approval. `SentinelOracle.postRequest`
+pointed at the devnet's RPC and one of the accounts above. Proposing a transaction requires sentinel
+oracle approval (`CONSENSUS_ADDRESS` is already exported from [above](#setting-up-environment-variables),
+so it doesn't need to be restated here). `SentinelOracle.postRequest`
 pulls the request fee from the proposing account (`--sender`, i.e. `msg.sender` on
 `proposeOracleTransaction`) via `transferFrom`, so that account must first `approve` the oracle to
 spend the fee token:
@@ -189,27 +176,13 @@ this path may need adaptation to work fully offline.
 
 ### Checking attestation status
 
-`Consensus` stores an attestation per `(epoch, Safe transaction hash)` (or, for oracle-checked
-transactions, per `(epoch, oracle, Safe transaction hash)`) as a FROST `Signature` — a
-`((uint256,uint256),uint256)` tuple of `(r.x, r.y), z`. A **zero** signature (all three fields `0`)
-means the FROST group hasn't produced an attestation for that hash yet.
+`Consensus` stores an attestation per `(epoch, oracle, Safe transaction hash)` as a FROST
+`Signature` — a `((uint256,uint256),uint256)` tuple of `(r.x, r.y), z`. A **zero** signature (all
+three fields `0`) means the FROST group hasn't produced an attestation for that hash yet.
 
-The simplest check doesn't require knowing the epoch — it looks at the active epoch first, falling
-back to the previous one:
+Check it using the epoch from `getActiveEpoch()` (from [above](#reading-contract-state-with-cast)):
 
 ```sh
-cast call $CONSENSUS_ADDRESS "getRecentTransactionAttestationByHash(bytes32)(uint64,((uint256,uint256),uint256))" \
-    <SAFE_TX_HASH> --rpc-url http://localhost:8545
-```
-
-This returns the `epoch` the attestation was found in alongside the signature itself. To check a
-specific epoch instead (e.g. `getActiveEpoch()` from [above](#reading-contract-state-with-cast)),
-or to check the attestation for an oracle-checked transaction, use:
-
-```sh
-cast call $CONSENSUS_ADDRESS "getTransactionAttestationByHash(uint64,bytes32)(((uint256,uint256),uint256))" \
-    <EPOCH> <SAFE_TX_HASH> --rpc-url http://localhost:8545
-
 cast call $CONSENSUS_ADDRESS "getOracleTransactionAttestationByHash(uint64,address,bytes32)(((uint256,uint256),uint256))" \
     <EPOCH> $ORACLE_ADDRESS <SAFE_TX_HASH> --rpc-url http://localhost:8545
 ```
