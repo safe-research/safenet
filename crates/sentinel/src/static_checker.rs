@@ -36,11 +36,11 @@ impl Decision {
     }
 }
 
-/// A single policy check, evaluated against the shared `safe-tx` transaction
-/// type. `StaticChecker::check` runs its checks in a fixed order and stops at
-/// the first denial.
+/// A single policy check, evaluated against a proposed transaction.
+/// `StaticChecker::check` runs its checks in a fixed order and stops at the
+/// first denial.
 trait Check {
-    fn evaluate(&self, tx: &safe_tx::types::SafeTransaction) -> Result<(), RuleId>;
+    fn evaluate(&self, tx: &SafeTransaction) -> Result<(), RuleId>;
 }
 
 /// Article IV Part A base guarantees, shared with the validator's
@@ -48,8 +48,9 @@ trait Check {
 struct BaseGuarantees;
 
 impl Check for BaseGuarantees {
-    fn evaluate(&self, tx: &safe_tx::types::SafeTransaction) -> Result<(), RuleId> {
-        safe_tx::checks::check_transaction(tx)
+    fn evaluate(&self, tx: &SafeTransaction) -> Result<(), RuleId> {
+        let tx = tx.clone().into();
+        safe_tx::checks::check_transaction(&tx)
     }
 }
 
@@ -59,7 +60,7 @@ impl Check for BaseGuarantees {
 struct Blocklist(HashSet<Address>);
 
 impl Check for Blocklist {
-    fn evaluate(&self, tx: &safe_tx::types::SafeTransaction) -> Result<(), RuleId> {
+    fn evaluate(&self, tx: &SafeTransaction) -> Result<(), RuleId> {
         if self.0.contains(&tx.to) {
             Err(RuleId::R4_6KnownMaliciousTarget)
         } else {
@@ -76,8 +77,9 @@ impl Check for Blocklist {
 struct ExcessiveApproval;
 
 impl Check for ExcessiveApproval {
-    fn evaluate(&self, tx: &safe_tx::types::SafeTransaction) -> Result<(), RuleId> {
-        for effect in decode_target_effects(tx) {
+    fn evaluate(&self, tx: &SafeTransaction) -> Result<(), RuleId> {
+        let tx = tx.clone().into();
+        for effect in decode_target_effects(&tx) {
             let unlimited = match effect.kind {
                 EffectKind::Erc20Approval { amount } => amount == U256::MAX,
                 EffectKind::OperatorApproval { approved } => approved,
@@ -112,10 +114,8 @@ impl StaticChecker {
     }
 
     pub fn check(&self, tx: &SafeTransaction) -> Decision {
-        let shared_tx: safe_tx::types::SafeTransaction = tx.into();
-
         for check in &self.checks {
-            if let Err(rule) = check.evaluate(&shared_tx) {
+            if let Err(rule) = check.evaluate(tx) {
                 return Decision::denied(rule);
             }
         }

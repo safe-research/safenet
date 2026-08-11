@@ -154,7 +154,7 @@ impl SentinelTransition {
             state,
             vec![Command::Effect(effect::Effect::DynamicCheck {
                 request_id,
-                transaction: (&event.transaction).into(),
+                transaction: event.transaction,
             })],
         )
     }
@@ -796,7 +796,7 @@ mod tests {
     fn dynamic_check_effect(id: B256, to: Address) -> Command<SentinelAction, effect::Effect> {
         Command::Effect(effect::Effect::DynamicCheck {
             request_id: id,
-            transaction: (&safe_tx(to)).into(),
+            transaction: safe_tx(to),
         })
     }
 

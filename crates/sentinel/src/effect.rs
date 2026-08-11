@@ -5,9 +5,11 @@
 //! `SentinelTransition::handle_oracle_transaction_proposed` and consumed by
 //! `SentinelTransition::apply_transition`'s `Message::Resume` arm.
 
-use crate::checker::{CheckOutcome, Checker};
+use crate::{
+    bindings::consensus::SafeTransaction,
+    checker::{CheckOutcome, Checker},
+};
 use alloy::primitives::B256;
-use safe_tx::types::SafeTransaction;
 use safenet_core::effects::EffectHandler;
 
 /// An impure operation the sentinel's state transition asks the [`Handler`]

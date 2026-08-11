@@ -15,7 +15,8 @@
 //! one's outcome beyond stop-on-first-answer) and is expected to be
 //! iterated on.
 
-use safe_tx::{rule::RuleId, types::SafeTransaction};
+use crate::bindings::consensus::SafeTransaction;
+use safe_tx::rule::RuleId;
 
 /// The result of running one checker in [`crate::effect::Handler`]'s chain.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

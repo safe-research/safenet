@@ -8,9 +8,12 @@
 //! "trigger this endpoint, parse the response" along if that ever needs to
 //! move out on its own.
 
-use crate::checker::{CheckOutcome, Checker};
+use crate::{
+    bindings::consensus::SafeTransaction,
+    checker::{CheckOutcome, Checker},
+};
 use alloy::primitives::Address;
-use safe_tx::{rule::RuleId, types::SafeTransaction};
+use safe_tx::rule::RuleId;
 use serde::{Deserialize, Serialize};
 use url::Url;
 
