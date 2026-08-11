@@ -2,6 +2,32 @@
 //! to any single component.
 
 use sqlx::sqlite::{SqliteConnectOptions, SqlitePool, SqlitePoolOptions};
+use tokio::signal::unix;
+
+/// Creates a signal for supporting graceful shutdown in services.
+///
+/// Intercepts both `SIGTERM` (usually sent by container runtimes) and `SIGINT`
+/// (sent by `Ctrl-C`).
+pub async fn shutdown_signal() {
+    let sigterm = async {
+        unix::signal(unix::SignalKind::terminate())
+            .unwrap()
+            .recv()
+            .await
+    };
+    let sigint = async {
+        unix::signal(unix::SignalKind::interrupt())
+            .unwrap()
+            .recv()
+            .await;
+    };
+    tokio::pin!(sigterm);
+    tokio::pin!(sigint);
+    tokio::select! {
+        _ = sigterm => {},
+        _ = sigint => {},
+    };
+}
 
 /// Connects a `SqlitePool`, for use as [`Driver::new`](crate::Driver::new)'s
 /// `pool` argument (or anywhere else a service needs a SQLite pool).

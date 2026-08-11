@@ -1,6 +1,6 @@
 use safenet_core::observability;
 use serde::Deserialize;
-use std::path::Path;
+use std::{net::SocketAddr, path::Path};
 use tokio::{fs, io};
 
 /// Error produced when loading the configuration.
@@ -17,9 +17,16 @@ pub enum Error {
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Config {
+    /// The address on which the transaction-checking API listens.
+    #[serde(default = "default_bind_address")]
+    pub bind_address: SocketAddr,
     /// Observability (logging and metrics) configuration.
     #[serde(default)]
     pub observability: observability::Config,
+}
+
+fn default_bind_address() -> SocketAddr {
+    ([127, 0, 0, 1], 5473).into()
 }
 
 impl Config {
@@ -38,12 +45,9 @@ mod tests {
 
     #[test]
     fn deserializes_required_fields_and_defaults_the_rest() {
-        let config = toml::from_str::<Config>(
-            r#"
-            "#,
-        )
-        .unwrap();
+        let config = toml::from_str::<Config>("").unwrap();
 
+        assert_eq!(config.bind_address, "127.0.0.1:5473".parse().unwrap());
         assert_eq!(
             config.observability.log_filter.to_string(),
             observability::Config::default().log_filter.to_string()
@@ -58,6 +62,8 @@ mod tests {
     fn deserializes_observability_overrides() {
         let config = toml::from_str::<Config>(
             r#"
+                bind_address = "0.0.0.0:8080"
+
                 [observability]
                 log_filter = "sentinel_engine=debug,info"
                 metrics_address = "127.0.0.1:9090"
