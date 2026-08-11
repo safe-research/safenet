@@ -10,7 +10,6 @@ The repository is a hybrid monorepo with:
   - `contracts/` — Solidity 0.8.30 smart contracts built with Foundry. Core contracts: `FROSTCoordinator.sol`, `Consensus.sol`, `Staking.sol`.
   - `examples/` — Scripts for interacting with the Safenet protocol on public testnets.
   - `explorer/` — React 19 + TypeScript + Vite frontend for inspecting network state.
-  - `validator/` — Node.js + TypeScript validator that participates in FROST signing rounds and sentinel puts up bonds in support of transaction correctness.
 - Rust crates:
   - `crates/core/` — Shared code used by all Safenet offchain services
   - `crates/sentinel/` — Rust port of the sentinel service that watches the `SentinelOracle` and `Consensus` contracts, decides whether to approve or deny proposed oracle transactions, and puts up bonds onchain
@@ -58,16 +57,15 @@ Integration tests start a local Anvil chain, deploy contracts, and run the valid
 services:
 
 ```sh
-npm run test:integration                     # ./scripts/run_integration_test.sh (TypeScript validator + sentinel)
 npm run test:integration:sentinel            # ./scripts/run_sentinel_integration_test.sh (Rust sentinel)
-npm run test:integration:validator           # ./scripts/run_validator_port_integration_test.sh (Rust validator, alongside the TypeScript one)
+npm run test:integration:validator           # ./scripts/run_validator_port_integration_test.sh (Rust validator)
 ```
 
 These scripts require:
 
 - **Anvil**, **Forge**, **cast** — part of the Foundry toolchain (`foundryup` to install)
 - **jq** — for parsing `cast`/deployment output
-- **Node.js** and **cargo** — the TypeScript and Rust services respectively
+- **Node.js** and **cargo** — for running the npm scripts and the Rust services respectively
 
 ### Local devnet
 
@@ -76,14 +74,12 @@ npm run devnet                  # ./scripts/run_devnet.sh (Podman required)
 ```
 
 Runs the Rust validator and sentinel services (`crates/validator`, `crates/sentinel`)
-against a local Anvil chain, not the TypeScript validator — two validators (`alice`,
-`bob`) and two sentinels (`carol`, `dave`) vote on a freshly deployed `SentinelOracleV2`.
-Each instance is configured via a generated TOML file (`--config-file`), not environment
-variables. `npm run devnet -- --build` builds the `crates/validator/Dockerfile` and
-`crates/sentinel/Dockerfile` images alongside the contracts image. This is separate from
-`npm run test:integration`/`test:integration:sentinel`/`test:integration:validator` above,
-which still exercise the TypeScript validator (and, for the latter two, the Rust
-validator/sentinel ports) directly rather than through Podman.
+against a local Anvil chain — two validators (`alice`, `bob`) and two sentinels (`carol`,
+`dave`) vote on a freshly deployed `SentinelOracleV2`. Each instance is configured via a
+generated TOML file (`--config-file`), not environment variables. `npm run devnet -- --build`
+builds the `crates/validator/Dockerfile` and `crates/sentinel/Dockerfile` images alongside
+the contracts image. This is separate from `test:integration:sentinel`/`test:integration:validator`
+above, which exercise the Rust validator/sentinel ports directly rather than through Podman.
 
 ## Code Quality Tools
 

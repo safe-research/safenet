@@ -7,7 +7,6 @@ This is a work-in-progress. Don't use it yet!
 - [Contracts](./contracts) Safenet contracts (Solidity & Foundry)
 - [Examples](./examples) Interact with Safenet on test networks (Typescript & npm)
 - [Explorer](./explorer) Explorer web interface (Typescript & npm)
-- [Validator](./validator) Validator service (Typescript & npm)
 - [Services core crate](./crates/core) Shared logic between the offchain Safenet services (Rust)
 - [Sentinel](./crates/sentinel) Sentinel service that watches and puts up bonds in support of transaction correctness (Rust)
 - [Sentinel engine](./crates/sentinel-engine) Transaction verification service that the sentinel defers its checks to
@@ -56,10 +55,11 @@ Unit tests for all projects:
 npm test
 ```
 
-Integration test:
+Integration tests:
 
 ```sh
-npm run test:integration
+npm run test:integration:sentinel
+npm run test:integration:validator
 ```
 
 Verbose logging for tests can be enabled by setting `SAFENET_TEST_VERBOSE=1`.
@@ -73,13 +73,6 @@ cargo build
 cargo test
 cargo clippy
 cargo fmt
-```
-
-Integration tests:
-
-```sh
-npm run test:integration:sentinel
-npm run test:integration:validator
 ```
 
 ## Planning Epics
