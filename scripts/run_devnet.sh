@@ -317,7 +317,7 @@ sentinel_oracle="$(parse_address "$(simulate_forge_script DeploySentinelOracleV2
     -e SENTINEL_BOND_MULTIPLIER="$SENTINEL_BOND_MULTIPLIER")" 'SentinelOracleV2 deployed at')"
 
 # Write each validator's TOML config into `$config_dir`, following the shape
-# established by `run_validator_port_integration_test.sh`'s `$RUST_CFG`
+# established by `run_validator_integration_test.sh`'s `validator_config()`
 # heredoc. `oracles` points validators at the SentinelOracleV2 above, so they
 # honor its attestations on oracle-checked transactions.
 for validator in "${VALIDATORS[@]}"; do

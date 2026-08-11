@@ -2,6 +2,7 @@
 
 use std::{
     convert::Infallible,
+    fmt::Debug,
     future::{self, Future},
     marker::PhantomData,
     sync::Arc,
@@ -37,8 +38,8 @@ pub struct EffectManager<Handler, Effect, Resume> {
 impl<Handler, Effect, Resume> EffectManager<Handler, Effect, Resume>
 where
     Handler: EffectHandler<Effect, Resume>,
-    Effect: Send + 'static,
-    Resume: Send + 'static,
+    Effect: Debug + Send + 'static,
+    Resume: Debug + Send + 'static,
 {
     /// Creates an effect manager for `handler`.
     pub fn new(handler: Handler) -> Self {
@@ -51,9 +52,13 @@ where
 
     /// Spawns an effect task.
     pub fn spawn(&mut self, effect: Effect) {
+        tracing::trace!(?effect, "spawning effect task");
         let handler = Arc::clone(&self.handler);
-        self.tasks
-            .spawn(async move { handler.perform_effect(effect).await });
+        self.tasks.spawn(async move {
+            let resume = handler.perform_effect(effect).await;
+            tracing::trace!(?resume, "effect task finished");
+            resume
+        });
     }
 
     /// Waits for and returns the next successfully completed effect.
@@ -69,7 +74,10 @@ where
     pub async fn next(&mut self) -> Resume {
         loop {
             match self.tasks.join_next().await {
-                Some(Ok(resume)) => return resume,
+                Some(Ok(resume)) => {
+                    tracing::trace!(?resume, "effect resume collected");
+                    return resume;
+                }
                 Some(Err(err)) => tracing::error!(?err, "unexpected effect task failure"),
                 // This may seem counter-intuitive, but we want to block forever
                 // in case there are no pending effects to wait for, this
@@ -96,6 +104,7 @@ mod tests {
     use std::sync::atomic::{AtomicUsize, Ordering};
     use tokio::time::{self, Duration, Instant};
 
+    #[derive(Debug)]
     enum TestEffect {
         Complete { after: Duration, resume: usize },
         Count,

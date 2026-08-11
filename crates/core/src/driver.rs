@@ -72,8 +72,8 @@ pub trait Service {
 
     type Event: Debug + Events;
     type Action;
-    type Effect: Send + 'static;
-    type Resume: Send + 'static;
+    type Effect: Debug + Send + 'static;
+    type Resume: Debug + Send + 'static;
 
     type Transition: StateTransition<
             Self::State,
@@ -222,6 +222,7 @@ where
     async fn update(&mut self, input: Input<S::Event, S::Resume>) -> Result<(), Error> {
         let commands = match input {
             Input::Update(update) => {
+                tracing::trace!(?update, "handling driver update");
                 let block_status = self.watcher.block_status();
 
                 // Reconcile the transaction queue against the block watcher's
@@ -241,7 +242,10 @@ where
                 self.state.prune(block_status.safe).await?;
                 commands
             }
-            Input::Resume(resume) => self.state.handle_resume(resume).await?,
+            Input::Resume(resume) => {
+                tracing::trace!(?resume, "handling driver resume");
+                self.state.handle_resume(resume).await?
+            }
         };
 
         let mut transactions = Vec::with_capacity(commands.len());

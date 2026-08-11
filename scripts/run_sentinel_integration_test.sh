@@ -2,7 +2,7 @@
 # Interop/integration test for the Rust sentinel (epic Phase F1, adapted for
 # commit-reveal): runs two independent Rust sentinel instances side by side
 # against the same dispute on Anvil, and asserts they agree (no arbitration)
-# and settle fees/bonds correctly. Unlike scripts/run_validator_port_integration_test.sh,
+# and settle fees/bonds correctly. Unlike scripts/run_validator_integration_test.sh,
 # this does not require a full validator/FROST genesis: a `TestConsensus` contract
 # stands in for `Consensus`, only emitting the `OracleTransactionProposed`
 # event the sentinels need.
