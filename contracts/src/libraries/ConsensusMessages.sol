@@ -24,12 +24,6 @@ library ConsensusMessages {
         hex"13de01993286119c9a7628720a5b7d7c32841dbf2d23752b59de86a7e03fe1bf";
 
     /**
-     * @custom:precomputed keccak256("TransactionProposal(uint64 epoch,bytes32 safeTxHash)")
-     */
-    bytes32 internal constant TRANSACTION_PROPOSAL_TYPEHASH =
-        hex"0791f9d2a47e59f417d6c5d2ac1c700ccf949a66461ac7842e6d104c1a92b152";
-
-    /**
      * @custom:precomputed keccak256("OracleTransactionProposal(uint64 epoch,address oracle,bytes32 safeTxHash)")
      */
     bytes32 internal constant ORACLE_TRANSACTION_PROPOSAL_TYPEHASH =
@@ -79,30 +73,6 @@ library ConsensusMessages {
             mstore(add(ptr, 0x60), rolloverBlock)
             mcopy(add(ptr, 0x80), groupKey, 0x40)
             mstore(add(ptr, 0x22), keccak256(ptr, 0xc0))
-            mstore(ptr, hex"1901")
-            mstore(add(ptr, 0x02), domainSeparator)
-            result := keccak256(ptr, 0x42)
-        }
-    }
-
-    /**
-     * @notice Computes the transaction proposal message that must be attested to by validators.
-     * @param domainSeparator The EIP-712 domain separator.
-     * @param epoch The epoch for the transaction proposal.
-     * @param transactionHash The hash of the transaction.
-     * @return result The transaction proposal message hash.
-     */
-    function transactionProposal(bytes32 domainSeparator, uint64 epoch, bytes32 transactionHash)
-        internal
-        pure
-        returns (bytes32 result)
-    {
-        assembly ("memory-safe") {
-            let ptr := mload(0x40)
-            mstore(ptr, TRANSACTION_PROPOSAL_TYPEHASH)
-            mstore(add(ptr, 0x20), epoch)
-            mstore(add(ptr, 0x40), transactionHash)
-            mstore(add(ptr, 0x22), keccak256(ptr, 0x60))
             mstore(ptr, hex"1901")
             mstore(add(ptr, 0x02), domainSeparator)
             result := keccak256(ptr, 0x42)

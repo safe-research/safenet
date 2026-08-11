@@ -20,7 +20,7 @@
  *   npm run attest-safe-tx -w @safenet/examples -- <safeTxHash> <guardAddress>
  *
  * Environment (copy examples/.env.sample to examples/.env):
- *   CONSENSUS_ADDRESS, RPC_URL, SAFE_TX_SERVICE_URL, SAFE_TX_SERVICE_API_KEY
+ *   CONSENSUS_ADDRESS, ORACLE_ADDRESS, RPC_URL, SAFE_TX_SERVICE_URL, SAFE_TX_SERVICE_API_KEY
  */
 
 import { resolve } from "node:path";
@@ -80,6 +80,10 @@ const envSchema = z.object({
 		.string()
 		.refine((a) => isAddress(a, { strict: false }), "Invalid address format")
 		.transform((a) => getAddress(a)),
+	ORACLE_ADDRESS: z
+		.string()
+		.refine((a) => isAddress(a, { strict: false }), "Invalid address format")
+		.transform((a) => getAddress(a)),
 	RPC_URL: z.url(),
 	SAFE_TX_SERVICE_URL: z.url().transform((url) => url.replace(/\/$/, "")),
 	SAFE_TX_SERVICE_API_KEY: z.string().min(1),
@@ -102,6 +106,7 @@ if (!envParseResult.success) {
 
 const {
 	CONSENSUS_ADDRESS: consensusAddress,
+	ORACLE_ADDRESS: oracleAddress,
 	RPC_URL: rpc,
 	SAFE_TX_SERVICE_URL: safeTxServiceUrl,
 	SAFE_TX_SERVICE_API_KEY: safeTxServiceApiKey,
@@ -116,8 +121,10 @@ const gnosisClient = createPublicClient({ chain: gnosis, transport: http(rpc) })
 // ABIs
 // ---------------------------------------------------------------------------
 
+const GET_ACTIVE_EPOCH = parseAbiItem("function getActiveEpoch() view returns (uint64 epoch, bytes32 groupId)");
+
 const GET_ATTESTATION = parseAbiItem(
-	"function getRecentTransactionAttestationByHash(bytes32) view returns (uint64 epoch, ((uint256 x, uint256 y) r, uint256 z) signature)",
+	"function getOracleTransactionAttestationByHash(uint64, address, bytes32) view returns (((uint256 x, uint256 y) r, uint256 z) signature)",
 );
 
 // The getter reverts NotSigned() until the FROST round completes; declaring the error lets viem decode
@@ -167,14 +174,19 @@ type Point = { x: bigint; y: bigint };
 
 async function pollAttestation(): Promise<{ epoch: bigint; sig: { r: Point; z: bigint } }> {
 	console.log(`[1] Polling Consensus for attestation (timeout: ${attestationTimeout}s)...`);
+	const [epoch] = await gnosisClient.readContract({
+		address: consensusAddress,
+		abi: [GET_ACTIVE_EPOCH],
+		functionName: "getActiveEpoch",
+	});
 	const deadline = Date.now() + attestationTimeout * 1000;
 	while (Date.now() < deadline) {
 		try {
-			const [epoch, sig] = await gnosisClient.readContract({
+			const sig = await gnosisClient.readContract({
 				address: consensusAddress,
 				abi: [GET_ATTESTATION, NOT_SIGNED],
-				functionName: "getRecentTransactionAttestationByHash",
-				args: [safeTxHash],
+				functionName: "getOracleTransactionAttestationByHash",
+				args: [epoch, oracleAddress, safeTxHash],
 			});
 			if (sig.r.x !== 0n || sig.r.y !== 0n || sig.z !== 0n) {
 				console.log(`\n    attestation received (epoch=${epoch})`);
@@ -240,10 +252,11 @@ async function main() {
 	);
 
 	// Signature extension = payload || uint256(payloadLength) || TYPE_HASH,
-	// where payload = abi.encode(uint64 epoch, Point groupKey, FROST.Signature sig).
+	// where payload = abi.encode(uint64 epoch, address oracle, Point groupKey, FROST.Signature sig).
 	const payload = encodeAbiParameters(
 		[
 			{ type: "uint64" },
+			{ type: "address" },
 			{
 				type: "tuple",
 				components: [
@@ -266,7 +279,7 @@ async function main() {
 				],
 			},
 		],
-		[epoch, groupKey, sig],
+		[epoch, oracleAddress, groupKey, sig],
 	);
 	const trailer = concat([payload, numberToHex(size(payload), { size: 32 }), TYPE_HASH]);
 	const signatures = concat([ownerSignatures, trailer]);

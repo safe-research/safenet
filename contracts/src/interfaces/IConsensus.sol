@@ -65,40 +65,6 @@ interface IConsensus {
     event EpochRolledOver(uint64 indexed newActiveEpoch);
 
     /**
-     * @notice Emitted when a transaction is proposed for validator approval.
-     * @param safeTxHash The hash of the proposed Safe transaction.
-     * @param chainId The chain ID of the Safe account.
-     * @param safe The address of the Safe.
-     * @param epoch The epoch in which the transaction is proposed.
-     * @param transaction The proposed Safe transaction.
-     */
-    event TransactionProposed(
-        bytes32 indexed safeTxHash,
-        uint256 indexed chainId,
-        address indexed safe,
-        uint64 epoch,
-        SafeTransaction.T transaction
-    );
-
-    /**
-     * @notice Emitted when a transaction is attested by the validator set.
-     * @param safeTxHash The hash of the attested Safe transaction.
-     * @param chainId The chain ID of the Safe account.
-     * @param safe The address of the Safe account.
-     * @param epoch The epoch in which the attested transaction was proposed.
-     * @param signatureId The FROST signature identifier corresponding to the transaction attestation.
-     * @param attestation The attestation to Safe transaction.
-     */
-    event TransactionAttested(
-        bytes32 indexed safeTxHash,
-        uint256 indexed chainId,
-        address indexed safe,
-        uint64 epoch,
-        FROSTSignatureId.T signatureId,
-        FROST.Signature attestation
-    );
-
-    /**
      * @notice Emitted when a transaction is proposed for oracle-checked validator approval.
      * @param safeTxHash The hash of the proposed Safe transaction.
      * @param chainId The chain ID of the Safe account.
@@ -206,97 +172,6 @@ interface IConsensus {
     // ============================================================
     // TRANSACTION ATTESTATIONS
     // ============================================================
-
-    /**
-     * @notice Gets a transaction attestation for a specific epoch and transaction.
-     * @param epoch The epoch in which the transaction was proposed.
-     * @param transaction The Safe transaction to query the attestation for.
-     * @return signature The FROST signature attesting to the transaction.
-     */
-    function getTransactionAttestation(uint64 epoch, SafeTransaction.T memory transaction)
-        external
-        view
-        returns (FROST.Signature memory signature);
-
-    /**
-     * @notice Gets a transaction attestation for a specific epoch and transaction hash.
-     * @param epoch The epoch in which the transaction was proposed.
-     * @param safeTxHash The Safe transaction hash to query the attestation for.
-     * @return signature The FROST signature attesting to the transaction.
-     */
-    function getTransactionAttestationByHash(uint64 epoch, bytes32 safeTxHash)
-        external
-        view
-        returns (FROST.Signature memory signature);
-
-    /**
-     * @notice Gets a recent transaction attestation.
-     * @param transaction The Safe transaction to query the attestation for.
-     * @return epoch The recent epoch that the transaction was attested in.
-     * @return signature The FROST signature attesting to the transaction.
-     * @dev This method will fail if the attestation did not happen in either the active or previous epochs. This is
-     *      provided as a convenience method to clients who may want to query an attestation for a transaction they
-     *      recently proposed for validator approval.
-     */
-    function getRecentTransactionAttestation(SafeTransaction.T memory transaction)
-        external
-        view
-        returns (uint64 epoch, FROST.Signature memory signature);
-
-    /**
-     * @notice Gets a recent transaction attestation by transaction hash.
-     * @param safeTxHash The hash of the Safe transaction.
-     * @return epoch The recent epoch that the transaction was attested in.
-     * @return signature The FROST signature attesting to the transaction.
-     */
-    function getRecentTransactionAttestationByHash(bytes32 safeTxHash)
-        external
-        view
-        returns (uint64 epoch, FROST.Signature memory signature);
-
-    /**
-     * @notice Proposes a transaction for validator approval.
-     * @param transaction The Safe transaction to propose.
-     * @return safeTxHash The Safe transaction hash.
-     */
-    function proposeTransaction(SafeTransaction.T memory transaction) external returns (bytes32 safeTxHash);
-
-    /**
-     * @notice Proposes a transaction for validator approval, only specifying the basic transaction properties.
-     * @param chainId The chain ID of the Safe account.
-     * @param safe The address of the Safe account.
-     * @param to Destination address of Safe transaction.
-     * @param value Native token value of the Safe transaction.
-     * @param data Data payload of the Safe transaction.
-     * @param nonce Safe transaction nonce.
-     * @return safeTxHash The Safe transaction hash.
-     * @dev This is provided as a convenience method for proposing transactions with the most common parameters.
-     */
-    function proposeBasicTransaction(
-        uint256 chainId,
-        address safe,
-        address to,
-        uint256 value,
-        bytes memory data,
-        uint256 nonce
-    ) external returns (bytes32 safeTxHash);
-
-    /**
-     * @notice Attests to a transaction.
-     * @param epoch The epoch in which the transaction was proposed.
-     * @param chainId The chain ID of the Safe account.
-     * @param safe The address of the Safe account.
-     * @param safeTxStructHash The EIP-712 struct hash of the Safe transaction data.
-     * @param signatureId The FROST signature share attesting to the transaction.
-     * @dev No explicit time limit is imposed for when a transaction can be attested in this contract.
-     */
-    function attestTransaction(
-        uint64 epoch,
-        uint256 chainId,
-        address safe,
-        bytes32 safeTxStructHash,
-        FROSTSignatureId.T signatureId
-    ) external;
 
     /**
      * @notice Proposes a transaction for oracle-checked validator approval.

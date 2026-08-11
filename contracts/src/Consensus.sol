@@ -249,101 +249,6 @@ contract Consensus is IConsensus, IERC165, IFROSTCoordinatorCallback {
     /**
      * @inheritdoc IConsensus
      */
-    function getTransactionAttestation(uint64 epoch, SafeTransaction.T memory transaction)
-        external
-        view
-        returns (FROST.Signature memory signature)
-    {
-        return getTransactionAttestationByHash(epoch, transaction.hash());
-    }
-
-    /**
-     * @inheritdoc IConsensus
-     */
-    function getTransactionAttestationByHash(uint64 epoch, bytes32 safeTxHash)
-        public
-        view
-        returns (FROST.Signature memory signature)
-    {
-        bytes32 message = domainSeparator().transactionProposal(epoch, safeTxHash);
-        return _COORDINATOR.signatureValue($attestations[message]);
-    }
-
-    /**
-     * @inheritdoc IConsensus
-     */
-    function getRecentTransactionAttestation(SafeTransaction.T memory transaction)
-        external
-        view
-        returns (uint64 epoch, FROST.Signature memory signature)
-    {
-        return getRecentTransactionAttestationByHash(transaction.hash());
-    }
-
-    /**
-     * @inheritdoc IConsensus
-     */
-    function getRecentTransactionAttestationByHash(bytes32 safeTxHash)
-        public
-        view
-        returns (uint64 epoch, FROST.Signature memory signature)
-    {
-        (Epochs memory epochs,) = _epochsWithRollover();
-        bytes32 domain = domainSeparator();
-        epoch = epochs.active;
-        bytes32 message = domain.transactionProposal(epochs.active, safeTxHash);
-        FROSTSignatureId.T attestation = $attestations[message];
-        if (attestation.isZero()) {
-            epoch = epochs.previous;
-            message = domain.transactionProposal(epochs.previous, safeTxHash);
-            attestation = $attestations[message];
-        }
-        signature = _COORDINATOR.signatureValue(attestation);
-    }
-
-    /**
-     * @inheritdoc IConsensus
-     */
-    function proposeTransaction(SafeTransaction.T memory transaction) public returns (bytes32 safeTxHash) {
-        Epochs memory epochs = _processRollover();
-        safeTxHash = transaction.hash();
-        bytes32 message = domainSeparator().transactionProposal(epochs.active, safeTxHash);
-        require($attestations[message].isZero(), AlreadyAttested());
-        emit TransactionProposed(safeTxHash, transaction.chainId, transaction.safe, epochs.active, transaction);
-        _COORDINATOR.sign($groups[epochs.active], message);
-    }
-
-    /**
-     * @inheritdoc IConsensus
-     */
-    function proposeBasicTransaction(
-        uint256 chainId,
-        address safe,
-        address to,
-        uint256 value,
-        bytes memory data,
-        uint256 nonce
-    ) external returns (bytes32 safeTxHash) {
-        SafeTransaction.T memory transaction = SafeTransaction.T({
-            chainId: chainId,
-            safe: safe,
-            to: to,
-            value: value,
-            data: data,
-            operation: SafeTransaction.Operation.CALL,
-            safeTxGas: 0,
-            baseGas: 0,
-            gasPrice: 0,
-            gasToken: address(0),
-            refundReceiver: address(0),
-            nonce: nonce
-        });
-        return proposeTransaction(transaction);
-    }
-
-    /**
-     * @inheritdoc IConsensus
-     */
     function proposeOracleTransaction(address oracle, bytes calldata oracleData, SafeTransaction.T memory transaction)
         public
         returns (bytes32 safeTxHash)
@@ -357,30 +262,6 @@ contract Consensus is IConsensus, IERC165, IFROSTCoordinatorCallback {
         );
         _COORDINATOR.sign($groups[epochs.active], message);
         IOracle(oracle).postRequest(message, msg.sender, oracleData);
-    }
-
-    /**
-     * @inheritdoc IConsensus
-     */
-    function attestTransaction(
-        uint64 epoch,
-        uint256 chainId,
-        address safe,
-        bytes32 safeTxStructHash,
-        FROSTSignatureId.T signatureId
-    ) public {
-        // Note that we do not impose a time limit for a transaction to be attested to in the consensus contract. In
-        // theory, we have enough space in our `Epochs` struct to also keep track of the previous epoch and then we
-        // could check here that `epoch` is either `epochs.active` or `epochs.previous`. This isn't a useful
-        // distinction, however: in fact, if there is a reverted transaction with a valid FROST signature onchain, then
-        // there is a valid attestation for the transaction (regardless of whether or not this contract accepts it).
-        // Therefore, it isn't useful for us to be restrictive here.
-        bytes32 safeTxHash = SafeTransaction.partialHash(chainId, safe, safeTxStructHash);
-        bytes32 message = domainSeparator().transactionProposal(epoch, safeTxHash);
-        require($attestations[message].isZero(), AlreadyAttested());
-        FROST.Signature memory attestation = _COORDINATOR.signatureVerify(signatureId, $groups[epoch], message);
-        $attestations[message] = signatureId;
-        emit TransactionAttested(safeTxHash, chainId, safe, epoch, signatureId, attestation);
     }
 
     /**
@@ -448,10 +329,6 @@ contract Consensus is IConsensus, IERC165, IFROSTCoordinatorCallback {
             (uint64 proposedEpoch, uint64 rolloverBlock, FROSTGroupId.T groupId) =
                 abi.decode(context[4:], (uint64, uint64, FROSTGroupId.T));
             stageEpoch(proposedEpoch, rolloverBlock, groupId, signatureId);
-        } else if (selector == this.attestTransaction.selector) {
-            (uint64 epoch, uint256 chainId, address safe, bytes32 safeTxStructHash) =
-                abi.decode(context[4:], (uint64, uint256, address, bytes32));
-            attestTransaction(epoch, chainId, safe, safeTxStructHash, signatureId);
         } else if (selector == this.attestOracleTransaction.selector) {
             (uint64 epoch, address oracle, uint256 chainId, address safe, bytes32 safeTxStructHash) =
                 abi.decode(context[4:], (uint64, address, uint256, address, bytes32));
