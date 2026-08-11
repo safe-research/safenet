@@ -1,115 +1,18 @@
 use std::collections::btree_map;
 
 use super::{Packet, SigningState, State, Transition};
-use crate::{
-    bindings::{Consensus, SafeTransaction},
-    consensus::epoch::EpochId,
-};
+use crate::{bindings::Consensus, consensus::epoch::EpochId};
 use safenet_core::state::Commands;
 
 impl Transition {
-    /// Verifies a proposed Safe transaction against the epoch's resolved
-    /// group, opening a signing session for it: [`SigningState::WaitingForRequest`]
-    /// if it passes Safenet policy, [`SigningState::WaitingToDecline`]
-    /// otherwise. A transaction proposed for an unknown or unresolved epoch,
-    /// or one whose group this validator is not part of, is ignored.
-    pub(super) fn handle_transaction_proposed(
-        &self,
-        mut state: State,
-        block: u64,
-        event: &Consensus::TransactionProposed,
-    ) -> (State, Commands<State, Self>) {
-        let epoch = EpochId::from_raw(event.epoch);
-        let Some(participating_epoch) = state.epochs.get(&epoch) else {
-            tracing::debug!(
-                ?epoch,
-                safe_tx_hash = %event.safeTxHash,
-                "ignoring transaction proposal for non-participating epoch"
-            );
-            return (state, Vec::new());
-        };
-
-        let message = self
-            .consensus
-            .transaction_packet_hash(epoch, &event.transaction);
-
-        // Prevent duplicate ongoing transaction proposals. This is to prevent
-        // malicious parties from blocking transaction attestations from ever
-        // being produced by resetting the signing state of honest validators.
-        if let btree_map::Entry::Vacant(signing) = state.signing.entry(message) {
-            let passed_checks = check_transaction(&event.transaction);
-            let packet = Packet::Transaction {
-                epoch,
-                transaction: event.transaction.clone(),
-            };
-
-            let signers = participating_epoch.group.participants().clone();
-            let deadline = block.saturating_add(self.config.signing_timeout.get());
-
-            let group_id = participating_epoch.group.id();
-            let signing_state = if passed_checks {
-                SigningState::WaitingForRequest {
-                    key_share: participating_epoch.key_share.clone(),
-                    group_id,
-                    responsible: None,
-                    packet,
-                    signers,
-                    deadline,
-                }
-            } else {
-                tracing::info!(
-                    ?epoch,
-                    %message,
-                    safe_tx_hash = %event.safeTxHash,
-                    "transaction proposal failed local checks; will decline signing request"
-                );
-                SigningState::WaitingToDecline { packet, deadline }
-            };
-
-            signing.insert(signing_state);
-        } else {
-            tracing::warn!(
-                %message,
-                "ignoring duplicate transaction proposal"
-            )
-        }
-
-        (state, Vec::new())
-    }
-
-    /// Clears a completed signing session once its attestation lands
-    /// onchain, keyed by the same proposal hash used to open it:
-    /// [`SigningState::WaitingForRequest`] verifies the full transaction,
-    /// while the attestation only carries its
-    /// [`safe_tx_hash`](crate::consensus::hashing::safe_tx_hash), so the
-    /// proposal is re-hashed directly from the event rather than the packet.
-    pub(super) fn handle_transaction_attested(
-        &self,
-        state: State,
-        event: &Consensus::TransactionAttested,
-    ) -> (State, Commands<State, Self>) {
-        let epoch = EpochId::from_raw(event.epoch);
-        let message = self
-            .consensus
-            .transaction_proposal_hash(epoch, event.safeTxHash);
-        tracing::info!(
-            ?epoch,
-            safe_tx_hash = %event.safeTxHash,
-            signature_id = %event.signatureId,
-            "transaction attested"
-        );
-        self.handle_sign_attested(state, event.signatureId, message)
-    }
-
     /// Verifies a proposed oracle-backed Safe transaction against the
     /// epoch's resolved group, opening a [`SigningState::WaitingForRequest`]
-    /// signing session for it. Unlike a plain [`Consensus::TransactionProposed`],
-    /// the transaction itself is not checked against Safenet policy here -
-    /// the oracle vouches for it, and its result is checked once attested -
-    /// only the oracle's own identity is verified against the configured
-    /// allow-list. A transaction proposed for an unknown or unresolved epoch,
-    /// one whose group this validator is not part of, or from a disallowed
-    /// oracle, is ignored.
+    /// signing session for it. The transaction itself is not checked against
+    /// Safenet policy here - the oracle vouches for it, and its result is
+    /// checked once attested - only the oracle's own identity is verified
+    /// against the configured allow-list. A transaction proposed for an
+    /// unknown or unresolved epoch, one whose group this validator is not
+    /// part of, or from a disallowed oracle, is ignored.
     pub(super) fn handle_oracle_transaction_proposed(
         &self,
         mut state: State,
@@ -147,7 +50,7 @@ impl Transition {
             let packet = Packet::OracleTransaction {
                 epoch,
                 oracle: event.oracle,
-                transaction: event.transaction.clone(),
+                transaction: Box::new(event.transaction.clone()),
             };
             let signers = participating_epoch.group.participants().clone();
             let deadline = block.saturating_add(self.config.signing_timeout.get());
@@ -188,18 +91,4 @@ impl Transition {
         );
         self.handle_sign_attested(state, event.signatureId, message)
     }
-}
-
-fn check_transaction(transaction: &SafeTransaction) -> bool {
-    // `sol!` requires custom types used as event/struct fields to be declared
-    // in the same macro invocation, so this ABI-decoding copy can't be replaced
-    // with the plain [`safe_tx::SafeTransaction`] in our bindings. Convert at
-    // the policy boundary, rejecting the generated enum's `__Invalid` escape
-    // hatch just like any other transaction that fails local checks.
-    let Ok(transaction) = transaction.clone().try_into() else {
-        tracing::error!(?transaction, "invalid Safe transaction value");
-        return false;
-    };
-
-    safe_tx::checks::check_transaction(&transaction).is_ok()
 }

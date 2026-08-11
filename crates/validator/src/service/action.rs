@@ -85,17 +85,6 @@ pub enum Action {
         message: B256,
         expires_at: u64,
     },
-    /// A fallback action to submit a completed transaction attestation
-    /// directly, when the automatic `signShareWithCallback` submission did
-    /// not land in time.
-    AttestTransaction {
-        epoch: EpochId,
-        chain_id: U256,
-        safe: Address,
-        safe_tx_struct_hash: B256,
-        signature_id: B256,
-        expires_at: u64,
-    },
     /// A fallback action to submit a completed oracle-backed transaction
     /// attestation directly, when the automatic `signShareWithCallback`
     /// submission did not land in time.
@@ -339,30 +328,6 @@ impl ActionEncoder<Action> for Encoder {
                     .abi_encode()
                     .into(),
                     gas: 150_000,
-                },
-                Some(expires_at),
-            ),
-            Action::AttestTransaction {
-                epoch,
-                chain_id,
-                safe,
-                safe_tx_struct_hash,
-                signature_id,
-                expires_at,
-            } => (
-                Transaction {
-                    to: self.consensus,
-                    value: U256::ZERO,
-                    data: Consensus::attestTransactionCall {
-                        epoch: epoch.raw_value(),
-                        chainId: chain_id,
-                        safe,
-                        safeTxStructHash: safe_tx_struct_hash,
-                        signatureId: signature_id,
-                    }
-                    .abi_encode()
-                    .into(),
-                    gas: 250_000,
                 },
                 Some(expires_at),
             ),
