@@ -1,20 +1,20 @@
-# Safenet Beta Validator Handbook
+# Safenet Testnet Validator Handbook
 
-This document provides a brief guide to operating a Safenet Beta validator.
+This document provides a brief guide to operating a Safenet Testnet validator.
 
 ## Introduction
 
-Safenet Beta is a decentralized Safe transaction security network where validators coordinate to generate cryptographic attestations for Safe transactions. Validators are run by independent parties to maintain decentralization and prevent a single entity from producing invalid attestations that could compromise Safenet’s security guarantees.
+Safenet Testnet is a decentralized Safe transaction security network where validators coordinate to generate cryptographic attestations for Safe transactions. Validators are run by independent parties to maintain decentralization and prevent a single entity from producing invalid attestations that could compromise Safenet’s security guarantees.
 
-In the initial beta release, Safenet validators communicate entirely onchain. This simplifies validator operations: only a stable RPC node connection is required, and the system does not need to be exposed to the public internet.
+In the initial testnet release, Safenet validators communicate entirely onchain. This simplifies validator operations: only a stable RPC node connection is required, and the system does not need to be exposed to the public internet.
 
-For more information on Safenet, consult the [technical overview](./overview.md) as well as the [general public docs](https://docs.safefoundation.org/safenet).
+For more information on Safenet, consult the [technical overview](./overview.md) as well as the [general public docs](https://docs.safefoundation.org/safenet). See the [sentinel handbook](./sentinel-handbook.md) for the sentinel side of the protocol.
 
 ## Requirements
 
 ### System
 
-The Safenet Beta validator node is distributed as an OCI container image that can run on any OCI-compatible runtime (Docker, Podman, etc.). The validator is lean and can run on a single core (with average CPU usage under 5%) and less than 500 MB of RAM (1 GB is recommended to handle spikes). Currently, only Linux x86-64 images are distributed.
+The Safenet Testnet validator node is distributed as an OCI container image that can run on any OCI-compatible runtime (Docker, Podman, etc.). The validator is lean and can run on a single core (with average CPU usage under 5%) and less than 500 MB of RAM (1 GB is recommended to handle spikes). Currently, only Linux x86-64 images are distributed.
 
 Additionally, the validator node stores intermediate state in a SQLite database file. This file contains critical runtime information and should be backed up. Loss of this data would prevent the validator from correctly participating in consensus for the duration of an epoch.
 
@@ -30,24 +30,29 @@ To run a validator, you need a reliable Ethereum RPC node that can accommodate a
 
 ##### `eth_getLogs` Reliability
 
-Unfortunately, some RPC providers are unreliable with `eth_getLogs` requests: if the logs are queried too soon after a block is observed then an empty array will be returned even if there logs in that block. This seems to affect RPC providers that use older versions of Nethermind before 1.36.
+Unfortunately, some RPC providers are unreliable with `eth_getLogs` requests: if the logs are queried too soon after a block is observed then an empty array will be returned even if there are logs in that block. This seems to affect RPC providers that use older versions of Nethermind before 1.36.
 
-The integrity of logs are critical for proper validator operation. In order to work around these RPC issues, the validators have a built-in mechanism to check log query integrity at the cost of additional bandwidth. If you have reason to believe your RPC may not reliably return all logs, then enable the following configuration:
+The integrity of logs are critical for proper validator operation. In order to work around these RPC issues, the validators have a built-in mechanism to check log query integrity at the cost of additional bandwidth. If you have reason to believe your RPC may not reliably return all logs, then enable the following configuration in the `[index]` table of your [configuration file](../crates/validator/validator.sample.toml):
 
-```sh
-BLOCK_ALL_LOGS_QUERY_RETRY_COUNT=1
-BLOCK_SINGLE_QUERY_RETRY_COUNT=1
+```toml
+[index]
+use_client_filtering = true
 ```
 
 #### Logging and Metrics
 
-The validator node writes JSON-formatted logs to standard output. It also exposes Prometheus metrics on `:3555` by default, which can be scraped over HTTP. Note that, by default, the metrics service binds to `localhost`, which can be inconvenient if running from a container. In that case, use `METRICS_HOST=0.0.0.0` to expose metrics to outside of the container. 
+The validator node writes JSON-formatted logs to standard output. It also exposes Prometheus metrics over HTTP, bound by default to an ephemeral port on `localhost` (inconvenient if running from a container). Set `metrics_address` in the `[observability]` table of your [configuration file](../crates/validator/validator.sample.toml) to bind elsewhere, e.g.:
+
+```toml
+[observability]
+metrics_address = "0.0.0.0:3555"
+```
 
 ### Secrets
 
 #### `secp256k1` Validator Key
 
-Each validator must be provisioned with a `secp256k1` private key. This key is used to authenticate the validator onchain for participation in Safenet Beta. It must be funded with sufficient gas for the EVM transactions required for onchain consensus-related communication.
+Each validator must be provisioned with a `secp256k1` private key. This key is used to authenticate the validator onchain for participation in Safenet Testnet. It must be funded with sufficient gas for the EVM transactions required for onchain consensus-related communication.
 
 > [!TIP]
 > The validator currently requires the private key at startup and does not support any KMS systems. Do not use this key for anything else, especially security-related tasks. Use it only for validating, and fund it only with the amount needed for gas. In the future, we plan to support KMS systems for more secure setups.
@@ -56,10 +61,10 @@ Each validator must be provisioned with a `secp256k1` private key. This key is u
 
 The exact amount varies by chain, but you can expect the account to consume roughly 1.000.000.000 gas per day under peak load. The actual cost of that gas depends on network congestion.
 
-Safenet Beta’s onchain components are planned for deployment on Gnosis Chain. Over the past six months (Aug 25, 2025 – Feb 25, 2026), the average base fee per gas was approximately 0.042 Gwei, translating to just under $0.05 per day in gas costs. However, daily average base fee per gas reached as high as 3.4 Gwei. Based on these figures, validators should expect to need roughly $10 in tokens to cover gas costs over the six-month Beta period. It is recommended to overfund the validator to account for base gas fee variability.
+Safenet Testnet’s onchain components are planned for deployment on Gnosis Chain. In a six-month sample window (Aug 25, 2025 – Feb 25, 2026), the average base fee per gas was approximately 0.042 Gwei, translating to just under $0.05 per day in gas costs. However, daily average base fee per gas reached as high as 3.4 Gwei. Based on these figures, validators should expect to need roughly $10 in tokens to cover gas costs over a comparable six-month period; treat this as a rough, dated estimate rather than a current guarantee, and recheck prevailing Gnosis Chain gas prices before funding a validator. It is recommended to overfund the validator to account for base gas fee variability.
 
 > [!TIP]
-> On Gnosis Chain, the base fee is very low relative to the priority fee, so the priority fee makes up the bulk of gas costs. If your RPC occasionally returns an inflated `eth_maxPriorityFeePerGas` estimate, you can cap how much of the total fee cap can be a tip. For example, setting `PRIORITY_FEE_CAP_PERCENTAGE=95` ensures the tip never exceeds 95% of `maxFeePerGas`, protecting against runaway estimates while still allowing normal inclusion.
+> On Gnosis Chain, the base fee is very low relative to the priority fee, so the priority fee makes up the bulk of gas costs. If your RPC occasionally returns an inflated `eth_maxPriorityFeePerGas` estimate, you can cap how much of the total fee cap can be a tip using the `[transactions]` table of your [configuration file](../crates/validator/validator.sample.toml). For example, setting `priority_fee_cap_percentage = 95` ensures the tip never exceeds 95% of `maxFeePerGas`, protecting against runaway estimates while still allowing normal inclusion.
 
 #### Consensus Secrets
 
@@ -76,20 +81,21 @@ Loss of these secrets would prevent the validator from participating in consensu
 
 ## Running
 
-Configure the validator. See the [configuration documentation](./configuration.md) for reference.
+Configure the validator by writing a TOML configuration file — see [`crates/validator/src/config.rs`](../crates/validator/src/config.rs) for the full schema, and copy [`validator.sample.toml`](../crates/validator/validator.sample.toml) as a worked example to start from.
 
 ```sh
-cp validator/.env.sample validator/.env
-$EDITOR validator/.env
+cp crates/validator/validator.sample.toml validator.toml
+$EDITOR validator.toml
 ```
 
-Use the provided OCI image to run the validator. For example, with `docker` and assuming that the `STORAGE_FILE` was configured to be in the `/var/lib/safenet/validator/data` directory:
+Use the provided OCI image to run the validator, passing the configuration file's path via `--config-file`. The image's `ENTRYPOINT` is the `validator` binary itself, so this flag is appended directly as the container command. For example, with `docker` and assuming `database` in `validator.toml` points at a file under `/var/lib/safenet/validator/data`:
 
 ```sh
 docker run --name safenet-validator \
-    --env-file validator/.env \
-    --volume validator/data:/var/lib/safenet/validator/data \
-    ghcr.io/safe-research/safenet-validator:main
+    --volume "$(pwd)/validator.toml:/usr/src/app/validator.toml" \
+    --volume validator-data:/var/lib/safenet/validator/data \
+    ghcr.io/safe-research/safenet-validator:main \
+    --config-file=validator.toml
 ```
 
 ## Debugging
@@ -105,6 +111,6 @@ There are a few things you can do to verify your validator is running as expecte
 ### Common Problems
 
 - Ethereum node RPC issues:
-  -  Rate limits. While the validator implements exponential backoff for some RPC requests, rate limits can still prevent full participation in Safenet Beta.
+  -  Rate limits. While the validator implements exponential backoff for some RPC requests, rate limits can still prevent full participation in Safenet Testnet.
   -  Missing logs. Some RPC providers do not reliably return all logs for `eth_getLogs` requests. This issue can be mitigated with the appropriate configuration (see [`eth_getLogs` Reliability](#eth_getlogs-reliability)).
 - Insufficient funds on the validator account to submit onchain transactions. Logs will show that `actions` could not be submitted because of insufficient gas.

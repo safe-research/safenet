@@ -1,0 +1,77 @@
+# Sample configuration for the `validator` binary.
+#
+# Copy this file, fill in the deployment-specific values below, and pass it
+# with `--config-file=/path/to/your/validator.toml` (the binary defaults to
+# `validator.toml` in its working directory if the flag is omitted). See
+# `src/config.rs` for the full schema, and `../../docs/validator-handbook.md`
+# for an operator's guide to running a validator.
+
+# The chain RPC endpoint.
+rpc = "https://rpc.gnosischain.com"
+
+# The secp256k1 private key used to sign onchain transactions. Fund this
+# account with just enough gas to submit consensus transactions — see the
+# validator handbook's "Secrets" section for the risks of reusing this key.
+signer = "0x0000000000000000000000000000000000000000000000000000000000000001"
+
+# A SQLite connection string for the validator's persistent state (secrets,
+# indexer/transaction-queue progress). This file contains secret key
+# material in plaintext — see the validator handbook's "Consensus Secrets"
+# section — and must be backed up and restored across restarts.
+database = "sqlite:/var/lib/safenet/validator/data/storage.db"
+
+[validator]
+# The `Consensus` contract this validator proposes epochs and attests
+# transactions on. The `FROSTCoordinator` address is not configured
+# directly; it is read onchain via `Consensus.getCoordinator()`.
+consensus = "0x0000000000000000000000000000000000000000"
+
+# Optional: the Ethereum Mainnet account responsible for putting up this
+# validator's stake, if different from `signer`'s address. See
+# `../../docs/configuration.md#staking`.
+# staker = "0x0000000000000000000000000000000000000000"
+
+# Optional: oracle contracts whose results this validator honors when
+# attesting oracle-checked transactions.
+# oracles = ["0x0000000000000000000000000000000000000000"]
+
+# The salt mixed into the genesis group's key generation context.
+genesis_salt = "0x0000000000000000000000000000000000000000000000000000000000000000"
+
+# Optional timing parameters, in blocks; each falls back to a built-in
+# default when omitted.
+# blocks_per_epoch = 1440   # default: 1440 (~2 hours on Gnosis Chain)
+# key_gen_timeout = 120     # default: 120
+# signing_timeout = 6       # default: 6 (~30 seconds on Gnosis Chain)
+# oracle_timeout = 12       # default: 12
+
+# The validator set participating in key generation and signing, one
+# `[[validator.participants]]` table per member. `active_from`/
+# `active_before` default to "always active" when omitted.
+[[validator.participants]]
+address = "0x0000000000000000000000000000000000000001"
+
+[[validator.participants]]
+address = "0x0000000000000000000000000000000000000002"
+
+[observability]
+# The `tracing` env-filter directive controlling log verbosity.
+log_filter = "info"
+
+# Optional: address the Prometheus metrics HTTP listener binds to. Defaults
+# to an ephemeral port on loopback; set this to expose metrics outside a
+# container (see the validator handbook's "Logging and Metrics" section).
+# metrics_address = "0.0.0.0:3555"
+
+[index]
+# Optional: set to work around RPC providers that unreliably return
+# `eth_getLogs` results (see the validator handbook's "`eth_getLogs`
+# Reliability" section).
+# use_client_filtering = true
+
+[transactions]
+# Optional: caps the priority fee of estimated fees to at most this
+# percentage of the total max fee per gas (see the validator handbook's gas
+# cost tip). Lower values reduce what you can overpay on a bad fee estimate,
+# but risk slower inclusion if the cap ends up below what the network needs.
+# priority_fee_cap_percentage = 95

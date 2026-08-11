@@ -1,0 +1,70 @@
+# Sample configuration for the `sentinel` binary.
+#
+# Copy this file, fill in the deployment-specific values below, and pass it
+# with `--config-file=/path/to/your/sentinel.toml` (the binary defaults to
+# `sentinel.toml` in its working directory if the flag is omitted). See
+# `src/config.rs` for the full schema, and `../../docs/sentinel-handbook.md`
+# for an operator's guide to running a sentinel.
+
+# The chain RPC endpoint.
+rpc = "https://rpc.gnosischain.com"
+
+# The secp256k1 private key used to sign onchain transactions (bond
+# commitments and votes) and reveal them onchain. Fund this account with
+# just enough gas to submit those transactions — see the sentinel
+# handbook's "Secrets" section for the risks of reusing this key.
+signer = "0x0000000000000000000000000000000000000000000000000000000000000001"
+
+# A SQLite connection string for the sentinel's persistent state (request
+# tracking, indexer/transaction-queue progress). Must be backed up and
+# restored across restarts.
+database = "sqlite:/var/lib/safenet/sentinel/data/storage.db"
+
+# The `SentinelOracle` contract watched and voted/committed on.
+oracle = "0x0000000000000000000000000000000000000000"
+
+# The `Consensus` contract whose proposals are hashed into request ids.
+consensus = "0x0000000000000000000000000000000000000000"
+
+[sentinel]
+# The ERC-20 fee token approved for bonds.
+fee_token = "0x0000000000000000000000000000000000000000"
+
+# The number of blocks a `Preparing` request is kept alive for before being
+# cleaned up.
+voting_window = 100
+
+# Transaction destinations that are always denied.
+blocklist = []
+
+# How many blocks of history the address-poisoning check looks back over
+# for a prior genuine transfer/approval from the Safe to a candidate
+# target. A sensible value is chain- and RPC-specific (block time, and some
+# providers cap query width), so there is no built-in default.
+address_poisoning_lookback_blocks = 50000
+
+# Optional: an operator-configured endpoint to defer checks to that aren't
+# implemented locally. No dynamic check runs if this is unset.
+# remote_check_url = "https://example.com/check"
+
+[observability]
+# The `tracing` env-filter directive controlling log verbosity.
+log_filter = "info"
+
+# Optional: address the Prometheus metrics HTTP listener binds to. Defaults
+# to an ephemeral port on loopback; set this to expose metrics outside a
+# container (see the sentinel handbook's "Logging and Metrics" section).
+# metrics_address = "0.0.0.0:3555"
+
+[index]
+# Optional: set to work around RPC providers that unreliably return
+# `eth_getLogs` results (see the sentinel handbook's "`eth_getLogs`
+# Reliability" section).
+# use_client_filtering = true
+
+[transactions]
+# Optional: caps the priority fee of estimated fees to at most this
+# percentage of the total max fee per gas (see the sentinel handbook's gas
+# cost tip). Lower values reduce what you can overpay on a bad fee estimate,
+# but risk slower inclusion if the cap ends up below what the network needs.
+# priority_fee_cap_percentage = 95

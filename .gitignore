@@ -10,5 +10,7 @@ lcov.info
 node_modules/
 target/
 validator*.toml
+!/crates/validator/validator.sample.toml
 sentinel*.toml
+!/crates/sentinel/sentinel.sample.toml
 *_logs.txt

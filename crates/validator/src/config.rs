@@ -278,4 +278,13 @@ mod tests {
         assert_eq!(config.driver.index.blocks.max_reorg_depth, 12);
         assert_eq!(config.driver.transactions.max_in_flight_transactions, 4);
     }
+
+    #[test]
+    fn parses_sample_config() {
+        // The sample linked from the validator handbook must stay a valid,
+        // loadable example of the schema above.
+        let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("validator.sample.toml");
+        let contents = std::fs::read_to_string(path).unwrap();
+        toml::from_str::<Config>(&contents).unwrap();
+    }
 }

@@ -144,4 +144,13 @@ mod tests {
         );
         assert!(toml::from_str::<Config>(&without_oracle).is_err());
     }
+
+    #[test]
+    fn parses_sample_config() {
+        // The sample linked from the sentinel handbook must stay a valid,
+        // loadable example of the schema above.
+        let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("sentinel.sample.toml");
+        let contents = std::fs::read_to_string(path).unwrap();
+        toml::from_str::<Config>(&contents).unwrap();
+    }
 }
