@@ -112,7 +112,7 @@ export const loadLatestAttestationStatus = async ({
 	const fromBlock = proposedAt ?? defaultFromBlock;
 	const chainId = await provider.getChainId();
 	const coordinator = await loadCoordinator(provider, consensus);
-	// An oracle-checked proposal is attested via `OracleTransactionAttested`, whose message is
+	// An oracle-checked proposal is attested via `TransactionAttested`, whose message is
 	// the oracle's requestId hash.
 	const message = oracleRequestId({ chainId, consensus, epoch, oracle, safeTxHash });
 	// Get signing events related to this message

@@ -5,17 +5,16 @@ export const consensusAbi = parseAbi([
 	"function getActiveEpoch() external view returns (uint64 epoch, bytes32 groupId)",
 	"function getEpochsState() external view returns (uint64 previous, uint64 active, uint64 staged, uint64 rolloverBlock)",
 	"function getEpochGroupId(uint64 epoch) external view returns (bytes32 groupId)",
-	"event OracleTransactionProposed(bytes32 indexed safeTxHash, uint256 indexed chainId, address indexed safe, uint64 epoch, address oracle, (uint256 chainId, address safe, address to, uint256 value, bytes data, uint8 operation, uint256 safeTxGas, uint256 baseGas, uint256 gasPrice, address gasToken, address refundReceiver, uint256 nonce) transaction)",
-	"event OracleTransactionAttested(bytes32 indexed safeTxHash, uint256 indexed chainId, address indexed safe, uint64 epoch, address oracle, bytes32 signatureId, ((uint256 x, uint256 y) r, uint256 z) attestation)",
+	"event TransactionProposed(bytes32 indexed safeTxHash, uint256 indexed chainId, address indexed safe, uint64 epoch, address oracle, (uint256 chainId, address safe, address to, uint256 value, bytes data, uint8 operation, uint256 safeTxGas, uint256 baseGas, uint256 gasPrice, address gasToken, address refundReceiver, uint256 nonce) transaction)",
+	"event TransactionAttested(bytes32 indexed safeTxHash, uint256 indexed chainId, address indexed safe, uint64 epoch, address oracle, bytes32 signatureId, ((uint256 x, uint256 y) r, uint256 z) attestation)",
 	"event EpochProposed(uint64 indexed activeEpoch, uint64 indexed proposedEpoch, uint64 rolloverBlock, bytes32 groupId, (uint256 x, uint256 y) groupKey)",
 	"event EpochStaged(uint64 indexed activeEpoch, uint64 indexed proposedEpoch, uint64 rolloverBlock, bytes32 groupId, (uint256 x, uint256 y) groupKey, bytes32 signatureId, ((uint256 x, uint256 y) r, uint256 z) attestation)",
 ]);
 
-export const transactionEventSelectors = [
-	"OracleTransactionProposed" as const,
-	"OracleTransactionAttested" as const,
-].map((eventName) => toEventSelector(getAbiItem({ abi: consensusAbi, name: eventName })));
+export const transactionEventSelectors = ["TransactionProposed" as const, "TransactionAttested" as const].map(
+	(eventName) => toEventSelector(getAbiItem({ abi: consensusAbi, name: eventName })),
+);
 
-export const proposedEventSelectors = ["OracleTransactionProposed" as const].map((eventName) =>
+export const proposedEventSelectors = ["TransactionProposed" as const].map((eventName) =>
 	toEventSelector(getAbiItem({ abi: consensusAbi, name: eventName })),
 );

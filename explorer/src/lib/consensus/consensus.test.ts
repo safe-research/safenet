@@ -163,7 +163,7 @@ const makeRawConsensusLog = ({
 	blockNumber,
 	logIndex = 0,
 }: {
-	eventName: "OracleTransactionProposed" | "OracleTransactionAttested";
+	eventName: "TransactionProposed" | "TransactionAttested";
 	indexedArgs: Record<string, unknown>;
 	nonIndexedValues: unknown[];
 	blockNumber: bigint;
@@ -197,7 +197,7 @@ const makeOracleProposedLog = ({
 	blockNumber: bigint;
 }) =>
 	makeRawConsensusLog({
-		eventName: "OracleTransactionProposed",
+		eventName: "TransactionProposed",
 		indexedArgs: { safeTxHash, chainId: 1n, safe: SAFE_ADDRESS },
 		nonIndexedValues: [epoch, oracle, ORACLE_TX],
 		blockNumber,
@@ -217,7 +217,7 @@ const makeOracleAttestedLog = ({
 	logIndex?: number;
 }) =>
 	makeRawConsensusLog({
-		eventName: "OracleTransactionAttested",
+		eventName: "TransactionAttested",
 		indexedArgs: { safeTxHash, chainId: 1n, safe: SAFE_ADDRESS },
 		nonIndexedValues: [epoch, oracle, `0x${"00".repeat(32)}`, { r: { x: 0n, y: 0n }, z: 0n }],
 		blockNumber,
@@ -244,7 +244,7 @@ describe("loadProposedSafeTransaction", () => {
 		expect(firstCall(provider).topics[1]).toBe(SAFE_TX_HASH);
 	});
 
-	it("returns the transaction from an OracleTransactionProposed log", async () => {
+	it("returns the transaction from a TransactionProposed log", async () => {
 		const oracle = "0x3333333333333333333333333333333333333333" as Address;
 		const provider = makeProviderWithLogs([
 			makeOracleProposedLog({ safeTxHash: SAFE_TX_HASH, epoch: 1n, oracle, blockNumber: 100n }),
@@ -290,7 +290,7 @@ describe("loadTransactionProposals oracle recognition", () => {
 		expect(result.proposals[0].oracle).toBe(ORACLE);
 	});
 
-	it("derives trust from an OracleTransactionAttested log when no allow-list is configured", async () => {
+	it("derives trust from a TransactionAttested log when no allow-list is configured", async () => {
 		const provider = makeProviderWithLogs([
 			makeOracleProposedLog({ safeTxHash: SAFE_TX_HASH, epoch: 1n, oracle: OTHER_ORACLE, blockNumber: CURRENT_BLOCK }),
 			makeOracleProposedLog({ safeTxHash: SAFE_TX_HASH, epoch: 1n, oracle: ORACLE, blockNumber: CURRENT_BLOCK }),

@@ -13,7 +13,7 @@ impl Transition {
     /// against the configured allow-list. A transaction proposed for an
     /// unknown or unresolved epoch, one whose group this validator is not
     /// part of, or from a disallowed oracle, is ignored.
-    pub(super) fn handle_oracle_transaction_proposed(
+    pub(super) fn handle_transaction_proposed(
         &self,
         mut state: State,
         block: u64,
@@ -41,13 +41,13 @@ impl Transition {
 
         let message =
             self.consensus
-                .oracle_transaction_packet_hash(epoch, event.oracle, &event.transaction);
+                .transaction_packet_hash(epoch, event.oracle, &event.transaction);
 
         // Prevent duplicate ongoing transaction proposals. This is to prevent
         // malicious parties from blocking transaction attestations from ever
         // being produced by resetting the signing state of honest validators.
         if let btree_map::Entry::Vacant(signing) = state.signing.entry(message) {
-            let packet = Packet::OracleTransaction {
+            let packet = Packet::Transaction {
                 epoch,
                 oracle: event.oracle,
                 transaction: Box::new(event.transaction.clone()),
@@ -73,7 +73,7 @@ impl Transition {
 
     /// Clears a completed oracle-backed signing session once its attestation
     /// lands onchain.
-    pub(super) fn handle_oracle_transaction_attested(
+    pub(super) fn handle_transaction_attested(
         &self,
         state: State,
         event: &Consensus::TransactionAttested,
@@ -81,7 +81,7 @@ impl Transition {
         let epoch = EpochId::from_raw(event.epoch);
         let message =
             self.consensus
-                .oracle_transaction_proposal_hash(epoch, event.oracle, event.safeTxHash);
+                .transaction_proposal_hash(epoch, event.oracle, event.safeTxHash);
         tracing::info!(
             ?epoch,
             safe_tx_hash = %event.safeTxHash,
