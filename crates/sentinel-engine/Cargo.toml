@@ -1,0 +1,14 @@
+[package]
+name = "sentinel-engine"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[dependencies]
+argh.workspace = true
+safenet-core.workspace = true
+serde.workspace = true
+thiserror.workspace = true
+tokio.workspace = true
+toml.workspace = true
+tracing.workspace = true
