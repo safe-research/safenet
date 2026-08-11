@@ -424,10 +424,10 @@ impl StateTransition<State> for Transition {
                 Event::Consensus(Consensus::ConsensusEvents::EpochStaged(event)) => {
                     self.handle_epoch_staged(state, &event)
                 }
-                Event::Consensus(Consensus::ConsensusEvents::OracleTransactionProposed(event)) => {
+                Event::Consensus(Consensus::ConsensusEvents::TransactionProposed(event)) => {
                     self.handle_oracle_transaction_proposed(state, log.block, &event)
                 }
-                Event::Consensus(Consensus::ConsensusEvents::OracleTransactionAttested(event)) => {
+                Event::Consensus(Consensus::ConsensusEvents::TransactionAttested(event)) => {
                     self.handle_oracle_transaction_attested(state, &event)
                 }
                 Event::Oracle(Oracle::OracleEvents::OracleResult(event)) => {

@@ -366,7 +366,7 @@ impl Transition {
 
     /// Publishes this validator's signature share once the
     /// [`Effect::UseNonce`] effect has produced it, attaching the packet's
-    /// completion callback (`stageEpoch`/`attestOracleTransaction`) so the
+    /// completion callback (`stageEpoch`/`attestTransaction`) so the
     /// group's completed signature carries out its onchain effect
     /// automatically.
     pub(super) fn handle_nonces(
@@ -489,7 +489,7 @@ impl Transition {
 
     /// Handles a signature attestation, which can mean different things for
     /// different packets. Called by the individual attestations handlers
-    /// (`EpochStaged`, `OracleTransactionAttested`).
+    /// (`EpochStaged`, `TransactionAttested`).
     pub(super) fn handle_sign_attested(
         &self,
         mut state: State,
@@ -803,7 +803,7 @@ impl Packet {
     }
 
     /// Builds the callback invoked once this packet's group signature
-    /// completes: `stageEpoch`/`attestOracleTransaction` calldata targeting
+    /// completes: `stageEpoch`/`attestTransaction` calldata targeting
     /// the `Consensus` contract. The signature id argument is left as a zero
     /// placeholder - the `Consensus` contract fills it in itself when it
     /// invokes the callback from a completed `signShareWithCallback`.
@@ -835,7 +835,7 @@ impl Packet {
         };
 
         let safe_tx_struct_hash = hashing::safe_tx_struct_hash(transaction);
-        let context = Consensus::attestOracleTransactionCall {
+        let context = Consensus::attestTransactionCall {
             epoch: epoch.raw_value(),
             oracle,
             chainId: transaction.chainId,

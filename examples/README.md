@@ -8,7 +8,7 @@ Scripts for interacting with the Safenet protocol on public testnets.
 and assembles the `signatures` blob that satisfies `SafenetGuard` — the owner signatures
 followed by the inline attestation *trailer* — ready to submit via `execTransaction`.
 
-Use this after a Safe transaction has been proposed to Safenet (via `proposeOracleTransaction`
+Use this after a Safe transaction has been proposed to Safenet (via `proposeTransaction`
 on the Consensus contract) and the FROST signing round has completed.
 
 ### Prerequisites
@@ -49,7 +49,7 @@ npm run attest-safe-tx -w @safenet/examples -- <safeTxHash> <guardAddress>
 
 ### What it does
 
-1. Calls `getActiveEpoch()` and then `getOracleTransactionAttestationByHash(epoch, oracleAddress, safeTxHash)`
+1. Calls `getActiveEpoch()` and then `getTransactionAttestationByHash(epoch, oracleAddress, safeTxHash)`
    on the Consensus contract on Gnosis Chain to fetch the FROST signature.
 2. Resolves the attesting group key by scanning the guard's `EpochInitialized` /
    `EpochRolledOver` events for that epoch (Consensus exposes no group-key getter).

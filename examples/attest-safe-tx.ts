@@ -124,7 +124,7 @@ const gnosisClient = createPublicClient({ chain: gnosis, transport: http(rpc) })
 const GET_ACTIVE_EPOCH = parseAbiItem("function getActiveEpoch() view returns (uint64 epoch, bytes32 groupId)");
 
 const GET_ATTESTATION = parseAbiItem(
-	"function getOracleTransactionAttestationByHash(uint64, address, bytes32) view returns (((uint256 x, uint256 y) r, uint256 z) signature)",
+	"function getTransactionAttestationByHash(uint64, address, bytes32) view returns (((uint256 x, uint256 y) r, uint256 z) signature)",
 );
 
 // The getter reverts NotSigned() until the FROST round completes; declaring the error lets viem decode
@@ -185,7 +185,7 @@ async function pollAttestation(): Promise<{ epoch: bigint; sig: { r: Point; z: b
 			const sig = await gnosisClient.readContract({
 				address: consensusAddress,
 				abi: [GET_ATTESTATION, NOT_SIGNED],
-				functionName: "getOracleTransactionAttestationByHash",
+				functionName: "getTransactionAttestationByHash",
 				args: [epoch, oracleAddress, safeTxHash],
 			});
 			if (sig.r.x !== 0n || sig.r.y !== 0n || sig.z !== 0n) {

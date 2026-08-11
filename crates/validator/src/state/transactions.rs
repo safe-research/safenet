@@ -17,7 +17,7 @@ impl Transition {
         &self,
         mut state: State,
         block: u64,
-        event: &Consensus::OracleTransactionProposed,
+        event: &Consensus::TransactionProposed,
     ) -> (State, Commands<State, Self>) {
         let epoch = EpochId::from_raw(event.epoch);
         let Some(participating_epoch) = state.epochs.get(&epoch) else {
@@ -76,7 +76,7 @@ impl Transition {
     pub(super) fn handle_oracle_transaction_attested(
         &self,
         state: State,
-        event: &Consensus::OracleTransactionAttested,
+        event: &Consensus::TransactionAttested,
     ) -> (State, Commands<State, Self>) {
         let epoch = EpochId::from_raw(event.epoch);
         let message =

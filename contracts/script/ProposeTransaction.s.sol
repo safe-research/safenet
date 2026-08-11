@@ -5,7 +5,7 @@ import {Script, console} from "@forge-std/Script.sol";
 import {Consensus} from "@/Consensus.sol";
 import {SafeTransaction} from "@/libraries/SafeTransaction.sol";
 
-contract ProposeOracleTransactionScript is Script {
+contract ProposeTransactionScript is Script {
     function run() public returns (bytes32 safeTxHash) {
         SafeTransaction.T memory transaction;
 
@@ -30,7 +30,7 @@ contract ProposeOracleTransactionScript is Script {
 
         vm.startBroadcast();
 
-        safeTxHash = Consensus(consensusAddress).proposeOracleTransaction(oracle, oracleData, transaction);
+        safeTxHash = Consensus(consensusAddress).proposeTransaction(oracle, oracleData, transaction);
 
         vm.stopBroadcast();
 

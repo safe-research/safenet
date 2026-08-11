@@ -138,7 +138,7 @@ pointed at the devnet's RPC and one of the accounts above. Proposing a transacti
 oracle approval (`CONSENSUS_ADDRESS` is already exported from [above](#setting-up-environment-variables),
 so it doesn't need to be restated here). `SentinelOracle.postRequest`
 pulls the request fee from the proposing account (`--sender`, i.e. `msg.sender` on
-`proposeOracleTransaction`) via `transferFrom`, so that account must first `approve` the oracle to
+`proposeTransaction`) via `transferFrom`, so that account must first `approve` the oracle to
 spend the fee token:
 
 ```sh
@@ -159,7 +159,7 @@ TX_TO=<TO_ADDRESS> \
 TX_NONCE=0 \
 TX_DATA=<CALLDATA> \
 TX_OPERATION=0 \
-npm run cmd:propose:oracle -w @safenet/contracts -- \
+npm run cmd:propose -w @safenet/contracts -- \
     --rpc-url http://127.0.0.1:8545 --unlocked --sender 0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266 --broadcast
 ```
 
@@ -183,7 +183,7 @@ three fields `0`) means the FROST group hasn't produced an attestation for that 
 Check it using the epoch from `getActiveEpoch()` (from [above](#reading-contract-state-with-cast)):
 
 ```sh
-cast call $CONSENSUS_ADDRESS "getOracleTransactionAttestationByHash(uint64,address,bytes32)(((uint256,uint256),uint256))" \
+cast call $CONSENSUS_ADDRESS "getTransactionAttestationByHash(uint64,address,bytes32)(((uint256,uint256),uint256))" \
     <EPOCH> $ORACLE_ADDRESS <SAFE_TX_HASH> --rpc-url http://localhost:8545
 ```
 

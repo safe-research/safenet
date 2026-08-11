@@ -177,9 +177,8 @@ contract SafenetGuardTest is Test {
         returns (bytes memory)
     {
         Secp256k1.Point memory groupKey = ForgeSecp256k1.g(sk).toPoint();
-        bytes32 message = ConsensusMessages.oracleTransactionProposal(
-            guard.getConsensusDomainSeparator(), epoch, ORACLE_ADDR, txHash
-        );
+        bytes32 message =
+            ConsensusMessages.transactionProposal(guard.getConsensusDomainSeparator(), epoch, ORACLE_ADDR, txHash);
         FROST.Signature memory sig = _frostSign(sk, nk, message);
         bytes memory payload = abi.encode(epoch, ORACLE_ADDR, groupKey, sig); // 224 bytes
         return bytes.concat(payload, abi.encode(payload.length), AttestationTrailer.TYPE_HASH);
@@ -436,7 +435,7 @@ contract SafenetGuardTest is Test {
     function test_integration_inlineAttestation_revertsWithTamperedSignature() public {
         uint256 nonce = safe.nonce();
         bytes32 txHash = _safeTxHash(TX_TO, TX_VALUE, TX_DATA, TX_OP, nonce);
-        bytes32 message = ConsensusMessages.oracleTransactionProposal(
+        bytes32 message = ConsensusMessages.transactionProposal(
             guard.getConsensusDomainSeparator(), GENESIS_EPOCH, ORACLE_ADDR, txHash
         );
         FROST.Signature memory sig = _frostSign(GENESIS_SK, GENESIS_NK, message);

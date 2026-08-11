@@ -35,7 +35,7 @@ sol! {
 
     /// The consensus-domain packet proposing an oracle-backed Safe
     /// transaction for attestation.
-    struct OracleTransactionProposal {
+    struct TransactionProposal {
         uint64 epoch;
         address oracle;
         bytes32 safeTxHash;
@@ -109,7 +109,7 @@ impl ConsensusDomain {
         oracle: Address,
         safe_tx_hash: B256,
     ) -> B256 {
-        OracleTransactionProposal {
+        TransactionProposal {
             epoch: epoch.raw_value(),
             oracle,
             safeTxHash: safe_tx_hash,
@@ -187,7 +187,7 @@ mod tests {
     fn sample_oracle_transaction_packet_hash() {
         assert_eq!(
             TEST_DOMAIN.oracle_transaction_packet_hash(EPOCH_ONE, TEST_ADDRESS, &safe_tx()),
-            b256!("b89cd5ddc8b9a71c6469b79711f8ce0000edd6fc3f47ad057a772302fcfa82af")
+            b256!("44151ab85018beace71ef3255d90480c7b41a3c42b2cf892c155a304875abc9e")
         );
     }
 

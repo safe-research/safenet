@@ -249,17 +249,15 @@ contract Consensus is IConsensus, IERC165, IFROSTCoordinatorCallback {
     /**
      * @inheritdoc IConsensus
      */
-    function proposeOracleTransaction(address oracle, bytes calldata oracleData, SafeTransaction.T memory transaction)
+    function proposeTransaction(address oracle, bytes calldata oracleData, SafeTransaction.T memory transaction)
         public
         returns (bytes32 safeTxHash)
     {
         Epochs memory epochs = _processRollover();
         safeTxHash = transaction.hash();
-        bytes32 message = domainSeparator().oracleTransactionProposal(epochs.active, oracle, safeTxHash);
+        bytes32 message = domainSeparator().transactionProposal(epochs.active, oracle, safeTxHash);
         require($attestations[message].isZero(), AlreadyAttested());
-        emit OracleTransactionProposed(
-            safeTxHash, transaction.chainId, transaction.safe, epochs.active, oracle, transaction
-        );
+        emit TransactionProposed(safeTxHash, transaction.chainId, transaction.safe, epochs.active, oracle, transaction);
         _COORDINATOR.sign($groups[epochs.active], message);
         IOracle(oracle).postRequest(message, msg.sender, oracleData);
     }
@@ -267,7 +265,7 @@ contract Consensus is IConsensus, IERC165, IFROSTCoordinatorCallback {
     /**
      * @inheritdoc IConsensus
      */
-    function attestOracleTransaction(
+    function attestTransaction(
         uint64 epoch,
         address oracle,
         uint256 chainId,
@@ -276,22 +274,22 @@ contract Consensus is IConsensus, IERC165, IFROSTCoordinatorCallback {
         FROSTSignatureId.T signatureId
     ) public {
         bytes32 safeTxHash = SafeTransaction.partialHash(chainId, safe, safeTxStructHash);
-        bytes32 message = domainSeparator().oracleTransactionProposal(epoch, oracle, safeTxHash);
+        bytes32 message = domainSeparator().transactionProposal(epoch, oracle, safeTxHash);
         require($attestations[message].isZero(), AlreadyAttested());
         FROST.Signature memory attestation = _COORDINATOR.signatureVerify(signatureId, $groups[epoch], message);
         $attestations[message] = signatureId;
-        emit OracleTransactionAttested(safeTxHash, chainId, safe, epoch, oracle, signatureId, attestation);
+        emit TransactionAttested(safeTxHash, chainId, safe, epoch, oracle, signatureId, attestation);
     }
 
     /**
      * @inheritdoc IConsensus
      */
-    function getOracleTransactionAttestationByHash(uint64 epoch, address oracle, bytes32 safeTxHash)
+    function getTransactionAttestationByHash(uint64 epoch, address oracle, bytes32 safeTxHash)
         public
         view
         returns (FROST.Signature memory signature)
     {
-        bytes32 message = domainSeparator().oracleTransactionProposal(epoch, oracle, safeTxHash);
+        bytes32 message = domainSeparator().transactionProposal(epoch, oracle, safeTxHash);
         return _COORDINATOR.signatureValue($attestations[message]);
     }
 
@@ -329,10 +327,10 @@ contract Consensus is IConsensus, IERC165, IFROSTCoordinatorCallback {
             (uint64 proposedEpoch, uint64 rolloverBlock, FROSTGroupId.T groupId) =
                 abi.decode(context[4:], (uint64, uint64, FROSTGroupId.T));
             stageEpoch(proposedEpoch, rolloverBlock, groupId, signatureId);
-        } else if (selector == this.attestOracleTransaction.selector) {
+        } else if (selector == this.attestTransaction.selector) {
             (uint64 epoch, address oracle, uint256 chainId, address safe, bytes32 safeTxStructHash) =
                 abi.decode(context[4:], (uint64, address, uint256, address, bytes32));
-            attestOracleTransaction(epoch, oracle, chainId, safe, safeTxStructHash, signatureId);
+            attestTransaction(epoch, oracle, chainId, safe, safeTxStructHash, signatureId);
         } else {
             revert UnknownSignatureSelector();
         }

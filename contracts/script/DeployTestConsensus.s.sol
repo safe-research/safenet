@@ -11,7 +11,7 @@ contract DeployTestConsensusScript is Script {
         vm.startBroadcast();
 
         // The real `Consensus`, backed by a coordinator that no-ops `sign()`.
-        // Sentinels only need `OracleTransactionProposed` and the resulting
+        // Sentinels only need `TransactionProposed` and the resulting
         // `postRequest` call; they never verify a FROST signature, so the
         // genesis group id is an arbitrary placeholder — `MockCoordinator`
         // never checks it against real group state.

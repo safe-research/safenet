@@ -30,7 +30,7 @@ interface IOracle {
      * @param oracleData Arbitrary oracle-specific data passed by the proposer; not part of the
      *                   signed message hash. The oracle may decode this however it sees fit.
      * @dev Transaction data is not passed here; the oracle is expected to fetch it independently
-     *      from the OracleTransactionProposed event. The oracle pulls the fee directly from
+     *      from the TransactionProposed event. The oracle pulls the fee directly from
      *      proposer and refunds to proposer on resolution when applicable.
      */
     function postRequest(bytes32 requestId, address proposer, bytes calldata oracleData) external;

@@ -1,5 +1,5 @@
 use crate::bindings::{
-    consensus::{OracleTransactionProposal, SafeTransaction},
+    consensus::{SafeTransaction, TransactionProposal},
     safe::{Operation as SafeOperation, SafeTx},
 };
 use alloy::{
@@ -91,7 +91,7 @@ pub fn oracle_tx_proposal_hash(
         verifying_contract: Some(consensus),
         ..Default::default()
     };
-    OracleTransactionProposal {
+    TransactionProposal {
         epoch,
         oracle,
         safeTxHash: stx_hash,
@@ -138,10 +138,11 @@ mod tests {
         );
     }
 
-    /// Parity vector: `oracleTxPacketHash(VALID_PACKET)` from
-    /// `validator/src/consensus/verify/oracleTx/handler.test.ts`.
-    /// VALID_PACKET: domain.chain=23, consensus=0x22Cb221c..., epoch=11,
-    /// oracle=safe=0x4838B106..., to=0x22Cb221c..., chainId=1, all other fields zero.
+    /// Parity vector: `test_TransactionProposal_SentinelParityVector` in
+    /// `contracts/test/libraries/ConsensusMessages.t.sol` — keep both in sync if either
+    /// implementation or expected hash changes.
+    /// domain.chain=23, consensus=0x22Cb221c..., epoch=11, oracle=safe=0x4838B106...,
+    /// to=0x22Cb221c..., chainId=1, all other fields zero.
     #[test]
     fn oracle_tx_proposal_hash_parity() {
         let consensus = address!("22Cb221caE98D6097082C80158B1472C45FEd729");
@@ -151,7 +152,7 @@ mod tests {
         let id = oracle_tx_proposal_hash(U256::from(23u64), consensus, 11, oracle, stx_hash);
         assert_eq!(
             id,
-            b256!("2a29f463bfd18f87230f795b09f22d8d126f0fcedab6149ce430777c827115b0"),
+            b256!("13889a221bc89a7b93781ab5457f5b7b9a6d9f2e9fe8d97dcf6be83a8658c58c"),
         );
     }
 
