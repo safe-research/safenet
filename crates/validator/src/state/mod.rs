@@ -61,6 +61,27 @@ struct Epoch {
     group: Group,
     /// This validator's key share.
     key_share: Arc<KeyShare>,
+    /// This validator's canonical nonce-tree assignments for the epoch.
+    nonces: NonceState,
+}
+
+/// Canonical nonce state for one participating epoch.
+#[derive(Clone, Debug, Default, Deserialize, Serialize)]
+struct NonceState {
+    /// The next signing sequence expected for the group.
+    next_sequence: u64,
+    /// Canonical nonce roots by sequence chunk. `None` reserves a chunk while
+    /// its locally generated root is waiting to be registered onchain.
+    chunks: BTreeMap<u64, Option<B256>>,
+}
+
+/// The durable-store coordinates of a nonce selected by canonical state.
+#[derive(Clone, Copy, Debug, Deserialize, Serialize)]
+struct NonceIndex {
+    /// The nonce tree's Merkle root.
+    root: B256,
+    /// The nonce's offset within the tree.
+    offset: u64,
 }
 
 /// The epoch-rollover / DKG state machine. Each active variant carries the
@@ -286,8 +307,8 @@ enum SigningState {
         group_id: B256,
         /// The signature id assigned to this signing round.
         signature_id: B256,
-        /// The nonce sequence number assigned to this signing round.
-        sequence: u64,
+        /// This validator's nonce selected for the signing round.
+        nonce: NonceIndex,
         /// The packet being signed.
         packet: Packet,
         /// The group members expected to take part in signing.
@@ -304,8 +325,8 @@ enum SigningState {
         group_id: B256,
         /// The signature id assigned to this signing round.
         signature_id: B256,
-        /// The nonce sequence number assigned to this signing round.
-        sequence: u64,
+        /// This validator's nonce selected for the signing round.
+        nonce: NonceIndex,
         /// Verified revealed nonce commitments received from peers so far.
         revealed: BTreeMap<Address, RevealedNonces>,
         /// The last participant to reveal a valid nonce commitment, if any.

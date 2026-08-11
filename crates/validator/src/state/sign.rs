@@ -27,24 +27,27 @@ impl Transition {
     ) -> (State, Commands<State, Self>) {
         let mut commands = Vec::new();
 
-        // Unconditionally top up the group's nonce stock, regardless of
-        // whether this validator is one of the selected signers: the
-        // sequence is shared by every participant and only ever advances, so
-        // it can run past this validator's local nonces even for signing
-        // ceremonies it was never asked to take part in. `epochs` is small
-        // (a handful of entries at most in regular operation), so a linear
-        // scan for the matching group is fine.
-        if let Some(epoch) = state
+        // Advance the canonical nonce cursor and reserve a top-up before
+        // requesting generation. This happens regardless of whether this
+        // validator was selected: the sequence is shared by every participant
+        // and advances for every signing ceremony.
+        let nonce = if let Some(epoch) = state
             .epochs
-            .values()
+            .values_mut()
             .find(|epoch| epoch.group.id() == event.gid)
         {
-            commands.push(Command::Effect(Effect::TopupNonces {
-                group_id: event.gid,
-                key_share: epoch.key_share.clone(),
-                sequence: event.sequence,
-            }));
-        }
+            let nonce = epoch.nonces.nonce(event.sequence);
+            epoch.nonces.observe(event.sequence);
+            if epoch.nonces.reserve_chunk().is_some() {
+                commands.push(Command::Effect(Effect::NonceTree {
+                    group_id: event.gid,
+                    key_share: epoch.key_share.clone(),
+                }));
+            }
+            nonce
+        } else {
+            None
+        };
 
         match state.signing.remove(&event.message) {
             Some(SigningState::WaitingToDecline { deadline, .. }) => {
@@ -64,67 +67,80 @@ impl Transition {
                 packet,
                 signers,
                 ..
-            }) if group_id == event.gid => match packet {
-                Packet::OracleTransaction { oracle, .. } => {
-                    let deadline = block.saturating_add(self.config.oracle_timeout.get());
-                    tracing::info!(
-                        message = %event.message,
-                        signature_id = %event.sid,
-                        group_id = %event.gid,
-                        %oracle,
-                        "signing request waiting for oracle result"
-                    );
-                    state.signing.insert(
-                        event.message,
-                        SigningState::WaitingForOracle {
-                            key_share,
-                            oracle,
-                            group_id,
-                            signature_id: event.sid,
-                            sequence: event.sequence,
-                            packet,
-                            signers,
-                            deadline,
-                        },
-                    );
-                    state
-                        .signature_id_to_message
-                        .insert(event.sid, event.message);
-                }
-                Packet::Transaction { .. } | Packet::EpochRollover { .. } => {
-                    let deadline = block.saturating_add(self.config.signing_timeout.get());
-                    tracing::info!(
+            }) if group_id == event.gid => {
+                let Some(nonce) = nonce else {
+                    tracing::warn!(
                         message = %event.message,
                         signature_id = %event.sid,
                         group_id = %event.gid,
                         sequence = event.sequence,
-                        "accepted signing request; revealing nonce commitment"
+                        "not participating in signing request without a canonically linked nonce"
                     );
-                    state.signing.insert(
-                        event.message,
-                        SigningState::CollectNonceCommitments {
-                            key_share,
-                            group_id: event.gid,
+                    return (state, commands);
+                };
+
+                match packet {
+                    Packet::OracleTransaction { oracle, .. } => {
+                        let deadline = block.saturating_add(self.config.oracle_timeout.get());
+                        tracing::info!(
+                            message = %event.message,
+                            signature_id = %event.sid,
+                            group_id = %event.gid,
+                            %oracle,
+                            "signing request waiting for oracle result"
+                        );
+                        state.signing.insert(
+                            event.message,
+                            SigningState::WaitingForOracle {
+                                key_share,
+                                oracle,
+                                group_id,
+                                signature_id: event.sid,
+                                nonce,
+                                packet,
+                                signers,
+                                deadline,
+                            },
+                        );
+                        state
+                            .signature_id_to_message
+                            .insert(event.sid, event.message);
+                    }
+                    Packet::Transaction { .. } | Packet::EpochRollover { .. } => {
+                        let deadline = block.saturating_add(self.config.signing_timeout.get());
+                        tracing::info!(
+                            message = %event.message,
+                            signature_id = %event.sid,
+                            group_id = %event.gid,
+                            sequence = event.sequence,
+                            "accepted signing request; revealing nonce commitment"
+                        );
+                        state.signing.insert(
+                            event.message,
+                            SigningState::CollectNonceCommitments {
+                                key_share,
+                                group_id: event.gid,
+                                signature_id: event.sid,
+                                nonce,
+                                revealed: BTreeMap::new(),
+                                last_signer: None,
+                                packet,
+                                signers,
+                                deadline,
+                            },
+                        );
+                        state
+                            .signature_id_to_message
+                            .insert(event.sid, event.message);
+                        commands.push(Command::Effect(Effect::RevealNonceCommitments {
                             signature_id: event.sid,
-                            sequence: event.sequence,
-                            revealed: BTreeMap::new(),
-                            last_signer: None,
-                            packet,
-                            signers,
-                            deadline,
-                        },
-                    );
-                    state
-                        .signature_id_to_message
-                        .insert(event.sid, event.message);
-                    commands.push(Command::Effect(Effect::RevealNonceCommitments {
-                        group_id: event.gid,
-                        signature_id: event.sid,
-                        message: event.message,
-                        sequence: event.sequence,
-                    }));
+                            message: event.message,
+                            root: nonce.root,
+                            offset: nonce.offset,
+                        }));
+                    }
                 }
-            },
+            }
             Some(other) => {
                 tracing::warn!(
                     message = %event.message,
@@ -197,7 +213,7 @@ impl Transition {
                 packet,
                 signers,
                 group_id,
-                sequence,
+                nonce,
                 ..
             }) if expected == oracle && event.approved => {
                 let deadline = block.saturating_add(self.config.signing_timeout.get());
@@ -213,7 +229,7 @@ impl Transition {
                         key_share,
                         group_id,
                         signature_id,
-                        sequence,
+                        nonce,
                         revealed: BTreeMap::new(),
                         last_signer: None,
                         packet,
@@ -225,10 +241,10 @@ impl Transition {
                 (
                     state,
                     vec![Command::Effect(Effect::RevealNonceCommitments {
-                        group_id,
                         signature_id,
                         message: event.requestId,
-                        sequence,
+                        root: nonce.root,
+                        offset: nonce.offset,
                     })],
                 )
             }
@@ -281,7 +297,7 @@ impl Transition {
                 key_share,
                 group_id,
                 signature_id,
-                sequence,
+                nonce,
                 mut revealed,
                 mut last_signer,
                 packet,
@@ -321,7 +337,7 @@ impl Transition {
                             key_share,
                             group_id,
                             signature_id,
-                            sequence,
+                            nonce,
                             revealed,
                             last_signer,
                             packet,
@@ -350,9 +366,9 @@ impl Transition {
                 (
                     state,
                     vec![Command::Effect(Effect::UseNonce {
-                        group_id,
                         message,
-                        sequence,
+                        root: nonce.root,
+                        offset: nonce.offset,
                     })],
                 )
             }
@@ -632,7 +648,7 @@ impl Transition {
                 oracle,
                 group_id,
                 signature_id,
-                sequence,
+                nonce,
                 packet,
                 signers,
                 deadline,
@@ -645,7 +661,7 @@ impl Transition {
                 key_share,
                 group_id,
                 signature_id,
-                sequence,
+                nonce,
                 revealed,
                 last_signer,
                 packet,
