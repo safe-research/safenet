@@ -81,7 +81,7 @@ env \
 	SENTINEL_GOVERNANCE_DELAY="$GOVERNANCE_DELAY" \
 	SENTINEL_BOND_MULTIPLIER="$BOND_MULTIPLIER" \
 	npm run -w contracts cmd:deploy:sentinel-oracle -- --rpc-url "$RPC_URL" --private-key "$DEPLOYER_PK" --broadcast
-ORACLE=$(jq -r '.returns.sentinelOracle.value' "$ROOT/contracts/build/broadcast/DeploySentinelOracleV2.s.sol/$CHAIN_ID/run-latest.json")
+ORACLE=$(jq -r '.returns.sentinelOracle.value' "$ROOT/contracts/build/broadcast/DeploySentinelOracle.s.sol/$CHAIN_ID/run-latest.json")
 echo "Sentinel oracle deployed at $ORACLE"
 
 # --- 4. Fund the required accounts ---

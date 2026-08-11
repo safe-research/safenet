@@ -6,12 +6,10 @@ import {SafeERC20} from "@oz/token/ERC20/utils/SafeERC20.sol";
 import {IOracle} from "@/interfaces/IOracle.sol";
 import {BondConfig} from "@/libraries/BondConfig.sol";
 import {SentinelMap} from "@/libraries/SentinelMap.sol";
-import {SentinelOracleCommitment, SentinelOracleCommitmentMap} from "@/libraries/SentinelOracleCommitmentsV2.sol";
-import {SentinelOracleRequest, SentinelOracleRequestMap} from "@/libraries/SentinelOracleRequestsV2.sol";
+import {SentinelOracleCommitment, SentinelOracleCommitmentMap} from "@/libraries/SentinelOracleCommitments.sol";
+import {SentinelOracleRequest, SentinelOracleRequestMap} from "@/libraries/SentinelOracleRequests.sol";
 
-// TODO(A4): rename to SentinelOracle.sol once SentinelOracle.t.sol is rewritten against this
-// interface and the V1 contract/libraries are removed.
-contract SentinelOracleV2 is IOracle {
+contract SentinelOracle is IOracle {
     using BondConfig for BondConfig.T;
     using SentinelMap for SentinelMap.T;
     using SentinelOracleCommitment for SentinelOracleCommitment.Commitment;

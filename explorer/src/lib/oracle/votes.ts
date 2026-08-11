@@ -1,13 +1,13 @@
 import { type Address, formatLog, type Hex, numberToHex, type PublicClient, parseEventLogs } from "viem";
 import { getBlockRange, loadChainId } from "@/lib/utils";
-import { sentinelOracleV2Abi, sentinelVoteEventSelectors } from "./abi";
+import { sentinelOracleAbi, sentinelVoteEventSelectors } from "./abi";
 import { oracleRequestId } from "./hashing";
 
 export type SentinelVote =
 	| { sentinel: Address; state: "committed" }
 	| { sentinel: Address; state: "approved" | "denied"; reason: string };
 
-// Per-sentinel breakdown for a `SentinelOracleV2` request, discovered from indexed `Committed`/
+// Per-sentinel breakdown for a `SentinelOracle` request, discovered from indexed `Committed`/
 // `Revealed` logs rather than a configured roster — only sentinels who acted appear, ordered by
 // their `Committed` log position (first vote first). Callers should only invoke this once
 // `loadVotingStatus` has confirmed `kind === "sentinel"`; a generic `IOracle` has no such events.
@@ -45,7 +45,7 @@ export const loadSentinelVotes = async ({
 	});
 	const logs = parseEventLogs({
 		logs: rawLogs.map((log) => formatLog(log)),
-		abi: sentinelOracleV2Abi,
+		abi: sentinelOracleAbi,
 		strict: true,
 	});
 

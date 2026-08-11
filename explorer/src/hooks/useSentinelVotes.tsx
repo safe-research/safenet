@@ -3,7 +3,7 @@ import type { Address, Hex } from "viem";
 import { useSettings } from "@/hooks/useSettings";
 import { getOracleWorker, type SentinelVote } from "@/lib/oracle";
 
-// `enabled` should be false until the caller knows the oracle is `SentinelOracleV2`-shaped
+// `enabled` should be false until the caller knows the oracle is `SentinelOracle`-shaped
 // (i.e. `useVotingStatus(...).data?.kind === "sentinel"`) — a generic `IOracle` has no
 // `Committed`/`Revealed` events to read, so querying it is pure wasted RPC traffic.
 export function useSentinelVotes(oracle: Address, epoch: bigint, safeTxHash: Hex, enabled = false) {

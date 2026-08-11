@@ -8,7 +8,7 @@ import {
 	type PublicClient,
 } from "viem";
 import { describe, expect, it, vi } from "vitest";
-import { sentinelOracleV2Abi } from "./abi";
+import { sentinelOracleAbi } from "./abi";
 import { oracleRequestId } from "./hashing";
 import { loadSentinelVotes } from "./votes";
 
@@ -51,8 +51,8 @@ const makeRawVoteLog = ({
 	blockNumber: bigint;
 	logIndex?: number;
 }) => {
-	const topics = encodeEventTopics({ abi: sentinelOracleV2Abi, eventName, args: indexedArgs });
-	const abiItem = getAbiItem({ abi: sentinelOracleV2Abi, name: eventName }) as { inputs: readonly unknown[] };
+	const topics = encodeEventTopics({ abi: sentinelOracleAbi, eventName, args: indexedArgs });
+	const abiItem = getAbiItem({ abi: sentinelOracleAbi, name: eventName }) as { inputs: readonly unknown[] };
 	const data = encodeAbiParameters(nonIndexedInputs(abiItem.inputs), nonIndexedValues);
 	return {
 		address: ORACLE,

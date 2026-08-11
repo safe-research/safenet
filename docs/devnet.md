@@ -39,7 +39,7 @@ This brings up a single Podman pod named `safenet` containing:
   votes on oracle-checked transactions.
 
 Startup deploys the core Safenet contracts (`Consensus`, `FROSTCoordinator`, `AlwaysApproveOracle`),
-a fee ERC-20 token, and a `SentinelOracleV2` arbitrated by a dedicated arbitrator account, registers
+a fee ERC-20 token, and a `SentinelOracle` arbitrated by a dedicated arbitrator account, registers
 and funds both sentinels against it, and (unless `--no-genesis` is passed) kicks off FROST key
 generation for the genesis epoch. The script runs in the foreground and only returns once that's
 done, so leave the terminal open (or run it in the background) while you interact with the network.
@@ -90,7 +90,7 @@ unlocked by Anvil, so you can impersonate any of them with `cast --unlocked` wit
 
 ## Setting up environment variables
 
-Most of the commands below need the `Consensus`, `SentinelOracleV2`, fee token, and
+Most of the commands below need the `Consensus`, `SentinelOracle`, fee token, and
 `FROSTCoordinator` addresses. Rather than copying them by hand, pull them into your shell once per
 devnet run:
 
@@ -122,7 +122,7 @@ cast call $CONSENSUS_ADDRESS "getActiveEpoch()(uint64,bytes32)" --rpc-url http:/
 cast call $CONSENSUS_ADDRESS "getCoordinator()(address)" --rpc-url http://localhost:8545
 ```
 
-`SentinelOracleV2` requests move through `PENDING → FROZEN → RESOLVED_APPROVED` / `RESOLVED_DENIED`
+`SentinelOracle` requests move through `PENDING → FROZEN → RESOLVED_APPROVED` / `RESOLVED_DENIED`
 (or `TIMED_OUT`); inspect a request's state and sentinel commitments with:
 
 ```sh
@@ -149,7 +149,7 @@ npm run cmd:propose -w @safenet/contracts -- \
     --rpc-url http://127.0.0.1:8545 --unlocked --sender 0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266 --broadcast
 ```
 
-Or, to propose a transaction that requires sentinel oracle approval. `SentinelOracleV2.postRequest`
+Or, to propose a transaction that requires sentinel oracle approval. `SentinelOracle.postRequest`
 pulls the request fee from the proposing account (`--sender`, i.e. `msg.sender` on
 `proposeOracleTransaction`) via `transferFrom`, so that account must first `approve` the oracle to
 spend the fee token:
@@ -215,7 +215,7 @@ cast call $CONSENSUS_ADDRESS "getOracleTransactionAttestationByHash(uint64,addre
 ```
 
 > [!TIP]
-> For an oracle-checked transaction, the attestation only appears once `SentinelOracleV2` has
+> For an oracle-checked transaction, the attestation only appears once `SentinelOracle` has
 > resolved the request (see [Reading contract state with `cast`](#reading-contract-state-with-cast)
 > for how to check a request's `getRequest`/`getCommitment` state) — validators won't attest before
 > the oracle approves.
@@ -231,7 +231,7 @@ podman logs -f safenet-sentinel-carol
 
 Beyond logs, check the validator/sentinel accounts on a block explorer pointed at the devnet (see
 below) — there should be recent transactions to the `Consensus`/`FROSTCoordinator` contracts from
-validators, and `commit`/`reveal` calls to `SentinelOracleV2` from sentinels.
+validators, and `commit`/`reveal` calls to `SentinelOracle` from sentinels.
 
 ### Tearing down
 
@@ -300,7 +300,7 @@ Consensus: 0x...
 AlwaysApproveOracle: 0x...
 ```
 
-The fee ERC-20 token and `SentinelOracleV2` addresses are **not** printed (their deployment output
+The fee ERC-20 token and `SentinelOracle` addresses are **not** printed (their deployment output
 is silenced by the script). Besides reading them out of the mounted TOML config (as the
 environment variable step does):
 
@@ -314,7 +314,7 @@ you can also read the deployment receipt straight from the contracts container:
 ```sh
 podman exec safenet-node cat /contracts/build/broadcast/DeployERC20.s.sol/31337/run-latest.json \
     | jq -r '.returns.erc20.value'
-podman exec safenet-node cat /contracts/build/broadcast/DeploySentinelOracleV2.s.sol/31337/run-latest.json \
+podman exec safenet-node cat /contracts/build/broadcast/DeploySentinelOracle.s.sol/31337/run-latest.json \
     | jq -r '.returns.sentinelOracle.value'
 ```
 

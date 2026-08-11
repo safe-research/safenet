@@ -14,7 +14,7 @@ use safenet_core::tx::Signer;
 const REVEAL_SALT_DOMAIN: &[u8] = b"safenet-sentinel-reveal-salt";
 
 /// Computes the blind commit-hash preimage for the sentinel game's commit-reveal vote, mirroring
-/// `SentinelOracleCommitment.computeHash` (`contracts/src/libraries/SentinelOracleCommitmentsV2.sol`):
+/// `SentinelOracleCommitment.computeHash` (`contracts/src/libraries/SentinelOracleCommitments.sol`):
 /// `keccak256(abi.encodePacked(approve, salt, sentinel, requestId, reason))`. Binding `sentinel`
 /// and `requestId` into the preimage (not just `approve`/`salt`) is load-bearing, not
 /// defense-in-depth — without it, a commitment computed for one sentinel/request could be
@@ -156,10 +156,10 @@ mod tests {
     }
 
     /// Parity vector: `SentinelOracleCommitment.computeHash` from
-    /// `contracts/src/libraries/SentinelOracleCommitmentsV2.sol`, obtained by exercising that
+    /// `contracts/src/libraries/SentinelOracleCommitments.sol`, obtained by exercising that
     /// library directly with `forge test`. Mirrored on the Solidity side by
     /// `test_HashCommitment_ParityWithRustImplementation` in
-    /// `contracts/test/SentinelOracleV2.t.sol` — keep both in sync if either implementation or
+    /// `contracts/test/SentinelOracle.t.sol` — keep both in sync if either implementation or
     /// expected hash changes.
     /// Inputs: sentinel=0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045, requestId=1, approve=true,
     /// salt=keccak256("test-salt"), reason="destination is not blocklisted".
