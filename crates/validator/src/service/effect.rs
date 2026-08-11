@@ -131,7 +131,7 @@ impl Handler {
             Effect::NonceTree {
                 group_id,
                 key_share,
-            } => self.sample_nonces(group_id, &key_share).await,
+            } => self.sample_nonces(group_id, key_share).await,
             Effect::LinkNonceTree {
                 group_id,
                 chunk,
@@ -197,7 +197,7 @@ impl Handler {
                 if available >= NONCE_TOPUP_THRESHOLD {
                     return Ok(Resume::Noop);
                 }
-                return self.sample_nonces(group_id, &key_share).await;
+                return self.sample_nonces(group_id, key_share).await;
             }
             Effect::PruneKeyGenSecrets { group_id } => {
                 self.secrets.prune_keygen_secrets(group_id).await?;
@@ -213,13 +213,14 @@ impl Handler {
     async fn sample_nonces(
         &self,
         group_id: B256,
-        key_share: &KeyShare,
+        key_share: Arc<KeyShare>,
     ) -> Result<Resume, InternalError> {
         let started = Instant::now();
-        let nonce_chunk = {
+        let nonce_chunk = tokio::task::spawn_blocking(move || {
             let mut rng = rand::thread_rng();
-            frost::preprocess::NonceChunk::generate(key_share, &mut rng)?
-        };
+            frost::preprocess::NonceChunk::generate(&key_share, &mut rng)
+        })
+        .await??;
         let result = self
             .secrets
             .register_nonces_chunk(group_id, self.account, nonce_chunk)
