@@ -2,7 +2,6 @@ import type { Address, PublicClient } from "viem";
 import { zeroAddress } from "viem";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { oracleRequestId } from "@/lib/oracle/hashing";
-import { safeTxProposalHash } from "@/lib/packets";
 
 // loadCoordinator is module-private. We test it indirectly via
 // loadLatestAttestationStatus: the coordinator address resolved by
@@ -45,15 +44,16 @@ const makeProvider = ({
 		request: requestImpl ? vi.fn(requestImpl) : vi.fn().mockResolvedValue([]),
 	}) as unknown as PublicClient;
 
+const ORACLE: Address = "0x2222222222222222222222222222222222222222";
+
 const baseArgs = {
 	consensus: CONSENSUS,
 	safeTxHash: SAFE_TX_HASH,
 	epoch: 0n,
 	proposedAt: 0n,
 	maxBlockRange: 1000n,
+	oracle: ORACLE,
 };
-
-const ORACLE: Address = "0x2222222222222222222222222222222222222222";
 
 describe("loadLatestAttestationStatus — message selection", () => {
 	beforeEach(() => {
@@ -64,11 +64,11 @@ describe("loadLatestAttestationStatus — message selection", () => {
 		vi.restoreAllMocks();
 	});
 
-	it("uses the oracle requestId hash as the message when an oracle is provided", async () => {
+	it("uses the oracle requestId hash as the message", async () => {
 		const provider = makeProvider({ readContractImpl: async () => COORDINATOR_FROM_GETTER });
 		const load = await loadModule();
 
-		await load({ provider, ...baseArgs, oracle: ORACLE });
+		await load({ provider, ...baseArgs });
 
 		const expectedMessage = oracleRequestId({
 			chainId: 1,
@@ -76,19 +76,6 @@ describe("loadLatestAttestationStatus — message selection", () => {
 			epoch: baseArgs.epoch,
 			oracle: ORACLE,
 			safeTxHash: SAFE_TX_HASH,
-		});
-		expect(provider.getLogs).toHaveBeenCalledWith(expect.objectContaining({ args: { message: expectedMessage } }));
-	});
-
-	it("uses the plain TransactionProposal hash as the message when no oracle is provided", async () => {
-		const provider = makeProvider({ readContractImpl: async () => COORDINATOR_FROM_GETTER });
-		const load = await loadModule();
-
-		await load({ provider, ...baseArgs });
-
-		const expectedMessage = safeTxProposalHash({
-			domain: { chainId: 1, verifyingContract: CONSENSUS },
-			proposal: { epoch: baseArgs.epoch, safeTxHash: SAFE_TX_HASH },
 		});
 		expect(provider.getLogs).toHaveBeenCalledWith(expect.objectContaining({ args: { message: expectedMessage } }));
 	});
