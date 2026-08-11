@@ -108,7 +108,7 @@ contract ConsensusTest is Test {
     }
 
     // ============================================================
-    // ORACLE TRANSACTION TESTS
+    // TRANSACTION TESTS
     // ============================================================
 
     // keccak256("SafeTx(address to,uint256 value,bytes data,uint8 operation,uint256 safeTxGas,uint256 baseGas,uint256 gasPrice,address gasToken,address refundReceiver,uint256 nonce)")
@@ -142,32 +142,32 @@ contract ConsensusTest is Test {
         }
     }
 
-    function test_ProposeOracleTransaction_EmitsEvent() public {
+    function test_ProposeTransaction_EmitsEvent() public {
         MockOracle oracle = new MockOracle();
         SafeTransaction.T memory transaction = _makeTransaction();
         bytes32 safeTxHash = transaction.hash();
 
         vm.expectEmit(true, true, true, true);
-        emit IConsensus.OracleTransactionProposed(safeTxHash, block.chainid, SAFE, 0, address(oracle), transaction);
+        emit IConsensus.TransactionProposed(safeTxHash, block.chainid, SAFE, 0, address(oracle), transaction);
 
-        consensus.proposeOracleTransaction(address(oracle), "", transaction);
+        consensus.proposeTransaction(address(oracle), "", transaction);
     }
 
-    function test_ProposeOracleTransaction_AlreadyAttested_Reverts() public {
+    function test_ProposeTransaction_AlreadyAttested_Reverts() public {
         MockOracle oracle = new MockOracle();
         SafeTransaction.T memory transaction = _makeTransaction();
         bytes32 safeTxStructHash = _transactionStructHash(transaction);
         FROSTSignatureId.T signatureId = FROSTSignatureId.T.wrap(keccak256("testSig"));
 
         // Attest the transaction so the message slot is occupied.
-        consensus.attestOracleTransaction(0, address(oracle), block.chainid, SAFE, safeTxStructHash, signatureId);
+        consensus.attestTransaction(0, address(oracle), block.chainid, SAFE, safeTxStructHash, signatureId);
 
         // Proposing the same (oracle, transaction) should now revert since it is already attested.
         vm.expectRevert(Consensus.AlreadyAttested.selector);
-        consensus.proposeOracleTransaction(address(oracle), "", transaction);
+        consensus.proposeTransaction(address(oracle), "", transaction);
     }
 
-    function test_AttestOracleTransaction_StoresAndEmits() public {
+    function test_AttestTransaction_StoresAndEmits() public {
         MockOracle oracle = new MockOracle();
         bytes32 safeTxStructHash = bytes32(uint256(0xdeadbeef));
         bytes32 safeTxHash = SafeTransaction.partialHash(block.chainid, SAFE, safeTxStructHash);
@@ -176,33 +176,31 @@ contract ConsensusTest is Test {
         FROST.Signature memory emptySig = coordinator.signatureValue(signatureId);
 
         vm.expectEmit(true, true, true, true);
-        emit IConsensus.OracleTransactionAttested(
-            safeTxHash, block.chainid, SAFE, 0, address(oracle), signatureId, emptySig
-        );
+        emit IConsensus.TransactionAttested(safeTxHash, block.chainid, SAFE, 0, address(oracle), signatureId, emptySig);
 
-        consensus.attestOracleTransaction(0, address(oracle), block.chainid, SAFE, safeTxStructHash, signatureId);
+        consensus.attestTransaction(0, address(oracle), block.chainid, SAFE, safeTxStructHash, signatureId);
     }
 
-    function test_AttestOracleTransaction_DoubleAttest_Reverts() public {
+    function test_AttestTransaction_DoubleAttest_Reverts() public {
         MockOracle oracle = new MockOracle();
         bytes32 safeTxStructHash = bytes32(uint256(0xdeadbeef));
         FROSTSignatureId.T signatureId = FROSTSignatureId.T.wrap(keccak256("testSig"));
 
-        consensus.attestOracleTransaction(0, address(oracle), block.chainid, SAFE, safeTxStructHash, signatureId);
+        consensus.attestTransaction(0, address(oracle), block.chainid, SAFE, safeTxStructHash, signatureId);
 
         vm.expectRevert(Consensus.AlreadyAttested.selector);
-        consensus.attestOracleTransaction(0, address(oracle), block.chainid, SAFE, safeTxStructHash, signatureId);
+        consensus.attestTransaction(0, address(oracle), block.chainid, SAFE, safeTxStructHash, signatureId);
     }
 
-    function test_GetOracleTransactionAttestationByHash() public {
+    function test_GetTransactionAttestationByHash() public {
         MockOracle oracle = new MockOracle();
         bytes32 safeTxStructHash = bytes32(uint256(0xdeadbeef));
         bytes32 safeTxHash = SafeTransaction.partialHash(block.chainid, SAFE, safeTxStructHash);
         FROSTSignatureId.T signatureId = FROSTSignatureId.T.wrap(keccak256("testSig"));
 
-        consensus.attestOracleTransaction(0, address(oracle), block.chainid, SAFE, safeTxStructHash, signatureId);
+        consensus.attestTransaction(0, address(oracle), block.chainid, SAFE, safeTxStructHash, signatureId);
 
-        FROST.Signature memory sig = consensus.getOracleTransactionAttestationByHash(0, address(oracle), safeTxHash);
+        FROST.Signature memory sig = consensus.getTransactionAttestationByHash(0, address(oracle), safeTxHash);
         // MockCoordinator returns an empty signature — we verify the call succeeds.
         assertEq(sig.r.x, 0);
     }

@@ -122,7 +122,7 @@ sol! {
             bytes32 signatureId,
             Signature attestation
         );
-        event OracleTransactionProposed(
+        event TransactionProposed(
             bytes32 indexed safeTxHash,
             uint256 indexed chainId,
             address indexed safe,
@@ -130,7 +130,7 @@ sol! {
             address oracle,
             SafeTransaction transaction
         );
-        event OracleTransactionAttested(
+        event TransactionAttested(
             bytes32 indexed safeTxHash,
             uint256 indexed chainId,
             address indexed safe,
@@ -148,7 +148,7 @@ sol! {
             bytes32 groupId,
             bytes32 signatureId
         ) external;
-        function attestOracleTransaction(
+        function attestTransaction(
             uint64 epoch,
             address oracle,
             uint256 chainId,

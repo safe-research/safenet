@@ -4,7 +4,7 @@
 # against the same dispute on Anvil, and asserts they agree (no arbitration)
 # and settle fees/bonds correctly. Unlike scripts/run_validator_integration_test.sh,
 # this does not require a full validator/FROST genesis: a `TestConsensus` contract
-# stands in for `Consensus`, only emitting the `OracleTransactionProposed`
+# stands in for `Consensus`, only emitting the `TransactionProposed`
 # event the sentinels need.
 set -eo pipefail
 # Job control, so each `&`-backgrounded command below gets its own process
@@ -172,7 +172,7 @@ env \
 	TX_SAFE=0x1111111111111111111111111111111111111111 \
 	TX_TO=0x2222222222222222222222222222222222222222 \
 	TX_NONCE=0 \
-	npm run -w contracts cmd:propose:oracle -- --rpc-url "$RPC_URL" --private-key "$PROPOSER_PK" --broadcast
+	npm run -w contracts cmd:propose -- --rpc-url "$RPC_URL" --private-key "$PROPOSER_PK" --broadcast
 
 REQUEST_ID=$(cast logs --rpc-url "$RPC_URL" --json --from-block 0 --address "$ORACLE" \
 	'NewRequest(bytes32,address,uint256,uint256,uint256,uint256)' | jq -r '.[0].topics[1]')

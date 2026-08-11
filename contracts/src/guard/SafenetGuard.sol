@@ -225,7 +225,7 @@ contract SafenetGuard is ISafenetGuard, BaseTransactionGuard {
             // oracle is acceptable is a Validator-side policy (they only attest on results from an oracle
             // they honour), not enforced here.
             bytes32 message =
-                ConsensusMessages.oracleTransactionProposal(_CONSENSUS_DOMAIN_SEPARATOR, epoch, oracle, safeTxHash);
+                ConsensusMessages.transactionProposal(_CONSENSUS_DOMAIN_SEPARATOR, epoch, oracle, safeTxHash);
             FROST.verify(groupKey, signature, message);
             return;
         }

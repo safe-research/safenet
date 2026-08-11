@@ -50,7 +50,7 @@ pub struct SentinelService {
 /// events.
 pub struct SentinelTransition {
     oracle: Address,
-    /// The `Consensus` contract whose `OracleTransactionProposed` events are
+    /// The `Consensus` contract whose `TransactionProposed` events are
     /// hashed into request ids.
     consensus: Address,
     /// Our own account, used to compute commitment hashes and identify votes
@@ -112,7 +112,7 @@ impl SentinelTransition {
         &self,
         mut state: State,
         block: u64,
-        event: Consensus::OracleTransactionProposed,
+        event: Consensus::TransactionProposed,
     ) -> (State, Commands<State, Self>) {
         if event.oracle != self.oracle {
             return (state, Vec::new());
@@ -676,9 +676,9 @@ impl StateTransition<State> for SentinelTransition {
             Message::Event(event) => {
                 let block = event.block;
                 match event.data {
-                    SentinelEvents::Consensus(
-                        Consensus::ConsensusEvents::OracleTransactionProposed(event),
-                    ) => self.handle_oracle_transaction_proposed(state, block, event),
+                    SentinelEvents::Consensus(Consensus::ConsensusEvents::TransactionProposed(
+                        event,
+                    )) => self.handle_oracle_transaction_proposed(state, block, event),
                     SentinelEvents::Oracle(SentinelOracle::SentinelOracleEvents::NewRequest(
                         event,
                     )) => self.handle_new_request(state, event),
@@ -832,8 +832,8 @@ mod tests {
     }
 
     fn proposed_event(oracle: Address, safe_tx_hash: B256, to: Address) -> SentinelEvents {
-        SentinelEvents::Consensus(Consensus::ConsensusEvents::OracleTransactionProposed(
-            Consensus::OracleTransactionProposed {
+        SentinelEvents::Consensus(Consensus::ConsensusEvents::TransactionProposed(
+            Consensus::TransactionProposed {
                 safeTxHash: safe_tx_hash,
                 chainId: U256::from(CHAIN_ID),
                 safe: SAFE,

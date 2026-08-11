@@ -65,7 +65,7 @@ pub mod consensus {
         #[derive(Debug, Default, PartialEq, Eq, Serialize)]
         enum Operation { #[default] CALL, DELEGATECALL }
 
-        // Full transaction struct carried by OracleTransactionProposed; mirrors SafeTransaction.T.
+        // Full transaction struct carried by TransactionProposed; mirrors SafeTransaction.T.
         #[derive(Debug, Default, PartialEq, Eq, Serialize)]
         struct SafeTransaction {
             uint256 chainId;
@@ -84,10 +84,10 @@ pub mod consensus {
 
         // EIP-712 struct for the oracle requestId.
         // Field order and types must exactly match the onchain typehash in ConsensusMessages.sol:
-        // keccak256("OracleTransactionProposal(uint64 epoch,address oracle,bytes32 safeTxHash)")
+        // keccak256("TransactionProposal(uint64 epoch,address oracle,bytes32 safeTxHash)")
         // Domain: { chainId, verifyingContract: consensus }
         #[derive(Debug)]
-        struct OracleTransactionProposal {
+        struct TransactionProposal {
             uint64 epoch;
             address oracle;
             bytes32 safeTxHash;
@@ -95,7 +95,7 @@ pub mod consensus {
 
         #[derive(Debug)]
         contract Consensus {
-            event OracleTransactionProposed(
+            event TransactionProposed(
                 bytes32 indexed safeTxHash,
                 uint256 indexed chainId,
                 address indexed safe,

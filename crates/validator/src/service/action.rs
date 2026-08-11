@@ -343,7 +343,7 @@ impl ActionEncoder<Action> for Encoder {
                 Transaction {
                     to: self.consensus,
                     value: U256::ZERO,
-                    data: Consensus::attestOracleTransactionCall {
+                    data: Consensus::attestTransactionCall {
                         epoch: epoch.raw_value(),
                         oracle,
                         chainId: chain_id,

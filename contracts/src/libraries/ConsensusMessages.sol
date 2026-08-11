@@ -24,10 +24,10 @@ library ConsensusMessages {
         hex"13de01993286119c9a7628720a5b7d7c32841dbf2d23752b59de86a7e03fe1bf";
 
     /**
-     * @custom:precomputed keccak256("OracleTransactionProposal(uint64 epoch,address oracle,bytes32 safeTxHash)")
+     * @custom:precomputed keccak256("TransactionProposal(uint64 epoch,address oracle,bytes32 safeTxHash)")
      */
-    bytes32 internal constant ORACLE_TRANSACTION_PROPOSAL_TYPEHASH =
-        hex"30673a82bcf1a0fa66d1c97cbe53999fc6c0b3e987742353c9aaecb3890205e9";
+    bytes32 internal constant TRANSACTION_PROPOSAL_TYPEHASH =
+        hex"d169b83f5cc55f1f8ad78e16e0feae4c314849f017eabb46c45c1ee5750be8c6";
 
     // ============================================================
     // INTERNAL FUNCTIONS
@@ -80,21 +80,21 @@ library ConsensusMessages {
     }
 
     /**
-     * @notice Computes the oracle transaction proposal message that must be attested to by validators.
+     * @notice Computes the transaction proposal message that must be attested to by validators.
      * @param domainSeparator The EIP-712 domain separator.
-     * @param epoch The epoch for the oracle transaction proposal.
+     * @param epoch The epoch for the transaction proposal.
      * @param oracle The address of the oracle contract used for evaluation.
      * @param safeTxHash The hash of the Safe transaction.
-     * @return result The oracle transaction proposal message hash, used as the oracle requestId.
+     * @return result The transaction proposal message hash, used as the oracle requestId.
      */
-    function oracleTransactionProposal(bytes32 domainSeparator, uint64 epoch, address oracle, bytes32 safeTxHash)
+    function transactionProposal(bytes32 domainSeparator, uint64 epoch, address oracle, bytes32 safeTxHash)
         internal
         pure
         returns (bytes32 result)
     {
         assembly ("memory-safe") {
             let ptr := mload(0x40)
-            mstore(ptr, ORACLE_TRANSACTION_PROPOSAL_TYPEHASH)
+            mstore(ptr, TRANSACTION_PROPOSAL_TYPEHASH)
             mstore(add(ptr, 0x20), epoch)
             mstore(add(ptr, 0x40), oracle)
             mstore(add(ptr, 0x60), safeTxHash)

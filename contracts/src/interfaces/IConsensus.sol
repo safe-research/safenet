@@ -73,7 +73,7 @@ interface IConsensus {
      * @param oracle The address of the oracle contract used for evaluation.
      * @param transaction The proposed Safe transaction.
      */
-    event OracleTransactionProposed(
+    event TransactionProposed(
         bytes32 indexed safeTxHash,
         uint256 indexed chainId,
         address indexed safe,
@@ -92,7 +92,7 @@ interface IConsensus {
      * @param signatureId The FROST signature identifier corresponding to the attestation.
      * @param attestation The attestation to the oracle-checked Safe transaction.
      */
-    event OracleTransactionAttested(
+    event TransactionAttested(
         bytes32 indexed safeTxHash,
         uint256 indexed chainId,
         address indexed safe,
@@ -180,7 +180,7 @@ interface IConsensus {
      * @param transaction The Safe transaction to propose.
      * @return safeTxHash The Safe transaction hash.
      */
-    function proposeOracleTransaction(address oracle, bytes calldata oracleData, SafeTransaction.T memory transaction)
+    function proposeTransaction(address oracle, bytes calldata oracleData, SafeTransaction.T memory transaction)
         external
         returns (bytes32 safeTxHash);
 
@@ -194,7 +194,7 @@ interface IConsensus {
      * @param signatureId The FROST signature identifier attesting to the transaction.
      * @dev Called internally via the onSignCompleted callback. No explicit time limit is imposed.
      */
-    function attestOracleTransaction(
+    function attestTransaction(
         uint64 epoch,
         address oracle,
         uint256 chainId,
@@ -204,13 +204,13 @@ interface IConsensus {
     ) external;
 
     /**
-     * @notice Gets an oracle transaction attestation by transaction hash.
+     * @notice Gets a transaction attestation by transaction hash.
      * @param epoch The epoch in which the transaction was proposed.
      * @param oracle The address of the oracle contract used for evaluation.
      * @param safeTxHash The Safe transaction hash to query the attestation for.
      * @return signature The FROST signature attesting to the oracle-checked transaction.
      */
-    function getOracleTransactionAttestationByHash(uint64 epoch, address oracle, bytes32 safeTxHash)
+    function getTransactionAttestationByHash(uint64 epoch, address oracle, bytes32 safeTxHash)
         external
         view
         returns (FROST.Signature memory signature);
