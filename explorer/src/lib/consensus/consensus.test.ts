@@ -36,7 +36,7 @@ describe("loadTransactionProposals", () => {
 			expect((provider.request as ReturnType<typeof vi.fn>).mock.calls).toHaveLength(1);
 		});
 
-		it("passes all four event selectors as an OR filter in topic[0]", async () => {
+		it("passes both event selectors as an OR filter in topic[0]", async () => {
 			const provider = makeProvider();
 			await loadTransactionProposals({
 				provider,
@@ -45,7 +45,7 @@ describe("loadTransactionProposals", () => {
 				signingTimeout: SIGNING_TIMEOUT,
 			});
 			expect(Array.isArray(firstCall(provider).topics[0])).toBe(true);
-			expect(firstCall(provider).topics[0]).toHaveLength(4);
+			expect(firstCall(provider).topics[0]).toHaveLength(2);
 		});
 
 		it("uses null for topic[1] when safeTxHash is not provided", async () => {
@@ -163,7 +163,7 @@ const makeRawConsensusLog = ({
 	blockNumber,
 	logIndex = 0,
 }: {
-	eventName: "TransactionProposed" | "TransactionAttested" | "OracleTransactionProposed" | "OracleTransactionAttested";
+	eventName: "OracleTransactionProposed" | "OracleTransactionAttested";
 	indexedArgs: Record<string, unknown>;
 	nonIndexedValues: unknown[];
 	blockNumber: bigint;
@@ -184,14 +184,6 @@ const makeRawConsensusLog = ({
 		removed: false,
 	};
 };
-
-const makeProposedLog = ({ safeTxHash, epoch, blockNumber }: { safeTxHash: Hex; epoch: bigint; blockNumber: bigint }) =>
-	makeRawConsensusLog({
-		eventName: "TransactionProposed",
-		indexedArgs: { safeTxHash, chainId: 1n, safe: SAFE_ADDRESS },
-		nonIndexedValues: [epoch, ORACLE_TX],
-		blockNumber,
-	});
 
 const makeOracleProposedLog = ({
 	safeTxHash,
@@ -248,21 +240,8 @@ describe("loadProposedSafeTransaction", () => {
 			maxBlockRange: MAX_BLOCK_RANGE,
 		});
 		expect(Array.isArray(firstCall(provider).topics[0])).toBe(true);
-		expect(firstCall(provider).topics[0]).toHaveLength(2);
+		expect(firstCall(provider).topics[0]).toHaveLength(1);
 		expect(firstCall(provider).topics[1]).toBe(SAFE_TX_HASH);
-	});
-
-	it("returns the transaction from a plain TransactionProposed log", async () => {
-		const provider = makeProviderWithLogs([
-			makeProposedLog({ safeTxHash: SAFE_TX_HASH, epoch: 1n, blockNumber: 100n }),
-		]);
-		const result = await loadProposedSafeTransaction({
-			provider,
-			consensus: CONSENSUS,
-			safeTxHash: SAFE_TX_HASH,
-			maxBlockRange: MAX_BLOCK_RANGE,
-		});
-		expect(result).toEqual(ORACLE_TX);
 	});
 
 	it("returns the transaction from an OracleTransactionProposed log", async () => {
@@ -326,23 +305,6 @@ describe("loadTransactionProposals oracle recognition", () => {
 		expect(result.proposals).toHaveLength(1);
 		expect(result.proposals[0].oracle).toBe(ORACLE);
 		expect(result.proposals[0].status).toBe("ATTESTED");
-	});
-
-	it("does not cross-match a plain proposal's attestation with an oracle-checked one sharing the same safeTxHash and epoch", async () => {
-		const provider = makeProviderWithLogs([
-			makeProposedLog({ safeTxHash: SAFE_TX_HASH, epoch: 1n, blockNumber: CURRENT_BLOCK }),
-			makeOracleAttestedLog({ safeTxHash: SAFE_TX_HASH, epoch: 1n, oracle: ORACLE, blockNumber: CURRENT_BLOCK }),
-		]);
-		const result = await loadTransactionProposals({
-			provider,
-			consensus: CONSENSUS,
-			maxBlockRange: MAX_BLOCK_RANGE,
-			signingTimeout: SIGNING_TIMEOUT,
-			oracles: [ORACLE],
-		});
-		expect(result.proposals).toHaveLength(1);
-		expect(result.proposals[0].oracle).toBeNull();
-		expect(result.proposals[0].status).toBe("PROPOSED");
 	});
 });
 

@@ -39,7 +39,7 @@ export type TransactionProposal = {
 	chainId: bigint;
 	safeTxHash: Hex;
 	epoch: bigint;
-	oracle: Address | null;
+	oracle: Address;
 	transaction: SafeTransaction;
 	proposedAt: ExecutionLink;
 	attestedAt: ExecutionLink | null;
@@ -67,9 +67,6 @@ export const loadProposedSafeTransaction = async ({
 	maxBlockRange: bigint;
 }): Promise<SafeTransaction | null> => {
 	const { fromBlock, toBlock } = await getBlockRange(provider, maxBlockRange);
-	// A plain and an oracle-checked proposal both carry `transaction` in their args, so a raw
-	// `eth_getLogs` with both selectors in topic[0] is needed — `getLogs`'s typed `event` option
-	// only accepts one event, and `events` can't be combined with `args` topic filtering.
 	const rawLogs = await provider.request({
 		method: "eth_getLogs",
 		params: [
@@ -84,7 +81,7 @@ export const loadProposedSafeTransaction = async ({
 	const logs = parseEventLogs({
 		logs: rawLogs.map((log) => formatLog(log)),
 		abi: consensusAbi,
-		eventName: ["TransactionProposed", "OracleTransactionProposed"],
+		eventName: "OracleTransactionProposed",
 		strict: true,
 	});
 	return safeTransactionSchema.safeParse(logs.at(0)?.args?.transaction).data ?? null;
@@ -113,7 +110,7 @@ export const loadTransactionProposals = async ({
 	const blockRange = { fromBlock: numberToHex(fromBlock), toBlock: numberToHex(toBlock) };
 
 	// We use an `eth_getLogs` here directly, in order to filter on the `safeTxHash` topic.
-	// When `safe` is set, topic[3] silently drops `TransactionAttested` (only 1 indexed topic);
+	// When `safe` is set, topic[3] silently drops `OracleTransactionAttested` (only 1 indexed topic);
 	// those proposals will have attestedAt: null until contract events are updated.
 	const rawLogs = await provider.request({
 		method: "eth_getLogs",
@@ -130,6 +127,7 @@ export const loadTransactionProposals = async ({
 			// <https://github.com/wevm/viem/issues/4340>
 			logs: rawLogs.map((log) => formatLog(log)),
 			abi: consensusAbi,
+			eventName: ["OracleTransactionProposed", "OracleTransactionAttested"],
 			strict: true,
 		}),
 	);
@@ -145,23 +143,18 @@ export const loadTransactionProposals = async ({
 			: allEventLogs.filter((log) => log.eventName === "OracleTransactionAttested").map((log) => log.args.oracle)
 		).map((oracle) => getAddress(oracle)),
 	);
-	const eventLogs = allEventLogs.filter((log) => {
-		if (log.eventName !== "OracleTransactionProposed" && log.eventName !== "OracleTransactionAttested") {
-			return true;
-		}
-		return trustedOracles.has(getAddress(log.args.oracle));
-	});
+	const eventLogs = allEventLogs.filter((log) => trustedOracles.has(getAddress(log.args.oracle)));
 
-	const attestationKey = (log: { args: { safeTxHash: Hex; epoch: bigint; oracle?: Address } }) =>
-		`${log.args.safeTxHash}:${log.args.epoch}:${log.args.oracle ? getAddress(log.args.oracle) : "plain"}`;
+	const attestationKey = (log: { args: { safeTxHash: Hex; epoch: bigint; oracle: Address } }) =>
+		`${log.args.safeTxHash}:${log.args.epoch}:${getAddress(log.args.oracle)}`;
 	const attestations = new Map(
 		eventLogs
-			.filter((log) => log.eventName === "TransactionAttested" || log.eventName === "OracleTransactionAttested")
+			.filter((log) => log.eventName === "OracleTransactionAttested")
 			.map((log) => [attestationKey(log), { block: log.blockNumber, tx: log.transactionHash }] as const),
 	);
 	const proposals = eventLogs
 		.map((log) => {
-			if (log.eventName !== "TransactionProposed" && log.eventName !== "OracleTransactionProposed") {
+			if (log.eventName !== "OracleTransactionProposed") {
 				return undefined;
 			}
 
@@ -170,7 +163,7 @@ export const loadTransactionProposals = async ({
 				return undefined;
 			}
 
-			const oracle = log.eventName === "OracleTransactionProposed" ? log.args.oracle : null;
+			const oracle = log.args.oracle;
 			const attestedAt = attestations.get(attestationKey(log)) ?? null;
 			const proposedAt = { block: log.blockNumber, tx: log.transactionHash };
 			const status: ProposalStatus =

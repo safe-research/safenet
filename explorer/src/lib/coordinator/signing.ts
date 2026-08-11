@@ -9,7 +9,6 @@ import {
 import { toPoint } from "@/lib/frost/math";
 import { verifySignature } from "@/lib/frost/verify";
 import { oracleRequestId } from "@/lib/oracle/hashing";
-import { safeTxProposalHash } from "@/lib/packets";
 import { getBlockRange } from "@/lib/utils";
 
 let cachedAddresses:
@@ -100,7 +99,7 @@ export const loadLatestAttestationStatus = async ({
 	consensus: Address;
 	safeTxHash: Hex;
 	epoch: bigint;
-	oracle?: Address | null;
+	oracle: Address;
 	proposedAt?: bigint;
 	attestedAt?: bigint | null;
 	maxBlockRange: bigint;
@@ -114,20 +113,8 @@ export const loadLatestAttestationStatus = async ({
 	const chainId = await provider.getChainId();
 	const coordinator = await loadCoordinator(provider, consensus);
 	// An oracle-checked proposal is attested via `OracleTransactionAttested`, whose message is
-	// the oracle's requestId hash, not the plain `TransactionProposal` hash.
-	const message =
-		oracle != null
-			? oracleRequestId({ chainId, consensus, epoch, oracle, safeTxHash })
-			: safeTxProposalHash({
-					domain: {
-						chainId,
-						verifyingContract: consensus,
-					},
-					proposal: {
-						epoch,
-						safeTxHash,
-					},
-				});
+	// the oracle's requestId hash.
+	const message = oracleRequestId({ chainId, consensus, epoch, oracle, safeTxHash });
 	// Get signing events related to this message
 	const signingEvents = await provider.getLogs({
 		address: coordinator,

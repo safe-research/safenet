@@ -8,7 +8,7 @@ export function useAttestationStatus(
 	epoch: bigint,
 	proposedAt: bigint,
 	attestedAt: bigint | null,
-	oracle: Address | null = null,
+	oracle: Address,
 ) {
 	const [settings] = useSettings();
 	return useQuery<AttestationStatus | null, Error>({

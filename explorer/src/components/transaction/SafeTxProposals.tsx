@@ -108,7 +108,7 @@ function SafeTxProposal({ proposal, number }: { proposal: TransactionProposalWit
 				<p>Status:</p>
 				<StatusBadge status={proposal.status} />
 			</div>
-			{proposal.oracle != null && <SafeTxProposalVoting oracle={proposal.oracle} proposal={proposal} />}
+			<SafeTxProposalVoting oracle={proposal.oracle} proposal={proposal} />
 			<div className="md:flex md:justify-between">
 				<p className="mr-2">Proposed:</p>
 				<p>
