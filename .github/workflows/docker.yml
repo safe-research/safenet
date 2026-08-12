@@ -26,6 +26,8 @@ jobs:
             dockerfile: crates/validator/Dockerfile
           - image: sentinel
             dockerfile: crates/sentinel/Dockerfile
+          - image: sentinel-engine
+            dockerfile: crates/sentinel-engine/Dockerfile
           - image: contracts
             dockerfile: contracts/Dockerfile
 
