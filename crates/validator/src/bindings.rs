@@ -124,18 +124,16 @@ sol! {
         );
         event TransactionProposed(
             bytes32 indexed safeTxHash,
-            uint256 indexed chainId,
-            address indexed safe,
+            bytes32 indexed safeId,
+            address indexed oracle,
             uint64 epoch,
-            address oracle,
             SafeTransaction transaction
         );
         event TransactionAttested(
             bytes32 indexed safeTxHash,
-            uint256 indexed chainId,
-            address indexed safe,
+            bytes32 indexed safeId,
+            address indexed oracle,
             uint64 epoch,
-            address oracle,
             bytes32 signatureId,
             Signature attestation
         );

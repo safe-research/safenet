@@ -76,14 +76,16 @@ describe("useSafeTransactionProposals", () => {
 		);
 	});
 
-	it("filters by safe address in params", async () => {
+	it("filters by safeId in params", async () => {
 		const { result } = renderHook(() => useSafeTransactionProposals({ safeAddress: SAFE_ADDRESS, chainId: CHAIN_ID }), {
 			wrapper: createWrapper(),
 		});
 
 		await waitFor(() => expect(result.current.isSuccess).toBe(true));
 
-		expect(mockLoadTransactionProposals).toHaveBeenCalledWith(expect.objectContaining({ safe: SAFE_ADDRESS }));
+		expect(mockLoadTransactionProposals).toHaveBeenCalledWith(
+			expect.objectContaining({ safeId: { chainId: CHAIN_ID, safe: SAFE_ADDRESS } }),
+		);
 	});
 
 	it("exposes a flat list of proposals across all pages", async () => {

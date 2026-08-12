@@ -4,6 +4,7 @@ pragma solidity ^0.8.30;
 import {FROST} from "@/libraries/FROST.sol";
 import {FROSTGroupId} from "@/libraries/FROSTGroupId.sol";
 import {FROSTSignatureId} from "@/libraries/FROSTSignatureId.sol";
+import {SafeId} from "@/libraries/SafeId.sol";
 import {SafeTransaction} from "@/libraries/SafeTransaction.sol";
 import {Secp256k1} from "@/libraries/Secp256k1.sol";
 
@@ -67,37 +68,33 @@ interface IConsensus {
     /**
      * @notice Emitted when a transaction is proposed for oracle-checked validator approval.
      * @param safeTxHash The hash of the proposed Safe transaction.
-     * @param chainId The chain ID of the Safe account.
-     * @param safe The address of the Safe.
-     * @param epoch The epoch in which the transaction is proposed.
+     * @param safeId The identifier of the Safe account, combining its chain ID and address.
      * @param oracle The address of the oracle contract used for evaluation.
+     * @param epoch The epoch in which the transaction is proposed.
      * @param transaction The proposed Safe transaction.
      */
     event TransactionProposed(
         bytes32 indexed safeTxHash,
-        uint256 indexed chainId,
-        address indexed safe,
+        SafeId.T indexed safeId,
+        address indexed oracle,
         uint64 epoch,
-        address oracle,
         SafeTransaction.T transaction
     );
 
     /**
      * @notice Emitted when an oracle-checked transaction is attested by the validator set.
      * @param safeTxHash The hash of the attested Safe transaction.
-     * @param chainId The chain ID of the Safe account.
-     * @param safe The address of the Safe account.
-     * @param epoch The epoch in which the attested transaction was proposed.
+     * @param safeId The identifier of the Safe account, combining its chain ID and address.
      * @param oracle The address of the oracle contract used for evaluation.
+     * @param epoch The epoch in which the attested transaction was proposed.
      * @param signatureId The FROST signature identifier corresponding to the attestation.
      * @param attestation The attestation to the oracle-checked Safe transaction.
      */
     event TransactionAttested(
         bytes32 indexed safeTxHash,
-        uint256 indexed chainId,
-        address indexed safe,
+        SafeId.T indexed safeId,
+        address indexed oracle,
         uint64 epoch,
-        address oracle,
         FROSTSignatureId.T signatureId,
         FROST.Signature attestation
     );

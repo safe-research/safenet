@@ -831,14 +831,20 @@ mod tests {
         oracle_tx_proposal_hash(U256::from(CHAIN_ID), CONSENSUS, epoch, oracle, safe_tx_hash)
     }
 
+    /// Mirrors `SafeId.create` in `contracts/src/libraries/SafeId.sol`: the chain ID occupies the
+    /// upper 96 bits and the address the lower 160 bits of the resulting `bytes32`.
+    fn safe_id(chain_id: u64, safe: Address) -> B256 {
+        let value: U256 = U256::from(chain_id) << 160 | U256::from_be_bytes(safe.into_word().0);
+        B256::from(value.to_be_bytes::<32>())
+    }
+
     fn proposed_event(oracle: Address, safe_tx_hash: B256, to: Address) -> SentinelEvents {
         SentinelEvents::Consensus(Consensus::ConsensusEvents::TransactionProposed(
             Consensus::TransactionProposed {
                 safeTxHash: safe_tx_hash,
-                chainId: U256::from(CHAIN_ID),
-                safe: SAFE,
-                epoch: 7,
+                safeId: safe_id(CHAIN_ID, SAFE),
                 oracle,
+                epoch: 7,
                 transaction: safe_tx(to),
             },
         ))

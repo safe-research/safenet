@@ -7,6 +7,7 @@ import {
 	type PublicClient,
 	pad,
 	parseEventLogs,
+	toHex,
 } from "viem";
 import z from "zod";
 import { bigIntSchema, checkedAddressSchema, hexDataSchema } from "@/lib/schemas";
@@ -55,6 +56,13 @@ export type LoadTransactionProposalsResult = {
 	toBlock: bigint;
 };
 
+// A Safe smart account on a specific chain: a Safe address is only unique per chain.
+export type SafeId = { chainId: bigint; safe: Address };
+
+// Mirrors `SafeId.create` in contracts/src/libraries/SafeId.sol: the chain ID occupies the upper
+// 96 bits and the address the lower 160 bits of the resulting bytes32.
+export const computeSafeId = ({ chainId, safe }: SafeId): Hex => toHex((chainId << 160n) | BigInt(safe), { size: 32 });
+
 export const loadProposedSafeTransaction = async ({
 	provider,
 	consensus,
@@ -91,7 +99,7 @@ export const loadTransactionProposals = async ({
 	provider,
 	consensus,
 	safeTxHash,
-	safe,
+	safeId,
 	toBlock: referenceBlock,
 	maxBlockRange,
 	signingTimeout,
@@ -100,7 +108,7 @@ export const loadTransactionProposals = async ({
 	provider: PublicClient;
 	consensus: Address;
 	safeTxHash?: Hex;
-	safe?: Address;
+	safeId?: SafeId;
 	toBlock?: bigint;
 	maxBlockRange: bigint;
 	signingTimeout: number;
@@ -109,16 +117,20 @@ export const loadTransactionProposals = async ({
 	const { fromBlock, toBlock } = await getBlockRange(provider, maxBlockRange, referenceBlock);
 	const blockRange = { fromBlock: numberToHex(fromBlock), toBlock: numberToHex(toBlock) };
 
-	// We use an `eth_getLogs` here directly, in order to filter on the `safeTxHash` topic.
-	// When `safe` is set, topic[3] silently drops `TransactionAttested` (only 1 indexed topic);
-	// those proposals will have attestedAt: null until contract events are updated.
+	// `TransactionProposed` and `TransactionAttested` both index `safeTxHash`, `safeId` and `oracle`,
+	// so an explicit allow-list can be pushed straight into the `oracle` topic as an OR filter.
 	const rawLogs = await provider.request({
 		method: "eth_getLogs",
 		params: [
 			{
 				address: consensus,
 				...blockRange,
-				topics: [transactionEventSelectors, safeTxHash ?? null, null, safe ? pad(safe) : null],
+				topics: [
+					transactionEventSelectors,
+					safeTxHash ?? null,
+					safeId ? computeSafeId(safeId) : null,
+					oracles.length > 0 ? oracles.map((oracle) => pad(oracle)) : null,
+				],
 			},
 		],
 	});
@@ -132,11 +144,12 @@ export const loadTransactionProposals = async ({
 		}),
 	);
 
-	// `oracle` isn't an indexed topic on either oracle event, so it can't be filtered via
-	// eth_getLogs topics; trust is resolved here, after decoding. With no explicit allow-list,
-	// an oracle is trusted once it has a `TransactionAttested` log in this same batch.
-	// Addresses are compared via their checksummed form: `oracles` comes from user settings and
-	// may not be checksummed, while addresses decoded from logs by viem always are.
+	// With an explicit allow-list, `eth_getLogs` already filtered to just those oracles above; this
+	// re-derives the same set from the (now pre-filtered) results as a cheap defensive check.
+	// Without an allow-list, trust is derived after decoding: an oracle is trusted once it has a
+	// `TransactionAttested` log in this same batch. Addresses are compared via their checksummed
+	// form: `oracles` comes from user settings and may not be checksummed, while addresses decoded
+	// from logs by viem always are.
 	const trustedOracles = new Set(
 		(oracles.length > 0
 			? oracles
@@ -173,7 +186,7 @@ export const loadTransactionProposals = async ({
 						? "TIMED_OUT"
 						: "PROPOSED";
 			return {
-				chainId: log.args.chainId,
+				chainId: transaction.data.chainId,
 				safeTxHash: log.args.safeTxHash,
 				epoch: log.args.epoch,
 				oracle,

@@ -3,7 +3,7 @@ import { encodeAbiParameters, encodeEventTopics, getAbiItem, numberToHex } from 
 import { describe, expect, it, vi } from "vitest";
 import { consensusAbi } from "./abi";
 import { loadEpochRolloverHistory, loadEpochsState } from "./epochs";
-import { loadProposedSafeTransaction, loadTransactionProposals } from "./transactions";
+import { computeSafeId, loadProposedSafeTransaction, loadTransactionProposals } from "./transactions";
 
 const CONSENSUS = "0x0000000000000000000000000000000000000001" as Address;
 const SAFE_TX_HASH = `0x${"ab".repeat(32)}` as Hex;
@@ -71,7 +71,30 @@ describe("loadTransactionProposals", () => {
 			expect(firstCall(provider).topics[1]).toBe(SAFE_TX_HASH);
 		});
 
-		it("uses null for topic[3] when safe is not provided", async () => {
+		it("uses null for topic[2] when safeId is not provided", async () => {
+			const provider = makeProvider();
+			await loadTransactionProposals({
+				provider,
+				consensus: CONSENSUS,
+				maxBlockRange: MAX_BLOCK_RANGE,
+				signingTimeout: SIGNING_TIMEOUT,
+			});
+			expect(firstCall(provider).topics[2]).toBeNull();
+		});
+
+		it("filters by safeId in topic[2] when provided", async () => {
+			const provider = makeProvider();
+			await loadTransactionProposals({
+				provider,
+				consensus: CONSENSUS,
+				safeId: { chainId: 1n, safe: SAFE_ADDRESS },
+				maxBlockRange: MAX_BLOCK_RANGE,
+				signingTimeout: SIGNING_TIMEOUT,
+			});
+			expect(firstCall(provider).topics[2]).toBe("0x000000000000000000000001deadbeefdeadbeefdeadbeefdeadbeefdeadbeef");
+		});
+
+		it("uses null for topic[3] when no oracle allow-list is configured", async () => {
 			const provider = makeProvider();
 			await loadTransactionProposals({
 				provider,
@@ -82,17 +105,21 @@ describe("loadTransactionProposals", () => {
 			expect(firstCall(provider).topics[3]).toBeNull();
 		});
 
-		it("filters by safe address in topic[3] when provided", async () => {
+		it("filters by the oracle allow-list as an OR filter in topic[3]", async () => {
 			const provider = makeProvider();
+			const oracleA = "0x3333333333333333333333333333333333333333" as Address;
+			const oracleB = "0x4444444444444444444444444444444444444444" as Address;
 			await loadTransactionProposals({
 				provider,
 				consensus: CONSENSUS,
-				safe: SAFE_ADDRESS,
 				maxBlockRange: MAX_BLOCK_RANGE,
 				signingTimeout: SIGNING_TIMEOUT,
+				oracles: [oracleA, oracleB],
 			});
-			expect(firstCall(provider).topics[2]).toBeNull(); // chainId wildcard
-			expect(firstCall(provider).topics[3]).toBe("0x000000000000000000000000DeaDbeefdEAdbeefdEadbEEFdeadbeEFdEaDbeeF");
+			expect(firstCall(provider).topics[3]).toEqual([
+				"0x0000000000000000000000003333333333333333333333333333333333333333",
+				"0x0000000000000000000000004444444444444444444444444444444444444444",
+			]);
 		});
 	});
 
@@ -198,8 +225,8 @@ const makeOracleProposedLog = ({
 }) =>
 	makeRawConsensusLog({
 		eventName: "TransactionProposed",
-		indexedArgs: { safeTxHash, chainId: 1n, safe: SAFE_ADDRESS },
-		nonIndexedValues: [epoch, oracle, ORACLE_TX],
+		indexedArgs: { safeTxHash, safeId: computeSafeId({ chainId: 1n, safe: SAFE_ADDRESS }), oracle },
+		nonIndexedValues: [epoch, ORACLE_TX],
 		blockNumber,
 	});
 
@@ -218,8 +245,8 @@ const makeOracleAttestedLog = ({
 }) =>
 	makeRawConsensusLog({
 		eventName: "TransactionAttested",
-		indexedArgs: { safeTxHash, chainId: 1n, safe: SAFE_ADDRESS },
-		nonIndexedValues: [epoch, oracle, `0x${"00".repeat(32)}`, { r: { x: 0n, y: 0n }, z: 0n }],
+		indexedArgs: { safeTxHash, safeId: computeSafeId({ chainId: 1n, safe: SAFE_ADDRESS }), oracle },
+		nonIndexedValues: [epoch, `0x${"00".repeat(32)}`, { r: { x: 0n, y: 0n }, z: 0n }],
 		blockNumber,
 		logIndex,
 	});
