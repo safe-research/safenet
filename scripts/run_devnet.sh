@@ -308,6 +308,7 @@ fee_token="$(parse_address "$(simulate_forge_script DeployERC20Script -e FACTORY
 sentinel_oracle="$(parse_address "$(simulate_forge_script DeploySentinelOracleScript \
     -e FACTORY=2 \
     -e SENTINEL_ARBITRATOR="$ARBITRATOR" \
+    -e SENTINEL_GOVERNANCE="$ARBITRATOR" \
     -e SENTINEL_CONSENSUS="$consensus" \
     -e SENTINEL_FEE_TOKEN="$fee_token" \
     -e SENTINEL_REQUEST_FEE="$SENTINEL_REQUEST_FEE" \
@@ -392,6 +393,7 @@ forge_script DeployERC20Script -e FACTORY=2 >/dev/null
 forge_script DeploySentinelOracleScript \
     -e FACTORY=2 \
     -e SENTINEL_ARBITRATOR="$ARBITRATOR" \
+    -e SENTINEL_GOVERNANCE="$ARBITRATOR" \
     -e SENTINEL_CONSENSUS="$consensus" \
     -e SENTINEL_FEE_TOKEN="$fee_token" \
     -e SENTINEL_REQUEST_FEE="$SENTINEL_REQUEST_FEE" \

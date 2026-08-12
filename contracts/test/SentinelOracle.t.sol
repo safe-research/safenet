@@ -33,6 +33,7 @@ contract SentinelOracleTest is Test {
     MockERC20 public token;
 
     address public arbitrator;
+    address public governance;
     address public consensus;
     address public proposer;
     address public sentinel1;
@@ -45,6 +46,7 @@ contract SentinelOracleTest is Test {
 
     function setUp() public {
         arbitrator = vm.createWallet("arbitrator").addr;
+        governance = vm.createWallet("governance").addr;
         consensus = vm.createWallet("consensus").addr;
         proposer = vm.createWallet("proposer").addr;
         sentinel1 = vm.createWallet("sentinel1").addr;
@@ -54,6 +56,7 @@ contract SentinelOracleTest is Test {
         token = new MockERC20("Fee Token", "FEE");
         oracle = new SentinelOracle(
             arbitrator,
+            governance,
             consensus,
             address(token),
             REQUEST_FEE,
@@ -80,7 +83,7 @@ contract SentinelOracleTest is Test {
         token.approve(address(oracle), type(uint256).max);
 
         // Register sentinels (active immediately by rolling past GOVERNANCE_DELAY)
-        vm.startPrank(arbitrator);
+        vm.startPrank(governance);
         oracle.addSentinel(sentinel1);
         oracle.addSentinel(sentinel2);
         oracle.addSentinel(sentinel3);
@@ -123,6 +126,56 @@ contract SentinelOracleTest is Test {
 
     function _advancePastRevealDeadline() internal {
         vm.roll(block.number + REVEAL_WINDOW + 1);
+    }
+
+    // ============================================================
+    // GOVERNANCE ACCESS CONTROL
+    // ============================================================
+
+    function test_AddSentinel_OnlyGovernance() public {
+        address randomAddress = vm.createWallet("random").addr;
+        address newSentinel = vm.createWallet("newSentinel").addr;
+
+        vm.expectRevert(SentinelOracle.NotGovernance.selector);
+        vm.prank(arbitrator);
+        oracle.addSentinel(newSentinel);
+
+        vm.expectRevert(SentinelOracle.NotGovernance.selector);
+        vm.prank(randomAddress);
+        oracle.addSentinel(newSentinel);
+
+        vm.prank(governance);
+        oracle.addSentinel(newSentinel);
+    }
+
+    function test_RemoveSentinel_OnlyGovernance() public {
+        address randomAddress = vm.createWallet("random").addr;
+
+        vm.expectRevert(SentinelOracle.NotGovernance.selector);
+        vm.prank(arbitrator);
+        oracle.removeSentinel(sentinel1);
+
+        vm.expectRevert(SentinelOracle.NotGovernance.selector);
+        vm.prank(randomAddress);
+        oracle.removeSentinel(sentinel1);
+
+        vm.prank(governance);
+        oracle.removeSentinel(sentinel1);
+    }
+
+    function test_ScheduleBondMultiplier_OnlyGovernance() public {
+        address randomAddress = vm.createWallet("random").addr;
+
+        vm.expectRevert(SentinelOracle.NotGovernance.selector);
+        vm.prank(arbitrator);
+        oracle.scheduleBondMultiplier(BOND_MULTIPLIER + 1);
+
+        vm.expectRevert(SentinelOracle.NotGovernance.selector);
+        vm.prank(randomAddress);
+        oracle.scheduleBondMultiplier(BOND_MULTIPLIER + 1);
+
+        vm.prank(governance);
+        oracle.scheduleBondMultiplier(BOND_MULTIPLIER + 1);
     }
 
     // ============================================================
