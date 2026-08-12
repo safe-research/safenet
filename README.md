@@ -47,8 +47,7 @@ git submodule update --init --recursive
 with:
 
 ```sh
-npm ci --prefix examples
-npm ci --prefix explorer
+just deps
 ```
 
 Each of `examples/`/`explorer/` also has its own [Biome](https://biomejs.dev/) devDependency and

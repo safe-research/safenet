@@ -1,0 +1,157 @@
+openapi: 3.2.0
+info:
+  title: Safenet Sentinel Engine API
+  version: 0.2.0
+  summary: Safenet transaction verification API that backs sentinel services.
+  description: >-
+    A sentinel watching the Consensus contract POSTs each proposed Safe
+    transaction to a sentinel engine and votes according to the verdict it gets
+    back from this API.
+paths:
+  /v1/security-check:
+    post:
+      operationId: security-check-v1
+      summary: Decide whether a proposed Safe transaction is secure.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SecurityCheckRequest"
+      responses:
+        "200":
+          description: >-
+            The verdict. Note that `unknown` is a successful response: the
+            engine is reporting that it has no definitive answer, which a caller
+            must not read as either secure or insecure.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SecurityCheckResponse"
+components:
+  schemas:
+    SecurityCheckRequest:
+      type: object
+      additionalProperties: false
+      required: [transaction]
+      properties:
+        transaction:
+          $ref: "#/components/schemas/SafeTransaction"
+      examples:
+        - transaction:
+            chainId: "0x1"
+            safe: "0x5aFE3855358E112B5647B952709E6165e1c1eEEe"
+            to: "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2"
+            value: "0x1234"
+            data: "0xd0e30db0"
+            operation: 1
+            safeTxGas: "0x186a0"
+            baseGas: "0x5208"
+            gasPrice: "0x1"
+            gasToken: "0x6B175474E89094C44Da98b954EedeAC495271d0F"
+            refundReceiver: "0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045"
+            nonce: "0x0"
+    SecurityCheckResponse:
+      description: >-
+        The engine's answer about the transaction. A sentinel maps `secure` to
+        an approving vote and `insecure` to a denying one, and `unknown` as
+        abstaining from voting.
+      oneOf:
+        - $ref: "#/components/schemas/Secure"
+        - $ref: "#/components/schemas/Insecure"
+        - $ref: "#/components/schemas/Unknown"
+      discriminator:
+        propertyName: verdict
+        mapping:
+          secure: "#/components/schemas/Secure"
+          insecure: "#/components/schemas/Insecure"
+          unknown: "#/components/schemas/Unknown"
+    SafeTransaction:
+      description: >-
+        The Safenet SafeTransaction type.
+      type: object
+      additionalProperties: false
+      required:
+        [
+          chainId,
+          safe,
+          to,
+          value,
+          data,
+          operation,
+          safeTxGas,
+          baseGas,
+          gasPrice,
+          gasToken,
+          refundReceiver,
+          nonce,
+        ]
+      properties:
+        chainId: { $ref: "#/components/schemas/Quantity" }
+        safe: { $ref: "#/components/schemas/Address" }
+        to: { $ref: "#/components/schemas/Address" }
+        value: { $ref: "#/components/schemas/Quantity" }
+        data: { $ref: "#/components/schemas/Bytes" }
+        operation: { $ref: "#/components/schemas/Operation" }
+        safeTxGas: { $ref: "#/components/schemas/Quantity" }
+        baseGas: { $ref: "#/components/schemas/Quantity" }
+        gasPrice: { $ref: "#/components/schemas/Quantity" }
+        gasToken: { $ref: "#/components/schemas/Address" }
+        refundReceiver: { $ref: "#/components/schemas/Address" }
+        nonce: { $ref: "#/components/schemas/Quantity" }
+    Operation:
+      description: >-
+        The Safe call type: `0` is CALL and `1` is DELEGATECALL.
+      type: integer
+      enum: [0, 1]
+    Secure:
+      description: >-
+        The engine considers the transaction secure.
+      type: object
+      required: [verdict]
+      properties:
+        verdict: { const: secure }
+      examples: [{ verdict: secure }]
+    Insecure:
+      description: >-
+        A check found the transaction to be in violation of the cited Charter
+        rule.
+      type: object
+      required: [verdict, rule]
+      properties:
+        verdict: { const: insecure }
+        rule: { $ref: "#/components/schemas/RuleId" }
+      examples: [{ verdict: insecure, rule: "R-4.1" }]
+    Unknown:
+      description: >-
+        The engine cannot reliably determine whether or not a transaction is
+        secure, and indicates the sentinel should abstain from voting.
+      type: object
+      required: [verdict]
+      properties:
+        verdict: { const: unknown }
+      examples: [{ verdict: unknown }]
+    RuleId:
+      type: string
+      description: >-
+        A Safenet Arbitration Charter rule citation. This is not a closed set
+        as the security Charter is an evolving document, and this list grows
+        with it.
+      pattern: "^R-[0-9]+\\.[0-9]+$"
+      examples: ["R-4.1", "R-42.1337"]
+    Address:
+      type: string
+      description: >-
+        A `0x`-prefixed 20-byte address.
+      pattern: "^0x[0-9a-fA-F]{40}$"
+      examples: ["0x5aFE3855358E112B5647B952709E6165e1c1eEEe"]
+    Quantity:
+      type: string
+      description: >-
+        A 256-bit unsigned integer as minimal (no leading zeros), lower-case,
+        `0x`-prefixed hex string. Zero is "0x0".
+      pattern: "^0x([1-9a-f][0-9a-f]*|0)$"
+    Bytes:
+      type: string
+      description: Lower-case, `0x`-prefixed byte string; empty is "0x".
+      pattern: "^0x([0-9a-f]{2})*$"
