@@ -286,13 +286,6 @@ impl SecretStore {
     /// non-consuming read of public data, a state transition may call it
     /// repeatedly - for example to re-emit a nonce reveal after a reorg -
     /// without risking nonce reuse.
-    #[cfg_attr(
-        not(test),
-        expect(
-            dead_code,
-            reason = "introduced ahead of root-based nonce effect integration"
-        )
-    )]
     pub async fn nonces_reveal_by_root(
         &self,
         root: B256,
@@ -356,13 +349,6 @@ impl SecretStore {
     /// gracefully no-ops instead of reusing the nonce. Deletion is permanent
     /// and not undone by a reorg; the returned nonce lives on only in the
     /// snapshot state, which a reorg is free to roll back.
-    #[cfg_attr(
-        not(test),
-        expect(
-            dead_code,
-            reason = "introduced ahead of root-based nonce effect integration"
-        )
-    )]
     pub async fn take_nonce_by_root(
         &self,
         root: B256,

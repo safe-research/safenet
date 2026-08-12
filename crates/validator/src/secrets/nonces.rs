@@ -1,10 +1,5 @@
 //! Process-local background generation of FROST nonce chunks.
 
-// The generator is introduced independently from its effect-handler wiring so
-// that the component can be reviewed in isolation. This allowance can be
-// removed when the effect handler starts consuming it.
-#![expect(dead_code)]
-
 use crate::frost::{keygen::KeyShare, preprocess::NonceChunk};
 use alloy::primitives::B256;
 use rand::{CryptoRng, RngCore};
@@ -12,6 +7,7 @@ use std::{
     collections::{BTreeMap, btree_map},
     sync::{Arc, Mutex, PoisonError, mpsc},
     thread,
+    time::Instant,
 };
 use tokio::sync::{Semaphore, oneshot};
 
@@ -45,7 +41,8 @@ impl NonceGenerator {
         };
 
         tracing::debug!(%group_id, "starting nonce stream for group");
-        let stream = NonceStream::new(sampler)?;
+        let span = tracing::debug_span!("nonce_generator", %group_id);
+        let stream = NonceStream::new(sampler, span)?;
         entry.insert(stream);
         Ok(())
     }
@@ -103,20 +100,23 @@ impl Sampler {
 
 /// A stream of nonces for a given key share.
 struct NonceStream {
-    worker: thread::JoinHandle<()>,
+    _worker: thread::JoinHandle<()>,
     pending: Arc<Semaphore>,
     requests: mpsc::Sender<oneshot::Sender<NonceChunk>>,
 }
 
 impl NonceStream {
-    fn new(sampler: Sampler) -> Result<Self, Error> {
+    fn new(sampler: Sampler, span: tracing::Span) -> Result<Self, Error> {
         let (sender, receiver) = mpsc::channel();
         let worker = thread::Builder::new()
-            .spawn(move || Self::stream(sampler, receiver))
+            .spawn(move || {
+                let _guard = span.enter();
+                Self::stream(sampler, receiver);
+            })
             .map_err(Error::Spawn)?;
 
         Ok(Self {
-            worker,
+            _worker: worker,
             pending: Arc::new(Semaphore::new(1)),
             requests: sender,
         })
@@ -125,6 +125,7 @@ impl NonceStream {
     fn stream(sampler: Sampler, requests: mpsc::Receiver<oneshot::Sender<NonceChunk>>) {
         let mut rng = rand::thread_rng();
         'outer: loop {
+            let started = Instant::now();
             let mut nonces = match sampler.nonces_chunk(&mut rng) {
                 Ok(nonces) => nonces,
                 Err(err) => {
@@ -132,6 +133,10 @@ impl NonceStream {
                     break;
                 }
             };
+            tracing::trace!(
+                elapsed_ms = started.elapsed().as_millis(),
+                "completed nonce tree sampling effect"
+            );
 
             loop {
                 let Ok(request) = requests.recv() else {
