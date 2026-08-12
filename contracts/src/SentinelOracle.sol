@@ -6,6 +6,7 @@ import {SafeERC20} from "@oz/token/ERC20/utils/SafeERC20.sol";
 import {IOracle} from "@/interfaces/IOracle.sol";
 import {BondConfig} from "@/libraries/BondConfig.sol";
 import {DelayedAddress} from "@/libraries/DelayedAddress.sol";
+import {DelayedUint256} from "@/libraries/DelayedUint256.sol";
 import {SentinelMap} from "@/libraries/SentinelMap.sol";
 import {SentinelOracleCommitment, SentinelOracleCommitmentMap} from "@/libraries/SentinelOracleCommitments.sol";
 import {SentinelOracleRequest, SentinelOracleRequestMap} from "@/libraries/SentinelOracleRequests.sol";
@@ -13,6 +14,7 @@ import {SentinelOracleRequest, SentinelOracleRequestMap} from "@/libraries/Senti
 contract SentinelOracle is IOracle {
     using BondConfig for BondConfig.T;
     using DelayedAddress for DelayedAddress.T;
+    using DelayedUint256 for DelayedUint256.T;
     using SentinelMap for SentinelMap.T;
     using SentinelOracleCommitment for SentinelOracleCommitment.Commitment;
     using SentinelOracleCommitmentMap for SentinelOracleCommitmentMap.T;
@@ -40,7 +42,6 @@ contract SentinelOracle is IOracle {
     address public immutable GOVERNANCE;
     address public immutable CONSENSUS;
     IERC20 public immutable FEE_TOKEN;
-    uint256 public immutable REQUEST_FEE;
     uint256 public immutable COMMIT_WINDOW;
     uint256 public immutable REVEAL_WINDOW;
     uint256 public immutable GOVERNANCE_DELAY;
@@ -54,6 +55,9 @@ contract SentinelOracle is IOracle {
 
     // forge-lint: disable-next-line(mixed-case-variable)
     DelayedAddress.T private $protocolFundsReceiverConfig;
+
+    // forge-lint: disable-next-line(mixed-case-variable)
+    DelayedUint256.T private $feeConfig;
 
     // forge-lint: disable-next-line(mixed-case-variable)
     SentinelMap.T private $sentinelMap;
@@ -123,12 +127,12 @@ contract SentinelOracle is IOracle {
         GOVERNANCE = governance;
         CONSENSUS = consensus;
         FEE_TOKEN = IERC20(feeToken);
-        REQUEST_FEE = requestFee;
         COMMIT_WINDOW = commitWindow;
         REVEAL_WINDOW = revealWindow;
         GOVERNANCE_DELAY = governanceDelay;
         $bondConfig.init(initialMultiplier);
         $protocolFundsReceiverConfig.init(initialProtocolFundsReceiver);
+        $feeConfig.init(requestFee);
     }
 
     // ============================================================
@@ -137,12 +141,12 @@ contract SentinelOracle is IOracle {
 
     function postRequest(bytes32 requestId, address proposer, bytes calldata) external override(IOracle) {
         require(msg.sender == CONSENSUS, NotConsensus());
-        uint256 fee = REQUEST_FEE;
-        uint256 bondTarget = fee * $bondConfig.applyPending();
+        uint256 currentFee = $feeConfig.applyPending();
+        uint256 bondTarget = currentFee * $bondConfig.applyPending();
         uint256 commitDeadline = block.number + COMMIT_WINDOW;
         uint256 revealDeadline = commitDeadline + REVEAL_WINDOW;
-        $requests.create(requestId, proposer, fee, bondTarget, commitDeadline, revealDeadline);
-        FEE_TOKEN.safeTransferFrom(proposer, address(this), fee);
+        $requests.create(requestId, proposer, currentFee, bondTarget, commitDeadline, revealDeadline);
+        FEE_TOKEN.safeTransferFrom(proposer, address(this), currentFee);
     }
 
     // ============================================================
@@ -269,6 +273,15 @@ contract SentinelOracle is IOracle {
         $protocolFundsReceiverConfig.applyPending();
     }
 
+    function scheduleFee(uint256 newValue) external onlyGovernance {
+        require(newValue > 0, ZeroFee());
+        $feeConfig.schedule(newValue, GOVERNANCE_DELAY);
+    }
+
+    function applyFee() external {
+        $feeConfig.applyPending();
+    }
+
     // ============================================================
     // VIEW FUNCTIONS
     // ============================================================
@@ -299,6 +312,18 @@ contract SentinelOracle is IOracle {
 
     function pendingProtocolFundsReceiverActiveAt() external view returns (uint256) {
         return $protocolFundsReceiverConfig.pendingActiveAt;
+    }
+
+    function fee() external view returns (uint256) {
+        return $feeConfig.current();
+    }
+
+    function pendingFee() external view returns (uint256) {
+        return $feeConfig.pendingValue;
+    }
+
+    function pendingFeeActiveAt() external view returns (uint256) {
+        return $feeConfig.pendingActiveAt;
     }
 
     function getRequest(bytes32 requestId) external view returns (SentinelOracleRequest.Request memory) {

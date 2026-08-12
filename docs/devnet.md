@@ -148,7 +148,9 @@ cast send $FEE_TOKEN_ADDRESS "approve(address,uint256)" $ORACLE_ADDRESS 40000000
 ```
 
 `400000000000000000` (0.4 tokens, 18 decimals) matches the devnet's default `SENTINEL_REQUEST_FEE`
-(`scripts/run_devnet.sh`); approve more if you plan to propose several oracle transactions. The
+(`scripts/run_devnet.sh`) — the fee is governed and delay-gated (see `scheduleFee`/`applyFee` on
+`SentinelOracle`), so this env var only sets its *initial* value at deploy time, not a fixed
+constant; approve more if you plan to propose several oracle transactions. The
 deployer account already holds the entire fee token supply (minted to it by `DeployERC20Script`), so
 using it as `--sender` only requires this allowance, not additional funding — an account funded via
 `--fund-account` instead already has both balance and would still need this approval.
