@@ -11,7 +11,7 @@ ROOT="$(dirname "$0")/.."
 #   (2) bob        0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC
 #   (3) carol      0x90F79bf6EB2c4f870365E785982E1f101E93b906
 #   (4) dave       0x15d34AAf54267DB7D7c367839AAf71A00a2C6A65
-#   (5) arbitrator 0x9965507D1a55bcC2695C58ba16FB37d819B0A4dc
+#   (5) operator   0x9965507D1a55bcC2695C58ba16FB37d819B0A4dc
 VALIDATORS=(
     alice:0x70997970C51812dc3A010C7d01b50e0d17dc79C8:0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d
     bob:0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC:0x5de4111afa1a4b94908f83103eb1f1706367c2e68ca870fc3fb9a804cdab365a
@@ -25,7 +25,7 @@ SENTINELS=(
 # referenced by this script — recorded here anyway in case it's ever needed
 # for a manual `cast`/wallet import:
 # 0x8b3a350cf5c34c9194ca85829a2df0ec3153be0318b5e2d3348e872092edffba
-ARBITRATOR=0x9965507D1a55bcC2695C58ba16FB37d819B0A4dc
+OPERATOR=0x9965507D1a55bcC2695C58ba16FB37d819B0A4dc
 # Anvil account (0), also used as the `--sender`/`--from` for every
 # broadcast/cast call below (all Anvil accounts are unlocked on the devnet).
 # Private key: 0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80
@@ -307,8 +307,9 @@ consensus="$(parse_address "$deployment" Consensus)"
 fee_token="$(parse_address "$(simulate_forge_script DeployERC20Script -e FACTORY=2)" 'ERC20 deployed at')"
 sentinel_oracle="$(parse_address "$(simulate_forge_script DeploySentinelOracleScript \
     -e FACTORY=2 \
-    -e SENTINEL_ARBITRATOR="$ARBITRATOR" \
-    -e SENTINEL_GOVERNANCE="$ARBITRATOR" \
+    -e SENTINEL_ARBITRATOR="$OPERATOR" \
+    -e SENTINEL_GOVERNANCE="$OPERATOR" \
+    -e SENTINEL_PROTOCOL_FUNDS_RECEIVER="$OPERATOR" \
     -e SENTINEL_CONSENSUS="$consensus" \
     -e SENTINEL_FEE_TOKEN="$fee_token" \
     -e SENTINEL_REQUEST_FEE="$SENTINEL_REQUEST_FEE" \
@@ -385,15 +386,17 @@ safenet_spec | podman kube play -
 # Deploy the Safenet contracts.
 forge_script DeployScript
 
-# Deploy the sentinel fee token and a SentinelOracle arbitrated by
-# $ARBITRATOR, then register and fund each SENTINELS entry against it. These
-# reuse the exact same arguments as `simulate_forge_script` above, so the
-# addresses actually deployed here match `$fee_token`/`$sentinel_oracle`.
+# Deploy the sentinel fee token and a SentinelOracle whose arbitrator,
+# governance, and protocol funds receiver are all $OPERATOR, then register
+# and fund each SENTINELS entry against it. These reuse the exact same
+# arguments as `simulate_forge_script` above, so the addresses actually
+# deployed here match `$fee_token`/`$sentinel_oracle`.
 forge_script DeployERC20Script -e FACTORY=2 >/dev/null
 forge_script DeploySentinelOracleScript \
     -e FACTORY=2 \
-    -e SENTINEL_ARBITRATOR="$ARBITRATOR" \
-    -e SENTINEL_GOVERNANCE="$ARBITRATOR" \
+    -e SENTINEL_ARBITRATOR="$OPERATOR" \
+    -e SENTINEL_GOVERNANCE="$OPERATOR" \
+    -e SENTINEL_PROTOCOL_FUNDS_RECEIVER="$OPERATOR" \
     -e SENTINEL_CONSENSUS="$consensus" \
     -e SENTINEL_FEE_TOKEN="$fee_token" \
     -e SENTINEL_REQUEST_FEE="$SENTINEL_REQUEST_FEE" \
@@ -406,7 +409,7 @@ for sentinel in "${SENTINELS[@]}"; do
     parts=(${sentinel//:/ })
     address=${parts[1]}
 
-    cast_send "$ARBITRATOR" "$sentinel_oracle" 'addSentinel(address)' "$address"
+    cast_send "$OPERATOR" "$sentinel_oracle" 'addSentinel(address)' "$address"
     cast_send "$DEPLOYER" "$fee_token" 'transfer(address,uint256)' "$address" "$SENTINEL_FUNDING_TOKEN"
 done
 

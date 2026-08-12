@@ -34,6 +34,7 @@ contract SentinelOracleTest is Test {
 
     address public arbitrator;
     address public governance;
+    address public protocolFundsReceiver;
     address public consensus;
     address public proposer;
     address public sentinel1;
@@ -47,6 +48,7 @@ contract SentinelOracleTest is Test {
     function setUp() public {
         arbitrator = vm.createWallet("arbitrator").addr;
         governance = vm.createWallet("governance").addr;
+        protocolFundsReceiver = vm.createWallet("protocolFundsReceiver").addr;
         consensus = vm.createWallet("consensus").addr;
         proposer = vm.createWallet("proposer").addr;
         sentinel1 = vm.createWallet("sentinel1").addr;
@@ -57,6 +59,7 @@ contract SentinelOracleTest is Test {
         oracle = new SentinelOracle(
             arbitrator,
             governance,
+            protocolFundsReceiver,
             consensus,
             address(token),
             REQUEST_FEE,
@@ -176,6 +179,135 @@ contract SentinelOracleTest is Test {
 
         vm.prank(governance);
         oracle.scheduleBondMultiplier(BOND_MULTIPLIER + 1);
+    }
+
+    function test_ScheduleProtocolFundsReceiver_OnlyGovernance() public {
+        address randomAddress = vm.createWallet("random").addr;
+        address newReceiver = vm.createWallet("newReceiver").addr;
+
+        vm.expectRevert(SentinelOracle.NotGovernance.selector);
+        vm.prank(arbitrator);
+        oracle.scheduleProtocolFundsReceiver(newReceiver);
+
+        vm.expectRevert(SentinelOracle.NotGovernance.selector);
+        vm.prank(randomAddress);
+        oracle.scheduleProtocolFundsReceiver(newReceiver);
+
+        vm.prank(governance);
+        oracle.scheduleProtocolFundsReceiver(newReceiver);
+    }
+
+    // ============================================================
+    // PROTOCOL FUNDS RECEIVER SCHEDULE/APPLY
+    // ============================================================
+
+    function test_ScheduleProtocolFundsReceiver_ZeroAddress_Reverts() public {
+        vm.expectRevert(SentinelOracle.InvalidAddress.selector);
+        vm.prank(governance);
+        oracle.scheduleProtocolFundsReceiver(address(0));
+    }
+
+    function test_ProtocolFundsReceiver_ScheduleApplyRoundTrip() public {
+        address newReceiver = vm.createWallet("newReceiver").addr;
+
+        assertEq(oracle.protocolFundsReceiver(), protocolFundsReceiver, "starts at the constructor value");
+
+        vm.prank(governance);
+        oracle.scheduleProtocolFundsReceiver(newReceiver);
+
+        assertEq(oracle.pendingProtocolFundsReceiver(), newReceiver);
+        assertEq(oracle.protocolFundsReceiver(), protocolFundsReceiver, "not active until the delay elapses");
+
+        // Applying too early is a no-op, not a revert -- it's permissionless and harmless to call
+        // speculatively.
+        oracle.applyProtocolFundsReceiver();
+        assertEq(oracle.protocolFundsReceiver(), protocolFundsReceiver, "still not active after an early apply");
+        assertEq(oracle.pendingProtocolFundsReceiver(), newReceiver, "pending value survives an early apply");
+
+        vm.roll(block.number + GOVERNANCE_DELAY);
+        oracle.applyProtocolFundsReceiver();
+
+        assertEq(oracle.protocolFundsReceiver(), newReceiver, "takes effect once the delay has elapsed");
+        assertEq(oracle.pendingProtocolFundsReceiver(), address(0));
+        assertEq(oracle.pendingProtocolFundsReceiverActiveAt(), 0);
+    }
+
+    function test_ProtocolFundsReceiver_RescheduleBeforeMaturity_OverwritesPending() public {
+        address firstReceiver = vm.createWallet("firstReceiver").addr;
+        address secondReceiver = vm.createWallet("secondReceiver").addr;
+
+        vm.startPrank(governance);
+        oracle.scheduleProtocolFundsReceiver(firstReceiver);
+
+        // Governance notices the mistake before `firstReceiver` matures and corrects it —
+        // this must overwrite the still-pending schedule, not revert.
+        oracle.scheduleProtocolFundsReceiver(secondReceiver);
+        vm.stopPrank();
+
+        assertEq(oracle.pendingProtocolFundsReceiver(), secondReceiver, "second schedule overwrites the first");
+        assertEq(oracle.protocolFundsReceiver(), protocolFundsReceiver, "not active until the delay elapses");
+
+        vm.roll(block.number + GOVERNANCE_DELAY);
+        oracle.applyProtocolFundsReceiver();
+
+        assertEq(oracle.protocolFundsReceiver(), secondReceiver, "corrected value takes effect, not the mistake");
+    }
+
+    // ============================================================
+    // EAGER APPLY ON ACTIVITY (NO EXPLICIT apply* CALL NEEDED)
+    // ============================================================
+
+    function test_PostRequest_EagerlyAppliesPendingBondMultiplier() public {
+        uint256 newMultiplier = BOND_MULTIPLIER + 1;
+
+        vm.prank(governance);
+        oracle.scheduleBondMultiplier(newMultiplier);
+        vm.roll(block.number + GOVERNANCE_DELAY);
+
+        // Nobody ever calls `applyBondMultiplier()` -- `postRequest` itself must flip the
+        // matured pending value into storage as a side effect of touching `$bondConfig`.
+        _postRequest();
+
+        assertEq(oracle.bondMultiplier(), newMultiplier, "postRequest applies the pending multiplier");
+        assertEq(oracle.pendingBondMultiplier(), 0, "pending slot cleared without a separate apply call");
+        assertEq(oracle.pendingBondMultiplierActiveAt(), 0);
+
+        SentinelOracleRequest.Request memory req = oracle.getRequest(REQUEST_ID);
+        assertEq(req.bondTarget, REQUEST_FEE * newMultiplier, "new request snapshots the newly-applied multiplier");
+    }
+
+    function test_Finalize_EagerlyAppliesPendingProtocolFundsReceiver() public {
+        address newReceiver = vm.createWallet("newReceiver2").addr;
+
+        _postRequest();
+        _commit(sentinel1, true, SALT_1);
+        _commit(sentinel2, true, SALT_2);
+        _commit(sentinel3, true, SALT_3);
+        _advancePastCommitDeadline();
+        _reveal(sentinel1, true, SALT_1);
+        _reveal(sentinel2, true, SALT_2);
+
+        vm.prank(governance);
+        oracle.scheduleProtocolFundsReceiver(newReceiver);
+        // GOVERNANCE_DELAY (100 blocks) comfortably clears the reveal deadline too, so
+        // sentinel3's non-reveal is finalizable in the same roll.
+        vm.roll(block.number + GOVERNANCE_DELAY);
+
+        uint256 newReceiverBalBefore = token.balanceOf(newReceiver);
+
+        // Nobody ever calls `applyProtocolFundsReceiver()` -- `finalize` itself must flip the
+        // matured pending receiver into storage before paying out sentinel3's unrevealed-bond
+        // slash.
+        oracle.finalize(REQUEST_ID);
+
+        assertEq(oracle.protocolFundsReceiver(), newReceiver, "finalize applies the pending receiver");
+        assertEq(oracle.pendingProtocolFundsReceiver(), address(0));
+        assertEq(oracle.pendingProtocolFundsReceiverActiveAt(), 0);
+        assertEq(
+            token.balanceOf(newReceiver),
+            newReceiverBalBefore + BOND_TARGET,
+            "unrevealed bond slashed to the newly-applied receiver, not the stale one"
+        );
     }
 
     // ============================================================
@@ -310,7 +442,7 @@ contract SentinelOracleTest is Test {
 
         // ---- Phase 2: arbitration ----
 
-        uint256 arbitratorBalBefore = token.balanceOf(arbitrator);
+        uint256 receiverBalBefore = token.balanceOf(protocolFundsReceiver);
         string memory context = "sentinel1's evidence was conclusive";
 
         vm.expectEmit(true, false, false, true);
@@ -327,15 +459,16 @@ contract SentinelOracleTest is Test {
 
         assertEq(token.balanceOf(proposer), proposerBalBefore, "proposer balance fully restored");
         assertEq(
-            token.balanceOf(arbitrator),
-            arbitratorBalBefore + BOND_TARGET - REQUEST_FEE,
-            "deny bonds slashed to arbitrator"
+            token.balanceOf(protocolFundsReceiver),
+            receiverBalBefore + BOND_TARGET - REQUEST_FEE,
+            "deny bonds slashed to protocol funds receiver, not the arbitrator"
         );
+        assertEq(token.balanceOf(arbitrator), 0, "arbitrator itself receives nothing from resolveDispute");
 
-        // Unlike the unanimous-resolution path, the proposer's refund and the arbitrator's cut are
-        // carved out of the losing side's slashed bonds — the original fee is untouched by
-        // resolveDispute and still flows to the winning revealer via calcFeeReward, exactly as it
-        // would without a dispute. (Sole winner here, so it gets the whole fee.)
+        // Unlike the unanimous-resolution path, the proposer's refund and the protocol funds
+        // receiver's cut are carved out of the losing side's slashed bonds — the original fee is
+        // untouched by resolveDispute and still flows to the winning revealer via calcFeeReward,
+        // exactly as it would without a dispute. (Sole winner here, so it gets the whole fee.)
         uint256 s1Before = token.balanceOf(sentinel1);
         vm.prank(sentinel1);
         oracle.claim(REQUEST_ID);
@@ -497,7 +630,7 @@ contract SentinelOracleTest is Test {
 
         _advancePastRevealDeadline();
 
-        uint256 arbitratorBalBefore = token.balanceOf(arbitrator);
+        uint256 receiverBalBefore = token.balanceOf(protocolFundsReceiver);
         oracle.finalize(REQUEST_ID);
 
         SentinelOracleRequest.Request memory req = oracle.getRequest(REQUEST_ID);
@@ -505,8 +638,9 @@ contract SentinelOracleTest is Test {
         assertEq(req.approveSentinelCount, 2);
         assertEq(req.revealedCount, 2);
 
-        // sentinel3's committed bond (never revealed) is slashed to the arbitrator.
-        assertEq(token.balanceOf(arbitrator), arbitratorBalBefore + BOND_TARGET, "unrevealed bond slashed");
+        // sentinel3's committed bond (never revealed) is slashed to the protocol funds receiver,
+        // not the arbitrator.
+        assertEq(token.balanceOf(protocolFundsReceiver), receiverBalBefore + BOND_TARGET, "unrevealed bond slashed");
 
         uint256 s1Before = token.balanceOf(sentinel1);
         vm.prank(sentinel1);
@@ -545,7 +679,7 @@ contract SentinelOracleTest is Test {
 
         _advancePastRevealDeadline();
 
-        uint256 arbitratorBalBefore = token.balanceOf(arbitrator);
+        uint256 receiverBalBefore = token.balanceOf(protocolFundsReceiver);
         oracle.finalize(REQUEST_ID);
 
         SentinelOracleRequest.Request memory req = oracle.getRequest(REQUEST_ID);
@@ -553,8 +687,8 @@ contract SentinelOracleTest is Test {
         assertEq(token.balanceOf(proposer), proposerBalBefore, "proposer fee refunded");
 
         // No established side exists, so no misbehavior can be proven against either committer —
-        // nothing is slashed to the arbitrator.
-        assertEq(token.balanceOf(arbitrator), arbitratorBalBefore, "no bonds slashed on a pure timeout");
+        // nothing is slashed to the protocol funds receiver.
+        assertEq(token.balanceOf(protocolFundsReceiver), receiverBalBefore, "no bonds slashed on a pure timeout");
 
         // Both commitments are still `Vote.PENDING`, but `claim()` succeeds anyway on `TIMED_OUT`.
         uint256 s1Before = token.balanceOf(sentinel1);
