@@ -27,12 +27,13 @@ jobs:
         with:
           node-version: "lts/*"
           cache: npm
+          cache-dependency-path: explorer/package-lock.json
 
       - name: Install
-        run: npm ci
+        run: npm ci --prefix explorer
 
       - name: Build explorer
-        run: VITE_BASE_PATH=/safenet/ VITE_APP_URL=https://safe.dev/safenet npm run build --workspace explorer
+        run: VITE_BASE_PATH=/safenet/ VITE_APP_URL=https://safe.dev/safenet npm --prefix explorer run build
 
       - name: Create 404 for GH pages
         run: cp explorer/dist/index.html explorer/dist/404.html

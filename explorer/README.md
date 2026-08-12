@@ -14,35 +14,35 @@ The Safenet Explorer is a React 19 single-page application for inspecting the st
 
 ### Prerequisites
 
-Install dependencies from the repository root:
+`explorer/` is an independent NPM package with its own lockfile (not an npm workspace member).
+Install its dependencies with:
 
 ```sh
-npm ci
+npm ci --prefix explorer
 ```
 
 ### Run the dev server
 
 ```sh
-npm run dev -w explorer        # starts on http://localhost:3000
+just explorer-dev              # starts on http://localhost:3000
 ```
 
 ### Build
 
 ```sh
-npm run build -w explorer
+npm --prefix explorer run build
 ```
 
 ### Lint and type-check
 
 ```sh
-npm run check -w explorer      # Biome + TypeScript
-npm run fix -w explorer        # auto-fix formatting issues
+npm --prefix explorer run check   # TypeScript only; run `just check`/`just fix` from the repo root for Biome formatting/linting
 ```
 
 ### Tests
 
 ```sh
-npm test -w explorer
+npm --prefix explorer run test
 ```
 
 ## Deployment
@@ -52,14 +52,13 @@ npm test -w explorer
 The explorer can be deployed to IPFS via Pinata:
 
 ```sh
-npm run deploy:ipfs -w explorer
+npm --prefix explorer run deploy:ipfs
 ```
 
 This builds the app and uploads the `dist/` directory to Pinata. The upload is always named with a snapshot timestamp (e.g. `safenet-explorer-2026-03-18T14:30:00.000Z`). Set `PINATA_JWT` (required) and `PINATA_GATEWAY` (optional) in your environment before running. To skip the build step and upload an existing `dist/`, pass `--skip-build`:
 
 ```sh
-npm run deploy:ipfs -w explorer -- --skip-build
-
+npm --prefix explorer run deploy:ipfs -- --skip-build
 ```
 
 ## Environment Variables

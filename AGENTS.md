@@ -6,8 +6,8 @@ Safenet is a decentralized Safe transaction security network that uses FROST (Fl
 
 The repository is a hybrid monorepo with:
 
-- NPM workspaces:
-  - `contracts/` — Solidity 0.8.30 smart contracts built with Foundry. Core contracts: `FROSTCoordinator.sol`, `Consensus.sol`, `Staking.sol`.
+- `contracts/` — Solidity 0.8.30 smart contracts built with Foundry. Core contracts: `FROSTCoordinator.sol`, `Consensus.sol`, `Staking.sol`. Has no JavaScript of its own; its commands are `forge` invocations exposed via the root [Justfile](./Justfile).
+- NPM packages (each with its own `package.json`/lockfile, no longer npm workspace members):
   - `examples/` — Scripts for interacting with the Safenet protocol on public testnets.
   - `explorer/` — React 19 + TypeScript + Vite frontend for inspecting network state.
 - Rust crates:
@@ -28,7 +28,7 @@ Code SHOULD focus on security and maintainability. Existing code and components 
 
 You MUST format, lint and test before committing.
 
-- For JavaScript/Typescript code, run `npm run fix --workspace <package>`, `npm run check --workspace <package>`, and `npm test --workspace <package>` respectively
+- For JavaScript/Typescript code, run `just fix`, `just check`, and `npm --prefix <package> run test` (only `explorer/` has a `test` script) respectively
 - For Rust code, run `cargo fmt --all`, `cargo clippy --package <package>`, and `cargo test --package <package>` respectively
 
 ## Testing Guidelines
@@ -41,15 +41,26 @@ New code SHOULD generally be tested. Design tests that do not require a high amo
 
 The steps for project setup are documented in the root [README.md](./README.md#project-setup).
 
-Always use `npm ci` instead of `npm install` / `npm i`. `npm ci` installs exactly what is in `package-lock.json` and never modifies it, keeping the lock file stable.
+Always use `npm ci` instead of `npm install` / `npm i`. `npm ci` installs exactly what is in the
+package's lockfile and never modifies it, keeping the lock file stable. Since `examples/` and
+`explorer/` each have their own `package.json`/lockfile, run it in each directory (e.g.
+`npm ci --prefix explorer`), not once at the repo root.
 
-Make sure you have the correct tool versions (NodeJS 24, NPM 11, Foundry 1.5.1). Use `npm run foundryup` to set up the correct Foundry version.
+Make sure you have the correct tool versions (NodeJS 24, NPM 11, Foundry 1.5.1, [Just](https://github.com/casey/just)). Use `just foundryup` to set up the correct Foundry version.
 
-### NPM Commands
+### Just Commands
 
-All commands are specified in the root [package.json](./package.json). Workspace specific commands can be found in the `package.json` of each corresponding workspace.
+All repo-wide commands are exposed as recipes in the root [Justfile](./Justfile) — run `just --list`
+for the full set. `contracts/` has no `package.json` of its own; its recipes shell out to `forge`
+directly. Package-specific commands not exposed as a recipe can still be run directly, e.g.
+`npm --prefix explorer run <script>`.
 
-To run a command in a specific workspace use `--workspace` or `-w`.
+Biome (the formatter/linter `just check`/`just fix` run) is a devDependency of `examples/` and
+`explorer/` individually, not a separate root package — `just check`/`just fix` run it once per
+directory, each scoped to that package's own `biome.json` (which `extends` the shared rules in the
+root [`biome.json`](./biome.json) without inheriting its `includes`), so it never scans outside
+that package. Both `npm ci --prefix examples` and `npm ci --prefix explorer` are required before
+either recipe works, even if you're only touching contracts/Rust code.
 
 ### Integration Tests
 
@@ -57,33 +68,33 @@ Integration tests start a local Anvil chain, deploy contracts, and run the valid
 services:
 
 ```sh
-npm run test:integration:sentinel            # ./scripts/run_sentinel_integration_test.sh (Rust sentinel)
-npm run test:integration:validator           # ./scripts/run_validator_integration_test.sh (two Rust validator instances, against an AlwaysApproveOracle-backed happy path, running in CI)
+just test-integration-sentinel            # ./scripts/run_sentinel_integration_test.sh (Rust sentinel)
+just test-integration-validator           # ./scripts/run_validator_integration_test.sh (two Rust validator instances, against an AlwaysApproveOracle-backed happy path, running in CI)
 ```
 
 These scripts require:
 
 - **Anvil**, **Forge**, **cast** — part of the Foundry toolchain (`foundryup` to install)
 - **jq** — for parsing `cast`/deployment output
-- **Node.js** and **cargo** — for running the npm scripts and the Rust services respectively
+- **cargo** — for running the Rust services
 
 ### Local devnet
 
 ```sh
-npm run devnet                  # ./scripts/run_devnet.sh (Podman required)
+just devnet                  # ./scripts/run_devnet.sh (Podman required)
 ```
 
 Runs the Rust validator and sentinel services (`crates/validator`, `crates/sentinel`)
 against a local Anvil chain — two validators (`alice`, `bob`) and two sentinels (`carol`,
 `dave`) vote on a freshly deployed `SentinelOracle`. Each instance is configured via a
-generated TOML file (`--config-file`), not environment variables. `npm run devnet -- --build`
+generated TOML file (`--config-file`), not environment variables. `just devnet --build`
 builds the `crates/validator/Dockerfile` and `crates/sentinel/Dockerfile` images alongside
-the contracts image. This is separate from `test:integration:sentinel`/`test:integration:validator`
+the contracts image. This is separate from `test-integration-sentinel`/`test-integration-validator`
 above, which exercise the Rust validator/sentinel ports directly rather than through Podman.
 
 ## Code Quality Tools
 
-Run `npm run check` before committing. Run `npm run fix` to auto-correct formatting issues.
+Run `just check` before committing. Run `just fix` to auto-correct formatting issues.
 
 ## Git Branch Naming Convention
 

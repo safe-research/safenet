@@ -15,11 +15,6 @@ jobs:
         with:
           submodules: recursive
 
-      - uses: actions/setup-node@v6
-        with:
-          node-version: "lts/*"
-          cache: "npm"
-
       - uses: foundry-rs/foundry-toolchain@v1
         with:
           # We fix the foundry version because of a formatting bug introduced
@@ -27,8 +22,10 @@ jobs:
           # See <https://github.com/foundry-rs/foundry/issues/13362>
           version: v1.5.1
 
-      - run: npm ci
-      - run: npm run test:integration:sentinel
+      - name: Install just
+        run: sudo apt-get update && sudo apt-get install -y just
+
+      - run: just test-integration-sentinel
 
       - name: Upload sentinel logs
         if: failure()
@@ -49,11 +46,6 @@ jobs:
         with:
           submodules: recursive
 
-      - uses: actions/setup-node@v6
-        with:
-          node-version: "lts/*"
-          cache: "npm"
-
       - uses: foundry-rs/foundry-toolchain@v1
         with:
           # We fix the foundry version because of a formatting bug introduced
@@ -61,8 +53,10 @@ jobs:
           # See <https://github.com/foundry-rs/foundry/issues/13362>
           version: v1.5.1
 
-      - run: npm ci
-      - run: npm run test:integration:validator
+      - name: Install just
+        run: sudo apt-get update && sudo apt-get install -y just
+
+      - run: just test-integration-validator
 
       - name: Upload validator logs
         if: failure()

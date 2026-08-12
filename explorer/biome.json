@@ -1,3 +1,18 @@
 {
-	"extends": "//"
+	"$schema": "https://biomejs.dev/schemas/2.0.6/schema.json",
+	"extends": ["../biome.json"],
+	"files": {
+		"ignoreUnknown": false,
+		"includes": [
+			"src/**/*.ts",
+			"src/**/*.tsx",
+			"package.json",
+			"tsconfig.json",
+			"tsconfig.*.json",
+			"vite.config.js",
+			"vitest.config.ts",
+			"!src/*.gen.ts"
+		],
+		"maxSize": 2000000
+	}
 }

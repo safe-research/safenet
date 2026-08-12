@@ -1,6 +1,6 @@
 # Deployment
 
-All the commands specified in `package.json` currently only simulates the transaction. For signing and broadcasting the transaction, you should use the `--rpc-url` and `--broadcast` flag along with the wallet configuration in forge. Make sure to fill the `.env` file with the correct values before running the commands.
+All the commands specified in the root [Justfile](../../Justfile) currently only simulate the transaction. For signing and broadcasting the transaction, you should use the `--rpc-url` and `--broadcast` flag along with the wallet configuration in forge. Make sure to fill the `.env` file with the correct values before running the commands.
 
 ## Setup
 
@@ -51,13 +51,13 @@ The deployed contract address can be taken from the Logs of forge script command
 Dry Run:
 
 ```
-npm run cmd:deploy:testing-erc20 -w @safenet/contracts
+just contracts-deploy-erc20
 ```
 
 For broadcasting and specifying rpc url along with sender, you can use the following command:
 
 ```
-npm run cmd:deploy:testing-erc20 -w @safenet/contracts -- --rpc-url http://127.0.0.1:8545 --broadcast --sender 0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266 --account sender-keystore-account
+just contracts-deploy-erc20 --rpc-url http://127.0.0.1:8545 --broadcast --sender 0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266 --account sender-keystore-account
 ```
 
 where
@@ -70,7 +70,7 @@ Note: `--sender` here is specified because forge uses default sender `0x1804c8AB
 Example ETH Mainnet Command will look something like this:
 
 ```
-npm run cmd:deploy:testing-erc20 -w @safenet/contracts -- --rpc-url https://eth.drpc.org --broadcast --sender SENDER_ADDRESS --account mainnet-account
+just contracts-deploy-erc20 --rpc-url https://eth.drpc.org --broadcast --sender SENDER_ADDRESS --account mainnet-account
 ```
 
 Here we are using `https://eth.drpc.org` as the RPC URL for mainnet, you can replace it with any other RPC provider. Also replace `SENDER_ADDRESS` with the address you want to use for deployment and `mainnet-account` with the keystore alias of the account in forge keystore which has the private key for the sender address.
@@ -93,13 +93,13 @@ Tip: For easier Testing, both delays can be kept to a minimum. Always remember t
 ##### EOA based deployment
 
 ```
-npm run cmd:deploy:staking -w @safenet/contracts -- --rpc-url http://127.0.0.1:8545 --broadcast --sender 0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266 --account sender-keystore-account
+just contracts-deploy-staking --rpc-url http://127.0.0.1:8545 --broadcast --sender 0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266 --account sender-keystore-account
 ```
 
 ##### Safe Tx Builder based deployment
 
 ```
-npm run cmd:deploy:staking-with-tx-builder -w @safenet/contracts
+just contracts-deploy-staking-tx-builder
 ```
 
 This command provides the output as a JSON in the path: `contracts/build/staking-deployment.json` which can be used with the Safe Tx Builder tool to deploy the staking contract. A forge verify command is also provided as the output of the above command, which can be used to verify the deployment transaction in etherscan (requires the etherscan API key).
@@ -121,13 +121,13 @@ Note: If you want to explicitly provide a staking contract address, you can set 
 ##### Propose
 
 ```
-npm run cmd:proposeValidators -w @safenet/contracts -- --rpc-url http://127.0.0.1:8545 --broadcast --sender 0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266 --account sender-keystore-account
+just contracts-propose-validators --rpc-url http://127.0.0.1:8545 --broadcast --sender 0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266 --account sender-keystore-account
 ```
 
 ##### Accept
 
 ```
-npm run cmd:acceptValidators -w @safenet/contracts -- --rpc-url http://127.0.0.1:8545 --broadcast --sender 0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266 --account sender-keystore-account
+just contracts-accept-validators --rpc-url http://127.0.0.1:8545 --broadcast --sender 0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266 --account sender-keystore-account
 ```
 
 You could also set an environment variable `EXECUTABLE_AT` with the timestamp value to execute the validator changes at a specific time (after the delay is passed). If not set, it will try to read the event from the propose script output.
@@ -147,7 +147,7 @@ Note: If you want to explicitly provide a staking contract address, you can set 
 #### Command
 
 ```
-npm run cmd:stakeSafe -w @safenet/contracts -- --rpc-url http://127.0.0.1:8545 --broadcast --sender 0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266 --account sender-keystore-account
+just contracts-stake-safe --rpc-url http://127.0.0.1:8545 --broadcast --sender 0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266 --account sender-keystore-account
 ```
 
 ### Withdraw SAFE Token
@@ -168,11 +168,11 @@ Note: If you want to explicitly provide a staking contract address, you can set 
 ##### Initiate Withdraw
 
 ```
-npm run cmd:initiateWithdraw -w @safenet/contracts -- --rpc-url http://127.0.0.1:8545 --broadcast --sender 0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266 --account sender-keystore-account
+just contracts-initiate-withdraw --rpc-url http://127.0.0.1:8545 --broadcast --sender 0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266 --account sender-keystore-account
 ```
 
 ##### Claim Withdraw
 
 ```
-npm run cmd:claimWithdraw -w @safenet/contracts -- --rpc-url http://127.0.0.1:8545 --broadcast --sender 0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266 --account sender-keystore-account
+just contracts-claim-withdraw --rpc-url http://127.0.0.1:8545 --broadcast --sender 0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266 --account sender-keystore-account
 ```
