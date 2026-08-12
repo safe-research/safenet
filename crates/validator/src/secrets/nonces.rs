@@ -61,14 +61,21 @@ impl NonceGenerator {
         future.await
     }
 
-    /// Stops the background stream for `group_id`.
+    /// Retain nonce generation background streams for the provided groups that
+    /// match the provided predicate. All other streams are stopped.
     ///
     /// An already accepted request may still receive its generated chunk while
     /// the worker drains the disconnected request channel.
-    pub fn stop(&self, group_id: B256) {
-        if let Ok(mut groups) = self.groups.lock() {
-            groups.remove(&group_id);
-        }
+    pub fn retain(&self, mut keep: impl FnMut(&B256) -> bool) -> Result<(), Error> {
+        let mut groups = self.groups.lock()?;
+        groups.retain(|group_id, _| {
+            let keep = keep(group_id);
+            if !keep {
+                tracing::debug!(%group_id, "stopping nonce stream for group");
+            }
+            keep
+        });
+        Ok(())
     }
 }
 
@@ -246,7 +253,7 @@ mod tests {
 
         // Stopping unpolled requests fails the request.
         let pending = generator.next(group_id);
-        generator.stop(group_id);
+        generator.retain(|_| false).unwrap();
         assert_matches!(pending.await, Err(Error::Unavailable));
 
         // Subsequent requests for the stopped group error.

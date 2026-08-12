@@ -124,7 +124,7 @@ enum RolloverState {
         /// The group being generated.
         group: Group,
         /// This validator's participation.
-        participation: Box<KeyGenParticipation>,
+        participation: KeyGenParticipation,
         /// Verified participant public key shares.
         public_keys: BTreeMap<Address, PublicKeyShare>,
         /// Verified secret shares received from peers so far, keyed by
@@ -144,7 +144,7 @@ enum RolloverState {
         /// The group being generated.
         group: Group,
         /// This validator's participation.
-        participation: Box<KeyGenParticipation>,
+        participation: KeyGenParticipation,
         /// The status of the confirmation for the current validator.
         status: KeyGenConfirmation,
         /// Participants that have confirmed so far.
@@ -440,12 +440,14 @@ impl StateTransition<State> for Transition {
                 let (state, rollover_commands) = self.handle_rollover_new_block(state, block);
                 let (state, keygen_timeout_commands) = self.handle_key_gen_timeouts(state, block);
                 let (state, signing_timeout_commands) = self.handle_signing_timeouts(state, block);
+                let (state, reconciliation_commands) = self.handle_group_reconciliation(state);
                 (
                     state,
                     [
                         rollover_commands,
                         keygen_timeout_commands,
                         signing_timeout_commands,
+                        reconciliation_commands,
                     ]
                     .concat(),
                 )
