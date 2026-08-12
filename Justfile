@@ -4,6 +4,9 @@
 
 set shell := ["bash", "-euo", "pipefail", "-c"]
 
+# Configure the default container runtime to use for Just recipes.
+docker := env("DOCKER", "docker")
+
 # List available recipes.
 default:
     @just --list
@@ -20,6 +23,7 @@ check:
     npm --prefix explorer run check
     cargo fmt --all -- --check
     cargo clippy --workspace --all-targets --locked -- -D warnings
+    @just lint-openapi crates/sentinel-engine/openapi.yaml
 
 # Auto-fix formatting issues.
 fix:
@@ -43,6 +47,17 @@ coverage:
 # Install the pinned Foundry toolchain version.
 foundryup:
     foundryup --install v1.5.1
+
+# Install NPM dependencies.
+deps:
+    npm --prefix examples ci
+    npm --prefix explorer ci
+
+# Lints an OpenAPI specification file.
+lint-openapi spec:
+    {{docker}} run --rm \
+        -v $PWD/{{spec}}:/spec/openapi.yaml:ro,z \
+        ghcr.io/redocly/cli:2.46.0 lint --extends=spec openapi.yaml
 
 # Start the local Podman devnet. Pass through any run_devnet.sh flag, e.g.
 # `just devnet --build`.

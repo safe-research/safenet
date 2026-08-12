@@ -38,8 +38,7 @@ jobs:
       - uses: ./.github/actions/install-lcov
       - uses: ./.github/actions/install-cargo-llvm-cov
 
-      - run: npm ci --prefix examples
-      - run: npm ci --prefix explorer
+      - run: just deps
       - run: scripts/generate_coverage_report.sh
 
       - name: Post Coverage Step Summary
