@@ -212,7 +212,7 @@ while [ "$SECONDS" -lt "$DEADLINE" ]; do
             --from-block 0 \
             --to-block latest \
             --address "$CONSENSUS_ADDR" \
-            'TransactionProposed(bytes32,uint256,address,uint64,address,(uint256,address,address,uint256,bytes,uint8,uint256,uint256,uint256,address,address,uint256))')
+            'TransactionProposed(bytes32,bytes32,address,uint64,(uint256,address,address,uint256,bytes,uint8,uint256,uint256,uint256,address,address,uint256))')
         TRANSACTION_HASH=$(jq -er --arg epoch "$EPOCH_ONE_WORD" \
             '[.[] | select(.data | startswith($epoch))][-1].topics[1]' <<< "$PROPOSALS")
         TRANSACTION_PROPOSED=1
@@ -232,7 +232,7 @@ while [ "$SECONDS" -lt "$DEADLINE" ]; do
             --from-block 0 \
             --to-block latest \
             --address "$CONSENSUS_ADDR" \
-            'TransactionAttested(bytes32,uint256,address,uint64,address,bytes32,((uint256,uint256),uint256))')
+            'TransactionAttested(bytes32,bytes32,address,uint64,bytes32,((uint256,uint256),uint256))')
         TRANSACTION_ATTESTED=$(jq --arg hash "$TRANSACTION_HASH" --arg epoch "$EPOCH_ONE_WORD" \
             '[.[] | select((.topics[1] == $hash) and (.data | startswith($epoch)))] | length' <<< "$ATTESTATIONS")
     fi

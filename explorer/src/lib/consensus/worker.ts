@@ -2,7 +2,7 @@ import { expose } from "comlink";
 import type { Address, Hex } from "viem";
 import { createRpcClient } from "@/lib/rpc";
 import { loadConsensusState, loadEpochRolloverHistory, loadEpochsState } from "./epochs";
-import { loadProposedSafeTransaction, loadTransactionProposals } from "./transactions";
+import { loadProposedSafeTransaction, loadTransactionProposals, type SafeId } from "./transactions";
 
 const workerApi = {
 	loadTransactionProposals: ({
@@ -12,7 +12,7 @@ const workerApi = {
 		rpc: string;
 		consensus: Address;
 		safeTxHash?: Hex;
-		safe?: Address;
+		safeId?: SafeId;
 		toBlock?: bigint;
 		maxBlockRange: bigint;
 		signingTimeout: number;

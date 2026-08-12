@@ -42,7 +42,7 @@ export function useSafeTransactionProposals({
 			getConsensusWorker().loadTransactionProposals({
 				rpc: settings.rpc,
 				consensus: settings.consensus,
-				safe: safeAddress,
+				safeId: { chainId, safe: safeAddress },
 				toBlock,
 				maxBlockRange: BigInt(settings.maxBlockRange),
 				signingTimeout: settings.signingTimeout,

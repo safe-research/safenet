@@ -7,6 +7,7 @@ import {Consensus, IConsensus} from "@/Consensus.sol";
 import {FROST} from "@/libraries/FROST.sol";
 import {FROSTGroupId} from "@/libraries/FROSTGroupId.sol";
 import {FROSTSignatureId} from "@/libraries/FROSTSignatureId.sol";
+import {SafeId} from "@/libraries/SafeId.sol";
 import {SafeTransaction} from "@/libraries/SafeTransaction.sol";
 
 contract MockOracle {
@@ -148,7 +149,9 @@ contract ConsensusTest is Test {
         bytes32 safeTxHash = transaction.hash();
 
         vm.expectEmit(true, true, true, true);
-        emit IConsensus.TransactionProposed(safeTxHash, block.chainid, SAFE, 0, address(oracle), transaction);
+        emit IConsensus.TransactionProposed(
+            safeTxHash, SafeId.create(block.chainid, SAFE), address(oracle), 0, transaction
+        );
 
         consensus.proposeTransaction(address(oracle), "", transaction);
     }
@@ -176,7 +179,9 @@ contract ConsensusTest is Test {
         FROST.Signature memory emptySig = coordinator.signatureValue(signatureId);
 
         vm.expectEmit(true, true, true, true);
-        emit IConsensus.TransactionAttested(safeTxHash, block.chainid, SAFE, 0, address(oracle), signatureId, emptySig);
+        emit IConsensus.TransactionAttested(
+            safeTxHash, SafeId.create(block.chainid, SAFE), address(oracle), 0, signatureId, emptySig
+        );
 
         consensus.attestTransaction(0, address(oracle), block.chainid, SAFE, safeTxStructHash, signatureId);
     }

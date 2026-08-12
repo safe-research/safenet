@@ -10,6 +10,7 @@ import {ConsensusMessages} from "@/libraries/ConsensusMessages.sol";
 import {FROST} from "@/libraries/FROST.sol";
 import {FROSTGroupId} from "@/libraries/FROSTGroupId.sol";
 import {FROSTSignatureId} from "@/libraries/FROSTSignatureId.sol";
+import {SafeId} from "@/libraries/SafeId.sol";
 import {SafeTransaction} from "@/libraries/SafeTransaction.sol";
 import {Secp256k1} from "@/libraries/Secp256k1.sol";
 
@@ -257,7 +258,8 @@ contract Consensus is IConsensus, IERC165, IFROSTCoordinatorCallback {
         safeTxHash = transaction.hash();
         bytes32 message = domainSeparator().transactionProposal(epochs.active, oracle, safeTxHash);
         require($attestations[message].isZero(), AlreadyAttested());
-        emit TransactionProposed(safeTxHash, transaction.chainId, transaction.safe, epochs.active, oracle, transaction);
+        SafeId.T safeId = SafeId.create(transaction.chainId, transaction.safe);
+        emit TransactionProposed(safeTxHash, safeId, oracle, epochs.active, transaction);
         _COORDINATOR.sign($groups[epochs.active], message);
         IOracle(oracle).postRequest(message, msg.sender, oracleData);
     }
@@ -278,7 +280,8 @@ contract Consensus is IConsensus, IERC165, IFROSTCoordinatorCallback {
         require($attestations[message].isZero(), AlreadyAttested());
         FROST.Signature memory attestation = _COORDINATOR.signatureVerify(signatureId, $groups[epoch], message);
         $attestations[message] = signatureId;
-        emit TransactionAttested(safeTxHash, chainId, safe, epoch, oracle, signatureId, attestation);
+        SafeId.T safeId = SafeId.create(chainId, safe);
+        emit TransactionAttested(safeTxHash, safeId, oracle, epoch, signatureId, attestation);
     }
 
     /**
