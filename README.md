@@ -10,7 +10,7 @@ This is a work-in-progress. Don't use it yet!
 - [Services core crate](./crates/core) Shared logic between the offchain Safenet services (Rust)
 - [Sentinel](./crates/sentinel) Sentinel service that watches and puts up bonds in support of transaction correctness (Rust)
 - [Sentinel engine](./crates/sentinel-engine) Transaction verification service that the sentinel defers its checks to
-- [Validator (Rust port)](./crates/validator) Rust port of the validator service that participates in FROST signing rounds and epoch rollovers
+- [Validator](./crates/validator) Validator service that participates in FROST signing rounds and epoch rollovers
 
 ## Developing
 
@@ -73,9 +73,11 @@ just test-integration-validator
 
 Verbose logging for tests can be enabled by setting `SAFENET_TEST_VERBOSE=1`.
 
-### Rust Port
+### Rust Services
 
-Currently, the offchain services of the Safenet protocol are being ported to Rust. Use the standard Cargo commands to build/test/lint/format/etc. the Rust port:
+The offchain services of the Safenet protocol (`crates/validator`, `crates/sentinel`,
+`crates/sentinel-engine`) are implemented in Rust. Use the standard Cargo commands to
+build/test/lint/format/etc. them:
 
 ```sh
 cargo build
