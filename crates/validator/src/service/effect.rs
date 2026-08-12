@@ -29,10 +29,6 @@ pub enum Effect {
     },
     /// Start eagerly generating nonce chunks for a group. Idempotent within a
     /// process.
-    #[expect(
-        dead_code,
-        reason = "introduced ahead of state-machine nonce integration"
-    )]
     StartNonceGeneration {
         group_id: B256,
         key_share: Arc<KeyShare>,

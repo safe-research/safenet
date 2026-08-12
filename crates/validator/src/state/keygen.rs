@@ -10,7 +10,7 @@ use crate::{
     },
     frost::{
         self,
-        keygen::{GroupCommitments, KeyShare, Secrets},
+        keygen::{GroupCommitments, KeyShare, Secrets, SharingState, VerifiedShare},
     },
     service::{Action, Effect},
 };
@@ -344,16 +344,16 @@ impl Transition {
                     KeyGenParticipation::Participating(sharing_state)
                         if shares.len() as u16 == count =>
                     {
-                        match frost::keygen::finalize(sharing_state.clone(), shares) {
-                            Ok(key_share) => {
-                                commands.push(Command::Action(Action::KeyGenConfirm {
-                                    group_id: group.id(),
-                                    callback: self.key_gen_confirmation_callback(next_epoch),
-                                    expires_at: deadlines
-                                        .as_ref()
-                                        .map(|deadlines| deadlines.confirm),
-                                }));
-                                KeyGenConfirmation::Confirmed(Arc::new(key_share))
+                        match self.confirm_key_gen(
+                            next_epoch,
+                            &group,
+                            sharing_state.clone(),
+                            shares,
+                            deadlines.as_ref(),
+                        ) {
+                            Ok((status, confirm_commands)) => {
+                                commands.extend(confirm_commands);
+                                status
                             }
                             Err(err) => {
                                 // Finalization failures are unexpected, since
@@ -848,21 +848,22 @@ impl Transition {
                 && shares.len() as u16 == count
             {
                 let sharing_state = sharing_state.clone();
-                match frost::keygen::finalize(sharing_state, mem::take(shares)) {
-                    Ok(key_share) => {
-                        commands.push(Command::Action(Action::KeyGenConfirm {
-                            group_id: group.id(),
-                            callback: self.key_gen_confirmation_callback(next_epoch),
-                            expires_at: deadlines.as_ref().map(|deadlines| deadlines.confirm),
-                        }));
-                        *status = KeyGenConfirmation::Confirmed(Arc::new(key_share));
-                    }
+                let (new_status, confirm_commands) = match self.confirm_key_gen(
+                    next_epoch,
+                    group,
+                    sharing_state,
+                    mem::take(shares),
+                    deadlines.as_ref(),
+                ) {
+                    Ok(value) => value,
                     Err(err) => {
                         // Finalization failures are unexpected, as all secret
                         // shares were already verified.
                         return fail_rollover!(state, next_epoch, group.id(), err);
                     }
-                }
+                };
+                *status = new_status;
+                commands.extend(confirm_commands);
             }
         }
 
@@ -1226,6 +1227,35 @@ impl Transition {
         }
 
         (state, commands)
+    }
+
+    /// Encodes commands for confirming a newly established secret key share,
+    /// returning the updated confirmation status.
+    fn confirm_key_gen(
+        &self,
+        epoch: EpochId,
+        group: &Group,
+        sharing_state: SharingState,
+        shares: BTreeMap<Address, VerifiedShare>,
+        deadlines: Option<&ConfirmationDeadlines>,
+    ) -> Result<(KeyGenConfirmation, Commands<State, Self>), frost::error::Error> {
+        let key_share = frost::keygen::finalize(sharing_state, shares)?;
+        let key_share = Arc::new(key_share);
+
+        Ok((
+            KeyGenConfirmation::Confirmed(key_share.clone()),
+            vec![
+                Command::Action(Action::KeyGenConfirm {
+                    group_id: group.id(),
+                    callback: self.key_gen_confirmation_callback(epoch),
+                    expires_at: deadlines.map(|deadlines| deadlines.confirm),
+                }),
+                Command::Effect(Effect::StartNonceGeneration {
+                    group_id: group.id(),
+                    key_share,
+                }),
+            ],
+        ))
     }
 
     /// Builds the callback that proposes a regular epoch as soon as the final
