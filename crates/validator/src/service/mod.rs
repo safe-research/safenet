@@ -107,7 +107,7 @@ impl Service for ValidatorService {
                 consensus,
                 config,
             },
-            effect::Handler { account, secrets },
+            effect::Handler::new(account, secrets),
             action::Encoder {
                 coordinator,
                 consensus: consensus_address,

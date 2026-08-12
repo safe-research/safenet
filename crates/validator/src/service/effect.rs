@@ -7,7 +7,7 @@ use crate::{
         keygen::{KeyShare, Secrets},
         preprocess::Nonces,
     },
-    secrets::SecretStore,
+    secrets::{SecretStore, nonces::NonceGenerator},
 };
 use alloy::primitives::{Address, B256};
 use safenet_core::effects::EffectHandler;
@@ -15,7 +15,6 @@ use std::{
     error::Error,
     fmt::{self, Display, Formatter},
     sync::Arc,
-    time::Instant,
 };
 
 /// An impure operation the state transition asks the handler to perform.
@@ -28,7 +27,20 @@ pub enum Effect {
         count: u16,
         threshold: u16,
     },
+    /// Start eagerly generating nonce chunks for a group. Idempotent within a
+    /// process.
+    #[expect(
+        dead_code,
+        reason = "introduced ahead of state-machine nonce integration"
+    )]
+    StartNonceGeneration {
+        group_id: B256,
+        key_share: Arc<KeyShare>,
+    },
     /// Sample a fresh nonce tree for `key_share` and persist it.
+    ///
+    /// This compatibility effect starts the group's generator if necessary,
+    /// then takes its next generated chunk.
     NonceTree {
         group_id: B256,
         key_share: Arc<KeyShare>,
@@ -48,12 +60,34 @@ pub enum Effect {
         message: B256,
         sequence: u64,
     },
+    /// Reveal this validator's nonce commitment at `(root, offset)`.
+    #[expect(
+        dead_code,
+        reason = "introduced ahead of state-machine nonce integration"
+    )]
+    RevealNonceCommitmentsByRoot {
+        signature_id: B256,
+        message: B256,
+        root: B256,
+        offset: u64,
+    },
     /// Use this validator's own nonce for the signing round at `sequence`.
     /// Once the nonce is taken, it is burned and can no longer be used.
     UseNonce {
         group_id: B256,
         message: B256,
         sequence: u64,
+    },
+    /// Use this validator's own nonce at `(root, offset)`.
+    /// Once the nonce is taken, it is burned and can no longer be used.
+    #[expect(
+        dead_code,
+        reason = "introduced ahead of state-machine nonce integration"
+    )]
+    UseNonceByRoot {
+        message: B256,
+        root: B256,
+        offset: u64,
     },
     /// Check that at least [`NONCE_TOPUP_THRESHOLD`] nonces remain usable for
     /// `key_share`'s group from `(chunk, offset)` onward, generating and
@@ -102,12 +136,23 @@ pub enum Resume {
 /// Performs the validator's [`Effect`]s, resuming with a [`Resume`].
 pub struct Handler {
     /// The account of the running validator.
-    pub account: Address,
+    account: Address,
     /// The secret store containing randomly generated secrets.
-    pub secrets: SecretStore,
+    secrets: SecretStore,
+    /// Process-local streams that eagerly generate nonce chunks by group.
+    nonce_generator: NonceGenerator,
 }
 
 impl Handler {
+    /// Creates an effect handler with no active nonce generator streams.
+    pub fn new(account: Address, secrets: SecretStore) -> Self {
+        Self {
+            account,
+            secrets,
+            nonce_generator: NonceGenerator::new(),
+        }
+    }
+
     async fn try_perform_effect(&self, effect: Effect) -> Result<Resume, InternalError> {
         match effect {
             Effect::KeyGenSetup {
@@ -128,10 +173,20 @@ impl Handler {
                     secrets: Box::new(stored),
                 })
             }
+            Effect::StartNonceGeneration {
+                group_id,
+                key_share,
+            } => {
+                self.nonce_generator.start(group_id, key_share)?;
+                Ok(Resume::Noop)
+            }
             Effect::NonceTree {
                 group_id,
                 key_share,
-            } => self.sample_nonces(group_id, key_share).await,
+            } => {
+                self.nonce_generator.start(group_id, key_share)?;
+                self.next_nonce_tree(group_id).await
+            }
             Effect::LinkNonceTree {
                 group_id,
                 chunk,
@@ -164,6 +219,22 @@ impl Handler {
                     .unwrap_or(Resume::Noop);
                 Ok(result)
             }
+            Effect::RevealNonceCommitmentsByRoot {
+                signature_id,
+                message,
+                root,
+                offset,
+            } => Ok(self
+                .secrets
+                .nonces_reveal_by_root(root, offset)
+                .await?
+                .map(|(nonces, proof)| Resume::NonceCommitments {
+                    signature_id,
+                    message,
+                    nonces,
+                    proof,
+                })
+                .unwrap_or(Resume::Noop)),
             Effect::UseNonce {
                 group_id,
                 message,
@@ -184,6 +255,19 @@ impl Handler {
                     .unwrap_or(Resume::Noop);
                 Ok(result)
             }
+            Effect::UseNonceByRoot {
+                message,
+                root,
+                offset,
+            } => Ok(self
+                .secrets
+                .take_nonce_by_root(root, offset)
+                .await?
+                .map(|nonces| Resume::Nonce {
+                    message,
+                    nonces: Box::new(nonces),
+                })
+                .unwrap_or(Resume::Noop)),
             Effect::TopupNonces {
                 group_id,
                 key_share,
@@ -197,30 +281,26 @@ impl Handler {
                 if available >= NONCE_TOPUP_THRESHOLD {
                     return Ok(Resume::Noop);
                 }
-                return self.sample_nonces(group_id, key_share).await;
+                self.nonce_generator.start(group_id, key_share)?;
+                self.next_nonce_tree(group_id).await
             }
             Effect::PruneKeyGenSecrets { group_id } => {
                 self.secrets.prune_keygen_secrets(group_id).await?;
                 Ok(Resume::Noop)
             }
             Effect::PruneGroupNonces { group_id } => {
+                self.nonce_generator.stop(group_id);
                 self.secrets.prune_group_nonces(group_id).await?;
                 Ok(Resume::Noop)
             }
         }
     }
 
-    async fn sample_nonces(
-        &self,
-        group_id: B256,
-        key_share: Arc<KeyShare>,
-    ) -> Result<Resume, InternalError> {
-        let started = Instant::now();
-        let nonce_chunk = tokio::task::spawn_blocking(move || {
-            let mut rng = rand::thread_rng();
-            frost::preprocess::NonceChunk::generate(&key_share, &mut rng)
-        })
-        .await??;
+    async fn next_nonce_tree(&self, group_id: B256) -> Result<Resume, InternalError> {
+        let Some(nonce_chunk) = self.nonce_generator.next(group_id).await? else {
+            tracing::debug!(%group_id, "nonce chunk request already running; ignoring duplicate effect");
+            return Ok(Resume::Noop);
+        };
         let result = self
             .secrets
             .register_nonces_chunk(group_id, self.account, nonce_chunk)
@@ -232,11 +312,6 @@ impl Handler {
             // There is already a pending nonce chunk from an earlier
             // top-up; do not register a second one.
             .unwrap_or(Resume::Noop);
-        tracing::trace!(
-            %group_id,
-            elapsed_ms = started.elapsed().as_millis(),
-            "completed nonce tree sampling effect"
-        );
         Ok(result)
     }
 }
