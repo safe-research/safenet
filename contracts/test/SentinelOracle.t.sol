@@ -19,6 +19,7 @@ contract SentinelOracleTest is Test {
     uint256 constant COMMIT_WINDOW = 12;
     uint256 constant REVEAL_WINDOW = 12;
     uint256 constant GOVERNANCE_DELAY = 100;
+    uint256 constant INITIAL_DAO_FEE_SHARE = 0;
 
     bytes32 constant REQUEST_ID = keccak256("request-1");
     bytes32 constant SALT_1 = keccak256("salt-1");
@@ -66,7 +67,8 @@ contract SentinelOracleTest is Test {
             COMMIT_WINDOW,
             REVEAL_WINDOW,
             GOVERNANCE_DELAY,
-            BOND_MULTIPLIER
+            BOND_MULTIPLIER,
+            INITIAL_DAO_FEE_SHARE
         );
 
         // Fund accounts
@@ -194,6 +196,21 @@ contract SentinelOracleTest is Test {
 
         vm.prank(governance);
         oracle.scheduleFee(REQUEST_FEE + 1);
+    }
+
+    function test_ScheduleDaoFeeShare_OnlyGovernance() public {
+        address randomAddress = vm.createWallet("random").addr;
+
+        vm.expectRevert(SentinelOracle.NotGovernance.selector);
+        vm.prank(arbitrator);
+        oracle.scheduleDaoFeeShare(10_000);
+
+        vm.expectRevert(SentinelOracle.NotGovernance.selector);
+        vm.prank(randomAddress);
+        oracle.scheduleDaoFeeShare(10_000);
+
+        vm.prank(governance);
+        oracle.scheduleDaoFeeShare(10_000);
     }
 
     function test_ScheduleProtocolFundsReceiver_OnlyGovernance() public {
@@ -341,6 +358,82 @@ contract SentinelOracleTest is Test {
     }
 
     // ============================================================
+    // DAO FEE SHARE SCHEDULE/APPLY
+    // ============================================================
+
+    function test_ScheduleDaoFeeShare_AboveDenominator_Reverts() public {
+        // Precompute before arming expectRevert -- `FEE_SHARE_DENOMINATOR()` is itself an
+        // external call, and vm.expectRevert only intercepts the very next one.
+        uint256 tooHigh = oracle.FEE_SHARE_DENOMINATOR() + 1;
+        vm.expectRevert(SentinelOracle.InvalidFeeShare.selector);
+        vm.prank(governance);
+        oracle.scheduleDaoFeeShare(tooHigh);
+    }
+
+    function test_DaoFeeShare_ScheduleApplyRoundTrip() public {
+        uint256 newShare = 10_000;
+
+        assertEq(oracle.daoFeeShare(), INITIAL_DAO_FEE_SHARE, "starts at the constructor value");
+
+        vm.prank(governance);
+        oracle.scheduleDaoFeeShare(newShare);
+
+        assertEq(oracle.pendingDaoFeeShare(), newShare);
+        assertEq(oracle.daoFeeShare(), INITIAL_DAO_FEE_SHARE, "not active until the delay elapses");
+
+        // Applying too early is a no-op, not a revert -- it's permissionless and harmless to call
+        // speculatively.
+        oracle.applyDaoFeeShare();
+        assertEq(oracle.daoFeeShare(), INITIAL_DAO_FEE_SHARE, "still not active after an early apply");
+        assertEq(oracle.pendingDaoFeeShare(), newShare, "pending value survives an early apply");
+
+        vm.roll(block.number + GOVERNANCE_DELAY);
+        oracle.applyDaoFeeShare();
+
+        assertEq(oracle.daoFeeShare(), newShare, "takes effect once the delay has elapsed");
+        assertEq(oracle.pendingDaoFeeShare(), 0);
+        assertEq(oracle.pendingDaoFeeShareActiveAt(), 0);
+    }
+
+    function test_DaoFeeShare_RescheduleBeforeMaturity_OverwritesPending() public {
+        uint256 firstShare = 10_000;
+        uint256 secondShare = 20_000;
+
+        vm.startPrank(governance);
+        oracle.scheduleDaoFeeShare(firstShare);
+
+        // Governance notices the mistake before `firstShare` matures and corrects it -- this must
+        // overwrite the still-pending schedule, not revert.
+        oracle.scheduleDaoFeeShare(secondShare);
+        vm.stopPrank();
+
+        assertEq(oracle.pendingDaoFeeShare(), secondShare, "second schedule overwrites the first");
+        assertEq(oracle.daoFeeShare(), INITIAL_DAO_FEE_SHARE, "not active until the delay elapses");
+
+        vm.roll(block.number + GOVERNANCE_DELAY);
+        oracle.applyDaoFeeShare();
+
+        assertEq(oracle.daoFeeShare(), secondShare, "corrected value takes effect, not the mistake");
+    }
+
+    function test_ScheduleDaoFeeShare_RequestsInFlightKeepSnapshottedShare() public {
+        uint256 newShare = 10_000;
+
+        _postRequest();
+
+        vm.prank(governance);
+        oracle.scheduleDaoFeeShare(newShare);
+        vm.roll(block.number + GOVERNANCE_DELAY);
+
+        // The in-flight request was created before the new share matured -- its snapshotted
+        // `daoFeeShare` must not retroactively change even though `oracle.daoFeeShare()` now
+        // reports the new value.
+        assertEq(oracle.daoFeeShare(), newShare, "governed share has matured");
+        SentinelOracleRequest.Request memory req = oracle.getRequest(REQUEST_ID);
+        assertEq(req.daoFeeShare, INITIAL_DAO_FEE_SHARE, "in-flight request keeps its originally snapshotted share");
+    }
+
+    // ============================================================
     // EAGER APPLY ON ACTIVITY (NO EXPLICIT apply* CALL NEEDED)
     // ============================================================
 
@@ -381,6 +474,25 @@ contract SentinelOracleTest is Test {
 
         SentinelOracleRequest.Request memory req = oracle.getRequest(REQUEST_ID);
         assertEq(req.bondTarget, REQUEST_FEE * newMultiplier, "new request snapshots the newly-applied multiplier");
+    }
+
+    function test_PostRequest_EagerlyAppliesPendingDaoFeeShare() public {
+        uint256 newShare = 10_000;
+
+        vm.prank(governance);
+        oracle.scheduleDaoFeeShare(newShare);
+        vm.roll(block.number + GOVERNANCE_DELAY);
+
+        // Nobody ever calls `applyDaoFeeShare()` -- `postRequest` itself must flip the matured
+        // pending value into storage as a side effect of touching `$daoFeeShareConfig`.
+        _postRequest();
+
+        assertEq(oracle.daoFeeShare(), newShare, "postRequest applies the pending share");
+        assertEq(oracle.pendingDaoFeeShare(), 0, "pending slot cleared without a separate apply call");
+        assertEq(oracle.pendingDaoFeeShareActiveAt(), 0);
+
+        SentinelOracleRequest.Request memory req = oracle.getRequest(REQUEST_ID);
+        assertEq(req.daoFeeShare, newShare, "new request snapshots the newly-applied share");
     }
 
     function test_Finalize_EagerlyAppliesPendingProtocolFundsReceiver() public {
@@ -470,6 +582,52 @@ contract SentinelOracleTest is Test {
         );
         assertEq(
             token.balanceOf(sentinel2), sentinel2BalBefore + BOND_TARGET + REQUEST_FEE / 2, "sentinel2 claim incorrect"
+        );
+    }
+
+    function test_UnanimousApprove_DaoFeeShareCutGoesToProtocolFundsReceiver() public {
+        uint256 daoShare = 10_000; // 10% of the fee
+        vm.prank(governance);
+        oracle.scheduleDaoFeeShare(daoShare);
+        vm.roll(block.number + GOVERNANCE_DELAY);
+
+        _postRequest();
+        _commit(sentinel1, true, SALT_1);
+        _commit(sentinel2, true, SALT_2);
+        _advancePastCommitDeadline();
+        _reveal(sentinel1, true, SALT_1);
+        _reveal(sentinel2, true, SALT_2);
+
+        uint256 receiverBalBefore = token.balanceOf(protocolFundsReceiver);
+        uint256 expectedCut = REQUEST_FEE * daoShare / oracle.FEE_SHARE_DENOMINATOR();
+
+        oracle.finalize(REQUEST_ID);
+
+        assertEq(
+            token.balanceOf(protocolFundsReceiver),
+            receiverBalBefore + expectedCut,
+            "DAO's cut reaches the protocol funds receiver"
+        );
+
+        uint256 sentinel1BalBefore = token.balanceOf(sentinel1);
+        uint256 sentinel2BalBefore = token.balanceOf(sentinel2);
+
+        vm.prank(sentinel1);
+        oracle.claim(REQUEST_ID);
+        vm.prank(sentinel2);
+        oracle.claim(REQUEST_ID);
+
+        // Winning sentinels split only the post-cut remainder of the fee.
+        uint256 remainingFee = REQUEST_FEE - expectedCut;
+        assertEq(
+            token.balanceOf(sentinel1),
+            sentinel1BalBefore + BOND_TARGET + remainingFee / 2,
+            "sentinel1's reward reflects the post-cut fee"
+        );
+        assertEq(
+            token.balanceOf(sentinel2),
+            sentinel2BalBefore + BOND_TARGET + remainingFee / 2,
+            "sentinel2's reward reflects the post-cut fee"
         );
     }
 
@@ -587,6 +745,50 @@ contract SentinelOracleTest is Test {
         vm.prank(sentinel2);
         oracle.claim(REQUEST_ID);
         assertEq(token.balanceOf(sentinel2), s2Before, "sentinel2 bond slashed");
+    }
+
+    function test_Conflict_ArbitrationDaoFeeShare_ProposerRefundUnaffected() public {
+        uint256 daoShare = 10_000; // 10% of the fee
+        vm.prank(governance);
+        oracle.scheduleDaoFeeShare(daoShare);
+        vm.roll(block.number + GOVERNANCE_DELAY);
+
+        uint256 proposerBalBefore = token.balanceOf(proposer);
+        _postRequest();
+
+        _commit(sentinel1, true, SALT_1);
+        _commit(sentinel2, false, SALT_2);
+        _advancePastCommitDeadline();
+        _reveal(sentinel1, true, SALT_1);
+        _reveal(sentinel2, false, SALT_2);
+
+        oracle.finalize(REQUEST_ID);
+
+        uint256 receiverBalBefore = token.balanceOf(protocolFundsReceiver);
+        uint256 expectedCut = REQUEST_FEE * daoShare / oracle.FEE_SHARE_DENOMINATOR();
+
+        vm.prank(arbitrator);
+        oracle.resolveDispute(REQUEST_ID, true, "sentinel1's evidence was conclusive");
+
+        // The proposer's arbitration refund stays whole -- the DAO's cut comes only out of the
+        // winning sentinel's fee-equivalent reward, not this refund.
+        assertEq(
+            token.balanceOf(proposer), proposerBalBefore, "proposer balance fully restored, unaffected by daoFeeShare"
+        );
+        assertEq(
+            token.balanceOf(protocolFundsReceiver),
+            receiverBalBefore + BOND_TARGET - REQUEST_FEE + expectedCut,
+            "arbitration remainder and DAO's cut both land on the protocol funds receiver"
+        );
+
+        uint256 s1Before = token.balanceOf(sentinel1);
+        vm.prank(sentinel1);
+        oracle.claim(REQUEST_ID);
+        assertEq(
+            token.balanceOf(sentinel1),
+            s1Before + BOND_TARGET + (REQUEST_FEE - expectedCut),
+            "winning sentinel's fee reward reflects the DAO's cut"
+        );
     }
 
     function test_ResolveDispute_EmptyContext_Accepted() public {

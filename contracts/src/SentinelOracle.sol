@@ -47,6 +47,12 @@ contract SentinelOracle is IOracle {
     uint256 public immutable GOVERNANCE_DELAY;
 
     // ============================================================
+    // CONSTANTS
+    // ============================================================
+
+    uint256 public constant FEE_SHARE_DENOMINATOR = 100_000;
+
+    // ============================================================
     // STORAGE
     // ============================================================
 
@@ -58,6 +64,9 @@ contract SentinelOracle is IOracle {
 
     // forge-lint: disable-next-line(mixed-case-variable)
     DelayedUint256.T private $feeConfig;
+
+    // forge-lint: disable-next-line(mixed-case-variable)
+    DelayedUint256.T private $daoFeeShareConfig;
 
     // forge-lint: disable-next-line(mixed-case-variable)
     SentinelMap.T private $sentinelMap;
@@ -80,6 +89,7 @@ contract SentinelOracle is IOracle {
     error ZeroWindow();
     error SentinelNotActive();
     error NotRevealed();
+    error InvalidFeeShare();
 
     // ============================================================
     // MODIFIERS
@@ -113,7 +123,8 @@ contract SentinelOracle is IOracle {
         uint256 commitWindow,
         uint256 revealWindow,
         uint256 governanceDelay,
-        uint256 initialMultiplier
+        uint256 initialMultiplier,
+        uint256 initialDaoFeeShare
     ) {
         require(arbitrator != address(0), InvalidAddress());
         require(governance != address(0), InvalidAddress());
@@ -123,6 +134,7 @@ contract SentinelOracle is IOracle {
         require(requestFee > 0, ZeroFee());
         require(commitWindow > 0, ZeroWindow());
         require(revealWindow > 0, ZeroWindow());
+        require(initialDaoFeeShare <= FEE_SHARE_DENOMINATOR, InvalidFeeShare());
         ARBITRATOR = arbitrator;
         GOVERNANCE = governance;
         CONSENSUS = consensus;
@@ -133,6 +145,7 @@ contract SentinelOracle is IOracle {
         $bondConfig.init(initialMultiplier);
         $protocolFundsReceiverConfig.init(initialProtocolFundsReceiver);
         $feeConfig.init(requestFee);
+        $daoFeeShareConfig.init(initialDaoFeeShare);
     }
 
     // ============================================================
@@ -143,9 +156,12 @@ contract SentinelOracle is IOracle {
         require(msg.sender == CONSENSUS, NotConsensus());
         uint256 currentFee = $feeConfig.applyPending();
         uint256 bondTarget = currentFee * $bondConfig.applyPending();
+        uint256 currentDaoFeeShare = $daoFeeShareConfig.applyPending();
         uint256 commitDeadline = block.number + COMMIT_WINDOW;
         uint256 revealDeadline = commitDeadline + REVEAL_WINDOW;
-        $requests.create(requestId, proposer, currentFee, bondTarget, commitDeadline, revealDeadline);
+        $requests.create(
+            requestId, proposer, currentFee, bondTarget, currentDaoFeeShare, commitDeadline, revealDeadline
+        );
         FEE_TOKEN.safeTransferFrom(proposer, address(this), currentFee);
     }
 
@@ -184,25 +200,35 @@ contract SentinelOracle is IOracle {
         address proposer = req.proposer;
         (SentinelOracleRequest.State newState, uint256 refundFee, uint256 unrevealedBond) = req.finalize();
 
+        address fundsReceiver = $protocolFundsReceiverConfig.applyPending();
         if (unrevealedBond > 0) {
-            FEE_TOKEN.safeTransfer($protocolFundsReceiverConfig.applyPending(), unrevealedBond);
+            FEE_TOKEN.safeTransfer(fundsReceiver, unrevealedBond);
         }
 
         if (newState == SentinelOracleRequest.State.FROZEN) {
             return;
         }
 
+        if (newState == SentinelOracleRequest.State.TIMED_OUT) {
+            FEE_TOKEN.safeTransfer(proposer, refundFee);
+            emit OracleResult(requestId, proposer, abi.encode(SentinelOracleRequest.ResolveReason.TIMEOUT), false);
+            return;
+        }
+
+        uint256 daoCut = req.fee * req.daoFeeShare / FEE_SHARE_DENOMINATOR;
+        req.fee -= daoCut;
+        if (daoCut > 0) {
+            FEE_TOKEN.safeTransfer(fundsReceiver, daoCut);
+        }
+
         if (newState == SentinelOracleRequest.State.RESOLVED_APPROVED) {
             emit OracleResult(
                 requestId, proposer, abi.encode(SentinelOracleRequest.ResolveReason.UNANIMOUS_APPROVE), true
             );
-        } else if (newState == SentinelOracleRequest.State.RESOLVED_DENIED) {
+        } else {
             emit OracleResult(
                 requestId, proposer, abi.encode(SentinelOracleRequest.ResolveReason.UNANIMOUS_DENY), false
             );
-        } else {
-            FEE_TOKEN.safeTransfer(proposer, refundFee);
-            emit OracleResult(requestId, proposer, abi.encode(SentinelOracleRequest.ResolveReason.TIMEOUT), false);
         }
     }
 
@@ -237,9 +263,11 @@ contract SentinelOracle is IOracle {
         uint256 slashed = req.resolveDispute(approveWins);
         SentinelOracleRequest.State outcome = req.state;
         uint256 refundFee = req.fee;
+        uint256 daoCut = refundFee * req.daoFeeShare / FEE_SHARE_DENOMINATOR;
+        req.fee -= daoCut;
         address fundsReceiver = $protocolFundsReceiverConfig.applyPending();
         FEE_TOKEN.safeTransfer(proposer, refundFee);
-        FEE_TOKEN.safeTransfer(fundsReceiver, slashed - refundFee);
+        FEE_TOKEN.safeTransfer(fundsReceiver, slashed - refundFee + daoCut);
         emit DisputeResolved(requestId, outcome, slashed, context);
         emit OracleResult(requestId, proposer, abi.encode(SentinelOracleRequest.ResolveReason.ARBITRATION), approveWins);
     }
@@ -280,6 +308,15 @@ contract SentinelOracle is IOracle {
 
     function applyFee() external {
         $feeConfig.applyPending();
+    }
+
+    function scheduleDaoFeeShare(uint256 newValue) external onlyGovernance {
+        require(newValue <= FEE_SHARE_DENOMINATOR, InvalidFeeShare());
+        $daoFeeShareConfig.schedule(newValue, GOVERNANCE_DELAY);
+    }
+
+    function applyDaoFeeShare() external {
+        $daoFeeShareConfig.applyPending();
     }
 
     // ============================================================
@@ -324,6 +361,18 @@ contract SentinelOracle is IOracle {
 
     function pendingFeeActiveAt() external view returns (uint256) {
         return $feeConfig.pendingActiveAt;
+    }
+
+    function daoFeeShare() external view returns (uint256) {
+        return $daoFeeShareConfig.current();
+    }
+
+    function pendingDaoFeeShare() external view returns (uint256) {
+        return $daoFeeShareConfig.pendingValue;
+    }
+
+    function pendingDaoFeeShareActiveAt() external view returns (uint256) {
+        return $daoFeeShareConfig.pendingActiveAt;
     }
 
     function getRequest(bytes32 requestId) external view returns (SentinelOracleRequest.Request memory) {

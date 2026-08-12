@@ -26,6 +26,7 @@ BOND_MULTIPLIER=2
 COMMIT_WINDOW=5
 REVEAL_WINDOW=5
 GOVERNANCE_DELAY=0
+INITIAL_DAO_FEE_SHARE=0
 FUNDING_ETH=1ether
 FUNDING_TOKEN=1000000
 # Anvil account 0 — deployer, MyToken owner, and SentinelOracle arbitrator.
@@ -82,6 +83,7 @@ env \
 	SENTINEL_REVEAL_WINDOW="$REVEAL_WINDOW" \
 	SENTINEL_GOVERNANCE_DELAY="$GOVERNANCE_DELAY" \
 	SENTINEL_BOND_MULTIPLIER="$BOND_MULTIPLIER" \
+	SENTINEL_INITIAL_DAO_FEE_SHARE="$INITIAL_DAO_FEE_SHARE" \
 	forge script --root "$ROOT/contracts" DeploySentinelOracleScript --rpc-url "$RPC_URL" --private-key "$DEPLOYER_PK" --broadcast
 ORACLE=$(jq -r '.returns.sentinelOracle.value' "$ROOT/contracts/build/broadcast/DeploySentinelOracle.s.sol/$CHAIN_ID/run-latest.json")
 echo "Sentinel oracle deployed at $ORACLE"
@@ -203,9 +205,9 @@ done
 REQUEST=""
 for _ in $(seq 1 10); do
 	REQUEST=$(cast call --rpc-url "$RPC_URL" --json "$ORACLE" \
-		"getRequest(bytes32)((address,uint256,uint256,uint256,uint256,uint8,uint256,uint256,uint256,uint256))" \
+		"getRequest(bytes32)((address,uint256,uint256,uint256,uint256,uint256,uint8,uint256,uint256,uint256,uint256))" \
 		"$REQUEST_ID" 2>/dev/null) || true
-	STATE=$(echo "$REQUEST" | jq -r '.[0][5]' 2>/dev/null) || true
+	STATE=$(echo "$REQUEST" | jq -r '.[0][6]' 2>/dev/null) || true
 	[ "$STATE" = "2" ] && break
 	sleep "$BLOCK_TIME_SECONDS"
 done
@@ -215,7 +217,7 @@ if [ "$STATE" != "2" ]; then
 	echo "FAILED: expected state RESOLVED_APPROVED (2), got $STATE"
 	exit 1
 fi
-DENY_SENTINEL_COUNT=$(echo "$REQUEST" | jq -r '.[0][9]')
+DENY_SENTINEL_COUNT=$(echo "$REQUEST" | jq -r '.[0][10]')
 if [ "$DENY_SENTINEL_COUNT" != "0" ]; then
 	echo "FAILED: expected a unanimous approve vote, but denySentinelCount is $DENY_SENTINEL_COUNT"
 	exit 1
