@@ -1,6 +1,4 @@
-# Repo-wide command runner. Replaces the npm-workspaces layer that used to
-# front Foundry/Rust/Vite commands with `npm run` (see
-# epics/2026_08_09_remove_legacy_typescript_and_v1_oracle.md, Phase 8).
+# Repo-wide command runner.
 # `contracts/` has no JavaScript of its own, so its commands shell out to
 # `forge` directly rather than through a package.json front door.
 
