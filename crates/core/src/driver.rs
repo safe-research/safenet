@@ -12,6 +12,7 @@ use crate::{
     index::{self, Update, Watcher, events::Events},
     state::{self, StateMachine, StateTransition},
     tx::{self, Signer, Transaction, TransactionQueue},
+    utils,
 };
 use alloy::{primitives::Address, providers::Provider};
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
@@ -164,11 +165,7 @@ where
     /// short delay. Errors encountered after an update has been received are
     /// handled according to their component's recovery policy.
     pub async fn run(mut self) {
-        let shutdown = async {
-            if let Err(err) = tokio::signal::ctrl_c().await {
-                tracing::error!(?err, "signal handling error; shutting down");
-            }
-        };
+        let shutdown = utils::shutdown_signal();
         tokio::pin!(shutdown);
 
         loop {
