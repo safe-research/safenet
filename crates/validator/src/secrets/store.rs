@@ -278,6 +278,42 @@ impl SecretStore {
         }))
     }
 
+    /// Returns the public reveal of the nonce at `(root, offset)` without
+    /// removing it, or `None` when no such nonce is stored.
+    ///
+    /// Only [`Nonces::reveal`] information (the onchain commitments and merkle
+    /// proof) is returned, never the secret nonce itself. Because this is a
+    /// non-consuming read of public data, a state transition may call it
+    /// repeatedly - for example to re-emit a nonce reveal after a reorg -
+    /// without risking nonce reuse.
+    #[cfg_attr(
+        not(test),
+        expect(
+            dead_code,
+            reason = "introduced ahead of root-based nonce effect integration"
+        )
+    )]
+    pub async fn nonces_reveal_by_root(
+        &self,
+        root: B256,
+        offset: u64,
+    ) -> Result<Option<(bindings::SignNonces, Vec<B256>)>, Error> {
+        Ok(sqlx::query_scalar::<_, String>(
+            "SELECT nonce FROM nonces
+             WHERE root = ? AND offs = ?",
+        )
+        .bind(key(root))
+        .bind(i64::try_from(offset)?)
+        .fetch_optional(&self.pool)
+        .await?
+        .map(|nonce| serde_json::from_str::<Nonces>(&nonce))
+        .transpose()?
+        .map(|nonce| {
+            let (nonces, proof) = nonce.reveal();
+            (nonces, proof.to_vec())
+        }))
+    }
+
     /// Removes and returns the nonce at `offset` in the tree `me` linked to
     /// sequence `chunk` in `group`.
     ///
@@ -305,6 +341,39 @@ impl SecretStore {
         .bind(key(group))
         .bind(key(me))
         .bind(i64::try_from(chunk)?)
+        .bind(i64::try_from(offset)?)
+        .fetch_optional(&self.pool)
+        .await?
+        .map(|nonce| serde_json::from_str(&nonce))
+        .transpose()
+        .map_err(Error::from)
+    }
+
+    /// Removes and returns the nonce at `(root, offset)`.
+    ///
+    /// The nonce is **deleted** from the store, so a subsequent call (for
+    /// example a replay after a reorg) returns `None` and the transition
+    /// gracefully no-ops instead of reusing the nonce. Deletion is permanent
+    /// and not undone by a reorg; the returned nonce lives on only in the
+    /// snapshot state, which a reorg is free to roll back.
+    #[cfg_attr(
+        not(test),
+        expect(
+            dead_code,
+            reason = "introduced ahead of root-based nonce effect integration"
+        )
+    )]
+    pub async fn take_nonce_by_root(
+        &self,
+        root: B256,
+        offset: u64,
+    ) -> Result<Option<Nonces>, Error> {
+        sqlx::query_scalar::<_, String>(
+            "DELETE FROM nonces
+             WHERE root = ? AND offs = ?
+             RETURNING nonce",
+        )
+        .bind(key(root))
         .bind(i64::try_from(offset)?)
         .fetch_optional(&self.pool)
         .await?
@@ -425,6 +494,15 @@ mod tests {
         .fetch_one(&store.pool)
         .await
         .unwrap();
+        u64::try_from(count).unwrap()
+    }
+
+    async fn count_root_nonces(store: &SecretStore, root: B256) -> u64 {
+        let count = sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM nonces WHERE root = ?")
+            .bind(key(root))
+            .fetch_one(&store.pool)
+            .await
+            .unwrap();
         u64::try_from(count).unwrap()
     }
 
@@ -682,6 +760,87 @@ mod tests {
                 .unwrap()
                 .is_none()
         );
+    }
+
+    #[tokio::test]
+    async fn nonces_reveal_by_root_is_non_consuming() {
+        let store = store().await;
+        let root = store
+            .register_nonces_chunk(GROUP, ME, nonce_chunk(4))
+            .await
+            .unwrap()
+            .unwrap();
+
+        assert!(
+            store
+                .nonces_reveal_by_root(root, 1)
+                .await
+                .unwrap()
+                .is_some()
+        );
+        assert!(
+            store
+                .nonces_reveal_by_root(root, 1)
+                .await
+                .unwrap()
+                .is_some()
+        );
+        assert_eq!(count_root_nonces(&store, root).await, 4);
+
+        assert!(
+            store
+                .nonces_reveal_by_root(root, 99)
+                .await
+                .unwrap()
+                .is_none()
+        );
+        assert!(
+            store
+                .nonces_reveal_by_root(B256::repeat_byte(7), 1)
+                .await
+                .unwrap()
+                .is_none()
+        );
+    }
+
+    #[tokio::test]
+    async fn take_nonce_by_root_removes_it_permanently() {
+        let store = store().await;
+        let root = store
+            .register_nonces_chunk(GROUP, ME, nonce_chunk(4))
+            .await
+            .unwrap()
+            .unwrap();
+
+        assert!(store.take_nonce_by_root(root, 2).await.unwrap().is_some());
+        assert!(store.take_nonce_by_root(root, 2).await.unwrap().is_none());
+        assert_eq!(count_root_nonces(&store, root).await, 3);
+
+        assert!(
+            store
+                .nonces_reveal_by_root(root, 0)
+                .await
+                .unwrap()
+                .is_some()
+        );
+        assert!(store.take_nonce_by_root(root, 0).await.unwrap().is_some());
+        assert!(
+            store
+                .nonces_reveal_by_root(root, 0)
+                .await
+                .unwrap()
+                .is_none()
+        );
+        assert_eq!(count_root_nonces(&store, root).await, 2);
+
+        assert!(
+            store
+                .take_nonce_by_root(B256::repeat_byte(7), 0)
+                .await
+                .unwrap()
+                .is_none()
+        );
+        assert_eq!(count_root_nonces(&store, root).await, 2);
     }
 
     #[tokio::test]
