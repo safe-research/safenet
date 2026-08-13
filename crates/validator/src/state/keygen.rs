@@ -200,7 +200,7 @@ impl Transition {
                     Err(err) => {
                         // There was an issue with the verified commitments,
                         // which is an unexpected an unrecoverable error.
-                        return fail_rollover!(state, next_epoch, group.id(), err);
+                        return fail_rollover!(state, next_epoch, err);
                     }
                 };
 
@@ -209,7 +209,7 @@ impl Transition {
                         rollover: RolloverState::CollectingShares {
                             next_epoch,
                             group,
-                            participation: Box::new(participation),
+                            participation,
                             public_keys: BTreeMap::new(),
                             shares: BTreeMap::new(),
                             complaints: BTreeMap::new(),
@@ -277,7 +277,7 @@ impl Transition {
                 // If we are participating, also verify the encrypted key shares
                 // against our sharing state, and emit a complaint if required.
                 if let (KeyGenParticipation::Participating(sharing_state), Some(encrypted_shares)) =
-                    (&*participation, encrypted_shares)
+                    (&participation, encrypted_shares)
                 {
                     match frost::keygen::verify_encrypted_secret_share(
                         sharing_state,
@@ -340,7 +340,7 @@ impl Transition {
 
                 // Finalize our key share only if every share we received was
                 // valid; otherwise wait for the complaint flow to resolve.
-                let status = match &*participation {
+                let status = match &participation {
                     KeyGenParticipation::Participating(sharing_state)
                         if shares.len() as u16 == count =>
                     {
@@ -358,7 +358,7 @@ impl Transition {
                             Err(err) => {
                                 // Finalization failures are unexpected, since
                                 // all secret shares were already verified.
-                                return fail_rollover!(state, next_epoch, group.id(), err);
+                                return fail_rollover!(state, next_epoch, err);
                             }
                         }
                     }
@@ -685,20 +685,13 @@ impl Transition {
                 "restarting key generation after too many complaints"
             );
 
-            let old_group_id = group.id();
             let excluded = group.also_exclude(iter::once(event.accused));
 
-            return self.restart_key_gen_excluding(
-                state,
-                next_epoch,
-                old_group_id,
-                excluded,
-                restart_deadline,
-            );
+            return self.restart_key_gen_excluding(state, next_epoch, excluded, restart_deadline);
         }
 
         let mut commands = Vec::new();
-        if let KeyGenParticipation::Participating(sharing_state) = &**participation
+        if let KeyGenParticipation::Participating(sharing_state) = participation
             && event.accused == self.account
         {
             match frost::keygen::reveal_secret_share(sharing_state, event.plaintiff) {
@@ -813,7 +806,6 @@ impl Transition {
                     "invalid secret share revealed in response to a complaint"
                 );
 
-                let old_group_id = group.id();
                 let excluded = group.also_exclude(iter::once(event.accused));
                 let restart_deadline =
                     deadline.map(|_| block.saturating_add(self.config.key_gen_timeout.get()));
@@ -821,7 +813,6 @@ impl Transition {
                 return self.restart_key_gen_excluding(
                     state,
                     next_epoch,
-                    old_group_id,
                     excluded,
                     restart_deadline,
                 );
@@ -844,7 +835,7 @@ impl Transition {
             if let (
                 KeyGenParticipation::Participating(sharing_state),
                 KeyGenConfirmation::Collecting(shares),
-            ) = (&**participation, &mut *status)
+            ) = (participation, &mut *status)
                 && shares.len() as u16 == count
             {
                 let sharing_state = sharing_state.clone();
@@ -860,7 +851,7 @@ impl Transition {
                     Err(err) => {
                         // Finalization failures are unexpected, as all secret
                         // shares were already verified.
-                        return fail_rollover!(state, next_epoch, group.id(), err);
+                        return fail_rollover!(state, next_epoch, err);
                     }
                 }
             }
@@ -873,8 +864,7 @@ impl Transition {
     /// the block reaches the rollover state's target epoch, stages the
     /// epoch (rolling `active_epoch` forward) if it was ready, then triggers
     /// a fresh key generation for whichever epoch is actually due now -
-    /// abandoning (and queuing for pruning) whatever attempt was in flight for
-    /// a now-stale target.
+    /// abandoning whatever attempt was in flight for a now-stale target.
     ///
     /// Genesis groups do not observe the rollover clock.
     pub(super) fn handle_rollover_new_block(
@@ -913,30 +903,6 @@ impl Transition {
             );
         }
 
-        // Whatever key generation was in flight for the stale target is being
-        // abandoned in favor of the epoch actually due now. Make sure to prune
-        // the key gen secrets (in case they weren't already pruned).
-        let mut prune_commands = Vec::new();
-        if let Some(group_id) = state.rollover.group_id() {
-            prune_commands.push(Command::Effect(Effect::PruneKeyGenSecrets { group_id }));
-        }
-
-        // Reap any old participating epochs for which there are no more
-        // signing ceremonies. This runs linearly through the entire signing
-        // ceremonies, but since it happens only once per rollover, we are OK
-        // with the performance hit.
-        let oldest_epoch = state
-            .signing
-            .values()
-            .map(|signing| signing.packet().epoch())
-            .fold(state.active_epoch, EpochId::min);
-        let reaped_epochs = split_off_front(&mut state.epochs, &oldest_epoch);
-        prune_commands.extend(reaped_epochs.values().map(|reaped| {
-            Command::Effect(Effect::PruneGroupNonces {
-                group_id: reaped.group.id(),
-            })
-        }));
-
         // Start a new keygen ceremony for the new next block, including
         // everyone again.
         let deadline = Some(block.saturating_add(self.config.key_gen_timeout.get()));
@@ -952,7 +918,7 @@ impl Transition {
             },
         );
 
-        let (state, keygen_commands) = match participants {
+        match participants {
             Some(participants) => self.start_key_gen(state, next_epoch, &participants, deadline),
             None => {
                 tracing::warn!(
@@ -969,9 +935,7 @@ impl Transition {
                     Vec::new(),
                 )
             }
-        };
-
-        (state, [keygen_commands, prune_commands].concat())
+        }
     }
 
     /// Retires participants whose round of the current key generation has
@@ -988,7 +952,7 @@ impl Transition {
         state: State,
         block: u64,
     ) -> (State, Commands<State, Self>) {
-        let Some((next_epoch, old_group_id, excluded)) = (match &state.rollover {
+        let Some((next_epoch, excluded)) = (match &state.rollover {
             RolloverState::CollectingCommitments {
                 next_epoch,
                 group,
@@ -1007,7 +971,7 @@ impl Transition {
                     "key generation commitment collection timed out"
                 );
                 let excluded = group.exclude_all_others(commitments.keys());
-                Some((*next_epoch, group.id(), excluded))
+                Some((*next_epoch, excluded))
             }
             RolloverState::CollectingShares {
                 next_epoch,
@@ -1030,7 +994,7 @@ impl Transition {
                     "key generation share collection timed out"
                 );
                 let excluded = group.exclude_all_others(public_keys.keys());
-                Some((*next_epoch, group.id(), excluded))
+                Some((*next_epoch, excluded))
             }
             RolloverState::CollectingConfirmations {
                 next_epoch,
@@ -1056,7 +1020,7 @@ impl Transition {
                 } else {
                     None
                 };
-                excluded.map(|excluded| (*next_epoch, group.id(), excluded))
+                excluded.map(|excluded| (*next_epoch, excluded))
             }
             _ => None,
         }) else {
@@ -1070,7 +1034,7 @@ impl Transition {
             "key generation timed out, restarting excluding stalled participants",
         );
         let deadline = Some(block.saturating_add(self.config.key_gen_timeout.get()));
-        self.restart_key_gen_excluding(state, next_epoch, old_group_id, excluded, deadline)
+        self.restart_key_gen_excluding(state, next_epoch, excluded, deadline)
     }
 
     /// Starts a key generation ceremony for `next_epoch` with `participants`,
@@ -1150,7 +1114,6 @@ impl Transition {
         &self,
         state: State,
         next_epoch: EpochId,
-        old_group_id: B256,
         excluded: BTreeSet<Address>,
         deadline: Option<u64>,
     ) -> (State, Commands<State, Self>) {
@@ -1171,7 +1134,7 @@ impl Transition {
             None
         };
 
-        let (state, mut commands) = match participants {
+        match participants {
             Some(participants) => self.start_key_gen(state, next_epoch, &participants, deadline),
             None => (
                 State {
@@ -1183,18 +1146,12 @@ impl Transition {
                 },
                 Vec::new(),
             ),
-        };
-
-        // Make sure to prune the secrets related to the old group.
-        commands.push(Command::Effect(Effect::PruneKeyGenSecrets {
-            group_id: old_group_id,
-        }));
-
-        (state, commands)
+        }
     }
 
-    /// Finalizes keygen, pruning any remaining DKG secrets, and triggering
-    /// nonces preprocessing.
+    /// Finalizes keygen and triggers nonces preprocessing. Any remaining DKG
+    /// secrets are pruned by the next group reconciliation, since the group
+    /// now has a key share (or none, if not participating).
     fn finalize_key_gen(
         &self,
         mut state: State,
@@ -1204,14 +1161,10 @@ impl Transition {
     ) -> (State, Commands<State, Self>) {
         let group_id = group.id();
 
-        // Schedule pruning of the DKG secrets for the finalized group - we do
-        // not need them anymore.
-        let mut commands = vec![Command::Effect(Effect::PruneKeyGenSecrets { group_id })];
-
         // If we are participating in the new group (in other words, we were
         // part of the DKG ceremony and key share), register the epoch in our
         // participating epochs map and generate a nonces chunk.
-        if let Some(key_share) = key_share {
+        let commands = if let Some(key_share) = key_share {
             state.epochs.insert(
                 epoch,
                 Epoch {
@@ -1219,11 +1172,13 @@ impl Transition {
                     key_share: key_share.clone(),
                 },
             );
-            commands.push(Command::Effect(Effect::NonceTree {
+            vec![Command::Effect(Effect::NonceTree {
                 group_id,
                 key_share,
-            }));
-        }
+            })]
+        } else {
+            Vec::new()
+        };
 
         (state, commands)
     }
@@ -1271,22 +1226,6 @@ impl RolloverState {
             RolloverState::Halted => None,
         }
     }
-
-    /// The ID of the group actively being generated for [`Self::next_epoch`],
-    /// if one has been created yet.
-    fn group_id(&self) -> Option<B256> {
-        match self {
-            RolloverState::WaitingForGenesis
-            | RolloverState::Halted
-            | RolloverState::EpochStaged { .. }
-            | RolloverState::EpochSkipped { .. } => None,
-            RolloverState::WaitingForSetup { group, .. }
-            | RolloverState::CollectingCommitments { group, .. }
-            | RolloverState::CollectingShares { group, .. }
-            | RolloverState::CollectingConfirmations { group, .. }
-            | RolloverState::SigningRollover { group, .. } => Some(group.id()),
-        }
-    }
 }
 
 impl KeyGenParticipation {
@@ -1331,45 +1270,17 @@ fn rollover_failure(next_epoch: EpochId, err: impl Display) -> RolloverState {
 // This is a macro instead of a function because keygen handlers partially move
 // `state.rollover` while matching its fields. The remaining `state` therefore
 // cannot be passed whole to a function, but a macro can reconstruct it at the
-// call site before scheduling the resolved group's secrets for pruning.
+// call site.
 macro_rules! fail_rollover {
-    ($state:ident, $next_epoch:expr, $group_id:expr, $err:expr) => {{
-        let (next_epoch, group_id, err) = ($next_epoch, $group_id, $err);
+    ($state:ident, $next_epoch:expr, $err:expr) => {{
+        let (next_epoch, err) = ($next_epoch, $err);
         (
             State {
                 rollover: rollover_failure(next_epoch, err),
                 ..($state)
             },
-            vec![Command::Effect(Effect::PruneKeyGenSecrets { group_id })],
+            Vec::new(),
         )
     }};
 }
 use fail_rollover;
-
-/// Splits off the front of a B-tree map up to (but not including) the provided
-/// key.
-fn split_off_front<K, V>(map: &mut BTreeMap<K, V>, key: &K) -> BTreeMap<K, V>
-where
-    K: Ord,
-{
-    // `BTreeMap` provides an API to split the back off of a B-tree, removing
-    // all items with key **greater than or equal to** the provided value. We
-    // can use this and just swap our mutable reference with the result.
-    let mut rest = map.split_off(key);
-    mem::swap(map, &mut rest);
-    rest
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn split_off_front_splits_strictly_below_key() {
-        let mut map = BTreeMap::from([(1, "a"), (2, "b"), (3, "c"), (4, "d"), (5, "e")]);
-        let front = split_off_front(&mut map, &3);
-
-        assert_eq!(front, BTreeMap::from([(1, "a"), (2, "b")]));
-        assert_eq!(map, BTreeMap::from([(3, "c"), (4, "d"), (5, "e")]));
-    }
-}
