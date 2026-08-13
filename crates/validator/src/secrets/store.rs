@@ -145,13 +145,6 @@ impl SecretStore {
     /// Specifying an empty `groups` will remove all DKG secrets.
     ///
     /// Idempotent.
-    #[cfg_attr(
-        not(test),
-        expect(
-            dead_code,
-            reason = "introduced ahead of state-machine secret reconciliation"
-        )
-    )]
     pub async fn retain_keygen_secrets(
         &self,
         groups: impl IntoIterator<Item = B256>,
@@ -450,13 +443,6 @@ impl SecretStore {
     /// Specifying an empty `groups` will remove all nonce trees and nonces.
     ///
     /// Idempotent.
-    #[cfg_attr(
-        not(test),
-        expect(
-            dead_code,
-            reason = "introduced ahead of state-machine secret reconciliation"
-        )
-    )]
     pub async fn retain_nonces(&self, groups: impl IntoIterator<Item = B256>) -> Result<(), Error> {
         self.retain_groups("nonces_chunks", groups).await
     }

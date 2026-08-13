@@ -12,6 +12,7 @@ use crate::{
 use alloy::primitives::{Address, B256};
 use safenet_core::effects::EffectHandler;
 use std::{
+    collections::BTreeMap,
     error::Error,
     fmt::{self, Display, Formatter},
     sync::Arc,
@@ -102,6 +103,17 @@ pub enum Effect {
     PruneKeyGenSecrets { group_id: B256 },
     /// Prune a retired group's registered nonce trees.
     PruneGroupNonces { group_id: B256 },
+    /// Reconcile the process-local and persisted secrets with the groups
+    /// retained by the state machine, dropping all secret material belonging to
+    /// other groups. A key share starts or retains a nonce generator; `None`
+    /// retains the group's DKG secrets without running one.
+    #[expect(
+        dead_code,
+        reason = "introduced ahead of state-machine secret reconciliation"
+    )]
+    ReconcileGroupSecrets {
+        groups: BTreeMap<B256, Option<Arc<KeyShare>>>,
+    },
 }
 
 /// The remaining usable nonce count, per participating group, below which a
@@ -301,6 +313,36 @@ impl Handler {
             Effect::PruneGroupNonces { group_id } => {
                 self.nonce_generator.lock().await.stop(group_id);
                 self.secrets.prune_group_nonces(group_id).await?;
+                Ok(Resume::Noop)
+            }
+            Effect::ReconcileGroupSecrets { groups } => {
+                self.secrets
+                    .retain_keygen_secrets(
+                        groups
+                            .iter()
+                            .filter_map(|(group_id, key_share)| {
+                                key_share.is_none().then_some(*group_id)
+                            })
+                            // Collecting here is unfortunately required for the
+                            // compiler to correctly resolve lifetimes of our
+                            // future; in theory it should not be needed.
+                            .collect::<Vec<_>>(),
+                    )
+                    .await?;
+                self.secrets.retain_nonces(groups.keys().copied()).await?;
+
+                let mut nonce_generator = self.nonce_generator.lock().await;
+                nonce_generator.retain(|group_id| {
+                    groups
+                        .get(group_id)
+                        .is_some_and(|key_share| key_share.is_some())
+                });
+                for (group_id, key_share) in groups {
+                    let Some(key_share) = key_share else {
+                        continue;
+                    };
+                    nonce_generator.start(group_id, key_share)?;
+                }
                 Ok(Resume::Noop)
             }
         }
