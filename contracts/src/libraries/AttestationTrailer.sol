@@ -9,10 +9,12 @@ import {SignatureExtension} from "@/libraries/SignatureExtension.sol";
  * @title AttestationTrailer
  * @notice Recognises and decodes a Safenet attestation carried as a {SignatureExtension} on Safe's
  *         `signatures` bytes.
- * @dev The attestation is a typed signature extension: its payload is the fixed 224-byte
- *      `abi.encode(uint64 epoch, address oracle, Secp256k1.Point groupKey, FROST.Signature signature)`,
+ * @dev The attestation is a typed signature extension: its payload is the fixed 256-byte
+ *      `abi.encode(uint64 epoch, address oracle, bytes32 oracleDataHash, Secp256k1.Point groupKey, FROST.Signature signature)`,
  *      tagged by the terminal `TYPE_HASH`. The `oracle` is the oracle contract the attestation was gated
- *      by; the guard reconstructs the consensus `OracleTransactionProposal` message from it. The envelope
+ *      by, and `oracleDataHash` is the keccak256 of the data it was gated with; the guard reconstructs the
+ *      consensus `TransactionProposal` message from them (the raw oracleData is not needed on-chain and
+ *      stays with the oracle contract). The envelope
  *      framing (length word + type hash, tail-anchored so Safe's front-to-back signature parser is
  *      untouched) is owned by {SignatureExtension}; this library owns only the guard-specific type hash
  *      and payload schema.
@@ -28,16 +30,16 @@ library AttestationTrailer {
     bytes32 internal constant TYPE_HASH = keccak256("SafenetGuard.AttestationTrailer.v1");
 
     /**
-     * @dev Payload is `abi.encode(uint64, address, Secp256k1.Point, FROST.Signature)` = 7 words = 224 bytes.
+     * @dev Payload is `abi.encode(uint64, address, bytes32, Secp256k1.Point, FROST.Signature)` = 8 words = 256 bytes.
      */
-    uint256 private constant _PAYLOAD_LENGTH = 224;
+    uint256 private constant _PAYLOAD_LENGTH = 256;
 
     // ============================================================
     // ERRORS
     // ============================================================
 
     /**
-     * @notice Thrown when a recognised trailer's payload is not the expected 224-byte attestation.
+     * @notice Thrown when a recognised trailer's payload is not the expected 256-byte attestation.
      */
     error MalformedAttestationTrailer();
 
@@ -59,21 +61,28 @@ library AttestationTrailer {
      * @notice Decodes the attestation from a trailer-bearing `signatures` blob.
      * @dev Self-verifying via {SignatureExtension.payload}: reverts `MalformedSignatureExtension` if the
      *      envelope itself is malformed, and `MalformedAttestationTrailer` if the payload is not the fixed
-     *      224-byte attestation — a recognised trailer never yields partial or wrongly-sized data.
+     *      256-byte attestation — a recognised trailer never yields partial or wrongly-sized data.
      * @param signatures The Safe `signatures` blob ending in an attestation trailer.
      * @return epoch The attested epoch.
      * @return oracle The oracle contract the attestation was gated by.
+     * @return oracleDataHash The keccak256 of the oracle data bound into the attested message.
      * @return groupKey The attesting FROST group key.
      * @return signature The FROST signature.
      */
     function decode(bytes calldata signatures)
         internal
         pure
-        returns (uint64 epoch, address oracle, Secp256k1.Point memory groupKey, FROST.Signature memory signature)
+        returns (
+            uint64 epoch,
+            address oracle,
+            bytes32 oracleDataHash,
+            Secp256k1.Point memory groupKey,
+            FROST.Signature memory signature
+        )
     {
         bytes calldata payloadData = SignatureExtension.payload(signatures, TYPE_HASH);
         require(payloadData.length == _PAYLOAD_LENGTH, MalformedAttestationTrailer());
-        (epoch, oracle, groupKey, signature) =
-            abi.decode(payloadData, (uint64, address, Secp256k1.Point, FROST.Signature));
+        (epoch, oracle, oracleDataHash, groupKey, signature) =
+            abi.decode(payloadData, (uint64, address, bytes32, Secp256k1.Point, FROST.Signature));
     }
 }

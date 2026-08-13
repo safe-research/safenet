@@ -198,8 +198,13 @@ contract SafenetGuard is ISafenetGuard, BaseTransactionGuard {
         if (_isAutoAllowed(to, value, data, operation)) return;
 
         if (AttestationTrailer.hasTrailer(signatures)) {
-            (uint64 epoch, address oracle, Secp256k1.Point memory groupKey, FROST.Signature memory signature) =
-                AttestationTrailer.decode(signatures);
+            (
+                uint64 epoch,
+                address oracle,
+                bytes32 oracleDataHash,
+                Secp256k1.Point memory groupKey,
+                FROST.Signature memory signature
+            ) = AttestationTrailer.decode(signatures);
             // Cheap forest-membership check first (also implies a non-zero key, enforced on record), so an
             // untrusted key short-circuits before the more expensive Safe tx hash is computed.
             require($epochs.isKnown(groupKey, epoch), UntrustedAttestationKey());
@@ -220,15 +225,13 @@ contract SafenetGuard is ISafenetGuard, BaseTransactionGuard {
                     nonce: nonce
                 })
             );
-            // The attestation binds the oracle it was gated by. Having verified the (groupKey, epoch) is a
-            // known forest member (above), the guard rebuilds the exact message the network signed. Which
-            // oracle is acceptable is a Validator-side policy (they only attest on results from an oracle
-            // they honour), not enforced here. The trailer does not yet carry `oracleData` (empty in every
-            // current proposal), so the message binds `keccak256("")`; the trailer is extended to carry and
-            // verify a real oracleData hash in a follow-up.
-            // forge-lint: disable-next-line(asm-keccak256)
+            // The attestation binds the oracle it was gated by and the oracleData (by its hash) it was gated
+            // with. Having verified the (groupKey, epoch) is a known forest member (above), the guard rebuilds
+            // the exact message the network signed. The guard neither pins the oracle nor validates the
+            // oracleData; which oracle is acceptable is a Validator-side policy (they only attest on results
+            // from an oracle they honour), not enforced here.
             bytes32 message = ConsensusMessages.transactionProposal(
-                _CONSENSUS_DOMAIN_SEPARATOR, epoch, oracle, keccak256(""), safeTxHash
+                _CONSENSUS_DOMAIN_SEPARATOR, epoch, oracle, oracleDataHash, safeTxHash
             );
             FROST.verify(groupKey, signature, message);
             return;

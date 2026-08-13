@@ -169,19 +169,28 @@ contract SafenetGuardTest is Test {
     }
 
     /// @dev Builds an inline FROST attestation as a signature extension:
-    ///      `[224-byte abi.encode(epoch, oracle, groupKey, signature)][uint256 payloadLength = 224][32-byte TYPE_HASH]`.
+    ///      `[256-byte abi.encode(epoch, oracle, oracleDataHash, groupKey, signature)][uint256 payloadLength = 256][32-byte TYPE_HASH]`.
     ///      The FROST signature is over the oracle-transaction-proposal message; the group key is derived
     ///      from `sk` so it matches the signing key. Uses `ORACLE_ADDR` as the gating oracle.
     function _buildInlineAttestation(bytes32 txHash, uint64 epoch, uint256 sk, uint256 nk)
         internal
         returns (bytes memory)
     {
+        return _buildInlineAttestation(txHash, epoch, sk, nk, hex"");
+    }
+
+    /// @dev Like the four-argument overload, but binds an explicit `oracleData` into the attested message;
+    ///      the trailer carries only its keccak256 hash (the fifth payload field, next to the oracle).
+    function _buildInlineAttestation(bytes32 txHash, uint64 epoch, uint256 sk, uint256 nk, bytes memory oracleData)
+        internal
+        returns (bytes memory)
+    {
         Secp256k1.Point memory groupKey = ForgeSecp256k1.g(sk).toPoint();
         bytes32 message = ConsensusMessages.transactionProposal(
-            guard.getConsensusDomainSeparator(), epoch, ORACLE_ADDR, keccak256(hex""), txHash
+            guard.getConsensusDomainSeparator(), epoch, ORACLE_ADDR, keccak256(oracleData), txHash
         );
         FROST.Signature memory sig = _frostSign(sk, nk, message);
-        bytes memory payload = abi.encode(epoch, ORACLE_ADDR, groupKey, sig); // 224 bytes
+        bytes memory payload = abi.encode(epoch, ORACLE_ADDR, keccak256(oracleData), groupKey, sig); // 256 bytes
         return bytes.concat(payload, abi.encode(payload.length), AttestationTrailer.TYPE_HASH);
     }
 
@@ -375,6 +384,42 @@ contract SafenetGuardTest is Test {
         _execSafeTx(TX_TO, TX_VALUE, TX_DATA, TX_OP, ExecMode.Attested); // must not revert
     }
 
+    function test_checkTransaction_passesWithOracleData() public {
+        // A non-empty oracleData, bound into the signed message and carried (as its hash) in the trailer.
+        uint256 nonce = safe.nonce();
+        bytes32 txHash = _safeTxHash(TX_TO, TX_VALUE, TX_DATA, TX_OP, nonce);
+        bytes memory trailer = _buildInlineAttestation(txHash, GENESIS_EPOCH, GENESIS_SK, GENESIS_NK, hex"c0ffee");
+        safe.execTransaction(
+            TX_TO,
+            TX_VALUE,
+            TX_DATA,
+            TX_OP,
+            0,
+            0,
+            0,
+            address(0),
+            payable(address(0)),
+            bytes.concat(_signSafeTx(txHash), trailer)
+        ); // must not revert
+    }
+
+    function test_checkTransaction_revertsWhenOracleDataTampered() public {
+        // Signature is over one oracleData, but a different oracleDataHash is carried in the trailer, so the
+        // guard rebuilds a message the group never signed and FROST verification fails.
+        uint256 nonce = safe.nonce();
+        bytes32 txHash = _safeTxHash(TX_TO, TX_VALUE, TX_DATA, TX_OP, nonce);
+        bytes32 message = ConsensusMessages.transactionProposal(
+            guard.getConsensusDomainSeparator(), GENESIS_EPOCH, ORACLE_ADDR, keccak256(hex"c0ffee"), txHash
+        );
+        FROST.Signature memory sig = _frostSign(GENESIS_SK, GENESIS_NK, message);
+        bytes memory payload =
+            abi.encode(GENESIS_EPOCH, ORACLE_ADDR, keccak256(hex"beef"), ForgeSecp256k1.g(GENESIS_SK).toPoint(), sig);
+        bytes memory combined =
+            bytes.concat(_signSafeTx(txHash), payload, abi.encode(payload.length), AttestationTrailer.TYPE_HASH);
+        vm.expectRevert(Secp256k1.InvalidMulMulAddWitness.selector);
+        safe.execTransaction(TX_TO, TX_VALUE, TX_DATA, TX_OP, 0, 0, 0, address(0), payable(address(0)), combined);
+    }
+
     function test_checkTransaction_revertsWithUntrustedKey() public {
         // A well-formed attestation whose group key was never recorded in the forest.
         uint256 nonce = safe.nonce();
@@ -441,7 +486,8 @@ contract SafenetGuardTest is Test {
         );
         FROST.Signature memory sig = _frostSign(GENESIS_SK, GENESIS_NK, message);
         sig.z = addmod(sig.z, 1, Secp256k1.N); // tamper
-        bytes memory payload = abi.encode(GENESIS_EPOCH, ORACLE_ADDR, ForgeSecp256k1.g(GENESIS_SK).toPoint(), sig);
+        bytes memory payload =
+            abi.encode(GENESIS_EPOCH, ORACLE_ADDR, keccak256(hex""), ForgeSecp256k1.g(GENESIS_SK).toPoint(), sig);
         bytes memory combined =
             bytes.concat(_signSafeTx(txHash), payload, abi.encode(payload.length), AttestationTrailer.TYPE_HASH);
         vm.expectRevert(Secp256k1.InvalidMulMulAddWitness.selector);
@@ -867,8 +913,8 @@ contract SafenetGuardTest is Test {
         safe.execTransaction(TX_TO, TX_VALUE, TX_DATA, TX_OP, 0, 0, 0, address(0), payable(address(0)), combined);
     }
 
-    /// @notice A well-formed signature-extension envelope whose payload is not the 224-byte attestation
-    ///         fails closed at the guard level with `MalformedAttestationTrailer` — the `payloadLength != 224`
+    /// @notice A well-formed signature-extension envelope whose payload is not the 256-byte attestation
+    ///         fails closed at the guard level with `MalformedAttestationTrailer` - the `payloadLength != 256`
     ///         shape, exercised end-to-end through `execTransaction`.
     function test_trailer_wrongPayloadSizeReverts() public {
         uint256 nonce = safe.nonce();
