@@ -65,6 +65,21 @@ impl NonceGenerator {
     pub fn stop(&mut self, group_id: B256) {
         self.groups.remove(&group_id);
     }
+
+    /// Stops the background stream of every group that does not match the
+    /// `keep` predicate.
+    ///
+    /// Outstanding requests for the stopped groups fail with
+    /// [`Error::Unavailable`].
+    pub fn retain(&mut self, mut keep: impl FnMut(&B256) -> bool) {
+        self.groups.retain(|group_id, _| {
+            let keep = keep(group_id);
+            if !keep {
+                tracing::debug!(%group_id, "stopping nonce stream for group");
+            }
+            keep
+        });
+    }
 }
 
 /// Parameters for sampling random nonce chunks.

@@ -12,6 +12,7 @@ use crate::{
 use alloy::primitives::{Address, B256};
 use safenet_core::effects::EffectHandler;
 use std::{
+    collections::{BTreeMap, BTreeSet},
     error::Error,
     fmt::{self, Display, Formatter},
     sync::Arc,
@@ -102,6 +103,17 @@ pub enum Effect {
     PruneKeyGenSecrets { group_id: B256 },
     /// Prune a retired group's registered nonce trees.
     PruneGroupNonces { group_id: B256 },
+    /// Reconcile the process-local and persisted secrets with the groups
+    /// retained by the state machine, dropping all secret material belonging to
+    /// other groups. A key share starts or retains a nonce generator; `None`
+    /// retains the group's DKG secrets without running one.
+    #[expect(
+        dead_code,
+        reason = "introduced ahead of state-machine secret reconciliation"
+    )]
+    ReconcileGroupSecrets {
+        groups: BTreeMap<B256, Option<Arc<KeyShare>>>,
+    },
 }
 
 /// The remaining usable nonce count, per participating group, below which a
@@ -301,6 +313,35 @@ impl Handler {
             Effect::PruneGroupNonces { group_id } => {
                 self.nonce_generator.lock().await.stop(group_id);
                 self.secrets.prune_group_nonces(group_id).await?;
+                Ok(Resume::Noop)
+            }
+            Effect::ReconcileGroupSecrets { groups } => {
+                // We only need to keep keygen secrets for groups that are still
+                // in DKG and do not yet have a key share, and nonces (both in
+                // the secret store and the nonce generator) for groups that
+                // have completed DKG to the point that their key share is
+                // constructed.
+                let (keygen, nonces) = groups.into_iter().fold(
+                    (BTreeSet::new(), BTreeMap::new()),
+                    |(mut keygen, mut nonces), (group_id, key_share)| {
+                        if let Some(key_share) = key_share {
+                            nonces.insert(group_id, key_share);
+                        } else {
+                            keygen.insert(group_id);
+                        }
+                        (keygen, nonces)
+                    },
+                );
+
+                self.secrets.retain_keygen_secrets(keygen).await?;
+                self.secrets.retain_nonces(nonces.keys().copied()).await?;
+
+                let mut generator = self.nonce_generator.lock().await;
+                generator.retain(|group_id| nonces.contains_key(group_id));
+                for (group_id, key_share) in nonces {
+                    generator.start(group_id, key_share)?;
+                }
+
                 Ok(Resume::Noop)
             }
         }
