@@ -74,8 +74,8 @@ enum Sampler {
     /// Custom function for generating a nonces chunk.
     ///
     /// Used only for unit testing.
+    #[cfg(test)]
     #[allow(clippy::type_complexity)]
-    #[cfg_attr(not(test), expect(dead_code))]
     Custom(Box<dyn Fn(&mut ThreadRng) -> Result<NonceChunk, rand::Error> + Send + Sync + 'static>),
 }
 
@@ -83,6 +83,7 @@ impl Sampler {
     fn nonces_chunk(&self, rng: &mut ThreadRng) -> Result<NonceChunk, rand::Error> {
         match self {
             Self::Full(key_share) => NonceChunk::generate(key_share, rng),
+            #[cfg(test)]
             Self::Custom(generate) => generate(rng),
         }
     }
@@ -158,7 +159,14 @@ impl NonceStream {
                         tracing::debug!("nonces future was canceled; using next request");
                         request = new_request;
                     }
-                    Err(mpsc::TryRecvError::Empty) => break,
+                    Err(mpsc::TryRecvError::Empty) => {
+                        // The `requests` queue is empty - this means that we
+                        // finished draining it with `request` being the active
+                        // one _and_ the sending end has not been dropped,
+                        // indicating the nonces stream is still alive and we
+                        // should send over our computed nonce chunk.
+                        break;
+                    }
                     Err(mpsc::TryRecvError::Disconnected) => {
                         tracing::debug!("nonce stream closed mid-request; failing ongoing request");
                         return false;
