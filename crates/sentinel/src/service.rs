@@ -122,6 +122,7 @@ impl SentinelTransition {
             self.consensus,
             event.epoch,
             event.oracle,
+            event.oracleData.clone(),
             event.safeTxHash,
         );
         // A duplicate or re-delivered proposal for the same request must not
@@ -759,7 +760,7 @@ mod tests {
     use super::*;
     use crate::bindings::consensus::{Operation, SafeTransaction};
     use alloy::{
-        primitives::{address, keccak256},
+        primitives::{Bytes, address, keccak256},
         providers::Provider as _,
         signers::k256::ecdsa::SigningKey,
     };
@@ -828,7 +829,14 @@ mod tests {
     }
 
     fn request_id(safe_tx_hash: B256, epoch: u64, oracle: Address) -> B256 {
-        oracle_tx_proposal_hash(U256::from(CHAIN_ID), CONSENSUS, epoch, oracle, safe_tx_hash)
+        oracle_tx_proposal_hash(
+            U256::from(CHAIN_ID),
+            CONSENSUS,
+            epoch,
+            oracle,
+            Bytes::new(),
+            safe_tx_hash,
+        )
     }
 
     /// Mirrors `SafeId.create` in `contracts/src/libraries/SafeId.sol`: the chain ID occupies the
@@ -845,6 +853,7 @@ mod tests {
                 safeId: safe_id(CHAIN_ID, SAFE),
                 oracle,
                 epoch: 7,
+                oracleData: Bytes::new(),
                 transaction: safe_tx(to),
             },
         ))

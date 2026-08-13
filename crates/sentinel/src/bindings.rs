@@ -84,12 +84,13 @@ pub mod consensus {
 
         // EIP-712 struct for the oracle requestId.
         // Field order and types must exactly match the onchain typehash in ConsensusMessages.sol:
-        // keccak256("TransactionProposal(uint64 epoch,address oracle,bytes32 safeTxHash)")
+        // keccak256("TransactionProposal(uint64 epoch,address oracle,bytes oracleData,bytes32 safeTxHash)")
         // Domain: { chainId, verifyingContract: consensus }
         #[derive(Debug)]
         struct TransactionProposal {
             uint64 epoch;
             address oracle;
+            bytes oracleData;
             bytes32 safeTxHash;
         }
 
@@ -100,6 +101,7 @@ pub mod consensus {
                 bytes32 indexed safeId,
                 address indexed oracle,
                 uint64 epoch,
+                bytes oracleData,
                 SafeTransaction transaction
             );
         }
