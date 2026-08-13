@@ -61,9 +61,9 @@ pub enum SentinelRequestState {
         self_revealed: bool,
     },
     /// The local tally showed both sides had revealed votes (a dispute);
-    /// only our own vote needs to survive, to compare against the eventual
-    /// arbitration outcome.
-    WaitingForDisputeResolution { approve: bool },
+    /// nothing further needs tracking here, since `handle_resolved` always
+    /// claims once the arbitrator settles it, regardless of which side won.
+    WaitingForDisputeResolution,
 }
 
 impl SentinelRequestState {
@@ -74,7 +74,7 @@ impl SentinelRequestState {
             Self::WaitingForRequest { .. } => "waiting_for_request",
             Self::CollectingCommitments { .. } => "collecting_commitments",
             Self::CollectingVotes { .. } => "collecting_votes",
-            Self::WaitingForDisputeResolution { .. } => "waiting_for_dispute_resolution",
+            Self::WaitingForDisputeResolution => "waiting_for_dispute_resolution",
         }
     }
 }

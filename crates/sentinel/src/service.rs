@@ -4,7 +4,7 @@ use crate::{
     bindings::{
         SentinelEvents,
         consensus::Consensus,
-        oracle::{ERC20, RequestState as OnchainRequestState, SentinelOracle},
+        oracle::{ERC20, SentinelOracle},
     },
     checker::CheckOutcome,
     cow::CowChecker,
@@ -474,7 +474,7 @@ impl SentinelTransition {
                     }
                 }
             }
-            RequestState::WaitingForDisputeResolution { .. } => true,
+            RequestState::WaitingForDisputeResolution => true,
         });
 
         (state, actions)
@@ -482,15 +482,17 @@ impl SentinelTransition {
 
     /// Resolves a genuine dispute — `DisputeResolved` is only ever emitted by
     /// `resolveDispute`, i.e. only for a request that reached
-    /// `WaitingForDisputeResolution` — by claiming iff our own revealed vote
-    /// matches the arbitrator's outcome; drops the request either way.
+    /// `WaitingForDisputeResolution` — by always claiming, regardless of
+    /// which side won: bond slashing is partial, so even a losing vote can
+    /// leave an unslashed remainder (`bondTarget - slashAmount`) to reclaim,
+    /// and `claim()` pays out `0` extra on the losing side without reverting.
     fn handle_resolved(
         &self,
         mut state: State,
         event: SentinelOracle::DisputeResolved,
     ) -> (State, Commands<State, Self>) {
-        let approve = match state.0.remove(&event.requestId) {
-            Some(RequestState::WaitingForDisputeResolution { approve }) => approve,
+        match state.0.remove(&event.requestId) {
+            Some(RequestState::WaitingForDisputeResolution) => {}
             Some(entry) => {
                 tracing::warn!(
                     request_id = %event.requestId,
@@ -508,20 +510,15 @@ impl SentinelTransition {
                 return (state, Vec::new());
             }
         };
-        let approved = event.outcome == OnchainRequestState::RESOLVED_APPROVED;
-        let actions = if approved == approve {
-            vec![
-                SentinelAction {
-                    kind: SentinelActionKind::Claim {
-                        id: event.requestId,
-                    },
-                    expires_at: None,
-                }
-                .into(),
-            ]
-        } else {
-            Vec::new()
-        };
+        let actions = vec![
+            SentinelAction {
+                kind: SentinelActionKind::Claim {
+                    id: event.requestId,
+                },
+                expires_at: None,
+            }
+            .into(),
+        ];
         (state, actions)
     }
 
@@ -543,7 +540,6 @@ impl SentinelTransition {
         request_id: B256,
     ) -> (Option<RequestState>, Commands<State, Self>) {
         let RequestState::CollectingVotes {
-            approve,
             revealed_count,
             approve_count,
             deny_count,
@@ -553,7 +549,6 @@ impl SentinelTransition {
         else {
             return (None, Vec::new());
         };
-        let approve = *approve;
         let dispute = *approve_count > 0 && *deny_count > 0;
         let timed_out = *revealed_count == 0;
 
@@ -574,10 +569,7 @@ impl SentinelTransition {
         // In case of a dispute it is not a timeout, so this sentinel participated.
         // Finalize the request and wait for a dispute resolution by the arbitrator.
         if dispute {
-            return (
-                Some(RequestState::WaitingForDisputeResolution { approve }),
-                actions,
-            );
+            return (Some(RequestState::WaitingForDisputeResolution), actions);
         }
 
         // Unanimity plus our own counted vote guarantees this sentinel is on the
@@ -759,6 +751,7 @@ impl Service for SentinelService {
 mod tests {
     use super::*;
     use crate::bindings::consensus::{Operation, SafeTransaction};
+    use crate::bindings::oracle::RequestState as OnchainRequestState;
     use alloy::{
         primitives::{Bytes, address, keccak256},
         providers::Provider as _,
@@ -1283,10 +1276,7 @@ mod tests {
                 .into(),
             ],
         );
-        assert_eq!(
-            state.0[&id],
-            RequestState::WaitingForDisputeResolution { approve: true },
-        );
+        assert_eq!(state.0[&id], RequestState::WaitingForDisputeResolution);
 
         (svc, id, state)
     }
@@ -1311,15 +1301,27 @@ mod tests {
         );
     }
 
+    /// Bond slashing is partial, so a losing vote still leaves an unslashed
+    /// remainder to reclaim — `handle_resolved` must claim unconditionally,
+    /// not only when our own revealed vote matches the arbitration outcome.
     #[test]
-    fn flow_dispute_drops_without_claim_when_arbitration_contradicts_our_vote() {
+    fn flow_dispute_still_claims_when_arbitration_contradicts_our_vote() {
         let (svc, id, state) = setup_dispute();
         let event = dispute_resolved_event(id, OnchainRequestState::RESOLVED_DENIED, U256::ZERO);
 
         let (state, commands) = svc.apply_transition(state, Message::Event(log(50, event)));
 
         assert!(!state.0.contains_key(&id));
-        assert!(commands.is_empty());
+        assert_eq!(
+            commands,
+            vec![
+                SentinelAction {
+                    kind: SentinelActionKind::Claim { id },
+                    expires_at: None,
+                }
+                .into(),
+            ],
+        );
     }
 
     /// Nobody reveals at all — a genuine timeout with no other sentinel's
