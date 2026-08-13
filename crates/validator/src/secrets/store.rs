@@ -31,7 +31,7 @@ use alloy::{
     hex::ToHexExt,
     primitives::{Address, B256},
 };
-use sqlx::sqlite::SqlitePool;
+use sqlx::{QueryBuilder, Sqlite, sqlite::SqlitePool};
 use std::num::TryFromIntError;
 
 /// Error produced by the [`SecretStore`].
@@ -137,6 +137,26 @@ impl SecretStore {
             .execute(&self.pool)
             .await?;
         Ok(())
+    }
+
+    /// Deletes the DKG secrets of every group other than `groups`, reconciling
+    /// the stored secrets with the groups the state machine still tracks.
+    ///
+    /// Specifying an empty `groups` will remove all DKG secrets.
+    ///
+    /// Idempotent.
+    #[cfg_attr(
+        not(test),
+        expect(
+            dead_code,
+            reason = "introduced ahead of state-machine secret reconciliation"
+        )
+    )]
+    pub async fn retain_keygen_secrets(
+        &self,
+        groups: impl IntoIterator<Item = B256>,
+    ) -> Result<(), Error> {
+        self.retain_groups("keygen_secrets", groups).await
     }
 
     /// Persists the freshly generated preprocessing `chunk` for `me` in
@@ -422,6 +442,48 @@ impl SecretStore {
             .await?;
         Ok(())
     }
+
+    /// Deletes the nonce trees of every group other than `groups` (cascading to
+    /// their nonces), reconciling the stored nonces with the groups the state
+    /// machine still tracks.
+    ///
+    /// Specifying an empty `groups` will remove all nonce trees and nonces.
+    ///
+    /// Idempotent.
+    #[cfg_attr(
+        not(test),
+        expect(
+            dead_code,
+            reason = "introduced ahead of state-machine secret reconciliation"
+        )
+    )]
+    pub async fn retain_nonces(&self, groups: impl IntoIterator<Item = B256>) -> Result<(), Error> {
+        self.retain_groups("nonces_chunks", groups).await
+    }
+
+    /// Deletes every row in `table` whose `group_id` is not one of `groups`.
+    async fn retain_groups(
+        &self,
+        table: &'static str,
+        groups: impl IntoIterator<Item = B256>,
+    ) -> Result<(), Error> {
+        let mut groups = groups.into_iter().peekable();
+        let mut query = if groups.peek().is_none() {
+            QueryBuilder::<Sqlite>::new(format!("DELETE FROM {table}"))
+        } else {
+            let mut query =
+                QueryBuilder::<Sqlite>::new(format!("DELETE FROM {table} WHERE group_id NOT IN ("));
+            let mut retained = query.separated(", ");
+            for group in groups {
+                retained.push_bind(key(group));
+            }
+            retained.push_unseparated(")");
+            query
+        };
+
+        query.build().execute(&self.pool).await?;
+        Ok(())
+    }
 }
 
 /// Encodes a fixed-byte value (group id, nonce root or address) as its
@@ -452,11 +514,11 @@ mod tests {
         NonceChunk::with_size(size, &keygen::KeyShare::dummy(), &mut rand::thread_rng()).unwrap()
     }
 
-    async fn get_keygen_secrets(store: &SecretStore) -> Option<Secrets> {
+    async fn get_keygen_secrets(store: &SecretStore, group: B256) -> Option<Secrets> {
         sqlx::query_scalar::<_, String>(
             "SELECT secrets FROM keygen_secrets WHERE group_id = ? AND address = ?",
         )
-        .bind(key(GROUP))
+        .bind(key(group))
         .bind(key(ME))
         .fetch_optional(&store.pool)
         .await
@@ -495,7 +557,7 @@ mod tests {
     #[tokio::test]
     async fn keygen_secrets_roundtrip_and_missing() {
         let store = store().await;
-        assert!(get_keygen_secrets(&store).await.is_none());
+        assert!(get_keygen_secrets(&store, GROUP).await.is_none());
 
         let secrets = keygen_secrets();
         store
@@ -503,7 +565,7 @@ mod tests {
             .await
             .unwrap();
 
-        let read = get_keygen_secrets(&store).await.unwrap();
+        let read = get_keygen_secrets(&store, GROUP).await.unwrap();
         assert_eq!(
             serde_json::to_string(&read).unwrap(),
             serde_json::to_string(&secrets).unwrap(),
@@ -538,7 +600,7 @@ mod tests {
             serde_json::to_string(&first).unwrap(),
         );
 
-        let read = get_keygen_secrets(&store).await.unwrap();
+        let read = get_keygen_secrets(&store, GROUP).await.unwrap();
         assert_eq!(
             serde_json::to_string(&read).unwrap(),
             serde_json::to_string(&first).unwrap(),
@@ -554,9 +616,32 @@ mod tests {
             .unwrap();
 
         store.prune_keygen_secrets(GROUP).await.unwrap();
-        assert!(get_keygen_secrets(&store).await.is_none());
+        assert!(get_keygen_secrets(&store, GROUP).await.is_none());
         // Pruning again is a no-op.
         store.prune_keygen_secrets(GROUP).await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn retain_keygen_secrets_removes_unretained_groups() {
+        let store = store().await;
+        let other_group = B256::repeat_byte(0xb2);
+        for group in [GROUP, other_group] {
+            store
+                .store_keygen_secrets(group, ME, keygen_secrets())
+                .await
+                .unwrap();
+        }
+
+        store.retain_keygen_secrets([other_group]).await.unwrap();
+        assert!(get_keygen_secrets(&store, GROUP).await.is_none());
+        assert!(get_keygen_secrets(&store, other_group).await.is_some());
+        // Retaining the same group again is a no-op.
+        store.retain_keygen_secrets([other_group]).await.unwrap();
+        assert!(get_keygen_secrets(&store, other_group).await.is_some());
+
+        // Retaining no groups removes all DKG secrets.
+        store.retain_keygen_secrets([]).await.unwrap();
+        assert!(get_keygen_secrets(&store, other_group).await.is_none());
     }
 
     #[tokio::test]
@@ -848,5 +933,41 @@ mod tests {
         store.prune_group_nonces(GROUP).await.unwrap();
         // The cascade removed the nonces, so a use now no-ops.
         assert!(store.take_nonce(GROUP, ME, 0, 0).await.unwrap().is_none());
+    }
+
+    #[tokio::test]
+    async fn retain_nonces_removes_unretained_groups() {
+        let store = store().await;
+        let other_group = B256::repeat_byte(0xb2);
+        for group in [GROUP, other_group] {
+            let root = store
+                .register_nonces_chunk(group, ME, nonce_chunk(2))
+                .await
+                .unwrap()
+                .unwrap();
+            store.link_nonces_chunk(group, ME, 0, root).await.unwrap();
+        }
+
+        store.retain_nonces([other_group]).await.unwrap();
+        // The cascade removed the unretained group's nonces, so a use now
+        // no-ops, while the retained group's nonces remain usable.
+        assert!(store.take_nonce(GROUP, ME, 0, 0).await.unwrap().is_none());
+        assert!(
+            store
+                .take_nonce(other_group, ME, 0, 0)
+                .await
+                .unwrap()
+                .is_some()
+        );
+
+        // Retaining no groups removes all nonce trees.
+        store.retain_nonces([]).await.unwrap();
+        assert!(
+            store
+                .take_nonce(other_group, ME, 0, 1)
+                .await
+                .unwrap()
+                .is_none()
+        );
     }
 }
