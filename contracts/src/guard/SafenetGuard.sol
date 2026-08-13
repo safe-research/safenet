@@ -223,9 +223,13 @@ contract SafenetGuard is ISafenetGuard, BaseTransactionGuard {
             // The attestation binds the oracle it was gated by. Having verified the (groupKey, epoch) is a
             // known forest member (above), the guard rebuilds the exact message the network signed. Which
             // oracle is acceptable is a Validator-side policy (they only attest on results from an oracle
-            // they honour), not enforced here.
-            bytes32 message =
-                ConsensusMessages.transactionProposal(_CONSENSUS_DOMAIN_SEPARATOR, epoch, oracle, safeTxHash);
+            // they honour), not enforced here. The trailer does not yet carry `oracleData` (empty in every
+            // current proposal), so the message binds `keccak256("")`; the trailer is extended to carry and
+            // verify a real oracleData hash in a follow-up.
+            // forge-lint: disable-next-line(asm-keccak256)
+            bytes32 message = ConsensusMessages.transactionProposal(
+                _CONSENSUS_DOMAIN_SEPARATOR, epoch, oracle, keccak256(""), safeTxHash
+            );
             FROST.verify(groupKey, signature, message);
             return;
         }

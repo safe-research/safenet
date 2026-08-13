@@ -28,15 +28,17 @@ contract ConsensusMessagesTest is Test {
     function test_TransactionProposalTypehash() public pure {
         assertEq(
             ConsensusMessages.TRANSACTION_PROPOSAL_TYPEHASH,
-            keccak256("TransactionProposal(uint64 epoch,address oracle,bytes32 safeTxHash)")
+            keccak256("TransactionProposal(uint64 epoch,address oracle,bytes oracleData,bytes32 safeTxHash)")
         );
     }
 
     function test_TransactionProposal() public pure {
         bytes32 message = ConsensusMessages.domain(23, 0x4838B106FCe9647Bdf1E7877BF73cE8B0BAD5f97)
-            .transactionProposal(1, 0x1234567890123456789012345678901234567890, bytes32(uint256(42)));
+            .transactionProposal(
+                1, 0x1234567890123456789012345678901234567890, keccak256(hex"cafe"), bytes32(uint256(42))
+            );
 
-        assertEq(message, hex"19f3fa0234f374f2e8ec0c2f2a45777a0696ba1ac8a214acf921c3ccfa080717");
+        assertEq(message, hex"973d5f5f4f873250bac60f83283dcff0f1bfbfa8ef19c2120830189a4ffa7084");
     }
 
     /// Cross-language parity vector for `oracle_tx_proposal_hash_parity` in `crates/sentinel/src/hashing.rs`:
@@ -61,8 +63,9 @@ contract ConsensusMessagesTest is Test {
             nonce: 0
         });
 
-        bytes32 message = ConsensusMessages.domain(23, consensus).transactionProposal(11, oracle, transaction.hash());
+        bytes32 message = ConsensusMessages.domain(23, consensus)
+            .transactionProposal(11, oracle, keccak256(hex""), transaction.hash());
 
-        assertEq(message, hex"13889a221bc89a7b93781ab5457f5b7b9a6d9f2e9fe8d97dcf6be83a8658c58c");
+        assertEq(message, hex"8080890fb312c10d10238e8eb3d58a5682e4e691862afee94e94726ad1a16dd5");
     }
 }

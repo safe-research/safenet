@@ -27,7 +27,7 @@ interface IOracle {
      * @notice Post a signing request to the oracle for evaluation.
      * @param requestId A unique id that allows fetching additional information related to the request.
      * @param proposer The address that offered the reward and to whom any refund is owed.
-     * @param oracleData Arbitrary oracle-specific data passed by the proposer; not part of the
+     * @param oracleData Arbitrary oracle-specific data passed by the proposer; bound into the
      *                   signed message hash. The oracle may decode this however it sees fit.
      * @dev Transaction data is not passed here; the oracle is expected to fetch it independently
      *      from the TransactionProposed event. The oracle pulls the fee directly from

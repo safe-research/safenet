@@ -24,10 +24,10 @@ library ConsensusMessages {
         hex"13de01993286119c9a7628720a5b7d7c32841dbf2d23752b59de86a7e03fe1bf";
 
     /**
-     * @custom:precomputed keccak256("TransactionProposal(uint64 epoch,address oracle,bytes32 safeTxHash)")
+     * @custom:precomputed keccak256("TransactionProposal(uint64 epoch,address oracle,bytes oracleData,bytes32 safeTxHash)")
      */
     bytes32 internal constant TRANSACTION_PROPOSAL_TYPEHASH =
-        hex"d169b83f5cc55f1f8ad78e16e0feae4c314849f017eabb46c45c1ee5750be8c6";
+        hex"9c6706f5afdb1de99f5ad39011e7770ce471f51d78380634f6cedb21a648b8d0";
 
     // ============================================================
     // INTERNAL FUNCTIONS
@@ -81,24 +81,32 @@ library ConsensusMessages {
 
     /**
      * @notice Computes the transaction proposal message that must be attested to by validators.
+     * @dev The message's `bytes oracleData` member is EIP-712 encoded as its `keccak256`, so callers pass the
+     *      pre-computed `oracleDataHash` directly. A caller holding the full data (e.g. `proposeTransaction`) hashes
+     *      it at the callsite; a caller holding only the hash (the guard, from its attestation trailer) uses it as-is.
+     *      Either way the raw data stays with the oracle contract and is never needed to rebuild the signed message.
      * @param domainSeparator The EIP-712 domain separator.
      * @param epoch The epoch for the transaction proposal.
      * @param oracle The address of the oracle contract used for evaluation.
+     * @param oracleDataHash The `keccak256` of the arbitrary oracle-specific data.
      * @param safeTxHash The hash of the Safe transaction.
      * @return result The transaction proposal message hash, used as the oracle requestId.
      */
-    function transactionProposal(bytes32 domainSeparator, uint64 epoch, address oracle, bytes32 safeTxHash)
-        internal
-        pure
-        returns (bytes32 result)
-    {
+    function transactionProposal(
+        bytes32 domainSeparator,
+        uint64 epoch,
+        address oracle,
+        bytes32 oracleDataHash,
+        bytes32 safeTxHash
+    ) internal pure returns (bytes32 result) {
         assembly ("memory-safe") {
             let ptr := mload(0x40)
             mstore(ptr, TRANSACTION_PROPOSAL_TYPEHASH)
             mstore(add(ptr, 0x20), epoch)
             mstore(add(ptr, 0x40), oracle)
-            mstore(add(ptr, 0x60), safeTxHash)
-            mstore(add(ptr, 0x22), keccak256(ptr, 0x80))
+            mstore(add(ptr, 0x60), oracleDataHash)
+            mstore(add(ptr, 0x80), safeTxHash)
+            mstore(add(ptr, 0x22), keccak256(ptr, 0xa0))
             mstore(ptr, hex"1901")
             mstore(add(ptr, 0x02), domainSeparator)
             result := keccak256(ptr, 0x42)
