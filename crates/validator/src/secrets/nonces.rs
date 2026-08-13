@@ -2,10 +2,10 @@
 
 use crate::frost::{keygen::KeyShare, preprocess::NonceChunk};
 use alloy::primitives::B256;
-use rand::{CryptoRng, RngCore};
+use rand::rngs::ThreadRng;
 use std::{
     collections::{BTreeMap, btree_map},
-    sync::{Arc, Mutex, PoisonError, mpsc},
+    sync::{Arc, mpsc},
     thread,
     time::Instant,
 };
@@ -16,26 +16,25 @@ use tokio::sync::{Semaphore, oneshot};
 /// Each stream eagerly computes one chunk, waits for a consumer to request it,
 /// and starts computing its successor immediately after delivering it.
 pub struct NonceGenerator {
-    groups: Mutex<BTreeMap<B256, NonceStream>>,
+    groups: BTreeMap<B256, NonceStream>,
 }
 
 impl NonceGenerator {
     /// Creates an empty nonce generator.
     pub fn new() -> Self {
         Self {
-            groups: Mutex::new(BTreeMap::new()),
+            groups: BTreeMap::new(),
         }
     }
 
     /// Starts a background nonce stream for `group_id`, if one is not already
     /// running.
-    pub fn start(&self, group_id: B256, key_share: Arc<KeyShare>) -> Result<(), Error> {
-        self.start_with_sampler(group_id, Sampler::full(key_share))
+    pub fn start(&mut self, group_id: B256, key_share: Arc<KeyShare>) -> Result<(), Error> {
+        self.start_with_sampler(group_id, Sampler::Full(key_share))
     }
 
-    fn start_with_sampler(&self, group_id: B256, sampler: Sampler) -> Result<(), Error> {
-        let mut groups = self.groups.lock()?;
-        let btree_map::Entry::Vacant(entry) = groups.entry(group_id) else {
+    fn start_with_sampler(&mut self, group_id: B256, sampler: Sampler) -> Result<(), Error> {
+        let btree_map::Entry::Vacant(entry) = self.groups.entry(group_id) else {
             tracing::debug!(%group_id, "ignoring attempt to restart nonce generation worker for group");
             return Ok(());
         };
@@ -52,48 +51,39 @@ impl NonceGenerator {
     /// Only one request per group may be outstanding. Concurrent duplicate
     /// requests return `Ok(None)` instead of waiting for another chunk. Returns
     /// [`Error::Unavailable`] if the group's stream has not been started.
-    pub async fn next(&self, group_id: B256) -> Result<Option<NonceChunk>, Error> {
-        let future = {
-            let groups = self.groups.lock()?;
-            let stream = groups.get(&group_id).ok_or(Error::Unavailable)?;
-            stream.next()
-        };
-        future.await
+    pub fn next(
+        &self,
+        group_id: B256,
+    ) -> impl Future<Output = Result<Option<NonceChunk>, Error>> + 'static {
+        let next = self.groups.get(&group_id).map(|stream| stream.next());
+        async move { next.ok_or(Error::Unavailable)?.await }
     }
 
     /// Stops the background stream for `group_id`.
     ///
-    /// An already accepted request may still receive its generated chunk while
-    /// the worker drains the disconnected request channel.
-    pub fn stop(&self, group_id: B256) {
-        if let Ok(mut groups) = self.groups.lock() {
-            groups.remove(&group_id);
-        }
+    /// An outstanding request fails with [`Error::Unavailable`].
+    pub fn stop(&mut self, group_id: B256) {
+        self.groups.remove(&group_id);
     }
 }
 
 /// Parameters for sampling random nonce chunks.
-struct Sampler {
-    key_share: Arc<KeyShare>,
-    /// An optional size for the nonces chunk. Used only for unit testing.
-    size: Option<u64>,
+enum Sampler {
+    /// Generate a full chunk of nonces using the specified key share.
+    Full(Arc<KeyShare>),
+    /// Custom function for generating a nonces chunk.
+    ///
+    /// Used only for unit testing.
+    #[allow(clippy::type_complexity)]
+    #[cfg_attr(not(test), expect(dead_code))]
+    Custom(Box<dyn Fn(&mut ThreadRng) -> Result<NonceChunk, rand::Error> + Send + Sync + 'static>),
 }
 
 impl Sampler {
-    fn full(key_share: Arc<KeyShare>) -> Self {
-        Self {
-            key_share,
-            size: None,
-        }
-    }
-
-    fn nonces_chunk<R>(&self, rng: &mut R) -> Result<NonceChunk, rand::Error>
-    where
-        R: RngCore + CryptoRng,
-    {
-        match self.size {
-            None => NonceChunk::generate(&self.key_share, rng),
-            Some(size) => NonceChunk::with_size(size, &self.key_share, rng),
+    fn nonces_chunk(&self, rng: &mut ThreadRng) -> Result<NonceChunk, rand::Error> {
+        match self {
+            Self::Full(key_share) => NonceChunk::generate(key_share, rng),
+            Self::Custom(generate) => generate(rng),
         }
     }
 }
@@ -124,12 +114,12 @@ impl NonceStream {
 
     fn stream(sampler: Sampler, requests: mpsc::Receiver<oneshot::Sender<NonceChunk>>) {
         let mut rng = rand::thread_rng();
-        'outer: loop {
+        loop {
             let started = Instant::now();
-            let mut nonces = match sampler.nonces_chunk(&mut rng) {
+            let nonces = match sampler.nonces_chunk(&mut rng) {
                 Ok(nonces) => nonces,
                 Err(err) => {
-                    tracing::warn!(?err, "unexpected error generating nonces; aborting");
+                    tracing::error!(?err, "unexpected error generating nonces; aborting");
                     break;
                 }
             };
@@ -138,17 +128,49 @@ impl NonceStream {
                 "completed nonce tree sampling effect"
             );
 
+            if !Self::send_nonces(&requests, nonces) {
+                break;
+            }
+        }
+    }
+
+    fn send_nonces(
+        requests: &mpsc::Receiver<oneshot::Sender<NonceChunk>>,
+        mut nonces: NonceChunk,
+    ) -> bool {
+        loop {
+            let Ok(mut request) = requests.recv() else {
+                tracing::trace!("nonce stream shut down");
+                return false;
+            };
+
+            // The stream guarantees that we only ever have a single active
+            // request at a time, meaning that only the last request from the
+            // `requests` channel is active (i.e. the receiving end has not
+            // been closed). Furthermore, multi-producer single-consumer
+            // channels like `request` will only report disconnection after
+            // all pending messages are handled. As such, we need to drain the
+            // `requests` channel and only consider the last request to
+            // correctly detect stream shutdown.
             loop {
-                let Ok(request) = requests.recv() else {
-                    tracing::trace!("nonce stream shut down");
-                    break 'outer;
-                };
-                match request.send(nonces) {
-                    Ok(()) => continue 'outer,
-                    Err(value) => {
-                        tracing::debug!("nonces future was canceled; waiting for next request");
-                        nonces = value;
+                match requests.try_recv() {
+                    Ok(new_request) => {
+                        tracing::debug!("nonces future was canceled; using next request");
+                        request = new_request;
                     }
+                    Err(mpsc::TryRecvError::Empty) => break,
+                    Err(mpsc::TryRecvError::Disconnected) => {
+                        tracing::debug!("nonce stream closed mid-request; failing ongoing request");
+                        return false;
+                    }
+                }
+            }
+
+            match request.send(nonces) {
+                Ok(()) => return true,
+                Err(unsent) => {
+                    tracing::debug!("nonces future was canceled; waiting for next request");
+                    nonces = unsent;
                 }
             }
         }
@@ -167,9 +189,9 @@ impl NonceStream {
         // We return an `async` block instead of making this an async function,
         // which allows us to express that the future does not capture `&self`
         // and continues to live past the reference. This is useful in our
-        // context as it allows us to immediately release the `Mutex` lock held
-        // for accessing the group-specific nonce stream in the
-        // `NonceGenerator::groups` mapping.
+        // context as it allows callers to immediately release any lock guarding
+        // the `NonceGenerator` instead of holding it for as long as it takes to
+        // generate the nonce chunk.
         async move {
             let _permit = permit;
             if let Some(receiver) = request.transpose()? {
@@ -191,15 +213,6 @@ pub enum Error {
     /// The group's worker stopped before fulfilling the request.
     #[error("nonce generator is unavailable")]
     Unavailable,
-    /// The nonce generator is poisoned.
-    #[error("nonce generator is poisoned")]
-    Poisoned,
-}
-
-impl<T> From<PoisonError<T>> for Error {
-    fn from(_: PoisonError<T>) -> Self {
-        Self::Poisoned
-    }
 }
 
 #[cfg(test)]
@@ -207,11 +220,11 @@ mod tests {
     use tokio::task::JoinSet;
 
     use super::*;
-    use std::assert_matches;
+    use std::{assert_matches, sync::Barrier};
 
     #[tokio::test]
     async fn group_nonce_generation() {
-        let generator = Arc::new(NonceGenerator::new());
+        let mut generator = NonceGenerator::new();
         let group_id = B256::repeat_byte(0xa1);
         let key_share = Arc::new(KeyShare::dummy());
 
@@ -221,10 +234,9 @@ mod tests {
         generator
             .start_with_sampler(
                 group_id,
-                Sampler {
-                    key_share,
-                    size: Some(4),
-                },
+                Sampler::Custom(Box::new(move |rng| {
+                    NonceChunk::with_size(4, &key_share, rng)
+                })),
             )
             .unwrap();
 
@@ -232,24 +244,90 @@ mod tests {
         let concurrent = {
             let mut set = JoinSet::new();
             for _ in 0..3 {
-                let generator = generator.clone();
-                set.spawn(async move { generator.next(group_id).await.unwrap() });
+                set.spawn(generator.next(group_id));
             }
             set.join_all().await
         };
-        let count = concurrent.into_iter().flatten().count();
+        let count = concurrent
+            .into_iter()
+            .filter_map(|result| result.unwrap())
+            .count();
         assert_eq!(count, 1);
 
-        // Can produces additional chunks after the first request completed.
+        // Can produce additional chunks after the first request completed.
         let more = generator.next(group_id).await.unwrap().is_some();
         assert!(more);
 
-        // Stopping unpolled requests fails the request.
-        let pending = generator.next(group_id);
+        // Stopping a group causes subsequent requests to fail.
         generator.stop(group_id);
-        assert_matches!(pending.await, Err(Error::Unavailable));
-
-        // Subsequent requests for the stopped group error.
         assert_matches!(generator.next(group_id).await, Err(Error::Unavailable));
+    }
+
+    #[tokio::test]
+    async fn cancel_then_rerequest() {
+        let mut generator = NonceGenerator::new();
+        let group_id = B256::repeat_byte(0xa1);
+        let key_share = Arc::new(KeyShare::dummy());
+
+        let barrier = Arc::new(Barrier::new(2));
+        generator
+            .start_with_sampler(
+                group_id,
+                Sampler::Custom(Box::new({
+                    let barrier = barrier.clone();
+                    move |rng| {
+                        barrier.wait();
+                        NonceChunk::with_size(4, &key_share, rng)
+                    }
+                })),
+            )
+            .unwrap();
+
+        // Cancel a request while the worker is still generating its chunk, then
+        // issue a fresh one.
+        drop(generator.next(group_id));
+        let next = generator.next(group_id);
+
+        barrier.wait();
+        assert_matches!(next.await, Ok(Some(_)));
+    }
+
+    #[tokio::test]
+    async fn stops_ongoing_generations() {
+        let mut generator = NonceGenerator::new();
+        let group_id = B256::repeat_byte(0xa1);
+        let key_share = Arc::new(KeyShare::dummy());
+
+        let barrier = Arc::new(Barrier::new(2));
+        generator
+            .start_with_sampler(
+                group_id,
+                Sampler::Custom(Box::new({
+                    let barrier = barrier.clone();
+                    move |rng| {
+                        barrier.wait();
+                        NonceChunk::with_size(4, &key_share, rng)
+                    }
+                })),
+            )
+            .unwrap();
+
+        // Start and poll a chunk request.
+        let next = generator.next(group_id);
+        tokio::pin!(next);
+        tokio::select! {
+            biased;
+            _ = next.as_mut() => panic!("nonce chunk future should not complete"),
+            _ = tokio::task::yield_now() => {},
+        };
+
+        // Stop the group.
+        generator.stop(group_id);
+
+        // Simulate the ongoing nonce chunk generation completing, and ensure
+        // that the nonce resolves to the chunk being unavailable as the group
+        // was stopped.
+        barrier.wait();
+        assert_matches!(next.await, Err(Error::Unavailable));
     }
 }

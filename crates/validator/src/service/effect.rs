@@ -16,6 +16,7 @@ use std::{
     fmt::{self, Display, Formatter},
     sync::Arc,
 };
+use tokio::sync::Mutex;
 
 /// An impure operation the state transition asks the handler to perform.
 #[derive(Debug, Clone)]
@@ -140,7 +141,7 @@ pub struct Handler {
     /// The secret store containing randomly generated secrets.
     secrets: SecretStore,
     /// Process-local streams that eagerly generate nonce chunks by group.
-    nonce_generator: NonceGenerator,
+    nonce_generator: Mutex<NonceGenerator>,
 }
 
 impl Handler {
@@ -149,7 +150,7 @@ impl Handler {
         Self {
             account,
             secrets,
-            nonce_generator: NonceGenerator::new(),
+            nonce_generator: Mutex::new(NonceGenerator::new()),
         }
     }
 
@@ -177,14 +178,20 @@ impl Handler {
                 group_id,
                 key_share,
             } => {
-                self.nonce_generator.start(group_id, key_share)?;
+                self.nonce_generator
+                    .lock()
+                    .await
+                    .start(group_id, key_share)?;
                 Ok(Resume::Noop)
             }
             Effect::NonceTree {
                 group_id,
                 key_share,
             } => {
-                self.nonce_generator.start(group_id, key_share)?;
+                self.nonce_generator
+                    .lock()
+                    .await
+                    .start(group_id, key_share)?;
                 self.next_nonce_tree(group_id).await
             }
             Effect::LinkNonceTree {
@@ -281,7 +288,10 @@ impl Handler {
                 if available >= NONCE_TOPUP_THRESHOLD {
                     return Ok(Resume::Noop);
                 }
-                self.nonce_generator.start(group_id, key_share)?;
+                self.nonce_generator
+                    .lock()
+                    .await
+                    .start(group_id, key_share)?;
                 self.next_nonce_tree(group_id).await
             }
             Effect::PruneKeyGenSecrets { group_id } => {
@@ -289,7 +299,7 @@ impl Handler {
                 Ok(Resume::Noop)
             }
             Effect::PruneGroupNonces { group_id } => {
-                self.nonce_generator.stop(group_id);
+                self.nonce_generator.lock().await.stop(group_id);
                 self.secrets.prune_group_nonces(group_id).await?;
                 Ok(Resume::Noop)
             }
@@ -297,7 +307,11 @@ impl Handler {
     }
 
     async fn next_nonce_tree(&self, group_id: B256) -> Result<Resume, InternalError> {
-        let Some(nonce_chunk) = self.nonce_generator.next(group_id).await? else {
+        let next = {
+            let generator = self.nonce_generator.lock().await;
+            generator.next(group_id)
+        };
+        let Some(nonce_chunk) = next.await? else {
             tracing::debug!(%group_id, "nonce chunk request already running; ignoring duplicate effect");
             return Ok(Resume::Noop);
         };
