@@ -23,7 +23,7 @@ use crate::{
     merkle::MerkleRoot,
     service::{Action, Effect, Event, Resume},
 };
-use alloy::primitives::{Address, B256};
+use alloy::primitives::{Address, B256, Bytes};
 use safenet_core::state::{Commands, Message, StateTransition};
 use serde::{Deserialize, Serialize};
 use std::{
@@ -236,6 +236,9 @@ enum Packet {
         epoch: EpochId,
         /// The oracle vouching for the transaction.
         oracle: Address,
+        /// Arbitrary oracle-specific data, bound into the signed message. Retained as bytes and hashed
+        /// only when building the (constant-size) attestation call.
+        oracle_data: Bytes,
         /// The proposed transaction.
         transaction: Box<SafeTransaction>,
     },

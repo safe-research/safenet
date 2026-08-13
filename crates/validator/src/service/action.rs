@@ -91,6 +91,7 @@ pub enum Action {
     AttestTransaction {
         epoch: EpochId,
         oracle: Address,
+        oracle_data_hash: B256,
         chain_id: U256,
         safe: Address,
         safe_tx_struct_hash: B256,
@@ -334,6 +335,7 @@ impl ActionEncoder<Action> for Encoder {
             Action::AttestTransaction {
                 epoch,
                 oracle,
+                oracle_data_hash,
                 chain_id,
                 safe,
                 safe_tx_struct_hash,
@@ -346,6 +348,7 @@ impl ActionEncoder<Action> for Encoder {
                     data: Consensus::attestTransactionCall {
                         epoch: epoch.raw_value(),
                         oracle,
+                        oracleDataHash: oracle_data_hash,
                         chainId: chain_id,
                         safe,
                         safeTxStructHash: safe_tx_struct_hash,

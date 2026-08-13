@@ -5,6 +5,13 @@
 //! values are transcribed only where a return is actually decoded onchain
 //! (`getValidatorStaker`); the mutating calls omit them.
 
+// `sol!` expands to constructors whose arity matches the onchain event/function field count, and the
+// oracle attestation carries enough fields to trip `too_many_arguments`. The offending constructor is
+// macro-generated, so it cannot be annotated per-function (an `#[allow]` on the `sol!` invocation is
+// reported as unused); the allow therefore sits at module scope, where the only hand-written item is a
+// single-argument `TryFrom` that can never trip the lint.
+#![allow(clippy::too_many_arguments)]
+
 use alloy::sol;
 use serde::{Deserialize, Serialize};
 
@@ -127,6 +134,7 @@ sol! {
             bytes32 indexed safeId,
             address indexed oracle,
             uint64 epoch,
+            bytes oracleData,
             SafeTransaction transaction
         );
         event TransactionAttested(
@@ -134,6 +142,7 @@ sol! {
             bytes32 indexed safeId,
             address indexed oracle,
             uint64 epoch,
+            bytes32 oracleDataHash,
             bytes32 signatureId,
             Signature attestation
         );
@@ -149,6 +158,7 @@ sol! {
         function attestTransaction(
             uint64 epoch,
             address oracle,
+            bytes32 oracleDataHash,
             uint256 chainId,
             address safe,
             bytes32 safeTxStructHash,
