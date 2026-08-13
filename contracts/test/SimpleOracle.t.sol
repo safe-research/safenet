@@ -8,19 +8,19 @@ import {SimpleOracle} from "@/SimpleOracle.sol";
 contract SimpleOracleTest is Test {
     SimpleOracle public oracle;
     address public approver;
-    address public requester;
+    address public sponsor;
 
     bytes32 constant REQUEST_ID = keccak256("requestId");
 
     function setUp() public {
         approver = vm.createWallet("approver").addr;
-        requester = vm.createWallet("requester").addr;
+        sponsor = vm.createWallet("sponsor").addr;
         oracle = new SimpleOracle(approver);
     }
 
-    function test_PostRequest_RecordsProposer() public {
-        vm.prank(requester);
-        oracle.postRequest(REQUEST_ID, requester, "");
+    function test_PostRequest_RecordsSponsor() public {
+        vm.prank(sponsor);
+        oracle.postRequest(REQUEST_ID, sponsor, "");
 
         // Verify by successfully approving — would revert with RequestNotPending if not recorded.
         vm.prank(approver);
@@ -28,47 +28,47 @@ contract SimpleOracleTest is Test {
     }
 
     function test_PostRequest_AlreadyPending_Reverts() public {
-        vm.prank(requester);
-        oracle.postRequest(REQUEST_ID, requester, "");
+        vm.prank(sponsor);
+        oracle.postRequest(REQUEST_ID, sponsor, "");
 
         vm.expectRevert(SimpleOracle.RequestAlreadyPending.selector);
-        vm.prank(requester);
-        oracle.postRequest(REQUEST_ID, requester, "");
+        vm.prank(sponsor);
+        oracle.postRequest(REQUEST_ID, sponsor, "");
     }
 
     function test_Approve_EmitsOracleResult_True() public {
-        vm.prank(requester);
-        oracle.postRequest(REQUEST_ID, requester, "");
+        vm.prank(sponsor);
+        oracle.postRequest(REQUEST_ID, sponsor, "");
 
         vm.expectEmit(true, true, false, true);
-        emit IOracle.OracleResult(REQUEST_ID, requester, "", true);
+        emit IOracle.OracleResult(REQUEST_ID, sponsor, "", true);
 
         vm.prank(approver);
         oracle.approve(REQUEST_ID);
     }
 
     function test_Reject_EmitsOracleResult_False() public {
-        vm.prank(requester);
-        oracle.postRequest(REQUEST_ID, requester, "");
+        vm.prank(sponsor);
+        oracle.postRequest(REQUEST_ID, sponsor, "");
 
         vm.expectEmit(true, true, false, true);
-        emit IOracle.OracleResult(REQUEST_ID, requester, "", false);
+        emit IOracle.OracleResult(REQUEST_ID, sponsor, "", false);
 
         vm.prank(approver);
         oracle.reject(REQUEST_ID);
     }
 
     function test_Approve_NotApprover_Reverts() public {
-        vm.prank(requester);
-        oracle.postRequest(REQUEST_ID, requester, "");
+        vm.prank(sponsor);
+        oracle.postRequest(REQUEST_ID, sponsor, "");
 
         vm.expectRevert(SimpleOracle.NotApprover.selector);
         oracle.approve(REQUEST_ID);
     }
 
     function test_Reject_NotApprover_Reverts() public {
-        vm.prank(requester);
-        oracle.postRequest(REQUEST_ID, requester, "");
+        vm.prank(sponsor);
+        oracle.postRequest(REQUEST_ID, sponsor, "");
 
         vm.expectRevert(SimpleOracle.NotApprover.selector);
         oracle.reject(REQUEST_ID);
@@ -87,8 +87,8 @@ contract SimpleOracleTest is Test {
     }
 
     function test_Approve_ClearsRequest() public {
-        vm.prank(requester);
-        oracle.postRequest(REQUEST_ID, requester, "");
+        vm.prank(sponsor);
+        oracle.postRequest(REQUEST_ID, sponsor, "");
 
         vm.prank(approver);
         oracle.approve(REQUEST_ID);
@@ -100,8 +100,8 @@ contract SimpleOracleTest is Test {
     }
 
     function test_Reject_ClearsRequest() public {
-        vm.prank(requester);
-        oracle.postRequest(REQUEST_ID, requester, "");
+        vm.prank(sponsor);
+        oracle.postRequest(REQUEST_ID, sponsor, "");
 
         vm.prank(approver);
         oracle.reject(REQUEST_ID);

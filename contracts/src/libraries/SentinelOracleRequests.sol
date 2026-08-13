@@ -21,7 +21,7 @@ library SentinelOracleRequest {
     // ============================================================
 
     struct Request {
-        address proposer;
+        address sponsor;
         uint256 fee;
         uint256 bondTarget;
         uint256 daoFeeShare;
@@ -188,7 +188,7 @@ library SentinelOracleRequestMap {
 
     event NewRequest(
         bytes32 indexed requestId,
-        address indexed proposer,
+        address indexed sponsor,
         uint256 fee,
         uint256 bondTarget,
         uint256 commitDeadline,
@@ -211,7 +211,7 @@ library SentinelOracleRequestMap {
     function create(
         T storage self,
         bytes32 requestId,
-        address proposer,
+        address sponsor,
         uint256 fee,
         uint256 bondTarget,
         uint256 daoFeeShare,
@@ -219,12 +219,12 @@ library SentinelOracleRequestMap {
         uint256 commitDeadline,
         uint256 revealDeadline
     ) internal {
-        require(self.requests[requestId].proposer == address(0), RequestAlreadyExists());
+        require(self.requests[requestId].sponsor == address(0), RequestAlreadyExists());
         require(commitDeadline > block.number, CommitDeadlineInPast());
         require(revealDeadline > commitDeadline, RevealDeadlineNotAfterCommit());
 
         self.requests[requestId] = SentinelOracleRequest.Request({
-            proposer: proposer,
+            sponsor: sponsor,
             fee: fee,
             bondTarget: bondTarget,
             daoFeeShare: daoFeeShare,
@@ -239,11 +239,11 @@ library SentinelOracleRequestMap {
             denySentinelCount: 0
         });
 
-        emit NewRequest(requestId, proposer, fee, bondTarget, commitDeadline, revealDeadline);
+        emit NewRequest(requestId, sponsor, fee, bondTarget, commitDeadline, revealDeadline);
     }
 
     function get(T storage self, bytes32 requestId) internal view returns (SentinelOracleRequest.Request storage) {
-        require(self.requests[requestId].proposer != address(0), RequestNotFound());
+        require(self.requests[requestId].sponsor != address(0), RequestNotFound());
         return self.requests[requestId];
     }
 }

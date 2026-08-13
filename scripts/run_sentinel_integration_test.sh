@@ -101,20 +101,20 @@ ORACLE=$(jq -r '.returns.sentinelOracle.value' "$ROOT/contracts/build/broadcast/
 echo "Sentinel oracle deployed at $ORACLE"
 
 # --- 4. Fund the required accounts ---
-echo "Generating sentinel and proposer accounts..."
+echo "Generating sentinel and sponsor accounts..."
 WALLETS=$(cast wallet new --json --number 3)
 SENTINEL_A_ADDR=$(echo "$WALLETS" | jq -r '.[0].address')
 SENTINEL_A_PK=$(echo "$WALLETS" | jq -r '.[0].private_key')
 SENTINEL_B_ADDR=$(echo "$WALLETS" | jq -r '.[1].address')
 SENTINEL_B_PK=$(echo "$WALLETS" | jq -r '.[1].private_key')
-PROPOSER_ADDR=$(echo "$WALLETS" | jq -r '.[2].address')
-PROPOSER_PK=$(echo "$WALLETS" | jq -r '.[2].private_key')
+SPONSOR_ADDR=$(echo "$WALLETS" | jq -r '.[2].address')
+SPONSOR_PK=$(echo "$WALLETS" | jq -r '.[2].private_key')
 echo "Sentinel A: $SENTINEL_A_ADDR"
 echo "Sentinel B: $SENTINEL_B_ADDR"
-echo "Proposer:   $PROPOSER_ADDR"
+echo "Sponsor:    $SPONSOR_ADDR"
 
 echo "Funding accounts with ETH and the fee token..."
-for addr in "$SENTINEL_A_ADDR" "$SENTINEL_B_ADDR" "$PROPOSER_ADDR"; do
+for addr in "$SENTINEL_A_ADDR" "$SENTINEL_B_ADDR" "$SPONSOR_ADDR"; do
 	cast send --rpc-url "$RPC_URL" --private-key "$DEPLOYER_PK" --value "$FUNDING_ETH" "$addr" >/dev/null
 	cast send --rpc-url "$RPC_URL" --private-key "$DEPLOYER_PK" \
 		"$FEE_TOKEN" "transfer(address,uint256)" "$addr" "$FUNDING_TOKEN" >/dev/null
@@ -124,8 +124,8 @@ echo "Registering both sentinels..."
 cast send --rpc-url "$RPC_URL" --private-key "$DEPLOYER_PK" "$ORACLE" "addSentinel(address)" "$SENTINEL_A_ADDR" >/dev/null
 cast send --rpc-url "$RPC_URL" --private-key "$DEPLOYER_PK" "$ORACLE" "addSentinel(address)" "$SENTINEL_B_ADDR" >/dev/null
 
-echo "Approving the oracle to pull the request fee from the proposer..."
-cast send --rpc-url "$RPC_URL" --private-key "$PROPOSER_PK" \
+echo "Approving the oracle to pull the request fee from the sponsor..."
+cast send --rpc-url "$RPC_URL" --private-key "$SPONSOR_PK" \
 	"$FEE_TOKEN" "approve(address,uint256)" "$ORACLE" "$REQUEST_FEE" >/dev/null
 
 # Balances just before either sentinel commits a bond, to measure the fee/bond
@@ -139,7 +139,7 @@ SENTINEL_A_BALANCE_BEFORE=$(balance_of "$SENTINEL_A_ADDR")
 SENTINEL_B_BALANCE_BEFORE=$(balance_of "$SENTINEL_B_ADDR")
 
 # `Request`'s tuple shape, field-for-field with `SentinelOracleRequest.Request`
-# (`proposer, fee, bondTarget, daoFeeShare, slashAmount, commitDeadline,
+# (`sponsor, fee, bondTarget, daoFeeShare, slashAmount, commitDeadline,
 # revealDeadline, state, committedCount, revealedCount, approveSentinelCount,
 # denySentinelCount`) — every field must be listed or `cast` silently
 # misaligns the ones after the omission.
@@ -205,7 +205,7 @@ env \
 	TX_SAFE=0x1111111111111111111111111111111111111111 \
 	TX_TO=0x2222222222222222222222222222222222222222 \
 	TX_NONCE=0 \
-	forge script --root "$ROOT/contracts" ProposeTransactionScript --rpc-url "$RPC_URL" --private-key "$PROPOSER_PK" --broadcast
+	forge script --root "$ROOT/contracts" ProposeTransactionScript --rpc-url "$RPC_URL" --private-key "$SPONSOR_PK" --broadcast
 
 REQUEST_ID=$(cast logs --rpc-url "$RPC_URL" --json --from-block 0 --address "$ORACLE" \
 	'NewRequest(bytes32,address,uint256,uint256,uint256,uint256)' | jq -r '.[0].topics[1]')
@@ -302,7 +302,7 @@ echo "OK: bonds were returned in full and the request fee was split between the 
 # claim after arbitration regardless of which side it was on, since bond
 # slashing is only partial (INITIAL_SLASHING_MULTIPLIER < BOND_MULTIPLIER).
 echo "Approving the oracle to pull the request fee for the disputed request..."
-cast send --rpc-url "$RPC_URL" --private-key "$PROPOSER_PK" \
+cast send --rpc-url "$RPC_URL" --private-key "$SPONSOR_PK" \
 	"$FEE_TOKEN" "approve(address,uint256)" "$ORACLE" "$REQUEST_FEE" >/dev/null
 
 echo "Proposing a transaction sentinel B's blocklist denies (to trigger a genuine dispute)..."
@@ -313,7 +313,7 @@ env \
 	TX_SAFE=0x1111111111111111111111111111111111111111 \
 	TX_TO="$DISPUTED_TX_TO" \
 	TX_NONCE=1 \
-	forge script --root "$ROOT/contracts" ProposeTransactionScript --rpc-url "$RPC_URL" --private-key "$PROPOSER_PK" --broadcast
+	forge script --root "$ROOT/contracts" ProposeTransactionScript --rpc-url "$RPC_URL" --private-key "$SPONSOR_PK" --broadcast
 
 DISPUTE_REQUEST_ID=$(cast logs --rpc-url "$RPC_URL" --json --from-block 0 --address "$ORACLE" \
 	'NewRequest(bytes32,address,uint256,uint256,uint256,uint256)' | jq -r '.[-1].topics[1]')
