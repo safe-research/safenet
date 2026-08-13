@@ -17,9 +17,12 @@ library SentinelOracleCommitment {
     // STRUCTS
     // ============================================================
 
+    // Packed into 2 slots instead of 3: `commitHash` fills a slot on its own (32 bytes), but
+    // `bondAmount` (a `uint96` token amount, matching `SentinelOracleRequest.Request.bondTarget`)
+    // now shares its slot with `vote`/`claimed`.
     struct Commitment {
         bytes32 commitHash;
-        uint256 bondAmount;
+        uint96 bondAmount;
         Vote vote;
         bool claimed;
     }
@@ -66,10 +69,10 @@ library SentinelOracleCommitmentMap {
     // EVENTS
     // ============================================================
 
-    event Committed(bytes32 indexed requestId, address indexed sentinel, uint256 bondAmount);
+    event Committed(bytes32 indexed requestId, address indexed sentinel, uint96 bondAmount);
     // `reason` is why this *sentinel* voted the way it did.
     event Revealed(
-        bytes32 indexed requestId, address indexed sentinel, bool approved, uint256 bondAmount, string reason
+        bytes32 indexed requestId, address indexed sentinel, bool approved, uint96 bondAmount, string reason
     );
 
     // ============================================================
@@ -89,7 +92,7 @@ library SentinelOracleCommitmentMap {
         require(self.commitments[requestId][sentinel].commitHash == 0, AlreadyCommitted());
     }
 
-    function add(T storage self, bytes32 requestId, address sentinel, bytes32 commitHash, uint256 bondAmount) internal {
+    function add(T storage self, bytes32 requestId, address sentinel, bytes32 commitHash, uint96 bondAmount) internal {
         checkNotCommitted(self, requestId, sentinel);
         self.commitments[requestId][sentinel] = SentinelOracleCommitment.Commitment({
             commitHash: commitHash, bondAmount: bondAmount, vote: SentinelOracleCommitment.Vote.PENDING, claimed: false
@@ -106,14 +109,18 @@ library SentinelOracleCommitmentMap {
         string calldata reason
     ) internal {
         SentinelOracleCommitment.Commitment storage c = self.commitments[requestId][sentinel];
-        require(c.vote != SentinelOracleCommitment.Vote.NONE, NotCommitted());
-        require(c.vote == SentinelOracleCommitment.Vote.PENDING, AlreadyRevealed());
+        // `commitHash` fills slot 0 alone; `vote` (read twice below) and `bondAmount` share slot 1
+        // -- caching the whole struct up front costs exactly one SLOAD per slot, both of which are
+        // needed regardless, instead of the 3 separate field reads this would otherwise take.
+        SentinelOracleCommitment.Commitment memory commitment = c;
+        require(commitment.vote != SentinelOracleCommitment.Vote.NONE, NotCommitted());
+        require(commitment.vote == SentinelOracleCommitment.Vote.PENDING, AlreadyRevealed());
         require(
-            SentinelOracleCommitment.computeHash(sentinel, requestId, approve, salt, reason) == c.commitHash,
+            SentinelOracleCommitment.computeHash(sentinel, requestId, approve, salt, reason) == commitment.commitHash,
             InvalidReveal()
         );
         c.vote = approve ? SentinelOracleCommitment.Vote.APPROVED : SentinelOracleCommitment.Vote.DENIED;
-        emit Revealed(requestId, sentinel, approve, c.bondAmount, reason);
+        emit Revealed(requestId, sentinel, approve, commitment.bondAmount, reason);
     }
 
     function get(T storage self, bytes32 requestId, address sentinel)

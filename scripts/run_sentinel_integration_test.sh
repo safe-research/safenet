@@ -139,16 +139,16 @@ SENTINEL_A_BALANCE_BEFORE=$(balance_of "$SENTINEL_A_ADDR")
 SENTINEL_B_BALANCE_BEFORE=$(balance_of "$SENTINEL_B_ADDR")
 
 # `Request`'s tuple shape, field-for-field with `SentinelOracleRequest.Request`
-# (`sponsor, fee, bondTarget, daoFeeShare, slashAmount, commitDeadline,
-# revealDeadline, state, committedCount, revealedCount, approveSentinelCount,
-# denySentinelCount`) — every field must be listed or `cast` silently
-# misaligns the ones after the omission.
+# (`sponsor, state, commitDeadline, daoFeeShare, revealDeadline, arbitrationDeadline,
+# fee, committedCount, revealedCount, bondTarget, slashAmount, approveSentinelCount,
+# denySentinelCount`) — every field must be listed, in its exact declared width, or
+# `cast` silently misaligns/misdecodes the rest.
 get_request() {
 	cast call --rpc-url "$RPC_URL" --json "$ORACLE" \
-		"getRequest(bytes32)((address,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint8,uint256,uint256,uint256,uint256))" \
+		"getRequest(bytes32)((address,uint8,uint64,uint24,uint64,uint64,uint96,uint16,uint16,uint96,uint96,uint16,uint16))" \
 		"$1" 2>/dev/null
 }
-REQUEST_STATE_INDEX=8
+REQUEST_STATE_INDEX=1
 REQUEST_DENY_SENTINEL_COUNT_INDEX=12
 
 # --- 5. Spin up both Rust sentinels ---
@@ -208,7 +208,7 @@ env \
 	forge script --root "$ROOT/contracts" ProposeTransactionScript --rpc-url "$RPC_URL" --private-key "$SPONSOR_PK" --broadcast
 
 REQUEST_ID=$(cast logs --rpc-url "$RPC_URL" --json --from-block 0 --address "$ORACLE" \
-	'NewRequest(bytes32,address,uint256,uint256,uint256,uint256)' | jq -r '.[0].topics[1]')
+	'NewRequest(bytes32,address,uint96,uint96,uint96,uint64,uint64)' | jq -r '.[0].topics[1]')
 echo "Request id: $REQUEST_ID"
 
 # --- 7. Wait for 10 blocks ---
@@ -250,7 +250,7 @@ if [ "$DENY_SENTINEL_COUNT" != "0" ]; then
 	exit 1
 fi
 DISPUTES=$(cast logs --rpc-url "$RPC_URL" --json --from-block 0 --address "$ORACLE" \
-	'DisputeResolved(bytes32,uint8,uint256)' | jq 'length')
+	'DisputeResolved(bytes32,uint8,uint128,string)' | jq 'length')
 if [ "$DISPUTES" != "0" ]; then
 	echo "FAILED: expected no arbitration, but $DISPUTES DisputeResolved event(s) were emitted"
 	exit 1
@@ -259,9 +259,9 @@ echo "OK: both sentinels agreed (approved) and no arbitration was triggered."
 
 # --- 9. Check the fee and bond flow ---
 SENTINEL_A_COMMITMENT=$(cast call --rpc-url "$RPC_URL" --json "$ORACLE" \
-	"getCommitment(bytes32,address)((bytes32,uint256,uint8,bool))" "$REQUEST_ID" "$SENTINEL_A_ADDR")
+	"getCommitment(bytes32,address)((bytes32,uint96,uint8,bool))" "$REQUEST_ID" "$SENTINEL_A_ADDR")
 SENTINEL_B_COMMITMENT=$(cast call --rpc-url "$RPC_URL" --json "$ORACLE" \
-	"getCommitment(bytes32,address)((bytes32,uint256,uint8,bool))" "$REQUEST_ID" "$SENTINEL_B_ADDR")
+	"getCommitment(bytes32,address)((bytes32,uint96,uint8,bool))" "$REQUEST_ID" "$SENTINEL_B_ADDR")
 if [ "$(echo "$SENTINEL_A_COMMITMENT" | jq -r '.[0][3]')" != "true" ] || [ "$(echo "$SENTINEL_B_COMMITMENT" | jq -r '.[0][3]')" != "true" ]; then
 	echo "FAILED: expected both sentinels to have claimed their bond and reward"
 	echo "Sentinel A commitment: $SENTINEL_A_COMMITMENT"
@@ -316,7 +316,7 @@ env \
 	forge script --root "$ROOT/contracts" ProposeTransactionScript --rpc-url "$RPC_URL" --private-key "$SPONSOR_PK" --broadcast
 
 DISPUTE_REQUEST_ID=$(cast logs --rpc-url "$RPC_URL" --json --from-block 0 --address "$ORACLE" \
-	'NewRequest(bytes32,address,uint256,uint256,uint256,uint256)' | jq -r '.[-1].topics[1]')
+	'NewRequest(bytes32,address,uint96,uint96,uint96,uint64,uint64)' | jq -r '.[-1].topics[1]')
 echo "Disputed request id: $DISPUTE_REQUEST_ID"
 
 DISPUTE_SENTINEL_A_BALANCE_BEFORE=$(balance_of "$SENTINEL_A_ADDR")
@@ -356,9 +356,9 @@ for _ in $(seq 1 10); do
 	REQUEST=$(get_request "$DISPUTE_REQUEST_ID") || true
 	STATE=$(echo "$REQUEST" | jq -r ".[0][$REQUEST_STATE_INDEX]" 2>/dev/null) || true
 	SENTINEL_A_COMMITMENT=$(cast call --rpc-url "$RPC_URL" --json "$ORACLE" \
-		"getCommitment(bytes32,address)((bytes32,uint256,uint8,bool))" "$DISPUTE_REQUEST_ID" "$SENTINEL_A_ADDR") || true
+		"getCommitment(bytes32,address)((bytes32,uint96,uint8,bool))" "$DISPUTE_REQUEST_ID" "$SENTINEL_A_ADDR") || true
 	SENTINEL_B_COMMITMENT=$(cast call --rpc-url "$RPC_URL" --json "$ORACLE" \
-		"getCommitment(bytes32,address)((bytes32,uint256,uint8,bool))" "$DISPUTE_REQUEST_ID" "$SENTINEL_B_ADDR") || true
+		"getCommitment(bytes32,address)((bytes32,uint96,uint8,bool))" "$DISPUTE_REQUEST_ID" "$SENTINEL_B_ADDR") || true
 	A_CLAIMED=$(echo "$SENTINEL_A_COMMITMENT" | jq -r '.[0][3]' 2>/dev/null) || true
 	B_CLAIMED=$(echo "$SENTINEL_B_COMMITMENT" | jq -r '.[0][3]' 2>/dev/null) || true
 	[ "$A_CLAIMED" = "true" ] && [ "$B_CLAIMED" = "true" ] && break

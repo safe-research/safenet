@@ -21,20 +21,21 @@ pub mod oracle {
             event NewRequest(
                 bytes32 indexed requestId,
                 address indexed sponsor,
-                uint256 fee,
-                uint256 bondTarget,
-                uint256 commitDeadline,
-                uint256 revealDeadline
+                uint96 fee,
+                uint96 bondTarget,
+                uint96 slashAmount,
+                uint64 commitDeadline,
+                uint64 revealDeadline
             );
-            event Committed(bytes32 indexed requestId, address indexed sentinel, uint256 bondAmount);
+            event Committed(bytes32 indexed requestId, address indexed sentinel, uint96 bondAmount);
             event Revealed(
                 bytes32 indexed requestId,
                 address indexed sentinel,
                 bool approved,
-                uint256 bondAmount,
+                uint96 bondAmount,
                 string reason
             );
-            event DisputeResolved(bytes32 indexed requestId, RequestState outcome, uint256 slashed, string context);
+            event DisputeResolved(bytes32 indexed requestId, RequestState outcome, uint128 slashed, string context);
 
             function commit(bytes32 requestId, bytes32 commitHash) external;
             function reveal(bytes32 requestId, bool approve, bytes32 salt, string calldata reason) external;

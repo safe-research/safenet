@@ -2,12 +2,14 @@
 pragma solidity ^0.8.30;
 
 import {Script, console} from "@forge-std/Script.sol";
+import {SafeCast} from "@oz/utils/math/SafeCast.sol";
 import {DeterministicDeployment} from "@script/util/DeterministicDeployment.sol";
 import {getFactory} from "@script/util/GetFactory.sol";
 import {SentinelOracle} from "@/SentinelOracle.sol";
 
 contract DeploySentinelOracleScript is Script {
     using DeterministicDeployment for DeterministicDeployment.Factory;
+    using SafeCast for uint256;
 
     function run() public returns (address sentinelOracle) {
         address arbitrator = vm.envAddress("SENTINEL_ARBITRATOR");
@@ -18,15 +20,15 @@ contract DeploySentinelOracleScript is Script {
         // is the role being filled, not necessarily always the Consensus contract.
         address proposer = vm.envAddress("SENTINEL_CONSENSUS");
         address feeToken = vm.envAddress("SENTINEL_FEE_TOKEN");
-        uint256 requestFee = vm.envUint("SENTINEL_REQUEST_FEE");
-        uint256 commitWindow = vm.envUint("SENTINEL_COMMIT_WINDOW");
-        uint256 revealWindow = vm.envUint("SENTINEL_REVEAL_WINDOW");
-        uint256 governanceDelay = vm.envUint("SENTINEL_GOVERNANCE_DELAY");
-        uint256 bondMultiplier = vm.envUint("SENTINEL_BOND_MULTIPLIER");
-        uint256 initialSlashingMultiplier = vm.envUint("SENTINEL_INITIAL_SLASHING_MULTIPLIER");
-        uint256 initialDaoFeeShare = vm.envUint("SENTINEL_INITIAL_DAO_FEE_SHARE");
+        uint96 requestFee = vm.envUint("SENTINEL_REQUEST_FEE").toUint96();
+        uint32 commitWindow = vm.envUint("SENTINEL_COMMIT_WINDOW").toUint32();
+        uint32 revealWindow = vm.envUint("SENTINEL_REVEAL_WINDOW").toUint32();
+        uint32 governanceDelay = vm.envUint("SENTINEL_GOVERNANCE_DELAY").toUint32();
+        uint32 bondMultiplier = vm.envUint("SENTINEL_BOND_MULTIPLIER").toUint32();
+        uint32 initialSlashingMultiplier = vm.envUint("SENTINEL_INITIAL_SLASHING_MULTIPLIER").toUint32();
+        uint24 initialDaoFeeShare = vm.envUint("SENTINEL_INITIAL_DAO_FEE_SHARE").toUint24();
         string memory charterEns = vm.envString("SENTINEL_CHARTER_ENS");
-        uint256 arbitrationTimeout = vm.envUint("SENTINEL_ARBITRATION_TIMEOUT");
+        uint32 arbitrationTimeout = vm.envUint("SENTINEL_ARBITRATION_TIMEOUT").toUint32();
 
         DeterministicDeployment.Factory factory = getFactory(vm);
 

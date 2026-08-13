@@ -248,7 +248,9 @@ impl SentinelTransition {
         );
         let actions = vec![
             SentinelAction {
-                kind: SentinelActionKind::ApproveToken { bond: bond_target },
+                kind: SentinelActionKind::ApproveToken {
+                    bond: U256::from(bond_target),
+                },
                 expires_at: Some(commit_deadline),
             }
             .into(),
@@ -274,8 +276,8 @@ impl SentinelTransition {
         let request_id = event.requestId;
         let request = Request {
             bond_target: event.bondTarget,
-            commit_deadline: event.commitDeadline.saturating_to::<u64>(),
-            reveal_deadline: event.revealDeadline.saturating_to::<u64>(),
+            commit_deadline: event.commitDeadline,
+            reveal_deadline: event.revealDeadline,
         };
         match state.0.remove(&request_id) {
             Some(RequestState::WaitingForRequest {
@@ -753,7 +755,7 @@ mod tests {
     use crate::bindings::consensus::{Operation, SafeTransaction};
     use crate::bindings::oracle::RequestState as OnchainRequestState;
     use alloy::{
-        primitives::{Bytes, address, keccak256},
+        primitives::{Bytes, Uint, address, aliases::U96, keccak256},
         providers::Provider as _,
         signers::k256::ecdsa::SigningKey,
     };
@@ -886,6 +888,7 @@ mod tests {
         id: B256,
         fee: U256,
         bond_target: U256,
+        slash_amount: U256,
         commit_deadline: u64,
         reveal_deadline: u64,
     ) -> SentinelEvents {
@@ -893,31 +896,32 @@ mod tests {
             SentinelOracle::NewRequest {
                 requestId: id,
                 sponsor: SAFE,
-                fee,
-                bondTarget: bond_target,
-                commitDeadline: U256::from(commit_deadline),
-                revealDeadline: U256::from(reveal_deadline),
+                fee: fee.to(),
+                bondTarget: bond_target.to(),
+                slashAmount: slash_amount.to(),
+                commitDeadline: commit_deadline,
+                revealDeadline: reveal_deadline,
             },
         ))
     }
 
-    fn committed_event(id: B256, sentinel: Address, bond: U256) -> SentinelEvents {
+    fn committed_event(id: B256, sentinel: Address, bond: u64) -> SentinelEvents {
         SentinelEvents::Oracle(SentinelOracle::SentinelOracleEvents::Committed(
             SentinelOracle::Committed {
                 requestId: id,
                 sentinel,
-                bondAmount: bond,
+                bondAmount: Uint::from(bond),
             },
         ))
     }
 
-    fn revealed_event(id: B256, sentinel: Address, approved: bool, bond: U256) -> SentinelEvents {
+    fn revealed_event(id: B256, sentinel: Address, approved: bool, bond: u64) -> SentinelEvents {
         SentinelEvents::Oracle(SentinelOracle::SentinelOracleEvents::Revealed(
             SentinelOracle::Revealed {
                 requestId: id,
                 sentinel,
                 approved,
-                bondAmount: bond,
+                bondAmount: Uint::from(bond),
                 reason: String::new(),
             },
         ))
@@ -932,7 +936,7 @@ mod tests {
             SentinelOracle::DisputeResolved {
                 requestId: id,
                 outcome,
-                slashed,
+                slashed: slashed.to(),
                 context: String::new(),
             },
         ))
@@ -955,7 +959,7 @@ mod tests {
     ) {
         let svc = transition();
         let id = request_id(safe_tx_hash, 7, ORACLE);
-        let bond_target = U256::from(500u64);
+        let bond_target = U96::from(500);
 
         let (state, commands) = svc.apply_transition(
             State::default(),
@@ -967,7 +971,14 @@ mod tests {
             state,
             Message::Event(log(
                 2,
-                new_request_event(id, U256::from(1_000u64), bond_target, 20, 40),
+                new_request_event(
+                    id,
+                    U256::from(1_000u64),
+                    U256::from(bond_target),
+                    U256::from(bond_target),
+                    20,
+                    40,
+                ),
             )),
         );
         assert!(commands.is_empty());
@@ -1006,7 +1017,9 @@ mod tests {
             commands,
             vec![
                 SentinelAction {
-                    kind: SentinelActionKind::ApproveToken { bond: bond_target },
+                    kind: SentinelActionKind::ApproveToken {
+                        bond: U256::from(bond_target),
+                    },
                     expires_at: Some(20),
                 }
                 .into(),
@@ -1078,7 +1091,14 @@ mod tests {
             state,
             Message::Event(log(
                 5,
-                new_request_event(id, U256::from(1_000u64), U256::from(500u64), 20, 40),
+                new_request_event(
+                    id,
+                    U256::from(1_000u64),
+                    U256::from(500u64),
+                    U256::from(500u64),
+                    20,
+                    40,
+                ),
             )),
         );
         let salt = self_signer().reveal_salt(id);
@@ -1115,15 +1135,12 @@ mod tests {
         // Our own commit lands onchain, followed by the other sentinel's.
         let (state, commands) = svc.apply_transition(
             state,
-            Message::Event(log(
-                6,
-                committed_event(id, self_address(), U256::from(500u64)),
-            )),
+            Message::Event(log(6, committed_event(id, self_address(), 500u64))),
         );
         assert!(commands.is_empty());
         let (state, commands) = svc.apply_transition(
             state,
-            Message::Event(log(7, committed_event(id, OTHER, U256::from(500u64)))),
+            Message::Event(log(7, committed_event(id, OTHER, 500u64))),
         );
         assert!(commands.is_empty());
         assert_eq!(
@@ -1171,7 +1188,7 @@ mod tests {
         // The other sentinel reveals first; not enough to finalize yet.
         let (state, commands) = svc.apply_transition(
             state,
-            Message::Event(log(22, revealed_event(id, OTHER, true, U256::from(500u64)))),
+            Message::Event(log(22, revealed_event(id, OTHER, true, 500u64))),
         );
         assert!(commands.is_empty());
         assert_eq!(
@@ -1192,10 +1209,7 @@ mod tests {
         // the reveal window.
         let (state, commands) = svc.apply_transition(
             state,
-            Message::Event(log(
-                23,
-                revealed_event(id, self_address(), true, U256::from(500u64)),
-            )),
+            Message::Event(log(23, revealed_event(id, self_address(), true, 500u64))),
         );
         assert!(!state.0.contains_key(&id));
         assert_eq!(
@@ -1233,19 +1247,23 @@ mod tests {
             state,
             Message::Event(log(
                 5,
-                new_request_event(id, U256::from(1_000u64), U256::from(500u64), 20, 40),
+                new_request_event(
+                    id,
+                    U256::from(1_000u64),
+                    U256::from(500u64),
+                    U256::from(500u64),
+                    20,
+                    40,
+                ),
             )),
         );
         let (state, _) = svc.apply_transition(
             state,
-            Message::Event(log(
-                6,
-                committed_event(id, self_address(), U256::from(500u64)),
-            )),
+            Message::Event(log(6, committed_event(id, self_address(), 500u64))),
         );
         let (state, _) = svc.apply_transition(
             state,
-            Message::Event(log(7, committed_event(id, OTHER, U256::from(500u64)))),
+            Message::Event(log(7, committed_event(id, OTHER, 500u64))),
         );
         let (state, _) = svc.apply_transition(state, Message::NewBlock(21));
 
@@ -1253,17 +1271,11 @@ mod tests {
         // lands last: unanimity fails, so this is a genuine dispute.
         let (state, _) = svc.apply_transition(
             state,
-            Message::Event(log(
-                22,
-                revealed_event(id, OTHER, false, U256::from(500u64)),
-            )),
+            Message::Event(log(22, revealed_event(id, OTHER, false, 500u64))),
         );
         let (state, commands) = svc.apply_transition(
             state,
-            Message::Event(log(
-                23,
-                revealed_event(id, self_address(), true, U256::from(500u64)),
-            )),
+            Message::Event(log(23, revealed_event(id, self_address(), true, 500u64))),
         );
 
         assert_eq!(
@@ -1342,15 +1354,19 @@ mod tests {
             state,
             Message::Event(log(
                 5,
-                new_request_event(id, U256::from(1_000u64), U256::from(500u64), 20, 40),
+                new_request_event(
+                    id,
+                    U256::from(1_000u64),
+                    U256::from(500u64),
+                    U256::from(500u64),
+                    20,
+                    40,
+                ),
             )),
         );
         let (state, _) = svc.apply_transition(
             state,
-            Message::Event(log(
-                6,
-                committed_event(id, self_address(), U256::from(500u64)),
-            )),
+            Message::Event(log(6, committed_event(id, self_address(), 500u64))),
         );
 
         let salt = self_signer().reveal_salt(id);
@@ -1442,7 +1458,14 @@ mod tests {
             state,
             Message::Event(log(
                 5,
-                new_request_event(id, U256::from(1_000u64), U256::from(500u64), 20, 40),
+                new_request_event(
+                    id,
+                    U256::from(1_000u64),
+                    U256::from(500u64),
+                    U256::from(500u64),
+                    20,
+                    40,
+                ),
             )),
         );
         let reason = RuleId::R4_6KnownMaliciousTarget.code();
@@ -1542,7 +1565,14 @@ mod tests {
             state,
             Message::Event(log(
                 2,
-                new_request_event(id, U256::from(1_000u64), U256::from(500u64), 20, 40),
+                new_request_event(
+                    id,
+                    U256::from(1_000u64),
+                    U256::from(500u64),
+                    U256::from(500u64),
+                    20,
+                    40,
+                ),
             )),
         );
         assert!(commands.is_empty());
@@ -1571,7 +1601,7 @@ mod tests {
             RequestState::WaitingForDynamicCheck {
                 deadline: 10,
                 request: Some(Request {
-                    bond_target: U256::from(500u64),
+                    bond_target: U96::from(500),
                     commit_deadline: 20,
                     reveal_deadline: 40,
                 }),
