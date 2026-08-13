@@ -88,7 +88,6 @@ contract SentinelOracle is IOracle {
     error ZeroFee();
     error ZeroWindow();
     error SentinelNotActive();
-    error NotRevealed();
     error InvalidFeeShare();
 
     // ============================================================
@@ -123,7 +122,8 @@ contract SentinelOracle is IOracle {
         uint256 commitWindow,
         uint256 revealWindow,
         uint256 governanceDelay,
-        uint256 initialMultiplier,
+        uint256 initialBondMultiplier,
+        uint256 initialSlashingMultiplier,
         uint256 initialDaoFeeShare
     ) {
         require(arbitrator != address(0), InvalidAddress());
@@ -142,7 +142,7 @@ contract SentinelOracle is IOracle {
         COMMIT_WINDOW = commitWindow;
         REVEAL_WINDOW = revealWindow;
         GOVERNANCE_DELAY = governanceDelay;
-        $bondConfig.init(initialMultiplier);
+        $bondConfig.init(initialBondMultiplier, initialSlashingMultiplier);
         $protocolFundsReceiverConfig.init(initialProtocolFundsReceiver);
         $feeConfig.init(requestFee);
         $daoFeeShareConfig.init(initialDaoFeeShare);
@@ -155,12 +155,14 @@ contract SentinelOracle is IOracle {
     function postRequest(bytes32 requestId, address proposer, bytes calldata) external override(IOracle) {
         require(msg.sender == CONSENSUS, NotConsensus());
         uint256 currentFee = $feeConfig.applyPending();
-        uint256 bondTarget = currentFee * $bondConfig.applyPending();
+        (uint256 currentBondMultiplier, uint256 currentSlashingMultiplier) = $bondConfig.applyPending();
+        uint256 bondTarget = currentFee * currentBondMultiplier;
+        uint256 slashAmount = currentFee * currentSlashingMultiplier;
         uint256 currentDaoFeeShare = $daoFeeShareConfig.applyPending();
         uint256 commitDeadline = block.number + COMMIT_WINDOW;
         uint256 revealDeadline = commitDeadline + REVEAL_WINDOW;
         $requests.create(
-            requestId, proposer, currentFee, bondTarget, currentDaoFeeShare, commitDeadline, revealDeadline
+            requestId, proposer, currentFee, bondTarget, currentDaoFeeShare, slashAmount, commitDeadline, revealDeadline
         );
         FEE_TOKEN.safeTransferFrom(proposer, address(this), currentFee);
     }
@@ -234,18 +236,12 @@ contract SentinelOracle is IOracle {
 
     function claim(bytes32 requestId) external {
         SentinelOracleRequest.Request storage req = $requests.get(requestId);
-        SentinelOracleRequest.State state = req.requireResolved();
+        req.requireResolved();
         SentinelOracleCommitment.Commitment storage commitment = $commitments.get(requestId, msg.sender);
         SentinelOracleCommitment.Vote vote = commitment.vote;
-        // Only allow claiming of pending votes in case of a timeout
-        require(
-            vote == SentinelOracleCommitment.Vote.APPROVED || vote == SentinelOracleCommitment.Vote.DENIED
-                || state == SentinelOracleRequest.State.TIMED_OUT,
-            NotRevealed()
-        );
         commitment.markClaimed();
         uint256 feeReward = req.calcFeeReward(vote);
-        uint256 bondReturn = req.isBondSlashed(vote) ? 0 : commitment.bondAmount;
+        uint256 bondReturn = commitment.bondAmount - req.slashAmountFor(vote);
         uint256 totalClaim = bondReturn + feeReward;
         if (totalClaim > 0) {
             FEE_TOKEN.safeTransfer(msg.sender, totalClaim);
@@ -284,11 +280,11 @@ contract SentinelOracle is IOracle {
         $sentinelMap.remove(sentinel);
     }
 
-    function scheduleBondMultiplier(uint256 newValue) external onlyGovernance {
-        $bondConfig.schedule(newValue, GOVERNANCE_DELAY);
+    function scheduleBondConfig(uint256 newBondMultiplier, uint256 newSlashingMultiplier) external onlyGovernance {
+        $bondConfig.schedule(newBondMultiplier, newSlashingMultiplier, GOVERNANCE_DELAY);
     }
 
-    function applyBondMultiplier() external {
+    function applyBondConfig() external {
         $bondConfig.applyPending();
     }
 
@@ -336,7 +332,15 @@ contract SentinelOracle is IOracle {
     }
 
     function pendingBondMultiplierActiveAt() external view returns (uint256) {
-        return $bondConfig.pendingBondMultiplierActiveAt;
+        return $bondConfig.pendingActiveAt;
+    }
+
+    function slashingMultiplier() external view returns (uint256) {
+        return $bondConfig.currentSlashingMultiplier();
+    }
+
+    function pendingSlashingMultiplier() external view returns (uint256) {
+        return $bondConfig.pendingSlashingMultiplier;
     }
 
     function protocolFundsReceiver() external view returns (address) {

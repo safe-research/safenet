@@ -8,58 +8,80 @@ library BondConfig {
 
     struct T {
         uint256 bondMultiplier;
+        uint256 slashingMultiplier;
         uint256 pendingBondMultiplier;
-        uint256 pendingBondMultiplierActiveAt;
+        uint256 pendingSlashingMultiplier;
+        uint256 pendingActiveAt;
     }
 
     // ============================================================
     // EVENTS
     // ============================================================
 
-    event BondMultiplierScheduled(uint256 newMultiplier, uint256 activeAtBlock);
-    event BondMultiplierApplied(uint256 newMultiplier);
+    event BondConfigScheduled(uint256 newBondMultiplier, uint256 newSlashingMultiplier, uint256 activeAtBlock);
+    event BondConfigApplied(uint256 newBondMultiplier, uint256 newSlashingMultiplier);
 
     // ============================================================
     // ERRORS
     // ============================================================
 
-    error InvalidMultiplier();
+    error InvalidBondMultiplier();
+    error InvalidSlashingMultiplier();
 
     // ============================================================
     // INTERNAL FUNCTIONS
     // ============================================================
 
-    function init(T storage self, uint256 initialMultiplier) internal {
-        require(initialMultiplier > 0, InvalidMultiplier());
-        self.bondMultiplier = initialMultiplier;
+    function init(T storage self, uint256 initialBondMultiplier, uint256 initialSlashingMultiplier) internal {
+        require(initialBondMultiplier > 0, InvalidBondMultiplier());
+        require(
+            initialSlashingMultiplier > 0 && initialSlashingMultiplier <= initialBondMultiplier,
+            InvalidSlashingMultiplier()
+        );
+        self.bondMultiplier = initialBondMultiplier;
+        self.slashingMultiplier = initialSlashingMultiplier;
     }
 
-    function schedule(T storage self, uint256 newValue, uint256 governanceDelay) internal {
-        require(newValue > 0, InvalidMultiplier());
+    function schedule(T storage self, uint256 newBondMultiplier, uint256 newSlashingMultiplier, uint256 governanceDelay)
+        internal
+    {
+        require(newBondMultiplier > 0, InvalidBondMultiplier());
+        require(newSlashingMultiplier > 0 && newSlashingMultiplier <= newBondMultiplier, InvalidSlashingMultiplier());
         applyPending(self);
 
         uint256 activeAt = block.number + governanceDelay;
-        self.pendingBondMultiplier = newValue;
-        self.pendingBondMultiplierActiveAt = activeAt;
-        emit BondMultiplierScheduled(newValue, activeAt);
+        self.pendingBondMultiplier = newBondMultiplier;
+        self.pendingSlashingMultiplier = newSlashingMultiplier;
+        self.pendingActiveAt = activeAt;
+        emit BondConfigScheduled(newBondMultiplier, newSlashingMultiplier, activeAt);
     }
 
-    function applyPending(T storage self) internal returns (uint256) {
-        if (self.pendingBondMultiplierActiveAt == 0) return self.bondMultiplier;
-        if (block.number < self.pendingBondMultiplierActiveAt) return self.bondMultiplier;
+    function applyPending(T storage self) internal returns (uint256 bondMultiplier, uint256 slashingMultiplier) {
+        if (self.pendingActiveAt == 0 || block.number < self.pendingActiveAt) {
+            return (self.bondMultiplier, self.slashingMultiplier);
+        }
 
-        uint256 newValue = self.pendingBondMultiplier;
-        self.bondMultiplier = newValue;
+        bondMultiplier = self.pendingBondMultiplier;
+        slashingMultiplier = self.pendingSlashingMultiplier;
+        self.bondMultiplier = bondMultiplier;
+        self.slashingMultiplier = slashingMultiplier;
         self.pendingBondMultiplier = 0;
-        self.pendingBondMultiplierActiveAt = 0;
-        emit BondMultiplierApplied(newValue);
-        return newValue;
+        self.pendingSlashingMultiplier = 0;
+        self.pendingActiveAt = 0;
+        emit BondConfigApplied(bondMultiplier, slashingMultiplier);
     }
 
     function currentMultiplier(T storage self) internal view returns (uint256) {
-        if (self.pendingBondMultiplierActiveAt != 0 && block.number >= self.pendingBondMultiplierActiveAt) {
+        if (self.pendingActiveAt != 0 && block.number >= self.pendingActiveAt) {
             return self.pendingBondMultiplier;
         }
         return self.bondMultiplier;
+    }
+
+    function currentSlashingMultiplier(T storage self) internal view returns (uint256) {
+        if (self.pendingActiveAt != 0 && block.number >= self.pendingActiveAt) {
+            return self.pendingSlashingMultiplier;
+        }
+        return self.slashingMultiplier;
     }
 }
