@@ -24,6 +24,7 @@ contract SentinelOracleTest is Test {
     uint256 constant GOVERNANCE_DELAY = 100;
     uint256 constant INITIAL_DAO_FEE_SHARE = 0;
     string constant CHARTER_ENS = "safenet-charter.safe.eth";
+    uint256 constant ARBITRATION_TIMEOUT = 20;
 
     bytes32 constant REQUEST_ID = keccak256("request-1");
     bytes32 constant SALT_1 = keccak256("salt-1");
@@ -74,7 +75,8 @@ contract SentinelOracleTest is Test {
             BOND_MULTIPLIER,
             SLASHING_MULTIPLIER,
             INITIAL_DAO_FEE_SHARE,
-            CHARTER_ENS
+            CHARTER_ENS,
+            ARBITRATION_TIMEOUT
         );
 
         // Fund accounts
@@ -670,9 +672,7 @@ contract SentinelOracleTest is Test {
         uint256 proposerBalBefore = token.balanceOf(proposer);
 
         vm.expectEmit(true, true, false, true);
-        emit IOracle.OracleResult(
-            REQUEST_ID, proposer, abi.encode(SentinelOracleRequest.ResolveReason.UNANIMOUS_APPROVE), true
-        );
+        emit IOracle.OracleResult(REQUEST_ID, proposer, "", true);
         oracle.finalize(REQUEST_ID);
 
         // Proposer's fee was NOT refunded (it's distributed to sentinels).
@@ -760,9 +760,7 @@ contract SentinelOracleTest is Test {
         _reveal(sentinel1, false, SALT_1);
 
         vm.expectEmit(true, true, false, true);
-        emit IOracle.OracleResult(
-            REQUEST_ID, proposer, abi.encode(SentinelOracleRequest.ResolveReason.UNANIMOUS_DENY), false
-        );
+        emit IOracle.OracleResult(REQUEST_ID, proposer, "", false);
 
         oracle.finalize(REQUEST_ID);
 
@@ -829,10 +827,6 @@ contract SentinelOracleTest is Test {
         vm.expectEmit(true, false, false, true);
         emit SentinelOracle.DisputeResolved(
             REQUEST_ID, SentinelOracleRequest.State.RESOLVED_APPROVED, BOND_TARGET, context
-        );
-        vm.expectEmit(true, true, false, true);
-        emit IOracle.OracleResult(
-            REQUEST_ID, proposer, abi.encode(SentinelOracleRequest.ResolveReason.ARBITRATION), true
         );
 
         vm.prank(arbitrator);
@@ -1332,5 +1326,139 @@ contract SentinelOracleTest is Test {
         vm.expectRevert(SentinelOracleCommitment.AlreadyClaimed.selector);
         vm.prank(sentinel1);
         oracle.claim(REQUEST_ID);
+    }
+
+    // ============================================================
+    // ARBITRATION TIMEOUT
+    // ============================================================
+
+    function _freezeRequest() internal {
+        _postRequest();
+        _commit(sentinel1, true, SALT_1);
+        _commit(sentinel2, false, SALT_2);
+        _advancePastCommitDeadline();
+        _reveal(sentinel1, true, SALT_1);
+        _reveal(sentinel2, false, SALT_2);
+        oracle.finalize(REQUEST_ID);
+
+        SentinelOracleRequest.Request memory req = oracle.getRequest(REQUEST_ID);
+        assertEq(uint256(req.state), uint256(SentinelOracleRequest.State.FROZEN));
+    }
+
+    function test_TimeoutArbitration_RevertsWhenNotFrozen() public {
+        _postRequest();
+        _advancePastCommitDeadline();
+        _advancePastRevealDeadline();
+
+        vm.expectRevert(SentinelOracleRequest.RequestNotFrozen.selector);
+        oracle.timeoutArbitration(REQUEST_ID);
+    }
+
+    function test_TimeoutArbitration_RevertsBeforeDeadline() public {
+        _freezeRequest();
+
+        vm.expectRevert(SentinelOracleRequest.ArbitrationNotTimedOut.selector);
+        oracle.timeoutArbitration(REQUEST_ID);
+
+        vm.roll(block.number + ARBITRATION_TIMEOUT);
+        vm.expectRevert(SentinelOracleRequest.ArbitrationNotTimedOut.selector);
+        oracle.timeoutArbitration(REQUEST_ID);
+    }
+
+    function test_TimeoutArbitration_RefundsFeeAndBondsInFull() public {
+        uint256 proposerBalBefore = token.balanceOf(proposer);
+        _freezeRequest();
+
+        vm.roll(block.number + ARBITRATION_TIMEOUT + 1);
+
+        uint256 receiverBalBefore = token.balanceOf(protocolFundsReceiver);
+
+        oracle.timeoutArbitration(REQUEST_ID);
+
+        SentinelOracleRequest.Request memory req = oracle.getRequest(REQUEST_ID);
+        assertEq(uint256(req.state), uint256(SentinelOracleRequest.State.TIMED_OUT));
+        assertEq(token.balanceOf(proposer), proposerBalBefore, "proposer fee refunded in full");
+        assertEq(
+            token.balanceOf(protocolFundsReceiver),
+            receiverBalBefore,
+            "no bonds slashed on an arbitration timeout, same as any other timeout"
+        );
+
+        uint256 s1Before = token.balanceOf(sentinel1);
+        vm.prank(sentinel1);
+        oracle.claim(REQUEST_ID);
+        assertEq(token.balanceOf(sentinel1), s1Before + BOND_TARGET, "sentinel1 bond refunded in full via claim");
+
+        uint256 s2Before = token.balanceOf(sentinel2);
+        vm.prank(sentinel2);
+        oracle.claim(REQUEST_ID);
+        assertEq(token.balanceOf(sentinel2), s2Before + BOND_TARGET, "sentinel2 bond refunded in full via claim");
+    }
+
+    function test_TimeoutArbitration_Permissionless() public {
+        _freezeRequest();
+        vm.roll(block.number + ARBITRATION_TIMEOUT + 1);
+
+        address randomAddress = vm.createWallet("random").addr;
+        vm.prank(randomAddress);
+        oracle.timeoutArbitration(REQUEST_ID);
+
+        SentinelOracleRequest.Request memory req = oracle.getRequest(REQUEST_ID);
+        assertEq(uint256(req.state), uint256(SentinelOracleRequest.State.TIMED_OUT));
+    }
+
+    function test_TimeoutArbitration_UnrevealedCommitter_NoDoubleRefund() public {
+        _postRequest();
+        SentinelOracleRequest.Request memory posted = oracle.getRequest(REQUEST_ID);
+        uint256 bondTarget = posted.bondTarget;
+        uint256 slashAmount = posted.slashAmount;
+
+        // sentinel1 approves, sentinel2 denies (conflict -> FROZEN); sentinel3 commits but never
+        // reveals. `finalize()` sweeps sentinel3's `unrevealedBond` slash to the protocol funds
+        // receiver immediately, even on the path to FROZEN (see
+        // `test_Conflict_WithUnrevealedCommitter_NoFundsTrappedOrDoubleSlashed`) -- so once the
+        // dispute times out instead of being arbitrated, sentinel3 must only reclaim the unslashed
+        // remainder via claim(), not their full bond, or they are refunded twice for the one bond.
+        _commit(sentinel1, true, SALT_1);
+        _commit(sentinel2, false, SALT_2);
+        _commit(sentinel3, true, SALT_3);
+        _advancePastCommitDeadline();
+        _reveal(sentinel1, true, SALT_1);
+        _reveal(sentinel2, false, SALT_2);
+        _advancePastRevealDeadline();
+
+        uint256 receiverBalBefore = token.balanceOf(protocolFundsReceiver);
+        oracle.finalize(REQUEST_ID);
+        assertEq(
+            token.balanceOf(protocolFundsReceiver),
+            receiverBalBefore + slashAmount,
+            "sentinel3's unrevealed bond is swept even on the path to FROZEN"
+        );
+
+        vm.roll(block.number + ARBITRATION_TIMEOUT + 1);
+        oracle.timeoutArbitration(REQUEST_ID);
+
+        // sentinel1 and sentinel2 each revealed and contributed to the freeze -- an arbitration
+        // timeout is nobody's fault, so they are made whole exactly like any other timeout.
+        uint256 s1Before = token.balanceOf(sentinel1);
+        vm.prank(sentinel1);
+        oracle.claim(REQUEST_ID);
+        assertEq(token.balanceOf(sentinel1), s1Before + bondTarget, "revealed sentinel1 refunded in full");
+
+        uint256 s2Before = token.balanceOf(sentinel2);
+        vm.prank(sentinel2);
+        oracle.claim(REQUEST_ID);
+        assertEq(token.balanceOf(sentinel2), s2Before + bondTarget, "revealed sentinel2 refunded in full");
+
+        // sentinel3 never revealed, so its slash already happened at `finalize()` time -- claim()
+        // must return only the unslashed remainder, not the full bond on top of that sweep.
+        uint256 s3Before = token.balanceOf(sentinel3);
+        vm.prank(sentinel3);
+        oracle.claim(REQUEST_ID);
+        assertEq(
+            token.balanceOf(sentinel3),
+            s3Before + (bondTarget - slashAmount),
+            "non-revealer reclaims only the unslashed remainder, not a second full refund"
+        );
     }
 }

@@ -67,8 +67,7 @@ library SentinelOracleCommitmentMap {
     // ============================================================
 
     event Committed(bytes32 indexed requestId, address indexed sentinel, uint256 bondAmount);
-    // `reason` is why this *sentinel* voted the way it did — unrelated to
-    // `SentinelOracleRequest.ResolveReason`, which is why a *request* resolved.
+    // `reason` is why this *sentinel* voted the way it did.
     event Revealed(
         bytes32 indexed requestId, address indexed sentinel, bool approved, uint256 bondAmount, string reason
     );

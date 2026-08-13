@@ -31,6 +31,7 @@ GOVERNANCE_DELAY=0
 INITIAL_SLASHING_MULTIPLIER=2
 INITIAL_DAO_FEE_SHARE=0
 CHARTER_ENS="safenet-charter.safe.eth"
+ARBITRATION_TIMEOUT=100
 FUNDING_ETH=1ether
 FUNDING_TOKEN=1000000
 # Anvil account 0 — deployer, MyToken owner, and SentinelOracle arbitrator.
@@ -94,6 +95,7 @@ env \
 	SENTINEL_INITIAL_SLASHING_MULTIPLIER="$INITIAL_SLASHING_MULTIPLIER" \
 	SENTINEL_INITIAL_DAO_FEE_SHARE="$INITIAL_DAO_FEE_SHARE" \
 	SENTINEL_CHARTER_ENS="$CHARTER_ENS" \
+	SENTINEL_ARBITRATION_TIMEOUT="$ARBITRATION_TIMEOUT" \
 	forge script --root "$ROOT/contracts" DeploySentinelOracleScript --rpc-url "$RPC_URL" --private-key "$DEPLOYER_PK" --broadcast
 ORACLE=$(jq -r '.returns.sentinelOracle.value' "$ROOT/contracts/build/broadcast/DeploySentinelOracle.s.sol/$CHAIN_ID/run-latest.json")
 echo "Sentinel oracle deployed at $ORACLE"
@@ -143,11 +145,11 @@ SENTINEL_B_BALANCE_BEFORE=$(balance_of "$SENTINEL_B_ADDR")
 # misaligns the ones after the omission.
 get_request() {
 	cast call --rpc-url "$RPC_URL" --json "$ORACLE" \
-		"getRequest(bytes32)((address,uint256,uint256,uint256,uint256,uint256,uint256,uint8,uint256,uint256,uint256,uint256))" \
+		"getRequest(bytes32)((address,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint8,uint256,uint256,uint256,uint256))" \
 		"$1" 2>/dev/null
 }
-REQUEST_STATE_INDEX=7
-REQUEST_DENY_SENTINEL_COUNT_INDEX=11
+REQUEST_STATE_INDEX=8
+REQUEST_DENY_SENTINEL_COUNT_INDEX=12
 
 # --- 5. Spin up both Rust sentinels ---
 # Already built in step 1, so this just runs it — twice, once per account,

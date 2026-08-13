@@ -16,13 +16,6 @@ library SentinelOracleRequest {
         TIMED_OUT
     }
 
-    enum ResolveReason {
-        UNANIMOUS_APPROVE,
-        UNANIMOUS_DENY,
-        TIMEOUT,
-        ARBITRATION
-    }
-
     // ============================================================
     // STRUCTS
     // ============================================================
@@ -35,6 +28,7 @@ library SentinelOracleRequest {
         uint256 slashAmount;
         uint256 commitDeadline;
         uint256 revealDeadline;
+        uint256 arbitrationDeadline;
         State state;
         uint256 committedCount;
         uint256 revealedCount;
@@ -53,6 +47,7 @@ library SentinelOracleRequest {
     error RevealWindowNotOpen();
     error RevealWindowClosed();
     error FinalizeTooEarly();
+    error ArbitrationNotTimedOut();
 
     // ============================================================
     // INTERNAL FUNCTIONS
@@ -79,7 +74,7 @@ library SentinelOracleRequest {
         }
     }
 
-    function finalize(Request storage self)
+    function finalize(Request storage self, uint256 arbitrationTimeout)
         internal
         returns (State newState, uint256 refundFee, uint256 unrevealedBond)
     {
@@ -94,6 +89,7 @@ library SentinelOracleRequest {
         if (approveMet || denyMet) {
             if (approveMet && denyMet) {
                 newState = State.FROZEN;
+                self.arbitrationDeadline = block.number + arbitrationTimeout;
             } else if (approveMet) {
                 newState = State.RESOLVED_APPROVED;
             } else {
@@ -113,6 +109,18 @@ library SentinelOracleRequest {
         }
 
         self.state = newState;
+    }
+
+    // A `FROZEN` request that outlives `ARBITRATION_TIMEOUT` moves to `TIMED_OUT` -- the same "no
+    // established outcome, everyone made whole" state every other timeout path already produces,
+    // so bonds return in full via the existing `claim()`/`slashAmountFor` logic with no changes
+    // there.
+    function timeoutArbitration(Request storage self) internal returns (uint256 refundFee) {
+        require(self.state == State.FROZEN, RequestNotFrozen());
+        require(block.number > self.arbitrationDeadline, ArbitrationNotTimedOut());
+        refundFee = self.fee;
+        self.fee = 0;
+        self.state = State.TIMED_OUT;
     }
 
     function requireResolved(Request storage self) internal view returns (State) {
@@ -137,13 +145,22 @@ library SentinelOracleRequest {
 
     function slashAmountFor(Request storage self, SentinelOracleCommitment.Vote vote) internal view returns (uint256) {
         State state = requireResolved(self);
-        if (state == State.TIMED_OUT) return 0;
-        // A pending (never revealed) vote in a resolved request is unrevealed griefing -- slash it
-        // regardless of which side won.
-        if (vote != SentinelOracleCommitment.Vote.APPROVED && vote != SentinelOracleCommitment.Vote.DENIED) {
-            return self.slashAmount;
+        bool isRevealedVote =
+            vote == SentinelOracleCommitment.Vote.APPROVED || vote == SentinelOracleCommitment.Vote.DENIED;
+
+        if (!isRevealedVote) {
+            // A pending (never-revealed) vote is unrevealed griefing whenever either side ever got
+            // established -- true for a directly-resolved request, and for a `FROZEN` request that
+            // later timed out via arbitration (that slash already happened back at `finalize()`
+            // time). A total timeout (nobody ever revealed) established neither side, so there is
+            // nothing left to slash.
+            bool wasEstablished = self.approveSentinelCount > 0 || self.denySentinelCount > 0;
+            return wasEstablished ? self.slashAmount : 0;
         }
-        // Slashing only applies to requests resolved via arbitration (both sides had votes).
+        // A revealed vote is only slashed for losing an arbitrated dispute -- a winner, a lone
+        // unopposed revealer, or anyone made whole by a timeout (total or arbitration) keeps
+        // their full bond.
+        if (state != State.RESOLVED_APPROVED && state != State.RESOLVED_DENIED) return 0;
         if (self.approveSentinelCount == 0 || self.denySentinelCount == 0) return 0;
         bool approved = vote == SentinelOracleCommitment.Vote.APPROVED;
         return approved != (state == State.RESOLVED_APPROVED) ? self.slashAmount : 0;
@@ -214,6 +231,7 @@ library SentinelOracleRequestMap {
             slashAmount: slashAmount,
             commitDeadline: commitDeadline,
             revealDeadline: revealDeadline,
+            arbitrationDeadline: 0,
             state: SentinelOracleRequest.State.PENDING,
             committedCount: 0,
             revealedCount: 0,
