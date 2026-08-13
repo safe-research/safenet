@@ -23,6 +23,7 @@ contract SentinelOracleTest is Test {
     uint256 constant REVEAL_WINDOW = 12;
     uint256 constant GOVERNANCE_DELAY = 100;
     uint256 constant INITIAL_DAO_FEE_SHARE = 0;
+    string constant CHARTER_ENS = "safenet-charter.safe.eth";
 
     bytes32 constant REQUEST_ID = keccak256("request-1");
     bytes32 constant SALT_1 = keccak256("salt-1");
@@ -72,7 +73,8 @@ contract SentinelOracleTest is Test {
             GOVERNANCE_DELAY,
             BOND_MULTIPLIER,
             SLASHING_MULTIPLIER,
-            INITIAL_DAO_FEE_SHARE
+            INITIAL_DAO_FEE_SHARE,
+            CHARTER_ENS
         );
 
         // Fund accounts
@@ -527,6 +529,14 @@ contract SentinelOracleTest is Test {
         assertEq(oracle.daoFeeShare(), newShare, "governed share has matured");
         SentinelOracleRequest.Request memory req = oracle.getRequest(REQUEST_ID);
         assertEq(req.daoFeeShare, INITIAL_DAO_FEE_SHARE, "in-flight request keeps its originally snapshotted share");
+    }
+
+    // ============================================================
+    // CHARTER ENS
+    // ============================================================
+
+    function test_CharterEns_RoundTrips() public view {
+        assertEq(oracle.charterEns(), CHARTER_ENS);
     }
 
     // ============================================================
