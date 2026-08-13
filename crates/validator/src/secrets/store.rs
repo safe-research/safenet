@@ -141,6 +141,9 @@ impl SecretStore {
 
     /// Deletes the DKG secrets of every group other than `groups`, reconciling
     /// the stored secrets with the groups the state machine still tracks.
+    ///
+    /// Specifying an empty `groups` will remove all DKG secrets.
+    ///
     /// Idempotent.
     #[cfg_attr(
         not(test),
@@ -442,7 +445,11 @@ impl SecretStore {
 
     /// Deletes the nonce trees of every group other than `groups` (cascading to
     /// their nonces), reconciling the stored nonces with the groups the state
-    /// machine still tracks. Idempotent.
+    /// machine still tracks.
+    ///
+    /// Specifying an empty `groups` will remove all nonce trees and nonces.
+    ///
+    /// Idempotent.
     #[cfg_attr(
         not(test),
         expect(
