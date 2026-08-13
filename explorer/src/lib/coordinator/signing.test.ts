@@ -1,4 +1,4 @@
-import type { Address, PublicClient } from "viem";
+import type { Address, Hex, PublicClient } from "viem";
 import { zeroAddress } from "viem";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { oracleRequestId } from "@/lib/oracle/hashing";
@@ -53,6 +53,7 @@ const baseArgs = {
 	proposedAt: 0n,
 	maxBlockRange: 1000n,
 	oracle: ORACLE,
+	oracleData: "0x" as Hex,
 };
 
 describe("loadLatestAttestationStatus — message selection", () => {
@@ -76,6 +77,7 @@ describe("loadLatestAttestationStatus — message selection", () => {
 			epoch: baseArgs.epoch,
 			oracle: ORACLE,
 			safeTxHash: SAFE_TX_HASH,
+			oracleData: "0x",
 		});
 		expect(provider.getLogs).toHaveBeenCalledWith(expect.objectContaining({ args: { message: expectedMessage } }));
 	});

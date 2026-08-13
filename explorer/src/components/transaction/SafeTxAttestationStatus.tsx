@@ -13,6 +13,7 @@ export function SafeTxAttestationStatus({ proposal }: { proposal: TransactionPro
 		proposal.proposedAt.block,
 		proposal.attestedAt?.block ?? null,
 		proposal.oracle,
+		proposal.oracleData,
 	);
 	const allValidatorIds = Array.from(validatorInfo.data?.keys() ?? []);
 	const committedIds = status.data?.committed.map((s) => s.address) ?? [];

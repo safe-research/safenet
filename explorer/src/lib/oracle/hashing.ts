@@ -5,6 +5,7 @@ export type OracleRequestIdParams = {
 	consensus: Address;
 	epoch: bigint;
 	oracle: Address;
+	oracleData: Hex;
 	safeTxHash: Hex;
 };
 
@@ -12,7 +13,14 @@ export type OracleRequestIdParams = {
 // The result isn't just an attestation message hash — `Consensus.proposeTransaction`
 // posts this same value to the oracle as its `requestId`, so it doubles as the lookup key for
 // `getRequest`/`Committed`/`Revealed`/`OracleResult`.
-export const oracleRequestId = ({ chainId, consensus, epoch, oracle, safeTxHash }: OracleRequestIdParams): Hex =>
+export const oracleRequestId = ({
+	chainId,
+	consensus,
+	epoch,
+	oracle,
+	safeTxHash,
+	oracleData,
+}: OracleRequestIdParams): Hex =>
 	hashTypedData({
 		domain: {
 			chainId,
@@ -22,9 +30,10 @@ export const oracleRequestId = ({ chainId, consensus, epoch, oracle, safeTxHash 
 			TransactionProposal: [
 				{ type: "uint64", name: "epoch" },
 				{ type: "address", name: "oracle" },
+				{ type: "bytes", name: "oracleData" },
 				{ type: "bytes32", name: "safeTxHash" },
 			],
 		},
 		primaryType: "TransactionProposal",
-		message: { epoch, oracle, safeTxHash },
+		message: { epoch, oracle, oracleData, safeTxHash },
 	});

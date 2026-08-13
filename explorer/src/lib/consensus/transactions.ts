@@ -41,6 +41,7 @@ export type TransactionProposal = {
 	safeTxHash: Hex;
 	epoch: bigint;
 	oracle: Address;
+	oracleData: Hex;
 	transaction: SafeTransaction;
 	proposedAt: ExecutionLink;
 	attestedAt: ExecutionLink | null;
@@ -177,6 +178,7 @@ export const loadTransactionProposals = async ({
 			}
 
 			const oracle = log.args.oracle;
+			const oracleData = log.args.oracleData;
 			const attestedAt = attestations.get(attestationKey(log)) ?? null;
 			const proposedAt = { block: log.blockNumber, tx: log.transactionHash };
 			const status: ProposalStatus =
@@ -190,6 +192,7 @@ export const loadTransactionProposals = async ({
 				safeTxHash: log.args.safeTxHash,
 				epoch: log.args.epoch,
 				oracle,
+				oracleData,
 				transaction: transaction.data,
 				proposedAt,
 				attestedAt,

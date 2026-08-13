@@ -16,6 +16,7 @@ const commonParams = {
 	consensus: CONSENSUS,
 	epoch: EPOCH,
 	safeTxHash: SAFE_TX_HASH,
+	oracleData: "0x" as Hex,
 	maxBlockRange: 500n,
 };
 

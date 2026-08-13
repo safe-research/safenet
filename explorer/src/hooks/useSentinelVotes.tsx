@@ -6,7 +6,7 @@ import { getOracleWorker, type SentinelVote } from "@/lib/oracle";
 // `enabled` should be false until the caller knows the oracle is `SentinelOracle`-shaped
 // (i.e. `useVotingStatus(...).data?.kind === "sentinel"`) — a generic `IOracle` has no
 // `Committed`/`Revealed` events to read, so querying it is pure wasted RPC traffic.
-export function useSentinelVotes(oracle: Address, epoch: bigint, safeTxHash: Hex, enabled = false) {
+export function useSentinelVotes(oracle: Address, epoch: bigint, safeTxHash: Hex, oracleData: Hex, enabled = false) {
 	const [settings] = useSettings();
 	return useQuery<SentinelVote[], Error>({
 		queryKey: [
@@ -16,6 +16,7 @@ export function useSentinelVotes(oracle: Address, epoch: bigint, safeTxHash: Hex
 			settings.consensus,
 			epoch.toString(),
 			safeTxHash,
+			oracleData,
 			settings.maxBlockRange,
 		],
 		queryFn: () =>
@@ -25,6 +26,7 @@ export function useSentinelVotes(oracle: Address, epoch: bigint, safeTxHash: Hex
 				consensus: settings.consensus,
 				epoch,
 				safeTxHash,
+				oracleData,
 				maxBlockRange: BigInt(settings.maxBlockRange),
 			}),
 		initialData: [],
