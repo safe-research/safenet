@@ -12,7 +12,7 @@ use crate::{
 use alloy::primitives::{Address, B256};
 use safenet_core::effects::EffectHandler;
 use std::{
-    collections::BTreeMap,
+    collections::{BTreeMap, BTreeSet},
     error::Error,
     fmt::{self, Display, Formatter},
     sync::Arc,
@@ -316,33 +316,32 @@ impl Handler {
                 Ok(Resume::Noop)
             }
             Effect::ReconcileGroupSecrets { groups } => {
-                self.secrets
-                    .retain_keygen_secrets(
-                        groups
-                            .iter()
-                            .filter_map(|(group_id, key_share)| {
-                                key_share.is_none().then_some(*group_id)
-                            })
-                            // Collecting here is unfortunately required for the
-                            // compiler to correctly resolve lifetimes of our
-                            // future; in theory it should not be needed.
-                            .collect::<Vec<_>>(),
-                    )
-                    .await?;
-                self.secrets.retain_nonces(groups.keys().copied()).await?;
+                // We only need to keep keygen secrets for groups that are still
+                // in DKG and do not yet have a key share, and nonces (both in
+                // the secret store and the nonce generator) for groups that
+                // have completed DKG to the point that their key share is
+                // constructed.
+                let (keygen, nonces) = groups.into_iter().fold(
+                    (BTreeSet::new(), BTreeMap::new()),
+                    |(mut keygen, mut nonces), (group_id, key_share)| {
+                        if let Some(key_share) = key_share {
+                            nonces.insert(group_id, key_share);
+                        } else {
+                            keygen.insert(group_id);
+                        }
+                        (keygen, nonces)
+                    },
+                );
 
-                let mut nonce_generator = self.nonce_generator.lock().await;
-                nonce_generator.retain(|group_id| {
-                    groups
-                        .get(group_id)
-                        .is_some_and(|key_share| key_share.is_some())
-                });
-                for (group_id, key_share) in groups {
-                    let Some(key_share) = key_share else {
-                        continue;
-                    };
-                    nonce_generator.start(group_id, key_share)?;
+                self.secrets.retain_keygen_secrets(keygen).await?;
+                self.secrets.retain_nonces(nonces.keys().copied()).await?;
+
+                let mut generator = self.nonce_generator.lock().await;
+                generator.retain(|group_id| nonces.contains_key(group_id));
+                for (group_id, key_share) in nonces {
+                    generator.start(group_id, key_share)?;
                 }
+
                 Ok(Resume::Noop)
             }
         }
