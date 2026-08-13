@@ -298,9 +298,9 @@ fi
 echo "OK: bonds were returned in full and the request fee was split between the sentinels."
 
 # --- 10. Propose a disputed transaction: sentinel B denies, sentinel A approves ---
-# Exercises Phase 6 of the oracle-governance epic — the sentinel client must
-# claim after arbitration regardless of which side it was on, since bond
-# slashing is only partial (INITIAL_SLASHING_MULTIPLIER < BOND_MULTIPLIER).
+# The sentinel client must claim after arbitration regardless of which side it
+# was on, since bond slashing is only partial (INITIAL_SLASHING_MULTIPLIER <
+# BOND_MULTIPLIER).
 echo "Approving the oracle to pull the request fee for the disputed request..."
 cast send --rpc-url "$RPC_URL" --private-key "$SPONSOR_PK" \
 	"$FEE_TOKEN" "approve(address,uint256)" "$ORACLE" "$REQUEST_FEE" >/dev/null
