@@ -83,7 +83,7 @@ impl Transition {
         event: &Consensus::TransactionAttested,
     ) -> (State, Commands<State, Self>) {
         let epoch = EpochId::from_raw(event.epoch);
-        let message = self.consensus.transaction_proposal_hash_from_data_hash(
+        let message = self.consensus.transaction_proposal_hash(
             epoch,
             event.oracle,
             event.oracleDataHash,

@@ -257,8 +257,8 @@ enum Packet {
         epoch: EpochId,
         /// The oracle vouching for the transaction.
         oracle: Address,
-        /// Arbitrary oracle-specific data, bound into the signed message. Retained as bytes and hashed
-        /// only when building the (constant-size) attestation call.
+        /// The oracle-specific data bound into the signed message, kept as its full preimage (mirroring
+        /// `transaction`, the preimage of the Safe tx hash); reduced to `keccak256` where a hash is needed.
         oracle_data: Bytes,
         /// The proposed transaction.
         transaction: Box<SafeTransaction>,
