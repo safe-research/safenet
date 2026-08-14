@@ -27,8 +27,7 @@ contract SentinelOracle is IOracle {
     // ============================================================
 
     // `context` is the arbitrator's rationale for this ruling (free-form text, or e.g. an IPFS
-    // CID pointing to a longer writeup) -- unrelated to a sentinel's `reveal` vote `reason` and
-    // to `SentinelOracleRequest.ResolveReason`, which is why a *request* resolved.
+    // CID pointing to a longer writeup).
     event DisputeResolved(
         bytes32 indexed requestId, SentinelOracleRequest.State outcome, uint256 slashed, string context
     );
@@ -45,6 +44,7 @@ contract SentinelOracle is IOracle {
     uint256 public immutable COMMIT_WINDOW;
     uint256 public immutable REVEAL_WINDOW;
     uint256 public immutable GOVERNANCE_DELAY;
+    uint256 public immutable ARBITRATION_TIMEOUT;
 
     // ============================================================
     // CONSTANTS
@@ -134,7 +134,8 @@ contract SentinelOracle is IOracle {
         uint256 initialBondMultiplier,
         uint256 initialSlashingMultiplier,
         uint256 initialDaoFeeShare,
-        string memory initialCharterEns
+        string memory initialCharterEns,
+        uint256 arbitrationTimeout
     ) {
         require(arbitrator != address(0), InvalidAddress());
         require(governance != address(0), InvalidAddress());
@@ -145,6 +146,7 @@ contract SentinelOracle is IOracle {
         require(commitWindow > 0, ZeroWindow());
         require(revealWindow > 0, ZeroWindow());
         require(initialDaoFeeShare <= FEE_SHARE_DENOMINATOR, InvalidFeeShare());
+        require(arbitrationTimeout > 0, ZeroWindow());
         ARBITRATOR = arbitrator;
         GOVERNANCE = governance;
         CONSENSUS = consensus;
@@ -152,6 +154,7 @@ contract SentinelOracle is IOracle {
         COMMIT_WINDOW = commitWindow;
         REVEAL_WINDOW = revealWindow;
         GOVERNANCE_DELAY = governanceDelay;
+        ARBITRATION_TIMEOUT = arbitrationTimeout;
         $charterEns = initialCharterEns;
         $bondConfig.init(initialBondMultiplier, initialSlashingMultiplier);
         $protocolFundsReceiverConfig.init(initialProtocolFundsReceiver);
@@ -211,7 +214,8 @@ contract SentinelOracle is IOracle {
     function finalize(bytes32 requestId) external {
         SentinelOracleRequest.Request storage req = $requests.get(requestId);
         address proposer = req.proposer;
-        (SentinelOracleRequest.State newState, uint256 refundFee, uint256 unrevealedBond) = req.finalize();
+        (SentinelOracleRequest.State newState, uint256 refundFee, uint256 unrevealedBond) =
+            req.finalize(ARBITRATION_TIMEOUT);
 
         address fundsReceiver = $protocolFundsReceiverConfig.applyPending();
         if (unrevealedBond > 0) {
@@ -224,7 +228,6 @@ contract SentinelOracle is IOracle {
 
         if (newState == SentinelOracleRequest.State.TIMED_OUT) {
             FEE_TOKEN.safeTransfer(proposer, refundFee);
-            emit OracleResult(requestId, proposer, abi.encode(SentinelOracleRequest.ResolveReason.TIMEOUT), false);
             return;
         }
 
@@ -235,13 +238,9 @@ contract SentinelOracle is IOracle {
         }
 
         if (newState == SentinelOracleRequest.State.RESOLVED_APPROVED) {
-            emit OracleResult(
-                requestId, proposer, abi.encode(SentinelOracleRequest.ResolveReason.UNANIMOUS_APPROVE), true
-            );
+            emit OracleResult(requestId, proposer, "", true);
         } else {
-            emit OracleResult(
-                requestId, proposer, abi.encode(SentinelOracleRequest.ResolveReason.UNANIMOUS_DENY), false
-            );
+            emit OracleResult(requestId, proposer, "", false);
         }
     }
 
@@ -276,7 +275,16 @@ contract SentinelOracle is IOracle {
         FEE_TOKEN.safeTransfer(proposer, refundFee);
         FEE_TOKEN.safeTransfer(fundsReceiver, slashed - refundFee + daoCut);
         emit DisputeResolved(requestId, outcome, slashed, context);
-        emit OracleResult(requestId, proposer, abi.encode(SentinelOracleRequest.ResolveReason.ARBITRATION), approveWins);
+    }
+
+    // Permissionless: a `FROZEN` request that outlives `ARBITRATION_TIMEOUT` should not wait on the
+    // arbitrator forever. Reuses the `TIMED_OUT` machinery, so every committed bond returns in
+    // full via `claim()` -- identical to the no-reveal timeout path.
+    function timeoutArbitration(bytes32 requestId) external {
+        SentinelOracleRequest.Request storage req = $requests.get(requestId);
+        address proposer = req.proposer;
+        uint256 refundFee = req.timeoutArbitration();
+        FEE_TOKEN.safeTransfer(proposer, refundFee);
     }
 
     // ============================================================

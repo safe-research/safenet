@@ -50,6 +50,10 @@ SENTINEL_INITIAL_DAO_FEE_SHARE=0
 # human-readable domain (not its namehash) so it can be read directly by
 # anyone inspecting the contract.
 SENTINEL_CHARTER_ENS="safenet-charter.safe.eth"
+# A frozen (conflicting-votes) request waits this many blocks for the
+# arbitrator before anyone can permissionlessly time it out and refund
+# everyone in full.
+SENTINEL_ARBITRATION_TIMEOUT=100
 # $10 of the fee token per sentinel: comfortably above the 80-cent bond
 # target across more than one request.
 SENTINEL_FUNDING_TOKEN=10000000000000000000
@@ -328,7 +332,8 @@ sentinel_oracle="$(parse_address "$(simulate_forge_script DeploySentinelOracleSc
     -e SENTINEL_BOND_MULTIPLIER="$SENTINEL_BOND_MULTIPLIER" \
     -e SENTINEL_INITIAL_SLASHING_MULTIPLIER="$SENTINEL_INITIAL_SLASHING_MULTIPLIER" \
     -e SENTINEL_INITIAL_DAO_FEE_SHARE="$SENTINEL_INITIAL_DAO_FEE_SHARE" \
-    -e SENTINEL_CHARTER_ENS="$SENTINEL_CHARTER_ENS")" 'SentinelOracle deployed at')"
+    -e SENTINEL_CHARTER_ENS="$SENTINEL_CHARTER_ENS" \
+    -e SENTINEL_ARBITRATION_TIMEOUT="$SENTINEL_ARBITRATION_TIMEOUT")" 'SentinelOracle deployed at')"
 
 # Write each validator's TOML config into `$config_dir`, following the shape
 # established by `run_validator_integration_test.sh`'s `validator_config()`
@@ -418,7 +423,8 @@ forge_script DeploySentinelOracleScript \
     -e SENTINEL_BOND_MULTIPLIER="$SENTINEL_BOND_MULTIPLIER" \
     -e SENTINEL_INITIAL_SLASHING_MULTIPLIER="$SENTINEL_INITIAL_SLASHING_MULTIPLIER" \
     -e SENTINEL_INITIAL_DAO_FEE_SHARE="$SENTINEL_INITIAL_DAO_FEE_SHARE" \
-    -e SENTINEL_CHARTER_ENS="$SENTINEL_CHARTER_ENS" >/dev/null
+    -e SENTINEL_CHARTER_ENS="$SENTINEL_CHARTER_ENS" \
+    -e SENTINEL_ARBITRATION_TIMEOUT="$SENTINEL_ARBITRATION_TIMEOUT" >/dev/null
 
 for sentinel in "${SENTINELS[@]}"; do
     parts=(${sentinel//:/ })
