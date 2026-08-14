@@ -157,7 +157,11 @@ Phase 1 is the only hard prerequisite for Phases 2-5 (they all gate new function
 
 `SentinelOracle.sol` (`ARBITRATION_TIMEOUT` immutable + constructor param; `timeoutArbitration()`; `ResolveReason.ARBITRATION_TIMEOUT`), `SentinelOracleRequests.sol` (`Request.arbitrationDeadline`; set when `finalize()` decides `FROZEN`; new `timeoutArbitration` library function reusing the no-reveal `TIMED_OUT` refund logic), deploy script + devnet wiring, tests (`timeoutArbitration` reverts before the deadline and while not `FROZEN`; after the deadline, fee refunds to the proposer and every committed bond returns in full via `claim`, matching the existing no-reveal timeout test's assertions).
 
-### Phase 9 — Remove this plan
+### Phase 9 — Optimizations
+
+So far the contract has not been gas optimized. As part of this phase the code should be analyzed where types could be limited and combined into one slot and reorderd to optimize loading less slots on likely code paths. It should be checked if the delayed config types can be abstracted to avoid code duplication. Also this should include to adjust fetching the pending configs. Each delayed type should have a `pending` method that returns the value and block number for the pending value if it is present, otherwise it should return zero values. If not done before methods with many parameters should be refactored to use structs as input (i.e. the oracle constructor).
+
+### Phase 10 — Remove this plan
 
 Delete `epics/2026_08_12_oracle_governance.md`.
 

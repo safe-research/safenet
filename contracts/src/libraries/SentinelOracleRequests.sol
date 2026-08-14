@@ -31,6 +31,7 @@ library SentinelOracleRequest {
         address proposer;
         uint256 fee;
         uint256 bondTarget;
+        uint256 daoFeeShare;
         uint256 commitDeadline;
         uint256 revealDeadline;
         State state;
@@ -195,6 +196,7 @@ library SentinelOracleRequestMap {
         address proposer,
         uint256 fee,
         uint256 bondTarget,
+        uint256 daoFeeShare,
         uint256 commitDeadline,
         uint256 revealDeadline
     ) internal {
@@ -206,6 +208,7 @@ library SentinelOracleRequestMap {
             proposer: proposer,
             fee: fee,
             bondTarget: bondTarget,
+            daoFeeShare: daoFeeShare,
             commitDeadline: commitDeadline,
             revealDeadline: revealDeadline,
             state: SentinelOracleRequest.State.PENDING,

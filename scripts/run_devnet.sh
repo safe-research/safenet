@@ -41,6 +41,8 @@ SENTINEL_COMMIT_WINDOW=5
 SENTINEL_REVEAL_WINDOW=5
 SENTINEL_GOVERNANCE_DELAY=0
 SENTINEL_BOND_MULTIPLIER=2
+# 0%: no DAO cut by default on devnet.
+SENTINEL_INITIAL_DAO_FEE_SHARE=0
 # $10 of the fee token per sentinel: comfortably above the 80-cent bond
 # target across more than one request.
 SENTINEL_FUNDING_TOKEN=10000000000000000000
@@ -316,7 +318,8 @@ sentinel_oracle="$(parse_address "$(simulate_forge_script DeploySentinelOracleSc
     -e SENTINEL_COMMIT_WINDOW="$SENTINEL_COMMIT_WINDOW" \
     -e SENTINEL_REVEAL_WINDOW="$SENTINEL_REVEAL_WINDOW" \
     -e SENTINEL_GOVERNANCE_DELAY="$SENTINEL_GOVERNANCE_DELAY" \
-    -e SENTINEL_BOND_MULTIPLIER="$SENTINEL_BOND_MULTIPLIER")" 'SentinelOracle deployed at')"
+    -e SENTINEL_BOND_MULTIPLIER="$SENTINEL_BOND_MULTIPLIER" \
+    -e SENTINEL_INITIAL_DAO_FEE_SHARE="$SENTINEL_INITIAL_DAO_FEE_SHARE")" 'SentinelOracle deployed at')"
 
 # Write each validator's TOML config into `$config_dir`, following the shape
 # established by `run_validator_integration_test.sh`'s `validator_config()`
@@ -403,7 +406,8 @@ forge_script DeploySentinelOracleScript \
     -e SENTINEL_COMMIT_WINDOW="$SENTINEL_COMMIT_WINDOW" \
     -e SENTINEL_REVEAL_WINDOW="$SENTINEL_REVEAL_WINDOW" \
     -e SENTINEL_GOVERNANCE_DELAY="$SENTINEL_GOVERNANCE_DELAY" \
-    -e SENTINEL_BOND_MULTIPLIER="$SENTINEL_BOND_MULTIPLIER" >/dev/null
+    -e SENTINEL_BOND_MULTIPLIER="$SENTINEL_BOND_MULTIPLIER" \
+    -e SENTINEL_INITIAL_DAO_FEE_SHARE="$SENTINEL_INITIAL_DAO_FEE_SHARE" >/dev/null
 
 for sentinel in "${SENTINELS[@]}"; do
     parts=(${sentinel//:/ })

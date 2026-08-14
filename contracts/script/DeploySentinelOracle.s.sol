@@ -20,6 +20,7 @@ contract DeploySentinelOracleScript is Script {
         uint256 revealWindow = vm.envUint("SENTINEL_REVEAL_WINDOW");
         uint256 governanceDelay = vm.envUint("SENTINEL_GOVERNANCE_DELAY");
         uint256 bondMultiplier = vm.envUint("SENTINEL_BOND_MULTIPLIER");
+        uint256 initialDaoFeeShare = vm.envUint("SENTINEL_INITIAL_DAO_FEE_SHARE");
 
         DeterministicDeployment.Factory factory = getFactory(vm);
 
@@ -38,7 +39,8 @@ contract DeploySentinelOracleScript is Script {
                 commitWindow,
                 revealWindow,
                 governanceDelay,
-                bondMultiplier
+                bondMultiplier,
+                initialDaoFeeShare
             )
         );
 
