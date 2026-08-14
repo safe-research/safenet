@@ -1,6 +1,7 @@
-import type { PublicClient } from "viem";
+import type { Address, PublicClient } from "viem";
 import { describe, expect, it, vi } from "vitest";
-import { getBlockRange, loadChainId, mostRecentFirst } from "./utils";
+import { shortAddress } from "@/lib/address";
+import { getBlockRange, loadChainId, mapAddressLabel, mostRecentFirst } from "./utils";
 
 const CURRENT_BLOCK = 10000n;
 const MAX_BLOCK_RANGE = 1000n;
@@ -117,5 +118,28 @@ describe("loadChainId", () => {
 		await expect(loadChainId(provider)).rejects.toThrow("network error");
 		await expect(loadChainId(provider)).resolves.toBe(7);
 		expect(provider.getChainId).toHaveBeenCalledTimes(2);
+	});
+});
+
+describe("mapAddressLabel", () => {
+	const ADDR_A = "0xAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA" as Address;
+	const ADDR_B = "0xBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB" as Address;
+
+	const labelMap = new Map([
+		[ADDR_A, { label: "Alice" }],
+		[ADDR_B, { label: "Bob" }],
+	]);
+
+	it("uses the label when the address is known", () => {
+		expect(mapAddressLabel(labelMap, "✅", ADDR_A)).toBe("Alice ✅");
+	});
+
+	it("falls back to the short address when the address is unknown", () => {
+		const unknown = "0xCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC" as Address;
+		expect(mapAddressLabel(labelMap, "⏳", unknown)).toBe(`${shortAddress(unknown)} ⏳`);
+	});
+
+	it("falls back to the short address when the map is missing", () => {
+		expect(mapAddressLabel(null, "❌", ADDR_B)).toBe(`${shortAddress(ADDR_B)} ❌`);
 	});
 });

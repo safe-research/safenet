@@ -1,6 +1,7 @@
 import { type ClassValue, clsx } from "clsx";
 import { twMerge } from "tailwind-merge";
-import type { Log, PublicClient } from "viem";
+import type { Address, Log, PublicClient } from "viem";
+import { shortAddress } from "@/lib/address";
 
 /**
  * Returns `"#ffffff"` or `"#000000"` depending on which gives better contrast
@@ -18,6 +19,15 @@ export const contrastColor = (hex: string): "#ffffff" | "#000000" => {
 export function cn(...inputs: ClassValue[]) {
 	return twMerge(clsx(inputs));
 }
+
+// Formats an address as its known label (looked up in an on/off-chain info map, e.g.
+// validator-info.json or sentinel-info.json), falling back to the short address, with
+// a status suffix appended (e.g. "✅").
+export const mapAddressLabel = (
+	labelMap: Map<Address, { label: string }> | null | undefined,
+	suffix: string,
+	address: Address,
+) => `${labelMap?.get(address)?.label ?? shortAddress(address)} ${suffix}`;
 
 export function jsonReplacer(_key: string, value: unknown): unknown {
 	if (typeof value === "bigint") {

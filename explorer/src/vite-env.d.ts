@@ -14,6 +14,7 @@ declare const __DEFAULT_DECODER__: string;
 declare const __DEFAULT_RELAYER__: string;
 declare const __DEFAULT_MAX_BLOCK_RANGE__: number;
 declare const __DEFAULT_VALIDATOR_INFO__: string;
+declare const __DEFAULT_SENTINEL_INFO__: string;
 declare const __DEFAULT_REFETCH_INTERVAL__: number;
 declare const __DEFAULT_BLOCKS_PER_EPOCH__: number;
 declare const __DEFAULT_SIGNING_TIMEOUT__: number;

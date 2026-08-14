@@ -16,6 +16,9 @@ export default defineConfig({
 		__DEFAULT_VALIDATOR_INFO__: JSON.stringify(
 			"https://raw.githubusercontent.com/safe-fndn/safenet-beta-data/refs/heads/main/assets/validator-info.json",
 		),
+		__DEFAULT_SENTINEL_INFO__: JSON.stringify(
+			"https://raw.githubusercontent.com/safe-fndn/safenet-beta-data/refs/heads/main/assets/sentinel-info.json",
+		),
 		__DEFAULT_REFETCH_INTERVAL__: 10000,
 		__DEFAULT_BLOCKS_PER_EPOCH__: 1440,
 		__DEFAULT_SIGNING_TIMEOUT__: 12,

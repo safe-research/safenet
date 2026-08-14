@@ -12,6 +12,8 @@ const DEFAULT_SETTINGS: Settings = {
 	maxBlockRange: 10000,
 	validatorInfo:
 		"https://raw.githubusercontent.com/safe-fndn/safenet-beta-data/refs/heads/main/assets/validator-info.json",
+	sentinelInfo:
+		"https://raw.githubusercontent.com/safe-fndn/safenet-beta-data/refs/heads/main/assets/sentinel-info.json",
 	refetchInterval: 10000,
 	blocksPerEpoch: 1440,
 	signingTimeout: 12,
@@ -42,6 +44,7 @@ describe("ConsensusSettingsForm", () => {
 		expect(screen.getByLabelText("Relayer Url")).toBeTruthy();
 		expect(screen.getByLabelText("Consensus Address")).toBeTruthy();
 		expect(screen.getByLabelText("Validator Info Url")).toBeTruthy();
+		expect(screen.getByLabelText("Sentinel Info Url")).toBeTruthy();
 		expect(screen.getByLabelText("Refetch Interval (0 to disable refetching)")).toBeTruthy();
 		expect(screen.getByLabelText("Signing Timeout (blocks)")).toBeTruthy();
 		expect(screen.getByLabelText("Oracle Addresses (comma-separated)")).toBeTruthy();

@@ -34,6 +34,10 @@ vi.mock("@/hooks/useSentinelVotes", () => ({
 	useSentinelVotes: vi.fn(() => ({ data: [] })),
 }));
 
+vi.mock("@/hooks/useSentinelInfo", () => ({
+	useSentinelInfoMap: vi.fn(() => ({ data: null })),
+}));
+
 vi.mock("../common/Info", () => ({
 	InlineBlockInfo: ({ block }: { block: bigint }) => <span>{block.toString()}</span>,
 	InlineExplorerTxLink: ({ children }: { children: React.ReactNode }) => <span>{children}</span>,
