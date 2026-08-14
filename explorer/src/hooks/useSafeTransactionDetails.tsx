@@ -12,7 +12,7 @@ export function useSafeTransactionDetails(
 ): { data: SafeTransaction | null; fromSafeApi: boolean; isFetching: boolean } {
 	const [settings] = useSettings();
 	const query = useQuery<SafeTransactionSource | null, Error>({
-		queryKey: ["safeTxDetails", chainId.toString(), safeTxHash, settings.consensus, settings.maxBlockRange],
+		queryKey: ["safeTxDetails", chainId.toString(), safeTxHash, settings.consensus, settings.detailsMaxBlockRange],
 		queryFn: async () => {
 			const apiData = await loadSafeTransactionDetails(chainId, safeTxHash);
 			if (apiData !== null) {
@@ -22,7 +22,7 @@ export function useSafeTransactionDetails(
 				rpc: settings.rpc,
 				consensus: settings.consensus,
 				safeTxHash,
-				maxBlockRange: BigInt(settings.maxBlockRange),
+				maxBlockRange: BigInt(settings.detailsMaxBlockRange),
 			});
 			return onChainData !== null ? { data: onChainData, fromSafeApi: false } : null;
 		},

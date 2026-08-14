@@ -34,7 +34,8 @@ export const getBlockRange = async (
 	referenceBlock?: bigint,
 ): Promise<BlockRange> => {
 	const toBlock = referenceBlock ?? (await provider.getBlockNumber());
-	const fromBlock = toBlock > maxBlockRange ? toBlock - maxBlockRange : 0n;
+	// 0 means unlimited: search from genesis instead of clamping to a window.
+	const fromBlock = maxBlockRange > 0n && toBlock > maxBlockRange ? toBlock - maxBlockRange : 0n;
 	return { fromBlock, toBlock };
 };
 

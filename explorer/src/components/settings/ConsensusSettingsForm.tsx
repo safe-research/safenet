@@ -32,6 +32,7 @@ const settingsFormSchema = z.object({
 	rpc: emptyToUndefined(z.url()),
 	relayer: emptyToUndefined(z.url()),
 	maxBlockRange: numberOrStringAsNumber.pipe(z.number().int().positive().optional()),
+	detailsMaxBlockRange: numberOrStringAsNumber.pipe(z.number().int().nonnegative().optional()),
 	validatorInfo: emptyToUndefined(z.url()),
 	refetchInterval: numberOrStringAsNumber.pipe(z.number().int().nonnegative().optional()),
 	blocksPerEpoch: numberOrStringAsNumber.pipe(z.number().int().positive().optional()),
@@ -75,6 +76,12 @@ function ConsensusSettingsForm({ onSubmitted }: { onSubmitted?: () => void }) {
 		<form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
 			<FormItem id="rpc" register={register} error={errors.rpc} label="RPC Url" />
 			<FormItem id="maxBlockRange" register={register} error={errors.maxBlockRange} label="Max Block Range" />
+			<FormItem
+				id="detailsMaxBlockRange"
+				register={register}
+				error={errors.detailsMaxBlockRange}
+				label="Details Max Block Range (0 for unlimited)"
+			/>
 			<FormItem id="decoder" register={register} error={errors.decoder} label="Decoder Url" />
 			<FormItem id="relayer" register={register} error={errors.relayer} label="Relayer Url" />
 

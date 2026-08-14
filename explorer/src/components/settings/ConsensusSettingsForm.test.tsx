@@ -10,6 +10,7 @@ const DEFAULT_SETTINGS: Settings = {
 	rpc: "https://ethereum-sepolia-rpc.publicnode.com",
 	decoder: "https://calldata.swiss-knife.xyz/decoder?calldata=",
 	maxBlockRange: 10000,
+	detailsMaxBlockRange: 0,
 	validatorInfo:
 		"https://raw.githubusercontent.com/safe-fndn/safenet-beta-data/refs/heads/main/assets/validator-info.json",
 	refetchInterval: 10000,

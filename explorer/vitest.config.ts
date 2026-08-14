@@ -13,6 +13,7 @@ export default defineConfig({
 		__DEFAULT_DECODER__: JSON.stringify("https://calldata.swiss-knife.xyz/decoder?calldata="),
 		__DEFAULT_RELAYER__: JSON.stringify(""),
 		__DEFAULT_MAX_BLOCK_RANGE__: 10000,
+		__DEFAULT_DETAILS_MAX_BLOCK_RANGE__: 0,
 		__DEFAULT_VALIDATOR_INFO__: JSON.stringify(
 			"https://raw.githubusercontent.com/safe-fndn/safenet-beta-data/refs/heads/main/assets/validator-info.json",
 		),

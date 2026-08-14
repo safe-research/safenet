@@ -19,6 +19,7 @@ const DEFAULT_SETTINGS: Settings = {
 	rpc: RPC,
 	decoder: "https://example.com/decoder?calldata=",
 	maxBlockRange: MAX_BLOCK_RANGE,
+	detailsMaxBlockRange: 0,
 	validatorInfo: "https://example.com/validator-info.json",
 	refetchInterval: 0,
 	blocksPerEpoch: 1440,
