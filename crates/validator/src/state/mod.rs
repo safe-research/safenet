@@ -60,6 +60,18 @@ struct Epoch {
     group: Group,
     /// This validator's key share.
     key_share: Arc<KeyShare>,
+    /// This validator's canonical nonce-tree assignments for the epoch.
+    nonces: NonceState,
+}
+
+/// Canonical nonce state for one participating epoch.
+#[derive(Clone, Debug, Default, Deserialize, Serialize)]
+struct NonceState {
+    /// The next signing sequence expected for the group.
+    next_sequence: u64,
+    /// Canonical nonce roots by sequence chunk. `None` reserves a chunk while
+    /// its locally generated root is waiting to be registered onchain.
+    chunks: BTreeMap<u64, Option<B256>>,
 }
 
 /// The epoch-rollover / DKG state machine. Each active variant carries the
@@ -443,6 +455,7 @@ impl StateTransition<State> for Transition {
                 let (state, rollover_commands) = self.handle_rollover_new_block(state, block);
                 let (state, keygen_timeout_commands) = self.handle_key_gen_timeouts(state, block);
                 let (state, signing_timeout_commands) = self.handle_signing_timeouts(state, block);
+                let (state, nonce_topup_commands) = self.handle_nonce_topup(state);
                 let (state, reconciliation_commands) = self.handle_group_reconciliation(state);
                 (
                     state,
@@ -450,6 +463,7 @@ impl StateTransition<State> for Transition {
                         rollover_commands,
                         keygen_timeout_commands,
                         signing_timeout_commands,
+                        nonce_topup_commands,
                         reconciliation_commands,
                     ]
                     .concat(),

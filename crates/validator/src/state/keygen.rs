@@ -1,6 +1,6 @@
 use super::{
-    ConfirmationDeadlines, Epoch, KeyGenConfirmation, KeyGenParticipation, Packet, RolloverState,
-    SigningState, State, Transition,
+    ConfirmationDeadlines, Epoch, KeyGenConfirmation, KeyGenParticipation, NonceState, Packet,
+    RolloverState, SigningState, State, Transition,
 };
 use crate::{
     bindings::{Consensus, Coordinator},
@@ -1167,11 +1167,16 @@ impl Transition {
         // part of the DKG ceremony and key share), register the epoch in our
         // participating epochs map and generate a nonces chunk.
         let commands = if let Some(key_share) = key_share {
+            let mut nonces = NonceState::default();
+            let chunk = nonces.reserve_chunk();
+            debug_assert_eq!(chunk, Some(0));
+
             state.epochs.insert(
                 epoch,
                 Epoch {
                     group,
                     key_share: key_share.clone(),
+                    nonces,
                 },
             );
             vec![Command::Effect(Effect::NonceTree {

@@ -87,14 +87,6 @@ pub enum Effect {
         root: B256,
         offset: u64,
     },
-    /// Check that at least [`NONCE_TOPUP_THRESHOLD`] nonces remain usable for
-    /// `key_share`'s group from `(chunk, offset)` onward, generating and
-    /// registering a fresh chunk if not.
-    TopupNonces {
-        group_id: B256,
-        key_share: Arc<KeyShare>,
-        sequence: u64,
-    },
     /// Reconcile the process-local and persisted secrets with the groups
     /// retained by the state machine, dropping all secret material belonging to
     /// other groups. A key share starts or retains a nonce generator; `None`
@@ -103,10 +95,6 @@ pub enum Effect {
         groups: BTreeMap<B256, Option<Arc<KeyShare>>>,
     },
 }
-
-/// The remaining usable nonce count, per participating group, below which a
-/// fresh nonce chunk is generated and registered.
-const NONCE_TOPUP_THRESHOLD: u64 = 100;
 
 /// The result of performing an [`Effect`], resumed into the state machine.
 #[derive(Debug, Clone, Default)]
@@ -275,25 +263,6 @@ impl Handler {
                     nonces: Box::new(nonces),
                 })
                 .unwrap_or(Resume::Noop)),
-            Effect::TopupNonces {
-                group_id,
-                key_share,
-                sequence,
-            } => {
-                let (chunk, offset) = frost::preprocess::decode_sequence(sequence);
-                let available = self
-                    .secrets
-                    .available_nonce_count(group_id, self.account, chunk, offset)
-                    .await?;
-                if available >= NONCE_TOPUP_THRESHOLD {
-                    return Ok(Resume::Noop);
-                }
-                self.nonce_generator
-                    .lock()
-                    .await
-                    .start(group_id, key_share)?;
-                self.next_nonce_tree(group_id).await
-            }
             Effect::ReconcileGroupSecrets { groups } => {
                 // We only need to keep keygen secrets for groups that are still
                 // in DKG and do not yet have a key share, and nonces (both in
