@@ -91,6 +91,7 @@ export const loadLatestAttestationStatus = async ({
 	safeTxHash,
 	epoch,
 	oracle,
+	oracleData,
 	proposedAt,
 	attestedAt,
 	maxBlockRange,
@@ -100,6 +101,7 @@ export const loadLatestAttestationStatus = async ({
 	safeTxHash: Hex;
 	epoch: bigint;
 	oracle: Address;
+	oracleData: Hex;
 	proposedAt?: bigint;
 	attestedAt?: bigint | null;
 	maxBlockRange: bigint;
@@ -114,7 +116,7 @@ export const loadLatestAttestationStatus = async ({
 	const coordinator = await loadCoordinator(provider, consensus);
 	// An oracle-checked proposal is attested via `TransactionAttested`, whose message is
 	// the oracle's requestId hash.
-	const message = oracleRequestId({ chainId, consensus, epoch, oracle, safeTxHash });
+	const message = oracleRequestId({ chainId, consensus, epoch, oracle, safeTxHash, oracleData });
 	// Get signing events related to this message
 	const signingEvents = await provider.getLogs({
 		address: coordinator,

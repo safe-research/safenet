@@ -10,6 +10,7 @@ type LoadVotesParams = {
 	consensus: Address;
 	epoch: bigint;
 	safeTxHash: Hex;
+	oracleData: Hex;
 	maxBlockRange: bigint;
 };
 

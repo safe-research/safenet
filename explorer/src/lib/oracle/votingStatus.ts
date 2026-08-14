@@ -18,6 +18,7 @@ export const loadVotingStatus = async ({
 	consensus,
 	epoch,
 	safeTxHash,
+	oracleData,
 	maxBlockRange,
 }: {
 	provider: PublicClient;
@@ -25,10 +26,11 @@ export const loadVotingStatus = async ({
 	consensus: Address;
 	epoch: bigint;
 	safeTxHash: Hex;
+	oracleData: Hex;
 	maxBlockRange: bigint;
 }): Promise<VotingStatus> => {
 	const chainId = await loadChainId(provider);
-	const requestId = oracleRequestId({ chainId, consensus, epoch, oracle, safeTxHash });
+	const requestId = oracleRequestId({ chainId, consensus, epoch, oracle, safeTxHash, oracleData });
 
 	// `getRequest` is a bare mapping read on `SentinelOracle` — it never reverts, even for an
 	// unknown requestId, instead returning a zero-initialized struct. The catch below only fires

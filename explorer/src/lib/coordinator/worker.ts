@@ -14,6 +14,7 @@ const workerApi = {
 		safeTxHash: Hex;
 		epoch: bigint;
 		oracle: Address;
+		oracleData: Hex;
 		proposedAt?: bigint;
 		attestedAt?: bigint | null;
 		maxBlockRange: bigint;

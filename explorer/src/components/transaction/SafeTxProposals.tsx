@@ -43,6 +43,7 @@ function ProposalInfoButton({ proposal }: { proposal: TransactionProposal }) {
 		proposal.proposedAt.block,
 		proposal.attestedAt?.block ?? null,
 		proposal.oracle,
+		proposal.oracleData,
 	);
 	if (status.data === null) return null;
 
@@ -74,9 +75,9 @@ function ProposalInfoButton({ proposal }: { proposal: TransactionProposal }) {
 }
 
 function SafeTxProposalVoting({ oracle, proposal }: { oracle: Address; proposal: TransactionProposal }) {
-	const votingStatus = useVotingStatus(oracle, proposal.epoch, proposal.safeTxHash);
+	const votingStatus = useVotingStatus(oracle, proposal.epoch, proposal.safeTxHash, proposal.oracleData);
 	const isSentinel = votingStatus.data?.kind === "sentinel";
-	const sentinelVotes = useSentinelVotes(oracle, proposal.epoch, proposal.safeTxHash, isSentinel);
+	const sentinelVotes = useSentinelVotes(oracle, proposal.epoch, proposal.safeTxHash, proposal.oracleData, isSentinel);
 	return (
 		<div className="space-y-2">
 			<div className="md:flex md:justify-between">

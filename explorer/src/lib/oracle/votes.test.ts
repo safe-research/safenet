@@ -23,6 +23,7 @@ const REQUEST_ID: Hex = oracleRequestId({
 	epoch: EPOCH,
 	oracle: ORACLE,
 	safeTxHash: SAFE_TX_HASH,
+	oracleData: "0x",
 });
 const SENTINEL_A: Address = "0x1111111111111111111111111111111111111111";
 const SENTINEL_B: Address = "0x2222222222222222222222222222222222222222";
@@ -32,6 +33,7 @@ const commonParams = {
 	consensus: CONSENSUS,
 	epoch: EPOCH,
 	safeTxHash: SAFE_TX_HASH,
+	oracleData: "0x" as Hex,
 	maxBlockRange: 500n,
 };
 

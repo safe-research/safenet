@@ -17,6 +17,7 @@ export const loadSentinelVotes = async ({
 	consensus,
 	epoch,
 	safeTxHash,
+	oracleData,
 	maxBlockRange,
 }: {
 	provider: PublicClient;
@@ -24,10 +25,11 @@ export const loadSentinelVotes = async ({
 	consensus: Address;
 	epoch: bigint;
 	safeTxHash: Hex;
+	oracleData: Hex;
 	maxBlockRange: bigint;
 }): Promise<SentinelVote[]> => {
 	const chainId = await loadChainId(provider);
-	const requestId = oracleRequestId({ chainId, consensus, epoch, oracle, safeTxHash });
+	const requestId = oracleRequestId({ chainId, consensus, epoch, oracle, safeTxHash, oracleData });
 	const { fromBlock, toBlock } = await getBlockRange(provider, maxBlockRange);
 
 	// A single `eth_getLogs` here, in order to filter on the `requestId` topic while still

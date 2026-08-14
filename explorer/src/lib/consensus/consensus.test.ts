@@ -226,7 +226,7 @@ const makeOracleProposedLog = ({
 	makeRawConsensusLog({
 		eventName: "TransactionProposed",
 		indexedArgs: { safeTxHash, safeId: computeSafeId({ chainId: 1n, safe: SAFE_ADDRESS }), oracle },
-		nonIndexedValues: [epoch, ORACLE_TX],
+		nonIndexedValues: [epoch, "0x", ORACLE_TX],
 		blockNumber,
 	});
 
@@ -246,7 +246,7 @@ const makeOracleAttestedLog = ({
 	makeRawConsensusLog({
 		eventName: "TransactionAttested",
 		indexedArgs: { safeTxHash, safeId: computeSafeId({ chainId: 1n, safe: SAFE_ADDRESS }), oracle },
-		nonIndexedValues: [epoch, `0x${"00".repeat(32)}`, { r: { x: 0n, y: 0n }, z: 0n }],
+		nonIndexedValues: [epoch, `0x${"00".repeat(32)}`, `0x${"00".repeat(32)}`, { r: { x: 0n, y: 0n }, z: 0n }],
 		blockNumber,
 		logIndex,
 	});

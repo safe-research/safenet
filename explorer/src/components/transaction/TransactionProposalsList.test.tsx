@@ -24,6 +24,7 @@ const makeProposal = (safeTxHash: string, epoch = 1n): TransactionProposalWithSt
 	safeTxHash: safeTxHash as Hex,
 	epoch,
 	oracle: "0x0000000000000000000000000000000000000099" as Address,
+	oracleData: "0x" as Hex,
 	transaction: {
 		chainId: 1n,
 		safe: "0x0000000000000000000000000000000000000001" as Address,

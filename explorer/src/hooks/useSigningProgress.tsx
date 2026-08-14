@@ -9,6 +9,7 @@ export function useAttestationStatus(
 	proposedAt: bigint,
 	attestedAt: bigint | null,
 	oracle: Address,
+	oracleData: Hex,
 ) {
 	const [settings] = useSettings();
 	return useQuery<AttestationStatus | null, Error>({
@@ -20,6 +21,7 @@ export function useAttestationStatus(
 			proposedAt.toString(),
 			attestedAt?.toString(),
 			oracle,
+			oracleData,
 			settings.maxBlockRange,
 		],
 		queryFn: () =>
@@ -29,6 +31,7 @@ export function useAttestationStatus(
 				safeTxHash,
 				epoch,
 				oracle,
+				oracleData,
 				proposedAt,
 				attestedAt,
 				maxBlockRange: BigInt(settings.maxBlockRange),
