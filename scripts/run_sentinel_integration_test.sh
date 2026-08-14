@@ -30,6 +30,7 @@ GOVERNANCE_DELAY=0
 # exercises a *partial* bond slash rather than the full bond.
 INITIAL_SLASHING_MULTIPLIER=2
 INITIAL_DAO_FEE_SHARE=0
+CHARTER_ENS="safenet-charter.safe.eth"
 FUNDING_ETH=1ether
 FUNDING_TOKEN=1000000
 # Anvil account 0 — deployer, MyToken owner, and SentinelOracle arbitrator.
@@ -92,6 +93,7 @@ env \
 	SENTINEL_BOND_MULTIPLIER="$BOND_MULTIPLIER" \
 	SENTINEL_INITIAL_SLASHING_MULTIPLIER="$INITIAL_SLASHING_MULTIPLIER" \
 	SENTINEL_INITIAL_DAO_FEE_SHARE="$INITIAL_DAO_FEE_SHARE" \
+	SENTINEL_CHARTER_ENS="$CHARTER_ENS" \
 	forge script --root "$ROOT/contracts" DeploySentinelOracleScript --rpc-url "$RPC_URL" --private-key "$DEPLOYER_PK" --broadcast
 ORACLE=$(jq -r '.returns.sentinelOracle.value' "$ROOT/contracts/build/broadcast/DeploySentinelOracle.s.sol/$CHAIN_ID/run-latest.json")
 echo "Sentinel oracle deployed at $ORACLE"

@@ -22,6 +22,7 @@ contract DeploySentinelOracleScript is Script {
         uint256 bondMultiplier = vm.envUint("SENTINEL_BOND_MULTIPLIER");
         uint256 initialSlashingMultiplier = vm.envUint("SENTINEL_INITIAL_SLASHING_MULTIPLIER");
         uint256 initialDaoFeeShare = vm.envUint("SENTINEL_INITIAL_DAO_FEE_SHARE");
+        string memory charterEns = vm.envString("SENTINEL_CHARTER_ENS");
 
         DeterministicDeployment.Factory factory = getFactory(vm);
 
@@ -42,7 +43,8 @@ contract DeploySentinelOracleScript is Script {
                 governanceDelay,
                 bondMultiplier,
                 initialSlashingMultiplier,
-                initialDaoFeeShare
+                initialDaoFeeShare,
+                charterEns
             )
         );
 

@@ -77,6 +77,15 @@ contract SentinelOracle is IOracle {
     // forge-lint: disable-next-line(mixed-case-variable)
     SentinelOracleCommitmentMap.T private $commitments;
 
+    // The ENS name (e.g. `safenet-charter.safe.eth`) of the Charter this Oracle
+    // trusts -- set once at construction and never updated (there is no setter),
+    // so despite living in storage it is as fixed as an immutable would be. A
+    // human-readable domain, rather than its namehash, is stored so it can be
+    // read directly on-chain (by a validator, the explorer, or a block
+    // explorer's "read contract" UI) without an off-chain ENS reverse lookup.
+    // forge-lint: disable-next-line(mixed-case-variable)
+    string private $charterEns;
+
     // ============================================================
     // ERRORS
     // ============================================================
@@ -124,7 +133,8 @@ contract SentinelOracle is IOracle {
         uint256 governanceDelay,
         uint256 initialBondMultiplier,
         uint256 initialSlashingMultiplier,
-        uint256 initialDaoFeeShare
+        uint256 initialDaoFeeShare,
+        string memory initialCharterEns
     ) {
         require(arbitrator != address(0), InvalidAddress());
         require(governance != address(0), InvalidAddress());
@@ -142,6 +152,7 @@ contract SentinelOracle is IOracle {
         COMMIT_WINDOW = commitWindow;
         REVEAL_WINDOW = revealWindow;
         GOVERNANCE_DELAY = governanceDelay;
+        $charterEns = initialCharterEns;
         $bondConfig.init(initialBondMultiplier, initialSlashingMultiplier);
         $protocolFundsReceiverConfig.init(initialProtocolFundsReceiver);
         $feeConfig.init(requestFee);
@@ -377,6 +388,10 @@ contract SentinelOracle is IOracle {
 
     function pendingDaoFeeShareActiveAt() external view returns (uint256) {
         return $daoFeeShareConfig.pendingActiveAt;
+    }
+
+    function charterEns() external view returns (string memory) {
+        return $charterEns;
     }
 
     function getRequest(bytes32 requestId) external view returns (SentinelOracleRequest.Request memory) {
