@@ -1,8 +1,12 @@
 import { getAbiItem, parseAbi, toEventSelector } from "viem";
 
-// Read-only surface of `SentinelOracle` (commit/reveal).
+// Read-only surface of `SentinelOracle` (commit/reveal). `getRequest` returns two structs,
+// field-for-field with `SentinelOracleRequest.Terms` (write-once creation params) and
+// `SentinelOracleRequest.Progress` (everything the request lifecycle mutates) — see
+// contracts/src/libraries/SentinelOracleRequests.sol. viem decodes multi-value returns as a
+// positional tuple `[terms, progress]` regardless of the (cosmetic, docs-only) output names below.
 export const sentinelOracleAbi = parseAbi([
-	"function getRequest(bytes32 requestId) view returns ((address proposer, uint256 fee, uint256 bondTarget, uint256 commitDeadline, uint256 revealDeadline, uint8 state, uint256 committedCount, uint256 revealedCount, uint256 approveSentinelCount, uint256 denySentinelCount))",
+	"function getRequest(bytes32 requestId) view returns ((uint64 commitDeadline, uint24 daoFeeShare, uint64 revealDeadline, uint96 bondTarget, address sponsor, uint96 slashAmount) terms, (uint8 state, uint96 fee, uint64 arbitrationDeadline, uint16 committedCount, uint16 revealedCount, uint16 approveSentinelCount, uint16 denySentinelCount) progress)",
 	"event Committed(bytes32 indexed requestId, address indexed sentinel, uint256 bondAmount)",
 	"event Revealed(bytes32 indexed requestId, address indexed sentinel, bool approved, uint256 bondAmount, string reason)",
 ]);

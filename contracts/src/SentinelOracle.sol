@@ -19,7 +19,7 @@ contract SentinelOracle is IOracle {
     using SentinelMap for SentinelMap.T;
     using SentinelOracleCommitment for SentinelOracleCommitment.Commitment;
     using SentinelOracleCommitmentMap for SentinelOracleCommitmentMap.T;
-    using SentinelOracleRequest for SentinelOracleRequest.Request;
+    using SentinelOracleRequest for SentinelOracleRequest.T;
     using SentinelOracleRequestMap for SentinelOracleRequestMap.T;
     using SafeERC20 for IERC20;
     using SafeCast for uint256;
@@ -220,16 +220,16 @@ contract SentinelOracle is IOracle {
 
     function commit(bytes32 requestId, bytes32 commitHash) external {
         require($sentinelMap.isActive(msg.sender), SentinelNotActive());
-        SentinelOracleRequest.Request storage req = $requests.get(requestId);
-        uint96 bondAmount = req.applyCommit();
+        SentinelOracleRequest.T storage request = $requests.get(requestId);
+        uint96 bondAmount = request.applyCommit();
         $commitments.add(requestId, msg.sender, commitHash, bondAmount);
         FEE_TOKEN.safeTransferFrom(msg.sender, address(this), bondAmount);
     }
 
     function reveal(bytes32 requestId, bool approve, bytes32 salt, string calldata reason) external {
-        SentinelOracleRequest.Request storage req = $requests.get(requestId);
+        SentinelOracleRequest.T storage request = $requests.get(requestId);
         $commitments.reveal(requestId, msg.sender, approve, salt, reason);
-        req.applyReveal(approve);
+        request.applyReveal(approve);
     }
 
     function hashCommitment(address sentinel, bytes32 requestId, bool approve, bytes32 salt, string calldata reason)
@@ -245,10 +245,10 @@ contract SentinelOracle is IOracle {
     // ============================================================
 
     function finalize(bytes32 requestId) external {
-        SentinelOracleRequest.Request storage req = $requests.get(requestId);
-        address sponsor = req.sponsor;
-        (SentinelOracleRequest.State newState, uint96 refundFee, uint128 unrevealedBond) =
-            req.finalize(ARBITRATION_TIMEOUT);
+        SentinelOracleRequest.T storage request = $requests.get(requestId);
+        address sponsor = request.terms.sponsor;
+        (SentinelOracleRequest.State newState, uint96 refundFee, uint128 unrevealedBond, uint96 daoCut) =
+            request.finalize(ARBITRATION_TIMEOUT, FEE_SHARE_DENOMINATOR);
 
         address fundsReceiver = $protocolFundsReceiverConfig.applyPending();
         if (unrevealedBond > 0) {
@@ -264,16 +264,6 @@ contract SentinelOracle is IOracle {
             return;
         }
 
-        // Read req.fee once -- it's used twice below (the multiply and the narrowing subtraction),
-        // and this is the only path in `finalize()` that reads it, so caching it locally avoids a
-        // second, redundant read of the same storage slot.
-        uint96 feeAmount = req.fee;
-        // Widen feeAmount to uint256 *before* multiplying -- see the identical reasoning in
-        // `postRequest` above. `daoCut` is always <= feeAmount (daoFeeShare <= FEE_SHARE_DENOMINATOR),
-        // so the narrowing cast back to the uint96 field below never truncates.
-        uint256 daoCut = uint256(feeAmount) * req.daoFeeShare / FEE_SHARE_DENOMINATOR;
-        // forge-lint: disable-next-line(unsafe-typecast)
-        req.fee = uint96(feeAmount - daoCut);
         if (daoCut > 0) {
             FEE_TOKEN.safeTransfer(fundsReceiver, daoCut);
         }
@@ -282,17 +272,17 @@ contract SentinelOracle is IOracle {
     }
 
     function claim(bytes32 requestId) external {
-        SentinelOracleRequest.Request storage req = $requests.get(requestId);
+        SentinelOracleRequest.T storage request = $requests.get(requestId);
         // Resolved once here and threaded into `calcFeeReward`/`slashAmountFor` below, rather than
         // each of those independently re-deriving it (`requireResolved`/`self.state`) -- otherwise
-        // this function would read `req.state`'s storage slot three separate times for a value
+        // this function would read `progress.state`'s storage slot three separate times for a value
         // that never changes across the call.
-        SentinelOracleRequest.State state = req.requireResolved();
+        SentinelOracleRequest.State state = request.requireResolved();
         SentinelOracleCommitment.Commitment storage commitment = $commitments.get(requestId, msg.sender);
         SentinelOracleCommitment.Vote vote = commitment.vote;
         commitment.markClaimed();
-        uint96 feeReward = req.calcFeeReward(state, vote);
-        uint96 bondReturn = commitment.bondAmount - req.slashAmountFor(state, vote);
+        uint96 feeReward = request.calcFeeReward(state, vote);
+        uint96 bondReturn = commitment.bondAmount - request.slashAmountFor(state, vote);
         // Widen before adding: `bondReturn` and `feeReward` can each be near `uint96`'s max, and
         // their sum could exceed it even though it fits easily in `uint256`.
         uint256 totalClaim = uint256(bondReturn) + feeReward;
@@ -307,24 +297,13 @@ contract SentinelOracle is IOracle {
     // ============================================================
 
     function resolveDispute(bytes32 requestId, bool approveWins, string calldata context) external onlyArbitrator {
-        SentinelOracleRequest.Request storage req = $requests.get(requestId);
-        address sponsor = req.sponsor;
-        uint128 slashed = req.resolveDispute(approveWins);
-        SentinelOracleRequest.State outcome = req.state;
-        // Deliberately uint256, not uint96 (unlike finalize()/timeoutArbitration()'s refundFee,
-        // which are plain passthroughs of req.fee with no further arithmetic): widening here is
-        // what makes `refundFee * req.daoFeeShare` below compute in uint256 instead of uint96 (the
-        // wider of the two operand types otherwise), avoiding the same overflow-revert risk as the
-        // other widen-before-multiply cases in this contract.
-        uint256 refundFee = req.fee;
-        uint256 daoCut = refundFee * req.daoFeeShare / FEE_SHARE_DENOMINATOR;
-        // daoCut <= refundFee == req.fee by construction (daoFeeShare <= FEE_SHARE_DENOMINATOR),
-        // so this never truncates despite the explicit narrowing cast back to the uint96 field.
-        // forge-lint: disable-next-line(unsafe-typecast)
-        req.fee = uint96(refundFee - daoCut);
+        SentinelOracleRequest.T storage request = $requests.get(requestId);
+        address sponsor = request.terms.sponsor;
+        (SentinelOracleRequest.State outcome, uint128 slashed, uint96 feeAmount, uint96 daoCut) =
+            request.resolveDispute(approveWins, FEE_SHARE_DENOMINATOR);
         address fundsReceiver = $protocolFundsReceiverConfig.applyPending();
-        FEE_TOKEN.safeTransfer(sponsor, refundFee);
-        FEE_TOKEN.safeTransfer(fundsReceiver, slashed - refundFee + daoCut);
+        FEE_TOKEN.safeTransfer(sponsor, feeAmount);
+        FEE_TOKEN.safeTransfer(fundsReceiver, slashed - feeAmount + daoCut);
         emit DisputeResolved(requestId, outcome, slashed, context);
     }
 
@@ -332,9 +311,9 @@ contract SentinelOracle is IOracle {
     // arbitrator forever. Reuses the `TIMED_OUT` machinery, so every committed bond returns in
     // full via `claim()` -- identical to the no-reveal timeout path.
     function timeoutArbitration(bytes32 requestId) external {
-        SentinelOracleRequest.Request storage req = $requests.get(requestId);
-        address sponsor = req.sponsor;
-        uint96 refundFee = req.timeoutArbitration();
+        SentinelOracleRequest.T storage request = $requests.get(requestId);
+        address sponsor = request.terms.sponsor;
+        uint96 refundFee = request.timeoutArbitration();
         FEE_TOKEN.safeTransfer(sponsor, refundFee);
     }
 
@@ -450,8 +429,8 @@ contract SentinelOracle is IOracle {
         return $charterEns;
     }
 
-    function getRequest(bytes32 requestId) external view returns (SentinelOracleRequest.Request memory) {
-        return $requests.requests[requestId];
+    function getRequest(bytes32 requestId) external view returns (SentinelOracleRequest.T memory) {
+        return $requests.get(requestId);
     }
 
     function getCommitment(bytes32 requestId, address sentinel)

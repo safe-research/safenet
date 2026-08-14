@@ -421,9 +421,9 @@ contract SentinelOracleTest is Test {
         // `slashAmount`/`bondTarget` must not retroactively change even though the oracle now
         // reports the new values.
         assertEq(oracle.slashingMultiplier(), newSlashingMultiplier, "governed slashing multiplier has matured");
-        SentinelOracleRequest.Request memory req = oracle.getRequest(REQUEST_ID);
-        assertEq(req.slashAmount, SLASH_AMOUNT, "in-flight request keeps its originally snapshotted slash amount");
-        assertEq(req.bondTarget, BOND_TARGET, "in-flight request keeps its originally snapshotted bond target");
+        SentinelOracleRequest.T memory r = oracle.getRequest(REQUEST_ID);
+        assertEq(r.terms.slashAmount, SLASH_AMOUNT, "in-flight request keeps its originally snapshotted slash amount");
+        assertEq(r.terms.bondTarget, BOND_TARGET, "in-flight request keeps its originally snapshotted bond target");
     }
 
     // ============================================================
@@ -494,8 +494,8 @@ contract SentinelOracleTest is Test {
         // The in-flight request was created before the new fee matured -- its snapshotted `fee`
         // must not retroactively change even though `oracle.fee()` now reports the new value.
         assertEq(oracle.fee(), newFee, "governed fee has matured");
-        SentinelOracleRequest.Request memory req = oracle.getRequest(REQUEST_ID);
-        assertEq(req.fee, REQUEST_FEE, "in-flight request keeps its originally snapshotted fee");
+        SentinelOracleRequest.T memory r = oracle.getRequest(REQUEST_ID);
+        assertEq(r.progress.fee, REQUEST_FEE, "in-flight request keeps its originally snapshotted fee");
     }
 
     // ============================================================
@@ -570,8 +570,8 @@ contract SentinelOracleTest is Test {
         // `daoFeeShare` must not retroactively change even though `oracle.daoFeeShare()` now
         // reports the new value.
         assertEq(oracle.daoFeeShare(), newShare, "governed share has matured");
-        SentinelOracleRequest.Request memory req = oracle.getRequest(REQUEST_ID);
-        assertEq(req.daoFeeShare, INITIAL_DAO_FEE_SHARE, "in-flight request keeps its originally snapshotted share");
+        SentinelOracleRequest.T memory r = oracle.getRequest(REQUEST_ID);
+        assertEq(r.terms.daoFeeShare, INITIAL_DAO_FEE_SHARE, "in-flight request keeps its originally snapshotted share");
     }
 
     // ============================================================
@@ -601,9 +601,9 @@ contract SentinelOracleTest is Test {
         assertEq(_pendingFee(), 0, "pending slot cleared without a separate apply call");
         assertEq(_pendingFeeActiveAt(), 0);
 
-        SentinelOracleRequest.Request memory req = oracle.getRequest(REQUEST_ID);
-        assertEq(req.fee, newFee, "new request snapshots the newly-applied fee");
-        assertEq(req.bondTarget, newFee * BOND_MULTIPLIER, "bond target is derived from the newly-applied fee");
+        SentinelOracleRequest.T memory r = oracle.getRequest(REQUEST_ID);
+        assertEq(r.progress.fee, newFee, "new request snapshots the newly-applied fee");
+        assertEq(r.terms.bondTarget, newFee * BOND_MULTIPLIER, "bond target is derived from the newly-applied fee");
     }
 
     function test_PostRequest_EagerlyAppliesPendingBondMultiplier() public {
@@ -626,10 +626,10 @@ contract SentinelOracleTest is Test {
         );
         assertEq(_pendingSlashingMultiplier(), 0, "pending slot cleared without a separate apply call");
 
-        SentinelOracleRequest.Request memory req = oracle.getRequest(REQUEST_ID);
-        assertEq(req.bondTarget, REQUEST_FEE * newMultiplier, "new request snapshots the newly-applied multiplier");
+        SentinelOracleRequest.T memory r = oracle.getRequest(REQUEST_ID);
+        assertEq(r.terms.bondTarget, REQUEST_FEE * newMultiplier, "new request snapshots the newly-applied multiplier");
         assertEq(
-            req.slashAmount,
+            r.terms.slashAmount,
             REQUEST_FEE * newSlashingMultiplier,
             "new request snapshots the newly-applied slashing multiplier"
         );
@@ -650,8 +650,8 @@ contract SentinelOracleTest is Test {
         assertEq(_pendingDaoFeeShare(), 0, "pending slot cleared without a separate apply call");
         assertEq(_pendingDaoFeeShareActiveAt(), 0);
 
-        SentinelOracleRequest.Request memory req = oracle.getRequest(REQUEST_ID);
-        assertEq(req.daoFeeShare, newShare, "new request snapshots the newly-applied share");
+        SentinelOracleRequest.T memory r = oracle.getRequest(REQUEST_ID);
+        assertEq(r.terms.daoFeeShare, newShare, "new request snapshots the newly-applied share");
     }
 
     function test_Finalize_EagerlyAppliesPendingProtocolFundsReceiver() public {
@@ -707,8 +707,8 @@ contract SentinelOracleTest is Test {
         _reveal(sentinel2, true, SALT_2);
 
         // Both committers already revealed — finalize is callable well before revealDeadline.
-        SentinelOracleRequest.Request memory pending = oracle.getRequest(REQUEST_ID);
-        assertLt(block.number, pending.revealDeadline, "should be finalizing early, before the reveal deadline");
+        SentinelOracleRequest.T memory pending = oracle.getRequest(REQUEST_ID);
+        assertLt(block.number, pending.terms.revealDeadline, "should be finalizing early, before the reveal deadline");
 
         uint256 sponsorBalBefore = token.balanceOf(sponsor);
 
@@ -719,11 +719,11 @@ contract SentinelOracleTest is Test {
         // Sponsor's fee was NOT refunded (it's distributed to sentinels).
         assertEq(token.balanceOf(sponsor), sponsorBalBefore, "sponsor should not receive fee on approve");
 
-        SentinelOracleRequest.Request memory req = oracle.getRequest(REQUEST_ID);
-        assertEq(uint256(req.state), uint256(SentinelOracleRequest.State.RESOLVED_APPROVED));
-        assertEq(req.approveSentinelCount, 2);
-        assertEq(req.denySentinelCount, 0);
-        assertEq(req.revealedCount, 2);
+        SentinelOracleRequest.T memory r = oracle.getRequest(REQUEST_ID);
+        assertEq(uint256(r.progress.state), uint256(SentinelOracleRequest.State.RESOLVED_APPROVED));
+        assertEq(r.progress.approveSentinelCount, 2);
+        assertEq(r.progress.denySentinelCount, 0);
+        assertEq(r.progress.revealedCount, 2);
 
         uint256 sentinel1BalBefore = token.balanceOf(sentinel1);
         uint256 sentinel2BalBefore = token.balanceOf(sentinel2);
@@ -805,9 +805,9 @@ contract SentinelOracleTest is Test {
 
         oracle.finalize(REQUEST_ID);
 
-        SentinelOracleRequest.Request memory req = oracle.getRequest(REQUEST_ID);
-        assertEq(uint256(req.state), uint256(SentinelOracleRequest.State.RESOLVED_DENIED));
-        assertEq(req.denySentinelCount, 1);
+        SentinelOracleRequest.T memory r = oracle.getRequest(REQUEST_ID);
+        assertEq(uint256(r.progress.state), uint256(SentinelOracleRequest.State.RESOLVED_DENIED));
+        assertEq(r.progress.denySentinelCount, 1);
 
         uint256 balBefore = token.balanceOf(sentinel1);
         vm.prank(sentinel1);
@@ -829,14 +829,14 @@ contract SentinelOracleTest is Test {
 
         // Zero commits resolve as soon as commitDeadline passes, without waiting for revealDeadline.
         _advancePastCommitDeadline();
-        SentinelOracleRequest.Request memory pending = oracle.getRequest(REQUEST_ID);
-        assertLt(block.number, pending.revealDeadline, "should finalize before the reveal deadline");
+        SentinelOracleRequest.T memory pending = oracle.getRequest(REQUEST_ID);
+        assertLt(block.number, pending.terms.revealDeadline, "should finalize before the reveal deadline");
 
         oracle.finalize(REQUEST_ID);
         assertEq(token.balanceOf(sponsor), sponsorBalBefore);
 
-        SentinelOracleRequest.Request memory req = oracle.getRequest(REQUEST_ID);
-        assertEq(uint256(req.state), uint256(SentinelOracleRequest.State.TIMED_OUT));
+        SentinelOracleRequest.T memory r = oracle.getRequest(REQUEST_ID);
+        assertEq(uint256(r.progress.state), uint256(SentinelOracleRequest.State.TIMED_OUT));
     }
 
     // ============================================================
@@ -857,8 +857,12 @@ contract SentinelOracleTest is Test {
 
         oracle.finalize(REQUEST_ID);
 
-        SentinelOracleRequest.Request memory req = oracle.getRequest(REQUEST_ID);
-        assertEq(uint256(req.state), uint256(SentinelOracleRequest.State.FROZEN), "conflicted request should be frozen");
+        SentinelOracleRequest.T memory r = oracle.getRequest(REQUEST_ID);
+        assertEq(
+            uint256(r.progress.state),
+            uint256(SentinelOracleRequest.State.FROZEN),
+            "conflicted request should be frozen"
+        );
 
         // ---- Phase 2: arbitration ----
 
@@ -995,9 +999,9 @@ contract SentinelOracleTest is Test {
         vm.roll(block.number + GOVERNANCE_DELAY);
 
         _postRequest();
-        SentinelOracleRequest.Request memory posted = oracle.getRequest(REQUEST_ID);
-        assertEq(posted.bondTarget, REQUEST_FEE * newBondMultiplier);
-        assertEq(posted.slashAmount, REQUEST_FEE * newSlashingMultiplier);
+        SentinelOracleRequest.T memory r = oracle.getRequest(REQUEST_ID);
+        assertEq(r.terms.bondTarget, REQUEST_FEE * newBondMultiplier);
+        assertEq(r.terms.slashAmount, REQUEST_FEE * newSlashingMultiplier);
 
         _commit(sentinel1, true, SALT_1);
         _commit(sentinel2, false, SALT_2);
@@ -1037,9 +1041,9 @@ contract SentinelOracleTest is Test {
         vm.roll(block.number + GOVERNANCE_DELAY);
 
         _postRequest();
-        SentinelOracleRequest.Request memory posted = oracle.getRequest(REQUEST_ID);
-        uint256 bondTarget = posted.bondTarget;
-        uint256 slashAmount = posted.slashAmount;
+        SentinelOracleRequest.T memory posted = oracle.getRequest(REQUEST_ID);
+        uint256 bondTarget = posted.terms.bondTarget;
+        uint256 slashAmount = posted.terms.slashAmount;
 
         // sentinel1 approves, sentinel2 denies (conflict -> FROZEN), sentinel3 commits but never
         // reveals. `finalize()` already sweeps sentinel3's `unrevealedBond` slash to the protocol
@@ -1058,8 +1062,8 @@ contract SentinelOracleTest is Test {
         uint256 receiverBalBefore = token.balanceOf(protocolFundsReceiver);
         oracle.finalize(REQUEST_ID);
 
-        SentinelOracleRequest.Request memory req = oracle.getRequest(REQUEST_ID);
-        assertEq(uint256(req.state), uint256(SentinelOracleRequest.State.FROZEN));
+        SentinelOracleRequest.T memory r = oracle.getRequest(REQUEST_ID);
+        assertEq(uint256(r.progress.state), uint256(SentinelOracleRequest.State.FROZEN));
         assertEq(
             token.balanceOf(protocolFundsReceiver),
             receiverBalBefore + slashAmount,
@@ -1242,10 +1246,10 @@ contract SentinelOracleTest is Test {
         uint256 receiverBalBefore = token.balanceOf(protocolFundsReceiver);
         oracle.finalize(REQUEST_ID);
 
-        SentinelOracleRequest.Request memory req = oracle.getRequest(REQUEST_ID);
-        assertEq(uint256(req.state), uint256(SentinelOracleRequest.State.RESOLVED_APPROVED));
-        assertEq(req.approveSentinelCount, 2);
-        assertEq(req.revealedCount, 2);
+        SentinelOracleRequest.T memory r = oracle.getRequest(REQUEST_ID);
+        assertEq(uint256(r.progress.state), uint256(SentinelOracleRequest.State.RESOLVED_APPROVED));
+        assertEq(r.progress.approveSentinelCount, 2);
+        assertEq(r.progress.revealedCount, 2);
 
         // sentinel3's committed bond (never revealed) is slashed to the protocol funds receiver,
         // not the arbitrator.
@@ -1334,8 +1338,8 @@ contract SentinelOracleTest is Test {
         uint256 receiverBalBefore = token.balanceOf(protocolFundsReceiver);
         oracle.finalize(REQUEST_ID);
 
-        SentinelOracleRequest.Request memory req = oracle.getRequest(REQUEST_ID);
-        assertEq(uint256(req.state), uint256(SentinelOracleRequest.State.TIMED_OUT));
+        SentinelOracleRequest.T memory r = oracle.getRequest(REQUEST_ID);
+        assertEq(uint256(r.progress.state), uint256(SentinelOracleRequest.State.TIMED_OUT));
         assertEq(token.balanceOf(sponsor), sponsorBalBefore, "sponsor fee refunded");
 
         // No established side exists, so no misbehavior can be proven against either committer —
@@ -1382,8 +1386,8 @@ contract SentinelOracleTest is Test {
         _reveal(sentinel2, false, SALT_2);
         oracle.finalize(REQUEST_ID);
 
-        SentinelOracleRequest.Request memory req = oracle.getRequest(REQUEST_ID);
-        assertEq(uint256(req.state), uint256(SentinelOracleRequest.State.FROZEN));
+        SentinelOracleRequest.T memory r = oracle.getRequest(REQUEST_ID);
+        assertEq(uint256(r.progress.state), uint256(SentinelOracleRequest.State.FROZEN));
     }
 
     function test_TimeoutArbitration_RevertsWhenNotFrozen() public {
@@ -1416,8 +1420,8 @@ contract SentinelOracleTest is Test {
 
         oracle.timeoutArbitration(REQUEST_ID);
 
-        SentinelOracleRequest.Request memory req = oracle.getRequest(REQUEST_ID);
-        assertEq(uint256(req.state), uint256(SentinelOracleRequest.State.TIMED_OUT));
+        SentinelOracleRequest.T memory r = oracle.getRequest(REQUEST_ID);
+        assertEq(uint256(r.progress.state), uint256(SentinelOracleRequest.State.TIMED_OUT));
         assertEq(token.balanceOf(sponsor), sponsorBalBefore, "sponsor fee refunded in full");
         assertEq(
             token.balanceOf(protocolFundsReceiver),
@@ -1444,15 +1448,15 @@ contract SentinelOracleTest is Test {
         vm.prank(randomAddress);
         oracle.timeoutArbitration(REQUEST_ID);
 
-        SentinelOracleRequest.Request memory req = oracle.getRequest(REQUEST_ID);
-        assertEq(uint256(req.state), uint256(SentinelOracleRequest.State.TIMED_OUT));
+        SentinelOracleRequest.T memory r = oracle.getRequest(REQUEST_ID);
+        assertEq(uint256(r.progress.state), uint256(SentinelOracleRequest.State.TIMED_OUT));
     }
 
     function test_TimeoutArbitration_UnrevealedCommitter_NoDoubleRefund() public {
         _postRequest();
-        SentinelOracleRequest.Request memory posted = oracle.getRequest(REQUEST_ID);
-        uint256 bondTarget = posted.bondTarget;
-        uint256 slashAmount = posted.slashAmount;
+        SentinelOracleRequest.T memory r = oracle.getRequest(REQUEST_ID);
+        uint256 bondTarget = r.terms.bondTarget;
+        uint256 slashAmount = r.terms.slashAmount;
 
         // sentinel1 approves, sentinel2 denies (conflict -> FROZEN); sentinel3 commits but never
         // reveals. `finalize()` sweeps sentinel3's `unrevealedBond` slash to the protocol funds

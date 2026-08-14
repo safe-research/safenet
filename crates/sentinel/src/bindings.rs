@@ -6,9 +6,13 @@ pub mod oracle {
     sol! {
         // Mirrors `SentinelOracleRequest.State` in
         // `contracts/src/libraries/SentinelOracleRequests.sol`; `DisputeResolved.outcome` is
-        // this type.
+        // this type. Declaration order must match the Solidity enum exactly -- `sol!` decodes by
+        // ordinal position, not by name. `NONE` is a zero-value sentinel the contract never
+        // actually emits (it means "request was never created"), included here only to keep the
+        // ordinals of every other variant aligned with the real enum.
         #[derive(Debug, PartialEq, Eq)]
         enum RequestState {
+            NONE,
             PENDING,
             FROZEN,
             RESOLVED_APPROVED,

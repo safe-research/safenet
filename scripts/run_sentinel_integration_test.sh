@@ -138,18 +138,27 @@ balance_of() {
 SENTINEL_A_BALANCE_BEFORE=$(balance_of "$SENTINEL_A_ADDR")
 SENTINEL_B_BALANCE_BEFORE=$(balance_of "$SENTINEL_B_ADDR")
 
-# `Request`'s tuple shape, field-for-field with `SentinelOracleRequest.Request`
-# (`sponsor, state, commitDeadline, daoFeeShare, revealDeadline, arbitrationDeadline,
-# fee, committedCount, revealedCount, bondTarget, slashAmount, approveSentinelCount,
-# denySentinelCount`) — every field must be listed, in its exact declared width, or
-# `cast` silently misaligns/misdecodes the rest.
+# `getRequest` returns two separate tuples, field-for-field with
+# `SentinelOracleRequest.Terms` (`commitDeadline, daoFeeShare, revealDeadline,
+# bondTarget, sponsor, slashAmount`) and `SentinelOracleRequest.Progress`
+# (`state, fee, arbitrationDeadline, committedCount, revealedCount,
+# approveSentinelCount, denySentinelCount`) — every field must be listed, in its
+# exact declared width and in this order, or `cast` silently misaligns/misdecodes
+# the rest.
 get_request() {
 	cast call --rpc-url "$RPC_URL" --json "$ORACLE" \
-		"getRequest(bytes32)((address,uint8,uint64,uint24,uint64,uint64,uint96,uint16,uint16,uint96,uint96,uint16,uint16))" \
+		"getRequest(bytes32)((uint64,uint24,uint64,uint96,address,uint96,uint8),(uint8,uint96,uint64,uint16,uint16,uint16,uint16,uint24))" \
 		"$1" 2>/dev/null
 }
-REQUEST_STATE_INDEX=1
-REQUEST_DENY_SENTINEL_COUNT_INDEX=12
+REQUEST_PROGRESS_INDEX=1
+REQUEST_STATE_INDEX=0
+REQUEST_DENY_SENTINEL_COUNT_INDEX=6
+
+# `SentinelOracleRequest.State` ordinals (`NONE, PENDING, FROZEN, RESOLVED_APPROVED,
+# RESOLVED_DENIED, TIMED_OUT`) — `NONE` is a zero-value sentinel meaning "never created", never a
+# real state a live request reports.
+STATE_FROZEN=2
+STATE_RESOLVED_APPROVED=3
 
 # --- 5. Spin up both Rust sentinels ---
 # Already built in step 1, so this just runs it — twice, once per account,
@@ -234,17 +243,17 @@ done
 REQUEST=""
 for _ in $(seq 1 10); do
 	REQUEST=$(get_request "$REQUEST_ID") || true
-	STATE=$(echo "$REQUEST" | jq -r ".[0][$REQUEST_STATE_INDEX]" 2>/dev/null) || true
-	[ "$STATE" = "2" ] && break
+	STATE=$(echo "$REQUEST" | jq -r ".[$REQUEST_PROGRESS_INDEX][$REQUEST_STATE_INDEX]" 2>/dev/null) || true
+	[ "$STATE" = "$STATE_RESOLVED_APPROVED" ] && break
 	sleep "$BLOCK_TIME_SECONDS"
 done
 
 echo "Final request state: $REQUEST"
-if [ "$STATE" != "2" ]; then
-	echo "FAILED: expected state RESOLVED_APPROVED (2), got $STATE"
+if [ "$STATE" != "$STATE_RESOLVED_APPROVED" ]; then
+	echo "FAILED: expected state RESOLVED_APPROVED ($STATE_RESOLVED_APPROVED), got $STATE"
 	exit 1
 fi
-DENY_SENTINEL_COUNT=$(echo "$REQUEST" | jq -r ".[0][$REQUEST_DENY_SENTINEL_COUNT_INDEX]")
+DENY_SENTINEL_COUNT=$(echo "$REQUEST" | jq -r ".[$REQUEST_PROGRESS_INDEX][$REQUEST_DENY_SENTINEL_COUNT_INDEX]")
 if [ "$DENY_SENTINEL_COUNT" != "0" ]; then
 	echo "FAILED: expected a unanimous approve vote, but denySentinelCount is $DENY_SENTINEL_COUNT"
 	exit 1
@@ -329,8 +338,8 @@ ELAPSED_SECONDS=0
 STATE=""
 while true; do
 	REQUEST=$(get_request "$DISPUTE_REQUEST_ID") || true
-	STATE=$(echo "$REQUEST" | jq -r ".[0][$REQUEST_STATE_INDEX]" 2>/dev/null) || true
-	[ "$STATE" = "1" ] && break
+	STATE=$(echo "$REQUEST" | jq -r ".[$REQUEST_PROGRESS_INDEX][$REQUEST_STATE_INDEX]" 2>/dev/null) || true
+	[ "$STATE" = "$STATE_FROZEN" ] && break
 	if [ "$ELAPSED_SECONDS" -ge "$TIMEOUT_SECONDS" ]; then
 		echo "FAILED: timed out waiting for the disputed request to freeze; last state was $STATE"
 		echo "Request: $REQUEST"
@@ -354,7 +363,7 @@ A_CLAIMED=""
 B_CLAIMED=""
 for _ in $(seq 1 10); do
 	REQUEST=$(get_request "$DISPUTE_REQUEST_ID") || true
-	STATE=$(echo "$REQUEST" | jq -r ".[0][$REQUEST_STATE_INDEX]" 2>/dev/null) || true
+	STATE=$(echo "$REQUEST" | jq -r ".[$REQUEST_PROGRESS_INDEX][$REQUEST_STATE_INDEX]" 2>/dev/null) || true
 	SENTINEL_A_COMMITMENT=$(cast call --rpc-url "$RPC_URL" --json "$ORACLE" \
 		"getCommitment(bytes32,address)((bytes32,uint96,uint8,bool))" "$DISPUTE_REQUEST_ID" "$SENTINEL_A_ADDR") || true
 	SENTINEL_B_COMMITMENT=$(cast call --rpc-url "$RPC_URL" --json "$ORACLE" \
@@ -366,8 +375,8 @@ for _ in $(seq 1 10); do
 done
 
 echo "Disputed request state after arbitration: $REQUEST"
-if [ "$STATE" != "2" ]; then
-	echo "FAILED: expected state RESOLVED_APPROVED (2), got $STATE"
+if [ "$STATE" != "$STATE_RESOLVED_APPROVED" ]; then
+	echo "FAILED: expected state RESOLVED_APPROVED ($STATE_RESOLVED_APPROVED), got $STATE"
 	exit 1
 fi
 if [ "$A_CLAIMED" != "true" ] || [ "$B_CLAIMED" != "true" ]; then
