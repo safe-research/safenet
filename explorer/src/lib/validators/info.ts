@@ -1,7 +1,7 @@
 import type { Address } from "viem";
 import z from "zod";
-import { shortAddress } from "@/lib/address";
 import { checkedAddressSchema } from "@/lib/schemas";
+import { mapAddressLabel } from "@/lib/utils";
 
 export type ValidatorInfo = {
 	address: Address;
@@ -27,15 +27,9 @@ export const loadValidatorInfoMap = async (source: string): Promise<Map<Address,
 	});
 };
 
-export const mapInfo = (
-	validatorInfoMap: Map<Address, ValidatorInfo> | null | undefined,
-	suffix: string,
-	address: Address,
-) => `${validatorInfoMap?.get(address)?.label ?? shortAddress(address)} ${suffix}`;
-
 // Formats each address as active (✅) or, if inactive, as either still-pending (⏳)
 // or missed (❌) depending on whether the roster has closed out.
 export const createStatusMapInfo =
 	(validatorInfoMap: Map<Address, ValidatorInfo> | null | undefined, completed: boolean) =>
 	(address: Address, isActive: boolean) =>
-		mapInfo(validatorInfoMap, isActive ? "✅" : completed ? "❌" : "⏳", address);
+		mapAddressLabel(validatorInfoMap, isActive ? "✅" : completed ? "❌" : "⏳", address);

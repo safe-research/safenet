@@ -20,6 +20,7 @@ const DEFAULT_SETTINGS: Settings = {
 	decoder: "https://example.com/decoder?calldata=",
 	maxBlockRange: MAX_BLOCK_RANGE,
 	validatorInfo: "https://example.com/validator-info.json",
+	sentinelInfo: "https://example.com/sentinel-info.json",
 	refetchInterval: 0,
 	blocksPerEpoch: 1440,
 	signingTimeout: 12,

@@ -33,6 +33,7 @@ const settingsFormSchema = z.object({
 	relayer: emptyToUndefined(z.url()),
 	maxBlockRange: numberOrStringAsNumber.pipe(z.number().int().positive().optional()),
 	validatorInfo: emptyToUndefined(z.url()),
+	sentinelInfo: emptyToUndefined(z.url()),
 	refetchInterval: numberOrStringAsNumber.pipe(z.number().int().nonnegative().optional()),
 	blocksPerEpoch: numberOrStringAsNumber.pipe(z.number().int().positive().optional()),
 	signingTimeout: numberOrStringAsNumber.pipe(z.number().int().positive().optional()),
@@ -94,6 +95,7 @@ function ConsensusSettingsForm({ onSubmitted }: { onSubmitted?: () => void }) {
 				label="Signing Timeout (blocks)"
 			/>
 			<FormItem id="validatorInfo" register={register} error={errors.validatorInfo} label="Validator Info Url" />
+			<FormItem id="sentinelInfo" register={register} error={errors.sentinelInfo} label="Sentinel Info Url" />
 
 			<FormItem
 				id="oracles"

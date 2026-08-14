@@ -2,7 +2,8 @@ import { AnnotatedAddressList } from "@/components/common/AnnotatedAddressList";
 import { useAttestationStatus } from "@/hooks/useSigningProgress";
 import { useValidatorInfoMap } from "@/hooks/useValidatorInfo";
 import type { TransactionProposal } from "@/lib/consensus";
-import { createStatusMapInfo, mapInfo } from "@/lib/validators/info";
+import { mapAddressLabel } from "@/lib/utils";
+import { createStatusMapInfo } from "@/lib/validators/info";
 import { Skeleton } from "../Skeleton";
 
 export function SafeTxAttestationStatus({ proposal }: { proposal: TransactionProposal }) {
@@ -52,7 +53,7 @@ export function SafeTxAttestationStatus({ proposal }: { proposal: TransactionPro
 							<div>
 								<AnnotatedAddressList
 									accounts={status.data.declined.map((s) => s.address)}
-									label={(address) => mapInfo(validatorInfo.data, "❌", address)}
+									label={(address) => mapAddressLabel(validatorInfo.data, "❌", address)}
 								/>
 							</div>
 						</div>

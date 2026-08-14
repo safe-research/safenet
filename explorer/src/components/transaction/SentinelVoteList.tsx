@@ -1,7 +1,8 @@
 import type { Address } from "viem";
 import { AnnotatedAddressList } from "@/components/common/AnnotatedAddressList";
-import { shortAddress } from "@/lib/address";
+import { useSentinelInfoMap } from "@/hooks/useSentinelInfo";
 import type { SentinelVote } from "@/lib/oracle";
+import { mapAddressLabel } from "@/lib/utils";
 
 const STATE_SUFFIXES: Record<SentinelVote["state"], string> = {
 	committed: "⏳",
@@ -13,6 +14,8 @@ const STATE_SUFFIXES: Record<SentinelVote["state"], string> = {
 // `AnnotatedAddressList`'s accounts-vs-active framing, every account here is active).
 // Renders nothing (not an empty-state message) when nobody has voted yet.
 export function SentinelVoteList({ votes }: { votes: SentinelVote[] }) {
+	const sentinelInfo = useSentinelInfoMap();
+
 	if (votes.length === 0) return null;
 
 	const sentinels = votes.map((vote) => vote.sentinel);
@@ -29,7 +32,7 @@ export function SentinelVoteList({ votes }: { votes: SentinelVote[] }) {
 			<div>
 				<AnnotatedAddressList
 					accounts={sentinels}
-					label={(address: Address) => `${shortAddress(address)} ${suffixBySentinel.get(address) ?? ""}`}
+					label={(address: Address) => mapAddressLabel(sentinelInfo.data, suffixBySentinel.get(address) ?? "", address)}
 					popoverContent={(address: Address) => {
 						const reason = reasonBySentinel.get(address);
 						return reason ? <span className="text-muted">{reason}</span> : null;
