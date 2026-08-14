@@ -181,6 +181,21 @@ contract SentinelOracleTest is Test {
         oracle.scheduleBondMultiplier(BOND_MULTIPLIER + 1);
     }
 
+    function test_ScheduleFee_OnlyGovernance() public {
+        address randomAddress = vm.createWallet("random").addr;
+
+        vm.expectRevert(SentinelOracle.NotGovernance.selector);
+        vm.prank(arbitrator);
+        oracle.scheduleFee(REQUEST_FEE + 1);
+
+        vm.expectRevert(SentinelOracle.NotGovernance.selector);
+        vm.prank(randomAddress);
+        oracle.scheduleFee(REQUEST_FEE + 1);
+
+        vm.prank(governance);
+        oracle.scheduleFee(REQUEST_FEE + 1);
+    }
+
     function test_ScheduleProtocolFundsReceiver_OnlyGovernance() public {
         address randomAddress = vm.createWallet("random").addr;
         address newReceiver = vm.createWallet("newReceiver").addr;
@@ -254,8 +269,100 @@ contract SentinelOracleTest is Test {
     }
 
     // ============================================================
+    // FEE SCHEDULE/APPLY
+    // ============================================================
+
+    function test_ScheduleFee_Zero_Reverts() public {
+        vm.expectRevert(SentinelOracle.ZeroFee.selector);
+        vm.prank(governance);
+        oracle.scheduleFee(0);
+    }
+
+    function test_Fee_ScheduleApplyRoundTrip() public {
+        uint256 newFee = REQUEST_FEE * 2;
+
+        assertEq(oracle.fee(), REQUEST_FEE, "starts at the constructor value");
+
+        vm.prank(governance);
+        oracle.scheduleFee(newFee);
+
+        assertEq(oracle.pendingFee(), newFee);
+        assertEq(oracle.fee(), REQUEST_FEE, "not active until the delay elapses");
+
+        // Applying too early is a no-op, not a revert -- it's permissionless and harmless to call
+        // speculatively.
+        oracle.applyFee();
+        assertEq(oracle.fee(), REQUEST_FEE, "still not active after an early apply");
+        assertEq(oracle.pendingFee(), newFee, "pending value survives an early apply");
+
+        vm.roll(block.number + GOVERNANCE_DELAY);
+        oracle.applyFee();
+
+        assertEq(oracle.fee(), newFee, "takes effect once the delay has elapsed");
+        assertEq(oracle.pendingFee(), 0);
+        assertEq(oracle.pendingFeeActiveAt(), 0);
+    }
+
+    function test_Fee_RescheduleBeforeMaturity_OverwritesPending() public {
+        uint256 firstFee = REQUEST_FEE * 2;
+        uint256 secondFee = REQUEST_FEE * 3;
+
+        vm.startPrank(governance);
+        oracle.scheduleFee(firstFee);
+
+        // Governance notices the mistake before `firstFee` matures and corrects it -- this must
+        // overwrite the still-pending schedule, not revert.
+        oracle.scheduleFee(secondFee);
+        vm.stopPrank();
+
+        assertEq(oracle.pendingFee(), secondFee, "second schedule overwrites the first");
+        assertEq(oracle.fee(), REQUEST_FEE, "not active until the delay elapses");
+
+        vm.roll(block.number + GOVERNANCE_DELAY);
+        oracle.applyFee();
+
+        assertEq(oracle.fee(), secondFee, "corrected value takes effect, not the mistake");
+    }
+
+    function test_ScheduleFee_RequestsInFlightKeepSnapshottedFee() public {
+        uint256 newFee = REQUEST_FEE * 2;
+
+        _postRequest();
+
+        vm.prank(governance);
+        oracle.scheduleFee(newFee);
+        vm.roll(block.number + GOVERNANCE_DELAY);
+
+        // The in-flight request was created before the new fee matured -- its snapshotted `fee`
+        // must not retroactively change even though `oracle.fee()` now reports the new value.
+        assertEq(oracle.fee(), newFee, "governed fee has matured");
+        SentinelOracleRequest.Request memory req = oracle.getRequest(REQUEST_ID);
+        assertEq(req.fee, REQUEST_FEE, "in-flight request keeps its originally snapshotted fee");
+    }
+
+    // ============================================================
     // EAGER APPLY ON ACTIVITY (NO EXPLICIT apply* CALL NEEDED)
     // ============================================================
+
+    function test_PostRequest_EagerlyAppliesPendingFee() public {
+        uint256 newFee = REQUEST_FEE * 2;
+
+        vm.prank(governance);
+        oracle.scheduleFee(newFee);
+        vm.roll(block.number + GOVERNANCE_DELAY);
+
+        // Nobody ever calls `applyFee()` -- `postRequest` itself must flip the matured pending
+        // value into storage as a side effect of touching `$feeConfig`.
+        _postRequest();
+
+        assertEq(oracle.fee(), newFee, "postRequest applies the pending fee");
+        assertEq(oracle.pendingFee(), 0, "pending slot cleared without a separate apply call");
+        assertEq(oracle.pendingFeeActiveAt(), 0);
+
+        SentinelOracleRequest.Request memory req = oracle.getRequest(REQUEST_ID);
+        assertEq(req.fee, newFee, "new request snapshots the newly-applied fee");
+        assertEq(req.bondTarget, newFee * BOND_MULTIPLIER, "bond target is derived from the newly-applied fee");
+    }
 
     function test_PostRequest_EagerlyAppliesPendingBondMultiplier() public {
         uint256 newMultiplier = BOND_MULTIPLIER + 1;
