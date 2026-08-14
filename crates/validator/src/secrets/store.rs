@@ -129,16 +129,6 @@ impl SecretStore {
         Ok(stored)
     }
 
-    /// Deletes `group`'s DKG secrets once its keygen resolves (successfully or
-    /// not). Idempotent.
-    pub async fn prune_keygen_secrets(&self, group: B256) -> Result<(), Error> {
-        sqlx::query("DELETE FROM keygen_secrets WHERE group_id = ?")
-            .bind(key(group))
-            .execute(&self.pool)
-            .await?;
-        Ok(())
-    }
-
     /// Deletes the DKG secrets of every group other than `groups`, reconciling
     /// the stored secrets with the groups the state machine still tracks.
     ///
@@ -426,16 +416,6 @@ impl SecretStore {
         Ok(u64::try_from(count)?)
     }
 
-    /// Deletes every nonce tree belonging to a retired `group` (cascading to its
-    /// nonces). Idempotent.
-    pub async fn prune_group_nonces(&self, group: B256) -> Result<(), Error> {
-        sqlx::query("DELETE FROM nonces_chunks WHERE group_id = ?")
-            .bind(key(group))
-            .execute(&self.pool)
-            .await?;
-        Ok(())
-    }
-
     /// Deletes the nonce trees of every group other than `groups` (cascading to
     /// their nonces), reconciling the stored nonces with the groups the state
     /// machine still tracks.
@@ -591,20 +571,6 @@ mod tests {
             serde_json::to_string(&read).unwrap(),
             serde_json::to_string(&first).unwrap(),
         );
-    }
-
-    #[tokio::test]
-    async fn prune_removes_resolved_group_secrets() {
-        let store = store().await;
-        store
-            .store_keygen_secrets(GROUP, ME, keygen_secrets())
-            .await
-            .unwrap();
-
-        store.prune_keygen_secrets(GROUP).await.unwrap();
-        assert!(get_keygen_secrets(&store, GROUP).await.is_none());
-        // Pruning again is a no-op.
-        store.prune_keygen_secrets(GROUP).await.unwrap();
     }
 
     #[tokio::test]
@@ -904,21 +870,6 @@ mod tests {
     async fn use_nonce_missing_tree_is_none() {
         let store = store().await;
         assert!(store.take_nonce(GROUP, ME, 7, 0).await.unwrap().is_none());
-    }
-
-    #[tokio::test]
-    async fn prune_group_nonces_removes_trees_and_nonces() {
-        let store = store().await;
-        let root = store
-            .register_nonces_chunk(GROUP, ME, nonce_chunk(2))
-            .await
-            .unwrap()
-            .unwrap();
-        store.link_nonces_chunk(GROUP, ME, 0, root).await.unwrap();
-
-        store.prune_group_nonces(GROUP).await.unwrap();
-        // The cascade removed the nonces, so a use now no-ops.
-        assert!(store.take_nonce(GROUP, ME, 0, 0).await.unwrap().is_none());
     }
 
     #[tokio::test]

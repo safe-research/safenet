@@ -99,18 +99,10 @@ pub enum Effect {
         key_share: Arc<KeyShare>,
         sequence: u64,
     },
-    /// Prune a resolved group's keygen secrets.
-    PruneKeyGenSecrets { group_id: B256 },
-    /// Prune a retired group's registered nonce trees.
-    PruneGroupNonces { group_id: B256 },
     /// Reconcile the process-local and persisted secrets with the groups
     /// retained by the state machine, dropping all secret material belonging to
     /// other groups. A key share starts or retains a nonce generator; `None`
     /// retains the group's DKG secrets without running one.
-    #[expect(
-        dead_code,
-        reason = "introduced ahead of state-machine secret reconciliation"
-    )]
     ReconcileGroupSecrets {
         groups: BTreeMap<B256, Option<Arc<KeyShare>>>,
     },
@@ -305,15 +297,6 @@ impl Handler {
                     .await
                     .start(group_id, key_share)?;
                 self.next_nonce_tree(group_id).await
-            }
-            Effect::PruneKeyGenSecrets { group_id } => {
-                self.secrets.prune_keygen_secrets(group_id).await?;
-                Ok(Resume::Noop)
-            }
-            Effect::PruneGroupNonces { group_id } => {
-                self.nonce_generator.lock().await.stop(group_id);
-                self.secrets.prune_group_nonces(group_id).await?;
-                Ok(Resume::Noop)
             }
             Effect::ReconcileGroupSecrets { groups } => {
                 // We only need to keep keygen secrets for groups that are still

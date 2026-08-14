@@ -59,13 +59,6 @@ impl NonceGenerator {
         async move { next.ok_or(Error::Unavailable)?.await }
     }
 
-    /// Stops the background stream for `group_id`.
-    ///
-    /// An outstanding request fails with [`Error::Unavailable`].
-    pub fn stop(&mut self, group_id: B256) {
-        self.groups.remove(&group_id);
-    }
-
     /// Stops the background stream of every group that does not match the
     /// `keep` predicate.
     ///
@@ -282,7 +275,7 @@ mod tests {
         assert!(more);
 
         // Stopping a group causes subsequent requests to fail.
-        generator.stop(group_id);
+        generator.retain(|_| false);
         assert_matches!(generator.next(group_id).await, Err(Error::Unavailable));
     }
 
@@ -345,7 +338,7 @@ mod tests {
         };
 
         // Stop the group.
-        generator.stop(group_id);
+        generator.retain(|_| false);
 
         // Simulate the ongoing nonce chunk generation completing, and ensure
         // that the nonce resolves to the chunk being unavailable as the group
