@@ -12,6 +12,7 @@ contract DeploySentinelOracleScript is Script {
     function run() public returns (address sentinelOracle) {
         address arbitrator = vm.envAddress("SENTINEL_ARBITRATOR");
         address governance = vm.envAddress("SENTINEL_GOVERNANCE");
+        address protocolFundsReceiver = vm.envAddress("SENTINEL_PROTOCOL_FUNDS_RECEIVER");
         address consensus = vm.envAddress("SENTINEL_CONSENSUS");
         address feeToken = vm.envAddress("SENTINEL_FEE_TOKEN");
         uint256 requestFee = vm.envUint("SENTINEL_REQUEST_FEE");
@@ -30,6 +31,7 @@ contract DeploySentinelOracleScript is Script {
             abi.encode(
                 arbitrator,
                 governance,
+                protocolFundsReceiver,
                 consensus,
                 feeToken,
                 requestFee,

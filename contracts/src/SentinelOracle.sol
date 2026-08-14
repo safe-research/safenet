@@ -5,12 +5,14 @@ import {IERC20} from "@oz/token/ERC20/IERC20.sol";
 import {SafeERC20} from "@oz/token/ERC20/utils/SafeERC20.sol";
 import {IOracle} from "@/interfaces/IOracle.sol";
 import {BondConfig} from "@/libraries/BondConfig.sol";
+import {DelayedAddress} from "@/libraries/DelayedAddress.sol";
 import {SentinelMap} from "@/libraries/SentinelMap.sol";
 import {SentinelOracleCommitment, SentinelOracleCommitmentMap} from "@/libraries/SentinelOracleCommitments.sol";
 import {SentinelOracleRequest, SentinelOracleRequestMap} from "@/libraries/SentinelOracleRequests.sol";
 
 contract SentinelOracle is IOracle {
     using BondConfig for BondConfig.T;
+    using DelayedAddress for DelayedAddress.T;
     using SentinelMap for SentinelMap.T;
     using SentinelOracleCommitment for SentinelOracleCommitment.Commitment;
     using SentinelOracleCommitmentMap for SentinelOracleCommitmentMap.T;
@@ -49,6 +51,9 @@ contract SentinelOracle is IOracle {
 
     // forge-lint: disable-next-line(mixed-case-variable)
     BondConfig.T private $bondConfig;
+
+    // forge-lint: disable-next-line(mixed-case-variable)
+    DelayedAddress.T private $protocolFundsReceiverConfig;
 
     // forge-lint: disable-next-line(mixed-case-variable)
     SentinelMap.T private $sentinelMap;
@@ -97,6 +102,7 @@ contract SentinelOracle is IOracle {
     constructor(
         address arbitrator,
         address governance,
+        address initialProtocolFundsReceiver,
         address consensus,
         address feeToken,
         uint256 requestFee,
@@ -107,6 +113,7 @@ contract SentinelOracle is IOracle {
     ) {
         require(arbitrator != address(0), InvalidAddress());
         require(governance != address(0), InvalidAddress());
+        require(initialProtocolFundsReceiver != address(0), InvalidAddress());
         require(consensus != address(0), InvalidAddress());
         require(feeToken != address(0), InvalidAddress());
         require(requestFee > 0, ZeroFee());
@@ -121,6 +128,7 @@ contract SentinelOracle is IOracle {
         REVEAL_WINDOW = revealWindow;
         GOVERNANCE_DELAY = governanceDelay;
         $bondConfig.init(initialMultiplier);
+        $protocolFundsReceiverConfig.init(initialProtocolFundsReceiver);
     }
 
     // ============================================================
@@ -130,7 +138,7 @@ contract SentinelOracle is IOracle {
     function postRequest(bytes32 requestId, address proposer, bytes calldata) external override(IOracle) {
         require(msg.sender == CONSENSUS, NotConsensus());
         uint256 fee = REQUEST_FEE;
-        uint256 bondTarget = fee * $bondConfig.currentMultiplier();
+        uint256 bondTarget = fee * $bondConfig.applyPending();
         uint256 commitDeadline = block.number + COMMIT_WINDOW;
         uint256 revealDeadline = commitDeadline + REVEAL_WINDOW;
         $requests.create(requestId, proposer, fee, bondTarget, commitDeadline, revealDeadline);
@@ -173,7 +181,7 @@ contract SentinelOracle is IOracle {
         (SentinelOracleRequest.State newState, uint256 refundFee, uint256 unrevealedBond) = req.finalize();
 
         if (unrevealedBond > 0) {
-            FEE_TOKEN.safeTransfer(ARBITRATOR, unrevealedBond);
+            FEE_TOKEN.safeTransfer($protocolFundsReceiverConfig.applyPending(), unrevealedBond);
         }
 
         if (newState == SentinelOracleRequest.State.FROZEN) {
@@ -225,8 +233,9 @@ contract SentinelOracle is IOracle {
         uint256 slashed = req.resolveDispute(approveWins);
         SentinelOracleRequest.State outcome = req.state;
         uint256 refundFee = req.fee;
+        address fundsReceiver = $protocolFundsReceiverConfig.applyPending();
         FEE_TOKEN.safeTransfer(proposer, refundFee);
-        FEE_TOKEN.safeTransfer(ARBITRATOR, slashed - refundFee);
+        FEE_TOKEN.safeTransfer(fundsReceiver, slashed - refundFee);
         emit DisputeResolved(requestId, outcome, slashed, context);
         emit OracleResult(requestId, proposer, abi.encode(SentinelOracleRequest.ResolveReason.ARBITRATION), approveWins);
     }
@@ -251,6 +260,15 @@ contract SentinelOracle is IOracle {
         $bondConfig.applyPending();
     }
 
+    function scheduleProtocolFundsReceiver(address newValue) external onlyGovernance {
+        require(newValue != address(0), InvalidAddress());
+        $protocolFundsReceiverConfig.schedule(newValue, GOVERNANCE_DELAY);
+    }
+
+    function applyProtocolFundsReceiver() external {
+        $protocolFundsReceiverConfig.applyPending();
+    }
+
     // ============================================================
     // VIEW FUNCTIONS
     // ============================================================
@@ -269,6 +287,18 @@ contract SentinelOracle is IOracle {
 
     function pendingBondMultiplierActiveAt() external view returns (uint256) {
         return $bondConfig.pendingBondMultiplierActiveAt;
+    }
+
+    function protocolFundsReceiver() external view returns (address) {
+        return $protocolFundsReceiverConfig.current();
+    }
+
+    function pendingProtocolFundsReceiver() external view returns (address) {
+        return $protocolFundsReceiverConfig.pendingValue;
+    }
+
+    function pendingProtocolFundsReceiverActiveAt() external view returns (uint256) {
+        return $protocolFundsReceiverConfig.pendingActiveAt;
     }
 
     function getRequest(bytes32 requestId) external view returns (SentinelOracleRequest.Request memory) {
