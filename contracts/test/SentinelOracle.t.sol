@@ -63,20 +63,22 @@ contract SentinelOracleTest is Test {
 
         token = new MockERC20("Fee Token", "FEE");
         oracle = new SentinelOracle(
-            arbitrator,
-            governance,
-            protocolFundsReceiver,
-            proposer,
-            address(token),
-            REQUEST_FEE,
-            COMMIT_WINDOW,
-            REVEAL_WINDOW,
-            GOVERNANCE_DELAY,
-            BOND_MULTIPLIER,
-            SLASHING_MULTIPLIER,
-            INITIAL_DAO_FEE_SHARE,
-            CHARTER_ENS,
-            ARBITRATION_TIMEOUT
+            SentinelOracle.ConstructorParams({
+                arbitrator: arbitrator,
+                governance: governance,
+                protocolFundsReceiver: protocolFundsReceiver,
+                proposer: proposer,
+                feeToken: address(token),
+                requestFee: REQUEST_FEE,
+                initialBondMultiplier: BOND_MULTIPLIER,
+                initialSlashingMultiplier: SLASHING_MULTIPLIER,
+                initialDaoFeeShare: INITIAL_DAO_FEE_SHARE,
+                commitWindow: COMMIT_WINDOW,
+                revealWindow: REVEAL_WINDOW,
+                governanceDelay: GOVERNANCE_DELAY,
+                arbitrationTimeout: ARBITRATION_TIMEOUT,
+                initialCharterEns: CHARTER_ENS
+            })
         );
 
         // Fund accounts

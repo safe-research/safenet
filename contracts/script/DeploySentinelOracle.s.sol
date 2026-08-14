@@ -36,20 +36,22 @@ contract DeploySentinelOracleScript is Script {
             bytes32(0),
             type(SentinelOracle).creationCode,
             abi.encode(
-                arbitrator,
-                governance,
-                protocolFundsReceiver,
-                proposer,
-                feeToken,
-                requestFee,
-                commitWindow,
-                revealWindow,
-                governanceDelay,
-                bondMultiplier,
-                initialSlashingMultiplier,
-                initialDaoFeeShare,
-                charterEns,
-                arbitrationTimeout
+                SentinelOracle.ConstructorParams({
+                    arbitrator: arbitrator,
+                    governance: governance,
+                    protocolFundsReceiver: protocolFundsReceiver,
+                    proposer: proposer,
+                    feeToken: feeToken,
+                    requestFee: requestFee,
+                    initialBondMultiplier: bondMultiplier,
+                    initialSlashingMultiplier: initialSlashingMultiplier,
+                    initialDaoFeeShare: initialDaoFeeShare,
+                    commitWindow: commitWindow,
+                    revealWindow: revealWindow,
+                    governanceDelay: governanceDelay,
+                    arbitrationTimeout: arbitrationTimeout,
+                    initialCharterEns: charterEns
+                })
             )
         );
 

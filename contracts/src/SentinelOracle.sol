@@ -123,45 +123,57 @@ contract SentinelOracle is IOracle {
     // CONSTRUCTOR
     // ============================================================
 
-    constructor(
-        address arbitrator,
-        address governance,
-        address initialProtocolFundsReceiver,
-        address proposer,
-        address feeToken,
-        uint256 requestFee,
-        uint256 commitWindow,
-        uint256 revealWindow,
-        uint256 governanceDelay,
-        uint256 initialBondMultiplier,
-        uint256 initialSlashingMultiplier,
-        uint256 initialDaoFeeShare,
-        string memory initialCharterEns,
-        uint256 arbitrationTimeout
-    ) {
-        require(arbitrator != address(0), InvalidAddress());
-        require(governance != address(0), InvalidAddress());
-        require(initialProtocolFundsReceiver != address(0), InvalidAddress());
-        require(proposer != address(0), InvalidAddress());
-        require(feeToken != address(0), InvalidAddress());
-        require(requestFee > 0, ZeroFee());
-        require(commitWindow > 0, ZeroWindow());
-        require(revealWindow > 0, ZeroWindow());
-        require(initialDaoFeeShare <= FEE_SHARE_DENOMINATOR, InvalidFeeShare());
-        require(arbitrationTimeout > 0, ZeroWindow());
-        ARBITRATOR = arbitrator;
-        GOVERNANCE = governance;
-        PROPOSER = proposer;
-        FEE_TOKEN = IERC20(feeToken);
-        COMMIT_WINDOW = commitWindow;
-        REVEAL_WINDOW = revealWindow;
-        GOVERNANCE_DELAY = governanceDelay;
-        ARBITRATION_TIMEOUT = arbitrationTimeout;
-        $charterEns = initialCharterEns;
-        $bondConfig.init(initialBondMultiplier, initialSlashingMultiplier);
-        $protocolFundsReceiverConfig.init(initialProtocolFundsReceiver);
-        $feeConfig.init(requestFee);
-        $daoFeeShareConfig.init(initialDaoFeeShare);
+    struct ConstructorParams {
+        // Operators: the three addresses the SafeDAO/arbitrator ecosystem cares about.
+        // `arbitrator` rules on frozen disputes; `governance` administers every other dynamic
+        // parameter; `proposer` is the trusted contract (typically Consensus) allowed to call
+        // `postRequest`. `protocolFundsReceiver` is grouped here too since it is itself an
+        // address, even though -- unlike the other three -- it is governed/delay-gated rather
+        // than immutable; this is only its *initial* value.
+        address arbitrator;
+        address governance;
+        address protocolFundsReceiver;
+        address proposer;
+        // Fee config: everything that determines the size of a request's fee/bond/slash and how
+        // it is split.
+        address feeToken;
+        uint256 requestFee;
+        uint256 initialBondMultiplier;
+        uint256 initialSlashingMultiplier;
+        uint256 initialDaoFeeShare;
+        // Timeouts: every block-denominated window/delay in the contract.
+        uint256 commitWindow;
+        uint256 revealWindow;
+        uint256 governanceDelay;
+        uint256 arbitrationTimeout;
+        // Charter reference (see `$charterEns` below).
+        string initialCharterEns;
+    }
+
+    constructor(ConstructorParams memory params) {
+        require(params.arbitrator != address(0), InvalidAddress());
+        require(params.governance != address(0), InvalidAddress());
+        require(params.protocolFundsReceiver != address(0), InvalidAddress());
+        require(params.proposer != address(0), InvalidAddress());
+        require(params.feeToken != address(0), InvalidAddress());
+        require(params.requestFee > 0, ZeroFee());
+        require(params.commitWindow > 0, ZeroWindow());
+        require(params.revealWindow > 0, ZeroWindow());
+        require(params.initialDaoFeeShare <= FEE_SHARE_DENOMINATOR, InvalidFeeShare());
+        require(params.arbitrationTimeout > 0, ZeroWindow());
+        ARBITRATOR = params.arbitrator;
+        GOVERNANCE = params.governance;
+        PROPOSER = params.proposer;
+        FEE_TOKEN = IERC20(params.feeToken);
+        COMMIT_WINDOW = params.commitWindow;
+        REVEAL_WINDOW = params.revealWindow;
+        GOVERNANCE_DELAY = params.governanceDelay;
+        ARBITRATION_TIMEOUT = params.arbitrationTimeout;
+        $charterEns = params.initialCharterEns;
+        $bondConfig.init(params.initialBondMultiplier, params.initialSlashingMultiplier);
+        $protocolFundsReceiverConfig.init(params.protocolFundsReceiver);
+        $feeConfig.init(params.requestFee);
+        $daoFeeShareConfig.init(params.initialDaoFeeShare);
     }
 
     // ============================================================
