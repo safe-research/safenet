@@ -47,6 +47,7 @@ export default defineConfig(({ mode }) => {
 	}
 	for (const key of [
 		"VITE_DEFAULT_MAX_BLOCK_RANGE",
+		"VITE_DEFAULT_DETAILS_MAX_BLOCK_RANGE",
 		"VITE_DEFAULT_REFETCH_INTERVAL",
 		"VITE_DEFAULT_BLOCKS_PER_EPOCH",
 		"VITE_DEFAULT_SIGNING_TIMEOUT",
@@ -112,6 +113,9 @@ export default defineConfig(({ mode }) => {
 			),
 			__DEFAULT_RELAYER__: JSON.stringify(env.VITE_DEFAULT_RELAYER || ""),
 			__DEFAULT_MAX_BLOCK_RANGE__: Number(env.VITE_DEFAULT_MAX_BLOCK_RANGE) || 10000,
+			// 0 means unlimited (no fromBlock lower bound) — used for single-proposal detail
+			// lookups, which need to find proposals arbitrarily far in the past.
+			__DEFAULT_DETAILS_MAX_BLOCK_RANGE__: Number(env.VITE_DEFAULT_DETAILS_MAX_BLOCK_RANGE) || 0,
 			__DEFAULT_VALIDATOR_INFO__: JSON.stringify(
 				env.VITE_DEFAULT_VALIDATOR_INFO ||
 					"https://raw.githubusercontent.com/safe-fndn/safenet-beta-data/refs/heads/main/assets/validator-info.json",

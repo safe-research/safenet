@@ -36,6 +36,13 @@ describe("getBlockRange", () => {
 		expect(toBlock).toBe(500n);
 		expect(fromBlock).toBe(0n);
 	});
+
+	it("treats maxBlockRange of 0 as unlimited, searching from block 0", async () => {
+		const provider = makeProvider();
+		const { fromBlock, toBlock } = await getBlockRange(provider, 0n);
+		expect(toBlock).toBe(CURRENT_BLOCK);
+		expect(fromBlock).toBe(0n);
+	});
 });
 
 describe("mostRecentFirst", () => {

@@ -11,6 +11,7 @@ const DEFAULT_SETTINGS = {
 	rpc: __DEFAULT_RPC__,
 	decoder: __DEFAULT_DECODER__,
 	maxBlockRange: __DEFAULT_MAX_BLOCK_RANGE__,
+	detailsMaxBlockRange: __DEFAULT_DETAILS_MAX_BLOCK_RANGE__,
 	validatorInfo: __DEFAULT_VALIDATOR_INFO__,
 	sentinelInfo: __DEFAULT_SENTINEL_INFO__,
 	refetchInterval: __DEFAULT_REFETCH_INTERVAL__,
@@ -26,6 +27,8 @@ const settingsSchema = z.object({
 	consensus: checkedAddressSchema.default(DEFAULT_SETTINGS.consensus),
 	relayer: z.url().optional(),
 	maxBlockRange: z.number().int().positive().default(DEFAULT_SETTINGS.maxBlockRange),
+	// 0 means unlimited (no fromBlock lower bound), used when looking up a single proposal's details.
+	detailsMaxBlockRange: z.number().int().nonnegative().default(DEFAULT_SETTINGS.detailsMaxBlockRange),
 	validatorInfo: z.url().default(DEFAULT_SETTINGS.validatorInfo),
 	sentinelInfo: z.url().default(DEFAULT_SETTINGS.sentinelInfo),
 	refetchInterval: z.number().int().nonnegative().default(DEFAULT_SETTINGS.refetchInterval),
