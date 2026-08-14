@@ -43,46 +43,16 @@ pub enum Effect {
         group_id: B256,
         key_share: Arc<KeyShare>,
     },
-    /// Link a registered nonce tree (identified by its `root` commitment) to
-    /// the onchain sequence `chunk` it was assigned.
-    LinkNonceTree {
-        group_id: B256,
-        chunk: u64,
-        root: B256,
-    },
-    /// Reveal this validator's nonce commitment for the signing round at
-    /// `sequence`.
-    RevealNonceCommitments {
-        group_id: B256,
-        signature_id: B256,
-        message: B256,
-        sequence: u64,
-    },
     /// Reveal this validator's nonce commitment at `(root, offset)`.
-    #[expect(
-        dead_code,
-        reason = "introduced ahead of state-machine nonce integration"
-    )]
-    RevealNonceCommitmentsByRoot {
+    RevealNonceCommitments {
         signature_id: B256,
         message: B256,
         root: B256,
         offset: u64,
     },
-    /// Use this validator's own nonce for the signing round at `sequence`.
-    /// Once the nonce is taken, it is burned and can no longer be used.
-    UseNonce {
-        group_id: B256,
-        message: B256,
-        sequence: u64,
-    },
     /// Use this validator's own nonce at `(root, offset)`.
     /// Once the nonce is taken, it is burned and can no longer be used.
-    #[expect(
-        dead_code,
-        reason = "introduced ahead of state-machine nonce integration"
-    )]
-    UseNonceByRoot {
+    UseNonce {
         message: B256,
         root: B256,
         offset: u64,
@@ -182,39 +152,7 @@ impl Handler {
                     .start(group_id, key_share)?;
                 self.next_nonce_tree(group_id).await
             }
-            Effect::LinkNonceTree {
-                group_id,
-                chunk,
-                root,
-            } => {
-                self.secrets
-                    .link_nonces_chunk(group_id, self.account, chunk, root)
-                    .await?;
-                Ok(Resume::Noop)
-            }
             Effect::RevealNonceCommitments {
-                group_id,
-                signature_id,
-                message,
-                sequence,
-            } => {
-                let (chunk, offset) = frost::preprocess::decode_sequence(sequence);
-                let result = self
-                    .secrets
-                    .nonces_reveal(group_id, self.account, chunk, offset)
-                    .await?
-                    .map(|(nonces, proof)| Resume::NonceCommitments {
-                        signature_id,
-                        message,
-                        nonces,
-                        proof,
-                    })
-                    // The nonce was not generated, used up, or the tree isn't
-                    // linked yet; nothing to reveal.
-                    .unwrap_or(Resume::Noop);
-                Ok(result)
-            }
-            Effect::RevealNonceCommitmentsByRoot {
                 signature_id,
                 message,
                 root,
@@ -231,26 +169,6 @@ impl Handler {
                 })
                 .unwrap_or(Resume::Noop)),
             Effect::UseNonce {
-                group_id,
-                message,
-                sequence,
-            } => {
-                let (chunk, offset) = frost::preprocess::decode_sequence(sequence);
-                let result = self
-                    .secrets
-                    .take_nonce(group_id, self.account, chunk, offset)
-                    .await?
-                    .map(|nonces| Resume::Nonce {
-                        message,
-                        nonces: Box::new(nonces),
-                    })
-                    // The nonce was already burned, for example by a reorg
-                    // replaying this effect; gracefully no-op instead of
-                    // producing a duplicate signature share.
-                    .unwrap_or(Resume::Noop);
-                Ok(result)
-            }
-            Effect::UseNonceByRoot {
                 message,
                 root,
                 offset,
@@ -304,18 +222,15 @@ impl Handler {
             tracing::debug!(%group_id, "nonce chunk request already running; ignoring duplicate effect");
             return Ok(Resume::Noop);
         };
-        let result = self
+        let commitment = self
             .secrets
             .register_nonces_chunk(group_id, self.account, nonce_chunk)
             .await?
-            .map(|commitment| Resume::NonceTree {
-                group_id,
-                commitment,
-            })
-            // There is already a pending nonce chunk from an earlier
-            // top-up; do not register a second one.
-            .unwrap_or(Resume::Noop);
-        Ok(result)
+            .ok_or_else(|| InternalError("failed to register nonce chunk".to_string()))?;
+        Ok(Resume::NonceTree {
+            group_id,
+            commitment,
+        })
     }
 }
 

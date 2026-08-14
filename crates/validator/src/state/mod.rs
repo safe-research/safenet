@@ -74,6 +74,15 @@ struct NonceState {
     chunks: BTreeMap<u64, Option<B256>>,
 }
 
+/// The durable-store coordinates of a nonce selected by canonical state.
+#[derive(Clone, Copy, Debug, Deserialize, Serialize)]
+struct NonceIndex {
+    /// The nonce tree's Merkle root.
+    root: B256,
+    /// The nonce's offset within the tree.
+    offset: u64,
+}
+
 /// The epoch-rollover / DKG state machine. Each active variant carries the
 /// group it is generating.
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
@@ -293,8 +302,8 @@ enum SigningState {
         group_id: B256,
         /// The signature id assigned to this signing round.
         signature_id: B256,
-        /// The nonce sequence number assigned to this signing round.
-        sequence: u64,
+        /// This validator's nonce selected for the signing round.
+        nonce: NonceIndex,
         /// The packet being signed.
         packet: Packet,
         /// The group members expected to take part in signing.
@@ -311,8 +320,8 @@ enum SigningState {
         group_id: B256,
         /// The signature id assigned to this signing round.
         signature_id: B256,
-        /// The nonce sequence number assigned to this signing round.
-        sequence: u64,
+        /// This validator's nonce selected for the signing round.
+        nonce: NonceIndex,
         /// Verified revealed nonce commitments received from peers so far.
         revealed: BTreeMap<Address, RevealedNonces>,
         /// The last participant to reveal a valid nonce commitment, if any.
