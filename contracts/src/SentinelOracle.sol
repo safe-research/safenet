@@ -39,7 +39,9 @@ contract SentinelOracle is IOracle {
 
     address public immutable ARBITRATOR;
     address public immutable GOVERNANCE;
-    address public immutable CONSENSUS;
+    // The trusted contract (typically Consensus) allowed to call `postRequest` -- distinct from a
+    // request's `sponsor`, the address that funds a given request's fee and is refunded on timeout.
+    address public immutable PROPOSER;
     IERC20 public immutable FEE_TOKEN;
     uint256 public immutable COMMIT_WINDOW;
     uint256 public immutable REVEAL_WINDOW;
@@ -92,7 +94,7 @@ contract SentinelOracle is IOracle {
 
     error NotArbitrator();
     error NotGovernance();
-    error NotConsensus();
+    error NotProposer();
     error InvalidAddress();
     error ZeroFee();
     error ZeroWindow();
@@ -125,7 +127,7 @@ contract SentinelOracle is IOracle {
         address arbitrator,
         address governance,
         address initialProtocolFundsReceiver,
-        address consensus,
+        address proposer,
         address feeToken,
         uint256 requestFee,
         uint256 commitWindow,
@@ -140,7 +142,7 @@ contract SentinelOracle is IOracle {
         require(arbitrator != address(0), InvalidAddress());
         require(governance != address(0), InvalidAddress());
         require(initialProtocolFundsReceiver != address(0), InvalidAddress());
-        require(consensus != address(0), InvalidAddress());
+        require(proposer != address(0), InvalidAddress());
         require(feeToken != address(0), InvalidAddress());
         require(requestFee > 0, ZeroFee());
         require(commitWindow > 0, ZeroWindow());
@@ -149,7 +151,7 @@ contract SentinelOracle is IOracle {
         require(arbitrationTimeout > 0, ZeroWindow());
         ARBITRATOR = arbitrator;
         GOVERNANCE = governance;
-        CONSENSUS = consensus;
+        PROPOSER = proposer;
         FEE_TOKEN = IERC20(feeToken);
         COMMIT_WINDOW = commitWindow;
         REVEAL_WINDOW = revealWindow;
@@ -166,8 +168,8 @@ contract SentinelOracle is IOracle {
     // IOracle IMPLEMENTATION
     // ============================================================
 
-    function postRequest(bytes32 requestId, address proposer, bytes calldata) external override(IOracle) {
-        require(msg.sender == CONSENSUS, NotConsensus());
+    function postRequest(bytes32 requestId, address sponsor, bytes calldata) external override(IOracle) {
+        require(msg.sender == PROPOSER, NotProposer());
         uint256 currentFee = $feeConfig.applyPending();
         (uint256 currentBondMultiplier, uint256 currentSlashingMultiplier) = $bondConfig.applyPending();
         uint256 bondTarget = currentFee * currentBondMultiplier;
@@ -176,9 +178,9 @@ contract SentinelOracle is IOracle {
         uint256 commitDeadline = block.number + COMMIT_WINDOW;
         uint256 revealDeadline = commitDeadline + REVEAL_WINDOW;
         $requests.create(
-            requestId, proposer, currentFee, bondTarget, currentDaoFeeShare, slashAmount, commitDeadline, revealDeadline
+            requestId, sponsor, currentFee, bondTarget, currentDaoFeeShare, slashAmount, commitDeadline, revealDeadline
         );
-        FEE_TOKEN.safeTransferFrom(proposer, address(this), currentFee);
+        FEE_TOKEN.safeTransferFrom(sponsor, address(this), currentFee);
     }
 
     // ============================================================
@@ -213,7 +215,7 @@ contract SentinelOracle is IOracle {
 
     function finalize(bytes32 requestId) external {
         SentinelOracleRequest.Request storage req = $requests.get(requestId);
-        address proposer = req.proposer;
+        address sponsor = req.sponsor;
         (SentinelOracleRequest.State newState, uint256 refundFee, uint256 unrevealedBond) =
             req.finalize(ARBITRATION_TIMEOUT);
 
@@ -227,7 +229,7 @@ contract SentinelOracle is IOracle {
         }
 
         if (newState == SentinelOracleRequest.State.TIMED_OUT) {
-            FEE_TOKEN.safeTransfer(proposer, refundFee);
+            FEE_TOKEN.safeTransfer(sponsor, refundFee);
             return;
         }
 
@@ -237,11 +239,7 @@ contract SentinelOracle is IOracle {
             FEE_TOKEN.safeTransfer(fundsReceiver, daoCut);
         }
 
-        if (newState == SentinelOracleRequest.State.RESOLVED_APPROVED) {
-            emit OracleResult(requestId, proposer, "", true);
-        } else {
-            emit OracleResult(requestId, proposer, "", false);
-        }
+        emit OracleResult(requestId, sponsor, "", newState == SentinelOracleRequest.State.RESOLVED_APPROVED);
     }
 
     function claim(bytes32 requestId) external {
@@ -265,14 +263,14 @@ contract SentinelOracle is IOracle {
 
     function resolveDispute(bytes32 requestId, bool approveWins, string calldata context) external onlyArbitrator {
         SentinelOracleRequest.Request storage req = $requests.get(requestId);
-        address proposer = req.proposer;
+        address sponsor = req.sponsor;
         uint256 slashed = req.resolveDispute(approveWins);
         SentinelOracleRequest.State outcome = req.state;
         uint256 refundFee = req.fee;
         uint256 daoCut = refundFee * req.daoFeeShare / FEE_SHARE_DENOMINATOR;
         req.fee -= daoCut;
         address fundsReceiver = $protocolFundsReceiverConfig.applyPending();
-        FEE_TOKEN.safeTransfer(proposer, refundFee);
+        FEE_TOKEN.safeTransfer(sponsor, refundFee);
         FEE_TOKEN.safeTransfer(fundsReceiver, slashed - refundFee + daoCut);
         emit DisputeResolved(requestId, outcome, slashed, context);
     }
@@ -282,9 +280,9 @@ contract SentinelOracle is IOracle {
     // full via `claim()` -- identical to the no-reveal timeout path.
     function timeoutArbitration(bytes32 requestId) external {
         SentinelOracleRequest.Request storage req = $requests.get(requestId);
-        address proposer = req.proposer;
+        address sponsor = req.sponsor;
         uint256 refundFee = req.timeoutArbitration();
-        FEE_TOKEN.safeTransfer(proposer, refundFee);
+        FEE_TOKEN.safeTransfer(sponsor, refundFee);
     }
 
     // ============================================================

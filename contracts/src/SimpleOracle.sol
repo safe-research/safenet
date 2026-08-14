@@ -6,7 +6,7 @@ import {IOracle} from "@/interfaces/IOracle.sol";
 /**
  * @title Simple Oracle
  * @notice A proof-of-concept oracle where a designated approver manually approves or rejects requests.
- * @dev postRequest records the caller (typically the Consensus contract) as the proposer. The approver
+ * @dev postRequest records the caller (typically the Consensus contract) as the sponsor. The approver
  *      must then call approve() or reject() to emit the OracleResult. This is suitable for testing and
  *      for use cases that require explicit human review of each transaction.
  */
@@ -21,11 +21,11 @@ contract SimpleOracle is IOracle {
     address public immutable APPROVER;
 
     /**
-     * @notice Mapping from request ID to the proposer address that posted the request.
+     * @notice Mapping from request ID to the sponsor address that posted the request.
      * @dev A non-zero value indicates the request is pending approval.
      */
     // forge-lint: disable-next-line(mixed-case-variable)
-    mapping(bytes32 requestId => address proposer) private $proposers;
+    mapping(bytes32 requestId => address sponsor) private $sponsors;
 
     // ============================================================
     // ERRORS
@@ -65,9 +65,9 @@ contract SimpleOracle is IOracle {
     /**
      * @inheritdoc IOracle
      */
-    function postRequest(bytes32 requestId, address proposer, bytes calldata) external {
-        require($proposers[requestId] == address(0), RequestAlreadyPending());
-        $proposers[requestId] = proposer;
+    function postRequest(bytes32 requestId, address sponsor, bytes calldata) external {
+        require($sponsors[requestId] == address(0), RequestAlreadyPending());
+        $sponsors[requestId] = sponsor;
     }
 
     // ============================================================
@@ -80,10 +80,10 @@ contract SimpleOracle is IOracle {
      */
     function approve(bytes32 requestId) external {
         require(msg.sender == APPROVER, NotApprover());
-        address proposer = $proposers[requestId];
-        require(proposer != address(0), RequestNotPending());
-        delete $proposers[requestId];
-        emit OracleResult(requestId, proposer, "", true);
+        address sponsor = $sponsors[requestId];
+        require(sponsor != address(0), RequestNotPending());
+        delete $sponsors[requestId];
+        emit OracleResult(requestId, sponsor, "", true);
     }
 
     /**
@@ -92,9 +92,9 @@ contract SimpleOracle is IOracle {
      */
     function reject(bytes32 requestId) external {
         require(msg.sender == APPROVER, NotApprover());
-        address proposer = $proposers[requestId];
-        require(proposer != address(0), RequestNotPending());
-        delete $proposers[requestId];
-        emit OracleResult(requestId, proposer, "", false);
+        address sponsor = $sponsors[requestId];
+        require(sponsor != address(0), RequestNotPending());
+        delete $sponsors[requestId];
+        emit OracleResult(requestId, sponsor, "", false);
     }
 }

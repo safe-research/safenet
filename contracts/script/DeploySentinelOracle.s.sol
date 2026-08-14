@@ -13,7 +13,10 @@ contract DeploySentinelOracleScript is Script {
         address arbitrator = vm.envAddress("SENTINEL_ARBITRATOR");
         address governance = vm.envAddress("SENTINEL_GOVERNANCE");
         address protocolFundsReceiver = vm.envAddress("SENTINEL_PROTOCOL_FUNDS_RECEIVER");
-        address consensus = vm.envAddress("SENTINEL_CONSENSUS");
+        // The trusted contract allowed to call `postRequest` -- in production, the Consensus
+        // contract itself, hence the env var name; the constructor field is `proposer` since that
+        // is the role being filled, not necessarily always the Consensus contract.
+        address proposer = vm.envAddress("SENTINEL_CONSENSUS");
         address feeToken = vm.envAddress("SENTINEL_FEE_TOKEN");
         uint256 requestFee = vm.envUint("SENTINEL_REQUEST_FEE");
         uint256 commitWindow = vm.envUint("SENTINEL_COMMIT_WINDOW");
@@ -36,7 +39,7 @@ contract DeploySentinelOracleScript is Script {
                 arbitrator,
                 governance,
                 protocolFundsReceiver,
-                consensus,
+                proposer,
                 feeToken,
                 requestFee,
                 commitWindow,

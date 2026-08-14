@@ -20,7 +20,7 @@ pub mod oracle {
         contract SentinelOracle {
             event NewRequest(
                 bytes32 indexed requestId,
-                address indexed proposer,
+                address indexed sponsor,
                 uint256 fee,
                 uint256 bondTarget,
                 uint256 commitDeadline,

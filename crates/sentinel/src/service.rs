@@ -892,7 +892,7 @@ mod tests {
         SentinelEvents::Oracle(SentinelOracle::SentinelOracleEvents::NewRequest(
             SentinelOracle::NewRequest {
                 requestId: id,
-                proposer: SAFE,
+                sponsor: SAFE,
                 fee,
                 bondTarget: bond_target,
                 commitDeadline: U256::from(commit_deadline),

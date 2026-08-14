@@ -41,8 +41,8 @@ contract SentinelOracleTest is Test {
     address public arbitrator;
     address public governance;
     address public protocolFundsReceiver;
-    address public consensus;
     address public proposer;
+    address public sponsor;
     address public sentinel1;
     address public sentinel2;
     address public sentinel3;
@@ -55,8 +55,8 @@ contract SentinelOracleTest is Test {
         arbitrator = vm.createWallet("arbitrator").addr;
         governance = vm.createWallet("governance").addr;
         protocolFundsReceiver = vm.createWallet("protocolFundsReceiver").addr;
-        consensus = vm.createWallet("consensus").addr;
         proposer = vm.createWallet("proposer").addr;
+        sponsor = vm.createWallet("sponsor").addr;
         sentinel1 = vm.createWallet("sentinel1").addr;
         sentinel2 = vm.createWallet("sentinel2").addr;
         sentinel3 = vm.createWallet("sentinel3").addr;
@@ -66,7 +66,7 @@ contract SentinelOracleTest is Test {
             arbitrator,
             governance,
             protocolFundsReceiver,
-            consensus,
+            proposer,
             address(token),
             REQUEST_FEE,
             COMMIT_WINDOW,
@@ -80,13 +80,13 @@ contract SentinelOracleTest is Test {
         );
 
         // Fund accounts
-        token.mint(proposer, 100_000);
+        token.mint(sponsor, 100_000);
         token.mint(sentinel1, 100_000);
         token.mint(sentinel2, 100_000);
         token.mint(sentinel3, 100_000);
 
         // Approve oracle for fee/bond pulls
-        vm.prank(proposer);
+        vm.prank(sponsor);
         token.approve(address(oracle), type(uint256).max);
         vm.prank(sentinel1);
         token.approve(address(oracle), type(uint256).max);
@@ -110,8 +110,8 @@ contract SentinelOracleTest is Test {
     // ============================================================
 
     function _postRequest() internal {
-        vm.prank(consensus);
-        oracle.postRequest(REQUEST_ID, proposer, "");
+        vm.prank(proposer);
+        oracle.postRequest(REQUEST_ID, sponsor, "");
     }
 
     function _commit(address sentinel, bool approve, bytes32 salt) internal {
@@ -669,14 +669,14 @@ contract SentinelOracleTest is Test {
         SentinelOracleRequest.Request memory pending = oracle.getRequest(REQUEST_ID);
         assertLt(block.number, pending.revealDeadline, "should be finalizing early, before the reveal deadline");
 
-        uint256 proposerBalBefore = token.balanceOf(proposer);
+        uint256 proposerBalBefore = token.balanceOf(sponsor);
 
         vm.expectEmit(true, true, false, true);
-        emit IOracle.OracleResult(REQUEST_ID, proposer, "", true);
+        emit IOracle.OracleResult(REQUEST_ID, sponsor, "", true);
         oracle.finalize(REQUEST_ID);
 
-        // Proposer's fee was NOT refunded (it's distributed to sentinels).
-        assertEq(token.balanceOf(proposer), proposerBalBefore, "proposer should not receive fee on approve");
+        // Sponsor's fee was NOT refunded (it's distributed to sentinels).
+        assertEq(token.balanceOf(sponsor), proposerBalBefore, "sponsor should not receive fee on approve");
 
         SentinelOracleRequest.Request memory req = oracle.getRequest(REQUEST_ID);
         assertEq(uint256(req.state), uint256(SentinelOracleRequest.State.RESOLVED_APPROVED));
@@ -760,7 +760,7 @@ contract SentinelOracleTest is Test {
         _reveal(sentinel1, false, SALT_1);
 
         vm.expectEmit(true, true, false, true);
-        emit IOracle.OracleResult(REQUEST_ID, proposer, "", false);
+        emit IOracle.OracleResult(REQUEST_ID, sponsor, "", false);
 
         oracle.finalize(REQUEST_ID);
 
@@ -783,7 +783,7 @@ contract SentinelOracleTest is Test {
     // ============================================================
 
     function test_NoCommitments_FeeRefunded() public {
-        uint256 proposerBalBefore = token.balanceOf(proposer);
+        uint256 proposerBalBefore = token.balanceOf(sponsor);
         _postRequest();
 
         // Zero commits resolve as soon as commitDeadline passes, without waiting for revealDeadline.
@@ -792,7 +792,7 @@ contract SentinelOracleTest is Test {
         assertLt(block.number, pending.revealDeadline, "should finalize before the reveal deadline");
 
         oracle.finalize(REQUEST_ID);
-        assertEq(token.balanceOf(proposer), proposerBalBefore);
+        assertEq(token.balanceOf(sponsor), proposerBalBefore);
 
         SentinelOracleRequest.Request memory req = oracle.getRequest(REQUEST_ID);
         assertEq(uint256(req.state), uint256(SentinelOracleRequest.State.TIMED_OUT));
@@ -803,7 +803,7 @@ contract SentinelOracleTest is Test {
     // ============================================================
 
     function test_Conflict_SetsStateFrozen() public {
-        uint256 proposerBalBefore = token.balanceOf(proposer);
+        uint256 proposerBalBefore = token.balanceOf(sponsor);
         _postRequest();
 
         // sentinel1 approves, sentinel2 denies — both sides have revealed votes → conflict
@@ -832,7 +832,7 @@ contract SentinelOracleTest is Test {
         vm.prank(arbitrator);
         oracle.resolveDispute(REQUEST_ID, true, context);
 
-        assertEq(token.balanceOf(proposer), proposerBalBefore, "proposer balance fully restored");
+        assertEq(token.balanceOf(sponsor), proposerBalBefore, "sponsor balance fully restored");
         assertEq(
             token.balanceOf(protocolFundsReceiver),
             receiverBalBefore + BOND_TARGET - REQUEST_FEE,
@@ -840,7 +840,7 @@ contract SentinelOracleTest is Test {
         );
         assertEq(token.balanceOf(arbitrator), 0, "arbitrator itself receives nothing from resolveDispute");
 
-        // Unlike the unanimous-resolution path, the proposer's refund and the protocol funds
+        // Unlike the unanimous-resolution path, the sponsor's refund and the protocol funds
         // receiver's cut are carved out of the losing side's slashed bonds — the original fee is
         // untouched by resolveDispute and still flows to the winning revealer via calcFeeReward,
         // exactly as it would without a dispute. (Sole winner here, so it gets the whole fee.)
@@ -863,7 +863,7 @@ contract SentinelOracleTest is Test {
         oracle.scheduleDaoFeeShare(daoShare);
         vm.roll(block.number + GOVERNANCE_DELAY);
 
-        uint256 proposerBalBefore = token.balanceOf(proposer);
+        uint256 proposerBalBefore = token.balanceOf(sponsor);
         _postRequest();
 
         _commit(sentinel1, true, SALT_1);
@@ -880,10 +880,10 @@ contract SentinelOracleTest is Test {
         vm.prank(arbitrator);
         oracle.resolveDispute(REQUEST_ID, true, "sentinel1's evidence was conclusive");
 
-        // The proposer's arbitration refund stays whole -- the DAO's cut comes only out of the
+        // The sponsor's arbitration refund stays whole -- the DAO's cut comes only out of the
         // winning sentinel's fee-equivalent reward, not this refund.
         assertEq(
-            token.balanceOf(proposer), proposerBalBefore, "proposer balance fully restored, unaffected by daoFeeShare"
+            token.balanceOf(sponsor), proposerBalBefore, "sponsor balance fully restored, unaffected by daoFeeShare"
         );
         assertEq(
             token.balanceOf(protocolFundsReceiver),
@@ -1274,7 +1274,7 @@ contract SentinelOracleTest is Test {
     // ============================================================
 
     function test_NoReveals_BondsAndFeeRefundedInFull() public {
-        uint256 proposerBalBefore = token.balanceOf(proposer);
+        uint256 proposerBalBefore = token.balanceOf(sponsor);
         _postRequest();
 
         // Both commit, but neither ever reveals.
@@ -1295,7 +1295,7 @@ contract SentinelOracleTest is Test {
 
         SentinelOracleRequest.Request memory req = oracle.getRequest(REQUEST_ID);
         assertEq(uint256(req.state), uint256(SentinelOracleRequest.State.TIMED_OUT));
-        assertEq(token.balanceOf(proposer), proposerBalBefore, "proposer fee refunded");
+        assertEq(token.balanceOf(sponsor), proposerBalBefore, "sponsor fee refunded");
 
         // No established side exists, so no misbehavior can be proven against either committer —
         // nothing is slashed to the protocol funds receiver.
@@ -1366,7 +1366,7 @@ contract SentinelOracleTest is Test {
     }
 
     function test_TimeoutArbitration_RefundsFeeAndBondsInFull() public {
-        uint256 proposerBalBefore = token.balanceOf(proposer);
+        uint256 proposerBalBefore = token.balanceOf(sponsor);
         _freezeRequest();
 
         vm.roll(block.number + ARBITRATION_TIMEOUT + 1);
@@ -1377,7 +1377,7 @@ contract SentinelOracleTest is Test {
 
         SentinelOracleRequest.Request memory req = oracle.getRequest(REQUEST_ID);
         assertEq(uint256(req.state), uint256(SentinelOracleRequest.State.TIMED_OUT));
-        assertEq(token.balanceOf(proposer), proposerBalBefore, "proposer fee refunded in full");
+        assertEq(token.balanceOf(sponsor), proposerBalBefore, "sponsor fee refunded in full");
         assertEq(
             token.balanceOf(protocolFundsReceiver),
             receiverBalBefore,
