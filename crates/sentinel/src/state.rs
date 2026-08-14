@@ -1,12 +1,13 @@
-use alloy::primitives::{B256, U256};
+use alloy::primitives::{B256, aliases::U96};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
 /// Onchain voting data retained while a dynamic check is still outstanding.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Request {
-    /// Bond amount the oracle expects this sentinel to post.
-    pub bond_target: U256,
+    /// Bond amount the oracle expects this sentinel to post -- `U96`, matching the onchain
+    /// `uint96` field exactly, so `NewRequest.bondTarget` assigns here with no cast at all.
+    pub bond_target: U96,
     /// Last block in which a commitment can be submitted.
     pub commit_deadline: u64,
     /// Last block in which a committed vote can be revealed.
@@ -129,7 +130,7 @@ mod tests {
             SentinelRequestState::WaitingForDynamicCheck {
                 deadline: 20,
                 request: Some(Request {
-                    bond_target: U256::from(1_000),
+                    bond_target: U96::from(1_000),
                     commit_deadline: 30,
                     reveal_deadline: 40,
                 }),

@@ -14,17 +14,17 @@ contract SentinelOracleTest is Test {
     // CONSTANTS
     // ============================================================
 
-    uint256 constant REQUEST_FEE = 10_000; // 1 cent in a 6-decimal token (e.g. USDC)
-    uint256 constant BOND_MULTIPLIER = 2;
-    uint256 constant BOND_TARGET = REQUEST_FEE * BOND_MULTIPLIER; // 20_000
-    uint256 constant SLASHING_MULTIPLIER = 2;
-    uint256 constant SLASH_AMOUNT = REQUEST_FEE * SLASHING_MULTIPLIER; // 20_000, equal to BOND_TARGET by default
-    uint256 constant COMMIT_WINDOW = 12;
-    uint256 constant REVEAL_WINDOW = 12;
-    uint256 constant GOVERNANCE_DELAY = 100;
-    uint256 constant INITIAL_DAO_FEE_SHARE = 0;
+    uint96 constant REQUEST_FEE = 10_000; // 1 cent in a 6-decimal token (e.g. USDC)
+    uint32 constant BOND_MULTIPLIER = 2;
+    uint96 constant BOND_TARGET = REQUEST_FEE * BOND_MULTIPLIER; // 20_000
+    uint32 constant SLASHING_MULTIPLIER = 2;
+    uint96 constant SLASH_AMOUNT = REQUEST_FEE * SLASHING_MULTIPLIER; // 20_000, equal to BOND_TARGET by default
+    uint32 constant COMMIT_WINDOW = 12;
+    uint32 constant REVEAL_WINDOW = 12;
+    uint32 constant GOVERNANCE_DELAY = 100;
+    uint24 constant INITIAL_DAO_FEE_SHARE = 0;
     string constant CHARTER_ENS = "safenet-charter.safe.eth";
-    uint256 constant ARBITRATION_TIMEOUT = 20;
+    uint32 constant ARBITRATION_TIMEOUT = 20;
 
     bytes32 constant REQUEST_ID = keccak256("request-1");
     bytes32 constant SALT_1 = keccak256("salt-1");
@@ -143,6 +143,45 @@ contract SentinelOracleTest is Test {
         vm.roll(block.number + REVEAL_WINDOW + 1);
     }
 
+    // Phase 9 consolidated each Delayed*/BondConfig pair of `pendingX()`/`pendingXActiveAt()`
+    // views into a single tuple-returning `pendingX()` -- these thin wrappers let the tests
+    // below keep asserting on just the value or just the activation block, one at a time.
+    function _pendingProtocolFundsReceiver() internal view returns (address value) {
+        (value,) = oracle.pendingProtocolFundsReceiver();
+    }
+
+    function _pendingProtocolFundsReceiverActiveAt() internal view returns (uint256 activeAt) {
+        (, activeAt) = oracle.pendingProtocolFundsReceiver();
+    }
+
+    function _pendingBondMultiplier() internal view returns (uint256 value) {
+        (value,,) = oracle.pendingBondConfig();
+    }
+
+    function _pendingSlashingMultiplier() internal view returns (uint256 value) {
+        (, value,) = oracle.pendingBondConfig();
+    }
+
+    function _pendingBondMultiplierActiveAt() internal view returns (uint256 activeAt) {
+        (,, activeAt) = oracle.pendingBondConfig();
+    }
+
+    function _pendingFee() internal view returns (uint256 value) {
+        (value,) = oracle.pendingFee();
+    }
+
+    function _pendingFeeActiveAt() internal view returns (uint256 activeAt) {
+        (, activeAt) = oracle.pendingFee();
+    }
+
+    function _pendingDaoFeeShare() internal view returns (uint256 value) {
+        (value,) = oracle.pendingDaoFeeShare();
+    }
+
+    function _pendingDaoFeeShareActiveAt() internal view returns (uint256 activeAt) {
+        (, activeAt) = oracle.pendingDaoFeeShare();
+    }
+
     // ============================================================
     // GOVERNANCE ACCESS CONTROL
     // ============================================================
@@ -257,21 +296,21 @@ contract SentinelOracleTest is Test {
         vm.prank(governance);
         oracle.scheduleProtocolFundsReceiver(newReceiver);
 
-        assertEq(oracle.pendingProtocolFundsReceiver(), newReceiver);
+        assertEq(_pendingProtocolFundsReceiver(), newReceiver);
         assertEq(oracle.protocolFundsReceiver(), protocolFundsReceiver, "not active until the delay elapses");
 
         // Applying too early is a no-op, not a revert -- it's permissionless and harmless to call
         // speculatively.
         oracle.applyProtocolFundsReceiver();
         assertEq(oracle.protocolFundsReceiver(), protocolFundsReceiver, "still not active after an early apply");
-        assertEq(oracle.pendingProtocolFundsReceiver(), newReceiver, "pending value survives an early apply");
+        assertEq(_pendingProtocolFundsReceiver(), newReceiver, "pending value survives an early apply");
 
         vm.roll(block.number + GOVERNANCE_DELAY);
         oracle.applyProtocolFundsReceiver();
 
         assertEq(oracle.protocolFundsReceiver(), newReceiver, "takes effect once the delay has elapsed");
-        assertEq(oracle.pendingProtocolFundsReceiver(), address(0));
-        assertEq(oracle.pendingProtocolFundsReceiverActiveAt(), 0);
+        assertEq(_pendingProtocolFundsReceiver(), address(0));
+        assertEq(_pendingProtocolFundsReceiverActiveAt(), 0);
     }
 
     function test_ProtocolFundsReceiver_RescheduleBeforeMaturity_OverwritesPending() public {
@@ -286,7 +325,7 @@ contract SentinelOracleTest is Test {
         oracle.scheduleProtocolFundsReceiver(secondReceiver);
         vm.stopPrank();
 
-        assertEq(oracle.pendingProtocolFundsReceiver(), secondReceiver, "second schedule overwrites the first");
+        assertEq(_pendingProtocolFundsReceiver(), secondReceiver, "second schedule overwrites the first");
         assertEq(oracle.protocolFundsReceiver(), protocolFundsReceiver, "not active until the delay elapses");
 
         vm.roll(block.number + GOVERNANCE_DELAY);
@@ -318,8 +357,8 @@ contract SentinelOracleTest is Test {
     }
 
     function test_BondConfig_ScheduleApplyRoundTrip() public {
-        uint256 newMultiplier = BOND_MULTIPLIER + 2;
-        uint256 newSlashingMultiplier = 1;
+        uint32 newMultiplier = BOND_MULTIPLIER + 2;
+        uint32 newSlashingMultiplier = 1;
 
         assertEq(oracle.bondMultiplier(), BOND_MULTIPLIER, "starts at the constructor value");
         assertEq(oracle.slashingMultiplier(), SLASHING_MULTIPLIER, "starts at the constructor value");
@@ -327,8 +366,8 @@ contract SentinelOracleTest is Test {
         vm.prank(governance);
         oracle.scheduleBondConfig(newMultiplier, newSlashingMultiplier);
 
-        assertEq(oracle.pendingBondMultiplier(), newMultiplier);
-        assertEq(oracle.pendingSlashingMultiplier(), newSlashingMultiplier);
+        assertEq(_pendingBondMultiplier(), newMultiplier);
+        assertEq(_pendingSlashingMultiplier(), newSlashingMultiplier);
         assertEq(oracle.bondMultiplier(), BOND_MULTIPLIER, "not active until the delay elapses");
         assertEq(oracle.slashingMultiplier(), SLASHING_MULTIPLIER, "not active until the delay elapses");
 
@@ -336,16 +375,16 @@ contract SentinelOracleTest is Test {
         // speculatively.
         oracle.applyBondConfig();
         assertEq(oracle.bondMultiplier(), BOND_MULTIPLIER, "still not active after an early apply");
-        assertEq(oracle.pendingBondMultiplier(), newMultiplier, "pending value survives an early apply");
+        assertEq(_pendingBondMultiplier(), newMultiplier, "pending value survives an early apply");
 
         vm.roll(block.number + GOVERNANCE_DELAY);
         oracle.applyBondConfig();
 
         assertEq(oracle.bondMultiplier(), newMultiplier, "takes effect once the delay has elapsed");
         assertEq(oracle.slashingMultiplier(), newSlashingMultiplier, "takes effect once the delay has elapsed");
-        assertEq(oracle.pendingBondMultiplier(), 0);
-        assertEq(oracle.pendingSlashingMultiplier(), 0);
-        assertEq(oracle.pendingBondMultiplierActiveAt(), 0);
+        assertEq(_pendingBondMultiplier(), 0);
+        assertEq(_pendingSlashingMultiplier(), 0);
+        assertEq(_pendingBondMultiplierActiveAt(), 0);
     }
 
     function test_BondConfig_RescheduleBeforeMaturity_OverwritesPending() public {
@@ -357,8 +396,8 @@ contract SentinelOracleTest is Test {
         oracle.scheduleBondConfig(BOND_MULTIPLIER + 3, 2);
         vm.stopPrank();
 
-        assertEq(oracle.pendingBondMultiplier(), BOND_MULTIPLIER + 3, "second schedule overwrites the first");
-        assertEq(oracle.pendingSlashingMultiplier(), 2, "second schedule overwrites the first");
+        assertEq(_pendingBondMultiplier(), BOND_MULTIPLIER + 3, "second schedule overwrites the first");
+        assertEq(_pendingSlashingMultiplier(), 2, "second schedule overwrites the first");
         assertEq(oracle.bondMultiplier(), BOND_MULTIPLIER, "not active until the delay elapses");
 
         vm.roll(block.number + GOVERNANCE_DELAY);
@@ -369,8 +408,8 @@ contract SentinelOracleTest is Test {
     }
 
     function test_ScheduleBondConfig_RequestsInFlightKeepSnapshottedSlashAmount() public {
-        uint256 newMultiplier = BOND_MULTIPLIER + 1;
-        uint256 newSlashingMultiplier = 1;
+        uint32 newMultiplier = BOND_MULTIPLIER + 1;
+        uint32 newSlashingMultiplier = 1;
 
         _postRequest();
 
@@ -398,33 +437,33 @@ contract SentinelOracleTest is Test {
     }
 
     function test_Fee_ScheduleApplyRoundTrip() public {
-        uint256 newFee = REQUEST_FEE * 2;
+        uint96 newFee = REQUEST_FEE * 2;
 
         assertEq(oracle.fee(), REQUEST_FEE, "starts at the constructor value");
 
         vm.prank(governance);
         oracle.scheduleFee(newFee);
 
-        assertEq(oracle.pendingFee(), newFee);
+        assertEq(_pendingFee(), newFee);
         assertEq(oracle.fee(), REQUEST_FEE, "not active until the delay elapses");
 
         // Applying too early is a no-op, not a revert -- it's permissionless and harmless to call
         // speculatively.
         oracle.applyFee();
         assertEq(oracle.fee(), REQUEST_FEE, "still not active after an early apply");
-        assertEq(oracle.pendingFee(), newFee, "pending value survives an early apply");
+        assertEq(_pendingFee(), newFee, "pending value survives an early apply");
 
         vm.roll(block.number + GOVERNANCE_DELAY);
         oracle.applyFee();
 
         assertEq(oracle.fee(), newFee, "takes effect once the delay has elapsed");
-        assertEq(oracle.pendingFee(), 0);
-        assertEq(oracle.pendingFeeActiveAt(), 0);
+        assertEq(_pendingFee(), 0);
+        assertEq(_pendingFeeActiveAt(), 0);
     }
 
     function test_Fee_RescheduleBeforeMaturity_OverwritesPending() public {
-        uint256 firstFee = REQUEST_FEE * 2;
-        uint256 secondFee = REQUEST_FEE * 3;
+        uint96 firstFee = REQUEST_FEE * 2;
+        uint96 secondFee = REQUEST_FEE * 3;
 
         vm.startPrank(governance);
         oracle.scheduleFee(firstFee);
@@ -434,7 +473,7 @@ contract SentinelOracleTest is Test {
         oracle.scheduleFee(secondFee);
         vm.stopPrank();
 
-        assertEq(oracle.pendingFee(), secondFee, "second schedule overwrites the first");
+        assertEq(_pendingFee(), secondFee, "second schedule overwrites the first");
         assertEq(oracle.fee(), REQUEST_FEE, "not active until the delay elapses");
 
         vm.roll(block.number + GOVERNANCE_DELAY);
@@ -444,7 +483,7 @@ contract SentinelOracleTest is Test {
     }
 
     function test_ScheduleFee_RequestsInFlightKeepSnapshottedFee() public {
-        uint256 newFee = REQUEST_FEE * 2;
+        uint96 newFee = REQUEST_FEE * 2;
 
         _postRequest();
 
@@ -466,40 +505,40 @@ contract SentinelOracleTest is Test {
     function test_ScheduleDaoFeeShare_AboveDenominator_Reverts() public {
         // Precompute before arming expectRevert -- `FEE_SHARE_DENOMINATOR()` is itself an
         // external call, and vm.expectRevert only intercepts the very next one.
-        uint256 tooHigh = oracle.FEE_SHARE_DENOMINATOR() + 1;
+        uint24 tooHigh = uint24(oracle.FEE_SHARE_DENOMINATOR() + 1);
         vm.expectRevert(SentinelOracle.InvalidFeeShare.selector);
         vm.prank(governance);
         oracle.scheduleDaoFeeShare(tooHigh);
     }
 
     function test_DaoFeeShare_ScheduleApplyRoundTrip() public {
-        uint256 newShare = 10_000;
+        uint24 newShare = 10_000;
 
         assertEq(oracle.daoFeeShare(), INITIAL_DAO_FEE_SHARE, "starts at the constructor value");
 
         vm.prank(governance);
         oracle.scheduleDaoFeeShare(newShare);
 
-        assertEq(oracle.pendingDaoFeeShare(), newShare);
+        assertEq(_pendingDaoFeeShare(), newShare);
         assertEq(oracle.daoFeeShare(), INITIAL_DAO_FEE_SHARE, "not active until the delay elapses");
 
         // Applying too early is a no-op, not a revert -- it's permissionless and harmless to call
         // speculatively.
         oracle.applyDaoFeeShare();
         assertEq(oracle.daoFeeShare(), INITIAL_DAO_FEE_SHARE, "still not active after an early apply");
-        assertEq(oracle.pendingDaoFeeShare(), newShare, "pending value survives an early apply");
+        assertEq(_pendingDaoFeeShare(), newShare, "pending value survives an early apply");
 
         vm.roll(block.number + GOVERNANCE_DELAY);
         oracle.applyDaoFeeShare();
 
         assertEq(oracle.daoFeeShare(), newShare, "takes effect once the delay has elapsed");
-        assertEq(oracle.pendingDaoFeeShare(), 0);
-        assertEq(oracle.pendingDaoFeeShareActiveAt(), 0);
+        assertEq(_pendingDaoFeeShare(), 0);
+        assertEq(_pendingDaoFeeShareActiveAt(), 0);
     }
 
     function test_DaoFeeShare_RescheduleBeforeMaturity_OverwritesPending() public {
-        uint256 firstShare = 10_000;
-        uint256 secondShare = 20_000;
+        uint24 firstShare = 10_000;
+        uint24 secondShare = 20_000;
 
         vm.startPrank(governance);
         oracle.scheduleDaoFeeShare(firstShare);
@@ -509,7 +548,7 @@ contract SentinelOracleTest is Test {
         oracle.scheduleDaoFeeShare(secondShare);
         vm.stopPrank();
 
-        assertEq(oracle.pendingDaoFeeShare(), secondShare, "second schedule overwrites the first");
+        assertEq(_pendingDaoFeeShare(), secondShare, "second schedule overwrites the first");
         assertEq(oracle.daoFeeShare(), INITIAL_DAO_FEE_SHARE, "not active until the delay elapses");
 
         vm.roll(block.number + GOVERNANCE_DELAY);
@@ -519,7 +558,7 @@ contract SentinelOracleTest is Test {
     }
 
     function test_ScheduleDaoFeeShare_RequestsInFlightKeepSnapshottedShare() public {
-        uint256 newShare = 10_000;
+        uint24 newShare = 10_000;
 
         _postRequest();
 
@@ -548,7 +587,7 @@ contract SentinelOracleTest is Test {
     // ============================================================
 
     function test_PostRequest_EagerlyAppliesPendingFee() public {
-        uint256 newFee = REQUEST_FEE * 2;
+        uint96 newFee = REQUEST_FEE * 2;
 
         vm.prank(governance);
         oracle.scheduleFee(newFee);
@@ -559,8 +598,8 @@ contract SentinelOracleTest is Test {
         _postRequest();
 
         assertEq(oracle.fee(), newFee, "postRequest applies the pending fee");
-        assertEq(oracle.pendingFee(), 0, "pending slot cleared without a separate apply call");
-        assertEq(oracle.pendingFeeActiveAt(), 0);
+        assertEq(_pendingFee(), 0, "pending slot cleared without a separate apply call");
+        assertEq(_pendingFeeActiveAt(), 0);
 
         SentinelOracleRequest.Request memory req = oracle.getRequest(REQUEST_ID);
         assertEq(req.fee, newFee, "new request snapshots the newly-applied fee");
@@ -568,8 +607,8 @@ contract SentinelOracleTest is Test {
     }
 
     function test_PostRequest_EagerlyAppliesPendingBondMultiplier() public {
-        uint256 newMultiplier = BOND_MULTIPLIER + 1;
-        uint256 newSlashingMultiplier = SLASHING_MULTIPLIER + 1;
+        uint32 newMultiplier = BOND_MULTIPLIER + 1;
+        uint32 newSlashingMultiplier = SLASHING_MULTIPLIER + 1;
 
         vm.prank(governance);
         oracle.scheduleBondConfig(newMultiplier, newSlashingMultiplier);
@@ -580,12 +619,12 @@ contract SentinelOracleTest is Test {
         _postRequest();
 
         assertEq(oracle.bondMultiplier(), newMultiplier, "postRequest applies the pending multiplier");
-        assertEq(oracle.pendingBondMultiplier(), 0, "pending slot cleared without a separate apply call");
-        assertEq(oracle.pendingBondMultiplierActiveAt(), 0);
+        assertEq(_pendingBondMultiplier(), 0, "pending slot cleared without a separate apply call");
+        assertEq(_pendingBondMultiplierActiveAt(), 0);
         assertEq(
             oracle.slashingMultiplier(), newSlashingMultiplier, "postRequest applies the pending slashing multiplier"
         );
-        assertEq(oracle.pendingSlashingMultiplier(), 0, "pending slot cleared without a separate apply call");
+        assertEq(_pendingSlashingMultiplier(), 0, "pending slot cleared without a separate apply call");
 
         SentinelOracleRequest.Request memory req = oracle.getRequest(REQUEST_ID);
         assertEq(req.bondTarget, REQUEST_FEE * newMultiplier, "new request snapshots the newly-applied multiplier");
@@ -597,7 +636,7 @@ contract SentinelOracleTest is Test {
     }
 
     function test_PostRequest_EagerlyAppliesPendingDaoFeeShare() public {
-        uint256 newShare = 10_000;
+        uint24 newShare = 10_000;
 
         vm.prank(governance);
         oracle.scheduleDaoFeeShare(newShare);
@@ -608,8 +647,8 @@ contract SentinelOracleTest is Test {
         _postRequest();
 
         assertEq(oracle.daoFeeShare(), newShare, "postRequest applies the pending share");
-        assertEq(oracle.pendingDaoFeeShare(), 0, "pending slot cleared without a separate apply call");
-        assertEq(oracle.pendingDaoFeeShareActiveAt(), 0);
+        assertEq(_pendingDaoFeeShare(), 0, "pending slot cleared without a separate apply call");
+        assertEq(_pendingDaoFeeShareActiveAt(), 0);
 
         SentinelOracleRequest.Request memory req = oracle.getRequest(REQUEST_ID);
         assertEq(req.daoFeeShare, newShare, "new request snapshots the newly-applied share");
@@ -640,8 +679,8 @@ contract SentinelOracleTest is Test {
         oracle.finalize(REQUEST_ID);
 
         assertEq(oracle.protocolFundsReceiver(), newReceiver, "finalize applies the pending receiver");
-        assertEq(oracle.pendingProtocolFundsReceiver(), address(0));
-        assertEq(oracle.pendingProtocolFundsReceiverActiveAt(), 0);
+        assertEq(_pendingProtocolFundsReceiver(), address(0));
+        assertEq(_pendingProtocolFundsReceiverActiveAt(), 0);
         assertEq(
             token.balanceOf(newReceiver),
             newReceiverBalBefore + BOND_TARGET,
@@ -671,14 +710,14 @@ contract SentinelOracleTest is Test {
         SentinelOracleRequest.Request memory pending = oracle.getRequest(REQUEST_ID);
         assertLt(block.number, pending.revealDeadline, "should be finalizing early, before the reveal deadline");
 
-        uint256 proposerBalBefore = token.balanceOf(sponsor);
+        uint256 sponsorBalBefore = token.balanceOf(sponsor);
 
         vm.expectEmit(true, true, false, true);
         emit IOracle.OracleResult(REQUEST_ID, sponsor, "", true);
         oracle.finalize(REQUEST_ID);
 
         // Sponsor's fee was NOT refunded (it's distributed to sentinels).
-        assertEq(token.balanceOf(sponsor), proposerBalBefore, "sponsor should not receive fee on approve");
+        assertEq(token.balanceOf(sponsor), sponsorBalBefore, "sponsor should not receive fee on approve");
 
         SentinelOracleRequest.Request memory req = oracle.getRequest(REQUEST_ID);
         assertEq(uint256(req.state), uint256(SentinelOracleRequest.State.RESOLVED_APPROVED));
@@ -704,7 +743,7 @@ contract SentinelOracleTest is Test {
     }
 
     function test_UnanimousApprove_DaoFeeShareCutGoesToProtocolFundsReceiver() public {
-        uint256 daoShare = 10_000; // 10% of the fee
+        uint24 daoShare = 10_000; // 10% of the fee
         vm.prank(governance);
         oracle.scheduleDaoFeeShare(daoShare);
         vm.roll(block.number + GOVERNANCE_DELAY);
@@ -785,7 +824,7 @@ contract SentinelOracleTest is Test {
     // ============================================================
 
     function test_NoCommitments_FeeRefunded() public {
-        uint256 proposerBalBefore = token.balanceOf(sponsor);
+        uint256 sponsorBalBefore = token.balanceOf(sponsor);
         _postRequest();
 
         // Zero commits resolve as soon as commitDeadline passes, without waiting for revealDeadline.
@@ -794,7 +833,7 @@ contract SentinelOracleTest is Test {
         assertLt(block.number, pending.revealDeadline, "should finalize before the reveal deadline");
 
         oracle.finalize(REQUEST_ID);
-        assertEq(token.balanceOf(sponsor), proposerBalBefore);
+        assertEq(token.balanceOf(sponsor), sponsorBalBefore);
 
         SentinelOracleRequest.Request memory req = oracle.getRequest(REQUEST_ID);
         assertEq(uint256(req.state), uint256(SentinelOracleRequest.State.TIMED_OUT));
@@ -805,7 +844,7 @@ contract SentinelOracleTest is Test {
     // ============================================================
 
     function test_Conflict_SetsStateFrozen() public {
-        uint256 proposerBalBefore = token.balanceOf(sponsor);
+        uint256 sponsorBalBefore = token.balanceOf(sponsor);
         _postRequest();
 
         // sentinel1 approves, sentinel2 denies — both sides have revealed votes → conflict
@@ -834,7 +873,7 @@ contract SentinelOracleTest is Test {
         vm.prank(arbitrator);
         oracle.resolveDispute(REQUEST_ID, true, context);
 
-        assertEq(token.balanceOf(sponsor), proposerBalBefore, "sponsor balance fully restored");
+        assertEq(token.balanceOf(sponsor), sponsorBalBefore, "sponsor balance fully restored");
         assertEq(
             token.balanceOf(protocolFundsReceiver),
             receiverBalBefore + BOND_TARGET - REQUEST_FEE,
@@ -859,13 +898,13 @@ contract SentinelOracleTest is Test {
         assertEq(token.balanceOf(sentinel2), s2Before, "sentinel2 bond slashed");
     }
 
-    function test_Conflict_ArbitrationDaoFeeShare_ProposerRefundUnaffected() public {
-        uint256 daoShare = 10_000; // 10% of the fee
+    function test_Conflict_ArbitrationDaoFeeShare_SponsorRefundUnaffected() public {
+        uint24 daoShare = 10_000; // 10% of the fee
         vm.prank(governance);
         oracle.scheduleDaoFeeShare(daoShare);
         vm.roll(block.number + GOVERNANCE_DELAY);
 
-        uint256 proposerBalBefore = token.balanceOf(sponsor);
+        uint256 sponsorBalBefore = token.balanceOf(sponsor);
         _postRequest();
 
         _commit(sentinel1, true, SALT_1);
@@ -885,7 +924,7 @@ contract SentinelOracleTest is Test {
         // The sponsor's arbitration refund stays whole -- the DAO's cut comes only out of the
         // winning sentinel's fee-equivalent reward, not this refund.
         assertEq(
-            token.balanceOf(sponsor), proposerBalBefore, "sponsor balance fully restored, unaffected by daoFeeShare"
+            token.balanceOf(sponsor), sponsorBalBefore, "sponsor balance fully restored, unaffected by daoFeeShare"
         );
         assertEq(
             token.balanceOf(protocolFundsReceiver),
@@ -949,8 +988,8 @@ contract SentinelOracleTest is Test {
     }
 
     function test_Conflict_MidRangeSlashingMultiplier_LosingSentinelReclaimsPartialRemainder() public {
-        uint256 newBondMultiplier = 4;
-        uint256 newSlashingMultiplier = 2;
+        uint32 newBondMultiplier = 4;
+        uint32 newSlashingMultiplier = 2;
         vm.prank(governance);
         oracle.scheduleBondConfig(newBondMultiplier, newSlashingMultiplier);
         vm.roll(block.number + GOVERNANCE_DELAY);
@@ -991,8 +1030,8 @@ contract SentinelOracleTest is Test {
         // A partial slashing multiplier makes each committer's unslashed remainder nonzero, so a
         // double-slash of sentinel3's bond (once swept as `unrevealedBond`, again deducted in
         // `claim()`) would be visible instead of masked by an already-zero remainder.
-        uint256 newBondMultiplier = 4;
-        uint256 newSlashingMultiplier = 2;
+        uint32 newBondMultiplier = 4;
+        uint32 newSlashingMultiplier = 2;
         vm.prank(governance);
         oracle.scheduleBondConfig(newBondMultiplier, newSlashingMultiplier);
         vm.roll(block.number + GOVERNANCE_DELAY);
@@ -1231,7 +1270,7 @@ contract SentinelOracleTest is Test {
     }
 
     function test_PartialReveal_PartialSlashingMultiplier_NonRevealerReclaimsRemainder() public {
-        uint256 newSlashingMultiplier = 1;
+        uint32 newSlashingMultiplier = 1;
         vm.prank(governance);
         oracle.scheduleBondConfig(BOND_MULTIPLIER, newSlashingMultiplier);
         vm.roll(block.number + GOVERNANCE_DELAY);
@@ -1276,7 +1315,7 @@ contract SentinelOracleTest is Test {
     // ============================================================
 
     function test_NoReveals_BondsAndFeeRefundedInFull() public {
-        uint256 proposerBalBefore = token.balanceOf(sponsor);
+        uint256 sponsorBalBefore = token.balanceOf(sponsor);
         _postRequest();
 
         // Both commit, but neither ever reveals.
@@ -1297,7 +1336,7 @@ contract SentinelOracleTest is Test {
 
         SentinelOracleRequest.Request memory req = oracle.getRequest(REQUEST_ID);
         assertEq(uint256(req.state), uint256(SentinelOracleRequest.State.TIMED_OUT));
-        assertEq(token.balanceOf(sponsor), proposerBalBefore, "sponsor fee refunded");
+        assertEq(token.balanceOf(sponsor), sponsorBalBefore, "sponsor fee refunded");
 
         // No established side exists, so no misbehavior can be proven against either committer —
         // nothing is slashed to the protocol funds receiver.
@@ -1368,7 +1407,7 @@ contract SentinelOracleTest is Test {
     }
 
     function test_TimeoutArbitration_RefundsFeeAndBondsInFull() public {
-        uint256 proposerBalBefore = token.balanceOf(sponsor);
+        uint256 sponsorBalBefore = token.balanceOf(sponsor);
         _freezeRequest();
 
         vm.roll(block.number + ARBITRATION_TIMEOUT + 1);
@@ -1379,7 +1418,7 @@ contract SentinelOracleTest is Test {
 
         SentinelOracleRequest.Request memory req = oracle.getRequest(REQUEST_ID);
         assertEq(uint256(req.state), uint256(SentinelOracleRequest.State.TIMED_OUT));
-        assertEq(token.balanceOf(sponsor), proposerBalBefore, "sponsor fee refunded in full");
+        assertEq(token.balanceOf(sponsor), sponsorBalBefore, "sponsor fee refunded in full");
         assertEq(
             token.balanceOf(protocolFundsReceiver),
             receiverBalBefore,
@@ -1461,6 +1500,140 @@ contract SentinelOracleTest is Test {
             token.balanceOf(sentinel3),
             s3Before + (bondTarget - slashAmount),
             "non-revealer reclaims only the unslashed remainder, not a second full refund"
+        );
+    }
+
+    // ============================================================
+    // LARGE-AMOUNT OVERFLOW SAFETY
+    // ============================================================
+    //
+    // `slashAmount`/`fee`/etc. are `uint96` and sentinel counts/`daoFeeShare` are `uint16`/
+    // `uint24` -- multiplying a narrow count/share against one of those amounts computes in the
+    // *wider* operand's type (`uint96`), not the `uint256` the result is ultimately assigned to.
+    // Left unguarded, a large-but-legitimate amount combined with more than one griefer/loser
+    // would overflow-revert `finalize()`/`resolveDispute()` even though the true product fits
+    // comfortably in `uint256`. These deploy a fresh oracle with `fee` at `type(uint96).max` to
+    // prove the multiplications are explicitly widened before multiplying, not computed narrow.
+
+    function _deployHugeFeeOracle(uint96 hugeFee, uint24 daoFeeShare) internal returns (SentinelOracle) {
+        SentinelOracle hugeOracle = new SentinelOracle(
+            SentinelOracle.ConstructorParams({
+                arbitrator: arbitrator,
+                governance: governance,
+                protocolFundsReceiver: protocolFundsReceiver,
+                proposer: proposer,
+                feeToken: address(token),
+                requestFee: hugeFee,
+                initialBondMultiplier: 1,
+                initialSlashingMultiplier: 1,
+                initialDaoFeeShare: daoFeeShare,
+                commitWindow: COMMIT_WINDOW,
+                revealWindow: REVEAL_WINDOW,
+                governanceDelay: GOVERNANCE_DELAY,
+                arbitrationTimeout: ARBITRATION_TIMEOUT,
+                initialCharterEns: CHARTER_ENS
+            })
+        );
+
+        vm.startPrank(governance);
+        hugeOracle.addSentinel(sentinel1);
+        hugeOracle.addSentinel(sentinel2);
+        hugeOracle.addSentinel(sentinel3);
+        vm.stopPrank();
+        vm.roll(block.number + GOVERNANCE_DELAY);
+
+        token.mint(sponsor, hugeFee);
+        token.mint(sentinel1, hugeFee);
+        token.mint(sentinel2, hugeFee);
+        token.mint(sentinel3, hugeFee);
+        vm.prank(sponsor);
+        token.approve(address(hugeOracle), hugeFee);
+        vm.prank(sentinel1);
+        token.approve(address(hugeOracle), hugeFee);
+        vm.prank(sentinel2);
+        token.approve(address(hugeOracle), hugeFee);
+        vm.prank(sentinel3);
+        token.approve(address(hugeOracle), hugeFee);
+
+        return hugeOracle;
+    }
+
+    function test_Finalize_UnrevealedBondAndDaoCutDoNotOverflowWithMaxUint96Amounts() public {
+        uint96 hugeFee = type(uint96).max;
+        // bondMultiplier == slashingMultiplier == 1, so bondTarget == slashAmount == hugeFee.
+        SentinelOracle hugeOracle = _deployHugeFeeOracle(hugeFee, uint24(oracle.FEE_SHARE_DENOMINATOR()));
+
+        vm.prank(proposer);
+        hugeOracle.postRequest(REQUEST_ID, sponsor, "");
+
+        // sentinel1 reveals (establishing the approve side); sentinel2 and sentinel3 commit but
+        // never reveal -- two non-revealing griefers, so `unrevealedBond = 2 * hugeFee` is
+        // computed, which overflows `uint96` (~2x its max) but fits easily in `uint256`.
+        for (uint256 i = 0; i < 3; i++) {
+            address sentinel = i == 0 ? sentinel1 : (i == 1 ? sentinel2 : sentinel3);
+            bytes32 hash = hugeOracle.hashCommitment(sentinel, REQUEST_ID, true, SALT_1, "");
+            vm.prank(sentinel);
+            hugeOracle.commit(REQUEST_ID, hash);
+        }
+        _advancePastCommitDeadline();
+        vm.prank(sentinel1);
+        hugeOracle.reveal(REQUEST_ID, true, SALT_1, "");
+        _advancePastRevealDeadline();
+
+        uint256 receiverBalBefore = token.balanceOf(protocolFundsReceiver);
+
+        // Neither multiplication below would complete without reverting on the pre-fix code:
+        // `unrevealedBond = nonRevealerCount(2) * slashAmount(hugeFee)`, and separately
+        // `daoCut = fee(hugeFee) * daoFeeShare(100%) / FEE_SHARE_DENOMINATOR`.
+        hugeOracle.finalize(REQUEST_ID);
+
+        assertEq(
+            token.balanceOf(protocolFundsReceiver),
+            receiverBalBefore + 2 * uint256(hugeFee) + hugeFee,
+            "unrevealed-bond slash (2x hugeFee) and the 100% DAO cut (hugeFee) both landed"
+        );
+    }
+
+    function test_ResolveDispute_SlashedDoesNotOverflowWithMaxUint96Amounts() public {
+        uint96 hugeFee = type(uint96).max;
+        SentinelOracle hugeOracle = _deployHugeFeeOracle(hugeFee, 0);
+
+        vm.prank(proposer);
+        hugeOracle.postRequest(REQUEST_ID, sponsor, "");
+
+        // sentinel1 approves; sentinel2 and sentinel3 deny -- a 2-member losing side, so
+        // `slashed = losingSideCount(2) * slashAmount(hugeFee)` overflows `uint96` (~2x its max)
+        // but fits easily in `uint256`.
+        bytes32 hash1 = hugeOracle.hashCommitment(sentinel1, REQUEST_ID, true, SALT_1, "");
+        vm.prank(sentinel1);
+        hugeOracle.commit(REQUEST_ID, hash1);
+        bytes32 hash2 = hugeOracle.hashCommitment(sentinel2, REQUEST_ID, false, SALT_2, "");
+        vm.prank(sentinel2);
+        hugeOracle.commit(REQUEST_ID, hash2);
+        bytes32 hash3 = hugeOracle.hashCommitment(sentinel3, REQUEST_ID, false, SALT_3, "");
+        vm.prank(sentinel3);
+        hugeOracle.commit(REQUEST_ID, hash3);
+
+        _advancePastCommitDeadline();
+        vm.prank(sentinel1);
+        hugeOracle.reveal(REQUEST_ID, true, SALT_1, "");
+        vm.prank(sentinel2);
+        hugeOracle.reveal(REQUEST_ID, false, SALT_2, "");
+        vm.prank(sentinel3);
+        hugeOracle.reveal(REQUEST_ID, false, SALT_3, "");
+
+        hugeOracle.finalize(REQUEST_ID);
+
+        uint256 receiverBalBefore = token.balanceOf(protocolFundsReceiver);
+
+        // This is the multiplication that would overflow-revert without the fix.
+        vm.prank(arbitrator);
+        hugeOracle.resolveDispute(REQUEST_ID, true, "sentinel1's evidence was conclusive");
+
+        assertEq(
+            token.balanceOf(protocolFundsReceiver),
+            receiverBalBefore + 2 * uint256(hugeFee) - hugeFee,
+            "slashed (2x hugeFee) minus the proposer's refund (hugeFee) landed on the receiver"
         );
     }
 }
