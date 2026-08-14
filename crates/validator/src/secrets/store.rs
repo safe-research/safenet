@@ -43,8 +43,7 @@ pub enum Error {
     /// A secret could not be serialized or deserialized.
     #[error("failed to serialize or deserialize a secret")]
     Serialization(#[from] serde_json::Error),
-    /// An arithmetic overflow converting a chunk or offset to or from the
-    /// database integer type.
+    /// An arithmetic overflow converting an integer to the database format.
     #[error("integer conversion overflow")]
     Overflow,
 }
@@ -73,10 +72,9 @@ impl SecretStore {
              );
 
              CREATE TABLE IF NOT EXISTS nonces_chunks (
-                 root     TEXT    NOT NULL,
-                 group_id TEXT    NOT NULL,
-                 address  TEXT    NOT NULL,
-                 chunk    INTEGER DEFAULT NULL,
+                 root     TEXT NOT NULL,
+                 group_id TEXT NOT NULL,
+                 address  TEXT NOT NULL,
                  PRIMARY KEY (root)
              );
 
@@ -88,12 +86,8 @@ impl SecretStore {
                  FOREIGN KEY (root) REFERENCES nonces_chunks (root) ON DELETE CASCADE
              );
 
-             CREATE UNIQUE INDEX IF NOT EXISTS idx_nonces_chunks_lookup
-                 ON nonces_chunks (group_id, address, chunk);
-
-             CREATE UNIQUE INDEX IF NOT EXISTS idx_nonces_chunks_unlinked
-                 ON nonces_chunks (group_id, address)
-                 WHERE chunk IS NULL;",
+             CREATE INDEX IF NOT EXISTS idx_nonces_chunks_group
+                 ON nonces_chunks (group_id);",
         )
         .execute(&pool)
         .await?;
@@ -142,36 +136,17 @@ impl SecretStore {
         self.retain_groups("keygen_secrets", groups).await
     }
 
-    /// Persists the freshly generated preprocessing `chunk` for `me` in
-    /// `group` and returns its merkle root, or returns `None` when another
-    /// unlinked chunk is already pending. At most one unlinked chunk is
-    /// retained per participant and group; the existing root is deliberately
-    /// not returned so callers cannot submit it under a second onchain chunk.
-    /// [`link_nonces_chunk`](Self::link_nonces_chunk) associates the new root
-    /// with a sequence chunk once assigned onchain.
+    /// Persists the freshly generated preprocessing `chunk`, tagged with its
+    /// owning `group` and participant, and echoes back its Merkle root.
     pub async fn register_nonces_chunk(
         &self,
         group: B256,
         me: Address,
         chunk: NonceChunk,
-    ) -> Result<Option<B256>, Error> {
+    ) -> Result<B256, Error> {
         let root = chunk.commitment.0;
 
         let mut tx = self.pool.begin().await?;
-        let existing = sqlx::query_scalar::<_, i64>(
-            "SELECT 1 FROM nonces_chunks
-             WHERE group_id = ? AND address = ? AND chunk IS NULL",
-        )
-        .bind(key(group))
-        .bind(key(me))
-        .fetch_optional(&mut *tx)
-        .await?;
-
-        // We only allow a single pending
-        if existing.is_some() {
-            return Ok(None);
-        };
-
         sqlx::query("INSERT INTO nonces_chunks (root, group_id, address) VALUES (?, ?, ?)")
             .bind(key(root))
             .bind(key(group))
@@ -188,7 +163,7 @@ impl SecretStore {
         }
         tx.commit().await?;
 
-        Ok(Some(root))
+        Ok(root)
     }
 
     /// Returns the public reveal of the nonce at `(root, offset)` without
@@ -199,7 +174,7 @@ impl SecretStore {
     /// non-consuming read of public data, a state transition may call it
     /// repeatedly - for example to re-emit a nonce reveal after a reorg -
     /// without risking nonce reuse.
-    pub async fn nonces_reveal_by_root(
+    pub async fn nonces_reveal(
         &self,
         root: B256,
         offset: u64,
@@ -227,11 +202,7 @@ impl SecretStore {
     /// gracefully no-ops instead of reusing the nonce. Deletion is permanent
     /// and not undone by a reorg; the returned nonce lives on only in the
     /// snapshot state, which a reorg is free to roll back.
-    pub async fn take_nonce_by_root(
-        &self,
-        root: B256,
-        offset: u64,
-    ) -> Result<Option<Nonces>, Error> {
+    pub async fn take_nonce(&self, root: B256, offset: u64) -> Result<Option<Nonces>, Error> {
         sqlx::query_scalar::<_, String>(
             "DELETE FROM nonces
              WHERE root = ? AND offs = ?
@@ -410,40 +381,37 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn nonces_reveal_by_root_is_non_consuming() {
+    async fn nonce_chunks_are_stored() {
+        let store = store().await;
+        let root = store
+            .register_nonces_chunk(GROUP, ME, nonce_chunk(11))
+            .await
+            .unwrap();
+        let other = store
+            .register_nonces_chunk(GROUP, ME, nonce_chunk(12))
+            .await
+            .unwrap();
+        assert_ne!(other, root);
+        assert_eq!(count_root_nonces(&store, root).await, 11);
+        assert_eq!(count_root_nonces(&store, other).await, 12);
+    }
+
+    #[tokio::test]
+    async fn nonces_reveal_is_non_consuming() {
         let store = store().await;
         let root = store
             .register_nonces_chunk(GROUP, ME, nonce_chunk(4))
             .await
-            .unwrap()
             .unwrap();
 
-        assert!(
-            store
-                .nonces_reveal_by_root(root, 1)
-                .await
-                .unwrap()
-                .is_some()
-        );
-        assert!(
-            store
-                .nonces_reveal_by_root(root, 1)
-                .await
-                .unwrap()
-                .is_some()
-        );
+        assert!(store.nonces_reveal(root, 1).await.unwrap().is_some());
+        assert!(store.nonces_reveal(root, 1).await.unwrap().is_some());
         assert_eq!(count_root_nonces(&store, root).await, 4);
 
+        assert!(store.nonces_reveal(root, 99).await.unwrap().is_none());
         assert!(
             store
-                .nonces_reveal_by_root(root, 99)
-                .await
-                .unwrap()
-                .is_none()
-        );
-        assert!(
-            store
-                .nonces_reveal_by_root(B256::repeat_byte(7), 1)
+                .nonces_reveal(B256::repeat_byte(7), 1)
                 .await
                 .unwrap()
                 .is_none()
@@ -451,38 +419,25 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn take_nonce_by_root_removes_it_permanently() {
+    async fn take_nonce_removes_it_permanently() {
         let store = store().await;
         let root = store
             .register_nonces_chunk(GROUP, ME, nonce_chunk(4))
             .await
-            .unwrap()
             .unwrap();
 
-        assert!(store.take_nonce_by_root(root, 2).await.unwrap().is_some());
-        assert!(store.take_nonce_by_root(root, 2).await.unwrap().is_none());
+        assert!(store.take_nonce(root, 2).await.unwrap().is_some());
+        assert!(store.take_nonce(root, 2).await.unwrap().is_none());
         assert_eq!(count_root_nonces(&store, root).await, 3);
 
-        assert!(
-            store
-                .nonces_reveal_by_root(root, 0)
-                .await
-                .unwrap()
-                .is_some()
-        );
-        assert!(store.take_nonce_by_root(root, 0).await.unwrap().is_some());
-        assert!(
-            store
-                .nonces_reveal_by_root(root, 0)
-                .await
-                .unwrap()
-                .is_none()
-        );
+        assert!(store.nonces_reveal(root, 0).await.unwrap().is_some());
+        assert!(store.take_nonce(root, 0).await.unwrap().is_some());
+        assert!(store.nonces_reveal(root, 0).await.unwrap().is_none());
         assert_eq!(count_root_nonces(&store, root).await, 2);
 
         assert!(
             store
-                .take_nonce_by_root(B256::repeat_byte(7), 0)
+                .take_nonce(B256::repeat_byte(7), 0)
                 .await
                 .unwrap()
                 .is_none()

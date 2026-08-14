@@ -1175,14 +1175,11 @@ impl Transition {
                 epoch,
                 Epoch {
                     group,
-                    key_share: key_share.clone(),
+                    key_share,
                     nonces,
                 },
             );
-            vec![Command::Effect(Effect::NonceTree {
-                group_id,
-                key_share,
-            })]
+            vec![Command::Effect(Effect::NonceTree { group_id })]
         } else {
             Vec::new()
         };

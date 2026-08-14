@@ -35,14 +35,8 @@ pub enum Effect {
         group_id: B256,
         key_share: Arc<KeyShare>,
     },
-    /// Sample a fresh nonce tree for `key_share` and persist it.
-    ///
-    /// This compatibility effect starts the group's generator if necessary,
-    /// then takes its next generated chunk.
-    NonceTree {
-        group_id: B256,
-        key_share: Arc<KeyShare>,
-    },
+    /// Take the next nonce tree from a group's generator stream and persist it.
+    NonceTree { group_id: B256 },
     /// Reveal this validator's nonce commitment at `(root, offset)`.
     RevealNonceCommitments {
         signature_id: B256,
@@ -142,15 +136,24 @@ impl Handler {
                     .start(group_id, key_share)?;
                 Ok(Resume::Noop)
             }
-            Effect::NonceTree {
-                group_id,
-                key_share,
-            } => {
-                self.nonce_generator
-                    .lock()
-                    .await
-                    .start(group_id, key_share)?;
-                self.next_nonce_tree(group_id).await
+            Effect::NonceTree { group_id } => {
+                let next = {
+                    let generator = self.nonce_generator.lock().await;
+                    generator.next(group_id)
+                };
+                let Some(nonce_chunk) = next.await? else {
+                    tracing::debug!(%group_id, "nonce chunk request already running; ignoring duplicate effect");
+                    return Ok(Resume::Noop);
+                };
+
+                let commitment = self
+                    .secrets
+                    .register_nonces_chunk(group_id, self.account, nonce_chunk)
+                    .await?;
+                Ok(Resume::NonceTree {
+                    group_id,
+                    commitment,
+                })
             }
             Effect::RevealNonceCommitments {
                 signature_id,
@@ -159,7 +162,7 @@ impl Handler {
                 offset,
             } => Ok(self
                 .secrets
-                .nonces_reveal_by_root(root, offset)
+                .nonces_reveal(root, offset)
                 .await?
                 .map(|(nonces, proof)| Resume::NonceCommitments {
                     signature_id,
@@ -174,7 +177,7 @@ impl Handler {
                 offset,
             } => Ok(self
                 .secrets
-                .take_nonce_by_root(root, offset)
+                .take_nonce(root, offset)
                 .await?
                 .map(|nonces| Resume::Nonce {
                     message,
@@ -211,26 +214,6 @@ impl Handler {
                 Ok(Resume::Noop)
             }
         }
-    }
-
-    async fn next_nonce_tree(&self, group_id: B256) -> Result<Resume, InternalError> {
-        let next = {
-            let generator = self.nonce_generator.lock().await;
-            generator.next(group_id)
-        };
-        let Some(nonce_chunk) = next.await? else {
-            tracing::debug!(%group_id, "nonce chunk request already running; ignoring duplicate effect");
-            return Ok(Resume::Noop);
-        };
-        let commitment = self
-            .secrets
-            .register_nonces_chunk(group_id, self.account, nonce_chunk)
-            .await?
-            .ok_or_else(|| InternalError("failed to register nonce chunk".to_string()))?;
-        Ok(Resume::NonceTree {
-            group_id,
-            commitment,
-        })
     }
 }
 
