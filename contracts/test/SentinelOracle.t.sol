@@ -3,6 +3,7 @@ pragma solidity ^0.8.30;
 
 import {Test} from "@forge-std/Test.sol";
 import {IOracle} from "@/interfaces/IOracle.sol";
+import {BondConfig} from "@/libraries/BondConfig.sol";
 import {SentinelOracle} from "@/SentinelOracle.sol";
 import {SentinelOracleRequest} from "@/libraries/SentinelOracleRequests.sol";
 import {SentinelOracleCommitment, SentinelOracleCommitmentMap} from "@/libraries/SentinelOracleCommitments.sol";
@@ -16,6 +17,8 @@ contract SentinelOracleTest is Test {
     uint256 constant REQUEST_FEE = 10_000; // 1 cent in a 6-decimal token (e.g. USDC)
     uint256 constant BOND_MULTIPLIER = 2;
     uint256 constant BOND_TARGET = REQUEST_FEE * BOND_MULTIPLIER; // 20_000
+    uint256 constant SLASHING_MULTIPLIER = 2;
+    uint256 constant SLASH_AMOUNT = REQUEST_FEE * SLASHING_MULTIPLIER; // 20_000, equal to BOND_TARGET by default
     uint256 constant COMMIT_WINDOW = 12;
     uint256 constant REVEAL_WINDOW = 12;
     uint256 constant GOVERNANCE_DELAY = 100;
@@ -68,6 +71,7 @@ contract SentinelOracleTest is Test {
             REVEAL_WINDOW,
             GOVERNANCE_DELAY,
             BOND_MULTIPLIER,
+            SLASHING_MULTIPLIER,
             INITIAL_DAO_FEE_SHARE
         );
 
@@ -168,19 +172,19 @@ contract SentinelOracleTest is Test {
         oracle.removeSentinel(sentinel1);
     }
 
-    function test_ScheduleBondMultiplier_OnlyGovernance() public {
+    function test_ScheduleBondConfig_OnlyGovernance() public {
         address randomAddress = vm.createWallet("random").addr;
 
         vm.expectRevert(SentinelOracle.NotGovernance.selector);
         vm.prank(arbitrator);
-        oracle.scheduleBondMultiplier(BOND_MULTIPLIER + 1);
+        oracle.scheduleBondConfig(BOND_MULTIPLIER + 1, SLASHING_MULTIPLIER + 1);
 
         vm.expectRevert(SentinelOracle.NotGovernance.selector);
         vm.prank(randomAddress);
-        oracle.scheduleBondMultiplier(BOND_MULTIPLIER + 1);
+        oracle.scheduleBondConfig(BOND_MULTIPLIER + 1, SLASHING_MULTIPLIER + 1);
 
         vm.prank(governance);
-        oracle.scheduleBondMultiplier(BOND_MULTIPLIER + 1);
+        oracle.scheduleBondConfig(BOND_MULTIPLIER + 1, SLASHING_MULTIPLIER + 1);
     }
 
     function test_ScheduleFee_OnlyGovernance() public {
@@ -283,6 +287,98 @@ contract SentinelOracleTest is Test {
         oracle.applyProtocolFundsReceiver();
 
         assertEq(oracle.protocolFundsReceiver(), secondReceiver, "corrected value takes effect, not the mistake");
+    }
+
+    // ============================================================
+    // BOND CONFIG (BOND MULTIPLIER + SLASHING MULTIPLIER) SCHEDULE/APPLY
+    // ============================================================
+
+    function test_ScheduleBondConfig_ZeroBondMultiplier_Reverts() public {
+        vm.expectRevert(BondConfig.InvalidBondMultiplier.selector);
+        vm.prank(governance);
+        oracle.scheduleBondConfig(0, 0);
+    }
+
+    function test_ScheduleBondConfig_SlashingMultiplierBelowOne_Reverts() public {
+        vm.expectRevert(BondConfig.InvalidSlashingMultiplier.selector);
+        vm.prank(governance);
+        oracle.scheduleBondConfig(BOND_MULTIPLIER, 0);
+    }
+
+    function test_ScheduleBondConfig_SlashingMultiplierAboveBondMultiplier_Reverts() public {
+        vm.expectRevert(BondConfig.InvalidSlashingMultiplier.selector);
+        vm.prank(governance);
+        oracle.scheduleBondConfig(BOND_MULTIPLIER, BOND_MULTIPLIER + 1);
+    }
+
+    function test_BondConfig_ScheduleApplyRoundTrip() public {
+        uint256 newMultiplier = BOND_MULTIPLIER + 2;
+        uint256 newSlashingMultiplier = 1;
+
+        assertEq(oracle.bondMultiplier(), BOND_MULTIPLIER, "starts at the constructor value");
+        assertEq(oracle.slashingMultiplier(), SLASHING_MULTIPLIER, "starts at the constructor value");
+
+        vm.prank(governance);
+        oracle.scheduleBondConfig(newMultiplier, newSlashingMultiplier);
+
+        assertEq(oracle.pendingBondMultiplier(), newMultiplier);
+        assertEq(oracle.pendingSlashingMultiplier(), newSlashingMultiplier);
+        assertEq(oracle.bondMultiplier(), BOND_MULTIPLIER, "not active until the delay elapses");
+        assertEq(oracle.slashingMultiplier(), SLASHING_MULTIPLIER, "not active until the delay elapses");
+
+        // Applying too early is a no-op, not a revert -- it's permissionless and harmless to call
+        // speculatively.
+        oracle.applyBondConfig();
+        assertEq(oracle.bondMultiplier(), BOND_MULTIPLIER, "still not active after an early apply");
+        assertEq(oracle.pendingBondMultiplier(), newMultiplier, "pending value survives an early apply");
+
+        vm.roll(block.number + GOVERNANCE_DELAY);
+        oracle.applyBondConfig();
+
+        assertEq(oracle.bondMultiplier(), newMultiplier, "takes effect once the delay has elapsed");
+        assertEq(oracle.slashingMultiplier(), newSlashingMultiplier, "takes effect once the delay has elapsed");
+        assertEq(oracle.pendingBondMultiplier(), 0);
+        assertEq(oracle.pendingSlashingMultiplier(), 0);
+        assertEq(oracle.pendingBondMultiplierActiveAt(), 0);
+    }
+
+    function test_BondConfig_RescheduleBeforeMaturity_OverwritesPending() public {
+        vm.startPrank(governance);
+        oracle.scheduleBondConfig(BOND_MULTIPLIER + 1, 1);
+
+        // Governance notices the mistake before the first schedule matures and corrects it -- this
+        // must overwrite the still-pending schedule, not revert.
+        oracle.scheduleBondConfig(BOND_MULTIPLIER + 3, 2);
+        vm.stopPrank();
+
+        assertEq(oracle.pendingBondMultiplier(), BOND_MULTIPLIER + 3, "second schedule overwrites the first");
+        assertEq(oracle.pendingSlashingMultiplier(), 2, "second schedule overwrites the first");
+        assertEq(oracle.bondMultiplier(), BOND_MULTIPLIER, "not active until the delay elapses");
+
+        vm.roll(block.number + GOVERNANCE_DELAY);
+        oracle.applyBondConfig();
+
+        assertEq(oracle.bondMultiplier(), BOND_MULTIPLIER + 3, "corrected value takes effect, not the mistake");
+        assertEq(oracle.slashingMultiplier(), 2, "corrected value takes effect, not the mistake");
+    }
+
+    function test_ScheduleBondConfig_RequestsInFlightKeepSnapshottedSlashAmount() public {
+        uint256 newMultiplier = BOND_MULTIPLIER + 1;
+        uint256 newSlashingMultiplier = 1;
+
+        _postRequest();
+
+        vm.prank(governance);
+        oracle.scheduleBondConfig(newMultiplier, newSlashingMultiplier);
+        vm.roll(block.number + GOVERNANCE_DELAY);
+
+        // The in-flight request was created before the new config matured -- its snapshotted
+        // `slashAmount`/`bondTarget` must not retroactively change even though the oracle now
+        // reports the new values.
+        assertEq(oracle.slashingMultiplier(), newSlashingMultiplier, "governed slashing multiplier has matured");
+        SentinelOracleRequest.Request memory req = oracle.getRequest(REQUEST_ID);
+        assertEq(req.slashAmount, SLASH_AMOUNT, "in-flight request keeps its originally snapshotted slash amount");
+        assertEq(req.bondTarget, BOND_TARGET, "in-flight request keeps its originally snapshotted bond target");
     }
 
     // ============================================================
@@ -459,21 +555,31 @@ contract SentinelOracleTest is Test {
 
     function test_PostRequest_EagerlyAppliesPendingBondMultiplier() public {
         uint256 newMultiplier = BOND_MULTIPLIER + 1;
+        uint256 newSlashingMultiplier = SLASHING_MULTIPLIER + 1;
 
         vm.prank(governance);
-        oracle.scheduleBondMultiplier(newMultiplier);
+        oracle.scheduleBondConfig(newMultiplier, newSlashingMultiplier);
         vm.roll(block.number + GOVERNANCE_DELAY);
 
-        // Nobody ever calls `applyBondMultiplier()` -- `postRequest` itself must flip the
+        // Nobody ever calls `applyBondConfig()` -- `postRequest` itself must flip the
         // matured pending value into storage as a side effect of touching `$bondConfig`.
         _postRequest();
 
         assertEq(oracle.bondMultiplier(), newMultiplier, "postRequest applies the pending multiplier");
         assertEq(oracle.pendingBondMultiplier(), 0, "pending slot cleared without a separate apply call");
         assertEq(oracle.pendingBondMultiplierActiveAt(), 0);
+        assertEq(
+            oracle.slashingMultiplier(), newSlashingMultiplier, "postRequest applies the pending slashing multiplier"
+        );
+        assertEq(oracle.pendingSlashingMultiplier(), 0, "pending slot cleared without a separate apply call");
 
         SentinelOracleRequest.Request memory req = oracle.getRequest(REQUEST_ID);
         assertEq(req.bondTarget, REQUEST_FEE * newMultiplier, "new request snapshots the newly-applied multiplier");
+        assertEq(
+            req.slashAmount,
+            REQUEST_FEE * newSlashingMultiplier,
+            "new request snapshots the newly-applied slashing multiplier"
+        );
     }
 
     function test_PostRequest_EagerlyAppliesPendingDaoFeeShare() public {
@@ -805,6 +911,155 @@ contract SentinelOracleTest is Test {
     }
 
     // ============================================================
+    // PARTIAL BOND SLASHING (ARBITRATION PATH)
+    // ============================================================
+
+    function test_Conflict_MinimumSlashingMultiplier_LosingSentinelReclaimsRemainder() public {
+        // Minimum allowed slashing multiplier (1): the slash covers exactly the fee, and the
+        // losing sentinel reclaims everything above that out of its bond via claim().
+        vm.prank(governance);
+        oracle.scheduleBondConfig(BOND_MULTIPLIER, 1);
+        vm.roll(block.number + GOVERNANCE_DELAY);
+
+        _postRequest();
+        _commit(sentinel1, true, SALT_1);
+        _commit(sentinel2, false, SALT_2);
+        _advancePastCommitDeadline();
+        _reveal(sentinel1, true, SALT_1);
+        _reveal(sentinel2, false, SALT_2);
+        oracle.finalize(REQUEST_ID);
+
+        vm.prank(arbitrator);
+        oracle.resolveDispute(REQUEST_ID, true, "sentinel1's evidence was conclusive");
+
+        uint256 s2Before = token.balanceOf(sentinel2);
+        vm.prank(sentinel2);
+        oracle.claim(REQUEST_ID);
+        assertEq(
+            token.balanceOf(sentinel2),
+            s2Before + (BOND_TARGET - REQUEST_FEE),
+            "losing sentinel reclaims its bond above the fee-covering slash"
+        );
+    }
+
+    function test_Conflict_MidRangeSlashingMultiplier_LosingSentinelReclaimsPartialRemainder() public {
+        uint256 newBondMultiplier = 4;
+        uint256 newSlashingMultiplier = 2;
+        vm.prank(governance);
+        oracle.scheduleBondConfig(newBondMultiplier, newSlashingMultiplier);
+        vm.roll(block.number + GOVERNANCE_DELAY);
+
+        _postRequest();
+        SentinelOracleRequest.Request memory posted = oracle.getRequest(REQUEST_ID);
+        assertEq(posted.bondTarget, REQUEST_FEE * newBondMultiplier);
+        assertEq(posted.slashAmount, REQUEST_FEE * newSlashingMultiplier);
+
+        _commit(sentinel1, true, SALT_1);
+        _commit(sentinel2, false, SALT_2);
+        _advancePastCommitDeadline();
+        _reveal(sentinel1, true, SALT_1);
+        _reveal(sentinel2, false, SALT_2);
+        oracle.finalize(REQUEST_ID);
+
+        uint256 receiverBalBefore = token.balanceOf(protocolFundsReceiver);
+        vm.prank(arbitrator);
+        oracle.resolveDispute(REQUEST_ID, true, "sentinel1's evidence was conclusive");
+
+        assertEq(
+            token.balanceOf(protocolFundsReceiver),
+            receiverBalBefore + (REQUEST_FEE * newSlashingMultiplier) - REQUEST_FEE,
+            "arbitration remainder reflects the governed slash amount, not the full bond"
+        );
+
+        uint256 s2Before = token.balanceOf(sentinel2);
+        vm.prank(sentinel2);
+        oracle.claim(REQUEST_ID);
+        assertEq(
+            token.balanceOf(sentinel2),
+            s2Before + (REQUEST_FEE * newBondMultiplier - REQUEST_FEE * newSlashingMultiplier),
+            "losing sentinel reclaims the unslashed remainder of its bond"
+        );
+    }
+
+    function test_Conflict_WithUnrevealedCommitter_NoFundsTrappedOrDoubleSlashed() public {
+        // A partial slashing multiplier makes each committer's unslashed remainder nonzero, so a
+        // double-slash of sentinel3's bond (once swept as `unrevealedBond`, again deducted in
+        // `claim()`) would be visible instead of masked by an already-zero remainder.
+        uint256 newBondMultiplier = 4;
+        uint256 newSlashingMultiplier = 2;
+        vm.prank(governance);
+        oracle.scheduleBondConfig(newBondMultiplier, newSlashingMultiplier);
+        vm.roll(block.number + GOVERNANCE_DELAY);
+
+        _postRequest();
+        SentinelOracleRequest.Request memory posted = oracle.getRequest(REQUEST_ID);
+        uint256 bondTarget = posted.bondTarget;
+        uint256 slashAmount = posted.slashAmount;
+
+        // sentinel1 approves, sentinel2 denies (conflict -> FROZEN), sentinel3 commits but never
+        // reveals. `finalize()` already sweeps sentinel3's `unrevealedBond` slash to the protocol
+        // funds receiver unconditionally -- including on the path to FROZEN, before the
+        // `newState == FROZEN` early return -- so `resolveDispute` must not additionally count
+        // sentinel3 in `slashed`, or its bond would be slashed twice and later claims would revert
+        // for lack of contract balance.
+        _commit(sentinel1, true, SALT_1);
+        _commit(sentinel2, false, SALT_2);
+        _commit(sentinel3, true, SALT_3);
+        _advancePastCommitDeadline();
+        _reveal(sentinel1, true, SALT_1);
+        _reveal(sentinel2, false, SALT_2);
+        _advancePastRevealDeadline();
+
+        uint256 receiverBalBefore = token.balanceOf(protocolFundsReceiver);
+        oracle.finalize(REQUEST_ID);
+
+        SentinelOracleRequest.Request memory req = oracle.getRequest(REQUEST_ID);
+        assertEq(uint256(req.state), uint256(SentinelOracleRequest.State.FROZEN));
+        assertEq(
+            token.balanceOf(protocolFundsReceiver),
+            receiverBalBefore + slashAmount,
+            "sentinel3's unrevealed bond is swept to the protocol funds receiver even while FROZEN"
+        );
+
+        vm.prank(arbitrator);
+        oracle.resolveDispute(REQUEST_ID, true, "sentinel1's evidence was conclusive");
+
+        // `slashed` in `resolveDispute` must only cover sentinel2 (the revealed loser) --
+        // sentinel3's slash was already swept above and must not be counted again.
+        assertEq(
+            token.balanceOf(protocolFundsReceiver),
+            receiverBalBefore + slashAmount + (slashAmount - REQUEST_FEE),
+            "resolveDispute's remainder covers only the revealed loser, not the already-swept unrevealed bond"
+        );
+
+        uint256 s1Before = token.balanceOf(sentinel1);
+        vm.prank(sentinel1);
+        oracle.claim(REQUEST_ID);
+        assertEq(token.balanceOf(sentinel1), s1Before + bondTarget + REQUEST_FEE, "winner claims bond + full fee");
+
+        uint256 s2Before = token.balanceOf(sentinel2);
+        vm.prank(sentinel2);
+        oracle.claim(REQUEST_ID);
+        assertEq(
+            token.balanceOf(sentinel2), s2Before + (bondTarget - slashAmount), "loser reclaims unslashed remainder"
+        );
+
+        // sentinel3 never revealed -- its slash was already swept via `unrevealedBond`, so
+        // `claim()` must not deduct it again; it reclaims exactly `bondTarget - slashAmount`, and
+        // the contract must have the balance on hand to pay it (no trapped/missing funds).
+        uint256 s3Before = token.balanceOf(sentinel3);
+        vm.prank(sentinel3);
+        oracle.claim(REQUEST_ID);
+        assertEq(
+            token.balanceOf(sentinel3),
+            s3Before + (bondTarget - slashAmount),
+            "non-revealer reclaims its unslashed remainder without being slashed twice"
+        );
+
+        assertEq(token.balanceOf(address(oracle)), 0, "every deposited token was accounted for -- nothing trapped");
+    }
+
+    // ============================================================
     // COMMIT-REVEAL EDGE CASES
     // ============================================================
 
@@ -961,10 +1216,53 @@ contract SentinelOracleTest is Test {
         oracle.claim(REQUEST_ID);
         assertEq(token.balanceOf(sentinel2), s2Before + BOND_TARGET + REQUEST_FEE / 2, "sentinel2 claim incorrect");
 
-        // sentinel3 never revealed — its commitment is still PENDING, so claim must revert.
-        vm.expectRevert(SentinelOracle.NotRevealed.selector);
+        // sentinel3 never revealed and its whole bond was slashed (slashingMultiplier ==
+        // bondMultiplier here) -- claim() now succeeds regardless, but returns nothing.
+        uint256 s3Before = token.balanceOf(sentinel3);
         vm.prank(sentinel3);
         oracle.claim(REQUEST_ID);
+        assertEq(token.balanceOf(sentinel3), s3Before, "fully slashed bond leaves nothing to claim");
+    }
+
+    function test_PartialReveal_PartialSlashingMultiplier_NonRevealerReclaimsRemainder() public {
+        uint256 newSlashingMultiplier = 1;
+        vm.prank(governance);
+        oracle.scheduleBondConfig(BOND_MULTIPLIER, newSlashingMultiplier);
+        vm.roll(block.number + GOVERNANCE_DELAY);
+
+        _postRequest();
+
+        // Three commit approve, but only two ever reveal.
+        _commit(sentinel1, true, SALT_1);
+        _commit(sentinel2, true, SALT_2);
+        _commit(sentinel3, true, SALT_3);
+
+        _advancePastCommitDeadline();
+        _reveal(sentinel1, true, SALT_1);
+        _reveal(sentinel2, true, SALT_2);
+        _advancePastRevealDeadline();
+
+        uint256 receiverBalBefore = token.balanceOf(protocolFundsReceiver);
+        oracle.finalize(REQUEST_ID);
+
+        // Only the governed slash amount (fee-covering, at multiplier 1) is forfeited, not the
+        // whole bond.
+        assertEq(
+            token.balanceOf(protocolFundsReceiver),
+            receiverBalBefore + REQUEST_FEE * newSlashingMultiplier,
+            "unrevealed bond partially slashed"
+        );
+
+        // sentinel3 never revealed, but can now reclaim the unslashed remainder of its bond --
+        // previously this reverted with NotRevealed().
+        uint256 s3Before = token.balanceOf(sentinel3);
+        vm.prank(sentinel3);
+        oracle.claim(REQUEST_ID);
+        assertEq(
+            token.balanceOf(sentinel3),
+            s3Before + (BOND_TARGET - REQUEST_FEE * newSlashingMultiplier),
+            "non-revealer reclaims the unslashed remainder of its bond"
+        );
     }
 
     // ============================================================

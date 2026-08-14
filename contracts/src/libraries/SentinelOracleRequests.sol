@@ -32,6 +32,7 @@ library SentinelOracleRequest {
         uint256 fee;
         uint256 bondTarget;
         uint256 daoFeeShare;
+        uint256 slashAmount;
         uint256 commitDeadline;
         uint256 revealDeadline;
         State state;
@@ -99,9 +100,9 @@ library SentinelOracleRequest {
                 newState = State.RESOLVED_DENIED;
             }
             // An established side exists, so a non-revealer's silence can only be griefing (stalling
-            // a request whose outcome their own commit already contributed to) -- slash their bond to
-            // `ARBITRATOR`.
-            unrevealedBond = (self.committedCount - self.revealedCount) * self.bondTarget;
+            // a request whose outcome their own commit already contributed to) -- slash the governed
+            // slash amount from their bond to the protocol funds receiver.
+            unrevealedBond = (self.committedCount - self.revealedCount) * self.slashAmount;
         } else {
             // Nobody revealed (or nobody even committed): there is no established side, so no
             // misbehavior can be proven against any committer -- bonds are returned in full via
@@ -134,23 +135,23 @@ library SentinelOracleRequest {
         return self.fee / winningSideCount;
     }
 
-    function isBondSlashed(Request storage self, SentinelOracleCommitment.Vote vote) internal view returns (bool) {
+    function slashAmountFor(Request storage self, SentinelOracleCommitment.Vote vote) internal view returns (uint256) {
         State state = requireResolved(self);
-        if (state == State.TIMED_OUT) return false;
+        if (state == State.TIMED_OUT) return 0;
         // A pending (never revealed) vote in a resolved request is unrevealed griefing -- slash it
         // regardless of which side won.
         if (vote != SentinelOracleCommitment.Vote.APPROVED && vote != SentinelOracleCommitment.Vote.DENIED) {
-            return true;
+            return self.slashAmount;
         }
         // Slashing only applies to requests resolved via arbitration (both sides had votes).
-        if (self.approveSentinelCount == 0 || self.denySentinelCount == 0) return false;
+        if (self.approveSentinelCount == 0 || self.denySentinelCount == 0) return 0;
         bool approved = vote == SentinelOracleCommitment.Vote.APPROVED;
-        return approved != (state == State.RESOLVED_APPROVED);
+        return approved != (state == State.RESOLVED_APPROVED) ? self.slashAmount : 0;
     }
 
     function resolveDispute(Request storage self, bool approveWins) internal returns (uint256 slashed) {
         require(self.state == State.FROZEN, RequestNotFrozen());
-        slashed = (approveWins ? self.denySentinelCount : self.approveSentinelCount) * self.bondTarget;
+        slashed = (approveWins ? self.denySentinelCount : self.approveSentinelCount) * self.slashAmount;
         self.state = approveWins ? State.RESOLVED_APPROVED : State.RESOLVED_DENIED;
     }
 }
@@ -197,6 +198,7 @@ library SentinelOracleRequestMap {
         uint256 fee,
         uint256 bondTarget,
         uint256 daoFeeShare,
+        uint256 slashAmount,
         uint256 commitDeadline,
         uint256 revealDeadline
     ) internal {
@@ -209,6 +211,7 @@ library SentinelOracleRequestMap {
             fee: fee,
             bondTarget: bondTarget,
             daoFeeShare: daoFeeShare,
+            slashAmount: slashAmount,
             commitDeadline: commitDeadline,
             revealDeadline: revealDeadline,
             state: SentinelOracleRequest.State.PENDING,

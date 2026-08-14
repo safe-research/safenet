@@ -41,6 +41,9 @@ SENTINEL_COMMIT_WINDOW=5
 SENTINEL_REVEAL_WINDOW=5
 SENTINEL_GOVERNANCE_DELAY=0
 SENTINEL_BOND_MULTIPLIER=2
+# Equal to the bond multiplier: a losing/never-revealed bond is slashed in
+# full by default, matching pre-governed-slashing behavior.
+SENTINEL_INITIAL_SLASHING_MULTIPLIER=2
 # 0%: no DAO cut by default on devnet.
 SENTINEL_INITIAL_DAO_FEE_SHARE=0
 # $10 of the fee token per sentinel: comfortably above the 80-cent bond
@@ -319,6 +322,7 @@ sentinel_oracle="$(parse_address "$(simulate_forge_script DeploySentinelOracleSc
     -e SENTINEL_REVEAL_WINDOW="$SENTINEL_REVEAL_WINDOW" \
     -e SENTINEL_GOVERNANCE_DELAY="$SENTINEL_GOVERNANCE_DELAY" \
     -e SENTINEL_BOND_MULTIPLIER="$SENTINEL_BOND_MULTIPLIER" \
+    -e SENTINEL_INITIAL_SLASHING_MULTIPLIER="$SENTINEL_INITIAL_SLASHING_MULTIPLIER" \
     -e SENTINEL_INITIAL_DAO_FEE_SHARE="$SENTINEL_INITIAL_DAO_FEE_SHARE")" 'SentinelOracle deployed at')"
 
 # Write each validator's TOML config into `$config_dir`, following the shape
@@ -407,6 +411,7 @@ forge_script DeploySentinelOracleScript \
     -e SENTINEL_REVEAL_WINDOW="$SENTINEL_REVEAL_WINDOW" \
     -e SENTINEL_GOVERNANCE_DELAY="$SENTINEL_GOVERNANCE_DELAY" \
     -e SENTINEL_BOND_MULTIPLIER="$SENTINEL_BOND_MULTIPLIER" \
+    -e SENTINEL_INITIAL_SLASHING_MULTIPLIER="$SENTINEL_INITIAL_SLASHING_MULTIPLIER" \
     -e SENTINEL_INITIAL_DAO_FEE_SHARE="$SENTINEL_INITIAL_DAO_FEE_SHARE" >/dev/null
 
 for sentinel in "${SENTINELS[@]}"; do
