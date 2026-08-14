@@ -39,9 +39,12 @@ impl Transition {
             return (state, Vec::new());
         }
 
-        let message =
-            self.consensus
-                .transaction_packet_hash(epoch, event.oracle, &event.transaction);
+        let message = self.consensus.transaction_packet_hash(
+            epoch,
+            event.oracle,
+            event.oracleData.clone(),
+            &event.transaction,
+        );
 
         // Prevent duplicate ongoing transaction proposals. This is to prevent
         // malicious parties from blocking transaction attestations from ever
@@ -50,6 +53,7 @@ impl Transition {
             let packet = Packet::Transaction {
                 epoch,
                 oracle: event.oracle,
+                oracle_data: event.oracleData.clone(),
                 transaction: Box::new(event.transaction.clone()),
             };
             let signers = participating_epoch.group.participants().clone();
@@ -79,9 +83,12 @@ impl Transition {
         event: &Consensus::TransactionAttested,
     ) -> (State, Commands<State, Self>) {
         let epoch = EpochId::from_raw(event.epoch);
-        let message =
-            self.consensus
-                .transaction_proposal_hash(epoch, event.oracle, event.safeTxHash);
+        let message = self.consensus.transaction_proposal_hash_from_data_hash(
+            epoch,
+            event.oracle,
+            event.oracleDataHash,
+            event.safeTxHash,
+        );
         tracing::info!(
             ?epoch,
             safe_tx_hash = %event.safeTxHash,

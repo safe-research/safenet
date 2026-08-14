@@ -12,11 +12,19 @@ use crate::{
     consensus::epoch::EpochId,
 };
 use alloy::{
-    primitives::{Address, B256, U256},
+    primitives::{Address, B256, Bytes, U256, b256, keccak256},
     sol,
     sol_types::{Eip712Domain, SolStruct},
 };
 use std::num::NonZeroU64;
+
+/// `keccak256("TransactionProposal(uint64 epoch,address oracle,bytes oracleData,bytes32 safeTxHash)")`.
+///
+/// Kept in sync with `ConsensusMessages.TRANSACTION_PROPOSAL_TYPEHASH` onchain; used only by
+/// [`ConsensusDomain::transaction_proposal_hash_from_data_hash`], which rebuilds the digest from a
+/// pre-hashed `oracleData`.
+const TRANSACTION_PROPOSAL_TYPE_HASH: B256 =
+    b256!("9c6706f5afdb1de99f5ad39011e7770ce471f51d78380634f6cedb21a648b8d0");
 
 sol! {
     /// The classic Safe `SafeTx` EIP-712 struct.
@@ -38,6 +46,7 @@ sol! {
     struct TransactionProposal {
         uint64 epoch;
         address oracle;
+        bytes oracleData;
         bytes32 safeTxHash;
     }
 
@@ -103,18 +112,53 @@ impl ConsensusDomain {
 
     /// The consensus-domain hash of an oracle-backed Safe transaction proposal,
     /// embedding the already-computed [`safe_tx_hash`] as its `safeTxHash` field.
+    ///
+    /// This is the proposal/signing path, which always holds the full `oracleData`, so it uses the
+    /// canonical `SolStruct` EIP-712 hashing (alloy hashes the `bytes` member itself).
     pub fn transaction_proposal_hash(
         &self,
         epoch: EpochId,
         oracle: Address,
+        oracle_data: Bytes,
         safe_tx_hash: B256,
     ) -> B256 {
         TransactionProposal {
             epoch: epoch.raw_value(),
             oracle,
+            oracleData: oracle_data,
             safeTxHash: safe_tx_hash,
         }
         .eip712_signing_hash(&self.0)
+    }
+
+    /// The same proposal digest, rebuilt from a pre-hashed `oracleData`.
+    ///
+    /// Used only on the attest path: the onchain `TransactionAttested` event carries just
+    /// `keccak256(oracleData)` (so the validator callback stays a constant size) and the full bytes
+    /// are not available there. EIP-712 encodes the `bytes oracleData` member as its `keccak256`, so
+    /// this produces a digest identical to [`transaction_proposal_hash`] for the same data (asserted
+    /// in the tests). It is spelled out by hand because alloy's `SolStruct` signing hash requires a
+    /// value holding the full bytes, which this path does not have.
+    pub fn transaction_proposal_hash_from_data_hash(
+        &self,
+        epoch: EpochId,
+        oracle: Address,
+        oracle_data_hash: B256,
+        safe_tx_hash: B256,
+    ) -> B256 {
+        let mut data = [0u8; 160];
+        data[0..32].copy_from_slice(TRANSACTION_PROPOSAL_TYPE_HASH.as_slice());
+        data[32..64].copy_from_slice(&U256::from(epoch.raw_value()).to_be_bytes::<32>());
+        data[64..96].copy_from_slice(oracle.into_word().as_slice());
+        data[96..128].copy_from_slice(oracle_data_hash.as_slice());
+        data[128..160].copy_from_slice(safe_tx_hash.as_slice());
+        let struct_hash = keccak256(data);
+
+        let mut message = [0u8; 66];
+        message[0..2].copy_from_slice(&[0x19, 0x01]);
+        message[2..34].copy_from_slice(self.0.separator().as_slice());
+        message[34..66].copy_from_slice(struct_hash.as_slice());
+        keccak256(message)
     }
 
     /// The consensus-domain hash of an oracle-backed Safe transaction packet:
@@ -124,9 +168,10 @@ impl ConsensusDomain {
         &self,
         epoch: EpochId,
         oracle: Address,
+        oracle_data: Bytes,
         tx: &SafeTransaction,
     ) -> B256 {
-        self.transaction_proposal_hash(epoch, oracle, safe_tx_hash(tx))
+        self.transaction_proposal_hash(epoch, oracle, oracle_data, safe_tx_hash(tx))
     }
 
     /// The consensus-domain hash of an epoch rollover proposal.
@@ -186,9 +231,31 @@ mod tests {
     #[test]
     fn sample_transaction_packet_hash() {
         assert_eq!(
-            TEST_DOMAIN.transaction_packet_hash(EPOCH_ONE, TEST_ADDRESS, &safe_tx()),
-            b256!("44151ab85018beace71ef3255d90480c7b41a3c42b2cf892c155a304875abc9e")
+            TEST_DOMAIN.transaction_packet_hash(EPOCH_ONE, TEST_ADDRESS, Bytes::new(), &safe_tx()),
+            b256!("5ac4a916cb21b51c5b61c6d4479f7c7477856abecb96e439fb53d5462fb5b3ed")
         );
+    }
+
+    /// The hand-rolled attest-path reconstruction must match the canonical `SolStruct`-based proposal
+    /// hash for the same data (EIP-712 encodes the `bytes oracleData` member as its keccak256).
+    #[test]
+    fn proposal_hash_from_data_hash_matches_full_data() {
+        for oracle_data in [Bytes::new(), Bytes::from_static(&[0xca, 0xfe])] {
+            let safe_tx = safe_tx();
+            let full = TEST_DOMAIN.transaction_packet_hash(
+                EPOCH_ONE,
+                TEST_ADDRESS,
+                oracle_data.clone(),
+                &safe_tx,
+            );
+            let from_hash = TEST_DOMAIN.transaction_proposal_hash_from_data_hash(
+                EPOCH_ONE,
+                TEST_ADDRESS,
+                keccak256(&oracle_data),
+                safe_tx_hash(&safe_tx),
+            );
+            assert_eq!(full, from_hash);
+        }
     }
 
     #[test]

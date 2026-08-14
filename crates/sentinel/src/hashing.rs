@@ -3,7 +3,7 @@ use crate::bindings::{
     safe::{Operation as SafeOperation, SafeTx},
 };
 use alloy::{
-    primitives::{Address, B256, Keccak256, U256},
+    primitives::{Address, B256, Bytes, Keccak256, U256},
     sol_types::{Eip712Domain, SolStruct},
 };
 use safenet_core::tx::Signer;
@@ -84,6 +84,7 @@ pub fn oracle_tx_proposal_hash(
     consensus: Address,
     epoch: u64,
     oracle: Address,
+    oracle_data: Bytes,
     stx_hash: B256,
 ) -> B256 {
     let domain = Eip712Domain {
@@ -94,6 +95,7 @@ pub fn oracle_tx_proposal_hash(
     TransactionProposal {
         epoch,
         oracle,
+        oracleData: oracle_data,
         safeTxHash: stx_hash,
     }
     .eip712_signing_hash(&domain)
@@ -149,10 +151,17 @@ mod tests {
         let oracle = address!("4838B106FCe9647Bdf1E7877BF73cE8B0BAD5f97");
 
         let stx_hash = safe_tx_hash(&zero_tx(1, oracle, consensus));
-        let id = oracle_tx_proposal_hash(U256::from(23u64), consensus, 11, oracle, stx_hash);
+        let id = oracle_tx_proposal_hash(
+            U256::from(23u64),
+            consensus,
+            11,
+            oracle,
+            Bytes::new(),
+            stx_hash,
+        );
         assert_eq!(
             id,
-            b256!("13889a221bc89a7b93781ab5457f5b7b9a6d9f2e9fe8d97dcf6be83a8658c58c"),
+            b256!("8080890fb312c10d10238e8eb3d58a5682e4e691862afee94e94726ad1a16dd5"),
         );
     }
 

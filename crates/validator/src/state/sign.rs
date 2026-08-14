@@ -7,7 +7,7 @@ use crate::{
     service::{Action, Effect},
 };
 use alloy::{
-    primitives::{Address, B256},
+    primitives::{Address, B256, keccak256},
     sol_types::SolCall as _,
 };
 use safenet_core::state::{Command, Commands};
@@ -808,12 +808,13 @@ impl Packet {
     /// placeholder - the `Consensus` contract fills it in itself when it
     /// invokes the callback from a completed `signShareWithCallback`.
     fn attestation_callback(&self, consensus: Address) -> bindings::Callback {
-        let (epoch, oracle, transaction) = match self {
+        let (epoch, oracle, oracle_data, transaction) = match self {
             Packet::Transaction {
                 epoch,
                 oracle,
+                oracle_data,
                 transaction,
-            } => (*epoch, *oracle, transaction),
+            } => (*epoch, *oracle, oracle_data, transaction),
             Packet::EpochRollover {
                 proposed_epoch,
                 rollover_block,
@@ -838,6 +839,7 @@ impl Packet {
         let context = Consensus::attestTransactionCall {
             epoch: epoch.raw_value(),
             oracle,
+            oracleDataHash: keccak256(oracle_data),
             chainId: transaction.chainId,
             safe: transaction.safe,
             safeTxStructHash: safe_tx_struct_hash,
@@ -870,10 +872,12 @@ impl Packet {
             Packet::Transaction {
                 epoch,
                 oracle,
+                oracle_data,
                 transaction,
             } => Action::AttestTransaction {
                 epoch: *epoch,
                 oracle: *oracle,
+                oracle_data_hash: keccak256(oracle_data),
                 chain_id: transaction.chainId,
                 safe: transaction.safe,
                 safe_tx_struct_hash: hashing::safe_tx_struct_hash(transaction),

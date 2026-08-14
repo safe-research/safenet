@@ -71,6 +71,7 @@ interface IConsensus {
      * @param safeId The identifier of the Safe account, combining its chain ID and address.
      * @param oracle The address of the oracle contract used for evaluation.
      * @param epoch The epoch in which the transaction is proposed.
+     * @param oracleData Arbitrary oracle-specific data, bound into the signed message hash.
      * @param transaction The proposed Safe transaction.
      */
     event TransactionProposed(
@@ -78,6 +79,7 @@ interface IConsensus {
         SafeId.T indexed safeId,
         address indexed oracle,
         uint64 epoch,
+        bytes oracleData,
         SafeTransaction.T transaction
     );
 
@@ -87,6 +89,9 @@ interface IConsensus {
      * @param safeId The identifier of the Safe account, combining its chain ID and address.
      * @param oracle The address of the oracle contract used for evaluation.
      * @param epoch The epoch in which the attested transaction was proposed.
+     * @param oracleDataHash The `keccak256` of the oracle-specific data bound into the signed message hash. Only the
+     *        hash is echoed here (the full data is emitted by `TransactionProposed`), keeping the attestation a fixed
+     *        size so the validator callback has a constant calldata cost.
      * @param signatureId The FROST signature identifier corresponding to the attestation.
      * @param attestation The attestation to the oracle-checked Safe transaction.
      */
@@ -95,6 +100,7 @@ interface IConsensus {
         SafeId.T indexed safeId,
         address indexed oracle,
         uint64 epoch,
+        bytes32 oracleDataHash,
         FROSTSignatureId.T signatureId,
         FROST.Signature attestation
     );
@@ -173,7 +179,8 @@ interface IConsensus {
     /**
      * @notice Proposes a transaction for oracle-checked validator approval.
      * @param oracle Address of the oracle contract to use for evaluation.
-     * @param oracleData Arbitrary oracle-specific data passed to the oracle; not part of the signed message hash.
+     * @param oracleData Arbitrary oracle-specific data passed to the oracle; bound into the signed message hash
+     *        (as the `bytes oracleData` EIP-712 member).
      * @param transaction The Safe transaction to propose.
      * @return safeTxHash The Safe transaction hash.
      */
@@ -185,6 +192,7 @@ interface IConsensus {
      * @notice Attests to an oracle-checked transaction.
      * @param epoch The epoch in which the transaction was proposed.
      * @param oracle The address of the oracle contract used for evaluation.
+     * @param oracleDataHash The `keccak256` of the oracle-specific data bound into the signed message hash.
      * @param chainId The chain ID of the Safe account.
      * @param safe The address of the Safe account.
      * @param safeTxStructHash The EIP-712 struct hash of the Safe transaction data.
@@ -194,6 +202,7 @@ interface IConsensus {
     function attestTransaction(
         uint64 epoch,
         address oracle,
+        bytes32 oracleDataHash,
         uint256 chainId,
         address safe,
         bytes32 safeTxStructHash,
@@ -204,10 +213,11 @@ interface IConsensus {
      * @notice Gets a transaction attestation by transaction hash.
      * @param epoch The epoch in which the transaction was proposed.
      * @param oracle The address of the oracle contract used for evaluation.
+     * @param oracleDataHash The `keccak256` of the oracle-specific data bound into the signed message hash.
      * @param safeTxHash The Safe transaction hash to query the attestation for.
      * @return signature The FROST signature attesting to the oracle-checked transaction.
      */
-    function getTransactionAttestationByHash(uint64 epoch, address oracle, bytes32 safeTxHash)
+    function getTransactionAttestationByHash(uint64 epoch, address oracle, bytes32 oracleDataHash, bytes32 safeTxHash)
         external
         view
         returns (FROST.Signature memory signature);
