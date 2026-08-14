@@ -35,6 +35,7 @@ contract SentinelOracle is IOracle {
     // ============================================================
 
     address public immutable ARBITRATOR;
+    address public immutable GOVERNANCE;
     address public immutable CONSENSUS;
     IERC20 public immutable FEE_TOKEN;
     uint256 public immutable REQUEST_FEE;
@@ -63,6 +64,7 @@ contract SentinelOracle is IOracle {
     // ============================================================
 
     error NotArbitrator();
+    error NotGovernance();
     error NotConsensus();
     error InvalidAddress();
     error ZeroFee();
@@ -81,6 +83,11 @@ contract SentinelOracle is IOracle {
         _;
     }
 
+    modifier onlyGovernance() {
+        require(msg.sender == GOVERNANCE, NotGovernance());
+        _;
+    }
+
     // forge-lint: disable-end(unwrapped-modifier-logic)
 
     // ============================================================
@@ -89,6 +96,7 @@ contract SentinelOracle is IOracle {
 
     constructor(
         address arbitrator,
+        address governance,
         address consensus,
         address feeToken,
         uint256 requestFee,
@@ -98,12 +106,14 @@ contract SentinelOracle is IOracle {
         uint256 initialMultiplier
     ) {
         require(arbitrator != address(0), InvalidAddress());
+        require(governance != address(0), InvalidAddress());
         require(consensus != address(0), InvalidAddress());
         require(feeToken != address(0), InvalidAddress());
         require(requestFee > 0, ZeroFee());
         require(commitWindow > 0, ZeroWindow());
         require(revealWindow > 0, ZeroWindow());
         ARBITRATOR = arbitrator;
+        GOVERNANCE = governance;
         CONSENSUS = consensus;
         FEE_TOKEN = IERC20(feeToken);
         REQUEST_FEE = requestFee;
@@ -225,15 +235,15 @@ contract SentinelOracle is IOracle {
     // GOVERNANCE
     // ============================================================
 
-    function addSentinel(address sentinel) external onlyArbitrator {
+    function addSentinel(address sentinel) external onlyGovernance {
         $sentinelMap.add(sentinel, GOVERNANCE_DELAY);
     }
 
-    function removeSentinel(address sentinel) external onlyArbitrator {
+    function removeSentinel(address sentinel) external onlyGovernance {
         $sentinelMap.remove(sentinel);
     }
 
-    function scheduleBondMultiplier(uint256 newValue) external onlyArbitrator {
+    function scheduleBondMultiplier(uint256 newValue) external onlyGovernance {
         $bondConfig.schedule(newValue, GOVERNANCE_DELAY);
     }
 
