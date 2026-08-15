@@ -21,18 +21,24 @@ impl Transition {
     /// the [`Effect::NonceTree`] effect has produced it.
     pub(super) fn handle_nonce_tree(
         &self,
-        state: State,
+        mut state: State,
         group_id: B256,
         nonces_commitment: B256,
     ) -> (State, Commands<State, Self>) {
-        if !state
+        let Some(epoch) = state
             .epochs
-            .values()
-            .any(|epoch| epoch.group.id() == group_id)
-        {
+            .values_mut()
+            .find(|epoch| epoch.group.id() == group_id)
+        else {
             tracing::debug!(%group_id, "ignoring nonce tree resume for an untracked group");
             return (state, Vec::new());
-        }
+        };
+
+        // In case we reorg while a nonce tree is pending, ensure that there is
+        // a chunk reservation while we wait for the `Preprocess` action to
+        // land onchain. This is not necessary for correctness, but can help
+        // avoid additional unnecessary nonce chunk computation in these cases.
+        epoch.nonces.ensure_chunk_reservation();
 
         (
             state,
@@ -197,6 +203,18 @@ impl NonceState {
     /// Records an onchain assignment.
     pub(super) fn link(&mut self, chunk: u64, root: B256) {
         self.chunks.insert(chunk, Some(root));
+    }
+
+    /// Ensures that there is a pending chunk reservation.
+    fn ensure_chunk_reservation(&mut self) {
+        let existing_reservation = self
+            .chunks
+            .last_key_value()
+            .is_some_and(|(_, root)| root.is_none());
+        if !existing_reservation {
+            // There is no existing reservation, so reserve one.
+            self.reserve_chunk();
+        }
     }
 
     /// Returns the chunk the onchain contract is expected to assign to the

@@ -58,6 +58,9 @@ echo "==> Building Rust validator..."
 cargo build --manifest-path "$REPO_ROOT/Cargo.toml" --package validator
 RUST_BIN="$REPO_ROOT/target/debug/validator"
 
+echo "==> Building Solidity contracts..."
+forge build --root "$REPO_ROOT/contracts" --force
+
 echo "==> Starting Anvil..."
 anvil --block-time $BLOCK_TIME > "$REPO_ROOT/anvil_validator_logs.txt" 2>&1 &
 PIDS+=("$!")
@@ -125,7 +128,7 @@ PIDS+=("$!")
 echo "    pid ${PIDS[-1]}"
 
 # Let both watchers initialize before emitting the genesis event.
-sleep 2
+sleep 0.5
 for pid in "${PIDS[@]:1}"; do
     if ! kill -0 "$pid" 2>/dev/null; then
         EXIT_MESSAGE="FAILURE: A validator exited during startup."
