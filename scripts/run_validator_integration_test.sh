@@ -249,7 +249,7 @@ while [ "$SECONDS" -lt "$DEADLINE" ]; do
             exit 1
         fi
     done
-    sleep 2
+    sleep "$BLOCK_TIME"
 done
 
 EXIT_MESSAGE="TIMEOUT: genesis confirmations: $GENESIS_CONFIRMATIONS; epoch 1 confirmations: $EPOCH_ONE_CONFIRMATIONS; staged: $STAGED; rolled over: $ROLLED_OVER; transaction proposed: $TRANSACTION_PROPOSED; transaction attested: $TRANSACTION_ATTESTED." >&2

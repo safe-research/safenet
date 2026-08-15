@@ -27,23 +27,15 @@ impl Transition {
     ) -> (State, Commands<State, Self>) {
         let mut commands = Vec::new();
 
-        // Unconditionally top up the group's nonce stock, regardless of
-        // whether this validator is one of the selected signers: the
-        // sequence is shared by every participant and only ever advances, so
-        // it can run past this validator's local nonces even for signing
-        // ceremonies it was never asked to take part in. `epochs` is small
-        // (a handful of entries at most in regular operation), so a linear
-        // scan for the matching group is fine.
+        // Unconditionally observe the group's sequence, regardless of whether
+        // this validator is one of the selected signers. The sequence is shared
+        // by every participant and advances for every signing ceremony.
         if let Some(epoch) = state
             .epochs
-            .values()
+            .values_mut()
             .find(|epoch| epoch.group.id() == event.gid)
         {
-            commands.push(Command::Effect(Effect::TopupNonces {
-                group_id: event.gid,
-                key_share: epoch.key_share.clone(),
-                sequence: event.sequence,
-            }));
+            epoch.nonces.observe(event.sequence);
         }
 
         match state.signing.remove(&event.message) {
