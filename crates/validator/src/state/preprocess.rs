@@ -93,15 +93,7 @@ impl Transition {
         };
 
         tracing::debug!(?active_epoch, %group_id, chunk, "requesting nonce tree top-up");
-        let key_share = epoch.key_share.clone();
-
-        (
-            state,
-            vec![Command::Effect(Effect::NonceTree {
-                group_id,
-                key_share,
-            })],
-        )
+        (state, vec![Command::Effect(Effect::NonceTree { group_id })])
     }
 
     /// Reaps epochs no longer needed by a signing ceremony and reconciles all
