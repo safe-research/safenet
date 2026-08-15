@@ -1,5 +1,6 @@
 use super::{
-    KeyGenConfirmation, KeyGenParticipation, NonceState, RolloverState, State, Transition,
+    KeyGenConfirmation, KeyGenParticipation, NonceIndex, NonceState, RolloverState, State,
+    Transition,
 };
 use crate::{
     bindings::Coordinator,
@@ -42,9 +43,9 @@ impl Transition {
         )
     }
 
-    /// Links a committed nonce tree to its assigned onchain chunk for the
-    /// current validator. This can happen regardless of the current rollover
-    /// or signing state.
+    /// Records the current validator's committed nonce tree at its canonical
+    /// onchain chunk. This can happen regardless of the current rollover or
+    /// signing state.
     pub(super) fn handle_preprocess(
         &self,
         mut state: State,
@@ -67,18 +68,10 @@ impl Transition {
             group_id = %event.gid,
             chunk = event.chunk,
             root = %event.commitment,
-            "linking nonce tree to onchain chunk"
+            "recorded canonical nonce tree assignment"
         );
         epoch.nonces.link(event.chunk, event.commitment);
-
-        (
-            state,
-            vec![Command::Effect(Effect::LinkNonceTree {
-                group_id: event.gid,
-                chunk: event.chunk,
-                root: event.commitment,
-            })],
-        )
+        (state, Vec::new())
     }
 
     /// Requests another nonce tree for the active epoch when its canonical
@@ -179,12 +172,25 @@ impl Transition {
 }
 
 impl NonceState {
-    /// Advances the observed sequence and forgets past roots for nonce chunks
-    /// that can no longer used for signing.
-    pub(super) fn observe(&mut self, sequence: u64) {
+    /// Returns the nonce secret-store coordinates and advances the observed
+    /// sequence and forgets past roots for nonce chunks that can no longer used
+    /// for signing.
+    ///
+    /// Returns `None` if there is no linked nonce for `sequence`.
+    pub(super) fn observe(&mut self, sequence: u64) -> Option<NonceIndex> {
+        let (chunk, offset) = preprocess::decode_sequence(sequence);
+        let nonce = self
+            .chunks
+            .get(&chunk)
+            .copied()
+            .flatten()
+            .map(|root| NonceIndex { root, offset });
+
         self.next_sequence = sequence.saturating_add(1);
-        let (chunk, _) = preprocess::decode_sequence(self.next_sequence);
-        self.chunks = self.chunks.split_off(&chunk);
+        let (next_chunk, _) = preprocess::decode_sequence(self.next_sequence);
+        self.chunks = self.chunks.split_off(&next_chunk);
+
+        nonce
     }
 
     /// Reserves the next chunk, marking it as pending in the nonce state.
