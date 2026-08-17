@@ -21,9 +21,9 @@ paths:
       responses:
         "200":
           description: >-
-            The verdict. Note that `unknown` is a successful response: the
-            engine is reporting that it has no definitive answer, which a caller
-            must not read as either secure or insecure.
+            The verdict. Note that `abstain` is a successful response: the
+            engine is directing the sentinel not to vote because it has no
+            definitive answer.
           content:
             application/json:
               schema:
@@ -54,18 +54,18 @@ components:
     SecurityCheckResponse:
       description: >-
         The engine's answer about the transaction. A sentinel maps `secure` to
-        an approving vote and `insecure` to a denying one, and `unknown` as
-        abstaining from voting.
+        an approving vote, `insecure` to a denying one, and `abstain` to no
+        vote.
       oneOf:
         - $ref: "#/components/schemas/Secure"
         - $ref: "#/components/schemas/Insecure"
-        - $ref: "#/components/schemas/Unknown"
+        - $ref: "#/components/schemas/Abstain"
       discriminator:
         propertyName: verdict
         mapping:
           secure: "#/components/schemas/Secure"
           insecure: "#/components/schemas/Insecure"
-          unknown: "#/components/schemas/Unknown"
+          abstain: "#/components/schemas/Abstain"
     SafeTransaction:
       description: >-
         The Safenet SafeTransaction type.
@@ -122,15 +122,15 @@ components:
         verdict: { const: insecure }
         rule: { $ref: "#/components/schemas/RuleId" }
       examples: [{ verdict: insecure, rule: "R-4.1" }]
-    Unknown:
+    Abstain:
       description: >-
-        The engine cannot reliably determine whether or not a transaction is
-        secure, and indicates the sentinel should abstain from voting.
+        The engine abstains because it cannot reliably determine whether or not
+        the transaction is secure. The sentinel must not vote.
       type: object
       required: [verdict]
       properties:
-        verdict: { const: unknown }
-      examples: [{ verdict: unknown }]
+        verdict: { const: abstain }
+      examples: [{ verdict: abstain }]
     RuleId:
       type: string
       description: >-
