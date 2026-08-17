@@ -21,16 +21,16 @@ pub enum Verdict {
         /// The rule violated by the transaction.
         rule: RuleId,
     },
-    /// The engine cannot give a trustworthy answer.
-    Unknown,
+    /// The engine abstains because it cannot give a trustworthy answer.
+    Abstain,
 }
 
 impl SentinelEngine {
     /// Assesses a proposed Safe transaction using the configured checks.
     ///
-    /// There are no checks in this phase, so the engine truthfully reports
-    /// [`Verdict::Unknown`] for every transaction.
+    /// There are no checks in this phase, so the engine abstains from voting on
+    /// every transaction.
     pub async fn security_check(&self, _transaction: SafeTransaction) -> Verdict {
-        Verdict::Unknown
+        Verdict::Abstain
     }
 }
