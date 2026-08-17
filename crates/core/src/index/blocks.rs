@@ -4,11 +4,11 @@
 //! and keeps a bounded history of recent blocks so chain reorgs can be detected.
 
 use super::clock::Clock;
+use crate::provider::Provider;
 use alloy::{
     eips::BlockId,
     primitives::{B256, Bloom},
-    providers::Provider,
-    rpc::types::Block,
+    providers::Provider as _,
     transports::TransportError,
 };
 use serde::Deserialize;
@@ -111,6 +111,17 @@ pub struct InvalidatedBlock {
     pub hash: B256,
 }
 
+/// The internal representation of a block header.
+///
+/// This type contains only the fields required by the indexer.
+struct BlockHeader {
+    number: u64,
+    hash: B256,
+    parent_hash: B256,
+    timestamp: u64,
+    logs_bloom: Bloom,
+}
+
 /// The next block the watcher expects to fetch, and the earliest time it is
 /// worth trying to (its expected mining time, in milliseconds).
 #[derive(Clone, Debug)]
@@ -120,22 +131,19 @@ struct PendingBlock {
 }
 
 /// Watches the chain head, producing [`BlockUpdate`]s and detecting reorgs.
-pub struct BlockWatcher<P> {
-    provider: P,
+pub struct BlockWatcher {
+    provider: Provider,
     config: Config,
     block_time: u64,
     pending: PendingBlock,
     clock: Clock,
     /// The most recent blocks (up to `max_reorg_depth`), kept for reorg
     /// detection. Ordered oldest-first.
-    recent: VecDeque<Block>,
+    recent: VecDeque<BlockHeader>,
     queue: VecDeque<BlockUpdate>,
 }
 
-impl<P> BlockWatcher<P>
-where
-    P: Provider,
-{
+impl BlockWatcher {
     /// Creates and initializes a block watcher.
     ///
     /// When `indexed` is set, the watcher resumes from the persisted snapshot
@@ -143,11 +151,11 @@ where
     /// synthetic reorg. Otherwise, when `Config::start_block` is set, it
     /// back-fills from there via a warp without a fake reorg.
     pub async fn new(
-        provider: P,
+        provider: Provider,
         config: Config,
         indexed: Option<BlockStatus>,
     ) -> Result<Self, Error> {
-        let block_time = resolve_block_time(&provider, config.block_time).await?;
+        let block_time = resolve_block_time(&provider, config.block_time)?;
         let mut watcher = Self {
             provider,
             config,
@@ -164,30 +172,35 @@ where
         Ok(watcher)
     }
 
+    /// Fetches a block by ID.
+    async fn get_block(&self, id: BlockId) -> Result<Option<BlockHeader>, Error> {
+        let block = self.provider.get_block(id).hashes().await?;
+        Ok(block.map(|block| BlockHeader {
+            number: block.header.number,
+            hash: block.header.hash,
+            parent_hash: block.header.parent_hash,
+            timestamp: block.header.timestamp,
+            logs_bloom: block.header.logs_bloom,
+        }))
+    }
+
     /// Fetches a block that is expected to exist, erroring if the node does not
     /// have it.
-    async fn require_block(&self, id: BlockId) -> Result<Block, Error> {
-        self.provider
-            .get_block(id)
-            .hashes()
-            .await?
-            .ok_or(Error::MissingBlock(id))
+    async fn require_block(&self, id: BlockId) -> Result<BlockHeader, Error> {
+        self.get_block(id).await?.ok_or(Error::MissingBlock(id))
     }
 
     async fn initialize(&mut self, indexed: Option<BlockStatus>) -> Result<(), Error> {
         let latest = self.require_block(BlockId::latest()).await?;
-        let safe = latest
-            .header
-            .number
-            .saturating_sub(self.config.max_reorg_depth);
+        let safe = latest.number.saturating_sub(self.config.max_reorg_depth);
         tracing::debug!(
-            latest = latest.header.number,
+            latest = latest.number,
             safe,
             resume = ?indexed,
             "initializing block watcher"
         );
 
-        self.update_next_pending_block(latest.header.number, latest.header.timestamp);
+        self.update_next_pending_block(latest.number, latest.timestamp);
 
         if let Some(indexed) = indexed {
             // The earliest retained snapshot is the rollback anchor. Replay
@@ -228,7 +241,7 @@ where
         // Query the recent blocks (those within the reorg window) so we can
         // detect reorgs going forward. On the rare chance of observing a reorg
         // mid-init, tear down and start the range again.
-        let latest_number = latest.header.number;
+        let latest_number = latest.number;
         let mut parent_hash = None;
         let mut canonical_latest = Some(latest);
         let mut number = safe + 1;
@@ -245,8 +258,8 @@ where
                 None => self.require_block(BlockId::number(number)).await?,
             };
 
-            if parent_hash.is_none_or(|hash| hash == block.header.parent_hash) {
-                parent_hash = Some(block.header.hash);
+            if parent_hash.is_none_or(|hash| hash == block.parent_hash) {
+                parent_hash = Some(block.hash);
                 self.recent.push_back(block);
                 number += 1;
             } else {
@@ -272,20 +285,20 @@ where
                 || {
                     self.config
                         .start_block
-                        .is_none_or(|start_block| block.header.number >= start_block)
+                        .is_none_or(|start_block| block.number >= start_block)
                 },
                 |indexed| {
                     indexed
                         .safe
                         .checked_add(1)
-                        .is_some_and(|from| block.header.number >= from)
+                        .is_some_and(|from| block.number >= from)
                 },
             )
         }) {
             self.queue.push_back(BlockUpdate::New {
-                number: block.header.number,
-                hash: block.header.hash,
-                logs_bloom: block.header.logs_bloom,
+                number: block.number,
+                hash: block.hash,
+                logs_bloom: block.logs_bloom,
             });
         }
 
@@ -304,7 +317,7 @@ where
             safe: self
                 .recent
                 .front()
-                .map(|block| block.header.number)
+                .map(|block| block.number)
                 .unwrap_or(self.pending.number)
                 .saturating_sub(1),
         }
@@ -322,10 +335,7 @@ where
         let mut retry_count = 0;
         let block = loop {
             self.wait_for_pending_block().await;
-            let pending = self
-                .provider
-                .get_block(BlockId::number(self.pending.number));
-            if let Some(block) = pending.hashes().await? {
+            if let Some(block) = self.get_block(BlockId::number(self.pending.number)).await? {
                 break block;
             }
 
@@ -352,25 +362,25 @@ where
         // uncle the last block and re-fetch its replacement on the next call.
         if let Some(last) = self
             .recent
-            .pop_back_if(|last| last.header.hash != block.header.parent_hash)
+            .pop_back_if(|last| last.hash != block.parent_hash)
         {
             self.pending = PendingBlock {
-                number: last.header.number,
-                timestamp_ms: last.header.timestamp * 1000,
+                number: last.number,
+                timestamp_ms: last.timestamp * 1000,
             };
-            tracing::debug!(number = last.header.number, "reorg detected, uncling block");
+            tracing::debug!(number = last.number, "reorg detected, uncling block");
             return Ok(BlockUpdate::Uncle {
-                number: last.header.number,
+                number: last.number,
             });
         }
 
-        let number = block.header.number;
-        let hash = block.header.hash;
-        let logs_bloom = block.header.logs_bloom;
+        let number = block.number;
+        let hash = block.hash;
+        let logs_bloom = block.logs_bloom;
 
         // Record the new block, keeping at most `max_reorg_depth` recent blocks,
         // and advance the pending block.
-        self.update_next_pending_block(block.header.number, block.header.timestamp);
+        self.update_next_pending_block(block.number, block.timestamp);
         self.recent.push_back(block);
         // TODO: This should be replaced by `VecDeque::truncate_front` once the
         // API stabilizes.
@@ -409,34 +419,30 @@ where
         let last_index = self
             .recent
             .iter()
-            .rposition(|block| next_number.is_none_or(|number| block.header.number < number));
+            .rposition(|block| next_number.is_none_or(|number| block.number < number));
         let Some(last_index) = last_index else {
             // We are past the max reorg depth, so there is nothing to do.
             return Ok(None);
         };
         let last = &self.recent[last_index];
 
-        let current = self
-            .provider
-            .get_block(BlockId::number(last.header.number))
-            .hashes()
-            .await?;
-        if current.map(|block| block.header.hash) == Some(last.header.hash) {
+        let current = self.get_block(BlockId::number(last.number)).await?;
+        if current.map(|block| block.hash) == Some(last.hash) {
             return Ok(None);
         }
 
         // Drop the no-longer-canonical block and all of its children, and rewind
         // the pending block to the one that was just uncled.
         let invalidated = InvalidatedBlock {
-            number: last.header.number,
-            hash: last.header.hash,
+            number: last.number,
+            hash: last.hash,
         };
         tracing::debug!(
             number = invalidated.number,
             hash = %invalidated.hash,
             "last block no longer canonical, invalidating"
         );
-        let timestamp = last.header.timestamp;
+        let timestamp = last.timestamp;
         self.recent.truncate(last_index);
         self.pending = PendingBlock {
             number: invalidated.number,
@@ -469,13 +475,10 @@ where
     }
 }
 
-async fn resolve_block_time<P>(provider: &P, block_time: BlockTime) -> Result<u64, Error>
-where
-    P: Provider,
-{
+fn resolve_block_time(provider: &Provider, block_time: BlockTime) -> Result<u64, Error> {
     match block_time {
         BlockTime::Millis(block_time) => Ok(block_time),
-        BlockTime::Auto => match provider.get_chain_id().await? {
+        BlockTime::Auto => match provider.chain_id() {
             100 => Ok(5_000),       // Gnosis Chain
             11155111 => Ok(12_000), // Sepolia
             chain_id => Err(Error::UnknownBlockTime { chain_id }),
@@ -489,8 +492,7 @@ mod tests {
     use crate::index::clock;
     use alloy::{
         primitives::keccak256,
-        providers::{ProviderBuilder, RootProvider},
-        rpc::types::Header,
+        rpc::types::{Block, Header},
         transports::mock::Asserter,
     };
     use std::time::Duration;
@@ -506,18 +508,13 @@ mod tests {
         }
     }
 
-    fn mock_provider(asserter: &Asserter) -> RootProvider {
-        ProviderBuilder::default().connect_mocked_client(asserter.clone())
-    }
-
     #[tokio::test]
     async fn auto_block_time_uses_chain_id() {
         let asserter = Asserter::new();
-        asserter.push_success(&100);
         asserter.push_success(&block(1000));
 
         let blocks = BlockWatcher::new(
-            mock_provider(&asserter),
+            Provider::mocked_with_chain(&asserter, 100),
             Config {
                 max_reorg_depth: 0,
                 ..Default::default()
@@ -531,15 +528,12 @@ mod tests {
         assert!(asserter.read_q().is_empty());
     }
 
-    async fn initialized_watcher_skip_ready(
-        asserter: &Asserter,
-        config: Config,
-    ) -> BlockWatcher<RootProvider> {
+    async fn initialized_watcher_skip_ready(asserter: &Asserter, config: Config) -> BlockWatcher {
         asserter.push_success(&block(1000));
         for number in (1000 - config.max_reorg_depth + 1)..1000 {
             asserter.push_success(&block(number));
         }
-        let mut blocks = BlockWatcher::new(mock_provider(asserter), config, None)
+        let mut blocks = BlockWatcher::new(Provider::mocked(asserter), config, None)
             .await
             .unwrap();
         let _ = blocks.ready();
@@ -554,7 +548,7 @@ mod tests {
         // historic block fetched on startup for reorg detection
         asserter.push_success(&block(999));
 
-        let mut blocks = BlockWatcher::new(mock_provider(&asserter), config(), None)
+        let mut blocks = BlockWatcher::new(Provider::mocked(&asserter), config(), None)
             .await
             .unwrap();
 
@@ -582,7 +576,7 @@ mod tests {
         asserter.push_success(&block(999));
 
         let mut blocks = BlockWatcher::new(
-            mock_provider(&asserter),
+            Provider::mocked(&asserter),
             config(),
             Some(BlockStatus {
                 latest: 900,
@@ -611,7 +605,7 @@ mod tests {
         asserter.push_success(&block(999));
 
         let mut blocks = BlockWatcher::new(
-            mock_provider(&asserter),
+            Provider::mocked(&asserter),
             config(),
             Some(BlockStatus {
                 latest: 900,
@@ -639,7 +633,7 @@ mod tests {
         asserter.push_success(&block(999));
 
         let mut blocks = BlockWatcher::new(
-            mock_provider(&asserter),
+            Provider::mocked(&asserter),
             config(),
             Some(BlockStatus {
                 latest: 1000,
@@ -660,7 +654,7 @@ mod tests {
         asserter.push_success(&block(999));
 
         let mut blocks = BlockWatcher::new(
-            mock_provider(&asserter),
+            Provider::mocked(&asserter),
             Config {
                 start_block: Some(900),
                 ..config()
@@ -688,7 +682,7 @@ mod tests {
         asserter.push_success(&block(999));
 
         let mut blocks = BlockWatcher::new(
-            mock_provider(&asserter),
+            Provider::mocked(&asserter),
             Config {
                 start_block: Some(999),
                 ..config()
@@ -714,7 +708,7 @@ mod tests {
         asserter.push_success(&block(999));
 
         let mut blocks = BlockWatcher::new(
-            mock_provider(&asserter),
+            Provider::mocked(&asserter),
             Config {
                 start_block: Some(1000),
                 ..config()
@@ -736,7 +730,7 @@ mod tests {
         asserter.push_success(&block(1000));
 
         let mut blocks = BlockWatcher::new(
-            mock_provider(&asserter),
+            Provider::mocked(&asserter),
             Config {
                 max_reorg_depth: 0,
                 ..config()
@@ -775,7 +769,7 @@ mod tests {
         asserter.push_success(&block(1000));
 
         let mut blocks = BlockWatcher::new(
-            mock_provider(&asserter),
+            Provider::mocked(&asserter),
             Config {
                 max_reorg_depth: 3,
                 ..config()
@@ -999,7 +993,7 @@ mod tests {
         asserter.push_success(&block(998));
         asserter.push_success(&block(999));
         let mut blocks = BlockWatcher::new(
-            mock_provider(&asserter),
+            Provider::mocked(&asserter),
             Config {
                 max_reorg_depth: 3,
                 ..config()
@@ -1031,7 +1025,7 @@ mod tests {
         let asserter = Asserter::new();
         asserter.push_success(&block(1000));
         let mut blocks = BlockWatcher::new(
-            mock_provider(&asserter),
+            Provider::mocked(&asserter),
             Config {
                 max_reorg_depth: 0,
                 ..config()

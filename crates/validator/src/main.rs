@@ -12,9 +12,8 @@ use self::{
     config::Config,
     service::{Action, ValidatorService},
 };
-use alloy::providers::{Provider, ProviderBuilder};
 use argh::FromArgs;
-use safenet_core::{Driver, observability, utils};
+use safenet_core::{Driver, observability, provider::Provider, utils};
 use std::{error::Error, path::PathBuf};
 
 #[derive(Debug, FromArgs)]
@@ -41,7 +40,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     observability::init(config.observability)?;
     tracing::debug!(config_file = %options.config_file.display(), "validator configuration loaded");
 
-    let provider = ProviderBuilder::new().connect(config.rpc.as_str()).await?;
+    let provider = Provider::connect(&config.rpc).await?;
     let pool = utils::connect_sqlite(config.database).await?;
 
     let consensus = config.validator.consensus;
@@ -49,7 +48,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         .getCoordinator()
         .call()
         .await?;
-    let chain_id = provider.get_chain_id().await?;
+    let chain_id = provider.chain_id();
     tracing::debug!(chain_id, %consensus, %coordinator, "resolved onchain contracts");
 
     let mut watched = vec![consensus, coordinator];

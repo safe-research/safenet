@@ -15,6 +15,7 @@ pub mod effects;
 pub mod index;
 pub mod kdf;
 pub mod observability;
+pub mod provider;
 pub mod serialization;
 pub mod state;
 pub mod tx;
