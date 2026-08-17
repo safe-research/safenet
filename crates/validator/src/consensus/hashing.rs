@@ -12,19 +12,11 @@ use crate::{
     consensus::epoch::EpochId,
 };
 use alloy::{
-    primitives::{Address, B256, Bytes, U256, b256, keccak256},
+    primitives::{Address, B256, Bytes, U256, keccak256},
     sol,
     sol_types::{Eip712Domain, SolStruct},
 };
 use std::num::NonZeroU64;
-
-/// `keccak256("TransactionProposal(uint64 epoch,address oracle,bytes oracleData,bytes32 safeTxHash)")`.
-///
-/// Kept in sync with `ConsensusMessages.TRANSACTION_PROPOSAL_TYPEHASH` onchain; used only by
-/// [`ConsensusDomain::transaction_proposal_hash_from_data_hash`], which rebuilds the digest from a
-/// pre-hashed `oracleData`.
-const TRANSACTION_PROPOSAL_TYPE_HASH: B256 =
-    b256!("9c6706f5afdb1de99f5ad39011e7770ce471f51d78380634f6cedb21a648b8d0");
 
 sol! {
     /// The classic Safe `SafeTx` EIP-712 struct.
@@ -110,44 +102,27 @@ impl ConsensusDomain {
         ))
     }
 
-    /// The consensus-domain hash of an oracle-backed Safe transaction proposal,
-    /// embedding the already-computed [`safe_tx_hash`] as its `safeTxHash` field.
+    /// The consensus-domain hash of an oracle-backed Safe transaction proposal, embedding the
+    /// already-computed [`safe_tx_hash`] and the `keccak256` of the oracle data preimage.
     ///
-    /// This is the proposal/signing path, which always holds the full `oracleData`, so it uses the
-    /// canonical `SolStruct` EIP-712 hashing (alloy hashes the `bytes` member itself).
+    /// Mirrors `ConsensusMessages.transactionProposal` onchain: it takes the oracle data already reduced
+    /// to its `keccak256` (EIP-712 encodes the message's `bytes oracleData` member as that hash), so a
+    /// caller holding the preimage `keccak256`s it first (see [`transaction_packet_hash`]) while the attest
+    /// path passes the hash straight from the `TransactionAttested` event (which only carries the hash,
+    /// keeping the validator callback a constant size). The encoding is spelled out by hand rather than via
+    /// `SolStruct::eip712_signing_hash`, whose signing hash requires a value holding the full preimage; the
+    /// type hash still comes from the generated `TransactionProposal` type, and the tests pin the result
+    /// against that canonical `SolStruct` implementation.
     pub fn transaction_proposal_hash(
-        &self,
-        epoch: EpochId,
-        oracle: Address,
-        oracle_data: Bytes,
-        safe_tx_hash: B256,
-    ) -> B256 {
-        TransactionProposal {
-            epoch: epoch.raw_value(),
-            oracle,
-            oracleData: oracle_data,
-            safeTxHash: safe_tx_hash,
-        }
-        .eip712_signing_hash(&self.0)
-    }
-
-    /// The same proposal digest, rebuilt from a pre-hashed `oracleData`.
-    ///
-    /// Used only on the attest path: the onchain `TransactionAttested` event carries just
-    /// `keccak256(oracleData)` (so the validator callback stays a constant size) and the full bytes
-    /// are not available there. EIP-712 encodes the `bytes oracleData` member as its `keccak256`, so
-    /// this produces a digest identical to [`transaction_proposal_hash`] for the same data (asserted
-    /// in the tests). It is spelled out by hand because alloy's `SolStruct` signing hash requires a
-    /// value holding the full bytes, which this path does not have.
-    pub fn transaction_proposal_hash_from_data_hash(
         &self,
         epoch: EpochId,
         oracle: Address,
         oracle_data_hash: B256,
         safe_tx_hash: B256,
     ) -> B256 {
+        let type_hash = keccak256(TransactionProposal::eip712_encode_type().as_bytes());
         let mut data = [0u8; 160];
-        data[0..32].copy_from_slice(TRANSACTION_PROPOSAL_TYPE_HASH.as_slice());
+        data[0..32].copy_from_slice(type_hash.as_slice());
         data[32..64].copy_from_slice(&U256::from(epoch.raw_value()).to_be_bytes::<32>());
         data[64..96].copy_from_slice(oracle.into_word().as_slice());
         data[96..128].copy_from_slice(oracle_data_hash.as_slice());
@@ -161,9 +136,9 @@ impl ConsensusDomain {
         keccak256(message)
     }
 
-    /// The consensus-domain hash of an oracle-backed Safe transaction packet:
-    /// shorthand for [`transaction_proposal_hash`] with [`safe_tx_hash`]
-    /// computed from `tx`.
+    /// The consensus-domain hash of an oracle-backed Safe transaction packet, computed from the two
+    /// preimages the packet holds: the oracle data and the full `tx`. Reduces both (`keccak256` of the
+    /// oracle data, [`safe_tx_hash`] of the transaction) and delegates to [`transaction_proposal_hash`].
     pub fn transaction_packet_hash(
         &self,
         epoch: EpochId,
@@ -171,7 +146,7 @@ impl ConsensusDomain {
         oracle_data: Bytes,
         tx: &SafeTransaction,
     ) -> B256 {
-        self.transaction_proposal_hash(epoch, oracle, oracle_data, safe_tx_hash(tx))
+        self.transaction_proposal_hash(epoch, oracle, keccak256(&oracle_data), safe_tx_hash(tx))
     }
 
     /// The consensus-domain hash of an epoch rollover proposal.
@@ -236,25 +211,27 @@ mod tests {
         );
     }
 
-    /// The hand-rolled attest-path reconstruction must match the canonical `SolStruct`-based proposal
-    /// hash for the same data (EIP-712 encodes the `bytes oracleData` member as its keccak256).
+    /// The hand-rolled proposal hash must match alloy's canonical `SolStruct::eip712_signing_hash` over
+    /// the full-data `TransactionProposal` message (EIP-712 encodes the `bytes oracleData` member as its
+    /// keccak256), so the hand-rolled encoding stays correct against the reference implementation.
     #[test]
-    fn proposal_hash_from_data_hash_matches_full_data() {
+    fn proposal_hash_matches_solstruct() {
         for oracle_data in [Bytes::new(), Bytes::from_static(&[0xca, 0xfe])] {
             let safe_tx = safe_tx();
-            let full = TEST_DOMAIN.transaction_packet_hash(
+            let hand_rolled = TEST_DOMAIN.transaction_packet_hash(
                 EPOCH_ONE,
                 TEST_ADDRESS,
                 oracle_data.clone(),
                 &safe_tx,
             );
-            let from_hash = TEST_DOMAIN.transaction_proposal_hash_from_data_hash(
-                EPOCH_ONE,
-                TEST_ADDRESS,
-                keccak256(&oracle_data),
-                safe_tx_hash(&safe_tx),
-            );
-            assert_eq!(full, from_hash);
+            let reference = TransactionProposal {
+                epoch: EPOCH_ONE.raw_value(),
+                oracle: TEST_ADDRESS,
+                oracleData: oracle_data.clone(),
+                safeTxHash: safe_tx_hash(&safe_tx),
+            }
+            .eip712_signing_hash(&TEST_DOMAIN.0);
+            assert_eq!(hand_rolled, reference);
         }
     }
 

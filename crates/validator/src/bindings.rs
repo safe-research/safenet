@@ -5,11 +5,8 @@
 //! values are transcribed only where a return is actually decoded onchain
 //! (`getValidatorStaker`); the mutating calls omit them.
 
-// `sol!` expands to constructors whose arity matches the onchain event/function field count, and the
-// oracle attestation carries enough fields to trip `too_many_arguments`. The offending constructor is
-// macro-generated, so it cannot be annotated per-function (an `#[allow]` on the `sol!` invocation is
-// reported as unused); the allow therefore sits at module scope, where the only hand-written item is a
-// single-argument `TryFrom` that can never trip the lint.
+// A macro-generated `sol!` constructor trips `too_many_arguments`; it can't be annotated per-item, so
+// the allow sits at module scope (the only hand-written item here is a single-argument `TryFrom`).
 #![allow(clippy::too_many_arguments)]
 
 use alloy::sol;
