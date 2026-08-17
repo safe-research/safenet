@@ -34,6 +34,8 @@ jobs:
           name: sentinel-integration-logs
           path: |
             anvil_sentinel_logs.txt
+            sentinel_engine_a_logs.txt
+            sentinel_engine_b_logs.txt
             sentinel_a_logs.txt
             sentinel_b_logs.txt
           if-no-files-found: ignore

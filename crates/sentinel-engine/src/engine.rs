@@ -28,9 +28,9 @@ pub enum Verdict {
 impl SentinelEngine {
     /// Assesses a proposed Safe transaction using the configured checks.
     ///
-    /// There are no checks in this phase, so the engine abstains from voting on
-    /// every transaction.
+    /// This temporary implementation approves every transaction so sentinel
+    /// integration tests can exercise the API before checks are moved here.
     pub async fn security_check(&self, _transaction: SafeTransaction) -> Verdict {
-        Verdict::Abstain
+        Verdict::Secure
     }
 }

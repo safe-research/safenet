@@ -19,6 +19,8 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
 # --- Configuration ---
 RPC_URL="http://127.0.0.1:8545"
+SENTINEL_A_ENGINE_URL="http://127.0.0.1:5473"
+SENTINEL_B_ENGINE_URL="http://127.0.0.1:5474"
 CHAIN_ID=31337
 BLOCK_TIME_SECONDS=1
 REQUEST_FEE=1000
@@ -42,18 +44,9 @@ DEPLOYER_PK=0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80
 # the genuine dispute exercised in step 10 below.
 DISPUTED_TX_TO=0x3333333333333333333333333333333333333333
 
-# --- 1. Build the Rust sentinel ---
-# Built up front, before Anvil or anything else starts, so a compile error
-# fails fast and no compile time is wasted while other test infrastructure
-# sits idle in the background.
-echo "Building the Rust sentinel..."
-cargo build --package sentinel
-
-# --- 2. Start Anvil with a 1-second block interval ---
-echo "Starting Anvil..."
-anvil --block-time "$BLOCK_TIME_SECONDS" > "$ROOT/anvil_sentinel_logs.txt" 2>&1 &
-PIDS=("$!")
-
+# Register cleanup before anything, to make sure we don't leave anything running
+# in the background in case of an error.
+PIDS=()
 cleanup() {
 	echo "Stopping background processes (${PIDS[*]})..."
 	for pid in "${PIDS[@]}"; do
@@ -62,9 +55,43 @@ cleanup() {
 		# left orphaned holding a port.
 		kill -- "-$pid" >/dev/null 2>&1 || true
 	done
-	rm -f "$SENTINEL_A_CONFIG" "$SENTINEL_B_CONFIG"
+	rm -f "$SENTINEL_A_CONFIG" "$SENTINEL_B_CONFIG" \
+		"$SENTINEL_A_ENGINE_CONFIG" "$SENTINEL_B_ENGINE_CONFIG"
 }
 trap cleanup EXIT
+
+# --- 1. Build the Rust sentinel and sentinel engine ---
+# Built up front, before Anvil or anything else starts, so a compile error
+# fails fast and no compile time is wasted while other test infrastructure
+# sits idle in the background.
+echo "Building the Rust sentinel and sentinel engine..."
+cargo build --package sentinel --package sentinel-engine
+
+# --- 2. Start Anvil with a 1-second block interval ---
+echo "Starting Anvil..."
+anvil --block-time "$BLOCK_TIME_SECONDS" > "$ROOT/anvil_sentinel_logs.txt" 2>&1 &
+PIDS+=("$!")
+
+sentinel_engine_config() {
+	local bind_address=$1
+	cat <<EOF
+bind_address = "$bind_address"
+EOF
+}
+
+SENTINEL_A_ENGINE_CONFIG=$(mktemp)
+sentinel_engine_config "127.0.0.1:5473" >"$SENTINEL_A_ENGINE_CONFIG"
+SENTINEL_B_ENGINE_CONFIG=$(mktemp)
+sentinel_engine_config "127.0.0.1:5474" >"$SENTINEL_B_ENGINE_CONFIG"
+
+echo "Starting sentinel engine A..."
+cargo run --package sentinel-engine -- --config-file "$SENTINEL_A_ENGINE_CONFIG" >"$ROOT/sentinel_engine_a_logs.txt" 2>&1 &
+PIDS+=("$!")
+
+echo "Starting sentinel engine B..."
+cargo run --package sentinel-engine -- --config-file "$SENTINEL_B_ENGINE_CONFIG" >"$ROOT/sentinel_engine_b_logs.txt" 2>&1 &
+PIDS+=("$!")
+
 sleep 2
 
 # --- 3. Deploy contracts ---
@@ -166,6 +193,7 @@ STATE_RESOLVED_APPROVED=3
 sentinel_config() {
 	local signer=$1
 	local blocklist=$2
+	local remote_check_url=$3
 	cat <<EOF
 rpc = "$RPC_URL"
 signer = "$signer"
@@ -177,6 +205,7 @@ consensus = "$CONSENSUS"
 fee_token = "$FEE_TOKEN"
 voting_window = $((COMMIT_WINDOW + REVEAL_WINDOW))
 blocklist = $blocklist
+remote_check_url = "$remote_check_url/v1/security-check"
 address_poisoning_lookback_blocks = 1000
 
 [index]
@@ -185,12 +214,12 @@ EOF
 }
 
 SENTINEL_A_CONFIG=$(mktemp)
-sentinel_config "$SENTINEL_A_PK" "[]" >"$SENTINEL_A_CONFIG"
+sentinel_config "$SENTINEL_A_PK" "[]" "$SENTINEL_A_ENGINE_URL" >"$SENTINEL_A_CONFIG"
 SENTINEL_B_CONFIG=$(mktemp)
 # Sentinel B alone blocklists $DISPUTED_TX_TO, so it denies a request
 # proposing a call to it while Sentinel A approves — the genuine dispute
 # exercised in step 10 below.
-sentinel_config "$SENTINEL_B_PK" "[\"$DISPUTED_TX_TO\"]" >"$SENTINEL_B_CONFIG"
+sentinel_config "$SENTINEL_B_PK" "[\"$DISPUTED_TX_TO\"]" "$SENTINEL_B_ENGINE_URL" >"$SENTINEL_B_CONFIG"
 
 echo "Starting sentinel A..."
 cargo run --package sentinel -- --config-file "$SENTINEL_A_CONFIG" >"$ROOT/sentinel_a_logs.txt" 2>&1 &
