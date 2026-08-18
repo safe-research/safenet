@@ -68,4 +68,36 @@ contract ConsensusMessagesTest is Test {
 
         assertEq(message, hex"8080890fb312c10d10238e8eb3d58a5682e4e691862afee94e94726ad1a16dd5");
     }
+
+    /// The EIP-712 message families are domain-separated by their distinct type hashes: an epoch-rollover
+    /// message and a transaction-proposal message (under the same domain, with numerically overlapping
+    /// inputs) must never collide.
+    function test_messageFamiliesDoNotCollide() public pure {
+        bytes32 sep = ConsensusMessages.domain(23, 0x4838B106FCe9647Bdf1E7877BF73cE8B0BAD5f97);
+        bytes32 rollover = sep.epochRollover(1, 2, 3, Secp256k1.Point({x: 7, y: 9}));
+        bytes32 proposal = sep.transactionProposal(1, address(uint160(7)), bytes32(uint256(9)), bytes32(uint256(2)));
+        assertTrue(rollover != proposal, "epochRollover and transactionProposal must be domain-separated");
+    }
+
+    /// transactionProposal is injective in each of its arguments (and in the domain separator): changing
+    /// the epoch, oracle, oracleData hash, Safe tx hash, or the consensus deployment changes the message.
+    /// This is what makes an attestation bind exactly its (epoch, oracle, oracleData, safeTx) tuple.
+    function test_transactionProposal_injectiveInEachField() public pure {
+        bytes32 sep = ConsensusMessages.domain(23, 0x4838B106FCe9647Bdf1E7877BF73cE8B0BAD5f97);
+        uint64 epoch = 5;
+        address oracle = 0x1234567890123456789012345678901234567890;
+        bytes32 odh = keccak256(hex"cafe");
+        bytes32 stx = bytes32(uint256(42));
+
+        bytes32 base = sep.transactionProposal(epoch, oracle, odh, stx);
+        assertTrue(base != sep.transactionProposal(epoch + 1, oracle, odh, stx), "epoch is bound");
+        assertTrue(base != sep.transactionProposal(epoch, address(uint160(oracle) + 1), odh, stx), "oracle is bound");
+        assertTrue(
+            base != sep.transactionProposal(epoch, oracle, keccak256(hex"beef"), stx), "oracleData hash is bound"
+        );
+        assertTrue(base != sep.transactionProposal(epoch, oracle, odh, bytes32(uint256(43))), "safeTxHash is bound");
+
+        bytes32 sep2 = ConsensusMessages.domain(23, 0x1111111111111111111111111111111111111111);
+        assertTrue(base != sep2.transactionProposal(epoch, oracle, odh, stx), "domain separator is bound");
+    }
 }
