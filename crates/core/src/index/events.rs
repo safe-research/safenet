@@ -6,9 +6,10 @@
 //! implements [`Events`] which the watcher decodes raw logs into.
 
 use super::{blocks::BlockUpdate, bloom};
+use crate::provider::Provider;
 use alloy::{
     primitives::{Address, B256, Bloom},
-    providers::Provider,
+    providers::Provider as _,
     rpc::types::{Filter, Log},
     transports::TransportError,
 };
@@ -195,8 +196,8 @@ enum Step {
 }
 
 /// Watches for the logs of the events `E` emitted by a set of addresses.
-pub struct EventWatcher<P, E> {
-    provider: P,
+pub struct EventWatcher<E> {
+    provider: Provider,
     config: Config,
     addresses: Vec<Address>,
     topics: Vec<B256>,
@@ -204,13 +205,12 @@ pub struct EventWatcher<P, E> {
     _events: PhantomData<fn() -> E>,
 }
 
-impl<P, E> EventWatcher<P, E>
+impl<E> EventWatcher<E>
 where
-    P: Provider,
     E: Events,
 {
     /// Creates an event watcher for the events `E` emitted by `addresses`.
-    pub fn new(provider: P, config: Config, addresses: Vec<Address>) -> Self {
+    pub fn new(provider: Provider, config: Config, addresses: Vec<Address>) -> Self {
         Self {
             provider,
             config,
@@ -598,7 +598,6 @@ mod tests {
     use super::*;
     use alloy::{
         primitives::{Address, address},
-        providers::{ProviderBuilder, RootProvider},
         sol,
         sol_types::SolEvent,
         transports::mock::Asserter,
@@ -662,11 +661,8 @@ mod tests {
         }
     }
 
-    fn watcher(
-        asserter: &Asserter,
-        config: Config,
-    ) -> EventWatcher<RootProvider, Erc20::Erc20Events> {
-        let provider = ProviderBuilder::default().connect_mocked_client(asserter.clone());
+    fn watcher(asserter: &Asserter, config: Config) -> EventWatcher<Erc20::Erc20Events> {
+        let provider = Provider::mocked(asserter);
         EventWatcher::new(provider, config, vec![WATCHED])
     }
 

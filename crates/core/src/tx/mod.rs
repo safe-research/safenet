@@ -18,10 +18,10 @@ use self::{
     types::AllocatedTransaction,
 };
 pub use self::{signer::Signer, types::Transaction};
-use crate::index::BlockStatus;
+use crate::{index::BlockStatus, provider::Provider};
 use alloy::{
     eips::{BlockId, eip1559::Eip1559Estimation},
-    providers::Provider,
+    providers::Provider as _,
     transports::TransportError,
 };
 use serde::Deserialize;
@@ -93,9 +93,8 @@ impl Default for Config {
 }
 
 /// A queue of transactions to submit onchain.
-pub struct TransactionQueue<P> {
-    provider: P,
-    chain_id: u64,
+pub struct TransactionQueue {
+    provider: Provider,
     signer: Signer,
     storage: TransactionStorage,
     config: Config,
@@ -104,24 +103,19 @@ pub struct TransactionQueue<P> {
     fee_cache: Option<Eip1559Estimation>,
 }
 
-impl<P> TransactionQueue<P>
-where
-    P: Provider,
-{
+impl TransactionQueue {
     /// Creates a transaction queue that signs `chain_id` transactions with
     /// `signer`, reads chain state and broadcasts through `provider`, and
     /// persists its state in `pool`.
     pub async fn new(
-        provider: P,
+        provider: Provider,
         signer: Signer,
         pool: SqlitePool,
         config: Config,
     ) -> Result<Self, Error> {
-        let chain_id = provider.get_chain_id().await?;
         let storage = TransactionStorage::new(pool).await?;
         Ok(Self {
             provider,
-            chain_id,
             signer,
             storage,
             config,
@@ -249,8 +243,9 @@ where
         transaction: AllocatedTransaction,
         block: u64,
     ) -> Result<(), Error> {
+        let chain_id = self.provider.chain_id();
         let fees = self.fees().await?;
-        let transaction = transaction.build(self.chain_id, fees);
+        let transaction = transaction.build(chain_id, fees);
         let submission = Submission {
             block: Some(block),
             nonce: transaction.nonce,
@@ -377,7 +372,6 @@ mod tests {
     use super::*;
     use alloy::{
         primitives::{Address, B256, U64, address, keccak256},
-        providers::{ProviderBuilder, RootProvider},
         rpc::{json_rpc::ErrorPayload, types::FeeHistory},
         transports::mock::Asserter,
     };
@@ -387,9 +381,8 @@ mod tests {
     const ENTRY_POINT: Address = address!("0x5FF137D4b0FDCD49DcA30c7CF57E578a026d2789");
 
     /// A transaction queue backed by a mocked RPC client and an in-memory pool.
-    async fn queue(asserter: &Asserter) -> TransactionQueue<RootProvider> {
-        let provider = ProviderBuilder::default().connect_mocked_client(asserter.clone());
-        asserter.push_success(&U64::from(CHAIN_ID));
+    async fn queue(asserter: &Asserter) -> TransactionQueue {
+        let provider = Provider::mocked_with_chain(asserter, CHAIN_ID);
         let private_key = SigningKey::from_slice(keccak256("test signer").as_slice()).unwrap();
         let signer = Signer::new(private_key);
         let pool = SqlitePool::connect("sqlite://:memory:").await.unwrap();
@@ -422,7 +415,7 @@ mod tests {
     }
 
     /// Returns the only in-flight transaction stored by `queue`.
-    async fn in_flight(queue: &TransactionQueue<RootProvider>) -> AllocatedTransaction {
+    async fn in_flight(queue: &TransactionQueue) -> AllocatedTransaction {
         let mut transactions = queue.storage.stale_submissions(Some(1_000)).await.unwrap();
         assert_eq!(transactions.len(), 1);
         transactions.pop().unwrap()

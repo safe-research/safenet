@@ -7,7 +7,8 @@ mod bloom;
 mod clock;
 pub mod events;
 
-use alloy::{primitives::Address, providers::Provider, rpc::types::error::EthRpcErrorCode};
+use crate::provider::Provider;
+use alloy::{primitives::Address, rpc::types::error::EthRpcErrorCode};
 use blocks::BlockWatcher;
 use events::{EventWatcher, Events};
 use serde::Deserialize;
@@ -54,21 +55,20 @@ pub enum Update<E> {
 
 /// Watches the chain head and the logs of the events `E`, producing an ordered
 /// stream of [`Update`]s.
-pub struct Watcher<P, E> {
-    blocks: BlockWatcher<P>,
-    events: EventWatcher<P, E>,
+pub struct Watcher<E> {
+    blocks: BlockWatcher,
+    events: EventWatcher<E>,
 }
 
-impl<P, E> Watcher<P, E>
+impl<E> Watcher<E>
 where
-    P: Provider + Clone,
     E: Events,
 {
     /// Creates and initializes a watcher for the events `E` emitted by
     /// `addresses`, resuming from the persisted snapshot range (see
     /// [`BlockWatcher::new`]).
     pub async fn new(
-        provider: P,
+        provider: Provider,
         config: Config,
         addresses: Vec<Address>,
         indexed: Option<BlockStatus>,
@@ -148,7 +148,6 @@ mod tests {
     use alloy::{
         consensus,
         primitives::{Address, B256, Bloom, U256, address},
-        providers::{ProviderBuilder, RootProvider},
         rpc::{
             json_rpc::ErrorPayload,
             types::{Block, Header, Log},
@@ -239,8 +238,8 @@ mod tests {
         asserter: &Asserter,
         config: Config,
         indexed: Option<BlockStatus>,
-    ) -> Watcher<RootProvider, Weth::WethEvents> {
-        let provider = ProviderBuilder::default().connect_mocked_client(asserter.clone());
+    ) -> Watcher<Weth::WethEvents> {
+        let provider = Provider::mocked(asserter);
         Watcher::new(provider, config, vec![WATCHED], indexed)
             .await
             .unwrap()

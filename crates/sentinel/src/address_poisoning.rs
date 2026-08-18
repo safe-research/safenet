@@ -27,7 +27,7 @@ use crate::{
 };
 use alloy::{
     primitives::Address,
-    providers::{DynProvider, Provider},
+    providers::Provider as _,
     rpc::types::Filter,
     sol,
     sol_types::{SolCall, SolEvent},
@@ -36,6 +36,7 @@ use safe_tx::{
     bindings::erc20::{approveCall, transferCall, transferFromCall},
     rule::RuleId,
 };
+use safenet_core::provider::Provider;
 
 sol! {
     event Transfer(address indexed from, address indexed to, uint256 amount);
@@ -88,12 +89,12 @@ fn decode_target(tx: &SafeTransaction) -> Option<(Address, TargetKind)> {
 /// Runs the R-4.3/R-4.4 address-poisoning check (see module docs for its
 /// current scope and limitations).
 pub struct AddressPoisoningChecker {
-    provider: DynProvider,
+    provider: Provider,
     lookback_blocks: u64,
 }
 
 impl AddressPoisoningChecker {
-    pub fn new(provider: DynProvider, lookback_blocks: u64) -> Self {
+    pub fn new(provider: Provider, lookback_blocks: u64) -> Self {
         Self {
             provider,
             lookback_blocks,
@@ -167,16 +168,14 @@ impl Checker for AddressPoisoningChecker {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use alloy::{primitives::U256, providers::ProviderBuilder, transports::mock::Asserter};
+    use alloy::{primitives::U256, transports::mock::Asserter};
 
     const SAFE: Address = Address::new([1u8; 20]);
     const TOKEN: Address = Address::new([2u8; 20]);
     const CANDIDATE: Address = Address::new([3u8; 20]);
 
     fn checker(asserter: &Asserter) -> AddressPoisoningChecker {
-        let provider = ProviderBuilder::default()
-            .connect_mocked_client(asserter.clone())
-            .erased();
+        let provider = Provider::mocked(asserter);
         AddressPoisoningChecker::new(provider, 1_000)
     }
 

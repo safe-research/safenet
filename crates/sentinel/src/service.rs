@@ -752,15 +752,16 @@ impl Service for SentinelService {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::bindings::consensus::{Operation, SafeTransaction};
-    use crate::bindings::oracle::RequestState as OnchainRequestState;
+    use crate::bindings::{
+        consensus::{Operation, SafeTransaction},
+        oracle::RequestState as OnchainRequestState,
+    };
     use alloy::{
         primitives::{Bytes, Uint, address, aliases::U96, keccak256},
-        providers::Provider as _,
         signers::k256::ecdsa::SigningKey,
     };
     use safe_tx::rule::RuleId;
-    use safenet_core::index::EventLog;
+    use safenet_core::{index::EventLog, provider::Provider};
 
     const ORACLE: Address = address!("1111111111111111111111111111111111111111");
     const FEE_TOKEN: Address = address!("2222222222222222222222222222222222222222");
@@ -788,9 +789,7 @@ mod tests {
         // `Effect::DynamicCheck` resolution, so neither checker below is ever
         // actually invoked; both are unconfigured/mocked stand-ins.
         let address_poisoning_checker = AddressPoisoningChecker::new(
-            alloy::providers::ProviderBuilder::default()
-                .connect_mocked_client(alloy::transports::mock::Asserter::new())
-                .erased(),
+            Provider::mocked(&alloy::transports::mock::Asserter::new()),
             1_000,
         );
         SentinelService::new(

@@ -15,12 +15,9 @@ use self::{
     address_poisoning::AddressPoisoningChecker, config::Config, dynamic_checker::RemoteChecker,
     service::SentinelService, static_checker::StaticChecker,
 };
-use alloy::{
-    primitives::U256,
-    providers::{Provider, ProviderBuilder},
-};
+use alloy::primitives::U256;
 use argh::FromArgs;
-use safenet_core::{Driver, observability, utils};
+use safenet_core::{Driver, observability, provider::Provider, utils};
 use std::{error::Error, path::PathBuf};
 
 #[derive(Debug, FromArgs)]
@@ -47,9 +44,9 @@ async fn main() -> Result<(), Box<dyn Error>> {
     observability::init(config.observability)?;
     tracing::debug!(config_file = %options.config_file.display(), "sentinel configuration loaded");
 
-    let provider = ProviderBuilder::new().connect(config.rpc.as_str()).await?;
+    let provider = Provider::connect(&config.rpc).await?;
     let pool = utils::connect_sqlite(config.database).await?;
-    let chain_id = U256::from(provider.get_chain_id().await?);
+    let chain_id = U256::from(provider.chain_id());
 
     let service = SentinelService::new(
         config.oracle,
@@ -60,7 +57,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         config.sentinel.voting_window,
         StaticChecker::new(config.sentinel.blocklist),
         AddressPoisoningChecker::new(
-            provider.clone().erased(),
+            provider.clone(),
             config.sentinel.address_poisoning_lookback_blocks,
         ),
         RemoteChecker::new(config.sentinel.remote_check_url),

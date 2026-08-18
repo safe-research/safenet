@@ -80,19 +80,14 @@ impl EffectHandler<Effect, Resume> for Handler {
 mod tests {
     use super::*;
     use crate::{address_poisoning::AddressPoisoningChecker, dynamic_checker::RemoteChecker};
-    use alloy::{
-        primitives::Address,
-        providers::{Provider, ProviderBuilder},
-        transports::mock::Asserter,
-    };
+    use alloy::{primitives::Address, transports::mock::Asserter};
+    use safenet_core::provider::Provider;
 
     const SAFE: Address = Address::new([1u8; 20]);
     const REQUEST_ID: B256 = B256::repeat_byte(0x11);
 
     fn address_poisoning() -> AddressPoisoningChecker {
-        let provider = ProviderBuilder::default()
-            .connect_mocked_client(Asserter::new())
-            .erased();
+        let provider = Provider::mocked(&Asserter::new());
         AddressPoisoningChecker::new(provider, 1_000)
     }
 

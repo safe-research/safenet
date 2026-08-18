@@ -10,11 +10,12 @@
 use crate::{
     effects::{EffectHandler, EffectManager},
     index::{self, Update, Watcher, events::Events},
+    provider::Provider,
     state::{self, StateMachine, StateTransition},
     tx::{self, Signer, Transaction, TransactionQueue},
     utils,
 };
-use alloy::{primitives::Address, providers::Provider};
+use alloy::primitives::Address;
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
 use sqlx::sqlite::SqlitePool;
 use std::{fmt::Debug, time::Duration};
@@ -92,20 +93,19 @@ pub trait Service {
 
 /// Drives a [`Service`] by wiring its indexer, state machine and transaction
 /// queue together.
-pub struct Driver<P, S>
+pub struct Driver<S>
 where
     S: Service,
 {
-    watcher: Watcher<P, S::Event>,
+    watcher: Watcher<S::Event>,
     state: StateMachine<S::State, S::Transition>,
     effects: EffectManager<S::Effects, S::Effect, S::Resume>,
     actions: S::Actions,
-    transactions: TransactionQueue<P>,
+    transactions: TransactionQueue,
 }
 
-impl<P, S> Driver<P, S>
+impl<S> Driver<S>
 where
-    P: Provider + Clone,
     S: Service,
 {
     /// Creates a driver that wires together the indexer, state machine and
@@ -118,7 +118,7 @@ where
     /// with the state machine.
     pub async fn new(
         service: S,
-        provider: P,
+        provider: Provider,
         signer: Signer,
         pool: SqlitePool,
         addresses: Vec<Address>,
