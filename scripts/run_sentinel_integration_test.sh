@@ -19,8 +19,8 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
 # --- Configuration ---
 RPC_URL="http://127.0.0.1:8545"
-SENTINEL_A_ENGINE_URL="http://127.0.0.1:5473"
-SENTINEL_B_ENGINE_URL="http://127.0.0.1:5474"
+SENTINEL_A_ENGINE_ADDR="127.0.0.1:5473"
+SENTINEL_B_ENGINE_ADDR="127.0.0.1:5474"
 CHAIN_ID=31337
 BLOCK_TIME_SECONDS=1
 REQUEST_FEE=1000
@@ -72,27 +72,6 @@ cargo build --package sentinel --package sentinel-engine
 echo "Starting Anvil..."
 anvil --block-time "$BLOCK_TIME_SECONDS" > "$ROOT/anvil_sentinel_logs.txt" 2>&1 &
 PIDS+=("$!")
-
-sentinel_engine_config() {
-	local bind_address=$1
-	cat <<EOF
-bind_address = "$bind_address"
-EOF
-}
-
-SENTINEL_A_ENGINE_CONFIG=$(mktemp)
-sentinel_engine_config "127.0.0.1:5473" >"$SENTINEL_A_ENGINE_CONFIG"
-SENTINEL_B_ENGINE_CONFIG=$(mktemp)
-sentinel_engine_config "127.0.0.1:5474" >"$SENTINEL_B_ENGINE_CONFIG"
-
-echo "Starting sentinel engine A..."
-"$ROOT/target/debug/sentinel-engine" --config-file "$SENTINEL_A_ENGINE_CONFIG" >"$ROOT/sentinel_engine_a_logs.txt" 2>&1 &
-PIDS+=("$!")
-
-echo "Starting sentinel engine B..."
-"$ROOT/target/debug/sentinel-engine" --config-file "$SENTINEL_B_ENGINE_CONFIG" >"$ROOT/sentinel_engine_b_logs.txt" 2>&1 &
-PIDS+=("$!")
-
 sleep 2
 
 # --- 3. Deploy contracts ---
@@ -188,13 +167,19 @@ REQUEST_DENY_SENTINEL_COUNT_INDEX=6
 STATE_FROZEN=2
 STATE_RESOLVED_APPROVED=3
 
-# --- 5. Spin up both Rust sentinels ---
+# --- 5. Spin up both Rust sentinels with their engines ---
 # Already built in step 1, so this just runs it — twice, once per account,
-# each with its own config file and in-memory database.
+# each with its own config, engine, and in-memory database.
+sentinel_engine_config() {
+	local bind_address=$1
+	cat <<EOF
+bind_address = "$bind_address"
+EOF
+}
 sentinel_config() {
 	local signer=$1
 	local blocklist=$2
-	local remote_check_url=$3
+	local remote_check_addr=$3
 	cat <<EOF
 rpc = "$RPC_URL"
 signer = "$signer"
@@ -206,7 +191,7 @@ consensus = "$CONSENSUS"
 fee_token = "$FEE_TOKEN"
 voting_window = $((COMMIT_WINDOW + REVEAL_WINDOW))
 blocklist = $blocklist
-remote_check_url = "$remote_check_url/v1/security-check"
+remote_check_url = "http://$remote_check_addr/v1/security-check"
 address_poisoning_lookback_blocks = 1000
 
 [index]
@@ -214,16 +199,29 @@ block_time = $((BLOCK_TIME_SECONDS * 1000))
 EOF
 }
 
+SENTINEL_A_ENGINE_CONFIG=$(mktemp)
+sentinel_engine_config "$SENTINEL_A_ENGINE_ADDR" >"$SENTINEL_A_ENGINE_CONFIG"
 SENTINEL_A_CONFIG=$(mktemp)
-sentinel_config "$SENTINEL_A_PK" "[]" "$SENTINEL_A_ENGINE_URL" >"$SENTINEL_A_CONFIG"
+sentinel_config "$SENTINEL_A_PK" "[]" "$SENTINEL_A_ENGINE_ADDR" >"$SENTINEL_A_CONFIG"
+
+SENTINEL_B_ENGINE_CONFIG=$(mktemp)
+sentinel_engine_config "$SENTINEL_B_ENGINE_ADDR" >"$SENTINEL_B_ENGINE_CONFIG"
 SENTINEL_B_CONFIG=$(mktemp)
 # Sentinel B alone blocklists $DISPUTED_TX_TO, so it denies a request
 # proposing a call to it while Sentinel A approves — the genuine dispute
 # exercised in step 10 below.
-sentinel_config "$SENTINEL_B_PK" "[\"$DISPUTED_TX_TO\"]" "$SENTINEL_B_ENGINE_URL" >"$SENTINEL_B_CONFIG"
+sentinel_config "$SENTINEL_B_PK" "[\"$DISPUTED_TX_TO\"]" "$SENTINEL_B_ENGINE_ADDR" >"$SENTINEL_B_CONFIG"
+
+echo "Starting sentinel engine A..."
+"$ROOT/target/debug/sentinel-engine" --config-file "$SENTINEL_A_ENGINE_CONFIG" >"$ROOT/sentinel_engine_a_logs.txt" 2>&1 &
+PIDS+=("$!")
 
 echo "Starting sentinel A..."
 "$ROOT/target/debug/sentinel" --config-file "$SENTINEL_A_CONFIG" >"$ROOT/sentinel_a_logs.txt" 2>&1 &
+PIDS+=("$!")
+
+echo "Starting sentinel engine B..."
+"$ROOT/target/debug/sentinel-engine" --config-file "$SENTINEL_B_ENGINE_CONFIG" >"$ROOT/sentinel_engine_b_logs.txt" 2>&1 &
 PIDS+=("$!")
 
 echo "Starting sentinel B..."
