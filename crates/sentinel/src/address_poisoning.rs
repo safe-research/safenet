@@ -14,7 +14,7 @@
 //! **This check does not yet deny anything.** A found prior event is
 //! unforgeable evidence of an established relationship, so it approves
 //! immediately — no further check (including the operator's configured
-//! `RemoteChecker`) needs to run. Not finding one is inconclusive rather
+//! sentinel engine) needs to run. Not finding one is inconclusive rather
 //! than suspicious: a single exact-match lookup isn't strong enough evidence
 //! on its own to deny a first-time-looking recipient (and the Charter's own
 //! §2.4 Notes caution against treating novelty alone as grounds for denial),

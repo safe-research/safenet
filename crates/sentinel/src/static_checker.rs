@@ -63,9 +63,9 @@ impl Check for ExcessiveApproval {
 
 /// Decides whether a proposed oracle transaction should be approved by
 /// running deterministic, local, synchronous checks against its calldata —
-/// as opposed to [`crate::dynamic_checker`]'s externally-pluggable,
-/// potentially statistical/time-varying checks. Built once at construction,
-/// in a fixed evaluation order.
+/// as opposed to the sentinel engine's externally-pluggable, potentially
+/// statistical/time-varying checks. Built once at construction, in a fixed
+/// evaluation order.
 pub struct StaticChecker {
     checks: Vec<Box<dyn Check>>,
 }

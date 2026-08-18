@@ -19,8 +19,8 @@ RUN cargo build --release --locked --package sentinel
 
 # ---- Runtime Stage ----
 # Slim image with only the compiled binary and the shared libraries it needs:
-# `ca-certificates` for TLS to the RPC endpoint and the optional
-# `remote_check_url`, `libsqlite3-0` because the binary links against the
+# `ca-certificates` for TLS to the RPC and optional sentinel engine endpoints,
+# `libsqlite3-0` because the binary links against the
 # system SQLite rather than bundling it.
 FROM debian:trixie-slim AS runner
 WORKDIR /usr/src/app
