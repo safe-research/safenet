@@ -60,7 +60,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
             provider.clone(),
             config.sentinel.address_poisoning_lookback_blocks,
         ),
-        EngineClient::new(config.sentinel.engine),
+        EngineClient::new(config.sentinel.engine)?,
     );
 
     let driver = Driver::new(

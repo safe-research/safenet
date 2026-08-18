@@ -37,15 +37,15 @@ voting_window = 100
 # Transaction destinations that are always denied.
 blocklist = []
 
+# Base URL of this sentinel's transaction-verification engine. The sentinel
+# appends the versioned security-check path itself.
+engine = "http://localhost:5473"
+
 # How many blocks of history the address-poisoning check looks back over
 # for a prior genuine transfer/approval from the Safe to a candidate
 # target. A sensible value is chain- and RPC-specific (block time, and some
 # providers cap query width), so there is no built-in default.
 address_poisoning_lookback_blocks = 50000
-
-# Optional: the sentinel engine endpoint. No sentinel engine check runs if
-# this is unset.
-# engine = "https://example.com/v1/security-check"
 
 [observability]
 # The `tracing` env-filter directive controlling log verbosity.
