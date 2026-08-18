@@ -86,4 +86,25 @@ contract AttestationTrailerTest is Test {
         vm.expectRevert(SignatureExtension.MalformedSignatureExtension.selector);
         this.callDecode(bytes.concat(AttestationTrailer.TYPE_HASH));
     }
+
+    /// @dev Breadth complement to the enumerated malformed/overrun cases: for arbitrary bytes `hasTrailer`
+    ///      is total (never reverts), and a recognised trailer carrying an arbitrary declared payload
+    ///      length either decodes a correctly-framed 256-byte payload or reverts fail-closed, it never
+    ///      reads out of bounds nor returns partial data.
+    function testFuzz_parseTotalAndFailClosed(bytes calldata noise, uint256 claimedLen) public view {
+        // `hasTrailer` must not revert on any input.
+        this.callHasTrailer(noise);
+
+        // Build a recognised trailer (ends in TYPE_HASH) with a fuzzed payload-length word.
+        bytes memory blob = bytes.concat(noise, abi.encode(claimedLen), AttestationTrailer.TYPE_HASH);
+        assertTrue(this.callHasTrailer(blob), "a blob ending in TYPE_HASH is recognised");
+
+        try this.callDecode(blob) returns (uint64, address, bytes32, Secp256k1.Point memory, FROST.Signature memory) {
+            // Success is only possible for the fixed-size payload with a full payload framed before it.
+            assertEq(claimedLen, 256, "decode succeeds only for the fixed 256-byte payload");
+            assertGe(noise.length, 256, "a full 256-byte payload must precede the length word");
+        } catch {
+            // Otherwise fail-closed (MalformedSignatureExtension / MalformedAttestationTrailer).
+        }
+    }
 }
