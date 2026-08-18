@@ -12,21 +12,21 @@ use crate::{
     bindings::consensus::SafeTransaction,
     checker::{CheckOutcome, Checker},
 };
-use alloy::primitives::Address;
 use safe_tx::rule::RuleId;
 use serde::{Deserialize, Serialize};
 use url::Url;
 
 #[derive(Serialize)]
 struct Request<'a> {
-    safe: Address,
-    transaction: &'a SafeTransaction,
+    transaction: &'a safe_tx::SafeTransaction,
 }
 
 #[derive(Deserialize)]
-struct Response {
-    approve: bool,
-    rule: Option<String>,
+#[serde(rename_all = "lowercase", tag = "verdict")]
+enum Response {
+    Secure,
+    Insecure { rule: RuleId },
+    Abstain,
 }
 
 /// Posts a proposed transaction to an operator-configured endpoint and
@@ -58,31 +58,29 @@ impl RemoteChecker {
         url: &Url,
         transaction: &SafeTransaction,
     ) -> Result<CheckOutcome, reqwest::Error> {
+        let transaction = match safe_tx::SafeTransaction::try_from(transaction.clone()) {
+            Ok(transaction) => transaction,
+            Err(err) => {
+                tracing::error!(%err, "cannot send invalid Safe transaction to remote checker");
+                return Ok(CheckOutcome::Unknown);
+            }
+        };
         let response: Response = self
             .client
             .post(url.clone())
             .json(&Request {
-                safe: transaction.safe,
-                transaction,
+                transaction: &transaction,
             })
             .send()
             .await?
             .error_for_status()?
             .json()
             .await?;
-        Ok(
-            match (
-                response.approve,
-                response.rule.as_deref().map(RuleId::from_code),
-            ) {
-                (true, _) => CheckOutcome::Approved,
-                (false, Some(Some(rule))) => CheckOutcome::Denied(rule),
-                (false, _) => {
-                    tracing::error!(safe = %transaction.safe, "remote check denied without a recognized rule code");
-                    CheckOutcome::Unknown
-                }
-            },
-        )
+        Ok(match response {
+            Response::Secure => CheckOutcome::Approved,
+            Response::Insecure { rule } => CheckOutcome::Denied(rule),
+            Response::Abstain => CheckOutcome::Unknown,
+        })
     }
 }
 
@@ -141,7 +139,7 @@ mod tests {
 
     #[tokio::test]
     async fn approves_when_the_endpoint_approves() {
-        let url = respond_once("200 OK", r#"{"approve":true,"rule":null}"#).await;
+        let url = respond_once("200 OK", r#"{"verdict":"secure"}"#).await;
         let checker = RemoteChecker::new(Some(url));
         assert_eq!(
             checker.check(&SafeTransaction::default()).await,
@@ -151,7 +149,7 @@ mod tests {
 
     #[tokio::test]
     async fn denies_with_the_cited_rule() {
-        let url = respond_once("200 OK", r#"{"approve":false,"rule":"R-4.6"}"#).await;
+        let url = respond_once("200 OK", r#"{"verdict":"insecure","rule":"R-4.6"}"#).await;
         let checker = RemoteChecker::new(Some(url));
         assert_eq!(
             checker.check(&SafeTransaction::default()).await,
@@ -161,7 +159,21 @@ mod tests {
 
     #[tokio::test]
     async fn fails_on_an_unrecognized_rule_code() {
-        let url = respond_once("200 OK", r#"{"approve":false,"rule":"not-a-real-rule"}"#).await;
+        let url = respond_once(
+            "200 OK",
+            r#"{"verdict":"insecure","rule":"not-a-real-rule"}"#,
+        )
+        .await;
+        let checker = RemoteChecker::new(Some(url));
+        assert_eq!(
+            checker.check(&SafeTransaction::default()).await,
+            CheckOutcome::Unknown
+        );
+    }
+
+    #[tokio::test]
+    async fn abstains_when_the_endpoint_abstains() {
+        let url = respond_once("200 OK", r#"{"verdict":"abstain"}"#).await;
         let checker = RemoteChecker::new(Some(url));
         assert_eq!(
             checker.check(&SafeTransaction::default()).await,
