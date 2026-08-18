@@ -40,9 +40,28 @@ test:
 
 # Generate per-package coverage reports.
 coverage:
-    (cd contracts && mkdir -p coverage && forge coverage --report lcov --report-file coverage/lcov.info)
+    (cd contracts && mkdir -p coverage && FOUNDRY_PROFILE=coverage forge coverage --report lcov --report-file coverage/lcov.info)
     npm --prefix examples run coverage
     npm --prefix explorer run coverage
+    cargo llvm-cov --workspace --no-report
+
+# Generate an HTML coverage report (with branch coverage) from the merged
+# lcov.info produced by scripts/generate_coverage_report.sh, and print its
+# path. `@vitest/coverage-v8`'s lcov output trips a few of genhtml 2.x's
+# stricter consistency checks (lcov 1.x doesn't perform them); genhtml <2
+# doesn't recognize those category names and hard-errors if passed, so only
+# apply them on genhtml >=2.
+coverage-html:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    ./scripts/generate_coverage_report.sh
+    genhtml_major_version="$(genhtml --version | grep -oE '[0-9]+' | head -1)"
+    ignore_errors=()
+    if [ "$genhtml_major_version" -ge 2 ]; then
+        ignore_errors=(--ignore-errors inconsistent,corrupt,category)
+    fi
+    genhtml lcov.info "${ignore_errors[@]}" --branch-coverage --output-directory coverage/html
+    echo "📄 Open coverage/html/index.html to view the report."
 
 # Install the pinned Foundry toolchain version.
 foundryup:
@@ -52,6 +71,12 @@ foundryup:
 deps:
     npm --prefix examples ci
     npm --prefix explorer ci
+
+# Install tooling required by `just coverage` on top of `deps`: cargo-llvm-cov
+# and its llvm-tools-preview component.
+coverage-deps: deps
+    cargo install cargo-llvm-cov --locked
+    rustup component add llvm-tools-preview
 
 # Lints an OpenAPI specification file.
 lint-openapi spec:

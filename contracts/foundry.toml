@@ -32,3 +32,21 @@ fs_permissions = [
   # script to write the deployment transaction details in JSON format for the Tx Builder Safe App.
   { access = "read-write", path = "build/staking-deployment.json" },
 ]
+
+# Used by `forge coverage` (see Justfile), which disables the optimizer and
+# viaIR on all contracts to produce accurate source maps. Without viaIR,
+# SentinelOracle.sol's unoptimized bytecode grows too large for forge's
+# coverage instrumentation, which silently drops it from the report. Pin it to
+# the legacy (non-IR) optimizer here to keep it under that size, without
+# forcing that trade-off on production builds via profile.default.
+[profile.coverage]
+additional_compiler_profiles = [
+  { name = "optimized", optimizer = true, optimizer_runs = 1000000, via_ir = true },
+  { name = "legacy-optimized", optimizer = true, optimizer_runs = 200, via_ir = false },
+]
+compilation_restrictions = [
+  { paths = "src/Consensus.sol", via_ir = true },
+  { paths = "src/FROSTCoordinator.sol", via_ir = true },
+  { paths = "src/guard/SafenetGuard.sol", via_ir = true },
+  { paths = "src/SentinelOracle.sol", optimizer = true, optimizer_runs = 200 },
+]

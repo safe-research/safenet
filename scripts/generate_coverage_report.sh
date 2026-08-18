@@ -16,19 +16,22 @@ cd "$ROOT"
 # --- 1. Generate coverage data --------------------------------------------
 
 # JavaScript/TypeScript and Solidity coverage, emitted per package as
-# {package}/coverage/lcov.info.
-echo "🧪 Generating JavaScript and Solidity coverage..."
+# {package}/coverage/lcov.info. Rust coverage data is collected for the whole
+# workspace in a single test run, with no per-crate report yet.
+echo "🧪 Generating coverage..."
 just coverage
-
-# Rust coverage. We collect coverage data for the whole workspace in a single
-# test run.
-echo "🧪 Generating Rust coverage..."
-cargo llvm-cov --workspace --no-report
 
 # --- 2. Build the report --------------------------------------------------
 
 MERGE_ARGS=()
 REPORT_TABLE=("| Package | Coverage |" "| :--- | :--- |")
+
+# `@vitest/coverage-v8`'s lcov output can have a branch-coverage record with
+# no corresponding line-coverage record for the same location, which lcov 2.x
+# treats as a hard "inconsistent"/"corrupt" error when reading it back (lcov
+# 1.x doesn't perform this check). Downgrade both to warnings on every lcov
+# invocation below that reads a tracefile.
+LCOV_IGNORE_ERRORS=(--ignore-errors inconsistent,corrupt)
 
 # Process a single LCOV tracefile: collect per-package stats, add a table row
 # and queue it for the final merge.
@@ -38,10 +41,10 @@ process_lcov() {
     local display_name="$2"
 
     # Run lcov summary on this specific file and extract the percentage.
-    local stats=$(lcov --summary "$lcov_file" | grep "lines......" | cut -d ':' -f 2 | xargs)
+    local stats=$(lcov "${LCOV_IGNORE_ERRORS[@]}" --summary "$lcov_file" | grep "lines......" | cut -d ':' -f 2 | xargs)
 
     echo "   📊 $display_name: $stats"
-    lcov --list "$lcov_file"
+    lcov "${LCOV_IGNORE_ERRORS[@]}" --list "$lcov_file"
 
     # Add to the merge list and append row to the table.
     MERGE_ARGS+=(--add-tracefile "$lcov_file")
@@ -67,6 +70,18 @@ for manifest in */package.json; do
     process_lcov "$lcov_file" "$pkg"
 done
 
+# Scan the Solidity contracts package. It has no package.json (see Justfile),
+# so the NPM scan above never picks it up even though `just coverage` (run
+# above) does generate its LCOV data.
+echo "🔍 Scanning Solidity contracts..."
+lcov_file="contracts/coverage/lcov.info"
+if [ -f "$lcov_file" ]; then
+    # forge emits source paths relative to contracts/, same as the NPM
+    # packages above.
+    sed -i "s|^SF:|SF:contracts/|g" "$lcov_file"
+    process_lcov "$lcov_file" "contracts"
+fi
+
 # Scan Rust crates (crates/*).
 echo "🔍 Scanning Rust workspace crates..."
 for manifest in crates/*/Cargo.toml; do
@@ -87,15 +102,27 @@ for manifest in crates/*/Cargo.toml; do
     process_lcov "$lcov_file" "$crate"
 done
 
-# Merge all reports into a single tracefile.
+# Merge all reports into a single tracefile. Enabling branch coverage is
+# required or lcov silently drops all BRDA (branch) records during the merge.
+# The RC option for this was renamed from `lcov_branch_coverage` to
+# `branch_coverage` in lcov 2.0, and lcov treats the old name as a hard error
+# rather than a warning, so pick the spelling that matches the installed
+# version instead of hard-coding one.
+LCOV_MAJOR_VERSION="$(lcov --version | grep -oE '[0-9]+' | head -1)"
+if [ "$LCOV_MAJOR_VERSION" -ge 2 ]; then
+    BRANCH_COVERAGE_RC="branch_coverage=1"
+else
+    BRANCH_COVERAGE_RC="lcov_branch_coverage=1"
+fi
+
 echo "🔗 Merging all reports..."
-lcov "${MERGE_ARGS[@]}" --output-file lcov.info
+lcov "${LCOV_IGNORE_ERRORS[@]}" --rc "$BRANCH_COVERAGE_RC" "${MERGE_ARGS[@]}" --output-file lcov.info
 
 # Total summary line coverage (e.g. "85.4%").
-TOTAL_STATS=$(lcov --summary lcov.info | grep "lines......" | cut -d ':' -f 2 | xargs)
+TOTAL_STATS=$(lcov "${LCOV_IGNORE_ERRORS[@]}" --summary lcov.info | grep "lines......" | cut -d ':' -f 2 | xargs)
 
 # Per-file list. grep -v removes the "Reading tracefile" noise.
-FILE_LIST=$(lcov --list lcov.info | grep -v "Reading tracefile")
+FILE_LIST=$(lcov "${LCOV_IGNORE_ERRORS[@]}" --list lcov.info | grep -v "Reading tracefile")
 
 # Write the report file. Variables are used directly here (no template
 # interpolation) to avoid URL-encoding of newlines and unintended shell
