@@ -207,6 +207,107 @@ If the arbitrator never rules, `timeoutArbitration` can be called permissionless
 ---
 
 <details>
+<summary><h2>Flow: Non-Reveal (Silent Sentinel Alongside an Established Side)</h2></summary>
+
+A third sentinel, Carol, joins Alice and Bob: she commits like everyone else, but never calls `reveal`. Unlike the Timeout flow below, a side over here still gets revealed by *someone* - so `finalize` doesn't time the whole request out, it resolves (or freezes) exactly as in the Unanimous Approval or Dispute flows above, and Carol's silence is handled as a separate, parallel accounting step: an aggregate slash charged inside that same `finalize()` call, well before she ever calls `claim()` herself. This is the only new mechanic here, so both diagrams below elide everything already shown above (postRequest, the mechanics of commit/reveal/claim for the revealing sentinels, arbitration) and focus only on Carol's silent path - first for a request that resolves unanimously, then for one that ends up disputed. Carol's own numbers come out identically either way.
+
+**Setup for this example:**
+
+| Parameter | Value |
+|---|---|
+| `fee` (current governed fee) | 0.40 USDC |
+| `bondMultiplier` | 2000 |
+| `bondTarget` (= fee × bondMultiplier) | 800 USDC per sentinel |
+| `slashingMultiplier` | 10 |
+| `slashAmount` (= fee × slashingMultiplier) | 4.00 USDC |
+| `daoFeeShare` | 10% (`10_000` / `FEE_SHARE_DENOMINATOR`) |
+| sentinels | Alice (reveals approve), Bob (reveals approve or deny, depending on the case below), Carol (commits, never reveals) |
+
+**Case A - Alice and Bob agree, as in the Unanimous Approval flow:**
+
+```mermaid
+sequenceDiagram
+    actor Alice
+    actor Bob
+    actor Carol
+    participant Oracle as SentinelOracle
+    participant Token as FEE_TOKEN
+    actor DAO as protocolFundsReceiver
+
+    Note over Oracle: request[R4] posted and committed exactly as in the Unanimous Approval flow:<br/>Alice, Bob, and Carol each commit(R4, hash(vote, salt, reason)) and post an 800 bond.<br/>request[R4].committedCount = 3
+
+    rect rgba(200,255,200,0.3)
+        Note over Alice,DAO: Reveal window -- Alice and Bob agree
+        Alice->>Oracle: reveal(R4, approve=true, saltA, reasonA)
+        Bob->>Oracle: reveal(R4, approve=true, saltB, reasonB)
+        Note over Oracle: request[R4] = { revealedCount: 2, approveCount: 2, denyCount: 0 }<br/>Carol never calls reveal() -- commitment[R4][Carol].vote stays PENDING
+    end
+
+    Note over Oracle: block.number passes revealDeadline -- revealedCount (2) != committedCount (3),<br/>so finalize() only proceeds because block.number > revealDeadline (not everyoneRevealed)
+
+    Alice->>Oracle: finalize(R4)
+    Note over Oracle: approveCount > 0, denyCount == 0 -> newState = RESOLVED_APPROVED directly, no FROZEN step<br/>(Alice/Bob's own claim math is exactly the Unanimous Approval flow, just split two ways)<br/>nonRevealerCount = committedCount(3) - revealedCount(2) = 1<br/>unrevealedBond = nonRevealerCount * slashAmount = 1 * 4.00 = 4.00
+    Oracle->>Token: transfer(protocolFundsReceiver, 4.00)
+    Oracle-->>DAO: 4.00 FEE_TOKEN
+
+    rect rgba(255,240,200,0.3)
+        Note over Alice,DAO: Carol claims
+        Carol->>Oracle: claim(R4)
+        Note over Oracle: vote = PENDING -> feeReward = 0 (not an APPROVED/DENIED vote)<br/>slash = slashAmountFor(RESOLVED_APPROVED, PENDING) = slashAmount = 4.00 (a side WAS established)<br/>bondReturn = 800 - 4.00 = 796<br/>commitment[R4][Carol].claimed = true
+        Oracle->>Token: transfer(Carol, 796)
+        Oracle-->>Carol: 796 FEE_TOKEN
+    end
+```
+
+**Case B - Alice and Bob disagree, as in the Dispute flow:**
+
+```mermaid
+sequenceDiagram
+    actor Alice
+    actor Bob
+    actor Carol
+    actor Arbitrator
+    participant Oracle as SentinelOracle
+    participant Token as FEE_TOKEN
+    actor DAO as protocolFundsReceiver
+
+    Note over Oracle: request[R5] posted and committed exactly as in the Dispute flow:<br/>Alice, Bob, and Carol each commit(R5, hash(vote, salt, reason)) and post an 800 bond.<br/>request[R5].committedCount = 3
+
+    rect rgba(200,255,200,0.3)
+        Note over Alice,DAO: Reveal window -- Alice and Bob disagree
+        Alice->>Oracle: reveal(R5, approve=true, saltA, reasonA)
+        Bob->>Oracle: reveal(R5, approve=false, saltB, reasonB)
+        Note over Oracle: request[R5] = { revealedCount: 2, approveCount: 1, denyCount: 1 }<br/>Carol never calls reveal() -- commitment[R5][Carol].vote stays PENDING
+    end
+
+    Note over Oracle: block.number passes revealDeadline -- revealedCount (2) != committedCount (3),<br/>so finalize() only proceeds because block.number > revealDeadline (not everyoneRevealed)
+
+    Alice->>Oracle: finalize(R5)
+    Note over Oracle: approveCount > 0 AND denyCount > 0 -> newState = FROZEN, arbitrationDeadline set<br/>(Alice/Bob's own arbitration and claim math is exactly the Dispute flow, unaffected by Carol)<br/>nonRevealerCount = committedCount(3) - revealedCount(2) = 1<br/>unrevealedBond = nonRevealerCount * slashAmount = 1 * 4.00 = 4.00<br/>-- charged in this SAME finalize() call, before the arbitrator ever rules
+    Oracle->>Token: transfer(protocolFundsReceiver, 4.00)
+    Oracle-->>DAO: 4.00 FEE_TOKEN
+
+    rect rgba(255,220,220,0.3)
+        Note over Alice,DAO: Arbitration resolves Alice/Bob's dispute (see Dispute flow) -- independent of Carol
+        Arbitrator->>Oracle: resolveDispute(R5, approveWins=true, context="...")
+    end
+
+    rect rgba(255,240,200,0.3)
+        Note over Alice,DAO: Carol claims -- same math regardless of which side the arbitrator ruled for
+        Carol->>Oracle: claim(R5)
+        Note over Oracle: vote = PENDING -> feeReward = 0 (not an APPROVED/DENIED vote)<br/>slash = slashAmountFor(RESOLVED_APPROVED, PENDING) = slashAmount = 4.00 (a side WAS established)<br/>bondReturn = 800 - 4.00 = 796<br/>commitment[R5][Carol].claimed = true
+        Oracle->>Token: transfer(Carol, 796)
+        Oracle-->>Carol: 796 FEE_TOKEN
+    end
+```
+
+**Outcome:** In both cases Carol loses her full 4.00 USDC `slashAmount` - `slashAmountFor` keys only on whether *any* side was ever established (`approveSentinelCount > 0 || denySentinelCount > 0`), not on which side won or how it was decided. Her aggregate slash is paid out to `protocolFundsReceiver` immediately inside `finalize()` - even before an arbitrator rules, in Case B - while her own reduced `bondReturn` (800 - 4.00 = 796) is only realized later, whenever she calls `claim()` herself; these are two independent halves of the same accounting, not a double charge. Contrast this with the Timeout flow below, where *nobody* reveals: there, no side is ever established, so the identical-looking non-reveal costs nothing.
+
+</details>
+
+---
+
+<details>
 <summary><h2>Flow: Timeout (Nobody Votes / Nobody Reveals)</h2></summary>
 
 Not every request reaches a vote. If nobody ever commits, or sentinels commit but nobody reveals, there is no established side for `finalize` to resolve or freeze - the request times out straight from `PENDING` to `TIMED_OUT`, the sponsor's fee is refunded in full, and any sentinel who did commit a bond recovers it in full via `claim`. Both branches below start from the same posted request and diverge only in whether any sentinel ever calls `commit`.
@@ -264,7 +365,7 @@ sequenceDiagram
         Note over Oracle: block.number passes revealDeadline -- revealedCount stays 0
 
         Sponsor->>Oracle: finalize(R3)
-        Note over Oracle: revealedCount (0) != committedCount (2) -> not everyoneRevealed,<br/>committedCount > 0 -> not nothingToReveal either --<br/>only block.number > revealDeadline lets this proceed<br/>approveCount == 0 AND denyCount == 0 -> no side was ever established -> newState = TIMED_OUT<br/>refundFee = request[R3].fee = 0.40<br/>unrevealedBond = 0 -- that slash only fires once some side IS established (see Dispute flow)<br/>request[R3].state = TIMED_OUT
+        Note over Oracle: revealedCount (0) != committedCount (2) -> not everyoneRevealed,<br/>committedCount > 0 -> not nothingToReveal either --<br/>only block.number > revealDeadline lets this proceed<br/>approveCount == 0 AND denyCount == 0 -> no side was ever established -> newState = TIMED_OUT<br/>refundFee = request[R3].fee = 0.40<br/>unrevealedBond = 0 -- that slash only fires once some side IS established (see Non-Reveal flow above)<br/>request[R3].state = TIMED_OUT
         Oracle->>Token: transfer(Sponsor, 0.40)
         Oracle-->>Sponsor: 0.40 FEE_TOKEN
 
@@ -283,6 +384,6 @@ sequenceDiagram
     end
 ```
 
-**Outcome:** Both branches land on `TIMED_OUT` and refund the sponsor's 0.40 USDC fee in full - a timeout costs the sponsor nothing either way. In the "nobody commits" branch, nobody ever staked a bond, so there is nothing to `claim`. In the "nobody reveals" branch, Alice and Bob each staked 800 USDC and get every bit of it back via `claim`: a non-reveal is only punished (the `unrevealedBond` computed inside `finalize`, see the Dispute flow above) when it stalls a request whose outcome was *already* decided by someone else's revealed vote. Here no vote was ever revealed at all, so no side was ever established, and there is no misconduct to prove against a silent committer - `slashAmountFor` only slashes an unrevealed vote once `approveSentinelCount > 0 || denySentinelCount > 0`, which never happens in this flow.
+**Outcome:** Both branches land on `TIMED_OUT` and refund the sponsor's 0.40 USDC fee in full - a timeout costs the sponsor nothing either way. In the "nobody commits" branch, nobody ever staked a bond, so there is nothing to `claim`. In the "nobody reveals" branch, Alice and Bob each staked 800 USDC and get every bit of it back via `claim`: a non-reveal is only punished (the `unrevealedBond` computed inside `finalize`, see the Non-Reveal flow above) when it stalls a request whose outcome was *already* decided by someone else's revealed vote. Here no vote was ever revealed at all, so no side was ever established, and there is no misconduct to prove against a silent committer - `slashAmountFor` only slashes an unrevealed vote once `approveSentinelCount > 0 || denySentinelCount > 0`, which never happens in this flow.
 
 </details>
