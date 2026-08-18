@@ -1,14 +1,19 @@
 import { getAbiItem, parseAbi, toEventSelector } from "viem";
 
-// Read-only surface of `SentinelOracle` (commit/reveal). `getRequest` returns two structs,
-// field-for-field with `SentinelOracleRequest.Terms` (write-once creation params) and
-// `SentinelOracleRequest.Progress` (everything the request lifecycle mutates) — see
-// contracts/src/libraries/SentinelOracleRequests.sol. viem decodes multi-value returns as a
-// positional tuple `[terms, progress]` regardless of the (cosmetic, docs-only) output names below.
+// Read-only surface of `SentinelOracle` (commit/reveal). `getRequest` returns a single
+// `SentinelOracleRequest.T` struct, field-for-field with `Terms` (write-once creation params) and
+// `Progress` (everything the request lifecycle mutates) — see
+// contracts/src/libraries/SentinelOracleRequests.sol, including that struct's `_padding` fields
+// (real ABI members, not decoration — omitting them misaligns every field decoded after them).
+// viem decodes this single-output function straight to that struct, so callers read
+// `result.terms`/`result.progress`, not `result[0]`/`result[1]`.
 export const sentinelOracleAbi = parseAbi([
-	"function getRequest(bytes32 requestId) view returns ((uint64 commitDeadline, uint24 daoFeeShare, uint64 revealDeadline, uint96 bondTarget, address sponsor, uint96 slashAmount) terms, (uint8 state, uint96 fee, uint64 arbitrationDeadline, uint16 committedCount, uint16 revealedCount, uint16 approveSentinelCount, uint16 denySentinelCount) progress)",
-	"event Committed(bytes32 indexed requestId, address indexed sentinel, uint256 bondAmount)",
-	"event Revealed(bytes32 indexed requestId, address indexed sentinel, bool approved, uint256 bondAmount, string reason)",
+	"struct Terms { uint64 commitDeadline; uint24 daoFeeShare; uint64 revealDeadline; uint96 bondTarget; uint8 _padding; address sponsor; uint96 slashAmount; }",
+	"struct Progress { uint8 state; uint96 fee; uint64 arbitrationDeadline; uint16 committedCount; uint16 revealedCount; uint16 approveSentinelCount; uint16 denySentinelCount; uint24 _padding; }",
+	"struct Request { Terms terms; Progress progress; }",
+	"function getRequest(bytes32 requestId) view returns (Request)",
+	"event Committed(bytes32 indexed requestId, address indexed sentinel, uint96 bondAmount)",
+	"event Revealed(bytes32 indexed requestId, address indexed sentinel, bool approved, uint96 bondAmount, string reason)",
 ]);
 
 // `Committed`/`Revealed` share the same indexed-topic layout (`requestId`, `sentinel`), so both

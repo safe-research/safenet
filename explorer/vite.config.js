@@ -56,7 +56,7 @@ export default defineConfig(({ mode }) => {
 			throw new Error(`${key} is not a valid integer: ${env[key]}`);
 		}
 	}
-	const defaultOracles = (env.VITE_DEFAULT_ORACLES || "")
+	const defaultOracles = (env.VITE_DEFAULT_ORACLES || "0xB2C7711b887Cc1f867768bE224f85ad30bB6da68")
 		.split(",")
 		.map((address) => address.trim())
 		.filter(Boolean);
@@ -106,8 +106,8 @@ export default defineConfig(({ mode }) => {
 			__PRIVACY_URL__: JSON.stringify(env.VITE_PRIVACY_URL || "#privacy"),
 			__IMPRINT_URL__: JSON.stringify(env.VITE_IMPRINT_URL || "#imprint"),
 			// Default explorer settings — configurable per deployment, users can still override in the UI
-			__DEFAULT_CONSENSUS__: JSON.stringify(env.VITE_DEFAULT_CONSENSUS || "0x223624cBF099e5a8f8cD5aF22aFa424a1d1acEE9"),
-			__DEFAULT_RPC__: JSON.stringify(env.VITE_DEFAULT_RPC || "https://rpc.gnosischain.com/"),
+			__DEFAULT_CONSENSUS__: JSON.stringify(env.VITE_DEFAULT_CONSENSUS || "0x23561B7209C0fCa401B4F6DabEDE9d3685de5020"),
+			__DEFAULT_RPC__: JSON.stringify(env.VITE_DEFAULT_RPC || "https://sepolia.rpc.sentio.xyz"),
 			__DEFAULT_DECODER__: JSON.stringify(
 				env.VITE_DEFAULT_DECODER || "https://calldata.swiss-knife.xyz/decoder?calldata=",
 			),
@@ -118,14 +118,14 @@ export default defineConfig(({ mode }) => {
 			__DEFAULT_DETAILS_MAX_BLOCK_RANGE__: Number(env.VITE_DEFAULT_DETAILS_MAX_BLOCK_RANGE) || 0,
 			__DEFAULT_VALIDATOR_INFO__: JSON.stringify(
 				env.VITE_DEFAULT_VALIDATOR_INFO ||
-					"https://raw.githubusercontent.com/safe-fndn/safenet-beta-data/refs/heads/main/assets/validator-info.json",
+					"https://raw.githubusercontent.com/safe-fndn/safenet-beta-data/refs/heads/testnet/assets/validator-info.json",
 			),
 			__DEFAULT_SENTINEL_INFO__: JSON.stringify(
 				env.VITE_DEFAULT_SENTINEL_INFO ||
-					"https://raw.githubusercontent.com/safe-fndn/safenet-beta-data/refs/heads/main/assets/sentinel-info.json",
+					"https://raw.githubusercontent.com/safe-fndn/safenet-beta-data/refs/heads/testnet/assets/sentinel-info.json",
 			),
 			__DEFAULT_REFETCH_INTERVAL__: Number(env.VITE_DEFAULT_REFETCH_INTERVAL) || 10000,
-			__DEFAULT_BLOCKS_PER_EPOCH__: Number(env.VITE_DEFAULT_BLOCKS_PER_EPOCH) || 1440,
+			__DEFAULT_BLOCKS_PER_EPOCH__: Number(env.VITE_DEFAULT_BLOCKS_PER_EPOCH) || 300,
 			__DEFAULT_SIGNING_TIMEOUT__: Number(env.VITE_DEFAULT_SIGNING_TIMEOUT) || 12,
 			__DEFAULT_ORACLES__: JSON.stringify(defaultOracles),
 		},
