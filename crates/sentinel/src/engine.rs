@@ -1,10 +1,7 @@
 //! Client for the sentinel engine used to check transactions that were not
 //! conclusively handled by the sentinel's local checks.
 
-use crate::{
-    bindings::consensus::SafeTransaction,
-    checker::{CheckOutcome, Checker},
-};
+use crate::{bindings::consensus::SafeTransaction, checker::CheckOutcome};
 use alloy::primitives::B256;
 use reqwest::RequestBuilder;
 use safe_tx::rule::RuleId;
@@ -46,8 +43,7 @@ enum Response {
 ///
 /// A failed request is *not* treated as approval or denial: an unreachable
 /// or malfunctioning sentinel engine isn't evidence about the transaction
-/// either way, so the caller is expected to drop the request rather than
-/// vote on it (see the `TODO` in `crate::effect`).
+/// either way, so the caller drops the request rather than voting on it.
 pub struct EngineClient {
     endpoint: Url,
     client: reqwest::Client,
@@ -102,10 +98,6 @@ pub struct SecurityCheck {
 
 impl SecurityCheck {
     /// Configure the request ID for the security check.
-    #[expect(
-        dead_code,
-        reason = "the sentinel is not yet wired to propagate request ID to the engine"
-    )]
     pub fn request_id(mut self, request_id: B256) -> Self {
         self.span.record("request_id", field::display(request_id));
         self.request = self.request.header("X-Request-ID", request_id.to_string());
@@ -149,23 +141,10 @@ impl SecurityCheck {
             // A failed request is *not* treated as approval or denial: an
             // unreachable or malfunctioning sentinel engine isn't evidence
             // about the  transaction either way, so it resolves to
-            // [`CheckOutcome::Unknown`], deferring to whatever checker runs
-            // next (or, if this is the last one in the chain, dropping the
-            // request rather than voting on it).
+            // [`CheckOutcome::Unknown`], dropping the request rather than
+            // voting on it.
             CheckOutcome::Unknown
         })
-    }
-}
-
-#[async_trait::async_trait]
-impl Checker for EngineClient {
-    async fn check(&self, transaction: &SafeTransaction) -> CheckOutcome {
-        self.security_check(transaction)
-            // TODO: Invoke `security_check` directly from the effect handler once
-            // it can supply the real request ID and remaining response time.
-            .timeout(Duration::from_secs(10))
-            .execute()
-            .await
     }
 }
 
@@ -175,32 +154,79 @@ mod tests {
     use tokio::{
         io::{AsyncReadExt, AsyncWriteExt},
         net::TcpListener,
+        sync::oneshot,
+        time,
     };
 
-    /// Serves `body` (with `status`, e.g. `"200 OK"`) to the single request
-    /// a test sends, on a one-shot localhost listener.
-    async fn respond_once(status: &'static str, body: &'static str) -> Url {
+    /// Serves `body` (with `status`, e.g. `"200 OK"`) after a `delay` to
+    /// the single request a test sends, on a one-shot localhost listener.
+    ///
+    /// Returns a channel for receiving the request body.
+    async fn respond_once_ex(
+        status: &'static str,
+        body: &'static str,
+        delay: Duration,
+    ) -> (Url, oneshot::Receiver<String>) {
         let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
         let url = Url::parse(&format!("http://{}", listener.local_addr().unwrap())).unwrap();
+        let (sender, receiver) = oneshot::channel();
         tokio::spawn(async move {
             let (mut stream, _) = listener.accept().await.unwrap();
             let mut buf = [0u8; 4096];
-            let _ = stream.read(&mut buf).await;
+            let size = stream.read(&mut buf).await.unwrap();
+            let request = str::from_utf8(&buf[..size]).unwrap().to_owned();
+            let _ = sender.send(request);
             let response = format!(
                 "HTTP/1.1 {status}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
                 body.len()
             );
+            tokio::time::sleep(delay).await;
             let _ = stream.write_all(response.as_bytes()).await;
         });
+        (url, receiver)
+    }
+
+    /// Serves `body` (with `status`, e.g. `"200 OK"`) to the single request
+    /// a test sends, on a one-shot localhost listener.
+    async fn respond_once(status: &'static str, body: &'static str) -> Url {
+        let (url, _) = respond_once_ex(status, body, Duration::ZERO).await;
         url
+    }
+
+    #[tokio::test]
+    async fn forwards_request_headers() {
+        let (url, request) =
+            respond_once_ex("200 OK", r#"{"verdict":"secure"}"#, Duration::ZERO).await;
+        let engine = EngineClient::new(url).unwrap();
+
+        let _ = engine
+            .security_check(&SafeTransaction::default())
+            .request_id(B256::repeat_byte(0x42))
+            .timeout(Duration::from_millis(1337))
+            .execute()
+            .await;
+        let request = request.await.unwrap();
+
+        for header in [
+            "x-request-id: 0x4242424242424242424242424242424242424242424242424242424242424242",
+            "x-request-timeout: 1337",
+        ] {
+            assert!(
+                request.contains(&format!("{header}\r\n")),
+                "request does not container header '{header}':\n---\n{request}\n---"
+            )
+        }
     }
 
     #[tokio::test]
     async fn approves_when_the_endpoint_approves() {
         let url = respond_once("200 OK", r#"{"verdict":"secure"}"#).await;
-        let checker = EngineClient::new(url).unwrap();
+        let engine = EngineClient::new(url).unwrap();
         assert_eq!(
-            checker.check(&SafeTransaction::default()).await,
+            engine
+                .security_check(&SafeTransaction::default())
+                .execute()
+                .await,
             CheckOutcome::Approved
         );
     }
@@ -208,9 +234,12 @@ mod tests {
     #[tokio::test]
     async fn denies_with_the_cited_rule() {
         let url = respond_once("200 OK", r#"{"verdict":"insecure","rule":"R-4.6"}"#).await;
-        let checker = EngineClient::new(url).unwrap();
+        let engine = EngineClient::new(url).unwrap();
         assert_eq!(
-            checker.check(&SafeTransaction::default()).await,
+            engine
+                .security_check(&SafeTransaction::default())
+                .execute()
+                .await,
             CheckOutcome::Denied(RuleId::R4_6KnownMaliciousTarget)
         );
     }
@@ -222,9 +251,12 @@ mod tests {
             r#"{"verdict":"insecure","rule":"not-a-real-rule"}"#,
         )
         .await;
-        let checker = EngineClient::new(url).unwrap();
+        let engine = EngineClient::new(url).unwrap();
         assert_eq!(
-            checker.check(&SafeTransaction::default()).await,
+            engine
+                .security_check(&SafeTransaction::default())
+                .execute()
+                .await,
             CheckOutcome::Unknown
         );
     }
@@ -232,9 +264,25 @@ mod tests {
     #[tokio::test]
     async fn abstains_when_the_endpoint_abstains() {
         let url = respond_once("200 OK", r#"{"verdict":"abstain"}"#).await;
-        let checker = EngineClient::new(url).unwrap();
+        let engine = EngineClient::new(url).unwrap();
         assert_eq!(
-            checker.check(&SafeTransaction::default()).await,
+            engine
+                .security_check(&SafeTransaction::default())
+                .execute()
+                .await,
+            CheckOutcome::Unknown
+        );
+    }
+
+    #[tokio::test]
+    async fn fails_when_the_endpoint_returns_an_error() {
+        let url = respond_once("503 Service Unavailable", r#"{"error":"unavailable"}"#).await;
+        let engine = EngineClient::new(url).unwrap();
+        assert_eq!(
+            engine
+                .security_check(&SafeTransaction::default())
+                .execute()
+                .await,
             CheckOutcome::Unknown
         );
     }
@@ -245,10 +293,32 @@ mod tests {
         let url = Url::parse(&format!("http://{}", listener.local_addr().unwrap())).unwrap();
         drop(listener);
 
-        let checker = EngineClient::new(url).unwrap();
+        let engine = EngineClient::new(url).unwrap();
         assert_eq!(
-            checker.check(&SafeTransaction::default()).await,
+            engine
+                .security_check(&SafeTransaction::default())
+                .execute()
+                .await,
             CheckOutcome::Unknown
         );
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn fails_when_the_request_times_out() {
+        let (url, _) =
+            respond_once_ex("200 OK", r#"{"verdict":"secure"}"#, Duration::from_secs(60)).await;
+
+        let engine = EngineClient::new(url).unwrap();
+        let outcome = time::timeout(
+            Duration::from_secs(50),
+            engine
+                .security_check(&SafeTransaction::default())
+                .timeout(Duration::from_secs(1))
+                .execute(),
+        )
+        .await
+        .expect("the engine request timeout did not fire");
+
+        assert_eq!(outcome, CheckOutcome::Unknown);
     }
 }

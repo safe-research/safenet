@@ -26,6 +26,23 @@ pub enum BlockTime {
     Millis(u64),
 }
 
+impl BlockTime {
+    /// Resolves this configuration to milliseconds for `chain_id`.
+    ///
+    /// Explicit block times are returned as-is. Automatic block times use the
+    /// same chain-specific values as the block watcher.
+    pub fn resolve(self, chain_id: u64) -> Result<u64, Error> {
+        match self {
+            Self::Millis(block_time) => Ok(block_time),
+            Self::Auto => match chain_id {
+                100 => Ok(5_000),       // Gnosis Chain
+                11155111 => Ok(12_000), // Sepolia
+                chain_id => Err(Error::UnknownBlockTime { chain_id }),
+            },
+        }
+    }
+}
+
 /// Block watcher configuration.
 #[derive(Clone, Debug, PartialEq, Eq, Deserialize)]
 #[serde(default, deny_unknown_fields)]
@@ -155,7 +172,7 @@ impl BlockWatcher {
         config: Config,
         indexed: Option<BlockStatus>,
     ) -> Result<Self, Error> {
-        let block_time = resolve_block_time(&provider, config.block_time)?;
+        let block_time = config.block_time.resolve(provider.chain_id())?;
         let mut watcher = Self {
             provider,
             config,
@@ -475,17 +492,6 @@ impl BlockWatcher {
     }
 }
 
-fn resolve_block_time(provider: &Provider, block_time: BlockTime) -> Result<u64, Error> {
-    match block_time {
-        BlockTime::Millis(block_time) => Ok(block_time),
-        BlockTime::Auto => match provider.chain_id() {
-            100 => Ok(5_000),       // Gnosis Chain
-            11155111 => Ok(12_000), // Sepolia
-            chain_id => Err(Error::UnknownBlockTime { chain_id }),
-        },
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -506,6 +512,17 @@ mod tests {
             max_reorg_depth: 2,
             start_block: None,
         }
+    }
+
+    #[test]
+    fn resolves_configured_and_automatic_block_times() {
+        assert_eq!(BlockTime::Millis(2_000).resolve(31_337).unwrap(), 2_000);
+        assert_eq!(BlockTime::Auto.resolve(100).unwrap(), 5_000);
+        assert_eq!(BlockTime::Auto.resolve(11_155_111).unwrap(), 12_000);
+        assert!(matches!(
+            BlockTime::Auto.resolve(31_337),
+            Err(Error::UnknownBlockTime { chain_id: 31_337 })
+        ));
     }
 
     #[tokio::test]
