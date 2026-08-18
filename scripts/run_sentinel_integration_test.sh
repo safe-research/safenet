@@ -179,7 +179,7 @@ EOF
 sentinel_config() {
 	local signer=$1
 	local blocklist=$2
-	local remote_check_addr=$3
+	local engine=$3
 	cat <<EOF
 rpc = "$RPC_URL"
 signer = "$signer"
@@ -191,7 +191,7 @@ consensus = "$CONSENSUS"
 fee_token = "$FEE_TOKEN"
 voting_window = $((COMMIT_WINDOW + REVEAL_WINDOW))
 blocklist = $blocklist
-remote_check_url = "http://$remote_check_addr/v1/security-check"
+engine = "http://$engine/v1/security-check"
 address_poisoning_lookback_blocks = 1000
 
 [index]

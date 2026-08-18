@@ -56,11 +56,10 @@ pub struct SentinelConfig {
     pub voting_window: u64,
     /// Transaction destinations that are always denied.
     pub blocklist: Vec<Address>,
-    /// An operator-configured endpoint to defer checks to that aren't
-    /// implemented locally (see [`crate::dynamic_checker`]). No dynamic check
-    /// runs if this is unset.
+    /// The optional sentinel engine endpoint. No sentinel engine check runs if
+    /// this is unset.
     #[serde(default)]
-    pub remote_check_url: Option<Url>,
+    pub engine: Option<Url>,
     /// How many blocks of history the address-poisoning check
     /// (see [`crate::address_poisoning`]) looks back over for a prior
     /// genuine `Transfer`/`Approval` from the Safe to a candidate target.
@@ -123,7 +122,7 @@ mod tests {
             config.sentinel.blocklist,
             vec![address!("0x0404040404040404040404040404040404040404")]
         );
-        assert_eq!(config.sentinel.remote_check_url, None);
+        assert_eq!(config.sentinel.engine, None);
         assert_eq!(config.sentinel.address_poisoning_lookback_blocks, 50000);
         assert_eq!(
             config.observability.log_filter.to_string(),

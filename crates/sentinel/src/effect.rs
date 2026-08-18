@@ -17,7 +17,7 @@ use safenet_core::effects::EffectHandler;
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Effect {
     /// Defer the approve/deny decision for `request_id` (a proposed
-    /// `transaction` on `safe`) to the configured dynamic check.
+    /// `transaction` on `safe`) to the configured checker chain.
     DynamicCheck {
         request_id: B256,
         transaction: SafeTransaction,
@@ -42,7 +42,7 @@ pub enum Resume {
 /// This is an initial cut of the "array of checkers" shape (see
 /// `crate::checker`'s module docs); the fixed construction order below is
 /// what encodes today's precedence (the built-in CoW check ahead of
-/// address-poisoning, ahead of the operator-configured remote check).
+/// address-poisoning, ahead of the sentinel engine).
 pub struct Handler {
     checkers: Vec<Box<dyn Checker>>,
 }
@@ -79,7 +79,7 @@ impl EffectHandler<Effect, Resume> for Handler {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{address_poisoning::AddressPoisoningChecker, dynamic_checker::RemoteChecker};
+    use crate::{address_poisoning::AddressPoisoningChecker, engine::EngineClient};
     use alloy::{primitives::Address, transports::mock::Asserter};
     use safenet_core::provider::Provider;
 
@@ -91,17 +91,17 @@ mod tests {
         AddressPoisoningChecker::new(provider, 1_000)
     }
 
-    fn handler(address_poisoning: AddressPoisoningChecker, remote: RemoteChecker) -> Handler {
-        Handler::new(vec![Box::new(address_poisoning), Box::new(remote)])
+    fn handler(address_poisoning: AddressPoisoningChecker, engine: EngineClient) -> Handler {
+        Handler::new(vec![Box::new(address_poisoning), Box::new(engine)])
     }
 
     #[tokio::test]
     async fn resumes_with_the_checker_s_outcome() {
-        // An unconfigured `RemoteChecker` always approves, and a
+        // An unconfigured `EngineClient` always approves, and a
         // transaction with only its Safe set has no ERC-20 calldata for the
         // earlier checkers to inspect — this only exercises the `Effect` ->
         // `Resume` wiring itself.
-        let handler = handler(address_poisoning(), RemoteChecker::new(None));
+        let handler = handler(address_poisoning(), EngineClient::new(None));
 
         let resume = handler
             .perform_effect(Effect::DynamicCheck {

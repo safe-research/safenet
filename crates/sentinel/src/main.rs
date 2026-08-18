@@ -4,15 +4,15 @@ mod bindings;
 mod checker;
 mod config;
 mod cow;
-mod dynamic_checker;
 mod effect;
+mod engine;
 mod hashing;
 mod service;
 mod state;
 mod static_checker;
 
 use self::{
-    address_poisoning::AddressPoisoningChecker, config::Config, dynamic_checker::RemoteChecker,
+    address_poisoning::AddressPoisoningChecker, config::Config, engine::EngineClient,
     service::SentinelService, static_checker::StaticChecker,
 };
 use alloy::primitives::U256;
@@ -60,7 +60,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
             provider.clone(),
             config.sentinel.address_poisoning_lookback_blocks,
         ),
-        RemoteChecker::new(config.sentinel.remote_check_url),
+        EngineClient::new(config.sentinel.engine),
     );
 
     let driver = Driver::new(

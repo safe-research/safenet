@@ -8,8 +8,8 @@ use crate::{
     },
     checker::CheckOutcome,
     cow::CowChecker,
-    dynamic_checker::RemoteChecker,
     effect,
+    engine::EngineClient,
     hashing::{RevealSalt as _, commit_hash, oracle_tx_proposal_hash},
     state::{Request, SentinelRequestState as RequestState, State},
     static_checker::StaticChecker,
@@ -38,12 +38,12 @@ pub struct SentinelService {
     static_checker: StaticChecker,
     /// Backs the [`effect::Handler`] this service's [`Effects`](Service::Effects)
     /// resolve [`effect::Effect::DynamicCheck`] against — checked after the
-    /// built-in CoW check, before `dynamic_checker`. See
+    /// built-in CoW check, before the sentinel engine. See
     /// [`Service::components`] for the fixed checker order.
     address_poisoning_checker: AddressPoisoningChecker,
     /// Backs the same [`effect::Handler`], as the fallback once every
     /// built-in checker comes back with no opinion.
-    dynamic_checker: RemoteChecker,
+    engine: EngineClient,
 }
 
 /// Advances the request FSM in response to `SentinelOracle`/`Consensus`
@@ -86,7 +86,7 @@ impl SentinelService {
         voting_window: u64,
         static_checker: StaticChecker,
         address_poisoning_checker: AddressPoisoningChecker,
-        dynamic_checker: RemoteChecker,
+        engine: EngineClient,
     ) -> Self {
         Self {
             oracle,
@@ -97,7 +97,7 @@ impl SentinelService {
             voting_window,
             static_checker,
             address_poisoning_checker,
-            dynamic_checker,
+            engine,
         }
     }
 }
@@ -723,7 +723,7 @@ impl Service for SentinelService {
             voting_window,
             static_checker,
             address_poisoning_checker,
-            dynamic_checker,
+            engine,
         } = self;
         (
             SentinelTransition {
@@ -737,7 +737,7 @@ impl Service for SentinelService {
             effect::Handler::new(vec![
                 Box::new(CowChecker::new()),
                 Box::new(address_poisoning_checker),
-                Box::new(dynamic_checker),
+                Box::new(engine),
             ]),
             SentinelEncoder { oracle, fee_token },
         )
@@ -801,7 +801,7 @@ mod tests {
             VOTING_WINDOW,
             StaticChecker::new(blocklist),
             address_poisoning_checker,
-            RemoteChecker::new(None),
+            EngineClient::new(None),
         )
     }
 
