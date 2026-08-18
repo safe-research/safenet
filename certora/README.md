@@ -53,8 +53,8 @@ This base introduces the harness and the shared spec that every concern spec bui
 specs (epoch forest, announcements, `checkTransaction`, message binding) are added on top and each is
 documented here as it lands.
 
-Last verified green: **2026-08-17** against `main` (`fd01aaa`) with **certora-cli 8.6.4**:
-`SafenetGuardCommon` reports *"No errors found by Prover!"* (`exit_code=0`) with its five state invariants.
+Last verified green: **2026-08-17** against `main` (`fd01aaa`) with **certora-cli 8.6.4**. Every conf
+documented below reports *"No errors found by Prover!"* (`exit_code=0`).
 
 ## Layout
 
@@ -62,17 +62,31 @@ Last verified green: **2026-08-17** against `main` (`fd01aaa`) with **certora-cl
 | --- | --- |
 | `harnesses/SafenetGuardHarness.sol` | Base harness: packed-window accessors, the `isAutoAllowed` mirror, trailer decoders, genesis-pair getters, raw forest membership. |
 | `specs/SafenetGuardCommon.spec` | Shared `methods` block, cryptography/hashing summaries, and the one-state invariants. Imported by the concern specs. |
-| `conf/SafenetGuardCommon.conf` | Conf for the shared spec. |
+| `specs/SafenetGuardEpoch.spec` | Epoch-forest rules and the genesis invariant. |
+| `conf/SafenetGuardCommon.conf` / `conf/SafenetGuardEpoch.conf` | One conf per spec. |
 
 ## Property ledger
 
-### Invariants: `SafenetGuardCommon.spec`
+### Invariants: `SafenetGuardCommon.spec` (+ genesis, in `SafenetGuardEpoch.spec`)
 
 - `announcementWindowCoherent`: a live announcement has `activeUntil >= activeFrom`.
 - `announcementWindowWidthFixed`: `activeFrom != 0 => activeUntil == activeFrom + window`.
 - `timingBoundsWithinUint64`: window timestamps stay within `uint64` (no packing overflow).
 - `zeroKeyNeverTrusted`: the zero point is never a trusted `(key, epoch)`.
 - `announcementSentinelCoherent`: a cleared announcement slot reads back `(0, 0)`, never `(0, x != 0)`.
+- `genesisPairAlwaysKnown`: `(initialGroupKey, initialEpoch)` is trusted in every reachable state (the base case for "trust chains back to genesis").
+
+### Epoch forest: `SafenetGuardEpoch.spec`
+
+- `epochForestAppendOnly`: a trusted pair is never removed.
+- `onlyUpdateEpochAddsPair`: only `updateEpoch` extends the forest.
+- `updateEpochRecordsChild` / `updateEpochRecordsOnlyChild`: a rollover records exactly the named child.
+- `updateEpochRequiresKnownParent` / `updateEpochRequiresAdvancingEpoch`: the two revert preconditions.
+- `updateEpochRequiresVerifyingProof`: a rollover reverts without a verifying FROST proof (the control-flow twin of `failedAttestationNeverConsumesAnnouncement`).
+- `updateEpochSucceedsFromKnownParent`: completeness, those are the *only* gates (never reverts on a valid call).
+- `updateEpochIdempotent`: re-submitting a known pair is a no-op (no revert, no state change).
+- `updateEpochOutcomeIndependentOfSender`: permissionless, revert outcome and state effect don't depend on `msg.sender`.
+- `immutablesNeverChange`: the configured delay/window/domain never change.
 
 ## Assumptions & scope
 
