@@ -18,7 +18,7 @@ library SentinelOracleCommitment {
     // ============================================================
 
     // Packed into 2 slots instead of 3: `commitHash` fills a slot on its own (32 bytes), but
-    // `bondAmount` (a `uint96` token amount, matching `SentinelOracleRequest.Request.bondTarget`)
+    // `bondAmount` (a `uint96` token amount, matching `SentinelOracleRequest.Terms.bondTarget`)
     // now shares its slot with `vote`/`claimed`.
     struct Commitment {
         bytes32 commitHash;
