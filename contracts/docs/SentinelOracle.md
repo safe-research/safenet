@@ -16,7 +16,8 @@ Each sentinel's individual ballot is tracked separately as a `SentinelOracleComm
 
 ---
 
-## Flow: Unanimous Approval
+<details>
+<summary><h2>Flow: Unanimous Approval</h2></summary>
 
 Two sentinels — Alice and Bob — both commit and reveal `approve`. Nobody dissents, so `finalize` resolves the request directly to `RESOLVED_APPROVED` with no arbitration step, and every sentinel recovers their full bond plus an equal share of the fee.
 
@@ -51,7 +52,7 @@ sequenceDiagram
     Note over Oracle: request[R1] = { state: PENDING, sponsor: Sponsor,<br/>fee: 0.40, bondTarget: 800, daoFeeShare: 10_000,<br/>committedCount: 0, revealedCount: 0,<br/>approveCount: 0, denyCount: 0 }
 
     rect rgba(200,220,255,0.3)
-        Note over Alice,Token: Commit window
+        Note over Sponsor,DAO: Commit window
         Alice->>Oracle: commit(R1, hash(approve=true, saltA, reasonA))
         Oracle->>Token: transferFrom(Alice, Oracle, 800)
         Alice-->>Oracle: 800 FEE_TOKEN
@@ -66,7 +67,7 @@ sequenceDiagram
     Note over Oracle: block.number passes commitDeadline -- reveal window opens
 
     rect rgba(200,255,200,0.3)
-        Note over Alice,Token: Reveal window
+        Note over Sponsor,DAO: Reveal window
         Alice->>Oracle: reveal(R1, approve=true, saltA, reasonA)
         Note over Oracle: commitment[R1][Alice].vote = APPROVED<br/>request[R1] = { revealedCount: 1, approveCount: 1 }
 
@@ -83,7 +84,7 @@ sequenceDiagram
     Oracle--)Sponsor: emit OracleResult(R1, Sponsor, "", approved=true)
 
     rect rgba(255,240,200,0.3)
-        Note over Alice,Token: Each sentinel claims independently
+        Note over Sponsor,DAO: Each sentinel claims independently
         Alice->>Oracle: claim(R1)
         Note over Oracle: feeReward = request[R1].fee / approveCount = 0.36 / 2 = 0.18<br/>slash = 0 (denyCount == 0, no losing side)<br/>bondReturn = 800 - 0 = 800<br/>commitment[R1][Alice].claimed = true
         Oracle->>Token: transfer(Alice, 800.18)
@@ -97,3 +98,108 @@ sequenceDiagram
 ```
 
 **Outcome:** Sponsor paid 0.40 USDC for the request; the protocol kept its 0.04 USDC DAO cut; Alice and Bob each staked 800 USDC and got back 800.18 (800 bond + 0.18 fee share) — a net profit of 0.18 USDC apiece for agreeing on the correct answer. Nobody was slashed because no dissenting side was ever established (`slashAmountFor` only slashes a revealed vote when it's on the *losing* side of a resolved dispute).
+
+</details>
+
+---
+
+<details>
+<summary><h2>Flow: Dispute (Split Vote, Arbitrator Rules)</h2></summary>
+
+Two sentinels — Alice and Bob — commit and reveal, but they disagree: Alice reveals `approve`, Bob reveals `deny`. With both sides established, `finalize` can't resolve the request itself, so it freezes it (`FROZEN`) and starts the arbitration clock. The arbitrator later rules for `approve`: the winner (Alice) keeps her bond plus the fee, and the loser (Bob) is slashed.
+
+**Setup for this example:**
+
+| Parameter | Value |
+|---|---|
+| `fee` (current governed fee) | 0.40 USDC |
+| `bondMultiplier` | 2000 |
+| `bondTarget` (= fee × bondMultiplier) | 800 USDC per sentinel |
+| `slashingMultiplier` | 10 — kept low at launch |
+| `slashAmount` (= fee × slashingMultiplier) | 4.00 USDC — charged per sentinel on the losing side of a resolved dispute |
+| `daoFeeShare` | 10% (`10_000` / `FEE_SHARE_DENOMINATOR`) |
+| sentinels | Alice (approve), Bob (deny) |
+
+Solid arrows (`→`) are contract calls. Dashed arrows (`⇢`) show the resulting ERC20 balance change, directly between the accounts whose balances actually move.
+
+```mermaid
+sequenceDiagram
+    actor Sponsor
+    actor Proposer as PROPOSER (Consensus)
+    actor Alice
+    actor Bob
+    actor Arbitrator
+    participant Oracle as SentinelOracle
+    participant Token as FEE_TOKEN
+    actor DAO as protocolFundsReceiver
+
+    Note over Oracle: request[R2] = none
+
+    Proposer->>Oracle: postRequest(R2, Sponsor, ...)
+    Oracle->>Token: transferFrom(Sponsor, Oracle, 0.40)
+    Sponsor-->>Oracle: 0.40 FEE_TOKEN
+    Note over Oracle: request[R2] = { state: PENDING, sponsor: Sponsor,<br/>fee: 0.40, bondTarget: 800, slashAmount: 4.00, daoFeeShare: 10_000,<br/>committedCount: 0, revealedCount: 0,<br/>approveCount: 0, denyCount: 0 }
+
+    rect rgba(200,220,255,0.3)
+        Note over Sponsor,DAO: Commit window
+        Alice->>Oracle: commit(R2, hash(approve=true, saltA, reasonA))
+        Oracle->>Token: transferFrom(Alice, Oracle, 800)
+        Alice-->>Oracle: 800 FEE_TOKEN
+
+        Bob->>Oracle: commit(R2, hash(approve=false, saltB, reasonB))
+        Oracle->>Token: transferFrom(Bob, Oracle, 800)
+        Bob-->>Oracle: 800 FEE_TOKEN
+        Note over Oracle: request[R2].committedCount = 2
+    end
+
+    Note over Oracle: block.number passes commitDeadline -- reveal window opens
+
+    rect rgba(200,255,200,0.3)
+        Note over Sponsor,DAO: Reveal window
+        Alice->>Oracle: reveal(R2, approve=true, saltA, reasonA)
+        Note over Oracle: commitment[R2][Alice].vote = APPROVED<br/>request[R2] = { revealedCount: 1, approveCount: 1 }
+
+        Bob->>Oracle: reveal(R2, approve=false, saltB, reasonB)
+        Note over Oracle: commitment[R2][Bob].vote = DENIED<br/>request[R2] = { revealedCount: 2, denyCount: 1 }
+    end
+
+    Note over Oracle: revealedCount (2) == committedCount (2) -> everyoneRevealed,<br/>so finalize() doesn't need to wait for revealDeadline
+
+    Alice->>Oracle: finalize(R2)
+    Note over Oracle: approveCount > 0 AND denyCount > 0 -> newState = FROZEN<br/>(both sides established -- no bonds move here, no fee is cut yet)<br/>request[R2].arbitrationDeadline = block.number + ARBITRATION_TIMEOUT<br/>request[R2].state = FROZEN
+
+    Note over Oracle: finalize() returns early for FROZEN -- no OracleResult event yet,<br/>request now waits on the arbitrator (or ARBITRATION_TIMEOUT, see timeoutArbitration)
+
+    rect rgba(255,220,220,0.3)
+        Note over Sponsor,DAO: ArbitraDocument Dispute Flow
+        
+        Create a mermaid sequence diagram that outlines the dispute flow
+tion
+        Arbitrator->>Oracle: resolveDispute(R2, approveWins=true, context="...")
+        Note over Oracle: losingSideCount = denyCount = 1<br/>slashed = 1 * 4.00 = 4.00<br/>request[R2].state = RESOLVED_APPROVED<br/>refundFee = request[R2].fee = 0.40<br/>daoCut = 0.40 * 10_000 / 100_000 = 0.04<br/>request[R2].fee = 0.40 - 0.04 = 0.36
+        Oracle->>Token: transfer(Sponsor, 0.40)
+        Oracle-->>Sponsor: 0.40 FEE_TOKEN
+        Oracle->>Token: transfer(protocolFundsReceiver, 4.00 - 0.40 + 0.04)
+        Oracle-->>DAO: 3.64 FEE_TOKEN
+        Oracle--)Sponsor: emit DisputeResolved(R2, RESOLVED_APPROVED, slashed=4.00, context="...")
+    end
+
+    rect rgba(255,240,200,0.3)
+        Note over Sponsor,DAO: Each sentinel claims independently
+        Alice->>Oracle: claim(R2)
+        Note over Oracle: feeReward = request[R2].fee / approveCount = 0.36 / 1 = 0.36<br/>slash = slashAmountFor(RESOLVED_APPROVED, APPROVED) = 0 (winner)<br/>bondReturn = 800 - 0 = 800
+        Oracle->>Token: transfer(Alice, 800.36)
+        Oracle-->>Alice: 800.36 FEE_TOKEN
+
+        Bob->>Oracle: claim(R2)
+        Note over Oracle: feeReward = 0 (DENIED vote, RESOLVED_APPROVED outcome -- not eligible)<br/>slash = slashAmountFor(RESOLVED_APPROVED, DENIED) = 4.00 (revealed, on the losing side)<br/>bondReturn = 800 - 4.00 = 796
+        Oracle->>Token: transfer(Bob, 796)
+        Oracle-->>Bob: 796 FEE_TOKEN
+    end
+```
+
+**Outcome:** Sponsor paid 0.40 USDC upfront and got the full 0.40 USDC back once the arbitrator ruled — a dispute costs the sponsor nothing; its economics are funded entirely by the losing side's slash. Alice staked 800 USDC and got back 800.36 (800 bond + the whole 0.36 USDC fee pool, since she was the only sentinel on the winning side). Bob staked 800 USDC and got back only 796 — the full 4.00 USDC `slashAmount` for revealing a vote that lost an arbitrated dispute — plus no fee share. The protocol's `protocolFundsReceiver` collected 3.64 USDC, the remainder of Bob's 4.00 USDC slash after the sponsor's refund and the DAO's normal fee cut are carved out of it. Every token the contract ever held across this flow (2 × 800 bond + 0.40 fee = 1600.40) is accounted for by the end: nothing is left stranded in the contract, and nothing is double-spent. `slashAmount` is deliberately small relative to `bondTarget` at launch — a governed parameter that can be raised later once the sentinel set and dispute frequency are better understood.
+
+If the arbitrator never rules, `timeoutArbitration` can be called permissionlessly once `block.number` passes `arbitrationDeadline`: the request moves straight to `TIMED_OUT`, the sponsor's fee is refunded, and every sentinel — including Bob — recovers their bond in full via `claim()`, since a timeout (unlike a ruling) establishes no losing side to slash.
+
+</details>
