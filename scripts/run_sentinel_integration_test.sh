@@ -9,10 +9,10 @@
 set -eo pipefail
 # Job control, so each `&`-backgrounded command below gets its own process
 # group (its PID doubling as its PGID) instead of sharing this script's.
-# Cleanup then kills each job's *group* (`kill -- -$pid`), reaping the
-# compiled-binary grandchildren `cargo run` spawns, without touching whatever
-# else happens to share this script's own process group (e.g. a CI runner's
-# step wrapper) the way `kill 0` would.
+# Cleanup then kills each job's *group* (`kill -- -$pid`), including any
+# subprocesses it spawns, without touching whatever else happens to share this
+# script's own process group (e.g. a CI runner's step wrapper) the way `kill 0`
+# would.
 set -m
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -51,8 +51,8 @@ cleanup() {
 	echo "Stopping background processes (${PIDS[*]})..."
 	for pid in "${PIDS[@]}"; do
 		# Negative PID targets the whole process group `set -m` gave this job,
-		# so `cargo run`'s compiled-binary children are reaped too rather than
-		# left orphaned holding a port.
+		# so any subprocesses are reaped too rather than left orphaned holding
+		# a port.
 		kill -- "-$pid" >/dev/null 2>&1 || true
 	done
 	rm -f "$SENTINEL_A_CONFIG" "$SENTINEL_B_CONFIG" \
@@ -63,7 +63,8 @@ trap cleanup EXIT
 # --- 1. Build the Rust sentinel and sentinel engine ---
 # Built up front, before Anvil or anything else starts, so a compile error
 # fails fast and no compile time is wasted while other test infrastructure
-# sits idle in the background.
+# sits idle in the background. The resulting binaries are invoked directly
+# below so Cargo cannot rebuild or contend for its build lock during the test.
 echo "Building the Rust sentinel and sentinel engine..."
 cargo build --package sentinel --package sentinel-engine
 
@@ -85,11 +86,11 @@ SENTINEL_B_ENGINE_CONFIG=$(mktemp)
 sentinel_engine_config "127.0.0.1:5474" >"$SENTINEL_B_ENGINE_CONFIG"
 
 echo "Starting sentinel engine A..."
-cargo run --package sentinel-engine -- --config-file "$SENTINEL_A_ENGINE_CONFIG" >"$ROOT/sentinel_engine_a_logs.txt" 2>&1 &
+"$ROOT/target/debug/sentinel-engine" --config-file "$SENTINEL_A_ENGINE_CONFIG" >"$ROOT/sentinel_engine_a_logs.txt" 2>&1 &
 PIDS+=("$!")
 
 echo "Starting sentinel engine B..."
-cargo run --package sentinel-engine -- --config-file "$SENTINEL_B_ENGINE_CONFIG" >"$ROOT/sentinel_engine_b_logs.txt" 2>&1 &
+"$ROOT/target/debug/sentinel-engine" --config-file "$SENTINEL_B_ENGINE_CONFIG" >"$ROOT/sentinel_engine_b_logs.txt" 2>&1 &
 PIDS+=("$!")
 
 sleep 2
@@ -222,11 +223,11 @@ SENTINEL_B_CONFIG=$(mktemp)
 sentinel_config "$SENTINEL_B_PK" "[\"$DISPUTED_TX_TO\"]" "$SENTINEL_B_ENGINE_URL" >"$SENTINEL_B_CONFIG"
 
 echo "Starting sentinel A..."
-cargo run --package sentinel -- --config-file "$SENTINEL_A_CONFIG" >"$ROOT/sentinel_a_logs.txt" 2>&1 &
+"$ROOT/target/debug/sentinel" --config-file "$SENTINEL_A_CONFIG" >"$ROOT/sentinel_a_logs.txt" 2>&1 &
 PIDS+=("$!")
 
 echo "Starting sentinel B..."
-cargo run --package sentinel -- --config-file "$SENTINEL_B_CONFIG" >"$ROOT/sentinel_b_logs.txt" 2>&1 &
+"$ROOT/target/debug/sentinel" --config-file "$SENTINEL_B_CONFIG" >"$ROOT/sentinel_b_logs.txt" 2>&1 &
 PIDS+=("$!")
 
 # Give both sentinels time to connect and start watching before the dispute
