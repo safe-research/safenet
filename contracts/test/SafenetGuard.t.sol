@@ -370,6 +370,20 @@ contract SafenetGuardTest is Test {
         );
     }
 
+    /// @notice The announcement hash must bind `data` by content, not just length: two same-length but
+    ///         different payloads must hash differently. Guards against `t.data.length` being hashed where
+    ///         `keccak256(t.data)` belongs, which would let one 4-byte payload authorise any other.
+    function test_announcementHash_separatesSameLengthData() public view {
+        TransactionAnnouncement.AnnouncedTransaction memory a = _defaultAnnouncement();
+        TransactionAnnouncement.AnnouncedTransaction memory b = _defaultAnnouncement();
+        a.data = hex"11223344";
+        b.data = hex"11223345"; // same length, one byte different
+        assertTrue(
+            guard.getAnnouncementHash(a) != guard.getAnnouncementHash(b),
+            "the announcement hash must bind call data by content"
+        );
+    }
+
     // ============================================================
     // CHECK TRANSACTION — ATTESTATION
     // ============================================================
