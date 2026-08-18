@@ -12,6 +12,24 @@ paths:
     post:
       operationId: security-check-v1
       summary: Decide whether a proposed Safe transaction is secure.
+      parameters:
+        - name: x-request-id
+          in: header
+          required: false
+          description: >-
+            The Safenet request ID of the proposal being checked.
+          schema:
+            $ref: "#/components/schemas/Digest"
+        - name: x-request-timeout
+          in: header
+          required: false
+          description: >-
+            The caller's timeout budget for the request, in milliseconds. An
+            engine can use this value to avoid starting work that cannot finish
+            before the caller stops waiting.
+          schema:
+            type: integer
+            minimum: 0
       requestBody:
         required: true
         content:
@@ -139,6 +157,12 @@ components:
         with it.
       pattern: "^R-[0-9]+\\.[0-9]+$"
       examples: ["R-4.1", "R-42.1337"]
+    Digest:
+      type: string
+      description: Lower-case `0x`-prefixed 32-byte digest.
+      pattern: "^0x[0-9a-f]{64}$"
+      examples:
+        ["0x0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"]
     Address:
       type: string
       description: >-

@@ -5,6 +5,7 @@ edition = "2024"
 publish = false
 
 [dependencies]
+alloy.workspace = true
 argh.workspace = true
 axum.workspace = true
 safe-tx.workspace = true
