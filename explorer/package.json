@@ -3,6 +3,10 @@
 	"homepage": "https://safe.dev/safenet/",
 	"private": true,
 	"type": "module",
+	"engines": {
+		"node": "24",
+		"npm": "11"
+	},
 	"scripts": {
 		"dev": "vite --port 3000",
 		"start": "vite --port 3000",
