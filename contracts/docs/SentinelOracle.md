@@ -19,7 +19,7 @@ Each sentinel's individual ballot is tracked separately as a `SentinelOracleComm
 <details>
 <summary><h2>Flow: Unanimous Approval</h2></summary>
 
-Two sentinels — Alice and Bob — both commit and reveal `approve`. Nobody dissents, so `finalize` resolves the request directly to `RESOLVED_APPROVED` with no arbitration step, and every sentinel recovers their full bond plus an equal share of the fee.
+Two sentinels - Alice and Bob - both commit and reveal `approve`. Nobody dissents, so `finalize` resolves the request directly to `RESOLVED_APPROVED` with no arbitration step, and every sentinel recovers their full bond plus an equal share of the fee.
 
 **Setup for this example:**
 
@@ -28,7 +28,7 @@ Two sentinels — Alice and Bob — both commit and reveal `approve`. Nobody dis
 | `fee` (current governed fee) | 0.40 USDC |
 | `bondMultiplier` | 2000 |
 | `bondTarget` (= fee × bondMultiplier) | 800 USDC per sentinel |
-| `slashAmount` (= fee × slashingMultiplier) | governed separately — unused in this flow, nobody is slashed |
+| `slashAmount` (= fee × slashingMultiplier) | governed separately - unused in this flow, nobody is slashed |
 | `daoFeeShare` | 10% (`10_000` / `FEE_SHARE_DENOMINATOR`) |
 | sentinels | Alice, Bob (both active) |
 
@@ -97,7 +97,7 @@ sequenceDiagram
     end
 ```
 
-**Outcome:** Sponsor paid 0.40 USDC for the request; the protocol kept its 0.04 USDC DAO cut; Alice and Bob each staked 800 USDC and got back 800.18 (800 bond + 0.18 fee share) — a net profit of 0.18 USDC apiece for agreeing on the correct answer. Nobody was slashed because no dissenting side was ever established (`slashAmountFor` only slashes a revealed vote when it's on the *losing* side of a resolved dispute).
+**Outcome:** Sponsor paid 0.40 USDC for the request; the protocol kept its 0.04 USDC DAO cut; Alice and Bob each staked 800 USDC and got back 800.18 (800 bond + 0.18 fee share) - a net profit of 0.18 USDC apiece for agreeing on the correct answer. Nobody was slashed because no dissenting side was ever established (`slashAmountFor` only slashes a revealed vote when it's on the *losing* side of a resolved dispute).
 
 </details>
 
@@ -106,7 +106,7 @@ sequenceDiagram
 <details>
 <summary><h2>Flow: Dispute (Split Vote, Arbitrator Rules)</h2></summary>
 
-Two sentinels — Alice and Bob — commit and reveal, but they disagree: Alice reveals `approve`, Bob reveals `deny`. With both sides established, `finalize` can't resolve the request itself, so it freezes it (`FROZEN`) and starts the arbitration clock. The arbitrator later rules for `approve`: the winner (Alice) keeps her bond plus the fee, and the loser (Bob) is slashed.
+Two sentinels - Alice and Bob - commit and reveal, but they disagree: Alice reveals `approve`, Bob reveals `deny`. With both sides established, `finalize` can't resolve the request itself, so it freezes it (`FROZEN`) and starts the arbitration clock. The arbitrator later rules for `approve`: the winner (Alice) keeps her bond plus the fee, and the loser (Bob) is slashed.
 
 **Setup for this example:**
 
@@ -115,8 +115,8 @@ Two sentinels — Alice and Bob — commit and reveal, but they disagree: Alice 
 | `fee` (current governed fee) | 0.40 USDC |
 | `bondMultiplier` | 2000 |
 | `bondTarget` (= fee × bondMultiplier) | 800 USDC per sentinel |
-| `slashingMultiplier` | 10 — kept low at launch |
-| `slashAmount` (= fee × slashingMultiplier) | 4.00 USDC — charged per sentinel on the losing side of a resolved dispute |
+| `slashingMultiplier` | 10 - kept low at launch |
+| `slashAmount` (= fee × slashingMultiplier) | 4.00 USDC - charged per sentinel on the losing side of a resolved dispute |
 | `daoFeeShare` | 10% (`10_000` / `FEE_SHARE_DENOMINATOR`) |
 | sentinels | Alice (approve), Bob (deny) |
 
@@ -198,8 +198,91 @@ tion
     end
 ```
 
-**Outcome:** Sponsor paid 0.40 USDC upfront and got the full 0.40 USDC back once the arbitrator ruled — a dispute costs the sponsor nothing; its economics are funded entirely by the losing side's slash. Alice staked 800 USDC and got back 800.36 (800 bond + the whole 0.36 USDC fee pool, since she was the only sentinel on the winning side). Bob staked 800 USDC and got back only 796 — the full 4.00 USDC `slashAmount` for revealing a vote that lost an arbitrated dispute — plus no fee share. The protocol's `protocolFundsReceiver` collected 3.64 USDC, the remainder of Bob's 4.00 USDC slash after the sponsor's refund and the DAO's normal fee cut are carved out of it. Every token the contract ever held across this flow (2 × 800 bond + 0.40 fee = 1600.40) is accounted for by the end: nothing is left stranded in the contract, and nothing is double-spent. `slashAmount` is deliberately small relative to `bondTarget` at launch — a governed parameter that can be raised later once the sentinel set and dispute frequency are better understood.
+**Outcome:** Sponsor paid 0.40 USDC upfront and got the full 0.40 USDC back once the arbitrator ruled - a dispute costs the sponsor nothing; its economics are funded entirely by the losing side's slash. Alice staked 800 USDC and got back 800.36 (800 bond + the whole 0.36 USDC fee pool, since she was the only sentinel on the winning side). Bob staked 800 USDC and got back only 796 - the full 4.00 USDC `slashAmount` for revealing a vote that lost an arbitrated dispute - plus no fee share. The protocol's `protocolFundsReceiver` collected 3.64 USDC, the remainder of Bob's 4.00 USDC slash after the sponsor's refund and the DAO's normal fee cut are carved out of it. Every token the contract ever held across this flow (2 × 800 bond + 0.40 fee = 1600.40) is accounted for by the end: nothing is left stranded in the contract, and nothing is double-spent. `slashAmount` is deliberately small relative to `bondTarget` at launch - a governed parameter that can be raised later once the sentinel set and dispute frequency are better understood.
 
-If the arbitrator never rules, `timeoutArbitration` can be called permissionlessly once `block.number` passes `arbitrationDeadline`: the request moves straight to `TIMED_OUT`, the sponsor's fee is refunded, and every sentinel — including Bob — recovers their bond in full via `claim()`, since a timeout (unlike a ruling) establishes no losing side to slash.
+If the arbitrator never rules, `timeoutArbitration` can be called permissionlessly once `block.number` passes `arbitrationDeadline`: the request moves straight to `TIMED_OUT`, the sponsor's fee is refunded, and every sentinel - including Bob - recovers their bond in full via `claim()`, since a timeout (unlike a ruling) establishes no losing side to slash.
+
+</details>
+
+---
+
+<details>
+<summary><h2>Flow: Timeout (Nobody Votes / Nobody Reveals)</h2></summary>
+
+Not every request reaches a vote. If nobody ever commits, or sentinels commit but nobody reveals, there is no established side for `finalize` to resolve or freeze - the request times out straight from `PENDING` to `TIMED_OUT`, the sponsor's fee is refunded in full, and any sentinel who did commit a bond recovers it in full via `claim`. Both branches below start from the same posted request and diverge only in whether any sentinel ever calls `commit`.
+
+**Setup for this example:**
+
+| Parameter | Value |
+|---|---|
+| `fee` (current governed fee) | 0.40 USDC |
+| `bondTarget` (= fee × bondMultiplier) | 800 USDC per sentinel |
+| sentinels | Alice, Bob (both active; only appear in the "nobody reveals" branch) |
+
+Solid arrows (`→`) are contract calls. Dashed arrows (`⇢`) show the resulting ERC20 balance change. `finalize` is permissionless - anyone can call it once its timing condition is met; the Sponsor is shown calling it here purely for convenience.
+
+```mermaid
+sequenceDiagram
+    actor Sponsor
+    actor Proposer as PROPOSER (Consensus)
+    actor Alice
+    actor Bob
+    participant Oracle as SentinelOracle
+    participant Token as FEE_TOKEN
+
+    Note over Oracle: request[R3] = none
+
+    Proposer->>Oracle: postRequest(R3, Sponsor, ...)
+    Oracle->>Token: transferFrom(Sponsor, Oracle, 0.40)
+    Sponsor-->>Oracle: 0.40 FEE_TOKEN
+    Note over Oracle: request[R3] = { state: PENDING, sponsor: Sponsor, fee: 0.40,<br/>bondTarget: 800, committedCount: 0, revealedCount: 0,<br/>approveCount: 0, denyCount: 0 }
+
+    alt Nobody ever commits
+        Note over Sponsor,Token: Commit window opens and closes -- nobody calls commit()
+        Note over Oracle: block.number passes commitDeadline -- committedCount stays 0
+
+        Sponsor->>Oracle: finalize(R3)
+        Note over Oracle: committedCount == 0 AND block.number > commitDeadline -> nothingToReveal<br/>(finalize() doesn't need to wait for revealDeadline)<br/>approveCount == 0 AND denyCount == 0 -> no side ever established -> newState = TIMED_OUT<br/>refundFee = request[R3].fee = 0.40<br/>unrevealedBond = 0 (nonRevealerCount * slashAmount -- nobody ever committed)<br/>request[R3].state = TIMED_OUT
+        Oracle->>Token: transfer(Sponsor, 0.40)
+        Oracle-->>Sponsor: 0.40 FEE_TOKEN
+
+        Note over Sponsor,Token: Nobody ever staked a bond, so there is nothing left to claim()
+    else Sentinels commit but nobody reveals
+        rect rgba(200,220,255,0.3)
+            Note over Sponsor,Token: Commit window
+            Alice->>Oracle: commit(R3, hash(approve=true, saltA, reasonA))
+            Oracle->>Token: transferFrom(Alice, Oracle, 800)
+            Alice-->>Oracle: 800 FEE_TOKEN
+
+            Bob->>Oracle: commit(R3, hash(approve=false, saltB, reasonB))
+            Oracle->>Token: transferFrom(Bob, Oracle, 800)
+            Bob-->>Oracle: 800 FEE_TOKEN
+            Note over Oracle: request[R3].committedCount = 2
+        end
+
+        Note over Oracle: block.number passes commitDeadline -- reveal window opens,<br/>but neither Alice nor Bob ever calls reveal()
+        Note over Oracle: block.number passes revealDeadline -- revealedCount stays 0
+
+        Sponsor->>Oracle: finalize(R3)
+        Note over Oracle: revealedCount (0) != committedCount (2) -> not everyoneRevealed,<br/>committedCount > 0 -> not nothingToReveal either --<br/>only block.number > revealDeadline lets this proceed<br/>approveCount == 0 AND denyCount == 0 -> no side was ever established -> newState = TIMED_OUT<br/>refundFee = request[R3].fee = 0.40<br/>unrevealedBond = 0 -- that slash only fires once some side IS established (see Dispute flow)<br/>request[R3].state = TIMED_OUT
+        Oracle->>Token: transfer(Sponsor, 0.40)
+        Oracle-->>Sponsor: 0.40 FEE_TOKEN
+
+        rect rgba(255,240,200,0.3)
+            Note over Sponsor,Token: Each sentinel claims their bond back in full
+            Alice->>Oracle: claim(R3)
+            Note over Oracle: feeReward = 0 (state is TIMED_OUT, not resolved)<br/>slash = slashAmountFor(TIMED_OUT, PENDING) = 0 (no side was ever established)<br/>bondReturn = 800 - 0 = 800
+            Oracle->>Token: transfer(Alice, 800)
+            Oracle-->>Alice: 800 FEE_TOKEN
+
+            Bob->>Oracle: claim(R3)
+            Note over Oracle: feeReward = 0, slash = 0, bondReturn = 800 - 0 = 800
+            Oracle->>Token: transfer(Bob, 800)
+            Oracle-->>Bob: 800 FEE_TOKEN
+        end
+    end
+```
+
+**Outcome:** Both branches land on `TIMED_OUT` and refund the sponsor's 0.40 USDC fee in full - a timeout costs the sponsor nothing either way. In the "nobody commits" branch, nobody ever staked a bond, so there is nothing to `claim`. In the "nobody reveals" branch, Alice and Bob each staked 800 USDC and get every bit of it back via `claim`: a non-reveal is only punished (the `unrevealedBond` computed inside `finalize`, see the Dispute flow above) when it stalls a request whose outcome was *already* decided by someone else's revealed vote. Here no vote was ever revealed at all, so no side was ever established, and there is no misconduct to prove against a silent committer - `slashAmountFor` only slashes an unrevealed vote once `approveSentinelCount > 0 || denySentinelCount > 0`, which never happens in this flow.
 
 </details>
