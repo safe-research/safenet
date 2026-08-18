@@ -16,9 +16,10 @@ VALIDATORS=(
     alice:0x70997970C51812dc3A010C7d01b50e0d17dc79C8:0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d
     bob:0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC:0x5de4111afa1a4b94908f83103eb1f1706367c2e68ca870fc3fb9a804cdab365a
 )
+# The configured sentinels as `name:private-key:engine-port`.
 SENTINELS=(
-    carol:0x90F79bf6EB2c4f870365E785982E1f101E93b906:0x7c852118294e51e653712a81e05800f419141751be58f605c371e15141b007a6
-    dave:0x15d34AAf54267DB7D7c367839AAf71A00a2C6A65:0x47e179ec197488593b187f80a00eb0da91f1b9d0b13f8733639f19c30a34926a
+    carol:0x90F79bf6EB2c4f870365E785982E1f101E93b906:0x7c852118294e51e653712a81e05800f419141751be58f605c371e15141b007a6:5473
+    dave:0x15d34AAf54267DB7D7c367839AAf71A00a2C6A65:0x47e179ec197488593b187f80a00eb0da91f1b9d0b13f8733639f19c30a34926a:5474
 )
 # Anvil account (5). Only ever used via `--unlocked` impersonation
 # (cast_send), so unlike the accounts above its private key is never
@@ -69,14 +70,14 @@ FUND_ACCOUNT_TOKEN=1000000000000000000000
 usage() {
     cat <<EOF
 Run a local Safenet development network, with Rust validators and sentinels
-voting on a SentinelOracle.
+backed by sentinel engines voting on a SentinelOracle.
 
 USAGE
     run_devnet.sh [OPTIONS...]
 
 OPTIONS
     -h, --help                  Print this help message.
-    --build                     Build the contracts, validator and sentinel Podman images.
+    --build                     Build the contracts, validator, sentinel, and sentinel engine Podman images.
     --port <PORT>               Specify an alternate host port for the Ethereum RPC.
     --block-time <SECS>         The block time in seconds for the devnet.
     --blocks-per-epoch <NUM>    The number of blocks per Safenet epoch.
@@ -183,6 +184,14 @@ EOF
         name=${parts[0]}
 
         cat <<EOF
+    - name: sentinel-engine-${name}
+      image: localhost/safenet-sentinel-engine:latest
+      args:
+        - --config-file
+        - /config/sentinel-engine.toml
+      volumeMounts:
+        - name: config-sentinel-engine-${name}
+          mountPath: /config/sentinel-engine.toml
     - name: sentinel-${name}
       image: localhost/safenet-sentinel:latest
       args:
@@ -218,6 +227,10 @@ EOF
     - name: config-${name}
       hostPath:
         path: ${config_dir}/${name}.toml
+        type: File
+    - name: config-sentinel-engine-${name}
+      hostPath:
+        path: ${config_dir}/${name}-engine.toml
         type: File
 EOF
     done
@@ -295,6 +308,7 @@ if [ $build == yes ]; then
     podman build -t localhost/safenet-contracts -f "$ROOT/contracts/Dockerfile" "$ROOT"
     podman build -t localhost/safenet-validator -f "$ROOT/crates/validator/Dockerfile" "$ROOT"
     podman build -t localhost/safenet-sentinel -f "$ROOT/crates/sentinel/Dockerfile" "$ROOT"
+    podman build -t localhost/safenet-sentinel-engine -f "$ROOT/crates/sentinel-engine/Dockerfile" "$ROOT"
 fi
 
 # Compute the participant set based on our configuration. We want to
@@ -367,13 +381,18 @@ for validator in "${VALIDATORS[@]}"; do
     } > "$config_dir/${name}.toml"
 done
 
-# Write each sentinel's TOML config into `$config_dir`, following the shape
-# established by `run_sentinel_integration_test.sh`'s `sentinel_config()`
-# heredoc.
+# Write each sentinel and its engine's TOML config into `$config_dir`,
+# following the shapes established by `run_sentinel_integration_test.sh`'s
+# configuration helpers.
 for sentinel in "${SENTINELS[@]}"; do
     parts=(${sentinel//:/ })
     name=${parts[0]}
     private_key=${parts[2]}
+    engine_port=${parts[3]}
+
+    {
+        echo "bind_address = \"0.0.0.0:${engine_port}\""
+    } > "$config_dir/${name}-engine.toml"
 
     {
         echo "rpc = \"http://localhost:8545\""
@@ -386,6 +405,7 @@ for sentinel in "${SENTINELS[@]}"; do
         echo "fee_token = \"${fee_token}\""
         echo "voting_window = 1"
         echo "blocklist = []"
+        echo "engine = \"http://localhost:${engine_port}/v1/security-check\""
         echo "address_poisoning_lookback_blocks = 1000"
         echo
         echo "[observability]"
