@@ -1,5 +1,4 @@
 mod action;
-mod address_poisoning;
 mod bindings;
 mod checker;
 mod config;
@@ -12,8 +11,7 @@ mod state;
 mod static_checker;
 
 use self::{
-    address_poisoning::AddressPoisoningChecker, config::Config, engine::EngineClient,
-    service::SentinelService, static_checker::StaticChecker,
+    config::Config, engine::EngineClient, service::SentinelService, static_checker::StaticChecker,
 };
 use alloy::primitives::U256;
 use argh::FromArgs;
@@ -75,10 +73,6 @@ async fn main() -> Result<(), Box<dyn Error>> {
         U256::from(chain_id),
         config.sentinel.voting_window,
         StaticChecker::new(config.sentinel.blocklist),
-        AddressPoisoningChecker::new(
-            provider.clone(),
-            config.sentinel.address_poisoning_lookback_blocks,
-        ),
         EngineClient::new(config.sentinel.engine)?,
         engine_timeout,
     );

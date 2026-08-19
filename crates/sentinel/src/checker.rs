@@ -1,8 +1,7 @@
 //! The shared verdict type and trait every check plugged into
 //! [`crate::effect::Handler`]'s dynamic-check chain implements: the built-in
-//! [`crate::cow::CowChecker`] and
-//! [`crate::address_poisoning::AddressPoisoningChecker`], and the
-//! operator-configured [`crate::engine::EngineClient`] alike.
+//! [`crate::cow::CowChecker`]. The operator-configured
+//! [`crate::engine::EngineClient`] runs after this local chain.
 //!
 //! `Handler` runs its checkers in a fixed order, stopping at the first
 //! non-[`CheckOutcome::Unknown`] result. If every checker in the chain comes

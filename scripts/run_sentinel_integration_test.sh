@@ -187,7 +187,11 @@ STATE_RESOLVED_APPROVED=3
 sentinel_engine_config() {
 	local bind_address=$1
 	cat <<EOF
+rpc = "$RPC_URL"
 bind_address = "$bind_address"
+
+[engine]
+address_poisoning_lookback_blocks = 1000
 EOF
 }
 sentinel_config() {
@@ -206,7 +210,6 @@ fee_token = "$FEE_TOKEN"
 voting_window = $((COMMIT_WINDOW + REVEAL_WINDOW))
 blocklist = $blocklist
 engine = "http://$engine"
-address_poisoning_lookback_blocks = 1000
 
 [index]
 block_time = $((BLOCK_TIME_SECONDS * 1000))
