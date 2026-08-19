@@ -119,6 +119,9 @@ contracts-deploy-erc20 *args:
 contracts-deploy-sentinel-oracle *args:
     (cd contracts && forge script DeploySentinelOracleScript {{args}})
 
+contracts-deploy-amb-governance-adapter *args:
+    (cd contracts && forge script DeployAmbGovernanceAdapterScript {{args}})
+
 contracts-deploy-test-consensus *args:
     (cd contracts && forge script DeployTestConsensusScript {{args}})
 
