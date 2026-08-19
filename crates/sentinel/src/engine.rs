@@ -5,13 +5,32 @@ use crate::{
     bindings::consensus::SafeTransaction,
     checker::{CheckOutcome, Checker},
 };
+use alloy::primitives::B256;
+use reqwest::RequestBuilder;
 use safe_tx::rule::RuleId;
-use serde::{Deserialize, Serialize};
+use serde::{
+    Deserialize, Serialize, Serializer,
+    ser::{self, SerializeStruct as _},
+};
+use std::time::Duration;
+use tracing::{Span, field};
 use url::Url;
 
-#[derive(Serialize)]
 struct Request<'a> {
-    transaction: &'a safe_tx::SafeTransaction,
+    transaction: &'a SafeTransaction,
+}
+
+impl<'a> Serialize for Request<'a> {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        let transaction = safe_tx::SafeTransaction::try_from(self.transaction.clone())
+            .map_err(ser::Error::custom)?;
+        let mut request = serializer.serialize_struct("Request", 1)?;
+        request.serialize_field("transaction", &transaction)?;
+        request.end()
+    }
 }
 
 #[derive(Deserialize)]
@@ -54,45 +73,99 @@ impl EngineClient {
         })
     }
 
-    async fn request(&self, transaction: &SafeTransaction) -> Result<CheckOutcome, reqwest::Error> {
-        let transaction = match safe_tx::SafeTransaction::try_from(transaction.clone()) {
-            Ok(transaction) => transaction,
-            Err(err) => {
-                tracing::error!(%err, "cannot send invalid Safe transaction to sentinel engine");
-                return Ok(CheckOutcome::Unknown);
-            }
-        };
-        let response: Response = self
+    /// Requests a verdict for `transaction`, correlating the HTTP request with
+    /// the onchain request through the `x-request-id` header.
+    ///
+    /// An invalid transaction, transport failure, timeout, non-success status,
+    /// or invalid response is not evidence for either vote and therefore
+    /// resolves to [`CheckOutcome::Unknown`].
+    pub fn security_check(&self, transaction: &SafeTransaction) -> SecurityCheck {
+        let span = tracing::info_span!(
+            "security_check",
+            safe = %transaction.safe,
+            request_id = field::Empty,
+        );
+        let request = self
             .client
             .post(self.endpoint.clone())
-            .json(&Request {
-                transaction: &transaction,
-            })
-            .send()
-            .await?
-            .error_for_status()?
-            .json()
-            .await?;
-        Ok(match response {
-            Response::Secure => CheckOutcome::Approved,
-            Response::Insecure { rule } => CheckOutcome::Denied(rule),
-            Response::Abstain => CheckOutcome::Unknown,
+            .json(&Request { transaction });
+
+        SecurityCheck { span, request }
+    }
+}
+
+/// A security check.
+pub struct SecurityCheck {
+    span: Span,
+    request: RequestBuilder,
+}
+
+impl SecurityCheck {
+    /// Configure the request ID for the security check.
+    #[expect(
+        dead_code,
+        reason = "the sentinel is not yet wired to propagate request ID to the engine"
+    )]
+    pub fn request_id(mut self, request_id: B256) -> Self {
+        self.span.record("request_id", field::display(request_id));
+        self.request = self.request.header("X-Request-ID", request_id.to_string());
+        self
+    }
+
+    /// Configure the timeout for the security check.
+    pub fn timeout(mut self, timeout: Duration) -> Self {
+        self.request = self.request.timeout(timeout).header(
+            "X-Request-Timeout",
+            u64::try_from(timeout.as_millis()).unwrap_or(u64::MAX),
+        );
+        self
+    }
+
+    /// Executes the security check.
+    pub async fn execute(self) -> CheckOutcome {
+        let _entered = self.span.enter();
+        async move {
+            let response = self
+                .request
+                .send()
+                .await?
+                .error_for_status()?
+                .json()
+                .await?;
+            let outcome = match response {
+                Response::Secure => CheckOutcome::Approved,
+                Response::Insecure { rule } => CheckOutcome::Denied(rule),
+                Response::Abstain => CheckOutcome::Unknown,
+            };
+            Ok(outcome)
+        }
+        .await
+        .unwrap_or_else(|err: reqwest::Error| {
+            tracing::error!(
+                %err,
+                "sentinel engine request failed; dropping the request unanswered",
+            );
+
+            // A failed request is *not* treated as approval or denial: an
+            // unreachable or malfunctioning sentinel engine isn't evidence
+            // about the  transaction either way, so it resolves to
+            // [`CheckOutcome::Unknown`], deferring to whatever checker runs
+            // next (or, if this is the last one in the chain, dropping the
+            // request rather than voting on it).
+            CheckOutcome::Unknown
         })
     }
 }
 
 #[async_trait::async_trait]
 impl Checker for EngineClient {
-    /// A failed request is *not* treated as approval or denial: an
-    /// unreachable or malfunctioning sentinel engine isn't evidence about the
-    /// transaction either way, so it resolves to [`CheckOutcome::Unknown`],
-    /// deferring to whatever checker runs next (or, if this is the last one
-    /// in the chain, dropping the request rather than voting on it).
     async fn check(&self, transaction: &SafeTransaction) -> CheckOutcome {
-        self.request(transaction).await.unwrap_or_else(|err| {
-            tracing::error!(%err, safe = %transaction.safe, "sentinel engine request failed; dropping the request unanswered");
-            CheckOutcome::Unknown
-        })
+        self.security_check(transaction)
+            // TODO: Invoke `security_check` directly from the effect handler once
+            // it can supply the real request ID and remaining response time.
+            .timeout(Duration::from_secs(10))
+            .execute()
+            .await
     }
 }
 
