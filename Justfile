@@ -97,6 +97,11 @@ test-integration-sentinel:
 test-integration-validator:
     ./scripts/run_validator_integration_test.sh
 
+# Regression test: nonces must survive a reorg that rewinds a group's DKG
+# past its key-share confirmation (Anvil + two validator instances).
+test-integration-validator-reorg-nonce:
+    ./scripts/run_validator_reorg_nonce_test.sh
+
 # Run the explorer's Vite dev server.
 explorer-dev:
     npm --prefix explorer run dev
