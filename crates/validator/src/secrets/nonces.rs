@@ -108,7 +108,7 @@ impl NonceStream {
         let (sender, receiver) = mpsc::channel();
         let worker = thread::Builder::new()
             .spawn(move || {
-                let _guard = span.enter();
+                let _guard = span.entered();
                 Self::stream(sampler, receiver);
             })
             .map_err(Error::Spawn)?;
