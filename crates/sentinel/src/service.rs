@@ -801,7 +801,9 @@ mod tests {
             VOTING_WINDOW,
             StaticChecker::new(blocklist),
             address_poisoning_checker,
-            EngineClient::new(None),
+            // Configure an engine for an invalid URL, all checks come back
+            // as `Unknown`.
+            EngineClient::new("http://127.0.0.1:1".parse().unwrap()).unwrap(),
         )
     }
 

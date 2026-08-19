@@ -79,29 +79,26 @@ impl EffectHandler<Effect, Resume> for Handler {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{address_poisoning::AddressPoisoningChecker, engine::EngineClient};
-    use alloy::{primitives::Address, transports::mock::Asserter};
-    use safenet_core::provider::Provider;
+    use alloy::primitives::Address;
 
     const SAFE: Address = Address::new([1u8; 20]);
     const REQUEST_ID: B256 = B256::repeat_byte(0x11);
 
-    fn address_poisoning() -> AddressPoisoningChecker {
-        let provider = Provider::mocked(&Asserter::new());
-        AddressPoisoningChecker::new(provider, 1_000)
-    }
+    struct StubChecker(CheckOutcome);
 
-    fn handler(address_poisoning: AddressPoisoningChecker, engine: EngineClient) -> Handler {
-        Handler::new(vec![Box::new(address_poisoning), Box::new(engine)])
+    #[async_trait::async_trait]
+    impl Checker for StubChecker {
+        async fn check(&self, _: &SafeTransaction) -> CheckOutcome {
+            self.0
+        }
     }
 
     #[tokio::test]
     async fn resumes_with_the_checker_s_outcome() {
-        // An unconfigured `EngineClient` always approves, and a
-        // transaction with only its Safe set has no ERC-20 calldata for the
-        // earlier checkers to inspect — this only exercises the `Effect` ->
-        // `Resume` wiring itself.
-        let handler = handler(address_poisoning(), EngineClient::new(None));
+        let handler = Handler::new(vec![
+            Box::new(StubChecker(CheckOutcome::Unknown)),
+            Box::new(StubChecker(CheckOutcome::Approved)),
+        ]);
 
         let resume = handler
             .perform_effect(Effect::DynamicCheck {

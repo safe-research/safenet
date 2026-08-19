@@ -1,5 +1,5 @@
-//! Client for the optional sentinel engine used to check transactions that
-//! were not conclusively handled by the sentinel's local checks.
+//! Client for the sentinel engine used to check transactions that were not
+//! conclusively handled by the sentinel's local checks.
 
 use crate::{
     bindings::consensus::SafeTransaction,
@@ -30,27 +30,31 @@ enum Response {
 /// either way, so the caller is expected to drop the request rather than
 /// vote on it (see the `TODO` in `crate::effect`).
 pub struct EngineClient {
-    url: Option<Url>,
+    endpoint: Url,
     client: reqwest::Client,
 }
 
+/// An error constructing an [`EngineClient`].
+#[derive(Debug, thiserror::Error)]
+#[error("sentinel engine URL cannot be used as a base URL")]
+pub struct InvalidBaseUrl;
+
 impl EngineClient {
-    /// `url: None` means no sentinel engine is configured; every call then
-    /// resolves to [`CheckOutcome::Approved`] without a request, so the
-    /// reference Sentinel works with just its local checks until an
-    /// operator opts into a remote one.
-    pub fn new(url: Option<Url>) -> Self {
-        Self {
-            url,
+    /// Creates a client for the engine at `base_url`.
+    pub fn new(mut base_url: Url) -> Result<Self, InvalidBaseUrl> {
+        base_url
+            .path_segments_mut()
+            .map_err(|_| InvalidBaseUrl)?
+            .pop_if_empty()
+            .extend(["v1", "security-check"]);
+
+        Ok(Self {
+            endpoint: base_url,
             client: reqwest::Client::new(),
-        }
+        })
     }
 
-    async fn request(
-        &self,
-        url: &Url,
-        transaction: &SafeTransaction,
-    ) -> Result<CheckOutcome, reqwest::Error> {
+    async fn request(&self, transaction: &SafeTransaction) -> Result<CheckOutcome, reqwest::Error> {
         let transaction = match safe_tx::SafeTransaction::try_from(transaction.clone()) {
             Ok(transaction) => transaction,
             Err(err) => {
@@ -60,7 +64,7 @@ impl EngineClient {
         };
         let response: Response = self
             .client
-            .post(url.clone())
+            .post(self.endpoint.clone())
             .json(&Request {
                 transaction: &transaction,
             })
@@ -85,10 +89,7 @@ impl Checker for EngineClient {
     /// deferring to whatever checker runs next (or, if this is the last one
     /// in the chain, dropping the request rather than voting on it).
     async fn check(&self, transaction: &SafeTransaction) -> CheckOutcome {
-        let Some(url) = &self.url else {
-            return CheckOutcome::Approved;
-        };
-        self.request(url, transaction).await.unwrap_or_else(|err| {
+        self.request(transaction).await.unwrap_or_else(|err| {
             tracing::error!(%err, safe = %transaction.safe, "sentinel engine request failed; dropping the request unanswered");
             CheckOutcome::Unknown
         })
@@ -122,18 +123,9 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn approves_without_a_request_when_unconfigured() {
-        let checker = EngineClient::new(None);
-        assert_eq!(
-            checker.check(&SafeTransaction::default()).await,
-            CheckOutcome::Approved
-        );
-    }
-
-    #[tokio::test]
     async fn approves_when_the_endpoint_approves() {
         let url = respond_once("200 OK", r#"{"verdict":"secure"}"#).await;
-        let checker = EngineClient::new(Some(url));
+        let checker = EngineClient::new(url).unwrap();
         assert_eq!(
             checker.check(&SafeTransaction::default()).await,
             CheckOutcome::Approved
@@ -143,7 +135,7 @@ mod tests {
     #[tokio::test]
     async fn denies_with_the_cited_rule() {
         let url = respond_once("200 OK", r#"{"verdict":"insecure","rule":"R-4.6"}"#).await;
-        let checker = EngineClient::new(Some(url));
+        let checker = EngineClient::new(url).unwrap();
         assert_eq!(
             checker.check(&SafeTransaction::default()).await,
             CheckOutcome::Denied(RuleId::R4_6KnownMaliciousTarget)
@@ -157,7 +149,7 @@ mod tests {
             r#"{"verdict":"insecure","rule":"not-a-real-rule"}"#,
         )
         .await;
-        let checker = EngineClient::new(Some(url));
+        let checker = EngineClient::new(url).unwrap();
         assert_eq!(
             checker.check(&SafeTransaction::default()).await,
             CheckOutcome::Unknown
@@ -167,7 +159,7 @@ mod tests {
     #[tokio::test]
     async fn abstains_when_the_endpoint_abstains() {
         let url = respond_once("200 OK", r#"{"verdict":"abstain"}"#).await;
-        let checker = EngineClient::new(Some(url));
+        let checker = EngineClient::new(url).unwrap();
         assert_eq!(
             checker.check(&SafeTransaction::default()).await,
             CheckOutcome::Unknown
@@ -180,7 +172,7 @@ mod tests {
         let url = Url::parse(&format!("http://{}", listener.local_addr().unwrap())).unwrap();
         drop(listener);
 
-        let checker = EngineClient::new(Some(url));
+        let checker = EngineClient::new(url).unwrap();
         assert_eq!(
             checker.check(&SafeTransaction::default()).await,
             CheckOutcome::Unknown

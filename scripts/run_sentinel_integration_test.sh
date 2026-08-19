@@ -191,7 +191,7 @@ consensus = "$CONSENSUS"
 fee_token = "$FEE_TOKEN"
 voting_window = $((COMMIT_WINDOW + REVEAL_WINDOW))
 blocklist = $blocklist
-engine = "http://$engine/v1/security-check"
+engine = "http://$engine"
 address_poisoning_lookback_blocks = 1000
 
 [index]

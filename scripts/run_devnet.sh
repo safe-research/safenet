@@ -405,7 +405,7 @@ for sentinel in "${SENTINELS[@]}"; do
         echo "fee_token = \"${fee_token}\""
         echo "voting_window = 1"
         echo "blocklist = []"
-        echo "engine = \"http://localhost:${engine_port}/v1/security-check\""
+        echo "engine = \"http://localhost:${engine_port}\""
         echo "address_poisoning_lookback_blocks = 1000"
         echo
         echo "[observability]"
