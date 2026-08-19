@@ -35,7 +35,6 @@ impl NonceGenerator {
 
     fn start_with_sampler(&mut self, group_id: B256, sampler: Sampler) -> Result<(), Error> {
         let btree_map::Entry::Vacant(entry) = self.groups.entry(group_id) else {
-            tracing::debug!(%group_id, "ignoring attempt to restart nonce generation worker for group");
             return Ok(());
         };
 
