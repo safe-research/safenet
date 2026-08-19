@@ -7,8 +7,25 @@ on:
       - main
 
 jobs:
-  sentinel-integration:
+  integration:
+    name: integration (${{ matrix.name }})
     runs-on: ubuntu-latest
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: sentinel
+            just-target: test-integration-sentinel
+            log-artifact: sentinel-integration-logs
+
+          - name: validator
+            just-target: test-integration-validator
+            log-artifact: validator-integration-logs
+
+          - name: validator-reorg-nonce
+            just-target: test-integration-validator-reorg-nonce
+            log-artifact: validator-integration-reorg-nonce-logs
 
     steps:
       - uses: actions/checkout@v5
@@ -24,78 +41,12 @@ jobs:
 
       - uses: ./.github/actions/install-just
 
-      - run: just test-integration-sentinel
+      - run: just ${{ matrix.just-target }}
 
-      - name: Upload sentinel logs
+      - name: Upload logs
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: sentinel-integration-logs
-          path: |
-            anvil_sentinel_logs.txt
-            sentinel_engine_a_logs.txt
-            sentinel_engine_b_logs.txt
-            sentinel_a_logs.txt
-            sentinel_b_logs.txt
-          if-no-files-found: ignore
-
-  validator-integration:
-    runs-on: ubuntu-latest
-
-    steps:
-      - uses: actions/checkout@v5
-        with:
-          submodules: recursive
-
-      - uses: foundry-rs/foundry-toolchain@v1
-        with:
-          # We fix the foundry version because of a formatting bug introduced
-          # in version 1.7.0.
-          # See <https://github.com/foundry-rs/foundry/issues/13362>
-          version: v1.5.1
-
-      - uses: ./.github/actions/install-just
-
-      - run: just test-integration-validator
-
-      - name: Upload validator logs
-        if: failure()
-        uses: actions/upload-artifact@v4
-        with:
-          name: validator-integration-logs
-          path: |
-            anvil_validator_logs.txt
-            validator_a_logs.txt
-            validator_b_logs.txt
-          if-no-files-found: ignore
-
-  validator-integration-reorg-nonce:
-    runs-on: ubuntu-latest
-
-    steps:
-      - uses: actions/checkout@v5
-        with:
-          submodules: recursive
-
-      - uses: foundry-rs/foundry-toolchain@v1
-        with:
-          # We fix the foundry version because of a formatting bug introduced
-          # in version 1.7.0.
-          # See <https://github.com/foundry-rs/foundry/issues/13362>
-          version: v1.5.1
-
-      - name: Install just
-        run: sudo apt-get update && sudo apt-get install -y just
-
-      - run: just test-integration-validator-reorg-nonce
-
-      - name: Upload validator logs
-        if: failure()
-        uses: actions/upload-artifact@v4
-        with:
-          name: validator-integration-reorg-nonce-logs
-          path: |
-            anvil_reorg_nonce_logs.txt
-            validator_a_logs.txt
-            validator_b_logs.txt
+          name: ${{ matrix.log-artifact }}
+          path: "*_logs.txt"
           if-no-files-found: ignore
