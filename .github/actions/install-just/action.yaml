@@ -1,0 +1,42 @@
+name: "Install just"
+description: "Installs a pinned just release binary directly from GitHub, avoiding flaky apt-get installs"
+
+inputs:
+  arch-suffix:
+    description: "Release asset architecture/target suffix"
+    required: false
+    default: "x86_64-unknown-linux-musl"
+  version:
+    description: "just version to install"
+    required: false
+    default: "1.58.0"
+  sha256:
+    description: "Expected SHA-256 checksum of the release archive"
+    required: false
+    default: "4a5cc2f53e6f0f8c59092a6cc38291eb729d46a7dd95d3ae582008881b84931d"
+
+runs:
+  using: "composite"
+  steps:
+    - name: Install just
+      shell: bash
+      env:
+        VERSION: ${{ inputs.version }}
+        ARCH_SUFFIX: ${{ inputs.arch-suffix }}
+        SHA256: ${{ inputs.sha256 }}
+      run: |
+        set -euo pipefail
+
+        url="https://github.com/casey/just/releases/download/${VERSION}/just-${VERSION}-${ARCH_SUFFIX}.tar.gz"
+
+        echo "⬇️ Downloading just v${VERSION}..."
+        curl --proto '=https' --tlsv1.2 -fsSL "$url" -o /tmp/just.tar.gz
+
+        echo "🔒 Verifying SHA-256 checksum..."
+        echo "${SHA256}  /tmp/just.tar.gz" | sha256sum --check -
+
+        tar -xzf /tmp/just.tar.gz -C /tmp just
+        sudo mv /tmp/just /usr/local/bin/just
+        rm -f /tmp/just.tar.gz
+
+        just --version
