@@ -19,7 +19,7 @@ const commonParams = {
 	maxBlockRange: 500n,
 };
 
-// Mirrors `getRequest`'s real two-tuple return (`[Terms, Progress]`, per
+// Mirrors `getRequest`'s real single-struct return (`{ terms, progress }`, per
 // contracts/src/libraries/SentinelOracleRequests.sol) rather than the flat field list
 // `loadVotingStatus` actually reads from, so this stays a faithful stand-in for what
 // `readContract` decodes.
@@ -35,8 +35,8 @@ const makeSentinelProvider = (request: {
 	denySentinelCount: number;
 }): PublicClient =>
 	({
-		readContract: vi.fn().mockResolvedValue([
-			{
+		readContract: vi.fn().mockResolvedValue({
+			terms: {
 				commitDeadline: request.commitDeadline ?? 0n,
 				daoFeeShare: 0,
 				revealDeadline: request.revealDeadline ?? 0n,
@@ -44,7 +44,7 @@ const makeSentinelProvider = (request: {
 				sponsor: SPONSOR,
 				slashAmount: 0n,
 			},
-			{
+			progress: {
 				state: request.state,
 				fee: request.fee ?? 0n,
 				arbitrationDeadline: 0n,
@@ -53,7 +53,7 @@ const makeSentinelProvider = (request: {
 				approveSentinelCount: request.approveSentinelCount,
 				denySentinelCount: request.denySentinelCount,
 			},
-		]),
+		}),
 		getChainId: vi.fn().mockResolvedValue(CHAIN_ID),
 	}) as unknown as PublicClient;
 

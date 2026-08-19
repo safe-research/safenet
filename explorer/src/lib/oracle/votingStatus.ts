@@ -43,7 +43,7 @@ export const loadVotingStatus = async ({
 	const requestId = oracleRequestId({ chainId, consensus, epoch, oracle, safeTxHash, oracleData });
 
 	try {
-		const [, progress] = await provider.readContract({
+		const { progress } = await provider.readContract({
 			address: oracle,
 			abi: sentinelOracleAbi,
 			functionName: "getRequest",
