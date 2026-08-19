@@ -186,10 +186,9 @@ impl Handler {
                 .unwrap_or(Resume::Noop)),
             Effect::ReconcileGroupSecrets { groups } => {
                 // We only need to keep keygen secrets for groups that are still
-                // in DKG and do not yet have a key share, and nonces (both in
-                // the secret store and the nonce generator) for groups that
-                // have completed DKG to the point that their key share is
-                // constructed.
+                // in DKG and do not yet have a key share.
+                // The process-local nonce generator, however, can only run for
+                // groups that currently have a key share to generate with.
                 let (keygen, nonces) = groups.into_iter().fold(
                     (BTreeSet::new(), BTreeMap::new()),
                     |(mut keygen, mut nonces), (group_id, key_share)| {
@@ -202,8 +201,17 @@ impl Handler {
                     },
                 );
 
+                // Retaining nonces for all groups tracked in the secret store
+                // (with and without secret share) is a work around for the
+                // issue that a reorg can roll a group's key share back to
+                // `None` after nonces were already generated for it (e.g. a
+                // restart replaying past the block where the key share was
+                // confirmed), and those nonces must survive until the group
+                // either re-confirms its key share or is dropped entirely.
+                self.secrets
+                    .retain_nonces(keygen.iter().copied().chain(nonces.keys().copied()))
+                    .await?;
                 self.secrets.retain_keygen_secrets(keygen).await?;
-                self.secrets.retain_nonces(nonces.keys().copied()).await?;
 
                 let mut generator = self.nonce_generator.lock().await;
                 generator.retain(|group_id| nonces.contains_key(group_id));
