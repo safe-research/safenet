@@ -14,14 +14,22 @@ concurrency:
 
 jobs:
   docker:
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.runner }}
     permissions:
       contents: read
       packages: write
 
     strategy:
       matrix:
+        platform: [amd64, arm64]
+        image: [validator, sentinel, sentinel-engine, contracts]
         include:
+          - platform: amd64
+            runner: ubuntu-latest
+            suffix: ""
+          - platform: arm64
+            runner: ubuntu-24.04-arm
+            suffix: "-arm64"
           - image: validator
             dockerfile: crates/validator/Dockerfile
           - image: sentinel
@@ -45,18 +53,17 @@ jobs:
       - id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ghcr.io/safe-research/safenet-${{ matrix.image }}
+          images: ghcr.io/safe-research/safenet-${{ matrix.image }}${{ matrix.suffix }}
           flavor: |
             latest=false
 
-      - uses: docker/setup-qemu-action@v3
       - uses: docker/setup-buildx-action@v3
 
       - uses: docker/build-push-action@v6
         with:
           context: .
           file: ${{ matrix.dockerfile }}
-          platforms: ${{ github.event_name == 'pull_request' && 'linux/amd64' || 'linux/amd64,linux/arm64' }}
+          platforms: linux/${{ matrix.platform }}
           push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
