@@ -23,6 +23,7 @@ use safenet_core::{
     state::{Command, Commands, Message, StateTransition},
     tx::{Signer, Transaction},
 };
+use std::time::Duration;
 
 /// The sentinel service: drives the request FSM (mirroring
 /// `SentinelOracleRequest.State`'s commit-reveal phases) from
@@ -44,6 +45,8 @@ pub struct SentinelService {
     /// Backs the same [`effect::Handler`], as the fallback once every
     /// built-in checker comes back with no opinion.
     engine: EngineClient,
+    /// Maximum time the sentinel engine has to answer a security check.
+    engine_timeout: Duration,
 }
 
 /// Advances the request FSM in response to `SentinelOracle`/`Consensus`
@@ -87,6 +90,7 @@ impl SentinelService {
         static_checker: StaticChecker,
         address_poisoning_checker: AddressPoisoningChecker,
         engine: EngineClient,
+        engine_timeout: Duration,
     ) -> Self {
         Self {
             oracle,
@@ -98,6 +102,7 @@ impl SentinelService {
             static_checker,
             address_poisoning_checker,
             engine,
+            engine_timeout,
         }
     }
 }
@@ -724,6 +729,7 @@ impl Service for SentinelService {
             static_checker,
             address_poisoning_checker,
             engine,
+            engine_timeout,
         } = self;
         (
             SentinelTransition {
@@ -734,11 +740,14 @@ impl Service for SentinelService {
                 voting_window,
                 static_checker,
             },
-            effect::Handler::new(vec![
-                Box::new(CowChecker::new()),
-                Box::new(address_poisoning_checker),
-                Box::new(engine),
-            ]),
+            effect::Handler::new(
+                vec![
+                    Box::new(CowChecker::new()),
+                    Box::new(address_poisoning_checker),
+                ],
+                engine,
+                engine_timeout,
+            ),
             SentinelEncoder { oracle, fee_token },
         )
     }
@@ -771,6 +780,7 @@ mod tests {
     const OTHER: Address = address!("8888888888888888888888888888888888888888");
     const CHAIN_ID: u64 = 1;
     const VOTING_WINDOW: u64 = 10;
+    const ENGINE_TIMEOUT: Duration = Duration::from_millis(7_500);
     /// `StaticChecker::check`'s reason for an approved transaction, as used by
     /// `transition()`/`svc` throughout this module's tests.
     const REASON: &str = "";
@@ -804,6 +814,7 @@ mod tests {
             // Configure an engine for an invalid URL, all checks come back
             // as `Unknown`.
             EngineClient::new("http://127.0.0.1:1".parse().unwrap()).unwrap(),
+            ENGINE_TIMEOUT,
         )
     }
 

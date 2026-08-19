@@ -18,7 +18,7 @@ use self::{
 use alloy::primitives::U256;
 use argh::FromArgs;
 use safenet_core::{Driver, observability, provider::Provider, utils};
-use std::{error::Error, path::PathBuf};
+use std::{error::Error, path::PathBuf, time::Duration};
 
 #[derive(Debug, FromArgs)]
 /// Safenet sentinel.
@@ -46,14 +46,33 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     let provider = Provider::connect(&config.rpc).await?;
     let pool = utils::connect_sqlite(config.database).await?;
-    let chain_id = U256::from(provider.chain_id());
+    let chain_id = provider.chain_id();
+
+    // TODO: Derive this from effect lifecycle data so time elapsed before the
+    // effect starts can be deducted from the request's actual reveal deadline.
+    // For now, use three quarters of the configured time until the block
+    // before the reveal deadline to leave some wiggle room for delays, with a
+    // one-second minimum for practical deployments.
+    let engine_timeout = {
+        let block_time = config.driver.index.blocks.block_time.resolve(chain_id)?;
+        Duration::from_millis(
+            u64::try_from(
+                u128::from(config.sentinel.voting_window.saturating_sub(1))
+                    .saturating_mul(u128::from(block_time))
+                    .saturating_mul(3)
+                    / 4,
+            )
+            .unwrap_or(u64::MAX)
+            .max(1_000),
+        )
+    };
 
     let service = SentinelService::new(
         config.oracle,
         config.sentinel.fee_token,
         config.consensus,
         config.signer.clone(),
-        chain_id,
+        U256::from(chain_id),
         config.sentinel.voting_window,
         StaticChecker::new(config.sentinel.blocklist),
         AddressPoisoningChecker::new(
@@ -61,6 +80,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
             config.sentinel.address_poisoning_lookback_blocks,
         ),
         EngineClient::new(config.sentinel.engine)?,
+        engine_timeout,
     );
 
     let driver = Driver::new(
