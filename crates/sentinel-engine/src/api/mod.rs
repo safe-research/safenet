@@ -9,7 +9,7 @@ use safe_tx::SafeTransaction;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use tower_http::trace::TraceLayer;
-use tracing::field;
+use tracing::{Instrument as _, field};
 
 /// A request to verify a proposed Safe transaction.
 #[derive(Debug, Deserialize, Eq, PartialEq, Serialize)]
@@ -42,12 +42,14 @@ async fn security_check(
     if let Some(request_id) = request_id {
         span.record("request_id", field::display(request_id));
     }
-    let _entered = span.enter();
 
     // TODO: Pass these parameters to the engine once it supports request
     // lifecycle context.
     let _ = timeout;
 
-    let verdict = engine.security_check(request.transaction).await;
+    let verdict = engine
+        .security_check(request.transaction)
+        .instrument(span)
+        .await;
     Json(verdict)
 }

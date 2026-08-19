@@ -10,7 +10,7 @@ use serde::{
     ser::{self, SerializeStruct as _},
 };
 use std::time::Duration;
-use tracing::{Span, field};
+use tracing::{Instrument as _, Span, field};
 use url::Url;
 
 struct Request<'a> {
@@ -115,36 +115,35 @@ impl SecurityCheck {
 
     /// Executes the security check.
     pub async fn execute(self) -> CheckOutcome {
-        let _entered = self.span.enter();
+        let Self { span, request } = self;
         async move {
-            let response = self
-                .request
-                .send()
-                .await?
-                .error_for_status()?
-                .json()
-                .await?;
-            let outcome = match response {
-                Response::Secure => CheckOutcome::Approved,
-                Response::Insecure { rule } => CheckOutcome::Denied(rule),
-                Response::Abstain => CheckOutcome::Unknown,
-            };
-            Ok(outcome)
-        }
-        .await
-        .unwrap_or_else(|err: reqwest::Error| {
-            tracing::error!(
-                %err,
-                "sentinel engine request failed; dropping the request unanswered",
-            );
+            let result = async {
+                let response = request.send().await?.error_for_status()?.json().await?;
+                let outcome = match response {
+                    Response::Secure => CheckOutcome::Approved,
+                    Response::Insecure { rule } => CheckOutcome::Denied(rule),
+                    Response::Abstain => CheckOutcome::Unknown,
+                };
+                Ok(outcome)
+            }
+            .await;
 
-            // A failed request is *not* treated as approval or denial: an
-            // unreachable or malfunctioning sentinel engine isn't evidence
-            // about the  transaction either way, so it resolves to
-            // [`CheckOutcome::Unknown`], dropping the request rather than
-            // voting on it.
-            CheckOutcome::Unknown
-        })
+            result.unwrap_or_else(|err: reqwest::Error| {
+                tracing::error!(
+                    %err,
+                    "sentinel engine request failed; dropping the request unanswered",
+                );
+
+                // A failed request is *not* treated as approval or denial: an
+                // unreachable or malfunctioning sentinel engine isn't evidence
+                // about the  transaction either way, so it resolves to
+                // [`CheckOutcome::Unknown`], dropping the request rather than
+                // voting on it.
+                CheckOutcome::Unknown
+            })
+        }
+        .instrument(span)
+        .await
     }
 }
 
