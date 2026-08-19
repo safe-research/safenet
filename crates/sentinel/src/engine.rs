@@ -100,14 +100,14 @@ impl SecurityCheck {
     /// Configure the request ID for the security check.
     pub fn request_id(mut self, request_id: B256) -> Self {
         self.span.record("request_id", field::display(request_id));
-        self.request = self.request.header("X-Request-ID", request_id.to_string());
+        self.request = self.request.header("x-request-id", request_id.to_string());
         self
     }
 
     /// Configure the timeout for the security check.
     pub fn timeout(mut self, timeout: Duration) -> Self {
         self.request = self.request.timeout(timeout).header(
-            "X-Request-Timeout",
+            "x-request-timeout",
             u64::try_from(timeout.as_millis()).unwrap_or(u64::MAX),
         );
         self
