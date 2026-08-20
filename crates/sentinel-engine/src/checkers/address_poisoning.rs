@@ -19,25 +19,18 @@
 //! next. See the `TODO` on [`AddressPoisoningChecker`]'s [`Checker`] impl.
 
 use super::Checker;
-use crate::engine::Verdict;
+use crate::{
+    contracts::bindings::erc20::{Approval, Transfer, approveCall, transferCall, transferFromCall},
+    engine::Verdict,
+};
 use alloy::{
     primitives::Address,
     providers::Provider as _,
     rpc::types::Filter,
-    sol,
     sol_types::{SolCall, SolEvent},
 };
-use safe_tx::{
-    SafeTransaction,
-    bindings::erc20::{approveCall, transferCall, transferFromCall},
-    rule::RuleId,
-};
+use safe_tx::{SafeTransaction, rule::RuleId};
 use safenet_core::provider::Provider;
-
-sol! {
-    event Transfer(address indexed from, address indexed to, uint256 amount);
-    event Approval(address indexed owner, address indexed spender, uint256 amount);
-}
 
 /// Which of the two poisoning-relevant ERC-20 call shapes `tx.data` decoded
 /// to.

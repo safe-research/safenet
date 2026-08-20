@@ -1,13 +1,12 @@
 //! Detection of functionally unlimited token allowances.
 
 use super::Checker;
-use crate::engine::Verdict;
-use alloy::primitives::U256;
-use safe_tx::{
-    SafeTransaction,
-    rule::RuleId,
-    target_effects::{EffectKind, decode_target_effects},
+use crate::{
+    contracts::target_effects::{EffectKind, decode_target_effects},
+    engine::Verdict,
 };
+use alloy::primitives::U256;
+use safe_tx::{SafeTransaction, rule::RuleId};
 
 /// Denies functionally unlimited token approvals.
 pub struct ExcessiveApprovalChecker;

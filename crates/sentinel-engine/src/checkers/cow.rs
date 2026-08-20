@@ -58,74 +58,19 @@
 //! malformed API response is `Abstain`, not guessed at either way.
 
 use super::Checker;
-use crate::engine::Verdict;
+use crate::{
+    contracts::bindings::{
+        cow::{Order, TwapData, createCall, setPreSignatureCall},
+        erc20::approveCall,
+    },
+    engine::Verdict,
+};
 use alloy::{
     primitives::{Address, B256, Bytes, U256, address},
-    sol,
     sol_types::{Eip712Domain, SolCall, SolStruct, SolValue, eip712_domain},
 };
-use safe_tx::{
-    Operation, SafeTransaction, bindings::erc20::approveCall, multi_send::decode_multi_send_call,
-    rule::RuleId,
-};
+use safe_tx::{Operation, SafeTransaction, multi_send::decode_multi_send_call, rule::RuleId};
 use serde::Deserialize;
-
-sol! {
-    function setPreSignature(bytes orderUid, bool signed);
-
-    struct ConditionalOrderParams {
-        address handler;
-        bytes32 salt;
-        bytes staticInput;
-    }
-    function create(ConditionalOrderParams params, bool dispatch);
-
-    /// ComposableCoW's TWAP handler's own order shape, ABI-encoded as
-    /// `create`'s `staticInput`. `sellToken` must match the token the
-    /// batched `approve` is actually for — an approval on an unrelated
-    /// token authorizes an allowance the order doesn't need at all, which is
-    /// itself excessive regardless of amount. `receiver` must be the Safe
-    /// itself (or the zero address, CoW's convention for "defaults to the
-    /// order owner") — anything else would route the order's proceeds to an
-    /// unrelated address. `partSellAmount * n` is the order's total sell
-    /// amount, the ceiling the approval must not exceed. The remaining
-    /// fields aren't needed by this check.
-    struct TwapData {
-        address sellToken;
-        address buyToken;
-        address receiver;
-        uint256 partSellAmount;
-        uint256 minPartLimit;
-        uint256 t0;
-        uint256 n;
-        uint256 t;
-        uint256 span;
-        bytes32 appData;
-    }
-
-    /// GPv2Settlement's own order struct (`GPv2Order.Data`), declared here
-    /// only for its EIP-712 hash — `kind`/`sellTokenBalance`/
-    /// `buyTokenBalance` are `string` (not `bytes32`) in the *type
-    /// signature* on purpose: GPv2Order.sol stores them pre-hashed as
-    /// `bytes32` markers (`keccak256("sell")` etc.), but EIP-712 hashes a
-    /// dynamic `string` field's *content* the same way, so passing the
-    /// literal strings here and letting this type's derived hashing do that
-    /// produces the identical digest.
-    struct Order {
-        address sellToken;
-        address buyToken;
-        address receiver;
-        uint256 sellAmount;
-        uint256 buyAmount;
-        uint32 validTo;
-        bytes32 appData;
-        uint256 feeAmount;
-        string kind;
-        bool partiallyFillable;
-        string sellTokenBalance;
-        string buyTokenBalance;
-    }
-}
 
 /// CoW Protocol's canonical contracts. Deployed at the same address on every
 /// network CoW Swap supports (deterministic `CREATE2` deployment), including
@@ -652,6 +597,8 @@ fn deserialize_decimal_u256<'de, D: serde::Deserializer<'de>>(de: D) -> Result<U
 
 #[cfg(test)]
 mod tests {
+    use crate::contracts::bindings::cow::ConditionalOrderParams;
+
     use super::*;
     use safe_tx::bindings::multi_send;
 
