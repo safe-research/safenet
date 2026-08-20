@@ -39,10 +39,8 @@ FUNDING_TOKEN=1000000
 # Anvil account 0 — deployer, MyToken owner, and SentinelOracle arbitrator.
 DEPLOYER=0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266
 DEPLOYER_PK=0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80
-# Only sentinel B blocklists this address, so the two sentinels are
-# guaranteed to cast opposing votes on a request proposing a call to it —
-# the genuine dispute exercised in step 10 below.
-DISPUTED_TX_TO=0x3333333333333333333333333333333333333333
+TX_SAFE=0x1111111111111111111111111111111111111111
+TX_RECIPIENT=0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
 
 # Register cleanup before anything, to make sure we don't leave anything running
 # in the background in case of an error.
@@ -127,6 +125,22 @@ for addr in "$SENTINEL_A_ADDR" "$SENTINEL_B_ADDR" "$SPONSOR_ADDR"; do
 		"$FEE_TOKEN" "transfer(address,uint256)" "$addr" "$FUNDING_TOKEN" >/dev/null
 done
 
+echo "Deploying transaction token..."
+env FACTORY=2 \
+	forge script --root "$ROOT/contracts" DeployERC20Script --rpc-url "$RPC_URL" --private-key "$SPONSOR_PK" --broadcast
+TX_TOKEN=$(jq -r '.returns.erc20.value' "$ROOT/contracts/build/broadcast/DeployERC20.s.sol/$CHAIN_ID/run-latest.json")
+echo "Transaction token deployed at $TX_TOKEN"
+
+# Seed a genuine prior interaction from the proposed Safe to the recipient so
+# sentinel A's address-poisoning checker approves the disputed transfer.
+cast send --rpc-url "$RPC_URL" --private-key "$SPONSOR_PK" \
+	"$TX_TOKEN" "mint(address,uint256)" "$TX_SAFE" 2 >/dev/null
+cast rpc --rpc-url "$RPC_URL" anvil_setBalance "$TX_SAFE" 0xde0b6b3a7640000 >/dev/null
+cast rpc --rpc-url "$RPC_URL" anvil_impersonateAccount "$TX_SAFE" >/dev/null
+cast send --rpc-url "$RPC_URL" --unlocked --from "$TX_SAFE" \
+	"$TX_TOKEN" "transfer(address,uint256)" "$TX_RECIPIENT" 1 >/dev/null
+cast rpc --rpc-url "$RPC_URL" anvil_stopImpersonatingAccount "$TX_SAFE" >/dev/null
+
 echo "Registering both sentinels..."
 cast send --rpc-url "$RPC_URL" --private-key "$DEPLOYER_PK" "$ORACLE" "addSentinel(address)" "$SENTINEL_A_ADDR" >/dev/null
 cast send --rpc-url "$RPC_URL" --private-key "$DEPLOYER_PK" "$ORACLE" "addSentinel(address)" "$SENTINEL_B_ADDR" >/dev/null
@@ -207,10 +221,10 @@ sentinel_config "$SENTINEL_A_PK" "[]" "$SENTINEL_A_ENGINE_ADDR" >"$SENTINEL_A_CO
 SENTINEL_B_ENGINE_CONFIG=$(mktemp)
 sentinel_engine_config "$SENTINEL_B_ENGINE_ADDR" >"$SENTINEL_B_ENGINE_CONFIG"
 SENTINEL_B_CONFIG=$(mktemp)
-# Sentinel B alone blocklists $DISPUTED_TX_TO, so it denies a request
+# Sentinel B alone blocklists $TX_TOKEN, so it denies a request
 # proposing a call to it while Sentinel A approves — the genuine dispute
 # exercised in step 10 below.
-sentinel_config "$SENTINEL_B_PK" "[\"$DISPUTED_TX_TO\"]" "$SENTINEL_B_ENGINE_ADDR" >"$SENTINEL_B_CONFIG"
+sentinel_config "$SENTINEL_B_PK" "[\"$TX_TOKEN\"]" "$SENTINEL_B_ENGINE_ADDR" >"$SENTINEL_B_CONFIG"
 
 echo "Starting sentinel engine A..."
 "$ROOT/target/debug/sentinel-engine" --config-file "$SENTINEL_A_ENGINE_CONFIG" >"$ROOT/sentinel_engine_a_logs.txt" 2>&1 &
@@ -239,8 +253,8 @@ env \
 	CONSENSUS_ADDRESS="$CONSENSUS" \
 	ORACLE_ADDRESS="$ORACLE" \
 	TX_CHAIN_ID=1 \
-	TX_SAFE=0x1111111111111111111111111111111111111111 \
-	TX_TO=0x2222222222222222222222222222222222222222 \
+	TX_SAFE="$TX_SAFE" \
+	TX_TO="$TX_SAFE" \
 	TX_NONCE=0 \
 	forge script --root "$ROOT/contracts" ProposeTransactionScript --rpc-url "$RPC_URL" --private-key "$SPONSOR_PK" --broadcast
 
@@ -347,8 +361,9 @@ env \
 	CONSENSUS_ADDRESS="$CONSENSUS" \
 	ORACLE_ADDRESS="$ORACLE" \
 	TX_CHAIN_ID=1 \
-	TX_SAFE=0x1111111111111111111111111111111111111111 \
-	TX_TO="$DISPUTED_TX_TO" \
+	TX_SAFE="$TX_SAFE" \
+	TX_TO="$TX_TOKEN" \
+	TX_DATA="$(cast calldata "transfer(address,uint256)" "$TX_RECIPIENT" 1)" \
 	TX_NONCE=1 \
 	forge script --root "$ROOT/contracts" ProposeTransactionScript --rpc-url "$RPC_URL" --private-key "$SPONSOR_PK" --broadcast
 

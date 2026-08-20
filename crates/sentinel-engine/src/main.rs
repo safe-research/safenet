@@ -1,8 +1,9 @@
 mod api;
+mod checkers;
 mod config;
 mod engine;
 
-use self::{config::Config, engine::SentinelEngine};
+use self::{checkers::cancellation::CancellationChecker, config::Config, engine::SentinelEngine};
 use argh::FromArgs;
 use safenet_core::{observability, utils};
 use std::{error::Error, path::PathBuf};
@@ -36,12 +37,14 @@ async fn main() -> Result<(), Box<dyn Error>> {
         "sentinel engine configuration loaded"
     );
 
+    let engine = SentinelEngine::new(vec![Box::new(CancellationChecker)]);
+
     let listener = TcpListener::bind(bind_address).await?;
     let local_address = listener.local_addr()?;
 
     tracing::info!(%local_address, "starting sentinel engine");
     tokio::select! {
-        result = axum::serve(listener, api::router(SentinelEngine)) => result?,
+        result = axum::serve(listener, api::router(engine)) => result?,
         _ = utils::shutdown_signal() => {
             tracing::info!("received shutdown signal; stopping sentinel engine");
         }
