@@ -8,13 +8,13 @@ The repository is a hybrid monorepo with:
 
 - `contracts/` — Solidity 0.8.30 smart contracts built with Foundry. Core contracts: `FROSTCoordinator.sol`, `Consensus.sol`, `Staking.sol`. Has no JavaScript of its own; its commands are `forge` invocations exposed via the root [Justfile](./Justfile).
 - NPM packages (each with its own `package.json`/lockfile, no longer npm workspace members):
-  - `examples/` — Scripts for interacting with the Safenet protocol on public testnets.
-  - `explorer/` — React 19 + TypeScript + Vite frontend for inspecting network state.
+    - `examples/` — Scripts for interacting with the Safenet protocol on public testnets.
+    - `explorer/` — React 19 + TypeScript + Vite frontend for inspecting network state.
 - Rust crates:
-  - `crates/core/` — Shared code used by all Safenet offchain services
-  - `crates/sentinel/` — Rust port of the sentinel service that watches the `SentinelOracle` and `Consensus` contracts, decides whether to approve or deny proposed oracle transactions, and puts up bonds onchain
-  - `crates/sentinel-engine/` — Transaction verification service the sentinel defers its checks to.
-  - `crates/validator/` — Rust port of the validator service that participates in FROST DKG and signing rounds and submits epoch rollovers and transaction attestations onchain
+    - `crates/core/` — Shared code used by all Safenet offchain services
+    - `crates/sentinel/` — Rust sentinel service that watches the `SentinelOracle` and `Consensus` contracts, asks its configured sentinel engine to assess proposed transactions, and puts up bonds for its votes onchain
+    - `crates/sentinel-engine/` — Keyless HTTP transaction-verification service that owns the sentinel's checks; it reads chain state but holds no bond and makes no onchain writes
+    - `crates/validator/` — Rust port of the validator service that participates in FROST DKG and signing rounds and submits epoch rollovers and transaction attestations onchain
 
 Additionally, formal verification specs live in `certora/`. Integration and devnet scripts are in `scripts/`.
 
@@ -84,13 +84,13 @@ These scripts require:
 just devnet                  # ./scripts/run_devnet.sh (Podman required)
 ```
 
-Runs the Rust validator and sentinel services (`crates/validator`, `crates/sentinel`)
-against a local Anvil chain — two validators (`alice`, `bob`) and two sentinels (`carol`,
-`dave`) vote on a freshly deployed `SentinelOracle`. Each instance is configured via a
-generated TOML file (`--config-file`), not environment variables. `just devnet --build`
-builds the `crates/validator/Dockerfile` and `crates/sentinel/Dockerfile` images alongside
-the contracts image. This is separate from `test-integration-sentinel`/`test-integration-validator`
-above, which exercise the Rust validator/sentinel ports directly rather than through Podman.
+Runs the Rust validator, sentinel, and sentinel-engine services against a local Anvil chain — two
+validators (`alice`, `bob`) and two sentinel/engine pairs (`carol`, `dave`) vote on a freshly
+deployed `SentinelOracle`. Each instance is configured via a generated TOML file
+(`--config-file`), not environment variables. `just devnet --build` builds the validator,
+sentinel, sentinel-engine, and contracts images. This is separate from
+`test-integration-sentinel`/`test-integration-validator` above, which exercise the Rust services
+directly rather than through Podman.
 
 ## Code Quality Tools
 

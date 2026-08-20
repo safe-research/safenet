@@ -1,8 +1,8 @@
 # Safenet Devnet
 
 This document covers how to spin up the local Safenet devnet and interact with it once it's
-running: finding contract addresses, sending transactions, checking validator/sentinel status, and
-pointing an explorer at it. The devnet is driven by
+running: finding contract addresses, sending transactions, checking service status, and pointing
+an explorer at it. The devnet is driven by
 [`scripts/run_devnet.sh`](../scripts/run_devnet.sh) (see also [`AGENTS.md`](../AGENTS.md#local-devnet)
 for a short summary).
 
@@ -10,8 +10,8 @@ for a short summary).
 
 - Full [project setup](../README.md#project-setup) (submodules, `npm ci --prefix examples`,
   `npm ci --prefix explorer`, `just foundryup`) — required even if you only plan to run
-  `just devnet` without touching the contracts/validator/sentinel code yourself, since
-  `just devnet --build` builds their Podman images from this
+  `just devnet` without touching the contracts/validator/sentinel/sentinel-engine code yourself,
+  since `just devnet --build` builds their Podman images from this
   checkout and will fail if submodules aren't initialized or Foundry isn't set up.
 - [Podman](https://podman.io/docs/installation) — the devnet is orchestrated with `podman kube play`,
   not `docker-compose`, and there is currently no Docker equivalent.
@@ -24,11 +24,11 @@ for a short summary).
 just devnet                     # ./scripts/run_devnet.sh
 ```
 
-The first run (or after contract/validator/sentinel code changes) needs `--build`, to build the
-three Podman images the devnet depends on:
+The first run (or after contract/validator/sentinel/sentinel-engine code changes) needs `--build`,
+to build the four Podman images the devnet depends on:
 
 ```sh
-just devnet --build          # builds localhost/safenet-{contracts,validator,sentinel}
+just devnet --build # builds localhost/safenet-{contracts,validator,sentinel,sentinel-engine}
 ```
 
 This brings up a single Podman pod named `safenet` containing:
@@ -38,6 +38,8 @@ This brings up a single Podman pod named `safenet` containing:
   FROST consensus.
 - `sentinel-carol`, `sentinel-dave` — two Rust sentinels (`crates/sentinel`) that commit/reveal
   votes on oracle-checked transactions.
+- `sentinel-engine-carol`, `sentinel-engine-dave` — one transaction-verification engine
+  (`crates/sentinel-engine`) for each sentinel.
 
 Startup deploys the core Safenet contracts (`Consensus`, `FROSTCoordinator`, `AlwaysApproveOracle`),
 a fee ERC-20 token, and a `SentinelOracle` arbitrated by a dedicated arbitrator account, registers
@@ -49,7 +51,7 @@ done, so leave the terminal open (or run it in the background) while you interac
 
 ```
 -h, --help                  Print the script's help message.
---build                     Build the contracts, validator and sentinel Podman images.
+--build                     Build the contracts, validator, sentinel, and sentinel-engine images.
 --port <PORT>               Alternate host port for the Ethereum RPC (default 8545).
 --block-time <SECS>         Block time in seconds for the devnet (default 5).
 --blocks-per-epoch <NUM>    Number of blocks per Safenet epoch (default 60).
@@ -65,29 +67,31 @@ just devnet --port 9545 --block-time 1 --fund-account 0xYourAddress
 
 ## Network details
 
-| | |
-|---|---|
-| RPC endpoint | `http://localhost:8545` (override with `--port`) |
-| Chain ID | `31337` (Anvil default) |
-| Block time | `5`s by default (override with `--block-time`) |
+|                  |                                                      |
+| ---------------- | ---------------------------------------------------- |
+| RPC endpoint     | `http://localhost:8545` (override with `--port`)     |
+| Chain ID         | `31337` (Anvil default)                              |
+| Block time       | `5`s by default (override with `--block-time`)       |
 | Blocks per epoch | `60` by default (override with `--blocks-per-epoch`) |
 
 The pod's containers are named `safenet-node`, `safenet-validator-alice`, `safenet-validator-bob`,
-`safenet-sentinel-carol`, and `safenet-sentinel-dave`.
+`safenet-sentinel-carol`, `safenet-sentinel-dave`, `safenet-sentinel-engine-carol`, and
+`safenet-sentinel-engine-dave`. The two engine APIs listen only inside the pod on ports `5473` and
+`5474`; they are not published to the host.
 
 ## Accounts
 
 The devnet uses Anvil's standard test-mnemonic accounts. All of them are pre-funded with ETH and
 unlocked by Anvil, so you can impersonate any of them with `cast --unlocked` without a private key.
 
-| Role | Address | Private key |
-|---|---|---|
+| Role              | Address                                      | Private key                                                          |
+| ----------------- | -------------------------------------------- | -------------------------------------------------------------------- |
 | Deployer / sender | `0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266` | `0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80` |
 | Validator `alice` | `0x70997970C51812dc3A010C7d01b50e0d17dc79C8` | `0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d` |
-| Validator `bob` | `0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC` | `0x5de4111afa1a4b94908f83103eb1f1706367c2e68ca870fc3fb9a804cdab365a` |
-| Sentinel `carol` | `0x90F79bf6EB2c4f870365E785982E1f101E93b906` | `0x7c852118294e51e653712a81e05800f419141751be58f605c371e15141b007a6` |
-| Sentinel `dave` | `0x15d34AAf54267DB7D7c367839AAf71A00a2C6A65` | `0x47e179ec197488593b187f80a00eb0da91f1b9d0b13f8733639f19c30a34926a` |
-| Arbitrator | `0x9965507D1a55bcC2695C58ba16FB37d819B0A4dc` | `0x8b3a350cf5c34c9194ca85829a2df0ec3153be0318b5e2d3348e872092edffba` |
+| Validator `bob`   | `0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC` | `0x5de4111afa1a4b94908f83103eb1f1706367c2e68ca870fc3fb9a804cdab365a` |
+| Sentinel `carol`  | `0x90F79bf6EB2c4f870365E785982E1f101E93b906` | `0x7c852118294e51e653712a81e05800f419141751be58f605c371e15141b007a6` |
+| Sentinel `dave`   | `0x15d34AAf54267DB7D7c367839AAf71A00a2C6A65` | `0x47e179ec197488593b187f80a00eb0da91f1b9d0b13f8733639f19c30a34926a` |
+| Arbitrator        | `0x9965507D1a55bcC2695C58ba16FB37d819B0A4dc` | `0x8b3a350cf5c34c9194ca85829a2df0ec3153be0318b5e2d3348e872092edffba` |
 
 ## Setting up environment variables
 
@@ -149,7 +153,7 @@ cast send $FEE_TOKEN_ADDRESS "approve(address,uint256)" $ORACLE_ADDRESS 40000000
 
 `400000000000000000` (0.4 tokens, 18 decimals) matches the devnet's default `SENTINEL_REQUEST_FEE`
 (`scripts/run_devnet.sh`) — the fee is governed and delay-gated (see `scheduleFee`/`applyFee` on
-`SentinelOracle`), so this env var only sets its *initial* value at deploy time, not a fixed
+`SentinelOracle`), so this env var only sets its _initial_ value at deploy time, not a fixed
 constant; approve more if you plan to propose several oracle transactions. The
 deployer account already holds the entire fee token supply (minted to it by `DeployERC20Script`), so
 using it as `--sender` only requires this allowance, not additional funding — an account funded via
@@ -196,18 +200,20 @@ cast call $CONSENSUS_ADDRESS "getTransactionAttestationByHash(uint64,address,byt
 > for how to check a request's `getRequest`/`getCommitment` state) — validators won't attest before
 > the oracle approves.
 
-### Checking validator and sentinel status
+### Checking service status
 
 The most direct way to check liveness is the container logs:
 
 ```sh
 podman logs -f safenet-validator-alice
 podman logs -f safenet-sentinel-carol
+podman logs -f safenet-sentinel-engine-carol
 ```
 
 Beyond logs, check the validator/sentinel accounts on a block explorer pointed at the devnet (see
 below) — there should be recent transactions to the `Consensus`/`FROSTCoordinator` contracts from
-validators, and `commit`/`reveal` calls to `SentinelOracle` from sentinels.
+validators, and `commit`/`reveal` calls to `SentinelOracle` from sentinels. Engines have no account
+and make no onchain transactions, so their logs are the relevant liveness signal.
 
 ### Tearing down
 
@@ -282,6 +288,7 @@ environment variable step does):
 
 ```sh
 podman exec safenet-sentinel-carol cat /config/sentinel.toml   # oracle, consensus, fee_token
+podman exec safenet-sentinel-engine-carol cat /config/sentinel-engine.toml # RPC, checks
 podman exec safenet-validator-alice cat /config/validator.toml # consensus, oracles
 ```
 

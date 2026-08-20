@@ -8,8 +8,8 @@ This is a work-in-progress. Don't use it yet!
 - [Examples](./examples) Interact with Safenet on test networks (Typescript & npm)
 - [Explorer](./explorer) Explorer web interface (Typescript & npm)
 - [Services core crate](./crates/core) Shared logic between the offchain Safenet services (Rust)
-- [Sentinel](./crates/sentinel) Sentinel service that watches and puts up bonds in support of transaction correctness (Rust)
-- [Sentinel engine](./crates/sentinel-engine) Transaction verification service that the sentinel defers its checks to
+- [Sentinel](./crates/sentinel) Service that watches proposals and puts up bonds for its onchain votes (Rust)
+- [Sentinel engine](./crates/sentinel-engine) Keyless transaction-verification API used by sentinels ([operator guide](./docs/sentinel-engine.md)) (Rust)
 - [Validator](./crates/validator) Validator service that participates in FROST signing rounds and epoch rollovers
 
 ## Developing
