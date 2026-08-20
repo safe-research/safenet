@@ -32,8 +32,7 @@ jobs:
           # See <https://github.com/foundry-rs/foundry/issues/13362>
           version: v1.5.1
 
-      - name: Install just
-        run: sudo apt-get update && sudo apt-get install -y just
+      - uses: ./.github/actions/install-just
 
       - run: just deps
       - run: just check
