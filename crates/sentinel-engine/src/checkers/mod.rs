@@ -2,8 +2,11 @@
 
 mod address_poisoning;
 mod cancellation;
+mod cow;
 
-pub use self::{address_poisoning::AddressPoisoningChecker, cancellation::CancellationChecker};
+pub use self::{
+    address_poisoning::AddressPoisoningChecker, cancellation::CancellationChecker, cow::CowChecker,
+};
 
 use crate::engine::Verdict;
 use safe_tx::SafeTransaction;

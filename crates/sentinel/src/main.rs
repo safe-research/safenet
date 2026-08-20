@@ -2,7 +2,6 @@ mod action;
 mod bindings;
 mod checker;
 mod config;
-mod cow;
 mod effect;
 mod engine;
 mod hashing;

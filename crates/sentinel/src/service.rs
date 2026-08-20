@@ -6,7 +6,6 @@ use crate::{
         oracle::{ERC20, SentinelOracle},
     },
     checker::CheckOutcome,
-    cow::CowChecker,
     effect,
     engine::EngineClient,
     hashing::{RevealSalt as _, commit_hash, oracle_tx_proposal_hash},
@@ -731,7 +730,7 @@ impl Service for SentinelService {
                 voting_window,
                 static_checker,
             },
-            effect::Handler::new(vec![Box::new(CowChecker::new())], engine, engine_timeout),
+            effect::Handler::new(vec![], engine, engine_timeout),
             SentinelEncoder { oracle, fee_token },
         )
     }
