@@ -5,12 +5,10 @@ use crate::{
         consensus::Consensus,
         oracle::{ERC20, SentinelOracle},
     },
-    checker::CheckOutcome,
     effect,
-    engine::EngineClient,
+    engine::{CheckOutcome, EngineClient},
     hashing::{RevealSalt as _, commit_hash, oracle_tx_proposal_hash},
     state::{Request, SentinelRequestState as RequestState, State},
-    static_checker::StaticChecker,
 };
 use alloy::{
     primitives::{Address, B256, U256},
@@ -34,8 +32,7 @@ pub struct SentinelService {
     signer: Signer,
     chain_id: U256,
     voting_window: u64,
-    static_checker: StaticChecker,
-    /// Checks transactions that pass the local static checks.
+    /// Checks proposed transactions.
     engine: EngineClient,
     /// Maximum time the sentinel engine has to answer a security check.
     engine_timeout: Duration,
@@ -56,7 +53,6 @@ pub struct SentinelTransition {
     /// The number of blocks a request without an onchain commit deadline is
     /// kept alive for before being cleaned up.
     voting_window: u64,
-    static_checker: StaticChecker,
 }
 
 /// Encodes [`SentinelAction`]s into the transactions that commit, reveal,
@@ -79,7 +75,6 @@ impl SentinelService {
         signer: Signer,
         chain_id: U256,
         voting_window: u64,
-        static_checker: StaticChecker,
         engine: EngineClient,
         engine_timeout: Duration,
     ) -> Self {
@@ -90,7 +85,6 @@ impl SentinelService {
             signer,
             chain_id,
             voting_window,
-            static_checker,
             engine,
             engine_timeout,
         }
@@ -98,11 +92,9 @@ impl SentinelService {
 }
 
 impl SentinelTransition {
-    /// Starts tracking a newly proposed oracle transaction. A local
-    /// `StaticChecker` denial decides immediately; otherwise the decision is
-    /// only provisional, and is deferred to the configured dynamic check via
-    /// [`effect::Effect::DynamicCheck`] (resolved in
-    /// [`Self::handle_dynamic_check_result`]).
+    /// Starts tracking a newly proposed oracle transaction and requests a
+    /// verdict from the configured sentinel engine via
+    /// [`effect::Effect::EngineCheck`].
     fn handle_oracle_transaction_proposed(
         &self,
         mut state: State,
@@ -132,60 +124,45 @@ impl SentinelTransition {
             return (state, Vec::new());
         }
         let deadline = block.saturating_add(self.voting_window);
-        let outcome = self.static_checker.check(&event.transaction);
-        let (request, commands) = match outcome {
-            CheckOutcome::Approved => (
-                RequestState::WaitingForDynamicCheck {
-                    deadline,
-                    request: None,
-                },
-                vec![Command::Effect(effect::Effect::DynamicCheck {
-                    request_id,
-                    transaction: event.transaction,
-                })],
-            ),
-            CheckOutcome::Denied(rule) => (
-                RequestState::WaitingForRequest {
-                    approve: false,
-                    reason: rule.to_string(),
-                    deadline,
-                },
-                Vec::new(),
-            ),
-            CheckOutcome::Unknown => {
-                tracing::warn!(
-                    %request_id,
-                    "unexpected static checker failure; dropping request unanswered"
-                );
-                return (state, Vec::new());
-            }
-        };
-        state.0.insert(request_id, request);
-        (state, commands)
+        state.0.insert(
+            request_id,
+            RequestState::WaitingForEngineCheck {
+                deadline,
+                request: None,
+            },
+        );
+
+        (
+            state,
+            vec![Command::Effect(effect::Effect::EngineCheck {
+                request_id,
+                transaction: event.transaction,
+            })],
+        )
     }
 
-    /// Consumes a [`effect::Effect::DynamicCheck`]'s resolved outcome for
+    /// Consumes a [`effect::Effect::EngineCheck`]'s resolved outcome for
     /// `request_id`. If the onchain request is already open, voting begins
     /// immediately; otherwise the resolved decision waits for `NewRequest`.
-    fn handle_dynamic_check_result(
+    fn handle_engine_check_result(
         &self,
         mut state: State,
         request_id: B256,
         outcome: CheckOutcome,
     ) -> (State, Commands<State, Self>) {
         let (deadline, request) = match state.0.remove(&request_id) {
-            Some(RequestState::WaitingForDynamicCheck { deadline, request }) => (deadline, request),
+            Some(RequestState::WaitingForEngineCheck { deadline, request }) => (deadline, request),
             Some(entry) => {
                 tracing::warn!(
                     %request_id,
                     state = entry.name(),
-                    "ignoring unexpected dynamic check result"
+                    "ignoring unexpected engine check result"
                 );
                 state.0.insert(request_id, entry);
                 return (state, Vec::new());
             }
             None => {
-                tracing::warn!(%request_id, "ignoring stale dynamic check result");
+                tracing::warn!(%request_id, "ignoring stale engine check result");
                 return (state, Vec::new());
             }
         };
@@ -194,7 +171,7 @@ impl SentinelTransition {
             CheckOutcome::Approved => (true, String::new()),
             CheckOutcome::Denied(rule) => (false, rule.to_string()),
             CheckOutcome::Unknown => {
-                tracing::warn!(%request_id, "dynamic check failed; dropping request unanswered");
+                tracing::warn!(%request_id, "engine check failed; dropping request unanswered");
                 return (state, Vec::new());
             }
         };
@@ -261,7 +238,7 @@ impl SentinelTransition {
         (state, actions)
     }
 
-    /// Retains a newly opened request while its dynamic check is outstanding,
+    /// Retains a newly opened request while its engine check is outstanding,
     /// or begins voting immediately if the decision is already available.
     fn handle_new_request(
         &self,
@@ -278,13 +255,13 @@ impl SentinelTransition {
             Some(RequestState::WaitingForRequest {
                 approve, reason, ..
             }) => self.commit_vote(state, request_id, approve, reason, request),
-            Some(RequestState::WaitingForDynamicCheck {
+            Some(RequestState::WaitingForEngineCheck {
                 deadline,
                 request: None,
             }) => {
                 state.0.insert(
                     request_id,
-                    RequestState::WaitingForDynamicCheck {
+                    RequestState::WaitingForEngineCheck {
                         deadline,
                         request: Some(request),
                     },
@@ -402,7 +379,7 @@ impl SentinelTransition {
         let mut actions = Vec::new();
 
         state.0.retain(|id, entry| match entry {
-            RequestState::WaitingForDynamicCheck { deadline, request } => {
+            RequestState::WaitingForEngineCheck { deadline, request } => {
                 block
                     <= request
                         .as_ref()
@@ -683,10 +660,10 @@ impl StateTransition<State> for SentinelTransition {
                     ) => self.handle_resolved(state, event),
                 }
             }
-            Message::Resume(effect::Resume::DynamicCheckResult {
+            Message::Resume(effect::Resume::EngineCheckResult {
                 request_id,
                 outcome,
-            }) => self.handle_dynamic_check_result(state, request_id, outcome),
+            }) => self.handle_engine_check_result(state, request_id, outcome),
         }
     }
 }
@@ -716,7 +693,6 @@ impl Service for SentinelService {
             signer,
             chain_id,
             voting_window,
-            static_checker,
             engine,
             engine_timeout,
         } = self;
@@ -727,7 +703,6 @@ impl Service for SentinelService {
                 signer,
                 chain_id,
                 voting_window,
-                static_checker,
             },
             effect::Handler::new(engine, engine_timeout),
             SentinelEncoder { oracle, fee_token },
@@ -765,8 +740,7 @@ mod tests {
     const CHAIN_ID: u64 = 1;
     const VOTING_WINDOW: u64 = 10;
     const ENGINE_TIMEOUT: Duration = Duration::from_millis(7_500);
-    /// `StaticChecker::check`'s reason for an approved transaction, as used by
-    /// `transition()`/`svc` throughout this module's tests.
+    /// The reason attached to an engine-approved transaction.
     const REASON: &str = "";
 
     fn self_signer() -> Signer {
@@ -779,8 +753,8 @@ mod tests {
 
     fn service() -> SentinelService {
         // These flow tests drive `Message::Resume` themselves (see
-        // `resolve_dynamic_check`) rather than through the `Handler`'s real
-        // `Effect::DynamicCheck` resolution, so the configured engine is
+        // `resolve_engine_check`) rather than through the `Handler`'s real
+        // `Effect::EngineCheck` resolution, so the configured engine is
         // never invoked.
         SentinelService::new(
             ORACLE,
@@ -789,7 +763,6 @@ mod tests {
             self_signer(),
             U256::from(CHAIN_ID),
             VOTING_WINDOW,
-            StaticChecker::new(),
             // Configure an engine for an invalid URL, all checks come back
             // as `Unknown`.
             EngineClient::new("http://127.0.0.1:1".parse().unwrap()).unwrap(),
@@ -841,22 +814,20 @@ mod tests {
         ))
     }
 
-    /// The `Command::Effect` `handle_oracle_transaction_proposed` emits once
-    /// its local `StaticChecker` pass approves a proposal for `(id, to)`,
-    /// deferring the final decision to the dynamic check.
-    fn dynamic_check_effect(id: B256, to: Address) -> Command<SentinelAction, effect::Effect> {
-        Command::Effect(effect::Effect::DynamicCheck {
+    /// The engine-check effect emitted for a proposal for `(id, to)`.
+    fn engine_check_effect(id: B256, to: Address) -> Command<SentinelAction, effect::Effect> {
+        Command::Effect(effect::Effect::EngineCheck {
             request_id: id,
             transaction: safe_tx(to),
         })
     }
 
-    /// Resolves the outstanding `Effect::DynamicCheck` for `id` with
+    /// Resolves the outstanding `Effect::EngineCheck` for `id` with
     /// `outcome`, exactly as `TransitionBatch` would perform and resume it
     /// inline within the same event. The flow tests below drive
     /// `SentinelTransition` directly rather than through the full
     /// `StateMachine`, so this simulates that resolution step for them.
-    fn resolve_dynamic_check(
+    fn resolve_engine_check(
         svc: &SentinelTransition,
         state: State,
         id: B256,
@@ -864,7 +835,7 @@ mod tests {
     ) -> (State, Commands<State, SentinelTransition>) {
         svc.apply_transition(
             state,
-            Message::Resume(effect::Resume::DynamicCheckResult {
+            Message::Resume(effect::Resume::EngineCheckResult {
                 request_id: id,
                 outcome,
             }),
@@ -938,7 +909,7 @@ mod tests {
         }
     }
 
-    fn assert_new_request_before_dynamic_check(
+    fn assert_new_request_before_engine_check(
         safe_tx_hash: B256,
         outcome: CheckOutcome,
         approve: bool,
@@ -952,7 +923,7 @@ mod tests {
             State::default(),
             Message::Event(log(1, proposed_event(ORACLE, safe_tx_hash, TO))),
         );
-        assert_eq!(commands, vec![dynamic_check_effect(id, TO)]);
+        assert_eq!(commands, vec![engine_check_effect(id, TO)]);
 
         let (state, commands) = svc.apply_transition(
             state,
@@ -971,7 +942,7 @@ mod tests {
         assert!(commands.is_empty());
         assert_eq!(
             state.0[&id],
-            RequestState::WaitingForDynamicCheck {
+            RequestState::WaitingForEngineCheck {
                 deadline: 1 + VOTING_WINDOW,
                 request: Some(Request {
                     bond_target,
@@ -981,7 +952,7 @@ mod tests {
             },
         );
 
-        let (state, commands) = resolve_dynamic_check(&svc, state, id, outcome);
+        let (state, commands) = resolve_engine_check(&svc, state, id, outcome);
         assert_eq!(
             state.0[&id],
             RequestState::CollectingCommitments {
@@ -1028,24 +999,23 @@ mod tests {
         let safe_tx_hash = B256::repeat_byte(0x01);
         let id = request_id(safe_tx_hash, 7, ORACLE);
 
-        // The transaction is proposed onchain; the local `StaticChecker`
-        // pass doesn't deny it outright, so the decision is deferred to the
-        // dynamic check and its outstanding state is tracked explicitly.
+        // The transaction is proposed onchain; the engine check is emitted
+        // and its outstanding state is tracked explicitly.
         let (state, commands) = svc.apply_transition(
             State::default(),
             Message::Event(log(1, proposed_event(ORACLE, safe_tx_hash, TO))),
         );
-        assert_eq!(commands, vec![dynamic_check_effect(id, TO)]);
+        assert_eq!(commands, vec![engine_check_effect(id, TO)]);
         assert_eq!(
             state.0[&id],
-            RequestState::WaitingForDynamicCheck {
+            RequestState::WaitingForEngineCheck {
                 deadline: 1 + VOTING_WINDOW,
                 request: None,
             },
         );
 
-        // The dynamic check approves; the provisional decision becomes final.
-        let (state, commands) = resolve_dynamic_check(&svc, state, id, CheckOutcome::Approved);
+        // The engine check approves; the provisional decision becomes final.
+        let (state, commands) = resolve_engine_check(&svc, state, id, CheckOutcome::Approved);
         assert_eq!(
             state.0[&id],
             RequestState::WaitingForRequest {
@@ -1229,7 +1199,7 @@ mod tests {
             State::default(),
             Message::Event(log(1, proposed_event(ORACLE, safe_tx_hash, TO))),
         );
-        let (state, _) = resolve_dynamic_check(&svc, state, id, CheckOutcome::Approved);
+        let (state, _) = resolve_engine_check(&svc, state, id, CheckOutcome::Approved);
         let (state, _) = svc.apply_transition(
             state,
             Message::Event(log(
@@ -1336,7 +1306,7 @@ mod tests {
             State::default(),
             Message::Event(log(1, proposed_event(ORACLE, safe_tx_hash, TO))),
         );
-        let (state, _) = resolve_dynamic_check(&svc, state, id, CheckOutcome::Approved);
+        let (state, _) = resolve_engine_check(&svc, state, id, CheckOutcome::Approved);
         let (state, _) = svc.apply_transition(
             state,
             Message::Event(log(
@@ -1396,25 +1366,25 @@ mod tests {
         );
     }
 
-    /// A resume without a matching outstanding dynamic check can arrive after
+    /// A resume without a matching outstanding engine check can arrive after
     /// a reorg restored a snapshot from before its proposal. It must not create
     /// state for the orphaned request.
     #[test]
-    fn stale_dynamic_check_resume_after_reorg_is_ignored() {
+    fn stale_engine_check_resume_after_reorg_is_ignored() {
         let svc = transition();
         let id = B256::repeat_byte(0x09);
 
         let (state, commands) =
-            resolve_dynamic_check(&svc, State::default(), id, CheckOutcome::Approved);
+            resolve_engine_check(&svc, State::default(), id, CheckOutcome::Approved);
 
         assert!(commands.is_empty());
         assert!(!state.0.contains_key(&id));
     }
 
-    /// A denying dynamic check finalizes the provisional request into
+    /// A denying engine check finalizes the provisional request into
     /// `WaitingForRequest` citing the remote outcome's `RuleId`.
     #[test]
-    fn dynamic_check_denial_finalizes_with_the_remote_rule() {
+    fn engine_check_denial_finalizes_with_the_engine_rule() {
         let svc = transition();
         let safe_tx_hash = B256::repeat_byte(0x06);
         let id = request_id(safe_tx_hash, 7, ORACLE);
@@ -1423,10 +1393,10 @@ mod tests {
             State::default(),
             Message::Event(log(1, proposed_event(ORACLE, safe_tx_hash, TO))),
         );
-        assert_eq!(commands, vec![dynamic_check_effect(id, TO)]);
+        assert_eq!(commands, vec![engine_check_effect(id, TO)]);
 
         let rule = RuleId::new(4, 6);
-        let (state, commands) = resolve_dynamic_check(&svc, state, id, CheckOutcome::Denied(rule));
+        let (state, commands) = resolve_engine_check(&svc, state, id, CheckOutcome::Denied(rule));
         assert_eq!(
             state.0[&id],
             RequestState::WaitingForRequest {
@@ -1490,8 +1460,8 @@ mod tests {
     }
 
     #[test]
-    fn new_request_before_dynamic_check_approval_starts_voting_on_resume() {
-        assert_new_request_before_dynamic_check(
+    fn new_request_before_engine_check_approval_starts_voting_on_resume() {
+        assert_new_request_before_engine_check(
             B256::repeat_byte(0x0a),
             CheckOutcome::Approved,
             true,
@@ -1500,10 +1470,10 @@ mod tests {
     }
 
     #[test]
-    fn new_request_before_dynamic_check_denial_starts_voting_on_resume() {
+    fn new_request_before_engine_check_denial_starts_voting_on_resume() {
         let rule = RuleId::new(42, 1337);
         let reason = rule.to_string();
-        assert_new_request_before_dynamic_check(
+        assert_new_request_before_engine_check(
             B256::repeat_byte(0x0b),
             CheckOutcome::Denied(rule),
             false,
@@ -1511,10 +1481,10 @@ mod tests {
         );
     }
 
-    /// An unreachable/malfunctioning dynamic check must not be guessed at
+    /// An unreachable/malfunctioning engine check must not be guessed at
     /// either way — the request is dropped unanswered instead of voting.
     #[test]
-    fn dynamic_check_failure_drops_the_request_unanswered() {
+    fn engine_check_failure_drops_the_request_unanswered() {
         let svc = transition();
         let safe_tx_hash = B256::repeat_byte(0x07);
         let id = request_id(safe_tx_hash, 7, ORACLE);
@@ -1525,18 +1495,18 @@ mod tests {
         );
         assert_eq!(
             state.0[&id],
-            RequestState::WaitingForDynamicCheck {
+            RequestState::WaitingForEngineCheck {
                 deadline: 1 + VOTING_WINDOW,
                 request: None,
             },
         );
 
-        let (state, _) = resolve_dynamic_check(&svc, state, id, CheckOutcome::Unknown);
+        let (state, _) = resolve_engine_check(&svc, state, id, CheckOutcome::Unknown);
         assert!(!state.0.contains_key(&id));
     }
 
     #[test]
-    fn dynamic_check_failure_drops_a_stored_onchain_request() {
+    fn engine_check_failure_drops_a_stored_onchain_request() {
         let svc = transition();
         let safe_tx_hash = B256::repeat_byte(0x0c);
         let id = request_id(safe_tx_hash, 7, ORACLE);
@@ -1561,28 +1531,28 @@ mod tests {
         );
         assert!(commands.is_empty());
 
-        let (state, commands) = resolve_dynamic_check(&svc, state, id, CheckOutcome::Unknown);
+        let (state, commands) = resolve_engine_check(&svc, state, id, CheckOutcome::Unknown);
 
         assert!(commands.is_empty());
         assert!(!state.0.contains_key(&id));
     }
 
     #[test]
-    fn waiting_dynamic_checks_expire_using_the_available_deadline() {
+    fn waiting_engine_checks_expire_using_the_available_deadline() {
         let svc = transition();
         let proposed_only = B256::repeat_byte(0x0d);
         let request_open = B256::repeat_byte(0x0e);
         let mut state = State::default();
         state.0.insert(
             proposed_only,
-            RequestState::WaitingForDynamicCheck {
+            RequestState::WaitingForEngineCheck {
                 deadline: 10,
                 request: None,
             },
         );
         state.0.insert(
             request_open,
-            RequestState::WaitingForDynamicCheck {
+            RequestState::WaitingForEngineCheck {
                 deadline: 10,
                 request: Some(Request {
                     bond_target: U96::from(500),
@@ -1602,16 +1572,16 @@ mod tests {
         assert!(!state.0.contains_key(&request_open));
 
         let (state, commands) =
-            resolve_dynamic_check(&svc, state, request_open, CheckOutcome::Approved);
+            resolve_engine_check(&svc, state, request_open, CheckOutcome::Approved);
         assert!(commands.is_empty());
         assert!(!state.0.contains_key(&request_open));
     }
 
-    /// A replayed resume for a request that already advanced past its dynamic
+    /// A replayed resume for a request that already advanced past its engine
     /// check (e.g. the effect ran twice after a crash) is a no-op because it no
-    /// longer has a matching `WaitingForDynamicCheck` marker.
+    /// longer has a matching `WaitingForEngineCheck` marker.
     #[test]
-    fn stale_dynamic_check_resume_does_not_disturb_an_already_advanced_request() {
+    fn stale_engine_check_resume_does_not_disturb_an_already_advanced_request() {
         let svc = transition();
         let safe_tx_hash = B256::repeat_byte(0x08);
         let id = request_id(safe_tx_hash, 7, ORACLE);
@@ -1620,11 +1590,11 @@ mod tests {
             State::default(),
             Message::Event(log(1, proposed_event(ORACLE, safe_tx_hash, TO))),
         );
-        let (state, _) = resolve_dynamic_check(&svc, state, id, CheckOutcome::Approved);
+        let (state, _) = resolve_engine_check(&svc, state, id, CheckOutcome::Approved);
         let advanced = state.0[&id].clone();
 
         let (state, _) =
-            resolve_dynamic_check(&svc, state, id, CheckOutcome::Denied(RuleId::new(42, 1337)));
+            resolve_engine_check(&svc, state, id, CheckOutcome::Denied(RuleId::new(42, 1337)));
         assert_eq!(state.0[&id], advanced);
     }
 }

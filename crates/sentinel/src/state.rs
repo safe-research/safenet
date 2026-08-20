@@ -2,7 +2,7 @@ use alloy::primitives::{B256, aliases::U96};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
-/// Onchain voting data retained while a dynamic check is still outstanding.
+/// Onchain voting data retained while an engine check is still outstanding.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Request {
     /// Bond amount the oracle expects this sentinel to post -- `U96`, matching the onchain
@@ -18,17 +18,17 @@ pub struct Request {
 /// `SentinelOracleRequest.State`'s commit-reveal phases.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum SentinelRequestState {
-    /// The proposal passed the static check and is waiting for its dynamic
-    /// check to complete. If the request opens onchain first, its voting data
-    /// is retained in `request` until the check resumes.
-    WaitingForDynamicCheck {
+    /// The proposal is waiting for its sentinel engine check to complete. If
+    /// the request opens onchain first, its voting data is retained in
+    /// `request` until the check resumes.
+    WaitingForEngineCheck {
         deadline: u64,
         request: Option<Request>,
     },
     /// Our vote intent is decided, but the oracle hasn't opened the request
     /// for voting yet. `deadline` is our own guessed cutoff, since the real
     /// `commitDeadline` isn't known until `NewRequest` arrives. `reason` is
-    /// carried unchanged from `StaticChecker::check` through to the `commit_hash`
+    /// carried unchanged from the engine verdict through to the `commit_hash`
     /// call and the eventual `reveal` — it must never be re-derived.
     WaitingForRequest {
         approve: bool,
@@ -71,7 +71,7 @@ impl SentinelRequestState {
     /// Returns a compact state name for diagnostics.
     pub(crate) fn name(&self) -> &'static str {
         match self {
-            Self::WaitingForDynamicCheck { .. } => "waiting_for_dynamic_check",
+            Self::WaitingForEngineCheck { .. } => "waiting_for_engine_check",
             Self::WaitingForRequest { .. } => "waiting_for_request",
             Self::CollectingCommitments { .. } => "collecting_commitments",
             Self::CollectingVotes { .. } => "collecting_votes",
@@ -120,14 +120,14 @@ mod tests {
         let mut state = State::default();
         state.0.insert(
             checking_id,
-            SentinelRequestState::WaitingForDynamicCheck {
+            SentinelRequestState::WaitingForEngineCheck {
                 deadline: 10,
                 request: None,
             },
         );
         state.0.insert(
             requested_id,
-            SentinelRequestState::WaitingForDynamicCheck {
+            SentinelRequestState::WaitingForEngineCheck {
                 deadline: 20,
                 request: Some(Request {
                     bond_target: U96::from(1_000),

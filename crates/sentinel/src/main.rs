@@ -1,17 +1,13 @@
 mod action;
 mod bindings;
-mod checker;
 mod config;
 mod effect;
 mod engine;
 mod hashing;
 mod service;
 mod state;
-mod static_checker;
 
-use self::{
-    config::Config, engine::EngineClient, service::SentinelService, static_checker::StaticChecker,
-};
+use self::{config::Config, engine::EngineClient, service::SentinelService};
 use alloy::primitives::U256;
 use argh::FromArgs;
 use safenet_core::{Driver, observability, provider::Provider, utils};
@@ -71,7 +67,6 @@ async fn main() -> Result<(), Box<dyn Error>> {
         config.signer.clone(),
         U256::from(chain_id),
         config.sentinel.voting_window,
-        StaticChecker::new(),
         EngineClient::new(config.sentinel.engine)?,
         engine_timeout,
     );
