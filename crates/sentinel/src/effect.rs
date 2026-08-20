@@ -1,15 +1,11 @@
 //! The sentinel's single effect: deferring a proposed transaction's
-//! remaining approve/deny decision to [`Handler`]'s checker chain once the
-//! local, synchronous checks in [`crate::static_checker::StaticChecker`]
-//! have passed. Emitted by
+//! remaining approve/deny decision to the sentinel engine once the local,
+//! synchronous checks in [`crate::static_checker::StaticChecker`] have
+//! passed. Emitted by
 //! `SentinelTransition::handle_oracle_transaction_proposed` and consumed by
 //! `SentinelTransition::apply_transition`'s `Message::Resume` arm.
 
-use crate::{
-    bindings::consensus::SafeTransaction,
-    checker::{CheckOutcome, Checker},
-    engine::EngineClient,
-};
+use crate::{bindings::consensus::SafeTransaction, checker::CheckOutcome, engine::EngineClient};
 use alloy::primitives::B256;
 use safenet_core::effects::EffectHandler;
 use std::time::Duration;
@@ -19,7 +15,7 @@ use std::time::Duration;
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Effect {
     /// Defer the approve/deny decision for `request_id` (a proposed
-    /// `transaction` on `safe`) to the configured checker chain.
+    /// `transaction` on `safe`) to the configured sentinel engine.
     DynamicCheck {
         request_id: B256,
         transaction: SafeTransaction,
@@ -36,28 +32,16 @@ pub enum Resume {
     },
 }
 
-/// Performs the sentinel's [`Effect`]s by running its local [`Checker`] chain
-/// in order, stopping at the first non-[`CheckOutcome::Unknown`] result. If
-/// every local checker resolves to `Unknown`, the sentinel engine is the final
-/// fallback — see `crate::checker` for why an engine failure remains `Unknown`
-/// rather than being guessed at.
-///
-/// The fixed construction order encodes today's precedence: the built-in CoW
-/// check runs before the sentinel engine's checker chain.
+/// Performs the sentinel's [`Effect`]s by asking the configured sentinel
+/// engine for a verdict.
 pub struct Handler {
-    checkers: Vec<Box<dyn Checker>>,
     engine: EngineClient,
     engine_timeout: Duration,
 }
 
 impl Handler {
-    pub fn new(
-        checkers: Vec<Box<dyn Checker>>,
-        engine: EngineClient,
-        engine_timeout: Duration,
-    ) -> Self {
+    pub fn new(engine: EngineClient, engine_timeout: Duration) -> Self {
         Self {
-            checkers,
             engine,
             engine_timeout,
         }
@@ -71,22 +55,13 @@ impl EffectHandler<Effect, Resume> for Handler {
                 request_id,
                 transaction,
             } => {
-                let mut outcome = CheckOutcome::Unknown;
-                for checker in &self.checkers {
-                    outcome = checker.check(&transaction).await;
-                    if outcome != CheckOutcome::Unknown {
-                        break;
-                    }
-                }
-                if outcome == CheckOutcome::Unknown {
-                    outcome = self
-                        .engine
-                        .security_check(&transaction)
-                        .request_id(request_id)
-                        .timeout(self.engine_timeout)
-                        .execute()
-                        .await;
-                }
+                let outcome = self
+                    .engine
+                    .security_check(&transaction)
+                    .request_id(request_id)
+                    .timeout(self.engine_timeout)
+                    .execute()
+                    .await;
                 Resume::DynamicCheckResult {
                     request_id,
                     outcome,
@@ -108,15 +83,6 @@ mod tests {
     const SAFE: Address = Address::new([1u8; 20]);
     const REQUEST_ID: B256 = B256::repeat_byte(0x11);
 
-    struct StubChecker(CheckOutcome);
-
-    #[async_trait::async_trait]
-    impl Checker for StubChecker {
-        async fn check(&self, _: &SafeTransaction) -> CheckOutcome {
-            self.0
-        }
-    }
-
     async fn engine(body: &'static str) -> EngineClient {
         let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
         let url = format!("http://{}", listener.local_addr().unwrap())
@@ -136,40 +102,8 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn resumes_with_the_checker_s_outcome() {
-        let engine = EngineClient::new("http://127.0.0.1:1".parse().unwrap()).unwrap();
+    async fn resumes_with_the_engine_outcome() {
         let handler = Handler::new(
-            vec![
-                Box::new(StubChecker(CheckOutcome::Unknown)),
-                Box::new(StubChecker(CheckOutcome::Approved)),
-            ],
-            engine,
-            Duration::from_secs(1),
-        );
-
-        let resume = handler
-            .perform_effect(Effect::DynamicCheck {
-                request_id: REQUEST_ID,
-                transaction: SafeTransaction {
-                    safe: SAFE,
-                    ..Default::default()
-                },
-            })
-            .await;
-
-        assert!(matches!(
-            resume,
-            Resume::DynamicCheckResult {
-                request_id,
-                outcome: CheckOutcome::Approved,
-            } if request_id == REQUEST_ID
-        ));
-    }
-
-    #[tokio::test]
-    async fn falls_back_to_the_engine_when_local_checkers_abstain() {
-        let handler = Handler::new(
-            vec![Box::new(StubChecker(CheckOutcome::Unknown))],
             engine(r#"{"verdict":"secure"}"#).await,
             Duration::from_secs(1),
         );
