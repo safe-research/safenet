@@ -246,24 +246,3 @@ sol! {
         event OracleResult(bytes32 indexed requestId, address indexed proposer, bytes result, bool approved);
     }
 }
-
-impl TryFrom<SafeTransaction> for safe_tx::SafeTransaction {
-    type Error = safe_tx::InvalidOperation;
-
-    fn try_from(tx: SafeTransaction) -> Result<Self, Self::Error> {
-        Ok(safe_tx::SafeTransaction {
-            chain_id: tx.chainId,
-            safe: tx.safe,
-            to: tx.to,
-            value: tx.value,
-            data: tx.data,
-            operation: (tx.operation as u8).try_into()?,
-            safe_tx_gas: tx.safeTxGas,
-            base_gas: tx.baseGas,
-            gas_price: tx.gasPrice,
-            gas_token: tx.gasToken,
-            refund_receiver: tx.refundReceiver,
-            nonce: tx.nonce,
-        })
-    }
-}

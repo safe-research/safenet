@@ -64,10 +64,10 @@ pub mod oracle {
 
 pub mod consensus {
     use alloy::sol;
-    use serde::Serialize;
+    use serde::{Serialize, Serializer, ser};
 
     sol! {
-        #[derive(Debug, Default, PartialEq, Eq, Serialize)]
+        #[derive(Debug, Default, PartialEq, Eq)]
         enum Operation { #[default] CALL, DELEGATECALL }
 
         // Full transaction struct carried by TransactionProposed; mirrors SafeTransaction.T.
@@ -112,58 +112,17 @@ pub mod consensus {
         }
     }
 
-    // `sol!` requires custom types used as event fields to be declared in
-    // the same macro invocation, so this ABI-decoding copy can't be replaced
-    // with the plain `safe_tx::{SafeTransaction, Operation}` types.
-    // `TryFrom` converts it at the point an event is consumed, because the
-    // generated operation enum has an `__Invalid` value the policy type
-    // deliberately cannot represent.
-    //
-    // TODO: this same event-binding + `TryFrom` conversion is duplicated
-    // near-verbatim in `crates/validator/src/bindings.rs`. Consider moving
-    // the ABI/event definitions into a shared crate so both consumers
-    // declare the `sol!` types (and this conversion) exactly once.
-    impl TryFrom<SafeTransaction> for safe_tx::SafeTransaction {
-        type Error = safe_tx::InvalidOperation;
-
-        fn try_from(tx: SafeTransaction) -> Result<Self, Self::Error> {
-            Ok(safe_tx::SafeTransaction {
-                chain_id: tx.chainId,
-                safe: tx.safe,
-                to: tx.to,
-                value: tx.value,
-                data: tx.data,
-                operation: (tx.operation as u8).try_into()?,
-                safe_tx_gas: tx.safeTxGas,
-                base_gas: tx.baseGas,
-                gas_price: tx.gasPrice,
-                gas_token: tx.gasToken,
-                refund_receiver: tx.refundReceiver,
-                nonce: tx.nonce,
-            })
-        }
-    }
-
-    impl From<safe_tx::SafeTransaction> for SafeTransaction {
-        fn from(tx: safe_tx::SafeTransaction) -> Self {
-            let operation = match tx.operation {
-                safe_tx::Operation::Call => Operation::CALL,
-                safe_tx::Operation::DelegateCall => Operation::DELEGATECALL,
+    impl Serialize for Operation {
+        fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+        where
+            S: Serializer,
+        {
+            let code = match self {
+                Operation::CALL => 0,
+                Operation::DELEGATECALL => 1,
+                _ => return Err(ser::Error::custom("invalid Safe transaction operation")),
             };
-            Self {
-                chainId: tx.chain_id,
-                safe: tx.safe,
-                to: tx.to,
-                value: tx.value,
-                data: tx.data,
-                operation,
-                safeTxGas: tx.safe_tx_gas,
-                baseGas: tx.base_gas,
-                gasPrice: tx.gas_price,
-                gasToken: tx.gas_token,
-                refundReceiver: tx.refund_receiver,
-                nonce: tx.nonce,
-            }
+            serializer.serialize_u8(code)
         }
     }
 }
