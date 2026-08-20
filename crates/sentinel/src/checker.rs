@@ -3,7 +3,7 @@
 //! [`crate::engine::EngineClient`] maps the sentinel engine's wire verdict to
 //! it.
 
-use safe_tx::rule::RuleId;
+use crate::engine::RuleId;
 
 /// The result of checking a proposed transaction.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

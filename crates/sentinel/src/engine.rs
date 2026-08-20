@@ -4,14 +4,61 @@
 use crate::{bindings::consensus::SafeTransaction, checker::CheckOutcome};
 use alloy::primitives::B256;
 use reqwest::RequestBuilder;
-use safe_tx::rule::RuleId;
 use serde::{
-    Deserialize, Serialize, Serializer,
+    Deserialize, Deserializer, Serialize, Serializer, de,
     ser::{self, SerializeStruct as _},
 };
-use std::time::Duration;
+use std::{borrow::Cow, fmt, time::Duration};
 use tracing::{Instrument as _, Span, field};
 use url::Url;
+
+/// A Safenet Arbitration Charter rule citation.
+///
+/// The sentinel deliberately treats this as an open-ended identifier rather
+/// than an enum: the connected engine may implement rules added after this
+/// sentinel version was released.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct RuleId(u32, u32);
+
+impl RuleId {
+    /// Creates the rule `R-{section}.{rule}`.
+    pub const fn new(section: u32, rule: u32) -> Self {
+        Self(section, rule)
+    }
+
+    fn parse(code: &str) -> Option<Self> {
+        let (section, rule) = code.strip_prefix("R-")?.split_once('.')?;
+        let section = section.parse().ok()?;
+        let rule = rule.parse().ok()?;
+        Some(Self::new(section, rule))
+    }
+}
+
+impl fmt::Display for RuleId {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(formatter, "R-{}.{}", self.0, self.1)
+    }
+}
+
+impl Serialize for RuleId {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        serializer.collect_str(self)
+    }
+}
+
+impl<'de> Deserialize<'de> for RuleId {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let code = Cow::<str>::deserialize(deserializer)?;
+        Self::parse(&code)
+            .ok_or_else(|| de::Error::custom(format_args!("invalid rule ID `{code}`")))
+    }
+}
 
 struct Request<'a> {
     transaction: &'a SafeTransaction,
@@ -239,12 +286,25 @@ mod tests {
                 .security_check(&SafeTransaction::default())
                 .execute()
                 .await,
-            CheckOutcome::Denied(RuleId::R4_6KnownMaliciousTarget)
+            CheckOutcome::Denied(RuleId::new(4, 6))
         );
     }
 
     #[tokio::test]
-    async fn fails_on_an_unrecognized_rule_code() {
+    async fn accepts_a_rule_not_known_to_the_sentinel() {
+        let url = respond_once("200 OK", r#"{"verdict":"insecure","rule":"R-42.1337"}"#).await;
+        let engine = EngineClient::new(url).unwrap();
+        assert_eq!(
+            engine
+                .security_check(&SafeTransaction::default())
+                .execute()
+                .await,
+            CheckOutcome::Denied(RuleId::new(42, 1337))
+        );
+    }
+
+    #[tokio::test]
+    async fn fails_on_a_malformed_rule_code() {
         let url = respond_once(
             "200 OK",
             r#"{"verdict":"insecure","rule":"not-a-real-rule"}"#,
@@ -258,6 +318,15 @@ mod tests {
                 .await,
             CheckOutcome::Unknown
         );
+    }
+
+    #[test]
+    fn rule_id_json_roundtrip() {
+        let rule = RuleId::new(42, 1337);
+        let json = serde_json::to_string(&rule).unwrap();
+
+        assert_eq!(json, r#""R-42.1337""#);
+        assert_eq!(serde_json::from_str::<RuleId>(&json).unwrap(), rule);
     }
 
     #[tokio::test]

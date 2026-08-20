@@ -1,5 +1,4 @@
-use crate::{bindings::consensus::SafeTransaction, checker::CheckOutcome};
-use safe_tx::rule::RuleId;
+use crate::{bindings::consensus::SafeTransaction, checker::CheckOutcome, engine::RuleId};
 
 /// A single policy check, evaluated against a proposed transaction.
 /// `StaticChecker::check` runs its checks in a fixed order and stops at the
