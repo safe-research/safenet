@@ -1,11 +1,16 @@
 //! Pure calldata decoding for the excessive-approval check.
 
-use crate::contracts::bindings::{erc20, erc721, erc1155};
+use crate::{
+    contracts::{
+        bindings::{erc20, erc721, erc1155},
+        multi_send::decode_multi_send_call,
+    },
+    engine::SafeTransaction,
+};
 use alloy::{
     primitives::{Address, U256},
     sol_types::SolCall as _,
 };
-use safe_tx::{SafeTransaction, multi_send::decode_multi_send_call};
 
 /// A decoded value- or authority-granting effect that a Safe transaction (or
 /// one of its MultiSend sub-calls) has on a target address.
@@ -129,8 +134,8 @@ fn decode_call(tx: &SafeTransaction) -> Vec<TargetEffect> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::{contracts::bindings::multi_send, engine::Operation};
     use alloy::primitives::{Bytes, address};
-    use safe_tx::{Operation, bindings::multi_send};
 
     fn tx(
         to: Address,

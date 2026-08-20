@@ -1,8 +1,4 @@
-//! Shared Safe transaction types used by Safenet services.
-
-pub mod bindings;
-pub mod multi_send;
-pub mod rule;
+//! Safe transaction types checked by the sentinel engine.
 
 use alloy::primitives::{Address, Bytes, U256};
 use serde::{Deserialize, Deserializer, Serialize, Serializer, de};

@@ -1,9 +1,8 @@
 //! Blocking of transactions to known malicious destinations.
 
 use super::Checker;
-use crate::engine::Verdict;
+use crate::engine::{RuleId, SafeTransaction, Verdict};
 use alloy::primitives::Address;
-use safe_tx::{SafeTransaction, rule::RuleId};
 use std::collections::HashSet;
 
 /// Denies transactions to a configured destination.

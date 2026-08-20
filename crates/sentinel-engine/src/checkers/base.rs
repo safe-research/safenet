@@ -1,12 +1,14 @@
 //! Article IV Part A base guarantees.
 
 use super::Checker;
-use crate::{contracts::bindings::safe, engine::Verdict};
+use crate::{
+    contracts::{bindings::safe, multi_send::decode_multi_send_call},
+    engine::{Operation, RuleId, SafeTransaction, Verdict},
+};
 use alloy::{
     primitives::{Address, address},
     sol_types::SolCall as _,
 };
-use safe_tx::{Operation, SafeTransaction, multi_send::decode_multi_send_call, rule::RuleId};
 
 const SUPPORTED_FALLBACK_HANDLERS: &[Address] = &[
     Address::ZERO,

@@ -3,9 +3,8 @@
 mod extractors;
 
 use self::extractors::{RequestId, RequestTimeout};
-use crate::engine::{SentinelEngine, Verdict};
+use crate::engine::{SafeTransaction, SentinelEngine, Verdict};
 use axum::{Json, Router, extract::State, routing::post};
-use safe_tx::SafeTransaction;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use tower_http::trace::TraceLayer;

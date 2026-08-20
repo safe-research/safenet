@@ -21,7 +21,7 @@
 use super::Checker;
 use crate::{
     contracts::bindings::erc20::{Approval, Transfer, approveCall, transferCall, transferFromCall},
-    engine::Verdict,
+    engine::{RuleId, SafeTransaction, Verdict},
 };
 use alloy::{
     primitives::Address,
@@ -29,7 +29,6 @@ use alloy::{
     rpc::types::Filter,
     sol_types::{SolCall, SolEvent},
 };
-use safe_tx::{SafeTransaction, rule::RuleId};
 use safenet_core::provider::Provider;
 
 /// Which of the two poisoning-relevant ERC-20 call shapes `tx.data` decoded
