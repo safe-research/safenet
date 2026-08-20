@@ -1,3 +1,4 @@
+use alloy::primitives::Address;
 use safenet_core::observability;
 use serde::Deserialize;
 use std::{net::SocketAddr, path::Path};
@@ -34,6 +35,8 @@ pub struct Config {
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct EngineConfig {
+    /// Transaction destinations that are always considered insecure.
+    pub blocklist: Vec<Address>,
     /// Number of blocks inspected for a prior interaction with a candidate
     /// address.
     pub address_poisoning_lookback_blocks: u64,
@@ -61,6 +64,7 @@ mod tests {
         rpc = "https://eth.llamarpc.com"
 
         [engine]
+        blocklist = ["0x0404040404040404040404040404040404040404"]
         address_poisoning_lookback_blocks = 50000
     "#;
 
@@ -70,6 +74,7 @@ mod tests {
 
         assert_eq!(config.rpc.as_str(), "https://eth.llamarpc.com/");
         assert_eq!(config.bind_address, "127.0.0.1:5473".parse().unwrap());
+        assert_eq!(config.engine.blocklist, [Address::repeat_byte(0x04)]);
         assert_eq!(config.engine.address_poisoning_lookback_blocks, 50_000);
         assert_eq!(
             config.observability.log_filter.to_string(),
@@ -93,6 +98,7 @@ mod tests {
                 metrics_address = "127.0.0.1:9090"
 
                 [engine]
+                blocklist = []
                 address_poisoning_lookback_blocks = 50000
             "#,
         )
@@ -117,6 +123,7 @@ mod tests {
                     invalid_field = "foo"
 
                     [engine]
+                    blocklist = []
                     address_poisoning_lookback_blocks = 50000
                 "#,
             )

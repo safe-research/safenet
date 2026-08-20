@@ -41,11 +41,11 @@ pub struct Config {
 /// Configuration specific to the sentinel's request handling, as opposed to
 /// the infrastructure it shares with other Safenet services.
 //
-// TODO(epic Phase E2, follow-up): pick and document sensible defaults for
-// `voting_window` and `blocklist` (`fee_token`/`oracle`/`consensus` are
-// deployment-specific and should stay required) once the sentinel's config
-// shape has settled; for now all three are mandatory so a missing value fails
-// loudly rather than silently watching the wrong address or window.
+// TODO(epic Phase E2, follow-up): pick and document a sensible default for
+// `voting_window` (`fee_token`/`oracle`/`consensus` are deployment-specific and
+// should stay required) once the sentinel's config shape has settled; for now
+// it is mandatory so a missing value fails loudly rather than silently using
+// the wrong window.
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct SentinelConfig {
@@ -54,8 +54,6 @@ pub struct SentinelConfig {
     /// The number of blocks a `Preparing` request is kept alive for before
     /// being cleaned up.
     pub voting_window: u64,
-    /// Transaction destinations that are always denied.
-    pub blocklist: Vec<Address>,
     /// Base URL of the transaction-verification engine used by this sentinel.
     pub engine: Url,
 }
@@ -83,7 +81,6 @@ mod tests {
         [sentinel]
         fee_token = "0x0303030303030303030303030303030303030303"
         voting_window = 100
-        blocklist = ["0x0404040404040404040404040404040404040404"]
         engine = "http://localhost:5473"
     "#;
 
@@ -109,10 +106,6 @@ mod tests {
             address!("0x0303030303030303030303030303030303030303")
         );
         assert_eq!(config.sentinel.voting_window, 100);
-        assert_eq!(
-            config.sentinel.blocklist,
-            vec![address!("0x0404040404040404040404040404040404040404")]
-        );
         assert_eq!(config.sentinel.engine.as_str(), "http://localhost:5473/");
         assert_eq!(
             config.observability.log_filter.to_string(),

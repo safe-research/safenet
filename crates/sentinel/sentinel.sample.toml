@@ -34,9 +34,6 @@ fee_token = "0x0000000000000000000000000000000000000000"
 # cleaned up.
 voting_window = 100
 
-# Transaction destinations that are always denied.
-blocklist = []
-
 # Base URL of this sentinel's transaction-verification engine. The sentinel
 # appends the versioned security-check path itself.
 engine = "http://localhost:5473"

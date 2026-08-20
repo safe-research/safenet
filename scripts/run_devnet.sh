@@ -395,6 +395,7 @@ for sentinel in "${SENTINELS[@]}"; do
         echo "bind_address = \"0.0.0.0:${engine_port}\""
         echo
         echo "[engine]"
+        echo "blocklist = []"
         echo "address_poisoning_lookback_blocks = 1000"
     } > "$config_dir/${name}-engine.toml"
 
@@ -408,7 +409,6 @@ for sentinel in "${SENTINELS[@]}"; do
         echo "[sentinel]"
         echo "fee_token = \"${fee_token}\""
         echo "voting_window = 1"
-        echo "blocklist = []"
         echo "engine = \"http://localhost:${engine_port}\""
         echo
         echo "[observability]"
