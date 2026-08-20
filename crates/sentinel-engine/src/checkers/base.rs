@@ -1,32 +1,12 @@
-use crate::multi_send::decode_multi_send_call;
-use crate::rule::RuleId;
-use crate::{Operation, SafeTransaction};
+//! Article IV Part A base guarantees.
+
+use super::Checker;
+use crate::{contracts::bindings::safe, engine::Verdict};
 use alloy::{
     primitives::{Address, address},
     sol_types::SolCall as _,
 };
-
-mod bindings {
-    alloy::sol! {
-        function addOwnerWithThreshold(address owner, uint256 threshold);
-        function removeOwner(address prevOwner, address owner, uint256 threshold);
-        function swapOwner(address prevOwner, address oldOwner, address newOwner);
-        function changeThreshold(uint256 threshold);
-        function setFallbackHandler(address handler);
-        function setGuard(address guard);
-        function enableModule(address module);
-        function disableModule(address prevModule, address module);
-        function setModuleGuard(address guard);
-        function migrateSingleton();
-        function migrateWithFallbackHandler();
-        function migrateL2Singleton();
-        function migrateL2WithFallbackHandler();
-        function signMessage(bytes message);
-        function multiSend(bytes transactions);
-        function performCreate(uint256 value, bytes deploymentData);
-        function performCreate2(uint256 value, bytes deploymentData, bytes32 salt);
-    }
-}
+use safe_tx::{Operation, SafeTransaction, multi_send::decode_multi_send_call, rule::RuleId};
 
 const SUPPORTED_FALLBACK_HANDLERS: &[Address] = &[
     Address::ZERO,
@@ -46,6 +26,19 @@ const SUPPORTED_MODULES: &[Address] = &[
 ];
 
 const SUPPORTED_MODULE_GUARDS: &[Address] = &[Address::ZERO];
+
+/// Enforces the Safe base guarantees from Article IV Part A.
+pub struct BaseChecker;
+
+#[async_trait::async_trait]
+impl Checker for BaseChecker {
+    async fn check(&self, transaction: &SafeTransaction) -> Verdict {
+        match check_transaction(transaction) {
+            Ok(()) => Verdict::Abstain,
+            Err(rule) => Verdict::Insecure { rule },
+        }
+    }
+}
 
 /// Checks a proposed Safe transaction against the Article IV Part A base
 /// guarantees (settings-change blocking, delegatecall integrity). On denial,
@@ -105,47 +98,41 @@ fn check_self_calls(tx: &SafeTransaction) -> bool {
     // No-arg checks: any calldata starting with the right selector is allowed.
     if tx
         .data
-        .starts_with(&bindings::addOwnerWithThresholdCall::SELECTOR)
+        .starts_with(&safe::addOwnerWithThresholdCall::SELECTOR)
     {
         return true;
     }
-    if tx.data.starts_with(&bindings::removeOwnerCall::SELECTOR) {
+    if tx.data.starts_with(&safe::removeOwnerCall::SELECTOR) {
         return true;
     }
-    if tx.data.starts_with(&bindings::swapOwnerCall::SELECTOR) {
+    if tx.data.starts_with(&safe::swapOwnerCall::SELECTOR) {
         return true;
     }
-    if tx
-        .data
-        .starts_with(&bindings::changeThresholdCall::SELECTOR)
-    {
+    if tx.data.starts_with(&safe::changeThresholdCall::SELECTOR) {
         return true;
     }
-    if tx.data.starts_with(&bindings::disableModuleCall::SELECTOR) {
+    if tx.data.starts_with(&safe::disableModuleCall::SELECTOR) {
         return true;
     }
 
     // Arg-validated checks: the first address argument must be in the allow-list.
-    if tx
-        .data
-        .starts_with(&bindings::setFallbackHandlerCall::SELECTOR)
-    {
-        return bindings::setFallbackHandlerCall::abi_decode(&tx.data)
+    if tx.data.starts_with(&safe::setFallbackHandlerCall::SELECTOR) {
+        return safe::setFallbackHandlerCall::abi_decode(&tx.data)
             .ok()
             .is_some_and(|call| SUPPORTED_FALLBACK_HANDLERS.contains(&call.handler));
     }
-    if tx.data.starts_with(&bindings::setGuardCall::SELECTOR) {
-        return bindings::setGuardCall::abi_decode(&tx.data)
+    if tx.data.starts_with(&safe::setGuardCall::SELECTOR) {
+        return safe::setGuardCall::abi_decode(&tx.data)
             .ok()
             .is_some_and(|call| SUPPORTED_GUARDS.contains(&call.guard));
     }
-    if tx.data.starts_with(&bindings::enableModuleCall::SELECTOR) {
-        return bindings::enableModuleCall::abi_decode(&tx.data)
+    if tx.data.starts_with(&safe::enableModuleCall::SELECTOR) {
+        return safe::enableModuleCall::abi_decode(&tx.data)
             .ok()
             .is_some_and(|call| SUPPORTED_MODULES.contains(&call.module));
     }
-    if tx.data.starts_with(&bindings::setModuleGuardCall::SELECTOR) {
-        return bindings::setModuleGuardCall::abi_decode(&tx.data)
+    if tx.data.starts_with(&safe::setModuleGuardCall::SELECTOR) {
+        return safe::setModuleGuardCall::abi_decode(&tx.data)
             .ok()
             .is_some_and(|call| SUPPORTED_MODULE_GUARDS.contains(&call.guard));
     }
@@ -165,18 +152,14 @@ fn check_delegate_calls(tx: &SafeTransaction) -> bool {
         address!("526643F69b81B008F46d95CD5ced5eC0edFFDaC6"),
     ];
     if MIGRATION_CONTRACTS.contains(&tx.to) {
-        return tx
-            .data
-            .starts_with(&bindings::migrateSingletonCall::SELECTOR)
+        return tx.data.starts_with(&safe::migrateSingletonCall::SELECTOR)
             || tx
                 .data
-                .starts_with(&bindings::migrateWithFallbackHandlerCall::SELECTOR)
+                .starts_with(&safe::migrateWithFallbackHandlerCall::SELECTOR)
+            || tx.data.starts_with(&safe::migrateL2SingletonCall::SELECTOR)
             || tx
                 .data
-                .starts_with(&bindings::migrateL2SingletonCall::SELECTOR)
-            || tx
-                .data
-                .starts_with(&bindings::migrateL2WithFallbackHandlerCall::SELECTOR);
+                .starts_with(&safe::migrateL2WithFallbackHandlerCall::SELECTOR);
     }
 
     const SIGN_MESSAGE_LIBS: &[Address] = &[
@@ -186,7 +169,7 @@ fn check_delegate_calls(tx: &SafeTransaction) -> bool {
         address!("4FfeF8222648872B3dE295Ba1e49110E61f5b5aa"),
     ];
     if SIGN_MESSAGE_LIBS.contains(&tx.to) {
-        return tx.data.starts_with(&bindings::signMessageCall::SELECTOR);
+        return tx.data.starts_with(&safe::signMessageCall::SELECTOR);
     }
 
     const CREATE_CALL_CONTRACTS: &[Address] = &[
@@ -196,8 +179,8 @@ fn check_delegate_calls(tx: &SafeTransaction) -> bool {
         address!("2Ef5ECfbea521449E4De05EDB1ce63B75eDA90B4"), // 1.5.0
     ];
     if CREATE_CALL_CONTRACTS.contains(&tx.to) {
-        return tx.data.starts_with(&bindings::performCreateCall::SELECTOR)
-            || tx.data.starts_with(&bindings::performCreate2Call::SELECTOR);
+        return tx.data.starts_with(&safe::performCreateCall::SELECTOR)
+            || tx.data.starts_with(&safe::performCreate2Call::SELECTOR);
     }
 
     false
@@ -278,11 +261,57 @@ mod tests {
     fn multisend(sub_txs: &[Vec<u8>]) -> Bytes {
         let transactions: Vec<u8> = sub_txs.iter().flatten().cloned().collect();
         Bytes::from(
-            bindings::multiSendCall {
+            safe::multiSendCall {
                 transactions: Bytes::from(transactions),
             }
             .abi_encode(),
         )
+    }
+
+    #[tokio::test]
+    async fn denies_self_call_not_on_settings_allow_list() {
+        let safe = Address::new([1u8; 20]);
+        let transaction = SafeTransaction {
+            safe,
+            to: safe,
+            data: vec![0xde, 0xad, 0xbe, 0xef].into(),
+            ..Default::default()
+        };
+
+        assert_eq!(
+            BaseChecker.check(&transaction).await,
+            Verdict::Insecure {
+                rule: RuleId::R4_1SettingsChange,
+            }
+        );
+    }
+
+    #[tokio::test]
+    async fn denies_delegatecall_to_unknown_target() {
+        let transaction = SafeTransaction {
+            safe: Address::new([1u8; 20]),
+            to: Address::new([2u8; 20]),
+            operation: Operation::DelegateCall,
+            ..Default::default()
+        };
+
+        assert_eq!(
+            BaseChecker.check(&transaction).await,
+            Verdict::Insecure {
+                rule: RuleId::R4_2DelegatecallIntegrity,
+            }
+        );
+    }
+
+    #[tokio::test]
+    async fn abstains_when_the_base_guarantees_hold() {
+        let transaction = SafeTransaction {
+            safe: Address::new([1u8; 20]),
+            to: Address::new([2u8; 20]),
+            ..Default::default()
+        };
+
+        assert_eq!(BaseChecker.check(&transaction).await, Verdict::Abstain);
     }
 
     #[test]
@@ -501,7 +530,7 @@ mod tests {
     fn allows_multisend_with_valid_delegatecall() {
         let safe = address!("3850cd76006dc6CaCBCBB514995C47Ca8Ad0bb96");
 
-        let sign_msg_data = bindings::signMessageCall {
+        let sign_msg_data = safe::signMessageCall {
             message: Bytes::from("swap GNO for SAFE"),
         }
         .abi_encode();
@@ -543,7 +572,7 @@ mod tests {
     fn denies_delegatecall_to_callonly_multisend() {
         let safe = address!("3850cd76006dc6CaCBCBB514995C47Ca8Ad0bb96");
 
-        let sign_msg_data = bindings::signMessageCall {
+        let sign_msg_data = safe::signMessageCall {
             message: Bytes::from("swap GNO for SAFE"),
         }
         .abi_encode();
@@ -679,7 +708,7 @@ mod tests {
             address!("2Ef5ECfbea521449E4De05EDB1ce63B75eDA90B4"), // 1.5.0
         ] {
             let data = Bytes::from(
-                bindings::performCreateCall {
+                safe::performCreateCall {
                     value: U256::ZERO,
                     deploymentData: Bytes::from(vec![0x60, 0x00, 0x60, 0x00, 0xf3]),
                 }
@@ -698,7 +727,7 @@ mod tests {
             );
 
             let data = Bytes::from(
-                bindings::performCreate2Call {
+                safe::performCreate2Call {
                     value: U256::ZERO,
                     deploymentData: Bytes::from(vec![0x60, 0x00, 0x60, 0x00, 0xf3]),
                     salt: [0u8; 32].into(),

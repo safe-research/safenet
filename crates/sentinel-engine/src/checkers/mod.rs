@@ -1,13 +1,14 @@
 //! Transaction checks run by the sentinel engine.
 
 mod address_poisoning;
+mod base;
 mod blocklist;
 mod cancellation;
 mod cow;
 mod excessive_approval;
 
 pub use self::{
-    address_poisoning::AddressPoisoningChecker, blocklist::BlocklistChecker,
+    address_poisoning::AddressPoisoningChecker, base::BaseChecker, blocklist::BlocklistChecker,
     cancellation::CancellationChecker, cow::CowChecker,
     excessive_approval::ExcessiveApprovalChecker,
 };

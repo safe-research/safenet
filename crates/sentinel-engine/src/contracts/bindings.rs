@@ -1,5 +1,27 @@
 //! Alloy bindings for contracts whose calls and events the engine inspects.
 
+pub mod safe {
+    alloy::sol! {
+        function addOwnerWithThreshold(address owner, uint256 threshold);
+        function removeOwner(address prevOwner, address owner, uint256 threshold);
+        function swapOwner(address prevOwner, address oldOwner, address newOwner);
+        function changeThreshold(uint256 threshold);
+        function setFallbackHandler(address handler);
+        function setGuard(address guard);
+        function enableModule(address module);
+        function disableModule(address prevModule, address module);
+        function setModuleGuard(address guard);
+        function migrateSingleton();
+        function migrateWithFallbackHandler();
+        function migrateL2Singleton();
+        function migrateL2WithFallbackHandler();
+        function signMessage(bytes message);
+        function multiSend(bytes transactions);
+        function performCreate(uint256 value, bytes deploymentData);
+        function performCreate2(uint256 value, bytes deploymentData, bytes32 salt);
+    }
+}
+
 pub mod erc20 {
     alloy::sol! {
         function transfer(address to, uint256 amount);
