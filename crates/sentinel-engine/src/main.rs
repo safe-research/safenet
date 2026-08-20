@@ -4,7 +4,10 @@ mod config;
 mod engine;
 
 use self::{
-    checkers::{AddressPoisoningChecker, BlocklistChecker, CancellationChecker, CowChecker},
+    checkers::{
+        AddressPoisoningChecker, BlocklistChecker, CancellationChecker, CowChecker,
+        ExcessiveApprovalChecker,
+    },
     config::Config,
     engine::SentinelEngine,
 };
@@ -47,6 +50,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let engine = SentinelEngine::new(vec![
         Box::new(CancellationChecker),
         Box::new(BlocklistChecker::new(engine_config.blocklist)),
+        Box::new(ExcessiveApprovalChecker),
         Box::new(CowChecker::new()),
         Box::new(AddressPoisoningChecker::new(
             provider,
