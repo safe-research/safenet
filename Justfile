@@ -102,6 +102,12 @@ test-integration-validator:
 test-integration-validator-reorg-nonce:
     ./scripts/run_validator_reorg_nonce_test.sh
 
+# Regression test: a reorg deeper than the configured `max_reorg_depth` must
+# make the validator fail loudly instead of silently continuing (Anvil + a
+# single validator instance).
+test-integration-validator-deep-reorg:
+    ./scripts/run_validator_deep_reorg_test.sh
+
 # Run the explorer's Vite dev server.
 explorer-dev:
     npm --prefix explorer run dev

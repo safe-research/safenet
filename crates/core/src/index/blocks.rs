@@ -56,7 +56,17 @@ pub struct Config {
     /// expected block to become available. Once exhausted, the watcher waits a
     /// whole `block_time` before trying again (to handle skipped slots).
     pub block_retry_delays: Vec<u64>,
-    /// How many blocks deep a reorg can be before it is considered final.
+    /// How many of the most recent blocks are still considered mutable
+    /// (i.e. how deep a reorg can be) before it is considered final. A reorg
+    /// that reaches past this depth - replacing a block already considered
+    /// final - makes the watcher unable to verify the chain any further, so
+    /// it returns [`Error::ExceededMaxReorgDepth`] instead of silently
+    /// continuing.
+    ///
+    /// `0` means no block is ever tolerated as reorg-able: every block is
+    /// final the instant it is observed, so *any* reorg, even one block
+    /// deep, is treated as exceeding this depth and fails loudly.
+    /// The default of `5` is a reasonable margin for typical shallow reorgs.
     pub max_reorg_depth: u64,
     /// Block to begin a fresh index from when there is no resume point. Unlike
     /// resuming, this back-fills history via a warp without emitting a (fake)
@@ -118,6 +128,12 @@ pub enum Error {
     /// inconsistent RPC node.
     #[error("block {0} is unexpectedly missing")]
     MissingBlock(BlockId),
+    /// A reorg unwound every block being tracked for reorg detection without
+    /// finding a common ancestor, meaning it went deeper than the configured
+    /// `max_reorg_depth` and a block already assumed final was replaced. The
+    /// watcher can no longer verify the chain and cannot recover on its own.
+    #[error("reorg exceeded the configured max reorg depth of {0} blocks")]
+    ExceededMaxReorgDepth(u64),
 }
 
 /// A block that was found to be no longer canonical on revalidation. Carries the
@@ -147,6 +163,16 @@ struct PendingBlock {
     timestamp_ms: u64,
 }
 
+/// The current `safe` block: the highest block outside the configured reorg
+/// window, considered final. Only its number and hash are needed - once a
+/// block becomes the anchor it is never re-emitted or uncled, just compared
+/// against.
+#[derive(Clone, Copy, Debug)]
+struct SafeBlock {
+    number: u64,
+    hash: B256,
+}
+
 /// Watches the chain head, producing [`BlockUpdate`]s and detecting reorgs.
 pub struct BlockWatcher {
     provider: Provider,
@@ -154,8 +180,12 @@ pub struct BlockWatcher {
     block_time: u64,
     pending: PendingBlock,
     clock: Clock,
-    /// The most recent blocks (up to `max_reorg_depth`), kept for reorg
-    /// detection. Ordered oldest-first.
+    /// The current `safe` block, kept explicitly so there is always
+    /// something to verify the chain against, even once `recent` (the
+    /// mutable window after it) has been fully unwound by a reorg.
+    safe: SafeBlock,
+    /// The blocks after `safe` (up to `max_reorg_depth` of them), kept for
+    /// reorg detection. Ordered oldest-first.
     recent: VecDeque<BlockHeader>,
     queue: VecDeque<BlockUpdate>,
 }
@@ -182,6 +212,10 @@ impl BlockWatcher {
                 timestamp_ms: 0,
             },
             clock: Clock::start(),
+            safe: SafeBlock {
+                number: 0,
+                hash: B256::ZERO,
+            },
             recent: VecDeque::new(),
             queue: VecDeque::new(),
         };
@@ -209,10 +243,10 @@ impl BlockWatcher {
 
     async fn initialize(&mut self, indexed: Option<BlockStatus>) -> Result<(), Error> {
         let latest = self.require_block(BlockId::latest()).await?;
-        let safe = latest.number.saturating_sub(self.config.max_reorg_depth);
+        let safe_number = latest.number.saturating_sub(self.config.max_reorg_depth);
         tracing::debug!(
             latest = latest.number,
-            safe,
+            safe = safe_number,
             resume = ?indexed,
             "initializing block watcher"
         );
@@ -236,32 +270,32 @@ impl BlockWatcher {
             // queries. We cannot warp to the latest block, as a range query
             // could then return data for a block that later gets uncled.
             if let Some(uncle) = uncle
-                && uncle <= safe
+                && uncle <= safe_number
             {
                 self.queue.push_back(BlockUpdate::Warp {
                     from: uncle,
-                    to: safe,
+                    to: safe_number,
                 });
             }
         } else if let Some(start_block) = self.config.start_block
-            && start_block <= safe
+            && start_block <= safe_number
         {
             // Fresh start from a configured block: if possible back-fill via a
             // warp. Unlike resuming, there is no prior state, so do not emit a
             // fake reorg like we do when resuming.
             self.queue.push_back(BlockUpdate::Warp {
                 from: start_block,
-                to: safe,
+                to: safe_number,
             });
         }
 
-        // Query the recent blocks (those within the reorg window) so we can
+        // Query the `safe` block itself, plus everything after it, so we can
         // detect reorgs going forward. On the rare chance of observing a reorg
         // mid-init, tear down and start the range again.
         let latest_number = latest.number;
         let mut parent_hash = None;
         let mut canonical_latest = Some(latest);
-        let mut number = safe + 1;
+        let mut number = safe_number;
         while number <= latest_number {
             // Avoid an additional RPC request for the latest block, but only if
             // we know for sure it is still canonical.
@@ -289,14 +323,26 @@ impl BlockWatcher {
                 parent_hash = None;
                 canonical_latest = None;
                 self.recent.clear();
-                number = safe + 1;
+                number = safe_number;
             }
         }
 
-        // Queue new-block updates for the recent blocks. Earlier blocks are
-        // still retained for reorg detection, but updates before the persisted
-        // rollback boundary (or configured start block on a fresh start) have
-        // already been processed and must not be emitted.
+        // The scan above always fetches at least `safe_number` itself (it
+        // never exceeds `latest_number`, which is always `>= safe_number`).
+        // Split it out into the explicit `safe` anchor - `recent` only ever
+        // represents the mutable blocks after it.
+        let safe_block = self
+            .recent
+            .pop_front()
+            .expect("the range scan always includes the safe block");
+        self.safe = SafeBlock {
+            number: safe_block.number,
+            hash: safe_block.hash,
+        };
+
+        // Queue new-block updates for the recent blocks. Updates before the
+        // persisted rollback boundary (or configured start block on a fresh
+        // start) have already been processed and must not be emitted.
         for block in self.recent.iter().filter(|block| {
             indexed.map_or_else(
                 || {
@@ -331,12 +377,7 @@ impl BlockWatcher {
     pub fn status(&self) -> BlockStatus {
         BlockStatus {
             latest: self.pending.number.saturating_sub(1),
-            safe: self
-                .recent
-                .front()
-                .map(|block| block.number)
-                .unwrap_or(self.pending.number)
-                .saturating_sub(1),
+            safe: self.safe.number,
         }
     }
 
@@ -375,8 +416,9 @@ impl BlockWatcher {
             }
         };
 
-        // Detect reorgs: if the new block does not build on our last seen block,
-        // uncle the last block and re-fetch its replacement on the next call.
+        // Detect reorgs: if the new block does not build on our last seen
+        // block - the back of `recent`, or the `safe` anchor once `recent` is
+        // empty - uncle it and re-fetch its replacement on the next call.
         if let Some(last) = self
             .recent
             .pop_back_if(|last| last.hash != block.parent_hash)
@@ -390,19 +432,33 @@ impl BlockWatcher {
                 number: last.number,
             });
         }
+        if self.recent.is_empty() && self.safe.hash != block.parent_hash {
+            // Even the anchor - a block already considered final - does not
+            // match: the reorg went deeper than the configured depth.
+            return Err(Error::ExceededMaxReorgDepth(self.config.max_reorg_depth));
+        }
 
         let number = block.number;
         let hash = block.hash;
         let logs_bloom = block.logs_bloom;
 
-        // Record the new block, keeping at most `max_reorg_depth` recent blocks,
-        // and advance the pending block.
+        // Record the new block, and advance the pending block.
         self.update_next_pending_block(block.number, block.timestamp);
         self.recent.push_back(block);
-        // TODO: This should be replaced by `VecDeque::truncate_front` once the
-        // API stabilizes.
-        while self.recent.len() as u64 > self.config.max_reorg_depth {
-            self.recent.pop_front();
+        // Evicting the oldest tracked block promotes it to the new `safe`
+        // anchor rather than discarding it, so there is always something to
+        // verify the chain against even once every mutable block has been
+        // uncled. Exactly one block is pushed per call, so at most one
+        // eviction is ever needed here.
+        if self.recent.len() as u64 > self.config.max_reorg_depth {
+            let evicted = self
+                .recent
+                .pop_front()
+                .expect("checked len > max_reorg_depth above");
+            self.safe = SafeBlock {
+                number: evicted.number,
+                hash: evicted.hash,
+            };
         }
 
         tracing::trace!(number, %hash, "new canonical block");
@@ -421,7 +477,9 @@ impl BlockWatcher {
     ///
     /// This recovers from nodes that briefly observe a block, expose its hash,
     /// and then lose the ability to serve logs for it (notably Reth around uncled
-    /// blocks).
+    /// blocks). It only ever considers blocks in `recent`, never the `safe`
+    /// anchor: by the time a block becomes `safe`, its logs have already been
+    /// dealt with, so there is nothing left here that could still need it.
     pub async fn revalidate_last_block(&mut self) -> Result<Option<InvalidatedBlock>, Error> {
         // Re-validating while warping is not possible, as it is beyond the max
         // reorg depth.
@@ -547,7 +605,7 @@ mod tests {
 
     async fn initialized_watcher_skip_ready(asserter: &Asserter, config: Config) -> BlockWatcher {
         asserter.push_success(&block(1000));
-        for number in (1000 - config.max_reorg_depth + 1)..1000 {
+        for number in (1000 - config.max_reorg_depth)..1000 {
             asserter.push_success(&block(number));
         }
         let mut blocks = BlockWatcher::new(Provider::mocked(asserter), config, None)
@@ -562,7 +620,9 @@ mod tests {
         let asserter = Asserter::new();
         // latest block fetched on startup
         asserter.push_success(&block(1000));
-        // historic block fetched on startup for reorg detection
+        // historic blocks fetched on startup for reorg detection: 998 is the
+        // anchor (`safe`), 999 is the one mutable block below `latest`.
+        asserter.push_success(&block(998));
         asserter.push_success(&block(999));
 
         let mut blocks = BlockWatcher::new(Provider::mocked(&asserter), config(), None)
@@ -590,6 +650,7 @@ mod tests {
     async fn initializes_from_persisted_snapshot_range() {
         let asserter = Asserter::new();
         asserter.push_success(&block(1000));
+        asserter.push_success(&block(998));
         asserter.push_success(&block(999));
 
         let mut blocks = BlockWatcher::new(
@@ -619,6 +680,7 @@ mod tests {
     async fn resumes_after_a_single_pruned_snapshot_without_a_fake_reorg() {
         let asserter = Asserter::new();
         asserter.push_success(&block(1000));
+        asserter.push_success(&block(998));
         asserter.push_success(&block(999));
 
         let mut blocks = BlockWatcher::new(
@@ -647,6 +709,7 @@ mod tests {
     async fn does_not_reemit_recent_blocks_at_or_before_the_persisted_snapshot() {
         let asserter = Asserter::new();
         asserter.push_success(&block(1000));
+        asserter.push_success(&block(998));
         asserter.push_success(&block(999));
 
         let mut blocks = BlockWatcher::new(
@@ -668,6 +731,7 @@ mod tests {
     async fn starts_from_configured_block_without_fake_reorg() {
         let asserter = Asserter::new();
         asserter.push_success(&block(1000));
+        asserter.push_success(&block(998));
         asserter.push_success(&block(999));
 
         let mut blocks = BlockWatcher::new(
@@ -696,6 +760,7 @@ mod tests {
     async fn does_not_warp_when_start_block_is_within_reorg_window() {
         let asserter = Asserter::new();
         asserter.push_success(&block(1000));
+        asserter.push_success(&block(998));
         asserter.push_success(&block(999));
 
         let mut blocks = BlockWatcher::new(
@@ -722,6 +787,7 @@ mod tests {
     async fn only_emits_blocks_at_or_after_start_block_inside_reorg_window() {
         let asserter = Asserter::new();
         asserter.push_success(&block(1000));
+        asserter.push_success(&block(998));
         asserter.push_success(&block(999));
 
         let mut blocks = BlockWatcher::new(
@@ -776,11 +842,15 @@ mod tests {
             header.hash = keccak256("bad1000");
             header.parent_hash = keccak256("bad999");
         }));
+        // `max_reorg_depth: 3` below, so the range scan starts at the anchor,
+        // 997, before the mismatch at 999 is found and the scan restarts.
+        asserter.push_success(&block(997));
         asserter.push_success(&block(998));
         asserter.push_success(&block_with(999, |header| {
             header.hash = keccak256("bad999");
             header.parent_hash = keccak256("uncle");
         }));
+        asserter.push_success(&block(997));
         asserter.push_success(&block(998));
         asserter.push_success(&block(999));
         asserter.push_success(&block(1000));
@@ -959,6 +1029,62 @@ mod tests {
         assert!(asserter.read_q().is_empty());
     }
 
+    #[tokio::test(start_paused = true)]
+    async fn fails_loudly_when_a_reorg_exceeds_max_depth() {
+        let asserter = Asserter::new();
+        let mut blocks = initialized_watcher_skip_ready(&asserter, config()).await;
+
+        // `config()` sets `max_reorg_depth: 2`, so after init `safe` is 998
+        // and `recent` holds 999 and 1000. Unwinding 1000 and 999 are both
+        // legitimate, in-window uncles; only a further mismatch against
+        // `safe` itself - a block already considered final - means the
+        // reorg went deeper than configured.
+        let reorg_1001 = block_with(1001, |header| {
+            header.hash = keccak256("reorg1001");
+            header.parent_hash = keccak256("reorg1000");
+        });
+        let reorg_1000 = block_with(1000, |header| {
+            header.hash = keccak256("reorg1000");
+            header.parent_hash = keccak256("reorg999");
+        });
+        let reorg_999 = block_with(999, |header| {
+            header.hash = keccak256("reorg999");
+            header.parent_hash = keccak256("reorg998");
+        });
+
+        asserter.push_success(&reorg_1001);
+        asserter.push_success(&reorg_1000);
+        asserter.push_success(&reorg_999);
+
+        assert_eq!(
+            blocks.next().await.unwrap(),
+            BlockUpdate::Uncle { number: 1000 }
+        );
+        assert_eq!(
+            blocks.next().await.unwrap(),
+            BlockUpdate::Uncle { number: 999 }
+        );
+
+        // With `recent` now empty, the next candidate is checked against
+        // `safe` (998) itself, which also doesn't match: there is nothing
+        // left to verify the chain against, so this fails rather than
+        // reporting it as one more (illegitimate) uncle.
+        assert!(matches!(
+            blocks.next().await,
+            Err(Error::ExceededMaxReorgDepth(2))
+        ));
+
+        // `safe` is a stable reference, not consumed by the check above, so
+        // every further call re-fetches the same replacement and keeps
+        // comparing (and failing) against it the same way.
+        asserter.push_success(&reorg_999);
+        assert!(matches!(
+            blocks.next().await,
+            Err(Error::ExceededMaxReorgDepth(2))
+        ));
+        assert!(asserter.read_q().is_empty());
+    }
+
     #[tokio::test]
     async fn revalidate_returns_none_when_the_block_is_still_canonical() {
         let asserter = Asserter::new();
@@ -1007,6 +1133,7 @@ mod tests {
     async fn revalidate_purges_queued_descendants() {
         let asserter = Asserter::new();
         asserter.push_success(&block(1000));
+        asserter.push_success(&block(997));
         asserter.push_success(&block(998));
         asserter.push_success(&block(999));
         let mut blocks = BlockWatcher::new(
@@ -1035,6 +1162,89 @@ mod tests {
             blocks.ready().collect::<Vec<_>>(),
             vec![BlockUpdate::Uncle { number: 999 }]
         );
+    }
+
+    #[tokio::test]
+    async fn revalidate_can_invalidate_the_oldest_tracked_block() {
+        let asserter = Asserter::new();
+        asserter.push_success(&block(1000));
+        asserter.push_success(&block(999));
+        let mut blocks = BlockWatcher::new(
+            Provider::mocked(&asserter),
+            Config {
+                max_reorg_depth: 1,
+                ..config()
+            },
+            None,
+        )
+        .await
+        .unwrap();
+
+        // `recent` holds only 1000 (999 became the `safe` anchor).
+        // Invalidating it - the oldest (and only) tracked block, at index 0 -
+        // is a routine uncle: unlike invalidating the anchor itself, this can
+        // never be fatal, since `safe` is a separate field `revalidate`
+        // cannot touch, and still gives the next call something to verify
+        // against.
+        assert_eq!(blocks.next().await.unwrap(), new_block_update(&block(1000)));
+
+        asserter.push_success(&block_with(1000, |header| {
+            header.hash = keccak256("new1000");
+        }));
+        assert_eq!(
+            blocks.revalidate_last_block().await.unwrap(),
+            Some(invalidated_block(&block(1000)))
+        );
+        assert_eq!(
+            blocks.next().await.unwrap(),
+            BlockUpdate::Uncle { number: 1000 }
+        );
+        assert!(asserter.read_q().is_empty());
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn evicting_from_recent_promotes_the_block_to_safe() {
+        let asserter = Asserter::new();
+        let mut blocks = initialized_watcher_skip_ready(
+            &asserter,
+            Config {
+                max_reorg_depth: 1,
+                ..config()
+            },
+        )
+        .await;
+        // After init: `safe` is 999, and `recent` holds only 1000.
+
+        // A legitimate new block (1001) evicts 1000 out of `recent`,
+        // promoting it to the new `safe` anchor.
+        asserter.push_success(&block(1001));
+        assert_eq!(blocks.next().await.unwrap(), new_block_update(&block(1001)));
+
+        // Unwind the only block left in `recent` (1001).
+        let reorg_1002 = block_with(1002, |header| {
+            header.hash = keccak256("reorg1002");
+            header.parent_hash = keccak256("reorg1001");
+        });
+        asserter.push_success(&reorg_1002);
+        assert_eq!(
+            blocks.next().await.unwrap(),
+            BlockUpdate::Uncle { number: 1001 }
+        );
+
+        // This candidate's parent matches the *stale* pre-eviction anchor
+        // (999), not the real current one (1000): if eviction had failed to
+        // update `safe`, this would be wrongly accepted as a legitimate
+        // continuation instead of failing.
+        let reorg_1001 = block_with(1001, |header| {
+            header.hash = keccak256("reorg1001");
+            header.parent_hash = block_hash(999);
+        });
+        asserter.push_success(&reorg_1001);
+        assert!(matches!(
+            blocks.next().await,
+            Err(Error::ExceededMaxReorgDepth(1))
+        ));
+        assert!(asserter.read_q().is_empty());
     }
 
     #[tokio::test(start_paused = true)]

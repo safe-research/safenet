@@ -27,6 +27,10 @@ jobs:
             just-target: test-integration-validator-reorg-nonce
             log-artifact: validator-integration-reorg-nonce-logs
 
+          - name: validator-deep-reorg
+            just-target: test-integration-validator-deep-reorg
+            log-artifact: validator-integration-deep-reorg-logs
+
     steps:
       - uses: actions/checkout@v5
         with:
