@@ -70,7 +70,7 @@ cargo build --package sentinel --package sentinel-engine
 
 # --- 2. Start Anvil with a 1-second block interval ---
 echo "Starting Anvil..."
-anvil --block-time "$BLOCK_TIME_SECONDS" > "$ROOT/anvil_sentinel_logs.txt" 2>&1 &
+anvil --block-time "$BLOCK_TIME_SECONDS" > "$ROOT/anvil_logs.txt" 2>&1 &
 PIDS+=("$!")
 sleep 2
 

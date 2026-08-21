@@ -58,7 +58,7 @@ echo "==> Using temporary directory $TMPDIR"
 build_services_and_contracts
 
 echo "==> Starting Anvil..."
-start_anvil "$BLOCK_TIME" "$ANVIL_PORT" "$REPO_ROOT/anvil_reorg_nonce_logs.txt" "$ANVIL_RPC_URL"
+start_anvil "$BLOCK_TIME" "$ANVIL_PORT" "$REPO_ROOT/anvil_logs.txt" "$ANVIL_RPC_URL"
 
 PARTICIPANTS_CSV=$(IFS=,; echo "${PARTICIPANTS[*]}")
 deploy_validator_contracts "$ANVIL_RPC_URL" "$SENDER" "$PARTICIPANTS_CSV" "$CHAIN_ID"
