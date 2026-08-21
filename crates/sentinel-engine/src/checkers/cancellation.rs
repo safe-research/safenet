@@ -1,8 +1,7 @@
 //! Recognition of Safe nonce-cancellation transactions.
 
 use super::Checker;
-use crate::engine::Verdict;
-use safe_tx::SafeTransaction;
+use crate::engine::{SafeTransaction, Verdict};
 
 /// Considers an empty call from a Safe to itself secure.
 pub struct CancellationChecker;

@@ -13,8 +13,7 @@ pub use self::{
     excessive_approval::ExcessiveApprovalChecker,
 };
 
-use crate::engine::Verdict;
-use safe_tx::SafeTransaction;
+use crate::engine::{SafeTransaction, Verdict};
 
 /// A transaction check in the sentinel engine's checker chain.
 #[async_trait::async_trait]

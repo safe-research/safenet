@@ -1,6 +1,6 @@
 # ---- Builder Stage ----
 # Compiles the release binary against the full workspace: `sentinel-engine`
-# depends on `safenet-core`/`safe-tx` via workspace path dependencies, so the
+# depends on `safenet-core` via a workspace path dependency, so the
 # build needs the whole `crates/` tree.
 FROM rust:1-slim AS builder
 WORKDIR /usr/src/app

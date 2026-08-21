@@ -51,6 +51,12 @@ pub mod erc1155 {
     }
 }
 
+pub mod multi_send {
+    alloy::sol! {
+        function multiSend(bytes transactions);
+    }
+}
+
 pub mod cow {
     alloy::sol! {
         function setPreSignature(bytes orderUid, bool signed);

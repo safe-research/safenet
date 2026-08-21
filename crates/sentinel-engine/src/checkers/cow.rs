@@ -7,10 +7,9 @@
 //! (`ComposableCoW.create`, `handler` set to the canonical TWAP contract).
 //!
 //! This registry (`GPv2VaultRelayer`/`GPv2Settlement`/`ComposableCoW`/TWAP
-//! handler addresses) is deliberately engine-local, not part of
-//! `safe-tx`: `safe-tx`'s own allow-lists are Safe-native protocol constants
-//! shared by both `validator` and `sentinel`, whereas these are one
-//! third-party dapp's addresses that only this one check needs today.
+//! handler addresses) is deliberately local to this checker. The base
+//! checker's allow-lists are Safe-native protocol constants, whereas these
+//! are one third-party dapp's addresses that only this check needs today.
 //!
 //! **Denies, rather than exempts.** A standalone `approve` to
 //! `GPv2VaultRelayer` — not co-batched with a recognized trigger call — is
@@ -63,13 +62,13 @@ use crate::{
         cow::{Order, TwapData, createCall, setPreSignatureCall},
         erc20::approveCall,
     },
-    engine::Verdict,
+    contracts::multi_send::decode_multi_send_call,
+    engine::{Operation, RuleId, SafeTransaction, Verdict},
 };
 use alloy::{
     primitives::{Address, B256, Bytes, U256, address},
     sol_types::{Eip712Domain, SolCall, SolStruct, SolValue, eip712_domain},
 };
-use safe_tx::{Operation, SafeTransaction, multi_send::decode_multi_send_call, rule::RuleId};
 use serde::Deserialize;
 
 /// CoW Protocol's canonical contracts. Deployed at the same address on every
@@ -600,7 +599,7 @@ mod tests {
     use crate::contracts::bindings::cow::ConditionalOrderParams;
 
     use super::*;
-    use safe_tx::bindings::multi_send;
+    use crate::contracts::bindings::multi_send;
 
     const SAFE: Address = Address::new([1u8; 20]);
     const TOKEN: Address = Address::new([2u8; 20]);

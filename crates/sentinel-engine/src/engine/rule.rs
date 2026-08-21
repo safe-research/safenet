@@ -32,7 +32,8 @@ pub enum RuleId {
     /// further analysis (unlike the rest of §2.5's amount-reasonableness
     /// factors, which remain out of scope for this MVP).
     ///
-    /// Also covers two worked CoW Swap instances (`crates/sentinel::cow`):
+    /// Also covers two worked CoW Swap instances
+    /// ([`crate::checkers::CowChecker`]):
     ///
     /// - An exact 2-call TWAP batch — an ERC-20 `approve` to CoW's
     ///   `GPv2VaultRelayer` plus a TWAP order's `create` call — whose
@@ -57,9 +58,9 @@ pub enum RuleId {
     /// Article IV Part B, R-4.3: an ERC-20 `transfer`/`transferFrom`
     /// recipient that resembles the address-poisoning pattern §2.4 Notes
     /// names as circumstantial evidence ("the recipient address resembles a
-    /// prior user address..."). MVP note: checked dynamically (see
-    /// `crate::address_poisoning` in `crates/sentinel`) by looking for a
-    /// prior genuine `Transfer` from the Safe to the exact same recipient,
+    /// prior user address..."). MVP note: checked dynamically by
+    /// [`crate::checkers::AddressPoisoningChecker`] using a prior genuine
+    /// `Transfer` from the Safe to the exact same recipient,
     /// within a bounded, recent block range — not a full history scan, and
     /// not yet a real denial path (see that module's docs).
     R4_3ValueTarget,
@@ -67,9 +68,10 @@ pub enum RuleId {
     /// [`Self::R4_3ValueTarget`], applied to an ERC-20 `approve` spender
     /// (an authorization-target grant) rather than a value transfer.
     ///
-    /// Also covers both CoW Swap worked examples (`crates/sentinel::cow`,
-    /// TWAP and presignature alike): an order whose receiver isn't the Safe
-    /// itself would route the order's proceeds to an unrelated address —
+    /// Also covers both CoW Swap worked examples
+    /// ([`crate::checkers::CowChecker`], TWAP and presignature alike): an
+    /// order whose receiver isn't the Safe itself would route the order's
+    /// proceeds to an unrelated address —
     /// the same target-manipulation concern as a wrong `approve` spender,
     /// distinct from [`Self::R4_5ExcessiveApproval`]'s amount-based checks
     /// on those same batches.

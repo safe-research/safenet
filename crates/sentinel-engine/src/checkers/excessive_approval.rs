@@ -3,10 +3,9 @@
 use super::Checker;
 use crate::{
     contracts::target_effects::{EffectKind, decode_target_effects},
-    engine::Verdict,
+    engine::{RuleId, SafeTransaction, Verdict},
 };
 use alloy::primitives::U256;
-use safe_tx::{SafeTransaction, rule::RuleId};
 
 /// Denies functionally unlimited token approvals.
 pub struct ExcessiveApprovalChecker;

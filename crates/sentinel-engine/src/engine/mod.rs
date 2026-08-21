@@ -4,8 +4,14 @@
 //! API passes decoded Safe transactions to [`SentinelEngine`], which owns the
 //! configured checker chain.
 
+mod rule;
+mod transaction;
+
+pub use self::{
+    rule::RuleId,
+    transaction::{Operation, SafeTransaction},
+};
 use crate::checkers::Checker;
-use safe_tx::{SafeTransaction, rule::RuleId};
 use serde::{Deserialize, Serialize};
 
 /// The transaction-verification engine shared by API handlers.
