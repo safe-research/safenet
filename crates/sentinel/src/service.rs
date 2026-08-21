@@ -147,7 +147,7 @@ impl SentinelTransition {
             CheckOutcome::Denied(rule) => (
                 RequestState::WaitingForRequest {
                     approve: false,
-                    reason: rule.code().to_string(),
+                    reason: rule.to_string(),
                     deadline,
                 },
                 Vec::new(),
@@ -192,7 +192,7 @@ impl SentinelTransition {
 
         let (approve, reason) = match outcome {
             CheckOutcome::Approved => (true, String::new()),
-            CheckOutcome::Denied(rule) => (false, rule.code().to_string()),
+            CheckOutcome::Denied(rule) => (false, rule.to_string()),
             CheckOutcome::Unknown => {
                 tracing::warn!(%request_id, "dynamic check failed; dropping request unanswered");
                 return (state, Vec::new());
@@ -743,15 +743,17 @@ impl Service for SentinelService {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::bindings::{
-        consensus::{Operation, SafeTransaction},
-        oracle::RequestState as OnchainRequestState,
+    use crate::{
+        bindings::{
+            consensus::{Operation, SafeTransaction},
+            oracle::RequestState as OnchainRequestState,
+        },
+        engine::RuleId,
     };
     use alloy::{
         primitives::{Bytes, Uint, address, aliases::U96, keccak256},
         signers::k256::ecdsa::SigningKey,
     };
-    use safe_tx::rule::RuleId;
     use safenet_core::index::EventLog;
 
     const ORACLE: Address = address!("1111111111111111111111111111111111111111");
@@ -1423,17 +1425,13 @@ mod tests {
         );
         assert_eq!(commands, vec![dynamic_check_effect(id, TO)]);
 
-        let (state, commands) = resolve_dynamic_check(
-            &svc,
-            state,
-            id,
-            CheckOutcome::Denied(RuleId::R4_6KnownMaliciousTarget),
-        );
+        let rule = RuleId::new(4, 6);
+        let (state, commands) = resolve_dynamic_check(&svc, state, id, CheckOutcome::Denied(rule));
         assert_eq!(
             state.0[&id],
             RequestState::WaitingForRequest {
                 approve: false,
-                reason: RuleId::R4_6KnownMaliciousTarget.code().to_string(),
+                reason: rule.to_string(),
                 deadline: 1 + VOTING_WINDOW,
             },
         );
@@ -1453,12 +1451,12 @@ mod tests {
                 ),
             )),
         );
-        let reason = RuleId::R4_6KnownMaliciousTarget.code();
+        let reason = RuleId::new(4, 6).to_string();
         assert_eq!(
             state.0[&id],
             RequestState::CollectingCommitments {
                 approve: false,
-                reason: reason.to_string(),
+                reason: reason.clone(),
                 commit_deadline: 20,
                 reveal_deadline: 40,
                 committed_count: 0,
@@ -1470,7 +1468,7 @@ mod tests {
             id,
             false,
             self_signer().reveal_salt(id),
-            reason,
+            &reason,
         );
         assert_eq!(
             commands,
@@ -1503,12 +1501,13 @@ mod tests {
 
     #[test]
     fn new_request_before_dynamic_check_denial_starts_voting_on_resume() {
-        let rule = RuleId::R4_6KnownMaliciousTarget;
+        let rule = RuleId::new(42, 1337);
+        let reason = rule.to_string();
         assert_new_request_before_dynamic_check(
             B256::repeat_byte(0x0b),
             CheckOutcome::Denied(rule),
             false,
-            rule.code(),
+            &reason,
         );
     }
 
@@ -1624,12 +1623,8 @@ mod tests {
         let (state, _) = resolve_dynamic_check(&svc, state, id, CheckOutcome::Approved);
         let advanced = state.0[&id].clone();
 
-        let (state, _) = resolve_dynamic_check(
-            &svc,
-            state,
-            id,
-            CheckOutcome::Denied(RuleId::R4_6KnownMaliciousTarget),
-        );
+        let (state, _) =
+            resolve_dynamic_check(&svc, state, id, CheckOutcome::Denied(RuleId::new(42, 1337)));
         assert_eq!(state.0[&id], advanced);
     }
 }
