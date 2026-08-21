@@ -4,9 +4,9 @@ This document provides a brief guide to operating a Safenet Testnet sentinel.
 
 ## Introduction
 
-Sentinels watch the `SentinelOracle` and `Consensus` contracts for proposed transactions, run their own checks against each proposal (e.g. blocklists, address-poisoning heuristics, and optionally a remote check), and commit/reveal a bond-backed approve-or-deny vote onchain. Once enough sentinels have revealed, the request resolves and bonds/fees are settled. Sentinels are run by independent parties, the same way validators are, to maintain decentralization and prevent a single entity from controlling which transactions get approved.
+Sentinels watch the `SentinelOracle` and `Consensus` contracts for proposed transactions, ask their configured [sentinel engine](./sentinel-engine.md) to assess each proposal, and commit/reveal a bond-backed approve-or-deny vote onchain. Once enough sentinels have revealed, the request resolves and bonds/fees are settled. Sentinels are run by independent parties, the same way validators are, to maintain decentralization and prevent a single entity from controlling which transactions get approved.
 
-Like validators, sentinels communicate entirely onchain: only a stable RPC node connection is required, and the system does not need to be exposed to the public internet.
+Like validators, sentinels communicate with the protocol entirely onchain. They additionally call their engine over HTTP, but neither service needs to be exposed to the public internet: keep that connection on the same host, in the same pod, or on a private network.
 
 For more information on Safenet, consult the [technical overview](./overview.md) as well as the [general public docs](https://docs.safefoundation.org/safenet). See the [validator handbook](./validator-handbook.md) for the validator side of the protocol.
 
@@ -28,6 +28,13 @@ The integrity of logs are critical for proper sentinel operation. In order to wo
 [index]
 use_client_filtering = true
 ```
+
+#### Sentinel Engine
+
+Every sentinel requires a reachable transaction-verification engine. You can run the repository's
+reference implementation or your own implementation of its OpenAPI contract; see the
+[sentinel engine operator guide](./sentinel-engine.md) for configuration, deployment, and the
+engine's keyless trust boundary.
 
 #### Logging and Metrics
 
@@ -56,17 +63,18 @@ The exact amount varies by chain and by how many requests a sentinel votes on, s
 
 ## Running
 
-Configure the sentinel by writing a TOML configuration file — see [`crates/sentinel/src/config.rs`](../crates/sentinel/src/config.rs) for the full schema, and copy [`sentinel.sample.toml`](../crates/sentinel/sentinel.sample.toml) as a worked example to start from.
+Configure the sentinel by writing a TOML configuration file — see [`crates/sentinel/src/config.rs`](../crates/sentinel/src/config.rs) for the full schema, and copy [`sentinel.sample.toml`](../crates/sentinel/sentinel.sample.toml) as a worked example to start from. Its mandatory `sentinel.engine` URL is a base URL; the sentinel appends the versioned security-check path itself.
 
 ```sh
 cp crates/sentinel/sentinel.sample.toml sentinel.toml
 $EDITOR sentinel.toml
 ```
 
-Use the provided OCI image to run the sentinel, passing the configuration file's path via `--config-file`. The image's `ENTRYPOINT` is the `sentinel` binary itself, so this flag is appended directly as the container command. For example, with `docker` and assuming `database` in `sentinel.toml` points at a file under `/var/lib/safenet/sentinel/data`:
+Use the provided OCI image to run the sentinel, passing the configuration file's path via `--config-file`. The image's `ENTRYPOINT` is the `sentinel` binary itself, so this flag is appended directly as the container command. The example below assumes the reference engine is already running as `safenet-sentinel-engine` on the private `safenet-sentinel` network created in the [engine guide](./sentinel-engine.md#running-the-reference-engine), the sentinel config uses `engine = "http://safenet-sentinel-engine:5473"`, and `database` points at a file under `/var/lib/safenet/sentinel/data`:
 
 ```sh
 docker run --name safenet-sentinel \
+    --network safenet-sentinel \
     --volume "$(pwd)/sentinel.toml:/usr/src/app/sentinel.toml" \
     --volume sentinel-data:/var/lib/safenet/sentinel/data \
     ghcr.io/safe-research/safenet-sentinel:main \
@@ -78,14 +86,18 @@ docker run --name safenet-sentinel \
 There are a few things you can do to verify your sentinel is running as expected:
 
 - Check the logs. For example, if running with `docker`:
-  ```sh
-  docker logs --follow safenet-sentinel
-  ```
+    ```sh
+    docker logs --follow safenet-sentinel
+    docker logs --follow safenet-sentinel-engine
+    ```
 - Check the sentinel EVM account on a block explorer. There should be recent transactions to the `SentinelOracle` contract (`commit`/`reveal`/`finalize`/`claim`) and, when bonding, an `approve` call to the fee token.
 
 ### Common Problems
 
 - Ethereum node RPC issues:
-  -  Rate limits. While the sentinel implements exponential backoff for some RPC requests, rate limits can still prevent full participation in Safenet Testnet.
-  -  Missing logs. Some RPC providers do not reliably return all logs for `eth_getLogs` requests. This issue can be mitigated with the appropriate configuration (see [`eth_getLogs` Reliability](#eth_getlogs-reliability)).
+    - Rate limits. While the sentinel implements exponential backoff for some RPC requests, rate limits can still prevent full participation in Safenet Testnet.
+    - Missing logs. Some RPC providers do not reliably return all logs for `eth_getLogs` requests. This issue can be mitigated with the appropriate configuration (see [`eth_getLogs` Reliability](#eth_getlogs-reliability)).
+- An unreachable engine or a request that exceeds the sentinel's timeout makes the sentinel abstain
+  instead of guessing. Check both services' logs and connectivity over the configured
+  `sentinel.engine` URL.
 - Insufficient funds on the sentinel account to submit onchain transactions. Logs will show that `actions` could not be submitted because of insufficient gas, or that a bond commitment failed because of insufficient fee-token balance/allowance.
