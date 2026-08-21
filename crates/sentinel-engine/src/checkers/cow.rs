@@ -380,7 +380,7 @@ impl CowChecker {
     /// approval *smaller* than that total is a trade-soundness concern (the
     /// order may not fully fill), not a security one, so it doesn't affect
     /// this verdict either way.
-    async fn check_twap_batch(&self, safe: Address, calls: &[SafeTransaction]) -> Verdict {
+    fn check_twap_batch(&self, safe: Address, calls: &[SafeTransaction]) -> Verdict {
         let [first, second] = calls else {
             return Verdict::Abstain;
         };
@@ -415,7 +415,7 @@ impl CowChecker {
     /// An `approve` to `GPv2VaultRelayer` with no co-batched presignature or
     /// TWAP order-creation call is not the pattern a genuine CoW Swap
     /// interaction takes.
-    async fn check_dangling_approval(&self, calls: &[SafeTransaction]) -> Verdict {
+    fn check_dangling_approval(&self, calls: &[SafeTransaction]) -> Verdict {
         if !calls.iter().any(approves_vault_relayer) {
             return Verdict::Abstain;
         }
@@ -454,7 +454,7 @@ impl Checker for CowChecker {
 
         let calls = sub_transactions(transaction);
 
-        let dangling_check = self.check_dangling_approval(&calls).await;
+        let dangling_check = self.check_dangling_approval(&calls);
         if dangling_check != Verdict::Abstain {
             return dangling_check;
         }
@@ -466,7 +466,7 @@ impl Checker for CowChecker {
             return presig_check;
         }
 
-        let twap_check = self.check_twap_batch(transaction.safe, &calls).await;
+        let twap_check = self.check_twap_batch(transaction.safe, &calls);
         if twap_check != Verdict::Abstain {
             return twap_check;
         }
