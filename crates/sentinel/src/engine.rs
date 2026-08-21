@@ -3,10 +3,7 @@
 use crate::bindings::consensus::SafeTransaction;
 use alloy::primitives::B256;
 use reqwest::RequestBuilder;
-use serde::{
-    Deserialize, Deserializer, Serialize, Serializer, de,
-    ser::{self, SerializeStruct as _},
-};
+use serde::{Deserialize, Deserializer, Serialize, Serializer, de};
 use std::{borrow::Cow, fmt, time::Duration};
 use tracing::{Instrument as _, Span, field};
 use url::Url;
@@ -71,21 +68,9 @@ impl<'de> Deserialize<'de> for RuleId {
     }
 }
 
+#[derive(Serialize)]
 struct Request<'a> {
     transaction: &'a SafeTransaction,
-}
-
-impl<'a> Serialize for Request<'a> {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: Serializer,
-    {
-        let transaction = safe_tx::SafeTransaction::try_from(self.transaction.clone())
-            .map_err(ser::Error::custom)?;
-        let mut request = serializer.serialize_struct("Request", 1)?;
-        request.serialize_field("transaction", &transaction)?;
-        request.end()
-    }
 }
 
 #[derive(Deserialize)]
