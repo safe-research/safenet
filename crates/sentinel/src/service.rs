@@ -35,8 +35,7 @@ pub struct SentinelService {
     chain_id: U256,
     voting_window: u64,
     static_checker: StaticChecker,
-    /// Backs the same [`effect::Handler`], as the fallback once every
-    /// built-in checker comes back with no opinion.
+    /// Checks transactions that pass the local static checks.
     engine: EngineClient,
     /// Maximum time the sentinel engine has to answer a security check.
     engine_timeout: Duration,
@@ -730,7 +729,7 @@ impl Service for SentinelService {
                 voting_window,
                 static_checker,
             },
-            effect::Handler::new(vec![], engine, engine_timeout),
+            effect::Handler::new(engine, engine_timeout),
             SentinelEncoder { oracle, fee_token },
         )
     }
