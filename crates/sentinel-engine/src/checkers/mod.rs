@@ -4,10 +4,12 @@ mod address_poisoning;
 mod blocklist;
 mod cancellation;
 mod cow;
+mod excessive_approval;
 
 pub use self::{
     address_poisoning::AddressPoisoningChecker, blocklist::BlocklistChecker,
     cancellation::CancellationChecker, cow::CowChecker,
+    excessive_approval::ExcessiveApprovalChecker,
 };
 
 use crate::engine::Verdict;
