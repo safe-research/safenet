@@ -9,6 +9,7 @@ alloy.workspace = true
 argh.workspace = true
 async-trait.workspace = true
 axum.workspace = true
+reqwest.workspace = true
 safe-tx.workspace = true
 safenet-core.workspace = true
 serde.workspace = true

@@ -4310,6 +4310,7 @@ dependencies = [
  "argh",
  "async-trait",
  "axum",
+ "reqwest",
  "safe-tx",
  "safenet-core",
  "serde",

@@ -4,7 +4,7 @@ mod config;
 mod engine;
 
 use self::{
-    checkers::{AddressPoisoningChecker, CancellationChecker},
+    checkers::{AddressPoisoningChecker, CancellationChecker, CowChecker},
     config::Config,
     engine::SentinelEngine,
 };
@@ -46,6 +46,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let provider = Provider::connect(&rpc).await?;
     let engine = SentinelEngine::new(vec![
         Box::new(CancellationChecker),
+        Box::new(CowChecker::new()),
         Box::new(AddressPoisoningChecker::new(
             provider,
             engine_config.address_poisoning_lookback_blocks,
