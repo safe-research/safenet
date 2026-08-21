@@ -1,11 +1,12 @@
-//! The sentinel's single effect: deferring a proposed transaction's
-//! remaining approve/deny decision to the sentinel engine once the local,
-//! synchronous checks in [`crate::static_checker::StaticChecker`] have
-//! passed. Emitted by
+//! The sentinel's single effect: requesting a proposed transaction's verdict
+//! from the sentinel engine. Emitted by
 //! `SentinelTransition::handle_oracle_transaction_proposed` and consumed by
 //! `SentinelTransition::apply_transition`'s `Message::Resume` arm.
 
-use crate::{bindings::consensus::SafeTransaction, checker::CheckOutcome, engine::EngineClient};
+use crate::{
+    bindings::consensus::SafeTransaction,
+    engine::{CheckOutcome, EngineClient},
+};
 use alloy::primitives::B256;
 use safenet_core::effects::EffectHandler;
 use std::time::Duration;
@@ -16,7 +17,7 @@ use std::time::Duration;
 pub enum Effect {
     /// Defer the approve/deny decision for `request_id` (a proposed
     /// `transaction` on `safe`) to the configured sentinel engine.
-    DynamicCheck {
+    EngineCheck {
         request_id: B256,
         transaction: SafeTransaction,
     },
@@ -25,8 +26,8 @@ pub enum Effect {
 /// The result of performing an [`Effect`], resumed into the state machine.
 #[derive(Debug, Clone)]
 pub enum Resume {
-    /// Resume with [`Effect::DynamicCheck`]'s outcome for `request_id`.
-    DynamicCheckResult {
+    /// Resume with [`Effect::EngineCheck`]'s outcome for `request_id`.
+    EngineCheckResult {
         request_id: B256,
         outcome: CheckOutcome,
     },
@@ -51,7 +52,7 @@ impl Handler {
 impl EffectHandler<Effect, Resume> for Handler {
     async fn perform_effect(&self, effect: Effect) -> Resume {
         match effect {
-            Effect::DynamicCheck {
+            Effect::EngineCheck {
                 request_id,
                 transaction,
             } => {
@@ -62,7 +63,7 @@ impl EffectHandler<Effect, Resume> for Handler {
                     .timeout(self.engine_timeout)
                     .execute()
                     .await;
-                Resume::DynamicCheckResult {
+                Resume::EngineCheckResult {
                     request_id,
                     outcome,
                 }
@@ -109,7 +110,7 @@ mod tests {
         );
 
         let resume = handler
-            .perform_effect(Effect::DynamicCheck {
+            .perform_effect(Effect::EngineCheck {
                 request_id: REQUEST_ID,
                 transaction: SafeTransaction {
                     safe: SAFE,
@@ -120,7 +121,7 @@ mod tests {
 
         assert!(matches!(
             resume,
-            Resume::DynamicCheckResult {
+            Resume::EngineCheckResult {
                 request_id,
                 outcome: CheckOutcome::Approved,
             } if request_id == REQUEST_ID

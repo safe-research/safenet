@@ -1,7 +1,6 @@
-//! Client for the sentinel engine used to check transactions that were not
-//! conclusively handled by the sentinel's local checks.
+//! Client for the sentinel engine used to check proposed transactions.
 
-use crate::{bindings::consensus::SafeTransaction, checker::CheckOutcome};
+use crate::bindings::consensus::SafeTransaction;
 use alloy::primitives::B256;
 use reqwest::RequestBuilder;
 use serde::{
@@ -11,6 +10,18 @@ use serde::{
 use std::{borrow::Cow, fmt, time::Duration};
 use tracing::{Instrument as _, Span, field};
 use url::Url;
+
+/// The result of checking a proposed transaction.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CheckOutcome {
+    /// The transaction should receive an approving vote.
+    Approved,
+    /// The transaction should receive a denying vote citing this rule.
+    Denied(RuleId),
+    /// There is no trustworthy verdict, so the request is dropped unanswered
+    /// rather than guessed at.
+    Unknown,
+}
 
 /// A Safenet Arbitration Charter rule citation.
 ///
