@@ -180,7 +180,14 @@ where
 
             // Once selected, an input is processed to completion before the run
             // loop can stop; this prevents partial state applies.
-            if let Err(err) = self.update(input).await {
+            let result = match input {
+                Err(err) => {
+                    tracing::error!(?err, "unrecoverable watcher error; exiting");
+                    break;
+                }
+                Ok(input) => self.update(input).await,
+            };
+            if let Err(err) = result {
                 tracing::error!(?err, "unrecoverable driver error; exiting");
                 break;
             }
@@ -189,13 +196,20 @@ where
 
     /// Reads the next state machine input to process.
     ///
-    /// Watcher failures are retried after a short delay while completed effects
-    /// remain eligible for selection.
-    async fn next_input(&mut self) -> Input<S::Event, S::Resume> {
+    /// Watcher failures are retried after a short delay while completed
+    /// effects remain eligible for selection, except a reorg deeper than the
+    /// configured `max_reorg_depth`: the watcher cannot recover from that on
+    /// its own, so it is returned instead of retried.
+    async fn next_input(&mut self) -> Result<Input<S::Event, S::Resume>, index::Error> {
         let update = async {
             loop {
                 match self.watcher.next().await {
-                    Ok(update) => return update,
+                    Ok(update) => return Ok(update),
+                    Err(
+                        err @ index::Error::Blocks(index::blocks::Error::ExceededMaxReorgDepth(_)),
+                    ) => {
+                        return Err(err);
+                    }
                     Err(err) => {
                         tracing::warn!(
                             ?err,
@@ -207,11 +221,10 @@ where
             }
         };
 
-        let input = tokio::select! {
-            update = update => Input::Update(update),
+        Ok(tokio::select! {
+            update = update => Input::Update(update?),
             resume = self.effects.next() => Input::Resume(resume)
-        };
-        input
+        })
     }
 
     /// Processes a single watcher update or completed effect, advancing the
