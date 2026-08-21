@@ -775,7 +775,7 @@ mod tests {
         self_signer().address()
     }
 
-    fn service_with_blocklist(blocklist: Vec<Address>) -> SentinelService {
+    fn service() -> SentinelService {
         // These flow tests drive `Message::Resume` themselves (see
         // `resolve_dynamic_check`) rather than through the `Handler`'s real
         // `Effect::DynamicCheck` resolution, so the configured engine is
@@ -787,7 +787,7 @@ mod tests {
             self_signer(),
             U256::from(CHAIN_ID),
             VOTING_WINDOW,
-            StaticChecker::new(blocklist),
+            StaticChecker::new(),
             // Configure an engine for an invalid URL, all checks come back
             // as `Unknown`.
             EngineClient::new("http://127.0.0.1:1".parse().unwrap()).unwrap(),
@@ -795,12 +795,8 @@ mod tests {
         )
     }
 
-    fn transition_with_blocklist(blocklist: Vec<Address>) -> SentinelTransition {
-        service_with_blocklist(blocklist).components().0
-    }
-
     fn transition() -> SentinelTransition {
-        transition_with_blocklist(vec![])
+        service().components().0
     }
 
     fn safe_tx(to: Address) -> SafeTransaction {

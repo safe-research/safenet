@@ -1,10 +1,9 @@
 use crate::{bindings::consensus::SafeTransaction, checker::CheckOutcome};
-use alloy::primitives::{Address, U256};
+use alloy::primitives::U256;
 use safe_tx::{
     rule::RuleId,
     target_effects::{EffectKind, decode_target_effects},
 };
-use std::collections::HashSet;
 
 /// A single policy check, evaluated against a proposed transaction.
 /// `StaticChecker::check` runs its checks in a fixed order and stops at the
@@ -20,21 +19,6 @@ struct BaseGuarantees;
 impl Check for BaseGuarantees {
     fn evaluate(&self, tx: &safe_tx::SafeTransaction) -> Result<(), RuleId> {
         safe_tx::checks::check_transaction(tx)
-    }
-}
-
-/// The static destination blocklist, reclassified as R-4.6 (see
-/// [`RuleId::R4_6KnownMaliciousTarget`] for the MVP caveat). Never changes
-/// once the check is created.
-struct Blocklist(HashSet<Address>);
-
-impl Check for Blocklist {
-    fn evaluate(&self, tx: &safe_tx::SafeTransaction) -> Result<(), RuleId> {
-        if self.0.contains(&tx.to) {
-            Err(RuleId::R4_6KnownMaliciousTarget)
-        } else {
-            Ok(())
-        }
     }
 }
 
@@ -71,13 +55,9 @@ pub struct StaticChecker {
 }
 
 impl StaticChecker {
-    pub fn new(blocklist: impl IntoIterator<Item = Address>) -> Self {
+    pub fn new() -> Self {
         Self {
-            checks: vec![
-                Box::new(BaseGuarantees),
-                Box::new(Blocklist(blocklist.into_iter().collect())),
-                Box::new(ExcessiveApproval),
-            ],
+            checks: vec![Box::new(BaseGuarantees), Box::new(ExcessiveApproval)],
         }
     }
 
@@ -99,6 +79,7 @@ impl StaticChecker {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use alloy::primitives::Address;
     use alloy::sol_types::SolCall as _;
 
     alloy::sol! {
@@ -108,42 +89,10 @@ mod tests {
 
     const A1: Address = Address::new([1u8; 20]);
     const A2: Address = Address::new([2u8; 20]);
-    const A3: Address = Address::new([3u8; 20]);
-
-    fn tx(to: Address) -> SafeTransaction {
-        SafeTransaction {
-            to,
-            ..Default::default()
-        }
-    }
-
-    #[test]
-    fn denied_when_blocklisted() {
-        let checker = StaticChecker::new(vec![A1, A2]);
-        for address in [A1, A2] {
-            let decision = checker.check(&tx(address));
-            assert_eq!(
-                decision,
-                CheckOutcome::Denied(RuleId::R4_6KnownMaliciousTarget)
-            );
-        }
-    }
-
-    #[test]
-    fn approved_with_empty_blocklist() {
-        let checker = StaticChecker::new(vec![]);
-        assert_eq!(checker.check(&tx(A1)), CheckOutcome::Approved);
-    }
-
-    #[test]
-    fn approved_when_not_blocklisted() {
-        let checker = StaticChecker::new(vec![A1, A2]);
-        assert_eq!(checker.check(&tx(A3)), CheckOutcome::Approved);
-    }
 
     #[test]
     fn denied_self_call_not_on_settings_allow_list() {
-        let checker = StaticChecker::new(vec![]);
+        let checker = StaticChecker::new();
         let safe = A1;
         let decision = checker.check(&SafeTransaction {
             safe,
@@ -156,7 +105,7 @@ mod tests {
 
     #[test]
     fn denied_delegatecall_to_unknown_target() {
-        let checker = StaticChecker::new(vec![]);
+        let checker = StaticChecker::new();
         let decision = checker.check(&SafeTransaction {
             safe: A1,
             to: A2,
@@ -171,7 +120,7 @@ mod tests {
 
     #[test]
     fn denied_unlimited_erc20_approval() {
-        let checker = StaticChecker::new(vec![]);
+        let checker = StaticChecker::new();
         let data = approveCall {
             spender: A2,
             amount: U256::MAX,
@@ -190,7 +139,7 @@ mod tests {
 
     #[test]
     fn approved_bounded_erc20_approval() {
-        let checker = StaticChecker::new(vec![]);
+        let checker = StaticChecker::new();
         let data = approveCall {
             spender: A2,
             amount: U256::from(1_000u64),
@@ -206,7 +155,7 @@ mod tests {
 
     #[test]
     fn denied_operator_approval_for_all() {
-        let checker = StaticChecker::new(vec![]);
+        let checker = StaticChecker::new();
         let data = setApprovalForAllCall {
             operator: A2,
             approved: true,
@@ -225,7 +174,7 @@ mod tests {
 
     #[test]
     fn approved_operator_approval_revocation() {
-        let checker = StaticChecker::new(vec![]);
+        let checker = StaticChecker::new();
         let data = setApprovalForAllCall {
             operator: A2,
             approved: false,

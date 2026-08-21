@@ -1,11 +1,13 @@
 //! Transaction checks run by the sentinel engine.
 
 mod address_poisoning;
+mod blocklist;
 mod cancellation;
 mod cow;
 
 pub use self::{
-    address_poisoning::AddressPoisoningChecker, cancellation::CancellationChecker, cow::CowChecker,
+    address_poisoning::AddressPoisoningChecker, blocklist::BlocklistChecker,
+    cancellation::CancellationChecker, cow::CowChecker,
 };
 
 use crate::engine::Verdict;

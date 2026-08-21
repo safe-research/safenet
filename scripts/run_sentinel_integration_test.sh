@@ -186,18 +186,19 @@ STATE_RESOLVED_APPROVED=3
 # each with its own config, engine, and in-memory database.
 sentinel_engine_config() {
 	local bind_address=$1
+	local blocklist=$2
 	cat <<EOF
 rpc = "$RPC_URL"
 bind_address = "$bind_address"
 
 [engine]
+blocklist = $blocklist
 address_poisoning_lookback_blocks = 1000
 EOF
 }
 sentinel_config() {
 	local signer=$1
-	local blocklist=$2
-	local engine=$3
+	local engine=$2
 	cat <<EOF
 rpc = "$RPC_URL"
 signer = "$signer"
@@ -208,7 +209,6 @@ consensus = "$CONSENSUS"
 [sentinel]
 fee_token = "$FEE_TOKEN"
 voting_window = $((COMMIT_WINDOW + REVEAL_WINDOW))
-blocklist = $blocklist
 engine = "http://$engine"
 
 [index]
@@ -217,17 +217,17 @@ EOF
 }
 
 SENTINEL_A_ENGINE_CONFIG=$(mktemp)
-sentinel_engine_config "$SENTINEL_A_ENGINE_ADDR" >"$SENTINEL_A_ENGINE_CONFIG"
+sentinel_engine_config "$SENTINEL_A_ENGINE_ADDR" "[]" >"$SENTINEL_A_ENGINE_CONFIG"
 SENTINEL_A_CONFIG=$(mktemp)
-sentinel_config "$SENTINEL_A_PK" "[]" "$SENTINEL_A_ENGINE_ADDR" >"$SENTINEL_A_CONFIG"
+sentinel_config "$SENTINEL_A_PK" "$SENTINEL_A_ENGINE_ADDR" >"$SENTINEL_A_CONFIG"
 
-SENTINEL_B_ENGINE_CONFIG=$(mktemp)
-sentinel_engine_config "$SENTINEL_B_ENGINE_ADDR" >"$SENTINEL_B_ENGINE_CONFIG"
-SENTINEL_B_CONFIG=$(mktemp)
-# Sentinel B alone blocklists $TX_TOKEN, so it denies a request
+# Sentinel B's engine alone blocklists $TX_TOKEN, so it denies a request
 # proposing a call to it while Sentinel A approves — the genuine dispute
 # exercised in step 10 below.
-sentinel_config "$SENTINEL_B_PK" "[\"$TX_TOKEN\"]" "$SENTINEL_B_ENGINE_ADDR" >"$SENTINEL_B_CONFIG"
+SENTINEL_B_ENGINE_CONFIG=$(mktemp)
+sentinel_engine_config "$SENTINEL_B_ENGINE_ADDR" "[\"$TX_TOKEN\"]" >"$SENTINEL_B_ENGINE_CONFIG"
+SENTINEL_B_CONFIG=$(mktemp)
+sentinel_config "$SENTINEL_B_PK" "$SENTINEL_B_ENGINE_ADDR" >"$SENTINEL_B_CONFIG"
 
 echo "Starting sentinel engine A..."
 "$ROOT/target/debug/sentinel-engine" --config-file "$SENTINEL_A_ENGINE_CONFIG" >"$ROOT/sentinel_engine_a_logs.txt" 2>&1 &
