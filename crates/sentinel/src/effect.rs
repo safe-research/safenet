@@ -42,10 +42,8 @@ pub enum Resume {
 /// fallback — see `crate::checker` for why an engine failure remains `Unknown`
 /// rather than being guessed at.
 ///
-/// This is an initial cut of the "array of checkers" shape (see
-/// `crate::checker`'s module docs); the fixed construction order below is
-/// what encodes today's precedence (the built-in CoW check ahead of
-/// address-poisoning, ahead of the sentinel engine).
+/// The fixed construction order encodes today's precedence: the built-in CoW
+/// check runs before the sentinel engine's checker chain.
 pub struct Handler {
     checkers: Vec<Box<dyn Checker>>,
     engine: EngineClient,
@@ -194,7 +192,4 @@ mod tests {
             } if request_id == REQUEST_ID
         ));
     }
-
-    // `cow_denial_overrides_an_address_poisoning_approval` deferred to Phase
-    // 8a, once `crate::cow::CowChecker` actually exists to exercise.
 }

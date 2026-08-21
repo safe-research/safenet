@@ -15,8 +15,8 @@
 //! **Denies, rather than exempts.** A standalone `approve` to
 //! `GPv2VaultRelayer` — not co-batched with a recognized trigger call — is
 //! denied under [`RuleId::R4_4AuthorizationTarget`], including when
-//! [`crate::address_poisoning::AddressPoisoningChecker`] would otherwise have
-//! approved the same target off a prior genuine interaction: this
+//! the sentinel engine's address-poisoning checker would otherwise have
+//! considered secure from a prior genuine interaction: this
 //! protocol-specific rule runs ahead of, and overrides, that general
 //! history-based bypass (`CowChecker` is ordered first in
 //! `crate::effect::Handler`'s checker chain).
@@ -382,8 +382,8 @@ impl CowChecker {
 
         // Order terms undecodable (malformed `staticInput`) means no
         // opinion, not a guessed denial — consistent with this codebase's
-        // other external/undecodable-data lookups (e.g. `address_poisoning`'s
-        // no-history case).
+        // other external/undecodable-data lookups (e.g. the sentinel engine's
+        // address-poisoning no-history case).
         let Some((approved_token, approved_amount, sell_token, receiver, total_sell_amount)) =
             decode_approval_and_twap(first, second)
                 .or_else(|| decode_approval_and_twap(second, first))

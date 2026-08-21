@@ -1,6 +1,9 @@
 //! Transaction checks run by the sentinel engine.
 
-pub mod cancellation;
+mod address_poisoning;
+mod cancellation;
+
+pub use self::{address_poisoning::AddressPoisoningChecker, cancellation::CancellationChecker};
 
 use crate::engine::Verdict;
 use safe_tx::SafeTransaction;

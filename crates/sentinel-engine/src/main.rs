@@ -3,9 +3,13 @@ mod checkers;
 mod config;
 mod engine;
 
-use self::{checkers::cancellation::CancellationChecker, config::Config, engine::SentinelEngine};
+use self::{
+    checkers::{AddressPoisoningChecker, CancellationChecker},
+    config::Config,
+    engine::SentinelEngine,
+};
 use argh::FromArgs;
-use safenet_core::{observability, utils};
+use safenet_core::{observability, provider::Provider, utils};
 use std::{error::Error, path::PathBuf};
 use tokio::net::TcpListener;
 
@@ -31,13 +35,22 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     let config = Config::load(&options.config_file).await?;
     let bind_address = config.bind_address;
+    let rpc = config.rpc;
+    let engine_config = config.engine;
     observability::init(config.observability)?;
     tracing::debug!(
         config_file = %options.config_file.display(),
         "sentinel engine configuration loaded"
     );
 
-    let engine = SentinelEngine::new(vec![Box::new(CancellationChecker)]);
+    let provider = Provider::connect(&rpc).await?;
+    let engine = SentinelEngine::new(vec![
+        Box::new(CancellationChecker),
+        Box::new(AddressPoisoningChecker::new(
+            provider,
+            engine_config.address_poisoning_lookback_blocks,
+        )),
+    ]);
 
     let listener = TcpListener::bind(bind_address).await?;
     let local_address = listener.local_addr()?;

@@ -4318,6 +4318,7 @@ dependencies = [
  "toml",
  "tower-http 0.7.0",
  "tracing",
+ "url",
 ]
 
 [[package]]

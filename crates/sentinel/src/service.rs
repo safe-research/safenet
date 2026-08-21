@@ -1,6 +1,5 @@
 use crate::{
     action::{SentinelAction, SentinelActionKind},
-    address_poisoning::AddressPoisoningChecker,
     bindings::{
         SentinelEvents,
         consensus::Consensus,
@@ -37,11 +36,6 @@ pub struct SentinelService {
     chain_id: U256,
     voting_window: u64,
     static_checker: StaticChecker,
-    /// Backs the [`effect::Handler`] this service's [`Effects`](Service::Effects)
-    /// resolve [`effect::Effect::DynamicCheck`] against — checked after the
-    /// built-in CoW check, before the sentinel engine. See
-    /// [`Service::components`] for the fixed checker order.
-    address_poisoning_checker: AddressPoisoningChecker,
     /// Backs the same [`effect::Handler`], as the fallback once every
     /// built-in checker comes back with no opinion.
     engine: EngineClient,
@@ -88,7 +82,6 @@ impl SentinelService {
         chain_id: U256,
         voting_window: u64,
         static_checker: StaticChecker,
-        address_poisoning_checker: AddressPoisoningChecker,
         engine: EngineClient,
         engine_timeout: Duration,
     ) -> Self {
@@ -100,7 +93,6 @@ impl SentinelService {
             chain_id,
             voting_window,
             static_checker,
-            address_poisoning_checker,
             engine,
             engine_timeout,
         }
@@ -727,7 +719,6 @@ impl Service for SentinelService {
             chain_id,
             voting_window,
             static_checker,
-            address_poisoning_checker,
             engine,
             engine_timeout,
         } = self;
@@ -740,14 +731,7 @@ impl Service for SentinelService {
                 voting_window,
                 static_checker,
             },
-            effect::Handler::new(
-                vec![
-                    Box::new(CowChecker::new()),
-                    Box::new(address_poisoning_checker),
-                ],
-                engine,
-                engine_timeout,
-            ),
+            effect::Handler::new(vec![Box::new(CowChecker::new())], engine, engine_timeout),
             SentinelEncoder { oracle, fee_token },
         )
     }
@@ -770,7 +754,7 @@ mod tests {
         signers::k256::ecdsa::SigningKey,
     };
     use safe_tx::rule::RuleId;
-    use safenet_core::{index::EventLog, provider::Provider};
+    use safenet_core::index::EventLog;
 
     const ORACLE: Address = address!("1111111111111111111111111111111111111111");
     const FEE_TOKEN: Address = address!("2222222222222222222222222222222222222222");
@@ -796,12 +780,8 @@ mod tests {
     fn service_with_blocklist(blocklist: Vec<Address>) -> SentinelService {
         // These flow tests drive `Message::Resume` themselves (see
         // `resolve_dynamic_check`) rather than through the `Handler`'s real
-        // `Effect::DynamicCheck` resolution, so neither checker below is ever
-        // actually invoked; both are unconfigured/mocked stand-ins.
-        let address_poisoning_checker = AddressPoisoningChecker::new(
-            Provider::mocked(&alloy::transports::mock::Asserter::new()),
-            1_000,
-        );
+        // `Effect::DynamicCheck` resolution, so the configured engine is
+        // never invoked.
         SentinelService::new(
             ORACLE,
             FEE_TOKEN,
@@ -810,7 +790,6 @@ mod tests {
             U256::from(CHAIN_ID),
             VOTING_WINDOW,
             StaticChecker::new(blocklist),
-            address_poisoning_checker,
             // Configure an engine for an invalid URL, all checks come back
             // as `Unknown`.
             EngineClient::new("http://127.0.0.1:1".parse().unwrap()).unwrap(),

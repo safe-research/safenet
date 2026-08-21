@@ -1,9 +1,7 @@
 //! R-4.3/R-4.4 address-poisoning check (first step): whether an
 //! ERC-20 `transfer`/`transferFrom`/`approve` target has a prior genuine
-//! interaction with the Safe. Unlike [`crate::static_checker::StaticChecker`],
-//! this inherently needs onchain event history, so it runs as part of
-//! [`crate::effect::Effect::DynamicCheck`] via a `Provider` held here,
-//! reusing the same one `main.rs` already constructs for event-watching.
+//! interaction with the Safe. This inherently needs onchain event history,
+//! so it runs in the sentinel engine with its configured `Provider`.
 //!
 //! Scoped narrowly for this first step: only a single (non-MultiSend) ERC-20
 //! call is decoded, and only the exact `(safe, candidate)` pair is queried —
@@ -12,19 +10,16 @@
 //! value transfers and ERC-721/1155 transfers are out of scope for now.
 //!
 //! **This check does not yet deny anything.** A found prior event is
-//! unforgeable evidence of an established relationship, so it approves
-//! immediately — no further check (including the operator's configured
-//! sentinel engine) needs to run. Not finding one is inconclusive rather
-//! than suspicious: a single exact-match lookup isn't strong enough evidence
-//! on its own to deny a first-time-looking recipient (and the Charter's own
-//! §2.4 Notes caution against treating novelty alone as grounds for denial),
-//! so that case defers to whatever check runs next. See the `TODO` on
-//! [`AddressPoisoningChecker`]'s [`Checker`] impl.
+//! unforgeable evidence of an established relationship, so it returns
+//! [`Verdict::Secure`] immediately. Not finding one returns
+//! [`Verdict::Abstain`] rather than [`Verdict::Insecure`]: a single exact-match
+//! lookup isn't strong enough evidence on its own to deny a first-time-looking
+//! recipient (and the Charter's own §2.4 Notes caution against treating novelty
+//! alone as grounds for denial), so that case defers to whatever check runs
+//! next. See the `TODO` on [`AddressPoisoningChecker`]'s [`Checker`] impl.
 
-use crate::{
-    bindings::consensus::SafeTransaction,
-    checker::{CheckOutcome, Checker},
-};
+use super::Checker;
+use crate::engine::Verdict;
 use alloy::{
     primitives::Address,
     providers::Provider as _,
@@ -33,6 +28,7 @@ use alloy::{
     sol_types::{SolCall, SolEvent},
 };
 use safe_tx::{
+    SafeTransaction,
     bindings::erc20::{approveCall, transferCall, transferFromCall},
     rule::RuleId,
 };
@@ -132,18 +128,19 @@ impl AddressPoisoningChecker {
 impl Checker for AddressPoisoningChecker {
     /// Decodes `transaction.data`'s ERC-20 target (if any) and looks up
     /// whether the Safe already has a genuine prior interaction with it. A
-    /// found interaction approves outright; anything else (no ERC-20 target
-    /// to check, no prior interaction found, or the lookup itself failing)
-    /// is `Unknown`, deferring to whatever checker runs next.
+    /// found interaction returns [`Verdict::Secure`]; anything else (no
+    /// ERC-20 target to check, no prior interaction found, or the lookup
+    /// itself failing) returns [`Verdict::Abstain`], deferring to whatever
+    /// checker runs next.
     ///
-    /// TODO(follow-up): an `Unknown` verdict never becomes a
-    /// denial yet — richer recipient-quality signals (the candidate's own
-    /// fund/transaction history, whether it's an EOA or a contract, and if
-    /// so its deployment age) are needed before a first-time-looking
-    /// recipient can be safely denied.
-    async fn check(&self, transaction: &SafeTransaction) -> CheckOutcome {
+    /// TODO(follow-up): [`Verdict::Abstain`] never becomes a denial yet —
+    /// richer recipient-quality signals (the candidate's own fund/transaction
+    /// history, whether it's an EOA or a contract, and if so its deployment
+    /// age) are needed before a first-time-looking recipient can be safely
+    /// denied.
+    async fn check(&self, transaction: &SafeTransaction) -> Verdict {
         let Some((candidate, kind)) = decode_target(transaction) else {
-            return CheckOutcome::Unknown;
+            return Verdict::Abstain;
         };
         match self
             .has_prior_interaction(transaction.to, transaction.safe, candidate, kind)
@@ -152,14 +149,14 @@ impl Checker for AddressPoisoningChecker {
             Ok(found) => {
                 tracing::debug!(token = %transaction.to, %candidate, found, rule = kind.rule().code(), "address-poisoning history lookup");
                 if found {
-                    CheckOutcome::Approved
+                    Verdict::Secure
                 } else {
-                    CheckOutcome::Unknown
+                    Verdict::Abstain
                 }
             }
             Err(err) => {
                 tracing::warn!(%err, token = %transaction.to, %candidate, rule = kind.rule().code(), "address-poisoning history lookup failed");
-                CheckOutcome::Unknown
+                Verdict::Abstain
             }
         }
     }
@@ -246,11 +243,11 @@ mod tests {
         }
         .abi_encode();
         let verdict = checker(&asserter).check(&tx(TOKEN, data)).await;
-        assert_eq!(verdict, CheckOutcome::Unknown);
+        assert_eq!(verdict, Verdict::Abstain);
     }
 
     #[tokio::test]
-    async fn approved_when_a_prior_event_is_found() {
+    async fn secure_when_a_prior_event_is_found() {
         let asserter = Asserter::new();
         asserter.push_success(&alloy::primitives::U64::from(1_000u64));
         let logs: Vec<alloy::rpc::types::Log> = vec![Default::default()];
@@ -262,7 +259,7 @@ mod tests {
         }
         .abi_encode();
         let verdict = checker(&asserter).check(&tx(TOKEN, data)).await;
-        assert_eq!(verdict, CheckOutcome::Approved);
+        assert_eq!(verdict, Verdict::Secure);
     }
 
     #[tokio::test]
@@ -270,6 +267,6 @@ mod tests {
         // No RPC calls should even be issued when there's nothing to decode.
         let asserter = Asserter::new();
         let verdict = checker(&asserter).check(&tx(TOKEN, vec![])).await;
-        assert_eq!(verdict, CheckOutcome::Unknown);
+        assert_eq!(verdict, Verdict::Abstain);
     }
 }

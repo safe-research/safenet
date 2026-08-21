@@ -391,7 +391,11 @@ for sentinel in "${SENTINELS[@]}"; do
     engine_port=${parts[3]}
 
     {
+        echo "rpc = \"http://localhost:8545\""
         echo "bind_address = \"0.0.0.0:${engine_port}\""
+        echo
+        echo "[engine]"
+        echo "address_poisoning_lookback_blocks = 1000"
     } > "$config_dir/${name}-engine.toml"
 
     {
@@ -406,7 +410,6 @@ for sentinel in "${SENTINELS[@]}"; do
         echo "voting_window = 1"
         echo "blocklist = []"
         echo "engine = \"http://localhost:${engine_port}\""
-        echo "address_poisoning_lookback_blocks = 1000"
         echo
         echo "[observability]"
         echo 'log_filter = "trace"'
