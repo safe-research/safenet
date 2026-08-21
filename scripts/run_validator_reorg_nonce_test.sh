@@ -44,108 +44,33 @@ PRIVATE_KEYS=(
 SENDER=0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+source "$SCRIPT_DIR/lib/shared_test_scripts.sh"
+
 TMPDIR="$(mktemp -d)"
 PIDS=()
 VALIDATOR_A_PID=""
 
-for command in anvil cast forge jq cargo; do
-    command -v "$command" >/dev/null || {
-        echo "Missing required command: $command" >&2
-        exit 1
-    }
-done
-
-EXIT_MESSAGE="FAILURE: interrupted"
-cleanup() {
-    for pid in "${PIDS[@]:-}"; do
-        kill "$pid" 2>/dev/null || true
-    done
-    rm -rf "$TMPDIR"
-    echo "$EXIT_MESSAGE"
-}
-trap cleanup EXIT
-
-# Converts a 0x-prefixed hex block number (as returned by `cast logs --json`)
-# to decimal, using bash's native hex arithmetic.
-hex_to_dec() {
-    echo "$((16#${1#0x}))"
-}
-
-# Prints the highest `blockNumber` among the JSON log array on stdin.
-max_block() {
-    local max=0 hex dec
-    while read -r hex; do
-        [ -z "$hex" ] && continue
-        dec=$(hex_to_dec "$hex")
-        [ "$dec" -gt "$max" ] && max=$dec
-    done
-    echo "$max"
-}
+require_commands anvil cast forge jq cargo
+install_cleanup_trap
 
 echo "==> Using temporary directory $TMPDIR"
 
-echo "==> Building Rust validator..."
-cargo build --manifest-path "$REPO_ROOT/Cargo.toml" --package validator
-RUST_BIN="$REPO_ROOT/target/debug/validator"
-
-echo "==> Building Solidity contracts..."
-forge build --root "$REPO_ROOT/contracts" --force
+build_services_and_contracts
 
 echo "==> Starting Anvil..."
-anvil --block-time $BLOCK_TIME --port $ANVIL_PORT \
-    > "$REPO_ROOT/anvil_reorg_nonce_logs.txt" 2>&1 &
-PIDS+=("$!")
-for _ in $(seq 1 20); do
-    cast block-number --rpc-url "$ANVIL_RPC_URL" >/dev/null 2>&1 && break
-    sleep 0.25
-done
-cast block-number --rpc-url "$ANVIL_RPC_URL" >/dev/null
+start_anvil "$BLOCK_TIME" "$ANVIL_PORT" "$REPO_ROOT/anvil_reorg_nonce_logs.txt" "$ANVIL_RPC_URL"
 
-echo "==> Deploying contracts..."
 PARTICIPANTS_CSV=$(IFS=,; echo "${PARTICIPANTS[*]}")
-env PARTICIPANTS="$PARTICIPANTS_CSV" \
-    forge script --root "$REPO_ROOT/contracts" DeployScript \
-    --rpc-url "$ANVIL_RPC_URL" \
-    --unlocked \
-    --sender "$SENDER" \
-    --broadcast 2>&1 | tee "$TMPDIR/deploy.log"
-
-DEPLOY_JSON="$REPO_ROOT/contracts/build/broadcast/Deploy.s.sol/$CHAIN_ID/run-latest.json"
-COORDINATOR_ADDR=$(jq -er '.returns.coordinator.value' "$DEPLOY_JSON")
-CONSENSUS_ADDR=$(jq -er '.returns.consensus.value' "$DEPLOY_JSON")
-ORACLE_ADDR=$(jq -er '.returns.alwaysApproveOracle.value' "$DEPLOY_JSON")
-echo "    coordinator: $COORDINATOR_ADDR"
-echo "    consensus:   $CONSENSUS_ADDR"
+deploy_validator_contracts "$ANVIL_RPC_URL" "$SENDER" "$PARTICIPANTS_CSV" "$CHAIN_ID"
 
 VALIDATOR_A_DB="$TMPDIR/validator_a.sqlite"
 VALIDATOR_B_DB="$TMPDIR/validator_b.sqlite"
 
 validator_config() {
-    local signer=$1
-    local database=$2
-    echo "rpc = \"$ANVIL_RPC_URL\""
-    echo "signer = \"$signer\""
-    echo "database = \"sqlite://$database?mode=rwc\""
-    echo
-    echo "[validator]"
-    echo "consensus = \"$CONSENSUS_ADDR\""
-    # High enough that epoch 1's rollover never becomes proposable during
-    # this test's short window - only genesis DKG matters here.
-    echo "blocks_per_epoch = 1000000"
-    echo "oracles = [\"$ORACLE_ADDR\"]"
-    for address in "${PARTICIPANTS[@]}"; do
-        echo
-        echo "[[validator.participants]]"
-        echo "address = \"$address\""
-    done
-    echo
-    echo "[observability]"
-    echo 'log_filter = "info,safenet_core=trace,validator=trace"'
-    echo
-    echo "[index]"
-    echo "block_time = $(($BLOCK_TIME*1000))"
-    echo "start_block = 0"
+    print_validator_config_base \
+        "$ANVIL_RPC_URL" "$1" "$2" "$CONSENSUS_ADDR" "$ORACLE_ADDR" \
+        1000000 "$(($BLOCK_TIME * 1000))" PARTICIPANTS
+
     # Large enough reorg depth support to work with slow CI tests
     echo "max_reorg_depth = 10"
 }
@@ -157,37 +82,22 @@ validator_config "${PRIVATE_KEYS[1]}" "$VALIDATOR_B_DB" > "$VALIDATOR_B_CONFIG"
 
 start_validator_a() {
     echo "==> Starting validator A (${PARTICIPANTS[0]})..."
-    "$RUST_BIN" --config-file "$VALIDATOR_A_CONFIG" >> "$REPO_ROOT/validator_a_logs.txt" 2>&1 &
-    PIDS+=("$!")
-    VALIDATOR_A_PID="${PIDS[-1]}"
+    run_rust_process validator "$VALIDATOR_A_CONFIG" "$REPO_ROOT/validator_a_logs.txt" "$1"
+    VALIDATOR_A_PID="$LAST_PID"
     echo "    pid $VALIDATOR_A_PID"
 }
 
-: > "$REPO_ROOT/validator_a_logs.txt"
-start_validator_a
+start_validator_a truncate
 
 echo "==> Starting validator B (${PARTICIPANTS[1]})..."
-"$RUST_BIN" --config-file "$VALIDATOR_B_CONFIG" > "$REPO_ROOT/validator_b_logs.txt" 2>&1 &
-PIDS+=("$!")
-echo "    pid ${PIDS[-1]}"
+run_rust_process validator "$VALIDATOR_B_CONFIG" "$REPO_ROOT/validator_b_logs.txt"
+echo "    pid $LAST_PID"
 
 # Let both watchers initialize before emitting the genesis event.
 sleep 0.5
-for pid in "${PIDS[@]:1}"; do
-    if ! kill -0 "$pid" 2>/dev/null; then
-        EXIT_MESSAGE="FAILURE: A validator exited during startup."
-        exit 1
-    fi
-done
+assert_processes_alive "FAILURE: A validator exited during startup." "${PIDS[@]:1}"
 
-echo "==> Triggering genesis KeyGen..."
-env PARTICIPANTS="$PARTICIPANTS_CSV" \
-    COORDINATOR_ADDRESS="$COORDINATOR_ADDR" \
-    forge script --root "$REPO_ROOT/contracts" GenesisScript \
-    --rpc-url "$ANVIL_RPC_URL" \
-    --unlocked \
-    --sender "$SENDER" \
-    --broadcast 2>&1 | tee "$TMPDIR/genesis.log"
+trigger_genesis_keygen "$ANVIL_RPC_URL" "$SENDER" "$PARTICIPANTS_CSV" "$COORDINATOR_ADDR"
 
 DEADLINE=$((SECONDS + TIMEOUT))
 GENESIS_GROUP=""
@@ -196,10 +106,7 @@ PREPROCESS_BLOCK=""
 
 echo "==> Waiting for genesis secret shares and its first nonce tree submission (timeout: ${TIMEOUT}s)..."
 while [ "$SECONDS" -lt "$DEADLINE" ]; do
-    SHARED=$(cast logs --json \
-        --rpc-url "$ANVIL_RPC_URL" \
-        --from-block 0 --to-block latest \
-        --address "$COORDINATOR_ADDR" \
+    SHARED=$(fetch_logs "$ANVIL_RPC_URL" "$COORDINATOR_ADDR" \
         'KeyGenSecretShared(bytes32,address,((uint256,uint256),uint256[]),bool)')
     SHARED_COUNT=$(jq 'length' <<< "$SHARED")
 
@@ -210,11 +117,7 @@ while [ "$SECONDS" -lt "$DEADLINE" ]; do
     fi
 
     if [ -n "$GENESIS_GROUP" ] && [ -z "$PREPROCESS_BLOCK" ]; then
-        PREPROCESS=$(cast logs --json \
-            --rpc-url "$ANVIL_RPC_URL" \
-            --from-block 0 --to-block latest \
-            --address "$COORDINATOR_ADDR" \
-            'Preprocess(bytes32,address,uint64,bytes32)')
+        PREPROCESS=$(fetch_logs "$ANVIL_RPC_URL" "$COORDINATOR_ADDR" 'Preprocess(bytes32,address,uint64,bytes32)')
         # `participant` (the first non-indexed word, a padded address) must
         # match validator A specifically: we assert on the exact nonce tree
         # *it* registered, not just any nonce tree for the group, so a fresh
@@ -233,12 +136,7 @@ while [ "$SECONDS" -lt "$DEADLINE" ]; do
 
     [ -n "$SECRET_SHARED_BLOCK" ] && [ -n "$PREPROCESS_BLOCK" ] && break
 
-    for pid in "${PIDS[@]:1}"; do
-        if ! kill -0 "$pid" 2>/dev/null; then
-            EXIT_MESSAGE="FAILURE: A validator exited before genesis completed."
-            exit 1
-        fi
-    done
+    assert_processes_alive "FAILURE: A validator exited before genesis completed." "${PIDS[@]:1}"
     sleep "$BLOCK_TIME"
 done
 
@@ -267,10 +165,7 @@ echo "==> Waiting for validator A to reprocess the reorged chain and reconfirm t
 DEADLINE=$((SECONDS + TIMEOUT))
 GENESIS_RECONFIRMED=0
 while [ "$SECONDS" -lt "$DEADLINE" ]; do
-    if ! kill -0 "$VALIDATOR_A_PID" 2>/dev/null; then
-        EXIT_MESSAGE="FAILURE: validator A exited after the reorg."
-        exit 1
-    fi
+    assert_processes_alive "FAILURE: validator A exited after restart." "$VALIDATOR_A_PID"
 
     CONFIRMATIONS=$(cast logs --json \
         --rpc-url "$ANVIL_RPC_URL" \

@@ -31,85 +31,28 @@ PRIVATE_KEYS=(
 SENDER=0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+source "$SCRIPT_DIR/lib/shared_test_scripts.sh"
+
 TMPDIR="$(mktemp -d)"
 PIDS=()
 
-for command in anvil cast forge jq cargo; do
-    command -v "$command" >/dev/null || {
-        echo "Missing required command: $command" >&2
-        exit 1
-    }
-done
-
-EXIT_MESSAGE="FAILURE: interrupted"
-cleanup() {
-    for pid in "${PIDS[@]:-}"; do
-        kill "$pid" 2>/dev/null || true
-    done
-    rm -rf "$TMPDIR"
-    echo "$EXIT_MESSAGE"
-}
-trap cleanup EXIT
+require_commands anvil cast forge jq cargo
+install_cleanup_trap
 
 echo "==> Using temporary directory $TMPDIR"
 
-echo "==> Building Rust validator..."
-cargo build --manifest-path "$REPO_ROOT/Cargo.toml" --package validator
-RUST_BIN="$REPO_ROOT/target/debug/validator"
-
-echo "==> Building Solidity contracts..."
-forge build --root "$REPO_ROOT/contracts" --force
+build_services_and_contracts
 
 echo "==> Starting Anvil..."
-anvil --block-time $BLOCK_TIME > "$REPO_ROOT/anvil_validator_logs.txt" 2>&1 &
-PIDS+=("$!")
-for _ in $(seq 1 20); do
-    cast block-number --rpc-url "$ANVIL_RPC_URL" >/dev/null 2>&1 && break
-    sleep 0.25
-done
-cast block-number --rpc-url "$ANVIL_RPC_URL" >/dev/null
+start_anvil "$BLOCK_TIME" 8545 "$REPO_ROOT/anvil_validator_logs.txt" "$ANVIL_RPC_URL"
 
-echo "==> Deploying contracts..."
 PARTICIPANTS_CSV=$(IFS=,; echo "${PARTICIPANTS[*]}")
-env PARTICIPANTS="$PARTICIPANTS_CSV" \
-    forge script --root "$REPO_ROOT/contracts" DeployScript \
-    --rpc-url "$ANVIL_RPC_URL" \
-    --unlocked \
-    --sender "$SENDER" \
-    --broadcast 2>&1 | tee "$TMPDIR/deploy.log"
-
-DEPLOY_JSON="$REPO_ROOT/contracts/build/broadcast/Deploy.s.sol/$CHAIN_ID/run-latest.json"
-COORDINATOR_ADDR=$(jq -er '.returns.coordinator.value' "$DEPLOY_JSON")
-CONSENSUS_ADDR=$(jq -er '.returns.consensus.value' "$DEPLOY_JSON")
-ORACLE_ADDR=$(jq -er '.returns.alwaysApproveOracle.value' "$DEPLOY_JSON")
-echo "    coordinator: $COORDINATOR_ADDR"
-echo "    consensus:   $CONSENSUS_ADDR"
-echo "    oracle:      $ORACLE_ADDR"
+deploy_validator_contracts "$ANVIL_RPC_URL" "$SENDER" "$PARTICIPANTS_CSV" "$CHAIN_ID"
 
 validator_config() {
-    local signer=$1
-    local database=$2
-    echo "rpc = \"$ANVIL_RPC_URL\""
-    echo "signer = \"$signer\""
-    echo "database = \"sqlite://$database?mode=rwc\""
-    echo
-    echo "[validator]"
-    echo "consensus = \"$CONSENSUS_ADDR\""
-    echo "blocks_per_epoch = $BLOCKS_PER_EPOCH"
-    echo "oracles = [\"$ORACLE_ADDR\"]"
-    for address in "${PARTICIPANTS[@]}"; do
-        echo
-        echo "[[validator.participants]]"
-        echo "address = \"$address\""
-    done
-    echo
-    echo "[observability]"
-    echo 'log_filter = "info,safenet_core=trace,validator=trace"'
-    echo
-    echo "[index]"
-    echo "block_time = $(($BLOCK_TIME*1000))"
-    echo "start_block = 0"
+    print_validator_config_base \
+        "$ANVIL_RPC_URL" "$1" "$2" "$CONSENSUS_ADDR" "$ORACLE_ADDR" \
+        "$BLOCKS_PER_EPOCH" "$(($BLOCK_TIME * 1000))" PARTICIPANTS
 }
 
 VALIDATOR_A_CONFIG="$TMPDIR/validator_a.toml"
@@ -118,32 +61,18 @@ VALIDATOR_B_CONFIG="$TMPDIR/validator_b.toml"
 validator_config "${PRIVATE_KEYS[1]}" "$TMPDIR/validator_b.sqlite" > "$VALIDATOR_B_CONFIG"
 
 echo "==> Starting validator A (${PARTICIPANTS[0]})..."
-"$RUST_BIN" --config-file "$VALIDATOR_A_CONFIG" > "$REPO_ROOT/validator_a_logs.txt" 2>&1 &
-PIDS+=("$!")
-echo "    pid ${PIDS[-1]}"
+run_rust_process validator "$VALIDATOR_A_CONFIG" "$REPO_ROOT/validator_a_logs.txt"
+echo "    pid $LAST_PID"
 
 echo "==> Starting validator B (${PARTICIPANTS[1]})..."
-"$RUST_BIN" --config-file "$VALIDATOR_B_CONFIG" > "$REPO_ROOT/validator_b_logs.txt" 2>&1 &
-PIDS+=("$!")
-echo "    pid ${PIDS[-1]}"
+run_rust_process validator "$VALIDATOR_B_CONFIG" "$REPO_ROOT/validator_b_logs.txt"
+echo "    pid $LAST_PID"
 
 # Let both watchers initialize before emitting the genesis event.
 sleep 0.5
-for pid in "${PIDS[@]:1}"; do
-    if ! kill -0 "$pid" 2>/dev/null; then
-        EXIT_MESSAGE="FAILURE: A validator exited during startup."
-        exit 1
-    fi
-done
+assert_processes_alive "FAILURE: A validator exited during startup." "${PIDS[@]:1}"
 
-echo "==> Triggering genesis KeyGen..."
-env PARTICIPANTS="$PARTICIPANTS_CSV" \
-    COORDINATOR_ADDRESS="$COORDINATOR_ADDR" \
-    forge script --root "$REPO_ROOT/contracts" GenesisScript \
-    --rpc-url "$ANVIL_RPC_URL" \
-    --unlocked \
-    --sender "$SENDER" \
-    --broadcast 2>&1 | tee "$TMPDIR/genesis.log"
+trigger_genesis_keygen "$ANVIL_RPC_URL" "$SENDER" "$PARTICIPANTS_CSV" "$COORDINATOR_ADDR"
 
 DEADLINE=$((SECONDS + TIMEOUT))
 EPOCH_ONE_WORD=0x0000000000000000000000000000000000000000000000000000000000000001
@@ -159,12 +88,7 @@ TRANSACTION_ATTESTED=0
 STAGED=0
 ROLLED_OVER=0
 while [ "$SECONDS" -lt "$DEADLINE" ]; do
-    CONFIRMATIONS=$(cast logs --json \
-        --rpc-url "$ANVIL_RPC_URL" \
-        --from-block 0 \
-        --to-block latest \
-        --address "$COORDINATOR_ADDR" \
-        'KeyGenConfirmed(bytes32,address,bool)')
+    CONFIRMATIONS=$(fetch_logs "$ANVIL_RPC_URL" "$COORDINATOR_ADDR" 'KeyGenConfirmed(bytes32,address,bool)')
     GENESIS_GROUP=$(jq -r '.[0].topics[1] // empty' <<< "$CONFIRMATIONS")
     if [ -n "$GENESIS_GROUP" ]; then
         GENESIS_CONFIRMATIONS=$(jq --arg gid "$GENESIS_GROUP" '[.[] | select(.topics[1] == $gid)] | length' <<< "$CONFIRMATIONS")
@@ -173,11 +97,7 @@ while [ "$SECONDS" -lt "$DEADLINE" ]; do
 
     GENESIS_COMPLETED=$(jq --arg true_word "$TRUE_WORD" '[.[] | select(.data | endswith($true_word))] | length' <<< "$CONFIRMATIONS")
 
-    STAGED_LOGS=$(cast logs --json \
-        --rpc-url "$ANVIL_RPC_URL" \
-        --from-block 0 \
-        --to-block latest \
-        --address "$CONSENSUS_ADDR" \
+    STAGED_LOGS=$(fetch_logs "$ANVIL_RPC_URL" "$CONSENSUS_ADDR" \
         'EpochStaged(uint64,uint64,uint64,bytes32,(uint256,uint256),bytes32,((uint256,uint256),uint256))')
     STAGED=$(jq --arg epoch "$EPOCH_ONE_WORD" '[.[] | select(.topics[2] == $epoch)] | length' <<< "$STAGED_LOGS")
     if [ "$STAGED" -gt 0 ]; then
@@ -208,33 +128,20 @@ while [ "$SECONDS" -lt "$DEADLINE" ]; do
             --rpc-url "$ANVIL_RPC_URL" \
             --unlocked \
             --sender "$SENDER" \
-            --broadcast 2>&1 | tee "$TMPDIR/propose_epoch_one.log"
+            --broadcast
 
-        PROPOSALS=$(cast logs --json \
-            --rpc-url "$ANVIL_RPC_URL" \
-            --from-block 0 \
-            --to-block latest \
-            --address "$CONSENSUS_ADDR" \
+        PROPOSALS=$(fetch_logs "$ANVIL_RPC_URL" "$CONSENSUS_ADDR" \
             'TransactionProposed(bytes32,bytes32,address,uint64,bytes,(uint256,address,address,uint256,bytes,uint8,uint256,uint256,uint256,address,address,uint256))')
         TRANSACTION_HASH=$(jq -er --arg epoch "$EPOCH_ONE_WORD" \
             '[.[] | select(.data | startswith($epoch))][-1].topics[1]' <<< "$PROPOSALS")
         TRANSACTION_PROPOSED=1
     fi
 
-    ROLLOVERS=$(cast logs --json \
-        --rpc-url "$ANVIL_RPC_URL" \
-        --from-block 0 \
-        --to-block latest \
-        --address "$CONSENSUS_ADDR" \
-        'EpochRolledOver(uint64)')
+    ROLLOVERS=$(fetch_logs "$ANVIL_RPC_URL" "$CONSENSUS_ADDR" 'EpochRolledOver(uint64)')
     ROLLED_OVER=$(jq --arg epoch "$EPOCH_ONE_WORD" '[.[] | select(.topics[1] == $epoch)] | length' <<< "$ROLLOVERS")
 
     if [ "$TRANSACTION_PROPOSED" -gt 0 ]; then
-        ATTESTATIONS=$(cast logs --json \
-            --rpc-url "$ANVIL_RPC_URL" \
-            --from-block 0 \
-            --to-block latest \
-            --address "$CONSENSUS_ADDR" \
+        ATTESTATIONS=$(fetch_logs "$ANVIL_RPC_URL" "$CONSENSUS_ADDR" \
             'TransactionAttested(bytes32,bytes32,address,uint64,bytes32,bytes32,((uint256,uint256),uint256))')
         TRANSACTION_ATTESTED=$(jq --arg hash "$TRANSACTION_HASH" --arg epoch "$EPOCH_ONE_WORD" \
             '[.[] | select((.topics[1] == $hash) and (.data | startswith($epoch)))] | length' <<< "$ATTESTATIONS")
@@ -246,12 +153,7 @@ while [ "$SECONDS" -lt "$DEADLINE" ]; do
         exit 0
     fi
 
-    for pid in "${PIDS[@]:1}"; do
-        if ! kill -0 "$pid" 2>/dev/null; then
-            EXIT_MESSAGE="FAILURE: A validator exited before both transactions were attested and epoch 1 rolled over." >&2
-            exit 1
-        fi
-    done
+    assert_processes_alive "FAILURE: A validator exited before both transactions were attested and epoch 1 rolled over." "${PIDS[@]:1}"
     sleep "$BLOCK_TIME"
 done
 
