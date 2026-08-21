@@ -68,3 +68,34 @@ jobs:
             validator_a_logs.txt
             validator_b_logs.txt
           if-no-files-found: ignore
+
+  validator-integration-reorg-nonce:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          submodules: recursive
+
+      - uses: foundry-rs/foundry-toolchain@v1
+        with:
+          # We fix the foundry version because of a formatting bug introduced
+          # in version 1.7.0.
+          # See <https://github.com/foundry-rs/foundry/issues/13362>
+          version: v1.5.1
+
+      - name: Install just
+        run: sudo apt-get update && sudo apt-get install -y just
+
+      - run: just test-integration-validator-reorg-nonce
+
+      - name: Upload validator logs
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: validator-integration-reorg-nonce-logs
+          path: |
+            anvil_reorg_nonce_logs.txt
+            validator_a_logs.txt
+            validator_b_logs.txt
+          if-no-files-found: ignore
