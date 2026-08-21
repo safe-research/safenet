@@ -4308,6 +4308,7 @@ version = "0.2.0"
 dependencies = [
  "alloy",
  "argh",
+ "async-trait",
  "axum",
  "safe-tx",
  "safenet-core",
