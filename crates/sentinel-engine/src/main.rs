@@ -1,6 +1,7 @@
 mod api;
 mod checkers;
 mod config;
+mod contracts;
 mod engine;
 
 use self::{

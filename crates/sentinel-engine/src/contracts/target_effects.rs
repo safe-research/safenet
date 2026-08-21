@@ -1,18 +1,11 @@
-//! Pure calldata decoding: extracts the address a Safe transaction (or, when
-//! it's a MultiSend batch, each of its sub-calls) sends value to, or grants
-//! transfer/spending authority over tokens to. No policy decisions are made
-//! here — see `crate::checks` for the existing base-guarantee policy, and
-//! future `Check`s (elsewhere) that will consume this output.
+//! Pure calldata decoding for the excessive-approval check.
 
-use crate::multi_send::decode_multi_send_call;
-use crate::{
-    SafeTransaction,
-    bindings::{erc20, erc721, erc1155},
-};
+use crate::contracts::bindings::{erc20, erc721, erc1155};
 use alloy::{
     primitives::{Address, U256},
     sol_types::SolCall as _,
 };
+use safe_tx::{SafeTransaction, multi_send::decode_multi_send_call};
 
 /// A decoded value- or authority-granting effect that a Safe transaction (or
 /// one of its MultiSend sub-calls) has on a target address.
@@ -136,8 +129,8 @@ fn decode_call(tx: &SafeTransaction) -> Vec<TargetEffect> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{Operation, bindings::multi_send};
     use alloy::primitives::{Bytes, address};
+    use safe_tx::{Operation, bindings::multi_send};
 
     fn tx(
         to: Address,

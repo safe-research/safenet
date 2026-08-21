@@ -5,7 +5,6 @@ pub mod bindings;
 pub mod checks;
 pub mod multi_send;
 pub mod rule;
-pub mod target_effects;
 
 use alloy::primitives::{Address, Bytes, U256};
 use serde::{Deserialize, Deserializer, Serialize, Serializer, de};
