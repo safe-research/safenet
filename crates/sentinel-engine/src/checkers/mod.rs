@@ -18,6 +18,9 @@ use crate::engine::{SafeTransaction, Verdict};
 /// A transaction check in the sentinel engine's checker chain.
 #[async_trait::async_trait]
 pub trait Checker: Send + Sync {
+    /// A short, log-friendly identifier for this checker.
+    fn name(&self) -> &'static str;
+
     /// Assesses `transaction` or abstains so the next checker can run.
     async fn check(&self, transaction: &SafeTransaction) -> Verdict;
 }

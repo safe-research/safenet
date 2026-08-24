@@ -34,6 +34,10 @@ pub struct BaseChecker;
 
 #[async_trait::async_trait]
 impl Checker for BaseChecker {
+    fn name(&self) -> &'static str {
+        "base"
+    }
+
     async fn check(&self, transaction: &SafeTransaction) -> Verdict {
         match check_transaction(transaction) {
             Ok(()) => Verdict::Abstain,

@@ -118,6 +118,10 @@ impl AddressPoisoningChecker {
 
 #[async_trait::async_trait]
 impl Checker for AddressPoisoningChecker {
+    fn name(&self) -> &'static str {
+        "address_poisoning"
+    }
+
     /// Decodes `transaction.data`'s ERC-20 target (if any) and looks up
     /// whether the Safe already has a genuine prior interaction with it. A
     /// found interaction returns [`Verdict::Secure`]; anything else (no

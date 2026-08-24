@@ -141,11 +141,26 @@ pub fn decode_multi_send(
 /// `decode_multi_send`, the three steps every caller needs together.
 pub fn decode_multi_send_call(tx: &SafeTransaction) -> Option<(Vec<SafeTransaction>, bool)> {
     if tx.operation != Operation::DelegateCall {
+        tracing::trace!(
+            to = %tx.to,
+            operation = ?tx.operation,
+            "not a MultiSend batch: top-level call is not a delegatecall, so any sub-calls \
+             would run with the MultiSend contract itself as their sender, not the Safe"
+        );
         return None;
     }
-    let (version, allows_delegate_calls) = known_deployment(tx.to)?;
-    let call = multi_send::multiSendCall::abi_decode(&tx.data).ok()?;
-    let sub_txs = decode_multi_send(tx.safe, &call.transactions, version)?;
+    let Some((version, allows_delegate_calls)) = known_deployment(tx.to) else {
+        tracing::trace!(to = %tx.to, "not a MultiSend batch: destination is not a known MultiSend deployment");
+        return None;
+    };
+    let Ok(call) = multi_send::multiSendCall::abi_decode(&tx.data) else {
+        tracing::trace!(to = %tx.to, "not a MultiSend batch: calldata does not decode as multiSend(bytes)");
+        return None;
+    };
+    let Some(sub_txs) = decode_multi_send(tx.safe, &call.transactions, version) else {
+        tracing::trace!(to = %tx.to, "not a MultiSend batch: packed transactions blob is malformed");
+        return None;
+    };
     Some((sub_txs, allows_delegate_calls))
 }
 
