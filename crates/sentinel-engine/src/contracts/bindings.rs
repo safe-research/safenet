@@ -66,7 +66,15 @@ pub mod cow {
             bytes32 salt;
             bytes staticInput;
         }
-        function create(ConditionalOrderParams params, bool dispatch);
+        /// The Safe app's actual order-creation call — unlike bare `create`,
+        /// this resolves `factory`'s value at creation time and substitutes
+        /// it into `params.staticInput` in place of a context-dependent
+        /// field (for the TWAP handler, `t0`). This is how a TWAP order
+        /// created "starting now" is expressed on-chain: `staticInput`'s own
+        /// `t0` is a placeholder, and `factory` — CoW's
+        /// `CurrentBlockTimestampFactory` for a genuine one — supplies the
+        /// real start time instead.
+        function createWithContext(ConditionalOrderParams params, address factory, bytes data, bool dispatch);
 
         /// ComposableCoW's TWAP handler's own order shape, ABI-encoded as
         /// `create`'s `staticInput`. `sellToken` must match the token the
