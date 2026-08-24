@@ -1,0 +1,18 @@
+{
+  "transaction": {
+    "chainId": "0x1",
+    "safe": "0x5aFE3855358E112B5647B952709E6165e1c1eEEe",
+    "to": "0x5aFE3855358E112B5647B952709E6165e1c1eEEe",
+    "value": "0x0",
+    "data": "0x",
+    "operation": 0,
+    "safeTxGas": "0x0",
+    "baseGas": "0x0",
+    "gasPrice": "0x0",
+    "gasToken": "0x0000000000000000000000000000000000000000",
+    "refundReceiver": "0x0000000000000000000000000000000000000000",
+    "nonce": "0x2a"
+  },
+  "verdict": "secure",
+  "note": "An empty call from the Safe to itself only burns the nonce; it changes nothing else."
+}

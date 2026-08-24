@@ -102,6 +102,15 @@ test-integration-validator:
 test-integration-validator-reorg-nonce:
     ./scripts/run_validator_reorg_nonce_test.sh
 
+# Runs the sentinel engine's specs (crates/sentinel-engine/specs, in the
+# safe-research/sentinel-test-vectors spec format) against a running engine
+# via curl (Anvil + the Rust sentinel-engine by default). Set
+# SENTINEL_ENGINE_URL to target an already-running engine instead —
+# including a non-Rust implementation — and SENTINEL_ENGINE_SPECS_DIR to run
+# a different set of specs.
+test-integration-sentinel-engine:
+    ./scripts/run_sentinel_engine_test_vectors.sh
+
 # Run the explorer's Vite dev server.
 explorer-dev:
     npm --prefix explorer run dev

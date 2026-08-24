@@ -1,0 +1,19 @@
+{
+  "transaction": {
+    "chainId": "0x1",
+    "safe": "0x0000000000000000000000000000000000000000",
+    "to": "0x0101010101010101010101010101010101010101",
+    "value": "0x0",
+    "data": "0x095ea7b30000000000000000000000000202020202020202020202020202020202020202ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+    "operation": 0,
+    "safeTxGas": "0x0",
+    "baseGas": "0x0",
+    "gasPrice": "0x0",
+    "gasToken": "0x0000000000000000000000000000000000000000",
+    "refundReceiver": "0x0000000000000000000000000000000000000000",
+    "nonce": "0x0"
+  },
+  "verdict": "insecure",
+  "rule": "R-4.5",
+  "note": "An unlimited ERC-20 approve grants the spender authority far beyond what any legitimate interaction needs."
+}

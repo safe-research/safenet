@@ -78,6 +78,17 @@ These scripts require:
 - **jq** — for parsing `cast`/deployment output
 - **cargo** — for running the Rust services
 
+`just test-integration-sentinel-engine` (`./scripts/run_sentinel_engine_test_vectors.sh`) is a
+lighter-weight check: it drives a sentinel engine purely over HTTP/JSON with the specs in
+`crates/sentinel-engine/specs` — `specs/<group>/<case>.json` files holding a `SafeTransaction` plus
+its expected verdict (`{"transaction": ..., "verdict": "insecure", "rule": "R-4.1", "note": "..."}`),
+in the format defined by
+[safe-research/sentinel-test-vectors](https://github.com/safe-research/sentinel-test-vectors) — using
+`curl`/`jq` rather than Rust test code so the same script and specs can validate any sentinel engine
+implementation. By default it builds and starts the Rust `sentinel-engine` against a local Anvil
+chain; set `SENTINEL_ENGINE_URL` to point it at an already-running engine instead, and
+`SENTINEL_ENGINE_SPECS_DIR` to run a different set of specs.
+
 ### Local devnet
 
 ```sh
