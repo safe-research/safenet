@@ -8,6 +8,11 @@ pub struct Request {
     /// Bond amount the oracle expects this sentinel to post -- `U96`, matching the onchain
     /// `uint96` field exactly, so `NewRequest.bondTarget` assigns here with no cast at all.
     pub bond_target: U96,
+    /// The amount of this sentinel's own bond an arbitrated dispute loss
+    /// would slash -- `NewRequest.slashAmount`, carried through to
+    /// `WaitingForDisputeResolution` purely for the
+    /// `safenet_sentinel_dispute_bond_slashed_amount` metric.
+    pub slash_amount: U96,
     /// Last block in which a commitment can be submitted.
     pub commit_deadline: u64,
     /// Last block in which a committed vote can be revealed.
@@ -42,6 +47,7 @@ pub enum SentinelRequestState {
     CollectingCommitments {
         approve: bool,
         reason: String,
+        slash_amount: U96,
         commit_deadline: u64,
         reveal_deadline: u64,
         committed_count: u64,
@@ -54,6 +60,7 @@ pub enum SentinelRequestState {
     /// event the same way `committed_count` tallied `Committed`.
     CollectingVotes {
         approve: bool,
+        slash_amount: U96,
         reveal_deadline: u64,
         committed_count: u64,
         revealed_count: u64,
@@ -61,10 +68,12 @@ pub enum SentinelRequestState {
         deny_count: u64,
         self_revealed: bool,
     },
-    /// The local tally showed both sides had revealed votes (a dispute);
-    /// nothing further needs tracking here, since `handle_resolved` always
-    /// claims once the arbitrator settles it, regardless of which side won.
-    WaitingForDisputeResolution,
+    /// The local tally showed both sides had revealed votes (a dispute).
+    /// `handle_resolved` always claims once the arbitrator settles it,
+    /// regardless of which side won, but `approve`/`slash_amount` are kept
+    /// so it can also record whether *this* sentinel's vote matched the
+    /// arbitrated outcome and, if not, how much of its bond was slashed.
+    WaitingForDisputeResolution { approve: bool, slash_amount: U96 },
 }
 
 impl SentinelRequestState {
@@ -75,7 +84,7 @@ impl SentinelRequestState {
             Self::WaitingForRequest { .. } => "waiting_for_request",
             Self::CollectingCommitments { .. } => "collecting_commitments",
             Self::CollectingVotes { .. } => "collecting_votes",
-            Self::WaitingForDisputeResolution => "waiting_for_dispute_resolution",
+            Self::WaitingForDisputeResolution { .. } => "waiting_for_dispute_resolution",
         }
     }
 }
@@ -92,6 +101,7 @@ mod tests {
         SentinelRequestState::CollectingCommitments {
             approve: false,
             reason: "destination is blocklisted".to_string(),
+            slash_amount: U96::from(500),
             commit_deadline,
             reveal_deadline,
             committed_count: 2,
@@ -131,6 +141,7 @@ mod tests {
                 deadline: 20,
                 request: Some(Request {
                     bond_target: U96::from(1_000),
+                    slash_amount: U96::from(1_000),
                     commit_deadline: 30,
                     reveal_deadline: 40,
                 }),

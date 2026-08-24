@@ -3,11 +3,12 @@ use crate::{
     bindings::{
         SentinelEvents,
         consensus::Consensus,
-        oracle::{ERC20, SentinelOracle},
+        oracle::{ERC20, RequestState as OracleRequestState, SentinelOracle},
     },
     effect,
     engine::{CheckOutcome, EngineClient},
     hashing::{RevealSalt as _, commit_hash, oracle_tx_proposal_hash},
+    metrics::ResolvedOutcome,
     state::{Request, SentinelRequestState as RequestState, State},
 };
 use alloy::{
@@ -131,6 +132,7 @@ impl SentinelTransition {
                 request: None,
             },
         );
+        crate::metrics::requests_proposed_total().increment(1);
 
         (
             state,
@@ -202,6 +204,7 @@ impl SentinelTransition {
     ) -> (State, Commands<State, Self>) {
         let Request {
             bond_target,
+            slash_amount,
             commit_deadline,
             reveal_deadline,
         } = request;
@@ -212,6 +215,7 @@ impl SentinelTransition {
             RequestState::CollectingCommitments {
                 approve,
                 reason,
+                slash_amount,
                 commit_deadline,
                 reveal_deadline,
                 committed_count: 0,
@@ -248,6 +252,7 @@ impl SentinelTransition {
         let request_id = event.requestId;
         let request = Request {
             bond_target: event.bondTarget,
+            slash_amount: event.slashAmount,
             commit_deadline: event.commitDeadline,
             reveal_deadline: event.revealDeadline,
         };
@@ -312,8 +317,14 @@ impl SentinelTransition {
             return (state, Vec::new());
         };
         *committed_count += 1;
-        if event.sentinel == self.signer.address() {
+        // Guarded on the false-to-true edge (rather than just
+        // `event.sentinel == self.signer.address()`) so a re-delivered
+        // `Committed` log (e.g. replayed after a reorg restores this exact
+        // block range) can't double-count our own participation.
+        if !*self_committed && event.sentinel == self.signer.address() {
             *self_committed = true;
+            crate::metrics::requests_participated_total().increment(1);
+            crate::metrics::bond_amount().record(event.bondAmount.to::<u128>() as f64);
         }
         (state, Vec::new())
     }
@@ -389,6 +400,7 @@ impl SentinelTransition {
             RequestState::CollectingCommitments {
                 approve,
                 reason,
+                slash_amount,
                 commit_deadline,
                 reveal_deadline,
                 committed_count,
@@ -403,6 +415,7 @@ impl SentinelTransition {
                     return false;
                 }
                 let approve = *approve;
+                let slash_amount = *slash_amount;
                 let reveal_deadline = *reveal_deadline;
                 let committed_count = *committed_count;
                 // `CollectingVotes` has no `reason` field of its own, so this is the
@@ -423,6 +436,7 @@ impl SentinelTransition {
                 );
                 *entry = RequestState::CollectingVotes {
                     approve,
+                    slash_amount,
                     reveal_deadline,
                     committed_count,
                     revealed_count: 0,
@@ -448,7 +462,7 @@ impl SentinelTransition {
                     }
                 }
             }
-            RequestState::WaitingForDisputeResolution => true,
+            RequestState::WaitingForDisputeResolution { .. } => true,
         });
 
         (state, actions)
@@ -460,13 +474,21 @@ impl SentinelTransition {
     /// which side won: bond slashing is partial, so even a losing vote can
     /// leave an unslashed remainder (`bondTarget - slashAmount`) to reclaim,
     /// and `claim()` pays out `0` extra on the losing side without reverting.
+    ///
+    /// Also records whether this sentinel's own revealed vote matched the
+    /// arbitrated `outcome` (`resolveDispute` only ever resolves to
+    /// `RESOLVED_APPROVED`/`RESOLVED_DENIED`, never `TIMED_OUT`) and, if it
+    /// lost, how much of its bond `slash_amount` says was slashed for it.
     fn handle_resolved(
         &self,
         mut state: State,
         event: SentinelOracle::DisputeResolved,
     ) -> (State, Commands<State, Self>) {
-        match state.0.remove(&event.requestId) {
-            Some(RequestState::WaitingForDisputeResolution) => {}
+        let (approve, slash_amount) = match state.0.remove(&event.requestId) {
+            Some(RequestState::WaitingForDisputeResolution {
+                approve,
+                slash_amount,
+            }) => (approve, slash_amount),
             Some(entry) => {
                 tracing::warn!(
                     request_id = %event.requestId,
@@ -484,6 +506,15 @@ impl SentinelTransition {
                 return (state, Vec::new());
             }
         };
+
+        let won = approve == (event.outcome == OracleRequestState::RESOLVED_APPROVED);
+        if won {
+            crate::metrics::requests_resolved_total(ResolvedOutcome::DisputeWon).increment(1);
+        } else {
+            crate::metrics::requests_resolved_total(ResolvedOutcome::DisputeLost).increment(1);
+            crate::metrics::dispute_bond_slashed_amount().record(slash_amount.to::<u128>() as f64);
+        }
+
         let actions = vec![
             SentinelAction {
                 kind: SentinelActionKind::Claim {
@@ -494,6 +525,23 @@ impl SentinelTransition {
             .into(),
         ];
         (state, actions)
+    }
+
+    /// Records this sentinel's own fee reward once a `claim()` it (or
+    /// anyone else) submitted lands onchain. No request state is touched:
+    /// by the time a request is claimable, [`Self::finalize`]/
+    /// [`Self::handle_resolved`] have already removed its tracked entry, so
+    /// `feeReward` is read directly off the event rather than correlated
+    /// against anything retained locally.
+    fn handle_claimed(
+        &self,
+        state: State,
+        event: SentinelOracle::Claimed,
+    ) -> (State, Commands<State, Self>) {
+        if event.sentinel == self.signer.address() && !event.feeReward.is_zero() {
+            crate::metrics::fee_reward_amount().record(event.feeReward.to::<u128>() as f64);
+        }
+        (state, Vec::new())
     }
 
     /// Shared finalize step, reached from either the early-finalize check
@@ -514,6 +562,8 @@ impl SentinelTransition {
         request_id: B256,
     ) -> (Option<RequestState>, Commands<State, Self>) {
         let RequestState::CollectingVotes {
+            approve,
+            slash_amount,
             revealed_count,
             approve_count,
             deny_count,
@@ -523,6 +573,8 @@ impl SentinelTransition {
         else {
             return (None, Vec::new());
         };
+        let approve = *approve;
+        let slash_amount = *slash_amount;
         let dispute = *approve_count > 0 && *deny_count > 0;
         let timed_out = *revealed_count == 0;
 
@@ -541,13 +593,26 @@ impl SentinelTransition {
         ];
 
         // In case of a dispute it is not a timeout, so this sentinel participated.
-        // Finalize the request and wait for a dispute resolution by the arbitrator.
+        // Finalize the request and wait for a dispute resolution by the arbitrator;
+        // `handle_resolved` records the win/loss metric once that arrives.
         if dispute {
-            return (Some(RequestState::WaitingForDisputeResolution), actions);
+            return (
+                Some(RequestState::WaitingForDisputeResolution {
+                    approve,
+                    slash_amount,
+                }),
+                actions,
+            );
         }
 
         // Unanimity plus our own counted vote guarantees this sentinel is on the
         // sole, winning side; no `DisputeResolved` round trip needed.
+        let outcome_metric = if timed_out {
+            ResolvedOutcome::Timeout
+        } else {
+            ResolvedOutcome::Unanimous
+        };
+        crate::metrics::requests_resolved_total(outcome_metric).increment(1);
         actions.push(
             SentinelAction {
                 kind: SentinelActionKind::Claim { id: request_id },
@@ -658,6 +723,9 @@ impl StateTransition<State> for SentinelTransition {
                     SentinelEvents::Oracle(
                         SentinelOracle::SentinelOracleEvents::DisputeResolved(event),
                     ) => self.handle_resolved(state, event),
+                    SentinelEvents::Oracle(SentinelOracle::SentinelOracleEvents::Claimed(
+                        event,
+                    )) => self.handle_claimed(state, event),
                 }
             }
             Message::Resume(effect::Resume::EngineCheckResult {
@@ -900,6 +968,22 @@ mod tests {
         ))
     }
 
+    fn claimed_event(
+        id: B256,
+        sentinel: Address,
+        bond_return: u64,
+        fee_reward: u64,
+    ) -> SentinelEvents {
+        SentinelEvents::Oracle(SentinelOracle::SentinelOracleEvents::Claimed(
+            SentinelOracle::Claimed {
+                requestId: id,
+                sentinel,
+                bondReturn: Uint::from(bond_return),
+                feeReward: Uint::from(fee_reward),
+            },
+        ))
+    }
+
     fn log(block: u64, data: SentinelEvents) -> EventLog<SentinelEvents> {
         EventLog {
             block,
@@ -946,6 +1030,7 @@ mod tests {
                 deadline: 1 + VOTING_WINDOW,
                 request: Some(Request {
                     bond_target,
+                    slash_amount: bond_target,
                     commit_deadline: 20,
                     reveal_deadline: 40,
                 }),
@@ -958,6 +1043,7 @@ mod tests {
             RequestState::CollectingCommitments {
                 approve,
                 reason: reason.to_string(),
+                slash_amount: bond_target,
                 commit_deadline: 20,
                 reveal_deadline: 40,
                 committed_count: 0,
@@ -1065,6 +1151,7 @@ mod tests {
             RequestState::CollectingCommitments {
                 approve: true,
                 reason: REASON.to_string(),
+                slash_amount: U96::from(500),
                 commit_deadline: 20,
                 reveal_deadline: 40,
                 committed_count: 0,
@@ -1105,6 +1192,7 @@ mod tests {
             RequestState::CollectingCommitments {
                 approve: true,
                 reason: REASON.to_string(),
+                slash_amount: U96::from(500),
                 commit_deadline: 20,
                 reveal_deadline: 40,
                 committed_count: 2,
@@ -1133,6 +1221,7 @@ mod tests {
             state.0[&id],
             RequestState::CollectingVotes {
                 approve: true,
+                slash_amount: U96::from(500),
                 reveal_deadline: 40,
                 committed_count: 2,
                 revealed_count: 0,
@@ -1152,6 +1241,7 @@ mod tests {
             state.0[&id],
             RequestState::CollectingVotes {
                 approve: true,
+                slash_amount: U96::from(500),
                 reveal_deadline: 40,
                 committed_count: 2,
                 revealed_count: 1,
@@ -1245,7 +1335,13 @@ mod tests {
                 .into(),
             ],
         );
-        assert_eq!(state.0[&id], RequestState::WaitingForDisputeResolution);
+        assert_eq!(
+            state.0[&id],
+            RequestState::WaitingForDisputeResolution {
+                approve: true,
+                slash_amount: U96::from(500),
+            }
+        );
 
         (svc, id, state)
     }
@@ -1291,6 +1387,38 @@ mod tests {
                 .into(),
             ],
         );
+    }
+
+    /// `Claimed` carries no request state to correlate against (the tracked
+    /// entry is already gone by the time a request is claimable), so it
+    /// must be a pure pass-through regardless of whose claim it is.
+    #[test]
+    fn claimed_event_never_mutates_state() {
+        let svc = transition();
+        let id = B256::repeat_byte(0x0f);
+        let mut state = State::default();
+        state.0.insert(
+            id,
+            RequestState::WaitingForRequest {
+                approve: true,
+                reason: String::new(),
+                deadline: 10,
+            },
+        );
+
+        let (after_self, commands) = svc.apply_transition(
+            state.clone(),
+            Message::Event(log(1, claimed_event(id, self_address(), 500, 100))),
+        );
+        assert!(commands.is_empty());
+        assert_eq!(after_self, state);
+
+        let (after_other, commands) = svc.apply_transition(
+            state.clone(),
+            Message::Event(log(1, claimed_event(id, OTHER, 500, 100))),
+        );
+        assert!(commands.is_empty());
+        assert_eq!(after_other, state);
     }
 
     /// Nobody reveals at all — a genuine timeout with no other sentinel's
@@ -1427,6 +1555,7 @@ mod tests {
             RequestState::CollectingCommitments {
                 approve: false,
                 reason: reason.clone(),
+                slash_amount: U96::from(500),
                 commit_deadline: 20,
                 reveal_deadline: 40,
                 committed_count: 0,
@@ -1556,6 +1685,7 @@ mod tests {
                 deadline: 10,
                 request: Some(Request {
                     bond_target: U96::from(500),
+                    slash_amount: U96::from(500),
                     commit_deadline: 20,
                     reveal_deadline: 40,
                 }),
