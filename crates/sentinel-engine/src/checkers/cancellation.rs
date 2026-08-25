@@ -8,6 +8,10 @@ pub struct CancellationChecker;
 
 #[async_trait::async_trait]
 impl Checker for CancellationChecker {
+    fn name(&self) -> &'static str {
+        "cancellation"
+    }
+
     async fn check(&self, transaction: &SafeTransaction) -> Verdict {
         let cancellation = SafeTransaction {
             chain_id: transaction.chain_id,

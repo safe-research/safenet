@@ -12,6 +12,10 @@ pub struct ExcessiveApprovalChecker;
 
 #[async_trait::async_trait]
 impl Checker for ExcessiveApprovalChecker {
+    fn name(&self) -> &'static str {
+        "excessive_approval"
+    }
+
     async fn check(&self, transaction: &SafeTransaction) -> Verdict {
         for effect in decode_target_effects(transaction) {
             let unlimited = match effect.kind {

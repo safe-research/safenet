@@ -410,6 +410,10 @@ impl Default for CowChecker {
 
 #[async_trait::async_trait]
 impl Checker for CowChecker {
+    fn name(&self) -> &'static str {
+        "cow"
+    }
+
     /// Runs, in order, [`CowChecker::check_dangling_approval`],
     /// [`CowChecker::check_presignature_batch`] and
     /// [`CowChecker::check_twap_batch`] against `transaction`'s sub-calls,

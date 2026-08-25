@@ -43,10 +43,12 @@ impl SentinelEngine {
         let mut verdict = Verdict::Abstain;
         for checker in &self.0 {
             verdict = checker.check(&transaction).await;
+            tracing::trace!(checker = checker.name(), ?verdict, "checker verdict");
             if verdict != Verdict::Abstain {
                 break;
             }
         }
+        tracing::trace!(?verdict, "security check verdict");
         verdict
     }
 }
@@ -59,6 +61,10 @@ mod tests {
 
     #[async_trait::async_trait]
     impl Checker for StubChecker {
+        fn name(&self) -> &'static str {
+            "stub"
+        }
+
         async fn check(&self, _: &SafeTransaction) -> Verdict {
             self.0
         }

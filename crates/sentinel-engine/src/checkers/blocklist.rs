@@ -17,6 +17,10 @@ impl BlocklistChecker {
 
 #[async_trait::async_trait]
 impl Checker for BlocklistChecker {
+    fn name(&self) -> &'static str {
+        "blocklist"
+    }
+
     async fn check(&self, transaction: &SafeTransaction) -> Verdict {
         if self.0.contains(&transaction.to) {
             Verdict::Insecure {
