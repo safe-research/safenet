@@ -4,6 +4,7 @@ mod config;
 mod effect;
 mod engine;
 mod hashing;
+mod metrics;
 mod service;
 mod state;
 

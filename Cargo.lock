@@ -4278,6 +4278,7 @@ version = "0.2.0"
 dependencies = [
  "alloy",
  "argh",
+ "metrics",
  "reqwest",
  "safenet-core",
  "serde",

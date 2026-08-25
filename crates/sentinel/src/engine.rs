@@ -1,6 +1,6 @@
 //! Client for the sentinel engine used to check proposed transactions.
 
-use crate::bindings::consensus::SafeTransaction;
+use crate::{bindings::consensus::SafeTransaction, metrics::EngineCheckVerdict};
 use alloy::primitives::B256;
 use reqwest::RequestBuilder;
 use serde::{Deserialize, Deserializer, Serialize, Serializer, de};
@@ -160,30 +160,30 @@ impl SecurityCheck {
     pub async fn execute(self) -> CheckOutcome {
         let Self { span, request } = self;
         async move {
-            let result = async {
-                let response = request.send().await?.error_for_status()?.json().await?;
-                let outcome = match response {
-                    Response::Secure => CheckOutcome::Approved,
-                    Response::Insecure { rule } => CheckOutcome::Denied(rule),
-                    Response::Abstain => CheckOutcome::Unknown,
-                };
-                Ok(outcome)
-            }
-            .await;
+            let result: Result<Response, reqwest::Error> =
+                async { request.send().await?.error_for_status()?.json().await }.await;
 
-            result.unwrap_or_else(|err: reqwest::Error| {
-                tracing::error!(
-                    %err,
-                    "sentinel engine request failed; dropping the request unanswered",
-                );
-
+            let (outcome, verdict) = match result {
+                Ok(Response::Secure) => (CheckOutcome::Approved, EngineCheckVerdict::Secure),
+                Ok(Response::Insecure { rule }) => {
+                    (CheckOutcome::Denied(rule), EngineCheckVerdict::Insecure)
+                }
+                Ok(Response::Abstain) => (CheckOutcome::Unknown, EngineCheckVerdict::Abstain),
                 // A failed request is *not* treated as approval or denial: an
                 // unreachable or malfunctioning sentinel engine isn't evidence
-                // about the  transaction either way, so it resolves to
+                // about the transaction either way, so it resolves to
                 // [`CheckOutcome::Unknown`], dropping the request rather than
                 // voting on it.
-                CheckOutcome::Unknown
-            })
+                Err(err) => {
+                    tracing::error!(
+                        %err,
+                        "sentinel engine request failed; dropping the request unanswered",
+                    );
+                    (CheckOutcome::Unknown, EngineCheckVerdict::Error)
+                }
+            };
+            crate::metrics::engine_check_verdicts_total(verdict).increment(1);
+            outcome
         }
         .instrument(span)
         .await
