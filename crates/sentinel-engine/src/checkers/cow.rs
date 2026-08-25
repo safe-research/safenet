@@ -4,7 +4,10 @@
 //! (to CoW's canonical `GPv2VaultRelayer`) together with the call that
 //! actually commits the Safe to an order: a swap's `setPreSignature`
 //! presignature call to `GPv2Settlement`, or a TWAP order's creation call
-//! (`ComposableCoW.create`, `handler` set to the canonical TWAP contract).
+//! (`ComposableCoW.createWithContext`, `handler` set to the canonical TWAP
+//! contract and `factory` set to the canonical `CurrentBlockTimestampFactory`
+//! — the Safe app always creates a TWAP order "starting now", which is
+//! exactly what routing through that factory encodes on-chain).
 //!
 //! This registry (`GPv2VaultRelayer`/`GPv2Settlement`/`ComposableCoW`/TWAP
 //! handler addresses) is deliberately local to this checker. The base
@@ -23,22 +26,31 @@
 //!
 //! **A batched TWAP order is checked against the order itself**
 //! ([`CowChecker::check_twap_batch`]), deliberately scoped
-//! narrow: only an exact 2-call batch — one `approve`, one TWAP `create`,
-//! in either order — is recognized at all; anything else (different batch
-//! size, two of the same kind) is `Abstain`. A TWAP order's sell token,
-//! receiver, and total sell amount (`partSellAmount * n`) are decodable
-//! directly from the `create` call's own `staticInput` — no RPC or offchain
-//! call needed, since the order's terms are committed onchain at creation
-//! time. Once recognized, the pair is denied under
+//! narrow: only an exact 2-call batch — one `approve`, one TWAP
+//! `createWithContext` — in either order — is recognized at all; anything
+//! else (different batch size, two of the same kind, or a `factory` other
+//! than the canonical `CurrentBlockTimestampFactory`) is `Abstain` (from
+//! this check specifically — [`CowChecker::check_dangling_approval`] still
+//! denies the lone `approve` it leaves behind, the same as an unrecognized
+//! handler). A TWAP order's sell token, receiver, and total sell amount
+//! (`partSellAmount * n`) are decodable directly from the
+//! `createWithContext` call's own `staticInput` — no RPC or offchain call
+//! needed, since the order's terms are committed onchain at creation time.
+//! Once recognized, the pair is denied under
 //! [`RuleId::R4_4AuthorizationTarget`] if the order's receiver isn't the
 //! Safe itself (the same address-poisoning-style target-manipulation
 //! concern as a wrong `approve` spender), or under
 //! [`RuleId::R4_5ExcessiveApproval`] if the approved token doesn't match the
-//! order's sell token, or the approved amount *exceeds* the order's total —
-//! the latter only guards against over-authorization (the security concern:
-//! a compromised relayer could drain the excess); an approval too small to
-//! fully fund the order is a trade-soundness concern, not a security one,
-//! and doesn't affect the verdict. Otherwise, the batch is considered secure.
+//! order's sell token, or the approved amount exceeds the order's total by
+//! `n` or more — the Safe app computes `partSellAmount` as
+//! `floor(desired_total / n)`, so up to `n - 1` units of whatever total the
+//! user actually approved never show up in `partSellAmount * n`; tolerating
+//! exactly that much (and no more) distinguishes this rounding remainder
+//! from real over-authorization (the security concern: a compromised
+//! relayer could drain the excess) without needing the token's decimals or
+//! value to size the tolerance. An approval too small to fully fund the
+//! order is a trade-soundness concern, not a security one, and doesn't
+//! affect the verdict. Otherwise, the batch is considered secure.
 //!
 //! **A batched presignature order is checked the same way**
 //! ([`CowChecker::check_presignature_batch`]): only an exact
@@ -59,7 +71,7 @@
 use super::Checker;
 use crate::{
     contracts::bindings::{
-        cow::{Order, TwapData, createCall, setPreSignatureCall},
+        cow::{Order, TwapData, createWithContextCall, setPreSignatureCall},
         erc20::approveCall,
     },
     contracts::multi_send::decode_multi_send_call,
@@ -78,6 +90,16 @@ const GP_V2_VAULT_RELAYER: Address = address!("C92E8bdf79f0507f65a392b0ab4667716
 const GP_V2_SETTLEMENT: Address = address!("9008D19f58AAbD9eD0D60971565AA8510560ab41");
 const COMPOSABLE_COW: Address = address!("fdaFc9d1902f4e0b84f65F49f244b32b31013b74");
 const TWAP_HANDLER: Address = address!("6cF1e9cA41f7611dEf408122793c358a3d11E5a5");
+/// The `factory` a genuine TWAP `createWithContext` call must use — it
+/// supplies the order's actual start time (`t0`) as "the current block
+/// timestamp", overriding whatever placeholder value sits in `staticInput`.
+/// A different factory could inject an arbitrary start time instead, so
+/// this is enforced rather than merely decoded. Deployed at the same
+/// address on every network CoW Swap supports (deterministic `CREATE2`
+/// deployment, like the constants above); see
+/// <https://github.com/cowprotocol/composable-cow/blob/main/networks.json>.
+const CURRENT_BLOCK_TIMESTAMP_FACTORY: Address =
+    address!("52eD56Da04309Aca4c3FECC595298d80C2f16BAc");
 
 /// Chain IDs the above are recognized on: Ethereum mainnet, Arbitrum One,
 /// Gnosis Chain.
@@ -305,22 +327,24 @@ impl CowChecker {
     }
 
     /// Deliberately narrow: recognizes only an exact 2-call batch, one
-    /// `approve` and one TWAP `create`, in either order — anything else
-    /// (different batch size, two of the same kind, neither) is `Abstain`,
-    /// not guessed at. A TWAP order's sell token, receiver, and total sell
-    /// amount (`partSellAmount * n`) are decodable directly from its
-    /// `create` calldata — no RPC or offchain call needed, since the
-    /// order's terms are committed onchain at creation time. Once the pair
-    /// is recognized, this check reaches a conclusive
-    /// verdict rather than falling through: it denies under
+    /// `approve` and one TWAP `createWithContext` — using the canonical
+    /// `CurrentBlockTimestampFactory` — in either order; anything else
+    /// (different batch size, two of the same kind, an unrecognized
+    /// factory, neither) is `Abstain`, not guessed at. A TWAP order's sell
+    /// token, receiver, and total sell amount (`partSellAmount * n`) are
+    /// decodable directly from its `createWithContext` calldata — no RPC or
+    /// offchain call needed, since the order's terms are committed onchain
+    /// at creation time. Once the pair is recognized, this check reaches a
+    /// conclusive verdict rather than falling through: it denies under
     /// [`RuleId::R4_4AuthorizationTarget`] if the order's `receiver` isn't
     /// `safe` itself (the same address-poisoning-style target-manipulation
     /// concern as a wrong `approve` spender — proceeds routed to an
     /// unrelated address), or under [`RuleId::R4_5ExcessiveApproval`] if the
     /// approved token doesn't match the order's `sellToken` (an allowance
     /// the order doesn't need at all, itself excessive) or the approved
-    /// amount exceeds the order's total; otherwise it considers the
-    /// transaction secure. An
+    /// amount exceeds the order's total by `n` or more (see
+    /// [`max_approval_for_twap_total`] for why `n - 1` of headroom is
+    /// tolerated); otherwise it considers the transaction secure. An
     /// approval *smaller* than that total is a trade-soundness concern (the
     /// order may not fully fill), not a security one, so it doesn't affect
     /// this verdict either way.
@@ -333,7 +357,7 @@ impl CowChecker {
         // opinion, not a guessed denial — consistent with this codebase's
         // other external/undecodable-data lookups (e.g. the sentinel engine's
         // address-poisoning no-history case).
-        let Some((approved_token, approved_amount, sell_token, receiver, total_sell_amount)) =
+        let Some((approved_token, approved_amount, sell_token, receiver, total_sell_amount, n)) =
             decode_approval_and_twap(first, second)
                 .or_else(|| decode_approval_and_twap(second, first))
         else {
@@ -348,7 +372,9 @@ impl CowChecker {
                 rule: RuleId::R4_4AuthorizationTarget,
             };
         }
-        if approved_token != sell_token || approved_amount > total_sell_amount {
+        if approved_token != sell_token
+            || approved_amount > max_approval_for_twap_total(total_sell_amount, n)
+        {
             return Verdict::Insecure {
                 rule: RuleId::R4_5ExcessiveApproval,
             };
@@ -460,54 +486,74 @@ fn is_presignature(tx: &SafeTransaction) -> bool {
 }
 
 /// Only a plain, valueless `CALL` to `ComposableCoW` is recognized — see
-/// [`vault_relayer_approval_amount`] for why `DELEGATECALL` and nonzero `tx.value`
-/// are excluded even to a legitimate address.
+/// [`vault_relayer_approval_amount`] for why `DELEGATECALL` and nonzero
+/// `tx.value` are excluded even to a legitimate address. The `factory` must
+/// be the canonical `CurrentBlockTimestampFactory` — a genuine
+/// Safe-app-created TWAP order always routes through it (see
+/// [`CURRENT_BLOCK_TIMESTAMP_FACTORY`]); anything else isn't the expected
+/// pattern, the same way an unrecognized `handler` isn't.
 fn is_twap_create(tx: &SafeTransaction) -> bool {
     tx.operation == Operation::Call
         && tx.value.is_zero()
         && tx.to == COMPOSABLE_COW
-        && createCall::abi_decode(&tx.data).is_ok_and(|call| call.params.handler == TWAP_HANDLER)
+        && createWithContextCall::abi_decode(&tx.data).is_ok_and(|call| {
+            call.params.handler == TWAP_HANDLER && call.factory == CURRENT_BLOCK_TIMESTAMP_FACTORY
+        })
 }
 
 /// Recognizes `approval_candidate` as a `GPv2VaultRelayer` approval and
-/// `twap_candidate` as a TWAP `create` call, returning the approved token,
-/// approved amount, and the TWAP order's own sell token, receiver, and total
-/// sell amount. `None` if either candidate doesn't match its expected role —
-/// including a matching pair given in the wrong order, which the caller
-/// (`CowChecker::check_twap_batch`) handles by trying both orderings.
+/// `twap_candidate` as a TWAP `createWithContext` call, returning the
+/// approved token, approved amount, and the TWAP order's own sell token,
+/// receiver, total sell amount, and part count (`n`). `None` if either
+/// candidate doesn't match its expected role — including a matching pair
+/// given in the wrong order, which the caller (`CowChecker::check_twap_batch`)
+/// handles by trying both orderings.
 fn decode_approval_and_twap<'a>(
     approval_candidate: &'a SafeTransaction,
     twap_candidate: &'a SafeTransaction,
-) -> Option<(Address, U256, Address, Address, U256)> {
+) -> Option<(Address, U256, Address, Address, U256, U256)> {
     let (approved_token, approved_amount) = vault_relayer_approval_amount(approval_candidate)?;
-    let (sell_token, receiver, total_sell_amount) = twap_order_terms(twap_candidate)?;
+    let (sell_token, receiver, total_sell_amount, n) = twap_order_terms(twap_candidate)?;
     Some((
         approved_token,
         approved_amount,
         sell_token,
         receiver,
         total_sell_amount,
+        n,
     ))
 }
 
-/// Recognizes `tx` as a TWAP `create` call (same rules as [`is_twap_create`])
-/// and, if so, decodes its sell token, receiver, and total sell amount
-/// (`partSellAmount * n`) from `staticInput`. `None` if `tx` isn't a
-/// recognized TWAP `create` call, `staticInput` isn't shaped as expected, or
-/// the multiplication overflows (implausible in practice, but left
-/// unguessed rather than wrapping) — either way the caller treats that as
-/// inconclusive, not denied.
-fn twap_order_terms(tx: &SafeTransaction) -> Option<(Address, Address, U256)> {
+/// Recognizes `tx` as a TWAP `createWithContext` call (same rules as
+/// [`is_twap_create`]) and, if so, decodes its sell token, receiver, total
+/// sell amount (`partSellAmount * n`), and `n` itself from `staticInput`.
+/// `None` if `tx` isn't a recognized TWAP `createWithContext` call,
+/// `staticInput` isn't shaped as expected, or the multiplication overflows
+/// (implausible in practice, but left unguessed rather than wrapping) —
+/// either way the caller treats that as inconclusive, not denied.
+fn twap_order_terms(tx: &SafeTransaction) -> Option<(Address, Address, U256, U256)> {
     if tx.operation != Operation::Call || !tx.value.is_zero() || tx.to != COMPOSABLE_COW {
         return None;
     };
-    let create = createCall::abi_decode(&tx.data).ok()?;
-    if create.params.handler != TWAP_HANDLER {
+    let create = createWithContextCall::abi_decode(&tx.data).ok()?;
+    if create.params.handler != TWAP_HANDLER || create.factory != CURRENT_BLOCK_TIMESTAMP_FACTORY {
         return None;
     };
     let order = TwapData::abi_decode(&create.params.staticInput).ok()?;
     let total = order.partSellAmount.checked_mul(order.n)?;
-    Some((order.sellToken, order.receiver, total))
+    Some((order.sellToken, order.receiver, total, order.n))
+}
+
+/// The most a genuine `approve` may exceed a TWAP order's own
+/// `partSellAmount * n` total by and still be considered an exact match:
+/// the Safe app computes `partSellAmount` as `floor(desired_total / n)`, so
+/// up to `n - 1` units of whatever total the user actually approved get
+/// truncated away and never show up in `partSellAmount * n`. Sized off the
+/// order's own `n` rather than a fixed amount or percentage, since neither
+/// this checker nor the order itself knows the sell token's decimals or
+/// value.
+fn max_approval_for_twap_total(total_sell_amount: U256, n: U256) -> U256 {
+    total_sell_amount.saturating_add(n.saturating_sub(U256::from(1)))
 }
 
 /// The referenced order's UID, if `tx` is a plain, valueless `CALL` to
@@ -712,7 +758,23 @@ mod tests {
         part_sell_amount: U256,
         n: U256,
     ) -> Vec<u8> {
-        createCall {
+        twap_create_data_with_factory(
+            sell_token,
+            receiver,
+            part_sell_amount,
+            n,
+            CURRENT_BLOCK_TIMESTAMP_FACTORY,
+        )
+    }
+
+    fn twap_create_data_with_factory(
+        sell_token: Address,
+        receiver: Address,
+        part_sell_amount: U256,
+        n: U256,
+        factory: Address,
+    ) -> Vec<u8> {
+        createWithContextCall {
             params: ConditionalOrderParams {
                 handler: TWAP_HANDLER,
                 salt: B256::ZERO,
@@ -732,6 +794,8 @@ mod tests {
                     .abi_encode(),
                 ),
             },
+            factory,
+            data: Bytes::new(),
             dispatch: true,
         }
         .abi_encode()
@@ -831,6 +895,43 @@ mod tests {
     #[tokio::test]
     async fn denies_when_the_approval_exceeds_the_twap_order() {
         let approve = approve_amount_data(GP_V2_VAULT_RELAYER, U256::from(1_000u64));
+        let create = twap_create_data(U256::from(10u64), U256::from(3u64));
+        let data = multisend(&[
+            pack(Operation::Call, TOKEN, &approve),
+            pack(Operation::Call, COMPOSABLE_COW, &create),
+        ]);
+        assert_eq!(
+            check(&tx(MULTI_SEND, data.into(), Operation::DelegateCall)).await,
+            Verdict::Insecure {
+                rule: RuleId::R4_5ExcessiveApproval
+            }
+        );
+    }
+
+    #[tokio::test]
+    async fn approves_when_the_approval_exceeds_the_total_by_less_than_n() {
+        // The Safe app computes `partSellAmount` as `floor(desired_total /
+        // n)`, so an approval for the user's actual (un-truncated) desired
+        // total can exceed `partSellAmount * n` by up to `n - 1` — here,
+        // `n = 3`, so `total + 2` is still within the rounding remainder,
+        // not real over-authorization.
+        let approve = approve_amount_data(GP_V2_VAULT_RELAYER, U256::from(32u64));
+        let create = twap_create_data(U256::from(10u64), U256::from(3u64));
+        let data = multisend(&[
+            pack(Operation::Call, TOKEN, &approve),
+            pack(Operation::Call, COMPOSABLE_COW, &create),
+        ]);
+        assert_eq!(
+            check(&tx(MULTI_SEND, data.into(), Operation::DelegateCall)).await,
+            Verdict::Secure
+        );
+    }
+
+    #[tokio::test]
+    async fn denies_when_the_approval_exceeds_the_total_by_n_or_more() {
+        // One more unit than the maximum possible rounding remainder
+        // (`n - 1 = 2`) is no longer explainable by truncation alone.
+        let approve = approve_amount_data(GP_V2_VAULT_RELAYER, U256::from(33u64));
         let create = twap_create_data(U256::from(10u64), U256::from(3u64));
         let data = multisend(&[
             pack(Operation::Call, TOKEN, &approve),
@@ -968,15 +1069,42 @@ mod tests {
     #[tokio::test]
     async fn denies_when_batch_targets_an_unrecognized_create_handler() {
         let approve = approve_data(GP_V2_VAULT_RELAYER);
-        let create = createCall {
+        let create = createWithContextCall {
             params: ConditionalOrderParams {
                 handler: Address::new([7u8; 20]),
                 salt: B256::ZERO,
                 staticInput: Bytes::new(),
             },
+            factory: CURRENT_BLOCK_TIMESTAMP_FACTORY,
+            data: Bytes::new(),
             dispatch: true,
         }
         .abi_encode();
+        let data = multisend(&[
+            pack(Operation::Call, TOKEN, &approve),
+            pack(Operation::Call, COMPOSABLE_COW, &create),
+        ]);
+        assert_eq!(
+            check(&tx(MULTI_SEND, data.into(), Operation::DelegateCall)).await,
+            Verdict::Insecure {
+                rule: RuleId::R4_4AuthorizationTarget
+            }
+        );
+    }
+
+    #[tokio::test]
+    async fn denies_when_the_twap_create_uses_an_unrecognized_factory() {
+        // Even with the canonical handler, a `factory` other than the
+        // canonical `CurrentBlockTimestampFactory` isn't the expected
+        // pattern — treated the same as an unrecognized handler.
+        let approve = approve_amount_data(GP_V2_VAULT_RELAYER, U256::from(30u64));
+        let create = twap_create_data_with_factory(
+            TOKEN,
+            SAFE,
+            U256::from(10u64),
+            U256::from(3u64),
+            Address::new([7u8; 20]),
+        );
         let data = multisend(&[
             pack(Operation::Call, TOKEN, &approve),
             pack(Operation::Call, COMPOSABLE_COW, &create),
@@ -1024,12 +1152,14 @@ mod tests {
     #[tokio::test]
     async fn denies_when_the_twap_create_trigger_is_a_delegatecall() {
         let approve = approve_data(GP_V2_VAULT_RELAYER);
-        let create = createCall {
+        let create = createWithContextCall {
             params: ConditionalOrderParams {
                 handler: TWAP_HANDLER,
                 salt: B256::ZERO,
                 staticInput: Bytes::new(),
             },
+            factory: CURRENT_BLOCK_TIMESTAMP_FACTORY,
+            data: Bytes::new(),
             dispatch: true,
         }
         .abi_encode();
@@ -1079,12 +1209,14 @@ mod tests {
     #[tokio::test]
     async fn denies_when_the_twap_create_trigger_carries_native_value() {
         let approve = approve_data(GP_V2_VAULT_RELAYER);
-        let create = createCall {
+        let create = createWithContextCall {
             params: ConditionalOrderParams {
                 handler: TWAP_HANDLER,
                 salt: B256::ZERO,
                 staticInput: Bytes::new(),
             },
+            factory: CURRENT_BLOCK_TIMESTAMP_FACTORY,
+            data: Bytes::new(),
             dispatch: true,
         }
         .abi_encode();
