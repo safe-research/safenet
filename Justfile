@@ -93,6 +93,10 @@ devnet *args:
 test-integration-sentinel:
     ./scripts/run_sentinel_integration_test.sh
 
+# Rust sentinel engine integration test (requires an external test-vector checkout).
+test-integration-sentinel-engine test-vectors:
+    TEST_VECTORS="{{test-vectors}}" ./scripts/run_sentinel_engine_integration_test.sh
+
 # Rust validator bash integration test (Anvil + two validator instances).
 test-integration-validator:
     ./scripts/run_validator_integration_test.sh
