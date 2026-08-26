@@ -250,6 +250,7 @@ mod tests {
         let asserter = Asserter::new();
 
         asserter.push_success(&block(1000));
+        asserter.push_success(&block(997));
         asserter.push_success(&block(998));
         asserter.push_success(&block(999));
         let mut watcher = watcher(
@@ -347,6 +348,8 @@ mod tests {
     async fn recovers_from_an_uncled_block_with_unavailable_logs() {
         let asserter = Asserter::new();
         asserter.push_success(&block(1000));
+        // The anchor block (999, since `max_reorg_depth` is set to 1 below).
+        asserter.push_success(&block(999));
 
         let mut watcher = watcher(
             &asserter,
