@@ -79,6 +79,19 @@ pub mod multi_send {
     }
 }
 
+pub mod staking {
+    alloy::sol! {
+        function stake(address validator, uint256 amount);
+
+        /// Safe Foundation's cumulative-claim staking-rewards distributor.
+        /// `account` is who the claimed SAFE tokens are paid out to (an
+        /// event topic on the real contract, confirmed independently of this
+        /// codebase) — not necessarily `msg.sender`, since anyone may submit
+        /// a valid proof on an account's behalf.
+        function claim(address account, uint256 cumulativeAmount, bytes32 expectedMerkleRoot, bytes32[] merkleProof);
+    }
+}
+
 pub mod cow {
     alloy::sol! {
         function setPreSignature(bytes orderUid, bool signed);

@@ -164,6 +164,13 @@ pub fn decode_multi_send_call(tx: &SafeTransaction) -> Option<(Vec<SafeTransacti
     Some((sub_txs, allows_delegate_calls))
 }
 
+/// `tx` itself, or, if it's a MultiSend batch, each of its sub-calls.
+pub fn sub_transactions(tx: &SafeTransaction) -> Vec<SafeTransaction> {
+    decode_multi_send_call(tx)
+        .map(|(sub_txs, _)| sub_txs)
+        .unwrap_or_else(|| vec![tx.clone()])
+}
+
 struct Cursor<'a>(&'a [u8]);
 
 impl<'a> Cursor<'a> {

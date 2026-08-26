@@ -74,7 +74,7 @@ use crate::{
         cow::{Order, TwapData, createWithContextCall, setPreSignatureCall},
         erc20::approveCall,
     },
-    contracts::multi_send::decode_multi_send_call,
+    contracts::multi_send::sub_transactions,
     engine::{Operation, RuleId, SafeTransaction, Verdict},
 };
 use alloy::{
@@ -447,13 +447,6 @@ impl Checker for CowChecker {
 
         Verdict::Abstain
     }
-}
-
-/// `tx` itself, or, if it's a MultiSend batch, each of its sub-calls.
-fn sub_transactions(tx: &SafeTransaction) -> Vec<SafeTransaction> {
-    decode_multi_send_call(tx)
-        .map(|(sub_txs, _)| sub_txs)
-        .unwrap_or_else(|| vec![tx.clone()])
 }
 
 /// Only a plain, valueless `CALL` is recognized — a `DELEGATECALL` executes

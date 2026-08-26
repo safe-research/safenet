@@ -7,7 +7,7 @@ mod engine;
 use self::{
     checkers::{
         AddressPoisoningChecker, BaseChecker, BlocklistChecker, CancellationChecker, CowChecker,
-        EscapeHatchChecker, ExcessiveApprovalChecker,
+        EscapeHatchChecker, ExcessiveApprovalChecker, StakingChecker,
     },
     config::Config,
     engine::SentinelEngine,
@@ -55,6 +55,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         Box::new(BlocklistChecker::new(engine_config.blocklist)),
         Box::new(ExcessiveApprovalChecker),
         Box::new(CowChecker::new()),
+        Box::new(StakingChecker),
         Box::new(AddressPoisoningChecker::new(
             provider,
             engine_config.address_poisoning_lookback_blocks,
