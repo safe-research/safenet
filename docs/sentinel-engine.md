@@ -34,7 +34,11 @@ The API currently specifies no authentication or rate limiting. A sentinel and i
 
 ## Configuration
 
-The reference engine reads TOML from `sentinel-engine.toml` by default. Pass a different path with `--config-file`.
+Configure the reference engine by writing a TOML configuration file — see [`crates/sentinel-engine/src/config.rs`](../crates/sentinel-engine/src/config.rs) for the full schema, and copy [`sentinel-engine.sample.toml`](../crates/sentinel-engine/sentinel-engine.sample.toml) as an example to start from. The engine reads `sentinel-engine.toml` by default; pass a different path with `--config-file`.
+
+```sh
+cp crates/sentinel-engine/sentinel-engine.sample.toml sentinel-engine.toml
+```
 
 ```toml
 # RPC used by checks that read onchain state.

@@ -1,0 +1,35 @@
+# Sample configuration for the `sentinel-engine` binary.
+#
+# Copy this file, fill in the deployment-specific values below, and pass it
+# with `--config-file=/path/to/your/sentinel-engine.toml` (the binary defaults
+# to `sentinel-engine.toml` in its working directory if the flag is omitted).
+# See `src/config.rs` for the full schema, and
+# `../../docs/sentinel-engine.md` for an operator's guide to running the
+# reference engine.
+
+# The chain RPC endpoint used by checks that query onchain state. Configure it
+# for the same chain as the transactions sent to this engine.
+rpc = "https://rpc.gnosischain.com"
+
+# Optional: address on which the transaction-checking API listens. Defaults to
+# loopback; bind to all interfaces when a sentinel in another container must
+# reach the engine over a private container network.
+# bind_address = "0.0.0.0:5473"
+
+[engine]
+# Transaction destinations that the blocklist check always considers
+# insecure. This setting is required, but the list may be empty.
+blocklist = []
+
+# Number of recent blocks the address-poisoning check searches for a prior
+# interaction with a candidate address.
+address_poisoning_lookback_blocks = 50000
+
+[observability]
+# The `tracing` env-filter directive controlling log verbosity.
+log_filter = "info"
+
+# Optional: address the Prometheus metrics HTTP listener binds to. Defaults to
+# an ephemeral port on loopback; set this to expose metrics outside a
+# container.
+# metrics_address = "0.0.0.0:3556"
