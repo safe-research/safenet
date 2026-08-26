@@ -67,6 +67,7 @@ Integration tests:
 
 ```sh
 just test-integration-sentinel
+just test-integration-sentinel-engine /path/to/sentinel-test-vectors
 just test-integration-validator
 ```
 

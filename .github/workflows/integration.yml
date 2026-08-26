@@ -6,6 +6,9 @@ on:
     branches:
       - main
 
+permissions:
+  contents: read
+
 jobs:
   integration:
     name: integration (${{ matrix.name }})
@@ -17,14 +20,22 @@ jobs:
         include:
           - name: sentinel
             just-target: test-integration-sentinel
+            just-args: ""
             log-artifact: sentinel-integration-logs
+
+          - name: sentinel-engine
+            just-target: test-integration-sentinel-engine
+            just-args: sentinel-test-vectors
+            log-artifact: sentinel-engine-integration-logs
 
           - name: validator
             just-target: test-integration-validator
+            just-args: ""
             log-artifact: validator-integration-logs
 
           - name: validator-reorg-nonce
             just-target: test-integration-validator-reorg-nonce
+            just-args: ""
             log-artifact: validator-integration-reorg-nonce-logs
 
           - name: validator-deep-reorg
@@ -36,6 +47,13 @@ jobs:
         with:
           submodules: recursive
 
+      - name: Check out sentinel test vectors
+        if: matrix.name == 'sentinel-engine'
+        uses: actions/checkout@v5
+        with:
+          repository: safe-research/sentinel-test-vectors
+          path: sentinel-test-vectors
+
       - uses: foundry-rs/foundry-toolchain@v1
         with:
           # We fix the foundry version because of a formatting bug introduced
@@ -45,7 +63,7 @@ jobs:
 
       - uses: ./.github/actions/install-just
 
-      - run: just ${{ matrix.just-target }}
+      - run: just ${{ matrix.just-target }} ${{ matrix.just-args }}
 
       - name: Upload logs
         if: failure()
