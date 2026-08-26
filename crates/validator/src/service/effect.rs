@@ -7,6 +7,7 @@ use crate::{
         keygen::{KeyShare, Secrets},
         preprocess::Nonces,
     },
+    metrics::{self, EffectKind, Outcome},
     secrets::{SecretStore, nonces::NonceGenerator},
 };
 use alloy::primitives::{Address, B256};
@@ -58,6 +59,19 @@ pub enum Effect {
     ReconcileGroupSecrets {
         groups: BTreeMap<B256, Option<Arc<KeyShare>>>,
     },
+}
+
+impl Effect {
+    fn metric_kind(&self) -> EffectKind {
+        match self {
+            Self::KeyGenSetup { .. } => EffectKind::KeyGenSetup,
+            Self::StartNonceGeneration { .. } => EffectKind::StartNonceGeneration,
+            Self::NonceTree { .. } => EffectKind::NonceTree,
+            Self::RevealNonceCommitments { .. } => EffectKind::RevealNonceCommitments,
+            Self::UseNonce { .. } => EffectKind::UseNonce,
+            Self::ReconcileGroupSecrets { .. } => EffectKind::ReconcileGroupSecrets,
+        }
+    }
 }
 
 /// The result of performing an [`Effect`], resumed into the state machine.
@@ -227,9 +241,14 @@ impl Handler {
 
 impl EffectHandler<Effect, Resume> for Handler {
     async fn perform_effect(&self, effect: Effect) -> Resume {
+        let kind = effect.metric_kind();
         match self.try_perform_effect(effect.clone()).await {
-            Ok(resume) => resume,
+            Ok(resume) => {
+                metrics::effect(kind, Outcome::Success);
+                resume
+            }
             Err(err) => {
+                metrics::effect(kind, Outcome::Failure);
                 tracing::warn!(?effect, %err, "failed to perform effect");
                 Resume::Noop
             }
@@ -253,5 +272,134 @@ where
 {
     fn from(value: E) -> Self {
         Self(value.to_string())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use metrics_util::debugging::{DebugValue, DebuggingRecorder};
+    use sqlx::SqlitePool;
+
+    async fn make_handler() -> (Handler, SqlitePool) {
+        let pool = SqlitePool::connect("sqlite::memory:").await.unwrap();
+        let secrets = SecretStore::new(pool.clone()).await.unwrap();
+        (Handler::new(Address::ZERO, secrets), pool)
+    }
+
+    fn effect_counter<'a>(
+        values: &'a [(
+            metrics_util::CompositeKey,
+            Option<::metrics::Unit>,
+            Option<::metrics::SharedString>,
+            DebugValue,
+        )],
+        effect: &str,
+        result: &str,
+    ) -> &'a DebugValue {
+        &values
+            .iter()
+            .find(|(key, _, _, _)| {
+                key.key().name() == "validator_effects"
+                    && key
+                        .key()
+                        .labels()
+                        .map(|label| (label.key(), label.value()))
+                        .eq([("effect", effect), ("result", result)])
+            })
+            .unwrap()
+            .3
+    }
+
+    #[test]
+    fn every_effect_variant_maps_to_its_stable_kind() {
+        let key_share = Arc::new(KeyShare::dummy());
+        let effects = [
+            (
+                Effect::KeyGenSetup {
+                    group_id: B256::ZERO,
+                    count: 1,
+                    threshold: 1,
+                },
+                EffectKind::KeyGenSetup,
+            ),
+            (
+                Effect::StartNonceGeneration {
+                    group_id: B256::ZERO,
+                    key_share,
+                },
+                EffectKind::StartNonceGeneration,
+            ),
+            (
+                Effect::NonceTree {
+                    group_id: B256::ZERO,
+                },
+                EffectKind::NonceTree,
+            ),
+            (
+                Effect::RevealNonceCommitments {
+                    signature_id: B256::ZERO,
+                    message: B256::ZERO,
+                    root: B256::ZERO,
+                    offset: 0,
+                },
+                EffectKind::RevealNonceCommitments,
+            ),
+            (
+                Effect::UseNonce {
+                    message: B256::ZERO,
+                    root: B256::ZERO,
+                    offset: 0,
+                },
+                EffectKind::UseNonce,
+            ),
+            (
+                Effect::ReconcileGroupSecrets {
+                    groups: BTreeMap::new(),
+                },
+                EffectKind::ReconcileGroupSecrets,
+            ),
+        ];
+
+        for (effect, expected) in effects {
+            assert_eq!(effect.metric_kind(), expected);
+        }
+    }
+
+    #[tokio::test]
+    async fn records_expected_noops_as_success_and_swallowed_errors_as_failure() {
+        let recorder = DebuggingRecorder::new();
+        let _guard = ::metrics::set_default_local_recorder(&recorder);
+
+        let (handler, _pool) = make_handler().await;
+        let resume = handler
+            .perform_effect(Effect::UseNonce {
+                message: B256::ZERO,
+                root: B256::ZERO,
+                offset: 0,
+            })
+            .await;
+        assert!(matches!(resume, Resume::Noop));
+
+        let (handler, pool) = make_handler().await;
+        pool.close().await;
+        let resume = handler
+            .perform_effect(Effect::UseNonce {
+                message: B256::ZERO,
+                root: B256::ZERO,
+                offset: 0,
+            })
+            .await;
+        assert!(matches!(resume, Resume::Noop));
+
+        let values = recorder.snapshotter().snapshot().into_vec();
+        assert_eq!(
+            effect_counter(&values, "use_nonce", "success"),
+            &DebugValue::Counter(1)
+        );
+        assert_eq!(
+            effect_counter(&values, "use_nonce", "failure"),
+            &DebugValue::Counter(1)
+        );
     }
 }

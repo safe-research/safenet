@@ -1,0 +1,174 @@
+# Validator Metrics Port
+
+This document describes the agreed scope and semantics for porting the former TypeScript validator's Prometheus metrics to the Rust validator. It is intended as an implementation handoff.
+
+The original metrics capture is available in [`metrics.txt`](./metrics.txt). The Rust services already initialize a Prometheus recorder and HTTP endpoint through `safenet_core::observability`; this work should add instrumentation to the existing exporter rather than introduce another metrics server.
+
+## Metrics to Implement
+
+### `validator_block_number`
+
+- Type: gauge
+- Help: `Block number by processing stage (seen: received from chain, processed: applied to state machine)`
+- Labels:
+    - `status="seen"`
+    - `status="processed"`
+
+Together with `validator_event_index`, this metric represents the validator's chain-processing cursor.
+
+- Record `seen` when the watcher produces a chain update for the driver.
+- Record `processed` after the corresponding update has been successfully applied to the state machine.
+- For a warp/log range, use the last block covered by the update.
+- Gauges must be allowed to move backwards when a reorg rolls the state machine back.
+- Initialize the processed position from the persisted state snapshot when practical so it is meaningful before the first new update.
+
+### `validator_event_index`
+
+- Type: gauge
+- Help: `Event index by processing stage (seen: received from chain, processed: applied to state machine)`
+- Labels:
+    - `status="seen"`
+    - `status="processed"`
+
+This gauge is the event-index component of the cursor represented with `validator_block_number`.
+
+- Use the last relevant decoded log index in the current block.
+- Use `-1` when advancing to a new block, or to the end of a range, without a relevant event in that block.
+- Update the block-number and event-index gauges together so they always describe the same cursor.
+- Record `processed` only after successful state-machine application.
+- Move the processed cursor backwards/reset its event index when applying a reorg.
+
+### `validator_reorgs`
+
+- Type: counter
+- Help: `Number of chain reorgs observed by the validator`
+- Labels: none
+
+Count live chain reorg incidents detected by the block watcher. Do not increment this metric merely because a `BlockUpdate::Uncle` is emitted: the block watcher also emits a synthetic uncle during startup to replay state from its safe rollback anchor. Startup replay is not a newly observed chain reorg.
+
+A deep reorg can invalidate multiple blocks. The metric description is incident-oriented, so one detected reorg should increment the counter once rather than once for every uncled block. If implementation constraints require block-oriented counting, rename and document that metric instead of silently changing this definition.
+
+### `validator_transitions`
+
+- Type: counter vector
+- Help: `Validator state transitions by input kind`
+- Labels:
+    - `kind="block" | "event" | "resume"`
+
+The Rust `StateTransition::apply_transition` contract is deliberately non-fallible: unexpected protocol inputs are handled gracefully and returned as ordinary state. Therefore, do not treat ignored or rejected protocol input as a failed transition.
+
+Record this metric where `StateTransition::apply_transition` is invoked:
+
+- Increment `kind="block"` once for each `Message::NewBlock` application.
+- Increment `kind="event"` once for each individual `Message::Event` application, not merely once per fetched log batch.
+- Increment `kind="resume"` once for each `Message::Resume` application.
+
+Storage, ordering, driver, and effect failures are not failed pure state transitions and must not be reported through this metric. Effect success and failure are covered by `validator_effects`; other operational errors remain visible through logs unless separately instrumented later.
+
+### `validator_rpc_requests`
+
+- Type: counter vector
+- Help: `RPC requests by method and result`
+- Labels:
+    - `method`: JSON-RPC method name
+    - `result="success" | "failure"`
+
+Instrument the shared Alloy transport/provider layer so every JSON-RPC request made by the validator is counted, including startup calls, block and log indexing, contract reads, transaction nonce and fee queries, and raw transaction submission.
+
+Do not hard-code the methods present in `metrics.txt`. The Rust implementation uses a different client and may issue additional methods such as `eth_chainId` and `eth_feeHistory`. The method label must come from the actual outgoing JSON-RPC request.
+
+Count a request as:
+
+- `success` when the JSON-RPC request completes successfully.
+- `failure` when the transport or JSON-RPC request returns an error, including failures that higher layers subsequently retry or otherwise tolerate.
+
+Avoid labels containing URLs, request IDs, addresses, transaction hashes, or other unbounded values.
+
+### `validator_effects`
+
+- Type: counter vector
+- Help: `Validator effects by type and result`
+- Labels:
+    - `effect`
+    - `result="success" | "failure"`
+
+Use these stable `effect` values, corresponding to `validator::service::Effect` variants:
+
+| Effect variant           | Label value                |
+| ------------------------ | -------------------------- |
+| `KeyGenSetup`            | `key_gen_setup`            |
+| `StartNonceGeneration`   | `start_nonce_generation`   |
+| `NonceTree`              | `nonce_tree`               |
+| `RevealNonceCommitments` | `reveal_nonce_commitments` |
+| `UseNonce`               | `use_nonce`                |
+| `ReconcileGroupSecrets`  | `reconcile_group_secrets`  |
+
+Record exactly once for each completed effect attempt at the effect-handler boundary:
+
+- Increment `success` when `try_perform_effect` returns `Ok`, including expected no-op outcomes such as an already-running duplicate nonce-tree request or a nonce that is no longer available.
+- Increment `failure` when `try_perform_effect` returns `Err`, before the public `perform_effect` method logs the error and converts it into `Resume::Noop`.
+
+This placement is important because effect failures are currently intentionally swallowed after logging; recording after conversion would incorrectly classify failures as successful no-ops.
+
+## Metrics Explicitly Out of Scope
+
+Do not implement the following metrics as part of this work:
+
+- `validator_transaction_checks`: the Rust validator no longer performs the TypeScript validator's Safe transaction policy checks. It verifies the configured oracle identity and relies on the oracle result. Transaction check/verdict metrics belong to the sentinel engine. If proposal admission needs instrumentation later, use a separately named metric rather than reusing this one with narrower semantics.
+- `validator_frost_group_cleanups`: remove this metric entirely. Group and secret reconciliation is sufficiently covered as the `reconcile_group_secrets` effect in `validator_effects`.
+- Every `validator_process_*` metric: process CPU, memory, start time, and file-descriptor metrics are collected separately.
+- Every `validator_nodejs_*` metric: these are specific to the retired Node.js implementation.
+- Tokio runtime metrics: these are planned separately and are not part of this port.
+
+## Implementation Placement
+
+Prefer typed metric accessor functions, following the pattern in `crates/sentinel/src/metrics.rs`, so metric names and label sets are defined in one place rather than repeated as raw strings throughout the code.
+
+Likely instrumentation locations:
+
+- `crates/core/src/index/blocks.rs`: distinguish live reorg detection from synthetic startup rollback.
+- `crates/core/src/driver.rs` and `crates/core/src/state/mod.rs`: seen/processed cursors and transition outcomes.
+- `crates/core/src/provider/mod.rs` or the underlying Alloy transport construction: RPC request outcomes.
+- `crates/validator/src/service/effect.rs`: effect type and outcome.
+- `crates/core/src/observability/metrics.rs`: existing Prometheus exporter; reuse it rather than adding a second listener or registry.
+
+The indexer, driver, state machine, provider, and transaction queue are shared with other Safenet services. Keep shared instrumentation reusable, but ensure the exposed names agreed above remain validator metrics when scraped from the validator. Avoid accidentally emitting misleading `validator_*` metrics from another service process without an explicit naming/ownership decision.
+
+## Naming and Registration
+
+The names in this document intentionally preserve the former validator metric names for compatibility. Use the names exactly as listed unless compatibility is explicitly reconsidered.
+
+The current `metrics` facade registers metrics lazily. Register or describe metrics during initialization if necessary to ensure expected metric families and HELP text appear before their first event, especially failure-labeled counters that may otherwise be absent during healthy operation.
+
+All label sets must remain bounded. In particular:
+
+- `status`: exactly `seen` or `processed`.
+- `result`: exactly `success` or `failure`.
+- `kind`: exactly `block`, `event`, or `resume`.
+- `effect`: exactly one of the six values listed above.
+- `method`: the finite set of JSON-RPC methods actually used by the process.
+
+## Verification
+
+Add tests alongside the affected components. At minimum, verify:
+
+- Seen and processed cursors update at the intended stages, including empty log ranges.
+- Cursor gauges move/reset correctly during a reorg.
+- Synthetic startup rollback does not increment `validator_reorgs`.
+- A multi-block reorg follows the chosen incident-counting semantics.
+- Every applied state-machine message increments exactly one documented transition kind.
+- Successful and failed RPC calls receive the correct method/result labels, including retried failures.
+- Every effect variant maps to its documented label.
+- Effect errors increment `failure` even though they are converted to `Resume::Noop`.
+- Expected effect no-ops increment `success`.
+- No removed process, Node.js, transaction-check, or FROST-cleanup metrics are exposed.
+
+Follow the repository's Rust checks after implementation:
+
+```sh
+cargo fmt --all
+cargo clippy --package safenet-core
+cargo clippy --package validator
+cargo test --package safenet-core
+cargo test --package validator
+```

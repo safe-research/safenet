@@ -21,6 +21,7 @@ use crate::{
         sign::RevealedNonces,
     },
     merkle::MerkleRoot,
+    metrics::{self, TransitionKind},
     service::{Action, Effect, Event, Resume},
 };
 use alloy::primitives::{Address, B256, Bytes};
@@ -410,6 +411,12 @@ impl StateTransition<State> for Transition {
         state: State,
         message: Message<Self::Event, Self::Resume>,
     ) -> (State, Commands<State, Self>) {
+        metrics::transition(match &message {
+            Message::NewBlock(_) => TransitionKind::Block,
+            Message::Event(_) => TransitionKind::Event,
+            Message::Resume(_) => TransitionKind::Resume,
+        });
+
         match message {
             Message::Event(log) => match log.data {
                 Event::Coordinator(Coordinator::CoordinatorEvents::KeyGen(event)) => {

@@ -101,6 +101,12 @@ where
         self.blocks.status()
     }
 
+    /// Returns whether the block watcher detected a new live reorg incident
+    /// since this was last called.
+    pub fn take_reorg_incident(&mut self) -> bool {
+        self.blocks.take_reorg_incident()
+    }
+
     /// Fetches the next batch of logs, recovering from a node that exposed a
     /// block it then cannot serve logs for by checking whether it was uncled.
     async fn next_logs(&mut self) -> Result<Option<EventUpdate<E>>, Error> {

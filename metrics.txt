@@ -1,0 +1,236 @@
+# HELP validator_block_number Block number by processing stage (seen: received from chain, processed: applied to state machine)
+# TYPE validator_block_number gauge
+validator_block_number{status="seen"} 47918937
+validator_block_number{status="processed"} 47918937
+
+# HELP validator_event_index Event index by processing stage (seen: received from chain, processed: applied to state machine)
+# TYPE validator_event_index gauge
+validator_event_index{status="seen"} 33
+validator_event_index{status="processed"} 33
+
+# HELP validator_reorgs Number of chain reorgs observed by the validator
+# TYPE validator_reorgs counter
+validator_reorgs 45
+
+# HELP validator_transitions Validator state transitions
+# TYPE validator_transitions counter
+validator_transitions{result="success"} 2625282
+validator_transitions{result="failure"} 4292
+
+# HELP validator_rpc_requests RPC requests by method and result
+# TYPE validator_rpc_requests counter
+validator_rpc_requests{method="eth_call",result="success"} 1
+validator_rpc_requests{method="eth_getBlockByNumber",result="success"} 895176
+validator_rpc_requests{method="eth_getLogs",result="success"} 313718
+validator_rpc_requests{method="eth_getTransactionCount",result="success"} 456251
+validator_rpc_requests{method="eth_maxPriorityFeePerGas",result="success"} 164478
+validator_rpc_requests{method="eth_sendRawTransaction",result="success"} 281839
+validator_rpc_requests{method="eth_sendRawTransaction",result="failure"} 625
+validator_rpc_requests{method="eth_getLogs",result="failure"} 56346
+validator_rpc_requests{method="eth_getBlockByNumber",result="failure"} 34598
+validator_rpc_requests{method="eth_getTransactionCount",result="failure"} 1
+
+# HELP validator_transaction_checks Checked transactions by result
+# TYPE validator_transaction_checks counter
+validator_transaction_checks{result="success"} 127759
+validator_transaction_checks{result="no_delegatecall"} 3989
+validator_transaction_checks{result="unsupported_module"} 269
+validator_transaction_checks{result="invalid_self_call"} 34
+validator_transaction_checks{result="invalid_create_call"} 4
+validator_transaction_checks{result="unsupported_guard"} 8
+validator_transaction_checks{result="unsupported_fallback_handler"} 2
+validator_transaction_checks{result="unsupported_module_guard"} 11
+
+# HELP validator_frost_group_cleanups FROST group unregistrations during epoch cleanup by result
+# TYPE validator_frost_group_cleanups counter
+validator_frost_group_cleanups{result="success"} 300
+
+# HELP validator_process_cpu_user_seconds_total Total user CPU time spent in seconds.
+# TYPE validator_process_cpu_user_seconds_total counter
+validator_process_cpu_user_seconds_total 218553.87852100033
+
+# HELP validator_process_cpu_system_seconds_total Total system CPU time spent in seconds.
+# TYPE validator_process_cpu_system_seconds_total counter
+validator_process_cpu_system_seconds_total 38911.5580269995
+
+# HELP validator_process_cpu_seconds_total Total user and system CPU time spent in seconds.
+# TYPE validator_process_cpu_seconds_total counter
+validator_process_cpu_seconds_total 257465.4365479989
+
+# HELP validator_process_start_time_seconds Start time of the process since unix epoch in seconds.
+# TYPE validator_process_start_time_seconds gauge
+validator_process_start_time_seconds 1785483836
+
+# HELP validator_process_resident_memory_bytes Resident memory size in bytes.
+# TYPE validator_process_resident_memory_bytes gauge
+validator_process_resident_memory_bytes 369164288
+
+# HELP validator_process_virtual_memory_bytes Virtual memory size in bytes.
+# TYPE validator_process_virtual_memory_bytes gauge
+validator_process_virtual_memory_bytes 10640625664
+
+# HELP validator_process_heap_bytes Process heap size in bytes.
+# TYPE validator_process_heap_bytes gauge
+validator_process_heap_bytes 962682880
+
+# HELP validator_process_open_fds Number of open file descriptors.
+# TYPE validator_process_open_fds gauge
+validator_process_open_fds 21
+
+# HELP validator_process_max_fds Maximum number of open file descriptors.
+# TYPE validator_process_max_fds gauge
+validator_process_max_fds 524288
+
+# HELP validator_nodejs_eventloop_lag_seconds Lag of event loop in seconds.
+# TYPE validator_nodejs_eventloop_lag_seconds gauge
+validator_nodejs_eventloop_lag_seconds 0.001982496
+
+# HELP validator_nodejs_eventloop_lag_min_seconds The minimum recorded event loop delay.
+# TYPE validator_nodejs_eventloop_lag_min_seconds gauge
+validator_nodejs_eventloop_lag_min_seconds 0.009158656
+
+# HELP validator_nodejs_eventloop_lag_max_seconds The maximum recorded event loop delay.
+# TYPE validator_nodejs_eventloop_lag_max_seconds gauge
+validator_nodejs_eventloop_lag_max_seconds 0.460849151
+
+# HELP validator_nodejs_eventloop_lag_mean_seconds The mean of the recorded event loop delays.
+# TYPE validator_nodejs_eventloop_lag_mean_seconds gauge
+validator_nodejs_eventloop_lag_mean_seconds 0.011174043202635915
+
+# HELP validator_nodejs_eventloop_lag_stddev_seconds The standard deviation of the recorded event loop delays.
+# TYPE validator_nodejs_eventloop_lag_stddev_seconds gauge
+validator_nodejs_eventloop_lag_stddev_seconds 0.019708135113249377
+
+# HELP validator_nodejs_eventloop_lag_p50_seconds The 50th percentile of the recorded event loop delays.
+# TYPE validator_nodejs_eventloop_lag_p50_seconds gauge
+validator_nodejs_eventloop_lag_p50_seconds 0.010133503
+
+# HELP validator_nodejs_eventloop_lag_p90_seconds The 90th percentile of the recorded event loop delays.
+# TYPE validator_nodejs_eventloop_lag_p90_seconds gauge
+validator_nodejs_eventloop_lag_p90_seconds 0.010166271
+
+# HELP validator_nodejs_eventloop_lag_p99_seconds The 99th percentile of the recorded event loop delays.
+# TYPE validator_nodejs_eventloop_lag_p99_seconds gauge
+validator_nodejs_eventloop_lag_p99_seconds 0.010264575
+
+# HELP validator_nodejs_active_resources Number of active resources that are currently keeping the event loop alive, grouped by async resource type.
+# TYPE validator_nodejs_active_resources gauge
+validator_nodejs_active_resources{type="PipeWrap"} 2
+validator_nodejs_active_resources{type="TCPServerWrap"} 1
+validator_nodejs_active_resources{type="TCPSocketWrap"} 1
+validator_nodejs_active_resources{type="Timeout"} 1
+validator_nodejs_active_resources{type="Immediate"} 1
+
+# HELP validator_nodejs_active_resources_total Total number of active resources.
+# TYPE validator_nodejs_active_resources_total gauge
+validator_nodejs_active_resources_total 6
+
+# HELP validator_nodejs_active_handles Number of active libuv handles grouped by handle type. Every handle type is C++ class name.
+# TYPE validator_nodejs_active_handles gauge
+validator_nodejs_active_handles{type="Socket"} 3
+validator_nodejs_active_handles{type="Server"} 1
+
+# HELP validator_nodejs_active_handles_total Total number of active handles.
+# TYPE validator_nodejs_active_handles_total gauge
+validator_nodejs_active_handles_total 4
+
+# HELP validator_nodejs_active_requests Number of active libuv requests grouped by request type. Every request type is C++ class name.
+# TYPE validator_nodejs_active_requests gauge
+
+# HELP validator_nodejs_active_requests_total Total number of active requests.
+# TYPE validator_nodejs_active_requests_total gauge
+validator_nodejs_active_requests_total 0
+
+# HELP validator_nodejs_heap_size_total_bytes Process heap size from Node.js in bytes.
+# TYPE validator_nodejs_heap_size_total_bytes gauge
+validator_nodejs_heap_size_total_bytes 93790208
+
+# HELP validator_nodejs_heap_size_used_bytes Process heap size used from Node.js in bytes.
+# TYPE validator_nodejs_heap_size_used_bytes gauge
+validator_nodejs_heap_size_used_bytes 83384624
+
+# HELP validator_nodejs_external_memory_bytes Node.js external memory size in bytes.
+# TYPE validator_nodejs_external_memory_bytes gauge
+validator_nodejs_external_memory_bytes 4234568
+
+# HELP validator_nodejs_heap_space_size_total_bytes Process heap space size total from Node.js in bytes.
+# TYPE validator_nodejs_heap_space_size_total_bytes gauge
+validator_nodejs_heap_space_size_total_bytes{space="read_only"} 0
+validator_nodejs_heap_space_size_total_bytes{space="new"} 2097152
+validator_nodejs_heap_space_size_total_bytes{space="old"} 59359232
+validator_nodejs_heap_space_size_total_bytes{space="code"} 6553600
+validator_nodejs_heap_space_size_total_bytes{space="shared"} 0
+validator_nodejs_heap_space_size_total_bytes{space="trusted"} 6119424
+validator_nodejs_heap_space_size_total_bytes{space="shared_trusted"} 0
+validator_nodejs_heap_space_size_total_bytes{space="new_large_object"} 5562368
+validator_nodejs_heap_space_size_total_bytes{space="large_object"} 13934592
+validator_nodejs_heap_space_size_total_bytes{space="code_large_object"} 163840
+validator_nodejs_heap_space_size_total_bytes{space="shared_large_object"} 0
+validator_nodejs_heap_space_size_total_bytes{space="shared_trusted_large_object"} 0
+validator_nodejs_heap_space_size_total_bytes{space="trusted_large_object"} 0
+
+# HELP validator_nodejs_heap_space_size_used_bytes Process heap space size used from Node.js in bytes.
+# TYPE validator_nodejs_heap_space_size_used_bytes gauge
+validator_nodejs_heap_space_size_used_bytes{space="read_only"} 0
+validator_nodejs_heap_space_size_used_bytes{space="new"} 326544
+validator_nodejs_heap_space_size_used_bytes{space="old"} 53021712
+validator_nodejs_heap_space_size_used_bytes{space="code"} 5312000
+validator_nodejs_heap_space_size_used_bytes{space="shared"} 0
+validator_nodejs_heap_space_size_used_bytes{space="trusted"} 5101304
+validator_nodejs_heap_space_size_used_bytes{space="shared_trusted"} 0
+validator_nodejs_heap_space_size_used_bytes{space="new_large_object"} 5560240
+validator_nodejs_heap_space_size_used_bytes{space="large_object"} 13902728
+validator_nodejs_heap_space_size_used_bytes{space="code_large_object"} 163584
+validator_nodejs_heap_space_size_used_bytes{space="shared_large_object"} 0
+validator_nodejs_heap_space_size_used_bytes{space="shared_trusted_large_object"} 0
+validator_nodejs_heap_space_size_used_bytes{space="trusted_large_object"} 0
+
+# HELP validator_nodejs_heap_space_size_available_bytes Process heap space size available from Node.js in bytes.
+# TYPE validator_nodejs_heap_space_size_available_bytes gauge
+validator_nodejs_heap_space_size_available_bytes{space="read_only"} 0
+validator_nodejs_heap_space_size_available_bytes{space="new"} 721968
+validator_nodejs_heap_space_size_available_bytes{space="old"} 6078336
+validator_nodejs_heap_space_size_available_bytes{space="code"} 1240800
+validator_nodejs_heap_space_size_available_bytes{space="shared"} 0
+validator_nodejs_heap_space_size_available_bytes{space="trusted"} 1006632
+validator_nodejs_heap_space_size_available_bytes{space="shared_trusted"} 0
+validator_nodejs_heap_space_size_available_bytes{space="new_large_object"} 280
+validator_nodejs_heap_space_size_available_bytes{space="large_object"} 0
+validator_nodejs_heap_space_size_available_bytes{space="code_large_object"} 0
+validator_nodejs_heap_space_size_available_bytes{space="shared_large_object"} 0
+validator_nodejs_heap_space_size_available_bytes{space="shared_trusted_large_object"} 0
+validator_nodejs_heap_space_size_available_bytes{space="trusted_large_object"} 0
+
+# HELP validator_nodejs_version_info Node.js version info.
+# TYPE validator_nodejs_version_info gauge
+validator_nodejs_version_info{version="v24.16.0",major="24",minor="16",patch="0"} 1
+
+# HELP validator_nodejs_gc_duration_seconds Garbage collection duration by kind, one of major, minor, incremental or weakcb.
+# TYPE validator_nodejs_gc_duration_seconds histogram
+validator_nodejs_gc_duration_seconds_bucket{le="0.001",kind="minor"} 135684
+validator_nodejs_gc_duration_seconds_bucket{le="0.01",kind="minor"} 805227
+validator_nodejs_gc_duration_seconds_bucket{le="0.1",kind="minor"} 806027
+validator_nodejs_gc_duration_seconds_bucket{le="1",kind="minor"} 806027
+validator_nodejs_gc_duration_seconds_bucket{le="2",kind="minor"} 806027
+validator_nodejs_gc_duration_seconds_bucket{le="5",kind="minor"} 806027
+validator_nodejs_gc_duration_seconds_bucket{le="+Inf",kind="minor"} 806027
+validator_nodejs_gc_duration_seconds_sum{kind="minor"} 1356.7149645512277
+validator_nodejs_gc_duration_seconds_count{kind="minor"} 806027
+validator_nodejs_gc_duration_seconds_bucket{le="0.001",kind="major"} 0
+validator_nodejs_gc_duration_seconds_bucket{le="0.01",kind="major"} 54392
+validator_nodejs_gc_duration_seconds_bucket{le="0.1",kind="major"} 85261
+validator_nodejs_gc_duration_seconds_bucket{le="1",kind="major"} 85261
+validator_nodejs_gc_duration_seconds_bucket{le="2",kind="major"} 85261
+validator_nodejs_gc_duration_seconds_bucket{le="5",kind="major"} 85261
+validator_nodejs_gc_duration_seconds_bucket{le="+Inf",kind="major"} 85261
+validator_nodejs_gc_duration_seconds_sum{kind="major"} 816.3932430562953
+validator_nodejs_gc_duration_seconds_count{kind="major"} 85261
+validator_nodejs_gc_duration_seconds_bucket{le="0.001",kind="incremental"} 3400
+validator_nodejs_gc_duration_seconds_bucket{le="0.01",kind="incremental"} 4463
+validator_nodejs_gc_duration_seconds_bucket{le="0.1",kind="incremental"} 4463
+validator_nodejs_gc_duration_seconds_bucket{le="1",kind="incremental"} 4463
+validator_nodejs_gc_duration_seconds_bucket{le="2",kind="incremental"} 4463
+validator_nodejs_gc_duration_seconds_bucket{le="5",kind="incremental"} 4463
+validator_nodejs_gc_duration_seconds_bucket{le="+Inf",kind="incremental"} 4463
+validator_nodejs_gc_duration_seconds_sum{kind="incremental"} 4.905804284095765
+validator_nodejs_gc_duration_seconds_count{kind="incremental"} 4463

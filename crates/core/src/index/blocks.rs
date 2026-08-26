@@ -158,6 +158,11 @@ pub struct BlockWatcher {
     /// detection. Ordered oldest-first.
     recent: VecDeque<BlockHeader>,
     queue: VecDeque<BlockUpdate>,
+    /// Whether successive invalidated blocks belong to an active reorg.
+    reorg_in_progress: bool,
+    /// Set once when a new live reorg incident is detected, until consumed by
+    /// the driver. Synthetic startup rollback never sets this flag.
+    reorg_incident: bool,
 }
 
 impl BlockWatcher {
@@ -184,6 +189,8 @@ impl BlockWatcher {
             clock: Clock::start(),
             recent: VecDeque::new(),
             queue: VecDeque::new(),
+            reorg_in_progress: false,
+            reorg_incident: false,
         };
         watcher.initialize(indexed).await?;
         Ok(watcher)
@@ -282,6 +289,7 @@ impl BlockWatcher {
             } else {
                 // Reorg observed mid-init: discard and re-query the range. We
                 // will also need to re-fetch `latest`, as it may have been uncled.
+                self.begin_reorg();
                 tracing::debug!(
                     number,
                     "reorg observed during initialization, restarting range scan"
@@ -319,6 +327,11 @@ impl BlockWatcher {
             });
         }
 
+        // Initialization has now reached a stable canonical range. Preserve
+        // the incident notification, but allow a later live reorg to begin a
+        // distinct incident.
+        self.reorg_in_progress = false;
+
         Ok(())
     }
 
@@ -338,6 +351,12 @@ impl BlockWatcher {
                 .unwrap_or(self.pending.number)
                 .saturating_sub(1),
         }
+    }
+
+    /// Returns whether a new live reorg incident was detected since this was
+    /// last called.
+    pub fn take_reorg_incident(&mut self) -> bool {
+        std::mem::take(&mut self.reorg_incident)
     }
 
     /// Retrieves the next block update from the watcher. This will block and
@@ -381,6 +400,7 @@ impl BlockWatcher {
             .recent
             .pop_back_if(|last| last.hash != block.parent_hash)
         {
+            self.begin_reorg();
             self.pending = PendingBlock {
                 number: last.number,
                 timestamp_ms: last.timestamp * 1000,
@@ -397,6 +417,7 @@ impl BlockWatcher {
 
         // Record the new block, keeping at most `max_reorg_depth` recent blocks,
         // and advance the pending block.
+        self.reorg_in_progress = false;
         self.update_next_pending_block(block.number, block.timestamp);
         self.recent.push_back(block);
         // TODO: This should be replaced by `VecDeque::truncate_front` once the
@@ -454,12 +475,13 @@ impl BlockWatcher {
             number: last.number,
             hash: last.hash,
         };
+        let timestamp = last.timestamp;
         tracing::debug!(
             number = invalidated.number,
             hash = %invalidated.hash,
             "last block no longer canonical, invalidating"
         );
-        let timestamp = last.timestamp;
+        self.begin_reorg();
         self.recent.truncate(last_index);
         self.pending = PendingBlock {
             number: invalidated.number,
@@ -473,6 +495,15 @@ impl BlockWatcher {
         });
 
         Ok(Some(invalidated))
+    }
+
+    /// Marks a live reorg as detected, emitting one incident notification for
+    /// any number of successively invalidated blocks.
+    fn begin_reorg(&mut self) {
+        if !self.reorg_in_progress {
+            self.reorg_in_progress = true;
+            self.reorg_incident = true;
+        }
     }
 
     /// Updates the pending block to follow the given latest block.
@@ -612,6 +643,7 @@ mod tests {
                 new_block_update(&block(1000)),
             ]
         );
+        assert!(!blocks.take_reorg_incident());
         assert!(asserter.read_q().is_empty());
     }
 
@@ -943,15 +975,19 @@ mod tests {
             blocks.next().await.unwrap(),
             BlockUpdate::Uncle { number: 1000 }
         );
+        assert!(blocks.take_reorg_incident());
         assert_eq!(
             blocks.next().await.unwrap(),
             BlockUpdate::Uncle { number: 999 }
         );
+        assert!(!blocks.take_reorg_incident());
         assert_eq!(
             blocks.next().await.unwrap(),
             BlockUpdate::Uncle { number: 998 }
         );
+        assert!(!blocks.take_reorg_incident());
         assert_eq!(blocks.next().await.unwrap(), new_block_update(&reorg_998));
+        assert!(!blocks.take_reorg_incident());
         assert_eq!(
             blocks.next().await.unwrap(),
             new_block_update(&canonical_999)
@@ -983,6 +1019,7 @@ mod tests {
             blocks.revalidate_last_block().await.unwrap(),
             Some(invalidated_block(&block(1000)))
         );
+        assert!(blocks.take_reorg_incident());
         assert_eq!(
             blocks.next().await.unwrap(),
             BlockUpdate::Uncle { number: 1000 }

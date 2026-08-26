@@ -89,8 +89,16 @@ impl Service for ValidatorService {
     type Transition = state::Transition;
     type Effects = effect::Handler;
     type Actions = action::Encoder;
+    type Metrics = crate::metrics::Metrics;
 
-    fn components(self) -> (Self::Transition, Self::Effects, Self::Actions) {
+    fn components(
+        self,
+    ) -> (
+        Self::Transition,
+        Self::Effects,
+        Self::Actions,
+        Self::Metrics,
+    ) {
         let ValidatorService {
             account,
             genesis,
@@ -112,6 +120,7 @@ impl Service for ValidatorService {
                 coordinator,
                 consensus: consensus_address,
             },
+            crate::metrics::Metrics,
         )
     }
 }

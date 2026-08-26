@@ -9,7 +9,7 @@
 
 use crate::{
     effects::{EffectHandler, EffectManager},
-    index::{self, Update, Watcher, events::Events},
+    index::{self, BlockStatus, Update, Watcher, events::Events},
     provider::Provider,
     state::{self, StateMachine, StateTransition},
     tx::{self, Signer, Transaction, TransactionQueue},
@@ -41,7 +41,10 @@ pub struct Config {
 #[allow(clippy::large_enum_variant)]
 enum Input<Event, Resume> {
     /// An indexer update.
-    Update(Update<Event>),
+    Update {
+        update: Update<Event>,
+        cursor: ProcessingCursor,
+    },
     /// Resume an effect.
     Resume(Resume),
 }
@@ -68,6 +71,70 @@ pub trait ActionEncoder<Action> {
     fn encode_action(&self, action: Action) -> (Transaction, Option<u64>);
 }
 
+/// Observes the chain-processing lifecycle of a service driver.
+///
+/// Implementations are service-owned so shared driver code can expose metrics
+/// without assigning one service's metric names to every process that uses it.
+pub trait Metrics {
+    /// Initializes metrics from the persisted state snapshot, when one exists.
+    fn initialize(&self, _status: Option<BlockStatus>) {}
+
+    /// Records an update received from the chain watcher.
+    fn update_seen(&self, _cursor: ProcessingCursor) {}
+
+    /// Records an update successfully applied to the state machine.
+    fn update_processed(&self, _cursor: ProcessingCursor) {}
+
+    /// Records a live chain reorg incident detected by the watcher.
+    fn reorg(&self) {}
+}
+
+/// A no-op driver metrics implementation for services without lifecycle
+/// metrics.
+#[derive(Clone, Copy, Debug, Default)]
+pub struct NoopMetrics;
+
+impl Metrics for NoopMetrics {}
+
+/// A validator-independent chain-processing cursor.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct ProcessingCursor {
+    /// Last block covered by an update, or the block before one that was
+    /// uncled.
+    pub block: u64,
+    /// Last decoded event index in `block`, when the update contained one.
+    pub event_index: Option<u64>,
+}
+
+impl ProcessingCursor {
+    fn from_update<Event>(update: &Update<Event>) -> Self {
+        match update {
+            Update::Block(index::BlockUpdate::Warp { to, .. }) => Self {
+                block: *to,
+                event_index: None,
+            },
+            Update::Block(index::BlockUpdate::Uncle { number }) => Self {
+                block: number.saturating_sub(1),
+                event_index: None,
+            },
+            Update::Block(index::BlockUpdate::New { number, .. }) => Self {
+                block: *number,
+                event_index: None,
+            },
+            Update::Logs(update) => {
+                let block = update.blocks.last;
+                let event_index = update
+                    .logs
+                    .iter()
+                    .rev()
+                    .find(|log| log.block == block)
+                    .map(|log| log.index);
+                Self { block, event_index }
+            }
+        }
+    }
+}
+
 /// A Safenet service definition.
 pub trait Service {
     type State: Default + DeserializeOwned + Serialize;
@@ -86,9 +153,17 @@ pub trait Service {
         >;
     type Effects: EffectHandler<Self::Effect, Self::Resume>;
     type Actions: ActionEncoder<Self::Action>;
+    type Metrics: Metrics;
 
     /// Constructs the service components used by the driver.
-    fn components(self) -> (Self::Transition, Self::Effects, Self::Actions);
+    fn components(
+        self,
+    ) -> (
+        Self::Transition,
+        Self::Effects,
+        Self::Actions,
+        Self::Metrics,
+    );
 }
 
 /// Drives a [`Service`] by wiring its indexer, state machine and transaction
@@ -101,6 +176,7 @@ where
     state: StateMachine<S::State, S::Transition>,
     effects: EffectManager<S::Effects, S::Effect, S::Resume>,
     actions: S::Actions,
+    metrics: S::Metrics,
     transactions: TransactionQueue,
 }
 
@@ -124,16 +200,12 @@ where
         addresses: Vec<Address>,
         config: Config,
     ) -> Result<Self, Error> {
-        let (transition, effects, actions) = service.components();
+        let (transition, effects, actions, metrics) = service.components();
         let state = StateMachine::new(transition, pool.clone()).await?;
         let effects = EffectManager::new(effects);
-        let watcher = Watcher::new(
-            provider.clone(),
-            config.index,
-            addresses,
-            state.block_status().await?,
-        )
-        .await?;
+        let block_status = state.block_status().await?;
+        metrics.initialize(block_status);
+        let watcher = Watcher::new(provider.clone(), config.index, addresses, block_status).await?;
         let transactions =
             TransactionQueue::new(provider, signer, pool, config.transactions).await?;
 
@@ -142,6 +214,7 @@ where
             state,
             effects,
             actions,
+            metrics,
             transactions,
         })
     }
@@ -195,7 +268,14 @@ where
         let update = async {
             loop {
                 match self.watcher.next().await {
-                    Ok(update) => return update,
+                    Ok(update) => {
+                        let cursor = ProcessingCursor::from_update(&update);
+                        self.metrics.update_seen(cursor);
+                        if self.watcher.take_reorg_incident() {
+                            self.metrics.reorg();
+                        }
+                        return Input::Update { update, cursor };
+                    }
                     Err(err) => {
                         tracing::warn!(
                             ?err,
@@ -208,7 +288,7 @@ where
         };
 
         let input = tokio::select! {
-            update = update => Input::Update(update),
+            update = update => update,
             resume = self.effects.next() => Input::Resume(resume)
         };
         input
@@ -218,7 +298,7 @@ where
     /// state machine and dispatching the commands it returns.
     async fn update(&mut self, input: Input<S::Event, S::Resume>) -> Result<(), Error> {
         let commands = match input {
-            Input::Update(update) => {
+            Input::Update { update, cursor } => {
                 tracing::trace!(?update, "handling driver update");
                 let block_status = self.watcher.block_status();
 
@@ -236,6 +316,7 @@ where
                 }
 
                 let commands = self.state.handle_update(update).await?;
+                self.metrics.update_processed(cursor);
                 self.state.prune(block_status.safe).await?;
                 commands
             }
@@ -266,5 +347,89 @@ where
         }
 
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::index::{BlockUpdate, EventLog, EventUpdate};
+    use alloy::primitives::{Address, B256, Bloom};
+
+    #[test]
+    fn processing_cursor_covers_block_updates_and_reorgs() {
+        assert_eq!(
+            ProcessingCursor::from_update(&Update::<()>::Block(BlockUpdate::Warp {
+                from: 10,
+                to: 20,
+            })),
+            ProcessingCursor {
+                block: 20,
+                event_index: None,
+            }
+        );
+        assert_eq!(
+            ProcessingCursor::from_update(&Update::<()>::Block(BlockUpdate::New {
+                number: 21,
+                hash: B256::ZERO,
+                logs_bloom: Bloom::ZERO,
+            })),
+            ProcessingCursor {
+                block: 21,
+                event_index: None,
+            }
+        );
+        assert_eq!(
+            ProcessingCursor::from_update(&Update::<()>::Block(BlockUpdate::Uncle { number: 21 })),
+            ProcessingCursor {
+                block: 20,
+                event_index: None,
+            }
+        );
+    }
+
+    #[test]
+    fn processing_cursor_uses_only_the_last_blocks_event_index() {
+        let update = Update::Logs(EventUpdate {
+            blocks: (20..=21).into(),
+            logs: vec![EventLog {
+                block: 20,
+                index: 7,
+                address: Address::ZERO,
+                data: (),
+            }],
+        });
+        assert_eq!(
+            ProcessingCursor::from_update(&update),
+            ProcessingCursor {
+                block: 21,
+                event_index: None,
+            }
+        );
+
+        let update = Update::Logs(EventUpdate {
+            blocks: (21..=21).into(),
+            logs: vec![
+                EventLog {
+                    block: 21,
+                    index: 3,
+                    address: Address::ZERO,
+                    data: (),
+                },
+                EventLog {
+                    block: 21,
+                    index: 9,
+                    address: Address::ZERO,
+                    data: (),
+                },
+            ],
+        });
+        assert_eq!(
+            ProcessingCursor::from_update(&update),
+            ProcessingCursor {
+                block: 21,
+                event_index: Some(9),
+            }
+        );
     }
 }

@@ -752,8 +752,16 @@ impl Service for SentinelService {
     type Transition = SentinelTransition;
     type Effects = effect::Handler;
     type Actions = SentinelEncoder;
+    type Metrics = safenet_core::driver::NoopMetrics;
 
-    fn components(self) -> (Self::Transition, Self::Effects, Self::Actions) {
+    fn components(
+        self,
+    ) -> (
+        Self::Transition,
+        Self::Effects,
+        Self::Actions,
+        Self::Metrics,
+    ) {
         let SentinelService {
             oracle,
             fee_token,
@@ -774,6 +782,7 @@ impl Service for SentinelService {
             },
             effect::Handler::new(engine, engine_timeout),
             SentinelEncoder { oracle, fee_token },
+            safenet_core::driver::NoopMetrics,
         )
     }
 }
