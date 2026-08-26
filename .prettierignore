@@ -1,0 +1,5 @@
+# Foundry-managed Git submodules.
+contracts/lib/
+
+# Generated coverage output.
+coverage-report.md
