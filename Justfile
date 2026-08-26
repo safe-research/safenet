@@ -94,8 +94,10 @@ test-integration-sentinel:
     ./scripts/run_sentinel_integration_test.sh
 
 # Rust sentinel engine integration test (requires an external test-vector checkout).
-test-integration-sentinel-engine test-vectors:
-    TEST_VECTORS="{{test-vectors}}" ./scripts/run_sentinel_engine_integration_test.sh
+# Pass through any extra flags to the test-vector runner, e.g.
+# `just test-integration-sentinel-engine ../sentinel-test-vectors --filter foo`.
+test-integration-sentinel-engine test-vectors *args:
+    TEST_VECTORS="{{test-vectors}}" ./scripts/run_sentinel_engine_integration_test.sh {{args}}
 
 # Rust validator bash integration test (Anvil + two validator instances).
 test-integration-validator:

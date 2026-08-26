@@ -69,4 +69,4 @@ if [ "$ENGINE_READY" -ne 1 ]; then
 fi
 
 echo "==> Running sentinel engine test vectors..."
-SENTINEL_ENGINE_URL="$ENGINE_URL" "$TEST_RUNNER"
+SENTINEL_ENGINE_URL="$ENGINE_URL" "$TEST_RUNNER" "$@"
