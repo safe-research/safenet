@@ -22,6 +22,28 @@ pub mod safe {
     }
 }
 
+pub mod safenet_guard {
+    alloy::sol! {
+        /// Mirrors `TransactionAnnouncement.AnnouncedTransaction`. Only the
+        /// function selector matters to the escape-hatch check, so the
+        /// struct is declared purely to get that selector right.
+        struct AnnouncedTransaction {
+            address to;
+            uint256 value;
+            bytes data;
+            uint8 operation;
+            uint256 safeTxGas;
+            uint256 baseGas;
+            uint256 gasPrice;
+            address gasToken;
+            address refundReceiver;
+        }
+
+        function announceTransaction(AnnouncedTransaction announcement);
+        function cancelAnnouncement(bytes32 announcementHash);
+    }
+}
+
 pub mod erc20 {
     alloy::sol! {
         function transfer(address to, uint256 amount);

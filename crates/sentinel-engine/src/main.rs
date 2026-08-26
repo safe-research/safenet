@@ -7,7 +7,7 @@ mod engine;
 use self::{
     checkers::{
         AddressPoisoningChecker, BaseChecker, BlocklistChecker, CancellationChecker, CowChecker,
-        ExcessiveApprovalChecker,
+        EscapeHatchChecker, ExcessiveApprovalChecker,
     },
     config::Config,
     engine::SentinelEngine,
@@ -50,6 +50,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let provider = Provider::connect(&rpc).await?;
     let engine = SentinelEngine::new(vec![
         Box::new(CancellationChecker),
+        Box::new(EscapeHatchChecker),
         Box::new(BaseChecker),
         Box::new(BlocklistChecker::new(engine_config.blocklist)),
         Box::new(ExcessiveApprovalChecker),
