@@ -14,6 +14,9 @@ use tracing::{Instrument as _, field};
 #[derive(Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct CheckRequest {
+    /// The block number the sentinel considers current.
+    #[serde(with = "alloy::serde::quantity")]
+    pub block: u64,
     /// The transaction to verify.
     pub transaction: SafeTransaction,
 }
@@ -45,6 +48,7 @@ async fn security_check(
     // TODO: Pass these parameters to the engine once it supports request
     // lifecycle context.
     let _ = timeout;
+    let _ = request.block;
 
     let verdict = engine
         .security_check(request.transaction)

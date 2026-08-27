@@ -16,10 +16,12 @@ use std::time::Duration;
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Effect {
     /// Defer the approve/deny decision for `request_id` (a proposed
-    /// `transaction` on `safe`) to the configured sentinel engine.
+    /// `transaction` on `safe`) to the configured sentinel engine. `block` is
+    /// the block number the sentinel considers current.
     EngineCheck {
         request_id: B256,
         transaction: SafeTransaction,
+        block: u64,
     },
 }
 
@@ -55,10 +57,11 @@ impl EffectHandler<Effect, Resume> for Handler {
             Effect::EngineCheck {
                 request_id,
                 transaction,
+                block,
             } => {
                 let outcome = self
                     .engine
-                    .security_check(&transaction)
+                    .security_check(block, &transaction)
                     .request_id(request_id)
                     .timeout(self.engine_timeout)
                     .execute()
@@ -116,6 +119,7 @@ mod tests {
                     safe: SAFE,
                     ..Default::default()
                 },
+                block: 1,
             })
             .await;
 
