@@ -5,11 +5,12 @@ mod base;
 mod blocklist;
 mod cancellation;
 mod cow;
+mod escape_hatch;
 mod excessive_approval;
 
 pub use self::{
     address_poisoning::AddressPoisoningChecker, base::BaseChecker, blocklist::BlocklistChecker,
-    cancellation::CancellationChecker, cow::CowChecker,
+    cancellation::CancellationChecker, cow::CowChecker, escape_hatch::EscapeHatchChecker,
     excessive_approval::ExcessiveApprovalChecker,
 };
 
