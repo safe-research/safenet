@@ -51,12 +51,21 @@ components:
     SecurityCheckRequest:
       type: object
       additionalProperties: false
-      required: [transaction]
+      required: [block, transaction]
       properties:
+        block:
+          description: >-
+            The block number the sentinel considers current, i.e. the most
+            recent block it had synced past when it submitted this check. An
+            engine can use this as its reference point when reading chain
+            state, rather than resolving "latest" independently and risking a
+            different view of the chain than the sentinel had.
+          $ref: "#/components/schemas/Quantity"
         transaction:
           $ref: "#/components/schemas/SafeTransaction"
       examples:
-        - transaction:
+        - block: "0x1361f5"
+          transaction:
             chainId: "0x1"
             safe: "0x5aFE3855358E112B5647B952709E6165e1c1eEEe"
             to: "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2"

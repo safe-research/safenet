@@ -70,6 +70,8 @@ impl<'de> Deserialize<'de> for RuleId {
 
 #[derive(Serialize)]
 struct Request<'a> {
+    #[serde(with = "alloy::serde::quantity")]
+    block: u64,
     transaction: &'a SafeTransaction,
 }
 
@@ -113,12 +115,14 @@ impl EngineClient {
     }
 
     /// Requests a verdict for `transaction`, correlating the HTTP request with
-    /// the onchain request through the `x-request-id` header.
+    /// the onchain request through the `x-request-id` header. `block` is the
+    /// block number the sentinel considers current, sent along so the engine
+    /// can use it as a reference point when reading chain state.
     ///
     /// An invalid transaction, transport failure, timeout, non-success status,
     /// or invalid response is not evidence for either vote and therefore
     /// resolves to [`CheckOutcome::Unknown`].
-    pub fn security_check(&self, transaction: &SafeTransaction) -> SecurityCheck {
+    pub fn security_check(&self, block: u64, transaction: &SafeTransaction) -> SecurityCheck {
         let span = tracing::info_span!(
             "security_check",
             safe = %transaction.safe,
@@ -127,7 +131,7 @@ impl EngineClient {
         let request = self
             .client
             .post(self.endpoint.clone())
-            .json(&Request { transaction });
+            .json(&Request { block, transaction });
 
         SecurityCheck { span, request }
     }
@@ -242,7 +246,7 @@ mod tests {
         let engine = EngineClient::new(url).unwrap();
 
         let _ = engine
-            .security_check(&SafeTransaction::default())
+            .security_check(1, &SafeTransaction::default())
             .request_id(B256::repeat_byte(0x42))
             .timeout(Duration::from_millis(1337))
             .execute()
@@ -266,7 +270,7 @@ mod tests {
         let engine = EngineClient::new(url).unwrap();
         assert_eq!(
             engine
-                .security_check(&SafeTransaction::default())
+                .security_check(1, &SafeTransaction::default())
                 .execute()
                 .await,
             CheckOutcome::Approved
@@ -279,7 +283,7 @@ mod tests {
         let engine = EngineClient::new(url).unwrap();
         assert_eq!(
             engine
-                .security_check(&SafeTransaction::default())
+                .security_check(1, &SafeTransaction::default())
                 .execute()
                 .await,
             CheckOutcome::Denied(RuleId::new(4, 6))
@@ -292,7 +296,7 @@ mod tests {
         let engine = EngineClient::new(url).unwrap();
         assert_eq!(
             engine
-                .security_check(&SafeTransaction::default())
+                .security_check(1, &SafeTransaction::default())
                 .execute()
                 .await,
             CheckOutcome::Denied(RuleId::new(42, 1337))
@@ -309,7 +313,7 @@ mod tests {
         let engine = EngineClient::new(url).unwrap();
         assert_eq!(
             engine
-                .security_check(&SafeTransaction::default())
+                .security_check(1, &SafeTransaction::default())
                 .execute()
                 .await,
             CheckOutcome::Unknown
@@ -331,7 +335,7 @@ mod tests {
         let engine = EngineClient::new(url).unwrap();
         assert_eq!(
             engine
-                .security_check(&SafeTransaction::default())
+                .security_check(1, &SafeTransaction::default())
                 .execute()
                 .await,
             CheckOutcome::Unknown
@@ -344,7 +348,7 @@ mod tests {
         let engine = EngineClient::new(url).unwrap();
         assert_eq!(
             engine
-                .security_check(&SafeTransaction::default())
+                .security_check(1, &SafeTransaction::default())
                 .execute()
                 .await,
             CheckOutcome::Unknown
@@ -360,7 +364,7 @@ mod tests {
         let engine = EngineClient::new(url).unwrap();
         assert_eq!(
             engine
-                .security_check(&SafeTransaction::default())
+                .security_check(1, &SafeTransaction::default())
                 .execute()
                 .await,
             CheckOutcome::Unknown
@@ -376,7 +380,7 @@ mod tests {
         let outcome = time::timeout(
             Duration::from_secs(50),
             engine
-                .security_check(&SafeTransaction::default())
+                .security_check(1, &SafeTransaction::default())
                 .timeout(Duration::from_secs(1))
                 .execute(),
         )
