@@ -107,20 +107,6 @@ enum RolloverState {
         /// The epoch whose key generation was skipped.
         next_epoch: NonZeroU64,
     },
-    /// This validator is participating in the group's key generation and is
-    /// waiting for the [`Effect::KeyGenSetup`] effect to complete before the
-    /// commitment can be published onchain.
-    WaitingForSetup {
-        /// The epoch this group will serve.
-        next_epoch: EpochId,
-        /// The group being generated.
-        group: Group,
-        /// This validator's PoAP Merkle proof.
-        poap: Vec<B256>,
-        /// The block by which the commitment round must complete. `None` to
-        /// indicate that there is no deadline.
-        deadline: Option<u64>,
-    },
     /// A key generation is underway and the group's commitments are being
     /// collected onchain.
     CollectingCommitments {
@@ -128,8 +114,8 @@ enum RolloverState {
         next_epoch: EpochId,
         /// The group being generated.
         group: Group,
-        /// Key generation secrets, or `None` if not participating.
-        secrets: Option<Box<Secrets>>,
+        /// This validator's key generation secrets and participation.
+        secrets: KeyGenCommitment,
         /// Verified commitments received from peers so far, keyed by
         /// participant.
         commitments: BTreeMap<Address, VerifiedCommitment>,
@@ -188,6 +174,26 @@ enum RolloverState {
         /// The rollover proposal's signing hash.
         message: B256,
     },
+}
+
+/// This validator's secrets for a key generation whose commitments are still
+/// being collected.
+#[derive(Clone, Debug, Deserialize, Serialize)]
+enum KeyGenCommitment {
+    /// The validator is an active participant in the key generation ceremony.
+    /// The `secrets` are `None` while the [`Effect::KeyGenSetup`] that samples
+    /// them is still outstanding, and are filled in once it resumes.
+    Participating {
+        /// This validator's PoAP Merkle proof, needed to publish the
+        /// commitment and therefore retained for the whole round.
+        poap: Vec<B256>,
+        /// The sampled secrets, or `None` while the setup effect is still
+        /// outstanding.
+        secrets: Option<Box<Secrets>>,
+    },
+    /// The validator is an observer to the ceremony and has no secrets of its
+    /// own.
+    Observing,
 }
 
 /// The keygen participation status for the validator.

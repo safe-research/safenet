@@ -1,6 +1,6 @@
 use super::{
-    ConfirmationDeadlines, Epoch, KeyGenConfirmation, KeyGenParticipation, NonceState, Packet,
-    RolloverState, SigningState, State, Transition,
+    ConfirmationDeadlines, Epoch, KeyGenCommitment, KeyGenConfirmation, KeyGenParticipation,
+    NonceState, Packet, RolloverState, SigningState, State, Transition,
 };
 use crate::{
     bindings::{Consensus, Coordinator},
@@ -10,7 +10,9 @@ use crate::{
     },
     frost::{
         self,
-        keygen::{GroupCommitments, KeyShare, Secrets, SharingState, VerifiedShare},
+        keygen::{
+            GroupCommitments, KeyShare, Secrets, SharingState, VerifiedCommitment, VerifiedShare,
+        },
     },
     service::{Action, Effect},
 };
@@ -52,7 +54,14 @@ impl Transition {
     }
 
     /// Publishes the key gen commitment once the [`Effect::KeyGenSetup`]
-    /// effect has produced it, moving the group into commitment collection.
+    /// effect has produced it.
+    ///
+    /// Peer commitments are already being collected at this point, so this
+    /// only fills in the secrets the round was missing - unless every
+    /// commitment has already been collected, in which case the commitment
+    /// round finalizes right away. This can happen in reorg situations where
+    /// the blocks with the commitments (including the validator's own
+    /// commitments) are replayed before the effect completes.
     pub(super) fn handle_key_gen_setup(
         &self,
         state: State,
@@ -60,40 +69,79 @@ impl Transition {
         secrets: Box<Secrets>,
     ) -> (State, Commands<State, Self>) {
         match state.rollover {
-            RolloverState::WaitingForSetup {
+            RolloverState::CollectingCommitments {
                 next_epoch,
                 group,
-                poap,
+                secrets:
+                    KeyGenCommitment::Participating {
+                        poap,
+                        secrets: None,
+                    },
+                commitments,
                 deadline,
             } if group_id == group.id() => {
-                let (participants, count, threshold, context) = group.parameters();
-                let commitment = secrets.commitment();
+                let (count, _) = group.size();
                 tracing::debug!(
                     ?next_epoch,
                     %group_id,
                     ?deadline,
-                    "key generation setup completed; publishing commitment"
+                    "key generation setup completed"
                 );
-                (
-                    State {
-                        rollover: RolloverState::CollectingCommitments {
-                            next_epoch,
-                            group,
-                            secrets: Some(secrets),
-                            commitments: BTreeMap::new(),
-                            deadline,
-                        },
-                        ..state
-                    },
+
+                // A reorg can replay this validator's own commitment before
+                // the setup that produced it resumes. The commitment is then
+                // already onchain and must not be published a second time.
+                let commands = if commitments.contains_key(&self.account) {
+                    Vec::new()
+                } else {
+                    let (participants, count, threshold, context) = group.parameters();
                     vec![Command::Action(Action::KeyGenAndCommit {
                         participants,
                         count,
                         threshold,
                         context,
-                        poap,
-                        commitment,
+                        poap: poap.clone(),
+                        commitment: secrets.commitment(),
                         expires_at: deadline,
-                    })],
+                    })]
+                };
+
+                if commitments.len() as u16 != count {
+                    // Commitments are still being collected, so stay in the
+                    // same state with the secrets filled in.
+                    return (
+                        State {
+                            rollover: RolloverState::CollectingCommitments {
+                                next_epoch,
+                                group,
+                                secrets: KeyGenCommitment::Participating {
+                                    poap,
+                                    secrets: Some(secrets),
+                                },
+                                commitments,
+                                deadline,
+                            },
+                            ..state
+                        },
+                        commands,
+                    );
+                }
+
+                // Every participant had already committed, so the commitment
+                // round closes as soon as the setup lands.
+                let deadline = deadline
+                    .map(|deadline| deadline.saturating_add(self.config.key_gen_timeout.get()));
+                let (rollover, finalize_commands) = self.finalize_key_gen_commitments(
+                    next_epoch,
+                    group,
+                    Some(secrets),
+                    commitments,
+                    deadline,
+                );
+
+                (
+                    State { rollover, ..state },
+                    [commands, finalize_commands].concat(),
                 )
             }
             _ => (state, Vec::new()),
@@ -164,61 +212,53 @@ impl Transition {
                     );
                 }
 
+                // Every participant has committed, but this validator's own
+                // key generation setup may still be outstanding, in which case
+                // its secret shares cannot be computed yet and the round is
+                // instead finalized by `handle_key_gen_setup` once it resumes.
+                let secrets = match secrets {
+                    KeyGenCommitment::Observing => None,
+                    KeyGenCommitment::Participating {
+                        secrets: Some(secrets),
+                        ..
+                    } => Some(secrets),
+                    secrets @ KeyGenCommitment::Participating { secrets: None, .. } => {
+                        tracing::debug!(
+                            ?next_epoch,
+                            group_id = %event.gid,
+                            "all key generation commitments received; waiting for setup"
+                        );
+                        return (
+                            State {
+                                rollover: RolloverState::CollectingCommitments {
+                                    next_epoch,
+                                    group,
+                                    secrets,
+                                    commitments,
+                                    deadline,
+                                },
+                                ..state
+                            },
+                            Vec::new(),
+                        );
+                    }
+                };
+
                 // Every participant has committed, so a fresh round starts:
                 // push the deadline forward from the current block. Genesis
                 // is not subject to a rollover deadline, so `None` stays
                 // `None`.
                 let deadline =
                     deadline.map(|_| block.saturating_add(self.config.key_gen_timeout.get()));
+                let (rollover, commands) = self.finalize_key_gen_commitments(
+                    next_epoch,
+                    group,
+                    secrets,
+                    commitments,
+                    deadline,
+                );
 
-                // Compute the group participation state for the validator,
-                // depending on whether or not it is observing.
-                let (participation, commands) = match if let Some(secrets) = secrets {
-                    // We are participating, so compute the secret shares to
-                    // publish onchain and the sharing state.
-                    frost::keygen::generate_secret_shares(*secrets, commitments).map(
-                        |(sharing_state, share)| {
-                            let participation = KeyGenParticipation::Participating(sharing_state);
-                            let commands = vec![Command::Action(Action::KeyGenSecretShare {
-                                group_id: group.id(),
-                                share,
-                                expires_at: deadline,
-                            })];
-                            (participation, commands)
-                        },
-                    )
-                } else {
-                    // We are observing, just compute the group commitments that
-                    // are required to verify secret share public key shares and
-                    // complain responses.
-                    frost::keygen::group_commitments(commitments).map(|group_commitments| {
-                        let participation = KeyGenParticipation::Observing(group_commitments);
-                        (participation, Vec::new())
-                    })
-                } {
-                    Ok(result) => result,
-                    Err(err) => {
-                        // There was an issue with the verified commitments,
-                        // which is an unexpected an unrecoverable error.
-                        return fail_rollover!(state, next_epoch, err);
-                    }
-                };
-
-                (
-                    State {
-                        rollover: RolloverState::CollectingShares {
-                            next_epoch,
-                            group,
-                            participation,
-                            public_keys: BTreeMap::new(),
-                            shares: BTreeMap::new(),
-                            complaints: BTreeMap::new(),
-                            deadline,
-                        },
-                        ..state
-                    },
-                    commands,
-                )
+                (State { rollover, ..state }, commands)
             }
             _ => (state, Vec::new()),
         }
@@ -954,6 +994,35 @@ impl Transition {
         state: State,
         block: u64,
     ) -> (State, Commands<State, Self>) {
+        // A commitment round every participant committed to, but whose own key
+        // generation setup never resumed, cannot be restarted: no participant
+        // is missing to exclude, so the restart would compute an identical
+        // group and publish a second commitment over the one already onchain.
+        // Skip the epoch instead. Other validators will just see us as not
+        // participating in the secret sharing phase and timeout there.
+        let stuck = match &state.rollover {
+            RolloverState::CollectingCommitments {
+                next_epoch,
+                group,
+                secrets: KeyGenCommitment::Participating { secrets: None, .. },
+                commitments,
+                deadline: Some(deadline),
+            } if block >= *deadline && commitments.len() as u16 == group.size().0 => {
+                tracing::error!(
+                    ?next_epoch,
+                    group_id = %group.id(),
+                    block,
+                    deadline,
+                    "key generation setup did not complete before its round closed"
+                );
+                Some(*next_epoch)
+            }
+            _ => None,
+        };
+        if let Some(next_epoch) = stuck {
+            return fail_rollover!(state, next_epoch, "key generation setup did not complete");
+        }
+
         let Some((next_epoch, excluded)) = (match &state.rollover {
             RolloverState::CollectingCommitments {
                 next_epoch,
@@ -1065,10 +1134,14 @@ impl Transition {
             );
             (
                 State {
-                    rollover: RolloverState::WaitingForSetup {
+                    rollover: RolloverState::CollectingCommitments {
                         next_epoch,
                         group,
-                        poap,
+                        secrets: KeyGenCommitment::Participating {
+                            poap,
+                            secrets: None,
+                        },
+                        commitments: BTreeMap::new(),
                         deadline,
                     },
                     ..state
@@ -1095,7 +1168,7 @@ impl Transition {
                     rollover: RolloverState::CollectingCommitments {
                         next_epoch,
                         group,
-                        secrets: None,
+                        secrets: KeyGenCommitment::Observing,
                         commitments: BTreeMap::new(),
                         deadline,
                     },
@@ -1149,6 +1222,71 @@ impl Transition {
                 Vec::new(),
             ),
         }
+    }
+
+    /// Finalizes a commitment round every participant has committed to,
+    /// producing the [`RolloverState::CollectingShares`] state that follows
+    /// it: kicking off this validator's secret share if it is participating,
+    /// or just computing the group commitments it needs as an observer.
+    ///
+    /// `secrets` are this validator's key generation secrets, or `None` if it
+    /// is only participating as an observer. `deadline` is the already
+    /// computed deadline for the secret-share round, since the two ways out of
+    /// the commitment round do not agree on a block to derive it from: only
+    /// the last commitment arrives with one.
+    fn finalize_key_gen_commitments(
+        &self,
+        next_epoch: EpochId,
+        group: Group,
+        secrets: Option<Box<Secrets>>,
+        commitments: BTreeMap<Address, VerifiedCommitment>,
+        deadline: Option<u64>,
+    ) -> (RolloverState, Commands<State, Self>) {
+        // Compute the group participation state for the validator, depending
+        // on whether or not it is observing.
+        let (participation, commands) = match if let Some(secrets) = secrets {
+            // We are participating, so compute the secret shares to publish
+            // onchain and the sharing state.
+            frost::keygen::generate_secret_shares(*secrets, commitments).map(
+                |(sharing_state, share)| {
+                    let participation = KeyGenParticipation::Participating(sharing_state);
+                    let commands = vec![Command::Action(Action::KeyGenSecretShare {
+                        group_id: group.id(),
+                        share,
+                        expires_at: deadline,
+                    })];
+                    (participation, commands)
+                },
+            )
+        } else {
+            // We are observing, just compute the group commitments that are
+            // required to verify secret share public key shares and complain
+            // responses.
+            frost::keygen::group_commitments(commitments).map(|group_commitments| {
+                let participation = KeyGenParticipation::Observing(group_commitments);
+                (participation, Vec::new())
+            })
+        } {
+            Ok(result) => result,
+            Err(err) => {
+                // There was an issue with the verified commitments, which is
+                // an unexpected an unrecoverable error.
+                return (rollover_failure(next_epoch, err), Vec::new());
+            }
+        };
+
+        (
+            RolloverState::CollectingShares {
+                next_epoch,
+                group,
+                participation,
+                public_keys: BTreeMap::new(),
+                shares: BTreeMap::new(),
+                complaints: BTreeMap::new(),
+                deadline,
+            },
+            commands,
+        )
     }
 
     /// Finalizes keygen and triggers nonces preprocessing. Any remaining DKG
@@ -1255,8 +1393,7 @@ impl RolloverState {
             | RolloverState::EpochStaged { next_epoch, .. } => Some(EpochId::Number {
                 number: *next_epoch,
             }),
-            RolloverState::WaitingForSetup { next_epoch, .. }
-            | RolloverState::CollectingCommitments { next_epoch, .. }
+            RolloverState::CollectingCommitments { next_epoch, .. }
             | RolloverState::CollectingShares { next_epoch, .. }
             | RolloverState::CollectingConfirmations { next_epoch, .. } => Some(*next_epoch),
             RolloverState::Halted => None,
