@@ -24,7 +24,7 @@ Two sentinels - Alice and Bob - both commit and reveal `approve`. Nobody dissent
 **Setup for this example:**
 
 | Parameter | Value |
-|---|---|
+| --- | --- |
 | `fee` (current governed fee) | 0.40 USDC |
 | `bondMultiplier` | 2000 |
 | `bondTarget` (= fee × bondMultiplier) | 800 USDC per sentinel |
@@ -97,7 +97,7 @@ sequenceDiagram
     end
 ```
 
-**Outcome:** Sponsor paid 0.40 USDC for the request; the protocol kept its 0.04 USDC DAO cut; Alice and Bob each staked 800 USDC and got back 800.18 (800 bond + 0.18 fee share) - a net profit of 0.18 USDC apiece for agreeing on the correct answer. Nobody was slashed because no dissenting side was ever established (`slashAmountFor` only slashes a revealed vote when it's on the *losing* side of a resolved dispute).
+**Outcome:** Sponsor paid 0.40 USDC for the request; the protocol kept its 0.04 USDC DAO cut; Alice and Bob each staked 800 USDC and got back 800.18 (800 bond + 0.18 fee share) - a net profit of 0.18 USDC apiece for agreeing on the correct answer. Nobody was slashed because no dissenting side was ever established (`slashAmountFor` only slashes a revealed vote when it's on the _losing_ side of a resolved dispute).
 
 </details>
 
@@ -111,7 +111,7 @@ Two sentinels - Alice and Bob - commit and reveal, but they disagree: Alice reve
 **Setup for this example:**
 
 | Parameter | Value |
-|---|---|
+| --- | --- |
 | `fee` (current governed fee) | 0.40 USDC |
 | `bondMultiplier` | 2000 |
 | `bondTarget` (= fee × bondMultiplier) | 800 USDC per sentinel |
@@ -172,7 +172,7 @@ sequenceDiagram
 
     rect rgba(255,220,220,0.3)
         Note over Sponsor,DAO: ArbitraDocument Dispute Flow
-        
+
         Create a mermaid sequence diagram that outlines the dispute flow
 tion
         Arbitrator->>Oracle: resolveDispute(R2, approveWins=true, context="...")
@@ -209,12 +209,12 @@ If the arbitrator never rules, `timeoutArbitration` can be called permissionless
 <details>
 <summary><h2>Flow: Non-Reveal (Silent Sentinel Alongside an Established Side)</h2></summary>
 
-A third sentinel, Carol, joins Alice and Bob: she commits like everyone else, but never calls `reveal`. Unlike the Timeout flow below, a side over here still gets revealed by *someone* - so `finalize` doesn't time the whole request out, it resolves (or freezes) exactly as in the Unanimous Approval or Dispute flows above, and Carol's silence is handled as a separate, parallel accounting step: an aggregate slash charged inside that same `finalize()` call, well before she ever calls `claim()` herself. This is the only new mechanic here, so both diagrams below elide everything already shown above (postRequest, the mechanics of commit/reveal/claim for the revealing sentinels, arbitration) and focus only on Carol's silent path - first for a request that resolves unanimously, then for one that ends up disputed. Carol's own numbers come out identically either way.
+A third sentinel, Carol, joins Alice and Bob: she commits like everyone else, but never calls `reveal`. Unlike the Timeout flow below, a side over here still gets revealed by _someone_ - so `finalize` doesn't time the whole request out, it resolves (or freezes) exactly as in the Unanimous Approval or Dispute flows above, and Carol's silence is handled as a separate, parallel accounting step: an aggregate slash charged inside that same `finalize()` call, well before she ever calls `claim()` herself. This is the only new mechanic here, so both diagrams below elide everything already shown above (postRequest, the mechanics of commit/reveal/claim for the revealing sentinels, arbitration) and focus only on Carol's silent path - first for a request that resolves unanimously, then for one that ends up disputed. Carol's own numbers come out identically either way.
 
 **Setup for this example:**
 
 | Parameter | Value |
-|---|---|
+| --- | --- |
 | `fee` (current governed fee) | 0.40 USDC |
 | `bondMultiplier` | 2000 |
 | `bondTarget` (= fee × bondMultiplier) | 800 USDC per sentinel |
@@ -301,7 +301,7 @@ sequenceDiagram
     end
 ```
 
-**Outcome:** In both cases Carol loses her full 4.00 USDC `slashAmount` - `slashAmountFor` keys only on whether *any* side was ever established (`approveSentinelCount > 0 || denySentinelCount > 0`), not on which side won or how it was decided. Her aggregate slash is paid out to `protocolFundsReceiver` immediately inside `finalize()` - even before an arbitrator rules, in Case B - while her own reduced `bondReturn` (800 - 4.00 = 796) is only realized later, whenever she calls `claim()` herself; these are two independent halves of the same accounting, not a double charge. Contrast this with the Timeout flow below, where *nobody* reveals: there, no side is ever established, so the identical-looking non-reveal costs nothing.
+**Outcome:** In both cases Carol loses her full 4.00 USDC `slashAmount` - `slashAmountFor` keys only on whether _any_ side was ever established (`approveSentinelCount > 0 || denySentinelCount > 0`), not on which side won or how it was decided. Her aggregate slash is paid out to `protocolFundsReceiver` immediately inside `finalize()` - even before an arbitrator rules, in Case B - while her own reduced `bondReturn` (800 - 4.00 = 796) is only realized later, whenever she calls `claim()` herself; these are two independent halves of the same accounting, not a double charge. Contrast this with the Timeout flow below, where _nobody_ reveals: there, no side is ever established, so the identical-looking non-reveal costs nothing.
 
 </details>
 
@@ -315,7 +315,7 @@ Not every request reaches a vote. If nobody ever commits, or sentinels commit bu
 **Setup for this example:**
 
 | Parameter | Value |
-|---|---|
+| --- | --- |
 | `fee` (current governed fee) | 0.40 USDC |
 | `bondTarget` (= fee × bondMultiplier) | 800 USDC per sentinel |
 | sentinels | Alice, Bob (both active; only appear in the "nobody reveals" branch) |
@@ -384,6 +384,6 @@ sequenceDiagram
     end
 ```
 
-**Outcome:** Both branches land on `TIMED_OUT` and refund the sponsor's 0.40 USDC fee in full - a timeout costs the sponsor nothing either way. In the "nobody commits" branch, nobody ever staked a bond, so there is nothing to `claim`. In the "nobody reveals" branch, Alice and Bob each staked 800 USDC and get every bit of it back via `claim`: a non-reveal is only punished (the `unrevealedBond` computed inside `finalize`, see the Non-Reveal flow above) when it stalls a request whose outcome was *already* decided by someone else's revealed vote. Here no vote was ever revealed at all, so no side was ever established, and there is no misconduct to prove against a silent committer - `slashAmountFor` only slashes an unrevealed vote once `approveSentinelCount > 0 || denySentinelCount > 0`, which never happens in this flow.
+**Outcome:** Both branches land on `TIMED_OUT` and refund the sponsor's 0.40 USDC fee in full - a timeout costs the sponsor nothing either way. In the "nobody commits" branch, nobody ever staked a bond, so there is nothing to `claim`. In the "nobody reveals" branch, Alice and Bob each staked 800 USDC and get every bit of it back via `claim`: a non-reveal is only punished (the `unrevealedBond` computed inside `finalize`, see the Non-Reveal flow above) when it stalls a request whose outcome was _already_ decided by someone else's revealed vote. Here no vote was ever revealed at all, so no side was ever established, and there is no misconduct to prove against a silent committer - `slashAmountFor` only slashes an unrevealed vote once `approveSentinelCount > 0 || denySentinelCount > 0`, which never happens in this flow.
 
 </details>

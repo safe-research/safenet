@@ -7,38 +7,38 @@
 Genesis Group Id: `0xf3d78298339ca6b6f2885e1157089bc86ac55520544a83840000000000000000`
 
 - Gnosis:
-    - `0x3D58a5475c1336b0A755c3aBd298CeB9b7BB9CDe`
+  - `0x3D58a5475c1336b0A755c3aBd298CeB9b7BB9CDe`
 - Greenfield:
-    - `0x7B0A8EFA45dE81F11F2846EC28259B62155a2b37`
+  - `0x7B0A8EFA45dE81F11F2846EC28259B62155a2b37`
 - Rockaway:
-    - `0xb0E735D4a3b70195420E0ae933689A55750CFcd2`
+  - `0xb0E735D4a3b70195420E0ae933689A55750CFcd2`
 - Core Contributors:
-    - `0xCc00DE0eA14c08669b26DcBFE365dBD9890B04D9`
+  - `0xCc00DE0eA14c08669b26DcBFE365dBD9890B04D9`
 - Blockchain Capital:
-    - `0xD8997c2a94052C4FB79B53b3e255c1F07c99305B`
+  - `0xD8997c2a94052C4FB79B53b3e255c1F07c99305B`
 - Safe Labs:
-    - `0xF6EA21D702983c443f58A267265912FE03D2FF0b`
+  - `0xF6EA21D702983c443f58A267265912FE03D2FF0b`
 
 ### Network Configuration
+
 - Chain Id:
-    - `100`
+  - `100`
 - Coordinator
-    - `0xaE27021CEB45316f1efe69D8E362aC07ED3Bd7E4`
-    - [Gnosisscan](https://gnosisscan.io/address/0xaE27021CEB45316f1efe69D8E362aC07ED3Bd7E4)
+  - `0xaE27021CEB45316f1efe69D8E362aC07ED3Bd7E4`
+  - [Gnosisscan](https://gnosisscan.io/address/0xaE27021CEB45316f1efe69D8E362aC07ED3Bd7E4)
 - Consensus
-    - `0x223624cBF099e5a8f8cD5aF22aFa424a1d1acEE9`
-    - [Gnosisscan](https://gnosisscan.io/address/0x223624cBF099e5a8f8cD5aF22aFa424a1d1acEE9)
+  - `0x223624cBF099e5a8f8cD5aF22aFa424a1d1acEE9`
+  - [Gnosisscan](https://gnosisscan.io/address/0x223624cBF099e5a8f8cD5aF22aFa424a1d1acEE9)
 - Genesis Salt
-    - `0x5afe000000000000000000000000000000000000000000000000000000000000`
+  - `0x5afe000000000000000000000000000000000000000000000000000000000000`
 - Blocks per epoch
-    - `1440` (~2 hours)
+  - `1440` (~2 hours)
 - Signing timeout
-    - `6` (~30 seconds)
+  - `6` (~30 seconds)
 
 ### Environment Variables
 
-> [!NOTE]
-> These environment variables configure the legacy TypeScript [Beta validator](https://github.com/safe-research/safenet/tree/beta/validator) that originally ran the Beta Network above, not the current [Rust validator](../crates/validator) (`crates/validator`, configured via a TOML `--config-file` — see `crates/validator/src/config.rs`). The Beta validator's onchain state has diverged from the current repo (e.g. it predates `SentinelOracleV2`/the oracle-backed consensus flow) and is not compatible with it, so this section is left as a historical record rather than updated to match the Rust validator's configuration surface.
+> [!NOTE] These environment variables configure the legacy TypeScript [Beta validator](https://github.com/safe-research/safenet/tree/beta/validator) that originally ran the Beta Network above, not the current [Rust validator](../crates/validator) (`crates/validator`, configured via a TOML `--config-file` — see `crates/validator/src/config.rs`). The Beta validator's onchain state has diverged from the current repo (e.g. it predates `SentinelOracleV2`/the oracle-backed consensus flow) and is not compatible with it, so this section is left as a historical record rather than updated to match the Rust validator's configuration surface.
 
 ```bash
 LOG_LEVEL=notice
@@ -68,7 +68,7 @@ The `STAKER_ADDRESS` will receive all validator rewards including commission, un
 
 ##### Configuring a Separate Commission Beneficiary
 
-By default, the `STAKER_ADDRESS` will receive all validator rewards including commission  **on Ethereum Mainnet**. In order to have commission be distributed to another beneficiary  **on Ethereum Mainnet**, the `STAKER_ADDRESS` must set a delegate on the [DelegateRegistry](https://etherscan.io/address/0x469788fE6E9E9681C6ebF3bF78e7Fd26Fc015446) with `id = keccak256(toHex("Safenet Beta validator commission beneficiary"))`.
+By default, the `STAKER_ADDRESS` will receive all validator rewards including commission **on Ethereum Mainnet**. In order to have commission be distributed to another beneficiary **on Ethereum Mainnet**, the `STAKER_ADDRESS` must set a delegate on the [DelegateRegistry](https://etherscan.io/address/0x469788fE6E9E9681C6ebF3bF78e7Fd26Fc015446) with `id = keccak256(toHex("Safenet Beta validator commission beneficiary"))`.
 
 ```
 from: STAKER_ADDRESS
@@ -78,7 +78,6 @@ function: setDelegate
     delegate: 0x...  // beneficiary address **on Ethereum Mainnet**
 ```
 
-Please inform the Safe team in case you intend to do this so we can make sure everything is accounted properly. 
+Please inform the Safe team in case you intend to do this so we can make sure everything is accounted properly.
 
 Once executed, `STAKER_ADDRESS` will only receive rewards on its own stake. `beneficiary` will only receive the commission.
-

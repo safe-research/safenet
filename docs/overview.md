@@ -35,8 +35,7 @@ The consensus contract is responsible for tracking the current epoch, as well as
 
 The coordinator contract is responsible for coordinating and verifying the various cryptographic protocols required by the Safenet consensus contract.
 
-> [!NOTE]
-> `FROSTCoordinator` acts as a **coordination message bus**, not a decision-making system. On-chain events sequence validator actions and provide a globally ordered communication log, but they do not constitute ceremony outcomes. The authoritative result of any signing ceremony is the FROST Schnorr signature itself — a cryptographic proof independently verifiable by anyone with the group public key and the signed message. This design keeps the coordinator as a pure message bus and avoids liveness issues that would arise from state-changing coordination signals under chain reorgs.
+> [!NOTE] `FROSTCoordinator` acts as a **coordination message bus**, not a decision-making system. On-chain events sequence validator actions and provide a globally ordered communication log, but they do not constitute ceremony outcomes. The authoritative result of any signing ceremony is the FROST Schnorr signature itself — a cryptographic proof independently verifiable by anyone with the group public key and the signed message. This design keeps the coordinator as a pure message bus and avoids liveness issues that would arise from state-changing coordination signals under chain reorgs.
 
 ## FROST
 
@@ -144,15 +143,13 @@ The main purpose of Safenet is to attest to Safe transactions. Attestations are 
 
 Because FROST signatures only require a threshold of participants to be involved, Safenet is resilient to intermittent outages and/or malicious behavior of less than half of the validators participating in an epoch. In case a validator is not available or acts maliciously, it is removed from the selection of participants for a given transaction attestation so that the signing ceremony can be restarted and the transaction ultimately attested.
 
-> [!IMPORTANT]
-> In the event of a severe outage in which half or more of the participating validators in an epoch are down, Safe transactions cannot be attested.
+> [!IMPORTANT] In the event of a severe outage in which half or more of the participating validators in an epoch are down, Safe transactions cannot be attested.
 
 #### Epoch Rollover Attestations
 
 Epoch rollover attestations work in the exact same way as transaction attestations, with just a different signing message. The epoch rollover attestation guarantees that the participants of the current epoch agree to the new FROST group that will become in charge of the following epoch.
 
-> [!IMPORTANT]
-> Like with Safe transaction attestations, in case of a severe outage, epoch rollover attestations will not be possible. This will prevent new epochs from starting, and cause the consensus to stay stuck in an old epoch. While in the older epoch, Safenet can continue to produce Safe transaction attestations, and will automatically recover once sufficient validators come online.
+> [!IMPORTANT] Like with Safe transaction attestations, in case of a severe outage, epoch rollover attestations will not be possible. This will prevent new epochs from starting, and cause the consensus to stay stuck in an old epoch. While in the older epoch, Safenet can continue to produce Safe transaction attestations, and will automatically recover once sufficient validators come online.
 
 #### State Diagram
 
@@ -199,7 +196,11 @@ One caveat to having parts of the Safenet consensus be onchain, is that there ar
 <!-- References -->
 
 [^scale]: [KeyGen Scaling on Secret Share Reveals](https://github.com/safe-research/safenet/issues/20)
+
 [^rfc9591]: [RFC 9591 - The Flexible Round-Optimized Schnorr Threshold (FROST) Protocol for Two‑Round Schnorr Signatures](https://datatracker.ietf.org/doc/html/rfc9591)
+
 [^frost]: [FROST: Flexible Round-Optimized Schnorr Threshold Signatures](https://web.archive.org/web/20260218133025/https://eprint.iacr.org/2020/852.pdf)
+
 [^dkg]: [Secure Distributed Key Generation for Discrete-Log Based Cryptosystems](https://web.archive.org/web/20260218134139/https://link.springer.com/content/pdf/10.1007/s00145-006-0347-3.pdf)
+
 [^grpsz]: [Minimum FROST Group Size Derivation](https://github.com/safe-research/safenet/blob/d3c80a0dc3128e54c4db6e30269694832481de62/validator/src/machine/keygen/group.ts#L7-L35).

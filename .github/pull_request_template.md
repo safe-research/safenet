@@ -1,19 +1,23 @@
 <!-- Include a brief one or two line high-level description of the PR. -->
+
 ...
 
 ### Context and Motivation
 
 <!-- Why is this change needed? What should reviewers know before reading the diff? -->
+
 - ...
 
 ### Decisions and Tradeoffs
 
 <!-- Include only non-obvious decisions, alternatives considered, or tradeoffs reviewers should understand. -->
+
 - ...
 
 ### Testing
 
 <!-- How did you verify this? If this is a UI change, include a relevant screenshot. -->
+
 - ...
 
 <!--

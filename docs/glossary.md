@@ -5,7 +5,7 @@
 ### Elliptic Curve
 
 | Term | Definition |
-|------|------------|
+| --- | --- |
 | **secp256k1** | The elliptic curve used by Bitcoin and Ethereum; also used by FROST in Safenet. Equation: $y² = x³ + 7$ |
 | **Point** | A coordinate pair $(x, y)$ on the elliptic curve, or the "point at infinity" |
 | **Scalar** | A number in the range $[0, N)$ where $N$ is the curve order |
@@ -20,7 +20,7 @@
 ### FROST
 
 | Term | Definition |
-|------|------------|
+| --- | --- |
 | **Group Public Key ($Y$)** | The collective public key derived during DKG; can verify signatures from any threshold of participants. Formula: $Y = \sum_{i=1}^{n} C_{i,0}$ |
 | **Signing Share ($s_i$)** | A participant's portion of the private key; cannot sign alone. Formula: $s_i = \sum_{j=1}^{n} f_j(i)$ |
 | **Public Key Share ($Y_i$)** | The public component of a participant's signing share. Formula: $Y_i = s_i \cdot G$ |
@@ -35,7 +35,7 @@
 | **Group Commitment (R)** | Combined commitment point from all signing participants. Formula: $R = \sum_i (D_i + \rho_i E_i)$ |
 | **Challenge (c)** | Hash of commitment, public key, and message; core of Schnorr signature. Formula: $c = H_2(R \| Y \| \text{msg})$ |
 | **Signature Share ($z_i$)** | Partial signature from one participant. Formula: $z_i = d_i + \rho_i e_i + \lambda_i sk_i c$ |
-| **Group Response ($z$)** | The aggregate of the signature shares from all participants. Formula: $z = \sum_i z_i$|
+| **Group Response ($z$)** | The aggregate of the signature shares from all participants. Formula: $z = \sum_i z_i$ |
 | **Schnorr Signature ($R, z$)** | Final signature $(R, z)$ verifiable with $z \cdot G = R + c \cdot Y$ |
 | **Hashing Functions ($H_n$)** | Hashing function specified as part of the FROST ciphersuite |
 
@@ -44,7 +44,7 @@
 ### FROST Coordinator
 
 | Term | Definition |
-|------|------------|
+| --- | --- |
 | **Group** | A set of participants who completed DKG together |
 | **Group ID** | Deterministic identifier for a FROST group |
 | **Signature ID** | Identifier for a specific signing ceremony |
@@ -57,7 +57,7 @@
 ### Consensus Contract
 
 | Term | Definition |
-|------|------------|
+| --- | --- |
 | **Safe Transaction** | A structured Safe smart account transaction format for cross-chain validation |
 | **Domain Separator** | EIP-712 value uniquely identifying the signing domain |
 | **Message Hash** | The final hash signed by validators |
@@ -66,38 +66,38 @@
 
 ## Data Structure Terms
 
-| Term | Definition |
-|------|------------|
-| **Merkle Tree** | Data structure for efficient inclusion proofs |
-| **Merkle Root** | Single hash summarizing all leaves in a Merkle tree |
-| **Merkle Proof** | Path proving a leaf is included in a tree |
-| **Doubly Linked List** | List where each node points to previous and next |
-| **Head** | First element in a list/queue |
-| **Tail** | Last element in a list/queue |
+| Term                   | Definition                                          |
+| ---------------------- | --------------------------------------------------- |
+| **Merkle Tree**        | Data structure for efficient inclusion proofs       |
+| **Merkle Root**        | Single hash summarizing all leaves in a Merkle tree |
+| **Merkle Proof**       | Path proving a leaf is included in a tree           |
+| **Doubly Linked List** | List where each node points to previous and next    |
+| **Head**               | First element in a list/queue                       |
+| **Tail**               | Last element in a list/queue                        |
 
 ## Abbreviations
 
-| Abbreviation | Full Form |
-|--------------|-----------|
-| DKG | Distributed Key Generation |
-| FROST | Flexible Round-Optimized Schnorr Threshold |
-| EIP | Ethereum Improvement Proposal |
-| ECDH | Elliptic Curve Diffie-Hellman |
-| ECDSA | Elliptic Curve Digital Signature Algorithm |
-| RFC | Request for Comments (internet standard) |
-| POAP | Proof of Participation (Merkle proof in this context) |
-| gid | Group ID |
-| sid | Signature ID |
-| tx | Transaction |
-| SEC | Standards for Efficient Cryptography |
-| SHA | Secure Hash Algorithm |
-| BFT | Byzantine Fault Tolerance |
-| CFT | Crash Fault Tolerance |
+| Abbreviation | Full Form                                             |
+| ------------ | ----------------------------------------------------- |
+| DKG          | Distributed Key Generation                            |
+| FROST        | Flexible Round-Optimized Schnorr Threshold            |
+| EIP          | Ethereum Improvement Proposal                         |
+| ECDH         | Elliptic Curve Diffie-Hellman                         |
+| ECDSA        | Elliptic Curve Digital Signature Algorithm            |
+| RFC          | Request for Comments (internet standard)              |
+| POAP         | Proof of Participation (Merkle proof in this context) |
+| gid          | Group ID                                              |
+| sid          | Signature ID                                          |
+| tx           | Transaction                                           |
+| SEC          | Standards for Efficient Cryptography                  |
+| SHA          | Secure Hash Algorithm                                 |
+| BFT          | Byzantine Fault Tolerance                             |
+| CFT          | Crash Fault Tolerance                                 |
 
 ## Security Terms
 
 | Term | Definition |
-|------|------------|
+| --- | --- |
 | **Rogue Key Attack** | Attack where adversary chooses public key to cancel out honest participants' keys |
 | **Adaptive Attack** | Attack where adversary chooses input based on observed protocol messages |
 | **Wagner's Birthday Attack** | Attack on multi-signature schemes exploiting hash collisions |
@@ -109,8 +109,8 @@
 
 ## External References (To Be Moved)
 
-| Resource | Link |
-|----------|------|
-| RFC-9591 (FROST) | https://datatracker.ietf.org/doc/html/rfc9591 |
-| FROST Book | https://frost.zfnd.org/frost.html |
-| secp256k1 Parameters | https://www.secg.org/sec2-v2.pdf |
+| Resource             | Link                                          |
+| -------------------- | --------------------------------------------- |
+| RFC-9591 (FROST)     | https://datatracker.ietf.org/doc/html/rfc9591 |
+| FROST Book           | https://frost.zfnd.org/frost.html             |
+| secp256k1 Parameters | https://www.secg.org/sec2-v2.pdf              |

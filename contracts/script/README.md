@@ -13,6 +13,7 @@ Also, please use the `.env.sample` file to create a `.env` file and fill the req
 Note: If you face an error like `vm.envUint: environment variable "ABC" not found`, make sure to set the required environment variables in the `.env` file.
 
 For deployment commands, the choice of `FACTORY` needs to be specified in the `.env` file. It can have two values:
+
 - `1`: Safe Singleton Factory (Default, recommended for mainnet or public testnets)
 - `2`: Canonical Deterministic Deployment Factory
 
@@ -61,6 +62,7 @@ just contracts-deploy-erc20 --rpc-url http://127.0.0.1:8545 --broadcast --sender
 ```
 
 where
+
 - RPC URL specified here is the localhost (anvil local node) url, change it accordingly based on the chain or network.
 - `0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266` is the sender address used for signing the transaction.
 - `sender-keystore-account` is the keystore account alias for the address `0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266` used for signing the transaction with forge keystore feature. You can use any other method as specified in the [forge documentation](https://www.getfoundry.sh/forge/scripting#providing-a-private-key). Replace `sender-keystore-account` with the alias of the account you want to use for signing.
@@ -80,6 +82,7 @@ Here we are using `https://eth.drpc.org` as the RPC URL for mainnet, you can rep
 This deploys the staking contract.
 
 Note: Make sure you have filled the `.env` file with the correct values. Staking contract deployment requires these five values (if not provided explicitly, default will be taken):
+
 - `STAKING_INITIAL_OWNER`
 - `SAFE_TOKEN`
 - `STAKING_INITIAL_WITHDRAWAL_DELAY`
@@ -111,6 +114,7 @@ Note: An added environment variable `CHAIN_ID` can optionally be specified for t
 This step is optional if the staking contract is already deployed with some validators.
 
 Note: Make sure you have filled the `.env` file with the correct values. Validator proposal requires these two values:
+
 - `ADD_VALIDATORS`: Comma separated addresses
 - `IS_REGISTRATION`: Comma separated bool values
 
@@ -136,8 +140,8 @@ You could also set an environment variable `EXECUTABLE_AT` with the timestamp va
 
 This step stakes the SAFE Token (or the selected ERC20 Token) into the staking contract for a particular validator. It also checks if there is enough allowance, if not, initiates a transaction to do the same.
 
-Note: Make sure you have filled the `.env` file with the correct values.
-Staking SAFE Tokens require 3 values:
+Note: Make sure you have filled the `.env` file with the correct values. Staking SAFE Tokens require 3 values:
+
 - `STAKE_VALIDATOR`: Validator address for which you want to stake
 - `STAKE_AMOUNT`: The amount to stake
 - `SAFE_TOKEN`: or the selected ERC20 Token should have enough balance in the sender's account and also approved for the staking contract.
@@ -153,11 +157,12 @@ just contracts-stake-safe --rpc-url http://127.0.0.1:8545 --broadcast --sender 0
 ### Withdraw SAFE Token
 
 This step withdraws the SAFE Token (or the selected ERC20 Token) from the staking contract for a particular validator. There are two steps for withdrawal:
+
 - Initiate Withdraw: This starts the delay for withdrawal, and the tokens can only be withdrawn after the delay is passed.
 - Claim Withdraw: This claims the withdrawn tokens after the delay is passed.
 
-Note: Make sure you have filled the `.env` file with the correct values.
-Withdrawing SAFE Tokens require 2 values:
+Note: Make sure you have filled the `.env` file with the correct values. Withdrawing SAFE Tokens require 2 values:
+
 - `WITHDRAW_VALIDATOR`: Validator address for which you want to withdraw
 - `WITHDRAW_AMOUNT`: The amount to withdraw
 
