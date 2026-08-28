@@ -75,7 +75,7 @@ use crate::{
         erc20::approveCall,
     },
     contracts::multi_send::sub_transactions,
-    engine::{Operation, RuleId, SafeTransaction, Verdict},
+    engine::{CheckContext, Operation, RuleId, SafeTransaction, Verdict},
 };
 use alloy::{
     primitives::{Address, B256, Bytes, U256, address},
@@ -418,7 +418,7 @@ impl Checker for CowChecker {
     /// [`CowChecker::check_presignature_batch`] and
     /// [`CowChecker::check_twap_batch`] against `transaction`'s sub-calls,
     /// returning the first non-[`Verdict::Abstain`] result.
-    async fn check(&self, transaction: &SafeTransaction) -> Verdict {
+    async fn check(&self, transaction: &SafeTransaction, _context: &CheckContext) -> Verdict {
         if !SUPPORTED_CHAIN_IDS
             .iter()
             .any(|&id| transaction.chain_id == U256::from(id))
@@ -706,7 +706,7 @@ mod tests {
     /// keeps those tests network-free.
     async fn check(transaction: &SafeTransaction) -> Verdict {
         CowChecker::with_order_api(FakeOrderApi::NotFound)
-            .check(transaction)
+            .check(transaction, &CheckContext::default())
             .await
     }
 

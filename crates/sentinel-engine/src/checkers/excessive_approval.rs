@@ -3,7 +3,7 @@
 use super::Checker;
 use crate::{
     contracts::target_effects::{EffectKind, decode_target_effects},
-    engine::{RuleId, SafeTransaction, Verdict},
+    engine::{CheckContext, RuleId, SafeTransaction, Verdict},
 };
 use alloy::primitives::U256;
 
@@ -16,7 +16,7 @@ impl Checker for ExcessiveApprovalChecker {
         "excessive_approval"
     }
 
-    async fn check(&self, transaction: &SafeTransaction) -> Verdict {
+    async fn check(&self, transaction: &SafeTransaction, _context: &CheckContext) -> Verdict {
         for effect in decode_target_effects(transaction) {
             let unlimited = match effect.kind {
                 EffectKind::Erc20Approval { amount } => amount == U256::MAX,
@@ -60,7 +60,9 @@ mod tests {
         };
 
         assert_eq!(
-            ExcessiveApprovalChecker.check(&transaction).await,
+            ExcessiveApprovalChecker
+                .check(&transaction, &CheckContext::default())
+                .await,
             Verdict::Insecure {
                 rule: RuleId::R4_5ExcessiveApproval,
             }
@@ -81,7 +83,9 @@ mod tests {
         };
 
         assert_eq!(
-            ExcessiveApprovalChecker.check(&transaction).await,
+            ExcessiveApprovalChecker
+                .check(&transaction, &CheckContext::default())
+                .await,
             Verdict::Abstain
         );
     }
@@ -100,7 +104,9 @@ mod tests {
         };
 
         assert_eq!(
-            ExcessiveApprovalChecker.check(&transaction).await,
+            ExcessiveApprovalChecker
+                .check(&transaction, &CheckContext::default())
+                .await,
             Verdict::Insecure {
                 rule: RuleId::R4_5ExcessiveApproval,
             }
@@ -121,7 +127,9 @@ mod tests {
         };
 
         assert_eq!(
-            ExcessiveApprovalChecker.check(&transaction).await,
+            ExcessiveApprovalChecker
+                .check(&transaction, &CheckContext::default())
+                .await,
             Verdict::Abstain
         );
     }

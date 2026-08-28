@@ -1,7 +1,7 @@
 use alloy::primitives::Address;
 use safenet_core::observability;
 use serde::Deserialize;
-use std::{net::SocketAddr, path::Path};
+use std::{net::SocketAddr, num::NonZeroU64, path::Path};
 use tokio::{fs, io};
 use url::Url;
 
@@ -40,6 +40,18 @@ pub struct EngineConfig {
     /// Number of blocks inspected for a prior interaction with a candidate
     /// address.
     pub address_poisoning_lookback_blocks: u64,
+    /// The widest `toBlock - fromBlock` *span* the configured RPC allows in
+    /// a single `eth_getLogs` call — the same number reported in a
+    /// provider's own "range exceeds limit" error, **not** a block count
+    /// (a call from block 100 to 110 has a span of 10 but covers 11 block
+    /// numbers; if a provider documents its cap as an inclusive block count
+    /// `N`, use `N - 1` here). Unset by default, which issues the whole
+    /// `address_poisoning_lookback_blocks` window as a single call; set
+    /// this when the provider caps it below that, and the lookback is
+    /// split into consecutive calls of at most this width to still cover
+    /// the full window. Must be non-zero if set.
+    #[serde(default)]
+    pub address_poisoning_max_block_range: Option<NonZeroU64>,
 }
 
 fn default_bind_address() -> SocketAddr {

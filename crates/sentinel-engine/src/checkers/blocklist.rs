@@ -1,7 +1,7 @@
 //! Blocking of transactions to known malicious destinations.
 
 use super::Checker;
-use crate::engine::{RuleId, SafeTransaction, Verdict};
+use crate::engine::{CheckContext, RuleId, SafeTransaction, Verdict};
 use alloy::primitives::Address;
 use std::collections::HashSet;
 
@@ -21,7 +21,7 @@ impl Checker for BlocklistChecker {
         "blocklist"
     }
 
-    async fn check(&self, transaction: &SafeTransaction) -> Verdict {
+    async fn check(&self, transaction: &SafeTransaction, _context: &CheckContext) -> Verdict {
         if self.0.contains(&transaction.to) {
             Verdict::Insecure {
                 rule: RuleId::R4_6KnownMaliciousTarget,
@@ -53,7 +53,9 @@ mod tests {
 
         for address in [A1, A2] {
             assert_eq!(
-                checker.check(&transaction(address)).await,
+                checker
+                    .check(&transaction(address), &CheckContext::default())
+                    .await,
                 Verdict::Insecure {
                     rule: RuleId::R4_6KnownMaliciousTarget,
                 }
@@ -65,13 +67,23 @@ mod tests {
     async fn abstains_with_empty_blocklist() {
         let checker = BlocklistChecker::new([]);
 
-        assert_eq!(checker.check(&transaction(A1)).await, Verdict::Abstain);
+        assert_eq!(
+            checker
+                .check(&transaction(A1), &CheckContext::default())
+                .await,
+            Verdict::Abstain
+        );
     }
 
     #[tokio::test]
     async fn abstains_when_not_blocklisted() {
         let checker = BlocklistChecker::new([A1, A2]);
 
-        assert_eq!(checker.check(&transaction(A3)).await, Verdict::Abstain);
+        assert_eq!(
+            checker
+                .check(&transaction(A3), &CheckContext::default())
+                .await,
+            Verdict::Abstain
+        );
     }
 }

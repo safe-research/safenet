@@ -25,6 +25,13 @@ blocklist = []
 # interaction with a candidate address.
 address_poisoning_lookback_blocks = 50000
 
+# Optional: widest toBlock-fromBlock span the RPC above allows in one
+# eth_getLogs call (not a block count — if a provider documents its cap as
+# an inclusive block count N, use N - 1 here). Unset issues the lookback
+# above as a single call; set this to a provider's own documented cap and
+# it's split into consecutive calls instead.
+# address_poisoning_max_block_range = 10000
+
 [observability]
 # The `tracing` env-filter directive controlling log verbosity.
 log_filter = "info"

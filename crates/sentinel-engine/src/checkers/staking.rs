@@ -53,7 +53,7 @@ use crate::{
         },
         multi_send::sub_transactions,
     },
-    engine::{Operation, RuleId, SafeTransaction, Verdict},
+    engine::{CheckContext, Operation, RuleId, SafeTransaction, Verdict},
 };
 use alloy::{
     primitives::{Address, U256, address},
@@ -85,7 +85,7 @@ impl Checker for StakingChecker {
         "staking"
     }
 
-    async fn check(&self, transaction: &SafeTransaction) -> Verdict {
+    async fn check(&self, transaction: &SafeTransaction, _context: &CheckContext) -> Verdict {
         if transaction.chain_id != U256::from(SUPPORTED_CHAIN_ID) {
             return Verdict::Abstain;
         }

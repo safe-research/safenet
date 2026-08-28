@@ -17,6 +17,21 @@ use serde::{Deserialize, Serialize};
 /// The transaction-verification engine shared by API handlers.
 pub struct SentinelEngine(Vec<Box<dyn Checker>>);
 
+/// Per-request context threaded to every [`Checker`] alongside the
+/// transaction being assessed, carrying caller-supplied hints that aren't
+/// part of the transaction itself.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct CheckContext {
+    /// The block number the caller (the sentinel) considers current — the
+    /// most recent block it had synced past when it submitted this check,
+    /// from the request's required `block` field. A check that reads
+    /// RPC-derived state should evaluate against this rather than resolving
+    /// "latest" itself, so it shares the same view of the chain the caller
+    /// had rather than racing ahead of (or behind) it. A check is free to
+    /// ignore this if it has no RPC-derived state to anchor.
+    pub block: u64,
+}
+
 /// The engine's assessment of a proposed transaction.
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "lowercase", tag = "verdict")]
@@ -39,7 +54,11 @@ impl SentinelEngine {
     }
 
     /// Assesses a proposed Safe transaction using the configured checks.
-    pub async fn security_check(&self, transaction: SafeTransaction) -> Verdict {
+    pub async fn security_check(
+        &self,
+        transaction: SafeTransaction,
+        context: CheckContext,
+    ) -> Verdict {
         // TODO: add a check for the Safe's own gas refund mechanism (a
         // nonzero `gasPrice` has the Safe reimburse the relayer for
         // `gasPrice * gasUsed` — up to `safeTxGas`/`baseGas` — in
@@ -53,7 +72,7 @@ impl SentinelEngine {
 
         let mut verdict = Verdict::Abstain;
         for checker in &self.0 {
-            verdict = checker.check(&transaction).await;
+            verdict = checker.check(&transaction, &context).await;
             tracing::trace!(checker = checker.name(), ?verdict, "checker verdict");
             if verdict != Verdict::Abstain {
                 break;
@@ -77,7 +96,7 @@ mod tests {
             "stub"
         }
 
-        async fn check(&self, _: &SafeTransaction) -> Verdict {
+        async fn check(&self, _: &SafeTransaction, _: &CheckContext) -> Verdict {
             self.0
         }
     }
@@ -87,7 +106,9 @@ mod tests {
         let engine = SentinelEngine::new(vec![Box::new(StubChecker(Verdict::Abstain))]);
 
         assert_eq!(
-            engine.security_check(SafeTransaction::default()).await,
+            engine
+                .security_check(SafeTransaction::default(), CheckContext::default())
+                .await,
             Verdict::Abstain
         );
     }
@@ -103,7 +124,9 @@ mod tests {
         ]);
 
         assert_eq!(
-            engine.security_check(SafeTransaction::default()).await,
+            engine
+                .security_check(SafeTransaction::default(), CheckContext::default())
+                .await,
             Verdict::Secure
         );
     }
@@ -116,6 +139,11 @@ mod tests {
             ..Default::default()
         };
 
-        assert_eq!(engine.security_check(transaction).await, Verdict::Abstain);
+        assert_eq!(
+            engine
+                .security_check(transaction, CheckContext::default())
+                .await,
+            Verdict::Abstain
+        );
     }
 }

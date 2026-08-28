@@ -28,6 +28,8 @@ An `abstain` response is successful and deliberate. It must not be interpreted a
 
 [`crates/sentinel-engine/openapi.yaml`](../crates/sentinel-engine/openapi.yaml) is the authoritative interface contract. It defines the `POST /v1/security-check` request and response bodies, wire formats, and the optional `x-request-id` and `x-request-timeout` headers. Operators implementing their own engine should validate against and remain compatible with that document.
 
+The request body's `block` field is the caller's (the sentinel's) own declared current block — the most recent block it had synced past when it submitted the check. RPC-derived checks should evaluate against this rather than resolving "latest" themselves, so the engine shares the same view of the chain the sentinel had instead of racing ahead of (or behind) it. This also lets a historical transaction be replayed against the block range it actually happened near (e.g. a `sentinel-test-vectors` vector supplying its own block) instead of however far the chain has moved on since — the caller is responsible for supplying a block _before_ the transaction being checked, since a query reaching up to the transaction's own block would see that transaction's own effects as if they were prior evidence.
+
 Rule citations are intentionally open-ended: the Charter can gain rules without requiring the sentinel to know a closed enum of every possible citation.
 
 The API currently specifies no authentication or rate limiting. A sentinel and its engine are expected to be co-deployed on the same host, in the same pod, or on a private network. Do not expose the reference API publicly without adding appropriate access controls at the deployment boundary.
@@ -53,8 +55,17 @@ bind_address = "127.0.0.1:5473"
 blocklist = []
 
 # Number of recent blocks searched for prior interactions by the address-
-# poisoning check.
+# poisoning check, counting back from the request's `block` field.
 address_poisoning_lookback_blocks = 50000
+
+# Optional; unset by default, which issues the whole lookback window above
+# as a single eth_getLogs call. Many RPC providers cap how wide a single
+# call's block range can be (Infura, for example, rejects a call spanning
+# more than 10,000 blocks) — set this to that provider's own limit and the
+# lookback window is split into consecutive calls no wider than it. This is
+# a toBlock-fromBlock span, not a block count: if a provider instead
+# documents its cap as an inclusive block count N, set this to N - 1.
+# address_poisoning_max_block_range = 10000
 
 [observability]
 # Optional; defaults to "info".
@@ -70,10 +81,11 @@ log_filter = "info"
 | `bind_address` | No | HTTP listen address; defaults to `127.0.0.1:5473`. |
 | `engine.blocklist` | Yes | Destinations treated as known malicious by the blocklist check. |
 | `engine.address_poisoning_lookback_blocks` | Yes | Recent block range inspected for an established interaction. |
+| `engine.address_poisoning_max_block_range` | No | Widest `eth_getLogs` block span the RPC allows per call; unset issues the lookback as one call. |
 | `observability.log_filter` | No | `tracing` filter; defaults to `info`. |
 | `observability.metrics_address` | No | Prometheus listener; defaults to an ephemeral loopback port. |
 
-The reference engine has one RPC endpoint. Configure it for the same chain as the transactions it receives; it does not currently reject a request whose `chainId` differs from the RPC's chain.
+The reference engine has one RPC endpoint. Configure it for the same chain as the transactions it receives. The address-poisoning check (the only check backed by RPC-derived state) abstains on a `chainId` mismatch between a transaction and the configured RPC; other checks make no onchain calls and so have nothing to validate against the RPC's chain.
 
 ## Running the Reference Engine
 

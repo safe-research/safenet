@@ -3,7 +3,7 @@
 use super::Checker;
 use crate::{
     contracts::bindings::safenet_guard,
-    engine::{Operation, SafeTransaction, Verdict},
+    engine::{CheckContext, Operation, SafeTransaction, Verdict},
 };
 use alloy::sol_types::SolCall as _;
 
@@ -38,7 +38,7 @@ impl Checker for EscapeHatchChecker {
         "escape_hatch"
     }
 
-    async fn check(&self, transaction: &SafeTransaction) -> Verdict {
+    async fn check(&self, transaction: &SafeTransaction, _context: &CheckContext) -> Verdict {
         if is_escape_hatch_call(transaction) {
             Verdict::Secure
         } else {
