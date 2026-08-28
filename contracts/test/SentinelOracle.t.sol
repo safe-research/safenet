@@ -1507,6 +1507,88 @@ contract SentinelOracleTest is Test {
         );
     }
 
+    function test_TimeoutArbitration_EmitsEvent() public {
+        _freezeRequest();
+        vm.roll(block.number + ARBITRATION_TIMEOUT + 1);
+
+        vm.expectEmit(true, false, false, true);
+        emit SentinelOracle.ArbitrationTimedOut(REQUEST_ID);
+        oracle.timeoutArbitration(REQUEST_ID);
+    }
+
+    function test_MarkOutOfScope_OnlyArbitrator() public {
+        _freezeRequest();
+        address randomAddress = vm.createWallet("random").addr;
+
+        vm.expectRevert(SentinelOracle.NotArbitrator.selector);
+        vm.prank(randomAddress);
+        oracle.markOutOfScope(REQUEST_ID, "out of scope");
+
+        vm.prank(arbitrator);
+        oracle.markOutOfScope(REQUEST_ID, "out of scope");
+    }
+
+    function test_MarkOutOfScope_RevertsWhenNotFrozen() public {
+        _postRequest();
+
+        vm.expectRevert(SentinelOracleRequest.RequestNotFrozen.selector);
+        vm.prank(arbitrator);
+        oracle.markOutOfScope(REQUEST_ID, "out of scope");
+    }
+
+    function test_MarkOutOfScope_NoDeadlineCheck() public {
+        // Unlike `timeoutArbitration`, the arbitrator can decline a dispute the moment it freezes
+        // -- there is no `ARBITRATION_TIMEOUT` wait, since their own refusal is the reason no
+        // ruling is coming.
+        _freezeRequest();
+
+        vm.prank(arbitrator);
+        oracle.markOutOfScope(REQUEST_ID, "outside our mandate");
+
+        SentinelOracleRequest.T memory r = oracle.getRequest(REQUEST_ID);
+        assertEq(uint256(r.progress.state), uint256(SentinelOracleRequest.State.TIMED_OUT));
+    }
+
+    function test_MarkOutOfScope_RefundsFeeAndBondsInFull() public {
+        uint256 sponsorBalBefore = token.balanceOf(sponsor);
+        _freezeRequest();
+
+        uint256 receiverBalBefore = token.balanceOf(protocolFundsReceiver);
+
+        vm.prank(arbitrator);
+        oracle.markOutOfScope(REQUEST_ID, "outside our mandate");
+
+        SentinelOracleRequest.T memory r = oracle.getRequest(REQUEST_ID);
+        assertEq(uint256(r.progress.state), uint256(SentinelOracleRequest.State.TIMED_OUT));
+        assertEq(token.balanceOf(sponsor), sponsorBalBefore, "sponsor fee refunded in full");
+        assertEq(
+            token.balanceOf(protocolFundsReceiver),
+            receiverBalBefore,
+            "no bonds slashed when the arbitrator declines a dispute, same as any other timeout"
+        );
+
+        uint256 s1Before = token.balanceOf(sentinel1);
+        vm.prank(sentinel1);
+        oracle.claim(REQUEST_ID);
+        assertEq(token.balanceOf(sentinel1), s1Before + BOND_TARGET, "sentinel1 bond refunded in full via claim");
+
+        uint256 s2Before = token.balanceOf(sentinel2);
+        vm.prank(sentinel2);
+        oracle.claim(REQUEST_ID);
+        assertEq(token.balanceOf(sentinel2), s2Before + BOND_TARGET, "sentinel2 bond refunded in full via claim");
+    }
+
+    function test_MarkOutOfScope_EmitsEvent() public {
+        _freezeRequest();
+        string memory context = "outside our mandate";
+
+        vm.expectEmit(true, false, false, true);
+        emit SentinelOracle.DisputeOutOfScope(REQUEST_ID, context);
+
+        vm.prank(arbitrator);
+        oracle.markOutOfScope(REQUEST_ID, context);
+    }
+
     // ============================================================
     // LARGE-AMOUNT OVERFLOW SAFETY
     // ============================================================
