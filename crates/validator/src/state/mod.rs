@@ -370,13 +370,6 @@ enum SigningState {
         /// The block by which the signing attestation must arrive.
         deadline: u64,
     },
-    /// The packet failed verification; waiting to submit a decline.
-    WaitingToDecline {
-        /// The packet that failed verification.
-        packet: Packet,
-        /// The block by which the decline must be submitted.
-        deadline: u64,
-    },
 }
 
 /// A Signing selection.

@@ -33,17 +33,6 @@ impl Transition {
             .find(|epoch| epoch.group.id() == event.gid)
             .and_then(|epoch| epoch.nonces.observe(event.sequence));
         match (nonce, state.signing.remove(&event.message)) {
-            (Some(_), Some(SigningState::WaitingToDecline { deadline, .. })) => {
-                tracing::info!(
-                    message = %event.message,
-                    signature_id = %event.sid,
-                    "declining signing request for rejected transaction"
-                );
-                commands.push(Command::Action(Action::SignDecline {
-                    signature_id: event.sid,
-                    expires_at: deadline,
-                }));
-            }
             (
                 Some(nonce),
                 Some(SigningState::WaitingForRequest {
@@ -114,8 +103,7 @@ impl Transition {
                     }));
                 }
             },
-            (None, Some(SigningState::WaitingToDecline { .. }))
-            | (None, Some(SigningState::WaitingForRequest { .. })) => {
+            (None, Some(SigningState::WaitingForRequest { .. })) => {
                 tracing::warn!(
                     message = %event.message,
                     signature_id = %event.sid,
@@ -519,8 +507,8 @@ impl Transition {
         (state, Vec::new())
     }
 
-    /// Retries, declines, or drops every signing ceremony that has stalled
-    /// past its deadline. Ports `signing/timeouts.ts`.
+    /// Retries or drops every signing ceremony that has stalled past its
+    /// deadline. Ports `signing/timeouts.ts`.
     pub(super) fn handle_signing_timeouts(
         &self,
         mut state: State,
@@ -730,11 +718,6 @@ impl Transition {
                 state.signature_id_to_message.remove(signature_id);
                 false
             }
-            SigningState::WaitingToDecline { packet, deadline } if *deadline <= block => {
-                // Declining is indicative anyway, its not a big deal if we did
-                // not do it. Just clean up the signing ceremony.
-                false
-            }
             _ => true,
         });
 
@@ -751,7 +734,6 @@ impl SigningState {
             Self::CollectNonceCommitments { .. } => "collect_nonce_commitments",
             Self::CollectSigningShares { .. } => "collect_signing_shares",
             Self::WaitingForAttestation { .. } => "waiting_for_attestation",
-            Self::WaitingToDecline { .. } => "waiting_to_decline",
         }
     }
 
@@ -762,8 +744,7 @@ impl SigningState {
             | Self::WaitingForOracle { deadline, .. }
             | Self::CollectNonceCommitments { deadline, .. }
             | Self::CollectSigningShares { deadline, .. }
-            | Self::WaitingForAttestation { deadline, .. }
-            | Self::WaitingToDecline { deadline, .. } => *deadline,
+            | Self::WaitingForAttestation { deadline, .. } => *deadline,
         }
     }
 
@@ -775,7 +756,7 @@ impl SigningState {
             | SigningState::WaitingForOracle { signature_id, .. }
             | SigningState::CollectNonceCommitments { signature_id, .. }
             | SigningState::CollectSigningShares { signature_id, .. } => Some(*signature_id),
-            SigningState::WaitingForRequest { .. } | SigningState::WaitingToDecline { .. } => None,
+            SigningState::WaitingForRequest { .. } => None,
         }
     }
 
@@ -786,8 +767,7 @@ impl SigningState {
             | SigningState::WaitingForOracle { packet, .. }
             | SigningState::CollectNonceCommitments { packet, .. }
             | SigningState::CollectSigningShares { packet, .. }
-            | SigningState::WaitingForAttestation { packet, .. }
-            | SigningState::WaitingToDecline { packet, .. } => packet,
+            | SigningState::WaitingForAttestation { packet, .. } => packet,
         }
     }
 }
