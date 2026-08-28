@@ -1,6 +1,6 @@
 use super::{
-    KeyGenConfirmation, KeyGenParticipation, NonceIndex, NonceState, RolloverState, State,
-    Transition,
+    KeyGenCommitment, KeyGenConfirmation, KeyGenParticipation, NonceIndex, NonceState,
+    RolloverState, State, Transition,
 };
 use crate::{
     bindings::Coordinator,
@@ -140,11 +140,13 @@ impl Transition {
                 key_share: Some(key_share),
                 ..
             } => Some((group.id(), Some(key_share.clone()))),
-            // Still building our secret key share.
-            RolloverState::WaitingForSetup { group, .. }
-            | RolloverState::CollectingCommitments {
+            // Still building our secret key share. A participating
+            // commitment round is retained even while its setup is still
+            // outstanding, since an earlier attempt may already have persisted
+            // the group's secrets.
+            RolloverState::CollectingCommitments {
                 group,
-                secrets: Some(_),
+                secrets: KeyGenCommitment::Participating { .. },
                 ..
             }
             | RolloverState::CollectingShares {
