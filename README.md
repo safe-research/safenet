@@ -42,18 +42,13 @@ In order to update the submodules, or fetch them if the repository was cloned wi
 git submodule update --init --recursive
 ```
 
-`contracts/` has no JavaScript of its own (see the [Justfile](./Justfile)), but `examples/` and
-`explorer/` are each an independent NPM package with its own lockfile. Install their dependencies
-with:
+`contracts/` has no JavaScript of its own (see the [Justfile](./Justfile)), but `examples/` and `explorer/` are each an independent NPM package with its own lockfile. Install their dependencies with:
 
 ```sh
 just deps
 ```
 
-Each of `examples/`/`explorer/` also has its own [Biome](https://biomejs.dev/) devDependency and
-`biome.json` (extending the shared rules in the root [`biome.json`](./biome.json), but scoped to
-that package's own files only) — `just check`/`just fix` run it once per directory, so both
-`npm ci` commands above are needed before either recipe works.
+Each of `examples/`/`explorer/` also has its own [Biome](https://biomejs.dev/) devDependency and `biome.json` (extending the shared rules in the root [`biome.json`](./biome.json), but scoped to that package's own files only) — `just check`/`just fix` run it once per directory, so both `npm ci` commands above are needed before either recipe works.
 
 ### Run tests
 
@@ -75,9 +70,7 @@ Verbose logging for tests can be enabled by setting `SAFENET_TEST_VERBOSE=1`.
 
 ### Rust Services
 
-The offchain services of the Safenet protocol (`crates/validator`, `crates/sentinel`,
-`crates/sentinel-engine`) are implemented in Rust. Use the standard Cargo commands to
-build/test/lint/format/etc. them:
+The offchain services of the Safenet protocol (`crates/validator`, `crates/sentinel`, `crates/sentinel-engine`) are implemented in Rust. Use the standard Cargo commands to build/test/lint/format/etc. them:
 
 ```sh
 cargo build

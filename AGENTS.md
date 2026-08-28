@@ -8,13 +8,13 @@ The repository is a hybrid monorepo with:
 
 - `contracts/` — Solidity 0.8.30 smart contracts built with Foundry. Core contracts: `FROSTCoordinator.sol`, `Consensus.sol`, `Staking.sol`. Has no JavaScript of its own; its commands are `forge` invocations exposed via the root [Justfile](./Justfile).
 - NPM packages (each with its own `package.json`/lockfile, no longer npm workspace members):
-    - `examples/` — Scripts for interacting with the Safenet protocol on public testnets.
-    - `explorer/` — React 19 + TypeScript + Vite frontend for inspecting network state.
+  - `examples/` — Scripts for interacting with the Safenet protocol on public testnets.
+  - `explorer/` — React 19 + TypeScript + Vite frontend for inspecting network state.
 - Rust crates:
-    - `crates/core/` — Shared code used by all Safenet offchain services
-    - `crates/sentinel/` — Rust sentinel service that watches the `SentinelOracle` and `Consensus` contracts, asks its configured sentinel engine to assess proposed transactions, and puts up bonds for its votes onchain
-    - `crates/sentinel-engine/` — Keyless HTTP transaction-verification service that owns the sentinel's checks; it reads chain state but holds no bond and makes no onchain writes
-    - `crates/validator/` — Rust port of the validator service that participates in FROST DKG and signing rounds and submits epoch rollovers and transaction attestations onchain
+  - `crates/core/` — Shared code used by all Safenet offchain services
+  - `crates/sentinel/` — Rust sentinel service that watches the `SentinelOracle` and `Consensus` contracts, asks its configured sentinel engine to assess proposed transactions, and puts up bonds for its votes onchain
+  - `crates/sentinel-engine/` — Keyless HTTP transaction-verification service that owns the sentinel's checks; it reads chain state but holds no bond and makes no onchain writes
+  - `crates/validator/` — Rust port of the validator service that participates in FROST DKG and signing rounds and submits epoch rollovers and transaction attestations onchain
 
 Additionally, formal verification specs live in `certora/`. Integration and devnet scripts are in `scripts/`.
 
@@ -41,31 +41,19 @@ New code SHOULD generally be tested. Design tests that do not require a high amo
 
 The steps for project setup are documented in the root [README.md](./README.md#project-setup).
 
-Always use `npm ci` instead of `npm install` / `npm i`. `npm ci` installs exactly what is in the
-package's lockfile and never modifies it, keeping the lock file stable. Since `examples/` and
-`explorer/` each have their own `package.json`/lockfile, run it in each directory (e.g.
-`npm ci --prefix explorer`), not once at the repo root.
+Always use `npm ci` instead of `npm install` / `npm i`. `npm ci` installs exactly what is in the package's lockfile and never modifies it, keeping the lock file stable. Since `examples/` and `explorer/` each have their own `package.json`/lockfile, run it in each directory (e.g. `npm ci --prefix explorer`), not once at the repo root.
 
 Make sure you have the correct tool versions (NodeJS 24, NPM 11, Foundry 1.5.1, [Just](https://github.com/casey/just)). Use `just foundryup` to set up the correct Foundry version.
 
 ### Just Commands
 
-All repo-wide commands are exposed as recipes in the root [Justfile](./Justfile) — run `just --list`
-for the full set. `contracts/` has no `package.json` of its own; its recipes shell out to `forge`
-directly. Package-specific commands not exposed as a recipe can still be run directly, e.g.
-`npm --prefix explorer run <script>`.
+All repo-wide commands are exposed as recipes in the root [Justfile](./Justfile) — run `just --list` for the full set. `contracts/` has no `package.json` of its own; its recipes shell out to `forge` directly. Package-specific commands not exposed as a recipe can still be run directly, e.g. `npm --prefix explorer run <script>`.
 
-Biome (the formatter/linter `just check`/`just fix` run) is a devDependency of `examples/` and
-`explorer/` individually, not a separate root package — `just check`/`just fix` run it once per
-directory, each scoped to that package's own `biome.json` (which `extends` the shared rules in the
-root [`biome.json`](./biome.json) without inheriting its `includes`), so it never scans outside
-that package. Both `npm ci --prefix examples` and `npm ci --prefix explorer` are required before
-either recipe works, even if you're only touching contracts/Rust code.
+Biome (the formatter/linter `just check`/`just fix` run) is a devDependency of `examples/` and `explorer/` individually, not a separate root package — `just check`/`just fix` run it once per directory, each scoped to that package's own `biome.json` (which `extends` the shared rules in the root [`biome.json`](./biome.json) without inheriting its `includes`), so it never scans outside that package. Both `npm ci --prefix examples` and `npm ci --prefix explorer` are required before either recipe works, even if you're only touching contracts/Rust code.
 
 ### Integration Tests
 
-Integration tests start a local Anvil chain, deploy contracts, and run the validator and/or sentinel
-services:
+Integration tests start a local Anvil chain, deploy contracts, and run the validator and/or sentinel services:
 
 ```sh
 just test-integration-sentinel            # ./scripts/run_sentinel_integration_test.sh (Rust sentinel)
@@ -84,13 +72,7 @@ These scripts require:
 just devnet                  # ./scripts/run_devnet.sh (Podman required)
 ```
 
-Runs the Rust validator, sentinel, and sentinel-engine services against a local Anvil chain — two
-validators (`alice`, `bob`) and two sentinel/engine pairs (`carol`, `dave`) vote on a freshly
-deployed `SentinelOracle`. Each instance is configured via a generated TOML file
-(`--config-file`), not environment variables. `just devnet --build` builds the validator,
-sentinel, sentinel-engine, and contracts images. This is separate from
-`test-integration-sentinel`/`test-integration-validator` above, which exercise the Rust services
-directly rather than through Podman.
+Runs the Rust validator, sentinel, and sentinel-engine services against a local Anvil chain — two validators (`alice`, `bob`) and two sentinel/engine pairs (`carol`, `dave`) vote on a freshly deployed `SentinelOracle`. Each instance is configured via a generated TOML file (`--config-file`), not environment variables. `just devnet --build` builds the validator, sentinel, sentinel-engine, and contracts images. This is separate from `test-integration-sentinel`/`test-integration-validator` above, which exercise the Rust services directly rather than through Podman.
 
 ## Code Quality Tools
 

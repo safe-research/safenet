@@ -7,6 +7,9 @@ set shell := ["bash", "-euo", "pipefail", "-c"]
 # Configure the default container runtime to use for Just recipes.
 docker := env("DOCKER", "docker")
 
+# Use NPM to run Prettier for Markdown formatting.
+prettier := "npm exec -y -- prettier@3.9.6"
+
 # List available recipes.
 default:
     @just --list
@@ -16,11 +19,12 @@ build:
     (cd contracts && forge build --force)
     npm --prefix explorer run build
 
-# Lint/format-check every package: Solidity, Rust, and (via each package's own check script) Biome/TypeScript.
+# Lint/format-check every package and the repository's Markdown documentation.
 check:
     (cd contracts && test "$(forge --version | head -1)" = "forge Version: 1.5.1-v1.5.1" && forge fmt --check && forge lint --deny notes)
     npm --prefix examples run check
     npm --prefix explorer run check
+    {{prettier}} --check "**/*.md"
     cargo fmt --all -- --check
     cargo clippy --workspace --all-targets --locked -- -D warnings
     @just lint-openapi crates/sentinel-engine/openapi.yaml
@@ -30,6 +34,7 @@ fix:
     (cd contracts && forge fmt)
     npm --prefix examples run fix
     npm --prefix explorer run fix
+    {{prettier}} --write "**/*.md"
     cargo fmt --all
 
 # Run every package's unit tests.

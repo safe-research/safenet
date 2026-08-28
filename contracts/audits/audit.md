@@ -1,6 +1,7 @@
 # Audits
 
 ## Auditor
+
 - Certora (https://www.certora.com/)
 
 ## Notes

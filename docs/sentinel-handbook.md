@@ -31,10 +31,7 @@ use_client_filtering = true
 
 #### Sentinel Engine
 
-Every sentinel requires a reachable transaction-verification engine. You can run the repository's
-reference implementation or your own implementation of its OpenAPI contract; see the
-[sentinel engine operator guide](./sentinel-engine.md) for configuration, deployment, and the
-engine's keyless trust boundary.
+Every sentinel requires a reachable transaction-verification engine. You can run the repository's reference implementation or your own implementation of its OpenAPI contract; see the [sentinel engine operator guide](./sentinel-engine.md) for configuration, deployment, and the engine's keyless trust boundary.
 
 #### Logging and Metrics
 
@@ -51,15 +48,13 @@ metrics_address = "0.0.0.0:3555"
 
 Each sentinel must be provisioned with a `secp256k1` private key. This key is used to authenticate the sentinel onchain for participation in Safenet Testnet. It must be funded with sufficient gas for the EVM transactions required for onchain commit/reveal communication, and with enough of the fee token to put up bonds on the requests it votes on.
 
-> [!TIP]
-> The sentinel currently requires the private key at startup and does not support any KMS systems. Do not use this key for anything else, especially security-related tasks. Use it only for running the sentinel, and fund it only with the amount needed for gas and bonds. In the future, we plan to support KMS systems for more secure setups.
+> [!TIP] The sentinel currently requires the private key at startup and does not support any KMS systems. Do not use this key for anything else, especially security-related tasks. Use it only for running the sentinel, and fund it only with the amount needed for gas and bonds. In the future, we plan to support KMS systems for more secure setups.
 
 ##### Gas Costs
 
 The exact amount varies by chain and by how many requests a sentinel votes on, since gas is spent on `commit`/`reveal`/`finalize`/`claim` calls (plus an ERC-20 `approve` for the bond token) rather than on a fixed per-epoch schedule like the validator's. The actual cost of that gas depends on network congestion.
 
-> [!TIP]
-> On Gnosis Chain, the base fee is very low relative to the priority fee, so the priority fee makes up the bulk of gas costs. If your RPC occasionally returns an inflated `eth_maxPriorityFeePerGas` estimate, you can cap how much of the total fee cap can be a tip using the `[transactions]` table of your [configuration file](../crates/sentinel/sentinel.sample.toml). For example, setting `priority_fee_cap_percentage = 95` ensures the tip never exceeds 95% of `maxFeePerGas`, protecting against runaway estimates while still allowing normal inclusion.
+> [!TIP] On Gnosis Chain, the base fee is very low relative to the priority fee, so the priority fee makes up the bulk of gas costs. If your RPC occasionally returns an inflated `eth_maxPriorityFeePerGas` estimate, you can cap how much of the total fee cap can be a tip using the `[transactions]` table of your [configuration file](../crates/sentinel/sentinel.sample.toml). For example, setting `priority_fee_cap_percentage = 95` ensures the tip never exceeds 95% of `maxFeePerGas`, protecting against runaway estimates while still allowing normal inclusion.
 
 ## Running
 
@@ -86,18 +81,16 @@ docker run --name safenet-sentinel \
 There are a few things you can do to verify your sentinel is running as expected:
 
 - Check the logs. For example, if running with `docker`:
-    ```sh
-    docker logs --follow safenet-sentinel
-    docker logs --follow safenet-sentinel-engine
-    ```
+  ```sh
+  docker logs --follow safenet-sentinel
+  docker logs --follow safenet-sentinel-engine
+  ```
 - Check the sentinel EVM account on a block explorer. There should be recent transactions to the `SentinelOracle` contract (`commit`/`reveal`/`finalize`/`claim`) and, when bonding, an `approve` call to the fee token.
 
 ### Common Problems
 
 - Ethereum node RPC issues:
-    - Rate limits. While the sentinel implements exponential backoff for some RPC requests, rate limits can still prevent full participation in Safenet Testnet.
-    - Missing logs. Some RPC providers do not reliably return all logs for `eth_getLogs` requests. This issue can be mitigated with the appropriate configuration (see [`eth_getLogs` Reliability](#eth_getlogs-reliability)).
-- An unreachable engine or a request that exceeds the sentinel's timeout makes the sentinel abstain
-  instead of guessing. Check both services' logs and connectivity over the configured
-  `sentinel.engine` URL.
+  - Rate limits. While the sentinel implements exponential backoff for some RPC requests, rate limits can still prevent full participation in Safenet Testnet.
+  - Missing logs. Some RPC providers do not reliably return all logs for `eth_getLogs` requests. This issue can be mitigated with the appropriate configuration (see [`eth_getLogs` Reliability](#eth_getlogs-reliability)).
+- An unreachable engine or a request that exceeds the sentinel's timeout makes the sentinel abstain instead of guessing. Check both services' logs and connectivity over the configured `sentinel.engine` URL.
 - Insufficient funds on the sentinel account to submit onchain transactions. Logs will show that `actions` could not be submitted because of insufficient gas, or that a bond commitment failed because of insufficient fee-token balance/allowance.

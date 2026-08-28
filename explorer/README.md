@@ -14,8 +14,7 @@ The Safenet Explorer is a React 19 single-page application for inspecting the st
 
 ### Prerequisites
 
-`explorer/` is an independent NPM package with its own lockfile (not an npm workspace member).
-Install its dependencies with:
+`explorer/` is an independent NPM package with its own lockfile (not an npm workspace member). Install its dependencies with:
 
 ```sh
 npm ci --prefix explorer
@@ -72,7 +71,7 @@ cp explorer/.env.sample explorer/.env
 Set them in a `.env` file inside the `explorer/` directory, or as build-time environment variables.
 
 | Variable | Default | Description |
-|---|---|---|
+| --- | --- | --- |
 | `VITE_BASE_PATH` | `/` | Base path when the app is served from a sub-path (e.g. `/explorer/`). |
 | `VITE_DOCS_URL` | `https://docs.safefoundation.org/safenet` | URL for the "Docs" link in the footer. |
 | `VITE_TERMS_URL` | `#tos` | URL for the "Terms" link in the footer. |
