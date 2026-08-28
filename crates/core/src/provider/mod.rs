@@ -3,12 +3,12 @@
 use alloy::{
     network::AnyNetwork,
     primitives::U64,
-    providers::{
-        Provider as AlloyProvider, ProviderBuilder, ProviderCall, RootProvider, mock::Asserter,
-    },
+    providers::{Provider as AlloyProvider, ProviderCall, RootProvider},
     rpc::client::NoParams,
     transports::TransportError,
 };
+#[cfg(any(test, feature = "test-util"))]
+use alloy::{providers::ProviderBuilder, transports::mock::Asserter};
 use url::Url;
 
 /// The standard [`alloy`] provider used by Safenet services.
@@ -27,11 +27,13 @@ impl Provider {
     }
 
     /// Creates a mocked provider.
+    #[cfg(any(test, feature = "test-util"))]
     pub fn mocked(asserter: &Asserter) -> Self {
         Self::mocked_with_chain(asserter, 0x5afe)
     }
 
     /// Creates a mocked provider for a specific chain.
+    #[cfg(any(test, feature = "test-util"))]
     pub fn mocked_with_chain(asserter: &Asserter, chain_id: u64) -> Self {
         let root = ProviderBuilder::default().connect_mocked_client(asserter.clone());
         Self { root, chain_id }

@@ -4,6 +4,9 @@ version = "0.2.0"
 edition = "2024"
 publish = false
 
+[features]
+test-util = []
+
 [dependencies]
 alloy.workspace = true
 futures.workspace = true
