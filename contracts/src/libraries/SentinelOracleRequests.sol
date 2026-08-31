@@ -221,8 +221,16 @@ library SentinelOracleRequest {
     // there. Only touches `Progress` -- `state`, `arbitrationDeadline`, and `fee` all live in its
     // single slot, so no `Terms` read is needed at all.
     function timeoutArbitration(T storage self) internal returns (uint96 refundFee) {
-        require(self.progress.state == State.FROZEN, RequestNotFrozen());
         require(block.number > self.progress.arbitrationDeadline, ArbitrationNotTimedOut());
+        return outOfScope(self);
+    }
+
+    // The arbitrator declining a `FROZEN` request (e.g. it falls outside what they rule on) moves
+    // it to `TIMED_OUT` immediately -- identical outcome to `timeoutArbitration` above, just without
+    // waiting on `arbitrationDeadline`, since the arbitrator's own refusal is itself the reason no
+    // ruling is coming.
+    function outOfScope(T storage self) internal returns (uint96 refundFee) {
+        require(self.progress.state == State.FROZEN, RequestNotFrozen());
         refundFee = self.progress.fee;
         self.progress.fee = 0;
         self.progress.state = State.TIMED_OUT;

@@ -33,6 +33,10 @@ contract SentinelOracle is IOracle {
     event DisputeResolved(
         bytes32 indexed requestId, SentinelOracleRequest.State outcome, uint128 slashed, string context
     );
+    // `context` is the arbitrator's rationale for declining to rule (free-form text, or e.g. an
+    // IPFS CID pointing to a longer writeup) -- same convention as `DisputeResolved.context`.
+    event DisputeOutOfScope(bytes32 indexed requestId, string context);
+    event ArbitrationTimedOut(bytes32 indexed requestId);
     event Claimed(bytes32 indexed requestId, address indexed sentinel, uint96 bondReturn, uint96 feeReward);
 
     event FeeScheduled(uint96 newValue, uint64 activeAtBlock);
@@ -315,6 +319,19 @@ contract SentinelOracle is IOracle {
         address sponsor = request.terms.sponsor;
         uint96 refundFee = request.timeoutArbitration();
         FEE_TOKEN.safeTransfer(sponsor, refundFee);
+        emit ArbitrationTimedOut(requestId);
+    }
+
+    // Lets the arbitrator decline a `FROZEN` request outright (e.g. it's outside what they rule
+    // on) instead of leaving it to run out the clock on `ARBITRATION_TIMEOUT`. Same `TIMED_OUT`
+    // outcome as `timeoutArbitration` above -- no established side, every bond returns in full via
+    // `claim()` -- just triggered by the arbitrator's own refusal rather than a deadline.
+    function markOutOfScope(bytes32 requestId, string calldata context) external onlyArbitrator {
+        SentinelOracleRequest.T storage request = $requests.get(requestId);
+        address sponsor = request.terms.sponsor;
+        uint96 refundFee = request.outOfScope();
+        FEE_TOKEN.safeTransfer(sponsor, refundFee);
+        emit DisputeOutOfScope(requestId, context);
     }
 
     // ============================================================
