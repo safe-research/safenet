@@ -23,8 +23,9 @@ library ForgeSecp256k1 {
     function rand() internal returns (P memory r) {
         // The `ecrecover` trick only works for x-coordinates smaller than the
         // curve order. Assuming uniform distribution of x-coordinates for curve
-        // points, this occurs once in every 3.7e39, so this loop will
-        // practically always run exactly once.
+        // points, an unusable point occurs with probability `(P - N) / P`, or
+        // roughly with a probability of 3.7e-39, so in practice this loop will
+        // run exactly once.
         while (true) {
             r = g(_VM.randomUint());
             if (r.w.publicKeyX < Secp256k1.N) {
