@@ -65,9 +65,6 @@ pub enum Action {
         proof: Vec<B256>,
         expires_at: u64,
     },
-    /// An action to decline participation in a signing round for a packet
-    /// that failed verification.
-    SignDecline { signature_id: B256, expires_at: u64 },
     /// An action to publish this validator's signature share, along with the
     /// callback invoked once the group's signature completes.
     SignShare {
@@ -273,20 +270,6 @@ impl ActionEncoder<Action> for Encoder {
                     .abi_encode()
                     .into(),
                     gas: 250_000,
-                },
-                Some(expires_at),
-            ),
-            Action::SignDecline {
-                signature_id,
-                expires_at,
-            } => (
-                Transaction {
-                    to: self.coordinator,
-                    value: U256::ZERO,
-                    data: Coordinator::signDeclineCall { sid: signature_id }
-                        .abi_encode()
-                        .into(),
-                    gas: 150_000,
                 },
                 Some(expires_at),
             ),

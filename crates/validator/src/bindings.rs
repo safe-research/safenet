@@ -224,7 +224,6 @@ sol! {
         function keyGenConfirmWithCallback(bytes32 gid, Callback callback) external;
         function preprocess(bytes32 gid, bytes32 commitment) external;
         function sign(bytes32 gid, bytes32 message) external;
-        function signDecline(bytes32 sid) external;
         function signRevealNonces(bytes32 sid, SignNonces nonces, bytes32[] proof) external;
         function signShare(
             bytes32 sid,

@@ -61,7 +61,6 @@ type AttestationInfo = {
 	lastUpdate: bigint;
 	committed: AttestationParticipation[];
 	signed: AttestationParticipation[];
-	declined: AttestationParticipation[];
 };
 
 export type AttestationStatus = AttestationInfo &
@@ -79,8 +78,6 @@ type StatusAggregation = {
 	lastUpdate: bigint;
 	committed: AttestationParticipation[];
 	signedBySelection: Record<string, AttestationParticipation[]>;
-	declined: AttestationParticipation[];
-	priorityAddresses: Set<Address>;
 	selectionRoot?: Hex;
 	signature?: Signature;
 };
@@ -155,23 +152,13 @@ export const loadLatestAttestationStatus = async ({
 			const status = agg[log.args.sid] ?? {
 				committed: [],
 				signedBySelection: {},
-				declined: [],
-				priorityAddresses: new Set<Address>(),
 				lastUpdate: 0n,
 			};
 			if (status.lastUpdate < log.blockNumber) {
 				status.lastUpdate = log.blockNumber;
 			}
 			switch (log.eventName) {
-				case "SignDeclined": {
-					status.declined.push({
-						address: log.args.participant,
-						block: log.blockNumber,
-					});
-					break;
-				}
 				case "SignRevealedNonces": {
-					status.priorityAddresses.add(log.args.participant);
 					status.committed.push({
 						address: log.args.participant,
 						block: log.blockNumber,
@@ -179,7 +166,6 @@ export const loadLatestAttestationStatus = async ({
 					break;
 				}
 				case "SignShared": {
-					status.priorityAddresses.add(log.args.participant);
 					const shares = status.signedBySelection[log.args.selectionRoot] ?? [];
 					shares.push({
 						address: log.args.participant,
@@ -208,7 +194,6 @@ export const loadLatestAttestationStatus = async ({
 			const sequence = signingEvent.args.sequence;
 			const committed = status?.committed ?? [];
 			const signed = getSigned(status);
-			const declined = getDeclined(status);
 			return [
 				{
 					lastUpdate: status.lastUpdate ?? signingEvent.blockNumber,
@@ -217,7 +202,6 @@ export const loadLatestAttestationStatus = async ({
 					sequence,
 					committed,
 					signed,
-					declined,
 				},
 				status.signature,
 			];
@@ -283,18 +267,6 @@ export const loadGroupPublicKey = async (
 		// Group might not exist or key generation might not be complete
 		return undefined;
 	}
-};
-
-const getDeclined = (status: StatusAggregation | undefined): AttestationParticipation[] => {
-	if (status === undefined || status.declined.length === 0) return [];
-	// Participants who committed or signed take priority — deduplicate per participant
-	const seen = new Set<Address>();
-	return status.declined.filter((p) => {
-		if (status.priorityAddresses.has(p.address)) return false;
-		if (seen.has(p.address)) return false;
-		seen.add(p.address);
-		return true;
-	});
 };
 
 const getSigned = (status: StatusAggregation | undefined): AttestationParticipation[] => {
