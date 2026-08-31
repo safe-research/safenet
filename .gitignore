@@ -13,4 +13,5 @@ validator*.toml
 !/crates/validator/validator.sample.toml
 sentinel*.toml
 !/crates/sentinel/sentinel.sample.toml
+!/crates/sentinel-engine/sentinel-engine.sample.toml
 *_logs.txt
