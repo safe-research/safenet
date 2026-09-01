@@ -36,9 +36,14 @@ certoraRun certora/conf/SafenetGuardCommon.conf --compilation_steps_only
 There is **no CI job** for Certora: run the specs manually and read the report; the goal is *verified
 properties*, not a green exit code.
 
-One sanity-check artifact is **advisory and expected** (it does not gate the exit code): ignore it.
+Two sanity-check artifacts are **advisory and expected** (they do not gate the exit code): ignore them.
 `invariant_not_trivial_postcondition` fires for every parameterised storage invariant (methods that don't
-touch the slot preserve it trivially). Sanity checks run at the tool default (`rule_sanity: basic`).
+touch the slot preserve it trivially), and `rule_not_vacuous` can fire on the `@withrevert` /
+reverting-summary rules. Sanity checks run at the tool default (`rule_sanity: basic`): an `advanced` run was
+tried on `SafenetGuardCheckTx.conf` and flagged **all** of that spec's rules as assert-tautologies, a
+systematic false positive for the `@withrevert` + reverting-summary style (it flags rules that are
+demonstrably not tautologies, e.g. the authorization-completeness and fail-closed rules), so it yields no
+actionable signal and roughly doubles prover time. `advanced` was not run on the other specs.
 
 ---
 
@@ -64,6 +69,7 @@ documented below reports *"No errors found by Prover!"* (`exit_code=0`).
 | `specs/SafenetGuardCommon.spec` | Shared `methods` block, cryptography/hashing summaries, and the one-state invariants. Imported by the concern specs. |
 | `specs/SafenetGuardEpoch.spec` | Epoch-forest rules and the genesis invariant. |
 | `specs/SafenetGuardAnnouncements.spec` | Announcement lifecycle and hash field-separation rules. |
+| `specs/SafenetGuardCheckTx.spec` | `checkTransaction` authorization rules. |
 | `conf/SafenetGuard*.conf` | One conf per spec. |
 
 ## Property ledger
@@ -100,6 +106,20 @@ documented below reports *"No errors found by Prover!"* (`exit_code=0`).
 - `announceSucceedsWhenAbsentOrExpired` / `cancelSucceedsWhenPresent`: liveness (announce/cancel always available).
 - `announcementHashSeparates{To,Value,Data,Operation,SafeTxGas,BaseGas,GasPrice,GasToken,RefundReceiver}`: the announcement hash binds every parameter.
 
+### `checkTransaction` authorization: `SafenetGuardCheckTx.spec`
+
+- `checkTransactionRevertsWithoutAuthorization`: reverts unless auto-allowed / valid attestation / matured announcement.
+- `autoAllowedNeverReverts` / `autoAllowedChangesNoState`: the auto-allow (announce/cancel self-call) path succeeds and mutates no state.
+- `guardRejectsNativeValue`: no payable entry point.
+- `attestationPathRequiresKnownEpoch`: the trust check precedes verification.
+- `malformedTrailerFailsClosed` / `untrustedTrailerNeverFallsThrough`: a recognised trailer never silently downgrades to the announcement path.
+- `trustedAttestationAlwaysAuthorizes`: liveness of the attestation path.
+- `maturedAnnouncementAlwaysAuthorizes`: liveness of the escape hatch.
+- `checkTransactionConsumesAnnouncement` / `consumeTouchesOnlyItsOwnSlot`: single-use consume; slot locality.
+- `attestationDoesNotConsumeAnnouncement` / `failedAttestationNeverConsumesAnnouncement`: a trailer never consumes an announcement.
+- `checkTransactionNeverExtendsForest`: `checkTransaction` never mutates the epoch forest.
+- `checkAfterExecutionNoOp`: `checkAfterExecution` never reverts and changes no storage.
+
 ## Assumptions & scope
 
 - **Cryptography is not modelled in CVL.** `FROST.verify` is summarised, but its *verdict* stays symbolic
@@ -111,6 +131,12 @@ documented below reports *"No errors found by Prover!"* (`exit_code=0`).
 - **Hashing is opaque.** `ConsensusMessages.{domain,epochRollover,transactionProposal}` are `NONDET` in the
   concern specs; the byte values are irrelevant to the guard's control flow (`FROST.verify` is itself
   summarised). `_.nonce()` is summarised to a ghost `safeNonce`.
+- **`_isAutoAllowed` is `private`.** The harness `isAutoAllowed` mirror re-expresses that gate so specs can
+  call it `envfree`; it is pinned to the real gate *behaviourally* by four load-bearing rules, never a
+  direct call: `autoAllowedNeverReverts` (not too permissive) and `checkTransactionRevertsWithoutAuthorization`
+  (not too restrictive) cover the no-trailer input space; `attestationPathRequiresKnownEpoch` closes the
+  well-formed-trailer region (it *asserts* pre-state key membership) and `malformedTrailerFailsClosed` closes
+  the malformed-trailer sliver the former prunes. Together they sandwich the mirror onto the contract's decision.
 - **`hashing_length_bound = 3200`** in every conf (Safe calldata is bounded to 3200 bytes).
 - **Loops run in pessimistic mode** (`optimistic_loop: false` in every conf), so no unsound loop assumption
   is made. `loop_iter = 3` is therefore a *sound, asserted* bound: a loop needing more than three
@@ -123,3 +149,6 @@ Properties that CVL abstracts are pinned by Foundry tests:
 - `SafenetGuardTest.test_announcementHash_separatesSameLengthData`: the announcement hash binds `data` by
   content, not merely by length (the CVL family separates `data` only by length, so the same-length case
   is pinned here).
+- `AttestationTrailerTest.testFuzz_parseTotalAndFailClosed`: the trailer parser is total and fail-closed
+  (`hasTrailer` never reverts; a recognised trailer either decodes a full 256-byte payload or reverts,
+  never reading out of bounds), the property `malformedTrailerFailsClosed` relies on.
