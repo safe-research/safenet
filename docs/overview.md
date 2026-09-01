@@ -139,7 +139,7 @@ stateDiagram-v2
 
 #### Transaction Attestations
 
-The main purpose of Safenet is to attest to Safe transactions. Attestations are cryptographically verifiable FROST signatures, specifically, `secp256k1` Schnorr signatures. This allows Safenet attestations to be verifiable **on any EVM-compatible chain** (specifically, it requires the `ecrecover (0x1)` and `sha256 (0x2)` precompiles which are ubiquitously available). Transaction attestations are generated as part of FROST signing ceremonies with the signature aggregated onchain.
+The main purpose of Safenet is to attest to Safe transactions. Attestations are cryptographically verifiable FROST signatures, specifically, `secp256k1` Schnorr signatures. This allows Safenet attestations to be verifiable on EVM-compatible chains (specifically, it requires the `ecrecover (0x1)` and `sha256 (0x2)` precompiles, as well as the `MCOPY` opcode introduced in the Cancun hardfork). Transaction attestations are generated as part of FROST signing ceremonies with the signature aggregated onchain.
 
 Because FROST signatures only require a threshold of participants to be involved, Safenet is resilient to intermittent outages and/or malicious behavior of less than half of the validators participating in an epoch. In case a validator is not available or acts maliciously, it is removed from the selection of participants for a given transaction attestation so that the signing ceremony can be restarted and the transaction ultimately attested.
 

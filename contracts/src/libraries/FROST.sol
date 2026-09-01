@@ -8,6 +8,8 @@ import {Secp256k1} from "@/libraries/Secp256k1.sol";
  * @notice Implementation of the FROST(secp256k1, SHA-256) ciphersuite.
  * @dev FROST Implementation based on [RFC-9591](https://datatracker.ietf.org/doc/html/rfc9591). In particular, it
  *      implements the FROST(secp256k1, SHA-256) ciphersuite from Section 6.5.
+ *
+ *      This library requires the `MCOPY` opcode (EIP-5656).
  */
 library FROST {
     using Secp256k1 for Secp256k1.Point;

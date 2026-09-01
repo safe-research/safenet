@@ -6,6 +6,7 @@ import {SafenetGuard} from "@/guard/SafenetGuard.sol";
 import {Secp256k1} from "@/libraries/Secp256k1.sol";
 import {DeterministicDeployment} from "@script/util/DeterministicDeployment.sol";
 import {getFactory} from "@script/util/GetFactory.sol";
+import {requireVerificationChainSupport} from "@script/util/ChainSupport.sol";
 
 contract DeploySafenetGuardScript is Script {
     using DeterministicDeployment for DeterministicDeployment.Factory;
@@ -28,6 +29,7 @@ contract DeploySafenetGuardScript is Script {
 
         Secp256k1.Point memory initialGroupKey = Secp256k1.Point({x: groupKeyX, y: groupKeyY});
 
+        requireVerificationChainSupport(vm);
         vm.startBroadcast();
 
         guard = factory.deployWithArgs(
