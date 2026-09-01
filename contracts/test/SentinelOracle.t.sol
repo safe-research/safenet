@@ -832,6 +832,8 @@ contract SentinelOracleTest is Test {
         SentinelOracleRequest.T memory pending = oracle.getRequest(REQUEST_ID);
         assertLt(block.number, pending.terms.revealDeadline, "should finalize before the reveal deadline");
 
+        vm.expectEmit(true, false, false, true);
+        emit SentinelOracle.RequestTimedOut(REQUEST_ID);
         oracle.finalize(REQUEST_ID);
         assertEq(token.balanceOf(sponsor), sponsorBalBefore);
 
@@ -855,6 +857,8 @@ contract SentinelOracleTest is Test {
         _reveal(sentinel1, true, SALT_1);
         _reveal(sentinel2, false, SALT_2);
 
+        vm.expectEmit(true, false, false, true);
+        emit SentinelOracle.DisputeTriggered(REQUEST_ID);
         oracle.finalize(REQUEST_ID);
 
         SentinelOracleRequest.T memory r = oracle.getRequest(REQUEST_ID);
@@ -1336,6 +1340,8 @@ contract SentinelOracleTest is Test {
         _advancePastRevealDeadline();
 
         uint256 receiverBalBefore = token.balanceOf(protocolFundsReceiver);
+        vm.expectEmit(true, false, false, true);
+        emit SentinelOracle.RequestTimedOut(REQUEST_ID);
         oracle.finalize(REQUEST_ID);
 
         SentinelOracleRequest.T memory r = oracle.getRequest(REQUEST_ID);

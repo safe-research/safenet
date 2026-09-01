@@ -168,7 +168,9 @@ sequenceDiagram
     Alice->>Oracle: finalize(R2)
     Note over Oracle: approveCount > 0 AND denyCount > 0 -> newState = FROZEN<br/>(both sides established -- no bonds move here, no fee is cut yet)<br/>request[R2].arbitrationDeadline = block.number + ARBITRATION_TIMEOUT<br/>request[R2].state = FROZEN
 
-    Note over Oracle: finalize() returns early for FROZEN -- no OracleResult event yet,<br/>request now waits on the arbitrator (or ARBITRATION_TIMEOUT, see timeoutArbitration)
+    Oracle--)Sponsor: emit DisputeTriggered(R2)
+
+    Note over Oracle: finalize() returns early for FROZEN -- no OracleResult event,<br/>request now waits on the arbitrator (or ARBITRATION_TIMEOUT, see timeoutArbitration)
 
     rect rgba(255,220,220,0.3)
         Note over Sponsor,DAO: ArbitraDocument Dispute Flow
@@ -348,6 +350,7 @@ sequenceDiagram
         Note over Oracle: committedCount == 0 AND block.number > commitDeadline -> nothingToReveal<br/>(finalize() doesn't need to wait for revealDeadline)<br/>approveCount == 0 AND denyCount == 0 -> no side ever established -> newState = TIMED_OUT<br/>refundFee = request[R3].fee = 0.40<br/>unrevealedBond = 0 (nonRevealerCount * slashAmount -- nobody ever committed)<br/>request[R3].state = TIMED_OUT
         Oracle->>Token: transfer(Sponsor, 0.40)
         Oracle-->>Sponsor: 0.40 FEE_TOKEN
+        Oracle--)Sponsor: emit RequestTimedOut(R3)
 
         Note over Sponsor,Token: Nobody ever staked a bond, so there is nothing left to claim()
     else Sentinels commit but nobody reveals
@@ -370,6 +373,7 @@ sequenceDiagram
         Note over Oracle: revealedCount (0) != committedCount (2) -> not everyoneRevealed,<br/>committedCount > 0 -> not nothingToReveal either --<br/>only block.number > revealDeadline lets this proceed<br/>approveCount == 0 AND denyCount == 0 -> no side was ever established -> newState = TIMED_OUT<br/>refundFee = request[R3].fee = 0.40<br/>unrevealedBond = 0 -- that slash only fires once some side IS established (see Non-Reveal flow above)<br/>request[R3].state = TIMED_OUT
         Oracle->>Token: transfer(Sponsor, 0.40)
         Oracle-->>Sponsor: 0.40 FEE_TOKEN
+        Oracle--)Sponsor: emit RequestTimedOut(R3)
 
         rect rgba(255,240,200,0.3)
             Note over Sponsor,Token: Each sentinel claims their bond back in full

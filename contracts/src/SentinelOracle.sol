@@ -28,6 +28,9 @@ contract SentinelOracle is IOracle {
     // EVENTS
     // ============================================================
 
+    // Emitted when `finalize` sees both an `approve` and a `deny` side established and freezes the
+    // request, starting the arbitration clock.
+    event DisputeTriggered(bytes32 indexed requestId);
     // `context` is the arbitrator's rationale for this ruling (free-form text, or e.g. an IPFS
     // CID pointing to a longer writeup).
     event DisputeResolved(
@@ -37,6 +40,9 @@ contract SentinelOracle is IOracle {
     // IPFS CID pointing to a longer writeup) -- same convention as `DisputeResolved.context`.
     event DisputeOutOfScope(bytes32 indexed requestId, string context);
     event ArbitrationTimedOut(bytes32 indexed requestId);
+    // Emitted when `finalize` times out a request that nobody committed to (or nobody revealed on)
+    // -- distinct from `ArbitrationTimedOut`, which is for a `FROZEN` (disputed) request instead.
+    event RequestTimedOut(bytes32 indexed requestId);
     event Claimed(bytes32 indexed requestId, address indexed sentinel, uint96 bondReturn, uint96 feeReward);
 
     event FeeScheduled(uint96 newValue, uint64 activeAtBlock);
@@ -260,11 +266,13 @@ contract SentinelOracle is IOracle {
         }
 
         if (newState == SentinelOracleRequest.State.FROZEN) {
+            emit DisputeTriggered(requestId);
             return;
         }
 
         if (newState == SentinelOracleRequest.State.TIMED_OUT) {
             FEE_TOKEN.safeTransfer(sponsor, refundFee);
+            emit RequestTimedOut(requestId);
             return;
         }
 
