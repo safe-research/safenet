@@ -1,7 +1,6 @@
 # Formal Verification
 
-Certora/CVL formal-verification specifications for the Safenet contracts. This directory currently
-covers two suites: the pre-existing **Staking** specs, and the **SafenetGuard** suite documented below.
+Certora/CVL formal-verification specifications for the Safenet contracts. This directory currently covers two suites: the pre-existing **Staking** specs, and the **SafenetGuard** suite documented below.
 
 ## Installation
 
@@ -13,12 +12,10 @@ source venv/bin/activate
 pip install -r certora/requirements.txt
 ```
 
-Additional requirements:
+### Additional requirements
 
-- **`solc` 0.8.30** on `PATH` (e.g. via `solc-select`). On non-x86 hosts (aarch64) the Solidity binaries
-  run under `qemu-user-static`.
-- **A JRE** (Java) must be installed: the local CVL type-checker needs it, and `certoraRun` aborts with a
-  "build failed" error without it.
+- **`solc` 0.8.30** on `PATH` (e.g. via `solc-select`).
+- Certora tooling requires a Java runtime.
 - A `CERTORAKEY` for the cloud prover.
 
 ## Running
@@ -33,33 +30,17 @@ CERTORAKEY=... certoraRun certora/conf/SafenetGuardCommon.conf --wait_for_result
 certoraRun certora/conf/SafenetGuardCommon.conf --compilation_steps_only
 ```
 
-There is **no CI job** for Certora: run the specs manually and read the report; the goal is *verified
-properties*, not a green exit code.
-
-Two sanity-check artifacts are **advisory and expected** (they do not gate the exit code): ignore them.
-`invariant_not_trivial_postcondition` fires for every parameterised storage invariant (methods that don't
-touch the slot preserve it trivially), and `rule_not_vacuous` can fire on the `@withrevert` /
-reverting-summary rules. Sanity checks run at the tool default (`rule_sanity: basic`): an `advanced` run was
-tried on `SafenetGuardCheckTx.conf` and flagged **all** of that spec's rules as assert-tautologies, a
-systematic false positive for the `@withrevert` + reverting-summary style (it flags rules that are
-demonstrably not tautologies, e.g. the authorization-completeness and fail-closed rules), so it yields no
-actionable signal and roughly doubles prover time. `advanced` was not run on the other specs.
+The `invariant_not_trivial_postcondition` and `rule_not_vacuous` sanity artifacts are advisory and can be ignored.
 
 ---
 
 # SafenetGuard suite
 
-Formal verification of `contracts/src/guard/SafenetGuard.sol` and its libraries (`EpochRollover`,
-`TransactionAnnouncement`, `AttestationTrailer`, `SignatureExtension`, `ConsensusMessages`,
-`SafeTransaction`). **The suite makes no changes to the contracts**: the harnesses expose internals and
-mirrors around the deployed code, never the reverse.
+Formal verification of `contracts/src/guard/SafenetGuard.sol` and its libraries (`EpochRollover`, `TransactionAnnouncement`, `AttestationTrailer`, `SignatureExtension`, `ConsensusMessages`, `SafeTransaction`). **The suite makes no changes to the contracts**: the harnesses expose internals and mirrors around the deployed code, never the reverse.
 
-The suite is organised as a shared base (the harness plus `SafenetGuardCommon.spec`) and four concern
-specs built on top of it: the epoch forest, announcements, `checkTransaction` authorization, and a
-standalone message-binding spec. Each concern spec is verified independently.
+The suite is organised as a shared base (the harness plus `SafenetGuardCommon.spec`) and four concern specs built on top of it: the epoch forest, announcements, `checkTransaction` authorization, and a standalone message-binding spec. Each concern spec is verified independently.
 
-Last verified green: **2026-08-17** against `main` (`fd01aaa`) with **certora-cli 8.6.4**. Every conf
-documented below reports *"No errors found by Prover!"* (`exit_code=0`). **55 properties: 6 invariants + 49 rules.**
+Last verified green: **2026-08-17** against `main` (`fd01aaa`) with **certora-cli 8.6.4**. Every conf documented below reports _"No errors found by Prover!"_ (`exit_code=0`). **55 properties: 6 invariants + 49 rules.**
 
 ## Layout
 
@@ -92,7 +73,7 @@ documented below reports *"No errors found by Prover!"* (`exit_code=0`). **55 pr
 - `updateEpochRecordsChild` / `updateEpochRecordsOnlyChild`: a rollover records exactly the named child.
 - `updateEpochRequiresKnownParent` / `updateEpochRequiresAdvancingEpoch`: the two revert preconditions.
 - `updateEpochRequiresVerifyingProof`: a rollover reverts without a verifying FROST proof (the control-flow twin of `failedAttestationNeverConsumesAnnouncement`).
-- `updateEpochSucceedsFromKnownParent`: completeness, those are the *only* gates (never reverts on a valid call).
+- `updateEpochSucceedsFromKnownParent`: completeness, those are the _only_ gates (never reverts on a valid call).
 - `updateEpochIdempotent`: re-submitting a known pair is a no-op (no revert, no state change).
 - `updateEpochOutcomeIndependentOfSender`: permissionless, revert outcome and state effect don't depend on `msg.sender`.
 - `immutablesNeverChange`: the configured delay/window/domain never change.
@@ -129,49 +110,20 @@ documented below reports *"No errors found by Prover!"* (`exit_code=0`). **55 pr
 
 ## Assumptions & scope
 
-- **Cryptography is not modelled in CVL.** `FROST.verify` is summarised, but its *verdict* stays symbolic
-  (`frostVerifyModel`) so the guard's fail-closed control flow is inside the verified boundary;
-  `Secp256k1.requireNonZero` is modelled to reject only the zero point (recovering `zeroKeyNeverTrusted`).
-  The real `requireNonZero` also reverts `NotOnCurve` for off-curve points; the model does not (a safety
-  superset), so R-01's "only gates" liveness holds only modulo this on-curve check. Cryptographic soundness
-  (which signatures/keys actually verify) is out of scope and covered by Foundry.
-- **Hashing is opaque.** `ConsensusMessages.{domain,epochRollover,transactionProposal}` are `NONDET` in the
-  concern specs; the byte values are irrelevant to the guard's control flow (`FROST.verify` is itself
-  summarised). `_.nonce()` is summarised to a ghost `safeNonce`.
-- **`_isAutoAllowed` is `private`.** The harness `isAutoAllowed` mirror re-expresses that gate so specs can
-  call it `envfree`; it is pinned to the real gate *behaviourally* by four load-bearing rules, never a
-  direct call: `autoAllowedNeverReverts` (not too permissive) and `checkTransactionRevertsWithoutAuthorization`
-  (not too restrictive) cover the no-trailer input space; `attestationPathRequiresKnownEpoch` closes the
-  well-formed-trailer region (it *asserts* pre-state key membership) and `malformedTrailerFailsClosed` closes
-  the malformed-trailer sliver the former prunes. Together they sandwich the mirror onto the contract's decision.
-- **The oracle is bound, not validated.** The trailer's `oracle` and `oracleDataHash` are attacker-chosen
-  inputs; the suite proves they are bound into the FROST-verified message (R-CHK-4), so an attestation gated
-  by one oracle/oracleData cannot authorise a transaction gated by another. Whether a given oracle is
-  *acceptable* is Validator-side policy and is deliberately not enforced on-chain: it reduces to FROST
-  soundness, which is out of scope (Foundry). Per-argument injectivity of the message is pinned by
-  `test_transactionProposal_injectiveInEachField`.
+- **Cryptography is not modelled in CVL.** `FROST.verify` is summarised, but its _verdict_ stays symbolic (`frostVerifyModel`) so the guard's fail-closed control flow is inside the verified boundary; `Secp256k1.requireNonZero` is modelled to reject only the zero point (recovering `zeroKeyNeverTrusted`). The real `requireNonZero` also reverts `NotOnCurve` for off-curve points; the model does not (a safety superset), so R-01's "only gates" liveness holds only modulo this on-curve check. Cryptographic soundness (which signatures/keys actually verify) is out of scope and covered by Foundry.
+- **Hashing is opaque.** `ConsensusMessages.{domain,epochRollover,transactionProposal}` are `NONDET` in the concern specs; the byte values are irrelevant to the guard's control flow (`FROST.verify` is itself summarised). `_.nonce()` is summarised to a ghost `safeNonce`.
+- **`_isAutoAllowed` is `private`.** The harness `isAutoAllowed` mirror re-expresses that gate so specs can call it `envfree`; it is pinned to the real gate _behaviourally_ by four load-bearing rules, never a direct call: `autoAllowedNeverReverts` (not too permissive) and `checkTransactionRevertsWithoutAuthorization` (not too restrictive) cover the no-trailer input space; `attestationPathRequiresKnownEpoch` closes the well-formed-trailer region (it _asserts_ pre-state key membership) and `malformedTrailerFailsClosed` closes the malformed-trailer sliver the former prunes. Together they sandwich the mirror onto the contract's decision.
+- **The oracle is bound, not validated.** The trailer's `oracle` and `oracleDataHash` are attacker-chosen inputs; the suite proves they are bound into the FROST-verified message (R-CHK-4), so an attestation gated by one oracle/oracleData cannot authorise a transaction gated by another. Whether a given oracle is _acceptable_ is Validator-side policy and is deliberately not enforced on-chain: it reduces to FROST soundness, which is out of scope (Foundry). Per-argument injectivity of the message is pinned by `test_transactionProposal_injectiveInEachField`.
 - **`hashing_length_bound = 3200`** in every conf (Safe calldata is bounded to 3200 bytes).
-- **Loops run in pessimistic mode** (`optimistic_loop: false` in every conf), so no unsound loop assumption
-  is made. `loop_iter = 3` is therefore a *sound, asserted* bound: a loop needing more than three
-  iterations would fail the run's unwinding condition.
+- **Loops run in pessimistic mode** (`optimistic_loop: false` in every conf), so no unsound loop assumption is made. `loop_iter = 3` is therefore a _sound, asserted_ bound: a loop needing more than three iterations would fail the run's unwinding condition.
 
 ## Foundry cross-checks
 
 Properties that CVL abstracts are pinned by Foundry tests:
 
-- `SafenetGuardTest.test_announcementHash_separatesSameLengthData`: the announcement hash binds `data` by
-  content, not merely by length (the CVL family separates `data` only by length, so the same-length case
-  is pinned here).
-- `AttestationTrailerTest.testFuzz_parseTotalAndFailClosed`: the trailer parser is total and fail-closed
-  (`hasTrailer` never reverts; a recognised trailer either decodes a full 256-byte payload or reverts,
-  never reading out of bounds), the property `malformedTrailerFailsClosed` relies on.
-- `SafenetGuardTest.test_safeTransactionHash_matchesDeployedSafe`: the guard's `SafeTransaction.hash`
-  equals a **deployed** `Safe.getTransactionHash` for the same fields (the cross-contract equivalence CVL
-  treats as opaque).
-- `ConsensusMessagesTest.test_messageFamiliesDoNotCollide` / `test_transactionProposal_injectiveInEachField`:
-  EIP-712 domain-separation and per-argument injectivity of the proposal message.
-- `EpochRolloverTest.test_rollover_revertsOnMismatchedMessageField` /
-  `SafenetGuardTest.test_integration_updateEpoch_revertsWithTamperedSignature`: the `epochRollover` message
-  binding (correct fields, verified against the parent key) and rejection of a tampered proof, the discharge
-  for the rollover half of the message-binding story (which has no CVL analogue).
+- `SafenetGuardTest.test_announcementHash_separatesSameLengthData`: the announcement hash binds `data` by content, not merely by length (the CVL family separates `data` only by length, so the same-length case is pinned here).
+- `AttestationTrailerTest.testFuzz_parseTotalAndFailClosed`: the trailer parser is total and fail-closed (`hasTrailer` never reverts; a recognised trailer either decodes a full 256-byte payload or reverts, never reading out of bounds), the property `malformedTrailerFailsClosed` relies on.
+- `SafenetGuardTest.test_safeTransactionHash_matchesDeployedSafe`: the guard's `SafeTransaction.hash` equals a **deployed** `Safe.getTransactionHash` for the same fields (the cross-contract equivalence CVL treats as opaque).
+- `ConsensusMessagesTest.test_messageFamiliesDoNotCollide` / `test_transactionProposal_injectiveInEachField`: EIP-712 domain-separation and per-argument injectivity of the proposal message.
+- `EpochRolloverTest.test_rollover_revertsOnMismatchedMessageField` / `SafenetGuardTest.test_integration_updateEpoch_revertsWithTamperedSignature`: the `epochRollover` message binding (correct fields, verified against the parent key) and rejection of a tampered proof, the discharge for the rollover half of the message-binding story (which has no CVL analogue).
 - FROST/curve soundness and EIP-712 golden vectors (`test_TransactionProposal*`, `test_Verify_*`, etc.).
