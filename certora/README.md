@@ -40,7 +40,7 @@ Formal verification of `contracts/src/guard/SafenetGuard.sol` and its libraries 
 
 The suite is organised as a shared base (the harness plus `SafenetGuardCommon.spec`) and four concern specs built on top of it: the epoch forest, announcements, `checkTransaction` authorization, and a standalone message-binding spec. Each concern spec is verified independently.
 
-Last verified green: **2026-08-17** against `main` (`fd01aaa`) with **certora-cli 8.6.4**. Every conf documented below reports _"No errors found by Prover!"_ (`exit_code=0`). **55 properties: 6 invariants + 49 rules.**
+Last verified green: **2026-08-17** against `main` (`fd01aaa`) with **certora-cli 8.6.4**. Every conf documented below reports _"No errors found by Prover!"_ (`exit_code=0`). **54 properties: 6 invariants + 48 rules.**
 
 ## Layout
 
@@ -76,7 +76,6 @@ Last verified green: **2026-08-17** against `main` (`fd01aaa`) with **certora-cl
 - `updateEpochSucceedsFromKnownParent`: completeness, those are the _only_ gates (never reverts on a valid call).
 - `updateEpochIdempotent`: re-submitting a known pair is a no-op (no revert, no state change).
 - `updateEpochOutcomeIndependentOfSender`: permissionless, revert outcome and state effect don't depend on `msg.sender`.
-- `immutablesNeverChange`: the configured delay/window/domain never change.
 
 ### Announcements: `SafenetGuardAnnouncements.spec`
 

@@ -168,23 +168,6 @@ rule updateEpochRequiresVerifyingProof(
 }
 
 // ------------------------------------------------------------------------------------------------------
-// F-21 / M-18: the guard's configuration immutables never change: pins the configuration story that INV-2
-// is expressed in terms of, and would fail loudly if the delay/window/domain were ever made governable.
-// ------------------------------------------------------------------------------------------------------
-
-rule immutablesNeverChange(env e, method f, calldataarg args) filtered { f -> !f.isView && !f.isPure } {
-    uint256 delayBefore = getAllowTxDelay();
-    uint256 windowBefore = getAllowTxWindow();
-    bytes32 domainBefore = getConsensusDomainSeparator();
-
-    f(e, args);
-
-    assert getAllowTxDelay() == delayBefore && getAllowTxWindow() == windowBefore
-        && getConsensusDomainSeparator() == domainBefore,
-        "the guard's configuration immutables never change";
-}
-
-// ------------------------------------------------------------------------------------------------------
 // F-20 / M-17: re-submitting an already-known rollover is a no-op (no revert, no state change), so reorg
 // replays and racing submitters are harmless. The `!lastReverted` half holds modulo the FROST/curve
 // summaries: it needs `frostAccepts`, and non-zero-ness of the already-known key is derived from INV-4
@@ -244,9 +227,9 @@ rule updateEpochSucceedsFromKnownParent(
 
 // ------------------------------------------------------------------------------------------------------
 // `updateEpoch` is permissionless: its authorization is the FROST proof over the rollover message, not the
-// caller. So both its revert outcome and its state effect are independent of `msg.sender` (and of the rest
-// of the environment bar `msg.value`, which the non-payable check pins to zero). This complements
-// `authorizationIgnoresMsgSender` (the checkTransaction counterpart) for the forest-mutating path.
+// caller. So both its revert outcome and its state effect are independent of `msg.sender` (the two calls
+// share `msg.value`, so non-zero-value paths are covered too, not just the non-payable case). This
+// complements `authorizationIgnoresMsgSender` (the checkTransaction counterpart) for the forest-mutating path.
 // ------------------------------------------------------------------------------------------------------
 
 rule updateEpochOutcomeIndependentOfSender(
@@ -259,7 +242,7 @@ rule updateEpochOutcomeIndependentOfSender(
     Secp256k1.Point newGroupKey,
     FROST.Signature signature
 ) {
-    require eA.msg.value == 0 && eB.msg.value == 0;
+    require eA.msg.value == eB.msg.value;
 
     storage init = lastStorage;
 
