@@ -54,22 +54,24 @@ Formal verification of `contracts/src/guard/SafenetGuard.sol` and its libraries 
 `SafeTransaction`). **The suite makes no changes to the contracts**: the harnesses expose internals and
 mirrors around the deployed code, never the reverse.
 
-This base introduces the harness and the shared spec that every concern spec builds on; the concern
-specs (epoch forest, announcements, `checkTransaction`, message binding) are added on top and each is
-documented here as it lands.
+The suite is organised as a shared base (the harness plus `SafenetGuardCommon.spec`) and four concern
+specs built on top of it: the epoch forest, announcements, `checkTransaction` authorization, and a
+standalone message-binding spec. Each concern spec is verified independently.
 
 Last verified green: **2026-08-17** against `main` (`fd01aaa`) with **certora-cli 8.6.4**. Every conf
-documented below reports *"No errors found by Prover!"* (`exit_code=0`).
+documented below reports *"No errors found by Prover!"* (`exit_code=0`). **55 properties: 6 invariants + 49 rules.**
 
 ## Layout
 
 | File | Role |
 | --- | --- |
 | `harnesses/SafenetGuardHarness.sol` | Base harness: packed-window accessors, the `isAutoAllowed` mirror, trailer decoders, genesis-pair getters, raw forest membership. |
+| `harnesses/SafenetGuardBindingHarness.sol` | Extends the base with deterministic `SafeTransaction.hash` / `transactionProposal` recomputation for the message-binding spec. |
 | `specs/SafenetGuardCommon.spec` | Shared `methods` block, cryptography/hashing summaries, and the one-state invariants. Imported by the concern specs. |
 | `specs/SafenetGuardEpoch.spec` | Epoch-forest rules and the genesis invariant. |
 | `specs/SafenetGuardAnnouncements.spec` | Announcement lifecycle and hash field-separation rules. |
 | `specs/SafenetGuardCheckTx.spec` | `checkTransaction` authorization rules. |
+| `specs/SafenetGuardBinding.spec` | Standalone (real hashing) attestation message-binding spec. |
 | `conf/SafenetGuard*.conf` | One conf per spec. |
 
 ## Property ledger
@@ -120,6 +122,11 @@ documented below reports *"No errors found by Prover!"* (`exit_code=0`).
 - `checkTransactionNeverExtendsForest`: `checkTransaction` never mutates the epoch forest.
 - `checkAfterExecutionNoOp`: `checkAfterExecution` never reverts and changes no storage.
 
+### Message binding: `SafenetGuardBinding.spec`
+
+- `attestationBindsTransactionMessage` (R-CHK-4): on the attestation path, `FROST.verify` is called with the decoded group key and signature, over `transactionProposal(domain, decoded epoch, decoded oracle, decoded oracleData hash, safeTxHash(actual params, nonce - 1))`. The oracle and oracleData-hash bindings are what stop an attestation gated by one oracle/oracleData from authorising a transaction gated by another.
+- `authorizationIgnoresMsgSender`: authorization derives from the attestation/announcement, not the trailing executor address.
+
 ## Assumptions & scope
 
 - **Cryptography is not modelled in CVL.** `FROST.verify` is summarised, but its *verdict* stays symbolic
@@ -137,6 +144,12 @@ documented below reports *"No errors found by Prover!"* (`exit_code=0`).
   (not too restrictive) cover the no-trailer input space; `attestationPathRequiresKnownEpoch` closes the
   well-formed-trailer region (it *asserts* pre-state key membership) and `malformedTrailerFailsClosed` closes
   the malformed-trailer sliver the former prunes. Together they sandwich the mirror onto the contract's decision.
+- **The oracle is bound, not validated.** The trailer's `oracle` and `oracleDataHash` are attacker-chosen
+  inputs; the suite proves they are bound into the FROST-verified message (R-CHK-4), so an attestation gated
+  by one oracle/oracleData cannot authorise a transaction gated by another. Whether a given oracle is
+  *acceptable* is Validator-side policy and is deliberately not enforced on-chain: it reduces to FROST
+  soundness, which is out of scope (Foundry). Per-argument injectivity of the message is pinned by
+  `test_transactionProposal_injectiveInEachField`.
 - **`hashing_length_bound = 3200`** in every conf (Safe calldata is bounded to 3200 bytes).
 - **Loops run in pessimistic mode** (`optimistic_loop: false` in every conf), so no unsound loop assumption
   is made. `loop_iter = 3` is therefore a *sound, asserted* bound: a loop needing more than three
@@ -152,3 +165,13 @@ Properties that CVL abstracts are pinned by Foundry tests:
 - `AttestationTrailerTest.testFuzz_parseTotalAndFailClosed`: the trailer parser is total and fail-closed
   (`hasTrailer` never reverts; a recognised trailer either decodes a full 256-byte payload or reverts,
   never reading out of bounds), the property `malformedTrailerFailsClosed` relies on.
+- `SafenetGuardTest.test_safeTransactionHash_matchesDeployedSafe`: the guard's `SafeTransaction.hash`
+  equals a **deployed** `Safe.getTransactionHash` for the same fields (the cross-contract equivalence CVL
+  treats as opaque).
+- `ConsensusMessagesTest.test_messageFamiliesDoNotCollide` / `test_transactionProposal_injectiveInEachField`:
+  EIP-712 domain-separation and per-argument injectivity of the proposal message.
+- `EpochRolloverTest.test_rollover_revertsOnMismatchedMessageField` /
+  `SafenetGuardTest.test_integration_updateEpoch_revertsWithTamperedSignature`: the `epochRollover` message
+  binding (correct fields, verified against the parent key) and rejection of a tampered proof, the discharge
+  for the rollover half of the message-binding story (which has no CVL analogue).
+- FROST/curve soundness and EIP-712 golden vectors (`test_TransactionProposal*`, `test_Verify_*`, etc.).

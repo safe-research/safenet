@@ -370,6 +370,39 @@ contract SafenetGuardTest is Test {
         );
     }
 
+    /// @notice The guard's `SafeTransaction.hash` must equal the deployed Safe's own `getTransactionHash`
+    ///         for the same fields, so the attestation is verified against exactly the transaction the Safe
+    ///         signs and executes. Pinned against a real `Safe`, exercising every field including non-zero gas.
+    function test_safeTransactionHash_matchesDeployedSafe() public view {
+        uint256 safeTxGas = 111;
+        uint256 baseGas = 222;
+        uint256 gasPrice = 333;
+        address gasToken = address(0x6a5);
+        address refundReceiver = address(0x4ef);
+        uint256 nonce = safe.nonce();
+
+        bytes32 guardHash = SafeTransaction.hash(
+            SafeTransaction.T({
+                chainId: block.chainid,
+                safe: address(safe),
+                to: TX_TO,
+                value: TX_VALUE,
+                data: TX_DATA,
+                operation: SafeTransaction.Operation(uint8(TX_OP)),
+                safeTxGas: safeTxGas,
+                baseGas: baseGas,
+                gasPrice: gasPrice,
+                gasToken: gasToken,
+                refundReceiver: refundReceiver,
+                nonce: nonce
+            })
+        );
+        bytes32 safeHash = safe.getTransactionHash(
+            TX_TO, TX_VALUE, TX_DATA, TX_OP, safeTxGas, baseGas, gasPrice, gasToken, refundReceiver, nonce
+        );
+        assertEq(guardHash, safeHash, "guard SafeTransaction.hash must equal the deployed Safe getTransactionHash");
+    }
+
     /// @notice The announcement hash must bind `data` by content, not just length: two same-length but
     ///         different payloads must hash differently. Guards against `t.data.length` being hashed where
     ///         `keccak256(t.data)` belongs, which would let one 4-byte payload authorise any other.
