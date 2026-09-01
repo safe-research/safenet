@@ -61,7 +61,7 @@ methods {
 
     // Getters / decoders (environment-independent).
     function getConsensusDomainSeparator() external returns (bytes32) envfree;
-    function isAutoAllowed(address to, uint256 value, bytes data, Enum.Operation operation)
+    function isAutoAllowed(address to, uint256 value, bytes data, Enum.Operation operation, uint256 gasPrice)
         external returns (bool) envfree;
     function hasTrailer(bytes signatures) external returns (bool) envfree;
     function trailerEpoch(bytes signatures) external returns (uint64) envfree;
@@ -120,7 +120,7 @@ rule attestationBindsTransactionMessage(
 ) {
     require e.msg.value == 0;
     require safeNonce > 0;            // nonce() - 1 must not underflow (F-26: make the cast's premise explicit)
-    require !isAutoAllowed(to, value, data, operation);
+    require !isAutoAllowed(to, value, data, operation, gasPrice);
     require hasTrailer(signatures);
 
     // What the trailer commits to.

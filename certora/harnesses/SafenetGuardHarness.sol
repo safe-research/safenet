@@ -84,12 +84,12 @@ contract SafenetGuardHarness is SafenetGuard {
     ///          excludes: it *asserts* rather than assumes pre-state key membership, so a contract that
     ///          auto-allowed a trailer-bearing call would return with an untrusted key and fail that assert.
     ///      So the mirror cannot silently drift from the contract's decision.
-    function isAutoAllowed(address to, uint256 value, bytes calldata data, Enum.Operation operation)
+    function isAutoAllowed(address to, uint256 value, bytes calldata data, Enum.Operation operation, uint256 gasPrice)
         external
         view
         returns (bool)
     {
-        if (to != address(this) || value != 0 || operation != Enum.Operation.Call || data.length < 4) {
+        if (to != address(this) || value != 0 || operation != Enum.Operation.Call || gasPrice != 0 || data.length < 4) {
             return false;
         }
         // forge-lint: disable-next-line(unsafe-typecast)

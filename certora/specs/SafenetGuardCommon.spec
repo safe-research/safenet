@@ -74,7 +74,7 @@ methods {
     // -- Pure/view harness decision helpers (envfree) ------------------------------------------------
     function getAnnouncementHash(TransactionAnnouncement.AnnouncedTransaction announcement) external returns (bytes32)
         envfree;
-    function isAutoAllowed(address to, uint256 value, bytes data, Enum.Operation operation)
+    function isAutoAllowed(address to, uint256 value, bytes data, Enum.Operation operation, uint256 gasPrice)
         external returns (bool) envfree;
     function hasTrailer(bytes signatures) external returns (bool) envfree;
     function announcementHashOf(

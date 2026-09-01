@@ -31,7 +31,8 @@ rule checkAfterExecutionNoOp(env e, bytes32 hash, bool success, address safe, by
 
 // ------------------------------------------------------------------------------------------------------
 // R-CHK-2: an auto-allowed self-call is always permitted, regardless of signatures/nonce. This also ties
-// the harness `isAutoAllowed` predicate to the contract's real auto-allow branch.
+// the harness `isAutoAllowed` predicate (which excludes a refund-bearing `gasPrice`) to the contract's real
+// auto-allow branch.
 // ------------------------------------------------------------------------------------------------------
 
 rule autoAllowedNeverReverts(
@@ -49,7 +50,7 @@ rule autoAllowedNeverReverts(
     address msgSender
 ) {
     require e.msg.value == 0; // non-payable: the Safe never forwards value to the guard hook
-    require isAutoAllowed(to, value, data, operation);
+    require isAutoAllowed(to, value, data, operation, gasPrice);
 
     checkTransaction@withrevert(
         e, to, value, data, operation, safeTxGas, baseGas, gasPrice, gasToken, refundReceiver, signatures, msgSender
@@ -78,7 +79,7 @@ rule checkTransactionRevertsWithoutAuthorization(
     address msgSender
 ) {
     require e.msg.value == 0; // non-payable (proven by guardRejectsNativeValue)
-    require !isAutoAllowed(to, value, data, operation);
+    require !isAutoAllowed(to, value, data, operation, gasPrice);
     require !hasTrailer(signatures);
 
     bytes32 announcementHash =
@@ -117,7 +118,7 @@ rule attestationPathRequiresKnownEpoch(
     bytes signatures,
     address msgSender
 ) {
-    require !isAutoAllowed(to, value, data, operation);
+    require !isAutoAllowed(to, value, data, operation, gasPrice);
     require hasTrailer(signatures);
 
     bool knownBefore = isKnownEpoch(trailerGroupKey(signatures), trailerEpoch(signatures)); // pre-state
@@ -178,7 +179,7 @@ rule attestationDoesNotConsumeAnnouncement(
     bytes signatures,
     address msgSender
 ) {
-    require !isAutoAllowed(to, value, data, operation);
+    require !isAutoAllowed(to, value, data, operation, gasPrice);
     require hasTrailer(signatures);
 
     bytes32 announcementHash =
@@ -215,7 +216,7 @@ rule checkTransactionConsumesAnnouncement(
     bytes signatures,
     address msgSender
 ) {
-    require !isAutoAllowed(to, value, data, operation);
+    require !isAutoAllowed(to, value, data, operation, gasPrice);
     require !hasTrailer(signatures);
 
     bytes32 announcementHash =
@@ -251,7 +252,7 @@ rule consumeTouchesOnlyItsOwnSlot(
     address safe,
     bytes32 other
 ) {
-    require !isAutoAllowed(to, value, data, operation);
+    require !isAutoAllowed(to, value, data, operation, gasPrice);
     require !hasTrailer(signatures);
 
     bytes32 announcementHash =
@@ -292,7 +293,7 @@ rule maturedAnnouncementAlwaysAuthorizes(
     address msgSender
 ) {
     require e.msg.value == 0;
-    require !isAutoAllowed(to, value, data, operation);
+    require !isAutoAllowed(to, value, data, operation, gasPrice);
     require !hasTrailer(signatures);
 
     bytes32 announcementHash =
@@ -329,7 +330,7 @@ rule trustedAttestationAlwaysAuthorizes(
 ) {
     require e.msg.value == 0;
     require safeNonce > 0; // the Safe pre-increments, so nonce() - 1 cannot underflow
-    require !isAutoAllowed(to, value, data, operation);
+    require !isAutoAllowed(to, value, data, operation, gasPrice);
     require hasTrailer(signatures);
     require isKnownEpoch(trailerGroupKey(signatures), trailerEpoch(signatures)); // trusted pair
     require frostAccepts;                                                        // verification succeeds
@@ -362,7 +363,7 @@ rule malformedTrailerFailsClosed(
     address msgSender
 ) {
     require e.msg.value == 0;
-    require !isAutoAllowed(to, value, data, operation);
+    require !isAutoAllowed(to, value, data, operation, gasPrice);
     require hasTrailer(signatures);
 
     // The blob is recognised (hasTrailer) but malformed: the same decode the guard runs reverts on it.
@@ -391,7 +392,7 @@ rule untrustedTrailerNeverFallsThrough(
     address msgSender
 ) {
     require e.msg.value == 0;
-    require !isAutoAllowed(to, value, data, operation);
+    require !isAutoAllowed(to, value, data, operation, gasPrice);
     require hasTrailer(signatures);
     require !isKnownEpoch(trailerGroupKey(signatures), trailerEpoch(signatures)); // well-formed but untrusted
 
@@ -430,7 +431,7 @@ rule failedAttestationNeverConsumesAnnouncement(
 ) {
     require e.msg.value == 0;
     require safeNonce > 0; // reach the verifier past the nonce-1 underflow, so we test the verdict path
-    require !isAutoAllowed(to, value, data, operation);
+    require !isAutoAllowed(to, value, data, operation, gasPrice);
     require hasTrailer(signatures);
     require isKnownEpoch(trailerGroupKey(signatures), trailerEpoch(signatures)); // trusted key
     require !frostAccepts;                                                        // ... but verification fails
@@ -472,7 +473,7 @@ rule autoAllowedChangesNoState(
     uint64 anyEpoch
 ) {
     require e.msg.value == 0;
-    require isAutoAllowed(to, value, data, operation);
+    require isAutoAllowed(to, value, data, operation, gasPrice);
 
     uint256 fromBefore = announcementActiveFrom(safe, announcementHash);
     bool epochBefore = isKnownEpoch(anyKey, anyEpoch);
