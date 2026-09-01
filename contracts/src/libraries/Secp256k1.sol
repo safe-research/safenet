@@ -148,8 +148,8 @@ library Secp256k1 {
      *      `(P - N) / P ≈ 3.7e-39` assuming uniformly distributed x-coordinates).
      */
     function mulmuladd(uint256 z, uint256 e, Point memory p, Point memory r) internal view {
-        (uint256 px, uint256 py) = _unpack(p);
-        (uint256 rx, uint256 ry) = _unpack(r);
+        (uint256 px, uint256 py) = _unpackNonZero(p);
+        (uint256 rx, uint256 ry) = _unpackNonZero(r);
 
         address minusR;
         assembly ("memory-safe") {
@@ -242,6 +242,20 @@ library Secp256k1 {
             // And that both `Px` and `Py` are elements in Fp.
             result := and(eq(mulmod(y, y, P), addmod(mulmod(x, mulmod(x, x, P), P), B, P)), and(lt(x, P), lt(y, P)))
         }
+    }
+
+    /**
+     * @notice Unpacks a point and validates it is a non-zero point on the curve.
+     * @param p The point to unpack.
+     * @return x The x-coordinate.
+     * @return y The y-coordinate.
+     * @dev Unlike `_unpack`, the point at infinity is rejected, as it is represented by the 0-value which does not
+     *      satisfy the curve equation.
+     */
+    function _unpackNonZero(Point memory p) private pure returns (uint256 x, uint256 y) {
+        x = p.x;
+        y = p.y;
+        require(_satisfiesCurveEquation(x, y), NotOnCurve());
     }
 
     /**
