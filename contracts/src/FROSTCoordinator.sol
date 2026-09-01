@@ -252,6 +252,12 @@ contract FROSTCoordinator {
      * @param participant The participant address.
      * @param z The scalar component of the share.
      * @param selectionRoot The Merkle root of the selected participants.
+     * @dev WARNING: This event only attests to the participant having produced a signature share when its
+     *      `selectionRoot` is one that the consumer has independently computed. A share's Lagrange coefficient is
+     *      provided by the caller and is only pinned by the Merkle leaf that it is proven against, so a participant
+     *      submitting a selection of their own making can choose the coefficient freely, and satisfy the share
+     *      verification without holding a valid share. Consumers must ignore events whose `selectionRoot` they do not
+     *      recognize, instead of treating them as evidence of participation.
      */
     event SignShared(FROSTSignatureId.T indexed sid, bytes32 indexed selectionRoot, address participant, uint256 z);
 
@@ -569,6 +575,11 @@ contract FROSTCoordinator {
      *      correctly reconstruct the group signature from a threshold number of shares. For a participant `i` in a
      *      signing set `S`, the coefficient is `l_i = ∏_{j∈S, j≠i} j / (j-i)`. The contract verifies the submitted
      *      share using this coefficient.
+     *
+     *      Note that `l_i` is not derived onchain, and is only constrained by the Merkle leaf that `proof` is checked
+     *      against, so the share verification is only meaningful relative to a `selection.root` that is known to be
+     *      correct. See the `SignShared` event for what this means for offchain consumers. The completed signature is
+     *      unaffected, as it is verified against the group public key before `SignCompleted` is emitted.
      */
     function signShare(
         FROSTSignatureId.T sid,
