@@ -590,6 +590,53 @@ contract SafenetGuardTest is Test {
         _execSafeTxWithNonce(address(guard), 0, data, Enum.Operation.Call, nonce);
     }
 
+    /// @notice A refund-bearing management call is not auto-allowed: only `gasPrice > 0` triggers a Safe
+    ///         refund, so such a call falls through and (unattested) reverts, blocking the drain. Other
+    ///         refund fields with `gasPrice == 0` trigger no refund and stay auto-allowed.
+    function test_checkTransaction_autoAllowExcludesGasPricedRefund() public {
+        bytes memory data = abi.encodeCall(SafenetGuard.announceTransaction, (_defaultAnnouncement()));
+
+        // gasPrice > 0 => refund possible => not auto-allowed => unattested call reverts.
+        uint256 nonce = safe.nonce();
+        bytes32 txHash = safe.getTransactionHash(
+            address(guard), 0, data, Enum.Operation.Call, 0, 100_000, 1, address(0), payable(address(0xbad)), nonce
+        );
+        bytes memory sig = _signSafeTx(txHash);
+        vm.expectRevert(ISafenetGuard.AttestationNotFound.selector);
+        safe.execTransaction(
+            address(guard), 0, data, Enum.Operation.Call, 0, 100_000, 1, address(0), payable(address(0xbad)), sig
+        );
+
+        // gasPrice == 0 with other refund fields set => no refund => still auto-allowed (announce runs).
+        bytes32 anyHash = _defaultAnnouncementHash();
+        uint256 nonce2 = safe.nonce();
+        bytes32 txHash2 = safe.getTransactionHash(
+            address(guard),
+            0,
+            data,
+            Enum.Operation.Call,
+            0,
+            100_000,
+            0,
+            address(0x1234),
+            payable(address(0xbad)),
+            nonce2
+        );
+        safe.execTransaction(
+            address(guard),
+            0,
+            data,
+            Enum.Operation.Call,
+            0,
+            100_000,
+            0,
+            address(0x1234),
+            payable(address(0xbad)),
+            _signSafeTx(txHash2)
+        );
+        assertGt(_announcedActiveFrom(anyHash), 0);
+    }
+
     // ============================================================
     // ESCAPE HATCH — NONCE-FREE ANNOUNCEMENTS
     // ============================================================
