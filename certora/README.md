@@ -63,7 +63,8 @@ documented below reports *"No errors found by Prover!"* (`exit_code=0`).
 | `harnesses/SafenetGuardHarness.sol` | Base harness: packed-window accessors, the `isAutoAllowed` mirror, trailer decoders, genesis-pair getters, raw forest membership. |
 | `specs/SafenetGuardCommon.spec` | Shared `methods` block, cryptography/hashing summaries, and the one-state invariants. Imported by the concern specs. |
 | `specs/SafenetGuardEpoch.spec` | Epoch-forest rules and the genesis invariant. |
-| `conf/SafenetGuardCommon.conf` / `conf/SafenetGuardEpoch.conf` | One conf per spec. |
+| `specs/SafenetGuardAnnouncements.spec` | Announcement lifecycle and hash field-separation rules. |
+| `conf/SafenetGuard*.conf` | One conf per spec. |
 
 ## Property ledger
 
@@ -88,6 +89,17 @@ documented below reports *"No errors found by Prover!"* (`exit_code=0`).
 - `updateEpochOutcomeIndependentOfSender`: permissionless, revert outcome and state effect don't depend on `msg.sender`.
 - `immutablesNeverChange`: the configured delay/window/domain never change.
 
+### Announcements: `SafenetGuardAnnouncements.spec`
+
+- `announcementsCallerIsolation`: a call only ever touches `$announcements[msg.sender][*]`.
+- `onlyAnnounceCreatesEntry` / `onlyCancelOrConsumeClearsEntry`: write provenance.
+- `announceTouchesOnlyItsOwnSlot` / `cancelTouchesOnlyItsOwnSlot`: slot locality (other `(safe, hash)` untouched).
+- `announcementWindowsFrozenOutsideApi`: only the announcement API may change any window (frozen elsewhere).
+- `announceCreatesWindow` / `announceRevertsWhilePending`: create semantics; renewal only once expired.
+- `cancelClearsWindow` / `cancelRevertsIfAbsent`: cancel semantics.
+- `announceSucceedsWhenAbsentOrExpired` / `cancelSucceedsWhenPresent`: liveness (announce/cancel always available).
+- `announcementHashSeparates{To,Value,Data,Operation,SafeTxGas,BaseGas,GasPrice,GasToken,RefundReceiver}`: the announcement hash binds every parameter.
+
 ## Assumptions & scope
 
 - **Cryptography is not modelled in CVL.** `FROST.verify` is summarised, but its *verdict* stays symbolic
@@ -103,3 +115,11 @@ documented below reports *"No errors found by Prover!"* (`exit_code=0`).
 - **Loops run in pessimistic mode** (`optimistic_loop: false` in every conf), so no unsound loop assumption
   is made. `loop_iter = 3` is therefore a *sound, asserted* bound: a loop needing more than three
   iterations would fail the run's unwinding condition.
+
+## Foundry cross-checks
+
+Properties that CVL abstracts are pinned by Foundry tests:
+
+- `SafenetGuardTest.test_announcementHash_separatesSameLengthData`: the announcement hash binds `data` by
+  content, not merely by length (the CVL family separates `data` only by length, so the same-length case
+  is pinned here).
