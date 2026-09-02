@@ -33,5 +33,6 @@ Deliberate choices with their rationale, recorded so reviewers and auditors can 
 ## Structure & scope
 
 - **Module-transaction guarding is intentionally not integrated** — deferred pending product requirements. Enabled Safe modules bypass this guard; deployers must prohibit modules or treat each as an explicit bypass.
+- **The guard must never be configured as the Safe's fallback handler.** Safe forwards fallback calls with `msg.sender` set to the Safe itself, so the announcement operations (`announceTransaction`, `cancelAnnouncement`, and the consume in `checkTransaction`), which identify the Safe by `msg.sender`, would accept calls from any caller. Deployment and Safe-setup tooling should verify this contract is configured only as the transaction guard.
 - **The structural self-call gate is inlined** in the guard for explicitness, rather than extracted into a separate library.
 - **Library-composed design** (`EpochRollover`, `TransactionAnnouncement`, `AttestationTrailer`): state/mechanism in libraries, FROST verification and domain events in the guard. `EpochRollover` epoch events are mirrored on `ISafenetGuard` for a single canonical integration ABI (they appear twice in the generated ABI; harmless — same topic).

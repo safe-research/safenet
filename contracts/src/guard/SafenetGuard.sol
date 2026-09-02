@@ -25,6 +25,9 @@ import {ISafe} from "@safe/interfaces/ISafe.sol";
  *
  *      - **Scope:** transaction guard only. Safe module executions bypass it — deployments must forbid
  *        modules or treat each as an explicit bypass.
+ *      - **Fallback handler:** never configure this contract as the Safe's fallback handler. The Safe
+ *        forwards fallback calls with `msg.sender` set to itself, so the announcement operations,
+ *        which identify the Safe by `msg.sender`, would then accept calls from any caller.
  *      - **Epochs:** a forest of trusted `(group key, epoch)` pairs kept forever (Consensus lives only on
  *        Gnosis Chain; the guard holds a local copy). Any recorded pair may attest; a compromised
  *        historical key can attest future transactions (but not replay past ones — the Safe nonce binds).
