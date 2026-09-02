@@ -14,6 +14,7 @@ pub mod driver;
 pub mod effects;
 pub mod index;
 pub mod kdf;
+mod metrics;
 pub mod observability;
 pub mod provider;
 pub mod serialization;
