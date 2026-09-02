@@ -9,7 +9,8 @@
 
 use crate::{
     effects::{EffectHandler, EffectManager},
-    index::{self, Update, Watcher, events::Events},
+    index::{self, BlockUpdate, Update, Watcher, events::Events},
+    metrics::{self, ProcessingStatus},
     provider::Provider,
     state::{self, StateMachine, StateTransition},
     tx::{self, Signer, Transaction, TransactionQueue},
@@ -127,15 +128,16 @@ where
         let (transition, effects, actions) = service.components();
         let state = StateMachine::new(transition, pool.clone()).await?;
         let effects = EffectManager::new(effects);
-        let watcher = Watcher::new(
-            provider.clone(),
-            config.index,
-            addresses,
-            state.block_status().await?,
-        )
-        .await?;
+        let block_status = state.block_status().await?;
+        let watcher = Watcher::new(provider.clone(), config.index, addresses, block_status).await?;
         let transactions =
             TransactionQueue::new(provider, signer, pool, config.transactions).await?;
+
+        // Make sure to initialize block metrics on startup.
+        let block_number = block_status.map(|status| status.latest).unwrap_or_default();
+        for status in ProcessingStatus::variants() {
+            metrics::block_number(status).set(block_number as f64);
+        }
 
         Ok(Self {
             watcher,
@@ -233,6 +235,7 @@ where
         let commands = match input {
             Input::Update(update) => {
                 tracing::trace!(?update, "handling driver update");
+                let recorder = UpdateRecorder::new(&update);
                 let block_status = self.watcher.block_status();
 
                 // Reconcile the transaction queue against the block watcher's
@@ -249,6 +252,7 @@ where
                 }
 
                 let commands = self.state.handle_update(update).await?;
+                recorder.processed();
                 self.state.prune(block_status.safe).await?;
                 commands
             }
@@ -279,5 +283,35 @@ where
         }
 
         Ok(())
+    }
+}
+
+/// Records a block update with the metrics.
+struct UpdateRecorder(Option<u64>);
+
+impl UpdateRecorder {
+    fn new<Event>(update: &Update<Event>) -> Self {
+        // Block updates advance the observed chain position, while log updates
+        // advance the position whose events have been fully processed. Uncles
+        // move both positions back to the last still-canonical block.
+        let (seen, processed) = match update {
+            Update::Block(BlockUpdate::New { number, .. }) => (Some(*number), None),
+            Update::Block(BlockUpdate::Uncle { number }) => {
+                let block = number.saturating_sub(1);
+                (Some(block), Some(block))
+            }
+            Update::Block(BlockUpdate::Warp { to, .. }) => (Some(*to), None),
+            Update::Logs(update) => (None, Some(update.blocks.last)),
+        };
+        if let Some(block) = seen {
+            metrics::block_number(ProcessingStatus::Seen).set(block as f64);
+        }
+        Self(processed)
+    }
+
+    fn processed(self) {
+        if let Some(block) = self.0 {
+            metrics::block_number(ProcessingStatus::Processed).set(block as f64);
+        }
     }
 }

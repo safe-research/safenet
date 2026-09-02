@@ -4,7 +4,7 @@
 //! and keeps a bounded history of recent blocks so chain reorgs can be detected.
 
 use super::clock::Clock;
-use crate::provider::Provider;
+use crate::{metrics, provider::Provider};
 use alloy::{
     eips::BlockId,
     primitives::{B256, Bloom},
@@ -250,6 +250,7 @@ impl BlockWatcher {
             resume = ?indexed,
             "initializing block watcher"
         );
+        metrics::uncled_blocks_total().absolute(0);
 
         self.update_next_pending_block(latest.number, latest.timestamp);
 
@@ -428,6 +429,7 @@ impl BlockWatcher {
                 timestamp_ms: last.timestamp * 1000,
             };
             tracing::debug!(number = last.number, "reorg detected, uncling block");
+            metrics::uncled_blocks_total().increment(1);
             return Ok(BlockUpdate::Uncle {
                 number: last.number,
             });
@@ -517,6 +519,7 @@ impl BlockWatcher {
             hash = %invalidated.hash,
             "last block no longer canonical, invalidating"
         );
+        metrics::uncled_blocks_total().increment(1);
         let timestamp = last.timestamp;
         self.recent.truncate(last_index);
         self.pending = PendingBlock {
