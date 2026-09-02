@@ -195,7 +195,7 @@ contract SafenetGuard is ISafenetGuard, BaseTransactionGuard {
         bytes calldata signatures,
         address /* msgSender */
     ) external override(ITransactionGuard) {
-        if (_isAutoAllowed(to, value, data, operation)) return;
+        if (_isAutoAllowed(to, value, data, operation, gasPrice)) return;
 
         if (AttestationTrailer.hasTrailer(signatures)) {
             (
@@ -339,21 +339,22 @@ contract SafenetGuard is ISafenetGuard, BaseTransactionGuard {
 
     /**
      * @dev True if the call is a structurally valid self-call to an escape-hatch selector, bypassing
-     *      attestation. A valid self-call targets the guard, carries no value, uses `CALL` (never
-     *      `DELEGATECALL`, which would run guard code in the Safe's storage context), and carries at least
-     *      a 4-byte selector matching one of the escape-hatch functions.
+     *      attestation. A valid self-call targets the guard, carries no value and no `gasPrice`, uses `CALL`
+     *      (never `DELEGATECALL`, which would run guard code in the Safe's storage context), and carries at
+     *      least a 4-byte selector matching an escape-hatch function.
      * @param to The call target.
      * @param value The native value forwarded.
      * @param data The call data.
      * @param operation The Safe operation type.
+     * @param gasPrice The refund gas price; must be 0 (a non-zero value triggers an unattested Safe refund).
      * @return allowed True if the call is an auto-allowed escape-hatch self-call.
      */
-    function _isAutoAllowed(address to, uint256 value, bytes calldata data, Enum.Operation operation)
+    function _isAutoAllowed(address to, uint256 value, bytes calldata data, Enum.Operation operation, uint256 gasPrice)
         private
         view
         returns (bool allowed)
     {
-        if (to != address(this) || value != 0 || operation != Enum.Operation.Call || data.length < 4) {
+        if (to != address(this) || value != 0 || operation != Enum.Operation.Call || gasPrice != 0 || data.length < 4) {
             return false;
         }
         // forge-lint: disable-next-line(unsafe-typecast)
