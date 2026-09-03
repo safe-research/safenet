@@ -7,14 +7,14 @@ mod engine;
 use self::{
     checkers::{
         AddressPoisoningChecker, BaseChecker, BlocklistChecker, CancellationChecker, CowChecker,
-        EscapeHatchChecker, ExcessiveApprovalChecker, StakingChecker,
+        EscapeHatchChecker, ExcessiveApprovalChecker, RefundChecker, StakingChecker,
     },
     config::Config,
     engine::SentinelEngine,
 };
 use argh::FromArgs;
 use safenet_core::{observability, provider::Provider, utils};
-use std::{error::Error, path::PathBuf};
+use std::{error::Error, path::PathBuf, sync::Arc};
 use tokio::net::TcpListener;
 
 #[derive(Debug, FromArgs)]
@@ -48,6 +48,11 @@ async fn main() -> Result<(), Box<dyn Error>> {
     );
 
     let provider = Provider::connect(&rpc).await?;
+    let address_poisoning = Arc::new(AddressPoisoningChecker::new(
+        provider,
+        engine_config.address_poisoning_lookback_blocks,
+        engine_config.address_poisoning_max_block_range,
+    ));
     let engine = SentinelEngine::new(vec![
         Box::new(CancellationChecker),
         Box::new(EscapeHatchChecker),
@@ -56,11 +61,13 @@ async fn main() -> Result<(), Box<dyn Error>> {
         Box::new(ExcessiveApprovalChecker),
         Box::new(CowChecker::new()),
         Box::new(StakingChecker),
-        Box::new(AddressPoisoningChecker::new(
-            provider,
-            engine_config.address_poisoning_lookback_blocks,
-            engine_config.address_poisoning_max_block_range,
-        )),
+        // RPC-backed, so they run last: cheaper local checkers above get a
+        // chance to reach a verdict first. `RefundChecker` can only deny or
+        // abstain (never affirm), so its position relative to
+        // `address_poisoning` doesn't affect correctness, only which RPC
+        // lookup runs first when both apply.
+        Box::new(RefundChecker::new(address_poisoning.clone())),
+        Box::new(address_poisoning),
     ]);
 
     let listener = TcpListener::bind(bind_address).await?;
