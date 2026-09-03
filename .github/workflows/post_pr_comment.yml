@@ -1,0 +1,46 @@
+name: Post PR Comment
+
+on:
+  workflow_run:
+    workflows: ["coverage", "sentinel-engine-integration"]
+    types:
+      - completed
+
+permissions:
+  contents: read
+  actions: read
+  pull-requests: write
+
+jobs:
+  post-comment:
+    runs-on: ubuntu-latest
+    if: github.event.workflow_run.event == 'pull_request' && github.event.workflow_run.conclusion == 'success'
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Download PR Comment Artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: pr-comment
+          run-id: ${{ github.event.workflow_run.id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      # Every producer's report file starts with a "<!-- marker -->" line, so
+      # the marker used to find/update the existing comment can be read
+      # straight from the report itself instead of being passed separately.
+      - name: Read Report Metadata
+        id: artifact
+        shell: bash
+        run: |
+          report_file=$(ls -- *.md)
+          echo "issue-number=$(cat issue-number.txt)" >> "$GITHUB_OUTPUT"
+          echo "report-file=$report_file" >> "$GITHUB_OUTPUT"
+          echo "marker=$(head -n1 -- "$report_file")" >> "$GITHUB_OUTPUT"
+
+      - name: Post PR Comment
+        uses: ./.github/actions/post-comment
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          issue-number: ${{ steps.artifact.outputs.issue-number }}
+          content-file: ${{ steps.artifact.outputs.report-file }}
+          marker: ${{ steps.artifact.outputs.marker }}

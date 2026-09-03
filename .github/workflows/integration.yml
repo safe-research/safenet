@@ -23,11 +23,6 @@ jobs:
             just-args: ""
             log-artifact: sentinel-integration-logs
 
-          - name: sentinel-engine
-            just-target: test-integration-sentinel-engine
-            just-args: sentinel-test-vectors
-            log-artifact: sentinel-engine-integration-logs
-
           - name: validator
             just-target: test-integration-validator
             just-args: ""
@@ -46,13 +41,6 @@ jobs:
       - uses: actions/checkout@v5
         with:
           submodules: recursive
-
-      - name: Check out sentinel test vectors
-        if: matrix.name == 'sentinel-engine'
-        uses: actions/checkout@v5
-        with:
-          repository: safe-research/sentinel-test-vectors
-          path: sentinel-test-vectors
 
       - uses: foundry-rs/foundry-toolchain@v1
         with:
