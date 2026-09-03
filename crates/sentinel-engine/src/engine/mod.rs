@@ -59,17 +59,6 @@ impl SentinelEngine {
         transaction: SafeTransaction,
         context: CheckContext,
     ) -> Verdict {
-        // TODO: add a check for the Safe's own gas refund mechanism (a
-        // nonzero `gasPrice` has the Safe reimburse the relayer for
-        // `gasPrice * gasUsed` — up to `safeTxGas`/`baseGas` — in
-        // `gasToken`/native currency to `refundReceiver`, none of which any
-        // checker currently inspects) before this can give a trustworthy
-        // answer.
-        if !transaction.gas_price.is_zero() {
-            tracing::trace!("abstaining: no check for the Safe refund mechanism yet");
-            return Verdict::Abstain;
-        }
-
         let mut verdict = Verdict::Abstain;
         for checker in &self.0 {
             verdict = checker.check(&transaction, &context).await;
@@ -86,7 +75,6 @@ impl SentinelEngine {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use alloy::primitives::U256;
 
     struct StubChecker(Verdict);
 
@@ -128,22 +116,6 @@ mod tests {
                 .security_check(SafeTransaction::default(), CheckContext::default())
                 .await,
             Verdict::Secure
-        );
-    }
-
-    #[tokio::test]
-    async fn abstains_on_a_nonzero_gas_price_without_consulting_any_checker() {
-        let engine = SentinelEngine::new(vec![Box::new(StubChecker(Verdict::Secure))]);
-        let transaction = SafeTransaction {
-            gas_price: U256::from(1u64),
-            ..Default::default()
-        };
-
-        assert_eq!(
-            engine
-                .security_check(transaction, CheckContext::default())
-                .await,
-            Verdict::Abstain
         );
     }
 }
