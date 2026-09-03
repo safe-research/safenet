@@ -63,8 +63,8 @@ impl Service<RequestPacket> for ObservabilityTransport {
         self.inner.poll_ready(cx)
     }
 
-    fn call(&mut self, request: RequestPacket) -> Self::Future {
-        let mut statuses = request
+    fn call(&mut self, request_packet: RequestPacket) -> Self::Future {
+        let mut statuses = request_packet
             .requests()
             .iter()
             .map(|request| {
@@ -74,33 +74,45 @@ impl Service<RequestPacket> for ObservabilityTransport {
                 )
             })
             .collect::<HashMap<_, _>>();
-        let mut inner = self.inner.clone();
+        if statuses.len() != request_packet.len() {
+            // `alloy` guarantees that IDs are unique internally, but just in
+            // case this assumption stops being true, log an error so we know
+            // that we need to re-evaluate how we track requests.
+            tracing::error!("unexpected duplicate request ID; metrics may be inaccurate");
+        }
 
+        let mut inner = self.inner.clone();
         Box::pin(async move {
             tracing::trace!(
-                request = %Json(&request),
+                request = %Json(&request_packet),
                 "sending JSON-RPC request"
             );
-            let response = inner.call(request).await;
+            let response_packet = inner.call(request_packet).await;
             tracing::trace!(
-                response = ?response.as_ref().map(ResponseJson),
+                response = ?response_packet.as_ref().map(ResponseJson),
                 "received JSON-RPC response"
             );
-            if let Ok(response) = &response {
-                for response in response.responses() {
-                    if let Some((_, result)) = statuses.get_mut(&response.id) {
-                        *result = if response.is_success() {
-                            RpcRequestResult::Success
-                        } else {
-                            RpcRequestResult::Failure
-                        };
-                    }
+            if let Ok(response_packet) = &response_packet {
+                for response in response_packet.responses() {
+                    let Some((_, result)) = statuses.get_mut(&response.id) else {
+                        tracing::warn!(
+                            id = ?response.id,
+                            "unexpected response without matching request"
+                        );
+                        continue;
+                    };
+
+                    *result = if response.is_success() {
+                        RpcRequestResult::Success
+                    } else {
+                        RpcRequestResult::Failure
+                    };
                 }
             }
             for (_, (method, result)) in statuses {
                 metrics::rpc_requests_total(&method, result).increment(1);
             }
-            response
+            response_packet
         })
     }
 }
