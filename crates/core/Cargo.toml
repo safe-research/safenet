@@ -21,6 +21,7 @@ sha2 = "0.11"
 sqlx.workspace = true
 thiserror.workspace = true
 tokio.workspace = true
+tokio-metrics = { version = "0.5", features = ["metrics-rs-integration"] }
 tower.workspace = true
 tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt", "json"] }
 tracing.workspace = true

@@ -1,10 +1,7 @@
 //! This crate's own Prometheus metrics.
-//!
-//! Each metric's name and its expected labels are defined together in one
-//! accessor function here, so every place a metric is recorded goes through a
-//! typed function that documents and enforces its label shape.
 
 use metrics::{Counter, Gauge};
+use tokio_metrics::RuntimeMetricsReporterBuilder;
 
 /// The result of a JSON-RPC request, as recorded by
 /// [`rpc_requests_total`].
@@ -70,4 +67,16 @@ pub fn block_number(status: ProcessingStatus) -> Gauge {
 /// Number of live blocks invalidated by chain reorgs.
 pub fn uncled_blocks_total() -> Counter {
     metrics::counter!("safenet_core_uncled_blocks_total")
+}
+
+/// Initializes core metrics.
+pub fn initialize() {
+    for status in ProcessingStatus::variants() {
+        block_number(status).set(0.0);
+    }
+    uncled_blocks_total().absolute(0);
+
+    // Spawn a background task to collect and report metrics on the underlying
+    // Tokio runtime.
+    tokio::spawn(RuntimeMetricsReporterBuilder::default().describe_and_run());
 }
