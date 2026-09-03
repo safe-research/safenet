@@ -35,7 +35,11 @@ impl TransitionKind {
 /// Number of validator state transitions applied, by input `kind`.
 pub fn transitions_total(kind: TransitionKind) -> Counter {
     let kind = kind.label();
-    metrics::counter!("safenet_validator_transitions_total", "kind" => kind)
+    metrics::counter!(
+        description: "Number of validator state transitions applied, by input kind.",
+        "safenet_validator_transitions_total",
+        "kind" => kind,
+    )
 }
 
 /// The validator effect being performed, as recorded by [`effects_total`].
@@ -108,6 +112,7 @@ pub fn effects_total(effect: EffectKind, result: EffectResult) -> Counter {
     let effect = effect.label();
     let result = result.label();
     metrics::counter!(
+        description: "Number of completed validator effect attempts, by effect and result.",
         "safenet_validator_effects_total",
         "effect" => effect,
         "result" => result,
