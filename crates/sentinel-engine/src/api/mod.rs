@@ -3,7 +3,7 @@
 mod extractors;
 
 use self::extractors::{RequestId, RequestTimeout};
-use crate::engine::{SafeTransaction, SentinelEngine, Verdict};
+use crate::engine::{CheckContext, SafeTransaction, SentinelEngine, Verdict};
 use axum::{Json, Router, extract::State, routing::post};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
@@ -45,13 +45,15 @@ async fn security_check(
         span.record("request_id", field::display(request_id));
     }
 
-    // TODO: Pass these parameters to the engine once it supports request
+    // TODO: Pass this parameter to the engine once it supports request
     // lifecycle context.
     let _ = timeout;
-    let _ = request.block;
 
+    let context = CheckContext {
+        block: request.block,
+    };
     let verdict = engine
-        .security_check(request.transaction)
+        .security_check(request.transaction, context)
         .instrument(span)
         .await;
     Json(verdict)

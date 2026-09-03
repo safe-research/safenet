@@ -59,10 +59,12 @@ pub enum RuleId {
     /// recipient that resembles the address-poisoning pattern §2.4 Notes
     /// names as circumstantial evidence ("the recipient address resembles a
     /// prior user address..."). MVP note: checked dynamically by
-    /// [`crate::checkers::AddressPoisoningChecker`] using a prior genuine
-    /// `Transfer` from the Safe to the exact same recipient,
-    /// within a bounded, recent block range — not a full history scan, and
-    /// not yet a real denial path (see that module's docs).
+    /// [`crate::checkers::AddressPoisoningChecker`] against the Safe's own
+    /// genuine `Transfer` history on that token within a bounded, recent
+    /// block range (not a full history scan) — an exact-match recipient
+    /// passes, a lookalike of a different established recipient is denied
+    /// under this rule, and a recipient with no history to compare against
+    /// still only abstains (see that module's docs).
     R4_3ValueTarget,
     /// Article IV Part B, R-4.4: the same address-poisoning pattern as
     /// [`Self::R4_3ValueTarget`], applied to an ERC-20 `approve` spender

@@ -15,7 +15,7 @@ pub use self::{
     excessive_approval::ExcessiveApprovalChecker, staking::StakingChecker,
 };
 
-use crate::engine::{SafeTransaction, Verdict};
+use crate::engine::{CheckContext, SafeTransaction, Verdict};
 
 /// A transaction check in the sentinel engine's checker chain.
 #[async_trait::async_trait]
@@ -24,5 +24,7 @@ pub trait Checker: Send + Sync {
     fn name(&self) -> &'static str;
 
     /// Assesses `transaction` or abstains so the next checker can run.
-    async fn check(&self, transaction: &SafeTransaction) -> Verdict;
+    /// `context` carries caller-supplied hints outside the transaction
+    /// itself (see [`CheckContext`]); most checks ignore it.
+    async fn check(&self, transaction: &SafeTransaction, context: &CheckContext) -> Verdict;
 }

@@ -59,6 +59,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         Box::new(AddressPoisoningChecker::new(
             provider,
             engine_config.address_poisoning_lookback_blocks,
+            engine_config.address_poisoning_max_block_range,
         )),
     ]);
 

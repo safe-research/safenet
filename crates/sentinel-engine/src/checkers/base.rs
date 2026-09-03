@@ -3,7 +3,7 @@
 use super::Checker;
 use crate::{
     contracts::{bindings::safe, multi_send::decode_multi_send_call},
-    engine::{Operation, RuleId, SafeTransaction, Verdict},
+    engine::{CheckContext, Operation, RuleId, SafeTransaction, Verdict},
 };
 use alloy::{
     primitives::{Address, address},
@@ -38,7 +38,7 @@ impl Checker for BaseChecker {
         "base"
     }
 
-    async fn check(&self, transaction: &SafeTransaction) -> Verdict {
+    async fn check(&self, transaction: &SafeTransaction, _context: &CheckContext) -> Verdict {
         match check_transaction(transaction) {
             Ok(()) => Verdict::Abstain,
             Err(rule) => Verdict::Insecure { rule },
@@ -285,7 +285,9 @@ mod tests {
         };
 
         assert_eq!(
-            BaseChecker.check(&transaction).await,
+            BaseChecker
+                .check(&transaction, &CheckContext::default())
+                .await,
             Verdict::Insecure {
                 rule: RuleId::R4_1SettingsChange,
             }
@@ -302,7 +304,9 @@ mod tests {
         };
 
         assert_eq!(
-            BaseChecker.check(&transaction).await,
+            BaseChecker
+                .check(&transaction, &CheckContext::default())
+                .await,
             Verdict::Insecure {
                 rule: RuleId::R4_2DelegatecallIntegrity,
             }
@@ -317,7 +321,12 @@ mod tests {
             ..Default::default()
         };
 
-        assert_eq!(BaseChecker.check(&transaction).await, Verdict::Abstain);
+        assert_eq!(
+            BaseChecker
+                .check(&transaction, &CheckContext::default())
+                .await,
+            Verdict::Abstain
+        );
     }
 
     #[test]

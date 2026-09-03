@@ -255,7 +255,7 @@ echo "Proposing an oracle-checked transaction..."
 env \
 	CONSENSUS_ADDRESS="$CONSENSUS" \
 	ORACLE_ADDRESS="$ORACLE" \
-	TX_CHAIN_ID=1 \
+	TX_CHAIN_ID="$CHAIN_ID" \
 	TX_SAFE="$TX_SAFE" \
 	TX_TO="$TX_SAFE" \
 	TX_NONCE=0 \
@@ -363,7 +363,7 @@ echo "Proposing a transaction sentinel B's blocklist denies (to trigger a genuin
 env \
 	CONSENSUS_ADDRESS="$CONSENSUS" \
 	ORACLE_ADDRESS="$ORACLE" \
-	TX_CHAIN_ID=1 \
+	TX_CHAIN_ID="$CHAIN_ID" \
 	TX_SAFE="$TX_SAFE" \
 	TX_TO="$TX_TOKEN" \
 	TX_DATA="$(cast calldata "transfer(address,uint256)" "$TX_RECIPIENT" 1)" \

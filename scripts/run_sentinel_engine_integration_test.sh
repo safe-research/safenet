@@ -9,6 +9,15 @@ source "$ROOT/scripts/lib/shared_test_scripts.sh"
 ENGINE_ADDR="127.0.0.1:5473"
 ENGINE_URL="http://$ENGINE_ADDR"
 RPC_URL="${SENTINEL_ENGINE_RPC_URL:-https://ethereum-rpc.publicnode.com}"
+# Unset by default (engine falls back to its own "info"). Set e.g.
+# `SENTINEL_ENGINE_LOG_FILTER="sentinel_engine=debug,info"` to see each
+# checker's per-candidate reasoning, not just warnings/errors.
+LOG_FILTER="${SENTINEL_ENGINE_LOG_FILTER:-}"
+# Unset by default (whole lookback window as one eth_getLogs call). Many RPC
+# providers cap that call's block range below the 50000-block lookback below
+# — set e.g. `SENTINEL_ENGINE_MAX_BLOCK_RANGE=10000` to match the provider's
+# own limit (its "range exceeds limit" error reports the number to use).
+MAX_BLOCK_RANGE="${SENTINEL_ENGINE_MAX_BLOCK_RANGE:-}"
 
 if [ -z "${TEST_VECTORS:-}" ]; then
     echo "TEST_VECTORS must point to the root of the sentinel-test-vectors repository." >&2
@@ -43,6 +52,20 @@ bind_address = "$ENGINE_ADDR"
 blocklist = []
 address_poisoning_lookback_blocks = 50000
 EOF
+
+if [ -n "$MAX_BLOCK_RANGE" ]; then
+    cat >>"$CONFIG_FILE" <<EOF
+address_poisoning_max_block_range = $MAX_BLOCK_RANGE
+EOF
+fi
+
+if [ -n "$LOG_FILTER" ]; then
+    cat >>"$CONFIG_FILE" <<EOF
+
+[observability]
+log_filter = "$LOG_FILTER"
+EOF
+fi
 
 echo "==> Building the sentinel engine..."
 cargo build --package sentinel-engine
