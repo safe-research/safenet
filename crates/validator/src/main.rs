@@ -3,6 +3,7 @@ mod config;
 mod consensus;
 mod frost;
 mod merkle;
+mod metrics;
 mod secrets;
 mod service;
 mod state;
@@ -38,6 +39,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     let config = Config::load(&options.config_file).await?;
     observability::init(config.observability)?;
+    metrics::initialize();
     tracing::debug!(config_file = %options.config_file.display(), "validator configuration loaded");
 
     let provider = Provider::connect(&config.rpc).await?;

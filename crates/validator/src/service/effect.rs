@@ -7,6 +7,7 @@ use crate::{
         keygen::{KeyShare, Secrets},
         preprocess::Nonces,
     },
+    metrics::{self, EffectKind, EffectResult},
     secrets::{SecretStore, nonces::NonceGenerator},
 };
 use alloy::primitives::{Address, B256};
@@ -58,6 +59,20 @@ pub enum Effect {
     ReconcileGroupSecrets {
         groups: BTreeMap<B256, Option<Arc<KeyShare>>>,
     },
+}
+
+impl Effect {
+    /// Returns the stable label value used to identify this effect in metrics.
+    fn metric_kind(&self) -> EffectKind {
+        match self {
+            Self::KeyGenSetup { .. } => EffectKind::KeyGenSetup,
+            Self::StartNonceGeneration { .. } => EffectKind::StartNonceGeneration,
+            Self::NonceTree { .. } => EffectKind::NonceTree,
+            Self::RevealNonceCommitments { .. } => EffectKind::RevealNonceCommitments,
+            Self::UseNonce { .. } => EffectKind::UseNonce,
+            Self::ReconcileGroupSecrets { .. } => EffectKind::ReconcileGroupSecrets,
+        }
+    }
 }
 
 /// The result of performing an [`Effect`], resumed into the state machine.
@@ -227,13 +242,16 @@ impl Handler {
 
 impl EffectHandler<Effect, Resume> for Handler {
     async fn perform_effect(&self, effect: Effect) -> Resume {
-        match self.try_perform_effect(effect.clone()).await {
-            Ok(resume) => resume,
+        let kind = effect.metric_kind();
+        let (resume, result) = match self.try_perform_effect(effect.clone()).await {
+            Ok(resume) => (resume, EffectResult::Success),
             Err(err) => {
                 tracing::warn!(?effect, %err, "failed to perform effect");
-                Resume::Noop
+                (Resume::Noop, EffectResult::Failure)
             }
-        }
+        };
+        metrics::effects_total(kind, result).increment(1);
+        resume
     }
 }
 
