@@ -39,6 +39,7 @@ pub mod oracle {
                 uint96 bondAmount,
                 string reason
             );
+            event DisputeTriggered(bytes32 indexed requestId, uint64 deadline);
             event DisputeResolved(bytes32 indexed requestId, RequestState outcome, uint128 slashed, string context);
             event OracleResult(bytes32 indexed requestId, address indexed sponsor, bytes result, bool approved);
             event Claimed(bytes32 indexed requestId, address indexed sentinel, uint96 bondReturn, uint96 feeReward);

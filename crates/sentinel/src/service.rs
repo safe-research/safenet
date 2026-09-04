@@ -625,6 +625,53 @@ impl SentinelTransition {
         (None, actions)
     }
 
+    /// `finalize()` found both an `approve` and a `deny` side established
+    /// onchain -- expected only from `WaitingForOutcome`, which is where it
+    /// carries `approve`/`slash_amount` forward from. The request now waits
+    /// for the arbitrator's ruling; see [`Self::handle_resolved`].
+    ///
+    /// A tracked request found in any *other* state here is unexpected, but
+    /// the dispute is real onchain regardless of what we thought was
+    /// happening locally -- recover into `WaitingForDisputeResolution`
+    /// anyway, via [`RequestState::approve_and_slash_amount`], rather than
+    /// dropping it. Silently leaving the request stuck outside every claim
+    /// path would strand its bond until someone notices and intervenes
+    /// manually. The one exception is `WaitingForEngineCheck`/
+    /// `WaitingForRequest`: our own logic never posts a bond that early, so
+    /// `approve_and_slash_amount` returns `None` and there is genuinely
+    /// nothing of ours to wait on -- the request is dropped instead.
+    #[expect(dead_code)]
+    fn handle_dispute_triggered(
+        &self,
+        mut state: State,
+        event: SentinelOracle::DisputeTriggered,
+    ) -> (State, Commands<State, Self>) {
+        let Some(entry) = state.0.remove(&event.requestId) else {
+            tracing::trace!(
+                request_id = %event.requestId,
+                "ignoring dispute trigger for an untracked request"
+            );
+            return (state, Vec::new());
+        };
+        if !matches!(entry, RequestState::WaitingForOutcome { .. }) {
+            tracing::warn!(
+                request_id = %event.requestId,
+                state = entry.name(),
+                "dispute triggered from an unexpected state; recovering into waiting_for_dispute_resolution to keep the claim path alive, if we had a bond to begin with"
+            );
+        }
+        if let Some((approve, slash_amount)) = entry.approve_and_slash_amount() {
+            state.0.insert(
+                event.requestId,
+                RequestState::WaitingForDisputeResolution {
+                    approve,
+                    slash_amount,
+                },
+            );
+        }
+        (state, Vec::new())
+    }
+
     /// `finalize()` found exactly one side established onchain -- expected
     /// only from `WaitingForOutcome`, and only ever for a request where we
     /// ourselves revealed (see the guard in [`Self::finalize`]), so our own
