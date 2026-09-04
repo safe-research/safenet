@@ -528,6 +528,53 @@ impl SentinelTransition {
         (state, actions)
     }
 
+    /// A `FROZEN` request escaping arbitration without a ruling --
+    /// `ArbitrationTimedOut` (permissionless, once nobody has ruled within
+    /// `ARBITRATION_TIMEOUT`) or `DisputeOutOfScope` (the arbitrator
+    /// declining outright). Both reuse the oracle's `TIMED_OUT` machinery
+    /// (see the Solidity comments on `timeoutArbitration`/`markOutOfScope`):
+    /// no side is established, so every committed bond returns in full via
+    /// `claim()` -- unlike [`Self::handle_resolved`], there is no winning
+    /// side and no slash to record.
+    fn handle_arbitration_timeout(
+        &self,
+        mut state: State,
+        request_id: B256,
+    ) -> (State, Commands<State, Self>) {
+        match state.0.remove(&request_id) {
+            Some(RequestState::WaitingForDisputeResolution { .. }) => {}
+            // Still claim: the oracle is authoritative that this request
+            // timed out, and having any tracked entry at all means we most
+            // likely posted a bond for it, even though our own local FSM
+            // hadn't (yet) caught up to `WaitingForDisputeResolution`.
+            Some(entry) => {
+                tracing::warn!(
+                    request_id = %request_id,
+                    state = entry.name(),
+                    "claiming despite unexpected state at arbitration timeout"
+                );
+            }
+            None => {
+                tracing::trace!(
+                    request_id = %request_id,
+                    "ignoring arbitration timeout for an untracked request"
+                );
+                return (state, Vec::new());
+            }
+        }
+
+        crate::metrics::requests_resolved_total(ResolvedOutcome::Timeout).increment(1);
+
+        let actions = vec![
+            SentinelAction {
+                kind: SentinelActionKind::Claim { id: request_id },
+                expires_at: None,
+            }
+            .into(),
+        ];
+        (state, actions)
+    }
+
     /// Records this sentinel's own fee reward once a `claim()` it (or
     /// anyone else) submitted lands onchain. No request state is touched:
     /// by the time a request is claimable, [`Self::finalize`]/
@@ -724,6 +771,12 @@ impl StateTransition<State> for SentinelTransition {
                     SentinelEvents::Oracle(
                         SentinelOracle::SentinelOracleEvents::DisputeResolved(event),
                     ) => self.handle_resolved(state, event),
+                    SentinelEvents::Oracle(
+                        SentinelOracle::SentinelOracleEvents::ArbitrationTimedOut(event),
+                    ) => self.handle_arbitration_timeout(state, event.requestId),
+                    SentinelEvents::Oracle(
+                        SentinelOracle::SentinelOracleEvents::DisputeOutOfScope(event),
+                    ) => self.handle_arbitration_timeout(state, event.requestId),
                     SentinelEvents::Oracle(SentinelOracle::SentinelOracleEvents::Claimed(
                         event,
                     )) => self.handle_claimed(state, event),
@@ -970,6 +1023,21 @@ mod tests {
                 requestId: id,
                 outcome,
                 slashed: slashed.to(),
+                context: String::new(),
+            },
+        ))
+    }
+
+    fn arbitration_timed_out_event(id: B256) -> SentinelEvents {
+        SentinelEvents::Oracle(SentinelOracle::SentinelOracleEvents::ArbitrationTimedOut(
+            SentinelOracle::ArbitrationTimedOut { requestId: id },
+        ))
+    }
+
+    fn dispute_out_of_scope_event(id: B256) -> SentinelEvents {
+        SentinelEvents::Oracle(SentinelOracle::SentinelOracleEvents::DisputeOutOfScope(
+            SentinelOracle::DisputeOutOfScope {
+                requestId: id,
                 context: String::new(),
             },
         ))
@@ -1380,6 +1448,52 @@ mod tests {
     fn flow_dispute_still_claims_when_arbitration_contradicts_our_vote() {
         let (svc, id, state) = setup_dispute();
         let event = dispute_resolved_event(id, OnchainRequestState::RESOLVED_DENIED, U256::ZERO);
+
+        let (state, commands) = svc.apply_transition(state, Message::Event(log(50, event)));
+
+        assert!(!state.0.contains_key(&id));
+        assert_eq!(
+            commands,
+            vec![
+                SentinelAction {
+                    kind: SentinelActionKind::Claim { id },
+                    expires_at: None,
+                }
+                .into(),
+            ],
+        );
+    }
+
+    /// `timeoutArbitration()` -- nobody rules within `ARBITRATION_TIMEOUT` --
+    /// reuses the oracle's `TIMED_OUT` machinery, so it must claim just like
+    /// a genuine `DisputeResolved`, even though there's no winning side.
+    #[test]
+    fn flow_claims_on_arbitration_timeout() {
+        let (svc, id, state) = setup_dispute();
+        let event = arbitration_timed_out_event(id);
+
+        let (state, commands) = svc.apply_transition(state, Message::Event(log(50, event)));
+
+        assert!(!state.0.contains_key(&id));
+        assert_eq!(
+            commands,
+            vec![
+                SentinelAction {
+                    kind: SentinelActionKind::Claim { id },
+                    expires_at: None,
+                }
+                .into(),
+            ],
+        );
+    }
+
+    /// `markOutOfScope` -- the arbitrator declining outright -- reuses the
+    /// same `TIMED_OUT` machinery as `timeoutArbitration`, so it must also
+    /// claim unconditionally.
+    #[test]
+    fn flow_claims_on_dispute_out_of_scope() {
+        let (svc, id, state) = setup_dispute();
+        let event = dispute_out_of_scope_event(id);
 
         let (state, commands) = svc.apply_transition(state, Message::Event(log(50, event)));
 
