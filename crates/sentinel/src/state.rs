@@ -115,7 +115,6 @@ impl SentinelRequestState {
     /// already drops a request that reaches its commit deadline without
     /// `self_committed`, so reaching `CollectingVotes` at all guarantees a
     /// real commit.
-    #[cfg_attr(not(test), expect(dead_code))]
     pub(crate) fn approve_and_slash_amount(&self) -> Option<(bool, U96)> {
         match self {
             Self::WaitingForEngineCheck { .. } | Self::WaitingForRequest { .. } => None,
@@ -155,7 +154,6 @@ impl SentinelRequestState {
     /// `true`. `WaitingForDisputeResolution` defaults to `true` too, though
     /// moot in practice -- the oracle never re-emits `OracleResult` for a
     /// request that's already `FROZEN`.
-    #[cfg_attr(not(test), expect(dead_code))]
     pub(crate) fn self_revealed(&self) -> bool {
         match self {
             Self::WaitingForEngineCheck { .. }

@@ -86,7 +86,6 @@ pub enum ResolvedOutcome {
     /// is slashed like any other non-revealer once a side is established,
     /// so this is a loss, not a win, despite the request resolving without
     /// a dispute.
-    #[expect(dead_code)]
     RevealMissed,
     /// This sentinel's vote matched the arbitrated outcome.
     DisputeWon,
