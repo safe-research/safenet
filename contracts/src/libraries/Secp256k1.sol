@@ -247,7 +247,7 @@ library Secp256k1 {
     /**
      * @notice Computes division in a prime field using Fermat's little theorem.
      * @param x The dividend.
-     * @param y The divisor.
+     * @param y The divisor; must be non-zero.
      * @param p The prime modulus.
      * @return result The result of x / y mod p.
      * @dev Division in a prime field is defined as multiplication by the divisor's multiplicative inverse. The most
@@ -268,7 +268,13 @@ library Secp256k1 {
             mstore(add(ptr, 0x60), y)
             mstore(add(ptr, 0x80), sub(p, 2))
             mstore(add(ptr, 0xa0), p)
-            success := and(eq(returndatasize(), 0x20), staticcall(gas(), 0x5, ptr, 0xc0, 0x00, 0x20))
+            success := and(
+                and(eq(returndatasize(), 0x20), staticcall(gas(), 0x5, ptr, 0xc0, 0x00, 0x20)),
+                // Fermat's little theorem only defines an inverse for a non-zero `y`. Ensure that the value of the
+                // divisor is non-zero. We do not try to optimize by skipping the precompile call in case `y` is zero
+                // since it is the responsibility of the caller to ensure that this condition holds.
+                iszero(iszero(y))
+            )
 
             // Compute `x / y = x * inv(y)`.
             result := mulmod(x, mload(0x00), p)
