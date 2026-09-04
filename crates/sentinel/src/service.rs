@@ -624,6 +624,68 @@ impl SentinelTransition {
         );
         (None, actions)
     }
+
+    /// `finalize()` found exactly one side established onchain -- expected
+    /// only from `WaitingForOutcome`, and only ever for a request where we
+    /// ourselves revealed (see the guard in [`Self::finalize`]), so our own
+    /// vote is guaranteed to be the winning side here (unlike
+    /// `DisputeTriggered`, only one side was ever established at all).
+    ///
+    /// A tracked request found in any *other* state here is unexpected, but
+    /// the result is real onchain regardless -- claim anyway (see the
+    /// identical reasoning on [`Self::handle_dispute_triggered`]) rather
+    /// than stranding a bond that's actually reclaimable right now. Unless,
+    /// per [`RequestState::approve_and_slash_amount`], we never posted a
+    /// bond in the first place (`WaitingForEngineCheck`/`WaitingForRequest`)
+    /// -- then there is nothing to claim, so we don't.
+    ///
+    /// Recovering from an unexpected state also means the "guaranteed
+    /// winning side" reasoning above no longer holds: we may have committed
+    /// a bond but never gotten our own `Reveal` onchain before someone
+    /// else's `finalize()` resolved the request. That bond is still ours to
+    /// reclaim via `claim()`, but it comes back slashed, not rewarded, so
+    /// [`RequestState::self_revealed`] picks the metric outcome instead of
+    /// assuming a win.
+    #[expect(dead_code)]
+    fn handle_oracle_result(
+        &self,
+        mut state: State,
+        event: SentinelOracle::OracleResult,
+    ) -> (State, Commands<State, Self>) {
+        let Some(entry) = state.0.remove(&event.requestId) else {
+            tracing::trace!(
+                request_id = %event.requestId,
+                "ignoring oracle result for an untracked request"
+            );
+            return (state, Vec::new());
+        };
+        if !matches!(entry, RequestState::WaitingForOutcome { .. }) {
+            tracing::warn!(
+                request_id = %event.requestId,
+                state = entry.name(),
+                "oracle result reached from an unexpected state; claiming anyway to keep the claim path alive, if we had a bond to begin with"
+            );
+        }
+        if entry.approve_and_slash_amount().is_none() {
+            return (state, Vec::new());
+        }
+        let outcome = if entry.self_revealed() {
+            ResolvedOutcome::Unanimous
+        } else {
+            ResolvedOutcome::RevealMissed
+        };
+        crate::metrics::requests_resolved_total(outcome).increment(1);
+        let actions = vec![
+            SentinelAction {
+                kind: SentinelActionKind::Claim {
+                    id: event.requestId,
+                },
+                expires_at: None,
+            }
+            .into(),
+        ];
+        (state, actions)
+    }
 }
 
 impl SentinelEncoder {
@@ -728,6 +790,7 @@ impl StateTransition<State> for SentinelTransition {
                     SentinelEvents::Oracle(SentinelOracle::SentinelOracleEvents::Claimed(
                         event,
                     )) => self.handle_claimed(state, event),
+                    _ => (state, vec![]), // Placeholder until all events are connected
                 }
             }
             Message::Resume(effect::Resume::EngineCheckResult {
