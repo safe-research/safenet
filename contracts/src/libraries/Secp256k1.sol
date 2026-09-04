@@ -30,6 +30,13 @@ library Secp256k1 {
     error NotOnCurve();
 
     /**
+     * @notice Thrown when `mulmuladd` is used with unsupported, but otherwise valid, inputs.
+     * @dev The `ecrecover` trick used by `mulmuladd` has some additional requirements on its inputs
+     *      that must be satisfied. See the `mulmuladd` documentation for more information.
+     */
+    error UnsupportedMulMulAddInput();
+
+    /**
      * @notice Thrown when the witness for mulmuladd is invalid.
      */
     error InvalidMulMulAddWitness();
@@ -131,14 +138,16 @@ library Secp256k1 {
      *      `-z` times the curve generator point plus `e` times the point `P` defined by the coordinates `Px` and `Py`.
      *      The caveat with this trick is that it doesn't return the resulting point, but a public address (which is a
      *      truncated hash of the resulting point's coordinates, and why we require a witness `r` instead of just
-     *      returning a result). Additionally, it requires `Px` to be an element in Fn, so points with `N <= Px < P`
-     *      are unsupported. In practice (assuming uniform distribution of x-coordinates), this happens with
-     *      probability `(P - N) / P`, or roughly 3.7e-39, and is negligible.
+     *      returning a result). Additionally, the trick has requirements on its inputs: `e` must be non-zero modulo
+     *      `N`, neither `P` nor `R` may be the point at infinity, and `Px` must be an element in Fn (this excludes
+     *      otherwise valid curve points with `N <= Px < P`, which occur with negligible probability
+     *      `(P - N) / P ≈ 3.7e-39` assuming uniformly distributed x-coordinates).
      */
     function mulmuladd(uint256 z, uint256 e, Point memory p, Point memory r) internal view {
         (uint256 px, uint256 py) = _unpack(p);
         (uint256 rx, uint256 ry) = _unpack(r);
-        bool valid;
+
+        address minusR;
         assembly ("memory-safe") {
             // Perform `ecrecover(z * Px, v, Px, e * Px) = address(-R)`
             let ptr := mload(0x40)
@@ -146,9 +155,12 @@ library Secp256k1 {
             mstore(add(ptr, 0x20), add(and(py, 1), 27))
             mstore(add(ptr, 0x40), px)
             mstore(add(ptr, 0x60), mulmod(e, px, N))
-            let minusR :=
-                mul(mload(0x00), and(eq(returndatasize(), 0x20), staticcall(gas(), 0x1, ptr, 0x80, 0x00, 0x20)))
+            minusR := mul(mload(0x00), and(eq(returndatasize(), 0x20), staticcall(gas(), 0x1, ptr, 0x80, 0x00, 0x20)))
+        }
+        require(minusR != address(0), UnsupportedMulMulAddInput());
 
+        bool valid;
+        assembly ("memory-safe") {
             // Compute `address(-R)` from the provided witness `r` and check it matches the result of the `ecrecover`
             // operation.
             mstore(0x00, rx)

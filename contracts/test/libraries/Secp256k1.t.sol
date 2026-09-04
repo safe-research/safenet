@@ -83,18 +83,41 @@ contract Secp256k1Test is Test {
 
         vm.expectRevert(Secp256k1.InvalidMulMulAddWitness.selector);
         this.callMulMulAdd(0, 1, p, p); // `0⋅G - 1⋅P = -P != P`
+    }
 
+    function test_UnsupportedMulMulAddInput() public {
         // The `ecrecover` trick only works for X-coordinates smaller than the
-        // curve order. Demonstrate that the `mulmuladd` fails despite being
-        // valid for these specific kinds of points.
-        p = Secp256k1.Point({
+        // curve order. Demonstrate that `mulmuladd` reports these points as
+        // unsupported, and not as an invalid witness, despite the equation
+        // holding for them.
+        Secp256k1.Point memory p = Secp256k1.Point({
             x: 0xfffffffffffffffffffffffffffffffebaaedce6af48a03bbfd25e8cd0364141,
             y: 0x98f66641cb0ae1776b463ebdee3d77fe2658f021db48e2c8ac7ab4c92f83621e
         });
+        Secp256k1.requireNonZero(p);
         assertTrue(p.x >= Secp256k1.N);
-
-        vm.expectRevert(Secp256k1.InvalidMulMulAddWitness.selector);
+        vm.expectRevert(Secp256k1.UnsupportedMulMulAddInput.selector);
         this.callMulMulAdd(0, Secp256k1.N - 1, p, p);
+
+        // It also does not support 0-points.
+        Secp256k1.Point memory z;
+        vm.expectRevert(Secp256k1.UnsupportedMulMulAddInput.selector);
+        this.callMulMulAdd(0, 1, z, z);
+
+        // `e = 0 mod N` would make the constructed ECDSA `s` value zero, which
+        // the `ecrecover` precompile rejects. Use a supported point here, so
+        // that the zero scalar is the only unsupported input.
+        Secp256k1.Point memory q = ForgeSecp256k1.rand().toPoint();
+        vm.expectRevert(Secp256k1.UnsupportedMulMulAddInput.selector);
+        this.callMulMulAdd(0, 0, q, q);
+        vm.expectRevert(Secp256k1.UnsupportedMulMulAddInput.selector);
+        this.callMulMulAdd(0, Secp256k1.N, q, q);
+
+        // `1⋅G - 1⋅G` is the point at infinity, which `ecrecover` cannot
+        // recover, so there is no result to compare the witness against.
+        Secp256k1.Point memory g = ForgeSecp256k1.g(1).toPoint();
+        vm.expectRevert(Secp256k1.UnsupportedMulMulAddInput.selector);
+        this.callMulMulAdd(1, 1, g, z);
     }
 
     function callAdd(Secp256k1.Point memory p, Secp256k1.Point memory q)
