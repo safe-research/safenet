@@ -1,4 +1,4 @@
-name: sentinel-engine-integration
+name: sentinel-engine-test-vectors
 
 on:
   pull_request:
