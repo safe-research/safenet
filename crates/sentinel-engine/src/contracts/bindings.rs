@@ -16,6 +16,18 @@ pub mod safe {
         function migrateL2Singleton();
         function migrateL2WithFallbackHandler();
         function signMessage(bytes message);
+        function execTransaction(
+            address to,
+            uint256 value,
+            bytes data,
+            uint8 operation,
+            uint256 safeTxGas,
+            uint256 baseGas,
+            uint256 gasPrice,
+            address gasToken,
+            address refundReceiver,
+            bytes signatures
+        ) returns (bool success);
         function multiSend(bytes transactions);
         function performCreate(uint256 value, bytes deploymentData);
         function performCreate2(uint256 value, bytes deploymentData, bytes32 salt);
