@@ -1,6 +1,12 @@
 //! Miscellaneous utilities shared across Safenet services that don't belong
 //! to any single component.
 
+use std::{
+    fmt::{self, Debug, Display, Formatter},
+    io,
+};
+
+use serde::Serialize;
 use sqlx::sqlite::{SqliteConnectOptions, SqlitePool, SqlitePoolOptions};
 use tokio::signal::unix;
 
@@ -53,4 +59,39 @@ pub async fn connect_sqlite(options: SqliteConnectOptions) -> Result<SqlitePool,
         .max_lifetime(None)
         .connect_with(options)
         .await
+}
+
+/// A JSON formatter for printing.
+pub struct Json<'a, T>(pub &'a T);
+
+impl<'a, T> Display for Json<'a, T>
+where
+    T: Serialize,
+{
+    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
+        struct FormatterWriter<'a, 'b>(&'a mut Formatter<'b>);
+
+        impl<'a, 'b> io::Write for FormatterWriter<'a, 'b> {
+            fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+                let str = str::from_utf8(buf).map_err(|_| io::ErrorKind::InvalidData)?;
+                self.0.write_str(str).map_err(|_| io::ErrorKind::Other)?;
+                Ok(buf.len())
+            }
+
+            fn flush(&mut self) -> io::Result<()> {
+                Ok(())
+            }
+        }
+
+        serde_json::to_writer(FormatterWriter(f), self.0).map_err(|_| fmt::Error)
+    }
+}
+
+impl<'a, T> Debug for Json<'a, T>
+where
+    T: Serialize,
+{
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        Display::fmt(self, f)
+    }
 }
