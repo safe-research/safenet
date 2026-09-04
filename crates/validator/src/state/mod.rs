@@ -21,6 +21,7 @@ use crate::{
         sign::RevealedNonces,
     },
     merkle::MerkleRoot,
+    metrics::{self, TransitionKind},
     service::{Action, Effect, Event, Resume},
 };
 use alloy::primitives::{Address, B256, Bytes};
@@ -409,6 +410,7 @@ impl StateTransition<State> for Transition {
         state: State,
         message: Message<Self::Event, Self::Resume>,
     ) -> (State, Commands<State, Self>) {
+        metrics::transitions_total(message.metric_kind()).increment(1);
         match message {
             Message::Event(log) => match log.data {
                 Event::Coordinator(Coordinator::CoordinatorEvents::KeyGen(event)) => {
@@ -494,6 +496,20 @@ impl StateTransition<State> for Transition {
                 } => self.handle_nonce_commitments(state, signature_id, message, nonces, proof),
                 Resume::Nonce { message, nonces } => self.handle_nonces(state, message, nonces),
             },
+        }
+    }
+}
+
+trait MessageExt {
+    fn metric_kind(&self) -> TransitionKind;
+}
+
+impl MessageExt for Message<Event, Resume> {
+    fn metric_kind(&self) -> TransitionKind {
+        match self {
+            Message::NewBlock(_) => TransitionKind::Block,
+            Message::Event(_) => TransitionKind::Event,
+            Message::Resume(_) => TransitionKind::Resume,
         }
     }
 }
