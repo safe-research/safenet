@@ -71,10 +71,13 @@ library FROST {
     /**
      * @notice Derives a FROST participant identifier for a given address.
      * @param participant The participant address.
-     * @return id The derived identifier.
+     * @return id The derived non-zero identifier.
      */
     function identifier(address participant) internal view returns (uint256 id) {
-        return _hid(abi.encodePacked(participant));
+        id = _hid(abi.encodePacked(participant));
+        // `_hid` hashes to the field modulo `N`, so 0 is in its range but is not a valid FROST identifier. However,
+        // getting a result of 0 means a preimage was found for the `HID` hash, which is computationally infeasible.
+        assert(id != 0);
     }
 
     /**
