@@ -7,13 +7,15 @@ mod cancellation;
 mod cow;
 mod escape_hatch;
 mod excessive_approval;
+mod nested;
 mod refund;
 mod staking;
 
 pub use self::{
     address_poisoning::AddressPoisoningChecker, base::BaseChecker, blocklist::BlocklistChecker,
     cancellation::CancellationChecker, cow::CowChecker, escape_hatch::EscapeHatchChecker,
-    excessive_approval::ExcessiveApprovalChecker, refund::RefundChecker, staking::StakingChecker,
+    excessive_approval::ExcessiveApprovalChecker, nested::NestedSafeChecker, refund::RefundChecker,
+    staking::StakingChecker,
 };
 
 use crate::engine::{CheckContext, SafeTransaction, Verdict};
