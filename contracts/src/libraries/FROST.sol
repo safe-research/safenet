@@ -17,7 +17,7 @@ library FROST {
     // ============================================================
 
     /**
-     * @notice Group commitment used in FROST signing.
+     * @notice A single participant's nonce commitments used in FROST signing.
      * @custom:param participant The participant address associated with this commitment.
      * @custom:param d The hiding nonce commitment point.
      * @custom:param e The binding nonce commitment point.
@@ -78,12 +78,13 @@ library FROST {
     }
 
     /**
-     * @notice Generates a random nonce from randomness and a secret key.
+     * @notice Derives a nonce from caller-provided randomness and a secret key.
      * @param random The source randomness.
      * @param secret The participant secret key.
      * @return n The derived nonce scalar.
-     * @dev Implements the RFC-9591 `nonce_generate` function
-     *      (https://datatracker.ietf.org/doc/html/rfc9591#section-4.1).
+     * @dev Implements the hashing step of the RFC-9591 `nonce_generate` function
+     *      (https://datatracker.ietf.org/doc/html/rfc9591#section-4.1). Sampling `random` from a
+     *       cryptographically secure random number generator is the caller's responsibility.
      */
     function nonce(bytes32 random, uint256 secret) internal view returns (uint256 n) {
         return _h3(abi.encodePacked(random, secret));
@@ -95,7 +96,8 @@ library FROST {
      * @param commitments The list of participant commitments.
      * @param message The message being signed.
      * @return rho The binding factors for each participant.
-     * @dev Implements the RFC-9591 `compute_binding_factors` function.
+     * @dev Implements the RFC-9591 `compute_binding_factors` function with identifiers derived from the participant's
+     *      addresses.
      */
     function bindingFactors(Secp256k1.Point memory y, Commitment[] memory commitments, bytes32 message)
         internal
@@ -129,7 +131,7 @@ library FROST {
 
     /**
      * @notice Computes the challenge for a message from a group commitment and group public key.
-     * @param r The participant commitment represented as a point.
+     * @param r The aggregate group commitment represented as a point.
      * @param y The group public key.
      * @param message The message being signed.
      * @return c The computed challenge scalar.
@@ -163,7 +165,7 @@ library FROST {
     /**
      * @notice Verifies a FROST signature share.
      * @param group The group public key.
-     * @param r The participant commitment represented as a point.
+     * @param r The aggregate group commitment represented as a point.
      * @param participant The participant public key.
      * @param share The signature share to verify.
      * @param message The signed message.
@@ -335,8 +337,9 @@ library FROST {
         // The RFC-9380 `hash_to_field` function with:
         // - F: the finite field of order Secp256k1.N
         // - p: Secp256k1.N (field modulus)
-        // - m: 1 (number of elements to generate)
+        // - m: 1 (extension degree of F)
         // - L: 48 (byte-length of intermediate value, for 128-bit security)
+        // - count: 1 (number of field elements to output)
         // <https://datatracker.ietf.org/doc/html/rfc9380#section-5.2>
 
         bytes memory uniform = _expandMessageXmd(message, dst, 48);
@@ -353,7 +356,9 @@ library FROST {
      * @param dst The domain separation tag. The string is packed into a bytes32 with its length as the final byte.
      * @param len The desired output length in bytes.
      * @return uniform The expanded pseudo-random bytes.
-     * @dev Implements the RFC-9380 `expand_message_xmd` function with SHA-256.
+     * @dev Implements a restricted form of the RFC-9380 `expand_message_xmd` function with SHA-256. The domain
+     *      separation tag is limited to the packed `bytes32` representation used here, and so is at most 31 bytes
+     *      long, whereas the RFC allows up to 255.
      */
     function _expandMessageXmd(bytes memory message, bytes32 dst, uint256 len)
         private

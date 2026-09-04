@@ -54,7 +54,7 @@ library Secp256k1 {
 
     /**
      * @notice The order of the generator point of the secp256k1 curve.
-     * @dev All scalar arithmetic are performed modulo N.
+     * @dev All scalar arithmetic is performed modulo N.
      */
     uint256 internal constant N = 0xfffffffffffffffffffffffffffffffebaaedce6af48a03bbfd25e8cd0364141;
 
@@ -72,8 +72,7 @@ library Secp256k1 {
      *      considered more efficient when doing multiple point additions at a time). The additional gas cost of
      *      storing the projective `Z` coordinate in storage is higher than the additional cost of the extra arithmetic
      *      from using affine coordinates. Note that we optimize the computation to do as few `_divmod`s as possible
-     *      (one per operation), as that is by far the most expensive computation (~200 gas for the `modexp` precompile
-     *      call).
+     *      (one per operation), as that is by far the most expensive computation (the `modexp` precompile call).
      */
     function add(Point memory p, Point memory q) internal view returns (Point memory r) {
         (uint256 px, uint256 py) = _unpack(p);
@@ -101,7 +100,7 @@ library Secp256k1 {
                 l = _divmod(mulmod(3, mulmod(px, px, P), P), addmod(py, py, P), P);
             }
         } else {
-            // This branch happens iff `P = -P` in which case their sum is the point at infinity (represented by the
+            // This branch happens iff `P = -Q` in which case their sum is the point at infinity (represented by the
             // 0-value) that `r` is initialized with.
             return r;
         }
@@ -129,12 +128,12 @@ library Secp256k1 {
      * @param r The expected result point R (witness).
      * @dev See <https://ethresear.ch/t/you-can-kinda-abuse-ecrecover-to-do-ecmul-in-secp256k1-today/2384> This
      *      function uses a trick to abuse the `ecrecover` precompile in order to compute a mul-mul-add operation of
-     *      `-z` times the curve generator point plus `e` time the point `P` defined by the coordinates `Px` and `Py`.
+     *      `-z` times the curve generator point plus `e` times the point `P` defined by the coordinates `Px` and `Py`.
      *      The caveat with this trick is that it doesn't return the resulting point, but a public address (which is a
      *      truncated hash of the resulting point's coordinates, and why we require a witness `r` instead of just
-     *      returning a result). Additionally, it only supports points `P` with x-coordinates that are elements in Fn.
-     *      In practice (assuming uniform distribution of x-coordinates), this happens for roughly one in every 3.7e39
-     *      points and is negligible.
+     *      returning a result). Additionally, it requires `Px` to be an element in Fn, so points with `N <= Px < P`
+     *      are unsupported. In practice (assuming uniform distribution of x-coordinates), this happens with
+     *      probability `(P - N) / P`, or roughly 3.7e-39, and is negligible.
      */
     function mulmuladd(uint256 z, uint256 e, Point memory p, Point memory r) internal view {
         (uint256 px, uint256 py) = _unpack(p);
