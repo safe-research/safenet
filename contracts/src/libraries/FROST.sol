@@ -385,7 +385,10 @@ library FROST {
         // - s_in_bytes: 64
         // <https://datatracker.ietf.org/doc/html/rfc9380#section-5.3.1>
 
-        assert(len < 0x8000);
+        // The RFC-9380 abort condition of `ell > 255`, where `ell = ceil(len / b_in_bytes)` is the number of hash
+        // blocks to compute, giving a bound of `255 * 32 = 8160` bytes.
+        assert(len <= 8160);
+
         assembly ("memory-safe") {
             function _sha256(inputPtr, inputLen, outputPtr) {
                 if iszero(
