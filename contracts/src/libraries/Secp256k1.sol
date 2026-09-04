@@ -88,10 +88,14 @@ library Secp256k1 {
         uint256 l;
         if (px | py == 0) {
             // `P` is the point at infinity, and `0 + Q = Q`.
-            return q;
+            r.x = qx;
+            r.y = qy;
+            return r;
         } else if (qx | qy == 0) {
             // `Q` is the point at infinity, and `P + 0 = P`.
-            return p;
+            r.x = px;
+            r.y = py;
+            return r;
         } else if (px != qx) {
             // Point addition, compute the slope through `P` and `Q`:
             //     λ = (Qy - Py) / (Qx - Px)

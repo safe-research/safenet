@@ -28,6 +28,26 @@ contract Secp256k1Test is Test {
         _assertEqPoint(z, Secp256k1.add(z, z));
     }
 
+    function test_AddZeroDoesNotAlias() public {
+        ForgeSecp256k1.P memory w = ForgeSecp256k1.rand();
+
+        Secp256k1.Point memory p = w.toPoint();
+        Secp256k1.Point memory z;
+
+        // The identity branches must copy into the return value. Returning an
+        // operand directly would alias its memory in this call frame, so that
+        // writing to the sum would also modify the operand.
+        Secp256k1.Point memory sum = Secp256k1.add(z, p);
+        sum.x = 0;
+        sum.y = 0;
+        _assertEqPoint(w.toPoint(), p);
+
+        sum = Secp256k1.add(p, z);
+        sum.x = 0;
+        sum.y = 0;
+        _assertEqPoint(w.toPoint(), p);
+    }
+
     function test_AddDouble() public {
         ForgeSecp256k1.P memory w = ForgeSecp256k1.rand();
 
