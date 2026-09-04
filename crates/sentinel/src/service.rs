@@ -625,6 +625,55 @@ impl SentinelTransition {
         (None, actions)
     }
 
+    /// `finalize()` found nobody had revealed onchain (or nobody had even
+    /// committed) -- expected only from `WaitingForOutcome`. A genuine
+    /// timeout established neither side, so every bond -- including our own
+    /// still-`PENDING` (unslashed) commitment -- returns in full via
+    /// `claim()`.
+    ///
+    /// A tracked request found in any *other* state here is unexpected, but
+    /// the timeout is real onchain regardless -- claim anyway (see the
+    /// identical reasoning on [`Self::handle_dispute_triggered`]) rather
+    /// than stranding a bond that's actually reclaimable right now. Unless,
+    /// per [`RequestState::approve_and_slash_amount`], we never posted a
+    /// bond in the first place (`WaitingForEngineCheck`/`WaitingForRequest`)
+    /// -- then there is nothing to claim, so we don't.
+    #[expect(dead_code)]
+    fn handle_request_timed_out(
+        &self,
+        mut state: State,
+        event: SentinelOracle::RequestTimedOut,
+    ) -> (State, Commands<State, Self>) {
+        let Some(entry) = state.0.remove(&event.requestId) else {
+            tracing::trace!(
+                request_id = %event.requestId,
+                "ignoring request timeout for an untracked request"
+            );
+            return (state, Vec::new());
+        };
+        if !matches!(entry, RequestState::WaitingForOutcome { .. }) {
+            tracing::warn!(
+                request_id = %event.requestId,
+                state = entry.name(),
+                "request timed out from an unexpected state; claiming anyway to keep the claim path alive, if we had a bond to begin with"
+            );
+        }
+        if entry.approve_and_slash_amount().is_none() {
+            return (state, Vec::new());
+        }
+        crate::metrics::requests_resolved_total(ResolvedOutcome::Timeout).increment(1);
+        let actions = vec![
+            SentinelAction {
+                kind: SentinelActionKind::Claim {
+                    id: event.requestId,
+                },
+                expires_at: None,
+            }
+            .into(),
+        ];
+        (state, actions)
+    }
+
     /// `finalize()` found both an `approve` and a `deny` side established
     /// onchain -- expected only from `WaitingForOutcome`, which is where it
     /// carries `approve`/`slash_amount` forward from. The request now waits
