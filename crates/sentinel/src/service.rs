@@ -463,6 +463,7 @@ impl SentinelTransition {
                     }
                 }
             }
+            RequestState::WaitingForOutcome { .. } => true,
             RequestState::WaitingForDisputeResolution { .. } => true,
         });
 
