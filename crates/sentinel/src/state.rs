@@ -68,7 +68,17 @@ pub enum SentinelRequestState {
         deny_count: u64,
         self_revealed: bool,
     },
-    /// The local tally showed both sides had revealed votes (a dispute).
+    /// A `Finalize` action was submitted and is awaiting onchain
+    /// confirmation. No deadline: unlike every other state, advancement out
+    /// of here is tied to our own `finalize()` call landing, not a block
+    /// window, so `handle_block_advance` never expires it. Which of
+    /// `handle_dispute_triggered`/`handle_request_timed_out`/
+    /// `handle_oracle_result` fires next -- and thus which outcome this
+    /// request actually reached -- is decided by the oracle's emitted event,
+    /// not predicted locally; `approve`/`slash_amount` are carried through
+    /// for the `DisputeTriggered` case, where they seed the next state.
+    WaitingForOutcome { approve: bool, slash_amount: U96 },
+    /// `DisputeTriggered` confirmed both sides had revealed votes onchain.
     /// `handle_resolved` always claims once the arbitrator settles it,
     /// regardless of which side won, but `approve`/`slash_amount` are kept
     /// so it can also record whether *this* sentinel's vote matched the
@@ -84,7 +94,50 @@ impl SentinelRequestState {
             Self::WaitingForRequest { .. } => "waiting_for_request",
             Self::CollectingCommitments { .. } => "collecting_commitments",
             Self::CollectingVotes { .. } => "collecting_votes",
+            Self::WaitingForOutcome { .. } => "waiting_for_outcome",
             Self::WaitingForDisputeResolution { .. } => "waiting_for_dispute_resolution",
+        }
+    }
+
+    /// `(approve, slash_amount)` recovery for a request found in an
+    /// unexpected state when one of the oracle's terminal finalize events
+    /// (`DisputeTriggered`/`RequestTimedOut`/`OracleResult`) arrives instead
+    /// of the expected `WaitingForOutcome` -- see
+    /// `handle_dispute_triggered`/`handle_request_timed_out`/
+    /// `handle_oracle_result`. Returns `None` for `WaitingForEngineCheck`/
+    /// `WaitingForRequest` (our own logic never posts a bond that early --
+    /// voting hasn't opened yet, or we haven't committed) and for
+    /// `CollectingCommitments` while `self_committed` is still `false` (the
+    /// request is open and its terms are known, but our own `Commit` hasn't
+    /// landed onchain yet) -- in every one of these there is nothing of
+    /// ours to claim back regardless of which event this turns out to be.
+    /// `CollectingVotes` never needs the same check: `handle_block_advance`
+    /// already drops a request that reaches its commit deadline without
+    /// `self_committed`, so reaching `CollectingVotes` at all guarantees a
+    /// real commit.
+    #[cfg_attr(not(test), expect(dead_code))]
+    pub(crate) fn approve_and_slash_amount(&self) -> Option<(bool, U96)> {
+        match self {
+            Self::WaitingForEngineCheck { .. } | Self::WaitingForRequest { .. } => None,
+            Self::CollectingCommitments {
+                approve,
+                slash_amount,
+                self_committed,
+                ..
+            } => self_committed.then_some((*approve, *slash_amount)),
+            Self::CollectingVotes {
+                approve,
+                slash_amount,
+                ..
+            }
+            | Self::WaitingForOutcome {
+                approve,
+                slash_amount,
+            }
+            | Self::WaitingForDisputeResolution {
+                approve,
+                slash_amount,
+            } => Some((*approve, *slash_amount)),
         }
     }
 }
@@ -107,6 +160,78 @@ mod tests {
             committed_count: 2,
             self_committed: true,
         }
+    }
+
+    #[test]
+    fn approve_and_slash_amount_is_none_before_any_bond_could_have_been_posted() {
+        assert_eq!(
+            SentinelRequestState::WaitingForEngineCheck {
+                deadline: 10,
+                request: None,
+            }
+            .approve_and_slash_amount(),
+            None,
+        );
+        assert_eq!(
+            SentinelRequestState::WaitingForRequest {
+                approve: true,
+                reason: String::new(),
+                deadline: 10,
+            }
+            .approve_and_slash_amount(),
+            None,
+        );
+        assert_eq!(
+            SentinelRequestState::CollectingCommitments {
+                approve: true,
+                reason: String::new(),
+                slash_amount: U96::from(500),
+                commit_deadline: 20,
+                reveal_deadline: 40,
+                committed_count: 0,
+                self_committed: false,
+            }
+            .approve_and_slash_amount(),
+            None,
+        );
+    }
+
+    #[test]
+    fn approve_and_slash_amount_recovers_the_real_values_once_a_bond_could_exist() {
+        assert_eq!(
+            collecting_commitments(20, 40).approve_and_slash_amount(),
+            Some((false, U96::from(500))),
+        );
+        assert_eq!(
+            SentinelRequestState::CollectingVotes {
+                approve: true,
+                slash_amount: U96::from(500),
+                reveal_deadline: 40,
+                committed_count: 2,
+                revealed_count: 1,
+                approve_count: 1,
+                deny_count: 0,
+                self_revealed: true,
+            }
+            .approve_and_slash_amount(),
+            Some((true, U96::from(500))),
+        );
+        assert_eq!(
+            SentinelRequestState::WaitingForOutcome {
+                approve: true,
+                slash_amount: U96::from(500),
+            }
+            .approve_and_slash_amount(),
+            Some((true, U96::from(500))),
+        );
+        assert_eq!(
+            SentinelRequestState::WaitingForDisputeResolution {
+                approve: false,
+                slash_amount: U96::from(500),
+            }
+            .approve_and_slash_amount(),
+            Some((false, U96::from(500))),
+        );
     }
 
     #[test]
