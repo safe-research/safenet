@@ -1,0 +1,70 @@
+name: sentinel-engine-test-vectors
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  sentinel-engine:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          submodules: recursive
+
+      - name: Check out sentinel test vectors
+        uses: actions/checkout@v5
+        with:
+          repository: safe-research/sentinel-test-vectors
+          path: sentinel-test-vectors
+
+      - uses: foundry-rs/foundry-toolchain@v1
+        with:
+          # We fix the foundry version because of a formatting bug introduced
+          # in version 1.7.0.
+          # See <https://github.com/foundry-rs/foundry/issues/13362>
+          version: v1.5.1
+
+      - uses: ./.github/actions/install-just
+
+      - run: scripts/generate_sentinel_engine_report.sh sentinel-test-vectors
+        env:
+          SENTINEL_ENGINE_RPC_URL: ${{ secrets.SENTINEL_ENGINE_RPC_URL }}
+
+      - name: Post Sentinel Engine Step Summary
+        run: cat sentinel-engine-report.md >> "$GITHUB_STEP_SUMMARY"
+
+      # In case this is run for a PR, upload the report as an artifact so the
+      # privileged post_pr_comment workflow can post it. This allows results
+      # to be produced even for fork-PRs.
+      - name: Prepare Sentinel Engine Report Artifact
+        if: github.event_name == 'pull_request'
+        run: |
+          PR_NUMBER=$(jq -r '.pull_request.number' "$GITHUB_EVENT_PATH")
+          if [ "$PR_NUMBER" = "null" ] || [ -z "$PR_NUMBER" ]; then
+            echo "❌ Sentinel engine comment requires a pull_request event context."
+            exit 1
+          fi
+          echo "$PR_NUMBER" > issue-number.txt
+
+      - name: Upload Sentinel Engine Report Artifact
+        if: github.event_name == 'pull_request'
+        uses: actions/upload-artifact@v4
+        with:
+          name: pr-comment
+          path: |
+            sentinel-engine-report.md
+            issue-number.txt
+
+      - name: Upload logs
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: sentinel-engine-integration-logs
+          path: "*_logs.txt"
+          if-no-files-found: ignore
