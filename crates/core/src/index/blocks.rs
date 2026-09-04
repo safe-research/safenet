@@ -250,8 +250,6 @@ impl BlockWatcher {
             resume = ?indexed,
             "initializing block watcher"
         );
-        metrics::uncled_blocks_total().absolute(0);
-
         self.update_next_pending_block(latest.number, latest.timestamp);
 
         if let Some(indexed) = indexed {

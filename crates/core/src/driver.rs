@@ -133,10 +133,11 @@ where
         let transactions =
             TransactionQueue::new(provider, signer, pool, config.transactions).await?;
 
-        // Make sure to initialize block metrics on startup.
-        let block_number = block_status.map(|status| status.latest).unwrap_or_default();
-        for status in ProcessingStatus::variants() {
-            metrics::block_number(status).set(block_number as f64);
+        // Restore the block metrics from the persisted block status.
+        if let Some(block_status) = block_status {
+            for status in ProcessingStatus::variants() {
+                metrics::block_number(status).set(block_status.latest as f64);
+            }
         }
 
         Ok(Self {

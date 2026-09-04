@@ -56,6 +56,7 @@ pub enum InitError {
 pub fn init(config: Config) -> Result<(), InitError> {
     logging::init(config.log_filter)?;
     let metrics_addr = metrics::serve(config.metrics_address)?;
+    crate::metrics::initialize();
 
     tracing::info!(%metrics_addr, "serving prometheus metrics and health endpoint");
     Ok(())
