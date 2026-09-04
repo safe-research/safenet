@@ -551,13 +551,19 @@ impl SentinelTransition {
     /// [`Self::handle_block_advance`]; always exits `CollectingVotes` in
     /// this same step, so a request's finalize step can only ever run once.
     ///
-    /// There are the following cases when the `Finalize` action is emitted:
-    /// - no one voted: a genuine timeout, where the bonds can be re-claimed
-    /// - unanimous vote: it is possible to claim the bond and reward
-    /// - a dispute: there is still a possibility to receive a reward
+    /// Only submits `Finalize` when it's worth this sentinel spending the
+    /// gas: either it revealed its own vote, or nobody revealed at all (a
+    /// genuine timeout, where its still-`PENDING` commitment is only
+    /// reclaimable once *someone* finalizes). In every other case it
+    /// wouldn't benefit from triggering finalization, so the request is
+    /// dropped instead.
     ///
-    /// In other cases it doesn't make sense to trigger the finalization for
-    /// this sentinel.
+    /// Which outcome the submitted `finalize()` call actually reaches --
+    /// a dispute, a timeout, or a direct resolution -- is not predicted
+    /// here; [`RequestState::WaitingForOutcome`] waits on the oracle's own
+    /// `DisputeTriggered`/`RequestTimedOut`/`OracleResult` event to decide
+    /// that (see [`Self::handle_dispute_triggered`],
+    /// [`Self::handle_request_timed_out`], [`Self::handle_oracle_result`]).
     fn finalize(
         &self,
         state: &RequestState,
@@ -567,8 +573,6 @@ impl SentinelTransition {
             approve,
             slash_amount,
             revealed_count,
-            approve_count,
-            deny_count,
             self_revealed,
             ..
         } = state
@@ -577,7 +581,6 @@ impl SentinelTransition {
         };
         let approve = *approve;
         let slash_amount = *slash_amount;
-        let dispute = *approve_count > 0 && *deny_count > 0;
         let timed_out = *revealed_count == 0;
 
         // If this sentinel did not participate and it was not a timeout
@@ -586,7 +589,7 @@ impl SentinelTransition {
             return (None, Vec::new());
         }
 
-        let mut actions = vec![
+        let actions = vec![
             SentinelAction {
                 kind: SentinelActionKind::Finalize { id: request_id },
                 expires_at: None,
@@ -594,35 +597,13 @@ impl SentinelTransition {
             .into(),
         ];
 
-        // In case of a dispute it is not a timeout, so this sentinel participated.
-        // Finalize the request and wait for a dispute resolution by the arbitrator;
-        // `handle_resolved` records the win/loss metric once that arrives.
-        if dispute {
-            return (
-                Some(RequestState::WaitingForDisputeResolution {
-                    approve,
-                    slash_amount,
-                }),
-                actions,
-            );
-        }
-
-        // Unanimity plus our own counted vote guarantees this sentinel is on the
-        // sole, winning side; no `DisputeResolved` round trip needed.
-        let outcome_metric = if timed_out {
-            ResolvedOutcome::Timeout
-        } else {
-            ResolvedOutcome::Unanimous
-        };
-        crate::metrics::requests_resolved_total(outcome_metric).increment(1);
-        actions.push(
-            SentinelAction {
-                kind: SentinelActionKind::Claim { id: request_id },
-                expires_at: None,
-            }
-            .into(),
-        );
-        (None, actions)
+        (
+            Some(RequestState::WaitingForOutcome {
+                approve,
+                slash_amount,
+            }),
+            actions,
+        )
     }
 
     /// `finalize()` found nobody had revealed onchain (or nobody had even
@@ -638,7 +619,6 @@ impl SentinelTransition {
     /// per [`RequestState::approve_and_slash_amount`], we never posted a
     /// bond in the first place (`WaitingForEngineCheck`/`WaitingForRequest`)
     /// -- then there is nothing to claim, so we don't.
-    #[expect(dead_code)]
     fn handle_request_timed_out(
         &self,
         mut state: State,
@@ -689,7 +669,6 @@ impl SentinelTransition {
     /// `WaitingForRequest`: our own logic never posts a bond that early, so
     /// `approve_and_slash_amount` returns `None` and there is genuinely
     /// nothing of ours to wait on -- the request is dropped instead.
-    #[expect(dead_code)]
     fn handle_dispute_triggered(
         &self,
         mut state: State,
@@ -742,7 +721,6 @@ impl SentinelTransition {
     /// reclaim via `claim()`, but it comes back slashed, not rewarded, so
     /// [`RequestState::self_revealed`] picks the metric outcome instead of
     /// assuming a win.
-    #[expect(dead_code)]
     fn handle_oracle_result(
         &self,
         mut state: State,
@@ -881,12 +859,20 @@ impl StateTransition<State> for SentinelTransition {
                         event,
                     )) => self.handle_revealed(state, event),
                     SentinelEvents::Oracle(
+                        SentinelOracle::SentinelOracleEvents::DisputeTriggered(event),
+                    ) => self.handle_dispute_triggered(state, event),
+                    SentinelEvents::Oracle(
                         SentinelOracle::SentinelOracleEvents::DisputeResolved(event),
                     ) => self.handle_resolved(state, event),
+                    SentinelEvents::Oracle(
+                        SentinelOracle::SentinelOracleEvents::RequestTimedOut(event),
+                    ) => self.handle_request_timed_out(state, event),
+                    SentinelEvents::Oracle(SentinelOracle::SentinelOracleEvents::OracleResult(
+                        event,
+                    )) => self.handle_oracle_result(state, event),
                     SentinelEvents::Oracle(SentinelOracle::SentinelOracleEvents::Claimed(
                         event,
                     )) => self.handle_claimed(state, event),
-                    _ => (state, vec![]), // Placeholder until all events are connected
                 }
             }
             Message::Resume(effect::Resume::EngineCheckResult {
@@ -1120,6 +1106,15 @@ mod tests {
         ))
     }
 
+    fn dispute_triggered_event(id: B256, deadline: u64) -> SentinelEvents {
+        SentinelEvents::Oracle(SentinelOracle::SentinelOracleEvents::DisputeTriggered(
+            SentinelOracle::DisputeTriggered {
+                requestId: id,
+                deadline,
+            },
+        ))
+    }
+
     fn dispute_resolved_event(
         id: B256,
         outcome: OnchainRequestState,
@@ -1131,6 +1126,23 @@ mod tests {
                 outcome,
                 slashed: slashed.to(),
                 context: String::new(),
+            },
+        ))
+    }
+
+    fn request_timed_out_event(id: B256) -> SentinelEvents {
+        SentinelEvents::Oracle(SentinelOracle::SentinelOracleEvents::RequestTimedOut(
+            SentinelOracle::RequestTimedOut { requestId: id },
+        ))
+    }
+
+    fn oracle_result_event(id: B256, approved: bool) -> SentinelEvents {
+        SentinelEvents::Oracle(SentinelOracle::SentinelOracleEvents::OracleResult(
+            SentinelOracle::OracleResult {
+                requestId: id,
+                sponsor: SAFE,
+                result: Bytes::new(),
+                approved,
             },
         ))
     }
@@ -1419,13 +1431,19 @@ mod tests {
         );
 
         // Our own reveal lands; every commit is now revealed, unanimously in
-        // favor, so we finalize and claim immediately instead of waiting out
-        // the reveal window.
+        // favor, so we finalize immediately instead of waiting out the
+        // reveal window.
         let (state, commands) = svc.apply_transition(
             state,
             Message::Event(log(23, revealed_event(id, self_address(), true, 500u64))),
         );
-        assert!(!state.0.contains_key(&id));
+        assert_eq!(
+            state.0[&id],
+            RequestState::WaitingForOutcome {
+                approve: true,
+                slash_amount: U96::from(500),
+            },
+        );
         assert_eq!(
             commands,
             vec![
@@ -1434,6 +1452,19 @@ mod tests {
                     expires_at: None,
                 }
                 .into(),
+            ],
+        );
+
+        // The oracle confirms the unanimous approval landed onchain; only
+        // now do we claim.
+        let (state, commands) = svc.apply_transition(
+            state,
+            Message::Event(log(24, oracle_result_event(id, true))),
+        );
+        assert!(!state.0.contains_key(&id));
+        assert_eq!(
+            commands,
+            vec![
                 SentinelAction {
                     kind: SentinelActionKind::Claim { id },
                     expires_at: None,
@@ -1502,6 +1533,22 @@ mod tests {
                 .into(),
             ],
         );
+        assert_eq!(
+            state.0[&id],
+            RequestState::WaitingForOutcome {
+                approve: true,
+                slash_amount: U96::from(500),
+            }
+        );
+
+        // The finalize() call lands onchain and finds both sides
+        // established, freezing the request; only now do we start waiting
+        // on the arbitrator.
+        let (state, commands) = svc.apply_transition(
+            state,
+            Message::Event(log(24, dispute_triggered_event(id, 60))),
+        );
+        assert!(commands.is_empty());
         assert_eq!(
             state.0[&id],
             RequestState::WaitingForDisputeResolution {
@@ -1643,7 +1690,13 @@ mod tests {
         // does anyone else's.
         let (state, commands) = svc.apply_transition(state, Message::NewBlock(41));
 
-        assert!(!state.0.contains_key(&id));
+        assert_eq!(
+            state.0[&id],
+            RequestState::WaitingForOutcome {
+                approve: true,
+                slash_amount: U96::from(500),
+            },
+        );
         assert_eq!(
             commands,
             vec![
@@ -1652,6 +1705,94 @@ mod tests {
                     expires_at: None,
                 }
                 .into(),
+            ],
+        );
+
+        // The finalize() call confirms onchain that nobody ever revealed;
+        // only now do we reclaim our own still-`PENDING` (unslashed)
+        // commitment.
+        let (state, commands) = svc.apply_transition(
+            state,
+            Message::Event(log(42, request_timed_out_event(id))),
+        );
+        assert!(!state.0.contains_key(&id));
+        assert_eq!(
+            commands,
+            vec![
+                SentinelAction {
+                    kind: SentinelActionKind::Claim { id },
+                    expires_at: None,
+                }
+                .into(),
+            ],
+        );
+    }
+
+    /// Same recovery guarantee as
+    /// `dispute_triggered_recovers_bond_claim_from_an_unexpected_state`, but
+    /// for `OracleResult` arriving while we're still `CollectingVotes` with
+    /// `self_revealed: false` (someone else's `finalize()` landed before
+    /// our own `Reveal` did). The bond is still claimed -- it's ours to
+    /// reclaim regardless -- but `self_revealed` being false here means
+    /// `handle_oracle_result` must record `ResolvedOutcome::RevealMissed`,
+    /// not `Unanimous`: this bond comes back slashed, not rewarded.
+    #[test]
+    fn oracle_result_recovers_a_slashed_bond_when_our_own_reveal_was_missed() {
+        let svc = transition();
+        let safe_tx_hash = B256::repeat_byte(0x12);
+        let id = request_id(safe_tx_hash, 7, ORACLE);
+
+        let (state, _) = svc.apply_transition(
+            State::default(),
+            Message::Event(log(1, proposed_event(ORACLE, safe_tx_hash, TO))),
+        );
+        let (state, _) = resolve_engine_check(&svc, state, id, CheckOutcome::Approved);
+        let (state, _) = svc.apply_transition(
+            state,
+            Message::Event(log(
+                5,
+                new_request_event(
+                    id,
+                    U256::from(1_000u64),
+                    U256::from(500u64),
+                    U256::from(500u64),
+                    20,
+                    40,
+                ),
+            )),
+        );
+        let (state, _) = svc.apply_transition(
+            state,
+            Message::Event(log(6, committed_event(id, self_address(), 500u64))),
+        );
+        let (state, _) = svc.apply_transition(
+            state,
+            Message::Event(log(7, committed_event(id, OTHER, 500u64))),
+        );
+        let (state, _) = svc.apply_transition(state, Message::NewBlock(21));
+        assert_eq!(
+            state.0[&id],
+            RequestState::CollectingVotes {
+                approve: true,
+                slash_amount: U96::from(500),
+                reveal_deadline: 40,
+                committed_count: 2,
+                revealed_count: 0,
+                approve_count: 0,
+                deny_count: 0,
+                self_revealed: false,
+            },
+        );
+
+        let (state, commands) = svc.apply_transition(
+            state,
+            Message::Event(log(22, oracle_result_event(id, true))),
+        );
+
+        assert!(!state.0.contains_key(&id));
+        assert_eq!(
+            commands,
+            vec![
                 SentinelAction {
                     kind: SentinelActionKind::Claim { id },
                     expires_at: None,
