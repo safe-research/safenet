@@ -140,6 +140,31 @@ impl SentinelRequestState {
             } => Some((*approve, *slash_amount)),
         }
     }
+
+    /// Whether our own committed vote is known to have been revealed
+    /// onchain -- used by `handle_oracle_result` to tell a genuine win from
+    /// a bond that's merely being reclaimed after our own `Reveal` never
+    /// landed (see `ResolvedOutcome::RevealMissed`).
+    ///
+    /// `CollectingCommitments` is always `false`: reaching this at all
+    /// already required `self_committed` via `approve_and_slash_amount`,
+    /// but revealing only starts once `CollectingVotes` is reached, and
+    /// this state hasn't gotten there yet. `WaitingForOutcome` is always
+    /// `true`: `finalize()`'s own guard only ever submits from a
+    /// non-timeout, single-side resolution once `self_revealed` was already
+    /// `true`. `WaitingForDisputeResolution` defaults to `true` too, though
+    /// moot in practice -- the oracle never re-emits `OracleResult` for a
+    /// request that's already `FROZEN`.
+    #[cfg_attr(not(test), expect(dead_code))]
+    pub(crate) fn self_revealed(&self) -> bool {
+        match self {
+            Self::WaitingForEngineCheck { .. }
+            | Self::WaitingForRequest { .. }
+            | Self::CollectingCommitments { .. } => false,
+            Self::CollectingVotes { self_revealed, .. } => *self_revealed,
+            Self::WaitingForOutcome { .. } | Self::WaitingForDisputeResolution { .. } => true,
+        }
+    }
 }
 
 /// Snapshot state: every in-flight request, keyed by request ID.
@@ -231,6 +256,63 @@ mod tests {
             }
             .approve_and_slash_amount(),
             Some((false, U96::from(500))),
+        );
+    }
+
+    #[test]
+    fn self_revealed_is_false_before_our_own_reveal_could_have_landed() {
+        assert!(
+            !SentinelRequestState::WaitingForEngineCheck {
+                deadline: 10,
+                request: None,
+            }
+            .self_revealed()
+        );
+        assert!(
+            !SentinelRequestState::WaitingForRequest {
+                approve: true,
+                reason: String::new(),
+                deadline: 10,
+            }
+            .self_revealed()
+        );
+        assert!(!collecting_commitments(20, 40).self_revealed());
+        assert!(
+            !SentinelRequestState::CollectingVotes {
+                approve: true,
+                slash_amount: U96::from(500),
+                reveal_deadline: 40,
+                committed_count: 2,
+                revealed_count: 1,
+                approve_count: 0,
+                deny_count: 1,
+                self_revealed: false,
+            }
+            .self_revealed()
+        );
+    }
+
+    #[test]
+    fn self_revealed_is_true_once_our_own_reveal_is_known_to_have_landed() {
+        assert!(
+            SentinelRequestState::CollectingVotes {
+                approve: true,
+                slash_amount: U96::from(500),
+                reveal_deadline: 40,
+                committed_count: 2,
+                revealed_count: 1,
+                approve_count: 1,
+                deny_count: 0,
+                self_revealed: true,
+            }
+            .self_revealed()
+        );
+        assert!(
+            SentinelRequestState::WaitingForOutcome {
+                approve: true,
+                slash_amount: U96::from(500),
+            }
+            .self_revealed()
         );
     }
 
