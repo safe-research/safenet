@@ -40,6 +40,8 @@ pub mod oracle {
                 string reason
             );
             event DisputeResolved(bytes32 indexed requestId, RequestState outcome, uint128 slashed, string context);
+            event ArbitrationTimedOut(bytes32 indexed requestId);
+            event DisputeOutOfScope(bytes32 indexed requestId, string context);
             event Claimed(bytes32 indexed requestId, address indexed sentinel, uint96 bondReturn, uint96 feeReward);
 
             function commit(bytes32 requestId, bytes32 commitHash) external;
