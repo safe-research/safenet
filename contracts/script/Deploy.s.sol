@@ -8,6 +8,7 @@ import {Consensus} from "@/Consensus.sol";
 import {AlwaysApproveOracle} from "@/AlwaysApproveOracle.sol";
 import {DeterministicDeployment} from "@script/util/DeterministicDeployment.sol";
 import {Genesis} from "@script/util/Genesis.sol";
+import {requireFullChainSupport} from "@script/util/ChainSupport.sol";
 
 contract DeployScript is Script {
     using DeterministicDeployment for DeterministicDeployment.Factory;
@@ -24,6 +25,7 @@ contract DeployScript is Script {
         bytes32 coordinatorSalt = vm.envOr("COORDINATOR_SALT", bytes32(0));
         bytes32 consensusSalt = vm.envOr("CONSENSUS_SALT", bytes32(0));
 
+        requireFullChainSupport(vm);
         vm.startBroadcast();
 
         coordinator = FROSTCoordinator(

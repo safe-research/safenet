@@ -4,6 +4,7 @@ pragma solidity ^0.8.30;
 /**
  * @title Secp256k1
  * @notice Secp256k1 curve operations.
+ * @dev This library requires the `MODEXP (0x05)` precompile (EIP-198).
  */
 library Secp256k1 {
     // ============================================================
