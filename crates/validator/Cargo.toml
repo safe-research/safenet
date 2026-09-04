@@ -10,6 +10,7 @@ argh.workspace = true
 frost-core = { version = "3", features = ["internals"] }
 frost-secp256k1 = "3"
 k256.workspace = true
+metrics.workspace = true
 rand.workspace = true
 rand_chacha.workspace = true
 rayon = "1"
