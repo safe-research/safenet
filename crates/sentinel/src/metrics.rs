@@ -38,25 +38,38 @@ impl EngineCheckVerdict {
 /// share of the total is this sentinel's engine error rate.
 pub fn engine_check_verdicts_total(verdict: EngineCheckVerdict) -> Counter {
     let label = verdict.label();
-    metrics::counter!("safenet_sentinel_engine_check_verdicts_total", "verdict" => label)
+    metrics::counter!(
+        description: "Number of sentinel engine checks, by verdict.",
+        "safenet_sentinel_engine_check_verdicts_total",
+        "verdict" => label,
+    )
 }
 
 /// How many proposed requests this sentinel has started tracking (one per
 /// unique `TransactionProposed`/request id) -- the denominator for this
 /// sentinel's participation rate.
 pub fn requests_proposed_total() -> Counter {
-    metrics::counter!("safenet_sentinel_requests_proposed_total")
+    metrics::counter!(
+        description: "Number of unique proposed requests tracked by this sentinel.",
+        "safenet_sentinel_requests_proposed_total",
+    )
 }
 
 /// How many requests this sentinel actually committed a bond to (its own
 /// `Committed` landing onchain) -- the numerator for its participation rate.
 pub fn requests_participated_total() -> Counter {
-    metrics::counter!("safenet_sentinel_requests_participated_total")
+    metrics::counter!(
+        description: "Number of requests this sentinel committed a bond to.",
+        "safenet_sentinel_requests_participated_total",
+    )
 }
 
 /// This sentinel's own bond amount, recorded once per request it commits to.
 pub fn bond_amount() -> Histogram {
-    metrics::histogram!("safenet_sentinel_bond_amount")
+    metrics::histogram!(
+        description: "Bond amount committed by this sentinel per participated request.",
+        "safenet_sentinel_bond_amount",
+    )
 }
 
 /// How a request this sentinel participated in was ultimately resolved, as
@@ -90,13 +103,20 @@ impl ResolvedOutcome {
 /// dispute_won` over the total is this sentinel's win rate.
 pub fn requests_resolved_total(outcome: ResolvedOutcome) -> Counter {
     let label = outcome.label();
-    metrics::counter!("safenet_sentinel_requests_resolved_total", "outcome" => label)
+    metrics::counter!(
+        description: "Number of participated requests resolved, by outcome.",
+        "safenet_sentinel_requests_resolved_total",
+        "outcome" => label,
+    )
 }
 
 /// The amount of this sentinel's own bond slashed by a lost, arbitrated
 /// dispute.
 pub fn dispute_bond_slashed_amount() -> Histogram {
-    metrics::histogram!("safenet_sentinel_dispute_bond_slashed_amount")
+    metrics::histogram!(
+        description: "Bond amount slashed from this sentinel per lost arbitrated dispute.",
+        "safenet_sentinel_dispute_bond_slashed_amount",
+    )
 }
 
 /// This sentinel's own fee reward from a winning claim -- the request's fee,
@@ -107,5 +127,8 @@ pub fn dispute_bond_slashed_amount() -> Histogram {
 /// (`requests_resolved_total` already tracks how often this sentinel
 /// doesn't win).
 pub fn fee_reward_amount() -> Histogram {
-    metrics::histogram!("safenet_sentinel_fee_reward_amount")
+    metrics::histogram!(
+        description: "Nonzero fee reward amount received by this sentinel per winning claim.",
+        "safenet_sentinel_fee_reward_amount",
+    )
 }

@@ -63,7 +63,11 @@ mod tests {
     async fn serves_metrics_and_health() {
         let addr = serve((Ipv4Addr::LOCALHOST, 0)).unwrap();
 
-        metrics::counter!("safenet_core_test_total").increment(1);
+        metrics::counter!(
+            description: "Test counter for the Prometheus metrics endpoint.",
+            "safenet_core_test_total",
+        )
+        .increment(1);
 
         let (status, metrics) = http_get(addr, "/metrics").await;
         assert_eq!(status, StatusCode::OK);

@@ -28,6 +28,7 @@ impl RpcRequestResult {
 pub fn rpc_requests_total(method: &str, result: RpcRequestResult) -> Counter {
     let result = result.label();
     metrics::counter!(
+        description: "Number of JSON-RPC requests made through the shared provider, by method and result.",
         "safenet_core_rpc_requests_total",
         "method" => method.to_owned(),
         "result" => result,
@@ -61,12 +62,19 @@ impl ProcessingStatus {
 /// The block-number component of the chain-processing cursor, by `status`.
 pub fn block_number(status: ProcessingStatus) -> Gauge {
     let status = status.label();
-    metrics::gauge!("safenet_core_block_number", "status" => status)
+    metrics::gauge!(
+        description: "Block number by chain-processing status.",
+        "safenet_core_block_number",
+        "status" => status,
+    )
 }
 
 /// Number of live blocks invalidated by chain reorgs.
 pub fn uncled_blocks_total() -> Counter {
-    metrics::counter!("safenet_core_uncled_blocks_total")
+    metrics::counter!(
+        description: "Number of live blocks invalidated by chain reorgs.",
+        "safenet_core_uncled_blocks_total",
+    )
 }
 
 /// Initializes core metrics.
