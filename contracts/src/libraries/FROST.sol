@@ -83,8 +83,22 @@ library FROST {
      * @param secret The participant secret key.
      * @return n The derived nonce scalar.
      * @dev Implements the hashing step of the RFC-9591 `nonce_generate` function
-     *      (https://datatracker.ietf.org/doc/html/rfc9591#section-4.1). Sampling `random` from a
-     *       cryptographically secure random number generator is the caller's responsibility.
+     *      (https://datatracker.ietf.org/doc/html/rfc9591#section-4.1).
+     *
+     *      WARNING: This function must never be called with a real signing share. It exists only for documentation
+     *      purposes: it makes the library a complete reference implementation of the ciphersuite, and it can be used
+     *      to generate reference vectors for testing a local implementation against. Invoking it in a transaction
+     *      publishes both `random` and `secret`, which compromises the signing share, and invoking it over `eth_call`
+     *      discloses the same values to the RPC endpoint.
+     *
+     *      This function does not sample `random` nor enforce any of the operational requirements that make the result
+     *      a safe nonce. Nonces must be generated locally by the signer from 32 bytes of cryptographically secure
+     *      entropy, and neither the randomness nor the derived nonce may ever be reused with the same signing share,
+     *      otherwise it is possible to recover it. See RFC-9591 Section 7.1 [^1] for side-channel mitigations and
+     *      Section 7.3 [^2] for nonce reuse attacks.
+     *
+     *      [^1]: <https://datatracker.ietf.org/doc/html/rfc9591#section-7.1>
+     *      [^2]: <https://datatracker.ietf.org/doc/html/rfc9591#section-7.3>
      */
     function nonce(bytes32 random, uint256 secret) internal view returns (uint256 n) {
         return _h3(abi.encodePacked(random, secret));
