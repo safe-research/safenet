@@ -29,8 +29,9 @@ contract SentinelOracle is IOracle {
     // ============================================================
 
     // Emitted when `finalize` sees both an `approve` and a `deny` side established and freezes the
-    // request, starting the arbitration clock.
-    event DisputeTriggered(bytes32 indexed requestId);
+    // request, starting the arbitration clock. `deadline` is the block number by which the
+    // arbitrator must rule before `timeoutArbitration` becomes callable.
+    event DisputeTriggered(bytes32 indexed requestId, uint64 deadline);
     // `context` is the arbitrator's rationale for this ruling (free-form text, or e.g. an IPFS
     // CID pointing to a longer writeup).
     event DisputeResolved(
@@ -257,8 +258,9 @@ contract SentinelOracle is IOracle {
     function finalize(bytes32 requestId) external {
         SentinelOracleRequest.T storage request = $requests.get(requestId);
         address sponsor = request.terms.sponsor;
+        uint64 arbitrationDeadline = (block.number + ARBITRATION_TIMEOUT).toUint64();
         (SentinelOracleRequest.State newState, uint96 refundFee, uint128 unrevealedBond, uint96 daoCut) =
-            request.finalize(ARBITRATION_TIMEOUT, FEE_SHARE_DENOMINATOR);
+            request.finalize(arbitrationDeadline, FEE_SHARE_DENOMINATOR);
 
         address fundsReceiver = $protocolFundsReceiverConfig.applyPending();
         if (unrevealedBond > 0) {
@@ -266,7 +268,7 @@ contract SentinelOracle is IOracle {
         }
 
         if (newState == SentinelOracleRequest.State.FROZEN) {
-            emit DisputeTriggered(requestId);
+            emit DisputeTriggered(requestId, arbitrationDeadline);
             return;
         }
 

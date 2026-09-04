@@ -1,12 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-only
 pragma solidity ^0.8.30;
 
-import {SafeCast} from "@oz/utils/math/SafeCast.sol";
 import {SentinelOracleCommitment} from "@/libraries/SentinelOracleCommitments.sol";
 
 library SentinelOracleRequest {
-    using SafeCast for uint256;
-
     // ============================================================
     // ENUMS
     // ============================================================
@@ -163,7 +160,7 @@ library SentinelOracleRequest {
         self.progress.fee = feeAmount - daoCut;
     }
 
-    function finalize(T storage self, uint32 arbitrationTimeout, uint256 feeShareDenominator)
+    function finalize(T storage self, uint64 arbitrationDeadline, uint256 feeShareDenominator)
         internal
         returns (State newState, uint96 refundFee, uint128 unrevealedBond, uint96 daoCut)
     {
@@ -182,7 +179,7 @@ library SentinelOracleRequest {
         if (approveMet || denyMet) {
             if (approveMet && denyMet) {
                 newState = State.FROZEN;
-                self.progress.arbitrationDeadline = (block.number + arbitrationTimeout).toUint64();
+                self.progress.arbitrationDeadline = arbitrationDeadline;
             } else {
                 // Exactly one side is established -- the request resolves now, so the DAO takes its
                 // cut immediately (unlike the FROZEN case, which defers that to `resolveDispute`).

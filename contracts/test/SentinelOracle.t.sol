@@ -858,7 +858,7 @@ contract SentinelOracleTest is Test {
         _reveal(sentinel2, false, SALT_2);
 
         vm.expectEmit(true, false, false, true);
-        emit SentinelOracle.DisputeTriggered(REQUEST_ID);
+        emit SentinelOracle.DisputeTriggered(REQUEST_ID, uint64(block.number + ARBITRATION_TIMEOUT));
         oracle.finalize(REQUEST_ID);
 
         SentinelOracleRequest.T memory r = oracle.getRequest(REQUEST_ID);
