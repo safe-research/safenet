@@ -49,15 +49,20 @@ export const getBlockRange = async (
 	return { fromBlock, toBlock };
 };
 
-export const mostRecentFirst = <T extends Pick<Log<bigint, number, false>, "blockNumber" | "logIndex">>(
-	logs: T[],
-): T[] =>
-	logs.sort((left, right) => {
-		if (left.blockNumber !== right.blockNumber) {
-			return left.blockNumber < right.blockNumber ? 1 : -1;
-		}
-		return right.logIndex - left.logIndex;
-	});
+type SortableLog = Pick<Log<bigint, number, false>, "blockNumber" | "logIndex">;
+
+// Chain order of two logs: by block, then by position within the block.
+const byChainOrder = (left: SortableLog, right: SortableLog) => {
+	if (left.blockNumber !== right.blockNumber) {
+		return left.blockNumber < right.blockNumber ? -1 : 1;
+	}
+	return left.logIndex - right.logIndex;
+};
+
+export const mostRecentFirst = <T extends SortableLog>(logs: T[]): T[] =>
+	logs.sort((left, right) => byChainOrder(right, left));
+
+export const oldestFirst = <T extends SortableLog>(logs: T[]): T[] => logs.sort(byChainOrder);
 
 let cachedChainId: { provider: PublicClient; chainId: Promise<number> } | undefined;
 

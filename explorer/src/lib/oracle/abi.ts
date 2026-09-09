@@ -27,3 +27,8 @@ export const sentinelVoteEventSelectors = ["Committed" as const, "Revealed" as c
 export const oracleAbi = parseAbi([
 	"event OracleResult(bytes32 indexed requestId, address indexed proposer, bytes result, bool approved)",
 ]);
+
+// `OracleResult` is only emitted once an oracle actually reaches a verdict: `SentinelOracle`
+// emits `RequestTimedOut` instead when a request expires unresolved, so the presence of this
+// event means "approved or denied", never "gave up".
+export const oracleResultEventSelector = toEventSelector(getAbiItem({ abi: oracleAbi, name: "OracleResult" }));

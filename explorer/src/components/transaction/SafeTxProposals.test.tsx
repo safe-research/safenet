@@ -72,6 +72,7 @@ const makeProposal = (overrides?: Partial<TransactionProposalWithStatus>): Trans
 	epoch: 1n,
 	oracle: "0x0000000000000000000000000000000000000099" as Address,
 	oracleData: "0x" as Hex,
+	requestId: `0x${"cd".repeat(32)}` as Hex,
 	transaction: makeTransaction(),
 	proposedAt: { block: 100n, tx: "0xabc" as Hex },
 	attestedAt: null,
