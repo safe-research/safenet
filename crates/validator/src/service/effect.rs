@@ -7,11 +7,11 @@ use crate::{
         keygen::{KeyShare, Secrets},
         preprocess::Nonces,
     },
-    metrics::{self, EffectKind, EffectResult},
+    metrics::{self, EffectKind, Outcome},
     secrets::{SecretStore, nonces::NonceGenerator, store::RetainedGroups},
 };
 use alloy::primitives::{Address, B256};
-use safenet_core::effects::EffectHandler;
+use safenet_core::{effects::EffectHandler, index::BlockStatus};
 use std::{
     collections::{BTreeMap, BTreeSet},
     error::Error,
@@ -265,14 +265,46 @@ impl EffectHandler<Effect, Resume> for Handler {
     async fn perform_effect(&self, effect: Effect) -> Resume {
         let kind = effect.metric_kind();
         let (resume, result) = match self.try_perform_effect(effect.clone()).await {
-            Ok(resume) => (resume, EffectResult::Success),
+            Ok(resume) => (resume, Outcome::Success),
             Err(err) => {
                 tracing::warn!(?effect, %err, "failed to perform effect");
-                (Resume::Noop, EffectResult::Failure)
+                (Resume::Noop, Outcome::Failure)
             }
         };
         metrics::effects_total(kind, result).increment(1);
         resume
+    }
+
+    async fn housekeeping(&self, status: BlockStatus) {
+        // Only secrets scheduled by a reconciliation at or before the snapshot
+        // boundary are collected, so nothing the state machine could still roll
+        // back to is deleted here.
+        let result = match self.secrets.prune_scheduled_secrets(status.safe).await {
+            Ok(pruned) => {
+                if pruned.keygen > 0 || pruned.nonces > 0 {
+                    tracing::debug!(
+                        block = status.latest,
+                        safe = status.safe,
+                        keygen = pruned.keygen,
+                        nonces = pruned.nonces,
+                        "pruned scheduled group secrets"
+                    );
+                }
+                Outcome::Success
+            }
+            Err(err) => {
+                // A later block retries the collection, and a schedule that was
+                // not collected stays valid until it is.
+                tracing::warn!(
+                    block = status.latest,
+                    safe = status.safe,
+                    %err,
+                    "failed to prune scheduled secrets"
+                );
+                Outcome::Failure
+            }
+        };
+        metrics::housekeeping_total(result).increment(1);
     }
 }
 
