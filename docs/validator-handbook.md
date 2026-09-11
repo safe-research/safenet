@@ -76,6 +76,21 @@ Loss of these secrets would prevent the validator from participating in consensu
 
 > [!IMPORTANT] The secrets are stored in plaintext and are not encrypted in the SQLite database. **Treat the validator database file as containing secret keys**, and apply sufficient restrictions to prevent unauthorized access. **Never share this file with anyone, including the Safenet team for debugging**.
 
+##### Secret Retention
+
+Secrets are not deleted the moment they stop being needed. When the validator observes that a group no longer needs one, it records a deletion deadline of the block it observed at, and deletes it only once that block falls outside the reorg window — the same boundary the validator prunes its state snapshots to. Until then the secret remains readable and usable, so a rollback that brings the group back cancels the pending deletion instead of losing the material. Expect a validator's database to hold secrets for groups it has already finished with, for roughly the depth of the configured reorg window.
+
+Two Prometheus metrics report this. `safenet_validator_secrets_total{kind}` is a gauge of what the database currently holds, counting secrets that are scheduled for deletion but not yet collected:
+
+- `{kind="keygen"}` counts DKG secret rows, one per group.
+- `{kind="nonces"}` counts nonce **chunks**, each holding 1024 nonces — not individual nonces.
+
+It is read from the database at startup and tracked from there, so it describes the file on disk rather than what this run of the validator happens to have done. A level that climbs steadily is the signal that collection is not keeping up.
+
+`safenet_validator_housekeeping_total{result="success"|"failure"}` counts collection passes, one per new block. A pass that finds nothing due is a success. Sustained `failure` means the database is rejecting writes, in which case secrets accumulate rather than being lost.
+
+> [!NOTE] Deadlines are ordered by block number, which does not distinguish between chain branches. After a deep rollback, or a restart that replays past the point where a group was dropped, a deadline recorded on an earlier branch can come due before the validator re-registers the group. The validator then treats the secret like any other that is missing: the signing ceremony that needed it is skipped, and the group times it out or retries it. Deleted secrets are not recreated — a fresh DKG secret cannot reproduce an existing commitment, and a nonce cannot be regenerated once its chunk is gone — so this can cost participation in a ceremony. It cannot cost correctness: a nonce is never reused, whether or not it survives.
+
 ## Running
 
 Configure the validator by writing a TOML configuration file — see [`crates/validator/src/config.rs`](../crates/validator/src/config.rs) for the full schema, and copy [`validator.sample.toml`](../crates/validator/validator.sample.toml) as a worked example to start from.

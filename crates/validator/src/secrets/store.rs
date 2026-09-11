@@ -14,11 +14,31 @@
 //!
 //! - **DKG secrets** are reused (not resampled) when already present, so a
 //!   reorged-and-re-included commitment stays consistent with the shares the
-//!   validator can still produce. They are pruned once the keygen resolves.
-//! - **Nonces** are handed out exactly once and are *removed* from the store
-//!   in order to prevent accidental reuse. Unused nonces persist so a
-//!   re-included `preprocess` commitment can still be signed against, and are
-//!   pruned when the owning group retires.
+//!   validator can still produce. They are retired once the keygen resolves.
+//! - **Nonces** are handed out exactly once and are *removed* immediately when
+//!   taken, in order to prevent accidental reuse. That deletion is permanent
+//!   and nothing below ever restores it. Unused nonces persist so a re-included
+//!   `preprocess` commitment can still be signed against, and are retired when
+//!   the owning group is.
+//!
+//! Retiring a secret happens in two steps rather than at once:
+//!
+//! - **Scheduling.** A reconciliation effect carries the groups the state
+//!   machine retained and the block it computed them for, and
+//!   [`SecretStore::schedule_group_secrets_deletion`] records a deadline on
+//!   every other group's rows. Reconciliations are ordered by that block, so a
+//!   replayed or reordered one from an earlier block cannot undo a newer one's
+//!   decision. A group that comes back has its deadline cancelled.
+//! - **Collection.** The driver hands the effect handler its block status once
+//!   per new block, and [`SecretStore::prune_scheduled_secrets`] deletes the
+//!   rows due at or before the safe block - the same boundary state snapshots
+//!   are pruned to, so a rollback the state machine can still make cannot
+//!   outrun the deletion.
+//!
+//! Block numbers order reconciliations but do not identify chain branches, so a
+//! deep rollback or a restart replaying past where a group was dropped can
+//! still collect material a ceremony needs. Such a secret is treated like any
+//! other that is missing rather than being recreated.
 
 use crate::{
     bindings,
