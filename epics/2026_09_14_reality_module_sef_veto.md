@@ -24,7 +24,7 @@ This epic delivers `RealityVetoModule`: a module enabled on the SafeDAO Safe who
 
 ### The module is the entire security boundary
 
-`execTransactionFromModule` checks only `modules[msg.sender] != address(0)` ([ModuleManager.sol:117](../contracts/lib/safe-smart-account/contracts/base/ModuleManager.sol#L117)). No signatures, no threshold, no transaction guard. The module's own `require(msg.sender == $vetoer)` is not part of the boundary, it *is* the boundary. Every design choice below follows from that.
+`execTransactionFromModule` checks only `modules[msg.sender] != address(0)` ([ModuleManager.sol:117](../contracts/lib/safe-smart-account/contracts/base/ModuleManager.sol#L117)). No signatures, no threshold, no transaction guard. The module's own `require(msg.sender == $vetoer)` is not part of the boundary, it _is_ the boundary. Every design choice below follows from that.
 
 ### Call chain
 
@@ -121,7 +121,7 @@ Constructor rejects zero addresses and `realityModule == address(safe)`.
 Each is a path from veto module to full Safe takeover if violated. Reviewers should treat this as the review checklist.
 
 | # | Invariant | Failure mode if violated |
-|---|---|---|
+| --- | --- | --- |
 | 1 | No `bytes` parameter anywhere in the ABI; calldata built by `abi.encodeCall` from typed args | Arbitrary calldata as the Safe. Full treasury |
 | 2 | `to` is the `REALITY_MODULE` immutable, never a parameter or allowlist | `setOracle` to an always-yes oracle. Governance takeover |
 | 3 | `operation` hardcoded `Call` | `DELEGATECALL` rewrites owners, threshold, guard, singleton in one tx |
@@ -142,7 +142,7 @@ Each is a path from veto module to full Safe takeover if violated. Reviewers sho
 Fixture modelled on [test/SafenetGuard.t.sol](../contracts/test/SafenetGuard.t.sol): real `Safe` singleton and `SafeProxyFactory`, module enabled through a real signed `execTransaction`, real `RealityModuleETH` against a mock Realitio. No mocked Safe.
 
 | Ticket deliverable | Cases |
-|---|---|
+| --- | --- |
 | D1 contract implemented and tested | Constructor: zero safe / zero module / zero vetoer / `module == safe` revert; immutables and vetoer set. `setVetoer`: reverts for vetoer and for randoms, succeeds via real `execTransaction`, emits, old vetoer loses access, new gains it, rejects zero |
 | D2 SEF can invalidate a pending proposal | Happy path, then **assert `executeProposal` subsequently reverts "Proposal has been invalidated"**; multi-tx proposal vetoed before index 0 blocks all; multi-tx vetoed after indices 0 and 1 blocks index 2 and leaves 0/1 recorded executed; fuzzed non-vetoer caller reverts `NotVetoer`; vetoer calling the Reality module directly reverts `OwnableUnauthorizedAccount`; unknown proposal reverts `ProposalNotFound` |
 | D3 SEF cannot approve, execute or reconfigure | One case per Reality `onlyOwner` setter, with `setOracle` and `setTarget` as named tests: unreachable through the module (no ABI path) and unreachable directly (owner check). Safe config: owners, threshold, guard, module guard, enable/disable module, fallback handler. Funds: ETH and ERC-20 both unreachable. ABI assertion: no function takes `bytes` or an `address` target, and the selector set is exactly `{vetoProposal, setVetoer, getVetoer}`. Raw calls: `hex"deadbeef"`, empty calldata, and `{value: 1 ether}("")` all return false, `address(module).balance == 0` |
@@ -203,14 +203,14 @@ Required regardless of size: this contract signs for the SafeDAO treasury withou
 
 ### Effort
 
-| Phase | Days |
-|---|---|
-| 0 verification | 0.5 to 1 |
-| 1 contract | 1 to 2 |
-| 2 tests | 3 to 4 |
-| 3 module guard | 0 to 1 |
-| 4 tooling and docs | 1 to 2 |
-| 5 review | 1 to 2 |
+| Phase               | Days                                            |
+| ------------------- | ----------------------------------------------- |
+| 0 verification      | 0.5 to 1                                        |
+| 1 contract          | 1 to 2                                          |
+| 2 tests             | 3 to 4                                          |
+| 3 module guard      | 0 to 1                                          |
+| 4 tooling and docs  | 1 to 2                                          |
+| 5 review            | 1 to 2                                          |
 | 6 audit remediation | 1 to 2 dev days, several calendar weeks elapsed |
 
 **8 to 14 engineering days.** The contract is the small part. Calendar time is dominated by the audit and by the SafeDAO governance vote to enable the module.
