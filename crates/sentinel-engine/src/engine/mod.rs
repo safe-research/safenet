@@ -179,6 +179,53 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn base_checker_never_abstains() {
+        use crate::checkers::BaseChecker;
+
+        let safe = alloy::primitives::Address::new([1u8; 20]);
+        let other = alloy::primitives::Address::new([2u8; 20]);
+
+        let allowed_call = SafeTransaction {
+            safe,
+            to: other,
+            ..Default::default()
+        };
+        let denied_call = SafeTransaction {
+            safe,
+            to: safe,
+            data: vec![0xde, 0xad, 0xbe, 0xef].into(),
+            ..Default::default()
+        };
+        let allowed_delegatecall = SafeTransaction {
+            safe,
+            to: alloy::primitives::address!("526643F69b81B008F46d95CD5ced5eC0edFFDaC6"),
+            data: alloy::primitives::bytes!("ed007fc6"),
+            operation: Operation::DelegateCall,
+            ..Default::default()
+        };
+        let denied_delegatecall = SafeTransaction {
+            safe,
+            to: other,
+            operation: Operation::DelegateCall,
+            ..Default::default()
+        };
+
+        for transaction in [
+            allowed_call,
+            denied_call,
+            allowed_delegatecall,
+            denied_delegatecall,
+        ] {
+            assert_ne!(
+                BaseChecker
+                    .check(&transaction, &CheckContext::default())
+                    .await,
+                Assessment::Abstain
+            );
+        }
+    }
+
+    #[tokio::test]
     async fn one_partial_claim_abstains() {
         let engine = SentinelEngine::new(vec![Box::new(StubChecker(Assessment::Secure {
             coverage: Coverage::TO | Coverage::OPERATION,
