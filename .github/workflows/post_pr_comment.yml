@@ -17,23 +17,31 @@ jobs:
     if: github.event.workflow_run.event == 'pull_request' && github.event.workflow_run.conclusion == 'success'
     steps:
       - uses: actions/checkout@v5
+        with:
+          sparse-checkout: .github/actions/post-comment
+          sparse-checkout-cone-mode: false
 
       - name: Download PR Comment Artifact
         uses: actions/download-artifact@v4
         with:
           name: pr-comment
+          path: pr-comment-artifact
           run-id: ${{ github.event.workflow_run.id }}
           github-token: ${{ secrets.GITHUB_TOKEN }}
 
       # Every producer's report file starts with a "<!-- marker -->" line, so
       # the marker used to find/update the existing comment can be read
       # straight from the report itself instead of being passed separately.
+      #
+      # The artifact is downloaded into its own directory rather than the
+      # repo root, so that *.md only matches the report and not files like
+      # README.md that checkout already placed there.
       - name: Read Report Metadata
         id: artifact
         shell: bash
         run: |
-          report_file=$(ls -- *.md)
-          echo "issue-number=$(cat issue-number.txt)" >> "$GITHUB_OUTPUT"
+          report_file=$(ls -- pr-comment-artifact/*.md)
+          echo "issue-number=$(cat pr-comment-artifact/issue-number.txt)" >> "$GITHUB_OUTPUT"
           echo "report-file=$report_file" >> "$GITHUB_OUTPUT"
           echo "marker=$(head -n1 -- "$report_file")" >> "$GITHUB_OUTPUT"
 
