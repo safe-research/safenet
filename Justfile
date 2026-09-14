@@ -141,6 +141,9 @@ contracts-deploy-erc20 *args:
 contracts-deploy-sentinel-oracle *args:
     (cd contracts && forge script DeploySentinelOracleScript {{args}})
 
+contracts-deploy-safenet-7702-executor *args:
+    (cd contracts && forge script DeploySafenet7702ExecutorScript {{args}})
+
 contracts-deploy-test-consensus *args:
     (cd contracts && forge script DeployTestConsensusScript {{args}})
 

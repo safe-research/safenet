@@ -113,6 +113,33 @@ for (uint256 i = 0; i < calls.length; ++i) {
 
 `calls[i]` currently re-computes the array element offset for each of the three field reads. The optimization PR adds a gas assertion to the existing test file that pins the observed `execute` cost for a fixed multi-call batch, so the improvement is measured rather than asserted, and future regressions are caught.
 
+Phase 1 also adds a per-call gas guard, because `execute` as written does not enforce that a call receives the `gasLimit` it asks for:
+
+```solidity
+require(gasleft() * 63 / 64 >= call.gasLimit, InsufficientGas(i));
+```
+
+EIP-150 forwards at most 63/64 of the gas remaining when the call is made, and Solidity does not check the shortfall. A truncated call that runs out of gas is indistinguishable from one that reverted, so it was swallowed as a `CallFailed` and `execute` still returned success. Measured on the unguarded contract, with one call reserving 1,000,000 gas and really needing 500,000:
+
+| transaction gas limit | `execute` succeeded | call took effect |
+| --------------------- | ------------------- | ---------------- |
+| 50,000 / 100,000      | no                  | no               |
+| 144,687               | **yes**             | **no**           |
+| 200,000 / 400,000     | **yes**             | **no**           |
+| 700,000 and above     | yes                 | yes              |
+
+So there was a wide band in which the transaction succeeded and the batched call was silently discarded. Worse, that band broke gas estimation: `eth_estimateGas` binary-searches for the _lowest_ gas limit at which the transaction does not revert, which is by construction the "callee ran out of gas, ~1/64 remained to emit `CallFailed` and return" point. It returned **144,687** for a batch needing ~1,050,000 — roughly 7× too low, and a limit at which nothing executes. The behavior was also non-monotonic, so estimation's core assumption did not hold at all.
+
+With the guard, estimation on the same batch returns **1,016,665** — matching `gasLimit × 64/63` plus dispatch — and every gas limit below it fails loudly while every limit at or above it both succeeds and takes effect.
+
+The check is deliberately **best-effort and approximate**. It encodes EIP-150's 63/64 rule but does _not_ model the `CALL`'s own base cost — cold account access, argument copy, memory expansion — which the EVM deducts before that rule applies. Those are gas _prices_, repriced by hardforks (cold account access was already repriced by EIP-2929), so hardcoding them would age badly in exchange for a bound that only needs to be roughly right. The 63/64 factor is a structural consensus rule rather than a price, and it fails safe: if it were ever relaxed so that calls receive all remaining gas, the check would merely become conservative, never unsafe. Sizing the gas limit to cover the EVM's base deductions on top of each `gasLimit` is the caller's responsibility, which the batch gas formula below discharges.
+
+The residual window this leaves is measurable and narrow. At the estimate above, the callee receives roughly `gasLimit` minus the `CALL`'s base cost (~2,560 gas), so a call needing within ~0.26% of its full reservation can still be truncated silently: with the callee needing 999,000 of its 1,000,000 reservation, the transaction succeeded at the estimate and the call did not take effect. A call needing 500,000 of the same reservation behaved correctly. Chasing that last sliver onchain is exactly the exactness the check declines to attempt; the per-call overhead term in the batch gas formula covers it offchain.
+
+The guard changes `execute`'s failure semantics, which is the reason it is worth stating here: an underfunded batch now reverts as a whole instead of applying a prefix and reporting success.
+
+The guard costs roughly 491 gas per call, which is more than the calldata-pointer optimization saves (298 per call), so Phase 1 is a net gas _increase_ of about 193 gas per call. That is a deliberate trade: it converts a silent action-dropping failure into a loud one. The cost is this high only because `Safenet7702Executor` is compiled with neither the optimizer nor viaIR (`foundry.toml` restricts viaIR to four other contracts), so each sub-expression in the loop body carries real cost — the same reason the calldata-pointer binding saves as much as it does. For reference, the weaker `require(gasleft() >= call.gasLimit, ...)` costs only 65 gas per call but widens the residual window to ~1.6% of each reservation. Adding this contract to the viaIR set would likely make the guard close to free, but it changes the deployed bytecode and hence the contract's deterministic address, so it is left as a follow-up rather than bundled into the rename.
+
 ### Config
 
 `tx::Config` (`crates/core/src/tx/mod.rs`), reachable as the `[transactions]` table of both services' config files:
@@ -280,7 +307,11 @@ batch_gas = 26_000                                  // 21_000 intrinsic + array 
                                                     // overhead, and 63/64 headroom
 ```
 
-The `call.gas / 63` term covers EIP-150: a call only receives `min(gasLimit, 63/64 × remaining)`, so without headroom the last calls in a large batch would be under-gassed. Under-gassing is not catastrophic — `execute` swallows the failure and emits `CallFailed` — but it silently degrades the batch, so the bound is deliberately conservative. The `5_000` per-call overhead and the `26_000` base are to be confirmed against the gas assertion added in the contract optimization PR; if EIP-7623's calldata floor cost turns out to dominate for large batches, the calldata term is raised to `max(standard, floor)`.
+The `call.gas / 63` term covers EIP-150: a call only receives `min(gasLimit, 63/64 × remaining)`, so without headroom the last calls in a large batch would be under-gassed. Since Phase 1, under-gassing is not silent: `execute` refuses to make a call it cannot fully fund and reverts with `InsufficientGas(index)`, so a formula that under-estimates costs the batch loudly rather than dropping actions.
+
+This makes the formula's per-call terms load-bearing against a known onchain floor. The guard requires `gasleft() × 63/64 ≥ call.gas`, i.e. `gasleft() ≥ call.gas × 64/63`, and the formula budgets `call.gas + call.gas / 63 + 5_000` per call, which satisfies it. The `/63` term must therefore not be dropped: it is exactly what the guard checks.
+
+The `5_000` is what closes the guard's residual window, so it carries more weight than a safety margin. It has to cover both the executor's real per-call overhead (loop, guard, `CALL` base cost, and the `CallFailed` path) and the ~2,560 gas of `CALL` base cost that the onchain check deliberately ignores. Phase 6 should measure that overhead against real action calldata rather than assume it, since `execute` is compiled unoptimized and larger per-call calldata expands memory more than a cold account access alone. The `5_000` per-call overhead and the `26_000` base are to be confirmed against the gas assertion added in the contract optimization PR; if EIP-7623's calldata floor cost turns out to dominate for large batches, the calldata term is raised to `max(standard, floor)`.
 
 Unit tests for `batch` cover: a single transaction (unbatched), several transactions under the limit (one batch), splitting at the gas limit, splitting on an `expires_at` change, order preservation across splits, an oversized transaction passed through unbatched, a non-zero-value transaction passed through unbatched, a delegation transaction passed through unbatched, and round-tripping the encoded calldata back through `executeCall::abi_decode` to assert the exact `to`/`gasLimit`/`data` of every call.
 
@@ -319,12 +350,13 @@ The Rust phases are deliberately ordered so that batching is wired **after** the
 
 ### Phase 1 — Rename and gas-optimize the executor contract
 
-Two small changes to the same three files, kept in one PR at the author's request:
+Three small changes to the same three files, kept in one PR at the author's request:
 
 - **Rename:** `contracts/src/Validator7702Account.sol` → `Safenet7702Executor.sol` with the contract, its natspec title and its doc comments retitled; the test and deploy script renamed to match (`Safenet7702Executor.t.sol`, `DeploySafenet7702Executor.s.sol`, `DeploySafenet7702ExecutorScript`). Add the missing `contracts-deploy-safenet-7702-executor` front door to the root `Justfile`.
 - **Gas:** bind each `Call` to a single calldata pointer in the `execute` loop body, and add a gas assertion pinning `execute`'s cost for a fixed multi-call batch. Record the before/after numbers in the PR description.
+- **Gas guard:** refuse to make a call the transaction cannot fund in full, reverting with `InsufficientGas(index)`, so an underfunded batch fails loudly instead of silently discarding calls and poisoning `eth_estimateGas` (see the contract section above for the measurements). Tests cover the guard firing at index 0, and firing mid-batch with the earlier call's effect rolled back.
 
-Keep these as two commits so the rename diff stays reviewable on its own, since a whole-file rename plus an edit is otherwise hard to read.
+Keep the rename as its own commit so its diff stays reviewable, since a whole-file rename plus an edit is otherwise hard to read.
 
 Expected files: `contracts/src/Safenet7702Executor.sol`, `contracts/test/Safenet7702Executor.t.sol`, `contracts/script/DeploySafenet7702Executor.s.sol`, `Justfile`.
 
@@ -390,7 +422,8 @@ Delete `epics/2026_09_09_safenet_7702_executor_tx_batching.md` once Phases 1–9
 - **Batch expiry policy.** The plan starts a new batch on any `expires_at` change so a batch can never drop a still-valid action. This is the safe choice but produces smaller batches when a single driver update mixes deadlines (for example a `None`-expiry `Preprocess` alongside a 6-block signing action). If measured batch sizes turn out to be disappointing, the alternative is minimum-expiry grouping with the drop risk accepted and documented.
 - **Gas constants.** The `26_000` base and `5_000` per-call overhead in the batch gas formula are estimates. Phase 1's gas assertion should produce real numbers, and Phase 6 should adopt them. Similarly, the `max_batch_gas` default of `2_000_000` (roughly six to eight typical 250,000-gas actions) is a starting point, not a measured optimum.
 - **EIP-7623 calldata floor.** For large batches the floor cost (`21_000 + 10 × tokens`) may exceed the standard calldata cost. The formula should be raised to `max(standard, floor)` if Phase 6's tests show the standard term under-estimating.
-- **Swallowed inner failures.** `execute` is best-effort: a failing call emits `CallFailed` and the batch still succeeds, so the queue marks it executed. This matches today's behavior in the sense that a reverting standalone transaction also does not get retried by the queue — the state machine's timeouts drive retries either way — but it does mean a batch's `CallFailed` events are the only signal that an action did not take effect. Surfacing them (the services do not currently watch their own EOA for logs) is deliberately out of scope; flagging it as a known observability gap.
+- **Swallowed inner failures.** `execute` is best-effort for calls that genuinely revert: a failing call emits `CallFailed` and the batch still succeeds, so the queue marks it executed. This matches today's behavior in the sense that a reverting standalone transaction also does not get retried by the queue — the state machine's timeouts drive retries either way — but it does mean a batch's `CallFailed` events are the only signal that an action did not take effect. Surfacing them (the services do not currently watch their own EOA for logs) is deliberately out of scope; flagging it as a known observability gap. Note that the _gas_ half of this problem is no longer swallowed: since Phase 1, a call the transaction cannot fund reverts the batch rather than emitting `CallFailed`, so "the batch was under-gassed" and "the callee reverted" are now distinguishable.
+- **The gas guard's residual window.** Phase 1's check is intentionally approximate: it applies the 63/64 rule but not the `CALL`'s own base cost, so a call needing within roughly 2,560 gas of its full reservation can still be truncated silently. Hardcoding that cost onchain was rejected because hardforks reprice it. The window is therefore closed offchain by the batch gas formula's per-call overhead term, which makes that term correctness-relevant rather than a margin — see the Phase 6 note above. An action whose `gas` estimate is exactly its real cost, with no headroom of its own, is the case to watch.
 - **Assumption: the signer's key is not used outside the service.** Nonce ordering is what keeps batches from executing before the delegation, and it is what makes the two-nonce reservation sound. A second process signing with the same key breaks both, as it already breaks the queue's existing nonce accounting.
 - **Assumption: no value-bearing actions.** Every action both services encode today sets `value: U256::ZERO`. Batching passes non-zero-value transactions through unbatched rather than adding a `value` field to the executor's `Call`.
 - **Assumption: Anvil supports EIP-7702 under Foundry 1.5.1.** The Solidity test already uses `vm.signAndAttachDelegation`, so the EVM supports it; whether the integration test's Anvil defaults to a Prague-or-later hardfork is to be confirmed in Phase 8.
