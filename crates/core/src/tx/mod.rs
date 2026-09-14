@@ -196,6 +196,22 @@ impl TransactionQueue {
             && self.storage.count_outstanding(status.latest).await? > 0
         {
             let nonce = self.nonce().await?;
+
+            // A delegation transaction reserves two nonces (its own and the
+            // one its authorization consumes). If the account nonce has only
+            // advanced by one past it, the authorization did not apply and
+            // every subsequent nonce is now stuck behind a permanent gap.
+            if let Some(delegation_nonce) = self.storage.pending_delegation().await?
+                && nonce == delegation_nonce + 1
+            {
+                tracing::error!(
+                    delegation_nonce,
+                    onchain_nonce = nonce,
+                    "delegation transaction's authorization did not apply; \
+                     account nonce advanced by one instead of two"
+                );
+            }
+
             self.storage
                 .mark_executed(Status {
                     block: status.latest,
