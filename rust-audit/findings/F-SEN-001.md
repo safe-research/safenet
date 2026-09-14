@@ -305,3 +305,9 @@ So neither branch emits a `Claim`: before the commit deadline the recovery decli
 **Certainty: 98% → 99%.** Severity unchanged (**High / High**). Raised only because the PoC was re-executed unmodified against the merged tree; the onchain reproduction from the Phase 8 run is unaffected, since the contract-side slash rule (`SentinelOracleRequests.sol:286-293`) is unchanged.
 
 Status left at `Verified` — not fixed.
+
+## In-flight impact (AS-SEN)
+
+**Pertains to unmerged branches, not to `main`.** Assessed against `origin/fix/sentinel_deadlines` (PR #914) and `origin/feat/optimistic_block_transition` (PR #915, tip `b2aad06`), built from a `git archive` extraction. Both apply cleanly onto `main` — `main`'s crates are byte-identical to their base `199629e`, so a verdict on the tip is also the verdict for the tip merged into `main`. **Effect: unchanged — bond lost again, live.** `handle_committed` (`service.rs:307-319`) still returns on `"ignoring unexpected commitment"`, `:427-429` still drops the reveal when `!self_committed`, and the second site at `state.rs:121-126` is unchanged; the PoC fails unmodified.
+
+**Live Anvil run with the #915 tip binaries** (local port 8845, engines 5873/5874, every config `rpc = "http://127.0.0.1:8845"`): sentinel A committed at block 31, was killed, and restarted at block 33 (`commitDeadline = 60`, `revealDeadline = 80`). It re-sent `approve` and `commit`; the second commit reverted in block 34 with `0xbfec5558` = `AlreadyCommitted()`. A never sent `reveal`, `finalize` or `claim`; B completed normally. Final state: A's commitment `[…, "4000", 1, false]` still pending, A's balance 996000 against B's 1001000, the slash receiver +2000. A's log after restart: `ignoring unexpected commitment` ×2 (`state: waiting_for_engine_check`) and `ignoring reveal for an untracked request`. Same outcome as the Phase 8 run on `main`.

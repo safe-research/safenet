@@ -175,3 +175,7 @@ if let Some((approve, slash_amount)) = entry.approve_and_slash_amount() {
 ### Certainty and severity
 
 **Certainty: 86% → 95%** — the mechanism is now execution-verified rather than read, and the "deferred to a later change" premise is settled: the later change landed and did not do it. **Severity unchanged (Medium / Medium)**, but the scope widens from one never-expiring state to two, and the second one is now reachable on every reverted `finalize()` — i.e. on `K-1` of every `K` participating sentinels per request. Status left at `Critiqued`.
+
+## In-flight impact (AS-SEN)
+
+**Pertains to unmerged branches, not to `main`.** Assessed against `origin/fix/sentinel_deadlines` (PR #914) and `origin/feat/optimistic_block_transition` (PR #915, tip `b2aad06`), built from a `git archive` extraction. Both apply cleanly onto `main` — `main`'s crates are byte-identical to their base `199629e`, so a verdict on the tip is also the verdict for the tip merged into `main`. **Effect: unchanged.** Both waiting states still never expire (`crates/sentinel/src/service.rs:478-479`: `WaitingForOutcome { .. } => true`, `WaitingForDisputeResolution { .. } => true`); `handle_dispute_triggered` (`:735-764`) reads only `event.requestId`, and no code in `crates/sentinel/src` reads `.deadline`. There is still no `timeoutArbitration` binding or action. #914 touches only the commit and engine-check comparisons (`:402-429`), not the dispute path.

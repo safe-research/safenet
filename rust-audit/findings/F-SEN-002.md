@@ -312,3 +312,7 @@ So two of the three sub-claims are now closed by `dbc963a` / `6df6fb9`: the guar
 ### Certainty and severity
 
 **Certainty 98% (unchanged); severity unchanged (High / High)** — carried entirely by the primary case, which is intact and re-executed. Status left at `Verified`.
+
+## In-flight impact (AS-SEN)
+
+**Pertains to unmerged branches, not to `main`.** Assessed against `origin/fix/sentinel_deadlines` (PR #914) and `origin/feat/optimistic_block_transition` (PR #915, tip `b2aad06`), built from a `git archive` extraction. Both apply cleanly onto `main` — `main`'s crates are byte-identical to their base `199629e`, so a verdict on the tip is also the verdict for the tip merged into `main`. **Effect: unchanged on the #915 tip; worsened by #914 merged alone.** `service.rs:307-319` and the `finalize` drop at `:647-649` are unchanged, and both PoC tests fail. With #914 alone, `:418` becomes `block < *commit_deadline`, so a peer's valid `Committed` mined in the commit-deadline block is discarded and the request is deleted with a bond posted. Filed as `F-SEN-016` D1 — **#914 should not be merged without #915.**

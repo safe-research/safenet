@@ -310,3 +310,7 @@ Reaching the discard arm then requires a `Sign` whose sequence lands in that unl
 Rust-only mechanism in unchanged code (`crates/validator` untouched by the merge), so `state/sign.rs:30-35, 106-114` still discards a signing session whose sequence has no linked nonce chunk, and the Phase 7 precondition observation stands.
 
 **Contract dependency check — this finding leans on `Coordinator.sign` throughout, and its address moved.** The function body is byte-identical (verified by diffing old `:530-542` against merged `:536-548`); it is still permissionless, still gated only on a non-zero message and a `FINALIZED` group, and still increments the group sequence on every call. Remap for every citation in this file: `FROSTCoordinator.sol:530-542`→**`:536-548`** (Location line, basis row 5, excerpt 5, and the Trigger/Notes references), `:530-541`→**`:536-547`**, `:536`→**`:542`**, `:524-558`→**`:530-564`**, `:508-562`→**`:514-568`**. Nothing was added that would let a validator distinguish or reject such a `Sign` event.
+
+## In-flight impact (AS-PRUNE)
+
+**Pertains to unmerged branches, not to `main`.** Assessed against the Scheduled Secret Pruning stack (`origin/prune/end`, PRs #906–#913), built from a `git archive` extraction; no branch was merged or checked out. **Effect: unchanged.** The unlinked-chunk session discard is untouched; the PoC tests pass on the branch.

@@ -92,3 +92,7 @@ Option 1 (make a task failure fatal) is consistent with the fail-stop policy app
 Option 3 (`catch_unwind` in `spawn` plus a `from_panic` bound on the service) keeps the "the state machine always gets a resume" contract honest, which is genuinely attractive. The hidden bound: it requires `AssertUnwindSafe`, and a handler that panics mid-mutation of shared state (the validator's nonce generator holds a `Semaphore` and a SQLite pool) may leave that state inconsistent — so "always gets a resume" would be paid for with a possibly-corrupt handler. Sound only if handlers are audited for unwind safety, which is a larger job than the option implies.
 
 **Contract note:** all three keep `apply_transition` pure. Option 3 changes the `Service` trait (a new bound), which is the same kind of change F-CORE-031 option 2 needs (`Effect: Serialize`); if both land, they should land together.
+
+## In-flight impact (AS-PRUNE)
+
+**Pertains to unmerged branches, not to `main`.** Assessed against the Scheduled Secret Pruning stack (`origin/prune/end`, PRs #906–#913), built from a `git archive` extraction; no branch was merged or checked out. **Effect: unchanged.** Effect spawning and panic handling only gained housekeeping code.

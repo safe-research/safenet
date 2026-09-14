@@ -90,3 +90,7 @@ Option 2 (a `Semaphore` permit acquired inside the handler) is unsound as a _cor
 Option 3 (cap logs per `Update::Logs` via `max_logs_per_query`) is the weakest and the finding says so; note it also interacts with F-CORE-012 option 2, which wants that same knob defaulted for a different reason. Setting it helps both, but only bounds one update at a time.
 
 **Cross-finding:** for the sentinel this is F-SEN-004 option 1 by another name — that finding asks for `max_concurrent_effects` on `EffectManager` explicitly. One change, two findings.
+
+## In-flight impact (AS-PRUNE)
+
+**Pertains to unmerged branches, not to `main`.** Assessed against the Scheduled Secret Pruning stack (`origin/prune/end`, PRs #906–#913), built from a `git archive` extraction; no branch was merged or checked out. **Effect: unchanged.** Effect concurrency is unbounded as before; housekeeping itself runs inline, not as a spawned effect.

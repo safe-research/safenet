@@ -121,3 +121,7 @@ Re-validated against merge commit `a7f3915` (baseline `2893917`).
 The new `metrics.rs` label (`ResolvedOutcome::RevealMissed`, `metrics.rs:84-89`) does not help here: it is only recorded from `handle_oracle_result`, which requires a bond to have been posted, whereas this finding's entries expire before any commit.
 
 **Certainty 82% and severity Low / Low unchanged.** Status left at `Critiqued`.
+
+## In-flight impact (AS-SEN)
+
+**Pertains to unmerged branches, not to `main`.** Assessed against `origin/fix/sentinel_deadlines` (PR #914) and `origin/feat/optimistic_block_transition` (PR #915, tip `b2aad06`), built from a `git archive` extraction. Both apply cleanly onto `main` — `main`'s crates are byte-identical to their base `199629e`, so a verdict on the tip is also the verdict for the tip merged into `main`. **Effect: unchanged.** The cited `effect.rs`, `state.rs`, `main.rs` and `config.rs` code is unchanged.

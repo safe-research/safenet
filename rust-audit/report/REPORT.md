@@ -1,6 +1,6 @@
 # Safenet Rust services — security and robustness review
 
-**Post-merge:** `origin/main` has since been merged (HEAD `a7f3915`, 21 commits). Every finding was re-validated against it — **nothing was fixed outright; `F-SEN-001` and `F-SEN-005` got worse.** See [`../state/STATE.md`](../state/STATE.md). **In-flight:** [`IN-FLIGHT.md`](IN-FLIGHT.md) assesses the unmerged Batched Execution stack (PRs #899–#904) — it fixes nothing, worsens `F-CORE-062`/`063`/`065`, and adds two forward-looking findings. **Already-known work:** [`KNOWN-WORK.md`](KNOWN-WORK.md) maps all 108 findings onto the team's issues, TODOs and epics — 55 are new, and **9 sit under issues the team already closed**.
+**Post-merge:** `origin/main` has since been merged (HEAD `a7f3915`, 21 commits). Every finding was re-validated against it — **nothing was fixed outright; `F-SEN-001` and `F-SEN-005` got worse.** See [`../state/STATE.md`](../state/STATE.md). **In-flight:** [`IN-FLIGHT.md`](IN-FLIGHT.md) assesses the unmerged Batched Execution stack (PRs #899–#904) — it fixes nothing, worsens `F-CORE-062`/`063`/`065`, and adds two forward-looking findings. A second round covers open PRs #906–#917: the pruning stack partially fixes `F-VAL-005`, #914/#915 fix nothing (and #914 alone worsens `F-SEN-002`), and two further forward-looking findings were filed. **Already-known work:** [`KNOWN-WORK.md`](KNOWN-WORK.md) maps all 108 findings onto the team's issues, TODOs and epics — 55 are new, and **9 sit under issues the team already closed**.
 
 Long-form version, with every trigger, remediation option and verification transcript: [`REPORT-full.md`](REPORT-full.md). Where this report and a finding file differ, **the finding file is authoritative**.
 
@@ -12,7 +12,7 @@ Long-form version, with every trigger, remediation option and verification trans
 | Commit | `2893917757ae518ebb91154712cf3e401cb68d33` (branch `rust-audit`), verified unchanged for the whole run |
 | Mode | Phases 0–4 **read-only**; Phase 5 executed unit-level PoCs; Phase 7 ran the repo's Anvil suites; Phase 8 drove findings end-to-end against real contracts and binaries. **Local Anvil only** (chain 31337, `127.0.0.1`) |
 | Evidence | **39** findings carry executed (`E1`) verification, **9** carry Anvil-suite verification, **21** carry real-world validation with value moving |
-| Deliverables | 108 finding files in [`../findings/`](../findings/), 38 PoC directories in [`../poc/`](../poc/), run narrative in [`../state/STATE.md`](../state/STATE.md) |
+| Deliverables | 112 finding files (108 against `main`, 4 scoped to unmerged branches) in [`../findings/`](../findings/), 38 PoC directories in [`../poc/`](../poc/), run narrative in [`../state/STATE.md`](../state/STATE.md) |
 
 **108 findings. Critical 4 / High 20 / Medium 32 / Low 41 / Informational 11.** Certainty spans **35–99 %**; 28 are at 90 % or above, 21 at 95 % or above. **No finding was refuted by any passing integration suite.** One Critical fell to High under live testing (`F-VAL-033`, below); one Informational was refuted outright (`F-SEN-013`).
 
@@ -230,6 +230,17 @@ Severity is the final severity; certainty is the finding header's number. Marker
 | [`F-VAL-037`](../findings/F-VAL-037.md) | Merkle trees pad with `B256::ZERO` and have no leaf/internal domain separation, so `B256::ZERO` is a provable leaf of most trees - safe today only by accident of what … | Informational | 60% | — | QA-done |
 
 `F-SEN-013`'s claim was **refuted by execution** and it is retained as Informational so the refutation stays visible (§6).
+
+### Findings scoped to unmerged branches (not counted above)
+
+These describe defects in **open, unmerged PRs** and are not defects on `main`. They are excluded from every count above; see [`IN-FLIGHT.md`](IN-FLIGHT.md).
+
+| ID | Title | Severity | Certainty | Markers | Status |
+| --- | --- | --- | --- | --- | --- |
+| [`F-CORE-068`](../findings/F-CORE-068.md) | A batch's execution status is unobservable, so a whole-batch revert or a mid-batch `CallFailed` silently drops up to a full batch of actions | High (forward-looking) | 85% | — | Filed (unmerged) |
+| [`F-CORE-069`](../findings/F-CORE-069.md) | The two-nonce delegation reservation writes a permanent nonce gap into durable state on the epic's own acknowledged failure path, and the only alarm fires exactly once | High (forward-looking) | 80% | — | Filed (unmerged) |
+| [`F-VAL-068`](../findings/F-VAL-068.md) | Scheduled secret pruning delays but does not prevent reorg-driven DKG secret loss, and adds a restart window in which no nonce generator runs | High (forward-looking) | 85% for D1–D4 | — | Filed (unmerged) |
+| [`F-SEN-016`](../findings/F-SEN-016.md) | Sentinel deadline and optimistic-transition PRs: #914 alone drops a valid peer commit, and #915 discards effect results on warp rollback and re-queues actions after a reorg | High (forward-looking) | 85% for D1 | — | Filed (unmerged) |
 
 ---
 

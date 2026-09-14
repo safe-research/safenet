@@ -104,3 +104,7 @@ Option 2 (confirm against `latest` before invalidating) is sound and cheap, and 
 Option 3 (separate metric label for "no block" vs "hash changed") is unconditionally correct and should land whichever of 1 or 2 is chosen — without it, `safenet_core_uncled_blocks_total` cannot be used as an alerting signal by anyone.
 
 No option touches `apply_transition` or the effect system; the `core::state` contract is unaffected. **Interaction:** a spurious uncle triggers the full replay path, so every occurrence of this defect is also an occurrence of **F-CORE-067** (duplicate queued actions). Fixing F-CORE-003 reduces F-CORE-067's frequency without touching its mechanism, and the report should present it that way rather than as a mitigation.
+
+## In-flight impact (AS-SEN)
+
+**Pertains to unmerged branches, not to `main`.** Assessed against `origin/fix/sentinel_deadlines` (PR #914) and `origin/feat/optimistic_block_transition` (PR #915, tip `b2aad06`), built from a `git archive` extraction. Both apply cleanly onto `main` — `main`'s crates are byte-identical to their base `199629e`, so a verdict on the tip is also the verdict for the tip merged into `main`. **Effect: unchanged.** `crates/core/src/index/blocks.rs:505` is unchanged.

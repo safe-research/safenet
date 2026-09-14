@@ -280,3 +280,7 @@ Outcome 2 (`Unknown` on replay) is also unrescued by the new handlers: the entry
 ### Certainty and severity
 
 **Certainty: 97% → 98%.** Severity unchanged (**High / High**). Status left at `Verified`.
+
+## In-flight impact (AS-SEN)
+
+**Pertains to unmerged branches, not to `main`.** Assessed against `origin/fix/sentinel_deadlines` (PR #914) and `origin/feat/optimistic_block_transition` (PR #915, tip `b2aad06`), built from a `git archive` extraction. Both apply cleanly onto `main` — `main`'s crates are byte-identical to their base `199629e`, so a verdict on the tip is also the verdict for the tip merged into `main`. **Effect: unchanged.** `service.rs:156` still removes the entry and the `Unknown` arm (`:176-179`) returns without restoring it; both PoC tests fail unmodified.

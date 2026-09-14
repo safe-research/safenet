@@ -94,3 +94,7 @@ Option 2's first half (`S: Default` on the load path, `#[serde(default)]` on sta
 Option 3 (recover by treating the store as empty only behind an explicit `--reset-state-on-incompatible-snapshot` flag, never silently) is sound and the "never silently" qualifier is the whole value of the option — re-indexing from `start_block` discards consensus state and must be an operator decision.
 
 Option 4 (document next to the existing "ensure this survives restarts" guidance) is necessary; the handbooks currently tell operators to preserve a file whose upgrade behaviour is undefined.
+
+## In-flight impact (AS-SEN)
+
+**Pertains to unmerged branches, not to `main`.** Assessed against `origin/fix/sentinel_deadlines` (PR #914) and `origin/feat/optimistic_block_transition` (PR #915, tip `b2aad06`), built from a `git archive` extraction. Both apply cleanly onto `main` — `main`'s crates are byte-identical to their base `199629e`, so a verdict on the tip is also the verdict for the tip merged into `main`. **Effect: unchanged; no migration needed.** #915's new `Status` exists only in memory (`crates/core/src/state/mod.rs:121-137`), and snapshot content semantics are unchanged; the format is still unversioned.

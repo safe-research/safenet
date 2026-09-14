@@ -45,6 +45,10 @@ The new work is a **stacked, unmerged PR chain** — the Batched Execution epic,
 
 **Two new findings filed, both scoped to unmerged branches** and labelled as such in their `Location`: **`F-CORE-068`** (batch execution status unobservable — success, a swallowed `CallFailed` and a whole-batch `InsufficientGas` revert are indistinguishable to `mark_executed`, enlarging the loss unit to a whole batch) and **`F-CORE-069`** (the two-nonce reservation writes a permanent gap, and its `error!` alarm **self-clears** because `mark_executed` runs immediately after it). Total findings: **110**.
 
+## Open-PR assessment, round 2 (#906–#917) — see [`report/IN-FLIGHT.md`](../report/IN-FLIGHT.md)
+
+`main` unchanged, so every finding still stands there. The Scheduled Secret Pruning stack **partially fixes `F-VAL-005`** (stored-block ordering; epoch-1 commitments identical across a live reorg) and changes `F-VAL-066`'s shape; #914 and #915 **fix nothing** — `F-SEN-001` lost a bond again live on the #915 tip — and **#914 merged alone worsens `F-SEN-002`**. The SEF veto epic (#917) addresses no finding. Two forward-looking findings filed: `F-VAL-068` and `F-SEN-016`. Assessment was read-only and verified against a before/after snapshot of git state and `rust-audit/`.
+
 ## Already-known work — see [`report/KNOWN-WORK.md`](../report/KNOWN-WORK.md)
 
 All 108 findings mapped onto 24 issues, 8 TODOs and 3 epics: **11 already tracked · 8 tracked but understated · 9 CLOSED BUT STILL PRESENT · 25 partial · 55 new.**
@@ -90,7 +94,7 @@ Ten reviewers read all 83 in-scope files (24,203 lines) to 100%. Nine Critics re
 | File |  |
 | --- | --- |
 | [`report/REPORT.md`](../report/REPORT.md) | the report |
-| [`findings/`](../findings/) | 108 findings, full evidence trails |
+| [`findings/`](../findings/) | 112 finding files (108 against `main`, 4 scoped to unmerged branches), full evidence trails |
 | [`poc/`](../poc/) | 36 PoC directories |
 | [`poc/UNRESOLVED-DEPENDENCY-QUESTIONS.md`](../poc/UNRESOLVED-DEPENDENCY-QUESTIONS.md) | open questions |
 | [`state/coverage.md`](./coverage.md) | per-file coverage matrix |

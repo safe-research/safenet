@@ -216,3 +216,7 @@ The merge shifts `contracts/src/FROSTCoordinator.sol` by two documentation-only 
 | --- | --- |
 | `FROSTCoordinator.sol:530-542` (Location, basis row 5, excerpt 5) | **`:536-548`** |
 | `FROSTCoordinator.sol:536` (`state.sequence++`, the strictly-increasing invariant) | **`:542`** |
+
+## In-flight impact (AS-PRUNE)
+
+**Pertains to unmerged branches, not to `main`.** Assessed against the Scheduled Secret Pruning stack (`origin/prune/end`, PRs #906–#913), built from a `git archive` extraction; no branch was merged or checked out. **Effect: unchanged.** `state/preprocess.rs::observe` is untouched.

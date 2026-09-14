@@ -1,6 +1,10 @@
-# In-flight impact assessment — the "Batched Execution" (batex) PR stack
+# In-flight impact assessment — unmerged PR stacks
 
-**Assessor:** FWD. **Date:** 2026-09-11. **Audit HEAD:** `a7f3915` (audit ran at `2893917`, re-validated against `origin/main` = `49d7e39`, which has not moved).
+This document covers two assessment rounds of **unmerged** work: first the Batched Execution stack (PRs #899–#904), then the open PRs #906–#917 (Scheduled Secret Pruning, sentinel deadlines, optimistic block transition, SEF veto epic). Nothing here is a finding against `main`.
+
+## Round 1 — Batched Execution stack (#899–#904)
+
+**Assessor:** FWD. **Audit HEAD:** `a7f3915` (audit ran at `2893917`, re-validated against `origin/main` = `49d7e39`, which has not moved).
 
 This document assesses **unmerged** code. Nothing here is a finding against `main`. No branch was merged, checked out, rebased or modified; everything below was read with `git show` / `git diff` against `origin/...` refs.
 
@@ -79,3 +83,58 @@ The audit's 21 end-to-end-validated PoCs were run on local Anvil. These are the 
 10. `pending_delegation` with **two** unexecuted delegation rows (one allocated, one not) — currently order-undefined; add the test before the query is relied on.
 11. Phase 6 landing: measure the `5_000` per-call and `26_000` base constants against real action calldata on a Prague Anvil, per the epic's own open question, and assert the `InsufficientGas` guard does not fire for a full `max_batch_gas` batch of real validator actions.
 12. Phase 7 landing: a batch containing one reverting call — assert the remaining calls still take effect and that the service can tell (it currently cannot; that is `F-CORE-068`).
+
+## Round 2 — open PRs #906–#917
+
+**`main` had not moved** (still `49d7e39`), so every finding still stands there. None of the ten PRs claims to close an issue or cites an audit finding; the only cross-reference is #915 → #471 (the June draft _Optimize Block State Transition_, same design). No issue was closed or updated. Each branch was read with `git show`/`git diff` and built from a `git archive` extraction; no branch was merged or checked out, and `rust-audit/` and git state were verified byte-identical before and after.
+
+| Work | PRs | Verdict |
+| --- | --- | --- |
+| Scheduled Secret Pruning | #906 → #907 → #908 → #909 → #910 → #912 → #913 | **`F-VAL-005` partially fixed**; `F-VAL-066` changed shape; everything else it touches unchanged. Four new defects: `F-VAL-068`. |
+| Sentinel deadlines | #914 | **Fixes nothing — worsens `F-SEN-002` if merged without #915** (`F-SEN-016` D1). |
+| Optimistic block transition | #915 (on #914) | **Fixes nothing.** `F-CORE-031` changed shape; the ordering behind `F-VAL-005` is unchanged. New defects: `F-SEN-016` D2–D4. |
+| SEF veto epic | #917 | Documentation only; addresses no finding. Risks widening `F-ENG-039` if the module is added to `SUPPORTED_MODULES`. |
+
+### Scheduled Secret Pruning (#906–#913)
+
+| Finding | Effect |
+| --- | --- |
+| [`F-VAL-005`](../findings/F-VAL-005.md) | **Partially fixed** — stored-block ordering (`store.rs:323-334`) closes the same-height replay; live Anvil showed identical epoch-1 commitments across the reorg. Residual: absence beyond `max_reorg_depth` still loses the ceremony. |
+| [`F-VAL-066`](../findings/F-VAL-066.md) | **Changed shape** — unqualified `DELETE` gone; retention set still pre-logs; race survives at depth 0–1. |
+| [`F-VAL-033`](../findings/F-VAL-033.md) | Unchanged |
+| [`F-VAL-030`](../findings/F-VAL-030.md), [`F-VAL-061`](../findings/F-VAL-061.md), [`F-VAL-032`](../findings/F-VAL-032.md) | Unchanged; `F-VAL-061`'s restart window widened (D1) |
+| [`F-VAL-035`](../findings/F-VAL-035.md) | Partially fixed (tests only) |
+| [`F-VAL-034`](../findings/F-VAL-034.md), [`F-VAL-036`](../findings/F-VAL-036.md), [`F-VAL-038`](../findings/F-VAL-038.md), [`F-VAL-062`](../findings/F-VAL-062.md), [`F-XC-002`](../findings/F-XC-002.md) | Unchanged |
+| [`F-CORE-031`](../findings/F-CORE-031.md), [`F-CORE-032`](../findings/F-CORE-032.md), [`F-CORE-033`](../findings/F-CORE-033.md), [`F-CORE-034`](../findings/F-CORE-034.md) | Unchanged |
+
+Caveats: the reorg-nonce harness performs no validator restart and asserts only on the genesis group, so the epoch-1 evidence was read from the validator logs; no same-machine control run on `main` was made.
+
+### Sentinel deadlines (#914) and optimistic block transition (#915)
+
+Both apply cleanly onto `main`: `main`'s crates are byte-identical to their base `199629e`.
+
+| Finding | Effect |
+| --- | --- |
+| [`F-SEN-005`](../findings/F-SEN-005.md) | Unchanged — waiting states still never expire; `event.deadline` still never read |
+| [`F-SEN-001`](../findings/F-SEN-001.md) | Unchanged — **bond lost again live on the #915 tip** (A: 996000 vs B: 1001000; second commit reverted `AlreadyCommitted()`) |
+| [`F-SEN-002`](../findings/F-SEN-002.md) | Unchanged on the tip; **worsened by #914 alone** |
+| [`F-SEN-003`](../findings/F-SEN-003.md), [`F-SEN-015`](../findings/F-SEN-015.md), [`F-SEN-011`](../findings/F-SEN-011.md), [`F-SEN-009`](../findings/F-SEN-009.md), [`F-SEN-004`](../findings/F-SEN-004.md), [`F-SEN-006`](../findings/F-SEN-006.md) | Unchanged |
+| [`F-CORE-031`](../findings/F-CORE-031.md) | **Changed shape** — block-transition effects now re-emit; log-originated effects still lost |
+| [`F-VAL-005`](../findings/F-VAL-005.md) | Unchanged — adapted PoC ordering case reproduces on the tip |
+| [`F-CORE-001`](../findings/F-CORE-001.md), [`F-CORE-067`](../findings/F-CORE-067.md), [`F-CORE-037`](../findings/F-CORE-037.md), [`F-CORE-003`](../findings/F-CORE-003.md) | Unchanged; #915 needs no snapshot migration |
+
+### SEF veto epic (#917)
+
+Plans a small Solidity Safe module letting one SEF address invalidate a SafeSnap Reality proposal. It repeats none of the Rust-service defect patterns: `to`, `value`, `operation` and selector are fixed in code, call success is required, and the question hash is computed onchain. Its gap: it never asks whether the SafeDAO Safe is Safenet-protected. If it is, a signed `enableModule` violates Charter R-4.1; the engine denies the direct path today and the escape hatch is the intended route. See [`F-ENG-039`](../findings/F-ENG-039.md).
+
+### New defects filed (round 2)
+
+| Finding | Branch | Defects |
+| --- | --- | --- |
+| [`F-VAL-068`](../findings/F-VAL-068.md) | `origin/prune/end` | D1 restart leaves a group with no nonce generator · D2 deletion delayed, not prevented · D3 `F-VAL-066` race at depth 0–1 · D4 stored block has no hash and never decreases |
+| [`F-SEN-016`](../findings/F-SEN-016.md) | #914, #915 | D1 #914 alone drops a valid peer commit · D2 warp rollback discards effect results (latent) · D3 early-transition actions re-queued after a reorg · D4 validator keygen deadlines one block earlier (unverified) |
+
+### What to re-run when these merge
+
+1. Pruning stack: `poc/F-VAL-005-066`, `poc/F-VAL-030-032-061`, `poc/F-VAL-033`, plus a reorg-nonce run that restarts a validator and asserts on the **epoch-1** group, with a same-machine control on `main`.
+2. #914/#915: `poc/F-SEN-001`, `F-SEN-002`, `F-SEN-015`, `F-CORE-067`, `F-CORE-001`, the `poc/F-VAL-005-066` ordering case, and the `F-SEN-016` D1 probe — **before** #914 merges on its own.

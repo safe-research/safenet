@@ -184,3 +184,11 @@ F-VAL-061's trigger is deterministic and is **not** a delivery problem: `Effect:
 4. **F-CORE-031 option 2** (durable pending-effect set) only if the at-least-once contract is genuinely wanted as a core guarantee — and only after step 1, or it amplifies silent failures.
 
 **Not recommended at any point:** F-CORE-031 option 1 (unsound, see above) and option 3 (worsens F-CORE-067).
+
+## In-flight impact (AS-PRUNE)
+
+**Pertains to unmerged branches, not to `main`.** Assessed against the Scheduled Secret Pruning stack (`origin/prune/end`, PRs #906–#913), built from a `git archive` extraction; no branch was merged or checked out. **Effect: unchanged by this stack.** `crates/core/src/state` is untouched; the effect spawn and `next` paths only gained housekeeping code. (PR #915 does change this finding's shape — see the `AS-SEN` section.)
+
+## In-flight impact (AS-SEN)
+
+**Pertains to unmerged branches, not to `main`.** Assessed against `origin/fix/sentinel_deadlines` (PR #914) and `origin/feat/optimistic_block_transition` (PR #915, tip `b2aad06`), built from a `git archive` extraction. Both apply cleanly onto `main` — `main`'s crates are byte-identical to their base `199629e`, so a verdict on the tip is also the verdict for the tip merged into `main`. **Effect: changed shape (#915).** The snapshot is now committed before the early transition (`crates/core/src/state/mod.rs:283-287`), so a rollback re-runs `NewBlock(N+1)` and effects from **block transitions** are re-emitted. Effects from **logs** are still lost: a probe after `Uncle(3)` shows `resumes: []` with no `Effect(10)` re-emitted. #915 also adds a second case on the warp path — filed as `F-SEN-016` D2.

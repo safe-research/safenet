@@ -344,3 +344,7 @@ Leg (c) drops out. The remaining legs are untouched by this run and were never p
 **The hardening recommendation survives the refutation and should be kept.** The behaviour is a library default that `sqlx` chose against SQLite's own default and documents as a choice; nothing in this workspace asserts it, and a connection URL carrying `foreign_keys=off` would silently disable it. One explicit `.foreign_keys(true)` in `connect_sqlite`, and the test above landed in-tree, cost almost nothing. Note also `journal_mode = delete`: WAL is **not** enabled, so writers block readers outright — see F-VAL-038.
 
 Certainty **45% → 35%**, Status **Verified (reduced)**, severity **Low** unchanged.
+
+## In-flight impact (AS-PRUNE)
+
+**Pertains to unmerged branches, not to `main`.** Assessed against the Scheduled Secret Pruning stack (`origin/prune/end`, PRs #906–#913), built from a `git archive` extraction; no branch was merged or checked out. **Effect: partially fixed (the untested part only).** The branch's store tests now assert that the cascade delete fires. Still true: the foreign-keys pragma is never set in code, abandoned chunks of retained groups are never pruned, and the JSON copies are not zeroed.

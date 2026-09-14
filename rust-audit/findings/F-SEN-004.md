@@ -138,3 +138,7 @@ Re-validated against merge commit `a7f3915` (baseline `2893917`).
 No concurrency limit, outstanding-bond cap or reveal-throughput guard was added anywhere in the merge. The two new epics (`epics/2026_09_04_sentinel_verdict_composition.md`, `epics/2026_09_04_sentinel_batch_meta_transactions.md`) both scope themselves to `crates/sentinel-engine` and state "no change to `crates/sentinel`", so neither addresses the sentinel-side flooding path; if anything, per-call coverage and batch flattening make each engine check more expensive, which sharpens consequence 1.
 
 **Certainty 62% and severity Medium / Medium unchanged.** Status left at `Critiqued`. No PoC exists for this finding.
+
+## In-flight impact (AS-SEN)
+
+**Pertains to unmerged branches, not to `main`.** Assessed against `origin/fix/sentinel_deadlines` (PR #914) and `origin/feat/optimistic_block_transition` (PR #915, tip `b2aad06`), built from a `git archive` extraction. Both apply cleanly onto `main` — `main`'s crates are byte-identical to their base `199629e`, so a verdict on the tip is also the verdict for the tip merged into `main`. **Effect: unchanged.**

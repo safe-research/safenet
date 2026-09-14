@@ -347,3 +347,7 @@ The same reading is what makes F-VAL-004's trigger A and F-XC-002's "cheapest tr
 The finding's claim is about **duration** — how long `register_nonces_chunk` holds the writer with a real 1024-nonce chunk while the driver commits snapshots on the same pool. A source read gives the timeout but not the transaction length, and it is the ratio that decides the finding. That benchmark was not run: it needs the single-core deployment `docs/validator-handbook.md` describes, and this host is not it. VAL-Q9 (`rayon` global pool sizing under `taskset -c 0`) is unanswered for the same reason.
 
 Certainty **45% → 55%**, severity **Low** unchanged. Status left as it was: this is not a verification, only a narrowing. The remaining gap is one benchmark, and it is the whole finding.
+
+## In-flight impact (AS-PRUNE)
+
+**Pertains to unmerged branches, not to `main`.** Assessed against the Scheduled Secret Pruning stack (`origin/prune/end`, PRs #906–#913), built from a `git archive` extraction; no branch was merged or checked out. **Effect: unchanged.** Collection adds one more database writer per block, awaited inline in the driver loop (`crates/core/src/driver.rs:292-294`) with an unbounded cascade delete. Under a backlog that could stall block processing and hold the SQLite writer lock; this was not measured.

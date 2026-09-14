@@ -46,7 +46,7 @@ The issue's stated goal was to avoid an "exponential death spiral on gas prices"
 | [`F-CORE-060`](../findings/F-CORE-060.md) | High 98% | The retained underpriced path compounds ×1.1 **per block**, unbounded, and silently overrides `priority_fee_cap_percentage` — the one knob documented to bound overpayment. Measured live: tip 1 → 11,527 → 201,207 wei, max fee 4,239 gwei against a real base fee of 772 wei, the cap bypassed **~28,700×**. The only brake is the signer's balance. At Gnosis' ~5 s blocks that is ×3.1/minute. |
 | [`F-CORE-061`](../findings/F-CORE-061.md) | Medium 58% | **Introduced by the fix.** #656 asked to bump when "we get a _transaction underpriced_ error from the node". Both regexes `80f747c` added require the rejection to be about a _replacement_. A first-submission rejection below the node's txpool floor matches neither, records no fee floor, and is re-signed at the same fee forever — and because the row holds an allocated nonce that is never released, every later transaction is blocked behind it. |
 
-### #614 — _Evaluate Parallel Execution of Effects_ (closed by merging the non-blocking-effects epic, `19d3815`; epic implemented and deleted in `e346b94`; closed "done" 2026-08-18)
+### #614 — _Evaluate Parallel Execution of Effects_ (closed by merging the non-blocking-effects epic, `19d3815`; epic implemented and deleted in `e346b94`; closed "done")
 
 The issue body quotes an analysis with two horns. The head-of-line-blocking horn was fixed by going async. **The second horn was not, and it is what the audit reproduced with value moving:**
 

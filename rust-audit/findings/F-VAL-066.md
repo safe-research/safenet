@@ -190,3 +190,7 @@ Two corrections that bear on the finding:
 **Verdict: STILL VALID.** Certainty **92%** and severity **Medium / High** unchanged. Merge commit `a7f3915`.
 
 Pure Rust, in code the merge does not touch: `ReconcileGroupSecrets` at `service/effect.rs:202-238` still computes its retention set before the block's logs and still runs concurrently with the store writes those logs cause. This file cites no contract line numbers, so nothing here depended on a contract behaviour that moved. The Phase 7 structural observation stands.
+
+## In-flight impact (AS-PRUNE)
+
+**Pertains to unmerged branches, not to `main`.** Assessed against the Scheduled Secret Pruning stack (`origin/prune/end`, PRs #906–#913), built from a `git archive` extraction; no branch was merged or checked out. **Effect: changed shape.** The unqualified pre-genesis `DELETE FROM` is gone; absent groups are now scheduled with `COALESCE(delete_after, block)` (`store.rs:388,397`) and collected later (`store.rs:359,364`). But the retention set is still computed before the block's logs, and the same-block race still deletes the row when `max_reorg_depth` is 0 or 1 (branch unit flow C: depths 0 and 1 lose the secrets, 2 and 5 keep them). Filed as `F-VAL-068` D3.

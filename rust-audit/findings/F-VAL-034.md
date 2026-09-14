@@ -322,3 +322,7 @@ The merge shifts `contracts/src/FROSTCoordinator.sol` by two documentation-only 
 | `FROSTCoordinator.sol:581` (`FROST.verifyShare` runs before registering anything) | **`:592`** (+11 — this citation is past the second doc hunk) |
 
 The line is byte-identical: `FROST.verifyShare(key, selection.r, group.participants.getKey(msg.sender), share, message);`. Note that `9e41b49` added a `@dev` note directly above `signShare` (**`:578-582`**) confirming from upstream that `l_i` is not derived onchain and is pinned only by the Merkle leaf it is proven against — which is the same "the contract checks the share against a caller-supplied coefficient" property this finding reasons about.
+
+## In-flight impact (AS-PRUNE)
+
+**Pertains to unmerged branches, not to `main`.** Assessed against the Scheduled Secret Pruning stack (`origin/prune/end`, PRs #906–#913), built from a `git archive` extraction; no branch was merged or checked out. **Effect: unchanged.** `state/sign.rs` is untouched.

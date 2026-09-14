@@ -115,3 +115,7 @@ The `voting_window` value is still unvalidated, still has no relation to the ora
 Consequence 3 is if anything sharper after the merge: it names the replay paths of F-SEN-001 and F-SEN-003, and F-SEN-001 was re-confirmed unchanged this run.
 
 **Certainty 82% and severity Low / Low unchanged.** Status left at `Critiqued`; the `known` tag still applies.
+
+## In-flight impact (AS-SEN)
+
+**Pertains to unmerged branches, not to `main`.** Assessed against `origin/fix/sentinel_deadlines` (PR #914) and `origin/feat/optimistic_block_transition` (PR #915, tip `b2aad06`), built from a `git archive` extraction. Both apply cleanly onto `main` — `main`'s crates are byte-identical to their base `199629e`, so a verdict on the tip is also the verdict for the tip merged into `main`. **Effect: unchanged.** `service.rs:127` is still `block.saturating_add(self.voting_window)`, unvalidated.

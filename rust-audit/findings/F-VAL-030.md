@@ -362,3 +362,7 @@ The consequence (the validator silently declines to sign every sequence that lan
 Rust-only mechanism in unchanged code (`crates/validator` and `crates/core` are untouched by the merge), so the phantom chunk reservation at `state/preprocess.rs:85-103, 196-203, 234-247` and the Phase 7 live observation are unaffected.
 
 **Contract dependency check.** The finding references the permissionless `Coordinator.sign` as the pressure source; that function is byte-identical after the merge and moves from `contracts/src/FROSTCoordinator.sol:530-542` to **`:536-548`**. It is still permissionless, still increments `state.sequence++` on every call (now **`:542`**), and gained no access control or deduplication.
+
+## In-flight impact (AS-PRUNE)
+
+**Pertains to unmerged branches, not to `main`.** Assessed against the Scheduled Secret Pruning stack (`origin/prune/end`, PRs #906–#913), built from a `git archive` extraction; no branch was merged or checked out. **Effect: unchanged.** The effect failure policy (`service/effect.rs:264-276`) is the same; all `poc/F-VAL-030-032-061` tests pass on the branch. The stack additionally widens the window in which this phantom reservation is created after a restart — see `F-VAL-068` D1.

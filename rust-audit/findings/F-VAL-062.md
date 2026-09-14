@@ -227,3 +227,7 @@ Confirmed, and unchanged by the above: the crate's own redaction convention **is
 Severity **Low / Medium → Informational / Low**. Certainty **60% → 88%** — the finding is now precisely characterised in both directions, which is what the number should express; it is not a claim that a leak is 88% likely. Status **Verified (reduced)**.
 
 Remediation option 3 (a guard test) is now the _primary_ recommendation rather than the third, and `signing_share_field_alone_is_redacted` is that test, ready to land in-tree — note the field isolation, without which the assertion is unsound against `KeyShare::dummy`. Option 1 (hand-written `Debug` for `KeyShare` and `Secrets`) remains worth doing and is a five-line change with three precedents in the same crate. Option 2 (stop logging whole effects) is still a better log line regardless.
+
+## In-flight impact (AS-PRUNE)
+
+**Pertains to unmerged branches, not to `main`.** Assessed against the Scheduled Secret Pruning stack (`origin/prune/end`, PRs #906–#913), built from a `git archive` extraction; no branch was merged or checked out. **Effect: unchanged.** No new effect or resume variant carries secret material — the only new field is `block: u64` — and `warn!(?effect)` at `service/effect.rs:270` still prints `KeyShare` through its derived `Debug`. Housekeeping logs only counts and errors.

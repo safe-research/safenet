@@ -104,3 +104,7 @@ Option 2 (classify before retrying — transport/429 → backoff, `DecodeLog`/`T
 Option 3 (`watcher_errors_total{kind}`, and log at `warn` only on the first failure and on a change of error kind) is sound and is what turns a million log lines into one alertable counter. Take it regardless.
 
 **Contract note:** none of these touch `apply_transition` or effect delivery. Backoff does lengthen the window in which a rollback replay has not yet happened, which very slightly reduces **F-CORE-067**'s frequency and does nothing to its mechanism — not a reason to choose or avoid any option, but worth not mistaking for a fix.
+
+## In-flight impact (AS-PRUNE)
+
+**Pertains to unmerged branches, not to `main`.** Assessed against the Scheduled Secret Pruning stack (`origin/prune/end`, PRs #906–#913), built from a `git archive` extraction; no branch was merged or checked out. **Effect: unchanged.** `next_input` (`crates/core/src/driver.rs:208-233`) and its fixed retry are untouched.

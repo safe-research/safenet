@@ -223,3 +223,7 @@ This is the whole of the finding's deterministic path — a failed effect conver
 **Verdict: STILL VALID.** Certainty **98%** and severity **High / High** unchanged. Merge commit `a7f3915`.
 
 Pure Rust, in code the merge does not touch: `service/effect.rs:243-256` still converts a failed effect to `Resume::Noop` with no retry path, and this file cites no contract line numbers, so nothing here depended on a contract behaviour that moved. The Phase 7 live failure observation stands.
+
+## In-flight impact (AS-PRUNE)
+
+**Pertains to unmerged branches, not to `main`.** Assessed against the Scheduled Secret Pruning stack (`origin/prune/end`, PRs #906–#913), built from a `git archive` extraction; no branch was merged or checked out. **Effect: unchanged, window widened.** The failure policy (`service/effect.rs:264-276`) is the same and the PoC tests pass. New: on a restart after less than `max_reorg_depth` blocks of downtime, replayed reconciliations below the stored block return at `effect.rs:241-251` **before** `generator.retain`/`generator.start` (`:253-256`), so the new process's nonce generator is never started and `NonceTree` fails into `Resume::Noop`. On `main` that window was the first block only; on the branch it is up to `max_reorg_depth` blocks. Filed as `F-VAL-068` D1.

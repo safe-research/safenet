@@ -285,3 +285,7 @@ The A/B is the whole claim in two lines of log: the same reorg depth that the ru
 One honest limit, unchanged from Phase 7: `anvil_reorg` produces empty replacement blocks, so the reorged transactions are dropped rather than re-mined. A real chain would re-include most of them, so the divergent state observed here is a **lower bound** on the divergence — the real case additionally carries re-applied logs on top of the orphaned snapshot.
 
 **Certainty: 99% (unchanged — already at ceiling).** Severity unchanged (High / High).
+
+## In-flight impact (AS-SEN)
+
+**Pertains to unmerged branches, not to `main`.** Assessed against `origin/fix/sentinel_deadlines` (PR #914) and `origin/feat/optimistic_block_transition` (PR #915, tip `b2aad06`), built from a `git archive` extraction. Both apply cleanly onto `main` — `main`'s crates are byte-identical to their base `199629e`, so a verdict on the tip is also the verdict for the tip merged into `main`. **Effect: unchanged.** All three PoC tests fail unmodified, producing the identical plan `[("uncle", 899), ("warp", 899), ("new", 999), ("new", 1000)]`; the snapshot table is still `["block_number", "state"]`.

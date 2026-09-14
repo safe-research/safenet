@@ -172,3 +172,7 @@ The bond **is** claimed. The finding's headline impact — "a frozen request's b
 ### Certainty and severity
 
 **Certainty: 72% → 80%** — the mechanism is now executed rather than read. **Severity: Medium → Low**, since the funds loss is gone and what remains is two reverting transactions per affected request plus a metric that lies on this path. Status left at `Critiqued`.
+
+## In-flight impact (AS-SEN)
+
+**Pertains to unmerged branches, not to `main`.** Assessed against `origin/fix/sentinel_deadlines` (PR #914) and `origin/feat/optimistic_block_transition` (PR #915, tip `b2aad06`), built from a `git archive` extraction. Both apply cleanly onto `main` — `main`'s crates are byte-identical to their base `199629e`, so a verdict on the tip is also the verdict for the tip merged into `main`. **Effect: unchanged.** The warp path still runs no block transitions (`crates/core/src/state/mod.rs:295-305`), so reveals are still discarded.
