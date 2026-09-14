@@ -298,10 +298,16 @@ async fn schedule_absent_groups(
 ) -> Result<(), Error> {
     let mut query = QueryBuilder::<Sqlite>::new(format!("UPDATE {table} SET delete_after = "));
     if retained.is_empty() {
+        // Nothing is retained, so every row is absent:
+        //
+        //     UPDATE <table> SET delete_after = COALESCE(delete_after, <block>);
         query.push("COALESCE(delete_after, ");
         query.push_bind(block);
         query.push(")");
     } else {
+        //     UPDATE <table>
+        //        SET delete_after = CASE WHEN group_id IN (<retained>, ...) THEN NULL
+        //                                ELSE COALESCE(delete_after, <block>) END;
         query.push("CASE WHEN group_id IN (");
         let mut groups = query.separated(", ");
         for group in retained {
