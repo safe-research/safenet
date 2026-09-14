@@ -64,10 +64,6 @@ impl Coverage {
     pub const ALL: Self = Self(Self::ACTION.0 | Aspect::Refund.bit());
 
     /// Builds a `Coverage` from a list of aspects.
-    ///
-    /// No non-test caller yet — every check narrowed in this epic's next
-    /// phase builds its claim with this.
-    #[allow(dead_code)]
     pub const fn of(aspects: &[Aspect]) -> Self {
         let mut bits = 0u8;
         let mut i = 0;
