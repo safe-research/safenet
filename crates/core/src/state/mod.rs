@@ -86,6 +86,20 @@ where
     type Resume;
 
     /// Apply the state transition for the given message.
+    ///
+    /// [`Message::NewBlock`] is applied optimistically for the *pending*
+    /// block during live indexing -- as soon as the previous block's events
+    /// are processed, before the block itself is observed -- so that the
+    /// actions it produces reach the mempool in time to be included in that
+    /// very block. The block number is therefore the block the resulting
+    /// actions are expected to land in, not one that has already been mined.
+    ///
+    /// A pending block may end up uncled, or skipped by a warp. The state is
+    /// rolled back to the last committed snapshot in both cases and the
+    /// transition re-applied on the canonical chain, but actions and effects
+    /// already emitted for it cannot be recalled. Transitions must only emit
+    /// commands for a pending block that are harmless if that block never
+    /// materialises.
     fn apply_transition(
         &self,
         state: S,
@@ -106,9 +120,20 @@ pub struct StateMachine<S, T> {
 
 enum Status {
     Initialized,
-    BlockPending { pending: u64 },
-    BlockEvents { latest: u64 },
-    WarpEvents { range: RangeInclusive<u64> },
+    /// Waiting on the `pending` block. `applied` records whether its
+    /// transition already ran optimistically after the previous block's
+    /// events, in which case it must not run again when the block is
+    /// observed.
+    BlockPending {
+        pending: u64,
+        applied: bool,
+    },
+    BlockEvents {
+        latest: u64,
+    },
+    WarpEvents {
+        range: RangeInclusive<u64>,
+    },
 }
 
 impl<S, T> StateMachine<S, T>
@@ -137,7 +162,13 @@ where
             .await?
             .map(|(latest, state)| -> Result<_, Error> {
                 let pending = latest.checked_add(1).ok_or(Error::EndOfChain)?;
-                Ok((state, Status::BlockPending { pending }))
+                Ok((
+                    state,
+                    Status::BlockPending {
+                        pending,
+                        applied: false,
+                    },
+                ))
             })
             .transpose()?
             .unwrap_or_else(|| (init(), Status::Initialized));
@@ -172,28 +203,55 @@ where
         let (state, status, commands) = match update {
             Update::Block(BlockUpdate::Warp { from, to })
                 if matches!(status, Status::Initialized)
-                    || matches!(status, Status::BlockPending { pending } if pending == from) =>
+                    || matches!(status, Status::BlockPending { pending, .. } if pending == from) =>
             {
+                // Warp ranges never run per-block transitions, so an
+                // optimistically applied pending block has to be undone before
+                // the range's events are applied on top of it. The last
+                // committed snapshot is exactly the pre-transition state.
+                let state = match status {
+                    Status::BlockPending {
+                        pending,
+                        applied: true,
+                    } => {
+                        let (block, state) =
+                            self.snapshots.current().await?.ok_or(
+                                storage::Error::MissingSnapshot(pending.saturating_sub(1)),
+                            )?;
+                        debug_assert_eq!(block.saturating_add(1), pending);
+                        state
+                    }
+                    _ => state,
+                };
                 let status = Status::WarpEvents {
                     range: block_range(from, to)?,
                 };
                 (state, status, vec![])
             }
             Update::Block(BlockUpdate::Uncle { number })
-                if matches!(status, Status::BlockPending { pending } if number < pending)
+                if matches!(status, Status::BlockPending { pending, .. } if number < pending)
                     || matches!(status, Status::BlockEvents { latest } if number <= latest) =>
             {
                 let (_, state) = self.snapshots.reorg(number).await?;
-                let status = Status::BlockPending { pending: number };
+                let status = Status::BlockPending {
+                    pending: number,
+                    applied: false,
+                };
                 (state, status, vec![])
             }
             Update::Block(BlockUpdate::New { number, .. })
                 if matches!(status, Status::Initialized)
-                    || matches!(status, Status::BlockPending { pending } if pending == number) =>
+                    || matches!(status, Status::BlockPending { pending, .. } if pending == number) =>
             {
-                let (state, commands) = self
-                    .transition
-                    .apply_transition(state, Message::NewBlock(number));
+                // The transition has usually already run against this block
+                // while it was still pending; only apply it here when it has
+                // not, i.e. on startup and after a warp or a reorg.
+                let (state, commands) = match status {
+                    Status::BlockPending { applied: true, .. } => (state, vec![]),
+                    _ => self
+                        .transition
+                        .apply_transition(state, Message::NewBlock(number)),
+                };
                 let status = Status::BlockEvents { latest: number };
                 (state, status, commands)
             }
@@ -210,7 +268,7 @@ where
                     return Err(Error::BadUpdate);
                 }
 
-                let (state, commands) = {
+                let (state, mut commands) = {
                     let mut state = state;
                     let mut commands = Vec::new();
                     for log in logs {
@@ -222,20 +280,47 @@ where
                     (state, commands)
                 };
 
-                let status = match status {
-                    Status::WarpEvents { range } if blocks.last < range.last => {
-                        let range = block_range(next_block(blocks.last)?, range.last)?;
-                        Status::WarpEvents { range }
-                    }
-                    _ => {
-                        let pending = next_block(blocks.last)?;
-                        Status::BlockPending { pending }
-                    }
-                };
-
+                // Commit before any pending block transition runs below, so
+                // the snapshot stays the canonical pre-transition state for
+                // `blocks.last`: restarting or rolling back to it re-applies
+                // the pending block instead of double-applying it.
                 self.snapshots.commit(blocks.last, &state).await?;
 
-                (state, status, commands)
+                match status {
+                    // Still catching up on the warp range.
+                    Status::WarpEvents { range } if blocks.last < range.last => {
+                        let range = block_range(next_block(blocks.last)?, range.last)?;
+                        (state, Status::WarpEvents { range }, commands)
+                    }
+                    // The warp is complete. Historic ranges skip per-block
+                    // transitions entirely, so the pending block is left for
+                    // the `BlockUpdate::New` that follows to apply.
+                    Status::WarpEvents { .. } => {
+                        let pending = next_block(blocks.last)?;
+                        let status = Status::BlockPending {
+                            pending,
+                            applied: false,
+                        };
+                        (state, status, commands)
+                    }
+                    // Live indexing: the latest block's events are complete,
+                    // so the next block's transition can run now rather than
+                    // once that block has been mined and observed. Its actions
+                    // reach the mempool a block earlier and can be included in
+                    // the block they were emitted for.
+                    _ => {
+                        let pending = next_block(blocks.last)?;
+                        let (state, block_commands) = self
+                            .transition
+                            .apply_transition(state, Message::NewBlock(pending));
+                        commands.extend(block_commands);
+                        let status = Status::BlockPending {
+                            pending,
+                            applied: true,
+                        };
+                        (state, status, commands)
+                    }
+                }
             }
             _ => return Err(Error::BadUpdate),
         };
@@ -411,12 +496,16 @@ mod tests {
         let pool = pool().await;
         let mut machine = new_machine(&pool).await;
 
-        // A new block runs the block transition; its events are applied and the
-        // resulting state is committed at the last block of the range.
+        // The first block runs its transition on observation, as there is no
+        // preceding block whose events could have triggered it early.
         assert_eq!(
             machine.handle_update(new_block(1)).await.unwrap(),
             vec![Command::Action(Action::Block(1))]
         );
+
+        // Its events are applied and the resulting state is committed at the
+        // last block of the range, followed by the next block's transition
+        // running optimistically against the pending block.
         assert_eq!(
             machine.handle_update(logs(1..=1, [10, 20])).await.unwrap(),
             vec![
@@ -424,9 +513,12 @@ mod tests {
                 Command::Effect(10),
                 Command::Action(Action::Event(20)),
                 Command::Effect(20),
+                Command::Action(Action::Block(2)),
             ]
         );
 
+        // The commit happens before that pending transition, so the snapshot
+        // holds block 1 only.
         assert_eq!(
             committed(&pool).await,
             Some((
@@ -434,6 +526,128 @@ mod tests {
                 TestState {
                     blocks: vec![1],
                     events: vec![10, 20],
+                    resumes: vec![],
+                },
+            ))
+        );
+    }
+
+    /// The pending block's transition runs as soon as the previous block's
+    /// events are in, so its actions can be included in that block, and it is
+    /// not applied a second time when the block is actually observed.
+    #[tokio::test]
+    async fn pending_block_transition_runs_before_the_block_is_observed() {
+        let pool = pool().await;
+        let mut machine = new_machine(&pool).await;
+
+        machine.handle_update(new_block(1)).await.unwrap();
+        assert_eq!(
+            machine.handle_update(logs(1..=1, [])).await.unwrap(),
+            vec![Command::Action(Action::Block(2))]
+        );
+
+        // Observing block 2 re-emits nothing.
+        assert_eq!(machine.handle_update(new_block(2)).await.unwrap(), vec![]);
+        assert_eq!(
+            machine.handle_update(logs(2..=2, [20])).await.unwrap(),
+            vec![
+                Command::Action(Action::Event(20)),
+                Command::Effect(20),
+                Command::Action(Action::Block(3)),
+            ]
+        );
+
+        // Each block transition ran exactly once, in order.
+        assert_eq!(
+            committed(&pool).await,
+            Some((
+                2,
+                TestState {
+                    blocks: vec![1, 2],
+                    events: vec![20],
+                    resumes: vec![],
+                },
+            ))
+        );
+    }
+
+    /// A warp skips per-block transitions, so an optimistically applied
+    /// pending block must be rolled back before the warped events are applied.
+    #[tokio::test]
+    async fn warp_rolls_back_an_optimistically_applied_pending_block() {
+        let pool = pool().await;
+        let mut machine = new_machine(&pool).await;
+
+        machine.handle_update(new_block(1)).await.unwrap();
+        assert_eq!(
+            machine.handle_update(logs(1..=1, [10])).await.unwrap(),
+            vec![
+                Command::Action(Action::Event(10)),
+                Command::Effect(10),
+                Command::Action(Action::Block(2)),
+            ]
+        );
+
+        // Block 2 never materialises as a live block; the indexer warps
+        // through it instead.
+        assert_eq!(machine.handle_update(warp(2, 4)).await.unwrap(), vec![]);
+        assert_eq!(
+            machine.handle_update(logs(2..=4, [40])).await.unwrap(),
+            vec![Command::Action(Action::Event(40)), Command::Effect(40)]
+        );
+
+        // Block 2's transition is gone from the state rather than lingering
+        // ahead of the warped events.
+        assert_eq!(
+            committed(&pool).await,
+            Some((
+                4,
+                TestState {
+                    blocks: vec![1],
+                    events: vec![10, 40],
+                    resumes: vec![],
+                },
+            ))
+        );
+
+        // The warp left the pending block unapplied, so block 5 runs on
+        // observation.
+        assert_eq!(
+            machine.handle_update(new_block(5)).await.unwrap(),
+            vec![Command::Action(Action::Block(5))]
+        );
+    }
+
+    /// A reorg discards an optimistically applied pending block, and the
+    /// replacement block runs its transition again on the canonical chain.
+    #[tokio::test]
+    async fn reorg_discards_an_optimistically_applied_pending_block() {
+        let pool = pool().await;
+        let mut machine = new_machine(&pool).await;
+
+        for block in 1..=3 {
+            machine.handle_update(new_block(block)).await.unwrap();
+            machine
+                .handle_update(logs(block..=block, []))
+                .await
+                .unwrap();
+        }
+
+        // Block 4 was applied optimistically, but blocks 3 and up are uncled.
+        assert_eq!(machine.handle_update(uncle(3)).await.unwrap(), vec![]);
+        assert_eq!(
+            machine.handle_update(new_block(3)).await.unwrap(),
+            vec![Command::Action(Action::Block(3))]
+        );
+        machine.handle_update(logs(3..=3, [30])).await.unwrap();
+
+        assert_eq!(
+            committed(&pool).await,
+            Some((
+                3,
+                TestState {
+                    blocks: vec![1, 2, 3],
+                    events: vec![30],
                     resumes: vec![],
                 },
             ))

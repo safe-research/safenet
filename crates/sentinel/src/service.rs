@@ -388,29 +388,24 @@ impl SentinelTransition {
     /// requests past their commit deadline, and finalizes requests past
     /// their reveal deadline.
     ///
-    /// `block` has already been mined by the time it is observed here, so the
-    /// earliest block an action emitted now can land in is `block + 1`. Every
-    /// deadline comparison below therefore acts one block ahead of the onchain
-    /// window: at `block == commit_deadline` a commit can no longer be
-    /// included, while a reveal is guaranteed to land in the reveal window
-    /// (`SentinelOracleRequests` requires `block.number > commitDeadline`).
-    ///
-    /// STOPGAP: safe-research/safenet#471 makes block transitions run against
-    /// the *pending* block instead, at which point `block` is the block our
-    /// actions land in and every comparison here reverts to the inclusive form
-    /// matching the contract. Revert this compensation together with that
-    /// change -- keeping both would emit reveals into the commit window.
+    /// `block` is the pending block, i.e. the block the actions emitted here
+    /// are expected to land in, so the comparisons below match the oracle's
+    /// inclusive windows one-to-one: a commit can still be included at
+    /// `block == commit_deadline`, and a reveal is only accepted from
+    /// `commit_deadline + 1` onwards (`SentinelOracleRequests` requires
+    /// `block.number > commitDeadline`). Acting a block earlier than these
+    /// comparisons would put a reveal in the commit window, where it reverts.
     fn handle_block_advance(&self, mut state: State, block: u64) -> (State, Commands<State, Self>) {
         let mut actions = Vec::new();
 
         state.0.retain(|id, entry| match entry {
             RequestState::WaitingForEngineCheck { deadline, request } => {
                 block
-                    < request
+                    <= request
                         .as_ref()
                         .map_or(*deadline, |request| request.commit_deadline)
             }
-            RequestState::WaitingForRequest { deadline, .. } => block < *deadline,
+            RequestState::WaitingForRequest { deadline, .. } => block <= *deadline,
             RequestState::CollectingCommitments {
                 approve,
                 reason,
@@ -420,18 +415,17 @@ impl SentinelTransition {
                 committed_count,
                 self_committed,
             } => {
-                if block < *commit_deadline {
+                if block <= *commit_deadline {
                     return true;
                 }
                 // Our own commit never landed onchain, so revealing would
-                // just revert; drop the request instead. Deferred by a block
-                // relative to the reveal below: `Message::NewBlock(block)` is
-                // applied *before* `block`'s own logs, so a `Committed` of
-                // ours mined in `commit_deadline` -- the common case with a
-                // short commit window -- has not been tallied yet, and
-                // dropping now would forfeit a bond we did post.
+                // just revert; drop the request instead. Safe to decide here:
+                // the pending block transition runs after `commit_deadline`'s
+                // events, so a commit of ours mined in that block -- the
+                // common case with a short commit window -- has already been
+                // tallied.
                 if !*self_committed {
-                    return block <= *commit_deadline;
+                    return false;
                 }
                 let approve = *approve;
                 let slash_amount = *slash_amount;
@@ -2153,14 +2147,12 @@ mod tests {
         assert!(!state.0.contains_key(&request_open));
     }
 
-    /// `Message::NewBlock(block)` is delivered for an already-mined block, so
-    /// the earliest block a reveal emitted here can land in is `block + 1`.
-    /// On the commit deadline block that is exactly the first block of the
-    /// reveal window (`SentinelOracleRequests` requires
-    /// `block.number > commitDeadline`), so waiting for `commit_deadline + 1`
-    /// throws away a full block of an already short reveal window.
+    /// Block transitions run against the pending block, so the deadline block
+    /// itself can still include a commit. Revealing there would land the
+    /// reveal in the commit window, where the oracle rejects it with
+    /// `RevealWindowNotOpen()`; the reveal belongs on `commit_deadline + 1`.
     #[test]
-    fn flow_reveals_on_the_commit_deadline_block() {
+    fn flow_does_not_reveal_before_the_commit_window_closes() {
         let svc = transition();
         let safe_tx_hash = B256::repeat_byte(0x11);
         let id = request_id(safe_tx_hash, 7, ORACLE);
@@ -2189,8 +2181,8 @@ mod tests {
             Message::Event(log(6, committed_event(id, self_address(), 500u64))),
         );
 
-        // A block before the deadline, a commit can still be included, so the
-        // commit phase is not over yet.
+        // Commits can still be included in the pending block, both before the
+        // deadline and on the deadline block itself.
         let (state, commands) = svc.apply_transition(state, Message::NewBlock(19));
         assert!(commands.is_empty());
         assert!(matches!(
@@ -2198,10 +2190,15 @@ mod tests {
             RequestState::CollectingCommitments { .. }
         ));
 
-        // On the deadline block itself no further commit can be included, and
-        // a reveal submitted now lands in block 21 at the earliest, so the
-        // reveal is emitted here rather than a block later.
         let (state, commands) = svc.apply_transition(state, Message::NewBlock(20));
+        assert!(commands.is_empty());
+        assert!(matches!(
+            state.0[&id],
+            RequestState::CollectingCommitments { .. }
+        ));
+
+        // The first pending block of the reveal window reveals.
+        let (state, commands) = svc.apply_transition(state, Message::NewBlock(21));
         let salt = self_signer().reveal_salt(id);
         assert_eq!(
             commands,
@@ -2233,12 +2230,12 @@ mod tests {
         );
     }
 
-    /// The block advance for `block` is applied *before* `block`'s own logs,
-    /// so a commit of ours mined in the deadline block has not been tallied
-    /// when the deadline transition runs. Giving up there would forfeit a bond
-    /// we did post, so -- unlike the reveal -- the drop waits one more block.
+    /// The pending block transition for `commit_deadline + 1` runs after the
+    /// deadline block's events, so a commit of ours mined in that very block
+    /// -- the common case with a short commit window -- is tallied in time to
+    /// be revealed rather than written off as a forfeited bond.
     #[test]
-    fn flow_defers_dropping_until_the_commit_deadline_block_is_indexed() {
+    fn flow_reveals_a_commit_that_landed_in_the_deadline_block() {
         let svc = transition();
         let late = B256::repeat_byte(0x12);
         let never = B256::repeat_byte(0x13);
@@ -2270,8 +2267,7 @@ mod tests {
             state = next;
         }
 
-        // Neither commit is known on the deadline block, but the block's logs
-        // have not been applied yet, so both requests survive it.
+        // Neither commit is known while the deadline block is still pending.
         let (state, commands) = svc.apply_transition(state, Message::NewBlock(20));
         assert!(commands.is_empty());
         assert!(matches!(
@@ -2289,16 +2285,15 @@ mod tests {
             }
         ));
 
-        // The deadline block's logs follow, carrying our commit for one of the
-        // two requests.
+        // It is mined into the deadline block for one of the two requests.
         let (state, commands) = svc.apply_transition(
             state,
             Message::Event(log(20, committed_event(late_id, self_address(), 500u64))),
         );
         assert!(commands.is_empty());
 
-        // Only now is it certain that the other commit never landed: the
-        // committed request reveals, the uncommitted one is dropped.
+        // The commit window has closed: the committed request reveals, the
+        // uncommitted one is dropped.
         let (state, commands) = svc.apply_transition(state, Message::NewBlock(21));
         let salt = self_signer().reveal_salt(late_id);
         assert_eq!(
