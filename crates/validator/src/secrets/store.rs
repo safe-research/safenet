@@ -63,10 +63,12 @@ pub struct SecretStore {
 impl SecretStore {
     /// Creates the store backed by `pool`, creating its tables if absent.
     pub async fn new(pool: SqlitePool) -> Result<Self, Error> {
-        // Both secret tables carry a nullable `delete_after` deadline, `NULL`
-        // meaning no pending deletion, and `group_secret_reconciliation` holds
-        // the last accepted reconciliation block as a single row, an empty
-        // table meaning none has been accepted yet.
+        // Both secret tables carry a nullable `delete_after` deadline: the
+        // block number from which the row may be deleted, `NULL` meaning no
+        // pending deletion. `group_secret_reconciliation` holds the block of
+        // the last accepted reconciliation as a single row, an empty table
+        // meaning none has been accepted yet. Every deadline here is a block
+        // number, never a timestamp.
         sqlx::query(
             "CREATE TABLE IF NOT EXISTS keygen_secrets (
                  group_id     TEXT NOT NULL,
@@ -315,56 +317,6 @@ mod tests {
         u64::try_from(count).unwrap()
     }
 
-    /// The deletion deadline scheduled for `group`'s DKG secrets, or `None`
-    /// when they are not scheduled for deletion.
-    async fn keygen_delete_after(store: &SecretStore, group: B256) -> Option<i64> {
-        sqlx::query_scalar::<_, Option<i64>>(
-            "SELECT delete_after FROM keygen_secrets WHERE group_id = ? AND address = ?",
-        )
-        .bind(key(group))
-        .bind(key(ME))
-        .fetch_one(&store.pool)
-        .await
-        .unwrap()
-    }
-
-    /// The deletion deadline scheduled for the nonce chunk at `root`, or `None`
-    /// when it is not scheduled for deletion.
-    async fn chunk_delete_after(store: &SecretStore, root: B256) -> Option<i64> {
-        sqlx::query_scalar::<_, Option<i64>>(
-            "SELECT delete_after FROM nonces_chunks WHERE root = ?",
-        )
-        .bind(key(root))
-        .fetch_one(&store.pool)
-        .await
-        .unwrap()
-    }
-
-    /// The last accepted reconciliation block, or `None` while the marker is
-    /// empty because no reconciliation has been accepted yet.
-    async fn reconciliation_block(store: &SecretStore) -> Option<i64> {
-        sqlx::query_scalar::<_, i64>("SELECT block FROM group_secret_reconciliation")
-            .fetch_optional(&store.pool)
-            .await
-            .unwrap()
-    }
-
-    /// Schedules every stored secret for deletion after `block` and records it
-    /// as the last accepted reconciliation, standing in for the scheduling API.
-    async fn schedule_everything(store: &SecretStore, block: i64) {
-        for statement in [
-            "UPDATE keygen_secrets SET delete_after = ?",
-            "UPDATE nonces_chunks SET delete_after = ?",
-            "INSERT INTO group_secret_reconciliation (id, block) VALUES (0, ?)",
-        ] {
-            sqlx::query(statement)
-                .bind(block)
-                .execute(&store.pool)
-                .await
-                .unwrap();
-        }
-    }
-
     #[tokio::test]
     async fn keygen_secrets_roundtrip_and_missing() {
         let store = store().await;
@@ -507,24 +459,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn fresh_secrets_are_unscheduled_and_unreconciled() {
-        let store = store().await;
-        store
-            .store_keygen_secrets(GROUP, ME, keygen_secrets())
-            .await
-            .unwrap();
-        let root = store
-            .register_nonces_chunk(GROUP, ME, nonce_chunk(2))
-            .await
-            .unwrap();
-
-        assert_eq!(keygen_delete_after(&store, GROUP).await, None);
-        assert_eq!(chunk_delete_after(&store, root).await, None);
-        assert_eq!(reconciliation_block(&store).await, None);
-    }
-
-    #[tokio::test]
-    async fn reopening_preserves_secrets_schedules_and_the_reconciliation_block() {
+    async fn reopening_preserves_stored_secrets() {
         let store = store().await;
         store
             .store_keygen_secrets(GROUP, ME, keygen_secrets())
@@ -535,17 +470,14 @@ mod tests {
             .await
             .unwrap();
         assert!(store.take_nonce(root, 0).await.unwrap().is_some());
-        schedule_everything(&store, 42).await;
 
         // Creating the store again re-runs the schema setup exactly as a
-        // restart does, and must leave everything it finds in place.
+        // restart does, so the added table and columns must leave the secrets
+        // already in the database untouched.
         let store = SecretStore::new(store.pool.clone()).await.unwrap();
 
         assert!(get_keygen_secrets(&store, GROUP).await.is_some());
         assert_eq!(count_root_nonces(&store, root).await, 2);
-        assert_eq!(keygen_delete_after(&store, GROUP).await, Some(42));
-        assert_eq!(chunk_delete_after(&store, root).await, Some(42));
-        assert_eq!(reconciliation_block(&store).await, Some(42));
         // A consumed nonce is never restored.
         assert!(store.nonces_reveal(root, 0).await.unwrap().is_none());
     }
