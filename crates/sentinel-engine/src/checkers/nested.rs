@@ -6,9 +6,10 @@
 //! [`crate::checkers::BaseChecker`]). Calling another Safe's
 //! `execTransaction` is just such a call: whatever the nested transaction
 //! does is that Safe's own guard's concern (if it has one), not this
-//! transaction's, so it's secure independent of the nested transaction's own
-//! content. Runs after [`crate::checkers::BlocklistChecker`] so a nested call
-//! to a known malicious `to` is still denied rather than short-circuited.
+//! transaction's, so the outer call's `to`, `data` and `operation` are
+//! secure independent of the nested transaction's own content. It does not
+//! inspect `value`, so it claims nothing about a nested call that also moves
+//! native currency.
 
 use super::{Assessment, Checker};
 use crate::{
@@ -17,8 +18,9 @@ use crate::{
 };
 use alloy::sol_types::SolCall as _;
 
-/// Considers a call to another contract's `execTransaction` secure,
-/// regardless of the nested transaction it carries.
+/// Considers the `to`, `data` and `operation` of a call to another
+/// contract's `execTransaction` secure, regardless of the nested transaction
+/// it carries.
 pub struct NestedSafeChecker;
 
 #[async_trait::async_trait]
@@ -30,7 +32,7 @@ impl Checker for NestedSafeChecker {
     async fn check(&self, transaction: &SafeTransaction, _context: &CheckContext) -> Assessment {
         if is_nested_exec_transaction(transaction) {
             Assessment::Secure {
-                coverage: Coverage::ALL,
+                coverage: Coverage::TO | Coverage::DATA | Coverage::OPERATION,
             }
         } else {
             Assessment::Abstain
