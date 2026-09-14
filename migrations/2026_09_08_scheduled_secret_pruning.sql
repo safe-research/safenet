@@ -13,7 +13,7 @@
 --
 --     sqlite3 <validator-database> \
 --         "SELECT COUNT(*) FROM pragma_table_info('keygen_secrets')
---          WHERE name = 'delete_after';"
+--          WHERE name = 'delete_at_block';"
 --
 -- 1 means it has, 0 means it has not. SQLite has no
 -- `ALTER TABLE ... ADD COLUMN IF NOT EXISTS`, so applying this twice cannot be
@@ -25,7 +25,7 @@
 --
 --     sqlite3 <validator-database> < migrations/2026_09_08_scheduled_secret_pruning.sql
 --
--- Existing secret rows are preserved, their deletion deadlines start as NULL
+-- Existing secret rows are preserved, their deletion blocks start as NULL
 -- (nothing scheduled for deletion), and the reconciliation marker starts empty
 -- (no reconciliation accepted yet), so the updated validator schedules and
 -- collects from its next accepted reconciliation onwards.

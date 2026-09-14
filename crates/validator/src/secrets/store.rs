@@ -284,7 +284,7 @@ impl SecretStore {
     ///
     /// Nothing is deleted here: scheduled secrets stay readable and usable
     /// until they are collected. A group that is already scheduled keeps its
-    /// original deadline for as long as it stays absent, so reconciling
+    /// original deletion block for as long as it stays absent, so reconciling
     /// repeatedly never pushes its deletion further out.
     ///
     /// Idempotent.
@@ -356,7 +356,7 @@ impl SecretStore {
 }
 
 /// Schedules every row of `table` whose group is not in `retained` for deletion
-/// after `block`, keeping the deadline a row already has, and unschedules the
+/// after `block`, keeping the deletion block a row already has, and unschedules the
 /// rows belonging to a retained group.
 async fn schedule_absent_groups(
     connection: &mut SqliteConnection,
@@ -368,14 +368,14 @@ async fn schedule_absent_groups(
     if retained.is_empty() {
         // Nothing is retained, so every row is absent:
         //
-        //     UPDATE <table> SET delete_after = COALESCE(delete_after, <block>);
+        //     UPDATE <table> SET delete_at_block = COALESCE(delete_at_block, <block>);
         query.push("COALESCE(delete_at_block, ");
         query.push_bind(block);
         query.push(")");
     } else {
         //     UPDATE <table>
-        //        SET delete_after = CASE WHEN group_id IN (<retained>, ...) THEN NULL
-        //                                ELSE COALESCE(delete_after, <block>) END;
+        //        SET delete_at_block = CASE WHEN group_id IN (<retained>, ...) THEN NULL
+        //                                   ELSE COALESCE(delete_at_block, <block>) END;
         query.push("CASE WHEN group_id IN (");
         let mut groups = query.separated(", ");
         for group in retained {
@@ -441,11 +441,11 @@ mod tests {
         u64::try_from(count).unwrap()
     }
 
-    /// The deletion deadline scheduled for `group`'s DKG secrets, or `None`
-    /// when they are not scheduled for deletion.
-    async fn keygen_delete_after(store: &SecretStore, group: B256) -> Option<i64> {
+    /// The block at which `group`'s DKG secrets are due for deletion, or `None`
+    /// when none is scheduled.
+    async fn keygen_delete_at_block(store: &SecretStore, group: B256) -> Option<i64> {
         sqlx::query_scalar::<_, Option<i64>>(
-            "SELECT delete_after FROM keygen_secrets WHERE group_id = ? AND address = ?",
+            "SELECT delete_at_block FROM keygen_secrets WHERE group_id = ? AND address = ?",
         )
         .bind(key(group))
         .bind(key(ME))
@@ -454,11 +454,11 @@ mod tests {
         .unwrap()
     }
 
-    /// The deletion deadline scheduled for the nonce chunk at `root`, or `None`
-    /// when it is not scheduled for deletion.
-    async fn chunk_delete_after(store: &SecretStore, root: B256) -> Option<i64> {
+    /// The block at which the nonce chunk at `root` is due for deletion, or
+    /// `None` when none is scheduled.
+    async fn chunk_delete_at_block(store: &SecretStore, root: B256) -> Option<i64> {
         sqlx::query_scalar::<_, Option<i64>>(
-            "SELECT delete_after FROM nonces_chunks WHERE root = ?",
+            "SELECT delete_at_block FROM nonces_chunks WHERE root = ?",
         )
         .bind(key(root))
         .fetch_one(&store.pool)
@@ -578,7 +578,7 @@ mod tests {
         assert_eq!(keygen_delete_at_block(&store, GROUP).await, None);
         assert_eq!(keygen_delete_at_block(&store, other).await, Some(0));
 
-        // A group that stays absent keeps the deadline it was first given,
+        // A group that stays absent keeps the deletion block it was first given,
         // rather than having it pushed out on every reconciliation.
         assert!(
             store
@@ -762,14 +762,14 @@ mod tests {
             .await
             .unwrap();
 
-        // A deadline past the safe block is not due yet.
+        // A deletion block past the safe block is not due yet.
         assert_eq!(
             store.prune_scheduled_secrets(4).await.unwrap(),
             Pruned::default()
         );
         assert!(get_keygen_secrets(&store, GROUP).await.is_some());
 
-        // The deadline itself is due, and unscheduled secrets are left alone.
+        // The deletion block itself is due, and unscheduled secrets are left alone.
         assert_eq!(
             store.prune_scheduled_secrets(5).await.unwrap(),
             Pruned {
