@@ -18,8 +18,28 @@ pub use self::{
     staking::StakingChecker,
 };
 
-use crate::engine::{CheckContext, SafeTransaction, Verdict};
+use crate::engine::{CheckContext, Coverage, RuleId, SafeTransaction};
 use std::sync::Arc;
+
+/// What a single check concluded. Distinct from [`crate::engine::Verdict`],
+/// which is the engine's own answer and the wire type — a check contributes
+/// evidence, the engine reaches the verdict.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum Assessment {
+    /// The check found a violation. Denials are final.
+    Insecure {
+        /// The rule violated by the transaction.
+        rule: RuleId,
+    },
+    /// The check found nothing wrong in `coverage`, and vouches for exactly
+    /// those aspects — no more.
+    Secure {
+        /// The aspects of the transaction this check vouches for.
+        coverage: Coverage,
+    },
+    /// No opinion.
+    Abstain,
+}
 
 /// A transaction check in the sentinel engine's checker chain.
 #[async_trait::async_trait]
@@ -30,7 +50,7 @@ pub trait Checker: Send + Sync {
     /// Assesses `transaction` or abstains so the next checker can run.
     /// `context` carries caller-supplied hints outside the transaction
     /// itself (see [`CheckContext`]); most checks ignore it.
-    async fn check(&self, transaction: &SafeTransaction, context: &CheckContext) -> Verdict;
+    async fn check(&self, transaction: &SafeTransaction, context: &CheckContext) -> Assessment;
 }
 
 /// Lets an [`Arc`]-shared checker (e.g. one both run directly and wrapped by
@@ -42,7 +62,7 @@ impl<T: Checker> Checker for Arc<T> {
         (**self).name()
     }
 
-    async fn check(&self, transaction: &SafeTransaction, context: &CheckContext) -> Verdict {
+    async fn check(&self, transaction: &SafeTransaction, context: &CheckContext) -> Assessment {
         (**self).check(transaction, context).await
     }
 }

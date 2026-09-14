@@ -44,7 +44,7 @@
 //! is left to [`Verdict::Abstain`] rather than guessed at either way,
 //! consistent with this codebase's other protocol-specific worked examples.
 
-use super::Checker;
+use super::{Assessment, Checker};
 use crate::{
     contracts::{
         bindings::{
@@ -53,7 +53,7 @@ use crate::{
         },
         multi_send::sub_transactions,
     },
-    engine::{CheckContext, Operation, RuleId, SafeTransaction, Verdict},
+    engine::{CheckContext, Coverage, Operation, RuleId, SafeTransaction},
 };
 use alloy::{
     primitives::{Address, U256, address},
@@ -85,9 +85,9 @@ impl Checker for StakingChecker {
         "staking"
     }
 
-    async fn check(&self, transaction: &SafeTransaction, _context: &CheckContext) -> Verdict {
+    async fn check(&self, transaction: &SafeTransaction, _context: &CheckContext) -> Assessment {
         if transaction.chain_id != U256::from(SUPPORTED_CHAIN_ID) {
-            return Verdict::Abstain;
+            return Assessment::Abstain;
         }
 
         let calls = sub_transactions(transaction);
@@ -97,7 +97,7 @@ impl Checker for StakingChecker {
         for call in &calls {
             match claim_account(call) {
                 Some(account) if account != transaction.safe => {
-                    return Verdict::Insecure {
+                    return Assessment::Insecure {
                         rule: RuleId::R4_3ValueTarget,
                     };
                 }
@@ -107,11 +107,13 @@ impl Checker for StakingChecker {
         }
 
         match remaining.as_slice() {
-            [] if claimed => Verdict::Secure,
-            [] => Verdict::Abstain,
+            [] if claimed => Assessment::Secure {
+                coverage: Coverage::ALL,
+            },
+            [] => Assessment::Abstain,
             [call] => check_lone_call(call),
             [first, second] => check_pair(first, second),
-            _ => Verdict::Abstain,
+            _ => Assessment::Abstain,
         }
     }
 }
@@ -119,13 +121,15 @@ impl Checker for StakingChecker {
 /// A single non-`claim` call left over after set-aside `claim`s: secure if
 /// it's a `stake` (spending some earlier, separately-vetted allowance).
 /// A dangling, unused `approve` on [`STAKING`] is left to
-/// [`Verdict::Abstain`] — see the module docs for why this check doesn't
+/// [`Assessment::Abstain`] — see the module docs for why this check doesn't
 /// deny it.
-fn check_lone_call(call: &SafeTransaction) -> Verdict {
+fn check_lone_call(call: &SafeTransaction) -> Assessment {
     if stake_amount(call).is_some() {
-        return Verdict::Secure;
+        return Assessment::Secure {
+            coverage: Coverage::ALL,
+        };
     }
-    Verdict::Abstain
+    Assessment::Abstain
 }
 
 /// Checks an exactly-two-call remainder, in the order the batch itself runs
@@ -134,19 +138,21 @@ fn check_lone_call(call: &SafeTransaction) -> Verdict {
 /// earlier in the same transaction, but `[stake, approve]` runs the `stake`
 /// against whatever allowance already existed *before* this transaction,
 /// leaving the `approve` a dangling, un-consumed authorization — left to
-/// [`Verdict::Abstain`] for the same reason as [`check_lone_call`]'s
+/// [`Assessment::Abstain`] for the same reason as [`check_lone_call`]'s
 /// standalone `approve` case, regardless of the amount approved.
-fn check_pair(first: &SafeTransaction, second: &SafeTransaction) -> Verdict {
+fn check_pair(first: &SafeTransaction, second: &SafeTransaction) -> Assessment {
     if let (Some(approved), Some(staked)) = (staking_approval_amount(first), stake_amount(second)) {
         return if approved > staked {
-            Verdict::Insecure {
+            Assessment::Insecure {
                 rule: RuleId::R4_5ExcessiveApproval,
             }
         } else {
-            Verdict::Secure
+            Assessment::Secure {
+                coverage: Coverage::ALL,
+            }
         };
     }
-    Verdict::Abstain
+    Assessment::Abstain
 }
 
 /// The claimed-for account, if `tx` is a `claim` call against
