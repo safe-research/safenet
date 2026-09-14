@@ -2,7 +2,7 @@
 --
 -- Applies ONLY to a validator database created before scheduled secret pruning
 -- was introduced, i.e. one whose `keygen_secrets` and `nonces_chunks` tables
--- have no `delete_after` column and which has no `group_secret_reconciliation`
+-- have no `delete_at_block` column and which has no `group_secret_reconciliation`
 -- table. It exists for the long-running dev network, whose database predates
 -- the change and holds secrets worth keeping. A recreated database already gets
 -- the new schema from `SecretStore::new`
@@ -34,8 +34,8 @@
 
 BEGIN;
 
-ALTER TABLE keygen_secrets ADD COLUMN delete_after INTEGER;
-ALTER TABLE nonces_chunks ADD COLUMN delete_after INTEGER;
+ALTER TABLE keygen_secrets ADD COLUMN delete_at_block INTEGER;
+ALTER TABLE nonces_chunks ADD COLUMN delete_at_block INTEGER;
 
 CREATE TABLE IF NOT EXISTS group_secret_reconciliation (
     id    INTEGER PRIMARY KEY CHECK (id = 0),

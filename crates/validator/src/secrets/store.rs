@@ -89,26 +89,25 @@ pub struct SecretStore {
 impl SecretStore {
     /// Creates the store backed by `pool`, creating its tables if absent.
     pub async fn new(pool: SqlitePool) -> Result<Self, Error> {
-        // Both secret tables carry a nullable `delete_after` deadline: the
-        // block number from which the row may be deleted, `NULL` meaning no
-        // pending deletion. `group_secret_reconciliation` holds the block of
-        // the last accepted reconciliation as a single row, an empty table
-        // meaning none has been accepted yet. Every deadline here is a block
-        // number, never a timestamp.
+        // Both secret tables carry a nullable `delete_at_block`: the earliest
+        // block at which the row may be deleted, `NULL` meaning no pending
+        // deletion. `group_secret_reconciliation` holds the block of the last
+        // accepted reconciliation as a single row, an empty table meaning none
+        // has been accepted yet.
         sqlx::query(
             "CREATE TABLE IF NOT EXISTS keygen_secrets (
-                 group_id     TEXT NOT NULL,
-                 address      TEXT NOT NULL,
-                 secrets      TEXT NOT NULL,
-                 delete_after INTEGER,
+                 group_id        TEXT NOT NULL,
+                 address         TEXT NOT NULL,
+                 secrets         TEXT NOT NULL,
+                 delete_at_block INTEGER,
                  PRIMARY KEY (group_id, address)
              );
 
              CREATE TABLE IF NOT EXISTS nonces_chunks (
-                 root         TEXT NOT NULL,
-                 group_id     TEXT NOT NULL,
-                 address      TEXT NOT NULL,
-                 delete_after INTEGER,
+                 root            TEXT NOT NULL,
+                 group_id        TEXT NOT NULL,
+                 address         TEXT NOT NULL,
+                 delete_at_block INTEGER,
                  PRIMARY KEY (root)
              );
 
@@ -165,7 +164,7 @@ impl SecretStore {
         // In case a keygen secret is already in the database, clear its
         // scheduled deletion (since it is requested for use).
         let existing = sqlx::query_scalar::<_, String>(
-            "UPDATE keygen_secrets SET delete_after = NULL
+            "UPDATE keygen_secrets SET delete_at_block = NULL
              WHERE group_id = ? AND address = ?
              RETURNING secrets",
         )
@@ -325,25 +324,25 @@ impl SecretStore {
         Ok(true)
     }
 
-    /// Deletes the secrets scheduled for deletion after a block at or before
-    /// `safe`, and reports how many rows of each kind were removed.
+    /// Deletes the secrets whose deletion block `safe` has reached, and reports
+    /// how many rows of each kind were removed.
     ///
     /// Deleting a nonce chunk cascades to the nonces under it, which the
-    /// reported counts do not include. Secrets with no deadline, and those
-    /// scheduled past `safe`, are left alone, as is the last accepted
-    /// reconciliation block.
+    /// reported counts do not include. Secrets with no deletion block, and
+    /// those whose block is still above `safe`, are left alone, as is the last
+    /// accepted reconciliation block.
     ///
     /// Idempotent.
     pub async fn prune_scheduled_secrets(&self, safe: u64) -> Result<Pruned, Error> {
         let safe = i64::try_from(safe)?;
 
         let mut tx = self.pool.begin().await?;
-        let keygen = sqlx::query("DELETE FROM keygen_secrets WHERE delete_after <= ?")
+        let keygen = sqlx::query("DELETE FROM keygen_secrets WHERE delete_at_block <= ?")
             .bind(safe)
             .execute(&mut *tx)
             .await?
             .rows_affected();
-        let nonces = sqlx::query("DELETE FROM nonces_chunks WHERE delete_after <= ?")
+        let nonces = sqlx::query("DELETE FROM nonces_chunks WHERE delete_at_block <= ?")
             .bind(safe)
             .execute(&mut *tx)
             .await?
@@ -365,12 +364,12 @@ async fn schedule_absent_groups(
     block: i64,
     retained: &BTreeSet<B256>,
 ) -> Result<(), Error> {
-    let mut query = QueryBuilder::<Sqlite>::new(format!("UPDATE {table} SET delete_after = "));
+    let mut query = QueryBuilder::<Sqlite>::new(format!("UPDATE {table} SET delete_at_block = "));
     if retained.is_empty() {
         // Nothing is retained, so every row is absent:
         //
         //     UPDATE <table> SET delete_after = COALESCE(delete_after, <block>);
-        query.push("COALESCE(delete_after, ");
+        query.push("COALESCE(delete_at_block, ");
         query.push_bind(block);
         query.push(")");
     } else {
@@ -382,7 +381,7 @@ async fn schedule_absent_groups(
         for group in retained {
             groups.push_bind(key(*group));
         }
-        groups.push_unseparated(") THEN NULL ELSE COALESCE(delete_after, ");
+        groups.push_unseparated(") THEN NULL ELSE COALESCE(delete_at_block, ");
         groups.push_bind_unseparated(block);
         groups.push_unseparated(") END");
     }
@@ -545,7 +544,7 @@ mod tests {
                 .await
                 .unwrap()
         );
-        assert_eq!(keygen_delete_after(&store, GROUP).await, Some(1));
+        assert_eq!(keygen_delete_at_block(&store, GROUP).await, Some(1));
 
         let stored = store
             .store_keygen_secrets(GROUP, ME, keygen_secrets())
@@ -555,7 +554,7 @@ mod tests {
             serde_json::to_string(&stored).unwrap(),
             serde_json::to_string(&first).unwrap(),
         );
-        assert_eq!(keygen_delete_after(&store, GROUP).await, None);
+        assert_eq!(keygen_delete_at_block(&store, GROUP).await, None);
     }
 
     #[tokio::test]
@@ -576,8 +575,8 @@ mod tests {
                 .await
                 .unwrap()
         );
-        assert_eq!(keygen_delete_after(&store, GROUP).await, None);
-        assert_eq!(keygen_delete_after(&store, other).await, Some(0));
+        assert_eq!(keygen_delete_at_block(&store, GROUP).await, None);
+        assert_eq!(keygen_delete_at_block(&store, other).await, Some(0));
 
         // A group that stays absent keeps the deadline it was first given,
         // rather than having it pushed out on every reconciliation.
@@ -587,7 +586,7 @@ mod tests {
                 .await
                 .unwrap()
         );
-        assert_eq!(keygen_delete_after(&store, other).await, Some(0));
+        assert_eq!(keygen_delete_at_block(&store, other).await, Some(0));
 
         // Retaining it again cancels the deletion, and dropping it later
         // schedules it afresh.
@@ -597,15 +596,15 @@ mod tests {
                 .await
                 .unwrap()
         );
-        assert_eq!(keygen_delete_after(&store, other).await, None);
+        assert_eq!(keygen_delete_at_block(&store, other).await, None);
         assert!(
             store
                 .schedule_group_secrets_deletion(9, &retained([GROUP]))
                 .await
                 .unwrap()
         );
-        assert_eq!(keygen_delete_after(&store, GROUP).await, None);
-        assert_eq!(keygen_delete_after(&store, other).await, Some(9));
+        assert_eq!(keygen_delete_at_block(&store, GROUP).await, None);
+        assert_eq!(keygen_delete_at_block(&store, other).await, Some(9));
     }
 
     #[tokio::test]
@@ -635,8 +634,8 @@ mod tests {
                 .unwrap()
         );
 
-        assert_eq!(keygen_delete_after(&store, GROUP).await, Some(5));
-        assert_eq!(chunk_delete_after(&store, root).await, None);
+        assert_eq!(keygen_delete_at_block(&store, GROUP).await, Some(5));
+        assert_eq!(chunk_delete_at_block(&store, root).await, None);
     }
 
     #[tokio::test]
@@ -665,8 +664,8 @@ mod tests {
                 .await
                 .unwrap()
         );
-        assert_eq!(keygen_delete_after(&store, GROUP).await, None);
-        assert_eq!(chunk_delete_after(&store, root).await, None);
+        assert_eq!(keygen_delete_at_block(&store, GROUP).await, None);
+        assert_eq!(chunk_delete_at_block(&store, root).await, None);
         assert_eq!(reconciliation_block(&store).await, Some(10));
 
         // One at the same height still applies, so a second reconciliation for
@@ -678,8 +677,8 @@ mod tests {
                 .await
                 .unwrap()
         );
-        assert_eq!(keygen_delete_after(&store, GROUP).await, Some(10));
-        assert_eq!(chunk_delete_after(&store, root).await, Some(10));
+        assert_eq!(keygen_delete_at_block(&store, GROUP).await, Some(10));
+        assert_eq!(chunk_delete_at_block(&store, root).await, Some(10));
         assert_eq!(reconciliation_block(&store).await, Some(10));
     }
 
@@ -718,8 +717,8 @@ mod tests {
         );
 
         assert_eq!(reconciliation_block(&store).await, Some(3));
-        assert_eq!(keygen_delete_after(&store, GROUP).await, None);
-        assert_eq!(chunk_delete_after(&store, root).await, None);
+        assert_eq!(keygen_delete_at_block(&store, GROUP).await, None);
+        assert_eq!(chunk_delete_at_block(&store, root).await, None);
 
         // Having changed nothing, the same block can be reconciled again.
         sqlx::query("DROP TRIGGER fail_nonces_chunks")
@@ -733,8 +732,8 @@ mod tests {
                 .unwrap()
         );
         assert_eq!(reconciliation_block(&store).await, Some(4));
-        assert_eq!(keygen_delete_after(&store, GROUP).await, Some(4));
-        assert_eq!(chunk_delete_after(&store, root).await, Some(4));
+        assert_eq!(keygen_delete_at_block(&store, GROUP).await, Some(4));
+        assert_eq!(chunk_delete_at_block(&store, root).await, Some(4));
     }
 
     #[tokio::test]
@@ -854,7 +853,7 @@ mod tests {
         );
 
         // Scheduling is not deletion: the nonces are usable until collected.
-        assert_eq!(chunk_delete_after(&store, root).await, Some(1));
+        assert_eq!(chunk_delete_at_block(&store, root).await, Some(1));
         assert!(store.nonces_reveal(root, 0).await.unwrap().is_some());
         assert!(store.take_nonce(root, 0).await.unwrap().is_some());
     }
