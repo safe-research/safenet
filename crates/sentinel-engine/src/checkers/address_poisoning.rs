@@ -48,7 +48,7 @@
 use super::{Assessment, Checker};
 use crate::{
     contracts::bindings::erc20::{Approval, Transfer, approveCall, transferCall, transferFromCall},
-    engine::{CheckContext, Coverage, Operation, RuleId, SafeTransaction},
+    engine::{Aspect, CheckContext, Coverage, Operation, RuleId, SafeTransaction},
 };
 use alloy::{
     primitives::{Address, U256},
@@ -305,6 +305,15 @@ impl Checker for AddressPoisoningChecker {
     /// recipient-quality signals (the candidate's own fund/transaction
     /// history, whether it's an EOA or a contract, and if so its deployment
     /// age) are needed before that case can be safely denied too.
+    ///
+    /// On a genuine prior interaction, claims `To | Data`: `Data` for the
+    /// recipient/spender argument this check decoded, and `To` on the softer
+    /// evidence that `tx.to`'s own `Transfer`/`Approval` logs show genuine
+    /// prior activity with the Safe — not a verified positive statement
+    /// about the destination (no `ERC165`/bytecode probe, no token
+    /// registry; the inference that `tx.to` is even an ERC-20 rests on
+    /// `decode_target` alone). Tracked as F2 (positive destination
+    /// assurance) in the verdict-composition epic.
     async fn check(&self, transaction: &SafeTransaction, context: &CheckContext) -> Assessment {
         let Some((candidate, kind)) = decode_target(transaction) else {
             return Assessment::Abstain;
@@ -330,7 +339,7 @@ impl Checker for AddressPoisoningChecker {
                     "address-poisoning: genuine prior interaction found"
                 );
                 Assessment::Secure {
-                    coverage: Coverage::ALL,
+                    coverage: Coverage::of(&[Aspect::To, Aspect::Data]),
                 }
             }
             Ok(RecipientLookup::NoExactMatch {
