@@ -373,6 +373,49 @@ mod tests {
         u64::try_from(count).unwrap()
     }
 
+    /// The deletion deadline scheduled for `group`'s DKG secrets, or `None`
+    /// when they are not scheduled for deletion.
+    async fn keygen_delete_after(store: &SecretStore, group: B256) -> Option<i64> {
+        sqlx::query_scalar::<_, Option<i64>>(
+            "SELECT delete_after FROM keygen_secrets WHERE group_id = ? AND address = ?",
+        )
+        .bind(key(group))
+        .bind(key(ME))
+        .fetch_one(&store.pool)
+        .await
+        .unwrap()
+    }
+
+    /// The deletion deadline scheduled for the nonce chunk at `root`, or `None`
+    /// when it is not scheduled for deletion.
+    async fn chunk_delete_after(store: &SecretStore, root: B256) -> Option<i64> {
+        sqlx::query_scalar::<_, Option<i64>>(
+            "SELECT delete_after FROM nonces_chunks WHERE root = ?",
+        )
+        .bind(key(root))
+        .fetch_one(&store.pool)
+        .await
+        .unwrap()
+    }
+
+    /// The last accepted reconciliation block, or `None` while the marker is
+    /// empty because no reconciliation has been accepted yet.
+    async fn reconciliation_block(store: &SecretStore) -> Option<i64> {
+        sqlx::query_scalar::<_, i64>("SELECT block FROM group_secret_reconciliation")
+            .fetch_optional(&store.pool)
+            .await
+            .unwrap()
+    }
+
+    /// Retains `groups` for both kinds of secret.
+    fn retained(groups: impl IntoIterator<Item = B256>) -> RetainedGroups {
+        let groups = groups.into_iter().collect::<BTreeSet<_>>();
+        RetainedGroups {
+            keygen: groups.clone(),
+            nonces: groups,
+        }
+    }
+
     #[tokio::test]
     async fn keygen_secrets_roundtrip_and_missing() {
         let store = store().await;
