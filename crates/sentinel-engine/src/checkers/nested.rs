@@ -10,10 +10,10 @@
 //! content. Runs after [`crate::checkers::BlocklistChecker`] so a nested call
 //! to a known malicious `to` is still denied rather than short-circuited.
 
-use super::Checker;
+use super::{Assessment, Checker};
 use crate::{
     contracts::bindings::safe,
-    engine::{CheckContext, Operation, SafeTransaction, Verdict},
+    engine::{CheckContext, Coverage, Operation, SafeTransaction},
 };
 use alloy::sol_types::SolCall as _;
 
@@ -27,11 +27,13 @@ impl Checker for NestedSafeChecker {
         "nested_safe"
     }
 
-    async fn check(&self, transaction: &SafeTransaction, _context: &CheckContext) -> Verdict {
+    async fn check(&self, transaction: &SafeTransaction, _context: &CheckContext) -> Assessment {
         if is_nested_exec_transaction(transaction) {
-            Verdict::Secure
+            Assessment::Secure {
+                coverage: Coverage::ALL,
+            }
         } else {
-            Verdict::Abstain
+            Assessment::Abstain
         }
     }
 }
