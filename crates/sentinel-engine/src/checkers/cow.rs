@@ -282,6 +282,16 @@ impl CowChecker {
         let Some(base_url) = order_api_base_url(chain_id) else {
             return Assessment::Abstain;
         };
+        // TODO(follow-up): a *standalone* presignature call — no co-batched
+        // `approve`, spending an allowance some earlier, separately-vetted
+        // transaction already granted — abstains here for want of a second
+        // element, even though `BaseChecker` already covers `To`/`Operation`
+        // for it (it's an ordinary external call, not a MultiSend). Only the
+        // order's receiver would need checking; the amount comparison has no
+        // approval to compare against and would simply drop out. This is F1
+        // (CoW standalone order commitments) in the verdict-composition
+        // epic, deliberately not folded into that epic because it's a new
+        // affirming path rather than a change to how verdicts combine.
         let [first, second] = calls else {
             return Assessment::Abstain;
         };
@@ -311,7 +321,7 @@ impl CowChecker {
             },
             Ok(order) if token == order.sell_token && approved_amount == order.sell_amount => {
                 Assessment::Secure {
-                    coverage: Coverage::ALL,
+                    coverage: Coverage::DATA,
                 }
             }
             Ok(_) => Assessment::Insecure {
@@ -351,6 +361,10 @@ impl CowChecker {
     /// order may not fully fill), not a security one, so it doesn't affect
     /// this verdict either way.
     fn check_twap_batch(&self, safe: Address, calls: &[SafeTransaction]) -> Assessment {
+        // TODO(follow-up): same gap as `check_presignature_batch` — a
+        // standalone TWAP `createWithContext` with no co-batched `approve`
+        // abstains here rather than affirming on the receiver check alone.
+        // See the TODO there for why (F1, verdict-composition epic).
         let [first, second] = calls else {
             return Assessment::Abstain;
         };
@@ -382,7 +396,7 @@ impl CowChecker {
             };
         }
         Assessment::Secure {
-            coverage: Coverage::ALL,
+            coverage: Coverage::DATA,
         }
     }
 
@@ -422,6 +436,11 @@ impl Checker for CowChecker {
     /// [`CowChecker::check_presignature_batch`] and
     /// [`CowChecker::check_twap_batch`] against `transaction`'s sub-calls,
     /// returning the first non-[`Assessment::Abstain`] result.
+    ///
+    /// An affirming result claims only `Data`: it vouches for the recognized
+    /// batch payload (the paired `approve` plus presignature/TWAP-creation
+    /// call), not the MultiSend container's own `to`/`operation` — that
+    /// coverage comes from `BaseChecker`.
     async fn check(&self, transaction: &SafeTransaction, _context: &CheckContext) -> Assessment {
         if !SUPPORTED_CHAIN_IDS
             .iter()
@@ -890,7 +909,7 @@ mod tests {
         assert_eq!(
             check(&tx(MULTI_SEND, data.into(), Operation::DelegateCall)).await,
             Assessment::Secure {
-                coverage: Coverage::ALL
+                coverage: Coverage::DATA
             }
         );
     }
@@ -927,7 +946,7 @@ mod tests {
         assert_eq!(
             check(&tx(MULTI_SEND, data.into(), Operation::DelegateCall)).await,
             Assessment::Secure {
-                coverage: Coverage::ALL
+                coverage: Coverage::DATA
             }
         );
     }
@@ -987,7 +1006,7 @@ mod tests {
         assert_eq!(
             check(&tx(MULTI_SEND, data.into(), Operation::DelegateCall)).await,
             Assessment::Secure {
-                coverage: Coverage::ALL
+                coverage: Coverage::DATA
             }
         );
     }
@@ -1007,7 +1026,7 @@ mod tests {
         assert_eq!(
             check(&tx(MULTI_SEND, data.into(), Operation::DelegateCall)).await,
             Assessment::Secure {
-                coverage: Coverage::ALL
+                coverage: Coverage::DATA
             }
         );
     }
@@ -1277,7 +1296,7 @@ mod tests {
                 .check_presignature_batch(SAFE, U256::from(1u64), &calls)
                 .await,
             Assessment::Secure {
-                coverage: Coverage::ALL
+                coverage: Coverage::DATA
             }
         );
     }
@@ -1335,7 +1354,7 @@ mod tests {
                 .check_presignature_batch(SAFE, U256::from(1u64), &calls)
                 .await,
             Assessment::Secure {
-                coverage: Coverage::ALL
+                coverage: Coverage::DATA
             }
         );
     }

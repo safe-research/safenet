@@ -85,6 +85,9 @@ impl Checker for StakingChecker {
         "staking"
     }
 
+    /// An affirming result claims only `Data`: it vouches for the recognized
+    /// claim/stake/approve payload, not the outer call's `to`/`operation` —
+    /// that coverage comes from `BaseChecker`.
     async fn check(&self, transaction: &SafeTransaction, _context: &CheckContext) -> Assessment {
         if transaction.chain_id != U256::from(SUPPORTED_CHAIN_ID) {
             return Assessment::Abstain;
@@ -108,7 +111,7 @@ impl Checker for StakingChecker {
 
         match remaining.as_slice() {
             [] if claimed => Assessment::Secure {
-                coverage: Coverage::ALL,
+                coverage: Coverage::DATA,
             },
             [] => Assessment::Abstain,
             [call] => check_lone_call(call),
@@ -126,7 +129,7 @@ impl Checker for StakingChecker {
 fn check_lone_call(call: &SafeTransaction) -> Assessment {
     if stake_amount(call).is_some() {
         return Assessment::Secure {
-            coverage: Coverage::ALL,
+            coverage: Coverage::DATA,
         };
     }
     Assessment::Abstain
@@ -148,7 +151,7 @@ fn check_pair(first: &SafeTransaction, second: &SafeTransaction) -> Assessment {
             }
         } else {
             Assessment::Secure {
-                coverage: Coverage::ALL,
+                coverage: Coverage::DATA,
             }
         };
     }
