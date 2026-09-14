@@ -252,6 +252,8 @@ mod tests {
 
                     [transactions]
                     max_in_flight_transactions = 4
+                    executor = "0x8888888888888888888888888888888888888888"
+                    max_batch_gas = 3000000
                 "#,
         )
         .unwrap();
@@ -277,6 +279,11 @@ mod tests {
         );
         assert_eq!(config.driver.index.blocks.max_reorg_depth, 12);
         assert_eq!(config.driver.transactions.max_in_flight_transactions, 4);
+        assert_eq!(
+            config.driver.transactions.executor,
+            Some(address!("0x8888888888888888888888888888888888888888"))
+        );
+        assert_eq!(config.driver.transactions.max_batch_gas, 3_000_000);
     }
 
     #[test]

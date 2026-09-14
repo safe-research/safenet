@@ -115,6 +115,29 @@ mod tests {
     }
 
     #[test]
+    fn deserializes_the_transactions_section() {
+        // The flattened driver config's `[transactions]` table, including the
+        // EIP-7702 batching parameters, which default to batching disabled.
+        let config = toml::from_str::<Config>(&format!(
+            r#"{TOML}
+
+                [transactions]
+                max_in_flight_transactions = 4
+                executor = "0x0404040404040404040404040404040404040404"
+                max_batch_gas = 3000000
+            "#
+        ))
+        .unwrap();
+
+        assert_eq!(config.driver.transactions.max_in_flight_transactions, 4);
+        assert_eq!(
+            config.driver.transactions.executor,
+            Some(address!("0x0404040404040404040404040404040404040404"))
+        );
+        assert_eq!(config.driver.transactions.max_batch_gas, 3_000_000);
+    }
+
+    #[test]
     fn rejects_config_missing_a_deployment_specific_field() {
         // `oracle`, `consensus` and the `[sentinel]` block have no sensible
         // default and must fail loudly rather than silently defaulting to the

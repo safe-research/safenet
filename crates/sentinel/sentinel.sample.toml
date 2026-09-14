@@ -59,3 +59,15 @@ log_filter = "info"
 # cost tip). Lower values reduce what you can overpay on a bad fee estimate,
 # but risk slower inclusion if the cap ends up below what the network needs.
 # priority_fee_cap_percentage = 95
+
+# Optional: the `Safenet7702Executor` this service's signer account delegates
+# to via EIP-7702, so several onchain actions can be submitted as a single
+# batched transaction. The service submits the delegation transaction on
+# startup, and no action is executed before it lands. Omit to submit one
+# transaction per action.
+# executor = "0x0000000000000000000000000000000000000000"
+
+# Optional: the maximum gas a single batched transaction may consume; actions
+# are split across batches so that no batch exceeds it. Ignored unless
+# `executor` is set.
+# max_batch_gas = 2000000

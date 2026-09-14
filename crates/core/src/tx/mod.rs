@@ -21,6 +21,7 @@ pub use self::{signer::Signer, types::Transaction};
 use crate::{index::BlockStatus, provider::Provider};
 use alloy::{
     eips::{BlockId, eip1559::Eip1559Estimation},
+    primitives::Address,
     providers::Provider as _,
     transports::TransportError,
 };
@@ -80,6 +81,13 @@ pub struct Config {
     /// total max fee per gas, lowering the priority fee (and max fee) when an
     /// estimate exceeds it. `None` applies no cap.
     pub priority_fee_cap_percentage: Option<f64>,
+    /// The `Safenet7702Executor` contract the signer account delegates to via
+    /// EIP-7702, enabling call batching. `None` disables batching, submitting
+    /// one transaction per queued transaction.
+    pub executor: Option<Address>,
+    /// The maximum gas a single batched transaction may consume. Ignored when
+    /// `executor` is `None`.
+    pub max_batch_gas: u64,
 }
 
 impl Default for Config {
@@ -88,6 +96,8 @@ impl Default for Config {
             max_in_flight_transactions: 16,
             blocks_before_resubmit: 2,
             priority_fee_cap_percentage: None,
+            executor: None,
+            max_batch_gas: 2_000_000,
         }
     }
 }
