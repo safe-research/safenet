@@ -1,9 +1,9 @@
 //! Article IV Part A base guarantees.
 
-use super::Checker;
+use super::{Assessment, Checker};
 use crate::{
     contracts::{bindings::safe, multi_send::decode_multi_send_call},
-    engine::{CheckContext, Operation, RuleId, SafeTransaction, Verdict},
+    engine::{CheckContext, Operation, RuleId, SafeTransaction},
 };
 use alloy::{
     primitives::{Address, address},
@@ -38,10 +38,10 @@ impl Checker for BaseChecker {
         "base"
     }
 
-    async fn check(&self, transaction: &SafeTransaction, _context: &CheckContext) -> Verdict {
+    async fn check(&self, transaction: &SafeTransaction, _context: &CheckContext) -> Assessment {
         match check_transaction(transaction) {
-            Ok(()) => Verdict::Abstain,
-            Err(rule) => Verdict::Insecure { rule },
+            Ok(()) => Assessment::Abstain,
+            Err(rule) => Assessment::Insecure { rule },
         }
     }
 }
@@ -288,7 +288,7 @@ mod tests {
             BaseChecker
                 .check(&transaction, &CheckContext::default())
                 .await,
-            Verdict::Insecure {
+            Assessment::Insecure {
                 rule: RuleId::R4_1SettingsChange,
             }
         );
@@ -307,7 +307,7 @@ mod tests {
             BaseChecker
                 .check(&transaction, &CheckContext::default())
                 .await,
-            Verdict::Insecure {
+            Assessment::Insecure {
                 rule: RuleId::R4_2DelegatecallIntegrity,
             }
         );
@@ -325,7 +325,7 @@ mod tests {
             BaseChecker
                 .check(&transaction, &CheckContext::default())
                 .await,
-            Verdict::Abstain
+            Assessment::Abstain
         );
     }
 
