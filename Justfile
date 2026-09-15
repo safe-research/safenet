@@ -153,6 +153,9 @@ contracts-deploy-staking *args:
 contracts-deploy-staking-tx-builder *args:
     (cd contracts && forge script DeployStakingWithTxBuilderScript {{args}})
 
+contracts-deploy-reality-veto *args:
+    (cd contracts && forge script DeployRealityVetoModuleScript {{args}})
+
 contracts-propose-validators *args:
     (cd contracts && forge script ProposeValidatorsScript {{args}})
 

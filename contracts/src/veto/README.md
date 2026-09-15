@@ -49,6 +49,8 @@ The Reality module is itself an enabled module, and zodiac-v1 `Module.exec` forw
 
 ## Operation
 
+Full runbook, including Tx Builder payloads and post-enablement verification, is in [`script/README.md`](../../script/README.md).
+
 - **Enable.** `enableModule(<module>)` from the Safe. Inert until then.
 - **Veto.** `vetoProposal(proposalId, txHashes)` from the vetoer, with exactly the arguments the proposal was added with. Mismatched `txHashes`, or a veto sent before `addProposal` lands, revert `ProposalNotFound`.
 - **Rotate.** `setVetoer(newVetoer)` from the Safe. The sitting vetoer can neither rotate nor renounce itself.
