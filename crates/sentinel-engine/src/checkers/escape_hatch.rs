@@ -23,7 +23,7 @@ use alloy::sol_types::SolCall as _;
 /// auto-allow anything but a `CALL`), and nonzero value handed to an
 /// unrelated `to` would simply be spent.
 ///
-/// Claims `Coverage::ACTION`, not `Refund`: a relayed call (nonzero
+/// Claims `Coverage::action()`, not `Refund`: a relayed call (nonzero
 /// `gasPrice`) is just as structurally safe, but this checker has no way to
 /// tell a trusted relayer from an untrusted one, so the refund leg is left
 /// to `RefundChecker` — or, absent a voucher for it, to the engine's
@@ -39,7 +39,7 @@ impl Checker for EscapeHatchChecker {
     async fn check(&self, transaction: &SafeTransaction, _context: &CheckContext) -> Assessment {
         if is_escape_hatch_call(transaction) {
             Assessment::Secure {
-                coverage: Coverage::ACTION,
+                coverage: Coverage::action(),
             }
         } else {
             Assessment::Abstain

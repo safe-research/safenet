@@ -13,30 +13,60 @@ bitflags! {
     #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
     pub struct Coverage: u8 {
         /// The destination the transaction calls.
+        #[bitflags(flag_name = "to")]
         const TO = 1 << 0;
         /// Native currency leaving the Safe.
+        #[bitflags(flag_name = "value")]
         const VALUE = 1 << 1;
         /// The calldata and the effects it encodes.
+        #[bitflags(flag_name = "data")]
         const DATA = 1 << 2;
         /// `CALL` versus `DELEGATECALL`.
+        #[bitflags(flag_name = "operation")]
         const OPERATION = 1 << 3;
         /// The Safe's own gas-refund payment (`gasPrice`, `gasToken`,
         /// `safeTxGas`, `baseGas`, `refundReceiver`) — one indivisible aspect,
         /// since a claim about part of the payment says nothing actionable.
+        #[bitflags(flag_name = "refund")]
         const REFUND = 1 << 4;
+    }
+}
 
-        /// `TO | VALUE | DATA | OPERATION` — everything but the refund leg.
-        const ACTION = Self::TO.bits() | Self::VALUE.bits() | Self::DATA.bits() | Self::OPERATION.bits();
-        /// Every aspect.
-        const ALL = Self::ACTION.bits() | Self::REFUND.bits();
+/// A single coverage aspect's metric-label spelling, as yielded by
+/// [`Coverage::labels`] — distinct from `Coverage` itself, which may hold
+/// more than one aspect at once and so has no single label of its own.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct CoverageLabel(&'static str);
+
+impl CoverageLabel {
+    pub const fn as_str(self) -> &'static str {
+        self.0
+    }
+}
+
+impl fmt::Display for CoverageLabel {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.0)
     }
 }
 
 impl Coverage {
+    /// `TO | VALUE | DATA | OPERATION` — everything but the refund leg.
+    pub fn action() -> Self {
+        Self::TO | Self::VALUE | Self::DATA | Self::OPERATION
+    }
+
     /// `other`'s aspects that `self` lacks — what an `Abstain` is logged
     /// with.
     pub const fn missing(self, other: Self) -> Self {
         other.difference(self)
+    }
+
+    /// This coverage's contained aspects, one label per set flag, in
+    /// declaration order — what `Display` joins with `|`, and what the
+    /// missing-coverage metric increments one counter per.
+    pub fn labels(self) -> impl Iterator<Item = CoverageLabel> {
+        self.iter_names().map(|(name, _)| CoverageLabel(name))
     }
 
     /// The aspects a `Secure` verdict for `transaction` requires vouchers
@@ -52,7 +82,7 @@ impl Coverage {
     ///
     /// `To` and `Operation` are always required.
     pub fn required_for(transaction: &SafeTransaction) -> Self {
-        let mut required = Self::ALL;
+        let mut required = Self::all();
         if transaction.value.is_zero() || transaction.operation == Operation::DelegateCall {
             required = required.difference(Self::VALUE);
         }
@@ -68,10 +98,7 @@ impl Coverage {
 
 impl fmt::Display for Coverage {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let names = self
-            .iter_names()
-            .map(|(name, _)| name.to_lowercase())
-            .collect::<Vec<_>>();
+        let names = self.labels().map(CoverageLabel::as_str).collect::<Vec<_>>();
         write!(f, "{}", names.join("|"))
     }
 }
@@ -118,17 +145,17 @@ mod tests {
             Coverage::OPERATION,
             Coverage::REFUND,
         ] {
-            assert!(Coverage::ALL.contains(aspect));
+            assert!(Coverage::all().contains(aspect));
         }
     }
 
     #[test]
     fn action_is_all_but_refund() {
-        assert!(Coverage::ACTION.contains(Coverage::TO));
-        assert!(Coverage::ACTION.contains(Coverage::VALUE));
-        assert!(Coverage::ACTION.contains(Coverage::DATA));
-        assert!(Coverage::ACTION.contains(Coverage::OPERATION));
-        assert!(!Coverage::ACTION.contains(Coverage::REFUND));
+        assert!(Coverage::action().contains(Coverage::TO));
+        assert!(Coverage::action().contains(Coverage::VALUE));
+        assert!(Coverage::action().contains(Coverage::DATA));
+        assert!(Coverage::action().contains(Coverage::OPERATION));
+        assert!(!Coverage::action().contains(Coverage::REFUND));
     }
 
     #[test]
@@ -152,9 +179,40 @@ mod tests {
     #[test]
     fn missing_is_the_others_aspects_self_lacks() {
         let covered = Coverage::TO | Coverage::OPERATION;
-        let required = Coverage::ACTION;
+        let required = Coverage::action();
         assert_eq!(covered.missing(required), Coverage::VALUE | Coverage::DATA);
         assert_eq!(required.missing(covered), Coverage::empty());
+    }
+
+    #[test]
+    fn labels_yields_exactly_the_contained_aspects_in_declaration_order() {
+        let coverage = Coverage::OPERATION | Coverage::TO;
+        assert_eq!(
+            coverage
+                .labels()
+                .map(CoverageLabel::as_str)
+                .collect::<Vec<_>>(),
+            vec!["to", "operation"]
+        );
+    }
+
+    #[test]
+    fn labels_are_the_lowercase_flag_names() {
+        for (coverage, name) in [
+            (Coverage::TO, "to"),
+            (Coverage::VALUE, "value"),
+            (Coverage::DATA, "data"),
+            (Coverage::OPERATION, "operation"),
+            (Coverage::REFUND, "refund"),
+        ] {
+            assert_eq!(
+                coverage
+                    .labels()
+                    .map(CoverageLabel::as_str)
+                    .collect::<Vec<_>>(),
+                vec![name]
+            );
+        }
     }
 
     #[test]
@@ -165,7 +223,7 @@ mod tests {
             vec![0xde, 0xad],
             Operation::Call,
         );
-        assert_eq!(Coverage::required_for(&tx), Coverage::ALL);
+        assert_eq!(Coverage::required_for(&tx), Coverage::all());
     }
 
     #[test]

@@ -22,7 +22,7 @@ impl Checker for CancellationChecker {
         };
         if transaction == &cancellation {
             Assessment::Secure {
-                coverage: Coverage::ALL,
+                coverage: Coverage::all(),
             }
         } else {
             Assessment::Abstain
@@ -51,7 +51,7 @@ mod tests {
                 .check(&transaction, &CheckContext::default())
                 .await,
             Assessment::Secure {
-                coverage: Coverage::ALL
+                coverage: Coverage::all()
             }
         );
     }

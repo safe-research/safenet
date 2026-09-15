@@ -9,7 +9,7 @@ mod rule;
 mod transaction;
 
 pub use self::{
-    coverage::Coverage,
+    coverage::{Coverage, CoverageLabel},
     rule::RuleId,
     transaction::{Operation, SafeTransaction},
 };
@@ -88,6 +88,9 @@ impl SentinelEngine {
         } else {
             let missing = covered.missing(required);
             tracing::trace!(%covered, %missing, "abstaining: incomplete coverage");
+            for label in missing.labels() {
+                crate::metrics::missing_coverage_total(label).increment(1);
+            }
             Verdict::Abstain
         };
         tracing::trace!(?verdict, "security check verdict");
@@ -139,7 +142,7 @@ mod tests {
     async fn a_denial_dominates_a_preceding_secure() {
         let engine = SentinelEngine::new(vec![
             Box::new(StubChecker(Assessment::Secure {
-                coverage: Coverage::ALL,
+                coverage: Coverage::all(),
             })),
             Box::new(StubChecker(Assessment::Insecure {
                 rule: RuleId::R4_3ValueTarget,
@@ -304,7 +307,7 @@ mod tests {
     /// A relayed escape-hatch call is just as structurally safe as an
     /// unrelayed one, but `EscapeHatchChecker` can't vouch for the refund
     /// leg, so the engine now abstains rather than affirming on
-    /// `Coverage::ALL`. Not expressible as a corpus vector — see "Behavior
+    /// `Coverage::all()`. Not expressible as a corpus vector — see "Behavior
     /// changes not expressible as test vectors" in the verdict-composition
     /// epic.
     #[tokio::test]

@@ -10,6 +10,7 @@ argh.workspace = true
 async-trait.workspace = true
 axum.workspace = true
 bitflags.workspace = true
+metrics.workspace = true
 reqwest.workspace = true
 safenet-core.workspace = true
 serde.workspace = true

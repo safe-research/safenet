@@ -3,6 +3,7 @@ mod checkers;
 mod config;
 mod contracts;
 mod engine;
+mod metrics;
 
 use self::{
     checkers::{
@@ -43,6 +44,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let rpc = config.rpc;
     let engine_config = config.engine;
     observability::init(config.observability)?;
+    metrics::init();
     tracing::debug!(
         config_file = %options.config_file.display(),
         "sentinel engine configuration loaded"
