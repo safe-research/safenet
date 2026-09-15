@@ -88,6 +88,9 @@ impl SentinelEngine {
         } else {
             let missing = covered.missing(required);
             tracing::trace!(%covered, %missing, "abstaining: incomplete coverage");
+            for aspect in missing.iter() {
+                crate::metrics::missing_coverage_total(aspect).increment(1);
+            }
             Verdict::Abstain
         };
         tracing::trace!(?verdict, "security check verdict");
