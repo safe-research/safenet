@@ -1,0 +1,88 @@
+# Toolchain probe, 2026-09-15T10:29:10Z, host lima-default, PATH prefixed with ~/.foundry/bin:~/.cargo/bin
+
+$ cargo --version
+cargo 1.98.1 (797e8a9bc 2026-08-05)
+[exit=0]
+
+$ rustc --version
+rustc 1.98.1 (48a229cea 2026-09-01)
+[exit=0]
+
+$ rustup show active-toolchain
+stable-aarch64-unknown-linux-gnu (default)
+[exit=0]
+
+$ rustup toolchain list
+stable-aarch64-unknown-linux-gnu (active, default)
+[exit=0]
+
+$ cargo audit --version
+cargo-audit-audit 0.22.2
+[exit=0]
+
+$ forge --version
+forge Version: 1.8.1
+Commit SHA: 982849d3140c01fd3b72905759581a132df7aa98
+Build Timestamp: 2026-08-28T17:46:36.463333209Z (1787939196)
+Build Profile: dist
+[exit=0]
+
+$ anvil --version
+anvil Version: 1.8.1
+Commit SHA: 982849d3140c01fd3b72905759581a132df7aa98
+Build Timestamp: 2026-08-28T17:46:36.463333209Z (1787939196)
+Build Profile: dist
+[exit=0]
+
+$ cast --version
+cast Version: 1.8.1
+Commit SHA: 982849d3140c01fd3b72905759581a132df7aa98
+Build Timestamp: 2026-08-28T17:46:36.463333209Z (1787939196)
+Build Profile: dist
+[exit=0]
+
+$ just --version
+just 1.40.0
+[exit=0]
+
+$ jq --version
+jq-1.8.1
+[exit=0]
+
+$ git --version
+git version 2.51.0
+[exit=0]
+
+$ python3 --version
+Python 3.13.7
+[exit=0]
+
+$ sqlite3 --version
+/bin/bash: line 21: sqlite3: command not found
+[exit=127]
+
+$ uname -srm
+Linux 6.17.0-41-generic aarch64
+[exit=0]
+
+$ nproc
+4
+$ free -h
+               total        used        free      shared  buff/cache   available
+Mem:            11Gi       4.6Gi       1.0Gi       2.4Gi       8.5Gi       7.0Gi
+Swap:             0B          0B          0B
+$ df -h / /tmp /home
+Filesystem      Size  Used Avail Use% Mounted on
+/dev/vda1       145G   70G   75G  49% /
+tmpfs           5.9G  2.4G  3.5G  41% /tmp
+/dev/vda1       145G   70G   75G  49% /
+$ cat /proc/cpuinfo | grep -m1 -iE 'model name|cpu part'
+CPU part	: 0x000
+$ ls -ld /home/shebin.guest/.cache/safenet-run2/target
+ls: cannot access '/home/shebin.guest/.cache/safenet-run2/target': No such file or directory
+$ ls ~/.cargo/registry
+CACHEDIR.TAG
+cache
+index
+src
+596M	/home/shebin.guest/.cargo/registry

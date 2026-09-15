@@ -1,0 +1,298 @@
+=== Reverse dependencies for duplicated security-relevant crates ===
+Method: parse each [[package]] block's dependencies list from Cargo.lock; a dep entry
+carries an explicit version only when the name is ambiguous, so unambiguous names are
+resolved to their single lock version. Direct workspace members are marked <<WORKSPACE>>.
+
+--- rand ---
+  0.10.1  <- 1 dependent(s)
+        sqlx-postgres 0.9.0
+  0.8.6  <- 10 dependent(s)  <<WORKSPACE: validator 0.2.0>>
+        alloy-consensus 2.0.5
+        alloy-rpc-types-engine 2.0.5
+        alloy-signer-local 2.0.5
+        ark-std 0.3.0
+        ark-std 0.4.0
+        ark-std 0.5.0
+        fixed-hash 0.8.0
+        ruint 1.18.0
+        secp256k1 0.30.0
+        validator 0.2.0
+  0.9.4  <- 7 dependent(s)
+        alloy-primitives 1.6.0
+        metrics-util 0.20.4
+        proptest 1.11.0
+        quinn-proto 0.11.14
+        ruint 1.18.0
+        secp256k1 0.31.1
+        tungstenite 0.28.0
+
+--- rand_core ---
+  0.10.1  <- 3 dependent(s)
+        chacha20 0.10.0
+        getrandom 0.4.2
+        rand 0.10.1
+  0.6.4  <- 10 dependent(s)
+        crypto-bigint 0.5.5
+        elliptic-curve 0.13.8
+        ff 0.13.1
+        frost-core 3.0.0
+        frost-rerandomized 3.0.0
+        frost-secp256k1 3.0.0
+        group 0.13.0
+        rand 0.8.6
+        rand_chacha 0.3.1
+        signature 2.2.0
+  0.9.5  <- 4 dependent(s)
+        rand 0.9.4
+        rand_chacha 0.9.0
+        rand_xorshift 0.4.0
+        rand_xoshiro 0.7.0
+
+--- rand_chacha ---
+  0.3.1  <- 2 dependent(s)  <<WORKSPACE: validator 0.2.0>>
+        rand 0.8.6
+        validator 0.2.0
+  0.9.0  <- 2 dependent(s)
+        proptest 1.11.0
+        rand 0.9.4
+
+--- sha2 ---
+  0.10.9  <- 5 dependent(s)
+        alloy-eips 2.0.5
+        frost-secp256k1 3.0.0
+        k256 0.13.4
+        sqlx-core 0.9.0
+        sqlx-macros-core 0.9.0
+  0.11.0  <- 3 dependent(s)  <<WORKSPACE: safenet-core 0.2.0>>
+        safenet-core 0.2.0
+        sqlx-mysql 0.9.0
+        sqlx-postgres 0.9.0
+
+--- digest ---
+  0.10.7  <- 11 dependent(s)
+        ark-ff 0.4.2
+        ark-ff 0.5.0
+        ark-serialize 0.4.2
+        ark-serialize 0.5.0
+        ecdsa 0.16.9
+        elliptic-curve 0.13.8
+        hmac 0.12.1
+        keccak-asm 0.1.7
+        sha1 0.10.6
+        sha2 0.10.9
+        signature 2.2.0
+  0.11.3  <- 6 dependent(s)
+        hmac 0.13.0
+        md-5 0.11.0
+        sha1 0.11.0
+        sha2 0.11.0
+        sha3 0.11.0
+        sqlx-mysql 0.9.0
+  0.9.0  <- 1 dependent(s)
+        ark-serialize 0.3.0
+
+--- getrandom ---
+  0.2.17  <- 2 dependent(s)
+        rand_core 0.6.4
+        ring 0.17.14
+  0.3.4  <- 3 dependent(s)
+        jobserver 0.1.34
+        quinn-proto 0.11.14
+        rand_core 0.9.5
+  0.4.2  <- 2 dependent(s)
+        rand 0.10.1
+        tempfile 3.27.0
+
+--- hmac ---
+  0.12.1  <- 1 dependent(s)
+        rfc6979 0.4.0
+  0.13.0  <- 2 dependent(s)
+        hkdf 0.13.0
+        sqlx-postgres 0.9.0
+
+--- secp256k1 ---
+  0.30.0  <- 1 dependent(s)
+        alloy-consensus 2.0.5
+  0.31.1  <- 1 dependent(s)
+        alloy-primitives 1.6.0
+
+--- block-buffer ---
+  0.10.4  <- 1 dependent(s)
+        digest 0.10.7
+  0.12.0  <- 1 dependent(s)
+        digest 0.11.3
+
+--- crypto-common ---
+  0.1.6  <- 1 dependent(s)
+        digest 0.10.7
+  0.2.2  <- 1 dependent(s)
+        digest 0.11.3
+
+--- const-oid ---
+  0.10.2  <- 1 dependent(s)
+        digest 0.11.3
+  0.9.6  <- 2 dependent(s)
+        der 0.7.10
+        digest 0.10.7
+
+--- indexmap ---
+  1.9.3  <- 1 dependent(s)
+        serde_with 3.21.0
+  2.14.0  <- 13 dependent(s)
+        alloy-primitives 1.6.0
+        alloy-sol-macro-expander 1.6.0
+        h2 0.4.14
+        metrics-exporter-prometheus 0.18.3
+        serde_with 3.21.0
+        sqlx-core 0.9.0
+        toml 1.1.2+spec-1.1.0
+        toml_edit 0.25.12+spec-1.1.0
+        wasm-metadata 0.244.0
+        wasmparser 0.244.0
+        wit-bindgen-rust 0.51.0
+        wit-component 0.244.0
+        ... and 1 more
+
+--- syn ---
+  1.0.109  <- 5 dependent(s)
+        ark-ff-asm 0.3.0
+        ark-ff-asm 0.4.2
+        ark-ff-macros 0.3.0
+        ark-ff-macros 0.4.2
+        derivative 2.2.0
+  2.0.117  <- 51 dependent(s)
+        alloy-rlp-derive 0.3.15
+        alloy-sol-macro 1.6.0
+        alloy-sol-macro-expander 1.6.0
+        alloy-sol-macro-input 1.6.0
+        alloy-tx-macros 2.0.5
+        argh_derive 0.1.19
+        ark-ff-asm 0.5.0
+        ark-ff-macros 0.5.0
+        async-stream-impl 0.3.6
+        async-trait 0.1.89
+        auto_impl 1.3.0
+        borsh-derive 1.6.1
+        ... and 39 more
+
+--- semver ---
+  0.11.0  <- 1 dependent(s)
+        rustc_version 0.3.3
+  1.0.28  <- 3 dependent(s)
+        rustc_version 0.4.1
+        wasmparser 0.244.0
+        wit-parser 0.244.0
+
+--- schemars ---
+  0.9.0  <- 1 dependent(s)
+        serde_with 3.21.0
+  1.2.1  <- 1 dependent(s)
+        serde_with 3.21.0
+
+--- webpki-roots ---
+  0.26.11  <- 1 dependent(s)
+        tokio-tungstenite 0.28.0
+  1.0.7  <- 1 dependent(s)
+        webpki-roots 0.26.11
+
+--- tower-http ---
+  0.6.11  <- 1 dependent(s)
+        reqwest 0.13.4
+  0.7.0  <- 1 dependent(s)  <<WORKSPACE: sentinel-engine 0.2.0>>
+        sentinel-engine 0.2.0
+
+--- hashbrown ---
+  0.12.3  <- 1 dependent(s)
+        indexmap 1.9.3
+  0.14.5  <- 1 dependent(s)
+        dashmap 6.2.1
+  0.15.5  <- 1 dependent(s)
+        wasmparser 0.244.0
+  0.16.1  <- 4 dependent(s)
+        hashlink 0.11.1
+        lru 0.16.4
+        metrics-util 0.20.4
+        sqlx-core 0.9.0
+  0.17.1  <- 2 dependent(s)
+        alloy-primitives 1.6.0
+        indexmap 2.14.0
+
+=== Direct dependency lists of the four workspace members (from Cargo.lock) ===
+
+--- safenet-core 0.2.0 (18 deps) ---
+    alloy
+    futures
+    hkdf
+    k256
+    metrics
+    metrics-exporter-prometheus
+    regex
+    serde
+    serde_json
+    sha2 0.11.0
+    sqlx
+    thiserror
+    tokio
+    tokio-metrics
+    tower
+    tracing
+    tracing-subscriber
+    url
+
+--- sentinel 0.2.0 (13 deps) ---
+    alloy
+    argh
+    metrics
+    reqwest
+    safenet-core
+    serde
+    serde_json
+    sqlx
+    thiserror
+    tokio
+    toml
+    tracing
+    url
+
+--- sentinel-engine 0.2.0 (14 deps) ---
+    alloy
+    argh
+    async-trait
+    axum
+    reqwest
+    safenet-core
+    serde
+    serde_json
+    thiserror
+    tokio
+    toml
+    tower-http 0.7.0
+    tracing
+    url
+
+--- validator 0.2.0 (18 deps) ---
+    alloy
+    argh
+    frost-core
+    frost-secp256k1
+    k256
+    metrics
+    rand 0.8.6
+    rand_chacha 0.3.1
+    rayon
+    safenet-core
+    serde
+    serde_json
+    sqlx
+    thiserror
+    tokio
+    toml
+    tracing
+    url
+
+=== Who depends on proptest? (verifying a claim in baseline.md Section 5) ===
+  dependent: alloy-primitives 1.6.0
+  dependent: const-hex 1.19.1
+  dependent: nybbles 0.4.8
+  proptest locked version: 1.11.0
+  dependent: ruint 1.18.0

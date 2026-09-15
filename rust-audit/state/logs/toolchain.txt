@@ -1,0 +1,102 @@
+=== Recon toolchain probe ===
+date: 2026-09-08T15:35:40+05:30
+host uname -a:
+Linux lima-default 6.17.0-41-generic #41-Ubuntu SMP PREEMPT_DYNAMIC Sat Jun 20 17:41:03 UTC 2026 aarch64 GNU/Linux
+
+--- command -v cargo ---
+NOT FOUND on PATH
+--- command -v rustc ---
+NOT FOUND on PATH
+--- command -v rustup ---
+NOT FOUND on PATH
+--- command -v cargo-audit ---
+NOT FOUND on PATH
+--- command -v forge ---
+NOT FOUND on PATH
+--- command -v anvil ---
+NOT FOUND on PATH
+--- command -v cast ---
+NOT FOUND on PATH
+--- command -v just ---
+NOT FOUND on PATH
+--- command -v jq ---
+/usr/bin/jq
+--- command -v git ---
+/usr/bin/git
+--- command -v sqlite3 ---
+NOT FOUND on PATH
+--- command -v python3 ---
+/usr/bin/python3
+--- command -v python ---
+NOT FOUND on PATH
+--- command -v node ---
+/home/shebin.guest/.local/bin/node
+
+=== Versions of tools that ARE present ===
+--- jq --version ---
+jq-1.8.1
+--- git --version ---
+git version 2.51.0
+--- python3 --version ---
+Python 3.13.7
+--- node --version ---
+v22.23.2
+
+=== Confirming absence: common install locations ===
+--- ls -la /home/shebin.guest/.cargo/bin ---
+ls: cannot access '/home/shebin.guest/.cargo/bin': No such file or directory
+--- ls -la /home/shebin.guest/.rustup ---
+ls: cannot access '/home/shebin.guest/.rustup': No such file or directory
+--- ls -la /usr/local/cargo/bin ---
+ls: cannot access '/usr/local/cargo/bin': No such file or directory
+--- ls -la /opt/cargo/bin ---
+ls: cannot access '/opt/cargo/bin': No such file or directory
+--- ls -la /home/shebin.guest/.foundry/bin ---
+ls: cannot access '/home/shebin.guest/.foundry/bin': No such file or directory
+--- ls -la /usr/local/bin ---
+total 18956
+drwxr-xr-x  2 root root     4096 May 13 19:44 .
+drwxr-xr-x 11 root root     4096 Apr 15 00:45 ..
+-rwxr-xr-x  1 root root 19398818 May 13 19:44 lima-guestagent
+
+--- PATH ---
+/home/shebin.guest/.local/bin:/home/shebin.guest/.local/bin:/home/shebin.guest/.vscode-server/cli/servers/Stable-a44adf7f53e00964ab890f9f8758a334f1fc15bc/server/bin/remote-cli:/home/shebin.guest/.local/bin:/home/shebin.guest/.local/bin:/home/shebin.guest/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/snap/bin:/usr/sbin:/sbin:/usr/sbin:/sbin:/usr/sbin:/sbin:/usr/sbin:/sbin:/usr/sbin:/sbin
+
+=== Direct --version invocation of every required tool (exact commands + observed output) ===
+--- $ cargo --version ---
+/bin/bash: line 21: cargo: command not found
+  (exit status 127)
+--- $ rustc --version ---
+/bin/bash: line 21: rustc: command not found
+  (exit status 127)
+--- $ rustup --version ---
+/bin/bash: line 21: rustup: command not found
+  (exit status 127)
+--- $ forge --version ---
+/bin/bash: line 21: forge: command not found
+  (exit status 127)
+--- $ anvil --version ---
+/bin/bash: line 21: anvil: command not found
+  (exit status 127)
+--- $ cast --version ---
+/bin/bash: line 21: cast: command not found
+  (exit status 127)
+--- $ just --version ---
+/bin/bash: line 21: just: command not found
+  (exit status 127)
+--- $ sqlite3 --version ---
+/bin/bash: line 21: sqlite3: command not found
+  (exit status 127)
+--- $ cargo audit --version ---
+/bin/bash: line 23: cargo: command not found
+  (exit status 127)
+
+=== Dependency source availability on disk (for assumption A6) ===
+--- ls -d vendor/ target/ .cargo/ in repo ---
+ls: cannot access 'vendor': No such file or directory
+ls: cannot access 'target': No such file or directory
+ls: cannot access '.cargo': No such file or directory
+--- find / -maxdepth 4 -type d -name 'registry' -path '*cargo*' ---
+(empty result above = no vendored crates.io registry on disk)
+--- .gitignore mentions of target ---
+11:target/

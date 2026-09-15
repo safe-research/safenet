@@ -1,0 +1,123 @@
+=== Test census ===
+date: 2026-09-08T15:38:07+05:30  commit: 2893917757ae518ebb91154712cf3e401cb68d33
+Method: grep -cE '^[[:space:]]*#\[(tokio::)?test\b' over each .rs file (matches #[test], #[tokio::test], #[tokio::test(...)]).
+
+--- raw totals over all crates ---
+  #[test]         occurrences: 125
+  #[tokio::test.. occurrences: 141
+  combined                   : 266
+
+--- other test-attribute macros present? (rstest/test_case/proptest/quickcheck/bench/ignore) ---
+  (none found)
+  #[should_panic] : 1
+  #[ignore]       : 0
+  non-line-start #[test/#[tokio::test (inline) : 0
+
+--- per crate (combined #[test] + #[tokio::test*]) ---
+  core             total=97    (#[test]=19    #[tokio::test*]=78  )
+  validator        total=35    (#[test]=26    #[tokio::test*]=9   )
+  sentinel         total=37    (#[test]=27    #[tokio::test*]=10  )
+  sentinel-engine  total=97    (#[test]=53    #[tokio::test*]=44  )
+
+--- per file (files with at least one test attribute) ---
+  0     crates/core/src/driver.rs
+  6     crates/core/src/effects.rs
+  23    crates/core/src/index/blocks.rs
+  2     crates/core/src/index/bloom.rs
+  2     crates/core/src/index/clock.rs
+  19    crates/core/src/index/events.rs
+  5     crates/core/src/index/mod.rs
+  4     crates/core/src/kdf.rs
+  0     crates/core/src/lib.rs
+  0     crates/core/src/metrics.rs
+  0     crates/core/src/observability/logging.rs
+  1     crates/core/src/observability/metrics.rs
+  2     crates/core/src/observability/mod.rs
+  0     crates/core/src/provider/mod.rs
+  0     crates/core/src/serialization.rs
+  6     crates/core/src/state/mod.rs
+  7     crates/core/src/state/storage.rs
+  3     crates/core/src/tx/fees.rs
+  9     crates/core/src/tx/mod.rs
+  1     crates/core/src/tx/signer.rs
+  7     crates/core/src/tx/storage.rs
+  0     crates/core/src/tx/types.rs
+  0     crates/core/src/utils.rs
+  0     crates/sentinel-engine/src/api/extractors.rs
+  0     crates/sentinel-engine/src/api/mod.rs
+  4     crates/sentinel-engine/src/checkers/address_poisoning.rs
+  20    crates/sentinel-engine/src/checkers/base.rs
+  3     crates/sentinel-engine/src/checkers/blocklist.rs
+  2     crates/sentinel-engine/src/checkers/cancellation.rs
+  31    crates/sentinel-engine/src/checkers/cow.rs
+  0     crates/sentinel-engine/src/checkers/escape_hatch.rs
+  4     crates/sentinel-engine/src/checkers/excessive_approval.rs
+  0     crates/sentinel-engine/src/checkers/mod.rs
+  0     crates/sentinel-engine/src/checkers/nested.rs
+  7     crates/sentinel-engine/src/checkers/refund.rs
+  0     crates/sentinel-engine/src/checkers/staking.rs
+  4     crates/sentinel-engine/src/config.rs
+  0     crates/sentinel-engine/src/contracts/bindings.rs
+  0     crates/sentinel-engine/src/contracts/mod.rs
+  0     crates/sentinel-engine/src/contracts/multi_send.rs
+  14    crates/sentinel-engine/src/contracts/target_effects.rs
+  2     crates/sentinel-engine/src/engine/mod.rs
+  2     crates/sentinel-engine/src/engine/rule.rs
+  4     crates/sentinel-engine/src/engine/transaction.rs
+  0     crates/sentinel-engine/src/main.rs
+  0     crates/sentinel/src/action.rs
+  0     crates/sentinel/src/bindings.rs
+  4     crates/sentinel/src/config.rs
+  1     crates/sentinel/src/effect.rs
+  10    crates/sentinel/src/engine.rs
+  5     crates/sentinel/src/hashing.rs
+  0     crates/sentinel/src/main.rs
+  0     crates/sentinel/src/metrics.rs
+  15    crates/sentinel/src/service.rs
+  2     crates/sentinel/src/state.rs
+  0     crates/validator/src/bindings.rs
+  4     crates/validator/src/config.rs
+  1     crates/validator/src/consensus/epoch.rs
+  5     crates/validator/src/consensus/group.rs
+  4     crates/validator/src/consensus/hashing.rs
+  0     crates/validator/src/consensus/mod.rs
+  4     crates/validator/src/frost/ecdh.rs
+  0     crates/validator/src/frost/error.rs
+  0     crates/validator/src/frost/keygen.rs
+  0     crates/validator/src/frost/marshal.rs
+  1     crates/validator/src/frost/mod.rs
+  1     crates/validator/src/frost/participants.rs
+  1     crates/validator/src/frost/preprocess.rs
+  1     crates/validator/src/frost/sign.rs
+  0     crates/validator/src/main.rs
+  4     crates/validator/src/merkle.rs
+  0     crates/validator/src/metrics.rs
+  0     crates/validator/src/secrets/mod.rs
+  3     crates/validator/src/secrets/nonces.rs
+  6     crates/validator/src/secrets/store.rs
+  0     crates/validator/src/service/action.rs
+  0     crates/validator/src/service/effect.rs
+  0     crates/validator/src/service/mod.rs
+  0     crates/validator/src/state/keygen.rs
+  0     crates/validator/src/state/mod.rs
+  0     crates/validator/src/state/preprocess.rs
+  0     crates/validator/src/state/sign.rs
+  0     crates/validator/src/state/transactions.rs
+
+--- #[cfg(test)] module count per crate ---
+  core             20
+  validator        17
+  sentinel         6
+  sentinel-engine  13
+
+--- tests/ directories (integration tests) ---
+  (no crates/*/tests directories)
+=== per-file test-count mismatches vs codebase-map Section 2 ===
+  (none — all 83 per-file test counts match)
+
+=== per-crate test totals ===
+  core             disk=97    map column sum=97    map/task claim=97    OK
+  validator        disk=35    map column sum=35    map/task claim=35    OK
+  sentinel         disk=37    map column sum=37    map/task claim=37    OK
+  sentinel-engine  disk=97    map column sum=97    map/task claim=97    OK
+  TOTAL            disk=266

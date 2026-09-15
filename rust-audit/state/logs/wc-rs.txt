@@ -1,0 +1,177 @@
+=== Rust file inventory (wc -l), repo root: /home/shebin.guest/safe/safenet ===
+date: 2026-09-08T15:36:11+05:30
+commit: 2893917757ae518ebb91154712cf3e401cb68d33
+
+--- find crates -name '*.rs' | wc -l ---
+83
+
+--- find crates -name '*.rs' -printf '%p\n' | sort  (full list, all four crates + anything else) ---
+crates/core/src/driver.rs
+crates/core/src/effects.rs
+crates/core/src/index/blocks.rs
+crates/core/src/index/bloom.rs
+crates/core/src/index/clock.rs
+crates/core/src/index/events.rs
+crates/core/src/index/mod.rs
+crates/core/src/kdf.rs
+crates/core/src/lib.rs
+crates/core/src/metrics.rs
+crates/core/src/observability/logging.rs
+crates/core/src/observability/metrics.rs
+crates/core/src/observability/mod.rs
+crates/core/src/provider/mod.rs
+crates/core/src/serialization.rs
+crates/core/src/state/mod.rs
+crates/core/src/state/storage.rs
+crates/core/src/tx/fees.rs
+crates/core/src/tx/mod.rs
+crates/core/src/tx/signer.rs
+crates/core/src/tx/storage.rs
+crates/core/src/tx/types.rs
+crates/core/src/utils.rs
+crates/sentinel-engine/src/api/extractors.rs
+crates/sentinel-engine/src/api/mod.rs
+crates/sentinel-engine/src/checkers/address_poisoning.rs
+crates/sentinel-engine/src/checkers/base.rs
+crates/sentinel-engine/src/checkers/blocklist.rs
+crates/sentinel-engine/src/checkers/cancellation.rs
+crates/sentinel-engine/src/checkers/cow.rs
+crates/sentinel-engine/src/checkers/escape_hatch.rs
+crates/sentinel-engine/src/checkers/excessive_approval.rs
+crates/sentinel-engine/src/checkers/mod.rs
+crates/sentinel-engine/src/checkers/nested.rs
+crates/sentinel-engine/src/checkers/refund.rs
+crates/sentinel-engine/src/checkers/staking.rs
+crates/sentinel-engine/src/config.rs
+crates/sentinel-engine/src/contracts/bindings.rs
+crates/sentinel-engine/src/contracts/mod.rs
+crates/sentinel-engine/src/contracts/multi_send.rs
+crates/sentinel-engine/src/contracts/target_effects.rs
+crates/sentinel-engine/src/engine/mod.rs
+crates/sentinel-engine/src/engine/rule.rs
+crates/sentinel-engine/src/engine/transaction.rs
+crates/sentinel-engine/src/main.rs
+crates/sentinel/src/action.rs
+crates/sentinel/src/bindings.rs
+crates/sentinel/src/config.rs
+crates/sentinel/src/effect.rs
+crates/sentinel/src/engine.rs
+crates/sentinel/src/hashing.rs
+crates/sentinel/src/main.rs
+crates/sentinel/src/metrics.rs
+crates/sentinel/src/service.rs
+crates/sentinel/src/state.rs
+crates/validator/src/bindings.rs
+crates/validator/src/config.rs
+crates/validator/src/consensus/epoch.rs
+crates/validator/src/consensus/group.rs
+crates/validator/src/consensus/hashing.rs
+crates/validator/src/consensus/mod.rs
+crates/validator/src/frost/ecdh.rs
+crates/validator/src/frost/error.rs
+crates/validator/src/frost/keygen.rs
+crates/validator/src/frost/marshal.rs
+crates/validator/src/frost/mod.rs
+crates/validator/src/frost/participants.rs
+crates/validator/src/frost/preprocess.rs
+crates/validator/src/frost/sign.rs
+crates/validator/src/main.rs
+crates/validator/src/merkle.rs
+crates/validator/src/metrics.rs
+crates/validator/src/secrets/mod.rs
+crates/validator/src/secrets/nonces.rs
+crates/validator/src/secrets/store.rs
+crates/validator/src/service/action.rs
+crates/validator/src/service/effect.rs
+crates/validator/src/service/mod.rs
+crates/validator/src/state/keygen.rs
+crates/validator/src/state/mod.rs
+crates/validator/src/state/preprocess.rs
+crates/validator/src/state/sign.rs
+crates/validator/src/state/transactions.rs
+
+--- per-file wc -l, sorted by path ---
+   318 crates/core/src/driver.rs
+   220 crates/core/src/effects.rs
+  1330 crates/core/src/index/blocks.rs
+   523 crates/core/src/index/bloom.rs
+   103 crates/core/src/index/clock.rs
+  1516 crates/core/src/index/events.rs
+   468 crates/core/src/index/mod.rs
+    81 crates/core/src/kdf.rs
+    25 crates/core/src/lib.rs
+    90 crates/core/src/metrics.rs
+    21 crates/core/src/observability/logging.rs
+    80 crates/core/src/observability/metrics.rs
+    94 crates/core/src/observability/mod.rs
+   166 crates/core/src/provider/mod.rs
+    34 crates/core/src/serialization.rs
+   644 crates/core/src/state/mod.rs
+   294 crates/core/src/state/storage.rs
+   109 crates/core/src/tx/fees.rs
+   719 crates/core/src/tx/mod.rs
+   118 crates/core/src/tx/signer.rs
+   507 crates/core/src/tx/storage.rs
+    87 crates/core/src/tx/types.rs
+    97 crates/core/src/utils.rs
+    69 crates/sentinel-engine/src/api/extractors.rs
+    60 crates/sentinel-engine/src/api/mod.rs
+   457 crates/sentinel-engine/src/checkers/address_poisoning.rs
+   765 crates/sentinel-engine/src/checkers/base.rs
+    89 crates/sentinel-engine/src/checkers/blocklist.rs
+    72 crates/sentinel-engine/src/checkers/cancellation.rs
+  1407 crates/sentinel-engine/src/checkers/cow.rs
+    61 crates/sentinel-engine/src/checkers/escape_hatch.rs
+   136 crates/sentinel-engine/src/checkers/excessive_approval.rs
+    48 crates/sentinel-engine/src/checkers/mod.rs
+    47 crates/sentinel-engine/src/checkers/nested.rs
+   206 crates/sentinel-engine/src/checkers/refund.rs
+   183 crates/sentinel-engine/src/checkers/staking.rs
+   154 crates/sentinel-engine/src/config.rs
+   172 crates/sentinel-engine/src/contracts/bindings.rs
+     5 crates/sentinel-engine/src/contracts/mod.rs
+   186 crates/sentinel-engine/src/contracts/multi_send.rs
+   454 crates/sentinel-engine/src/contracts/target_effects.rs
+   121 crates/sentinel-engine/src/engine/mod.rs
+   164 crates/sentinel-engine/src/engine/rule.rs
+   170 crates/sentinel-engine/src/engine/transaction.rs
+    87 crates/sentinel-engine/src/main.rs
+    43 crates/sentinel/src/action.rs
+   170 crates/sentinel/src/bindings.rs
+   144 crates/sentinel/src/config.rs
+   134 crates/sentinel/src/effect.rs
+   392 crates/sentinel/src/engine.rs
+   224 crates/sentinel/src/hashing.rs
+    89 crates/sentinel/src/main.rs
+   134 crates/sentinel/src/metrics.rs
+  1851 crates/sentinel/src/service.rs
+   167 crates/sentinel/src/state.rs
+   247 crates/validator/src/bindings.rs
+   290 crates/validator/src/config.rs
+    95 crates/validator/src/consensus/epoch.rs
+   459 crates/validator/src/consensus/group.rs
+   249 crates/validator/src/consensus/hashing.rs
+     5 crates/validator/src/consensus/mod.rs
+   181 crates/validator/src/frost/ecdh.rs
+    46 crates/validator/src/frost/error.rs
+   516 crates/validator/src/frost/keygen.rs
+   176 crates/validator/src/frost/marshal.rs
+   258 crates/validator/src/frost/mod.rs
+    33 crates/validator/src/frost/participants.rs
+   189 crates/validator/src/frost/preprocess.rs
+   204 crates/validator/src/frost/sign.rs
+    99 crates/validator/src/main.rs
+   142 crates/validator/src/merkle.rs
+   132 crates/validator/src/metrics.rs
+     6 crates/validator/src/secrets/mod.rs
+   348 crates/validator/src/secrets/nonces.rs
+   447 crates/validator/src/secrets/store.rs
+   381 crates/validator/src/service/action.rs
+   275 crates/validator/src/service/effect.rs
+   129 crates/validator/src/service/mod.rs
+  1459 crates/validator/src/state/keygen.rs
+   515 crates/validator/src/state/mod.rs
+   248 crates/validator/src/state/preprocess.rs
+   868 crates/validator/src/state/sign.rs
+   101 crates/validator/src/state/transactions.rs
+ 24203 total

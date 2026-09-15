@@ -1,0 +1,67 @@
+# Drift facts, 2026-09-15T10:34:54Z
+HEAD:        3ec8bc57dc35d1e9e65075ae9424bff427c47833
+origin/main: 5cc096e085ab1fe51afebd673a93fc12d0d59015
+run-1 commit 2893917: 2893917757ae518ebb91154712cf3e401cb68d33 2026-09-08 14:48:47 +0530 AI review changes
+old main 49d7e39:     49d7e398ac35c315da2b54d44a998b265855b43e 2026-09-09 10:18:26 +0200 [Epic] Meta transactions (#893)
+HEAD parents: 57044afee403da56c666b321cc20271153616576 5cc096e085ab1fe51afebd673a93fc12d0d59015
+
+## git diff --stat 49d7e39 3ec8bc5 -- crates/ Cargo.toml Cargo.lock
+ crates/core/src/driver.rs                |  16 +-
+ crates/core/src/effects.rs               |  49 ++-
+ crates/validator/src/metrics.rs          |  67 +++-
+ crates/validator/src/secrets/store.rs    | 668 +++++++++++++++++++++++++++----
+ crates/validator/src/service/effect.rs   |  79 +++-
+ crates/validator/src/state/mod.rs        |   3 +-
+ crates/validator/src/state/preprocess.rs |   9 +-
+ 7 files changed, 789 insertions(+), 102 deletions(-)
+[exit=0]
+
+## git diff --stat 2893917 3ec8bc5 -- crates/
+ crates/core/src/driver.rs                |  16 +-
+ crates/core/src/effects.rs               |  49 ++-
+ crates/sentinel/src/bindings.rs          |   3 +
+ crates/sentinel/src/metrics.rs           |  13 +-
+ crates/sentinel/src/service.rs           | 371 +++++++++++++++--
+ crates/sentinel/src/state.rs             | 207 +++++++++-
+ crates/validator/src/metrics.rs          |  67 +++-
+ crates/validator/src/secrets/store.rs    | 668 +++++++++++++++++++++++++++----
+ crates/validator/src/service/effect.rs   |  79 +++-
+ crates/validator/src/state/mod.rs        |   3 +-
+ crates/validator/src/state/preprocess.rs |   9 +-
+ 11 files changed, 1348 insertions(+), 137 deletions(-)
+[exit=0]
+
+## git diff --stat 2893917 3ec8bc5 -- Cargo.toml Cargo.lock
+[exit=0] (empty = no manifest/lock change since run 1)
+
+## git diff --stat 3ec8bc5 origin/main -- crates/ Cargo.toml Cargo.lock (expect empty)
+[exit=0]
+
+## commits on main between 49d7e39 and 5cc096e (first-parent)
+5cc096e 2026-09-14 21:35:28 +0200 Fix `post_pr_comment` artifact glob matching and limit checkout scope (#923)
+80951a0 2026-09-14 17:32:59 +0200 [Prune End]: Remove Scheduled Pruning Epic And Devnet Migration (#913)
+f0fdc40 2026-09-14 17:32:59 +0200 [Prune 5]: Document Secret Retention (#912)
+c87c054 2026-09-14 17:32:58 +0200 [Prune 4]: Collect Scheduled Secrets On Housekeeping (#910)
+8b88f4a 2026-09-14 17:32:58 +0200 [Prune 3]: Schedule Group Secret Deletion Through Reconciliation (#909)
+545c890 2026-09-14 16:34:33 +0200 [Phase 2]: Update Database Structure for Pruning (#908)
+4a74b41 2026-09-14 16:34:33 +0200 [Prune 1]: Extend Effect Handler for Housekeeping (#907)
+224845b 2026-09-14 16:34:32 +0200 [Pruning Plan]: Plan Scheduled Pruning (#906)
+246d28e 2026-09-14 18:17:13 +0530 [Epic] SEF Veto for Reality Module Proposals (#917)
+
+## commits on main between 2893917 and 49d7e39 touching crates/ (first-parent)
+199629e 2026-09-08 16:19:52 +0200 [Part 7] Use oracle events over local inference (#891)
+898a5c5 2026-09-08 11:14:57 +0200 [Part 6] Add handle request timed out method (#890)
+6df6fb9 2026-09-08 11:14:57 +0200 [Part 5] Add handle dispute triggered method (#889)
+30d79de 2026-09-08 11:14:56 +0200 [Part 4] Add handle oracle result method (#888)
+84facb2 2026-09-08 11:14:55 +0200 [Part 2] Add waiting for outcome state (#885)
+6faa0b4 2026-09-08 11:14:55 +0200 [Part 1] Add waiting for outcome state (#884)
+
+## git status --short, entries OUTSIDE rust-audit/ (expect none)
+[end]
+## git status --short, count of entries INSIDE rust-audit/ (Manager's in-progress edits; not read)
+103
+
+## .gitignore covers target/?
+11:target/
+## git stash list (expect empty)
+[end]

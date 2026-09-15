@@ -1,0 +1,36 @@
+   Compiling tokio v1.52.3
+   Compiling tokio-util v0.7.18
+   Compiling tower v0.5.3
+   Compiling tokio-rustls v0.26.4
+   Compiling tokio-tungstenite v0.28.0
+   Compiling h2 v0.4.14
+   Compiling tokio-stream v0.1.18
+   Compiling alloy-transport v2.0.5
+   Compiling tower-http v0.6.11
+   Compiling alloy-pubsub v2.0.5
+   Compiling interprocess v2.4.2
+   Compiling alloy-transport-ipc v2.0.5
+   Compiling alloy-transport-ws v2.0.5
+   Compiling sqlx-core v0.9.0
+   Compiling tokio-metrics v0.5.2
+   Compiling hyper v1.10.1
+   Compiling hyper-util v0.1.20
+   Compiling sqlx-sqlite v0.9.0
+   Compiling hyper-rustls v0.27.9
+   Compiling reqwest v0.13.4
+   Compiling metrics-exporter-prometheus v0.18.3
+   Compiling axum v0.8.9
+   Compiling alloy-transport-http v2.0.5
+   Compiling alloy-rpc-client v2.0.5
+   Compiling sqlx v0.9.0
+   Compiling alloy-provider v2.0.5
+   Compiling alloy-contract v2.0.5
+   Compiling alloy v2.0.5
+   Compiling safenet-core v0.2.0 (/home/shebin.guest/safe/safenet/crates/core)
+   Compiling sentinel v0.2.0 (/home/shebin.guest/safe/safenet/crates/sentinel)
+   Compiling sentinel-engine v0.2.0 (/home/shebin.guest/safe/safenet/crates/sentinel-engine)
+   Compiling validator v0.2.0 (/home/shebin.guest/safe/safenet/crates/validator)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 24.05s
+warning: the following packages contain code that will be rejected by a future version of Rust: proc-macro-error2 v2.0.1
+note: to see what the problems were, use the option `--future-incompat-report`, or run `cargo report future-incompatibilities --id 1`
+BUILD_EXIT=0

@@ -1,0 +1,22 @@
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.77s
+warning: the following packages contain code that will be rejected by a future version of Rust: proc-macro-error2 v2.0.1
+note: to see what the problems were, use the option `--future-incompat-report`, or run `cargo report future-incompatibilities --id 1`
+     Running unittests src/main.rs (target/debug/deps/validator-3a1b46af57fe89be)
+
+running 2 tests
+test secrets::poc_v_val_pragmas::on_delete_cascade_actually_fires ... nonces rows before retain_nonces([]) = 4
+nonces rows after  retain_nonces([]) = 0, chunk rows = 0
+ok
+test secrets::poc_v_val_pragmas::sqlite_defaults_under_connect_sqlite ... 
+=== file-backed, url-parsed, exactly as main.rs ===
+foreign_keys = 1
+journal_mode = delete
+synchronous = 2
+busy_timeout = 5000
+page_size = 4096
+locking_mode = normal
+pool max_connections = 10, min_connections = 0
+ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 35 filtered out; finished in 0.06s
+

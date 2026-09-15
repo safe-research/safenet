@@ -1,0 +1,23 @@
+=== Resources ===
+date: 2026-09-08T15:35:57+05:30
+--- free -h ---
+               total        used        free      shared  buff/cache   available
+Mem:           3.8Gi       2.1Gi       1.1Gi       305Mi       1.1Gi       1.7Gi
+Swap:             0B          0B          0B
+--- nproc ---
+4
+--- lscpu (subset) ---
+Architecture:                            aarch64
+CPU(s):                                  4
+Vendor ID:                               Apple
+Model name:                              -
+Thread(s) per core:                      1
+Core(s) per cluster:                     4
+--- df -h /home/shebin.guest/safe/safenet ---
+Filesystem      Size  Used Avail Use% Mounted on
+/dev/vda1        96G   13G   83G  14% /
+--- df -h / ---
+Filesystem      Size  Used Avail Use% Mounted on
+/dev/vda1        96G   13G   83G  14% /
+--- du -sh repo ---
+13M	/home/shebin.guest/safe/safenet

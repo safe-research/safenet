@@ -1,0 +1,25 @@
+    Blocking waiting for file lock on build directory
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 2.62s
+warning: the following packages contain code that will be rejected by a future version of Rust: proc-macro-error2 v2.0.1
+note: to see what the problems were, use the option `--future-incompat-report`, or run `cargo report future-incompatibilities --id 1`
+     Running unittests src/main.rs (target/debug/deps/validator-3a1b46af57fe89be)
+
+running 2 tests
+test frost::poc_f_val_033_reuse::one_nonce_signs_two_messages ... ok
+test frost::poc_f_val_033_reuse::three_uses_recover_the_signing_share ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 37 filtered out; finished in 0.16s
+
+reuse exit=0
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.12s
+warning: the following packages contain code that will be rejected by a future version of Rust: proc-macro-error2 v2.0.1
+note: to see what the problems were, use the option `--future-incompat-report`, or run `cargo report future-incompatibilities --id 1`
+     Running unittests src/main.rs (target/debug/deps/validator-3a1b46af57fe89be)
+
+running 2 tests
+test secrets::poc_f_val_033::restore_unburns_a_consumed_nonce ... ok
+test secrets::poc_f_val_033::restoring_a_newer_backup_is_harmless ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 37 filtered out; finished in 0.02s
+
+store exit=0

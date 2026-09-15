@@ -1,0 +1,10 @@
+running 2 tests
+DisputeResolved.context  => Ok(DisputeResolved(DisputeResolved { requestId: 0x00000000000000000000000000000000000000000000000000000000000000aa, outcome: RESOLVED_APPROVED, slashed: 0, context: "�" }))
+DisputeOutOfScope.context => Ok(DisputeOutOfScope(DisputeOutOfScope { requestId: 0x00000000000000000000000000000000000000000000000000000000000000aa, context: "�" }))
+Revealed / SolEventInterface::decode_raw_log => Ok(Revealed(Revealed { requestId: 0x00000000000000000000000000000000000000000000000000000000000000aa, sentinel: 0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266, approved: true, bondAmount: 0, reason: "�" }))
+test bindings::poc_q2_utf8::q2_non_utf8_dispute_contexts_decode ... okRevealed / watcher_events!::decode_log       => Some(Oracle(Revealed(Revealed { requestId: 0x00000000000000000000000000000000000000000000000000000000000000aa, sentinel: 0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266, approved: true, bondAmount: 0, reason: "�" })))
+
+test bindings::poc_q2_utf8::q2_non_utf8_reason_decode ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 37 filtered out; finished in 0.00s
+

@@ -1,0 +1,119 @@
+Building the Rust sentinel and sentinel engine...
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.28s
+warning: the following packages contain code that will be rejected by a future version of Rust: proc-macro-error2 v2.0.1
+note: to see what the problems were, use the option `--future-incompat-report`, or run `cargo report future-incompatibilities --id 1`
+Starting Anvil...
+Deploying fee token...
+Warning: Found unknown `optimizer` config key in section `compilation_restrictions` defined in contracts/foundry.toml.
+No files changed, compilation skipped
+Script ran successfully.
+
+== Return ==
+erc20: address 0x34dA19700Bb1AdeeBDcd47b989802e058f4B9057
+
+== Logs ==
+  ERC20 deployed at: 0x34dA19700Bb1AdeeBDcd47b989802e058f4B9057
+
+## Setting up 1 EVM.
+
+==========================
+
+Chain 31337
+
+Estimated max fee per gas: 1.172363283 gwei
+Estimated base fee per gas: 0.586181641 gwei
+Estimated max priority fee per gas: 0.000000001 gwei
+
+Estimated total gas used for script: 2805017
+
+Estimated amount required: 0.003288498938990811 ETH
+
+==========================
+
+
+==========================
+
+ONCHAIN EXECUTION COMPLETE & SUCCESSFUL.
+
+Transactions saved to: /home/shebin.guest/safe/safenet/contracts/build/broadcast/DeployERC20.s.sol/31337/run-latest.json
+
+Sensitive values saved to: /home/shebin.guest/safe/safenet/contracts/build/cache/DeployERC20.s.sol/31337/run-latest.json
+
+Fee token deployed at 0x34dA19700Bb1AdeeBDcd47b989802e058f4B9057
+Deploying test consensus...
+Warning: Found unknown `optimizer` config key in section `compilation_restrictions` defined in contracts/foundry.toml.
+No files changed, compilation skipped
+Script ran successfully.
+
+== Return ==
+consensus: address 0x9fE46736679d2D9a65F0992F2272dE9f3c7fa6e0
+
+== Logs ==
+  Consensus deployed at: 0x9fE46736679d2D9a65F0992F2272dE9f3c7fa6e0
+
+## Setting up 1 EVM.
+
+==========================
+
+Chain 31337
+
+Estimated max fee per gas: 0.799738009 gwei
+Estimated base fee per gas: 0.399869004 gwei
+Estimated max priority fee per gas: 0.000000001 gwei
+
+Estimated total gas used for script: 2593819
+
+Estimated amount required: 0.002074375642766371 ETH
+
+==========================
+
+
+==========================
+
+ONCHAIN EXECUTION COMPLETE & SUCCESSFUL.
+
+Transactions saved to: /home/shebin.guest/safe/safenet/contracts/build/broadcast/DeployTestConsensus.s.sol/31337/run-latest.json
+
+Sensitive values saved to: /home/shebin.guest/safe/safenet/contracts/build/cache/DeployTestConsensus.s.sol/31337/run-latest.json
+
+Test consensus deployed at 0x9fE46736679d2D9a65F0992F2272dE9f3c7fa6e0
+Deploying sentinel oracle...
+Warning: Found unknown `optimizer` config key in section `compilation_restrictions` defined in contracts/foundry.toml.
+No files changed, compilation skipped
+Script ran successfully.
+
+== Return ==
+sentinelOracle: address 0x708ae6af8F1f42ee7cA7C777F6Df36078d9dDD31
+
+== Logs ==
+  SentinelOracle deployed at: 0x708ae6af8F1f42ee7cA7C777F6Df36078d9dDD31
+
+## Setting up 1 EVM.
+
+==========================
+
+Chain 31337
+
+Estimated max fee per gas: 0.545942723 gwei
+Estimated base fee per gas: 0.272971361 gwei
+Estimated max priority fee per gas: 0.000000001 gwei
+
+Estimated total gas used for script: 5165007
+
+Estimated amount required: 0.002819797985894061 ETH
+
+==========================
+
+
+==========================
+
+ONCHAIN EXECUTION COMPLETE & SUCCESSFUL.
+
+Transactions saved to: /home/shebin.guest/safe/safenet/contracts/build/broadcast/DeploySentinelOracle.s.sol/31337/run-latest.json
+
+Sensitive values saved to: /home/shebin.guest/safe/safenet/contracts/build/cache/DeploySentinelOracle.s.sol/31337/run-latest.json
+
+Sentinel oracle deployed at 0x708ae6af8F1f42ee7cA7C777F6Df36078d9dDD31
+Generating sentinel and sponsor accounts...
+jq: error (at <stdin>:1): Cannot index object with number
+Stopping background processes (116355)...

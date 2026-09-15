@@ -1,0 +1,54 @@
+### 1. POST valid JSON, wrong field types (chainId as string)
+HTTP/1.1 422 Unprocessable Entity
+content-type: text/plain; charset=utf-8
+content-length: 145
+date: Tue, 08 Sep 2026 13:37:24 GMT
+
+Failed to deserialize the JSON body into the target type: chainId: unknown field `chainId`, expected `block` or `transaction` at line 1 column 10
+
+### 2. POST with no content-type, body 'not json at all'
+HTTP/1.1 415 Unsupported Media Type
+content-type: text/plain; charset=utf-8
+content-length: 54
+date: Tue, 08 Sep 2026 13:37:24 GMT
+
+Expected request with `Content-Type: application/json`
+
+### 3. GET on a POST-only route
+HTTP/1.1 405 Method Not Allowed
+allow: POST
+content-length: 0
+date: Tue, 08 Sep 2026 13:37:24 GMT
+
+
+
+### 4. POST to an unknown route
+HTTP/1.1 404 Not Found
+content-length: 0
+date: Tue, 08 Sep 2026 13:37:24 GMT
+
+
+
+### 5. POST content-type: application/json, truncated body
+HTTP/1.1 422 Unprocessable Entity
+content-type: text/plain; charset=utf-8
+content-length: 145
+date: Tue, 08 Sep 2026 13:37:24 GMT
+
+Failed to deserialize the JSON body into the target type: chainId: unknown field `chainId`, expected `block` or `transaction` at line 1 column 10
+
+### 6. POST content-type: text/plain, valid JSON body
+HTTP/1.1 415 Unsupported Media Type
+content-type: text/plain; charset=utf-8
+content-length: 54
+date: Tue, 08 Sep 2026 13:37:24 GMT
+
+Expected request with `Content-Type: application/json`
+
+### 7. POST application/json, unknown field
+HTTP/1.1 422 Unprocessable Entity
+content-type: text/plain; charset=utf-8
+content-length: 169
+date: Tue, 08 Sep 2026 13:37:24 GMT
+
+Failed to deserialize the JSON body into the target type: totallyUnknownField: unknown field `totallyUnknownField`, expected `block` or `transaction` at line 1 column 22
