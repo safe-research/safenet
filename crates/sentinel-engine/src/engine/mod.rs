@@ -8,10 +8,6 @@ mod coverage;
 mod rule;
 mod transaction;
 
-// `Aspect` has no non-test caller yet — checkers start building `Coverage`
-// values from individual aspects in the epic's next phase, which narrows
-// `BaseChecker`'s claim off `Coverage::ALL`.
-#[allow(unused_imports)]
 pub use self::{
     coverage::{Aspect, Coverage},
     rule::RuleId,
@@ -180,6 +176,53 @@ mod tests {
                 .await,
             Verdict::Secure
         );
+    }
+
+    #[tokio::test]
+    async fn base_checker_never_abstains() {
+        use crate::checkers::BaseChecker;
+
+        let safe = alloy::primitives::Address::new([1u8; 20]);
+        let other = alloy::primitives::Address::new([2u8; 20]);
+
+        let allowed_call = SafeTransaction {
+            safe,
+            to: other,
+            ..Default::default()
+        };
+        let denied_call = SafeTransaction {
+            safe,
+            to: safe,
+            data: vec![0xde, 0xad, 0xbe, 0xef].into(),
+            ..Default::default()
+        };
+        let allowed_delegatecall = SafeTransaction {
+            safe,
+            to: alloy::primitives::address!("526643F69b81B008F46d95CD5ced5eC0edFFDaC6"),
+            data: alloy::primitives::bytes!("ed007fc6"),
+            operation: Operation::DelegateCall,
+            ..Default::default()
+        };
+        let denied_delegatecall = SafeTransaction {
+            safe,
+            to: other,
+            operation: Operation::DelegateCall,
+            ..Default::default()
+        };
+
+        for transaction in [
+            allowed_call,
+            denied_call,
+            allowed_delegatecall,
+            denied_delegatecall,
+        ] {
+            assert_ne!(
+                BaseChecker
+                    .check(&transaction, &CheckContext::default())
+                    .await,
+                Assessment::Abstain
+            );
+        }
     }
 
     #[tokio::test]
