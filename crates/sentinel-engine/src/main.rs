@@ -3,6 +3,7 @@ mod checkers;
 mod config;
 mod contracts;
 mod engine;
+mod metrics;
 
 use self::{
     checkers::{
