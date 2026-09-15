@@ -93,7 +93,6 @@ The audit's 21 end-to-end-validated PoCs were run on local Anvil. These are the 
 | Scheduled Secret Pruning | #906 → #907 → #908 → #909 → #910 → #912 → #913 | **`F-VAL-005` partially fixed**; `F-VAL-066` changed shape; everything else it touches unchanged. Four new defects: `F-VAL-068`. |
 | Sentinel deadlines | #914 | **Fixes nothing — worsens `F-SEN-002` if merged without #915** (`F-SEN-016` D1). |
 | Optimistic block transition | #915 (on #914) | **Fixes nothing.** `F-CORE-031` changed shape; the ordering behind `F-VAL-005` is unchanged. New defects: `F-SEN-016` D2–D4. |
-| SEF veto epic | #917 | Documentation only; addresses no finding. Risks widening `F-ENG-039` if the module is added to `SUPPORTED_MODULES`. |
 
 ### Scheduled Secret Pruning (#906–#913)
 
@@ -125,7 +124,7 @@ Both apply cleanly onto `main`: `main`'s crates are byte-identical to their base
 
 ### SEF veto epic (#917)
 
-Plans a small Solidity Safe module letting one SEF address invalidate a SafeSnap Reality proposal. It repeats none of the Rust-service defect patterns: `to`, `value`, `operation` and selector are fixed in code, call success is required, and the question hash is computed onchain. Its gap: it never asks whether the SafeDAO Safe is Safenet-protected. If it is, a signed `enableModule` violates Charter R-4.1; the engine denies the direct path today and the escape hatch is the intended route. See [`F-ENG-039`](../findings/F-ENG-039.md).
+Plans a small Solidity Safe module letting one SEF address invalidate a SafeSnap Reality proposal. It repeats none of the Rust-service defect patterns: `to`, `value`, `operation` and selector are fixed in code, call success is required, and the question hash is computed onchain. Its gap: it never asks whether the SafeDAO Safe is Safenet-protected. If it is, a signed `enableModule` violates Charter R-4.1. (Engine-side analysis removed with the engine's scope.)
 
 ### New defects filed (round 2)
 

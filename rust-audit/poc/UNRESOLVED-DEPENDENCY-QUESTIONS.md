@@ -1,3 +1,5 @@
+> **Scope note (run 2):** `crates/sentinel-engine` is out of scope (PROMPT.md Section 11). Questions that exist only for the engine are withdrawn and kept for history: **Q3, Q4, Q10, Q19, Q20, Q21, Q23**. `Q-ENG-A` was removed with the engine PoCs.
+
 # Unresolved questions — what a Rust toolchain would settle, in order
 
 > **Merged canonical file.** Assembled by the Manager on from the four QA agents' restored parts, after the original shared file was overwritten mid-run (see `rust-audit/state/STATE.md`, "Data loss and recovery"). Every entry below was restored by its **own author from that agent's working context** — nothing here was reconstructed by guesswork, and no author wrote another author's entry.
@@ -31,13 +33,11 @@ Certainty percentages are the values in the finding headers at the time this fil
 | **1** | Does `frost-core` redact secrets in `Debug`? | **5 min** | `F-XC-002` 74%, `F-VAL-062` 60%, `F-CORE-036` 50% | `I` |
 | **2** | Does `alloy-sol-types` reject non-UTF-8 in a `string` field? | 15 min | `F-SEN-013` 65% (the whole finding) | `I` |
 | **3** | Does `deny_unknown_fields` work alongside `#[serde(flatten)]`? | 5 min | `F-XC-003` 58%, `F-VAL-063` 72% | `I` |
-| **4** | Can an un-timed `reqwest` request hang indefinitely? | 10 min | `F-ENG-005` 80%, `F-ENG-043` 74%, `F-CORE-011` 60%, `F-CORE-039` 55% | `I` |
 | **5** | What does `verify_proof_of_knowledge` do with an empty commitment vector? | 10 min | `F-XC-051` 42%, R4's O4 | `I` |
 | **6** | Does alloy's ABI decoder pre-allocate from a declared array length? | 20 min | `F-XC-051` 42%, `F-VAL-001` 88%, `F-VAL-003` 80% | `I` |
 | **7** | What are Cargo's stock `release` profile defaults on the pinned toolchain? | 2 min | `F-XC-001` 66% | `I` |
 | **8** | Does `cargo tree -d` match the lockfile-derived duplicate list? | 2 min | `baseline.md` §6 | text parse only |
 | **9** | Any advisory status for the 516 locked packages? | 5 min | `F-XC-007` 84% | **unknown, unasserted** |
-| **10** | Does axum's `JsonRejection` echo a fragment of a malformed body? | 10 min | `F-ENG-008` 80% | `I` |
 | **11** | What does `estimate_eip1559_fees` return when `reward` is empty? | 20 min | `F-CORE-060` 82% | mock only |
 | **12** | `sqlx` 0.9 defaults: `journal_mode`, `synchronous`, `busy_timeout`, `foreign_keys`, pool size | 20 min | `F-VAL-035` 45%, R2's O-6/O-7 | `I` |
 | **13** | Does `frost-core` reject a signing package whose commitments do not match the nonces? | 15 min | `F-VAL-034` 40% | `I` |
@@ -48,11 +48,8 @@ Certainty percentages are the values in the finding headers at the time this fil
 | **18** | `reqwest`'s default redirect and proxy policy | 15 min | `F-XC-008` 80% (items 2-3) | `I` |
 | **19** | Does the linker strip the unused `sqlx-mysql`/`sqlx-postgres` code? | 30 min | `F-XC-007` 84% item 2 | `I` |
 | — | _diminishing returns begin here — the rest need something other than a toolchain_ |  |  |  |
-| **20** | Are the eight MultiSend deployment addresses correct and complete? | 30 min + network | `F-ENG-006` 80%, `F-ENG-035` 80%, `F-ENG-037` 84%, `F-XC-052` 85% | not in this repo |
-| **21** | CoW / Safe contract semantics (`setPreSignature`, `GPv2VaultRelayer`, `createWithContext`, `handlePayment`) | hours + the contracts | `F-ENG-031` 85%, `F-ENG-037` 84%, `F-ENG-038` 78% | not in this repo |
 | **22** | Is the HKDF reference vector reproducible? | — | `F-CORE-038` | ✅ **ANSWERED — yes** |
 | **23** | Can the `sentinel-test-vectors` corpus be cloned and run? | hours + a team decision | every `F-ENG-*` | A8 unresolved |
-| **Q-ENG-A** | Does `alloy::transports::mock::Asserter` expose a queue-emptiness accessor? (restored by QA-ENG; full entry under _Additional sections_ below) | 2 min | `F-ENG-032` | open |
 
 **If you have ten minutes:** do #1. **If you have an hour:** #0, #1, #3, #5, #7, #8, #9 — seven answers, four findings re-scored, and the run's `E1` slot filled.
 
@@ -221,7 +218,6 @@ cargo test -p sentinel-engine qa_xc_008 -- --ignored --nocapture
 
 | Answer | Consequence |
 | --- | --- |
-| Hangs past the budget | All four findings move to `E1` on their pivotal `I` leg. `F-ENG-005` is the canonical home for the severity call. Remediation is one expression: `CowChecker::with_client` (`cow.rs:234`) already exists as the seam. |
 | Returns within a cap | Record the observed duration — it re-scores four findings downwards at once, from "stall" to "delay". |
 | The control also hangs | The proposed `.timeout`/`.connect_timeout` fix does not work; fall back to a `tokio::time::timeout` wrapper at the call site. |
 
@@ -544,39 +540,10 @@ Restored by its author, QA-ENG. **Full entry is in the "Additional sections" par
 
 - **Anything about a specific package's security posture.** See the disclaimer at the top.
 - **`F-XC-004` (images run as root, no digest pin, discarded provenance argument), `F-XC-006` (nothing binds a deployment to a chain), `F-XC-009` (sample-config placeholders).** These are Confirmed on direct reads of files in this checkout and are not blocked on anything. They need a decision, not an experiment. The suggested CI gate for `F-XC-004` — `docker inspect` asserting a non-root `User` and a non-empty revision label — is the right shape and needs no answer from this list.
-- **`F-XC-010` (the engine exports no metrics of its own).** Not blocked either; the PoC at `rust-audit/poc/F-XC-010/` demonstrates it locally with no dependency question involved.
 
 ---
 
 # Additional sections
-
-## Q-ENG-A. Does `alloy::transports::mock::Asserter` expose a queue-emptiness accessor?
-
-**Effort: 2 minutes.** **Class:** `I` (no dependency source on disk, assumption A6).
-
-This is the **only identifier used anywhere in the ten engine PoCs that could not be verified against a checkout.** Everything else in `rust-audit/poc/F-ENG-{002,030,031,032,033,034,035,036,037,044}/` was read in `crates/sentinel-engine/src` or `crates/core/src` at commit `2893917`.
-
-**Why it cannot be settled offline.** `Asserter` lives in `alloy-transport`, not in this repository. There is no `vendor/`, no `target/`, and no `*/cargo/registry` anywhere on this host, so the type's inherent methods cannot be read. `crates/core/src/index/events.rs` uses `Asserter::new`, `push_success` and `push_failure_msg` (e.g. `:786`, `:1036`), which confirms those three exist at the locked version — but nothing in this checkout exercises a queue-length or emptiness accessor, so its existence is genuinely unknown rather than merely unread.
-
-**The check.** With a toolchain, either:
-
-- `cargo doc -p alloy --open` and look at `alloy::transports::mock::Asserter`; or
-- simply compile the PoC — `cat rust-audit/poc/F-ENG-032/append-to-src-checkers-refund.rs >> crates/sentinel-engine/src/checkers/refund.rs && cargo test -p sentinel-engine poc_f_eng_032`. A missing method is a compile error naming it exactly.
-
-**Where it is used.** `rust-audit/poc/F-ENG-032/append-to-src-checkers-refund.rs`, in the test `poc_f_eng_032_an_established_refund_receiver_abstains_after_a_real_lookup`, as the **final assertion**. Its purpose is to distinguish "the checker abstained _after_ issuing a real `eth_getLogs` lookup" from "the checker abstained _without_ issuing one" — the two cases that are today indistinguishable on the wire (both emit `{"verdict":"abstain"}`), and the reason F-ENG-032 went unnoticed in the first place.
-
-**If the method does not exist: delete exactly these three lines** from that test, leaving the verdict assertion above them intact:
-
-```rust
-        assert!(
-            asserter.is_empty(),
-            "the queued eth_getLogs response was never consumed: no lookup was issued"
-        );
-```
-
-(The PoC carries a `NOTE:` comment immediately above them saying the same thing, so whoever runs it does not need this file to know what to do.)
-
-**Nothing is lost if it goes.** The same fact is already established, more robustly, by the first test in that file — `poc_f_eng_032_abstains_without_any_rpc_call_today` — which leaves the `Asserter` queue **empty** and relies on `alloy`'s mock transport panicking if a request is ever issued. Merely reaching that test's assertion is therefore proof that no `eth_getLogs` call was made. That formulation depends on no accessor at all, and it is the one to keep if only one can be had.
 
 ---
 

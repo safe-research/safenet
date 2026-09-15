@@ -58,10 +58,12 @@ Tick each box, or replace it with `FALSE:` and a note. The Manager stops at Gate
 | A13 | [ ] No git branches or commits; fixes are proposed inside finding files only. | Not applicable to this run. |
 | A14 | [ ] The tree at the commit recorded in `state/STATE.md` does not change during the run. | Restart from Phase 0. |
 | A15 | [ ] The Safenet Charter text that the engine rule codes (`R-x.y`) cite is available to reviewers; without it, verdict-policy findings stay Plausible. | Verdict-policy leads (ENG-H2 to H7) cannot be Confirmed. |
+| A16 | [x] **(run 2)** Genesis does not need to be recoverable. The genesis ceremony is closely observed by the operator and is manually restarted with a new deployment on abnormal participation. Narrow reading: findings whose only impact is genesis-ceremony liveness are Informational and tagged `known`; findings that reach later epochs (rollover key generations, epoch-1 loss) remain in scope at full severity. | Restore genesis-liveness findings to their measured severity. |
+| A17 | [x] **(run 2)** Only the services (`validator`, `sentinel`) access their respective databases. Triggers that require out-of-band database access — backup restore, copying a database to another chain or deployment, manual edits — are out of scope. Crash-consistency and reorg defects caused by the service itself remain in scope. | Operator-restore triggers (e.g. nonce reuse after a restore across a reorg) return to scope. |
 
 ## 4. Scope
 
-- Findings allowed: `crates/core`, `crates/validator`, `crates/sentinel`, `crates/sentinel-engine` (every `.rs` file), `Cargo.toml`, `Cargo.lock`, `crates/*/Cargo.toml`, `crates/*/Dockerfile`, `crates/*/*.sample.toml`, `crates/sentinel-engine/openapi.yaml`.
+- Findings allowed (run 1; **run 2 excludes `crates/sentinel-engine` — see Section 11**): `crates/core`, `crates/validator`, `crates/sentinel`, `crates/sentinel-engine` (every `.rs` file), `Cargo.toml`, `Cargo.lock`, `crates/*/Cargo.toml`, `crates/*/Dockerfile`, `crates/*/*.sample.toml`, `crates/sentinel-engine/openapi.yaml`.
 - Reference only (read to understand, no findings): `contracts/src`, `docs/`, `scripts/`, `AGENTS.md`, `epics/`.
 - Out of scope: `explorer/`, `examples/`, `certora/`, `.github/`, findings on Solidity.
 
@@ -229,3 +231,13 @@ Severity for this system:
 ## 10. Workflow variant (optional)
 
 If the operator says "use a workflow" or "ultracode", run each phase as its own Workflow with `phase()` blocks, one `agent()` per role instance, the same file outputs, and the same gate between phases. Note that a stopped workflow can only be resumed within the same session, so the file-based state in Section 7 remains authoritative.
+
+## 11. Run 2 addendum
+
+A second, independent execution of this prompt with a different model (Claude Fable 5.1), on the same commit of the audited code. Everything in Sections 1–9 applies with these changes:
+
+- **Scope.** `crates/sentinel-engine` is **out of scope**: it is a reference implementation used for testing and is not required to be in final form. No reviewer, Critic or QA agent reads it or files against it, and every prior artefact about it has been removed from `rust-audit/`. Findings are allowed only against `crates/core`, `crates/validator`, `crates/sentinel`, the workspace manifests, and those crates' Dockerfiles and sample configs. `openapi.yaml`, `sentinel-engine.sample.toml` and `crates/sentinel-engine/Dockerfile` leave the inventory. Assumptions A16 and A17 above are in force; A8 (the engine test-vector corpus) is moot.
+- **Independence.** Run-2 agents must **not** read run-1 findings (`findings/F-*.md`), run-1 reports (`report/*`) or run-1 state (`state/*.md` outside `state/run2/`). The codebase map and analyses remain available as leads, exactly as in run 1. Run 2 is a second opinion; reconciliation with run 1 is a separate final phase performed by a Manager-directed agent that reads both.
+- **Naming.** Run-2 findings are `findings/F2-<CRATE>-<nnn>.md` with `CRATE` in `CORE`, `VAL`, `SEN`, `XC`; PoCs under `poc/F2-<id>/`; state under `state/run2/` (`STATE.md`, `baseline.md`, `coverage.md`, `agents/`, `logs/`). Same file template as Section 8.
+- **Reconciliation phase (after Phase 4).** One agent maps every `F2-*` finding to run 1: **confirms** an existing finding (link it, note any severity/certainty disagreement), **contradicts** one (record both positions and the evidence), or is **genuinely new**. Run-1 findings that run 2 did not rediscover are listed, since a miss by an independent reviewer is itself information.
+- **Delivery.** Work lands as incremental commits on the existing PR — never a force push, never a commit outside `rust-audit/`, no co-author trailer, Prettier-clean and CI-verified before each push. `report/REPORT.md` is rewritten for the combined result and committed **last, on its own**, so reviewers can diff it in isolation.

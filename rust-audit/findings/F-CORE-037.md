@@ -98,3 +98,7 @@ Option 4 (document next to the existing "ensure this survives restarts" guidance
 ## In-flight impact (AS-SEN)
 
 **Pertains to unmerged branches, not to `main`.** Assessed against `origin/fix/sentinel_deadlines` (PR #914) and `origin/feat/optimistic_block_transition` (PR #915, tip `b2aad06`), built from a `git archive` extraction. Both apply cleanly onto `main` — `main`'s crates are byte-identical to their base `199629e`, so a verdict on the tip is also the verdict for the tip merged into `main`. **Effect: unchanged; no migration needed.** #915's new `Status` exists only in memory (`crates/core/src/state/mod.rs:121-137`), and snapshot content semantics are unchanged; the format is still unversioned.
+
+## Scope note (run 2)
+
+`crates/sentinel-engine` was placed out of scope after this finding was written (PROMPT.md Section 11); the engine-specific parts above are retained as run-1 history and are not part of the current audit's claims. The non-engine parts stand.

@@ -134,3 +134,7 @@ The other two claims — `/health` unreachable by default, container runs as roo
 **Option 4 must be rewritten**, per the `H` the Critic recorded above and C-XC's independent finding of the same fact. Whatever survives of it should be stated against the four `Dockerfile.dockerignore` paths that actually exist, and the base-image digest pinning — which is sound and unaffected by the `H` — should be split out so it is not lost with the rest.
 
 **Severity.** Medium is right and I agree with C-VAL-B's reasoning in both directions. The point worth carrying into the report is the one that distinguishes claim 1 from the other two: exit code 0 on a fatal stop cannot be worked around by configuration, because `run` does not tell `main` why it returned. The root user and the unreachable `/health` are both one-line deployment fixes; this one is not.
+
+## Scope note (run 2)
+
+`crates/sentinel-engine` was placed out of scope after this finding was written (PROMPT.md Section 11); the engine-specific parts above are retained as run-1 history and are not part of the current audit's claims. The non-engine parts stand.

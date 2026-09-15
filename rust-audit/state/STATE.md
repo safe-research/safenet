@@ -7,8 +7,6 @@
 | Mode | phases 0–4 read-only; **5–8 executed** (toolchain, then Foundry, installed mid-run) |
 | Deliverable | [`report/REPORT.md`](../report/REPORT.md) |
 
-Long-form run narrative, with every gate and agent report: [`STATE-full.md`](./STATE-full.md).
-
 ## Post-merge revalidation
 
 Merged `origin/main` (21 commits). Only **`crates/sentinel`** changed in Rust (+559/−35: `service.rs` +371, `state.rs` +207); `core`, `validator` and `sentinel-engine` are **unchanged**. `contracts/src` took the Certora FROST audit fixes I-01..I-09. Merged tree builds; `cargo test --workspace` **271 passed / 0 failed**.
@@ -66,12 +64,7 @@ All 108 findings mapped onto 24 issues, 8 TODOs and 3 epics: **11 already tracke
 
 | Critical |  |  |
 | --- | --- | --- |
-| `F-ENG-030` | 99% | `secure` verdict on 1000 ETH to an attacker EOA — drained on a real Safe proxy |
-| `F-ENG-031` | 99% | refund leg never vetted — 100.0003 ETH and 0.503 tokens actually paid out |
-| `F-ENG-033` | 99% | address-poisoning affirms on a forged history — 1000 ETH drained |
 | `F-VAL-001` | 97% | DKG key `q` has no proof of possession — victim's FROST signing share recovered; real contract bytecode accepts it, 5/5 seeds |
-
-All three engine Criticals are instances of **`F-ENG-044`** (first-non-abstain-wins combinator). Fixing them per-checker without it leaves the next over-broad affirmer exploitable.
 
 ## The result the team should act on first
 

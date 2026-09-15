@@ -1,3 +1,5 @@
+> **Scope note (run 2):** this is the run-1 baseline. `crates/sentinel-engine` has since been placed out of scope (PROMPT.md Section 11); its toolchain, inventory and test rows below are historical. The run-2 baseline is `state/run2/baseline.md`.
+
 # Phase 0 baseline
 
 | Field | Value |

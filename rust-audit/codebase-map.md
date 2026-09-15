@@ -1,5 +1,7 @@
 # Safenet Rust Codebase Map
 
+> **Scope note (run 2):** `crates/sentinel-engine` is out of scope (PROMPT.md Section 11). Section 6.4, the engine inventory rows and reviewers R8/R9 were removed; remaining mentions of `ENG-H*` leads or the engine are run-1 history.
+
 | Field | Value |
 | --- | --- |
 | Produced | against commit `82b3e0d` on `main`, by Claude Fable 5.1 acting as Manager plus four read-only per-crate analysis agents |
@@ -163,21 +165,17 @@ Line counts are `wc -l` at the audited commit; tests are `#[test]` and `#[tokio:
 
 **Non-Rust files in scope**
 
-| File                                                 | Lines |
-| ---------------------------------------------------- | ----- |
-| `Cargo.toml`                                         | 26    |
-| `Cargo.lock`                                         | 6,169 |
-| `crates/core/Cargo.toml`                             | 31    |
-| `crates/validator/Cargo.toml`                        | 28    |
-| `crates/sentinel/Cargo.toml`                         | 24    |
-| `crates/sentinel-engine/Cargo.toml`                  | 24    |
-| `crates/validator/Dockerfile`                        | 37    |
-| `crates/sentinel/Dockerfile`                         | 38    |
-| `crates/sentinel-engine/Dockerfile`                  | 28    |
-| `crates/validator/validator.sample.toml`             | 77    |
-| `crates/sentinel/sentinel.sample.toml`               | 61    |
-| `crates/sentinel-engine/sentinel-engine.sample.toml` | 42    |
-| `crates/sentinel-engine/openapi.yaml`                | 190   |
+| File                                     | Lines |
+| ---------------------------------------- | ----- |
+| `Cargo.toml`                             | 26    |
+| `Cargo.lock`                             | 6,169 |
+| `crates/core/Cargo.toml`                 | 31    |
+| `crates/validator/Cargo.toml`            | 28    |
+| `crates/sentinel/Cargo.toml`             | 24    |
+| `crates/validator/Dockerfile`            | 37    |
+| `crates/sentinel/Dockerfile`             | 38    |
+| `crates/validator/validator.sample.toml` | 77    |
+| `crates/sentinel/sentinel.sample.toml`   | 61    |
 
 ## 3. Toolchain, build and CI facts
 
@@ -194,10 +192,6 @@ Line counts are `wc -l` at the audited commit; tests are `#[test]` and `#[tokio:
 | --- | --- |
 | `crates/sentinel/src/main.rs:45` | Startup timing metric should be derived from effect lifecycle data. |
 | `crates/sentinel/src/config.rs:44` and `:121` | Default for a zero-address configuration value still to be chosen (epic E2). |
-| `crates/sentinel-engine/src/api/mod.rs:48` | A request parameter is not yet passed to the engine. |
-| `crates/sentinel-engine/src/checkers/address_poisoning.rs:303` | First-time recipient with no established history is a follow-up. |
-| `crates/sentinel-engine/src/checkers/base.rs:198` | Every denial maps to `RuleId::R4_2DelegatecallIntegrity` for now. |
-| `crates/sentinel-engine/src/checkers/refund.rs:83` and `:93` | Documented holes in the refund checker (native currency and token cases). |
 | `epics/2026_07_14_validator_state_machine_flow_test_harness.md` | Validator state machine has little end-to-end behavioural coverage. |
 
 ## 5. Cross-cutting checklist (every reviewer)
@@ -306,36 +300,6 @@ Considered and rejected by the agent (do not re-derive unless you disagree): com
 
 Reviewer checklist: items 1 to 13 in the analysis file, section 13, in that order.
 
-### 6.4 `sentinel-engine` (5,113 lines, 97 tests)
-
-Purpose: keyless HTTP verdict service. One axum route (`api/mod.rs:27-30`) runs a fixed chain of ten checkers (`main.rs:57-73`); the first non-abstain verdict wins (`engine/mod.rs:62-69`), so any checker that affirms `secure` suppresses every denial a later checker would have made. Full analysis: [analysis/analysis-sentinel-engine.md](./analysis/analysis-sentinel-engine.md), including a per-checker table of exactly when each returns `secure`, `insecure`, or `abstain` (section 5).
-
-Runtime facts a reviewer must hold in mind: six checkers can affirm `secure` (Cancellation, EscapeHatch, NestedSafe, Cow, Staking, AddressPoisoning); only Cancellation and EscapeHatch require `gasPrice == 0`; NestedSafe and AddressPoisoning ignore `value` and every refund field; the refund checker can only deny and runs after all affirmers; decoding is total (checked MultiSend cursor, `Result` everywhere; the one `expect` in `cow.rs:130` is gated by a supported-chain check); there is no server-side timeout, no concurrency limit, no RPC or CoW client timeout, and `x-request-timeout` is parsed then discarded (`api/mod.rs:48-50`); failure-abstain and policy-abstain are the same bytes on the wire.
-
-Hotspots: `main.rs:57-73` (ordering is a security property), `checkers/refund.rs:98-117`, `checkers/nested.rs:42-47`, `checkers/escape_hatch.rs:52-61`, `checkers/address_poisoning.rs:116-139`, `194-222`, `305-380`, `checkers/cow.rs:295-402`, `478-569`, `contracts/target_effects.rs:46-49`, `contracts/multi_send.rs`.
-
-Invariants to verify: no checker affirms without evidence about the whole transaction, including `value` and the refund leg; every RPC-backed check verifies `chain_id` before using RPC evidence; the blocklist applies to every address the transaction touches; a malformed body can never produce a panic; the engine's chain view is at or before the request's `block`.
-
-Seeded hypotheses (from the analysis agent; the Manager re-read the citations for ENG-H1, H2, H3 and H5 and they match the code; verdict severity depends on the Charter, which reviewers must consult):
-
-| Lead | Location | One line | Agent confidence | Severity guess |
-| --- | --- | --- | --- | --- |
-| ENG-H1 | `checkers/refund.rs:105-117`, `address_poisoning.rs:312-319` | The synthetic refund transfer is built with `..Default::default()`, so `chain_id` is zero and the delegated check always abstains: the refund checker never denies anything. | 95% | Medium alone, enabler |
-| ENG-H2 | `checkers/nested.rs:42-47`, `main.rs:62` | Any `Call` to a non-self address carrying decodable `execTransaction` calldata is affirmed `secure` regardless of `value`, `gasPrice`, or the target's identity. | 90% | Critical if the Charter forbids affirming unvetted value transfers |
-| ENG-H3 | `checkers/address_poisoning.rs:194-222`, `325-333` | Evidence comes from `eth_getLogs` on `transaction.to`, which the proposer chooses; a contract emitting a forged `Transfer(safe, X, 1)` yields `ExactMatch` and `secure`, with `value` unchecked. | 85% | Critical |
-| ENG-H4 | `main.rs:57-73`, `checkers/refund.rs:83-96` | The gas-refund leg is unvetted whenever any affirming checker fires; PR #876 removed the global non-zero-`gasPrice` abstain and relied on the (dead) refund checker. | 90% | Critical in combination |
-| ENG-H5 | `checkers/escape_hatch.rs:52-61`, `main.rs:58-61`, `contracts/src/guard/SafenetGuard.sol:360` | The escape-hatch shape is affirmed for any `to` and runs before the blocklist, while the onchain guard only auto-allows it for `to == address(this)`. | 85% | Medium |
-| ENG-H6 | `checkers/blocklist.rs:25` | The blocklist inspects only the top-level `to`; MultiSend and nested wrappers bypass it. | 90% | Medium |
-| ENG-H7 | `checkers/excessive_approval.rs:22`, `address_poisoning.rs:325-333` | `approve(X, 2^256 - 2)` evades the literal-max rule and is affirmed if `X` has any prior history. | 80% | Medium to High |
-| ENG-H8, H9 | `checkers/cow.rs:376`, `540-554`, `478-499` | TWAP tolerance sized by attacker-chosen `n`; presignature and TWAP shape checks accept what the decoders reject, turning a dangling relayer approval into `abstain`. | 85% | Low to Medium |
-| ENG-H10 | `api/mod.rs:48-50`, `cow.rs:196-231`, `core/provider/mod.rs:129-137` | No server-side deadline or client timeouts; a stalled provider pins handler tasks. | 95% | Medium |
-| ENG-H11 | `contracts/target_effects.rs:46-49`, `base.rs:205-213` | Unbounded recursion in effect decoding, currently shielded only by the base checker running first. | 90% | Low now, High if reachable |
-| ENG-H12 to H14 | see analysis | Non-graceful shutdown; failure-abstain indistinguishable from policy-abstain; docs understate external dependencies (CoW API, RPC via refund). | 90% to 95% | Low to Info |
-
-Considered and rejected by the agent: panics from malformed bodies or calldata; JSON depth and size bombs; header injection; CoW API spoofing (digest recompute binds the response); block-chunk non-termination; nested MultiSend reaching the recursive decoder today; out-of-range `operation` values; wire drift between sentinel and engine; selector collisions; `transferFrom` forgery on real tokens (needs an allowance; H3 is the allowance-free variant).
-
-Reviewer checklist: items 1 to 13 in the analysis file, section 11. Item 1 (should any checker ever return `secure`, and under which zero-field conditions) is the crate's central question and needs the Charter text.
-
 ## 7. Leads from the Manager's own reading
 
 These come from the Manager reading `ecdh.rs`, `nonces.rs`, `merkle.rs`, `preprocess.rs`, `store.rs`, `kdf.rs`, `signer.rs`, `hashing.rs`, `driver.rs` and parts of `keygen.rs` and `utils.rs` directly. Class I or E2 by inspection; nothing executed.
@@ -379,8 +343,6 @@ Ten reviewers, split by risk domain rather than by crate size. A reviewer reads 
 | R5 | validator signing path and secrets | `validator/src/frost/{preprocess,sign}.rs`, `validator/src/merkle.rs`, `validator/src/secrets/*`, `validator/src/state/{preprocess,sign,transactions}.rs`, `validator/src/consensus/hashing.rs` | 2,802 | VAL-H3, H6, H8, H11, M4, M5, M6, M7; validator checklist 3, 4, 5, 10 |
 | R6 | validator service, wiring, config | `validator/src/state/mod.rs`, `validator/src/service/*`, `validator/src/{bindings,config,main,metrics}.rs`, `validator.sample.toml`, `validator/Dockerfile` | 2,068 | VAL-H2, H7, H10, CORE-H4; validator checklist 2, 6, 9, 11, 13 |
 | R7 | sentinel | all of `sentinel/src/*`, `sentinel.sample.toml`, `sentinel/Dockerfile` | 3,348 | SEN-H1 to H15, M8; sentinel checklist 1 to 13 |
-| R8 | engine API, chain, contracts decoding | `sentinel-engine/src/api/*`, `engine/*`, `contracts/*`, `{config,main}.rs`, `openapi.yaml`, `sentinel-engine.sample.toml`, `sentinel-engine/Dockerfile` | 1,642 | ENG-H10 to H14; engine checklist 3, 6, 10, 11, 13 |
-| R9 | engine checkers | `sentinel-engine/src/checkers/*` | 3,275 | ENG-H1 to H9; engine checklist 1, 2, 4, 5, 7, 8, 9, 12 |
 | R10 | cross-cutting | `Cargo.toml`, `Cargo.lock`, `crates/*/Cargo.toml`, all Dockerfiles and sample configs; plus a repo-wide sweep for secrets in `Debug`, logs and metrics, the panic and cast censuses in each analysis (section 8), `cargo audit` and `cargo tree -d` output from Phase 0, and CI gaps (Section 3) | n/a | VAL-H10, SEN-H14, SEN-H15, CORE-H17, ENG-H14 |
 
 Critics: one per crate (`C-CORE` covers R1 to R3, `C-VAL` covers R4 to R6, `C-SEN` covers R7, `C-ENG` covers R8 and R9), one for R10, and the Coverage Critic. QA: one per crate that has at least one Confirmed or Plausible finding after Phase 2. The Manager may split any reviewer with more than about forty findings or observations into two agents at the same scope boundary.

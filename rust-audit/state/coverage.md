@@ -1,3 +1,5 @@
+> **Scope note (run 2):** `crates/sentinel-engine` is out of scope (PROMPT.md Section 11). Its files, reviewers R8/R9, findings and seeded leads were removed from the tables below; any prose that still mentions the engine describes run-1 history only.
+
 # Coverage matrix and gap report — Coverage Critic
 
 | Field | Value |
@@ -6,7 +8,6 @@
 | Commit | `2893917` (branch `rust-audit`), verified unchanged during this run |
 | Mode | READ-ONLY. No toolchain (A9 FALSE): no `cargo`, `rustc`, `forge`, `anvil`, `just`, no network, no dependency source on disk. `E1` is unreachable, so **no finding in this run may be certified above 89%**. |
 | Snapshot | , taken with **101 finding files**, of which **89 carry a `## Critic` section**. C-CORE-A, C-CORE-B, C-VAL-A, C-SEN, C-ENG-A and C-ENG-B are complete; **C-VAL-B and C-XC were still running** when this was written, so a Critic column reading "in progress" is a snapshot artefact, not an uncovered finding. |
-| Findings filed by this agent | `F-XC-050`, `F-XC-051`, `F-XC-052`. The range `F-XC-050`…`F-XC-069` belongs to this agent alone (R10 used `001`–`009`; the cross-cutting Critic holds `010`–`049`). |
 
 ## 0. The denominator
 
@@ -47,7 +48,6 @@ Columns:
 | `crates/core/src/observability/logging.rs` | 21 | R2 | 100% | **none** | F-CORE-034 | none yet |
 | `crates/core/src/observability/metrics.rs` | 80 | R2 | 100% | F-CORE-030 F-XC-009 | F-CORE-004 F-CORE-011 | C-CORE-B (+1 pending) |
 | `crates/core/src/observability/mod.rs` | 94 | R2 | 100% | F-CORE-007 F-VAL-064 | F-CORE-037 F-VAL-062 F-XC-002 F-XC-009 | C-CORE-A (+1 pending) |
-| `crates/core/src/provider/mod.rs` | 166 | R1 | 100% | F-CORE-011 F-CORE-039 F-CORE-065 F-ENG-005 F-XC-006 | F-ENG-032 F-ENG-042 F-ENG-043 F-XC-002 F-XC-008 | C-CORE-B C-ENG-A C-XC (+1 pending) |
 | `crates/core/src/serialization.rs` | 34 | R2 | 100% | **none** | — | none yet |
 | `crates/core/src/state/mod.rs` | 644 | R2 | 100% | F-CORE-031 F-CORE-032 F-CORE-033 F-CORE-037 F-SEN-001 F-SEN-003 F-SEN-015 F-VAL-005 F-VAL-030 F-VAL-034 F-VAL-038 | F-CORE-001 F-CORE-002 F-CORE-003 F-CORE-006 F-CORE-012 F-SEN-005 F-SEN-006 F-VAL-004 F-VAL-036 F-VAL-061 F-VAL-066 | C-CORE-B C-SEN C-VAL-A C-VAL-B (+3 pending) |
 | `crates/core/src/state/storage.rs` | 294 | R2 | 100% | F-CORE-001 F-CORE-031 F-CORE-037 F-XC-006 | F-SEN-001 F-VAL-004 F-VAL-005 F-VAL-063 F-XC-007 | C-CORE-A C-CORE-B C-XC |
@@ -56,38 +56,12 @@ Columns:
 | `crates/core/src/tx/signer.rs` | 118 | R3 | 100% | F-CORE-038 F-XC-002 | F-CORE-063 F-VAL-062 | C-CORE-B C-XC |
 | `crates/core/src/tx/storage.rs` | 507 | R3 | 100% | F-CORE-060 F-CORE-061 F-CORE-062 F-CORE-063 F-CORE-064 F-CORE-065 F-SEN-004 F-SEN-006 F-VAL-065 F-XC-006 | F-CORE-003 F-SEN-003 F-SEN-014 | C-CORE-B C-SEN C-XC (+1 pending) |
 | `crates/core/src/tx/types.rs` | 87 | R3 | 100% | F-CORE-060 F-CORE-061 | F-CORE-065 | C-CORE-B |
-| `crates/core/src/utils.rs` | 97 | R2 | 100% | F-CORE-039 F-ENG-007 F-VAL-035 | F-VAL-038 F-VAL-066 | C-CORE-B C-ENG-A (+1 pending) |
-| `crates/sentinel-engine/src/api/extractors.rs` | 69 | R8 | 100% | F-ENG-008 | F-ENG-005 F-XC-002 | C-ENG-A |
-| `crates/sentinel-engine/src/api/mod.rs` | 60 | R8 | 100% | F-ENG-005 F-ENG-008 | F-XC-008 | C-ENG-A |
-| `crates/sentinel-engine/src/checkers/address_poisoning.rs` | 457 | R9 | 100% | F-ENG-004 F-ENG-009 F-ENG-033 F-ENG-041 F-ENG-042 F-XC-005 F-XC-052 | F-ENG-031 F-ENG-032 F-ENG-035 F-ENG-036 | C-ENG-A C-ENG-B C-XC (+1 pending) |
-| `crates/sentinel-engine/src/checkers/base.rs` | 765 | R9 | 100% | F-ENG-001 F-ENG-003 F-ENG-006 F-ENG-039 F-ENG-040 | F-ENG-030 | C-ENG-A C-ENG-B |
-| `crates/sentinel-engine/src/checkers/blocklist.rs` | 89 | R9 | 100% | F-ENG-035 | F-ENG-034 | C-ENG-B |
-| `crates/sentinel-engine/src/checkers/cancellation.rs` | 72 | R9 | 100% | **none** | — | none yet |
-| `crates/sentinel-engine/src/checkers/cow.rs` | 1407 | R9 | 100% | F-ENG-005 F-ENG-037 F-ENG-038 F-ENG-043 F-XC-008 F-XC-052 | F-ENG-031 | C-ENG-A C-ENG-B (+2 pending) |
-| `crates/sentinel-engine/src/checkers/escape_hatch.rs` | 61 | R9 | 100% | F-ENG-034 | — | C-ENG-B |
-| `crates/sentinel-engine/src/checkers/excessive_approval.rs` | 136 | R9 | 100% | F-ENG-002 F-ENG-006 F-ENG-036 | — | C-ENG-A C-ENG-B |
-| `crates/sentinel-engine/src/checkers/mod.rs` | 48 | R9 | 100% | **none** | — | none yet |
-| `crates/sentinel-engine/src/checkers/nested.rs` | 47 | R9 | 100% | F-ENG-030 | — | C-ENG-B |
-| `crates/sentinel-engine/src/checkers/refund.rs` | 206 | R9 | 100% | F-ENG-031 F-ENG-032 F-XC-052 | F-ENG-044 | C-ENG-B (+1 pending) |
-| `crates/sentinel-engine/src/checkers/staking.rs` | 183 | R9 | 100% | F-XC-052 | F-ENG-031 | C-XC in progress |
-| `crates/sentinel-engine/src/config.rs` | 154 | R8 | 100% | F-ENG-009 F-XC-003 F-XC-005 | F-XC-004 F-XC-006 F-XC-009 | C-ENG-A C-XC |
-| `crates/sentinel-engine/src/contracts/bindings.rs` | 172 | R8 | 100% | F-ENG-003 | F-ENG-036 | C-ENG-A |
-| `crates/sentinel-engine/src/contracts/mod.rs` | 5 | R8 | 100% | **none** | — | none yet |
-| `crates/sentinel-engine/src/contracts/multi_send.rs` | 186 | R8 | 100% | F-ENG-006 F-XC-052 | F-ENG-032 F-ENG-035 | C-ENG-A (+1 pending) |
-| `crates/sentinel-engine/src/contracts/target_effects.rs` | 454 | R8 | 100% | F-ENG-002 F-ENG-006 | F-ENG-036 | C-ENG-A |
-| `crates/sentinel-engine/src/engine/mod.rs` | 121 | R8 | 100% | F-ENG-030 F-ENG-044 | F-ENG-006 | C-ENG-B (+1 pending) |
-| `crates/sentinel-engine/src/engine/rule.rs` | 164 | R8 | 100% | F-ENG-001 F-ENG-002 F-ENG-003 F-ENG-004 | — | C-ENG-A |
-| `crates/sentinel-engine/src/engine/transaction.rs` | 170 | R8 | 100% | **none** | F-ENG-008 F-ENG-032 | none yet |
-| `crates/sentinel-engine/src/main.rs` | 87 | R8 | 100% | F-ENG-005 F-ENG-006 F-ENG-007 F-ENG-009 F-ENG-030 F-ENG-044 F-XC-008 | F-ENG-031 F-ENG-034 F-ENG-035 F-XC-052 | C-ENG-A C-ENG-B (+2 pending) |
 | `crates/sentinel/src/action.rs` | 43 | R7 | 100% | F-SEN-005 | — | C-SEN |
 | `crates/sentinel/src/bindings.rs` | 170 | R7 | 100% | F-SEN-005 F-SEN-013 | F-CORE-006 F-SEN-008 | C-SEN |
 | `crates/sentinel/src/config.rs` | 144 | R7 | 100% | F-SEN-009 F-SEN-010 F-XC-003 | F-CORE-036 F-XC-006 F-XC-008 F-XC-009 | C-SEN C-XC |
-| `crates/sentinel/src/effect.rs` | 134 | R7 | 100% | F-SEN-011 F-SEN-012 | F-CORE-032 F-ENG-043 F-SEN-009 | C-SEN |
-| `crates/sentinel/src/engine.rs` | 392 | R7 | 100% | F-ENG-007 F-SEN-012 F-SEN-015 F-XC-008 | F-ENG-001 F-ENG-005 F-ENG-008 F-ENG-030 F-ENG-032 F-ENG-038 F-ENG-039 F-ENG-043 | C-ENG-A C-SEN (+2 pending) |
 | `crates/sentinel/src/hashing.rs` | 224 | R7 | 100% | F-CORE-038 | F-SEN-010 F-XC-007 | C-CORE-B |
 | `crates/sentinel/src/main.rs` | 89 | R7 | 100% | F-CORE-030 F-SEN-007 F-SEN-009 | F-CORE-006 F-CORE-007 F-CORE-011 F-CORE-033 F-SEN-001 F-SEN-010 | C-CORE-B C-SEN |
 | `crates/sentinel/src/metrics.rs` | 134 | R7 | 100% | **none** | F-SEN-012 F-XC-002 | none yet |
-| `crates/sentinel/src/service.rs` | 1851 | R7 | 100% | F-CORE-036 F-SEN-001 F-SEN-002 F-SEN-003 F-SEN-004 F-SEN-005 F-SEN-006 F-SEN-007 F-SEN-008 F-SEN-009 F-SEN-011 F-SEN-012 F-SEN-014 F-SEN-015 | F-CORE-031 F-CORE-033 F-CORE-064 F-ENG-001 F-ENG-002 F-ENG-003 F-ENG-007 F-ENG-030 F-ENG-032 F-ENG-033 F-ENG-036 F-ENG-038 F-ENG-039 F-ENG-040 F-ENG-041 F-ENG-042 F-ENG-043 | C-CORE-B C-SEN (+1 pending) |
 | `crates/sentinel/src/state.rs` | 167 | R7 | 100% | F-CORE-037 F-SEN-011 | — | C-CORE-B C-SEN |
 | `crates/validator/src/bindings.rs` | 247 | R6 | 100% | F-CORE-012 | F-CORE-004 F-CORE-006 | none yet (+1 pending) |
 | `crates/validator/src/config.rs` | 290 | R6 | 100% | F-VAL-063 F-XC-003 F-XC-009 | F-CORE-004 F-CORE-006 F-CORE-036 F-CORE-066 F-VAL-035 F-XC-006 | C-XC (+2 pending) |
@@ -128,19 +102,14 @@ R10 is the only reviewer with a findings-eligible non-Rust scope. Line counts re
 
 | File | Lines | Reviewer | Claimed read | Findings anchored | Also cited | Critic |
 | --- | --: | --- | --- | --- | --- | --- |
-| `Cargo.toml` | 26 | R10 | 100% | F-ENG-005 F-XC-001 F-XC-007 F-XC-008 | F-CORE-008 F-ENG-006 F-ENG-008 F-ENG-043 F-VAL-035 F-VAL-064 F-XC-002 F-XC-004 F-XC-005 | C-ENG-A C-XC |
 | `Cargo.lock` | 6169 | R10 | 100% | F-XC-007 | F-SEN-013 F-VAL-062 F-VAL-064 F-XC-002 F-XC-004 | C-XC in progress |
 | `crates/core/Cargo.toml` | 31 | R10 | 100% | F-XC-007 | — | C-XC in progress |
 | `crates/validator/Cargo.toml` | 28 | R10 | 100% | **none** | F-XC-002 | C-XC in progress |
 | `crates/sentinel/Cargo.toml` | 24 | R10 | 100% | **none** | — | C-XC in progress |
-| `crates/sentinel-engine/Cargo.toml` | 24 | R10 | 100% | F-ENG-005 | F-ENG-043 F-XC-005 | C-ENG-A |
 | `crates/validator/Dockerfile` | 37 | R10 | 100% | F-VAL-064 F-XC-001 F-XC-004 | — | C-XC |
 | `crates/sentinel/Dockerfile` | 38 | R10 | 100% | F-XC-001 F-XC-004 | — | C-XC |
-| `crates/sentinel-engine/Dockerfile` | 28 | R10 | 100% | F-XC-001 F-XC-004 | — | C-XC |
 | `crates/validator/validator.sample.toml` | 77 | R10 | 100% | F-VAL-063 F-VAL-064 F-XC-006 F-XC-009 | F-CORE-006 F-CORE-007 F-CORE-060 F-CORE-066 F-XC-003 F-XC-004 | C-XC |
 | `crates/sentinel/sentinel.sample.toml` | 61 | R10 | 100% | F-SEN-010 F-XC-006 F-XC-009 | F-CORE-007 | C-SEN C-XC |
-| `crates/sentinel-engine/sentinel-engine.sample.toml` | 42 | R10 | 100% | F-ENG-009 F-XC-005 F-XC-006 F-XC-009 | F-ENG-034 F-ENG-042 | C-ENG-A C-XC |
-| `crates/sentinel-engine/openapi.yaml` | 190 | R10 | 100% | F-ENG-005 F-ENG-008 | F-XC-007 | C-ENG-A |
 
 **One claimed read is not a line-by-line read, and R10 says so:** `Cargo.lock` (6,169 lines) is logged as "**not line-by-line**; parsed in full with `python3` (package/version/dependency extraction, 573 `[[package]]` blocks) and read directly at the `sqlx` block (`4599-4620`). Stated honestly: I did not read 6,169 lines by eye." That is the correct treatment for a generated lockfile and is recorded here so the report does not overclaim.
 
@@ -169,9 +138,6 @@ These are the files where a claimed 100% read produced no citation of any kind. 
 | `crates/validator/src/consensus/mod.rs` | 5 | R4 | Module declaration only. |
 | `crates/core/src/lib.rs` | 25 | R2 | **Read by this agent.** Crate doc plus twelve `pub mod` lines. Only note: `metrics` is the one private module, so `core::metrics` is not part of the public API while `observability::metrics` is — deliberate, matches R2's reading. |
 | `crates/core/src/serialization.rs` | 34 | R2 | **Read by this agent.** One `from_str` serde helper. R2's rejected hypothesis 8 already established its three call sites and that none carries a secret. Clean. |
-| `crates/sentinel-engine/src/checkers/mod.rs` | 48 | R9 | **Read by this agent.** Trait definition plus the `impl<T: Checker> Checker for Arc<T>` blanket. Clean. |
-| `crates/sentinel-engine/src/contracts/mod.rs` | 5 | R8 | Module declaration only. |
-| `crates/sentinel-engine/src/checkers/cancellation.rs` | 72 | R9 | **Read by this agent.** `CancellationChecker` compares all twelve `SafeTransaction` fields against a template that copies only `chain_id`/`safe`/`to`/`nonce`, so `value`, `data`, `operation` and all four refund fields must be default for it to affirm; `Operation::default` is `Call` (`engine/transaction.rs:7-13`). **Clean, and correctly stricter than the affirmers F-ENG-031 covers.** |
 
 ### 3.2 Six more files with no _anchored_ finding (cited only in others' basis rows)
 
@@ -194,7 +160,6 @@ Method: pick the three least-covered files per crate by combined weakest evidenc
 | `core` | `index/bloom.rs`, `serialization.rs`, `lib.rs` (+ `observability/logging.rs`) | Clean. `may_contain_log` (`bloom.rs:23-35`) has no production caller and the `#[allow(dead_code)]` at `index/mod.rs:5-6` hides that from the compiler; R1 already recorded it as the cheapest remediation for F-CORE-002 and C-CORE-A has since promoted `F-CORE-012` over the same file. No new finding. |
 | `validator` | `frost/marshal.rs`, `frost/mod.rs`, `consensus/hashing.rs` | **`F-XC-051`** from `marshal.rs`. `hashing.rs` verified clean against Solidity. `frost/mod.rs` is declarations plus a happy-path test. |
 | `sentinel` | `action.rs`, `metrics.rs`, `hashing.rs` | Clean. Every sentinel file already carried at least one citation before this pass — `sentinel` is the best-covered crate in the audit by this metric. `hashing.rs`'s `commit_hash` preimage order matches the documented `SentinelOracleCommitments.computeHash`, and R7 closed M8 over it with a full trace. No new finding. |
-| `sentinel-engine` | `checkers/cancellation.rs`, `checkers/mod.rs`, `contracts/mod.rs` (+ `engine/transaction.rs`, `contracts/multi_send.rs` reached by tracing `sub_transactions` out of `staking.rs`) | **`F-XC-052`** from `multi_send.rs`. The three nominal targets are clean. |
 | cross-cutting | `state/keygen.rs:445-482` and `:1295-1325`, reached from R4's dangling observations | **`F-XC-050`**. |
 
 ### Findings filed
@@ -203,7 +168,6 @@ Method: pick the three least-covered files per crate by combined weakest evidenc
 | --- | --- | --- | --- | --- |
 | `F-XC-050` | No DKG event handler checks group membership, so one injected `KeyGenConfirmed` closes the confirmation round early and silently finalises genesis with no key share | High | 58% | Promotes R4's Observation **O9**, which R4 parked as conditional on VAL-H2 and which R6's `F-VAL-060` left dangling. `F-VAL-060` stays canonical for the injection mechanism; this is the consequence it does not enumerate. Mechanism `E2`, trigger inherits F-VAL-060's unproven precondition → **Plausible**, not Confirmed. |
 | `F-XC-051` | `verify_commitment` deliberately delegates the DKG commitment's only structural validation to a contract that is not in the event path, and accepts identity coefficients | Medium | 45% | Promotes R4's Observations **O3** and **O4**, same dangling condition. Mechanism `E2`; both load-bearing consequences (`frost-core` behaviour on an empty `c`; the contract's `require`) are class `I` under A6/A7, which is what caps it. |
-| `F-XC-052` | `decode_multi_send` synthesises sub-transactions with `chain_id`, `nonce` and every refund field zeroed — the identical construction that made `RefundChecker` dead | Low | 62% | New, from the spot-read. Same defect class as `F-ENG-032`, second site, currently latent: no consumer reads a sub-call's `chain_id` today, but `F-ENG-035`'s own remediation names `sub_transactions` as the helper its fix would use. `F-ENG-032` stays canonical for the live instance. |
 
 All three are Draft, awaiting a Critic. Every citation in them was re-opened in this checkout at commit `2893917`. Nothing was executed.
 
@@ -219,8 +183,6 @@ A split assignment creates a defect each side assumes the other owns. Each seam 
 | **CORE-H5** — replay re-queues actions with fresh nonces, no dedup. R2 deferred the duplicate-action half to R3's `tx/`. | R2 / R3 | **NOT COVERED at the core layer.** R2: "I did **not** file a duplicate-action finding: the enqueue/allocate side is `tx/storage.rs:89-104`/`145-156`, explicitly R3's scope." R3, rejected hypothesis 28: "**not mine to file.** `enqueue` is an unconditional `INSERT` with no de-duplication (`tx/storage.rs:96-100`), which I confirm, but the _replay_ half lives in `index/blocks.rs` and `state/mod.rs`." Each confirmed its half and each filed nothing. `F-CORE-031` is the **mirror** defect (effects performed _zero_ times), not this one. Neither C-CORE-A nor C-CORE-B promoted it. **The core-level claim "replay re-enqueues an identical action and the queue offers no de-duplication hook at all" exists in no finding file.** It is covered only at the service layer, by `F-VAL-065` (validator duplicate actions, a duplicate `Sign` burns a nonce sequence for the whole group) and `F-SEN-006` (sentinel `approve`/`commit`/`reveal`/`finalize`/`claim` duplicated on every restart and reorg). Those two carry the impact, so nothing is lost from the report — but the shared root cause has no home, and a fix applied in one service will not fix the other. **Recommended: the Manager assigns the core-layer claim to C-CORE-B or QA, anchored at `tx/storage.rs:96-100` with `index/blocks.rs:255-266` as the replay driver.** |
 | **CORE-H13** — wall-clock polling. R2 deferred it entirely to R1's `index/`. | R2 / R1 | **COVERED** by `F-CORE-008` (R1, "Block polling is scheduled by comparing chain timestamps against the host wall clock…"), critiqued by C-CORE-A. R2 recorded the mechanism with citations (`index/clock.rs:31-38`, `blocks.rs:538-551`) and filed nothing to avoid duplicating — correct call, and R1 did file. Landed cleanly. |
 | **SEN-H9** — engine has unbounded authority over bond exposure; no local loss budget or kill switch. | R7 → (map §9 leaves it with R7) | **NOT COVERED.** R7 examined it and declined: "Under A3 the engine is a trusted co-deployed component … the residual point (no local loss budget for engine _mistakes_) is a design gap, not a defect, and is not supported by a code-level guard that is missing" (Observation 5.1, cited at `service.rs:173-180`). C-SEN has finished and promoted `F-SEN-015` from a different rejected hypothesis, not this one. No finding mentions a loss budget, kill switch or circuit breaker anywhere in `findings/`. **This agent agrees with R7's substance** — under A3 it is a resilience gap, not a defect — but records that it is a _conscious_ omission resting entirely on A3, so if the team ever marks A3 FALSE this is the first item to revisit. |
-| **SEN-H14** — `reqwest::Client::new` defaults. R7 deferred to R10 per map §9. | R7 → R10 | **COVERED** by `F-XC-008`. R10's log: "**Promoted and broadened** into F-XC-008. Confirmed at `engine.rs:113` and found a second, worse instance at `sentinel-engine/checkers/cow.rs:230` which additionally has _no timeout_." Landed, and improved on the way. |
-| **SEN-H15** — private key lingers in an un-zeroised config `String`. | R7 ⇄ R10 | **HALF COVERED — a genuine mutual deferral.** R7: "Not filed by me — observation 5.3, **owned by R10** (Section 9 assigns SEN-H15 to R10)." R10: "**Not promoted; left to R7.** It is a single-crate question about `Signer`'s `Deserialize`." Each pointed at the other, in writing. What R10 _did_ file (`F-XC-009` item 1) is the **sample-config placeholder key**, a different concern; `F-XC-009`'s own "Considered and rejected" says so: "**\"The signer `String` should be zeroized (SEN-H15).\"** Left with R7." **The claim itself — that `Config::load` reads the whole TOML, private key included, into a `String` that is dropped without zeroisation — is in no finding file.** Verified this session in all three services: `crates/validator/src/config.rs:43-47`, `crates/sentinel/src/config.rs:62-66`, `crates/sentinel-engine/src/config.rs:63-67`, each `let contents = fs::read_to_string(file).await?;` with no `Zeroizing` wrapper — while `core/tx/signer.rs:89-91` is careful to `raw.0.zeroize` its own 32-byte temporary, which is the contrast that makes the gap visible. **Not filed as a finding by this agent**, and deliberately so: under A1 the operator and host filesystem are trusted, both owners assessed it on the merits and judged it Informational, and the disagreement was only about _who_ files, not _whether_ it matters. Filing it here would be padding. It is recorded with full citations so the Documentation agent can carry it in the unverified-observations list, and so a future run with A1 FALSE finds it immediately. |
 | **VAL-H7** — `ReconcileGroupSecrets` computes its retention set from pre-log state and races the same block's store writes. R4's log says it was left to R6. | R4 → R6 | **COVERED** by `F-VAL-066` (R6, "`ReconcileGroupSecrets` deletes from a retention set computed before the block's logs, and runs concurrently with the store writes those logs cause"). R4 recorded the effect-emission sites it could see (`state/keygen.rs:1149-1153`, `:1320`, `:1352-1355`) as Observation O2 and said "I could not construct a deterministic interleaving from my files alone. Left to R6." R6 constructed it. Textbook hand-off. |
 
 ### 5.1 R4's four observations left conditional on R6's VAL-H2 — **two landed, two are still dangling**
@@ -251,7 +213,6 @@ Eleven leads are cited by no finding _by ID string_. Five of those are covered i
 | **CORE-H15** — `fallible_events` silently discards logs without marking the gap | **Confirmed, observation only. No finding.** | The only lead whose ID appears in **no** log and **no** finding. Its substance is R1's Observation **O-6** and R1's §5 enumeration row, which says the dropped topic's logs are omitted "and the update is still emitted as complete for the range", and that no service configures it (`grep -rn "fallible_events" crates/` matches only `core/src/index/events.rs` and one test). R1 downgraded it to a documentation issue: the `Config` doc comment ("Use this to mark events as noncritical", `events.rs:89-91`) understates what enabling it accepts. **This agent agrees it is not a finding today** — unreachable, no service sets it — but the doc-comment fix is real and cheap. |
 | **VAL-H8** — re-revealing nonces lets a signer appoint itself "responsible" and stall each ceremony by two timeouts | **Mechanism confirmed, deliberately not filed. No finding.** | R5: "Confirmed mechanically (`last_signer = Some(event.participant)` is overwritten on every accepted reveal, `state/sign.rs:284`, and the contract does not dedupe reveals, `FROSTCoordinator.sol:554-558`). **REJECTED as a finding at my severity bar** because the impact is bounded at one extra `signing_timeout` (6 blocks) … **Left to the Critic as a Low observation; I did not out-rank R4/R6 on it.**" C-VAL-A finished without promoting it; C-VAL-B is still running. **This is the clearest hand-off with no receiver in the run** — a confirmed mechanism, explicitly passed to "the Critic", and no Critic has yet taken it. **Recommended: C-VAL-B.** |
 | **SEN-H9** — engine has unbounded authority over bond exposure; no local loss budget or kill switch | **Examined, dismissed under A3. No finding.** | See §5. Conscious omission resting entirely on A3. |
-| **ENG-H14** — operator documentation understates external dependencies (CoW API, RPC via refund) | **Confirmed, unfileable by scope rule.** | `docs/` is reference-only (PROMPT.md §4), so a documentation defect cannot carry a finding. R10 filed the checkable consequences instead: the CoW dependency's missing timeout (`F-XC-008`), the RPC dependency's sample value that disables a check (`F-XC-005`), and the `/health`-on-the-metrics-port half (`F-XC-009` item 2). Correct handling; recorded so the report does not show it as dropped. |
 | **M3** — documentation drift: `docs/overview.md` still says `C[0]` is reused for ECDH and its one-time-pad argument no longer matches the code | **Confirmed at 90%, unfileable by scope rule.** | R4 confirmed it against `frost/keygen.rs:42` and `bindings.rs:60` while filing `F-VAL-002` for the code half (VAL-H5/M2). The doc fix should ship with `F-VAL-002`'s remediation; it belongs in the report's documentation section, not as a finding. |
 | **M8** — the commit hash binds `reason`; the reveal must present the identical string | **Refuted / closed, with a full trace.** | R7: `reason` is produced once (`service.rs:173-180`), hashed (`:213`), stored verbatim (`:218`), carried unchanged (`:261-263`), and finally **moved** — not re-derived — into the `Reveal` action with `std::mem::take` (`:424`, `:432`). The only formatting site is `RuleId::Display` (`engine.rs:45-49`), ASCII, locale-independent, no floats, no truncation, run once before the hash. "**M8 is closed.**" This agent re-checked the `mem::take` and agrees. |
 
@@ -288,7 +249,6 @@ Ordered by how much a finding's certainty moves.
 | 3 | Does `serde_derive` accept, reject, or silently ignore `deny_unknown_fields` on a container that also has a `#[serde(flatten)]` field, in the locked version? | `F-XC-003` (its open leg), R6's H-R6-15 | One `#[test]` feeding a mistyped key to the real `Config` type. |
 | 4 | Does `alloy`'s ABI decoder pre-allocate a `Vec` from the declared length of a dynamic array (`uint256[] f`, `Point[] c`) before validating it against the actual payload size? | `F-XC-051`, `F-VAL-001`, `F-VAL-003` — these arrays arrive from event data that F-VAL-060 shows is injectable | Decode a log whose array length prefix is `2^32` with a two-word payload; watch RSS. |
 | 5 | What does `frost_core::keys::dkg::verify_proof_of_knowledge` do with a **zero-length** commitment vector — return `Err`, or index `[0]` and panic? A panic on that path is not caught anywhere: there is no `catch_unwind` in the driver. | `F-XC-051` (basis row 8), R4's Observation O4 | Call `verify_commitment` with `c = vec![]`. |
-| 6 | Are the eight hard-coded canonical MultiSend deployment addresses in `contracts/multi_send.rs:27-68`, their `Legacy`/`V150Plus` wire-format tags, and their `allows_delegate_calls` flags correct and complete against the real Safe `MultiSend.sol` / `MultiSendCallOnly.sol` releases? | `F-ENG-006`, `F-ENG-035`, `F-ENG-037`, `F-XC-052` — a wrong or missing address means a batch is silently not recognised as a batch and every sub-call check is skipped | Safe's deployment registry. Needs no toolchain, only the contracts, which are **not in this checkout** (R9: "`Safe.sol` is not in this checkout"). |
 
 ### Tier 2 — dependency behaviour that several findings lean on
 
@@ -297,13 +257,10 @@ Ordered by how much a finding's certainty moves.
 | 7 | Any advisory or CVE status for any of the 516 locked packages (`cargo audit`). **No advisory status is asserted anywhere in this audit** — `F-XC-007` says so explicitly. | `F-XC-007` |
 | 8 | `reqwest 0.13.4`'s actual default redirect and proxy policy. | `F-XC-008` basis row 8 |
 | 9 | Which TLS root source `reqwest` selects under `default-features = false, features = ["json", "rustls"]` — and therefore whether the images' `ca-certificates` package is load-bearing or dead weight. | `F-XC-004`, R10 Observation 3 |
-| 10 | Can an un-timed `hyper`/`reqwest` request actually hang indefinitely, or is there an internal cap? This is the premise that turns a mechanism into a stall. | `F-CORE-011`, `F-CORE-039`, `F-ENG-005`, `F-ENG-043` |
 | 11 | `sqlx` 0.9 defaults for `journal_mode`, `synchronous`, `busy_timeout`, `foreign_keys`, `create_if_missing` and pool size — `connect_sqlite` sets only the two recycling knobs (`utils.rs:56-62`). | `F-VAL-035` (the `ON DELETE CASCADE` leg, M6), R2 Observations O-6/O-7 |
 | 12 | Do alloy's `PrivateKeySigner` and k256's `SigningKey` zeroize on drop, and does `to_bytes` leave an unzeroized intermediate? | R3 Observation O4; raises or lowers every secret-at-rest severity |
 | 13 | What does alloy's `estimate_eip1559_fees` issue and return when `reward` is empty? `F-CORE-060`'s starting fee level currently comes from the tests' mock, not the real estimator. | `F-CORE-060` |
 | 14 | `alloy` 2.0.5 specifics R1 could not read: `Filter::at_block_hash` encoding, `EthRpcErrorCode::ResourceNotFound == -32001`, `logs_bloom` accumulation semantics, `SolEventInterface::decode_raw_log` failure conditions, whether `ProviderCall::Ready` short-circuits every internal chain-id fetch. | `F-CORE-002`, `F-CORE-010`, `F-CORE-012`, `F-CORE-065` |
-| 15 | Axum's default `JsonRejection` body — does it echo a value fragment from a malformed `CheckRequest`? | `F-ENG-008`, R10 Observation 5 |
-| 16 | CoW's `GPv2Signing.setPreSignature`, `GPv2VaultRelayer` and `ComposableCoW.createWithContext` semantics, and Safe's `handlePayment` arithmetic — the contracts are not in this checkout. | `F-ENG-031`, `F-ENG-037`, `F-ENG-038` |
 
 ### Tier 3 — build, tooling and hygiene
 
@@ -314,7 +271,6 @@ Ordered by how much a finding's certainty moves.
 | 19 | Does `cargo tree -d`'s real output match the lockfile-derived duplicate list in `baseline.md` §6? The substitute was a text parse and cannot see feature-gated edges. | `baseline.md` §6 |
 | 20 | What are Cargo's stock `release` profile defaults on the pinned toolchain — confirming `overflow-checks = false` and `debug-assertions = false` in shipped binaries? | `F-XC-001` (its `I` leg) |
 | 21 | Is the HKDF reference vector at `kdf.rs:36-46` reproducible with Python `hmac`/`hashlib`? C-CORE-B flagged that the reviewer declined to re-derive it. | `F-CORE-038` |
-| 22 | Can the `sentinel-test-vectors` corpus be cloned and `just test-integration-sentinel-engine <path>` run (assumption **A8**, still TEAM TO CONFIRM)? This is the only route by which any checker finding reaches `E1`. | every `F-ENG-*` |
 
 **Consequence for the report, stated once:** `E1` was reached zero times in this run. Per the Critic brief §2 the whole audit is capped at **89%**, and every finding above depends on at least one of these twenty-two answers for its remaining margin. Questions **1, 2, 3, 5, 17 and 21** are each answerable in under ten minutes once `cargo` exists.
 
