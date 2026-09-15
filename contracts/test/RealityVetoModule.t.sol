@@ -702,15 +702,20 @@ contract RealityVetoModuleTest is Test {
         assertEq(token.balanceOf(vetoer), 0);
     }
 
-    /// @dev Invariants 1, 11 and 13: the whole ABI is five selectors, none taking `bytes`, `bytes4` or a
-    ///      target address, and none of them ownership management. The epic's claim of three selectors is
-    ///      wrong: `SAFE` and `REALITY_MODULE` are public immutables and contribute getters.
-    ///
-    ///      Exhaustiveness comes from the build artifact, not from the hand-written tables below: solc's
+    /// @dev Exhaustiveness, from the compiler rather than from a hand-written list: solc's
     ///      `methodIdentifiers` is the complete external surface, so a sixth function, including an
-    ///      unauthenticated one, fails here rather than slipping past a list of selectors someone thought
-    ///      to check. The tables then pin the signatures behind those five selectors.
-    function test_Abi_SelectorSetIsExactlyFive() public {
+    ///      unauthenticated one, fails here rather than slipping past a table someone thought to check.
+    ///
+    ///      Split from the selector assertions below because it needs the build artifact on disk.
+    ///      `forge test` writes it before running; `forge coverage` does not write artifacts at all, so
+    ///      under coverage this skips rather than failing. The `check` job runs `forge test`, so the
+    ///      assertion still gates every PR.
+    function test_Abi_MatchesCompilerMethodIdentifiers() public {
+        // forge-lint: disable-next-line(unsafe-cheatcode)
+        if (!vm.isFile(ARTIFACT_PATH)) {
+            vm.skip(true);
+        }
+
         // Reading the artifact is the point: it is the compiler's own answer, not the test's.
         // forge-lint: disable-next-line(unsafe-cheatcode)
         string[] memory signatures = vm.parseJsonKeys(vm.readFile(ARTIFACT_PATH), ".methodIdentifiers");
@@ -720,7 +725,14 @@ contract RealityVetoModuleTest is Test {
         for (uint256 i = 0; i < expectedSignatures.length; i++) {
             assertTrue(_containsSignature(signatures, expectedSignatures[i]), expectedSignatures[i]);
         }
+    }
 
+    /// @dev Invariants 1, 11 and 13: the five expected selectors dispatch, none takes `bytes`, `bytes4` or
+    ///      a target address, none is ownership management, and a table of plausible extras does not
+    ///      dispatch. The epic's claim of three selectors is wrong: `SAFE` and `REALITY_MODULE` are public
+    ///      immutables and contribute getters. Exactness is proven by
+    ///      `test_Abi_MatchesCompilerMethodIdentifiers`; this pins the signatures behind the five.
+    function test_Abi_ExposesTheFiveExpectedSelectors() public {
         assertEq(RealityVetoModule.vetoProposal.selector, bytes4(0x14ec5de5));
         assertEq(RealityVetoModule.setVetoer.selector, bytes4(0xd152a32e));
         assertEq(RealityVetoModule.getVetoer.selector, bytes4(0xdb121e4e));
