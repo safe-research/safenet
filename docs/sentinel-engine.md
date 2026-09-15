@@ -124,6 +124,23 @@ Use `http://127.0.0.1:5473` instead when both processes share a network namespac
 
 The repository's [devnet](./devnet.md) demonstrates the container topology: `carol` and `dave` each run with a dedicated engine in the same Podman pod.
 
+## Verdict Composition
+
+The reference engine does not return the first check's non-`abstain` verdict. Ordering checks that way would make the engine's answer a function of checker order rather than of the transaction, and would let a `secure` from a check that only looked at _part_ of a transaction stand in for the whole thing — for example, a check that recognizes a nested `execTransaction` call has said nothing about whether the outer transaction's gas refund is reasonable.
+
+Instead, the reference engine composes verdicts from two internal concepts that do not appear on the wire:
+
+- **Aspect** — a part of a Safe transaction a check can vouch for: `To` (the destination), `Value` (native currency leaving the Safe), `Data` (the calldata and the effects it encodes), `Operation` (`CALL` versus `DELEGATECALL`), and `Refund` (the Safe's own gas-refund payment — `gasPrice`, `gasToken`, `safeTxGas`, `baseGas` and `refundReceiver` together, since a claim about part of the payment says nothing actionable). `chainId`, `safe` and `nonce` are deliberately not aspects: they identify which proposal is being assessed rather than describing what it does.
+- **Coverage** — a set of aspects. Each check's affirming path returns the coverage it vouches for, not a bare `secure`. A deny-only check (one with no affirming path at all) has no coverage to claim.
+
+The engine's fold works as follows: any check's denial is the engine's verdict immediately — denials are never masked by a later affirmation. Otherwise, the engine unions the coverage claimed by every affirming check. It answers `secure` only when that union contains every aspect the transaction actually requires a voucher for, and `abstain` otherwise.
+
+Not every aspect is required for every transaction. An aspect a transaction cannot actually exercise is trivially covered and dropped from the requirement — a `value` of zero (or a `DELEGATECALL`, which takes no value argument) needs no `Value` voucher, a `gasPrice` of zero needs no `Refund` voucher (`Safe.sol` only calls `handlePayment` `if (gasPrice > 0)`), and empty `data` needs no `Data` voucher. `To` and `Operation` are always required.
+
+**What a `To` claim does and does not assert.** `To` coverage means "no rule in scope forbids this destination." It does not mean "this destination is trustworthy." The reference engine's `BaseChecker` is the sole supplier of `To` (and `Operation`) coverage for an ordinary call, on the strength of that restriction rather than a positive statement about the destination — the destination has been checked against every Charter `to`-restriction currently enforced (a self-call confined to an allow-listed settings function; a delegatecall confined to a known migration, signing-library, `CreateCall` or MultiSend contract) and given the blocklist check its chance to deny. A destination-reputation check that makes `To` a positive statement is a possible future addition, not something the current engine does.
+
+The consequence for an operator: **an engine answering `secure` is asserting that it examined every aspect the transaction has** — not merely that some check liked part of it and nothing else objected. An `abstain` from the reference engine most often means some aspect (frequently `Refund`, on a relayed transaction none of the affirming checks look at) had no voucher, not that a check actively distrusted the transaction. This is also why implementing a custom engine's own composition rule matters as much as implementing its individual checks: a custom engine that returns the first non-`abstain` verdict from its own checks reintroduces the exact ordering-dependence problem described above.
+
 ## Implementing a Custom Engine
 
 A custom engine may use different checks, external services, simulations, or persistent storage. It must preserve the [OpenAPI contract](../crates/sentinel-engine/openapi.yaml) and the trust boundary above: it assesses transactions but does not hold the sentinel key, put up bonds, or write to the SentinelOracle. This keeps transaction-verification compromise separate from custody and onchain participation.
