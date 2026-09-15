@@ -38,7 +38,9 @@ impl Aspect {
         1 << (self as u8)
     }
 
-    const fn name(self) -> &'static str {
+    /// This aspect's `snake_case` metric-label spelling; also what
+    /// `Coverage`'s `Display` impl joins with `|`.
+    pub(crate) const fn name(self) -> &'static str {
         match self {
             Self::To => "to",
             Self::Value => "value",
@@ -95,6 +97,14 @@ impl Coverage {
         Self(other.0 & !self.0)
     }
 
+    /// The aspects in this set, in declaration order — what the engine's
+    /// missing-coverage metric iterates to record one increment per aspect.
+    pub(crate) fn iter(self) -> impl Iterator<Item = Aspect> {
+        Aspect::ALL
+            .into_iter()
+            .filter(move |&aspect| self.contains(aspect))
+    }
+
     /// The aspects a `Secure` verdict for `transaction` requires vouchers
     /// for. An aspect the transaction cannot actually exercise is trivially
     /// covered and dropped from the requirement:
@@ -124,11 +134,7 @@ impl Coverage {
 
 impl fmt::Display for Coverage {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let names = Aspect::ALL
-            .into_iter()
-            .filter(|&aspect| self.contains(aspect))
-            .map(Aspect::name)
-            .collect::<Vec<_>>();
+        let names = self.iter().map(Aspect::name).collect::<Vec<_>>();
         write!(f, "{}", names.join("|"))
     }
 }
@@ -213,6 +219,15 @@ mod tests {
             Coverage::of(&[Aspect::Value, Aspect::Data])
         );
         assert_eq!(required.missing(covered), Coverage::NONE);
+    }
+
+    #[test]
+    fn iter_yields_exactly_the_contained_aspects_in_declaration_order() {
+        let coverage = Coverage::of(&[Aspect::Operation, Aspect::To]);
+        assert_eq!(
+            coverage.iter().collect::<Vec<_>>(),
+            vec![Aspect::To, Aspect::Operation]
+        );
     }
 
     #[test]
