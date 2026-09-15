@@ -4,7 +4,7 @@
 # Starts Anvil, deploys the contracts, and runs two Rust validator instances
 # as members of the genesis and epoch-1 groups. It proposes one oracle-backed
 # transaction for attestation by each group, checked against the
-# always-approving AlwaysApproveOracle that DeployScript deploys. The test
+# always-approving AlwaysApproveOracle that deploy_validator_contracts deploys. The test
 # succeeds once epoch 1 is attested by genesis, staged, rolled over, and
 # attests the second transaction.
 #

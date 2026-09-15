@@ -204,7 +204,7 @@ Then open `http://localhost:5100` and browse the deployer/validator/sentinel/arb
 
 The [environment variable step](#setting-up-environment-variables) above already covers the common case. A few other ways to get at the same values:
 
-`DeployScript` prints its output to the terminal running `just devnet`, so the following are visible directly in that output:
+`DeployConsensusScript` and `DeployAlwaysApproveOracleScript` print their output to the terminal running `just devnet`, so the following are visible directly in that output:
 
 ```
 Genesis Group ID: 0x...

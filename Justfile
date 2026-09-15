@@ -139,8 +139,11 @@ examples-attest-safe-tx *args:
 
 # --- contracts/script/*.s.sol front doors (see contracts/script/README.md) ---
 
-contracts-deploy *args:
-    (cd contracts && forge script DeployScript {{args}})
+contracts-deploy-consensus *args:
+    (cd contracts && forge script DeployConsensusScript {{args}})
+
+contracts-deploy-always-approve-oracle *args:
+    (cd contracts && forge script DeployAlwaysApproveOracleScript {{args}})
 
 contracts-genesis *args:
     (cd contracts && forge script GenesisScript {{args}})
