@@ -466,7 +466,8 @@ impl StateTransition<State> for Transition {
                 let (state, keygen_timeout_commands) = self.handle_key_gen_timeouts(state, block);
                 let (state, signing_timeout_commands) = self.handle_signing_timeouts(state, block);
                 let (state, nonce_topup_commands) = self.handle_nonce_topup(state);
-                let (state, reconciliation_commands) = self.handle_group_reconciliation(state);
+                let (state, reconciliation_commands) =
+                    self.handle_group_reconciliation(state, block);
                 (
                     state,
                     [

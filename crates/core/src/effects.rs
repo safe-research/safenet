@@ -1,5 +1,6 @@
 //! Effect handling for state transitions.
 
+use crate::index::BlockStatus;
 use std::{
     convert::Infallible,
     fmt::Debug,
@@ -23,6 +24,12 @@ pub trait EffectHandler<Effect, Resume>: Send + Sync + 'static {
     /// should encode outcomes like "already used" in `Resume`; state transitions
     /// remain pure because they consume only the resume value.
     fn perform_effect(&self, effect: Effect) -> impl Future<Output = Resume> + Send;
+
+    /// Performs maintenance on resources outside the snapshotted state.
+    fn housekeeping(&self, status: BlockStatus) -> impl Future<Output = ()> + Send {
+        let _ = status;
+        async {}
+    }
 }
 
 /// Executes effects concurrently and yields their resumes as they complete.
@@ -59,6 +66,11 @@ where
             tracing::trace!(?resume, "effect task finished");
             resume
         });
+    }
+
+    /// Awaits handler maintenance inline, independently of the effect tasks.
+    pub async fn housekeeping(&self, status: BlockStatus) {
+        self.handler.housekeeping(status).await;
     }
 
     /// Waits for and returns the next successfully completed effect.
@@ -101,7 +113,10 @@ impl<Resume> EffectHandler<Infallible, Resume> for Pure {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::sync::atomic::{AtomicUsize, Ordering};
+    use std::sync::{
+        Mutex,
+        atomic::{AtomicUsize, Ordering},
+    };
     use tokio::time::{self, Duration, Instant};
 
     #[derive(Debug)]
@@ -113,6 +128,7 @@ mod tests {
 
     struct TestHandler {
         calls: AtomicUsize,
+        housekeeping: Mutex<Vec<BlockStatus>>,
     }
 
     impl EffectHandler<TestEffect, usize> for TestHandler {
@@ -127,12 +143,43 @@ mod tests {
                 TestEffect::Panic => panic!("effect task panicked"),
             }
         }
+
+        async fn housekeeping(&self, status: BlockStatus) {
+            self.housekeeping.lock().unwrap().push(status);
+        }
     }
 
     fn manager() -> EffectManager<TestHandler, TestEffect, usize> {
         EffectManager::new(TestHandler {
             calls: AtomicUsize::new(0),
+            housekeeping: Mutex::new(Vec::new()),
         })
+    }
+
+    #[tokio::test]
+    async fn forwards_housekeeping_status_to_handler() {
+        let manager = manager();
+        let status = BlockStatus {
+            latest: 100,
+            safe: 95,
+        };
+
+        manager.housekeeping(status).await;
+
+        assert_eq!(*manager.handler.housekeeping.lock().unwrap(), [status]);
+        assert_eq!(manager.handler.calls.load(Ordering::SeqCst), 0);
+    }
+
+    #[tokio::test]
+    async fn pure_handler_inherits_noop_housekeeping() {
+        let manager = EffectManager::<Pure, Infallible, ()>::new(Pure);
+
+        manager
+            .housekeeping(BlockStatus {
+                latest: 100,
+                safe: 95,
+            })
+            .await;
     }
 
     #[tokio::test(start_paused = true)]

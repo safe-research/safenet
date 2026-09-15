@@ -6,6 +6,8 @@
 //! every update and completed effect to the [`state machine`](crate::state).
 //! Effects produced by the state machine run concurrently, while actions are
 //! encoded into transactions by the [`Service`] and queued for submission.
+//! After dispatching a new block's commands, the driver awaits effect handler
+//! housekeeping with the same chain view it prunes state snapshots to.
 
 use crate::{
     effects::{EffectHandler, EffectManager},
@@ -233,7 +235,7 @@ where
     /// Processes a single watcher update or completed effect, advancing the
     /// state machine and dispatching the commands it returns.
     async fn update(&mut self, input: Input<S::Event, S::Resume>) -> Result<(), Error> {
-        let commands = match input {
+        let (commands, housekeeping) = match input {
             Input::Update(update) => {
                 tracing::trace!(?update, "handling driver update");
                 let recorder = UpdateRecorder::new(&update);
@@ -252,14 +254,18 @@ where
                     );
                 }
 
+                let housekeeping = match &update {
+                    Update::Block(BlockUpdate::New { .. }) => Some(block_status),
+                    _ => None,
+                };
                 let commands = self.state.handle_update(update).await?;
                 recorder.processed();
                 self.state.prune(block_status.safe).await?;
-                commands
+                (commands, housekeeping)
             }
             Input::Resume(resume) => {
                 tracing::trace!(?resume, "handling driver resume");
-                self.state.handle_resume(resume).await?
+                (self.state.handle_resume(resume).await?, None)
             }
         };
 
@@ -281,6 +287,10 @@ where
                     "transaction queue failed to queue transactions; will continue"
                 );
             }
+        }
+
+        if let Some(status) = housekeeping {
+            self.effects.housekeeping(status).await;
         }
 
         Ok(())

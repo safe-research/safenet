@@ -4,7 +4,7 @@
 //! accessor function here, so every place a metric is recorded goes through a
 //! typed function that documents and enforces its label shape.
 
-use metrics::Counter;
+use metrics::{Counter, Gauge};
 
 /// The input to a single validator state transition, as recorded by
 /// [`transitions_total`].
@@ -84,17 +84,17 @@ impl EffectKind {
     }
 }
 
-/// The result of a validator effect attempt, as recorded by
-/// [`effects_total`].
+/// The result of an attempted piece of work, as recorded by [`effects_total`]
+/// and [`housekeeping_total`].
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum EffectResult {
-    /// The effect completed successfully, including an expected no-op.
+pub enum Outcome {
+    /// The work completed successfully, including an expected no-op.
     Success,
-    /// The effect returned an error.
+    /// The work returned an error.
     Failure,
 }
 
-impl EffectResult {
+impl Outcome {
     fn variants() -> impl Iterator<Item = Self> {
         [Self::Success, Self::Failure].into_iter()
     }
@@ -108,7 +108,7 @@ impl EffectResult {
 }
 
 /// Number of completed validator effect attempts, by `effect` and `result`.
-pub fn effects_total(effect: EffectKind, result: EffectResult) -> Counter {
+pub fn effects_total(effect: EffectKind, result: Outcome) -> Counter {
     let effect = effect.label();
     let result = result.label();
     metrics::counter!(
@@ -119,14 +119,63 @@ pub fn effects_total(effect: EffectKind, result: EffectResult) -> Counter {
     )
 }
 
+/// The kind of secret held in the secret store, as reported by
+/// [`secrets_total`].
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum SecretKind {
+    /// DKG polynomial secrets, one per group.
+    Keygen,
+    /// Nonce chunks, each holding many nonces.
+    Nonces,
+}
+
+impl SecretKind {
+    fn variants() -> impl Iterator<Item = Self> {
+        [Self::Keygen, Self::Nonces].into_iter()
+    }
+
+    fn label(&self) -> &'static str {
+        match self {
+            Self::Keygen => "keygen",
+            Self::Nonces => "nonces",
+        }
+    }
+}
+
+/// Number of secrets currently held in the secret store, by `kind`.
+pub fn secrets_total(kind: SecretKind) -> Gauge {
+    let kind = kind.label();
+    metrics::gauge!(
+        description: "Number of secrets currently held in the secret store, by kind.",
+        "safenet_validator_secrets_total",
+        "kind" => kind,
+    )
+}
+
+/// Number of completed validator housekeeping runs, by `result`.
+pub fn housekeeping_total(result: Outcome) -> Counter {
+    let result = result.label();
+    metrics::counter!(
+        description: "Number of completed validator housekeeping runs, by result.",
+        "safenet_validator_housekeeping_total",
+        "result" => result,
+    )
+}
+
 /// Materializes every bounded validator metric series at zero.
 pub fn initialize() {
     for kind in TransitionKind::variants() {
         transitions_total(kind).absolute(0);
     }
     for effect in EffectKind::variants() {
-        for result in EffectResult::variants() {
+        for result in Outcome::variants() {
             effects_total(effect, result).absolute(0);
         }
+    }
+    for kind in SecretKind::variants() {
+        secrets_total(kind).set(0);
+    }
+    for result in Outcome::variants() {
+        housekeeping_total(result).absolute(0);
     }
 }

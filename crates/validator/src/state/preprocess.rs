@@ -103,10 +103,12 @@ impl Transition {
     }
 
     /// Reaps epochs no longer needed by a signing ceremony and reconciles all
-    /// process-local and persisted group secrets with the resulting state.
+    /// process-local and persisted group secrets with the resulting state as of
+    /// `block`.
     pub(super) fn handle_group_reconciliation(
         &self,
         mut state: State,
+        block: u64,
     ) -> (State, Commands<State, Self>) {
         // Reap old participating epochs for which there are no more signing
         // ceremonies. This runs linearly through the entire signing state, but
@@ -166,7 +168,10 @@ impl Transition {
 
         (
             state,
-            vec![Command::Effect(Effect::ReconcileGroupSecrets { groups })],
+            vec![Command::Effect(Effect::ReconcileGroupSecrets {
+                block,
+                groups,
+            })],
         )
     }
 }

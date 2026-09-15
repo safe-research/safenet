@@ -7,11 +7,11 @@ use crate::{
         keygen::{KeyShare, Secrets},
         preprocess::Nonces,
     },
-    metrics::{self, EffectKind, EffectResult},
-    secrets::{SecretStore, nonces::NonceGenerator},
+    metrics::{self, EffectKind, Outcome},
+    secrets::{SecretStore, nonces::NonceGenerator, store::RetainedGroups},
 };
 use alloy::primitives::{Address, B256};
-use safenet_core::effects::EffectHandler;
+use safenet_core::{effects::EffectHandler, index::BlockStatus};
 use std::{
     collections::{BTreeMap, BTreeSet},
     error::Error,
@@ -53,10 +53,12 @@ pub enum Effect {
         offset: u64,
     },
     /// Reconcile the process-local and persisted secrets with the groups
-    /// retained by the state machine, dropping all secret material belonging to
-    /// other groups. A key share starts or retains a nonce generator; `None`
-    /// retains the group's DKG secrets without running one.
+    /// retained by the state machine as of `block`, scheduling all secret
+    /// material belonging to other groups for deletion. A key share starts or
+    /// retains a nonce generator; `None` retains the group's DKG secrets
+    /// without running one.
     ReconcileGroupSecrets {
+        block: u64,
         groups: BTreeMap<B256, Option<Arc<KeyShare>>>,
     },
 }
@@ -199,7 +201,7 @@ impl Handler {
                     nonces: Box::new(nonces),
                 })
                 .unwrap_or(Resume::Noop)),
-            Effect::ReconcileGroupSecrets { groups } => {
+            Effect::ReconcileGroupSecrets { block, groups } => {
                 // We only need to keep keygen secrets for groups that are still
                 // in DKG and do not yet have a key share.
                 // The process-local nonce generator, however, can only run for
@@ -223,12 +225,31 @@ impl Handler {
                 // restart replaying past the block where the key share was
                 // confirmed), and those nonces must survive until the group
                 // either re-confirms its key share or is dropped entirely.
-                self.secrets
-                    .retain_nonces(keygen.iter().copied().chain(nonces.keys().copied()))
-                    .await?;
-                self.secrets.retain_keygen_secrets(keygen).await?;
+                let retained = RetainedGroups {
+                    nonces: keygen
+                        .iter()
+                        .copied()
+                        .chain(nonces.keys().copied())
+                        .collect(),
+                    keygen,
+                };
 
+                // Hold the generator lock across scheduling so that the
+                // persisted schedules and the process-local generators are
+                // reconciled in the same order as each other.
                 let mut generator = self.nonce_generator.lock().await;
+                if !self
+                    .secrets
+                    .schedule_group_secrets_deletion(block, &retained)
+                    .await?
+                {
+                    // A reconciliation older than the last accepted one no
+                    // longer describes the groups being tracked, so leave both
+                    // the schedules and the generators as they are.
+                    tracing::debug!(block, "ignoring outdated group secret reconciliation");
+                    return Ok(Resume::Noop);
+                }
+
                 generator.retain(|group_id| nonces.contains_key(group_id));
                 for (group_id, key_share) in nonces {
                     generator.start(group_id, key_share)?;
@@ -244,14 +265,46 @@ impl EffectHandler<Effect, Resume> for Handler {
     async fn perform_effect(&self, effect: Effect) -> Resume {
         let kind = effect.metric_kind();
         let (resume, result) = match self.try_perform_effect(effect.clone()).await {
-            Ok(resume) => (resume, EffectResult::Success),
+            Ok(resume) => (resume, Outcome::Success),
             Err(err) => {
                 tracing::warn!(?effect, %err, "failed to perform effect");
-                (Resume::Noop, EffectResult::Failure)
+                (Resume::Noop, Outcome::Failure)
             }
         };
         metrics::effects_total(kind, result).increment(1);
         resume
+    }
+
+    async fn housekeeping(&self, status: BlockStatus) {
+        // Only secrets scheduled by a reconciliation at or before the snapshot
+        // boundary are collected, so nothing the state machine could still roll
+        // back to is deleted here.
+        let result = match self.secrets.prune_scheduled_secrets(status.safe).await {
+            Ok(pruned) => {
+                if pruned.keygen > 0 || pruned.nonces > 0 {
+                    tracing::debug!(
+                        block = status.latest,
+                        safe = status.safe,
+                        keygen = pruned.keygen,
+                        nonces = pruned.nonces,
+                        "pruned scheduled group secrets"
+                    );
+                }
+                Outcome::Success
+            }
+            Err(err) => {
+                // A later block retries the collection, and a schedule that was
+                // not collected stays valid until it is.
+                tracing::warn!(
+                    block = status.latest,
+                    safe = status.safe,
+                    %err,
+                    "failed to prune scheduled secrets"
+                );
+                Outcome::Failure
+            }
+        };
+        metrics::housekeeping_total(result).increment(1);
     }
 }
 
