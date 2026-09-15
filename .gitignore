@@ -1,6 +1,7 @@
 .DS_Store
 .certora_internal
 .env
+.env.testnet
 build/
 coverage-report.md
 coverage/
