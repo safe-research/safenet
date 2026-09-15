@@ -45,6 +45,9 @@ fs_permissions = [
   # Allow read-write access to the staking-deployment.json file for the DeployStakingWithTxBuilder
   # script to write the deployment transaction details in JSON format for the Tx Builder Safe App.
   { access = "read-write", path = "build/staking-deployment.json" },
+  # Allow read access to the RealityVetoModule build artifact, so its test can assert the module's
+  # external ABI against solc's own `methodIdentifiers` rather than a hand-written selector list.
+  { access = "read", path = "build/out/RealityVetoModule.sol/RealityVetoModule.json" },
 ]
 
 # Used by `forge coverage` (see Justfile), which disables the optimizer and
