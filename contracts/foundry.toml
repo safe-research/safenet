@@ -47,7 +47,7 @@ fs_permissions = [
   { access = "read-write", path = "build/staking-deployment.json" },
   # Allow read access to the RealityVetoModule build artifact, so its test can assert the module's
   # external ABI against solc's own `methodIdentifiers` rather than a hand-written selector list.
-  { access = "read", path = "build/out/RealityVetoModule.sol" },
+  { access = "read", path = "build/out/RealityVetoModule.sol/RealityVetoModule.json" },
 ]
 
 # Used by `forge coverage` (see Justfile), which disables the optimizer and

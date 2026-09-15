@@ -343,6 +343,47 @@ contract RealityVetoModuleTest is Test {
     ///      answer, bond, cooldown and expiration checks, so a revert on the vetoed proposal alone would
     ///      also be produced by a fixture that was never executable. The control is identical apart from
     ///      its id and is not vetoed, so it has to execute.
+    /// @dev The vetoer is expected to be a SEF-controlled Safe rather than an EOA, which every other veto
+    ///      test stands in for with `vm.prank`. Nothing in the module distinguishes a contract caller, but
+    ///      the production path is only proven by driving it: the vetoer Safe's owner signs, that Safe
+    ///      executes, and the veto lands on the SafeDAO Safe's Reality module. No prank anywhere.
+    function test_VetoProposal_FromASafeVetoerWorksEndToEnd() public {
+        ISafe vetoerSafe = _newSafe(3);
+        _execSafeTx(safe, address(module), 0, abi.encodeCall(RealityVetoModule.setVetoer, (address(vetoerSafe))));
+        assertEq(module.getVetoer(), address(vetoerSafe));
+
+        string memory controlId = "QmControlProposalSafeVetoer";
+        bytes32[] memory txHashes = _proposalTxHashes(1);
+        realityModule.addProposal(PROPOSAL_ID, txHashes);
+        realityModule.addProposal(controlId, txHashes);
+        _approveProposal(PROPOSAL_ID, txHashes);
+        _approveProposal(controlId, txHashes);
+        vm.warp(block.timestamp + QUESTION_COOLDOWN + 1);
+
+        _execSafeTx(
+            vetoerSafe, address(module), 0, abi.encodeCall(RealityVetoModule.vetoProposal, (PROPOSAL_ID, txHashes))
+        );
+
+        assertEq(realityModule.questionIds(_questionHash(PROPOSAL_ID, txHashes)), realityModule.INVALIDATED());
+
+        vm.expectRevert("Proposal has been invalidated");
+        realityModule.executeProposal(
+            PROPOSAL_ID, txHashes, address(token), 0, _proposalTxData(0), ZodiacEnum.Operation.Call
+        );
+        assertEq(token.balanceOf(recipient), 0);
+
+        // Positive control: the veto blocked this proposal, not the fixture.
+        realityModule.executeProposal(
+            controlId, txHashes, address(token), 0, _proposalTxData(0), ZodiacEnum.Operation.Call
+        );
+        assertEq(token.balanceOf(recipient), 1 ether, "the control proposal was not executable either");
+
+        // The old EOA vetoer lost access when the Safe took over.
+        vm.prank(vetoer);
+        vm.expectRevert(RealityVetoModule.NotVetoer.selector);
+        module.vetoProposal(controlId, txHashes);
+    }
+
     function test_VetoProposal_BlocksSubsequentExecuteProposal() public {
         string memory controlId = "QmControlProposal";
         bytes32[] memory txHashes = _proposalTxHashes(1);
@@ -1397,8 +1438,11 @@ contract RealityVetoModuleTest is Test {
     }
 
     /// @dev The constructor rejects only zero and `realityModule == safe`. Aliasing the vetoer to the Safe
-    ///      or to the Reality module is accepted, so the deploy script's arguments are the only thing
-    ///      guarding against it. Recorded so a later "the constructor validates the vetoer" belief fails.
+    ///      or to the Reality module is accepted, and deliberately so: neither alias grants any authority
+    ///      that address does not already hold, since the Safe owns the Reality module and a passed
+    ///      proposal executes as the Safe, so both can already invalidate directly. The only consequence
+    ///      is a configuration nobody can veto through, which the runbook's post-enablement `getVetoer()`
+    ///      check catches. Recorded so a later "the constructor validates the vetoer" belief fails.
     function test_Constructor_DoesNotRejectAVetoerAliasedToSafeOrRealityModule() public {
         RealityVetoModule aliasedToSafe = new RealityVetoModule(safe, address(realityModule), address(safe));
         assertEq(aliasedToSafe.getVetoer(), address(safe));
