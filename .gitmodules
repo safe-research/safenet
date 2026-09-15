@@ -7,3 +7,15 @@
 [submodule "contracts/lib/safe-smart-account"]
 	path = contracts/lib/safe-smart-account
 	url = https://github.com/safe-fndn/safe-smart-account
+[submodule "contracts/lib/zodiac-module-reality"]
+	path = contracts/lib/zodiac-module-reality
+	url = https://github.com/gnosisguild/zodiac-module-reality
+[submodule "contracts/lib/safe-v130"]
+	path = contracts/lib/safe-v130
+	url = https://github.com/safe-global/safe-smart-account
+[submodule "contracts/lib/openzeppelin-contracts-upgradeable"]
+	path = contracts/lib/openzeppelin-contracts-upgradeable
+	url = https://github.com/OpenZeppelin/openzeppelin-contracts-upgradeable
+[submodule "contracts/lib/zodiac"]
+	path = contracts/lib/zodiac
+	url = https://github.com/gnosisguild/zodiac

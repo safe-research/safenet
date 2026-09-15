@@ -21,6 +21,20 @@ remappings = [
   "@forge-std/=lib/forge-std/src/",
   "@oz/=lib/openzeppelin-contracts/contracts/",
   "@safe/=lib/safe-smart-account/contracts/",
+  # Test-only, pinned to the versions the SafeDAO Gnosis Chain deployment actually runs, so tests
+  # drive the same code that is deployed: zodiac-module-reality v2.0.0 (mastercopy
+  # 0x4e35da39fa5893a70a40ce964f993d891e607cc0), which predates the @gnosis-guild/zodiac-core
+  # split, on zodiac v1.0.1 and OpenZeppelin 4.9.6.
+  #
+  # Two of these sit next to a different major of the same upstream, so read the paths carefully:
+  # lib/openzeppelin-contracts-upgradeable is 4.9.6, while lib/openzeppelin-contracts behind @oz/
+  # is 5.x; lib/safe-v130 is Safe 1.3.0, while lib/safe-smart-account behind @safe/ is 1.5.0.
+  #
+  # Nothing in src/ uses any of them.
+  "@reality/=lib/zodiac-module-reality/contracts/",
+  "@gnosis.pm/zodiac/=lib/zodiac/",
+  "@gnosis.pm/safe-contracts/=lib/safe-v130/",
+  "@openzeppelin/contracts-upgradeable/=lib/openzeppelin-contracts-upgradeable/contracts/",
 ]
 auto_detect_remappings = false
 
