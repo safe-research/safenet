@@ -7,6 +7,7 @@ alloy = { version = "2", features = ["full", "json-rpc"] }
 argh = "0.1"
 async-trait = "0.1"
 axum = "0.8"
+bitflags = "2"
 futures = "0.3"
 k256 = { version = "0.13", features = ["hash2curve", "serde"] }
 metrics = "0.24"

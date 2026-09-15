@@ -1,9 +1,9 @@
 //! Recognition of SafenetGuard escape-hatch calls.
 
-use super::Checker;
+use super::{Assessment, Checker};
 use crate::{
     contracts::bindings::safenet_guard,
-    engine::{CheckContext, Operation, SafeTransaction, Verdict},
+    engine::{CheckContext, Coverage, Operation, SafeTransaction},
 };
 use alloy::sol_types::SolCall as _;
 
@@ -38,11 +38,13 @@ impl Checker for EscapeHatchChecker {
         "escape_hatch"
     }
 
-    async fn check(&self, transaction: &SafeTransaction, _context: &CheckContext) -> Verdict {
+    async fn check(&self, transaction: &SafeTransaction, _context: &CheckContext) -> Assessment {
         if is_escape_hatch_call(transaction) {
-            Verdict::Secure
+            Assessment::Secure {
+                coverage: Coverage::ALL,
+            }
         } else {
-            Verdict::Abstain
+            Assessment::Abstain
         }
     }
 }

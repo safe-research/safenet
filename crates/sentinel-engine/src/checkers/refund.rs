@@ -19,11 +19,8 @@
 //! accordingly — only a genuine [`Verdict::Insecure`] denial is allowed
 //! through.
 
-use super::{AddressPoisoningChecker, CheckContext, Checker};
-use crate::{
-    contracts::bindings::erc20::transferCall,
-    engine::{SafeTransaction, Verdict},
-};
+use super::{AddressPoisoningChecker, Assessment, CheckContext, Checker};
+use crate::{contracts::bindings::erc20::transferCall, engine::SafeTransaction};
 use alloy::sol_types::SolCall as _;
 use std::sync::Arc;
 
@@ -49,26 +46,25 @@ impl Checker for RefundChecker {
     /// from the Safe to `refundReceiver` and defers to
     /// [`AddressPoisoningChecker`]; abstains outright when there's no refund
     /// to resynthesize (see [`refund_transfer`]).
-    async fn check(&self, transaction: &SafeTransaction, context: &CheckContext) -> Verdict {
+    async fn check(&self, transaction: &SafeTransaction, context: &CheckContext) -> Assessment {
         let Some(refund) = refund_transfer(transaction) else {
-            return Verdict::Abstain;
+            return Assessment::Abstain;
         };
         deny_or_abstain(self.0.check(&refund, context).await)
     }
 }
 
-/// Only lets a denial through. A poisoning check's `Secure` verdict is, at
+/// Only lets a denial through. A poisoning check's `Secure` assessment is, at
 /// best, evidence about the one leg it was run against — never grounds to
 /// affirm the whole transaction, which is what returning it here would do:
-/// this checker runs in a chain that stops at the first non-[`Verdict::Abstain`]
-/// verdict, so any recipient with *some* public onchain history (trivial for
-/// an attacker to pick) would otherwise make the engine answer `Secure`
-/// without Blocklist, CoW, ExcessiveApproval, or the primary-transfer check
-/// ever running.
-fn deny_or_abstain(verdict: Verdict) -> Verdict {
-    match verdict {
-        Verdict::Secure => Verdict::Abstain,
-        verdict => verdict,
+/// any recipient with *some* public onchain history (trivial for an attacker
+/// to pick) would otherwise contribute coverage toward the engine answering
+/// `Secure` without Blocklist, CoW, ExcessiveApproval, or the primary-transfer
+/// check ever having a say.
+fn deny_or_abstain(assessment: Assessment) -> Assessment {
+    match assessment {
+        Assessment::Secure { .. } => Assessment::Abstain,
+        assessment => assessment,
     }
 }
 
@@ -120,7 +116,7 @@ fn refund_transfer(transaction: &SafeTransaction) -> Option<SafeTransaction> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::engine::RuleId;
+    use crate::engine::{Coverage, RuleId};
     use alloy::primitives::{Address, U256};
 
     const SAFE: Address = Address::new([1u8; 20]);
@@ -187,12 +183,17 @@ mod tests {
 
     #[test]
     fn never_lets_a_secure_refund_leg_affirm_the_whole_transaction() {
-        assert_eq!(deny_or_abstain(Verdict::Secure), Verdict::Abstain);
+        assert_eq!(
+            deny_or_abstain(Assessment::Secure {
+                coverage: Coverage::ALL,
+            }),
+            Assessment::Abstain
+        );
     }
 
     #[test]
     fn passes_through_a_denial() {
-        let denial = Verdict::Insecure {
+        let denial = Assessment::Insecure {
             rule: RuleId::R4_3ValueTarget,
         };
 
@@ -201,6 +202,6 @@ mod tests {
 
     #[test]
     fn passes_through_an_abstention() {
-        assert_eq!(deny_or_abstain(Verdict::Abstain), Verdict::Abstain);
+        assert_eq!(deny_or_abstain(Assessment::Abstain), Assessment::Abstain);
     }
 }
