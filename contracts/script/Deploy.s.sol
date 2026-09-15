@@ -15,7 +15,12 @@ contract DeployScript is Script {
 
     function run()
         public
-        returns (FROSTCoordinator coordinator, Consensus consensus, AlwaysApproveOracle alwaysApproveOracle)
+        returns (
+            FROSTCoordinator coordinator,
+            Consensus consensus,
+            AlwaysApproveOracle alwaysApproveOracle,
+            FROSTGroupId.T groupId
+        )
     {
         // Required script arguments:
         address[] memory participants = vm.envAddress("PARTICIPANTS", ",");
@@ -34,7 +39,7 @@ contract DeployScript is Script {
 
         (bytes32 participantsRoot, uint16 count, uint16 threshold, bytes32 context) =
             Genesis.groupParameters(participants, genesisSalt);
-        FROSTGroupId.T groupId = FROSTGroupId.create(participantsRoot, count, threshold, context);
+        groupId = FROSTGroupId.create(participantsRoot, count, threshold, context);
         consensus = Consensus(
             DeterministicDeployment.CANONICAL
                 .deployWithArgs(consensusSalt, type(Consensus).creationCode, abi.encode(coordinator, groupId))
