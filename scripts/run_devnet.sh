@@ -324,12 +324,14 @@ participants_cs=$(IFS=, ; echo "${participants[*]}")
 # bytecode with the `validator`/`sentinel` binaries, allowing them to compute
 # default contract addresses based on other inputs and using deterministic
 # deployments. For now, simulate the deployments with our `contracts` image
-# and parse out the resulting addresses (see `simulate_forge_script`). Both
-# `DeployERC20Script` and `DeploySentinelOracleScript` select the
-# `CANONICAL` CREATE2 factory (`FACTORY=2`, matching
-# `run_sentinel_integration_test.sh`): the `SAFE_SINGLETON_FACTORY` that
-# `getFactory()` otherwise defaults to isn't deployed on a bare Anvil node.
-deployment="$(simulate_forge_script DeployScript)"
+# and parse out the resulting addresses (see `simulate_forge_script`).
+# `DeployConsensusScript`'s consensus deploy, `DeployERC20Script`, and
+# `DeploySentinelOracleScript` all select the `CANONICAL` CREATE2 factory
+# (`FACTORY=2`, matching `run_sentinel_integration_test.sh`): the
+# `SAFE_SINGLETON_FACTORY` that `getFactory()` otherwise defaults to isn't
+# deployed on a bare Anvil node. (DeployConsensusScript's coordinator deploy
+# always uses `CANONICAL` directly, regardless of `FACTORY`.)
+deployment="$(simulate_forge_script DeployConsensusScript -e FACTORY=2)"
 consensus="$(parse_address "$deployment" Consensus)"
 fee_token="$(parse_address "$(simulate_forge_script DeployERC20Script -e FACTORY=2)" 'ERC20 deployed at')"
 sentinel_oracle="$(parse_address "$(simulate_forge_script DeploySentinelOracleScript \
@@ -423,8 +425,16 @@ done
 # from our generated spec.
 safenet_spec | podman kube play -
 
-# Deploy the Safenet contracts.
-forge_script DeployScript
+# Deploy the Safenet contracts. FACTORY=2 matches the simulate step above for
+# DeployConsensusScript, so the consensus address actually deployed here matches `$consensus` (and
+# everything derived from it, e.g. the SentinelOracle deploy below and the TOML configs already
+# written above); DeployAlwaysApproveOracleScript needs it too, since its default
+# (SAFE_SINGLETON_FACTORY) isn't deployed on a bare Anvil node either, even though nothing here
+# depends on its predicted address matching anything precomputed. Both scripts' output stays
+# visible on the terminal (unlike the deploys below), since it's how "Manually recovering contract
+# addresses" in docs/devnet.md expects to find these addresses.
+forge_script DeployConsensusScript -e FACTORY=2
+forge_script DeployAlwaysApproveOracleScript -e FACTORY=2
 
 # Deploy the sentinel fee token and a SentinelOracle whose arbitrator,
 # governance, and protocol funds receiver are all $OPERATOR, then register

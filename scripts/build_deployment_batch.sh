@@ -7,7 +7,8 @@
 #
 # This coordinates the existing contracts/script/*.s.sol front doors 1:1 with the runbook steps —
 # it does not reimplement any of their deployment logic:
-#   1. DeployScript             (coordinator + consensus, via the CANONICAL CREATE2 factory)
+#   1. DeployConsensusScript    (coordinator via the CANONICAL CREATE2 factory, consensus via the
+#                               FACTORY-selected one, same as steps 2 and 3)
 #   2. DeployERC20Script        (fee token, skipped if SENTINEL_FEE_TOKEN is already set), plus a
 #                               mint(...) to each SENTINEL_ADDRESSES entry when a fresh token is
 #                               deployed, so sentinels can actually afford to post bonds
@@ -122,10 +123,11 @@ forge_return() {
 }
 
 # Appends every CALL/CREATE2 transaction from a dry-run artifact to TXS as a raw-data Safe Tx
-# Builder entry. Plain CREATE transactions (to: null, e.g. DeployScript's incidental
-# AlwaysApproveOracle deploy, unused by this runbook) can't be represented as a Safe "to"+"data"
-# call and are intentionally skipped. A blank artifact (see dry_run above) means zero transactions
-# to add, which is correct: nothing needs to happen again for an already-deployed contract.
+# Builder entry. Plain CREATE transactions (to: null — none of these scripts produce one, but a
+# Safe transaction has no way to express "deploy without a target" if one ever did) can't be
+# represented as a Safe "to"+"data" call and are intentionally skipped. A blank artifact (see
+# dry_run above) means zero transactions to add, which is correct: nothing needs to happen again
+# for an already-deployed contract.
 add_deploy_txs() {
     local artifact="$1" line
     [[ -z "$artifact" ]] && return
@@ -150,8 +152,8 @@ add_deploy_txs() {
 
 echo "--- 1. Deploy consensus (and coordinator) ---"
 
-DEPLOY_OUTPUT="$(dry_run DeployScript)"
-add_deploy_txs "$(artifact_path Deploy)"
+DEPLOY_OUTPUT="$(dry_run DeployConsensusScript)"
+add_deploy_txs "$(artifact_path DeployConsensus)"
 forge_return COORDINATOR "$DEPLOY_OUTPUT" coordinator
 forge_return GROUP_ID "$DEPLOY_OUTPUT" groupId
 # Make SENTINEL_CONSENSUS accessible for the deployment scripts

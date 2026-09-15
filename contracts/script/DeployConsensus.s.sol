@@ -5,23 +5,15 @@ import {Script, console} from "@forge-std/Script.sol";
 import {FROSTGroupId} from "@/libraries/FROSTGroupId.sol";
 import {FROSTCoordinator} from "@/FROSTCoordinator.sol";
 import {Consensus} from "@/Consensus.sol";
-import {AlwaysApproveOracle} from "@/AlwaysApproveOracle.sol";
 import {DeterministicDeployment} from "@script/util/DeterministicDeployment.sol";
 import {Genesis} from "@script/util/Genesis.sol";
+import {getFactory} from "@script/util/GetFactory.sol";
 import {requireFullChainSupport} from "@script/util/ChainSupport.sol";
 
-contract DeployScript is Script {
+contract DeployConsensusScript is Script {
     using DeterministicDeployment for DeterministicDeployment.Factory;
 
-    function run()
-        public
-        returns (
-            FROSTCoordinator coordinator,
-            Consensus consensus,
-            AlwaysApproveOracle alwaysApproveOracle,
-            FROSTGroupId.T groupId
-        )
-    {
+    function run() public returns (FROSTCoordinator coordinator, Consensus consensus, FROSTGroupId.T groupId) {
         // Required script arguments:
         address[] memory participants = vm.envAddress("PARTICIPANTS", ",");
 
@@ -41,11 +33,8 @@ contract DeployScript is Script {
             Genesis.groupParameters(participants, genesisSalt);
         groupId = FROSTGroupId.create(participantsRoot, count, threshold, context);
         consensus = Consensus(
-            DeterministicDeployment.CANONICAL
-                .deployWithArgs(consensusSalt, type(Consensus).creationCode, abi.encode(coordinator, groupId))
+            getFactory(vm).deployWithArgs(consensusSalt, type(Consensus).creationCode, abi.encode(coordinator, groupId))
         );
-
-        alwaysApproveOracle = new AlwaysApproveOracle();
 
         vm.stopBroadcast();
 
@@ -56,6 +45,5 @@ contract DeployScript is Script {
         console.log("Genesis Group Context:", vm.toString(context));
         console.log("FROSTCoordinator:", address(coordinator));
         console.log("Consensus:", address(consensus));
-        console.log("AlwaysApproveOracle:", address(alwaysApproveOracle));
     }
 }

@@ -103,24 +103,38 @@ build_services_and_contracts() {
     forge build --root "$REPO_ROOT/contracts" --force
 }
 
-# Deploys the validator contracts (Coordinator, Consensus, and the
-# always-approving oracle) via `DeployScript`. Sets `COORDINATOR_ADDR`,
+# Deploys the validator contracts (Coordinator, Consensus, and the always-approving oracle) via
+# `DeployConsensusScript` and `DeployAlwaysApproveOracleScript`. Sets `COORDINATOR_ADDR`,
 # `CONSENSUS_ADDR`, and `ORACLE_ADDR`.
 deploy_validator_contracts() {
     local rpc_url=$1 sender=$2 participants_csv=$3 chain_id=$4
 
     echo "==> Deploying contracts..."
-    env PARTICIPANTS="$participants_csv" \
-        forge script --root "$REPO_ROOT/contracts" DeployScript \
+    # FACTORY=2 selects the CANONICAL CREATE2 factory for both Consensus and AlwaysApproveOracle
+    # (matching DeployERC20Script/DeploySentinelOracleScript elsewhere): the SAFE_SINGLETON_FACTORY
+    # that DeployConsensusScript/DeployAlwaysApproveOracleScript otherwise default to isn't
+    # deployed on a bare Anvil node.
+    env PARTICIPANTS="$participants_csv" FACTORY=2 \
+        forge script --root "$REPO_ROOT/contracts" DeployConsensusScript \
         --rpc-url "$rpc_url" \
         --unlocked \
         --sender "$sender" \
         --broadcast
 
-    local deploy_json="$REPO_ROOT/contracts/build/broadcast/Deploy.s.sol/$chain_id/run-latest.json"
+    local deploy_json="$REPO_ROOT/contracts/build/broadcast/DeployConsensus.s.sol/$chain_id/run-latest.json"
     COORDINATOR_ADDR=$(jq -er '.returns.coordinator.value' "$deploy_json")
     CONSENSUS_ADDR=$(jq -er '.returns.consensus.value' "$deploy_json")
-    ORACLE_ADDR=$(jq -er '.returns.alwaysApproveOracle.value' "$deploy_json")
+
+    env FACTORY=2 \
+        forge script --root "$REPO_ROOT/contracts" DeployAlwaysApproveOracleScript \
+        --rpc-url "$rpc_url" \
+        --unlocked \
+        --sender "$sender" \
+        --broadcast
+
+    local oracle_json="$REPO_ROOT/contracts/build/broadcast/DeployAlwaysApproveOracle.s.sol/$chain_id/run-latest.json"
+    ORACLE_ADDR=$(jq -er '.returns.alwaysApproveOracle.value' "$oracle_json")
+
     echo "    coordinator: $COORDINATOR_ADDR"
     echo "    consensus:   $CONSENSUS_ADDR"
     echo "    oracle:      $ORACLE_ADDR"
