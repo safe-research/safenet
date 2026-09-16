@@ -211,20 +211,23 @@ library SentinelOracleRequest {
         self.progress.state = newState;
     }
 
-    // A `FROZEN` request that outlives `ARBITRATION_TIMEOUT` moves to `TIMED_OUT` -- the same "no
-    // established outcome, everyone made whole" state every other timeout path already produces,
-    // so bonds return in full via the existing `claim()`/`slashAmountFor` logic with no changes
-    // there. Only touches `Progress` -- `state`, `arbitrationDeadline`, and `fee` all live in its
-    // single slot, so no `Terms` read is needed at all.
+    // A `FROZEN` request that outlives `ARBITRATION_TIMEOUT` moves to `TIMED_OUT` without a ruling.
+    // Revealed committers' bonds return in full via `claim()`/`slashAmountFor` -- no ruling means no
+    // adjudicated loser to slash. Non-revealers are NOT made whole, though: their bond was already
+    // slashed back at `finalize()` time (the `unrevealedBond` transfer, made as soon as the request
+    // froze), and that slash is never reversed -- `slashAmountFor`'s `wasEstablished` check still
+    // holds, since both sides genuinely were established, just never ruled on. Only touches
+    // `Progress` -- `state`, `arbitrationDeadline`, and `fee` all live in its single slot, so no
+    // `Terms` read is needed at all.
     function timeoutArbitration(T storage self) internal returns (uint96 refundFee) {
         require(block.number > self.progress.arbitrationDeadline, ArbitrationNotTimedOut());
         return outOfScope(self);
     }
 
     // The arbitrator declining a `FROZEN` request (e.g. it falls outside what they rule on) moves
-    // it to `TIMED_OUT` immediately -- identical outcome to `timeoutArbitration` above, just without
-    // waiting on `arbitrationDeadline`, since the arbitrator's own refusal is itself the reason no
-    // ruling is coming.
+    // it to `TIMED_OUT` immediately -- same outcome, and the same non-revealer caveat, as
+    // `timeoutArbitration` above, just without waiting on `arbitrationDeadline`, since the
+    // arbitrator's own refusal is itself the reason no ruling is coming.
     function outOfScope(T storage self) internal returns (uint96 refundFee) {
         require(self.progress.state == State.FROZEN, RequestNotFrozen());
         refundFee = self.progress.fee;

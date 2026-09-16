@@ -327,8 +327,10 @@ contract SentinelOracle is IOracle {
     }
 
     // Permissionless: a `FROZEN` request that outlives `ARBITRATION_TIMEOUT` should not wait on the
-    // arbitrator forever. Reuses the `TIMED_OUT` machinery, so every committed bond returns in
-    // full via `claim()` -- identical to the no-reveal timeout path.
+    // arbitrator forever. Reuses the `TIMED_OUT` machinery, so every *revealed* committer's bond
+    // returns in full via `claim()`. A non-revealer's bond is the exception: it was already
+    // slashed to the protocol funds receiver back when `finalize()` froze the request, and that
+    // slash stands -- it is not refunded here.
     function timeoutArbitration(bytes32 requestId) external {
         SentinelOracleRequest.T storage request = $requests.get(requestId);
         address sponsor = request.terms.sponsor;
@@ -339,8 +341,8 @@ contract SentinelOracle is IOracle {
 
     // Lets the arbitrator decline a `FROZEN` request outright (e.g. it's outside what they rule
     // on) instead of leaving it to run out the clock on `ARBITRATION_TIMEOUT`. Same `TIMED_OUT`
-    // outcome as `timeoutArbitration` above -- no established side, every bond returns in full via
-    // `claim()` -- just triggered by the arbitrator's own refusal rather than a deadline.
+    // outcome and same non-revealer caveat as `timeoutArbitration` above -- just triggered by the
+    // arbitrator's own refusal rather than a deadline.
     function markOutOfScope(bytes32 requestId, string calldata context) external onlyArbitrator {
         SentinelOracleRequest.T storage request = $requests.get(requestId);
         address sponsor = request.terms.sponsor;
