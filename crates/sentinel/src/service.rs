@@ -1138,6 +1138,7 @@ mod tests {
                 sponsor: SAFE,
                 fee: fee.to(),
                 bondTarget: bond_target.to(),
+                daoFeeShare: Default::default(),
                 slashAmount: slash_amount.to(),
                 commitDeadline: commit_deadline,
                 revealDeadline: reveal_deadline,

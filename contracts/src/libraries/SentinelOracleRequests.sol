@@ -352,6 +352,7 @@ library SentinelOracleRequestMap {
         address indexed sponsor,
         uint96 fee,
         uint96 bondTarget,
+        uint24 daoFeeShare,
         uint96 slashAmount,
         uint64 commitDeadline,
         uint64 revealDeadline
@@ -409,7 +410,7 @@ library SentinelOracleRequestMap {
             _padding: 0
         });
 
-        emit NewRequest(requestId, sponsor, fee, bondTarget, slashAmount, commitDeadline, revealDeadline);
+        emit NewRequest(requestId, sponsor, fee, bondTarget, daoFeeShare, slashAmount, commitDeadline, revealDeadline);
     }
 
     function get(T storage self, bytes32 requestId) internal view returns (SentinelOracleRequest.T storage request) {
