@@ -59,6 +59,12 @@ contract SentinelOracle is IOracle {
     // The trusted contract (typically Consensus) allowed to call `postRequest` -- distinct from a
     // request's `sponsor`, the address that funds a given request's fee and is refunded on timeout.
     address public immutable PROPOSER;
+    // Must be a standard, non-rebasing ERC20 with at most 18 decimals and no transfer hooks
+    // (e.g. not ERC777). More than 18 decimals risks overflowing `uint96` bond/slash amounts once
+    // multiplied by `bondConfig`'s multipliers; a hooked token lets a malicious `sponsor` revert on
+    // its own refund (`finalize`/`resolveDispute`/`timeoutArbitration`/`markOutOfScope` all push
+    // tokens to `sponsor`), permanently freezing the request and trapping every committed
+    // sentinel's bond along with it.
     IERC20 public immutable FEE_TOKEN;
     // `uint32` blocks is vastly more than any realistic window/delay/timeout needs (billions of
     // blocks -- centuries even at a fast chain's block time), matching the same convention already
@@ -162,7 +168,9 @@ contract SentinelOracle is IOracle {
         // Fee config: everything that determines the size of a request's fee/bond/slash and how
         // it is split. Sized to match each value's own governed-storage width (see `$feeConfig`,
         // `$bondConfig`, `$daoFeeShareConfig` below) so an oversized value fails at the ABI/
-        // calldata boundary instead of being silently accepted and caught later.
+        // calldata boundary instead of being silently accepted and caught later. `feeToken` must
+        // satisfy the constraints documented on `FEE_TOKEN` above (at most 18 decimals, no
+        // transfer hooks) -- this is only ever set once, here, with no setter.
         address feeToken;
         uint96 requestFee;
         uint32 initialBondMultiplier;
