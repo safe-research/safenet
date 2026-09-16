@@ -1215,6 +1215,14 @@ contract SentinelOracleTest is Test {
         oracle.commit(REQUEST_ID, hash);
     }
 
+    function test_Commit_ZeroHash_Reverts() public {
+        _postRequest();
+
+        vm.expectRevert(SentinelOracleCommitmentMap.InvalidCommitHash.selector);
+        vm.prank(sentinel1);
+        oracle.commit(REQUEST_ID, bytes32(0));
+    }
+
     function test_DoubleReveal_Reverts() public {
         _postRequest();
         _commit(sentinel1, true, SALT_1);

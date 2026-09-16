@@ -83,17 +83,15 @@ library SentinelOracleCommitmentMap {
     error AlreadyRevealed();
     error InvalidReveal();
     error NotCommitted();
+    error InvalidCommitHash();
 
     // ============================================================
     // INTERNAL FUNCTIONS
     // ============================================================
 
-    function checkNotCommitted(T storage self, bytes32 requestId, address sentinel) internal view {
-        require(self.commitments[requestId][sentinel].commitHash == 0, AlreadyCommitted());
-    }
-
     function add(T storage self, bytes32 requestId, address sentinel, bytes32 commitHash, uint96 bondAmount) internal {
-        checkNotCommitted(self, requestId, sentinel);
+        require(commitHash != bytes32(0), InvalidCommitHash());
+        require(self.commitments[requestId][sentinel].vote == SentinelOracleCommitment.Vote.NONE, AlreadyCommitted());
         self.commitments[requestId][sentinel] = SentinelOracleCommitment.Commitment({
             commitHash: commitHash, bondAmount: bondAmount, vote: SentinelOracleCommitment.Vote.PENDING, claimed: false
         });
