@@ -65,6 +65,9 @@ contract SentinelOracle is IOracle {
     // used for `BondConfig`'s multipliers.
     uint32 public immutable COMMIT_WINDOW;
     uint32 public immutable REVEAL_WINDOW;
+    // Unlike `COMMIT_WINDOW`/`REVEAL_WINDOW`/`ARBITRATION_TIMEOUT`, zero is a deliberately valid
+    // value here: it makes every governance-gated change (sentinel add/remove, fee, bond config,
+    // DAO fee share, protocol funds receiver) take effect immediately instead of being timelocked.
     uint32 public immutable GOVERNANCE_DELAY;
     uint32 public immutable ARBITRATION_TIMEOUT;
 
@@ -165,7 +168,9 @@ contract SentinelOracle is IOracle {
         uint32 initialBondMultiplier;
         uint32 initialSlashingMultiplier;
         uint24 initialDaoFeeShare;
-        // Timeouts: every block-denominated window/delay in the contract.
+        // Timeouts: every block-denominated window/delay in the contract. `governanceDelay` may
+        // be zero -- see `GOVERNANCE_DELAY` above -- unlike the other three, which must be
+        // nonzero (checked below).
         uint32 commitWindow;
         uint32 revealWindow;
         uint32 governanceDelay;
