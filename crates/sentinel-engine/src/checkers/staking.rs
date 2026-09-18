@@ -53,7 +53,7 @@ use crate::{
         },
         multi_send::sub_transactions,
     },
-    engine::{CheckContext, Coverage, Operation, RuleId, SafeTransaction},
+    engine::{CheckContext, Coverage, MetaTransaction, Operation, RuleId, SafeTransaction},
 };
 use alloy::{
     primitives::{Address, U256, address},
@@ -126,7 +126,7 @@ impl Checker for StakingChecker {
 /// A dangling, unused `approve` on [`STAKING`] is left to
 /// [`Assessment::Abstain`] — see the module docs for why this check doesn't
 /// deny it.
-fn check_lone_call(call: &SafeTransaction) -> Assessment {
+fn check_lone_call(call: &MetaTransaction) -> Assessment {
     if stake_amount(call).is_some() {
         return Assessment::Secure {
             coverage: Coverage::DATA,
@@ -143,7 +143,7 @@ fn check_lone_call(call: &SafeTransaction) -> Assessment {
 /// leaving the `approve` a dangling, un-consumed authorization — left to
 /// [`Assessment::Abstain`] for the same reason as [`check_lone_call`]'s
 /// standalone `approve` case, regardless of the amount approved.
-fn check_pair(first: &SafeTransaction, second: &SafeTransaction) -> Assessment {
+fn check_pair(first: &MetaTransaction, second: &MetaTransaction) -> Assessment {
     if let (Some(approved), Some(staked)) = (staking_approval_amount(first), stake_amount(second)) {
         return if approved > staked {
             Assessment::Insecure {
@@ -162,7 +162,7 @@ fn check_pair(first: &SafeTransaction, second: &SafeTransaction) -> Assessment {
 /// [`REWARDS_DISTRIBUTOR`]. Only a plain, valueless `CALL` is recognized — a
 /// `DELEGATECALL` executes the target's code in the Safe's own storage
 /// context rather than a real call to it, and `claim` is never payable.
-fn claim_account(tx: &SafeTransaction) -> Option<Address> {
+fn claim_account(tx: &MetaTransaction) -> Option<Address> {
     if tx.operation != Operation::Call || !tx.value.is_zero() || tx.to != REWARDS_DISTRIBUTOR {
         return None;
     }
@@ -173,7 +173,7 @@ fn claim_account(tx: &SafeTransaction) -> Option<Address> {
 /// naming [`STAKING`] as spender. See [`claim_account`] for why
 /// `DELEGATECALL` and nonzero `tx.value` are excluded even to a legitimate
 /// address.
-fn staking_approval_amount(tx: &SafeTransaction) -> Option<U256> {
+fn staking_approval_amount(tx: &MetaTransaction) -> Option<U256> {
     if tx.operation != Operation::Call || !tx.value.is_zero() || tx.to != SAFE_TOKEN {
         return None;
     }
@@ -184,7 +184,7 @@ fn staking_approval_amount(tx: &SafeTransaction) -> Option<U256> {
 /// The staked amount, if `tx` is a `stake` call against [`STAKING`]. See
 /// [`claim_account`] for why `DELEGATECALL` and nonzero `tx.value` are
 /// excluded even to a legitimate address.
-fn stake_amount(tx: &SafeTransaction) -> Option<U256> {
+fn stake_amount(tx: &MetaTransaction) -> Option<U256> {
     if tx.operation != Operation::Call || !tx.value.is_zero() || tx.to != STAKING {
         return None;
     }
