@@ -3,7 +3,7 @@
 use super::{Assessment, Checker};
 use crate::{
     contracts::{bindings::safe, multi_send::decode_multi_send_call},
-    engine::{CheckContext, Coverage, Operation, RuleId, SafeTransaction},
+    engine::{CheckContext, Coverage, MetaTransaction, Operation, RuleId, SafeTransaction},
 };
 use alloy::{
     primitives::{Address, address},
@@ -82,7 +82,7 @@ fn check_settings_change(tx: &SafeTransaction) -> Option<Result<(), RuleId>> {
     if tx.operation != Operation::Call {
         return None;
     }
-    Some(if check_calls(tx) {
+    Some(if check_calls(tx.safe, &tx.as_meta_transaction()) {
         Ok(())
     } else {
         Err(RuleId::R4_1SettingsChange)
@@ -96,72 +96,78 @@ fn check_delegatecall_integrity(tx: &SafeTransaction) -> Option<Result<(), RuleI
     if tx.operation != Operation::DelegateCall {
         return None;
     }
-    Some(if check_delegate_calls(tx) || check_multi_send(tx) {
-        Ok(())
-    } else {
-        Err(RuleId::R4_2DelegatecallIntegrity)
-    })
+    let call = tx.as_meta_transaction();
+    Some(
+        if check_delegate_calls(&call) || check_multi_send(tx.safe, &call) {
+            Ok(())
+        } else {
+            Err(RuleId::R4_2DelegatecallIntegrity)
+        },
+    )
 }
 
 /// Calls to other contracts are freely allowed; self-calls are restricted to a
 /// whitelist of Safe management functions.
-fn check_calls(tx: &SafeTransaction) -> bool {
-    if tx.operation != Operation::Call {
+fn check_calls(safe: Address, call: &MetaTransaction) -> bool {
+    if call.operation != Operation::Call {
         return false;
     }
-    if tx.safe != tx.to {
+    if safe != call.to {
         return true;
     }
     // receive: empty calldata with any value (e.g. cancellation transactions).
-    if tx.data.is_empty() {
+    if call.data.is_empty() {
         return true;
     }
-    check_self_calls(tx)
+    check_self_calls(call)
 }
 
 /// Checks that a self-call targets one of the allowed Safe management
 /// functions (with argument validation where necessary).
-fn check_self_calls(tx: &SafeTransaction) -> bool {
+fn check_self_calls(call: &MetaTransaction) -> bool {
     // No-arg checks: any calldata starting with the right selector is allowed.
-    if tx
+    if call
         .data
         .starts_with(&safe::addOwnerWithThresholdCall::SELECTOR)
     {
         return true;
     }
-    if tx.data.starts_with(&safe::removeOwnerCall::SELECTOR) {
+    if call.data.starts_with(&safe::removeOwnerCall::SELECTOR) {
         return true;
     }
-    if tx.data.starts_with(&safe::swapOwnerCall::SELECTOR) {
+    if call.data.starts_with(&safe::swapOwnerCall::SELECTOR) {
         return true;
     }
-    if tx.data.starts_with(&safe::changeThresholdCall::SELECTOR) {
+    if call.data.starts_with(&safe::changeThresholdCall::SELECTOR) {
         return true;
     }
-    if tx.data.starts_with(&safe::disableModuleCall::SELECTOR) {
+    if call.data.starts_with(&safe::disableModuleCall::SELECTOR) {
         return true;
     }
 
     // Arg-validated checks: the first address argument must be in the allow-list.
-    if tx.data.starts_with(&safe::setFallbackHandlerCall::SELECTOR) {
-        return safe::setFallbackHandlerCall::abi_decode(&tx.data)
+    if call
+        .data
+        .starts_with(&safe::setFallbackHandlerCall::SELECTOR)
+    {
+        return safe::setFallbackHandlerCall::abi_decode(&call.data)
             .ok()
-            .is_some_and(|call| SUPPORTED_FALLBACK_HANDLERS.contains(&call.handler));
+            .is_some_and(|decoded| SUPPORTED_FALLBACK_HANDLERS.contains(&decoded.handler));
     }
-    if tx.data.starts_with(&safe::setGuardCall::SELECTOR) {
-        return safe::setGuardCall::abi_decode(&tx.data)
+    if call.data.starts_with(&safe::setGuardCall::SELECTOR) {
+        return safe::setGuardCall::abi_decode(&call.data)
             .ok()
-            .is_some_and(|call| SUPPORTED_GUARDS.contains(&call.guard));
+            .is_some_and(|decoded| SUPPORTED_GUARDS.contains(&decoded.guard));
     }
-    if tx.data.starts_with(&safe::enableModuleCall::SELECTOR) {
-        return safe::enableModuleCall::abi_decode(&tx.data)
+    if call.data.starts_with(&safe::enableModuleCall::SELECTOR) {
+        return safe::enableModuleCall::abi_decode(&call.data)
             .ok()
-            .is_some_and(|call| SUPPORTED_MODULES.contains(&call.module));
+            .is_some_and(|decoded| SUPPORTED_MODULES.contains(&decoded.module));
     }
-    if tx.data.starts_with(&safe::setModuleGuardCall::SELECTOR) {
-        return safe::setModuleGuardCall::abi_decode(&tx.data)
+    if call.data.starts_with(&safe::setModuleGuardCall::SELECTOR) {
+        return safe::setModuleGuardCall::abi_decode(&call.data)
             .ok()
-            .is_some_and(|call| SUPPORTED_MODULE_GUARDS.contains(&call.guard));
+            .is_some_and(|decoded| SUPPORTED_MODULE_GUARDS.contains(&decoded.guard));
     }
 
     false
@@ -169,8 +175,8 @@ fn check_self_calls(tx: &SafeTransaction) -> bool {
 
 /// Delegate calls are restricted to known Safe migration and signing-library
 /// contracts, each with a fixed set of allowed function selectors.
-fn check_delegate_calls(tx: &SafeTransaction) -> bool {
-    if tx.operation != Operation::DelegateCall {
+fn check_delegate_calls(call: &MetaTransaction) -> bool {
+    if call.operation != Operation::DelegateCall {
         return false;
     }
 
@@ -178,13 +184,15 @@ fn check_delegate_calls(tx: &SafeTransaction) -> bool {
         address!("6439e7ABD8Bb915A5263094784C5CF561c4172AC"),
         address!("526643F69b81B008F46d95CD5ced5eC0edFFDaC6"),
     ];
-    if MIGRATION_CONTRACTS.contains(&tx.to) {
-        return tx.data.starts_with(&safe::migrateSingletonCall::SELECTOR)
-            || tx
+    if MIGRATION_CONTRACTS.contains(&call.to) {
+        return call.data.starts_with(&safe::migrateSingletonCall::SELECTOR)
+            || call
                 .data
                 .starts_with(&safe::migrateWithFallbackHandlerCall::SELECTOR)
-            || tx.data.starts_with(&safe::migrateL2SingletonCall::SELECTOR)
-            || tx
+            || call
+                .data
+                .starts_with(&safe::migrateL2SingletonCall::SELECTOR)
+            || call
                 .data
                 .starts_with(&safe::migrateL2WithFallbackHandlerCall::SELECTOR);
     }
@@ -195,8 +203,8 @@ fn check_delegate_calls(tx: &SafeTransaction) -> bool {
         address!("d53cd0aB83D845Ac265BE939c57F53AD838012c9"),
         address!("4FfeF8222648872B3dE295Ba1e49110E61f5b5aa"),
     ];
-    if SIGN_MESSAGE_LIBS.contains(&tx.to) {
-        return tx.data.starts_with(&safe::signMessageCall::SELECTOR);
+    if SIGN_MESSAGE_LIBS.contains(&call.to) {
+        return call.data.starts_with(&safe::signMessageCall::SELECTOR);
     }
 
     const CREATE_CALL_CONTRACTS: &[Address] = &[
@@ -205,9 +213,9 @@ fn check_delegate_calls(tx: &SafeTransaction) -> bool {
         address!("9b35Af71d77eaf8d7e40252370304687390A1A52"), // 1.4.1
         address!("2Ef5ECfbea521449E4De05EDB1ce63B75eDA90B4"), // 1.5.0
     ];
-    if CREATE_CALL_CONTRACTS.contains(&tx.to) {
-        return tx.data.starts_with(&safe::performCreateCall::SELECTOR)
-            || tx.data.starts_with(&safe::performCreate2Call::SELECTOR);
+    if CREATE_CALL_CONTRACTS.contains(&call.to) {
+        return call.data.starts_with(&safe::performCreateCall::SELECTOR)
+            || call.data.starts_with(&safe::performCreate2Call::SELECTOR);
     }
 
     false
@@ -223,13 +231,23 @@ fn check_delegate_calls(tx: &SafeTransaction) -> bool {
 /// this function returning the failing sub-tx's own rule instead of a flat
 /// `bool`, which is a bigger change than a MultiSend-only fix warrants
 /// right now.
-fn check_multi_send(tx: &SafeTransaction) -> bool {
-    let Some((sub_txs, allows_delegate_calls)) = decode_multi_send_call(tx) else {
+fn check_multi_send(safe: Address, call: &MetaTransaction) -> bool {
+    // `decode_multi_send_call` still takes a `SafeTransaction`; reconstruct
+    // one from `call`'s four action fields plus `safe` to bridge the two.
+    let tx = SafeTransaction {
+        safe,
+        to: call.to,
+        value: call.value,
+        data: call.data.clone(),
+        operation: call.operation,
+        ..Default::default()
+    };
+    let Some((calls, allows_delegate_calls)) = decode_multi_send_call(&tx) else {
         return false;
     };
 
-    sub_txs.iter().all(|sub_tx| {
-        check_calls(sub_tx) || (allows_delegate_calls && check_delegate_calls(sub_tx))
+    calls.iter().all(|call| {
+        check_calls(safe, call) || (allows_delegate_calls && check_delegate_calls(call))
     })
 }
 

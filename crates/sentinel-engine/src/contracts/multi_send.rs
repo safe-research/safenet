@@ -2,7 +2,7 @@ use std::mem;
 
 use crate::{
     contracts::bindings::multi_send,
-    engine::{Operation, SafeTransaction},
+    engine::{MetaTransaction, Operation, SafeTransaction},
 };
 use alloy::{
     primitives::{Address, Bytes, U256, address},
@@ -93,7 +93,7 @@ pub fn decode_multi_send(
     safe: Address,
     data: &[u8],
     version: MultiSendVersion,
-) -> Option<Vec<SafeTransaction>> {
+) -> Option<Vec<MetaTransaction>> {
     let mut result = Vec::new();
     let mut cursor = Cursor(data);
     while let Some(operation) = cursor.next() {
@@ -113,19 +113,11 @@ pub fn decode_multi_send(
             _ => to,
         };
 
-        result.push(SafeTransaction {
-            chain_id: U256::ZERO,
-            safe,
+        result.push(MetaTransaction {
             to,
             value,
             data,
             operation,
-            safe_tx_gas: U256::ZERO,
-            base_gas: U256::ZERO,
-            gas_price: U256::ZERO,
-            gas_token: Address::ZERO,
-            refund_receiver: Address::ZERO,
-            nonce: U256::ZERO,
         });
     }
 
@@ -139,7 +131,7 @@ pub fn decode_multi_send(
 /// whether that deployment allows delegate calls among them — combining
 /// `known_deployment`, decoding the outer `multiSend(bytes)` call, and
 /// `decode_multi_send`, the three steps every caller needs together.
-pub fn decode_multi_send_call(tx: &SafeTransaction) -> Option<(Vec<SafeTransaction>, bool)> {
+pub fn decode_multi_send_call(tx: &SafeTransaction) -> Option<(Vec<MetaTransaction>, bool)> {
     if tx.operation != Operation::DelegateCall {
         tracing::trace!(
             to = %tx.to,
@@ -157,17 +149,35 @@ pub fn decode_multi_send_call(tx: &SafeTransaction) -> Option<(Vec<SafeTransacti
         tracing::trace!(to = %tx.to, "not a MultiSend batch: calldata does not decode as multiSend(bytes)");
         return None;
     };
-    let Some(sub_txs) = decode_multi_send(tx.safe, &call.transactions, version) else {
+    let Some(calls) = decode_multi_send(tx.safe, &call.transactions, version) else {
         tracing::trace!(to = %tx.to, "not a MultiSend batch: packed transactions blob is malformed");
         return None;
     };
-    Some((sub_txs, allows_delegate_calls))
+    Some((calls, allows_delegate_calls))
 }
 
 /// `tx` itself, or, if it's a MultiSend batch, each of its sub-calls.
+///
+/// Sub-calls are re-synthesized as zeroed-out `SafeTransaction`s here, same
+/// as `decode_multi_send` did before it returned `MetaTransaction`s — this
+/// call site still hands its result to checks that read `SafeTransaction`.
+/// A later phase migrates those checks to `MetaTransaction` directly and
+/// this synthesis goes away.
 pub fn sub_transactions(tx: &SafeTransaction) -> Vec<SafeTransaction> {
     decode_multi_send_call(tx)
-        .map(|(sub_txs, _)| sub_txs)
+        .map(|(calls, _)| {
+            calls
+                .into_iter()
+                .map(|call| SafeTransaction {
+                    safe: tx.safe,
+                    to: call.to,
+                    value: call.value,
+                    data: call.data,
+                    operation: call.operation,
+                    ..Default::default()
+                })
+                .collect()
+        })
         .unwrap_or_else(|| vec![tx.clone()])
 }
 
