@@ -157,28 +157,10 @@ pub fn decode_multi_send_call(tx: &SafeTransaction) -> Option<(Vec<MetaTransacti
 }
 
 /// `tx` itself, or, if it's a MultiSend batch, each of its sub-calls.
-///
-/// Sub-calls are re-synthesized as zeroed-out `SafeTransaction`s here, same
-/// as `decode_multi_send` did before it returned `MetaTransaction`s — this
-/// call site still hands its result to checks that read `SafeTransaction`.
-/// A later phase migrates those checks to `MetaTransaction` directly and
-/// this synthesis goes away.
-pub fn sub_transactions(tx: &SafeTransaction) -> Vec<SafeTransaction> {
+pub fn sub_transactions(tx: &SafeTransaction) -> Vec<MetaTransaction> {
     decode_multi_send_call(tx)
-        .map(|(calls, _)| {
-            calls
-                .into_iter()
-                .map(|call| SafeTransaction {
-                    safe: tx.safe,
-                    to: call.to,
-                    value: call.value,
-                    data: call.data,
-                    operation: call.operation,
-                    ..Default::default()
-                })
-                .collect()
-        })
-        .unwrap_or_else(|| vec![tx.clone()])
+        .map(|(calls, _)| calls)
+        .unwrap_or_else(|| vec![tx.as_meta_transaction()])
 }
 
 struct Cursor<'a>(&'a [u8]);

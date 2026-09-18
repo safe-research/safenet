@@ -5,7 +5,7 @@ use crate::{
         bindings::{erc20, erc721, erc1155},
         multi_send::decode_multi_send_call,
     },
-    engine::SafeTransaction,
+    engine::{MetaTransaction, SafeTransaction},
 };
 use alloy::{
     primitives::{Address, U256},
@@ -44,42 +44,51 @@ pub enum EffectKind {
 /// Decodes the target effects of a Safe transaction, recursing through
 /// MultiSend so each batched sub-call is decoded individually.
 pub fn decode_target_effects(tx: &SafeTransaction) -> Vec<TargetEffect> {
-    if let Some((calls, _)) = decode_multi_send_call(tx) {
-        // Sub-calls are re-synthesized as zeroed-out `SafeTransaction`s here,
-        // same as `decode_multi_send` did before it returned
-        // `MetaTransaction`s. A later phase migrates this recursion to work
-        // on `MetaTransaction` directly and this synthesis goes away.
+    decode_call_effects(tx.safe, &tx.as_meta_transaction())
+}
+
+/// Decodes a single call's target effects, recursing through MultiSend if
+/// `call` is itself a delegatecall to a known MultiSend deployment.
+///
+/// `call` is re-wrapped into a `SafeTransaction` here (with `safe` as the
+/// enclosing Safe's address) only to bridge into `decode_multi_send_call`,
+/// which still needs a full `SafeTransaction` to resolve a nested batch. A
+/// later phase moves batch recognition behind the engine's entry-point
+/// parser and this bridging goes away.
+fn decode_call_effects(safe: Address, call: &MetaTransaction) -> Vec<TargetEffect> {
+    let tx = SafeTransaction {
+        safe,
+        to: call.to,
+        value: call.value,
+        data: call.data.clone(),
+        operation: call.operation,
+        ..Default::default()
+    };
+    if let Some((calls, _)) = decode_multi_send_call(&tx) {
         return calls
-            .into_iter()
-            .map(|call| SafeTransaction {
-                safe: tx.safe,
-                to: call.to,
-                value: call.value,
-                data: call.data,
-                operation: call.operation,
-                ..Default::default()
-            })
-            .flat_map(|sub_tx| decode_target_effects(&sub_tx))
+            .iter()
+            .flat_map(|call| decode_call_effects(safe, call))
             .collect();
     }
 
-    decode_call(tx)
+    decode_call(call)
 }
 
 /// Decodes a single (non-MultiSend) call into its target effects: a native
-/// value transfer (if `tx.value` is non-zero) plus, independently, whatever
-/// token effect `tx.data` decodes to — a call can carry both at once (e.g. a
-/// `payable` ERC-20 `transfer`), so neither is allowed to suppress the other.
-fn decode_call(tx: &SafeTransaction) -> Vec<TargetEffect> {
+/// value transfer (if `call.value` is non-zero) plus, independently,
+/// whatever token effect `call.data` decodes to — a call can carry both at
+/// once (e.g. a `payable` ERC-20 `transfer`), so neither is allowed to
+/// suppress the other.
+fn decode_call(call: &MetaTransaction) -> Vec<TargetEffect> {
     let mut effects = Vec::new();
-    if !tx.value.is_zero() {
+    if !call.value.is_zero() {
         effects.push(TargetEffect {
-            recipient: tx.to,
-            kind: EffectKind::ValueTransfer { amount: tx.value },
+            recipient: call.to,
+            kind: EffectKind::ValueTransfer { amount: call.value },
         });
     }
 
-    let data = &tx.data;
+    let data = &call.data;
     if data.is_empty() {
         return effects;
     }
