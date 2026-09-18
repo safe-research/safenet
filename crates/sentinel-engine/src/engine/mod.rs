@@ -11,7 +11,7 @@ mod transaction;
 pub use self::{
     coverage::{Coverage, CoverageLabel},
     rule::RuleId,
-    transaction::{Operation, SafeTransaction},
+    transaction::{MetaTransaction, Operation, SafeTransaction},
 };
 use crate::checkers::{Assessment, Checker};
 use serde::{Deserialize, Serialize};

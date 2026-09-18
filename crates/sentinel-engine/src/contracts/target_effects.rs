@@ -44,8 +44,23 @@ pub enum EffectKind {
 /// Decodes the target effects of a Safe transaction, recursing through
 /// MultiSend so each batched sub-call is decoded individually.
 pub fn decode_target_effects(tx: &SafeTransaction) -> Vec<TargetEffect> {
-    if let Some((sub_txs, _)) = decode_multi_send_call(tx) {
-        return sub_txs.iter().flat_map(decode_target_effects).collect();
+    if let Some((calls, _)) = decode_multi_send_call(tx) {
+        // Sub-calls are re-synthesized as zeroed-out `SafeTransaction`s here,
+        // same as `decode_multi_send` did before it returned
+        // `MetaTransaction`s. A later phase migrates this recursion to work
+        // on `MetaTransaction` directly and this synthesis goes away.
+        return calls
+            .into_iter()
+            .map(|call| SafeTransaction {
+                safe: tx.safe,
+                to: call.to,
+                value: call.value,
+                data: call.data,
+                operation: call.operation,
+                ..Default::default()
+            })
+            .flat_map(|sub_tx| decode_target_effects(&sub_tx))
+            .collect();
     }
 
     decode_call(tx)
