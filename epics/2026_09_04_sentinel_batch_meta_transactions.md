@@ -31,7 +31,7 @@ struct Proposal {
 
 One decoder, one recursion policy, one representation that cannot be misread — and coverage keyed per call, so the verdict-composition model can require that _every_ call in a batch was fully examined, not just that some check had an opinion about the batch as a whole.
 
-Nine PRs: the `MetaTransaction` type and the decoder (1–2), the entry-point parse and the trait signature (3), then one check at a time (4–6), the per-call coverage migration (7), documentation (8), and removal of this spec (9).
+Eleven PRs: the `MetaTransaction` type and the decoder (1–2), the entry-point parse and the trait signature (3), then one check at a time (4–6), the per-call coverage migration (7a–7c), documentation (8), and removal of this spec (9).
 
 ---
 
@@ -72,7 +72,7 @@ pub struct Coverage {
 
 A `Secure` requires, for every call index `i`, that the union of claims covers `Coverage::required_for(&proposal.calls[i])`, plus the refund leg when `gasPrice != 0`.
 
-The claim already travels back with the verdict — the verdict-composition epic made `Checker::check` return `Assessment::Secure { coverage }` for exactly this reason, so nothing about the trait or the fold's shape changes here. Phase 7 re-keys `Coverage`'s internals and rewrites the handful of sites that build a claim, and nothing else.
+The claim already travels back with the verdict — the verdict-composition epic made `Checker::check` return `Assessment::Secure { coverage }` for exactly this reason, so nothing about the trait or the fold's shape changes here. Phase 7 re-keys `Coverage`'s internals and rewrites the handful of sites that build a claim, and nothing else — staged as introduce-the-type (7a), wire-it-in (7b), then delete-the-old-type-and-rename (7c); see Phase 7 below.
 
 One claim needs restating rather than re-keying. `CancellationChecker` is the only check that claims `Coverage::ALL`, which it earns by comparing the whole transaction against a zeroed template; per call that becomes "every aspect of the single call", and the check must require that there _is_ only one call — which is the same change phase 6 makes to it for its own reasons.
 
@@ -152,7 +152,7 @@ A MultiSend deployment with `allows_delegate_calls == true` can carry a sub-call
 | `BaseChecker` | Evaluates each entry of `proposal.calls` and returns the _failing call's own_ rule, resolving the `check_multi_send` mis-citation `TODO`. `check_multi_send` and `decode_multi_send_call`'s use here are deleted. |
 | `BlocklistChecker` | Checks every call's `to`, not just the top-level one. Closes a live gap. |
 | `AddressPoisoningChecker` | Runs its ERC-20 decode over each call instead of returning `None` for a batch. Closes `address-poisoning/superfortune-poisoned-multisend`. Its `Operation::Call` guard now applies per call. |
-| `CowChecker`, `StakingChecker` | `sub_transactions(transaction)` becomes `&proposal.calls`; their helpers already read only the four action fields. In phase 7 they claim the specific indices they recognized. |
+| `CowChecker`, `StakingChecker` | `sub_transactions(transaction)` becomes `&proposal.calls`; their helpers already read only the four action fields. In phase 7b they claim the specific indices they recognized. |
 | `ExcessiveApprovalChecker` | `decode_target_effects` stops recursing (the engine already flattened) and decodes one `MetaTransaction`; the check maps over `proposal.calls`. |
 | `CancellationChecker` | Requires `proposal.calls.len() == 1` before template-matching, so a batch cannot be mistaken for a cancellation. |
 | `EscapeHatchChecker`, `NestedSafeChecker` | Evaluate per call; both are meaningful for a batch leg as well as a top-level call. |
@@ -168,13 +168,13 @@ Per `AGENTS.md`, check behavior is verified by the [sentinel-test-vectors](https
 
 - **Rust unit tests** for the engine-level parser (which is not a check): recognized-batch flattening, execution order, v1.5.0+ `to == address(0)` self-call resolution, malformed payload, plain-`CALL`-to-MultiSend, depth bound, and `Coverage`'s per-call algebra. Plus internal-helper tests for `BlocklistChecker`'s "is any call blocklisted" helper, since that behavior is not corpus-testable (question 8).
 - **New test vectors** for the two corpus-visible behavior changes: a batch whose sub-call is a settings-change violation, expecting `insecure R-4.1` where the engine cites `R-4.2` today; and re-running `address-poisoning/superfortune-poisoned-multisend`, which should go from skip to pass. Both need an archive RPC for the chain in question.
-- **Baseline**: re-run `just test-integration-sentinel-engine ~/repositories/sentinel-test-vectors` against an archive RPC before phase 1, and after each of phases 4–7. The 2026-09-04 baseline against the script's default public RPC was 12 pass / 0 fail / 17 skip, but 14 of those skips are RPC-access or chain-id artifacts of that endpoint rather than engine behavior — see the verdict-composition epic's Tech Specs for the breakdown.
+- **Baseline**: re-run `just test-integration-sentinel-engine ~/repositories/sentinel-test-vectors` against an archive RPC before phase 1, and after each of phases 4–6 and 7b. The 2026-09-04 baseline against the script's default public RPC was 12 pass / 0 fail / 17 skip, but 14 of those skips are RPC-access or chain-id artifacts of that endpoint rather than engine behavior — see the verdict-composition epic's Tech Specs for the breakdown. 7a and 7c cannot change a check's verdict (7a is unwired, 7c is a rename), so re-running the corpus for either is optional.
 
 ---
 
 ## Implementation Phases
 
-Phases 1 and 2 are behavior-preserving refactors and can be reviewed independently of the verdict-composition epic. Phases 4, 5 and 6 touch disjoint check files, depend only on phase 3, and can be parallelized. Phase 7 depends on the verdict-composition epic having landed and on phases 4–6.
+Phases 1 and 2 are behavior-preserving refactors and can be reviewed independently of the verdict-composition epic. Phases 4, 5 and 6 touch disjoint check files, depend only on phase 3, and can be parallelized. Phase 7 depends on the verdict-composition epic having landed, and is itself three PRs: 7a (the new `CallCoverage` type, standalone) depends only on the verdict-composition epic and can be reviewed in parallel with phases 4–6; 7b (wiring it in) additionally depends on phases 4–6, since every affirming check must already read `proposal.calls` before its claim can be rewritten; 7c (deleting the old type and renaming) depends only on 7b.
 
 ### Phase 1 — `MetaTransaction`, and the decoder that produces it
 
@@ -224,11 +224,35 @@ Split into "`AddressPoisoningChecker`" (the one with a corpus-visible change and
 
 ### Phase 7 — Per-call coverage
 
-**Files:** `engine/coverage.rs`, `engine/mod.rs`, and each affirming check.
+Re-keys `Coverage` to a per-call `Vec<AspectSet> + refund`, so the verdict-composition model can require that the union of affirming checks' claims covers every call in a batch, not just that some check had an opinion about it as a whole. `Checker::check` already returns the claim, so the trait is untouched throughout.
 
-Re-key `Coverage` to `Vec<AspectSet> + refund`, apply `Coverage::required_for` per call, and rewrite each affirming check's claim to name the call indices it vouched for. `Checker::check` already returns the claim, so the trait is untouched.
+Landing this as one PR would mean reviewing a new type's algebra and its wiring into eight checkers at once, with no point at which the diff compiles and passes on just the type's own merits. Three PRs instead, each independently buildable and testable:
 
-Depends on the verdict-composition epic. Split into "the type and the fold" and "the claim sites", so the semantic change and the mechanical migration are reviewed separately.
+#### Phase 7a — Introduce `CallCoverage`, standalone
+
+**Files:** `engine/coverage.rs`.
+
+Adds `AspectSet` (the four per-call aspects — `Coverage`'s `Refund` bit doesn't belong to any one call) and `CallCoverage` (`Vec<AspectSet> + refund`), with the full union/contains/missing/`required_for` algebra, entirely alongside — not touching — the existing `Coverage`. Nothing in the engine or any checker constructs or reads a `CallCoverage` yet; `Assessment::Secure` still carries the old `Coverage`. No tests: `Coverage`'s existing tests migrate over to `CallCoverage` in 7b as it's wired in, rather than a parallel set being written here just to be thrown away. A file-level `#[allow(dead_code)]` covers the resulting gap until then, removed again in 7c.
+
+Depends only on the verdict-composition epic having landed (`Coverage`, `Assessment`, `Proposal` and `MetaTransaction` all need to already exist). Does not depend on phases 4–6 and can be reviewed in parallel with them. Purely additive: behavior-preserving by construction, corpus unaffected, existing Rust tests unaffected.
+
+#### Phase 7b — Wire `CallCoverage` into the engine and every claim site
+
+**Files:** `engine/coverage.rs`, `engine/mod.rs`, `checkers/mod.rs`, `metrics.rs`, and each affirming check.
+
+`Assessment::Secure`'s `coverage` field switches from `Coverage` to `CallCoverage` (so `Assessment` loses its `Copy` derive — `CallCoverage` owns a `Vec`); the fold uses `CallCoverage::required_for(&proposal)`/`contains`/`missing`; `metrics::init` switches to `CallCoverage::all_labels`. Every affirming check's claim is rewritten to `CallCoverage::calls(proposal.calls.len(), aspects)` or `CallCoverage::refund(proposal.calls.len())`, naming the call indices it vouched for — in practice every check either claims the same aspects for every call it examined or abstains outright, so `calls()` always widens to the full `proposal.calls.len()` rather than naming a proper subset (see [G2](#g2-cross-call-interference-declarations)). `CancellationChecker`'s `Coverage::ALL` claim becomes `AspectSet::all()` for its one call, plus `refund()` — the single-call requirement already holds structurally, since its zeroed-template comparison can never match a proposal whose top-level `data` decoded as a batch.
+
+Has to land as one PR: `Checker::check`'s return type is shared by every implementor of the trait, so Rust doesn't let checkers migrate one at a time without a temporary bridging `Assessment` variant — more machinery than eight mechanical, near-identical edits are worth. `Coverage` above stays in place, now unused, for 7c to remove. `Coverage`'s existing unit tests move over onto `CallCoverage` here too, adapted for its per-call shape (e.g. `required_for` now takes a `Proposal` with `calls`, not a bare `SafeTransaction`), plus new tests for the per-call algebra `Coverage` never needed (a batch's claim widths, the union/contains/missing width invariant).
+
+Depends on 7a and on phases 4–6 (every check must already read `proposal.calls`). First corpus-relevant PR in this phase — re-run the baseline after it lands, though no check's actual verdict logic changes, only the shape of the claim it returns, so the corpus is expected unchanged.
+
+#### Phase 7c — Delete `Coverage`, rename `CallCoverage`
+
+**Files:** `engine/coverage.rs`, and every file 7b touched.
+
+Deletes the old flat `Coverage` (now dead) and its `#[allow(dead_code)]`, and renames `CallCoverage` → `Coverage` everywhere. Pure find-and-replace, no logic changes — like phase 3's exception, touching many files mechanically is preferable here to a trait or type living under two names for longer than necessary.
+
+Depends on 7b.
 
 ### Phase 8 — Document the model
 
@@ -240,7 +264,7 @@ Extend the engine guide's verdict-composition section with the batching model: s
 
 **Files:** `epics/2026_09_04_sentinel_batch_meta_transactions.md`.
 
-Before deleting this file, walk the [Follow-ups](#follow-ups) section item by item and confirm each one is recorded somewhere that outlives the spec — a GitHub issue, or an in-code `TODO` at the site it concerns. Any item that has neither must get one, or be explicitly dropped with the reason stated in the PR description. Deleting this spec must not be how a deferred decision gets lost. Then delete it, once phases 1–8 have merged.
+Before deleting this file, walk the [Follow-ups](#follow-ups) section item by item and confirm each one is recorded somewhere that outlives the spec — a GitHub issue, or an in-code `TODO` at the site it concerns. Any item that has neither must get one, or be explicitly dropped with the reason stated in the PR description. Deleting this spec must not be how a deferred decision gets lost. Then delete it, once phases 1–6, 7a–7c and 8 have merged.
 
 ---
 
