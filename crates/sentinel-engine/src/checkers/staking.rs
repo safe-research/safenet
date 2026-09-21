@@ -46,12 +46,9 @@
 
 use super::{Assessment, Checker};
 use crate::{
-    contracts::{
-        bindings::{
-            erc20::approveCall,
-            staking::{claimCall, stakeCall},
-        },
-        multi_send::sub_transactions,
+    contracts::bindings::{
+        erc20::approveCall,
+        staking::{claimCall, stakeCall},
     },
     engine::{CheckContext, Coverage, MetaTransaction, Operation, Proposal, RuleId},
 };
@@ -94,11 +91,9 @@ impl Checker for StakingChecker {
             return Assessment::Abstain;
         }
 
-        let calls = sub_transactions(transaction);
-
-        let mut remaining = Vec::with_capacity(calls.len());
+        let mut remaining = Vec::with_capacity(proposal.calls.len());
         let mut claimed = false;
-        for call in &calls {
+        for call in &proposal.calls {
             match claim_account(call) {
                 Some(account) if account != transaction.safe => {
                     return Assessment::Insecure {

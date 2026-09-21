@@ -10,13 +10,20 @@
 //! secure independent of the nested transaction's own content. It does not
 //! inspect `value`, so it claims nothing about a nested call that also moves
 //! native currency.
+//!
+//! Evaluates every call of `proposal.calls`, not just a top-level one: since
+//! `Coverage::TO | Coverage::DATA | Coverage::OPERATION` is still claimed
+//! for the whole transaction (per-call coverage is a later epic), affirming
+//! requires *every* call in a batch to itself be a nested `execTransaction`
+//! call — a batch mixing one in with an unrelated call still abstains,
+//! since this checker cannot vouch for the unrelated call's own action.
 
 use super::{Assessment, Checker};
 use crate::{
     contracts::bindings::safe,
-    engine::{CheckContext, Coverage, Operation, Proposal, SafeTransaction},
+    engine::{CheckContext, Coverage, MetaTransaction, Operation, Proposal},
 };
-use alloy::sol_types::SolCall as _;
+use alloy::{primitives::Address, sol_types::SolCall as _};
 
 /// Considers the `to`, `data` and `operation` of a call to another
 /// contract's `execTransaction` secure, regardless of the nested transaction
@@ -30,7 +37,12 @@ impl Checker for NestedSafeChecker {
     }
 
     async fn check(&self, proposal: &Proposal, _context: &CheckContext) -> Assessment {
-        if is_nested_exec_transaction(&proposal.transaction) {
+        let safe_address = proposal.transaction.safe;
+        if proposal
+            .calls
+            .iter()
+            .all(|call| is_nested_exec_transaction(safe_address, call))
+        {
             Assessment::Secure {
                 coverage: Coverage::TO | Coverage::DATA | Coverage::OPERATION,
             }
@@ -40,12 +52,12 @@ impl Checker for NestedSafeChecker {
     }
 }
 
-/// A `Call` (never a delegatecall) to a different address, carrying
-/// `execTransaction` calldata for that address to decode and enforce on its
-/// own terms.
-fn is_nested_exec_transaction(tx: &SafeTransaction) -> bool {
-    tx.operation == Operation::Call
-        && tx.to != tx.safe
-        && tx.data.starts_with(&safe::execTransactionCall::SELECTOR)
-        && safe::execTransactionCall::abi_decode(&tx.data).is_ok()
+/// A `Call` (never a delegatecall) to a different address than
+/// `safe_address`, carrying `execTransaction` calldata for that address to
+/// decode and enforce on its own terms.
+fn is_nested_exec_transaction(safe_address: Address, call: &MetaTransaction) -> bool {
+    call.operation == Operation::Call
+        && call.to != safe_address
+        && call.data.starts_with(&safe::execTransactionCall::SELECTOR)
+        && safe::execTransactionCall::abi_decode(&call.data).is_ok()
 }

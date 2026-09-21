@@ -74,7 +74,6 @@ use crate::{
         cow::{Order, TwapData, createWithContextCall, setPreSignatureCall},
         erc20::approveCall,
     },
-    contracts::multi_send::sub_transactions,
     engine::{CheckContext, Coverage, MetaTransaction, Operation, Proposal, RuleId},
 };
 use alloy::{
@@ -450,21 +449,19 @@ impl Checker for CowChecker {
             return Assessment::Abstain;
         }
 
-        let calls = sub_transactions(transaction);
-
-        let dangling_check = self.check_dangling_approval(&calls);
+        let dangling_check = self.check_dangling_approval(&proposal.calls);
         if dangling_check != Assessment::Abstain {
             return dangling_check;
         }
 
         let presig_check = self
-            .check_presignature_batch(transaction.safe, transaction.chain_id, &calls)
+            .check_presignature_batch(transaction.safe, transaction.chain_id, &proposal.calls)
             .await;
         if presig_check != Assessment::Abstain {
             return presig_check;
         }
 
-        let twap_check = self.check_twap_batch(transaction.safe, &calls);
+        let twap_check = self.check_twap_batch(transaction.safe, &proposal.calls);
         if twap_check != Assessment::Abstain {
             return twap_check;
         }
@@ -729,13 +726,27 @@ mod tests {
     /// exercising [`CowChecker::check_dangling_approval`]/
     /// [`CowChecker::check_twap_batch`] never needs a real lookup, so this
     /// keeps those tests network-free.
+    ///
+    /// Parses `transaction` through the real engine parser rather than
+    /// `Proposal::from`'s unbatched identity wrap — `CowChecker::check` now
+    /// reads `proposal.calls` directly, so a batch has to actually be
+    /// flattened for these tests to exercise it, the same way
+    /// `SentinelEngine::security_check` flattens it in production.
     async fn check(transaction: &SafeTransaction) -> Assessment {
         CowChecker::with_order_api(FakeOrderApi::NotFound)
             .check(
-                &Proposal::from(transaction.clone()),
+                &parsed_proposal(transaction.clone()),
                 &CheckContext::default(),
             )
             .await
+    }
+
+    /// Parses `transaction` into a [`Proposal`], panicking if it's nested
+    /// deeper than the parser's recursion bound — none of these tests build
+    /// a transaction like that.
+    fn parsed_proposal(transaction: SafeTransaction) -> Proposal {
+        crate::engine::parse(transaction)
+            .unwrap_or_else(|err| panic!("expected a proposal, got an error: {err}"))
     }
 
     fn tx(to: Address, data: Vec<u8>, operation: Operation) -> SafeTransaction {
@@ -1277,10 +1288,11 @@ mod tests {
 
     #[tokio::test]
     async fn no_opinion_when_the_order_lookup_fails() {
-        let calls = sub_transactions(&batched_presig_tx(
+        let calls = parsed_proposal(batched_presig_tx(
             U256::from(100u64),
             ORDER_UID.to_vec().into(),
-        ));
+        ))
+        .calls;
         assert_eq!(
             CowChecker::with_order_api(FakeOrderApi::NotFound)
                 .check_presignature_batch(SAFE, U256::from(1u64), &calls)
@@ -1292,10 +1304,8 @@ mod tests {
     #[tokio::test]
     async fn approves_when_the_batched_approval_matches_the_swap_order() {
         let order = order(100);
-        let calls = sub_transactions(&batched_presig_tx(
-            U256::from(100u64),
-            order_uid_for(&order),
-        ));
+        let calls =
+            parsed_proposal(batched_presig_tx(U256::from(100u64), order_uid_for(&order))).calls;
         assert_eq!(
             CowChecker::with_order_api(FakeOrderApi::Found(order))
                 .check_presignature_batch(SAFE, U256::from(1u64), &calls)
@@ -1309,7 +1319,8 @@ mod tests {
     #[tokio::test]
     async fn denies_when_the_batched_approval_does_not_match_the_swap_order_amount() {
         let order = order(1000);
-        let calls = sub_transactions(&batched_presig_tx(U256::from(1u64), order_uid_for(&order)));
+        let calls =
+            parsed_proposal(batched_presig_tx(U256::from(1u64), order_uid_for(&order))).calls;
         assert_eq!(
             CowChecker::with_order_api(FakeOrderApi::Found(order))
                 .check_presignature_batch(SAFE, U256::from(1u64), &calls)
@@ -1326,10 +1337,8 @@ mod tests {
             receiver: Some(Address::new([9u8; 20])),
             ..order(100)
         };
-        let calls = sub_transactions(&batched_presig_tx(
-            U256::from(100u64),
-            order_uid_for(&order),
-        ));
+        let calls =
+            parsed_proposal(batched_presig_tx(U256::from(100u64), order_uid_for(&order))).calls;
         assert_eq!(
             CowChecker::with_order_api(FakeOrderApi::Found(order))
                 .check_presignature_batch(SAFE, U256::from(1u64), &calls)
@@ -1350,10 +1359,8 @@ mod tests {
             receiver: Some(Address::ZERO),
             ..order(100)
         };
-        let calls = sub_transactions(&batched_presig_tx(
-            U256::from(100u64),
-            order_uid_for(&order),
-        ));
+        let calls =
+            parsed_proposal(batched_presig_tx(U256::from(100u64), order_uid_for(&order))).calls;
         assert_eq!(
             CowChecker::with_order_api(FakeOrderApi::Found(order))
                 .check_presignature_batch(SAFE, U256::from(1u64), &calls)
@@ -1373,10 +1380,11 @@ mod tests {
         // with a different order's terms. Must not be approved on that
         // basis.
         let order = order(100);
-        let calls = sub_transactions(&batched_presig_tx(
+        let calls = parsed_proposal(batched_presig_tx(
             U256::from(100u64),
             ORDER_UID.to_vec().into(),
-        ));
+        ))
+        .calls;
         assert_eq!(
             CowChecker::with_order_api(FakeOrderApi::Found(order))
                 .check_presignature_batch(SAFE, U256::from(1u64), &calls)
@@ -1388,10 +1396,11 @@ mod tests {
     #[tokio::test]
     async fn no_opinion_outside_the_recognized_presignature_shape() {
         let checker = CowChecker::with_order_api(FakeOrderApi::NotFound);
-        let calls = sub_transactions(&batched_presig_tx(
+        let calls = parsed_proposal(batched_presig_tx(
             U256::from(100u64),
             ORDER_UID.to_vec().into(),
-        ));
+        ))
+        .calls;
 
         // Unsupported chain.
         assert_eq!(

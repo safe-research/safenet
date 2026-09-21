@@ -3,7 +3,7 @@
 use super::{Assessment, Checker};
 use crate::{
     contracts::bindings::safenet_guard,
-    engine::{CheckContext, Coverage, Operation, Proposal, SafeTransaction},
+    engine::{CheckContext, Coverage, MetaTransaction, Operation, Proposal},
 };
 use alloy::sol_types::SolCall as _;
 
@@ -23,6 +23,13 @@ use alloy::sol_types::SolCall as _;
 /// auto-allow anything but a `CALL`), and nonzero value handed to an
 /// unrelated `to` would simply be spent.
 ///
+/// Evaluates every call of `proposal.calls`, not just a top-level one: since
+/// `Coverage::action()` is still claimed for the whole transaction (per-call
+/// coverage is a later epic), affirming requires *every* call in a batch to
+/// itself be an escape-hatch call — a batch mixing one in with an unrelated
+/// call still abstains, since this checker cannot vouch for the unrelated
+/// call's own action.
+///
 /// Claims `Coverage::action()`, not `Refund`: a relayed call (nonzero
 /// `gasPrice`) is just as structurally safe, but this checker has no way to
 /// tell a trusted relayer from an untrusted one, so the refund leg is left
@@ -37,7 +44,7 @@ impl Checker for EscapeHatchChecker {
     }
 
     async fn check(&self, proposal: &Proposal, _context: &CheckContext) -> Assessment {
-        if is_escape_hatch_call(&proposal.transaction) {
+        if proposal.calls.iter().all(is_escape_hatch_call) {
             Assessment::Secure {
                 coverage: Coverage::action(),
             }
@@ -47,15 +54,15 @@ impl Checker for EscapeHatchChecker {
     }
 }
 
-/// True if `tx` is a zero-value `CALL` whose calldata invokes one of the two
-/// SafenetGuard escape-hatch functions.
-fn is_escape_hatch_call(tx: &SafeTransaction) -> bool {
-    if tx.operation != Operation::Call || !tx.value.is_zero() {
+/// True if `call` is a zero-value `CALL` whose calldata invokes one of the
+/// two SafenetGuard escape-hatch functions.
+fn is_escape_hatch_call(call: &MetaTransaction) -> bool {
+    if call.operation != Operation::Call || !call.value.is_zero() {
         return false;
     }
-    tx.data
+    call.data
         .starts_with(&safenet_guard::announceTransactionCall::SELECTOR)
-        || tx
+        || call
             .data
             .starts_with(&safenet_guard::cancelAnnouncementCall::SELECTOR)
 }

@@ -3,20 +3,32 @@
 //! interaction with the Safe, or closely resembles an address that does.
 //! Needs onchain event history, so it runs with the engine's `Provider`.
 //!
-//! Scoped narrowly: a single (non-MultiSend, non-`DelegateCall`) ERC-20
-//! call, only `safe`'s own outbound `Transfer`/`Approval` history on the
-//! exact `token` being called, over a bounded, operator-configured block
-//! range. Native value transfers and ERC-721/1155 are out of scope.
+//! Scoped narrowly: evaluates every call of a proposal (the top-level call,
+//! or, for a recognized MultiSend batch, each of its packed sub-calls) as a
+//! standalone (non-`DelegateCall`) ERC-20 call, comparing only against
+//! `safe`'s own outbound `Transfer`/`Approval` history on the exact `token`
+//! each call names, over a bounded, operator-configured block range. Native
+//! value transfers and ERC-721/1155 are out of scope.
 //!
 //! A genuine (non-zero-value) prior event to the exact candidate returns
-//! [`Verdict::Secure`]. Absent that, a candidate sharing a long enough run
-//! of leading/trailing hex digits with a *different* established recipient
-//! — the address-poisoning pattern the Charter's §2.4 Notes call out —
-//! returns [`Verdict::Insecure`]. A novel candidate, with nothing to
-//! compare it against, returns [`Verdict::Abstain`]: novelty alone isn't
-//! grounds for denial. The evidence pool covers `Transfer` and `Approval`
-//! together, so a lookalike of an address `safe` only ever paid still
-//! denies a poisoned `approve`, and vice versa.
+//! [`Verdict::Secure`] *for that call*. Absent that, a candidate sharing a
+//! long enough run of leading/trailing hex digits with a *different*
+//! established recipient — the address-poisoning pattern the Charter's
+//! §2.4 Notes call out — returns [`Verdict::Insecure`] for the whole
+//! transaction immediately, regardless of what any other call in the batch
+//! decoded to. A novel candidate, with nothing to compare it against,
+//! returns [`Verdict::Abstain`]: novelty alone isn't grounds for denial. The
+//! evidence pool covers `Transfer` and `Approval` together, so a lookalike
+//! of an address `safe` only ever paid still denies a poisoned `approve`,
+//! and vice versa.
+//!
+//! The whole-transaction verdict, absent a denial, is only [`Verdict::Secure`]
+//! once *every* call has its own genuine established match — a call with no
+//! ERC-20 target, nothing to compare its candidate against, or a failed
+//! lookup abstains the whole transaction, even if every other call in the
+//! same batch matched. This check claims `To | Data` for the whole
+//! transaction, not per call, so it can only honestly do so once it has
+//! actually vouched for every call in it.
 //!
 //! Many RPC providers cap `eth_getLogs`' block range;
 //! [`AddressPoisoningChecker::new`]'s `max_block_range` splits the lookback
@@ -48,7 +60,7 @@
 use super::{Assessment, Checker};
 use crate::{
     contracts::bindings::erc20::{Approval, Transfer, approveCall, transferCall, transferFromCall},
-    engine::{CheckContext, Coverage, Operation, Proposal, RuleId, SafeTransaction},
+    engine::{CheckContext, Coverage, MetaTransaction, Operation, Proposal, RuleId},
 };
 use alloy::{
     primitives::{Address, U256},
@@ -109,31 +121,32 @@ impl TargetKind {
     }
 }
 
-/// Decodes `tx.data` as an ERC-20 `transfer`/`transferFrom`/`approve` call,
-/// returning the recipient/spender address and which kind it is. `None`
-/// for anything out of scope for this check — including a MultiSend batch
-/// (recursing through batched sub-calls is deferred; see module docs).
-fn decode_target(tx: &SafeTransaction) -> Option<(Address, TargetKind)> {
+/// Decodes `call.data` as an ERC-20 `transfer`/`transferFrom`/`approve`
+/// call, returning the recipient/spender address and which kind it is.
+/// `None` for anything out of scope for this check. `safe` is `call`'s own
+/// enclosing Safe — a `MetaTransaction` carries no identity of its own, so
+/// `transferFrom`'s fund-source check needs it passed in separately.
+fn decode_target(safe: Address, call: &MetaTransaction) -> Option<(Address, TargetKind)> {
     // A `DelegateCall`'s `to` isn't necessarily even a token contract, so
     // events queried against it would be meaningless.
-    if tx.operation != Operation::Call {
+    if call.operation != Operation::Call {
         return None;
     }
-    if let Ok(call) = transferCall::abi_decode(&tx.data) {
-        return (!call.amount.is_zero()).then_some((call.to, TargetKind::Transfer));
+    if let Ok(decoded) = transferCall::abi_decode(&call.data) {
+        return (!decoded.amount.is_zero()).then_some((decoded.to, TargetKind::Transfer));
     }
-    if let Ok(call) = transferFromCall::abi_decode(&tx.data) {
+    if let Ok(decoded) = transferFromCall::abi_decode(&call.data) {
         // Only meaningful when `safe` is the fund source: the evidence
         // compared against is `safe`'s own outbound history, not a third
         // party's funds `safe` merely has an allowance to move.
-        return (call.from == tx.safe && !call.amount.is_zero())
-            .then_some((call.to, TargetKind::Transfer));
+        return (decoded.from == safe && !decoded.amount.is_zero())
+            .then_some((decoded.to, TargetKind::Transfer));
     }
-    if let Ok(call) = approveCall::abi_decode(&tx.data) {
+    if let Ok(decoded) = approveCall::abi_decode(&call.data) {
         // `approve(spender, 0)` is the standard way to *revoke* an
         // allowance — including to a poisoned lookalike — and must never
         // itself be denied.
-        return (!call.amount.is_zero()).then_some((call.spender, TargetKind::Approval));
+        return (!decoded.amount.is_zero()).then_some((decoded.spender, TargetKind::Approval));
     }
     None
 }
@@ -290,15 +303,26 @@ impl Checker for AddressPoisoningChecker {
         "address_poisoning"
     }
 
-    /// Decodes `transaction.data`'s ERC-20 target (if any) and compares it
-    /// against the Safe's own recent genuine outbound history on that token.
-    /// An exact match returns [`Verdict::Secure`]; a lookalike of a
-    /// *different* established recipient returns [`Verdict::Insecure`]; a
-    /// candidate with nothing in that history to compare against — along
-    /// with no ERC-20 target to check, a `chain_id` mismatch between the
-    /// transaction and the configured provider, or the lookup itself
-    /// failing — returns [`Verdict::Abstain`], deferring to whatever checker
-    /// runs next.
+    /// Decodes each of `proposal.calls`' ERC-20 target (if any) and compares
+    /// it against the Safe's own recent genuine outbound history on that
+    /// call's token — closing the gap where a poisoned transfer was one leg
+    /// of a MultiSend batch rather than the whole transaction. A lookalike
+    /// of a *different* established recipient, found on a complete scan,
+    /// denies the whole transaction immediately: denials are final,
+    /// regardless of what any other call in the batch decoded to. Absent
+    /// that, `chain_id` mismatching the configured provider abstains
+    /// outright (checked once, since it's a property of the transaction, not
+    /// any one call).
+    ///
+    /// Affirming still claims `To | Data` for the *whole* transaction —
+    /// per-call coverage is a later epic — so it requires a genuine
+    /// established match on *every* call, not just one: a call with no
+    /// ERC-20 target, no established history to compare against, or a
+    /// failed lookup was never actually vouched for by this check, so a
+    /// batch containing one leaves the whole transaction `Abstain` even
+    /// though every other leg matched. Denying still short-circuits
+    /// immediately regardless of how much of the batch has been scanned so
+    /// far.
     ///
     /// TODO(follow-up): a first-time-looking recipient with no established
     /// address to compare against still only ever abstains — richer
@@ -308,17 +332,14 @@ impl Checker for AddressPoisoningChecker {
     ///
     /// On a genuine prior interaction, claims `To | Data`: `Data` for the
     /// recipient/spender argument this check decoded, and `To` on the softer
-    /// evidence that `tx.to`'s own `Transfer`/`Approval` logs show genuine
+    /// evidence that the call's own `Transfer`/`Approval` logs show genuine
     /// prior activity with the Safe — not a verified positive statement
     /// about the destination (no `ERC165`/bytecode probe, no token
-    /// registry; the inference that `tx.to` is even an ERC-20 rests on
+    /// registry; the inference that `call.to` is even an ERC-20 rests on
     /// `decode_target` alone). Tracked as F2 (positive destination
     /// assurance) in the verdict-composition epic.
     async fn check(&self, proposal: &Proposal, context: &CheckContext) -> Assessment {
         let transaction = &proposal.transaction;
-        let Some((candidate, kind)) = decode_target(transaction) else {
-            return Assessment::Abstain;
-        };
         if transaction.chain_id != U256::from(self.provider.chain_id()) {
             tracing::warn!(
                 tx_chain_id = %transaction.chain_id,
@@ -328,65 +349,86 @@ impl Checker for AddressPoisoningChecker {
             return Assessment::Abstain;
         }
 
-        match self
-            .established_recipients(transaction.to, transaction.safe, candidate, context.block)
-            .await
-        {
-            Ok(RecipientLookup::ExactMatch) => {
-                tracing::debug!(
-                    token = %transaction.to,
-                    %candidate,
-                    rule = kind.rule().code(),
-                    "address-poisoning: genuine prior interaction found"
-                );
-                Assessment::Secure {
-                    coverage: Coverage::TO | Coverage::DATA,
-                }
-            }
-            Ok(RecipientLookup::NoExactMatch {
-                recipients,
-                complete,
-            }) => {
-                let Some(established) = recipients.iter().find(|&&r| is_lookalike(r, candidate))
-                else {
+        // Keeps scanning past a call that leaves `abstain` set rather than
+        // returning early, since a later call could still turn up a
+        // lookalike — and a denial is always final, so it must never be
+        // missed just because an earlier call already couldn't be vouched
+        // for.
+        let mut abstain = false;
+        for call in &proposal.calls {
+            let Some((candidate, kind)) = decode_target(transaction.safe, call) else {
+                abstain = true;
+                continue;
+            };
+
+            match self
+                .established_recipients(call.to, transaction.safe, candidate, context.block)
+                .await
+            {
+                Ok(RecipientLookup::ExactMatch) => {
                     tracing::debug!(
-                        token = %transaction.to,
+                        token = %call.to,
                         %candidate,
                         rule = kind.rule().code(),
-                        "address-poisoning: no established recipient to compare against"
+                        "address-poisoning: genuine prior interaction found"
                     );
-                    return Assessment::Abstain;
-                };
-                if !complete {
-                    // See `RecipientLookup::NoExactMatch` — can't deny on
-                    // an incomplete scan.
-                    tracing::warn!(
-                        token = %transaction.to,
+                }
+                Ok(RecipientLookup::NoExactMatch {
+                    recipients,
+                    complete,
+                }) => {
+                    let Some(established) =
+                        recipients.iter().find(|&&r| is_lookalike(r, candidate))
+                    else {
+                        tracing::debug!(
+                            token = %call.to,
+                            %candidate,
+                            rule = kind.rule().code(),
+                            "address-poisoning: no established recipient to compare against"
+                        );
+                        abstain = true;
+                        continue;
+                    };
+                    if !complete {
+                        // See `RecipientLookup::NoExactMatch` — can't deny
+                        // on an incomplete scan.
+                        tracing::warn!(
+                            token = %call.to,
+                            %candidate,
+                            %established,
+                            rule = kind.rule().code(),
+                            "address-poisoning: candidate resembles an established recipient, but the scan was incomplete; abstaining rather than denying on partial evidence"
+                        );
+                        abstain = true;
+                        continue;
+                    }
+                    tracing::debug!(
+                        token = %call.to,
                         %candidate,
                         %established,
                         rule = kind.rule().code(),
-                        "address-poisoning: candidate resembles an established recipient, but the scan was incomplete; abstaining rather than denying on partial evidence"
+                        "address-poisoning: candidate is a lookalike of an established recipient"
                     );
-                    return Assessment::Abstain;
+                    return Assessment::Insecure { rule: kind.rule() };
                 }
-                tracing::debug!(
-                    token = %transaction.to,
-                    %candidate,
-                    %established,
-                    rule = kind.rule().code(),
-                    "address-poisoning: candidate is a lookalike of an established recipient"
-                );
-                Assessment::Insecure { rule: kind.rule() }
+                Err(err) => {
+                    tracing::warn!(
+                        %err,
+                        token = %call.to,
+                        %candidate,
+                        rule = kind.rule().code(),
+                        "address-poisoning history lookup failed"
+                    );
+                    abstain = true;
+                }
             }
-            Err(err) => {
-                tracing::warn!(
-                    %err,
-                    token = %transaction.to,
-                    %candidate,
-                    rule = kind.rule().code(),
-                    "address-poisoning history lookup failed"
-                );
-                Assessment::Abstain
+        }
+
+        if abstain {
+            Assessment::Abstain
+        } else {
+            Assessment::Secure {
+                coverage: Coverage::TO | Coverage::DATA,
             }
         }
     }

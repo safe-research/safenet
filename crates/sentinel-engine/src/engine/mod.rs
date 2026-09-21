@@ -10,6 +10,12 @@ mod rule;
 mod transaction;
 
 use self::proposal::ParseError;
+// Test-only and not part of the engine's own public API — exposed so a
+// checker's own tests can build a `Proposal` the same way `SentinelEngine`
+// itself does, flattening a real batch, rather than `Proposal::from`'s
+// unbatched identity wrap.
+#[cfg(test)]
+pub(crate) use self::proposal::parse;
 pub use self::{
     coverage::{Coverage, CoverageLabel},
     proposal::Proposal,

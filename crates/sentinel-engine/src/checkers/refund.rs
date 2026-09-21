@@ -20,7 +20,7 @@
 use super::{AddressPoisoningChecker, Assessment, CheckContext, Checker};
 use crate::{
     contracts::bindings::erc20::transferCall,
-    engine::{Coverage, Proposal, SafeTransaction},
+    engine::{Coverage, MetaTransaction, Proposal, SafeTransaction},
 };
 use alloy::sol_types::SolCall as _;
 use std::sync::Arc;
@@ -45,15 +45,22 @@ impl Checker for RefundChecker {
 
     /// Resynthesizes `transaction`'s own gas refund as an ERC-20 `transfer`
     /// from the Safe to `refundReceiver` and defers to
-    /// [`AddressPoisoningChecker`]; abstains outright when there's no refund
-    /// to resynthesize (see [`refund_transfer`]). A delegated `Secure` is
+    /// [`AddressPoisoningChecker`], as the sole call of a `Proposal` that
+    /// otherwise keeps `proposal.transaction` as-is — so the delegate still
+    /// sees the real `chain_id` and `safe`, which the synthesized call has
+    /// none of its own. Abstains outright when there's no refund to
+    /// resynthesize (see [`refund_transfer`]). A delegated `Secure` is
     /// reinterpreted as covering only [`Coverage::REFUND`] — the recipient's
     /// prior history says nothing about the rest of the transaction.
     async fn check(&self, proposal: &Proposal, context: &CheckContext) -> Assessment {
-        let Some(refund) = refund_transfer(&proposal.transaction) else {
+        let Some(refund_call) = refund_transfer(&proposal.transaction) else {
             return Assessment::Abstain;
         };
-        match self.0.check(&Proposal::from(refund), context).await {
+        let refund_proposal = Proposal {
+            transaction: proposal.transaction.clone(),
+            calls: vec![refund_call],
+        };
+        match self.0.check(&refund_proposal, context).await {
             Assessment::Secure { .. } => Assessment::Secure {
                 coverage: Coverage::REFUND,
             },
@@ -83,7 +90,7 @@ impl Checker for RefundChecker {
 ///   another check's `Secure`. Closing it needs an amount policy, since an
 ///   unset `refundReceiver` paying a reasonable fee to an unknown relayer
 ///   isn't itself a violation. See F7 (refund amount policy).
-fn refund_transfer(transaction: &SafeTransaction) -> Option<SafeTransaction> {
+fn refund_transfer(transaction: &SafeTransaction) -> Option<MetaTransaction> {
     if transaction.gas_price.is_zero()
         || transaction.gas_token.is_zero()
         || transaction.refund_receiver.is_zero()
@@ -91,8 +98,7 @@ fn refund_transfer(transaction: &SafeTransaction) -> Option<SafeTransaction> {
         return None;
     }
 
-    Some(SafeTransaction {
-        safe: transaction.safe,
+    Some(MetaTransaction {
         to: transaction.gas_token,
         data: transferCall {
             to: transaction.refund_receiver,
@@ -161,7 +167,6 @@ mod tests {
     fn builds_an_erc20_transfer_to_the_refund_receiver() {
         let refund = refund_transfer(&relayed_tx()).expect("a refund to check");
 
-        assert_eq!(refund.safe, SAFE);
         assert_eq!(refund.to, GAS_TOKEN);
         assert_eq!(
             refund.data,
