@@ -17,16 +17,18 @@ impl Checker for ExcessiveApprovalChecker {
     }
 
     async fn check(&self, proposal: &Proposal, _context: &CheckContext) -> Assessment {
-        for effect in decode_target_effects(&proposal.transaction) {
-            let unlimited = match effect.kind {
-                EffectKind::Erc20Approval { amount } => amount == U256::MAX,
-                EffectKind::OperatorApproval { approved } => approved,
-                _ => false,
-            };
-            if unlimited {
-                return Assessment::Insecure {
-                    rule: RuleId::R4_5ExcessiveApproval,
+        for call in &proposal.calls {
+            for effect in decode_target_effects(call) {
+                let unlimited = match effect.kind {
+                    EffectKind::Erc20Approval { amount } => amount == U256::MAX,
+                    EffectKind::OperatorApproval { approved } => approved,
+                    _ => false,
                 };
+                if unlimited {
+                    return Assessment::Insecure {
+                        rule: RuleId::R4_5ExcessiveApproval,
+                    };
+                }
             }
         }
         Assessment::Abstain

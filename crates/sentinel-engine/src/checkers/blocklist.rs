@@ -1,7 +1,7 @@
 //! Blocking of transactions to known malicious destinations.
 
 use super::{Assessment, Checker};
-use crate::engine::{CheckContext, Proposal, RuleId};
+use crate::engine::{CheckContext, MetaTransaction, Proposal, RuleId};
 use alloy::primitives::Address;
 use std::collections::HashSet;
 
@@ -13,6 +13,14 @@ impl BlocklistChecker {
     pub fn new(blocklist: impl IntoIterator<Item = Address>) -> Self {
         Self(blocklist.into_iter().collect())
     }
+
+    /// Whether any of `calls`' destinations is blocklisted — not just a
+    /// batch's top-level container. Not corpus-testable: the integration
+    /// script hard-codes an empty blocklist (see the batched-meta-
+    /// transactions epic's G4), so this is covered by a unit test instead.
+    fn any_call_blocklisted(&self, calls: &[MetaTransaction]) -> bool {
+        calls.iter().any(|call| self.0.contains(&call.to))
+    }
 }
 
 #[async_trait::async_trait]
@@ -22,7 +30,7 @@ impl Checker for BlocklistChecker {
     }
 
     async fn check(&self, proposal: &Proposal, _context: &CheckContext) -> Assessment {
-        if self.0.contains(&proposal.transaction.to) {
+        if self.any_call_blocklisted(&proposal.calls) {
             Assessment::Insecure {
                 rule: RuleId::R4_6KnownMaliciousTarget,
             }
@@ -86,5 +94,26 @@ mod tests {
                 .await,
             Assessment::Abstain
         );
+    }
+
+    /// Closes the batch gap: a blocklisted destination among several calls
+    /// (as a flattened MultiSend batch produces) is caught, not just a
+    /// single top-level `to`. Not corpus-testable (see [`any_call_blocklisted`]'s
+    /// docs), so pinned directly on the helper instead of through `check()`.
+    #[test]
+    fn any_call_blocklisted_checks_every_call_not_just_the_first() {
+        let checker = BlocklistChecker::new([A2]);
+        let calls = [
+            MetaTransaction {
+                to: A1,
+                ..Default::default()
+            },
+            MetaTransaction {
+                to: A2,
+                ..Default::default()
+            },
+        ];
+
+        assert!(checker.any_call_blocklisted(&calls));
     }
 }
