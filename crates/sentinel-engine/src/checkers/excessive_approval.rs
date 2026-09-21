@@ -3,7 +3,7 @@
 use super::{Assessment, Checker};
 use crate::{
     contracts::target_effects::{EffectKind, decode_target_effects},
-    engine::{CheckContext, RuleId, SafeTransaction},
+    engine::{CheckContext, Proposal, RuleId},
 };
 use alloy::primitives::U256;
 
@@ -16,8 +16,8 @@ impl Checker for ExcessiveApprovalChecker {
         "excessive_approval"
     }
 
-    async fn check(&self, transaction: &SafeTransaction, _context: &CheckContext) -> Assessment {
-        for effect in decode_target_effects(transaction) {
+    async fn check(&self, proposal: &Proposal, _context: &CheckContext) -> Assessment {
+        for effect in decode_target_effects(&proposal.transaction) {
             let unlimited = match effect.kind {
                 EffectKind::Erc20Approval { amount } => amount == U256::MAX,
                 EffectKind::OperatorApproval { approved } => approved,
@@ -36,6 +36,7 @@ impl Checker for ExcessiveApprovalChecker {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::engine::SafeTransaction;
     use alloy::{primitives::Address, sol_types::SolCall as _};
 
     alloy::sol! {
@@ -61,7 +62,7 @@ mod tests {
 
         assert_eq!(
             ExcessiveApprovalChecker
-                .check(&transaction, &CheckContext::default())
+                .check(&Proposal::from(transaction), &CheckContext::default())
                 .await,
             Assessment::Insecure {
                 rule: RuleId::R4_5ExcessiveApproval,
@@ -84,7 +85,7 @@ mod tests {
 
         assert_eq!(
             ExcessiveApprovalChecker
-                .check(&transaction, &CheckContext::default())
+                .check(&Proposal::from(transaction), &CheckContext::default())
                 .await,
             Assessment::Abstain
         );
@@ -105,7 +106,7 @@ mod tests {
 
         assert_eq!(
             ExcessiveApprovalChecker
-                .check(&transaction, &CheckContext::default())
+                .check(&Proposal::from(transaction), &CheckContext::default())
                 .await,
             Assessment::Insecure {
                 rule: RuleId::R4_5ExcessiveApproval,
@@ -128,7 +129,7 @@ mod tests {
 
         assert_eq!(
             ExcessiveApprovalChecker
-                .check(&transaction, &CheckContext::default())
+                .check(&Proposal::from(transaction), &CheckContext::default())
                 .await,
             Assessment::Abstain
         );

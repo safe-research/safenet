@@ -75,7 +75,7 @@ use crate::{
         erc20::approveCall,
     },
     contracts::multi_send::sub_transactions,
-    engine::{CheckContext, Coverage, MetaTransaction, Operation, RuleId, SafeTransaction},
+    engine::{CheckContext, Coverage, MetaTransaction, Operation, Proposal, RuleId},
 };
 use alloy::{
     primitives::{Address, B256, Bytes, U256, address},
@@ -441,7 +441,8 @@ impl Checker for CowChecker {
     /// batch payload (the paired `approve` plus presignature/TWAP-creation
     /// call), not the MultiSend container's own `to`/`operation` — that
     /// coverage comes from `BaseChecker`.
-    async fn check(&self, transaction: &SafeTransaction, _context: &CheckContext) -> Assessment {
+    async fn check(&self, proposal: &Proposal, _context: &CheckContext) -> Assessment {
+        let transaction = &proposal.transaction;
         if !SUPPORTED_CHAIN_IDS
             .iter()
             .any(|&id| transaction.chain_id == U256::from(id))
@@ -666,6 +667,7 @@ mod tests {
 
     use super::*;
     use crate::contracts::bindings::multi_send;
+    use crate::engine::SafeTransaction;
 
     const SAFE: Address = Address::new([1u8; 20]);
     const TOKEN: Address = Address::new([2u8; 20]);
@@ -729,7 +731,10 @@ mod tests {
     /// keeps those tests network-free.
     async fn check(transaction: &SafeTransaction) -> Assessment {
         CowChecker::with_order_api(FakeOrderApi::NotFound)
-            .check(transaction, &CheckContext::default())
+            .check(
+                &Proposal::from(transaction.clone()),
+                &CheckContext::default(),
+            )
             .await
     }
 

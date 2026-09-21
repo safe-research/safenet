@@ -3,7 +3,9 @@
 use super::{Assessment, Checker};
 use crate::{
     contracts::{bindings::safe, multi_send::decode_multi_send_call},
-    engine::{CheckContext, Coverage, MetaTransaction, Operation, RuleId, SafeTransaction},
+    engine::{
+        CheckContext, Coverage, MetaTransaction, Operation, Proposal, RuleId, SafeTransaction,
+    },
 };
 use alloy::{
     primitives::{Address, address},
@@ -51,8 +53,8 @@ impl Checker for BaseChecker {
         "base"
     }
 
-    async fn check(&self, transaction: &SafeTransaction, _context: &CheckContext) -> Assessment {
-        match check_transaction(transaction) {
+    async fn check(&self, proposal: &Proposal, _context: &CheckContext) -> Assessment {
+        match check_transaction(&proposal.transaction) {
             Ok(()) => Assessment::Secure {
                 coverage: Coverage::TO | Coverage::OPERATION,
             },
@@ -325,7 +327,7 @@ mod tests {
 
         assert_eq!(
             BaseChecker
-                .check(&transaction, &CheckContext::default())
+                .check(&Proposal::from(transaction), &CheckContext::default())
                 .await,
             Assessment::Insecure {
                 rule: RuleId::R4_1SettingsChange,
@@ -344,7 +346,7 @@ mod tests {
 
         assert_eq!(
             BaseChecker
-                .check(&transaction, &CheckContext::default())
+                .check(&Proposal::from(transaction), &CheckContext::default())
                 .await,
             Assessment::Insecure {
                 rule: RuleId::R4_2DelegatecallIntegrity,
@@ -362,7 +364,7 @@ mod tests {
 
         assert_eq!(
             BaseChecker
-                .check(&transaction, &CheckContext::default())
+                .check(&Proposal::from(transaction), &CheckContext::default())
                 .await,
             Assessment::Secure {
                 coverage: Coverage::TO | Coverage::OPERATION,

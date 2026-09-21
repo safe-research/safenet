@@ -18,7 +18,7 @@ pub use self::{
     staking::StakingChecker,
 };
 
-use crate::engine::{CheckContext, Coverage, RuleId, SafeTransaction};
+use crate::engine::{CheckContext, Coverage, Proposal, RuleId};
 use std::sync::Arc;
 
 /// What a single check concluded. Distinct from [`crate::engine::Verdict`],
@@ -47,10 +47,10 @@ pub trait Checker: Send + Sync {
     /// A short, log-friendly identifier for this checker.
     fn name(&self) -> &'static str;
 
-    /// Assesses `transaction` or abstains so the next checker can run.
+    /// Assesses `proposal` or abstains so the next checker can run.
     /// `context` carries caller-supplied hints outside the transaction
     /// itself (see [`CheckContext`]); most checks ignore it.
-    async fn check(&self, transaction: &SafeTransaction, context: &CheckContext) -> Assessment;
+    async fn check(&self, proposal: &Proposal, context: &CheckContext) -> Assessment;
 }
 
 /// Lets an [`Arc`]-shared checker (e.g. one both run directly and wrapped by
@@ -62,7 +62,7 @@ impl<T: Checker> Checker for Arc<T> {
         (**self).name()
     }
 
-    async fn check(&self, transaction: &SafeTransaction, context: &CheckContext) -> Assessment {
-        (**self).check(transaction, context).await
+    async fn check(&self, proposal: &Proposal, context: &CheckContext) -> Assessment {
+        (**self).check(proposal, context).await
     }
 }

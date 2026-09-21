@@ -48,7 +48,7 @@
 use super::{Assessment, Checker};
 use crate::{
     contracts::bindings::erc20::{Approval, Transfer, approveCall, transferCall, transferFromCall},
-    engine::{CheckContext, Coverage, Operation, RuleId, SafeTransaction},
+    engine::{CheckContext, Coverage, Operation, Proposal, RuleId, SafeTransaction},
 };
 use alloy::{
     primitives::{Address, U256},
@@ -314,7 +314,8 @@ impl Checker for AddressPoisoningChecker {
     /// registry; the inference that `tx.to` is even an ERC-20 rests on
     /// `decode_target` alone). Tracked as F2 (positive destination
     /// assurance) in the verdict-composition epic.
-    async fn check(&self, transaction: &SafeTransaction, context: &CheckContext) -> Assessment {
+    async fn check(&self, proposal: &Proposal, context: &CheckContext) -> Assessment {
+        let transaction = &proposal.transaction;
         let Some((candidate, kind)) = decode_target(transaction) else {
             return Assessment::Abstain;
         };

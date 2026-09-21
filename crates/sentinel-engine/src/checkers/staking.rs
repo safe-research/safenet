@@ -53,7 +53,7 @@ use crate::{
         },
         multi_send::sub_transactions,
     },
-    engine::{CheckContext, Coverage, MetaTransaction, Operation, RuleId, SafeTransaction},
+    engine::{CheckContext, Coverage, MetaTransaction, Operation, Proposal, RuleId},
 };
 use alloy::{
     primitives::{Address, U256, address},
@@ -88,7 +88,8 @@ impl Checker for StakingChecker {
     /// An affirming result claims only `Data`: it vouches for the recognized
     /// claim/stake/approve payload, not the outer call's `to`/`operation` —
     /// that coverage comes from `BaseChecker`.
-    async fn check(&self, transaction: &SafeTransaction, _context: &CheckContext) -> Assessment {
+    async fn check(&self, proposal: &Proposal, _context: &CheckContext) -> Assessment {
+        let transaction = &proposal.transaction;
         if transaction.chain_id != U256::from(SUPPORTED_CHAIN_ID) {
             return Assessment::Abstain;
         }

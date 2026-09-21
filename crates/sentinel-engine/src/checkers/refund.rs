@@ -20,7 +20,7 @@
 use super::{AddressPoisoningChecker, Assessment, CheckContext, Checker};
 use crate::{
     contracts::bindings::erc20::transferCall,
-    engine::{Coverage, SafeTransaction},
+    engine::{Coverage, Proposal, SafeTransaction},
 };
 use alloy::sol_types::SolCall as _;
 use std::sync::Arc;
@@ -49,11 +49,11 @@ impl Checker for RefundChecker {
     /// to resynthesize (see [`refund_transfer`]). A delegated `Secure` is
     /// reinterpreted as covering only [`Coverage::REFUND`] — the recipient's
     /// prior history says nothing about the rest of the transaction.
-    async fn check(&self, transaction: &SafeTransaction, context: &CheckContext) -> Assessment {
-        let Some(refund) = refund_transfer(transaction) else {
+    async fn check(&self, proposal: &Proposal, context: &CheckContext) -> Assessment {
+        let Some(refund) = refund_transfer(&proposal.transaction) else {
             return Assessment::Abstain;
         };
-        match self.0.check(&refund, context).await {
+        match self.0.check(&Proposal::from(refund), context).await {
             Assessment::Secure { .. } => Assessment::Secure {
                 coverage: Coverage::REFUND,
             },

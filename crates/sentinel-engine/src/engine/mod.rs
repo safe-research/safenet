@@ -5,11 +5,14 @@
 //! configured checker chain.
 
 mod coverage;
+mod proposal;
 mod rule;
 mod transaction;
 
+use self::proposal::ParseError;
 pub use self::{
     coverage::{Coverage, CoverageLabel},
+    proposal::Proposal,
     rule::RuleId,
     transaction::{MetaTransaction, Operation, SafeTransaction},
 };
@@ -57,6 +60,12 @@ impl SentinelEngine {
 
     /// Assesses a proposed Safe transaction using the configured checks.
     ///
+    /// `transaction` is first parsed into a [`Proposal`] — recognizing and
+    /// flattening a MultiSend batch into its packed sub-calls (see
+    /// [`Proposal`]'s docs). A batch nested deeper than the parser's
+    /// recursion bound can't be turned into a usable view at all; the
+    /// engine abstains without running any check in that case.
+    ///
     /// Any `Insecure` assessment is the engine's verdict — denials are never
     /// masked by an affirmation, and the first denial short-circuits the
     /// run. Otherwise, the engine answers `Secure` only once the union of
@@ -67,9 +76,17 @@ impl SentinelEngine {
         transaction: SafeTransaction,
         context: CheckContext,
     ) -> Verdict {
+        let proposal = match proposal::parse(transaction) {
+            Ok(proposal) => proposal,
+            Err(ParseError(why)) => {
+                tracing::trace!(why, "abstaining: transaction could not be parsed");
+                return Verdict::Abstain;
+            }
+        };
+
         let mut covered = Coverage::empty();
         for checker in &self.0 {
-            let assessment = checker.check(&transaction, &context).await;
+            let assessment = checker.check(&proposal, &context).await;
             tracing::trace!(checker = checker.name(), ?assessment, "checker assessment");
             match assessment {
                 Assessment::Insecure { rule } => {
@@ -82,7 +99,7 @@ impl SentinelEngine {
             }
         }
 
-        let required = Coverage::required_for(&transaction);
+        let required = Coverage::required_for(&proposal.transaction);
         let verdict = if covered.contains(required) {
             Verdict::Secure
         } else {
@@ -110,7 +127,7 @@ mod tests {
             "stub"
         }
 
-        async fn check(&self, _: &SafeTransaction, _: &CheckContext) -> Assessment {
+        async fn check(&self, _: &Proposal, _: &CheckContext) -> Assessment {
             self.0
         }
     }
@@ -221,7 +238,7 @@ mod tests {
         ] {
             assert_ne!(
                 BaseChecker
-                    .check(&transaction, &CheckContext::default())
+                    .check(&Proposal::from(transaction), &CheckContext::default())
                     .await,
                 Assessment::Abstain
             );

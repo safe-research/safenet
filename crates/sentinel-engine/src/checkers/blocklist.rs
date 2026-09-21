@@ -1,7 +1,7 @@
 //! Blocking of transactions to known malicious destinations.
 
 use super::{Assessment, Checker};
-use crate::engine::{CheckContext, RuleId, SafeTransaction};
+use crate::engine::{CheckContext, Proposal, RuleId};
 use alloy::primitives::Address;
 use std::collections::HashSet;
 
@@ -21,8 +21,8 @@ impl Checker for BlocklistChecker {
         "blocklist"
     }
 
-    async fn check(&self, transaction: &SafeTransaction, _context: &CheckContext) -> Assessment {
-        if self.0.contains(&transaction.to) {
+    async fn check(&self, proposal: &Proposal, _context: &CheckContext) -> Assessment {
+        if self.0.contains(&proposal.transaction.to) {
             Assessment::Insecure {
                 rule: RuleId::R4_6KnownMaliciousTarget,
             }
@@ -35,16 +35,17 @@ impl Checker for BlocklistChecker {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::engine::SafeTransaction;
 
     const A1: Address = Address::new([1u8; 20]);
     const A2: Address = Address::new([2u8; 20]);
     const A3: Address = Address::new([3u8; 20]);
 
-    fn transaction(to: Address) -> SafeTransaction {
-        SafeTransaction {
+    fn transaction(to: Address) -> Proposal {
+        Proposal::from(SafeTransaction {
             to,
             ..Default::default()
-        }
+        })
     }
 
     #[tokio::test]

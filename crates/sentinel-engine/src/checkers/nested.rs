@@ -14,7 +14,7 @@
 use super::{Assessment, Checker};
 use crate::{
     contracts::bindings::safe,
-    engine::{CheckContext, Coverage, Operation, SafeTransaction},
+    engine::{CheckContext, Coverage, Operation, Proposal, SafeTransaction},
 };
 use alloy::sol_types::SolCall as _;
 
@@ -29,8 +29,8 @@ impl Checker for NestedSafeChecker {
         "nested_safe"
     }
 
-    async fn check(&self, transaction: &SafeTransaction, _context: &CheckContext) -> Assessment {
-        if is_nested_exec_transaction(transaction) {
+    async fn check(&self, proposal: &Proposal, _context: &CheckContext) -> Assessment {
+        if is_nested_exec_transaction(&proposal.transaction) {
             Assessment::Secure {
                 coverage: Coverage::TO | Coverage::DATA | Coverage::OPERATION,
             }
