@@ -21,4 +21,4 @@ The Safenet Sentinel Oracle audit was performed on commit [49d7e398ac35c315da2b5
 - [Safenet Beta Staking Audit Report - Certora](./2026_01_audit_certora_safenet_beta_staking.pdf)
 - [Safenet Guard Audit Report - Certora](./2026_08_audit_certora_safenet_guard.pdf)
 - [Safenet FROST Audit Report - Certora](./2026_08_audit_certora_safenet_frost.pdf)
-- [Safenet Sentinel_Oracle Audit Report - Certora](./2026_09_audit_certora_safenet_sentinel_oracle.pdf)
+- [Safenet Sentinel Oracle Audit Report - Certora](./2026_09_audit_certora_safenet_sentinel_oracle.pdf)
