@@ -262,7 +262,7 @@ env \
 	forge script --root "$ROOT/contracts" ProposeTransactionScript --rpc-url "$RPC_URL" --private-key "$SPONSOR_PK" --broadcast
 
 REQUEST_ID=$(cast logs --rpc-url "$RPC_URL" --json --from-block 0 --address "$ORACLE" \
-	'NewRequest(bytes32,address,uint96,uint96,uint96,uint64,uint64)' | jq -r '.[0].topics[1]')
+	'NewRequest(bytes32,address,uint96,uint96,uint24,uint96,uint64,uint64)' | jq -r '.[0].topics[1]')
 echo "Request id: $REQUEST_ID"
 
 # --- 7. Wait for 10 blocks ---
@@ -371,7 +371,7 @@ env \
 	forge script --root "$ROOT/contracts" ProposeTransactionScript --rpc-url "$RPC_URL" --private-key "$SPONSOR_PK" --broadcast
 
 DISPUTE_REQUEST_ID=$(cast logs --rpc-url "$RPC_URL" --json --from-block 0 --address "$ORACLE" \
-	'NewRequest(bytes32,address,uint96,uint96,uint96,uint64,uint64)' | jq -r '.[-1].topics[1]')
+	'NewRequest(bytes32,address,uint96,uint96,uint24,uint96,uint64,uint64)' | jq -r '.[-1].topics[1]')
 echo "Disputed request id: $DISPUTE_REQUEST_ID"
 
 DISPUTE_SENTINEL_A_BALANCE_BEFORE=$(balance_of "$SENTINEL_A_ADDR")

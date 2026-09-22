@@ -68,14 +68,14 @@
 //! under-approval and an over-approval are denied here. An unreachable or
 //! malformed API response is `Abstain`, not guessed at either way.
 
-use super::Checker;
+use super::{Assessment, Checker};
 use crate::{
     contracts::bindings::{
         cow::{Order, TwapData, createWithContextCall, setPreSignatureCall},
         erc20::approveCall,
     },
     contracts::multi_send::sub_transactions,
-    engine::{CheckContext, Operation, RuleId, SafeTransaction, Verdict},
+    engine::{CheckContext, Coverage, Operation, RuleId, SafeTransaction},
 };
 use alloy::{
     primitives::{Address, B256, Bytes, U256, address},
@@ -267,7 +267,7 @@ impl CowChecker {
     /// `orderUid` we looked it up by — the same binding the presignature
     /// itself relies on — before any of its fields are used for a decision.
     ///
-    /// Returns [`Verdict::Abstain`] if `chain_id` isn't recognized, if
+    /// Returns [`Assessment::Abstain`] if `chain_id` isn't recognized, if
     /// `calls` isn't that exact shape at all, if the lookup fails or is
     /// malformed, or if the response's recomputed digest doesn't match the
     /// requested `orderUid`: none of these are treated as approval or
@@ -278,18 +278,28 @@ impl CowChecker {
         safe: Address,
         chain_id: U256,
         calls: &[SafeTransaction],
-    ) -> Verdict {
+    ) -> Assessment {
         let Some(base_url) = order_api_base_url(chain_id) else {
-            return Verdict::Abstain;
+            return Assessment::Abstain;
         };
+        // TODO(follow-up): a *standalone* presignature call — no co-batched
+        // `approve`, spending an allowance some earlier, separately-vetted
+        // transaction already granted — abstains here for want of a second
+        // element, even though `BaseChecker` already covers `To`/`Operation`
+        // for it (it's an ordinary external call, not a MultiSend). Only the
+        // order's receiver would need checking; the amount comparison has no
+        // approval to compare against and would simply drop out. This is F1
+        // (CoW standalone order commitments) in the verdict-composition
+        // epic, deliberately not folded into that epic because it's a new
+        // affirming path rather than a change to how verdicts combine.
         let [first, second] = calls else {
-            return Verdict::Abstain;
+            return Assessment::Abstain;
         };
         let Some((token, approved_amount, order_uid)) =
             decode_approval_and_presignature(first, second)
                 .or_else(|| decode_approval_and_presignature(second, first))
         else {
-            return Verdict::Abstain;
+            return Assessment::Abstain;
         };
 
         match self.order_api.fetch_order(base_url, &order_uid).await {
@@ -299,20 +309,22 @@ impl CowChecker {
                     "CoW order response's recomputed digest didn't match the requested \
                      order UID; no opinion on the batched approval"
                 );
-                Verdict::Abstain
+                Assessment::Abstain
             }
             // A wrong receiver is an address-poisoning-style
             // target-manipulation concern (R-4.4), distinct from the
             // excessive-approval-amount concern (R-4.5) the token/amount
             // check below guards against — see `check_twap_batch` for the
             // same split.
-            Ok(order) if order.receiver() != safe => Verdict::Insecure {
+            Ok(order) if order.receiver() != safe => Assessment::Insecure {
                 rule: RuleId::R4_4AuthorizationTarget,
             },
             Ok(order) if token == order.sell_token && approved_amount == order.sell_amount => {
-                Verdict::Secure
+                Assessment::Secure {
+                    coverage: Coverage::DATA,
+                }
             }
-            Ok(_) => Verdict::Insecure {
+            Ok(_) => Assessment::Insecure {
                 rule: RuleId::R4_5ExcessiveApproval,
             },
             Err(err) => {
@@ -321,7 +333,7 @@ impl CowChecker {
                     %order_uid,
                     "CoW order lookup failed; no opinion on the batched approval"
                 );
-                Verdict::Abstain
+                Assessment::Abstain
             }
         }
     }
@@ -348,9 +360,13 @@ impl CowChecker {
     /// approval *smaller* than that total is a trade-soundness concern (the
     /// order may not fully fill), not a security one, so it doesn't affect
     /// this verdict either way.
-    fn check_twap_batch(&self, safe: Address, calls: &[SafeTransaction]) -> Verdict {
+    fn check_twap_batch(&self, safe: Address, calls: &[SafeTransaction]) -> Assessment {
+        // TODO(follow-up): same gap as `check_presignature_batch` — a
+        // standalone TWAP `createWithContext` with no co-batched `approve`
+        // abstains here rather than affirming on the receiver check alone.
+        // See the TODO there for why (F1, verdict-composition epic).
         let [first, second] = calls else {
-            return Verdict::Abstain;
+            return Assessment::Abstain;
         };
 
         // Order terms undecodable (malformed `staticInput`) means no
@@ -361,41 +377,43 @@ impl CowChecker {
             decode_approval_and_twap(first, second)
                 .or_else(|| decode_approval_and_twap(second, first))
         else {
-            return Verdict::Abstain;
+            return Assessment::Abstain;
         };
 
         // A wrong receiver is an address-poisoning-style target-manipulation
         // concern (R-4.4), distinct from the excessive-approval-amount
         // concern (R-4.5) the token/amount checks below guard against.
         if receiver != safe && !receiver.is_zero() {
-            return Verdict::Insecure {
+            return Assessment::Insecure {
                 rule: RuleId::R4_4AuthorizationTarget,
             };
         }
         if approved_token != sell_token
             || approved_amount > max_approval_for_twap_total(total_sell_amount, n)
         {
-            return Verdict::Insecure {
+            return Assessment::Insecure {
                 rule: RuleId::R4_5ExcessiveApproval,
             };
         }
-        Verdict::Secure
+        Assessment::Secure {
+            coverage: Coverage::DATA,
+        }
     }
 
     /// An `approve` to `GPv2VaultRelayer` with no co-batched presignature or
     /// TWAP order-creation call is not the pattern a genuine CoW Swap
     /// interaction takes.
-    fn check_dangling_approval(&self, calls: &[SafeTransaction]) -> Verdict {
+    fn check_dangling_approval(&self, calls: &[SafeTransaction]) -> Assessment {
         if !calls.iter().any(approves_vault_relayer) {
-            return Verdict::Abstain;
+            return Assessment::Abstain;
         }
         if calls
             .iter()
             .any(|c| is_presignature(c) || is_twap_create(c))
         {
-            Verdict::Abstain
+            Assessment::Abstain
         } else {
-            Verdict::Insecure {
+            Assessment::Insecure {
                 rule: RuleId::R4_4AuthorizationTarget,
             }
         }
@@ -417,35 +435,40 @@ impl Checker for CowChecker {
     /// Runs, in order, [`CowChecker::check_dangling_approval`],
     /// [`CowChecker::check_presignature_batch`] and
     /// [`CowChecker::check_twap_batch`] against `transaction`'s sub-calls,
-    /// returning the first non-[`Verdict::Abstain`] result.
-    async fn check(&self, transaction: &SafeTransaction, _context: &CheckContext) -> Verdict {
+    /// returning the first non-[`Assessment::Abstain`] result.
+    ///
+    /// An affirming result claims only `Data`: it vouches for the recognized
+    /// batch payload (the paired `approve` plus presignature/TWAP-creation
+    /// call), not the MultiSend container's own `to`/`operation` — that
+    /// coverage comes from `BaseChecker`.
+    async fn check(&self, transaction: &SafeTransaction, _context: &CheckContext) -> Assessment {
         if !SUPPORTED_CHAIN_IDS
             .iter()
             .any(|&id| transaction.chain_id == U256::from(id))
         {
-            return Verdict::Abstain;
+            return Assessment::Abstain;
         }
 
         let calls = sub_transactions(transaction);
 
         let dangling_check = self.check_dangling_approval(&calls);
-        if dangling_check != Verdict::Abstain {
+        if dangling_check != Assessment::Abstain {
             return dangling_check;
         }
 
         let presig_check = self
             .check_presignature_batch(transaction.safe, transaction.chain_id, &calls)
             .await;
-        if presig_check != Verdict::Abstain {
+        if presig_check != Assessment::Abstain {
             return presig_check;
         }
 
         let twap_check = self.check_twap_batch(transaction.safe, &calls);
-        if twap_check != Verdict::Abstain {
+        if twap_check != Assessment::Abstain {
             return twap_check;
         }
 
-        Verdict::Abstain
+        Assessment::Abstain
     }
 }
 
@@ -704,7 +727,7 @@ mod tests {
     /// exercising [`CowChecker::check_dangling_approval`]/
     /// [`CowChecker::check_twap_batch`] never needs a real lookup, so this
     /// keeps those tests network-free.
-    async fn check(transaction: &SafeTransaction) -> Verdict {
+    async fn check(transaction: &SafeTransaction) -> Assessment {
         CowChecker::with_order_api(FakeOrderApi::NotFound)
             .check(transaction, &CheckContext::default())
             .await
@@ -842,7 +865,7 @@ mod tests {
         let data = approve_data(Address::new([9u8; 20]));
         assert_eq!(
             check(&tx(TOKEN, data, Operation::Call)).await,
-            Verdict::Abstain
+            Assessment::Abstain
         );
     }
 
@@ -851,7 +874,7 @@ mod tests {
         let data = approve_data(GP_V2_VAULT_RELAYER);
         assert_eq!(
             check(&tx(TOKEN, data, Operation::Call)).await,
-            Verdict::Insecure {
+            Assessment::Insecure {
                 rule: RuleId::R4_4AuthorizationTarget
             }
         );
@@ -871,7 +894,7 @@ mod tests {
         ]);
         assert_eq!(
             check(&tx(MULTI_SEND, data.into(), Operation::DelegateCall)).await,
-            Verdict::Abstain
+            Assessment::Abstain
         );
     }
 
@@ -885,7 +908,9 @@ mod tests {
         ]);
         assert_eq!(
             check(&tx(MULTI_SEND, data.into(), Operation::DelegateCall)).await,
-            Verdict::Secure
+            Assessment::Secure {
+                coverage: Coverage::DATA
+            }
         );
     }
 
@@ -899,7 +924,7 @@ mod tests {
         ]);
         assert_eq!(
             check(&tx(MULTI_SEND, data.into(), Operation::DelegateCall)).await,
-            Verdict::Insecure {
+            Assessment::Insecure {
                 rule: RuleId::R4_5ExcessiveApproval
             }
         );
@@ -920,7 +945,9 @@ mod tests {
         ]);
         assert_eq!(
             check(&tx(MULTI_SEND, data.into(), Operation::DelegateCall)).await,
-            Verdict::Secure
+            Assessment::Secure {
+                coverage: Coverage::DATA
+            }
         );
     }
 
@@ -936,7 +963,7 @@ mod tests {
         ]);
         assert_eq!(
             check(&tx(MULTI_SEND, data.into(), Operation::DelegateCall)).await,
-            Verdict::Insecure {
+            Assessment::Insecure {
                 rule: RuleId::R4_5ExcessiveApproval
             }
         );
@@ -959,7 +986,7 @@ mod tests {
         ]);
         assert_eq!(
             check(&tx(MULTI_SEND, data.into(), Operation::DelegateCall)).await,
-            Verdict::Insecure {
+            Assessment::Insecure {
                 rule: RuleId::R4_5ExcessiveApproval
             }
         );
@@ -978,7 +1005,9 @@ mod tests {
         ]);
         assert_eq!(
             check(&tx(MULTI_SEND, data.into(), Operation::DelegateCall)).await,
-            Verdict::Secure
+            Assessment::Secure {
+                coverage: Coverage::DATA
+            }
         );
     }
 
@@ -996,7 +1025,9 @@ mod tests {
         ]);
         assert_eq!(
             check(&tx(MULTI_SEND, data.into(), Operation::DelegateCall)).await,
-            Verdict::Secure
+            Assessment::Secure {
+                coverage: Coverage::DATA
+            }
         );
     }
 
@@ -1014,7 +1045,7 @@ mod tests {
         ]);
         assert_eq!(
             check(&tx(MULTI_SEND, data.into(), Operation::DelegateCall)).await,
-            Verdict::Insecure {
+            Assessment::Insecure {
                 rule: RuleId::R4_4AuthorizationTarget
             }
         );
@@ -1033,7 +1064,7 @@ mod tests {
         ]);
         assert_eq!(
             check(&tx(MULTI_SEND, data.into(), Operation::DelegateCall)).await,
-            Verdict::Abstain
+            Assessment::Abstain
         );
     }
 
@@ -1047,7 +1078,7 @@ mod tests {
         ]);
         assert_eq!(
             check(&tx(MULTI_SEND, data.into(), Operation::DelegateCall)).await,
-            Verdict::Abstain
+            Assessment::Abstain
         );
     }
 
@@ -1057,7 +1088,7 @@ mod tests {
         let data = multisend(&[pack(Operation::Call, TOKEN, &approve)]);
         assert_eq!(
             check(&tx(MULTI_SEND, data.into(), Operation::DelegateCall)).await,
-            Verdict::Insecure {
+            Assessment::Insecure {
                 rule: RuleId::R4_4AuthorizationTarget
             }
         );
@@ -1083,7 +1114,7 @@ mod tests {
         ]);
         assert_eq!(
             check(&tx(MULTI_SEND, data.into(), Operation::DelegateCall)).await,
-            Verdict::Insecure {
+            Assessment::Insecure {
                 rule: RuleId::R4_4AuthorizationTarget
             }
         );
@@ -1108,7 +1139,7 @@ mod tests {
         ]);
         assert_eq!(
             check(&tx(MULTI_SEND, data.into(), Operation::DelegateCall)).await,
-            Verdict::Insecure {
+            Assessment::Insecure {
                 rule: RuleId::R4_4AuthorizationTarget
             }
         );
@@ -1122,7 +1153,7 @@ mod tests {
         let data = approve_data(GP_V2_VAULT_RELAYER);
         assert_eq!(
             check(&tx(TOKEN, data, Operation::DelegateCall)).await,
-            Verdict::Abstain
+            Assessment::Abstain
         );
     }
 
@@ -1140,7 +1171,7 @@ mod tests {
         ]);
         assert_eq!(
             check(&tx(MULTI_SEND, data.into(), Operation::DelegateCall)).await,
-            Verdict::Insecure {
+            Assessment::Insecure {
                 rule: RuleId::R4_4AuthorizationTarget
             }
         );
@@ -1166,7 +1197,7 @@ mod tests {
         ]);
         assert_eq!(
             check(&tx(MULTI_SEND, data.into(), Operation::DelegateCall)).await,
-            Verdict::Insecure {
+            Assessment::Insecure {
                 rule: RuleId::R4_4AuthorizationTarget
             }
         );
@@ -1180,7 +1211,7 @@ mod tests {
             value: U256::from(1u64),
             ..tx(TOKEN, data, Operation::Call)
         };
-        assert_eq!(check(&transaction).await, Verdict::Abstain);
+        assert_eq!(check(&transaction).await, Assessment::Abstain);
     }
 
     #[tokio::test]
@@ -1197,7 +1228,7 @@ mod tests {
         ]);
         assert_eq!(
             check(&tx(MULTI_SEND, data.into(), Operation::DelegateCall)).await,
-            Verdict::Insecure {
+            Assessment::Insecure {
                 rule: RuleId::R4_4AuthorizationTarget
             }
         );
@@ -1223,7 +1254,7 @@ mod tests {
         ]);
         assert_eq!(
             check(&tx(MULTI_SEND, data.into(), Operation::DelegateCall)).await,
-            Verdict::Insecure {
+            Assessment::Insecure {
                 rule: RuleId::R4_4AuthorizationTarget
             }
         );
@@ -1236,7 +1267,7 @@ mod tests {
             chain_id: U256::from(137u64),
             ..tx(TOKEN, data, Operation::Call)
         };
-        assert_eq!(check(&transaction).await, Verdict::Abstain);
+        assert_eq!(check(&transaction).await, Assessment::Abstain);
     }
 
     #[tokio::test]
@@ -1249,7 +1280,7 @@ mod tests {
             CowChecker::with_order_api(FakeOrderApi::NotFound)
                 .check_presignature_batch(SAFE, U256::from(1u64), &calls)
                 .await,
-            Verdict::Abstain
+            Assessment::Abstain
         );
     }
 
@@ -1264,7 +1295,9 @@ mod tests {
             CowChecker::with_order_api(FakeOrderApi::Found(order))
                 .check_presignature_batch(SAFE, U256::from(1u64), &calls)
                 .await,
-            Verdict::Secure
+            Assessment::Secure {
+                coverage: Coverage::DATA
+            }
         );
     }
 
@@ -1276,7 +1309,7 @@ mod tests {
             CowChecker::with_order_api(FakeOrderApi::Found(order))
                 .check_presignature_batch(SAFE, U256::from(1u64), &calls)
                 .await,
-            Verdict::Insecure {
+            Assessment::Insecure {
                 rule: RuleId::R4_5ExcessiveApproval
             }
         );
@@ -1296,7 +1329,7 @@ mod tests {
             CowChecker::with_order_api(FakeOrderApi::Found(order))
                 .check_presignature_batch(SAFE, U256::from(1u64), &calls)
                 .await,
-            Verdict::Insecure {
+            Assessment::Insecure {
                 rule: RuleId::R4_4AuthorizationTarget
             }
         );
@@ -1320,7 +1353,9 @@ mod tests {
             CowChecker::with_order_api(FakeOrderApi::Found(order))
                 .check_presignature_batch(SAFE, U256::from(1u64), &calls)
                 .await,
-            Verdict::Secure
+            Assessment::Secure {
+                coverage: Coverage::DATA
+            }
         );
     }
 
@@ -1341,7 +1376,7 @@ mod tests {
             CowChecker::with_order_api(FakeOrderApi::Found(order))
                 .check_presignature_batch(SAFE, U256::from(1u64), &calls)
                 .await,
-            Verdict::Abstain
+            Assessment::Abstain
         );
     }
 
@@ -1358,7 +1393,7 @@ mod tests {
             checker
                 .check_presignature_batch(SAFE, U256::from(137u64), &calls)
                 .await,
-            Verdict::Abstain
+            Assessment::Abstain
         );
 
         // Not a two-call batch.
@@ -1367,7 +1402,7 @@ mod tests {
             checker
                 .check_presignature_batch(SAFE, U256::from(1u64), &single)
                 .await,
-            Verdict::Abstain
+            Assessment::Abstain
         );
     }
 

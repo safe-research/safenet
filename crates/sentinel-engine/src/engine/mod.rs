@@ -4,14 +4,16 @@
 //! API passes decoded Safe transactions to [`SentinelEngine`], which owns the
 //! configured checker chain.
 
+mod coverage;
 mod rule;
 mod transaction;
 
 pub use self::{
+    coverage::{Coverage, CoverageLabel},
     rule::RuleId,
     transaction::{Operation, SafeTransaction},
 };
-use crate::checkers::Checker;
+use crate::checkers::{Assessment, Checker};
 use serde::{Deserialize, Serialize};
 
 /// The transaction-verification engine shared by API handlers.
@@ -54,19 +56,43 @@ impl SentinelEngine {
     }
 
     /// Assesses a proposed Safe transaction using the configured checks.
+    ///
+    /// Any `Insecure` assessment is the engine's verdict — denials are never
+    /// masked by an affirmation, and the first denial short-circuits the
+    /// run. Otherwise, the engine answers `Secure` only once the union of
+    /// every affirming check's claimed [`Coverage`] covers every aspect the
+    /// transaction actually has, and `Abstain` otherwise.
     pub async fn security_check(
         &self,
         transaction: SafeTransaction,
         context: CheckContext,
     ) -> Verdict {
-        let mut verdict = Verdict::Abstain;
+        let mut covered = Coverage::empty();
         for checker in &self.0 {
-            verdict = checker.check(&transaction, &context).await;
-            tracing::trace!(checker = checker.name(), ?verdict, "checker verdict");
-            if verdict != Verdict::Abstain {
-                break;
+            let assessment = checker.check(&transaction, &context).await;
+            tracing::trace!(checker = checker.name(), ?assessment, "checker assessment");
+            match assessment {
+                Assessment::Insecure { rule } => {
+                    let verdict = Verdict::Insecure { rule };
+                    tracing::trace!(?verdict, "security check verdict");
+                    return verdict;
+                }
+                Assessment::Secure { coverage } => covered = covered.union(coverage),
+                Assessment::Abstain => {}
             }
         }
+
+        let required = Coverage::required_for(&transaction);
+        let verdict = if covered.contains(required) {
+            Verdict::Secure
+        } else {
+            let missing = covered.missing(required);
+            tracing::trace!(%covered, %missing, "abstaining: incomplete coverage");
+            for label in missing.labels() {
+                crate::metrics::missing_coverage_total(label).increment(1);
+            }
+            Verdict::Abstain
+        };
         tracing::trace!(?verdict, "security check verdict");
         verdict
     }
@@ -76,7 +102,7 @@ impl SentinelEngine {
 mod tests {
     use super::*;
 
-    struct StubChecker(Verdict);
+    struct StubChecker(Assessment);
 
     #[async_trait::async_trait]
     impl Checker for StubChecker {
@@ -84,14 +110,25 @@ mod tests {
             "stub"
         }
 
-        async fn check(&self, _: &SafeTransaction, _: &CheckContext) -> Verdict {
+        async fn check(&self, _: &SafeTransaction, _: &CheckContext) -> Assessment {
             self.0
+        }
+    }
+
+    /// A transaction with no aspects to trivially cover, so composing to
+    /// `Secure` requires an explicit voucher for every one of them.
+    fn transaction_requiring_every_aspect() -> SafeTransaction {
+        SafeTransaction {
+            value: alloy::primitives::U256::from(1u64),
+            data: vec![0xde, 0xad].into(),
+            gas_price: alloy::primitives::U256::from(1u64),
+            ..Default::default()
         }
     }
 
     #[tokio::test]
     async fn abstains_when_every_checker_abstains() {
-        let engine = SentinelEngine::new(vec![Box::new(StubChecker(Verdict::Abstain))]);
+        let engine = SentinelEngine::new(vec![Box::new(StubChecker(Assessment::Abstain))]);
 
         assert_eq!(
             engine
@@ -102,11 +139,12 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn stops_at_the_first_non_abstaining_verdict() {
+    async fn a_denial_dominates_a_preceding_secure() {
         let engine = SentinelEngine::new(vec![
-            Box::new(StubChecker(Verdict::Abstain)),
-            Box::new(StubChecker(Verdict::Secure)),
-            Box::new(StubChecker(Verdict::Insecure {
+            Box::new(StubChecker(Assessment::Secure {
+                coverage: Coverage::all(),
+            })),
+            Box::new(StubChecker(Assessment::Insecure {
                 rule: RuleId::R4_3ValueTarget,
             })),
         ]);
@@ -115,7 +153,203 @@ mod tests {
             engine
                 .security_check(SafeTransaction::default(), CheckContext::default())
                 .await,
+            Verdict::Insecure {
+                rule: RuleId::R4_3ValueTarget,
+            }
+        );
+    }
+
+    #[tokio::test]
+    async fn two_partial_claims_compose_to_secure() {
+        let engine = SentinelEngine::new(vec![
+            Box::new(StubChecker(Assessment::Secure {
+                coverage: Coverage::TO | Coverage::OPERATION,
+            })),
+            Box::new(StubChecker(Assessment::Secure {
+                coverage: Coverage::VALUE | Coverage::DATA | Coverage::REFUND,
+            })),
+        ]);
+
+        assert_eq!(
+            engine
+                .security_check(
+                    transaction_requiring_every_aspect(),
+                    CheckContext::default()
+                )
+                .await,
             Verdict::Secure
+        );
+    }
+
+    #[tokio::test]
+    async fn base_checker_never_abstains() {
+        use crate::checkers::BaseChecker;
+
+        let safe = alloy::primitives::Address::new([1u8; 20]);
+        let other = alloy::primitives::Address::new([2u8; 20]);
+
+        let allowed_call = SafeTransaction {
+            safe,
+            to: other,
+            ..Default::default()
+        };
+        let denied_call = SafeTransaction {
+            safe,
+            to: safe,
+            data: vec![0xde, 0xad, 0xbe, 0xef].into(),
+            ..Default::default()
+        };
+        let allowed_delegatecall = SafeTransaction {
+            safe,
+            to: alloy::primitives::address!("526643F69b81B008F46d95CD5ced5eC0edFFDaC6"),
+            data: alloy::primitives::bytes!("ed007fc6"),
+            operation: Operation::DelegateCall,
+            ..Default::default()
+        };
+        let denied_delegatecall = SafeTransaction {
+            safe,
+            to: other,
+            operation: Operation::DelegateCall,
+            ..Default::default()
+        };
+
+        for transaction in [
+            allowed_call,
+            denied_call,
+            allowed_delegatecall,
+            denied_delegatecall,
+        ] {
+            assert_ne!(
+                BaseChecker
+                    .check(&transaction, &CheckContext::default())
+                    .await,
+                Assessment::Abstain
+            );
+        }
+    }
+
+    /// The epic's headline fix: a relayed nested `execTransaction` no longer
+    /// affirms just because `NestedSafeChecker` doesn't inspect the refund
+    /// leg. Not expressible as a corpus vector — see "Behavior changes not
+    /// expressible as test vectors" in the verdict-composition epic.
+    #[tokio::test]
+    async fn relayed_nested_exec_transaction_abstains() {
+        use crate::{checkers::NestedSafeChecker, contracts::bindings::safe};
+        use alloy::{primitives::U256, sol_types::SolCall as _};
+
+        let engine = SentinelEngine::new(vec![Box::new(NestedSafeChecker)]);
+        let transaction = SafeTransaction {
+            safe: alloy::primitives::Address::new([1u8; 20]),
+            to: alloy::primitives::Address::new([2u8; 20]),
+            gas_price: U256::from(1u64),
+            data: safe::execTransactionCall {
+                to: alloy::primitives::Address::ZERO,
+                value: U256::ZERO,
+                data: Default::default(),
+                operation: 0,
+                safeTxGas: U256::ZERO,
+                baseGas: U256::ZERO,
+                gasPrice: U256::ZERO,
+                gasToken: alloy::primitives::Address::ZERO,
+                refundReceiver: alloy::primitives::Address::ZERO,
+                signatures: Default::default(),
+            }
+            .abi_encode()
+            .into(),
+            ..Default::default()
+        };
+
+        assert_eq!(
+            engine
+                .security_check(transaction, CheckContext::default())
+                .await,
+            Verdict::Abstain
+        );
+    }
+
+    /// `NestedSafeChecker` doesn't inspect `value`, so it can't affirm a
+    /// nested call that also carries native currency.
+    #[tokio::test]
+    async fn nested_exec_transaction_with_native_value_abstains() {
+        use crate::{checkers::NestedSafeChecker, contracts::bindings::safe};
+        use alloy::{primitives::U256, sol_types::SolCall as _};
+
+        let engine = SentinelEngine::new(vec![Box::new(NestedSafeChecker)]);
+        let transaction = SafeTransaction {
+            safe: alloy::primitives::Address::new([1u8; 20]),
+            to: alloy::primitives::Address::new([2u8; 20]),
+            value: U256::from(1u64),
+            data: safe::execTransactionCall {
+                to: alloy::primitives::Address::ZERO,
+                value: U256::ZERO,
+                data: Default::default(),
+                operation: 0,
+                safeTxGas: U256::ZERO,
+                baseGas: U256::ZERO,
+                gasPrice: U256::ZERO,
+                gasToken: alloy::primitives::Address::ZERO,
+                refundReceiver: alloy::primitives::Address::ZERO,
+                signatures: Default::default(),
+            }
+            .abi_encode()
+            .into(),
+            ..Default::default()
+        };
+
+        assert_eq!(
+            engine
+                .security_check(transaction, CheckContext::default())
+                .await,
+            Verdict::Abstain
+        );
+    }
+
+    /// A relayed escape-hatch call is just as structurally safe as an
+    /// unrelayed one, but `EscapeHatchChecker` can't vouch for the refund
+    /// leg, so the engine now abstains rather than affirming on
+    /// `Coverage::all()`. Not expressible as a corpus vector — see "Behavior
+    /// changes not expressible as test vectors" in the verdict-composition
+    /// epic.
+    #[tokio::test]
+    async fn relayed_escape_hatch_call_abstains() {
+        use crate::{checkers::EscapeHatchChecker, contracts::bindings::safenet_guard};
+        use alloy::{primitives::U256, sol_types::SolCall as _};
+
+        let engine = SentinelEngine::new(vec![Box::new(EscapeHatchChecker)]);
+        let transaction = SafeTransaction {
+            safe: alloy::primitives::Address::new([1u8; 20]),
+            to: alloy::primitives::Address::new([2u8; 20]),
+            gas_price: U256::from(1u64),
+            data: safenet_guard::cancelAnnouncementCall {
+                announcementHash: Default::default(),
+            }
+            .abi_encode()
+            .into(),
+            ..Default::default()
+        };
+
+        assert_eq!(
+            engine
+                .security_check(transaction, CheckContext::default())
+                .await,
+            Verdict::Abstain
+        );
+    }
+
+    #[tokio::test]
+    async fn one_partial_claim_abstains() {
+        let engine = SentinelEngine::new(vec![Box::new(StubChecker(Assessment::Secure {
+            coverage: Coverage::TO | Coverage::OPERATION,
+        }))]);
+
+        assert_eq!(
+            engine
+                .security_check(
+                    transaction_requiring_every_aspect(),
+                    CheckContext::default()
+                )
+                .await,
+            Verdict::Abstain
         );
     }
 }

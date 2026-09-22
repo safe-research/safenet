@@ -4301,6 +4301,8 @@ dependencies = [
  "argh",
  "async-trait",
  "axum",
+ "bitflags",
+ "metrics",
  "reqwest",
  "safenet-core",
  "serde",

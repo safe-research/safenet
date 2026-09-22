@@ -1,9 +1,9 @@
 //! Article IV Part A base guarantees.
 
-use super::Checker;
+use super::{Assessment, Checker};
 use crate::{
     contracts::{bindings::safe, multi_send::decode_multi_send_call},
-    engine::{CheckContext, Operation, RuleId, SafeTransaction, Verdict},
+    engine::{CheckContext, Coverage, Operation, RuleId, SafeTransaction},
 };
 use alloy::{
     primitives::{Address, address},
@@ -30,6 +30,19 @@ const SUPPORTED_MODULES: &[Address] = &[
 const SUPPORTED_MODULE_GUARDS: &[Address] = &[Address::ZERO];
 
 /// Enforces the Safe base guarantees from Article IV Part A.
+///
+/// The sole supplier of `To` and `Operation` coverage for ordinary calls,
+/// on the strength of **"no rule in scope forbids this destination" — not
+/// "this destination is trustworthy."** A call that passes has had its `to`
+/// evaluated against every `to`-restriction the Charter currently states (a
+/// self-call confined to an allow-listed settings function, a delegatecall
+/// confined to a known migration, signing-library, `CreateCall` or
+/// MultiSend contract), and `BlocklistChecker` (R-4.6) has had its chance to
+/// deny. That is the whole of what this claim asserts; a positive statement
+/// about the destination is tracked as F2 (positive destination assurance)
+/// in the verdict-composition epic.
+///
+/// This check never abstains — see [`check_transaction`].
 pub struct BaseChecker;
 
 #[async_trait::async_trait]
@@ -38,10 +51,12 @@ impl Checker for BaseChecker {
         "base"
     }
 
-    async fn check(&self, transaction: &SafeTransaction, _context: &CheckContext) -> Verdict {
+    async fn check(&self, transaction: &SafeTransaction, _context: &CheckContext) -> Assessment {
         match check_transaction(transaction) {
-            Ok(()) => Verdict::Abstain,
-            Err(rule) => Verdict::Insecure { rule },
+            Ok(()) => Assessment::Secure {
+                coverage: Coverage::TO | Coverage::OPERATION,
+            },
+            Err(rule) => Assessment::Insecure { rule },
         }
     }
 }
@@ -49,7 +64,13 @@ impl Checker for BaseChecker {
 /// Checks a proposed Safe transaction against the Article IV Part A base
 /// guarantees (settings-change blocking, delegatecall integrity). On denial,
 /// returns the specific rule violated.
-pub fn check_transaction(tx: &SafeTransaction) -> Result<(), RuleId> {
+///
+/// Always answers `Ok` or `Err`, never neither: `Operation` has exactly two
+/// variants, and `check_settings_change` and `check_delegatecall_integrity`
+/// each return `Some` for their own variant, so the `.unwrap_or(..)`
+/// fallback below is unreachable. `BaseChecker::check` relies on this to
+/// never abstain.
+fn check_transaction(tx: &SafeTransaction) -> Result<(), RuleId> {
     check_settings_change(tx)
         .or_else(|| check_delegatecall_integrity(tx))
         .unwrap_or(Err(RuleId::R4_1SettingsChange))
@@ -288,7 +309,7 @@ mod tests {
             BaseChecker
                 .check(&transaction, &CheckContext::default())
                 .await,
-            Verdict::Insecure {
+            Assessment::Insecure {
                 rule: RuleId::R4_1SettingsChange,
             }
         );
@@ -307,14 +328,14 @@ mod tests {
             BaseChecker
                 .check(&transaction, &CheckContext::default())
                 .await,
-            Verdict::Insecure {
+            Assessment::Insecure {
                 rule: RuleId::R4_2DelegatecallIntegrity,
             }
         );
     }
 
     #[tokio::test]
-    async fn abstains_when_the_base_guarantees_hold() {
+    async fn affirms_to_and_operation_when_the_base_guarantees_hold() {
         let transaction = SafeTransaction {
             safe: Address::new([1u8; 20]),
             to: Address::new([2u8; 20]),
@@ -325,7 +346,9 @@ mod tests {
             BaseChecker
                 .check(&transaction, &CheckContext::default())
                 .await,
-            Verdict::Abstain
+            Assessment::Secure {
+                coverage: Coverage::TO | Coverage::OPERATION,
+            }
         );
     }
 

@@ -45,10 +45,10 @@
 //! *before* the transaction being checked, or the query would see that
 //! transaction's own effects as if they were prior evidence.
 
-use super::Checker;
+use super::{Assessment, Checker};
 use crate::{
     contracts::bindings::erc20::{Approval, Transfer, approveCall, transferCall, transferFromCall},
-    engine::{CheckContext, Operation, RuleId, SafeTransaction, Verdict},
+    engine::{CheckContext, Coverage, Operation, RuleId, SafeTransaction},
 };
 use alloy::{
     primitives::{Address, U256},
@@ -305,9 +305,18 @@ impl Checker for AddressPoisoningChecker {
     /// recipient-quality signals (the candidate's own fund/transaction
     /// history, whether it's an EOA or a contract, and if so its deployment
     /// age) are needed before that case can be safely denied too.
-    async fn check(&self, transaction: &SafeTransaction, context: &CheckContext) -> Verdict {
+    ///
+    /// On a genuine prior interaction, claims `To | Data`: `Data` for the
+    /// recipient/spender argument this check decoded, and `To` on the softer
+    /// evidence that `tx.to`'s own `Transfer`/`Approval` logs show genuine
+    /// prior activity with the Safe — not a verified positive statement
+    /// about the destination (no `ERC165`/bytecode probe, no token
+    /// registry; the inference that `tx.to` is even an ERC-20 rests on
+    /// `decode_target` alone). Tracked as F2 (positive destination
+    /// assurance) in the verdict-composition epic.
+    async fn check(&self, transaction: &SafeTransaction, context: &CheckContext) -> Assessment {
         let Some((candidate, kind)) = decode_target(transaction) else {
-            return Verdict::Abstain;
+            return Assessment::Abstain;
         };
         if transaction.chain_id != U256::from(self.provider.chain_id()) {
             tracing::warn!(
@@ -315,7 +324,7 @@ impl Checker for AddressPoisoningChecker {
                 provider_chain_id = self.provider.chain_id(),
                 "address-poisoning check: transaction chain id does not match the configured provider"
             );
-            return Verdict::Abstain;
+            return Assessment::Abstain;
         }
 
         match self
@@ -329,7 +338,9 @@ impl Checker for AddressPoisoningChecker {
                     rule = kind.rule().code(),
                     "address-poisoning: genuine prior interaction found"
                 );
-                Verdict::Secure
+                Assessment::Secure {
+                    coverage: Coverage::TO | Coverage::DATA,
+                }
             }
             Ok(RecipientLookup::NoExactMatch {
                 recipients,
@@ -343,7 +354,7 @@ impl Checker for AddressPoisoningChecker {
                         rule = kind.rule().code(),
                         "address-poisoning: no established recipient to compare against"
                     );
-                    return Verdict::Abstain;
+                    return Assessment::Abstain;
                 };
                 if !complete {
                     // See `RecipientLookup::NoExactMatch` — can't deny on
@@ -355,7 +366,7 @@ impl Checker for AddressPoisoningChecker {
                         rule = kind.rule().code(),
                         "address-poisoning: candidate resembles an established recipient, but the scan was incomplete; abstaining rather than denying on partial evidence"
                     );
-                    return Verdict::Abstain;
+                    return Assessment::Abstain;
                 }
                 tracing::debug!(
                     token = %transaction.to,
@@ -364,7 +375,7 @@ impl Checker for AddressPoisoningChecker {
                     rule = kind.rule().code(),
                     "address-poisoning: candidate is a lookalike of an established recipient"
                 );
-                Verdict::Insecure { rule: kind.rule() }
+                Assessment::Insecure { rule: kind.rule() }
             }
             Err(err) => {
                 tracing::warn!(
@@ -374,7 +385,7 @@ impl Checker for AddressPoisoningChecker {
                     rule = kind.rule().code(),
                     "address-poisoning history lookup failed"
                 );
-                Verdict::Abstain
+                Assessment::Abstain
             }
         }
     }

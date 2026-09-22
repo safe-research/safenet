@@ -1,5 +1,6 @@
 use safenet_core::watcher_events;
 
+#[allow(clippy::too_many_arguments)]
 pub mod oracle {
     use alloy::sol;
 
@@ -27,6 +28,7 @@ pub mod oracle {
                 address indexed sponsor,
                 uint96 fee,
                 uint96 bondTarget,
+                uint24 daoFeeShare,
                 uint96 slashAmount,
                 uint64 commitDeadline,
                 uint64 revealDeadline

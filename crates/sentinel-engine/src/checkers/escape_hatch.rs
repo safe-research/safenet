@@ -1,14 +1,14 @@
 //! Recognition of SafenetGuard escape-hatch calls.
 
-use super::Checker;
+use super::{Assessment, Checker};
 use crate::{
     contracts::bindings::safenet_guard,
-    engine::{CheckContext, Operation, SafeTransaction, Verdict},
+    engine::{CheckContext, Coverage, Operation, SafeTransaction},
 };
 use alloy::sol_types::SolCall as _;
 
 /// Considers a Safe's own call into a SafenetGuard escape-hatch function
-/// secure.
+/// secure, independent of the transaction it announces or cancels.
 ///
 /// `announceTransaction`/`cancelAnnouncement` only register or clear a
 /// nonce-free announcement keyed by the calling Safe (`msg.sender`); per
@@ -23,13 +23,11 @@ use alloy::sol_types::SolCall as _;
 /// auto-allow anything but a `CALL`), and nonzero value handed to an
 /// unrelated `to` would simply be spent.
 ///
-/// Relayed calls (nonzero `gasPrice`) are excluded and abstained on rather
-/// than affirmed: Safe pays a refund out of its own funds to
-/// `refundReceiver` (or `tx.origin` when unset), and this checker doesn't
-/// yet have a way to tell a trusted relayer from an untrusted one. Deciding
-/// that is a follow-up. `baseGas` alone doesn't gate this — Safe.sol only
-/// calls `handlePayment` `if (gasPrice > 0)`, so a nonzero `baseGas` next to
-/// a zero `gasPrice` pays nothing.
+/// Claims `Coverage::action()`, not `Refund`: a relayed call (nonzero
+/// `gasPrice`) is just as structurally safe, but this checker has no way to
+/// tell a trusted relayer from an untrusted one, so the refund leg is left
+/// to `RefundChecker` — or, absent a voucher for it, to the engine's
+/// abstention.
 pub struct EscapeHatchChecker;
 
 #[async_trait::async_trait]
@@ -38,19 +36,21 @@ impl Checker for EscapeHatchChecker {
         "escape_hatch"
     }
 
-    async fn check(&self, transaction: &SafeTransaction, _context: &CheckContext) -> Verdict {
+    async fn check(&self, transaction: &SafeTransaction, _context: &CheckContext) -> Assessment {
         if is_escape_hatch_call(transaction) {
-            Verdict::Secure
+            Assessment::Secure {
+                coverage: Coverage::action(),
+            }
         } else {
-            Verdict::Abstain
+            Assessment::Abstain
         }
     }
 }
 
-/// True if `tx` is an unrelayed, zero-value `CALL` whose calldata invokes
-/// one of the two SafenetGuard escape-hatch functions.
+/// True if `tx` is a zero-value `CALL` whose calldata invokes one of the two
+/// SafenetGuard escape-hatch functions.
 fn is_escape_hatch_call(tx: &SafeTransaction) -> bool {
-    if tx.operation != Operation::Call || !tx.value.is_zero() || !tx.gas_price.is_zero() {
+    if tx.operation != Operation::Call || !tx.value.is_zero() {
         return false;
     }
     tx.data

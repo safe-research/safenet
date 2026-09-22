@@ -59,12 +59,21 @@ contract SentinelOracle is IOracle {
     // The trusted contract (typically Consensus) allowed to call `postRequest` -- distinct from a
     // request's `sponsor`, the address that funds a given request's fee and is refunded on timeout.
     address public immutable PROPOSER;
+    // Must be a standard, non-rebasing ERC20 with at most 18 decimals and no transfer hooks
+    // (e.g. not ERC777). More than 18 decimals risks overflowing `uint96` bond/slash amounts once
+    // multiplied by `bondConfig`'s multipliers; a hooked token lets a malicious `sponsor` revert on
+    // its own refund (`finalize`/`resolveDispute`/`timeoutArbitration`/`markOutOfScope` all push
+    // tokens to `sponsor`), permanently freezing the request and trapping every committed
+    // sentinel's bond along with it.
     IERC20 public immutable FEE_TOKEN;
     // `uint32` blocks is vastly more than any realistic window/delay/timeout needs (billions of
     // blocks -- centuries even at a fast chain's block time), matching the same convention already
     // used for `BondConfig`'s multipliers.
     uint32 public immutable COMMIT_WINDOW;
     uint32 public immutable REVEAL_WINDOW;
+    // Unlike `COMMIT_WINDOW`/`REVEAL_WINDOW`/`ARBITRATION_TIMEOUT`, zero is a deliberately valid
+    // value here: it makes every governance-gated change (sentinel add/remove, fee, bond config,
+    // DAO fee share, protocol funds receiver) take effect immediately instead of being timelocked.
     uint32 public immutable GOVERNANCE_DELAY;
     uint32 public immutable ARBITRATION_TIMEOUT;
 
@@ -159,13 +168,17 @@ contract SentinelOracle is IOracle {
         // Fee config: everything that determines the size of a request's fee/bond/slash and how
         // it is split. Sized to match each value's own governed-storage width (see `$feeConfig`,
         // `$bondConfig`, `$daoFeeShareConfig` below) so an oversized value fails at the ABI/
-        // calldata boundary instead of being silently accepted and caught later.
+        // calldata boundary instead of being silently accepted and caught later. `feeToken` must
+        // satisfy the constraints documented on `FEE_TOKEN` above (at most 18 decimals, no
+        // transfer hooks) -- this is only ever set once, here, with no setter.
         address feeToken;
         uint96 requestFee;
         uint32 initialBondMultiplier;
         uint32 initialSlashingMultiplier;
         uint24 initialDaoFeeShare;
-        // Timeouts: every block-denominated window/delay in the contract.
+        // Timeouts: every block-denominated window/delay in the contract. `governanceDelay` may
+        // be zero -- see `GOVERNANCE_DELAY` above -- unlike the other three, which must be
+        // nonzero (checked below).
         uint32 commitWindow;
         uint32 revealWindow;
         uint32 governanceDelay;
@@ -322,8 +335,10 @@ contract SentinelOracle is IOracle {
     }
 
     // Permissionless: a `FROZEN` request that outlives `ARBITRATION_TIMEOUT` should not wait on the
-    // arbitrator forever. Reuses the `TIMED_OUT` machinery, so every committed bond returns in
-    // full via `claim()` -- identical to the no-reveal timeout path.
+    // arbitrator forever. Reuses the `TIMED_OUT` machinery, so every *revealed* committer's bond
+    // returns in full via `claim()`. A non-revealer's bond is the exception: it was already
+    // slashed to the protocol funds receiver back when `finalize()` froze the request, and that
+    // slash stands -- it is not refunded here.
     function timeoutArbitration(bytes32 requestId) external {
         SentinelOracleRequest.T storage request = $requests.get(requestId);
         address sponsor = request.terms.sponsor;
@@ -334,8 +349,8 @@ contract SentinelOracle is IOracle {
 
     // Lets the arbitrator decline a `FROZEN` request outright (e.g. it's outside what they rule
     // on) instead of leaving it to run out the clock on `ARBITRATION_TIMEOUT`. Same `TIMED_OUT`
-    // outcome as `timeoutArbitration` above -- no established side, every bond returns in full via
-    // `claim()` -- just triggered by the arbitrator's own refusal rather than a deadline.
+    // outcome and same non-revealer caveat as `timeoutArbitration` above -- just triggered by the
+    // arbitrator's own refusal rather than a deadline.
     function markOutOfScope(bytes32 requestId, string calldata context) external onlyArbitrator {
         SentinelOracleRequest.T storage request = $requests.get(requestId);
         address sponsor = request.terms.sponsor;

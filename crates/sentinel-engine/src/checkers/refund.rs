@@ -10,19 +10,17 @@
 //! Runs late in the engine's checker chain, alongside
 //! [`AddressPoisoningChecker`]'s own primary-transfer check: both are RPC-
 //! backed, so cheaper local checkers get a chance to reach a verdict first.
-//! Also, for the same reason [`crate::checkers::CowChecker`] runs ahead of
-//! `AddressPoisoningChecker`'s own bypass (see that module's docs), a
-//! `Secure` verdict here must never stand in for the whole transaction: it
-//! only means the refund's recipient has *some* prior history, which is weak
-//! evidence for the refund leg alone, let alone the transaction's primary
-//! effect. [`RefundChecker::check`] squashes it to [`Verdict::Abstain`]
-//! accordingly — only a genuine [`Verdict::Insecure`] denial is allowed
-//! through.
+//! A genuine prior interaction with `refundReceiver` is evidence about the
+//! refund leg alone, never the transaction's primary effect, so
+//! [`RefundChecker::check`] reinterprets a delegated [`Assessment::Secure`]
+//! as claiming only [`Coverage::REFUND`] — the engine still needs another
+//! check to cover the rest of the transaction before it can answer `Secure`
+//! overall.
 
-use super::{AddressPoisoningChecker, CheckContext, Checker};
+use super::{AddressPoisoningChecker, Assessment, CheckContext, Checker};
 use crate::{
     contracts::bindings::erc20::transferCall,
-    engine::{SafeTransaction, Verdict},
+    engine::{Coverage, SafeTransaction},
 };
 use alloy::sol_types::SolCall as _;
 use std::sync::Arc;
@@ -48,27 +46,19 @@ impl Checker for RefundChecker {
     /// Resynthesizes `transaction`'s own gas refund as an ERC-20 `transfer`
     /// from the Safe to `refundReceiver` and defers to
     /// [`AddressPoisoningChecker`]; abstains outright when there's no refund
-    /// to resynthesize (see [`refund_transfer`]).
-    async fn check(&self, transaction: &SafeTransaction, context: &CheckContext) -> Verdict {
+    /// to resynthesize (see [`refund_transfer`]). A delegated `Secure` is
+    /// reinterpreted as covering only [`Coverage::REFUND`] — the recipient's
+    /// prior history says nothing about the rest of the transaction.
+    async fn check(&self, transaction: &SafeTransaction, context: &CheckContext) -> Assessment {
         let Some(refund) = refund_transfer(transaction) else {
-            return Verdict::Abstain;
+            return Assessment::Abstain;
         };
-        deny_or_abstain(self.0.check(&refund, context).await)
-    }
-}
-
-/// Only lets a denial through. A poisoning check's `Secure` verdict is, at
-/// best, evidence about the one leg it was run against — never grounds to
-/// affirm the whole transaction, which is what returning it here would do:
-/// this checker runs in a chain that stops at the first non-[`Verdict::Abstain`]
-/// verdict, so any recipient with *some* public onchain history (trivial for
-/// an attacker to pick) would otherwise make the engine answer `Secure`
-/// without Blocklist, CoW, ExcessiveApproval, or the primary-transfer check
-/// ever running.
-fn deny_or_abstain(verdict: Verdict) -> Verdict {
-    match verdict {
-        Verdict::Secure => Verdict::Abstain,
-        verdict => verdict,
+        match self.0.check(&refund, context).await {
+            Assessment::Secure { .. } => Assessment::Secure {
+                coverage: Coverage::REFUND,
+            },
+            assessment => assessment,
+        }
     }
 }
 
@@ -80,20 +70,19 @@ fn deny_or_abstain(verdict: Verdict) -> Verdict {
 ///   [`AddressPoisoningChecker`] doesn't decode (it only recognizes ERC-20
 ///   calldata).
 ///
-///   TODO(follow-up): this checker abstaining doesn't mean anything else
-///   inspects a native refund either. Since the engine-wide "abstain on any
-///   nonzero `gasPrice`" guard that used to sit ahead of the whole checker
-///   chain is gone, a transaction another checker calls `Secure` can now
-///   drain unbounded native currency to `refundReceiver` uncommented on. A
-///   native-value-aware check (or at least an amount cap) is needed before
-///   this is safe to affirm.
+///   TODO(follow-up): this checker abstaining no longer lets another check's
+///   `Secure` stand in for the refund leg — an uncovered `Refund` now forces
+///   the engine to `Abstain` on the whole transaction. What's still missing
+///   is a way to *affirm* a native-currency refund at all. See F6 (native-
+///   value target check).
 /// - `refundReceiver` zero — Safe.sol then pays `tx.origin` instead, an
 ///   address this checker has no way to learn ahead of execution.
 ///
-///   TODO(follow-up): same hole as the native-currency case — the refund
-///   still goes out, to a fully unvetted relayer, on a transaction the rest
-///   of the chain can still approve. Needs a policy once the engine can
-///   observe or reason about the relayer, not just abstain on it.
+///   TODO(follow-up): same hole as the native-currency case — abstaining
+///   here now costs the engine coverage rather than being silently masked by
+///   another check's `Secure`. Closing it needs an amount policy, since an
+///   unset `refundReceiver` paying a reasonable fee to an unknown relayer
+///   isn't itself a violation. See F7 (refund amount policy).
 fn refund_transfer(transaction: &SafeTransaction) -> Option<SafeTransaction> {
     if transaction.gas_price.is_zero()
         || transaction.gas_token.is_zero()
@@ -120,7 +109,6 @@ fn refund_transfer(transaction: &SafeTransaction) -> Option<SafeTransaction> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::engine::RuleId;
     use alloy::primitives::{Address, U256};
 
     const SAFE: Address = Address::new([1u8; 20]);
@@ -183,24 +171,5 @@ mod tests {
             }
             .abi_encode()
         );
-    }
-
-    #[test]
-    fn never_lets_a_secure_refund_leg_affirm_the_whole_transaction() {
-        assert_eq!(deny_or_abstain(Verdict::Secure), Verdict::Abstain);
-    }
-
-    #[test]
-    fn passes_through_a_denial() {
-        let denial = Verdict::Insecure {
-            rule: RuleId::R4_3ValueTarget,
-        };
-
-        assert_eq!(deny_or_abstain(denial), denial);
-    }
-
-    #[test]
-    fn passes_through_an_abstention() {
-        assert_eq!(deny_or_abstain(Verdict::Abstain), Verdict::Abstain);
     }
 }

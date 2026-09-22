@@ -1,9 +1,9 @@
 //! Detection of functionally unlimited token allowances.
 
-use super::Checker;
+use super::{Assessment, Checker};
 use crate::{
     contracts::target_effects::{EffectKind, decode_target_effects},
-    engine::{CheckContext, RuleId, SafeTransaction, Verdict},
+    engine::{CheckContext, RuleId, SafeTransaction},
 };
 use alloy::primitives::U256;
 
@@ -16,7 +16,7 @@ impl Checker for ExcessiveApprovalChecker {
         "excessive_approval"
     }
 
-    async fn check(&self, transaction: &SafeTransaction, _context: &CheckContext) -> Verdict {
+    async fn check(&self, transaction: &SafeTransaction, _context: &CheckContext) -> Assessment {
         for effect in decode_target_effects(transaction) {
             let unlimited = match effect.kind {
                 EffectKind::Erc20Approval { amount } => amount == U256::MAX,
@@ -24,12 +24,12 @@ impl Checker for ExcessiveApprovalChecker {
                 _ => false,
             };
             if unlimited {
-                return Verdict::Insecure {
+                return Assessment::Insecure {
                     rule: RuleId::R4_5ExcessiveApproval,
                 };
             }
         }
-        Verdict::Abstain
+        Assessment::Abstain
     }
 }
 
@@ -63,7 +63,7 @@ mod tests {
             ExcessiveApprovalChecker
                 .check(&transaction, &CheckContext::default())
                 .await,
-            Verdict::Insecure {
+            Assessment::Insecure {
                 rule: RuleId::R4_5ExcessiveApproval,
             }
         );
@@ -86,7 +86,7 @@ mod tests {
             ExcessiveApprovalChecker
                 .check(&transaction, &CheckContext::default())
                 .await,
-            Verdict::Abstain
+            Assessment::Abstain
         );
     }
 
@@ -107,7 +107,7 @@ mod tests {
             ExcessiveApprovalChecker
                 .check(&transaction, &CheckContext::default())
                 .await,
-            Verdict::Insecure {
+            Assessment::Insecure {
                 rule: RuleId::R4_5ExcessiveApproval,
             }
         );
@@ -130,7 +130,7 @@ mod tests {
             ExcessiveApprovalChecker
                 .check(&transaction, &CheckContext::default())
                 .await,
-            Verdict::Abstain
+            Assessment::Abstain
         );
     }
 }

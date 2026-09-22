@@ -56,7 +56,7 @@ export default defineConfig(({ mode }) => {
 			throw new Error(`${key} is not a valid integer: ${env[key]}`);
 		}
 	}
-	const defaultOracles = (env.VITE_DEFAULT_ORACLES || "0xB2C7711b887Cc1f867768bE224f85ad30bB6da68")
+	const defaultOracles = (env.VITE_DEFAULT_ORACLES || "0x544F12bAd6FF72564abBc7eA6494A2a4BdD0DDD0")
 		.split(",")
 		.map((address) => address.trim())
 		.filter(Boolean);
@@ -106,8 +106,8 @@ export default defineConfig(({ mode }) => {
 			__PRIVACY_URL__: JSON.stringify(env.VITE_PRIVACY_URL || "#privacy"),
 			__IMPRINT_URL__: JSON.stringify(env.VITE_IMPRINT_URL || "#imprint"),
 			// Default explorer settings — configurable per deployment, users can still override in the UI
-			__DEFAULT_CONSENSUS__: JSON.stringify(env.VITE_DEFAULT_CONSENSUS || "0x23561B7209C0fCa401B4F6DabEDE9d3685de5020"),
-			__DEFAULT_RPC__: JSON.stringify(env.VITE_DEFAULT_RPC || "https://sepolia.rpc.sentio.xyz"),
+			__DEFAULT_CONSENSUS__: JSON.stringify(env.VITE_DEFAULT_CONSENSUS || "0x98810887769db19A0Df9bf2f44E4998856fcb390"),
+			__DEFAULT_RPC__: JSON.stringify(env.VITE_DEFAULT_RPC || "https://rpc.gnosischain.com"),
 			__DEFAULT_DECODER__: JSON.stringify(
 				env.VITE_DEFAULT_DECODER || "https://calldata.swiss-knife.xyz/decoder?calldata=",
 			),

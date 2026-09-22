@@ -94,6 +94,16 @@ lint-openapi spec:
 devnet *args:
     ./scripts/run_devnet.sh {{args}}
 
+# Build a Safe Transaction Builder batch for a Safenet deployment from contracts/.env.testnet (see
+# contracts/.env.testnet.sample), e.g. `just deployment_batch`.
+deployment_batch *args:
+    ./scripts/build_deployment_batch.sh {{args}}
+
+# Verify the contracts from a `just deployment_batch` run via forge (Etherscan if ETHERSCAN_KEY is
+# set, Sourcify otherwise) once the Safe has executed the batch, e.g. `just verify_deployment`.
+verify_deployment *args:
+    ./scripts/verify_deployment.sh {{args}}
+
 # Rust sentinel bash integration test (Anvil + two sentinel instances).
 test-integration-sentinel:
     ./scripts/run_sentinel_integration_test.sh
@@ -129,8 +139,11 @@ examples-attest-safe-tx *args:
 
 # --- contracts/script/*.s.sol front doors (see contracts/script/README.md) ---
 
-contracts-deploy *args:
-    (cd contracts && forge script DeployScript {{args}})
+contracts-deploy-consensus *args:
+    (cd contracts && forge script DeployConsensusScript {{args}})
+
+contracts-deploy-always-approve-oracle *args:
+    (cd contracts && forge script DeployAlwaysApproveOracleScript {{args}})
 
 contracts-genesis *args:
     (cd contracts && forge script GenesisScript {{args}})

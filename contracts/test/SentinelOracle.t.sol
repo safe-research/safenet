@@ -742,6 +742,45 @@ contract SentinelOracleTest is Test {
         );
     }
 
+    function test_UnanimousApprove_FeeRewardRemainderSweptToProtocol() public {
+        _postRequest();
+
+        // Three winners: REQUEST_FEE (10_000) does not divide evenly by 3, leaving a 1-unit
+        // remainder that must be swept to the protocol instead of trapped in the contract.
+        _commit(sentinel1, true, SALT_1);
+        _commit(sentinel2, true, SALT_2);
+        _commit(sentinel3, true, SALT_3);
+        _advancePastCommitDeadline();
+        _reveal(sentinel1, true, SALT_1);
+        _reveal(sentinel2, true, SALT_2);
+        _reveal(sentinel3, true, SALT_3);
+
+        uint256 receiverBalBefore = token.balanceOf(protocolFundsReceiver);
+        oracle.finalize(REQUEST_ID);
+        assertEq(token.balanceOf(protocolFundsReceiver), receiverBalBefore + 1, "1-unit remainder swept to protocol");
+
+        uint96 perSentinelReward = REQUEST_FEE / 3;
+        uint256 s1Before = token.balanceOf(sentinel1);
+        vm.prank(sentinel1);
+        oracle.claim(REQUEST_ID);
+        assertEq(token.balanceOf(sentinel1), s1Before + BOND_TARGET + perSentinelReward);
+
+        uint256 s2Before = token.balanceOf(sentinel2);
+        vm.prank(sentinel2);
+        oracle.claim(REQUEST_ID);
+        assertEq(token.balanceOf(sentinel2), s2Before + BOND_TARGET + perSentinelReward);
+
+        uint256 s3Before = token.balanceOf(sentinel3);
+        vm.prank(sentinel3);
+        oracle.claim(REQUEST_ID);
+        assertEq(token.balanceOf(sentinel3), s3Before + BOND_TARGET + perSentinelReward);
+
+        // Nothing left behind: the whole fee is accounted for across the three claims plus the
+        // swept remainder, with no dust stuck in the contract.
+        assertEq(3 * perSentinelReward + 1, REQUEST_FEE);
+        assertEq(token.balanceOf(address(oracle)), 0, "no dust left in the contract");
+    }
+
     function test_UnanimousApprove_DaoFeeShareCutGoesToProtocolFundsReceiver() public {
         uint24 daoShare = 10_000; // 10% of the fee
         vm.prank(governance);
@@ -1213,6 +1252,14 @@ contract SentinelOracleTest is Test {
         vm.expectRevert(SentinelOracleCommitmentMap.AlreadyCommitted.selector);
         vm.prank(sentinel1);
         oracle.commit(REQUEST_ID, hash);
+    }
+
+    function test_Commit_ZeroHash_Reverts() public {
+        _postRequest();
+
+        vm.expectRevert(SentinelOracleCommitmentMap.InvalidCommitHash.selector);
+        vm.prank(sentinel1);
+        oracle.commit(REQUEST_ID, bytes32(0));
     }
 
     function test_DoubleReveal_Reverts() public {

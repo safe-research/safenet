@@ -387,17 +387,30 @@ impl SentinelTransition {
     /// Drops requests we never got to commit on in time, reveals (or drops)
     /// requests past their commit deadline, and finalizes requests past
     /// their reveal deadline.
+    ///
+    /// `block` has already been mined by the time it is observed here, so the
+    /// earliest block an action emitted now can land in is `block + 1`. Every
+    /// deadline comparison below therefore acts one block ahead of the onchain
+    /// window: at `block == commit_deadline` a commit can no longer be
+    /// included, while a reveal is guaranteed to land in the reveal window
+    /// (`SentinelOracleRequests` requires `block.number > commitDeadline`).
+    ///
+    /// STOPGAP: safe-research/safenet#471 makes block transitions run against
+    /// the *pending* block instead, at which point `block` is the block our
+    /// actions land in and every comparison here reverts to the inclusive form
+    /// matching the contract. Revert this compensation together with that
+    /// change -- keeping both would emit reveals into the commit window.
     fn handle_block_advance(&self, mut state: State, block: u64) -> (State, Commands<State, Self>) {
         let mut actions = Vec::new();
 
         state.0.retain(|id, entry| match entry {
             RequestState::WaitingForEngineCheck { deadline, request } => {
                 block
-                    <= request
+                    < request
                         .as_ref()
                         .map_or(*deadline, |request| request.commit_deadline)
             }
-            RequestState::WaitingForRequest { deadline, .. } => block <= *deadline,
+            RequestState::WaitingForRequest { deadline, .. } => block < *deadline,
             RequestState::CollectingCommitments {
                 approve,
                 reason,
@@ -407,13 +420,18 @@ impl SentinelTransition {
                 committed_count,
                 self_committed,
             } => {
-                if block <= *commit_deadline {
+                if block < *commit_deadline {
                     return true;
                 }
                 // Our own commit never landed onchain, so revealing would
-                // just revert; drop the request instead.
+                // just revert; drop the request instead. Deferred by a block
+                // relative to the reveal below: `Message::NewBlock(block)` is
+                // applied *before* `block`'s own logs, so a `Committed` of
+                // ours mined in `commit_deadline` -- the common case with a
+                // short commit window -- has not been tallied yet, and
+                // dropping now would forfeit a bond we did post.
                 if !*self_committed {
-                    return false;
+                    return block <= *commit_deadline;
                 }
                 let approve = *approve;
                 let slash_amount = *slash_amount;
@@ -1138,6 +1156,7 @@ mod tests {
                 sponsor: SAFE,
                 fee: fee.to(),
                 bondTarget: bond_target.to(),
+                daoFeeShare: Default::default(),
                 slashAmount: slash_amount.to(),
                 commitDeadline: commit_deadline,
                 revealDeadline: reveal_deadline,
@@ -2133,6 +2152,176 @@ mod tests {
             resolve_engine_check(&svc, state, request_open, CheckOutcome::Approved);
         assert!(commands.is_empty());
         assert!(!state.0.contains_key(&request_open));
+    }
+
+    /// `Message::NewBlock(block)` is delivered for an already-mined block, so
+    /// the earliest block a reveal emitted here can land in is `block + 1`.
+    /// On the commit deadline block that is exactly the first block of the
+    /// reveal window (`SentinelOracleRequests` requires
+    /// `block.number > commitDeadline`), so waiting for `commit_deadline + 1`
+    /// throws away a full block of an already short reveal window.
+    #[test]
+    fn flow_reveals_on_the_commit_deadline_block() {
+        let svc = transition();
+        let safe_tx_hash = B256::repeat_byte(0x11);
+        let id = request_id(safe_tx_hash, 7, ORACLE);
+
+        let (state, _) = svc.apply_transition(
+            State::default(),
+            Message::Event(log(1, proposed_event(ORACLE, safe_tx_hash, TO))),
+        );
+        let (state, _) = resolve_engine_check(&svc, state, id, CheckOutcome::Approved);
+        let (state, _) = svc.apply_transition(
+            state,
+            Message::Event(log(
+                5,
+                new_request_event(
+                    id,
+                    U256::from(1_000u64),
+                    U256::from(500u64),
+                    U256::from(500u64),
+                    20,
+                    40,
+                ),
+            )),
+        );
+        let (state, _) = svc.apply_transition(
+            state,
+            Message::Event(log(6, committed_event(id, self_address(), 500u64))),
+        );
+
+        // A block before the deadline, a commit can still be included, so the
+        // commit phase is not over yet.
+        let (state, commands) = svc.apply_transition(state, Message::NewBlock(19));
+        assert!(commands.is_empty());
+        assert!(matches!(
+            state.0[&id],
+            RequestState::CollectingCommitments { .. }
+        ));
+
+        // On the deadline block itself no further commit can be included, and
+        // a reveal submitted now lands in block 21 at the earliest, so the
+        // reveal is emitted here rather than a block later.
+        let (state, commands) = svc.apply_transition(state, Message::NewBlock(20));
+        let salt = self_signer().reveal_salt(id);
+        assert_eq!(
+            commands,
+            vec![
+                SentinelAction {
+                    kind: SentinelActionKind::Reveal {
+                        id,
+                        approve: true,
+                        salt,
+                        reason: REASON.to_string(),
+                    },
+                    expires_at: Some(40),
+                }
+                .into(),
+            ],
+        );
+        assert_eq!(
+            state.0[&id],
+            RequestState::CollectingVotes {
+                approve: true,
+                slash_amount: U96::from(500),
+                reveal_deadline: 40,
+                committed_count: 1,
+                revealed_count: 0,
+                approve_count: 0,
+                deny_count: 0,
+                self_revealed: false,
+            },
+        );
+    }
+
+    /// The block advance for `block` is applied *before* `block`'s own logs,
+    /// so a commit of ours mined in the deadline block has not been tallied
+    /// when the deadline transition runs. Giving up there would forfeit a bond
+    /// we did post, so -- unlike the reveal -- the drop waits one more block.
+    #[test]
+    fn flow_defers_dropping_until_the_commit_deadline_block_is_indexed() {
+        let svc = transition();
+        let late = B256::repeat_byte(0x12);
+        let never = B256::repeat_byte(0x13);
+        let late_id = request_id(late, 7, ORACLE);
+        let never_id = request_id(never, 7, ORACLE);
+
+        let mut state = State::default();
+        for safe_tx_hash in [late, never] {
+            let id = request_id(safe_tx_hash, 7, ORACLE);
+            let (next, _) = svc.apply_transition(
+                state,
+                Message::Event(log(1, proposed_event(ORACLE, safe_tx_hash, TO))),
+            );
+            let (next, _) = resolve_engine_check(&svc, next, id, CheckOutcome::Approved);
+            let (next, _) = svc.apply_transition(
+                next,
+                Message::Event(log(
+                    5,
+                    new_request_event(
+                        id,
+                        U256::from(1_000u64),
+                        U256::from(500u64),
+                        U256::from(500u64),
+                        20,
+                        40,
+                    ),
+                )),
+            );
+            state = next;
+        }
+
+        // Neither commit is known on the deadline block, but the block's logs
+        // have not been applied yet, so both requests survive it.
+        let (state, commands) = svc.apply_transition(state, Message::NewBlock(20));
+        assert!(commands.is_empty());
+        assert!(matches!(
+            state.0[&late_id],
+            RequestState::CollectingCommitments {
+                self_committed: false,
+                ..
+            }
+        ));
+        assert!(matches!(
+            state.0[&never_id],
+            RequestState::CollectingCommitments {
+                self_committed: false,
+                ..
+            }
+        ));
+
+        // The deadline block's logs follow, carrying our commit for one of the
+        // two requests.
+        let (state, commands) = svc.apply_transition(
+            state,
+            Message::Event(log(20, committed_event(late_id, self_address(), 500u64))),
+        );
+        assert!(commands.is_empty());
+
+        // Only now is it certain that the other commit never landed: the
+        // committed request reveals, the uncommitted one is dropped.
+        let (state, commands) = svc.apply_transition(state, Message::NewBlock(21));
+        let salt = self_signer().reveal_salt(late_id);
+        assert_eq!(
+            commands,
+            vec![
+                SentinelAction {
+                    kind: SentinelActionKind::Reveal {
+                        id: late_id,
+                        approve: true,
+                        salt,
+                        reason: REASON.to_string(),
+                    },
+                    expires_at: Some(40),
+                }
+                .into(),
+            ],
+        );
+        assert!(matches!(
+            state.0[&late_id],
+            RequestState::CollectingVotes { .. }
+        ));
+        assert!(!state.0.contains_key(&never_id));
     }
 
     /// A replayed resume for a request that already advanced past its engine

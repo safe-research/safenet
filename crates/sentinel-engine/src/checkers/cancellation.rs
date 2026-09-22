@@ -1,7 +1,7 @@
 //! Recognition of Safe nonce-cancellation transactions.
 
-use super::Checker;
-use crate::engine::{CheckContext, SafeTransaction, Verdict};
+use super::{Assessment, Checker};
+use crate::engine::{CheckContext, Coverage, SafeTransaction};
 
 /// Considers an empty call from a Safe to itself secure.
 pub struct CancellationChecker;
@@ -12,7 +12,7 @@ impl Checker for CancellationChecker {
         "cancellation"
     }
 
-    async fn check(&self, transaction: &SafeTransaction, _context: &CheckContext) -> Verdict {
+    async fn check(&self, transaction: &SafeTransaction, _context: &CheckContext) -> Assessment {
         let cancellation = SafeTransaction {
             chain_id: transaction.chain_id,
             safe: transaction.safe,
@@ -21,9 +21,11 @@ impl Checker for CancellationChecker {
             ..Default::default()
         };
         if transaction == &cancellation {
-            Verdict::Secure
+            Assessment::Secure {
+                coverage: Coverage::all(),
+            }
         } else {
-            Verdict::Abstain
+            Assessment::Abstain
         }
     }
 }
@@ -48,7 +50,9 @@ mod tests {
             CancellationChecker
                 .check(&transaction, &CheckContext::default())
                 .await,
-            Verdict::Secure
+            Assessment::Secure {
+                coverage: Coverage::all()
+            }
         );
     }
 
@@ -66,7 +70,7 @@ mod tests {
             CancellationChecker
                 .check(&transaction, &CheckContext::default())
                 .await,
-            Verdict::Abstain
+            Assessment::Abstain
         );
     }
 }

@@ -3,6 +3,7 @@ mod checkers;
 mod config;
 mod contracts;
 mod engine;
+mod metrics;
 
 use self::{
     checkers::{
@@ -43,6 +44,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let rpc = config.rpc;
     let engine_config = config.engine;
     observability::init(config.observability)?;
+    metrics::init();
     tracing::debug!(
         config_file = %options.config_file.display(),
         "sentinel engine configuration loaded"
@@ -64,8 +66,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
         Box::new(CowChecker::new()),
         Box::new(StakingChecker),
         // RPC-backed, so they run last: cheaper local checkers above get a
-        // chance to reach a verdict first. `RefundChecker` can only deny or
-        // abstain (never affirm), so its position relative to
+        // chance to reach a verdict first. The fold composes coverage
+        // order-independently, so `RefundChecker`'s position relative to
         // `address_poisoning` doesn't affect correctness, only which RPC
         // lookup runs first when both apply.
         Box::new(RefundChecker::new(address_poisoning.clone())),

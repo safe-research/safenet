@@ -134,18 +134,13 @@ library SentinelOracleRequest {
         }
     }
 
-    // Deducts the DAO's share of `feeAmount` and writes the remainder to `self.fee` in place --
-    // the remainder being the sponsor's refund, or the pot winning sentinels later draw from via
-    // `calcFeeReward`, depending on the caller. Shared by `finalize`'s resolved branch and
-    // `resolveDispute`, which otherwise duplicate this exact computation. `feeAmount` is passed in
-    // rather than read here because both callers already have `self.fee`'s current value in hand
-    // (`finalize` from its up-front `Progress memory` snapshot; `resolveDispute` from its own
-    // direct `self.fee` read -- see the comment there for why it skips the snapshot) -- reading it
-    // again here would be a second, redundant SLOAD of a slot they've already paid to load.
-    // `feeShareDenominator` is threaded in rather than hardcoded here because it's
-    // `SentinelOracle.FEE_SHARE_DENOMINATOR` -- an external, public constant this library has no
-    // business redeclaring a second copy of.
-    function applyDaoFeeCut(T storage self, uint96 feeAmount, uint256 feeShareDenominator)
+    // Deducts the DAO's cut from `feeAmount`, then rounds the remainder down to a multiple of
+    // `winningSideCount` and writes that to `self.fee` -- the pot `calcFeeReward` later divides
+    // evenly among winners. `daoCut` returned to the caller includes both the DAO's share and this
+    // rounding dust, so none of it is stranded unclaimed in the contract. Shared by `finalize` and
+    // `resolveDispute` to avoid duplicating the computation; `feeAmount` is passed in since both
+    // already have it in hand, avoiding a redundant SLOAD.
+    function applyDaoFeeCut(T storage self, uint96 feeAmount, uint256 feeShareDenominator, uint16 winningSideCount)
         private
         returns (uint96 daoCut)
     {
@@ -154,10 +149,13 @@ library SentinelOracleRequest {
         // large fee/share combination, even though the checked result below fits comfortably.
         uint256 wideCut = uint256(feeAmount) * self.terms.daoFeeShare / feeShareDenominator;
         // forge-lint: disable-next-line(unsafe-typecast)
-        daoCut = uint96(wideCut);
-        // daoCut <= feeAmount by construction (daoFeeShare <= feeShareDenominator), so this never
-        // underflows.
-        self.progress.fee = feeAmount - daoCut;
+        uint96 rawDaoCut = uint96(wideCut);
+        // rawDaoCut <= feeAmount by construction (daoFeeShare <= feeShareDenominator), so this
+        // never underflows.
+        uint96 remainingFee = feeAmount - rawDaoCut;
+        uint96 remainder = remainingFee % winningSideCount;
+        daoCut = rawDaoCut + remainder;
+        self.progress.fee = remainingFee - remainder;
     }
 
     function finalize(T storage self, uint64 arbitrationDeadline, uint256 feeShareDenominator)
@@ -184,7 +182,8 @@ library SentinelOracleRequest {
                 // Exactly one side is established -- the request resolves now, so the DAO takes its
                 // cut immediately (unlike the FROZEN case, which defers that to `resolveDispute`).
                 newState = approveMet ? State.RESOLVED_APPROVED : State.RESOLVED_DENIED;
-                daoCut = applyDaoFeeCut(self, prog.fee, feeShareDenominator);
+                uint16 winningSideCount = approveMet ? prog.approveSentinelCount : prog.denySentinelCount;
+                daoCut = applyDaoFeeCut(self, prog.fee, feeShareDenominator, winningSideCount);
             }
             // An established side exists, so a non-revealer's silence can only be griefing (stalling
             // a request whose outcome their own commit already contributed to) -- slash the governed
@@ -212,20 +211,23 @@ library SentinelOracleRequest {
         self.progress.state = newState;
     }
 
-    // A `FROZEN` request that outlives `ARBITRATION_TIMEOUT` moves to `TIMED_OUT` -- the same "no
-    // established outcome, everyone made whole" state every other timeout path already produces,
-    // so bonds return in full via the existing `claim()`/`slashAmountFor` logic with no changes
-    // there. Only touches `Progress` -- `state`, `arbitrationDeadline`, and `fee` all live in its
-    // single slot, so no `Terms` read is needed at all.
+    // A `FROZEN` request that outlives `ARBITRATION_TIMEOUT` moves to `TIMED_OUT` without a ruling.
+    // Revealed committers' bonds return in full via `claim()`/`slashAmountFor` -- no ruling means no
+    // adjudicated loser to slash. Non-revealers are NOT made whole, though: their bond was already
+    // slashed back at `finalize()` time (the `unrevealedBond` transfer, made as soon as the request
+    // froze), and that slash is never reversed -- `slashAmountFor`'s `wasEstablished` check still
+    // holds, since both sides genuinely were established, just never ruled on. Only touches
+    // `Progress` -- `state`, `arbitrationDeadline`, and `fee` all live in its single slot, so no
+    // `Terms` read is needed at all.
     function timeoutArbitration(T storage self) internal returns (uint96 refundFee) {
         require(block.number > self.progress.arbitrationDeadline, ArbitrationNotTimedOut());
         return outOfScope(self);
     }
 
     // The arbitrator declining a `FROZEN` request (e.g. it falls outside what they rule on) moves
-    // it to `TIMED_OUT` immediately -- identical outcome to `timeoutArbitration` above, just without
-    // waiting on `arbitrationDeadline`, since the arbitrator's own refusal is itself the reason no
-    // ruling is coming.
+    // it to `TIMED_OUT` immediately -- same outcome, and the same non-revealer caveat, as
+    // `timeoutArbitration` above, just without waiting on `arbitrationDeadline`, since the
+    // arbitrator's own refusal is itself the reason no ruling is coming.
     function outOfScope(T storage self) internal returns (uint96 refundFee) {
         require(self.progress.state == State.FROZEN, RequestNotFrozen());
         refundFee = self.progress.fee;
@@ -327,7 +329,8 @@ library SentinelOracleRequest {
         outcome = approveWins ? State.RESOLVED_APPROVED : State.RESOLVED_DENIED;
         self.progress.state = outcome;
         feeAmount = self.progress.fee;
-        daoCut = applyDaoFeeCut(self, feeAmount, feeShareDenominator);
+        uint16 winningSideCount = approveWins ? self.progress.approveSentinelCount : self.progress.denySentinelCount;
+        daoCut = applyDaoFeeCut(self, feeAmount, feeShareDenominator, winningSideCount);
     }
 }
 
@@ -349,6 +352,7 @@ library SentinelOracleRequestMap {
         address indexed sponsor,
         uint96 fee,
         uint96 bondTarget,
+        uint24 daoFeeShare,
         uint96 slashAmount,
         uint64 commitDeadline,
         uint64 revealDeadline
@@ -406,7 +410,7 @@ library SentinelOracleRequestMap {
             _padding: 0
         });
 
-        emit NewRequest(requestId, sponsor, fee, bondTarget, slashAmount, commitDeadline, revealDeadline);
+        emit NewRequest(requestId, sponsor, fee, bondTarget, daoFeeShare, slashAmount, commitDeadline, revealDeadline);
     }
 
     function get(T storage self, bytes32 requestId) internal view returns (SentinelOracleRequest.T storage request) {
