@@ -1,55 +1,18 @@
 //! The coverage vocabulary a check's affirming path claims, and the engine
 //! composes, in place of "first non-abstaining verdict wins". See the
-//! "Verdict composition" epic for the full rationale.
-//!
-//! `Coverage` below is superseded by `AspectSet`/`CallCoverage`: the
-//! batched-meta-transactions epic's per-call replacement. Wiring it into
-//! the engine and every affirming check is phase 7b's second half; until
-//! that lands, `Coverage` is still what `Assessment::Secure` carries, so
-//! `AspectSet`/`CallCoverage` (and `Proposal::checked`/`refund_checked`,
-//! which build them) are unreachable from `main()` — exercised only by
-//! their own tests below, which already moved off `Coverage` in
-//! anticipation of the switch.
+//! "Verdict composition" epic for the full rationale, and the
+//! "batched meta-transactions" epic's "Coverage becomes per call" for why
+//! it's keyed the way it is here: a claim names the calls it examined, not
+//! the transaction as a whole.
 
-// Temporary, for the same reason as the doc comment above: covers the gap
-// between "exercised by tests" and "reachable from `main()`" until
-// `AspectSet`/`CallCoverage` are wired in. Goes away once they are.
-#![allow(dead_code)]
-
-use super::{MetaTransaction, Operation, Proposal, SafeTransaction};
+use super::{MetaTransaction, Operation, Proposal};
 use bitflags::bitflags;
 use std::fmt;
 
-bitflags! {
-    /// The parts of a Safe transaction a check can vouch for, as a set. A
-    /// single-aspect claim is just a `Coverage` with one bit set (e.g.
-    /// `Coverage::TO`) — there is no separate "aspect" type.
-    #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
-    #[allow(dead_code)] // superseded by `CallCoverage`; kept for phase 7c's rename diff
-    pub struct Coverage: u8 {
-        /// The destination the transaction calls.
-        #[bitflags(flag_name = "to")]
-        const TO = 1 << 0;
-        /// Native currency leaving the Safe.
-        #[bitflags(flag_name = "value")]
-        const VALUE = 1 << 1;
-        /// The calldata and the effects it encodes.
-        #[bitflags(flag_name = "data")]
-        const DATA = 1 << 2;
-        /// `CALL` versus `DELEGATECALL`.
-        #[bitflags(flag_name = "operation")]
-        const OPERATION = 1 << 3;
-        /// The Safe's own gas-refund payment (`gasPrice`, `gasToken`,
-        /// `safeTxGas`, `baseGas`, `refundReceiver`) — one indivisible aspect,
-        /// since a claim about part of the payment says nothing actionable.
-        #[bitflags(flag_name = "refund")]
-        const REFUND = 1 << 4;
-    }
-}
-
 /// A single coverage aspect's metric-label spelling, as yielded by
-/// [`Coverage::labels`] — distinct from `Coverage` itself, which may hold
-/// more than one aspect at once and so has no single label of its own.
+/// [`AspectSet::labels`] and [`Coverage::labels`] — distinct from either,
+/// since both may hold more than one aspect at once and so have no single
+/// label of their own.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct CoverageLabel(&'static str);
 
@@ -62,60 +25,6 @@ impl CoverageLabel {
 impl fmt::Display for CoverageLabel {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}", self.0)
-    }
-}
-
-#[allow(dead_code)] // superseded by `CallCoverage`; kept for phase 7c's rename diff
-impl Coverage {
-    /// `TO | VALUE | DATA | OPERATION` — everything but the refund leg.
-    pub fn action() -> Self {
-        Self::TO | Self::VALUE | Self::DATA | Self::OPERATION
-    }
-
-    /// `other`'s aspects that `self` lacks — what an `Abstain` is logged
-    /// with.
-    pub const fn missing(self, other: Self) -> Self {
-        other.difference(self)
-    }
-
-    /// This coverage's contained aspects, one label per set flag, in
-    /// declaration order — what `Display` joins with `|`, and what the
-    /// missing-coverage metric increments one counter per.
-    pub fn labels(self) -> impl Iterator<Item = CoverageLabel> {
-        self.iter_names().map(|(name, _)| CoverageLabel(name))
-    }
-
-    /// The aspects a `Secure` verdict for `transaction` requires vouchers
-    /// for. An aspect the transaction cannot actually exercise is trivially
-    /// covered and dropped from the requirement:
-    ///
-    /// - `value == 0`, or `operation == DelegateCall` (which takes no value
-    ///   argument) — no native currency leaves the Safe, so `Value` needs no
-    ///   voucher.
-    /// - `gasPrice == 0` — `Safe.sol` only calls `handlePayment` `if
-    ///   (gasPrice > 0)`, so nothing is paid and `Refund` needs no voucher.
-    /// - `data` is empty — there is no calldata effect to vouch for.
-    ///
-    /// `To` and `Operation` are always required.
-    pub fn required_for(transaction: &SafeTransaction) -> Self {
-        let mut required = Self::all();
-        if transaction.value.is_zero() || transaction.operation == Operation::DelegateCall {
-            required = required.difference(Self::VALUE);
-        }
-        if transaction.gas_price.is_zero() {
-            required = required.difference(Self::REFUND);
-        }
-        if transaction.data.is_empty() {
-            required = required.difference(Self::DATA);
-        }
-        required
-    }
-}
-
-impl fmt::Display for Coverage {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let names = self.labels().map(CoverageLabel::as_str).collect::<Vec<_>>();
-        write!(f, "{}", names.join("|"))
     }
 }
 
@@ -142,7 +51,7 @@ bitflags! {
 
 /// The refund leg's own label. Not one of `AspectSet`'s bits, since the
 /// refund is a proposal-level claim rather than a per-call one — see
-/// [`CallCoverage`].
+/// [`Coverage`].
 const REFUND_LABEL: CoverageLabel = CoverageLabel("refund");
 
 impl AspectSet {
@@ -189,17 +98,17 @@ impl fmt::Display for AspectSet {
 /// docs).
 ///
 /// Every constructor below takes the proposal's call count so this invariant
-/// holds by construction; [`CallCoverage::union`], [`CallCoverage::contains`]
-/// and [`CallCoverage::missing`] all assume it (debug-asserted) rather than
+/// holds by construction; [`Coverage::union`], [`Coverage::contains`]
+/// and [`Coverage::missing`] all assume it (debug-asserted) rather than
 /// tolerating a mismatched width — two claims about calls that aren't the
 /// same proposal's calls have nothing meaningful to combine.
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub struct CallCoverage {
+pub struct Coverage {
     calls: Vec<AspectSet>,
     refund: bool,
 }
 
-impl CallCoverage {
+impl Coverage {
     /// Claims nothing: no aspect of any of `total_calls` calls, and not the
     /// refund leg. The fold's starting point.
     pub fn none(total_calls: usize) -> Self {
@@ -239,7 +148,7 @@ impl CallCoverage {
         debug_assert_eq!(
             self.calls.len(),
             other.calls.len(),
-            "CallCoverage::union: operands must be claims about the same proposal's calls"
+            "Coverage::union: operands must be claims about the same proposal's calls"
         );
         let calls = self
             .calls
@@ -259,7 +168,7 @@ impl CallCoverage {
         debug_assert_eq!(
             self.calls.len(),
             required.calls.len(),
-            "CallCoverage::contains: operands must be claims about the same proposal's calls"
+            "Coverage::contains: operands must be claims about the same proposal's calls"
         );
         self.calls
             .iter()
@@ -274,7 +183,7 @@ impl CallCoverage {
         debug_assert_eq!(
             self.calls.len(),
             required.calls.len(),
-            "CallCoverage::missing: operands must be claims about the same proposal's calls"
+            "Coverage::missing: operands must be claims about the same proposal's calls"
         );
         let calls = self
             .calls
@@ -321,7 +230,7 @@ impl CallCoverage {
     }
 }
 
-impl fmt::Display for CallCoverage {
+impl fmt::Display for Coverage {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let mut parts = self
             .calls
@@ -353,7 +262,7 @@ mod tests {
 
     fn proposal(calls: Vec<MetaTransaction>, gas_price: U256) -> Proposal {
         Proposal {
-            transaction: SafeTransaction {
+            transaction: crate::engine::SafeTransaction {
                 gas_price,
                 ..Default::default()
             },
@@ -434,72 +343,72 @@ mod tests {
 
     #[test]
     fn calls_claims_the_same_aspects_for_every_index() {
-        let coverage = CallCoverage::calls(3, AspectSet::TO | AspectSet::DATA);
-        let required = CallCoverage::calls(3, AspectSet::TO | AspectSet::DATA);
+        let coverage = Coverage::calls(3, AspectSet::TO | AspectSet::DATA);
+        let required = Coverage::calls(3, AspectSet::TO | AspectSet::DATA);
         assert!(coverage.contains(&required));
     }
 
     #[test]
     fn refund_claims_only_the_refund_leg() {
-        let coverage = CallCoverage::refund(1);
-        assert!(coverage.contains(&CallCoverage::refund(1)));
-        assert!(!coverage.contains(&CallCoverage::calls(1, AspectSet::TO)));
+        let coverage = Coverage::refund(1);
+        assert!(coverage.contains(&Coverage::refund(1)));
+        assert!(!coverage.contains(&Coverage::calls(1, AspectSet::TO)));
     }
 
     #[test]
     fn union_combines_partial_per_call_claims() {
-        let first = CallCoverage::calls(2, AspectSet::TO | AspectSet::OPERATION);
-        let second = CallCoverage::calls(2, AspectSet::VALUE | AspectSet::DATA);
+        let first = Coverage::calls(2, AspectSet::TO | AspectSet::OPERATION);
+        let second = Coverage::calls(2, AspectSet::VALUE | AspectSet::DATA);
         let combined = first.union(second);
-        assert!(combined.contains(&CallCoverage::calls(2, AspectSet::all())));
+        assert!(combined.contains(&Coverage::calls(2, AspectSet::all())));
     }
 
     #[test]
     fn union_of_a_refund_claim_and_a_calls_claim_keeps_both() {
-        let calls_claim = CallCoverage::calls(1, AspectSet::all());
-        let refund_claim = CallCoverage::refund(1);
+        let calls_claim = Coverage::calls(1, AspectSet::all());
+        let refund_claim = Coverage::refund(1);
         let combined = calls_claim.union(refund_claim);
 
-        let required = CallCoverage::calls(1, AspectSet::all()).union(CallCoverage::refund(1));
+        let required = Coverage::calls(1, AspectSet::all()).union(Coverage::refund(1));
         assert!(combined.contains(&required));
     }
 
     #[test]
-    #[should_panic(expected = "CallCoverage::union")]
+    #[should_panic(expected = "Coverage::union")]
     fn union_panics_on_claims_about_different_numbers_of_calls() {
         // Two claims widened to different call counts can't be about the
         // same proposal — combining them would either drop one side's
         // claim or fabricate coverage for calls it never examined.
-        let _ = CallCoverage::calls(1, AspectSet::TO).union(CallCoverage::calls(3, AspectSet::TO));
+        let _ = Coverage::calls(1, AspectSet::TO).union(Coverage::calls(3, AspectSet::TO));
     }
 
     #[test]
     fn contains_requires_every_required_call_index_and_the_refund_leg() {
-        let covered = CallCoverage::calls(2, AspectSet::TO).union(CallCoverage::refund(2));
-        assert!(covered.contains(&CallCoverage::calls(2, AspectSet::TO)));
-        assert!(covered.contains(&CallCoverage::refund(2)));
-        assert!(!covered.contains(&CallCoverage::calls(2, AspectSet::DATA)));
+        let covered = Coverage::calls(2, AspectSet::TO).union(Coverage::refund(2));
+        assert!(covered.contains(&Coverage::calls(2, AspectSet::TO)));
+        assert!(covered.contains(&Coverage::refund(2)));
+        assert!(!covered.contains(&Coverage::calls(2, AspectSet::DATA)));
     }
 
     #[test]
     fn missing_is_per_call_and_includes_the_refund_leg() {
-        let covered = CallCoverage::calls(2, AspectSet::TO);
-        let required = CallCoverage::calls(2, AspectSet::all()).union(CallCoverage::refund(2));
+        let covered = Coverage::calls(2, AspectSet::TO);
+        let required = Coverage::calls(2, AspectSet::all()).union(Coverage::refund(2));
 
         let missing = covered.missing(&required);
-        assert!(missing.contains(&CallCoverage::calls(
+        assert!(missing.contains(&Coverage::calls(
             2,
             AspectSet::VALUE | AspectSet::DATA | AspectSet::OPERATION
         )));
-        assert!(missing.contains(&CallCoverage::refund(2)));
+        assert!(missing.contains(&Coverage::refund(2)));
     }
 
     #[test]
     fn missing_is_empty_when_fully_covered() {
-        let required = CallCoverage::calls(2, AspectSet::all()).union(CallCoverage::refund(2));
+        let required = Coverage::calls(2, AspectSet::all()).union(Coverage::refund(2));
         let missing = required.missing(&required);
-        assert!(!missing.contains(&CallCoverage::calls(2, AspectSet::TO)));
-        assert!(!missing.contains(&CallCoverage::refund(2)));
+        assert!(!missing.contains(&Coverage::calls(2, AspectSet::TO)));
+        assert!(!missing.contains(&Coverage::refund(2)));
     }
 
     #[test]
@@ -512,8 +421,8 @@ mod tests {
             U256::ZERO,
         );
 
-        let required = CallCoverage::required_for(&batch);
-        let expected = CallCoverage {
+        let required = Coverage::required_for(&batch);
+        let expected = Coverage {
             calls: vec![AspectSet::all(), AspectSet::TO | AspectSet::OPERATION],
             refund: false,
         };
@@ -523,15 +432,15 @@ mod tests {
     #[test]
     fn required_for_requires_the_refund_leg_only_when_gas_price_is_nonzero() {
         let unrelayed = proposal(vec![MetaTransaction::default()], U256::ZERO);
-        assert!(!CallCoverage::required_for(&unrelayed).refund);
+        assert!(!Coverage::required_for(&unrelayed).refund);
 
         let relayed = proposal(vec![MetaTransaction::default()], U256::from(1u64));
-        assert!(CallCoverage::required_for(&relayed).refund);
+        assert!(Coverage::required_for(&relayed).refund);
     }
 
     #[test]
     fn labels_yields_each_aspect_kind_at_most_once_across_calls_plus_refund() {
-        let coverage = CallCoverage::calls(2, AspectSet::TO).union(CallCoverage::refund(2));
+        let coverage = Coverage::calls(2, AspectSet::TO).union(Coverage::refund(2));
         assert_eq!(
             coverage
                 .labels()
@@ -544,7 +453,7 @@ mod tests {
     #[test]
     fn all_labels_covers_every_aspect_including_refund() {
         assert_eq!(
-            CallCoverage::all_labels()
+            Coverage::all_labels()
                 .map(CoverageLabel::as_str)
                 .collect::<Vec<_>>(),
             vec!["to", "value", "data", "operation", "refund"]
@@ -553,7 +462,7 @@ mod tests {
 
     #[test]
     fn display_names_only_non_empty_calls_and_the_refund_leg() {
-        let coverage = CallCoverage {
+        let coverage = Coverage {
             calls: vec![
                 AspectSet::TO | AspectSet::OPERATION,
                 AspectSet::empty(),
@@ -561,7 +470,7 @@ mod tests {
             ],
             refund: false,
         }
-        .union(CallCoverage::refund(3));
+        .union(Coverage::refund(3));
 
         assert_eq!(coverage.to_string(), "call0:to|operation,call2:data,refund");
     }

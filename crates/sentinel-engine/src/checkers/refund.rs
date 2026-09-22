@@ -13,7 +13,7 @@
 //! A genuine prior interaction with `refundReceiver` is evidence about the
 //! refund leg alone, never the transaction's primary effect, so
 //! [`RefundChecker::check`] reinterprets a delegated [`Assessment::Secure`]
-//! as claiming only [`crate::engine::CallCoverage::refund`] — the engine
+//! as claiming only [`crate::engine::Coverage::refund`] — the engine
 //! still needs another check to cover the rest of the transaction before it
 //! can answer `Secure` overall.
 
@@ -51,7 +51,7 @@ impl Checker for RefundChecker {
     /// none of its own. Abstains outright when there's no refund to
     /// resynthesize (see [`refund_transfer`]). A delegated `Secure` is
     /// reinterpreted as covering only
-    /// [`crate::engine::CallCoverage::refund`] — the recipient's prior
+    /// [`crate::engine::Coverage::refund`] — the recipient's prior
     /// history says nothing about the rest of the transaction.
     async fn check(&self, proposal: &Proposal, context: &CheckContext) -> Assessment {
         let Some(refund_call) = refund_transfer(&proposal.transaction) else {

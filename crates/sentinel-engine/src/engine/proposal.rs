@@ -7,7 +7,7 @@
 //! MultiSend contract, or a delegatecall to something else, stays one
 //! opaque call.
 
-use super::{AspectSet, CallCoverage, MetaTransaction, Operation, SafeTransaction};
+use super::{AspectSet, Coverage, MetaTransaction, Operation, SafeTransaction};
 use crate::contracts::multi_send::decode_multi_send_call;
 use alloy::primitives::Address;
 
@@ -39,18 +39,18 @@ pub struct Proposal {
 #[allow(dead_code)]
 impl Proposal {
     /// Claims `aspects` for every one of this proposal's calls, uniformly —
-    /// shorthand for the common case of [`CallCoverage::calls`] sized to
+    /// shorthand for the common case of [`Coverage::calls`] sized to
     /// `self.calls.len()`. Only right for a check that examines every call
     /// the same way and only ever affirms once all of them pass; see
-    /// [`CallCoverage::calls`]'s own docs for when it isn't.
-    pub fn checked(&self, aspects: AspectSet) -> CallCoverage {
-        CallCoverage::calls(self.calls.len(), aspects)
+    /// [`Coverage::calls`]'s own docs for when it isn't.
+    pub fn checked(&self, aspects: AspectSet) -> Coverage {
+        Coverage::calls(self.calls.len(), aspects)
     }
 
     /// Claims only this proposal's own refund leg — shorthand for
-    /// [`CallCoverage::refund`] sized to `self.calls.len()`.
-    pub fn refund_checked(&self) -> CallCoverage {
-        CallCoverage::refund(self.calls.len())
+    /// [`Coverage::refund`] sized to `self.calls.len()`.
+    pub fn refund_checked(&self) -> Coverage {
+        Coverage::refund(self.calls.len())
     }
 }
 

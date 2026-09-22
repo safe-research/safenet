@@ -50,7 +50,7 @@ use crate::{
         erc20::approveCall,
         staking::{claimCall, stakeCall},
     },
-    engine::{AspectSet, CallCoverage, CheckContext, MetaTransaction, Operation, Proposal, RuleId},
+    engine::{AspectSet, CheckContext, Coverage, MetaTransaction, Operation, Proposal, RuleId},
 };
 use alloy::{
     primitives::{Address, U256, address},
@@ -117,7 +117,7 @@ impl Checker for StakingChecker {
         let total_calls = proposal.calls.len();
         match remaining.as_slice() {
             [] if claimed => Assessment::Secure {
-                coverage: CallCoverage::calls(total_calls, AspectSet::DATA),
+                coverage: Coverage::calls(total_calls, AspectSet::DATA),
             },
             [] => Assessment::Abstain,
             [call] => check_lone_call(total_calls, call),
@@ -140,7 +140,7 @@ impl Checker for StakingChecker {
 fn check_lone_call(total_calls: usize, call: &MetaTransaction) -> Assessment {
     if stake_amount(call).is_some() {
         return Assessment::Secure {
-            coverage: CallCoverage::calls(total_calls, AspectSet::DATA),
+            coverage: Coverage::calls(total_calls, AspectSet::DATA),
         };
     }
     Assessment::Abstain
@@ -165,7 +165,7 @@ fn check_pair(total_calls: usize, first: &MetaTransaction, second: &MetaTransact
             }
         } else {
             Assessment::Secure {
-                coverage: CallCoverage::calls(total_calls, AspectSet::DATA),
+                coverage: Coverage::calls(total_calls, AspectSet::DATA),
             }
         };
     }

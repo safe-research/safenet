@@ -17,7 +17,7 @@ use self::proposal::ParseError;
 #[cfg(test)]
 pub(crate) use self::proposal::parse;
 pub use self::{
-    coverage::{AspectSet, CallCoverage, CoverageLabel},
+    coverage::{AspectSet, Coverage, CoverageLabel},
     proposal::Proposal,
     rule::RuleId,
     transaction::{MetaTransaction, Operation, SafeTransaction},
@@ -75,7 +75,7 @@ impl SentinelEngine {
     /// Any `Insecure` assessment is the engine's verdict — denials are never
     /// masked by an affirmation, and the first denial short-circuits the
     /// run. Otherwise, the engine answers `Secure` only once the union of
-    /// every affirming check's claimed [`CallCoverage`] covers every call
+    /// every affirming check's claimed [`Coverage`] covers every call
     /// the proposal actually has, and `Abstain` otherwise.
     pub async fn security_check(
         &self,
@@ -90,7 +90,7 @@ impl SentinelEngine {
             }
         };
 
-        let mut covered = CallCoverage::none(proposal.calls.len());
+        let mut covered = Coverage::none(proposal.calls.len());
         for checker in &self.0 {
             let assessment = checker.check(&proposal, &context).await;
             tracing::trace!(checker = checker.name(), ?assessment, "checker assessment");
@@ -105,7 +105,7 @@ impl SentinelEngine {
             }
         }
 
-        let required = CallCoverage::required_for(&proposal);
+        let required = Coverage::required_for(&proposal);
         let verdict = if covered.contains(&required) {
             Verdict::Secure
         } else {
@@ -165,7 +165,7 @@ mod tests {
     async fn a_denial_dominates_a_preceding_secure() {
         let engine = SentinelEngine::new(vec![
             Box::new(StubChecker(Assessment::Secure {
-                coverage: CallCoverage::calls(1, AspectSet::all()).union(CallCoverage::refund(1)),
+                coverage: Coverage::calls(1, AspectSet::all()).union(Coverage::refund(1)),
             })),
             Box::new(StubChecker(Assessment::Insecure {
                 rule: RuleId::R4_3ValueTarget,
@@ -186,11 +186,11 @@ mod tests {
     async fn two_partial_claims_compose_to_secure() {
         let engine = SentinelEngine::new(vec![
             Box::new(StubChecker(Assessment::Secure {
-                coverage: CallCoverage::calls(1, AspectSet::TO | AspectSet::OPERATION),
+                coverage: Coverage::calls(1, AspectSet::TO | AspectSet::OPERATION),
             })),
             Box::new(StubChecker(Assessment::Secure {
-                coverage: CallCoverage::calls(1, AspectSet::VALUE | AspectSet::DATA)
-                    .union(CallCoverage::refund(1)),
+                coverage: Coverage::calls(1, AspectSet::VALUE | AspectSet::DATA)
+                    .union(Coverage::refund(1)),
             })),
         ]);
 
@@ -362,7 +362,7 @@ mod tests {
     #[tokio::test]
     async fn one_partial_claim_abstains() {
         let engine = SentinelEngine::new(vec![Box::new(StubChecker(Assessment::Secure {
-            coverage: CallCoverage::calls(1, AspectSet::TO | AspectSet::OPERATION),
+            coverage: Coverage::calls(1, AspectSet::TO | AspectSet::OPERATION),
         }))]);
 
         assert_eq!(

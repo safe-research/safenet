@@ -234,7 +234,7 @@ fn check_delegate_calls(call: &MetaTransaction) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::engine::{CallCoverage, SafeTransaction};
+    use crate::engine::{Coverage, SafeTransaction};
     use alloy::primitives::{Address, Bytes, U256, address};
 
     /// Checks a single call's four action fields against the base
@@ -315,7 +315,7 @@ mod tests {
                 .check(&Proposal::from(transaction), &CheckContext::default())
                 .await,
             Assessment::Secure {
-                coverage: CallCoverage::calls(1, AspectSet::TO | AspectSet::OPERATION),
+                coverage: Coverage::calls(1, AspectSet::TO | AspectSet::OPERATION),
             }
         );
     }

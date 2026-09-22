@@ -18,7 +18,7 @@ pub use self::{
     staking::StakingChecker,
 };
 
-use crate::engine::{CallCoverage, CheckContext, Proposal, RuleId};
+use crate::engine::{CheckContext, Coverage, Proposal, RuleId};
 use std::sync::Arc;
 
 /// What a single check concluded. Distinct from [`crate::engine::Verdict`],
@@ -35,7 +35,7 @@ pub enum Assessment {
     /// those aspects — no more.
     Secure {
         /// The calls (and/or refund leg) this check vouches for.
-        coverage: CallCoverage,
+        coverage: Coverage,
     },
     /// No opinion.
     Abstain,
