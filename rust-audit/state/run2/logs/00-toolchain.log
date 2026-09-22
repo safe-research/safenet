@@ -1,4 +1,4 @@
-# Toolchain probe, 2026-09-15T10:29:10Z, host lima-default, PATH prefixed with ~/.foundry/bin:~/.cargo/bin
+# Toolchain probe, host lima-default, PATH prefixed with ~/.foundry/bin:~/.cargo/bin
 
 $ cargo --version
 cargo 1.98.1 (797e8a9bc 2026-08-05)

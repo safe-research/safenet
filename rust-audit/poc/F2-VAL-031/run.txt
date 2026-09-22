@@ -1,0 +1,28 @@
+# QA2-VAL-B PoC for F2-VAL-031 mechanism sub-claims (temporary; reverted after run).
+# commit under test: 92a0610953c80a1308ef651c44a836e4f2c99267  (crates/ identical to audited 3ec8bc5)
+# Sub-claim (a): NonceGenerator::next on an UNSTARTED group -> Error::Unavailable
+#   is asserted by the crate's OWN existing test (no edit needed):
+#   secrets::nonces::tests::group_nonce_generation (first assertion). Re-run below.
+# Sub-claim (b): the below-marker reconciliation is rejected (Ok(false)) BEFORE
+#   generator.start -- store_below_marker_test_fn.rs, appended to store.rs test mod.
+# The end-to-end restart/warp stall (finding Trigger steps 1-4) is NOT attempted:
+#   it needs the core Driver + block index replaying an Uncle/Warp, which cannot be
+#   driven from an in-process unit test. Certainty kept at the E2 band (not raised).
+
+$ cargo test -p validator --bins secrets::store::tests::f2_val_031_below_marker -- --exact
+     Running unittests src/main.rs (/home/shebin.guest/.cache/safenet-run2/target/debug/deps/validator-3a1b46af57fe89be)
+
+running 1 test
+test secrets::store::tests::f2_val_031_below_marker_reconciliation_rejected_before_generator_start ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 46 filtered out; finished in 0.00s
+
+
+$ cargo test -p validator --bins secrets::nonces::tests::group_nonce_generation -- --exact
+     Running unittests src/main.rs (/home/shebin.guest/.cache/safenet-run2/target/debug/deps/validator-3a1b46af57fe89be)
+
+running 1 test
+test secrets::nonces::tests::group_nonce_generation ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 46 filtered out; finished in 0.00s
+

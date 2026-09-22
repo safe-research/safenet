@@ -351,3 +351,7 @@ Certainty **45% → 55%**, severity **Low** unchanged. Status left as it was: th
 ## In-flight impact (AS-PRUNE)
 
 **Pertains to unmerged branches, not to `main`.** Assessed against the Scheduled Secret Pruning stack (`origin/prune/end`, PRs #906–#913), built from a `git archive` extraction; no branch was merged or checked out. **Effect: unchanged.** Collection adds one more database writer per block, awaited inline in the driver loop (`crates/core/src/driver.rs:292-294`) with an unbounded cascade delete. Under a backlog that could stall block processing and hold the SQLite writer lock; this was not measured.
+
+## Reconciliation (run 2)
+
+**Final combined status: Low, 55 %, Plausible — run-2 miss, still valid at `fe9e84c`.** `frost/preprocess.rs:19,124` (`into_par_iter`) and `store.rs:216-235` unchanged; the pruning series adds `prune_scheduled_secrets` awaited inline in the driver loop (`driver.rs:292-294`), as the AS-PRUNE note predicted. Duration still unmeasured. See `state/run2/reconciliation/validator.md` (Section 2).

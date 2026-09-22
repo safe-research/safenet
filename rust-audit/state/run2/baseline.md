@@ -4,7 +4,6 @@
 | --- | --- |
 | Commit | `3ec8bc57dc35d1e9e65075ae9424bff427c47833` — merge of `origin/main` (`5cc096e`) into `audit/rust-services`; parents `57044af`, `5cc096e` |
 | Branch | `audit/rust-services` |
-| Date | 2026-09-15 (toolchain probe 10:29 UTC; build 10:34–10:36 UTC; clippy finished 10:47 UTC) |
 | Mode | **full** — toolchain present, all five baseline commands executed |
 | Scope | `crates/core`, `crates/validator`, `crates/sentinel`, `Cargo.toml`, `Cargo.lock`, those three crates' `Cargo.toml`, `Dockerfile` and `*.sample.toml`. `crates/sentinel-engine` is excluded (PROMPT.md Section 11). |
 | Logs | `rust-audit/state/run2/logs/`: `00-toolchain.log`, `01-build.log`, `02-test.log`, `03-clippy.log`, `04-audit.log`, `05-tree-d.log`, `06-inventory.txt`, `07-drift.txt`, `08-future-incompat.log` |
@@ -96,7 +95,7 @@ Reachability and impact are **not assessed here**; that is reviewer R10's task. 
 | `chacha20` | 0.10.0 | — | warning: yanked | — | — |
 | `spin` | 0.9.8 | — | warning: yanked | — | — |
 
-The advisory set is date-dependent: RUSTSEC-2026-0285 (`rustls`) is dated 2026-09-14, the day before this run. `cargo audit` is not part of CI (`codebase-map.md` Section 3), so none of this is gated upstream.
+The advisory set is date-dependent: RUSTSEC-2026-0285 (`rustls`) is dated 2026-09-14. `cargo audit` is not part of CI (`codebase-map.md` Section 3), so none of this is gated upstream.
 
 ### 2.3 `cargo tree -d --workspace` (`logs/05-tree-d.log`, 947 lines)
 

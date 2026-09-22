@@ -1,6 +1,5 @@
 # cmd: cargo audit
 # commit: 4ac68383b636eb5409cf77c69bbd83bd651bdf3c
-# start: 2026-09-15T10:46:25Z
 # cargo-audit: cargo-audit-audit 0.22.2
     Fetching advisory database from `https://github.com/RustSec/advisory-db.git`
       Loaded 1246 security advisories (from /home/shebin.guest/.cargo/advisory-db)
@@ -122,5 +121,4 @@ Warning:   yanked
 
 error: 5 vulnerabilities found!
 warning: 11 allowed warnings found
-# end: 2026-09-15T10:46:30Z
 # exit=1

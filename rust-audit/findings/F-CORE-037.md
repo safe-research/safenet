@@ -102,3 +102,7 @@ Option 4 (document next to the existing "ensure this survives restarts" guidance
 ## Scope note (run 2)
 
 `crates/sentinel-engine` was placed out of scope after this finding was written (PROMPT.md Section 11); the engine-specific parts above are retained as run-1 history and are not part of the current audit's claims. The non-engine parts stand.
+
+## Reconciliation (run 2)
+
+**Final: Confirmed, Low, 62 (E2), canonical — examined by run 2, partly rediscovered.** Run 2's R2 O10 records the same unversioned-snapshot property and did not file it because `F2-CORE-066` (= `F-CORE-065`) already asks for a schema version; `F2-CORE-066`'s Critic names the snapshot store explicitly as the same class. Still valid at `fe9e84c` (`state/storage.rs:47-79` unchanged). A17: the binary downgrade is in-band, in scope. Counterpart (version half): `F2-CORE-066` (`state/run2/reconciliation/core.md` §2).

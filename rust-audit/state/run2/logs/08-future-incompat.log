@@ -1,6 +1,5 @@
 # cmd: cargo report future-incompatibilities --id 1
 # commit: 4ac68383b636eb5409cf77c69bbd83bd651bdf3c
-# start: 2026-09-15T10:47:36Z
 The following warnings were discovered during the build. These warnings are an
 indication that the packages contain code that will become an error in a
 future release of Rust. These warnings typically cover changes to close

@@ -55,3 +55,20 @@ Interrupting mid-phase (Escape) kills running subagents. Their finished finding 
 ## After the run
 
 Findings are proposals. The team triages `report/REPORT.md`, verifies the Evidence / Inference / Hallucination trail of anything it intends to act on, and applies fixes through normal pull requests. Nothing in this folder needs to be kept in the repository once the team has what it needs; if it is kept, `just check` formats Markdown with Prettier, so run `just fix` before committing.
+
+## Run 2 (independent second opinion)
+
+PROMPT.md Section 11 defines a second, independent run over the same crates with `crates/sentinel-engine` out of scope and two extra assumptions (A16 genesis need not be recoverable, A17 only the services touch their databases). Its layout:
+
+| Path | Contents |
+| --- | --- |
+| `state/run2/STATE.md` | Run-2 state and resume point (gates, agents, tally, Manager log). |
+| `state/run2/*-brief.md` | What each role was told (reviewer, critic, QA, reconciliation, report). |
+| `state/run2/baseline.md`, `baseline-delta.md` | Executed baseline at the audited commit and at the later merge of `main`. |
+| `state/run2/coverage.md`, `state/run2/agents/` | Per-file coverage matrix and the reviewers' logs with rejected hypotheses. |
+| `state/run2/reconciliation/` | Per-crate mapping of run-2 findings to run 1 (inputs to `report/RECONCILIATION.md`). |
+| `findings/F2-*.md` | Run-2 findings with reviewer, Critic, QA and reconciliation sections. |
+| `poc/F2-*/` | Run-2 proofs of concept with verbatim output. |
+| `report/RECONCILIATION.md` | The combined ledger of both runs — the single source for every number in `report/REPORT.md`. |
+
+Run-2 agents did not read run-1 findings, report or state; the reconciliation phase is the first place both runs meet.

@@ -91,3 +91,7 @@ The merge shifts `contracts/src/FROSTCoordinator.sol` by two documentation-only 
 | `FROSTCoordinator.sol:554-558` (basis row 3, `signRevealNonces` does not deduplicate) | **`:560-564`** |
 
 `signRevealNonces` is byte-identical and still has no "already revealed" guard.
+
+## Reconciliation (run 2)
+
+**Final combined status: Low, 88 %, Confirmed — canonical.** Counterpart `F2-VAL-033` (CONFIRMS, E1 88 %): same `state/sign.rs:284` overwrite, same contract non-deduplication. See `state/run2/reconciliation/validator.md` (Section 1).

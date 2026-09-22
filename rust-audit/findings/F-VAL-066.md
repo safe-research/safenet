@@ -194,3 +194,7 @@ Pure Rust, in code the merge does not touch: `ReconcileGroupSecrets` at `service
 ## In-flight impact (AS-PRUNE)
 
 **Pertains to unmerged branches, not to `main`.** Assessed against the Scheduled Secret Pruning stack (`origin/prune/end`, PRs #906–#913), built from a `git archive` extraction; no branch was merged or checked out. **Effect: changed shape.** The unqualified pre-genesis `DELETE FROM` is gone; absent groups are now scheduled with `COALESCE(delete_after, block)` (`store.rs:388,397`) and collected later (`store.rs:359,364`). But the retention set is still computed before the block's logs, and the same-block race still deletes the row when `max_reorg_depth` is 0 or 1 (branch unit flow C: depths 0 and 1 lose the secrets, 2 and 5 keep them). Filed as `F-VAL-068` D3.
+
+## Reconciliation (run 2)
+
+**Final combined status: Medium, 78 %, Confirmed — canonical; changed shape by the merge.** The unqualified pre-genesis `DELETE` is gone (#909: `schedule_absent_groups`, `store.rs:381-411`, only sets `delete_at_block`). The root cause survives — retention set computed before the block's logs, no ordering between the spawned reconciliation (`driver.rs:278`) and the inline prune (`driver.rs:292-294`) — and is restated with executed evidence by `F2-VAL-035` (EXTENDS; E1, secret lost 19/20 rounds after a restart) and by `F-VAL-068` D3 at depth 0–1. See `state/run2/reconciliation/validator.md` (Sections 1, 4).

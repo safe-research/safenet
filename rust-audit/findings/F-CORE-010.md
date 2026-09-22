@@ -86,3 +86,7 @@ Option 3 (validate before committing the rewind) is the cleanest design and also
 Option 4 (a driver escalation path for errors that repeat unchanged on the same step) is the same change as F-CORE-004 option 3 and F-CORE-034 option 2, and would bound this whole class as a side effect. That is the strongest argument for prioritising the escalation path over any individual loop fix.
 
 No option touches the state machine or effects; the `core::state` contract is unaffected.
+
+## Reconciliation (run 2)
+
+**Final: Plausible, Low, 45 (E2, no trigger), canonical — not rediscovered; independently corroborated.** Run 2's R1 rejected hypothesis 2 (`UnexpectedBlockInvalidation` unreachable: `rposition` selects the block the event watcher is fetching) reaches the same "no trigger" conclusion this file's Critic recorded. Still valid as a shape-of-code note at `fe9e84c` (`index/mod.rs:106-130`, `blocks.rs:483-535` unchanged). The report may list it under observations (`state/run2/reconciliation/core.md` §2).

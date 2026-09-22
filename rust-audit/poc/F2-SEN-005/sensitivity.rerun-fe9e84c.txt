@@ -1,0 +1,63 @@
+QA2-SEN-Δ sensitivity record for F2-SEN-005 at audited commit fe9e84c (PR #914), rustc/cargo 1.98.1.
+Command (each pass): cargo test -p sentinel --bins qa2_sen::f2_sen_005 -- --nocapture --test-threads=1
+
+Why: the verbatim PoC model (poc/F2-SEN-005/poc.rs) enqueues each Reveal at observed block p + CW + 1, which was the tree's
+emission point at 3ec8bc5 (`NewBlock(commit_deadline + 1)`). At fe9e84c `handle_block_advance` emits the Reveal at
+`NewBlock(commit_deadline)` = p + CW (service.rs:423 `block < *commit_deadline`). The verbatim PoC therefore still fails with the
+3ec8bc5 numbers (poc/F2-SEN-005/output.rerun-fe9e84c.txt) but no longer models the tree. The passes below change ONE model line
+and nothing in the tally or in the assertion:
+
+-                if let Some(p) = b.checked_sub(cw + 1)
++                if let Some(p) = b.checked_sub(cw)
+
+Everything else is the PoC's stated block budget: default cap 16 in flight, every submitted row mined in the next block, engine
+latency zero, `expires_at` = commit_deadline for ApproveToken/Commit and reveal_deadline for Reveal, 30 flood blocks.
+
+=== Pass 1: CW = RW = 10, rates 5/8/10/12 (the original grid) — the assertion now PASSES (zero slashable at every rate) ===
+
+test service::tests::qa2_sen::f2_sen_005_reveal_starvation_under_proposal_flood ... [F2-SEN-005 Δ reveal@p+CW] rate=5/block x 30 blocks (CW=10, RW=10, cap=16, all mined next block): proposals=150 commits submitted=150 commits dropped=0 reveals submitted=150 reveals DROPPED after a submitted commit (slashable)=0 first slashable proposal block=None
+[F2-SEN-005 Δ reveal@p+CW] rate=8/block x 30 blocks (CW=10, RW=10, cap=16, all mined next block): proposals=240 commits submitted=232 commits dropped=8 reveals submitted=240 reveals DROPPED after a submitted commit (slashable)=0 first slashable proposal block=None
+[F2-SEN-005 Δ reveal@p+CW] rate=10/block x 30 blocks (CW=10, RW=10, cap=16, all mined next block): proposals=300 commits submitted=212 commits dropped=88 reveals submitted=300 reveals DROPPED after a submitted commit (slashable)=0 first slashable proposal block=None
+[F2-SEN-005 Δ reveal@p+CW] rate=12/block x 30 blocks (CW=10, RW=10, cap=16, all mined next block): proposals=360 commits submitted=192 commits dropped=168 reveals submitted=360 reveals DROPPED after a submitted commit (slashable)=0 first slashable proposal block=None
+ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 55 filtered out; finished in 2.46s
+
+=== Pass 2: RW = CW - 1 = 9 (rates 8/10/12) and RW = CW + 1 = 11 (rates 10/12) — the loop was rewritten as `for (rate, rw) in [...]`, label extended ===
+
+test service::tests::qa2_sen::f2_sen_005_reveal_starvation_under_proposal_flood ... [F2-SEN-005 Δ reveal@p+CW, RW≠CW] rate=8/block x 30 blocks (CW=10, RW=9, cap=16, all mined next block): proposals=240 commits submitted=240 commits dropped=0 reveals submitted=216 reveals DROPPED after a submitted commit (slashable)=24 first slashable proposal block=Some(19)
+[F2-SEN-005 Δ reveal@p+CW, RW≠CW] rate=10/block x 30 blocks (CW=10, RW=9, cap=16, all mined next block): proposals=300 commits submitted=274 commits dropped=26 reveals submitted=166 reveals DROPPED after a submitted commit (slashable)=126 first slashable proposal block=Some(8)
+[F2-SEN-005 Δ reveal@p+CW, RW≠CW] rate=12/block x 30 blocks (CW=10, RW=9, cap=16, all mined next block): proposals=360 commits submitted=292 commits dropped=68 reveals submitted=148 reveals DROPPED after a submitted commit (slashable)=180 first slashable proposal block=Some(4)
+[F2-SEN-005 Δ reveal@p+CW, RW≠CW] rate=10/block x 30 blocks (CW=10, RW=11, cap=16, all mined next block): proposals=300 commits submitted=212 commits dropped=88 reveals submitted=300 reveals DROPPED after a submitted commit (slashable)=0 first slashable proposal block=None
+[F2-SEN-005 Δ reveal@p+CW, RW≠CW] rate=12/block x 30 blocks (CW=10, RW=11, cap=16, all mined next block): proposals=360 commits submitted=192 commits dropped=168 reveals submitted=360 reveals DROPPED after a submitted commit (slashable)=0 first slashable proposal block=None
+
+thread 'service::tests::qa2_sen::f2_sen_005_reveal_starvation_under_proposal_flood' (11770) panicked at crates/sentinel/src/service.rs:3070:13:
+assertion `left == right` failed: F2-SEN-005 (ii) reproduced: 330 commitments across the modelled rates were submitted while their Reveal expired unsubmitted behind the FIFO backlog
+  left: 330
+ right: 0
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+FAILED
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 55 filtered out; finished in 3.43s
+
+=== Pass 3: CW = RW = 10, rates 16/17/20 (the finding's written trigger (ii): "more than 16 proposals per block") ===
+
+test service::tests::qa2_sen::f2_sen_005_reveal_starvation_under_proposal_flood ... [F2-SEN-005 Δ reveal@p+CW, R≥16] rate=16/block x 30 blocks (CW=10, RW=10, cap=16, all mined next block): proposals=480 commits submitted=152 commits dropped=328 reveals submitted=480 reveals DROPPED after a submitted commit (slashable)=0 first slashable proposal block=None
+[F2-SEN-005 Δ reveal@p+CW, R≥16] rate=17/block x 30 blocks (CW=10, RW=10, cap=16, all mined next block): proposals=510 commits submitted=152 commits dropped=358 reveals submitted=480 reveals DROPPED after a submitted commit (slashable)=8 first slashable proposal block=Some(1)
+[F2-SEN-005 Δ reveal@p+CW, R≥16] rate=20/block x 30 blocks (CW=10, RW=10, cap=16, all mined next block): proposals=600 commits submitted=152 commits dropped=448 reveals submitted=480 reveals DROPPED after a submitted commit (slashable)=24 first slashable proposal block=Some(1)
+
+thread 'service::tests::qa2_sen::f2_sen_005_reveal_starvation_under_proposal_flood' (15270) panicked at crates/sentinel/src/service.rs:3069:13:
+assertion `left == right` failed: F2-SEN-005 (ii) reproduced: 32 commitments across the modelled rates were submitted while their Reveal expired unsubmitted behind the FIFO backlog
+  left: 32
+ right: 0
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+FAILED
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 55 filtered out; finished in 2.74s
+
+Reading: a Reveal enqueued at observed block b = p + CW expires at b + RW; the youngest Commit queued ahead of it (block b - 1)
+expires at b - 1 + CW. In a strict FIFO the Reveal outlives everything ahead of it iff RW >= CW (at 3ec8bc5, with insertion at
+p + CW + 1: iff RW > CW). PR #914 moves that knife-edge by exactly one block; the margin is one block and holds only while every
+in-flight row is mined in the next block and R <= 16 (all R reveals of one block must be submitted on the single block on which
+they are the oldest eligible rows). Deployment samples: contracts/.env.testnet.sample CW=2/RW=3, scripts/run_devnet.sh CW=5/RW=5;
+production windows are governance-set constructor parameters (SentinelOracle.sol:205-206) not known here.

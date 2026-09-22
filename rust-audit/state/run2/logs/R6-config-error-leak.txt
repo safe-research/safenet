@@ -1,0 +1,32 @@
+# R6 executed evidence: config parse errors print the config document (signer key included) on stderr
+# commit 3ec8bc5; binary: $CARGO_TARGET_DIR/debug/validator (cargo build -p validator --bins --offline)
+# rpc in both configs is loopback http://127.0.0.1:1 (never contacted: Config::load fails first); signer is the public Anvil test key #0
+
+## case 0: the documented '--config-file=<path>' spelling (validator.sample.toml:4, docs/validator-handbook.md, Dockerfile:35)
+$ validator --config-file=typo.toml; echo "exit=$?"
+Unrecognized argument: --config-file=/tmp/claude-501/-home-shebin-guest-safe-safenet/166c992f-87ea-4548-be85-5fcf1c13bf90/scratchpad/cfg/typo.toml
+
+Run validator --help for more information.
+exit=1
+
+## case 1: misspelled optional key (blocks_per_epoc) with a well-formed signer
+$ validator --config-file typo.toml; echo "exit=$?"
+Error: Parse(Error { message: "unknown field `blocks_per_epoc`, expected one of `consensus`, `staker`, `participants`, `oracles`, `genesis_salt`, `blocks_per_epoch`, `key_gen_timeout`, `signing_timeout`, `oracle_timeout`", input: Some("rpc = \"http://127.0.0.1:1\"\nsigner = \"0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80\"\ndatabase = \"sqlite::memory:\"\n\n[validator]\nconsensus = \"0x1111111111111111111111111111111111111111\"\nblocks_per_epoc = 1440\n"), keys: ["validator"], span: Some(204..219) })
+exit=1
+
+## case 2: signer one hex digit short
+$ validator --config-file badkey.toml; echo "exit=$?"
+Error: Parse(Error { message: "odd number of digits", input: Some("rpc = \"http://127.0.0.1:1\"\nsigner = \"0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff8\"\ndatabase = \"sqlite::memory:\"\n\n[validator]\nconsensus = \"0x1111111111111111111111111111111111111111\"\n"), keys: ["signer"], span: Some(36..103) })
+exit=1
+
+## case 3: --help
+Usage: validator [--config-file <config-file>] [--version]
+
+Safenet validator.
+
+Options:
+  --config-file     path to the validator TOML configuration file.
+  --version         print version information.
+  --help, help      display usage information
+
+exit=0

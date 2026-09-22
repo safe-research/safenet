@@ -1,0 +1,24 @@
+# QA2-VAL-B PoC for F2-VAL-061 (temporary; reverted after run).
+# commit under test: 92a0610953c80a1308ef651c44a836e4f2c99267  (crates/ identical to audited 3ec8bc5)
+# sign_tests_061_module.rs was appended to state/sign.rs, run, then reverted.
+# Executes the ROOT defect: a Coordinator event's emitting address is never
+# consulted (apply_transition passes log.address only to the oracle handler), so
+# an identical Sign delivered 'from' the real coordinator vs an attacker oracle
+# advances the session identically -- any watched contract can inject one. Also
+# scenario (c): a truncated log with a watched topic0 fails Event::decode_log
+# (fatal Error::DecodeLog for the batch -> indexer halt).
+# Scenario (a) (forged KeyGenComplained -> plaintext secret-share reveal action)
+# stays E2: it needs a full participating DKG SharingState + public-key map to
+# construct, not built here; the address-binding gap it relies on is what is
+# executed above.
+
+$ cargo test -p validator --bins qa2_val_b_061
+
+     Running unittests src/main.rs (/home/shebin.guest/.cache/safenet-run2/target/debug/deps/validator-3a1b46af57fe89be)
+
+running 2 tests
+test state::sign::qa2_val_b_061::f2_val_061_coordinator_event_outcome_is_independent_of_emitting_address ... ok
+test state::sign::qa2_val_b_061::f2_val_061_malformed_log_with_watched_topic_fails_to_decode ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 42 filtered out; finished in 0.00s
+

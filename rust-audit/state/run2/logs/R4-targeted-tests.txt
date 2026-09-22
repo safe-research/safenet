@@ -1,0 +1,23 @@
+   Compiling safenet-core v0.2.0 (/home/shebin.guest/safe/safenet/crates/core)
+   Compiling validator v0.2.0 (/home/shebin.guest/safe/safenet/crates/validator)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 6.56s
+warning: the following packages contain code that will be rejected by a future version of Rust: proc-macro-error2 v2.0.1
+note: to see what the problems were, use the option `--future-incompat-report`, or run `cargo report future-incompatibilities --id 1`
+     Running unittests src/main.rs (/home/shebin.guest/.cache/safenet-run2/target/debug/deps/validator-3a1b46af57fe89be)
+
+running 12 tests
+test consensus::epoch::tests::computes_next_epoch_number_from_block ... ok
+test consensus::group::tests::minimum_participation_is_two_thirds_with_a_floor_of_two ... ok
+test consensus::group::tests::minimum_participation_does_not_overflow ... ok
+test consensus::group::tests::thresholds_are_strict_majorities ... ok
+test consensus::group::tests::genesis_group_matches_the_parity_vector ... ok
+test consensus::group::tests::actual_group ... ok
+test frost::ecdh::tests::ecdh_rejects_degenerate_public_keys_at_infinity ... ok
+test frost::participants::tests::identifier_is_deterministic_and_distinct ... ok
+test frost::ecdh::tests::different_recipient_different_ciphertext ... ok
+test frost::ecdh::tests::ecdh_is_commutative ... ok
+test frost::ecdh::tests::roundtrip_encrypt_decrypt ... ok
+test frost::tests::ceremony ... ok
+
+test result: ok. 12 passed; 0 failed; 0 ignored; 0 measured; 30 filtered out; finished in 0.07s
+

@@ -100,3 +100,7 @@ Option 2 (take `message: &[u8]`, matching the only caller) is sound and is argua
 **Option 3 (length-prefix each part) should be rejected, not merely weighed.** The finding notes it "changes derived values" and would need a coordinated change with the sentinel's onchain reveal salt. That is understated: `Signer::reveal_salt` feeds the commitment hash that bonded funds are locked behind (`crates/sentinel/src/service.rs:212-213`), so changing the derivation while any commitment is outstanding would make every affected sentinel's reveal fail `InvalidReveal` and lose `slashAmount` — the F-SEN-015 loss, self-inflicted at fleet scale. If option 3 is ever wanted it needs a migration that drains outstanding commitments first, and that should be written down here so nobody reaches for it as a tidy-up.
 
 Option 4 (replace the `assert!` with a `const`-checked or `Result`-returning API) is sound and independent; a `pub` function that panics on an argument is worth removing regardless of which of 1/2 is chosen.
+
+## Reconciliation (run 2)
+
+**Final: Confirmed, Informational, 85 (E2), canonical — examined by run 2, not filed.** Run 2's R2 rejected 13 (single fixed-length caller) and observation O9 add a second nuance to fold in: HMAC key normalisation makes salts equivalent under trailing zero bytes and hashes salts longer than 64 bytes, so the doc's "different domains can never collide" (`kdf.rs:10-12`) is also overstated. Still valid at `fe9e84c` (`kdf.rs` unchanged). No run-2 counterpart (`state/run2/reconciliation/core.md` §2).

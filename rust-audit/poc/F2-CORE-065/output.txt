@@ -1,0 +1,17 @@
+   Compiling safenet-core v0.2.0 (/home/shebin.guest/safe/safenet/crates/core)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 5.71s
+     Running unittests src/lib.rs (/home/shebin.guest/.cache/safenet-run2/target/debug/deps/safenet_core-9a33466691bc8389)
+
+running 14 tests
+[excerpt: only this finding's tests are shown; the complete 14-test run is poc/F2-CORE-060/output-full-run.txt]
+test tx::tests::qa_f2_core_065_degenerate_config_values_are_accepted_and_misbehave_silently ... parsed: Config { max_in_flight_transactions: 0, blocks_before_resubmit: 0, priority_fee_cap_percentage: None }
+cap NaN: Eip1559Estimation { max_fee_per_gas: 40, max_priority_fee_per_gas: 0 }
+max_in_flight_transactions = 0: 3 blocks, 3 nonce RPCs, 0 submissions
+blocks_before_resubmit = 0: block 10: maxFeePerGas=Some(210) maxPriorityFeePerGas=Some(10)
+blocks_before_resubmit = 0: block 11: maxFeePerGas=Some(231) maxPriorityFeePerGas=Some(11)
+blocks_before_resubmit = 0: block 12: maxFeePerGas=Some(255) maxPriorityFeePerGas=Some(13)
+blocks_before_resubmit = 0: block 13: maxFeePerGas=Some(281) maxPriorityFeePerGas=Some(15)
+ok
+
+test result: ok. 14 passed; 0 failed; 0 ignored; 0 measured; 99 filtered out; finished in 0.20s
+

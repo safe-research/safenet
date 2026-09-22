@@ -1,4 +1,4 @@
-# Inventory at commit 3ec8bc57dc35d1e9e65075ae9424bff427c47833, 2026-09-15T10:34:51Z; wc -l on the working tree (identical to HEAD for crates/)
+# Inventory at commit 3ec8bc57dc35d1e9e65075ae9424bff427c47833; wc -l on the working tree (identical to HEAD for crates/)
 # tests = grep -cE '#\[(tokio::)?test' (matches #[test] and #[tokio::test] incl. attribute args)
 
 ## crates/core

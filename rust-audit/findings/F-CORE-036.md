@@ -118,3 +118,7 @@ So the delegation is a real structural weakness with a **currently benign** outc
 The second, independent claim — that the same sinks write unbounded attacker-influenced data, e.g. the sentinel's `Effect::EngineCheck` carrying the full proposed Safe transaction printed whole at `effects.rs:55` and `driver.rs:238`, with `trace` genuinely enabled in the integration harness and the devnet script — was outside V-VAL's scope (it is a `sentinel`/`core` path). It stays at its prior basis class. Nothing here raises or lowers it.
 
 Certainty **50% → 85%** for the finding as a whole, driven by the secret leg moving from `I` to `E1`. Severity **Low / Low** unchanged. Status **Verified (secret leg refuted)**.
+
+## Reconciliation (run 2)
+
+**Final: Verified (secret leg refuted), Low, 85 (E1), canonical — examined by run 2, not filed.** Run 2's R2 rejected hypothesis 1 refutes the secret leak at today's types, agreeing with this file's Phase 5 result, and records the structural sink as observation O7 (sinks now at `driver.rs:240`, `267`; `effects.rs:62`, `66`, `90` after the housekeeping drift). The attacker-data half (a sentinel at `trace` writing every proposed Safe transaction twice per check) stands. Still valid at `fe9e84c`. No run-2 counterpart (`state/run2/reconciliation/core.md` §2).

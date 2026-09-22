@@ -1,0 +1,13 @@
+# commit: fe9e84cc59b65367b31d5a3121774383cc422234
+# cmd: cargo clippy --workspace --all-targets --locked -- -D warnings
+# start: 10:47:20
+clippy 0.1.98 (48a229ceae 2026-09-01)
+    Checking safenet-core v0.2.0 (/home/shebin.guest/safe/safenet/crates/core)
+    Checking sentinel-engine v0.2.0 (/home/shebin.guest/safe/safenet/crates/sentinel-engine)
+    Checking validator v0.2.0 (/home/shebin.guest/safe/safenet/crates/validator)
+    Checking sentinel v0.2.0 (/home/shebin.guest/safe/safenet/crates/sentinel)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 2.14s
+warning: the following packages contain code that will be rejected by a future version of Rust: proc-macro-error2 v2.0.1
+note: to see what the problems were, use the option `--future-incompat-report`, or run `cargo report future-incompatibilities --id 1`
+# end: 10:47:22
+# exit=0

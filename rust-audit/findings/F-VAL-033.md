@@ -398,3 +398,7 @@ Rust-only mechanism in unchanged code — `crates/validator` is untouched, so `s
 ## In-flight impact (AS-PRUNE)
 
 **Pertains to unmerged branches, not to `main`.** Assessed against the Scheduled Secret Pruning stack (`origin/prune/end`, PRs #906–#913), built from a `git archive` extraction; no branch was merged or checked out. **Effect: unchanged.** `take_nonce` still deletes on the spot; both `poc/F-VAL-033` tests pass on the branch. The stack's new handbook text states "a nonce is never reused", which a backup restore across a reorg still contradicts.
+
+## Reconciliation (run 2)
+
+**Final combined status: out of scope under A17 (operator database restore); mechanism recorded as real.** `take_nonce` (`store.rs:281-291`) still deletes on the spot and nothing records consumption at `fe9e84c`; the team's objection to remediation option 1 is upheld; the validator self-halts before reuse (Phase 8). Not a run-2 miss — run 2 was directed away by A17. See `state/run2/reconciliation/validator.md` (Sections 2, 3).

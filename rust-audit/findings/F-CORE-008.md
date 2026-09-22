@@ -107,3 +107,7 @@ Option 3 (clamp the sleep to a small multiple of `block_time`) is a one-line def
 Option 4 (`head_lag_seconds`) is necessary: as shipped, neither Trigger case is detectable from outside the process.
 
 Option 5 (checked/saturating arithmetic on the five timestamp expressions, or `overflow-checks = true`) is sound; note that setting `overflow-checks` on the release profile is a workspace-wide change that interacts with F-XC-001's profile findings and should be decided there, not here.
+
+## Reconciliation (run 2)
+
+**Final: Confirmed, Low, 70 (E2), canonical — not rediscovered by run 2.** Run 2's R1 recorded the same mechanism as observation O3 (`clock.rs:33-38`, `blocks.rs:538-551`, ~40 %, Low) and did not file it. Still valid at `fe9e84c` (`clock.rs`, `blocks.rs` unchanged since `2893917`). No run-2 counterpart (`state/run2/reconciliation/core.md` §2).

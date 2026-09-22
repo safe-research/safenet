@@ -98,3 +98,7 @@ Option 2 (let `revalidate_last_block` compare against `self.safe` when `recent` 
 Option 3 (bound consecutive identical `-32001` recoveries) is the same counter F-CORE-004 option 3 and F-CORE-003 option 1 want. One counter, three findings.
 
 Option 4 (document) is the honest fallback if the behaviour is accepted, and it should say specifically that `max_reorg_depth = 0` is unsuitable for nodes with the `-32001` behaviour — which is the configuration a reader would otherwise choose precisely _because_ they want strictness.
+
+## Reconciliation (run 2)
+
+**Final: Confirmed, Low, 75 (E2), canonical.** Rediscovered by run 2 as `F2-CORE-008` (CONFIRMS: identical mechanism at `blocks.rs:494-501`, identical severity and certainty); run 2 additionally frames it as the depth-0 instance of `F-CORE-004`'s starvation. Still valid at `fe9e84c`. Counterpart: `F2-CORE-008`.

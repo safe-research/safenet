@@ -45,3 +45,7 @@ Any batch containing an action that reverts (a duplicate under `F-VAL-065`/`F-SE
 ## Trail
 
 Filed by FWD from `origin/feat/batex_4` + the epic at `epics/2026_09_09_safenet_7702_executor_tx_batching.md`. No PoC: the batching wiring (Phases 6–7) is not on any pushed branch, so this is static-only and must be re-validated when Phase 7 lands.
+
+## Reconciliation (run 2)
+
+**Final: Unmerged, forward-looking — unchanged.** The Batched Execution stack (PR #904) is not in the tree at `fe9e84c` (`crates/core/src/tx/` has no `executor.rs`; `types.rs` has no `authorization` field), so run 2 could not and did not assess it; this is not a miss. Re-validate when the stack merges (`report/IN-FLIGHT.md` round 1). No run-2 counterpart (`state/run2/reconciliation/core.md` §2).

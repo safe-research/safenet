@@ -107,3 +107,7 @@ What the finding understates is how much depends on this. A non-zero exit is the
 Option 3 (a `driver_running` gauge / `driver_exits_total{reason}` counter, and something for `/health` to report) is sound and covers the case option 1 cannot: the process that never exits at all. This is the same consolidated health/liveness signal F-CORE-004, -007, -011 and -035 each ask for separately.
 
 The finding's own note that the deep-reorg integration script should assert a non-zero status is correct and cheap: `scripts/run_validator_deep_reorg_test.sh` currently cannot distinguish the intended fatal exit from a clean one.
+
+## Reconciliation (run 2)
+
+**Final: Confirmed, Medium, 85 (E2), canonical for the exit-status defect** (over `F-VAL-064` and run 2's `F2-VAL-066`). Rediscovered by run 2 as `F2-CORE-031` (CONFIRMS: `driver.rs:172-198`, both `main`s return `Ok(())`; adds the storage-error path and that `run_validator_deep_reorg_test.sh:86-94` never asserts the status). Run 2 rated it Low; its Critic offered Medium, #820 asked explicitly for an observable failure, and the fix is two lines, so Medium is carried (`state/run2/reconciliation/core.md` §1). The `/health` half is restated in `F2-CORE-033`. Anchor note: `driver.rs` lines ≥ 238 shifted by the housekeeping hook merged after `2893917`; mechanism unchanged. Counterparts: `F2-CORE-031`, `F2-CORE-033`.

@@ -80,3 +80,7 @@ Option 3 (a `last_update_timestamp` gauge, or `/health` failing after _k_ block 
 Option 4 (bound the startup scan, which runs before `Driver::run` and is on no retry path) is a real gap and should not be dropped: a timeout layer on the provider covers it automatically, which is a further argument for option 1 over option 3 alone.
 
 **Certainty note, not a change:** whether an un-timed request hangs _indefinitely_ rests on `reqwest`'s default, which is not on disk (A6). That is question 4 in `rust-audit/poc/UNRESOLVED-DEPENDENCY-QUESTIONS.md`; answering it is what would move this finding out of 60%.
+
+## Reconciliation (run 2)
+
+**Final: Confirmed (narrowed), Low, 80 (E2), canonical.** Rediscovered by run 2 as `F2-CORE-033` (CONFIRMS, narrows), which settled this file's open dependency question from the pinned sources: `alloy-transport-http` 2.0.5 uses `reqwest::Client::new()` and `reqwest-0.13.4` sets `timeout: None`, `read_timeout: None` **but** `tcp_user_timeout: Some(30 s)` on Linux (`tcp_keepalive` 15 s × 3 retries), so a vanished peer surfaces as an RPC error within about a minute and only a live-but-silent peer hangs indefinitely. That removes half of this file's "indefinite" premise; Medium 60 Plausible → Low 80 Confirmed (`state/run2/reconciliation/core.md` §1.1). The "no backoff" horn is `F-CORE-034`'s. Still valid at `fe9e84c` (`provider/mod.rs` unchanged). Counterparts: `F2-CORE-033` (also restates `F-CORE-030`'s `/health` half), `F2-CORE-034` (= `F-CORE-039`).

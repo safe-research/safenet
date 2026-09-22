@@ -1,0 +1,24 @@
+QA2-SEN-Δ Foundry counterpart for F2-SEN-010, audited commit fe9e84c, forge 1.8.1, solc 0.8.30 (offline).
+Source: poc/F2-SEN-010/poc.t.sol appended as one function to contracts/test/SentinelOracle.t.sol (one hunk), reverted with git checkout afterwards; build outputs under contracts/build (ignored).
+Command: cd contracts && forge test --offline --match-test test_QA2SEN010 -vv
+Note: this test PASSES by design — it executes the contract side the finding relies on (commit accepted at block == commitDeadline, FinalizeTooEarly with committedCount 2 / revealedCount 1 inside the reveal window, finalize accepted after revealDeadline).
+
+Warning: Found unknown `optimizer` config key in section `compilation_restrictions` defined in foundry.toml.
+Compiling 75 files with Solc 0.8.30
+Compiling 105 files with Solc 0.8.30
+Solc 0.8.30 finished in 352.46ms
+Solc 0.8.30 finished in 6.43s
+Compiler run successful!
+
+Ran 1 test for test/SentinelOracle.t.sol:SentinelOracleTest
+[PASS] test_QA2SEN010_DeadlineBlockCommitCounts_FinalizeTooEarlyAtOneOfTwoReveals() (gas: 626750)
+Logs:
+  commitDeadline: 113
+  block.number at finalize: 114
+  revealDeadline: 125
+  committedCount: 2
+  revealedCount: 1
+
+Suite result: ok. 1 passed; 0 failed; 0 skipped; finished in 2.43ms (277.33µs CPU time)
+
+Ran 1 test suite in 3.81ms (2.43ms CPU time): 1 tests passed, 0 failed, 0 skipped (1 total tests)

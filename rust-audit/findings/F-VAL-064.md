@@ -138,3 +138,7 @@ The other two claims — `/health` unreachable by default, container runs as roo
 ## Scope note (run 2)
 
 `crates/sentinel-engine` was placed out of scope after this finding was written (PROMPT.md Section 11); the engine-specific parts above are retained as run-1 history and are not part of the current audit's claims. The non-engine parts stand.
+
+## Reconciliation (run 2)
+
+**Final combined status: Low, 72 %, Confirmed — split across run-2 canonicals.** Exit-0 and `/health` → `F2-VAL-066`, folded into `F2-CORE-031` (with run-1 `F-CORE-030`); root user and floating tags → `F2-VAL-068`, folded into `F2-XC-003` (with run-1 `F-XC-004`). Both run-2 Critics rate the pieces Low/Informational, so this composite is aligned from Medium 68 to Low so one defect does not carry two severities. See `state/run2/reconciliation/validator.md` (Sections 1, 5).

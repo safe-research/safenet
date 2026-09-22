@@ -245,3 +245,7 @@ The **consequence** this finding names — a single genesis-keygen disruption st
 Rust-only mechanism in unchanged code — `crates/validator` is untouched by the merge, so the genesis rollover state at `state/keygen.rs:41-54` still has no deadline, no timeout arm and no retry, and the Phase 5 execution stands.
 
 **Contract dependency check — the one citation that moved.** Basis row 9 and the Trigger both cite `contracts/src/FROSTCoordinator.sol:368-372` for "the coordinator leaves `COMMITTING` only when every participant has committed". The quoted excerpt is byte-identical after the merge; the range is now **`:374-378`**, and the `--state.pending` line cited as `:372` is now **`:378`**. Nothing in the Certora fixes adds a commitment-round deadline or a way to evict a stuck participant, so the "one stuck validator blocks the whole genesis group" conclusion is unchanged.
+
+## Reconciliation (run 2)
+
+**Final combined status: canonical; genesis instance Informational, `known` (A16, team accepted); rollover instance Medium, 69 %, Plausible.** Counterparts `F2-VAL-063` (EXTENDS: the same lost or failed `KeyGenSetup` forfeits a numbered epoch, structural gap E1, trigger E2) and `F2-VAL-005` (folded into `F2-VAL-063`). The rollover instance is the "other flow" the team's acceptance was conditional on. See `state/run2/reconciliation/validator.md` (Sections 1, 3, 5).

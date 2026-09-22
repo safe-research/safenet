@@ -101,3 +101,7 @@ Option 2 (check a shutdown flag before the second transaction-queue call at `dri
 Option 3 (document the grace period in the handbooks) is necessary and currently absent; operators setting `terminationGracePeriodSeconds` have nothing to size it against.
 
 **Certainty note, not a change:** basis 5 — whether an un-timed request can hang indefinitely — rests on `reqwest`'s default, which is not on disk (A6). Question 4 in `rust-audit/poc/UNRESOLVED-DEPENDENCY-QUESTIONS.md`. Answering it is what moves this out of 55%, and the same answer moves F-CORE-011.
+
+## Reconciliation (run 2)
+
+**Final: Confirmed, Low, 72 (E2), canonical for the shutdown half.** Rediscovered by run 2 as `F2-CORE-034` (CONFIRMS), which closes this file's basis-5 caveat from the pinned `reqwest-0.13.4` source (no request/read timeout; `tcp_user_timeout` 30 s on Linux, so only a live-but-silent peer blocks indefinitely), adds the new inline `housekeeping` await (`driver.rs:292-294`, merged after `2893917`) as a second unbounded await in the same window, and notes that the "prevents partial state applies" rationale is not what protects consistency (snapshot commits are already atomic). 55 → 72. Counterparts: `F2-CORE-034`; indexing half `F-CORE-011` / `F2-CORE-033`.

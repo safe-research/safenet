@@ -2,6 +2,8 @@
 
 This document covers two assessment rounds of **unmerged** work: first the Batched Execution stack (PRs #899–#904), then the open PRs #906–#917 (Scheduled Secret Pruning, sentinel deadlines, optimistic block transition, SEF veto epic). Nothing here is a finding against `main`.
 
+**Status after run 2** (audit branch at `fe9e84c`, `origin/main` `8b6a75d` merged): the pruning stack (#906–#913), #914 and #917 are **merged** and no longer in flight — #914 is now a finding on `main`, [`F2-SEN-010`](../findings/F2-SEN-010.md). #915 and the batex stack remain unmerged. See the section [Status at `fe9e84c`](#status-at-fe9e84c-after-run-2) at the end; the rounds below are kept as written.
+
 ## Round 1 — Batched Execution stack (#899–#904)
 
 **Assessor:** FWD. **Audit HEAD:** `a7f3915` (audit ran at `2893917`, re-validated against `origin/main` = `49d7e39`, which has not moved).
@@ -90,9 +92,9 @@ The audit's 21 end-to-end-validated PoCs were run on local Anvil. These are the 
 
 | Work | PRs | Verdict |
 | --- | --- | --- |
-| Scheduled Secret Pruning | #906 → #907 → #908 → #909 → #910 → #912 → #913 | **`F-VAL-005` partially fixed**; `F-VAL-066` changed shape; everything else it touches unchanged. Four new defects: `F-VAL-068`. |
-| Sentinel deadlines | #914 | **Fixes nothing — worsens `F-SEN-002` if merged without #915** (`F-SEN-016` D1). |
-| Optimistic block transition | #915 (on #914) | **Fixes nothing.** `F-CORE-031` changed shape; the ordering behind `F-VAL-005` is unchanged. New defects: `F-SEN-016` D2–D4. |
+| Scheduled Secret Pruning | #906 → #907 → #908 → #909 → #910 → #912 → #913 | **`F-VAL-005` partially fixed**; `F-VAL-066` changed shape; everything else it touches unchanged. Four new defects: `F-VAL-068`. — **Since merged**; run 2's verdict on the merged code is in the status section below. |
+| Sentinel deadlines | #914 | **Fixes nothing — worsens `F-SEN-002` if merged without #915** (`F-SEN-016` D1). — **Since merged alone** (`8b6a75d`): the D1 defect is live on `main` as [`F2-SEN-010`](../findings/F2-SEN-010.md), High 93. |
+| Optimistic block transition | #915 (on #914) | **Fixes nothing.** `F-CORE-031` changed shape; the ordering behind `F-VAL-005` is unchanged. New defects: `F-SEN-016` D2–D4. — **Still unmerged.** |
 
 ### Scheduled Secret Pruning (#906–#913)
 
@@ -137,3 +139,19 @@ Plans a small Solidity Safe module letting one SEF address invalidate a SafeSnap
 
 1. Pruning stack: `poc/F-VAL-005-066`, `poc/F-VAL-030-032-061`, `poc/F-VAL-033`, plus a reorg-nonce run that restarts a validator and asserts on the **epoch-1** group, with a same-machine control on `main`.
 2. #914/#915: `poc/F-SEN-001`, `F-SEN-002`, `F-SEN-015`, `F-CORE-067`, `F-CORE-001`, the `poc/F-VAL-005-066` ordering case, and the `F-SEN-016` D1 probe — **before** #914 merges on its own.
+
+## Status at `fe9e84c` (after run 2)
+
+Written by the reconciliation after `origin/main` `8b6a75d` was merged into the audit branch. Branch positions are from `git branch -r` and `git rev-list --left-right --count origin/main...<branch>`; nothing was fetched or checked out.
+
+| Work | PRs | Status at `fe9e84c` | Effect on findings |
+| --- | --- | --- | --- |
+| Scheduled Secret Pruning | #906–#913 | **Merged** (`main` commits `8b88f4a` #909, `c87c054` #910, `f0fdc40` #912, `80951a0` #913 and the earlier three). | [`F-VAL-005`](../findings/F-VAL-005.md) **fixed for the reproduced trigger** (reorg within `max_reorg_depth`, no restart; 13/13 store tests at `fe9e84c`); [`F-VAL-066`](../findings/F-VAL-066.md) changed shape — the reconcile-vs-prune race across a restart, executed 19/20 at the driver seam ([`F2-VAL-035`](../findings/F2-VAL-035.md)); [`F-VAL-068`](../findings/F-VAL-068.md) **superseded and split** (D1 → [`F2-VAL-031`](../findings/F2-VAL-031.md) Medium 80; D2 → `F-VAL-005`'s documented residual, `known`; D3 → `F2-VAL-035`; D4 → nearest [`F2-XC-006`](../findings/F2-XC-006.md)); new [`F2-VAL-034`](../findings/F2-VAL-034.md) (no schema-version check, Informational `known`); `F-VAL-061`'s restart window widened as predicted. Details: [`RECONCILIATION.md`](RECONCILIATION.md) §5.2 (`F-VAL-005` reply) and the [validator part](../state/run2/reconciliation/validator.md) §4. |
+| Sentinel deadlines | #914 | **Merged alone** as `8b6a75d` (squash of `origin/fix/sentinel_deadlines` `dd2c54d`). | Fixes nothing of ours (R7Δ re-validated all nine sentinel findings; QA2-SEN-Δ re-ran twelve PoC tests). **Introduces [`F2-SEN-010`](../findings/F2-SEN-010.md), High 93** — the `F-SEN-016` D1 defect, now confirmed on `main` with Rust and forge execution; `F-SEN-016` D1 is superseded by it. `F-SEN-002`'s trigger set broadened; `F-SEN-003`'s restart variant narrowed by one block; `F-SEN-004`/`F2-SEN-005` narrowed (85 → 78), not fixed; `F-SEN-005` untouched. [`RECONCILIATION.md`](RECONCILIATION.md) §6. |
+| Optimistic block transition | #915 | **Unmerged** — `origin/feat/optimistic_block_transition` at `b2aad06`, 2 ahead / 31 behind `main`; #914's `STOPGAP` note (`crates/sentinel/src/service.rs:390-402`) defers the compensation revert to it (safe-research/safenet#471). | `F-SEN-016` D2–D4 remain forward-looking; the warp arm at `crates/core/src/state/mod.rs:173-181` is the pre-#915 form. |
+| Batched Execution | #899–#904 | **Unmerged** — `origin/feat/batex_4` at `d6edbb6`, 5 ahead / 31 behind `main` (`feat/batex_0`, `fix/batex_1`, `feat/batex_2`, `feat/batex_3` likewise); Phases 5–10 are still on no pushed branch. | `F-CORE-068`, `F-CORE-069` remain forward-looking; Round 1's re-run list stands. |
+| SEF veto epic | #917 | **Merged** (`246d28e`, epic document only; no Rust change). | The Round 2 assessment stands as written; nothing to re-validate. |
+
+**Counts after run 2.** In flight: two PR stacks (#915; #899–#904). Forward-looking findings: two whole files (`F-CORE-068`, `F-CORE-069`) and one partial (`F-SEN-016` D2–D4). Superseded: `F-VAL-068` (whole), `F-SEN-016` D1. Merged work that turned into a finding on `main`: `F2-SEN-010`. Merged work that fixed a finding: the pruning stack, for `F-VAL-005`'s reproduced trigger only.
+
+**Re-run status.** Of the lists above: run 2 did not re-run run 1's Anvil PoCs (independence rule); its own equivalents were executed at `fe9e84c` — the validator store tests and `poc/F2-VAL-030`, `F2-VAL-031`, `poc/F2-XC-050/coverage-7.3` for the pruning stack; `poc/F2-SEN-001`…`010` re-runs (`*.rerun-fe9e84c.txt`) and the `F2-SEN-010` Rust + forge PoC for #914. Still not done: a reorg-nonce run that restarts a validator and asserts on the epoch-1 group with a same-machine control, and the multi-validator restart with a real group drop during the outage that would measure `F2-VAL-035`'s live rate ([`RECONCILIATION.md`](RECONCILIATION.md) §7).

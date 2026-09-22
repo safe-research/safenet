@@ -88,3 +88,7 @@ Option 1 (hold a pinned `next_input` future across iterations) is sound in princ
 Option 4 (document the cancel-safety asymmetry next to `next_input`, mirroring the `# Cancel Safety` section `EffectManager::next` already carries) is sound and should land whichever else is chosen: the distinction between cancel-_safe_ and cancel-_free_ is exactly the thing the next person adding a branch to that select will not think about.
 
 No option affects `apply_transition` or effect semantics; the `core::state` contract is unaffected.
+
+## Reconciliation (run 2)
+
+**Final: Plausible, Low, 65 (E2), canonical — cost missed by run 2.** Run 2's R1 rejected 7 and R2 rejected 9 re-established the cancel-safety (no data loss) that this file also grants, and stopped there; the wasted-work cost of the `select!` was not filed. Still valid at `fe9e84c` (`driver.rs:229-232` unchanged in content). No run-2 counterpart (`state/run2/reconciliation/core.md` §2).

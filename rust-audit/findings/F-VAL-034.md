@@ -326,3 +326,7 @@ The line is byte-identical: `FROST.verifyShare(key, selection.r, group.participa
 ## In-flight impact (AS-PRUNE)
 
 **Pertains to unmerged branches, not to `main`.** Assessed against the Scheduled Secret Pruning stack (`origin/prune/end`, PRs #906–#913), built from a `git archive` extraction; no branch was merged or checked out. **Effect: unchanged.** `state/sign.rs` is untouched.
+
+## Reconciliation (run 2)
+
+**Final combined status: Low, 55 %, Plausible (outcome executed benign) — run-2 miss, still valid at `fe9e84c`.** `state/sign.rs:359-377` still looks the session up by message only; the `*sid == signature_id` guard exists only in `handle_nonce_commitments` (`:151`). See `state/run2/reconciliation/validator.md` (Section 2).

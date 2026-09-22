@@ -185,3 +185,7 @@ The mechanism is entirely Rust and `crates/validator` is untouched by the merge 
 **I-02 (`5bde4c8`) is adjacent but does not apply.** It adds a WARNING to the Solidity `FROST.nonce` helper (`FROST.sol:93-106`) saying it exists for reference vectors only and must never be called with a real signing share. That is a _signing-nonce_ helper, not the DKG share pad, and the validator never calls it — Rust nonces are generated locally from `ChaCha12Rng` (`crates/validator/src/frost/preprocess.rs:88-121`). It changes nothing here.
 
 If anything the merge sharpens F-VAL-001's remediation option 1 (HKDF over the shared secret bound to `(gid, sender, recipient)`), which remains the single change that removes the bias, the two-time pad and the possession gap together.
+
+## Reconciliation (run 2)
+
+**Final combined status: Medium, 93 %, Confirmed — canonical.** Counterpart `F2-VAL-002` (CONFIRMS, E1 90 %, rated Low as a standalone break). Medium is kept because point 2 — every complaint response also opens the plaintiff's share — is executed and is a leak beyond `F-VAL-001`; the remediation (KDF-bound pad) is shared. See `state/run2/reconciliation/validator.md` (Section 1).

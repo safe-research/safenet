@@ -1,0 +1,18 @@
+# QA2-VAL-B PoC for F2-VAL-032 (and control) and F2-VAL-033
+# commit under test: 92a0610953c80a1308ef651c44a836e4f2c99267  (crates/ identical to audited 3ec8bc5)
+# The module in sign_tests_module.rs was pasted into the existing state/sign.rs
+# (a temporary #[cfg(test)] mod appended at EOF), run, then reverted with
+# 'git checkout -- crates/validator/src/state/sign.rs'.
+#
+# command:
+$ cargo test -p validator --bins qa2_val_b
+
+     Running unittests src/main.rs (/home/shebin.guest/.cache/safenet-run2/target/debug/deps/validator-3a1b46af57fe89be)
+
+running 3 tests
+test state::sign::qa2_val_b::f2_val_032_matching_group_sign_advances_session_control ... ok
+test state::sign::qa2_val_b::f2_val_032_foreign_group_sign_drops_pending_session ... ok
+test state::sign::qa2_val_b::f2_val_033_re_reveal_makes_re_revealer_the_last_signer ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 42 filtered out; finished in 0.00s
+

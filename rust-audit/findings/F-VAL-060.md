@@ -182,3 +182,7 @@ The finding's core — `Transition` carries no coordinator address to compare ag
 | After | `DisputeTriggered(bytes32,uint64)` | `0x86e8b85731e4787f033d85108356db1e068dea243be32d422e6dc5681ff49cc1` |
 
 Computed with `cast keccak`. The new topic collides with nothing in the Coordinator or Consensus sets, so the paragraph's conclusion — "with those exact contracts the injection is not reachable today" — holds unchanged. `crates/sentinel/src/bindings.rs:42` was updated in the same merge to the new signature, so there is no decode break either. Recorded because the sweep was presented as mechanical over a fixed set, and that set has now moved once; a re-run is cheap and should be repeated on any future contract merge.
+
+## Reconciliation (run 2)
+
+**Final combined status: High, 90 %, Confirmed, conditional on a malicious or compromised allow-listed oracle — canonical.** Counterpart `F2-VAL-061` (EXTENDS; E1 90 %: plaintext-polynomial calldata, `sequence = 2^63` liveness kill, malformed-log indexer halt). Run 1's Critic cut to Medium on the precondition's likelihood; the report carries High with the precondition stated. Core half: `F-CORE-006` / `F2-CORE-004` (REC-CORE). See `state/run2/reconciliation/validator.md` (Section 1).

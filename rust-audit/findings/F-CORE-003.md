@@ -108,3 +108,7 @@ No option touches `apply_transition` or the effect system; the `core::state` con
 ## In-flight impact (AS-SEN)
 
 **Pertains to unmerged branches, not to `main`.** Assessed against `origin/fix/sentinel_deadlines` (PR #914) and `origin/feat/optimistic_block_transition` (PR #915, tip `b2aad06`), built from a `git archive` extraction. Both apply cleanly onto `main` — `main`'s crates are byte-identical to their base `199629e`, so a verdict on the tip is also the verdict for the tip merged into `main`. **Effect: unchanged.** `crates/core/src/index/blocks.rs:505` is unchanged.
+
+## Reconciliation (run 2)
+
+**Final: Confirmed, Medium, 70 (E2), canonical.** Rediscovered by run 2 as `F2-CORE-006` (CONFIRMS: `blocks.rs:504-507`, identical mechanism and mock recipe, certainty 70 both runs). Run 2 rated it Low ("state converges; cost is duplicated side effects"); Medium is carried because the trigger is routine under A4 and each spurious uncle re-emits actions into a queue with no deduplication, which `F-CORE-067` measured as real gas (`state/run2/reconciliation/core.md` §1). Still valid at `fe9e84c`. Counterpart: `F2-CORE-006`.

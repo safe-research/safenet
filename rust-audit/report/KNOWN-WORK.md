@@ -1,8 +1,8 @@
 # Known work — audit findings mapped onto existing issues, TODOs and epics
 
-> **Scope note:** sentinel-engine findings (`F-ENG-*`, `F-XC-005/010/052`) were removed after the engine was placed out of scope; the counts in this document predate that removal and are recomputed in the final `REPORT.md`.
+> **Scope note:** sentinel-engine findings (`F-ENG-*`, `F-XC-005/010/052`) were removed after the engine was placed out of scope; the counts in this document predate that removal and are recomputed in the final `REPORT.md`. Run 2 has since been reconciled with run 1 in [`RECONCILIATION.md`](RECONCILIATION.md); Section 5 below adds the run-2 counterpart and the combined status of every row in this document, and lists the `known`-tagged run-2 items.
 
-What the team already has a ticket for, and what it does not. Sources: 24 GitHub issues (16 open, 8 closed), 8 in-code `TODO`s, 3 epics in [`epics/`](../../epics/). Findings are the 108 in [`../findings/`](../findings/); see [`REPORT.md`](REPORT.md) for severities and evidence.
+What the team already has a ticket for, and what it does not. Sources: 24 GitHub issues (16 open, 8 closed), 8 in-code `TODO`s, 3 epics in [`epics/`](../../epics/). The mapping was made over run 1's 108 findings at `2893917` (85 remain in [`../findings/`](../findings/) after the engine's removal); the severities quoted in Sections 1–3 are run 1's, and the combined severities are in [`RECONCILIATION.md`](RECONCILIATION.md) §2.
 
 | Relationship                 |  Count |
 | ---------------------------- | -----: |
@@ -119,4 +119,64 @@ The state variant exists (`RequestState::WaitingForEngineCheck`). The queuing th
 | #669, #657 (closed) | Solidity/protocol changes; contracts were out of scope except as a reference oracle. |
 | #785 (closed) | **Verified fixed.** `Provider::mocked` / `mocked_with_chain` and the `Asserter` import are behind `#[cfg(any(test, feature = "test-util"))]`. |
 | #20 | Blob-storage redesign of KeyGen share distribution — a protocol change; no Rust finding touches the transport. |
-| #546 | No direct finding. Adjacent: `F-SEN-002`'s failure is an under-counted local commitment tally, and #546's proposal — derive the count from the oracle's registered sentinel set — is the shape of the fix. |
+| #546 | No direct finding. Adjacent: `F-SEN-002`'s failure is an under-counted local commitment tally, and #546's proposal — derive the count from the oracle's registered sentinel set — is the shape of the fix. Run 2 added a second instance of the same under-count, [`F2-SEN-010`](../findings/F2-SEN-010.md) (commits mined in the deadline block), introduced by #914; #546's proposal would close both. |
+
+---
+
+## 5. Run-2 counterparts (added after reconciliation)
+
+Every row of Sections 1–3 with its run-2 counterpart and the combined status from [`RECONCILIATION.md`](RECONCILIATION.md) §2. The issue mapping of Sections 1–4 is unchanged; a run-2 counterpart that confirms a row confirms its mapping. "miss" means run 2 did not re-file the defect (still valid at `fe9e84c` unless stated).
+
+| Run-1 row | Section | Run-2 counterpart(s) | Combined status |
+| --- | --- | --- | --- |
+| `F-CORE-001` | 1 (#820) | `F2-CORE-001` confirms | High 99, Confirmed |
+| `F-CORE-030` | 1 (#820) | `F2-CORE-031`, `F2-VAL-066` confirm | Medium 85, Confirmed |
+| `F-CORE-005` | 1 (#820) | `F2-CORE-008` confirms | Low 75, Confirmed |
+| `F-VAL-005` | 1 (#801) | `F2-VAL-035`, `F2-VAL-031` (residuals) | **Fixed by #909/#910** for the reproduced trigger (13/13 store tests); residual D2 Informational `known`; the restart race is `F-VAL-066` Medium 78 |
+| `F-CORE-060` | 1 (#656) | `F2-CORE-060` extends | High 98, Confirmed |
+| `F-CORE-061` | 1 (#656) | `F2-CORE-062` extends | Medium 65, Plausible |
+| `F-SEN-001` | 1 (#614) | `F2-SEN-001` confirms | High 99, Confirmed — unassigned |
+| `F-SEN-002` | 1 (#614) | `F2-SEN-002` confirms; `F2-SEN-010` is a second source | High 98, Confirmed — assigned |
+| `F-SEN-015` | 1 (#614) | `F2-SEN-001` (c), inference only | High 98, Confirmed — assigned |
+| `F-SEN-009` | 2 | `F2-SEN-006` claim 6, `F2-SEN-008` claim 3 | Low 82, Confirmed, `known` |
+| `F-SEN-010` | 2 | `F2-SEN-009` b1 (via `F-XC-009`) | Informational 85, Confirmed, `known` |
+| `F-XC-002` | 2 | miss (soft) | Low 88, union counted under `F-VAL-062` and `F-CORE-036` |
+| `F-VAL-062` | 2 | miss | Informational 88, Confirmed |
+| `F-CORE-036` | 2 | examined, not filed | Low 85, Verified |
+| `F-VAL-061` | 2 | `F2-VAL-030/031/062/063` (policy leg) | High 98, Confirmed |
+| `F-VAL-030` | 2 | `F2-VAL-030`, `F2-VAL-062` extend | High 97, Confirmed |
+| `F-VAL-033` | 2 | — | **Out of scope (A17)** |
+| `F-VAL-004` | 2 | `F2-VAL-063`, `F2-VAL-005` extend | genesis instance accepted (A16, Informational `known`); rollover instance Medium 69, Plausible |
+| `F-VAL-064` | 2 | `F2-VAL-066` (→ `F-CORE-030`), `F2-VAL-068` (→ `F-XC-004`) | Low 72, split |
+| `F-VAL-066` | 2 | `F2-VAL-035` extends | Medium 78, Confirmed (changed shape by #909) |
+| `F-CORE-031` | 2 | `F2-CORE-030` extends | **High 92**, Confirmed (raised) |
+| `F-CORE-033` | 2 | `F2-CORE-035` extends | Medium 70, Confirmed; team question answered |
+| `F-SEN-003` | 2 | `F2-SEN-003` (b) executes the route | Low 80, Confirmed (residual) |
+| `F-SEN-004` | 2 | `F2-SEN-005` settles the trigger | Medium 78, Confirmed (was Plausible) |
+| `F-SEN-005` | 2 | `F2-SEN-004` confirms | Medium 95, Confirmed — assigned |
+| `F-VAL-003` | 2 | `F2-VAL-006` confirms | Medium 82, Confirmed |
+| `F-VAL-067` | 2 | `F2-VAL-006` para. 2 | Low 70, Confirmed (was Medium 48) |
+| `F-CORE-032` | 2 | miss | Low 45, Plausible |
+| `F-CORE-040` | 2 | partial (cost missed) | Low 65, Plausible |
+| `F-SEN-011` | 2 | mechanism in `F2-CORE-030` | Low 82, Confirmed |
+| `F-VAL-035` | 2 | miss | Low 35, Observation |
+| `F-VAL-038` | 2 | miss | Low 55, Plausible |
+| `F-VAL-040` | 2 | `F2-VAL-033` confirms | Low 88, Confirmed (was 50) |
+| `F-VAL-001` | 3 | `F2-VAL-001` confirms | Critical 97, Confirmed |
+| `F-CORE-002` | 3 | `F2-CORE-002` confirms | High 99, Confirmed |
+| `F-VAL-032` | 3 | `F2-VAL-032` extends | High 93, Confirmed — accepted |
+| `F-VAL-039` | 3 | miss | High 58, Plausible |
+
+Run-2 canonical findings with a relationship to existing work (the rest of the 18 are NEW in the sense of Section 3):
+
+| Run-2 finding | Sev / cert | Tracked by | Relationship | Note |
+| --- | --- | --- | --- | --- |
+| [`F2-SEN-010`](../findings/F2-SEN-010.md) | High 93 | PR #914 (introduced), #546 (adjacent) | PARTIALLY OVERLAPS | second under-count source next to `F-SEN-002`; the STOPGAP note in `service.rs:390-402` ties it to safe-research/safenet#471 (#915) |
+| [`F2-CORE-011`](../findings/F2-CORE-011.md) | Low 92 | #820 (closed by #834) | CLOSED BUT STILL PRESENT (class) | no rollback anchor on a fresh start; the fourth silent-continue path next to `F-CORE-001`/`030`/`005` |
+| [`F2-CORE-007`](../findings/F2-CORE-007.md) | Low 75 | #820 | PARTIALLY OVERLAPS | restart against a lagging node exits with an opaque `BadUpdate` |
+| [`F2-VAL-031`](../findings/F2-VAL-031.md) | Medium 80 | #799, #666; introduced by #909/#910 | PARTIALLY OVERLAPS | cold nonce generators after every restart; predicted by run 1 as `F-VAL-068` D1 |
+| [`F2-VAL-034`](../findings/F2-VAL-034.md) | Informational 85 | #913 (deleted the devnet migration) | ALREADY TRACKED (`known`) | no schema-version check; a pre-#908 database fails every reconciliation |
+| [`F2-SEN-003`](../findings/F2-SEN-003.md) | Medium 90 | #614 | PARTIALLY OVERLAPS | the same discard class as `F-SEN-002`; `finalize()` drops a bonded entry whenever our reveal was not observed |
+| [`F2-XC-001`](../findings/F2-XC-001.md), [`F2-XC-002`](../findings/F2-XC-002.md), [`F2-XC-005`](../findings/F2-XC-005.md), [`F2-XC-007`](../findings/F2-XC-007.md), [`F2-XC-050`](../findings/F2-XC-050.md), [`F2-CORE-003`](../findings/F2-CORE-003.md), [`F2-CORE-067`](../findings/F2-CORE-067.md), [`F2-VAL-003`](../findings/F2-VAL-003.md), [`F2-VAL-004`](../findings/F2-VAL-004.md), [`F2-VAL-007`](../findings/F2-VAL-007.md), [`F2-VAL-064`](../findings/F2-VAL-064.md), [`F2-SEN-011`](../findings/F2-SEN-011.md) | — | none | NEW | no issue, TODO or epic found |
+
+`known`-tagged items after both runs (A12): `F-CORE-065` (with `F2-CORE-066`), `F-SEN-009`, `F-SEN-010`, `F-CORE-067`'s tag from run 1, `F2-VAL-034`, the zero-address sub-item of `F-XC-009`/`F2-XC-008` (`config.rs:44` TODO), and the A16 genesis instances of `F-VAL-004`, `F-XC-050` and `F2-VAL-004` (b), plus `F-VAL-005`'s documented residual (`secrets/store.rs:38-41`).

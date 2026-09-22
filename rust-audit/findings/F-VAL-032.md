@@ -314,3 +314,7 @@ Rust-only mechanism in unchanged code (`crates/validator` untouched by the merge
 ## In-flight impact (AS-PRUNE)
 
 **Pertains to unmerged branches, not to `main`.** Assessed against the Scheduled Secret Pruning stack (`origin/prune/end`, PRs #906–#913), built from a `git archive` extraction; no branch was merged or checked out. **Effect: unchanged.** The unlinked-chunk session discard is untouched; the PoC tests pass on the branch.
+
+## Reconciliation (run 2)
+
+**Final combined status: High, 93 %, Confirmed — canonical; team: accepted.** Counterpart `F2-VAL-032` (EXTENDS; E1 92 %): an attacker-created 2-of-2 group and one `sign(G_att, m)` in the deterministic post-timeout block drops every honest validator's session, so the High no longer depends on `F-VAL-030`/`F-VAL-039`. See `state/run2/reconciliation/validator.md` (Section 1).

@@ -100,3 +100,7 @@ The merge shifts `contracts/src/FROSTCoordinator.sol` by two documentation-only 
 | `FROSTCoordinator.sol:530-542` (Location) | **`:536-548`** |
 | `FROSTCoordinator.sol:530-541` (basis row 4, `sign` is permissionless) | **`:536-547`** |
 | `FROSTNonceCommitmentSet.sol:91-105` | unchanged — the file was not touched |
+
+## Reconciliation (run 2)
+
+**Final combined status: High, 58 %, Plausible — run-2 miss, still valid at `fe9e84c`.** `state/preprocess.rs:17` (`NONCE_TOPUP_THRESHOLD = 100`) and `:91` unchanged. Run 2's R5 again rejected the drain framing as cost-of-attack; `F2-VAL-032` names the endpoint as the "known H6 vector" but nothing in run 2 examines the headroom. Needs an executed cost model to leave the Plausible band. See `state/run2/reconciliation/validator.md` (Section 2).

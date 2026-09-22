@@ -88,3 +88,7 @@ Option 1 (cross-check `ClientFiltered` against an independent `MultipleQueries` 
 Option 3 (`eth_getBlockReceipts`, or compare against the block's transaction count) is the only node-independent completeness evidence available and is the genuine fix. Its stated costs — another RPC method, more bandwidth, variable provider support — are all real, and the provider-support one is the blocker: an operator on a provider without `eth_getBlockReceipts` would be back to option 2.
 
 Option 4 (state the guarantee honestly in the `use_client_filtering` doc comment) is necessary and should be merged with **F-CORE-002 option 4**, which asks for a doc change to the same four lines (`events.rs:80-84`) about a different blind spot. One doc change, two findings — and it must cover both: the check does not survive the retry budget (F-CORE-002) _and_, while it is running, it cannot see a repeated-shape omission (this finding).
+
+## Reconciliation (run 2)
+
+**Final: Confirmed, Medium, 70 (E2), canonical — missed by run 2.** No run-2 log considers bloom idempotence over repeated `(address, topics)` shapes or the absent `check_logs_limit` on the `ClientFiltered` path (R1 rejected 19 addressed wrong-block logs only). Still valid at `fe9e84c` (`events.rs:441-466`, `bloom.rs:37-40` unchanged since `2893917`). It remains the second independent route to `F-CORE-002`'s realised outcome and should be reported beside it (`state/run2/reconciliation/core.md` §2). No run-2 counterpart.

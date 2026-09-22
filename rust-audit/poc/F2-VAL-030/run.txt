@@ -1,0 +1,17 @@
+# QA2-VAL-B PoC for F2-VAL-030 (canonical) and its duplicate F2-VAL-062.
+# commit under test: 92a0610953c80a1308ef651c44a836e4f2c99267  (crates/ identical to audited 3ec8bc5)
+# preprocess_tests_module.rs was appended to state/preprocess.rs as a temporary
+# #[cfg(test)] mod, run, then reverted with 'git checkout --'.
+# One PoC serves both findings: F2-VAL-030 is canonical (full expected_chunk-vs-
+# contract cascade); F2-VAL-062 is the effect-handler/restart-race view of the
+# same phantom-reservation defect.
+
+$ cargo test -p validator --bins qa2_val_b::f2_val_030
+
+     Running unittests src/main.rs (/home/shebin.guest/.cache/safenet-run2/target/debug/deps/validator-3a1b46af57fe89be)
+
+running 1 test
+test state::preprocess::qa2_val_b::f2_val_030_failed_nonce_tree_strands_a_phantom_reservation_and_cascades ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 42 filtered out; finished in 0.00s
+

@@ -98,3 +98,7 @@ Option 3 (log at `warn`, add a restart counter) is the change that makes the con
 Option 4 (`/health` should reflect driver state, not process liveness) is sound and is the same change F-CORE-004 option 3, F-CORE-011 option 3, F-CORE-030 option 3 and F-CORE-035 option 1 all ask for. **Five findings, one health/liveness signal.** The report should consolidate them into one recommendation rather than five, or it will read as five separate observability asks and be deferred five times.
 
 Option 5 (incremental re-scan) is sound but is the wrong cost/benefit for a rare path; the finding says so and I agree.
+
+## Reconciliation (run 2)
+
+**Final: Confirmed, Low, 70 (E2), canonical.** Rediscovered by run 2 as `F2-CORE-009` (CONFIRMS: `blocks.rs:311-326`, unbounded, undelayed rescan); run 2's Critic contrasts the `MissingBlock` fail-stop when the node's chain shrinks, this file carries the `debug`-only log and the `/health`-already-`OK` point. Plausible 60 → Confirmed 70. Still valid at `fe9e84c`. Counterpart: `F2-CORE-009`.

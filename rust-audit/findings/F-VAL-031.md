@@ -277,3 +277,7 @@ The second `start` returns `Ok()` without doing anything, because `btree_map::En
 **Option 3 (`catch_unwind` plus retry with backoff) is sound for panics and not for the `Err`-returning path**, and the finding conflates them. The `break` at `nonces.rs:132-136` is reached by a sampler `Err`, not a panic; a `catch_unwind` would not see it. Retrying with backoff instead of `break`ing is the change that matters, and it is one line. Also note `catch_unwind` requires the closure to be `UnwindSafe`, which the `Sampler` and channel captures are not without an `AssertUnwindSafe` — worth flagging so it is not scoped as trivial.
 
 **Option 4 (a metric or `error!` on stream death, plus an `available` gauge) is the one that should ship regardless of the others.** Today a validator whose worker has died is indistinguishable from a healthy one at every layer: `next` returns `Err(Unavailable)`, `perform_effect` swallows it into `Resume::Noop` (F-VAL-061), and the only counter is `effects_total{result="failure"}` whose `Success` label explicitly covers expected no-ops (`metrics.rs:91-92`). The `available` gauge is shared with F-VAL-030 option 4 and F-VAL-061 option 5; build it once.
+
+## Reconciliation (run 2)
+
+**Final combined status: Low, 42 %, Plausible — run-2 miss, still valid at `fe9e84c`.** `secrets/nonces.rs:101,117` still stores `_worker: thread::JoinHandle<()>` unjoined and `start` (`:30-32`) still returns early for an existing entry. No run-2 counterpart. See `state/run2/reconciliation/validator.md` (Section 2).

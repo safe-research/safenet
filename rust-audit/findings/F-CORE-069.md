@@ -60,3 +60,7 @@ There is no `ORDER BY` and no `WHERE nonce IS NOT NULL`, yet the doc comment pro
 ## Trail
 
 Filed by FWD from `origin/feat/batex_4` + the epic at `epics/2026_09_09_safenet_7702_executor_tx_batching.md`. No PoC: nothing sets `authorization` on any pushed branch (Phase 5 enqueues the delegation), so Phase 4 is behaviourally inert today and this is static-only. Re-validate when Phase 5 lands.
+
+## Reconciliation (run 2)
+
+**Final: Unmerged, forward-looking — unchanged.** PR #904's span-aware allocation is not in the tree at `fe9e84c` (`crates/core/src/tx/storage.rs` allocation is still `MAX(?, COALESCE((SELECT MAX(nonce) + 1 …), 0))`, `:145-149`), so run 2 did not assess it; not a miss. Its `main`-side prerequisite, the permanent gap, is `F-CORE-062` (now with executed evidence from `F2-CORE-061`). Re-validate when the stack merges. No run-2 counterpart (`state/run2/reconciliation/core.md` §2).

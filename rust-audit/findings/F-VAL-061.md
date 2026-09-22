@@ -227,3 +227,7 @@ Pure Rust, in code the merge does not touch: `service/effect.rs:243-256` still c
 ## In-flight impact (AS-PRUNE)
 
 **Pertains to unmerged branches, not to `main`.** Assessed against the Scheduled Secret Pruning stack (`origin/prune/end`, PRs #906–#913), built from a `git archive` extraction; no branch was merged or checked out. **Effect: unchanged, window widened.** The failure policy (`service/effect.rs:264-276`) is the same and the PoC tests pass. New: on a restart after less than `max_reorg_depth` blocks of downtime, replayed reconciliations below the stored block return at `effect.rs:241-251` **before** `generator.retain`/`generator.start` (`:253-256`), so the new process's nonce generator is never started and `NonceTree` fails into `Resume::Noop`. On `main` that window was the first block only; on the branch it is up to `max_reorg_depth` blocks. Filed as `F-VAL-068` D1.
+
+## Reconciliation (run 2)
+
+**Final combined status: High, 98 %, Confirmed — canonical for the effect-failure policy.** Confirmed by `F2-VAL-030`, `F2-VAL-031`, `F2-VAL-062` and `F2-VAL-063`; the deterministic first-block trigger stated here is `F2-VAL-062`'s race verbatim, and the pruning series widened the window to up to `max_reorg_depth` blocks plus the warp (`F2-VAL-031`, Medium 80 %, carried as its own row). See `state/run2/reconciliation/validator.md` (Section 1).

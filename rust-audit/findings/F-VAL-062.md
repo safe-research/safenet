@@ -231,3 +231,7 @@ Remediation option 3 (a guard test) is now the _primary_ recommendation rather t
 ## In-flight impact (AS-PRUNE)
 
 **Pertains to unmerged branches, not to `main`.** Assessed against the Scheduled Secret Pruning stack (`origin/prune/end`, PRs #906–#913), built from a `git archive` extraction; no branch was merged or checked out. **Effect: unchanged.** No new effect or resume variant carries secret material — the only new field is `block: u64` — and `warn!(?effect)` at `service/effect.rs:270` still prints `KeyShare` through its derived `Debug`. Housekeeping logs only counts and errors.
+
+## Reconciliation (run 2)
+
+**Final combined status: Informational, 88 % (hygiene confirmed, leak refuted) — run-2 miss, still valid at `fe9e84c`.** `service/effect.rs:24` derives `Debug`, `:270` logs `?effect` at `warn`; `frost/keygen.rs:27-28,433-435` unchanged. Run 2's nearest items (`F2-XC-005`, `F2-XC-007`) are different surfaces; run-1 twin `F-XC-002`. See `state/run2/reconciliation/validator.md` (Section 2).

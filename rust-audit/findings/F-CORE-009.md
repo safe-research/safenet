@@ -108,3 +108,7 @@ Option 3 (make the slot-skip fallback unconditionally advance time, `timestamp_m
 Option 4 (honour or reject a future `start_block`) is sound; of the two branches offered, rejecting at startup is better than silently waiting, because an operator who sets a future `start_block` has almost certainly made a units error.
 
 **Interaction:** `max_reorg_depth` is not only a tolerance, it is the snapshot retention window (F-CORE-001 option 2, F-SEN-011 option 3). Bounding it here without introducing a separate `snapshot_retention` would cap the fix those two findings need. Bound it, but note the coupling.
+
+## Reconciliation (run 2)
+
+**Final: Confirmed, Low, 78 (E2), canonical — partly missed by run 2.** Run 2's R1 O4 covers case 1 (`block_time = 0` with empty retry delays) as an Informational observation; cases 2 (unbounded `max_reorg_depth` sizing the startup scan and the retained window) and 3 (`start_block > head` silently ignored) appear in no run-2 log. Still valid at `fe9e84c` (`blocks.rs:46-87`, `279-289`, `345-365` unchanged). No run-2 counterpart (`state/run2/reconciliation/core.md` §2). Related run-2 NEW `F2-CORE-011` concerns `start_block` inside the window, a different case.

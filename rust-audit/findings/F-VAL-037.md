@@ -250,3 +250,7 @@ This finding was flagged for a line-number sweep because the merge moved address
 | `FROSTSignatureShares.sol:112-129` (selection leaf preimage) | unchanged |
 
 The merge's only Merkle-adjacent change is documentation: `9e41b49` adds `@dev` notes to `FROSTCoordinator`'s `SignShared` event (`:256-261`) and `signShare` (`:578-582`) warning that a selection root supplied by the submitter pins the Lagrange coefficient and must not be treated as evidence of participation. That is an _offchain-consumer trust_ caveat about the selection tree, not a change to how any tree is built, padded or domain-separated. The `B256::ZERO` padding and the absent leaf/internal domain separation in `crates/validator/src/merkle.rs` are untouched (`crates/validator` is unchanged by the merge), and the "safe today only by accident of what the consumers hash" framing is unaffected — if anything the new `signShare` note is a second instance of the same pattern, a safety property held by consumer discipline rather than by construction.
+
+## Reconciliation (run 2)
+
+**Final combined status: Informational, 60 % — run-2 miss, still valid at `fe9e84c`.** `merkle.rs:21-22,55` still pad with `B256::ZERO`; still unexploitable for the `msg.sender` reason given above. See `state/run2/reconciliation/validator.md` (Section 2).

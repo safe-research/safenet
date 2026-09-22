@@ -319,3 +319,7 @@ The merge shifts `contracts/src/FROSTCoordinator.sol` by two doc-only hunks. Com
 | ≥ 574 | **+11** | `581`→`592` (the `FROST.verifyShare` line cited by F-VAL-034) |
 
 `Secp256k1.sol`: `18-21`→`19-22`, `83-88`→`90-98`, `178-180`→`194-196`, `210-213`→`226-229`. `FROST.sol`: `36-51`→`38-53`. `FROSTParticipantMap.sol`, `FROSTNonceCommitmentSet.sol`, `FROSTSignatureShares.sol` and `Consensus.sol` are unchanged, so citations into those are still correct as written.
+
+## Reconciliation (run 2)
+
+**Final combined status: Critical, 97 %, Confirmed — canonical.** Counterpart `F2-VAL-001` (CONFIRMS): an independent E1 reproduction (`poc/F2-VAL-001`, `s_a_recovered == s_a_ref`, 95 %) of the same mechanism. No team disposition yet. See `state/run2/reconciliation/validator.md` (Sections 1, 5).

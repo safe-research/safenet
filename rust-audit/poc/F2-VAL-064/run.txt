@@ -1,0 +1,38 @@
+# QA2-VAL-B re-run for F2-VAL-064: the documented '--config-file=<path>' spelling is rejected by argh 0.1.19
+# commit: 92a0610953c80a1308ef651c44a836e4f2c99267
+# binary: /home/shebin.guest/.cache/safenet-run2/target/debug/validator (built from this tree; cargo build -p validator --bins --offline --locked -> Finished, up to date)
+# scratch config: same val-typo.toml as poc/F2-VAL-060 (sample copy, rpc ->  "http://127.0.0.1:1")
+
+## run 1: documented '=' form
+$ validator --config-file=/tmp/claude-501/-home-shebin-guest-safe-safenet/166c992f-87ea-4548-be85-5fcf1c13bf90/scratchpad/cfg/val-typo.toml; echo exit=$?
+Unrecognized argument: --config-file=/tmp/claude-501/-home-shebin-guest-safe-safenet/166c992f-87ea-4548-be85-5fcf1c13bf90/scratchpad/cfg/val-typo.toml
+
+Run validator --help for more information.
+exit=1
+
+## run 2: space form (accepted: the binary proceeds to Config::load, which then fails on the misspelled key)
+$ validator --config-file /tmp/claude-501/-home-shebin-guest-safe-safenet/166c992f-87ea-4548-be85-5fcf1c13bf90/scratchpad/cfg/val-typo.toml; echo exit=$?
+Error: Parse(Error { message: "unknown field `blocks_per_epoc`, expected one of `consensus`, `staker`, `participants`, `oracles`, `genesis_salt`, `blocks_per_epoch`, `key_gen_timeout`, `signing_timeout`, `oracle_timeout`", input: Some("# Sample configuration for the `validator` binary.\n#\n# Copy this file, fill in the deployment-specific values below, and pass it\n# with `--config-file=/path/to/your/validator.toml` (the binary defaults to\n# `validator.toml` in its working directory if the flag is omitted). See\n# `src/config.rs` for the full schema, and `../../docs/validator-handbook.md`\n# for an operator's guide to running a validator.\n\n# The chain RPC endpoint.\nrpc = \"http://127.0.0.1:1\"\n\n# The secp256k1 private key used to sign onchain transactions. Fund this\n# account with just enough gas to submit consensus transactions — see the\n# validator handbook's \"Secrets\" section for the risks of reusing this key.\nsigner = \"0x0000000000000000000000000000000000000000000000000000000000000001\"\n\n# A SQLite connection string for the validator's persistent state (secrets,\n# indexer/transaction-queue progress). This file contains secret key\n# material in plaintext — see the validator handbook's \"Consensus Secrets\"\n# section — and must be backed up and restored across restarts.\ndatabase = \"sqlite:/var/lib/safenet/validator/data/storage.db\"\n\n[validator]\n# The `Consensus` contract this validator proposes epochs and attests\n# transactions on. The `FROSTCoordinator` address is not configured\n# directly; it is read onchain via `Consensus.getCoordinator()`.\nconsensus = \"0x0000000000000000000000000000000000000000\"\nblocks_per_epoc = 1440\n\n# Optional: the Ethereum Mainnet account responsible for putting up this\n# validator's stake, if different from `signer`'s address. See\n# `../../docs/configuration.md#staking`.\n# staker = \"0x0000000000000000000000000000000000000000\"\n\n# Optional: oracle contracts whose results this validator honors when\n# attesting oracle-checked transactions.\n# oracles = [\"0x0000000000000000000000000000000000000000\"]\n\n# The salt mixed into the genesis group's key generation context.\ngenesis_salt = \"0x0000000000000000000000000000000000000000000000000000000000000000\"\n\n# Optional timing parameters, in blocks; each falls back to a built-in\n# default when omitted.\n# blocks_per_epoch = 1440   # default: 1440 (~2 hours on Gnosis Chain)\n# key_gen_timeout = 120     # default: 120\n# signing_timeout = 6       # default: 6 (~30 seconds on Gnosis Chain)\n# oracle_timeout = 12       # default: 12\n\n# The validator set participating in key generation and signing, one\n# `[[validator.participants]]` table per member. `active_from`/\n# `active_before` default to \"always active\" when omitted.\n[[validator.participants]]\naddress = \"0x0000000000000000000000000000000000000001\"\n\n[[validator.participants]]\naddress = \"0x0000000000000000000000000000000000000002\"\n\n[observability]\n# The `tracing` env-filter directive controlling log verbosity.\nlog_filter = \"info\"\n\n# Optional: address the Prometheus metrics HTTP listener binds to. Defaults\n# to an ephemeral port on loopback; set this to expose metrics outside a\n# container (see the validator handbook's \"Logging and Metrics\" section).\n# metrics_address = \"0.0.0.0:3555\"\n\n[index]\n# Optional: set to work around RPC providers that unreliably return\n# `eth_getLogs` results (see the validator handbook's \"`eth_getLogs`\n# Reliability\" section).\n# use_client_filtering = true\n\n[transactions]\n# Optional: caps the priority fee of estimated fees to at most this\n# percentage of the total max fee per gas (see the validator handbook's gas\n# cost tip). Lower values reduce what you can overpay on a bad fee estimate,\n# but risk slower inclusion if the cap ends up below what the network needs.\n# priority_fee_cap_percentage = 95\n"), keys: ["validator"], span: Some(1389..1404) })
+exit=1
+
+## run 3: --help (the usage line shows the only accepted spelling)
+$ validator --help; echo exit=$?
+Usage: validator [--config-file <config-file>] [--version]
+
+Safenet validator.
+
+Options:
+  --config-file     path to the validator TOML configuration file.
+  --version         print version information.
+  --help, help      display usage information
+
+exit=0
+
+## where the '=' spelling is documented in this checkout
+/home/shebin.guest/safe/safenet/crates/validator/validator.sample.toml:4:# with `--config-file=/path/to/your/validator.toml` (the binary defaults to
+/home/shebin.guest/safe/safenet/crates/validator/Dockerfile:35:# `args:` (e.g. `--config-file=...`) appends to the binary instead of
+/home/shebin.guest/safe/safenet/docs/validator-handbook.md:110:    --config-file=validator.toml
+
+## code identity check
+$ git diff --stat 3ec8bc57dc35d1e9e65075ae9424bff427c47833 HEAD -- crates contracts Cargo.toml Cargo.lock
+(no output: the audited code at 3ec8bc5 is byte-identical to HEAD 92a0610; only rust-audit/ differs)

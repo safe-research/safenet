@@ -1,0 +1,23 @@
+   Compiling validator v0.2.0 (/home/shebin.guest/safe/safenet/crates/validator)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 3.61s
+warning: the following packages contain code that will be rejected by a future version of Rust: proc-macro-error2 v2.0.1
+note: to see what the problems were, use the option `--future-incompat-report`, or run `cargo report future-incompatibilities --id 1`
+     Running unittests src/main.rs (/home/shebin.guest/.cache/safenet-run2/target/debug/deps/validator-3a1b46af57fe89be)
+
+running 13 tests
+test secrets::store::tests::each_kind_of_secret_follows_its_own_retained_set ... ok
+test secrets::store::tests::a_failed_reconciliation_rolls_back_the_marker_and_both_schedules ... ok
+test secrets::store::tests::a_failed_collection_deletes_nothing ... ok
+test secrets::store::tests::keygen_secrets_roundtrip_and_missing ... ok
+test secrets::store::tests::nonces_reveal_is_non_consuming ... ok
+test secrets::store::tests::collects_only_secrets_scheduled_at_or_before_the_safe_block ... ok
+test secrets::store::tests::scheduled_nonces_stay_revealable_and_consumable ... ok
+test secrets::store::tests::reconciliation_below_the_last_accepted_block_is_ignored ... ok
+test secrets::store::tests::reopening_preserves_stored_secrets ... ok
+test secrets::store::tests::nonce_chunks_are_stored ... ok
+test secrets::store::tests::schedules_absent_groups_and_unschedules_retained_ones ... ok
+test secrets::store::tests::take_nonce_removes_it_permanently ... ok
+test secrets::store::tests::store_keygen_secrets_does_not_overwrite ... ok
+
+test result: ok. 13 passed; 0 failed; 0 ignored; 0 measured; 29 filtered out; finished in 0.04s
+

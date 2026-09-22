@@ -46,3 +46,7 @@ The pruning stack partially fixes `F-VAL-005` by ordering reconciliations by a s
 ## Trail
 
 - Filed from the AS-PRUNE assessment of `origin/prune/end`: static reading plus the branch unit flows A–E, the adapted `poc/F-VAL-005-066`, `poc/F-VAL-030-032-061` and `poc/F-VAL-033`, and a live Anvil run of the reorg-nonce harness. Not yet critiqued or independently re-derived. Re-check when the stack merges.
+
+## Reconciliation (run 2)
+
+**Final combined status: Superseded — the branch it was filed against is now `main` (`fe9e84c`); split.** D1 → `F2-VAL-031` (Medium 80 %, QA'd); D2 → the design-conceded residual of `F-VAL-005` (`store.rs:38-41`), `known`; D3 → `F2-VAL-035` (depth 0–1 instance of the same ordering, Medium 78 %); D4 (marker with no hash that never decreases, `store.rs:323-328`) → not filed by run 2 in this form; `F2-XC-006` is the nearest canonical. See `state/run2/reconciliation/validator.md` (Section 2).

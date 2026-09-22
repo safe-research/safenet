@@ -108,3 +108,7 @@ Option 3 (`watcher_errors_total{kind}`, and log at `warn` only on the first fail
 ## In-flight impact (AS-PRUNE)
 
 **Pertains to unmerged branches, not to `main`.** Assessed against the Scheduled Secret Pruning stack (`origin/prune/end`, PRs #906–#913), built from a `git archive` extraction; no branch was merged or checked out. **Effect: unchanged.** `next_input` (`crates/core/src/driver.rs:208-233`) and its fixed retry are untouched.
+
+## Reconciliation (run 2)
+
+**Final: Confirmed, Medium, 80 (E2), canonical for the driver retry policy.** Rediscovered in two parts by run 2: `F2-CORE-010` (EXTENDS: quantifies the storm — 17 concurrent `eth_getLogs` per 100 ms for the validator, 11 for the sentinel, `try_join_all` discards partial progress, no batching layer in `alloy-rpc-client` 2.0.5) and `F2-CORE-005` (executes the "deterministic errors never escalate" horn). This file alone carries the log-flood horn and the handbook contradiction (`docs/validator-handbook.md:110`). Still valid at `fe9e84c` (`driver.rs:28`, `210-226` unchanged in content). Counterparts: `F2-CORE-010`, `F2-CORE-005`; shares remediation with `F-CORE-004` option 1.

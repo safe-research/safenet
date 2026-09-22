@@ -1,6 +1,5 @@
 # cmd: cargo tree -d --workspace
 # commit: 4ac68383b636eb5409cf77c69bbd83bd651bdf3c
-# start: 2026-09-15T10:46:32Z
 alloy-json-abi v1.6.0
 ├── alloy-contract v2.0.5
 │   └── alloy v2.0.5
@@ -943,5 +942,4 @@ winnow v1.0.3
 ├── toml v1.1.2+spec-1.1.0 (*)
 └── toml_parser v1.1.2+spec-1.1.0
     └── toml v1.1.2+spec-1.1.0 (*)
-# end: 2026-09-15T10:46:32Z
 # exit=0

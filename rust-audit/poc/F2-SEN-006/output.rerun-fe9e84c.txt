@@ -1,0 +1,12 @@
+QA2-SEN-Δ re-run for F2-SEN-006 at audited commit fe9e84c (previous run: 3ec8bc5, poc/F2-SEN-006/output.txt), rustc/cargo 1.98.1.
+Command: cargo test -p sentinel --bins qa2_sen -- --nocapture --test-threads=1
+Source: poc/F2-SEN-001/qa2_sen_all.rs pasted verbatim into `mod tests` of crates/sentinel/src/service.rs, reverted afterwards.
+Verbatim output of this finding's tests (full 12-test log: poc/F2-SEN-001/qa2_sen_all.rerun-fe9e84c.txt):
+
+test service::tests::qa2_sen::f2_sen_006_voting_window_zero_is_accepted ... [F2-SEN-006] voting_window = 0 accepted: true; engine_timeout would be 1000 ms (w=0), 1000 ms (w=1), 371250 ms (w=100)
+
+thread 'service::tests::qa2_sen::f2_sen_006_voting_window_zero_is_accepted' (7119) panicked at crates/sentinel/src/service.rs:3098:13:
+F2-SEN-006 reproduced: voting_window = 0 accepted (WaitingForEngineCheck deadline = proposal block, 1 s engine timeout)
+FAILED
+
+Run summary: test result: FAILED. 0 passed; 12 failed; 0 ignored; 0 measured; 44 filtered out; finished in 2.73s

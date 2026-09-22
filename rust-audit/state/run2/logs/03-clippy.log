@@ -1,6 +1,5 @@
 # cmd: cargo clippy --workspace --all-targets --locked -- -D warnings
 # commit: 4ac68383b636eb5409cf77c69bbd83bd651bdf3c
-# start: 2026-09-15T10:47:11Z
 # CARGO_TARGET_DIR=/home/shebin.guest/.cache/safenet-run2/target CARGO_BUILD_JOBS=2
 # clippy: clippy 0.1.98 (48a229ceae 2026-09-01)
     Checking serde_core v1.0.228
@@ -302,5 +301,4 @@
     Finished `dev` profile [unoptimized + debuginfo] target(s) in 23.99s
 warning: the following packages contain code that will be rejected by a future version of Rust: proc-macro-error2 v2.0.1
 note: to see what the problems were, use the option `--future-incompat-report`, or run `cargo report future-incompatibilities --id 1`
-# end: 2026-09-15T10:47:36Z
 # exit=0

@@ -96,3 +96,7 @@ Option 3 (`catch_unwind` in `spawn` plus a `from_panic` bound on the service) ke
 ## In-flight impact (AS-PRUNE)
 
 **Pertains to unmerged branches, not to `main`.** Assessed against the Scheduled Secret Pruning stack (`origin/prune/end`, PRs #906–#913), built from a `git archive` extraction; no branch was merged or checked out. **Effect: unchanged.** Effect spawning and panic handling only gained housekeeping code.
+
+## Reconciliation (run 2)
+
+**Final: Plausible, Low, 45 (E2, no trigger), canonical — missed by run 2.** Run 2's R2 rejected 9 covers cancel-safety of `join_next`, not task failure; no run-2 log considers a panicking effect task. Still valid at `fe9e84c`: `EffectManager::next` still documents "Task failures are logged and skipped" (`effects.rs:76-79` after the housekeeping drift). No run-2 counterpart (`state/run2/reconciliation/core.md` §2).

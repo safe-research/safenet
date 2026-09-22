@@ -348,3 +348,7 @@ Certainty **45% → 35%**, Status **Verified (reduced)**, severity **Low** uncha
 ## In-flight impact (AS-PRUNE)
 
 **Pertains to unmerged branches, not to `main`.** Assessed against the Scheduled Secret Pruning stack (`origin/prune/end`, PRs #906–#913), built from a `git archive` extraction; no branch was merged or checked out. **Effect: partially fixed (the untested part only).** The branch's store tests now assert that the cascade delete fires. Still true: the foreign-keys pragma is never set in code, abandoned chunks of retained groups are never pruned, and the JSON copies are not zeroed.
+
+## Reconciliation (run 2)
+
+**Final combined status: observation, 35 % — run-2 miss.** Legs (a) and (b) still true at `fe9e84c` (`store.rs:197,202,235,266,291` JSON strings; `schedule_absent_groups` at `store.rs:381-411` is keyed by group id, so a retained group's abandoned chunk is never scheduled); leg (c) refuted in run 1. `F2-XC-005` (logical deletion) is adjacent, not the same. See `state/run2/reconciliation/validator.md` (Section 2).

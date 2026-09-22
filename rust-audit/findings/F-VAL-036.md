@@ -220,3 +220,7 @@ The merge shifts `contracts/src/FROSTCoordinator.sol` by two documentation-only 
 ## In-flight impact (AS-PRUNE)
 
 **Pertains to unmerged branches, not to `main`.** Assessed against the Scheduled Secret Pruning stack (`origin/prune/end`, PRs #906–#913), built from a `git archive` extraction; no branch was merged or checked out. **Effect: unchanged.** `state/preprocess.rs::observe` is untouched.
+
+## Reconciliation (run 2)
+
+**Final combined status: Low, 40 %, Plausible — run-2 miss, still valid at `fe9e84c`.** `state/preprocess.rs:194` still assigns `next_sequence = sequence.saturating_add(1)` unconditionally. `F2-VAL-061` scenario (b) exercises only the forward jump. See `state/run2/reconciliation/validator.md` (Section 2).

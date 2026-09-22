@@ -114,3 +114,7 @@ Option 1 (make the watch list `(address, event-set)` pairs) is the structurally 
 Option 2 (bind the ABI to its contract inside `watcher_events!`) is sound in intent but the finding correctly identifies why it does not work as a pure macro — the addresses are runtime values. As written it is a builder, not a macro change; the report should say so or it will be costed wrong.
 
 **Dependency worth recording:** F-CORE-004 option 2 (skip undecodable logs) is only safe _with_ this finding fixed, because without per-address topic sets any watched address can emit any watched topic and therefore manufacture the skip. The two should be sequenced: F-CORE-006 first.
+
+## Reconciliation (run 2)
+
+**Final: Confirmed, Low, 70 (E2), canonical for the core half** (service side remains `F-VAL-060`, REC-VAL). Rediscovered by run 2 as `F2-CORE-004` (CONFIRMS), whose Critic verified both services' watched sets and added that the pinned `alloy-sol-types` 1.6.0 decode path is more permissive than "ABI-compatible" (extra topics ignored, out-of-range enums decode to `__Invalid`, strings decode lossily) — which lifts this file's Plausible 55 to Confirmed 70 and strengthens remediation option 1 (per-address topic sets). Still valid at `fe9e84c`. Counterpart: `F2-CORE-004`.

@@ -154,3 +154,7 @@ The merge shifts `contracts/src/FROSTCoordinator.sol` by two documentation-only 
 | `FROSTParticipantMap.complain:185` | unchanged — the file was not touched |
 
 Nothing in the merge marks the plaintiff `COMPROMISED`, bounds complaints per plaintiff, or makes the contract verify the revealed scalar, so basis rows 6 and 8 and the offchain-adjudication conclusion all stand.
+
+## Reconciliation (run 2)
+
+**Final combined status: Medium, 82 %, Confirmed — canonical.** Counterpart `F2-VAL-006` (CONFIRMS; E1 82 %, rated Low). Medium is kept: an attacker-controlled on-demand disclosure primitive plus the honest side's fee-market race to land `n-1` responses. `F2-VAL-006`'s second paragraph also restates `F-VAL-067`. See `state/run2/reconciliation/validator.md` (Section 1).

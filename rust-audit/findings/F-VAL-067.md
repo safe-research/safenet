@@ -106,3 +106,7 @@ The merge shifts `contracts/src/FROSTCoordinator.sol` by two documentation-only 
 | `FROSTParticipantMap.sol:181-209` and `respond`'s decrements | unchanged — the file was not touched |
 
 `keyGenComplain` is byte-identical (verified by diffing old `:476-492` against merged `:482-498`), so the Rust/Solidity disagreement over the net complaint count that this finding identifies is unchanged, and remediation option 1 still points at what is now **`:486`**.
+
+## Reconciliation (run 2)
+
+**Final combined status: Low, 70 %, Confirmed (impact bounded) — was Medium 48 %.** Mechanism confirmed by `F2-VAL-006` (second paragraph); `state/keygen.rs:715,722,840` unchanged. Checked at `fe9e84c`: `restart_key_gen_excluding` (`:1188-1224`) for a numbered epoch calls `start_key_gen` with a new participant set and consults no contract state, so every honest node moves together and the abort costs one extra ceremony; reaching `total >= threshold` against one accused needs `threshold` distinct plaintiffs. Genesis `Halted` branch is A16-Informational. See `state/run2/reconciliation/validator.md` (Sections 2, 3).

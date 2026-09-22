@@ -366,3 +366,7 @@ Rust-only mechanism in unchanged code (`crates/validator` and `crates/core` are 
 ## In-flight impact (AS-PRUNE)
 
 **Pertains to unmerged branches, not to `main`.** Assessed against the Scheduled Secret Pruning stack (`origin/prune/end`, PRs #906–#913), built from a `git archive` extraction; no branch was merged or checked out. **Effect: unchanged.** The effect failure policy (`service/effect.rs:264-276`) is the same; all `poc/F-VAL-030-032-061` tests pass on the branch. The stack additionally widens the window in which this phantom reservation is created after a restart — see `F-VAL-068` D1.
+
+## Reconciliation (run 2)
+
+**Final combined status: High, 97 %, Confirmed — canonical.** Counterparts `F2-VAL-030` (EXTENDS: the `expected_chunk`-vs-contract cascade makes ~90 % of every later chunk unsignable; E1 90 %) and `F2-VAL-062` (folded into `F2-VAL-030`). Run 2's Critic rated Medium as "self-inflicted restart"; the reorg trigger reproduced live and unforced here meets Section 8's High, so High stands with the cascade folded in. See `state/run2/reconciliation/validator.md` (Section 1).

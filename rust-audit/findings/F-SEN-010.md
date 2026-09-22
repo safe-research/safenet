@@ -103,3 +103,7 @@ Re-validated against merge commit `a7f3915` (baseline `2893917`).
 The one `service.rs` citation is byte-identical: the request-id derivation from the configured `consensus` address at `service.rs:108-115`, and the `debug`-level drop of a mismatched `NewRequest` at `service.rs:286-289`.
 
 **Certainty 85% and severity Informational unchanged.** Status left at `Critiqued`; the `known` tag still applies.
+
+## Reconciliation (run 2)
+
+**Final combined status: Confirmed, Informational, 85% (E2), `known`, canonical `F-SEN-010`.** Rediscovered by run 2 as bullet 1 of `F2-SEN-009` and, canonically, in the cross-cutting `F2-XC-008` ("zero-address contracts … the sentinel starts, indexes mainnet and idles forever"), whose row REC-XC writes; this run-1 row absorbs the sentinel-sample half (zero `oracle`/`consensus`/`fee_token`, parse-only `parses_sample_config` at `crates/sentinel/src/config.rs:136-143`, the well-known placeholder `signer`). Run 2 adds the live-mainnet `rpc` in the same sample, which run 1 had filed cross-cutting (`F-XC-009`). `config.rs` and `sentinel.sample.toml` are unchanged at `fe9e84c`. Agreed fix: a `Config::validate` rejecting `Address::ZERO` and a `voting_window` floor, together with a sample that does not load as-is. Team disposition: none. See `state/run2/reconciliation/sentinel.md` §1.

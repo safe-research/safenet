@@ -99,3 +99,7 @@ Option 2 (escalate after N consecutive lifted failures) is sound but depends on 
 Option 4 (make `queue_action` and the run loop agree — either both lift or neither) is worth doing on its own merits: the current split means the same provider fault is fatal at startup and invisible thereafter, which is the kind of asymmetry that makes an incident report impossible to write.
 
 **Interaction to note:** narrowing `is_intermittent` (option 3) changes which failures reach the underpriced/generic branches in `submit_transaction`, which is the classification **F-CORE-061** is about. The two should be reviewed together so that widening one match and narrowing the other do not cancel out.
+
+## Reconciliation (run 2)
+
+**Final: Confirmed, Medium, 78 (E2), canonical — mechanism missed by run 2.** Run 2 filed the observability leg as `F2-CORE-067` (no queue metrics, hash never persisted) and its R3 examined intermittent classification for other hypotheses (R12, R20), but no run-2 finding covers the unbounded swallow of a permanent RPC error while the state machine advances, nor the `queue_action` asymmetry. Still valid at `fe9e84c`: `lift_intermittent_error(..)?` at `driver.rs:250` and `284` (cited at those lines by `F2-CORE-031` row 6) and `is_intermittent` = `matches!(self, Self::Rpc(_))` (`tx/mod.rs:47-54`). Counterpart for the metrics leg only: `F2-CORE-067` (`state/run2/reconciliation/core.md` §2).
