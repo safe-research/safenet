@@ -13,14 +13,14 @@
 //! A genuine prior interaction with `refundReceiver` is evidence about the
 //! refund leg alone, never the transaction's primary effect, so
 //! [`RefundChecker::check`] reinterprets a delegated [`Assessment::Secure`]
-//! as claiming only [`Coverage::REFUND`] — the engine still needs another
-//! check to cover the rest of the transaction before it can answer `Secure`
-//! overall.
+//! as claiming only [`crate::engine::CallCoverage::refund`] — the engine
+//! still needs another check to cover the rest of the transaction before it
+//! can answer `Secure` overall.
 
 use super::{AddressPoisoningChecker, Assessment, CheckContext, Checker};
 use crate::{
     contracts::bindings::erc20::transferCall,
-    engine::{Coverage, MetaTransaction, Proposal, SafeTransaction},
+    engine::{MetaTransaction, Proposal, SafeTransaction},
 };
 use alloy::sol_types::SolCall as _;
 use std::sync::Arc;
@@ -50,8 +50,9 @@ impl Checker for RefundChecker {
     /// sees the real `chain_id` and `safe`, which the synthesized call has
     /// none of its own. Abstains outright when there's no refund to
     /// resynthesize (see [`refund_transfer`]). A delegated `Secure` is
-    /// reinterpreted as covering only [`Coverage::REFUND`] — the recipient's
-    /// prior history says nothing about the rest of the transaction.
+    /// reinterpreted as covering only
+    /// [`crate::engine::CallCoverage::refund`] — the recipient's prior
+    /// history says nothing about the rest of the transaction.
     async fn check(&self, proposal: &Proposal, context: &CheckContext) -> Assessment {
         let Some(refund_call) = refund_transfer(&proposal.transaction) else {
             return Assessment::Abstain;
@@ -62,7 +63,7 @@ impl Checker for RefundChecker {
         };
         match self.0.check(&refund_proposal, context).await {
             Assessment::Secure { .. } => Assessment::Secure {
-                coverage: Coverage::REFUND,
+                coverage: proposal.refund_checked(),
             },
             assessment => assessment,
         }

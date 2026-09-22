@@ -50,7 +50,7 @@ use crate::{
         erc20::approveCall,
         staking::{claimCall, stakeCall},
     },
-    engine::{CheckContext, Coverage, MetaTransaction, Operation, Proposal, RuleId},
+    engine::{AspectSet, CallCoverage, CheckContext, MetaTransaction, Operation, Proposal, RuleId},
 };
 use alloy::{
     primitives::{Address, U256, address},
@@ -105,13 +105,23 @@ impl Checker for StakingChecker {
             }
         }
 
+        // The whole proposal's call count, not `remaining.len()`: any
+        // `claim` calls set aside above are covered by the claim too.
+        //
+        // TODO(follow-up): this widens the same claim across every call in
+        // the proposal rather than building it compositionally (one claim
+        // per independently-validated call, unioned together). The two are
+        // equivalent today only because this check still requires every
+        // call to be recognized before it affirms at all — not yet tracked
+        // as a named epic follow-up.
+        let total_calls = proposal.calls.len();
         match remaining.as_slice() {
             [] if claimed => Assessment::Secure {
-                coverage: Coverage::DATA,
+                coverage: CallCoverage::calls(total_calls, AspectSet::DATA),
             },
             [] => Assessment::Abstain,
-            [call] => check_lone_call(call),
-            [first, second] => check_pair(first, second),
+            [call] => check_lone_call(total_calls, call),
+            [first, second] => check_pair(total_calls, first, second),
             _ => Assessment::Abstain,
         }
     }
@@ -122,10 +132,15 @@ impl Checker for StakingChecker {
 /// A dangling, unused `approve` on [`STAKING`] is left to
 /// [`Assessment::Abstain`] — see the module docs for why this check doesn't
 /// deny it.
-fn check_lone_call(call: &MetaTransaction) -> Assessment {
+///
+/// `total_calls` is the *whole proposal's* call count, not `1` — it can
+/// exceed `remaining`'s length by the number of `claim` calls set aside
+/// before this ran, and the claim covers those too, since they were already
+/// validated in `check`'s own loop above.
+fn check_lone_call(total_calls: usize, call: &MetaTransaction) -> Assessment {
     if stake_amount(call).is_some() {
         return Assessment::Secure {
-            coverage: Coverage::DATA,
+            coverage: CallCoverage::calls(total_calls, AspectSet::DATA),
         };
     }
     Assessment::Abstain
@@ -139,7 +154,10 @@ fn check_lone_call(call: &MetaTransaction) -> Assessment {
 /// leaving the `approve` a dangling, un-consumed authorization — left to
 /// [`Assessment::Abstain`] for the same reason as [`check_lone_call`]'s
 /// standalone `approve` case, regardless of the amount approved.
-fn check_pair(first: &MetaTransaction, second: &MetaTransaction) -> Assessment {
+///
+/// `total_calls` is the *whole proposal's* call count, not `2` — see
+/// [`check_lone_call`]'s docs for why.
+fn check_pair(total_calls: usize, first: &MetaTransaction, second: &MetaTransaction) -> Assessment {
     if let (Some(approved), Some(staked)) = (staking_approval_amount(first), stake_amount(second)) {
         return if approved > staked {
             Assessment::Insecure {
@@ -147,7 +165,7 @@ fn check_pair(first: &MetaTransaction, second: &MetaTransaction) -> Assessment {
             }
         } else {
             Assessment::Secure {
-                coverage: Coverage::DATA,
+                coverage: CallCoverage::calls(total_calls, AspectSet::DATA),
             }
         };
     }

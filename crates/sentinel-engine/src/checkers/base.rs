@@ -3,7 +3,7 @@
 use super::{Assessment, Checker};
 use crate::{
     contracts::bindings::safe,
-    engine::{CheckContext, Coverage, MetaTransaction, Operation, Proposal, RuleId},
+    engine::{AspectSet, CheckContext, MetaTransaction, Operation, Proposal, RuleId},
 };
 use alloy::{
     primitives::{Address, address},
@@ -59,7 +59,7 @@ impl Checker for BaseChecker {
             .try_for_each(|call| check_call(safe, call))
         {
             Ok(()) => Assessment::Secure {
-                coverage: Coverage::TO | Coverage::OPERATION,
+                coverage: proposal.checked(AspectSet::TO | AspectSet::OPERATION),
             },
             Err(rule) => Assessment::Insecure { rule },
         }
@@ -234,7 +234,7 @@ fn check_delegate_calls(call: &MetaTransaction) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::engine::SafeTransaction;
+    use crate::engine::{CallCoverage, SafeTransaction};
     use alloy::primitives::{Address, Bytes, U256, address};
 
     /// Checks a single call's four action fields against the base
@@ -315,7 +315,7 @@ mod tests {
                 .check(&Proposal::from(transaction), &CheckContext::default())
                 .await,
             Assessment::Secure {
-                coverage: Coverage::TO | Coverage::OPERATION,
+                coverage: CallCoverage::calls(1, AspectSet::TO | AspectSet::OPERATION),
             }
         );
     }

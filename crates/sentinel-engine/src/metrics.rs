@@ -6,7 +6,7 @@
 //! is recorded goes through a typed function that documents (and enforces)
 //! its label shape instead of a raw string.
 
-use crate::engine::{Coverage, CoverageLabel};
+use crate::engine::{CallCoverage, CoverageLabel};
 use metrics::Counter;
 
 /// Tally of missing coverage on an engine abstention, by `aspect` --
@@ -26,7 +26,7 @@ pub fn missing_coverage_total(aspect: CoverageLabel) -> Counter {
 /// from "counter never created", and an operator diffing dashboards across
 /// deploys wants the former.
 pub fn init() {
-    for label in Coverage::all().labels() {
+    for label in CallCoverage::all_labels() {
         missing_coverage_total(label).absolute(0);
     }
 }

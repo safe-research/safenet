@@ -11,17 +11,17 @@
 //! inspect `value`, so it claims nothing about a nested call that also moves
 //! native currency.
 //!
-//! Evaluates every call of `proposal.calls`, not just a top-level one: since
-//! `Coverage::TO | Coverage::DATA | Coverage::OPERATION` is still claimed
-//! for the whole transaction (per-call coverage is a later epic), affirming
-//! requires *every* call in a batch to itself be a nested `execTransaction`
-//! call — a batch mixing one in with an unrelated call still abstains,
-//! since this checker cannot vouch for the unrelated call's own action.
+//! Evaluates every call of `proposal.calls`, not just a top-level one:
+//! affirming requires *every* call in a batch to itself be a nested
+//! `execTransaction` call — a batch mixing one in with an unrelated call
+//! still abstains, since this checker cannot vouch for the unrelated call's
+//! own action. When it does affirm, `To | Data | Operation` is claimed for
+//! every call index, not a proper subset.
 
 use super::{Assessment, Checker};
 use crate::{
     contracts::bindings::safe,
-    engine::{CheckContext, Coverage, MetaTransaction, Operation, Proposal},
+    engine::{AspectSet, CheckContext, MetaTransaction, Operation, Proposal},
 };
 use alloy::{primitives::Address, sol_types::SolCall as _};
 
@@ -44,7 +44,7 @@ impl Checker for NestedSafeChecker {
             .all(|call| is_nested_exec_transaction(safe_address, call))
         {
             Assessment::Secure {
-                coverage: Coverage::TO | Coverage::DATA | Coverage::OPERATION,
+                coverage: proposal.checked(AspectSet::TO | AspectSet::DATA | AspectSet::OPERATION),
             }
         } else {
             Assessment::Abstain

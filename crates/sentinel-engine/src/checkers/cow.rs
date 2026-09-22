@@ -74,7 +74,7 @@ use crate::{
         cow::{Order, TwapData, createWithContextCall, setPreSignatureCall},
         erc20::approveCall,
     },
-    engine::{CheckContext, Coverage, MetaTransaction, Operation, Proposal, RuleId},
+    engine::{AspectSet, CallCoverage, CheckContext, MetaTransaction, Operation, Proposal, RuleId},
 };
 use alloy::{
     primitives::{Address, B256, Bytes, U256, address},
@@ -320,7 +320,7 @@ impl CowChecker {
             },
             Ok(order) if token == order.sell_token && approved_amount == order.sell_amount => {
                 Assessment::Secure {
-                    coverage: Coverage::DATA,
+                    coverage: CallCoverage::calls(calls.len(), AspectSet::DATA),
                 }
             }
             Ok(_) => Assessment::Insecure {
@@ -395,7 +395,7 @@ impl CowChecker {
             };
         }
         Assessment::Secure {
-            coverage: Coverage::DATA,
+            coverage: CallCoverage::calls(calls.len(), AspectSet::DATA),
         }
     }
 
@@ -925,7 +925,7 @@ mod tests {
         assert_eq!(
             check(&tx(MULTI_SEND, data.into(), Operation::DelegateCall)).await,
             Assessment::Secure {
-                coverage: Coverage::DATA
+                coverage: CallCoverage::calls(2, AspectSet::DATA)
             }
         );
     }
@@ -962,7 +962,7 @@ mod tests {
         assert_eq!(
             check(&tx(MULTI_SEND, data.into(), Operation::DelegateCall)).await,
             Assessment::Secure {
-                coverage: Coverage::DATA
+                coverage: CallCoverage::calls(2, AspectSet::DATA)
             }
         );
     }
@@ -1022,7 +1022,7 @@ mod tests {
         assert_eq!(
             check(&tx(MULTI_SEND, data.into(), Operation::DelegateCall)).await,
             Assessment::Secure {
-                coverage: Coverage::DATA
+                coverage: CallCoverage::calls(2, AspectSet::DATA)
             }
         );
     }
@@ -1042,7 +1042,7 @@ mod tests {
         assert_eq!(
             check(&tx(MULTI_SEND, data.into(), Operation::DelegateCall)).await,
             Assessment::Secure {
-                coverage: Coverage::DATA
+                coverage: CallCoverage::calls(2, AspectSet::DATA)
             }
         );
     }
@@ -1311,7 +1311,7 @@ mod tests {
                 .check_presignature_batch(SAFE, U256::from(1u64), &calls)
                 .await,
             Assessment::Secure {
-                coverage: Coverage::DATA
+                coverage: CallCoverage::calls(2, AspectSet::DATA)
             }
         );
     }
@@ -1366,7 +1366,7 @@ mod tests {
                 .check_presignature_batch(SAFE, U256::from(1u64), &calls)
                 .await,
             Assessment::Secure {
-                coverage: Coverage::DATA
+                coverage: CallCoverage::calls(2, AspectSet::DATA)
             }
         );
     }

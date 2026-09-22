@@ -25,6 +25,7 @@ bitflags! {
     /// single-aspect claim is just a `Coverage` with one bit set (e.g.
     /// `Coverage::TO`) — there is no separate "aspect" type.
     #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+    #[allow(dead_code)] // superseded by `CallCoverage`; kept for phase 7c's rename diff
     pub struct Coverage: u8 {
         /// The destination the transaction calls.
         #[bitflags(flag_name = "to")]
@@ -64,6 +65,7 @@ impl fmt::Display for CoverageLabel {
     }
 }
 
+#[allow(dead_code)] // superseded by `CallCoverage`; kept for phase 7c's rename diff
 impl Coverage {
     /// `TO | VALUE | DATA | OPERATION` — everything but the refund leg.
     pub fn action() -> Self {

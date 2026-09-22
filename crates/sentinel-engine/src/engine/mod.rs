@@ -17,7 +17,7 @@ use self::proposal::ParseError;
 #[cfg(test)]
 pub(crate) use self::proposal::parse;
 pub use self::{
-    coverage::{AspectSet, CallCoverage, Coverage, CoverageLabel},
+    coverage::{AspectSet, CallCoverage, CoverageLabel},
     proposal::Proposal,
     rule::RuleId,
     transaction::{MetaTransaction, Operation, SafeTransaction},
@@ -75,8 +75,8 @@ impl SentinelEngine {
     /// Any `Insecure` assessment is the engine's verdict — denials are never
     /// masked by an affirmation, and the first denial short-circuits the
     /// run. Otherwise, the engine answers `Secure` only once the union of
-    /// every affirming check's claimed [`Coverage`] covers every aspect the
-    /// transaction actually has, and `Abstain` otherwise.
+    /// every affirming check's claimed [`CallCoverage`] covers every call
+    /// the proposal actually has, and `Abstain` otherwise.
     pub async fn security_check(
         &self,
         transaction: SafeTransaction,
@@ -90,7 +90,7 @@ impl SentinelEngine {
             }
         };
 
-        let mut covered = Coverage::empty();
+        let mut covered = CallCoverage::none(proposal.calls.len());
         for checker in &self.0 {
             let assessment = checker.check(&proposal, &context).await;
             tracing::trace!(checker = checker.name(), ?assessment, "checker assessment");
@@ -105,11 +105,11 @@ impl SentinelEngine {
             }
         }
 
-        let required = Coverage::required_for(&proposal.transaction);
-        let verdict = if covered.contains(required) {
+        let required = CallCoverage::required_for(&proposal);
+        let verdict = if covered.contains(&required) {
             Verdict::Secure
         } else {
-            let missing = covered.missing(required);
+            let missing = covered.missing(&required);
             tracing::trace!(%covered, %missing, "abstaining: incomplete coverage");
             for label in missing.labels() {
                 crate::metrics::missing_coverage_total(label).increment(1);
@@ -134,7 +134,7 @@ mod tests {
         }
 
         async fn check(&self, _: &Proposal, _: &CheckContext) -> Assessment {
-            self.0
+            self.0.clone()
         }
     }
 
@@ -165,7 +165,7 @@ mod tests {
     async fn a_denial_dominates_a_preceding_secure() {
         let engine = SentinelEngine::new(vec![
             Box::new(StubChecker(Assessment::Secure {
-                coverage: Coverage::all(),
+                coverage: CallCoverage::calls(1, AspectSet::all()).union(CallCoverage::refund(1)),
             })),
             Box::new(StubChecker(Assessment::Insecure {
                 rule: RuleId::R4_3ValueTarget,
@@ -186,10 +186,11 @@ mod tests {
     async fn two_partial_claims_compose_to_secure() {
         let engine = SentinelEngine::new(vec![
             Box::new(StubChecker(Assessment::Secure {
-                coverage: Coverage::TO | Coverage::OPERATION,
+                coverage: CallCoverage::calls(1, AspectSet::TO | AspectSet::OPERATION),
             })),
             Box::new(StubChecker(Assessment::Secure {
-                coverage: Coverage::VALUE | Coverage::DATA | Coverage::REFUND,
+                coverage: CallCoverage::calls(1, AspectSet::VALUE | AspectSet::DATA)
+                    .union(CallCoverage::refund(1)),
             })),
         ]);
 
@@ -329,10 +330,9 @@ mod tests {
 
     /// A relayed escape-hatch call is just as structurally safe as an
     /// unrelayed one, but `EscapeHatchChecker` can't vouch for the refund
-    /// leg, so the engine now abstains rather than affirming on
-    /// `Coverage::all()`. Not expressible as a corpus vector — see "Behavior
-    /// changes not expressible as test vectors" in the verdict-composition
-    /// epic.
+    /// leg, so the engine abstains on that leg alone rather than affirming
+    /// outright. Not expressible as a corpus vector — see "Behavior changes
+    /// not expressible as test vectors" in the verdict-composition epic.
     #[tokio::test]
     async fn relayed_escape_hatch_call_abstains() {
         use crate::{checkers::EscapeHatchChecker, contracts::bindings::safenet_guard};
@@ -362,7 +362,7 @@ mod tests {
     #[tokio::test]
     async fn one_partial_claim_abstains() {
         let engine = SentinelEngine::new(vec![Box::new(StubChecker(Assessment::Secure {
-            coverage: Coverage::TO | Coverage::OPERATION,
+            coverage: CallCoverage::calls(1, AspectSet::TO | AspectSet::OPERATION),
         }))]);
 
         assert_eq!(

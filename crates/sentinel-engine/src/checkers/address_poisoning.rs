@@ -26,9 +26,9 @@
 //! once *every* call has its own genuine established match — a call with no
 //! ERC-20 target, nothing to compare its candidate against, or a failed
 //! lookup abstains the whole transaction, even if every other call in the
-//! same batch matched. This check claims `To | Data` for the whole
-//! transaction, not per call, so it can only honestly do so once it has
-//! actually vouched for every call in it.
+//! same batch matched. The claim is `To | Data`, per call — but since this
+//! check only ever affirms once every call has its own match, an affirming
+//! claim always names every call in the proposal, not a proper subset.
 //!
 //! Many RPC providers cap `eth_getLogs`' block range;
 //! [`AddressPoisoningChecker::new`]'s `max_block_range` splits the lookback
@@ -60,7 +60,7 @@
 use super::{Assessment, Checker};
 use crate::{
     contracts::bindings::erc20::{Approval, Transfer, approveCall, transferCall, transferFromCall},
-    engine::{CheckContext, Coverage, MetaTransaction, Operation, Proposal, RuleId},
+    engine::{AspectSet, CheckContext, MetaTransaction, Operation, Proposal, RuleId},
 };
 use alloy::{
     primitives::{Address, U256},
@@ -314,15 +314,13 @@ impl Checker for AddressPoisoningChecker {
     /// outright (checked once, since it's a property of the transaction, not
     /// any one call).
     ///
-    /// Affirming still claims `To | Data` for the *whole* transaction —
-    /// per-call coverage is a later epic — so it requires a genuine
-    /// established match on *every* call, not just one: a call with no
-    /// ERC-20 target, no established history to compare against, or a
-    /// failed lookup was never actually vouched for by this check, so a
-    /// batch containing one leaves the whole transaction `Abstain` even
-    /// though every other leg matched. Denying still short-circuits
-    /// immediately regardless of how much of the batch has been scanned so
-    /// far.
+    /// Affirming claims `To | Data` for *every* call, not a subset: this
+    /// check still requires a genuine established match on every call before
+    /// it will vouch for any of them, so a call with no ERC-20 target, no
+    /// established history to compare against, or a failed lookup leaves the
+    /// whole transaction `Abstain` even though every other leg matched.
+    /// Denying still short-circuits immediately regardless of how much of
+    /// the batch has been scanned so far.
     ///
     /// TODO(follow-up): a first-time-looking recipient with no established
     /// address to compare against still only ever abstains — richer
@@ -428,7 +426,7 @@ impl Checker for AddressPoisoningChecker {
             Assessment::Abstain
         } else {
             Assessment::Secure {
-                coverage: Coverage::TO | Coverage::DATA,
+                coverage: proposal.checked(AspectSet::TO | AspectSet::DATA),
             }
         }
     }

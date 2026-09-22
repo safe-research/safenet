@@ -1,7 +1,7 @@
 //! Recognition of Safe nonce-cancellation transactions.
 
 use super::{Assessment, Checker};
-use crate::engine::{CheckContext, Coverage, Proposal, SafeTransaction};
+use crate::engine::{AspectSet, CheckContext, Proposal, SafeTransaction};
 
 /// Considers an empty call from a Safe to itself secure.
 pub struct CancellationChecker;
@@ -12,6 +12,12 @@ impl Checker for CancellationChecker {
         "cancellation"
     }
 
+    /// Claims every aspect of the transaction's single call, plus the
+    /// refund leg: `cancellation`'s zeroed template pins `data` empty, which
+    /// means `transaction` can never have decoded as a recognized MultiSend
+    /// batch (a batch's top-level `data` is the packed payload, never
+    /// empty), so `proposal.calls` is always exactly the one call this
+    /// template-matches against.
     async fn check(&self, proposal: &Proposal, _context: &CheckContext) -> Assessment {
         let transaction = &proposal.transaction;
         let cancellation = SafeTransaction {
@@ -23,7 +29,9 @@ impl Checker for CancellationChecker {
         };
         if transaction == &cancellation {
             Assessment::Secure {
-                coverage: Coverage::all(),
+                coverage: proposal
+                    .checked(AspectSet::all())
+                    .union(proposal.refund_checked()),
             }
         } else {
             Assessment::Abstain
@@ -47,12 +55,15 @@ mod tests {
             ..Default::default()
         };
 
+        let proposal = Proposal::from(transaction);
         assert_eq!(
             CancellationChecker
-                .check(&Proposal::from(transaction), &CheckContext::default())
+                .check(&proposal, &CheckContext::default())
                 .await,
             Assessment::Secure {
-                coverage: Coverage::all()
+                coverage: proposal
+                    .checked(AspectSet::all())
+                    .union(proposal.refund_checked())
             }
         );
     }

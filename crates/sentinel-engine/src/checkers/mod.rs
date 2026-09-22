@@ -18,13 +18,13 @@ pub use self::{
     staking::StakingChecker,
 };
 
-use crate::engine::{CheckContext, Coverage, Proposal, RuleId};
+use crate::engine::{CallCoverage, CheckContext, Proposal, RuleId};
 use std::sync::Arc;
 
 /// What a single check concluded. Distinct from [`crate::engine::Verdict`],
 /// which is the engine's own answer and the wire type — a check contributes
 /// evidence, the engine reaches the verdict.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub enum Assessment {
     /// The check found a violation. Denials are final.
     Insecure {
@@ -34,8 +34,8 @@ pub enum Assessment {
     /// The check found nothing wrong in `coverage`, and vouches for exactly
     /// those aspects — no more.
     Secure {
-        /// The aspects of the transaction this check vouches for.
-        coverage: Coverage,
+        /// The calls (and/or refund leg) this check vouches for.
+        coverage: CallCoverage,
     },
     /// No opinion.
     Abstain,
