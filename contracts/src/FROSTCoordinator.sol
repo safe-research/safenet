@@ -382,9 +382,13 @@ contract FROSTCoordinator {
         }
         Secp256k1.requireNonZero(commitment.q);
         require(commitment.c.length == state.threshold, InvalidGroupCommitment());
+        Secp256k1.Point memory oldGroupKey = group.key;
+        Secp256k1.Point memory newGroupKey = Secp256k1.add(oldGroupKey, commitment.c[0]);
+        // We require that the commitment is not the point at infinity.
+        require(!Secp256k1.eq(oldGroupKey, newGroupKey), InvalidGroupCommitment());
         group.participants.register(msg.sender, poap);
         group.state = state;
-        group.key = Secp256k1.add(group.key, commitment.c[0]);
+        group.key = newGroupKey;
         emit KeyGenCommitted(gid, msg.sender, commitment, committed);
     }
 

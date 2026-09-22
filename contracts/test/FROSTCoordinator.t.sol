@@ -226,6 +226,22 @@ contract FROSTCoordinatorTest is Test {
         }
     }
 
+    function test_RevertWhen_KeyGenCommit_PointAtInfinityContribution() public {
+        FROSTGroupId.T gid = coordinator.keyGen(participants.root(), COUNT, THRESHOLD, bytes32(0));
+
+        FROSTCoordinator.KeyGenCommitment memory commitment;
+        commitment.q = ForgeSecp256k1.g(1).toPoint();
+        // The point at infinity is the identity element for point addition, so
+        // committing to it contributes no key material to the group key.
+        commitment.c = new Secp256k1.Point[](THRESHOLD);
+        commitment.c[0] = Secp256k1.Point({x: 0, y: 0});
+
+        (address participant, bytes32[] memory poap) = participants.proof(0);
+        vm.prank(participant);
+        vm.expectRevert(FROSTCoordinator.InvalidGroupCommitment.selector);
+        coordinator.keyGenCommit(gid, poap, commitment);
+    }
+
     function test_Sign() public {
         // Implementation of the two-round FROST signing protocol from RFC-9591
         // <https://datatracker.ietf.org/doc/html/rfc9591#section-5>
@@ -381,10 +397,12 @@ contract FROSTCoordinatorTest is Test {
         // Because we are in a trusted setup, we don't actually need to encrypt
         // anything. Specify a dummy encryption key.
         commitment.q = ForgeSecp256k1.g(1).toPoint();
-        // In our trusted key gen setup, we pretend like the first participant
-        // has the full polynomial for deriving all the shares, and all other
-        // participants do not add anything.
+        // In our trusted key gen setup, only the first participant contributes
+        // entropy to the full group polynomial. Since all participants must
+        // still contribute with a non-zero commitment, everyone commits to the
+        // `1` making the group secret `a[0] + COUNT - 1`.
         commitment.c = new Secp256k1.Point[](THRESHOLD);
+        commitment.c[0] = ForgeSecp256k1.g(1).toPoint();
         for (uint256 i = 1; i < COUNT; i++) {
             bytes32 root = participants.root();
             (address participant, bytes32[] memory poap) = participants.proof(i);
@@ -400,6 +418,7 @@ contract FROSTCoordinatorTest is Test {
             vm.prank(participant);
             (gid,) = coordinator.keyGenAndCommit(root, COUNT, THRESHOLD, context, poap, commitment);
         }
+        a[0] = addmod(a[0], COUNT - 1, Secp256k1.N);
 
         // We don't actually need to encrypt and broadcast secret shares, the
         // trusted dealer computes the private keys for each participant.
