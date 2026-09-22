@@ -1,0 +1,33 @@
+IF-MISC (round 3) re-run of the F2-SEN-010 PoC on PR #915 cherry-picked onto main.
+Tree: git merge-tree --write-tree --merge-base=dd2c54d origin/main b2aad06 -> f73f6e9 (origin/main 8b6a75d + b2aad06, conflict-free), extracted with git archive into the scratchpad; poc/F2-SEN-010/poc.rs pasted into mod tests of crates/sentinel/src/service.rs.
+Adaptation (scratch copy only): the #914 precondition 'Reveal at NewBlock(20)' became 'no Reveal at NewBlock(20)', and after Committed(OTHER)@20 the setup applies NewBlock(21) and asserts the Reveal there - #915's delivery order. Unadapted, all three tests fail on that precondition line (service.rs:2399 in the copy), not on the finding.
+Command: cargo test --offline -p sentinel --bins qa2_sen_010 -- --nocapture --test-threads=1  (CARGO_TARGET_DIR=~/.cache/safenet-run2/target-misc)
+
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.23s
+     Running unittests src/main.rs (/home/shebin.guest/.cache/safenet-run2/target-misc/debug/deps/sentinel-152a0c2d5ccd9f00)
+
+running 3 tests
+test service::tests::qa2_sen_010::f2_sen_010a_own_reveal_first_emits_premature_finalize_then_parks ... [F2-SEN-010] state at NewBlock(20): Some(CollectingCommitments { approve: true, reason: "", slash_amount: 500, commit_deadline: 20, reveal_deadline: 40, committed_count: 1, self_committed: true })
+[F2-SEN-010] after Committed(OTHER)@20 (onchain committedCount=2): Some(CollectingVotes { approve: true, slash_amount: 500, reveal_deadline: 40, committed_count: 2, revealed_count: 0, approve_count: 0, deny_count: 0, self_revealed: false })
+[F2-SEN-010a] Revealed(self)@21 (onchain 1/2 revealed, block 21 <= revealDeadline 40 → finalize reverts FinalizeTooEarly): [] state=Some(CollectingVotes { approve: true, slash_amount: 500, reveal_deadline: 40, committed_count: 2, revealed_count: 1, approve_count: 1, deny_count: 0, self_revealed: true })
+[F2-SEN-010a] OTHER never reveals: NewBlock(41) → [Action(SentinelAction { kind: Finalize { id: 0x508c727651b87c655d0b573e1ce8a4a21b5c31aee823a3644277a91faec6158e }, expires_at: None })]; NewBlock(100040) → []; state=Some(WaitingForOutcome { approve: true, slash_amount: 500 })
+[F2-SEN-010a] third-party finalize → OracleResult → [Action(SentinelAction { kind: Claim { id: 0x508c727651b87c655d0b573e1ce8a4a21b5c31aee823a3644277a91faec6158e }, expires_at: None })]; tracked=false
+ok
+test service::tests::qa2_sen_010::f2_sen_010b_other_reveal_first_drops_bonded_entry ... [F2-SEN-010] state at NewBlock(20): Some(CollectingCommitments { approve: true, reason: "", slash_amount: 500, commit_deadline: 20, reveal_deadline: 40, committed_count: 1, self_committed: true })
+[F2-SEN-010] after Committed(OTHER)@20 (onchain committedCount=2): Some(CollectingVotes { approve: true, slash_amount: 500, reveal_deadline: 40, committed_count: 2, revealed_count: 0, approve_count: 0, deny_count: 0, self_revealed: false })
+[F2-SEN-010b] Revealed(OTHER)@21 (local 1/1, onchain 1/2): commands=[] tracked=true
+[F2-SEN-010b] Revealed(self)@22 → [Action(SentinelAction { kind: Finalize { id: 0xf373119a45ba10a1c6534ad081e825b62b1072c795079302a19ac951e0d1a117 }, expires_at: None })]; OracleResult@45 → [Action(SentinelAction { kind: Claim { id: 0xf373119a45ba10a1c6534ad081e825b62b1072c795079302a19ac951e0d1a117 }, expires_at: None })]; tracked=false
+ok
+test service::tests::qa2_sen_010::f2_sen_010c_deadline_block_commit_is_tallied ... [F2-SEN-010] state at NewBlock(20): Some(CollectingCommitments { approve: true, reason: "", slash_amount: 500, commit_deadline: 20, reveal_deadline: 40, committed_count: 1, self_committed: true })
+[F2-SEN-010] after Committed(OTHER)@20 (onchain committedCount=2): Some(CollectingVotes { approve: true, slash_amount: 500, reveal_deadline: 40, committed_count: 2, revealed_count: 0, approve_count: 0, deny_count: 0, self_revealed: false })
+ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 44 filtered out; finished in 0.06s
+
+
+Regression on the same copy: cargo test --offline -p sentinel -p safenet-core
+     Running unittests src/lib.rs (/home/shebin.guest/.cache/safenet-run2/target-misc/debug/deps/safenet_core-c5c7ceb628f639f8)
+test result: ok. 102 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.05s
+     Running unittests src/main.rs (/home/shebin.guest/.cache/safenet-run2/target-misc/debug/deps/sentinel-152a0c2d5ccd9f00)
+test result: ok. 47 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.19s
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s

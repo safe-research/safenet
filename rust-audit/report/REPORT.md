@@ -549,7 +549,7 @@ Full replies with citations in [ledger §5.2](RECONCILIATION.md#52-draft-replies
 
 | Work | PRs | Status at `fe9e84c` | Effect |
 | --- | --- | --- | --- |
-| Optimistic block transition | #915 | unmerged — `origin/feat/optimistic_block_transition` `b2aad06`, 2 ahead / 31 behind `main`; #914's `STOPGAP` (`service.rs:390-402`) defers its compensation revert to it | `F-SEN-016` D2–D4 forward-looking; the warp arm at `state/mod.rs:173-181` is the pre-#915 form |
+| Optimistic block transition | #915 | unmerged — `origin/feat/optimistic_block_transition` `b2aad06`, 2 ahead / 31 behind `main`; #914's `STOPGAP` (`service.rs:390-402`) defers its compensation revert to it | `F-SEN-016` D2–D4 forward-looking; the warp arm at `state/mod.rs:173-181` is the pre-#915 form. Round 3 ([`IN-FLIGHT.md`](IN-FLIGHT.md#round-3--open-branches-after-run-2)): resolves the mechanism of `F2-SEN-010` when rebased and merged — executed |
 | Batched Execution | #899–#904 | unmerged — `origin/feat/batex_4` `d6edbb6`, 5 ahead / 31 behind; Phases 5–10 on no pushed branch | `F-CORE-068`, `F-CORE-069` forward-looking; the stack fixes nothing and worsens `F-CORE-062`/`063`/`065`; re-run list in [`IN-FLIGHT.md`](IN-FLIGHT.md) |
 | Sentinel deadlines | #914 | **merged alone** | `F2-SEN-010` (Section 2.4) |
 | Scheduled Secret Pruning | #906–#913 | **merged** | Section 2.3 |

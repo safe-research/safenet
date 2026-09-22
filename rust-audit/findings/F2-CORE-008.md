@@ -59,3 +59,7 @@ Verdict: **Confirmed**. Certainty **75** (E2; the mock is straightforward). Seve
 ## Reconciliation (run 2)
 
 **Final: CONFIRMS `F-CORE-005` (canonical) — combined Low, 75 (E2).** Identical mechanism, severity and certainty in both runs (`state/run2/reconciliation/core.md` §1).
+
+## In-flight impact (round 3)
+
+The stale branch `origin/fix/issue_820_exceeding_reorgs` (`33fcdcc`, the pre-review draft of #834 `40467c5`) contains the loud failure this finding and `F-CORE-005` ask for on the revalidation path: its `revalidate_last_block` keeps the anchor inside `recent` and returns `Error::ExceededMaxReorgDepth` when the block to invalidate is the anchor (`crates/core/src/index/blocks.rs:504-506` on the branch, `if last_index == 0`), with a test at `max_reorg_depth = 0` asserting `Err(ExceededMaxReorgDepth(0))` (`:1166`, `fails_loudly_when_revalidation_invalidates_the_anchor`); the driver already exits on that error class (`driver.rs:185`, `:209`, identical on `main`). The review of #834 moved the anchor into a separate `SafeBlock` field and dropped the guard, which is why `recent` is empty at depth 0 and `rposition` returns `Ok(None)` (`main` `blocks.rs:494-501`). Relation: **partially resolves, in a superseded design** — port the guard to the `SafeBlock` layout (when `recent` is empty and a revalidation is requested, compare `safe.hash` against the node and return `ExceededMaxReorgDepth`) rather than merging the branch, which is 106 commits behind. Details: `state/run2/in-flight/misc-branches.md` §4.1; `report/IN-FLIGHT.md` Round 3.
