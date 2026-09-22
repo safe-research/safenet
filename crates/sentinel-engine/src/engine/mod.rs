@@ -17,7 +17,7 @@ use self::proposal::ParseError;
 #[cfg(test)]
 pub(crate) use self::proposal::parse;
 pub use self::{
-    coverage::{Coverage, CoverageLabel},
+    coverage::{AspectSet, CallCoverage, Coverage, CoverageLabel},
     proposal::Proposal,
     rule::RuleId,
     transaction::{MetaTransaction, Operation, SafeTransaction},
