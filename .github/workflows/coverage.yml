@@ -32,10 +32,10 @@ jobs:
           # See <https://github.com/foundry-rs/foundry/issues/13362>
           version: v1.5.1
 
-      - uses: ./.github/actions/install-just
+      - uses: safe-research/actions/install-just@v1
 
-      - uses: ./.github/actions/install-lcov
-      - uses: ./.github/actions/install-cargo-llvm-cov
+      - uses: safe-research/actions/install-lcov@v1
+      - uses: safe-research/actions/install-cargo-llvm-cov@v1
 
       - run: just deps
       - run: scripts/generate_coverage_report.sh

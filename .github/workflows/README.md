@@ -2,7 +2,7 @@
 
 ## Gemini Code Review (`gemini_review.yml`)
 
-Runs the [`ai-review`](../actions/ai-review) action against Google's Gemini OpenAI-compatible endpoint. Triggers automatically when a PR is opened or reopened, and can also be run manually via `workflow_dispatch` with a `pr-number` input.
+Runs the [`ai-review`](https://github.com/safe-research/actions/tree/v1/ai-review) action against Google's Gemini OpenAI-compatible endpoint. Triggers automatically when a PR is opened or reopened, and can also be run manually via `workflow_dispatch` with a `pr-number` input.
 
 ### Setup
 
@@ -14,7 +14,7 @@ No other configuration is required; the action defaults to a Gemini model and en
 
 ## Tailnet AI Code Review (`tailnet_ai_review.yml`)
 
-Runs the same [`ai-review`](../actions/ai-review) action, but against a self-hosted OpenAI-compatible server reachable only inside our Tailscale tailnet. The runner joins the tailnet via [`tailscale/github-action`](https://github.com/tailscale/github-action) before the review step runs. Unlike the Gemini review, it currently (for now) also re-runs on every new push to a PR, not just on open/reopen — it triggers automatically when a PR is opened, or reopened, and can also be run manually via `workflow_dispatch` with a `pr-number` input. Since it depends on a private server that may not always be reachable, keep an eye on this workflow failing if the tailnet server is down.
+Runs the same [`ai-review`](https://github.com/safe-research/actions/tree/v1/ai-review) action, but against a self-hosted OpenAI-compatible server reachable only inside our Tailscale tailnet. The runner joins the tailnet via [`tailscale/github-action`](https://github.com/tailscale/github-action) before the review step runs. Unlike the Gemini review, it currently (for now) also re-runs on every new push to a PR, not just on open/reopen — it triggers automatically when a PR is opened, or reopened, and can also be run manually via `workflow_dispatch` with a `pr-number` input. Since it depends on a private server that may not always be reachable, keep an eye on this workflow failing if the tailnet server is down.
 
 ### Setup
 
