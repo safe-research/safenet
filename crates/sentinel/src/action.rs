@@ -22,6 +22,9 @@ pub enum SentinelActionKind {
     Finalize { id: B256 },
     /// Claim the bond and reward for the request with the given id.
     Claim { id: B256 },
+    /// Release the disputed request with the given id from arbitration once
+    /// its arbitration deadline passed without a ruling.
+    TimeoutArbitration { id: B256 },
 }
 
 /// A sentinel action tagged with the voting-deadline block by which it is

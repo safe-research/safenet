@@ -60,6 +60,7 @@ pub mod oracle {
             ) external pure returns (bytes32);
             function finalize(bytes32 requestId) external;
             function claim(bytes32 requestId) external;
+            function timeoutArbitration(bytes32 requestId) external;
         }
 
         #[derive(Debug)]

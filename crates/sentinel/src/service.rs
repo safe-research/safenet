@@ -385,8 +385,9 @@ impl SentinelTransition {
     }
 
     /// Drops requests we never got to commit on in time, reveals (or drops)
-    /// requests past their commit deadline, and finalizes requests past
-    /// their reveal deadline.
+    /// requests past their commit deadline, finalizes requests past their
+    /// reveal deadline, and times out disputes past their arbitration
+    /// deadline.
     ///
     /// `block` has already been mined by the time it is observed here, so the
     /// earliest block an action emitted now can land in is `block + 1`. Every
@@ -394,6 +395,8 @@ impl SentinelTransition {
     /// window: at `block == commit_deadline` a commit can no longer be
     /// included, while a reveal is guaranteed to land in the reveal window
     /// (`SentinelOracleRequests` requires `block.number > commitDeadline`).
+    /// The same holds for `timeoutArbitration()`, which requires
+    /// `block.number > arbitrationDeadline`.
     ///
     /// STOPGAP: safe-research/safenet#471 makes block transitions run against
     /// the *pending* block instead, at which point `block` is the block our
@@ -482,7 +485,31 @@ impl SentinelTransition {
                 }
             }
             RequestState::WaitingForOutcome { .. } => true,
-            RequestState::WaitingForDisputeResolution { .. } => true,
+            RequestState::WaitingForDisputeResolution {
+                approve,
+                slash_amount,
+                arbitration_deadline,
+            } => {
+                // `<` rather than `!=`: warp-mode catch-up doesn't deliver a
+                // `NewBlock` for every block, so the deadline block itself
+                // may never be observed.
+                if block < *arbitration_deadline {
+                    return true;
+                }
+                actions.push(
+                    SentinelAction {
+                        kind: SentinelActionKind::TimeoutArbitration { id: *id },
+                        expires_at: None,
+                    }
+                    .into(),
+                );
+                *entry = RequestState::WaitingForArbitrationTimeout {
+                    approve: *approve,
+                    slash_amount: *slash_amount,
+                };
+                true
+            }
+            RequestState::WaitingForArbitrationTimeout { .. } => true,
         });
 
         (state, actions)
@@ -490,7 +517,9 @@ impl SentinelTransition {
 
     /// Resolves a genuine dispute — `DisputeResolved` is only ever emitted by
     /// `resolveDispute`, i.e. only for a request that reached
-    /// `WaitingForDisputeResolution` — by always claiming, regardless of
+    /// `WaitingForDisputeResolution` (or already moved on to
+    /// `WaitingForArbitrationTimeout`, since `resolveDispute` can still beat
+    /// our `timeoutArbitration()` onchain) — by always claiming, regardless of
     /// which side won: bond slashing is partial, so even a losing vote can
     /// leave an unslashed remainder (`bondTarget - slashAmount`) to reclaim,
     /// and `claim()` pays out `0` extra on the losing side without reverting.
@@ -505,10 +534,17 @@ impl SentinelTransition {
         event: SentinelOracle::DisputeResolved,
     ) -> (State, Commands<State, Self>) {
         let (approve, slash_amount) = match state.0.remove(&event.requestId) {
-            Some(RequestState::WaitingForDisputeResolution {
-                approve,
-                slash_amount,
-            }) => (approve, slash_amount),
+            Some(
+                RequestState::WaitingForDisputeResolution {
+                    approve,
+                    slash_amount,
+                    ..
+                }
+                | RequestState::WaitingForArbitrationTimeout {
+                    approve,
+                    slash_amount,
+                },
+            ) => (approve, slash_amount),
             Some(entry) => {
                 tracing::warn!(
                     request_id = %event.requestId,
@@ -561,7 +597,10 @@ impl SentinelTransition {
         request_id: B256,
     ) -> (State, Commands<State, Self>) {
         match state.0.remove(&request_id) {
-            Some(RequestState::WaitingForDisputeResolution { .. }) => {}
+            Some(
+                RequestState::WaitingForDisputeResolution { .. }
+                | RequestState::WaitingForArbitrationTimeout { .. },
+            ) => {}
             // Still claim: the oracle is authoritative that this request
             // timed out, and having any tracked entry at all means we most
             // likely posted a bond for it, even though our own local FSM
@@ -726,7 +765,9 @@ impl SentinelTransition {
     /// `finalize()` found both an `approve` and a `deny` side established
     /// onchain -- expected only from `WaitingForOutcome`, which is where it
     /// carries `approve`/`slash_amount` forward from. The request now waits
-    /// for the arbitrator's ruling; see [`Self::handle_resolved`].
+    /// for the arbitrator's ruling (see [`Self::handle_resolved`]) until the
+    /// event's `deadline`, after which [`Self::handle_block_advance`] times
+    /// the arbitration out itself.
     ///
     /// A tracked request found in any *other* state here is unexpected, but
     /// the dispute is real onchain regardless of what we thought was
@@ -763,6 +804,7 @@ impl SentinelTransition {
                 RequestState::WaitingForDisputeResolution {
                     approve,
                     slash_amount,
+                    arbitration_deadline: event.deadline,
                 },
             );
         }
@@ -895,6 +937,14 @@ impl SentinelEncoder {
                 to: self.oracle,
                 value: U256::ZERO,
                 data: SentinelOracle::claimCall { requestId: id }
+                    .abi_encode()
+                    .into(),
+                gas: 250_000,
+            },
+            SentinelActionKind::TimeoutArbitration { id } => Transaction {
+                to: self.oracle,
+                value: U256::ZERO,
+                data: SentinelOracle::timeoutArbitrationCall { requestId: id }
                     .abi_encode()
                     .into(),
                 gas: 250_000,
@@ -1649,6 +1699,7 @@ mod tests {
             RequestState::WaitingForDisputeResolution {
                 approve: true,
                 slash_amount: U96::from(500),
+                arbitration_deadline: 60,
             }
         );
 

@@ -83,7 +83,25 @@ pub enum SentinelRequestState {
     /// regardless of which side won, but `approve`/`slash_amount` are kept
     /// so it can also record whether *this* sentinel's vote matched the
     /// arbitrated outcome and, if not, how much of its bond was slashed.
-    WaitingForDisputeResolution { approve: bool, slash_amount: U96 },
+    ///
+    /// `arbitration_deadline` is `DisputeTriggered.deadline`: once it passes
+    /// without a ruling, `handle_block_advance` submits the permissionless
+    /// `timeoutArbitration()` itself and moves on to
+    /// `WaitingForArbitrationTimeout`, rather than leaving the bond locked
+    /// until someone else does.
+    WaitingForDisputeResolution {
+        approve: bool,
+        slash_amount: U96,
+        arbitration_deadline: u64,
+    },
+    /// A `TimeoutArbitration` action was submitted and is awaiting onchain
+    /// confirmation. No deadline, like `WaitingForOutcome`: the request
+    /// leaves this state on the oracle's `ArbitrationTimedOut` -- or on a
+    /// `DisputeResolved`/`DisputeOutOfScope` that beat our call onchain,
+    /// since `resolveDispute` isn't bound by the arbitration deadline.
+    /// `approve`/`slash_amount` are carried through for that
+    /// `DisputeResolved` case.
+    WaitingForArbitrationTimeout { approve: bool, slash_amount: U96 },
 }
 
 impl SentinelRequestState {
@@ -96,6 +114,7 @@ impl SentinelRequestState {
             Self::CollectingVotes { .. } => "collecting_votes",
             Self::WaitingForOutcome { .. } => "waiting_for_outcome",
             Self::WaitingForDisputeResolution { .. } => "waiting_for_dispute_resolution",
+            Self::WaitingForArbitrationTimeout { .. } => "waiting_for_arbitration_timeout",
         }
     }
 
@@ -136,6 +155,11 @@ impl SentinelRequestState {
             | Self::WaitingForDisputeResolution {
                 approve,
                 slash_amount,
+                ..
+            }
+            | Self::WaitingForArbitrationTimeout {
+                approve,
+                slash_amount,
             } => Some((*approve, *slash_amount)),
         }
     }
@@ -151,7 +175,8 @@ impl SentinelRequestState {
     /// this state hasn't gotten there yet. `WaitingForOutcome` is always
     /// `true`: `finalize()`'s own guard only ever submits from a
     /// non-timeout, single-side resolution once `self_revealed` was already
-    /// `true`. `WaitingForDisputeResolution` defaults to `true` too, though
+    /// `true`. `WaitingForDisputeResolution`/`WaitingForArbitrationTimeout`
+    /// default to `true` too, though
     /// moot in practice -- the oracle never re-emits `OracleResult` for a
     /// request that's already `FROZEN`.
     pub(crate) fn self_revealed(&self) -> bool {
@@ -160,7 +185,9 @@ impl SentinelRequestState {
             | Self::WaitingForRequest { .. }
             | Self::CollectingCommitments { .. } => false,
             Self::CollectingVotes { self_revealed, .. } => *self_revealed,
-            Self::WaitingForOutcome { .. } | Self::WaitingForDisputeResolution { .. } => true,
+            Self::WaitingForOutcome { .. }
+            | Self::WaitingForDisputeResolution { .. }
+            | Self::WaitingForArbitrationTimeout { .. } => true,
         }
     }
 }
@@ -249,6 +276,15 @@ mod tests {
         );
         assert_eq!(
             SentinelRequestState::WaitingForDisputeResolution {
+                approve: false,
+                slash_amount: U96::from(500),
+                arbitration_deadline: 60,
+            }
+            .approve_and_slash_amount(),
+            Some((false, U96::from(500))),
+        );
+        assert_eq!(
+            SentinelRequestState::WaitingForArbitrationTimeout {
                 approve: false,
                 slash_amount: U96::from(500),
             }

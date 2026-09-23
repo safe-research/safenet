@@ -33,7 +33,9 @@ GOVERNANCE_DELAY=0
 INITIAL_SLASHING_MULTIPLIER=2
 INITIAL_DAO_FEE_SHARE=0
 CHARTER_ENS="safenet-charter.safe.eth"
-ARBITRATION_TIMEOUT=100
+# Short enough for the unruled-dispute scenario below to wait it out, long
+# enough that the ruled dispute before it is arbitrated well within it.
+ARBITRATION_TIMEOUT=20
 FUNDING_ETH=1ether
 FUNDING_TOKEN=1000000
 # Anvil account 0 — deployer, MyToken owner, and SentinelOracle arbitrator.
@@ -180,6 +182,8 @@ REQUEST_DENY_SENTINEL_COUNT_INDEX=6
 # real state a live request reports.
 STATE_FROZEN=2
 STATE_RESOLVED_APPROVED=3
+STATE_TIMED_OUT=5
+REQUEST_ARBITRATION_DEADLINE_INDEX=2
 
 # --- 5. Spin up both Rust sentinels with their engines ---
 # Already built in step 1, so this just runs it — twice, once per account,
@@ -460,5 +464,110 @@ if [ "$DISPUTE_ORACLE_BALANCE_AFTER" -gt 2 ]; then
 	exit 1
 fi
 echo "OK: the losing sentinel's bond was slashed only partially and both sides' balances reconcile."
+
+# --- 15. Propose another disputed transaction, which the arbitrator never rules on ---
+# Nobody but the sentinels calls the permissionless `timeoutArbitration` here,
+# so the bonds only come back if the sentinels submit it themselves once the
+# arbitration deadline passes.
+UNRULED_SPONSOR_BALANCE_BEFORE=$(balance_of "$SPONSOR_ADDR")
+echo "Approving the oracle to pull the request fee for the unruled disputed request..."
+cast send --rpc-url "$RPC_URL" --private-key "$SPONSOR_PK" \
+	"$FEE_TOKEN" "approve(address,uint256)" "$ORACLE" "$REQUEST_FEE" >/dev/null
+
+UNRULED_SENTINEL_A_BALANCE_BEFORE=$(balance_of "$SENTINEL_A_ADDR")
+UNRULED_SENTINEL_B_BALANCE_BEFORE=$(balance_of "$SENTINEL_B_ADDR")
+
+echo "Proposing another transaction sentinel B's blocklist denies (a dispute left unruled)..."
+env \
+	CONSENSUS_ADDRESS="$CONSENSUS" \
+	ORACLE_ADDRESS="$ORACLE" \
+	TX_CHAIN_ID="$CHAIN_ID" \
+	TX_SAFE="$TX_SAFE" \
+	TX_TO="$TX_TOKEN" \
+	TX_DATA="$(cast calldata "transfer(address,uint256)" "$TX_RECIPIENT" 1)" \
+	TX_NONCE=2 \
+	forge script --root "$ROOT/contracts" ProposeTransactionScript --rpc-url "$RPC_URL" --private-key "$SPONSOR_PK" --broadcast
+
+UNRULED_REQUEST_ID=$(cast logs --rpc-url "$RPC_URL" --json --from-block 0 --address "$ORACLE" \
+	'NewRequest(bytes32,address,uint96,uint96,uint24,uint96,uint64,uint64)' | jq -r '.[-1].topics[1]')
+echo "Unruled disputed request id: $UNRULED_REQUEST_ID"
+
+# --- 16. Wait for the request to freeze, then time out without a ruling ---
+# The whole commit/reveal window plus `ARBITRATION_TIMEOUT` and a margin for
+# the sentinels' `timeoutArbitration`/`claim` transactions to land.
+echo "Waiting for the sentinels to time out the unruled arbitration..."
+TIMEOUT_SECONDS=$((COMMIT_WINDOW + REVEAL_WINDOW + ARBITRATION_TIMEOUT + 20))
+ELAPSED_SECONDS=0
+STATE=""
+FROZE=""
+while true; do
+	REQUEST=$(get_request "$UNRULED_REQUEST_ID") || true
+	STATE=$(echo "$REQUEST" | jq -r ".[$REQUEST_PROGRESS_INDEX][$REQUEST_STATE_INDEX]" 2>/dev/null) || true
+	if [ -z "$FROZE" ] && [ "$STATE" = "$STATE_FROZEN" ]; then
+		FROZE=1
+		ARBITRATION_DEADLINE=$(echo "$REQUEST" | jq -r ".[$REQUEST_PROGRESS_INDEX][$REQUEST_ARBITRATION_DEADLINE_INDEX]")
+		echo "Request froze; arbitration deadline is block $ARBITRATION_DEADLINE."
+	fi
+	[ "$STATE" = "$STATE_TIMED_OUT" ] && break
+	if [ "$ELAPSED_SECONDS" -ge "$TIMEOUT_SECONDS" ]; then
+		echo "FAILED: timed out waiting for the unruled arbitration to time out; last state was $STATE"
+		echo "Request: $REQUEST"
+		exit 1
+	fi
+	sleep "$BLOCK_TIME_SECONDS"
+	ELAPSED_SECONDS=$((ELAPSED_SECONDS + BLOCK_TIME_SECONDS))
+done
+if [ -z "$FROZE" ]; then
+	echo "FAILED: expected the request to freeze (a dispute) before timing out"
+	exit 1
+fi
+
+ARBITRATION_TIMEOUT_TX=$(cast logs --rpc-url "$RPC_URL" --json --from-block 0 --address "$ORACLE" \
+	'ArbitrationTimedOut(bytes32)' "$UNRULED_REQUEST_ID" | jq -r '.[0].transactionHash')
+ARBITRATION_TIMEOUT_SENDER=$(cast tx --rpc-url "$RPC_URL" --json "$ARBITRATION_TIMEOUT_TX" | jq -r '.from')
+ARBITRATION_TIMEOUT_SENDER=$(cast to-check-sum-address "$ARBITRATION_TIMEOUT_SENDER")
+if [ "$ARBITRATION_TIMEOUT_SENDER" != "$SENTINEL_A_ADDR" ] && [ "$ARBITRATION_TIMEOUT_SENDER" != "$SENTINEL_B_ADDR" ]; then
+	echo "FAILED: expected a sentinel to have submitted timeoutArbitration, but it came from $ARBITRATION_TIMEOUT_SENDER"
+	exit 1
+fi
+echo "OK: $ARBITRATION_TIMEOUT_SENDER timed out the unruled arbitration."
+
+# --- 17. Wait for both sentinels to claim their full bonds back ---
+A_CLAIMED=""
+B_CLAIMED=""
+for _ in $(seq 1 10); do
+	SENTINEL_A_COMMITMENT=$(cast call --rpc-url "$RPC_URL" --json "$ORACLE" \
+		"getCommitment(bytes32,address)((bytes32,uint96,uint8,bool))" "$UNRULED_REQUEST_ID" "$SENTINEL_A_ADDR") || true
+	SENTINEL_B_COMMITMENT=$(cast call --rpc-url "$RPC_URL" --json "$ORACLE" \
+		"getCommitment(bytes32,address)((bytes32,uint96,uint8,bool))" "$UNRULED_REQUEST_ID" "$SENTINEL_B_ADDR") || true
+	A_CLAIMED=$(echo "$SENTINEL_A_COMMITMENT" | jq -r '.[0][3]' 2>/dev/null) || true
+	B_CLAIMED=$(echo "$SENTINEL_B_COMMITMENT" | jq -r '.[0][3]' 2>/dev/null) || true
+	[ "$A_CLAIMED" = "true" ] && [ "$B_CLAIMED" = "true" ] && break
+	sleep "$BLOCK_TIME_SECONDS"
+done
+if [ "$A_CLAIMED" != "true" ] || [ "$B_CLAIMED" != "true" ]; then
+	echo "FAILED: expected both sentinels to have claimed after the arbitration timeout"
+	echo "Sentinel A commitment: $SENTINEL_A_COMMITMENT"
+	echo "Sentinel B commitment: $SENTINEL_B_COMMITMENT"
+	exit 1
+fi
+
+# Both sentinels revealed, so no ruling means no slash: each bond returns in
+# full (net 0, no fee reward), and the fee is refunded to the sponsor.
+UNRULED_SENTINEL_A_CHANGE=$(($(balance_of "$SENTINEL_A_ADDR") - UNRULED_SENTINEL_A_BALANCE_BEFORE))
+UNRULED_SENTINEL_B_CHANGE=$(($(balance_of "$SENTINEL_B_ADDR") - UNRULED_SENTINEL_B_BALANCE_BEFORE))
+UNRULED_SPONSOR_CHANGE=$(($(balance_of "$SPONSOR_ADDR") - UNRULED_SPONSOR_BALANCE_BEFORE))
+echo "Sentinel A balance change: $UNRULED_SENTINEL_A_CHANGE"
+echo "Sentinel B balance change: $UNRULED_SENTINEL_B_CHANGE"
+echo "Sponsor balance change: $UNRULED_SPONSOR_CHANGE"
+if [ "$UNRULED_SENTINEL_A_CHANGE" != "0" ] || [ "$UNRULED_SENTINEL_B_CHANGE" != "0" ]; then
+	echo "FAILED: expected both sentinels' bonds to return in full after the arbitration timeout"
+	exit 1
+fi
+if [ "$UNRULED_SPONSOR_CHANGE" != "0" ]; then
+	echo "FAILED: expected the sponsor's request fee to be refunded after the arbitration timeout"
+	exit 1
+fi
+echo "OK: the sentinels timed out the unruled arbitration and recovered their bonds in full."
 
 echo "Sentinel integration test finished successfully."
