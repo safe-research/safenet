@@ -120,7 +120,7 @@ impl TransactionStorage {
     ///
     /// The `status.block` is used as the current latest block number in order
     /// to determine whether or not a transaction is expired. This is needed
-    /// since we keep  expired transactions around until they are older than the
+    /// since we keep expired transactions around until they are older than the
     /// `safe` block in order to be robust to reorg edge cases.
     ///
     /// The nonce is the first free nonce at or above `status.nonce` (the
