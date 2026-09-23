@@ -7,6 +7,14 @@ mod hashing;
 mod metrics;
 mod service;
 mod state;
+#[cfg_attr(
+    not(test),
+    expect(
+        dead_code,
+        reason = "the verdict store is wired into the effect handler in a follow-up change"
+    )
+)]
+mod verdicts;
 
 use self::{config::Config, engine::EngineClient, service::SentinelService};
 use alloy::primitives::U256;

@@ -34,7 +34,7 @@ impl RuleId {
         Self(section, rule)
     }
 
-    fn parse(code: &str) -> Option<Self> {
+    pub(crate) fn parse(code: &str) -> Option<Self> {
         let (section, rule) = code.strip_prefix("R-")?.split_once('.')?;
         let section = section.parse().ok()?;
         let rule = rule.parse().ok()?;
