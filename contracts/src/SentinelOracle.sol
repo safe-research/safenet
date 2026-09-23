@@ -253,7 +253,9 @@ contract SentinelOracle is IOracle {
     function reveal(bytes32 requestId, bool approve, bytes32 salt, string calldata reason) external {
         SentinelOracleRequest.T storage request = $requests.get(requestId);
         $commitments.reveal(requestId, msg.sender, approve, salt, reason);
-        request.applyReveal(approve);
+        if (request.applyReveal(approve)) {
+            finalize(requestId);
+        }
     }
 
     function hashCommitment(address sentinel, bytes32 requestId, bool approve, bytes32 salt, string calldata reason)
@@ -268,7 +270,7 @@ contract SentinelOracle is IOracle {
     // FINALISATION
     // ============================================================
 
-    function finalize(bytes32 requestId) external {
+    function finalize(bytes32 requestId) public {
         SentinelOracleRequest.T storage request = $requests.get(requestId);
         address sponsor = request.terms.sponsor;
         uint64 arbitrationDeadline = (block.number + ARBITRATION_TIMEOUT).toUint64();
