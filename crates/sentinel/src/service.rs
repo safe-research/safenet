@@ -10,6 +10,7 @@ use crate::{
     hashing::{RevealSalt as _, commit_hash, oracle_tx_proposal_hash},
     metrics::ResolvedOutcome,
     state::{Request, SentinelRequestState as RequestState, State},
+    verdicts::VerdictStore,
 };
 use alloy::{
     primitives::{Address, B256, U256},
@@ -37,6 +38,9 @@ pub struct SentinelService {
     engine: EngineClient,
     /// Maximum time the sentinel engine has to answer a security check.
     engine_timeout: Duration,
+    /// Records engine verdicts so a replayed check reuses the one a
+    /// commitment was built from.
+    verdicts: VerdictStore,
 }
 
 /// Advances the request FSM in response to `SentinelOracle`/`Consensus`
@@ -78,6 +82,7 @@ impl SentinelService {
         voting_window: u64,
         engine: EngineClient,
         engine_timeout: Duration,
+        verdicts: VerdictStore,
     ) -> Self {
         Self {
             oracle,
@@ -88,6 +93,7 @@ impl SentinelService {
             voting_window,
             engine,
             engine_timeout,
+            verdicts,
         }
     }
 }
@@ -142,6 +148,7 @@ impl SentinelTransition {
                 request_id,
                 transaction: event.transaction,
                 proposal_timestamp: block_timestamp,
+                block,
             })],
         )
     }
@@ -1041,6 +1048,7 @@ impl Service for SentinelService {
             voting_window,
             engine,
             engine_timeout,
+            verdicts,
         } = self;
         (
             SentinelTransition {
@@ -1050,7 +1058,7 @@ impl Service for SentinelService {
                 chain_id,
                 voting_window,
             },
-            effect::Handler::new(engine, engine_timeout),
+            effect::Handler::new(engine, engine_timeout, verdicts),
             SentinelEncoder { oracle, fee_token },
         )
     }
@@ -1078,14 +1086,12 @@ mod tests {
     use safenet_core::index::EventLog;
 
     const ORACLE: Address = address!("1111111111111111111111111111111111111111");
-    const FEE_TOKEN: Address = address!("2222222222222222222222222222222222222222");
     const CONSENSUS: Address = address!("3333333333333333333333333333333333333333");
     const SAFE: Address = address!("4444444444444444444444444444444444444444");
     const TO: Address = address!("5555555555555555555555555555555555555555");
     const OTHER: Address = address!("8888888888888888888888888888888888888888");
     const CHAIN_ID: u64 = 1;
     const VOTING_WINDOW: u64 = 10;
-    const ENGINE_TIMEOUT: Duration = Duration::from_millis(7_500);
     /// The reason attached to an engine-approved transaction.
     const REASON: &str = "";
 
@@ -1097,27 +1103,17 @@ mod tests {
         self_signer().address()
     }
 
-    fn service() -> SentinelService {
+    fn transition() -> SentinelTransition {
         // These flow tests drive `Message::Resume` themselves (see
         // `resolve_engine_check`) rather than through the `Handler`'s real
-        // `Effect::EngineCheck` resolution, so the configured engine is
-        // never invoked.
-        SentinelService::new(
-            ORACLE,
-            FEE_TOKEN,
-            CONSENSUS,
-            self_signer(),
-            U256::from(CHAIN_ID),
-            VOTING_WINDOW,
-            // Configure an engine for an invalid URL, all checks come back
-            // as `Unknown`.
-            EngineClient::new("http://127.0.0.1:1".parse().unwrap()).unwrap(),
-            ENGINE_TIMEOUT,
-        )
-    }
-
-    fn transition() -> SentinelTransition {
-        service().components().0
+        // `Effect::EngineCheck` resolution, so no engine is configured.
+        SentinelTransition {
+            oracle: ORACLE,
+            consensus: CONSENSUS,
+            signer: self_signer(),
+            chain_id: U256::from(CHAIN_ID),
+            voting_window: VOTING_WINDOW,
+        }
     }
 
     fn safe_tx(to: Address) -> SafeTransaction {
@@ -1171,6 +1167,7 @@ mod tests {
             request_id: id,
             transaction: safe_tx(to),
             proposal_timestamp: Some(block_timestamp(block)),
+            block,
         })
     }
 

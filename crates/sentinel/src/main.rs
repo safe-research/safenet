@@ -7,16 +7,11 @@ mod hashing;
 mod metrics;
 mod service;
 mod state;
-#[cfg_attr(
-    not(test),
-    expect(
-        dead_code,
-        reason = "the verdict store is wired into the effect handler in a follow-up change"
-    )
-)]
 mod verdicts;
 
-use self::{config::Config, engine::EngineClient, service::SentinelService};
+use self::{
+    config::Config, engine::EngineClient, service::SentinelService, verdicts::VerdictStore,
+};
 use alloy::primitives::U256;
 use argh::FromArgs;
 use safenet_core::{Driver, observability, provider::Provider, utils};
@@ -78,6 +73,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         config.sentinel.voting_window,
         EngineClient::new(config.sentinel.engine)?,
         engine_timeout,
+        VerdictStore::new(pool.clone()).await?,
     );
 
     let driver = Driver::new(
