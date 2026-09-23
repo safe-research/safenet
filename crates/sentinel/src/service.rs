@@ -385,8 +385,9 @@ impl SentinelTransition {
     }
 
     /// Drops requests we never got to commit on in time, reveals (or drops)
-    /// requests past their commit deadline, and finalizes requests past
-    /// their reveal deadline.
+    /// requests past their commit deadline, finalizes requests past their
+    /// reveal deadline, and times out and claims disputes past their
+    /// arbitration deadline.
     ///
     /// `block` has already been mined by the time it is observed here, so the
     /// earliest block an action emitted now can land in is `block + 1`. Every
@@ -394,6 +395,8 @@ impl SentinelTransition {
     /// window: at `block == commit_deadline` a commit can no longer be
     /// included, while a reveal is guaranteed to land in the reveal window
     /// (`SentinelOracleRequests` requires `block.number > commitDeadline`).
+    /// The same holds for `timeoutArbitration()`, which requires
+    /// `block.number > arbitrationDeadline`.
     ///
     /// STOPGAP: safe-research/safenet#471 makes block transitions run against
     /// the *pending* block instead, at which point `block` is the block our
@@ -482,7 +485,37 @@ impl SentinelTransition {
                 }
             }
             RequestState::WaitingForOutcome { .. } => true,
-            RequestState::WaitingForDisputeResolution { .. } => true,
+            RequestState::WaitingForDisputeResolution {
+                arbitration_deadline,
+                ..
+            } => {
+                // `<` rather than `!=`: warp-mode catch-up doesn't deliver a
+                // `NewBlock` for every block, so the deadline block itself
+                // may never be observed.
+                if block < *arbitration_deadline {
+                    return true;
+                }
+                // Our `timeoutArbitration()` reverts if another sentinel's
+                // (or a late ruling) lands first, but the `claim()` queued
+                // behind it succeeds either way, since the request is no
+                // longer `FROZEN` by then. So there is nothing left to wait
+                // on, and the request is dropped; the `ArbitrationTimedOut`
+                // that follows is ignored as untracked.
+                crate::metrics::requests_resolved_total(ResolvedOutcome::Timeout).increment(1);
+                actions.extend([
+                    SentinelAction {
+                        kind: SentinelActionKind::TimeoutArbitration { id: *id },
+                        expires_at: None,
+                    }
+                    .into(),
+                    SentinelAction {
+                        kind: SentinelActionKind::Claim { id: *id },
+                        expires_at: None,
+                    }
+                    .into(),
+                ]);
+                false
+            }
         });
 
         (state, actions)
@@ -508,6 +541,7 @@ impl SentinelTransition {
             Some(RequestState::WaitingForDisputeResolution {
                 approve,
                 slash_amount,
+                ..
             }) => (approve, slash_amount),
             Some(entry) => {
                 tracing::warn!(
@@ -726,7 +760,9 @@ impl SentinelTransition {
     /// `finalize()` found both an `approve` and a `deny` side established
     /// onchain -- expected only from `WaitingForOutcome`, which is where it
     /// carries `approve`/`slash_amount` forward from. The request now waits
-    /// for the arbitrator's ruling; see [`Self::handle_resolved`].
+    /// for the arbitrator's ruling (see [`Self::handle_resolved`]) until the
+    /// event's `deadline`, after which [`Self::handle_block_advance`] times
+    /// the arbitration out and claims itself.
     ///
     /// A tracked request found in any *other* state here is unexpected, but
     /// the dispute is real onchain regardless of what we thought was
@@ -763,6 +799,7 @@ impl SentinelTransition {
                 RequestState::WaitingForDisputeResolution {
                     approve,
                     slash_amount,
+                    arbitration_deadline: event.deadline,
                 },
             );
         }
@@ -895,6 +932,14 @@ impl SentinelEncoder {
                 to: self.oracle,
                 value: U256::ZERO,
                 data: SentinelOracle::claimCall { requestId: id }
+                    .abi_encode()
+                    .into(),
+                gas: 250_000,
+            },
+            SentinelActionKind::TimeoutArbitration { id } => Transaction {
+                to: self.oracle,
+                value: U256::ZERO,
+                data: SentinelOracle::timeoutArbitrationCall { requestId: id }
                     .abi_encode()
                     .into(),
                 gas: 250_000,
@@ -1649,6 +1694,7 @@ mod tests {
             RequestState::WaitingForDisputeResolution {
                 approve: true,
                 slash_amount: U96::from(500),
+                arbitration_deadline: 60,
             }
         );
 
