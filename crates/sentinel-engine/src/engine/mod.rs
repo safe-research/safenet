@@ -42,6 +42,11 @@ pub struct CheckContext {
     /// check is free to ignore this if it has no RPC-derived state to
     /// anchor.
     pub block: BlockLabel,
+    /// The timestamp, in seconds since the Unix epoch, of the consensus-chain
+    /// block the transaction was proposed in, from the optional
+    /// `x-proposal-timestamp` header. `None` when the caller didn't supply
+    /// one; a check relying on it must abstain in that case.
+    pub proposal_timestamp: Option<u64>,
 }
 
 /// A block reference on the engine's configured chain: either a concrete

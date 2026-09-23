@@ -49,6 +49,28 @@ where
     }
 }
 
+/// The optional proposal timestamp supplied in `x-proposal-timestamp`, in
+/// seconds since the Unix epoch.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct ProposalTimestamp(pub Option<u64>);
+
+impl<S> FromRequestParts<S> for ProposalTimestamp
+where
+    S: Send + Sync,
+{
+    type Rejection = (StatusCode, &'static str);
+
+    async fn from_request_parts(parts: &mut Parts, _: &S) -> Result<Self, Self::Rejection> {
+        let timestamp = parse_header(parts, "x-proposal-timestamp", || {
+            (
+                StatusCode::BAD_REQUEST,
+                "x-proposal-timestamp must be an unsigned integer number of seconds",
+            )
+        })?;
+        Ok(Self(timestamp))
+    }
+}
+
 fn parse_header<T, R>(
     parts: &mut Parts,
     header: &str,

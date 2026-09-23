@@ -1,7 +1,7 @@
 openapi: 3.2.0
 info:
   title: Safenet Sentinel Engine API
-  version: 0.3.0
+  version: 0.2.0
   summary: Safenet transaction verification API that backs sentinel services.
   description: >-
     A sentinel watching the Consensus contract POSTs each proposed Safe
@@ -27,6 +27,17 @@ paths:
             The caller's timeout budget for the request, in milliseconds. An
             engine can use this value to avoid starting work that cannot finish
             before the caller stops waiting.
+          schema:
+            type: integer
+            minimum: 0
+        - name: x-proposal-timestamp
+          in: header
+          required: false
+          description: >-
+            The timestamp, in seconds since the Unix epoch, of the
+            consensus-chain block the transaction was proposed in. Omitted
+            when the sentinel's node did not report it. An engine must not
+            treat a missing value as any particular time.
           schema:
             type: integer
             minimum: 0

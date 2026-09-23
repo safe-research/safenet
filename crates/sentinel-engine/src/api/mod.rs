@@ -2,7 +2,7 @@
 
 mod extractors;
 
-use self::extractors::{RequestId, RequestTimeout};
+use self::extractors::{ProposalTimestamp, RequestId, RequestTimeout};
 use crate::engine::{BlockLabel, CheckContext, SafeTransaction, SentinelEngine, Verdict};
 use axum::{Json, Router, extract::State, routing::post};
 use serde::{Deserialize, Serialize};
@@ -33,6 +33,7 @@ async fn security_check(
     State(engine): State<Arc<SentinelEngine>>,
     RequestId(request_id): RequestId,
     RequestTimeout(timeout): RequestTimeout,
+    ProposalTimestamp(proposal_timestamp): ProposalTimestamp,
     Json(request): Json<CheckRequest>,
 ) -> Json<Verdict> {
     let span = tracing::info_span!(
@@ -50,6 +51,7 @@ async fn security_check(
 
     let context = CheckContext {
         block: request.block,
+        proposal_timestamp,
     };
     let verdict = engine
         .security_check(request.transaction, context)

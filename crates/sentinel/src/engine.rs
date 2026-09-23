@@ -154,6 +154,13 @@ impl SecurityCheck {
         self
     }
 
+    /// Configure the timestamp, in seconds since the Unix epoch, of the
+    /// consensus-chain block the transaction was proposed in.
+    pub fn proposal_timestamp(mut self, timestamp: u64) -> Self {
+        self.request = self.request.header("x-proposal-timestamp", timestamp);
+        self
+    }
+
     /// Configure the timeout for the security check.
     pub fn timeout(mut self, timeout: Duration) -> Self {
         self.request = self.request.timeout(timeout).header(
@@ -251,6 +258,7 @@ mod tests {
         let _ = engine
             .security_check(BlockNumberOrTag::Number(1), &SafeTransaction::default())
             .request_id(B256::repeat_byte(0x42))
+            .proposal_timestamp(1_700_000_000)
             .timeout(Duration::from_millis(1337))
             .execute()
             .await;
@@ -258,6 +266,7 @@ mod tests {
 
         for header in [
             "x-request-id: 0x4242424242424242424242424242424242424242424242424242424242424242",
+            "x-proposal-timestamp: 1700000000",
             "x-request-timeout: 1337",
         ] {
             assert!(

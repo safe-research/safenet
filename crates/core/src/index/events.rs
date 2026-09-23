@@ -44,6 +44,10 @@ pub trait Events: Sized {
 pub struct EventLog<E> {
     /// The block number the log is for.
     pub block: u64,
+    /// The timestamp of the block the log is for. `None` when the node omits
+    /// the (non-standard, but widely supported) `blockTimestamp` field from
+    /// its `eth_getLogs` response.
+    pub block_timestamp: Option<u64>,
     /// The index of the log within the block.
     pub index: u64,
     /// The address that emitted the event.
@@ -499,6 +503,7 @@ where
                 .and_then(|data| {
                     Some(EventLog {
                         block: log.block_number?,
+                        block_timestamp: log.block_timestamp,
                         index: log.log_index?,
                         address: log.inner.address,
                         data,
@@ -647,14 +652,20 @@ mod tests {
                 data: event.encode_log_data(),
             },
             block_number: Some(block_number),
+            block_timestamp: Some(block_timestamp(block_number)),
             log_index: Some(log_index),
             ..Default::default()
         }
     }
 
+    fn block_timestamp(block: u64) -> u64 {
+        1_700_000_000 + block * 12
+    }
+
     fn event_log<E>((block, index): (u64, u64), data: E) -> EventLog<E> {
         EventLog {
             block,
+            block_timestamp: Some(block_timestamp(block)),
             index,
             address: WATCHED,
             data,

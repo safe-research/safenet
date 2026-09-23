@@ -26,9 +26,11 @@ An `abstain` response is successful and deliberate. It must not be interpreted a
 
 ## API Contract
 
-[`crates/sentinel-engine/openapi.yaml`](../crates/sentinel-engine/openapi.yaml) is the authoritative interface contract. It defines the `POST /v1/security-check` request and response bodies, wire formats, and the optional `x-request-id` and `x-request-timeout` headers. Operators implementing their own engine should validate against and remain compatible with that document.
+[`crates/sentinel-engine/openapi.yaml`](../crates/sentinel-engine/openapi.yaml) is the authoritative interface contract. It defines the `POST /v1/security-check` request and response bodies, wire formats, and the optional `x-request-id`, `x-request-timeout` and `x-proposal-timestamp` headers. Operators implementing their own engine should validate against and remain compatible with that document.
 
 The request body's `block` field is the block, on the chain the transaction executes on, that RPC-derived checks evaluate against: either a block number or `latest`. The sentinel always sends `latest` — it only follows the consensus chain, so any block number it knows of belongs to the wrong chain — and the checks that need a concrete block resolve `latest` against the engine's own RPC. A block number lets a historical transaction be replayed against the block range it actually happened near (e.g. a `sentinel-test-vectors` vector supplying its own block) instead of however far the chain has moved on since — the caller is responsible for supplying a block _before_ the transaction being checked, since a query reaching up to the transaction's own block would see that transaction's own effects as if they were prior evidence.
+
+The optional `x-proposal-timestamp` header carries the timestamp, in seconds since the Unix epoch, of the consensus-chain block the transaction was proposed in. The sentinel takes it from the `blockTimestamp` field of the node's `eth_getLogs` response and omits the header when the node doesn't report it, so a check relying on it must abstain when it is absent.
 
 Rule citations are intentionally open-ended: the Charter can gain rules without requiring the sentinel to know a closed enum of every possible citation.
 

@@ -458,6 +458,7 @@ mod tests {
                 .enumerate()
                 .map(|(index, data)| EventLog {
                     block,
+                    block_timestamp: None,
                     index: index.try_into().expect("test log index fits in u64"),
                     address: WATCHED,
                     data: Weth::WethEvents::Deposit(data),
