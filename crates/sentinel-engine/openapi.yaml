@@ -1,7 +1,7 @@
 openapi: 3.2.0
 info:
   title: Safenet Sentinel Engine API
-  version: 0.2.0
+  version: 0.3.0
   summary: Safenet transaction verification API that backs sentinel services.
   description: >-
     A sentinel watching the Consensus contract POSTs each proposed Safe
@@ -55,16 +55,18 @@ components:
       properties:
         block:
           description: >-
-            The block number the sentinel considers current, i.e. the most
-            recent block it had synced past when it submitted this check. An
-            engine can use this as its reference point when reading chain
-            state, rather than resolving "latest" independently and risking a
-            different view of the chain than the sentinel had.
-          $ref: "#/components/schemas/Quantity"
+            The block, on the chain the transaction executes on, that an
+            engine should use as its reference point when reading chain state.
+            A sentinel sends `latest`, since it only follows the consensus
+            chain and has no block of its own on the transaction's chain. A
+            concrete block number replays a historical transaction against
+            the chain state it was executed on, and must be a block before
+            the one that mined it.
+          $ref: "#/components/schemas/BlockLabel"
         transaction:
           $ref: "#/components/schemas/SafeTransaction"
       examples:
-        - block: "0x1361f5"
+        - block: latest
           transaction:
             chainId: "0x1"
             safe: "0x5aFE3855358E112B5647B952709E6165e1c1eEEe"
@@ -184,6 +186,12 @@ components:
         A 256-bit unsigned integer as minimal (no leading zeros), lower-case,
         `0x`-prefixed hex string. Zero is "0x0".
       pattern: "^0x([1-9a-f][0-9a-f]*|0)$"
+    BlockLabel:
+      description: Either a block number or the `latest` block tag.
+      oneOf:
+        - $ref: "#/components/schemas/Quantity"
+        - type: string
+          const: latest
     Bytes:
       type: string
       description: Lower-case, `0x`-prefixed byte string; empty is "0x".

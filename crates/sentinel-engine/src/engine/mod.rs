@@ -23,6 +23,7 @@ pub use self::{
     transaction::{MetaTransaction, Operation, SafeTransaction},
 };
 use crate::checkers::{Assessment, Checker};
+use alloy::eips::BlockNumberOrTag;
 use serde::{Deserialize, Serialize};
 
 /// The transaction-verification engine shared by API handlers.
@@ -33,14 +34,53 @@ pub struct SentinelEngine(Vec<Box<dyn Checker>>);
 /// part of the transaction itself.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct CheckContext {
-    /// The block number the caller (the sentinel) considers current — the
-    /// most recent block it had synced past when it submitted this check,
-    /// from the request's required `block` field. A check that reads
-    /// RPC-derived state should evaluate against this rather than resolving
-    /// "latest" itself, so it shares the same view of the chain the caller
-    /// had rather than racing ahead of (or behind) it. A check is free to
-    /// ignore this if it has no RPC-derived state to anchor.
-    pub block: u64,
+    /// The block a check that reads RPC-derived state should evaluate
+    /// against, from the request's required `block` field. A live caller
+    /// (the sentinel) sends [`BlockLabel::Latest`], since it has no view of
+    /// the chain the transaction executes on; a replayed historical
+    /// transaction supplies the block before the one that mined it. A
+    /// check is free to ignore this if it has no RPC-derived state to
+    /// anchor.
+    pub block: BlockLabel,
+}
+
+/// A block reference on the engine's configured chain: either a concrete
+/// block number or the chain's `latest` block. Other block tags (`pending`,
+/// `safe`, …) are rejected at deserialization.
+#[derive(Clone, Copy, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(try_from = "BlockNumberOrTag", into = "BlockNumberOrTag")]
+pub enum BlockLabel {
+    /// The latest block, resolved by whichever check needs it.
+    #[default]
+    Latest,
+    /// A concrete block number.
+    Number(u64),
+}
+
+/// An error converting a [`BlockNumberOrTag`] into a [`BlockLabel`].
+#[derive(Debug, thiserror::Error)]
+#[error("unsupported block tag `{0}`, expected a block number or `latest`")]
+pub struct UnsupportedBlockTag(BlockNumberOrTag);
+
+impl TryFrom<BlockNumberOrTag> for BlockLabel {
+    type Error = UnsupportedBlockTag;
+
+    fn try_from(block: BlockNumberOrTag) -> Result<Self, Self::Error> {
+        match block {
+            BlockNumberOrTag::Latest => Ok(Self::Latest),
+            BlockNumberOrTag::Number(number) => Ok(Self::Number(number)),
+            tag => Err(UnsupportedBlockTag(tag)),
+        }
+    }
+}
+
+impl From<BlockLabel> for BlockNumberOrTag {
+    fn from(block: BlockLabel) -> Self {
+        match block {
+            BlockLabel::Latest => Self::Latest,
+            BlockLabel::Number(number) => Self::Number(number),
+        }
+    }
 }
 
 /// The engine's assessment of a proposed transaction.
@@ -373,6 +413,20 @@ mod tests {
                 )
                 .await,
             Verdict::Abstain
+        );
+    }
+
+    #[test]
+    fn block_label_is_a_number_or_latest() {
+        let parse = |json| serde_json::from_str::<BlockLabel>(json).ok();
+
+        assert_eq!(parse(r#""latest""#), Some(BlockLabel::Latest));
+        assert_eq!(parse(r#""0x1361f5""#), Some(BlockLabel::Number(0x1361f5)));
+        assert_eq!(parse(r#""pending""#), None);
+        assert_eq!(parse(r#""finalized""#), None);
+        assert_eq!(
+            serde_json::to_string(&BlockLabel::Number(0x1361f5)).unwrap(),
+            r#""0x1361f5""#
         );
     }
 }

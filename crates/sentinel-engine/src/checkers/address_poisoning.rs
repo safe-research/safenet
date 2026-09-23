@@ -50,17 +50,17 @@
 //! Fixing either needs per-log transaction forensics (whose `msg.sender`
 //! actually moved the funds), not done today.
 //!
-//! Checks are evaluated as of [`CheckContext::block`] — the caller's own
-//! declared current block — rather than this checker resolving "latest"
-//! itself, which also lets a historical transaction replay against the
-//! block it actually happened near. The caller must supply a block
+//! Checks are evaluated as of [`CheckContext::block`]: `latest` (resolved
+//! once per check via the provider) for a live transaction that hasn't
+//! executed yet, or a concrete number to replay a historical transaction
+//! against the block it actually happened near. A concrete block must be
 //! *before* the transaction being checked, or the query would see that
 //! transaction's own effects as if they were prior evidence.
 
 use super::{Assessment, Checker};
 use crate::{
     contracts::bindings::erc20::{Approval, Transfer, approveCall, transferCall, transferFromCall},
-    engine::{AspectSet, CheckContext, MetaTransaction, Operation, Proposal, RuleId},
+    engine::{AspectSet, BlockLabel, CheckContext, MetaTransaction, Operation, Proposal, RuleId},
 };
 use alloy::{
     primitives::{Address, U256},
@@ -346,6 +346,16 @@ impl Checker for AddressPoisoningChecker {
             );
             return Assessment::Abstain;
         }
+        let current_block = match context.block {
+            BlockLabel::Number(number) => number,
+            BlockLabel::Latest => match self.provider.get_block_number().await {
+                Ok(number) => number,
+                Err(err) => {
+                    tracing::warn!(%err, "address-poisoning: failed to resolve the latest block");
+                    return Assessment::Abstain;
+                }
+            },
+        };
 
         // Keeps scanning past a call that leaves `abstain` set rather than
         // returning early, since a later call could still turn up a
@@ -360,7 +370,7 @@ impl Checker for AddressPoisoningChecker {
             };
 
             match self
-                .established_recipients(call.to, transaction.safe, candidate, context.block)
+                .established_recipients(call.to, transaction.safe, candidate, current_block)
                 .await
             {
                 Ok(RecipientLookup::ExactMatch) => {

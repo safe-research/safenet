@@ -7,7 +7,7 @@ use crate::{
     bindings::consensus::SafeTransaction,
     engine::{CheckOutcome, EngineClient},
 };
-use alloy::primitives::B256;
+use alloy::{eips::BlockNumberOrTag, primitives::B256};
 use safenet_core::effects::EffectHandler;
 use std::time::Duration;
 
@@ -16,12 +16,10 @@ use std::time::Duration;
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Effect {
     /// Defer the approve/deny decision for `request_id` (a proposed
-    /// `transaction` on `safe`) to the configured sentinel engine. `block` is
-    /// the block number the sentinel considers current.
+    /// `transaction` on `safe`) to the configured sentinel engine.
     EngineCheck {
         request_id: B256,
         transaction: SafeTransaction,
-        block: u64,
     },
 }
 
@@ -57,11 +55,13 @@ impl EffectHandler<Effect, Resume> for Handler {
             Effect::EngineCheck {
                 request_id,
                 transaction,
-                block,
             } => {
+                // The sentinel only follows the consensus chain, so it has no
+                // block of its own on the chain `transaction` executes on:
+                // defer to the engine's view of that chain's latest block.
                 let outcome = self
                     .engine
-                    .security_check(block, &transaction)
+                    .security_check(BlockNumberOrTag::Latest, &transaction)
                     .request_id(request_id)
                     .timeout(self.engine_timeout)
                     .execute()
@@ -119,7 +119,6 @@ mod tests {
                     safe: SAFE,
                     ..Default::default()
                 },
-                block: 1,
             })
             .await;
 

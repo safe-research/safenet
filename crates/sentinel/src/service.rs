@@ -139,7 +139,6 @@ impl SentinelTransition {
             vec![Command::Effect(effect::Effect::EngineCheck {
                 request_id,
                 transaction: event.transaction,
-                block,
             })],
         )
     }
@@ -1108,17 +1107,11 @@ mod tests {
         ))
     }
 
-    /// The engine-check effect emitted for a proposal for `(id, to)` at
-    /// `block`.
-    fn engine_check_effect(
-        id: B256,
-        to: Address,
-        block: u64,
-    ) -> Command<SentinelAction, effect::Effect> {
+    /// The engine-check effect emitted for a proposal for `(id, to)`.
+    fn engine_check_effect(id: B256, to: Address) -> Command<SentinelAction, effect::Effect> {
         Command::Effect(effect::Effect::EngineCheck {
             request_id: id,
             transaction: safe_tx(to),
-            block,
         })
     }
 
@@ -1281,7 +1274,7 @@ mod tests {
             State::default(),
             Message::Event(log(1, proposed_event(ORACLE, safe_tx_hash, TO))),
         );
-        assert_eq!(commands, vec![engine_check_effect(id, TO, 1)]);
+        assert_eq!(commands, vec![engine_check_effect(id, TO)]);
 
         let (state, commands) = svc.apply_transition(
             state,
@@ -1365,7 +1358,7 @@ mod tests {
             State::default(),
             Message::Event(log(1, proposed_event(ORACLE, safe_tx_hash, TO))),
         );
-        assert_eq!(commands, vec![engine_check_effect(id, TO, 1)]);
+        assert_eq!(commands, vec![engine_check_effect(id, TO)]);
         assert_eq!(
             state.0[&id],
             RequestState::WaitingForEngineCheck {
@@ -1968,7 +1961,7 @@ mod tests {
             State::default(),
             Message::Event(log(1, proposed_event(ORACLE, safe_tx_hash, TO))),
         );
-        assert_eq!(commands, vec![engine_check_effect(id, TO, 1)]);
+        assert_eq!(commands, vec![engine_check_effect(id, TO)]);
 
         let rule = RuleId::new(4, 6);
         let (state, commands) = resolve_engine_check(&svc, state, id, CheckOutcome::Denied(rule));
