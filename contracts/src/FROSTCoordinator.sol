@@ -367,6 +367,12 @@ contract FROSTCoordinator {
      * @param commitment The key generation commitment.
      * @return committed True if all commitments are received and the phase completes.
      * @dev This corresponds to Round 1 of the FROST KeyGen algorithm.
+     *
+     *      The proof of knowledge `(r, mu)` is not verified onchain. Instead, participants must verify it offchain for
+     *      every commitment, and must not complete the ceremony with any participant whose proof is invalid. Without
+     *      this check, a participant could mount a rogue key attack (by committing last, with a `c[0]` chosen so that
+     *      it knows the discrete logarithm of the group key), or contribute no key material to the group key at all
+     *      (by committing to the point at infinity as `c[0]`).
      */
     function keyGenCommit(FROSTGroupId.T gid, bytes32[] calldata poap, KeyGenCommitment calldata commitment)
         public

@@ -19,6 +19,7 @@ mod tests {
     use super::*;
     use crate::merkle::MerkleRoot;
     use alloy::primitives::{address, keccak256};
+    use k256::elliptic_curve::Field as _;
     use std::collections::BTreeMap;
 
     #[test]
@@ -254,5 +255,34 @@ mod tests {
                 assert_eq!(group_commitment, *signature.R());
             }
         }
+    }
+
+    #[test]
+    fn keygen_commitment_rejects_identity_contribution() {
+        let mut rng = rand::thread_rng();
+        let participant = address!("f39Fd6e51aad88F6F4ce6aB8827279cffFb92266");
+        let mut commitment = keygen::setup(&mut rng, participant, 3, 2)
+            .unwrap()
+            .commitment();
+
+        // Commit to the point at infinity as `C₀` (i.e. `a₀ = 0`), with a
+        // proof of knowledge `R = g^k, μ = k` that satisfies `g^μ = R + c·C₀`
+        // for any challenge `c`. It must still be rejected, as the point at
+        // infinity has no encoding for computing the challenge.
+        let k = k256::Scalar::random(&mut rng);
+        commitment.c[0] = marshal::solidity_point(&k256::ProjectivePoint::IDENTITY);
+        commitment.r = marshal::solidity_point(&(k256::ProjectivePoint::GENERATOR * k));
+        commitment.mu = marshal::solidity_scalar(&k);
+
+        let err = keygen::verify_commitment(participant, &commitment).unwrap_err();
+        assert!(matches!(
+            err,
+            error::Error::Participant {
+                cause: frost_secp256k1::Error::GroupError(
+                    frost_secp256k1::GroupError::InvalidIdentityElement
+                ),
+                culprit,
+            } if culprit == participant
+        ));
     }
 }
