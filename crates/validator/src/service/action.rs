@@ -143,6 +143,7 @@ impl ActionEncoder<Action> for Encoder {
                     .abi_encode()
                     .into(),
                     gas: 250_000,
+                    authorization: None,
                 },
                 expires_at,
             ),
@@ -163,6 +164,7 @@ impl ActionEncoder<Action> for Encoder {
                         .abi_encode()
                         .into(),
                         gas,
+                        authorization: None,
                     },
                     expires_at,
                 )
@@ -182,6 +184,7 @@ impl ActionEncoder<Action> for Encoder {
                     .abi_encode()
                     .into(),
                     gas: 300_000,
+                    authorization: None,
                 },
                 expires_at,
             ),
@@ -210,6 +213,7 @@ impl ActionEncoder<Action> for Encoder {
                         value: U256::ZERO,
                         data: data.into(),
                         gas,
+                        authorization: None,
                     },
                     expires_at,
                 )
@@ -231,6 +235,7 @@ impl ActionEncoder<Action> for Encoder {
                     .abi_encode()
                     .into(),
                     gas: 300_000,
+                    authorization: None,
                 },
                 expires_at,
             ),
@@ -248,6 +253,7 @@ impl ActionEncoder<Action> for Encoder {
                     .abi_encode()
                     .into(),
                     gas: 250_000,
+                    authorization: None,
                 },
                 // Nonce registration doesn't carry an expiry - we cannot
                 // reliably know for how long it is valuable.
@@ -270,6 +276,7 @@ impl ActionEncoder<Action> for Encoder {
                     .abi_encode()
                     .into(),
                     gas: 250_000,
+                    authorization: None,
                 },
                 Some(expires_at),
             ),
@@ -294,6 +301,7 @@ impl ActionEncoder<Action> for Encoder {
                     .abi_encode()
                     .into(),
                     gas: 400_000,
+                    authorization: None,
                 },
                 Some(expires_at),
             ),
@@ -312,6 +320,7 @@ impl ActionEncoder<Action> for Encoder {
                     .abi_encode()
                     .into(),
                     gas: 150_000,
+                    authorization: None,
                 },
                 Some(expires_at),
             ),
@@ -340,6 +349,7 @@ impl ActionEncoder<Action> for Encoder {
                     .abi_encode()
                     .into(),
                     gas: 250_000,
+                    authorization: None,
                 },
                 Some(expires_at),
             ),
@@ -362,6 +372,7 @@ impl ActionEncoder<Action> for Encoder {
                     .abi_encode()
                     .into(),
                     gas: 250_000,
+                    authorization: None,
                 },
                 Some(expires_at),
             ),
@@ -373,6 +384,7 @@ impl ActionEncoder<Action> for Encoder {
                         .abi_encode()
                         .into(),
                     gas: 100_000,
+                    authorization: None,
                 },
                 None,
             ),

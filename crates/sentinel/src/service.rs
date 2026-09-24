@@ -887,6 +887,7 @@ impl SentinelEncoder {
                 .abi_encode()
                 .into(),
                 gas: 55_000,
+                authorization: None,
             },
             // Measured onchain at ~196k gas for a request's first commit (fresh
             // storage slots for the request, the commitment and the ERC-20
@@ -903,6 +904,7 @@ impl SentinelEncoder {
                 .abi_encode()
                 .into(),
                 gas: 250_000,
+                authorization: None,
             },
             SentinelActionKind::Reveal {
                 id,
@@ -921,6 +923,7 @@ impl SentinelEncoder {
                 .abi_encode()
                 .into(),
                 gas: 250_000,
+                authorization: None,
             },
             SentinelActionKind::Finalize { id } => Transaction {
                 to: self.oracle,
@@ -929,6 +932,7 @@ impl SentinelEncoder {
                     .abi_encode()
                     .into(),
                 gas: 250_000,
+                authorization: None,
             },
             SentinelActionKind::Claim { id } => Transaction {
                 to: self.oracle,
@@ -937,6 +941,7 @@ impl SentinelEncoder {
                     .abi_encode()
                     .into(),
                 gas: 250_000,
+                authorization: None,
             },
             SentinelActionKind::TimeoutArbitration { id } => Transaction {
                 to: self.oracle,

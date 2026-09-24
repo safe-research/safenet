@@ -254,18 +254,17 @@ impl TransactionQueue {
         block: u64,
     ) -> Result<(), Error> {
         let chain_id = self.provider.chain_id();
-        let fees = self.fees().await?;
-        let transaction = transaction.build(chain_id, fees);
+        let estimate = self.fees().await?;
+        let fees = transaction.bumped_fees(estimate);
         let submission = Submission {
             block: Some(block),
             nonce: transaction.nonce,
-            fees: Eip1559Estimation {
-                max_fee_per_gas: transaction.max_fee_per_gas,
-                max_priority_fee_per_gas: transaction.max_priority_fee_per_gas,
-            },
+            fees,
         };
 
-        let signed = self.signer.sign_transaction(transaction)?;
+        let signed = self
+            .signer
+            .sign_transaction(transaction.build(chain_id, fees))?;
         tracing::debug!(
             nonce = submission.nonce,
             block,
