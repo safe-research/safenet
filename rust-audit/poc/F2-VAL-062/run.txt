@@ -1,0 +1,4 @@
+# F2-VAL-062 shares the PoC of its canonical, F2-VAL-030.
+# See ../F2-VAL-030/preprocess_tests_module.rs and ../F2-VAL-030/run.txt.
+# The failed-NonceTree phantom reservation, and available() counting it as
+# full capacity, are the shared mechanism; 030's PoC executes both.

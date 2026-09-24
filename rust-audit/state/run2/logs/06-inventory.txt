@@ -1,0 +1,112 @@
+# Inventory at commit 3ec8bc57dc35d1e9e65075ae9424bff427c47833; wc -l on the working tree (identical to HEAD for crates/)
+# tests = grep -cE '#\[(tokio::)?test' (matches #[test] and #[tokio::test] incl. attribute args)
+
+## crates/core
+   328    0 crates/core/src/driver.rs
+   267    8 crates/core/src/effects.rs
+  1330   23 crates/core/src/index/blocks.rs
+   523    2 crates/core/src/index/bloom.rs
+   103    2 crates/core/src/index/clock.rs
+  1516   19 crates/core/src/index/events.rs
+   468    5 crates/core/src/index/mod.rs
+    81    4 crates/core/src/kdf.rs
+    25    0 crates/core/src/lib.rs
+    90    0 crates/core/src/metrics.rs
+    21    0 crates/core/src/observability/logging.rs
+    80    1 crates/core/src/observability/metrics.rs
+    94    2 crates/core/src/observability/mod.rs
+   166    0 crates/core/src/provider/mod.rs
+    34    0 crates/core/src/serialization.rs
+   644    6 crates/core/src/state/mod.rs
+   294    7 crates/core/src/state/storage.rs
+   109    3 crates/core/src/tx/fees.rs
+   719    9 crates/core/src/tx/mod.rs
+   118    1 crates/core/src/tx/signer.rs
+   507    7 crates/core/src/tx/storage.rs
+    87    0 crates/core/src/tx/types.rs
+    97    0 crates/core/src/utils.rs
+TOTAL core: files=23 lines=7701 tests=99
+
+## crates/validator
+   247    0 crates/validator/src/bindings.rs
+   290    4 crates/validator/src/config.rs
+    95    1 crates/validator/src/consensus/epoch.rs
+   459    5 crates/validator/src/consensus/group.rs
+   249    4 crates/validator/src/consensus/hashing.rs
+     5    0 crates/validator/src/consensus/mod.rs
+   181    4 crates/validator/src/frost/ecdh.rs
+    46    0 crates/validator/src/frost/error.rs
+   516    0 crates/validator/src/frost/keygen.rs
+   176    0 crates/validator/src/frost/marshal.rs
+   258    1 crates/validator/src/frost/mod.rs
+    33    1 crates/validator/src/frost/participants.rs
+   189    1 crates/validator/src/frost/preprocess.rs
+   204    1 crates/validator/src/frost/sign.rs
+    99    0 crates/validator/src/main.rs
+   142    4 crates/validator/src/merkle.rs
+   181    0 crates/validator/src/metrics.rs
+     6    0 crates/validator/src/secrets/mod.rs
+   348    3 crates/validator/src/secrets/nonces.rs
+   969   13 crates/validator/src/secrets/store.rs
+   381    0 crates/validator/src/service/action.rs
+   328    0 crates/validator/src/service/effect.rs
+   129    0 crates/validator/src/service/mod.rs
+  1459    0 crates/validator/src/state/keygen.rs
+   516    0 crates/validator/src/state/mod.rs
+   253    0 crates/validator/src/state/preprocess.rs
+   868    0 crates/validator/src/state/sign.rs
+   101    0 crates/validator/src/state/transactions.rs
+TOTAL validator: files=28 lines=8728 tests=42
+
+## crates/sentinel
+    43    0 crates/sentinel/src/action.rs
+   173    0 crates/sentinel/src/bindings.rs
+   144    4 crates/sentinel/src/config.rs
+   134    1 crates/sentinel/src/effect.rs
+   392   10 crates/sentinel/src/engine.rs
+   224    5 crates/sentinel/src/hashing.rs
+    89    0 crates/sentinel/src/main.rs
+   143    0 crates/sentinel/src/metrics.rs
+  2158   16 crates/sentinel/src/service.rs
+   372    6 crates/sentinel/src/state.rs
+TOTAL sentinel: files=10 lines=3872 tests=42
+
+## excluded: crates/sentinel-engine
+files=22 lines=5113 tests=97
+
+## .rs outside src/ in the three crates (tests/, benches/, build.rs, examples/):
+(none if empty)
+
+## other test-like attributes in scope (sqlx::test, rstest, test_case, ignore, should_panic):
+crates/core/src/kdf.rs:77:    #[should_panic(expected = "HKDF domain must not be empty")]
+(none if empty)
+
+## unsafe census (non-test lines containing 'unsafe'):
+(none if empty)
+
+## non-Rust in-scope files
+    26 Cargo.toml
+  6169 Cargo.lock
+    31 crates/core/Cargo.toml
+    28 crates/validator/Cargo.toml
+    24 crates/sentinel/Cargo.toml
+    37 crates/validator/Dockerfile
+    38 crates/sentinel/Dockerfile
+    77 crates/validator/validator.sample.toml
+    61 crates/sentinel/sentinel.sample.toml
+
+## every non-.rs file under the three crates
+    31 crates/core/Cargo.toml
+    24 crates/sentinel/Cargo.toml
+    38 crates/sentinel/Dockerfile
+     4 crates/sentinel/Dockerfile.dockerignore
+    61 crates/sentinel/sentinel.sample.toml
+    28 crates/validator/Cargo.toml
+    37 crates/validator/Dockerfile
+     4 crates/validator/Dockerfile.dockerignore
+    77 crates/validator/validator.sample.toml
+
+## git ls-files check: tracked .rs under the three crates
+61
+## untracked/ignored .rs under the three crates:
+(none if empty)

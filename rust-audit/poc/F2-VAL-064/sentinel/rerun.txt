@@ -1,0 +1,18 @@
+# QA2-XC (resume) re-run of coverage.md section 7 item 7 on the current tree; HEAD fe9e84cc59b65367b31d5a3121774383cc422234; sentinel debug binary built from this tree (crates/sentinel changed since 3ec8bc5: PR #914)
+# config: poc/F2-VAL-064/sentinel/sentinel-loopback.toml (rpc =  "http://127.0.0.1:9"; never contacted, the flag is rejected before the file is read)
+
+=================== sentinel --config-file=sentinel-loopback.toml   (the spelling in sentinel.sample.toml:4, Dockerfile, docs/sentinel-handbook.md)
+Unrecognized argument: --config-file=/home/shebin.guest/safe/safenet/rust-audit/poc/F2-VAL-064/sentinel/sentinel-loopback.toml
+
+Run sentinel --help for more information.
+--- exit=1
+
+=================== sentinel --config-file /nonexistent/sentinel.toml   (space-separated spelling is parsed: fails later, on the missing file)
+Error: Io(Os { code: 2, kind: NotFound, message: "No such file or directory" })
+--- exit=1
+
+=================== validator --config-file=/nonexistent/validator.toml   (same argh 0.1.19 behaviour in the validator binary)
+Unrecognized argument: --config-file=/nonexistent/validator.toml
+
+Run validator --help for more information.
+--- exit=1

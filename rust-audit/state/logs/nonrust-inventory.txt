@@ -1,0 +1,64 @@
+=== Non-Rust in-scope files ===
+date: 2026-09-08T15:38:43+05:30  commit: 2893917757ae518ebb91154712cf3e401cb68d33
+
+--- ls crates/ (are there exactly four crates?) ---
+core
+sentinel
+sentinel-engine
+validator
+
+--- expected in-scope non-Rust files: existence, bytes, wc -l ---
+PATH                                                       EXISTS     BYTES    LINES
+Cargo.toml                                                 yes        777      26
+Cargo.lock                                                 yes        148444   6169
+crates/core/Cargo.toml                                     yes        723      31
+crates/validator/Cargo.toml                                yes        633      28
+crates/sentinel/Cargo.toml                                 yes        548      24
+crates/sentinel-engine/Cargo.toml                          yes        532      24
+crates/core/Dockerfile                                     NO         -        -
+crates/validator/Dockerfile                                yes        1376     37
+crates/sentinel/Dockerfile                                 yes        1393     38
+crates/sentinel-engine/Dockerfile                          yes        964      28
+crates/validator/validator.sample.toml                     yes        3545     77
+crates/sentinel/sentinel.sample.toml                       yes        2595     61
+crates/sentinel-engine/sentinel-engine.sample.toml         yes        1852     42
+crates/sentinel-engine/openapi.yaml                        yes        6726     190
+
+--- everything actually present under crates/ that is NOT a .rs file ---
+  crates/core/Cargo.toml                                          723 bytes      31 lines
+  crates/sentinel-engine/Cargo.toml                               532 bytes      24 lines
+  crates/sentinel-engine/Dockerfile                               964 bytes      28 lines
+  crates/sentinel-engine/Dockerfile.dockerignore                   42 bytes       4 lines
+  crates/sentinel-engine/openapi.yaml                            6726 bytes     190 lines
+  crates/sentinel-engine/sentinel-engine.sample.toml             1852 bytes      42 lines
+  crates/sentinel/Cargo.toml                                      548 bytes      24 lines
+  crates/sentinel/Dockerfile                                     1393 bytes      38 lines
+  crates/sentinel/Dockerfile.dockerignore                          42 bytes       4 lines
+  crates/sentinel/sentinel.sample.toml                           2595 bytes      61 lines
+  crates/validator/Cargo.toml                                     633 bytes      28 lines
+  crates/validator/Dockerfile                                    1376 bytes      37 lines
+  crates/validator/Dockerfile.dockerignore                         42 bytes       4 lines
+  crates/validator/validator.sample.toml                         3545 bytes      77 lines
+
+--- root-level in-scope files ---
+  Cargo.toml                777 bytes      26 lines
+  Cargo.lock             148444 bytes    6169 lines
+
+--- glob sweep for scope patterns ---
+crates/*/Cargo.toml   :
+crates/core/Cargo.toml
+crates/sentinel-engine/Cargo.toml
+crates/sentinel/Cargo.toml
+crates/validator/Cargo.toml
+crates/*/Dockerfile   :
+crates/sentinel-engine/Dockerfile
+crates/sentinel/Dockerfile
+crates/validator/Dockerfile
+crates/*/*.sample.toml:
+crates/sentinel-engine/sentinel-engine.sample.toml
+crates/sentinel/sentinel.sample.toml
+crates/validator/validator.sample.toml
+crates/*/*.yaml|yml   :
+crates/sentinel-engine/openapi.yaml
+  (none besides those listed)
+build.rs anywhere     :

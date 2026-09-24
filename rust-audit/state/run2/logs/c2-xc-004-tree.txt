@@ -1,0 +1,563 @@
+# C2-XC: cargo tree reachability re-run; commit 3ec8bc5
+# every command: cargo tree --offline --locked <args>
+
+=================== --workspace -i h2 --depth 8 (host target)
+h2 v0.4.14
+└── hyper v1.10.1
+    ├── axum v0.8.9
+    │   └── sentinel-engine v0.2.0 (/home/shebin.guest/safe/safenet/crates/sentinel-engine)
+    ├── hyper-rustls v0.27.9
+    │   ├── metrics-exporter-prometheus v0.18.3
+    │   │   └── safenet-core v0.2.0 (/home/shebin.guest/safe/safenet/crates/core)
+    │   │       ├── sentinel v0.2.0 (/home/shebin.guest/safe/safenet/crates/sentinel)
+    │   │       ├── sentinel-engine v0.2.0 (/home/shebin.guest/safe/safenet/crates/sentinel-engine)
+    │   │       └── validator v0.2.0 (/home/shebin.guest/safe/safenet/crates/validator)
+    │   │       [dev-dependencies]
+    │   │       ├── sentinel v0.2.0 (/home/shebin.guest/safe/safenet/crates/sentinel)
+    │   │       ├── sentinel-engine v0.2.0 (/home/shebin.guest/safe/safenet/crates/sentinel-engine)
+    │   │       └── validator v0.2.0 (/home/shebin.guest/safe/safenet/crates/validator)
+    │   └── reqwest v0.13.4
+    │       ├── alloy-provider v2.0.5
+    │       │   ├── alloy v2.0.5
+    │       │   │   ├── safenet-core v0.2.0 (/home/shebin.guest/safe/safenet/crates/core) (*)
+    │       │   │   ├── sentinel v0.2.0 (/home/shebin.guest/safe/safenet/crates/sentinel)
+    │       │   │   ├── sentinel-engine v0.2.0 (/home/shebin.guest/safe/safenet/crates/sentinel-engine)
+    │       │   │   └── validator v0.2.0 (/home/shebin.guest/safe/safenet/crates/validator)
+    │       │   └── alloy-contract v2.0.5
+    │       │       └── alloy v2.0.5 (*)
+    │       ├── alloy-rpc-client v2.0.5
+    │       │   ├── alloy v2.0.5 (*)
+    │       │   └── alloy-provider v2.0.5 (*)
+    │       ├── alloy-transport-http v2.0.5
+    │       │   ├── alloy v2.0.5 (*)
+    │       │   ├── alloy-provider v2.0.5 (*)
+    │       │   └── alloy-rpc-client v2.0.5 (*)
+    │       ├── sentinel v0.2.0 (/home/shebin.guest/safe/safenet/crates/sentinel)
+    │       └── sentinel-engine v0.2.0 (/home/shebin.guest/safe/safenet/crates/sentinel-engine)
+    ├── hyper-util v0.1.20
+    │   ├── axum v0.8.9 (*)
+    │   ├── hyper-rustls v0.27.9 (*)
+    │   ├── metrics-exporter-prometheus v0.18.3 (*)
+    │   └── reqwest v0.13.4 (*)
+    ├── metrics-exporter-prometheus v0.18.3 (*)
+    └── reqwest v0.13.4 (*)
+
+=================== --workspace -i rustls --depth 8 (host target)
+rustls v0.23.40
+├── alloy-transport-ws v2.0.5
+│   ├── alloy v2.0.5
+│   │   ├── safenet-core v0.2.0 (/home/shebin.guest/safe/safenet/crates/core)
+│   │   │   ├── sentinel v0.2.0 (/home/shebin.guest/safe/safenet/crates/sentinel)
+│   │   │   ├── sentinel-engine v0.2.0 (/home/shebin.guest/safe/safenet/crates/sentinel-engine)
+│   │   │   └── validator v0.2.0 (/home/shebin.guest/safe/safenet/crates/validator)
+│   │   │   [dev-dependencies]
+│   │   │   ├── sentinel v0.2.0 (/home/shebin.guest/safe/safenet/crates/sentinel)
+│   │   │   ├── sentinel-engine v0.2.0 (/home/shebin.guest/safe/safenet/crates/sentinel-engine)
+│   │   │   └── validator v0.2.0 (/home/shebin.guest/safe/safenet/crates/validator)
+│   │   ├── sentinel v0.2.0 (/home/shebin.guest/safe/safenet/crates/sentinel)
+│   │   ├── sentinel-engine v0.2.0 (/home/shebin.guest/safe/safenet/crates/sentinel-engine)
+│   │   └── validator v0.2.0 (/home/shebin.guest/safe/safenet/crates/validator)
+│   ├── alloy-provider v2.0.5
+│   │   ├── alloy v2.0.5 (*)
+│   │   └── alloy-contract v2.0.5
+│   │       └── alloy v2.0.5 (*)
+│   └── alloy-rpc-client v2.0.5
+│       ├── alloy v2.0.5 (*)
+│       └── alloy-provider v2.0.5 (*)
+├── hyper-rustls v0.27.9
+│   ├── metrics-exporter-prometheus v0.18.3
+│   │   └── safenet-core v0.2.0 (/home/shebin.guest/safe/safenet/crates/core) (*)
+│   └── reqwest v0.13.4
+│       ├── alloy-provider v2.0.5 (*)
+│       ├── alloy-rpc-client v2.0.5 (*)
+│       ├── alloy-transport-http v2.0.5
+│       │   ├── alloy v2.0.5 (*)
+│       │   ├── alloy-provider v2.0.5 (*)
+│       │   └── alloy-rpc-client v2.0.5 (*)
+│       ├── sentinel v0.2.0 (/home/shebin.guest/safe/safenet/crates/sentinel)
+│       └── sentinel-engine v0.2.0 (/home/shebin.guest/safe/safenet/crates/sentinel-engine)
+├── metrics-exporter-prometheus v0.18.3 (*)
+├── reqwest v0.13.4 (*)
+├── rustls-platform-verifier v0.7.0
+│   └── reqwest v0.13.4 (*)
+├── tokio-rustls v0.26.4
+│   ├── hyper-rustls v0.27.9 (*)
+│   ├── reqwest v0.13.4 (*)
+│   └── tokio-tungstenite v0.28.0
+│       └── alloy-transport-ws v2.0.5 (*)
+├── tokio-tungstenite v0.28.0 (*)
+└── tungstenite v0.28.0
+    └── tokio-tungstenite v0.28.0 (*)
+
+=================== --workspace -i ruint --depth 8 (host target)
+ruint v1.18.0
+├── alloy-primitives v1.6.0
+│   ├── alloy-chains v0.2.34
+│   │   └── alloy-provider v2.0.5
+│   │       ├── alloy v2.0.5
+│   │       │   ├── safenet-core v0.2.0 (/home/shebin.guest/safe/safenet/crates/core)
+│   │       │   │   ├── sentinel v0.2.0 (/home/shebin.guest/safe/safenet/crates/sentinel)
+│   │       │   │   ├── sentinel-engine v0.2.0 (/home/shebin.guest/safe/safenet/crates/sentinel-engine)
+│   │       │   │   └── validator v0.2.0 (/home/shebin.guest/safe/safenet/crates/validator)
+│   │       │   │   [dev-dependencies]
+│   │       │   │   ├── sentinel v0.2.0 (/home/shebin.guest/safe/safenet/crates/sentinel)
+│   │       │   │   ├── sentinel-engine v0.2.0 (/home/shebin.guest/safe/safenet/crates/sentinel-engine)
+│   │       │   │   └── validator v0.2.0 (/home/shebin.guest/safe/safenet/crates/validator)
+│   │       │   ├── sentinel v0.2.0 (/home/shebin.guest/safe/safenet/crates/sentinel)
+│   │       │   ├── sentinel-engine v0.2.0 (/home/shebin.guest/safe/safenet/crates/sentinel-engine)
+│   │       │   └── validator v0.2.0 (/home/shebin.guest/safe/safenet/crates/validator)
+│   │       └── alloy-contract v2.0.5
+│   │           └── alloy v2.0.5 (*)
+│   ├── alloy-consensus v2.0.5
+│   │   ├── alloy v2.0.5 (*)
+│   │   ├── alloy-consensus-any v2.0.5
+│   │   │   ├── alloy-network v2.0.5
+│   │   │   │   ├── alloy v2.0.5 (*)
+│   │   │   │   ├── alloy-contract v2.0.5 (*)
+│   │   │   │   ├── alloy-provider v2.0.5 (*)
+│   │   │   │   └── alloy-signer-local v2.0.5
+│   │   │   │       └── alloy v2.0.5 (*)
+│   │   │   ├── alloy-rpc-types-any v2.0.5
+│   │   │   │   └── alloy-network v2.0.5 (*)
+│   │   │   └── alloy-rpc-types-eth v2.0.5
+│   │   │       ├── alloy-contract v2.0.5 (*)
+│   │   │       ├── alloy-network v2.0.5 (*)
+│   │   │       ├── alloy-provider v2.0.5 (*)
+│   │   │       ├── alloy-rpc-types v2.0.5
+│   │   │       │   └── alloy v2.0.5 (*)
+│   │   │       ├── alloy-rpc-types-anvil v2.0.5
+│   │   │       │   ├── alloy-provider v2.0.5 (*)
+│   │   │       │   └── alloy-rpc-types v2.0.5 (*)
+│   │   │       ├── alloy-rpc-types-any v2.0.5 (*)
+│   │   │       ├── alloy-rpc-types-trace v2.0.5
+│   │   │       │   ├── alloy-provider v2.0.5 (*)
+│   │   │       │   └── alloy-rpc-types v2.0.5 (*)
+│   │   │       └── alloy-rpc-types-txpool v2.0.5
+│   │   │           ├── alloy-provider v2.0.5 (*)
+│   │   │           └── alloy-rpc-types v2.0.5 (*)
+│   │   ├── alloy-contract v2.0.5 (*)
+│   │   ├── alloy-network v2.0.5 (*)
+│   │   ├── alloy-network-primitives v2.0.5
+│   │   │   ├── alloy-contract v2.0.5 (*)
+│   │   │   ├── alloy-network v2.0.5 (*)
+│   │   │   ├── alloy-provider v2.0.5 (*)
+│   │   │   ├── alloy-rpc-types-any v2.0.5 (*)
+│   │   │   └── alloy-rpc-types-eth v2.0.5 (*)
+│   │   ├── alloy-provider v2.0.5 (*)
+│   │   ├── alloy-rpc-types-eth v2.0.5 (*)
+│   │   └── alloy-signer-local v2.0.5 (*)
+│   ├── alloy-consensus-any v2.0.5 (*)
+│   ├── alloy-contract v2.0.5 (*)
+│   ├── alloy-core v1.6.0
+│   │   └── alloy v2.0.5 (*)
+│   ├── alloy-dyn-abi v1.6.0
+│   │   ├── alloy-contract v2.0.5 (*)
+│   │   └── alloy-core v1.6.0 (*)
+│   ├── alloy-eip2124 v0.2.0
+│   │   └── alloy-eips v2.0.5
+│   │       ├── alloy v2.0.5 (*)
+│   │       ├── alloy-consensus v2.0.5 (*)
+│   │       ├── alloy-consensus-any v2.0.5 (*)
+│   │       ├── alloy-network v2.0.5 (*)
+│   │       ├── alloy-network-primitives v2.0.5 (*)
+│   │       ├── alloy-provider v2.0.5 (*)
+│   │       └── alloy-rpc-types-eth v2.0.5 (*)
+│   ├── alloy-eip2930 v0.2.3
+│   │   └── alloy-eips v2.0.5 (*)
+│   ├── alloy-eip7702 v0.6.3
+│   │   └── alloy-eips v2.0.5 (*)
+│   ├── alloy-eip7928 v0.3.7
+│   │   └── alloy-eips v2.0.5 (*)
+│   ├── alloy-eips v2.0.5 (*)
+│   ├── alloy-json-abi v1.6.0
+│   │   ├── alloy-contract v2.0.5 (*)
+│   │   ├── alloy-core v1.6.0 (*)
+│   │   ├── alloy-dyn-abi v1.6.0 (*)
+│   │   └── alloy-sol-types v1.6.0
+│   │       ├── alloy-contract v2.0.5 (*)
+│   │       ├── alloy-core v1.6.0 (*)
+│   │       ├── alloy-dyn-abi v1.6.0 (*)
+│   │       ├── alloy-json-rpc v2.0.5
+│   │       │   ├── alloy v2.0.5 (*)
+│   │       │   ├── alloy-network v2.0.5 (*)
+│   │       │   ├── alloy-provider v2.0.5 (*)
+│   │       │   ├── alloy-pubsub v2.0.5
+│   │       │   │   ├── alloy v2.0.5 (*)
+│   │       │   │   ├── alloy-contract v2.0.5 (*)
+│   │       │   │   ├── alloy-provider v2.0.5 (*)
+│   │       │   │   ├── alloy-rpc-client v2.0.5
+│   │       │   │   │   ├── alloy v2.0.5 (*)
+│   │       │   │   │   └── alloy-provider v2.0.5 (*)
+│   │       │   │   ├── alloy-transport-ipc v2.0.5
+│   │       │   │   │   ├── alloy v2.0.5 (*)
+│   │       │   │   │   ├── alloy-provider v2.0.5 (*)
+│   │       │   │   │   └── alloy-rpc-client v2.0.5 (*)
+│   │       │   │   └── alloy-transport-ws v2.0.5
+│   │       │   │       ├── alloy v2.0.5 (*)
+│   │       │   │       ├── alloy-provider v2.0.5 (*)
+│   │       │   │       └── alloy-rpc-client v2.0.5 (*)
+│   │       │   ├── alloy-rpc-client v2.0.5 (*)
+│   │       │   ├── alloy-transport v2.0.5
+│   │       │   │   ├── alloy v2.0.5 (*)
+│   │       │   │   ├── alloy-contract v2.0.5 (*)
+│   │       │   │   ├── alloy-provider v2.0.5 (*)
+│   │       │   │   ├── alloy-pubsub v2.0.5 (*)
+│   │       │   │   ├── alloy-rpc-client v2.0.5 (*)
+│   │       │   │   ├── alloy-transport-http v2.0.5
+│   │       │   │   │   ├── alloy v2.0.5 (*)
+│   │       │   │   │   ├── alloy-provider v2.0.5 (*)
+│   │       │   │   │   └── alloy-rpc-client v2.0.5 (*)
+│   │       │   │   ├── alloy-transport-ipc v2.0.5 (*)
+│   │       │   │   └── alloy-transport-ws v2.0.5 (*)
+│   │       │   ├── alloy-transport-http v2.0.5 (*)
+│   │       │   └── alloy-transport-ipc v2.0.5 (*)
+│   │       ├── alloy-network v2.0.5 (*)
+│   │       ├── alloy-provider v2.0.5 (*)
+│   │       └── alloy-rpc-types-eth v2.0.5 (*)
+│   ├── alloy-json-rpc v2.0.5 (*)
+│   ├── alloy-network v2.0.5 (*)
+│   ├── alloy-network-primitives v2.0.5 (*)
+│   ├── alloy-provider v2.0.5 (*)
+│   ├── alloy-pubsub v2.0.5 (*)
+│   ├── alloy-rpc-client v2.0.5 (*)
+│   ├── alloy-rpc-types v2.0.5 (*)
+│   ├── alloy-rpc-types-anvil v2.0.5 (*)
+│   ├── alloy-rpc-types-any v2.0.5 (*)
+│   ├── alloy-rpc-types-debug v2.0.5
+│   │   ├── alloy-provider v2.0.5 (*)
+│   │   └── alloy-rpc-types v2.0.5 (*)
+│   ├── alloy-rpc-types-eth v2.0.5 (*)
+│   ├── alloy-rpc-types-trace v2.0.5 (*)
+│   ├── alloy-rpc-types-txpool v2.0.5 (*)
+│   ├── alloy-serde v2.0.5
+│   │   ├── alloy v2.0.5 (*)
+│   │   ├── alloy-consensus v2.0.5 (*)
+│   │   ├── alloy-consensus-any v2.0.5 (*)
+│   │   ├── alloy-eips v2.0.5 (*)
+│   │   ├── alloy-network v2.0.5 (*)
+│   │   ├── alloy-network-primitives v2.0.5 (*)
+│   │   ├── alloy-rpc-types v2.0.5 (*)
+│   │   ├── alloy-rpc-types-anvil v2.0.5 (*)
+│   │   ├── alloy-rpc-types-any v2.0.5 (*)
+│   │   ├── alloy-rpc-types-eth v2.0.5 (*)
+│   │   ├── alloy-rpc-types-trace v2.0.5 (*)
+│   │   └── alloy-rpc-types-txpool v2.0.5 (*)
+│   ├── alloy-signer v2.0.5
+│   │   ├── alloy v2.0.5 (*)
+│   │   ├── alloy-network v2.0.5 (*)
+│   │   ├── alloy-provider v2.0.5 (*)
+│   │   └── alloy-signer-local v2.0.5 (*)
+│   ├── alloy-signer-local v2.0.5 (*)
+│   ├── alloy-sol-types v1.6.0 (*)
+│   └── alloy-trie v0.9.5
+│       └── alloy-consensus v2.0.5 (*)
+└── nybbles v0.4.8
+    └── alloy-trie v0.9.5 (*)
+
+ruint v1.18.0
+└── alloy-primitives v1.6.0
+    └── alloy-json-abi v1.6.0
+        ├── alloy-sol-macro-expander v1.6.0
+        │   └── alloy-sol-macro v1.6.0 (proc-macro)
+        │       └── alloy-sol-types v1.6.0 (*)
+        └── alloy-sol-macro-input v1.6.0
+            ├── alloy-sol-macro v1.6.0 (proc-macro) (*)
+            └── alloy-sol-macro-expander v1.6.0 (*)
+
+=================== --workspace -i quinn-proto --depth 8 (host target)
+warning: nothing to print.
+
+To find dependencies that require specific target platforms, try to use option `--target all` first, and then narrow your search scope accordingly.
+
+=================== --workspace -i crossbeam-epoch --depth 8 (host target)
+crossbeam-epoch v0.9.18
+├── crossbeam-deque v0.8.7
+│   └── rayon-core v1.13.0
+│       └── rayon v1.12.0
+│           └── validator v0.2.0 (/home/shebin.guest/safe/safenet/crates/validator)
+└── metrics-util v0.20.4
+    └── metrics-exporter-prometheus v0.18.3
+        └── safenet-core v0.2.0 (/home/shebin.guest/safe/safenet/crates/core)
+            ├── sentinel v0.2.0 (/home/shebin.guest/safe/safenet/crates/sentinel)
+            ├── sentinel-engine v0.2.0 (/home/shebin.guest/safe/safenet/crates/sentinel-engine)
+            └── validator v0.2.0 (/home/shebin.guest/safe/safenet/crates/validator)
+            [dev-dependencies]
+            ├── sentinel v0.2.0 (/home/shebin.guest/safe/safenet/crates/sentinel)
+            ├── sentinel-engine v0.2.0 (/home/shebin.guest/safe/safenet/crates/sentinel-engine)
+            └── validator v0.2.0 (/home/shebin.guest/safe/safenet/crates/validator)
+
+=================== -p sentinel -i quinn-proto
+warning: nothing to print.
+
+To find dependencies that require specific target platforms, try to use option `--target all` first, and then narrow your search scope accordingly.
+
+=================== -p sentinel -e features -i reqwest --depth 1
+reqwest v0.13.4
+├── alloy-provider v2.0.5
+└── alloy-rpc-client v2.0.5
+├── reqwest feature "__rustls"
+├── reqwest feature "__rustls-aws-lc-rs"
+├── reqwest feature "__tls"
+├── reqwest feature "json"
+└── reqwest feature "rustls"
+
+=================== -p sentinel -e features -i hyper --depth 1
+hyper v1.10.1
+└── hyper-rustls v0.27.9
+├── hyper feature "client"
+├── hyper feature "default"
+├── hyper feature "http1"
+├── hyper feature "http2"
+└── hyper feature "server"
+
+=================== -p sentinel -e features -i hyper-util --depth 1
+hyper-util v0.1.20
+├── hyper-util feature "client"
+├── hyper-util feature "client-legacy"
+├── hyper-util feature "client-proxy"
+├── hyper-util feature "default"
+├── hyper-util feature "http1"
+├── hyper-util feature "http2"
+├── hyper-util feature "server"
+├── hyper-util feature "server-auto"
+├── hyper-util feature "service"
+└── hyper-util feature "tokio"
+
+=================== -p sentinel -e features -i h2 --depth 2
+h2 v0.4.14
+└── h2 feature "default"
+    └── hyper v1.10.1
+
+=================== -p sentinel -e features -i rustls --depth 1
+rustls v0.23.40
+├── alloy-transport-ws v2.0.5
+├── hyper-rustls v0.27.9
+├── metrics-exporter-prometheus v0.18.3
+└── tokio-tungstenite v0.28.0
+├── rustls feature "aws-lc-rs"
+├── rustls feature "aws_lc_rs"
+├── rustls feature "std"
+└── rustls feature "tls12"
+
+=================== -p sentinel -e features -i metrics-exporter-prometheus --depth 1
+metrics-exporter-prometheus v0.18.3
+├── metrics-exporter-prometheus feature "_hyper-client"
+├── metrics-exporter-prometheus feature "_hyper-server"
+├── metrics-exporter-prometheus feature "_push-gateway-common"
+├── metrics-exporter-prometheus feature "async-runtime"
+├── metrics-exporter-prometheus feature "default"
+├── metrics-exporter-prometheus feature "http-body-util"
+├── metrics-exporter-prometheus feature "http-listener"
+├── metrics-exporter-prometheus feature "hyper"
+├── metrics-exporter-prometheus feature "hyper-rustls"
+├── metrics-exporter-prometheus feature "hyper-util"
+├── metrics-exporter-prometheus feature "ipnet"
+├── metrics-exporter-prometheus feature "push-gateway"
+├── metrics-exporter-prometheus feature "rustls"
+├── metrics-exporter-prometheus feature "tokio"
+└── metrics-exporter-prometheus feature "tracing"
+
+=================== -p sentinel -e features -i crossbeam-epoch --depth 3
+crossbeam-epoch v0.9.18
+├── crossbeam-epoch feature "alloc"
+│   └── metrics-util v0.20.4
+│       ├── metrics-util feature "crossbeam-epoch"
+│       ├── metrics-util feature "crossbeam-utils"
+│       ├── metrics-util feature "hashbrown"
+│       ├── metrics-util feature "quanta"
+│       ├── metrics-util feature "rand"
+│       ├── metrics-util feature "rand_xoshiro"
+│       ├── metrics-util feature "recency"
+│       ├── metrics-util feature "registry"
+│       ├── metrics-util feature "sketches-ddsketch"
+│       └── metrics-util feature "storage"
+│   └── crossbeam-epoch feature "std"
+│       └── metrics-util v0.20.4 (*)
+└── crossbeam-epoch feature "std" (*)
+
+=================== -p validator -i quinn-proto
+warning: nothing to print.
+
+To find dependencies that require specific target platforms, try to use option `--target all` first, and then narrow your search scope accordingly.
+
+=================== -p validator -e features -i reqwest --depth 1
+reqwest v0.13.4
+├── alloy-provider v2.0.5
+└── alloy-rpc-client v2.0.5
+├── reqwest feature "__rustls"
+├── reqwest feature "__rustls-aws-lc-rs"
+├── reqwest feature "__tls"
+├── reqwest feature "json"
+└── reqwest feature "rustls"
+
+=================== -p validator -e features -i hyper --depth 1
+hyper v1.10.1
+└── hyper-rustls v0.27.9
+├── hyper feature "client"
+├── hyper feature "default"
+├── hyper feature "http1"
+├── hyper feature "http2"
+└── hyper feature "server"
+
+=================== -p validator -e features -i hyper-util --depth 1
+hyper-util v0.1.20
+├── hyper-util feature "client"
+├── hyper-util feature "client-legacy"
+├── hyper-util feature "client-proxy"
+├── hyper-util feature "default"
+├── hyper-util feature "http1"
+├── hyper-util feature "http2"
+├── hyper-util feature "server"
+├── hyper-util feature "server-auto"
+├── hyper-util feature "service"
+└── hyper-util feature "tokio"
+
+=================== -p validator -e features -i h2 --depth 2
+h2 v0.4.14
+└── h2 feature "default"
+    └── hyper v1.10.1
+
+=================== -p validator -e features -i rustls --depth 1
+rustls v0.23.40
+├── alloy-transport-ws v2.0.5
+├── hyper-rustls v0.27.9
+├── metrics-exporter-prometheus v0.18.3
+└── tokio-tungstenite v0.28.0
+├── rustls feature "aws-lc-rs"
+├── rustls feature "aws_lc_rs"
+├── rustls feature "std"
+└── rustls feature "tls12"
+
+=================== -p validator -e features -i metrics-exporter-prometheus --depth 1
+metrics-exporter-prometheus v0.18.3
+├── metrics-exporter-prometheus feature "_hyper-client"
+├── metrics-exporter-prometheus feature "_hyper-server"
+├── metrics-exporter-prometheus feature "_push-gateway-common"
+├── metrics-exporter-prometheus feature "async-runtime"
+├── metrics-exporter-prometheus feature "default"
+├── metrics-exporter-prometheus feature "http-body-util"
+├── metrics-exporter-prometheus feature "http-listener"
+├── metrics-exporter-prometheus feature "hyper"
+├── metrics-exporter-prometheus feature "hyper-rustls"
+├── metrics-exporter-prometheus feature "hyper-util"
+├── metrics-exporter-prometheus feature "ipnet"
+├── metrics-exporter-prometheus feature "push-gateway"
+├── metrics-exporter-prometheus feature "rustls"
+├── metrics-exporter-prometheus feature "tokio"
+└── metrics-exporter-prometheus feature "tracing"
+
+=================== -p validator -e features -i crossbeam-epoch --depth 3
+crossbeam-epoch v0.9.18
+└── crossbeam-deque v0.8.7
+    ├── crossbeam-deque feature "default"
+    │   └── rayon-core v1.13.0
+    └── crossbeam-deque feature "std"
+        └── crossbeam-deque feature "default" (*)
+├── crossbeam-epoch feature "alloc"
+│   └── metrics-util v0.20.4
+│       ├── metrics-util feature "crossbeam-epoch"
+│       ├── metrics-util feature "crossbeam-utils"
+│       ├── metrics-util feature "hashbrown"
+│       ├── metrics-util feature "quanta"
+│       ├── metrics-util feature "rand"
+│       ├── metrics-util feature "rand_xoshiro"
+│       ├── metrics-util feature "recency"
+│       ├── metrics-util feature "registry"
+│       ├── metrics-util feature "sketches-ddsketch"
+│       └── metrics-util feature "storage"
+│   └── crossbeam-epoch feature "std"
+│       └── metrics-util v0.20.4 (*)
+│       └── crossbeam-deque feature "std" (*)
+└── crossbeam-epoch feature "std" (*)
+
+=================== -p sentinel -e features -i hyper --depth 3 (who enables hyper/http2)
+hyper v1.10.1
+└── hyper-rustls v0.27.9
+    ├── hyper-rustls feature "aws-lc-rs"
+    │   ├── reqwest feature "__rustls-aws-lc-rs"
+    │   └── metrics-exporter-prometheus feature "push-gateway"
+    ├── hyper-rustls feature "http1"
+    │   ├── metrics-exporter-prometheus v0.18.3
+    │   └── reqwest v0.13.4
+    ├── hyper-rustls feature "rustls-native-certs"
+    │   └── metrics-exporter-prometheus v0.18.3 (*)
+    └── hyper-rustls feature "tls12"
+        └── reqwest v0.13.4 (*)
+├── hyper feature "client"
+│   ├── metrics-exporter-prometheus v0.18.3 (*)
+│   └── reqwest v0.13.4 (*)
+│   ├── hyper-util feature "client"
+│   │   ├── metrics-exporter-prometheus v0.18.3 (*)
+│   │   └── reqwest v0.13.4 (*)
+│   │   ├── hyper-util feature "client-legacy"
+│   │   ├── hyper-util feature "client-proxy"
+│   │   └── metrics-exporter-prometheus feature "_hyper-client"
+│   └── metrics-exporter-prometheus feature "_hyper-client" (*)
+├── hyper feature "default"
+│   ├── hyper-util v0.1.20
+│   │   ├── hyper-util feature "client" (*)
+│   │   ├── hyper-util feature "client-legacy" (*)
+│   │   ├── hyper-util feature "client-proxy" (*)
+│   │   ├── hyper-util feature "default"
+│   │   ├── hyper-util feature "http1"
+│   │   ├── hyper-util feature "http2"
+│   │   ├── hyper-util feature "server"
+│   │   ├── hyper-util feature "server-auto"
+│   │   ├── hyper-util feature "service"
+│   │   └── hyper-util feature "tokio"
+│   └── reqwest v0.13.4 (*)
+├── hyper feature "http1"
+│   └── reqwest v0.13.4 (*)
+│   └── hyper-util feature "http1" (*)
+├── hyper feature "http2"
+│   └── hyper-util feature "http2" (*)
+└── hyper feature "server"
+    └── metrics-exporter-prometheus v0.18.3 (*)
+    ├── hyper-util feature "server" (*)
+    └── metrics-exporter-prometheus feature "_hyper-server"
+        └── metrics-exporter-prometheus feature "http-listener"
+
+=================== -p sentinel -e features -i hyper-util --depth 2 (who enables hyper-util/http2 and server-auto)
+hyper-util v0.1.20
+├── hyper-util feature "client"
+│   ├── metrics-exporter-prometheus v0.18.3
+│   └── reqwest v0.13.4
+│   ├── hyper-util feature "client-legacy"
+│   ├── hyper-util feature "client-proxy"
+│   └── metrics-exporter-prometheus feature "_hyper-client"
+├── hyper-util feature "client-legacy" (*)
+├── hyper-util feature "client-proxy" (*)
+├── hyper-util feature "default"
+│   └── reqwest v0.13.4 (*)
+├── hyper-util feature "http1"
+│   ├── metrics-exporter-prometheus v0.18.3 (*)
+│   └── reqwest v0.13.4 (*)
+│   ├── hyper-rustls feature "http1"
+│   ├── hyper-util feature "server-auto"
+│   └── metrics-exporter-prometheus feature "_hyper-client" (*)
+├── hyper-util feature "http2"
+│   └── hyper-util feature "server-auto" (*)
+├── hyper-util feature "server"
+│   └── hyper-util feature "server-auto" (*)
+├── hyper-util feature "server-auto" (*)
+├── hyper-util feature "service"
+│   └── metrics-exporter-prometheus v0.18.3 (*)
+└── hyper-util feature "tokio"
+    ├── hyper-rustls v0.27.9
+    ├── metrics-exporter-prometheus v0.18.3 (*)
+    └── reqwest v0.13.4 (*)
+    ├── hyper-util feature "client" (*)
+    ├── hyper-util feature "client-legacy" (*)
+    ├── hyper-util feature "tokio" (*)
+    └── metrics-exporter-prometheus feature "async-runtime"
+
+=================== -p sentinel -e features -i ruint --depth 1
+ruint v1.18.0
+├── ruint feature "alloc"
+├── ruint feature "alloy-rlp"
+├── ruint feature "serde"
+└── ruint feature "std"
+
+ruint v1.18.0
+├── ruint feature "alloc"
+└── ruint feature "serde"

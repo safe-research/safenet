@@ -1,0 +1,33 @@
+# C2-XC re-run of the fresh-volume database open; commit 3ec8bc5
+# rpc = http://127.0.0.1:8746 = loopback python stub (pid 2319085, started and killed by C2-XC) answering every JSON-RPC call with result 0x64
+# database directory exists and is empty; signer is the 0x0123... placeholder
+
+=================== validator val-fresh.toml
+    | rpc = "http://127.0.0.1:8746"
+    | signer = "0x0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+    | database = "sqlite:<scratch>/vol/storage.db"
+    | 
+    | [validator]
+    | consensus = "0x1111111111111111111111111111111111111111"
+--- ls vol before: 
+--- output:
+{"timestamp":"2026-09-15T11:50:05.441082Z","level":"INFO","fields":{"message":"serving prometheus metrics and health endpoint","metrics_addr":"127.0.0.1:46159"},"target":"safenet_core::observability"}
+Error: Database(SqliteError { code: 14, message: "unable to open database file" })
+--- exit=1
+--- ls vol after: 
+
+=================== validator val-fresh-rwc.toml
+    | rpc = "http://127.0.0.1:8746"
+    | signer = "0x0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+    | database = "sqlite:<scratch>/vol/storage-rwc.db?mode=rwc"
+    | 
+    | [validator]
+    | consensus = "0x1111111111111111111111111111111111111111"
+--- ls vol before: 
+--- output:
+{"timestamp":"2026-09-15T11:50:05.689199Z","level":"INFO","fields":{"message":"serving prometheus metrics and health endpoint","metrics_addr":"127.0.0.1:41339"},"target":"safenet_core::observability"}
+Error: AbiError(SolTypes(Overrun))
+--- exit=1
+--- ls vol after: storage-rwc.db 
+
+# stub pid 2319085 killed

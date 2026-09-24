@@ -1,0 +1,171 @@
+diff --git a/crates/sentinel/src/service.rs b/crates/sentinel/src/service.rs
+index 40457eb..64017e0 100644
+--- a/crates/sentinel/src/service.rs
++++ b/crates/sentinel/src/service.rs
+@@ -304,6 +304,15 @@ impl SentinelTransition {
+             );
+             return (state, Vec::new());
+         };
++        // F2-SEN-010 remediation option 1 (QA2-SEN-Δ scratch, not committed):
++        // a `Committed` observed in `CollectingVotes` can only stem from block
++        // `commit_deadline` -- the switch runs at `NewBlock(commit_deadline)`,
++        // before that block's logs, and the contract refuses later commits
++        // (`block.number <= commitDeadline`) -- so it is still a live commitment.
++        if let RequestState::CollectingVotes { committed_count, .. } = entry {
++            *committed_count += 1;
++            return (state, Vec::new());
++        }
+         let RequestState::CollectingCommitments {
+             committed_count,
+             self_committed,
+@@ -2344,4 +2353,150 @@ mod tests {
+             resolve_engine_check(&svc, state, id, CheckOutcome::Denied(RuleId::new(42, 1337)));
+         assert_eq!(state.0[&id], advanced);
+     }
++    // =====================================================================
++    // QA2-SEN-Δ proof-of-concept for F2-SEN-010 at fe9e84c (PR #914).
++    // Temporary: pasted into `mod tests` of crates/sentinel/src/service.rs,
++    // run with `cargo test -p sentinel --bins qa2_sen_010 -- --nocapture --test-threads=1`,
++    // then reverted. Every test asserts the *intended* behaviour, so a failure
++    // reproduces the finding; the `eprintln!` lines record the decisive state.
++    // =====================================================================
++    mod qa2_sen_010 {
++        use super::*;
++
++        type Cmds = Commands<State, SentinelTransition>;
++        const COMMIT_DEADLINE: u64 = 20;
++        const REVEAL_DEADLINE: u64 = 40;
++        const BOND: u64 = 500;
++
++        fn has(cmds: &Cmds, pred: impl Fn(&SentinelActionKind) -> bool) -> bool {
++            cmds.iter()
++                .any(|c| matches!(c, Command::Action(SentinelAction { kind, .. }) if pred(kind)))
++        }
++        fn is_reveal(k: &SentinelActionKind) -> bool {
++            matches!(k, SentinelActionKind::Reveal { .. })
++        }
++        fn is_finalize(k: &SentinelActionKind) -> bool {
++            matches!(k, SentinelActionKind::Finalize { .. })
++        }
++        fn is_claim(k: &SentinelActionKind) -> bool {
++            matches!(k, SentinelActionKind::Claim { .. })
++        }
++        fn apply(svc: &SentinelTransition, state: State, block: u64, ev: SentinelEvents) -> (State, Cmds) {
++            svc.apply_transition(state, Message::Event(log(block, ev)))
++        }
++
++        /// Trigger steps 1-3: the sequence of the existing (passing) test
++        /// `flow_reveals_on_the_commit_deadline_block`, then one more log — a
++        /// second sentinel's commit mined in the deadline block itself, which the
++        /// contract accepts (`block.number <= commitDeadline`, Requests.sol:117).
++        fn setup(svc: &SentinelTransition, byte: u8) -> (B256, State) {
++            let h = B256::repeat_byte(byte);
++            let id = request_id(h, 7, ORACLE);
++            let (state, _) = apply(svc, State::default(), 1, proposed_event(ORACLE, h, TO));
++            let (state, _) = resolve_engine_check(svc, state, id, CheckOutcome::Approved);
++            let (state, _) = apply(
++                svc,
++                state,
++                5,
++                new_request_event(
++                    id,
++                    U256::from(1_000u64),
++                    U256::from(BOND),
++                    U256::from(BOND),
++                    COMMIT_DEADLINE,
++                    REVEAL_DEADLINE,
++                ),
++            );
++            let (state, _) = apply(svc, state, 6, committed_event(id, self_address(), BOND));
++            // NewBlock(20) precedes block 20's logs (core state/mod.rs:190-216).
++            let (state, c20) = svc.apply_transition(state, Message::NewBlock(COMMIT_DEADLINE));
++            assert!(has(&c20, is_reveal), "precondition (the delta's own test): Reveal at NewBlock(20)");
++            let before = format!("{:?}", state.0.get(&id));
++            let (state, c) = apply(svc, state, COMMIT_DEADLINE, committed_event(id, OTHER, BOND));
++            assert!(c.is_empty());
++            eprintln!(
++                "[F2-SEN-010] state at NewBlock(20): {before}\n[F2-SEN-010] after Committed(OTHER)@20 (onchain committedCount=2): {:?}",
++                state.0.get(&id)
++            );
++            (id, state)
++        }
++
++        /// Claim: a commitment mined in block `commitDeadline` must be tallied.
++        #[test]
++        fn f2_sen_010c_deadline_block_commit_is_tallied() {
++            let svc = transition();
++            let (id, state) = setup(&svc, 0x10);
++            assert!(
++                matches!(state.0[&id], RequestState::CollectingVotes { committed_count: 2, .. }),
++                "F2-SEN-010 reproduced: Committed(OTHER)@20 discarded (\"ignoring unexpected commitment\"); local state {:?} vs onchain committedCount=2",
++                state.0[&id]
++            );
++        }
++
++        /// Outcome 2 (the honest default per the Critic's correction 1): our own
++        /// reveal reaches the undercounted threshold → `Finalize` while onchain
++        /// revealedCount 1 < committedCount 2 → FinalizeTooEarly; parked forever
++        /// unless somebody else finalizes.
++        #[test]
++        fn f2_sen_010a_own_reveal_first_emits_premature_finalize_then_parks() {
++            let svc = transition();
++            let (id, state) = setup(&svc, 0x11);
++            let (state, c21) = apply(&svc, state, 21, revealed_event(id, self_address(), true, BOND));
++            eprintln!(
++                "[F2-SEN-010a] Revealed(self)@21 (onchain 1/2 revealed, block 21 <= revealDeadline 40 → finalize reverts FinalizeTooEarly): {:?} state={:?}",
++                c21,
++                state.0.get(&id)
++            );
++            // OTHER never reveals: nothing re-emits Finalize after the reveal deadline.
++            let (state, c41) = svc.apply_transition(state, Message::NewBlock(REVEAL_DEADLINE + 1));
++            let (state, c_far) = svc.apply_transition(state, Message::NewBlock(REVEAL_DEADLINE + 100_000));
++            eprintln!(
++                "[F2-SEN-010a] OTHER never reveals: NewBlock(41) → {:?}; NewBlock(100040) → {:?}; state={:?}",
++                c41,
++                c_far,
++                state.0.get(&id)
++            );
++            // Recovery only through a third party: a foreign finalize's OracleResult reaches the parked entry.
++            let (state, c_res) = apply(&svc, state, 100_041, oracle_result_event(id, true));
++            eprintln!(
++                "[F2-SEN-010a] third-party finalize → OracleResult → {:?}; tracked={}",
++                c_res,
++                state.0.contains_key(&id)
++            );
++            assert!(
++                !has(&c21, is_finalize),
++                "F2-SEN-010 outcome 2 reproduced: Finalize emitted at Revealed(self)@21 on local tally 1/1 while onchain 1/2 \
++                 (FinalizeTooEarly, Requests.sol:172); WaitingForOutcome retained with no retry through block {}",
++                REVEAL_DEADLINE + 100_000
++            );
++        }
++
++        /// Outcome 1 (needs our own reveal observed after the counted ones): the
++        /// entry is dropped with `self_revealed == false`; bond and fee share are
++        /// never claimed.
++        #[test]
++        fn f2_sen_010b_other_reveal_first_drops_bonded_entry() {
++            let svc = transition();
++            let (id, state) = setup(&svc, 0x12);
++            let (state, c21) = apply(&svc, state, 21, revealed_event(id, OTHER, true, BOND));
++            let tracked_after_21 = state.0.contains_key(&id);
++            eprintln!(
++                "[F2-SEN-010b] Revealed(OTHER)@21 (local 1/1, onchain 1/2): commands={:?} tracked={tracked_after_21}",
++                c21
++            );
++            let (state, c22) = apply(&svc, state, 22, revealed_event(id, self_address(), true, BOND));
++            let (state, c_res) = apply(&svc, state, 45, oracle_result_event(id, true));
++            eprintln!(
++                "[F2-SEN-010b] Revealed(self)@22 → {:?}; OracleResult@45 → {:?}; tracked={}",
++                c22,
++                c_res,
++                state.0.contains_key(&id)
++            );
++            assert!(
++                tracked_after_21 || has(&c22, is_claim) || has(&c_res, is_claim),
++                "F2-SEN-010 outcome 1 reproduced: entry dropped at Revealed(OTHER)@21 with self_revealed=false; \
++                 own reveal and OracleResult ignored; no Claim ever"
++            );
++        }
++    }
+ }

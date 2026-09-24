@@ -1,0 +1,60 @@
+#!/bin/bash
+# V-INT scratchpad probe (NOT a repo file): F-CORE-001's trigger.
+# Same shape as scripts/run_validator_deep_reorg_test.sh, except the reorg
+# happens while the validator is DOWN, and the validator is then restarted
+# against the same database.
+set -euo pipefail
+ANVIL_PORT=8551
+ANVIL_RPC_URL="http://127.0.0.1:$ANVIL_PORT"
+CHAIN_ID=31337
+BLOCK_TIME=1
+MAX_REORG_DEPTH=2
+REORG_DEPTH=5
+PARTICIPANTS=(0x70997970C51812dc3A010C7d01b50e0d17dc79C8 0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC)
+PRIVATE_KEY=0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d
+SENDER=0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266
+source /home/shebin.guest/safe/safenet/scripts/lib/shared_test_scripts.sh
+OUT="$1"
+TMPDIR="$(mktemp -d)"
+PIDS=()
+require_commands anvil cast forge jq cargo
+install_cleanup_trap
+build_services_and_contracts
+start_anvil "$BLOCK_TIME" "$ANVIL_PORT" "$OUT/anvil.txt" "$ANVIL_RPC_URL"
+PARTICIPANTS_CSV=$(IFS=,; echo "${PARTICIPANTS[*]}")
+deploy_validator_contracts "$ANVIL_RPC_URL" "$SENDER" "$PARTICIPANTS_CSV" "$CHAIN_ID"
+VALIDATOR_DB="$TMPDIR/validator.sqlite"
+VALIDATOR_CONFIG="$TMPDIR/validator.toml"
+{
+    print_validator_config_base "$ANVIL_RPC_URL" "$PRIVATE_KEY" "$VALIDATOR_DB" \
+        "$CONSENSUS_ADDR" "$ORACLE_ADDR" 1000000 "$((BLOCK_TIME * 1000))" PARTICIPANTS
+    echo "max_reorg_depth = $MAX_REORG_DEPTH"
+} > "$VALIDATOR_CONFIG"
+
+echo "==> [run 1] starting validator"
+run_rust_process validator "$VALIDATOR_CONFIG" "$OUT/validator-run1.txt"
+V1="$LAST_PID"
+sleep "$((BLOCK_TIME * (MAX_REORG_DEPTH + 4)))"
+assert_processes_alive "FAILURE: validator exited during run 1." "$V1"
+echo "==> snapshots before shutdown:"
+sqlite3 "$VALIDATOR_DB" "SELECT MIN(block_number), MAX(block_number), COUNT(*) FROM snapshots;" 2>/dev/null || echo "(no sqlite3)"
+echo "==> block before shutdown: $(cast block-number --rpc-url $ANVIL_RPC_URL)"
+echo "==> [downtime] stopping validator (SIGTERM) and waiting for exit"
+kill -TERM "$V1"; wait "$V1" 2>/dev/null || true
+sleep 1
+echo "==> reorging $REORG_DEPTH blocks (> max_reorg_depth $MAX_REORG_DEPTH) WHILE THE VALIDATOR IS DOWN"
+cast rpc anvil_reorg "$REORG_DEPTH" '[]' --rpc-url "$ANVIL_RPC_URL" >/dev/null
+sleep 2
+echo "==> block after reorg: $(cast block-number --rpc-url $ANVIL_RPC_URL)"
+echo "==> [run 2] restarting validator against the SAME database"
+run_rust_process validator "$VALIDATOR_CONFIG" "$OUT/validator-run2.txt"
+V2="$LAST_PID"
+sleep 12
+if kill -0 "$V2" 2>/dev/null; then
+    EXIT_MESSAGE="RESULT: validator SURVIVED a ${REORG_DEPTH}-block downtime reorg with max_reorg_depth=${MAX_REORG_DEPTH} (still running)."
+else
+    EXIT_MESSAGE="RESULT: validator EXITED after the downtime reorg."
+fi
+grep -c "ExceededMaxReorgDepth" "$OUT/validator-run2.txt" > "$OUT/exceeded-count.txt" || true
+echo "==> ExceededMaxReorgDepth occurrences in run 2: $(cat $OUT/exceeded-count.txt)"
+exit 0

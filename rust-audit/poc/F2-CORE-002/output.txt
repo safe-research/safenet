@@ -1,0 +1,19 @@
+   Compiling safenet-core v0.2.0 (/home/shebin.guest/safe/safenet/crates/core)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 5.71s
+     Running unittests src/lib.rs (/home/shebin.guest/.cache/safenet-run2/target/debug/deps/safenet_core-9a33466691bc8389)
+
+running 14 tests
+[excerpt: only this finding's tests are shown; the complete 14-test run is poc/F2-CORE-060/output-full-run.txt]
+test index::events::tests::qa_f2_core_002_client_filtering_is_abandoned_after_the_retry_budget ... attempt 1 (ClientFiltered, node serves []): Err(IncompleteLogs { block_hash: 0x1313131313131313131313131313131313131313131313131313131313131313 })
+attempt 2 (ClientFiltered, node serves []): Err(IncompleteLogs { block_hash: 0x1313131313131313131313131313131313131313131313131313131313131313 })
+attempt 3 (ClientFiltered, node serves []): Err(IncompleteLogs { block_hash: 0x1313131313131313131313131313131313131313131313131313131313131313 })
+attempt 4 (MultipleQueries, node serves [] per topic): Ok(Some(EventUpdate { blocks: 1337..=1337, logs: [] }))
+ok
+test index::events::tests::qa_f2_core_002_transient_errors_spend_the_client_filtering_budget ... attempt 1 (ClientFiltered, transport error): Err(Rpc(ErrorResp(ErrorPayload { code: -32603, message: "429 Too Many Requests", data: None })))
+attempt 2 (ClientFiltered, transport error): Err(Rpc(ErrorResp(ErrorPayload { code: -32603, message: "429 Too Many Requests", data: None })))
+attempt 3 (ClientFiltered, transport error): Err(Rpc(ErrorResp(ErrorPayload { code: -32603, message: "429 Too Many Requests", data: None })))
+attempt 4 (MultipleQueries, node serves []): Ok(Some(EventUpdate { blocks: 1337..=1337, logs: [] }))
+ok
+
+test result: ok. 14 passed; 0 failed; 0 ignored; 0 measured; 99 filtered out; finished in 0.20s
+

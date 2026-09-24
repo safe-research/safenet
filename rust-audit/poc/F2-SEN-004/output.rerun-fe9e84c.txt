@@ -1,0 +1,12 @@
+QA2-SEN-Δ re-run for F2-SEN-004 at audited commit fe9e84c (previous run: 3ec8bc5, poc/F2-SEN-004/output.txt), rustc/cargo 1.98.1.
+Command: cargo test -p sentinel --bins qa2_sen -- --nocapture --test-threads=1
+Source: poc/F2-SEN-001/qa2_sen_all.rs pasted verbatim into `mod tests` of crates/sentinel/src/service.rs, reverted afterwards.
+Verbatim output of this finding's tests (full 12-test log: poc/F2-SEN-001/qa2_sen_all.rerun-fe9e84c.txt):
+
+test service::tests::qa2_sen::f2_sen_004_waiting_states_never_expire ... [F2-SEN-004] after NewBlock(u64::MAX-1): any_action=false id1=Some(WaitingForDisputeResolution { approve: true, slash_amount: 500 }) id2=Some(WaitingForOutcome { approve: true, slash_amount: 500 })
+
+thread 'service::tests::qa2_sen::f2_sen_004_waiting_states_never_expire' (7107) panicked at crates/sentinel/src/service.rs:2863:13:
+F2-SEN-004 reproduced: WaitingForDisputeResolution (arbitration deadline 1_200) and WaitingForOutcome retained through block u64::MAX-1 with no action
+FAILED
+
+Run summary: test result: FAILED. 0 passed; 12 failed; 0 ignored; 0 measured; 44 filtered out; finished in 2.73s

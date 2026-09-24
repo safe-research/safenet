@@ -1,0 +1,17 @@
+# QA2-VAL-B re-run on commit fe9e84cc59b65367b31d5a3121774383cc422234 (crates/validator + crates/core byte-identical to audited 3ec8bc5)
+# PoC source pasted into the tracked file exactly as saved next to this file, run, then reverted with git checkout --
+
+$ cargo test -p validator --bins state::sign::qa2_val_b::f2_val_03
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.11s
+warning: the following packages contain code that will be rejected by a future version of Rust: proc-macro-error2 v2.0.1
+note: to see what the problems were, use the option `--future-incompat-report`, or run `cargo report future-incompatibilities --id 1`
+     Running unittests src/main.rs (/home/shebin.guest/.cache/safenet-run2/target/debug/deps/validator-3a1b46af57fe89be)
+
+running 3 tests
+test state::sign::qa2_val_b::f2_val_032_matching_group_sign_advances_session_control ... ok
+test state::sign::qa2_val_b::f2_val_032_foreign_group_sign_drops_pending_session ... ok
+test state::sign::qa2_val_b::f2_val_033_re_reveal_makes_re_revealer_the_last_signer ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 50 filtered out; finished in 0.00s
+
+exit=0

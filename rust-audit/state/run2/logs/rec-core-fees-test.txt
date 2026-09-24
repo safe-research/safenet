@@ -1,0 +1,14 @@
+   Compiling safenet-core v0.2.0 (/home/shebin.guest/safe/safenet/crates/core)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 3.40s
+warning: the following packages contain code that will be rejected by a future version of Rust: proc-macro-error2 v2.0.1
+note: to see what the problems were, use the option `--future-incompat-report`, or run `cargo report future-incompatibilities --id 1`
+     Running unittests src/lib.rs (/home/shebin.guest/.cache/safenet-run2/target/debug/deps/safenet_core-9a33466691bc8389)
+
+running 4 tests
+test tx::fees::tests::bumps_replacement_fees_by_at_least_ten_percent ... ok
+test tx::fees::tests::priority_fee_cap_saturates_at_its_bounds ... ok
+test tx::fees::tests::caps_the_priority_fee_at_a_percentage_of_the_max_fee ... ok
+test tx::tests::failed_replacements_do_not_advance_the_fee_floor ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 95 filtered out; finished in 0.01s
+

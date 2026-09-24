@@ -1,0 +1,300 @@
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.43s
+warning: the following packages contain code that will be rejected by a future version of Rust: proc-macro-error2 v2.0.1
+note: to see what the problems were, use the option `--future-incompat-report`, or run `cargo report future-incompatibilities --id 1`
+     Running unittests src/lib.rs (target/debug/deps/safenet_core-6612ce6b3ff2ae86)
+
+running 97 tests
+test effects::tests::remains_pending_when_empty ... ok
+test effects::tests::runs_effects_concurrently_and_yields_in_completion_order ... ok
+test effects::tests::next_is_cancel_safe ... ok
+test effects::tests::shares_one_handler_between_tasks ... ok
+test effects::tests::skips_panicked_tasks_without_losing_successful_resumes ... ok
+test index::blocks::tests::auto_block_time_uses_chain_id ... ok
+test index::blocks::tests::does_not_reemit_recent_blocks_at_or_before_the_persisted_snapshot ... ok
+test index::blocks::tests::does_not_warp_when_start_block_is_within_reorg_window ... ok
+test index::blocks::tests::evicting_from_recent_promotes_the_block_to_safe ... ok
+test index::blocks::tests::fails_loudly_when_a_reorg_exceeds_max_depth ... ok
+test index::blocks::tests::handles_reorgs_during_initialization ... ok
+test index::blocks::tests::initializes_a_watcher ... ok
+test effects::tests::accepts_more_effects_after_completing_all_tasks ... ok
+test index::blocks::tests::initializes_from_persisted_snapshot_range ... ok
+test index::blocks::tests::next_waits_for_pending_block_and_fetches_it ... ok
+test index::blocks::tests::resolves_configured_and_automatic_block_times ... ok
+test index::blocks::tests::next_waits_for_the_next_slot_after_retries_are_exhausted ... ok
+test index::blocks::tests::only_emits_blocks_at_or_after_start_block_inside_reorg_window ... ok
+test index::blocks::tests::next_retries_if_block_is_not_ready_when_expected ... ok
+test index::blocks::tests::resumes_after_a_single_pruned_snapshot_without_a_fake_reorg ... ok
+test index::blocks::tests::revalidate_invalidates_a_block_missing_from_rpc ... ok
+test index::blocks::tests::revalidate_invalidates_a_reorged_block ... ok
+test index::blocks::tests::revalidate_can_invalidate_the_oldest_tracked_block ... ok
+test index::blocks::tests::revalidate_purges_queued_descendants ... ok
+test index::blocks::tests::starts_from_configured_block_without_fake_reorg ... ok
+test index::blocks::tests::revalidate_returns_none_when_the_block_is_still_canonical ... ok
+test index::bloom::tests::checks_inclusion ... ok
+test index::blocks::tests::safe_block_without_reorg_protection_is_the_last_indexed_block ... ok
+test index::clock::tests::returns_instantly_when_sleeping_until_past ... ok
+test index::clock::tests::tokio_test_util_compatibility ... ok
+test index::events::tests::block_invalidation_errors_on_hash_mismatch ... ok
+test index::events::tests::block_invalidation_errors_when_not_fetching_a_block ... ok
+test index::events::tests::block_invalidation_returns_to_idle ... ok
+test index::events::tests::client_filtered_errors_when_logs_do_not_match_bloom ... ok
+test index::blocks::tests::supports_deep_reorgs_during_indexing ... ok
+test index::events::tests::decodes_and_sorts_logs ... ok
+test index::events::tests::client_filtered_filters_logs_by_address_and_event ... ok
+test index::blocks::tests::supports_no_reorg_protection ... ok
+test index::events::tests::decodes_and_sorts_mixed_logs ... ok
+test index::events::tests::fetches_a_new_block_with_client_filtering ... ok
+test index::events::tests::multiple_queries_drops_fallible_events ... ok
+test index::events::tests::multiple_queries_fetches_one_event_per_query ... ok
+test index::events::tests::multiple_queries_propagates_a_failed_query ... ok
+test index::events::tests::multiple_queries_errors_when_a_query_returns_too_many_logs ... ok
+test index::events::tests::new_block_falls_back_to_multiple_queries_after_retries ... ok
+test index::events::tests::single_query_fetches_all_events_at_once ... ok
+test index::events::tests::single_query_errors_when_too_many_logs ... ok
+test index::events::tests::warp_narrows_the_page_on_failure_and_resets_on_success ... ok
+test index::events::tests::fetches_a_new_block_with_a_single_query ... ok
+test index::events::tests::warps_through_a_range_in_pages ... ok
+test index::events::tests::warp_queries_each_event_for_single_block_pages ... ok
+test index::tests::deserializes_auto_block_time ... ok
+test index::tests::deserializes_flattened_config_with_defaults ... ok
+test index::tests::recovers_from_an_uncled_block_with_unavailable_logs ... ok
+test kdf::tests::derive_key_is_deterministic_and_bound_to_domain_and_message ... ok
+test kdf::tests::derive_key_matches_reference_vector ... ok
+test kdf::tests::derive_key_rejects_empty_domain - should panic ... ok
+test kdf::tests::derive_key_treats_multi_part_message_as_its_concatenation ... ok
+test index::tests::emits_block_updates_then_their_logs ... ok
+test index::bloom::tests::example_block_bloom_filter ... ok
+test index::tests::deserializes_flattened_config_overrides ... ok
+test observability::tests::defaults ... ok
+test observability::tests::deserializes_overrides ... ok
+test state::storage::tests::commits_and_reads_back_the_tip ... ok
+test state::storage::tests::current_is_none_when_empty ... ok
+test state::storage::tests::commit_replaces_an_existing_snapshot ... ok
+test state::storage::tests::prunes_snapshots_below_the_safe_block ... ok
+test state::storage::tests::reorg_with_a_missing_parent_errors_and_leaves_the_store_unchanged ... ok
+test state::storage::tests::prune_retains_the_latest_snapshot ... ok
+test state::tests::applies_new_blocks_and_events ... ok
+test state::tests::reorg_rolls_back_to_the_common_ancestor ... ok
+test state::tests::resume_updates_live_state_without_committing_a_snapshot ... ok
+test state::tests::restart_can_reorg_after_observing_an_uncommitted_block ... ok
+test state::storage::tests::reorgs_a_block_and_re_applies ... ok
+test tx::fees::tests::bumps_replacement_fees_by_at_least_ten_percent ... ok
+test tx::fees::tests::caps_the_priority_fee_at_a_percentage_of_the_max_fee ... ok
+test tx::fees::tests::priority_fee_cap_saturates_at_its_bounds ... ok
+test state::tests::resumes_from_the_committed_snapshot ... ok
+test tx::storage::tests::never_expiring_transactions_are_always_selectable_and_never_pruned ... ok
+test state::tests::warps_and_prunes_intermediate_snapshots ... ok
+test tx::storage::tests::prunes_queued_transactions_past_their_expiry ... ok
+test tx::storage::tests::record_submission_errors_for_an_unknown_nonce ... ok
+test tx::signer::tests::can_sign_transactions ... ok
+test tx::storage::tests::record_submission_stamps_the_block_and_fees ... ok
+test tx::storage::tests::submit_next_is_none_when_empty ... ok
+test tx::storage::tests::submit_assigns_the_account_nonce_and_fees ... ok
+test tx::storage::tests::submit_assigns_sequential_nonces_in_queue_order ... ok
+test tx::tests::identifies_transaction_underpriced_error_messages ... ok
+test tx::tests::failed_replacements_do_not_advance_the_fee_floor ... ok
+test tx::tests::processes_each_block_status_once ... ok
+test tx::tests::initial_status_reconciles_executions_in_the_reorg_window ... ok
+test tx::tests::retries_failed_submissions_without_bumping_fees ... ok
+test tx::tests::transactions_expired_before_the_initial_status_are_ignored ... ok
+test tx::tests::submits_queued_transactions_with_reorg_awareness ... ok
+test tx::tests::underpriced_replacements_advance_the_fee_floor ... ok
+test tx::tests::does_not_submit_expired_transactions ... ok
+test observability::metrics::tests::serves_metrics_and_health ... ok
+
+test result: ok. 97 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.06s
+
+     Running unittests src/main.rs (target/debug/deps/sentinel-9b3031651d6550fc)
+
+running 37 tests
+test config::tests::rejects_config_missing_the_engine_url ... ok
+test config::tests::rejects_config_missing_a_deployment_specific_field ... ok
+test config::tests::parses_sample_config ... ok
+test config::tests::deserializes_required_fields_and_defaults_the_rest ... ok
+test engine::tests::abstains_when_the_endpoint_abstains ... ok
+test engine::tests::approves_when_the_endpoint_approves ... ok
+test effect::tests::resumes_with_the_engine_outcome ... ok
+test engine::tests::accepts_a_rule_not_known_to_the_sentinel ... ok
+test engine::tests::fails_when_the_endpoint_is_unreachable ... ok
+test engine::tests::denies_with_the_cited_rule ... ok
+test engine::tests::fails_on_a_malformed_rule_code ... ok
+test engine::tests::rule_id_json_roundtrip ... ok
+test hashing::tests::commit_hash_parity ... ok
+test hashing::tests::oracle_tx_proposal_hash_parity ... ok
+test hashing::tests::reveal_salt_is_bound_to_request_id ... ok
+test hashing::tests::reveal_salt_parity ... ok
+test hashing::tests::safe_tx_hash_parity ... ok
+test engine::tests::fails_when_the_endpoint_returns_an_error ... ok
+test engine::tests::fails_when_the_request_times_out ... ok
+test engine::tests::forwards_request_headers ... ok
+test service::tests::claimed_event_never_mutates_state ... ok
+test service::tests::engine_check_denial_finalizes_with_the_engine_rule ... ok
+test service::tests::engine_check_failure_drops_a_stored_onchain_request ... ok
+test service::tests::engine_check_failure_drops_the_request_unanswered ... ok
+test service::tests::flow_claims_on_arbitration_timeout ... ok
+test service::tests::flow_claims_on_dispute_out_of_scope ... ok
+test service::tests::flow_dispute_claims_when_arbitration_matches_our_vote ... ok
+test service::tests::flow_dispute_still_claims_when_arbitration_contradicts_our_vote ... ok
+test service::tests::flow_finalizes_and_claims_on_genuine_reveal_timeout ... ok
+test service::tests::flow_unanimous_approve_finalizes_via_early_reveal_and_claims ... ok
+test service::tests::new_request_before_engine_check_approval_starts_voting_on_resume ... ok
+test service::tests::new_request_before_engine_check_denial_starts_voting_on_resume ... ok
+test state::tests::state_multiple_requests_in_different_phases ... ok
+test state::tests::state_serde_roundtrip ... ok
+test service::tests::stale_engine_check_resume_after_reorg_is_ignored ... ok
+test service::tests::stale_engine_check_resume_does_not_disturb_an_already_advanced_request ... ok
+test service::tests::waiting_engine_checks_expire_using_the_available_deadline ... ok
+
+test result: ok. 37 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.17s
+
+     Running unittests src/main.rs (target/debug/deps/sentinel_engine-0ab2df0efcd619e3)
+
+running 97 tests
+test checkers::address_poisoning::tests::block_chunks_covers_the_whole_range_without_gaps_or_overlap ... ok
+test checkers::address_poisoning::tests::block_chunks_is_a_single_chunk_when_unset ... ok
+test checkers::address_poisoning::tests::nibbles_decomposes_most_significant_first ... ok
+test checkers::base::tests::allows_cancellation_transaction ... ok
+test checkers::address_poisoning::tests::is_lookalike_requires_both_thresholds_and_a_different_address ... ok
+test checkers::base::tests::allows_delegate_call_with_nonzero_value ... ok
+test checkers::base::tests::allows_contract_deployment_via_create_call ... ok
+test checkers::base::tests::allows_empty_multisend ... ok
+test checkers::base::tests::allows_multisend_where_last_sub_tx_has_no_data ... ok
+test checkers::base::tests::abstains_when_the_base_guarantees_hold ... ok
+test checkers::base::tests::allows_multisend_with_calls_to_other_contracts ... ok
+test checkers::base::tests::allows_multisend_with_valid_delegatecall ... ok
+test checkers::base::tests::allows_owner_change ... ok
+test checkers::base::tests::allows_multisend_with_multiple_owner_changes ... ok
+test checkers::base::tests::allows_multisend_with_nonzero_value ... ok
+test checkers::base::tests::allows_self_call_with_nonzero_value ... ok
+test checkers::base::tests::allows_singleton_upgrade ... ok
+test checkers::base::tests::denies_arbitrary_self_calls ... ok
+test checkers::base::tests::denies_bybit_transaction ... ok
+test checkers::base::tests::denies_delegatecall_to_unknown_target ... ok
+test checkers::base::tests::denies_delegatecall_to_callonly_multisend ... ok
+test checkers::base::tests::denies_delegatecall_via_multisend_to_disallowed_target ... ok
+test checkers::base::tests::denies_empty_self_delegatecall ... ok
+test checkers::base::tests::denies_self_call_not_on_settings_allow_list ... ok
+test checkers::blocklist::tests::abstains_when_not_blocklisted ... ok
+test checkers::blocklist::tests::denies_when_blocklisted ... ok
+test checkers::cancellation::tests::abstains_when_a_transaction_field_is_not_zeroed ... ok
+test checkers::cancellation::tests::considers_an_empty_call_to_the_safe_secure ... ok
+test checkers::blocklist::tests::abstains_with_empty_blocklist ... ok
+test checkers::cow::tests::approves_when_the_approval_exactly_covers_the_twap_order ... ok
+test checkers::cow::tests::approves_when_the_approval_exceeds_the_total_by_less_than_n ... ok
+test checkers::cow::tests::approves_when_the_approval_is_smaller_than_the_twap_order ... ok
+test checkers::cow::tests::approves_when_the_swap_order_receiver_is_the_zero_address ... ok
+test checkers::cow::tests::approves_when_the_batched_approval_matches_the_swap_order ... ok
+test checkers::cow::tests::approves_when_the_twap_orders_receiver_is_zero_address ... ok
+test checkers::cow::tests::compute_order_uid_matches_a_real_mainnet_order ... ok
+test checkers::cow::tests::denies_a_batched_approval_without_a_recognized_trigger ... ok
+test checkers::cow::tests::denies_when_batch_targets_an_unrecognized_create_handler ... ok
+test checkers::cow::tests::denies_a_standalone_approval_to_the_relayer ... ok
+test checkers::cow::tests::denies_when_the_approval_exceeds_the_total_by_n_or_more ... ok
+test checkers::cow::tests::denies_when_the_approval_exceeds_the_twap_order ... ok
+test checkers::cow::tests::denies_when_the_approval_is_for_a_different_token_than_the_twap_order_sells ... ok
+test checkers::cow::tests::denies_when_the_presignature_trigger_is_a_delegatecall ... ok
+test checkers::cow::tests::denies_when_the_presignature_trigger_carries_native_value ... ok
+test checkers::cow::tests::denies_when_the_twap_create_trigger_carries_native_value ... ok
+test checkers::cow::tests::denies_when_the_twap_create_trigger_is_a_delegatecall ... ok
+test checkers::cow::tests::denies_when_the_twap_create_uses_an_unrecognized_factory ... ok
+test checkers::cow::tests::denies_when_the_twap_orders_receiver_is_not_the_safe ... ok
+test checkers::cow::tests::no_opinion_on_an_unsupported_chain ... ok
+test checkers::cow::tests::denies_when_the_batched_approval_does_not_match_the_swap_order_amount ... ok
+test checkers::cow::tests::no_opinion_outside_the_recognized_presignature_shape ... ok
+test checkers::cow::tests::no_opinion_when_the_approval_carries_native_value ... ok
+test checkers::cow::tests::no_opinion_when_approval_is_batched_with_a_presignature_call ... ok
+test checkers::cow::tests::no_opinion_when_no_relayer_approval_is_present ... ok
+test checkers::cow::tests::no_opinion_when_the_approval_itself_is_a_delegatecall ... ok
+test checkers::cow::tests::no_opinion_when_the_order_lookup_fails ... ok
+test checkers::cow::tests::no_opinion_when_the_batch_pairs_an_unrelated_approval_with_a_twap_create_call ... ok
+test checkers::excessive_approval::tests::abstains_on_bounded_erc20_approval ... ok
+test checkers::cow::tests::denies_when_the_swap_order_receiver_is_not_the_safe ... ok
+test checkers::cow::tests::no_opinion_when_the_order_response_does_not_match_the_requested_order_uid ... ok
+test checkers::cow::tests::no_opinion_when_the_twap_batch_has_more_than_two_calls ... ok
+test checkers::excessive_approval::tests::abstains_on_operator_approval_revocation ... ok
+test checkers::excessive_approval::tests::denies_operator_approval_for_all ... ok
+test checkers::excessive_approval::tests::denies_unlimited_erc20_approval ... ok
+test checkers::refund::tests::builds_an_erc20_transfer_to_the_refund_receiver ... ok
+test checkers::refund::tests::never_lets_a_secure_refund_leg_affirm_the_whole_transaction ... ok
+test checkers::refund::tests::none_when_gas_price_is_zero ... ok
+test checkers::refund::tests::none_when_the_refund_receiver_is_unset ... ok
+test checkers::refund::tests::none_on_a_native_currency_refund ... ok
+test checkers::refund::tests::passes_through_a_denial ... ok
+test checkers::refund::tests::passes_through_an_abstention ... ok
+test config::tests::deserializes_observability_overrides ... ok
+test config::tests::deserializes_required_fields_and_defaults_the_rest ... ok
+test config::tests::rejects_unknown_field ... ok
+test contracts::target_effects::tests::decodes_erc1155_safe_batch_transfer_from ... ok
+test contracts::target_effects::tests::decodes_erc1155_safe_transfer_from ... ok
+test contracts::target_effects::tests::decodes_erc20_transfer ... ok
+test contracts::target_effects::tests::decodes_erc20_transfer_from ... ok
+test contracts::target_effects::tests::decodes_erc20_unlimited_approval ... ok
+test contracts::target_effects::tests::decodes_erc721_safe_transfer_from ... ok
+test contracts::target_effects::tests::decodes_native_value_alongside_token_effect ... ok
+test contracts::target_effects::tests::decodes_erc721_safe_transfer_from_with_data ... ok
+test contracts::target_effects::tests::decodes_native_value_alongside_unrecognized_calldata ... ok
+test contracts::target_effects::tests::decodes_operator_approval ... ok
+test contracts::target_effects::tests::decodes_native_value_transfer ... ok
+test config::tests::parses_sample_config ... ok
+test contracts::target_effects::tests::no_effect_for_unrecognized_calldata ... ok
+test contracts::target_effects::tests::no_effect_for_zero_value_empty_call ... ok
+test engine::rule::tests::from_code_round_trips_every_variant ... ok
+test contracts::target_effects::tests::recurses_through_multi_send ... ok
+test engine::rule::tests::from_code_rejects_unknown_codes ... ok
+test engine::tests::abstains_when_every_checker_abstains ... ok
+test engine::tests::stops_at_the_first_non_abstaining_verdict ... ok
+test engine::transaction::tests::rejects_an_operation_outside_the_two_safe_call_types ... ok
+test engine::transaction::tests::json_roundtrip ... ok
+test engine::transaction::tests::accepts_an_address_in_any_case_and_re_emits_it_checksummed ... ok
+test engine::transaction::tests::rejects_an_unknown_member ... ok
+
+test result: ok. 97 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+     Running unittests src/main.rs (target/debug/deps/validator-5c3391d9446ff4e6)
+
+running 35 tests
+test config::tests::deserializes_with_optional_service_fields ... ok
+test consensus::epoch::tests::computes_next_epoch_number_from_block ... ok
+test config::tests::deserializes_validator_section ... ok
+test config::tests::deserializes_required_fields ... ok
+test consensus::group::tests::actual_group ... ok
+test consensus::group::tests::genesis_group_matches_the_parity_vector ... ok
+test consensus::group::tests::minimum_participation_does_not_overflow ... ok
+test consensus::group::tests::minimum_participation_is_two_thirds_with_a_floor_of_two ... ok
+test consensus::group::tests::thresholds_are_strict_majorities ... ok
+test consensus::hashing::tests::reference_safe_tx_hash ... ok
+test consensus::hashing::tests::sample_epoch_rollover_hash ... ok
+test consensus::hashing::tests::sample_transaction_packet_hash ... ok
+test config::tests::parses_sample_config ... ok
+test frost::ecdh::tests::ecdh_rejects_degenerate_public_keys_at_infinity ... ok
+test consensus::hashing::tests::proposal_hash_matches_solstruct ... ok
+test frost::participants::tests::identifier_is_deterministic_and_distinct ... ok
+test frost::ecdh::tests::roundtrip_encrypt_decrypt ... ok
+test frost::sign::tests::computes_the_canonical_signer_leaf_value ... ok
+test frost::ecdh::tests::ecdh_is_commutative ... ok
+test merkle::tests::generates_the_expected_merkle_root ... ok
+test merkle::tests::merkle_root_empty_returns_zero ... ok
+test merkle::tests::merkle_root_single_leaf ... ok
+test frost::ecdh::tests::different_recipient_different_ciphertext ... ok
+test merkle::tests::verifies_a_proof ... ok
+test frost::tests::ceremony ... ok
+test secrets::nonces::tests::stops_ongoing_generations ... ok
+test secrets::nonces::tests::cancel_then_rerequest ... ok
+test secrets::nonces::tests::group_nonce_generation ... ok
+test secrets::store::tests::keygen_secrets_roundtrip_and_missing ... ok
+test secrets::store::tests::nonces_reveal_is_non_consuming ... ok
+test secrets::store::tests::retain_keygen_secrets_removes_unretained_groups ... ok
+test secrets::store::tests::store_keygen_secrets_does_not_overwrite ... ok
+test secrets::store::tests::nonce_chunks_are_stored ... ok
+test secrets::store::tests::take_nonce_removes_it_permanently ... ok
+test frost::preprocess::tests::nonces_commitment_inclusion_proofs ... ok
+
+test result: ok. 35 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.31s
+
+   Doc-tests safenet_core
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+TEST_EXIT=0

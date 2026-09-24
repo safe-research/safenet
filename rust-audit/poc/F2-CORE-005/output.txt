@@ -1,0 +1,32 @@
+   Compiling safenet-core v0.2.0 (/home/shebin.guest/safe/safenet/crates/core)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 5.71s
+     Running unittests src/lib.rs (/home/shebin.guest/.cache/safenet-run2/target/debug/deps/safenet_core-9a33466691bc8389)
+
+running 14 tests
+[excerpt: only this finding's tests are shown; the complete 14-test run is poc/F2-CORE-060/output-full-run.txt]
+test index::tests::qa_f2_core_005_max_logs_per_query_reached_within_one_block_stalls_forever ... attempt 1 (SingleQuery): Err(Events(TooManyLogs))
+attempt 2 (SingleQuery): Err(Events(TooManyLogs))
+attempt 3 (SingleQuery): Err(Events(TooManyLogs))
+attempt 4 (MultipleQueries): Err(Events(TooManyLogs))
+attempt 5 (MultipleQueries): Err(Events(TooManyLogs))
+attempt 6 (MultipleQueries): Err(Events(TooManyLogs))
+attempt 7 (MultipleQueries): Err(Events(TooManyLogs))
+attempt 8 (MultipleQueries): Err(Events(TooManyLogs))
+ok
+test index::tests::qa_f2_core_005_undecodable_log_stalls_the_watcher_and_starves_the_block_watcher ... attempt  1 (SingleQuery): Err(Events(DecodeLog { block_hash: 0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff, log_index: 0 }))
+attempt  2 (SingleQuery): Err(Events(DecodeLog { block_hash: 0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff, log_index: 0 }))
+attempt  3 (SingleQuery): Err(Events(DecodeLog { block_hash: 0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff, log_index: 0 }))
+attempt  4 (MultipleQueries): Err(Events(DecodeLog { block_hash: 0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff, log_index: 0 }))
+attempt  5 (MultipleQueries): Err(Events(DecodeLog { block_hash: 0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff, log_index: 0 }))
+attempt  6 (MultipleQueries): Err(Events(DecodeLog { block_hash: 0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff, log_index: 0 }))
+attempt  7 (MultipleQueries): Err(Events(DecodeLog { block_hash: 0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff, log_index: 0 }))
+attempt  8 (MultipleQueries): Err(Events(DecodeLog { block_hash: 0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff, log_index: 0 }))
+attempt  9 (MultipleQueries): Err(Events(DecodeLog { block_hash: 0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff, log_index: 0 }))
+attempt 10 (MultipleQueries): Err(Events(DecodeLog { block_hash: 0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff, log_index: 0 }))
+attempt 11 (MultipleQueries): Err(Events(DecodeLog { block_hash: 0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff, log_index: 0 }))
+attempt 12 (MultipleQueries): Err(Events(DecodeLog { block_hash: 0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff, log_index: 0 }))
+after 12 attempts: block watcher status BlockStatus { latest: 1000, safe: 999 }; unconsumed mock responses: 1
+ok
+
+test result: ok. 14 passed; 0 failed; 0 ignored; 0 measured; 99 filtered out; finished in 0.20s
+

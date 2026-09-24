@@ -1,0 +1,45 @@
+# QA2-VAL-B re-run for F2-VAL-064 on commit fe9e84cc59b65367b31d5a3121774383cc422234 (binaries: /home/shebin.guest/.cache/safenet-run2/target/debug/validator and /home/shebin.guest/.cache/safenet-run2/target/debug/sentinel, cargo build -p validator -p sentinel --bins --locked; stderr merged into this log)
+# scratch configs in the scratchpad: copies of ../F2-VAL-060/val-typo.toml and ./sentinel/sentinel-loopback.toml; effective rpc lines:
+/tmp/claude-501/-home-shebin-guest-safe-safenet/166c992f-87ea-4548-be85-5fcf1c13bf90/scratchpad/cfg/val-typo.toml:10:rpc = "http://127.0.0.1:1"
+/tmp/claude-501/-home-shebin-guest-safe-safenet/166c992f-87ea-4548-be85-5fcf1c13bf90/scratchpad/cfg/sentinel-loopback.toml:10:rpc = "http://127.0.0.1:9"
+
+$ validator --config-file=/tmp/claude-501/-home-shebin-guest-safe-safenet/166c992f-87ea-4548-be85-5fcf1c13bf90/scratchpad/cfg/val-typo.toml; echo exit=$?
+Unrecognized argument: --config-file=/tmp/claude-501/-home-shebin-guest-safe-safenet/166c992f-87ea-4548-be85-5fcf1c13bf90/scratchpad/cfg/val-typo.toml
+
+Run validator --help for more information.
+exit=1
+
+$ validator --config-file /tmp/claude-501/-home-shebin-guest-safe-safenet/166c992f-87ea-4548-be85-5fcf1c13bf90/scratchpad/cfg/val-typo.toml 2>&1 | cut -c1-120   (space form: accepted, proceeds to Config::load which fails on the misspelled key)
+Error: Parse(Error { message: "unknown field `blocks_per_epoc`, expected one of `consensus`, `staker`, `participants`, `
+exit=1
+
+$ validator --help
+Usage: validator [--config-file <config-file>] [--version]
+
+Safenet validator.
+
+Options:
+  --config-file     path to the validator TOML configuration file.
+  --version         print version information.
+  --help, help      display usage information
+
+exit=0
+
+## sentinel half (Critic's widening)
+$ sentinel --config-file=/tmp/claude-501/-home-shebin-guest-safe-safenet/166c992f-87ea-4548-be85-5fcf1c13bf90/scratchpad/cfg/sentinel-loopback.toml; echo exit=$?
+Unrecognized argument: --config-file=/tmp/claude-501/-home-shebin-guest-safe-safenet/166c992f-87ea-4548-be85-5fcf1c13bf90/scratchpad/cfg/sentinel-loopback.toml
+
+Run sentinel --help for more information.
+exit=1
+
+$ sentinel --config-file /nonexistent/sentinel.toml; echo exit=$?   (space form parsed; fails later on the missing file)
+Error: Io(Os { code: 2, kind: NotFound, message: "No such file or directory" })
+exit=1
+
+## documented '=' spelling in this checkout
+crates/validator/validator.sample.toml:4:# with `--config-file=/path/to/your/validator.toml` (the binary defaults to
+crates/validator/Dockerfile:35:# `args:` (e.g. `--config-file=...`) appends to the binary instead of
+docs/validator-handbook.md:110:    --config-file=validator.toml
+crates/sentinel/sentinel.sample.toml:4:# with `--config-file=/path/to/your/sentinel.toml` (the binary defaults to
+crates/sentinel/Dockerfile:36:# `args:` (e.g. `--config-file=...`) appends to the binary instead of
+docs/sentinel-handbook.md:76:    --config-file=sentinel.toml
