@@ -173,10 +173,7 @@ sequenceDiagram
     Note over Oracle: finalize() returns early for FROZEN -- no OracleResult event,<br/>request now waits on the arbitrator (or ARBITRATION_TIMEOUT, see timeoutArbitration)
 
     rect rgba(255,220,220,0.3)
-        Note over Sponsor,DAO: ArbitraDocument Dispute Flow
-
-        Create a mermaid sequence diagram that outlines the dispute flow
-tion
+        Note over Sponsor,DAO: Arbitration
         Arbitrator->>Oracle: resolveDispute(R2, approveWins=true, context="...")
         Note over Oracle: losingSideCount = denyCount = 1<br/>slashed = 1 * 4.00 = 4.00<br/>request[R2].state = RESOLVED_APPROVED<br/>refundFee = request[R2].fee = 0.40<br/>daoCut = 0.40 * 10_000 / 100_000 = 0.04<br/>request[R2].fee = 0.40 - 0.04 = 0.36
         Oracle->>Token: transfer(Sponsor, 0.40)
