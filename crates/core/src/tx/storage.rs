@@ -79,6 +79,13 @@ impl TransactionStorage {
         .execute(&pool)
         .await?;
 
+        // Several queries filter, order by, or take the max of `nonce`
+        // (allocation, `mark_executed`, `stale_submissions`); an index keeps
+        // those from scanning every row as the table grows.
+        sqlx::query("CREATE INDEX IF NOT EXISTS transactions_nonce_idx ON transactions (nonce)")
+            .execute(&pool)
+            .await?;
+
         Ok(Self { pool })
     }
 
@@ -115,6 +122,36 @@ impl TransactionStorage {
         Ok(usize::try_from(count)?)
     }
 
+    /// The nonce of the outstanding delegation transaction, if one is in
+    /// flight (queued with a nonce assigned, but not yet executed).
+    pub async fn pending_delegation(&self) -> Result<Option<u64>, Error> {
+        let nonce = sqlx::query_scalar::<_, Option<i64>>(
+            "SELECT nonce FROM transactions
+             WHERE json_extract(request, '$.authorization') IS NOT NULL
+               AND executed_at IS NULL
+             LIMIT 1",
+        )
+        .fetch_optional(&self.pool)
+        .await?
+        .flatten();
+        Ok(nonce.map(u64::try_from).transpose()?)
+    }
+
+    /// Whether a delegation transaction is queued or in flight, used to keep
+    /// the startup enqueue idempotent across restarts.
+    // Wired in by `TransactionQueue::queue_delegation`, added in a later phase.
+    #[allow(dead_code)]
+    pub async fn has_delegation(&self) -> Result<bool, Error> {
+        let count = sqlx::query_scalar::<_, i64>(
+            "SELECT COUNT(*) FROM transactions
+             WHERE json_extract(request, '$.authorization') IS NOT NULL
+               AND executed_at IS NULL",
+        )
+        .fetch_one(&self.pool)
+        .await?;
+        Ok(count > 0)
+    }
+
     /// Selects the oldest queued transaction that has not expired and assigns
     /// it a nonce. Returns `None` when nothing is queued.
     ///
@@ -141,10 +178,29 @@ impl TransactionStorage {
         // afterwards). The `request` value is not affected by this query,
         // `json_set(TEXT, ...) -> TEXT` is just a pure transformation on its
         // inputs to an output JSON string value.
+        // A delegation transaction (one carrying an `authorization`) consumes
+        // two nonces: its own, and the one its self-signed authorization
+        // specifies. Everything else consumes one. The next free nonce is
+        // therefore one past the highest nonce in flight, spanned by however
+        // many nonces that transaction consumes.
+        //
+        // Nonces are assigned in this same monotonically increasing fashion,
+        // so the row holding the overall maximum nonce is always the most
+        // recently allocated one, and its span alone determines the next
+        // free nonce: any earlier row's `nonce + span` is bounded by a later
+        // row's own nonce, which was assigned to be at least that large. This
+        // lets the query inspect a single row (via `ORDER BY nonce DESC LIMIT
+        // 1`) instead of running `json_extract` over every allocated row.
         let Some(request) = sqlx::query_scalar::<_, String>(
             "UPDATE transactions
              SET nonce = MAX(?, COALESCE(
-                     (SELECT MAX(nonce) + 1 FROM transactions),
+                     (SELECT nonce + IIF(
+                             json_extract(request, '$.authorization') IS NULL, 1, 2
+                         )
+                      FROM transactions
+                      WHERE nonce IS NOT NULL
+                      ORDER BY nonce DESC
+                      LIMIT 1),
                      0
                  ))
              WHERE id = (
@@ -338,6 +394,16 @@ mod tests {
         }
     }
 
+    /// A queued delegation transaction (no nonce or fees yet), spanning two
+    /// nonces once allocated.
+    fn delegation() -> Transaction {
+        Transaction {
+            to: ENTRY_POINT,
+            authorization: Some(ENTRY_POINT),
+            ..Default::default()
+        }
+    }
+
     fn fees(max_fee_per_gas: u128, max_priority_fee_per_gas: u128) -> Eip1559Estimation {
         Eip1559Estimation {
             max_fee_per_gas,
@@ -503,5 +569,123 @@ mod tests {
             .unwrap()
             .unwrap();
         assert_eq!(next.transaction.data, tx("0x5afe").data);
+    }
+
+    #[tokio::test]
+    async fn allocation_is_unchanged_without_a_delegation() {
+        let storage = storage().await;
+        storage.enqueue([(tx("0x5afe01"), None)]).await.unwrap();
+        storage.enqueue([(tx("0x5afe02"), None)]).await.unwrap();
+
+        let first = storage
+            .next_transaction(Status { nonce: 5, block: 0 })
+            .await
+            .unwrap()
+            .unwrap();
+        let second = storage
+            .next_transaction(Status { nonce: 5, block: 0 })
+            .await
+            .unwrap()
+            .unwrap();
+
+        // Every transaction consumes exactly one nonce absent a delegation.
+        assert_eq!(first.nonce, 5);
+        assert_eq!(second.nonce, 6);
+    }
+
+    #[tokio::test]
+    async fn allocation_skips_the_two_nonces_reserved_by_a_delegation() {
+        let storage = storage().await;
+        storage.enqueue([(delegation(), None)]).await.unwrap();
+        storage.enqueue([(tx("0x5afe"), None)]).await.unwrap();
+
+        let delegation = storage
+            .next_transaction(Status { nonce: 5, block: 0 })
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(delegation.nonce, 5);
+
+        // The delegation reserves nonces 5 and 6, so the next transaction is
+        // allocated 7, not 6.
+        let next = storage
+            .next_transaction(Status { nonce: 5, block: 0 })
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(next.nonce, 7);
+    }
+
+    #[tokio::test]
+    async fn a_nonce_consumed_outside_the_queue_wins_over_the_delegation_reservation() {
+        let storage = storage().await;
+        storage.enqueue([(delegation(), None)]).await.unwrap();
+        storage.enqueue([(tx("0x5afe"), None)]).await.unwrap();
+
+        let delegation = storage
+            .next_transaction(Status { nonce: 5, block: 0 })
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(delegation.nonce, 5);
+
+        // The reservation would put the next transaction at nonce 7, but the
+        // account's onchain nonce has since advanced to 10 outside the queue
+        // (for example, a transaction submitted through another process), so
+        // that wins instead.
+        let next = storage
+            .next_transaction(Status {
+                nonce: 10,
+                block: 0,
+            })
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(next.nonce, 10);
+    }
+
+    #[tokio::test]
+    async fn pending_delegation_is_none_without_a_delegation() {
+        let storage = storage().await;
+        storage.enqueue([(tx("0x5afe"), None)]).await.unwrap();
+        storage
+            .next_transaction(Status { nonce: 5, block: 0 })
+            .await
+            .unwrap();
+
+        assert_eq!(storage.pending_delegation().await.unwrap(), None);
+        assert!(!storage.has_delegation().await.unwrap());
+    }
+
+    #[tokio::test]
+    async fn pending_delegation_is_none_before_a_nonce_is_allocated() {
+        let storage = storage().await;
+        storage.enqueue([(delegation(), None)]).await.unwrap();
+
+        // The delegation is queued but not yet in flight, so it has no nonce
+        // to report, even though it is present.
+        assert_eq!(storage.pending_delegation().await.unwrap(), None);
+        assert!(storage.has_delegation().await.unwrap());
+    }
+
+    #[tokio::test]
+    async fn pending_delegation_reports_the_in_flight_nonce_until_executed() {
+        let storage = storage().await;
+        storage.enqueue([(delegation(), None)]).await.unwrap();
+        storage
+            .next_transaction(Status { nonce: 5, block: 0 })
+            .await
+            .unwrap();
+
+        assert_eq!(storage.pending_delegation().await.unwrap(), Some(5));
+        assert!(storage.has_delegation().await.unwrap());
+
+        storage
+            .mark_executed(Status { block: 0, nonce: 7 })
+            .await
+            .unwrap();
+
+        assert_eq!(storage.pending_delegation().await.unwrap(), None);
+        assert!(!storage.has_delegation().await.unwrap());
     }
 }
