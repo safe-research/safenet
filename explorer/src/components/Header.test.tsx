@@ -27,6 +27,12 @@ afterEach(() => {
 });
 
 describe("Header", () => {
+	it("renders the Safenet Aegis logo", async () => {
+		const { default: Header } = await import("./Header");
+		render(<Header />);
+		expect(screen.getByRole("img", { name: "Safenet Aegis" })).toBeTruthy();
+	});
+
 	it("renders Explore nav link pointing to /", async () => {
 		const { default: Header } = await import("./Header");
 		render(<Header />);
