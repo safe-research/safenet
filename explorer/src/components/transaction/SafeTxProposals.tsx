@@ -14,6 +14,7 @@ import { useVotingStatus } from "@/hooks/useVotingStatus";
 import { SAFE_SERVICE_CHAINS } from "@/lib/chains";
 import type { SafeTransaction, TransactionProposal, TransactionProposalWithStatus } from "@/lib/consensus";
 import { InlineBlockInfo, InlineExplorerTxLink } from "../common/Info";
+import { SafeTxArbitration } from "./SafeTxArbitration";
 import { SafeTxAttestationStatus } from "./SafeTxAttestationStatus";
 import { SentinelVoteList } from "./SentinelVoteList";
 import { VotingStatusBadge } from "./VotingStatusBadge";
@@ -110,6 +111,9 @@ function SafeTxProposal({ proposal, number }: { proposal: TransactionProposalWit
 				<StatusBadge status={proposal.status} />
 			</div>
 			<SafeTxProposalVoting oracle={proposal.oracle} proposal={proposal} />
+			{proposal.arbitration !== null && (
+				<SafeTxArbitration oracle={proposal.oracle} arbitration={proposal.arbitration} />
+			)}
 			<div className="md:flex md:justify-between">
 				<p className="mr-2">Proposed:</p>
 				<p>
