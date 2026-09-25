@@ -2,7 +2,7 @@ import { Bars3Icon, XMarkIcon } from "@heroicons/react/24/solid";
 import { Link } from "@tanstack/react-router";
 import { useState } from "react";
 import { Button } from "@/components/common/Button";
-import { SafenetBetaLogo } from "@/components/common/SafenetBetaLogo";
+import { SafenetLogo } from "@/components/common/SafenetLogo";
 import { useConsensusState } from "@/hooks/useConsensusState";
 
 type NavLinkProps = {
@@ -47,7 +47,7 @@ export default function Header() {
 				{/* Left col: logo */}
 				<div className="flex-1">
 					<Link to="/" className="hover:opacity-75 transition inline-block" search={{}}>
-						<SafenetBetaLogo />
+						<SafenetLogo />
 					</Link>
 				</div>
 
