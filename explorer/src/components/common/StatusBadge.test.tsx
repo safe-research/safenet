@@ -12,6 +12,10 @@ describe("StatusBadge", () => {
 		{ status: "DENIED" as const, text: "DENIED", expectedClass: "bg-error" },
 		{ status: "APPROVED" as const, text: "APPROVED", expectedClass: "bg-info" },
 		{ status: "PROPOSED" as const, text: "PROPOSED", expectedClass: "bg-pending" },
+		{ status: "ARBITRATING" as const, text: "ARBITRATING", expectedClass: "bg-pending" },
+		{ status: "SECURE" as const, text: "SECURE", expectedClass: "bg-info" },
+		{ status: "INSECURE" as const, text: "INSECURE", expectedClass: "bg-error" },
+		{ status: "NO_RULING" as const, text: "NO RULING", expectedClass: "bg-warning-surface" },
 	])("renders $status with correct label and variant class", ({ status, text, expectedClass }) => {
 		const { container } = render(<StatusBadge status={status} />);
 		expect(screen.getByText(text)).toBeTruthy();

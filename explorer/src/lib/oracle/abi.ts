@@ -14,6 +14,10 @@ export const sentinelOracleAbi = parseAbi([
 	"function getRequest(bytes32 requestId) view returns (Request)",
 	"event Committed(bytes32 indexed requestId, address indexed sentinel, uint96 bondAmount)",
 	"event Revealed(bytes32 indexed requestId, address indexed sentinel, bool approved, uint96 bondAmount, string reason)",
+	"event DisputeTriggered(bytes32 indexed requestId, uint64 deadline)",
+	"event DisputeResolved(bytes32 indexed requestId, uint8 outcome, uint128 slashed, string context)",
+	"event DisputeOutOfScope(bytes32 indexed requestId, string context)",
+	"event ArbitrationTimedOut(bytes32 indexed requestId)",
 ]);
 
 // `Committed`/`Revealed` share the same indexed-topic layout (`requestId`, `sentinel`), so both
@@ -28,7 +32,18 @@ export const oracleAbi = parseAbi([
 	"event OracleResult(bytes32 indexed requestId, address indexed proposer, bytes result, bool approved)",
 ]);
 
-// `OracleResult` is only emitted once an oracle actually reaches a verdict: `SentinelOracle`
-// emits `RequestTimedOut` instead when a request expires unresolved, so the presence of this
-// event means "approved or denied", never "gave up".
-export const oracleResultEventSelector = toEventSelector(getAbiItem({ abi: oracleAbi, name: "OracleResult" }));
+// The events that settle a request, all indexed by `requestId` first, so a single `eth_getLogs`
+// filtered by `requestId` fetches them together. `OracleResult` is only emitted once an oracle
+// actually reaches a verdict: `SentinelOracle` emits `RequestTimedOut` instead when a request
+// expires unresolved, so the presence of this event means "approved or denied", never "gave up".
+// A split vote emits `DisputeTriggered` instead of `OracleResult`, followed by at most one of
+// `DisputeResolved`, `DisputeOutOfScope` or `ArbitrationTimedOut` once the dispute ends.
+export const oracleOutcomeEventSelectors = [
+	toEventSelector(getAbiItem({ abi: oracleAbi, name: "OracleResult" })),
+	...[
+		"DisputeTriggered" as const,
+		"DisputeResolved" as const,
+		"DisputeOutOfScope" as const,
+		"ArbitrationTimedOut" as const,
+	].map((eventName) => toEventSelector(getAbiItem({ abi: sentinelOracleAbi, name: eventName }))),
+];

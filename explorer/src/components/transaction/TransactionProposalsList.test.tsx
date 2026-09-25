@@ -43,6 +43,7 @@ const makeProposal = (safeTxHash: string, epoch = 1n): TransactionProposalWithSt
 	proposedAt: { block: 100n, tx: "0xabc" as Hex },
 	attestedAt: null,
 	status: "PROPOSED",
+	arbitration: null,
 });
 
 const PROPOSALS = [makeProposal("0xhash1"), makeProposal("0xhash2"), makeProposal("0xhash3")];
