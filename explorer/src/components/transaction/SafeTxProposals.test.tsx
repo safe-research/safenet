@@ -77,6 +77,7 @@ const makeProposal = (overrides?: Partial<TransactionProposalWithStatus>): Trans
 	proposedAt: { block: 100n, tx: "0xabc" as Hex },
 	attestedAt: null,
 	status: "PROPOSED",
+	arbitration: null,
 	...overrides,
 });
 

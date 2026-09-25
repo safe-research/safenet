@@ -10,7 +10,7 @@ import {
 	toHex,
 } from "viem";
 import z from "zod";
-import { oracleAbi, oracleResultEventSelector } from "@/lib/oracle/abi";
+import { oracleAbi, oracleOutcomeEventSelectors, sentinelOracleAbi } from "@/lib/oracle/abi";
 import { oracleRequestId } from "@/lib/oracle/hashing";
 import { bigIntSchema, checkedAddressSchema, hexDataSchema } from "@/lib/schemas";
 import { getBlockRange, jsonReplacer, loadChainId, mostRecentFirst, oldestFirst } from "@/lib/utils";
@@ -58,15 +58,45 @@ export type TransactionProposal = {
 //     │
 //     ├──`OracleResult(approved: false)`──────────────────────────────> DENIED (final)
 //     │
-//     └──`OracleResult(approved: true)`─> APPROVED ──`TransactionAttested`──> ATTESTED (final)
-//                                            └──no attestation in time──────> TIMED_OUT (final)
+//     ├──`OracleResult(approved: true)`─> APPROVED ──`TransactionAttested`──> ATTESTED (final)
+//     │                                      └──no attestation in time──────> TIMED_OUT (final)
+//     │
+//     └──`DisputeTriggered`──> ARBITRATING ──`DisputeResolved`──> SECURE | INSECURE (final)
+//                                   └──`DisputeOutOfScope` / `ArbitrationTimedOut`──> NO_RULING (final)
 //
 // `TIMED_OUT` is an error state: it means the explorer expected something to happen and it
 // didn't, so it is only reported when no verdict/attestation explains the silence. A denied
 // proposal is a normal, final outcome — no attestation is ever expected for it.
-export type ProposalStatus = "PROPOSED" | "APPROVED" | "ATTESTED" | "DENIED" | "TIMED_OUT";
+// A disputed proposal is never attested either, whatever the ruling: `ARBITRATING` waits on the
+// Council (or on someone calling `timeoutArbitration`), never on the validators, so it never
+// becomes `TIMED_OUT`.
+export type ProposalStatus =
+	| "PROPOSED"
+	| "APPROVED"
+	| "ATTESTED"
+	| "DENIED"
+	| "TIMED_OUT"
+	| "ARBITRATING"
+	| "SECURE"
+	| "INSECURE"
+	| "NO_RULING";
 
-export type TransactionProposalWithStatus = TransactionProposal & { status: ProposalStatus };
+// A split sentinel vote, frozen by the oracle until the Council rules on it, declines it as out of
+// scope, or someone times it out after the `deadline` block.
+export type Arbitration = {
+	triggeredAt: ExecutionLink;
+	deadline: bigint;
+	outcome:
+		| { kind: "ruled"; secure: boolean; context: string; at: ExecutionLink }
+		| { kind: "outOfScope"; context: string; at: ExecutionLink }
+		| { kind: "timedOut"; at: ExecutionLink }
+		| null;
+};
+
+export type TransactionProposalWithStatus = TransactionProposal & {
+	status: ProposalStatus;
+	arbitration: Arbitration | null;
+};
 
 export type LoadTransactionProposalsResult = {
 	proposals: TransactionProposalWithStatus[];
@@ -120,12 +150,24 @@ const proposalKey = ({ safeTxHash, epoch, oracle }: { safeTxHash: Hex; epoch: bi
 
 type OracleVerdict = { approved: boolean; resolvedAt: ExecutionLink };
 
-// Loads oracle verdicts from a single `eth_getLogs`, keyed by the request ID the oracle tracks
+// A request either resolves directly (`OracleResult`) or freezes for arbitration
+// (`DisputeTriggered`), never both.
+type OracleOutcome = { kind: "verdict"; verdict: OracleVerdict } | { kind: "arbitration"; arbitration: Arbitration };
+
+// The `SentinelOracleRequest.State` ordinals a Council ruling (`DisputeResolved.outcome`) carries.
+const RESOLVED_APPROVED = 3;
+const RESOLVED_DENIED = 4;
+
+// Loads oracle outcomes from a single `eth_getLogs`, keyed by the request ID the oracle tracks
 // each proposal under. `requestIds` narrows the query to specific proposals; passing none returns
-// every verdict the given oracles emitted in the range instead, which is what the unscoped
+// every outcome the given oracles emitted since `fromBlock` instead, which is what the unscoped
 // overview wants — there the topic list would grow with every proposal in the block range, and
-// callers look verdicts up by request ID either way, so a broader query only adds ignored logs.
-const loadOracleVerdicts = async ({
+// callers look outcomes up by request ID either way, so a broader query only adds ignored logs.
+// The query runs up to `latest` rather than the page's `toBlock`: a Council ruling can land weeks
+// after its proposal, and an older page should still show how the dispute ended. That range grows
+// past `maxBlockRange` on older pages, so if the RPC rejects it, the query falls back to the page's
+// own window with a second request, which only misses the outcomes that landed after it.
+const loadOracleOutcomes = async ({
 	provider,
 	oracles,
 	requestIds,
@@ -137,58 +179,103 @@ const loadOracleVerdicts = async ({
 	requestIds: Hex[];
 	fromBlock: bigint;
 	toBlock: bigint;
-}): Promise<Map<Hex, OracleVerdict>> => {
-	const rawLogs = await provider.request({
-		method: "eth_getLogs",
-		params: [
-			{
-				address: oracles,
-				fromBlock: numberToHex(fromBlock),
-				toBlock: numberToHex(toBlock),
-				topics: [oracleResultEventSelector, requestIds.length > 0 ? requestIds : null],
-			},
-		],
-	});
+}): Promise<Map<Hex, OracleOutcome>> => {
+	const request = (upTo: Hex | "latest") =>
+		provider.request({
+			method: "eth_getLogs",
+			params: [
+				{
+					address: oracles,
+					fromBlock: numberToHex(fromBlock),
+					toBlock: upTo,
+					topics: [oracleOutcomeEventSelectors, requestIds.length > 0 ? requestIds : null],
+				},
+			],
+		});
+	let rawLogs: Awaited<ReturnType<typeof request>>;
+	try {
+		rawLogs = await request("latest");
+	} catch {
+		rawLogs = await request(numberToHex(toBlock));
+	}
 	const logs = parseEventLogs({
 		logs: rawLogs.map((log) => formatLog(log)),
-		abi: oracleAbi,
-		eventName: "OracleResult",
+		abi: [...oracleAbi, ...sentinelOracleAbi],
+		eventName: ["OracleResult", "DisputeTriggered", "DisputeResolved", "DisputeOutOfScope", "ArbitrationTimedOut"],
 		strict: true,
 	});
-	// Oldest verdict first, so that for a request that somehow resolved more than once the newest
-	// one wins the `Map` insertion below.
-	return new Map(
-		oldestFirst(logs).map(
-			(log) =>
-				[
-					log.args.requestId,
-					{ approved: log.args.approved, resolvedAt: { block: log.blockNumber, tx: log.transactionHash } },
-				] as const,
-		),
-	);
+	// Oldest event first, so that a dispute's trigger is seen before its resolution, and for a
+	// request that somehow resolved more than once the newest outcome wins.
+	const outcomes = new Map<Hex, OracleOutcome>();
+	for (const log of oldestFirst(logs)) {
+		const { requestId } = log.args;
+		const at = { block: log.blockNumber, tx: log.transactionHash };
+		if (log.eventName === "OracleResult") {
+			outcomes.set(requestId, { kind: "verdict", verdict: { approved: log.args.approved, resolvedAt: at } });
+			continue;
+		}
+		if (log.eventName === "DisputeTriggered") {
+			outcomes.set(requestId, {
+				kind: "arbitration",
+				arbitration: { triggeredAt: at, deadline: log.args.deadline, outcome: null },
+			});
+			continue;
+		}
+		// A resolution without its trigger is ignored. The trigger always follows the proposal, so
+		// it is in range for every proposal the caller asks about.
+		const outcome = outcomes.get(requestId);
+		if (outcome?.kind !== "arbitration") {
+			continue;
+		}
+		const { arbitration } = outcome;
+		if (log.eventName === "DisputeResolved") {
+			if (log.args.outcome === RESOLVED_APPROVED || log.args.outcome === RESOLVED_DENIED) {
+				const secure = log.args.outcome === RESOLVED_APPROVED;
+				arbitration.outcome = { kind: "ruled", secure, context: log.args.context, at };
+			}
+		} else if (log.eventName === "DisputeOutOfScope") {
+			arbitration.outcome = { kind: "outOfScope", context: log.args.context, at };
+		} else {
+			arbitration.outcome = { kind: "timedOut", at };
+		}
+	}
+	return outcomes;
 };
 
 const deriveProposalStatus = ({
 	proposedAt,
 	attestedAt,
-	verdict,
+	outcome,
 	isTimedOut,
 }: {
 	proposedAt: ExecutionLink;
 	attestedAt: ExecutionLink | null;
-	verdict: OracleVerdict | undefined;
+	outcome: OracleOutcome | undefined;
 	isTimedOut: (since: bigint) => boolean;
 }): ProposalStatus => {
 	if (attestedAt !== null) {
 		return "ATTESTED";
 	}
-	// No verdict: still waiting on the oracle. An oracle that gave up doesn't emit `OracleResult`
+	// No outcome: still waiting on the oracle. An oracle that gave up doesn't emit `OracleResult`
 	// (`SentinelOracle` emits `RequestTimedOut`, which isn't read here), so silence that outlasts
 	// the timeout is all there is to go on.
-	if (verdict === undefined) {
+	if (outcome === undefined) {
 		return isTimedOut(proposedAt.block) ? "TIMED_OUT" : "PROPOSED";
 	}
+	// A disputed proposal is never attested, so `signingTimeout` doesn't apply to it: a dispute past
+	// its deadline is still open until someone times it out.
+	if (outcome.kind === "arbitration") {
+		const result = outcome.arbitration.outcome;
+		if (result === null) {
+			return "ARBITRATING";
+		}
+		if (result.kind === "ruled") {
+			return result.secure ? "SECURE" : "INSECURE";
+		}
+		return "NO_RULING";
+	}
 	// Final: `Consensus` never attests a denied proposal, so nothing is outstanding to time out.
+	const { verdict } = outcome;
 	if (!verdict.approved) {
 		return "DENIED";
 	}
@@ -294,32 +381,36 @@ export const loadTransactionProposals = async ({
 		];
 	});
 
-	// The requests whose verdict still matters: an attestation already tells the whole story, so a
+	// The requests whose outcome still matters: an attestation already tells the whole story, so a
 	// fully attested batch skips the oracle query altogether.
-	const oracleVerdictRequests = proposed.flatMap(({ attestedAt, requestId }) =>
+	const oracleOutcomeRequests = proposed.flatMap(({ attestedAt, requestId }) =>
 		attestedAt === null ? [requestId] : [],
 	);
-	const verdicts =
-		oracleVerdictRequests.length > 0
-			? await loadOracleVerdicts({
+	const outcomes =
+		oracleOutcomeRequests.length > 0
+			? await loadOracleOutcomes({
 					provider,
 					oracles: [...trustedOracles],
 					// Same scoping as the consensus query above: with a `safeTxHash` or a `safeId` these
 					// are a handful of request IDs worth filtering on, without either the unscoped
-					// overview takes every verdict in the range instead.
-					requestIds: safeTxHash !== undefined || safeId !== undefined ? oracleVerdictRequests : [],
+					// overview takes every outcome in the range instead.
+					requestIds: safeTxHash !== undefined || safeId !== undefined ? oracleOutcomeRequests : [],
 					fromBlock,
 					toBlock,
 				})
-			: new Map<Hex, OracleVerdict>();
+			: new Map<Hex, OracleOutcome>();
 
 	// Each phase gets its own `signingTimeout` budget: waiting on the oracle is measured from the
 	// proposal, waiting on the validators from the oracle's verdict.
 	const isTimedOut = (since: bigint) => toBlock - since > BigInt(signingTimeout);
-	const proposals = proposed.map((proposal) => ({
-		...proposal,
-		status: deriveProposalStatus({ ...proposal, verdict: verdicts.get(proposal.requestId), isTimedOut }),
-	}));
+	const proposals = proposed.map((proposal) => {
+		const outcome = outcomes.get(proposal.requestId);
+		return {
+			...proposal,
+			status: deriveProposalStatus({ ...proposal, outcome, isTimedOut }),
+			arbitration: outcome?.kind === "arbitration" ? outcome.arbitration : null,
+		};
+	});
 
 	return { proposals, fromBlock, toBlock };
 };
