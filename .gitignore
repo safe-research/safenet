@@ -3,6 +3,7 @@
 .env
 .env.testnet
 build/
+snapshots/
 coverage-report.md
 coverage/
 dist/
