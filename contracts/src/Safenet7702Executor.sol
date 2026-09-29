@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-only
 pragma solidity ^0.8.30;
 
+import {ISafenet7702Executor} from "@/interfaces/ISafenet7702Executor.sol";
+
 /**
  * @title Safenet 7702 Executor
  * @notice A minimal EIP-7702 account implementation that lets a Safenet service EOA batch multiple calls into
@@ -25,25 +27,7 @@ pragma solidity ^0.8.30;
  *      signature validation, and no functionality beyond batching calls and receiving the native token used
  *      to fund gas and the value of batched calls.
  */
-contract Safenet7702Executor {
-    // ============================================================
-    // STRUCTS
-    // ============================================================
-
-    /**
-     * @notice A single call to execute as part of a batch.
-     * @custom:param to The target address of the call.
-     * @custom:param value The amount of native token to send with the call, paid from the account's own balance.
-     * @custom:param gasLimit The maximum amount of gas to forward to the call.
-     * @custom:param data The calldata of the call.
-     */
-    struct Call {
-        address to;
-        uint256 value;
-        uint256 gasLimit;
-        bytes data;
-    }
-
+contract Safenet7702Executor is ISafenet7702Executor {
     // ============================================================
     // EVENTS
     // ============================================================
@@ -90,7 +74,7 @@ contract Safenet7702Executor {
     // ============================================================
 
     /**
-     * @notice Executes a batch of calls on a best-effort basis.
+     * @inheritdoc ISafenet7702Executor
      * @dev Each entry in `calls` is forwarded to its target `to` with its `value` and at most `gasLimit` gas.
      *      The batch is NOT atomic: if a call reverts, its index and revert data are recorded with a
      *      {CallFailed} event and execution continues with the remaining calls, so one failing call does not
@@ -108,9 +92,8 @@ contract Safenet7702Executor {
      *      EVM's own per-call deductions, the caller must supply a gas limit covering the sum of every
      *      `gasLimit` in the batch plus that overhead, even though calls typically consume far less than
      *      they reserve.
-     * @param calls The calls to execute, in order.
      */
-    function execute(Call[] calldata calls) external {
+    function execute(Call[] calldata calls) external override(ISafenet7702Executor) {
         require(msg.sender == address(this), OnlySelf());
         for (uint256 i = 0; i < calls.length; ++i) {
             Call calldata call = calls[i];
