@@ -12,7 +12,11 @@ pub mod signer;
 mod storage;
 pub mod types;
 
-pub use self::{config::Config, signer::Signer, types::Transaction};
+pub use self::{
+    config::{Config, SubmissionMode},
+    signer::Signer,
+    types::Transaction,
+};
 use self::{
     fees::cap_priority_fee,
     signer::SigningError,
@@ -173,10 +177,10 @@ impl TransactionQueue {
     }
 
     /// Submits queued transactions while fewer than
-    /// `config.max_in_flight_transactions` are in flight.
+    /// `config.mode.max_in_flight_transactions()` are in flight.
     async fn submit_pending(&mut self, block: u64) -> Result<(), Error> {
         let in_flight = self.storage.count_in_flight().await?;
-        for _ in in_flight..self.config.max_in_flight_transactions {
+        for _ in in_flight..self.config.mode.max_in_flight_transactions() {
             let nonce = self.nonce().await?;
             let Some(transaction) = self
                 .storage
@@ -518,7 +522,7 @@ mod tests {
         // Fill up the queue with transactions that will not execute.
         asserter.push_success(&U64::from(0)); // signer transaction count
         asserter.push_success(&fee_history()); // fee estimate
-        for i in 0..queue.config.max_in_flight_transactions {
+        for i in 0..queue.config.mode.max_in_flight_transactions() {
             queue
                 .queue([(tx(&format!("0x{i:02x}")), Some(12))])
                 .await
@@ -550,7 +554,7 @@ mod tests {
         // is because once a transaction is in the mempool, it has to execute.
         asserter.push_success(&U64::from(2)); // signer transaction count
         asserter.push_success(&fee_history()); // fee estimate
-        for _ in 2..queue.config.max_in_flight_transactions {
+        for _ in 2..queue.config.mode.max_in_flight_transactions() {
             asserter.push_success(&B256::ZERO); // transaction hash from submission
         }
         queue.update_block_status(block_status(12)).await.unwrap();
@@ -558,7 +562,9 @@ mod tests {
 
         // At block 13, all the remaining transactions get mined, the second
         // transaction was already expired and does not resubmit.
-        asserter.push_success(&U64::from(queue.config.max_in_flight_transactions + 1)); // signer transaction count
+        asserter.push_success(&U64::from(
+            queue.config.mode.max_in_flight_transactions() + 1,
+        )); // signer transaction count
         queue.update_block_status(block_status(13)).await.unwrap();
         assert!(asserter.read_q().is_empty());
 
