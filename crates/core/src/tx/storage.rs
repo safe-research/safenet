@@ -291,6 +291,26 @@ impl TransactionStorage {
         Ok(())
     }
 
+    /// Recovers from the account's onchain `nonce` having moved past a
+    /// transaction but not past the authorization it carries, which would
+    /// leave every later nonce stuck behind a gap. The authorization at
+    /// `nonce`, if there is one, becomes a cancellation transaction
+    /// ([`Transaction::default()`]) that is immediately due for submission,
+    /// and the transaction before it keeps its authorization. An authorization
+    /// is recovered at most once. Returns whether one was recovered.
+    pub async fn recover_authorization_gap(&self, nonce: u64) -> Result<bool, Error> {
+        let updated = sqlx::query(
+            "UPDATE allocated_nonces
+             SET request = ?
+             WHERE nonce = ? AND delegate IS NOT NULL AND request IS NULL",
+        )
+        .bind(serde_json::to_string(&Transaction::default())?)
+        .bind(i64::try_from(nonce)?)
+        .execute(&self.pool)
+        .await?;
+        Ok(updated.rows_affected() > 0)
+    }
+
     /// Prunes transactions that can no longer be affected by a reorg: those
     /// executed at or below the reorg-safe block `safe`, and queued transactions
     /// that expired at or before it.
@@ -864,5 +884,114 @@ mod tests {
             .unwrap()
             .unwrap();
         assert_eq!(next.nonce, 0);
+    }
+
+    /// Allocates `tx("0x5afe01")` at nonce 5, carrying an authorization that
+    /// takes nonce 6.
+    async fn authorized_storage() -> (TransactionStorage, Authorization) {
+        let storage = storage().await;
+        let authorization = Authorization { address: EXECUTOR };
+        storage.enqueue([(tx("0x5afe01"), None)]).await.unwrap();
+        storage
+            .next_transaction(
+                Status { nonce: 5, block: 0 },
+                Bundler::direct(Some(authorization)),
+            )
+            .await
+            .unwrap()
+            .unwrap();
+        (storage, authorization)
+    }
+
+    #[tokio::test]
+    async fn recovers_an_unused_authorization_nonce_once() {
+        let (storage, authorization) = authorized_storage().await;
+
+        // The authorization's nonce becomes a cancellation that is due for
+        // submission, and the transaction before it keeps its authorization.
+        assert!(storage.recover_authorization_gap(6).await.unwrap());
+        assert_eq!(
+            storage.stale_submissions(None).await.unwrap(),
+            [
+                AllocatedTransaction {
+                    nonce: 5,
+                    transaction: tx("0x5afe01"),
+                    authorization: Some(authorization),
+                    max_fee_per_gas: None,
+                    max_priority_fee_per_gas: None,
+                },
+                AllocatedTransaction {
+                    nonce: 6,
+                    transaction: Transaction::default(),
+                    authorization: None,
+                    max_fee_per_gas: None,
+                    max_priority_fee_per_gas: None,
+                },
+            ]
+        );
+
+        // Recovering again leaves the submitted cancellation as it is.
+        storage
+            .record_submission(Submission {
+                block: Some(42),
+                nonce: 6,
+                fees: fees(100, 10),
+            })
+            .await
+            .unwrap();
+        assert!(!storage.recover_authorization_gap(6).await.unwrap());
+        let cancellation = storage.stale_submissions(Some(42)).await.unwrap().remove(1);
+        assert_eq!(cancellation.transaction, Transaction::default());
+        assert_eq!(cancellation.max_fee_per_gas, Some(100));
+    }
+
+    #[tokio::test]
+    async fn only_recovers_the_authorization_at_the_account_nonce() {
+        let (storage, _) = authorized_storage().await;
+
+        // Nothing is recovered while the transaction carrying the
+        // authorization is in flight, or once the account is past the
+        // authorization.
+        for nonce in [5, 7] {
+            assert!(!storage.recover_authorization_gap(nonce).await.unwrap());
+        }
+        assert_eq!(storage.count_in_flight().await.unwrap(), 1);
+    }
+
+    #[tokio::test]
+    async fn marks_a_cancellation_executed_once_the_account_is_past_it() {
+        let (storage, _) = authorized_storage().await;
+        storage
+            .mark_executed(Status {
+                nonce: 6,
+                block: 10,
+            })
+            .await
+            .unwrap();
+        storage.recover_authorization_gap(6).await.unwrap();
+        assert_eq!(storage.count_in_flight().await.unwrap(), 1);
+
+        // The cancellation lands.
+        storage
+            .mark_executed(Status {
+                nonce: 7,
+                block: 11,
+            })
+            .await
+            .unwrap();
+        assert_eq!(storage.count_outstanding(11).await.unwrap(), 0);
+
+        // A reorg uncles both blocks, and the original transaction lands with
+        // its authorization instead, which uses up the cancellation's nonce.
+        storage.unmark_executed(10).await.unwrap();
+        assert_eq!(storage.count_in_flight().await.unwrap(), 2);
+        storage
+            .mark_executed(Status {
+                nonce: 7,
+                block: 10,
+            })
+            .await
+            .unwrap();
+        assert_eq!(storage.count_outstanding(10).await.unwrap(), 0);
     }
 }
