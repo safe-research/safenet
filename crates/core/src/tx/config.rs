@@ -115,6 +115,12 @@ impl TryFrom<RawConfig> for Config {
             (Some(_), Some(_), _) => {
                 return Err("`max_in_flight_transactions` cannot be combined with `executor`");
             }
+            // An EIP-7702 authorization to the zero address removes a
+            // delegation instead of setting one, so every `execute` self-call
+            // would run against empty code and succeed without making any call.
+            (None, Some(executor), _) if executor.is_zero() => {
+                return Err("`executor` cannot be the zero address");
+            }
             (None, Some(executor), max_batch_gas) => SubmissionMode::Batched {
                 executor,
                 max_batch_gas: max_batch_gas.unwrap_or(DEFAULT_MAX_BATCH_GAS),
