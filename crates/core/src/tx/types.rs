@@ -2,10 +2,8 @@
 
 use crate::tx::fees;
 use alloy::{
-    consensus::TxEip1559,
     eips::eip1559::Eip1559Estimation,
-    primitives::{Address, Bytes, TxKind, U256},
-    rpc::types::AccessList,
+    primitives::{Address, Bytes, U256},
 };
 use serde::{Deserialize, Serialize};
 
@@ -71,23 +69,20 @@ pub struct AllocatedTransaction {
 }
 
 impl AllocatedTransaction {
-    /// Builds a concrete EIP-1559 transaction for signing, bumping `estimate`
-    /// above any fees from a previous submission so that it replaces it.
-    pub fn build(self, chain_id: u64, estimate: Eip1559Estimation) -> TxEip1559 {
-        if self.authorization.is_some() {
-            todo!("EIP-7702 transactions are not supported yet");
-        }
+    /// Builds an unsigned transaction for signing, bumping `estimate` above any
+    /// fees from a previous submission so that it replaces it.
+    pub fn build(self, chain_id: u64, estimate: Eip1559Estimation) -> UnsignedTransaction {
         let fees = fees::bump(estimate, self.fees());
-        TxEip1559 {
+        UnsignedTransaction {
             chain_id,
             nonce: self.nonce,
             gas_limit: self.transaction.gas,
             max_fee_per_gas: fees.max_fee_per_gas,
             max_priority_fee_per_gas: fees.max_priority_fee_per_gas,
-            to: TxKind::Call(self.transaction.to),
+            to: self.transaction.to,
             value: self.transaction.value,
-            access_list: AccessList::default(),
             input: self.transaction.data,
+            authorization: self.authorization,
         }
     }
 
@@ -99,4 +94,28 @@ impl AllocatedTransaction {
             max_priority_fee_per_gas: self.max_priority_fee_per_gas?,
         })
     }
+}
+
+/// An unsigned transaction, as built by the queue for signing.
+#[derive(Clone, Debug, PartialEq)]
+pub struct UnsignedTransaction {
+    /// The chain ID.
+    pub chain_id: u64,
+    /// The nonce.
+    pub nonce: u64,
+    /// The gas limit.
+    pub gas_limit: u64,
+    /// The maximum total fee per gas.
+    pub max_fee_per_gas: u128,
+    /// The maximum priority fee per gas.
+    pub max_priority_fee_per_gas: u128,
+    /// The destination of the transaction.
+    pub to: Address,
+    /// The transaction value.
+    pub value: U256,
+    /// The transaction calldata.
+    pub input: Bytes,
+    /// The EIP-7702 authorization to sign alongside the transaction, which
+    /// uses up the nonce after `nonce`.
+    pub authorization: Option<Authorization>,
 }
