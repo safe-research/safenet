@@ -5,8 +5,12 @@
 //! and the bookkeeping the queue needs: the fees of their last submission,
 //! when they were submitted and executed.
 
-use super::types::{AllocatedTransaction, Transaction};
+use super::{
+    bundle::Bundler,
+    types::{AllocatedTransaction, Transaction},
+};
 use alloy::eips::eip1559::Eip1559Estimation;
+use futures::TryStreamExt as _;
 use sqlx::sqlite::SqlitePool;
 use std::num::TryFromIntError;
 
@@ -134,8 +138,10 @@ impl TransactionStorage {
         Ok(usize::try_from(count)?)
     }
 
-    /// Selects the oldest queued transaction that has not expired and assigns
-    /// it a nonce. Returns `None` when nothing is queued.
+    /// Allocates the next free nonce to the oldest queued transactions that
+    /// have not expired, pushing them in order into `bundler` until it is full.
+    /// The bundler's authorization, if any, uses up the nonce after it. Returns
+    /// `None` when nothing is queued.
     ///
     /// The `status.block` is used as the current latest block number in order
     /// to determine whether or not a transaction is expired. This is needed
@@ -145,62 +151,76 @@ impl TransactionStorage {
     /// The nonce is the first free nonce at or above `status.nonce` (the
     /// account's current onchain transaction count, passed in so nonces
     /// consumed by transactions submitted outside the queue are respected),
-    /// accounting for the nonces of other in-flight transactions. Selecting the
-    /// nonce and reserving it for the transaction happen atomically.
+    /// accounting for the nonces already allocated. Selecting the nonce and
+    /// reserving it for the transactions happen atomically.
     pub async fn next_transaction(
         &self,
         status: Status,
+        mut bundler: Bundler,
     ) -> Result<Option<AllocatedTransaction>, Error> {
         // The transaction reads before it writes, so take the write lock up
         // front: SQLite fails a deferred transaction with `SQLITE_BUSY`, without
         // waiting on the busy timeout, if another connection writes between its
         // first read and its first write.
         let mut tx = self.pool.begin_with("BEGIN IMMEDIATE").await?;
+        let block = i64::try_from(status.block)?;
 
-        let Some((id, request)) = sqlx::query_as::<_, (i64, String)>(
+        // Queued transactions are streamed one at a time, so that only as many
+        // are read as the bundler takes. It takes a prefix of them, so the id
+        // of the last one it took is enough to allocate all of them below.
+        let mut last = None;
+        let mut queued = sqlx::query_as::<_, (i64, String)>(
             "SELECT id, request FROM transactions
              WHERE nonce IS NULL AND (expires_at IS NULL OR expires_at > ?)
-             ORDER BY id ASC
-             LIMIT 1",
+             ORDER BY id ASC",
         )
-        .bind(i64::try_from(status.block)?)
-        .fetch_optional(&mut *tx)
-        .await?
-        else {
+        .bind(block)
+        .fetch(&mut *tx);
+        while let Some((id, request)) = queued.try_next().await? {
+            if !bundler.push(serde_json::from_str(&request)?) {
+                break;
+            }
+            last = Some(id);
+        }
+        drop(queued);
+        let Some(last) = last else {
             return Ok(None);
         };
 
-        // Note that, instead of returning the `nonce` and `request` as
-        // separate columns, we instead return a JSON string with the nonce
-        // field already set (**without updating the `request` column**). This
-        // just makes the deserialization on the Rust side more natural (where
-        // we don't need to declare a type just for deserializing a
-        // `AllocatedTransaction` without a nonce and combine the two values
-        // afterwards). The `request` value is not affected by this query,
-        // `json_set(TEXT, ...) -> TEXT` is just a pure transformation on its
-        // inputs to an output JSON string value.
-        let (nonce, request) = sqlx::query_as::<_, (i64, String)>(
-            "INSERT INTO allocated_nonces (nonce, request)
-             VALUES (
-                 MAX(?, COALESCE((SELECT MAX(nonce) + 1 FROM allocated_nonces), 0)),
-                 ?
-             )
-             RETURNING nonce, json_set(request, '$.nonce', nonce)",
+        let nonce = sqlx::query_scalar::<_, i64>(
+            "SELECT MAX(?, COALESCE((SELECT MAX(nonce) + 1 FROM allocated_nonces), 0))",
         )
         .bind(i64::try_from(status.nonce)?)
-        .bind(request)
         .fetch_one(&mut *tx)
         .await?;
+        let Some(allocated) = bundler.finish(u64::try_from(nonce)?) else {
+            return Ok(None);
+        };
 
-        sqlx::query("UPDATE transactions SET nonce = ? WHERE id = ?")
+        sqlx::query("INSERT INTO allocated_nonces (nonce, request) VALUES (?, ?)")
             .bind(nonce)
-            .bind(id)
+            .bind(serde_json::to_string(&allocated.transaction)?)
             .execute(&mut *tx)
             .await?;
+        if let Some(authorization) = allocated.authorization {
+            sqlx::query("INSERT INTO allocated_nonces (nonce, delegate) VALUES (?, ?)")
+                .bind(nonce.checked_add(1).ok_or(Error::Overflow)?)
+                .bind(authorization.address.to_string())
+                .execute(&mut *tx)
+                .await?;
+        }
+        sqlx::query(
+            "UPDATE transactions SET nonce = ?
+             WHERE nonce IS NULL AND (expires_at IS NULL OR expires_at > ?) AND id <= ?",
+        )
+        .bind(nonce)
+        .bind(block)
+        .bind(last)
+        .execute(&mut *tx)
+        .await?;
         tx.commit().await?;
 
-        let transaction = serde_json::from_str::<AllocatedTransaction>(&request)?;
-        Ok(Some(transaction))
+        Ok(Some(allocated))
     }
 
     /// Records the mempool block and fee floor for the transaction with
@@ -337,16 +357,29 @@ impl TransactionStorage {
         &self,
         submitted_before: Option<u64>,
     ) -> Result<Vec<AllocatedTransaction>, Error> {
-        // Similar to `next_transaction`, transform the JSON value to include
-        // the nonce directly instead of returning separate columns for the
-        // nonce and an "AllocatedTransactionWithoutNonce". This simplifies
-        // deserialization logic in Rust.
+        // Note that, instead of returning the `nonce`, `request` and
+        // authorization as separate columns, we instead return a JSON string
+        // with the nonce and authorization fields already set (**without
+        // updating the `request` column**). This just makes the
+        // deserialization on the Rust side more natural (where we don't need to
+        // declare a type just for deserializing a `AllocatedTransaction`
+        // without a nonce and combine the values afterwards). The authorization
+        // is the delegate of the row at the nonce after the transaction, if it
+        // has one.
         sqlx::query_scalar::<_, String>(
-            "SELECT json_set(request, '$.nonce', nonce)
-             FROM allocated_nonces
-             WHERE request IS NOT NULL AND executed_at IS NULL
-               AND (submitted_at IS NULL OR submitted_at <= ?)
-             ORDER BY nonce ASC",
+            "SELECT json_set(
+                 n.request,
+                 '$.nonce', n.nonce,
+                 '$.authorization', json(CASE
+                     WHEN a.delegate IS NULL THEN NULL
+                     ELSE json_object('address', a.delegate)
+                 END)
+             )
+             FROM allocated_nonces n
+             LEFT JOIN allocated_nonces a ON a.nonce = n.nonce + 1 AND a.delegate IS NOT NULL
+             WHERE n.request IS NOT NULL AND n.executed_at IS NULL
+               AND (n.submitted_at IS NULL OR n.submitted_at <= ?)
+             ORDER BY n.nonce ASC",
         )
         .bind(
             submitted_before
@@ -371,9 +404,15 @@ impl From<TryFromIntError> for Error {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use alloy::primitives::{Address, Bytes, address};
+    use crate::tx::{bundle::ISafenet7702Executor, types::Authorization};
+    use alloy::{
+        primitives::{Address, Bytes, address},
+        sol_types::SolCall as _,
+    };
 
     const ENTRY_POINT: Address = address!("0x5FF137D4b0FDCD49DcA30c7CF57E578a026d2789");
+    const ACCOUNT: Address = address!("0x7702770277027702770277027702770277027702");
+    const EXECUTOR: Address = address!("0x5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe");
 
     async fn storage() -> TransactionStorage {
         let pool = SqlitePool::connect("sqlite://:memory:").await.unwrap();
@@ -389,6 +428,25 @@ mod tests {
         }
     }
 
+    /// A queued transaction using 1,000,000 gas, so that a batch gas limit of
+    /// 2,500,000 fits exactly two of them.
+    fn big_tx(data: &str) -> Transaction {
+        Transaction {
+            gas: 1_000_000,
+            ..tx(data)
+        }
+    }
+
+    /// The calldata of each call of a batch.
+    fn calls(batch: &Transaction) -> Vec<Bytes> {
+        ISafenet7702Executor::executeCall::abi_decode(&batch.data)
+            .unwrap()
+            .calls
+            .into_iter()
+            .map(|call| call.data)
+            .collect()
+    }
+
     fn fees(max_fee_per_gas: u128, max_priority_fee_per_gas: u128) -> Eip1559Estimation {
         Eip1559Estimation {
             max_fee_per_gas,
@@ -401,7 +459,7 @@ mod tests {
         let storage = storage().await;
         assert_eq!(
             storage
-                .next_transaction(Status { nonce: 0, block: 0 })
+                .next_transaction(Status { nonce: 0, block: 0 }, Bundler::direct(None))
                 .await
                 .unwrap(),
             None
@@ -417,7 +475,7 @@ mod tests {
         assert_eq!(storage.count_in_flight().await.unwrap(), 0);
 
         let submitted = storage
-            .next_transaction(Status { nonce: 5, block: 0 })
+            .next_transaction(Status { nonce: 5, block: 0 }, Bundler::direct(None))
             .await
             .unwrap()
             .unwrap();
@@ -429,7 +487,7 @@ mod tests {
         assert_eq!(storage.count_in_flight().await.unwrap(), 1);
         assert_eq!(
             storage
-                .next_transaction(Status { nonce: 5, block: 0 })
+                .next_transaction(Status { nonce: 5, block: 0 }, Bundler::direct(None))
                 .await
                 .unwrap(),
             None
@@ -456,7 +514,7 @@ mod tests {
         // FIFO order.
         for (data, nonce) in [("0x5afe01", 5), ("0x5afe02", 6), ("0x5afe03", 7)] {
             let submitted = storage
-                .next_transaction(Status { nonce: 5, block: 0 })
+                .next_transaction(Status { nonce: 5, block: 0 }, Bundler::direct(None))
                 .await
                 .unwrap()
                 .unwrap();
@@ -470,7 +528,7 @@ mod tests {
         let storage = storage().await;
         storage.enqueue([(tx("0x5afe"), Some(100))]).await.unwrap();
         let submitted = storage
-            .next_transaction(Status { nonce: 5, block: 0 })
+            .next_transaction(Status { nonce: 5, block: 0 }, Bundler::direct(None))
             .await
             .unwrap()
             .unwrap();
@@ -490,6 +548,7 @@ mod tests {
             vec![AllocatedTransaction {
                 nonce: 5,
                 transaction: tx("0x5afe"),
+                authorization: None,
                 max_fee_per_gas: Some(100),
                 max_priority_fee_per_gas: Some(10),
             }]
@@ -501,7 +560,7 @@ mod tests {
         let storage = storage().await;
         storage.enqueue([(tx("0x5afe"), Some(100))]).await.unwrap();
         storage
-            .next_transaction(Status { nonce: 5, block: 0 })
+            .next_transaction(Status { nonce: 5, block: 0 }, Bundler::direct(None))
             .await
             .unwrap()
             .unwrap();
@@ -529,7 +588,7 @@ mod tests {
         storage.prune(15).await.unwrap();
 
         let next = storage
-            .next_transaction(Status { nonce: 0, block: 0 })
+            .next_transaction(Status { nonce: 0, block: 0 }, Bundler::direct(None))
             .await
             .unwrap()
             .unwrap();
@@ -541,7 +600,7 @@ mod tests {
         let storage = storage().await;
         storage.enqueue([(tx("0x5afe01"), None)]).await.unwrap();
         storage
-            .next_transaction(Status { nonce: 5, block: 0 })
+            .next_transaction(Status { nonce: 5, block: 0 }, Bundler::direct(None))
             .await
             .unwrap()
             .unwrap();
@@ -561,10 +620,13 @@ mod tests {
 
         storage.enqueue([(tx("0x5afe02"), None)]).await.unwrap();
         let next = storage
-            .next_transaction(Status {
-                nonce: 0,
-                block: 10,
-            })
+            .next_transaction(
+                Status {
+                    nonce: 0,
+                    block: 10,
+                },
+                Bundler::direct(None),
+            )
             .await
             .unwrap()
             .unwrap();
@@ -581,13 +643,226 @@ mod tests {
         storage.prune(1_000_000).await.unwrap();
 
         let next = storage
-            .next_transaction(Status {
-                nonce: 0,
-                block: 1_000_000,
-            })
+            .next_transaction(
+                Status {
+                    nonce: 0,
+                    block: 1_000_000,
+                },
+                Bundler::direct(None),
+            )
             .await
             .unwrap()
             .unwrap();
         assert_eq!(next.transaction.data, tx("0x5afe").data);
+    }
+
+    #[tokio::test]
+    async fn batches_several_transactions_into_one_nonce() {
+        let storage = storage().await;
+        storage
+            .enqueue([
+                (big_tx("0x5afe01"), None),
+                (big_tx("0x5afe02"), None),
+                (big_tx("0x5afe03"), None),
+            ])
+            .await
+            .unwrap();
+
+        // The batch takes the first two transactions, and the nonce stores the
+        // transaction built for them.
+        let batch = storage
+            .next_transaction(
+                Status { nonce: 5, block: 0 },
+                Bundler::batched(ACCOUNT, 2_500_000, None),
+            )
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(batch.nonce, 5);
+        assert_eq!(
+            calls(&batch.transaction),
+            [big_tx("0x5afe01").data, big_tx("0x5afe02").data]
+        );
+
+        // The transaction left out of the batch is the next one queued.
+        let next = storage
+            .next_transaction(Status { nonce: 5, block: 0 }, Bundler::direct(None))
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!((next.nonce, next.transaction), (6, big_tx("0x5afe03")));
+
+        // The batch records its submission and executes as one transaction.
+        storage
+            .record_submission(Submission {
+                block: Some(42),
+                nonce: 5,
+                fees: fees(100, 10),
+            })
+            .await
+            .unwrap();
+        assert_eq!(
+            storage.stale_submissions(Some(42)).await.unwrap()[0],
+            AllocatedTransaction {
+                max_fee_per_gas: Some(100),
+                max_priority_fee_per_gas: Some(10),
+                ..batch
+            }
+        );
+        storage
+            .mark_executed(Status {
+                nonce: 6,
+                block: 50,
+            })
+            .await
+            .unwrap();
+        assert_eq!(storage.count_in_flight().await.unwrap(), 1);
+    }
+
+    #[tokio::test]
+    async fn bundles_unexpired_unallocated_transactions_in_order() {
+        let storage = storage().await;
+        storage
+            .enqueue([
+                (tx("0x5afe01"), None),
+                (tx("0x5afe02"), Some(5)),
+                (tx("0x5afe03"), None),
+                (tx("0x5afe04"), Some(20)),
+            ])
+            .await
+            .unwrap();
+        storage
+            .next_transaction(Status { nonce: 0, block: 0 }, Bundler::direct(None))
+            .await
+            .unwrap()
+            .unwrap();
+
+        // At block 10, the first transaction is allocated and the second has
+        // expired, so the batch takes the remaining two, leaving nothing
+        // queued.
+        let status = || Status {
+            nonce: 0,
+            block: 10,
+        };
+        let batch = storage
+            .next_transaction(status(), Bundler::batched(ACCOUNT, u64::MAX, None))
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(batch.nonce, 1);
+        assert_eq!(
+            calls(&batch.transaction),
+            [tx("0x5afe03").data, tx("0x5afe04").data]
+        );
+        assert_eq!(
+            storage
+                .next_transaction(status(), Bundler::batched(ACCOUNT, u64::MAX, None))
+                .await
+                .unwrap(),
+            None
+        );
+    }
+
+    #[tokio::test]
+    async fn authorization_uses_up_the_next_nonce() {
+        let storage = storage().await;
+        storage
+            .enqueue([
+                (tx("0x5afe01"), None),
+                (tx("0x5afe02"), None),
+                (tx("0x5afe03"), None),
+            ])
+            .await
+            .unwrap();
+        let authorization = Authorization { address: EXECUTOR };
+
+        let allocated = storage
+            .next_transaction(
+                Status { nonce: 5, block: 0 },
+                Bundler::direct(Some(authorization)),
+            )
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(allocated.nonce, 5);
+        assert_eq!(allocated.authorization, Some(authorization));
+
+        // The authorization takes nonce 6, so the next transaction takes 7.
+        let next = storage
+            .next_transaction(Status { nonce: 5, block: 0 }, Bundler::direct(None))
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(next.nonce, 7);
+
+        // A nonce consumed outside the queue still wins.
+        let next = storage
+            .next_transaction(
+                Status {
+                    nonce: 10,
+                    block: 0,
+                },
+                Bundler::direct(None),
+            )
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(next.nonce, 10);
+
+        // Only the transaction that carries the authorization loads with it,
+        // and the authorization is not a transaction in flight.
+        let stale = storage.stale_submissions(None).await.unwrap();
+        assert_eq!(
+            stale
+                .iter()
+                .map(|transaction| (transaction.nonce, transaction.authorization))
+                .collect::<Vec<_>>(),
+            [(5, Some(authorization)), (7, None), (10, None)]
+        );
+        assert_eq!(storage.count_in_flight().await.unwrap(), 3);
+    }
+
+    #[tokio::test]
+    async fn prunes_a_nonce_with_its_authorization_and_transactions() {
+        let storage = storage().await;
+        storage
+            .enqueue([(tx("0x5afe01"), None), (tx("0x5afe02"), None)])
+            .await
+            .unwrap();
+        storage
+            .next_transaction(
+                Status { nonce: 0, block: 0 },
+                Bundler::batched(ACCOUNT, u64::MAX, Some(Authorization { address: EXECUTOR })),
+            )
+            .await
+            .unwrap()
+            .unwrap();
+
+        // The transaction and its authorization both execute, moving the
+        // account to nonce 2.
+        storage
+            .mark_executed(Status {
+                nonce: 2,
+                block: 10,
+            })
+            .await
+            .unwrap();
+        storage.prune(10).await.unwrap();
+        assert_eq!(storage.count_outstanding(10).await.unwrap(), 0);
+
+        // Neither nonce counts towards the next free one any more.
+        storage.enqueue([(tx("0x5afe03"), None)]).await.unwrap();
+        let next = storage
+            .next_transaction(
+                Status {
+                    nonce: 0,
+                    block: 10,
+                },
+                Bundler::direct(None),
+            )
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(next.nonce, 0);
     }
 }

@@ -39,6 +39,14 @@ impl Default for Transaction {
     }
 }
 
+/// An EIP-7702 delegation to authorize alongside a transaction.
+#[derive(Clone, Copy, Debug, Deserialize, PartialEq, Serialize)]
+pub struct Authorization {
+    /// The delegate the signer account authorizes, or `Address::ZERO` to
+    /// remove the account's delegation.
+    pub address: Address,
+}
+
 /// A [`Transaction`] with a nonce allocated for submission.
 ///
 /// It may contain fees from a previous submission.
@@ -50,6 +58,10 @@ pub struct AllocatedTransaction {
     /// The transaction.
     #[serde(flatten)]
     pub transaction: Transaction,
+    /// The EIP-7702 authorization carried by the transaction, which uses up
+    /// the nonce after `nonce`.
+    #[serde(default)]
+    pub authorization: Option<Authorization>,
     /// The maximum total fee per gas, set by the queue on submission.
     #[serde(default, with = "alloy::serde::quantity::opt")]
     pub max_fee_per_gas: Option<u128>,
@@ -62,6 +74,9 @@ impl AllocatedTransaction {
     /// Builds a concrete EIP-1559 transaction for signing, bumping `estimate`
     /// above any fees from a previous submission so that it replaces it.
     pub fn build(self, chain_id: u64, estimate: Eip1559Estimation) -> TxEip1559 {
+        if self.authorization.is_some() {
+            todo!("EIP-7702 transactions are not supported yet");
+        }
         let fees = fees::bump(estimate, self.fees());
         TxEip1559 {
             chain_id,

@@ -1,10 +1,10 @@
 //! Bundling queued transactions into the transaction sent at an allocated
 //! nonce.
 
-// The queue only bundles transactions once allocation is wired to it.
+// The queue only batches transactions once an executor is wired in.
 #![cfg_attr(not(test), expect(dead_code))]
 
-use crate::tx::types::{AllocatedTransaction, Transaction};
+use crate::tx::types::{AllocatedTransaction, Authorization, Transaction};
 use alloy::{
     primitives::{Address, U256},
     sol,
@@ -29,7 +29,10 @@ sol! {
 
 /// Bundles queued transactions, in order, into the transaction sent onchain at
 /// an allocated nonce.
-pub struct Bundler(Inner);
+pub struct Bundler {
+    inner: Inner,
+    authorization: Option<Authorization>,
+}
 
 enum Inner {
     Direct(Option<Transaction>),
@@ -70,34 +73,45 @@ const CALL_OVERHEAD_GAS: u64 = 5_000;
 const CALL_VALUE_GAS: u64 = 34_000;
 
 impl Bundler {
-    /// A bundler that sends a single queued transaction as is.
-    pub fn direct() -> Self {
-        Self(Inner::Direct(None))
+    /// A bundler that sends a single queued transaction as is, carrying
+    /// `authorization`.
+    pub fn direct(authorization: Option<Authorization>) -> Self {
+        Self {
+            inner: Inner::Direct(None),
+            authorization,
+        }
     }
 
     /// A bundler that sends queued transactions as one
     /// `ISafenet7702Executor.execute` self-call to `account`, the signer's own
-    /// address (not the executor's).
+    /// address (not the executor's), carrying `authorization`.
     ///
     /// Transactions are taken while the batch's estimated gas stays within
     /// `max_batch_gas`. The first transaction is always taken, even if it
     /// exceeds the limit on its own, so `0` sends every transaction as its own
     /// one-call batch.
-    pub fn batched(account: Address, max_batch_gas: u64) -> Self {
-        Self(Inner::Batched {
-            account,
-            max_batch_gas,
-            calls: Vec::new(),
-            gas: BATCH_GAS,
-            full: false,
-        })
+    pub fn batched(
+        account: Address,
+        max_batch_gas: u64,
+        authorization: Option<Authorization>,
+    ) -> Self {
+        Self {
+            inner: Inner::Batched {
+                account,
+                max_batch_gas,
+                calls: Vec::new(),
+                gas: BATCH_GAS,
+                full: false,
+            },
+            authorization,
+        }
     }
 
     /// Adds `transaction` to the bundle, returning whether it was added. Once
     /// it returns `false`, the bundle is full, and every later transaction is
     /// refused as well, so the bundle holds a prefix of the transactions pushed.
     pub fn push(&mut self, transaction: Transaction) -> bool {
-        match &mut self.0 {
+        match &mut self.inner {
             Inner::Direct(slot @ None) => {
                 *slot = Some(transaction);
                 true
@@ -130,7 +144,7 @@ impl Bundler {
     /// Finishes the bundle as the transaction allocated to `nonce`, or `None`
     /// if no transaction was added to it.
     pub fn finish(self, nonce: u64) -> Option<AllocatedTransaction> {
-        let transaction = match self.0 {
+        let transaction = match self.inner {
             Inner::Direct(transaction) => transaction?,
             Inner::Batched {
                 account,
@@ -154,6 +168,7 @@ impl Bundler {
         Some(AllocatedTransaction {
             nonce,
             transaction,
+            authorization: self.authorization,
             max_fee_per_gas: None,
             max_priority_fee_per_gas: None,
         })
@@ -233,26 +248,40 @@ mod tests {
 
     #[test]
     fn direct_sends_one_transaction_as_is() {
-        let mut bundler = Bundler::direct();
+        let mut bundler = Bundler::direct(None);
         assert!(bundler.push(tx("0x5afe01", 50_000)));
         assert!(!bundler.push(tx("0x5afe02", 50_000)));
 
         let allocated = bundler.finish(5).unwrap();
         assert_eq!(allocated.nonce, 5);
         assert_eq!(allocated.transaction, tx("0x5afe01", 50_000));
+        assert_eq!(allocated.authorization, None);
         assert_eq!(allocated.max_fee_per_gas, None);
         assert_eq!(allocated.max_priority_fee_per_gas, None);
     }
 
     #[test]
+    fn bundles_carry_their_authorization() {
+        let authorization = Authorization { address: TARGET };
+        for mut bundler in [
+            Bundler::direct(Some(authorization)),
+            Bundler::batched(ACCOUNT, 2_000_000, Some(authorization)),
+        ] {
+            assert!(bundler.push(tx("0x5afe01", 50_000)));
+            let allocated = bundler.finish(5).unwrap();
+            assert_eq!(allocated.authorization, Some(authorization));
+        }
+    }
+
+    #[test]
     fn empty_bundles_finish_as_none() {
-        assert_eq!(Bundler::direct().finish(0), None);
-        assert_eq!(Bundler::batched(ACCOUNT, 2_000_000).finish(0), None);
+        assert_eq!(Bundler::direct(None).finish(0), None);
+        assert_eq!(Bundler::batched(ACCOUNT, 2_000_000, None).finish(0), None);
     }
 
     #[test]
     fn batched_sends_a_single_transaction_through_the_executor() {
-        let mut bundler = Bundler::batched(ACCOUNT, 2_000_000);
+        let mut bundler = Bundler::batched(ACCOUNT, 2_000_000, None);
         assert!(bundler.push(tx("0x5afe01", 50_000)));
 
         let allocated = bundler.finish(5).unwrap();
@@ -282,7 +311,7 @@ mod tests {
         ];
 
         // The limit fits exactly two of the transactions.
-        let mut bundler = Bundler::batched(ACCOUNT, batch_gas(&transactions[..2]));
+        let mut bundler = Bundler::batched(ACCOUNT, batch_gas(&transactions[..2]), None);
         assert!(bundler.push(transactions[0].clone()));
         assert!(bundler.push(transactions[1].clone()));
         assert!(!bundler.push(transactions[2].clone()));
@@ -307,7 +336,7 @@ mod tests {
         // An oversized first transaction is a batch of one over the limit, and
         // a limit of 0 sends every transaction as its own batch.
         for max_batch_gas in [100_000, 0] {
-            let mut bundler = Bundler::batched(ACCOUNT, max_batch_gas);
+            let mut bundler = Bundler::batched(ACCOUNT, max_batch_gas, None);
             assert!(bundler.push(tx("0x5afe01", 1_000_000)));
             assert!(!bundler.push(tx("0x5afe02", 1_000)));
 
@@ -327,7 +356,7 @@ mod tests {
             tx("0x5afe", 50_000),
         ];
 
-        let mut bundler = Bundler::batched(ACCOUNT, 2_000_000);
+        let mut bundler = Bundler::batched(ACCOUNT, 2_000_000, None);
         for transaction in &transactions {
             assert!(bundler.push(transaction.clone()));
         }
