@@ -1,0 +1,7 @@
+rpc = "http://127.0.0.1:8545"
+bind_address = "127.0.0.1:5473"
+[engine]
+blocklist = []
+address_poisoning_lookback_blocks = 50000
+[observability]
+log_filter = "info"

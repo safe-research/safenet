@@ -1,0 +1,25 @@
+=== codebase-map Section 9 'Lines' column checked against wc -l (Rust files only) ===
+date: 2026-09-08T15:41:02+05:30  commit: 2893917757ae518ebb91154712cf3e401cb68d33
+
+--- R1 (map: 4,106) ---
+  4106 total
+--- R2 (map: 1,993) ---
+ 1998 total
+--- R3 (map: 1,540) ---
+ 1540 total
+--- R4 (map: 3,228) ---
+  3228 total
+--- R5 (map: 2,802) ---
+  2802 total
+--- R6 (map: 2,068; Rust only, excludes validator.sample.toml + Dockerfile) ---
+ 2068 total
+--- R7 (map: 3,348; Rust only) ---
+  3348 total
+--- R8 (map: 1,642; Rust only) ---
+ 1642 total
+--- R9 (map: 3,275) ---
+  3471 total
+
+--- sum of R1..R9 measured vs workspace .rs total (24203) ---
+  measured sum: 24203
+  map   sum:    24002  (delta vs measured: -201 )

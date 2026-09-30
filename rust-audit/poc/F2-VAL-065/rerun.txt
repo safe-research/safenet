@@ -1,0 +1,18 @@
+# F2_VAL_065_DIR=/tmp/claude-501/-home-shebin-guest-safe-safenet/166c992f-87ea-4548-be85-5fcf1c13bf90/scratchpad/fresh-vol is an existing, empty directory standing in for the handbook's fresh named volume
+# QA2-VAL-B re-run on commit fe9e84cc59b65367b31d5a3121774383cc422234 (crates/validator + crates/core byte-identical to audited 3ec8bc5)
+# PoC source pasted into the tracked file exactly as saved next to this file, run, then reverted with git checkout --
+
+$ env F2_VAL_065_DIR=/tmp/claude-501/-home-shebin-guest-safe-safenet/166c992f-87ea-4548-be85-5fcf1c13bf90/scratchpad/fresh-vol cargo test -p validator --bins secrets::store::tests::f2_val_065_sample_shaped_database_url_fails_on_a_fresh_volume -- --exact --nocapture
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.11s
+warning: the following packages contain code that will be rejected by a future version of Rust: proc-macro-error2 v2.0.1
+note: to see what the problems were, use the option `--future-incompat-report`, or run `cargo report future-incompatibilities --id 1`
+     Running unittests src/main.rs (/home/shebin.guest/.cache/safenet-run2/target/debug/deps/validator-3a1b46af57fe89be)
+
+running 1 test
+F2-VAL-065 sqlite:/tmp/claude-501/-home-shebin-guest-safe-safenet/166c992f-87ea-4548-be85-5fcf1c13bf90/scratchpad/fresh-vol/storage.db -> error returned from database: (code: 14) unable to open database file
+F2-VAL-065 sqlite:/tmp/claude-501/-home-shebin-guest-safe-safenet/166c992f-87ea-4548-be85-5fcf1c13bf90/scratchpad/fresh-vol/storage.db?mode=rwc -> ok
+test secrets::store::tests::f2_val_065_sample_shaped_database_url_fails_on_a_fresh_volume ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 52 filtered out; finished in 0.00s
+
+exit=0

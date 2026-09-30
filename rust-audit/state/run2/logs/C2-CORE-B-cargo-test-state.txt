@@ -1,0 +1,24 @@
+# C2-CORE-B — commit 92a0610
+# cargo test -p safenet-core --lib state::
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.28s
+warning: the following packages contain code that will be rejected by a future version of Rust: proc-macro-error2 v2.0.1
+note: to see what the problems were, use the option `--future-incompat-report`, or run `cargo report future-incompatibilities --id 1`
+     Running unittests src/lib.rs (/home/shebin.guest/.cache/safenet-run2/target/debug/deps/safenet_core-9a33466691bc8389)
+
+running 13 tests
+test state::storage::tests::current_is_none_when_empty ... ok
+test state::storage::tests::commit_replaces_an_existing_snapshot ... ok
+test state::storage::tests::commits_and_reads_back_the_tip ... ok
+test state::storage::tests::prune_retains_the_latest_snapshot ... ok
+test state::storage::tests::reorg_with_a_missing_parent_errors_and_leaves_the_store_unchanged ... ok
+test state::tests::applies_new_blocks_and_events ... ok
+test state::storage::tests::reorgs_a_block_and_re_applies ... ok
+test state::storage::tests::prunes_snapshots_below_the_safe_block ... ok
+test state::tests::reorg_rolls_back_to_the_common_ancestor ... ok
+test state::tests::resumes_from_the_committed_snapshot ... ok
+test state::tests::resume_updates_live_state_without_committing_a_snapshot ... ok
+test state::tests::restart_can_reorg_after_observing_an_uncommitted_block ... ok
+test state::tests::warps_and_prunes_intermediate_snapshots ... ok
+
+test result: ok. 13 passed; 0 failed; 0 ignored; 0 measured; 86 filtered out; finished in 0.01s
+

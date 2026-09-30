@@ -1,0 +1,737 @@
+# cmd: cargo tree --offline --locked -p <bin> -e features -i <crate> ; commit 3ec8bc5 
+
+=================== -p sentinel -e features -i reqwest (depth 3)
+reqwest v0.13.4
+├── alloy-provider v2.0.5
+│   ├── alloy v2.0.5
+│   │   ├── alloy feature "alloy-transport-ws"
+│   │   ├── alloy feature "consensus"
+│   │   ├── alloy feature "contract"
+│   │   ├── alloy feature "default"
+│   │   ├── alloy feature "dyn-abi"
+│   │   ├── alloy feature "eips"
+│   │   ├── alloy feature "essentials"
+│   │   ├── alloy feature "full"
+│   │   ├── alloy feature "json"
+│   │   ├── alloy feature "json-abi"
+│   │   ├── alloy feature "json-rpc"
+│   │   ├── alloy feature "k256"
+│   │   ├── alloy feature "kzg"
+│   │   ├── alloy feature "network"
+│   │   ├── alloy feature "provider-anvil-api"
+│   │   ├── alloy feature "provider-debug-api"
+│   │   ├── alloy feature "provider-http"
+│   │   ├── alloy feature "provider-ipc"
+│   │   ├── alloy feature "provider-trace-api"
+│   │   ├── alloy feature "provider-txpool-api"
+│   │   ├── alloy feature "provider-ws"
+│   │   ├── alloy feature "providers"
+│   │   ├── alloy feature "pubsub"
+│   │   ├── alloy feature "reqwest"
+│   │   ├── alloy feature "reqwest-rustls-tls"
+│   │   ├── alloy feature "rlp"
+│   │   ├── alloy feature "rpc"
+│   │   ├── alloy feature "rpc-client"
+│   │   ├── alloy feature "rpc-types"
+│   │   ├── alloy feature "rpc-types-anvil"
+│   │   ├── alloy feature "rpc-types-debug"
+│   │   ├── alloy feature "rpc-types-trace"
+│   │   ├── alloy feature "rpc-types-txpool"
+│   │   ├── alloy feature "serde"
+│   │   ├── alloy feature "signer-local"
+│   │   ├── alloy feature "signers"
+│   │   ├── alloy feature "sol-types"
+│   │   ├── alloy feature "std"
+│   │   ├── alloy feature "transport-http"
+│   │   ├── alloy feature "transport-ipc"
+│   │   ├── alloy feature "transport-ws"
+│   │   ├── alloy feature "transport-ws-base"
+│   │   └── alloy feature "transports"
+│   └── alloy-contract v2.0.5
+│       └── alloy v2.0.5 (*)
+│       └── alloy-contract feature "pubsub"
+│   ├── alloy-provider feature "alloy-transport-ipc"
+│   │   └── alloy-provider feature "ipc"
+│   ├── alloy-provider feature "alloy-transport-ws"
+│   │   └── alloy-provider feature "ws"
+│   ├── alloy-provider feature "anvil-api"
+│   │   ├── alloy feature "provider-anvil-api" (*)
+│   │   └── alloy feature "rpc-types-anvil" (*)
+│   ├── alloy-provider feature "debug-api"
+│   │   ├── alloy feature "provider-debug-api" (*)
+│   │   └── alloy feature "rpc-types-debug" (*)
+│   ├── alloy-provider feature "ipc" (*)
+│   ├── alloy-provider feature "pubsub"
+│   │   ├── alloy feature "pubsub" (*)
+│   │   ├── alloy-contract feature "pubsub" (*)
+│   │   ├── alloy-provider feature "ipc" (*)
+│   │   └── alloy-provider feature "ws-base"
+│   ├── alloy-provider feature "reqwest"
+│   │   ├── alloy feature "reqwest" (*)
+│   │   └── alloy feature "reqwest-rustls-tls" (*)
+│   ├── alloy-provider feature "trace-api"
+│   │   ├── alloy feature "provider-trace-api" (*)
+│   │   └── alloy feature "rpc-types-trace" (*)
+│   ├── alloy-provider feature "txpool-api"
+│   │   ├── alloy feature "provider-txpool-api" (*)
+│   │   └── alloy feature "rpc-types-txpool" (*)
+│   ├── alloy-provider feature "ws" (*)
+│   └── alloy-provider feature "ws-base" (*)
+└── alloy-rpc-client v2.0.5
+    ├── alloy v2.0.5 (*)
+    └── alloy-provider v2.0.5 (*)
+    ├── alloy-rpc-client feature "alloy-transport-http"
+
+=================== -p sentinel -e features -i hyper (depth 3)
+hyper v1.10.1
+└── hyper-rustls v0.27.9
+    ├── hyper-rustls feature "aws-lc-rs"
+    │   ├── reqwest feature "__rustls-aws-lc-rs"
+    │   └── metrics-exporter-prometheus feature "push-gateway"
+    ├── hyper-rustls feature "http1"
+    │   ├── metrics-exporter-prometheus v0.18.3
+    │   └── reqwest v0.13.4
+    ├── hyper-rustls feature "rustls-native-certs"
+    │   └── metrics-exporter-prometheus v0.18.3 (*)
+    └── hyper-rustls feature "tls12"
+        └── reqwest v0.13.4 (*)
+├── hyper feature "client"
+│   ├── metrics-exporter-prometheus v0.18.3 (*)
+│   └── reqwest v0.13.4 (*)
+│   ├── hyper-util feature "client"
+│   │   ├── metrics-exporter-prometheus v0.18.3 (*)
+│   │   └── reqwest v0.13.4 (*)
+│   │   ├── hyper-util feature "client-legacy"
+│   │   ├── hyper-util feature "client-proxy"
+│   │   └── metrics-exporter-prometheus feature "_hyper-client"
+│   └── metrics-exporter-prometheus feature "_hyper-client" (*)
+├── hyper feature "default"
+│   ├── hyper-util v0.1.20
+│   │   ├── hyper-util feature "client" (*)
+│   │   ├── hyper-util feature "client-legacy" (*)
+│   │   ├── hyper-util feature "client-proxy" (*)
+│   │   ├── hyper-util feature "default"
+│   │   ├── hyper-util feature "http1"
+│   │   ├── hyper-util feature "http2"
+│   │   ├── hyper-util feature "server"
+│   │   ├── hyper-util feature "server-auto"
+│   │   ├── hyper-util feature "service"
+│   │   └── hyper-util feature "tokio"
+│   └── reqwest v0.13.4 (*)
+├── hyper feature "http1"
+│   └── reqwest v0.13.4 (*)
+│   └── hyper-util feature "http1" (*)
+├── hyper feature "http2"
+│   └── hyper-util feature "http2" (*)
+└── hyper feature "server"
+    └── metrics-exporter-prometheus v0.18.3 (*)
+    ├── hyper-util feature "server" (*)
+    └── metrics-exporter-prometheus feature "_hyper-server"
+        └── metrics-exporter-prometheus feature "http-listener"
+
+=================== -p sentinel -e features -i h2 (depth 3)
+h2 v0.4.14
+└── h2 feature "default"
+    └── hyper v1.10.1
+        └── hyper-rustls v0.27.9
+        ├── hyper feature "client"
+        ├── hyper feature "default"
+        ├── hyper feature "http1"
+        ├── hyper feature "http2"
+        └── hyper feature "server"
+
+=================== -p sentinel -e features -i rustls (depth 3)
+rustls v0.23.40
+├── alloy-transport-ws v2.0.5
+│   ├── alloy v2.0.5
+│   │   ├── alloy feature "alloy-transport-ws"
+│   │   ├── alloy feature "consensus"
+│   │   ├── alloy feature "contract"
+│   │   ├── alloy feature "default"
+│   │   ├── alloy feature "dyn-abi"
+│   │   ├── alloy feature "eips"
+│   │   ├── alloy feature "essentials"
+│   │   ├── alloy feature "full"
+│   │   ├── alloy feature "json"
+│   │   ├── alloy feature "json-abi"
+│   │   ├── alloy feature "json-rpc"
+│   │   ├── alloy feature "k256"
+│   │   ├── alloy feature "kzg"
+│   │   ├── alloy feature "network"
+│   │   ├── alloy feature "provider-anvil-api"
+│   │   ├── alloy feature "provider-debug-api"
+│   │   ├── alloy feature "provider-http"
+│   │   ├── alloy feature "provider-ipc"
+│   │   ├── alloy feature "provider-trace-api"
+│   │   ├── alloy feature "provider-txpool-api"
+│   │   ├── alloy feature "provider-ws"
+│   │   ├── alloy feature "providers"
+│   │   ├── alloy feature "pubsub"
+│   │   ├── alloy feature "reqwest"
+│   │   ├── alloy feature "reqwest-rustls-tls"
+│   │   ├── alloy feature "rlp"
+│   │   ├── alloy feature "rpc"
+│   │   ├── alloy feature "rpc-client"
+│   │   ├── alloy feature "rpc-types"
+│   │   ├── alloy feature "rpc-types-anvil"
+│   │   ├── alloy feature "rpc-types-debug"
+│   │   ├── alloy feature "rpc-types-trace"
+│   │   ├── alloy feature "rpc-types-txpool"
+│   │   ├── alloy feature "serde"
+│   │   ├── alloy feature "signer-local"
+│   │   ├── alloy feature "signers"
+│   │   ├── alloy feature "sol-types"
+│   │   ├── alloy feature "std"
+│   │   ├── alloy feature "transport-http"
+│   │   ├── alloy feature "transport-ipc"
+│   │   ├── alloy feature "transport-ws"
+│   │   ├── alloy feature "transport-ws-base"
+│   │   └── alloy feature "transports"
+│   ├── alloy-provider v2.0.5
+│   │   ├── alloy v2.0.5 (*)
+│   │   └── alloy-contract v2.0.5
+│   │   ├── alloy-provider feature "alloy-transport-ipc"
+│   │   ├── alloy-provider feature "alloy-transport-ws"
+│   │   ├── alloy-provider feature "anvil-api"
+│   │   ├── alloy-provider feature "debug-api"
+│   │   ├── alloy-provider feature "ipc"
+│   │   ├── alloy-provider feature "pubsub"
+│   │   ├── alloy-provider feature "reqwest"
+│   │   ├── alloy-provider feature "trace-api"
+│   │   ├── alloy-provider feature "txpool-api"
+│   │   ├── alloy-provider feature "ws"
+│   │   └── alloy-provider feature "ws-base"
+│   └── alloy-rpc-client v2.0.5
+│       ├── alloy v2.0.5 (*)
+│       └── alloy-provider v2.0.5 (*)
+│       ├── alloy-rpc-client feature "alloy-transport-http"
+│       ├── alloy-rpc-client feature "alloy-transport-ws"
+│       ├── alloy-rpc-client feature "ipc"
+│       ├── alloy-rpc-client feature "pubsub"
+│       ├── alloy-rpc-client feature "reqwest"
+│       ├── alloy-rpc-client feature "ws"
+│       └── alloy-rpc-client feature "ws-base"
+│   ├── alloy-transport-ws feature "aws-lc-rs"
+│   │   ├── alloy feature "transport-ws" (*)
+│   │   ├── alloy-provider feature "ws" (*)
+│   │   └── alloy-rpc-client feature "ws" (*)
+│   └── alloy-transport-ws feature "rustls-tls"
+│       └── alloy-transport-ws feature "aws-lc-rs" (*)
+├── hyper-rustls v0.27.9
+│   ├── hyper-rustls feature "aws-lc-rs"
+│   │   ├── reqwest feature "__rustls-aws-lc-rs"
+│   │   └── metrics-exporter-prometheus feature "push-gateway"
+
+=================== -p sentinel -e features -i metrics-exporter-prometheus (depth 3)
+metrics-exporter-prometheus v0.18.3
+├── metrics-exporter-prometheus feature "_hyper-client"
+│   └── metrics-exporter-prometheus feature "_push-gateway-common"
+│       └── metrics-exporter-prometheus feature "push-gateway"
+├── metrics-exporter-prometheus feature "_hyper-server"
+│   └── metrics-exporter-prometheus feature "http-listener"
+│       └── metrics-exporter-prometheus feature "default"
+├── metrics-exporter-prometheus feature "_push-gateway-common" (*)
+├── metrics-exporter-prometheus feature "async-runtime"
+│   ├── metrics-exporter-prometheus feature "_push-gateway-common" (*)
+│   └── metrics-exporter-prometheus feature "http-listener" (*)
+├── metrics-exporter-prometheus feature "default" (*)
+├── metrics-exporter-prometheus feature "http-body-util"
+│   ├── metrics-exporter-prometheus feature "_hyper-client" (*)
+│   └── metrics-exporter-prometheus feature "_hyper-server" (*)
+├── metrics-exporter-prometheus feature "http-listener" (*)
+├── metrics-exporter-prometheus feature "hyper"
+│   ├── metrics-exporter-prometheus feature "_hyper-client" (*)
+│   └── metrics-exporter-prometheus feature "_hyper-server" (*)
+├── metrics-exporter-prometheus feature "hyper-rustls"
+│   ├── metrics-exporter-prometheus feature "_hyper-client" (*)
+│   └── metrics-exporter-prometheus feature "push-gateway" (*)
+├── metrics-exporter-prometheus feature "hyper-util"
+│   ├── metrics-exporter-prometheus feature "_hyper-client" (*)
+│   ├── metrics-exporter-prometheus feature "_hyper-server" (*)
+│   └── metrics-exporter-prometheus feature "async-runtime" (*)
+├── metrics-exporter-prometheus feature "ipnet"
+│   └── metrics-exporter-prometheus feature "http-listener" (*)
+├── metrics-exporter-prometheus feature "push-gateway" (*)
+├── metrics-exporter-prometheus feature "rustls"
+│   └── metrics-exporter-prometheus feature "_push-gateway-common" (*)
+├── metrics-exporter-prometheus feature "tokio"
+│   └── metrics-exporter-prometheus feature "async-runtime" (*)
+└── metrics-exporter-prometheus feature "tracing"
+    ├── metrics-exporter-prometheus feature "_push-gateway-common" (*)
+    └── metrics-exporter-prometheus feature "http-listener" (*)
+
+=================== -p sentinel -e features -i alloy (depth 3)
+alloy v2.0.5
+├── alloy feature "alloy-transport-ws"
+│   └── alloy feature "transport-ws"
+│       └── alloy feature "provider-ws"
+├── alloy feature "consensus"
+│   ├── alloy feature "full"
+│   │   ├── safenet-core v0.2.0 (/home/shebin.guest/safe/safenet/crates/core)
+│   │   └── sentinel v0.2.0 (/home/shebin.guest/safe/safenet/crates/sentinel)
+│   └── alloy feature "providers"
+│       ├── alloy feature "contract"
+│       ├── alloy feature "provider-anvil-api"
+│       ├── alloy feature "provider-debug-api"
+│       ├── alloy feature "provider-http"
+│       ├── alloy feature "provider-ipc"
+│       ├── alloy feature "provider-trace-api"
+│       ├── alloy feature "provider-txpool-api"
+│       └── alloy feature "provider-ws" (*)
+├── alloy feature "contract" (*)
+├── alloy feature "default"
+│   ├── safenet-core v0.2.0 (/home/shebin.guest/safe/safenet/crates/core) (*)
+│   └── sentinel v0.2.0 (/home/shebin.guest/safe/safenet/crates/sentinel) (*)
+├── alloy feature "dyn-abi"
+│   └── alloy feature "contract" (*)
+├── alloy feature "eips"
+│   ├── alloy feature "full" (*)
+│   └── alloy feature "providers" (*)
+├── alloy feature "essentials"
+│   ├── alloy feature "default" (*)
+│   └── alloy feature "full" (*)
+├── alloy feature "full" (*)
+├── alloy feature "json"
+│   └── alloy feature "contract" (*)
+├── alloy feature "json-abi"
+│   └── alloy feature "contract" (*)
+├── alloy feature "json-rpc"
+│   ├── safenet-core v0.2.0 (/home/shebin.guest/safe/safenet/crates/core) (*)
+│   └── sentinel v0.2.0 (/home/shebin.guest/safe/safenet/crates/sentinel) (*)
+├── alloy feature "k256"
+│   └── alloy feature "full" (*)
+├── alloy feature "kzg"
+│   └── alloy feature "full" (*)
+├── alloy feature "network"
+│   ├── alloy feature "full" (*)
+│   └── alloy feature "providers" (*)
+├── alloy feature "provider-anvil-api" (*)
+├── alloy feature "provider-debug-api" (*)
+├── alloy feature "provider-http" (*)
+├── alloy feature "provider-ipc" (*)
+├── alloy feature "provider-trace-api" (*)
+├── alloy feature "provider-txpool-api" (*)
+├── alloy feature "provider-ws" (*)
+├── alloy feature "providers" (*)
+├── alloy feature "pubsub"
+│   ├── alloy feature "full" (*)
+│   ├── alloy feature "transport-ipc"
+│   │   └── alloy feature "provider-ipc" (*)
+│   └── alloy feature "transport-ws-base"
+│       └── alloy feature "transport-ws" (*)
+├── alloy feature "reqwest"
+│   └── alloy feature "default" (*)
+├── alloy feature "reqwest-rustls-tls"
+│   └── alloy feature "default" (*)
+├── alloy feature "rlp"
+│   ├── alloy feature "consensus" (*)
+│   ├── alloy feature "eips" (*)
+│   └── alloy feature "full" (*)
+├── alloy feature "rpc"
+│   ├── alloy feature "json-rpc" (*)
+│   ├── alloy feature "rpc-client"
+│   │   └── alloy feature "providers" (*)
+│   └── alloy feature "rpc-types"
+│       ├── alloy feature "essentials" (*)
+│       ├── alloy feature "rpc-types-anvil"
+│       ├── alloy feature "rpc-types-debug"
+│       ├── alloy feature "rpc-types-trace"
+│       └── alloy feature "rpc-types-txpool"
+├── alloy feature "rpc-client" (*)
+├── alloy feature "rpc-types" (*)
+├── alloy feature "rpc-types-anvil" (*)
+├── alloy feature "rpc-types-debug" (*)
+
+=================== -p validator -e features -i reqwest (depth 3)
+reqwest v0.13.4
+├── alloy-provider v2.0.5
+│   ├── alloy v2.0.5
+│   │   ├── alloy feature "alloy-transport-ws"
+│   │   ├── alloy feature "consensus"
+│   │   ├── alloy feature "contract"
+│   │   ├── alloy feature "default"
+│   │   ├── alloy feature "dyn-abi"
+│   │   ├── alloy feature "eips"
+│   │   ├── alloy feature "essentials"
+│   │   ├── alloy feature "full"
+│   │   ├── alloy feature "json"
+│   │   ├── alloy feature "json-abi"
+│   │   ├── alloy feature "json-rpc"
+│   │   ├── alloy feature "k256"
+│   │   ├── alloy feature "kzg"
+│   │   ├── alloy feature "network"
+│   │   ├── alloy feature "provider-anvil-api"
+│   │   ├── alloy feature "provider-debug-api"
+│   │   ├── alloy feature "provider-http"
+│   │   ├── alloy feature "provider-ipc"
+│   │   ├── alloy feature "provider-trace-api"
+│   │   ├── alloy feature "provider-txpool-api"
+│   │   ├── alloy feature "provider-ws"
+│   │   ├── alloy feature "providers"
+│   │   ├── alloy feature "pubsub"
+│   │   ├── alloy feature "reqwest"
+│   │   ├── alloy feature "reqwest-rustls-tls"
+│   │   ├── alloy feature "rlp"
+│   │   ├── alloy feature "rpc"
+│   │   ├── alloy feature "rpc-client"
+│   │   ├── alloy feature "rpc-types"
+│   │   ├── alloy feature "rpc-types-anvil"
+│   │   ├── alloy feature "rpc-types-debug"
+│   │   ├── alloy feature "rpc-types-trace"
+│   │   ├── alloy feature "rpc-types-txpool"
+│   │   ├── alloy feature "serde"
+│   │   ├── alloy feature "signer-local"
+│   │   ├── alloy feature "signers"
+│   │   ├── alloy feature "sol-types"
+│   │   ├── alloy feature "std"
+│   │   ├── alloy feature "transport-http"
+│   │   ├── alloy feature "transport-ipc"
+│   │   ├── alloy feature "transport-ws"
+│   │   ├── alloy feature "transport-ws-base"
+│   │   └── alloy feature "transports"
+│   └── alloy-contract v2.0.5
+│       └── alloy v2.0.5 (*)
+│       └── alloy-contract feature "pubsub"
+│   ├── alloy-provider feature "alloy-transport-ipc"
+│   │   └── alloy-provider feature "ipc"
+│   ├── alloy-provider feature "alloy-transport-ws"
+│   │   └── alloy-provider feature "ws"
+│   ├── alloy-provider feature "anvil-api"
+│   │   ├── alloy feature "provider-anvil-api" (*)
+│   │   └── alloy feature "rpc-types-anvil" (*)
+│   ├── alloy-provider feature "debug-api"
+│   │   ├── alloy feature "provider-debug-api" (*)
+│   │   └── alloy feature "rpc-types-debug" (*)
+│   ├── alloy-provider feature "ipc" (*)
+│   ├── alloy-provider feature "pubsub"
+│   │   ├── alloy feature "pubsub" (*)
+│   │   ├── alloy-contract feature "pubsub" (*)
+│   │   ├── alloy-provider feature "ipc" (*)
+│   │   └── alloy-provider feature "ws-base"
+│   ├── alloy-provider feature "reqwest"
+│   │   ├── alloy feature "reqwest" (*)
+│   │   └── alloy feature "reqwest-rustls-tls" (*)
+│   ├── alloy-provider feature "trace-api"
+│   │   ├── alloy feature "provider-trace-api" (*)
+│   │   └── alloy feature "rpc-types-trace" (*)
+│   ├── alloy-provider feature "txpool-api"
+│   │   ├── alloy feature "provider-txpool-api" (*)
+│   │   └── alloy feature "rpc-types-txpool" (*)
+│   ├── alloy-provider feature "ws" (*)
+│   └── alloy-provider feature "ws-base" (*)
+└── alloy-rpc-client v2.0.5
+    ├── alloy v2.0.5 (*)
+    └── alloy-provider v2.0.5 (*)
+    ├── alloy-rpc-client feature "alloy-transport-http"
+
+=================== -p validator -e features -i hyper (depth 3)
+hyper v1.10.1
+└── hyper-rustls v0.27.9
+    ├── hyper-rustls feature "aws-lc-rs"
+    │   ├── reqwest feature "__rustls-aws-lc-rs"
+    │   └── metrics-exporter-prometheus feature "push-gateway"
+    ├── hyper-rustls feature "http1"
+    │   ├── metrics-exporter-prometheus v0.18.3
+    │   └── reqwest v0.13.4
+    ├── hyper-rustls feature "rustls-native-certs"
+    │   └── metrics-exporter-prometheus v0.18.3 (*)
+    └── hyper-rustls feature "tls12"
+        └── reqwest v0.13.4 (*)
+├── hyper feature "client"
+│   ├── metrics-exporter-prometheus v0.18.3 (*)
+│   └── reqwest v0.13.4 (*)
+│   ├── hyper-util feature "client"
+│   │   ├── metrics-exporter-prometheus v0.18.3 (*)
+│   │   └── reqwest v0.13.4 (*)
+│   │   ├── hyper-util feature "client-legacy"
+│   │   ├── hyper-util feature "client-proxy"
+│   │   └── metrics-exporter-prometheus feature "_hyper-client"
+│   └── metrics-exporter-prometheus feature "_hyper-client" (*)
+├── hyper feature "default"
+│   ├── hyper-util v0.1.20
+│   │   ├── hyper-util feature "client" (*)
+│   │   ├── hyper-util feature "client-legacy" (*)
+│   │   ├── hyper-util feature "client-proxy" (*)
+│   │   ├── hyper-util feature "default"
+│   │   ├── hyper-util feature "http1"
+│   │   ├── hyper-util feature "http2"
+│   │   ├── hyper-util feature "server"
+│   │   ├── hyper-util feature "server-auto"
+│   │   ├── hyper-util feature "service"
+│   │   └── hyper-util feature "tokio"
+│   └── reqwest v0.13.4 (*)
+├── hyper feature "http1"
+│   └── reqwest v0.13.4 (*)
+│   └── hyper-util feature "http1" (*)
+├── hyper feature "http2"
+│   └── hyper-util feature "http2" (*)
+└── hyper feature "server"
+    └── metrics-exporter-prometheus v0.18.3 (*)
+    ├── hyper-util feature "server" (*)
+    └── metrics-exporter-prometheus feature "_hyper-server"
+        └── metrics-exporter-prometheus feature "http-listener"
+
+=================== -p validator -e features -i h2 (depth 3)
+h2 v0.4.14
+└── h2 feature "default"
+    └── hyper v1.10.1
+        └── hyper-rustls v0.27.9
+        ├── hyper feature "client"
+        ├── hyper feature "default"
+        ├── hyper feature "http1"
+        ├── hyper feature "http2"
+        └── hyper feature "server"
+
+=================== -p validator -e features -i rustls (depth 3)
+rustls v0.23.40
+├── alloy-transport-ws v2.0.5
+│   ├── alloy v2.0.5
+│   │   ├── alloy feature "alloy-transport-ws"
+│   │   ├── alloy feature "consensus"
+│   │   ├── alloy feature "contract"
+│   │   ├── alloy feature "default"
+│   │   ├── alloy feature "dyn-abi"
+│   │   ├── alloy feature "eips"
+│   │   ├── alloy feature "essentials"
+│   │   ├── alloy feature "full"
+│   │   ├── alloy feature "json"
+│   │   ├── alloy feature "json-abi"
+│   │   ├── alloy feature "json-rpc"
+│   │   ├── alloy feature "k256"
+│   │   ├── alloy feature "kzg"
+│   │   ├── alloy feature "network"
+│   │   ├── alloy feature "provider-anvil-api"
+│   │   ├── alloy feature "provider-debug-api"
+│   │   ├── alloy feature "provider-http"
+│   │   ├── alloy feature "provider-ipc"
+│   │   ├── alloy feature "provider-trace-api"
+│   │   ├── alloy feature "provider-txpool-api"
+│   │   ├── alloy feature "provider-ws"
+│   │   ├── alloy feature "providers"
+│   │   ├── alloy feature "pubsub"
+│   │   ├── alloy feature "reqwest"
+│   │   ├── alloy feature "reqwest-rustls-tls"
+│   │   ├── alloy feature "rlp"
+│   │   ├── alloy feature "rpc"
+│   │   ├── alloy feature "rpc-client"
+│   │   ├── alloy feature "rpc-types"
+│   │   ├── alloy feature "rpc-types-anvil"
+│   │   ├── alloy feature "rpc-types-debug"
+│   │   ├── alloy feature "rpc-types-trace"
+│   │   ├── alloy feature "rpc-types-txpool"
+│   │   ├── alloy feature "serde"
+│   │   ├── alloy feature "signer-local"
+│   │   ├── alloy feature "signers"
+│   │   ├── alloy feature "sol-types"
+│   │   ├── alloy feature "std"
+│   │   ├── alloy feature "transport-http"
+│   │   ├── alloy feature "transport-ipc"
+│   │   ├── alloy feature "transport-ws"
+│   │   ├── alloy feature "transport-ws-base"
+│   │   └── alloy feature "transports"
+│   ├── alloy-provider v2.0.5
+│   │   ├── alloy v2.0.5 (*)
+│   │   └── alloy-contract v2.0.5
+│   │   ├── alloy-provider feature "alloy-transport-ipc"
+│   │   ├── alloy-provider feature "alloy-transport-ws"
+│   │   ├── alloy-provider feature "anvil-api"
+│   │   ├── alloy-provider feature "debug-api"
+│   │   ├── alloy-provider feature "ipc"
+│   │   ├── alloy-provider feature "pubsub"
+│   │   ├── alloy-provider feature "reqwest"
+│   │   ├── alloy-provider feature "trace-api"
+│   │   ├── alloy-provider feature "txpool-api"
+│   │   ├── alloy-provider feature "ws"
+│   │   └── alloy-provider feature "ws-base"
+│   └── alloy-rpc-client v2.0.5
+│       ├── alloy v2.0.5 (*)
+│       └── alloy-provider v2.0.5 (*)
+│       ├── alloy-rpc-client feature "alloy-transport-http"
+│       ├── alloy-rpc-client feature "alloy-transport-ws"
+│       ├── alloy-rpc-client feature "ipc"
+│       ├── alloy-rpc-client feature "pubsub"
+│       ├── alloy-rpc-client feature "reqwest"
+│       ├── alloy-rpc-client feature "ws"
+│       └── alloy-rpc-client feature "ws-base"
+│   ├── alloy-transport-ws feature "aws-lc-rs"
+│   │   ├── alloy feature "transport-ws" (*)
+│   │   ├── alloy-provider feature "ws" (*)
+│   │   └── alloy-rpc-client feature "ws" (*)
+│   └── alloy-transport-ws feature "rustls-tls"
+│       └── alloy-transport-ws feature "aws-lc-rs" (*)
+├── hyper-rustls v0.27.9
+│   ├── hyper-rustls feature "aws-lc-rs"
+│   │   ├── reqwest feature "__rustls-aws-lc-rs"
+│   │   └── metrics-exporter-prometheus feature "push-gateway"
+
+=================== -p validator -e features -i metrics-exporter-prometheus (depth 3)
+metrics-exporter-prometheus v0.18.3
+├── metrics-exporter-prometheus feature "_hyper-client"
+│   └── metrics-exporter-prometheus feature "_push-gateway-common"
+│       └── metrics-exporter-prometheus feature "push-gateway"
+├── metrics-exporter-prometheus feature "_hyper-server"
+│   └── metrics-exporter-prometheus feature "http-listener"
+│       └── metrics-exporter-prometheus feature "default"
+├── metrics-exporter-prometheus feature "_push-gateway-common" (*)
+├── metrics-exporter-prometheus feature "async-runtime"
+│   ├── metrics-exporter-prometheus feature "_push-gateway-common" (*)
+│   └── metrics-exporter-prometheus feature "http-listener" (*)
+├── metrics-exporter-prometheus feature "default" (*)
+├── metrics-exporter-prometheus feature "http-body-util"
+│   ├── metrics-exporter-prometheus feature "_hyper-client" (*)
+│   └── metrics-exporter-prometheus feature "_hyper-server" (*)
+├── metrics-exporter-prometheus feature "http-listener" (*)
+├── metrics-exporter-prometheus feature "hyper"
+│   ├── metrics-exporter-prometheus feature "_hyper-client" (*)
+│   └── metrics-exporter-prometheus feature "_hyper-server" (*)
+├── metrics-exporter-prometheus feature "hyper-rustls"
+│   ├── metrics-exporter-prometheus feature "_hyper-client" (*)
+│   └── metrics-exporter-prometheus feature "push-gateway" (*)
+├── metrics-exporter-prometheus feature "hyper-util"
+│   ├── metrics-exporter-prometheus feature "_hyper-client" (*)
+│   ├── metrics-exporter-prometheus feature "_hyper-server" (*)
+│   └── metrics-exporter-prometheus feature "async-runtime" (*)
+├── metrics-exporter-prometheus feature "ipnet"
+│   └── metrics-exporter-prometheus feature "http-listener" (*)
+├── metrics-exporter-prometheus feature "push-gateway" (*)
+├── metrics-exporter-prometheus feature "rustls"
+│   └── metrics-exporter-prometheus feature "_push-gateway-common" (*)
+├── metrics-exporter-prometheus feature "tokio"
+│   └── metrics-exporter-prometheus feature "async-runtime" (*)
+└── metrics-exporter-prometheus feature "tracing"
+    ├── metrics-exporter-prometheus feature "_push-gateway-common" (*)
+    └── metrics-exporter-prometheus feature "http-listener" (*)
+
+=================== -p validator -e features -i alloy (depth 3)
+alloy v2.0.5
+├── alloy feature "alloy-transport-ws"
+│   └── alloy feature "transport-ws"
+│       └── alloy feature "provider-ws"
+├── alloy feature "consensus"
+│   ├── alloy feature "full"
+│   │   ├── safenet-core v0.2.0 (/home/shebin.guest/safe/safenet/crates/core)
+│   │   └── validator v0.2.0 (/home/shebin.guest/safe/safenet/crates/validator)
+│   └── alloy feature "providers"
+│       ├── alloy feature "contract"
+│       ├── alloy feature "provider-anvil-api"
+│       ├── alloy feature "provider-debug-api"
+│       ├── alloy feature "provider-http"
+│       ├── alloy feature "provider-ipc"
+│       ├── alloy feature "provider-trace-api"
+│       ├── alloy feature "provider-txpool-api"
+│       └── alloy feature "provider-ws" (*)
+├── alloy feature "contract" (*)
+├── alloy feature "default"
+│   ├── safenet-core v0.2.0 (/home/shebin.guest/safe/safenet/crates/core) (*)
+│   └── validator v0.2.0 (/home/shebin.guest/safe/safenet/crates/validator) (*)
+├── alloy feature "dyn-abi"
+│   └── alloy feature "contract" (*)
+├── alloy feature "eips"
+│   ├── alloy feature "full" (*)
+│   └── alloy feature "providers" (*)
+├── alloy feature "essentials"
+│   ├── alloy feature "default" (*)
+│   └── alloy feature "full" (*)
+├── alloy feature "full" (*)
+├── alloy feature "json"
+│   └── alloy feature "contract" (*)
+├── alloy feature "json-abi"
+│   └── alloy feature "contract" (*)
+├── alloy feature "json-rpc"
+│   ├── safenet-core v0.2.0 (/home/shebin.guest/safe/safenet/crates/core) (*)
+│   └── validator v0.2.0 (/home/shebin.guest/safe/safenet/crates/validator) (*)
+├── alloy feature "k256"
+│   └── alloy feature "full" (*)
+├── alloy feature "kzg"
+│   └── alloy feature "full" (*)
+├── alloy feature "network"
+│   ├── alloy feature "full" (*)
+│   └── alloy feature "providers" (*)
+├── alloy feature "provider-anvil-api" (*)
+├── alloy feature "provider-debug-api" (*)
+├── alloy feature "provider-http" (*)
+├── alloy feature "provider-ipc" (*)
+├── alloy feature "provider-trace-api" (*)
+├── alloy feature "provider-txpool-api" (*)
+├── alloy feature "provider-ws" (*)
+├── alloy feature "providers" (*)
+├── alloy feature "pubsub"
+│   ├── alloy feature "full" (*)
+│   ├── alloy feature "transport-ipc"
+│   │   └── alloy feature "provider-ipc" (*)
+│   └── alloy feature "transport-ws-base"
+│       └── alloy feature "transport-ws" (*)
+├── alloy feature "reqwest"
+│   └── alloy feature "default" (*)
+├── alloy feature "reqwest-rustls-tls"
+│   └── alloy feature "default" (*)
+├── alloy feature "rlp"
+│   ├── alloy feature "consensus" (*)
+│   ├── alloy feature "eips" (*)
+│   └── alloy feature "full" (*)
+├── alloy feature "rpc"
+│   ├── alloy feature "json-rpc" (*)
+│   ├── alloy feature "rpc-client"
+│   │   └── alloy feature "providers" (*)
+│   └── alloy feature "rpc-types"
+│       ├── alloy feature "essentials" (*)
+│       ├── alloy feature "rpc-types-anvil"
+│       ├── alloy feature "rpc-types-debug"
+│       ├── alloy feature "rpc-types-trace"
+│       └── alloy feature "rpc-types-txpool"
+├── alloy feature "rpc-client" (*)
+├── alloy feature "rpc-types" (*)
+├── alloy feature "rpc-types-anvil" (*)
+├── alloy feature "rpc-types-debug" (*)
+
+=================== -p sentinel -e features --depth 1 (direct feature edges)
+sentinel v0.2.0 (/home/shebin.guest/safe/safenet/crates/sentinel)
+├── alloy feature "default"
+├── alloy feature "full"
+├── alloy feature "json-rpc"
+├── serde feature "default"
+├── serde feature "derive"
+├── thiserror feature "default"
+├── serde_json feature "default"
+├── tracing feature "default"
+├── tokio feature "default"
+├── tokio feature "full"
+├── url feature "default"
+├── url feature "serde"
+├── reqwest feature "json"
+├── reqwest feature "rustls"
+├── argh feature "default"
+├── metrics feature "default"
+├── safenet-core feature "default"
+├── sqlx feature "default"
+├── sqlx feature "runtime-tokio"
+├── sqlx feature "sqlite"
+└── toml feature "default"
+[dev-dependencies]
+├── tokio feature "default" (*)
+├── tokio feature "full" (*)
+├── tokio feature "test-util"
+├── safenet-core feature "default" (*)
+└── safenet-core feature "test-util"
+
+=================== appended: cargo tree --offline --locked -p sentinel -e features -i reqwest --depth 1
+reqwest v0.13.4
+├── alloy-provider v2.0.5
+└── alloy-rpc-client v2.0.5
+├── reqwest feature "__rustls"
+├── reqwest feature "__rustls-aws-lc-rs"
+├── reqwest feature "__tls"
+├── reqwest feature "json"
+└── reqwest feature "rustls"
+
+=================== cargo tree --offline --locked -p validator -e features -i reqwest --depth 1
+reqwest v0.13.4
+├── alloy-provider v2.0.5
+└── alloy-rpc-client v2.0.5
+├── reqwest feature "__rustls"
+├── reqwest feature "__rustls-aws-lc-rs"
+├── reqwest feature "__tls"
+├── reqwest feature "json"
+└── reqwest feature "rustls"
+
+# reqwest 0.13.4 Cargo.toml: default = [default-tls, charset, http2, system-proxy]; system-proxy = [hyper-util/client-proxy-system]. None of these appear above: the workspace (Cargo.toml:15) and alloy declare default-features = false.

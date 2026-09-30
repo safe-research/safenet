@@ -1,0 +1,134 @@
+Cargo.lock: /home/shebin.guest/safe/safenet/Cargo.lock
+lockfile format: version = 4
+total [[package]] entries: 573 ; distinct package names: 516
+
+=== A. Pinned versions of the requested packages (from Cargo.lock) ===
+PACKAGE              VERSION(S) IN LOCK           SOURCE
+frost-core           3.0.0                        crates.io
+frost-secp256k1      3.0.0                        crates.io
+k256                 0.13.4                       crates.io
+sha2                 0.10.9                       crates.io
+sha2                 0.11.0                       crates.io
+hkdf                 0.13.0                       crates.io
+alloy                2.0.5                        crates.io
+sqlx                 0.9.0                        crates.io
+axum                 0.8.9                        crates.io
+reqwest              0.13.4                       crates.io
+rand                 0.10.1                       crates.io
+rand                 0.8.6                        crates.io
+rand                 0.9.4                        crates.io
+rand_chacha          0.3.1                        crates.io
+rand_chacha          0.9.0                        crates.io
+tokio                1.52.3                       crates.io
+tracing-subscriber   0.3.23                       crates.io
+toml                 1.1.2+spec-1.1.0             crates.io
+argh                 0.1.19                       crates.io
+
+=== B. Packages present at 2+ DIFFERENT MAJOR version numbers (strict: first component differs) ===
+Method: split Cargo.lock on '[[package]]', take name/version, group by name, compare int(version.split('.')[0]).
+  indexmap                 1.9.3, 2.14.0
+  r-efi                    5.3.0, 6.0.0
+  schemars                 0.9.0, 1.2.1
+  semver                   0.11.0, 1.0.28
+  syn                      1.0.109, 2.0.117
+  webpki-roots             0.26.11, 1.0.7
+  count: 6
+
+=== C. Packages present at 2+ SEMVER-INCOMPATIBLE versions (cargo's rule: 0.x treated as its own major) ===
+Method: same parse; compat key = major if major>0 else '0.<minor>'.
+  ark-ff                   0.3.0, 0.4.2, 0.5.0
+  ark-ff-asm               0.3.0, 0.4.2, 0.5.0
+  ark-ff-macros            0.3.0, 0.4.2, 0.5.0
+  ark-serialize            0.3.0, 0.4.2, 0.5.0
+  ark-std                  0.3.0, 0.4.0, 0.5.0
+  block-buffer             0.10.4, 0.12.0
+  const-oid                0.10.2, 0.9.6
+  cpufeatures              0.2.17, 0.3.0
+  crypto-common            0.1.6, 0.2.2
+  digest                   0.10.7, 0.11.3, 0.9.0
+  embedded-io              0.4.0, 0.6.1
+  fastrlp                  0.3.1, 0.4.0
+  foldhash                 0.1.5, 0.2.0
+  getrandom                0.2.17, 0.3.4, 0.4.2
+  hashbrown                0.12.3, 0.14.5, 0.15.5, 0.16.1, 0.17.1
+  hmac                     0.12.1, 0.13.0
+  indexmap                 1.9.3, 2.14.0
+  itertools                0.10.5, 0.13.0, 0.14.0
+  r-efi                    5.3.0, 6.0.0
+  rand                     0.10.1, 0.8.6, 0.9.4
+  rand_chacha              0.3.1, 0.9.0
+  rand_core                0.10.1, 0.6.4, 0.9.5
+  rustc_version            0.3.3, 0.4.1
+  schemars                 0.9.0, 1.2.1
+  secp256k1                0.30.0, 0.31.1
+  secp256k1-sys            0.10.1, 0.11.0
+  semver                   0.11.0, 1.0.28
+  sha1                     0.10.6, 0.11.0
+  sha2                     0.10.9, 0.11.0
+  syn                      1.0.109, 2.0.117
+  tower-http               0.6.11, 0.7.0
+  webpki-roots             0.26.11, 1.0.7
+  windows-sys              0.52.0, 0.60.2, 0.61.2
+  windows-targets          0.52.6, 0.53.5
+  windows_aarch64_gnullvm  0.52.6, 0.53.1
+  windows_aarch64_msvc     0.52.6, 0.53.1
+  windows_i686_gnu         0.52.6, 0.53.1
+  windows_i686_gnullvm     0.52.6, 0.53.1
+  windows_i686_msvc        0.52.6, 0.53.1
+  windows_x86_64_gnu       0.52.6, 0.53.1
+  windows_x86_64_gnullvm   0.52.6, 0.53.1
+  windows_x86_64_msvc      0.52.6, 0.53.1
+  wit-bindgen              0.51.0, 0.57.1
+  count: 43
+
+=== D. Any package name appearing more than once at all (incl. same-major) ===
+  ark-ff                   0.3.0, 0.4.2, 0.5.0
+  ark-ff-asm               0.3.0, 0.4.2, 0.5.0
+  ark-ff-macros            0.3.0, 0.4.2, 0.5.0
+  ark-serialize            0.3.0, 0.4.2, 0.5.0
+  ark-std                  0.3.0, 0.4.0, 0.5.0
+  block-buffer             0.10.4, 0.12.0
+  const-oid                0.10.2, 0.9.6
+  cpufeatures              0.2.17, 0.3.0
+  crypto-common            0.1.6, 0.2.2
+  digest                   0.10.7, 0.11.3, 0.9.0
+  embedded-io              0.4.0, 0.6.1
+  fastrlp                  0.3.1, 0.4.0
+  foldhash                 0.1.5, 0.2.0
+  getrandom                0.2.17, 0.3.4, 0.4.2
+  hashbrown                0.12.3, 0.14.5, 0.15.5, 0.16.1, 0.17.1
+  hmac                     0.12.1, 0.13.0
+  indexmap                 1.9.3, 2.14.0
+  itertools                0.10.5, 0.13.0, 0.14.0
+  r-efi                    5.3.0, 6.0.0
+  rand                     0.10.1, 0.8.6, 0.9.4
+  rand_chacha              0.3.1, 0.9.0
+  rand_core                0.10.1, 0.6.4, 0.9.5
+  rustc_version            0.3.3, 0.4.1
+  schemars                 0.9.0, 1.2.1
+  secp256k1                0.30.0, 0.31.1
+  secp256k1-sys            0.10.1, 0.11.0
+  semver                   0.11.0, 1.0.28
+  sha1                     0.10.6, 0.11.0
+  sha2                     0.10.9, 0.11.0
+  syn                      1.0.109, 2.0.117
+  tower-http               0.6.11, 0.7.0
+  webpki-roots             0.26.11, 1.0.7
+  windows-sys              0.52.0, 0.60.2, 0.61.2
+  windows-targets          0.52.6, 0.53.5
+  windows_aarch64_gnullvm  0.52.6, 0.53.1
+  windows_aarch64_msvc     0.52.6, 0.53.1
+  windows_i686_gnu         0.52.6, 0.53.1
+  windows_i686_gnullvm     0.52.6, 0.53.1
+  windows_i686_msvc        0.52.6, 0.53.1
+  windows_x86_64_gnu       0.52.6, 0.53.1
+  windows_x86_64_gnullvm   0.52.6, 0.53.1
+  windows_x86_64_msvc      0.52.6, 0.53.1
+  wit-bindgen              0.51.0, 0.57.1
+  count: 43
+
+=== E. Workspace member entries in the lock (no source = local path) ===
+  safenet-core         0.2.0
+  sentinel             0.2.0
+  sentinel-engine      0.2.0
+  validator            0.2.0

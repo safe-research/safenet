@@ -1,0 +1,21 @@
+running 2 tests
+test service::tests::poc_f_sen_001_replayed_own_commit_is_discarded_so_no_reveal_is_emitted ... FAILED
+test service::tests::poc_f_sen_001_warp_page_applies_the_commit_before_the_effect_is_spawned ... ok
+
+failures:
+
+---- service::tests::poc_f_sen_001_replayed_own_commit_is_discarded_so_no_reveal_is_emitted stdout ----
+
+thread 'service::tests::poc_f_sen_001_replayed_own_commit_is_discarded_so_no_reveal_is_emitted' (81221) panicked at crates/sentinel/src/service.rs:2009:5:
+assertion `left == right` failed: no Reveal was emitted for a commitment that is live onchain — the `!self_committed` branch at service.rs:415-417 dropped the request, so slashAmount (500) is lost and the remainder is never claimed
+  left: []
+ right: [Action(SentinelAction { kind: Reveal { id: 0x23d490d080446171493a1d2ae6a02ac79b3ea4f676668bb2abc7515f5225538d, approve: true, salt: 0x261eb185891d438bbfe68d2874d756c532288f5b4d45692135cd5fc33e0d398d, reason: "" }, expires_at: Some(40) })]
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    service::tests::poc_f_sen_001_replayed_own_commit_is_discarded_so_no_reveal_is_emitted
+
+test result: FAILED. 1 passed; 1 failed; 0 ignored; 0 measured; 41 filtered out; finished in 0.02s
+
+error: test failed, to rerun pass `-p sentinel --bin sentinel`

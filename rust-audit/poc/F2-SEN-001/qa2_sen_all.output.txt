@@ -1,0 +1,106 @@
+Command: cargo test -p sentinel --bins qa2_sen -- --nocapture --test-threads=1
+
+   Compiling sentinel v0.2.0 (/home/shebin.guest/safe/safenet/crates/sentinel)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 4.70s
+warning: the following packages contain code that will be rejected by a future version of Rust: proc-macro-error2 v2.0.1
+note: to see what the problems were, use the option `--future-incompat-report`, or run `cargo report future-incompatibilities --id 1`
+     Running unittests src/main.rs (/home/shebin.guest/.cache/safenet-run2/target/debug/deps/sentinel-152a0c2d5ccd9f00)
+
+running 12 tests
+test service::tests::qa2_sen::f2_sen_001a_restart_anchor_before_resume_strands_commitment ... [F2-SEN-001a] state after replayed Committed(self) @102: Some(WaitingForEngineCheck { deadline: 110, request: Some(Request { bond_target: 500, slash_amount: 500, commit_deadline: 120, reveal_deadline: 130 }) })
+[F2-SEN-001a] reveal_emitted=false tracked_after_commit_deadline=false
+
+thread 'service::tests::qa2_sen::f2_sen_001a_restart_anchor_before_resume_strands_commitment' (2327065) panicked at crates/sentinel/src/service.rs:2357:13:
+F2-SEN-001 (a) reproduced: our commit landed onchain at 102, the restart rolled back to snapshot 100 (WaitingForEngineCheck), no Reveal was emitted through block 121, entry still tracked: false
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+FAILED
+test service::tests::qa2_sen::f2_sen_001b_warp_page_delivers_own_commit_before_effect_respawns ... [F2-SEN-001b] state after the warp page (own Committed inside it): Some(WaitingForEngineCheck { deadline: 111, request: Some(Request { bond_target: 500, slash_amount: 500, commit_deadline: 120, reveal_deadline: 130 }) })
+[F2-SEN-001b] reveal_emitted=false tracked_after_commit_deadline=false
+
+thread 'service::tests::qa2_sen::f2_sen_001b_warp_page_delivers_own_commit_before_effect_respawns' (2327068) panicked at crates/sentinel/src/service.rs:2425:13:
+F2-SEN-001 (b) reproduced: own Committed replayed inside the warp page before the effect re-spawned; resume started CollectingCommitments { self_committed: false }; no Reveal through block 121, entry tracked: false
+FAILED
+test service::tests::qa2_sen::f2_sen_002a_early_commit_uncounted_finalize_drops_bonded_entry ... [F2-SEN-002a] local committed_count=2; onchain committedCount=3
+[F2-SEN-002a] after Revealed(OTHER) (local 2/2, onchain 2/3): tracked=false commands=[]
+[F2-SEN-002a] Revealed(self)@124 → []; OracleResult@125 → []; tracked=false
+
+thread 'service::tests::qa2_sen::f2_sen_002a_early_commit_uncounted_finalize_drops_bonded_entry' (2327071) panicked at crates/sentinel/src/service.rs:2478:13:
+F2-SEN-002 outcome 1 reproduced: local tally 2 vs onchain 3, entry dropped at the second reveal with self_revealed=false, later OracleResult ignored, no Claim ever emitted
+FAILED
+test service::tests::qa2_sen::f2_sen_002b_premature_finalize_is_never_retried ... [F2-SEN-002b] after Revealed(OTHER) (local 2/2, onchain 2/3, M never reveals): [Action(SentinelAction { kind: Finalize { id: 0xb05637b90481befcd0b253790579ed4b8b3a69532ac034a23507a01bae0cff56 }, expires_at: None })] state=Some(WaitingForOutcome { approve: true, slash_amount: 500 })
+[F2-SEN-002b] NewBlock(131) → []; NewBlock(100130) → []; state=Some(WaitingForOutcome { approve: true, slash_amount: 500 })
+
+thread 'service::tests::qa2_sen::f2_sen_002b_premature_finalize_is_never_retried' (2327072) panicked at crates/sentinel/src/service.rs:2521:13:
+F2-SEN-002 outcome 2 reproduced: Finalize emitted at block 123 on a local 2/2 tally (onchain 2/3 → FinalizeTooEarly); WaitingForOutcome retained through block 100130 with no second Finalize
+FAILED
+test service::tests::qa2_sen::f2_sen_003a_finalize_drops_bonded_entry_when_own_reveal_unobserved ... [F2-SEN-003a] NewBlock(131): tracked=false commands=[]
+[F2-SEN-003a] OracleResult@132 → []; tracked=false
+
+thread 'service::tests::qa2_sen::f2_sen_003a_finalize_drops_bonded_entry_when_own_reveal_unobserved' (2327073) panicked at crates/sentinel/src/service.rs:2557:13:
+F2-SEN-003 reproduced: bonded entry (self_committed) dropped at reveal_deadline + 1 with self_revealed=false and one reveal counted; no Finalize, no Claim, OracleResult ignored
+FAILED
+test service::tests::qa2_sen::f2_sen_003b_restart_in_reveal_window_discards_own_reveal_then_drops ... [F2-SEN-003b] after warp page carrying Revealed(self)@122: Some(CollectingCommitments { approve: true, reason: "", slash_amount: 500, commit_deadline: 120, reveal_deadline: 130, committed_count: 2, self_committed: true })
+[F2-SEN-003b] NewBlock(125) → [Action(SentinelAction { kind: Reveal { id: 0x512c9b96760a8b79e92d78c485699641e30204c6d8b9a3c6cb19f083d0d9c4cb, approve: true, salt: 0x6f694265eb8e13c4170f7656b6df2f7eecea23628daaca02185fdf15538dc36d, reason: "" }, expires_at: Some(130) })]
+[F2-SEN-003b] NewBlock(131): commands=[] tracked=false
+[F2-SEN-003b] OracleResult@132 → []
+
+thread 'service::tests::qa2_sen::f2_sen_003b_restart_in_reveal_window_discards_own_reveal_then_drops' (2327074) panicked at crates/sentinel/src/service.rs:2627:13:
+F2-SEN-003 restart variant reproduced: own Revealed discarded inside the warp, duplicate Reveal emitted at 125, entry dropped at 131 after Revealed(OTHER); full bond + fee share never claimed
+FAILED
+test service::tests::qa2_sen::f2_sen_004_waiting_states_never_expire ... [F2-SEN-004] after NewBlock(u64::MAX-1): any_action=false id1=Some(WaitingForDisputeResolution { approve: true, slash_amount: 500 }) id2=Some(WaitingForOutcome { approve: true, slash_amount: 500 })
+
+thread 'service::tests::qa2_sen::f2_sen_004_waiting_states_never_expire' (2327078) panicked at crates/sentinel/src/service.rs:2674:13:
+F2-SEN-004 reproduced: WaitingForDisputeResolution (arbitration deadline 1_200) and WaitingForOutcome retained through block u64::MAX-1 with no action
+FAILED
+test service::tests::qa2_sen::f2_sen_005_reveal_starvation_under_proposal_flood ... [F2-SEN-005] rate=5/block x 30 blocks (CW=10, RW=10, cap=16, all mined next block): proposals=150 commits submitted=150 commits dropped=0 reveals submitted=150 reveals DROPPED after a submitted commit (slashable)=0 first slashable proposal block=None
+[F2-SEN-005] rate=8/block x 30 blocks (CW=10, RW=10, cap=16, all mined next block): proposals=240 commits submitted=240 commits dropped=0 reveals submitted=224 reveals DROPPED after a submitted commit (slashable)=16 first slashable proposal block=Some(19)
+[F2-SEN-005] rate=10/block x 30 blocks (CW=10, RW=10, cap=16, all mined next block): proposals=300 commits submitted=276 commits dropped=24 reveals submitted=172 reveals DROPPED after a submitted commit (slashable)=124 first slashable proposal block=Some(8)
+[F2-SEN-005] rate=12/block x 30 blocks (CW=10, RW=10, cap=16, all mined next block): proposals=360 commits submitted=294 commits dropped=66 reveals submitted=156 reveals DROPPED after a submitted commit (slashable)=178 first slashable proposal block=Some(4)
+
+thread 'service::tests::qa2_sen::f2_sen_005_reveal_starvation_under_proposal_flood' (2327079) panicked at crates/sentinel/src/service.rs:2873:13:
+assertion `left == right` failed: F2-SEN-005 (ii) reproduced: 318 commitments across the modelled rates were submitted while their Reveal expired unsubmitted behind the FIFO backlog
+  left: 318
+ right: 0
+FAILED
+test service::tests::qa2_sen::f2_sen_006_voting_window_zero_is_accepted ... [F2-SEN-006] voting_window = 0 accepted: true; engine_timeout would be 1000 ms (w=0), 1000 ms (w=1), 371250 ms (w=100)
+
+thread 'service::tests::qa2_sen::f2_sen_006_voting_window_zero_is_accepted' (2327091) panicked at crates/sentinel/src/service.rs:2909:13:
+F2-SEN-006 reproduced: voting_window = 0 accepted (WaitingForEngineCheck deadline = proposal block, 1 s engine timeout)
+FAILED
+test service::tests::qa2_sen::f2_sen_007a_arbitration_timeout_claims_without_a_bond ... [F2-SEN-007a] from WaitingForRequest: ArbitrationTimedOut → [Action(SentinelAction { kind: Claim { id: 0xf1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1 }, expires_at: None })]; RequestTimedOut → []; OracleResult → []
+
+thread 'service::tests::qa2_sen::f2_sen_007a_arbitration_timeout_claims_without_a_bond' (2327092) panicked at crates/sentinel/src/service.rs:2942:13:
+F2-SEN-007 reproduced: ArbitrationTimedOut from WaitingForRequest emits Claim (reverts NothingToClaim, Commitments.sol:42) while the sibling handlers emit nothing
+FAILED
+test service::tests::qa2_sen::f2_sen_007b_depth1_reorg_replays_reveal ... [F2-SEN-007b] first block 121 → [Action(SentinelAction { kind: Reveal { id: 0xde6dd5467b1a7f644539f250db8b834d5823842dcc8dd40d4ca88e3a25112ebe, approve: true, salt: 0x3d5afd417882fb0d34cd286b5ab6bd7277f3061b8bb2aa9a9ea471e1af285f1c, reason: "" }, expires_at: Some(130) })]
+[F2-SEN-007b] replacement block 121 → [Action(SentinelAction { kind: Reveal { id: 0xde6dd5467b1a7f644539f250db8b834d5823842dcc8dd40d4ca88e3a25112ebe, approve: true, salt: 0x3d5afd417882fb0d34cd286b5ab6bd7277f3061b8bb2aa9a9ea471e1af285f1c, reason: "" }, expires_at: Some(130) })]
+
+thread 'service::tests::qa2_sen::f2_sen_007b_depth1_reorg_replays_reveal' (2327093) panicked at crates/sentinel/src/service.rs:2973:13:
+F2-SEN-007 reproduced: a second Reveal row is emitted for the replacement block 121; the first is still queued or in flight, so the second reverts AlreadyRevealed (Commitments.sol:117)
+FAILED
+test service::tests::qa2_sen::f2_sen_008_single_attempt_failure_drops_request_and_header_equals_timeout ... [F2-SEN-008] connection refused → outcome Unknown; commands=[]; tracked after failed check: false (commit deadline 120, block 100)
+[F2-SEN-008] x-request-timeout header = Some("4321") (client timeout 4321 ms); HTTP 503 → outcome Unknown
+
+thread 'service::tests::qa2_sen::f2_sen_008_single_attempt_failure_drops_request_and_header_equals_timeout' (2327096) panicked at crates/sentinel/src/service.rs:3048:13:
+F2-SEN-008 reproduced: one refused connection resolved Unknown and the request was dropped with the commit window open; x-request-timeout=Some("4321") equals the client timeout
+FAILED
+
+failures:
+
+failures:
+    service::tests::qa2_sen::f2_sen_001a_restart_anchor_before_resume_strands_commitment
+    service::tests::qa2_sen::f2_sen_001b_warp_page_delivers_own_commit_before_effect_respawns
+    service::tests::qa2_sen::f2_sen_002a_early_commit_uncounted_finalize_drops_bonded_entry
+    service::tests::qa2_sen::f2_sen_002b_premature_finalize_is_never_retried
+    service::tests::qa2_sen::f2_sen_003a_finalize_drops_bonded_entry_when_own_reveal_unobserved
+    service::tests::qa2_sen::f2_sen_003b_restart_in_reveal_window_discards_own_reveal_then_drops
+    service::tests::qa2_sen::f2_sen_004_waiting_states_never_expire
+    service::tests::qa2_sen::f2_sen_005_reveal_starvation_under_proposal_flood
+    service::tests::qa2_sen::f2_sen_006_voting_window_zero_is_accepted
+    service::tests::qa2_sen::f2_sen_007a_arbitration_timeout_claims_without_a_bond
+    service::tests::qa2_sen::f2_sen_007b_depth1_reorg_replays_reveal
+    service::tests::qa2_sen::f2_sen_008_single_attempt_failure_drops_request_and_header_equals_timeout
+
+test result: FAILED. 0 passed; 12 failed; 0 ignored; 0 measured; 42 filtered out; finished in 2.87s
+
+error: test failed, to rerun pass `-p sentinel --bin sentinel`

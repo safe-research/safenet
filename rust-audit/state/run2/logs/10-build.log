@@ -1,0 +1,12 @@
+# commit: fe9e84cc59b65367b31d5a3121774383cc422234
+# cmd: cargo build --workspace --all-targets --locked
+# start: 10:46:16
+   Compiling safenet-core v0.2.0 (/home/shebin.guest/safe/safenet/crates/core)
+   Compiling validator v0.2.0 (/home/shebin.guest/safe/safenet/crates/validator)
+   Compiling sentinel-engine v0.2.0 (/home/shebin.guest/safe/safenet/crates/sentinel-engine)
+   Compiling sentinel v0.2.0 (/home/shebin.guest/safe/safenet/crates/sentinel)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 15.54s
+warning: the following packages contain code that will be rejected by a future version of Rust: proc-macro-error2 v2.0.1
+note: to see what the problems were, use the option `--future-incompat-report`, or run `cargo report future-incompatibilities --id 1`
+# end: 10:46:32
+# exit=0

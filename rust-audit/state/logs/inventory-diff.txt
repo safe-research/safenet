@@ -1,0 +1,19 @@
+map rows: 83   disk .rs files: 83
+
+crate            | map (files, LOC)       | disk (files, LOC)     
+core             |     23 files     7644 LOC |     23 files     7644 LOC
+validator        |     28 files     8098 LOC |     28 files     8098 LOC
+sentinel         |     10 files     3348 LOC |     10 files     3348 LOC
+sentinel-engine  |     22 files     5113 LOC |     22 files     5113 LOC
+TOTAL            |     83 files    24203 LOC |     83 files    24203 LOC
+
+=== A. files in BOTH but LOC differs ===
+  (none)
+
+=== B. on disk, MISSING from map ===
+  (none)
+
+=== C. in map, MISSING from disk ===
+  (none)
+
+mismatch counts: A=0  B=0  C=0

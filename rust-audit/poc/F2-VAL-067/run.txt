@@ -1,0 +1,18 @@
+# QA2-VAL-B PoC for F2-VAL-067.
+# commit under test: 92a0610953c80a1308ef651c44a836e4f2c99267  (crates/ identical to audited 3ec8bc5)
+# config_test_fn.rs was inserted into config.rs's existing #[cfg(test)] mod tests,
+# run, then reverted with 'git checkout --'.
+# It executes the two decisive facts: (1) the pathological pairing loads with no
+# validation guard; (2) the abandonment window boundary always precedes the keygen
+# deadline when blocks_per_epoch < key_gen_timeout, so a stalled participant is
+# re-included every attempt. The full multi-epoch stall is the composite consequence.
+
+$ cargo test -p validator --bins config::tests::f2_val_067
+
+     Running unittests src/main.rs (/home/shebin.guest/.cache/safenet-run2/target/debug/deps/validator-3a1b46af57fe89be)
+
+running 1 test
+test config::tests::f2_val_067_short_epoch_relative_to_keygen_timeout_livelocks_rollover ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 42 filtered out; finished in 0.00s
+

@@ -1,0 +1,18 @@
+   Compiling safenet-core v0.2.0 (/home/shebin.guest/safe/safenet/crates/core)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 5.71s
+     Running unittests src/lib.rs (/home/shebin.guest/.cache/safenet-run2/target/debug/deps/safenet_core-9a33466691bc8389)
+
+running 14 tests
+[excerpt: only this finding's tests are shown; the complete 14-test run is poc/F2-CORE-060/output-full-run.txt]
+test tx::tests::qa_f2_core_061_false_execution_mark_is_irrevocable_and_opens_a_nonce_gap ... after block 11 (reading 1): [(1, "{\"to\":\"0x5ff137d4b0fdcd49dca30c7cf57e578a026d2789\",\"value\":\"0x0\",\"data\":\"0x01\",\"gas\":21000,\"maxFeePerGas\":\"0xd2\",\"maxPriorityFeePerGas\":\"0xa\"}", None, Some(0), Some(10), Some(11))]
+blocks 12..=15: no RPC issued, mark untouched
+second action allocated nonce 1 while the chain nonce reads 0
+after block 30: [(2, "{\"to\":\"0x5ff137d4b0fdcd49dca30c7cf57e578a026d2789\",\"value\":\"0x0\",\"data\":\"0x02\",\"gas\":21000,\"maxFeePerGas\":\"0x19e\",\"maxPriorityFeePerGas\":\"0x18\"}", None, Some(1), Some(29), None)]
+row 1 after 7 bumps: maxFeePerGas=Some(414) maxPriorityFeePerGas=Some(24)
+ok
+test tx::tests::qa_f2_core_061_gap_closes_when_nothing_is_queued_inside_the_retention_window ... after block 17 (safe 12): []
+next action allocated nonce 0
+ok
+
+test result: ok. 14 passed; 0 failed; 0 ignored; 0 measured; 99 filtered out; finished in 0.20s
+

@@ -1,0 +1,28 @@
+# C2-VAL-B re-run of R6's config-error checks (F2-VAL-060, F2-VAL-064); commit 3ec8bc5; binary $CARGO_TARGET_DIR/debug/validator (built by Phase 0 baseline, mtime 2026-09-15 16:29:18)
+# config: scratchpad copy; rpc = http://127.0.0.1:1 (loopback, never contacted: Config::load fails first); signer = public Anvil test key #0; database = sqlite::memory:
+
+## config used
+rpc = "http://127.0.0.1:1"
+signer = "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80"
+database = "sqlite::memory:"
+
+[validator]
+consensus = "0x1111111111111111111111111111111111111111"
+signing_timeot = 6
+
+## case A: --config-file broken.toml (misspelled optional key signing_timeot)
+$ validator --config-file broken.toml; echo "exit=$?"
+Error: Parse(Error { message: "unknown field `signing_timeot`, expected one of `consensus`, `staker`, `participants`, `oracles`, `genesis_salt`, `blocks_per_epoch`, `key_gen_timeout`, `signing_timeout`, `oracle_timeout`", input: Some("rpc = \"http://127.0.0.1:1\"\nsigner = \"0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80\"\ndatabase = \"sqlite::memory:\"\n\n[validator]\nconsensus = \"0x1111111111111111111111111111111111111111\"\nsigning_timeot = 6\n"), keys: ["validator"], span: Some(204..218) })
+exit=1
+
+## case B: documented spelling --config-file=broken.toml
+$ validator --config-file=broken.toml; echo "exit=$?"
+Unrecognized argument: --config-file=broken.toml
+
+Run validator --help for more information.
+exit=1
+
+## case C: missing file (Io path, no document to print)
+$ validator --config-file does-not-exist.toml; echo "exit=$?"
+Error: Io(Os { code: 2, kind: NotFound, message: "No such file or directory" })
+exit=1

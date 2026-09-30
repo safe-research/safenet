@@ -1,0 +1,29 @@
+running 2 tests
+test tx::storage::tests::poc_f_core_067_enqueue_is_not_idempotent ... FAILED
+test tx::storage::tests::poc_f_core_067_restart_replay_enqueues_a_duplicate_action ... FAILED
+
+failures:
+
+---- tx::storage::tests::poc_f_core_067_enqueue_is_not_idempotent stdout ----
+
+thread 'tx::storage::tests::poc_f_core_067_enqueue_is_not_idempotent' (78938) panicked at crates/core/src/tx/storage.rs:576:5:
+assertion `left == right` failed: the identical action was queued a second time and allocated its own nonce: first=7 second=Some(AllocatedTransaction { nonce: 8, transaction: Transaction { to: 0x5ff137d4b0fdcd49dca30c7cf57e578a026d2789, value: 0, data: 0xdeadbeef, gas: 21000 }, max_fee_per_gas: None, max_priority_fee_per_gas: None }) — two onchain transactions for one decision
+  left: Some(AllocatedTransaction { nonce: 8, transaction: Transaction { to: 0x5ff137d4b0fdcd49dca30c7cf57e578a026d2789, value: 0, data: 0xdeadbeef, gas: 21000 }, max_fee_per_gas: None, max_priority_fee_per_gas: None })
+ right: None
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+---- tx::storage::tests::poc_f_core_067_restart_replay_enqueues_a_duplicate_action stdout ----
+
+thread 'tx::storage::tests::poc_f_core_067_restart_replay_enqueues_a_duplicate_action' (78939) panicked at crates/core/src/tx/storage.rs:731:5:
+assertion `left == right` failed: a rollback replay re-queued the same action: 2 rows for one decision
+  left: 2
+ right: 1
+
+
+failures:
+    tx::storage::tests::poc_f_core_067_enqueue_is_not_idempotent
+    tx::storage::tests::poc_f_core_067_restart_replay_enqueues_a_duplicate_action
+
+test result: FAILED. 0 passed; 2 failed; 0 ignored; 0 measured; 97 filtered out; finished in 0.00s
+
+error: test failed, to rerun pass `-p safenet-core --lib`

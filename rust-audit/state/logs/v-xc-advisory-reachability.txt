@@ -1,0 +1,109 @@
+V-XC Phase 5 — advisory reachability evidence. Host: cargo 1.98.1, stable-aarch64-unknown-linux-gnu.
+All commands run from the repo root with PATH="$HOME/.cargo/bin:$PATH".
+
+--- 1. quinn-proto (RUSTSEC-2026-0185, 7.5 HIGH) : NOT REACHABLE ---
+$ cargo tree -i quinn-proto --workspace --locked
+warning: nothing to print.
+$ cargo tree -i quinn       --workspace --locked
+warning: nothing to print.
+$ cargo tree -i quinn-udp   --workspace --locked
+warning: nothing to print.
+$ ls target/debug/deps/ | grep -ci quinn
+0
+Lockfile parent: reqwest names "quinn" as an OPTIONAL dependency (Cargo.lock:3560-3616).
+reqwest's enabled features in this workspace:
+$ cargo tree -e features --locked --workspace | grep -o 'reqwest feature "[a-z0-9_-]*"' | sort -u
+reqwest feature "__rustls"
+reqwest feature "__rustls-aws-lc-rs"
+reqwest feature "__tls"
+reqwest feature "json"
+reqwest feature "rustls"
+(no "http3" / "quic" feature => the optional quinn edge is never activated)
+
+--- 2. ruint 1.18.0 (RUSTSEC-2026-0220) : IN THE GRAPH, VULNERABLE API NOT CALLED ---
+Advisory's [affected.functions] are ONLY the 8 explicit shift methods:
+  overflowing_shl/shr, checked_shl/shr, saturating_shl/shr, wrapping_shl/shr
+$ grep -rn "checked_shl\|checked_shr\|overflowing_shl\|overflowing_shr\|saturating_shl\|saturating_shr\|wrapping_shl\|wrapping_shr\|strict_shl\|strict_shr\|to_base_be\|to_base_le" crates/ --include='*.rs'
+(no matches)
+Every real shift operator in the workspace (72 raw `<<`/`>>` grep hits reduce to 3 after
+removing turbofish/generics):
+  crates/validator/src/merkle.rs:56          current >>= 1;                    <- usize, std
+  crates/sentinel-engine/src/checkers/address_poisoning.rs:66  out[2*i] = byte >> 4;  <- u8, std
+  crates/sentinel/src/service.rs:922         U256::from(chain_id) << 160 | ... <- U256, but:
+$ grep -n "cfg(test)" crates/sentinel/src/service.rs
+840:#[cfg(test)]
+841:mod tests {
+=> line 922 > 840: the ONLY U256 shift in the workspace is inside `#[cfg(test)] mod tests`,
+   in the test helper `fn safe_id`. It is not in any shipped binary.
+$ grep -rn "I256\|Signed<" crates/ --include='*.rs'
+(no matches — alloy-primitives' own affected uses are all in signed/ops.rs, i.e. I256)
+Non-limb-aligned Uint in use: `U96` (crates/sentinel/src/state.rs) — constructed only via
+U96::from(..) and (de)serialised; no shift, no base conversion.
+The advisory's infinite-loop leg is scoped to no-alloc builds; ruint here has alloc+std:
+$ cargo tree -i ruint -e features --locked | grep -o 'ruint feature "[a-z0-9_-]*"' | sort -u
+ruint feature "alloc" / "alloy-rlp" / "serde" / "std"
+Note for completeness: ruint's `Shl<$u>` operator DOES delegate to the affected
+`wrapping_shl` (ruint-1.18.0/src/bits.rs:684-686), and `Shl<Self>` to `overflowing_shl_big`
+(:617-619) — so `<<` is on the affected path in principle. It is unreachable here only
+because the single U256 `<<` is test-only and its shift amount is the constant 160.
+
+--- 3. h2 0.4.14 (RUSTSEC-2026-0258, unbounded empty DATA frames) ---
+$ cargo tree -i h2 --workspace --locked
+h2 v0.4.14 -> hyper v1.10.1 -> {axum 0.8.9 -> sentinel-engine,
+                                hyper-rustls 0.27.9 -> metrics-exporter-prometheus 0.18.3 -> safenet-core,
+                                                    -> reqwest 0.13.4 -> alloy-provider / sentinel / sentinel-engine}
+
+(a) ENGINE TRANSACTION-CHECKING API — REACHABLE (measured).
+axum's own "http2" feature is NOT enabled:
+$ cargo tree -e features --locked -p sentinel-engine | grep -o 'axum feature "[a-z0-9_-]*"' | sort -u
+axum feature "default" / "form" / "http1" / "json" / "matched-path" / "original-uri"
+axum feature "query" / "tokio" / "tower-log" / "tracing"
+...but `axum feature "tokio"` pulls `hyper-util feature "server-auto"`, which enables
+`hyper-util feature "http2"` and `hyper feature "http2"`, and hyper-util's auto::Builder
+sniffs the H2 preface (hyper-util-0.1.20/src/server/conn/auto/mod.rs:39,351-358) under
+that feature. Executed test (temporary, appended to crates/sentinel-engine/src/engine/mod.rs,
+run, reverted): bind `axum::serve(listener, crate::api::router(engine))` on loopback, write
+the literal bytes "PRI * HTTP/2.0\r\n\r\nSM\r\n\r\n" + an empty SETTINGS frame, read the reply.
+  H2-PREFACE reply 55 bytes: [00, 00, 18, 04, 00, 00, 00, 00, 00, 00, 03, 00, 00, 00, c8,
+                              00, 04, 00, 10, 00, 00, 00, 05, 00, 00, 40, 00, 00, 06, 00, 00, 40]
+    frame_type=0x04 (0x04 == SETTINGS => server spoke HTTP/2)
+    looks_like_http1_text=false
+=> The engine API is a live HTTP/2 server. The h2 advisory is reachable there.
+
+(b) PROMETHEUS METRICS LISTENER — NOT REACHABLE (measured).
+metrics-exporter-prometheus builds an HTTP/1-only connection:
+$ grep -rn "http1::Builder\|serve_connection" ~/.cargo/registry/src/*/metrics-exporter-prometheus-0.18.3/src/exporter/http_listener.rs
+9:    server::conn::http1::Builder as HyperHttpBuilder,
+77:    HyperHttpBuilder::new().serve_connection(TokioIo::new(stream), service).await
+122:   HyperHttpBuilder::new().serve_connection(TokioIo::new(stream), service).await
+Executed test, same preface against `safenet_core::observability::metrics::serve(...)`:
+  METRICS H2-PREFACE reply 0 bytes
+  raw: ""    hex: []    is_http1_text=false    is_h2_settings=false
+=> No SETTINGS frame, no HTTP/1 response; the connection is dropped. Not an HTTP/2 server.
+
+--- 4. crossbeam-epoch 0.9.18 (RUSTSEC-2026-0204) : NOT REACHABLE ---
+$ cargo tree -i crossbeam-epoch --workspace --locked
+crossbeam-epoch v0.9.18 -> crossbeam-deque -> rayon-core -> rayon -> validator
+                        -> metrics-util 0.20.4 -> metrics-exporter-prometheus -> safenet-core
+The advisory needs `fmt::Pointer`/`Debug` formatting of an INVALID `Atomic`/`Shared`.
+$ grep -rn "Atomic\|Shared" .../rayon-core-1.13.0/src/*.rs | grep -E '\{:\?\}|fmt::Pointer|\{:p\}'
+$ grep -rn "Atomic\|Shared" .../metrics-util-0.20.4/src/**/*.rs | grep -E '\{:\?\}|fmt::Pointer|\{:p\}'
+(no matches in either)
+Neither consumer formats an epoch pointer, and no Safenet code has any handle to one.
+
+--- 5. WARNINGS: 4 unmaintained + 3 unsound + 4 yanked = 11 ---
+unmaintained: atomic-polyfill 1.0.3, derivative 2.2.0, paste 1.0.15, proc-macro-error2 2.0.1
+  (proc-macro-error2 is also flagged by rustc itself in every build:
+   "the following packages contain code that will be rejected by a future version of Rust")
+unsound:
+  anyhow 1.0.102        RUSTSEC-2026-0190  $ cargo tree -i anyhow  -> "nothing to print"
+                                           $ ls target/debug/deps | grep -c "^libanyhow\|^anyhow-"  -> 0   NOT BUILT
+  event-listener 5.4.1  RUSTSEC-2026-0221  -> sqlx-core 0.9.0 -> sqlx -> all four crates       REACHABLE
+  lru 0.16.4            RUSTSEC-2026-0253  -> alloy-provider 2.0.5 -> alloy -> all four crates REACHABLE
+yanked:
+  spin 0.9.8         -> flume 0.12.0 -> sqlx-sqlite 0.9.0 -> sqlx -> all four crates. REACHABLE.
+                        $ ls target/debug/deps | grep -c "^libspin\|^spin-"  -> 8   (BUILT)
+  bitcoin-io 0.1.100    lockfile parent: bitcoin_hashes.      artifacts: 0   NOT BUILT
+  bitcoin_hashes 0.14.100 lockfile parent: secp256k1.         artifacts: 0   NOT BUILT
+  chacha20 0.10.0       lockfile parent: rand (optional).     artifacts: 0   NOT BUILT
+  ($ cargo tree -i <crate> --workspace --locked -> "nothing to print" for all three)

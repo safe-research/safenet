@@ -1,0 +1,112 @@
+    Fetching advisory database from `https://github.com/RustSec/advisory-db.git`
+      Loaded 1242 security advisories (from /home/shebin.guest/.cargo/advisory-db)
+    Updating crates.io index
+    Scanning Cargo.lock for vulnerabilities (573 crate dependencies)
+Crate:     crossbeam-epoch
+Version:   0.9.18
+Title:     Invalid pointer dereference in `fmt::Pointer` impl for `Atomic` and `Shared` when the underlying pointer is invalid
+Date:      2026-07-06
+ID:        RUSTSEC-2026-0204
+URL:       https://rustsec.org/advisories/RUSTSEC-2026-0204
+Solution:  Upgrade to >=0.9.20
+
+Crate:     h2
+Version:   0.4.14
+Title:     h2 unbounded empty DATA frames
+Date:      2026-08-17
+ID:        RUSTSEC-2026-0258
+URL:       https://rustsec.org/advisories/RUSTSEC-2026-0258
+Solution:  Upgrade to >=0.4.16
+
+Crate:     quinn-proto
+Version:   0.11.14
+Title:      Remote memory exhaustion in quinn-proto from unbounded out-of-order stream reassembly
+Date:      2026-06-22
+ID:        RUSTSEC-2026-0185
+URL:       https://rustsec.org/advisories/RUSTSEC-2026-0185
+Severity:  7.5 (high)
+Solution:  Upgrade to >=0.11.15
+
+Crate:     ruint
+Version:   1.18.0
+Title:     Uint shift operations: incorrect overflow flags and truncated shift amounts
+Date:      2026-07-08
+ID:        RUSTSEC-2026-0220
+URL:       https://rustsec.org/advisories/RUSTSEC-2026-0220
+Solution:  Upgrade to >=1.20.0
+
+Crate:     atomic-polyfill
+Version:   1.0.3
+Warning:   unmaintained
+Title:     atomic-polyfill is unmaintained
+Date:      2023-07-11
+ID:        RUSTSEC-2023-0089
+URL:       https://rustsec.org/advisories/RUSTSEC-2023-0089
+
+Crate:     derivative
+Version:   2.2.0
+Warning:   unmaintained
+Title:     `derivative` is unmaintained; consider using an alternative
+Date:      2024-06-26
+ID:        RUSTSEC-2024-0388
+URL:       https://rustsec.org/advisories/RUSTSEC-2024-0388
+
+Crate:     paste
+Version:   1.0.15
+Warning:   unmaintained
+Title:     paste - no longer maintained
+Date:      2024-10-07
+ID:        RUSTSEC-2024-0436
+URL:       https://rustsec.org/advisories/RUSTSEC-2024-0436
+
+Crate:     proc-macro-error2
+Version:   2.0.1
+Warning:   unmaintained
+Title:     proc-macro-error2 is unmaintained
+Date:      2026-06-07
+ID:        RUSTSEC-2026-0173
+URL:       https://rustsec.org/advisories/RUSTSEC-2026-0173
+
+Crate:     anyhow
+Version:   1.0.102
+Warning:   unsound
+Title:     Unsoundness in `Error::downcast_mut()`
+Date:      2026-06-25
+ID:        RUSTSEC-2026-0190
+URL:       https://rustsec.org/advisories/RUSTSEC-2026-0190
+
+Crate:     event-listener
+Version:   5.4.1
+Warning:   unsound
+Title:     `event-listener` allows `!Send` tags to cross thread boundaries via `StackSlot`
+Date:      2026-07-13
+ID:        RUSTSEC-2026-0221
+URL:       https://rustsec.org/advisories/RUSTSEC-2026-0221
+
+Crate:     lru
+Version:   0.16.4
+Warning:   unsound
+Title:     Potential use-after-free due to lack of panic safety in `LruCache::pop()`
+Date:      2026-05-12
+ID:        RUSTSEC-2026-0253
+URL:       https://rustsec.org/advisories/RUSTSEC-2026-0253
+
+Crate:     bitcoin-io
+Version:   0.1.100
+Warning:   yanked
+
+Crate:     bitcoin_hashes
+Version:   0.14.100
+Warning:   yanked
+
+Crate:     chacha20
+Version:   0.10.0
+Warning:   yanked
+
+Crate:     spin
+Version:   0.9.8
+Warning:   yanked
+
+error: 4 vulnerabilities found!
+warning: 11 allowed warnings found
+AUDIT_EXIT=1

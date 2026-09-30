@@ -1,0 +1,20 @@
+# QA2-XC (resume) re-run of the F2-XC-009 PoC, dev/test profile (control: overflow checks ON); HEAD fe9e84cc59b65367b31d5a3121774383cc422234; crates/core identical to 3ec8bc5
+# PoC source: poc/F2-XC-009/qa2_xc_009_blocks_test.rs, pasted into crates/core/src/index/blocks.rs 'mod tests' with poc/F2-XC-050/paste.py, reverted with git checkout afterwards
+# command: cargo test --offline --locked -p safenet-core --lib index::blocks::tests::qa2_xc_009 -- --nocapture
+
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 3.80s
+warning: the following packages contain code that will be rejected by a future version of Rust: proc-macro-error2 v2.0.1
+note: to see what the problems were, use the option `--future-incompat-report`, or run `cargo report future-incompatibilities --id 1`
+     Running unittests src/lib.rs (/home/shebin.guest/.cache/safenet-run2/target/debug/deps/safenet_core-9a33466691bc8389)
+
+running 1 test
+
+thread 'index::blocks::tests::qa2_xc_009::header_timestamp_arithmetic_at_blocks_rs_541_wraps_in_the_shipped_profile' (16598) panicked at crates/core/src/index/blocks.rs:541:27:
+attempt to multiply with overflow
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+panicked: overflow checks are ON in this build (cfg!(debug_assertions) = true)
+test index::blocks::tests::qa2_xc_009::header_timestamp_arithmetic_at_blocks_rs_541_wraps_in_the_shipped_profile ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 99 filtered out; finished in 0.00s
+
+# exit=0

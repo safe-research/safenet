@@ -1,0 +1,432 @@
+# cmd: cargo tree --offline --locked --workspace -i <crate> [-e features] ; commit 3ec8bc5 
+
+=================== cargo tree -i crossbeam-epoch (depth 6, dedup)
+crossbeam-epoch v0.9.18
+├── crossbeam-deque v0.8.7
+│   └── rayon-core v1.13.0
+│       └── rayon v1.12.0
+│           └── validator v0.2.0 (/home/shebin.guest/safe/safenet/crates/validator)
+└── metrics-util v0.20.4
+    └── metrics-exporter-prometheus v0.18.3
+        └── safenet-core v0.2.0 (/home/shebin.guest/safe/safenet/crates/core)
+            ├── sentinel v0.2.0 (/home/shebin.guest/safe/safenet/crates/sentinel)
+            ├── sentinel-engine v0.2.0 (/home/shebin.guest/safe/safenet/crates/sentinel-engine)
+            └── validator v0.2.0 (/home/shebin.guest/safe/safenet/crates/validator)
+            [dev-dependencies]
+            ├── sentinel v0.2.0 (/home/shebin.guest/safe/safenet/crates/sentinel)
+            ├── sentinel-engine v0.2.0 (/home/shebin.guest/safe/safenet/crates/sentinel-engine)
+            └── validator v0.2.0 (/home/shebin.guest/safe/safenet/crates/validator)
+
+=================== cargo tree -i h2 (depth 6, dedup)
+h2 v0.4.14
+└── hyper v1.10.1
+    ├── axum v0.8.9
+    │   └── sentinel-engine v0.2.0 (/home/shebin.guest/safe/safenet/crates/sentinel-engine)
+    ├── hyper-rustls v0.27.9
+    │   ├── metrics-exporter-prometheus v0.18.3
+    │   │   └── safenet-core v0.2.0 (/home/shebin.guest/safe/safenet/crates/core)
+    │   │       ├── sentinel v0.2.0 (/home/shebin.guest/safe/safenet/crates/sentinel)
+    │   │       ├── sentinel-engine v0.2.0 (/home/shebin.guest/safe/safenet/crates/sentinel-engine)
+    │   │       └── validator v0.2.0 (/home/shebin.guest/safe/safenet/crates/validator)
+    │   │       [dev-dependencies]
+    │   │       ├── sentinel v0.2.0 (/home/shebin.guest/safe/safenet/crates/sentinel)
+    │   │       ├── sentinel-engine v0.2.0 (/home/shebin.guest/safe/safenet/crates/sentinel-engine)
+    │   │       └── validator v0.2.0 (/home/shebin.guest/safe/safenet/crates/validator)
+    │   └── reqwest v0.13.4
+    │       ├── alloy-provider v2.0.5
+    │       │   ├── alloy v2.0.5
+    │       │   │   ├── safenet-core v0.2.0 (/home/shebin.guest/safe/safenet/crates/core) (*)
+    │       │   │   ├── sentinel v0.2.0 (/home/shebin.guest/safe/safenet/crates/sentinel)
+    │       │   │   ├── sentinel-engine v0.2.0 (/home/shebin.guest/safe/safenet/crates/sentinel-engine)
+    │       │   │   └── validator v0.2.0 (/home/shebin.guest/safe/safenet/crates/validator)
+    │       │   └── alloy-contract v2.0.5
+    │       │       └── alloy v2.0.5 (*)
+    │       ├── alloy-rpc-client v2.0.5
+    │       │   ├── alloy v2.0.5 (*)
+    │       │   └── alloy-provider v2.0.5 (*)
+    │       ├── alloy-transport-http v2.0.5
+    │       │   ├── alloy v2.0.5 (*)
+    │       │   ├── alloy-provider v2.0.5 (*)
+    │       │   └── alloy-rpc-client v2.0.5 (*)
+    │       ├── sentinel v0.2.0 (/home/shebin.guest/safe/safenet/crates/sentinel)
+    │       └── sentinel-engine v0.2.0 (/home/shebin.guest/safe/safenet/crates/sentinel-engine)
+    ├── hyper-util v0.1.20
+    │   ├── axum v0.8.9 (*)
+    │   ├── hyper-rustls v0.27.9 (*)
+    │   ├── metrics-exporter-prometheus v0.18.3 (*)
+    │   └── reqwest v0.13.4 (*)
+    ├── metrics-exporter-prometheus v0.18.3 (*)
+    └── reqwest v0.13.4 (*)
+
+=================== cargo tree -i quinn-proto (depth 6, dedup)
+warning: nothing to print.
+
+To find dependencies that require specific target platforms, try to use option `--target all` first, and then narrow your search scope accordingly.
+
+=================== cargo tree -i ruint (depth 6, dedup)
+ruint v1.18.0
+├── alloy-primitives v1.6.0
+│   ├── alloy-chains v0.2.34
+│   │   └── alloy-provider v2.0.5
+│   │       ├── alloy v2.0.5
+│   │       │   ├── safenet-core v0.2.0 (/home/shebin.guest/safe/safenet/crates/core)
+│   │       │   │   ├── sentinel v0.2.0 (/home/shebin.guest/safe/safenet/crates/sentinel)
+│   │       │   │   ├── sentinel-engine v0.2.0 (/home/shebin.guest/safe/safenet/crates/sentinel-engine)
+│   │       │   │   └── validator v0.2.0 (/home/shebin.guest/safe/safenet/crates/validator)
+│   │       │   │   [dev-dependencies]
+│   │       │   │   ├── sentinel v0.2.0 (/home/shebin.guest/safe/safenet/crates/sentinel)
+│   │       │   │   ├── sentinel-engine v0.2.0 (/home/shebin.guest/safe/safenet/crates/sentinel-engine)
+│   │       │   │   └── validator v0.2.0 (/home/shebin.guest/safe/safenet/crates/validator)
+│   │       │   ├── sentinel v0.2.0 (/home/shebin.guest/safe/safenet/crates/sentinel)
+│   │       │   ├── sentinel-engine v0.2.0 (/home/shebin.guest/safe/safenet/crates/sentinel-engine)
+│   │       │   └── validator v0.2.0 (/home/shebin.guest/safe/safenet/crates/validator)
+│   │       └── alloy-contract v2.0.5
+│   │           └── alloy v2.0.5 (*)
+│   ├── alloy-consensus v2.0.5
+│   │   ├── alloy v2.0.5 (*)
+│   │   ├── alloy-consensus-any v2.0.5
+│   │   │   ├── alloy-network v2.0.5
+│   │   │   │   ├── alloy v2.0.5 (*)
+│   │   │   │   ├── alloy-contract v2.0.5 (*)
+│   │   │   │   ├── alloy-provider v2.0.5 (*)
+│   │   │   │   └── alloy-signer-local v2.0.5
+│   │   │   │       └── alloy v2.0.5 (*)
+│   │   │   ├── alloy-rpc-types-any v2.0.5
+│   │   │   │   └── alloy-network v2.0.5 (*)
+│   │   │   └── alloy-rpc-types-eth v2.0.5
+│   │   │       ├── alloy-contract v2.0.5 (*)
+│   │   │       ├── alloy-network v2.0.5 (*)
+│   │   │       ├── alloy-provider v2.0.5 (*)
+│   │   │       ├── alloy-rpc-types v2.0.5
+│   │   │       │   └── alloy v2.0.5 (*)
+│   │   │       ├── alloy-rpc-types-anvil v2.0.5
+│   │   │       │   ├── alloy-provider v2.0.5 (*)
+│   │   │       │   └── alloy-rpc-types v2.0.5 (*)
+│   │   │       ├── alloy-rpc-types-any v2.0.5 (*)
+│   │   │       ├── alloy-rpc-types-trace v2.0.5
+│   │   │       │   ├── alloy-provider v2.0.5 (*)
+│   │   │       │   └── alloy-rpc-types v2.0.5 (*)
+│   │   │       └── alloy-rpc-types-txpool v2.0.5
+│   │   │           ├── alloy-provider v2.0.5 (*)
+│   │   │           └── alloy-rpc-types v2.0.5 (*)
+│   │   ├── alloy-contract v2.0.5 (*)
+│   │   ├── alloy-network v2.0.5 (*)
+│   │   ├── alloy-network-primitives v2.0.5
+│   │   │   ├── alloy-contract v2.0.5 (*)
+│   │   │   ├── alloy-network v2.0.5 (*)
+│   │   │   ├── alloy-provider v2.0.5 (*)
+│   │   │   ├── alloy-rpc-types-any v2.0.5 (*)
+│   │   │   └── alloy-rpc-types-eth v2.0.5 (*)
+│   │   ├── alloy-provider v2.0.5 (*)
+│   │   ├── alloy-rpc-types-eth v2.0.5 (*)
+│   │   └── alloy-signer-local v2.0.5 (*)
+│   ├── alloy-consensus-any v2.0.5 (*)
+│   ├── alloy-contract v2.0.5 (*)
+│   ├── alloy-core v1.6.0
+│   │   └── alloy v2.0.5 (*)
+
+=================== cargo tree -i rustls (depth 6, dedup)
+rustls v0.23.40
+├── alloy-transport-ws v2.0.5
+│   ├── alloy v2.0.5
+│   │   ├── safenet-core v0.2.0 (/home/shebin.guest/safe/safenet/crates/core)
+│   │   │   ├── sentinel v0.2.0 (/home/shebin.guest/safe/safenet/crates/sentinel)
+│   │   │   ├── sentinel-engine v0.2.0 (/home/shebin.guest/safe/safenet/crates/sentinel-engine)
+│   │   │   └── validator v0.2.0 (/home/shebin.guest/safe/safenet/crates/validator)
+│   │   │   [dev-dependencies]
+│   │   │   ├── sentinel v0.2.0 (/home/shebin.guest/safe/safenet/crates/sentinel)
+│   │   │   ├── sentinel-engine v0.2.0 (/home/shebin.guest/safe/safenet/crates/sentinel-engine)
+│   │   │   └── validator v0.2.0 (/home/shebin.guest/safe/safenet/crates/validator)
+│   │   ├── sentinel v0.2.0 (/home/shebin.guest/safe/safenet/crates/sentinel)
+│   │   ├── sentinel-engine v0.2.0 (/home/shebin.guest/safe/safenet/crates/sentinel-engine)
+│   │   └── validator v0.2.0 (/home/shebin.guest/safe/safenet/crates/validator)
+│   ├── alloy-provider v2.0.5
+│   │   ├── alloy v2.0.5 (*)
+│   │   └── alloy-contract v2.0.5
+│   │       └── alloy v2.0.5 (*)
+│   └── alloy-rpc-client v2.0.5
+│       ├── alloy v2.0.5 (*)
+│       └── alloy-provider v2.0.5 (*)
+├── hyper-rustls v0.27.9
+│   ├── metrics-exporter-prometheus v0.18.3
+│   │   └── safenet-core v0.2.0 (/home/shebin.guest/safe/safenet/crates/core) (*)
+│   └── reqwest v0.13.4
+│       ├── alloy-provider v2.0.5 (*)
+│       ├── alloy-rpc-client v2.0.5 (*)
+│       ├── alloy-transport-http v2.0.5
+│       │   ├── alloy v2.0.5 (*)
+│       │   ├── alloy-provider v2.0.5 (*)
+│       │   └── alloy-rpc-client v2.0.5 (*)
+│       ├── sentinel v0.2.0 (/home/shebin.guest/safe/safenet/crates/sentinel)
+│       └── sentinel-engine v0.2.0 (/home/shebin.guest/safe/safenet/crates/sentinel-engine)
+├── metrics-exporter-prometheus v0.18.3 (*)
+├── reqwest v0.13.4 (*)
+├── rustls-platform-verifier v0.7.0
+│   └── reqwest v0.13.4 (*)
+├── tokio-rustls v0.26.4
+│   ├── hyper-rustls v0.27.9 (*)
+│   ├── reqwest v0.13.4 (*)
+│   └── tokio-tungstenite v0.28.0
+│       └── alloy-transport-ws v2.0.5 (*)
+├── tokio-tungstenite v0.28.0 (*)
+└── tungstenite v0.28.0
+    └── tokio-tungstenite v0.28.0 (*)
+
+=================== cargo tree -i atomic-polyfill (depth 6, dedup)
+warning: nothing to print.
+
+To find dependencies that require specific target platforms, try to use option `--target all` first, and then narrow your search scope accordingly.
+
+=================== cargo tree -i derivative (depth 6, dedup)
+warning: nothing to print.
+
+To find dependencies that require specific target platforms, try to use option `--target all` first, and then narrow your search scope accordingly.
+
+=================== cargo tree -i paste (depth 6, dedup)
+paste v1.0.15 (proc-macro)
+├── alloy-primitives v1.6.0
+│   ├── alloy-chains v0.2.34
+│   │   └── alloy-provider v2.0.5
+│   │       ├── alloy v2.0.5
+│   │       │   ├── safenet-core v0.2.0 (/home/shebin.guest/safe/safenet/crates/core)
+│   │       │   │   ├── sentinel v0.2.0 (/home/shebin.guest/safe/safenet/crates/sentinel)
+│   │       │   │   ├── sentinel-engine v0.2.0 (/home/shebin.guest/safe/safenet/crates/sentinel-engine)
+│   │       │   │   └── validator v0.2.0 (/home/shebin.guest/safe/safenet/crates/validator)
+│   │       │   │   [dev-dependencies]
+│   │       │   │   ├── sentinel v0.2.0 (/home/shebin.guest/safe/safenet/crates/sentinel)
+│   │       │   │   ├── sentinel-engine v0.2.0 (/home/shebin.guest/safe/safenet/crates/sentinel-engine)
+│   │       │   │   └── validator v0.2.0 (/home/shebin.guest/safe/safenet/crates/validator)
+│   │       │   ├── sentinel v0.2.0 (/home/shebin.guest/safe/safenet/crates/sentinel)
+│   │       │   ├── sentinel-engine v0.2.0 (/home/shebin.guest/safe/safenet/crates/sentinel-engine)
+│   │       │   └── validator v0.2.0 (/home/shebin.guest/safe/safenet/crates/validator)
+│   │       └── alloy-contract v2.0.5
+│   │           └── alloy v2.0.5 (*)
+│   ├── alloy-consensus v2.0.5
+│   │   ├── alloy v2.0.5 (*)
+│   │   ├── alloy-consensus-any v2.0.5
+│   │   │   ├── alloy-network v2.0.5
+│   │   │   │   ├── alloy v2.0.5 (*)
+│   │   │   │   ├── alloy-contract v2.0.5 (*)
+│   │   │   │   ├── alloy-provider v2.0.5 (*)
+│   │   │   │   └── alloy-signer-local v2.0.5
+│   │   │   │       └── alloy v2.0.5 (*)
+│   │   │   ├── alloy-rpc-types-any v2.0.5
+│   │   │   │   └── alloy-network v2.0.5 (*)
+│   │   │   └── alloy-rpc-types-eth v2.0.5
+│   │   │       ├── alloy-contract v2.0.5 (*)
+│   │   │       ├── alloy-network v2.0.5 (*)
+│   │   │       ├── alloy-provider v2.0.5 (*)
+│   │   │       ├── alloy-rpc-types v2.0.5
+│   │   │       │   └── alloy v2.0.5 (*)
+│   │   │       ├── alloy-rpc-types-anvil v2.0.5
+│   │   │       │   ├── alloy-provider v2.0.5 (*)
+│   │   │       │   └── alloy-rpc-types v2.0.5 (*)
+│   │   │       ├── alloy-rpc-types-any v2.0.5 (*)
+│   │   │       ├── alloy-rpc-types-trace v2.0.5
+│   │   │       │   ├── alloy-provider v2.0.5 (*)
+│   │   │       │   └── alloy-rpc-types v2.0.5 (*)
+│   │   │       └── alloy-rpc-types-txpool v2.0.5
+│   │   │           ├── alloy-provider v2.0.5 (*)
+│   │   │           └── alloy-rpc-types v2.0.5 (*)
+│   │   ├── alloy-contract v2.0.5 (*)
+│   │   ├── alloy-network v2.0.5 (*)
+│   │   ├── alloy-network-primitives v2.0.5
+│   │   │   ├── alloy-contract v2.0.5 (*)
+│   │   │   ├── alloy-network v2.0.5 (*)
+│   │   │   ├── alloy-provider v2.0.5 (*)
+│   │   │   ├── alloy-rpc-types-any v2.0.5 (*)
+│   │   │   └── alloy-rpc-types-eth v2.0.5 (*)
+│   │   ├── alloy-provider v2.0.5 (*)
+│   │   ├── alloy-rpc-types-eth v2.0.5 (*)
+│   │   └── alloy-signer-local v2.0.5 (*)
+│   ├── alloy-consensus-any v2.0.5 (*)
+│   ├── alloy-contract v2.0.5 (*)
+│   ├── alloy-core v1.6.0
+│   │   └── alloy v2.0.5 (*)
+
+=================== cargo tree -i proc-macro-error2 (depth 6, dedup)
+proc-macro-error2 v2.0.1
+├── alloy-sol-macro v1.6.0 (proc-macro)
+│   └── alloy-sol-types v1.6.0
+│       ├── alloy-contract v2.0.5
+│       │   └── alloy v2.0.5
+│       │       ├── safenet-core v0.2.0 (/home/shebin.guest/safe/safenet/crates/core)
+│       │       │   ├── sentinel v0.2.0 (/home/shebin.guest/safe/safenet/crates/sentinel)
+│       │       │   ├── sentinel-engine v0.2.0 (/home/shebin.guest/safe/safenet/crates/sentinel-engine)
+│       │       │   └── validator v0.2.0 (/home/shebin.guest/safe/safenet/crates/validator)
+│       │       │   [dev-dependencies]
+│       │       │   ├── sentinel v0.2.0 (/home/shebin.guest/safe/safenet/crates/sentinel)
+│       │       │   ├── sentinel-engine v0.2.0 (/home/shebin.guest/safe/safenet/crates/sentinel-engine)
+│       │       │   └── validator v0.2.0 (/home/shebin.guest/safe/safenet/crates/validator)
+│       │       ├── sentinel v0.2.0 (/home/shebin.guest/safe/safenet/crates/sentinel)
+│       │       ├── sentinel-engine v0.2.0 (/home/shebin.guest/safe/safenet/crates/sentinel-engine)
+│       │       └── validator v0.2.0 (/home/shebin.guest/safe/safenet/crates/validator)
+│       ├── alloy-core v1.6.0
+│       │   └── alloy v2.0.5 (*)
+│       ├── alloy-dyn-abi v1.6.0
+│       │   ├── alloy-contract v2.0.5 (*)
+│       │   └── alloy-core v1.6.0 (*)
+│       ├── alloy-json-rpc v2.0.5
+│       │   ├── alloy v2.0.5 (*)
+│       │   ├── alloy-network v2.0.5
+│       │   │   ├── alloy v2.0.5 (*)
+│       │   │   ├── alloy-contract v2.0.5 (*)
+│       │   │   ├── alloy-provider v2.0.5
+│       │   │   │   ├── alloy v2.0.5 (*)
+│       │   │   │   └── alloy-contract v2.0.5 (*)
+│       │   │   └── alloy-signer-local v2.0.5
+│       │   │       └── alloy v2.0.5 (*)
+│       │   ├── alloy-provider v2.0.5 (*)
+│       │   ├── alloy-pubsub v2.0.5
+│       │   │   ├── alloy v2.0.5 (*)
+│       │   │   ├── alloy-contract v2.0.5 (*)
+│       │   │   ├── alloy-provider v2.0.5 (*)
+│       │   │   ├── alloy-rpc-client v2.0.5
+│       │   │   │   ├── alloy v2.0.5 (*)
+│       │   │   │   └── alloy-provider v2.0.5 (*)
+│       │   │   ├── alloy-transport-ipc v2.0.5
+│       │   │   │   ├── alloy v2.0.5 (*)
+│       │   │   │   ├── alloy-provider v2.0.5 (*)
+│       │   │   │   └── alloy-rpc-client v2.0.5 (*)
+│       │   │   └── alloy-transport-ws v2.0.5
+│       │   │       ├── alloy v2.0.5 (*)
+│       │   │       ├── alloy-provider v2.0.5 (*)
+│       │   │       └── alloy-rpc-client v2.0.5 (*)
+│       │   ├── alloy-rpc-client v2.0.5 (*)
+│       │   ├── alloy-transport v2.0.5
+│       │   │   ├── alloy v2.0.5 (*)
+│       │   │   ├── alloy-contract v2.0.5 (*)
+│       │   │   ├── alloy-provider v2.0.5 (*)
+│       │   │   ├── alloy-pubsub v2.0.5 (*)
+│       │   │   ├── alloy-rpc-client v2.0.5 (*)
+│       │   │   ├── alloy-transport-http v2.0.5
+│       │   │   │   ├── alloy v2.0.5 (*)
+│       │   │   │   ├── alloy-provider v2.0.5 (*)
+│       │   │   │   └── alloy-rpc-client v2.0.5 (*)
+│       │   │   ├── alloy-transport-ipc v2.0.5 (*)
+│       │   │   └── alloy-transport-ws v2.0.5 (*)
+
+=================== cargo tree -i anyhow (depth 6, dedup)
+warning: nothing to print.
+
+To find dependencies that require specific target platforms, try to use option `--target all` first, and then narrow your search scope accordingly.
+
+=================== cargo tree -i event-listener (depth 6, dedup)
+event-listener v5.4.1
+└── sqlx-core v0.9.0
+    ├── sqlx v0.9.0
+    │   ├── safenet-core v0.2.0 (/home/shebin.guest/safe/safenet/crates/core)
+    │   │   ├── sentinel v0.2.0 (/home/shebin.guest/safe/safenet/crates/sentinel)
+    │   │   ├── sentinel-engine v0.2.0 (/home/shebin.guest/safe/safenet/crates/sentinel-engine)
+    │   │   └── validator v0.2.0 (/home/shebin.guest/safe/safenet/crates/validator)
+    │   │   [dev-dependencies]
+    │   │   ├── sentinel v0.2.0 (/home/shebin.guest/safe/safenet/crates/sentinel)
+    │   │   ├── sentinel-engine v0.2.0 (/home/shebin.guest/safe/safenet/crates/sentinel-engine)
+    │   │   └── validator v0.2.0 (/home/shebin.guest/safe/safenet/crates/validator)
+    │   ├── sentinel v0.2.0 (/home/shebin.guest/safe/safenet/crates/sentinel)
+    │   └── validator v0.2.0 (/home/shebin.guest/safe/safenet/crates/validator)
+    ├── sqlx-macros v0.9.0 (proc-macro)
+    │   └── sqlx v0.9.0 (*)
+    ├── sqlx-macros-core v0.9.0
+    │   └── sqlx-macros v0.9.0 (proc-macro) (*)
+    ├── sqlx-sqlite v0.9.0
+    │   └── sqlx v0.9.0 (*)
+    └── sqlx-sqlite v0.9.0
+        └── sqlx-macros-core v0.9.0 (*)
+
+=================== cargo tree -i lru (depth 6, dedup)
+lru v0.16.4
+└── alloy-provider v2.0.5
+    ├── alloy v2.0.5
+    │   ├── safenet-core v0.2.0 (/home/shebin.guest/safe/safenet/crates/core)
+    │   │   ├── sentinel v0.2.0 (/home/shebin.guest/safe/safenet/crates/sentinel)
+    │   │   ├── sentinel-engine v0.2.0 (/home/shebin.guest/safe/safenet/crates/sentinel-engine)
+    │   │   └── validator v0.2.0 (/home/shebin.guest/safe/safenet/crates/validator)
+    │   │   [dev-dependencies]
+    │   │   ├── sentinel v0.2.0 (/home/shebin.guest/safe/safenet/crates/sentinel)
+    │   │   ├── sentinel-engine v0.2.0 (/home/shebin.guest/safe/safenet/crates/sentinel-engine)
+    │   │   └── validator v0.2.0 (/home/shebin.guest/safe/safenet/crates/validator)
+    │   ├── sentinel v0.2.0 (/home/shebin.guest/safe/safenet/crates/sentinel)
+    │   ├── sentinel-engine v0.2.0 (/home/shebin.guest/safe/safenet/crates/sentinel-engine)
+    │   └── validator v0.2.0 (/home/shebin.guest/safe/safenet/crates/validator)
+    └── alloy-contract v2.0.5
+        └── alloy v2.0.5 (*)
+
+=================== cargo tree -i bitcoin-io (depth 6, dedup)
+warning: nothing to print.
+
+To find dependencies that require specific target platforms, try to use option `--target all` first, and then narrow your search scope accordingly.
+
+=================== cargo tree -i bitcoin_hashes (depth 6, dedup)
+warning: nothing to print.
+
+To find dependencies that require specific target platforms, try to use option `--target all` first, and then narrow your search scope accordingly.
+
+=================== cargo tree -i chacha20 (depth 6, dedup)
+warning: nothing to print.
+
+To find dependencies that require specific target platforms, try to use option `--target all` first, and then narrow your search scope accordingly.
+
+=================== cargo tree -i spin (depth 6, dedup)
+spin v0.9.8
+└── flume v0.12.0
+    ├── sqlx-sqlite v0.9.0
+    │   └── sqlx v0.9.0
+    │       ├── safenet-core v0.2.0 (/home/shebin.guest/safe/safenet/crates/core)
+    │       │   ├── sentinel v0.2.0 (/home/shebin.guest/safe/safenet/crates/sentinel)
+    │       │   ├── sentinel-engine v0.2.0 (/home/shebin.guest/safe/safenet/crates/sentinel-engine)
+    │       │   └── validator v0.2.0 (/home/shebin.guest/safe/safenet/crates/validator)
+    │       │   [dev-dependencies]
+    │       │   ├── sentinel v0.2.0 (/home/shebin.guest/safe/safenet/crates/sentinel)
+    │       │   ├── sentinel-engine v0.2.0 (/home/shebin.guest/safe/safenet/crates/sentinel-engine)
+    │       │   └── validator v0.2.0 (/home/shebin.guest/safe/safenet/crates/validator)
+    │       ├── sentinel v0.2.0 (/home/shebin.guest/safe/safenet/crates/sentinel)
+    │       └── validator v0.2.0 (/home/shebin.guest/safe/safenet/crates/validator)
+    └── sqlx-sqlite v0.9.0
+        └── sqlx-macros-core v0.9.0
+            └── sqlx-macros v0.9.0 (proc-macro)
+                └── sqlx v0.9.0 (*)
+
+# appended: cargo tree --offline --locked --workspace --target all -i <crate> --depth 4 
+
+=================== --target all -i quinn-proto
+error: failed to download `android_system_properties v0.1.5`
+
+Caused by:
+  attempting to make an HTTP request, but --offline was specified
+
+=================== --target all -i bitcoin_hashes
+error: failed to download `android_system_properties v0.1.5`
+
+Caused by:
+  attempting to make an HTTP request, but --offline was specified
+
+=================== --target all -i bitcoin-io
+error: failed to download `android_system_properties v0.1.5`
+
+Caused by:
+  attempting to make an HTTP request, but --offline was specified
+
+=================== --target all -i chacha20
+error: failed to download `android_system_properties v0.1.5`
+
+Caused by:
+  attempting to make an HTTP request, but --offline was specified
+
+=================== --target all -i anyhow
+error: failed to download `android_system_properties v0.1.5`
+
+Caused by:
+  attempting to make an HTTP request, but --offline was specified
+
+=================== --target all -i derivative
+error: failed to download `android_system_properties v0.1.5`
+
+Caused by:
+  attempting to make an HTTP request, but --offline was specified
+
+=================== --target all -i atomic-polyfill
+error: failed to download `android_system_properties v0.1.5`
+
+Caused by:
+  attempting to make an HTTP request, but --offline was specified

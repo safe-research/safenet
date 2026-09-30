@@ -1,0 +1,48 @@
+# C2-XC re-run of the config-error key leak; commit 3ec8bc5
+# effective rpc in every scratch config: http://127.0.0.1:9 (loopback discard port, never contacted: Config::load fails first)
+# signer values are the placeholder pattern 0x0123456789abcdef..., not a real key; database sqlite::memory:
+# command: cargo run --offline --locked -q -p <bin> -- --config-file <scratch>/<name>.toml  (2>&1)
+
+=================== validator val-badsigner.toml
+    | rpc = "http://127.0.0.1:9"
+    | signer = "0x0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcd"
+    | database = "sqlite::memory:"
+    | 
+    | [validator]
+    | consensus = "0x1111111111111111111111111111111111111111"
+--- stdout+stderr:
+Error: Parse(Error { message: "invalid string length", input: Some("rpc = \"http://127.0.0.1:9\"\nsigner = \"0x0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcd\"\ndatabase = \"sqlite::memory:\"\n\n[validator]\nconsensus = \"0x1111111111111111111111111111111111111111\"\n"), keys: ["signer"], span: Some(36..102) })
+--- exit=1
+
+=================== validator val-typo.toml
+    | rpc = "http://127.0.0.1:9"
+    | signer = "0x0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+    | database = "sqlite::memory:"
+    | 
+    | [validator]
+    | consensus = "0x1111111111111111111111111111111111111111"
+    | signing_timeout = 0
+--- stdout+stderr:
+Error: Parse(Error { message: "invalid value: integer `0`, expected a nonzero u64", input: Some("rpc = \"http://127.0.0.1:9\"\nsigner = \"0x0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef\"\ndatabase = \"sqlite::memory:\"\n\n[validator]\nconsensus = \"0x1111111111111111111111111111111111111111\"\nsigning_timeout = 0\n"), keys: ["validator", "signing_timeout"], span: Some(222..223) })
+--- exit=1
+
+=================== sentinel sen-typo.toml
+    | rpc = "http://127.0.0.1:9"
+    | signer = "0x0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+    | database = "sqlite::memory:"
+    | oracle = "0x0101010101010101010101010101010101010101"
+    | consensus = "0x0202020202020202020202020202020202020202"
+    | 
+    | [sentinel]
+    | fee_token = "0x0303030303030303030303030303030303030303"
+    | voting_window = 100
+    | engine = "http://127.0.0.1:9"
+    | engin = "typo"
+--- stdout+stderr:
+Error: Parse(Error { message: "unknown field `engin`, expected one of `fee_token`, `voting_window`, `engine`", input: Some("rpc = \"http://127.0.0.1:9\"\nsigner = \"0x0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef\"\ndatabase = \"sqlite::memory:\"\noracle = \"0x0101010101010101010101010101010101010101\"\nconsensus = \"0x0202020202020202020202020202020202020202\"\n\n[sentinel]\nfee_token = \"0x0303030303030303030303030303030303030303\"\nvoting_window = 100\nengine = \"http://127.0.0.1:9\"\nengin = \"typo\"\n"), keys: ["sentinel"], span: Some(364..369) })
+--- exit=1
+
+=================== stderr only (2>&1 1>/dev/null) for validator val-typo.toml, to show the channel
+Error: Parse(Error { message: "invalid value: integer `0`, expected a nonzero u64", input: Some("rpc = \"http://127.0.0.1:9\"\nsigner = \"0x0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef\"\ndatabase = \"sqlite::memory:\"\n\n[validator]\nconsensus = \"0x1111111111111111111111111111111111111111\"\nsigning_timeout = 0\n"), keys: ["validator", "signing_timeout"], span: Some(222..223) })
+
+--- exit=0
