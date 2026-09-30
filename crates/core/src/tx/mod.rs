@@ -18,7 +18,7 @@ use self::{
     fees::cap_priority_fee,
     signer::SigningError,
     storage::{Status, Submission, TransactionStorage},
-    types::{AllocatedTransaction, UnsignedTransaction},
+    types::AllocatedTransaction,
 };
 pub use self::{
     config::{Config, SubmissionMode},
@@ -27,11 +27,8 @@ pub use self::{
 };
 use crate::{index::BlockStatus, provider::Provider};
 use alloy::{
-    consensus::TxEip1559,
     eips::{BlockId, eip1559::Eip1559Estimation},
-    primitives::TxKind,
     providers::Provider as _,
-    rpc::types::AccessList,
     transports::TransportError,
 };
 use sqlx::sqlite::SqlitePool;
@@ -243,7 +240,7 @@ impl TransactionQueue {
             },
         };
 
-        let signed = self.signer.sign_transaction(eip1559(transaction))?;
+        let signed = self.signer.sign_transaction(transaction)?;
         tracing::debug!(
             nonce = submission.nonce,
             block,
@@ -330,24 +327,6 @@ impl TransactionQueue {
                 Ok(fees)
             }
         }
-    }
-}
-
-/// Converts `transaction` to the EIP-1559 transaction the signer accepts.
-fn eip1559(transaction: UnsignedTransaction) -> TxEip1559 {
-    if transaction.authorization.is_some() {
-        todo!("EIP-7702 transactions are not supported yet");
-    }
-    TxEip1559 {
-        chain_id: transaction.chain_id,
-        nonce: transaction.nonce,
-        gas_limit: transaction.gas_limit,
-        max_fee_per_gas: transaction.max_fee_per_gas,
-        max_priority_fee_per_gas: transaction.max_priority_fee_per_gas,
-        to: TxKind::Call(transaction.to),
-        value: transaction.value,
-        access_list: AccessList::default(),
-        input: transaction.input,
     }
 }
 
