@@ -1,8 +1,9 @@
 //! Persistent storage for the transaction queue.
 //!
 //! Holds the transactions a service has queued for execution, each as a
-//! serialized [`Transaction`] alongside the bookkeeping the queue needs: when it
-//! expires, its allocated nonce, when it was submitted and executed.
+//! serialized [`Transaction`] alongside the nonces the queue has allocated,
+//! and the bookkeeping the queue needs: the fees of their last submission,
+//! when they were submitted and executed.
 
 use super::types::{AllocatedTransaction, Transaction};
 use alloy::eips::eip1559::Eip1559Estimation;
@@ -56,8 +57,7 @@ pub struct TransactionStorage {
 }
 
 impl TransactionStorage {
-    /// Creates a store backed by `pool`, creating the transactions table if it
-    /// does not already exist.
+    /// Creates a store backed by `pool`.
     pub async fn new(pool: SqlitePool) -> Result<Self, Error> {
         // Note that we store the `nonce` in a separate column from the
         // transaction request JSON data. This allows us to work more naturally
@@ -66,15 +66,34 @@ impl TransactionStorage {
         // data directly (as we would need JSON extractors to use the column
         // and would have to potentially deal with hexadecimal encoding, to
         // match other numerical values are serialized).
+        //
+        // Every nonce the queue uses has a row in `allocated_nonces`. A row
+        // with a `request` is a transaction: the one sent onchain at that
+        // nonce, with the fees of its last submission, carrying the queued
+        // transactions that reference it. A row with a `delegate` is an
+        // EIP-7702 authorization carried by the transaction at the nonce
+        // before it. Under exceptional cases, a row can have _both_ a
+        // transaction and a delegate in the cases where the account's nonce
+        // onchain progressed past a transaction but not its delegation (which
+        // can only happen if the account is used externally to the services).
+        // In this case a cancellation transaction is inserted in order to
+        // recover and continue with nonce execution.
         sqlx::query(
-            "CREATE TABLE IF NOT EXISTS transactions (
-                 id           INTEGER PRIMARY KEY,
-                 request      TEXT    NOT NULL,
-                 expires_at   INTEGER DEFAULT NULL,
-                 nonce        INTEGER DEFAULT NULL,
+            "CREATE TABLE IF NOT EXISTS allocated_nonces (
+                 nonce        INTEGER PRIMARY KEY,
+                 request      TEXT    DEFAULT NULL,
+                 delegate     TEXT    DEFAULT NULL,
                  submitted_at INTEGER DEFAULT NULL,
-                 executed_at  INTEGER DEFAULT NULL
-             )",
+                 executed_at  INTEGER DEFAULT NULL,
+                 CHECK (request IS NOT NULL OR delegate IS NOT NULL)
+             );
+
+             CREATE TABLE IF NOT EXISTS transactions (
+                 id         INTEGER PRIMARY KEY,
+                 request    TEXT    NOT NULL,
+                 expires_at INTEGER DEFAULT NULL,
+                 nonce      INTEGER DEFAULT NULL REFERENCES allocated_nonces (nonce)
+             );",
         )
         .execute(&pool)
         .await?;
@@ -107,8 +126,8 @@ impl TransactionStorage {
     /// assigned a nonce but are not yet executed.
     pub async fn count_in_flight(&self) -> Result<usize, Error> {
         let count = sqlx::query_scalar::<_, i64>(
-            "SELECT COUNT(*) FROM transactions
-             WHERE nonce IS NOT NULL AND executed_at IS NULL",
+            "SELECT COUNT(*) FROM allocated_nonces
+             WHERE request IS NOT NULL AND executed_at IS NULL",
         )
         .fetch_one(&self.pool)
         .await?;
@@ -132,6 +151,25 @@ impl TransactionStorage {
         &self,
         status: Status,
     ) -> Result<Option<AllocatedTransaction>, Error> {
+        // The transaction reads before it writes, so take the write lock up
+        // front: SQLite fails a deferred transaction with `SQLITE_BUSY`, without
+        // waiting on the busy timeout, if another connection writes between its
+        // first read and its first write.
+        let mut tx = self.pool.begin_with("BEGIN IMMEDIATE").await?;
+
+        let Some((id, request)) = sqlx::query_as::<_, (i64, String)>(
+            "SELECT id, request FROM transactions
+             WHERE nonce IS NULL AND (expires_at IS NULL OR expires_at > ?)
+             ORDER BY id ASC
+             LIMIT 1",
+        )
+        .bind(i64::try_from(status.block)?)
+        .fetch_optional(&mut *tx)
+        .await?
+        else {
+            return Ok(None);
+        };
+
         // Note that, instead of returning the `nonce` and `request` as
         // separate columns, we instead return a JSON string with the nonce
         // field already set (**without updating the `request` column**). This
@@ -141,27 +179,25 @@ impl TransactionStorage {
         // afterwards). The `request` value is not affected by this query,
         // `json_set(TEXT, ...) -> TEXT` is just a pure transformation on its
         // inputs to an output JSON string value.
-        let Some(request) = sqlx::query_scalar::<_, String>(
-            "UPDATE transactions
-             SET nonce = MAX(?, COALESCE(
-                     (SELECT MAX(nonce) + 1 FROM transactions),
-                     0
-                 ))
-             WHERE id = (
-                 SELECT id FROM transactions
-                 WHERE nonce IS NULL AND (expires_at IS NULL OR expires_at > ?)
-                 ORDER BY id ASC
-                 LIMIT 1
+        let (nonce, request) = sqlx::query_as::<_, (i64, String)>(
+            "INSERT INTO allocated_nonces (nonce, request)
+             VALUES (
+                 MAX(?, COALESCE((SELECT MAX(nonce) + 1 FROM allocated_nonces), 0)),
+                 ?
              )
-             RETURNING json_set(request, '$.nonce', nonce)",
+             RETURNING nonce, json_set(request, '$.nonce', nonce)",
         )
         .bind(i64::try_from(status.nonce)?)
-        .bind(i64::try_from(status.block)?)
-        .fetch_optional(&self.pool)
-        .await?
-        else {
-            return Ok(None);
-        };
+        .bind(request)
+        .fetch_one(&mut *tx)
+        .await?;
+
+        sqlx::query("UPDATE transactions SET nonce = ? WHERE id = ?")
+            .bind(nonce)
+            .bind(id)
+            .execute(&mut *tx)
+            .await?;
+        tx.commit().await?;
 
         let transaction = serde_json::from_str::<AllocatedTransaction>(&request)?;
         Ok(Some(transaction))
@@ -174,14 +210,14 @@ impl TransactionStorage {
     pub async fn record_submission(&self, submission: Submission) -> Result<(), Error> {
         let Submission { block, nonce, fees } = submission;
         let updated = sqlx::query(
-            "UPDATE transactions
+            "UPDATE allocated_nonces
              SET submitted_at = ?,
                  request = json_set(
                      request,
                      '$.maxFeePerGas', ?,
                      '$.maxPriorityFeePerGas', ?
                  )
-             WHERE nonce = ?",
+             WHERE nonce = ? AND request IS NOT NULL",
         )
         .bind(block.map(i64::try_from).transpose()?)
         // Note that we encode the fee arguments in hexadecimal notation. This
@@ -209,9 +245,10 @@ impl TransactionStorage {
     /// block passes their expiry.
     pub async fn count_outstanding(&self, block: u64) -> Result<usize, Error> {
         let count = sqlx::query_scalar::<_, i64>(
-            "SELECT COUNT(*) FROM transactions
-             WHERE executed_at IS NULL
-               AND (nonce IS NOT NULL OR expires_at IS NULL OR expires_at > ?)",
+            "SELECT
+                 (SELECT COUNT(*) FROM allocated_nonces WHERE executed_at IS NULL) +
+                 (SELECT COUNT(*) FROM transactions
+                  WHERE nonce IS NULL AND (expires_at IS NULL OR expires_at > ?))",
         )
         .bind(i64::try_from(block)?)
         .fetch_one(&self.pool)
@@ -223,9 +260,9 @@ impl TransactionStorage {
     /// `execution.nonce`) as executed at `execution.block`.
     pub async fn mark_executed(&self, status: Status) -> Result<(), Error> {
         sqlx::query(
-            "UPDATE transactions
+            "UPDATE allocated_nonces
              SET executed_at = ?
-             WHERE nonce IS NOT NULL AND nonce < ? AND executed_at IS NULL",
+             WHERE nonce < ? AND executed_at IS NULL",
         )
         .bind(i64::try_from(status.block)?)
         .bind(i64::try_from(status.nonce)?)
@@ -246,11 +283,25 @@ impl TransactionStorage {
         let safe = i64::try_from(safe)?;
         let mut tx = self.pool.begin().await?;
 
-        // Prune transactions executed at or below the reorg-safe block.
-        sqlx::query("DELETE FROM transactions WHERE executed_at IS NOT NULL AND executed_at <= ?")
-            .bind(safe)
-            .execute(&mut *tx)
-            .await?;
+        // Prune transactions executed at or below the reorg-safe block,
+        // together with their nonces. The transactions reference the nonces,
+        // so they have to be deleted first.
+        sqlx::query(
+            "DELETE FROM transactions
+             WHERE nonce IN (
+                 SELECT nonce FROM allocated_nonces
+                 WHERE executed_at IS NOT NULL AND executed_at <= ?
+             )",
+        )
+        .bind(safe)
+        .execute(&mut *tx)
+        .await?;
+        sqlx::query(
+            "DELETE FROM allocated_nonces WHERE executed_at IS NOT NULL AND executed_at <= ?",
+        )
+        .bind(safe)
+        .execute(&mut *tx)
+        .await?;
 
         // Remove queued (not-yet-submitted) transactions that expired at or
         // before the reorg-safe block. Never-expiring transactions have a
@@ -271,7 +322,7 @@ impl TransactionStorage {
     /// Clears the executed marker from transactions executed at or after `block`,
     /// used when `block` is uncled by a reorg.
     pub async fn unmark_executed(&self, block: u64) -> Result<(), Error> {
-        sqlx::query("UPDATE transactions SET executed_at = NULL WHERE executed_at >= ?")
+        sqlx::query("UPDATE allocated_nonces SET executed_at = NULL WHERE executed_at >= ?")
             .bind(i64::try_from(block)?)
             .execute(&self.pool)
             .await?;
@@ -292,8 +343,8 @@ impl TransactionStorage {
         // deserialization logic in Rust.
         sqlx::query_scalar::<_, String>(
             "SELECT json_set(request, '$.nonce', nonce)
-             FROM transactions
-             WHERE nonce IS NOT NULL AND executed_at IS NULL
+             FROM allocated_nonces
+             WHERE request IS NOT NULL AND executed_at IS NULL
                AND (submitted_at IS NULL OR submitted_at <= ?)
              ORDER BY nonce ASC",
         )
@@ -483,6 +534,41 @@ mod tests {
             .unwrap()
             .unwrap();
         assert_eq!(next.transaction.data, tx("0x5afe02").data);
+    }
+
+    #[tokio::test]
+    async fn prunes_executed_transactions_with_their_nonces() {
+        let storage = storage().await;
+        storage.enqueue([(tx("0x5afe01"), None)]).await.unwrap();
+        storage
+            .next_transaction(Status { nonce: 5, block: 0 })
+            .await
+            .unwrap()
+            .unwrap();
+        storage
+            .mark_executed(Status {
+                nonce: 6,
+                block: 10,
+            })
+            .await
+            .unwrap();
+
+        // Pruning at the block the transaction executed at removes it along
+        // with its nonce, so nothing is outstanding and the nonce no longer
+        // counts towards the next free one.
+        storage.prune(10).await.unwrap();
+        assert_eq!(storage.count_outstanding(10).await.unwrap(), 0);
+
+        storage.enqueue([(tx("0x5afe02"), None)]).await.unwrap();
+        let next = storage
+            .next_transaction(Status {
+                nonce: 0,
+                block: 10,
+            })
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(next.nonce, 0);
     }
 
     #[tokio::test]

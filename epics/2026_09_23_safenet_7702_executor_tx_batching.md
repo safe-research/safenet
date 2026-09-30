@@ -14,7 +14,7 @@ This design supersedes the `feat/batex_*` branches. Two of their phases are kept
 
 1. **Contract** — take `fix/batex_1` unchanged (rename to `Safenet7702Executor`, calldata-pointer gas optimization, the best-effort `InsufficientGas` guard), then add a `value` to each `Call` and an `ISafenet7702Executor` interface. The services depend on this interface, not on the concrete contract.
 2. **Config** — take `feat/batex_2`'s TOML keys, but replace `max_in_flight_transactions` with a `SubmissionMode` enum, either `Direct { max_in_flight_transactions }` or `Batched { executor, max_batch_gas }`, deserialized through a private flat `RawConfig`, so that mixing keys from both modes is a config error. Configuring an executor limits the queue to one transaction in flight.
-3. **Storage** — split the transaction storage into the queued `transactions` and a `nonces` table holding one row per allocated nonce, that is, per onchain transaction. Several queued transactions can be allocated to one nonce. A nonce row can carry an authorization, which reserves the following nonce. If a transaction's nonce is consumed without its authorization's nonce, the storage recovers with a cancellation transaction.
+3. **Storage** — split the transaction storage into the queued `transactions` and an `allocated_nonces` table holding one row per nonce the queue uses: one for each onchain transaction, and one for each authorization it carries. Several queued transactions can be allocated to one nonce, and the nonce's row stores the onchain transaction built for them. If a transaction's nonce is consumed without its authorization's nonce, the storage recovers by turning the authorization's row into a cancellation transaction.
 4. **Unsigned transactions** — replace `TxEip1559` inside the `tx` module with a queue-owned `UnsignedTransaction`. The `Signer` then builds and signs either a `TxEip1559` or a `TxEip7702` (with a self-signed authorization at `nonce + 1`).
 5. **Batching** — replace the nonce cache with an `eth_getProof`-backed account cache (`nonce` and `code_hash`). Add the batch encoder and the EIP-7702 delegation code hash helper. Then wire them into `TransactionQueue::submit_pending`: when an executor is configured, allocate the longest prefix of queued transactions that fits in `max_batch_gas` as one batch. Attach an authorization whenever the account's code hash differs from the one wanted: the executor's delegation designator when an executor is configured, and empty code when none is (an authorization to `address(0)`, which removes a leftover delegation). While the account is delegated, keep one transaction in flight. Histogram metrics show how many calls batches carry and how much gas they use.
 6. **Integration test** — a 7702 integration test in which validators delegate on demand and serve three signing requests through `execute` self-calls only.
@@ -34,17 +34,15 @@ Batching and delegation live entirely inside `crates/core/src/tx`. The services'
  TransactionQueue::queue -> TransactionStorage::enqueue            one row per transaction, as today
         v
  TransactionQueue::submit_pending (while in flight < limit; limit is 1 with an executor or a delegated account)
-        |-- storage.queued(block, limit)        oldest unexpired unallocated transactions, in order
-        |-- executor configured?
-        |     no  -> the first transaction, unchanged
-        |     yes -> executor::batch(account, queued, max_batch_gas)
-        |              longest prefix that fits (at least one); a batch of one still goes through `execute`
+        |-- allocation := Single without an executor, or
+        |                 Batch { build: executor::batch(account, .., max_batch_gas) } with one
         |-- wanted := Authorization { address: executor or address(0) }
         |   authorization := account.code_hash != wanted.code_hash()   (address(0) wants empty code)
         v
- storage.allocate(status, ids, transaction, authorization)
-        |   nonces row N (transaction + authorization); N + 1 reserved when authorized
-        |   transactions.nonce = N for every id
+ storage.next_transaction(status, allocation, authorization)
+        |   the oldest unexpired unallocated transactions; `build` takes a prefix and builds the batch
+        |   allocated_nonces row N (the onchain transaction), and row N + 1 (delegate) when authorized
+        |   transactions.nonce = N for the prefix
         v
  AllocatedTransaction { nonce, transaction, authorization, fees } -> build -> UnsignedTransaction
         v
@@ -67,7 +65,11 @@ A batch's contents are fixed when its nonce is allocated. Resubmission rebroadca
 
 ### The storage stays a nonce store
 
-The storage does not know about batching or calldata encoding. It is a queue of transactions plus a store of allocated nonces, where each nonce row holds the onchain transaction built for it and which queued transactions it carries. The queue selects the transactions for a nonce and builds the batch. The storage allocates the nonce, links the transactions to it atomically, and tracks submission and execution per nonce, as it does per transaction today.
+The storage does not know about calldata encoding or batch gas. It is a queue of transactions plus a store of allocated nonces. Each transaction row of `allocated_nonces` holds the onchain transaction built for that nonce (the queued transaction itself without an executor, or the `execute` batch with one) and all of its submission state. Which queued transactions it carries follows from `transactions.nonce`.
+
+The queue decides what to allocate through an `Allocation`: `Single` takes the oldest queued transaction as it is, and `Batch` passes the oldest queued transactions to a pure `build` function, which returns how long a prefix it took and the batch it built from it. The storage allocates the nonce, stores the transaction, and links the prefix to it, all in one SQLite transaction, and tracks submission and execution per nonce, as it does per transaction today.
+
+The row stores what was actually sent, so it does not depend on the configuration. After a restart with a different `executor`, or none, a nonce allocated earlier is still resubmitted exactly as it was built, whether it is a one-call batch or a plain transaction.
 
 ### The authorization rides on the transaction that needs it
 
@@ -93,21 +95,21 @@ Without an executor, the undelegating authorization rides on the next plain tran
 
 Until the account's code hash is observed to be empty, the queue keeps one transaction in flight even without an executor, because the mempool allows no more for a delegated account or for one with a pending authorization. This is the one in-flight rule the queue applies itself rather than through the config. The config's limit of 1 covers a configured executor, but it cannot know whether an account is still delegated from an earlier configuration. Once the delegation is gone, `max_in_flight_transactions` applies again. A non-existent account's `eth_getProof` code hash of zero is treated as `KECCAK_EMPTY` when the account status is fetched, so a fresh account is never undelegated needlessly.
 
-### Authorizations reserve a nonce
+### Authorizations have their own nonce row
 
-A self-sponsored authorization must name `nonce + 1`, because the sender's nonce is incremented before the authorization list is processed, and applying it increments the nonce again. So a transaction at `N` with an authorization leaves the account at `N + 2`. The storage models this directly on the nonce row:
+A self-sponsored authorization must name `nonce + 1`, because the sender's nonce is incremented before the authorization list is processed, and applying it increments the nonce again. So a transaction at `N` with an authorization leaves the account at `N + 2`. The storage gives the authorization's nonce a row of its own:
 
-- `nonces` is the single source of truth for allocated nonces. A row with a non-null `authorization` also reserves `nonce + 1`.
-- The next free nonce is `MAX(status.nonce, MAX(nonce + 1 + (authorization IS NOT NULL)))` over `nonces`.
-- An authorization has no `expires_at`, `submitted_at` or `executed_at` of its own. It is always part of exactly one onchain transaction.
+- `allocated_nonces` has exactly one row for every nonce the queue uses, and is the single source of truth for them. The next free nonce is `MAX(status.nonce, MAX(nonce) + 1)`, with no special case.
+- A row with a `request` is a transaction. A row with a `delegate` is an authorization, carried by the transaction at `nonce - 1`. Both are allocated together, in one SQLite transaction.
+- An authorization row has no `expires_at` or `submitted_at`. `mark_executed` marks it executed like any other row once the account moves past its nonce.
 
 ### Recovering from a consumed transaction nonce with an unused authorization nonce
 
-If the account's onchain nonce is `N + 1` and the row at `N` carries an authorization, then nonce `N` was consumed but the authorization's `N + 1` was not. This happens if the EOA was used outside the queue and replaced the transaction at `N`, or if the transaction at `N` executed but its authorization was skipped as invalid. Every nonce the queue allocates from then on sits behind a permanent gap at `N + 1`.
+If the account's onchain nonce is `N + 1` and the row at `N + 1` is an authorization, then nonce `N` was consumed but the authorization's `N + 1` was not. This happens if the EOA was used outside the queue and replaced the transaction at `N`, or if the transaction at `N` executed but its authorization was skipped as invalid. Every nonce the queue allocates from then on sits behind a permanent gap at `N + 1`.
 
-The storage recovers by inserting a nonce row at `N + 1` holding a cancellation transaction (`Transaction::default()`: a call to `address(0)` with no value and no data, 21,000 gas) that carries no queued transactions. Because it is allocated but never submitted, the existing `stale_submissions` query picks it up and `resubmit_stale` broadcasts it in the same pass. This does not depend on the in-flight budget, which the stuck transactions above the gap may already exhaust.
+The storage recovers by giving the authorization's row a `request`, which turns it into a cancellation: a transaction row with no queued transactions, sent as `Transaction::default()` (a call to `address(0)` with no value and no data, 21,000 gas). Its `delegate` stays set, so the transaction at `N` still loads with its authorization. Because the cancellation is allocated but never submitted, the existing `stale_submissions` query picks it up and `resubmit_stale` broadcasts it in the same pass. This does not depend on the in-flight budget, which the stuck transactions above the gap may already exhaust.
 
-This is reorg-safe. If a reorg means the original transaction and its authorization do execute after all, nonce `N + 1` is consumed by the authorization. The account nonce then moves past it, and `mark_executed` marks the cancellation executed like any other nonce row the account has moved past.
+This is reorg-safe. If a reorg means the original transaction and its authorization do execute after all, nonce `N + 1` is consumed by the authorization. The account nonce then moves past it, and `mark_executed` marks the row executed like any other row the account has moved past.
 
 ### Every call goes through the executor
 
@@ -117,7 +119,7 @@ When an executor is configured, even a single queued transaction is wrapped in a
 
 A batch is the longest prefix of the queued transactions, in the order they were enqueued, that fits in `max_batch_gas`. Order matters: the sentinel emits `ApproveToken` before `Commit`, batches execute in nonce order, and calls within a batch execute in array order. Taking a prefix, rather than packing whatever fits, keeps that order across batches.
 
-Expiry does not split batches. `queued` only returns transactions that have not expired at the block the nonce is allocated against, so a batch never contains an expired transaction. After allocation, a batch is in the mempool and must execute as a whole, just as a single transaction does today once it is submitted.
+Expiry does not split batches. `next_transaction` only considers transactions that have not expired at the block the nonce is allocated against, so a batch never contains an expired transaction. After allocation, a batch is in the mempool and must execute as a whole, just as a single transaction does today once it is submitted.
 
 ### Alternatives Considered
 
@@ -126,7 +128,11 @@ Expiry does not split batches. `queued` only returns transactions that have not 
 - **Coalesce effect resumes in the `Driver`** (drain already-completed resumes before calling `queue()`). Timing-dependent, and unnecessary once transactions coalesce while a batch is in flight. Not pursued.
 - **Let a resubmission absorb newly queued transactions.** This would get them onchain sooner, but different submissions of one nonce could then carry different transactions, and the queue could not tell which ones executed. Rejected.
 - **Standalone startup `SetCode` transaction** (the `feat/batex_4` design). It needs a startup enqueue, restart idempotency, a `json_extract`-based two-nonce span in the allocation query, and the guarantee that no batch runs before delegation rests entirely on nonce ordering. Rejected in favor of per-transaction authorizations.
-- **Infer the authorization span from JSON** (`feat/batex_4`). This makes the allocation query depend on the most recently allocated row's JSON. Rejected: a nullable `authorization` column on the nonce row states it directly.
+- **Infer the authorization span from JSON** (`feat/batex_4`). This makes the allocation query depend on the most recently allocated row's JSON. Rejected: the authorization's nonce has its own row.
+- **A nullable `authorization` column on the transaction's row that reserves `nonce + 1`.** The next free nonce becomes `MAX(nonce + 1 + (authorization IS NOT NULL))`, an implicit rule every nonce query has to know. Recovery must insert a row into the reserved gap. Rejected in favor of a row per nonce.
+- **A separate `authorizations` table.** SQL cannot enforce that a nonce is unique across two tables, and the next free nonce needs a `UNION`. Rejected.
+- **Return a nonce's queued transactions and build the onchain transaction on every submission.** The storage would not duplicate the queued requests in the batch calldata. But the row would no longer say what was sent: whether one queued transaction went out as is or as a one-call batch would need a stored flag, or would follow from the current config, which can change across a restart. Rejected: the nonce row stores the built transaction.
+- **`queued(block, limit)` and `allocate(status, ids, transaction, authorization)`** (this epic's previous revision). Queued row ids leak out of the storage, and the queue has to hand them back consistently with the batch it built. Rejected in favor of one `next_transaction` that takes an `Allocation`.
 - **Leave the delegation in place when the executor is removed.** The account stays delegated, and the mempool keeps capping it at one pending transaction, so `max_in_flight_transactions` would be silently ignored. It would also leave the account's behavior depending on an executor the operator no longer configures. Rejected: the queue undelegates the account.
 - **Unbatched single transactions** (send a batch of one as the original transaction). This saves the executor overhead for lone actions. Rejected per the section above.
 - **`eth_getCode` next to `eth_getTransactionCount`** instead of `eth_getProof`. `eth_getCode` is universally supported, but this takes two requests and two failure modes for what `eth_getProof` returns in one. Rejected. The RPC node must support `eth_getProof` for recent blocks (see Assumptions).
@@ -240,41 +246,48 @@ The new `config` module has its own unit tests, and the services' config tests a
 `crates/core/src/tx/storage.rs`, final shape (introduced in full in Phase 3a):
 
 ```sql
-CREATE TABLE nonces (
-    nonce         INTEGER PRIMARY KEY,
-    request       TEXT    NOT NULL,     -- the onchain transaction, plus the fees of its last submission
-    authorization TEXT    DEFAULT NULL, -- the delegate; reserves nonce + 1
-    submitted_at  INTEGER DEFAULT NULL,
-    executed_at   INTEGER DEFAULT NULL
+CREATE TABLE IF NOT EXISTS allocated_nonces (
+    nonce        INTEGER PRIMARY KEY,
+    request      TEXT    DEFAULT NULL,  -- transaction rows: the onchain transaction, plus the fees of its last submission
+    delegate     TEXT    DEFAULT NULL,  -- authorization rows: the delegate
+    submitted_at INTEGER DEFAULT NULL,  -- transaction rows
+    executed_at  INTEGER DEFAULT NULL,  -- every row: the account has moved past this nonce
+    CHECK (request IS NOT NULL OR delegate IS NOT NULL)
 );
-CREATE TABLE transactions (
+CREATE TABLE IF NOT EXISTS transactions (
     id         INTEGER PRIMARY KEY,
     request    TEXT    NOT NULL,
     expires_at INTEGER DEFAULT NULL,
-    nonce      INTEGER DEFAULT NULL REFERENCES nonces (nonce)
+    nonce      INTEGER DEFAULT NULL REFERENCES allocated_nonces (nonce)
 );
 ```
 
-A `transactions` row is a queued transaction, exactly as enqueued. A `nonces` row is an onchain transaction: the one built for that nonce (the transaction itself without an executor, or the `execute` batch with one) and all of its submission state. Several `transactions` rows can share a nonce. A cancellation's nonce row has none.
+The table is not called `nonces`: the validator's secret store already has a `nonces` table for its FROST nonces, in the same database.
 
-Storage methods, with queries moved from `transactions` to `nonces` where they concern onchain state:
+A `transactions` row is a queued transaction, exactly as enqueued. An `allocated_nonces` row is a nonce the queue has used:
+
+- `request` set: the transaction sent at this nonce, with the fees of its last submission (absent until the first submission), as an `AllocatedTransaction` without its nonce. It carries the `transactions` rows that reference it: one sent as is, the calls of a batch, or none for a cancellation.
+- `delegate` set: the transaction at `nonce - 1` carries an authorization to `delegate`, which uses up this nonce.
+- both set: the authorization was never used, and the row was recovered as a cancellation (see the Architecture Decision).
+
+Storage methods:
 
 - **`enqueue`:** unchanged. It still takes `(Transaction, Option<u64>)` tuples. Nothing about a queued transaction is decided at enqueue any more.
-- **`queued(block, limit)`:** the oldest `limit` transactions with no nonce that have not expired at `block`, as `(id, Transaction)` in `id` order.
-- **`allocate(status, ids, transaction, authorization)`:** in one SQLite transaction, inserts the nonce row at the next free nonce (see the Architecture Decision), then sets `transactions.nonce` for `ids`, requiring each of them to still have no nonce. Otherwise it fails and allocates nothing. Returns the `AllocatedTransaction`.
-- **`count_in_flight`:** nonce rows with `executed_at IS NULL`.
-- **`count_outstanding(block)`:** nonce rows not yet executed, plus unallocated transactions not yet expired.
-- **`record_submission`, `mark_executed`, `unmark_executed`, `stale_submissions`:** today's queries, on `nonces`. `mark_executed` marks nonce rows whose own nonce is below the account nonce. A reserved authorization nonce plays no part: the transaction executed as soon as its own nonce was consumed.
-- **`recover_authorization_gap(status)`:** if the row at `status.nonce - 1` carries an authorization and there is no row at `status.nonce`, inserts the cancellation row there (see the Architecture Decision).
-- **`prune(safe)`:** deletes nonce rows executed at or below `safe` together with their transactions, and unallocated transactions that expired at or before `safe`.
+- **`next_transaction(status, allocation, authorization)`:** in one SQLite transaction, selects the oldest queued transactions with no nonce that have not expired at `status.block` (one for `Allocation::Single`, up to `limit` for `Allocation::Batch`), inserts the transaction row at the next free nonce (`MAX(status.nonce, MAX(nonce) + 1)`) holding the transaction to send (the queued one, or the batch `build` returns), inserts the authorization row at the nonce after it when `authorization` is set, and sets `transactions.nonce` for the allocated prefix. Returns `None`, allocating nothing, when nothing is queued. In Phase 3a it keeps today's signature and allocates one transaction.
+- **`count_in_flight`:** transaction rows with `executed_at IS NULL`.
+- **`count_outstanding(block)`:** rows not yet executed, including authorization rows, plus unallocated transactions not yet expired. It only gates whether `update_block_status` fetches the account status, and an authorization row left behind by a skipped authorization must keep that happening, so the recovery can run.
+- **`record_submission`, `stale_submissions`:** today's queries, on transaction rows.
+- **`mark_executed`, `unmark_executed`:** today's queries, on every row. `mark_executed` marks rows whose nonce is below the account nonce.
+- **`recover_authorization_gap(status)`:** sets the `request` of an authorization row at `status.nonce` to `Transaction::default()` (`WHERE nonce = ? AND request IS NULL`), turning it into a cancellation. It can only apply once.
+- **`prune(safe)`:** deletes rows executed at or below `safe` together with their transactions (the transactions first), and unallocated transactions that expired at or before `safe`.
 
-sqlx enables `PRAGMA foreign_keys` by default, so the reference is enforced, and pruning deletes a nonce row's transactions first.
+Loading an `AllocatedTransaction` reads the row's `request` and, from Phase 3b, joins the authorization row at `nonce + 1` (`LEFT JOIN allocated_nonces a ON a.nonce = n.nonce + 1 AND a.delegate IS NOT NULL`). sqlx enables `PRAGMA foreign_keys` by default, so the reference is enforced.
 
 **Migration.** Safenet has not been released and does not run in production, so there is no in-app migration. `TransactionStorage::new` only changes its `CREATE TABLE IF NOT EXISTS` definitions, and a recreated database gets the new schema. It adds no schema probes, no `ALTER TABLE` calls and no migration execution.
 
-For the test network, whose existing database has only the old `transactions` table, Phase 3a adds a temporary `migrations/2026_09_23_safenet_7702_executor_tx_batching.sql`. An operator applies it manually with `sqlite3 <database> < migrations/…sql` while the service is stopped. The application never discovers or runs it. It follows the earlier scheduled-pruning migration (removed in `80951a0`): `.bail on`, a single `BEGIN … COMMIT`, and header comments that give its scope, how to check whether it has already been applied (a `nonces` table in `sqlite_master`), and how to apply it. It:
+For the test network, whose existing database has only the old `transactions` table, Phase 3a adds a temporary `migrations/2026_09_23_safenet_7702_executor_tx_batching.sql`. An operator applies it manually with `sqlite3 <database> < migrations/…sql` while the service is stopped. The application never discovers or runs it. It follows the earlier scheduled-pruning migration (removed in `80951a0`): `.bail on`, a single `BEGIN … COMMIT`, and header comments that give its scope, how to check whether it has already been applied, and how to apply it. The check is whether `transactions` still has a `submitted_at` column, not whether `allocated_nonces` exists: a service started before the migration creates an empty `allocated_nonces` itself (and leaves the old `transactions` as it is), which is also why the script creates it with `IF NOT EXISTS`. It:
 
-1. creates `nonces` and copies `(nonce, request, submitted_at, executed_at)` into it for rows with a non-null nonce;
+1. creates `allocated_nonces` and copies `(nonce, request, submitted_at, executed_at)` into it for rows with a non-null nonce, `request` with its fees;
 2. rebuilds `transactions` as `(id, request, expires_at, nonce)` with the new reference: create a new table, copy the rows (removing the fee fields from `request` with `json_remove`), drop the old table and rename the new one.
 
 The script is checked by hand against a copy of a pre-change database before Phase 3a merges. It has no automated test and is removed in Phase 8.
@@ -300,7 +313,7 @@ impl Authorization {
 pub struct AllocatedTransaction {
     pub nonce: u64,
     pub transaction: Transaction,             // the onchain transaction from the nonce row
-    pub authorization: Option<Authorization>, // populated for a non-null authorization
+    pub authorization: Option<Authorization>, // from the authorization row at `nonce + 1`
     pub max_fee_per_gas: Option<u128>,
     pub max_priority_fee_per_gas: Option<u128>,
 }
@@ -319,9 +332,28 @@ pub struct UnsignedTransaction {
 }
 ```
 
+`crates/core/src/tx/storage.rs`:
+
+```rust
+/// How `next_transaction` allocates a nonce.
+pub enum Allocation<'a> {
+    /// The oldest queued transaction, sent as is.
+    Single,
+    /// A batch of the oldest queued transactions: `build` is given up to
+    /// `limit` of them and returns how many it took, at least one, and the
+    /// batch built from them.
+    Batch {
+        limit: usize,
+        build: &'a dyn Fn(&[Transaction]) -> (usize, Transaction),
+    },
+}
+```
+
+The storage fails with an error, allocating nothing, if `build` returns a count of zero or more than the transactions it passed.
+
 The public `TransactionQueue::queue` and `ActionEncoder` signatures keep their tuples, and so does `TransactionStorage::enqueue`: batching and authorization are decided at allocation.
 
-Until Phase 4a, `AllocatedTransaction::build` returns a `TxEip1559` and panics with `todo!()` for `Some(authorization)`. Nothing sets one before Phase 5d. From Phase 4a it returns an `UnsignedTransaction`, and the `todo!()` moves to the `UnsignedTransaction` → `TxEip1559` conversion that `submit_transaction` uses until Phase 4b. Phase 4b removes it.
+`AllocatedTransaction::build` adds EIP-7702's `PER_EMPTY_ACCOUNT_COST` of 25,000 gas to the stored transaction's gas when an authorization is set, so the stored transaction and `max_batch_gas` exclude it. Until Phase 4a, `build` returns a `TxEip1559` and panics with `todo!()` for `Some(authorization)`. Nothing sets one before Phase 5d. From Phase 4a it returns an `UnsignedTransaction`, and the `todo!()` moves to the `UnsignedTransaction` → `TxEip1559` conversion that `submit_transaction` uses until Phase 4b. Phase 4b removes it.
 
 ### Signer
 
@@ -344,7 +376,7 @@ This makes `eth_getProof` for recent blocks a requirement on the RPC node, wheth
 
 ### Batch encoding
 
-New module `crates/core/src/tx/executor.rs`, with a `sol!` transcription of `ISafenet7702Executor` (following the repo's existing inline `sol!` bindings) and one pure function:
+New module `crates/core/src/tx/executor.rs`, with a `sol!` transcription of `ISafenet7702Executor` (following the repo's existing inline `sol!` bindings) and one pure function, the `build` of `Allocation::Batch`:
 
 ```rust
 /// Builds an `ISafenet7702Executor.execute` self-call sent to `account` from
@@ -367,7 +399,7 @@ Rules:
 3. A first transaction whose own gas exceeds `max_batch_gas` becomes a one-call batch (over the limit) and is never dropped. This is normal operation and logs at `debug`, not `warn`. It also means `max_batch_gas = 0` sends every transaction as its own one-call batch, for operators who want the executor (for onchain accounting, say) without batching.
 4. A batch is `Transaction { to: account, value: 0, data: executeCall { calls }.abi_encode(), gas }`, where each call is `Call { to, value, gasLimit: gas, data }` from the original transaction. A transaction's `value` travels in its `Call` and is paid from the account's own balance.
 
-`submit_pending` passes at most `max_batch_gas / 5_000 + 1` queued transactions. Every call adds at least the formula's 5,000 per-call overhead, so no batch within the limit can hold more, and the bound caps the query without cutting a batch short.
+`submit_pending` sets the `Allocation::Batch` `limit` to `max_batch_gas / 5_000 + 1` queued transactions. Every call adds at least the formula's 5,000 per-call overhead, so no batch within the limit can hold more, and the bound caps the query without cutting a batch short.
 
 The batch gas is computed from the encoded calldata, so it needs no RPC request. The formula is carried over from `feat/batex_*`:
 
@@ -405,29 +437,27 @@ async fn submit_pending(&mut self, block: u64) -> Result<(), Error> {
     for _ in in_flight..limit {
         let account = self.account().await?;
         let status = Status { nonce: account.nonce, block };
-        let (ids, mut transaction, wanted) = match self.config.mode {
-            SubmissionMode::Direct { .. } => {
-                let Some((id, transaction)) = self.storage.queued(block, 1).await?.pop() else { break };
-                (vec![id], transaction, Authorization { address: Address::ZERO })
-            }
+        let account_address = self.signer.address();
+        let build;
+        let (allocation, wanted) = match self.config.mode {
+            SubmissionMode::Direct { .. } => (Allocation::Single, Authorization { address: Address::ZERO }),
             SubmissionMode::Batched { executor, max_batch_gas } => {
-                let queued = self.storage.queued(block, max_batch_gas / 5_000 + 1).await?;
-                if queued.is_empty() { break }
-                let (ids, transactions) = /* unzip */;
-                let (taken, batch) = executor::batch(self.signer.address(), &transactions, max_batch_gas);
-                (ids[..taken].to_vec(), batch, Authorization { address: executor })
+                build = move |queued: &[Transaction]| executor::batch(account_address, queued, max_batch_gas);
+                let limit = usize::try_from(max_batch_gas / 5_000 + 1).unwrap_or(usize::MAX);
+                (Allocation::Batch { limit, build: &build }, Authorization { address: executor })
             }
         };
         let authorization = (account.code_hash != wanted.code_hash()).then_some(wanted);
-        if authorization.is_some() { transaction.gas += 25_000 }
-        let transaction = self.storage.allocate(status, &ids, transaction, authorization).await?;
+        let Some(transaction) = self.storage.next_transaction(status, allocation, authorization).await? else {
+            break;
+        };
         self.submit_transaction(transaction, block).await?;
     }
     Ok(())
 }
 ```
 
-`queue()` itself goes back to only enqueueing and calling `submit_pending`, as today. The 25,000 is EIP-7702's `PER_EMPTY_ACCOUNT_COST`, added on top of the transaction's gas and not counted against `max_batch_gas`. The account status is already required for the nonce, so the authorization decision adds no request and no failure mode. The account status is cached per block, so within one `submit_pending` pass the code hash does not change, and at most one transaction is allocated while the account is delegated.
+`queue()` itself goes back to only enqueueing and calling `submit_pending`, as today. The 25,000 authorization gas is added by `build`, on top of the batch's gas and not counted against `max_batch_gas`. The account status is already required for the nonce, so the authorization decision adds no request and no failure mode. The account status is cached per block, so within one `submit_pending` pass the code hash does not change, and at most one transaction is allocated while the account is delegated.
 
 `update_block_status` calls `storage.recover_authorization_gap(status)` right after `mark_executed`, before `resubmit_stale`.
 
@@ -435,7 +465,7 @@ async fn submit_pending(&mut self, block: u64) -> Result<(), Error> {
 
 ### Metrics
 
-`crates/core/src/metrics.rs` gains two histograms, following the existing `metrics::histogram!` pattern in `crates/sentinel/src/metrics.rs`. Both are recorded in `submit_pending` when a batch is allocated, so resubmissions are not counted again, and only when an executor is configured:
+`crates/core/src/metrics.rs` gains two histograms, following the existing `metrics::histogram!` pattern in `crates/sentinel/src/metrics.rs`. Both are recorded by the `build` closure that `submit_pending` passes in `Allocation::Batch`, from the prefix length and the batch `executor::batch` returns. Resubmissions do not build, so they are not counted again, and only batches are recorded:
 
 - `safenet_core_transaction_batch_size` — the number of calls in each batch. This is the measure of whether batching pays off at all: a distribution stuck at 1 means the executor adds overhead without coalescing anything.
 - `safenet_core_transaction_batch_gas` — the gas limit of each batch, excluding the authorization gas. Values near `max_batch_gas` mean the limit is what splits batches.
@@ -507,26 +537,25 @@ Add `SubmissionMode`, replace `Config::max_in_flight_transactions` with `Config:
 
 **Files:** `crates/core/src/tx/config.rs`, `crates/core/src/tx/mod.rs`, `crates/validator/src/config.rs` (the existing in-flight assertion), `crates/validator/validator.sample.toml`, `crates/sentinel/sentinel.sample.toml`.
 
-### Phase 3a — `nonces` table and final schema
+### Phase 3a — `allocated_nonces` table and final schema
 
-Introduce the full final schema (`nonces` with its unused `authorization` column, and `transactions.nonce` referencing it) in one PR, so that the test network needs only one manual migration. Move submission and execution state and every query about it onto `nonces`. `next_transaction` keeps its signature and still allocates one queued transaction per nonce, copying its request into the new nonce row. `prune` deletes a nonce row together with its transactions. Add the temporary manual migration script for the test network. Behavior-preserving: the existing storage and queue tests pass unchanged.
+Introduce the full final schema (`allocated_nonces` with its unused `delegate` column, and `transactions.nonce` referencing it) in one PR, so that the test network needs only one manual migration. Move submission and execution state and every query about it onto `allocated_nonces`. `next_transaction` keeps its signature and still allocates one queued transaction per nonce, copying its request into the new nonce row. `prune` deletes a nonce row together with its transactions. Add the temporary manual migration script for the test network. Behavior-preserving: the existing storage and queue tests pass unchanged. A storage test covers pruning an executed transaction together with its nonce row, which the foreign key makes order-sensitive.
 
 **Files:** `crates/core/src/tx/storage.rs`, `migrations/2026_09_23_safenet_7702_executor_tx_batching.sql` (new).
 
-### Phase 3b — Allocate several transactions and authorizations
+### Phase 3b — Allocate batches and authorizations
 
-Add `types::Authorization` and `AllocatedTransaction::authorization`. Replace `next_transaction` with `queued` and `allocate`: the nonce row stores the given transaction and authorization, the authorization reserves `N + 1`, and `AllocatedTransaction::authorization` is populated from the nonce row. `submit_pending` calls `queued(block, 1)` and allocates that transaction as-is with no authorization. `build` panics with `todo!()` for `Some(authorization)`.
+Add `types::Authorization`, `AllocatedTransaction::authorization` and `storage::Allocation`. `next_transaction` takes an `Allocation` and an `Option<Authorization>`: a batch stores the transaction `build` returns and allocates its prefix, an authorization gets its own row at `N + 1`, and `AllocatedTransaction::authorization` is loaded from that row. `submit_pending` passes `Allocation::Single` and no authorization. `build` panics with `todo!()` for `Some(authorization)`.
 
 Storage tests cover:
 
-- several transactions allocated to one nonce, which record their submission and are marked executed together;
-- a nonce with an authorization takes `N`, and the next allocation takes `N + 2`;
+- a batch of several transactions allocated to one nonce, which records its submission and is marked executed as one, and stores the transaction `build` returned;
+- `build` is given only unexpired, unallocated transactions in order, at most `limit`, and a count of zero or more than it was given fails without allocating anything;
+- a nonce with an authorization takes `N`, the authorization row takes `N + 1`, and the next allocation takes `N + 2`;
 - allocation without authorizations is unchanged;
-- a nonce consumed outside the queue still wins over the reservation;
-- `allocate` fails, and allocates nothing, for a transaction that already has a nonce;
-- `queued` skips expired and allocated transactions and keeps their order;
-- `AllocatedTransaction::authorization` round-trips;
-- pruning removes a nonce row and all of its transactions.
+- a nonce consumed outside the queue still wins over the next free nonce;
+- `AllocatedTransaction::authorization` round-trips, and a transaction without one has none;
+- pruning removes a nonce row, its authorization row and all of its transactions.
 
 **Files:** `crates/core/src/tx/types.rs`, `crates/core/src/tx/storage.rs`, `crates/core/src/tx/mod.rs`.
 
@@ -536,7 +565,7 @@ Add `recover_authorization_gap`, called from `update_block_status` right after `
 
 Storage tests cover:
 
-- the cancellation is created exactly once, carries no transactions, and is returned by `stale_submissions`;
+- the cancellation is created exactly once, loads as `Transaction::default()` with no queued transactions, and is returned by `stale_submissions`, while the transaction before it still loads with its authorization;
 - nothing is created while the authorization's transaction is still in flight, or once the account is past `N + 1`;
 - the cancellation is marked executed when the nonce moves past it, both when it lands and when a reorg lets the original authorization land instead.
 
@@ -576,7 +605,7 @@ Add `Authorization::code_hash`, using alloy's EIP-7702 delegation designator con
 
 ### Phase 5d — Batch and authorize at allocation
 
-Wire `executor::batch`, the authorization decision (delegating and undelegating) and the delegated-account in-flight limit into `TransactionQueue::submit_pending` as specified above, including the 25,000 authorization gas. Add a batching tip to the `[transactions]` sections of both handbooks, covering the one-in-flight limit and how removing `executor` undelegates the account.
+Wire `Allocation::Batch` with `executor::batch`, the authorization decision (delegating and undelegating) and the delegated-account in-flight limit into `TransactionQueue::submit_pending` as specified above, and add the 25,000 authorization gas in `build`. Add a batching tip to the `[transactions]` sections of both handbooks, covering the one-in-flight limit and how removing `executor` undelegates the account.
 
 Queue tests cover:
 
