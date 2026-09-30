@@ -6,6 +6,7 @@
 //! local [`signer`], and resubmitting with bumped fees when a transaction is
 //! stuck.
 
+mod bundle;
 mod config;
 mod fees;
 pub mod signer;

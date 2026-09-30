@@ -406,11 +406,11 @@ The batch gas is computed from the encoded calldata, so it needs no RPC request.
 ```text
 gas = 26_000                                  // intrinsic + array decode
     + 16 * abi_encode(execute(calls)).len()   // conservative calldata cost
-    + Σ (call.gas + call.gas / 63 + 5_000)    // callee gas, 63/64 headroom, per-call overhead
+    + Σ (call.gas + ⌈call.gas / 63⌉ + 5_000)  // callee gas, 63/64 headroom, per-call overhead
     + Σ (call.value != 0 ? 34_000 : 0)        // CALL value transfer + possible account creation
 ```
 
-The `call.gas / 63` term is exactly what the `InsufficientGas` guard checks, so it must not be dropped. The `5_000` covers the executor's per-call overhead plus the `CALL` base cost the onchain check ignores. A value-bearing `CALL` also pays 9,000 for the value transfer and, if the target account is empty, 25,000 to create it. The EVM deducts both before the 63/64 rule applies, and the onchain guard does not model them, so the formula budgets them on top of the call's own `gasLimit`. Phase 5b confirms these constants against the gas snapshot pinned in Phase 1a and updated in 1b.
+The `⌈call.gas / 63⌉` term is exactly what the `InsufficientGas` guard checks (`gasleft() * 63 / 64 >= call.gas` holds from `call.gas + ⌈call.gas / 63⌉` gas left), so it must not be dropped, and rounding it down could underfund a call by one gas. The `5_000` covers the executor's per-call overhead plus the `CALL` base cost the onchain check ignores. A value-bearing `CALL` also pays 9,000 for the value transfer and, if the target account is empty, 25,000 to create it. The EVM deducts both before the 63/64 rule applies, and the onchain guard does not model them, so the formula budgets them on top of the call's own `gasLimit`. Phase 5b confirms these constants against the gas snapshot pinned in Phase 1a and updated in 1b.
 
 Unit tests cover:
 
