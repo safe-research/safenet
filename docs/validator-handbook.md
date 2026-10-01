@@ -95,6 +95,8 @@ It is read from the database at startup and tracked from there, so it describes 
 
 Configure the validator by writing a TOML configuration file — see [`crates/validator/src/config.rs`](../crates/validator/src/config.rs) for the full schema, and copy [`validator.sample.toml`](../crates/validator/validator.sample.toml) as a worked example to start from.
 
+The `rpc`, `signer` and `database` settings may reference environment variables as `${NAME}` (use `$$` for a literal `$`), so that secrets such as the validator private key or an RPC API key can be injected at startup instead of being stored in the configuration file — for example `signer = "${SIGNER_PRIVATE_KEY}"`. Substitution applies only to these settings; a referenced variable that is not set fails startup.
+
 ```sh
 cp crates/validator/validator.sample.toml validator.toml
 $EDITOR validator.toml

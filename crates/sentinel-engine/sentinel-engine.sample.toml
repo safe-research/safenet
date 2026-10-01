@@ -8,7 +8,10 @@
 # reference engine.
 
 # The chain RPC endpoint used by checks that query onchain state. Configure it
-# for the same chain as the transactions sent to this engine.
+# for the same chain as the transactions sent to this engine. The value may
+# reference environment variables as `${NAME}` (use `$$` for a literal `$`),
+# so that an RPC API key need not be stored in this file, e.g.
+# `rpc = "https://gnosis.example.com/${RPC_API_KEY}"`.
 rpc = "https://rpc.gnosischain.com"
 
 # Optional: address on which the transaction-checking API listens. Defaults to
